@@ -61,6 +61,12 @@ before it is replaced: coming-soon first, then full. The full target additionall
 runs search-readiness and the axe scan over every emitted route, uploading the
 JSON result. Both modes verify their emitted route families.
 
+The emitted-route console sweep serves the repository's Public Sans proof fonts
+at the known PBS Sans font URLs. This keeps localhost preview independent of
+production-origin font CORS. Other resource, console and page errors still fail
+the sweep. Live media font CORS requires separate verification from its public
+origin.
+
 Automated checks do not replace keyboard, screen-reader, zoom, or content
 review. Run those checks for affected pages and during scheduled accessibility
 audits.
