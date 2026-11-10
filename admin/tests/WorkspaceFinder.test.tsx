@@ -22,6 +22,23 @@ function setup() {
 }
 
 describe("WorkspaceFinder", () => {
+  it("uses the current shortcut owner without waiting for a responsive rerender", () => {
+    let phone = false;
+    render(<MemoryRouter>
+      <WorkspaceFinder shortcutEnabled={() => !phone} destinations={[{ ...destinations[0], label: "Rail destination" }]} />
+      <WorkspaceFinder shortcutEnabled={() => phone} destinations={[{ ...destinations[1], label: "Phone destination" }]} />
+    </MemoryRouter>);
+    fireEvent.keyDown(document, { key: "k", ctrlKey: true });
+    const rail = screen.getByRole("dialog", { name: "Find a workspace" });
+    expect(within(rail).getByRole("link", { name: "Rail destination" })).toBeVisible();
+    fireEvent.keyDown(rail, { key: "Escape" });
+    // Media-query matches change before the browser delivers its change event.
+    phone = true;
+    fireEvent.keyDown(document, { key: "k", ctrlKey: true });
+    const active = screen.getByRole("dialog", { name: "Find a workspace" });
+    expect(within(active).getByRole("link", { name: "Phone destination" })).toBeVisible();
+  });
+
   it("closes with Escape even when the search input contains text", () => {
     const dialog = setup();
     const search = within(dialog).getByRole("searchbox");

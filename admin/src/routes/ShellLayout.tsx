@@ -358,9 +358,11 @@ function ShellLayoutContents() {
     };
   }, [chromeElement, sharedChrome]);
   const contextHeader = usesContextHeader(location.pathname);
-  const [narrowScreen, setNarrowScreen] = useState(
+  const isNarrowScreen = useCallback(
     () => window.matchMedia?.(sharedChrome ? "(max-width: 619px)" : "(max-width: 720px)").matches ?? false,
+    [sharedChrome],
   );
+  const [narrowScreen, setNarrowScreen] = useState(isNarrowScreen);
   const [moreActionsOpen, setMoreActionsOpen] = useState(false);
   const morePanelRef = useRef<HTMLDivElement>(null);
   const morePosition = useFloatingPosition(moreActionsOpen && headerMenu,
@@ -979,7 +981,7 @@ function ShellLayoutContents() {
             id="primary-navigation"
             aria-label="Primary"
           >
-            <WorkspaceFinder fallbackFocusRef={moreActionsTrigger} shortcutEnabled={!sharedChrome || !narrowScreen} destinations={railDestinations.map((row) => row.destination)} />
+            <WorkspaceFinder fallbackFocusRef={moreActionsTrigger} shortcutEnabled={() => !sharedChrome || !isNarrowScreen()} destinations={railDestinations.map((row) => row.destination)} />
             <ul className="primary-nav-list">
               {railDestinations.map((row, index) => (
                 <li key={row.destination.id}>
@@ -1056,7 +1058,7 @@ function ShellLayoutContents() {
               />
             </div>
             <div className="workspace-tools">
-              {browsingWorkspace ? <div className="editor-workspace-find browse-workspace-find"><WorkspaceFinder triggerRef={browseFinderTrigger} fallbackFocusRef={browseFinderFallback} shortcutEnabled={narrowScreen} destinations={railDestinations.map(row => row.destination)} /></div> : null}
+              {browsingWorkspace ? <div className="editor-workspace-find browse-workspace-find"><WorkspaceFinder triggerRef={browseFinderTrigger} fallbackFocusRef={browseFinderFallback} shortcutEnabled={isNarrowScreen} destinations={railDestinations.map(row => row.destination)} /></div> : null}
               <div
                 className="workspace-actions"
                 id="workspace-actions"
@@ -1142,7 +1144,7 @@ function ShellLayoutContents() {
             <div className="workspace-editing-end">
               {editorView.historyAvailable && (editorView.kind === "post" || !narrowScreen) ? <ActionControl action="revision-history" variant="ghost" size="compact" onClick={() => { editorView.openPane("details"); editorView.setHistoryOpen(true); }} /> : null}
               {editorView.kind === "post" ? <ActionControl action="focus-writing" variant="ghost" size="compact" aria-pressed={editorView.focusWriting} onClick={() => editorView.setFocusWriting(!editorView.focusWriting)} /> : null}
-              <div className="editor-workspace-find"><WorkspaceFinder fallbackFocusRef={moreActionsTrigger} triggerRef={editorFinderTrigger} shortcutEnabled={Boolean(editorView.kind && narrowScreen)} destinations={railDestinations.map(row => row.destination)} /></div>
+              <div className="editor-workspace-find"><WorkspaceFinder fallbackFocusRef={moreActionsTrigger} triggerRef={editorFinderTrigger} shortcutEnabled={() => Boolean(editorView.kind && isNarrowScreen())} destinations={railDestinations.map(row => row.destination)} /></div>
               {!narrowScreen ? densityControl : null}
               <ActionControl action={editorView.detailsOpen ? "inspector-close" : "inspector-open"} label="Details" size="compact"
                 graphic={<Icon name="panel-right" />} ref={editorView.detailsTrigger}
