@@ -1,0 +1,25 @@
+---
+import { getEntry } from "astro:content";
+import { PUBLIC_HOMEPAGE_BANNER_SETTINGS_ID } from "../../../packages/content-core/src/cms-settings";
+import { electionBannerExcluded, electionBannerWindow } from "../../../packages/content-core/src/nj-decides-banner";
+import type { PublicHomepageBannerBuildData } from "../lib/public-homepage-banner";
+import NjDecidesBand from "./NjDecidesBand.astro";
+
+interface Props { setting?: PublicHomepageBannerBuildData | null; canonicalPath?: string }
+const { setting: supplied, canonicalPath = Astro.url.pathname } = Astro.props as Props;
+const setting = supplied !== undefined ? supplied : Astro.locals.cmsRender
+  ? Astro.locals.cmsRender.content.settings.find((item): item is PublicHomepageBannerBuildData => item.settingId === PUBLIC_HOMEPAGE_BANNER_SETTINGS_ID)
+  : (await getEntry("cmsPublicSettings", PUBLIC_HOMEPAGE_BANNER_SETTINGS_ID))?.data;
+const election = setting?.enabled && setting.njDecides && !electionBannerExcluded(setting.excludedPaths, canonicalPath) ? setting : null;
+const state = election ? electionBannerWindow(election, Date.now()) : null;
+---
+{election && (
+  <aside aria-label="Election announcement" data-nj-decides-announcement data-pagefind-ignore
+    data-starts-at={election.startsAt} data-ends-at={election.endsAt} hidden={!state?.visible}>
+    <NjDecidesBand copy={election.message} links={election.link ? [election.link, ...(election.secondLink ? [election.secondLink] : [])] : []} liveLabel={election.liveLabel} />
+  </aside>
+)}
+<script>
+  import { mountElectionBanner } from "../lib/nj-decides-banner-dom";
+  document.querySelectorAll<HTMLElement>("[data-nj-decides-announcement]").forEach(mountElectionBanner);
+</script>

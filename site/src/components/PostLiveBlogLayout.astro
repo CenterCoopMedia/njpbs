@@ -1,0 +1,15 @@
+<div class="post-live-blog-layout">
+  <div class="post-live-blog-layout__updates"><slot /></div>
+  <aside aria-label="More from this coverage"><slot name="sidebar" /></aside>
+</div>
+
+<style>
+  .post-live-blog-layout { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--space-8); align-items: start; }
+  .post-live-blog-layout__updates, aside { min-width: 0; }
+  .post-live-blog-layout__updates :global(.live-blog) { max-inline-size: none; margin-inline: 0; }
+  aside { border-block-start: 1px solid var(--line); padding-block-start: var(--space-6); }
+  @media (min-width: 1024px) {
+    .post-live-blog-layout { grid-template-columns: minmax(0, 2fr) minmax(0, 1fr); }
+    aside { border-block-start: 0; border-inline-start: 1px solid var(--line); padding-block-start: 0; padding-inline-start: var(--space-6); }
+  }
+</style>

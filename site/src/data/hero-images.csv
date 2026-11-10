@@ -1,0 +1,4 @@
+id,src,alt,label,caption,credit,position,scrim,accent,enabled
+nj-evening,/hero/nj-evening.svg,"Abstract blue and amber image suggesting New Jersey at dusk",Dusk signal,"A quiet statewide signal, tuned for the pause before the page changes.",CCM design placeholder,68% 34%,0.74,#F5B14C,yes
+nj-shore,/hero/nj-shore.svg,"Abstract teal and gold image suggesting the New Jersey shore",Coastline field,"Soft shore colors keep the page tied to place without borrowing a real news image.",CCM design placeholder,74% 28%,0.68,#88D2C5,yes
+nj-studio,/hero/nj-studio.svg,"Abstract indigo and cyan image suggesting a public media studio",Studio light,"A cooler control-room field for the broadcast side of the visual system.",CCM design placeholder,28% 24%,0.76,#5CE1FF,yes

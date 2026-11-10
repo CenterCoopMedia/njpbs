@@ -1,0 +1,10 @@
+{
+  "date": "2026-09-08",
+  "kind": "new",
+  "title": "Create pages and edit their URLs",
+  "body": "You can create new pages from Pages, change a page URL and add a background image to a page hero. Drag handles let you reorder editor sections.",
+  "prs": [
+    1668
+  ],
+  "order": 0
+}

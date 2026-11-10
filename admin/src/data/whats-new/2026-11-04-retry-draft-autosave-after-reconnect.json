@@ -1,0 +1,8 @@
+{
+  "date": "2026-11-04",
+  "order": 1793808700000,
+  "kind": "fixed",
+  "title": "Draft autosave retries after reconnecting",
+  "body": "If a draft autosave fails, Boardwalk tries again on the next autosave interval after your connection returns. Keep the editor open until the draft is saved.",
+  "prs": []
+}

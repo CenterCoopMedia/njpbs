@@ -1,0 +1,215 @@
+---
+// Garden State public (gs) — home-page preview slice for the NJ PBS chooser.
+// Presentational only. Uses real gs- namespaced classes from public/kits/gs/gs.css.
+// Sample/placeholder copy: no operator-change claim, no launch date, no live
+// integration. Donate/support buttons and the newsletter form are sample UI.
+---
+
+<section class="kit-preview gs" data-kit="gs" aria-label="Garden State public preview">
+  <!-- 1. Utility bar -->
+  <div class="gs-utility">
+    <div class="gs-utility__inner">
+      <span class="gs-utility__msg">A new public-media home for New Jersey is in development. This is a design preview.</span>
+      <button type="button" class="gs-utility__dismiss" data-gs-dismiss>Dismiss</button>
+    </div>
+  </div>
+
+  <!-- 2. Masthead -->
+  <header class="gs-masthead">
+    <div class="gs-masthead__inner">
+      <a href="#" class="gs-brand">
+        <span class="gs-brand__mark">New NJ PBS</span>
+        <span class="gs-brand__lockup">Public media for New Jersey</span>
+      </a>
+      <nav id="gs-preview-nav" class="gs-nav" aria-label="Primary">
+        <a href="#" class="gs-nav__link is-active">Watch</a>
+        <a href="#" class="gs-nav__link">Schedule</a>
+        <a href="#" class="gs-nav__link">Shows</a>
+        <a href="#" class="gs-nav__link">News</a>
+      </nav>
+      <div class="gs-masthead__actions">
+        <a href="#" class="gs-btn gs-btn--donate">Support</a>
+      </div>
+      <button
+        type="button"
+        class="gs-nav-toggle"
+        data-gs-nav-toggle
+        aria-controls="gs-preview-nav"
+        aria-expanded="false"
+        aria-label="Menu"
+      >
+        <svg class="gs-ic-menu" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><line x1="3" y1="6" x2="21" y2="6" /><line x1="3" y1="12" x2="21" y2="12" /><line x1="3" y1="18" x2="21" y2="18" /></svg>
+        <svg class="gs-ic-close" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><line x1="5" y1="5" x2="19" y2="19" /><line x1="19" y1="5" x2="5" y2="19" /></svg>
+      </button>
+    </div>
+  </header>
+
+  <div class="gs-container">
+    <!-- 3. Hero -->
+    <section class="gs-hero" aria-label="Featured">
+      <div class="gs-hero__stage">
+        <div class="gs-hero__copy">
+          <h2>A new public-media home for New Jersey is taking shape</h2>
+          <p class="gs-hero__deck">A statewide newsroom and broadcaster in development — built on the grid, designed to be read.</p>
+          <div class="gs-hero__actions">
+            <a href="#" class="gs-btn gs-btn--primary">Explore the work</a>
+            <a href="#" class="gs-btn gs-btn--outline">How it is built</a>
+          </div>
+          <p class="gs-hero__meta">Design preview // sample content</p>
+        </div>
+        <div class="gs-hero__canvas-cell">
+          <canvas class="gs-hero__canvas" data-nj-canvas aria-hidden="true"></canvas>
+          <!-- Static fallback: shown until the chooser confirms the hero can run
+               (no WebGL / no JS keeps it visible). Decorative; the heading carries meaning. -->
+          <img class="nj-fallback" data-nj-fallback src="/nj-static.svg" alt="" aria-hidden="true" width="420" height="740" decoding="async" />
+        </div>
+      </div>
+    </section>
+
+    <!-- 4. Schedule strip (sample, static — no live status indicator) -->
+    <div class="gs-onair">
+      <div class="gs-onair__head">
+        <span class="gs-onair__title">Sample schedule</span>
+        <a href="#" class="gs-onair__full">Full schedule</a>
+      </div>
+      <div class="gs-onair__tiles">
+        <div class="gs-onair__tile">
+          <p class="gs-onair__slot">Now</p>
+          <p class="gs-onair__time">7:00 PM</p>
+          <p class="gs-onair__prog">Evening newscast</p>
+        </div>
+        <div class="gs-onair__tile">
+          <p class="gs-onair__slot">Next</p>
+          <p class="gs-onair__time">8:00 PM</p>
+          <p class="gs-onair__prog">Documentary hour</p>
+        </div>
+      </div>
+    </div>
+
+    <!-- 5. Section head + lead story -->
+    <div class="gs-sec-head">
+      <span class="gs-sec-head__num">01</span>
+      <h2>Featured</h2>
+      <span class="gs-sec-head__meta">From the newsroom</span>
+    </div>
+    <article class="gs-lead">
+      <div class="gs-lead__media" aria-hidden="true"></div>
+      <div class="gs-lead__body">
+        <p class="gs-lead__cat">Statewide report</p>
+        <h3>Local reporting, organized around the communities it serves</h3>
+        <p class="gs-lead__deck">Sample lead story. A plain layout that puts the headline and the reporting first.</p>
+        <p class="gs-lead__byline">Sample editorial placeholder</p>
+      </div>
+    </article>
+
+    <!-- 6. Card grid -->
+    <div class="gs-sec-head">
+      <span class="gs-sec-head__num">02</span>
+      <h2>More to watch</h2>
+      <span class="gs-sec-head__meta">Programs and stories</span>
+    </div>
+    <div class="gs-card-grid">
+      <a href="#" class="gs-card gs-card--link">
+        <div class="gs-card__media" aria-hidden="true"></div>
+        <div class="gs-card__body">
+          <p class="gs-card__meta">Arts profile</p>
+          <h3 class="gs-card__title">A working artist on the Jersey coast</h3>
+          <p class="gs-card__meta">28 min</p>
+        </div>
+      </a>
+      <a href="#" class="gs-card gs-card--link">
+        <div class="gs-card__media" aria-hidden="true"></div>
+        <div class="gs-card__body">
+          <p class="gs-card__meta">Documentary hour</p>
+          <h3 class="gs-card__title">Water, land, and the people in between</h3>
+          <p class="gs-card__meta">54 min</p>
+        </div>
+      </a>
+      <a href="#" class="gs-card gs-card--link">
+        <div class="gs-card__media" aria-hidden="true"></div>
+        <div class="gs-card__body">
+          <p class="gs-card__meta">Public affairs</p>
+          <h3 class="gs-card__title">A weekly conversation about the state</h3>
+          <p class="gs-card__meta">42 min</p>
+        </div>
+      </a>
+    </div>
+
+    <!-- 7. Support block -->
+    <div class="gs-support">
+      <div>
+        <h2>Support public media in New Jersey</h2>
+        <p>Become a member. Sustaining gifts keep statewide reporting and programming free for everyone.</p>
+      </div>
+      <div class="gs-support__actions">
+        <a href="#" class="gs-btn gs-btn--donate">Become a member</a>
+        <a href="#" class="gs-support__secondary">Other ways to give</a>
+      </div>
+    </div>
+
+    <!-- 8. Newsletter capture (sample UI — does not submit) -->
+    <div class="gs-newsletter">
+      <h2>Stay in the loop</h2>
+      <p class="gs-newsletter__intro">Sample sign-up — this preview does not submit or collect data.</p>
+      <form class="gs-form">
+        <div class="gs-field">
+          <label class="gs-label" for="gs-preview-email">Email address <span class="gs-req" aria-hidden="true">*</span></label>
+          <input class="gs-input" type="email" id="gs-preview-email" name="email" autocomplete="email" />
+        </div>
+        <div class="gs-form__submit">
+          <button type="button" class="gs-btn gs-btn--primary">Subscribe</button>
+        </div>
+      </form>
+      <p class="gs-consent">Sample form. No data is collected from this preview.</p>
+    </div>
+
+    <!-- Guardrail callout -->
+    <div class="gs-callout gs-callout--note">
+      <p class="gs-callout__title">About this preview</p>
+      <p>Sample and placeholder copy only. Nothing here asserts an operator change, a launch date, or a connected service.</p>
+    </div>
+  </div>
+
+  <!-- 9. Footer -->
+  <footer class="gs-foot">
+    <div class="gs-foot__inner">
+      <div class="gs-foot__col">
+        <h2>Watch</h2>
+        <ul>
+          <li><a href="#">Live stream</a></li>
+          <li><a href="#">Schedule</a></li>
+          <li><a href="#">Shows</a></li>
+        </ul>
+      </div>
+      <div class="gs-foot__col">
+        <h2>News</h2>
+        <ul>
+          <li><a href="#">Latest reporting</a></li>
+          <li><a href="#">Newsletters</a></li>
+          <li><a href="#">Public file</a></li>
+        </ul>
+      </div>
+      <div class="gs-foot__col">
+        <h2>Support</h2>
+        <ul>
+          <li><a href="#">Become a member</a></li>
+          <li><a href="#">Other ways to give</a></li>
+          <li><a href="#">Volunteer</a></li>
+        </ul>
+      </div>
+      <div class="gs-foot__col">
+        <h2>About</h2>
+        <ul>
+          <li><a href="#">Contact</a></li>
+          <li><a href="#">Accessibility</a></li>
+          <li><a href="#">Privacy</a></li>
+        </ul>
+      </div>
+    </div>
+    <div class="gs-foot__bottom">
+      <div class="gs-foot__bottom-inner">
+        <span>Design preview — not an official NJ PBS or PBS property.</span>
+      </div>
+    </div>
+  </footer>
+</section>

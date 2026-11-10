@@ -1,0 +1,28 @@
+---
+import type { RenderedContentGroup } from "../../../packages/content-core/src/content-row-render";
+import type { RecordCardPayload } from "../lib/record-card-resolution";
+import { cmsBlockGroupVisible } from "../lib/cms-block-visibility";
+import CmsBlockLeaf from "./CmsBlockLeaf.astro";
+
+interface Props {
+  group: RenderedContentGroup;
+  cards: readonly RecordCardPayload[];
+}
+const { group, cards } = Astro.props;
+const hasVisibleChild = cmsBlockGroupVisible(group, cards);
+const widths = group.block.type === "row"
+  ? group.block.data.columns.map(width => `minmax(0, ${width}fr)`).join(" ")
+  : "";
+---
+{group.columns ? hasVisibleChild ? <div
+  class="cms-block cms-block--row"
+  id={group.id}
+  data-block-id={group.block.id}
+  data-block-type="row"
+>
+  <div class="cms-row" style={`--cms-columns: ${widths}`}>
+    {group.columns.map(column => <div class="cms-row__column">
+      {column.map(item => <CmsBlockLeaf group={item} cards={cards} />)}
+    </div>)}
+  </div>
+</div> : null : <CmsBlockLeaf group={group} cards={cards} />}

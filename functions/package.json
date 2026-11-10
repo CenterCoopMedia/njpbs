@@ -1,0 +1,36 @@
+{
+  "name": "njpbs-functions",
+  "version": "0.0.0",
+  "private": true,
+  "description": "NJ PBS Cloud Functions (Gen 2).",
+  "main": "index.js",
+  "browser": {
+    "./lib/public-release-initial-control-guard.js": "./lib/public-release-initial-control-guard.browser.js"
+  },
+  "engines": {
+    "node": "22"
+  },
+  "scripts": {
+    "lint": "eslint ."
+  },
+  "dependencies": {
+    "@aws-sdk/client-lambda": "3.1132.0",
+    "@aws-sdk/client-s3": "^3.1109.0",
+    "@aws-sdk/client-sfn": "^3.1132.0",
+    "@aws-sdk/client-transcribe": "^3.1132.0",
+    "@aws-sdk/credential-providers": "^3.1132.0",
+    "@aws-sdk/s3-request-presigner": "^3.1132.0",
+    "busboy": "^1.6.0",
+    "firebase-admin": "^14.2.0",
+    "firebase-functions": "^7.3.2",
+    "google-auth-library": "^9.15.1",
+    "parse5": "8.0.0",
+    "pdf-lib": "^1.17.1",
+    "sharp": "^0.35.5"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9",
+    "eslint": "^9",
+    "globals": "^15"
+  }
+}

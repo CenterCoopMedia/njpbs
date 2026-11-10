@@ -1,0 +1,12 @@
+{
+  "date": "2026-07-21",
+  "kind": "new",
+  "title": "Edit every public page in Pages",
+  "body": "Every public page now has a record you can open in Pages. You can also edit page and post details such as titles, summaries and slugs.",
+  "prs": [
+    662,
+    667,
+    668
+  ],
+  "order": 0
+}

@@ -1,0 +1,109 @@
+{
+  "source": "pbs-tvss",
+  "generatedAt": "2026-10-02T15:39:31.280Z",
+  "timeZone": "America/New_York",
+  "request": {
+    "station": "WNJT",
+    "dates": [
+      "2026-10-02"
+    ]
+  },
+  "days": {
+    "broadcast": [
+      {
+        "date": "2026-10-02",
+        "callsign": "wnjt",
+        "kind": "broadcast",
+        "feedCid": "4211290e-ce30-49e5-9be1-2c412c5b3278",
+        "timeZone": "America/New_York",
+        "entries": [
+          {
+            "startsAt": "2026-10-02T00:00:00-04:00",
+            "endsAt": "2026-10-02T01:00:00-04:00",
+            "title": "Finding Your Roots With Henry Louis Gates, Jr.",
+            "episodeTitle": "Westward Bound",
+            "description": "Educator Henry Louis Gates Jr. has hosted several PBS series that examine U.S. history. In \"Finding Your Roots,\" the Harvard professor continues his quest to \"get into the DNA of American culture.\" In each episode, celebrities view ancestral histories, sometimes learn of connections to famous/infamous people, discover secrets, and share the emotional experience with viewers. Analyzing genetic code, DNA diagnosticians trace bloodlines and occasionally debunk long-held beliefs.",
+            "episodeDescription": "Tracing the family trees of talk show host Sara Haines and playwright Tracy Letts.",
+            "hd": true,
+            "closedCaptions": true,
+            "seasonNumber": 12,
+            "episodeNumber": 6,
+            "airingType": "Taped",
+            "nolaRoot": "FIYO",
+            "programId": 7927,
+            "programExternalId": "SH015204570000",
+            "cid": "dec58ef0-9ef6-4e2b-86ea-2a6bff93973c",
+            "isKids": false,
+            "feedKind": "broadcast"
+          },
+          {
+            "startsAt": "2026-10-02T19:30:00-04:00",
+            "endsAt": "2026-10-02T20:30:00-04:00",
+            "title": "NJ PBS News with Rob Nelson",
+            "description": "Stay informed with the latest breaking news and headlines.",
+            "hd": true,
+            "closedCaptions": true,
+            "seasonNumber": null,
+            "episodeNumber": null,
+            "airingType": "Taped",
+            "nolaRoot": null,
+            "programId": 87417,
+            "programExternalId": "SH066401120000",
+            "cid": "322aebeb-54c3-4ec6-80a4-aa7248625896",
+            "isKids": false,
+            "feedKind": "broadcast"
+          }
+        ]
+      }
+    ],
+    "kids": [
+      {
+        "date": "2026-10-02",
+        "callsign": "wnjt",
+        "kind": "kids",
+        "feedCid": "4211290e-ce30-49e5-9be1-2c412c5b3278",
+        "timeZone": "America/New_York",
+        "entries": [
+          {
+            "startsAt": "2026-10-02T00:00:00-04:00",
+            "endsAt": "2026-10-02T01:00:00-04:00",
+            "title": "Finding Your Roots With Henry Louis Gates, Jr.",
+            "episodeTitle": "Westward Bound",
+            "description": "Educator Henry Louis Gates Jr. has hosted several PBS series that examine U.S. history. In \"Finding Your Roots,\" the Harvard professor continues his quest to \"get into the DNA of American culture.\" In each episode, celebrities view ancestral histories, sometimes learn of connections to famous/infamous people, discover secrets, and share the emotional experience with viewers. Analyzing genetic code, DNA diagnosticians trace bloodlines and occasionally debunk long-held beliefs.",
+            "episodeDescription": "Tracing the family trees of talk show host Sara Haines and playwright Tracy Letts.",
+            "hd": true,
+            "closedCaptions": true,
+            "seasonNumber": 12,
+            "episodeNumber": 6,
+            "airingType": "Taped",
+            "nolaRoot": "FIYO",
+            "programId": 7927,
+            "programExternalId": "SH015204570000",
+            "cid": "dec58ef0-9ef6-4e2b-86ea-2a6bff93973c",
+            "kids": false,
+            "isKids": false,
+            "feedKind": "kids"
+          },
+          {
+            "startsAt": "2026-10-02T19:30:00-04:00",
+            "endsAt": "2026-10-02T20:30:00-04:00",
+            "title": "NJ PBS News with Rob Nelson",
+            "description": "Stay informed with the latest breaking news and headlines.",
+            "hd": true,
+            "closedCaptions": true,
+            "seasonNumber": null,
+            "episodeNumber": null,
+            "airingType": "Taped",
+            "nolaRoot": null,
+            "programId": 87417,
+            "programExternalId": "SH066401120000",
+            "cid": "322aebeb-54c3-4ec6-80a4-aa7248625896",
+            "kids": false,
+            "isKids": false,
+            "feedKind": "kids"
+          }
+        ]
+      }
+    ]
+  }
+}

@@ -1,0 +1,98 @@
+/* Page sections follow one stable task flow during normal editing. Movement controls become visible
+   only after the editor chooses the explicit layout mode. */
+.editor-layout-mode {
+  grid-column: 1 / -1;
+  order: -1;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  min-width: 0;
+  padding-block-end: var(--space-2);
+  border-block-end: var(--border-width) solid var(--color-border);
+}
+
+.editor-layout-mode-copy {
+  color: var(--color-text-muted);
+  font-size: var(--font-size-sm);
+}
+
+.editor-layout-mode-actions {
+  display: flex;
+  flex: 0 0 auto;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: var(--space-2);
+}
+
+.editor-bento[data-layout-mode="edit"] .editor-bento-grip,
+.editor-bento[data-layout-mode="edit"] .editor-bento-card-controls {
+  display: none;
+}
+
+.editor-bento[data-layout-mode="edit"] .editor-bento-card-header {
+  grid-template-columns: minmax(0, 1fr) auto;
+}
+
+.editor-bento[data-layout-mode="edit"] .editor-bento-card-heading {
+  grid-column: 1;
+}
+
+.editor-bento[data-layout-mode="edit"] .editor-bento-card-aside {
+  grid-column: 2;
+}
+
+.editor-bento[data-layout-mode="customize"] .editor-bento-card {
+  outline: var(--border-width) dashed var(--color-border-strong);
+  outline-offset: calc(-1 * var(--border-width));
+}
+
+/* Layout mode makes movement available. Each card then shows its controls only where the
+   editor is working, while the controls stay in the tab order so keyboard focus reveals them. */
+.editor-bento[data-layout-mode="customize"] .editor-bento-grip,
+.editor-bento[data-layout-mode="customize"] .editor-bento-card-controls {
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity var(--motion-fast) var(--ease-standard);
+}
+
+.editor-bento[data-layout-mode="customize"]
+  .editor-bento-card:focus-within
+  .editor-bento-grip,
+.editor-bento[data-layout-mode="customize"]
+  .editor-bento-card:focus-within
+  .editor-bento-card-controls {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+@media (hover: hover) {
+  .editor-bento[data-layout-mode="customize"]
+    .editor-bento-card:hover
+    .editor-bento-grip,
+  .editor-bento[data-layout-mode="customize"]
+    .editor-bento-card:hover
+    .editor-bento-card-controls {
+    opacity: 1;
+    pointer-events: auto;
+  }
+}
+
+@media (hover: none), (any-pointer: coarse) {
+  .editor-bento[data-layout-mode="customize"] .editor-bento-grip,
+  .editor-bento[data-layout-mode="customize"] .editor-bento-card-controls {
+    opacity: 1;
+    pointer-events: auto;
+  }
+}
+
+@container studio (max-width: 48rem) {
+  .editor-layout-mode {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .editor-layout-mode-actions {
+    justify-content: flex-start;
+  }
+}

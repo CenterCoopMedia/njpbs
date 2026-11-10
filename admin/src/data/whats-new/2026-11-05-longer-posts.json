@@ -1,0 +1,8 @@
+{
+  "date": "2026-11-05",
+  "order": 1793899200000,
+  "kind": "fixed",
+  "title": "Add more rows to a Post",
+  "body": "Posts now hold up to 200 blocks. Each Row and each block inside it counts once. Save your draft and reload Boardwalk to use the higher limit.",
+  "prs": []
+}

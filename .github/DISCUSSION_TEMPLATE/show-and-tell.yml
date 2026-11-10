@@ -1,0 +1,55 @@
+title: "[Feedback] "
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Share a page, draft, design, or workflow that is ready for friendly feedback. Ask one concrete question.
+
+        Do not include passwords, Access codes, donor or member data, private contact details, unpublished agreements, or other protected information.
+  - type: dropdown
+    id: role
+    attributes:
+      label: I am sharing this as
+      options:
+        - A staff editor
+        - A CCM or MSU collaborator
+        - A stakeholder
+        - Someone else
+    validations:
+      required: true
+  - type: textarea
+    id: work
+    attributes:
+      label: What are you sharing?
+    validations:
+      required: true
+  - type: input
+    id: link
+    attributes:
+      label: Where can people view it?
+      description: A public or preview URL that is safe to share with every collaborator.
+  - type: textarea
+    id: feedback
+    attributes:
+      label: What feedback would help?
+      description: "Example: Please check whether the Watch labels make sense on a phone."
+    validations:
+      required: true
+  - type: dropdown
+    id: readiness
+    attributes:
+      label: What stage is the work in?
+      options:
+        - Early idea
+        - Draft for review
+        - Ready for a decision
+        - Live result
+    validations:
+      required: true
+  - type: checkboxes
+    id: privacy
+    attributes:
+      label: Privacy check
+      options:
+        - label: I checked that this post and its links do not include protected or private information.
+          required: true

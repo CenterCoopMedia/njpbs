@@ -1,0 +1,10 @@
+import type { Firestore, Transaction } from "firebase-admin/firestore";
+import type { PublicReleasePair } from "../../packages/content-core/src/public-release";
+import type { PairTaskIdentity } from "./public-release-pair-work";
+import type { PairViewCursor } from "./public-release-pair-view";
+export type PairStagedCodePack = Readonly<{ schemaVersion: 1; kind: "pair-code-pack-staged-baseline"; status: "staged";
+  pairDigest: string; taskId: string; identity: PairTaskIdentity; claimDigest: string; viewManifestDigest: string; inputManifestDigest: string;
+  codePackManifestDigest: string; codeAssetManifestDigest: string; cursor: PairViewCursor; memberCount: number; memberBytes: number; readbackDigest: string }>;
+export function publicReleasePairStagedCodePackPath(pair: PublicReleasePair): string;
+export function parsePublicReleasePairStagedCodePack(value: unknown, pair: PublicReleasePair): PairStagedCodePack;
+export function assertReadPublicReleasePairStagedCodePackInTransaction(args: { firestore: Firestore; transaction: Transaction; pair: PublicReleasePair }): Promise<PairStagedCodePack>;

@@ -1,0 +1,461 @@
+{
+  "source": {
+    "program": "One on One With Steve Adubato",
+    "month": "2026-11",
+    "station": "WNJT",
+    "timeZone": "America/New_York",
+    "scope": "Episode metadata on existing One-on-One airings only. PBS feed intervals and other programs remain unchanged.",
+    "files": [
+      {
+        "file": "source-schedule.txt",
+        "sha256": "207f61c69f72553787f59ed8d7773f4f52053e777a0b13b2a47208d803e06693"
+      },
+      {
+        "file": "source-descriptions.txt",
+        "sha256": "aa7d447a522cd489d8dcf46b4bbcbdaacc51d6e6a4268589302a58081777f5f1"
+      },
+      {
+        "file": "source-proposal.json",
+        "sha256": "32b4bca4c3f12038d89bfce15299b43f7b9d53d08adcddbb80a7efa1881ed440"
+      },
+      {
+        "file": "REV_One-on-One Show Descriptions - November 2026.docx",
+        "sha256": "5bf260287fcd30a61a12f7e2928de6362c3d1a7276678e25a1953db42601ab1c"
+      }
+    ],
+    "description_whitespace": "Restore 14 missing spaces at verified DOCX line breaks on 10 dates. Preserve every non-whitespace character from the packet."
+  },
+  "nj_pbs_start_time_labels": {
+    "monday_through_friday": [
+      "5:30am",
+      "7pm",
+      "11:30pm"
+    ],
+    "saturday": [
+      "7am"
+    ],
+    "sunday": [
+      "11am"
+    ],
+    "pdf_display_text": {
+      "monday_through_friday": [
+        "5:30am - NJ PBS",
+        "7:00pm - NJ PBS",
+        "11:30pm - NJ PBS"
+      ],
+      "saturday": [
+        "7am- NJ PBS"
+      ],
+      "sunday": [
+        "11am- NJ PBS"
+      ]
+    }
+  },
+  "forwarded_authority_replacements": [
+    {
+      "dates": [
+        "2026-11-03"
+      ],
+      "directive": "#2826 replaces #2943",
+      "pdf_result": "#2826",
+      "docx_result": "#2826",
+      "source_status": "The PDF and DOCX agree with the forwarded authority."
+    },
+    {
+      "dates": [
+        "2026-11-07",
+        "2026-11-08"
+      ],
+      "directive": "#2976 replaces #2971",
+      "pdf_result": "#2976 on both dates",
+      "docx_result": "#2976 on November 7 and stale #2971 on November 8",
+      "source_status": "The PDF agrees with the forwarded authority. The DOCX conflicts on November 8."
+    },
+    {
+      "dates": [
+        "2026-11-14",
+        "2026-11-15"
+      ],
+      "directive": "#2979 replaces #2973",
+      "pdf_result": "#2979 on both dates",
+      "docx_result": "#2979 on November 14 and stale #2973 on November 15",
+      "source_status": "The PDF agrees with the forwarded authority. The DOCX conflicts on November 15."
+    },
+    {
+      "dates": [
+        "2026-11-28",
+        "2026-11-29"
+      ],
+      "directive": "#2981 replaces #2976",
+      "pdf_result": "#2981 on both dates",
+      "docx_result": "#2981 on November 28 and stale #2976 on November 29",
+      "source_status": "The PDF agrees with the forwarded authority. The DOCX conflicts on November 29."
+    }
+  ],
+  "conflicts": [
+    {
+      "date": "2026-11-08",
+      "field": "episode_code",
+      "pdf_value": "2976",
+      "docx_value": "2971",
+      "effective_value": "2976",
+      "reason": "The DOCX Sunday code is stale. The PDF agrees with the forwarded directive that #2976 replaces #2971 for November 7 and 8.",
+      "pdf_section": "source-schedule.txt lines 15-19, November 8 calendar cell",
+      "docx_section": "source-descriptions.txt lines 61-67, Air Date 11/08/26"
+    },
+    {
+      "date": "2026-11-12",
+      "field": "air_date_year",
+      "pdf_value": "2026",
+      "docx_value": "2025",
+      "effective_value": "2026",
+      "reason": "The PDF places this entry in the November 2026 calendar. The DOCX heading remains Air Date 11/12/25.",
+      "pdf_section": "source-schedule.txt lines 22-28, November 12 calendar cell",
+      "docx_section": "source-descriptions.txt lines 99-103, Air Date 11/12/25"
+    },
+    {
+      "date": "2026-11-15",
+      "field": "episode_code",
+      "pdf_value": "2979",
+      "docx_value": "2973",
+      "effective_value": "2979",
+      "reason": "The DOCX Sunday code is stale. The PDF agrees with the forwarded directive that #2979 replaces #2973 for November 14 and 15.",
+      "pdf_section": "source-schedule.txt lines 22-28, November 15 calendar cell",
+      "docx_section": "source-descriptions.txt lines 122-128, Air Date 11/15/26"
+    },
+    {
+      "date": "2026-11-26",
+      "field": "guest_or_title",
+      "pdf_value": "Celebrating 30 Years of the Russ Berrie Making A Difference Award",
+      "docx_value": "Celebrating 30 Years of the Russ Berrie Making a Difference Award",
+      "effective_value": "Celebrating 30 Years of the Russ Berrie Making A Difference Award",
+      "reason": "The sources differ only in the capitalization of “A.” The effective guest/title preserves the PDF text.",
+      "pdf_section": "source-schedule.txt lines 35-39, November 26 calendar cell",
+      "docx_section": "source-descriptions.txt lines 220-224, Air Date 11/26/26"
+    },
+    {
+      "date": "2026-11-29",
+      "field": "episode_code",
+      "pdf_value": "2981",
+      "docx_value": "2976",
+      "effective_value": "2981",
+      "reason": "The DOCX Sunday code is stale. The PDF agrees with the forwarded directive that #2981 replaces #2976 for November 28 and 29.",
+      "pdf_section": "source-schedule.txt lines 35-39, November 29 calendar cell",
+      "docx_section": "source-descriptions.txt lines 246-252, Air Date 11/29/26"
+    }
+  ],
+  "dates": [
+    {
+      "date": "2026-11-01",
+      "episode_code": "2959",
+      "guest_or_title": "Jeremy Jordan; Cost n’ Mayor",
+      "description": "Steve Adubato welcomes Tony and Grammy Award Nominee Jeremy Jordan, starring as Bobby Darin in Broadway’s Just In Time, for a conversation about his remarkable career on the stage and screen and his ties to New Jersey. Cost n’ Mayor, Austin and Marideth Telenko, join Senior Correspondent Jacqui Tricarico to explore their rise as a social media dance duo, how they create viral content together, and their mission to make movement a powerful form of storytelling.",
+      "nj_pbs_start_time_labels": [
+        "11am"
+      ]
+    },
+    {
+      "date": "2026-11-02",
+      "episode_code": "2950",
+      "guest_or_title": "Jessica Jenkins; Bryan Felt; Emmie Bleznick",
+      "description": "Senior Correspondent Jacqui Tricarico speaks with Jessica Jenkins, Wife of Organ Donor Jay Jenkins, on-location at the NJ Sharing Network 5K Celebration of Life, about honoring the gift of life through Team Jay Birds and the impact of organ donation on her family. Steve Adubato and One-on-One Contributor Mary Gamba are joined by Bryan Felt, Director of Athletics and Recreational Services at Seton Hall University, to discuss implications of the NCAA's transfer portal and the importance of preparing student-athletes for life beyond college. Senior Correspondent Jacqui Tricarico goes on-location to the NJ Sharing Network 5K Celebration of Life event to speak with Emmie Bleznick, Wife of Tissue Donor Adam Bleznick, about the impact of profound impact of tissue donation and how she continues to honor her husband's life and legacy.",
+      "nj_pbs_start_time_labels": [
+        "5:30am",
+        "7pm",
+        "11:30pm"
+      ]
+    },
+    {
+      "date": "2026-11-03",
+      "episode_code": "2826",
+      "guest_or_title": "Remembering NJ Political Figures",
+      "description": "Steve Adubato and Remember Them co-host Jacqui Tricarico honor the careers of several politicians who dedicated their lives to help shape New Jersey. These unsung heroes include Garabed Chuck Haytaian, Peter Shapiro, Lee Laskin, amongst others.\n\nGuest:\nDavid Wildstein, Editor, New Jersey Globe",
+      "nj_pbs_start_time_labels": [
+        "5:30am",
+        "7pm",
+        "11:30pm"
+      ]
+    },
+    {
+      "date": "2026-11-04",
+      "episode_code": "2962",
+      "guest_or_title": "T.J. English",
+      "description": "Author and Journalist T.J. English sits down with Steve Adubato to explore the motivations, methods, and public perceptions of organized crime groups in the United States and Cuba.",
+      "nj_pbs_start_time_labels": [
+        "5:30am",
+        "7pm",
+        "11:30pm"
+      ]
+    },
+    {
+      "date": "2026-11-05",
+      "episode_code": "2930",
+      "guest_or_title": "Remembering Gov. Richard Codey",
+      "description": "Steve Adubato and Remember Them co-host Jacqui Tricarico pay respect to Governor Richard Codey, New Jersey's longest-serving lawmaker, celebrated for the humanity that shaped his five decades of dedicated public service.\n\nGuests Include:\nMax Pizarro, Editor-in-Chief, InsiderNJ.com Eric Shuffler, Founding Partner, River Crossing Strategy Group",
+      "nj_pbs_start_time_labels": [
+        "5:30am",
+        "7pm",
+        "11:30pm"
+      ]
+    },
+    {
+      "date": "2026-11-06",
+      "episode_code": "2919",
+      "guest_or_title": "Naomi Gewirtz; Calvin R. Ledford Jr.; Jack Ford",
+      "description": "Naomi Gewirtz, President & CEO of the Adler Aphasia Center, sits down with Steve Adubato to discuss awareness for aphasia, the importance of patient-centered care and support, and their committed to training future clinicians. Steve Adubato is joined by Calvin R. Ledford, Jr., President of PSEG Foundation and Director of Corporate Social Responsibility for PSEG, to discuss the impact corporate responsibility initiatives have on small businesses and the community. Steve Adubato sits down with Jack Ford, Author, Legal Analyst, and Emmy Award-winning Journalist, to examine challenges in today’s media landscape and discuss the importance of independent journalism.",
+      "nj_pbs_start_time_labels": [
+        "5:30am",
+        "7pm",
+        "11:30pm"
+      ]
+    },
+    {
+      "date": "2026-11-07",
+      "episode_code": "2976",
+      "guest_or_title": "Alfa M. Demmellash; Raeshem Nijhon",
+      "description": "Steve Adubato and One-on-One Contributor Mary Gamba are joined by Alfa M. Demmellash, CEO of Future Tide Partners and Co-Founder of Rising Tide Capital, for a conversation about entrepreneurship, leadership evolution, inclusive economic opportunities, and embracing innovation without losing sight of people and purpose.\n\nRaeshem Nijhon, Director of No Country for Mothers and Co-Founder of Culture House, joins Senior Correspondent Jacqui Tricarico to discuss how the film amplifies mothers’ voices and sparks conversations around critical issues such as affordable child care and paid parental leave.",
+      "nj_pbs_start_time_labels": [
+        "7am"
+      ]
+    },
+    {
+      "date": "2026-11-08",
+      "episode_code": "2976",
+      "guest_or_title": "Alfa M. Demmellash; Raeshem Nijhon",
+      "description": "Steve Adubato and One-on-One Contributor Mary Gamba are joined by Alfa M. Demmellash, CEO of Future Tide Partners and Co-Founder of Rising Tide Capital, for a conversation about entrepreneurship, leadership evolution, inclusive economic opportunities, and embracing innovation without losing sight of people and purpose.\n\nRaeshem Nijhon, Director of No Country for Mothers and Co-Founder of Culture House, joins Senior Correspondent Jacqui Tricarico to discuss how the film amplifies mothers’ voices and sparks conversations around critical issues such as affordable child care and paid parental leave.",
+      "nj_pbs_start_time_labels": [
+        "11am"
+      ]
+    },
+    {
+      "date": "2026-11-09",
+      "episode_code": "2923",
+      "guest_or_title": "Remembering NJ Journalists",
+      "description": "Steve Adubato and Remember Them co-host Jacqui Tricarico celebrate four influential New Jersey journalists: Jules Witcover, Sam Newhouse, Gus Heningburg, and Gil Noble, highlighting their contributions and profound impact on the media industry.\n\nGuests Include:\nDavid Wildstein, Editor, New Jersey Globe Milton Allimadi, Publisher, Black Star News",
+      "nj_pbs_start_time_labels": [
+        "5:30am",
+        "7pm",
+        "11:30pm"
+      ]
+    },
+    {
+      "date": "2026-11-10",
+      "episode_code": "2972",
+      "guest_or_title": "Sylvester P. Lukasiewicz; Debi Weiss & Charles Farber, MD, PhD; Bond Benton, PhD",
+      "description": "Steve Adubato sits down with Sylvester P. Lukasiewicz, Founder of SPL Films and Director of Back to One — Return to Ground Zero, to discuss how his film illuminates a deeply personal journey of healing, loss, and returning to New York City more than two decades after 9/11.\n\nSteve Adubato speaks with Debi Weiss, Lymphoma Cancer Survivor, and Charles Farber, MD, PhD, Hematologist-Oncologist at Atlantic Health, about Debi’s cancer journey and how innovative immunotherapy transformed her treatment and prognosis.\n\nBond Benton, PhD, Professor of Strategic Communication at Montclair State University, sits down with Steve Adubato to examine how social media algorithms reward negative content, the potential consequences for developing brains, and strategies to address these concerns.",
+      "nj_pbs_start_time_labels": [
+        "5:30am",
+        "7pm",
+        "11:30pm"
+      ]
+    },
+    {
+      "date": "2026-11-11",
+      "episode_code": "2864",
+      "guest_or_title": "Caring for Our Veterans",
+      "description": "Steve Adubato goes on-location to the Essex County Veterans Health Fair to speak with veterans and those who support them about the critical importance of healthcare, mental health resources, and ongoing advocacy for those who have served.",
+      "nj_pbs_start_time_labels": [
+        "5:30am",
+        "7pm",
+        "11:30pm"
+      ]
+    },
+    {
+      "date": "2026-11-12",
+      "episode_code": "2934",
+      "guest_or_title": "Making a Difference: Environmental Justice and Sustainability",
+      "description": "Steve Adubato is joined by three environmental activists to discuss their innovative solutions for a sustainable future. Panelists Include: Jose German-Gomez, Founder, Northeast Earth Coalition Kim Gaddy, Founder and Director, The South Ward Environmental Alliance Ron Hine, Founding Member and Executive Director, Fund For A Better Waterfront",
+      "nj_pbs_start_time_labels": [
+        "5:30am",
+        "7pm",
+        "11:30pm"
+      ]
+    },
+    {
+      "date": "2026-11-13",
+      "episode_code": "2940",
+      "guest_or_title": "Howard Reid and Bridget Nkatta, DNP; Angelica Berrie; Jess Rauchberg, PhD",
+      "description": "Steve Adubato speaks with Howard Reid, Senior Vice President of Corporate Brand and Purpose at Johnson & Johnson and Bridget Nkatta, DNP, Executive Director of Bridge to Life Clinical Care, about why investing in nurses is critical to strengthening healthcare systems and supporting community health. Steve Adubato sits down with Angelica Berrie, President of the Russell Berrie Foundation Board of Trustees, on-location at the final Russ Berrie Making a Difference Awards’ Ceremony to celebrate thirty years of honoring changemakers and discuss the lasting ripple effect throughout New Jersey. Steve Adubato joins Jess Rauchberg, PhD, Assistant Professor in the Department of Communication, Media, and Arts at Seton Hall University, to examine how social media platforms keep users coming back through the design of the algorithm.",
+      "nj_pbs_start_time_labels": [
+        "5:30am",
+        "7pm",
+        "11:30pm"
+      ]
+    },
+    {
+      "date": "2026-11-14",
+      "episode_code": "2979",
+      "guest_or_title": "Chris Brancato; Allan Wylie",
+      "description": "Chris Brancato, Co-Creator, Producer, and Writer of The Westies on MGM+, joins Steve Adubato for a conversation about his fascination with true crime, adapting history for television, and the lasting legacy of New York City’s notorious Westies crime gang.\n\nSportscaster and Junior at Rowan University, Allan Wylie, talks with Steve Adubato about his love of sports broadcasting, his journey as a blind commentator, and how he turns challenges into opportunities to pursue his passion.",
+      "nj_pbs_start_time_labels": [
+        "7am"
+      ]
+    },
+    {
+      "date": "2026-11-15",
+      "episode_code": "2979",
+      "guest_or_title": "Chris Brancato; Allan Wylie",
+      "description": "Chris Brancato, Co-Creator, Producer, and Writer of The Westies on MGM+, joins Steve Adubato for a conversation about his fascination with true crime, adapting history for television, and the lasting legacy of New York City’s notorious Westies crime gang.\n\nSportscaster and Junior at Rowan University, Allan Wylie, talks with Steve Adubato about his love of sports broadcasting, his journey as a blind commentator, and how he turns challenges into opportunities to pursue his passion.",
+      "nj_pbs_start_time_labels": [
+        "11am"
+      ]
+    },
+    {
+      "date": "2026-11-16",
+      "episode_code": "2963",
+      "guest_or_title": "Ryan DePersio; Holly Moscatiello",
+      "description": "Steve Adubato sits down with Chef & Restaurateur Ryan DePersio to discuss his passion for cooking and the opportunities and obstacles the restaurant industry faces today. Holly Moscatiello, Founder and President of The Balance Project, sits down with Senior Correspondent Jacqui Tricarico to examine how her grassroots movement blends fulfilling, real-life experiences with mindful technology use to bring modern childhood back into balance.",
+      "nj_pbs_start_time_labels": [
+        "5:30am",
+        "7pm",
+        "11:30pm"
+      ]
+    },
+    {
+      "date": "2026-11-17",
+      "episode_code": "2956",
+      "guest_or_title": "Eddie S. Glaude Jr., PhD",
+      "description": "Steve Adubato welcomes Professor of African American Studies at Princeton University Eddie S. Glaude Jr., PhD, Author of America, U.S.A.: How Race Shadows the Nation’s Anniversaries, to explore the enduring impact of race on American history and identity, and how it shapes patriotism and the lived experiences of minority communities.",
+      "nj_pbs_start_time_labels": [
+        "5:30am",
+        "7pm",
+        "11:30pm"
+      ]
+    },
+    {
+      "date": "2026-11-18",
+      "episode_code": "2974",
+      "guest_or_title": "Balpreet Grewal-Virk, PhD; John Schreiber; Franco Miyashiro",
+      "description": "Steve Adubato is joined by Balpreet Grewal-Virk, PhD, Senior Vice President of Community Health at RWJBarnabas Health, to examine community initiatives that address homelessness, food insecurity, and social determinants of health.\n\nJohn Schreiber, President and CEO of The New Jersey Performing Arts Center (NJPAC), joins Steve Adubato for a conversation about his legacy, the growth of NJPAC under his leadership, and the power of the arts to transform Newark and strengthen its communities.\n\nFranco Miyashiro, Goldwater Scholarship Recipient and Senior at Ramapo College of New Jersey, speaks with Steve Adubato about his passion for STEM research, his drive to develop solutions to issues that affect people's lives, and his desire to serve as a role model for first-generation students and students of color.",
+      "nj_pbs_start_time_labels": [
+        "5:30am",
+        "7pm",
+        "11:30pm"
+      ]
+    },
+    {
+      "date": "2026-11-19",
+      "episode_code": "2927",
+      "guest_or_title": "Remembering Elston Howard and Pete Carril",
+      "description": "Steve Adubato and Remember Them co-host Jacqui Tricarico reflect on the legacy of Elston Howard, the first Black New York Yankee who is remembered for his defensive prowess and strong ties to the Teaneck, NJ community. Then, they remember Princeton Coach Pete Carril, who led the men’s basketball team to 13 Ivy League championships over 29 seasons.\n\nGuests Include:\nBob Kendrick, President, Negro Leagues Baseball Museum Mitch Henderson, Head Coach, Princeton Men’s Basketball Team",
+      "nj_pbs_start_time_labels": [
+        "5:30am",
+        "7pm",
+        "11:30pm"
+      ]
+    },
+    {
+      "date": "2026-11-20",
+      "episode_code": "2958",
+      "guest_or_title": "Darryl McDaniels",
+      "description": "Steve Adubato is joined by Co-Founder of Run-DMC, Music Icon, Author, and Speaker Darryl McDaniels for a special half-hour conversation about his contributions to the evolution of hip-hop, his powerful journey with mental health, and his mission to champion foster kids across the country.",
+      "nj_pbs_start_time_labels": [
+        "5:30am",
+        "7pm",
+        "11:30pm"
+      ]
+    },
+    {
+      "date": "2026-11-21",
+      "episode_code": "2975",
+      "guest_or_title": "Anjanette Christy; Nicole McGrath-Barnes, DDS; Mariekarl Vilceus-Talty",
+      "description": "Anjanette Christy, Director of the Stockton University Performing Arts Center, joins Steve Adubato to celebrate the center’s 50th anniversary and its longstanding role as a vibrant hub for live performance in South Jersey.\n\nNicole McGrath-Barnes, DDS, Founder & CEO of KinderSmile Foundation, talks with Steve Adubato about the organization’s mission to increase oral care access and education for children and families in marginalized communities.\n\nSteve Adubato is joined by Mariekarl Vilceus-Talty, President & Chief Executive Officer of Partnership for Maternal and Child Health of Northern New Jersey, to examine the organization’s commitment to expanding access to critical support for mothers and children in underserved populations.",
+      "nj_pbs_start_time_labels": [
+        "7am"
+      ]
+    },
+    {
+      "date": "2026-11-22",
+      "episode_code": "2975",
+      "guest_or_title": "Anjanette Christy; Nicole McGrath-Barnes, DDS; Mariekarl Vilceus-Talty",
+      "description": "Anjanette Christy, Director of the Stockton University Performing Arts Center, joins Steve Adubato to celebrate the center’s 50th anniversary and its longstanding role as a vibrant hub for live performance in South Jersey.\n\nNicole McGrath-Barnes, DDS, Founder & CEO of KinderSmile Foundation, talks with Steve Adubato about the organization’s mission to increase oral care access and education for children and families in marginalized communities.\n\nSteve Adubato is joined by Mariekarl Vilceus-Talty, President & Chief Executive Officer of Partnership for Maternal and Child Health of Northern New Jersey, to examine the organization’s commitment to expanding access to critical support for mothers and children in underserved populations.",
+      "nj_pbs_start_time_labels": [
+        "11am"
+      ]
+    },
+    {
+      "date": "2026-11-23",
+      "episode_code": "2959",
+      "guest_or_title": "Jeremy Jordan; Cost n’ Mayor",
+      "description": "Steve Adubato welcomes Tony and Grammy Award Nominee Jeremy Jordan, starring as Bobby Darin in Broadway’s Just In Time, for a conversation about his remarkable career on the stage and screen and his ties to New Jersey. Cost n’ Mayor, Austin and Marideth Telenko, join Senior Correspondent Jacqui Tricarico to explore their rise as a social media dance duo, how they create viral content together, and their mission to make movement a powerful form of storytelling.",
+      "nj_pbs_start_time_labels": [
+        "5:30am",
+        "7pm",
+        "11:30pm"
+      ]
+    },
+    {
+      "date": "2026-11-24",
+      "episode_code": "2970",
+      "guest_or_title": "Samuel Kim; Katharine Clouser, MD, MBA; Michele Russo",
+      "description": "Steve Adubato speaks with Samuel Kim, Founder & Executive Director of Aim for Unity, about how his non-profit promotes brain health and dementia awareness through free and safe archery workshops for seniors.\n\nSteve Adubato is joined by Katharine Clouser, MD, MBA, Vice Chair of Pediatrics at Hackensack Meridian Joseph M. Sanzari Children’s Hospital and Immediate Past President of the NJ Chapter of American Academy of Pediatrics, to examine the importance of herd immunity for vaccine effectiveness and the rationale behind vaccine recommendations.\n\nSenior Correspondent Jacqui Tricarico is joined by Michele Russo, President & CEO of Young Audiences Arts for Learning NJ & Eastern PA, to discuss the organization’s commitment to arts education through engaging performances and expert instruction that expand access to the arts for all students.",
+      "nj_pbs_start_time_labels": [
+        "5:30am",
+        "7pm",
+        "11:30pm"
+      ]
+    },
+    {
+      "date": "2026-11-25",
+      "episode_code": "2952",
+      "guest_or_title": "Vanrick Vandenburg; Scott J. Mariani and Peter Hartney; Jacqueline Foley",
+      "description": "Senior Correspondent Jacqui Tricarico joins Vanrick Vandenburg, Father of Organ Donor Devin Vandenburg, on-location at the NJ Sharing Network 5K Celebration of Life, to honor the memory of his son and the community of family, friends, and supporters who continue to celebrate his life. Steve Adubato speaks with Scott J. Mariani, President of Simon J. Mariani Foundation, Inc., and Peter Hartney, President of Surf City Volunteer Fire Co. #1 and Emergency Medical Services, about honoring Simon Mariani’s legacy through community service, scholarships and support. On-location at the NJ Sharing Network 5K Celebration of Life, Senior Correspondent Jacqui Tricarico sits down with Jacqueline Foley, Advanced Hospital Development Manager at New Jersey Sharing Network and Member of Team Caitlin Gives, to explore how her early experiences of organ donation and transplantation led to a career of advocacy.",
+      "nj_pbs_start_time_labels": [
+        "5:30am",
+        "7pm",
+        "11:30pm"
+      ]
+    },
+    {
+      "date": "2026-11-26",
+      "episode_code": "2954",
+      "guest_or_title": "Celebrating 30 Years of the Russ Berrie Making A Difference Award",
+      "description": "In this special edition of One-on-One, Steve Adubato looks back on 30 years of the Russ Berrie Making a Difference Award and the remarkable New Jersey changemakers whose impact continues to inspire.",
+      "nj_pbs_start_time_labels": [
+        "5:30am",
+        "7pm",
+        "11:30pm"
+      ]
+    },
+    {
+      "date": "2026-11-27",
+      "episode_code": "2855",
+      "guest_or_title": "Remembering Pat Nixon",
+      "description": "Steve Adubato and Remember Them co-host Jacqui Tricarico pay respect to First Lady Pat Nixon, highlighting how her leadership, service, and quiet feminism helped shape opportunities for women today.\n\nGuest:\nHeath Hardage Lee, Author, The Mysterious Mrs. Nixon: The Life and Times of Washington’s Most Private First Lady",
+      "nj_pbs_start_time_labels": [
+        "5:30am",
+        "7pm",
+        "11:30pm"
+      ]
+    },
+    {
+      "date": "2026-11-28",
+      "episode_code": "2981",
+      "guest_or_title": "Lisa Marie Falbo; Jocelyn Carley",
+      "description": "Steve Adubato and One-on-One Contributor sit down with Lisa Marie Falbo, Co-Founder of On New Jersey (ONNJ) and author of LiLu the Peach, to discuss the message of her new children's book as well as entrepreneurship, storytelling, and innovative ways to engage audiences.\n\nBreast Cancer Survivor and Englewood Health Patient Jocelyn Carley sits down with Senior Correspondent Jacqui Tricarico to talk about her journey with cancer, the importance of being your own advocate, and how to navigate the uncertainties of diagnosis and treatment.",
+      "nj_pbs_start_time_labels": [
+        "7am"
+      ]
+    },
+    {
+      "date": "2026-11-29",
+      "episode_code": "2981",
+      "guest_or_title": "Lisa Marie Falbo; Jocelyn Carley",
+      "description": "Steve Adubato and One-on-One Contributor sit down with Lisa Marie Falbo, Co-Founder of On New Jersey (ONNJ) and author of LiLu the Peach, to discuss the message of her new children's book as well as entrepreneurship, storytelling, and innovative ways to engage audiences.\n\nBreast Cancer Survivor and Englewood Health Patient Jocelyn Carley sits down with Senior Correspondent Jacqui Tricarico to talk about her journey with cancer, the importance of being your own advocate, and how to navigate the uncertainties of diagnosis and treatment.",
+      "nj_pbs_start_time_labels": [
+        "11am"
+      ]
+    },
+    {
+      "date": "2026-11-30",
+      "episode_code": "2953",
+      "guest_or_title": "2026 New Jersey Sharing Network Celebration of Life",
+      "description": "Senior Correspondent Jacqui Tricarico goes on-location to the NJ Sharing Network's Annual 5K Celebration of Life, to hear powerful testimonies from attendees about the lasting impact of organ and tissue donation on their lives and the lives of those they love.",
+      "nj_pbs_start_time_labels": [
+        "5:30am",
+        "7pm",
+        "11:30pm"
+      ]
+    }
+  ]
+}

@@ -1,0 +1,9 @@
+[Unit]
+Description=Reconcile private MP4 viewing-copy backups
+
+[Timer]
+OnBootSec=5m
+OnUnitInactiveSec=15m
+
+[Install]
+WantedBy=timers.target

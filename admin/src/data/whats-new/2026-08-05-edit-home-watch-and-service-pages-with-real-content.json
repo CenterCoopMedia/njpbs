@@ -1,0 +1,13 @@
+{
+  "date": "2026-08-05",
+  "kind": "new",
+  "title": "Edit Home, Watch and service pages with real content",
+  "body": "Home, Watch and the service pages now open in the editor with their live content and layout. You edit what visitors see instead of placeholder text.",
+  "prs": [
+    836,
+    829,
+    819,
+    815
+  ],
+  "order": 0
+}

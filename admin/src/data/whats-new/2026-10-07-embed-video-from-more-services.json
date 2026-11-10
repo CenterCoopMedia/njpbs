@@ -1,0 +1,14 @@
+{
+  "date": "2026-10-07",
+  "kind": "improved",
+  "title": "Embed video from more services",
+  "body": "The embed block now plays YouTube, Vimeo, TikTok, Instagram, Facebook, PBS and X video. YouTube players keep their start time and fit the screen.",
+  "prs": [
+    2767,
+    2470,
+    2471,
+    2472,
+    2505
+  ],
+  "order": -2
+}

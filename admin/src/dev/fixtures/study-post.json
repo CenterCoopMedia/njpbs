@@ -1,0 +1,246 @@
+{
+  "id": "study-post",
+  "type": "post",
+  "version": 30,
+  "contentVersion": 30,
+  "status": "draft",
+  "publiclyVisible": true,
+  "published": {
+    "sourceVersion": 29
+  },
+  "title": "Man who waged Delaney Hall hunger strike released from ICE custody",
+  "summary": "",
+  "credits": [
+    {
+      "kind": "custom",
+      "name": "Sean P. Sullivan"
+    }
+  ],
+  "date": "2026-10-07",
+  "recordMeaningfulUpdate": false,
+  "showUpdatedDate": false,
+  "categories": [
+    "news",
+    "immigration"
+  ],
+  "tags": [
+    "delaney hall",
+    "news",
+    "nj",
+    "nj pbs",
+    "announcement",
+    "ice",
+    "immigration"
+  ],
+  "spotlightNews": false,
+  "slug": "man-who-waged-delaney-hall-hunger-strike-released-from-ice-custody",
+  "heroBackgroundImage": "study-background",
+  "heroBackgroundPosition": "center",
+  "blocks": [
+    {
+      "id": "study-post-video",
+      "type": "video",
+      "visible": true,
+      "data": {
+        "sourceId": "video-library",
+        "assetId": "study-video",
+        "title": "Man who waged Delaney Hall hunger strike released from ICE custody"
+      },
+      "order": 0
+    },
+    {
+      "id": "study-post-row",
+      "type": "row",
+      "visible": true,
+      "data": {
+        "columns": [
+          8,
+          4
+        ]
+      },
+      "order": 1
+    },
+    {
+      "id": "study-post-intro",
+      "type": "prose",
+      "visible": true,
+      "data": {
+        "content": {
+          "type": "doc",
+          "content": [
+            {
+              "type": "paragraph",
+              "content": [
+                {
+                  "type": "text",
+                  "text": "NEWARK, N.J.",
+                  "marks": [
+                    {
+                      "type": "bold"
+                    }
+                  ]
+                },
+                {
+                  "type": "text",
+                  "text": " — He was at the center of a hunger strike inside a controversial ICE detention center in Newark, New Jersey that sparked protests and calls for the closure of Delaney Hall."
+                },
+                {
+                  "type": "hardBreak"
+                },
+                {
+                  "type": "hardBreak"
+                },
+                {
+                  "type": "text",
+                  "text": "Now Martin Soto is free after eight months behind bars."
+                },
+                {
+                  "type": "hardBreak"
+                },
+                {
+                  "type": "hardBreak"
+                },
+                {
+                  "type": "text",
+                  "text": "Soto drew international attention when his wife, Gabriella, demonstrated outside Delaney Hall in the spring as Martin and other detainees staged a weeks-long hunger strike inside."
+                },
+                {
+                  "type": "hardBreak"
+                },
+                {
+                  "type": "hardBreak"
+                },
+                {
+                  "type": "text",
+                  "text": "Soto, an asylum seeker from Peru, was transferred from Delaney Hall to another facility in Elizabeth in May, as the protests outside Delaney Hall grew increasingly violent with clashes between protesters, federal immigration officers and even local police."
+                }
+              ]
+            },
+            {
+              "type": "paragraph",
+              "content": [
+                {
+                  "type": "text",
+                  "text": "U.S. Representative Nellie Pou (D-9th) said in a statement late Tuesday that Soto was “finally freed from ICE custody.”"
+                },
+                {
+                  "type": "hardBreak"
+                },
+                {
+                  "type": "hardBreak"
+                },
+                {
+                  "type": "text",
+                  "text": "“Martin was undeniably targeted and mistreated, being moved from Delaney Hall to the Elizabeth Detention Center and held in solitary confinement,” Pou said."
+                }
+              ]
+            }
+          ]
+        }
+      },
+      "layout": {
+        "rowId": "study-post-row",
+        "column": 0
+      },
+      "order": 2
+    },
+    {
+      "id": "study-post-image",
+      "type": "image",
+      "visible": true,
+      "data": {
+        "assetId": "study-photo",
+        "caption": "Martin Soto (center) reunites with his wife and children outside of Delaney Hall following his release from ICE detention center.",
+        "alt": "",
+        "altDecorative": false
+      },
+      "layout": {
+        "rowId": "study-post-row",
+        "column": 1
+      },
+      "order": 3
+    },
+    {
+      "id": "study-post-continuation",
+      "type": "prose",
+      "visible": true,
+      "data": {
+        "content": {
+          "type": "doc",
+          "content": [
+            {
+              "type": "paragraph",
+              "content": [
+                {
+                  "type": "text",
+                  "text": "“For months my office has been pushing ICE to release Martin and tonight justice is finally being done. It should have happened months ago.”"
+                },
+                {
+                  "type": "hardBreak"
+                },
+                {
+                  "type": "hardBreak"
+                },
+                {
+                  "type": "text",
+                  "text": "The Trump administration and ICE have maintained there was no hunger strike, calling it a publicity stunt by Democratic lawmakers and activists. Immigration advocates released multiple public letters signed by more than 300 detainees describing deplorable conditions inside Delaney Hall, including rotten food, lack of medical care and unsanitary conditions."
+                },
+                {
+                  "type": "hardBreak"
+                },
+                {
+                  "type": "hardBreak"
+                },
+                {
+                  "type": "text",
+                  "text": "DHS did not respond to a request for comment from NJ PBS on Soto’s release. His wife told news reporters that “the state of New Jersey signed off on his new Visa certification,” clearing the way for his release."
+                },
+                {
+                  "type": "hardBreak"
+                },
+                {
+                  "type": "hardBreak"
+                },
+                {
+                  "type": "text",
+                  "text": "A spokesman for Gov. Mikie Sherrill did not respond to a request for comment."
+                },
+                {
+                  "type": "hardBreak"
+                },
+                {
+                  "type": "hardBreak"
+                },
+                {
+                  "type": "text",
+                  "text": "Casey Ward, a New Jersey hairdresser and activist who is close with the Sotos, shared video from outside the Elizabeth facility Tuesday evening, showing Martin and Gabi Soto reunited and speaking to supporters as the couple’s two children climbed their way into Martin’s arms."
+                },
+                {
+                  "type": "hardBreak"
+                },
+                {
+                  "type": "hardBreak"
+                },
+                {
+                  "type": "text",
+                  "text": "“We have seen that when we don't accept ‘nothing can be done’ as an answer, things can be done,” Ward told NJ PBS in an interview."
+                },
+                {
+                  "type": "hardBreak"
+                },
+                {
+                  "type": "hardBreak"
+                },
+                {
+                  "type": "text",
+                  "text": "“The squeaky wheel gets the oil and there is no squeakier wheel in this fight than Gabriela Soto. She is a force of nature. And I really think that she has proven that if you can get yourself in front of the right people and annoy them enough, something might just happen. We can, with persistence, fight for the release of our neighbors and reunite families.”"
+                }
+              ]
+            }
+          ]
+        }
+      },
+      "order": 4
+    }
+  ]
+}

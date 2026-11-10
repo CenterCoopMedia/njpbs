@@ -1,0 +1,12 @@
+{
+  "date": "2026-09-01",
+  "kind": "new",
+  "title": "Manage staff profiles and author pages",
+  "body": "Managers can create, update and close staff profiles. On an author page, you can pin Posts to the top or hide Posts from the list.",
+  "prs": [
+    1380,
+    1390,
+    1391
+  ],
+  "order": -4
+}

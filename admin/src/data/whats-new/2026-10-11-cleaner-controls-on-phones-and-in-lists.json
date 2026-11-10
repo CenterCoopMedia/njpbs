@@ -1,0 +1,19 @@
+{
+  "date": "2026-10-11",
+  "kind": "improved",
+  "title": "Cleaner controls on phones and in lists",
+  "body": "Phones show icon-only buttons with clear names. Lists use small add and remove controls. The queue, activity, schedule and All content views are easier to scan, and editors use the full width.",
+  "prs": [
+    3146,
+    2444,
+    2447,
+    2445,
+    2962,
+    2970,
+    2965,
+    2955,
+    2960,
+    3010
+  ],
+  "order": -1
+}

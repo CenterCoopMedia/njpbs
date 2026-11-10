@@ -1,0 +1,11 @@
+{
+  "date": "2026-09-09",
+  "kind": "improved",
+  "title": "See rows and columns in the Page outline",
+  "body": "The Page outline now shows each row, its columns and the content inside them. The outline stays closed until you open it, so you have more room to write.",
+  "prs": [
+    1691,
+    1559
+  ],
+  "order": -2
+}

@@ -1,0 +1,827 @@
+---
+// The public "report a problem" dialog.
+//
+// A framework-free island: the shared modal controller owns the native
+// <dialog>'s focus, Escape, backdrop, and close behavior. This script keeps the
+// report form's validation and Cloudflare Worker submission lifecycle. The
+// trigger button lives in the footer of PublicSiteLayout and carries
+// data-report-open; this island binds to it, so the dialog can sit once at the
+// end of the footer and still overlay from the top layer.
+//
+// The widget renders in preview builds for review. Submission stays disabled
+// when those builds omit the endpoint. Required public builds fail instead of
+// publishing a report form without its endpoint or bot check.
+import { CATEGORIES } from "../lib/report-form";
+
+const endpoint = (import.meta.env.PUBLIC_REPORT_ENDPOINT ?? "").trim();
+const turnstileSitekey = (import.meta.env.PUBLIC_TURNSTILE_SITEKEY ?? "").trim();
+const reportRequired = import.meta.env.PUBLIC_REPORT_REQUIRED === "1";
+if (reportRequired && (!endpoint || !turnstileSitekey)) {
+  throw new Error(
+    "PUBLIC_REPORT_ENDPOINT and PUBLIC_TURNSTILE_SITEKEY are required for this deployment.",
+  );
+}
+---
+
+<dialog
+  class="report-dialog"
+  data-report-dialog
+  data-endpoint={endpoint}
+  data-sitekey={turnstileSitekey}
+  aria-labelledby="report-dialog-title"
+>
+  <form class="report-dialog__panel" method="dialog" data-report-form novalidate>
+    <div class="report-dialog__head">
+      <div class="report-dialog__title">
+        {/* Decorative: the dialog's accessible name comes from the title below,
+            so the wordmark is a brand cue, not a second announced label. */}
+        <img
+          class="report-dialog__brand"
+          src="/brand/njpbs-horizontal-white.svg"
+          alt=""
+          width="146"
+          height="40"
+        />
+        <h2 id="report-dialog-title">Report a problem</h2>
+      </div>
+      <button
+        type="button"
+        class="report-dialog__close"
+        data-dialog-close
+        aria-label="Close"
+      >
+        <span aria-hidden="true">&times;</span>
+      </button>
+    </div>
+
+    <p class="report-dialog__intro">
+      Found something broken, or have a suggestion? Tell us what happened and we
+      will look into it.
+    </p>
+
+    <fieldset class="report-dialog__field report-dialog__categories">
+      <legend>What kind of feedback is this?</legend>
+      {
+        CATEGORIES.map((cat, i) => (
+          <label class="report-dialog__choice">
+            <input
+              type="radio"
+              name="category"
+              value={cat.id}
+              checked={i === 0}
+            />
+            <span>{cat.label}</span>
+          </label>
+        ))
+      }
+    </fieldset>
+
+    <div class="report-dialog__field">
+      <label for="report-description">Tell us what happened</label>
+      <textarea
+        id="report-description"
+        name="description"
+        rows="4"
+        minlength="10"
+        maxlength="2000"
+        required
+        aria-invalid="false"
+        aria-describedby="report-description-hint report-description-count"
+        placeholder="Describe the issue, suggestion, or question."
+        data-report-description></textarea>
+      <div class="report-dialog__meta">
+        <span id="report-description-hint" data-report-hint>At least 10 characters.</span>
+        <span id="report-description-count" data-report-count>0 / 2000</span>
+      </div>
+      <p
+        class="report-dialog__error"
+        id="report-description-error"
+        data-report-description-error
+        hidden
+      >
+        Enter at least 10 characters.
+      </p>
+    </div>
+
+    <div class="report-dialog__field">
+      <label for="report-email">
+        Email <span class="report-dialog__optional">(optional, for confirmation and updates)</span>
+      </label>
+      <input
+        type="email"
+        id="report-email"
+        name="email"
+        autocomplete="email"
+        placeholder="you@example.com"
+        aria-invalid="false"
+        data-report-email
+      />
+      <p
+        class="report-dialog__error"
+        id="report-email-error"
+        data-report-email-error
+        hidden
+      >
+        Enter a valid email address or leave this field blank.
+      </p>
+    </div>
+
+    {/* Honeypot: hidden from people and assistive tech, tempting to bots. A
+        filled value means an automated submit, which we silently drop. */}
+    <div class="report-dialog__hp" aria-hidden="true">
+      <label for="report-website">Leave this field empty</label>
+      <input
+        type="text"
+        id="report-website"
+        name="website"
+        tabindex="-1"
+        autocomplete="off"
+        data-report-hp
+      />
+    </div>
+
+    <div data-report-turnstile></div>
+
+    <p class="report-dialog__status" role="status" aria-live="polite" data-report-status></p>
+    <button type="button" class="report-dialog__btn report-dialog__btn--ghost report-dialog__retry" data-report-retry hidden>
+      Retry spam check
+    </button>
+
+    <p class="report-dialog__note" data-report-note hidden></p>
+
+    <div class="report-dialog__actions">
+      <button type="button" class="report-dialog__btn report-dialog__btn--ghost" data-dialog-close>
+        Cancel
+      </button>
+      <button type="submit" class="report-dialog__btn report-dialog__btn--primary" data-report-submit disabled>
+        Send report
+      </button>
+    </div>
+  </form>
+</dialog>
+
+<script>
+  import {
+    buildReportPayload,
+    canSubmit,
+    isDescriptionLongEnough,
+    isValidEmail,
+    MAX_DESCRIPTION_LENGTH,
+    MIN_DWELL_MS,
+    passesDwell,
+  } from "../lib/report-form";
+  import { getConsoleLogs, initConsoleCapture } from "../lib/console-capture";
+  import { createModalDialog } from "../lib/dialog";
+
+  // Adopt the boot-time capture buffer the head primitive installed (or start a
+  // fresh one if it is absent), so a report carries console output from page boot
+  // onward, not only from when this footer island mounted. Safe to call once; the
+  // module ignores repeats.
+  initConsoleCapture();
+
+  const dialog = document.querySelector<HTMLDialogElement>("[data-report-dialog]");
+  const form = dialog?.querySelector<HTMLFormElement>("[data-report-form]");
+  if (dialog && form) {
+    // Non-null aliases: TypeScript does not carry this guard's narrowing into
+    // the nested handlers defined below (a closure could run later), so capture
+    // the checked values once and use them where a handler needs them.
+    const reportDialog = dialog;
+    const reportForm = form;
+    const endpoint = (dialog.dataset.endpoint || "").trim();
+    const sitekey = (dialog.dataset.sitekey || "").trim();
+
+    const descEl = form.querySelector<HTMLTextAreaElement>("[data-report-description]")!;
+    const descriptionErrorEl = form.querySelector<HTMLElement>("[data-report-description-error]")!;
+    const emailEl = form.querySelector<HTMLInputElement>("[data-report-email]")!;
+    const emailErrorEl = form.querySelector<HTMLElement>("[data-report-email-error]")!;
+    const hpEl = form.querySelector<HTMLInputElement>("[data-report-hp]")!;
+    const countEl = form.querySelector<HTMLElement>("[data-report-count]")!;
+    const statusEl = form.querySelector<HTMLElement>("[data-report-status]")!;
+    const retryEl = form.querySelector<HTMLButtonElement>("[data-report-retry]")!;
+    const noteEl = form.querySelector<HTMLElement>("[data-report-note]")!;
+    const submitEl = form.querySelector<HTMLButtonElement>("[data-report-submit]")!;
+    const turnstileMount = form.querySelector<HTMLElement>("[data-report-turnstile]")!;
+    // The button's resting label, captured once. A submit swaps it to "Sending...";
+    // resetForm restores it on every open so a stale send that gets ignored (the
+    // generation guard below) can never leave a reopened dialog stuck on "Sending...".
+    const submitLabel = submitEl.textContent;
+    const descriptionDescriptions = "report-description-hint report-description-count";
+
+    let openedAt = 0;
+    let sending = false;
+    let turnstileToken = "";
+    let turnstileRendered = false;
+    let turnstileWidgetId: string | undefined;
+    let turnstileLoading = false;
+    let turnstileStatusActive = false;
+    let dwellTimer = 0;
+    let closeTimer = 0;
+    // Bumped on every open and close. A submit captures this at send time and
+    // ignores its own response if the dialog was closed or reopened while the
+    // request was in flight, so a stale response never writes into a new session.
+    let openGeneration = 0;
+
+    // The submit button turns on only when the description is long enough and
+    // the dwell has elapsed, a Turnstile token exists if a sitekey is configured,
+    // and there is a live endpoint to post to. Gating on dwell here (not only at
+    // submit time) means a genuine fast reporter cannot click Send before the
+    // three seconds and get silently dropped by the submit-time bot check; a
+    // timer in openDialog flips the button on at the dwell mark so a valid form
+    // does not sit stuck if the reporter stops typing.
+    function emailIsValid() {
+      const email = emailEl.value.trim();
+      return !email || isValidEmail(email);
+    }
+
+    function validateEmail() {
+      const valid = emailIsValid();
+      emailEl.setAttribute("aria-invalid", String(!valid));
+      if (valid) {
+        emailEl.removeAttribute("aria-describedby");
+      } else {
+        emailEl.setAttribute("aria-describedby", "report-email-error");
+      }
+      emailErrorEl.hidden = valid;
+      return valid;
+    }
+
+    function validateDescription() {
+      const valid = isDescriptionLongEnough(descEl.value);
+      descEl.setAttribute("aria-invalid", String(!valid));
+      descEl.setAttribute(
+        "aria-describedby",
+        valid ? descriptionDescriptions : `${descriptionDescriptions} report-description-error`,
+      );
+      descriptionErrorEl.hidden = valid;
+      return valid;
+    }
+
+    function refreshSubmitState() {
+      const ok =
+        !sending &&
+        Boolean(endpoint) &&
+        emailIsValid() &&
+        canSubmit({ description: descEl.value, timeElapsed: Date.now() - openedAt }) &&
+        (!sitekey || Boolean(turnstileToken));
+      submitEl.disabled = !ok;
+    }
+
+    function setStatus(message: string, tone: "error" | "success" | "") {
+      if (statusEl.contains(document.activeElement) || document.activeElement === retryEl) {
+        descEl.focus();
+      }
+      turnstileStatusActive = false;
+      retryEl.hidden = true;
+      statusEl.textContent = message;
+      statusEl.dataset.tone = tone;
+    }
+
+    function showSpamCheckError(message: string, retryable = false) {
+      turnstileToken = "";
+      const showRetry = retryable && turnstileRendered && Boolean(window.turnstile);
+      // Automatic retries can repeat this error while someone is using its
+      // recovery controls. Keep those nodes and their focus until state changes.
+      if (turnstileStatusActive && statusEl.dataset.tone === "error" &&
+          statusEl.firstChild?.textContent === message && retryEl.hidden === !showRetry) {
+        refreshSubmitState();
+        return;
+      }
+      setStatus(message, "error");
+      turnstileStatusActive = true;
+      const emailLink = document.createElement("a");
+      emailLink.href = "mailto:njpbs@montclair.edu?subject=Website%20problem%20report";
+      emailLink.textContent = "Email njpbs@montclair.edu to report the problem.";
+      statusEl.append(" ", emailLink);
+      retryEl.hidden = !showRetry;
+      refreshSubmitState();
+    }
+
+    retryEl.addEventListener("click", () => {
+      setStatus("Retrying the spam check…", "");
+      turnstileStatusActive = true;
+      descEl.focus();
+      try {
+        if (!window.turnstile) throw new Error("Spam check unavailable");
+        window.turnstile.reset(turnstileWidgetId);
+      } catch {
+        showSpamCheckError("We couldn't complete the spam check. Please try again.", true);
+      }
+    });
+
+    function resetForm() {
+      reportForm.reset();
+      submitEl.textContent = submitLabel;
+      sending = false;
+      turnstileToken = "";
+      turnstileStatusActive = false;
+      countEl.textContent = `0 / ${MAX_DESCRIPTION_LENGTH}`;
+      descEl.setAttribute("aria-invalid", "false");
+      descEl.setAttribute("aria-describedby", descriptionDescriptions);
+      descriptionErrorEl.hidden = true;
+      setStatus("", "");
+      validateEmail();
+      if (turnstileRendered && window.turnstile) {
+        try {
+          window.turnstile.reset(turnstileWidgetId);
+        } catch {
+          /* a failed reset is not worth surfacing */
+        }
+      }
+      refreshSubmitState();
+    }
+
+    // Cloudflare's script is loaded (and the widget rendered) only when a sitekey
+    // is configured, so a preview build without one never pulls a third-party
+    // script. Rendered on first open so it lays out in a visible dialog.
+    function ensureTurnstile() {
+      if (!sitekey || turnstileRendered) return;
+      const render = () => {
+        if (!window.turnstile || turnstileRendered) return;
+        turnstileWidgetId = window.turnstile.render(turnstileMount, {
+          sitekey,
+          callback: (token: string) => {
+            turnstileToken = token;
+            if (turnstileStatusActive) {
+              setStatus("", "");
+            }
+            refreshSubmitState();
+          },
+          "expired-callback": () => {
+            turnstileToken = "";
+            refreshSubmitState();
+          },
+          "error-callback": (code: string) => {
+            // Cloudflare documents only these codes/families as resettable:
+            // https://developers.cloudflare.com/turnstile/troubleshooting/client-side-errors/error-codes/
+            const retryable = /^(110600|110620|200500|300\d*|600\d*)$/.test(code);
+            showSpamCheckError(
+              retryable ? "We couldn't complete the spam check. Please try again."
+                : "The spam check is unavailable right now.",
+              retryable,
+            );
+          },
+        });
+        turnstileRendered = true;
+      };
+      if (window.turnstile) {
+        render();
+        return;
+      }
+      // api.js may still be loading from an earlier open. Attach only one load
+      // handler; without this guard each reopen stacks another render() against
+      // the same mount and Turnstile draws duplicate widgets.
+      if (turnstileLoading) return;
+      turnstileLoading = true;
+      const src = "https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit";
+      let script = document.querySelector<HTMLScriptElement>(`script[src="${src}"]`);
+      if (!script) {
+        script = document.createElement("script");
+        script.src = src;
+        script.async = true;
+        script.defer = true;
+        document.head.appendChild(script);
+      }
+      script.addEventListener("load", render, { once: true });
+      script.addEventListener(
+        "error",
+        () => {
+          turnstileLoading = false;
+          // Drop the failed element so the next open re-adds a fresh script. A
+          // script that already errored never re-fires load, so reusing it would
+          // leave submit permanently disabled whenever a sitekey is configured.
+          script?.remove();
+          // With a sitekey set, submit needs a Turnstile token, so a blocked or
+          // failed script (an ad blocker, an offline edge) is a dead end. Point
+          // the reporter at the email path instead of a silently disabled button.
+          showSpamCheckError(
+            "We couldn't load the spam check.",
+          );
+        },
+        { once: true },
+      );
+    }
+
+    const modal = createModalDialog(reportDialog, {
+      initialFocus: descEl,
+      // Turnstile needs the dialog to be visible before it can lay out its
+      // iframe. The controller calls onOpen only after showModal and focus.
+      onOpen: ensureTurnstile,
+      onClose: () => {
+        openGeneration += 1;
+        window.clearTimeout(dwellTimer);
+        window.clearTimeout(closeTimer);
+      },
+    });
+
+    function openDialog(trigger: HTMLElement) {
+      openGeneration += 1;
+      openedAt = Date.now();
+      resetForm();
+      // Flip the submit button on once the dwell elapses even if the reporter
+      // has stopped interacting, so a valid fast report is never lost.
+      window.clearTimeout(dwellTimer);
+      // Cancel a pending success/automated close from a previous session, or its
+      // timer could fire and close this freshly opened dialog mid-typing.
+      window.clearTimeout(closeTimer);
+      dwellTimer = window.setTimeout(refreshSubmitState, MIN_DWELL_MS + 50);
+      if (!endpoint) {
+        noteEl.hidden = false;
+        noteEl.textContent =
+          "Reporting isn't available right now. To reach us in the meantime, email njpbs@montclair.edu.";
+      } else {
+        noteEl.hidden = true;
+      }
+      modal.open(trigger);
+    }
+
+    function closeDialog() {
+      modal.close();
+    }
+
+    descEl.addEventListener("input", () => {
+      const len = descEl.value.length;
+      countEl.textContent = `${len} / ${MAX_DESCRIPTION_LENGTH}`;
+      validateDescription();
+      refreshSubmitState();
+    });
+
+    emailEl.addEventListener("input", () => {
+      validateEmail();
+      refreshSubmitState();
+    });
+
+    // The footer trigger is a real mailto: link. Only hijack it into the dialog
+    // when the dialog can actually do its job: there must be an endpoint to post
+    // to and real modal support. Otherwise let
+    // the link open the reporter's email client rather than trapping them in a
+    // dialog they cannot submit.
+    for (const trigger of document.querySelectorAll<HTMLElement>("[data-report-open]")) {
+      trigger.addEventListener("click", (e) => {
+        if (!endpoint || !modal.supportsModal) return;
+        e.preventDefault();
+        openDialog(trigger);
+      });
+    }
+
+    // The signed-out Boardwalk screen links here without carrying account data.
+    // Keep the same configured public form and its ordinary spam-check gate.
+    const requestedTrigger = document.querySelector<HTMLElement>("#main")
+      ?? document.querySelector<HTMLElement>("[data-report-open]");
+    if (window.location.hash === "#report-a-problem" && endpoint &&
+        modal.supportsModal && requestedTrigger) {
+      openDialog(requestedTrigger);
+    }
+
+    form.addEventListener("submit", async (e) => {
+      e.preventDefault();
+      if (sending) return;
+
+      if (!validateEmail()) {
+        setStatus("Enter a valid email address or leave it blank.", "error");
+        refreshSubmitState();
+        return;
+      }
+
+      // A filled honeypot, or a submit before the dwell has elapsed, means an
+      // automated client: the button stays disabled until dwell passes, so a
+      // person cannot reach this. We show the same thank-you a person sees and
+      // send nothing, so the client learns nothing about why it failed.
+      const looksAutomated =
+        hpEl.value.trim().length > 0 || !passesDwell(Date.now() - openedAt);
+      if (looksAutomated) {
+        setStatus("Thanks for the report. We will look into this.", "success");
+        closeTimer = window.setTimeout(closeDialog, 2000);
+        return;
+      }
+
+      if (!validateDescription()) {
+        setStatus("Enter at least 10 characters.", "error");
+        refreshSubmitState();
+        return;
+      }
+
+      if (!endpoint) {
+        setStatus("Reporting is not available yet.", "error");
+        return;
+      }
+
+      let payload;
+      try {
+        payload = buildReportPayload({
+          category: new FormData(form).get("category"),
+          description: descEl.value,
+          email: emailEl.value,
+          url: window.location.href,
+          userAgent: navigator.userAgent,
+          screenSize: `${window.innerWidth}x${window.innerHeight}`,
+          consoleLogs: getConsoleLogs(),
+          formOpenedAt: openedAt,
+          timeElapsed: Date.now() - openedAt,
+          turnstileToken: turnstileToken || null,
+        });
+      } catch {
+        setStatus("Something looks off with that report. Please try again.", "error");
+        return;
+      }
+
+      sending = true;
+      refreshSubmitState();
+      const submitGen = openGeneration;
+      submitEl.textContent = "Sending...";
+      setStatus("", "");
+
+      try {
+        const res = await fetch(endpoint, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload),
+        });
+        const data = await res.json().catch(() => ({}));
+        // The dialog was closed or reopened while this request was in flight:
+        // ignore the stale response so it cannot write into a new report session.
+        if (submitGen !== openGeneration) return;
+        if (res.ok && data && data.success) {
+          setStatus(
+            payload.email
+              ? "Thanks. We will email a confirmation and a final update about your report."
+              : "Thanks for the report. We will look into this.",
+            "success",
+          );
+          submitEl.textContent = submitLabel;
+          // Leave the button disabled (sending stays true) through the close
+          // delay so a second click or an Enter cannot double-submit the same
+          // report; the next open resets sending in resetForm. The timer id is
+          // tracked so a reopen within the delay cancels it (see openDialog).
+          closeTimer = window.setTimeout(closeDialog, 2500);
+          return;
+        }
+        setStatus("We could not send that. Please try again.", "error");
+      } catch {
+        if (submitGen !== openGeneration) return;
+        setStatus("We could not send that. Please try again.", "error");
+      }
+
+      // Reached only when the send failed. Reset Turnstile first: a token is
+      // single-use, so resending the same one after a transient failure just
+      // fails verification and strands the reporter on a 403 loop. Resetting
+      // issues a fresh token (via the callback) before the next attempt.
+      sending = false;
+      submitEl.textContent = submitLabel;
+      if (turnstileRendered && window.turnstile) {
+        try {
+          window.turnstile.reset(turnstileWidgetId);
+        } catch {
+          /* a failed reset should not block the retry */
+        }
+      }
+      turnstileToken = "";
+      refreshSubmitState();
+    });
+  }
+
+  // Minimal typing for the Turnstile global we load on demand.
+  declare global {
+    interface Window {
+      turnstile?: {
+        render: (el: HTMLElement, opts: Record<string, unknown>) => string;
+        reset: (id?: string) => void;
+      };
+    }
+  }
+</script>
+
+<style>
+  .report-dialog {
+    padding: 0;
+    border: 1px solid var(--line);
+    border-radius: 14px;
+    background: var(--bg-2);
+    color: var(--text);
+    width: min(30rem, calc(100vw - 2rem));
+    max-height: min(85vh, 44rem);
+    overflow: auto;
+    box-shadow: 0 24px 60px rgba(0, 0, 0, 0.5);
+    /* Theme the scrollbar so a short viewport (where the panel overflows) shows
+       a scrollbar that blends with the dark surface instead of a generic UA one.
+       scrollbar-color is inherited, so the textarea's scrollbar picks it up too. */
+    scrollbar-width: thin;
+    scrollbar-color: rgba(255, 255, 255, 0.24) transparent;
+  }
+  .report-dialog::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+  }
+  .report-dialog::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  .report-dialog::-webkit-scrollbar-thumb {
+    background-color: rgba(255, 255, 255, 0.24);
+    border-radius: 999px;
+    /* The transparent border + padding-box clip insets the thumb so it reads as a
+       slim pill on the surface rather than a bar filling the gutter edge to edge. */
+    border: 2px solid transparent;
+    background-clip: padding-box;
+    /* Ease the hover brighten so it matches the dialog's own entrance timing
+       instead of snapping. A color fade is unaffected by prefers-reduced-motion. */
+    transition: background-color 120ms ease;
+  }
+  .report-dialog::-webkit-scrollbar-thumb:hover {
+    background-color: rgba(255, 255, 255, 0.34);
+  }
+  .report-dialog::backdrop {
+    background: rgba(6, 8, 18, 0.66);
+  }
+  .report-dialog__panel {
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+    padding: 1.25rem 1.35rem 1.35rem;
+  }
+  .report-dialog__head {
+    display: flex;
+    /* Top-align so the close button sits level with the wordmark, not centered
+       against the taller wordmark-plus-title stack. */
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 1rem;
+  }
+  .report-dialog__title {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+    min-width: 0;
+  }
+  .report-dialog__brand {
+    display: block;
+    width: auto;
+    /* Set below the header/footer wordmark so it reads as a quiet brand cue over
+       the title, not a second header competing with "Report a problem". */
+    height: 22px;
+  }
+  .report-dialog__head h2 {
+    margin: 0;
+    font-size: 1.15rem;
+    line-height: 1.2;
+  }
+  .report-dialog__close {
+    flex: none;
+    width: 2rem;
+    height: 2rem;
+    border: none;
+    border-radius: 6px;
+    background: transparent;
+    color: var(--text-dim);
+    font-size: 1.4rem;
+    line-height: 1;
+    cursor: pointer;
+  }
+  .report-dialog__close:hover {
+    color: var(--text);
+    background: rgba(255, 255, 255, 0.06);
+  }
+  .report-dialog__intro {
+    margin: 0;
+    color: var(--text-dim);
+    font-size: 0.92rem;
+    line-height: 1.4;
+  }
+  .report-dialog__field {
+    display: flex;
+    flex-direction: column;
+    gap: 0.4rem;
+  }
+  .report-dialog__field > label,
+  .report-dialog__categories legend {
+    font-size: 0.9rem;
+    font-weight: 600;
+  }
+  .report-dialog__optional {
+    font-weight: 400;
+    color: var(--text-dim);
+  }
+  .report-dialog__categories {
+    border: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+  }
+  .report-dialog__categories legend {
+    margin-bottom: 0.4rem;
+    padding: 0;
+  }
+  .report-dialog__choice {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+    padding: 0.4rem 0.7rem;
+    border: 1px solid var(--line);
+    border-radius: 999px;
+    font-size: 0.88rem;
+    cursor: pointer;
+  }
+  .report-dialog__choice:has(input:checked) {
+    border-color: var(--pbs-blue-bright);
+    background: rgba(77, 94, 232, 0.14);
+  }
+  .report-dialog textarea,
+  .report-dialog input[type="email"] {
+    box-sizing: border-box;
+    width: 100%;
+    padding: 0.6rem 0.7rem;
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    background: var(--bg-1);
+    color: var(--text);
+    font: inherit;
+    resize: vertical;
+  }
+  .report-dialog textarea:focus,
+  .report-dialog input[type="email"]:focus {
+    outline: var(--focus-outline);
+    outline-offset: var(--focus-offset);
+  }
+  .report-dialog__meta {
+    display: flex;
+    justify-content: space-between;
+    gap: 1rem;
+    font-size: 0.78rem;
+    color: var(--text-dim);
+  }
+  .report-dialog__error {
+    margin: 0;
+    color: var(--color-danger-text);
+    font-size: 0.82rem;
+  }
+  .report-dialog__hp {
+    position: absolute;
+    left: -9999px;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+  }
+  .report-dialog__status {
+    margin: 0;
+    font-size: 0.9rem;
+    min-height: 1.2em;
+  }
+  .report-dialog__status[data-tone="error"] {
+    color: var(--color-danger-text);
+  }
+  .report-dialog__status[data-tone="success"] {
+    color: var(--color-success-text);
+  }
+  .report-dialog__retry {
+    align-self: flex-start;
+    min-height: 44px;
+  }
+  .report-dialog__note {
+    margin: 0;
+    font-size: 0.82rem;
+    color: var(--text-dim);
+  }
+  .report-dialog__actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 0.6rem;
+  }
+  .report-dialog__btn {
+    padding: 0.55rem 1rem;
+    border-radius: 6px;
+    font: inherit;
+    font-weight: 600;
+    cursor: pointer;
+    border: 1px solid transparent;
+  }
+  .report-dialog__btn--ghost {
+    background: transparent;
+    border-color: var(--line);
+    color: var(--text-dim);
+  }
+  .report-dialog__btn--ghost:hover {
+    color: var(--text);
+  }
+  .report-dialog__btn--primary {
+    background: var(--pbs-blue);
+    color: var(--color-text-on-brand);
+  }
+  .report-dialog__btn--primary:hover:not(:disabled) {
+    background: var(--pbs-blue-bright);
+  }
+  .report-dialog__btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+  @media (prefers-reduced-motion: no-preference) {
+    .report-dialog[open] {
+      animation: report-dialog-in 160ms ease-out;
+    }
+  }
+  @keyframes report-dialog-in {
+    from {
+      transform: translateY(8px);
+      opacity: 0;
+    }
+  }
+</style>

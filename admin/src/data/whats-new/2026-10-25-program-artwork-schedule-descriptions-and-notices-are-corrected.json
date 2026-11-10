@@ -1,0 +1,12 @@
+{
+  "date": "2026-10-25",
+  "kind": "fixed",
+  "title": "Program artwork, schedule descriptions and notices are corrected",
+  "body": "State of the Arts no longer shows the State of Affairs logo. Corrected TV schedule listings keep the matching show descriptions. Meeting notices no longer lists the expired October 16 meeting notice.",
+  "prs": [
+    3926,
+    3927,
+    3984
+  ],
+  "order": -5
+}

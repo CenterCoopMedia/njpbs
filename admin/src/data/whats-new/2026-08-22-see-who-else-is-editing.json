@@ -1,0 +1,12 @@
+{
+  "date": "2026-08-22",
+  "kind": "new",
+  "title": "See who else is editing",
+  "body": "The editor shows when another person has the same item open. This helps you avoid writing over each other's changes.",
+  "prs": [
+    1110,
+    1615,
+    1069
+  ],
+  "order": -1
+}

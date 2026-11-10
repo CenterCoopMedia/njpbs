@@ -1,0 +1,7 @@
+{
+  "date": "2026-11-09",
+  "kind": "fixed",
+  "title": "Public status recovers after a connection problem",
+  "body": "Posts and Pages check public status again after a connection problem or a return to an open tab. You do not need to reload Boardwalk to restart the check.",
+  "prs": []
+}

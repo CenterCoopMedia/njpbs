@@ -1,0 +1,10 @@
+{
+  "date": "2026-10-27",
+  "kind": "new",
+  "title": "Choose a comfortable reading size",
+  "body": "Pages and Posts have a Text size picker above the reading copy. Choose Standard, Large or Largest. Your browser remembers the choice and applies it as the page opens. Kids pages keep their existing controls.",
+  "prs": [
+    4062
+  ],
+  "order": -8
+}

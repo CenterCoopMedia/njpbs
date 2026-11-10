@@ -1,0 +1,49 @@
+---
+// A retired URL that still has to reach the page it became.
+//
+// A static-host fallback uses a canonical tag to identify the live URL,
+// noindex to exclude this stub, an instant meta refresh to move the browser,
+// and a visible link for readers with scripting or refresh disabled. A host
+// that supports HTTP redirects can use the same route map for 301 responses.
+//
+// It carries no structured data, on purpose: the post-build guardrail requires
+// a noindex page to emit none, and a stub describing an article it is not would
+// be a false claim anyway.
+
+interface Props {
+  /** The live route this URL became, root-relative and trailing-slashed. */
+  to: string;
+  /** The title of the page being redirected to, for the visible fallback. */
+  label: string;
+}
+
+const { to, label } = Astro.props as Props;
+---
+
+<div class="redirect">
+  <h1>This page has moved</h1>
+  <p>
+    It is now at <a href={to}>{label}</a>.
+  </p>
+</div>
+
+<style>
+  .redirect {
+    max-width: 40rem;
+    margin: 0 auto;
+    padding: clamp(4rem, 10vw, 7rem) 1.5rem;
+    color: var(--text-dim);
+  }
+
+  .redirect h1 {
+    margin: 0 0 0.9rem;
+    color: var(--text);
+    font-size: clamp(1.7rem, 4vw, 2.4rem);
+    line-height: 1.12;
+  }
+
+  .redirect a {
+    color: var(--color-link);
+    text-underline-offset: 0.22em;
+  }
+</style>

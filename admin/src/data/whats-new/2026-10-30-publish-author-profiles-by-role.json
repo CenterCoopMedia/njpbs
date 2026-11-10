@@ -1,0 +1,8 @@
+{
+  "date": "2026-10-30",
+  "kind": "fixed",
+  "title": "Publish author profiles by role",
+  "body": "Editors, Publishers, Admins and Owners can publish their own author profile when profile publishing is on. Contributors can save and unpublish their profile; ask an admin to publish it from Staff profiles. Admins and Owners can publish other staff profiles there.",
+  "prs": [],
+  "order": 0
+}

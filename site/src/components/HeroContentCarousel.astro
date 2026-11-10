@@ -1,0 +1,615 @@
+---
+import launchMedia from "../data/launch-media-manager.json";
+import { loadLaunchContentData } from "../lib/launch-content-data";
+import committedSpotlightNews from "../data/spotlight-news.json";
+import {
+  manualLaunchCards,
+  selectLaunchCards,
+  type LaunchCard,
+} from "../data/launch-fallback";
+import {
+  composeHeroContentCarouselItems,
+  type HeroNewsCard,
+} from "../lib/hero-content-carousel";
+import { loadSpotlightNewsData } from "../lib/spotlight-news-data";
+import { spotlightFallbackImage } from "../../../packages/content-core/src/spotlight-image.mjs";
+
+const currentLaunchMedia = await loadLaunchContentData(launchMedia);
+const mediaCards = ((currentLaunchMedia as { cards?: LaunchCard[] }).cards ?? []).filter(
+  Boolean,
+);
+const programCards = selectLaunchCards(mediaCards, manualLaunchCards);
+const spotlightNews = await loadSpotlightNewsData(committedSpotlightNews);
+const newsCards = (
+  (spotlightNews as { cards?: HeroNewsCard[] }).cards ?? []
+).filter(Boolean);
+const items = composeHeroContentCarouselItems(programCards, newsCards);
+const carouselId = "hero-content-carousel";
+const helpId = `${carouselId}-help`;
+---
+
+{
+  items.length > 1 && (
+    <section
+      class="hero-content-carousel"
+      data-hero-content-carousel
+      aria-labelledby={`${carouselId}-heading`}
+      aria-roledescription="carousel"
+    >
+      <h2 id={`${carouselId}-heading`} class="sr-only">
+        Featured PBS, NJ PBS, and NJ Spotlight News content
+      </h2>
+      <p class="hero-content-carousel__label" aria-hidden="true">
+        Explore what’s on
+      </p>
+      <p id={helpId} class="sr-only">
+        Use the left and right arrow keys or the previous and next buttons to move
+        one item at a time. Swipe horizontally on a touch screen. Automatic rotation
+        pauses while the carousel is hovered and stops when keyboard focus enters.
+        Use Reduce motion in the page footer to disable motion.
+      </p>
+
+      <button
+        class="hero-content-carousel__motion"
+        type="button"
+        data-carousel-toggle
+        aria-controls={carouselId}
+        aria-label="Pause automatic rotation"
+        hidden
+      >
+        <span class="hero-content-carousel__motion-icon" aria-hidden="true"></span>
+        <span data-carousel-toggle-label>Pause</span>
+      </button>
+
+      <button
+        class="hero-content-carousel__arrow hero-content-carousel__arrow--previous"
+        type="button"
+        data-carousel-previous
+        aria-label="Show previous featured item"
+        aria-controls={carouselId}
+        hidden
+      >
+        <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+          <path d="m15.5 4.5-7 7.5 7 7.5" />
+        </svg>
+      </button>
+
+      <div
+        class="hero-content-carousel__viewport"
+        id={carouselId}
+        data-carousel-viewport
+        role="group"
+        aria-describedby={helpId}
+        tabindex="0"
+      >
+        <div class="hero-content-carousel__track" data-carousel-track>
+          {items.map((item, index) => (
+            <a
+              class="hero-content-carousel__card"
+              href={item.href}
+              data-carousel-card
+              data-carousel-title={item.title}
+              data-carousel-source={item.sourceLabel}
+              {...(item.external
+                ? { rel: "noopener", target: "_blank" }
+                : {})}
+            >
+              <span class="hero-content-carousel__media" aria-hidden="true">
+                {item.image ? (
+                  <img
+                    src={item.image}
+                    data-spotlight-fallback={spotlightFallbackImage(item.fallbackImage)}
+                    alt=""
+                    loading="lazy"
+                    decoding="async"
+                    width="640"
+                    height="360"
+                  />
+                ) : (
+                  <span class="hero-content-carousel__placeholder"></span>
+                )}
+                <span class="hero-content-carousel__source">
+                  {item.sourceLabel}
+                </span>
+              </span>
+              <span class="hero-content-carousel__body">
+                <span class="hero-content-carousel__meta">{item.meta}</span>
+                <span class="hero-content-carousel__title">{item.title}</span>
+                <span class="hero-content-carousel__description">
+                  {item.description}
+                </span>
+              </span>
+              <span class="hero-content-carousel__index" aria-hidden="true">
+                {String(index + 1).padStart(2, "0")}
+              </span>
+              {item.external && (
+                <span class="sr-only"> (opens in new tab)</span>
+              )}
+            </a>
+          ))}
+        </div>
+      </div>
+
+      <button
+        class="hero-content-carousel__arrow hero-content-carousel__arrow--next"
+        type="button"
+        data-carousel-next
+        aria-label="Show next featured item"
+        aria-controls={carouselId}
+        hidden
+      >
+        <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+          <path d="m8.5 4.5 7 7.5-7 7.5" />
+        </svg>
+      </button>
+
+      <p
+        class="sr-only"
+        data-carousel-status
+        aria-live="polite"
+        aria-atomic="true"
+      ></p>
+    </section>
+  )
+}
+
+<script>
+  import { mountHeroContentCarousels } from "../lib/hero-content-carousel-client";
+  import { mountSpotlightImages } from "../../../packages/content-core/src/spotlight-image-dom";
+
+  mountHeroContentCarousels();
+  mountSpotlightImages();
+</script>
+
+<style>
+  .hero-content-carousel {
+    --hero-carousel-card-width: clamp(13.5rem, 29cqi, 19rem);
+    --hero-carousel-card-height: clamp(10.53rem, 22.62cqi, 14.82rem);
+    position: absolute;
+    z-index: 4;
+    top: 31%;
+    right: 15%;
+    bottom: 2%;
+    left: 35%;
+    min-width: 0;
+    container-type: inline-size;
+    pointer-events: auto;
+  }
+
+  .hero-content-carousel::before {
+    content: "";
+    position: absolute;
+    z-index: -1;
+    right: 8%;
+    bottom: 7%;
+    left: 8%;
+    height: 48%;
+    border-top: 1px solid rgba(255, 255, 255, 0.13);
+    border-radius: 50%;
+    opacity: 0.56;
+    pointer-events: none;
+    -webkit-mask-image: linear-gradient(
+      90deg,
+      transparent,
+      rgba(0, 0, 0, 0.9) 22%,
+      rgba(0, 0, 0, 0.9) 78%,
+      transparent
+    );
+    mask-image: linear-gradient(
+      90deg,
+      transparent,
+      rgba(0, 0, 0, 0.9) 22%,
+      rgba(0, 0, 0, 0.9) 78%,
+      transparent
+    );
+  }
+
+  .hero-content-carousel__label {
+    position: absolute;
+    z-index: 6;
+    top: 0.7rem;
+    left: 50%;
+    margin: 0;
+    color: var(--text-quiet);
+    font-size: 0.78rem;
+    font-weight: 650;
+    letter-spacing: 0.02em;
+    transform: translateX(-50%);
+    white-space: nowrap;
+    pointer-events: none;
+  }
+
+  .hero-content-carousel__viewport {
+    position: absolute;
+    inset: 0;
+    overflow-x: auto;
+    overflow-y: hidden;
+    overscroll-behavior-inline: contain;
+    scroll-snap-type: x mandatory;
+    scroll-padding-inline: 50%;
+    scrollbar-width: none;
+    touch-action: pan-x pan-y;
+    -webkit-mask-image: radial-gradient(
+      ellipse 82% 88% at 56% 58%,
+      rgba(0, 0, 0, 1) 22%,
+      rgba(0, 0, 0, 0.94) 49%,
+      transparent 86%
+    );
+    mask-image: radial-gradient(
+      ellipse 82% 88% at 56% 58%,
+      rgba(0, 0, 0, 1) 22%,
+      rgba(0, 0, 0, 0.94) 49%,
+      transparent 86%
+    );
+  }
+
+  .hero-content-carousel__viewport::-webkit-scrollbar {
+    display: none;
+  }
+
+  .hero-content-carousel__viewport:focus-visible {
+    outline: var(--focus-outline);
+    outline-offset: var(--focus-offset);
+  }
+
+  .hero-content-carousel__track {
+    display: flex;
+    align-items: center;
+    gap: clamp(0.7rem, 1.7cqi, 1.2rem);
+    width: max-content;
+    min-width: 100%;
+    height: 100%;
+    padding: 3rem max(1rem, calc(50cqi - var(--hero-carousel-card-width) / 2)) 2.5rem;
+  }
+
+  .hero-content-carousel__card {
+    position: relative;
+    display: flex;
+    flex: 0 0 var(--hero-carousel-card-width);
+    flex-direction: column;
+    width: var(--hero-carousel-card-width);
+    height: var(--hero-carousel-card-height);
+    overflow: hidden;
+    border: 1px solid var(--line-strong);
+    border-radius: 14px;
+    color: var(--color-text-on-surface);
+    background:
+      linear-gradient(160deg, rgba(19, 23, 54, 0.94), rgba(6, 7, 15, 0.9)),
+      var(--color-surface-panel);
+    box-shadow:
+      0 1.1rem 3.4rem rgba(0, 0, 0, 0.34),
+      inset 0 1px rgba(255, 255, 255, 0.09);
+    scroll-snap-align: center;
+    text-decoration: none;
+    transform: translateZ(0);
+    transition:
+      border-color var(--motion-duration-fast) var(--motion-ease-standard),
+      box-shadow var(--motion-duration-fast) var(--motion-ease-standard),
+      opacity var(--motion-duration-fast) var(--motion-ease-standard);
+  }
+
+  .hero-content-carousel__card:hover {
+    color: var(--color-text-on-surface);
+    border-color: rgba(255, 255, 255, 0.42);
+    box-shadow:
+      0 1.35rem 4.2rem rgba(0, 0, 0, 0.44),
+      0 0 0 1px rgba(174, 183, 255, 0.2),
+      inset 0 1px rgba(255, 255, 255, 0.12);
+  }
+
+  .hero-content-carousel__card:focus-visible {
+    outline: var(--focus-outline);
+    outline-offset: var(--focus-offset);
+  }
+
+  .hero-content-carousel__card[data-carousel-active] {
+    border-color: rgba(174, 183, 255, 0.52);
+    box-shadow:
+      0 1.5rem 4.6rem rgba(0, 0, 0, 0.48),
+      0 0 2.1rem rgba(77, 94, 232, 0.14),
+      inset 0 1px rgba(255, 255, 255, 0.14);
+  }
+
+  .hero-content-carousel__media {
+    position: relative;
+    display: block;
+    flex: 0 0 53%;
+    min-height: 0;
+    overflow: hidden;
+    background:
+      radial-gradient(90% 120% at 80% 10%, rgba(77, 94, 232, 0.38), transparent 58%),
+      var(--color-surface-elevated);
+  }
+
+  .hero-content-carousel__media::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    background:
+      linear-gradient(180deg, rgba(6, 7, 15, 0.02) 42%, rgba(6, 7, 15, 0.72)),
+      radial-gradient(100% 90% at 16% 4%, rgba(255, 255, 255, 0.13), transparent 50%);
+    pointer-events: none;
+  }
+
+  .hero-content-carousel__media img,
+  .hero-content-carousel__placeholder {
+    display: block;
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+  }
+
+  .hero-content-carousel__media img {
+    opacity: 0.78;
+    transform: scale(1.025);
+  }
+
+  .hero-content-carousel__placeholder {
+    background:
+      radial-gradient(70% 90% at 20% 20%, rgba(0, 172, 0, 0.2), transparent 62%),
+      linear-gradient(145deg, rgba(38, 56, 196, 0.7), rgba(11, 14, 29, 0.94));
+  }
+
+  .hero-content-carousel__source {
+    position: absolute;
+    z-index: 2;
+    right: 0.7rem;
+    bottom: 0.58rem;
+    left: 0.7rem;
+    color: var(--color-text-on-surface);
+    font-size: 0.68rem;
+    font-weight: 750;
+    line-height: 1.2;
+    text-shadow: 0 1px 0.9rem rgba(0, 0, 0, 0.9);
+  }
+
+  .hero-content-carousel__body {
+    display: flex;
+    flex: 1 1 auto;
+    min-height: 0;
+    flex-direction: column;
+    padding: clamp(0.7rem, 2cqi, 0.9rem) clamp(0.78rem, 2.2cqi, 1rem) 0.8rem;
+  }
+
+  .hero-content-carousel__meta {
+    display: block;
+    overflow: hidden;
+    color: var(--text-quiet);
+    font-size: 0.66rem;
+    font-weight: 650;
+    line-height: 1.2;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .hero-content-carousel__title {
+    display: -webkit-box;
+    margin-top: 0.3rem;
+    overflow: hidden;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
+    font-size: clamp(0.9rem, 2.7cqi, 1.12rem);
+    font-weight: 820;
+    line-height: 1.08;
+    text-wrap: balance;
+  }
+
+  .hero-content-carousel__description {
+    display: -webkit-box;
+    margin-top: 0.35rem;
+    overflow: hidden;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
+    color: var(--text-dim);
+    font-size: clamp(0.69rem, 2cqi, 0.78rem);
+    line-height: 1.28;
+  }
+
+  .hero-content-carousel__index {
+    position: absolute;
+    right: 0.62rem;
+    bottom: 0.44rem;
+    color: rgba(255, 255, 255, 0.24);
+    font-size: 0.58rem;
+    font-variant-numeric: tabular-nums;
+    letter-spacing: 0.08em;
+  }
+
+  .hero-content-carousel__arrow,
+  .hero-content-carousel__motion {
+    position: absolute;
+    z-index: 8;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: var(--target-comfortable);
+    min-height: var(--target-comfortable);
+    border: 1px solid var(--color-control-edge-on-glass);
+    color: var(--color-text-on-surface);
+    background: rgba(6, 7, 15, 0.62);
+    -webkit-backdrop-filter: blur(12px);
+    backdrop-filter: blur(12px);
+    opacity: 0;
+    pointer-events: none;
+    transition:
+      opacity var(--motion-duration-fast) var(--motion-ease-standard),
+      background var(--motion-duration-fast) var(--motion-ease-standard),
+      transform var(--motion-duration-fast) var(--motion-ease-standard);
+  }
+
+  .hero-content-carousel.is-ready .hero-content-carousel__arrow,
+  .hero-content-carousel.is-enhanced .hero-content-carousel__motion {
+    opacity: 1;
+    pointer-events: auto;
+  }
+
+  .hero-content-carousel__arrow {
+    top: 51%;
+    width: var(--target-comfortable);
+    border-radius: 16.5px;
+    transform: translateY(-50%);
+  }
+
+  .hero-content-carousel__arrow--previous {
+    left: calc(
+      50% - var(--hero-carousel-card-width) / 2 - var(--target-comfortable) - 0.75rem
+    );
+  }
+
+  .hero-content-carousel__arrow--next {
+    right: clamp(0.55rem, 2cqi, 1.25rem);
+  }
+
+  .hero-content-carousel__arrow svg {
+    width: 1.15rem;
+    height: 1.15rem;
+    overflow: visible;
+    fill: none;
+    stroke: currentColor;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+    stroke-width: 1.8;
+  }
+
+  .hero-content-carousel__arrow:hover,
+  .hero-content-carousel__motion:hover {
+    background: rgba(19, 23, 54, 0.86);
+  }
+
+  .hero-content-carousel__arrow:active {
+    transform: translateY(-50%) scale(0.95);
+  }
+
+  .hero-content-carousel__arrow:focus-visible,
+  .hero-content-carousel__motion:focus-visible {
+    outline: var(--focus-outline);
+    outline-offset: var(--focus-offset);
+  }
+
+  .hero-content-carousel__motion {
+    display: none;
+    bottom: 0.45rem;
+    left: 50%;
+    gap: 0.45rem;
+    padding: 0.38rem 0.78rem;
+    border-radius: 16.5px;
+    font: inherit;
+    font-size: 0.7rem;
+    font-weight: 720;
+    transform: translateX(-50%);
+  }
+
+  .hero-content-carousel__motion:disabled {
+    cursor: default;
+    opacity: 0.72;
+  }
+
+  .hero-content-carousel__motion-icon {
+    width: 0.62rem;
+    height: 0.68rem;
+    border-right: 2px solid currentColor;
+    border-left: 2px solid currentColor;
+  }
+
+  .hero-content-carousel__motion[data-carousel-paused]
+    .hero-content-carousel__motion-icon {
+    width: 0;
+    height: 0;
+    border: 0;
+    border-top: 0.36rem solid transparent;
+    border-bottom: 0.36rem solid transparent;
+    border-left: 0.58rem solid currentColor;
+  }
+
+  .hero-content-carousel.is-enhanced .hero-content-carousel__viewport {
+    overflow: hidden;
+    scroll-snap-type: none;
+    cursor: grab;
+    touch-action: pan-y;
+  }
+
+  .hero-content-carousel.is-enhanced .hero-content-carousel__viewport:active {
+    cursor: grabbing;
+  }
+
+  .hero-content-carousel.is-enhanced .hero-content-carousel__card {
+    flex-basis: auto;
+    width: var(--hero-carousel-card-width);
+    height: var(--hero-carousel-card-height);
+    backface-visibility: hidden;
+    will-change: opacity, filter;
+  }
+
+  :global(.hero-content-carousel__three-stage) {
+    position: absolute;
+    inset: 0;
+    overflow: visible !important;
+    touch-action: pan-y;
+  }
+
+  @media (max-width: 820px) {
+    .hero-content-carousel {
+      top: auto;
+      right: 0;
+      bottom: 0.75rem;
+      left: 0;
+      height: clamp(18rem, 70vw, 25rem);
+    }
+
+    .hero-content-carousel__viewport {
+      -webkit-mask-image: radial-gradient(
+        ellipse 105% 86% at 50% 56%,
+        rgba(0, 0, 0, 1) 18%,
+        rgba(0, 0, 0, 0.94) 52%,
+        transparent 91%
+      );
+      mask-image: radial-gradient(
+        ellipse 105% 86% at 50% 56%,
+        rgba(0, 0, 0, 1) 18%,
+        rgba(0, 0, 0, 0.94) 52%,
+        transparent 91%
+      );
+    }
+
+    .hero-content-carousel__track {
+      padding-top: 2.8rem;
+      padding-bottom: 2.35rem;
+    }
+
+    .hero-content-carousel__arrow {
+      top: 53%;
+    }
+  }
+
+  @media (max-width: 480px) {
+    .hero-content-carousel {
+      height: clamp(18rem, 88vw, 22rem);
+    }
+
+    .hero-content-carousel__label {
+      top: 0.25rem;
+    }
+
+    .hero-content-carousel__arrow--previous {
+      left: 0.35rem;
+    }
+
+    .hero-content-carousel__arrow--next {
+      right: 0.35rem;
+    }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .hero-content-carousel__card,
+    .hero-content-carousel__arrow,
+    .hero-content-carousel__motion {
+      transition: none;
+    }
+  }
+
+  :global(html[data-motion="off"]) .hero-content-carousel__card,
+  :global(html[data-motion="off"]) .hero-content-carousel__arrow,
+  :global(html[data-motion="off"]) .hero-content-carousel__motion {
+    transition: none;
+  }
+</style>

@@ -1,0 +1,14 @@
+{
+  "date": "2026-10-12",
+  "kind": "new",
+  "title": "Preview Programs, Events and any record you can open",
+  "body": "You can now preview Program and Event drafts, and any record you can open. Previews show video blocks, load status sooner and explain a short outage.",
+  "prs": [
+    3319,
+    2861,
+    2798,
+    2869,
+    2616
+  ],
+  "order": 0
+}

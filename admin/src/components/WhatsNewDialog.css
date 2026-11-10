@@ -1,0 +1,136 @@
+/* What's new: an icon launcher beside the guide and report controls, and a read-only notes dialog
+   on the same surfaces and scale as the problem report dialog. */
+button.whats-new-launch:not(.ui-menu-item) {
+  position: relative;
+  width: var(--studio-control-height);
+  min-width: var(--studio-control-height);
+  min-height: var(--studio-control-height);
+  flex: 0 0 auto;
+  justify-content: center;
+  padding-inline: var(--space-2);
+}
+
+.whats-new-launch .icon { flex: 0 0 auto; }
+
+/* The unread dot is decorative; the accessible name says "unread updates". */
+.whats-new-launch[data-unread]::after {
+  content: "";
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  width: 8px;
+  height: 8px;
+  border: 1.5px solid var(--cms-surface, var(--color-surface));
+  border-radius: 50%;
+  background: var(--cms-brand, var(--color-accent));
+}
+
+.whats-new-launch.ui-menu-item[data-unread]::after {
+  position: static;
+  flex: 0 0 auto;
+}
+
+.whats-new-dialog.whats-new-dialog {
+  width: min(40rem, calc(100vw - (2 * var(--space-4))));
+  max-width: none;
+  max-height: calc(100dvh - (2 * var(--space-4)));
+  margin: auto;
+  overflow: auto;
+  border: var(--border-width) solid var(--color-border);
+  border-radius: var(--radius-surface);
+  padding: 0;
+  background: var(--color-surface);
+  color: var(--color-ink);
+  font-family: var(--font-sans);
+  box-shadow: 0 1.5rem 3.75rem var(--color-shadow-strong);
+  scrollbar-width: thin;
+  scrollbar-color: var(--color-border-strong) transparent;
+}
+
+.whats-new-dialog::backdrop { background: var(--color-scrim); }
+
+.whats-new-panel {
+  display: grid;
+  gap: var(--space-5);
+  padding: var(--space-6);
+}
+
+.whats-new-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--space-4);
+}
+
+.whats-new-head h2 {
+  margin: 0;
+  font-size: var(--font-size-xl);
+  line-height: var(--line-height-tight);
+}
+
+.whats-new-head p {
+  margin: var(--space-1) 0 0;
+  color: var(--color-text-muted);
+  font-size: var(--font-size-sm);
+}
+
+.whats-new-head > button {
+  width: var(--target-comfortable);
+  min-width: var(--target-comfortable);
+  min-height: var(--target-comfortable);
+  padding: 0;
+  font-size: var(--font-size-xl);
+}
+
+.whats-new-notes { display: grid; gap: var(--space-6); }
+
+.whats-new-notes h3 {
+  margin: 0 0 var(--space-2);
+  padding-bottom: var(--space-2);
+  border-bottom: var(--border-width) solid var(--color-border);
+  font-size: var(--font-size-md);
+}
+
+.whats-new-notes ul {
+  display: grid;
+  gap: var(--space-4);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.whats-new-notes li { display: grid; gap: var(--space-1); }
+
+.whats-new-notes h4 {
+  margin: 0;
+  font-size: var(--font-size-base, 1rem);
+  line-height: var(--line-height-tight);
+}
+
+.whats-new-notes li > p:last-child {
+  margin: 0;
+  max-width: 65ch;
+  color: var(--color-text-muted);
+  font-size: var(--font-size-sm);
+  line-height: var(--line-height-copy);
+}
+
+.whats-new-meta {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  margin: 0;
+  color: var(--color-text-muted);
+  font-size: var(--font-size-xs);
+}
+
+/* Compact kind labels reuse the status badge tone pairs. */
+.whats-new-kind {
+  border-radius: var(--cms-radius-small);
+  padding: 1px var(--space-2);
+  font-weight: 700;
+}
+
+.whats-new-kind-new { background: var(--cms-brand-soft); color: var(--cms-brand-ink); }
+.whats-new-kind-improved { background: var(--cms-scheduled-soft); color: var(--cms-scheduled); }
+.whats-new-kind-fixed { background: var(--cms-positive-soft); color: var(--cms-positive); }

@@ -1,0 +1,15 @@
+{
+  "schemaVersion": 1,
+  "contracts": {
+    "cmsReleaseChecks": {
+      "version": 1
+    },
+    "cmsEditorLocks": {
+      "version": 9,
+      "firestoreRulesSha256": "2f1df1d48c2d1837f7ba22028c508450f2a162d3c24174c66c1e8ab3e11c2df7"
+    },
+    "cmsDevReleaseChecks": {
+      "version": 1
+    }
+  }
+}

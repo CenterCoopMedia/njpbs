@@ -1,0 +1,12 @@
+{
+  "date": "2026-09-26",
+  "kind": "new",
+  "title": "Restore deleted images from the recycle bin",
+  "body": "Open More on the Images tab and choose Recycle bin. Staff who can manage images can restore a deleted image without uploading the file again.",
+  "prs": [
+    2331,
+    2338,
+    2351
+  ],
+  "order": -4
+}

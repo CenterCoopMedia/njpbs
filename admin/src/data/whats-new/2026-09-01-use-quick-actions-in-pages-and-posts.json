@@ -1,0 +1,12 @@
+{
+  "date": "2026-09-01",
+  "kind": "new",
+  "title": "Use quick actions in Pages and Posts",
+  "body": "Each row in Pages and Posts has quick actions, such as preview and revisions. The rail also shows actions for the list you are on.",
+  "prs": [
+    1382,
+    1385,
+    1397
+  ],
+  "order": -3
+}

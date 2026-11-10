@@ -1,0 +1,485 @@
+name: CI
+
+# This is the repository's primary pull_request and main-push validation workflow. A
+# dependency-free classifier starts with every consumer enabled and disables a
+# consumer only after it proves the exact tested diff and event base lineage.
+# Main pushes require every consumer unless an identical tree already passed
+# full CI. Merge groups require every consumer and check the combined tree
+# without relying on pull-request paths or metadata.
+# Classification and the policy gate share one runner so Policy does not wait
+# in the hosted-runner queue after Classify. The policy gate still finishes
+# before any consumer can run package code. The final `ci` job is the one
+# required main-branch result. The narrow Pages fallback safety workflow
+# supplies the separate production-branch status context. Metadata edits must
+# not start another code run in this concurrency group.
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, edited]
+  merge_group:
+    types: [checks_requested]
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci${{ github.event_name == 'pull_request' && github.event.action == 'edited' && !github.event.changes.base && '-metadata' || '' }}-${{ github.event_name == 'workflow_dispatch' && github.run_id || github.ref }}
+  # Finish active main proof for pinned deploys; keep only the newest pending run.
+  # PR and queue runs still cancel superseded work. Manual runs are isolated.
+  cancel-in-progress: ${{ github.event_name != 'push' || github.ref != 'refs/heads/main' }}
+env:
+  CANONICAL_GITHUB_REPOSITORY: ${{ vars.CANONICAL_GITHUB_REPOSITORY }}
+  CANONICAL_GITHUB_REPOSITORY_ID: ${{ vars.CANONICAL_GITHUB_REPOSITORY_ID }}
+  VITE_CANONICAL_GITHUB_REPOSITORY: ${{ vars.CANONICAL_GITHUB_REPOSITORY }}
+
+jobs:
+  policy:
+    name: Policy
+    # Base edits validate automatically; title/body edits use no code runners.
+    if: github.event_name != 'pull_request' || github.event.action != 'edited' || github.event.changes.base
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10 # Runaway guard: 3x max 3m13s (14d, 2026-10-26; #2657).
+    permissions:
+      contents: read
+      actions: read
+      pull-requests: read
+    outputs:
+      inputs_hash: ${{ steps.inputs.outputs.hash }}
+      reused: ${{ steps.reuse.outputs.reused }}
+      reused_run: ${{ steps.reuse.outputs.run_id }}
+      docs: ${{ (github.event_name == 'push' || github.event_name == 'merge_group') && 'true' || steps.changes.outputs.docs || steps.defaults.outputs.docs }}
+      site: ${{ (github.event_name == 'push' || github.event_name == 'merge_group') && 'true' || steps.changes.outputs.site || steps.defaults.outputs.site }}
+      admin: ${{ (github.event_name == 'push' || github.event_name == 'merge_group') && 'true' || steps.changes.outputs.admin || steps.defaults.outputs.admin }}
+      firebase: ${{ (github.event_name == 'push' || github.event_name == 'merge_group') && 'true' || steps.changes.outputs.firebase || steps.defaults.outputs.firebase }}
+      classification: ${{ steps.changes.outputs.classification || steps.defaults.outputs.classification }}
+      classifier_result: ${{ steps.changes.outcome == 'success' && 'success' || 'failure' }}
+    steps:
+      - name: Set fail-closed defaults
+        id: defaults
+        run: |
+          printf 'docs=true\nsite=true\nadmin=true\nfirebase=true\nclassification=fallback\n' >> "$GITHUB_OUTPUT"
+      # Capture configuration before checkout or any branch/package code runs.
+      - name: Capture CI input identity
+        id: inputs
+        env:
+          CI_VARIABLES: ${{ toJSON(vars) }}
+        run: |
+          node <<'NODE'
+          const { createHash } = require('node:crypto');
+          const { appendFileSync } = require('node:fs');
+          const canonical = JSON.stringify(Object.fromEntries(Object.entries(JSON.parse(process.env.CI_VARIABLES)).sort(([a], [b]) => a < b ? -1 : a > b ? 1 : 0)));
+          const hash = createHash('sha256').update(canonical).digest('hex');
+          appendFileSync(process.env.GITHUB_OUTPUT, `hash=${hash}\n`);
+          NODE
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      # Classify with base-branch code before PR code can change the checkout or runner
+      # environment. Manual runs read the classifier from the default branch.
+      - name: Classify the exact base diff
+        id: changes
+        continue-on-error: true
+        env:
+          BASE_SHA: ${{ (github.event_name == 'merge_group' && github.event.merge_group.base_sha) || github.event_name == 'push' && github.event.before || github.event.pull_request.base.sha }}
+          TRUSTED_SHA: ${{ (github.event_name == 'merge_group' && github.event.merge_group.base_sha) || github.event.pull_request.base.sha || (github.event_name == 'push' && github.sha) || format('origin/{0}', github.event.repository.default_branch) }}
+          HEAD_REF: ${{ github.sha }}
+          PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          PR_BASE_REF: ${{ github.event.pull_request.base.ref }}
+        run: |
+          git show "$TRUSTED_SHA:.github/scripts/ci-classifier.mjs" > "$RUNNER_TEMP/ci-classifier.mjs"
+          node "$RUNNER_TEMP/ci-classifier.mjs" classify
+      - name: Metered-API source scan (before any scanned code runs)
+        run: node .github/scripts/metered-api-scan.mjs
+      - name: Evidence image policy
+        run: node .github/scripts/evidence-image-policy.mjs
+      - name: Identity boundary guard
+        run: node .github/scripts/identity-boundary-guard.mjs
+      - name: Require the non-reserving Pages runtime
+        run: node .github/scripts/pages-fallback-safety.mjs
+      - name: Find an identical tree with full CI success
+        id: reuse
+        env:
+          GH_TOKEN: ${{ github.token }}
+          CI_INPUTS_HASH: ${{ steps.inputs.outputs.hash }}
+        run: node .github/scripts/ci-tree-reuse.mjs
+      - name: Classifier, aggregation, and Pages safety tests
+        if: steps.reuse.outputs.reused != 'true'
+        run: >-
+          node --test
+          tests/repository-identity.test.mjs
+          .github/scripts/ci-classifier.test.mjs
+          .github/scripts/evidence-image-policy.test.mjs
+          .github/scripts/ci-tree-reuse.test.mjs
+          .github/scripts/workflow-policy.test.mjs
+          .github/scripts/report-relay.test.mjs
+          .github/scripts/dev-reconcile-input.test.mjs
+          scripts/lib/deployment-settings.test.mjs
+          scripts/assert-dev-cms-targets.test.mjs
+          scripts/cms-debug-browser.test.mjs
+          .github/scripts/ensure-panel-browser-deps.test.mjs
+          .github/scripts/pages-fallback-safety.test.mjs
+          .github/scripts/pages-reviewed-source.test.mjs
+          tests/scripts/check-dev-machine-receipt.test.mjs
+          tests/scripts/dev-access-guards.test.mjs
+          tests/scripts/ugc-r2-policy.test.mjs
+          tests/scripts/write-ugc-consent-config.test.mjs
+      - uses: actions/setup-node@v7
+        if: steps.reuse.outputs.reused != 'true'
+        with:
+          node-version: "22"
+          cache: npm
+          package-manager-cache: true
+          cache-dependency-path: site/package-lock.json
+      - uses: actions/setup-python@v7
+        if: steps.reuse.outputs.reused != 'true'
+        with:
+          python-version: "3.12"
+      - name: Install policy test dependencies
+        if: steps.reuse.outputs.reused != 'true'
+        working-directory: site
+        run: npm ci --ignore-scripts
+      - name: Site diagnostics reporter contract
+        if: steps.reuse.outputs.reused != 'true'
+        # The release gate tests read yaml from the site install above.
+        run: node --test .github/scripts/site-resource-reporter.test.mjs .github/scripts/require-main-ci.test.mjs
+      - name: Workflow policy unit tests
+        if: steps.reuse.outputs.reused != 'true'
+        working-directory: site
+        run: >-
+          npx --no-install vitest run
+          tests/pr-ci-events.test.ts
+          tests/identity-boundary-ci-wiring.test.ts
+          tests/identity-boundary.test.ts
+          tests/public-only-dist-wiring.test.ts
+          tests/deploy-environments.test.ts
+          tests/cms-preview-export.test.ts
+          tests/workflow-secret-guardrail.test.ts
+          tests/workflow-secret-inherit-guardrail.test.ts
+      - name: Workflow source guardrails
+        if: steps.reuse.outputs.reused != 'true'
+        working-directory: site
+        run: >-
+          npx --no-install vitest run --config vitest.guardrails.config.ts
+          scripts/workflow-concurrency-guardrail-source.test.ts
+          scripts/workflow-runner-context-guardrail-source.test.ts
+          scripts/workflow-secret-guardrail-source.test.ts
+      - name: QA harness unit tests
+        if: steps.reuse.outputs.reused != 'true'
+        run: |
+          python3 -m unittest discover -s qa -p 'test_*.py'
+          python3 -m unittest discover -s scripts -p 'test_*.py'
+      - name: Deployment configuration contracts
+        if: steps.reuse.outputs.reused != 'true'
+        run: |
+          python3 tests/scripts/configuration-inputs.test.py
+          node --test tests/scripts/render-wrangler-config.test.mjs
+      - name: Spotlight readership ranking contracts
+        if: steps.reuse.outputs.reused != 'true'
+        run: python3 -m unittest discover -s ops/spotlight-most-read -p 'test_*.py'
+
+  docs:
+    name: Docs
+    needs: [policy]
+    if: >-
+      !cancelled() &&
+      needs.policy.result == 'success' &&
+      needs.policy.outputs.reused != 'true' &&
+      (needs.policy.outputs.classifier_result != 'success' || needs.policy.outputs.docs != 'false')
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20 # Runaway guard: 3x max 6m33s (14d, 2026-10-26; #2657).
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: "22"
+          cache: npm
+          package-manager-cache: true
+          cache-dependency-path: site/package-lock.json
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+      # Keep this before npm installs because its glob must not read dependency
+      # README files under node_modules.
+      # Resolve /images/... and other root-relative site assets against the
+      # public directory, so the offline checker verifies the committed files.
+      # The staff guide endpoint serves its images from the private source tree.
+      # Tutorial videos, posters and captions live in private R2 behind the staff
+      # guide function, so they have no committed file to check.
+      # Staff guide links (/guide/<slug>) resolve to the page's source file.
+      - name: Check relative links (offline)
+        uses: lycheeverse/lychee-action@e7477775783ea5526144ba13e8db5eec57747ce8 # v2
+        with:
+          args: '--offline --root-dir "${{ github.workspace }}/site/public" --remap "^file://${{ github.workspace }}/site/public/images/admin-guide/ file://${{ github.workspace }}/site/src/internal/admin-guide/" --remap "^file://${{ github.workspace }}/site/public/guide/([a-z0-9-]+)/?(#.*)?$ file://${{ github.workspace }}/site/src/pages/_admin-docs/\$1/index.md" --exclude "^file://${{ github.workspace }}/site/public/guide-content/videos/" --no-progress "./**/*.md"'
+          fail: true
+      - name: Install docs gate dependencies
+        working-directory: site
+        run: npm ci --ignore-scripts
+      - name: Markdown lint
+        run: npx --yes markdownlint-cli2@0.24.0
+      - name: ADR numbering guard
+        run: python3 qa/adr_guard.py
+      - name: Docs pointer and vault guardrails
+        working-directory: site
+        run: npm run guardrails:docs
+
+  site:
+    name: Site
+    needs: [policy]
+    if: >-
+      !cancelled() &&
+      needs.policy.result == 'success' &&
+      needs.policy.outputs.reused != 'true' &&
+      (needs.policy.outputs.classifier_result != 'success' || needs.policy.outputs.site != 'false')
+    # Python accessibility checks require the hosted image's sandboxed Chrome.
+    runs-on: ubuntu-24.04
+    timeout-minutes: 58 # Runaway guard: 3x max 19m03s (14d, 2026-10-26; #2657).
+    env:
+      PUBLIC_GA4_REQUIRED: "1"
+      PUBLIC_GA4_MEASUREMENT_ID: ${{ vars.PUBLIC_GA4_MEASUREMENT_ID }}
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: "22"
+          cache: npm
+          package-manager-cache: true
+          cache-dependency-path: |
+            site/package-lock.json
+            tests/public-post-runtime/package-lock.json
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: qa/requirements.txt
+      - name: Install site dependencies
+        working-directory: site
+        run: npm ci --ignore-scripts
+      - name: Cache pinned search model
+        uses: actions/cache@v6
+        with:
+          path: site/node_modules/@huggingface/transformers/.cache
+          # Contracts pin MODEL_ID and MODEL_REVISION; the lockfile pins the loader.
+          key: ${{ runner.os }}-${{ runner.arch }}-search-model-${{ hashFiles('packages/browser-search/contracts.ts', 'site/package-lock.json') }}
+      - name: Verify hosted Chrome security floor
+        run: |
+          set -euo pipefail
+          chrome_version="$(google-chrome --product-version)"
+          dpkg --compare-versions "$chrome_version" ge 156.0.8078.73
+      - name: Install accessibility scanner
+        run: python3 -m pip install -r qa/requirements.txt
+      - name: Type and template check
+        working-directory: site
+        run: npm run check
+      - name: Accessibility lint (Astro templates)
+        working-directory: site
+        run: npm run lint
+      - name: Unit tests
+        working-directory: site
+        run: npm test -- --reporter=default --reporter=github-actions --reporter=../.github/scripts/site-resource-reporter.mjs
+      - name: Shared preview template input tests
+        working-directory: site
+        run: npm run test:preview-content -- --reporter=default --reporter=github-actions --reporter=../.github/scripts/site-resource-reporter.mjs
+      - name: Compile and verify private renderer
+        working-directory: site
+        run: npm run verify:renderer
+      - name: Install public Post runtime test dependencies
+        working-directory: tests/public-post-runtime
+        run: npm ci --ignore-scripts
+      - name: Compile public Post renderer
+        working-directory: site
+        env:
+          PUBLIC_GA4_MEASUREMENT_ID: G-TEST123
+          PUBLIC_REPORT_ENDPOINT: https://report.example.test/
+          PUBLIC_TURNSTILE_SITEKEY: public-test-sitekey
+          PUBLIC_SHARE_INTAKE_ENDPOINT: https://intake.example.test/
+        run: npm run build:public-post-renderer -- --compile-only
+      - name: Check public Post rendering in workerd
+        working-directory: site
+        run: npm run test:public-post-runtime
+      - name: Public build
+        working-directory: site
+        env:
+          PUBLIC_ONLY: "1"
+        run: npm run build
+      - name: Guardrail scan over public build
+        working-directory: site
+        env:
+          PUBLIC_ONLY: "1"
+        run: npm run guardrails -- --reporter=default --reporter=github-actions --reporter=../.github/scripts/site-resource-reporter.mjs
+      - name: Browser interactions over coming-soon build
+        working-directory: site
+        run: |
+          set -euo pipefail
+          node node_modules/astro/bin/astro.mjs preview --host 127.0.0.1 --port 4321 >"$RUNNER_TEMP/axe-preview.log" 2>&1 &
+          preview_pid=$!
+          trap 'kill "$preview_pid" >/dev/null 2>&1 || true; wait "$preview_pid" 2>/dev/null || true' EXIT
+          ready=false
+          for attempt in {1..30}; do
+            if curl --fail --silent --output /dev/null http://127.0.0.1:4321/; then
+              ready=true
+              break
+            fi
+            sleep 1
+          done
+          if [[ "$ready" != "true" ]]; then
+            cat "$RUNNER_TEMP/axe-preview.log"
+            exit 1
+          fi
+          python3 ../qa/axe_scan_browser_test.py --base http://127.0.0.1:4321 --mode coming-soon --dist dist
+      - name: Full build
+        working-directory: site
+        env:
+          PUBLIC_SHARE_PAGE: ${{ vars.PUBLIC_SHARE_PAGE || '' }}
+        run: npm run build
+      - name: Public homepage contract over full build
+        working-directory: site
+        run: npm run assert:public-contract
+      - name: Guardrail scan over full build
+        working-directory: site
+        run: npm run guardrails -- --reporter=default --reporter=github-actions --reporter=../.github/scripts/site-resource-reporter.mjs
+      - name: QA audit over full build
+        run: python3 qa/audit_dist.py site/dist
+      - name: Accessibility scan over full build
+        id: axe_scan
+        working-directory: site
+        run: |
+          set -euo pipefail
+          node node_modules/astro/bin/astro.mjs preview --host 127.0.0.1 --port 4321 >"$RUNNER_TEMP/axe-preview.log" 2>&1 &
+          preview_pid=$!
+          trap 'kill "$preview_pid" >/dev/null 2>&1 || true; wait "$preview_pid" 2>/dev/null || true' EXIT
+          ready=false
+          for _attempt in {1..30}; do
+            if curl --fail --silent --output /dev/null http://127.0.0.1:4321/; then
+              ready=true
+              break
+            fi
+            sleep 1
+          done
+          if [[ "$ready" != "true" ]]; then
+            cat "$RUNNER_TEMP/axe-preview.log"
+            exit 1
+          fi
+          python3 ../qa/axe_scan_browser_test.py --base http://127.0.0.1:4321 --mode full --dist dist
+          python3 ../qa/axe_scan.py \
+            --base http://127.0.0.1:4321 \
+            --mode full \
+            --dist dist
+      # axe_scan.py exits nonzero for any finding or scan error, so a failed
+      # step is the only run with findings worth keeping.
+      - name: Upload accessibility scan result
+        if: failure() && steps.axe_scan.outcome == 'failure'
+        uses: actions/upload-artifact@v7
+        with:
+          name: axe-findings-${{ github.sha }}
+          path: qa/axe-findings.json
+          if-no-files-found: warn
+          retention-days: 7
+      - name: Build PR preview artifact
+        working-directory: site
+        env:
+          INTERNAL_SURFACES: "1"
+          POLITICS_PREVIEW_FIXTURE_MODE: "1"
+          PUBLIC_SHARE_PAGE: ${{ vars.PUBLIC_SHARE_PAGE || '' }}
+        run: npm run build
+      - name: Guardrail scan over PR preview artifact
+        working-directory: site
+        run: npm run guardrails -- --reporter=default --reporter=github-actions --reporter=../.github/scripts/site-resource-reporter.mjs
+        env:
+          INTERNAL_SURFACES: "1"
+      # Only pull-request reviewers download this artifact. Merge groups and
+      # main pushes still build and scan it, because that scan is the only
+      # internal-surfaces guardrail over the combined tree.
+      - name: Upload PR preview artifact
+        if: github.event_name == 'pull_request'
+        uses: actions/upload-artifact@v7
+        with:
+          name: site-preview-${{ github.sha }}
+          path: site/dist
+          if-no-files-found: error
+          retention-days: 7
+
+  admin:
+    name: Admin
+    needs: [policy]
+    if: >-
+      !cancelled() &&
+      needs.policy.result == 'success' &&
+      needs.policy.outputs.reused != 'true' &&
+      (needs.policy.outputs.classifier_result != 'success' || needs.policy.outputs.admin != 'false')
+    permissions:
+      contents: read
+    uses: ./.github/workflows/admin-ci.yml
+
+  firebase:
+    name: Firebase
+    needs: [policy]
+    if: >-
+      !cancelled() &&
+      needs.policy.result == 'success' &&
+      needs.policy.outputs.reused != 'true' &&
+      (needs.policy.outputs.classifier_result != 'success' || needs.policy.outputs.firebase != 'false')
+    permissions:
+      contents: read
+    uses: ./.github/workflows/firebase-ci.yml
+
+  ci:
+    # A skipped metadata job must not replace the required code result.
+    name: ${{ github.event_name == 'pull_request' && github.event.action == 'edited' && !github.event.changes.base && 'PR metadata' || 'ci' }}
+    if: always() && (github.event_name != 'pull_request' || github.event.action != 'edited' || github.event.changes.base)
+    needs: [policy, docs, site, admin, firebase]
+    runs-on: ubuntu-24.04
+    # Allow checkout/network overhead on busy runners; aggregation is Node-only.
+    timeout-minutes: 5 # Runaway guard: 3x max 38s rounds to 2m; keep fleet#21's 5m floor.
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          # Read the aggregation code from the immutable event base.
+          ref: ${{ (github.event_name == 'merge_group' && github.event.merge_group.base_sha) || github.event.pull_request.base.sha || (github.event_name == 'push' && github.sha) || github.event.repository.default_branch }}
+          persist-credentials: false
+          # The classifier imports only Node built-ins; omit unrelated repository blobs.
+          filter: blob:none
+          sparse-checkout: .github/scripts/ci-classifier.mjs
+          sparse-checkout-cone-mode: false
+      - name: Report identical-tree CI success on this main SHA
+        if: needs.policy.outputs.reused == 'true'
+        env:
+          EVENT: ${{ github.event_name }}
+          REF: ${{ github.ref }}
+          POLICY: ${{ needs.policy.result }}
+          DOCS: ${{ needs.docs.result }}
+          SITE: ${{ needs.site.result }}
+          ADMIN: ${{ needs.admin.result }}
+          FIREBASE: ${{ needs.firebase.result }}
+          SOURCE_RUN: ${{ needs.policy.outputs.reused_run }}
+        run: |
+          test "$EVENT" = push
+          test "$REF" = refs/heads/main
+          test "$POLICY" = success
+          for result in "$DOCS" "$SITE" "$ADMIN" "$FIREBASE"; do
+            test "$result" = skipped || exit 1
+          done
+          echo "Full CI already passed this tree in run $SOURCE_RUN; ci succeeds on $GITHUB_SHA."
+      - name: Require every selected CI gate
+        if: needs.policy.outputs.reused != 'true'
+        env:
+          CLASSIFIER_RESULT: ${{ needs.policy.outputs.classifier_result }}
+          POLICY_RESULT: ${{ needs.policy.result }}
+          DOCS_SELECTED: ${{ needs.policy.outputs.docs }}
+          SITE_SELECTED: ${{ needs.policy.outputs.site }}
+          ADMIN_SELECTED: ${{ needs.policy.outputs.admin }}
+          FIREBASE_SELECTED: ${{ needs.policy.outputs.firebase }}
+          DOCS_RESULT: ${{ needs.docs.result }}
+          SITE_RESULT: ${{ needs.site.result }}
+          ADMIN_RESULT: ${{ needs.admin.result }}
+          FIREBASE_RESULT: ${{ needs.firebase.result }}
+        run: node .github/scripts/ci-classifier.mjs aggregate
+      - name: Full CI inputs ${{ needs.policy.outputs.inputs_hash }}
+        # Only a full run can supply proof for a later main push.
+        if: >-
+          needs.policy.outputs.reused != 'true' &&
+          needs.docs.result == 'success' && needs.site.result == 'success' &&
+          needs.admin.result == 'success' && needs.firebase.result == 'success'
+        run: ':'

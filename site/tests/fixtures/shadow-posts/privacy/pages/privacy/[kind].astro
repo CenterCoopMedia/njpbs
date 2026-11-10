@@ -1,0 +1,29 @@
+---
+import PostRoute from "../../../../../../src/pages/posts/[...slug].astro";
+import { projectCmsPost } from "../../../../../../src/lib/cms-posts-projection";
+import { LEAD_KINDS, postLeadFixture } from "../../../../post-lead-media";
+import { video } from "../../../fixtures";
+
+export function getStaticPaths() {
+  return ([...LEAD_KINDS, "body-video"] as const).map(kind => {
+    const read = postLeadFixture("standard", kind === "body-video" ? "image" : kind);
+    const document = { ...read.document, published: { ...read.document.published,
+      metadata: { ...read.document.published.metadata, previousSlugs: [`retired-${kind}`] },
+      blocks: kind === "body-video" ? video.document.published.blocks : read.document.published.blocks,
+    } };
+    const post = projectCmsPost(document, {
+      now: new Date("2026-10-07T13:00:00Z"),
+      assets: new Map(read.assets.map(asset => [asset.id, asset])),
+    })!;
+    return { params: { kind }, props: {
+      entry: { id: post.postId, collection: "cmsPosts" as const, data: {
+        ...post, heroImageCaption: post.heroImageCaption ?? "",
+        seo: post.seo ? { ...post.seo } : undefined,
+        social: post.social ? { ...post.social } : undefined,
+      } }, credits: post.credits,
+      redirectFrom: post.previousSlugs[0],
+    } };
+  });
+}
+---
+<PostRoute {...Astro.props} />

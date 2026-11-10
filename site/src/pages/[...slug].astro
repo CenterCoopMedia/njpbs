@@ -1,0 +1,213 @@
+---
+import { getCollection, render, type CollectionEntry } from "astro:content";
+import { getImage } from "astro:assets";
+import PublicSiteLayout from "../layouts/PublicSiteLayout.astro";
+import PublicSubpage from "../components/PublicSubpage.astro";
+import PublicArticle from "../components/PublicArticle.astro";
+import CmsPage from "../components/CmsPage.astro";
+import CmsBlocks from "../components/CmsBlocks.astro";
+import NativeSchedule from "../components/NativeSchedule.astro";
+import StaffDirectory from "../components/StaffDirectory.astro";
+import scheduleData from "../data/schedule.json";
+import type { BakedScheduleData } from "../lib/schedule-feed";
+import { loadScheduleData } from "../lib/schedule-data";
+import { staffDirectoryEntries } from "../lib/staff-directory";
+import { renderPage, renderAuthors, renderSchedule } from "../lib/cms-render-context";
+import {
+  launchArticlePageSlugs,
+  launchFallbackPages,
+  launchFallbackRoutePages,
+  type LaunchFallbackPage,
+} from "../data/launch-fallback";
+import { publicRootRoutesEnabled, cmsRoutedContentEnabled } from "../lib/build-target";
+import { PUBLIC_PAGES, publicPage, publicPageAliases } from "../../../packages/content-core/src/public-pages";
+import { projectCmsServicePage } from "../lib/cms-service-page";
+import { containsVideo } from "../../../packages/content-core/src/video-block";
+import { usesServiceComposition } from "../../../packages/content-core/src/service-composition";
+import {
+  cmsImageAsset,
+  resolveCmsResponsiveAssets,
+  responsiveImageKey,
+} from "../lib/cms-responsive-image";
+import type {
+  ResolvedRenderAsset,
+} from "../../../packages/content-core/src/content-render";
+import { resolveNjDecidesSocialImage } from "../lib/nj-decides-social-images";
+
+type Props = {
+  redirectTo?: string;
+  page?: LaunchFallbackPage;
+  entry?: CollectionEntry<"pages">;
+  cmsEntry?: CollectionEntry<"cmsPages">;
+};
+
+// Compile the actual committed article modules. No database serializer or
+// fabricated CMS Page supplies the body of an unmigrated public frame.
+const articles = import.meta.glob<import("astro").MarkdownInstance<{ title: string; description: string; noindex?: boolean; childDirected?: boolean }>>("../content/pages/*.md", { eager: true });
+
+export async function getStaticPaths() {
+  if (!publicRootRoutesEnabled(process.env)) return [];
+  const cmsPages = (await getCollection("cmsPages")).filter(
+    (entry) =>
+      entry.data.path !== "/" && entry.data.family !== "dataHub" &&
+      (entry.data.family !== "staff" || cmsRoutedContentEnabled(process.env)),
+  );
+  const cmsRoutes = cmsPages.flatMap((cmsEntry) => {
+    const definition = publicPage(cmsEntry.data.pageId);
+    if (!definition) {
+      throw new Error(`Unknown CMS public page ${cmsEntry.data.pageId}`);
+    }
+    const paths = [cmsEntry.data.path, ...publicPageAliases(definition, cmsEntry.data.path, cmsEntry.data.previousSlugs)];
+    return paths.filter(path => !((definition.family === "schedule" && path === "/schedule/") ||
+      (definition.family === "staff" && path === "/staff/"))).map(path => ({
+      params: { slug: path.replace(/^\/|\/$/g, "") },
+      props: { cmsEntry, ...(path !== cmsEntry.data.path ? { redirectTo: cmsEntry.data.path } : {}) },
+    }));
+  });
+  const cmsSlugs = new Set(
+    cmsRoutes.map((route) => route.params.slug),
+  );
+  if (cmsSlugs.size !== cmsRoutes.length) throw new Error("Two CMS pages own the same public URL");
+  const articleSlugs = new Set<string>(launchArticlePageSlugs);
+  const articlePages = await getCollection("pages", ({ id }) =>
+    articleSlugs.has(id) && !cmsSlugs.has(id),
+  );
+  const articlePageIds = new Set(articlePages.map((entry) => entry.id));
+  const fallbackPages = launchFallbackRoutePages
+    .filter(
+      (page) =>
+        !articlePageIds.has(page.slug) &&
+        !cmsSlugs.has(page.slug) &&
+        !(page.slug === "donate" && cmsSlugs.has("give")),
+    )
+    .map((page) => ({
+      params: { slug: page.slug },
+      props: { page },
+    }));
+  return [
+    ...cmsRoutes,
+    ...fallbackPages,
+    ...articlePages.flatMap((entry) => {
+      const canonicalPath = `/${entry.id}/`;
+      const definition = PUBLIC_PAGES.find(page => page.path === canonicalPath);
+      const aliases = definition ? publicPageAliases(definition, canonicalPath) : [];
+      return [canonicalPath, ...aliases].map(path => ({
+        params: { slug: path.replace(/^\/|\/$/g, "") },
+        props: { entry, ...(path !== canonicalPath ? { redirectTo: canonicalPath } : {}) },
+      }));
+    }),
+  ];
+}
+
+const renderContext = Astro.locals.cmsRender;
+const sealedSchedule = renderSchedule(Astro.locals.cmsRender);
+const bakedSchedule = sealedSchedule?.data ?? await loadScheduleData(scheduleData as BakedScheduleData);
+const contextFrame = renderContext?.content.kind === "public-page-context" && renderContext.content.target.source === "site"
+  ? publicPage(renderContext.content.target.documentId) : undefined;
+const article = contextFrame?.family === "article" ? articles[`../content/pages/${contextFrame.path.slice(1, -1)}.md`] : undefined;
+const { page, entry, cmsEntry, redirectTo }: Props = renderContext
+  ? { cmsEntry: renderPage(renderContext, renderContext.content.target.documentId),
+      ...(contextFrame?.family === "service" ? { page: launchFallbackPages[(renderContext.content.target.pagePath === "/donate/" ? "donate" : contextFrame.id) as keyof typeof launchFallbackPages] } : {}),
+      ...(renderContext.staticRedirect ? { redirectTo: renderContext.staticRedirect.to } : {}) }
+  : Astro.props;
+if (renderContext && !cmsEntry && (!contextFrame || (!page && !article))) throw new Error("Compiled renderer Page target is missing");
+const staff = cmsEntry?.data.family === "staff"
+  ? staffDirectoryEntries((Astro.locals.cmsRender
+    ? renderAuthors(Astro.locals.cmsRender)
+    : await getCollection("cmsAuthorsPublic")).map(entry => entry.data)) : [];
+const renderedEntry = entry ? await render(entry) : null;
+const Content = renderedEntry?.Content ?? article?.Content;
+const title = cmsEntry?.data.title ?? page?.title ?? entry?.data.title ?? String(article?.frontmatter.title ?? "NJ PBS");
+const description =
+  cmsEntry?.data.description ?? page?.description ?? entry?.data.description ?? String(article?.frontmatter.description ?? "NJ PBS");
+const canonicalPath =
+  cmsEntry?.data.path ?? redirectTo ?? (page?.slug === "donate" ? "/give/" : undefined);
+const noindex = Boolean(redirectTo) || page?.slug === "donate" || (cmsEntry?.data.noindex ?? entry?.data.noindex ?? article?.frontmatter.noindex ?? false) || (cmsEntry?.data.family === "staff" && staff.length === 0);
+const preview = cmsEntry?.data.contentMode === "draft";
+const socialImage = resolveNjDecidesSocialImage(cmsEntry ? { kind: "page", ...cmsEntry.data } : undefined);
+const heroBackgroundImage = cmsEntry?.data.heroBackgroundImage
+  ? cmsImageAsset(cmsEntry.data.assets[cmsEntry.data.heroBackgroundImage])
+  : undefined;
+let cmsServicePage: LaunchFallbackPage | undefined;
+let cmsService: ReturnType<typeof projectCmsServicePage> | undefined;
+let cmsTailEntry: CollectionEntry<"cmsPages"> | undefined;
+if (cmsEntry?.data.family === "service" && !usesServiceComposition(cmsEntry.data)) {
+  const frame =
+    launchFallbackPages[
+      cmsEntry.data.pageId as keyof typeof launchFallbackPages
+    ];
+  if (!frame) {
+    throw new Error(`CMS service page ${cmsEntry.data.pageId} has no public frame`);
+  }
+  const responsiveAssets = await resolveCmsResponsiveAssets(
+    cmsEntry.data.blocks,
+    cmsEntry.data.assets,
+    getImage,
+  );
+  const cardAssets: Record<string, ResolvedRenderAsset> = {};
+  for (const block of cmsEntry.data.blocks) {
+    if (block.type !== "card_grid") continue;
+    for (const card of block.data.cards) {
+      if (!card.imageAssetId) continue;
+      const responsive = responsiveAssets.get(
+        responsiveImageKey(card.imageAssetId, "grid"),
+      );
+      if (responsive) cardAssets[card.imageAssetId] = responsive;
+    }
+  }
+  cmsService = projectCmsServicePage({
+    frame,
+    title: cmsEntry.data.title,
+    description: cmsEntry.data.description,
+    blocks: cmsEntry.data.blocks,
+    assets: cardAssets,
+  });
+  cmsServicePage = cmsService.page;
+  if (cmsService.remainingBlocks.length > 0) {
+    cmsTailEntry = {
+      ...cmsEntry,
+      data: {
+        ...cmsEntry.data,
+        blocks: cmsService.remainingBlocks,
+      },
+    };
+  }
+}
+---
+
+<PublicSiteLayout
+  title={title}
+  hasNjDecidesPageHeading={!redirectTo && cmsEntry?.data.pageTheme === "nj-decides"
+    && cmsEntry.data.pageId !== "contact"
+    && (cmsEntry.data.family === "article" || cmsEntry.data.family === "service")}
+  editTarget={cmsEntry ? { type: "page", id: cmsEntry.data.pageId } : undefined}
+  description={description}
+  seoTitle={cmsEntry?.data.seo?.title}
+  seoDescription={cmsEntry?.data.seo?.description}
+  socialTitle={cmsEntry?.data.social?.title}
+  socialDescription={cmsEntry?.data.social?.description}
+  socialImage={socialImage?.url}
+  socialImageAlt={socialImage?.alt}
+  preview={preview}
+  canonicalPath={canonicalPath}
+  noindex={noindex}
+  metaRefreshTo={redirectTo}
+  noAnalytics={containsVideo(cmsEntry?.data.blocks)}
+  childDirected={cmsEntry?.data.childDirected ?? entry?.data.childDirected ?? article?.frontmatter.childDirected === true}
+>
+  {redirectTo ? <main><h1>Page moved</h1><p><a href={redirectTo}>Continue to {title}</a></p></main> : <>
+  {cmsEntry?.data.family === "schedule" && <><NativeSchedule data={bakedSchedule} heroBackgroundImage={heroBackgroundImage} heroBackgroundPosition={cmsEntry.data.heroBackgroundPosition} /><CmsBlocks entry={cmsEntry} readerControls /></>}
+  {cmsEntry?.data.family === "staff" && <><StaffDirectory staff={staff} title={title} description={description} heroBackgroundImage={heroBackgroundImage} heroBackgroundPosition={cmsEntry.data.heroBackgroundPosition} /><CmsBlocks entry={cmsEntry} readerControls /></>}
+  {cmsEntry && (cmsEntry.data.family === "article" || usesServiceComposition(cmsEntry.data)) && <CmsPage entry={cmsEntry} />}
+  {cmsServicePage && cmsEntry && (
+    <>
+      <PublicSubpage page={cmsServicePage} cmsService={cmsService} pageTheme={cmsEntry.data.pageTheme} heroBackgroundImage={heroBackgroundImage} heroBackgroundPosition={cmsEntry.data.heroBackgroundPosition} />
+      {cmsTailEntry && <div class="wrap"><CmsBlocks entry={cmsTailEntry} contained={false} /></div>}
+    </>
+  )}
+  {!cmsEntry && page && <PublicSubpage page={page} />}
+  {entry && Content && <PublicArticle entry={entry}><Content /></PublicArticle>}
+  {article && Content && <PublicArticle title={title} description={description} runtimePageId={contextFrame?.id === "contact" ? "contact" : undefined}><Content /></PublicArticle>}
+  </>}
+</PublicSiteLayout>
+

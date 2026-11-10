@@ -1,0 +1,13 @@
+{
+  "date": "2026-09-25",
+  "kind": "improved",
+  "title": "Edit media details beside the library",
+  "body": "Image and video details now open in a side panel next to the library on wide screens. On phones, the panel opens over the page. Save controls stay visible with long transcripts.",
+  "prs": [
+    2195,
+    2273,
+    2291,
+    2298
+  ],
+  "order": -2
+}

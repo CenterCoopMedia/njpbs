@@ -1,0 +1,10 @@
+{
+  "date": "2026-09-08",
+  "kind": "improved",
+  "title": "Drafts save automatically, even when incomplete",
+  "body": "The editor saves your draft as you work. You can save a page or Post before all fields are complete. Boardwalk checks for missing fields when you send it for review.",
+  "prs": [
+    1650
+  ],
+  "order": -1
+}

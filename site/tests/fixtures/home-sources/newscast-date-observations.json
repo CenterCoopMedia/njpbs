@@ -1,0 +1,70 @@
+{
+  "source": "PBS Media Manager assets and individual episode endpoints (read-only)",
+  "checkedAt": "2026-10-15T21:14:44.289380+00:00",
+  "note": "Seven live full-length episodes. Premiere dates are online metadata, not verified broadcast dates. Undated-title test variants remove the editor-added suffix described in #3519.",
+  "observations": [
+    {
+      "assetId": "da623aa3-efc2-4aef-9e4b-3994bda5a598",
+      "episodeId": "0cdf67b4-eb9a-4a6e-8a16-76a44a98b30a",
+      "assetTitle": "NJ PBS News with Rob Nelson | October 14, 2026",
+      "assetPremiere": "2026-10-15",
+      "episodeTitle": "NJ PBS News with Rob Nelson | October 14, 2026",
+      "episodePremiere": "2026-10-15",
+      "broadcastDate": "2026-10-14"
+    },
+    {
+      "assetId": "6c890a14-9e29-4417-b095-5a9693de7432",
+      "episodeId": "d815221c-dd3d-4f48-9e3e-f6fe25b7cdf1",
+      "assetTitle": "NJ PBS News with Rob Nelson | October 13, 2026",
+      "assetPremiere": "2026-10-14",
+      "episodeTitle": "NJ PBS News with Rob Nelson | October 13, 2026",
+      "episodePremiere": "2026-10-14",
+      "broadcastDate": "2026-10-13"
+    },
+    {
+      "assetId": "1823ecfe-c54a-4aa0-b259-6139b89ec142",
+      "episodeId": "49388689-27d2-4a3a-a287-6d08d045ea06",
+      "assetTitle": "NJ PBS News with Rob Nelson | October 12, 2026",
+      "assetPremiere": "2026-10-13",
+      "episodeTitle": "NJ PBS News with Rob Nelson | October 12, 2026",
+      "episodePremiere": "2026-10-13",
+      "broadcastDate": "2026-10-12"
+    },
+    {
+      "assetId": "8e104e34-c4cd-450c-9945-c175d8092eba",
+      "episodeId": "d5f3b5f0-409b-4847-b956-b9572b89eb10",
+      "assetTitle": "NJ PBS News with Rob Nelson | October 8, 2026",
+      "assetPremiere": "2026-10-09",
+      "episodeTitle": "NJ PBS News with Rob Nelson | October 8, 2026",
+      "episodePremiere": "2026-10-09",
+      "broadcastDate": "2026-10-08"
+    },
+    {
+      "assetId": "a22562ab-3442-42e7-a9e4-192c2d0bd190",
+      "episodeId": "eccc7cc0-b356-4040-b597-2186f495d309",
+      "assetTitle": "NJ PBS News with Rob Nelson | October 9, 2026",
+      "assetPremiere": "2026-10-09",
+      "episodeTitle": "NJ PBS News with Rob Nelson | October 9, 2026",
+      "episodePremiere": "2026-10-09",
+      "broadcastDate": "2026-10-09"
+    },
+    {
+      "assetId": "ba0a3ea0-5929-413d-8d2f-e82206495103",
+      "episodeId": "858cd206-89d3-4f40-9822-6d42bff02e5a",
+      "assetTitle": "NJ PBS News with Rob Nelson | October 7, 2026",
+      "assetPremiere": "2026-10-08",
+      "episodeTitle": "NJ PBS News with Rob Nelson | October 7, 2026",
+      "episodePremiere": "2026-10-08",
+      "broadcastDate": "2026-10-07"
+    },
+    {
+      "assetId": "ca570be2-871a-426d-8fd3-3050a9fe13c5",
+      "episodeId": "ae6324a8-fde0-4785-9e82-3bf136e74d0e",
+      "assetTitle": "NJ PBS News with Rob Nelson | October 6, 2026",
+      "assetPremiere": "2026-10-07",
+      "episodeTitle": "NJ PBS News with Rob Nelson | October 6, 2026",
+      "episodePremiere": "2026-10-07",
+      "broadcastDate": "2026-10-06"
+    }
+  ]
+}

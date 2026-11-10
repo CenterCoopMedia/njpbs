@@ -1,0 +1,6 @@
+{
+  "usageItems": [
+    { "product": "actions", "netAmount": 2.5 },
+    { "product": "copilot", "netAmount": 10 }
+  ]
+}

@@ -1,0 +1,20 @@
+{
+  "rules": [
+    {
+      "id": "delete-ugc-quarantine-after-90-days",
+      "enabled": true,
+      "conditions": { "prefix": "ugc-quarantine/" },
+      "deleteObjectsTransition": {
+        "condition": { "type": "Age", "maxAge": 7776000 }
+      }
+    },
+    {
+      "id": "abort-ugc-multipart-after-7-days",
+      "enabled": true,
+      "conditions": { "prefix": "" },
+      "abortMultipartUploadsTransition": {
+        "condition": { "type": "Age", "maxAge": 604800 }
+      }
+    }
+  ]
+}

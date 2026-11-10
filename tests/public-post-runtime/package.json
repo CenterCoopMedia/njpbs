@@ -1,0 +1,23 @@
+{
+  "name": "njpbs-public-post-runtime-tests",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "pretest": "node ../../site/node_modules/tsx/dist/cli.mjs prepare-static-fixtures.mjs",
+    "check": "tsc --noEmit",
+    "test": "npm run check && vitest run"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "esbuild": "0.28.2",
+    "miniflare": "5.20260917.0-alpha",
+    "typescript": "5.9.3",
+    "vitest": "4.1.12",
+    "vite": "8.2.4"
+  },
+  "overrides": {
+    "miniflare": {
+      "sharp": "0.35.5"
+    }
+  }
+}

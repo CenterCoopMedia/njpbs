@@ -1,0 +1,14 @@
+import type { Firestore, Transaction } from "firebase-admin/firestore";
+import type { PublicReleasePair, PublicReleaseSelector } from "../../packages/content-core/src/public-release";
+export type BootstrapAttempt = Readonly<{ schemaVersion: 2; operationId: string; expectedSourceDigest: string;
+  currentPair: PublicReleasePair; recoveryPair: PublicReleasePair; admittedContractDigest: string;
+  qualifications: readonly Readonly<{ qualificationId: string; receiptDigest: string }>[] }>;
+export function parseBootstrapAttempt(value: unknown): BootstrapAttempt;
+export type BootstrapQualificationGuard = { begin(transaction: Transaction): { transaction: Transaction;
+  verify(input: { firestore: Firestore; transaction: Transaction; pairs: readonly PublicReleasePair[];
+    qualifications: BootstrapAttempt["qualifications"] }): Promise<readonly unknown[]>; finish(): void } };
+export function bootstrapPublicReleaseSelector(input: { firestore: Firestore; attempt: BootstrapAttempt; dryRun?: boolean;
+  qualificationGuard: BootstrapQualificationGuard;
+  assertClosedFenceInTransaction(input: { firestore: Firestore; transaction: Transaction; environment: string; before: unknown; operationId: string }): Promise<unknown>;
+  assertInstalledConsumersInTransaction(input: { firestore: Firestore; transaction: Transaction; environment: string; contractDigest: string; before: unknown }): Promise<unknown> }): Promise<{ dryRun: boolean; idempotent: boolean; before: unknown;
+    after: PublicReleaseSelector; receipt: unknown; receiptPath: string; headInitializations: readonly {path:string;before:null;after:unknown}[]; mediaInitialization:null|{path:string;before:null;after:unknown} }>;

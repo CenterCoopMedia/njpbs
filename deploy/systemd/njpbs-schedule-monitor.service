@@ -1,0 +1,29 @@
+[Unit]
+Description=Observe NJ PBS schedule bake and report to private Uptime Kuma
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=oneshot
+User=njpbs
+Group=njpbs
+WorkingDirectory=/opt/njpbs-schedule-monitor
+ExecStart=/usr/bin/python3 /opt/njpbs-schedule-monitor/check-schedule-jobs.py --bake-only --report
+LoadCredentialEncrypted=schedule-bake-push-url:/etc/credstore.encrypted/njpbs-schedule-bake-push-url
+Environment=GH_NO_UPDATE_NOTIFIER=1
+EnvironmentFile=-/etc/njpbs-schedule-monitor.env
+TimeoutStartSec=2min
+UMask=0077
+Nice=10
+NoNewPrivileges=true
+PrivateDevices=true
+PrivateTmp=true
+ProtectHome=read-only
+ProtectSystem=strict
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+CapabilityBoundingSet=
+AmbientCapabilities=
+MemoryMax=128M
+TasksMax=32
+StandardOutput=journal
+StandardError=journal

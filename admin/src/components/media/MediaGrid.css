@@ -1,0 +1,50 @@
+/* The shared media grid. Rows exist for the ARIA grid
+   only, so the layout is the auto-fill grid from the Display thumbnail size. */
+.media-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, var(--media-grid-thumb, var(--cms-thumb-md))), 1fr));
+  gap: var(--cms-space-4);
+  min-width: 0;
+}
+
+.media-grid-row {
+  display: contents;
+}
+
+/* Each cell is a grid item, so its card takes the column width for its container queries.
+   Focus scrolls clear of the sticky toolbar (WCAG 2.4.11). */
+.media-grid-cell {
+  display: grid;
+  min-width: 0;
+  scroll-margin-top: calc(var(--workspace-header-height, 0px) + var(--media-chrome-height, 0px) + var(--cms-space-3));
+  scroll-margin-bottom: var(--cms-space-3);
+}
+
+/* While the selection bar floats over the results, focus also stays clear of it. */
+.media-grid[data-selection-mode] .media-grid-cell,
+.media-grid[data-selection-mode] > .media-row,
+.media-grid[data-selection-mode] :where(button, input, a, [tabindex]) {
+  scroll-margin-bottom: calc(var(--media-selection-bar-height, 4rem) + var(--cms-space-4));
+}
+
+/* The list layout: one bordered panel of rows, header first. */
+.media-grid[data-layout="list"] {
+  grid-template-columns: minmax(0, 1fr);
+  gap: 0;
+  overflow: hidden;
+  border: var(--cms-border-width) solid var(--cms-line);
+  border-radius: var(--cms-radius-panel);
+  background: var(--cms-surface);
+}
+
+.media-grid[data-layout="list"] > .media-row {
+  scroll-margin-top: calc(var(--workspace-header-height, 0px) + var(--media-chrome-height, 0px) + var(--cms-space-3));
+}
+
+/* Phones: a fixed column count from Display, with a tighter gap. */
+@media (max-width: 45rem) {
+  .media-grid:not([data-layout="list"]) {
+    grid-template-columns: repeat(var(--media-grid-phone-columns, 2), minmax(0, 1fr));
+    gap: var(--cms-space-2);
+  }
+}

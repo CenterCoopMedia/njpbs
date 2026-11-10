@@ -1,0 +1,10 @@
+{
+  "date": "2026-08-26",
+  "kind": "new",
+  "title": "Promote items on the homepage",
+  "body": "Editors can manage a promotion row on the homepage. Add, remove and reorder the promoted items in the Home editor.",
+  "prs": [
+    1276
+  ],
+  "order": 0
+}

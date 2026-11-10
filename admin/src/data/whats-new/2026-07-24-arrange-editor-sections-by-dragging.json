@@ -1,0 +1,10 @@
+{
+  "date": "2026-07-24",
+  "kind": "new",
+  "title": "Arrange editor sections by dragging",
+  "body": "You can now drag the page editor sections into a wide or narrow column, reorder them or collapse them. Keyboard move controls do the same, and your layout stays in place.",
+  "prs": [
+    731
+  ],
+  "order": 0
+}

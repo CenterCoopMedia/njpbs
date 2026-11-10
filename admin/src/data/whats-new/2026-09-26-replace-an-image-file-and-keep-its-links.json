@@ -1,0 +1,12 @@
+{
+  "date": "2026-09-26",
+  "kind": "new",
+  "title": "Replace an image file and keep its links",
+  "body": "Open an image's details and choose Replace file. Pages and Posts that use the image keep working, and Boardwalk keeps the earlier file so you can recover it.",
+  "prs": [
+    2335,
+    2340,
+    2347
+  ],
+  "order": -5
+}

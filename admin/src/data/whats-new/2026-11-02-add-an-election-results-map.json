@@ -1,0 +1,10 @@
+{
+  "date": "2026-11-02",
+  "kind": "improved",
+  "title": "Add an election results map",
+  "body": "In Pages and Posts, add an Embed plank and paste the published election results layout link. Choose the map size, mobile height and width, and add a heading and caption. Move or remove the plank with the usual controls. Pages with these embeds omit site analytics.",
+  "prs": [
+    4657
+  ],
+  "order": 0
+}

@@ -1,0 +1,24 @@
+# Public share intake. Bind intake.njpbs.org as a custom domain at launch.
+name = "njpbs-share-intake"
+main = "index.ts"
+compatibility_date = "2026-09-28"
+workers_dev = false
+preview_urls = false
+
+[[durable_objects.bindings]]
+name = "RATE_LIMITER"
+class_name = "ShareIntakeLimiter"
+
+[[migrations]]
+tag = "v1"
+new_sqlite_classes = ["ShareIntakeLimiter"]
+
+[vars]
+ALLOWED_ORIGIN = "https://njpbs.org"
+FUNCTIONS_BASE_URL = "https://us-central1-njpbs-site.cloudfunctions.net"
+
+# Worker secrets, set at launch with `wrangler secret put`:
+#   CMS_EDGE_ORIGIN_SECRET  Shared CMS edge gate
+#   TURNSTILE_SECRET       Turnstile siteverify secret
+#   IP_HASH_SALT           Salt for the client IP hash
+# No routes appear here. Bind the custom domain out of band after approval.

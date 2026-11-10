@@ -1,0 +1,8 @@
+{
+  "date": "2026-11-09",
+  "order": 1794242400000,
+  "kind": "fixed",
+  "title": "Check embeds before publishing",
+  "body": "Custom HTML planks support chart and story embeds. If an embed cannot appear on the public site, saving your draft shows the plank and host to fix. Publishing waits until you replace or remove that embed.",
+  "prs": []
+}

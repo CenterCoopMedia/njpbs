@@ -1,0 +1,12 @@
+{
+  "date": "2026-09-26",
+  "kind": "new",
+  "title": "Favorite many images at once",
+  "body": "Select images, then choose to add or remove them from Favorites in the selection bar or the right-click menu. Hearts and the Favorites count update after the change.",
+  "prs": [
+    2334,
+    2337,
+    2370
+  ],
+  "order": -8
+}

@@ -1,0 +1,531 @@
+{
+  "fixtureKind": "documented-schema fixture, not a live MM response",
+  "provenance": {
+    "metadata": "Public watch.njpbs.org episodes response captured October 11, 2026; IDs/titles/duration/images/caption flag and parent hierarchy are real. premiered_on keeps the portal premiere calendar day, not an invented instant.",
+    "rightsAndPlatforms": "The public window/country/platform structures below are the literal published PBS Assets documentation sample (10 Modern Marvels That Changed America), used solely as contract-fixture admission conditions. They are NOT verified rights for this series; the first credentialed dev response must replace/verify them before publishing.",
+    "playerCode": "Public station portal metadata captured October 14, 2026 supplies legacy_tp_media_id for these exact asset IDs. October 9 public episode share HTML independently confirms viralplayer/3114511752/. player_code uses the existing MM documented iframe field and normalizes through the shared Partner Player sanitizer; no credentialed MM response is claimed."
+  },
+  "data": [
+    {
+      "type": "asset",
+      "id": "a22562ab-3442-42e7-a9e4-192c2d0bd190",
+      "attributes": {
+        "slug": "nj-pbs-news-with-rob-nelson-october-9-2026-0oavxo",
+        "title": "NJ PBS News with Rob Nelson | October 9, 2026",
+        "object_type": "full_length",
+        "premiered_on": "2026-10-09",
+        "duration": 1606,
+        "has_captions": true,
+        "images": [
+          {
+            "profile": "asset-mezzanine-16x9",
+            "image": "https://image.pbs.org/video-assets/servqn9-asset-mezzanine-16x9-yzVeG3B.png"
+          }
+        ],
+        "availabilities": {
+          "public": {
+            "end": "2028-07-24T03:59:59Z",
+            "start": "2018-07-25T04:00:00Z",
+            "updated_at": "2020-03-27T08:24:53.675103Z",
+            "countries": [
+              {
+                "id": "6a9df090-8ede-44c0-8781-5ddbb942966b",
+                "code": "US",
+                "name": "United States",
+                "updated_at": "2017-04-04T09:00:32.190936Z"
+              },
+              {
+                "id": "1dff4e57-5b2e-4966-9f2f-e4eace8dd185",
+                "code": "GD",
+                "name": "Grenada",
+                "updated_at": "2017-04-04T09:00:31.636143Z"
+              }
+            ],
+            "geo_profile": {
+              "id": "e945d809-1004-4164-b4e2-7902ade9c1f6",
+              "name": "US and Territories, Canada, and Caribbean",
+              "updated_at": "2018-07-26T17:36:08.878630Z"
+            }
+          }
+        },
+        "platforms": [
+          {
+            "id": "e5a289b8-01b3-41ce-92c1-3eb5a4e14bc0",
+            "slug": "allplatforms",
+            "name": "All Platforms",
+            "updated_at": "2017-04-03T15:57:09.459445Z"
+          }
+        ],
+        "parent_tree": {
+          "type": "episode",
+          "id": "eccc7cc0-b356-4040-b597-2186f495d309",
+          "attributes": {
+            "title": "NJ PBS News with Rob Nelson | October 9, 2026",
+            "ordinal": 7,
+            "season": {
+              "type": "season",
+              "id": "21847855-ae33-470a-9bb6-4692fbc19286",
+              "attributes": {
+                "show": {
+                  "type": "show",
+                  "id": "ad1f378e-9779-4ef1-a629-40a8a6f8f8d5",
+                  "attributes": {
+                    "title": "NJ PBS News with Rob Nelson"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "player_code": "<iframe src=\"https://player.pbs.org/viralplayer/3114511752/\" allowfullscreen></iframe>"
+      }
+    },
+    {
+      "type": "asset",
+      "id": "8e104e34-c4cd-450c-9945-c175d8092eba",
+      "attributes": {
+        "slug": "nj-pbs-news-with-rob-nelson-october-8-2026-ssphvs",
+        "title": "NJ PBS News with Rob Nelson | October 8, 2026",
+        "object_type": "full_length",
+        "premiered_on": "2026-10-09",
+        "duration": 1606,
+        "has_captions": true,
+        "images": [
+          {
+            "profile": "asset-mezzanine-16x9",
+            "image": "https://image.pbs.org/video-assets/NRTmKpn-asset-mezzanine-16x9-SZ1GwnA.png"
+          }
+        ],
+        "availabilities": {
+          "public": {
+            "end": "2028-07-24T03:59:59Z",
+            "start": "2018-07-25T04:00:00Z",
+            "updated_at": "2020-03-27T08:24:53.675103Z",
+            "countries": [
+              {
+                "id": "6a9df090-8ede-44c0-8781-5ddbb942966b",
+                "code": "US",
+                "name": "United States",
+                "updated_at": "2017-04-04T09:00:32.190936Z"
+              },
+              {
+                "id": "1dff4e57-5b2e-4966-9f2f-e4eace8dd185",
+                "code": "GD",
+                "name": "Grenada",
+                "updated_at": "2017-04-04T09:00:31.636143Z"
+              }
+            ],
+            "geo_profile": {
+              "id": "e945d809-1004-4164-b4e2-7902ade9c1f6",
+              "name": "US and Territories, Canada, and Caribbean",
+              "updated_at": "2018-07-26T17:36:08.878630Z"
+            }
+          }
+        },
+        "platforms": [
+          {
+            "id": "e5a289b8-01b3-41ce-92c1-3eb5a4e14bc0",
+            "slug": "allplatforms",
+            "name": "All Platforms",
+            "updated_at": "2017-04-03T15:57:09.459445Z"
+          }
+        ],
+        "parent_tree": {
+          "type": "episode",
+          "id": "d5f3b5f0-409b-4847-b956-b9572b89eb10",
+          "attributes": {
+            "title": "NJ PBS News with Rob Nelson | October 8, 2026",
+            "ordinal": 6,
+            "season": {
+              "type": "season",
+              "id": "21847855-ae33-470a-9bb6-4692fbc19286",
+              "attributes": {
+                "show": {
+                  "type": "show",
+                  "id": "ad1f378e-9779-4ef1-a629-40a8a6f8f8d5",
+                  "attributes": {
+                    "title": "NJ PBS News with Rob Nelson"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "player_code": "<iframe src=\"https://player.pbs.org/viralplayer/3114477441/\" allowfullscreen></iframe>"
+      }
+    },
+    {
+      "type": "asset",
+      "id": "ba0a3ea0-5929-413d-8d2f-e82206495103",
+      "attributes": {
+        "slug": "nj-pbs-news-with-rob-nelson-october-7-2026-n3g7gw",
+        "title": "NJ PBS News with Rob Nelson | October 7, 2026",
+        "object_type": "full_length",
+        "premiered_on": "2026-10-08",
+        "duration": 1599,
+        "has_captions": true,
+        "images": [
+          {
+            "profile": "asset-mezzanine-16x9",
+            "image": "https://image.pbs.org/video-assets/QjcUvNV-asset-mezzanine-16x9-LldBSgV.png"
+          }
+        ],
+        "availabilities": {
+          "public": {
+            "end": "2028-07-24T03:59:59Z",
+            "start": "2018-07-25T04:00:00Z",
+            "updated_at": "2020-03-27T08:24:53.675103Z",
+            "countries": [
+              {
+                "id": "6a9df090-8ede-44c0-8781-5ddbb942966b",
+                "code": "US",
+                "name": "United States",
+                "updated_at": "2017-04-04T09:00:32.190936Z"
+              },
+              {
+                "id": "1dff4e57-5b2e-4966-9f2f-e4eace8dd185",
+                "code": "GD",
+                "name": "Grenada",
+                "updated_at": "2017-04-04T09:00:31.636143Z"
+              }
+            ],
+            "geo_profile": {
+              "id": "e945d809-1004-4164-b4e2-7902ade9c1f6",
+              "name": "US and Territories, Canada, and Caribbean",
+              "updated_at": "2018-07-26T17:36:08.878630Z"
+            }
+          }
+        },
+        "platforms": [
+          {
+            "id": "e5a289b8-01b3-41ce-92c1-3eb5a4e14bc0",
+            "slug": "allplatforms",
+            "name": "All Platforms",
+            "updated_at": "2017-04-03T15:57:09.459445Z"
+          }
+        ],
+        "parent_tree": {
+          "type": "episode",
+          "id": "858cd206-89d3-4f40-9822-6d42bff02e5a",
+          "attributes": {
+            "title": "NJ PBS News with Rob Nelson | October 7, 2026",
+            "ordinal": 5,
+            "season": {
+              "type": "season",
+              "id": "21847855-ae33-470a-9bb6-4692fbc19286",
+              "attributes": {
+                "show": {
+                  "type": "show",
+                  "id": "ad1f378e-9779-4ef1-a629-40a8a6f8f8d5",
+                  "attributes": {
+                    "title": "NJ PBS News with Rob Nelson"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "player_code": "<iframe src=\"https://player.pbs.org/viralplayer/3114435972/\" allowfullscreen></iframe>"
+      }
+    },
+    {
+      "type": "asset",
+      "id": "ca570be2-871a-426d-8fd3-3050a9fe13c5",
+      "attributes": {
+        "slug": "nj-pbs-news-with-rob-nelson-october-6-2026-paynr1",
+        "title": "NJ PBS News with Rob Nelson | October 6, 2026",
+        "object_type": "full_length",
+        "premiered_on": "2026-10-07",
+        "duration": 1606,
+        "has_captions": true,
+        "images": [
+          {
+            "profile": "asset-mezzanine-16x9",
+            "image": "https://image.pbs.org/video-assets/6wDV2GH-asset-mezzanine-16x9-UyrCUB1.jpeg"
+          }
+        ],
+        "availabilities": {
+          "public": {
+            "end": "2028-07-24T03:59:59Z",
+            "start": "2018-07-25T04:00:00Z",
+            "updated_at": "2020-03-27T08:24:53.675103Z",
+            "countries": [
+              {
+                "id": "6a9df090-8ede-44c0-8781-5ddbb942966b",
+                "code": "US",
+                "name": "United States",
+                "updated_at": "2017-04-04T09:00:32.190936Z"
+              },
+              {
+                "id": "1dff4e57-5b2e-4966-9f2f-e4eace8dd185",
+                "code": "GD",
+                "name": "Grenada",
+                "updated_at": "2017-04-04T09:00:31.636143Z"
+              }
+            ],
+            "geo_profile": {
+              "id": "e945d809-1004-4164-b4e2-7902ade9c1f6",
+              "name": "US and Territories, Canada, and Caribbean",
+              "updated_at": "2018-07-26T17:36:08.878630Z"
+            }
+          }
+        },
+        "platforms": [
+          {
+            "id": "e5a289b8-01b3-41ce-92c1-3eb5a4e14bc0",
+            "slug": "allplatforms",
+            "name": "All Platforms",
+            "updated_at": "2017-04-03T15:57:09.459445Z"
+          }
+        ],
+        "parent_tree": {
+          "type": "episode",
+          "id": "ae6324a8-fde0-4785-9e82-3bf136e74d0e",
+          "attributes": {
+            "title": "NJ PBS News with Rob Nelson | October 6, 2026",
+            "ordinal": 4,
+            "season": {
+              "type": "season",
+              "id": "21847855-ae33-470a-9bb6-4692fbc19286",
+              "attributes": {
+                "show": {
+                  "type": "show",
+                  "id": "ad1f378e-9779-4ef1-a629-40a8a6f8f8d5",
+                  "attributes": {
+                    "title": "NJ PBS News with Rob Nelson"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "player_code": "<iframe src=\"https://player.pbs.org/viralplayer/3114385860/\" allowfullscreen></iframe>"
+      }
+    },
+    {
+      "type": "asset",
+      "id": "e2a784b4-a812-41e7-b430-02ca44c0884d",
+      "attributes": {
+        "slug": "nj-pbs-news-with-rob-nelson-october-5-2026-ki1jru",
+        "title": "NJ PBS News with Rob Nelson | October 5, 2026",
+        "object_type": "full_length",
+        "premiered_on": "2026-10-05",
+        "duration": 1600,
+        "has_captions": true,
+        "images": [
+          {
+            "profile": "asset-mezzanine-16x9",
+            "image": "https://image.pbs.org/video-assets/PYGy8Gt-asset-mezzanine-16x9-VZArb6q.png"
+          }
+        ],
+        "availabilities": {
+          "public": {
+            "end": "2028-07-24T03:59:59Z",
+            "start": "2018-07-25T04:00:00Z",
+            "updated_at": "2020-03-27T08:24:53.675103Z",
+            "countries": [
+              {
+                "id": "6a9df090-8ede-44c0-8781-5ddbb942966b",
+                "code": "US",
+                "name": "United States",
+                "updated_at": "2017-04-04T09:00:32.190936Z"
+              },
+              {
+                "id": "1dff4e57-5b2e-4966-9f2f-e4eace8dd185",
+                "code": "GD",
+                "name": "Grenada",
+                "updated_at": "2017-04-04T09:00:31.636143Z"
+              }
+            ],
+            "geo_profile": {
+              "id": "e945d809-1004-4164-b4e2-7902ade9c1f6",
+              "name": "US and Territories, Canada, and Caribbean",
+              "updated_at": "2018-07-26T17:36:08.878630Z"
+            }
+          }
+        },
+        "platforms": [
+          {
+            "id": "e5a289b8-01b3-41ce-92c1-3eb5a4e14bc0",
+            "slug": "allplatforms",
+            "name": "All Platforms",
+            "updated_at": "2017-04-03T15:57:09.459445Z"
+          }
+        ],
+        "parent_tree": {
+          "type": "episode",
+          "id": "2a1d56e7-99dc-4599-8d93-ffe3dbce92d3",
+          "attributes": {
+            "title": "NJ PBS News with Rob Nelson | October 5, 2026",
+            "ordinal": 3,
+            "season": {
+              "type": "season",
+              "id": "21847855-ae33-470a-9bb6-4692fbc19286",
+              "attributes": {
+                "show": {
+                  "type": "show",
+                  "id": "ad1f378e-9779-4ef1-a629-40a8a6f8f8d5",
+                  "attributes": {
+                    "title": "NJ PBS News with Rob Nelson"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "player_code": "<iframe src=\"https://player.pbs.org/viralplayer/3114345042/\" allowfullscreen></iframe>"
+      }
+    },
+    {
+      "type": "asset",
+      "id": "fd4be988-9943-490c-ae68-4ee3c89773bd",
+      "attributes": {
+        "slug": "nj-pbs-news-with-rob-nelson-october-2-2026-pkdr3u",
+        "title": "NJ PBS News with Rob Nelson | October 2, 2026",
+        "object_type": "full_length",
+        "premiered_on": "2026-10-05",
+        "duration": 1599,
+        "has_captions": true,
+        "images": [
+          {
+            "profile": "asset-mezzanine-16x9",
+            "image": "https://image.pbs.org/video-assets/CcV9AmD-asset-mezzanine-16x9-jpSq8cW.webp"
+          }
+        ],
+        "availabilities": {
+          "public": {
+            "end": "2028-07-24T03:59:59Z",
+            "start": "2018-07-25T04:00:00Z",
+            "updated_at": "2020-03-27T08:24:53.675103Z",
+            "countries": [
+              {
+                "id": "6a9df090-8ede-44c0-8781-5ddbb942966b",
+                "code": "US",
+                "name": "United States",
+                "updated_at": "2017-04-04T09:00:32.190936Z"
+              },
+              {
+                "id": "1dff4e57-5b2e-4966-9f2f-e4eace8dd185",
+                "code": "GD",
+                "name": "Grenada",
+                "updated_at": "2017-04-04T09:00:31.636143Z"
+              }
+            ],
+            "geo_profile": {
+              "id": "e945d809-1004-4164-b4e2-7902ade9c1f6",
+              "name": "US and Territories, Canada, and Caribbean",
+              "updated_at": "2018-07-26T17:36:08.878630Z"
+            }
+          }
+        },
+        "platforms": [
+          {
+            "id": "e5a289b8-01b3-41ce-92c1-3eb5a4e14bc0",
+            "slug": "allplatforms",
+            "name": "All Platforms",
+            "updated_at": "2017-04-03T15:57:09.459445Z"
+          }
+        ],
+        "parent_tree": {
+          "type": "episode",
+          "id": "d781ffeb-3a22-4e2d-8471-03641e432ce8",
+          "attributes": {
+            "title": "NJ PBS News with Rob Nelson | October 2, 2026",
+            "ordinal": 2,
+            "season": {
+              "type": "season",
+              "id": "21847855-ae33-470a-9bb6-4692fbc19286",
+              "attributes": {
+                "show": {
+                  "type": "show",
+                  "id": "ad1f378e-9779-4ef1-a629-40a8a6f8f8d5",
+                  "attributes": {
+                    "title": "NJ PBS News with Rob Nelson"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "player_code": "<iframe src=\"https://player.pbs.org/viralplayer/3114334165/\" allowfullscreen></iframe>"
+      }
+    },
+    {
+      "type": "asset",
+      "id": "228a9703-0682-4787-86d6-d00a6a8d706b",
+      "attributes": {
+        "slug": "nj-pbs-news-with-rob-nelson-october-1-2026-7tzhbq",
+        "title": "NJ PBS News with Rob Nelson | October 1, 2026",
+        "object_type": "full_length",
+        "premiered_on": "2026-10-01",
+        "duration": 1600,
+        "has_captions": true,
+        "images": [
+          {
+            "profile": "asset-mezzanine-16x9",
+            "image": "https://image.pbs.org/video-assets/jZfvq8S-asset-mezzanine-16x9-mo29s1P.jpg"
+          }
+        ],
+        "availabilities": {
+          "public": {
+            "end": "2028-07-24T03:59:59Z",
+            "start": "2018-07-25T04:00:00Z",
+            "updated_at": "2020-03-27T08:24:53.675103Z",
+            "countries": [
+              {
+                "id": "6a9df090-8ede-44c0-8781-5ddbb942966b",
+                "code": "US",
+                "name": "United States",
+                "updated_at": "2017-04-04T09:00:32.190936Z"
+              },
+              {
+                "id": "1dff4e57-5b2e-4966-9f2f-e4eace8dd185",
+                "code": "GD",
+                "name": "Grenada",
+                "updated_at": "2017-04-04T09:00:31.636143Z"
+              }
+            ],
+            "geo_profile": {
+              "id": "e945d809-1004-4164-b4e2-7902ade9c1f6",
+              "name": "US and Territories, Canada, and Caribbean",
+              "updated_at": "2018-07-26T17:36:08.878630Z"
+            }
+          }
+        },
+        "platforms": [
+          {
+            "id": "e5a289b8-01b3-41ce-92c1-3eb5a4e14bc0",
+            "slug": "allplatforms",
+            "name": "All Platforms",
+            "updated_at": "2017-04-03T15:57:09.459445Z"
+          }
+        ],
+        "parent_tree": {
+          "type": "episode",
+          "id": "436b6389-5414-417c-8ab2-98439a7e9013",
+          "attributes": {
+            "title": "NJ PBS News with Rob Nelson | October 1, 2026",
+            "ordinal": 1,
+            "season": {
+              "type": "season",
+              "id": "21847855-ae33-470a-9bb6-4692fbc19286",
+              "attributes": {
+                "show": {
+                  "type": "show",
+                  "id": "ad1f378e-9779-4ef1-a629-40a8a6f8f8d5",
+                  "attributes": {
+                    "title": "NJ PBS News with Rob Nelson"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "player_code": "<iframe src=\"https://player.pbs.org/viralplayer/3114265948/\" allowfullscreen></iframe>"
+      }
+    }
+  ],
+  "links": {
+    "next": null
+  }
+}

@@ -1,0 +1,113 @@
+---
+// The byline line under a headline: who wrote it, when it ran, and whether it
+// has been meaningfully updated since.
+//
+// Registered names and links come from the current public-author collection.
+// Withdrawing a profile removes its link and restores the frozen Post name.
+// A custom credit ("NJ PBS staff", a wire service, a guest contributor) links
+// to the Post index filtered by that exact frozen display name.
+//
+// Joining follows AP style, matching `storyCreditsByline` in the content core:
+// "A", "A and B", "A, B and C", with no serial comma.
+import { formatEditorialDate } from "../lib/editorial-date-format";
+import { postCreditHref } from "../lib/post-index-links";
+
+interface Credit {
+  name: string;
+  slug?: string;
+  authorId?: string;
+}
+
+interface Props {
+  credits: readonly Credit[];
+  displayDate: string | null;
+  updateShown: boolean;
+  updatedAt: string | null;
+  updatedDate: string | null;
+}
+
+const { credits, displayDate, updateShown, updatedAt, updatedDate } =
+  Astro.props as Props;
+
+// The separator that precedes each credit, so the joined line reads as prose
+// without building it from a single interpolated string (which would have to
+// escape names or render them unlinked).
+const separatorBefore = (index: number): string => {
+  if (index === 0) return "";
+  if (index === credits.length - 1) return " and ";
+  return ", ";
+};
+
+const published = formatEditorialDate(displayDate);
+const updated = updateShown ? formatEditorialDate(updatedDate) : null;
+const hasCredits = credits.length > 0;
+---
+
+<p class="post-byline">
+  {hasCredits && (
+    <span class="post-byline__credits">
+      <span class="post-byline__label">By</span>{" "}
+      {credits.map((credit, index) => {
+        const href = postCreditHref(credit);
+        return (
+          <>
+            {separatorBefore(index)}
+            {href ? (
+              <a href={href} rel={credit.slug ? "author" : undefined}>{credit.name}</a>
+            ) : (
+              credit.name
+            )}
+          </>
+        );
+      })}
+    </span>
+  )}
+  {published && (
+    <span class="post-byline__date">
+      {hasCredits && (
+        <span class="post-byline__sep" aria-hidden="true">{" · "}</span>
+      )}
+      <time datetime={displayDate}>{published}</time>
+    </span>
+  )}
+  {updated && updatedAt && (
+    <span class="post-byline__date">
+      {(hasCredits || published) && (
+        <span class="post-byline__sep" aria-hidden="true">{" · "}</span>
+      )}
+      Updated <time datetime={updatedAt}>{updated}</time>
+    </span>
+  )}
+</p>
+
+<style>
+  .post-byline {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: 0.4rem;
+    margin: 1.1rem 0 0;
+    color: var(--text-dim);
+    font-size: 0.98rem;
+    line-height: 1.5;
+  }
+
+  .post-byline__label {
+    color: var(--text-quiet);
+  }
+
+  .post-byline__credits a {
+    color: var(--text);
+    text-decoration: underline;
+    text-underline-offset: 0.22em;
+  }
+
+  .post-byline__credits a:hover {
+    color: var(--color-link);
+  }
+
+  .post-byline__sep {
+    margin-right: 0.4rem;
+    color: var(--text-quiet);
+  }
+</style>

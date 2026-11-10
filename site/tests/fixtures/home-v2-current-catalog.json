@@ -1,0 +1,130 @@
+{
+  "catalog": {
+    "schemaVersion": 1,
+    "cutoffAt": "2026-10-11T19:30:00.000Z",
+    "sources": {
+      "home-featured": {
+        "status": "ready",
+        "checkedAt": "2026-06-29T19:43:58.507Z",
+        "cards": [
+          {
+            "id": "https://watch.njpbs.org/show/painting-community/",
+            "source": "pbs_featured",
+            "title": "Painting Community",
+            "href": "https://watch.njpbs.org/show/painting-community/",
+            "summary": "With the stroke of a brush, a story is created, communities gather, and the walls talk.",
+            "sourceLabel": "PBS · NJ PBS",
+            "image": {
+              "url": "https://image.pbs.org/contentchannels/m3L1qFK-show-mezzanine16x9-Uyjvdy5.jpg",
+              "alt": ""
+            }
+          },
+          {
+            "id": "https://watch.njpbs.org/show/from-that-small-island-the-story-of-the-irish-feature-film/",
+            "source": "pbs_featured",
+            "title": "From That Small Island: The Story of the Irish Feature Film",
+            "href": "https://watch.njpbs.org/show/from-that-small-island-the-story-of-the-irish-feature-film/",
+            "summary": "The fascinating history of an island people who have truly left their mark on the world.",
+            "sourceLabel": "PBS · NJ PBS",
+            "image": {
+              "url": "https://image.pbs.org/contentchannels/xU29P1C-show-mezzanine16x9-kJ3DjLB.jpg",
+              "alt": ""
+            }
+          }
+        ]
+      },
+      "home-more": {
+        "status": "ready",
+        "checkedAt": "2026-06-29T19:43:58.507Z",
+        "cards": [
+          {
+            "id": "https://watch.njpbs.org/show/the-four-phantoms-in-concert/",
+            "source": "pbs_more",
+            "title": "The Four Phantoms in Concert",
+            "href": "https://watch.njpbs.org/show/the-four-phantoms-in-concert/",
+            "summary": "Veteran Phantom performers celebrate the music of Broadway and more.",
+            "sourceLabel": "PBS · NJ PBS",
+            "image": {
+              "url": "https://image.pbs.org/contentchannels/u5B4ldP-show-mezzanine16x9-nrVDaNJ.jpg",
+              "alt": ""
+            }
+          },
+          {
+            "id": "https://watch.njpbs.org/show/marvin-gaye-greatest-hits-alive/",
+            "source": "pbs_more",
+            "title": "Marvin Gaye: Greatest Hits Alive",
+            "href": "https://watch.njpbs.org/show/marvin-gaye-greatest-hits-alive/",
+            "summary": "This classic performance was recorded on Marvin Gaye’s first European Tour in 1976.",
+            "sourceLabel": "PBS · NJ PBS",
+            "image": {
+              "url": "https://image.pbs.org/contentchannels/c9TcppP-show-mezzanine16x9-rOfGICQ.jpg",
+              "alt": ""
+            }
+          }
+        ]
+      },
+      "home-spotlight": {
+        "status": "ready",
+        "checkedAt": "2026-10-11T14:49:53.477Z",
+        "cards": [
+          {
+            "id": "https://www.njspotlightnews.org/2026/10/from-delaney-hall-hunger-strike-to-freedom/",
+            "source": "spotlight_news",
+            "title": "From Delaney Hall hunger strike to freedom",
+            "href": "https://www.njspotlightnews.org/2026/10/from-delaney-hall-hunger-strike-to-freedom/",
+            "sourceLabel": "NJ Spotlight News",
+            "publishedAt": "2026-10-08T21:00:00.000Z",
+            "displayDate": "2026-10-08",
+            "byline": "jmooney",
+            "image": {
+              "url": "/brand/spotlight/immigration-02.jpg",
+              "alt": ""
+            }
+          },
+          {
+            "id": "https://www.njspotlightnews.org/2026/10/dale-caldwell-were-all-due-due-process/",
+            "source": "spotlight_news",
+            "title": "Dale Caldwell: ‘We’re all due due process’",
+            "href": "https://www.njspotlightnews.org/2026/10/dale-caldwell-were-all-due-due-process/",
+            "sourceLabel": "NJ Spotlight News",
+            "publishedAt": "2026-10-07T22:59:31.000Z",
+            "displayDate": "2026-10-07",
+            "byline": "NJ Spotlight",
+            "image": {
+              "url": "/brand/spotlight/politics.jpg",
+              "alt": ""
+            }
+          }
+        ]
+      },
+      "home-posts": {
+        "status": "ready",
+        "checkedAt": "2026-10-11T19:30:00.000Z",
+        "cards": [
+          {
+            "id": "1208e81a5470be941e3fb392eac674ae",
+            "source": "station_posts",
+            "sourceVersion": 41,
+            "title": "Corrected published headline",
+            "href": "/posts/nj-pbs-announces-rob-nelson-as-anchor-of-new-daily-newscast/",
+            "publishedAt": "2026-10-03T22:56:21.054Z",
+            "sourceLabel": "NJ PBS",
+            "summary": "Corrected published summary",
+            "displayDate": "2026-09-16",
+            "byline": "NJ PBS",
+            "image": {
+              "url": "https://media.njpbs.org/cms-media/general/0f5dfc5a-cd5c-4a1d-ab59-c8ad44fbce6d/6780ec064586141fc9c99eed52b6fa9457a1645e7cab1d45cda2cd58bfd02080.png",
+              "alt": "A portrait of journalist Rob Nelson smiling and wearing a suit."
+            }
+          }
+        ]
+      }
+    }
+  },
+  "receipt": {
+    "buildBatchId": "cms-HOME6CatalogProof002",
+    "generation": 22,
+    "commitSha": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "digest": "ac692469d1f3a834fa5934210e96f03c04bfab74b4677b9365a71d60a8cb8eb5"
+  }
+}

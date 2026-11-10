@@ -1,0 +1,57 @@
+---
+import type { ScheduleFeedDay } from "../lib/schedule-feed";
+import { renderScheduleNowNextFrame } from "../lib/schedule-now-next-render";
+import "../styles/schedule-now-next.css";
+
+interface Props {
+  days: readonly ScheduleFeedDay[];
+  variant: "full" | "compact";
+}
+
+const { days, variant } = Astro.props as Props;
+const serializedDays = JSON.stringify(days).replace(/</g, "\\u003c");
+const frame = renderScheduleNowNextFrame(variant);
+---
+
+<Fragment set:html={frame} />
+<script
+  type="application/json"
+  data-now-next-data
+  is:inline
+  set:html={serializedDays}
+></script>
+
+<script>
+  import {
+    millisecondsToNextMinute,
+    readNowNextDays,
+    renderScheduleNowNext,
+    resolveNowNextClock,
+  } from "../lib/schedule-now-next-dom";
+
+  const MINUTE_MS = 60_000;
+
+  document.querySelectorAll<HTMLElement>("[data-now-next]").forEach((root) => {
+    if (root.dataset.nowNextMounted === "true") return;
+    const days = readNowNextDays(root);
+    if (!days) return;
+
+    root.dataset.nowNextMounted = "true";
+    const clock = resolveNowNextClock(window.location.search, new Date());
+    const update = () =>
+      renderScheduleNowNext(
+        root,
+        days,
+        clock.fixed ? clock.at : resolveNowNextClock("", new Date()).at,
+      );
+
+    update();
+    if (clock.fixed) return;
+
+    const firstRefreshDelay = millisecondsToNextMinute(Date.now());
+    window.setTimeout(() => {
+      update();
+      window.setInterval(update, MINUTE_MS);
+    }, firstRefreshDelay);
+  });
+</script>

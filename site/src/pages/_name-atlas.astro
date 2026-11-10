@@ -1,0 +1,90 @@
+---
+import PublicSiteLayout from "../layouts/PublicSiteLayout.astro";
+import bridge from "../internal/name-atlas/bridge.js?raw";
+---
+<PublicSiteLayout
+  title="An Atlas of New Jersey Names"
+  description="Explore the name journeys of New Jersey’s municipalities."
+  preview={true}
+  noindex={true}
+  searchable={false}
+>
+  <section class="name-atlas-preview" aria-labelledby="name-atlas-heading" data-pagefind-ignore="all">
+    <header class="name-atlas-preview__intro">
+      <div>
+        <p class="name-atlas-preview__label">Private preview</p>
+        <h1 id="name-atlas-heading">An Atlas of New Jersey Names</h1>
+        <p>Explore the stories behind the names of New Jersey’s 564 municipalities.</p>
+      </div>
+      <a class="name-atlas-preview__standalone" href="/atlas/reader/" data-name-atlas-standalone>
+        Open atlas on its own
+      </a>
+    </header>
+    <iframe
+      data-name-atlas-frame
+      title="Interactive atlas of New Jersey municipality name histories"
+      referrerpolicy="no-referrer"
+      allow="clipboard-write 'self'"
+    ></iframe>
+    <noscript><p>The interactive atlas requires JavaScript.</p></noscript>
+    <p class="name-atlas-preview__note">Initial research edition. The atlas identifies uncertain claims and includes references within each town’s story.</p>
+  </section>
+  <script is:inline set:html={bridge}></script>
+</PublicSiteLayout>
+
+<style>
+  .name-atlas-preview {
+    width: min(var(--wrap), 100% - var(--gutter) * 2);
+    margin: var(--space-8) auto;
+  }
+  .name-atlas-preview__intro {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: flex-end;
+    justify-content: space-between;
+    gap: var(--space-4);
+    margin-bottom: var(--space-6);
+  }
+  .name-atlas-preview__label {
+    color: var(--color-text-muted);
+    font-size: 0.8rem;
+    margin: 0 0 var(--space-2);
+  }
+  h1 {
+    font-weight: 500;
+    font-size: clamp(1.8rem, 4vw, 2.6rem);
+    line-height: 1.15;
+    margin: 0 0 var(--space-3);
+  }
+  .name-atlas-preview__intro p:last-child {
+    margin: 0;
+    color: var(--color-text-muted);
+  }
+  .name-atlas-preview__standalone {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-2);
+    min-height: var(--target-comfortable);
+    padding: var(--space-2) var(--space-3);
+    border: 1px solid var(--color-border-strong);
+    border-radius: var(--radius-control);
+    color: var(--color-text-on-surface);
+    font-size: 0.875rem;
+  }
+  .name-atlas-preview__standalone:focus-visible {
+    outline: var(--focus-outline);
+    outline-offset: var(--focus-offset);
+  }
+  iframe {
+    display: block;
+    width: 100%;
+    height: max(36rem, calc(100svh - 8rem));
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-surface);
+  }
+  .name-atlas-preview__note {
+    margin: var(--space-3) 0 0;
+    font-size: 0.8rem;
+    color: var(--color-text-muted);
+  }
+</style>

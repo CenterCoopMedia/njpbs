@@ -1,0 +1,85 @@
+{
+  "version": 1,
+  "observationSequence": 1,
+  "lastSequence": 2,
+  "entries": [
+    {
+      "command": {
+        "schemaVersion": 1,
+        "protocolVersion": 1,
+        "id": "legacy-update-1",
+        "requestId": "legacy-request-1",
+        "actorId": "staff",
+        "sessionId": "simulation-session",
+        "deviceId": "simulation-device",
+        "sessionGeneration": 1,
+        "mappingVersion": 1,
+        "sequence": 1,
+        "clearGeneration": 0,
+        "overlay": 1,
+        "createdAtMs": 100,
+        "expiresAtMs": 15100,
+        "expectedObservationSequence": 1,
+        "action": "update_text",
+        "snapshot": {
+          "bannerId": "banner",
+          "sessionId": "simulation-session",
+          "version": 1,
+          "mappingVersion": 1,
+          "text": {
+            "templateId": "name_title",
+            "name": "Legacy name",
+            "title": "Legacy title"
+          }
+        }
+      },
+      "hash": "2c9feae27d8d614f26900b1c3b7ffae53ceaea81689fd5de3083a60b24dabcf2",
+      "acknowledged": true,
+      "receipt": {
+        "commandId": "legacy-update-1",
+        "requestId": "legacy-request-1",
+        "outcome": "succeeded",
+        "checkpoint": "TextBlock1.Text"
+      }
+    },
+    {
+      "command": {
+        "schemaVersion": 1,
+        "protocolVersion": 1,
+        "id": "legacy-update-2",
+        "requestId": "legacy-request-2",
+        "actorId": "staff",
+        "sessionId": "simulation-session",
+        "deviceId": "simulation-device",
+        "sessionGeneration": 1,
+        "mappingVersion": 1,
+        "sequence": 2,
+        "clearGeneration": 0,
+        "overlay": 1,
+        "createdAtMs": 100,
+        "expiresAtMs": 15100,
+        "expectedObservationSequence": 1,
+        "action": "update_text",
+        "snapshot": {
+          "bannerId": "banner",
+          "sessionId": "simulation-session",
+          "version": 2,
+          "mappingVersion": 1,
+          "text": {
+            "templateId": "name_title",
+            "name": "Legacy name",
+            "title": "Legacy title"
+          }
+        }
+      },
+      "hash": "2975c6123bb7a0532cc93e2f306ec429f5755edae640124977a010a1c2c74559",
+      "acknowledged": false,
+      "receipt": {
+        "commandId": "legacy-update-2",
+        "requestId": "legacy-request-2",
+        "outcome": "started",
+        "checkpoint": "TextBlock1.Text"
+      }
+    }
+  ]
+}

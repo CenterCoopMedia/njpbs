@@ -1,0 +1,8 @@
+{
+  "date": "2026-11-02",
+  "kind": "fixed",
+  "title": "Published Pages keep their saved planks",
+  "body": "Published Pages show election results, videos, data figures, newsletter signups, sponsor lists and record cards with the rest of the page.",
+  "prs": [],
+  "order": 60
+}

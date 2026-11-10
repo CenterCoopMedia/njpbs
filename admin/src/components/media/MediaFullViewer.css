@@ -1,0 +1,61 @@
+.media-full-viewer-body {
+  display: grid;
+  grid-column: 1 / -1;
+  grid-template-columns: minmax(0, 1fr) var(--cms-inspector-width);
+  min-width: 0;
+}
+
+.media-full-viewer-body > .component-editor-dialog-content {
+  grid-column: 1;
+  grid-row: 1;
+}
+
+.media-full-viewer-body > .component-editor-dialog-settings {
+  display: flex;
+  grid-column: 2;
+  grid-row: 1 / 3;
+  min-height: 0;
+  padding: 0;
+  border-left: 0;
+  background: transparent;
+}
+
+.media-full-viewer-body > .component-editor-dialog-sections {
+  grid-column: 1;
+  grid-row: 2;
+}
+
+.media-full-viewer-header-actions {
+  min-width: 0;
+  width: 100%;
+}
+
+.media-full-viewer-specimen-details {
+  display: grid;
+  align-content: start;
+  gap: var(--cms-space-3);
+  width: 100%;
+  padding: var(--cms-space-4);
+}
+
+.media-full-viewer-specimen-details > h2,
+.media-full-viewer-specimen-details > p {
+  margin: 0;
+}
+
+@media (max-width: 61.99rem) {
+  .media-full-viewer-body {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .media-full-viewer-body > .component-editor-dialog-content,
+  .media-full-viewer-body > .component-editor-dialog-settings,
+  .media-full-viewer-body > .component-editor-dialog-sections {
+    grid-column: 1;
+    grid-row: auto;
+  }
+
+  .media-full-viewer-body > .component-editor-dialog-settings {
+    min-height: auto;
+  }
+}

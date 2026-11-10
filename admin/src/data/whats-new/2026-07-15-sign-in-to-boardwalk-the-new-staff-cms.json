@@ -1,0 +1,14 @@
+{
+  "date": "2026-07-15",
+  "kind": "new",
+  "title": "Sign in to Boardwalk, the new staff CMS",
+  "body": "Staff now sign in with their Montclair account to edit NJ PBS content in one editorial workspace. Approved staff with other email addresses can also sign in.",
+  "prs": [
+    414,
+    523,
+    516,
+    470,
+    535
+  ],
+  "order": 0
+}

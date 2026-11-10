@@ -1,0 +1,111 @@
+---
+import { pbsVideoUrl } from "../data/launch-fallback";
+---
+
+<section class="page-hero">
+  <div class="page-hero__inner wrap">
+    <h1>Search NJ PBS</h1>
+    <p class="page-hero__lead">Find pages, stories, and guides on this site.</p>
+  </div>
+</section>
+<div class="wrap search-content" data-site-search>
+  <p data-search-fallback>Search needs JavaScript. Use the browse links below to find what you need.</p>
+  <form role="search" aria-label="NJ PBS site search" hidden>
+    <label for="site-search-query">Search this site</label>
+    <div class="search-controls">
+      <input id="site-search-query" name="q" type="search" maxlength="200" aria-describedby="search-hint" autocomplete="off" />
+      <div class="search-actions">
+        <button class="btn btn--primary" type="submit">Search</button>
+        <button class="btn btn--ghost" type="reset">Clear</button>
+      </div>
+    </div>
+    <p id="search-hint">Results appear as you type. Try a topic, page title, or keyword.</p>
+    <fieldset class="search-filters" data-search-filters hidden>
+      <legend>Filter programs</legend>
+      <p>Choose a program or genre to search only program pages. You can leave the search box empty.</p>
+      <div class="search-filter-controls">
+        <div>
+          <label for="site-search-program">Program</label>
+          <select id="site-search-program" data-search-filter="show" disabled>
+            <option value="">All programs</option>
+          </select>
+        </div>
+        <div>
+          <label for="site-search-genre">Genre</label>
+          <select id="site-search-genre" data-search-filter="genre" disabled>
+            <option value="">All genres</option>
+          </select>
+        </div>
+      </div>
+    </fieldset>
+    <p data-search-filter-status role="status"></p>
+  </form>
+  <p data-meaning-status role="status" aria-live="polite">Preparing meaning search… Keyword search is ready.</p>
+  <p class="search-status" role="status" aria-atomic="true"></p>
+  <p data-search-recovery hidden><a href="/search/">Reload search</a> to try again, or use the browse links below.</p>
+  <ol class="search-results" aria-label="Search results"></ol>
+  <button class="btn btn--ghost search-more" type="button" data-search-more hidden>Show more results</button>
+  <nav class="search-browse" aria-labelledby="search-browse-title">
+    <h2 id="search-browse-title">Browse NJ PBS</h2>
+    <p>Looking for a show or episode? <a href={pbsVideoUrl} target="_blank" rel="noopener noreferrer" aria-label="Browse the PBS video library (opens in new tab)">Browse the PBS video library</a>.</p>
+    <ul>
+      <li><a href="/schedule/">TV schedule</a></li>
+      <li><a href="/about/">About NJ PBS</a></li>
+      <li><a href="/support/">Viewer support</a></li>
+    </ul>
+  </nav>
+</div>
+
+<script>
+  import { mountSiteSearch } from "../lib/site-search";
+  const root = document.querySelector<HTMLElement>("[data-site-search]");
+  if (root) mountSiteSearch(root);
+</script>
+
+<style>
+  .search-content { padding-block: 2rem 3rem; }
+  label { display: block; font-weight: 700; margin-bottom: 0.5rem; }
+  .search-controls { display: flex; gap: 0.75rem; }
+  input, select {
+    flex: 1;
+    min-width: 0;
+    min-height: var(--target-comfortable);
+    padding: 0.75rem 1rem;
+    border: 1px solid var(--text-quiet);
+    border-radius: var(--radius-control);
+    background: var(--bg-1);
+    color: var(--text);
+    font: inherit;
+  }
+  .search-actions { display: flex; gap: 0.5rem; }
+  select { width: 100%; }
+  .search-filters { margin: 1.5rem 0 0; padding: 0; border: 0; min-width: 0; }
+  .search-filters legend { font-weight: 700; }
+  .search-filters p { color: var(--text-dim); margin-block: 0.5rem 1rem; }
+  .search-filter-controls { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0.75rem; }
+  [data-search-filter-status]:empty { display: none; }
+  button { font: inherit; font-weight: 700; cursor: pointer; }
+  .btn--primary { border: 1px solid transparent; }
+  button:disabled { cursor: wait; }
+  #search-hint, .search-status { color: var(--text-dim); }
+  #search-hint { font-size: 0.9rem; margin-block: 0.6rem 0; }
+  .search-status { margin-block: 1.5rem; }
+  .search-status:empty { display: none; }
+  .search-results { list-style: none; padding: 0; margin: 0; }
+  .search-results :global(li) { border-top: 1px solid var(--line); padding-block: 1.25rem; overflow-wrap: anywhere; }
+  .search-results :global(h2) { font-size: 1.25rem; margin: 0 0 0.5rem; }
+  .search-results :global(p) { color: var(--text-dim); margin: 0; }
+  .search-results :global(mark) { background: var(--focus); color: var(--ink); }
+  .search-more { margin-top: 1rem; }
+  [hidden] { display: none !important; }
+  .search-browse { border-top: 1px solid var(--line); margin-top: 2rem; padding-top: 1.5rem; }
+  .search-browse h2 { font-size: 1.15rem; margin: 0; }
+  .search-browse p { color: var(--text-dim); }
+  .search-browse ul { display: flex; flex-wrap: wrap; gap: 0.25rem 1.5rem; padding: 0; list-style: none; }
+  .search-browse li a { display: inline-flex; align-items: center; min-height: var(--target-comfortable); }
+  @media (max-width: 600px) {
+    .search-controls { flex-direction: column; }
+    .search-filter-controls { grid-template-columns: minmax(0, 1fr); }
+    .search-actions button { flex: 1; }
+  }
+</style>

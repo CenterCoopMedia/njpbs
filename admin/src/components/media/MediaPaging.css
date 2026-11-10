@@ -1,0 +1,24 @@
+.media-paging {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--cms-space-3);
+  color: var(--cms-ink-muted);
+  font-size: var(--cms-font-sm);
+}
+
+.media-paging-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--cms-space-2);
+}
+
+.media-paging-actions button {
+  min-width: var(--cms-control-standard-target);
+  min-height: var(--cms-control-standard-target);
+}
+
+.media-paging-error {
+  flex-basis: 100%;
+}

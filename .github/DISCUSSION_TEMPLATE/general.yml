@@ -1,0 +1,44 @@
+title: "[Discussion] "
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Use this for coordination: owners, timeline, meetings, or a topic that is not a how-to or a product idea.
+
+        Do not include passwords, Access codes, donor or member data, private contact details, unpublished agreements, or other protected information.
+  - type: dropdown
+    id: role
+    attributes:
+      label: I am
+      options:
+        - A staff editor
+        - A CCM or MSU collaborator
+        - A stakeholder
+        - Someone else
+    validations:
+      required: true
+  - type: textarea
+    id: topic
+    attributes:
+      label: What would you like to discuss?
+    validations:
+      required: true
+  - type: textarea
+    id: outcome
+    attributes:
+      label: What would be a useful result?
+      description: An answer, a decision, or the role that should own the next step.
+    validations:
+      required: true
+  - type: textarea
+    id: context
+    attributes:
+      label: What else should people know?
+      description: Links or background only when they help. Remove private information first.
+  - type: checkboxes
+    id: privacy
+    attributes:
+      label: Privacy check
+      options:
+        - label: I checked that this post does not include protected or private information.
+          required: true

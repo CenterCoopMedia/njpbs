@@ -1,0 +1,9 @@
+{
+  "projectId": "njpbs-site",
+  "region": "us-central1",
+  "codebase": "default",
+  "mediaCredentialVersions": {
+    "CMS_MEDIA_R2_ACCESS_KEY_ID": null,
+    "CMS_MEDIA_R2_SECRET_ACCESS_KEY": null
+  }
+}

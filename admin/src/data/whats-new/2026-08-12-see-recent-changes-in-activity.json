@@ -1,0 +1,8 @@
+{
+  "date": "2026-08-12",
+  "kind": "new",
+  "title": "See recent changes in Activity",
+  "body": "The Activity screen lists who created, saved, published or archived each record, and when. It also shows clear empty and error states.",
+  "prs": [],
+  "order": -1
+}

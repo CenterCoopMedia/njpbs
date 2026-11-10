@@ -1,0 +1,45 @@
+{
+  "electionDate": "2024-11-05",
+  "timestamp": "2024-11-06T01:00:00Z",
+  "races": [
+    {
+      "test": false,
+      "resultsType": "live",
+      "raceID": "900001",
+      "raceType": "General",
+      "raceTypeID": "G",
+      "officeID": "S",
+      "officeName": "U.S. Senate",
+      "eevp": 85,
+      "reportingUnits": [
+        {
+          "statePostal": "VT",
+          "stateName": "Vermont",
+          "reportingunitLevel": 1,
+          "lastUpdated": "2024-11-06T00:59:00Z",
+          "precinctsReporting": 100,
+          "precinctsTotal": 100,
+          "precinctsReportingPct": 100,
+          "candidates": [
+            {
+              "first": "Example",
+              "last": "North",
+              "party": "Dem",
+              "candidateID": "900011",
+              "voteCount": 1200,
+              "winner": "X"
+            },
+            {
+              "first": "Example",
+              "last": "South",
+              "party": "GOP",
+              "candidateID": "900012",
+              "voteCount": 800
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "nextrequest": "https://api.ap.org/v3/elections/2024-11-05?statePostal=VT&officeID=S&minDateTime=2024-11-06T00%3A59%3A00Z"
+}

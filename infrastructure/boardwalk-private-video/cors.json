@@ -1,0 +1,13 @@
+{
+  "rules": [
+    {
+      "allowed": {
+        "origins": ["https://admin.njpbs.org"],
+        "methods": ["GET", "HEAD"],
+        "headers": ["Range"]
+      },
+      "exposeHeaders": ["Accept-Ranges", "Content-Range", "Content-Length", "Content-Type", "Content-Disposition", "ETag"],
+      "maxAgeSeconds": 3600
+    }
+  ]
+}

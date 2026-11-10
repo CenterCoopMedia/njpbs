@@ -1,0 +1,63 @@
+NJ PBS Studio connector for Windows
+
+Run only a package you downloaded from Boardwalk > Live production > Studio setup.
+If you got it any other way, do not run it. Download it again from Boardwalk.
+
+Use this only with the studio safely off air. Disconnect every broadcast feed
+from the test output. Keep recording and streaming off. Read Studio test guide.txt
+before the first test; it has the full pairing, connection and Take/Clear checks.
+
+What it is
+This small program sends saved Boardwalk banner text to vMix on this PC.
+It runs in your Windows user folder and connects out to Boardwalk only.
+It needs no administrator rights, Node install or firewall change. It opens no
+incoming port and gives no one access to the PC from outside. Use the same Windows account for setup and each show.
+
+1. Extract and set up
+Select Download for Windows in Prepare > Studio setup. Save the ZIP. Right-click
+it and choose Extract All, then Extract. Open that folder.
+Double-click Set up Studio connector.
+Do not run files from inside the ZIP. Wait for PASS: The connector self-test passed.
+That test does not prove native studio output.
+Before pairing, ask support to provide studio-config.json in the installed folder
+(%LOCALAPPDATA%\NJPBS\vmix-agent). The packaged studio-config.example.json is
+a template only. Setup stops until every private preset value is configured.
+Keep studio-config.json private; do not add it to a package or repository.
+
+2. Pair and connect
+In Boardwalk, open Live production > Prepare > Studio setup. Choose or create
+the program's reusable session, then find Live production devices and create a
+five-minute pairing code. Follow setup's hidden code prompt. If you have no code,
+press Enter at the yes/no question; setup stops safely until the studio test.
+Follow Studio test guide.txt with the setup operator for the input-file handoff,
+connection verification and both lower-third tests. Do not guess a session or edit
+a mapping. Keep all test feeds disconnected from broadcast.
+
+3. Start and stop
+In %LOCALAPPDATA%\NJPBS\vmix-agent, double-click Start Studio connector.
+Keep its window open. To stop, press Ctrl+C and wait for it to finish. Stopping
+sends no Clear. Keep the config, journal and credential files for later shows.
+
+If Windows blocks it
+A downloaded ZIP can have Mark of the Web. Right-click the original ZIP, select
+Properties > Unblock if shown, then Apply. Extract it again. Setup clears this mark
+on its own installed files. SmartScreen may show Windows protected your PC.
+For a package you downloaded from Boardwalk, select More info > Run anyway,
+if available. If campus policy still blocks it or asks for an administrator,
+stop. Do not turn off Windows security. The full guide has a process-only
+PowerShell fallback.
+
+Upgrade during an off-air maintenance window
+Disable the per-user startup shortcut or scheduled task, then stop every Studio
+connector window first. Download and extract a fresh Boardwalk
+package, then run Set up Studio connector from it. Setup keeps your paired
+credential, configuration and journals. It moves the old shipped files and runtime
+to a dated vmix-agent-previous folder beside the install, then checks the new
+connector. Confirm the displayed source revisions only after support checks
+journal compatibility. An identical package keeps its files and runs the test
+again. Start stays blocked until the test passes. Keep any previous backup. If setup reports a lock, stop and ask support;
+do not remove locks or reset a journal. Unknown local items stay in place.
+
+For help, contact njpbs@montclair.edu or contact NJ PBS support.
+Send the PC name and short stop message. Never send pairing codes, credentials,
+config, journals, raw vMix XML or a screenshot of a code.

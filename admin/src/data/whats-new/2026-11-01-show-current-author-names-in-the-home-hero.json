@@ -1,0 +1,8 @@
+{
+  "date": "2026-11-01",
+  "kind": "fixed",
+  "title": "Show current author names in the Home hero",
+  "body": "Home hero bylines use each author's current public profile name. Guest credits keep their saved names and order. If a profile is no longer public, the story keeps its saved credit.",
+  "prs": [],
+  "order": -2
+}

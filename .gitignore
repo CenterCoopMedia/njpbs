@@ -1,0 +1,111 @@
+# Scratch files and working notes.
+.firecrawl/
+scratch/
+*.tmp
+
+# Logs
+logs/
+*.log
+.superpowers/
+
+# Node
+node_modules
+functions/cloud-publication-wake.generated.json
+dist/
+dist-ssr/
+*.local
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
+
+# Secrets: never commit. Real values live in the deploy secret store.
+.env
+.env.*
+!.env.example
+!**/.env.example
+# Functions deploy-param template (no secret values).
+!functions/.env.example
+# Emulator-only Functions params are generated from the committed synthetic fixture.
+# functions/.env.local is generated from scripts/fixtures/functions-emulator.env.example.
+functions/.emulator-env.sha256
+!functions/.env.njpbs-site-dev
+# Local Worker secrets. Only the example files are tracked.
+.dev.vars
+.dev.vars.*
+!.dev.vars.example
+*.pem
+*.key
+credentials.json
+token.json
+
+# Branding: Version-control the canonical favicon.
+# The brand source logos and the large third-party PBS style-guide PDF stay local.
+branding/*
+!branding/njpbs-favicon.png
+
+# Editor / OS
+.vscode/*
+!.vscode/extensions.json
+.idea/
+.DS_Store
+*.sw?
+
+# Session-local state — never commit
+.remember/
+
+# Cloudflare
+.wrangler-rendered-*
+.wrangler/
+site/.compiled-renderer/
+
+# Firebase
+.firebase/
+.firebaserc
+firebase-debug.log
+firebase-debug.*.log
+firestore-debug.log
+database-debug.log
+pubsub-debug.log
+ui-debug.log
+storage-debug.log
+.firebase-emulator-*.json
+
+# Firebase service account keys (never commit)
+*-firebase-adminsdk*.json
+*-serviceaccount*.json
+service-account*.json
+gha-creds-*.json
+
+# Docs vault atomic-write temp files may hold decrypted content after a
+# hard crash; never commit them.
+*.docs-vault-tmp
+
+# Playwright visual regression run output. The baselines under
+# admin/tests/visual/baselines/ are tracked; the diffs and reports are not.
+admin/test-results/
+admin/playwright-report/
+admin/blob-report/
+
+# Generated cost pull decision ships with Functions, never with Git.
+functions/cost-ledger-pulls.generated.json
+
+# Local compiled Post shadow release
+site/.shadow-renderer/
+site/.shadow-static-fixtures/
+
+site/.public-post-renderer/
+site/.public-page-static-fixtures/
+site/.public-page-renderer/
+
+# Private frozen inputs and retained artifacts for the dev publisher.
+/dev-publication/
+/site/.public-page-fixture-cache/
+/site/.public-post-fixture-cache/
+
+/functions/media-purge.generated.json
+
+# Build-only non-secret deployment pins; never copy back into a source branch.
+/.rendered-deployment-inputs.json

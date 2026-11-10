@@ -1,0 +1,12 @@
+{
+  "date": "2026-10-02",
+  "kind": "improved",
+  "title": "Media library loads and searches faster",
+  "body": "Media loads faster, repeated searches take less time and uploads get ready sooner.",
+  "prs": [
+    2480,
+    2516,
+    2495
+  ],
+  "order": 0
+}

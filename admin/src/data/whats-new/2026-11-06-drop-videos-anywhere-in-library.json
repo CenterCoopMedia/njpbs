@@ -1,0 +1,10 @@
+{
+  "date": "2026-11-06",
+  "kind": "fixed",
+  "title": "Drop videos anywhere in the library",
+  "body": "Drop a video on the Videos toolbar or header to open its details before uploading. Boardwalk keeps the file in the upload workflow.",
+  "prs": [
+    4912
+  ],
+  "order": 1794014699390
+}

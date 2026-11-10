@@ -1,0 +1,12 @@
+{
+  "date": "2026-09-18",
+  "kind": "new",
+  "title": "Read the broadcast schedule in Boardwalk",
+  "body": "Open Broadcast schedule in the rail to read the weekly on-air schedule. Search for a program and step between weeks. The page shows when the schedule source was last updated.",
+  "prs": [
+    1940,
+    1983,
+    1996
+  ],
+  "order": 0
+}

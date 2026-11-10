@@ -1,0 +1,8 @@
+{
+  "date": "2026-11-04",
+  "kind": "improved",
+  "title": "Preview without waiting for search updates",
+  "body": "Saved previews can open while search updates are still building or need a retry. Previews still require verified content and images.",
+  "order": 1793824000000,
+  "prs": []
+}

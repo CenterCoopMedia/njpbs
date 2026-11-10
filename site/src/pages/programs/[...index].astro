@@ -1,0 +1,46 @@
+---
+import { getCollection } from "astro:content";
+import PublicSiteLayout from "../../layouts/PublicSiteLayout.astro";
+import { resolveCmsResponsiveImage } from "../../lib/cms-responsive-image";
+import { getImage } from "astro:assets";
+import { publicRootRoutesEnabled } from "../../lib/build-target";
+import { isIncorrectProgramArtwork } from "../../lib/program-artwork";
+export function getStaticPaths() {
+  return publicRootRoutesEnabled(process.env) ? [{ params: { index: undefined } }] : [];
+}
+const content = Astro.locals.cmsRender?.content;
+const programs = (content?.kind === "public-record-family"
+  ? content.programs.map(data => ({ id: data.programId, data })) : await getCollection("cmsPrograms")).sort((a, b) => a.data.title.localeCompare(b.data.title));
+const cards = await Promise.all(programs.map(async (entry) => ({
+  program: entry.data,
+  image: isIncorrectProgramArtwork(entry.data.path, entry.data.keyArt) ? null : (content?.kind === "public-record-family"
+    ? content.programImageDescriptors?.programs.find(record => record.programId === entry.data.programId)?.grid : undefined)
+    ?? (entry.data.keyArt ? await resolveCmsResponsiveImage(entry.data.keyArt, "grid", getImage) : null),
+})));
+---
+<PublicSiteLayout preview={false} title="Programs" description="Explore NJ PBS programs." canonicalPath="/programs/">
+  <div class="program-index">
+    <h1>Programs</h1>
+    {cards.length ? <ul class="program-index__list">{cards.map(({ program, image }) => <li>
+      <a href={program.path}>
+        {image && <picture>
+          {image.sources?.map((source) => <source type={source.type} srcset={source.srcset} sizes={image.sizes} />)}
+          <img src={image.url} srcset={image.srcset} sizes={image.sizes} width={image.width} height={image.height} alt={program.keyArtDecorative ? "" : program.keyArtAlt} loading="lazy" decoding="async" />
+        </picture>}
+        <h2>{program.title}</h2>
+      </a>
+      {program.genre && <p>{program.genre}</p>}
+    </li>)}</ul> : <p>No programs are published yet.</p>}
+  </div>
+</PublicSiteLayout>
+<style>
+.program-index { max-width: var(--wrap); margin: auto; padding: clamp(2.75rem, 6vw, 4.5rem) var(--gutter); }
+.program-index h1 { margin: 0 0 2rem; }
+.program-index__list { list-style: none; padding: 0; display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 17rem), 1fr)); gap: 1.5rem; }
+.program-index__list li { border: 1px solid var(--line); border-radius: .75rem; overflow: hidden; }
+.program-index__list a { color: var(--text); text-decoration: none; }
+.program-index__list a:hover h2, .program-index__list a:focus-visible h2 { text-decoration: underline; }
+.program-index__list img { display: block; width: 100%; height: auto; aspect-ratio: 16 / 9; object-fit: cover; }
+.program-index__list h2, .program-index__list p { margin: 1rem; }
+.program-index__list p { color: var(--text-dim); }
+</style>

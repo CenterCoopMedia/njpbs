@@ -1,0 +1,32 @@
+/* A 24px-wide target straddling the left edge; the visible rule shows on hover or focus. */
+.ui-inspector-resize {
+  position: absolute;
+  inset-block: 0;
+  left: -0.75rem;
+  z-index: 1;
+  width: 1.5rem;
+  cursor: col-resize;
+  touch-action: none;
+}
+
+.ui-inspector-resize::after {
+  position: absolute;
+  inset-block: var(--cms-space-3);
+  left: calc(50% - 1px);
+  width: 2px;
+  border-radius: var(--cms-radius-round);
+  background: transparent;
+  content: "";
+}
+
+.ui-inspector-resize:hover::after,
+.ui-inspector-resize:focus-visible::after {
+  background: var(--cms-brand);
+}
+
+.ui-inspector-resize:focus-visible {
+  outline: var(--cms-focus-outline);
+  outline-offset: -2px;
+}
+
+.ui-inspector-resize-right { left: auto; right: -0.75rem; }

@@ -1,0 +1,61 @@
+name: Probe Media Manager
+
+# Read-only wiring check for the GitHub Pages fallback path. It reads credentials
+# from its declared environment and uploads a redacted summary artifact. It
+# does not deploy, schedule work, or print credentials.
+on:
+  # Manual only — this is a one-off wiring check, not a branch or main trigger.
+  # A push trigger pinned to a feature branch goes dead once the branch merges.
+  workflow_dispatch:
+    inputs:
+      audience:
+        description: "Media Manager audience call sign"
+        required: true
+        default: "WNJT"
+      page_size:
+        description: "Number of shows to request"
+        required: true
+        default: "25"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: probe-media-manager
+  cancel-in-progress: true
+
+jobs:
+  probe:
+    # Credential-bearing probes use the declared protected environment
+    # and run only from its permitted release branch.
+    environment: production
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: site
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: site/package-lock.json
+      - run: npm ci --ignore-scripts
+      # The dependency-free bootstrap runs before package lifecycle hooks and
+      # before the probe can reach Media Manager credentials (issue #607).
+      - name: Metered-API source scan (before any scanned code runs)
+        run: node ../.github/scripts/metered-api-scan.mjs
+      - name: Probe WNJT Media Manager CDA
+        run: npm run probe:media-manager
+        env:
+          MEDIA_MANAGER_API_KEY: ${{ secrets.MEDIA_MANAGER_API_KEY }}
+          MEDIA_MANAGER_API_SECRET: ${{ secrets.MEDIA_MANAGER_API_SECRET }}
+          MEDIA_MANAGER_AUDIENCE: ${{ inputs.audience }}
+          MEDIA_MANAGER_PAGE_SIZE: ${{ inputs.page_size }}
+      - name: Upload redacted probe summary
+        uses: actions/upload-artifact@v7
+        with:
+          name: media-manager-probe
+          path: site/.cache/launch-content/media-manager-probe.json
+          if-no-files-found: error

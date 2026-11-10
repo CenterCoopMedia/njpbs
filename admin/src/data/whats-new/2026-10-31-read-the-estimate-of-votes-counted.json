@@ -1,0 +1,8 @@
+{
+  "date": "2026-10-31",
+  "kind": "improved",
+  "title": "Read the estimate of votes counted",
+  "body": "Connected election results show the estimated share of expected vote counted when the source supplies it. If the estimate is missing, the card says it is unavailable. Existing saved results keep their reporting label. Race calls retain their source attribution.",
+  "prs": [],
+  "order": 0
+}

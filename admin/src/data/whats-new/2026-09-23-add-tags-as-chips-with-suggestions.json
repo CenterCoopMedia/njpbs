@@ -1,0 +1,11 @@
+{
+  "date": "2026-09-23",
+  "kind": "improved",
+  "title": "Add tags as chips with suggestions",
+  "body": "Tag fields now turn each tag into a chip instead of a comma list. Suggestions include the last 20 tags you saved in this browser. In bulk editing, a typed tag goes on every selected item.",
+  "prs": [
+    2173,
+    2273
+  ],
+  "order": 0
+}

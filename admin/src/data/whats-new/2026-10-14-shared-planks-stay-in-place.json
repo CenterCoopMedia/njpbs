@@ -1,0 +1,11 @@
+{
+  "date": "2026-10-14",
+  "kind": "improved",
+  "title": "Shared planks stay in place",
+  "body": "A shared plank keeps its place in your rail after you make personal edits. When a person loses staff access, their shared planks and spans leave everyone's rail.",
+  "prs": [
+    3417,
+    3023
+  ],
+  "order": -5
+}

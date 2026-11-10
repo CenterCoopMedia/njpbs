@@ -1,0 +1,8 @@
+{
+  "source": "Sanitized development access response fixtures; request bodies and login query parameters are excluded.",
+  "exposed": { "status": 200, "headers": { "cache-control": "public, max-age=0, must-revalidate" } },
+  "restored": { "status": 302, "headers": { "location": "https://fixture.cloudflareaccess.com/cdn-cgi/access/login/dev-public.example.org" } },
+  "removedPost": { "status": 404, "headers": { "cache-control": "no-store" } },
+  "beforeDns": { "type": "CNAME", "name": "dev-public.example.org", "content": "template-dev.pages.dev", "proxied": true, "ttl": 1 },
+  "duringDns": { "type": "A", "name": "dev-public.example.org", "content": "192.0.2.1", "proxied": true, "ttl": 1 }
+}

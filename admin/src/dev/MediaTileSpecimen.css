@@ -1,0 +1,92 @@
+/* Gallery frame for the media card and list row specimens. The drawn hover and focus states
+   repeat the real :hover and :focus-visible rules from MediaTile.css and MediaRow.css so a
+   still capture can hold them. */
+.media-tile-specimen {
+  display: grid;
+  gap: var(--cms-space-6);
+  padding: var(--cms-space-4);
+  background: var(--cms-canvas);
+  color: var(--cms-ink);
+}
+
+.media-tile-specimen section {
+  display: grid;
+  gap: var(--cms-space-2);
+  min-width: 0;
+}
+
+.media-tile-specimen h2 {
+  margin: 0;
+  font-size: var(--cms-font-lg);
+}
+
+.media-tile-specimen-note {
+  margin: 0;
+  color: var(--cms-ink-secondary);
+  font-size: var(--cms-font-sm);
+}
+
+.media-tile-specimen-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, var(--cms-thumb-md)), 1fr));
+  gap: var(--cms-space-4);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.media-tile-specimen-video {
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, var(--cms-thumb-lg)), 1fr));
+}
+
+.media-tile-specimen-figure {
+  display: grid;
+  gap: var(--cms-space-2);
+  min-width: 0;
+  margin: 0;
+}
+
+.media-tile-specimen-figure figcaption {
+  color: var(--cms-ink-secondary);
+  font-size: var(--cms-font-xs);
+}
+
+.media-tile-specimen-narrow {
+  width: var(--cms-thumb-sm);
+}
+
+.media-tile[data-specimen-state="hover"] {
+  border-color: var(--cms-line-strong);
+  box-shadow: var(--cms-shadow-panel);
+}
+
+.media-tile[data-specimen-state] .media-tile-mark,
+.media-tile[data-specimen-state] .media-tile-actions {
+  opacity: 1;
+}
+
+.media-tile[data-specimen-state]:not([data-selection-mode]) .media-tile-badge-favorite {
+  visibility: hidden;
+}
+
+.media-tile[data-specimen-state="focus"] {
+  outline: var(--cms-focus-outline);
+  outline-offset: var(--cms-focus-offset);
+}
+
+.media-row[data-specimen-state="hover"] {
+  background: var(--cms-surface-muted);
+}
+
+.media-row-specimen-list {
+  display: grid;
+  min-width: 0;
+  overflow: hidden;
+  border: var(--cms-border-width) solid var(--cms-line);
+  border-radius: var(--cms-radius-panel);
+  background: var(--cms-surface);
+}
+
+.media-row-specimen-narrow {
+  max-width: 36rem;
+}

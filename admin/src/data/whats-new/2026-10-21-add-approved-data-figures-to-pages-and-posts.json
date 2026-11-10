@@ -1,0 +1,10 @@
+{
+  "date": "2026-10-21",
+  "kind": "new",
+  "title": "Add approved data figures to Pages and Posts",
+  "body": "Choose Data figure in the content picker, then select an approved dataset. Keep one reporting release or use the latest approved release. Figures include a chart, a text explanation, a table of values and source details. Create or edit datasets from the same view.",
+  "prs": [
+    3878
+  ],
+  "order": 0
+}

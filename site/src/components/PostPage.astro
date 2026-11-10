@@ -1,0 +1,627 @@
+---
+import ReaderTextSize from "./ReaderTextSize.astro";
+import { createPageImageLoading } from "../../../packages/content-core/src/image-loading";
+import "../../../packages/content-core/src/component-blocks.css";
+import PostPublication from "./PostPublication.astro";
+import PostLiveBlog from "./PostLiveBlog.astro";
+import PostLiveBlogLayout from "./PostLiveBlogLayout.astro";
+import { splitLiveBlogBlocks } from "../../../packages/content-core/src/live-blog-layout";
+// One published Post, composed from the content already in its immutable public
+// snapshot. The lead-media and block mix choose a deterministic branded layout;
+// editors do not have to maintain a separate presentation switch.
+//
+// The body still renders through the canonical `renderBlock` and responsive
+// asset contract shared by CMS pages and the editor, with immutable Post originals.
+// This visual layer cannot
+// invent a second content model or bypass the media and heading contracts.
+import "../styles/branded-masthead.css";
+import "../../../packages/content-core/src/link-card.css";
+import "../../../packages/content-core/src/link-card-directory.css";
+import "../../../packages/content-core/src/component-blocks.css";
+import { getCollection, type CollectionEntry } from "astro:content";
+import { getImage } from "astro:assets";
+import { renderContentGroups } from "../../../packages/content-core/src/content-row-render";
+import {
+  generatedHeadingLevelAt,
+  renderBlock,
+} from "../../../packages/content-core/src/content-render";
+import {
+  resolveCmsPostAssets,
+  responsiveImageKey,
+} from "../lib/cms-responsive-image";
+import { choosePostLayout, postEyebrow } from "../lib/post-layout";
+import { publicPostCategories, publicPostTopics } from "../lib/post-formats";
+import { postIndexFilterHref } from "../lib/post-index-links";
+import { groupLinkCardDirectories } from "../../../packages/content-core/src/link-card-directory-groups";
+import PostByline from "./PostByline.astro";
+import PostShareControls from "./PostShareControls.astro";
+import CmsHeroBackground from "./CmsHeroBackground.astro";
+import PostLeadPlayer from "./PostLeadPlayer.astro";
+import PostImageCaption from "./PostImageCaption.astro";
+import LinkCardDirectory from "./LinkCardDirectory.astro";
+import CmsBlockGroup from "./CmsBlockGroup.astro";
+import { cmsBlockGroupHasContent } from "../lib/cms-block-visibility";
+import { sponsorCardsFromRecordCards } from "../lib/record-card-resolution";
+import { newsletterSignupResolution } from "../lib/newsletter-signup";
+import { isPrivatePreviewRender, renderDatasetFigures, renderRecordCards } from "../lib/cms-render-context";
+
+type PublicCredit = CollectionEntry<"cmsPosts">["data"]["credits"][number];
+
+interface Props {
+  entry: CollectionEntry<"cmsPosts">;
+  /** Frozen names with links resolved against the current public-author set. */
+  credits: readonly PublicCredit[];
+  canonicalUrl: string;
+}
+
+const { entry, credits, canonicalUrl } = Astro.props as Props;
+const post = entry.data;
+const layout = choosePostLayout(post);
+const eyebrow = postEyebrow(post.categories, post.tags);
+const categories = publicPostCategories(post.categories);
+const tags = publicPostTopics(post.tags);
+const responsiveAssets = await resolveCmsPostAssets(
+  post.blocks,
+  post.assets,
+);
+const videoLead = post.leadMedia && post.leadMedia.kind !== "image";
+const hero = videoLead ? null : post.heroImage;
+const imageLoading = createPageImageLoading();
+const heroLoading = imageLoading(hero, "lcp");
+// A decorative lead image is silenced with an empty alt; a lead image with no
+// alternative text written for it is treated the same way rather than having the
+// headline repeated into it, which a screen reader has already just read.
+const heroAlt = post.heroImageDecorative ? "" : post.heroImageAlt;
+const recordCards = renderRecordCards(Astro.locals.cmsRender, Astro.locals.cmsRender
+  ? []
+  : (await getCollection("cmsRecordCards")).map(item => item.data));
+const sponsors = sponsorCardsFromRecordCards(recordCards);
+const resolveDataFigure = renderDatasetFigures(post.datasetFigures);
+const newsletters = await newsletterSignupResolution(post.blocks, getImage, recordCards);
+const { body: bodyBlocks, sidebar: sidebarBlocks } = splitLiveBlogBlocks(post.blocks, Boolean(post.liveBlog));
+const renderGroups = (blocks: typeof post.blocks) => renderContentGroups(blocks, (block, index) => ({
+  generatedHeadingLevel: generatedHeadingLevelAt(blocks, index),
+  html: renderBlock(block, {
+    allowBios: true,
+    showImageCredits: true,
+    sponsors,
+    resolveDataFigure,
+    resolveAsset: (assetId, placement) =>
+      responsiveAssets.get(responsiveImageKey(assetId, placement)) ?? newsletters.images.get(assetId) ?? null,
+    resolveNewsletter: id => newsletters.cards.get(id) ?? null,
+    externalLinksNewTab: true,
+    generatedHeadingLevel: generatedHeadingLevelAt(blocks, index),
+    videoPlaceholder: isPrivatePreviewRender(Astro.locals.cmsRender),
+  }),
+}));
+const publicGroups = groupLinkCardDirectories(renderGroups(bodyBlocks));
+const sidebarGroups = groupLinkCardDirectories(renderGroups(sidebarBlocks).filter(group => cmsBlockGroupHasContent(group, recordCards)));
+---
+
+<article class={`post post--${layout}`} data-layout={layout}>
+  <header
+    class:list={[
+      "post-masthead", "branded-masthead",
+      { "cms-hero-surface": Boolean(post.heroBackgroundImage) },
+    ]}
+  >
+    <CmsHeroBackground
+      image={post.heroBackgroundImage}
+      imageLoading={imageLoading}
+      position={post.heroBackgroundPosition}
+    />
+    <div class="post-masthead__inner">
+      <div class="post-head">
+        <p class="post-head__eyebrow">
+          <span>{eyebrow.category}</span>{" "}
+          {eyebrow.tag && (
+            <>
+              <span class="post-head__eyebrow-separator" aria-hidden="true"></span>
+              <span>{eyebrow.tag}</span>
+            </>
+          )}
+        </p>
+        <PostPublication spotlightNews={post.spotlightNews} coverageLabelId={post.coverageLabelId} />
+        <h1>{post.title}</h1>
+        {post.summary && <p class="post-head__summary">{post.summary}</p>}
+        <PostByline
+          credits={credits}
+          displayDate={post.displayDate}
+          updateShown={post.updateShown}
+          updatedAt={post.updatedAt}
+          updatedDate={post.updatedDate}
+        />
+        <PostShareControls title={post.title} url={canonicalUrl} placement="top" />
+      </div>
+
+      {hero ? (
+        <figure class="post-hero">
+          <div class="post-hero__frame">
+            <img
+              src={hero.url}
+              width={hero.width}
+              height={hero.height}
+              alt={heroAlt}
+              {...heroLoading}
+            />
+            <span class="post-hero__wash" aria-hidden="true"></span>
+          </div>
+          <PostImageCaption caption={post.heroImageCaption} credit={hero.credit} />
+        </figure>
+      ) : videoLead ? (
+        <div class="post-hero"><PostLeadPlayer post={post} /></div>
+      ) : (
+        <div class="post-masthead__signal branded-signal" aria-hidden="true">
+          <span></span>
+          <span></span>
+          <span></span>
+        </div>
+      )}
+    </div>
+  </header>
+
+  <ReaderTextSize />
+
+  <div class="post-content">
+    <div class="post-body">
+      {publicGroups.map((item) => item.kind === "link-card-directory" ? (
+        <LinkCardDirectory groups={item.groups} />
+      ) : (
+        <CmsBlockGroup group={item.group} cards={recordCards} />
+      ))}
+    </div>
+
+    {post.liveBlog && (sidebarGroups.length ? <PostLiveBlogLayout>
+      <PostLiveBlog postId={post.postId} publishedAt={post.publishedAt} liveBlog={post.liveBlog} assets={post.assets} canonicalUrl={canonicalUrl} />
+      <div slot="sidebar" class="post-body">
+        {sidebarGroups.map(item => item.kind === "link-card-directory" ? (
+          <LinkCardDirectory groups={item.groups} />
+        ) : <CmsBlockGroup group={item.group} cards={recordCards} />)}
+      </div>
+    </PostLiveBlogLayout> : <PostLiveBlog postId={post.postId} publishedAt={post.publishedAt} liveBlog={post.liveBlog} assets={post.assets} canonicalUrl={canonicalUrl} />)}
+
+    <PostShareControls title={post.title} url={canonicalUrl} placement="bottom" />
+
+    {(categories.length > 0 || tags.length > 0) && (
+      <footer class="post-topics">
+        <p class="post-topics__kicker">Filed under</p>
+        {categories.length > 0 && (
+          <>
+            <h2>Categories</h2>
+            <ul>
+              {categories.map((category) => (
+                <li><a href={postIndexFilterHref("category", category)}>{category}</a></li>
+              ))}
+            </ul>
+          </>
+        )}
+        {tags.length > 0 && (
+          <>
+            <h2>Tags</h2>
+            <ul>
+              {tags.map((tag) => (
+                <li><a href={postIndexFilterHref("tag", tag)}>{tag}</a></li>
+              ))}
+            </ul>
+          </>
+        )}
+      </footer>
+    )}
+  </div>
+</article>
+
+<style>
+  .post {
+    min-height: 70vh;
+  }
+
+  .post-masthead__inner {
+    display: grid;
+    gap: clamp(1.75rem, 4vw, 4rem);
+    align-items: center;
+    max-width: var(--wrap);
+    margin: 0 auto;
+    /* Keep the masthead prominent without delaying the first content block. */
+    padding: clamp(2.5rem, 4vw, 4.5rem) var(--gutter);
+  }
+
+  .post--visual .post-masthead__inner {
+    grid-template-columns: minmax(0, 0.82fr) minmax(20rem, 1.18fr);
+  }
+
+  .post--mixed .post-masthead__inner,
+  .post--text .post-masthead__inner {
+    grid-template-columns: minmax(0, 1fr);
+    row-gap: clamp(1.5rem, 2.5vw, 2.5rem);
+    justify-content: start;
+  }
+
+  .post--text .post-masthead__inner {
+    grid-template-columns: minmax(0, 1fr);
+    justify-content: start;
+    padding-block: clamp(2.25rem, 3.5vw, 3.75rem);
+  }
+
+  .post-head {
+    position: relative;
+    z-index: 1;
+    min-width: 0;
+  }
+
+  .post-head__eyebrow {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.55rem;
+    align-items: center;
+    margin: 0;
+    color: var(--color-link);
+    font-size: 0.78rem;
+    font-weight: 800;
+    letter-spacing: 0.12em;
+    line-height: 1.3;
+    text-transform: uppercase;
+  }
+
+  .post-head__eyebrow-separator {
+    width: 1.7rem;
+    height: 2px;
+    background:
+      linear-gradient(90deg, var(--pbs-blue-bright), var(--color-nj-green));
+  }
+
+  .post-head h1 {
+    margin: 0.75rem 0 0;
+    color: var(--text);
+    font-size: clamp(2.25rem, 4.75vw, 3.75rem);
+    font-weight: 900;
+    letter-spacing: var(--heading-tracking);
+    line-height: 0.98;
+    overflow-wrap: anywhere;
+    text-wrap: balance;
+  }
+
+  .post--text .post-head h1 {
+    font-size: clamp(2.2rem, 4.5vw, 3.5rem);
+  }
+
+  .post-head__summary {
+    margin: clamp(1.15rem, 2.4vw, 1.6rem) 0 0;
+    color: var(--text-dim);
+    font-size: clamp(1.08rem, 1.8vw, 1.3rem);
+    line-height: 1.62;
+  }
+
+  .post-head :global(.post-byline) {
+    margin-top: 1.35rem;
+  }
+
+  .post-hero {
+    min-width: 0;
+    margin: 0;
+  }
+
+  .post-hero__frame {
+    position: relative;
+    overflow: hidden;
+    border: 1px solid var(--line-strong);
+    border-radius: var(--radius-accent);
+    background: var(--color-surface-elevated);
+    box-shadow:
+      inset 0 1px 0 rgba(255, 255, 255, 0.1),
+      0 30px 76px rgba(0, 0, 0, 0.36);
+  }
+
+  .post-hero__frame::before {
+    position: absolute;
+    inset: 0;
+    z-index: 2;
+    border: 1px solid rgba(255, 255, 255, 0.06);
+    border-radius: inherit;
+    pointer-events: none;
+    content: "";
+  }
+
+  .post-hero img {
+    display: block;
+    width: 100%;
+    height: auto;
+  }
+
+  .post-hero__wash {
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    background:
+      linear-gradient(145deg, rgba(255, 255, 255, 0.08), transparent 32%),
+      linear-gradient(180deg, transparent 76%, rgba(6, 7, 15, 0.18));
+  }
+
+  .post--mixed .post-masthead__signal {
+    width: min(100%, 27rem);
+    height: 0.55rem;
+  }
+
+  .post-content {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    justify-content: start;
+    max-width: var(--wrap);
+    margin: 0 auto;
+    padding: clamp(2rem, 3vw, 3.5rem) var(--gutter)
+      clamp(4rem, 9vw, 8rem);
+  }
+
+  .post-body {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    row-gap: clamp(1.15rem, 2.6vw, 1.75rem);
+    width: 100%;
+    margin: 0;
+    color: var(--text-dim);
+    font-size: 1.25rem;
+    line-height: 1.78;
+  }
+
+  /* Keep this component's tone independent from generic runtime-CMS styles. */
+  .post-body > .cms-block {
+    width: 100%;
+    max-width: none;
+    margin-inline: 0;
+    color: inherit;
+  }
+
+  .post-body > :is(
+      .cms-block--row,
+      .cms-block--embed,
+      .cms-block--card_grid,
+      .cms-block--data_table,
+      .cms-block--promotion_playlist,
+      .cms-block--content_shelf,
+      .cms-block--topic_shelf,
+      .cms-block--video_playlist,
+      .cms-block--cta_row,
+      .cms-block--link_card
+    ) {
+    grid-column: 1 / -1;
+    width: 100%;
+    margin-left: 0;
+    transform: none;
+  }
+
+  .post-body > :global(.link-card-directory) {
+    grid-column: 1 / -1;
+    width: 100%;
+    margin-left: 0;
+    transform: none;
+  }
+
+  .post-body :global(p),
+  .post-body :global(ul),
+  .post-body :global(ol),
+  .post-body :global(blockquote) {
+    margin-block: 0 1.15rem;
+  }
+
+  .post-body :global(ul),
+  .post-body :global(ol) {
+    padding-left: 1.35rem;
+  }
+
+  .post-body :global(li:not([class]) + li:not([class])) {
+    margin-top: 0.35rem;
+  }
+
+  .post-body :global(li:not([class]) > p) {
+    margin-block: 0;
+  }
+
+  .post-body :global(a:not(.btn)) {
+    color: var(--color-link);
+    text-decoration-thickness: 0.09em;
+    text-underline-offset: 0.22em;
+  }
+
+  .post-body :global(a:not(.btn):hover) {
+    color: var(--text);
+  }
+
+  .post-body :global(a:not(.btn):focus-visible) {
+    outline: var(--focus-outline);
+    outline-offset: var(--focus-offset);
+  }
+
+  .post-body :global(h2),
+  .post-body :global(h3),
+  .post-body :global(h4) {
+    margin: clamp(0.6rem, 1.8vw, 1.25rem) 0 0;
+    color: var(--text);
+    letter-spacing: -0.02em;
+    line-height: 1.14;
+    text-wrap: balance;
+  }
+
+  .post-body :global(h2) {
+    font-size: clamp(1.75rem, 3.8vw, 2.65rem);
+  }
+
+  .post-body :global(h3) {
+    font-size: clamp(1.35rem, 3vw, 1.9rem);
+  }
+
+  /* Same card label kicker as component-blocks.css; each surface scopes its own card rules. */
+  .post-body :global(.card-grid__label) {
+    display: block;
+    margin-block: 0 0.35rem;
+    color: var(--color-link);
+    font-size: 0.78rem;
+    font-weight: 800;
+    letter-spacing: 0.12em;
+    line-height: 1.4;
+    text-transform: uppercase;
+  }
+
+  .post-body :global(.card-grid__card > .card-grid__title),
+  .post-body :global(.faq-item > .faq-item__question) {
+    margin-block: 0 0.65rem;
+    /* Preserve card scale when the generated semantic rank is h2. */
+    font-size: 1.17em;
+  }
+
+  .post-body :global(figure) {
+    margin: 0;
+  }
+
+  .post-body :global(img) {
+    display: block;
+    width: 100%;
+    height: auto;
+    border-radius: var(--radius-accent);
+    background: var(--color-surface-elevated);
+  }
+
+  .post-body :global(figcaption) {
+    margin: 0.7rem 0 0;
+    color: var(--text-quiet);
+    font-size: 0.88rem;
+    line-height: 1.52;
+  }
+
+  .post-body :global(blockquote) {
+    padding: clamp(1rem, 3vw, 1.6rem);
+    border-left: 4px solid var(--pbs-blue-bright);
+    border-radius: 0 var(--radius-surface) var(--radius-surface) 0;
+    background:
+      linear-gradient(110deg, rgba(77, 94, 232, 0.11), transparent 70%),
+      var(--color-surface-panel);
+    color: var(--text);
+    font-size: calc(clamp(1.08rem, 2vw, 1.28rem) * var(--reader-text-scale, 1));
+    line-height: 1.62;
+  }
+
+  .post-body :global(pre) {
+    max-width: 100%;
+    overflow-x: auto;
+    padding: 1rem;
+    border: 1px solid var(--line);
+    border-radius: var(--radius-surface);
+    background: var(--color-surface-panel);
+  }
+
+  .post-body :global(code) {
+    font-size: 0.9em;
+  }
+
+  .post-body :global(table) {
+    display: block;
+    max-width: 100%;
+    overflow-x: auto;
+    border-collapse: collapse;
+  }
+
+  .post-body :global(th),
+  .post-body :global(td) {
+    padding: 0.7rem;
+    border: 1px solid var(--line);
+    text-align: left;
+  }
+
+  .post-body :global(iframe) {
+    display: block;
+    width: 100%;
+    max-width: 100%;
+    border: 0;
+    border-radius: var(--radius-accent);
+    background: var(--color-surface-elevated);
+  }
+
+  .post-body :global(hr) {
+    width: 100%;
+    margin: 0;
+    border: 0;
+    border-top: 1px solid var(--line);
+  }
+
+  .post-content > :global(.post-share--bottom) {
+    width: 100%;
+    margin-right: auto;
+    margin-left: 0;
+  }
+
+  .post-topics {
+    width: 100%;
+    margin: clamp(2.5rem, 6vw, 4.5rem) 0 0;
+    padding-top: 1.4rem;
+    border-top: 1px solid var(--line);
+  }
+
+  .post-topics__kicker {
+    margin: 0;
+    color: var(--color-link);
+    font-size: 0.74rem;
+    font-weight: 800;
+    letter-spacing: 0.11em;
+    text-transform: uppercase;
+  }
+
+  .post-topics h2 {
+    margin: 0.4rem 0 0;
+    color: var(--text);
+    font-size: 1.15rem;
+    line-height: 1.2;
+  }
+
+  .post-topics ul {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.55rem;
+    margin: 0.9rem 0 0;
+    padding: 0;
+    list-style: none;
+  }
+
+  .post-topics a {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: var(--target-comfortable);
+    min-height: var(--target-comfortable);
+    box-sizing: border-box;
+    padding: 0.42rem 0.72rem;
+    border: 1px solid var(--line);
+    border-radius: var(--radius-pill);
+    background: rgba(255, 255, 255, 0.035);
+    color: var(--text-dim);
+    font-size: 0.84rem;
+    line-height: 1.3;
+    text-decoration: none;
+  }
+
+  .post-topics a:hover {
+    border-color: var(--color-link);
+    color: var(--text);
+  }
+
+  .post-topics a:focus-visible {
+    outline: var(--focus-outline);
+    outline-offset: var(--focus-offset);
+  }
+
+  @media (max-width: 900px) {
+    .post--visual .post-masthead__inner {
+      grid-template-columns: 1fr;
+    }
+
+    .post-hero {
+      width: min(100%, 58rem);
+    }
+  }
+
+  @media (max-width: 520px) {
+    .post-masthead__inner,
+    .post-content {
+      padding-right: 1rem;
+      padding-left: 1rem;
+    }
+
+  }
+</style>

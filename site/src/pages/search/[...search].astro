@@ -1,0 +1,21 @@
+---
+import PublicSiteLayout from "../../layouts/PublicSiteLayout.astro";
+import SiteSearch from "../../components/SiteSearch.astro";
+import { publicRootRoutesEnabled } from "../../lib/build-target";
+
+export function getStaticPaths() {
+  if (!publicRootRoutesEnabled(process.env)) return [];
+  return [{ params: { search: undefined } }];
+}
+---
+
+<PublicSiteLayout
+  title="Search NJ PBS"
+  description="Find pages, stories, and guides on NJ PBS."
+  preview={false}
+  canonicalPath="/search/"
+  noindex={true}
+  searchable={false}
+>
+  <SiteSearch />
+</PublicSiteLayout>

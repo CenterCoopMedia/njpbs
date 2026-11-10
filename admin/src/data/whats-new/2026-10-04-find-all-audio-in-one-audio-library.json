@@ -1,0 +1,11 @@
+{
+  "date": "2026-10-04",
+  "kind": "new",
+  "title": "Find all audio in one Audio library",
+  "body": "The Media library has one Audio tab for uploads and private voiceovers. Tabs now read Images, Videos, Public submissions and Audio.",
+  "prs": [
+    2562,
+    2553
+  ],
+  "order": 0
+}

@@ -1,0 +1,10 @@
+{
+  "date": "2026-09-08",
+  "kind": "new",
+  "title": "Upload media from the editor",
+  "body": "Image and media pickers in the editor now let you upload new files without leaving your draft. You can upload many files at once and set one license for the whole batch.",
+  "prs": [
+    1350
+  ],
+  "order": -3
+}

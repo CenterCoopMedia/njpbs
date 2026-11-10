@@ -1,0 +1,71 @@
+{
+  "schemaVersion": 1,
+  "electionDate": "2015-11-03",
+  "races": [
+    {
+      "id": "rehearsal-2015-ld1",
+      "office": "REHEARSAL: New Jersey General Assembly (2015)",
+      "district": "District 1, historical replay",
+      "candidateIds": [
+        "rehearsal-2015-ld1-bob-andrzejczak",
+        "rehearsal-2015-ld1-bruce-land",
+        "rehearsal-2015-ld1-samuel-fiocchi",
+        "rehearsal-2015-ld1-jim-sauro"
+      ]
+    }
+  ],
+  "candidates": [
+    {
+      "id": "rehearsal-2015-ld1-bob-andrzejczak",
+      "raceId": "rehearsal-2015-ld1",
+      "name": "Bob Andrzejczak",
+      "firstName": "Bob",
+      "lastName": "Andrzejczak",
+      "ballotLabel": "Democratic",
+      "party": "democratic",
+      "incumbent": true,
+      "campaignWebsite": "",
+      "ballotStatus": "REHEARSAL: Historical 2015 candidate",
+      "aliases": []
+    },
+    {
+      "id": "rehearsal-2015-ld1-bruce-land",
+      "raceId": "rehearsal-2015-ld1",
+      "name": "Bruce Land",
+      "firstName": "Bruce",
+      "lastName": "Land",
+      "ballotLabel": "Democratic",
+      "party": "democratic",
+      "incumbent": false,
+      "campaignWebsite": "",
+      "ballotStatus": "REHEARSAL: Historical 2015 candidate",
+      "aliases": []
+    },
+    {
+      "id": "rehearsal-2015-ld1-samuel-fiocchi",
+      "raceId": "rehearsal-2015-ld1",
+      "name": "Samuel Fiocchi",
+      "firstName": "Samuel",
+      "lastName": "Fiocchi",
+      "ballotLabel": "Republican",
+      "party": "republican",
+      "incumbent": true,
+      "campaignWebsite": "",
+      "ballotStatus": "REHEARSAL: Historical 2015 candidate",
+      "aliases": []
+    },
+    {
+      "id": "rehearsal-2015-ld1-jim-sauro",
+      "raceId": "rehearsal-2015-ld1",
+      "name": "Jim Sauro",
+      "firstName": "Jim",
+      "lastName": "Sauro",
+      "ballotLabel": "Republican",
+      "party": "republican",
+      "incumbent": false,
+      "campaignWebsite": "",
+      "ballotStatus": "REHEARSAL: Historical 2015 candidate",
+      "aliases": []
+    }
+  ]
+}

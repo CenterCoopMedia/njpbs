@@ -1,0 +1,272 @@
+{
+  "AWSTemplateFormatVersion": "2010-09-09",
+  "Description": "Private Boardwalk BYOK transcription input and result access.",
+  "Parameters": {
+    "GoogleOAuth2ClientId": {
+      "Type": "String",
+      "AllowedPattern": "[0-9]{10,30}",
+      "Description": "Verified azp claim for the dedicated transcription runner."
+    },
+    "GoogleServiceAccountUniqueId": {
+      "Type": "String",
+      "AllowedPattern": "[0-9]{10,30}",
+      "Description": "Verified sub claim for the dedicated transcription runner."
+    },
+    "RenditionBucket": {
+      "Type": "String",
+      "AllowedPattern": "[a-z0-9][a-z0-9.-]{1,61}[a-z0-9]",
+      "Description": "Existing private Boardwalk rendition bucket."
+    },
+    "TranscriptAudioPreparationFunctionArn": {
+      "Type": "String",
+      "Default": "",
+      "AllowedPattern": "^$|^arn:aws:lambda:us-east-2:[0-9]{12}:function:[A-Za-z0-9-_]{1,64}$",
+      "Description": "Optional exact transcript-audio preparation function ARN. Leave empty until its image canary is approved."
+    }
+  },
+  "Resources": {
+    "RunnerDataRole": {
+      "Type": "AWS::IAM::Role",
+      "Properties": {
+        "RoleName": "njpbs-boardwalk-transcription-byok-data",
+        "AssumeRolePolicyDocument": {
+          "Version": "2012-10-17",
+          "Statement": [
+            {
+              "Effect": "Allow",
+              "Principal": {
+                "Federated": "accounts.google.com"
+              },
+              "Action": "sts:AssumeRoleWithWebIdentity",
+              "Condition": {
+                "StringEquals": {
+                  "accounts.google.com:aud": {
+                    "Ref": "GoogleOAuth2ClientId"
+                  },
+                  "accounts.google.com:oaud": "njpbs-boardwalk-s3",
+                  "accounts.google.com:sub": {
+                    "Ref": "GoogleServiceAccountUniqueId"
+                  }
+                }
+              }
+            }
+          ]
+        },
+        "Policies": [
+          {
+            "PolicyName": "private-transcription-input-and-results",
+            "PolicyDocument": {
+              "Version": "2012-10-17",
+              "Statement": [
+                {
+                  "Sid": "ReadExactInputAndResults",
+                  "Effect": "Allow",
+                  "Action": [
+                    "s3:GetObject",
+                    "s3:GetObjectVersion"
+                  ],
+                  "Resource": [
+                    {
+                      "Fn::Sub": "arn:${AWS::Partition}:s3:::${RenditionBucket}/outputs/*"
+                    },
+                    {
+                      "Fn::Sub": "arn:${AWS::Partition}:s3:::${RenditionBucket}/transcripts/results/*"
+                    }
+                  ],
+                  "Condition": {
+                    "StringEquals": {
+                      "s3:ResourceAccount": {
+                        "Ref": "AWS::AccountId"
+                      },
+                      "aws:RequestedRegion": {
+                        "Ref": "AWS::Region"
+                      }
+                    },
+                    "Bool": {
+                      "aws:SecureTransport": "true"
+                    }
+                  }
+                },
+                {
+                  "Sid": "WritePrivateResults",
+                  "Effect": "Allow",
+                  "Action": [
+                    "s3:PutObject"
+                  ],
+                  "Resource": {
+                    "Fn::Sub": "arn:${AWS::Partition}:s3:::${RenditionBucket}/transcripts/results/*"
+                  },
+                  "Condition": {
+                    "StringEquals": {
+                      "s3:ResourceAccount": {
+                        "Ref": "AWS::AccountId"
+                      },
+                      "aws:RequestedRegion": {
+                        "Ref": "AWS::Region"
+                      }
+                    },
+                    "Bool": {
+                      "aws:SecureTransport": "true"
+                    }
+                  }
+                }
+              ]
+            }
+          }
+        ]
+      },
+      "Metadata": {
+        "com.aws.cloudformation.Context": {
+          "why": "Give the dedicated BYOK runner access to private viewing copies and durable transcript results.",
+          "must": [
+            "Bind Google trust to the verified runner identity and audience.",
+            "Keep access within the rendition bucket, account and region over TLS.",
+            "Do not grant original upload access, deletion, bucket listing or paid AWS transcription."
+          ]
+        }
+      }
+    },
+    "TranscriptAudioPreparationInvokePolicy": {
+      "Type": "AWS::IAM::Policy",
+      "Condition": "HasTranscriptAudioPreparationFunction",
+      "Properties": {
+        "PolicyName": "invoke-transcript-audio-preparation",
+        "Roles": [
+          {
+            "Ref": "RunnerDataRole"
+          }
+        ],
+        "PolicyDocument": {
+          "Version": "2012-10-17",
+          "Statement": [
+            {
+              "Sid": "InvokeExactAudioPreparationFunction",
+              "Effect": "Allow",
+              "Action": "lambda:InvokeFunction",
+              "Resource": {
+                "Ref": "TranscriptAudioPreparationFunctionArn"
+              }
+            },
+            {
+              "Sid": "ReadSharedAudioAndReceipts",
+              "Effect": "Allow",
+              "Action": [
+                "s3:GetObject",
+                "s3:GetObjectVersion"
+              ],
+              "Resource": {
+                "Fn::Sub": "arn:${AWS::Partition}:s3:::${RenditionBucket}/transcripts/inputs/audio/*"
+              },
+              "Condition": {
+                "StringEquals": {
+                  "s3:ResourceAccount": {
+                    "Ref": "AWS::AccountId"
+                  },
+                  "aws:RequestedRegion": {
+                    "Ref": "AWS::Region"
+                  }
+                },
+                "Bool": {
+                  "aws:SecureTransport": "true"
+                }
+              }
+            },
+            {
+              "Sid": "DeleteExactSharedAudioVersion",
+              "Effect": "Allow",
+              "Action": "s3:DeleteObjectVersion",
+              "Resource": {
+                "Fn::Sub": "arn:${AWS::Partition}:s3:::${RenditionBucket}/transcripts/inputs/audio/*/attempts/*/input.m4a"
+              },
+              "Condition": {
+                "StringEquals": {
+                  "s3:ResourceAccount": {
+                    "Ref": "AWS::AccountId"
+                  },
+                  "aws:RequestedRegion": {
+                    "Ref": "AWS::Region"
+                  }
+                },
+                "Bool": {
+                  "aws:SecureTransport": "true"
+                }
+              }
+            },
+            {
+              "Sid": "DeleteExactAmazonAudioCopy",
+              "Effect": "Allow",
+              "Action": "s3:DeleteObjectVersion",
+              "Resource": {
+                "Fn::Sub": "arn:${AWS::Partition}:s3:::${RenditionBucket}/transcripts/inputs/amazon/*/attempts/*/input.m4a"
+              },
+              "Condition": {
+                "StringEquals": {
+                  "s3:ResourceAccount": {
+                    "Ref": "AWS::AccountId"
+                  },
+                  "aws:RequestedRegion": {
+                    "Ref": "AWS::Region"
+                  }
+                },
+                "Bool": {
+                  "aws:SecureTransport": "true"
+                }
+              }
+            }
+          ]
+        }
+      },
+      "Metadata": {
+        "com.aws.cloudformation.Context": {
+          "why": "Invoke the exact audio preparer, read version-bound M4A and receipts, and delete only terminal shared audio versions through the fenced job registry.",
+          "must": [
+            "Keep this policy absent until the worker ARN is set after its canary.",
+            "Never delete a version referenced by a running or uncertain job.",
+            "Grant no original-media, bucket administration or unversioned deletion."
+          ]
+        }
+      }
+    }
+  },
+  "Outputs": {
+    "RunnerDataRoleArn": {
+      "Value": {
+        "Fn::GetAtt": [
+          "RunnerDataRole",
+          "Arn"
+        ]
+      }
+    }
+  },
+  "Metadata": {
+    "AWSToolsMetrics": {
+      "AWSAgentToolkit": "aws-cloudformation@2"
+    },
+    "com.aws.cloudformation.Context": {
+      "arch": "A Google-federated BYOK runner reads exact private web renditions and writes private transcript results. An optional conditional policy can invoke the shared audio preparation function after its separate image canary.",
+      "must": [
+        "Keep access inside the rendition bucket, account and Region over TLS.",
+        "Keep paid-provider and original-media permissions outside this role.",
+        "Leave the audio preparation function ARN empty until its digest-pinned worker is approved."
+      ],
+      "ref": [
+        "infrastructure/boardwalk-transcription-byok/README.md",
+        "infrastructure/boardwalk-transcript-audio/README.md"
+      ]
+    }
+  },
+  "Conditions": {
+    "HasTranscriptAudioPreparationFunction": {
+      "Fn::Not": [
+        {
+          "Fn::Equals": [
+            {
+              "Ref": "TranscriptAudioPreparationFunctionArn"
+            },
+            ""
+          ]
+        }
+      ]
+    }
+  }
+}

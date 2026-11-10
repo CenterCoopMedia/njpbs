@@ -1,0 +1,27 @@
+/* Hover and focus preview card. */
+.ui-hover-card {
+  position: fixed;
+  z-index: var(--cms-z-popover);
+  width: max-content;
+  max-width: min(20rem, calc(100vw - (2 * var(--cms-space-2))));
+  padding: var(--cms-space-3) var(--cms-space-4);
+  border: var(--cms-border-width) solid var(--cms-line);
+  border-radius: var(--cms-radius-panel);
+  background: var(--cms-surface);
+  box-shadow: var(--cms-shadow-menu);
+  color: var(--cms-ink);
+  font-size: var(--cms-font-sm);
+  line-height: var(--cms-line-copy);
+}
+
+.ui-hover-card[data-positioned="false"] {
+  visibility: hidden;
+}
+
+.ui-hover-card > :first-child {
+  margin-top: 0;
+}
+
+.ui-hover-card > :last-child {
+  margin-bottom: 0;
+}

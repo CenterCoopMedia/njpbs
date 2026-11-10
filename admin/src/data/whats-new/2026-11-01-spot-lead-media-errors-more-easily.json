@@ -1,0 +1,8 @@
+{
+  "date": "2026-11-01",
+  "kind": "fixed",
+  "title": "Spot lead media errors more easily",
+  "body": "Lead media messages use the same error color as other fields, making image and video problems easier to spot.",
+  "prs": [],
+  "order": 0
+}

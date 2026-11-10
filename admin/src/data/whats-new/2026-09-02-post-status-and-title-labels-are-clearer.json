@@ -1,0 +1,11 @@
+{
+  "date": "2026-09-02",
+  "kind": "improved",
+  "title": "Post status and title labels are clearer",
+  "body": "Post labels now show the difference between your working draft and the live version, and between pending and approved. Summary sits with the Post header, and description guidance stays visible.",
+  "prs": [
+    1398,
+    1399
+  ],
+  "order": 0
+}

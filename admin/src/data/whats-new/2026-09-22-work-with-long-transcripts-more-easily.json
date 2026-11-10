@@ -1,0 +1,10 @@
+{
+  "date": "2026-09-22",
+  "kind": "improved",
+  "title": "Work with long transcripts more easily",
+  "body": "The transcript workspace has better navigation for long videos. You can rename a speaker directly and select a continuous range of lines for a clip.",
+  "prs": [
+    2065
+  ],
+  "order": -3
+}

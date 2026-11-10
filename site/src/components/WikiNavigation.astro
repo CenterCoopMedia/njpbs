@@ -1,0 +1,105 @@
+---
+import type { WikiSection, WikiPageMeta } from "../lib/wiki";
+
+interface Props {
+  nav: { section: WikiSection; pages: WikiPageMeta[] }[];
+  current: string;
+}
+
+const { nav, current } = Astro.props;
+---
+
+<nav aria-label="Wiki sections">
+  {
+    nav.map((group) => (
+      <div class="wiki-nav__group">
+        <a class="wiki-nav__head" href={`/wiki/#${group.section.dir}`}>
+          {group.section.label}
+        </a>
+        <ul>
+          {group.pages.map((p) => (
+            <li>
+              <a
+                href={p.path}
+                class={p.slug === current ? "is-current" : ""}
+                aria-current={p.slug === current ? "page" : undefined}
+              >
+                {p.title}
+              </a>
+            </li>
+          ))}
+        </ul>
+      </div>
+    ))
+  }
+</nav>
+
+<style>
+  .wiki-nav__group {
+    margin-bottom: 1.4rem;
+  }
+  .wiki-nav__head {
+    display: block;
+    font-size: 0.74rem;
+    font-weight: 800;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--w-muted);
+    text-decoration: none;
+    margin-bottom: 0.4rem;
+  }
+  .wiki-nav__head:hover {
+    color: var(--w-link);
+  }
+  ul {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+  }
+  li {
+    margin: 0;
+  }
+  li a {
+    display: block;
+    padding: 0.28rem 0.6rem;
+    margin-left: -0.6rem;
+    border-radius: 6px;
+    color: var(--w-ink);
+    text-decoration: none;
+    font-size: 0.92rem;
+  }
+  li a:hover {
+    background: var(--w-soft);
+    color: var(--w-link);
+  }
+  li a.is-current {
+    background: var(--color-light-surface-blue-strong);
+    color: var(--w-link);
+    font-weight: 700;
+  }
+
+  a:focus-visible {
+    outline: var(--focus-outline);
+    outline-offset: var(--focus-offset);
+  }
+
+  @media (max-width: 800px) {
+    .wiki-nav__group {
+      margin-bottom: 0.75rem;
+    }
+    .wiki-nav__head,
+    li a {
+      min-height: var(--target-comfortable);
+      box-sizing: border-box;
+      display: flex;
+      align-items: center;
+      padding: 0.5rem 0.75rem;
+      margin: 0;
+    }
+    .wiki-nav__head {
+      letter-spacing: normal;
+      text-transform: none;
+      font-size: 0.85rem;
+    }
+  }
+</style>

@@ -1,0 +1,156 @@
+---
+import TransmitterCoverageMap from "../../components/TransmitterCoverageMap.astro";
+import WatchDirectory from "../../components/WatchDirectory.astro";
+import PublicSiteLayout from "../../layouts/PublicSiteLayout.astro";
+import { publicRootRoutesEnabled } from "../../lib/build-target";
+
+export function getStaticPaths() {
+  if (!publicRootRoutesEnabled(process.env)) return [];
+  return [{ params: { coverage: undefined } }];
+}
+---
+
+<PublicSiteLayout
+  title="Broadcast coverage"
+  description="Explore current and proposed NJ PBS television coverage and see where WHYY, WNET and Lehigh Valley public television signals overlap New Jersey."
+  preview={false}
+  canonicalPath="/coverage/"
+  noindex={true}
+  searchable={false}
+>
+  <section class="page-hero coverage-hero">
+    <div class="page-hero__inner wrap">
+      <p class="page-hero__kicker">Over-the-air television</p>
+      <h1>Broadcast coverage across New Jersey</h1>
+      <p class="page-hero__lead">
+        See where current over-the-air NJ PBS signals are expected to reach. Explore nine
+        proposed LPTV sites, then compare coverage with WHYY, WNET and Lehigh Valley public television.
+      </p>
+      <dl class="coverage-hero__facts">
+        <div><dt>4</dt><dd>Full-power licenses</dd></div>
+        <div><dt>3</dt><dd>On-air LPTV stations</dd></div>
+        <div><dt>9</dt><dd>Proposed LPTV sites</dd></div>
+        <div><dt>3</dt><dd>Neighboring systems</dd></div>
+      </dl>
+    </div>
+  </section>
+
+  <TransmitterCoverageMap />
+
+  <WatchDirectory />
+
+  <section class="coverage-notes wrap" aria-labelledby="coverage-notes-title">
+    <div>
+      <p class="coverage-notes__kicker">How to read the map</p>
+      <h2 id="coverage-notes-title">A service contour is a prediction</h2>
+      <p>
+        Solid shapes are FCC protected service contours for current stations. They show the
+        predicted over-the-air service area for each licensed facility. Dashed orange shapes
+        come from the NJPBA planning study and are not approved service areas. No shape guarantees
+        reception at a specific address. Terrain, buildings, antenna height and equipment can
+        change the signal you receive.
+      </p>
+    </div>
+    <div class="coverage-notes__sources">
+      <h3>Sources and status</h3>
+      <ul>
+        <li><a href="https://geo.fcc.gov/api/contours/" rel="noopener" target="_blank">FCC contour data<span class="sr-only"> (opens in new tab)</span></a>, updated June 30, 2026</li>
+        <li><a href="https://www.nj.gov/treasury/njpba/index.shtml" rel="noopener" target="_blank">New Jersey Public Broadcasting Authority station inventory<span class="sr-only"> (opens in new tab)</span></a></li>
+        <li><a href="https://maps.nj.gov/arcgis/rest/services/Framework/Government_Boundaries/MapServer" rel="noopener" target="_blank">NJ Office of GIS state and county boundaries<span class="sr-only"> (opens in new tab)</span></a></li>
+        <li><a href="https://tigerweb.geo.census.gov/" rel="noopener" target="_blank">U.S. Census Bureau surrounding state boundaries<span class="sr-only"> (opens in new tab)</span></a></li>
+      </ul>
+      <p>
+        The nine proposed NJ PBS LPTV sites are awaiting FCC approval and are not on air.
+        The proposed layer includes 10 planned signals because Princeton and Yardville share
+        one transmitter site in Lawrence. These predictions come from the NJPBA TVStudy v2.3.0
+        planning map supplied Sept. 1, 2026.
+      </p>
+      <p>
+        Station pairs that share one transmitter and RF channel use one shared contour. The FCC
+        records list the same protected area for both licenses in each pair.
+      </p>
+    </div>
+  </section>
+</PublicSiteLayout>
+
+<style>
+  .coverage-hero { min-height: 24rem; display: grid; align-items: end; }
+  .coverage-hero::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    z-index: -1;
+    opacity: 0.42;
+    background:
+      linear-gradient(115deg, transparent 15%, var(--color-map-detail-glow) 48%, transparent 75%),
+      repeating-radial-gradient(circle at 82% 42%, var(--color-map-county-line) 0 1px, transparent 1px 22px);
+    -webkit-mask-image: linear-gradient(to left, var(--color-black), transparent 76%);
+    mask-image: linear-gradient(to left, var(--color-black), transparent 76%);
+  }
+  .coverage-hero .page-hero__inner { box-sizing: border-box; width: 100%; }
+  .coverage-hero__facts {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 1px;
+    width: fit-content;
+    max-width: 100%;
+    margin: 1.8rem 0 0;
+    overflow: hidden;
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-surface);
+    background: var(--color-border);
+    box-sizing: border-box;
+  }
+  .coverage-hero__facts div {
+    display: grid;
+    grid-template-columns: auto 1fr;
+    align-items: baseline;
+    gap: 0.5rem;
+    padding: 0.7rem 1rem;
+    background: var(--color-surface-panel);
+    box-sizing: border-box;
+    min-width: 0;
+  }
+  .coverage-hero__facts dt {
+    color: var(--color-map-nj-low);
+    font-size: 1.35rem;
+    font-weight: 900;
+    font-variant-numeric: tabular-nums;
+  }
+  .coverage-hero__facts dd { margin: 0; color: var(--color-text-muted); font-size: 0.82rem; }
+
+  .coverage-notes {
+    display: grid;
+    grid-template-columns: minmax(0, 1.1fr) minmax(18rem, 0.9fr);
+    gap: clamp(2rem, 6vw, 6rem);
+    padding-block: 0 clamp(4rem, 8vw, 7rem);
+  }
+  .coverage-notes__kicker {
+    margin: 0 0 0.45rem;
+    color: var(--color-map-nj-low);
+    font-size: 0.76rem;
+    font-weight: 800;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+  }
+  .coverage-notes h2 { margin: 0; font-size: clamp(1.6rem, 3vw, 2.35rem); }
+  .coverage-notes h3 { margin: 0; font-size: 1.05rem; }
+  .coverage-notes p,
+  .coverage-notes li { color: var(--color-text-muted); line-height: 1.7; }
+  .coverage-notes ul { margin: 0.8rem 0 1rem; padding-left: 1.1rem; }
+  .coverage-notes a { color: var(--color-link); text-underline-offset: 0.2em; }
+  .coverage-notes__sources {
+    padding: 1.25rem;
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-accent);
+    background: var(--color-surface-panel);
+  }
+  .coverage-notes__sources p { margin-bottom: 0; font-size: 0.82rem; }
+
+  @media (max-width: 44rem) {
+    .coverage-hero { min-height: 22rem; }
+    .coverage-hero__facts { width: 100%; }
+    .coverage-hero__facts div { flex: 1 1 calc(50% - 1px); grid-template-columns: 1fr; gap: 0.1rem; }
+    .coverage-notes { grid-template-columns: 1fr; }
+  }
+</style>

@@ -1,0 +1,23 @@
+---
+import { getCollection, type CollectionEntry } from "astro:content";
+import PublicSiteLayout from "../../layouts/PublicSiteLayout.astro";
+import PermanentRedirect from "../../components/PermanentRedirect.astro";
+import { cmsRoutedContentEnabled } from "../../lib/build-target";
+import { programPublicPath } from "../../lib/public-content-routes";
+
+type Props = { entry: CollectionEntry<"cmsPrograms">; slug: string };
+export async function getStaticPaths() {
+  if (!cmsRoutedContentEnabled(process.env)) return [];
+  const programs = await getCollection("cmsPrograms");
+  return programs.flatMap((entry) => [entry.data.slug, ...entry.data.previousSlugs].map((slug) => ({ params: { slug }, props: { entry, slug } satisfies Props })));
+}
+const content = Astro.locals.cmsRender?.content;
+const publicRecord = content?.kind === "public-record-family" ? content : undefined;
+const program = publicRecord?.programs.find(program => program.programId === publicRecord.target.documentId);
+if (publicRecord && !program) throw new Error("Compiled Show alias target is missing");
+const { entry } = (program ? { entry: { id: program.programId, collection: "cmsPrograms", data: program } } : Astro.props) as Props;
+const target = programPublicPath(entry.data.slug);
+---
+<PublicSiteLayout preview={false} title={entry.data.title} description="This program has moved." canonicalPath={target} noindex metaRefreshTo={target}>
+  <PermanentRedirect to={target} label={entry.data.title} />
+</PublicSiteLayout>

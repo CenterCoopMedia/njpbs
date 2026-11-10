@@ -1,0 +1,10 @@
+{
+  "date": "2026-09-26",
+  "kind": "improved",
+  "title": "Open outside links in a new tab",
+  "body": "Links in Posts that go to other websites now open in a new tab. Your new-tab choice stays in place when you edit the link address.",
+  "prs": [
+    2371
+  ],
+  "order": 0
+}

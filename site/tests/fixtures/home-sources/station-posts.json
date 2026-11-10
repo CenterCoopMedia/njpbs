@@ -1,0 +1,56 @@
+[
+  {
+    "postId": "1208e81a5470be941e3fb392eac674ae",
+    "path": "/posts/nj-pbs-announces-rob-nelson-as-anchor-of-new-daily-newscast/",
+    "title": "NJ PBS announces Rob Nelson as anchor of new daily newscast",
+    "summary": "Veteran journalist and New Jersey native will lead NJ PBS News with Rob Nelson, launching as part of the station's new era under Montclair State University",
+    "credits": [
+      {
+        "name": "NJ PBS"
+      }
+    ],
+    "displayDate": "2026-09-16",
+    "publishedAt": "2026-10-03T22:56:21.054Z",
+    "firstPublishedAt": "2026-09-09T19:27:40.681Z",
+    "sourceVersion": 40,
+    "heroImage": {
+      "url": "https://media.njpbs.org/cms-media/general/0f5dfc5a-cd5c-4a1d-ab59-c8ad44fbce6d/6780ec064586141fc9c99eed52b6fa9457a1645e7cab1d45cda2cd58bfd02080.png",
+      "mimeType": "image/png",
+      "width": 1536,
+      "height": 1024,
+      "alt": "A portrait of journalist Rob Nelson smiling and wearing a suit.",
+      "decorative": false
+    },
+    "heroImageAlt": "A portrait of journalist Rob Nelson smiling and wearing a suit.",
+    "heroImageDecorative": false,
+    "noindex": false,
+    "sortInstant": 1789531200000
+  },
+  {
+    "postId": "57298ff3b0d0917f9e653f80bada063d",
+    "path": "/posts/nj-pbs-announces-six-staff-appointments/",
+    "title": "NJ PBS announces six staff appointments",
+    "summary": "New leaders and producers bring experience across public media, journalism, audience development, programming, digital storytelling and broadcast operations",
+    "credits": [
+      {
+        "name": "NJ PBS"
+      }
+    ],
+    "displayDate": "2026-09-01",
+    "publishedAt": "2026-10-03T22:56:58.520Z",
+    "firstPublishedAt": "2026-09-01T18:47:12.711Z",
+    "sourceVersion": 55,
+    "heroImage": {
+      "url": "https://media.njpbs.org/cms-media/general/a4a5b023-de4c-42d8-af3a-ae549bca4e76/bcd1b579bd40d2d11539f7fe09e5e1d01b81fb1d5c16f1b9c7889620d587086e.webp",
+      "mimeType": "image/webp",
+      "width": 2048,
+      "height": 1325,
+      "alt": "Six newly appointed NJ PBS staff members pictured in individual headshots arranged in a two-by-three grid against a blue geometric background. The appointments support the newsroom, programming, audience development, digital content and media operations.",
+      "decorative": false
+    },
+    "heroImageAlt": "Six newly appointed NJ PBS staff members pictured in individual headshots arranged in a two-by-three grid against a blue geometric background. The appointments support the newsroom, programming, audience development, digital content and media operations.",
+    "heroImageDecorative": false,
+    "noindex": false,
+    "sortInstant": 1788288432711
+  }
+]

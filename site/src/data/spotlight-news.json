@@ -1,0 +1,228 @@
+{
+  "source": "nj-spotlight-news-rss",
+  "checkedAt": "2026-10-14T17:29:02.808Z",
+  "request": {
+    "url": "https://www.njspotlightnews.org/feed/"
+  },
+  "cards": [
+    {
+      "source": "nj-spotlight-news-rss",
+      "title": "‘Forever chemicals’ found in surface water statewide, report holds",
+      "href": "https://www.njspotlightnews.org/2026/10/forever-chemicals-found-in-surface-water-statewide-report-holds/",
+      "sourceCategories": [
+        "Energy & Environment",
+        "Health Care",
+        "Chemours",
+        "Doug O'Malley",
+        "DuPont",
+        "forever chamicals",
+        "PFAS",
+        "robert laumbach"
+      ],
+      "byline": "jmooney",
+      "category": "Energy & Environment",
+      "topic": "Energy & Environment",
+      "topicSlug": "energy-environment",
+      "publishedAt": "Wed, 14 Oct 2026 09:15:00 +0000",
+      "dateLabel": "Oct 14, 2026",
+      "image": "/brand/spotlight/energy-environment-02.jpg",
+      "fallbackImage": "/brand/spotlight/energy-environment-02.jpg",
+      "sourceImage": {
+        "url": "https://www.njspotlightnews.org/wp-content/uploads/sites/123/2025/01/drinking-water-tap-cup-300x169.jpg",
+        "width": 300,
+        "height": 169
+      }
+    },
+    {
+      "source": "nj-spotlight-news-rss",
+      "title": "New ordinance in Newark to protect tenants from broker fees",
+      "href": "https://www.njspotlightnews.org/2026/10/new-ordinance-in-newark-to-protect-tenants-from-broker-fees/",
+      "sourceCategories": [
+        "From our Partners",
+        "Housing",
+        "affordability",
+        "brokers fees",
+        "Newark Mayor Ras Baraka",
+        "rental",
+        "Tenants"
+      ],
+      "byline": "jmooney",
+      "category": "More Issues",
+      "topic": "More Issues",
+      "topicSlug": "more-issues",
+      "publishedAt": "Wed, 14 Oct 2026 04:10:24 +0000",
+      "dateLabel": "Oct 14, 2026",
+      "image": "/brand/spotlight/more-issues-02.jpg",
+      "fallbackImage": "/brand/spotlight/more-issues-02.jpg",
+      "sourceImage": {
+        "url": "https://www.njspotlightnews.org/wp-content/uploads/sites/123/2023/07/newark-house-housing-home-ownership-rent-300x169.jpg",
+        "width": 300,
+        "height": 169
+      }
+    },
+    {
+      "source": "nj-spotlight-news-rss",
+      "title": "By the numbers: Black bear hunting season underway",
+      "href": "https://www.njspotlightnews.org/2026/10/by-the-numbers-black-bear-hunting-season-underway/",
+      "sourceCategories": [
+        "Around NJ",
+        "bear hunt",
+        "bear sightings",
+        "black bear",
+        "Black Bear Hunt"
+      ],
+      "byline": "jmooney",
+      "category": "More Issues",
+      "topic": "More Issues",
+      "topicSlug": "more-issues",
+      "publishedAt": "Wed, 14 Oct 2026 04:08:58 +0000",
+      "dateLabel": "Oct 14, 2026",
+      "image": "/brand/spotlight/more-issues-02.jpg",
+      "fallbackImage": "/brand/spotlight/more-issues-02.jpg",
+      "sourceImage": {
+        "url": "https://www.njspotlightnews.org/wp-content/uploads/sites/123/2022/11/black-bear-DEP-300x169.jpg",
+        "width": 300,
+        "height": 169
+      }
+    },
+    {
+      "source": "nj-spotlight-news-rss",
+      "title": "Op-Ed: Teaching consent is not enough",
+      "href": "https://www.njspotlightnews.org/2026/10/op-ed-teaching-consent-is-not-enough/",
+      "sourceCategories": [
+        "Education",
+        "Opinion",
+        "consent",
+        "cornell",
+        "fraternities",
+        "Montclair State University",
+        "sexual assault"
+      ],
+      "byline": "jmooney",
+      "category": "Education",
+      "topic": "Education",
+      "topicSlug": "education",
+      "publishedAt": "Tue, 13 Oct 2026 04:10:47 +0000",
+      "dateLabel": "Oct 13, 2026",
+      "image": "/brand/spotlight/education-02.jpg",
+      "fallbackImage": "/brand/spotlight/education-02.jpg",
+      "sourceImage": {
+        "url": "https://www.njspotlightnews.org/wp-content/uploads/sites/123/2026/10/digital-size-pics-300x169.png",
+        "width": 300,
+        "height": 169
+      }
+    },
+    {
+      "source": "nj-spotlight-news-rss",
+      "title": "Newark school audit flags millions in potential waste. Why the tepid response?",
+      "href": "https://www.njspotlightnews.org/2026/10/newark-school-audit-flags-millions-in-potential-waste-why-the-tepid-response/",
+      "sourceCategories": [
+        "Education",
+        "education spending",
+        "Newark Public Schools",
+        "Newark Schools",
+        "Office of the State Auditor",
+        "Roger Leon",
+        "state audit"
+      ],
+      "byline": "jmooney",
+      "category": "Education",
+      "topic": "Education",
+      "topicSlug": "education",
+      "publishedAt": "Tue, 13 Oct 2026 04:05:33 +0000",
+      "dateLabel": "Oct 13, 2026",
+      "image": "/brand/spotlight/education-02.jpg",
+      "fallbackImage": "/brand/spotlight/education-02.jpg",
+      "sourceImage": {
+        "url": "https://www.njspotlightnews.org/wp-content/uploads/sites/123/2026/10/newark-board-of-education-exterior-300x169.png",
+        "width": 300,
+        "height": 169
+      }
+    },
+    {
+      "source": "nj-spotlight-news-rss",
+      "title": "McIver requests full hearing of Delaney Hall case, extending appeal",
+      "href": "https://www.njspotlightnews.org/2026/10/mciver-requests-full-hearing-of-delaney-hall-case-extending-appeal/",
+      "sourceCategories": [
+        "Immigration",
+        "Politics",
+        "Alina Habba",
+        "anti-ICE protests",
+        "Delaney Hall",
+        "Donald Trump",
+        "Lamonica McIver",
+        "Newark",
+        "Ras Baraka"
+      ],
+      "byline": "jmooney",
+      "category": "Immigration",
+      "topic": "Immigration",
+      "topicSlug": "immigration",
+      "publishedAt": "Mon, 12 Oct 2026 16:57:02 +0000",
+      "dateLabel": "Oct 12, 2026",
+      "image": "/brand/spotlight/immigration-02.jpg",
+      "fallbackImage": "/brand/spotlight/immigration-02.jpg",
+      "sourceImage": {
+        "url": "https://www.njspotlightnews.org/wp-content/uploads/sites/123/2025/05/Rep.-LaMonica-McIver-300x169.jpg",
+        "width": 300,
+        "height": 169
+      }
+    },
+    {
+      "source": "nj-spotlight-news-rss",
+      "title": "Op-Ed: Collaboration needed in effort to rein school health insurance costs",
+      "href": "https://www.njspotlightnews.org/2026/10/op-ed-collaboration-needed-in-effort-to-rein-school-health-insurance-costs/",
+      "sourceCategories": [
+        "Education",
+        "Opinion",
+        "\"Death spiral\"",
+        "health benefits cost",
+        "New Jersey School Employees' Health Benefits Commission",
+        "NJEA",
+        "school spending",
+        "SEHBP",
+        "Steve Beatty"
+      ],
+      "byline": "jmooney",
+      "category": "Education",
+      "topic": "Education",
+      "topicSlug": "education",
+      "publishedAt": "Mon, 12 Oct 2026 04:10:05 +0000",
+      "dateLabel": "Oct 12, 2026",
+      "image": "/brand/spotlight/education.jpg",
+      "fallbackImage": "/brand/spotlight/education.jpg",
+      "sourceImage": {
+        "url": "https://www.njspotlightnews.org/wp-content/uploads/sites/123/2026/07/Steve-Beatty-300x169.jpg",
+        "width": 300,
+        "height": 169
+      }
+    },
+    {
+      "source": "nj-spotlight-news-rss",
+      "title": "Rents are rising across NJ, but state-funded rebates remain frozen in time",
+      "href": "https://www.njspotlightnews.org/2026/10/rents-are-rising-across-nj-but-state-funded-rebates-remain-frozen-in-time/",
+      "sourceCategories": [
+        "Budget",
+        "Anchor",
+        "anchor benefits",
+        "Mikie Sherrill",
+        "NJPP",
+        "renters",
+        "tax relief"
+      ],
+      "byline": "jmooney",
+      "category": "Budget",
+      "topic": "Budget",
+      "topicSlug": "budget",
+      "publishedAt": "Mon, 12 Oct 2026 04:05:15 +0000",
+      "dateLabel": "Oct 12, 2026",
+      "image": "/brand/spotlight/budget.jpg",
+      "fallbackImage": "/brand/spotlight/budget.jpg",
+      "sourceImage": {
+        "url": "https://www.njspotlightnews.org/wp-content/uploads/sites/123/2025/01/house-houses-home-street--300x169.jpg",
+        "width": 300,
+        "height": 169
+      }
+    }
+  ]
+}

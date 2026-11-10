@@ -1,0 +1,175 @@
+/* Gallery-only styles for the phase 4 inspector specimens. Bulk fields move into the image
+   and video forms in 4f; until then they live here. Every value is a token. */
+
+.gx-tile {
+  border: 0;
+  cursor: pointer;
+}
+
+.gx-tile:focus-visible {
+  outline: var(--cms-focus-outline);
+  outline-offset: 2px;
+}
+
+.gx-help {
+  margin: 0;
+  color: var(--cms-ink-muted);
+  font-size: var(--cms-font-xs);
+  line-height: var(--cms-line-tight);
+}
+
+/* A field's label and its choice menu wrap onto two lines rather than squeeze each other. */
+.gx-bulk-field {
+  display: grid;
+  gap: var(--cms-space-1);
+  min-width: 0;
+  color: var(--cms-ink);
+  font-size: var(--cms-font-sm);
+  font-weight: 700;
+}
+
+.gx-bulk-field-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0 var(--cms-space-2);
+}
+
+.gx-field-choice.ui-menu-trigger {
+  max-width: 100%;
+  font-size: var(--cms-font-xs);
+  font-weight: 700;
+  text-align: start;
+  white-space: normal;
+}
+
+.gx-field-choice.ui-menu-trigger .icon {
+  flex: none;
+  width: 1rem;
+  height: 1rem;
+}
+
+.gx-mixed {
+  display: flex;
+  align-items: center;
+  min-height: var(--cms-control-height);
+  margin: 0;
+  padding: var(--cms-space-2) var(--cms-space-3);
+  border: var(--cms-border-width) dashed var(--cms-control-border);
+  border-radius: var(--cms-radius-control);
+  background: var(--cms-surface-soft);
+  color: var(--cms-ink-muted);
+  font-size: var(--cms-font-sm);
+  font-style: italic;
+  font-weight: 400;
+}
+
+/* The bulk preview: a 2 × 2 stack of loaded thumbnails, the last one counting the rest. */
+.gx-stack {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--cms-space-2);
+}
+
+.gx-stack figure {
+  position: relative;
+  margin: 0;
+  overflow: hidden;
+  border-radius: var(--cms-radius-control);
+  background: var(--cms-surface-muted);
+}
+
+.gx-stack img {
+  display: block;
+  width: 100%;
+  aspect-ratio: 3 / 2;
+  object-fit: cover;
+}
+
+.gx-stack-more {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  background: var(--cms-thumb-scrim);
+  color: var(--cms-sidebar-text);
+  font-size: var(--cms-font-lg);
+  font-weight: 700;
+}
+
+/* The docked specimen's stand-in viewer. */
+.gx-viewer {
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  height: 36rem;
+  overflow: hidden;
+  border: var(--cms-border-width) solid var(--cms-line);
+  border-radius: var(--cms-radius-panel);
+  background: var(--cms-surface);
+}
+
+.gx-viewer-header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--cms-space-2);
+  padding: var(--cms-space-3) var(--cms-space-4);
+  border-bottom: var(--cms-border-width) solid var(--cms-line);
+}
+
+.gx-viewer-header h2 {
+  margin: 0;
+  font-size: var(--cms-font-lg);
+}
+
+.gx-viewer-body {
+  display: flex;
+  min-height: 0;
+}
+
+.gx-viewer-player {
+  display: grid;
+  flex: 1 1 auto;
+  place-items: center;
+  min-height: 12rem;
+  margin: var(--cms-space-4);
+  border-radius: var(--cms-radius-control);
+  background: var(--cms-thumb-scrim);
+  color: var(--cms-sidebar-text);
+  font-weight: 700;
+}
+
+@media (max-width: 61.99rem) {
+  .gx-viewer-body {
+    display: block;
+    overflow: auto;
+  }
+}
+
+.gx-video-player {
+  display: grid;
+  place-items: center;
+  aspect-ratio: 16 / 9;
+  border-radius: var(--cms-radius-control);
+  background: var(--cms-thumb-scrim);
+  color: var(--cms-sidebar-text);
+  font-size: var(--cms-font-lg);
+  font-weight: 700;
+}
+
+.gx-video-production {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--cms-space-2);
+  margin-top: var(--cms-space-4);
+}
+
+.gx-video-production p {
+  flex-basis: 100%;
+  margin: 0;
+  color: var(--cms-ink-muted);
+  font-size: var(--cms-font-sm);
+}

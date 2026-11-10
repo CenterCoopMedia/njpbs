@@ -1,0 +1,17 @@
+.rundown-intake { min-width: 0; border-top: 1px solid var(--live-line); padding-block: 10px; }
+.rundown-intake[hidden] { display: none; }
+.rundown-intake summary { min-height: 44px; display: list-item; align-content: center; cursor: pointer; font-weight: 600; }
+.rundown-intake-body, .rundown-change-editor { display: grid; gap: 12px; min-width: 0; }
+.rundown-intake :is(h3, h4, p) { margin: 0; }
+.rundown-intake details > :not(summary) { margin-block-start: 10px; }
+.rundown-intake .rundown-check { display: flex; gap: 10px; align-items: center; min-height: 44px; }
+.rundown-check input { flex: 0 0 auto; width: 20px; height: 20px; }
+.rundown-change-list { margin: 0; padding-inline-start: 22px; display: grid; gap: 8px; }
+.rundown-change-list .button { width: 100%; text-align: left; white-space: normal; display: block; height: auto; min-height: 44px; }
+.rundown-row-copy { display: block; font-weight: 400; overflow-wrap: anywhere; white-space: pre-wrap; }
+.rundown-compare { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
+.rundown-compare > div { display: grid; gap: 10px; align-content: start; min-width: 0; }
+.rundown-copy, .rundown-passage { white-space: pre-wrap; overflow-wrap: anywhere; font: inherit; min-width: 0; }
+.rundown-passage { padding: 10px; background: var(--live-surface); border: 1px solid var(--live-line); border-radius: 4px; }
+.rundown-intake .live-name-fields { grid-template-columns: minmax(0, 1fr); }
+@media (max-width: 43.99rem) { .rundown-compare { grid-template-columns: minmax(0, 1fr); } }

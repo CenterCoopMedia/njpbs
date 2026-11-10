@@ -1,0 +1,8 @@
+{
+  "date": "2026-11-03",
+  "kind": "improved",
+  "title": "Add two links to the site banner",
+  "body": "In Admin settings, Homepage banner now has Second link label and Second link URL. Add the first link, then an optional second link. The links sit side by side and wrap on phones. Save and publish to update the public banner.",
+  "prs": [],
+  "order": 1793734800000
+}

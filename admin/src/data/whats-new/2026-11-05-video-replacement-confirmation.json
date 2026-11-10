@@ -1,0 +1,11 @@
+{
+  "date": "2026-11-05",
+  "kind": "fixed",
+  "requires": "video-replacement",
+  "title": "Confirm changes to the video you reviewed",
+  "body": "If a video changes while Replace file or Restore previous file is open, review its details and confirm again. Other videos continue processing when an earlier replacement waits for recovery. A file that fails local upload checks leaves no saved replacement to resume or cancel. If a previous upload already finished, choose the next file again to start its replacement. You can also clear its saved progress with Cancel saved replacement.",
+  "prs": [
+    4679
+  ],
+  "order": 1793880000000
+}

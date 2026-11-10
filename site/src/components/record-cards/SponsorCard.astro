@@ -1,0 +1,24 @@
+---
+import type { RecordCardPayload } from "../../lib/record-card-resolution";
+
+interface Props { card: RecordCardPayload; headingLevel: number }
+const { card } = Astro.props;
+const sponsor = card.kind === "sponsor" ? card.sponsor : null;
+const compact = card.variant === "compact";
+---
+
+{sponsor ? <article class:list={["record-card", "record-card--sponsor", { "record-card--compact": compact }]}>
+  {sponsor.href ? <a href={sponsor.href} rel="sponsored noopener">
+    {!compact && sponsor.logoUrl ? <img src={sponsor.logoUrl} alt={sponsor.logoDecorative ? "" : sponsor.logoAlt} loading="lazy" decoding="async" /> : null}
+    <span class="record-card__name">{sponsor.name}</span>
+  </a> : <span class="record-card__name">{sponsor.name}</span>}
+  {!compact && sponsor.tier ? <p class="record-card__tier">{sponsor.tier}</p> : null}
+  {!compact && sponsor.description ? <p class="record-card__description">{sponsor.description}</p> : null}
+</article> : card.kind === "sponsor" ? card.href ? <a href={card.href} rel="sponsored noopener">{card.title}</a> : <span>{card.title}</span> : null}
+
+<style>
+  .record-card--sponsor img { display: block; max-width: 12rem; max-height: 5rem; width: auto; height: auto; object-fit: contain; }
+  .record-card--sponsor a { display: inline-flex; align-items: center; gap: .75rem; min-height: 2.75rem; }
+  .record-card--sponsor p { margin: .5rem 0 0; }
+  .record-card--sponsor.record-card--compact { padding: .75rem 1rem; }
+</style>

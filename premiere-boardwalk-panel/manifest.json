@@ -1,0 +1,71 @@
+{
+  "manifestVersion": 5,
+  "id": "org.njpbs.boardwalk.premiere",
+  "name": "Boardwalk",
+  "shortname": "Boardwalk",
+  "version": "0.1.1",
+  "main": "index.html",
+  "host": {
+    "app": "premierepro",
+    "minVersion": "26.5.0"
+  },
+  "requiredPermissions": {
+    "clipboard": "readAndWrite",
+    "localFileSystem": "request",
+    "network": {
+      "domains": ["https://api.example.org", "https://*.s3.us-east-2.amazonaws.com"]
+    },
+    "launchProcess": { "schemes": ["https"] }
+  },
+  "entrypoints": [
+    {
+      "type": "panel",
+      "id": "boardwalkPanel",
+      "label": {
+        "default": "Boardwalk"
+      },
+      "minimumSize": {
+        "width": 280,
+        "height": 400
+      },
+      "maximumSize": {
+        "width": 2000,
+        "height": 2000
+      },
+      "preferredDockedSize": {
+        "width": 320,
+        "height": 640
+      },
+      "preferredFloatingSize": {
+        "width": 360,
+        "height": 720
+      },
+      "icons": [
+        {
+          "width": 23,
+          "height": 23,
+          "path": "icons/dark.png",
+          "scale": [1, 2],
+          "theme": ["darkest", "dark", "medium"]
+        },
+        {
+          "width": 23,
+          "height": 23,
+          "path": "icons/light.png",
+          "scale": [1, 2],
+          "theme": ["lightest", "light"]
+        }
+      ]
+    }
+  ],
+  "icons": [
+    {
+      "width": 48,
+      "height": 48,
+      "path": "icons/plugin-icon.png",
+      "scale": [1, 2],
+      "theme": ["darkest", "dark", "medium", "lightest", "light", "all"],
+      "species": ["pluginList"]
+    }
+  ]
+}

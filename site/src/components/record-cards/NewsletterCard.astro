@@ -1,0 +1,30 @@
+---
+import type { RecordCardPayload } from "../../lib/record-card-resolution";
+
+interface Props { card: RecordCardPayload; headingLevel: number }
+const { card, headingLevel } = Astro.props;
+const Heading = `h${Math.max(2, Math.min(6, headingLevel))}` as "h2" | "h3" | "h4" | "h5" | "h6";
+const data = card.kind === "newsletter" ? card.newsletter?.card : null;
+const image = card.kind === "newsletter" ? card.newsletter?.image : null;
+const compact = card.variant === "compact";
+---
+
+{data?.signupUrl ? <article class:list={["newsletter-record-card", `newsletter-record-card--${card.variant ?? "card"}`, { "newsletter-record-card--has-image": Boolean(image) }]}>
+  {!compact && image && data.imageAssetId ? <img src={image.url} width={image.width} height={image.height} alt={data.imageDecorative ? "" : data.imageAlt ?? ""} loading="lazy" decoding="async" /> : null}
+  <div>
+    {compact ? <Heading><a href={data.signupUrl} rel="noopener noreferrer">{data.title}</a></Heading> : <>
+      <Heading>{data.title}</Heading>
+      {data.frequency ? <p class="newsletter-record-card__frequency">{data.frequency}</p> : null}
+      {data.summary ? <p>{data.summary}</p> : null}
+      <a href={data.signupUrl} rel="noopener noreferrer">Sign up for {data.title}</a>
+    </>}
+  </div>
+</article> : card.kind === "newsletter" ? <span>{card.title}</span> : null}
+
+<style>
+  .newsletter-record-card { display: grid; gap: 1rem; }
+  .newsletter-record-card img { display: block; width: 100%; height: auto; }
+  .newsletter-record-card__frequency { font-weight: 700; }
+  .newsletter-record-card a { display: inline-flex; align-items: center; min-height: 44px; }
+  .newsletter-record-card--compact { padding: .75rem 1rem; }
+</style>

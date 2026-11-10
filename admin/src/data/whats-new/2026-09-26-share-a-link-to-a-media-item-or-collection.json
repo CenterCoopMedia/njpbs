@@ -1,0 +1,10 @@
+{
+  "date": "2026-09-26",
+  "kind": "new",
+  "title": "Share a link to a media item or collection",
+  "body": "Each media item and collection now has its own Boardwalk address. Copy the address to send a coworker straight to that item. Back and Forward in the browser work in the viewer.",
+  "prs": [
+    2343
+  ],
+  "order": -9
+}

@@ -1,0 +1,10 @@
+{
+  "date": "2026-11-02",
+  "kind": "new",
+  "title": "Compare federal elections by county",
+  "body": "Add a county comparison plank to a standard or program Page to show 2020 and 2024 Senate results, combined House votes and turnout. Edit its heading, introduction and source line, and move or remove it like other planks.",
+  "prs": [
+    4668
+  ],
+  "order": 40
+}

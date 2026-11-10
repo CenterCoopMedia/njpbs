@@ -1,0 +1,48 @@
+# Markdownlint config for the docs-first repo. Relaxed where the default rules
+# fight long-form research prose, strict everywhere that catches real mistakes.
+config:
+  default: true
+  # Line length: research docs wrap prose and carry long URLs.
+  MD013: false
+  # Inline HTML: we use <https://...> autolinks and the occasional tag.
+  MD033: false
+  # Duplicate headings are fine across different sections (siblings only).
+  MD024:
+    siblings_only: true
+  # OKF concept files (wiki/) carry a `title:` in YAML frontmatter AND a body H1.
+  # MD025 treats a frontmatter `title:` as an implicit top-level heading, so it
+  # false-positives on the body H1 ("multiple top-level headings"). Disable
+  # front-matter-title detection — the body H1 is the single document title.
+  MD025:
+    front_matter_title: ""
+  # First line need not be a top-level heading (some docs open with a blockquote
+  # note before the H1's context).
+  MD041: false
+  # Ordered-list numbering: research/meeting docs use intentional continuous
+  # numbering across subsections (questions 1–9), which isn't "restart at 1".
+  MD029: false
+  # Unordered-list marker (dash vs plus): cosmetic; don't fight mixed markers.
+  MD004: false
+  # Research docs cite sources as [1][2][3]. Markdown reads those as
+  # reference-style links, so MD052 false-positives on every citation marker.
+  # Off: these are footnote-style citations, not links.
+  MD052: false
+  # Table pipe spacing is cosmetic; don't fight compact separator rows.
+  MD060: false
+  # Emphasis-as-heading: research briefings use bold callout labels
+  # (**1.1 — "..."**, **N. Step**) for subsection emphasis inside long-form
+  # prose. Converting every one to a real heading over-structures the outline.
+  # Off, same category as the prose-fighting rules relaxed above.
+  MD036: false
+
+globs:
+  - "**/*.md"
+
+ignores:
+  # Match node_modules and dist at any depth (site/node_modules, site/dist), not
+  # just the repo root — otherwise third-party package READMEs get linted.
+  - "**/node_modules/**"
+  - "**/dist/**"
+  - ".github/**"
+  # Third-party license text is kept verbatim.
+  - "site/src/assets/pdf-fonts/LICENSE.md"

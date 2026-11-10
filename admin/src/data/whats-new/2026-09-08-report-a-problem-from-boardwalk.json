@@ -1,0 +1,15 @@
+{
+  "date": "2026-09-08",
+  "kind": "new",
+  "title": "Report a problem from Boardwalk",
+  "body": "Use Report a problem to tell the team when something does not work. The form matches the public feedback form, and you get updates when your report changes.",
+  "prs": [
+    1342,
+    1343,
+    1344,
+    1354,
+    1359,
+    1651
+  ],
+  "order": -6
+}

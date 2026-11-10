@@ -1,0 +1,11 @@
+# Set the deployment CLI's CLOUDFLARE_ACCOUNT_ID environment variable separately.
+# Wrangler does not interpolate environment variables inside JSON configuration.
+CLOUDFLARE_ACCOUNT_ID="REPLACE_ME"
+ALERT_INTAKE_URL="https://reports.example.org/intake"
+CMS_MEDIA_R2_ENDPOINT="https://REPLACE_ME.r2.cloudflarestorage.com"
+ALERT_WEBHOOK_SECRET=""
+INTAKE_SECRET=""
+CF_ACCESS_CLIENT_ID=""
+CF_ACCESS_CLIENT_SECRET=""
+# Private pair and staff gateway deployments also need their exact Access issuer.
+CMS_DEV_ACCESS_ORIGIN="https://access.example.org"

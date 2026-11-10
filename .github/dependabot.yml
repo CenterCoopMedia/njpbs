@@ -1,0 +1,12 @@
+version: 2
+updates:
+  # GitHub Actions used by CI. Grouped into one weekly PR so a batch of
+  # action bumps doesn't open N parallel PRs that fight each other.
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    groups:
+      actions-all:
+        patterns: ["*"]
+  # Only GitHub Actions updates are configured here; npm packages are not listed.

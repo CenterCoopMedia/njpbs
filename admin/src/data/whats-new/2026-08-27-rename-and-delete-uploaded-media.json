@@ -1,0 +1,10 @@
+{
+  "date": "2026-08-27",
+  "kind": "new",
+  "title": "Rename and delete uploaded media",
+  "body": "You can change the filename of an uploaded file and delete media that nothing uses. You can also make uploaded images smaller with an optional WebP conversion.",
+  "prs": [
+    1307
+  ],
+  "order": 0
+}

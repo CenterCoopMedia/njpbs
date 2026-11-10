@@ -1,0 +1,11 @@
+{
+  "date": "2026-09-24",
+  "kind": "improved",
+  "title": "Videos use the same grid as images",
+  "body": "The Videos tab now uses the same cards, list rows and selection bar as Images. Posters fill their frames, and rows fit on tablets.",
+  "prs": [
+    2249,
+    2254
+  ],
+  "order": -2
+}

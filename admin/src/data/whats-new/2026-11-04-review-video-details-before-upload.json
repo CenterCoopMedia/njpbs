@@ -1,0 +1,8 @@
+{
+  "date": "2026-11-04",
+  "kind": "improved",
+  "title": "Review video details before upload",
+  "body": "In Videos, review the title, description, rights details and tags before you start an upload. Select Start all uploads after you review a batch. Approved files continue from the upload tray as slots open.",
+  "prs": [],
+  "order": 1793809244461
+}

@@ -1,0 +1,105 @@
+.custom-shelf {
+  container-type: inline-size;
+  min-width: 0;
+  width: 100%;
+  color: inherit;
+  --shelf-columns: 3;
+}
+.custom-shelf--columns-2 { --shelf-columns: 2; }
+.custom-shelf--columns-4 { --shelf-columns: 4; }
+.custom-shelf__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: 1rem;
+}
+.custom-shelf__head > :is(h1, h2, h3, h4, h5, h6) {
+  margin: 0;
+  font: inherit;
+  font-size: clamp(1.3rem, 3vw, 1.8rem);
+  font-weight: 700;
+  line-height: 1.2;
+  overflow-wrap: anywhere;
+}
+.custom-shelf__track {
+  display: grid;
+  gap: 1.25rem;
+  min-width: 0;
+}
+.custom-shelf__track,
+.cms-block .custom-shelf__track {
+  margin: 0;
+  padding: 0 0 0.5rem;
+  list-style: none;
+}
+.custom-shelf--rail .custom-shelf__track {
+  grid-auto-flow: column;
+  grid-auto-columns: min(85%, 21rem);
+  overflow-x: auto;
+  overscroll-behavior-inline: contain;
+  scroll-snap-type: x proximity;
+  scrollbar-width: thin;
+}
+.custom-shelf--grid .custom-shelf__track {
+  grid-template-columns: repeat(var(--shelf-columns), minmax(0, 1fr));
+}
+.custom-shelf__item {
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  scroll-snap-align: start;
+}
+.custom-shelf__card {
+  display: block;
+  height: 100%;
+  color: inherit;
+  text-decoration: none;
+  overflow-wrap: anywhere;
+}
+.custom-shelf__card:hover .custom-shelf__title { text-decoration: underline; }
+.custom-shelf__card :is(picture, img) { display: block; width: 100%; }
+.custom-shelf__card img {
+  aspect-ratio: 16 / 9;
+  object-fit: cover;
+  height: auto;
+}
+.custom-shelf__copy { display: grid; align-content: start; gap: 0.5rem; padding-block: 0.75rem; }
+.custom-shelf__title { font-size: 1.15rem; font-weight: 700; line-height: 1.3; }
+.custom-shelf__summary { font-size: 1rem; line-height: 1.5; }
+.custom-shelf--list .custom-shelf__card {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 2fr);
+  align-items: start;
+  gap: 1.25rem;
+}
+.custom-shelf--list .custom-shelf__copy { padding: 0; }
+.custom-shelf__controls { display: flex; flex: none; gap: 0.5rem; }
+.custom-shelf__controls[hidden] { display: none; }
+.custom-shelf__controls button {
+  display: grid;
+  place-items: center;
+  width: 2.75rem;
+  height: 2.75rem;
+  border: 1px solid currentColor;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  font-size: 1.8rem;
+  cursor: pointer;
+}
+.custom-shelf__controls button:disabled { opacity: 0.4; cursor: default; }
+.custom-shelf :is(a, button, [tabindex]):focus-visible {
+  outline: 2px solid currentColor;
+  outline-offset: -2px;
+}
+@container (max-width: 38rem) {
+  .custom-shelf--grid .custom-shelf__track { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+@container (max-width: 24rem) {
+  .custom-shelf--grid .custom-shelf__track { grid-template-columns: minmax(0, 1fr); }
+  .custom-shelf--list .custom-shelf__card { grid-template-columns: minmax(0, 1fr); gap: 0; }
+  .custom-shelf--list .custom-shelf__copy { padding-block: 0.75rem; }
+}
+
+.custom-shelf__controls svg { display: block; width: 0.65rem; height: 1.25rem; fill: currentColor; }

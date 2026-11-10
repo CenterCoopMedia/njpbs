@@ -1,0 +1,35 @@
+/* Service compositions use the PublicArticle frame and the shared CMS blocks.
+   Only prose has a reading measure; titles and destination rows fill the frame. */
+.cms-page--service-composition .cms-page__blocks[data-cms-page-blocks] {
+  gap: calc(var(--space-8) * 1.5);
+}
+.cms-page--service-composition .public-article__head-inner > span,
+.cms-page--service-composition .cms-block--prose > p,
+.cms-page--service-composition .cms-block--prose > ul,
+.cms-page--service-composition .cms-block--prose > ol,
+.cms-page--service-composition .cms-block--prose > blockquote,
+.cms-page--service-composition .faq-item > p,
+.cms-page--service-composition .faq-item > ul,
+.cms-page--service-composition .faq-item > ol,
+.cms-page--service-composition .faq-item > blockquote {
+  max-width: var(--reading-width);
+}
+.cms-page--service-composition .cms-block--prose > :is(h2, h3, h4, h5, h6) {
+  margin-block: 0 var(--space-6);
+  font-size: var(--section-title-size);
+}
+.cms-page--service-composition .cms-block--prose > :last-child,
+.cms-page--service-composition .card-grid__card > :last-child,
+.cms-page--service-composition .faq-item > :last-child {
+  margin-bottom: 0;
+}
+.cms-page--service-composition .card-grid__title a {
+  display: inline-flex;
+  align-items: center;
+  min-height: var(--target-comfortable);
+}
+.cms-page--service-composition .card-grid__card,
+.cms-page--service-composition .faq-item,
+.cms-page--service-composition .card-grid__card img {
+  border-radius: var(--radius-surface);
+}

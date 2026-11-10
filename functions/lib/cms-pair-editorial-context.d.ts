@@ -1,0 +1,24 @@
+import type { PublicReleasePair, PublicReleasePairReference } from "../../packages/content-core/src/public-release";
+import type { PairTaskIdentity } from "./public-release-pair-work";
+import type { PairViewCursor } from "./public-release-pair-view";
+import type { CurrentCodeReference } from "./current-public-code-source";
+export type PairEditorialContextSource = Readonly<{ schemaVersion: 2; kind: "pair-editorial-context-source";
+  pair: PublicReleasePairReference; pairDigest: string; identity: PairTaskIdentity; claimDigest: string;
+  viewManifestDigest: string; cursor: PairViewCursor; renderedAt: string; sourcePair: PublicReleasePairReference;
+  originalCode: Readonly<{ reference: CurrentCodeReference; qualifiedCodeDigest: string; programImageDescriptors?: unknown }>;
+  documents: readonly Readonly<{ path: string; data: Record<string, unknown> }>[]; homeSources: unknown }>;
+export type PairEditorialContextManifest = Readonly<{ schemaVersion: 2; kind: "pair-editorial-context-manifest";
+  pairDigest: string; identity: PairTaskIdentity; claimDigest: string; viewManifestDigest: string;
+  cursor: PairViewCursor; bodyDigest: string; bodyBytes: number; chunks: readonly string[] }>;
+export const ROOT: string;
+export const MAX_BYTES: number;
+export const CHUNK_BYTES: number;
+export function parsePairEditorialContextSource(value: unknown, pair: PublicReleasePair): PairEditorialContextSource;
+export function parsePairEditorialContextManifest(value: unknown, pair: PublicReleasePair): PairEditorialContextManifest;
+export function writePairEditorialContext(options: { firestore: unknown; pair: PublicReleasePair; source: PairEditorialContextSource }): Promise<{
+  index: { schemaVersion: 2; pairDigest: string; viewManifestDigest: string; bodyDigest: string; manifestDigest: string };
+  manifest: PairEditorialContextManifest }>;
+export function readPairEditorialContextManifest(options: { firestore: unknown; transaction: unknown;
+  pair: PublicReleasePair; viewManifestDigest: string }): Promise<PairEditorialContextManifest>;
+export function readPairEditorialContextBytes(options: { firestore: unknown; pair: PublicReleasePair;
+  manifest: PairEditorialContextManifest }): Promise<{ bytes: Buffer; source: PairEditorialContextSource }>;

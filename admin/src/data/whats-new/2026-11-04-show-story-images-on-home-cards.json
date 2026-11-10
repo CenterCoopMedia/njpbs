@@ -1,0 +1,10 @@
+{
+  "date": "2026-11-04",
+  "kind": "fixed",
+  "title": "Show story images on Home cards",
+  "body": "Home cards use smaller story images when large images exceed the copy limit. Cards and social previews also use each Post's selected lead image.",
+  "prs": [
+    4721
+  ],
+  "order": 1793773769285
+}

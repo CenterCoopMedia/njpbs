@@ -1,0 +1,30 @@
+{
+  "exposed": {
+    "status": 200,
+    "headers": {
+      "content-type": "text/html",
+      "x-njpbs-publication-origin": "test-public"
+    }
+  },
+  "restored": {
+    "status": 302,
+    "headers": {
+      "location": "https://access.example.org/cdn-cgi/access/login/dev-public.example.org",
+      "cache-control": "no-store"
+    }
+  },
+  "removedPost": {
+    "status": 404,
+    "headers": {
+      "content-type": "text/html",
+      "x-njpbs-source-version": "7"
+    }
+  },
+  "beforeDns": {
+    "type": "CNAME",
+    "name": "dev-public.example.org",
+    "content": "dev-origin.example.org",
+    "proxied": true,
+    "ttl": 1
+  }
+}

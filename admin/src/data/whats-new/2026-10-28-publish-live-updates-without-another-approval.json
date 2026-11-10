@@ -1,0 +1,8 @@
+{
+  "date": "2026-10-28",
+  "kind": "new",
+  "title": "Publish live updates without another approval",
+  "body": "On a published live blog, Editors and Managers can select Publish live updates now in Live updates. It requests publication of new updates, corrections, withdrawals and the coverage state right away. The Post's publication status shows when the public site confirms them, and the Post history shows who published each change. Writers still send updates for review. Changes to the Post title, summary, body, lead media, URL or coverage branding still need review and approval.",
+  "prs": [],
+  "order": -5
+}

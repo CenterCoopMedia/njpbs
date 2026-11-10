@@ -1,0 +1,227 @@
+---
+import { contentLink } from "../../../packages/content-core/src/content-link.ts";
+import { cmsImageSources } from "../../../packages/content-core/src/cms-image-variants.ts";
+import { getEntry } from "astro:content";
+import { COVERAGE_LABELS_SETTINGS_ID } from "../../../packages/content-core/src/cms-settings";
+import { isCoverageLabelsBuildData } from "../../../packages/content-core/src/coverage-labels";
+import "../styles/branded-masthead.css";
+import "../styles/home-editorial.css";
+import PostPublication from "./PostPublication.astro";
+import { formatEditorialDate } from "../lib/editorial-date-format";
+import type { HomeHeroItem } from "../lib/home-hero-presentation";
+import { homeHeroHref, type HomeHeroConfig } from "../../../packages/content-core/src/home-hero";
+import { renderHomeEditorialHero } from "../../../packages/content-core/src/home-editorial-render";
+import CmsHeroBackground from "./CmsHeroBackground.astro";
+
+interface Props {
+  items?: readonly HomeHeroItem[];
+  config?: HomeHeroConfig;
+  title: string;
+  subtitle: string;
+  image?: { url: string; width: number; height: number } | null;
+  position?: "center" | "top" | "bottom";
+  watchHref: string;
+  watchLabel: string;
+  giveHref: string;
+  aboutHref: string;
+  externalActions?: boolean;
+}
+
+const { items = [], config, title, subtitle, image, position, watchHref, watchLabel,
+  giveHref, aboutHref, externalActions = false } = Astro.props;
+const slides = items.filter(item => item.title.trim() && homeHeroHref(item.href)).slice(0, 10);
+const multiple = slides.length > 1;
+const background = image ?? { url: "/brand/home/new-jersey-blue.webp", width: 1774, height: 887 };
+const fallbackPosition = image ? position ?? "center" : "right";
+const external = (href: string) => /^https?:\/\//.test(href) && new URL(href).hostname !== "njpbs.org";
+const coverageLabels = (Astro.locals.cmsRender
+  ? Astro.locals.cmsRender.content.settings.find(setting => setting.settingId === COVERAGE_LABELS_SETTINGS_ID)
+  : (await getEntry("cmsPublicSiteChrome", COVERAGE_LABELS_SETTINGS_ID))?.data);
+const editorialMarkup = config?.presentation === "editorial"
+  ? renderHomeEditorialHero(slides, { ...config, coverageLabels: isCoverageLabelsBuildData(coverageLabels) ? coverageLabels : undefined, fallbackImage: image ?? undefined, fallbackPosition: position })
+  : "";
+---
+
+{editorialMarkup ? <Fragment set:html={editorialMarkup} /> : (
+<section class:list={["home-hero", "branded-masthead", "cms-hero-surface", { "home-hero--default-background": !image }]}
+  aria-label="Featured on NJ PBS" aria-roledescription={multiple ? "carousel" : undefined}
+  data-home-hero>
+  {slides.length ? (
+    <div class="home-hero__backgrounds" aria-hidden="true">
+      {slides.map((item, index) => (
+        <div class="home-hero__background" data-home-hero-background hidden={index !== 0}>
+          <img src={index === 0 ? item.image?.url ?? background.url : undefined}
+            {...(index === 0 ? cmsImageSources(item.image ?? background, "100vw") : {})}
+            data-home-hero-srcset={index === 0 ? undefined : cmsImageSources(item.image ?? background, "100vw").srcset}
+            data-home-hero-sizes={index === 0 ? undefined : cmsImageSources(item.image ?? background, "100vw").sizes}
+            data-home-hero-src={index === 0 ? undefined : item.image?.url ?? background.url} alt=""
+            width={item.image?.width || background.width} height={item.image?.height || background.height}
+            loading={index === 0 ? "eager" : "lazy"} fetchpriority={index === 0 ? "high" : "auto"}
+            decoding="async" data-home-hero-image data-fallback-src={item.image?.fallbackUrl ?? background.url}
+            data-spotlight-fallback={item.image?.fallbackUrl}
+            data-fallback-position={fallbackPosition}
+            style={`object-position: ${item.image ? "center" : fallbackPosition};`} />
+        </div>
+      ))}
+    </div>
+  ) : <CmsHeroBackground image={background} position={image ? position : "right"} />}
+  {!slides.length ? (
+    <>
+      <div class="home-hero__fallback">
+        <div class="home-hero__copy">
+          <h1 id="hero-h">{title}</h1>
+          <p class="home-hero__summary">{subtitle}</p>
+          <div class="home-hero__actions">
+            <a class="btn btn--primary" href={watchHref} {...(externalActions ? { rel: "noopener", target: "_blank" } : {})}>
+              {watchLabel}{externalActions && <span class="sr-only"> (opens in new tab)</span>}
+            </a>
+            <a class="btn btn--ghost" href={giveHref} {...(externalActions ? { rel: "noopener", target: "_blank" } : {})}>
+              Donate{externalActions && <span class="sr-only"> (opens in new tab)</span>}
+            </a>
+            <a class="btn btn--text" href={aboutHref}>About the new NJ PBS</a>
+          </div>
+        </div>
+      </div>
+    </>
+  ) : (
+    <>
+      <h1 class="sr-only" id="hero-h">NJ PBS</h1>
+      <div class="home-hero__slides" id="home-hero-slides">
+        {slides.map((item, index) => (
+          <div class="home-hero__slide" data-home-hero-slide data-title={item.title}
+            role="group" aria-roledescription="slide" aria-label={`${index + 1} of ${slides.length}`}
+            hidden={index !== 0} inert={index !== 0}>
+            <a class="home-hero__item" href={item.href}
+              {...((item.contentLinkMode === "custom" ? contentLink(item, item.href).newTab : external(item.href)) ? { rel: item.contentLinkMode === "custom" ? contentLink(item, item.href).rel : "noopener", target: "_blank" } : {})}>
+              <div class="home-hero__copy">
+                <PostPublication spotlightNews={item.spotlightNews} coverageLabelId={item.coverageLabelId} linked={false} />
+                {item.byline && <p class="home-hero__byline">By {item.byline}</p>}
+                {formatEditorialDate(item.displayDate) && <time class="home-hero__date" datetime={item.displayDate}>{formatEditorialDate(item.displayDate)}</time>}
+                <h2>{item.title}</h2>
+                {item.summary && <p class="home-hero__summary">{item.summary}</p>}
+                {item.image?.alt && <span class="sr-only">{item.image.alt}</span>}
+                <span class="home-hero__read">Explore this story <span aria-hidden="true">→</span></span>
+                {(item.contentLinkMode === "custom" ? contentLink(item, item.href).newTab : external(item.href)) && <span class="sr-only"> (opens in new tab)</span>}
+              </div>
+
+            </a>
+          </div>
+        ))}
+      </div>
+      {multiple && (
+        <div class="home-hero__controls" data-home-hero-controls hidden>
+          <button type="button" data-home-hero-previous aria-label="Previous hero item" aria-controls="home-hero-slides"><span aria-hidden="true">←</span></button>
+          <span data-home-hero-count aria-hidden="true">1 / {slides.length}</span>
+          <button type="button" data-home-hero-next aria-label="Next hero item" aria-controls="home-hero-slides"><span aria-hidden="true">→</span></button>
+          <button type="button" data-home-hero-pause aria-label="Pause rotation" aria-controls="home-hero-slides">Pause</button>
+        </div>
+      )}
+      <p class="sr-only" data-home-hero-status role="status" aria-live="polite" aria-atomic="true"></p>
+    </>
+  )}
+</section>
+)}
+
+<script>
+  import { mountHomeHeroes } from "../lib/home-hero-client";
+  mountHomeHeroes();
+</script>
+
+<style>
+  /* Focus must scroll the page, never the clipped carousel artwork container. */
+  .home-hero { overflow: clip; }
+  .home-hero--default-background :global(.cms-hero-background__overlay) { opacity: 0.35; }
+  .home-hero__fallback, .home-hero__item {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    align-items: center;
+    gap: clamp(1.75rem, 4vw, 4rem);
+    max-width: var(--wrap);
+    width: 100%;
+    margin: 0 auto;
+    padding: clamp(2.5rem, 4vw, 4.5rem) var(--gutter);
+    box-sizing: border-box;
+    min-height: 34rem;
+  }
+
+  .home-hero__copy { position: relative; min-width: 0; z-index: 1; }
+  h1, h2 { margin: 0; color: var(--text); font-size: clamp(2.25rem, 4.75vw, 3.75rem); font-weight: 900; letter-spacing: var(--heading-tracking); line-height: 1.06; overflow-wrap: anywhere; text-wrap: balance; }
+  .home-hero__item h2 { text-wrap: wrap; }
+  .home-hero__date { display: block; margin-bottom: 0.75rem; color: var(--text-dim); font-size: 0.95rem; }
+  .home-hero__summary { margin: 1.25rem 0 0; color: var(--text-dim); font-size: clamp(1.08rem, 1.8vw, 1.3rem); line-height: 1.62; white-space: pre-line; overflow-wrap: anywhere; }
+  .home-hero__actions { display: flex; flex-wrap: wrap; align-items: center; gap: 0.85rem; margin-top: 1.75rem; }
+  .home-hero > .home-hero__backgrounds { position: absolute; inset: 0; z-index: 0; pointer-events: none; }
+  .home-hero__background {
+    position: absolute;
+    inset: 0;
+    opacity: 1;
+    visibility: visible;
+    transition:
+      opacity var(--motion-duration-emphasis) var(--motion-ease-standard),
+      visibility 0s linear 0s;
+  }
+  .home-hero__background[hidden] {
+    display: none;
+    opacity: 0;
+    visibility: hidden;
+    transition:
+      opacity var(--motion-duration-emphasis) var(--motion-ease-standard),
+      visibility 0s linear var(--motion-duration-emphasis);
+  }
+  .home-hero__background[hidden][data-home-hero-warm] { display: block; }
+  .home-hero__background img { width: 100%; height: 100%; object-fit: cover; object-position: center; }
+  .home-hero__background img[hidden] { display: none; }
+  .home-hero__backgrounds::after { content: ""; position: absolute; inset: 0; background: linear-gradient(90deg, rgba(6, 7, 15, 0.88), rgba(6, 7, 15, 0.74) 60%, rgba(6, 7, 15, 0.74)), linear-gradient(0deg, rgba(6, 7, 15, 0.65), transparent 45%); }
+  .home-hero__slides { display: grid; }
+  .home-hero__slide {
+    grid-area: 1 / 1;
+    min-width: 0;
+    opacity: 1;
+    visibility: visible;
+    transition:
+      opacity var(--motion-duration-standard) var(--motion-ease-standard),
+      visibility 0s linear 0s;
+  }
+  .home-hero__slide[hidden] {
+    display: block;
+    opacity: 0;
+    visibility: hidden;
+    pointer-events: none;
+    transition:
+      opacity var(--motion-duration-standard) var(--motion-ease-standard),
+      visibility 0s linear var(--motion-duration-standard);
+  }
+  .home-hero__item { height: 100%; color: var(--text); text-decoration: none; }
+  .home-hero__item:focus-visible { outline: var(--focus-outline); outline-offset: var(--focus-offset-inset); }
+  .home-hero__item:hover h2 { text-decoration: underline; text-decoration-thickness: 2px; text-underline-offset: 0.15em; }
+  .home-hero__read { display: inline-flex; gap: 0.7rem; margin-top: 1.5rem; color: var(--color-link); font-weight: 750; }
+  .home-hero__controls { display: flex; align-items: center; flex-wrap: wrap; gap: 0.75rem; max-width: var(--wrap); margin: 0 auto; padding: 0 var(--gutter) 1.75rem; }
+  .home-hero__controls[hidden] { display: none; }
+  .home-hero__controls button { min-width: var(--target-comfortable); min-height: var(--target-comfortable); padding: 0.65rem 1rem; border: 1px solid var(--line-strong); border-radius: var(--radius-control); background: var(--bg-1); color: var(--text); font: inherit; cursor: pointer; }
+  .home-hero__controls button:focus-visible { outline: var(--focus-outline); outline-offset: var(--focus-offset); }
+  .home-hero__controls [data-home-hero-count] { min-width: 3.5rem; text-align: center; font-variant-numeric: tabular-nums; }
+  @media (min-width: 761px) {
+    .home-hero--default-background :global(.cms-hero-background__image) { width: auto; max-width: 100%; left: auto; object-fit: contain; mask-image: linear-gradient(to right, transparent, black 25%); }
+  }
+  @media (max-width: 760px) {
+    .home-hero--default-background :global(.cms-hero-background__overlay) { opacity: 0.65; }
+    .home-hero__fallback, .home-hero__item { grid-template-columns: minmax(0, 1fr); min-height: 0; }
+    .home-hero__backgrounds::after { background: rgba(6, 7, 15, 0.74); }
+  }
+  @media (max-width: 480px) {
+    .home-hero__actions { align-items: stretch; flex-direction: column; }
+    .home-hero__actions .btn { justify-content: center; }
+    .home-hero__controls { gap: 0.5rem; }
+  }
+  @media (forced-colors: active) {
+    .home-hero__controls button { border-color: ButtonText; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .home-hero__background,
+    .home-hero__background[hidden],
+    .home-hero__slide,
+    .home-hero__slide[hidden] { transition: none; }
+  }
+  :global(html[data-motion="off"]) .home-hero__background,
+  :global(html[data-motion="off"]) .home-hero__slide { transition: none; }
+</style>

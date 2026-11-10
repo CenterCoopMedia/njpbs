@@ -1,0 +1,23 @@
+---
+import { renderCustomShelf } from "../../../packages/content-core/src/content-render";
+import type { PromotionPlaylistBlock } from "../../../packages/content-core/src/content-model";
+import { responsiveImageKey, type CmsResponsiveRenderAsset } from "../lib/cms-responsive-image";
+
+interface Props {
+  block: PromotionPlaylistBlock;
+  assets: ReadonlyMap<string, CmsResponsiveRenderAsset>;
+}
+const { block, assets } = Astro.props;
+const html = renderCustomShelf(block, {
+  resolveAsset: (id, placement) => assets.get(responsiveImageKey(id, placement)) ?? null,
+});
+---
+{html && <div class="rail promotion-playlist" set:html={html} />}
+
+<style>
+  .promotion-playlist {
+    max-width: 84rem;
+    margin-inline: auto;
+    padding-inline: 1.5rem;
+  }
+</style>

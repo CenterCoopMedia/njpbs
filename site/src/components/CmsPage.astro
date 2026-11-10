@@ -1,0 +1,36 @@
+---
+import type { CollectionEntry } from "astro:content";
+import CmsBlocks from "./CmsBlocks.astro";
+import { cmsImageAsset } from "../lib/cms-responsive-image";
+import PublicArticle from "./PublicArticle.astro";
+import { usesServiceComposition } from "../../../packages/content-core/src/service-composition";
+import "../styles/service-composition.css";
+
+interface Props {
+  entry: CollectionEntry<"cmsPages">;
+}
+
+const { entry } = Astro.props as Props;
+const heroBackgroundImage = entry.data.heroBackgroundImage
+  ? cmsImageAsset(entry.data.assets[entry.data.heroBackgroundImage])
+  : undefined;
+---
+
+<div
+  class:list={["cms-page", { "cms-page--service-composition": usesServiceComposition(entry.data) }]}
+  data-cms-page={entry.data.pageId}
+  data-cms-content-mode={entry.data.contentMode}
+  data-service-composition-version={entry.data.serviceCompositionVersion}
+>
+  <PublicArticle
+    title={entry.data.title}
+    pageTheme={entry.data.pageTheme}
+    description={entry.data.description}
+    runtimePageId={entry.data.pageId === "contact" ? "contact" : undefined}
+    heroBackgroundImage={heroBackgroundImage}
+    heroBackgroundPosition={entry.data.heroBackgroundPosition}
+  >
+    <CmsBlocks entry={entry} contained={false} />
+  </PublicArticle>
+</div>
+

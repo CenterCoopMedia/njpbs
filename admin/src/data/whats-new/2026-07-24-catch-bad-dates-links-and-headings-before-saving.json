@@ -1,0 +1,13 @@
+{
+  "date": "2026-07-24",
+  "kind": "improved",
+  "title": "Catch bad dates, links and headings before saving",
+  "body": "The editor now checks dates, links and heading levels before it saves. It refuses links the public site would remove and keeps headings in a correct order.",
+  "prs": [
+    726,
+    727,
+    729,
+    730
+  ],
+  "order": -1
+}

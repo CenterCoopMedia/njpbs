@@ -1,0 +1,10 @@
+{
+  "date": "2026-09-11",
+  "kind": "fixed",
+  "title": "Back-to-back saves keep your changes",
+  "body": "When you save a Post twice in a row, Boardwalk now keeps both saves in order. Row changes from the first save are not lost.",
+  "prs": [
+    1754
+  ],
+  "order": -3
+}

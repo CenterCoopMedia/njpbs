@@ -1,0 +1,18 @@
+[Unit]
+Description=Boardwalk node-gpu-b transcription relay
+After=network-online.target
+Wants=network-online.target
+StartLimitIntervalSec=0
+
+[Service]
+Type=simple
+ExecStart=/usr/bin/python3 %h/.local/lib/boardwalk-transcription-worker/relay.py --config %h/.config/boardwalk-transcription-worker/relay.json
+Restart=on-failure
+RestartSec=60
+TimeoutStopSec=70
+KillMode=mixed
+UMask=0077
+NoNewPrivileges=true
+
+[Install]
+WantedBy=default.target

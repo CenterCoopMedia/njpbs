@@ -1,0 +1,51 @@
+<!doctype html>
+<html lang="en" data-cms-theme="editorial">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="description" content="Boardwalk, the staff CMS for NJ PBS." />
+    <meta name="robots" content="noindex, nofollow, noarchive" />
+    <link rel="icon" type="image/png" href="/favicon.png" />
+    <!--
+      The first requests after the entry script evaluates go to Firebase Authentication
+      (restore the session), Firestore (the staff profile) and the CMS API edge (admission).
+      Opening those connections while the JavaScript still downloads removes one DNS, TCP
+      and TLS round trip from each of them on a cold visit. A preconnect changes nothing about
+      what is sent; it only starts the handshake early.
+    -->
+    <link rel="preconnect" href="https://identitytoolkit.googleapis.com" crossorigin />
+    <link rel="preconnect" href="https://securetoken.googleapis.com" crossorigin />
+    <link rel="preconnect" href="https://firestore.googleapis.com" crossorigin />
+    <link rel="preconnect" href="https://api.example.org" crossorigin />
+    <link
+      rel="preload"
+      href="https://media.njpbs.org/cms-media/fonts/6d1461f427c030aed42aaa039eb8ce7409a261a7a62e46ff0854d7c79db00123/PBSSans.woff2"
+      as="font"
+      type="font/woff2"
+      crossorigin
+    />
+    <link
+      rel="preload"
+      href="/brand/njpbs-horizontal-white.svg"
+      as="image"
+      type="image/svg+xml"
+    />
+    <meta property="og:title" content="Boardwalk" />
+    <meta property="og:description" content="Boardwalk, the staff CMS for NJ PBS." />
+    <meta property="og:type" content="website" />
+    <meta property="og:url" content="https://admin.njpbs.org/" />
+    <meta property="og:image" content="https://njpbs.org/og-default.png" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="Boardwalk" />
+    <meta name="twitter:description" content="Boardwalk, the staff CMS for NJ PBS." />
+    <meta name="twitter:image" content="https://njpbs.org/og-default.png" />
+    <title>Boardwalk</title>
+  </head>
+  <body>
+    <div id="root"></div>
+    <div id="admin-overlay-root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>

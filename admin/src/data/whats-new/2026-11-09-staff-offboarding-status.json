@@ -1,0 +1,8 @@
+{
+  "date": "2026-11-09",
+  "kind": "fixed",
+  "title": "Clearer inactive staff status",
+  "body": "Staff access shows Retry offboarding only when account shutdown has unfinished steps. The row explains what still needs attention. Completed shutdowns show Inactive, access removed.",
+  "order": 1794262700000,
+  "prs": []
+}

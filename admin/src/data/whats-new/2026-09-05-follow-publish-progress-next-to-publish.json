@@ -1,0 +1,13 @@
+{
+  "date": "2026-09-05",
+  "kind": "improved",
+  "title": "Follow publish progress next to Publish",
+  "body": "Publish progress and errors now show beside the Publish button. Boardwalk shows which version is live, and you can safely retry a failed publish or remove an item.",
+  "prs": [
+    1545,
+    1535,
+    1537,
+    1529
+  ],
+  "order": -2
+}

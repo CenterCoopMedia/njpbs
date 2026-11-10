@@ -1,0 +1,8 @@
+{
+  "date": "2026-11-04",
+  "kind": "fixed",
+  "title": "Sign in again after your session ends",
+  "body": "When your sign-in stops being valid, Boardwalk now takes you to the sign-in screen and tells you why. Autosaved drafts are still there after you sign in with the same account.",
+  "prs": [4800],
+  "order": 1793816000000
+}

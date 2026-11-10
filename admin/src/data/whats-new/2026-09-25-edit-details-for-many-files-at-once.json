@@ -1,0 +1,12 @@
+{
+  "date": "2026-09-25",
+  "kind": "new",
+  "title": "Edit details for many files at once",
+  "body": "Select files in Media library and open bulk editing. Review each change before you apply it. Boardwalk saves the files in small groups and reports any file it could not change.",
+  "prs": [
+    2070,
+    2273,
+    2298
+  ],
+  "order": -3
+}

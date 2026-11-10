@@ -1,0 +1,44 @@
+.media-replace-dialog {
+  width: min(32rem, calc(100vw - 2 * var(--cms-space-4)));
+  max-height: calc(100dvh - 2 * var(--cms-space-4));
+  box-sizing: border-box;
+  padding: var(--cms-space-4);
+  border: 1px solid var(--cms-line-strong);
+  border-radius: var(--cms-radius-control);
+  background: var(--cms-surface);
+  color: var(--cms-ink);
+  overflow: auto;
+}
+
+.media-replace-dialog::backdrop {
+  background: var(--cms-scrim);
+}
+
+.media-replace-dialog .media-form-actions {
+  margin-top: var(--cms-space-4);
+}
+
+.video-replace-control {
+  display: grid;
+  justify-items: start;
+  gap: var(--cms-space-2);
+  padding: var(--cms-space-4);
+  border-bottom: 1px solid var(--cms-line);
+  overflow-wrap: anywhere;
+}
+
+.video-replace-control > h3,
+.video-replace-control > p,
+.video-replace-control > ol {
+  margin: 0;
+}
+
+.video-replace-history {
+  display: grid;
+  gap: var(--cms-space-2);
+}
+
+.video-replace-history p,
+.video-replace-history ol {
+  margin: 0;
+}

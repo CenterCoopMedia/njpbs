@@ -1,0 +1,8 @@
+{
+  "date": "2026-11-04",
+  "kind": "improved",
+  "title": "Less startup work for saved previews",
+  "body": "Saved previews do less work when starting after a pause. Preview still opens the exact version you saved.",
+  "prs": [],
+  "order": 1793805900000
+}

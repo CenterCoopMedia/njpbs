@@ -1,0 +1,8 @@
+{
+  "date": "2026-10-29",
+  "kind": "improved",
+  "title": "Work on one settings section at a time",
+  "body": "Admin settings has a section outline and a preview beside each public form. On a phone, choose a section from Settings section. Unsaved changes stay in place when you switch sections. Each section keeps its own save and publication controls. Homepage banner explains which message and link appear in NJ Decides mode and offers suggested election text.",
+  "prs": [],
+  "order": -1
+}

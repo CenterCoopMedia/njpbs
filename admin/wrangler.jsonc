@@ -1,0 +1,31 @@
+{
+  // Pages (direct-upload) config for the njpbs-admin CMS served at admin.njpbs.org.
+  // Its only job is to exist here: `wrangler pages deploy` discovers config by
+  // walking up from the working directory, so without this file the admin deploy
+  // walked all the way up to the public Worker config (now workers/wrangler.jsonc) (the public site's
+  // njpbs-production Workers Builds config), found no pages_build_output_dir, and
+  // warned on every run (issue #552). A config at admin/ stops that walk one level
+  // down. scripts/deploy-admin.sh (npm run admin:deploy) is the one command that
+  // uses it; it runs wrangler with --cwd admin so ./dist resolves to admin/dist.
+  //
+  // This is a direct-upload project (no git connection, no build command here);
+  // the build happens in the deploy script. compatibility_date matches the
+  // public-site config for consistency and is otherwise inert for an assets-only
+  // Pages upload.
+  "name": "njpbs-admin",
+  "pages_build_output_dir": "./dist",
+  "compatibility_date": "2026-07-09",
+  "services": [
+    {
+      "binding": "STAFF_ACCESS",
+      "service": "njpbs-cms-api",
+      "entrypoint": "StaffSiteEntrypoint"
+    }
+  ],
+  "r2_buckets": [
+    {
+      "binding": "GUIDE_VIDEOS",
+      "bucket_name": "njpbs-admin-guide"
+    }
+  ]
+}

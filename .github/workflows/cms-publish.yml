@@ -1,0 +1,892 @@
+name: CMS publish
+
+run-name: CMS publish ${{ github.event.client_payload.queueId || 'invalid' }}
+
+# Triggered by the cmsPublish function's repository_dispatch (cms_publish). Builds the
+# reviewed production site with published Firestore content, deploys that exact
+# artifact to the current GitHub Pages host, then writes the terminal queue
+# result. Open-set inventory remains separate in #1228.
+# The owner and trusted default-branch workflow ref are checked before repository
+# code is loaded. The artifact source itself is the protected production branch.
+#
+# This path prefers
+# FIREBASE_PUBLISH_SERVICE_ACCOUNT (roles/datastore.user) and falls back to the
+# project-admin FIREBASE_SERVICE_ACCOUNT. Build code receives Pages read access;
+# only the separate deploy job receives Pages write and OIDC access. See #562 for
+# why the two Firebase credentials are separate.
+on:
+  repository_dispatch:
+    types: [cms_publish]
+
+permissions:
+  contents: read
+
+env:
+  CMS_PRODUCTION_API_ORIGIN: ${{ vars.CMS_PRODUCTION_API_ORIGIN }}
+  CANONICAL_GITHUB_REPOSITORY: ${{ vars.CANONICAL_GITHUB_REPOSITORY }}
+  CANONICAL_GITHUB_REPOSITORY_ID: ${{ vars.CANONICAL_GITHUB_REPOSITORY_ID }}
+  VITE_CANONICAL_GITHUB_REPOSITORY: ${{ vars.CANONICAL_GITHUB_REPOSITORY }}
+  CMS_PUBLISH_GITHUB_TRUSTED_ACTORS: ${{ vars.CMS_PUBLISH_GITHUB_TRUSTED_ACTORS }}
+
+concurrency:
+  # Reserve the Firestore cutoff only after this shared live-host lock starts.
+  # Holding the same bounded queue as pages.yml through build, deployment, and
+  # terminal writeback prevents any later Pages run from activating an older
+  # artifact or reserving a generation that can strand this ready artifact.
+  group: pages
+  queue: max
+  cancel-in-progress: false
+
+jobs:
+  authorize:
+    # Refuse ineligible dispatch metadata before fetching the trusted main helper.
+    # The helper then applies complete payload admission before production source or credentials.
+    if: >-
+      (vars.CANONICAL_GITHUB_REPOSITORY != '' && vars.CANONICAL_GITHUB_REPOSITORY_ID != '' && github.repository == vars.CANONICAL_GITHUB_REPOSITORY && github.repository_id == vars.CANONICAL_GITHUB_REPOSITORY_ID) &&
+      contains(fromJSON(vars.CMS_PUBLISH_GITHUB_TRUSTED_ACTORS || '[]'), github.triggering_actor) &&
+      github.ref == 'refs/heads/main' &&
+      github.event_name == 'repository_dispatch' && github.event.action == 'cms_publish' &&
+      github.event.client_payload.queueId != '' && startsWith(toJSON(github.event.client_payload.queueId), '"') &&
+      github.event.sender.login != '' && github.event.sender.login == github.actor &&
+      contains(fromJSON(vars.CMS_PUBLISH_GITHUB_TRUSTED_ACTORS || '[]'), github.actor) &&
+      github.event.sender.login != vars.CMS_DEV_DISPATCH_ACTOR &&
+      github.event.client_payload.projectId != 'njpbs-site-dev' &&
+      github.event.client_payload.environment != 'development'
+    outputs:
+      deploy_ref: ${{ steps.request.outputs.deploy_ref }}
+    permissions:
+      contents: read
+    runs-on: ubuntu-24.04
+    timeout-minutes: 2
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+          sparse-checkout: functions/lib/cms-publish-dispatch.js
+          sparse-checkout-cone-mode: false
+      - name: Authorize CMS publish request
+        id: request
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          EVENT_ACTION: ${{ github.event.action }}
+          EVENT_SENDER: ${{ github.event.sender.login }}
+          EVENT_ACTOR: ${{ github.actor }}
+          EVENT_PROJECT: ${{ github.event.client_payload.projectId }}
+          EVENT_ENVIRONMENT: ${{ github.event.client_payload.environment }}
+          DEV_DISPATCH_ACTOR: ${{ vars.CMS_DEV_DISPATCH_ACTOR }}
+          EVENT_REF: ${{ github.ref }}
+          TRIGGERING_ACTOR: ${{ github.triggering_actor }}
+          QUEUE_ID: ${{ github.event.client_payload.queueId }}
+        run: |
+          set -euo pipefail
+          node <<'NODE'
+          const { assertPublishDispatch, trustedPublishActors } = require('./functions/lib/cms-publish-dispatch');
+          if (!trustedPublishActors().includes(process.env.TRIGGERING_ACTOR)) {
+            throw new Error('Production publication rerunner is not trusted');
+          }
+          assertPublishDispatch({
+            eventName: process.env.EVENT_NAME, action: process.env.EVENT_ACTION,
+            ref: process.env.EVENT_REF, sender: process.env.EVENT_SENDER,
+            actor: process.env.EVENT_ACTOR,
+            payload: { queueId: process.env.QUEUE_ID, projectId: process.env.EVENT_PROJECT,
+              environment: process.env.EVENT_ENVIRONMENT },
+          }, 'production', process.env.DEV_DISPATCH_ACTOR);
+          NODE
+          echo "deploy_ref=refs/heads/production" >> "$GITHUB_OUTPUT"
+
+  build:
+    environment: production
+    needs: authorize
+    if: >-
+      (vars.CANONICAL_GITHUB_REPOSITORY != '' && vars.CANONICAL_GITHUB_REPOSITORY_ID != '' && github.repository == vars.CANONICAL_GITHUB_REPOSITORY && github.repository_id == vars.CANONICAL_GITHUB_REPOSITORY_ID) &&
+      contains(fromJSON(vars.CMS_PUBLISH_GITHUB_TRUSTED_ACTORS || '[]'), github.triggering_actor) &&
+      github.ref == 'refs/heads/main' &&
+      needs.authorize.result == 'success'
+    outputs:
+      build_batch_id: ${{ steps.source.outputs.build_batch_id }}
+      deploy_ready: ${{ steps.release.outputs.ready }}
+      deploy_runtime_version: ${{ steps.deploy_runtime.outputs.version }}
+      public_receipt_ready: ${{ steps.public_receipt_runtime.outputs.ready }}
+      public_url: ${{ steps.pages.outputs.base_url }}
+      source_sha: ${{ steps.source.outputs.sha }}
+    permissions:
+      contents: read
+      pages: read
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    env:
+      # Either credential satisfies this path. FIREBASE_PUBLISH_SERVICE_ACCOUNT is
+      # the narrow one (#562): Firestore only, which is all this workflow uses.
+      # FIREBASE_SERVICE_ACCOUNT is the project-admin key the staging deploy needs,
+      # and it stays the fallback so publishing keeps working before the narrow
+      # secret exists. An unset secret is the empty string, which is falsy here, so
+      # `||` picks the admin key only when the narrow one is absent. Once the narrow
+      # secret is set, nothing in this file changes and the blast radius drops.
+      FIREBASE_SERVICE_ACCOUNT_CONFIGURED: ${{ (secrets.FIREBASE_PUBLISH_SERVICE_ACCOUNT || secrets.FIREBASE_SERVICE_ACCOUNT) != '' }}
+      # Shell steps read the queue id from this env var only; interpolating
+      # client_payload into run bodies is an injection surface.
+      QUEUE_ID: ${{ github.event.client_payload.queueId }}
+      BUILD_BATCH_ID: cms-${{ github.event.client_payload.queueId }}-${{ github.run_id }}-${{ github.run_attempt }}
+    steps:
+      # A dispatched publish always carries a queue row; without the writeback
+      # secret its status can never terminate, so refuse loudly instead of
+      # producing a green build the queue cannot see (#407 tracks reconciliation).
+      # credentials must be configured before CMS_PUBLISH_GITHUB_TOKEN. Token-first
+      # ordering strands every queue row in "publishing", because this refusal
+      # cannot write the failure back without a credential.
+      - name: Require writeback credentials for queued publishes
+        if: github.event.client_payload.queueId != '' && env.FIREBASE_SERVICE_ACCOUNT_CONFIGURED != 'true'
+        run: |
+          echo "No writeback credential is configured. Set FIREBASE_PUBLISH_SERVICE_ACCOUNT (preferred, Firestore only) or FIREBASE_SERVICE_ACCOUNT; queue item ${QUEUE_ID} could never record a terminal status. Refusing to build." >&2
+          exit 1
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ needs.authorize.outputs.deploy_ref }}
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Require reviewed production source
+        env:
+          DEPLOY_REF: ${{ needs.authorize.outputs.deploy_ref }}
+        run: |
+          set -euo pipefail
+          deploy_sha="$(git rev-parse HEAD)"
+          if git merge-base --is-ancestor HEAD origin/main; then
+            exit 0
+          fi
+
+          # Production promotion receipts are merge commits. Accept one only
+          # when its reviewed main parent has the same tree as the merge.
+          parent_count="$(git rev-list --parents -n 1 HEAD | awk '{print NF - 1}')"
+          if [ "$parent_count" -eq 2 ]; then
+            reviewed_main_sha="$(git rev-parse HEAD^2)"
+            if git merge-base --is-ancestor "$reviewed_main_sha" origin/main &&
+               git diff --quiet "$reviewed_main_sha" HEAD
+            then
+              exit 0
+            fi
+          fi
+
+          echo "::error::CMS publish source must be reviewed production; '$DEPLOY_REF' resolved to $deploy_sha."
+          exit 1
+      - name: Capture built source commit
+        id: source
+        run: |
+          echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+          echo "build_batch_id=$BUILD_BATCH_ID" >> "$GITHUB_OUTPUT"
+      - name: Detect exact artifact runtime
+        id: artifact_runtime
+        run: |
+          set -euo pipefail
+          marker_v2="scripts/cms-publish-artifact-runtime-v2.txt"
+          if [ -f "$marker_v2" ]; then
+            for required in \
+              scripts/prepare-cms-publish-artifact.cjs \
+              functions/lib/cms-publish-artifact.js \
+              scripts/update-publish-status.cjs \
+              site/scripts/build-with-production-sync.mjs \
+              site/src/lib/public-artifact-build.ts \
+              site/src/lib/public-artifact-bundle.ts \
+              site/src/lib/public-artifact-inventory.ts
+            do
+              if [ ! -f "$required" ]; then
+                echo "Exact artifact runtime v2 marker exists but $required is missing." >&2
+                exit 1
+              fi
+            done
+            # A runtime marker alone does not establish the prepare script's
+            # argument contract. Require the per-attempt batch argument too.
+            if ! grep -Fq 'const [queueId, buildBatchId, commitSha] = process.argv.slice(2);' scripts/prepare-cms-publish-artifact.cjs ||
+               ! grep -Fq "queueIncludesArtifact" scripts/update-publish-status.cjs ||
+               ! grep -Fq "preparePublicArtifactBundle" site/scripts/build-with-production-sync.mjs ||
+               ! grep -Fq "PUBLIC_ARTIFACT_BUNDLE_PATH" site/scripts/build-with-production-sync.mjs
+            then
+              echo "Exact artifact runtime v2 marker conflicts with its implementation." >&2
+              exit 1
+            fi
+            echo "version=v2" >> "$GITHUB_OUTPUT"
+            echo "ready=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          marker="scripts/cms-publish-artifact-runtime-v1.txt"
+          if [ ! -f "$marker" ]; then
+            echo "version=legacy" >> "$GITHUB_OUTPUT"
+            echo "ready=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::Reviewed production source predates the exact artifact runtime; using the prior build-only settlement until production is promoted."
+            exit 0
+          fi
+          for required in \
+            scripts/prepare-cms-publish-artifact.cjs \
+            functions/lib/cms-publish-artifact.js \
+            scripts/update-publish-status.cjs \
+            site/scripts/build-with-production-sync.mjs \
+            site/src/lib/cms-loader.ts \
+            site/src/lib/public-artifact-inventory.ts
+          do
+            if [ ! -f "$required" ]; then
+              echo "Exact artifact runtime marker exists but $required is missing." >&2
+              exit 1
+            fi
+          done
+          if ! grep -Fq 'const [queueId, buildBatchId, commitSha] = process.argv.slice(2);' scripts/prepare-cms-publish-artifact.cjs ||
+             ! grep -Fq "queueIncludesArtifact" scripts/update-publish-status.cjs ||
+             ! grep -Fq "PUBLIC_ARTIFACT_INVENTORY_CANDIDATE_PATH" site/scripts/build-with-production-sync.mjs
+          then
+            echo "Exact artifact runtime marker conflicts with its implementation." >&2
+            exit 1
+          fi
+          echo "version=v1" >> "$GITHUB_OUTPUT"
+          echo "ready=true" >> "$GITHUB_OUTPUT"
+      - name: Detect live Pages deployment runtime
+        id: deploy_runtime
+        run: |
+          set -euo pipefail
+          marker_v2="scripts/cms-publish-pages-deploy-v2.txt"
+          if [ -f "$marker_v2" ]; then
+            if [ "${{ steps.artifact_runtime.outputs.ready }}" != "true" ] ||
+               ! grep -Fq "verifyDeploymentWriteback" scripts/update-publish-status.cjs ||
+               ! grep -Fq "pagesDeploymentId" scripts/update-publish-status.cjs
+            then
+              echo "The live CMS deployment v2 marker conflicts with its required runtime." >&2
+              exit 1
+            fi
+            echo "version=v2" >> "$GITHUB_OUTPUT"
+            echo "ready=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          marker="scripts/cms-publish-pages-deploy-v1.txt"
+          if [ ! -f "$marker" ]; then
+            echo "version=legacy" >> "$GITHUB_OUTPUT"
+            echo "ready=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::Reviewed production source predates the live CMS deployment runtime; preserving build-only settlement until production is promoted."
+            exit 0
+          fi
+          if [ "${{ steps.artifact_runtime.outputs.ready }}" != "true" ] ||
+             ! grep -Fq "verifyDeploymentWriteback" scripts/update-publish-status.cjs
+          then
+            echo "The live CMS deployment marker conflicts with its required runtime." >&2
+            exit 1
+          fi
+          echo "version=v1" >> "$GITHUB_OUTPUT"
+          echo "ready=true" >> "$GITHUB_OUTPUT"
+      - name: Detect prepared Worker artifact runtime
+        id: worker_artifact_runtime
+        run: |
+          set -euo pipefail
+          marker="scripts/public-worker-artifact-runtime-v1.txt"
+          if [ ! -f "$marker" ]; then
+            echo "ready=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::Reviewed production source predates the prepared Worker artifact runtime; preserving its prior Pages artifact."
+            exit 0
+          fi
+          for required in \
+            site/package.json \
+            site/scripts/prepare-public-worker-artifact.ts \
+            site/src/lib/public-artifact-inventory.ts \
+            site/src/lib/public-worker-artifact.ts
+          do
+            if [ ! -f "$required" ]; then
+              echo "Prepared Worker artifact marker exists but $required is missing." >&2
+              exit 1
+            fi
+          done
+          if ! grep -Fq '"prepare:public-worker-artifact"' site/package.json; then
+            echo "The prepared Worker artifact marker conflicts with its package command." >&2
+            exit 1
+          fi
+          echo "ready=true" >> "$GITHUB_OUTPUT"
+      - name: Detect public receipt runtime
+        id: public_receipt_runtime
+        run: |
+          set -euo pipefail
+          marker="scripts/cms-publish-public-receipt-v1.txt"
+          if [ ! -f "$marker" ]; then
+            echo "ready=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::Reviewed production source predates the apex receipt probe; preserving the prior Pages completion timing until production is promoted."
+            exit 0
+          fi
+          if [ "${{ steps.deploy_runtime.outputs.ready }}" != "true" ] ||
+             [ "${{ steps.worker_artifact_runtime.outputs.ready }}" != "true" ] ||
+             [ ! -f site/scripts/probe-public-pages-receipt.ts ]
+          then
+            echo "The public receipt marker conflicts with its required runtime." >&2
+            exit 1
+          fi
+          echo "ready=true" >> "$GITHUB_OUTPUT"
+      - uses: actions/setup-node@v7
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: |
+            package-lock.json
+            site/package-lock.json
+      # Ahead of the install and build on purpose: a key from the wrong project
+      # should be rejected before it runs npm ci or a Firestore-reading build.
+      # This step deliberately writes nothing to disk. The credential file is
+      # created after the guarded install, so no dependency's install script
+      # ever runs with the key sitting in RUNNER_TEMP or
+      # GOOGLE_APPLICATION_CREDENTIALS pointing at it.
+      - name: Check out trusted configuration renderer
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ github.sha }}
+          path: .configuration-render-gate
+          persist-credentials: false
+          sparse-checkout: |
+            scripts/render-development-config.mjs
+            config/development-inputs.json
+          sparse-checkout-cone-mode: false
+      - name: Render deployment resource configuration
+        working-directory: ${{ github.workspace }}
+        run: |
+          set -euo pipefail
+          mv .configuration-render-gate "$RUNNER_TEMP/configuration-render-gate"
+          node "$RUNNER_TEMP/configuration-render-gate/scripts/render-development-config.mjs" --production --root "$GITHUB_WORKSPACE"
+      - name: Verify the publish credential's project
+        id: verify_creds
+        if: ${{ env.FIREBASE_SERVICE_ACCOUNT_CONFIGURED == 'true' }}
+        env:
+          SA: ${{ secrets.FIREBASE_PUBLISH_SERVICE_ACCOUNT || secrets.FIREBASE_SERVICE_ACCOUNT }}
+        run: |
+          # || true so the message below is what the operator sees. Without it
+          # the step dies on the assignment under bash -e and prints nothing
+          # actionable.
+          project_id="$(printf '%s' "$SA" | node -e 'let s="";process.stdin.on("data",d=>{s+=d});process.stdin.on("end",()=>{try{const p=JSON.parse(s).project_id;if(p)process.stdout.write(p)}catch(e){}})' || true)"
+          # Preview and staging both refuse a foreign key here, and the publish
+          # path has to as well: FIREBASE_PROJECT_ID is taken from the key
+          # itself, so a key from another Firebase project would read and write
+          # that project while this project's queue row stayed in "publishing".
+          if [ "$project_id" != "njpbs-site" ]; then
+            echo "The configured publish credential belongs to Firebase project '${project_id:-<unreadable>}', not njpbs-site. Set FIREBASE_PUBLISH_SERVICE_ACCOUNT (or FIREBASE_SERVICE_ACCOUNT) to a key from the njpbs-site project and re-run; queue item ${QUEUE_ID} keeps its current status until then." >&2
+            exit 1
+          fi
+          echo "project_id=$project_id" >> "$GITHUB_OUTPUT"
+      - name: Install site deps
+        working-directory: site
+        timeout-minutes: 5
+        run: npm ci --ignore-scripts
+      - name: Install queue and artifact deps
+        id: root_deps
+        timeout-minutes: 5
+        run: npm ci --ignore-scripts
+      # A CMS deployment replaces the complete Pages artifact. Refresh the same
+      # external data as pages.yml before reserving the Firestore cutoff so one
+      # editorial change cannot restore an older committed cache.
+      - name: Prepare local search model for frozen builds
+        working-directory: site
+        run: |
+          # Older reviewed release refs do not have this build dependency.
+          if [ -f scripts/prepare-search-model.ts ]; then
+            node --import ./node_modules/tsx/dist/loader.mjs scripts/prepare-search-model.ts
+          fi
+      # Finish the credential-bearing shell before public feed code starts.
+      - name: Refresh Media Manager content
+        working-directory: site
+        env:
+          REQUIRE_FRESH_CONTENT: "1"
+          MEDIA_MANAGER_API_KEY: ${{ secrets.MEDIA_MANAGER_API_KEY }}
+          MEDIA_MANAGER_API_SECRET: ${{ secrets.MEDIA_MANAGER_API_SECRET }}
+          MEDIA_MANAGER_AUDIENCE: WNJT
+          MEDIA_MANAGER_PAGE_SIZE: "100"
+        # Inline commands also work when deploying an older reviewed source.
+        run: npm run sync:launch-content
+      - name: Refresh external content concurrently
+        working-directory: site
+        env:
+          REQUIRE_FRESH_CONTENT: "1"
+        run: |
+          set -euo pipefail
+          npm run sync:spotlight-news &
+          spotlight_pid=$!
+          npm run sync:schedule &
+          schedule_pid=$!
+          # Wait for all writers even after a failure. Never reserve a snapshot
+          # or build a replacement artifact from a partially refreshed tree.
+          result=0
+          for sync_pid in "$spotlight_pid" "$schedule_pid"; do
+            if ! wait "$sync_pid"; then
+              result=1
+            fi
+          done
+          exit "$result"
+      # After the install, so the key exists on disk only for the build that
+      # needs it. Skipped automatically when the verify step above failed.
+      - name: Configure Firestore build credentials
+        if: ${{ env.FIREBASE_SERVICE_ACCOUNT_CONFIGURED == 'true' }}
+        env:
+          SA: ${{ secrets.FIREBASE_PUBLISH_SERVICE_ACCOUNT || secrets.FIREBASE_SERVICE_ACCOUNT }}
+          PROJECT_ID: ${{ steps.verify_creds.outputs.project_id }}
+        run: |
+          credentials_path="$RUNNER_TEMP/service-account.json"
+          printf '%s' "$SA" > "$credentials_path"
+          echo "GOOGLE_APPLICATION_CREDENTIALS=$credentials_path" >> "$GITHUB_ENV"
+          echo "FIREBASE_PROJECT_ID=$PROJECT_ID" >> "$GITHUB_ENV"
+      - name: Reserve exact public artifact cutoff
+        id: artifact
+        if: steps.artifact_runtime.outputs.ready == 'true'
+        env:
+          SOURCE_SHA: ${{ steps.source.outputs.sha }}
+        run: node scripts/prepare-cms-publish-artifact.cjs "$QUEUE_ID" "$BUILD_BATCH_ID" "$SOURCE_SHA"
+      - name: Build site
+        if: steps.artifact_runtime.outputs.ready != 'true' || steps.artifact.outputs.build_required != 'false'
+        working-directory: site
+        timeout-minutes: 10
+        env:
+          # Strict only when credentials are configured: the pre-secret bootstrap
+          # keeps the documented no-op contract instead of failing every dispatch.
+          CMS_LOADER_STRICT: ${{ env.FIREBASE_SERVICE_ACCOUNT_CONFIGURED == 'true' && '1' || '' }}
+          # A publish build may read immutable snapshots only. Draft builds set
+          # this to draft plus one CMS_PREVIEW_PAGE_ID in their private workflow.
+          CMS_CONTENT_MODE: published
+          # Each workflow attempt has its own immutable public build id. The
+          # loader reads that attempt's Firestore cutoff and emits its receipt
+          # outside dist. A failed or cancelled retry therefore gets fresh data.
+          PUBLIC_BUILD_BATCH_ID: ${{ steps.artifact_runtime.outputs.ready == 'true' && env.BUILD_BATCH_ID || '' }}
+          PUBLIC_BUILD_COMMIT_SHA: ${{ steps.artifact_runtime.outputs.ready == 'true' && steps.source.outputs.sha || '' }}
+          PUBLIC_ARTIFACT_INVENTORY_PATH: ${{ steps.artifact_runtime.outputs.ready == 'true' && format('{0}/cms-public-artifact.json', runner.temp) || '' }}
+          PUBLIC_GA4_REQUIRED: "1"
+          PUBLIC_GA4_MEASUREMENT_ID: ${{ vars.PUBLIC_GA4_MEASUREMENT_ID }}
+          PUBLIC_REPORT_ENDPOINT: ${{ vars.PUBLIC_REPORT_ENDPOINT }}
+          PUBLIC_SHARE_INTAKE_ENDPOINT: ${{ vars.PUBLIC_SHARE_INTAKE_ENDPOINT || 'https://intake.njpbs.org' }}
+          PUBLIC_SHARE_PAGE: ${{ vars.PUBLIC_SHARE_PAGE || '' }}
+          PUBLIC_TURNSTILE_SITEKEY: ${{ vars.PUBLIC_TURNSTILE_SITEKEY }}
+        run: npm run build
+      - name: Public homepage contract before publish
+        if: steps.artifact_runtime.outputs.ready != 'true' || steps.artifact.outputs.build_required != 'false'
+        working-directory: site
+        run: npm run assert:public-contract
+      - name: Guardrail scan before publish
+        if: steps.artifact_runtime.outputs.ready != 'true' || steps.artifact.outputs.build_required != 'false'
+        working-directory: site
+        run: npm run guardrails
+      - name: Clean up Firestore build credentials
+        if: always()
+        run: rm -f "$RUNNER_TEMP/service-account.json"
+      - name: Bind the final public Worker artifact
+        if: >-
+          steps.deploy_runtime.outputs.ready == 'true' &&
+          steps.worker_artifact_runtime.outputs.ready == 'true' &&
+          steps.artifact.outputs.build_required != 'false'
+        working-directory: site
+        run: >-
+          npm run prepare:public-worker-artifact --
+          "$RUNNER_TEMP/cms-public-artifact.json"
+          "$RUNNER_TEMP/cms-public-worker-artifact.json"
+      - name: Prepare terminal writeback runtime
+        if: >-
+          steps.deploy_runtime.outputs.ready == 'true' &&
+          steps.artifact.outputs.build_required != 'false'
+        env:
+          PUBLIC_RECEIPT_RUNTIME_READY: ${{ steps.public_receipt_runtime.outputs.ready }}
+          WORKER_ARTIFACT_RUNTIME_READY: ${{ steps.worker_artifact_runtime.outputs.ready }}
+        run: |
+          set -euo pipefail
+          terminal_dir="$RUNNER_TEMP/cms-writeback"
+          mkdir -p "$terminal_dir"
+          ./node_modules/.bin/esbuild scripts/update-publish-status.cjs \
+            --bundle \
+            --platform=node \
+            --target=node22 \
+            --outfile="$terminal_dir/update-publish-status.cjs"
+          if [ "$PUBLIC_RECEIPT_RUNTIME_READY" = "true" ]; then
+            ./node_modules/.bin/esbuild site/scripts/probe-public-pages-receipt.ts \
+              --bundle \
+              --platform=node \
+              --target=node22 \
+              --format=esm \
+              --outfile="$terminal_dir/probe-public-pages-receipt.mjs"
+          fi
+          cp "$RUNNER_TEMP/cms-public-artifact.json" \
+            "$terminal_dir/cms-public-artifact.json"
+          checksum_files=(update-publish-status.cjs cms-public-artifact.json)
+          if [ "$WORKER_ARTIFACT_RUNTIME_READY" = "true" ]; then
+            cp "$RUNNER_TEMP/cms-public-worker-artifact.json" \
+              "$terminal_dir/cms-public-worker-artifact.json"
+            checksum_files+=(cms-public-worker-artifact.json)
+          fi
+          if [ "$PUBLIC_RECEIPT_RUNTIME_READY" = "true" ]; then
+            checksum_files+=(probe-public-pages-receipt.mjs)
+          fi
+          (
+            cd "$terminal_dir"
+            sha256sum "${checksum_files[@]}" > SHA256SUMS
+          )
+          node -e 'const runtime=require(process.argv[1]);if(typeof runtime.updatePublishStatus!=="function"||typeof runtime.verifyDeploymentWriteback!=="function")process.exit(1)' \
+            "$terminal_dir/update-publish-status.cjs"
+          if [ "$PUBLIC_RECEIPT_RUNTIME_READY" = "true" ]; then
+            node -e 'import(process.argv[2]).then(runtime=>{if(typeof runtime.probePublicPagesReceipt!=="function")process.exit(1)})' verify \
+              "$terminal_dir/probe-public-pages-receipt.mjs"
+          fi
+      - name: Upload terminal writeback runtime
+        if: >-
+          steps.deploy_runtime.outputs.ready == 'true' &&
+          steps.artifact.outputs.build_required != 'false'
+        uses: actions/upload-artifact@v7
+        with:
+          name: cms-publish-writeback
+          path: ${{ runner.temp }}/cms-writeback
+          if-no-files-found: error
+          retention-days: 1
+      - name: Configure GitHub Pages
+        id: pages
+        if: >-
+          steps.deploy_runtime.outputs.ready == 'true' &&
+          steps.artifact.outputs.build_required != 'false'
+        uses: actions/configure-pages@v6
+      - name: Upload exact CMS publish artifact
+        if: >-
+          steps.deploy_runtime.outputs.ready == 'true' &&
+          steps.artifact.outputs.build_required != 'false'
+        uses: actions/upload-pages-artifact@v5
+        with:
+          path: site/dist
+      - name: Mark exact artifact ready for deployment
+        id: release
+        if: >-
+          steps.deploy_runtime.outputs.ready == 'true' &&
+          steps.artifact.outputs.build_required != 'false'
+        run: echo "ready=true" >> "$GITHUB_OUTPUT"
+
+      # ---- Publish-queue status writeback (guarded) --------------------------
+      - name: Check whether writeback is configured
+        id: wb
+        if: always()
+        env:
+          SA: ${{ secrets.FIREBASE_PUBLISH_SERVICE_ACCOUNT || secrets.FIREBASE_SERVICE_ACCOUNT }}
+        run: |
+          # Every writeback step below materializes the secret itself rather
+          # than reusing the build credential, so this check has to judge the
+          # key, not the verify step. Reading that step's outcome cannot work:
+          # writeback runs on failure and on cancellation, and a run cancelled
+          # during checkout or setup-node leaves the outcome "skipped", which is
+          # neither proof the key is ours nor grounds to strand the row. So
+          # validate the secret here, inline and independent of the checkout,
+          # and the answer holds however the run arrived.
+          ready=false
+          if [ -n "${SA:-}" ] && [ -n "${QUEUE_ID:-}" ]; then
+            project_id="$(printf '%s' "$SA" | node -e 'let s="";process.stdin.on("data",d=>{s+=d});process.stdin.on("end",()=>{try{const p=JSON.parse(s).project_id;if(p)process.stdout.write(p)}catch(e){}})' || true)"
+            if [ "$project_id" = "njpbs-site" ]; then
+              ready=true
+            fi
+          fi
+          if [ "$ready" != "true" ]; then
+            echo "Writeback skipped: no credential, no queue id, or a credential that does not belong to the njpbs-site Firebase project. Queue item ${QUEUE_ID:-<none>} keeps its current status; clear it by setting a njpbs-site key and re-running this publish."
+          fi
+          echo "ready=$ready" >> "$GITHUB_OUTPUT"
+      - name: Install writeback deps
+        if: always() && steps.wb.outputs.ready == 'true' && steps.root_deps.outcome != 'success'
+        timeout-minutes: 3
+        run: npm ci --ignore-scripts
+      - name: Writeback success
+        if: >-
+          success() &&
+          steps.wb.outputs.ready == 'true' &&
+          steps.deploy_runtime.outputs.ready != 'true' &&
+          (steps.artifact_runtime.outputs.ready != 'true' ||
+           steps.artifact.outputs.build_required != 'false')
+        env:
+          SA: ${{ secrets.FIREBASE_PUBLISH_SERVICE_ACCOUNT || secrets.FIREBASE_SERVICE_ACCOUNT }}
+          SOURCE_SHA: ${{ steps.source.outputs.sha }}
+          ARTIFACT_RECEIPT: ${{ runner.temp }}/cms-public-artifact.json
+          ARTIFACT_RUNTIME_READY: ${{ steps.artifact_runtime.outputs.ready }}
+        run: |
+          printf '%s' "$SA" > service-account.json
+          if [ "$ARTIFACT_RUNTIME_READY" = "true" ]; then
+            node scripts/update-publish-status.cjs "$QUEUE_ID" success "$SOURCE_SHA" "$ARTIFACT_RECEIPT"
+          else
+            node scripts/update-publish-status.cjs "$QUEUE_ID" success "$SOURCE_SHA"
+          fi
+          rm -f service-account.json
+      - name: Writeback failure
+        if: failure() && steps.wb.outputs.ready == 'true'
+        env:
+          SA: ${{ secrets.FIREBASE_PUBLISH_SERVICE_ACCOUNT || secrets.FIREBASE_SERVICE_ACCOUNT }}
+        run: |
+          printf '%s' "$SA" > service-account.json
+          node scripts/update-publish-status.cjs "$QUEUE_ID" failed
+          rm -f service-account.json
+      - name: Writeback cancelled
+        if: cancelled() && steps.wb.outputs.ready == 'true'
+        env:
+          SA: ${{ secrets.FIREBASE_PUBLISH_SERVICE_ACCOUNT || secrets.FIREBASE_SERVICE_ACCOUNT }}
+        run: |
+          printf '%s' "$SA" > service-account.json
+          node scripts/update-publish-status.cjs "$QUEUE_ID" cancelled
+          rm -f service-account.json
+
+  deploy:
+    needs: [authorize, build]
+    if: >-
+      (vars.CANONICAL_GITHUB_REPOSITORY != '' && vars.CANONICAL_GITHUB_REPOSITORY_ID != '' && github.repository == vars.CANONICAL_GITHUB_REPOSITORY && github.repository_id == vars.CANONICAL_GITHUB_REPOSITORY_ID) &&
+      contains(fromJSON(vars.CMS_PUBLISH_GITHUB_TRUSTED_ACTORS || '[]'), github.triggering_actor) &&
+      github.ref == 'refs/heads/main' &&
+      needs.authorize.result == 'success' &&
+      needs.build.result == 'success' &&
+      needs.build.outputs.deploy_ready == 'true'
+    outputs:
+      deployment_outcome: ${{ steps.deployment.outcome }}
+      public_receipt_outcome: ${{ steps.public_receipt.outcome }}
+      visible_at_ms: ${{ steps.public_receipt.outputs.visible_at_ms || steps.legacy_completion.outputs.visible_at_ms }}
+    permissions:
+      actions: read
+      pages: write
+      id-token: write
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    env:
+      BUILD_BATCH_ID: ${{ needs.build.outputs.build_batch_id }}
+      DEPLOY_RUNTIME_VERSION: ${{ needs.build.outputs.deploy_runtime_version }}
+      PAGES_DEPLOYMENT_ID: ${{ github.sha }}
+      PUBLIC_RECEIPT_READY: ${{ needs.build.outputs.public_receipt_ready }}
+      PUBLIC_URL: ${{ needs.build.outputs.public_url }}
+      QUEUE_ID: ${{ github.event.client_payload.queueId }}
+      SOURCE_SHA: ${{ needs.build.outputs.source_sha }}
+    steps:
+      - uses: actions/setup-node@v7
+        with:
+          node-version: "22"
+      - name: Export terminal receipt paths
+        env:
+          RECEIPT_DIRECTORY: ${{ runner.temp }}/cms-writeback
+        run: |
+          echo "ARTIFACT_RECEIPT=$RECEIPT_DIRECTORY/cms-public-artifact.json" >> "$GITHUB_ENV"
+          echo "DEPLOYMENT_RECEIPT=$RECEIPT_DIRECTORY/cms-deployment.json" >> "$GITHUB_ENV"
+      - name: Download terminal writeback runtime
+        uses: actions/download-artifact@v8
+        with:
+          name: cms-publish-writeback
+          path: ${{ runner.temp }}/cms-writeback
+      - name: Verify terminal writeback before deploy
+        id: writeback_preflight
+        env:
+          SA: ${{ secrets.FIREBASE_PUBLISH_SERVICE_ACCOUNT || secrets.FIREBASE_SERVICE_ACCOUNT }}
+          PUBLIC_URL: ${{ needs.build.outputs.public_url }}
+          RUN_ATTEMPT: ${{ github.run_attempt }}
+          RUN_ID: ${{ github.run_id }}
+        run: |
+          set -euo pipefail
+          cd "$RUNNER_TEMP/cms-writeback"
+          sha256sum -c SHA256SUMS
+          node -e 'const runtime=require(process.argv[1]);if(typeof runtime.updatePublishStatus!=="function"||typeof runtime.verifyDeploymentWriteback!=="function")process.exit(1)' \
+            "$RUNNER_TEMP/cms-writeback/update-publish-status.cjs"
+          if [ "$PUBLIC_RECEIPT_READY" = "true" ]; then
+            node -e 'import(process.argv[2]).then(runtime=>{if(typeof runtime.probePublicPagesReceipt!=="function")process.exit(1)})' verify \
+              "$RUNNER_TEMP/cms-writeback/probe-public-pages-receipt.mjs"
+          fi
+          node <<'NODE'
+          const { writeFileSync } = require("node:fs");
+          const runAttempt = Number(process.env.RUN_ATTEMPT);
+          const deployment = {
+            buildBatchId: process.env.BUILD_BATCH_ID,
+            runId: process.env.RUN_ID,
+            runAttempt,
+            publicUrl: process.env.PUBLIC_URL,
+          };
+          if (process.env.DEPLOY_RUNTIME_VERSION === "v2") {
+            deployment.pagesDeploymentId = process.env.PAGES_DEPLOYMENT_ID;
+          }
+          writeFileSync(process.env.DEPLOYMENT_RECEIPT, JSON.stringify(deployment));
+          NODE
+          project_id="$(printf '%s' "$SA" | node -e 'let s="";process.stdin.on("data",d=>{s+=d});process.stdin.on("end",()=>{try{const p=JSON.parse(s).project_id;if(p)process.stdout.write(p)}catch(e){}})' || true)"
+          if [ "$project_id" != "njpbs-site" ]; then
+            echo "The terminal writeback credential does not belong to njpbs-site." >&2
+            exit 1
+          fi
+          credential_path="$RUNNER_TEMP/cms-writeback/service-account.json"
+          trap 'rm -f "$credential_path"' EXIT
+          printf '%s' "$SA" > "$credential_path"
+          GOOGLE_APPLICATION_CREDENTIALS="$credential_path" \
+            node "$RUNNER_TEMP/cms-writeback/update-publish-status.cjs" \
+              verify-deployment \
+              "$QUEUE_ID" \
+              "$SOURCE_SHA" \
+              "$ARTIFACT_RECEIPT" \
+              "$DEPLOYMENT_RECEIPT"
+      - name: Deploy exact CMS publish artifact
+        id: deployment
+        uses: actions/deploy-pages@v5
+      - name: Verify exact CMS artifact at the public apex
+        id: public_receipt
+        if: steps.deployment.outcome == 'success' && env.PUBLIC_RECEIPT_READY == 'true'
+        continue-on-error: true
+        run: |
+          set -euo pipefail
+          node "$RUNNER_TEMP/cms-writeback/probe-public-pages-receipt.mjs" \
+            "$PUBLIC_URL" \
+            "$RUNNER_TEMP/cms-writeback/cms-public-worker-artifact.json" \
+            "$DEPLOYMENT_RECEIPT"
+          visible_at_ms="$(node -e 'const value=require(process.argv[1]);if(!Number.isSafeInteger(value.visibleAtMs))process.exit(1);process.stdout.write(String(value.visibleAtMs))' "$DEPLOYMENT_RECEIPT")"
+          echo "visible_at_ms=$visible_at_ms" >> "$GITHUB_OUTPUT"
+      - name: Preserve legacy Pages completion timing
+        id: legacy_completion
+        if: steps.deployment.outcome == 'success' && env.PUBLIC_RECEIPT_READY != 'true'
+        run: |
+          set -euo pipefail
+          visible_at_ms="$(date +%s%3N)"
+          VISIBLE_AT_MS="$visible_at_ms" node <<'NODE'
+          const { readFileSync, writeFileSync } = require("node:fs");
+          const receipt = JSON.parse(readFileSync(process.env.DEPLOYMENT_RECEIPT, "utf8"));
+          receipt.visibleAtMs = Number(process.env.VISIBLE_AT_MS);
+          writeFileSync(process.env.DEPLOYMENT_RECEIPT, JSON.stringify(receipt));
+          NODE
+          echo "visible_at_ms=$visible_at_ms" >> "$GITHUB_OUTPUT"
+      - name: Write terminal deployment result
+        if: always() && steps.writeback_preflight.outcome == 'success'
+        env:
+          DEPLOY_OUTCOME: ${{ steps.deployment.outcome }}
+          PUBLIC_RECEIPT_OUTCOME: ${{ steps.public_receipt.outcome }}
+          SA: ${{ secrets.FIREBASE_PUBLISH_SERVICE_ACCOUNT || secrets.FIREBASE_SERVICE_ACCOUNT }}
+        run: |
+          set -euo pipefail
+          credential_path="$RUNNER_TEMP/cms-writeback/service-account.json"
+          trap 'rm -f "$credential_path"' EXIT
+          printf '%s' "$SA" > "$credential_path"
+          export GOOGLE_APPLICATION_CREDENTIALS="$credential_path"
+          if [ "$DEPLOY_OUTCOME" = "success" ] &&
+             { [ "$PUBLIC_RECEIPT_READY" != "true" ] || [ "$PUBLIC_RECEIPT_OUTCOME" = "success" ]; }
+          then
+            node "$RUNNER_TEMP/cms-writeback/update-publish-status.cjs" \
+              "$QUEUE_ID" \
+              success \
+              "$SOURCE_SHA" \
+              "$ARTIFACT_RECEIPT" \
+              "$DEPLOYMENT_RECEIPT"
+          elif [ "$DEPLOY_OUTCOME" = "success" ] &&
+               [ "$PUBLIC_RECEIPT_READY" = "true" ]
+          then
+            node "$RUNNER_TEMP/cms-writeback/update-publish-status.cjs" \
+              "$QUEUE_ID" \
+              public_unconfirmed \
+              "$SOURCE_SHA" \
+              "$ARTIFACT_RECEIPT" \
+              "$DEPLOYMENT_RECEIPT"
+          elif [ "$DEPLOY_OUTCOME" = "cancelled" ]; then
+            node "$RUNNER_TEMP/cms-writeback/update-publish-status.cjs" \
+              "$QUEUE_ID" cancelled
+          elif [ "$DEPLOY_OUTCOME" = "failure" ] ||
+               [ "$DEPLOY_OUTCOME" = "skipped" ]
+          then
+            node "$RUNNER_TEMP/cms-writeback/update-publish-status.cjs" \
+              "$QUEUE_ID" failed
+          else
+            echo "The Pages deployment or public receipt result is invalid." >&2
+            exit 1
+          fi
+
+  finalize:
+    environment: production
+    needs: [authorize, build, deploy]
+    if: >-
+      always() &&
+      (vars.CANONICAL_GITHUB_REPOSITORY != '' && vars.CANONICAL_GITHUB_REPOSITORY_ID != '' && github.repository == vars.CANONICAL_GITHUB_REPOSITORY && github.repository_id == vars.CANONICAL_GITHUB_REPOSITORY_ID) &&
+      contains(fromJSON(vars.CMS_PUBLISH_GITHUB_TRUSTED_ACTORS || '[]'), github.triggering_actor) &&
+      github.ref == 'refs/heads/main' &&
+      needs.authorize.result == 'success' &&
+      needs.build.result == 'success' &&
+      needs.build.outputs.deploy_ready == 'true' &&
+      needs.deploy.result != 'success'
+    permissions:
+      actions: read
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    env:
+      BUILD_BATCH_ID: ${{ needs.build.outputs.build_batch_id }}
+      DEPLOYMENT_OUTCOME: ${{ needs.deploy.outputs.deployment_outcome }}
+      DEPLOY_RESULT: ${{ needs.deploy.result }}
+      DEPLOY_RUNTIME_VERSION: ${{ needs.build.outputs.deploy_runtime_version }}
+      PAGES_DEPLOYMENT_ID: ${{ github.sha }}
+      PUBLIC_URL: ${{ needs.build.outputs.public_url }}
+      PUBLIC_RECEIPT_OUTCOME: ${{ needs.deploy.outputs.public_receipt_outcome }}
+      PUBLIC_RECEIPT_READY: ${{ needs.build.outputs.public_receipt_ready }}
+      QUEUE_ID: ${{ github.event.client_payload.queueId }}
+      RUN_ATTEMPT: ${{ github.run_attempt }}
+      RUN_ID: ${{ github.run_id }}
+      SOURCE_SHA: ${{ needs.build.outputs.source_sha }}
+      VISIBLE_AT_MS: ${{ needs.deploy.outputs.visible_at_ms }}
+    steps:
+      - uses: actions/setup-node@v7
+        with:
+          node-version: "22"
+      - name: Export terminal receipt paths
+        env:
+          RECEIPT_DIRECTORY: ${{ runner.temp }}/cms-writeback
+        run: |
+          echo "ARTIFACT_RECEIPT=$RECEIPT_DIRECTORY/cms-public-artifact.json" >> "$GITHUB_ENV"
+          echo "DEPLOYMENT_RECEIPT=$RECEIPT_DIRECTORY/cms-deployment.json" >> "$GITHUB_ENV"
+      - name: Download prepared terminal runtime
+        uses: actions/download-artifact@v8
+        with:
+          name: cms-publish-writeback
+          path: ${{ runner.temp }}/cms-writeback
+      - name: Verify prepared terminal runtime
+        run: |
+          set -euo pipefail
+          cd "$RUNNER_TEMP/cms-writeback"
+          sha256sum -c SHA256SUMS
+          node -e 'const runtime=require(process.argv[1]);if(typeof runtime.updatePublishStatus!=="function"||typeof runtime.verifyDeploymentWriteback!=="function")process.exit(1)' \
+            "$RUNNER_TEMP/cms-writeback/update-publish-status.cjs"
+      - name: Prepare deployment receipt
+        run: |
+          node <<'NODE'
+          const { writeFileSync } = require("node:fs");
+          const deployment = {
+            buildBatchId: process.env.BUILD_BATCH_ID,
+            runId: process.env.RUN_ID,
+            runAttempt: Number(process.env.RUN_ATTEMPT),
+            publicUrl: process.env.PUBLIC_URL,
+          };
+          if (process.env.DEPLOY_RUNTIME_VERSION === "v2") {
+            deployment.pagesDeploymentId = process.env.PAGES_DEPLOYMENT_ID;
+          }
+          const publicReceiptVerified =
+            process.env.PUBLIC_RECEIPT_READY !== "true" ||
+            process.env.PUBLIC_RECEIPT_OUTCOME === "success";
+          if (process.env.DEPLOYMENT_OUTCOME === "success" && publicReceiptVerified) {
+            if (/^\d{1,16}$/.test(process.env.VISIBLE_AT_MS ?? "")) {
+              deployment.visibleAtMs = Number(process.env.VISIBLE_AT_MS);
+            }
+          }
+          writeFileSync(process.env.DEPLOYMENT_RECEIPT, JSON.stringify(deployment));
+          NODE
+      - name: Write fallback terminal result
+        env:
+          SA: ${{ secrets.FIREBASE_PUBLISH_SERVICE_ACCOUNT || secrets.FIREBASE_SERVICE_ACCOUNT }}
+        run: |
+          set -euo pipefail
+          project_id="$(printf '%s' "$SA" | node -e 'let s="";process.stdin.on("data",d=>{s+=d});process.stdin.on("end",()=>{try{const p=JSON.parse(s).project_id;if(p)process.stdout.write(p)}catch(e){}})' || true)"
+          if [ "$project_id" != "njpbs-site" ]; then
+            echo "The terminal writeback credential does not belong to njpbs-site." >&2
+            exit 1
+          fi
+          credential_path="$RUNNER_TEMP/cms-writeback/service-account.json"
+          trap 'rm -f "$credential_path"' EXIT
+          printf '%s' "$SA" > "$credential_path"
+          export GOOGLE_APPLICATION_CREDENTIALS="$credential_path"
+          if [ "$DEPLOYMENT_OUTCOME" = "success" ] &&
+             { [ "$PUBLIC_RECEIPT_READY" != "true" ] || [ "$PUBLIC_RECEIPT_OUTCOME" = "success" ]; }
+          then
+            node "$RUNNER_TEMP/cms-writeback/update-publish-status.cjs" \
+              "$QUEUE_ID" \
+              success \
+              "$SOURCE_SHA" \
+              "$ARTIFACT_RECEIPT" \
+              "$DEPLOYMENT_RECEIPT"
+          elif [ "$DEPLOYMENT_OUTCOME" = "success" ] &&
+               [ "$PUBLIC_RECEIPT_READY" = "true" ]
+          then
+            node "$RUNNER_TEMP/cms-writeback/update-publish-status.cjs" \
+              "$QUEUE_ID" \
+              public_unconfirmed \
+              "$SOURCE_SHA" \
+              "$ARTIFACT_RECEIPT" \
+              "$DEPLOYMENT_RECEIPT"
+          elif [ "$DEPLOY_RESULT" = "cancelled" ]; then
+            node "$RUNNER_TEMP/cms-writeback/update-publish-status.cjs" \
+              "$QUEUE_ID" cancelled
+          else
+            node "$RUNNER_TEMP/cms-writeback/update-publish-status.cjs" \
+              "$QUEUE_ID" failed
+          fi

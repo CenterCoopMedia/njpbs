@@ -1,0 +1,10 @@
+{
+  "date": "2026-11-01",
+  "kind": "fixed",
+  "title": "Keep watching private video previews",
+  "body": "Private video previews renew access while you watch. The player keeps your place and speed and applies the fresh link when you pause or finish playing.",
+  "prs": [
+    4384
+  ],
+  "order": -7
+}

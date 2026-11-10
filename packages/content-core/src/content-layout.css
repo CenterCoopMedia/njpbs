@@ -1,0 +1,33 @@
+/* Shared by public pages and the editor canvas. Mobile follows DOM reading order. */
+.cms-row {
+  display: grid;
+  grid-template-columns: var(--cms-columns);
+  gap: clamp(1rem, 2.5vw, 2rem);
+  width: 100%;
+  min-width: 0;
+}
+
+.cms-row__column {
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.cms-row__column > .cms-block {
+  width: 100%;
+  min-width: 0;
+  max-width: none;
+  margin: 0;
+}
+
+.cms-row__column :is(img, video, iframe) {
+  max-width: 100%;
+}
+
+@media (max-width: 47.99rem) {
+  .cms-row {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}

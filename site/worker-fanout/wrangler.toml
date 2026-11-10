@@ -1,0 +1,36 @@
+# Cloudflare Email Worker: the fan-out for the shared njpbs.org addresses.
+
+name = "njpbs-fanout"
+main = "index.ts"
+
+# The live script was deployed through the API with no compatibility date at all,
+# so it runs on Cloudflare's default baseline. wrangler requires one, and pinning
+# it is better than inheriting a default that can move. This matches ../worker/.
+# Keep this baseline stable for forwarding, Web Crypto, and the Durable Object
+# receipt store; assess compatibility changes separately from routing changes.
+compatibility_date = "2026-07-01"
+
+# No HTTP surface: this worker only has an email() handler. A workers.dev URL
+# would serve nothing but a 404 and would be one more public name to think about.
+workers_dev = false
+preview_urls = false
+
+# FANOUT_DESTINATIONS_JSON is a required Worker secret containing recipient groups.
+# Set it before enabling Email Routing. Which addresses reach this worker is
+# decided by the zone's Email Routing rules, not from this file (see README.md);
+# where each address goes once it arrives is decided in fanout.ts.
+
+# Durable acceptance receipts and short claims, keyed only by hashes. A future
+# reviewed deployment creates the namespace with this migration.
+[[durable_objects.bindings]]
+name = "FANOUT_DELIVERIES"
+class_name = "FanoutDeliveryLedger"
+
+[[migrations]]
+tag = "fanout-deliveries-v1"
+new_sqlite_classes = ["FanoutDeliveryLedger"]
+
+[observability.logs]
+enabled = true
+head_sampling_rate = 1
+invocation_logs = false

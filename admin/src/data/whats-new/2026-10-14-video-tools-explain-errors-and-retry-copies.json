@@ -1,0 +1,12 @@
+{
+  "date": "2026-10-14",
+  "kind": "improved",
+  "title": "Video tools explain errors and retry copies",
+  "body": "Video tools now say why a browser check failed. Boardwalk retries a failed video viewing copy, and it warns you before you download a video that has a credit requirement.",
+  "prs": [
+    3399,
+    3495,
+    2845
+  ],
+  "order": -4
+}

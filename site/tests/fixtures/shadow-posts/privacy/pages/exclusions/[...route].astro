@@ -1,0 +1,22 @@
+---
+import PublicSiteLayout from "../../../../../../src/layouts/PublicSiteLayout.astro";
+
+export function getStaticPaths() {
+  return [
+    { route: "adult", props: {} },
+    { route: "kids/games", props: {} },
+    { route: "canonical-alias", props: { canonicalPath: "/kids/games/" } },
+    { route: "child-template", props: { childDirected: true } },
+    { route: "renamed-kids", props: { editTarget: { type: "page" as const, id: "kids" } } },
+    { route: "preview", props: { preview: true } },
+    { route: "no-analytics", props: { noAnalytics: true } },
+    { route: "noindex", props: { noindex: true } },
+    { route: "redirect", props: { metaRefreshTo: "/about/" } },
+    { route: "video", props: { video: true } },
+  ].map(({ route, props }) => ({ params: { route }, props }));
+}
+const { video, ...props } = Astro.props;
+---
+<PublicSiteLayout title="Privacy fixture" description="Local fixture" preview={false} noindex={false} {...props}>
+  <main><h1>Privacy fixture</h1>{video && <video src="/local-fixture.mp4"></video>}</main>
+</PublicSiteLayout>

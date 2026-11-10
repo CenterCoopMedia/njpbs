@@ -1,0 +1,14 @@
+{
+  "date": "2026-09-07",
+  "kind": "improved",
+  "title": "Lists and sign-in are easier to scan",
+  "body": "Pages and Posts lists show the most important details first, and the editor has a clearer order. The Google sign-in button is easier to find.",
+  "prs": [
+    1617,
+    1616,
+    1381,
+    1305,
+    1136
+  ],
+  "order": -3
+}

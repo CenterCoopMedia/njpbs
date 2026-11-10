@@ -1,0 +1,10 @@
+{
+  "production": {
+    "media": ["media.njpbs.org"],
+    "brand": ["njpbs.org"]
+  },
+  "development": {
+    "media": ["media.njpbs.org", "dev-media.example.org"],
+    "brand": ["njpbs.org", "dev-public.example.org"]
+  }
+}

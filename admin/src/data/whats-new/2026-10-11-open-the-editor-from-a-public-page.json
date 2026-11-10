@@ -1,0 +1,10 @@
+{
+  "date": "2026-10-11",
+  "kind": "new",
+  "title": "Open the editor from a public page",
+  "body": "Staff can follow an Edit in Boardwalk link on a public page to open the matching editor.",
+  "prs": [
+    3157
+  ],
+  "order": 0
+}

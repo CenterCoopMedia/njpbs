@@ -1,0 +1,11 @@
+---
+import PublicSiteLayout from "../../layouts/PublicSiteLayout.astro";
+import PermanentRedirect from "../../components/PermanentRedirect.astro";
+import { publicRootRoutesEnabled } from "../../lib/build-target";
+export function getStaticPaths() {
+  return publicRootRoutesEnabled(process.env) ? [{ params: { index: undefined } }] : [];
+}
+---
+<PublicSiteLayout preview={false} title="Programs have moved" description="Find NJ PBS programs." canonicalPath="/programs/" noindex metaRefreshTo="/programs/">
+  <PermanentRedirect to="/programs/" label="Browse programs" />
+</PublicSiteLayout>

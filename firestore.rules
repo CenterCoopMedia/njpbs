@@ -1,0 +1,1162 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function currentUserPath() {
+      return /databases/$(database)/documents/users/$(request.auth.uid);
+    }
+
+    function accessTierReadsActive() {
+      let activation = /databases/$(database)/documents/system/staffAccessActivation;
+      let receiptExists = exists(activation);
+      let receipt = receiptExists ? get(activation).data : {};
+      return receiptExists && receipt.get('schema', null) == 1 &&
+        receipt.get('state', null) == 'active' &&
+        receipt.get('cleanScan', false) == true;
+    }
+
+    function usesAccessTier(profile) {
+      return profile.keys().hasAny(['accessTier']) && accessTierReadsActive();
+    }
+
+    // Firebase refresh tokens have no end date. Measured from auth_time, so a token refresh does
+    // not extend a session. cms-api/src/firebase-auth.ts and functions/lib/session-refusal.js
+    // hold the same limit.
+    function maxSessionAgeSeconds() {
+      return 60 * 24 * 60 * 60;
+    }
+
+    function hasValidStaffSession() {
+      let profileExists = request.auth != null && exists(currentUserPath());
+      let profile = profileExists ? get(currentUserPath()).data : {};
+      return profileExists && profile.get('active', true) == true &&
+        (!usesAccessTier(profile) ||
+          (request.auth.token.get('email_verified', false) == true &&
+            profile.get('accessTier', null) in ['viewer', 'contributor', 'editor', 'publisher', 'admin', 'owner'])) &&
+        request.auth.token.auth_time > profile.get('tokensValidAfter', 0) &&
+        request.auth.token.auth_time * 1000 > request.time.toMillis() - maxSessionAgeSeconds() * 1000;
+    }
+
+    function isAdmittedStaff() {
+      return hasValidStaffSession();
+    }
+
+    function isOwner(userId) {
+      return request.auth != null && request.auth.uid == userId;
+    }
+
+    function isSuperAdmin() {
+      return hasValidStaffSession() &&
+        effectiveAdminRole(get(currentUserPath()).data) == 'super_admin';
+    }
+
+    function isAdmin() {
+      return hasValidStaffSession() &&
+        effectiveAdminRole(get(currentUserPath()).data) == 'admin';
+    }
+
+    function effectiveAdminRole(profile) {
+      let tier = profile.get('accessTier', null);
+      return usesAccessTier(profile)
+        ? (tier == 'owner' ? 'super_admin' : (tier == 'admin' ? 'admin' : null))
+        : profile.get('role', null);
+    }
+
+    function hasEditorLockEditAny() {
+      let profile = get(currentUserPath()).data;
+      let grants = profile.get('grants', []);
+      let tierActive = usesAccessTier(profile);
+      return hasValidStaffSession() &&
+        (
+          (tierActive &&
+            profile.get('accessTier', null) in ['editor', 'publisher', 'admin', 'owner']) ||
+          (!tierActive && (
+            profile.get('role', null) in ['admin', 'super_admin'] ||
+            (grants is list && grants.hasAny([{'role': 'editor'}]))))
+        );
+    }
+
+    function isSiteWideContributor() {
+      let profile = get(currentUserPath()).data;
+      let grants = profile.get('grants', []);
+      let tierActive = usesAccessTier(profile);
+      return hasValidStaffSession() &&
+        ((tierActive && profile.get('accessTier', null) == 'contributor') ||
+          (!tierActive && grants is list &&
+            grants.hasAny([{'role': 'contributor'}])));
+    }
+
+    function validEditorLockAddress(data, lockId) {
+      return data.keys().hasAll([
+          'surfaceKey',
+          'contentCollection',
+          'contentId'
+        ]) &&
+        data.surfaceKey is string &&
+        data.contentCollection is string &&
+        data.contentId is string &&
+        (
+          data.contentCollection == 'cmsPages' ||
+          data.contentCollection == 'cmsPosts'
+        ) &&
+        data.contentId.size() >= 1 &&
+        data.contentId.size() <= 128 &&
+        data.contentId.matches('^[A-Za-z0-9_-]+$') &&
+        data.surfaceKey == data.contentCollection + ':' + data.contentId &&
+        data.surfaceKey == lockId;
+    }
+
+    function validLegacyEditorLockAddress(data, lockId) {
+      return data.surfaceKey is string &&
+        data.surfaceKey == lockId &&
+        data.surfaceKey.matches('^(cmsPages|cmsPosts):[A-Za-z0-9_-]{1,128}$');
+    }
+
+    function validLegacyEditorLockData(data, lockId) {
+      return data.keys().hasAll([
+          'surfaceKey',
+          'ownerId',
+          'ownerName',
+          'sessionId',
+          'acquiredAt',
+          'heartbeatAt'
+        ]) &&
+        data.keys().hasOnly([
+          'surfaceKey',
+          'ownerId',
+          'ownerName',
+          'sessionId',
+          'acquiredAt',
+          'heartbeatAt',
+          'takeoverAt'
+        ]) &&
+        validLegacyEditorLockAddress(data, lockId) &&
+        data.ownerId is string &&
+        data.ownerId.size() >= 1 &&
+        data.ownerName is string &&
+        data.ownerName.size() >= 1 &&
+        data.ownerName.size() <= 100 &&
+        data.sessionId is string &&
+        data.sessionId.size() >= 20 &&
+        data.sessionId.size() <= 100 &&
+        data.acquiredAt is timestamp &&
+        data.heartbeatAt is timestamp &&
+        (
+          !data.keys().hasAny(['takeoverAt']) ||
+          data.takeoverAt is timestamp
+        );
+    }
+
+    function validLegacyEditorLockReleaseData(data, lockId) {
+      return data.keys().hasAll([
+          'surfaceKey',
+          'ownerId',
+          'sessionId',
+          'releasedAt'
+        ]) &&
+        data.keys().hasOnly([
+          'surfaceKey',
+          'ownerId',
+          'sessionId',
+          'releasedAt'
+        ]) &&
+        validLegacyEditorLockAddress(data, lockId) &&
+        data.ownerId is string &&
+        data.ownerId.size() >= 1 &&
+        data.sessionId is string &&
+        data.sessionId.size() >= 20 &&
+        data.sessionId.size() <= 100 &&
+        data.releasedAt is timestamp;
+    }
+
+    function isCreateEligibleEditorLockPage(data) {
+      return data.contentCollection == 'cmsPages' &&
+        data.contentId in [
+          'home',
+          'watch',
+          'live',
+          'schedule',
+          'kids',
+          'support',
+          'give',
+          'passport',
+          'about',
+          'staff',
+          'contact',
+          'faq',
+          'accessibility',
+          'closed-captioning',
+          'privacy',
+          'public-file',
+          'eeo',
+          'public-meetings',
+          'data-hub'
+        ];
+    }
+
+    function contributorCanUseEditorLock(data) {
+      let contentPath = /databases/$(database)/documents/$(data.contentCollection)/$(data.contentId);
+      return isSiteWideContributor() &&
+        (
+          (
+            exists(contentPath) &&
+            get(contentPath).data.get('createdBy', null) == request.auth.uid
+          ) ||
+          (!exists(contentPath) && isCreateEligibleEditorLockPage(data))
+        );
+    }
+
+    function canUseEditorLock(data, lockId) {
+      return validEditorLockAddress(data, lockId) &&
+        (hasEditorLockEditAny() || contributorCanUseEditorLock(data)) &&
+        (
+          isCreateEligibleEditorLockPage(data) ||
+          exists(/databases/$(database)/documents/$(data.contentCollection)/$(data.contentId))
+        );
+    }
+
+    // The address a lease document *would* carry, derived from its ID alone. An editor's first
+    // act on a record is a subscription to a lease that does not exist yet, where `resource` is
+    // null; reading `resource.data` there raises a null-value error and Firestore denies the
+    // whole read. That denial made presence fail open and stopped every claim (#1047).
+    function absentEditorLockAddress(lockId) {
+      return {
+        'surfaceKey': lockId,
+        'contentCollection': lockId.split(':')[0],
+        'contentId': lockId.split(':')[1]
+      };
+    }
+
+    // An absent lease still discloses whether the addressed record exists (through the
+    // contributor ownership check), so hold it to exactly the eligibility the stored document
+    // would require. An address the caller could never hold a lease on stays denied.
+    function canObserveAbsentEditorLock(lockId) {
+      return lockId.matches('^(cmsPages|cmsPosts):[A-Za-z0-9_-]{1,128}$') &&
+        canUseEditorLock(absentEditorLockAddress(lockId), lockId);
+    }
+
+    // A waiting editor may attach exactly one request triple to somebody else's live lease, and
+    // only the holder may clear it. The request is advisory presence: it never transfers the
+    // lease, so a holder who ignores it keeps editing until the lease expires or is forced.
+    function editorLockRequestKeys() {
+      return ['requestedById', 'requestedByName', 'requestedAt'];
+    }
+
+    function validEditorLockRequest(data) {
+      return !data.keys().hasAny(editorLockRequestKeys()) ||
+        (
+          data.keys().hasAll(editorLockRequestKeys()) &&
+          data.requestedById is string &&
+          data.requestedById.size() >= 1 &&
+          data.requestedByName is string &&
+          data.requestedByName.size() >= 1 &&
+          data.requestedByName.size() <= 100 &&
+          data.requestedAt is timestamp
+        );
+    }
+
+    function editorLockUnchangedExceptRequest() {
+      return request.resource.data.diff(resource.data).affectedKeys()
+        .hasOnly(editorLockRequestKeys());
+    }
+
+    // Only the request triple may move, so the stored document is the written one with that
+    // triple added or removed; validating the written shape validates both.
+    function isEditorLockRequestChange(lockId) {
+      return validEditorLockShape(request.resource.data, lockId) &&
+        (
+          request.resource.data.keys().hasAll(editorLockRequestKeys())
+            ? (
+              request.resource.data.requestedById == request.auth.uid &&
+              request.resource.data.requestedAt == request.time &&
+              resource.data.ownerId != request.auth.uid &&
+              // The lease carries one ask. A later asker joins no queue, so letting them write
+              // over the pending triple would silently drop the editor already waiting; only
+              // the holder clears an ask, by answering it (#1047).
+              (
+                !resource.data.keys().hasAny(editorLockRequestKeys()) ||
+                resource.data.requestedById == request.auth.uid
+              )
+            )
+            : resource.data.ownerId == request.auth.uid
+        ) &&
+        canUseEditorLock(request.resource.data, lockId);
+    }
+
+    function canForceEditorLockTakeover() {
+      let profile = get(currentUserPath()).data;
+      let grants = profile.get('grants', []);
+      let tierActive = usesAccessTier(profile);
+      return hasValidStaffSession() &&
+        (
+          (tierActive &&
+            profile.get('accessTier', null) in ['editor', 'publisher', 'admin', 'owner']) ||
+          (!tierActive && (
+            profile.get('role', null) in ['admin', 'super_admin'] ||
+            (grants is list && grants.hasAny([{'role': 'editor'}]))))
+        ) &&
+        // A marked automation account never forces a person off a record (#4717).
+        !exists(/databases/$(database)/documents/cmsAutomationAccounts/$(request.auth.uid));
+    }
+
+    function touchesPrivilegeKeys() {
+      return request.resource.data.diff(resource.data).affectedKeys()
+        .hasAny(['role', 'grants', 'active', 'tokensValidAfter', 'accessTier']);
+    }
+
+    // The only profile keys a client may create, change or delete (#3428). A new field stays
+    // server-owned until it is added here, so authorization can trust it from the start.
+    function touchesOnlyClientProfileKeys() {
+      return request.resource.data.diff(resource.data).affectedKeys()
+        .hasOnly(['displayName', 'jobTitle', 'email', 'preferences']);
+    }
+
+    function emailChangeAllowed(userId) {
+      return !request.resource.data.diff(resource.data).affectedKeys().hasAny(['email']) ||
+        (isOwner(userId) && request.resource.data.email == request.auth.token.email);
+    }
+
+    function navigationEntriesFor(item) {
+      return item.kind == 'section' ? [item].concat(item.links) : [item];
+    }
+
+    function navigationEntries(items) {
+      let count = items.size();
+      return count == 0 ? [] : navigationEntriesFor(items[0]).concat(
+        count == 1 ? [] : navigationEntriesFor(items[1]).concat(
+        count == 2 ? [] : navigationEntriesFor(items[2]).concat(
+        count == 3 ? [] : navigationEntriesFor(items[3]).concat(
+        count == 4 ? [] : navigationEntriesFor(items[4]).concat(
+        count == 5 ? [] : navigationEntriesFor(items[5]).concat(
+        count == 6 ? [] : navigationEntriesFor(items[6]).concat(
+        count == 7 ? [] : navigationEntriesFor(items[7]).concat(
+        count == 8 ? [] : navigationEntriesFor(items[8]).concat(
+        count == 9 ? [] : navigationEntriesFor(items[9]))))))))));
+    }
+
+    function navigationEntryIds(entries) {
+      let count = entries.size();
+      return count == 0 ? [] : [entries[0].id].concat(
+        count == 1 ? [] : [entries[1].id].concat(
+        count == 2 ? [] : [entries[2].id].concat(
+        count == 3 ? [] : [entries[3].id].concat(
+        count == 4 ? [] : [entries[4].id].concat(
+        count == 5 ? [] : [entries[5].id].concat(
+        count == 6 ? [] : [entries[6].id].concat(
+        count == 7 ? [] : [entries[7].id].concat(
+        count == 8 ? [] : [entries[8].id].concat(
+        count == 9 ? [] : [entries[9].id])))))))));
+    }
+
+    function validSharedIds(data) {
+      let joined = data.keys().hasAny(['shared']) && data.shared is list ? data.shared.join(',') : '';
+      return !data.keys().hasAny(['shared']) || (
+        data.shared is list &&
+        data.shared.size() <= 10 &&
+        data.shared.toSet().size() == data.shared.size() &&
+        (data.shared.size() == 0 || (
+          joined.matches('^custom:[A-Za-z0-9_-]{1,73}(?:,custom:[A-Za-z0-9_-]{1,73})*$') &&
+          joined.split(',').size() == data.shared.size()
+        ))
+      );
+    }
+
+    function validNavigationArrangement(data, custom) {
+      let entries = navigationEntries(custom);
+      let ids = navigationEntryIds(entries);
+      let allowedIds = ids.concat([
+        'home', 'pages', 'posts', 'library', 'media', 'editorial-queue', 'cuez-storydesk', 'activity',
+        'schedule', 'live-production', 'resources', 'staff-profiles', 'staff-access', 'analytics',
+        'reports', 'admin-settings', 'around-nj'
+      ]);
+      let shareIds = data.keys().hasAny(['shared']) && data.shared is list ? data.shared : [];
+      let limit = allowedIds.size() + shareIds.size();
+      // Membership stays on the personal id list unless this write adopts shares.
+      // removeAll keeps that heavier list out of the shared check's expression budget.
+      let known = shareIds.size() == 0
+        ? data.order.hasOnly(allowedIds) && data.hidden.hasOnly(allowedIds)
+        : data.order.removeAll(allowedIds).hasOnly(shareIds) && data.hidden.removeAll(allowedIds).hasOnly(shareIds);
+      return entries.size() > 10 ? false :
+        (data.order.size() <= limit && data.hidden.size() <= limit)
+          ? data.order.toSet().size() == data.order.size() &&
+            data.hidden.toSet().size() == data.hidden.size() &&
+            known &&
+            ids.toSet().size() == entries.size()
+          : false;
+    }
+
+    function validNavigationPreferences(data, stored) {
+      let custom = stored is map ? stored.get('custom', []) : [];
+      return !(data is map) ? false :
+        !(data.order is list) || !(data.hidden is list) ? false :
+        data.version == 3
+          ? (stored is map ? stored.get('version', 0) != 4 : true) &&
+            data.keys().hasOnly(['version', 'order', 'hidden'])
+          : data.version == 4
+            ? (!data.keys().hasOnly(['version', 'order', 'hidden', 'custom', 'shared']) ? false :
+              !(data.custom is list) ? false :
+              data.custom != custom ? false :
+              custom.size() > 10 ? false :
+              !validSharedIds(data) ? false :
+              // Custom admission and edits are validated by the server API.
+              validNavigationArrangement(data, custom))
+            : false;
+    }
+
+    function navigationWriteAllowed(userId, before, after) {
+      let scopedPreferences = before is map
+        ? after.diff(before).affectedKeys().hasOnly(['navigation'])
+        : after.keys().hasOnly(['navigation']);
+      let stored = before is map ? before.get('navigation', {}) : {};
+      return !isOwner(userId) ? false :
+        !request.resource.data.diff(resource.data).affectedKeys().hasOnly(['preferences']) ? false :
+        !scopedPreferences ? false :
+        !after.keys().hasAny(['navigation'])
+          ? (before is map ? !before.keys().hasAny(['navigation']) : true)
+          : validNavigationPreferences(after.navigation, stored);
+    }
+
+    function navigationChangeAllowed(userId) {
+      let before = resource.data.get('preferences', {});
+      let after = request.resource.data.get('preferences', {});
+      return before == after ? true :
+        !(after is map) ? false :
+        before is map
+          ? (after.diff(before).affectedKeys().hasAny(['navigation'])
+            ? navigationWriteAllowed(userId, before, after) : true)
+          // Only the owner can repair a legacy malformed preferences field.
+          : navigationWriteAllowed(userId, before, after);
+    }
+
+    // Home shortcuts are presentation only; recognized IDs never authorize a route.
+    function homeShortcutsChangeAllowed(userId) {
+      let before = resource.data.get('preferences', {});
+      let after = request.resource.data.get('preferences', {});
+      let previous = before is map ? before.get('homeShortcuts', null) : null;
+      let next = after is map ? after.get('homeShortcuts', null) : null;
+      return (previous == next &&
+        (before is map && before.keys().hasAny(['homeShortcuts'])) ==
+        (after is map && after.keys().hasAny(['homeShortcuts']))) || (isOwner(userId) && after is map &&
+        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['preferences']) &&
+        (before is map ? after.diff(before).affectedKeys().hasOnly(['homeShortcuts']) : after.keys().hasOnly(['homeShortcuts'])) &&
+        (!after.keys().hasAny(['homeShortcuts']) || (next is list && next.size() <= 2 &&
+          next.toSet().size() == next.size() &&
+          next.hasOnly(['recent-edits', 'assigned', 'media', 'guide']))));
+    }
+
+    // The canonical shape of a live lease, with no claim about who is writing it. A takeover
+    // request is written by the waiting editor, not the holder, so shape and authorship are two
+    // separate checks.
+    function validEditorLockShape(data, lockId) {
+      return data.keys().hasAll([
+          'surfaceKey',
+          'contentCollection',
+          'contentId',
+          'ownerId',
+          'ownerName',
+          'sessionId',
+          'acquiredAt',
+          'heartbeatAt'
+        ]) &&
+        data.keys().hasOnly([
+          'surfaceKey',
+          'contentCollection',
+          'contentId',
+          'ownerId',
+          'ownerName',
+          'sessionId',
+          'acquiredAt',
+          'heartbeatAt',
+          'takeoverAt',
+          'requestedById',
+          'requestedByName',
+          'requestedAt'
+        ]) &&
+        validEditorLockAddress(data, lockId) &&
+        validEditorLockRequest(data) &&
+        data.ownerId is string &&
+        data.ownerId.size() >= 1 &&
+        data.ownerName is string &&
+        data.ownerName.size() >= 1 &&
+        data.ownerName.size() <= 100 &&
+        data.sessionId is string &&
+        data.sessionId.size() >= 20 &&
+        data.sessionId.size() <= 100 &&
+        data.acquiredAt is timestamp &&
+        data.heartbeatAt is timestamp &&
+        (
+          !data.keys().hasAny(['takeoverAt']) ||
+          data.takeoverAt is timestamp
+        );
+    }
+
+    function validEditorLockData(lockId) {
+      return validEditorLockShape(request.resource.data, lockId) &&
+        request.resource.data.ownerId == request.auth.uid;
+    }
+
+    function validEditorLockReleaseData(lockId) {
+      return request.resource.data.keys().hasAll([
+          'surfaceKey',
+          'contentCollection',
+          'contentId',
+          'ownerId',
+          'sessionId',
+          'releasedAt'
+        ]) &&
+        request.resource.data.keys().hasOnly([
+          'surfaceKey',
+          'contentCollection',
+          'contentId',
+          'ownerId',
+          'sessionId',
+          'releasedAt'
+        ]) &&
+        validEditorLockAddress(request.resource.data, lockId) &&
+        request.resource.data.ownerId == request.auth.uid &&
+        request.resource.data.sessionId is string &&
+        request.resource.data.sessionId.size() >= 20 &&
+        request.resource.data.sessionId.size() <= 100 &&
+        request.resource.data.releasedAt is timestamp;
+    }
+
+    function storedEditorLockIsReleased(lockId) {
+      return (
+        resource.data.keys().hasAll([
+          'surfaceKey',
+          'contentCollection',
+          'contentId',
+          'ownerId',
+          'sessionId',
+          'releasedAt'
+        ]) &&
+        resource.data.keys().hasOnly([
+          'surfaceKey',
+          'contentCollection',
+          'contentId',
+          'ownerId',
+          'sessionId',
+          'releasedAt'
+        ]) &&
+          validEditorLockAddress(resource.data, lockId) &&
+          resource.data.releasedAt is timestamp
+        ) ||
+        validLegacyEditorLockReleaseData(resource.data, lockId);
+    }
+
+    match /users/{userId} {
+      // Self reads own profile; either admin tier reads any profile (admin panel).
+      allow read: if (isOwner(userId) && hasValidStaffSession()) ||
+        isAdmin() || isSuperAdmin();
+
+      // Profile admission and creation are server-owned. registerStaffProfile
+      // verifies the Workspace domain, exact named exception, or bootstrap address
+      // for every session and writes only a privilege-free row through the Admin SDK.
+      allow create: if false;
+
+      // Client profile fields only; privilege changes use audited functions.
+      // Evaluate shared navigation validation once, including for either admin tier.
+      allow update: if hasValidStaffSession() &&
+        (isOwner(userId) || effectiveAdminRole(get(currentUserPath()).data) in ['admin', 'super_admin']) &&
+        touchesOnlyClientProfileKeys() && !touchesPrivilegeKeys() && emailChangeAllowed(userId) && navigationChangeAllowed(userId) && homeShortcutsChangeAllowed(userId);
+
+      // No client delete: user removal happens server-side via the Admin SDK.
+    }
+
+    // Shared rail items (#2593). Staff read active shares with one query and fetch
+    // referenced removed shares by document id.
+    // cmsSetNavigationPreferences and onNavigationShareOwnerWrite own writes.
+    // A removed document stays so recipients can read its removal reason.
+    match /navigationShares/{shareId} {
+      allow read: if hasValidStaffSession();
+      allow write: if false;
+    }
+
+    // The content section registry (#619): the finite list of editorial desks a scoped
+    // role grant can name. Signed-in staff read it so the Staff access picker offers real
+    // sections instead of free text, the same direct-read pattern the users roster uses.
+    // Rows carry no identity or content, only a desk id, label and description, and an
+    // unauthenticated reader gets nothing. Writes are seed-script and Admin SDK only:
+    // a browser that could add a desk could invent a scope nobody granted.
+    match /sections/{sectionId} {
+      allow read: if hasValidStaffSession();
+      allow write: if false;
+    }
+
+    // Version history contains complete content snapshots. All client access is
+    // denied; cmsListRevisions and cmsGetRevision authorize reads against the
+    // current content record before returning bounded summaries or one row.
+    match /cmsVersionHistory/{docId} {
+      allow read, write: if false;
+    }
+
+    // Admin audit log (compliance stream). Server-only write, admin read.
+    match /admin_logs/{logId} {
+      allow read: if isAdmin() || isSuperAdmin();
+      allow write: if false;
+    }
+
+    // Routine activity log. Server-only write, admin read.
+    match /activity_logs/{logId} {
+      allow read: if isAdmin() || isSuperAdmin();
+      allow write: if false;
+    }
+
+    // Server-fault log. Server-only write, admin read.
+    match /system_errors/{errorId} {
+      allow read: if isAdmin() || isSuperAdmin();
+      allow write: if false;
+    }
+
+    // Publish queue: Cloud Functions write it only. cmsPublish enqueues pending
+    // rows; the workflow writeback advances status. Admins read it.
+    match /cmsPublishQueue/{docId} {
+      allow read: if isAdmin() || isSuperAdmin();
+      allow write: if false;
+    }
+
+    // Ephemeral editor presence. Content correctness remains in cmsSaveContent's optimistic
+    // version check; this client-written document is only a named courtesy lease. Site-wide
+    // editors and top-level administrators can use leases for existing content or the fixed set
+    // of absent pages that the page editor can create; an absent post never qualifies. A
+    // site-wide contributor must also own existing content. Address fields bind the lease ID to
+    // the content document whose createdBy value is checked. A cross-user forced takeover still
+    // requires site-wide edit-any authority, and a marked automation account can never force
+    // one. During a rolling deployment, edit-any users can
+    // read, heartbeat, and release only the exact former schema; every new claim uses the
+    // addressed schema. Heartbeats and release markers preserve the exact owning session;
+    // direct deletes are never accepted.
+    match /cmsEditorLocks/{lockId} {
+      allow read: if resource == null
+        ? canObserveAbsentEditorLock(lockId)
+        : (
+          canUseEditorLock(resource.data, lockId) ||
+          (
+            hasEditorLockEditAny() &&
+            (
+              validLegacyEditorLockData(resource.data, lockId) ||
+              validLegacyEditorLockReleaseData(resource.data, lockId)
+            )
+          )
+        );
+      allow create: if canUseEditorLock(request.resource.data, lockId) &&
+        validEditorLockData(lockId) &&
+        !request.resource.data.keys().hasAny(editorLockRequestKeys()) &&
+        request.resource.data.acquiredAt == request.time &&
+        request.resource.data.heartbeatAt == request.time &&
+        (
+          !request.resource.data.keys().hasAny(['takeoverAt']) ||
+          request.resource.data.takeoverAt == request.time
+        );
+      // A takeover request is the only write a non-holder may make to a live lease, and it moves
+      // nothing but the request triple. Split it out first so the two paths stay independent and
+      // neither has to be evaluated to decide the other.
+      allow update: if editorLockUnchangedExceptRequest()
+        ? isEditorLockRequestChange(lockId)
+        : (
+      // Addressed writes cannot match either legacy schema. Do not spend their
+      // evaluation budget on legacy fallbacks after an addressed claim is denied.
+      request.resource.data.keys().hasAny(['contentCollection', 'contentId']) ?
+      (
+        canUseEditorLock(request.resource.data, lockId) &&
+        (
+          (
+            validEditorLockData(lockId) &&
+            (
+              (
+                resource.data.ownerId == request.auth.uid &&
+                request.resource.data.ownerId == resource.data.ownerId &&
+                request.resource.data.sessionId == resource.data.sessionId &&
+                request.resource.data.surfaceKey == resource.data.surfaceKey &&
+                request.resource.data.contentCollection == resource.data.contentCollection &&
+                request.resource.data.contentId == resource.data.contentId &&
+                request.resource.data.ownerName == resource.data.ownerName &&
+                request.resource.data.acquiredAt == resource.data.acquiredAt &&
+                request.resource.data.diff(resource.data).affectedKeys().hasOnly(['heartbeatAt']) &&
+                request.resource.data.heartbeatAt == request.time
+              ) ||
+              (
+                request.resource.data.surfaceKey == resource.data.surfaceKey &&
+                request.resource.data.acquiredAt == request.time &&
+                request.resource.data.heartbeatAt == request.time &&
+                // A new claim replaces the lease outright, so a request recorded against the
+                // previous holder never survives into the session that answered it.
+                !request.resource.data.keys().hasAny(editorLockRequestKeys()) &&
+                (
+                  (
+                    request.resource.data.keys().hasAny(['takeoverAt']) &&
+                    request.resource.data.takeoverAt == request.time &&
+                    (
+                      resource.data.ownerId == request.auth.uid ||
+                      canForceEditorLockTakeover()
+                    )
+                  ) ||
+                  (
+                    !request.resource.data.keys().hasAny(['takeoverAt']) &&
+                    (
+                      storedEditorLockIsReleased(lockId) ||
+                      (
+                        resource.data.heartbeatAt is timestamp &&
+                        resource.data.heartbeatAt <= request.time - duration.value(120, 's')
+                      )
+                    )
+                  )
+                )
+              )
+            )
+          ) ||
+          (
+            validEditorLockReleaseData(lockId) &&
+            resource.data.ownerId == request.auth.uid &&
+            request.resource.data.ownerId == resource.data.ownerId &&
+            request.resource.data.sessionId == resource.data.sessionId &&
+            request.resource.data.surfaceKey == resource.data.surfaceKey &&
+            request.resource.data.releasedAt == request.time &&
+            (
+              (
+                validLegacyEditorLockData(resource.data, lockId) &&
+                hasEditorLockEditAny()
+              ) ||
+              (
+                request.resource.data.contentCollection == resource.data.contentCollection &&
+                request.resource.data.contentId == resource.data.contentId
+              )
+            )
+          )
+        )
+      ) : (
+      (
+        hasEditorLockEditAny() &&
+        validLegacyEditorLockData(resource.data, lockId) &&
+        validLegacyEditorLockData(request.resource.data, lockId) &&
+        resource.data.ownerId == request.auth.uid &&
+        request.resource.data.ownerId == resource.data.ownerId &&
+        request.resource.data.sessionId == resource.data.sessionId &&
+        request.resource.data.surfaceKey == resource.data.surfaceKey &&
+        request.resource.data.ownerName == resource.data.ownerName &&
+        request.resource.data.acquiredAt == resource.data.acquiredAt &&
+        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['heartbeatAt']) &&
+        request.resource.data.heartbeatAt == request.time
+      ) ||
+      (
+        hasEditorLockEditAny() &&
+        validLegacyEditorLockData(resource.data, lockId) &&
+        validLegacyEditorLockReleaseData(request.resource.data, lockId) &&
+        resource.data.ownerId == request.auth.uid &&
+        request.resource.data.ownerId == resource.data.ownerId &&
+        request.resource.data.sessionId == resource.data.sessionId &&
+        request.resource.data.surfaceKey == resource.data.surfaceKey &&
+        request.resource.data.releasedAt == request.time
+      )
+      )
+      );
+      allow delete: if false;
+    }
+
+    // CMS content documents are browser-inaccessible. cmsGetContent and cmsListContent resolve
+    // the trusted principal and enforce grant, ownership, and scope server-side; cmsSaveContent
+    // validates writes and owns canonical block ids. The Admin SDK bypasses these rules, so no
+    // browser role needs a second, coarser content path here.
+    match /cmsPages/{docId} {
+      allow read, write: if false;
+    }
+
+    match /cmsPages/{docId}/mediaUsage/{state} {
+      allow read, write: if false;
+    }
+
+    match /cmsPosts/{docId} {
+      allow read, write: if false;
+    }
+
+    // Automation account markers (#4717). Functions read them to require a live editing lock and
+    // an exact baseVersion from agent accounts, and canForceEditorLockTakeover reads them to
+    // refuse a forced takeover. No client may read, add or remove one.
+    match /cmsAutomationAccounts/{document=**} { allow read, write: if false; }
+
+    // Dataset drafts, approved revisions and receipts are private trusted-API records.
+    match /cmsDatasetUses/{document=**} { allow read, write: if false; }
+    match /cmsDatasetRefreshJobs/{document=**} { allow read, write: if false; }
+    match /cmsDatasets/{document=**} {
+      allow read, write: if false;
+    }
+
+    // Template content, media usage and request receipts use the trusted API.
+    match /cmsPostTemplates/{document=**} {
+      allow read, write: if false;
+    }
+
+    match /cmsPosts/{docId}/mediaUsage/{state} {
+      allow read, write: if false;
+    }
+
+    // Settings are also available only through a future capability-gated server
+    // boundary. This explicit root rule keeps that contract visible beside the
+    // page and post rules instead of relying only on the default deny below.
+    match /cmsSettings/{docId} {
+      allow read, write: if false;
+    }
+
+    match /cmsSettings/{docId}/mediaUsage/{state} {
+      allow read, write: if false;
+    }
+
+    // The DAM is reachable only through capability-gated Cloud Functions. The
+    // projection is server-only too: public pages receive resolved fields during
+    // the static build, so no browser needs a second media read surface.
+    match /media_assets/{assetId} {
+      allow read, write: if false;
+    }
+
+    match /media_assets_public/{assetId} {
+      allow read, write: if false;
+    }
+
+    // Exact object deletion plans are private to the server.
+    match /mediaPurgeQueue/{entryId} {
+      allow read, write: if false;
+    }
+
+    // AWS source metadata and import state stay behind the CMS API. Browser
+    // clients never receive object keys, version ids, bucket names, or role data.
+    match /mediaSourceAssets/{assetId} {
+      allow read, write: if false;
+    }
+
+    match /mediaSourceOriginalStatus/{assetId} {
+      allow read, write: if false;
+    }
+
+    match /mediaSourceOriginalRestores/{restoreId} {
+      allow read, write: if false;
+    }
+
+    match /mediaSourceOriginalNotices/{userId}/{document=**} {
+      allow read, write: if false;
+    }
+
+    match /mediaSourceStats/{sourceId} {
+      allow read, write: if false;
+    }
+
+    match /mediaSourceImports/{sourceId} {
+      allow read, write: if false;
+    }
+
+    match /mediaSourcePreviewJobs/{jobId} {
+      allow read, write: if false;
+    }
+
+    match /mediaSourceUploads/{sessionId} {
+      allow read, write: if false;
+    }
+
+    // Personal favorites stay behind the CMS API. The server derives this user
+    // path from the verified principal; a browser cannot select another owner.
+    match /mediaFavorites/{userId} {
+      allow read, write: if false;
+    }
+
+    match /mediaFavorites/{userId}/items/{favoriteId} {
+      allow read, write: if false;
+    }
+
+    // Private reviews and shared comments stay behind the CMS API. The server
+    // derives review ownership and verifies current media access for both types.
+    match /mediaReviews/{userId} {
+      allow read, write: if false;
+    }
+
+    match /mediaReviews/{userId}/{document=**} {
+      allow read, write: if false;
+    }
+
+    match /mediaComments/{mediaId} {
+      allow read, write: if false;
+    }
+
+    match /mediaComments/{mediaId}/{document=**} {
+      allow read, write: if false;
+    }
+
+    // Personal and all-staff collections stay behind the CMS API. The server
+    // derives private ownership and rechecks each member asset's current access.
+    match /mediaCollections/{collectionId} {
+      allow read, write: if false;
+    }
+
+    match /mediaCollections/{collectionId}/{document=**} {
+      allow read, write: if false;
+    }
+
+    // Media-category ids are authorization and immutable-storage scopes. The
+    // browser reaches their labels and lifecycle only through capability-gated
+    // Functions; every registry write is versioned and audited on the server.
+    match /mediaCategories/{categoryId} {
+      allow read, write: if false;
+    }
+
+    // Voiceover objects stay in private R2. Library metadata, recorder links and
+    // each staff member's private review are available only through the admitted-
+    // staff Functions boundary.
+    match /voiceoverLibrary/{documentId} {
+      allow read, write: if false;
+    }
+
+    match /voiceoverTakes/{takeId} {
+      allow read, write: if false;
+    }
+
+    match /voiceoverReviews/{userId} {
+      allow read, write: if false;
+    }
+
+    match /voiceoverReviews/{userId}/takes/{takeId} {
+      allow read, write: if false;
+    }
+
+    // Account requests and email delivery rows contain identity and workflow
+    // evidence. All access goes through the capability-checked Functions API.
+    match /staffAccessRequests/{userId} {
+      allow read, write: if false;
+    }
+
+    match /staffAccessRequestCounters/{userId} {
+      allow read, write: if false;
+    }
+
+    match /staffAccessNotificationCooldowns/{emailHash} {
+      allow read, write: if false;
+    }
+
+    match /staffSignInRefusedCooldowns/{uid} {
+      allow read, write: if false;
+    }
+
+    match /staffPasswordResetRequests/{emailHash} {
+      allow read, write: if false;
+    }
+
+    match /staffAccessEmailOutbox/{messageId} {
+      allow read, write: if false;
+    }
+
+    match /staffAccessNotificationOutbox/{notificationId} {
+      allow read, write: if false;
+    }
+
+    // Raw bug reports include reporter identity, delivery identifiers, and
+    // internal triage state. Future report endpoints return fixed reporter or
+    // administrator projections; no browser role reads or writes these records.
+    match /bug_reports/{reportId} {
+      allow read, write: if false;
+    }
+
+    match /ugcSubmissions/{submissionId} {
+      allow read, write: if false;
+    }
+
+    match /ugcReviewAudit/{decisionId} {
+      allow read, write: if false;
+    }
+
+    match /ugcConfig/{configId} {
+      allow read, write: if false;
+    }
+    match /ugcConsentVersions/{versionId} {
+      allow read, write: if false;
+    }
+
+    // Normalized screenshots remain private evidence. The browser receives only
+    // the bounded evidence summary on a report projection.
+    match /bugReportEvidence/{reportId} {
+      allow read, write: if false;
+    }
+
+    match /bugReportDeliveryOutbox/{deliveryId} {
+      allow read, write: if false;
+    }
+
+    match /bugReportGithubOutbox/{jobId} {
+      allow read, write: if false;
+    }
+
+    match /bugReportGithubLocks/{reportId} {
+      allow read, write: if false;
+    }
+
+    match /bugReportGithubWebhookReceipts/{deliveryId} {
+      allow read, write: if false;
+    }
+
+    match /bugReportAutofixOutbox/{jobId} {
+      allow read, write: if false;
+    }
+
+    // Separate from the existing File + fix consumer: one approved investigation
+    // request per nudge; companion consumer activation is tracked separately.
+    match /bugReportFollowupOutbox/{jobId} {
+      allow read, write: if false;
+    }
+
+    match /bugReportMutationReceipts/{mutationId} {
+      allow read, write: if false;
+    }
+
+    match /bugReportRateLimits/{userId} {
+      allow read, write: if false;
+    }
+
+    // Author identity, staff linkage, and profile documents are server-only.
+    // The admin app reaches all four through the capability-checked
+    // cmsGetAuthorProfile / cmsUpdateAuthorProfile / cmsSetAuthorProfileVisibility
+    // / cmsListAuthorProfiles / cmsAdminUpdateAuthorProfile callables, so no
+    // browser needs a direct path here -- including to the public snapshot,
+    // which reaches readers through the static build rather than a client read.
+    // A browser-writable profile would let an author set their own authorId or
+    // slug and break the byline join, so these deny writes even to the owner.
+    match /cmsStaffRecords/{uid} {
+      allow read, write: if false;
+    }
+
+    // Server-owned, narrow byline feed. Ineligible source profiles keep only
+    // an opaque id so a cursor can pass them without disclosing former staff.
+    match /cmsBylineDirectory/{authorId} {
+      allow get: if isAdmittedStaff();
+      allow list: if isAdmittedStaff() &&
+        request.query.limit != null && request.query.limit <= 200;
+      allow write: if false;
+    }
+
+    match /cmsBylineSelf/{uid} {
+      allow get: if isOwner(uid) && hasValidStaffSession();
+      allow list, write: if false;
+    }
+
+    match /cmsAuthorProfiles/{authorId} {
+      allow read, write: if false;
+    }
+
+    match /cmsAuthorProfilesPublic/{authorId} {
+      allow read, write: if false;
+    }
+
+    match /cmsAuthorSlugs/{slug} {
+      allow read, write: if false;
+    }
+
+    function isCostReader() {
+      return isAdmin() || isSuperAdmin();
+    }
+
+    match /costLedgerLines/{lineId} {
+      allow read: if isCostReader();
+      allow write: if false;
+    }
+
+    match /costLedgerPeriods/{periodId} {
+      allow read: if isCostReader();
+      allow write: if false;
+    }
+
+    match /costLedgerSnapshots/{snapshotId} {
+      allow read: if isCostReader();
+      allow write: if false;
+    }
+
+    match /costLedgerComparisons/{comparisonId} {
+      allow read: if isCostReader();
+      allow write: if false;
+    }
+
+    match /costLedgerAssumptions/{docId} {
+      allow read: if isCostReader();
+      allow write: if false;
+    }
+
+    // Upload recovery owns these deterministic claims through the Admin SDK.
+    // An editor cannot forge, steal, or abandon a content-hash reservation.
+    match /system/media/hashOwners/{contentHash} {
+      allow read, write: if false;
+    }
+
+    // Binary replacement serializes one active attempt per stable AssetId.
+    // Only the Admin SDK can read or change this cross-service recovery lease.
+    match /system/media/replacements/{assetId} {
+      allow read, write: if false;
+    }
+
+    // Billing is the one client-visible system document. Admitted staff read it
+    // for the billing kill-switch banner; Cloud Functions write it.
+    match /system/billing {
+      allow read: if isAdmittedStaff();
+      allow write: if false;
+    }
+
+    // Other system documents are server-only.
+    match /system/staffAccessActivation {
+      allow read: if isAdmittedStaff();
+      allow write: if false;
+    }
+
+    match /system/{docId} {
+      allow read, write: if false;
+    }
+
+    // CMS staging-deploy mutation receipts. Admin SDK writes them; no client
+    // may read or change a Functions, renderer, or CMS API receipt.
+    match /cmsDeploymentReceipts/{component} {
+      allow read, write: if false;
+    }
+
+    // Opaque media continuation handles bind server-only query positions to one account.
+    match /mediaDiscoveryCursors/{cursorId} {
+      allow read, write: if false;
+    }
+
+    // Serializer journals and preview public-context manifests are server-only.
+    match /cmsPreviewSerializerJournals/{serializerId} {
+      allow read, write: if false;
+    }
+
+    match /cmsPublicationSerializerJournals/{serializerId} {
+      allow read, write: if false;
+    }
+
+    match /cmsPreviewPublicContexts/{buildBatchId} {
+      allow read, write: if false;
+    }
+
+    match /cmsPreviewEditorialContexts/{document=**} {
+      allow read, write: if false;
+    }
+
+    match /cmsPreviewEditorialSeals/{document=**} {
+      allow read, write: if false;
+    }
+
+    // Provider credentials are encrypted server data. Neither owners nor admins
+    // can read or alter them directly from browser SDKs.
+    match /mediaTranscriptionBudgets/{document=**} {
+      allow read, write: if false;
+    }
+
+    match /mediaTranscriptionCredentials/{document=**} {
+      allow read, write: if false;
+    }
+
+    // Default deny for every unlisted path.
+    // Connection configuration, leases, last good values and provider cursors
+    // are written only by the authorized endpoint and the scheduled poller.
+    match /cmsElectionResultConnections/{document=**} {
+      allow read, write: if false;
+    }
+    match /cmsElectionResultEditorialOwners/{document=**} {
+      allow read, write: if false;
+    }
+
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

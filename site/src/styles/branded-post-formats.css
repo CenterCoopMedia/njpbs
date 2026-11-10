@@ -1,0 +1,136 @@
+/*
+ * Post formats reuse the canonical CMS block renderer, but the shared
+ * public block defaults must not pull generic card decoration into these
+ * editorial presentations. Every selector is contained by the format article.
+ */
+/* Share one reading measure with the bottom sharing divider. Let it grow with
+ * the reader's text size, while media and authored columns keep their layouts. */
+:is(.post-content, .special-report__story, .multimedia-feature__story, .interactive-data__story) {
+  --post-prose-width: min(calc(60rem * var(--reader-text-scale, 1)), calc(100vw - 2 * var(--gutter)), var(--wrap));
+}
+
+:is(.post-body, .special-report__body, .multimedia-feature__body, .interactive-data__body)
+  .cms-block--prose > :is(p, ul, ol, blockquote) {
+  max-inline-size: var(--post-prose-width);
+}
+
+:is(.special-report__topics, .multimedia-feature__topics, .interactive-data__topics) a {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+  min-width: var(--target-comfortable);
+  min-height: var(--target-comfortable);
+}
+
+[data-post-presentation] h1 {
+  overflow-wrap: anywhere;
+}
+
+[data-post-presentation] .cms-block {
+  min-width: 0;
+}
+
+[data-post-presentation] :is(.shelf-card, .btn, img, pre, blockquote) {
+  border-radius: 0;
+  box-shadow: none;
+}
+
+[data-post-presentation] .cms-block .shelf-card,
+[data-post-presentation] .cms-block .shelf-card__media img {
+  border-radius: 0;
+  box-shadow: none;
+}
+
+[data-post-presentation] .cms-block .embed__frame {
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
+}
+
+[data-post-presentation] blockquote {
+  border-inline: 0;
+}
+
+[data-post-presentation] pre {
+  max-width: 100%;
+  overflow-x: auto;
+}
+
+[data-post-presentation] .cta-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  align-items: center;
+}
+
+/* The report body has ordinary prose-list rhythm. Related-story cards are list
+ * items too, so explicitly keep their uniform grid alignment. */
+[data-post-presentation] .shelf-card + .shelf-card {
+  margin-top: 0;
+}
+
+/* TipTap keeps paragraphs inside list items. Their normal paragraph margin
+ * must not add a second full line between adjacent bullets. */
+[data-post-presentation] li:not([class]) > p {
+  margin-block: 0;
+}
+
+/* Source metadata remains available, but it follows the story title at normal
+ * reading size instead of acting as a small decorative label above it. */
+[data-post-presentation] .shelf-card__title {
+  order: 1;
+}
+
+[data-post-presentation] .shelf-card__kicker {
+  order: 2;
+  color: var(--color-text-muted);
+  font-size: 1rem;
+  letter-spacing: normal;
+  text-transform: none;
+}
+
+[data-post-presentation] .shelf-card__summary,
+[data-post-presentation] .shelf-card__meta {
+  order: 3;
+  color: var(--color-text-muted);
+  font-size: 1rem;
+}
+
+[data-post-presentation] .image-gallery__hint {
+  color: var(--color-text-muted);
+  font-size: 1rem;
+}
+
+/* Generated semantic ranks must not turn a card title or FAQ question into a
+ * report chapter visually. The canonical renderer supplies these class hooks. */
+[data-post-presentation] .card-grid__card > .card-grid__title,
+[data-post-presentation] .faq-item > .faq-item__question,
+[data-post-presentation] .link-card__title {
+  margin-block: 0 0.65rem;
+  font-size: 1.17em;
+}
+
+/* An optional card label reads like the shelf-card kicker above: its own line,
+ * normal reading size, muted. These formats reject small uppercase labels. */
+[data-post-presentation] .card-grid__label {
+  display: block;
+  margin-block: 0 0.35rem;
+  color: var(--color-text-muted);
+  font-size: 1rem;
+}
+
+[data-post-presentation] .coverage-list__card + .coverage-list__card {
+  margin-top: 0;
+}
+
+/* A long Interactive guide stays reachable on a short desktop viewport. The
+ * small-screen layout already returns the rail to ordinary document flow. */
+@media (min-width: 901px) {
+  [data-post-presentation="interactive"] .interactive-data__rail {
+    max-height: calc(100vh - 8rem);
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    scrollbar-gutter: stable;
+  }
+}

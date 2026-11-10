@@ -1,0 +1,6 @@
+CMS publish Pages deployment runtime version 2.
+
+This marker means the reviewed production source contains the shared build-to-
+deploy Pages ordering contract and the self-contained live deployment receipt.
+The receipt binds the queue revisions to the exact cutoff, generation, reviewed
+source commit, GitHub Pages deployment id, public URL, and visibility timing.

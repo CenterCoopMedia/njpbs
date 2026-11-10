@@ -1,0 +1,10 @@
+[Unit]
+Description=Copy private MP4 viewing copies to R2
+
+[Service]
+Type=oneshot
+WorkingDirectory=%h/njpbs-video-backup
+EnvironmentFile=-%h/.config/njpbs-video-backup.env
+ExecStart=/bin/bash infrastructure/video-backup/run.sh
+UMask=0077
+TimeoutStartSec=infinity

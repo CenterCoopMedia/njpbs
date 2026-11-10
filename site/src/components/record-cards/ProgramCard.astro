@@ -1,0 +1,25 @@
+---
+import type { RecordCardPayload } from "../../lib/record-card-resolution";
+import { isIncorrectProgramArtwork } from "../../lib/program-artwork";
+interface Props { card: RecordCardPayload; headingLevel: number }
+const { card, headingLevel } = Astro.props;
+const Heading = `h${Math.max(2, Math.min(6, headingLevel))}` as "h2" | "h3" | "h4" | "h5" | "h6";
+const program = card.kind === "program" ? card.program : null;
+const compact = card.variant === "compact";
+const omitArt = program && isIncorrectProgramArtwork(program.url, program.art);
+---
+{program ? <article class:list={["record-card", "record-card--program", `record-card--${card.variant ?? "card"}`]}>
+  <a href={program.url}>
+    {!compact && !omitArt && program.art ? <img src={program.art.url} width={program.art.width} height={program.art.height} alt={program.alt} loading="lazy" decoding="async" /> : null}
+    <Heading>{program.title}</Heading>
+  </a>
+  {!compact && program.genre ? <p>{program.genre}</p> : null}
+  {!compact && program.summary ? <p>{program.summary}</p> : null}
+</article> : card.kind === "program" ? <a href={card.href}>{card.title}</a> : null}
+<style>
+  .record-card--program img { display: block; width: 100%; height: auto; object-fit: cover; }
+  .record-card--program a { display: block; min-height: 44px; }
+  .record-card--program p { margin-block: .5rem 0; }
+  .record-card--program.record-card--compact { padding: .75rem 1rem; }
+  .record-card--program.record-card--compact a { display: flex; align-items: center; }
+</style>

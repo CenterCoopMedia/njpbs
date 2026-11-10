@@ -1,0 +1,11 @@
+{
+  "date": "2026-09-26",
+  "kind": "new",
+  "title": "Edit header and footer links",
+  "body": "Open Admin settings, then the Public website section, to change the site header links and footer columns. Move links up or down, check the desktop and phone preview, then save or publish.",
+  "prs": [
+    2339,
+    2359
+  ],
+  "order": -7
+}

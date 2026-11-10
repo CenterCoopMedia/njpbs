@@ -1,0 +1,8 @@
+{
+  "date": "2026-10-27",
+  "kind": "fixed",
+  "title": "Check a publication again",
+  "body": "If a Page or Post needs public confirmation, staff with publish access can choose Check again in Publish activity or the editor's publication status. A confirmed publication clears recovery; a newer live publication retires the old request. If the check still fails, your saved copy stays unchanged and you can retry publication.",
+  "prs": [],
+  "order": -6
+}

@@ -1,0 +1,8 @@
+{
+  "date": "2026-10-28",
+  "kind": "fixed",
+  "title": "Sign in after an account already exists",
+  "body": "If Create account says your email already has an account, choose Go to sign in. Your email stays filled in. Use your existing password or Forgot password? to reset it. Account errors now explain what to try next.",
+  "prs": [],
+  "order": 0
+}

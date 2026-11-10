@@ -1,0 +1,3 @@
+import { checkCloudWorkContract, checkCloudContextWorkContract } from "./no-build-cloud-contract";
+import { checkCloudHealthContract, checkMultipleCloudHealthContract, checkAggregateContextHealthContract, checkMissingAggregateHealthContract, checkPageHomeHealthContract } from "./no-build-cloud-health-contract";
+export default { async test() { await checkCloudWorkContract(); await checkCloudContextWorkContract(); await checkCloudHealthContract(); await checkMultipleCloudHealthContract(); await checkAggregateContextHealthContract(); await checkMissingAggregateHealthContract(); await checkPageHomeHealthContract(); } };

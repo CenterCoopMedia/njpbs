@@ -1,0 +1,567 @@
+/* ===================================================================
+   post — Garden State poster
+   A civic poster design kit. Type does the heavy lifting at poster
+   scale over a tight WPA 4-color ceiling: warm ink on cream stock,
+   one civic blue for structure, one poster red for emphasis, a warm
+   ochre fill behind ink. Swiss modular grid backbone, flush-left huge
+   display type, figure-ground that echoes the Everyman without
+   copying it. Boldness in type and palette, never in interruption.
+
+   Sharp corners, hairline borders, shared-border grids, tint +
+   title-color callouts and numbered section heads with flush-right meta
+   meet a WPA / Sister Corita / Push Pin poster register. Sibling of gs-
+   and sig-; namespaced post- / --post- to coexist on one page.
+
+   Tokens live on :root. Base typography applies under .post.
+   Components carry their own look and work inside .post.
+   Light is the default; warm dark is opt-in.
+   =================================================================== */
+
+@import url('https://fonts.googleapis.com/css2?family=Anton&family=Public+Sans:ital,wght@0,400;0,500;0,600;0,700;1,400&family=IBM+Plex+Mono:wght@400;500&display=swap');
+
+/* ---------- Tokens (WPA 4-color ceiling + neutrals) ---------- */
+:root {
+  --post-ink: #1a1714;            /* warm ink — text + contour */
+  --post-text: #1a1714;
+  --post-text-bright: #0e0c0a;    /* deepest ink for display type */
+  --post-muted: #57524b;          /* metadata / captions */
+
+  --post-cream: #f3e9d6;          /* poster stock — the page */
+  --post-bg: #f3e9d6;
+  --post-surface: #ffffff;        /* white well where a card needs lift */
+  --post-surface-2: #ece0c8;      /* inset / zebra over cream */
+
+  --post-blue: #1d4e89;           /* civic blue — structure + links */
+  --post-blue-hover: #163c69;     /* link/button hover */
+  --post-blue-tint: #e4eaf2;      /* blue callout fill */
+
+  --post-red: #c8102e;            /* poster red — the ONE emphasis / CTA */
+  --post-red-hover: #a50c24;      /* CTA hover */
+  --post-red-tint: #f6e0de;       /* red callout fill */
+
+  --post-ochre: #e8a33d;          /* Push-Pin secondary — FILL ONLY behind ink */
+
+  --post-hairline: #d8cdb6;       /* cream-matched hairline */
+  --post-hairline-strong: #b6a887;/* stronger rule + ochre-neighbor badge fill */
+  --post-border: var(--post-hairline);
+  --post-border-strong: var(--post-ink);
+
+  /* tint feeds callout title color; fills swap per modifier */
+  --post-callt: var(--post-text-bright);
+
+  --post-font-display: 'Anton', 'Arial Narrow', system-ui, sans-serif;
+  --post-font-body: 'Public Sans', system-ui, -apple-system, sans-serif;
+  --post-font-mono: 'IBM Plex Mono', 'SF Mono', Consolas, monospace;
+
+  --post-pad: 44px;               /* page side padding; 22px under 1000px */
+  --post-measure: 66ch;           /* body text measure */
+  --post-col-gap: 24px;           /* 12-col modular grid gutter */
+
+  --post-focus: var(--post-blue); /* visible focus ring color */
+
+  /* Fixed-fill CTA red. --post-red lightens in dark mode (right for red read as
+     text/links on the dark page), which drops white-on-red below AA. The poster-red
+     CTA and support pill use these instead — they hold the brand red with white text
+     in BOTH themes. --post-cream-dim is the dim on-air caption; it tracks the
+     ink/cream swap (dim-light in light mode, dim-dark on the now-light band in dark). */
+  --post-red-cta: #c8102e;
+  --post-red-cta-hover: #a50c24;
+  --post-cream-dim: #d6ccb8;
+}
+
+/* Warm dark: auto from system when no explicit theme is set... */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-post-theme]) {
+    --post-ink: #f3e9d6; --post-text: #f3e9d6; --post-text-bright: #fbf4e7; --post-muted: #b6ab99;
+    --post-cream: #14110f; --post-bg: #14110f; --post-surface: #211c18; --post-surface-2: #1b1714;
+    --post-blue: #7fb0e6; --post-blue-hover: #a9cbf0; --post-blue-tint: #1c2b3d;
+    --post-red: #f2718a; --post-red-hover: #f78fa3; --post-red-tint: #33191c;
+    --post-ochre: #e8a33d;
+    --post-hairline: #3a332c; --post-hairline-strong: #574d40;
+    --post-callt: var(--post-text-bright);
+    --post-focus: #7fb0e6;
+    --post-cream-dim: #6b6052; /* dim caption darkens for the now-light on-air band */
+  }
+}
+/* ...or explicitly via the toggle / a wrapper class. */
+[data-post-theme="dark"], .post-dark {
+  --post-ink: #f3e9d6; --post-text: #f3e9d6; --post-text-bright: #fbf4e7; --post-muted: #b6ab99;
+  --post-cream: #14110f; --post-bg: #14110f; --post-surface: #211c18; --post-surface-2: #1b1714;
+  --post-blue: #7fb0e6; --post-blue-hover: #a9cbf0; --post-blue-tint: #1c2b3d;
+  --post-red: #f2718a; --post-red-hover: #f78fa3; --post-red-tint: #33191c;
+  --post-ochre: #e8a33d;
+  --post-hairline: #3a332c; --post-hairline-strong: #574d40;
+  --post-callt: var(--post-text-bright);
+  --post-focus: #7fb0e6;
+  --post-cream-dim: #6b6052; /* dim caption darkens for the now-light on-air band */
+}
+
+/* ---------- Base (opt in with class="post") ---------- */
+.post, .post *, .post *::before, .post *::after { box-sizing: border-box; min-width: 0; }
+.post * { margin: 0; padding: 0; }
+
+/* Smooth-scroll only when post owns the whole page (body.post), so an
+   embedded widget never changes a host document's scroll behavior. */
+html:has(body.post) { scroll-behavior: smooth; }
+
+.post {
+  font-family: var(--post-font-body);
+  background: var(--post-bg);
+  color: var(--post-text);
+  line-height: 1.6;
+  overflow-wrap: break-word;
+  -webkit-font-smoothing: antialiased;
+}
+.post a { color: var(--post-blue); text-decoration: underline; text-underline-offset: 2px; text-decoration-thickness: 1px; }
+.post a:hover { color: var(--post-blue-hover); }
+.post b, .post strong { font-weight: 700; color: var(--post-text-bright); }
+.post code, .post-code {
+  font-family: var(--post-font-mono); font-size: 0.84em;
+  background: var(--post-surface-2); color: var(--post-text-bright);
+  padding: 1px 5px; border: 1px solid var(--post-hairline); word-break: break-word;
+}
+
+/* Skip link — visible only on focus. */
+.post-skip {
+  position: absolute; left: 8px; top: -60px; z-index: 600;
+  background: var(--post-ink); color: var(--post-cream);
+  font-family: var(--post-font-mono); font-size: 12px; padding: 10px 14px;
+  text-decoration: none; transition: top 0.12s;
+}
+.post-skip:focus { top: 8px; }
+
+/* Visible focus ring everywhere: 2px ring, 2px offset. */
+.post :focus-visible {
+  outline: 2px solid var(--post-focus);
+  outline-offset: 2px;
+}
+
+/* ---------- Page shell + 12-column modular grid ---------- */
+.post-shell { max-width: 1240px; margin: 0 auto; padding: 0 var(--post-pad); }
+.post-grid {
+  display: grid;
+  grid-template-columns: repeat(12, 1fr);
+  gap: 0 var(--post-col-gap);
+}
+.post-col-12 { grid-column: span 12; }
+.post-col-8 { grid-column: span 8; }
+.post-col-6 { grid-column: span 6; }
+.post-col-4 { grid-column: span 4; }
+
+/* ---------- Utility bar (top strip) ---------- */
+.post-utility {
+  background: var(--post-ink); color: var(--post-cream);
+  font-family: var(--post-font-mono); font-size: 11px;
+  letter-spacing: 0.04em;
+}
+.post-utility__inner {
+  max-width: 1240px; margin: 0 auto; padding: 7px var(--post-pad);
+  display: flex; align-items: center; justify-content: space-between; gap: 16px;
+}
+.post-utility a { color: var(--post-cream); text-decoration: none; }
+.post-utility a:hover { text-decoration: underline; text-underline-offset: 2px; }
+.post-utility__group { display: flex; gap: 18px; align-items: center; flex-wrap: wrap; }
+
+/* ---------- Masthead / header ---------- */
+.post-masthead {
+  /* Floating nav: rides in flow, then pins to the top while the hero and the rest
+     of the page scroll under it — matching the gs/sig mastheads. The opaque
+     --post-bg keeps content readable as it passes beneath, and z-index 200 sits
+     above the hero stage (z-index 0) and hero content (z-index 1). */
+  position: sticky; top: 0; z-index: 200;
+  border-bottom: 2px solid var(--post-ink);
+  background: var(--post-bg);
+}
+.post-masthead__inner {
+  max-width: 1240px; margin: 0 auto; padding: 18px var(--post-pad);
+  display: flex; align-items: center; justify-content: space-between; gap: 24px;
+}
+.post-brand { display: flex; align-items: center; gap: 12px; text-decoration: none; }
+.post-brand:hover { text-decoration: none; }
+.post-brand__mark { width: 34px; height: 34px; flex-shrink: 0; display: block; }
+.post-brand__name {
+  font-family: var(--post-font-display); font-weight: 400;
+  font-size: 24px; letter-spacing: 0.01em; line-height: 1;
+  color: var(--post-text-bright); text-transform: uppercase;
+}
+.post-nav { display: flex; align-items: center; gap: 4px; }
+.post-nav a {
+  font-family: var(--post-font-body); font-size: 14px; font-weight: 600;
+  color: var(--post-text); text-decoration: none;
+  padding: 10px 12px; min-height: 44px; display: inline-flex; align-items: center;
+  border-bottom: 2px solid transparent;
+}
+.post-nav a:hover { color: var(--post-blue); }
+/* Active nav = weight + bottom underline, never an edge sliver. */
+.post-nav a[aria-current="page"], .post-nav a.is-active {
+  color: var(--post-text-bright); font-weight: 700;
+  border-bottom-color: var(--post-red);
+}
+
+/* Hamburger (mobile) */
+.post-nav-toggle {
+  display: none;
+  width: 44px; height: 44px; align-items: center; justify-content: center;
+  background: var(--post-surface); border: 1px solid var(--post-ink);
+  color: var(--post-text-bright); cursor: pointer;
+}
+.post-nav-toggle .post-ic-close { display: none; }
+.post-nav-toggle[aria-expanded="true"] .post-ic-menu { display: none; }
+.post-nav-toggle[aria-expanded="true"] .post-ic-close { display: block; }
+
+/* ---------- Hero stage (wraps the particle-NJ canvas) ---------- */
+.post-hero { position: relative; border-bottom: 2px solid var(--post-ink); overflow: hidden; }
+.post-hero__inner {
+  max-width: 1240px; margin: 0 auto; padding: 64px var(--post-pad) 56px;
+  position: relative;
+}
+/* The canvas sits behind the type, flush-left composition kept clear on the right. */
+.post-hero__stage {
+  position: absolute; inset: 0; z-index: 0;
+  pointer-events: none; /* the engine attaches its own pointer listeners to the canvas */
+}
+/* Nudge the NJ point cloud toward the right column on wider screens so it fills the
+   open space and clears the flush-left display headline (the engine centers the cloud
+   in its canvas, so moving the stage moves the cloud). translateX keeps the canvas at
+   full size — no aspect change, no shape clipping — and the hero's overflow:hidden
+   trims the overscan. Skipped on narrow screens, where the headline stacks over a
+   centered cloud and there is no side room to shift into. */
+@media (min-width: 64rem) {
+  .post-hero__stage { transform: translateX(21%); }
+}
+@media (min-width: 90rem) {
+  .post-hero__stage { transform: translateX(27%); }
+}
+/* No touch-action override on the canvas: it is decorative and only reads native
+   scroll, so the browser keeps full pan/zoom over it (no scroll-jacking). */
+.post-hero__stage canvas { width: 100%; height: 100%; display: block; }
+/* cap the headline column with a viewport-relative measure. NOT `ch`: ch resolves
+   against this element's body font-size, not the 132px display headline, so `18ch`
+   collapsed to ~176px and shattered the headline word-by-word. */
+.post-hero__content { position: relative; z-index: 1; max-width: min(92%, 44rem); }
+/* hero headline: h1 in real use; h2 when embedded in a preview that owns the page h1 */
+.post-hero :is(h1, h2) {
+  font-family: var(--post-font-display); font-weight: 400;
+  font-size: clamp(52px, 12vw, 132px); line-height: 0.92;
+  letter-spacing: 0.005em; text-transform: uppercase;
+  color: var(--post-text-bright); margin-bottom: 22px;
+}
+.post-hero .post-lead {
+  font-family: var(--post-font-body); font-size: clamp(17px, 0.8vw + 14px, 21px);
+  line-height: 1.5; color: var(--post-text); max-width: 52ch; margin-bottom: 22px;
+}
+.post-hero__actions { display: flex; flex-wrap: wrap; gap: 12px; }
+.post-hero__meta {
+  font-family: var(--post-font-mono); font-size: 12px; color: var(--post-muted);
+  margin-top: 28px; letter-spacing: 0.02em;
+}
+
+/* ONE duotone / Ben-Day halftone treatment, progressive-enhancement, off body text.
+   Layered dot screens over the hero stage in poster red + civic blue. */
+@supports (mix-blend-mode: multiply) {
+  .post-hero__halftone {
+    position: absolute; inset: 0; z-index: 0; pointer-events: none;
+    opacity: 0.5; mix-blend-mode: multiply;
+    background-image:
+      radial-gradient(var(--post-red) 22%, transparent 23%),
+      radial-gradient(var(--post-blue) 22%, transparent 23%);
+    background-size: 11px 11px, 11px 11px;
+    background-position: 0 0, 5.5px 5.5px;
+    -webkit-mask-image: linear-gradient(105deg, transparent 56%, #000 96%);
+    mask-image: linear-gradient(105deg, transparent 56%, #000 96%);
+  }
+}
+[data-post-theme="dark"] .post-hero__halftone, .post-dark .post-hero__halftone { mix-blend-mode: screen; opacity: 0.38; }
+
+/* Hero load stagger — one orchestrated reveal, not scattered micro-motion. */
+@keyframes post-fade-up { from { opacity: 0; transform: translateY(14px); } to { opacity: 1; transform: none; } }
+.post-hero__content > * { animation: post-fade-up 0.6s ease both; }
+.post-hero :is(h1, h2) { animation-delay: 0.05s; }
+.post-hero .post-lead { animation-delay: 0.13s; }
+.post-hero__actions { animation-delay: 0.21s; }
+.post-hero__meta { animation-delay: 0.29s; }
+
+/* ---------- Buttons (44px touch targets) ---------- */
+.post-btn {
+  font-family: var(--post-font-body); font-size: 14px; font-weight: 700;
+  letter-spacing: 0.01em; line-height: 1;
+  display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+  min-height: 44px; padding: 12px 22px; cursor: pointer;
+  border: 2px solid var(--post-ink); background: var(--post-ink); color: var(--post-cream);
+  text-decoration: none; transition: background 0.12s, border-color 0.12s, color 0.12s;
+}
+.post-btn:hover { background: var(--post-text-bright); border-color: var(--post-text-bright); color: var(--post-cream); }
+/* Primary = the poster-red CTA, white on red. */
+/* Scoped under .post so button text color (0,2,0) beats the generic `.post a`
+   link rule (0,1,1); otherwise anchor buttons take link blue over the brand fill. */
+.post .post-btn--primary { background: var(--post-red-cta); border-color: var(--post-red-cta); color: #ffffff; }
+.post-btn--primary:hover { background: var(--post-red-cta-hover); border-color: var(--post-red-cta-hover); color: #ffffff; }
+/* Outline = ink contour on cream. */
+.post .post-btn--outline { background: transparent; border-color: var(--post-ink); color: var(--post-text-bright); }
+.post-btn--outline:hover { background: var(--post-ink); color: var(--post-cream); }
+
+/* Support pill: the one white-on-red emphasis chip. */
+.post-pill {
+  font-family: var(--post-font-mono); font-size: 12px; font-weight: 500;
+  letter-spacing: 0.06em; text-transform: uppercase;
+  display: inline-flex; align-items: center; gap: 7px;
+  min-height: 44px; padding: 0 18px;
+  color: #ffffff; text-decoration: none;
+  background: var(--post-red-cta);
+  border: 2px solid var(--post-red-cta); transition: background 0.12s, border-color 0.12s;
+}
+/* Scoped under .post so the pill's white text (0,2,0) beats `.post a` (0,1,1). */
+.post .post-pill { color: #ffffff; }
+.post-pill:hover { background: var(--post-red-cta-hover); border-color: var(--post-red-cta-hover); color: #ffffff; }
+.post-pill__dot { width: 8px; height: 8px; background: #ffffff; flex-shrink: 0; }
+
+/* ---------- On-air strip ---------- */
+.post-onair {
+  background: var(--post-ink); color: var(--post-cream);
+  border-bottom: 2px solid var(--post-ink);
+}
+.post-onair__inner {
+  max-width: 1240px; margin: 0 auto; padding: 12px var(--post-pad);
+  display: flex; align-items: center; gap: 16px; flex-wrap: wrap;
+}
+.post-onair__label {
+  font-family: var(--post-font-mono); font-size: 10px; font-weight: 500;
+  text-transform: uppercase; letter-spacing: 0.18em; color: var(--post-cream);
+}
+.post-onair__title { font-family: var(--post-font-body); font-size: 14px; font-weight: 600; color: var(--post-cream); }
+.post-onair__time { font-family: var(--post-font-mono); font-size: 12px; color: var(--post-cream-dim); margin-left: auto; }
+
+/* ---------- Section heads (mono number + flush-right meta) ---------- */
+.post-sec-head {
+  display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px 18px;
+  margin: 80px 0 18px; padding-top: 26px; border-top: 2px solid var(--post-ink);
+  scroll-margin-top: 24px;
+}
+.post-sec-head__num { font-family: var(--post-font-mono); font-size: 14px; font-weight: 500; color: var(--post-red); flex-shrink: 0; }
+.post-sec-head h2 {
+  font-family: var(--post-font-display); font-weight: 400;
+  font-size: clamp(28px, 4.4vw, 48px); line-height: 0.98; letter-spacing: 0.01em;
+  text-transform: uppercase; color: var(--post-text-bright);
+}
+.post-sec-head__meta {
+  margin-left: auto; align-self: center;
+  font-family: var(--post-font-mono); font-size: 11px; text-transform: uppercase;
+  letter-spacing: 0.12em; color: var(--post-muted);
+}
+
+/* ---------- Prose ---------- */
+.post-prose { color: var(--post-text); margin: 14px 0 24px; max-width: var(--post-measure); }
+.post-prose p { margin-bottom: 15px; }
+.post-prose ul, .post-prose ol { margin: 6px 0 15px; padding-left: 1.3em; }
+.post-prose li { margin-bottom: 9px; }
+.post-prose li::marker { color: var(--post-red); }
+
+/* ---------- Lead / story card ---------- */
+.post-lead-story {
+  display: grid; grid-template-columns: 1.3fr 1fr; gap: 0;
+  border: 2px solid var(--post-ink); background: var(--post-surface);
+  margin: 8px 0 4px;
+}
+.post-lead-story__media {
+  position: relative; min-height: 280px; border-right: 2px solid var(--post-ink);
+  background: var(--post-blue);
+  /* halftone-friendly placeholder field; real media replaces this background */
+}
+.post-lead-story__body { padding: 28px; display: flex; flex-direction: column; gap: 12px; }
+.post-lead-story__kicker {
+  font-family: var(--post-font-mono); font-size: 10px; font-weight: 500;
+  text-transform: uppercase; letter-spacing: 0.16em; color: var(--post-red);
+}
+.post-lead-story h3 {
+  font-family: var(--post-font-display); font-weight: 400;
+  font-size: clamp(24px, 3vw, 38px); line-height: 1.0; letter-spacing: 0.01em;
+  text-transform: uppercase; color: var(--post-text-bright);
+}
+.post-lead-story p { font-size: 15px; color: var(--post-text); max-width: 52ch; }
+.post-lead-story__meta { margin-top: auto; font-family: var(--post-font-mono); font-size: 11px; color: var(--post-muted); }
+
+/* ---------- Program card grid (Warhol repetition, shared borders) ---------- */
+.post-card-grid {
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); gap: 0;
+  border: 2px solid var(--post-ink); margin: 6px 0;
+}
+.post-card {
+  background: var(--post-surface); padding: 0;
+  border-right: 1px solid var(--post-hairline); border-bottom: 1px solid var(--post-hairline);
+  display: flex; flex-direction: column;
+}
+.post-card__media {
+  height: 132px; background: var(--post-surface-2);
+  border-bottom: 1px solid var(--post-hairline);
+}
+/* Warhol repetition: rotate the media field tint per nth card for the print-run feel. */
+.post-card:nth-child(4n+1) .post-card__media { background: color-mix(in srgb, var(--post-blue) 18%, var(--post-surface)); }
+.post-card:nth-child(4n+2) .post-card__media { background: color-mix(in srgb, var(--post-red) 16%, var(--post-surface)); }
+.post-card:nth-child(4n+3) .post-card__media { background: color-mix(in srgb, var(--post-ochre) 34%, var(--post-surface)); }
+.post-card:nth-child(4n+4) .post-card__media { background: var(--post-surface-2); }
+.post-card__body { padding: 16px 18px 20px; display: flex; flex-direction: column; gap: 7px; }
+.post-card__label {
+  font-family: var(--post-font-mono); font-size: 10px; font-weight: 500;
+  text-transform: uppercase; letter-spacing: 0.14em; color: var(--post-red);
+}
+.post-card h4 {
+  font-family: var(--post-font-body); font-size: 16px; font-weight: 700;
+  line-height: 1.18; color: var(--post-text-bright);
+}
+.post-card p { font-size: 13.5px; color: var(--post-muted); }
+
+/* ---------- Support / donate block (tinted, uniform border) ---------- */
+.post-support {
+  background: var(--post-red-tint); border: 1px solid var(--post-red);
+  padding: 28px; margin: 28px 0;
+  display: grid; grid-template-columns: 1fr auto; gap: 20px 28px; align-items: center;
+}
+.post-support__title {
+  font-family: var(--post-font-display); font-weight: 400;
+  font-size: clamp(22px, 2.6vw, 32px); line-height: 1.0; letter-spacing: 0.01em;
+  text-transform: uppercase; color: var(--post-red);
+}
+.post-support p { font-size: 14px; color: var(--post-text); margin-top: 8px; max-width: 48ch; }
+.post-support__actions { display: flex; flex-wrap: wrap; gap: 12px; }
+
+/* ---------- Newsletter capture (labels, not placeholders; focus ring) ---------- */
+.post-newsletter { border: 2px solid var(--post-ink); background: var(--post-surface); padding: 28px; margin: 28px 0; }
+.post-newsletter__title {
+  font-family: var(--post-font-display); font-weight: 400;
+  font-size: clamp(22px, 2.6vw, 32px); line-height: 1.0; letter-spacing: 0.01em;
+  text-transform: uppercase; color: var(--post-text-bright); margin-bottom: 8px;
+}
+.post-newsletter p { font-size: 14px; color: var(--post-muted); margin-bottom: 18px; max-width: 52ch; }
+.post-form { display: flex; flex-wrap: wrap; gap: 14px; align-items: flex-end; }
+.post-field { display: flex; flex-direction: column; gap: 6px; flex: 1 1 240px; }
+.post-field label {
+  font-family: var(--post-font-mono); font-size: 11px; font-weight: 500;
+  text-transform: uppercase; letter-spacing: 0.1em; color: var(--post-muted);
+}
+.post-field input {
+  font-family: var(--post-font-body); font-size: 15px; color: var(--post-text);
+  background: var(--post-bg); border: 1px solid var(--post-border-strong);
+  padding: 0 14px; min-height: 44px; width: 100%;
+}
+.post-field input:hover { border-color: var(--post-blue); }
+.post-form .post-btn { flex: 0 0 auto; }
+.post-consent { width: 100%; font-family: var(--post-font-mono); font-size: 11px; color: var(--post-muted); margin-top: 4px; }
+
+/* ---------- Tinted callout (tint + title color, no edge stripe) ---------- */
+.post-callout { padding: 18px 20px; border: 1px solid var(--post-hairline); background: var(--post-surface); margin: 24px 0; }
+.post-callout__title {
+  font-family: var(--post-font-mono); font-size: 11px; font-weight: 500;
+  text-transform: uppercase; letter-spacing: 0.12em; margin-bottom: 9px;
+  color: var(--post-callt);
+}
+.post-callout p { font-size: 14px; color: var(--post-text); }
+.post-callout--info { background: var(--post-blue-tint); border-color: var(--post-blue); --post-callt: var(--post-blue); }
+.post-callout--note { background: var(--post-red-tint); border-color: var(--post-red); --post-callt: var(--post-red); }
+.post-callout--plain { --post-callt: var(--post-text-bright); }
+
+/* ---------- Badge (ochre fill behind ink, large only) ---------- */
+.post-badge {
+  font-family: var(--post-font-mono); font-size: 11px; font-weight: 500;
+  text-transform: uppercase; letter-spacing: 0.1em;
+  display: inline-flex; align-items: center; min-height: 28px; padding: 0 10px;
+  background: var(--post-ochre); color: var(--post-ink); border: 1px solid var(--post-ink);
+}
+
+/* ---------- Data table ---------- */
+.post-table { border: 2px solid var(--post-ink); margin: 10px 0; }
+.post-table__scroll { overflow-x: auto; }
+table.post-data { width: 100%; border-collapse: collapse; font-size: 13.5px; }
+table.post-data th {
+  background: var(--post-surface-2); font-family: var(--post-font-mono);
+  font-size: 10px; font-weight: 500; text-transform: uppercase; letter-spacing: 0.1em;
+  color: var(--post-muted); text-align: left; padding: 12px 15px;
+  border-bottom: 2px solid var(--post-ink); white-space: nowrap;
+}
+table.post-data td { padding: 13px 15px; border-bottom: 1px solid var(--post-hairline); vertical-align: top; color: var(--post-text); }
+table.post-data tbody tr:last-child td { border-bottom: none; }
+
+/* ---------- Single hairline diagonal rule (Constructivist nod, used once) ---------- */
+.post-diagonal { height: 64px; margin: 8px 0; position: relative; overflow: hidden; }
+.post-diagonal::after {
+  content: ""; position: absolute; left: -4%; right: -4%; top: 50%;
+  height: 0; border-top: 1px solid var(--post-red);
+  transform: rotate(-4deg); transform-origin: center;
+}
+
+/* ---------- Footer ---------- */
+.post-footer { border-top: 2px solid var(--post-ink); background: var(--post-bg); margin-top: 64px; }
+.post-footer__inner {
+  max-width: 1240px; margin: 0 auto; padding: 40px var(--post-pad) 56px;
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 32px;
+}
+.post-footer__brand { font-family: var(--post-font-display); font-weight: 400; font-size: 22px; text-transform: uppercase; color: var(--post-text-bright); }
+.post-footer__col h5 {
+  font-family: var(--post-font-mono); font-size: 10px; font-weight: 500;
+  text-transform: uppercase; letter-spacing: 0.14em; color: var(--post-muted); margin-bottom: 12px;
+}
+.post-footer__col a { display: block; font-size: 14px; color: var(--post-text); text-decoration: none; padding: 5px 0; }
+.post-footer__col a:hover { color: var(--post-blue); text-decoration: underline; text-underline-offset: 2px; }
+.post-footer__legal {
+  max-width: 1240px; margin: 0 auto; padding: 18px var(--post-pad) 36px;
+  border-top: 1px solid var(--post-hairline);
+  font-family: var(--post-font-mono); font-size: 11px; color: var(--post-muted);
+}
+
+/* ---------- Theme toggle ---------- */
+.post-theme-toggle {
+  position: fixed; bottom: 22px; right: 22px; z-index: 300;
+  width: 44px; height: 44px;
+  background: var(--post-surface); border: 1px solid var(--post-ink); color: var(--post-text-bright);
+  cursor: pointer; display: flex; align-items: center; justify-content: center; transition: background 0.12s;
+}
+.post-theme-toggle:hover { background: var(--post-surface-2); }
+.post-theme-toggle .post-ic-sun { display: none; }
+.post-theme-toggle .post-ic-moon { display: block; }
+.post-theme-toggle[data-mode="dark"] .post-ic-sun { display: block; }
+.post-theme-toggle[data-mode="dark"] .post-ic-moon { display: none; }
+
+/* ---------- Small utilities ---------- */
+.post-rule { border: none; border-top: 2px solid var(--post-ink); margin: 32px 0; }
+.post-mono { font-family: var(--post-font-mono); }
+.post-text-red { color: var(--post-red); }
+.post-text-blue { color: var(--post-blue); }
+.post-text-muted { color: var(--post-muted); }
+
+/* ---------- Reduced motion ---------- */
+@media (prefers-reduced-motion: reduce) {
+  html:has(body.post) { scroll-behavior: auto; }
+  .post *, .post *::before, .post *::after { animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; }
+}
+
+/* ---------- Responsive ---------- */
+@media (max-width: 1000px) {
+  :root { --post-pad: 22px; }
+  .post-lead-story { grid-template-columns: 1fr; }
+  .post-lead-story__media { border-right: none; border-bottom: 2px solid var(--post-ink); }
+  .post-support { grid-template-columns: 1fr; }
+
+  /* Nav collapses to a hamburger panel. */
+  .post-nav-toggle { display: inline-flex; }
+  .post-nav {
+    display: none; position: absolute; left: 0; right: 0; top: 100%; z-index: 200;
+    flex-direction: column; align-items: stretch; gap: 0;
+    background: var(--post-bg); border-bottom: 2px solid var(--post-ink);
+    box-shadow: 0 16px 32px rgba(0,0,0,0.20);
+  }
+  /* Stay sticky on mobile too (matching gs/sig). `sticky` is a positioned value,
+     so it still anchors the absolute hamburger panel below — no need to drop to
+     `relative`, which would also kill the float. */
+  .post-masthead { position: sticky; top: 0; }
+  .post-nav.is-open { display: flex; }
+  .post-nav a { padding: 14px var(--post-pad); border-bottom: 1px solid var(--post-hairline); border-bottom-width: 1px; }
+  .post-nav a[aria-current="page"], .post-nav a.is-active { border-bottom-color: var(--post-red); }
+  .post-onair__time { margin-left: 0; width: 100%; }
+  .post-sec-head { margin-top: 56px; scroll-margin-top: 64px; }
+  .post-theme-toggle { bottom: 14px; right: 14px; }
+}
+
+/* ---------- Print ---------- */
+@media print {
+  .post-theme-toggle, .post-nav-toggle, .post-utility, .post-hero__stage, .post-hero__halftone { display: none !important; }
+  .post { background: #fff; color: #000; }
+}

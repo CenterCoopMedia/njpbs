@@ -1,0 +1,10 @@
+{
+  "date": "2026-09-17",
+  "kind": "fixed",
+  "title": "Staff account recovery works again",
+  "body": "Staff can recover an email account again. Errors during account setup now stay on screen so you can read them.",
+  "prs": [
+    1951
+  ],
+  "order": -2
+}

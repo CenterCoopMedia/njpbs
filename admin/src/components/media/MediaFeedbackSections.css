@@ -1,0 +1,200 @@
+.media-feedback-help,
+.media-feedback-status,
+.media-feedback-empty,
+.media-feedback-comment-meta,
+.media-feedback-comment-text,
+.media-feedback-delete p {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.media-feedback-help,
+.media-feedback-status,
+.media-feedback-empty,
+.media-feedback-comment-meta {
+  color: var(--cms-ink-secondary);
+  font-size: var(--cms-font-sm);
+}
+
+.media-feedback-field {
+  display: grid;
+  gap: var(--cms-space-1);
+  min-width: 0;
+  font-size: var(--cms-font-sm);
+  font-weight: 700;
+}
+
+.media-feedback-field textarea {
+  min-height: 4.75rem;
+  resize: vertical;
+}
+
+.media-feedback-check {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--cms-space-2);
+  min-width: 0;
+  font-size: var(--cms-font-sm);
+  font-weight: 700;
+}
+
+.media-feedback-check input {
+  flex: none;
+  margin-block-start: 0.2rem;
+}
+
+.media-feedback-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--cms-space-2);
+}
+
+.media-feedback-comments {
+  display: grid;
+  gap: var(--cms-space-3);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.media-feedback-comment {
+  display: grid;
+  gap: var(--cms-space-2);
+  min-width: 0;
+  padding-block-end: var(--cms-space-3);
+  border-bottom: var(--cms-border-width) solid var(--cms-line);
+}
+
+.media-feedback-comment-text {
+  white-space: pre-wrap;
+}
+
+.media-feedback-comment-text a {
+  color: var(--cms-brand-ink);
+  text-underline-offset: var(--cms-text-underline-offset-content);
+}
+
+.media-feedback-delete {
+  display: grid;
+  gap: var(--cms-space-2);
+  min-width: 0;
+  padding: var(--cms-space-3);
+  border: var(--cms-border-width) solid var(--cms-line);
+  border-radius: var(--cms-radius-control);
+  background: var(--cms-surface-soft);
+}
+
+.media-feedback-time {
+  display: grid;
+  gap: var(--cms-space-2);
+  min-width: 0;
+  padding: var(--cms-space-3);
+  border: var(--cms-border-width) solid var(--cms-line);
+  border-radius: var(--cms-radius-control);
+}
+
+.media-feedback-time p {
+  margin: 0;
+  overflow-wrap: anywhere;
+  font-size: var(--cms-font-sm);
+}
+
+.media-feedback-comment[data-active] {
+  border-inline-start: 3px solid var(--cms-brand);
+  padding-inline-start: var(--cms-space-2);
+}
+
+.media-feedback-time-jump {
+  min-height: 24px;
+  padding-inline: 0;
+  font-variant-numeric: tabular-nums;
+}
+
+.media-feedback-filter {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--cms-space-2);
+  font-size: var(--cms-font-sm);
+  font-weight: 700;
+}
+
+.media-feedback-filter select {
+  width: auto;
+  min-width: 10rem;
+}
+
+.media-feedback-status:empty {
+  display: none;
+}
+
+.media-feedback-resolved {
+  margin: 0;
+  font-size: var(--cms-font-sm);
+}
+
+.media-feedback-comment[data-resolved] > .media-feedback-comment-text {
+  color: var(--cms-ink-secondary);
+}
+
+.media-feedback-replies {
+  display: grid;
+  gap: var(--cms-space-3);
+  margin: 0;
+  padding: 0 0 0 var(--cms-space-3);
+  list-style: none;
+  border-inline-start: 2px solid var(--cms-line);
+}
+
+.media-feedback-reply {
+  display: grid;
+  gap: var(--cms-space-2);
+  min-width: 0;
+}
+
+.media-feedback-reply-composer,
+.media-mention {
+  display: grid;
+  gap: var(--cms-space-2);
+  min-width: 0;
+}
+
+.media-mention textarea {
+  min-height: 4.75rem;
+  resize: vertical;
+}
+
+.media-mention-popup {
+  min-width: 0;
+  padding: var(--cms-space-2);
+  border: var(--cms-border-width) solid var(--cms-line);
+  border-radius: var(--cms-radius-control);
+  background: var(--cms-surface-soft);
+}
+
+.media-mention-list {
+  display: grid;
+  gap: 2px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.media-mention-option {
+  min-height: 24px;
+  padding: var(--cms-space-1) var(--cms-space-2);
+  border-radius: var(--cms-radius-control);
+  cursor: pointer;
+  overflow-wrap: anywhere;
+}
+
+.media-mention-option:hover,
+.media-mention-option[aria-selected="true"] {
+  background: var(--cms-brand);
+  color: #fff;
+}
+
+.media-mention-option[aria-selected="true"]::before {
+  content: "▸ ";
+}

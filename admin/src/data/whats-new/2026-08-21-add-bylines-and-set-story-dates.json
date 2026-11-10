@@ -1,0 +1,12 @@
+{
+  "date": "2026-08-21",
+  "kind": "new",
+  "title": "Add bylines and set story dates",
+  "body": "Add one or more staff bylines or a custom byline to a story. First publish, scheduled, backdated and updated dates are now separate fields.",
+  "prs": [
+    1092,
+    1084,
+    1130
+  ],
+  "order": 0
+}

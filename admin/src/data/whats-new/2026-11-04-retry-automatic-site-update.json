@@ -1,0 +1,8 @@
+{
+  "date": "2026-11-04",
+  "kind": "fixed",
+  "title": "Retry an automatic site update",
+  "body": "Publish activity offers Retry site update for a failed automatic update. It retries the accepted update without publishing newer drafts. Progress still has to confirm completion.",
+  "prs": [],
+  "order": 1793816310000
+}

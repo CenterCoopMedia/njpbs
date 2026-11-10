@@ -1,0 +1,61 @@
+---
+import { getCollection, getEntry } from "astro:content";
+import { isPrivatePreviewRender, renderPage } from "../../lib/cms-render-context";
+import { dataHubReportingHtml } from "../../lib/data-hub-reporting-render";
+import { parseReportingStory } from "../../../../packages/content-core/src/data-hub-reporting-sources.ts";
+import CmsBlocks from "../../components/CmsBlocks.astro";
+import ReaderTextSize from "../../components/ReaderTextSize.astro";
+import { dataHubCompositionHtml, dataHubSectionHtml } from "../../lib/data-hub-composition-render";
+import { isDefaultDataHubComposition } from "../../../../packages/content-core/src/data-hub-composition";
+import PublicSiteLayout from "../../layouts/PublicSiteLayout.astro";
+import { dataHubPageEnabled } from "../../lib/build-target";
+import dataHubHtml from "../../data/njpbs-data-hub-v16.html?raw";
+import "../../styles/data-hub.css";
+import { resolveNjDecidesSocialImage } from "../../lib/nj-decides-social-images";
+
+export function getStaticPaths() {
+  return dataHubPageEnabled(process.env)
+    ? [{ params: { hub: undefined } }]
+    : [];
+}
+const context = Astro.locals.cmsRender;
+const page = context ? renderPage(context,"data-hub") : (await getCollection("cmsPages")).find(entry => entry.data.pageId === "data-hub");
+const sources = context && "dataHubSources" in context.content ? context.content.dataHubSources : undefined;
+const collected = context ? context.content.posts : (await getCollection("cmsPosts")).map(entry => entry.data);
+const posts = sources?.posts ?? collected.flatMap(post => {
+  try { return [parseReportingStory({source:"posts",id:post.postId,href:`https://njpbs.org${post.path}`,title:post.title,
+    ...(post.credits.length && post.credits.map(credit => credit.name).join(", ").length <= 300 ? {byline:post.credits.map(credit => credit.name).join(", ")} : {}),
+    publishedAt:new Date(post.sortInstant ?? Date.parse(post.publishedAt)).toISOString(),tags:post.tags,categories:post.categories})]; } catch { return []; }
+});
+const spotlight = sources?.spotlight ?? (!context ? (await getEntry("publicDataHubReporting","reporting"))?.data : undefined);
+const preview = isPrivatePreviewRender(context) || page?.data.contentMode === "draft";
+const cutoffAt = sources ? Date.parse(sources.cutoffAt) : context?.content.kind === "private-preview"
+  ? context.content.publicContextReceipt.cutoffAt.seconds*1000 + Math.floor(context.content.publicContextReceipt.cutoffAt.nanoseconds/1e6) : Date.now();
+const html = dataHubReportingHtml(dataHubHtml,page?.data.dataHubReporting,posts,spotlight,Number.isFinite(cutoffAt) ? cutoffAt : Date.now());
+const composed = page?.data.dataHubCompositionVersion === 1 && !isDefaultDataHubComposition(page.data.blocks);
+const compositionHtml = dataHubCompositionHtml(html, page?.data.blocks ?? [], page?.data.dataHubCompositionVersion);
+const socialImage = resolveNjDecidesSocialImage(page ? { kind: "page", ...page.data } : undefined);
+---
+
+<PublicSiteLayout
+  title={page?.data.title ?? "New Jersey by the Numbers"}
+  description={page?.data.description ?? "Find official New Jersey employment, wages, taxes, and weather data, with clear reporting periods and source links."}
+  editTarget={page ? {type:"page",id:"data-hub"} : undefined}
+  seoTitle={page?.data.seo?.title}
+  seoDescription={page?.data.seo?.description}
+  socialTitle={page?.data.social?.title}
+  socialDescription={page?.data.social?.description}
+  socialImage={socialImage?.url}
+  socialImageAlt={socialImage?.alt}
+  canonicalPath="/data-hub/"
+  preview={preview}
+  noindex={preview || page?.data.noindex === true}
+  childDirected={page?.data.childDirected}
+  searchable={false}
+>
+  <ReaderTextSize within="data-hub" />
+  {composed && page ? <div class="data-hub data-hub--composed">
+    <CmsBlocks entry={page} contained={false} resolveDataHubSection={(data, level) => dataHubSectionHtml(html, data, level)} />
+    <Fragment set:html={compositionHtml} />
+  </div> : <div class="data-hub" set:html={html} />}
+</PublicSiteLayout>

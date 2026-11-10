@@ -1,0 +1,7 @@
+{
+  "date": "2026-11-08",
+  "kind": "fixed",
+  "title": "See when a restored original expires",
+  "body": "Video details now show how long a temporarily restored original is available. The available-until date and time use Eastern time.",
+  "prs": []
+}

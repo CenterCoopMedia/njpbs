@@ -1,0 +1,74 @@
+/* Anchored popover and its phone bottom sheet. */
+.ui-popover {
+  position: fixed;
+  z-index: var(--cms-z-popover);
+  width: max-content;
+  min-width: 16rem;
+  max-width: min(26rem, calc(100vw - (2 * var(--cms-space-2))));
+  max-height: calc(100vh - (2 * var(--cms-space-4)));
+  padding: var(--cms-space-4);
+  overflow: auto;
+  border: var(--cms-border-width) solid var(--cms-line);
+  border-radius: var(--cms-radius-panel);
+  background: var(--cms-surface);
+  box-shadow: var(--cms-shadow-menu);
+  color: var(--cms-ink);
+}
+
+.ui-popover[data-positioned="false"] {
+  visibility: hidden;
+}
+
+/* The global reduced-motion rule gives every property a 0.01ms transition. Visibility would
+   then still read hidden when the panel is placed and focus moves in, so focus stayed on the
+   trigger. Nothing here needs a transition with reduced motion. */
+@media (prefers-reduced-motion: reduce) {
+  .ui-popover,
+  .ui-popover * {
+    transition-property: none;
+  }
+}
+
+.ui-popover:focus-visible {
+  outline: var(--cms-focus-outline);
+  outline-offset: 2px;
+}
+
+.ui-popover-scrim {
+  position: fixed;
+  inset: 0;
+  z-index: var(--cms-z-popover);
+  background: var(--cms-scrim);
+}
+
+.ui-popover-sheet {
+  inset: auto 0 0;
+  width: auto;
+  max-width: none;
+  max-height: 85vh;
+  padding: var(--cms-space-2) var(--cms-space-4) calc(var(--cms-space-6) + env(safe-area-inset-bottom));
+  border-inline: 0;
+  border-bottom: 0;
+  border-radius: var(--cms-radius-panel) var(--cms-radius-panel) 0 0;
+}
+
+.ui-popover-grabber {
+  width: 2.5rem;
+  height: 0.25rem;
+  margin: 0 auto var(--cms-space-3);
+  border-radius: var(--cms-radius-round);
+  background: var(--cms-line-strong);
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .ui-popover-sheet {
+    animation: ui-popover-rise var(--cms-motion-normal) var(--cms-ease);
+  }
+}
+
+@keyframes ui-popover-rise {
+  from {
+    transform: translateY(1.5rem);
+    opacity: 0;
+  }
+}

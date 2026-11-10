@@ -1,0 +1,13 @@
+---
+import { renderNjDecidesBand, type NjDecidesBandOptions } from "../../../packages/content-core/src/nj-decides-render";
+import "../../../packages/content-core/src/nj-decides.css";
+import { getEntry } from "astro:content";
+import { NJ_DECIDES_SETTINGS_ID } from "../../../packages/content-core/src/cms-settings";
+
+interface Props extends NjDecidesBandOptions {}
+const props = Astro.props as Props;
+const branding = props.branding ?? (Astro.locals.cmsRender
+  ? Astro.locals.cmsRender.content.settings.find(setting => setting.settingId === NJ_DECIDES_SETTINGS_ID)
+  : (await getEntry("cmsPublicSiteChrome", NJ_DECIDES_SETTINGS_ID))?.data);
+---
+<Fragment set:html={renderNjDecidesBand({ ...props, branding })} />

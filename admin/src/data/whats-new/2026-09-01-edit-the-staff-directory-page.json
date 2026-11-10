@@ -1,0 +1,10 @@
+{
+  "date": "2026-09-01",
+  "kind": "new",
+  "title": "Edit the Staff directory page",
+  "body": "The Staff directory is now a page in Pages. You edit it like any other page.",
+  "prs": [
+    1389
+  ],
+  "order": -1
+}

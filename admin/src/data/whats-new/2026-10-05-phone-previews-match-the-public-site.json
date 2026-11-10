@@ -1,0 +1,11 @@
+{
+  "date": "2026-10-05",
+  "kind": "fixed",
+  "title": "Phone previews match the public site",
+  "body": "Phone previews of components now match the mobile layout and no longer jitter.",
+  "prs": [
+    2500,
+    2601
+  ],
+  "order": -1
+}

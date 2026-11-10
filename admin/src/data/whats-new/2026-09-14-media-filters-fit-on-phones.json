@@ -1,0 +1,12 @@
+{
+  "date": "2026-09-14",
+  "kind": "fixed",
+  "title": "Media filters fit on phones",
+  "body": "Media filters now use the full panel width on phones. Category names stay on one line and no longer run into their counts.",
+  "prs": [
+    1811,
+    1818,
+    1838
+  ],
+  "order": -3
+}

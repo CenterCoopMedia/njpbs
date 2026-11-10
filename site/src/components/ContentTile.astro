@@ -1,0 +1,146 @@
+---
+// A reusable content tile with honest status badges, so members see what is free,
+// what needs Passport, and what is leaving before they click instead of hitting a
+// dead-end "unavailable" after it. The status logic lives in lib/content-tile.ts
+// (tested there); this file is the presentation. Every badge pairs a text label with
+// an icon, so its meaning survives with colour removed (WCAG 1.4.1), and the media
+// kind is exposed both visually (a badge) and programmatically (data-media-kind).
+//
+// The art is a neutral brand placeholder.
+import {
+  tileBadges,
+  BADGE_COLORS,
+  BADGE_ICONS,
+  TILE_MIN_TARGET_PX,
+  type ContentTileData,
+} from "../lib/content-tile";
+
+interface Props {
+  tile: ContentTileData;
+}
+
+const { tile } = Astro.props;
+const badges = tileBadges(tile);
+---
+
+<a class="tile" href={tile.href} data-media-kind={tile.mediaKind}>
+  <span class="tile__art" aria-hidden="true"></span>
+
+  <ul class="tile__badges">
+    {
+      badges.map((b) => (
+        <li
+          class={`tile__badge tile__badge--${b.tone}`}
+          style={`--badge-bg:${BADGE_COLORS[b.tone].bg};--badge-fg:${BADGE_COLORS[b.tone].fg}`}
+        >
+          <svg
+            class="tile__badge-icon"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+            aria-hidden="true"
+            set:html={BADGE_ICONS[b.icon]}
+          />
+          <span class="tile__badge-label">{b.label}</span>
+          {b.srText && <span class="sr-only"> {b.srText}</span>}
+        </li>
+      ))
+    }
+  </ul>
+
+  <span class="tile__title">{tile.title}</span>
+  {tile.meta && <span class="tile__meta">{tile.meta}</span>}
+</a>
+
+<style define:vars={{ minTarget: `${TILE_MIN_TARGET_PX}px` }}>
+  .tile {
+    position: relative;
+    display: block;
+    min-height: var(--minTarget);
+    color: var(--text);
+    text-decoration: none;
+    border-radius: 8px;
+  }
+  .tile__art {
+    display: block;
+    aspect-ratio: 16 / 9;
+    border-radius: 8px;
+    background:
+      linear-gradient(150deg, var(--bg-2), var(--bg-1));
+    border: 1px solid var(--line);
+  }
+  .tile:focus-visible {
+    outline: none;
+  }
+  .tile:focus-visible .tile__art {
+    outline: var(--focus-outline);
+    outline-offset: var(--focus-offset);
+  }
+
+  /* Badges sit over the top of the art so status reads before the click. */
+  .tile__badges {
+    position: absolute;
+    top: 0.5rem;
+    left: 0.5rem;
+    right: 0.5rem;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.35rem;
+  }
+  .tile__badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.3em;
+    padding: 0.2rem 0.5rem;
+    border-radius: 999px;
+    font-size: 0.72rem;
+    font-weight: 600;
+    line-height: 1.2;
+    white-space: nowrap;
+    background: var(--badge-bg);
+    color: var(--badge-fg);
+  }
+  .tile__badge-icon {
+    width: 0.95em;
+    height: 0.95em;
+    flex: none;
+  }
+  .tile__title {
+    display: block;
+    margin-top: 0.55rem;
+    font-size: 0.95rem;
+    font-weight: 600;
+  }
+  .tile__meta {
+    display: block;
+    margin-top: 0.15rem;
+    font-size: 0.8rem;
+    color: var(--text-dim);
+  }
+
+  /* Self-contained visually-hidden utility, so the badge's assistive-tech text
+     works even where a global .sr-only is not in scope. */
+  .sr-only {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    border: 0;
+  }
+
+  @media (prefers-reduced-motion: no-preference) {
+    .tile__art {
+      transition: outline-color 0.15s ease;
+    }
+  }
+</style>

@@ -1,0 +1,86 @@
+{
+  "AWSTemplateFormatVersion": "2010-09-09",
+  "Description": "On-demand Boardwalk original-range runtime in the existing VPC. No running service or new media bucket.",
+  "Parameters": {
+    "ExistingVpcId": {
+      "Type": "AWS::EC2::VPC::Id",
+      "Description": "Inventoried VPC used by the extraction task."
+    }
+  },
+  "Resources": {
+    "Cluster": {
+      "Type": "AWS::ECS::Cluster",
+      "Properties": {
+        "CapacityProviders": [
+          "FARGATE"
+        ],
+        "ClusterSettings": [
+          {
+            "Name": "containerInsights",
+            "Value": "disabled"
+          }
+        ]
+      }
+    },
+    "Repository": {
+      "Type": "AWS::ECR::Repository",
+      "DeletionPolicy": "Retain",
+      "UpdateReplacePolicy": "Retain",
+      "Properties": {
+        "ImageTagMutability": "IMMUTABLE",
+        "EncryptionConfiguration": {
+          "EncryptionType": "AES256"
+        }
+      }
+    },
+    "TaskSecurityGroup": {
+      "Type": "AWS::EC2::SecurityGroup",
+      "Properties": {
+        "GroupDescription": "Boardwalk extraction tasks: No inbound connections, outbound HTTPS only",
+        "VpcId": {
+          "Ref": "ExistingVpcId"
+        },
+        "SecurityGroupEgress": [
+          {
+            "IpProtocol": "tcp",
+            "FromPort": 443,
+            "ToPort": 443,
+            "CidrIp": "0.0.0.0/0",
+            "Description": "HTTPS for S3, ECR, and CloudWatch Logs"
+          }
+        ]
+      }
+    }
+  },
+  "Outputs": {
+    "ClusterArn": {
+      "Value": {
+        "Fn::GetAtt": [
+          "Cluster",
+          "Arn"
+        ]
+      }
+    },
+    "RepositoryUri": {
+      "Value": {
+        "Fn::GetAtt": [
+          "Repository",
+          "RepositoryUri"
+        ]
+      }
+    },
+    "RepositoryName": {
+      "Value": {
+        "Ref": "Repository"
+      }
+    },
+    "TaskSecurityGroupId": {
+      "Value": {
+        "Fn::GetAtt": [
+          "TaskSecurityGroup",
+          "GroupId"
+        ]
+      }
+    }
+  }
+}

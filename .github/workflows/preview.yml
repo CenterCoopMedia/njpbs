@@ -1,0 +1,78 @@
+name: Preview site
+
+# Builds site/dist for preview/develop branch pushes or a manual run, runs the
+# public-contract and guardrail scans, and uploads the dist as a downloadable
+# approval artifact. Pull requests get the same artifact from ci.yml.
+#
+# Live GitHub Pages deploys come only from pages.yml on the production branch.
+on:
+  push:
+    branches: [preview, develop]
+    paths:
+      - "site/**"
+      - "wiki/**"
+      # The preview compiles these shared Admin sources. Changes to them
+      # must rebuild the matching preview artifact.
+      - "admin/dev-preview/**"
+      - "admin/src/routes/PoliticsResourceRoute.*"
+      - "admin/src/routes/ElectionsPanel.*"
+      - "admin/src/routes/ShellContext.tsx"
+      - "admin/src/lib/politics-resource.ts"
+      - "admin/src/lib/election-directory.ts"
+      - "admin/src/lib/guide-preview-source.ts"
+      - "admin/src/styles.css"
+      - "admin/src/design-system/**"
+      # The site compiles the content core in from packages/content-core, so a
+      # core-only change has to rebuild the preview artifact.
+      - "packages/**"
+      - ".github/workflows/preview.yml"
+      - ".github/workflows/pages.yml"
+  workflow_dispatch:
+
+# This workflow only builds and uploads the dist artifact, so contents: read is
+# the whole permission set.
+permissions:
+  contents: read
+
+concurrency:
+  group: preview-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: site
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: site/package-lock.json
+      - run: npm ci --ignore-scripts
+      # The dependency-free bootstrap runs before package lifecycle hooks and
+      # before the build evaluates scanned source (issue #607).
+      - name: Metered-API source scan (before any scanned code runs)
+        run: node ../.github/scripts/metered-api-scan.mjs
+      - name: Build preview artifact
+        run: npm run build
+        env:
+          INTERNAL_SURFACES: "1"
+          PUBLIC_SHARE_PAGE: ${{ vars.PUBLIC_SHARE_PAGE || '' }}
+          PUBLIC_GA4_REQUIRED: "1"
+          PUBLIC_GA4_MEASUREMENT_ID: ${{ vars.PUBLIC_GA4_MEASUREMENT_ID }}
+      - name: Public homepage contract
+        run: npm run assert:public-contract
+      - name: Guardrail scan
+        run: npm run guardrails
+        env:
+          INTERNAL_SURFACES: "1"
+      - uses: actions/upload-artifact@v7
+        with:
+          name: site-preview-${{ github.sha }}
+          path: site/dist
+          if-no-files-found: error
+          retention-days: 7

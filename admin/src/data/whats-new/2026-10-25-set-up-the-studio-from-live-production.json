@@ -1,0 +1,15 @@
+{
+  "date": "2026-10-25",
+  "kind": "improved",
+  "title": "Set up the studio from Live production",
+  "body": "Open Live production, then Prepare and Studio setup, to download the connection package, pair a studio PC and check its setup. On a phone, setup scrolls with the page and keeps focus while you type. Rundown rows show consecutive numbers and keep banners together.",
+  "prs": [
+    3908,
+    3910,
+    3994,
+    3996,
+    4002,
+    4031
+  ],
+  "order": -3
+}

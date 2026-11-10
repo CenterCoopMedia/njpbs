@@ -1,0 +1,21 @@
+---
+import type { RenderedContentGroup } from "../../../packages/content-core/src/content-row-render";
+import type { RecordCardPayload } from "../lib/record-card-resolution";
+import { cmsBlockLeafPresentation } from "../lib/cms-block-visibility";
+import RecordCard from "./RecordCard.astro";
+
+interface Props {
+  group: RenderedContentGroup;
+  cards: readonly RecordCardPayload[];
+}
+const { group, cards } = Astro.props;
+const { card, visible } = cmsBlockLeafPresentation(group, cards);
+---
+{visible ? <div
+  class={`cms-block cms-block--${group.block.type}`}
+  id={group.id}
+  data-block-id={group.block.id}
+  data-block-type={group.block.type}
+>
+  {card ? <RecordCard card={card} headingLevel={group.generatedHeadingLevel ?? 2} /> : <Fragment set:html={group.html} />}
+</div> : null}

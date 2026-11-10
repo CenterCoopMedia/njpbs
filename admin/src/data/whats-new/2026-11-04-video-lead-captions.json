@@ -1,0 +1,8 @@
+{
+  "date": "2026-11-04",
+  "kind": "fixed",
+  "title": "Video captions appear once",
+  "body": "Linked and embedded Post videos no longer repeat a caption below Play or Watch when it already names the video. A separate caption still appears when the video has a different title.",
+  "prs": [],
+  "order": 1793822620000
+}

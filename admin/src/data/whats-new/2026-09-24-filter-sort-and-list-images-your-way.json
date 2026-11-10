@@ -1,0 +1,13 @@
+{
+  "date": "2026-09-24",
+  "kind": "improved",
+  "title": "Filter, sort and list images your way",
+  "body": "The Images tab has a new toolbar with Filter, Display and More. Choose List in Display to see a table that you can sort by column. More holds Select this page and Keyboard shortcuts.",
+  "prs": [
+    2195,
+    2208,
+    2238,
+    2273
+  ],
+  "order": 0
+}

@@ -1,0 +1,12 @@
+{
+  "date": "2026-08-27",
+  "kind": "improved",
+  "title": "Restore and save conflicts are clearer",
+  "body": "Page editor sections follow a fixed task order. When a save conflicts with another change, Boardwalk shows progress and what to fix, and restore asks you to confirm first.",
+  "prs": [
+    1304,
+    1291,
+    1289
+  ],
+  "order": -1
+}

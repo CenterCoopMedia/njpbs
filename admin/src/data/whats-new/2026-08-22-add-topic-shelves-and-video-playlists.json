@@ -1,0 +1,10 @@
+{
+  "date": "2026-08-22",
+  "kind": "new",
+  "title": "Add topic shelves and video playlists",
+  "body": "Add a related-story shelf that follows an approved topic, or a video playlist from an approved library. You can pin up to six items to the front.",
+  "prs": [
+    1118
+  ],
+  "order": -4
+}

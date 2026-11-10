@@ -1,0 +1,253 @@
+---
+import Base from "./Base.astro";
+import GuideSearch from "../components/GuideSearch.astro";
+import {
+  ADMIN_DOC_SECTIONS,
+  ADMIN_DOCS_BASE,
+  adminDocNeighbours,
+  normalizeAdminDocsPath,
+} from "../lib/admin-docs";
+import "../styles/admin-docs.css";
+
+interface MarkdownHeading {
+  depth: number;
+  slug: string;
+  text: string;
+}
+
+interface DocMetadata {
+  title?: string;
+  description?: string;
+}
+
+interface Props {
+  title?: string;
+  description?: string;
+  route?: string;
+  frontmatter?: DocMetadata;
+  headings?: MarkdownHeading[];
+}
+
+const props = Astro.props as Props;
+const title =
+  props.title ?? props.frontmatter?.title ?? "Boardwalk guide";
+const description =
+  props.description ??
+  props.frontmatter?.description ??
+  "Instructions for creating, reviewing, and publishing NJ PBS content.";
+const currentPath = normalizeAdminDocsPath(props.route ?? Astro.url.pathname);
+const { previous, next } = adminDocNeighbours(currentPath);
+const contents = (props.headings ?? []).filter((heading) => heading.depth === 2);
+const documentTitle =
+  currentPath === ADMIN_DOCS_BASE
+    ? "Boardwalk guide"
+    : `${title} | Boardwalk guide`;
+const canonicalUrl = new URL(currentPath, "https://dev-public.example.org").toString();
+const isCurrent = (href: string) => href === currentPath;
+---
+
+<Base
+  title={documentTitle}
+  description={description}
+  canonicalPath={canonicalUrl}
+  ogTitle={documentTitle}
+  ogDescription={description}
+  noindex={true}
+>
+  <link
+    slot="head"
+    rel="preload"
+    href="https://media.njpbs.org/cms-media/fonts/6d1461f427c030aed42aaa039eb8ce7409a261a7a62e46ff0854d7c79db00123/PBSSans.woff2"
+    as="font"
+    type="font/woff2"
+    crossorigin
+  />
+  <link
+    slot="head"
+    rel="preload"
+    href="https://media.njpbs.org/cms-media/fonts/d2a1a10beac03a9cf986714d6388978379efaa9d9b4a662ec374b262104851b5/PBSSans-Bold.woff2"
+    as="font"
+    type="font/woff2"
+    crossorigin
+  />
+
+  <a class="admin-docs-skip" href="#admin-docs-main">Skip to guide content</a>
+
+  <div class="admin-docs-page">
+    <header class="admin-docs-header" data-pagefind-ignore>
+      <div class="admin-docs-header-inner">
+        <a class="admin-docs-brand" href={ADMIN_DOCS_BASE}>
+          <img
+            src="/brand/njpbs-horizontal-white.svg"
+            alt="NJ PBS"
+            width="183"
+            height="50"
+          />
+          <span>Boardwalk guide</span>
+        </a>
+
+        <nav class="admin-docs-site-nav" aria-label="Guide utilities">
+          <GuideSearch />
+          <a href="/">NJ PBS home</a>
+          <a href={ADMIN_DOCS_BASE}>Guide home</a>
+          <a
+            class="admin-docs-open-admin"
+            href="https://admin.njpbs.org/"
+            rel="noopener noreferrer"
+            target="_blank"
+          >
+            Open Boardwalk<span class="sr-only"> (opens in new tab)</span>
+          </a>
+        </nav>
+      </div>
+    </header>
+
+    <div class="admin-docs-breadcrumb-wrap" data-pagefind-ignore>
+      <nav class="admin-docs-breadcrumbs" aria-label="Breadcrumb">
+        <ol>
+          <li><a href="/">NJ PBS</a></li>
+          {
+            currentPath === ADMIN_DOCS_BASE ? (
+              <li>
+                <span aria-current="page">Boardwalk guide</span>
+              </li>
+            ) : (
+              <>
+                <li><a href={ADMIN_DOCS_BASE}>Boardwalk guide</a></li>
+                <li>
+                  <span aria-current="page">{title}</span>
+                </li>
+              </>
+            )
+          }
+        </ol>
+      </nav>
+    </div>
+
+    <details class="admin-docs-mobile-nav" data-pagefind-ignore>
+      <summary>Browse the guide</summary>
+      <div class="admin-docs-mobile-nav-body">
+        {
+          ADMIN_DOC_SECTIONS.map((section) => (
+            <section>
+              <p class="admin-docs-nav-title">{section.title}</p>
+              <ul>
+                {section.pages.map((page) => {
+                  const href = `${ADMIN_DOCS_BASE}${page.slug}/`;
+                  return (
+                    <li>
+                      <a
+                        href={href}
+                        aria-current={isCurrent(href) ? "page" : undefined}
+                      >
+                        {page.title}
+                      </a>
+                    </li>
+                  );
+                })}
+              </ul>
+            </section>
+          ))
+        }
+      </div>
+    </details>
+
+    <div class="admin-docs-frame">
+      <aside class="admin-docs-sidebar" data-pagefind-ignore>
+        <nav aria-label="Boardwalk guide">
+          {
+            ADMIN_DOC_SECTIONS.map((section) => (
+              <section>
+                <p class="admin-docs-nav-title">{section.title}</p>
+                <ul>
+                  {section.pages.map((page) => {
+                    const href = `${ADMIN_DOCS_BASE}${page.slug}/`;
+                    return (
+                      <li>
+                        <a
+                          href={href}
+                          aria-current={isCurrent(href) ? "page" : undefined}
+                        >
+                          {page.title}
+                        </a>
+                      </li>
+                    );
+                  })}
+                </ul>
+              </section>
+            ))
+          }
+        </nav>
+      </aside>
+
+      <main class="admin-docs-main" id="admin-docs-main" tabindex="-1">
+        <article class="admin-docs-article" data-pagefind-body>
+          <header class="admin-docs-article-header">
+            <h1>{title}</h1>
+            <p class="admin-docs-lede">{description}</p>
+          </header>
+
+          {
+            contents.length >= 2 ? (
+              <nav
+                class="admin-docs-contents"
+                aria-labelledby="admin-docs-contents-title"
+              >
+                <h2 id="admin-docs-contents-title">On this page</h2>
+                <ol>
+                  {contents.map((heading) => (
+                    <li>
+                      <a href={`#${heading.slug}`}>{heading.text}</a>
+                    </li>
+                  ))}
+                </ol>
+              </nav>
+            ) : null
+          }
+
+          <div class="admin-docs-prose">
+            <slot />
+          </div>
+        </article>
+
+        {
+          previous || next ? (
+            <nav
+              class="admin-docs-pagination"
+              aria-label="Guide pages"
+              data-pagefind-ignore
+            >
+              {previous ? (
+                <a href={previous.href} rel="prev">
+                  <span>Previous</span>
+                  <strong>{previous.title}</strong>
+                </a>
+              ) : (
+                <span aria-hidden="true" />
+              )}
+              {next ? (
+                <a class="admin-docs-pagination-next" href={next.href} rel="next">
+                  <span>Next</span>
+                  <strong>{next.title}</strong>
+                </a>
+              ) : null}
+            </nav>
+          ) : null
+        }
+      </main>
+    </div>
+
+    <footer class="admin-docs-footer" data-pagefind-ignore>
+      <div>
+        <strong>Boardwalk guide</strong>
+        <span>
+          For staff who create, review, and maintain NJ PBS digital content.
+        </span>
+      </div>
+      <p>
+        Never include passwords, verification links, private member or donor
+        information, or unpublished agreements in a support report.
+      </p>
+    </footer>
+  </div>
+</Base>

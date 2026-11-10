@@ -1,0 +1,10 @@
+{
+  "date": "2026-08-31",
+  "kind": "new",
+  "title": "Show a banner on the homepage",
+  "body": "Staff can add, change and remove a banner at the top of the public homepage from Boardwalk.",
+  "prs": [
+    1371
+  ],
+  "order": 0
+}

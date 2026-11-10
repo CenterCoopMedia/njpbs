@@ -1,0 +1,14 @@
+{
+  "date": "2026-10-10",
+  "kind": "new",
+  "title": "Favorite, sort and search videos faster",
+  "body": "You can add a group of selected videos to Favorites in one step and sort the video library by file size. Search and download actions are simpler, and the daily clip export limit is now 30.",
+  "prs": [
+    3026,
+    2602,
+    2959,
+    2853,
+    2914
+  ],
+  "order": 0
+}

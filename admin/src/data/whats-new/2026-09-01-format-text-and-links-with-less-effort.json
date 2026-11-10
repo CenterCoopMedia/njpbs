@@ -1,0 +1,11 @@
+{
+  "date": "2026-09-01",
+  "kind": "improved",
+  "title": "Format text and links with less effort",
+  "body": "Text formatting controls appear next to the text you select. Links show clear feedback, and pasted text keeps clean formatting.",
+  "prs": [
+    1405,
+    1396
+  ],
+  "order": -2
+}

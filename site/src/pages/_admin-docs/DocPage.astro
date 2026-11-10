@@ -1,0 +1,29 @@
+---
+import AdminDocsLayout from "../../layouts/AdminDocsLayout.astro";
+import { findAdminDocPage } from "../../lib/admin-docs";
+
+type AdminDocModule = typeof import("./overview/index.md");
+
+const modules = import.meta.glob("./*/index.md", {
+  eager: true,
+}) as Record<string, AdminDocModule>;
+const page = findAdminDocPage(Astro.url.pathname);
+if (!page) {
+  throw new Error(`Unknown Admin guide route ${Astro.url.pathname}`);
+}
+const module = modules[`./${page.slug}/index.md`];
+if (!module) {
+  throw new Error(`Missing Admin guide source for ${page.slug}`);
+}
+const Content = module.Content;
+const headings = module.getHeadings();
+---
+
+<AdminDocsLayout
+  title={page.title}
+  description={page.description}
+  route={page.href}
+  headings={headings}
+>
+  <Content />
+</AdminDocsLayout>

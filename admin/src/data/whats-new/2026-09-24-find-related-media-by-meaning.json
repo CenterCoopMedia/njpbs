@@ -1,0 +1,13 @@
+{
+  "date": "2026-09-24",
+  "kind": "new",
+  "title": "Find related media by meaning",
+  "body": "When you search Media library, open Related results above the list to see items with a similar meaning, not only matching words. Boardwalk retries a failed scan.",
+  "prs": [
+    1896,
+    2207,
+    2216,
+    2273
+  ],
+  "order": -1
+}

@@ -1,0 +1,12 @@
+{
+  "date": "2026-10-12",
+  "kind": "fixed",
+  "title": "Boardwalk loads and saves as expected",
+  "body": "Boardwalk no longer opens to a blank screen on first load. New staff can sign in after they verify their email. Event drafts save with a blank end time.",
+  "prs": [
+    3345,
+    2909,
+    3324
+  ],
+  "order": -1
+}

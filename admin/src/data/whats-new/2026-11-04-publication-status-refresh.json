@@ -1,0 +1,7 @@
+{
+  "date": "2026-11-04",
+  "kind": "fixed",
+  "title": "Publication status stays current",
+  "body": "The live status in Pages and Posts updates after publication without a page reload.",
+  "prs": []
+}

@@ -1,0 +1,11 @@
+{
+  "date": "2026-08-18",
+  "kind": "improved",
+  "title": "See progress while an action runs",
+  "body": "Saves, uploads and other actions now show clear progress, success and error messages. The Boardwalk rail and header appear at once while the editor loads.",
+  "prs": [
+    1001,
+    1017
+  ],
+  "order": -1
+}

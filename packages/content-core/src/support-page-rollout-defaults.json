@@ -1,0 +1,218 @@
+[
+  {
+    "id": "support-layout-v1-hero-actions",
+    "type": "cta_row",
+    "visible": true,
+    "order": 0,
+    "data": {
+      "ctas": [
+        {
+          "label": "Donate",
+          "href": "https://www.pbs.org/donation/?station_id=63b643e1-1a13-4dd9-9bab-ff6f7527715f&campaign=passport",
+          "variant": "primary"
+        },
+        {
+          "label": "Contact NJ PBS",
+          "href": "/contact/",
+          "variant": "secondary"
+        }
+      ]
+    }
+  },
+  {
+    "id": "support-layout-v1-transition-notice",
+    "type": "prose",
+    "visible": true,
+    "order": 1,
+    "data": {
+      "content": {
+        "type": "doc",
+        "content": [
+          {
+            "type": "heading",
+            "attrs": {
+              "level": 2
+            },
+            "content": [
+              {
+                "type": "text",
+                "text": "Giving and Passport during the transition"
+              }
+            ]
+          },
+          {
+            "type": "paragraph",
+            "content": [
+              {
+                "type": "text",
+                "text": "Existing gifts, including one-time and recurring gifts, ended June 30, 2026. If you would like to continue supporting NJ PBS, you will need to set up a new monthly recurring gift or make a one-time donation through the new donation portal. "
+              }
+            ]
+          },
+          {
+            "type": "paragraph",
+            "content": [
+              {
+                "type": "text",
+                "text": "PBS manages Passport account status. Use the PBS Passport lookup tool to check an existing account. If access does not appear or a renewal is due, contact NJ PBS for help with the current account or donation path."
+              }
+            ]
+          }
+        ]
+      }
+    }
+  },
+  {
+    "id": "support-layout-v1-transition-actions",
+    "type": "cta_row",
+    "visible": true,
+    "order": 2,
+    "data": {
+      "ctas": [
+        {
+          "label": "See the full transition FAQ",
+          "href": "/faq/",
+          "variant": "secondary"
+        },
+        {
+          "label": "Look up Passport access",
+          "href": "https://www.pbs.org/passport/lookup/",
+          "variant": "secondary"
+        }
+      ]
+    }
+  },
+  {
+    "id": "support-layout-v1-checks",
+    "type": "prose",
+    "visible": true,
+    "order": 3,
+    "data": {
+      "content": {
+        "type": "doc",
+        "content": [
+          {
+            "type": "heading",
+            "attrs": {
+              "level": 2
+            },
+            "content": [
+              {
+                "type": "text",
+                "text": "Prefer to mail a check?"
+              }
+            ]
+          },
+          {
+            "type": "paragraph",
+            "content": [
+              {
+                "type": "text",
+                "text": "Make checks payable to NJ PBS and mail to: "
+              },
+              {
+                "type": "text",
+                "text": "NJ PBS, 1 Normal Ave., Montclair, NJ 07043",
+                "marks": [
+                  {
+                    "type": "bold"
+                  }
+                ]
+              },
+              {
+                "type": "text",
+                "text": "."
+              }
+            ]
+          },
+          {
+            "type": "paragraph",
+            "content": [
+              {
+                "type": "text",
+                "text": "Online donation processing is handled through PBS, and this site does not collect payment information. A mailed check supports NJ PBS but does not activate PBS Passport; to start or renew Passport streaming, donate through the new donation portal."
+              }
+            ]
+          },
+          {
+            "type": "paragraph",
+            "content": []
+          }
+        ]
+      }
+    }
+  },
+  {
+    "id": "support-layout-v1-service-destinations",
+    "type": "card_grid",
+    "visible": true,
+    "order": 4,
+    "data": {
+      "cards": [
+        {
+          "itemId": "support-layout-v1-card-0",
+          "label": "Give",
+          "title": "Donate",
+          "body": {
+            "type": "doc",
+            "content": [
+              {
+                "type": "paragraph",
+                "content": [
+                  {
+                    "type": "text",
+                    "text": "Open the secure PBS payment form for NJ PBS."
+                  }
+                ]
+              }
+            ]
+          },
+          "href": "https://www.pbs.org/donation/?station_id=63b643e1-1a13-4dd9-9bab-ff6f7527715f&campaign=passport",
+          "imageAssetId": "launch-give"
+        },
+        {
+          "itemId": "support-layout-v1-card-1",
+          "label": "Member",
+          "title": "Passport access",
+          "body": {
+            "type": "doc",
+            "content": [
+              {
+                "type": "paragraph",
+                "content": [
+                  {
+                    "type": "text",
+                    "text": "Learn about the Passport member benefit before you watch."
+                  }
+                ]
+              }
+            ]
+          },
+          "href": "/passport/",
+          "imageAssetId": "launch-passport"
+        },
+        {
+          "itemId": "support-layout-v1-card-2",
+          "label": "Help",
+          "title": "Contact NJ PBS",
+          "body": {
+            "type": "doc",
+            "content": [
+              {
+                "type": "paragraph",
+                "content": [
+                  {
+                    "type": "text",
+                    "text": "Reach the station team with membership or site questions."
+                  }
+                ]
+              }
+            ]
+          },
+          "href": "/contact/",
+          "imageAssetId": "launch-contact"
+        }
+      ]
+    }
+  }
+]

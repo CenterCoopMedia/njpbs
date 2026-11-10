@@ -1,0 +1,41 @@
+/* Live election text uses the existing PBS Sans family. */
+.nj-decides {
+  color: var(--color-nj-decides-text);
+  background: var(--color-nj-decides-surface);
+  font-family: var(--font-nj-decides);
+}
+
+.nj-decides a {
+  color: inherit;
+  text-underline-offset: 0.2em;
+}
+
+.nj-decides :focus-visible {
+  outline: 3px solid var(--color-nj-decides-focus);
+  outline-offset: 3px;
+}
+
+.nj-decides__logo {
+  display: block;
+  width: 100%;
+  height: auto;
+  max-height: 8rem;
+  object-fit: contain;
+}
+
+/* Four stars echo the supplied ribbon. This is decoration, never a status. */
+.nj-decides__ribbon {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-3) var(--space-6);
+  color: var(--color-nj-decides-paper);
+  background: var(--color-nj-decides-red);
+}
+
+.nj-decides__star {
+  width: 1rem;
+  height: 1rem;
+  background: currentColor;
+  clip-path: polygon(50% 0%, 61% 35%, 98% 35%, 68% 57%, 79% 94%, 50% 72%, 21% 94%, 32% 57%, 2% 35%, 39% 35%);
+}

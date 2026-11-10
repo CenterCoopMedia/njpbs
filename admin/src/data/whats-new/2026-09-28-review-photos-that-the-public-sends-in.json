@@ -1,0 +1,10 @@
+{
+  "date": "2026-09-28",
+  "kind": "new",
+  "title": "Review photos that the public sends in",
+  "body": "The Public submissions tab in Media library lists photos from the public. Site-wide media managers can approve, reject or import each one. Boardwalk removes hidden photo data before import.",
+  "prs": [
+    2385
+  ],
+  "order": 0
+}

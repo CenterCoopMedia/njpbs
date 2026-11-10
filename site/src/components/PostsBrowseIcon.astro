@@ -1,0 +1,13 @@
+---
+import type { PostsBrowseIcon } from "../../../packages/content-core/src/posts-browse";
+interface Props { icon: PostsBrowseIcon }
+const paths = {
+  ballot: "M5 3h14v7H5z M3 12h18v9H3z M8 6l3 2 5-4",
+  heart: "M20.8 4.6a5.5 5.5 0 0 0-7.8 0L12 5.7l-1.1-1.1a5.5 5.5 0 0 0-7.8 7.8L12 21l8.8-8.6a5.5 5.5 0 0 0 0-7.8Z",
+  train: "M5 16V5c0-4 14-4 14 0v11H5z M5 10h14 M8 20l-2 3 M16 20l2 3 M8 14h.01 M16 14h.01",
+  leaf: "M20 3c1 13-4 19-13 16C0 11 9 4 20 3Z M4 22 15 10",
+  play: "M4 3h16v18H4z M10 8l6 4-6 4z",
+  pin: "M20 10c0 6-8 12-8 12S4 16 4 10a8 8 0 1 1 16 0Z M15 10a3 3 0 1 1-6 0 3 3 0 0 1 6 0Z",
+};
+---
+<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.65" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d={paths[Astro.props.icon]} /></svg>

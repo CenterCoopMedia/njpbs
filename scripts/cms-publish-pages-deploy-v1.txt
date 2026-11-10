@@ -1,0 +1,5 @@
+CMS publish Pages deployment runtime version 1.
+
+This marker means the reviewed production source contains the exact artifact,
+prepared terminal writeback, and live deployment receipt contract required by
+the protected CMS publish workflow.

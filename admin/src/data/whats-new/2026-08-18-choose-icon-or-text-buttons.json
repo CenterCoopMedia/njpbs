@@ -1,0 +1,11 @@
+{
+  "date": "2026-08-18",
+  "kind": "new",
+  "title": "Choose icon or text buttons",
+  "body": "Each account can now choose how Boardwalk shows its small action buttons: as icons or as text. Tag controls also use a compact style with clear remove buttons.",
+  "prs": [
+    1003,
+    972
+  ],
+  "order": 0
+}

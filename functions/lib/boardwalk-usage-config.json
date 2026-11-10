@@ -1,0 +1,34 @@
+{
+  "analyticsEnabled": true,
+  "screens": {
+    "dashboard": "Home",
+    "pages": "Pages",
+    "posts": "Posts",
+    "content": "Other content",
+    "post-templates": "Post templates",
+    "cuez": "StoryDesk",
+    "analytics": "Site analytics",
+    "activity": "Activity",
+    "media": "Other media",
+    "images": "Images",
+    "videos": "Videos",
+    "voiceovers": "Audio",
+    "queue": "Editorial queue",
+    "reports": "Reports",
+    "guide": "Boardwalk guide",
+    "resources": "Resources",
+    "schedule": "Broadcast schedule",
+    "live-production": "Live production",
+    "account-settings": "Account settings",
+    "account-profile": "Your profile",
+    "author-profiles": "Staff profiles",
+    "costs": "Costs",
+    "admin-settings": "Admin settings",
+    "staff-access": "Staff access",
+    "premiere-connect": "Connect Premiere"
+  },
+  "actions": {
+    "content.publish.request": "Content publish attempts",
+    "preview.request": "Saved Preview attempts"
+  }
+}

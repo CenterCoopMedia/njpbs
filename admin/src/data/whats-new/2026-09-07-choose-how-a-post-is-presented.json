@@ -1,0 +1,10 @@
+{
+  "date": "2026-09-07",
+  "kind": "new",
+  "title": "Choose how a Post is presented",
+  "body": "Pick a presentation style for each Post in the editor. Boardwalk tells you which fields a Post needs before you can publish it.",
+  "prs": [
+    1612
+  ],
+  "order": -1
+}

@@ -1,0 +1,6 @@
+.data-hub-reporting-editor fieldset { min-width: 0; }
+.data-hub-reporting-editor summary { cursor: pointer; min-height: 44px; display: flex; align-items: center; }
+.data-hub-reporting-editor ul, .data-hub-reporting-editor ol { padding-inline-start: 1.5rem; }
+.data-hub-reporting-editor li { overflow-wrap: anywhere; margin-block: 0.75rem; }
+.data-hub-reporting-editor__search { display: flex; flex-wrap: wrap; gap: 0.5rem; align-items: center; }
+.data-hub-reporting-editor__search input { min-width: 0; max-width: 100%; }

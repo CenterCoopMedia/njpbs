@@ -1,0 +1,11 @@
+{
+  "date": "2026-09-26",
+  "kind": "improved",
+  "title": "Upload media from any library tab",
+  "body": "Media library now accepts uploads from every tab. Boardwalk sends each file to the correct place by file type, so images go to Images and videos go to Videos.",
+  "prs": [
+    2246,
+    2369
+  ],
+  "order": -1
+}

@@ -1,0 +1,10 @@
+{
+  "date": "2026-11-02",
+  "kind": "improved",
+  "title": "Follow election results without reloading",
+  "body": "Public election results check for updates each minute while the tab is visible. Readers can jump to a race, search by candidate or district, and filter by race status. Unreported numbers show a dash. A white check on green marks a called winner.",
+  "prs": [
+    4661
+  ],
+  "order": 50
+}

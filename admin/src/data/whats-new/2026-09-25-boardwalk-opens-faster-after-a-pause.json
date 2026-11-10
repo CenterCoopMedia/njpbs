@@ -1,0 +1,11 @@
+{
+  "date": "2026-09-25",
+  "kind": "improved",
+  "title": "Boardwalk opens faster after a pause",
+  "body": "Boardwalk now remembers common account and settings data for one minute. The first request after a quiet period also responds faster.",
+  "prs": [
+    2284,
+    2286
+  ],
+  "order": -8
+}

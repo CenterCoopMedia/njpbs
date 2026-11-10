@@ -1,0 +1,15 @@
+---
+// Keep the shared report form off child-directed routes. The form accepts an
+// optional email address, loads Turnstile, and POSTs a report, so rendering it
+// on /kids/ would contradict the route's zero-collection boundary.
+//
+// This wrapper preserves the component's existing import path for every layout.
+// The final path-segment check covers the root public route and future localized
+// routes without teaching each caller about this exception.
+import ReportProblemDialog from "./ReportProblemDialog.astro";
+
+const pathSegments = Astro.url.pathname.split("/").filter(Boolean);
+const isKidsRoute = pathSegments.at(-1) === "kids";
+---
+
+{process.env.CMS_DEPLOYMENT_ENVIRONMENT !== "development" && !isKidsRoute && <ReportProblemDialog />}

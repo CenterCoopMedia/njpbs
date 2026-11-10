@@ -1,0 +1,10 @@
+{
+  "date": "2026-11-02",
+  "kind": "fixed",
+  "title": "Upgrade the Studio connector safely",
+  "body": "During an off-air maintenance window, turn off automatic startup, stop the Studio connector and run setup from a fresh download. Setup keeps your pairing, session settings and journals, and saves the previous connector files in a dated backup folder.",
+  "prs": [
+    4658
+  ],
+  "order": 100
+}

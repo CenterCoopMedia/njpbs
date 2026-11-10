@@ -1,0 +1,110 @@
+/* The media search field: a magnifier, the field, a
+   lock while details are unsaved, Clear search, and a "/" hint. The wrapper draws the field,
+   so its focus state follows the input inside. */
+.media-search-field {
+  display: flex;
+  align-items: center;
+  gap: var(--cms-space-1);
+  min-width: 0;
+  min-height: var(--cms-field-standard-height);
+  padding: 0 var(--cms-space-1) 0 var(--cms-space-3);
+  border: var(--cms-border-width) solid var(--cms-control-border);
+  border-radius: var(--cms-radius-control);
+  background: var(--cms-surface);
+  color: var(--cms-ink-muted);
+}
+
+.media-search-field:focus-within {
+  border-color: var(--cms-brand);
+  box-shadow: 0 0 0 3px var(--cms-brand-soft-hover);
+}
+
+.media-search-field .icon {
+  width: 18px;
+  height: 18px;
+  flex: none;
+}
+
+.media-search-field-input {
+  flex: 1 1 auto;
+  min-width: 0;
+  align-self: stretch;
+  padding: 0 0 0 var(--cms-space-1);
+  border: 0;
+  background: none;
+  color: var(--cms-ink);
+  font: inherit;
+  font-size: var(--cms-font-control);
+  font-weight: 400;
+}
+
+.media-search-field-input:focus-visible {
+  outline: none;
+}
+
+.media-search-field-input::placeholder {
+  color: var(--cms-ink-muted);
+}
+
+/* The field draws its own clear button. */
+.media-search-field-input::-webkit-search-cancel-button {
+  appearance: none;
+}
+
+.media-search-field-clear {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  /* The shared target grows to 44px for a coarse pointer. */
+  width: var(--cms-control-standard-target);
+  height: var(--cms-control-standard-target);
+  padding: 0;
+  border: 0;
+  border-radius: var(--cms-radius-control);
+  background: none;
+  color: var(--cms-ink-secondary);
+}
+
+.media-search-field-clear:focus-visible {
+  outline: var(--cms-focus-outline);
+  outline-offset: calc(-1 * var(--cms-focus-width));
+}
+
+.media-search-field-hint {
+  flex: none;
+  margin-inline-end: var(--cms-space-2);
+  padding: 1px 6px;
+  border: var(--cms-border-width) solid var(--cms-line);
+  border-radius: var(--cms-radius-small);
+  background: var(--cms-surface-soft);
+  color: var(--cms-ink-muted);
+  font-family: inherit;
+  font-size: var(--cms-font-xs);
+  font-weight: 700;
+  line-height: 1.3;
+}
+
+.media-search-field:focus-within .media-search-field-hint,
+.media-search-field[data-filled] .media-search-field-hint {
+  display: none;
+}
+
+@media (hover: hover) {
+  .media-search-field-clear:hover {
+    background: var(--cms-action-quiet);
+    color: var(--cms-ink);
+  }
+}
+
+@media (max-width: 60rem) {
+  .media-search-field-hint {
+    display: none;
+  }
+}
+
+@media (forced-colors: active) {
+  .media-search-field:focus-within {
+    outline: 2px solid Highlight;
+  }
+}

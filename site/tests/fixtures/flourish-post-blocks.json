@@ -1,0 +1,32 @@
+[
+  {
+    "id": "44d622b5-1fd4-4f05-aafd-a28cf0f9a9e5",
+    "type": "html",
+    "order": 1,
+    "visible": true,
+    "data": {
+      "html": "<div class=\"flourish-embed flourish-chart\" data-src=\"visualisation/30830626\"><script src=\"https://public.flourish.studio/resources/embed.js\"></script><noscript><img src=\"https://public.flourish.studio/visualisation/30830626/thumbnail\" width=\"100%\" alt=\"chart visualization\" /></noscript></div>",
+      "title": ""
+    }
+  },
+  {
+    "id": "716c4033-7e28-45bd-bcb1-ad2054d379fb",
+    "type": "html",
+    "order": 3,
+    "visible": true,
+    "data": {
+      "html": "<div class=\"flourish-embed flourish-chart\" data-src=\"visualisation/30830723\"><script src=\"https://public.flourish.studio/resources/embed.js\"></script><noscript><img src=\"https://public.flourish.studio/visualisation/30830723/thumbnail\" width=\"100%\" alt=\"chart visualization\" /></noscript></div>",
+      "title": ""
+    }
+  },
+  {
+    "id": "e9206a63-0ed4-4f50-ba37-411613f0f940",
+    "type": "html",
+    "order": 5,
+    "visible": true,
+    "data": {
+      "html": "<div class=\"flourish-embed flourish-chart\" data-src=\"visualisation/30829637\"><script src=\"https://public.flourish.studio/resources/embed.js\"></script><noscript><img src=\"https://public.flourish.studio/visualisation/30829637/thumbnail\" width=\"100%\" alt=\"chart visualization\" /></noscript></div>",
+      "title": ""
+    }
+  }
+]

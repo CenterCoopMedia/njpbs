@@ -1,0 +1,12 @@
+{
+  "date": "2026-09-15",
+  "kind": "new",
+  "title": "Make transcripts and clips from videos",
+  "body": "Open a video in the Videos tab to make a speaker-labeled transcript, correct words and rename speakers. Set in and out points to export a clip.",
+  "prs": [
+    1860,
+    1871,
+    1879
+  ],
+  "order": 0
+}

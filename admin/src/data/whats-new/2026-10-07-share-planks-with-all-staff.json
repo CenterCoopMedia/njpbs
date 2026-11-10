@@ -1,0 +1,11 @@
+{
+  "date": "2026-10-07",
+  "kind": "new",
+  "title": "Share planks with all staff",
+  "body": "You can share a custom plank or span with all staff. Other staff turn it on or off for their own rail in Account settings.",
+  "prs": [
+    2740,
+    2746
+  ],
+  "order": 0
+}

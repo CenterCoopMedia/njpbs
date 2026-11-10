@@ -1,0 +1,85 @@
+---
+interface Item {
+  label: string;
+  count: number;
+  href: string;
+}
+
+interface Props {
+  title: string;
+  items: readonly Item[];
+}
+
+const { title, items } = Astro.props as Props;
+---
+
+<section class="post-index-browse-group">
+  <h3>{title}</h3>
+  <ul>
+    {items.map((item) => (
+      <li>
+        <a href={item.href}>
+          <span>{item.label}</span>
+          <span class="post-index-browse-group__count" aria-label={`${item.count} ${item.count === 1 ? "Post" : "Posts"}`}>
+            {item.count}
+          </span>
+        </a>
+      </li>
+    ))}
+  </ul>
+</section>
+
+<style>
+  .post-index-browse-group h3 {
+    margin: 0;
+    color: var(--text-quiet);
+    font-size: 0.75rem;
+    font-weight: 800;
+    letter-spacing: 0.09em;
+    text-transform: uppercase;
+  }
+
+  .post-index-browse-group ul {
+    display: grid;
+    gap: 0.25rem;
+    margin: 0.55rem 0 0;
+    padding: 0;
+    list-style: none;
+  }
+
+  .post-index-browse-group a {
+    display: flex;
+    gap: 0.75rem;
+    align-items: center;
+    justify-content: space-between;
+    min-height: var(--target-comfortable);
+    padding: 0.45rem 0.6rem;
+    border-radius: 0.55rem;
+    color: var(--text-dim);
+    line-height: 1.35;
+    text-decoration: none;
+  }
+
+  .post-index-browse-group a:hover {
+    color: var(--text);
+    background: rgba(255, 255, 255, 0.06);
+  }
+
+  .post-index-browse-group a:focus-visible {
+    outline: var(--focus-outline);
+    outline-offset: var(--focus-offset);
+  }
+
+  .post-index-browse-group__count {
+    display: grid;
+    flex: 0 0 auto;
+    min-width: 1.65rem;
+    min-height: 1.65rem;
+    place-items: center;
+    border: 1px solid var(--line);
+    border-radius: 999px;
+    color: var(--text-quiet);
+    font-size: 0.72rem;
+    font-variant-numeric: tabular-nums;
+  }
+</style>

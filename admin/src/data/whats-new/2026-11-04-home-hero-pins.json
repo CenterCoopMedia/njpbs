@@ -1,0 +1,10 @@
+{
+  "date": "2026-11-04",
+  "kind": "new",
+  "title": "Pin stories and Pages to the Home hero",
+  "body": "In Home hero category or tag settings, pin up to three published Posts or Pages above automatic stories. Reorder or remove pins, or set an optional end time in Eastern time. Save and publish Home to apply your changes. When a pin ends, a matching story can still appear in its normal automatic order.",
+  "prs": [
+    4687
+  ],
+  "order": 1793770096993
+}

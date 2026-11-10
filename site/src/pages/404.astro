@@ -1,0 +1,91 @@
+---
+import { contentLink } from "../../../packages/content-core/src/content-link.ts";
+import Base from "../layouts/Base.astro";
+import PublicSiteLayout from "../layouts/PublicSiteLayout.astro";
+import { getCollection, getEntry } from "astro:content";
+import { publicRootRoutesEnabled, cmsRoutedContentEnabled } from "../lib/build-target";
+import { selectNotFoundCards } from "../lib/not-found-content";
+import "../styles/not-found.css";
+import { spotlightFallbackImage } from "../../../packages/content-core/src/spotlight-image.mjs";
+
+const publicSite = publicRootRoutesEnabled(process.env);
+const hasPosts = publicSite && cmsRoutedContentEnabled(process.env);
+const posts = hasPosts ? (await getCollection("cmsPosts")).map(entry => entry.data) : [];
+const sources = publicSite ? (await getEntry("publicHomeSources", "home"))?.data : undefined;
+const cutoffAt = sources?.editorial?.catalog.cutoffAt ?? new Date().toISOString();
+const cards = (publicSite ? selectNotFoundCards({ posts, sources, cutoffAt, newsIndexAvailable: hasPosts }) : []).map(card => ({ ...card,
+  link: contentLink(card.contentLinkMode === "custom" ? card : card.href.startsWith("https://")
+    ? { contentLinkMode: "custom", contentLinkUrl: card.href } : {}, card.href),
+}));
+const Layout = publicSite ? PublicSiteLayout : Base;
+const Content = publicSite ? "div" : "main";
+---
+<Layout title={publicSite ? "Page not found" : "Page not found — NJ PBS"} canonicalPath="/404/" preview={false} searchable={false} description="This page could not be found. Find your way back to NJ PBS and New Jersey reporting." noindex={true}>
+  {!publicSite && <a class="nf-skip" href="#not-found">Skip to page recovery</a>}
+  <div class="nf-page">
+    {!publicSite && <header class="nf-header">
+      <a class="nf-wordmark" href="/" aria-label="NJ PBS home">NJ PBS<span aria-hidden="true">●</span></a>
+      <a class="nf-header-link" href="https://watch.njpbs.org/" target="_blank" rel="noopener noreferrer">Watch on demand<span class="sr-only"> (opens in new tab)</span><span aria-hidden="true"> ↗</span></a>
+    </header>}
+    <Content id="not-found" class="nf-main">
+      <section class="nf-hero" aria-labelledby="nf-title" data-not-found-dial>
+        <div class="nf-copy">
+          <h1 id="nf-title">You’re between<br />channels.</h1>
+          <p class="nf-error">404 / Page not found</p>
+          <p class="nf-description">That address is off the air. Head back home, or find a story worth staying for.</p>
+          <a class="nf-home" href="/">Back to NJ PBS<span aria-hidden="true"> ↗</span></a>
+        </div>
+        <div class="nf-instrument">
+          <div class="nf-dial" aria-hidden="true">
+            <div class="nf-dial-offset">
+              <div class="nf-ring nf-ring--outer" data-dial-outer><i></i></div>
+              <div class="nf-ring nf-ring--middle"><i></i></div>
+              <div class="nf-ring nf-ring--inner"><i></i></div>
+            </div>
+            <span class="nf-dial-number">404</span>
+            <span class="nf-dial-label">Signal not found</span>
+            <span class="nf-dial-tick nf-dial-tick--top"></span>
+            <span class="nf-dial-tick nf-dial-tick--bottom"></span>
+          </div>
+          <div class="nf-dial-controls" data-dial-controls hidden>
+            <label for="nf-tuning">Tuning</label>
+            <input id="nf-tuning" type="range" min="-180" max="180" value="0" step="1" data-dial-input />
+            <button type="button" data-dial-replay>Replay</button>
+            <p data-dial-hint>Turn the dial. The links below are ready now.</p>
+          </div>
+        </div>
+      </section>
+      {cards.length > 0 && <section class="nf-discovery" aria-labelledby="nf-discovery-title">
+        <div class="nf-discovery-heading"><h2 id="nf-discovery-title">The story continues.</h2><p>Watch, read, keep exploring.</p></div>
+        <ul class="nf-cards">
+          {cards.map((card, index) => <li>
+            <a class="nf-card" href={card.link.href} target={card.link.target}
+              rel={card.link.rel} data-recovery-slot={card.slot}>
+              <span class:list={["nf-card-art", `nf-card-art--${index}`]} aria-hidden="true">
+                {card.image ? <img src={card.image} alt="" width="640" height="360" loading="lazy" decoding="async" data-spotlight-fallback={spotlightFallbackImage(card.imageFallback)} />
+                  : <span class="nf-card-pattern"><span></span><span></span><span></span></span>}
+                <span class="nf-card-number">0{index + 1}</span>
+              </span>
+              <h3>{card.title}</h3>
+              <p class="nf-card-source">{card.sourceLabel} · {card.kind}</p>
+              {card.date && <time datetime={card.date}>{card.date}</time>}
+              <span class="nf-card-action">{card.action}<span aria-hidden="true"> ↗</span></span>
+              {card.link.newTab && <span class="sr-only"> (opens in new tab)</span>}
+            </a>
+          </li>)}
+        </ul>
+      </section>}
+    </Content>
+    {!publicSite && <footer class="nf-footer"><a href="/">NJ PBS</a><p>A missing page. Not the end of the story.</p></footer>}
+  </div>
+</Layout>
+<script>
+  import { mountSpotlightImages } from "../../../packages/content-core/src/spotlight-image-dom";
+  mountSpotlightImages(document);
+  import { mountNotFoundDial } from "../lib/not-found-motion";
+  const root = document.querySelector<HTMLElement>("[data-not-found-dial]");
+  if (root) {
+    const destroy = mountNotFoundDial(root);
+    document.addEventListener("astro:before-swap", destroy, { once: true });
+  }
+</script>

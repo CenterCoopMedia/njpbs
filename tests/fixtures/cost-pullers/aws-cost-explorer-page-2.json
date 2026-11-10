@@ -1,0 +1,7 @@
+{
+  "ResultsByTime": [{
+    "Groups": [
+      { "Keys": ["Amazon Lightsail"], "Metrics": { "UnblendedCost": { "Amount": "3.50", "Unit": "USD" } } }
+    ]
+  }]
+}

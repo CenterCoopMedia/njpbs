@@ -1,0 +1,11 @@
+{
+  "date": "2026-09-25",
+  "kind": "new",
+  "title": "Use a library image as a profile photo",
+  "body": "Choose any still image from Media library as a staff profile photo. Boardwalk shows a warning when the image does not have profile rights. Animated images are not accepted.",
+  "prs": [
+    2172,
+    2292
+  ],
+  "order": -6
+}

@@ -1,0 +1,10 @@
+{
+  "date": "2026-10-22",
+  "kind": "improved",
+  "title": "Choose your account each time you sign in",
+  "body": "The sign-in account chooser appears every time, so you can select the account you need after signing out.",
+  "prs": [
+    3916
+  ],
+  "order": 0
+}

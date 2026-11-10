@@ -1,0 +1,10 @@
+{
+  "date": "2026-09-27",
+  "kind": "new",
+  "title": "Duplicate a Post",
+  "body": "Choose Duplicate post to make a new draft copy of an existing Post. The copy keeps the content and bylines. The original Post does not change.",
+  "prs": [
+    2372
+  ],
+  "order": 0
+}

@@ -1,0 +1,15 @@
+{
+  "date": "2026-10-14",
+  "kind": "improved",
+  "title": "Home cards show story photos, authors and dates",
+  "body": "Latest story cards on Home show photo backgrounds. NJ Spotlight News cards show the author and the story image, and all cards show dates the same way. Home bands show their background art again.",
+  "prs": [
+    3530,
+    3529,
+    3517,
+    3490,
+    3516,
+    3500
+  ],
+  "order": 0
+}

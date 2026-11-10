@@ -1,0 +1,13 @@
+{
+  "date": "2026-09-04",
+  "kind": "improved",
+  "title": "Find help where you work",
+  "body": "Each workspace has a clearer layout and help next to the task. Rail groups stay open or closed until you change them, and account settings use a gear icon.",
+  "prs": [
+    1538,
+    1531,
+    1421,
+    1290
+  ],
+  "order": 0
+}

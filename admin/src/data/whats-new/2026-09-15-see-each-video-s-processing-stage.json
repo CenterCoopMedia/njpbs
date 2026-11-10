@@ -1,0 +1,11 @@
+{
+  "date": "2026-09-15",
+  "kind": "improved",
+  "title": "See each video's processing stage",
+  "body": "Video details now show each processing stage and its status, so you know when a video is ready to play or transcribe. The video dialog is wider, with editing below the player.",
+  "prs": [
+    1867,
+    1879
+  ],
+  "order": -1
+}

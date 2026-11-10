@@ -1,0 +1,8 @@
+{
+  "date": "2026-11-05",
+  "order": 1793908888267,
+  "kind": "fixed",
+  "title": "Readable section labels on small screens",
+  "body": "Document section labels wrap inside their buttons on small screens, including when the usual font is unavailable. Schedule downloads use a new font.",
+  "prs": []
+}

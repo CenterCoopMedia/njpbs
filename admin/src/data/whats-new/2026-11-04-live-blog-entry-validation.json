@@ -1,0 +1,10 @@
+{
+  "date": "2026-11-04",
+  "kind": "fixed",
+  "title": "Find live blog entries that need attention",
+  "body": "If a live blog entry needs a headline, body or byline before publication, the message names the entry and takes you to it. Reporter profile notices still let you publish.",
+  "prs": [
+    4705
+  ],
+  "order": 1793769854163
+}

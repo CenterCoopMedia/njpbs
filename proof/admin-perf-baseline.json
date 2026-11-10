@@ -1,0 +1,273 @@
+{
+  "schemaVersion": 1,
+  "label": "Anonymous pre-optimization comparison data (production build, emulator authentication)",
+  "profile": "njpbs-admin-baseline-2026-08",
+  "conditions": {
+    "network": {
+      "name": "njpbs-constrained-1017",
+      "latencyMs": 150,
+      "downloadKbps": 1600,
+      "uploadKbps": 750,
+      "cdp": {
+        "offline": false,
+        "latency": 150,
+        "downloadThroughput": 200000,
+        "uploadThroughput": 93750
+      }
+    },
+    "cpu": {
+      "name": "modest-desktop-4x",
+      "rate": 4
+    }
+  },
+  "samples": [
+    {
+      "viewport": "desktop-1440",
+      "scenario": "bootstrap",
+      "temperature": "cold",
+      "status": "captured",
+      "receipt": {
+        "schemaVersion": 1,
+        "marks": [
+          {
+            "name": "njpbs.admin.bootstrap",
+            "detail": {},
+            "startTime": 1656.3
+          },
+          {
+            "name": "njpbs.admin.route-load.start",
+            "detail": {
+              "route": "dashboard"
+            },
+            "startTime": 1701.6
+          },
+          {
+            "name": "njpbs.admin.route-load.end",
+            "detail": {
+              "route": "dashboard",
+              "outcome": "ok"
+            },
+            "startTime": 2113
+          },
+          {
+            "name": "njpbs.admin.auth-resolved",
+            "detail": {},
+            "startTime": 2138.7
+          }
+        ],
+        "measures": [
+          {
+            "name": "njpbs.admin.measure.route-load",
+            "detail": {
+              "route": "dashboard",
+              "outcome": "ok"
+            },
+            "durationMs": 411.4
+          },
+          {
+            "name": "njpbs.admin.measure.auth",
+            "detail": {},
+            "durationMs": 482.4
+          }
+        ],
+        "counts": {
+          "marks": 4,
+          "open": 0,
+          "routeLoad": 1,
+          "cmsRequest": 0,
+          "save": 0,
+          "byOperation": {},
+          "byRoute": {
+            "dashboard": 1
+          }
+        }
+      }
+    },
+    {
+      "viewport": "desktop-1440",
+      "scenario": "bootstrap",
+      "temperature": "warm",
+      "status": "captured",
+      "receipt": {
+        "schemaVersion": 1,
+        "marks": [
+          {
+            "name": "njpbs.admin.bootstrap",
+            "detail": {},
+            "startTime": 404.9
+          },
+          {
+            "name": "njpbs.admin.route-load.start",
+            "detail": {
+              "route": "dashboard"
+            },
+            "startTime": 422.2
+          },
+          {
+            "name": "njpbs.admin.auth-resolved",
+            "detail": {},
+            "startTime": 577.3
+          },
+          {
+            "name": "njpbs.admin.route-load.end",
+            "detail": {
+              "route": "dashboard",
+              "outcome": "ok"
+            },
+            "startTime": 638.6
+          }
+        ],
+        "measures": [
+          {
+            "name": "njpbs.admin.measure.auth",
+            "detail": {},
+            "durationMs": 172.4
+          },
+          {
+            "name": "njpbs.admin.measure.route-load",
+            "detail": {
+              "route": "dashboard",
+              "outcome": "ok"
+            },
+            "durationMs": 216.4
+          }
+        ],
+        "counts": {
+          "marks": 4,
+          "open": 0,
+          "routeLoad": 1,
+          "cmsRequest": 0,
+          "save": 0,
+          "byOperation": {},
+          "byRoute": {
+            "dashboard": 1
+          }
+        }
+      }
+    },
+    {
+      "viewport": "mobile-390",
+      "scenario": "bootstrap",
+      "temperature": "cold",
+      "status": "captured",
+      "receipt": {
+        "schemaVersion": 1,
+        "marks": [
+          {
+            "name": "njpbs.admin.bootstrap",
+            "detail": {},
+            "startTime": 1637.2
+          },
+          {
+            "name": "njpbs.admin.route-load.start",
+            "detail": {
+              "route": "dashboard"
+            },
+            "startTime": 1681.9
+          },
+          {
+            "name": "njpbs.admin.route-load.end",
+            "detail": {
+              "route": "dashboard",
+              "outcome": "ok"
+            },
+            "startTime": 2027.9
+          },
+          {
+            "name": "njpbs.admin.auth-resolved",
+            "detail": {},
+            "startTime": 2062.8
+          }
+        ],
+        "measures": [
+          {
+            "name": "njpbs.admin.measure.route-load",
+            "detail": {
+              "route": "dashboard",
+              "outcome": "ok"
+            },
+            "durationMs": 346
+          },
+          {
+            "name": "njpbs.admin.measure.auth",
+            "detail": {},
+            "durationMs": 425.6
+          }
+        ],
+        "counts": {
+          "marks": 4,
+          "open": 0,
+          "routeLoad": 1,
+          "cmsRequest": 0,
+          "save": 0,
+          "byOperation": {},
+          "byRoute": {
+            "dashboard": 1
+          }
+        }
+      }
+    },
+    {
+      "viewport": "mobile-390",
+      "scenario": "bootstrap",
+      "temperature": "warm",
+      "status": "captured",
+      "receipt": {
+        "schemaVersion": 1,
+        "marks": [
+          {
+            "name": "njpbs.admin.bootstrap",
+            "detail": {},
+            "startTime": 405.8
+          },
+          {
+            "name": "njpbs.admin.route-load.start",
+            "detail": {
+              "route": "dashboard"
+            },
+            "startTime": 423.2
+          },
+          {
+            "name": "njpbs.admin.auth-resolved",
+            "detail": {},
+            "startTime": 587.4
+          },
+          {
+            "name": "njpbs.admin.route-load.end",
+            "detail": {
+              "route": "dashboard",
+              "outcome": "ok"
+            },
+            "startTime": 620.4
+          }
+        ],
+        "measures": [
+          {
+            "name": "njpbs.admin.measure.auth",
+            "detail": {},
+            "durationMs": 181.6
+          },
+          {
+            "name": "njpbs.admin.measure.route-load",
+            "detail": {
+              "route": "dashboard",
+              "outcome": "ok"
+            },
+            "durationMs": 197.2
+          }
+        ],
+        "counts": {
+          "marks": 4,
+          "open": 0,
+          "routeLoad": 1,
+          "cmsRequest": 0,
+          "save": 0,
+          "byOperation": {},
+          "byRoute": {
+            "dashboard": 1
+          }
+        }
+      }
+    }
+  ]
+}

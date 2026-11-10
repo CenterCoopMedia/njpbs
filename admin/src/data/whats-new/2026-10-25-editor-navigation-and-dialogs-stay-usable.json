@@ -1,0 +1,12 @@
+{
+  "date": "2026-10-25",
+  "kind": "fixed",
+  "title": "Editor navigation and dialogs stay usable",
+  "body": "Breadcrumbs name the destination they open, such as Pages, Posts or All content. The first outline drag works when the editor opens. Gallery dialogs scroll as one view on small screens or when enlarged, so fields and buttons stay within reach.",
+  "prs": [
+    3964,
+    4007,
+    4009
+  ],
+  "order": -2
+}

@@ -1,0 +1,8 @@
+{
+  "date": "2026-10-28",
+  "kind": "improved",
+  "title": "Read election results in candidate rows",
+  "body": "Election results use a white card with candidate rows, party labels and share bars. Check totals, reporting share and update time beside the rows, or above them on phones. Leading marks a unique lead in complete reported counts; AP calls keep their Winner label and attribution. The table remains available.",
+  "prs": [],
+  "order": -7
+}

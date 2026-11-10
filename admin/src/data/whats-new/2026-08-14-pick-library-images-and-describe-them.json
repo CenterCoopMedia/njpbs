@@ -1,0 +1,13 @@
+{
+  "date": "2026-08-14",
+  "kind": "new",
+  "title": "Pick library images and describe them",
+  "body": "Image fields now open a picker that shows the Media library. You can add alternative text, a caption and a credit, or mark an image as decorative.",
+  "prs": [
+    941,
+    944,
+    964,
+    804
+  ],
+  "order": -1
+}

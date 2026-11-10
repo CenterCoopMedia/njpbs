@@ -1,0 +1,13 @@
+{
+  "date": "2026-09-26",
+  "kind": "improved",
+  "title": "Search video transcripts faster",
+  "body": "Video search now reads transcripts in small batches and keeps the results while you move between tabs. Results group by video, and a match opens the video near the spoken words.",
+  "prs": [
+    2260,
+    2261,
+    2344,
+    2364
+  ],
+  "order": -2
+}

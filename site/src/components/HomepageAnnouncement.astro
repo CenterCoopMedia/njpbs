@@ -1,0 +1,137 @@
+---
+// A compact public homepage announcement. Published CMS settings supply the
+// message and optional link; this component owns presentation and accessibility.
+interface Props {
+  message: string;
+  link?: { label: string; href: string };
+  secondLink?: { label: string; href: string };
+}
+
+const { message, link, secondLink } = Astro.props as Props;
+const links = link ? [link, ...(secondLink ? [secondLink] : [])] : [];
+---
+
+<aside class="announcement" aria-label="Homepage announcement">
+  <div class:list={["announcement__inner", { "announcement__inner--two-links": secondLink }]}>
+    <p class="announcement__message">
+      <span class="announcement__eyebrow">Announcement</span>{" "}
+      <span class="announcement__heading">{message}</span>
+    </p>
+    {links.length > 0 && <div class="announcement__links">
+    {links.map((link) => {
+      const externalLink = /^https?:\/\//i.test(link.href);
+      return <a
+        class="announcement__link"
+        href={link.href}
+        {...(externalLink ? { rel: "noopener", target: "_blank" } : {})}
+      >
+        {link.label}
+        <span class="announcement__arrow" aria-hidden="true" data-pagefind-ignore>→</span>
+        {externalLink && <span class="sr-only"> (opens in new tab)</span>}
+      </a>;
+    })}
+    </div>}
+  </div>
+
+  <style>
+    .announcement {
+      background:
+        linear-gradient(
+          180deg,
+          rgba(38, 56, 196, 0.22),
+          rgba(38, 56, 196, 0.08)
+        ),
+        var(--color-announcement-surface);
+      border-bottom: 1px solid var(--line);
+      color: var(--text);
+    }
+
+    .announcement__inner {
+      max-width: 84rem;
+      margin: 0 auto;
+      padding: 0.7rem 1.5rem;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 0.6rem 1.5rem;
+    }
+
+    .announcement__inner--two-links { flex-wrap: wrap; }
+    .announcement__links { flex: none; display: flex; flex-wrap: wrap; gap: 0.15rem 1.5rem; max-width: 100%; min-width: 0; }
+
+    .announcement__message {
+      min-width: 0;
+      margin: 0;
+      display: flex;
+      flex-wrap: wrap;
+      align-items: baseline;
+      gap: 0.2rem 0.7rem;
+      line-height: 1.45;
+    }
+
+    .announcement__eyebrow {
+      color: var(--color-announcement-copy);
+      font-size: 0.78rem;
+      font-weight: 700;
+      letter-spacing: 0.08em;
+    }
+
+    .announcement__heading {
+      color: var(--text);
+      font-size: 1.02rem;
+      font-weight: 700;
+      letter-spacing: -0.01em;
+    }
+
+    .announcement__link {
+      min-height: 44px;
+      flex: 0 1 auto;
+      min-width: 0;
+      max-width: 100%;
+      overflow-wrap: anywhere;
+      display: inline-flex;
+      align-items: center;
+      gap: 0.45rem;
+      padding: 0.35rem 0;
+      color: var(--color-announcement-link);
+      font-size: 0.9rem;
+      font-weight: 700;
+      line-height: 1.35;
+      text-decoration: underline;
+      text-underline-offset: 3px;
+    }
+
+    .announcement__link:hover {
+      color: var(--color-text-on-surface);
+    }
+
+    .announcement__link:focus-visible {
+      outline: var(--focus-outline);
+      outline-offset: var(--focus-offset);
+      border-radius: var(--radius-sm);
+    }
+
+    .announcement__arrow {
+      font-size: 1.1em;
+      text-decoration: none;
+    }
+
+    @media (max-width: 640px) {
+      .announcement__inner {
+        padding: 0.6rem 1.25rem;
+        align-items: flex-start;
+        flex-direction: column;
+        gap: 0.15rem;
+      }
+
+      .announcement__message {
+        display: grid;
+        gap: 0.05rem;
+      }
+
+      .announcement__heading {
+        font-size: 0.96rem;
+      }
+    }
+  </style>
+</aside>

@@ -1,0 +1,16 @@
+{
+  "schemaVersion": 1,
+  "profiles": [
+    {
+      "profileId": "example-official",
+      "kind": "person",
+      "name": "Alex Example",
+      "role": "Acting secretary",
+      "summary": "Synthetic official used to verify profiles, source links and incomplete research fields.",
+      "sourceUrl": "https://example.org/official",
+      "sourceLabel": "Official biography",
+      "asOf": "2026-09-26",
+      "reviewStatus": "reviewed"
+    }
+  ]
+}

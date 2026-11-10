@@ -1,0 +1,8 @@
+{
+  "date": "2026-11-06",
+  "kind": "fixed",
+  "title": "Review older StoryDesk transfers",
+  "body": "StoryDesk shows older transfer results on request and explains when a story description is too long to import.",
+  "prs": [],
+  "order": 1794009000000
+}

@@ -1,0 +1,1150 @@
+/* ===================================================================
+   Garden signal glasshouse  (glasshouse)
+   A flourishing garden and retro television design kit.
+   Namespaced to .glasshouse, glasshouse-, and --glasshouse- so it can
+   run beside the other archived chooser directions.
+   =================================================================== */
+
+@import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=Public+Sans:wght@400;500;600;700;800&family=Source+Serif+4:opsz,wght@8..60,500;8..60,700;8..60,800&display=swap');
+
+:root {
+  --glasshouse-pine: #07351F;
+  --glasshouse-pine-deep: #041D12;
+  --glasshouse-cream: #F7F3DF;
+  --glasshouse-mist: #E7F0D8;
+  --glasshouse-white: #FFFFFF;
+  --glasshouse-ink: #102015;
+  --glasshouse-muted: #43564B;
+  --glasshouse-fern: #2F8F46;
+  --glasshouse-fern-dark: #17612D;
+  --glasshouse-blue: #2447D8;
+  --glasshouse-blue-dark: #1831A2;
+  --glasshouse-tomato: #9D281F;
+  --glasshouse-tomato-bright: #C63226;
+  --glasshouse-marigold: #F0B23E;
+  --glasshouse-phosphor: #B7FFD8;
+  --glasshouse-glass: #D7EBC9;
+  --glasshouse-line: #9BB890;
+  --glasshouse-bg: var(--glasshouse-cream);
+  --glasshouse-surface: var(--glasshouse-white);
+  --glasshouse-surface-alt: var(--glasshouse-mist);
+  --glasshouse-text: var(--glasshouse-ink);
+  --glasshouse-text-muted: var(--glasshouse-muted);
+  --glasshouse-focus: var(--glasshouse-blue);
+  --glasshouse-radius: 28px;
+  --glasshouse-maxw: 1180px;
+  --glasshouse-pad: clamp(1rem, 4vw, 3rem);
+  --glasshouse-font-display: 'Source Serif 4', Georgia, serif;
+  --glasshouse-font-body: 'Public Sans', system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --glasshouse-font-mono: 'IBM Plex Mono', ui-monospace, 'SF Mono', Consolas, monospace;
+}
+
+[data-glasshouse-theme="dark"], .glasshouse-dark {
+  --glasshouse-bg: var(--glasshouse-pine-deep);
+  --glasshouse-surface: #0B3A24;
+  --glasshouse-surface-alt: #103F28;
+  --glasshouse-text: var(--glasshouse-cream);
+  --glasshouse-text-muted: #B9CBB8;
+  --glasshouse-line: #397354;
+  --glasshouse-focus: var(--glasshouse-phosphor);
+}
+
+.glasshouse,
+.glasshouse *,
+.glasshouse *::before,
+.glasshouse *::after {
+  box-sizing: border-box;
+  min-width: 0;
+}
+
+.glasshouse * {
+  margin: 0;
+  padding: 0;
+}
+
+.glasshouse {
+  position: relative;
+  isolation: isolate;
+  min-height: 100vh;
+  overflow: hidden;
+  background:
+    radial-gradient(circle at 10% 2%, rgba(240, 178, 62, 0.24), transparent 26rem),
+    radial-gradient(circle at 88% 8%, rgba(183, 255, 216, 0.34), transparent 28rem),
+    linear-gradient(135deg, rgba(47, 143, 70, 0.08), transparent 36%),
+    var(--glasshouse-bg);
+  color: var(--glasshouse-text);
+  font-family: var(--glasshouse-font-body);
+  line-height: 1.58;
+  overflow-wrap: break-word;
+  -webkit-font-smoothing: antialiased;
+}
+
+.glasshouse::before,
+.glasshouse::after {
+  content: "";
+  position: fixed;
+  inset: -12vh -8vw;
+  z-index: -2;
+  pointer-events: none;
+  transform: translate3d(0, calc(var(--glasshouse-scroll, 0) * -2vh), 0);
+}
+
+.glasshouse::before {
+  background:
+    linear-gradient(90deg, rgba(7, 53, 31, 0.08) 1px, transparent 1px),
+    linear-gradient(0deg, rgba(7, 53, 31, 0.08) 1px, transparent 1px);
+  background-size: 76px 76px;
+  mask-image: radial-gradient(circle at center, black, transparent 72%);
+}
+
+.glasshouse::after {
+  z-index: -1;
+  opacity: 0.42;
+  transform: translate3d(0, calc(var(--glasshouse-scroll, 0) * -4vh), 0);
+  background:
+    radial-gradient(ellipse at 8% 65%, rgba(47, 143, 70, 0.36) 0 9rem, transparent 9.2rem),
+    radial-gradient(ellipse at 94% 58%, rgba(36, 71, 216, 0.18) 0 12rem, transparent 12.2rem),
+    radial-gradient(ellipse at 56% 100%, rgba(198, 50, 38, 0.15) 0 10rem, transparent 10.2rem);
+  filter: blur(1px);
+}
+
+.glasshouse a {
+  color: inherit;
+}
+
+.glasshouse a:focus-visible,
+.glasshouse button:focus-visible,
+.glasshouse input:focus-visible {
+  outline: 3px solid var(--glasshouse-focus);
+  outline-offset: 4px;
+}
+
+.glasshouse-skip {
+  position: absolute;
+  left: -9999px;
+  top: 0;
+  z-index: 50;
+  padding: 0.8rem 1rem;
+  border-radius: 0 0 14px 0;
+  background: var(--glasshouse-phosphor);
+  color: var(--glasshouse-pine-deep);
+  font-weight: 800;
+}
+
+.glasshouse-skip:focus {
+  left: 0;
+}
+
+.glasshouse-utility {
+  background: var(--glasshouse-pine-deep);
+  color: var(--glasshouse-cream);
+  border-bottom: 1px solid rgba(183, 255, 216, 0.28);
+}
+
+.glasshouse-utility__inner,
+.glasshouse-masthead__inner,
+.glasshouse-shell {
+  width: min(var(--glasshouse-maxw), calc(100% - (var(--glasshouse-pad) * 2)));
+  margin-inline: auto;
+}
+
+.glasshouse-utility__inner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  min-height: 44px;
+  padding-block: 0.45rem;
+  font-size: 0.9rem;
+}
+
+.glasshouse-utility__msg {
+  color: var(--glasshouse-cream);
+}
+
+.glasshouse-utility__dismiss,
+.glasshouse-theme-toggle,
+.glasshouse-nav-toggle {
+  min-height: 44px;
+  min-width: 44px;
+  border: 1px solid currentColor;
+  border-radius: 999px;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  font: inherit;
+  font-weight: 700;
+}
+
+.glasshouse-utility__dismiss {
+  padding-inline: 1rem;
+}
+
+.glasshouse-masthead {
+  position: sticky;
+  top: 0;
+  z-index: 20;
+  background: color-mix(in srgb, var(--glasshouse-bg) 92%, transparent);
+  border-bottom: 1px solid var(--glasshouse-line);
+  backdrop-filter: blur(18px);
+}
+
+.glasshouse-masthead__inner {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  align-items: center;
+  gap: 1rem;
+  min-height: 82px;
+}
+
+.glasshouse-brand {
+  display: inline-flex;
+  flex-direction: column;
+  text-decoration: none;
+}
+
+.glasshouse-brand__mark {
+  font-family: var(--glasshouse-font-display);
+  font-size: clamp(1.35rem, 3vw, 2rem);
+  font-weight: 800;
+  line-height: 1;
+  letter-spacing: -0.03em;
+}
+
+.glasshouse-brand__lockup,
+.glasshouse-kicker,
+.glasshouse-card__meta,
+.glasshouse-time,
+.glasshouse-sec-head__meta {
+  font-family: var(--glasshouse-font-mono);
+  font-size: 0.75rem;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.glasshouse-brand__lockup,
+.glasshouse-card__meta,
+.glasshouse-sec-head__meta {
+  color: var(--glasshouse-text-muted);
+}
+
+.glasshouse-nav {
+  display: flex;
+  justify-content: center;
+  gap: 0.25rem;
+}
+
+.glasshouse-nav__link {
+  min-height: 44px;
+  display: inline-flex;
+  align-items: center;
+  border-radius: 999px;
+  padding-inline: 1rem;
+  text-decoration: none;
+  font-weight: 800;
+}
+
+.glasshouse-nav__link:hover,
+.glasshouse-nav__link.is-active {
+  background: var(--glasshouse-mist);
+  color: var(--glasshouse-pine);
+  text-decoration: underline;
+  text-decoration-thickness: 0.16em;
+  text-underline-offset: 0.26em;
+}
+
+.glasshouse-masthead__actions {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.glasshouse-nav-toggle {
+  display: none;
+}
+
+.glasshouse-btn {
+  display: inline-flex;
+  min-height: 44px;
+  align-items: center;
+  justify-content: center;
+  gap: 0.45rem;
+  border-radius: 999px;
+  border: 2px solid transparent;
+  padding: 0.78rem 1.15rem;
+  font-weight: 800;
+  text-decoration: none;
+  line-height: 1.1;
+}
+
+.glasshouse-btn::after {
+  content: "↗";
+  font-family: var(--glasshouse-font-mono);
+  font-size: 0.9em;
+}
+
+.glasshouse-btn--primary {
+  background: var(--glasshouse-fern-dark);
+  color: var(--glasshouse-white);
+  box-shadow: 0 16px 32px rgba(7, 53, 31, 0.22);
+}
+
+.glasshouse-btn--primary:hover {
+  background: var(--glasshouse-pine);
+}
+
+.glasshouse-btn--signal {
+  background: var(--glasshouse-blue);
+  color: var(--glasshouse-white);
+}
+
+.glasshouse-btn--outline {
+  border-color: currentColor;
+  color: var(--glasshouse-text);
+  background: color-mix(in srgb, var(--glasshouse-bg) 74%, transparent);
+}
+
+.glasshouse-hero {
+  position: relative;
+  padding: clamp(2rem, 5vw, 5rem) 0 clamp(2.5rem, 7vw, 6rem);
+}
+
+.glasshouse-hero__stage {
+  position: relative;
+  display: grid;
+  grid-template-columns: minmax(0, 0.94fr) minmax(300px, 0.8fr);
+  gap: clamp(1.5rem, 4vw, 3rem);
+  align-items: center;
+  min-height: min(760px, 86vh);
+}
+
+.glasshouse-hero__copy {
+  position: relative;
+  z-index: 2;
+  max-width: 42rem;
+}
+
+.glasshouse-kicker {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-bottom: 1rem;
+  color: var(--glasshouse-tomato);
+}
+
+.glasshouse-kicker::before {
+  content: "";
+  width: 0.85rem;
+  height: 0.85rem;
+  border-radius: 999px;
+  background: var(--glasshouse-marigold);
+  box-shadow: 0 0 0 5px rgba(240, 178, 62, 0.24);
+}
+
+.glasshouse-hero h2 {
+  font-family: var(--glasshouse-font-display);
+  font-size: clamp(3.4rem, 9.4vw, 8.6rem);
+  line-height: 0.88;
+  letter-spacing: -0.065em;
+}
+
+.glasshouse-hero__deck {
+  max-width: 34rem;
+  margin-top: 1.2rem;
+  color: var(--glasshouse-text-muted);
+  font-size: clamp(1.05rem, 2vw, 1.3rem);
+}
+
+.glasshouse-hero__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  margin-top: 1.6rem;
+}
+
+.glasshouse-hero__meta {
+  margin-top: 1rem;
+  color: var(--glasshouse-text-muted);
+  font-family: var(--glasshouse-font-mono);
+  font-size: 0.82rem;
+}
+
+.glasshouse-hero__glass {
+  position: relative;
+  min-height: clamp(420px, 66vh, 720px);
+  border-radius: clamp(2rem, 8vw, 5.5rem);
+  border: 2px solid color-mix(in srgb, var(--glasshouse-line) 72%, transparent);
+  overflow: hidden;
+  background:
+    radial-gradient(circle at 35% 22%, rgba(183, 255, 216, 0.36), transparent 22rem),
+    radial-gradient(circle at 80% 86%, rgba(240, 178, 62, 0.24), transparent 18rem),
+    linear-gradient(145deg, rgba(7, 53, 31, 0.92), rgba(4, 29, 18, 0.98));
+  box-shadow:
+    inset 0 0 0 1px rgba(255, 255, 255, 0.16),
+    inset 0 40px 90px rgba(255, 255, 255, 0.08),
+    0 24px 60px rgba(7, 53, 31, 0.24);
+}
+
+.glasshouse-hero__glass::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background:
+    linear-gradient(120deg, rgba(255, 255, 255, 0.22), transparent 32%),
+    repeating-linear-gradient(0deg, rgba(247, 243, 223, 0.08) 0 1px, transparent 1px 7px);
+  mix-blend-mode: screen;
+}
+
+.glasshouse-hero__glass::after {
+  content: "signal garden · channel 23";
+  position: absolute;
+  left: 1.2rem;
+  bottom: 1rem;
+  z-index: 4;
+  border-radius: 999px;
+  padding: 0.45rem 0.75rem;
+  background: rgba(4, 29, 18, 0.76);
+  color: var(--glasshouse-phosphor);
+  font-family: var(--glasshouse-font-mono);
+  font-size: 0.72rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.glasshouse-three,
+.glasshouse-hero__canvas {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+}
+
+.glasshouse-three {
+  z-index: 1;
+  opacity: 0.68;
+  pointer-events: none;
+}
+
+.glasshouse-hero__canvas {
+  z-index: 2;
+}
+
+.glasshouse .nj-fallback {
+  position: absolute;
+  inset: 8% 12%;
+  z-index: 2;
+  width: 76%;
+  height: 82%;
+  object-fit: contain;
+  opacity: 0.92;
+  filter: drop-shadow(0 0 24px rgba(183, 255, 216, 0.42));
+}
+
+.glasshouse .nj-live .nj-fallback {
+  display: none;
+}
+
+.glasshouse-shell {
+  display: grid;
+  gap: clamp(1.5rem, 4vw, 3rem);
+  padding-bottom: clamp(3rem, 7vw, 6rem);
+}
+
+.glasshouse-onair,
+.glasshouse-card,
+.glasshouse-panel,
+.glasshouse-newsletter {
+  position: relative;
+  border: 1px solid var(--glasshouse-line);
+  border-radius: var(--glasshouse-radius);
+  background: color-mix(in srgb, var(--glasshouse-surface) 96%, transparent);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.38),
+    0 14px 38px rgba(7, 53, 31, 0.12);
+}
+
+.glasshouse-onair {
+  display: grid;
+  grid-template-columns: 0.8fr 1.2fr;
+  gap: 1rem;
+  padding: clamp(1rem, 3vw, 1.5rem);
+  overflow: hidden;
+}
+
+.glasshouse-onair::before {
+  content: "";
+  position: absolute;
+  inset: auto 1.2rem 1rem auto;
+  width: 7rem;
+  height: 7rem;
+  border: 1px solid rgba(47, 143, 70, 0.34);
+  border-radius: 999px;
+}
+
+.glasshouse-onair__label {
+  color: var(--glasshouse-tomato);
+}
+
+.glasshouse-onair__title {
+  margin-top: 0.2rem;
+  font-family: var(--glasshouse-font-display);
+  font-size: clamp(1.7rem, 4vw, 3rem);
+  line-height: 1;
+}
+
+.glasshouse-schedule {
+  display: grid;
+  gap: 0.6rem;
+}
+
+.glasshouse-time {
+  display: grid;
+  grid-template-columns: 5.5rem 1fr auto;
+  align-items: center;
+  gap: 0.8rem;
+  min-height: 52px;
+  padding: 0.6rem 0.8rem;
+  border-radius: 999px;
+  background: var(--glasshouse-mist);
+  color: var(--glasshouse-ink);
+}
+
+.glasshouse-time::before {
+  content: "";
+  width: 0.75rem;
+  height: 0.75rem;
+  border-radius: 999px;
+  background: var(--glasshouse-fern-dark);
+  box-shadow: 0 0 0 4px rgba(47, 143, 70, 0.18);
+}
+
+.glasshouse-sec-head {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  align-items: baseline;
+  gap: 1rem;
+  padding-top: 1rem;
+  border-top: 2px solid var(--glasshouse-line);
+}
+
+.glasshouse-sec-head__num {
+  display: inline-grid;
+  place-items: center;
+  width: 2.4rem;
+  height: 2.4rem;
+  border-radius: 999px;
+  background: var(--glasshouse-marigold);
+  color: var(--glasshouse-pine-deep);
+  font-family: var(--glasshouse-font-mono);
+  font-weight: 800;
+}
+
+.glasshouse-sec-head h2 {
+  font-family: var(--glasshouse-font-display);
+  font-size: clamp(2rem, 5vw, 4rem);
+  line-height: 0.96;
+}
+
+.glasshouse-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.2fr) minmax(260px, 0.8fr);
+  gap: 1rem;
+}
+
+.glasshouse-card {
+  overflow: hidden;
+  color: var(--glasshouse-text);
+  text-decoration: none;
+}
+
+.glasshouse-card--feature {
+  display: grid;
+  grid-template-columns: 0.9fr 1.1fr;
+  min-height: 360px;
+}
+
+.glasshouse-card__media {
+  min-height: 220px;
+  background:
+    radial-gradient(circle at 30% 30%, rgba(183, 255, 216, 0.9), transparent 5rem),
+    radial-gradient(circle at 70% 70%, rgba(198, 50, 38, 0.38), transparent 6rem),
+    linear-gradient(135deg, var(--glasshouse-pine), var(--glasshouse-fern-dark));
+}
+
+.glasshouse-card__body,
+.glasshouse-panel,
+.glasshouse-newsletter {
+  padding: clamp(1rem, 3vw, 1.6rem);
+}
+
+.glasshouse-card__body {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 0.75rem;
+}
+
+.glasshouse-card h3,
+.glasshouse-panel__title,
+.glasshouse-newsletter__title {
+  font-family: var(--glasshouse-font-display);
+  font-size: clamp(1.45rem, 3.2vw, 2.45rem);
+  line-height: 1.02;
+}
+
+.glasshouse-card:hover h3,
+.glasshouse-card:focus-visible h3 {
+  text-decoration: underline;
+  text-decoration-thickness: 0.08em;
+  text-underline-offset: 0.16em;
+}
+
+.glasshouse-card__meta {
+  color: var(--glasshouse-tomato);
+}
+
+.glasshouse-panel {
+  display: grid;
+  align-content: start;
+  gap: 0.8rem;
+  background:
+    linear-gradient(135deg, rgba(183, 255, 216, 0.28), transparent 46%),
+    var(--glasshouse-surface-alt);
+}
+
+.glasshouse-mini-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 1rem;
+}
+
+.glasshouse-mini {
+  min-height: 240px;
+  display: flex;
+  flex-direction: column;
+}
+
+.glasshouse-mini .glasshouse-card__media {
+  min-height: 128px;
+}
+
+.glasshouse-support {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 1rem;
+  align-items: center;
+  padding: clamp(1.2rem, 4vw, 2rem);
+  border-radius: var(--glasshouse-radius);
+  background: var(--glasshouse-pine);
+  color: var(--glasshouse-cream);
+}
+
+.glasshouse-support p {
+  color: var(--glasshouse-cream);
+}
+
+.glasshouse-support__title {
+  font-family: var(--glasshouse-font-display);
+  font-size: clamp(1.8rem, 4vw, 3.2rem);
+  line-height: 1;
+}
+
+.glasshouse-newsletter {
+  display: grid;
+  grid-template-columns: 0.9fr 1.1fr;
+  gap: 1rem;
+  align-items: end;
+}
+
+.glasshouse-form-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 0.75rem;
+  align-items: end;
+}
+
+.glasshouse-field {
+  display: grid;
+  gap: 0.3rem;
+}
+
+.glasshouse-field label {
+  font-weight: 800;
+}
+
+.glasshouse-field input {
+  min-height: 48px;
+  border: 2px solid var(--glasshouse-line);
+  border-radius: 999px;
+  padding: 0 1rem;
+  background: var(--glasshouse-white);
+  color: var(--glasshouse-ink);
+  font: inherit;
+}
+
+.glasshouse-field__hint {
+  color: var(--glasshouse-text-muted);
+  font-size: 0.88rem;
+}
+
+.glasshouse-foot {
+  background: var(--glasshouse-pine-deep);
+  color: var(--glasshouse-cream);
+  border-top: 1px solid rgba(183, 255, 216, 0.24);
+}
+
+.glasshouse-foot__inner {
+  width: min(var(--glasshouse-maxw), calc(100% - (var(--glasshouse-pad) * 2)));
+  margin: 0 auto;
+  padding: clamp(2rem, 5vw, 4rem) 0;
+}
+
+.glasshouse-foot__grid {
+  display: grid;
+  grid-template-columns: 1.2fr repeat(3, 1fr);
+  gap: 1rem;
+}
+
+.glasshouse-foot__brand {
+  font-family: var(--glasshouse-font-display);
+  font-size: 2rem;
+  line-height: 1;
+}
+
+.glasshouse-foot a {
+  color: var(--glasshouse-phosphor);
+}
+
+.glasshouse-foot ul {
+  display: grid;
+  gap: 0.4rem;
+  list-style: none;
+}
+
+.glasshouse-foot__fine {
+  margin-top: 2rem;
+  color: #B9CBB8;
+  font-size: 0.9rem;
+}
+
+[data-glasshouse-theme="dark"] .glasshouse-nav__link:hover,
+[data-glasshouse-theme="dark"] .glasshouse-nav__link.is-active {
+  background: var(--glasshouse-phosphor);
+  color: var(--glasshouse-pine-deep);
+}
+
+[data-glasshouse-theme="dark"] .glasshouse-time {
+  background: var(--glasshouse-phosphor);
+  color: var(--glasshouse-pine-deep);
+}
+
+[data-glasshouse-theme="dark"] .glasshouse-kicker,
+[data-glasshouse-theme="dark"] .glasshouse-onair__label,
+[data-glasshouse-theme="dark"] .glasshouse-card__meta {
+  color: var(--glasshouse-marigold);
+}
+
+[data-glasshouse-theme="dark"] .glasshouse-panel {
+  background: var(--glasshouse-surface);
+}
+
+[data-glasshouse-theme="dark"] .glasshouse-btn--outline {
+  color: var(--glasshouse-cream);
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .glasshouse-card,
+  .glasshouse-btn {
+    transition: transform 180ms ease, box-shadow 180ms ease, background-color 180ms ease;
+  }
+
+  .glasshouse-card:hover,
+  .glasshouse-card:focus-within {
+    transform: translateY(-4px);
+  }
+
+  .glasshouse-btn:hover,
+  .glasshouse-btn:focus-visible {
+    transform: translateY(-2px);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .glasshouse::before,
+  .glasshouse::after {
+    transform: none;
+  }
+
+  .glasshouse-three {
+    display: none;
+  }
+}
+
+@media (max-width: 920px) {
+  .glasshouse-masthead__inner {
+    grid-template-columns: 1fr auto auto;
+  }
+
+  .glasshouse-nav {
+    display: none;
+    grid-column: 1 / -1;
+    justify-content: stretch;
+    padding-bottom: 1rem;
+  }
+
+  .glasshouse-masthead.is-open .glasshouse-nav {
+    display: grid;
+  }
+
+  .glasshouse-nav__link {
+    justify-content: center;
+  }
+
+  .glasshouse-nav-toggle {
+    display: inline-grid;
+    place-items: center;
+  }
+
+  .glasshouse-hero__stage,
+  .glasshouse-grid,
+  .glasshouse-card--feature,
+  .glasshouse-newsletter,
+  .glasshouse-onair,
+  .glasshouse-support,
+  .glasshouse-foot__grid {
+    grid-template-columns: 1fr;
+  }
+
+  .glasshouse-hero__glass {
+    min-height: 520px;
+  }
+
+  .glasshouse-mini-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 620px) {
+  .glasshouse-utility__inner,
+  .glasshouse-form-row {
+    grid-template-columns: 1fr;
+    display: grid;
+  }
+
+  .glasshouse-utility__dismiss,
+  .glasshouse-form-row .glasshouse-btn {
+    width: 100%;
+  }
+
+  .glasshouse-masthead__actions .glasshouse-btn--primary {
+    display: none;
+  }
+
+  .glasshouse-time {
+    grid-template-columns: 1fr;
+    border-radius: 20px;
+  }
+}
+
+/* Dynamic garden signal layer. Decorative only; text remains on solid panels. */
+.glasshouse {
+  --glasshouse-pointer-x: 0;
+  --glasshouse-pointer-y: 0;
+  --glasshouse-breathe: 0;
+}
+
+.glasshouse-hero__meta-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.8rem;
+  margin-top: 1rem;
+}
+
+.glasshouse-hero__meta-row .glasshouse-hero__meta {
+  margin-top: 0;
+}
+
+.glasshouse-signal-meter {
+  display: inline-grid;
+  grid-template-columns: repeat(5, 0.42rem);
+  align-items: end;
+  gap: 0.18rem;
+  min-height: 1.6rem;
+  padding: 0.28rem 0.4rem;
+  border: 1px solid color-mix(in srgb, var(--glasshouse-line) 78%, transparent);
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--glasshouse-surface) 78%, transparent);
+}
+
+.glasshouse-signal-meter span {
+  display: block;
+  width: 0.42rem;
+  height: calc(0.35rem + (var(--i) * 0.18rem));
+  border-radius: 999px;
+  background: var(--glasshouse-fern-dark);
+  transform-origin: bottom;
+}
+
+.glasshouse-signal-orbit,
+.glasshouse-vine-field,
+.glasshouse-scan-window {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  pointer-events: none;
+}
+
+.glasshouse-signal-orbit {
+  transform:
+    translate3d(
+      calc(var(--glasshouse-pointer-x) * 0.9rem),
+      calc(var(--glasshouse-pointer-y) * 0.7rem),
+      0
+    )
+    rotate(calc(var(--glasshouse-scroll, 0) * 18deg));
+}
+
+.glasshouse-signal-orbit span {
+  position: absolute;
+  inset: 14%;
+  border: 1px solid rgba(183, 255, 216, 0.24);
+  border-radius: 50%;
+  transform: rotate(calc(var(--i, 1) * 18deg)) scale(0.78);
+}
+
+.glasshouse-signal-orbit span:nth-child(2) {
+  inset: 24% 8%;
+  border-color: rgba(240, 178, 62, 0.24);
+  transform: rotate(-22deg) scale(0.96);
+}
+
+.glasshouse-signal-orbit span:nth-child(3) {
+  inset: 8% 28%;
+  border-color: rgba(198, 50, 38, 0.18);
+  transform: rotate(36deg) scale(1.12);
+}
+
+.glasshouse-vine-field span {
+  position: absolute;
+  left: var(--x);
+  top: var(--y);
+  width: clamp(2.6rem, 7vw, 5.4rem);
+  aspect-ratio: 1 / 1.7;
+  border-radius: 60% 10% 60% 10%;
+  background: linear-gradient(135deg, rgba(183, 255, 216, 0.55), rgba(47, 143, 70, 0.08));
+  filter: blur(0.2px);
+  opacity: 0.5;
+  transform:
+    translate3d(
+      calc(var(--glasshouse-pointer-x) * -0.8rem),
+      calc(var(--glasshouse-pointer-y) * -0.6rem),
+      0
+    )
+    rotate(24deg);
+}
+
+.glasshouse-scan-window {
+  z-index: 3;
+  opacity: 0.65;
+  background:
+    linear-gradient(
+      90deg,
+      transparent,
+      rgba(183, 255, 216, 0.2),
+      rgba(240, 178, 62, 0.16),
+      transparent
+    ),
+    radial-gradient(circle at 50% 50%, transparent 0 48%, rgba(183, 255, 216, 0.1) 49%, transparent 50%);
+  mix-blend-mode: screen;
+  transform: translateX(calc((var(--glasshouse-scroll, 0) * 18%) - 9%));
+}
+
+.glasshouse-time {
+  position: relative;
+  overflow: hidden;
+  isolation: isolate;
+}
+
+.glasshouse-time::after {
+  content: "";
+  position: absolute;
+  inset: 0 auto 0 0;
+  z-index: -1;
+  width: var(--tune, 50%);
+  border-radius: inherit;
+  background: linear-gradient(90deg, rgba(183, 255, 216, 0.7), rgba(240, 178, 62, 0.36));
+}
+
+.glasshouse-card__media {
+  position: relative;
+  overflow: hidden;
+}
+
+.glasshouse-card__media::before,
+.glasshouse-card__media::after {
+  content: "";
+  position: absolute;
+  inset: 12%;
+  border-radius: 50%;
+  pointer-events: none;
+}
+
+.glasshouse-card__media::before {
+  border: 1px solid rgba(247, 243, 223, 0.34);
+  transform: rotate(calc(var(--glasshouse-scroll, 0) * 28deg));
+}
+
+.glasshouse-card__media::after {
+  inset: 22% 8%;
+  background: repeating-linear-gradient(90deg, rgba(247, 243, 223, 0.22) 0 2px, transparent 2px 12px);
+  opacity: 0.4;
+  transform: translateX(calc(var(--glasshouse-pointer-x) * 0.7rem));
+}
+
+.glasshouse-dial {
+  display: grid;
+  grid-template-columns: minmax(0, 0.8fr) minmax(280px, 1.2fr);
+  gap: 1rem;
+  align-items: stretch;
+  padding: clamp(1.2rem, 4vw, 2rem);
+  border: 1px solid var(--glasshouse-line);
+  border-radius: var(--glasshouse-radius);
+  background: var(--glasshouse-pine);
+  color: var(--glasshouse-cream);
+  overflow: hidden;
+}
+
+.glasshouse-dial h2 {
+  font-family: var(--glasshouse-font-display);
+  font-size: clamp(2rem, 5vw, 4.6rem);
+  line-height: 0.94;
+  letter-spacing: -0.04em;
+}
+
+.glasshouse-dial__screen {
+  position: relative;
+  min-height: 220px;
+  border: 1px solid rgba(183, 255, 216, 0.28);
+  border-radius: clamp(1.4rem, 5vw, 3.6rem);
+  background:
+    radial-gradient(circle at 30% 30%, rgba(183, 255, 216, 0.32), transparent 10rem),
+    linear-gradient(135deg, rgba(36, 71, 216, 0.18), rgba(4, 29, 18, 0.72));
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.12);
+  overflow: hidden;
+}
+
+.glasshouse-dial__screen span {
+  position: absolute;
+  left: calc(12% + (var(--i, 0) * 18%));
+  bottom: 12%;
+  width: 12%;
+  height: calc(22% + (var(--i, 1) * 12%));
+  border-radius: 999px 999px 0 0;
+  background: linear-gradient(180deg, var(--glasshouse-phosphor), var(--glasshouse-marigold));
+  opacity: 0.82;
+  transform-origin: bottom;
+}
+
+.glasshouse-dial__screen span:nth-child(1) { --i: 0; }
+.glasshouse-dial__screen span:nth-child(2) { --i: 1; }
+.glasshouse-dial__screen span:nth-child(3) { --i: 2; }
+.glasshouse-dial__screen span:nth-child(4) { --i: 3; }
+
+[data-glasshouse-theme="dark"] .glasshouse-signal-meter {
+  background: rgba(4, 29, 18, 0.72);
+}
+
+[data-glasshouse-theme="dark"] .glasshouse-signal-meter span {
+  background: var(--glasshouse-marigold);
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .glasshouse-kicker::before {
+    animation: glasshouse-pulse 2.8s ease-in-out infinite;
+  }
+
+  .glasshouse-signal-meter span {
+    animation: glasshouse-meter 1.6s ease-in-out infinite;
+    animation-delay: calc(var(--i) * -0.16s);
+  }
+
+  .glasshouse-vine-field span {
+    animation: glasshouse-leaf-drift 9s ease-in-out infinite;
+    animation-delay: var(--d);
+  }
+
+  .glasshouse-scan-window {
+    animation: glasshouse-scan 7s linear infinite;
+  }
+
+  .glasshouse-time::after {
+    animation: glasshouse-tune 4.8s ease-in-out infinite;
+  }
+
+  .glasshouse-dial__screen span {
+    animation: glasshouse-meter 2.2s ease-in-out infinite;
+    animation-delay: calc(var(--i) * -0.22s);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .glasshouse-signal-orbit,
+  .glasshouse-vine-field span,
+  .glasshouse-scan-window,
+  .glasshouse-card__media::before,
+  .glasshouse-card__media::after {
+    transform: none;
+    animation: none;
+  }
+
+  .glasshouse-time::after,
+  .glasshouse-signal-meter span,
+  .glasshouse-dial__screen span {
+    animation: none;
+  }
+}
+
+@keyframes glasshouse-pulse {
+  0%, 100% { box-shadow: 0 0 0 5px rgba(240, 178, 62, 0.22); }
+  50% { box-shadow: 0 0 0 9px rgba(183, 255, 216, 0.18); }
+}
+
+@keyframes glasshouse-meter {
+  0%, 100% { transform: scaleY(0.62); opacity: 0.68; }
+  50% { transform: scaleY(1.14); opacity: 1; }
+}
+
+@keyframes glasshouse-leaf-drift {
+  0%, 100% { transform: translate3d(0, 0, 0) rotate(18deg); }
+  50% { transform: translate3d(0.8rem, -0.9rem, 0) rotate(32deg); }
+}
+
+@keyframes glasshouse-scan {
+  0% { background-position: -80% 0, 0 0; }
+  100% { background-position: 180% 0, 0 0; }
+}
+
+@keyframes glasshouse-tune {
+  0%, 100% { filter: saturate(0.9); }
+  50% { filter: saturate(1.35); }
+}
+
+
+@media (max-width: 920px) {
+  .glasshouse-dial {
+    grid-template-columns: 1fr;
+  }
+}
+
+.glasshouse-dial .glasshouse-kicker,
+.glasshouse-support .glasshouse-kicker {
+  color: var(--glasshouse-marigold);
+}
+
+.glasshouse-support .glasshouse-btn--outline,
+.glasshouse-dial .glasshouse-btn--outline {
+  color: var(--glasshouse-cream);
+}

@@ -1,0 +1,14 @@
+{
+  "date": "2026-10-06",
+  "kind": "new",
+  "title": "Send media to Premiere Pro from Boardwalk",
+  "body": "The Boardwalk panel for Premiere Pro lets you find and import station media. The connection code fills in for you, and exports let you pick a frame rate, with 29.97 as the default.",
+  "prs": [
+    2520,
+    2536,
+    2648,
+    2606,
+    2607
+  ],
+  "order": -1
+}

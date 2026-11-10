@@ -1,0 +1,152 @@
+cb({
+  "headends": [
+    {
+      "cid": "68202fb6-8f6b-40f5-a70a-f4d136d5ad30",
+      "name": "Bristol Garden Apts",
+      "feeds": [
+        {
+          "cid": "a41c4091-7417-49ab-a883-0a9090db1320",
+          "short_name": "WNJT",
+          "full_name": "NJTV",
+          "timezone": "America/New_York",
+          "listings": [
+            {
+              "start_time": "0100",
+              "duration": 100,
+              "minutes": 60,
+              "nola_root": "GOTE",
+              "program_id": 57904,
+              "program_external_id": "SH049708030000",
+              "cid": "9db2a277-e276-4ba5-bcf7-96931f981f38",
+              "title": "Gods of Tennis",
+              "episode_title": "Billie Jean King and Arthur Ashe",
+              "description": "How the golden age of tennis in the 70s and 80s changed the game forever.",
+              "hd": false,
+              "closed_captions": true,
+              "season_number": 1,
+              "episode_number": 1,
+              "airing_type": "Taped",
+              "kids": false
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Broadcast",
+      "feeds": [
+        {
+          "cid": "a41c4091-7417-49ab-a883-0a9090db1320",
+          "short_name": "WNJT",
+          "full_name": "NJTV",
+          "timezone": "America/New_York",
+          "listings": [
+            {
+              "start_time": "0100",
+              "duration": 100,
+              "minutes": 60,
+              "nola_root": "GOTE",
+              "program_id": 57904,
+              "program_external_id": "SH049708030000",
+              "cid": "9db2a277-e276-4ba5-bcf7-96931f981f38",
+              "title": "Gods of Tennis",
+              "episode_title": "Billie Jean King and Arthur Ashe",
+              "description": "How the golden age of tennis in the 70s and 80s changed the game forever.",
+              "hd": false,
+              "closed_captions": true,
+              "season_number": 1,
+              "episode_number": 1,
+              "airing_type": "Taped",
+              "kids": false
+            }
+          ]
+        },
+        {
+          "cid": "4211290e-ce30-49e5-9be1-2c412c5b3278",
+          "short_name": "WNJTDT",
+          "full_name": "NJTV HDTV",
+          "timezone": "America/New_York",
+          "listings": [
+            {
+              "start_time": "0100",
+              "duration": 100,
+              "minutes": 60,
+              "nola_root": "GOTE",
+              "program_id": 57904,
+              "program_external_id": "SH049708030000",
+              "cid": "9db2a277-e276-4ba5-bcf7-96931f981f38",
+              "title": "Gods of Tennis",
+              "episode_title": "Billie Jean King and Arthur Ashe",
+              "description": "How the golden age of tennis in the 70s and 80s changed the game forever.",
+              "hd": true,
+              "closed_captions": true,
+              "season_number": 1,
+              "episode_number": 1,
+              "airing_type": "Taped",
+              "kids": false
+            },
+            {
+              "start_time": "0600",
+              "duration": 30,
+              "minutes": 30,
+              "nola_root": "WILK",
+              "title": "Wild Kratts",
+              "episode_title": "Pangolin Rescue",
+              "description": "The Wild Kratts set out to save the pangolins.",
+              "hd": true,
+              "closed_captions": true,
+              "season_number": 4,
+              "episode_number": 7,
+              "airing_type": "Taped",
+              "kids": true
+            },
+            {
+              "start_time": "0630",
+              "duration": 30,
+              "minutes": 30,
+              "nola_root": "WEHU",
+              "title": "Weather Hunters",
+              "episode_title": "A Dark and Stormy Night",
+              "description": "Weather detective Lily Hunter and her family.",
+              "hd": true,
+              "closed_captions": true,
+              "season_number": 1,
+              "episode_number": 5,
+              "airing_type": "Taped",
+              "kids": false
+            },
+            {
+              "start_time": "0700",
+              "duration": 30,
+              "minutes": 30,
+              "nola_root": "LYLO",
+              "title": "Lyla in the Loop",
+              "episode_title": "How to Hamster; A Bad Case of the Beeps",
+              "description": "Seven-year-old Lyla and her family address everyday problems together.",
+              "hd": true,
+              "closed_captions": true,
+              "season_number": 1,
+              "episode_number": 7,
+              "airing_type": "Taped",
+              "kids": true
+            },
+            {
+              "start_time": "2330",
+              "duration": 30,
+              "minutes": 30,
+              "nola_root": "",
+              "title": "BBC News",
+              "description": "The latest national and international stories as they break.",
+              "hd": true,
+              "closed_captions": true,
+              "season_number": null,
+              "episode_number": null,
+              "airing_type": "Taped",
+              "kids": false
+            }
+          ]
+        }
+      ]
+    }
+  ]
+});

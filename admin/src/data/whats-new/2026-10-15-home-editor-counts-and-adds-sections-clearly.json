@@ -1,0 +1,13 @@
+{
+  "date": "2026-10-15",
+  "kind": "improved",
+  "title": "Home editor counts and adds sections clearly",
+  "body": "The Home outline counts a row and its items as one section and keeps the count current. The Add menu, canvas controls and section numbers now look and work the same everywhere.",
+  "prs": [
+    3545,
+    3509,
+    3503,
+    3526
+  ],
+  "order": -2
+}

@@ -1,0 +1,17 @@
+export const developmentInputFixture = Object.freeze({
+  CLOUDFLARE_DEV_PUBLIC_WORKER: "fixture-dev-public",
+  CMS_DEV_ADMIN_ORIGIN: "https://dev-admin.fixture.test",
+  CMS_DEV_ADMIN_PAGES: "fixture-dev-admin",
+  CMS_DEV_API_ORIGIN: "https://dev-api.fixture.test",
+  CMS_DEV_API_WORKER: "fixture-dev-cms-api",
+  CMS_DEV_MEDIA_BUCKET: "fixture-dev-media",
+  CMS_DEV_MEDIA_ORIGIN: "https://dev-media.fixture.test",
+  CMS_DEV_PREVIEW_BUCKET: "fixture-dev-cms-previews",
+  CMS_DEV_PREVIEW_ORIGIN: "https://dev-preview.fixture.test",
+  CMS_DEV_PREVIEW_RENDERER: "fixture-dev-cms-preview-renderer",
+  CMS_DEV_PREVIEW_STAFF_WORKER: "fixture-dev-preview-staff-sites",
+  CMS_DEV_PREVIEW_WORKER: "fixture-dev-cms-preview",
+  CMS_DEV_PUBLIC_ORIGIN: "https://dev-public.fixture.test",
+  CMS_DEV_SITE_PAGES: "fixture-dev",
+  CMS_PRODUCTION_API_ORIGIN: "https://api.fixture.test",
+});

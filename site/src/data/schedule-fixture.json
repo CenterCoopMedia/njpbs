@@ -1,0 +1,175 @@
+{
+  "fixture": true,
+  "source": "pbs-tvss",
+  "generatedAt": "2026-09-18T12:00:00.000Z",
+  "timeZone": "America/New_York",
+  "request": {
+    "station": "WNJT",
+    "dates": [
+      "2026-09-18",
+      "2026-09-19"
+    ]
+  },
+  "days": {
+    "broadcast": [
+      {
+        "date": "2026-09-18",
+        "kind": "broadcast",
+        "callsign": "wnjt",
+        "feedCid": "fixture-broadcast",
+        "timeZone": "America/New_York",
+        "entries": [
+          {
+            "title": "Example broadcast program",
+            "episodeTitle": "Example episode",
+            "startsAt": "2026-09-18T00:00:00-04:00",
+            "endsAt": "2026-09-18T12:00:00-04:00",
+            "isKids": false,
+            "kids": false,
+            "feedKind": "broadcast",
+            "seasonNumber": null,
+            "episodeNumber": null,
+            "nolaRoot": null,
+            "programId": null,
+            "programExternalId": null,
+            "cid": null
+          },
+          {
+            "title": "Example broadcast program two",
+            "episodeTitle": "Example episode",
+            "startsAt": "2026-09-18T12:00:00-04:00",
+            "endsAt": "2026-09-19T00:00:00-04:00",
+            "isKids": false,
+            "kids": false,
+            "feedKind": "broadcast",
+            "seasonNumber": null,
+            "episodeNumber": null,
+            "nolaRoot": null,
+            "programId": null,
+            "programExternalId": null,
+            "cid": null
+          }
+        ]
+      },
+      {
+        "date": "2026-09-19",
+        "kind": "broadcast",
+        "callsign": "wnjt",
+        "feedCid": "fixture-broadcast",
+        "timeZone": "America/New_York",
+        "entries": [
+          {
+            "title": "Example broadcast program",
+            "episodeTitle": "Example episode",
+            "startsAt": "2026-09-19T00:00:00-04:00",
+            "endsAt": "2026-09-19T12:00:00-04:00",
+            "isKids": false,
+            "kids": false,
+            "feedKind": "broadcast",
+            "seasonNumber": null,
+            "episodeNumber": null,
+            "nolaRoot": null,
+            "programId": null,
+            "programExternalId": null,
+            "cid": null
+          },
+          {
+            "title": "Example broadcast program two",
+            "episodeTitle": "Example episode",
+            "startsAt": "2026-09-19T12:00:00-04:00",
+            "endsAt": "2026-09-20T00:00:00-04:00",
+            "isKids": false,
+            "kids": false,
+            "feedKind": "broadcast",
+            "seasonNumber": null,
+            "episodeNumber": null,
+            "nolaRoot": null,
+            "programId": null,
+            "programExternalId": null,
+            "cid": null
+          }
+        ]
+      }
+    ],
+    "kids": [
+      {
+        "date": "2026-09-18",
+        "kind": "kids",
+        "callsign": "wnjt",
+        "feedCid": "fixture-kids",
+        "timeZone": "America/New_York",
+        "entries": [
+          {
+            "title": "Example kids program",
+            "episodeTitle": "Example episode",
+            "startsAt": "2026-09-18T00:00:00-04:00",
+            "endsAt": "2026-09-18T12:00:00-04:00",
+            "isKids": true,
+            "kids": true,
+            "feedKind": "kids",
+            "seasonNumber": null,
+            "episodeNumber": null,
+            "nolaRoot": null,
+            "programId": null,
+            "programExternalId": null,
+            "cid": null
+          },
+          {
+            "title": "Example kids program two",
+            "episodeTitle": "Example episode",
+            "startsAt": "2026-09-18T12:00:00-04:00",
+            "endsAt": "2026-09-19T00:00:00-04:00",
+            "isKids": true,
+            "kids": true,
+            "feedKind": "kids",
+            "seasonNumber": null,
+            "episodeNumber": null,
+            "nolaRoot": null,
+            "programId": null,
+            "programExternalId": null,
+            "cid": null
+          }
+        ]
+      },
+      {
+        "date": "2026-09-19",
+        "kind": "kids",
+        "callsign": "wnjt",
+        "feedCid": "fixture-kids",
+        "timeZone": "America/New_York",
+        "entries": [
+          {
+            "title": "Example kids program",
+            "episodeTitle": "Example episode",
+            "startsAt": "2026-09-19T00:00:00-04:00",
+            "endsAt": "2026-09-19T12:00:00-04:00",
+            "isKids": true,
+            "kids": true,
+            "feedKind": "kids",
+            "seasonNumber": null,
+            "episodeNumber": null,
+            "nolaRoot": null,
+            "programId": null,
+            "programExternalId": null,
+            "cid": null
+          },
+          {
+            "title": "Example kids program two",
+            "episodeTitle": "Example episode",
+            "startsAt": "2026-09-19T12:00:00-04:00",
+            "endsAt": "2026-09-20T00:00:00-04:00",
+            "isKids": true,
+            "kids": true,
+            "feedKind": "kids",
+            "seasonNumber": null,
+            "episodeNumber": null,
+            "nolaRoot": null,
+            "programId": null,
+            "programExternalId": null,
+            "cid": null
+          }
+        ]
+      }
+    ]
+  }
+}

@@ -1,0 +1,10 @@
+{
+  "date": "2026-09-08",
+  "kind": "new",
+  "title": "Duplicate content and add it where you work",
+  "body": "You can duplicate a block or row and add new content next to the item you are editing. Error notices stay on screen until you close them and tell you how to recover.",
+  "prs": [
+    1493
+  ],
+  "order": -2
+}

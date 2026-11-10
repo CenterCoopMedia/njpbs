@@ -1,0 +1,553 @@
+{
+  "checkedAt": "2026-09-08T15:43:39.663Z",
+  "provenance": "NJ Spotlight News RSS snapshots: https://www.njspotlightnews.org/budget/feed/ (checked 2026-09-08T15:43:39.664Z); https://www.njspotlightnews.org/business/feed/ (checked 2026-09-08T15:43:40.117Z); https://www.njspotlightnews.org/energy-environment/feed/ (checked 2026-09-08T15:43:39.663Z); https://www.njspotlightnews.org/immigration/feed/ (checked 2026-09-08T15:43:39.729Z); https://www.njspotlightnews.org/social-issues/feed/ (checked 2026-09-08T15:43:40.133Z). Topics match the publisher's source categories/tags exactly; no headline inference. Input order supplies curated order; this data is pending editorial review until its PR is approved. Featured images for the first five budget stories verified against publisher RSS and WordPress featured-media records on 2026-09-13. Story dates, topics and order are unchanged.",
+  "items": [
+    {
+      "id": "njspotlight-851e750f9a757a42e2d083a22ae8ccb81af320d52d5227d62fc4bad4c8e1faae",
+      "source": "njpbs_related_index",
+      "title": "It’s not your imagination: ‘Bracket creep’ costing you more in taxes",
+      "href": "https://www.njspotlightnews.org/2026/08/its-not-your-imagination-bracket-creep-costing-you-more-in-taxes/",
+      "topics": [
+        "budget"
+      ],
+      "publishedAt": "2026-08-31T04:09:33.000Z",
+      "sourceLabel": "NJ Spotlight News",
+      "thumbnail": {
+        "url": "https://media.njpbs.org/cms-media/spotlight/1d8a624c901423a554da02a1710a446eda699d3475888239d5c8cf3d8f2f8251/43b02cd0d7d4d20e02efa7ee6f117bfd9d7d29183d4b01afb824a58850d972fa.jpg",
+        "alt": ""
+      }
+    },
+    {
+      "id": "njspotlight-982f6096f17a048be49dc851513c9c332b8caf1297771f05dd0409fea175fcde",
+      "source": "njpbs_related_index",
+      "title": "Democratic districts cashed in as NJ lawmakers drafted spending bills",
+      "href": "https://www.njspotlightnews.org/2026/08/democratic-districts-cashed-in-as-nj-lawmakers-drafted-spending-bills/",
+      "topics": [
+        "budget"
+      ],
+      "publishedAt": "2026-08-20T04:05:30.000Z",
+      "sourceLabel": "NJ Spotlight News",
+      "thumbnail": {
+        "url": "https://media.njpbs.org/cms-media/spotlight/90564cfd4362a2d3462986c4cbcb246304f8582ee8dfc6a49f4299042889bc7f/e03683dcd40ccbdd56b42cbc5ae17a2436c290471053fe716e2c4d002c6fd74d.jpg",
+        "alt": ""
+      }
+    },
+    {
+      "id": "njspotlight-2acbffdf0e46d846d37f7fcd3a1664bcc373a7d178accac4961ebe8b52e64818",
+      "source": "njpbs_related_index",
+      "title": "NJ tax collections jump 9% in July, giving Sherrill budget an early boost",
+      "href": "https://www.njspotlightnews.org/2026/08/nj-treasury-tax-collections-ticked-up-in-july/",
+      "topics": [
+        "budget"
+      ],
+      "publishedAt": "2026-08-19T04:08:37.000Z",
+      "sourceLabel": "NJ Spotlight News",
+      "thumbnail": {
+        "url": "https://media.njpbs.org/cms-media/spotlight/cb58376680a73df9362999413185d01bd2b0b6a260d16fb612475c5e0dabcae9/b2fdeece6cec886de89c0ee2c6726e1928887dc07eb82bec44398742400326f0.jpg",
+        "alt": ""
+      }
+    },
+    {
+      "id": "njspotlight-f04d0b79f709214dfae42d370d353fb64b33b2654a0ba36464efc0d30cb187a0",
+      "source": "njpbs_related_index",
+      "title": "Workers, retirees among those urging NJ pension to look beyond the bottom line",
+      "href": "https://www.njspotlightnews.org/2026/08/workers-retirees-among-those-urging-nj-pension-to-look-beyond-the-bottom-line/",
+      "topics": [
+        "budget",
+        "delaney-hall"
+      ],
+      "publishedAt": "2026-08-03T04:08:19.000Z",
+      "sourceLabel": "NJ Spotlight News",
+      "thumbnail": {
+        "url": "https://media.njpbs.org/cms-media/spotlight/77abda1058885842264827a77c093955df56f04ca2685be102786866dd1642e5/d700ed67f6689e1410fad8d8c8ba9e0547bb517cef91679e4fe157c6672e40a8.jpg",
+        "alt": ""
+      }
+    },
+    {
+      "id": "njspotlight-acc13f01c6c9a678bd00f138a47f3ef2081b41e617660ea2895e391b12d53591",
+      "source": "njpbs_related_index",
+      "title": "Funding gap delays NJ’s new mental health crisis centers",
+      "href": "https://www.njspotlightnews.org/2026/07/funding-gap-delays-njs-new-mental-health-crisis-centers/",
+      "topics": [
+        "budget"
+      ],
+      "publishedAt": "2026-07-30T04:12:12.000Z",
+      "sourceLabel": "NJ Spotlight News",
+      "thumbnail": {
+        "url": "https://media.njpbs.org/cms-media/spotlight/b219a651c49d95a98be60d71024ee72b6832d786fdef05c11508e96eb5aa648a/1ee8bc08e4a13cf93fb64ddcebdc2ca470360bb640cd998f598cde9215165276.jpg",
+        "alt": ""
+      }
+    },
+    {
+      "id": "njspotlight-ce742117a569fca5398d0aa0b8abab181871445563a7d18b10ea13bdba4a724c",
+      "source": "njpbs_related_index",
+      "title": "New Jersey pension fund on track to continue winning streak",
+      "href": "https://www.njspotlightnews.org/2026/07/new-jersey-pension-fund-on-track-to-continue-winning-streak/",
+      "topics": [
+        "budget"
+      ],
+      "publishedAt": "2026-07-30T04:08:15.000Z",
+      "sourceLabel": "NJ Spotlight News"
+    },
+    {
+      "id": "njspotlight-6f37919b1f0144a036c619ec51b172a9a39f2fd9bf2ce5e2efb04982c8bc0e84",
+      "source": "njpbs_related_index",
+      "title": "NJ taps employers with workers on Medicaid to counter Trump cuts",
+      "href": "https://www.njspotlightnews.org/2026/07/nj-taps-employers-with-workers-on-medicaid-to-counter-trump-cuts/",
+      "topics": [
+        "budget",
+        "business"
+      ],
+      "publishedAt": "2026-07-27T04:08:39.000Z",
+      "sourceLabel": "NJ Spotlight News"
+    },
+    {
+      "id": "njspotlight-180e4d1cecff630d98894c48191c287932db1bfc558db303aa4097d3767cf7b8",
+      "source": "njpbs_related_index",
+      "title": "NJ Transit approves biggest budget ever, with 3% higher fares",
+      "href": "https://www.njspotlightnews.org/2026/07/nj-transit-approves-biggest-budget-ever-with-3-higher-fares/",
+      "topics": [
+        "budget"
+      ],
+      "publishedAt": "2026-07-22T04:12:59.000Z",
+      "sourceLabel": "NJ Spotlight News"
+    },
+    {
+      "id": "njspotlight-d1a591e17b58d3f228c3546c74f6d46ca2764f48506dcd471f4f255e36d36469",
+      "source": "njpbs_related_index",
+      "title": "NJ Lottery sales up 5%, generating $1 billion-plus for pension system",
+      "href": "https://www.njspotlightnews.org/2026/07/nj-lottery-sales-up-5-generating-1-billion-plus-for-pension-system/",
+      "topics": [
+        "budget"
+      ],
+      "publishedAt": "2026-07-22T04:08:23.000Z",
+      "sourceLabel": "NJ Spotlight News"
+    },
+    {
+      "id": "njspotlight-5ef8c05eadedb328aafbf1c1acc27acb707c8e47dd6bea3ae1fb4bd451e12703",
+      "source": "njpbs_related_index",
+      "title": "Senior, disabled homeowners up first for $4B in property tax relief",
+      "href": "https://www.njspotlightnews.org/2026/07/senior-disabled-homeowners-up-first-for-4b-in-property-tax-relief/",
+      "topics": [
+        "budget"
+      ],
+      "publishedAt": "2026-07-20T04:08:52.000Z",
+      "sourceLabel": "NJ Spotlight News"
+    },
+    {
+      "id": "njspotlight-67329fd525775e18ebc719d8ae23e0fddb531ad96ae2ee393f90b2fd2653f5a2",
+      "source": "njpbs_related_index",
+      "title": "NJ coaxing World Cup fans to celebrate on this side of the Hudson",
+      "href": "https://www.njspotlightnews.org/2026/06/nj-coaxing-world-cup-fans-to-celebrate-on-this-side-of-the-hudson/",
+      "topics": [
+        "business"
+      ],
+      "publishedAt": "2026-06-09T04:10:57.000Z",
+      "sourceLabel": "NJ Spotlight News"
+    },
+    {
+      "id": "njspotlight-0705db36b7bcc46b49df95a9f2e02138c4c27aae49b6a7561de4d6222437e3c1",
+      "source": "njpbs_related_index",
+      "title": "Burlington City gets lawmakers’ backing for economic zone program",
+      "href": "https://www.njspotlightnews.org/2026/05/burlington-city-gets-lawmakers-backing-for-economic-zone-program/",
+      "topics": [
+        "business"
+      ],
+      "publishedAt": "2026-05-19T04:05:20.000Z",
+      "sourceLabel": "NJ Spotlight News"
+    },
+    {
+      "id": "njspotlight-3d50fb71c55fd5616af7c489cac659e846e9250a5fbe2d20ec0d40bf1454acae",
+      "source": "njpbs_related_index",
+      "title": "Financial, consumer watchdog on ‘life support’ under Trump",
+      "href": "https://www.njspotlightnews.org/2026/02/consumer-financial-protection-bureau-cfpb-on-life-support/",
+      "topics": [
+        "business"
+      ],
+      "publishedAt": "2026-02-12T05:09:27.000Z",
+      "sourceLabel": "NJ Spotlight News"
+    },
+    {
+      "id": "njspotlight-b498fdbbeb038675ba08fb26b73e01415f8bba4f84554733b0f3a9848e0eb3e6",
+      "source": "njpbs_related_index",
+      "title": "Slight boost in jobs, tax revenue ahead of Sherrill’s first spending proposal",
+      "href": "https://www.njspotlightnews.org/2026/01/slight-boost-in-jobs-tax-revenue-ahead-of-sherrills-first-spending-proposal/",
+      "topics": [
+        "budget",
+        "business"
+      ],
+      "publishedAt": "2026-01-26T05:09:43.000Z",
+      "sourceLabel": "NJ Spotlight News"
+    },
+    {
+      "id": "njspotlight-87445d9b579296d1983be23cfb88c95628870b633edd822f381e546bb13ab450",
+      "source": "njpbs_related_index",
+      "title": "NJ minimum wage rises, but not for all",
+      "href": "https://www.njspotlightnews.org/2026/01/nj-minimum-wage-rises-but-not-for-all/",
+      "topics": [
+        "business"
+      ],
+      "publishedAt": "2026-01-05T05:07:53.000Z",
+      "sourceLabel": "NJ Spotlight News"
+    },
+    {
+      "id": "njspotlight-c8edcfe2a83be1db9b220f2b699cf79dd9a488d30e038f62bfc8fb585e202869",
+      "source": "njpbs_related_index",
+      "title": "Stagnating national jobs market raises economic concerns",
+      "href": "https://www.njspotlightnews.org/2025/12/stagnating-national-jobs-market-raises-economic-concerns/",
+      "topics": [
+        "business"
+      ],
+      "publishedAt": "2025-12-18T05:13:00.000Z",
+      "sourceLabel": "NJ Spotlight News"
+    },
+    {
+      "id": "njspotlight-7707870fd1216d0e664a3a8b0c61c016d43716d270147bddcc44f90768ac86e5",
+      "source": "njpbs_related_index",
+      "title": "FIFA World Cup ticket prices leave fans frustrated and priced out",
+      "href": "https://www.njspotlightnews.org/2025/12/fifa-world-cup-ticket-prices-leave-fans-frustrated-and-priced-out/",
+      "topics": [
+        "business"
+      ],
+      "publishedAt": "2025-12-17T05:10:34.000Z",
+      "sourceLabel": "NJ Spotlight News"
+    },
+    {
+      "id": "njspotlight-f2fda795fc4bb8fb02aea79d5a6175f8e5f8736052a5713e509ca4d7cc6c058e",
+      "source": "njpbs_related_index",
+      "title": "Could layoffs in NJ preview a recession for 2026?",
+      "href": "https://www.njspotlightnews.org/2025/12/could-layoffs-in-nj-preview-a-recession-in-2026/",
+      "topics": [
+        "business"
+      ],
+      "publishedAt": "2025-12-10T05:11:37.000Z",
+      "sourceLabel": "NJ Spotlight News"
+    },
+    {
+      "id": "njspotlight-f47da9a16f2830e71de7e338df333ef4cf842aa574d71bd019c50b8f9d1359bd",
+      "source": "njpbs_related_index",
+      "title": "House votes to delay North Atlantic right whale protections",
+      "href": "https://www.njspotlightnews.org/2026/09/house-votes-to-delay-north-atlantic-right-whale-protections/",
+      "topics": [
+        "energy-environment"
+      ],
+      "publishedAt": "2026-09-04T04:08:56.000Z",
+      "sourceLabel": "NJ Spotlight News"
+    },
+    {
+      "id": "njspotlight-b5bc65ea239bbb711b6e7bce837112bfbfee93a8bd2269b6b740702b030d692d",
+      "source": "njpbs_related_index",
+      "title": "How to save endangered NJ marsh from rising sea: Build it higher",
+      "href": "https://www.njspotlightnews.org/2026/09/how-to-save-endangered-nj-marsh-from-rising-sea-build-it-higher/",
+      "topics": [
+        "energy-environment"
+      ],
+      "publishedAt": "2026-09-03T04:10:42.000Z",
+      "sourceLabel": "NJ Spotlight News"
+    },
+    {
+      "id": "njspotlight-fa9ba4029aaf5cdbd561c80b1a07827112a255979ef065ebff78a18df02813c0",
+      "source": "njpbs_related_index",
+      "title": "Power utility overbilled customers, erred on tax law, audit finds",
+      "href": "https://www.njspotlightnews.org/2026/09/power-utility-overbilled-customers-erred-on-tax-law-audit-finds/",
+      "topics": [
+        "energy-environment"
+      ],
+      "publishedAt": "2026-09-02T04:14:32.000Z",
+      "sourceLabel": "NJ Spotlight News"
+    },
+    {
+      "id": "njspotlight-e7663fcc2589587bda8474375f23729184edb78caaeacf36ddde363e2da05323",
+      "source": "njpbs_related_index",
+      "title": "Operator of leaky pipeline blocked inspectors, regulator says",
+      "href": "https://www.njspotlightnews.org/2026/08/operator-of-leaky-pipeline-blocked-inspectors-regulator-says/",
+      "topics": [
+        "energy-environment"
+      ],
+      "publishedAt": "2026-08-26T04:04:48.000Z",
+      "sourceLabel": "NJ Spotlight News"
+    },
+    {
+      "id": "njspotlight-d89aec13ddbb1f5920e124a612cd69c3cd2e46e0ea189697423292b2b6ef8ffc",
+      "source": "njpbs_related_index",
+      "title": "Why ‘salt finger mixing’ draws Rutgers scientists to warming ocean",
+      "href": "https://www.njspotlightnews.org/2026/08/why-salt-finger-mixing-draws-rutgers-scientists-to-warming-ocean/",
+      "topics": [
+        "energy-environment"
+      ],
+      "publishedAt": "2026-08-24T04:10:19.000Z",
+      "sourceLabel": "NJ Spotlight News"
+    },
+    {
+      "id": "njspotlight-f2de4b3dbd6157bb43499f83f6457d6a407e6e7616d8ac987f08529fcddca036",
+      "source": "njpbs_related_index",
+      "title": "The aching human soul of Keyport’s feared cancer cluster",
+      "href": "https://www.njspotlightnews.org/2026/08/the-aching-human-soul-of-keyports-feared-cancer-cluster/",
+      "topics": [
+        "energy-environment"
+      ],
+      "publishedAt": "2026-08-18T04:08:45.000Z",
+      "sourceLabel": "NJ Spotlight News"
+    },
+    {
+      "id": "njspotlight-396d98ce2b6937f06308d977db75927c5f176711f817059ae9c96985bb9a2df8",
+      "source": "njpbs_related_index",
+      "title": "How a question about water filters sparked a movement in Newark",
+      "href": "https://www.njspotlightnews.org/2026/08/how-a-question-about-water-filters-sparked-a-movement-in-newark/",
+      "topics": [
+        "energy-environment",
+        "social-issues"
+      ],
+      "publishedAt": "2026-08-10T04:12:24.000Z",
+      "sourceLabel": "NJ Spotlight News"
+    },
+    {
+      "id": "njspotlight-a10de1ff56c9871d09c6acf3f6a812accbac45efe0ccd167f6e77ef5f7078c27",
+      "source": "njpbs_related_index",
+      "title": "Chemicals persistent in cancer-riddled area near Keyport landfill",
+      "href": "https://www.njspotlightnews.org/2026/07/chemicals-persistent-in-cancer-riddled-area-near-keyport-landfill/",
+      "topics": [
+        "energy-environment"
+      ],
+      "publishedAt": "2026-07-30T04:10:52.000Z",
+      "sourceLabel": "NJ Spotlight News"
+    },
+    {
+      "id": "njspotlight-bb18e091065e7d0eda353be224d2cb44fbd43ef4fda9cd7553fde8c7211af38b",
+      "source": "njpbs_related_index",
+      "title": "Food parasite fear drives customers to trusted New Jersey farm",
+      "href": "https://www.njspotlightnews.org/2026/07/food-parasite-fear-drives-customers-to-trusted-new-jersey-farm/",
+      "topics": [
+        "energy-environment"
+      ],
+      "publishedAt": "2026-07-27T04:10:41.000Z",
+      "sourceLabel": "NJ Spotlight News"
+    },
+    {
+      "id": "njspotlight-5a0e4018acd4105537228b824ceb505cc08a039b1ce10a18e7697453b75a2bcb",
+      "source": "njpbs_related_index",
+      "title": "Fracking ban in Delaware River watershed survives GOP challenge",
+      "href": "https://www.njspotlightnews.org/2026/07/fracking-ban-in-delaware-river-watershed-survives-gop-challenge/",
+      "topics": [
+        "energy-environment"
+      ],
+      "publishedAt": "2026-07-23T04:12:03.000Z",
+      "sourceLabel": "NJ Spotlight News"
+    },
+    {
+      "id": "njspotlight-dce449f9c696154b8d96bb2a3abefcfbcd7b07bcc47ea9a6ea1261d52d402246",
+      "source": "njpbs_related_index",
+      "title": "Q&A: Teacher of the Year creates safe zone amid ‘culture of fear’",
+      "href": "https://www.njspotlightnews.org/2026/09/qa-teacher-of-the-year-creates-safe-zone-amid-culture-of-fear/",
+      "topics": [
+        "immigration",
+        "delaney-hall"
+      ],
+      "publishedAt": "2026-09-01T04:10:25.000Z",
+      "sourceLabel": "NJ Spotlight News"
+    },
+    {
+      "id": "njspotlight-68ad0bdb216f5fab06f8dff38f54e724ef51b213f92b6b7fedb661e274aef26a",
+      "source": "njpbs_related_index",
+      "title": "McIver loses bid to toss charges over Delaney Hall clash with ICE",
+      "href": "https://www.njspotlightnews.org/2026/08/mciver-loses-bid-to-dismiss-charges-in-delaney-hall-scrum-with-ice/",
+      "topics": [
+        "immigration",
+        "delaney-hall"
+      ],
+      "publishedAt": "2026-08-27T04:12:47.000Z",
+      "sourceLabel": "NJ Spotlight News"
+    },
+    {
+      "id": "njspotlight-2ab6f833caa09a2246fd56de16f4db00a301afa395feb4c9eceba127a79b1fde",
+      "source": "njpbs_related_index",
+      "title": "Who’s behind the mask? New Jerseyans haunted by ICE run-ins",
+      "href": "https://www.njspotlightnews.org/2026/08/whos-behind-the-mask-new-jerseyans-haunted-by-ice-run-ins/",
+      "topics": [
+        "immigration",
+        "delaney-hall"
+      ],
+      "publishedAt": "2026-08-27T04:10:44.000Z",
+      "sourceLabel": "NJ Spotlight News"
+    },
+    {
+      "id": "njspotlight-085c6243339a1c49c0420defd374586bba90ffc111eda6545b12d1191b74692b",
+      "source": "njpbs_related_index",
+      "title": "Post-detention deaths to go untracked in ‘common sense’ ICE move",
+      "href": "https://www.njspotlightnews.org/2026/08/post-detention-deaths-to-go-untracked-by-ices-common-sense-move/",
+      "topics": [
+        "immigration",
+        "delaney-hall"
+      ],
+      "publishedAt": "2026-08-11T04:06:20.000Z",
+      "sourceLabel": "NJ Spotlight News"
+    },
+    {
+      "id": "njspotlight-1aa53bfa0472c75fb1415df0bda8261c2afeb11b654035dc437412f12d3b8fec",
+      "source": "njpbs_related_index",
+      "title": "Death shows Delaney ‘not adequate’ in emergency, McIver says",
+      "href": "https://www.njspotlightnews.org/2026/08/death-shows-delaney-not-adequate-in-emergency-mciver-says/",
+      "topics": [
+        "immigration",
+        "delaney-hall"
+      ],
+      "publishedAt": "2026-08-05T04:10:10.000Z",
+      "sourceLabel": "NJ Spotlight News"
+    },
+    {
+      "id": "njspotlight-901db9adcdae7f4b2fa4c1a482b2c2ade03a3ec4d1739dd83082b3cda6e12eb5",
+      "source": "njpbs_related_index",
+      "title": "Why advocates want an end to all immigrant detention",
+      "href": "https://www.njspotlightnews.org/2026/07/why-advocates-want-an-end-to-all-immigrant-detention/",
+      "topics": [
+        "immigration",
+        "delaney-hall"
+      ],
+      "publishedAt": "2026-07-22T04:10:21.000Z",
+      "sourceLabel": "NJ Spotlight News"
+    },
+    {
+      "id": "njspotlight-6adc52add46a87a8baf89de38f74525fe42c61b25737901f84b2bcdf6759212b",
+      "source": "njpbs_related_index",
+      "title": "Thousands of non-citizens registered to vote in NJ, Sherrill says",
+      "href": "https://www.njspotlightnews.org/2026/07/thousands-of-non-citizens-registered-to-vote-in-nj-sherrill-says/",
+      "topics": [
+        "immigration"
+      ],
+      "publishedAt": "2026-07-22T04:06:22.000Z",
+      "sourceLabel": "NJ Spotlight News"
+    },
+    {
+      "id": "njspotlight-ee2dcdc660b5901204ef5741fd09e0462e5ba7b00483c4ca0efd156574d0b503",
+      "source": "njpbs_related_index",
+      "title": "Immigration courts running like ‘deportation machine,’ attorneys say",
+      "href": "https://www.njspotlightnews.org/2026/07/immigration-courts-running-like-deportation-machine-attorneys-say/",
+      "topics": [
+        "immigration"
+      ],
+      "publishedAt": "2026-07-16T04:12:04.000Z",
+      "sourceLabel": "NJ Spotlight News"
+    },
+    {
+      "id": "njspotlight-22297f885cb29eb2e9bebcc855e76833af405e9fc4277988e7d86e5067cbc458",
+      "source": "njpbs_related_index",
+      "title": "Judge criticized in rape case now serving on immigration court",
+      "href": "https://www.njspotlightnews.org/2026/07/judge-criticized-in-rape-case-now-serving-on-immigration-court/",
+      "topics": [
+        "immigration"
+      ],
+      "publishedAt": "2026-07-08T04:08:28.000Z",
+      "sourceLabel": "NJ Spotlight News"
+    },
+    {
+      "id": "njspotlight-e1ef78177b6391b4069d75a5f99aa825c0fe077554a95946b6adde2359ccb34e",
+      "source": "njpbs_related_index",
+      "title": "As Trump rants, Democrats and advocates hail U.S. birthright ruling",
+      "href": "https://www.njspotlightnews.org/2026/07/as-trump-rants-democrats-and-advocates-hail-u-s-birthright-ruling/",
+      "topics": [
+        "immigration"
+      ],
+      "publishedAt": "2026-07-01T04:06:54.000Z",
+      "sourceLabel": "NJ Spotlight News"
+    },
+    {
+      "id": "njspotlight-2102eb1f0507bcdd32527c4c477e3aeba348ce1b8d79fd7294f209cc8dc2f603",
+      "source": "njpbs_related_index",
+      "title": "NJ finds $16 million for crisis centers left out of state budget",
+      "href": "https://www.njspotlightnews.org/2026/08/nj-finds-16-million-for-crisis-centers-left-out-of-state-budget/",
+      "topics": [
+        "social-issues"
+      ],
+      "publishedAt": "2026-08-24T04:08:07.000Z",
+      "sourceLabel": "NJ Spotlight News"
+    },
+    {
+      "id": "njspotlight-b30b3910b1b11e49314af3c1ba08d914ef85d792d56dba1f92cecf243b00b9ed",
+      "source": "njpbs_related_index",
+      "title": "¿No tienes ahorros para la jubilación? NJ amplía el programa para empleados de empresas privadas",
+      "href": "https://www.njspotlightnews.org/2026/08/no-tienes-ahorros-para-la-jubilacion-nj-amplia-el-programa-para-empleados-de-empresas-privadas/",
+      "topics": [
+        "social-issues"
+      ],
+      "publishedAt": "2026-08-14T04:14:43.000Z",
+      "sourceLabel": "NJ Spotlight News"
+    },
+    {
+      "id": "njspotlight-35b4e572337b1e9fba24b591f95557935ddf97f56b78abd57921c5618c141809",
+      "source": "njpbs_related_index",
+      "title": "No retirement savings? NJ broadens program for privately employed",
+      "href": "https://www.njspotlightnews.org/2026/08/no-retirement-savings-nj-broadens-program-for-privately-employed/",
+      "topics": [
+        "social-issues"
+      ],
+      "publishedAt": "2026-08-10T04:08:20.000Z",
+      "sourceLabel": "NJ Spotlight News"
+    },
+    {
+      "id": "njspotlight-e38d810c66e02c3ff9113f1300a91417481398d921aa5985343416a2ad70379a",
+      "source": "njpbs_related_index",
+      "title": "Health care, food aid enrollees down as deeper federal cuts loom",
+      "href": "https://www.njspotlightnews.org/2026/07/health-care-food-aid-enrollees-down-as-deeper-federal-cuts-loom/",
+      "topics": [
+        "social-issues"
+      ],
+      "publishedAt": "2026-07-14T04:08:20.000Z",
+      "sourceLabel": "NJ Spotlight News"
+    },
+    {
+      "id": "njspotlight-de40aca0f9f39982a9666715e3253a1866338c5f32c389b639f60552232fac61",
+      "source": "njpbs_related_index",
+      "title": "SNAP food program benefits more than recipients, study finds",
+      "href": "https://www.njspotlightnews.org/2026/06/snap-food-program-benefits-more-than-recipients-study-finds/",
+      "topics": [
+        "social-issues"
+      ],
+      "publishedAt": "2026-06-12T04:12:00.000Z",
+      "sourceLabel": "NJ Spotlight News"
+    },
+    {
+      "id": "njspotlight-5dbd6a9bfe2e0e54da8a49a169aca657086d5e514b2e41e0cbc76ad4c97200cc",
+      "source": "njpbs_related_index",
+      "title": "‘Pretty scary’: Food pantries expect surge due to SNAP work rule",
+      "href": "https://www.njspotlightnews.org/2026/04/pretty-scary-food-pantries-expect-surge-due-to-snap-work-rule/",
+      "topics": [
+        "social-issues"
+      ],
+      "publishedAt": "2026-04-23T04:12:40.000Z",
+      "sourceLabel": "NJ Spotlight News"
+    },
+    {
+      "id": "njspotlight-45df99135058e3d7437e1203faae0dba5d0f3f584a3456e2c74078c0c77a3402",
+      "source": "njpbs_related_index",
+      "title": "For the unhoused in bitter cold, Camden resource fair offers lifeline",
+      "href": "https://www.njspotlightnews.org/2026/01/for-the-unhoused-in-bitter-cold-camden-resource-fair-offers-lifeline/",
+      "topics": [
+        "social-issues"
+      ],
+      "publishedAt": "2026-01-30T05:10:38.000Z",
+      "sourceLabel": "NJ Spotlight News"
+    },
+    {
+      "id": "njspotlight-699e64f14d6e8a3ead9c4456882ed9e2935298906ab8845345cc13b9145aeb28",
+      "source": "njpbs_related_index",
+      "title": "Prison bills advance but deadline nears",
+      "href": "https://www.njspotlightnews.org/2026/01/prison-bills-advance-but-deadline-nears/",
+      "topics": [
+        "social-issues"
+      ],
+      "publishedAt": "2026-01-07T05:08:28.000Z",
+      "sourceLabel": "NJ Spotlight News"
+    },
+    {
+      "id": "njspotlight-466876896fb6c5e4eccb8e2ee3602d2545651ddb32c32317422c5615db83dca3",
+      "source": "njpbs_related_index",
+      "title": "Government shutdown could leave thousands in NJ without food assistance",
+      "href": "https://www.njspotlightnews.org/2025/10/government-shutdown-could-leave-thousands-in-nj-without-food-assistance/",
+      "topics": [
+        "social-issues"
+      ],
+      "publishedAt": "2025-10-29T04:12:54.000Z",
+      "sourceLabel": "NJ Spotlight News"
+    }
+  ]
+}

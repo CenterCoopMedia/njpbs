@@ -1,0 +1,460 @@
+---
+// Shell for the NJ PBS public record at /wiki/. Keep this source-backed public
+// history separate from the main site's promotional presentation.
+import Base from "./Base.astro";
+import WikiNavigation from "../components/WikiNavigation.astro";
+import type { WikiSection, WikiPageMeta } from "../lib/wiki";
+
+interface NavGroup {
+  section: WikiSection;
+  pages: WikiPageMeta[];
+}
+
+interface Props {
+  title: string;
+  description: string;
+  nav: NavGroup[];
+  /** slug of the current page ("" for the landing) */
+  current: string;
+  /** concept-page meta (omitted on the landing) */
+  section?: WikiSection;
+  type?: string;
+  verified?: string | null;
+  tags?: string[];
+}
+
+const {
+  title,
+  description,
+  nav,
+  current,
+  section,
+  type,
+  verified,
+  tags = [],
+} = Astro.props;
+
+const isIndex = current === "";
+const pageTitle = isIndex ? title : `${title} | NJ PBS public record`;
+---
+
+<Base title={pageTitle} description={description} noindex={true}>
+  <a class="skip" href="#main">Skip to content</a>
+
+  <header class="wiki-top">
+    <div class="wiki-top__inner">
+      <a class="wiki-brand" href="/wiki/">
+        <span class="wiki-brand__mark">NJ PBS</span>
+        <span class="wiki-brand__sub">Public record</span>
+      </a>
+      <a class="wiki-top__home" href="/">Main site &rarr;</a>
+    </div>
+  </header>
+
+  <p class="wiki-note" role="note">
+    These pages summarize dated public sources about NJ PBS and its 2026 operator
+    transition.
+  </p>
+
+  <div class="wiki-shell">
+    <aside class="wiki-nav">
+      <div class="wiki-nav__desktop">
+        <WikiNavigation nav={nav} current={current} />
+      </div>
+      <details class="wiki-nav__mobile">
+        <summary>Browse articles</summary>
+        <WikiNavigation nav={nav} current={current} />
+      </details>
+    </aside>
+
+    <main id="main" class="wiki-main">
+      <nav class="wiki-crumbs" aria-label="Breadcrumb">
+        <a href="/wiki/">Wiki</a>
+        {
+          !isIndex && section && (
+            <>
+              <span aria-hidden="true">/</span>
+              <a href={`/wiki/#${section.dir}`}>{section.label}</a>
+            </>
+          )
+        }
+      </nav>
+
+      {
+        !isIndex && (
+          <div class="wiki-meta" role="note">
+            {type && <span class="wiki-badge">{type}</span>}
+            {verified && <span class="wiki-meta__item">Verified {verified}</span>}
+          </div>
+        )
+      }
+
+      <slot />
+
+      {
+        !isIndex && tags.length > 0 && (
+          <ul class="wiki-tags" aria-label="Tags">
+            {tags.map((t) => (
+              <li>#{t}</li>
+            ))}
+          </ul>
+        )
+      }
+    </main>
+  </div>
+
+  <footer class="wiki-foot">
+    <p>
+      <a href="/">NJ PBS home</a>
+    </p>
+  </footer>
+
+  <style is:global>
+    html {
+      background: var(--color-paper);
+      color-scheme: light;
+    }
+    body {
+      --color-focus-ring: var(--color-focus-ring-on-light);
+      --focus-outline: 3px solid var(--color-focus-ring);
+      margin: 0;
+      color: var(--color-light-text);
+      background: var(--color-paper);
+      font-family:
+        system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      line-height: 1.65;
+      -webkit-text-size-adjust: 100%;
+    }
+  </style>
+
+  <style>
+    :root {
+      --w-ink: var(--color-light-text);
+      --w-muted: var(--color-light-text-muted);
+      --w-link: var(--color-light-link);
+      --w-line: var(--color-light-line);
+      --w-soft: var(--color-light-surface-soft);
+      --w-accent: var(--color-brand);
+    }
+
+    .skip {
+      position: absolute;
+      left: -999px;
+    }
+    .skip:focus {
+      left: 0.5rem;
+      top: 0.5rem;
+      z-index: 30;
+      background: var(--color-paper);
+      color: var(--color-black);
+      padding: 0.5rem 0.75rem;
+      border: 2px solid var(--w-accent);
+      border-radius: 6px;
+    }
+
+    .wiki-top {
+      border-bottom: 1px solid var(--w-line);
+      background: var(--color-paper);
+    }
+    .wiki-top__inner {
+      max-width: 72rem;
+      margin: 0 auto;
+      padding: 0.85rem 1.5rem;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 1rem;
+    }
+    .wiki-brand {
+      display: inline-flex;
+      align-items: baseline;
+      gap: 0.6rem;
+      text-decoration: none;
+      color: var(--w-ink);
+    }
+    .wiki-brand__mark {
+      font-weight: 800;
+      letter-spacing: -0.01em;
+      font-size: 1.1rem;
+    }
+    .wiki-brand__sub {
+      color: var(--w-muted);
+      font-size: 0.85rem;
+      font-weight: 600;
+    }
+    .wiki-top__home {
+      color: var(--w-link);
+      text-decoration: none;
+      font-weight: 600;
+      font-size: 0.9rem;
+    }
+    .wiki-top__home:hover {
+      text-decoration: underline;
+    }
+
+    .wiki-note {
+      margin: 0;
+      padding: 0.55rem 1.5rem;
+      background: var(--color-light-surface-blue);
+      border-bottom: 1px solid var(--w-line);
+      color: var(--color-light-blue-copy);
+      font-size: 0.82rem;
+      text-align: center;
+    }
+
+    .wiki-shell {
+      max-width: 72rem;
+      margin: 0 auto;
+      padding: 0 1.5rem;
+      display: grid;
+      grid-template-columns: 16rem minmax(0, 1fr);
+      gap: 2.5rem;
+      align-items: start;
+    }
+
+    .wiki-nav {
+      position: sticky;
+      top: 1rem;
+      padding: 1.5rem 0;
+      max-height: calc(100vh - 2rem);
+      overflow-y: auto;
+    }
+
+    .wiki-nav__mobile {
+      display: none;
+    }
+
+    .wiki-main {
+      padding: 1.5rem 0 3rem;
+      min-width: 0;
+    }
+    .wiki-crumbs {
+      font-size: 0.85rem;
+      color: var(--w-muted);
+      display: flex;
+      gap: 0.45rem;
+      flex-wrap: wrap;
+      margin-bottom: 1rem;
+    }
+    .wiki-crumbs a {
+      color: var(--w-link);
+      text-decoration: none;
+    }
+    .wiki-crumbs a:hover {
+      text-decoration: underline;
+    }
+
+    .wiki-meta {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 0.6rem 1rem;
+      margin-bottom: 0.5rem;
+      font-size: 0.82rem;
+      color: var(--w-muted);
+    }
+    .wiki-badge {
+      background: var(--color-light-surface-muted);
+      color: var(--w-link);
+      padding: 0.12rem 0.55rem;
+      border-radius: 999px;
+      font-weight: 700;
+      font-size: 0.74rem;
+    }
+    .wiki-tags {
+      list-style: none;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.4rem 0.7rem;
+      padding: 1.5rem 0 0;
+      margin: 2rem 0 0;
+      border-top: 1px solid var(--w-line);
+      font-size: 0.8rem;
+      color: var(--w-muted);
+    }
+
+    .wiki-foot {
+      border-top: 1px solid var(--w-line);
+      background: var(--w-soft);
+    }
+    .wiki-foot p {
+      max-width: 72rem;
+      margin: 0 auto;
+      padding: 1.25rem 1.5rem;
+      font-size: 0.82rem;
+      color: var(--w-muted);
+    }
+    .wiki-foot a {
+      color: var(--w-link);
+      text-decoration: none;
+    }
+    .wiki-foot a:hover {
+      text-decoration: underline;
+    }
+
+    a:focus-visible,
+    summary:focus-visible {
+      outline: var(--focus-outline);
+      outline-offset: var(--focus-offset);
+    }
+
+    @media (max-width: 800px) {
+      .wiki-shell {
+        padding: 0 1rem;
+        grid-template-columns: 1fr;
+        gap: 0;
+      }
+      .wiki-nav {
+        position: static;
+        max-height: none;
+        overflow: visible;
+        padding: 0.75rem 0 0;
+      }
+      .wiki-nav__desktop {
+        display: none;
+      }
+      .wiki-nav__mobile {
+        display: block;
+        border: 1px solid var(--w-line);
+        border-radius: 6px;
+      }
+      .wiki-nav__mobile summary {
+        padding: 0.65rem 0.75rem;
+        min-height: var(--target-comfortable);
+        box-sizing: border-box;
+        cursor: pointer;
+        color: var(--w-link);
+        font-weight: 600;
+      }
+      .wiki-nav__mobile[open] summary {
+        border-bottom: 1px solid var(--w-line);
+        margin-bottom: 0.5rem;
+      }
+      .wiki-top__inner {
+        padding: 0.5rem 1rem;
+      }
+      .wiki-brand {
+        flex-wrap: wrap;
+        gap: 0 0.6rem;
+      }
+      .wiki-brand,
+      .wiki-top__home {
+        min-height: var(--target-comfortable);
+        align-content: center;
+      }
+      .wiki-top__home {
+        display: flex;
+        align-items: center;
+        flex-shrink: 0;
+      }
+      .wiki-note {
+        padding: 0.5rem 1rem;
+        text-align: left;
+      }
+      .wiki-main {
+        padding-top: 1rem;
+      }
+    }
+  </style>
+
+  <!-- Markdown body styling. The rendered <Content/> is slotted, so it is not
+       reached by scoped styles — these target .wiki-prose globally. -->
+  <style is:global>
+    .wiki-prose {
+      font-size: 1.02rem;
+      overflow-wrap: break-word;
+    }
+    .wiki-prose > :first-child {
+      margin-top: 0;
+    }
+    .wiki-prose h1 {
+      font-size: 2rem;
+      line-height: 1.15;
+      letter-spacing: -0.015em;
+      margin: 0.2rem 0 1rem;
+    }
+    .wiki-prose h2 {
+      font-size: 1.35rem;
+      margin: 2rem 0 0.6rem;
+      padding-top: 0.4rem;
+      border-top: 1px solid var(--color-light-line-soft);
+    }
+    .wiki-prose h3 {
+      font-size: 1.1rem;
+      margin: 1.5rem 0 0.4rem;
+    }
+    .wiki-prose p,
+    .wiki-prose li {
+      color: var(--color-light-body);
+    }
+    .wiki-prose a {
+      color: var(--color-light-link);
+      text-decoration: underline;
+      text-underline-offset: 0.15em;
+    }
+    .wiki-prose a:hover {
+      text-decoration-thickness: 0.12em;
+    }
+    .wiki-prose code {
+      background: var(--color-light-code);
+      padding: 0.1rem 0.35rem;
+      border-radius: 4px;
+      font-size: 0.88em;
+    }
+    .wiki-prose pre {
+      background: var(--color-light-code);
+      padding: 1rem;
+      border-radius: 8px;
+      overflow-x: auto;
+    }
+    .wiki-prose pre code {
+      background: none;
+      padding: 0;
+    }
+    .wiki-prose blockquote {
+      margin: 1rem 0;
+      padding: 0.3rem 1rem;
+      border-left: 4px solid var(--w-accent, var(--color-brand));
+      background: var(--color-light-note);
+      color: var(--color-light-note-text);
+    }
+    .wiki-prose table {
+      width: 100%;
+      border-collapse: collapse;
+      margin: 1rem 0;
+      font-size: 0.92rem;
+      display: block;
+      overflow-x: auto;
+    }
+    .wiki-prose th,
+    .wiki-prose td {
+      border: 1px solid var(--color-light-line);
+      padding: 0.45rem 0.7rem;
+      text-align: left;
+      vertical-align: top;
+    }
+    .wiki-prose th {
+      background: var(--color-light-surface-soft);
+      font-weight: 700;
+    }
+    @media (max-width: 800px) {
+      .wiki-prose h1 {
+        font-size: 1.75rem;
+        line-height: 1.2;
+      }
+      .wiki-prose ul,
+      .wiki-prose ol {
+        padding-left: 1.4rem;
+      }
+      .wiki-prose th,
+      .wiki-prose td {
+        padding: 0.45rem;
+      }
+    }
+    .wiki-prose hr {
+      border: none;
+      border-top: 1px solid var(--color-light-line);
+      margin: 2rem 0;
+    }
+  </style>
+</Base>

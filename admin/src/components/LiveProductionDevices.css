@@ -1,0 +1,13 @@
+.live-production-devices .media-category-summary strong,
+.live-production-devices .muted {
+  overflow-wrap: anywhere;
+}
+
+.live-production-pairing-code {
+  display: block;
+  font-family: var(--cms-font-mono);
+  font-size: clamp(var(--cms-font-title), 6vw, var(--cms-font-display));
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  overflow-wrap: anywhere;
+}

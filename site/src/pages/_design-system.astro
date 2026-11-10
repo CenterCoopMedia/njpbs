@@ -1,0 +1,1728 @@
+---
+import PublicSiteLayout from "../layouts/PublicSiteLayout.astro";
+import tokenSource from "../styles/design-tokens.css?raw";
+import {
+  DESIGN_ASSETS,
+  DESIGN_FONT_ASSETS,
+  DESIGN_SYSTEM_VERSION,
+  groupDesignAssets,
+  groupDesignTokens,
+  parseDesignTokens,
+} from "../lib/design-system-catalog";
+import { measureDesignContrast } from "../lib/design-system-contrast";
+import {
+  DESIGN_PLAYGROUND_TOKEN_SPECS,
+  getDesignPlaygroundTokens,
+  groupDesignPlaygroundTokens,
+} from "../lib/design-system-playground";
+
+const tokenGroups = groupDesignTokens(parseDesignTokens(tokenSource));
+const tokenCount = tokenGroups.reduce((count, group) => count + group.tokens.length, 0);
+const assetGroups = groupDesignAssets(DESIGN_ASSETS);
+const imageAssetCount = DESIGN_ASSETS.length;
+const assetCount = DESIGN_ASSETS.length + DESIGN_FONT_ASSETS.length;
+const contrastPairings = measureDesignContrast(tokenSource);
+const playgroundGroups = groupDesignPlaygroundTokens(
+  getDesignPlaygroundTokens(tokenSource),
+);
+
+---
+
+<PublicSiteLayout
+  title="NJ PBS Design and Asset Lab"
+  description="The internal catalog for NJ PBS web design tokens and approved site assets."
+  preview={false}
+  noindex={true}
+  searchable={false}
+>
+  <div class="design-lab" data-design-version={DESIGN_SYSTEM_VERSION} data-pagefind-ignore>
+    <header class="design-lab__intro">
+      <div class="wrap design-lab__intro-inner">
+        <p class="design-lab__eyebrow">Internal design reference</p>
+        <h1>NJ PBS Design and Asset Lab</h1>
+        <p class="design-lab__lead">
+          Inspect production values, try reversible draft changes against real
+          components, and download approved web assets from one governed workspace.
+        </p>
+        <dl class="release-facts">
+          <div><dt>Lab release</dt><dd>v{DESIGN_SYSTEM_VERSION}</dd></div>
+          <div><dt>Tokens cataloged</dt><dd>{tokenCount}</dd></div>
+          <div><dt>Assets cataloged</dt><dd>{assetCount}</dd></div>
+        </dl>
+        <div class="download-actions" aria-label="Token downloads">
+          <a class="lab-button" href="/design-system/tokens.css" download>Download CSS</a>
+          <a class="lab-button lab-button--secondary" href="/design-system/tokens.json" download>
+            Download JSON
+          </a>
+        </div>
+      </div>
+    </header>
+
+    <nav class="design-lab__nav" aria-label="Design lab sections">
+      <div class="wrap design-lab__nav-inner">
+        <a href="#playground" data-lab-nav>Playground</a>
+        <a href="#components" data-lab-nav>Components</a>
+        <a href="#governance" data-lab-nav>Status guide</a>
+        <a href="#tokens" data-lab-nav>Tokens <span>{tokenCount}</span></a>
+        <a href="#contrast" data-lab-nav>Contrast</a>
+        <a href="#assets" data-lab-nav>Assets <span>{assetCount}</span></a>
+        <a href="#next" data-lab-nav>Releases</a>
+      </div>
+    </nav>
+
+    <div class="wrap design-lab__main">
+      <section id="playground" class="lab-section lab-section--playground" aria-labelledby="playground-heading">
+        <header class="section-heading">
+          <p class="section-kicker">Experimental draft — browser local</p>
+          <h2 id="playground-heading">Try token changes without changing the site</h2>
+          <p>
+            Edit the selected foundations below. Valid changes apply only to the draft
+            specimen in this tab; they never write to the CMS or production CSS. Download
+            a draft when it is ready for discussion and review.
+          </p>
+        </header>
+
+        <div class="playground-toolbar">
+          <p>
+            <strong data-playground-count>0</strong> of {DESIGN_PLAYGROUND_TOKEN_SPECS.length}
+            allowlisted tokens changed
+          </p>
+          <div class="playground-actions" aria-label="Draft actions">
+            <button class="playground-button playground-button--secondary" type="button" data-playground-compare aria-pressed="false">
+              Compare baseline
+            </button>
+            <button class="playground-button playground-button--secondary" type="button" data-playground-reset disabled>
+              Reset draft
+            </button>
+            <button class="playground-button" type="button" data-playground-export-css disabled>
+              Download draft CSS
+            </button>
+            <button class="playground-button" type="button" data-playground-export-json disabled>
+              Download draft JSON
+            </button>
+          </div>
+        </div>
+        <p class="playground-status" aria-live="polite" data-playground-status>
+          No draft changes. The live baseline is unchanged.
+        </p>
+        <p class="playground-note">
+          Format validation keeps the preview safe; it does not certify contrast or brand approval.
+          Treat every download as an experimental proposal until the normal review gates pass.
+        </p>
+
+        <div class="playground-workspace">
+          <form class="playground-controls" data-playground-form novalidate>
+            {playgroundGroups.map((group) => (
+              <fieldset>
+                <legend>{group.group}</legend>
+                {group.tokens.map((token) => {
+                  const controlId = `playground-${token.name.slice(2)}`;
+                  const errorId = `${controlId}-error`;
+                  return (
+                    <div class="playground-control" data-playground-control>
+                      <label for={controlId}>
+                        <span class="playground-control__label">
+                          {token.constraint.kind === "color" && (
+                            <span
+                              class="playground-control__swatch"
+                              style={`--playground-color: ${token.baseline}`}
+                              data-playground-swatch
+                              aria-hidden="true"
+                            ></span>
+                          )}
+                          <strong>{token.label}</strong>
+                        </span>
+                        <code>{token.name}</code>
+                      </label>
+                      <input
+                        id={controlId}
+                        name={token.name}
+                        value={token.baseline}
+                        data-playground-input
+                        data-playground-name={token.name}
+                        data-playground-baseline={token.baseline}
+                        data-playground-kind={token.constraint.kind}
+                        aria-describedby={errorId}
+                        aria-invalid="false"
+                        autocomplete="off"
+                        spellcheck="false"
+                      />
+                      <span id={errorId} class="playground-control__error" data-playground-error></span>
+                    </div>
+                  );
+                })}
+              </fieldset>
+            ))}
+          </form>
+
+          <div class="playground-preview" data-playground-preview-grid data-compare="off">
+            <section class="playground-frame" data-playground-baseline-frame hidden>
+              <header><h3>Live baseline</h3><span>Production values</span></header>
+              <iframe
+                src="/design-system/specimens/public/"
+                title="Public component specimen with the live token baseline"
+                data-playground-baseline
+              ></iframe>
+            </section>
+            <section class="playground-frame">
+              <header><h3>Draft preview</h3><span>Experimental values</span></header>
+              <iframe
+                src="/design-system/specimens/public/"
+                title="Public component specimen with experimental token overrides"
+                data-playground-draft
+              ></iframe>
+            </section>
+          </div>
+        </div>
+      </section>
+
+      <section id="components" class="lab-section" aria-labelledby="components-heading">
+        <header class="section-heading">
+          <p class="section-kicker">Live public components</p>
+          <h2 id="components-heading">Inspect the real interface at useful widths</h2>
+          <p>
+            The frame renders production Astro components with clearly labeled fixture
+            content. Change its width to exercise the components' own responsive rules.
+          </p>
+        </header>
+        <div class="specimen-toolbar">
+          <div class="specimen-widths" role="group" aria-label="Specimen viewport width">
+            <button type="button" data-specimen-width="wide" aria-pressed="true">
+              Wide <span>1280</span>
+            </button>
+            <button type="button" data-specimen-width="tablet" aria-pressed="false">
+              Tablet <span>768</span>
+            </button>
+            <button type="button" data-specimen-width="phone" aria-pressed="false">
+              Phone <span>390</span>
+            </button>
+          </div>
+          <a href="/design-system/specimens/public/">Open the full specimen page</a>
+        </div>
+        <p class="specimen-status" aria-live="polite" data-specimen-status>
+          Showing the wide 1280 pixel frame.
+        </p>
+        <div class="specimen-stage" data-specimen-stage="wide">
+          <iframe
+            src="/design-system/specimens/public/"
+            title="Responsive public-site component specimens"
+          ></iframe>
+        </div>
+      </section>
+
+      <section id="governance" class="lab-section" aria-labelledby="governance-heading">
+        <header class="section-heading">
+          <p class="section-kicker">Foundation</p>
+          <h2 id="governance-heading">Know what is ready to use</h2>
+          <p>
+            Brand files and web implementation values are related, but they are not
+            interchangeable. Draft work will always carry a visible experimental label.
+          </p>
+        </header>
+        <dl class="status-grid">
+          <div><dt>Official brand asset</dt><dd>Approved source material for the stated use.</dd></div>
+          <div><dt>Production web token</dt><dd>A value currently consumed by the public site or CMS.</dd></div>
+          <div><dt>Experimental draft</dt><dd>A playground proposal that is not approved for publication.</dd></div>
+          <div><dt>Deprecated</dt><dd>Retained for compatibility, with a replacement identified.</dd></div>
+        </dl>
+      </section>
+
+      <section id="tokens" class="lab-section" aria-labelledby="tokens-heading">
+        <header class="section-heading">
+          <p class="section-kicker">Production web tokens</p>
+          <h2 id="tokens-heading">The current CSS contract</h2>
+          <p>
+            Values are read from <code>site/src/styles/design-tokens.css</code> during the
+            build. This page does not maintain a second copy.
+          </p>
+        </header>
+
+        <div class="catalog-filter">
+          <label for="token-catalog-filter">
+            <strong>Find a token</strong>
+            <span>Filter by token name, value, or category.</span>
+          </label>
+          <div class="catalog-filter__control">
+            <input
+              id="token-catalog-filter"
+              type="search"
+              placeholder="Try --color-link or focus"
+              autocomplete="off"
+              aria-controls="token-catalog"
+              aria-describedby="token-catalog-count"
+              data-catalog-filter="tokens"
+            />
+            <output
+              id="token-catalog-count"
+              for="token-catalog-filter"
+              aria-live="polite"
+              data-catalog-count="tokens"
+            >Showing all {tokenCount} tokens.</output>
+          </div>
+        </div>
+        <p class="catalog-empty" data-catalog-empty="tokens" hidden>
+          No tokens match this search. Try a token name, CSS value, or category.
+        </p>
+
+        <div id="token-catalog" class="token-groups">
+          {tokenGroups.map((group) => (
+            <section class="token-group" aria-labelledby={`token-${group.category.toLowerCase().replaceAll(" ", "-")}`} data-catalog-group="tokens">
+              <h3 id={`token-${group.category.toLowerCase().replaceAll(" ", "-")}`}>
+                {group.category} <span>{group.tokens.length}</span>
+              </h3>
+              <ul class="token-list">
+                {group.tokens.map((token) => (
+                  <li
+                    class="token-row"
+                    data-catalog-item="tokens"
+                    data-catalog-search={`${group.category} ${token.name} ${token.value}`}
+                  >
+                    {token.preview === "paint" ? (
+                      <span
+                        class="token-swatch"
+                        style={`--design-token-swatch: var(${token.name})`}
+                        aria-hidden="true"
+                      ></span>
+                    ) : (
+                      <span class="token-marker" aria-hidden="true">Aa</span>
+                    )}
+                    <div class="token-name">
+                      <code>{token.name}</code>
+                      <span data-resolved-token={token.name}>{token.value}</span>
+                    </div>
+                    <code class="token-value">{token.value}</code>
+                    <button
+                      class="copy-token"
+                      type="button"
+                      data-copy-token={token.name}
+                      aria-label={`Copy ${token.name}`}
+                    >
+                      Copy name
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            </section>
+          ))}
+        </div>
+        <p class="copy-status" aria-live="polite" data-copy-status></p>
+      </section>
+
+      <section id="contrast" class="lab-section" aria-labelledby="contrast-heading">
+        <header class="section-heading">
+          <p class="section-kicker">Accessibility contract</p>
+          <h2 id="contrast-heading">Representative contrast pairings</h2>
+          <p>
+            Ratios are calculated at build time from the same live CSS source. Text
+            pairs must clear 4.5:1; focus and other interface indicators must clear 3:1.
+            The repository's full contrast suite remains the release gate.
+          </p>
+        </header>
+        <ul class="contrast-grid">
+          {contrastPairings.map((pairing) => (
+            <li
+              class="contrast-card"
+              style={`--contrast-foreground: var(${pairing.foreground}); --contrast-background: var(${pairing.background})`}
+            >
+              <div class="contrast-sample">
+                <span>{pairing.kind === "text" ? "Readable type" : "Visible focus"}</span>
+              </div>
+              <div class="contrast-card__details">
+                <h3>{pairing.label}</h3>
+                <p>
+                  <strong>{pairing.ratio.toFixed(2)}:1</strong>
+                  <span>{pairing.passes ? "Pass" : "Fail"} · minimum {pairing.minimum}:1</span>
+                </p>
+                <code>{pairing.foreground}</code>
+                <code>{pairing.background}</code>
+              </div>
+            </li>
+          ))}
+        </ul>
+      </section>
+
+      <section id="assets" class="lab-section" aria-labelledby="assets-heading">
+        <header class="section-heading">
+          <p class="section-kicker">Current asset registry</p>
+          <h2 id="assets-heading">Approved and production brand files</h2>
+          <p>
+            Use the stated background and purpose. A production label identifies a
+            checked-in web implementation file; it does not make that file a substitute
+            for authoritative PBS brand guidance.
+          </p>
+        </header>
+        <div class="catalog-filter">
+          <label for="asset-catalog-filter">
+            <strong>Find an image asset</strong>
+            <span>Filter by name, use, format, status, background, or group.</span>
+          </label>
+          <div class="catalog-filter__control">
+            <input
+              id="asset-catalog-filter"
+              type="search"
+              placeholder="Try passport, SVG, or dark background"
+              autocomplete="off"
+              aria-controls="asset-catalog"
+              aria-describedby="asset-catalog-count"
+              data-catalog-filter="assets"
+            />
+            <output
+              id="asset-catalog-count"
+              for="asset-catalog-filter"
+              aria-live="polite"
+              data-catalog-count="assets"
+            >Showing all {imageAssetCount} image assets.</output>
+          </div>
+        </div>
+        <p class="catalog-empty" data-catalog-empty="assets" hidden>
+          No image assets match this search. Try a name, purpose, format, or status.
+        </p>
+
+        <div id="asset-catalog" class="asset-groups">
+          {assetGroups.map((group) => (
+            <section class="asset-group" aria-labelledby={`asset-${group.group.toLowerCase().replaceAll(" ", "-")}`} data-catalog-group="assets">
+              <h3 id={`asset-${group.group.toLowerCase().replaceAll(" ", "-")}`}>
+                {group.group} <span>{group.assets.length}</span>
+              </h3>
+              <div class="asset-grid">
+                {group.assets.map((asset) => (
+                  <article
+                    class="asset-card"
+                    data-catalog-item="assets"
+                    data-catalog-search={`${group.group} ${asset.name} ${asset.use} ${asset.avoid} ${asset.format} ${asset.status} ${asset.background} background ${asset.path} ${asset.version}`}
+                  >
+                    <div class:list={["asset-preview", `asset-preview--${asset.background}`]}>
+                      <img
+                        src={asset.path}
+                        alt={asset.alt}
+                        width={asset.width}
+                        height={asset.height}
+                        loading="lazy"
+                      />
+                    </div>
+                    <div class="asset-card__body">
+                      <p class:list={["asset-status", `asset-status--${asset.status}`]}>{asset.status}</p>
+                      <h4>{asset.name}</h4>
+                      <p><strong>Use:</strong> {asset.use}</p>
+                      <p><strong>Avoid:</strong> {asset.avoid}</p>
+                      <dl>
+                        <div><dt>Format</dt><dd>{asset.format}</dd></div>
+                        <div><dt>Dimensions</dt><dd>{asset.width} × {asset.height}</dd></div>
+                        <div><dt>Version</dt><dd>{asset.version}</dd></div>
+                        <div><dt>Background</dt><dd>{asset.background}</dd></div>
+                      </dl>
+                      <code class="asset-path">{asset.path}</code>
+                      <a class="asset-download" href={asset.path} download>
+                        Download {asset.name} ({asset.format})
+                      </a>
+                    </div>
+                  </article>
+                ))}
+              </div>
+            </section>
+          ))}
+        </div>
+
+        <section class="font-assets" aria-labelledby="font-assets-heading">
+          <header>
+            <h3 id="font-assets-heading">Packaged type assets</h3>
+            <p>
+              The public site packages these PBS Sans files. Reuse its existing family
+              declarations so fallback behavior and weights stay consistent.
+            </p>
+          </header>
+          <ul>
+            {DESIGN_FONT_ASSETS.map((font) => (
+              <li style={`--font-asset-weight: ${font.weight}`}>
+                <div>
+                  <strong>{font.name}</strong>
+                  <span>{font.weight} · {font.format} · {font.status}</span>
+                </div>
+                <p>The quick brown fox jumps over New Jersey.</p>
+                <a href={font.path} download>Download {font.name}</a>
+              </li>
+            ))}
+          </ul>
+        </section>
+      </section>
+
+      <section id="next" class="lab-section lab-section--next" aria-labelledby="next-heading">
+        <header class="section-heading">
+          <p class="section-kicker">Releases</p>
+          <h2 id="next-heading">Release history</h2>
+        </header>
+        <ol class="release-roadmap">
+          <li><strong>v0.3.1 · Catalog navigation refinement.</strong> Searchable token and image-asset inventories, live result counts, and a persistent section guide for long-page orientation.</li>
+          <li><strong>v0.3.0 · Browser-local token playground.</strong> Allowlisted draft overrides, live specimen preview, baseline comparison, reset, and deterministic CSS/JSON export.</li>
+          <li><strong>v0.2.0 · Public specimens and complete site-asset catalog.</strong> Real components, responsive frames, usage guidance, hosted fonts, and representative contrast results.</li>
+          <li><strong>v0.1.0 · Foundation.</strong> Live token inventory, governance labels, initial brand registry, and CSS/JSON exports.</li>
+        </ol>
+      </section>
+    </div>
+  </div>
+</PublicSiteLayout>
+
+<script>
+  import { setupDesignCatalogFilter } from "../lib/design-system-catalog-filter";
+  import {
+    serializeDesignTokenCss,
+    serializeDesignTokenJson,
+    validateDesignTokenOverride,
+  } from "../lib/design-system-playground";
+
+  const playgroundForm = document.querySelector<HTMLFormElement>("[data-playground-form]");
+  const playgroundInputs = [
+    ...document.querySelectorAll<HTMLInputElement>("[data-playground-input]"),
+  ];
+  const playgroundDraftFrame = document.querySelector<HTMLIFrameElement>("[data-playground-draft]");
+  const playgroundBaselineFrame = document.querySelector<HTMLElement>("[data-playground-baseline-frame]");
+  const playgroundPreviewGrid = document.querySelector<HTMLElement>("[data-playground-preview-grid]");
+  const playgroundCompare = document.querySelector<HTMLButtonElement>("[data-playground-compare]");
+  const playgroundReset = document.querySelector<HTMLButtonElement>("[data-playground-reset]");
+  const playgroundExportCss = document.querySelector<HTMLButtonElement>("[data-playground-export-css]");
+  const playgroundExportJson = document.querySelector<HTMLButtonElement>("[data-playground-export-json]");
+  const playgroundCount = document.querySelector<HTMLElement>("[data-playground-count]");
+  const playgroundStatus = document.querySelector<HTMLElement>("[data-playground-status]");
+  const playgroundVersion =
+    document.querySelector<HTMLElement>("[data-design-version]")?.dataset.designVersion ??
+    "draft";
+  const playgroundDraft = new Map<string, string>();
+
+  const applyPlaygroundDraft = () => {
+    const root = playgroundDraftFrame?.contentDocument?.documentElement;
+    if (!root) return;
+    playgroundInputs.forEach((input) => {
+      const name = input.dataset.playgroundName;
+      if (name) root.style.removeProperty(name);
+    });
+    playgroundDraft.forEach((value, name) => root.style.setProperty(name, value));
+  };
+
+  const readPlaygroundDraft = () => {
+    playgroundDraft.clear();
+    let invalidCount = 0;
+    let changedCount = 0;
+
+    playgroundInputs.forEach((input) => {
+      const name = input.dataset.playgroundName;
+      const baseline = input.dataset.playgroundBaseline;
+      const control = input.closest<HTMLElement>("[data-playground-control]");
+      const error = control?.querySelector<HTMLElement>("[data-playground-error]");
+      if (!name || baseline === undefined) return;
+
+      const validation = validateDesignTokenOverride(name, input.value);
+      input.setAttribute("aria-invalid", String(!validation.valid));
+      if (error) error.textContent = validation.valid ? "" : validation.error;
+      if (!validation.valid) {
+        invalidCount += 1;
+        return;
+      }
+
+      if (input.dataset.playgroundKind === "color") {
+        const swatch = control?.querySelector<HTMLElement>("[data-playground-swatch]");
+        swatch?.style.setProperty("--playground-color", validation.value);
+      }
+      if (validation.value !== baseline) {
+        playgroundDraft.set(name, validation.value);
+        changedCount += 1;
+      }
+    });
+
+    const hasEditedInput = playgroundInputs.some(
+      (input) => input.value.trim() !== input.dataset.playgroundBaseline,
+    );
+    const canExport = changedCount > 0 && invalidCount === 0;
+    if (playgroundCount) playgroundCount.textContent = String(changedCount);
+    if (playgroundReset) playgroundReset.disabled = !hasEditedInput;
+    if (playgroundExportCss) playgroundExportCss.disabled = !canExport;
+    if (playgroundExportJson) playgroundExportJson.disabled = !canExport;
+    if (playgroundStatus) {
+      playgroundStatus.textContent = invalidCount > 0
+        ? `${invalidCount} ${invalidCount === 1 ? "value needs" : "values need"} attention before export.`
+        : changedCount > 0
+          ? `${changedCount} experimental ${changedCount === 1 ? "change is" : "changes are"} active in the draft preview.`
+          : "No draft changes. The live baseline is unchanged.";
+    }
+    applyPlaygroundDraft();
+  };
+
+  const downloadPlaygroundDraft = (body: string, extension: "css" | "json") => {
+    const blob = new Blob([body], {
+      type: extension === "css" ? "text/css;charset=utf-8" : "application/json;charset=utf-8",
+    });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `njpbs-design-token-draft-v${playgroundVersion}.${extension}`;
+    link.click();
+    window.setTimeout(() => URL.revokeObjectURL(url), 0);
+    if (playgroundStatus) playgroundStatus.textContent = `Downloaded the experimental ${extension.toUpperCase()} draft.`;
+  };
+
+  playgroundInputs.forEach((input) => input.addEventListener("input", readPlaygroundDraft));
+  playgroundDraftFrame?.addEventListener("load", applyPlaygroundDraft);
+
+  playgroundCompare?.addEventListener("click", () => {
+    const showBaseline = playgroundCompare.getAttribute("aria-pressed") !== "true";
+    playgroundCompare.setAttribute("aria-pressed", String(showBaseline));
+    playgroundCompare.textContent = showBaseline ? "Hide baseline" : "Compare baseline";
+    if (playgroundBaselineFrame) playgroundBaselineFrame.hidden = !showBaseline;
+    if (playgroundPreviewGrid) playgroundPreviewGrid.dataset.compare = showBaseline ? "on" : "off";
+  });
+
+  playgroundReset?.addEventListener("click", () => {
+    playgroundForm?.reset();
+    readPlaygroundDraft();
+    playgroundInputs[0]?.focus();
+  });
+
+  playgroundExportCss?.addEventListener("click", () => {
+    downloadPlaygroundDraft(
+      serializeDesignTokenCss(Object.fromEntries(playgroundDraft)),
+      "css",
+    );
+  });
+
+  playgroundExportJson?.addEventListener("click", () => {
+    downloadPlaygroundDraft(
+      serializeDesignTokenJson(Object.fromEntries(playgroundDraft)),
+      "json",
+    );
+  });
+
+  const specimenStage = document.querySelector<HTMLElement>("[data-specimen-stage]");
+  const specimenStatus = document.querySelector<HTMLElement>("[data-specimen-status]");
+  const specimenLabels: Record<string, string> = {
+    wide: "wide 1280 pixel",
+    tablet: "tablet 768 pixel",
+    phone: "phone 390 pixel",
+  };
+
+  document.querySelectorAll<HTMLButtonElement>("[data-specimen-width]").forEach((button) => {
+    button.addEventListener("click", () => {
+      const width = button.dataset.specimenWidth;
+      if (!width || !specimenStage) return;
+      specimenStage.dataset.specimenStage = width;
+      document.querySelectorAll<HTMLButtonElement>("[data-specimen-width]").forEach((choice) => {
+        choice.setAttribute("aria-pressed", String(choice === button));
+      });
+      if (specimenStatus) {
+        specimenStatus.textContent = `Showing the ${specimenLabels[width]} frame.`;
+      }
+    });
+  });
+
+  const rootStyles = getComputedStyle(document.documentElement);
+  document.querySelectorAll<HTMLElement>("[data-resolved-token]").forEach((node) => {
+    const token = node.dataset.resolvedToken;
+    if (!token) return;
+    const value = rootStyles.getPropertyValue(token).trim();
+    if (value) node.textContent = `Resolved: ${value}`;
+  });
+
+  const status = document.querySelector<HTMLElement>("[data-copy-status]");
+  document.querySelectorAll<HTMLButtonElement>("[data-copy-token]").forEach((button) => {
+    button.addEventListener("click", async () => {
+      const token = button.dataset.copyToken;
+      if (!token) return;
+      try {
+        await navigator.clipboard.writeText(token);
+        if (status) status.textContent = `${token} copied.`;
+      } catch {
+        if (status) status.textContent = `Copy unavailable. Select ${token} from the catalog.`;
+      }
+    });
+  });
+
+  setupDesignCatalogFilter("tokens");
+  setupDesignCatalogFilter("assets");
+
+  const labNavigation = [
+    ...document.querySelectorAll<HTMLAnchorElement>("[data-lab-nav]"),
+  ].flatMap((link) => {
+    const id = link.hash.slice(1);
+    const section = id ? document.getElementById(id) : null;
+    return section ? [{ link, section }] : [];
+  });
+  let navigationFrame = 0;
+
+  const updateLabNavigation = () => {
+    navigationFrame = 0;
+    const firstEntry = labNavigation[0];
+    if (!firstEntry) return;
+    const boundary = Math.min(window.innerHeight * 0.32, 260);
+    let active = firstEntry;
+
+    labNavigation.forEach((entry) => {
+      if (entry.section.getBoundingClientRect().top <= boundary) active = entry;
+    });
+    if (window.innerHeight + window.scrollY >= document.documentElement.scrollHeight - 2) {
+      active = labNavigation[labNavigation.length - 1] ?? active;
+    }
+
+    labNavigation.forEach((entry) => {
+      if (entry === active) entry.link.setAttribute("aria-current", "location");
+      else entry.link.removeAttribute("aria-current");
+    });
+  };
+
+  const queueNavigationUpdate = () => {
+    if (navigationFrame !== 0) return;
+    navigationFrame = window.requestAnimationFrame(updateLabNavigation);
+  };
+
+  window.addEventListener("scroll", queueNavigationUpdate, { passive: true });
+  window.addEventListener("resize", queueNavigationUpdate);
+  updateLabNavigation();
+</script>
+
+<style>
+  .design-lab {
+    overflow-x: clip;
+    background: var(--color-surface-page);
+  }
+
+  .design-lab [hidden] {
+    display: none !important;
+  }
+
+  .design-lab__intro {
+    border-bottom: 1px solid var(--color-border-strong);
+    background: var(--color-surface-panel);
+  }
+
+  .design-lab__intro-inner {
+    display: grid;
+    gap: var(--space-4);
+    padding-top: clamp(2rem, 4vw, 3.5rem);
+    padding-bottom: clamp(2rem, 4vw, 3rem);
+  }
+
+  .design-lab__eyebrow,
+  .section-kicker,
+  .asset-status {
+    margin: 0;
+    color: var(--color-brand-bright);
+    font-size: 0.82rem;
+    font-weight: 800;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+  }
+
+  .design-lab h1 {
+    margin: 0;
+    color: var(--color-text-on-surface);
+    font-size: clamp(2.75rem, 6vw, 4.75rem);
+    line-height: 0.95;
+    letter-spacing: var(--heading-tracking);
+  }
+
+  .design-lab__lead {
+    max-width: 64ch;
+    margin: 0;
+    color: var(--color-text-muted);
+    font-size: clamp(1.05rem, 2vw, 1.3rem);
+    line-height: 1.5;
+  }
+
+  .release-facts,
+  .status-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(10rem, 1fr));
+    gap: 1px;
+    margin: 0;
+    border: 1px solid var(--color-border);
+    background: var(--color-border);
+  }
+
+  .release-facts > div,
+  .status-grid > div {
+    background: var(--color-surface-elevated);
+    padding: var(--space-4);
+  }
+
+  .release-facts dt,
+  .status-grid dt {
+    color: var(--color-text-quiet);
+    font-size: 0.82rem;
+    font-weight: 700;
+  }
+
+  .release-facts dd,
+  .status-grid dd {
+    margin: var(--space-1) 0 0;
+    color: var(--color-text-on-surface);
+    font-weight: 700;
+  }
+
+  .status-grid dd {
+    color: var(--color-text-muted);
+    font-weight: 400;
+    line-height: 1.5;
+  }
+
+  .download-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-3);
+  }
+
+  .lab-button,
+  .asset-download,
+  .copy-token,
+  .playground-button,
+  .specimen-widths button,
+  .specimen-toolbar > a,
+  .font-assets a {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-height: var(--target-comfortable);
+    border: 1px solid var(--color-brand);
+    border-radius: 3px;
+    padding: var(--space-2) var(--space-4);
+    background: var(--color-brand);
+    color: var(--color-text-on-brand);
+    font: inherit;
+    font-weight: 700;
+    line-height: 1.2;
+    text-decoration: none;
+    cursor: pointer;
+  }
+
+  .lab-button:hover,
+  .asset-download:hover,
+  .copy-token:hover,
+  .playground-button:hover,
+  .specimen-widths button:hover,
+  .specimen-toolbar > a:hover,
+  .font-assets a:hover {
+    background: var(--color-brand-bright);
+  }
+
+  .lab-button:focus-visible,
+  .asset-download:focus-visible,
+  .copy-token:focus-visible,
+  .playground-button:focus-visible,
+  .specimen-widths button:focus-visible,
+  .specimen-toolbar > a:focus-visible,
+  .font-assets a:focus-visible,
+  .design-lab__nav a:focus-visible,
+  .catalog-filter input:focus-visible {
+    outline: var(--focus-outline);
+    outline-offset: var(--focus-offset);
+  }
+
+  .lab-button--secondary {
+    border-color: var(--color-border-strong);
+    background: transparent;
+    color: var(--color-text-on-surface);
+  }
+
+  .playground-button:disabled {
+    border-color: var(--color-border);
+    background: var(--color-surface-panel);
+    color: var(--color-text-quiet);
+    cursor: not-allowed;
+    opacity: 0.72;
+  }
+
+  .design-lab__nav {
+    position: sticky;
+    top: 4.2rem;
+    z-index: 10;
+    border-bottom: 1px solid var(--color-border);
+    background: var(--color-surface-page);
+    box-shadow: 0 var(--space-1) var(--space-3) rgb(0 0 0 / 18%);
+  }
+
+  .design-lab__nav-inner {
+    display: flex;
+    gap: var(--space-6);
+    overflow-x: auto;
+    padding-top: var(--space-4);
+    padding-bottom: var(--space-4);
+  }
+
+  .design-lab__nav a {
+    display: inline-flex;
+    align-items: center;
+    flex: none;
+    min-height: var(--target-comfortable);
+    color: var(--color-text-muted);
+    font-weight: 700;
+    text-underline-offset: 0.25em;
+  }
+
+  .design-lab__nav a[aria-current="location"] {
+    color: var(--color-text-on-surface);
+    text-decoration-color: var(--color-brand-bright);
+    text-decoration-thickness: 0.2em;
+  }
+
+  .design-lab__nav a span {
+    display: inline-grid;
+    min-width: 1.75rem;
+    min-height: 1.75rem;
+    margin-left: var(--space-2);
+    place-items: center;
+    border-radius: var(--radius-pill);
+    background: var(--color-surface-current);
+    color: var(--color-text-quiet);
+    font-size: 0.75rem;
+    font-variant-numeric: var(--number-variant);
+  }
+
+  .design-lab__main {
+    padding-top: var(--space-8);
+    padding-bottom: 6rem;
+  }
+
+  .lab-section {
+    scroll-margin-top: 10rem;
+    padding: clamp(2.5rem, 6vw, 5rem) 0;
+    border-bottom: 1px solid var(--color-border-strong);
+  }
+
+  .section-heading {
+    max-width: 68ch;
+  }
+
+  .section-heading h2 {
+    margin: var(--space-2) 0 0;
+    color: var(--color-text-on-surface);
+    font-size: clamp(2rem, 4vw, 3.2rem);
+    letter-spacing: var(--heading-tracking);
+  }
+
+  .section-heading > p:last-child {
+    margin: var(--space-3) 0 0;
+    color: var(--color-text-muted);
+    font-size: 1.05rem;
+    line-height: 1.6;
+  }
+
+  .section-heading code,
+  .token-row code,
+  .contrast-card code,
+  .asset-path {
+    color: var(--color-text-on-surface);
+    font-family: ui-monospace, "SFMono-Regular", Consolas, monospace;
+  }
+
+  .status-grid,
+  .specimen-toolbar,
+  .contrast-grid,
+  .release-roadmap,
+  .catalog-filter {
+    margin-top: var(--space-8);
+  }
+
+  .token-groups,
+  .asset-groups {
+    margin-top: var(--space-4);
+  }
+
+  .catalog-filter {
+    display: grid;
+    grid-template-columns: minmax(12rem, 0.7fr) minmax(18rem, 1.3fr);
+    gap: var(--space-6);
+    align-items: end;
+    padding: var(--space-4);
+    border: 1px solid var(--color-border-strong);
+    border-radius: var(--radius-surface);
+    background: var(--color-surface-panel);
+  }
+
+  .catalog-filter label,
+  .catalog-filter__control {
+    display: grid;
+    gap: var(--space-2);
+  }
+
+  .catalog-filter label strong {
+    color: var(--color-text-on-surface);
+  }
+
+  .catalog-filter label span,
+  .catalog-filter output {
+    color: var(--color-text-quiet);
+    font-size: 0.88rem;
+    line-height: 1.4;
+  }
+
+  .catalog-filter input {
+    width: 100%;
+    min-height: var(--target-comfortable);
+    box-sizing: border-box;
+    border: 1px solid var(--color-border-strong);
+    border-radius: var(--radius-control);
+    padding: var(--space-2) var(--space-3);
+    background: var(--color-surface-page);
+    color: var(--color-text-on-surface);
+    font: inherit;
+  }
+
+  .catalog-filter input::placeholder {
+    color: var(--color-text-quiet);
+  }
+
+  .catalog-empty {
+    margin: var(--space-4) 0 0;
+    padding: var(--space-6);
+    border: 1px dashed var(--color-border-strong);
+    border-radius: var(--radius-surface);
+    color: var(--color-text-muted);
+    text-align: center;
+  }
+
+  .lab-section--playground {
+    padding-top: var(--space-6);
+  }
+
+  .playground-toolbar {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-4);
+    align-items: center;
+    justify-content: space-between;
+    margin-top: var(--space-6);
+    padding: var(--space-4);
+    border: 1px solid var(--color-border-strong);
+    border-radius: var(--radius-surface);
+    background: var(--color-surface-panel);
+  }
+
+  .playground-toolbar > p {
+    margin: 0;
+    color: var(--color-text-muted);
+  }
+
+  .playground-toolbar > p strong {
+    color: var(--color-text-on-surface);
+    font-size: 1.2rem;
+    font-variant-numeric: var(--number-variant);
+  }
+
+  .playground-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-2);
+  }
+
+  .playground-button {
+    font-size: 0.88rem;
+  }
+
+  .playground-button--secondary {
+    border-color: var(--color-border-strong);
+    background: transparent;
+    color: var(--color-text-on-surface);
+  }
+
+  .playground-button--secondary[aria-pressed="true"] {
+    border-color: var(--color-brand);
+    background: var(--color-brand);
+    color: var(--color-text-on-brand);
+  }
+
+  .playground-status {
+    min-height: 1.5em;
+    margin: var(--space-3) 0;
+    color: var(--color-text-muted);
+  }
+
+  .playground-note {
+    max-width: 72ch;
+    margin: 0 0 var(--space-4);
+    color: var(--color-text-quiet);
+    font-size: 0.9rem;
+    line-height: 1.5;
+  }
+
+  .playground-workspace {
+    display: grid;
+    grid-template-columns: minmax(19rem, 24rem) minmax(0, 1fr);
+    gap: var(--space-6);
+    align-items: start;
+  }
+
+  .playground-controls {
+    max-height: 54rem;
+    overflow-y: auto;
+    border: 1px solid var(--color-border-strong);
+    border-radius: var(--radius-surface);
+    background: var(--color-surface-panel);
+  }
+
+  .playground-controls fieldset {
+    margin: 0;
+    padding: var(--space-4);
+    border: 0;
+  }
+
+  .playground-controls fieldset + fieldset {
+    border-top: 1px solid var(--color-border-strong);
+  }
+
+  .playground-controls legend {
+    width: 100%;
+    padding: 0 0 var(--space-2);
+    color: var(--color-text-on-surface);
+    font-size: 1rem;
+    font-weight: 800;
+  }
+
+  .playground-control {
+    display: grid;
+    gap: var(--space-2);
+    padding: var(--space-3) 0;
+  }
+
+  .playground-control + .playground-control {
+    border-top: 1px solid var(--color-border);
+  }
+
+  .playground-control label {
+    display: flex;
+    gap: var(--space-3);
+    align-items: center;
+    justify-content: space-between;
+    color: var(--color-text-on-surface);
+  }
+
+  .playground-control__label {
+    display: inline-flex;
+    gap: var(--space-2);
+    align-items: center;
+  }
+
+  .playground-control__swatch {
+    width: 1.25rem;
+    height: 1.25rem;
+    flex: none;
+    border: 1px solid var(--color-border-strong);
+    border-radius: var(--radius-control);
+    background: var(--playground-color);
+  }
+
+  .playground-control code {
+    overflow-wrap: anywhere;
+    color: var(--color-text-quiet);
+    font-family: ui-monospace, "SFMono-Regular", Consolas, monospace;
+    font-size: 0.75rem;
+    text-align: right;
+  }
+
+  .playground-control input {
+    width: 100%;
+    min-height: var(--target-comfortable);
+    box-sizing: border-box;
+    border: 1px solid var(--color-border-strong);
+    border-radius: var(--radius-control);
+    padding: var(--space-2) var(--space-3);
+    background: var(--color-surface-page);
+    color: var(--color-text-on-surface);
+    font: inherit;
+    font-family: ui-monospace, "SFMono-Regular", Consolas, monospace;
+  }
+
+  .playground-control input[aria-invalid="true"] {
+    border-color: var(--color-danger-text);
+  }
+
+  .playground-control input:focus-visible {
+    outline: var(--focus-outline);
+    outline-offset: var(--focus-offset);
+  }
+
+  .playground-control__error {
+    min-height: 1.25em;
+    color: var(--color-danger-text);
+    font-size: 0.8rem;
+    line-height: 1.4;
+  }
+
+  .playground-preview {
+    display: grid;
+    gap: var(--space-6);
+    min-width: 0;
+  }
+
+  .playground-frame {
+    overflow: hidden;
+    border: 1px solid var(--color-border-strong);
+    border-radius: var(--radius-surface);
+    background: var(--color-surface-panel);
+  }
+
+  .playground-frame > header {
+    display: flex;
+    gap: var(--space-3);
+    align-items: baseline;
+    justify-content: space-between;
+    padding: var(--space-3) var(--space-4);
+    border-bottom: 1px solid var(--color-border-strong);
+  }
+
+  .playground-frame h3 {
+    margin: 0;
+    color: var(--color-text-on-surface);
+    font-size: 1rem;
+  }
+
+  .playground-frame header span {
+    color: var(--color-text-quiet);
+    font-size: 0.8rem;
+  }
+
+  .playground-frame iframe {
+    display: block;
+    width: 100%;
+    height: 48rem;
+    border: 0;
+    background: var(--color-surface-page);
+  }
+
+  .specimen-toolbar {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-4);
+    align-items: center;
+    justify-content: space-between;
+  }
+
+  .specimen-widths {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-1);
+    padding: var(--space-1);
+    border: 1px solid var(--color-border-strong);
+    border-radius: var(--radius-control);
+    background: var(--color-surface-panel);
+  }
+
+  .specimen-widths button,
+  .specimen-toolbar > a,
+  .font-assets a {
+    border-color: var(--color-border-strong);
+    background: transparent;
+    color: var(--color-text-on-surface);
+    font-size: 0.9rem;
+  }
+
+  .specimen-widths button[aria-pressed="true"] {
+    border-color: var(--color-brand);
+    background: var(--color-brand);
+    color: var(--color-text-on-brand);
+  }
+
+  .specimen-widths span {
+    margin-left: var(--space-2);
+    color: var(--color-text-quiet);
+    font-variant-numeric: var(--number-variant);
+  }
+
+  .specimen-widths button[aria-pressed="true"] span {
+    color: var(--color-text-on-brand);
+  }
+
+  .specimen-status {
+    min-height: 1.5em;
+    margin: var(--space-3) 0;
+    color: var(--color-text-quiet);
+    font-size: 0.9rem;
+  }
+
+  .specimen-stage {
+    width: min(100%, 80rem);
+    margin-inline: auto;
+    overflow: hidden;
+    border: 1px solid var(--color-border-strong);
+    border-radius: var(--radius-surface);
+    background: var(--color-surface-panel);
+    box-shadow: 0 0 0 var(--space-1) var(--color-border);
+    transition: width var(--motion-duration-standard) var(--motion-ease-standard);
+  }
+
+  .specimen-stage[data-specimen-stage="tablet"] {
+    width: min(100%, 48rem);
+  }
+
+  .specimen-stage[data-specimen-stage="phone"] {
+    width: min(100%, 24.375rem);
+  }
+
+  .specimen-stage iframe {
+    display: block;
+    width: 100%;
+    height: 72rem;
+    border: 0;
+    background: var(--color-surface-page);
+  }
+
+  .token-group + .token-group {
+    margin-top: clamp(2.5rem, 6vw, 4rem);
+  }
+
+  .token-group h3 {
+    display: flex;
+    gap: var(--space-3);
+    align-items: center;
+    margin: 0 0 var(--space-4);
+    color: var(--color-text-on-surface);
+    font-size: 1.35rem;
+  }
+
+  .token-group h3 span {
+    display: inline-grid;
+    min-width: var(--target-min);
+    min-height: var(--target-min);
+    place-items: center;
+    border-radius: var(--radius-pill);
+    background: var(--color-surface-current);
+    color: var(--color-text-muted);
+    font-size: 0.78rem;
+    font-variant-numeric: var(--number-variant);
+  }
+
+  .token-list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    border-bottom: 1px solid var(--color-border);
+  }
+
+  .token-row {
+    display: grid;
+    grid-template-columns: 3rem minmax(13rem, 0.8fr) minmax(12rem, 1.2fr) auto;
+    gap: var(--space-4);
+    align-items: center;
+    min-height: var(--target-comfortable);
+    padding: var(--space-3) 0;
+    border-top: 1px solid var(--color-border);
+  }
+
+  .token-swatch,
+  .token-marker {
+    display: grid;
+    width: 2.75rem;
+    height: 2.75rem;
+    place-items: center;
+    border: 1px solid var(--color-border-strong);
+    border-radius: var(--radius-control);
+  }
+
+  .token-swatch {
+    background: var(--design-token-swatch);
+  }
+
+  .token-marker {
+    color: var(--color-text-muted);
+    font-weight: 800;
+  }
+
+  .token-name {
+    display: grid;
+    gap: var(--space-1);
+    min-width: 0;
+  }
+
+  .token-name span {
+    overflow-wrap: anywhere;
+    color: var(--color-text-quiet);
+    font-size: 0.82rem;
+  }
+
+  .token-value {
+    overflow-wrap: anywhere;
+    color: var(--color-text-muted);
+    font-size: 0.88rem;
+  }
+
+  .copy-token {
+    min-width: 7rem;
+    border-color: var(--color-border-strong);
+    background: transparent;
+    color: var(--color-text-on-surface);
+    font-size: 0.85rem;
+  }
+
+  .copy-status {
+    min-height: 1.5em;
+    margin: var(--space-4) 0 0;
+    color: var(--color-text-muted);
+  }
+
+  .contrast-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(min(100%, 18rem), 1fr));
+    gap: var(--space-4);
+    padding: 0;
+    list-style: none;
+  }
+
+  .contrast-card {
+    overflow: hidden;
+    border: 1px solid var(--color-border-strong);
+    border-radius: var(--radius-surface);
+    background: var(--color-surface-panel);
+  }
+
+  .contrast-sample {
+    display: grid;
+    min-height: 7rem;
+    place-items: center;
+    padding: var(--space-4);
+    border-bottom: 1px solid var(--color-border-strong);
+    background: var(--contrast-background);
+    color: var(--contrast-foreground);
+    font-weight: 800;
+  }
+
+  .contrast-card__details {
+    display: grid;
+    gap: var(--space-2);
+    padding: var(--space-4);
+  }
+
+  .contrast-card h3,
+  .contrast-card p {
+    margin: 0;
+  }
+
+  .contrast-card h3 {
+    color: var(--color-text-on-surface);
+    font-size: 1rem;
+  }
+
+  .contrast-card p {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-2);
+    align-items: baseline;
+    justify-content: space-between;
+    color: var(--color-status);
+  }
+
+  .contrast-card p strong {
+    font-size: 1.25rem;
+    font-variant-numeric: var(--number-variant);
+  }
+
+  .contrast-card code {
+    overflow-wrap: anywhere;
+    color: var(--color-text-quiet);
+    font-size: 0.78rem;
+  }
+
+  .asset-group + .asset-group {
+    margin-top: clamp(3rem, 8vw, 6rem);
+  }
+
+  .asset-group > h3 {
+    display: flex;
+    gap: var(--space-3);
+    align-items: center;
+    margin: 0;
+    color: var(--color-text-on-surface);
+    font-size: 1.35rem;
+  }
+
+  .asset-group > h3 span {
+    display: inline-grid;
+    min-width: var(--target-min);
+    min-height: var(--target-min);
+    place-items: center;
+    border-radius: var(--radius-pill);
+    background: var(--color-surface-current);
+    color: var(--color-text-muted);
+    font-size: 0.78rem;
+    font-variant-numeric: var(--number-variant);
+  }
+
+  .asset-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(min(100%, 20rem), 1fr));
+    gap: var(--space-6);
+    margin-top: var(--space-6);
+  }
+
+  .asset-card {
+    display: grid;
+    grid-template-rows: minmax(15rem, auto) 1fr;
+    border: 1px solid var(--color-border-strong);
+    border-radius: var(--radius-surface);
+    overflow: hidden;
+    background: var(--color-surface-panel);
+  }
+
+  .asset-preview {
+    display: grid;
+    min-height: 15rem;
+    place-items: center;
+    padding: var(--space-8);
+    border-bottom: 1px solid var(--color-border-strong);
+  }
+
+  .asset-preview--light {
+    background: var(--color-paper);
+    color: var(--color-light-text);
+  }
+
+  .asset-preview--dark {
+    background: var(--color-brand);
+    color: var(--color-text-on-brand);
+  }
+
+  .asset-preview--neutral {
+    background: var(--color-surface-elevated);
+    color: var(--color-text-on-surface);
+  }
+
+  .asset-preview img {
+    display: block;
+    width: 100%;
+    max-width: 24rem;
+    height: auto;
+  }
+
+  .asset-preview span {
+    max-width: 22ch;
+    text-align: center;
+  }
+
+  .asset-card__body {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: var(--space-3);
+    padding: var(--space-6);
+  }
+
+  .asset-card h4,
+  .asset-card p,
+  .asset-card dl {
+    margin: 0;
+  }
+
+  .asset-card h4 {
+    color: var(--color-text-on-surface);
+    font-size: 1.25rem;
+  }
+
+  .asset-card__body > p:not(.asset-status) {
+    color: var(--color-text-muted);
+    line-height: 1.55;
+  }
+
+  .asset-status--official {
+    color: var(--color-status);
+  }
+
+  .asset-status--production {
+    color: var(--color-brand-bright);
+  }
+
+  .asset-card dl {
+    display: grid;
+    width: 100%;
+    gap: var(--space-2);
+    padding-top: var(--space-3);
+    border-top: 1px solid var(--color-border);
+  }
+
+  .asset-card dl div {
+    display: flex;
+    justify-content: space-between;
+    gap: var(--space-4);
+  }
+
+  .asset-card dt {
+    color: var(--color-text-quiet);
+  }
+
+  .asset-card dd {
+    margin: 0;
+    color: var(--color-text-on-surface);
+    text-transform: capitalize;
+  }
+
+  .asset-path {
+    max-width: 100%;
+    overflow-wrap: anywhere;
+    color: var(--color-text-quiet);
+    font-size: 0.78rem;
+  }
+
+  .asset-download {
+    margin-top: auto;
+  }
+
+  .font-assets {
+    margin-top: clamp(3rem, 8vw, 6rem);
+    padding-top: clamp(2.5rem, 6vw, 4rem);
+    border-top: 1px solid var(--color-border-strong);
+  }
+
+  .font-assets > header {
+    max-width: 62ch;
+  }
+
+  .font-assets h3,
+  .font-assets header p {
+    margin: 0;
+  }
+
+  .font-assets h3 {
+    color: var(--color-text-on-surface);
+    font-size: 1.35rem;
+  }
+
+  .font-assets header p {
+    margin-top: var(--space-2);
+    color: var(--color-text-muted);
+    line-height: 1.55;
+  }
+
+  .font-assets ul {
+    display: grid;
+    gap: 1px;
+    margin: var(--space-6) 0 0;
+    padding: 1px;
+    background: var(--color-border-strong);
+    list-style: none;
+  }
+
+  .font-assets li {
+    display: grid;
+    grid-template-columns: minmax(12rem, 0.7fr) minmax(16rem, 1.3fr) auto;
+    gap: var(--space-6);
+    align-items: center;
+    padding: var(--space-4);
+    background: var(--color-surface-panel);
+  }
+
+  .font-assets li > div {
+    display: grid;
+    gap: var(--space-1);
+  }
+
+  .font-assets li span {
+    color: var(--color-text-quiet);
+    font-size: 0.82rem;
+  }
+
+  .font-assets li p {
+    margin: 0;
+    color: var(--color-text-on-surface);
+    font-family: "PBS Sans", var(--font-sans);
+    font-size: 1.1rem;
+    font-weight: var(--font-asset-weight);
+  }
+
+  .release-roadmap {
+    max-width: 72ch;
+    padding-left: 1.25rem;
+    color: var(--color-text-muted);
+  }
+
+  .release-roadmap li + li {
+    margin-top: var(--space-4);
+  }
+
+  .release-roadmap strong {
+    color: var(--color-text-on-surface);
+  }
+
+  @media (max-width: 1152px) {
+    .design-lab__nav {
+      top: 3.25rem;
+    }
+  }
+
+  @media (max-width: 1040px) {
+    .playground-workspace {
+      grid-template-columns: 1fr;
+    }
+
+    .playground-controls {
+      max-height: 40rem;
+    }
+  }
+
+  @media (max-width: 760px) {
+    .catalog-filter {
+      grid-template-columns: 1fr;
+      gap: var(--space-4);
+      align-items: stretch;
+    }
+
+    .token-row {
+      grid-template-columns: 3rem minmax(0, 1fr);
+    }
+
+    .token-value,
+    .copy-token {
+      grid-column: 2;
+    }
+
+    .copy-token {
+      justify-self: start;
+    }
+
+    .font-assets li {
+      grid-template-columns: 1fr;
+      gap: var(--space-3);
+    }
+
+    .font-assets li a {
+      justify-self: start;
+    }
+  }
+
+  @media (max-width: 480px) {
+    .design-lab h1 {
+      font-size: clamp(2.6rem, 16vw, 4.2rem);
+    }
+
+    .design-lab__nav {
+      position: static;
+      box-shadow: none;
+    }
+
+    .design-lab__nav-inner {
+      flex-wrap: nowrap;
+      gap: var(--space-4);
+      overflow-x: auto;
+    }
+
+    .lab-section {
+      scroll-margin-top: 4rem;
+    }
+
+    .download-actions,
+    .lab-button,
+    .playground-actions,
+    .playground-button,
+    .specimen-widths,
+    .specimen-widths button,
+    .specimen-toolbar > a {
+      width: 100%;
+    }
+
+    .specimen-stage iframe {
+      height: 80rem;
+    }
+
+    .playground-control label {
+      align-items: flex-start;
+      flex-direction: column;
+      gap: var(--space-1);
+    }
+
+    .playground-control code {
+      text-align: left;
+    }
+  }
+</style>

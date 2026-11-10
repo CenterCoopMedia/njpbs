@@ -1,0 +1,14 @@
+{
+  "date": "2026-09-30",
+  "kind": "new",
+  "title": "Save views and undo changes in the Media library",
+  "body": "You can save your own filter views in the Media library. Undo is available after you save details, change a collection or clear filters. Save details now sits beside Close.",
+  "prs": [
+    2434,
+    2439,
+    2440,
+    2441,
+    2442
+  ],
+  "order": 0
+}

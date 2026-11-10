@@ -1,0 +1,70 @@
+.county-comparison {
+  --color-link: var(--color-nj-decides-link, #011375);
+  color: var(--color-nj-decides-ink, #172033);
+  background: var(--color-nj-decides-paper, #fff);
+  padding: 1.25rem;
+  border: 1px solid var(--color-light-line-strong, #b9c2e6);
+  border-radius: var(--radius-md, .5rem);
+  min-width: 0;
+  container-type: inline-size;
+  overflow-wrap: anywhere;
+  font-family: var(--font-nj-decides, "PBS Sans", sans-serif);
+}
+.county-comparison :is(h2, h3, h4, h5, h6) { margin: 0 0 .75rem; color: inherit; }
+.county-comparison p { margin: .75rem 0; }
+.county-comparison__method, .county-comparison__source { font-size: .875rem; line-height: 1.6; }
+.county-comparison__source { overflow-wrap: anywhere; }
+.county-comparison__source span { display: block; }
+.county-comparison__layout { display: grid; grid-template-columns: minmax(12rem, .3fr) minmax(0, 1fr); gap: 1.5rem; align-items: start; }
+.county-comparison__map { margin: 0; }
+.county-comparison__map figcaption,
+.cms-block.cms-block--county_comparison .county-comparison__map figcaption { font-weight: 700; color: var(--color-nj-decides-ink, #172033); }
+.county-comparison__map p { font-size: .875rem; }
+.county-comparison__map > svg { display: block; width: 100%; max-height: 34rem; }
+.county-comparison__county { stroke: var(--color-nj-decides-paper, #fff); stroke-width: 1.5; }
+.county-comparison__county--democratic { fill: var(--color-nj-decides-navy, #011375); background: var(--color-nj-decides-navy, #011375); }
+.county-comparison__county--democratic-close { fill: #89adc9; background: #89adc9; }
+.county-comparison__county--republican-close { fill: #e7a399; background: #e7a399; }
+.county-comparison__county--republican { fill: var(--color-nj-decides-red, #840000); background: var(--color-nj-decides-red, #840000); }
+.county-comparison__map a:is(:hover, :focus) path { stroke: var(--color-nj-decides-ink, #172033); stroke-width: 5; }
+.county-comparison__legend { display: grid; gap: .4rem; padding: 0 !important; list-style: none; font-size: .875rem; }
+.county-comparison__legend li { display: flex; align-items: center; gap: .5rem; }
+.county-comparison__legend i { display: inline-block; width: 1rem; height: 1rem; flex: 0 0 1rem; border: 1px solid currentColor; }
+.county-comparison__scroll { min-width: 0; overflow-x: auto; padding: .25rem .25rem .75rem; }
+.county-comparison table { width: 100%; min-width: 42rem; border-collapse: collapse; font-size: .875rem; line-height: 1.4; font-variant-numeric: tabular-nums; }
+.county-comparison caption { text-align: left; font-weight: 700; padding: .5rem 0 .75rem; }
+.county-comparison :is(th, td) { padding: .65rem .5rem; text-align: left; border-bottom: 1px solid var(--color-light-line-strong, #b9c2e6); vertical-align: top; }
+.county-comparison thead th { background: var(--color-nj-decides-field, #f2f4f7); }
+.county-comparison small { display: block; margin-top: .25rem; font-size: .8rem; }
+.county-comparison tfoot { font-weight: 700; background: var(--color-nj-decides-field, #f2f4f7); }
+.county-comparison tr:target { outline: 3px solid var(--color-nj-decides-navy, #011375); outline-offset: -3px; }
+.county-comparison button { appearance: none; font: inherit; font-weight: 700; color: inherit; background: transparent; border: 0; text-align: left; min-height: 44px; padding: .25rem; cursor: pointer; }
+.county-comparison__dot { display: block; width: 5rem; height: .75rem; margin-top: .4rem; }
+.county-comparison__dot path { stroke: var(--color-light-line-strong, #b9c2e6); fill: none; }
+.county-comparison__dot circle { fill: currentColor; }
+.county-comparison__house { margin-top: 1rem; }
+.county-comparison__house summary { cursor: pointer; min-height: 44px; padding: .65rem; font-weight: 700; }
+.county-comparison__status { min-height: 1.4em; font-size: .875rem; }
+.county-comparison :is(button, a, summary, [tabindex]):focus-visible { outline: 3px solid var(--color-nj-decides-navy, #011375); outline-offset: 3px; }
+@media (max-width: 800px) {
+  .county-comparison { padding: 1rem; }
+  .county-comparison__layout { grid-template-columns: minmax(0, 1fr); }
+  .county-comparison__map,
+  .cms-block.cms-block--county_comparison figure.county-comparison__map { max-width: 22rem; width: 100%; margin-inline: auto; }
+  .county-comparison__map > svg { max-height: 28rem; }
+}
+@media (forced-colors: active) {
+  .county-comparison__county { fill: Canvas; stroke: CanvasText; }
+  .county-comparison__map a:focus path { fill: Highlight; }
+}
+
+.county-comparison a { color: var(--color-nj-decides-link, #011375); text-decoration: underline; text-underline-offset: .15em; }
+
+.cms-block--county_comparison .county-comparison a:hover { color: var(--color-nj-decides-link, #011375); text-decoration-thickness: 2px; }
+
+@container (max-width: 800px) {
+  .county-comparison__layout { grid-template-columns: minmax(0, 1fr); }
+  .county-comparison__map,
+  .cms-block.cms-block--county_comparison figure.county-comparison__map { max-width: 22rem; width: 100%; margin-inline: auto; }
+  .county-comparison__map > svg { max-height: 28rem; }
+}

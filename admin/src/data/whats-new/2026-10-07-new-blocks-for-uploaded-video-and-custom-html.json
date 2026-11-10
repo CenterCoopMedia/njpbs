@@ -1,0 +1,12 @@
+{
+  "date": "2026-10-07",
+  "kind": "new",
+  "title": "New blocks for uploaded video and custom HTML",
+  "body": "Add an uploaded video block or a custom HTML block that runs in a safe frame. An image block can now link to a page, with an option to open a new tab.",
+  "prs": [
+    2754,
+    2473,
+    2475
+  ],
+  "order": -1
+}

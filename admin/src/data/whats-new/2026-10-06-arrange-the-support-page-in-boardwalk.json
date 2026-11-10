@@ -1,0 +1,10 @@
+{
+  "date": "2026-10-06",
+  "kind": "new",
+  "title": "Arrange the Support page in Boardwalk",
+  "body": "Staff can change the order of sections on the Support page in the Page editor.",
+  "prs": [
+    2654
+  ],
+  "order": 0
+}

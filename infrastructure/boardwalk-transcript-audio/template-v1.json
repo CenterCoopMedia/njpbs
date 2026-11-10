@@ -1,0 +1,486 @@
+{
+  "AWSTemplateFormatVersion": "2010-09-09",
+  "Description": "Default-off exact-version audio preparation for Boardwalk paid transcription.",
+  "Metadata": {
+    "AWSToolsMetrics": {
+      "AWSAgentToolkit": "aws-cloudformation@2"
+    },
+    "com.aws.cloudformation.Context": {
+      "arch": "A digest-pinned Lambda image reads one exact private web-MP4 version, copies its single AAC-LC stream to an M4A, verifies payload and timing identity, and writes an immutable-version receipt. An empty image parameter creates only the private ECR repository.",
+      "must": [
+        {
+          "Fn::Sub": "Deploy only to AWS account ${AWS::AccountId} in us-east-2."
+        },
+        "Keep ImageUri and FfmpegArtifactSha256 empty together until the reviewed image is built, scanned, pushed, and pinned by digest.",
+        "Read only outputs/ versions and write or clean up only transcripts/inputs/audio/ versions.",
+        "Keep paid provider feature flags off until the exact image and provider adapters pass separate canaries."
+      ],
+      "ref": [
+        "infrastructure/boardwalk-transcript-audio/README.md",
+        "functions/lib/video-transcript-audio-input.js",
+        "infrastructure/boardwalk-video-previews/template-v1.json",
+        "infrastructure/boardwalk-transcription-byok/template-v1.json"
+      ]
+    }
+  },
+  "Parameters": {
+    "RenditionBucketName": {
+      "Type": "String",
+      "Description": "Existing versioned private Boardwalk rendition bucket."
+    },
+    "ImageUri": {
+      "Type": "String",
+      "Default": "",
+      "AllowedPattern": "^$|^[0-9]{12}\\.dkr\\.ecr\\.us-east-2\\.amazonaws\\.com/njpbs-boardwalk-transcript-audio@sha256:[a-f0-9]{64}$",
+      "Description": "Exact ECR image digest. Leave empty during the repository-only deployment."
+    },
+    "FfmpegArtifactSha256": {
+      "Type": "String",
+      "Default": "",
+      "AllowedPattern": "^$|^[a-f0-9]{64}$",
+      "Description": "Combined FFmpeg and ffprobe binary identity printed by build-image.sh."
+    },
+    "DeploymentAccountId": {
+      "Type": "String",
+      "AllowedPattern": "^[0-9]{12}$",
+      "Description": "Explicit account authorized for this deployment."
+    }
+  },
+  "Rules": {
+    "TargetAccountAndRegion": {
+      "Assertions": [
+        {
+          "Assert": {
+            "Fn::Equals": [
+              {
+                "Ref": "AWS::AccountId"
+              },
+              {
+                "Ref": "DeploymentAccountId"
+              }
+            ]
+          },
+          "AssertDescription": "Deploy this stack only to the configured AWS account."
+        },
+        {
+          "Assert": {
+            "Fn::Equals": [
+              {
+                "Ref": "AWS::Region"
+              },
+              "us-east-2"
+            ]
+          },
+          "AssertDescription": "Deploy this stack only in us-east-2."
+        }
+      ]
+    },
+    "ActivationParametersTogether": {
+      "Assertions": [
+        {
+          "Assert": {
+            "Fn::Or": [
+              {
+                "Fn::And": [
+                  {
+                    "Fn::Equals": [
+                      {
+                        "Ref": "ImageUri"
+                      },
+                      ""
+                    ]
+                  },
+                  {
+                    "Fn::Equals": [
+                      {
+                        "Ref": "FfmpegArtifactSha256"
+                      },
+                      ""
+                    ]
+                  }
+                ]
+              },
+              {
+                "Fn::And": [
+                  {
+                    "Fn::Not": [
+                      {
+                        "Fn::Equals": [
+                          {
+                            "Ref": "ImageUri"
+                          },
+                          ""
+                        ]
+                      }
+                    ]
+                  },
+                  {
+                    "Fn::Not": [
+                      {
+                        "Fn::Equals": [
+                          {
+                            "Ref": "FfmpegArtifactSha256"
+                          },
+                          ""
+                        ]
+                      }
+                    ]
+                  }
+                ]
+              }
+            ]
+          },
+          "AssertDescription": "ImageUri and FfmpegArtifactSha256 must be empty or supplied together."
+        }
+      ]
+    }
+  },
+  "Conditions": {
+    "HasImage": {
+      "Fn::Not": [
+        {
+          "Fn::Equals": [
+            {
+              "Ref": "ImageUri"
+            },
+            ""
+          ]
+        }
+      ]
+    }
+  },
+  "Resources": {
+    "TranscriptAudioRepository": {
+      "Type": "AWS::ECR::Repository",
+      "DeletionPolicy": "Retain",
+      "UpdateReplacePolicy": "Retain",
+      "Properties": {
+        "RepositoryName": "njpbs-boardwalk-transcript-audio",
+        "EncryptionConfiguration": {
+          "EncryptionType": "AES256"
+        },
+        "ImageScanningConfiguration": {
+          "ScanOnPush": true
+        },
+        "ImageTagMutability": "IMMUTABLE",
+        "RepositoryPolicyText": {
+          "Version": "2012-10-17",
+          "Statement": [
+            {
+              "Sid": "LambdaEcrImageRetrieval",
+              "Effect": "Allow",
+              "Principal": {
+                "Service": "lambda.amazonaws.com"
+              },
+              "Action": [
+                "ecr:BatchGetImage",
+                "ecr:GetDownloadUrlForLayer"
+              ],
+              "Condition": {
+                "ArnLike": {
+                  "aws:SourceArn": {
+                    "Fn::Sub": "arn:${AWS::Partition}:lambda:${AWS::Region}:${AWS::AccountId}:function:${AWS::StackName}-worker"
+                  }
+                }
+              }
+            }
+          ]
+        },
+        "LifecyclePolicy": {
+          "LifecyclePolicyText": "{\"rules\":[{\"rulePriority\":1,\"description\":\"Remove untagged build remnants after seven days\",\"selection\":{\"tagStatus\":\"untagged\",\"countType\":\"sinceImagePushed\",\"countUnit\":\"days\",\"countNumber\":7},\"action\":{\"type\":\"expire\"}}]}"
+        },
+        "Tags": [
+          {
+            "Key": "Project",
+            "Value": "njpbs"
+          },
+          {
+            "Key": "System",
+            "Value": "boardwalk-transcript-audio"
+          }
+        ]
+      }
+    },
+    "TranscriptAudioFailureQueue": {
+      "Type": "AWS::SQS::Queue",
+      "Condition": "HasImage",
+      "Properties": {
+        "MessageRetentionPeriod": 1209600,
+        "SqsManagedSseEnabled": true,
+        "Tags": [
+          {
+            "Key": "Project",
+            "Value": "njpbs"
+          },
+          {
+            "Key": "System",
+            "Value": "boardwalk-transcript-audio"
+          }
+        ]
+      }
+    },
+    "TranscriptAudioLog": {
+      "Type": "AWS::Logs::LogGroup",
+      "Condition": "HasImage",
+      "DeletionPolicy": "Retain",
+      "UpdateReplacePolicy": "Retain",
+      "Properties": {
+        "LogGroupName": {
+          "Fn::Sub": "/aws/lambda/${AWS::StackName}-worker"
+        },
+        "RetentionInDays": 14
+      }
+    },
+    "TranscriptAudioRole": {
+      "Type": "AWS::IAM::Role",
+      "Condition": "HasImage",
+      "Properties": {
+        "RoleName": "njpbs-boardwalk-transcript-audio",
+        "Description": "Exact-version web audio remux only. No provider or original-media access.",
+        "AssumeRolePolicyDocument": {
+          "Version": "2012-10-17",
+          "Statement": [
+            {
+              "Effect": "Allow",
+              "Principal": {
+                "Service": "lambda.amazonaws.com"
+              },
+              "Action": "sts:AssumeRole"
+            }
+          ]
+        },
+        "Policies": [
+          {
+            "PolicyName": "exact-version-audio-preparation",
+            "PolicyDocument": {
+              "Version": "2012-10-17",
+              "Statement": [
+                {
+                  "Sid": "ListExactInputsAndReceipts",
+                  "Effect": "Allow",
+                  "Action": [
+                    "s3:ListBucket",
+                    "s3:ListBucketVersions"
+                  ],
+                  "Resource": {
+                    "Fn::Sub": "arn:${AWS::Partition}:s3:::${RenditionBucketName}"
+                  },
+                  "Condition": {
+                    "StringLike": {
+                      "s3:prefix": [
+                        "outputs/*",
+                        "transcripts/inputs/audio/*"
+                      ]
+                    },
+                    "StringEquals": {
+                      "s3:ResourceAccount": {
+                        "Ref": "AWS::AccountId"
+                      },
+                      "aws:RequestedRegion": {
+                        "Ref": "AWS::Region"
+                      }
+                    },
+                    "Bool": {
+                      "aws:SecureTransport": "true"
+                    }
+                  }
+                },
+                {
+                  "Sid": "ReadExactWebRendition",
+                  "Effect": "Allow",
+                  "Action": "s3:GetObjectVersion",
+                  "Resource": {
+                    "Fn::Sub": "arn:${AWS::Partition}:s3:::${RenditionBucketName}/outputs/*"
+                  },
+                  "Condition": {
+                    "StringEquals": {
+                      "s3:ResourceAccount": {
+                        "Ref": "AWS::AccountId"
+                      },
+                      "aws:RequestedRegion": {
+                        "Ref": "AWS::Region"
+                      }
+                    },
+                    "Bool": {
+                      "aws:SecureTransport": "true"
+                    }
+                  }
+                },
+                {
+                  "Sid": "ManageOwnAudioAttemptsAndReceipts",
+                  "Effect": "Allow",
+                  "Action": [
+                    "s3:GetObject",
+                    "s3:GetObjectVersion",
+                    "s3:PutObject",
+                    "s3:DeleteObjectVersion"
+                  ],
+                  "Resource": {
+                    "Fn::Sub": "arn:${AWS::Partition}:s3:::${RenditionBucketName}/transcripts/inputs/audio/*"
+                  },
+                  "Condition": {
+                    "StringEquals": {
+                      "s3:ResourceAccount": {
+                        "Ref": "AWS::AccountId"
+                      },
+                      "aws:RequestedRegion": {
+                        "Ref": "AWS::Region"
+                      }
+                    },
+                    "Bool": {
+                      "aws:SecureTransport": "true"
+                    }
+                  }
+                },
+                {
+                  "Sid": "WriteFunctionLogs",
+                  "Effect": "Allow",
+                  "Action": [
+                    "logs:CreateLogStream",
+                    "logs:PutLogEvents"
+                  ],
+                  "Resource": {
+                    "Fn::Sub": "${TranscriptAudioLog.Arn}:*"
+                  }
+                },
+                {
+                  "Sid": "RecordAsyncFailure",
+                  "Effect": "Allow",
+                  "Action": "sqs:SendMessage",
+                  "Resource": {
+                    "Fn::GetAtt": [
+                      "TranscriptAudioFailureQueue",
+                      "Arn"
+                    ]
+                  }
+                }
+              ]
+            }
+          }
+        ],
+        "Tags": [
+          {
+            "Key": "Project",
+            "Value": "njpbs"
+          },
+          {
+            "Key": "System",
+            "Value": "boardwalk-transcript-audio"
+          }
+        ]
+      }
+    },
+    "TranscriptAudioFunction": {
+      "Type": "AWS::Lambda::Function",
+      "Condition": "HasImage",
+      "DependsOn": "TranscriptAudioLog",
+      "Properties": {
+        "FunctionName": {
+          "Fn::Sub": "${AWS::StackName}-worker"
+        },
+        "Description": "Create a normal-speed M4A from one exact private web-MP4 version.",
+        "PackageType": "Image",
+        "Architectures": [
+          "x86_64"
+        ],
+        "Code": {
+          "ImageUri": {
+            "Ref": "ImageUri"
+          }
+        },
+        "Role": {
+          "Fn::GetAtt": [
+            "TranscriptAudioRole",
+            "Arn"
+          ]
+        },
+        "MemorySize": 1769,
+        "EphemeralStorage": {
+          "Size": 4096
+        },
+        "Timeout": 900,
+        "ReservedConcurrentExecutions": 1,
+        "Environment": {
+          "Variables": {
+            "EXPECTED_BUCKET_OWNER": {
+              "Ref": "AWS::AccountId"
+            },
+            "FFMPEG_ARTIFACT_SHA256": {
+              "Ref": "FfmpegArtifactSha256"
+            },
+            "RENDITION_BUCKET": {
+              "Ref": "RenditionBucketName"
+            }
+          }
+        },
+        "Tags": [
+          {
+            "Key": "Project",
+            "Value": "njpbs"
+          },
+          {
+            "Key": "System",
+            "Value": "boardwalk-transcript-audio"
+          }
+        ]
+      }
+    },
+    "TranscriptAudioAsyncPolicy": {
+      "Type": "AWS::Lambda::EventInvokeConfig",
+      "Condition": "HasImage",
+      "Properties": {
+        "FunctionName": {
+          "Ref": "TranscriptAudioFunction"
+        },
+        "Qualifier": "$LATEST",
+        "MaximumEventAgeInSeconds": 900,
+        "MaximumRetryAttempts": 0,
+        "DestinationConfig": {
+          "OnFailure": {
+            "Destination": {
+              "Fn::GetAtt": [
+                "TranscriptAudioFailureQueue",
+                "Arn"
+              ]
+            }
+          }
+        }
+      }
+    }
+  },
+  "Outputs": {
+    "RepositoryUri": {
+      "Description": "Private image repository created by the repository-only deployment.",
+      "Value": {
+        "Fn::GetAtt": [
+          "TranscriptAudioRepository",
+          "RepositoryUri"
+        ]
+      }
+    },
+    "FunctionArn": {
+      "Condition": "HasImage",
+      "Description": "Digest-pinned preparation function ARN. Grant invoke only after a canary plan is approved.",
+      "Value": {
+        "Fn::GetAtt": [
+          "TranscriptAudioFunction",
+          "Arn"
+        ]
+      }
+    },
+    "FfmpegArtifactSha256": {
+      "Condition": "HasImage",
+      "Description": "Configured FFmpeg and ffprobe binary identity.",
+      "Value": {
+        "Ref": "FfmpegArtifactSha256"
+      }
+    },
+    "FailureQueueUrl": {
+      "Condition": "HasImage",
+      "Description": "Fourteen-day async failure evidence queue.",
+      "Value": {
+        "Ref": "TranscriptAudioFailureQueue"
+      }
+    }
+  }
+}

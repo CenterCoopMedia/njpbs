@@ -1,0 +1,14 @@
+{
+  "id": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  "attemptId": "00000000-0000-4000-8000-000000000001",
+  "kind": "clip",
+  "scope": "clip",
+  "format": "original_copy",
+  "sourceId": "video-library",
+  "assetId": "synthetic",
+  "sourceObjectKey": "objects/synthetic.mp4",
+  "sourceObjectVersionId": "fixture-version-1",
+  "sourceSizeBytes": 229725,
+  "inMs": 2500,
+  "outMs": 4500
+}

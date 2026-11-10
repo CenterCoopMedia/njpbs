@@ -1,0 +1,42 @@
+# Cloudflare Worker: the public edge for the report-a-problem widget.
+
+name = "njpbs-report"
+main = "index.ts"
+compatibility_date = "2026-07-01"
+
+# Serve only on the custom domain (report.njpbs.org). No workers.dev URL and no
+# preview URLs, so the widget's origin is the single public entry point.
+workers_dev = false
+preview_urls = false
+
+# Public hostname: report.njpbs.org is bound as a Worker Custom Domain out of band
+# (Cloudflare dashboard or the workers/domains API), not managed from this file.
+# Declaring it here as custom_domain = true makes a script-only redeploy fail
+# unless the deploy token also holds zone Workers Routes edit, so the route is
+# left out on purpose. To (re)bind it: Workers & Pages > njpbs-report > Settings >
+# Domains, or PUT /accounts/<acct>/workers/domains {hostname:"report.njpbs.org"}.
+# [[routes]]
+# pattern = "report.njpbs.org"
+# custom_domain = true
+
+# Per-IP rate-limit counter.
+[[kv_namespaces]]
+binding = "RATE_LIMIT"
+# Render with scripts/render-wrangler-config.mjs before deployment.
+# Wrangler does not expand environment variables in this file.
+id = "${RATE_LIMIT_KV_NAMESPACE_ID}"
+
+[vars]
+# Non-secret. The browser origin allowed to POST here.
+ALLOWED_ORIGIN = "https://njpbs.org"
+# Non-secret. The bot intake URL over the Cloudflare tunnel.
+INTAKE_URL = "${REPORT_INTAKE_URL}"
+
+# Secrets (never in this file): set with `npx wrangler secret put <NAME>`.
+#   TURNSTILE_SECRET         Turnstile secret key
+#   INTAKE_SECRET            shared Bearer for the intake
+#   IP_HASH_SALT             salt for the client-IP hash
+#   CF_ACCESS_CLIENT_ID      Access service-token id
+#   CF_ACCESS_CLIENT_SECRET  Access service-token secret
+# The configured intake host may be protected by Cloudflare Access; the worker sends
+# the service token on the CF-Access-Client-* headers so the forward is admitted.

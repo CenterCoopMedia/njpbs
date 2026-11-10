@@ -1,0 +1,39 @@
+{
+  "name": "njpbs-cms-publisher",
+  "main": "worker.ts",
+  "r2_buckets": [{ "binding": "DURABLE_POST_WITHDRAWALS", "bucket_name": "njpbs-cms-publication" }],
+  "compatibility_date": "2026-09-10",
+  "compatibility_flags": ["nodejs_compat"],
+  "workers_dev": false,
+  "preview_urls": false,
+  "routes": [{ "pattern": "publisher-health.njpbs.org", "custom_domain": true }],
+  "secrets": { "required": ["FIREBASE_SERVICE_ACCOUNT", "R2_PUBLICATION_CREDENTIAL", "R2_PREVIEW_CREDENTIAL", "PUBLICATION_WAKE_TOKEN", "ACTIVATION_TOKEN", "MEDIA_MANAGER_CREDENTIAL"] },
+  "vars": {
+    "CLOUDFLARE_ACCOUNT_ID": "",
+    "CLOUDFLARE_PUBLIC_WORKER_TAG": "",
+    "CMS_DEPLOYMENT_ENVIRONMENT": "production",
+    "CMS_MEDIA_R2_ENDPOINT": "",
+    "CMS_MEDIA_R2_BUCKET": "njpbs",
+    "PUBLICATION_ENABLED": "false",
+    "PUBLICATION_COMMIT_SHA": "",
+    "PUBLICATION_SERIALIZER_ID": "cloudflare-publisher",
+    "PUBLIC_GA4_MEASUREMENT_ID": "",
+    "PUBLIC_REPORT_ENDPOINT": "",
+    "PUBLIC_SHARE_INTAKE_ENDPOINT": "https://intake.njpbs.org",
+    "PUBLIC_TURNSTILE_SITEKEY": "",
+    "PUBLIC_SHARE_PAGE": "",
+    "PUBLIC_SHARE_UPLOAD_ORIGIN": ""
+  },
+  "triggers": { "crons": ["* * * * *"] },
+  "containers": [{
+    "name": "njpbs-cms-publisher",
+    "class_name": "PublicationRuntime",
+    "image": "./Dockerfile",
+    "image_build_context": "./build",
+    "instance_type": "standard-2",
+    "max_instances": 1
+  }],
+  "durable_objects": { "bindings": [{ "name": "PUBLISHER", "class_name": "PublicationRuntime" }] },
+  "migrations": [{ "tag": "v1", "new_sqlite_classes": ["PublicationRuntime"] }],
+  "observability": { "enabled": true, "head_sampling_rate": 1 }
+}

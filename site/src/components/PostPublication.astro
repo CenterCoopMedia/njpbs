@@ -1,0 +1,19 @@
+---
+import { getEntry } from "astro:content";
+import { resolveCoverageLabel } from "../../../packages/content-core/src/coverage-labels";
+import { COVERAGE_LABELS_SETTINGS_ID } from "../../../packages/content-core/src/cms-settings";
+import { renderPostBranding } from "../../../packages/content-core/src/post-branding";
+import "../../../packages/content-core/src/post-branding.css";
+
+interface Props {
+  spotlightNews?: boolean;
+  coverageLabelId?: string;
+  linked?: boolean;
+  placement?: "headline" | "card";
+}
+const { spotlightNews, coverageLabelId, placement = "headline", linked = placement === "headline" } = Astro.props;
+const registry = Astro.locals.cmsRender
+  ? Astro.locals.cmsRender.content.settings.find(setting => setting.settingId === COVERAGE_LABELS_SETTINGS_ID)
+  : (await getEntry("cmsPublicSiteChrome", COVERAGE_LABELS_SETTINGS_ID))?.data;
+---
+<Fragment set:html={renderPostBranding(spotlightNews, placement, resolveCoverageLabel(coverageLabelId, registry), linked)} />

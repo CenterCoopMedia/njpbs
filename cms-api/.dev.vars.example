@@ -1,0 +1,2 @@
+CMS_EDGE_ORIGIN_SECRET=replace-with-a-long-random-local-value
+ALLOW_LOCAL_ORIGINS=true

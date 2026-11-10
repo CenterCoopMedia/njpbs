@@ -1,0 +1,66 @@
+---
+import { getEntry } from "astro:content";
+import { COVERAGE_LABELS_SETTINGS_ID } from "../../../packages/content-core/src/cms-settings";
+import { isCoverageLabelsBuildData } from "../../../packages/content-core/src/coverage-labels";
+import { type CollectionEntry } from "astro:content";
+import type { HomeComposition } from "../../../packages/content-core/src/home-composition";
+import { homeCompositionGroups } from "../../../packages/content-core/src/home-composition";
+import { renderHomePassport } from "../../../packages/content-core/src/home-section-render";
+import { renderHomeProgramRail, renderHomeNewsRail, type HomeProgramRailCard, type HomeNewsCard } from "../../../packages/content-core/src/home-rail-render";
+import { passportLearnMoreUrl, pbsVideoUrl } from "../data/launch-fallback";
+import type { CmsResponsiveRenderAsset } from "../lib/cms-responsive-image";
+import CmsBlocks from "./CmsBlocks.astro";
+import HomepagePromotionPlaylist from "./HomepagePromotionPlaylist.astro";
+import { renderHomeCuratedShelf } from "../../../packages/content-core/src/home-curated-render";
+import type { HomeEditorialCatalog } from "../../../packages/content-core/src/home-source-catalog";
+import { renderHomeNewsletter } from "../../../packages/content-core/src/home-newsletter-section";
+import { renderHomeDonor } from "../../../packages/content-core/src/home-donor-section";
+import { renderHomeNewscast } from "../../../packages/content-core/src/home-newscast-section";
+
+interface Props {
+  entry: CollectionEntry<"cmsPages">;
+  composition: HomeComposition;
+  featured: readonly HomeProgramRailCard[];
+  more: readonly HomeProgramRailCard[];
+  spotlight: readonly HomeNewsCard[];
+  promotionAssets: ReadonlyMap<string, CmsResponsiveRenderAsset>;
+  catalog?: HomeEditorialCatalog;
+}
+const { entry, composition, featured, more, spotlight, promotionAssets, catalog } = Astro.props as Props;
+const groups = homeCompositionGroups(entry.data.blocks);
+const coverageLabels = (Astro.locals.cmsRender
+  ? Astro.locals.cmsRender.content.settings.find(setting => setting.settingId === COVERAGE_LABELS_SETTINGS_ID)
+  : (await getEntry("cmsPublicSiteChrome", COVERAGE_LABELS_SETTINGS_ID))?.data);
+---
+
+{groups.map(group => {
+  if (group.kind === "content") {
+    const block = group.blocks[0];
+    return block.type === "promotion_playlist"
+      ? <HomepagePromotionPlaylist block={block} assets={promotionAssets} />
+      : <CmsBlocks entry={{ ...entry, data: { ...entry.data, blocks: group.blocks } }} />;
+  }
+  // The retained Start pair remains recovery data, as it does in version 1.
+  if (group.section === "home-start") return null;
+  const block = group.blocks[0];
+  if (group.section === "home-newscast" && block.type === "home_newscast") return <Fragment set:html={renderHomeNewscast(block, catalog, { complete: entry.data.contentMode !== "draft" })} />;
+  if (group.section === "home-newsletter" && block.type === "newsletter_signup") {
+    if (!catalog && block.data.newsletterIds.length > 0) throw new Error("Home Newsletter requires the current published source catalog");
+    return <Fragment set:html={renderHomeNewsletter(block, catalog, { assets: entry.data.assets, complete: entry.data.contentMode !== "draft" })} />;
+  }
+  if (group.section === "home-donor" && block.type === "card_grid") return <Fragment set:html={renderHomeDonor(block, { assets: entry.data.assets, complete: entry.data.contentMode !== "draft" })} />;
+  if (block.type === "content_shelf" && (entry.data.homeCompositionVersion === 2 || block.data.selectedIds !== undefined)) {
+    if (!catalog) throw new Error("Curated Home requires the current published source catalog");
+    return <Fragment set:html={renderHomeCuratedShelf(block, catalog, isCoverageLabelsBuildData(coverageLabels) ? coverageLabels : undefined)} />;
+  }
+  if (group.section === "home-featured") return <Fragment set:html={renderHomeProgramRail("featured", featured.slice(0, composition.featured.itemLimit), pbsVideoUrl, true, composition.featured)} />;
+  if (group.section === "home-more") return <Fragment set:html={renderHomeProgramRail("more", more.slice(0, composition.more.itemLimit), pbsVideoUrl, true, composition.more)} />;
+  if (group.section === "home-spotlight") return <Fragment set:html={renderHomeNewsRail(spotlight.slice(0, composition.spotlight.itemLimit), composition.spotlight)} />;
+  if (group.section === "home-passport-copy") return <Fragment set:html={renderHomePassport(composition.passport, passportLearnMoreUrl, true)} />;
+  throw new Error(`Unsupported admitted Home section ${group.section}`);
+})}
+
+<script>
+  import { installHomeNewscastPlayers } from "../../../packages/content-core/src/home-newscast-player";
+  installHomeNewscastPlayers(document);
+</script>

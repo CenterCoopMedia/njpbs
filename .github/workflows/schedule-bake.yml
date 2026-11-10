@@ -1,0 +1,430 @@
+name: Schedule bake
+
+on:
+  workflow_run:
+    workflows: [CI]
+    types: [completed]
+    branches: [automation/schedule-bake]
+  workflow_dispatch:
+  schedule:
+    # 09:00 UTC is 4 a.m. EST and 5 a.m. EDT.
+    - cron: "0 9 * * *"
+    # 21:00 UTC is 4 p.m. EST and 5 p.m. EDT.
+    - cron: "0 21 * * *"
+
+permissions:
+  actions: read
+
+env:
+  CANONICAL_GITHUB_REPOSITORY: ${{ vars.CANONICAL_GITHUB_REPOSITORY }}
+  CANONICAL_GITHUB_REPOSITORY_ID: ${{ vars.CANONICAL_GITHUB_REPOSITORY_ID }}
+  VITE_CANONICAL_GITHUB_REPOSITORY: ${{ vars.CANONICAL_GITHUB_REPOSITORY }}
+  CMS_DEPLOY_OWNER: ${{ vars.CMS_DEPLOY_OWNER }}
+  SCHEDULE_BAKE_APP_SLUG: ${{ vars.SCHEDULE_BAKE_APP_SLUG }}
+
+jobs:
+  bake:
+    permissions:
+      contents: read
+      actions: read
+    # This environment must allow only the main branch. Keep the App private
+    # key here, with no repository-level copy.
+    environment: schedule-bake
+    # Manual recovery uses the reviewed main workflow and source only.
+    if: >-
+      vars.CANONICAL_GITHUB_REPOSITORY != '' && vars.CANONICAL_GITHUB_REPOSITORY_ID != '' && vars.SCHEDULE_BAKE_APP_SLUG != '' &&
+      github.repository == vars.CANONICAL_GITHUB_REPOSITORY && github.repository_id == vars.CANONICAL_GITHUB_REPOSITORY_ID &&
+      github.workflow_ref == format('{0}/.github/workflows/schedule-bake.yml@refs/heads/main', vars.CANONICAL_GITHUB_REPOSITORY) &&
+      github.ref == 'refs/heads/main' && (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch')
+    # Apply admission before concurrency: rejected dispatches cannot replace a
+    # waiting bake. Valid scheduled/manual jobs still share the same group.
+    concurrency:
+      group: schedule-bake
+      cancel-in-progress: false
+    runs-on: ubuntu-24.04
+    # Finish when schedule validation and the PR update complete. CI and merge
+    # continue through workflow_run without holding the bake runner or writer
+    # group. A pending CI run leaves this bake successful for freshness checks.
+    timeout-minutes: 64 # Runaway guard: 3x max 21m15s (14d, 2026-10-26; #2657).
+    env:
+      # Job scope exposes only whether Healthchecks is configured, so the two
+      # report steps' `if:` guards can read it. The ping URL itself is a secret
+      # and is bound only on those two steps, never to checkout, setup-node, or
+      # npm ci (whose third-party install scripts run with the job environment).
+      HEALTHCHECKS_CONFIGURED: ${{ secrets.HEALTHCHECKS_SCHEDULE_BAKE != '' }}
+    steps:
+      - name: Create Healthchecks run ID
+        shell: bash
+        run: echo "HEALTHCHECKS_RUN_ID=$(cat /proc/sys/kernel/random/uuid)" >> "$GITHUB_ENV"
+      # Warn when the optional heartbeat integration is not configured.
+      - name: Warn when the Healthchecks heartbeat is unarmed
+        if: env.HEALTHCHECKS_CONFIGURED != 'true'
+        shell: bash
+        run: >-
+          echo "::warning title=Schedule bake heartbeat is not armed::HEALTHCHECKS_SCHEDULE_BAKE is unset.
+          Set the secret to the heartbeat ping URL."
+
+      - name: Report start to Healthchecks
+        if: env.HEALTHCHECKS_CONFIGURED == 'true'
+        continue-on-error: true
+        shell: bash
+        env:
+          HEALTHCHECKS_URL: ${{ secrets.HEALTHCHECKS_SCHEDULE_BAKE }}
+        run: |
+          test -n "$HEALTHCHECKS_URL"
+          curl -fsS -m 10 --retry 5 -o /dev/null \
+            "${HEALTHCHECKS_URL}/start?rid=${HEALTHCHECKS_RUN_ID}"
+
+      - name: Check schedule bake app credentials
+        shell: bash
+        env:
+          APP_CLIENT_ID: ${{ vars.SCHEDULE_BAKE_APP_CLIENT_ID }}
+          APP_PRIVATE_KEY: ${{ secrets.SCHEDULE_BAKE_APP_PRIVATE_KEY }}
+        run: |
+          if [ -z "$APP_CLIENT_ID" ] || [ -z "$APP_PRIVATE_KEY" ] || [ -z "$SCHEDULE_BAKE_APP_SLUG" ]; then
+            echo "::error title=Schedule bake app credentials are missing::Set SCHEDULE_BAKE_APP_CLIENT_ID, SCHEDULE_BAKE_APP_PRIVATE_KEY and SCHEDULE_BAKE_APP_SLUG."
+            exit 1
+          fi
+
+      - uses: actions/checkout@v7
+        with:
+          ref: main
+          fetch-depth: 0
+          persist-credentials: false
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: site/package-lock.json
+
+      - name: Install site deps
+        working-directory: site
+        run: npm ci --ignore-scripts
+
+      # The dependency-free bootstrap runs before package lifecycle hooks and
+      # before the bake executes scanned source (issue #607).
+      - name: Metered-API source scan (before any scanned code runs)
+        working-directory: site
+        run: node ../.github/scripts/metered-api-scan.mjs
+
+      - name: Bake schedule
+        working-directory: site
+        env:
+          REQUIRE_FRESH_CONTENT: "1"
+        run: npm run sync:schedule
+
+      - name: Commit changed schedule
+        id: commit
+        shell: bash
+        run: |
+          if git diff --quiet -- site/src/data/schedule.json; then
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add site/src/data/schedule.json
+          git commit -m "chore: refresh baked schedule before its window expires"
+
+          echo "changed=true" >> "$GITHUB_OUTPUT"
+
+      - name: Create schedule bake app token
+        if: steps.commit.outputs.changed == 'true'
+        id: app-token
+        uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3.3.0
+        with:
+          client-id: ${{ vars.SCHEDULE_BAKE_APP_CLIENT_ID }}
+          private-key: ${{ secrets.SCHEDULE_BAKE_APP_PRIVATE_KEY }}
+          permission-contents: write
+          permission-pull-requests: write
+
+      - name: Push schedule update
+        if: steps.commit.outputs.changed == 'true'
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+        run: |
+          # This machine-owned branch is rebuilt from the latest main. Supply
+          # credentials only to the push, without persisting the writer token.
+          git -c credential.helper= -c 'credential.helper=!gh auth git-credential' \
+            push --force origin HEAD:refs/heads/automation/schedule-bake
+
+      - name: Open schedule update pull request
+        id: pull_request
+        if: steps.commit.outputs.changed == 'true'
+        shell: bash
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+        run: |
+          set -euo pipefail
+
+          pr_number=$(gh pr list \
+            --repo "$GITHUB_REPOSITORY" \
+            --head automation/schedule-bake \
+            --base main \
+            --state open \
+            --json number \
+            --jq '.[0].number // empty')
+
+          if [ -z "$pr_number" ]; then
+            gh pr create \
+              --repo "$GITHUB_REPOSITORY" \
+              --head automation/schedule-bake \
+              --base main \
+              --title "Refresh the baked schedule" \
+              --body "Refreshes the committed fourteen-day schedule window from the twice-daily bake."
+
+            pr_number=$(gh pr list \
+              --repo "$GITHUB_REPOSITORY" \
+              --head automation/schedule-bake \
+              --base main \
+              --state open \
+              --json number \
+              --jq '.[0].number // empty')
+          fi
+
+          test -n "$pr_number"
+          head_sha=$(git rev-parse HEAD)
+          pr_head_sha=""
+          # The PR API can briefly report the old head after the branch push.
+          for _attempt in {1..30}; do
+            pr_head_sha=$(gh pr view "$pr_number" \
+              --repo "$GITHUB_REPOSITORY" \
+              --json headRefOid \
+              --jq '.headRefOid')
+            if [ "$pr_head_sha" = "$head_sha" ]; then
+              break
+            fi
+            sleep 2
+          done
+          if [ "$pr_head_sha" != "$head_sha" ]; then
+            echo "::error::Schedule PR $pr_number head did not converge: expected $head_sha, observed ${pr_head_sha:-missing}." >&2
+            exit 1
+          fi
+
+          printf 'number=%s\nhead_sha=%s\n' "$pr_number" "$head_sha" >> "$GITHUB_OUTPUT"
+
+      # Confirm event creation only; do not wait for CI to finish. Missing CI
+      # and API errors must still fail the bake and its Healthchecks result.
+      - name: Confirm schedule CI run exists
+        if: steps.commit.outputs.changed == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          HEAD_SHA: ${{ steps.pull_request.outputs.head_sha }}
+        run: |
+          set -euo pipefail
+          timeout 60s bash -euo pipefail <<'DISCOVERY'
+          for attempt in {1..5}; do
+            run_id=$(gh run list --repo "$GITHUB_REPOSITORY" --workflow ci.yml \
+              --branch automation/schedule-bake --event pull_request --limit 20 \
+              --json databaseId,headSha \
+              --jq '[.[] | select(.headSha == env.HEAD_SHA)][0].databaseId // empty')
+            if [ -n "$run_id" ]; then exit 0; fi
+            if [ "$attempt" -lt 5 ]; then sleep 12; fi
+          done
+          echo "::error::No CI run found for schedule head $HEAD_SHA." >&2
+          exit 1
+          DISCOVERY
+
+      # The app-created PR starts CI through its normal pull_request event.
+      # Successful exact-head CI admits the separate deferred writer below.
+      - name: Report deferred schedule merge
+        if: steps.commit.outputs.changed == 'true'
+        env:
+          PR_NUMBER: ${{ steps.pull_request.outputs.number }}
+        run: |
+          printf 'Schedule PR #%s awaits CI; a successful exact-head CI completion triggers the deferred merge.\n' "$PR_NUMBER" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Report result to Healthchecks
+        if: always() && env.HEALTHCHECKS_CONFIGURED == 'true'
+        shell: bash
+        env:
+          HEALTHCHECKS_URL: ${{ secrets.HEALTHCHECKS_SCHEDULE_BAKE }}
+          JOB_STATUS: ${{ job.status }}
+        run: |
+          test -n "$HEALTHCHECKS_URL"
+
+          if [ "$JOB_STATUS" = "success" ]; then
+            endpoint="${HEALTHCHECKS_URL}?rid=${HEALTHCHECKS_RUN_ID}"
+          else
+            endpoint="${HEALTHCHECKS_URL}/fail?rid=${HEALTHCHECKS_RUN_ID}"
+          fi
+
+          curl -fsS -m 10 --retry 5 -o /dev/null "$endpoint"
+
+  deferred-admission:
+    # Reject unrelated/fork events before entering the shared writer group.
+    if: >-
+      github.event_name == 'workflow_run' &&
+      (vars.CANONICAL_GITHUB_REPOSITORY != '' && vars.CANONICAL_GITHUB_REPOSITORY_ID != '' && vars.SCHEDULE_BAKE_APP_SLUG != '' && github.repository == vars.CANONICAL_GITHUB_REPOSITORY && github.repository_id == vars.CANONICAL_GITHUB_REPOSITORY_ID) &&
+      github.ref == 'refs/heads/main' &&
+      (vars.CANONICAL_GITHUB_REPOSITORY != '' && vars.CANONICAL_GITHUB_REPOSITORY_ID != '' && github.repository_id == vars.CANONICAL_GITHUB_REPOSITORY_ID && github.workflow_ref == format('{0}/.github/workflows/schedule-bake.yml@refs/heads/main', vars.CANONICAL_GITHUB_REPOSITORY)) &&
+      github.event.workflow_run.event == 'pull_request' &&
+      github.event.workflow_run.conclusion == 'success' &&
+      github.event.workflow_run.head_branch == 'automation/schedule-bake' &&
+      github.event.workflow_run.head_repository.full_name == github.repository
+    permissions:
+      contents: read
+      actions: read
+      pull-requests: read
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15 # Runaway guard: 3x max 4m56s (14d, 2026-10-26; #2657).
+    environment: schedule-bake
+    env:
+      HEALTHCHECKS_CONFIGURED: ${{ secrets.HEALTHCHECKS_SCHEDULE_BAKE != '' }}
+    outputs:
+      number: ${{ steps.admission.outputs.number }}
+      head_sha: ${{ steps.admission.outputs.head_sha }}
+    steps:
+      # Execute only reviewed main source; no artifacts or code from the CI run.
+      - uses: actions/checkout@v7
+        with:
+          ref: main
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Admit the exact schedule CI completion
+        id: admission
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RUN_ID: ${{ github.event.workflow_run.id }}
+        run: bash .github/scripts/admit-schedule-ci.sh
+
+      - name: Report schedule admission failure to Healthchecks
+        if: >-
+          failure() && env.HEALTHCHECKS_CONFIGURED == 'true' &&
+          vars.SCHEDULE_BAKE_APP_SLUG != '' &&
+          ((vars.CMS_DEPLOY_OWNER != '' && github.triggering_actor == vars.CMS_DEPLOY_OWNER) || github.triggering_actor == format('{0}[bot]', vars.SCHEDULE_BAKE_APP_SLUG))
+        env:
+          HEALTHCHECKS_URL: ${{ secrets.HEALTHCHECKS_SCHEDULE_BAKE }}
+        run: |
+          test -n "$HEALTHCHECKS_URL"
+          curl -fsS -m 10 --retry 5 -o /dev/null "${HEALTHCHECKS_URL}/fail"
+
+  # No runner starts for a scheduled bake or successful CI completion.
+  # One short read-only job preserves failure alerts for Healthchecks-only setups.
+  ci-failure-alert:
+    if: >-
+      github.event_name == 'workflow_run' &&
+      (vars.CANONICAL_GITHUB_REPOSITORY != '' && vars.CANONICAL_GITHUB_REPOSITORY_ID != '' && vars.SCHEDULE_BAKE_APP_SLUG != '' && github.repository == vars.CANONICAL_GITHUB_REPOSITORY && github.repository_id == vars.CANONICAL_GITHUB_REPOSITORY_ID) &&
+      github.ref == 'refs/heads/main' &&
+      (vars.CANONICAL_GITHUB_REPOSITORY != '' && vars.CANONICAL_GITHUB_REPOSITORY_ID != '' && github.repository_id == vars.CANONICAL_GITHUB_REPOSITORY_ID && github.workflow_ref == format('{0}/.github/workflows/schedule-bake.yml@refs/heads/main', vars.CANONICAL_GITHUB_REPOSITORY)) &&
+      ((vars.CMS_DEPLOY_OWNER != '' && github.triggering_actor == vars.CMS_DEPLOY_OWNER) || github.triggering_actor == format('{0}[bot]', vars.SCHEDULE_BAKE_APP_SLUG)) &&
+      github.event.workflow_run.event == 'pull_request' &&
+      (github.event.workflow_run.conclusion == 'failure' ||
+       github.event.workflow_run.conclusion == 'cancelled' ||
+       github.event.workflow_run.conclusion == 'timed_out' ||
+       github.event.workflow_run.conclusion == 'action_required' ||
+       github.event.workflow_run.conclusion == 'startup_failure' ||
+       github.event.workflow_run.conclusion == 'stale') &&
+      github.event.workflow_run.head_branch == 'automation/schedule-bake' &&
+      github.event.workflow_run.head_repository.full_name == github.repository
+    environment: schedule-bake
+    permissions:
+      contents: read
+      actions: read
+      pull-requests: read
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    env:
+      HEALTHCHECKS_CONFIGURED: ${{ secrets.HEALTHCHECKS_SCHEDULE_BAKE != '' }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: main
+          persist-credentials: false
+      - name: Admit the current failed schedule CI completion
+        id: admission
+        if: env.HEALTHCHECKS_CONFIGURED == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RUN_ID: ${{ github.event.workflow_run.id }}
+        run: bash .github/scripts/admit-schedule-ci.sh failure
+      - name: Report schedule CI failure to Healthchecks
+        if: (steps.admission.outputs.number != '' || failure()) && env.HEALTHCHECKS_CONFIGURED == 'true'
+        env:
+          HEALTHCHECKS_URL: ${{ secrets.HEALTHCHECKS_SCHEDULE_BAKE }}
+        run: |
+          test -n "$HEALTHCHECKS_URL"
+          curl -fsS -m 10 --retry 5 -o /dev/null "${HEALTHCHECKS_URL}/fail"
+
+  deferred-merge:
+    # This environment must allow only the main branch. Keep the App private
+    # key here, with no repository-level copy.
+    environment: schedule-bake
+    needs: deferred-admission
+    # Live admission rejects stale/closed completions before writer concurrency.
+    if: needs.deferred-admission.outputs.number != ''
+    concurrency:
+      group: schedule-bake
+      cancel-in-progress: false
+    permissions:
+      contents: read
+      actions: read
+      pull-requests: read
+    runs-on: ubuntu-24.04
+    timeout-minutes: 51 # Runaway guard: 3x max 16m45s (14d, 2026-10-26; #2657).
+    env:
+      HEALTHCHECKS_CONFIGURED: ${{ secrets.HEALTHCHECKS_SCHEDULE_BAKE != '' }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: main
+          fetch-depth: 0
+          persist-credentials: false
+
+      # The admitted PR may close or change head while this writer queues.
+      - name: Recheck schedule CI completion inside writer concurrency
+        id: admission
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RUN_ID: ${{ github.event.workflow_run.id }}
+        run: bash .github/scripts/admit-schedule-ci.sh
+
+      - name: Create schedule bake app token
+        id: app-token
+        if: steps.admission.outputs.number != ''
+        uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3.3.0
+        with:
+          client-id: ${{ vars.SCHEDULE_BAKE_APP_CLIENT_ID }}
+          private-key: ${{ secrets.SCHEDULE_BAKE_APP_PRIVATE_KEY }}
+          permission-contents: write
+          permission-pull-requests: write
+
+      - name: Configure authenticated origin for leased rebases
+        if: steps.admission.outputs.number != ''
+        uses: actions/checkout@v7
+        with:
+          ref: main
+          fetch-depth: 0
+          token: ${{ steps.app-token.outputs.token }}
+          persist-credentials: true
+
+      - name: Set schedule bot identity for rebases
+        if: steps.admission.outputs.number != ''
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+      - name: Merge the verified deferred schedule-only update
+        if: steps.admission.outputs.number != ''
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+          ACTIONS_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ steps.admission.outputs.number }}
+          HEAD_SHA: ${{ steps.admission.outputs.head_sha }}
+        run: |
+          export CI_WAIT_DEADLINE=$(( $(date +%s) + 20 * 60 ))
+          bash .github/scripts/merge-schedule-pr.sh
+
+      - name: Report deferred merge failure to Healthchecks
+        if: >-
+          failure() && env.HEALTHCHECKS_CONFIGURED == 'true' &&
+          vars.SCHEDULE_BAKE_APP_SLUG != '' &&
+          ((vars.CMS_DEPLOY_OWNER != '' && github.triggering_actor == vars.CMS_DEPLOY_OWNER) || github.triggering_actor == format('{0}[bot]', vars.SCHEDULE_BAKE_APP_SLUG))
+        env:
+          HEALTHCHECKS_URL: ${{ secrets.HEALTHCHECKS_SCHEDULE_BAKE }}
+        run: |
+          test -n "$HEALTHCHECKS_URL"
+          curl -fsS -m 10 --retry 5 -o /dev/null "${HEALTHCHECKS_URL}/fail"

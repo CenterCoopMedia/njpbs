@@ -1,0 +1,18 @@
+.component-phone-viewport { width: 320px; max-width: 100%; min-width: 0; margin: auto; }
+.component-phone-screen { overflow: hidden; margin-inline: auto; border-radius: var(--radius-surface); background: var(--color-surface); }
+.component-phone-size { display: grid; gap: var(--space-1); margin-block: var(--space-3); font-size: var(--font-size-sm); font-weight: 700; }
+.component-phone-size .field-control { width: 100%; min-width: 0; }
+.component-phone-scale { margin: var(--space-2) 0 0; color: var(--color-text-muted); font-size: var(--font-size-xs); text-align: center; }
+.component-phone-screen .home-preview-frame { background: var(--color-surface); }
+.component-phone-preview { min-width: 0; padding: var(--space-3); border: var(--border-width) solid var(--color-border-strong); border-radius: var(--radius-surface); background: var(--color-surface); color: var(--color-ink); box-shadow: var(--shadow-surface); }
+.component-phone-preview-header { display: flex; align-items: center; gap: var(--space-1); margin-bottom: var(--space-2); }
+.component-phone-preview-header strong { flex: 1; font-size: var(--font-size-sm); }
+.component-phone-preview-header .button { flex: none; min-width: 44px; min-height: 44px; padding: var(--space-2); }
+.component-phone-preview-move { cursor: move; touch-action: none; }
+.component-phone-preview[data-collapsed] .component-phone-preview-header { margin-bottom: 0; }
+.component-phone-preview[hidden] { display: none; }
+.component-phone-viewport { padding-block: var(--space-2); }
+.component-phone-screen {
+  border-radius: calc(var(--radius-surface) * 3);
+  box-shadow: 0 0 0 var(--space-2) var(--color-sidebar);
+}

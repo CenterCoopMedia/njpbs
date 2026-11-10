@@ -1,0 +1,852 @@
+{
+  "AWSTemplateFormatVersion": "2010-09-09",
+  "Description": "Private NJ PBS archive and video object storage in Ohio, with versioning, encryption, HTTPS-only access, and retained data.",
+  "Metadata": {
+    "AWSToolsMetrics": {
+      "AWSAgentToolkit": "aws-cloudformation@2"
+    },
+    "com.aws.cloudformation.Context": {
+      "why": "Separate original source copies, working restore files, and video originals. Versioning is not immutable retention.",
+      "must": [
+        {
+          "Fn::Sub": "Deploy only to account ${AWS::AccountId} in us-east-2."
+        },
+        "Capacity planning does not reserve storage or set quotas.",
+        "Uploads use S3 Standard; nonempty originals transition to Intelligent-Tiering with only automatic instant tiers. Only the reviewed video batch may transition to Deep Archive. Retain completed versions; no optional Intelligent-Tiering archive tiers, object expiration, public distribution, or transcoding.",
+        "Versioning retains prior versions and increases billed storage; budgets are managed separately.",
+        "Deploy and verify the separate replica stack before this source update. Keep replication enabled, disable delete-marker propagation, and retain every replica version."
+      ],
+      "arch": "Ohio originals replicate to separate per-source Oregon Deep Archive buckets. Video originals with the one-time retention batch tag also transition in place in Ohio; other originals keep their instant-access lifecycle.",
+      "ref": []
+    }
+  },
+  "Parameters": {
+    "MasterReplicaRegion": {
+      "Type": "String",
+      "AllowedValues": [
+        "us-west-2"
+      ],
+      "Default": "us-west-2",
+      "Description": "Region of the separately deployed master replica buckets."
+    }
+  },
+  "Resources": {
+    "ArchiveOriginalsBucket": {
+      "Type": "AWS::S3::Bucket",
+      "DeletionPolicy": "Retain",
+      "UpdateReplacePolicy": "Retain",
+      "Metadata": {
+        "com.aws.cloudformation.Context": {
+          "why": "Preserve source archive copies.",
+          "must": [
+            "Private, SSE-S3, versioned, ACLs disabled, HTTPS only.",
+            "Retain bucket and all completed object versions; abort only incomplete uploads after 7 days.",
+            "Permit browser reads only from https://admin.njpbs.org; CORS does not grant S3 access.",
+            "Transition all nonempty current originals at day 0 and noncurrent versions after 30 noncurrent days to Intelligent-Tiering; retain every completed version. Use only the three automatic instant tiers; do not enable optional Archive Access or Deep Archive Access before the CMS restore feature.",
+            "Copy every key to its matching cross-region Deep Archive bucket; do not replicate delete markers or remove source versions.",
+            "Preserve the existing per-bucket EventTime-partitioned access logging; logging target is managed outside this stack."
+          ]
+        }
+      },
+      "Properties": {
+        "BucketName": {
+          "Fn::Sub": "njpbs-archive-originals-${AWS::AccountId}-${AWS::Region}"
+        },
+        "CorsConfiguration": {
+          "CorsRules": [
+            {
+              "AllowedHeaders": [
+                "range"
+              ],
+              "AllowedMethods": [
+                "GET",
+                "HEAD"
+              ],
+              "AllowedOrigins": [
+                "https://admin.njpbs.org"
+              ],
+              "ExposedHeaders": [
+                "accept-ranges",
+                "content-length",
+                "content-range",
+                "etag",
+                "x-amz-checksum-sha256",
+                "x-amz-version-id"
+              ],
+              "MaxAge": 300
+            }
+          ]
+        },
+        "BucketEncryption": {
+          "ServerSideEncryptionConfiguration": [
+            {
+              "ServerSideEncryptionByDefault": {
+                "SSEAlgorithm": "AES256"
+              }
+            }
+          ]
+        },
+        "VersioningConfiguration": {
+          "Status": "Enabled"
+        },
+        "OwnershipControls": {
+          "Rules": [
+            {
+              "ObjectOwnership": "BucketOwnerEnforced"
+            }
+          ]
+        },
+        "PublicAccessBlockConfiguration": {
+          "BlockPublicAcls": true,
+          "BlockPublicPolicy": true,
+          "IgnorePublicAcls": true,
+          "RestrictPublicBuckets": true
+        },
+        "LifecycleConfiguration": {
+          "Rules": [
+            {
+              "Id": "AbortIncompleteMultipartUploads",
+              "Status": "Enabled",
+              "AbortIncompleteMultipartUpload": {
+                "DaysAfterInitiation": 7
+              }
+            },
+            {
+              "Id": "TransitionOriginalsToIntelligentTiering",
+              "Status": "Enabled",
+              "ObjectSizeGreaterThan": "0",
+              "Transitions": [
+                {
+                  "TransitionInDays": 0,
+                  "StorageClass": "INTELLIGENT_TIERING"
+                }
+              ],
+              "NoncurrentVersionTransitions": [
+                {
+                  "TransitionInDays": 30,
+                  "StorageClass": "INTELLIGENT_TIERING"
+                }
+              ]
+            }
+          ],
+          "TransitionDefaultMinimumObjectSize": "all_storage_classes_128K"
+        },
+        "Tags": [
+          {
+            "Key": "Project",
+            "Value": "njpbs"
+          },
+          {
+            "Key": "Purpose",
+            "Value": "archive-originals"
+          }
+        ],
+        "ReplicationConfiguration": {
+          "Role": {
+            "Fn::GetAtt": [
+              "MasterReplicationRole",
+              "Arn"
+            ]
+          },
+          "Rules": [
+            {
+              "Id": "CopyMastersToDeepArchive",
+              "Priority": 1,
+              "Status": "Enabled",
+              "Filter": {
+                "Prefix": ""
+              },
+              "DeleteMarkerReplication": {
+                "Status": "Disabled"
+              },
+              "Destination": {
+                "Bucket": {
+                  "Fn::Sub": "arn:${AWS::Partition}:s3:::njpbs-archive-originals-replica-${AWS::AccountId}-${MasterReplicaRegion}"
+                },
+                "StorageClass": "DEEP_ARCHIVE"
+              }
+            }
+          ]
+        },
+        "LoggingConfiguration": {
+          "DestinationBucketName": {
+            "Fn::Sub": "njpbs-s3-access-logs-${AWS::AccountId}-${AWS::Region}"
+          },
+          "LogFilePrefix": "njpbs-archive-originals/",
+          "TargetObjectKeyFormat": {
+            "PartitionedPrefix": {
+              "PartitionDateSource": "EventTime"
+            }
+          }
+        }
+      }
+    },
+    "ArchiveOriginalsPolicy": {
+      "Type": "AWS::S3::BucketPolicy",
+      "DeletionPolicy": "Retain",
+      "UpdateReplacePolicy": "Retain",
+      "Metadata": {
+        "com.aws.cloudformation.Context": {
+          "why": "Keep HTTPS enforcement attached even if the stack is deleted.",
+          "must": [
+            "Deny insecure transport for bucket and objects; grant no public access."
+          ]
+        }
+      },
+      "Properties": {
+        "Bucket": {
+          "Ref": "ArchiveOriginalsBucket"
+        },
+        "PolicyDocument": {
+          "Version": "2012-10-17",
+          "Statement": [
+            {
+              "Sid": "DenyInsecureTransport",
+              "Effect": "Deny",
+              "Principal": "*",
+              "Action": "s3:*",
+              "Resource": [
+                {
+                  "Fn::GetAtt": [
+                    "ArchiveOriginalsBucket",
+                    "Arn"
+                  ]
+                },
+                {
+                  "Fn::Sub": "${ArchiveOriginalsBucket.Arn}/*"
+                }
+              ],
+              "Condition": {
+                "Bool": {
+                  "aws:SecureTransport": "false"
+                }
+              }
+            }
+          ]
+        }
+      }
+    },
+    "ArchiveWorkingBucket": {
+      "Type": "AWS::S3::Bucket",
+      "DeletionPolicy": "Retain",
+      "UpdateReplacePolicy": "Retain",
+      "Metadata": {
+        "com.aws.cloudformation.Context": {
+          "why": "Store active archive work.",
+          "must": [
+            "Private, SSE-S3, versioned, ACLs disabled, HTTPS only.",
+            "Retain bucket and all completed object versions; abort only incomplete uploads after 7 days.",
+            "Permit Boardwalk reads and multipart PUT requests only from https://admin.njpbs.org; CORS does not grant S3 access.",
+            "Preserve the existing per-bucket EventTime-partitioned access logging; logging target is managed outside this stack."
+          ]
+        }
+      },
+      "Properties": {
+        "BucketName": {
+          "Fn::Sub": "njpbs-archive-working-${AWS::AccountId}-${AWS::Region}"
+        },
+        "CorsConfiguration": {
+          "CorsRules": [
+            {
+              "AllowedHeaders": [
+                "content-type",
+                "range",
+                "x-amz-checksum-sha256",
+                "x-amz-content-sha256"
+              ],
+              "AllowedMethods": [
+                "GET",
+                "HEAD",
+                "PUT"
+              ],
+              "AllowedOrigins": [
+                "https://admin.njpbs.org"
+              ],
+              "ExposedHeaders": [
+                "accept-ranges",
+                "content-length",
+                "content-range",
+                "etag",
+                "x-amz-checksum-sha256",
+                "x-amz-version-id"
+              ],
+              "MaxAge": 300
+            }
+          ]
+        },
+        "BucketEncryption": {
+          "ServerSideEncryptionConfiguration": [
+            {
+              "ServerSideEncryptionByDefault": {
+                "SSEAlgorithm": "AES256"
+              }
+            }
+          ]
+        },
+        "VersioningConfiguration": {
+          "Status": "Enabled"
+        },
+        "OwnershipControls": {
+          "Rules": [
+            {
+              "ObjectOwnership": "BucketOwnerEnforced"
+            }
+          ]
+        },
+        "PublicAccessBlockConfiguration": {
+          "BlockPublicAcls": true,
+          "BlockPublicPolicy": true,
+          "IgnorePublicAcls": true,
+          "RestrictPublicBuckets": true
+        },
+        "LifecycleConfiguration": {
+          "Rules": [
+            {
+              "Id": "AbortIncompleteMultipartUploads",
+              "Status": "Enabled",
+              "AbortIncompleteMultipartUpload": {
+                "DaysAfterInitiation": 7
+              }
+            }
+          ]
+        },
+        "Tags": [
+          {
+            "Key": "Project",
+            "Value": "njpbs"
+          },
+          {
+            "Key": "Purpose",
+            "Value": "archive-working"
+          }
+        ],
+        "LoggingConfiguration": {
+          "DestinationBucketName": {
+            "Fn::Sub": "njpbs-s3-access-logs-${AWS::AccountId}-${AWS::Region}"
+          },
+          "LogFilePrefix": "njpbs-archive-working/",
+          "TargetObjectKeyFormat": {
+            "PartitionedPrefix": {
+              "PartitionDateSource": "EventTime"
+            }
+          }
+        }
+      }
+    },
+    "ArchiveWorkingPolicy": {
+      "Type": "AWS::S3::BucketPolicy",
+      "DeletionPolicy": "Retain",
+      "UpdateReplacePolicy": "Retain",
+      "Metadata": {
+        "com.aws.cloudformation.Context": {
+          "why": "Keep HTTPS enforcement attached even if the stack is deleted.",
+          "must": [
+            "Deny insecure transport for bucket and objects; grant no public access."
+          ]
+        }
+      },
+      "Properties": {
+        "Bucket": {
+          "Ref": "ArchiveWorkingBucket"
+        },
+        "PolicyDocument": {
+          "Version": "2012-10-17",
+          "Statement": [
+            {
+              "Sid": "DenyInsecureTransport",
+              "Effect": "Deny",
+              "Principal": "*",
+              "Action": "s3:*",
+              "Resource": [
+                {
+                  "Fn::GetAtt": [
+                    "ArchiveWorkingBucket",
+                    "Arn"
+                  ]
+                },
+                {
+                  "Fn::Sub": "${ArchiveWorkingBucket.Arn}/*"
+                }
+              ],
+              "Condition": {
+                "Bool": {
+                  "aws:SecureTransport": "false"
+                }
+              }
+            }
+          ]
+        }
+      }
+    },
+    "VideoOriginalsBucket": {
+      "Type": "AWS::S3::Bucket",
+      "DeletionPolicy": "Retain",
+      "UpdateReplacePolicy": "Retain",
+      "Metadata": {
+        "com.aws.cloudformation.Context": {
+          "why": "Retain video originals and archive only the reviewed retention batch. Capacity planning does not reserve storage.",
+          "must": [
+            "Private, SSE-S3, versioned, ACLs disabled, HTTPS only.",
+            "Retain bucket and all completed object versions; abort only incomplete uploads after 7 days.",
+            "Permit Boardwalk reads and multipart PUT requests only from https://admin.njpbs.org; CORS does not grant S3 access.",
+            "Keep day-0 current and day-30 noncurrent Intelligent-Tiering transitions. Only current objects/ versions tagged ops-retention-batch=2026-11-05-a may transition to Deep Archive after 21 days. Remove the one-time rule after batch reconciliation; retain all completed versions.",
+            "Copy every key to its matching cross-region Deep Archive bucket; do not replicate delete markers or remove source versions.",
+            "Preserve the existing per-bucket EventTime-partitioned access logging; logging target is managed outside this stack."
+          ]
+        }
+      },
+      "Properties": {
+        "BucketName": {
+          "Fn::Sub": "njpbs-video-originals-${AWS::AccountId}-${AWS::Region}"
+        },
+        "CorsConfiguration": {
+          "CorsRules": [
+            {
+              "AllowedHeaders": [
+                "content-type",
+                "range",
+                "x-amz-checksum-sha256",
+                "x-amz-content-sha256"
+              ],
+              "AllowedMethods": [
+                "GET",
+                "HEAD",
+                "PUT"
+              ],
+              "AllowedOrigins": [
+                "https://admin.njpbs.org"
+              ],
+              "ExposedHeaders": [
+                "accept-ranges",
+                "content-length",
+                "content-range",
+                "etag",
+                "x-amz-checksum-sha256",
+                "x-amz-version-id"
+              ],
+              "MaxAge": 300
+            }
+          ]
+        },
+        "BucketEncryption": {
+          "ServerSideEncryptionConfiguration": [
+            {
+              "ServerSideEncryptionByDefault": {
+                "SSEAlgorithm": "AES256"
+              }
+            }
+          ]
+        },
+        "VersioningConfiguration": {
+          "Status": "Enabled"
+        },
+        "OwnershipControls": {
+          "Rules": [
+            {
+              "ObjectOwnership": "BucketOwnerEnforced"
+            }
+          ]
+        },
+        "PublicAccessBlockConfiguration": {
+          "BlockPublicAcls": true,
+          "BlockPublicPolicy": true,
+          "IgnorePublicAcls": true,
+          "RestrictPublicBuckets": true
+        },
+        "LifecycleConfiguration": {
+          "Rules": [
+            {
+              "Id": "AbortIncompleteMultipartUploads",
+              "Status": "Enabled",
+              "AbortIncompleteMultipartUpload": {
+                "DaysAfterInitiation": 7
+              }
+            },
+            {
+              "Id": "TransitionOriginalsToIntelligentTiering",
+              "Status": "Enabled",
+              "ObjectSizeGreaterThan": "0",
+              "Transitions": [
+                {
+                  "TransitionInDays": 0,
+                  "StorageClass": "INTELLIGENT_TIERING"
+                }
+              ],
+              "NoncurrentVersionTransitions": [
+                {
+                  "TransitionInDays": 30,
+                  "StorageClass": "INTELLIGENT_TIERING"
+                }
+              ]
+            },
+            {
+              "Id": "ArchiveRetentionBatch20261105A",
+              "Status": "Enabled",
+              "Prefix": "objects/",
+              "TagFilters": [
+                {
+                  "Key": "ops-retention-batch",
+                  "Value": "2026-11-05-a"
+                }
+              ],
+              "Transitions": [
+                {
+                  "TransitionInDays": 21,
+                  "StorageClass": "DEEP_ARCHIVE"
+                }
+              ]
+            }
+          ],
+          "TransitionDefaultMinimumObjectSize": "all_storage_classes_128K"
+        },
+        "Tags": [
+          {
+            "Key": "Project",
+            "Value": "njpbs"
+          },
+          {
+            "Key": "Purpose",
+            "Value": "video-originals"
+          }
+        ],
+        "ReplicationConfiguration": {
+          "Role": {
+            "Fn::GetAtt": [
+              "MasterReplicationRole",
+              "Arn"
+            ]
+          },
+          "Rules": [
+            {
+              "Id": "CopyMastersToDeepArchive",
+              "Priority": 1,
+              "Status": "Enabled",
+              "Filter": {
+                "Prefix": ""
+              },
+              "DeleteMarkerReplication": {
+                "Status": "Disabled"
+              },
+              "Destination": {
+                "Bucket": {
+                  "Fn::Sub": "arn:${AWS::Partition}:s3:::njpbs-video-originals-replica-${AWS::AccountId}-${MasterReplicaRegion}"
+                },
+                "StorageClass": "DEEP_ARCHIVE"
+              }
+            }
+          ]
+        },
+        "LoggingConfiguration": {
+          "DestinationBucketName": {
+            "Fn::Sub": "njpbs-s3-access-logs-${AWS::AccountId}-${AWS::Region}"
+          },
+          "LogFilePrefix": "njpbs-video-originals/",
+          "TargetObjectKeyFormat": {
+            "PartitionedPrefix": {
+              "PartitionDateSource": "EventTime"
+            }
+          }
+        }
+      }
+    },
+    "VideoOriginalsPolicy": {
+      "Type": "AWS::S3::BucketPolicy",
+      "DeletionPolicy": "Retain",
+      "UpdateReplacePolicy": "Retain",
+      "Metadata": {
+        "com.aws.cloudformation.Context": {
+          "why": "Keep HTTPS enforcement attached even if the stack is deleted.",
+          "must": [
+            "Deny insecure transport for bucket and objects; grant no public access."
+          ]
+        }
+      },
+      "Properties": {
+        "Bucket": {
+          "Ref": "VideoOriginalsBucket"
+        },
+        "PolicyDocument": {
+          "Version": "2012-10-17",
+          "Statement": [
+            {
+              "Sid": "DenyInsecureTransport",
+              "Effect": "Deny",
+              "Principal": "*",
+              "Action": "s3:*",
+              "Resource": [
+                {
+                  "Fn::GetAtt": [
+                    "VideoOriginalsBucket",
+                    "Arn"
+                  ]
+                },
+                {
+                  "Fn::Sub": "${VideoOriginalsBucket.Arn}/*"
+                }
+              ],
+              "Condition": {
+                "Bool": {
+                  "aws:SecureTransport": "false"
+                }
+              }
+            }
+          ]
+        }
+      }
+    },
+    "MasterReplicationRole": {
+      "Type": "AWS::IAM::Role",
+      "Metadata": {
+        "com.aws.cloudformation.Context": {
+          "why": "S3-only service role copies originals to separate regional replicas; never reuse a CMS role or grant source writes. Deterministic source ARNs avoid a bucket/role dependency cycle.",
+          "must": [
+            "Scope trust to this account and the two originals bucket ARNs.",
+            "Allow source-version reads and replica writes only; no delete permission, rendition access, or wildcard resource.",
+            "s3:ReplicateObject includes object-tag replication; retain exact source-version tag reads."
+          ],
+          "mutable": "review-required",
+          "ref": [
+            "https://docs.aws.amazon.com/AmazonS3/latest/userguide/setting-repl-config-perm-overview.html#setting-repl-config-same-acctowner"
+          ]
+        }
+      },
+      "Properties": {
+        "AssumeRolePolicyDocument": {
+          "Version": "2012-10-17",
+          "Statement": [
+            {
+              "Effect": "Allow",
+              "Principal": {
+                "Service": "s3.amazonaws.com"
+              },
+              "Action": "sts:AssumeRole",
+              "Condition": {
+                "StringEquals": {
+                  "aws:SourceAccount": {
+                    "Ref": "AWS::AccountId"
+                  }
+                },
+                "ArnEquals": {
+                  "aws:SourceArn": [
+                    {
+                      "Fn::Sub": "arn:${AWS::Partition}:s3:::njpbs-video-originals-${AWS::AccountId}-${AWS::Region}"
+                    },
+                    {
+                      "Fn::Sub": "arn:${AWS::Partition}:s3:::njpbs-archive-originals-${AWS::AccountId}-${AWS::Region}"
+                    }
+                  ]
+                }
+              }
+            }
+          ]
+        },
+        "Policies": [
+          {
+            "PolicyName": "master-replication",
+            "PolicyDocument": {
+              "Version": "2012-10-17",
+              "Statement": [
+                {
+                  "Sid": "ReadSourceConfiguration",
+                  "Effect": "Allow",
+                  "Action": [
+                    "s3:GetReplicationConfiguration",
+                    "s3:ListBucket"
+                  ],
+                  "Resource": [
+                    {
+                      "Fn::Sub": "arn:${AWS::Partition}:s3:::njpbs-video-originals-${AWS::AccountId}-${AWS::Region}"
+                    },
+                    {
+                      "Fn::Sub": "arn:${AWS::Partition}:s3:::njpbs-archive-originals-${AWS::AccountId}-${AWS::Region}"
+                    }
+                  ]
+                },
+                {
+                  "Sid": "ReadExactSourceVersions",
+                  "Effect": "Allow",
+                  "Action": [
+                    "s3:GetObjectVersionForReplication",
+                    "s3:GetObjectVersionAcl",
+                    "s3:GetObjectVersionTagging"
+                  ],
+                  "Resource": [
+                    {
+                      "Fn::Sub": "arn:${AWS::Partition}:s3:::njpbs-video-originals-${AWS::AccountId}-${AWS::Region}/*"
+                    },
+                    {
+                      "Fn::Sub": "arn:${AWS::Partition}:s3:::njpbs-archive-originals-${AWS::AccountId}-${AWS::Region}/*"
+                    }
+                  ]
+                },
+                {
+                  "Sid": "WriteRegionalReplicas",
+                  "Effect": "Allow",
+                  "Action": "s3:ReplicateObject",
+                  "Resource": [
+                    {
+                      "Fn::Sub": "arn:${AWS::Partition}:s3:::njpbs-video-originals-replica-${AWS::AccountId}-${MasterReplicaRegion}/*"
+                    },
+                    {
+                      "Fn::Sub": "arn:${AWS::Partition}:s3:::njpbs-archive-originals-replica-${AWS::AccountId}-${MasterReplicaRegion}/*"
+                    }
+                  ]
+                }
+              ]
+            }
+          }
+        ]
+      }
+    },
+    "MasterBatchReplicationRole": {
+      "Type": "AWS::IAM::Role",
+      "Metadata": {
+        "com.aws.cloudformation.Context": {
+          "why": "Batch Operations initiates existing-version replication using user-supplied manifests; manifest/report files live under a dedicated prefix of the existing rendition bucket, outside originals.",
+          "must": [
+            "Trust only account-owned Batch Operations jobs in the source region.",
+            "No source writes, source deletes, replica deletes, inventory configuration, or data-plane replica writes.",
+            "Read manifests and write completion reports only under the rendition replication/ control prefixes."
+          ],
+          "deps": [
+            "Existing versioned njpbs-video-renditions bucket from boardwalk-video-previews stack."
+          ],
+          "mutable": "review-required"
+        }
+      },
+      "Properties": {
+        "AssumeRolePolicyDocument": {
+          "Version": "2012-10-17",
+          "Statement": [
+            {
+              "Effect": "Allow",
+              "Principal": {
+                "Service": "batchoperations.s3.amazonaws.com"
+              },
+              "Action": "sts:AssumeRole",
+              "Condition": {
+                "StringEquals": {
+                  "aws:SourceAccount": {
+                    "Ref": "AWS::AccountId"
+                  }
+                },
+                "ArnLike": {
+                  "aws:SourceArn": {
+                    "Fn::Sub": "arn:${AWS::Partition}:s3:${AWS::Region}:${AWS::AccountId}:job/*"
+                  }
+                }
+              }
+            }
+          ]
+        },
+        "Policies": [
+          {
+            "PolicyName": "master-batch-replication",
+            "PolicyDocument": {
+              "Version": "2012-10-17",
+              "Statement": [
+                {
+                  "Sid": "InitiateExactSourceReplication",
+                  "Effect": "Allow",
+                  "Action": "s3:InitiateReplication",
+                  "Resource": [
+                    {
+                      "Fn::Sub": "arn:${AWS::Partition}:s3:::njpbs-video-originals-${AWS::AccountId}-${AWS::Region}/*"
+                    },
+                    {
+                      "Fn::Sub": "arn:${AWS::Partition}:s3:::njpbs-archive-originals-${AWS::AccountId}-${AWS::Region}/*"
+                    }
+                  ]
+                },
+                {
+                  "Sid": "ReadPinnedManifests",
+                  "Effect": "Allow",
+                  "Action": [
+                    "s3:GetObject",
+                    "s3:GetObjectVersion"
+                  ],
+                  "Resource": {
+                    "Fn::Sub": "arn:${AWS::Partition}:s3:::njpbs-video-renditions-${AWS::AccountId}-${AWS::Region}/replication/manifests/*"
+                  }
+                },
+                {
+                  "Sid": "WriteCompletionReports",
+                  "Effect": "Allow",
+                  "Action": "s3:PutObject",
+                  "Resource": {
+                    "Fn::Sub": "arn:${AWS::Partition}:s3:::njpbs-video-renditions-${AWS::AccountId}-${AWS::Region}/replication/reports/*"
+                  }
+                }
+              ]
+            }
+          }
+        ]
+      }
+    }
+  },
+  "Outputs": {
+    "ArchiveOriginalsBucketName": {
+      "Description": "Private archive-originals bucket name",
+      "Value": {
+        "Ref": "ArchiveOriginalsBucket"
+      }
+    },
+    "ArchiveOriginalsBucketArn": {
+      "Description": "Private archive-originals bucket ARN",
+      "Value": {
+        "Fn::GetAtt": [
+          "ArchiveOriginalsBucket",
+          "Arn"
+        ]
+      }
+    },
+    "ArchiveWorkingBucketName": {
+      "Description": "Private archive-working bucket name",
+      "Value": {
+        "Ref": "ArchiveWorkingBucket"
+      }
+    },
+    "ArchiveWorkingBucketArn": {
+      "Description": "Private archive-working bucket ARN",
+      "Value": {
+        "Fn::GetAtt": [
+          "ArchiveWorkingBucket",
+          "Arn"
+        ]
+      }
+    },
+    "VideoOriginalsBucketName": {
+      "Description": "Private video-originals bucket name",
+      "Value": {
+        "Ref": "VideoOriginalsBucket"
+      }
+    },
+    "VideoOriginalsBucketArn": {
+      "Description": "Private video-originals bucket ARN",
+      "Value": {
+        "Fn::GetAtt": [
+          "VideoOriginalsBucket",
+          "Arn"
+        ]
+      }
+    },
+    "MasterReplicationRoleArn": {
+      "Description": "Scoped master replication service role ARN",
+      "Value": {
+        "Fn::GetAtt": [
+          "MasterReplicationRole",
+          "Arn"
+        ]
+      }
+    },
+    "MasterBatchReplicationRoleArn": {
+      "Description": "Scoped existing-master Batch Replication role ARN",
+      "Value": {
+        "Fn::GetAtt": [
+          "MasterBatchReplicationRole",
+          "Arn"
+        ]
+      }
+    }
+  }
+}

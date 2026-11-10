@@ -1,0 +1,10 @@
+{
+  "date": "2026-09-01",
+  "kind": "new",
+  "title": "Sort Posts into ordered categories",
+  "body": "You can add more than one category to a Post and put them in order. The first category is the main one.",
+  "prs": [
+    1401
+  ],
+  "order": 0
+}

@@ -1,0 +1,12 @@
+{
+  "date": "2026-07-22",
+  "kind": "new",
+  "title": "See when someone else is editing",
+  "body": "An editor lock now shows when another person has a record open. If two people save at the same time, Boardwalk warns you instead of losing either person's work.",
+  "prs": [
+    675,
+    565,
+    725
+  ],
+  "order": -1
+}

@@ -1,0 +1,1207 @@
+{
+  "previousCatalog": {
+    "sourceCommit": "5dc8aaa23e0ccf307f7c1597f92dc7d0dc861fae",
+    "checkedAt": "2026-06-29T19:51:36.757Z",
+    "items": [
+      {
+        "id": "op-ed-cutting-spending-on-homelessness-would-cost-nj-a-fortune",
+        "href": "https://www.njspotlightnews.org/2026/06/op-ed-cutting-spending-on-homelessness-would-cost-nj-a-fortune/"
+      },
+      {
+        "id": "driver-charged-in-delaney-hall-crash-blamed-protesters-police-say",
+        "href": "https://www.njspotlightnews.org/2026/06/driver-charged-in-delaney-hall-crash-blamed-protesters-police-say/"
+      },
+      {
+        "id": "nj-has-crucial-choices-on-data-centers-environmentalist-says",
+        "href": "https://www.njspotlightnews.org/2026/06/nj-has-crucial-choices-on-data-centers-environmentalist-says/"
+      },
+      {
+        "id": "heres-how-much-federal-funding-nj-lawmakers-secured-for-local-state-projects",
+        "href": "https://www.njspotlightnews.org/2026/06/heres-how-much-federal-funding-nj-lawmakers-secured-for-local-state-projects/"
+      },
+      {
+        "id": "democrats-ready-njs-largest-ever-budget-for-final-votes",
+        "href": "https://www.njspotlightnews.org/2026/06/democrats-ready-njs-largest-ever-budget-for-final-votes/"
+      },
+      {
+        "id": "bipartisan-housing-effort-in-limbo-after-trump-sinks-popular-bill",
+        "href": "https://www.njspotlightnews.org/2026/06/bipartisan-housing-effort-in-limbo-after-trump-sinks-popular-bill/"
+      }
+    ]
+  },
+  "report": {
+    "storyCount": 47,
+    "topicCounts": {
+      "budget": 11,
+      "business": 9,
+      "delaney-hall": 7,
+      "energy-environment": 10,
+      "immigration": 10,
+      "social-issues": 10
+    },
+    "removedIds": [
+      "op-ed-cutting-spending-on-homelessness-would-cost-nj-a-fortune",
+      "driver-charged-in-delaney-hall-crash-blamed-protesters-police-say",
+      "nj-has-crucial-choices-on-data-centers-environmentalist-says",
+      "heres-how-much-federal-funding-nj-lawmakers-secured-for-local-state-projects",
+      "democrats-ready-njs-largest-ever-budget-for-final-votes",
+      "bipartisan-housing-effort-in-limbo-after-trump-sinks-popular-bill"
+    ],
+    "duplicatesMerged": 2,
+    "skipped": {
+      "invalidStory": 1,
+      "noApprovedTopic": 0
+    },
+    "unmappedCategories": [
+      "$15 minimum wage",
+      "2026 FIFA World Cup",
+      "988 crisis hotline",
+      "Adam Reich",
+      "Adriana Mitchell",
+      "Aeromarine landfill",
+      "Alstede Farms",
+      "Amazon",
+      "American Civil Liberties Union",
+      "American Immigration Council",
+      "American University Center for Latin American and Latino Studies",
+      "Anchor",
+      "Anderson Cabot Center for Ocean Life",
+      "Around NJ",
+      "Assemblyman Brian Rumpf",
+      "Atlantic City Electric Co.",
+      "Attorney General Jennifer Davenport",
+      "Bloustein School for Planning and Public Policy",
+      "Bucks County",
+      "Bucks County fuel leak",
+      "Burlington City",
+      "Care Plus",
+      "Carla Ferreira",
+      "Cecillia Wang",
+      "Challenger Gray & Christmas",
+      "Consumer Financial Protectoin Bureau",
+      "Consumer Reports",
+      "Corday Selden",
+      "Corporate Business Tax",
+      "Cuenta de Jubilaci\u00f3n Individual",
+      "Delaware River",
+      "Delaware River Basin Commission",
+      "Delaware Riverkeeper Network",
+      "Drill Now Act",
+      "Education",
+      "Edwin Jeovanny Lopez Cornejo",
+      "Edwin Lopez-Cornejo",
+      "Elections",
+      "En Espa\u00f1ol",
+      "Energy & Commerce Committee",
+      "Energy Transfer LP",
+      "Essex County Teacher of the Year",
+      "Exelon Corp.",
+      "FIFA World Cup revenue",
+      "FIFA world cup",
+      "Federal cuts",
+      "Foodborne illness",
+      "Former Attorney General Matt Platkin",
+      "From our Partners",
+      "GEO Group",
+      "Global Warming",
+      "Gov. Mikie Sherrill",
+      "Government Accountability Office",
+      "H.R. 1",
+      "Health Care",
+      "Homeland Security",
+      "Housing",
+      "Human Services Commissioner Stephen Cha",
+      "ICE",
+      "Immigrant detention center",
+      "Immigration and Customs Enforcement",
+      "Individual Retirement Accounts",
+      "Janelle Fritts",
+      "Jersey Dog",
+      "Jim Kirkos",
+      "Joe Gradone",
+      "Josh Fox",
+      "Judge Thomas Shusted",
+      "Justine Neville",
+      "Karin Price Mueller",
+      "Kate Tully",
+      "Lamonica McIver",
+      "Lauren Anselowitz",
+      "Law & Public Safety",
+      "Lindenwold School District",
+      "Lottery sales",
+      "Maine",
+      "Manhattan commute",
+      "Marcellus Shale Coalition",
+      "Mayor Ras Baraka",
+      "Mega Millions",
+      "MetLife Stadium",
+      "Minimum wage",
+      "Monclair University Center for Research and Evaluation on Education and Human Services",
+      "More Issues",
+      "NJ Board of Public Utilities",
+      "NJ Budget",
+      "NJ Department of Environmental Protection",
+      "NJ Division of Investment",
+      "NJ Motor Vehicle Commission",
+      "NJ State Investment Council",
+      "NJ Transit",
+      "NJ Transit board",
+      "NJ Urban Enterprise Zone",
+      "NJ businesses",
+      "NJ downtowns",
+      "NJ history",
+      "NJ property taxes",
+      "NJ public pension performance",
+      "NJ public workers",
+      "NJ revenue growth",
+      "NJ revenue sources",
+      "NJ tax revenues",
+      "NJBIA",
+      "New England Aquarium",
+      "New Jersey Business and Industry Association",
+      "New Jersey Citizen Action",
+      "New Jersey Policy Perspective",
+      "New Jersey Re-Entry Corporation",
+      "New Jersey Retail Merchants Association",
+      "New Jersey State Prison",
+      "New York New Jersey 2026 FIFA World Cup",
+      "Newark",
+      "Newark School of Architecture & Interior Design",
+      "Overdraft fees",
+      "Palantir",
+      "Paul Fishman",
+      "Pennsylvania",
+      "Pension fund investments",
+      "Pipeline and Hazardous Materials Safety Administration",
+      "Politics",
+      "Potomac River Basin Compact",
+      "R/V Falkor",
+      "R/V Falkor (too)",
+      "REFORM Alliance",
+      "ReadyRetire NJ",
+      "Recovery",
+      "Redlining",
+      "Reformed Church of Highland Park",
+      "Rep. Bonnie Watson Coleman",
+      "Rep. Chris Smith",
+      "Rep. Frank Pallone",
+      "Rep. Jeff Van Drew",
+      "Rep. LaMonica McIver",
+      "Rep. Nellie Pou",
+      "Rep. Rob Menendez",
+      "Rep. Scott Perry",
+      "RetireReady NJ",
+      "Rutgers Health's University Behavioral Health Care",
+      "Rutgers University",
+      "Rutgers-Eagleton Poll",
+      "SNAP benefits",
+      "Safety net",
+      "Samantha Chapman",
+      "Schmidt Ocean Institute",
+      "Scotch Bonnet Island",
+      "Seguro Social",
+      "Sen. Andy Kim",
+      "Sen. Anthony Bucco",
+      "Sen. Joe Vitale",
+      "Sen. Kristin Corrado",
+      "Sen. Paul Kanitra",
+      "Seven Mile Island Innovation Land",
+      "South Atlantic Salt Marsh Initiative",
+      "Stay NJ",
+      "Steve Miano",
+      "Sunoco LLP",
+      "Susquehanna River Basin Commission",
+      "TD Bank",
+      "Tax Foundation",
+      "Third Circuit Court of Appeals",
+      "Transportation",
+      "Trident Mortgage Company",
+      "Trump Administration",
+      "Twin Oaks pipeline",
+      "USDA",
+      "Under the Dome",
+      "Union Beach",
+      "Upper Makefield Township",
+      "Volunteers of America",
+      "Voting Rights",
+      "WETFEET Project",
+      "WIC benefits",
+      "Walmart",
+      "Water Resources Development Act",
+      "Weather",
+      "Will Irving",
+      "World Cup",
+      "World Cup fan festivals",
+      "addiction",
+      "affordability",
+      "asequibilidad",
+      "birthright citizenship",
+      "bus",
+      "cancer cases",
+      "citibank",
+      "clean water",
+      "climate change",
+      "cold weather",
+      "community foodbank of new jersey",
+      "commuters",
+      "congress",
+      "corporation business tax",
+      "counties",
+      "courts",
+      "crisis centers",
+      "cyclospora",
+      "department of homeland security",
+      "deportation",
+      "dynamic pricing",
+      "economic development",
+      "economy",
+      "employment data",
+      "employment rate",
+      "fare increases",
+      "federal government shutdown",
+      "flag cities",
+      "food assistance",
+      "food banks",
+      "food insecurity",
+      "food pantries",
+      "fossil fuels",
+      "fracking",
+      "government shutdown",
+      "greenhouse gases",
+      "homelessness",
+      "hunger",
+      "immigrant detention centers",
+      "immigration court",
+      "immigration enforcement",
+      "incarceration",
+      "income tax",
+      "income tax revenue",
+      "inflation",
+      "inflation indexing",
+      "investigative reporting",
+      "job creation",
+      "job market",
+      "joblessness",
+      "jubilaci\u00f3n",
+      "keyport",
+      "kris kolluri",
+      "lenore tedesco",
+      "lgbtq",
+      "lobster industry",
+      "mass transit",
+      "meadowlands chamber of commerce",
+      "medicaid",
+      "mental health",
+      "mental health association of new jersey",
+      "motor voter",
+      "nami",
+      "nami-nj",
+      "natural gas",
+      "new jersey coalition to end homelessness",
+      "new jersey lottery",
+      "newark water coalition",
+      "nj commuting",
+      "nj farmers",
+      "nj legislature",
+      "nj minimum wage",
+      "nj pension fund",
+      "nj taxes",
+      "nj workers",
+      "nj.com",
+      "noaa",
+      "nutrition",
+      "ny/nj stadium",
+      "oceanography",
+      "outreach",
+      "parole",
+      "phytoplankton",
+      "point in time count",
+      "poverty",
+      "power bills",
+      "powerball",
+      "prison population",
+      "private health insurance",
+      "property tax relief",
+      "public workers",
+      "rail",
+      "recession",
+      "reentry",
+      "reincarceration",
+      "retirement",
+      "revenue report",
+      "right whale",
+      "sales tax",
+      "salt fingers",
+      "senior freeze",
+      "sexual assault",
+      "shop local",
+      "snap",
+      "social security",
+      "social services",
+      "speech or debate clause",
+      "spending plan",
+      "supplemental nutrition assistance program",
+      "suspected cancer cluster",
+      "tax bracket creep",
+      "tax brackets",
+      "tax collections",
+      "the wetlands institute",
+      "tipped workers",
+      "tourism",
+      "transit subsidy",
+      "u.s. department of agriculture",
+      "u.s. supreme court",
+      "unemployment",
+      "unemployment claims",
+      "unemployment rate",
+      "wetlands",
+      "wic",
+      "youth mental health"
+    ]
+  },
+  "sources": [
+    {
+      "url": "https://www.njspotlightnews.org/budget/feed/",
+      "checkedAt": "2026-09-08T15:43:39.664Z",
+      "cards": [
+        {
+          "href": "https://www.njspotlightnews.org/2026/08/its-not-your-imagination-bracket-creep-costing-you-more-in-taxes/",
+          "title": "It\u2019s not your imagination: \u2018Bracket creep\u2019 costing you more in taxes",
+          "publishedAt": "Mon, 31 Aug 2026 04:09:33 +0000",
+          "sourceCategories": [
+            "Budget",
+            "Under the Dome",
+            "income tax",
+            "inflation",
+            "inflation indexing",
+            "Janelle Fritts",
+            "nj minimum wage",
+            "nj taxes",
+            "Sen. Anthony Bucco",
+            "tax bracket creep",
+            "tax brackets",
+            "Tax Foundation"
+          ]
+        },
+        {
+          "href": "https://www.njspotlightnews.org/2026/08/democratic-districts-cashed-in-as-nj-lawmakers-drafted-spending-bills/",
+          "title": "Democratic districts cashed in as NJ lawmakers drafted spending bills",
+          "publishedAt": "Thu, 20 Aug 2026 04:05:30 +0000",
+          "sourceCategories": [
+            "Budget",
+            "Politics",
+            "Under the Dome",
+            "Assemblyman Brian Rumpf",
+            "Gov. Mikie Sherrill",
+            "new jersey coalition to end homelessness",
+            "New Jersey Re-Entry Corporation",
+            "Rutgers-Eagleton Poll",
+            "Volunteers of America"
+          ]
+        },
+        {
+          "href": "https://www.njspotlightnews.org/2026/08/nj-treasury-tax-collections-ticked-up-in-july/",
+          "title": "NJ tax collections jump 9% in July, giving Sherrill budget an early boost",
+          "publishedAt": "Wed, 19 Aug 2026 04:08:37 +0000",
+          "sourceCategories": [
+            "Budget",
+            "Under the Dome",
+            "FIFA World Cup revenue",
+            "new jersey lottery",
+            "NJ revenue growth",
+            "NJ tax revenues",
+            "tax collections"
+          ]
+        },
+        {
+          "href": "https://www.njspotlightnews.org/2026/08/workers-retirees-among-those-urging-nj-pension-to-look-beyond-the-bottom-line/",
+          "title": "Workers, retirees among those urging NJ pension to look beyond the bottom line",
+          "publishedAt": "Mon, 03 Aug 2026 04:08:19 +0000",
+          "sourceCategories": [
+            "Budget",
+            "Under the Dome",
+            "Delaney Hall",
+            "fossil fuels",
+            "GEO Group",
+            "immigration enforcement",
+            "Palantir",
+            "Pension fund investments",
+            "public workers"
+          ]
+        },
+        {
+          "href": "https://www.njspotlightnews.org/2026/07/funding-gap-delays-njs-new-mental-health-crisis-centers/",
+          "title": "Funding gap delays NJ\u2019s new mental health crisis centers",
+          "publishedAt": "Thu, 30 Jul 2026 04:12:12 +0000",
+          "sourceCategories": [
+            "Budget",
+            "From our Partners",
+            "Health Care",
+            "addiction",
+            "Care Plus",
+            "crisis centers",
+            "Human Services Commissioner Stephen Cha",
+            "mental health",
+            "mental health association of new jersey",
+            "nami",
+            "nami-nj",
+            "Rutgers Health's University Behavioral Health Care",
+            "Sen. Joe Vitale"
+          ]
+        },
+        {
+          "href": "https://www.njspotlightnews.org/2026/07/new-jersey-pension-fund-on-track-to-continue-winning-streak/",
+          "title": "New Jersey pension fund on track to continue winning streak",
+          "publishedAt": "Thu, 30 Jul 2026 04:08:15 +0000",
+          "sourceCategories": [
+            "Budget",
+            "More Issues",
+            "Under the Dome",
+            "NJ Budget",
+            "NJ Division of Investment",
+            "NJ public pension performance",
+            "NJ public workers",
+            "NJ State Investment Council"
+          ]
+        },
+        {
+          "href": "https://www.njspotlightnews.org/2026/07/nj-taps-employers-with-workers-on-medicaid-to-counter-trump-cuts/",
+          "title": "NJ taps employers with workers on Medicaid to counter Trump cuts",
+          "publishedAt": "Mon, 27 Jul 2026 04:08:39 +0000",
+          "sourceCategories": [
+            "Budget",
+            "Business",
+            "Under the Dome",
+            "Amazon",
+            "Federal cuts",
+            "Gov. Mikie Sherrill",
+            "medicaid",
+            "New Jersey Citizen Action",
+            "New Jersey Policy Perspective",
+            "New Jersey Retail Merchants Association",
+            "private health insurance",
+            "social services",
+            "Walmart"
+          ]
+        },
+        {
+          "href": "https://www.njspotlightnews.org/2026/07/nj-transit-approves-biggest-budget-ever-with-3-higher-fares/",
+          "title": "NJ Transit approves biggest budget ever, with 3% higher fares",
+          "publishedAt": "Wed, 22 Jul 2026 04:12:59 +0000",
+          "sourceCategories": [
+            "Budget",
+            "From our Partners",
+            "Transportation",
+            "Adam Reich",
+            "bus",
+            "commuters",
+            "Corporate Business Tax",
+            "fare increases",
+            "kris kolluri",
+            "Manhattan commute",
+            "mass transit",
+            "nj commuting",
+            "NJ Transit",
+            "NJ Transit board",
+            "rail",
+            "transit subsidy"
+          ]
+        },
+        {
+          "href": "https://www.njspotlightnews.org/2026/07/nj-lottery-sales-up-5-generating-1-billion-plus-for-pension-system/",
+          "title": "NJ Lottery sales up 5%, generating $1 billion-plus for pension system",
+          "publishedAt": "Wed, 22 Jul 2026 04:08:23 +0000",
+          "sourceCategories": [
+            "Budget",
+            "More Issues",
+            "Under the Dome",
+            "Jersey Dog",
+            "Lottery sales",
+            "Mega Millions",
+            "new jersey lottery",
+            "nj pension fund",
+            "powerball"
+          ]
+        },
+        {
+          "href": "https://www.njspotlightnews.org/2026/07/senior-disabled-homeowners-up-first-for-4b-in-property-tax-relief/",
+          "title": "Senior, disabled homeowners up first for $4B in property tax relief",
+          "publishedAt": "Mon, 20 Jul 2026 04:08:52 +0000",
+          "sourceCategories": [
+            "Budget",
+            "More Issues",
+            "Under the Dome",
+            "affordability",
+            "Anchor",
+            "Gov. Mikie Sherrill",
+            "NJ property taxes",
+            "property tax relief",
+            "senior freeze",
+            "Stay NJ"
+          ]
+        }
+      ]
+    },
+    {
+      "url": "https://www.njspotlightnews.org/business/feed/",
+      "checkedAt": "2026-09-08T15:43:40.117Z",
+      "cards": [
+        {
+          "href": "https://www.njspotlightnews.org/2026/07/nj-taps-employers-with-workers-on-medicaid-to-counter-trump-cuts/",
+          "title": "NJ taps employers with workers on Medicaid to counter Trump cuts",
+          "publishedAt": "Mon, 27 Jul 2026 04:08:39 +0000",
+          "sourceCategories": [
+            "Budget",
+            "Business",
+            "Under the Dome",
+            "Amazon",
+            "Federal cuts",
+            "Gov. Mikie Sherrill",
+            "medicaid",
+            "New Jersey Citizen Action",
+            "New Jersey Policy Perspective",
+            "New Jersey Retail Merchants Association",
+            "private health insurance",
+            "social services",
+            "Walmart"
+          ]
+        },
+        {
+          "href": "https://www.njspotlightnews.org/2026/06/nj-coaxing-world-cup-fans-to-celebrate-on-this-side-of-the-hudson/",
+          "title": "NJ coaxing World Cup fans to celebrate on this side of the Hudson",
+          "publishedAt": "Tue, 09 Jun 2026 04:10:57 +0000",
+          "sourceCategories": [
+            "Around NJ",
+            "Business",
+            "2026 FIFA World Cup",
+            "flag cities",
+            "Jim Kirkos",
+            "meadowlands chamber of commerce",
+            "tourism",
+            "World Cup fan festivals"
+          ]
+        },
+        {
+          "href": "https://www.njspotlightnews.org/2026/05/burlington-city-gets-lawmakers-backing-for-economic-zone-program/",
+          "title": "Burlington City gets lawmakers\u2019 backing for economic zone program",
+          "publishedAt": "Tue, 19 May 2026 04:05:20 +0000",
+          "sourceCategories": [
+            "Business",
+            "Under the Dome",
+            "Burlington City",
+            "economic development",
+            "NJ downtowns",
+            "NJ history",
+            "nj legislature",
+            "NJ Urban Enterprise Zone"
+          ]
+        },
+        {
+          "href": "https://www.njspotlightnews.org/2026/02/consumer-financial-protection-bureau-cfpb-on-life-support/",
+          "title": "Financial, consumer watchdog on \u2018life support\u2019 under Trump",
+          "publishedAt": "Thu, 12 Feb 2026 05:09:27 +0000",
+          "sourceCategories": [
+            "Business",
+            "Politics",
+            "citibank",
+            "Consumer Financial Protectoin Bureau",
+            "Consumer Reports",
+            "Government Accountability Office",
+            "Overdraft fees",
+            "Redlining",
+            "TD Bank",
+            "Trident Mortgage Company"
+          ]
+        },
+        {
+          "href": "https://www.njspotlightnews.org/2026/01/slight-boost-in-jobs-tax-revenue-ahead-of-sherrills-first-spending-proposal/",
+          "title": "Slight boost in jobs, tax revenue ahead of Sherrill\u2019s first spending proposal",
+          "publishedAt": "Mon, 26 Jan 2026 05:09:43 +0000",
+          "sourceCategories": [
+            "Budget",
+            "Business",
+            "employment rate",
+            "income tax revenue",
+            "NJ revenue sources",
+            "revenue report",
+            "sales tax",
+            "spending plan",
+            "unemployment"
+          ]
+        },
+        {
+          "href": "https://www.njspotlightnews.org/2026/01/nj-minimum-wage-rises-but-not-for-all/",
+          "title": "NJ minimum wage rises, but not for all",
+          "publishedAt": "Mon, 05 Jan 2026 05:07:53 +0000",
+          "sourceCategories": [
+            "Business",
+            "More Issues",
+            "$15 minimum wage",
+            "Minimum wage",
+            "NJ businesses",
+            "nj minimum wage",
+            "nj workers",
+            "tipped workers"
+          ]
+        },
+        {
+          "href": "https://www.njspotlightnews.org/2025/12/stagnating-national-jobs-market-raises-economic-concerns/",
+          "title": "Stagnating national jobs market raises economic concerns",
+          "publishedAt": "Thu, 18 Dec 2025 05:13:00 +0000",
+          "sourceCategories": [
+            "Business",
+            "affordability",
+            "Bloustein School for Planning and Public Policy",
+            "job market",
+            "Rutgers University",
+            "unemployment rate",
+            "Will Irving"
+          ]
+        },
+        {
+          "href": "https://www.njspotlightnews.org/2025/12/fifa-world-cup-ticket-prices-leave-fans-frustrated-and-priced-out/",
+          "title": "FIFA World Cup ticket prices leave fans frustrated and priced out",
+          "publishedAt": "Wed, 17 Dec 2025 05:10:34 +0000",
+          "sourceCategories": [
+            "Business",
+            "dynamic pricing",
+            "FIFA world cup",
+            "MetLife Stadium",
+            "New York New Jersey 2026 FIFA World Cup",
+            "ny/nj stadium",
+            "World Cup"
+          ]
+        },
+        {
+          "href": "https://www.njspotlightnews.org/video/nj-breaks-ground-on-major-production-studio-in-bayonne/",
+          "title": "NJ breaks ground on major production studio in Bayonne",
+          "publishedAt": "Tue, 16 Dec 2025 22:39:50 +0000",
+          "sourceCategories": [
+            "Business"
+          ]
+        },
+        {
+          "href": "https://www.njspotlightnews.org/2025/12/could-layoffs-in-nj-preview-a-recession-in-2026/",
+          "title": "Could layoffs in NJ preview a recession for 2026?",
+          "publishedAt": "Wed, 10 Dec 2025 05:11:37 +0000",
+          "sourceCategories": [
+            "Business",
+            "Bloustein School for Planning and Public Policy",
+            "Challenger Gray & Christmas",
+            "corporation business tax",
+            "employment data",
+            "job creation",
+            "job market",
+            "New Jersey Business and Industry Association",
+            "NJBIA",
+            "recession",
+            "unemployment",
+            "unemployment claims"
+          ]
+        }
+      ]
+    },
+    {
+      "url": "https://www.njspotlightnews.org/energy-environment/feed/",
+      "checkedAt": "2026-09-08T15:43:39.663Z",
+      "cards": [
+        {
+          "href": "https://www.njspotlightnews.org/2026/09/house-votes-to-delay-north-atlantic-right-whale-protections/",
+          "title": "House votes to delay North Atlantic right whale protections",
+          "publishedAt": "Fri, 04 Sep 2026 04:08:56 +0000",
+          "sourceCategories": [
+            "Energy & Environment",
+            "Politics",
+            "Anderson Cabot Center for Ocean Life",
+            "congress",
+            "Energy & Commerce Committee",
+            "lobster industry",
+            "Maine",
+            "New England Aquarium",
+            "noaa",
+            "Rep. Frank Pallone",
+            "right whale"
+          ]
+        },
+        {
+          "href": "https://www.njspotlightnews.org/2026/09/how-to-save-endangered-nj-marsh-from-rising-sea-build-it-higher/",
+          "title": "How to save endangered NJ marsh from rising sea: Build it higher",
+          "publishedAt": "Thu, 03 Sep 2026 04:10:42 +0000",
+          "sourceCategories": [
+            "Energy & Environment",
+            "From our Partners",
+            "climate change",
+            "Global Warming",
+            "greenhouse gases",
+            "Justine Neville",
+            "Kate Tully",
+            "lenore tedesco",
+            "Samantha Chapman",
+            "Scotch Bonnet Island",
+            "Seven Mile Island Innovation Land",
+            "South Atlantic Salt Marsh Initiative",
+            "the wetlands institute",
+            "WETFEET Project",
+            "wetlands"
+          ]
+        },
+        {
+          "href": "https://www.njspotlightnews.org/2026/09/power-utility-overbilled-customers-erred-on-tax-law-audit-finds/",
+          "title": "Power utility overbilled customers, erred on tax law, audit finds",
+          "publishedAt": "Wed, 02 Sep 2026 04:14:32 +0000",
+          "sourceCategories": [
+            "Energy & Environment",
+            "affordability",
+            "Atlantic City Electric Co.",
+            "Exelon Corp.",
+            "NJ Board of Public Utilities",
+            "power bills",
+            "Rep. Jeff Van Drew"
+          ]
+        },
+        {
+          "href": "https://www.njspotlightnews.org/2026/08/operator-of-leaky-pipeline-blocked-inspectors-regulator-says/",
+          "title": "Operator of leaky pipeline blocked inspectors, regulator says",
+          "publishedAt": "Wed, 26 Aug 2026 04:04:48 +0000",
+          "sourceCategories": [
+            "Energy & Environment",
+            "More Issues",
+            "Politics",
+            "Bucks County",
+            "Bucks County fuel leak",
+            "Energy Transfer LP",
+            "Pennsylvania",
+            "Pipeline and Hazardous Materials Safety Administration",
+            "Sunoco LLP",
+            "Twin Oaks pipeline",
+            "Upper Makefield Township"
+          ]
+        },
+        {
+          "href": "https://www.njspotlightnews.org/2026/08/why-salt-finger-mixing-draws-rutgers-scientists-to-warming-ocean/",
+          "title": "Why \u2018salt finger mixing\u2019 draws Rutgers scientists to warming ocean",
+          "publishedAt": "Mon, 24 Aug 2026 04:10:19 +0000",
+          "sourceCategories": [
+            "Energy & Environment",
+            "Corday Selden",
+            "Joe Gradone",
+            "oceanography",
+            "phytoplankton",
+            "R/V Falkor",
+            "R/V Falkor (too)",
+            "salt fingers",
+            "Schmidt Ocean Institute"
+          ]
+        },
+        {
+          "href": "https://www.njspotlightnews.org/2026/08/the-aching-human-soul-of-keyports-feared-cancer-cluster/",
+          "title": "The aching human soul of Keyport\u2019s feared cancer cluster",
+          "publishedAt": "Tue, 18 Aug 2026 04:08:45 +0000",
+          "sourceCategories": [
+            "Energy & Environment",
+            "Health Care",
+            "Aeromarine landfill",
+            "investigative reporting",
+            "Karin Price Mueller",
+            "keyport",
+            "nj.com",
+            "suspected cancer cluster",
+            "Union Beach"
+          ]
+        },
+        {
+          "href": "https://www.njspotlightnews.org/2026/08/how-a-question-about-water-filters-sparked-a-movement-in-newark/",
+          "title": "How a question about water filters sparked a movement in Newark",
+          "publishedAt": "Mon, 10 Aug 2026 04:12:24 +0000",
+          "sourceCategories": [
+            "Energy & Environment",
+            "From our Partners",
+            "Social Issues",
+            "Newark",
+            "newark water coalition"
+          ]
+        },
+        {
+          "href": "https://www.njspotlightnews.org/2026/07/chemicals-persistent-in-cancer-riddled-area-near-keyport-landfill/",
+          "title": "Chemicals persistent in cancer-riddled area near Keyport landfill",
+          "publishedAt": "Thu, 30 Jul 2026 04:10:52 +0000",
+          "sourceCategories": [
+            "Energy & Environment",
+            "Aeromarine landfill",
+            "cancer cases",
+            "Karin Price Mueller",
+            "keyport",
+            "NJ Department of Environmental Protection",
+            "suspected cancer cluster"
+          ]
+        },
+        {
+          "href": "https://www.njspotlightnews.org/2026/07/food-parasite-fear-drives-customers-to-trusted-new-jersey-farm/",
+          "title": "Food parasite fear drives customers to trusted New Jersey farm",
+          "publishedAt": "Mon, 27 Jul 2026 04:10:41 +0000",
+          "sourceCategories": [
+            "Energy & Environment",
+            "Weather",
+            "Alstede Farms",
+            "cyclospora",
+            "Foodborne illness",
+            "nj farmers",
+            "shop local",
+            "USDA"
+          ]
+        },
+        {
+          "href": "https://www.njspotlightnews.org/2026/07/fracking-ban-in-delaware-river-watershed-survives-gop-challenge/",
+          "title": "Fracking ban in Delaware River watershed survives GOP challenge",
+          "publishedAt": "Thu, 23 Jul 2026 04:12:03 +0000",
+          "sourceCategories": [
+            "Energy & Environment",
+            "From our Partners",
+            "Politics",
+            "clean water",
+            "Delaware River",
+            "Delaware River Basin Commission",
+            "Delaware Riverkeeper Network",
+            "Drill Now Act",
+            "fracking",
+            "Josh Fox",
+            "Marcellus Shale Coalition",
+            "natural gas",
+            "Potomac River Basin Compact",
+            "Rep. Scott Perry",
+            "Steve Miano",
+            "Susquehanna River Basin Commission",
+            "Water Resources Development Act"
+          ]
+        }
+      ]
+    },
+    {
+      "url": "https://www.njspotlightnews.org/immigration/feed/",
+      "checkedAt": "2026-09-08T15:43:39.729Z",
+      "cards": [
+        {
+          "href": "https://www.njspotlightnews.org/2026/09/qa-teacher-of-the-year-creates-safe-zone-amid-culture-of-fear/",
+          "title": "Q&A: Teacher of the Year creates safe zone amid \u2018culture of fear\u2019",
+          "publishedAt": "Tue, 01 Sep 2026 04:10:25 +0000",
+          "sourceCategories": [
+            "Education",
+            "Immigration",
+            "Carla Ferreira",
+            "Delaney Hall",
+            "Essex County Teacher of the Year",
+            "Newark",
+            "Newark School of Architecture & Interior Design"
+          ]
+        },
+        {
+          "href": "https://www.njspotlightnews.org/2026/08/mciver-loses-bid-to-dismiss-charges-in-delaney-hall-scrum-with-ice/",
+          "title": "McIver loses bid to toss charges over Delaney Hall clash with ICE",
+          "publishedAt": "Thu, 27 Aug 2026 04:12:47 +0000",
+          "sourceCategories": [
+            "Immigration",
+            "Law & Public Safety",
+            "Delaney Hall",
+            "ICE",
+            "Mayor Ras Baraka",
+            "Paul Fishman",
+            "Rep. Bonnie Watson Coleman",
+            "Rep. LaMonica McIver",
+            "Rep. Rob Menendez",
+            "speech or debate clause",
+            "Third Circuit Court of Appeals"
+          ]
+        },
+        {
+          "href": "https://www.njspotlightnews.org/2026/08/whos-behind-the-mask-new-jerseyans-haunted-by-ice-run-ins/",
+          "title": "Who\u2019s behind the mask? New Jerseyans haunted by ICE run-ins",
+          "publishedAt": "Thu, 27 Aug 2026 04:10:44 +0000",
+          "sourceCategories": [
+            "From our Partners",
+            "Immigration",
+            "Law & Public Safety",
+            "Delaney Hall",
+            "Gov. Mikie Sherrill",
+            "ICE",
+            "Lindenwold School District",
+            "Reformed Church of Highland Park"
+          ]
+        },
+        {
+          "href": "https://www.njspotlightnews.org/2026/08/post-detention-deaths-to-go-untracked-by-ices-common-sense-move/",
+          "title": "Post-detention deaths to go untracked in \u2018common sense\u2019 ICE move",
+          "publishedAt": "Tue, 11 Aug 2026 04:06:20 +0000",
+          "sourceCategories": [
+            "Immigration",
+            "Politics",
+            "American Immigration Council",
+            "American University Center for Latin American and Latino Studies",
+            "Attorney General Jennifer Davenport",
+            "Delaney Hall",
+            "department of homeland security",
+            "Edwin Lopez-Cornejo",
+            "ICE",
+            "Rep. Rob Menendez"
+          ]
+        },
+        {
+          "href": "https://www.njspotlightnews.org/2026/08/death-shows-delaney-not-adequate-in-emergency-mciver-says/",
+          "title": "Death shows Delaney \u2018not adequate\u2019 in emergency, McIver says",
+          "publishedAt": "Wed, 05 Aug 2026 04:10:10 +0000",
+          "sourceCategories": [
+            "Immigration",
+            "Law & Public Safety",
+            "Politics",
+            "Delaney Hall",
+            "Edwin Jeovanny Lopez Cornejo",
+            "Immigrant detention center",
+            "Immigration and Customs Enforcement",
+            "Lamonica McIver",
+            "Newark"
+          ]
+        },
+        {
+          "href": "https://www.njspotlightnews.org/2026/07/why-advocates-want-an-end-to-all-immigrant-detention/",
+          "title": "Why advocates want an end to all immigrant detention",
+          "publishedAt": "Wed, 22 Jul 2026 04:10:21 +0000",
+          "sourceCategories": [
+            "Immigration",
+            "Law & Public Safety",
+            "Delaney Hall",
+            "immigrant detention centers",
+            "immigration",
+            "Trump Administration"
+          ]
+        },
+        {
+          "href": "https://www.njspotlightnews.org/2026/07/thousands-of-non-citizens-registered-to-vote-in-nj-sherrill-says/",
+          "title": "Thousands of non-citizens registered to vote in NJ, Sherrill says",
+          "publishedAt": "Wed, 22 Jul 2026 04:06:22 +0000",
+          "sourceCategories": [
+            "Elections",
+            "Immigration",
+            "More Issues",
+            "Gov. Mikie Sherrill",
+            "motor voter",
+            "NJ Motor Vehicle Commission",
+            "Rep. Chris Smith",
+            "Rep. Jeff Van Drew",
+            "Sen. Kristin Corrado",
+            "Sen. Paul Kanitra",
+            "Voting Rights"
+          ]
+        },
+        {
+          "href": "https://www.njspotlightnews.org/2026/07/immigration-courts-running-like-deportation-machine-attorneys-say/",
+          "title": "Immigration courts running like \u2018deportation machine,\u2019 attorneys say",
+          "publishedAt": "Thu, 16 Jul 2026 04:12:04 +0000",
+          "sourceCategories": [
+            "From our Partners",
+            "Immigration",
+            "Law & Public Safety",
+            "courts",
+            "deportation",
+            "ICE"
+          ]
+        },
+        {
+          "href": "https://www.njspotlightnews.org/2026/07/judge-criticized-in-rape-case-now-serving-on-immigration-court/",
+          "title": "Judge criticized in rape case now serving on immigration court",
+          "publishedAt": "Wed, 08 Jul 2026 04:08:28 +0000",
+          "sourceCategories": [
+            "From our Partners",
+            "Immigration",
+            "Law & Public Safety",
+            "Adriana Mitchell",
+            "Homeland Security",
+            "immigration court",
+            "Judge Thomas Shusted",
+            "Lauren Anselowitz",
+            "sexual assault"
+          ]
+        },
+        {
+          "href": "https://www.njspotlightnews.org/2026/07/as-trump-rants-democrats-and-advocates-hail-u-s-birthright-ruling/",
+          "title": "As Trump rants, Democrats and advocates hail U.S. birthright ruling",
+          "publishedAt": "Wed, 01 Jul 2026 04:06:54 +0000",
+          "sourceCategories": [
+            "Immigration",
+            "Law & Public Safety",
+            "Politics",
+            "American Civil Liberties Union",
+            "Attorney General Jennifer Davenport",
+            "birthright citizenship",
+            "Cecillia Wang",
+            "Former Attorney General Matt Platkin",
+            "Rep. Nellie Pou",
+            "Sen. Andy Kim",
+            "u.s. supreme court"
+          ]
+        }
+      ]
+    },
+    {
+      "url": "https://www.njspotlightnews.org/social-issues/feed/",
+      "checkedAt": "2026-09-08T15:43:40.133Z",
+      "cards": [
+        {
+          "href": "https://www.njspotlightnews.org/2026/08/nj-finds-16-million-for-crisis-centers-left-out-of-state-budget/",
+          "title": "NJ finds $16 million for crisis centers left out of state budget",
+          "publishedAt": "Mon, 24 Aug 2026 04:08:07 +0000",
+          "sourceCategories": [
+            "Health Care",
+            "Social Issues",
+            "Under the Dome",
+            "988 crisis hotline",
+            "Gov. Mikie Sherrill",
+            "Human Services Commissioner Stephen Cha",
+            "lgbtq",
+            "mental health",
+            "youth mental health"
+          ]
+        },
+        {
+          "href": "https://www.njspotlightnews.org/2026/08/no-tienes-ahorros-para-la-jubilacion-nj-amplia-el-programa-para-empleados-de-empresas-privadas/",
+          "title": "\u00bfNo tienes ahorros para la jubilaci\u00f3n? NJ ampl\u00eda el programa para empleados de empresas privadas",
+          "publishedAt": "Fri, 14 Aug 2026 04:14:43 +0000",
+          "sourceCategories": [
+            "En Espa\u00f1ol",
+            "Social Issues",
+            "asequibilidad",
+            "Cuenta de Jubilaci\u00f3n Individual",
+            "jubilaci\u00f3n",
+            "ReadyRetire NJ",
+            "Seguro Social"
+          ]
+        },
+        {
+          "href": "https://www.njspotlightnews.org/2026/08/how-a-question-about-water-filters-sparked-a-movement-in-newark/",
+          "title": "How a question about water filters sparked a movement in Newark",
+          "publishedAt": "Mon, 10 Aug 2026 04:12:24 +0000",
+          "sourceCategories": [
+            "Energy & Environment",
+            "From our Partners",
+            "Social Issues",
+            "Newark",
+            "newark water coalition"
+          ]
+        },
+        {
+          "href": "https://www.njspotlightnews.org/2026/08/no-retirement-savings-nj-broadens-program-for-privately-employed/",
+          "title": "No retirement savings? NJ broadens program for privately employed",
+          "publishedAt": "Mon, 10 Aug 2026 04:08:20 +0000",
+          "sourceCategories": [
+            "More Issues",
+            "Social Issues",
+            "Under the Dome",
+            "affordability",
+            "Individual Retirement Accounts",
+            "retirement",
+            "RetireReady NJ",
+            "social security"
+          ]
+        },
+        {
+          "href": "https://www.njspotlightnews.org/2026/07/health-care-food-aid-enrollees-down-as-deeper-federal-cuts-loom/",
+          "title": "Health care, food aid enrollees down as deeper federal cuts loom",
+          "publishedAt": "Tue, 14 Jul 2026 04:08:20 +0000",
+          "sourceCategories": [
+            "Health Care",
+            "More Issues",
+            "Politics",
+            "Social Issues",
+            "affordability",
+            "food assistance",
+            "H.R. 1",
+            "medicaid",
+            "snap"
+          ]
+        },
+        {
+          "href": "https://www.njspotlightnews.org/2026/06/snap-food-program-benefits-more-than-recipients-study-finds/",
+          "title": "SNAP food program benefits more than recipients, study finds",
+          "publishedAt": "Fri, 12 Jun 2026 04:12:00 +0000",
+          "sourceCategories": [
+            "From our Partners",
+            "Social Issues",
+            "Human Services Commissioner Stephen Cha",
+            "Monclair University Center for Research and Evaluation on Education and Human Services",
+            "snap",
+            "supplemental nutrition assistance program"
+          ]
+        },
+        {
+          "href": "https://www.njspotlightnews.org/2026/04/pretty-scary-food-pantries-expect-surge-due-to-snap-work-rule/",
+          "title": "\u2018Pretty scary\u2019: Food pantries expect surge due to SNAP work rule",
+          "publishedAt": "Thu, 23 Apr 2026 04:12:40 +0000",
+          "sourceCategories": [
+            "More Issues",
+            "Social Issues",
+            "community foodbank of new jersey",
+            "food banks",
+            "food insecurity",
+            "food pantries",
+            "hunger",
+            "SNAP benefits",
+            "supplemental nutrition assistance program"
+          ]
+        },
+        {
+          "href": "https://www.njspotlightnews.org/2026/01/for-the-unhoused-in-bitter-cold-camden-resource-fair-offers-lifeline/",
+          "title": "For the unhoused in bitter cold, Camden resource fair offers lifeline",
+          "publishedAt": "Fri, 30 Jan 2026 05:10:38 +0000",
+          "sourceCategories": [
+            "More Issues",
+            "Social Issues",
+            "cold weather",
+            "counties",
+            "economy",
+            "homelessness",
+            "Housing",
+            "joblessness",
+            "nutrition",
+            "outreach",
+            "point in time count",
+            "poverty",
+            "Recovery",
+            "Safety net",
+            "social services",
+            "Weather"
+          ]
+        },
+        {
+          "href": "https://www.njspotlightnews.org/2026/01/prison-bills-advance-but-deadline-nears/",
+          "title": "Prison bills advance but deadline nears",
+          "publishedAt": "Wed, 07 Jan 2026 05:08:28 +0000",
+          "sourceCategories": [
+            "Law & Public Safety",
+            "Social Issues",
+            "incarceration",
+            "New Jersey State Prison",
+            "parole",
+            "prison population",
+            "reentry",
+            "REFORM Alliance",
+            "reincarceration"
+          ]
+        },
+        {
+          "href": "https://www.njspotlightnews.org/2025/10/government-shutdown-could-leave-thousands-in-nj-without-food-assistance/",
+          "title": "Government shutdown could leave thousands in NJ without food assistance",
+          "publishedAt": "Wed, 29 Oct 2025 04:12:54 +0000",
+          "sourceCategories": [
+            "Politics",
+            "Social Issues",
+            "federal government shutdown",
+            "government shutdown",
+            "SNAP benefits",
+            "supplemental nutrition assistance program",
+            "u.s. department of agriculture",
+            "wic",
+            "WIC benefits"
+          ]
+        }
+      ]
+    }
+  ]
+}

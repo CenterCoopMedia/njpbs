@@ -1,0 +1,22 @@
+{
+  "$schema": "../node_modules/wrangler/config-schema.json",
+  "name": "njpbs-dev-routing-measurement",
+  "main": "src/public-release-routing-measurement-worker.ts",
+  "compatibility_date": "2026-07-09",
+  "compatibility_flags": ["nodejs_compat"],
+  "workers_dev": false,
+  "preview_urls": false,
+  "routes": [],
+  "vars": {
+    "PUBLIC_RELEASE_ROUTING_EXPERIMENT_ENABLED": "false",
+    "FBASE_PROJECT": "njpbs-site-dev",
+    "MEASUREMENT_ID": "",
+    "MEASUREMENT_CASES_JSON": "[]",
+    "PUBLIC_PAIR_IDENTITIES_JSON": "[]"
+  },
+  "version_metadata": { "binding": "CF_VERSION_METADATA" },
+  "services": [
+    { "binding": "CMS_API", "service": "template-dev-cms-api", "entrypoint": "PublicContentEntrypoint" }
+  ],
+  "observability": { "enabled": false }
+}

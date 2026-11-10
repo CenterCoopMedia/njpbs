@@ -1,0 +1,13 @@
+{
+  "date": "2026-10-14",
+  "kind": "improved",
+  "title": "Staff roles use plain job names",
+  "body": "Access settings now show six staff levels with plain job names, so you can read each level before you assign it. A new News area joins the areas, and media access is site-wide.",
+  "prs": [
+    3412,
+    2755,
+    2757,
+    2758
+  ],
+  "order": -6
+}

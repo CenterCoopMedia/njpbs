@@ -1,0 +1,13 @@
+{
+  "date": "2026-10-25",
+  "kind": "fixed",
+  "title": "Search and upload media without saving the Post",
+  "body": "Searching the image picker or submitting an upload no longer saves the surrounding Post form. Upload fields fit narrow screens. Retrying a failed video viewing copy starts with a fresh retry allowance, and a waiting video preview no longer holds up the others.",
+  "prs": [
+    3986,
+    4016,
+    4021,
+    4022
+  ],
+  "order": -1
+}

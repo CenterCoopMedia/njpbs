@@ -1,0 +1,13 @@
+{
+  "date": "2026-09-25",
+  "kind": "improved",
+  "title": "Media library loads faster",
+  "body": "Media library now shows small thumbnails instead of full images and remembers lists you already opened. Video posters load with each page of results.",
+  "prs": [
+    2191,
+    2264,
+    2265,
+    2293
+  ],
+  "order": -7
+}

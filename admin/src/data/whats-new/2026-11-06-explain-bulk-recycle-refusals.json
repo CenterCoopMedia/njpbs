@@ -1,0 +1,8 @@
+{
+  "date": "2026-11-06",
+  "order": 1794008700000,
+  "kind": "fixed",
+  "title": "See why an item stayed in the library",
+  "body": "Bulk recycle actions show a publishing reason when it is available for an item that cannot be moved. Items that succeed stay moved.",
+  "prs": []
+}

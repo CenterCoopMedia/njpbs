@@ -1,0 +1,8 @@
+{
+  "date": "2026-11-09",
+  "order": 1794250360851,
+  "kind": "fixed",
+  "title": "More reliable public page checks",
+  "body": "Public page checks are more reliable during busy periods, reducing interruptions when confirming a publication.",
+  "prs": []
+}

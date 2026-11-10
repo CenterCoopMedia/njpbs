@@ -1,0 +1,60 @@
+---
+import { getCollection } from "astro:content";
+import PublicSiteLayout from "../../layouts/PublicSiteLayout.astro";
+import { cmsRoutedContentEnabled, publicRootRoutesEnabled } from "../../lib/build-target";
+export function getStaticPaths() {
+  return publicRootRoutesEnabled(process.env) ? [{ params: { index: undefined } }] : [];
+}
+const content = Astro.locals.cmsRender?.content;
+const publicRecord = content?.kind === "public-record-family" ? content : undefined;
+const events = publicRecord ? publicRecord.events.map(data => ({ id: data.eventId, data }))
+  : cmsRoutedContentEnabled(process.env) ? await getCollection("cmsEvents") : [];
+const now = publicRecord ? Date.parse(publicRecord.target.renderedAt) : Date.now();
+const upcoming = events.filter(event => Date.parse(event.data.endsAt ?? event.data.startsAt) >= now).sort((a, b) => Date.parse(a.data.startsAt) - Date.parse(b.data.startsAt));
+const past = events.filter(event => Date.parse(event.data.endsAt ?? event.data.startsAt) < now).sort((a, b) => Date.parse(b.data.startsAt) - Date.parse(a.data.startsAt));
+const date = new Intl.DateTimeFormat("en-US", { timeZone: "America/New_York", dateStyle: "long" });
+---
+<PublicSiteLayout title="Events" description="Upcoming NJ PBS events." preview={false} canonicalPath="/events/">
+  <div class="events-index">
+    <h1>Events</h1>
+    <h2>Upcoming events</h2>
+    <ul id="upcoming-events">{upcoming.map(event => <li data-start={event.data.startsAt} data-end={event.data.endsAt ?? event.data.startsAt}><time datetime={event.data.startsAt}>{date.format(new Date(event.data.startsAt))}</time><h3><a href={event.data.path}>{event.data.title}</a></h3>{event.data.location && <p>{event.data.location}</p>}</li>)}</ul>
+    <p id="no-upcoming" hidden={upcoming.length > 0}>No upcoming events are listed right now.</p>
+    <p id="past-events-link" hidden={past.length === 0}><a href="#past-events">Past events</a></p>
+    <section id="past-events" aria-labelledby="past-events-heading" hidden={past.length === 0}>
+      <h2 id="past-events-heading">Past events</h2>
+      <ul id="past-event-list">{past.map(event => <li data-start={event.data.startsAt} data-end={event.data.endsAt ?? event.data.startsAt}><time datetime={event.data.startsAt}>{date.format(new Date(event.data.startsAt))}</time><h3><a href={event.data.path}>{event.data.title}</a></h3>{event.data.location && <p>{event.data.location}</p>}</li>)}</ul>
+      <p id="no-past" hidden={past.length > 0}>No past events are listed yet.</p>
+    </section>
+  </div>
+  <script is:inline>
+    // Static builds cannot know when an event will pass. Reclassify the already
+    // published cards at visit time; the build-time HTML remains usable without JS.
+    (() => {
+      const upcoming = document.getElementById("upcoming-events");
+      const past = document.getElementById("past-event-list");
+      if (!upcoming || !past) return;
+      const cards = [...upcoming.querySelectorAll("li"), ...past.querySelectorAll("li")];
+      const now = Date.now();
+      const coming = cards.filter(card => Date.parse(card.dataset.end || "") >= now)
+        .sort((a, b) => Date.parse(a.dataset.start || "") - Date.parse(b.dataset.start || ""));
+      const finished = cards.filter(card => Date.parse(card.dataset.end || "") < now)
+        .sort((a, b) => Date.parse(b.dataset.start || "") - Date.parse(a.dataset.start || ""));
+      upcoming.replaceChildren(...coming);
+      past.replaceChildren(...finished);
+      document.getElementById("no-upcoming").hidden = coming.length > 0;
+      document.getElementById("no-past").hidden = finished.length > 0;
+      document.getElementById("past-events-link").hidden = finished.length === 0;
+      document.getElementById("past-events").hidden = finished.length === 0;
+    })();
+  </script>
+</PublicSiteLayout>
+<style>
+  .events-index { max-width: var(--wrap); margin: auto; padding: clamp(2.5rem, 6vw, 4rem) var(--gutter) 5rem; }
+  h1 { font-size: clamp(2.1rem, 5vw, 3.4rem); margin: 0 0 2rem; }
+  ul { list-style: none; padding: 0; display: grid; gap: 1.25rem; }
+  #past-events { margin-top: 3rem; }
+  li { border-top: 1px solid var(--line); padding-top: 1.25rem; }
+  h3 { margin: .35rem 0; }
+  a { color: var(--color-link); text-underline-offset: .2em; }
+</style>

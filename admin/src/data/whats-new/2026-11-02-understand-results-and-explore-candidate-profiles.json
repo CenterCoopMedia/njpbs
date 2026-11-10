@@ -1,0 +1,10 @@
+{
+  "date": "2026-11-02",
+  "kind": "new",
+  "title": "Understand results and explore candidate profiles",
+  "body": "Readers can open a short explanation of race calls and vote counting from election results. Candidate names link to voter guide profiles, campaign websites appear when available, and incumbents have a badge. To add your own guidance, place a Text plank above the results in Boardwalk.",
+  "prs": [
+    4665
+  ],
+  "order": 10
+}

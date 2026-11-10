@@ -1,0 +1,22 @@
+{
+  "name": "njpbs-preview-renderer",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "types": "wrangler types --strict-vars=false --include-runtime=false worker-configuration.d.ts",
+    "check": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@aws-sdk/client-s3": "3.1109.0",
+    "@cloudflare/containers": "0.3.7"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "5.20260917.1",
+    "typescript": "5.9.3",
+    "wrangler": "4.134.0"
+  },
+  "overrides": {
+    "sharp": "0.35.5"
+  }
+}

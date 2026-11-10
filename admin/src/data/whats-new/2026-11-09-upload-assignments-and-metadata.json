@@ -1,0 +1,8 @@
+{
+  "date": "2026-11-09",
+  "order": 1794243600000,
+  "kind": "improved",
+  "title": "Set upload details for a batch",
+  "body": "Add a default title and description before uploading a batch. Files keep details you enter individually. Record a metadata update request for one file or the batch, and check its pending status in the media library.",
+  "prs": []
+}

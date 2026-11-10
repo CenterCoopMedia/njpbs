@@ -1,0 +1,10 @@
+{
+  "date": "2026-09-11",
+  "kind": "new",
+  "title": "Choose content with the Add content picker",
+  "body": "A new picker lets you search for a Post or Page and select it by row. Screen readers announce how many matches the search finds.",
+  "prs": [
+    1761
+  ],
+  "order": 0
+}

@@ -1,0 +1,36 @@
+{
+  "kind": "published-post",
+  "document": {
+    "id": "shadow-fixture",
+    "status": "draft",
+    "publiclyVisible": true,
+    "title": "Private working title",
+    "published": {
+      "sourceVersion": 7,
+      "publishedAt": "2026-10-07T12:00:00.000Z",
+      "metadata": {
+        "type": "post",
+        "title": "A published fixture",
+        "slug": "shadow-fixture",
+        "previousSlugs": [],
+        "summary": "Published fixture summary.",
+        "date": "2026-10-07",
+        "editorialDateSource": "editorial",
+        "categories": [],
+        "tags": [],
+        "locale": "en"
+      },
+      "blocks": [{
+        "id": "body", "type": "prose", "visible": true, "order": 0,
+        "data": { "content": { "type": "doc", "content": [{
+          "type": "paragraph", "content": [
+            { "type": "text", "text": "Published body with " },
+            { "type": "text", "text": "a link", "marks": [{ "type": "link", "attrs": { "href": "/about/" } }] },
+            { "type": "text", "text": "." }
+          ]
+        }] } }
+      }]
+    }
+  },
+  "assets": []
+}

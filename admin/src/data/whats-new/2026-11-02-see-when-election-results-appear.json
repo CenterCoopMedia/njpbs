@@ -1,0 +1,10 @@
+{
+  "date": "2026-11-02",
+  "kind": "fixed",
+  "title": "See when election results appear",
+  "body": "Election results say they appear as The Associated Press reports them. Readers see this message while they wait for the first results.",
+  "prs": [
+    4647
+  ],
+  "order": -0.5
+}

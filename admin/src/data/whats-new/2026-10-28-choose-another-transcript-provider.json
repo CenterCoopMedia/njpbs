@@ -1,0 +1,8 @@
+{
+  "date": "2026-10-28",
+  "kind": "improved",
+  "title": "Choose another transcript provider",
+  "body": "In a video's Transcript settings, use New transcript after a failed request, a request that needs attention or a ready result. Choose the free local service or a paid provider, and adjust the language or speaker limit. Earlier requests stay in the saved list. Matching local work is reused, and each person can start up to five free retries a day.",
+  "prs": [],
+  "order": -9
+}

@@ -1,0 +1,584 @@
+/* The tab strip and the upload control for tabs that do not already have one. The strip
+   keeps its own sideways scroll. At a phone width the control takes the next line. */
+.media-workspace-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: var(--cms-space-2);
+  min-width: 0;
+}
+
+.media-workspace-bar > .media-tabs-frame {
+  flex: 1 1 16rem;
+  min-width: 0;
+}
+
+.media-workspace-upload {
+  display: flex;
+  flex: none;
+  align-items: center;
+  min-width: 0;
+  padding-bottom: var(--cms-space-1);
+}
+.media-workspace-upload > .button.media-workspace-upload-button > .button-compact-label {
+  position: static;
+  width: auto;
+  height: auto;
+  overflow: visible;
+  clip-path: none;
+}
+
+@media (max-width: 24.375rem) {
+  .media-workspace-upload {
+    flex: 1 1 100%;
+    padding-bottom: 0;
+  }
+
+  .media-workspace-upload-button {
+    width: 100%;
+  }
+}
+
+.media-library {
+  --media-grid-gap: var(--cms-space-4);
+  --media-card-pad: 10px;
+  min-width: 0;
+  gap: var(--cms-space-6);
+  padding: var(--cms-space-8);
+  container: media-library / inline-size;
+}
+
+/* The Display density override. It sets data-density on
+   this section only and re-declares every spacing variable, so an override never inherits a
+   different shell density. Comfortable restates the defaults; controls keep their 44px
+   baseline except in Loose, as in the shell. Without an override the shell's density applies. */
+:is(.media-library, .favorite-media-library, .media-collection-items-shell)[data-density="comfortable"] {
+  --studio-control-height: var(--cms-control-height);
+  --studio-icon-control: var(--cms-control-height);
+  --studio-gap: var(--cms-workspace-gap);
+  --studio-section-gap: var(--cms-workspace-section-gap);
+  --studio-gutter: var(--cms-gutter);
+  --studio-panel-padding: var(--cms-workspace-panel-padding);
+  --studio-row-padding-block: var(--cms-row-pad);
+  --studio-row-padding-inline: var(--cms-workspace-row-padding-inline);
+  --studio-empty-height: var(--cms-workspace-empty-height);
+  --media-grid-gap: var(--cms-space-4);
+  --media-card-pad: 10px;
+}
+
+:is(:root[data-cms-theme="editorial"][data-density="compact"], .app-shell[data-density="compact"]) :is(.media-library, .favorite-media-library, .media-collection-items-shell):not([data-density]),
+:is(.media-library, .favorite-media-library, .media-collection-items-shell)[data-density="compact"] {
+  --studio-control-height: var(--cms-control-height);
+  --studio-icon-control: var(--cms-control-height);
+  --studio-gap: var(--space-1);
+  --studio-section-gap: var(--space-3);
+  --studio-gutter: var(--space-4);
+  --studio-panel-padding: var(--space-2);
+  --studio-row-padding-block: var(--space-1);
+  --studio-row-padding-inline: var(--space-2);
+  --studio-empty-height: 6rem;
+  --media-grid-gap: var(--cms-space-2);
+  --media-card-pad: var(--cms-space-2);
+}
+
+:is(:root[data-cms-theme="editorial"][data-density="loose"], .app-shell[data-density="loose"]) :is(.media-library, .favorite-media-library, .media-collection-items-shell):not([data-density]),
+:is(.media-library, .favorite-media-library, .media-collection-items-shell)[data-density="loose"] {
+  --studio-control-height: 3rem;
+  --studio-icon-control: 3rem;
+  --studio-gap: var(--space-3);
+  --studio-section-gap: var(--space-6);
+  --studio-gutter: clamp(1rem, 2vw, 2rem);
+  --studio-panel-padding: var(--space-6);
+  --studio-row-padding-block: var(--space-3);
+  --studio-row-padding-inline: var(--space-4);
+  --studio-empty-height: 10rem;
+  --media-grid-gap: var(--cms-space-6);
+  --media-card-pad: var(--cms-space-4);
+}
+
+/* The media routes use the compact context header (styles.css .workspace-header-context): one
+   control row, the shared block padding and its border, not the full 4.5rem header. The sticky
+   toolbar, the inspector and the scroll margins below measure from that header. */
+.workspace-shell:has(> .workspace-header-context, > .workspace-chrome > .workspace-header-context) :is(.media-library, .voiceover-library, .source-media-library) {
+  --workspace-header-height: calc(
+    var(--workspace-shell-control-height, var(--target-comfortable)) +
+    (2 * var(--space-2)) +
+    var(--border-width)
+  );
+}
+
+/* At 900px and narrower the shell header scrolls with the page and the sidebar becomes a
+   sticky top bar: one control row inside --space-4 padding (styles.css). The toolbar pins
+   under that bar. */
+@media (max-width: 900px) {
+  .workspace-shell:has(> .workspace-header-context, > .workspace-chrome > .workspace-header-context) :is(.media-library, .voiceover-library, .source-media-library) {
+    --workspace-header-height: calc((2 * var(--space-4)) + var(--target-comfortable));
+    /* The open menu grows down from that bar (z-index 10), so the toolbar and the selection
+       bar stay beneath it here. */
+    --cms-z-chrome: 9;
+    --cms-z-selection-bar: 9;
+  }
+}
+
+/* Narrow libraries, such as 320px phones or enlarged text (WCAG 1.4.4). The query is in
+   rem, so it follows the text size; at 390px with default text it does not apply. Search and the labeled Upload
+   action wrap as needed instead of spilling past the page. */
+@container media-library (max-width: 15.5rem) {
+  .media-chrome-compact .media-library-toolbar,
+  .media-chrome-compact .ui-overflow-toolbar-trailing {
+    flex-wrap: wrap;
+  }
+
+  .media-chrome-compact .ui-overflow-toolbar-trailing {
+    flex: 1 1 100%;
+  }
+
+  .media-chrome-compact .ui-overflow-toolbar-trailing > .ui-overflow-toolbar-search {
+    min-width: min(7rem, 100%);
+  }
+}
+
+/* Keyboard focus and a scrolled-to receipt, heading or field land below the sticky header and
+   toolbar, never under them (WCAG 2.4.11). The toolbar writes --media-chrome-height. */
+:is(.media-library, .voiceover-library) * {
+  scroll-margin-top: calc(var(--workspace-header-height, 0px) + var(--media-chrome-height, 0px) + var(--cms-space-3));
+}
+
+/* The pager and receipts share the grid's measured clearance from the floating dock. */
+.media-results:has(> .media-selection-dock) > :not(.media-selection-dock) :where(button, input, a, [tabindex]) {
+  scroll-margin-bottom: calc(var(--media-selection-bar-height, 4rem) + var(--cms-space-4));
+}
+
+.content-area-studio:has(> .media-library) {
+  padding: var(--cms-space-8);
+}
+
+.content-area-studio > .media-library {
+  padding: 0;
+}
+
+/* Results, then the details inspector beside them. */
+.media-library .media-library-layout {
+  grid-template-columns: minmax(0, 1fr);
+  gap: var(--cms-space-6);
+}
+
+.media-library .media-library-layout:has(> .ui-inspector:not([hidden])) {
+  grid-template-columns: minmax(0, 1fr) auto;
+}
+
+.media-library .media-results {
+  position: relative;
+  gap: var(--cms-space-4);
+}
+
+/* Deterministic local gallery hosts for the shared upload parts. */
+.media-upload-gallery-canvas,
+.media-upload-gallery-form {
+  display: grid;
+  gap: var(--cms-space-4);
+  min-width: 0;
+}
+
+.media-upload-gallery-canvas {
+  min-height: 24rem;
+  padding: var(--cms-space-6);
+}
+
+.media-upload-gallery-results {
+  display: grid;
+  gap: var(--cms-space-2);
+  min-height: 12rem;
+  align-content: center;
+}
+
+.media-upload-gallery-results span {
+  color: var(--cms-ink-muted);
+}
+
+.media-upload-gallery-form {
+  padding: var(--cms-space-4);
+}
+
+.media-upload-gallery-form label {
+  display: grid;
+  gap: var(--cms-space-1);
+  font-size: var(--cms-font-sm);
+  font-weight: 700;
+}
+
+.media-upload-gallery-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: var(--cms-space-2);
+}
+
+.media-upload-overlay-gallery {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+@media (max-width: 40rem) {
+  .media-upload-overlay-gallery {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+/* A refresh keeps the results in place; this pill over their top edge is the visual cue.
+   The result status below the grid carries the announcement. */
+.media-results-updating {
+  position: absolute;
+  z-index: 1;
+  inset-block-start: 0;
+  inset-inline-start: 50%;
+  display: inline-flex;
+  align-items: center;
+  gap: var(--cms-space-2);
+  transform: translate(-50%, calc(-50% - var(--cms-space-2)));
+  border: var(--cms-border-width) solid var(--cms-line);
+  border-radius: var(--cms-radius-small);
+  padding: var(--cms-space-1) var(--cms-space-3);
+  background: var(--cms-surface-context);
+  box-shadow: none;
+  color: var(--cms-ink-muted);
+  font-size: var(--cms-font-sm);
+  white-space: nowrap;
+}
+
+/* Display thumbnail size sets the shared grid's column minimum (9, 13 and 18rem) and density sets its gap. MediaGrid.css lays the columns out from these. */
+:is(.media-library, .favorite-media-library, .media-collection-items-shell) .media-grid {
+  --media-grid-thumb: var(--cms-thumb-md);
+  gap: var(--media-grid-gap);
+}
+
+:is(.media-library, .favorite-media-library, .media-collection-items-shell)[data-thumbnail="s"] .media-grid {
+  --media-grid-thumb: var(--cms-thumb-sm);
+}
+
+:is(.media-library, .favorite-media-library, .media-collection-items-shell)[data-thumbnail="l"] .media-grid {
+  --media-grid-thumb: var(--cms-thumb-lg);
+}
+
+/* Display density sets the whole card's padding. Comfortable keeps the tile's own. */
+:is(.media-library, .favorite-media-library, .media-collection-items-shell) .media-tile {
+  padding: var(--media-card-pad);
+}
+
+/* While the inspector sits beside the results (a viewport over 1200px and a library over
+   62rem, see below and styles.css), Medium and Large drop to an 11rem minimum, so the results
+   keep three columns instead of two oversized ones. */
+@media (min-width: 1201px) {
+  @container media-library (min-width: 62.0625rem) {
+    .media-library:is([data-thumbnail="m"], [data-thumbnail="l"]) .media-library-layout:has(> .ui-inspector:not([hidden])) .media-grid {
+      --media-grid-thumb: 11rem;
+    }
+  }
+}
+
+.media-library .media-library-layout > .ui-inspector:not(.ui-inspector-sheet) {
+  grid-column: 2;
+  top: calc(var(--workspace-header-height, 0px) + var(--media-chrome-height, 0px) + var(--studio-gutter));
+  max-height: calc(
+    100dvh - var(--workspace-header-height, 0px) - var(--media-chrome-height, 0px) - (2 * var(--studio-gutter))
+  );
+}
+
+.media-image-inspector-form {
+  display: contents;
+}
+
+.media-inspector-field {
+  display: grid;
+  gap: var(--cms-space-1);
+  min-width: 0;
+  color: var(--cms-ink);
+  font-size: var(--cms-font-sm);
+  font-weight: 700;
+}
+
+.media-inspector-field textarea {
+  min-height: 4.75rem;
+  resize: vertical;
+}
+
+.media-inspector-readonly-field {
+  display: grid;
+  gap: var(--cms-space-1);
+  min-width: 0;
+  font-size: var(--cms-font-sm);
+}
+
+.media-inspector-readonly-field > span,
+.media-inspector-readonly-field > .editor-field-label-row {
+  color: var(--cms-ink-muted);
+  font-weight: 700;
+}
+
+.media-inspector-readonly-field p {
+  margin: 0;
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+}
+
+.media-image-inspector .media-category-assignments legend {
+  display: flex;
+  align-items: center;
+  gap: var(--cms-space-1);
+}
+
+.media-inspector-field-help,
+.media-file-summary {
+  margin: 0;
+  color: var(--cms-ink-muted);
+  font-size: var(--cms-font-xs);
+  font-weight: 400;
+  line-height: var(--cms-line-tight);
+}
+
+.media-image-inspector-preview {
+  display: grid;
+  gap: var(--cms-space-2);
+  color: var(--cms-brand-ink);
+  font-size: var(--cms-font-sm);
+  font-weight: 700;
+  text-decoration: none;
+}
+
+.media-image-inspector-preview > img,
+.media-image-inspector-preview > .media-document-preview {
+  display: grid;
+  width: 100%;
+  height: auto;
+  aspect-ratio: 3 / 2;
+  border-radius: var(--cms-radius-control);
+  background: var(--cms-surface-muted);
+  object-fit: cover;
+}
+
+.media-image-inspector-preview > span:last-child {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--cms-space-1);
+  min-height: var(--cms-control-height);
+}
+
+.media-image-inspector-preview-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--cms-space-2);
+}
+
+.media-image-inspector-facts {
+  display: grid;
+  gap: var(--cms-space-2);
+  margin: 0;
+  font-size: var(--cms-font-sm);
+}
+
+.media-image-inspector-facts > div {
+  display: grid;
+  grid-template-columns: minmax(6rem, auto) minmax(0, 1fr);
+  gap: var(--cms-space-2);
+}
+
+.media-image-inspector-facts dt {
+  color: var(--cms-ink-muted);
+}
+
+.media-image-inspector-facts dd {
+  min-width: 0;
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.media-image-inspector-footer {
+  display: grid;
+  flex: 1 1 100%;
+  gap: var(--cms-space-2);
+  min-width: 0;
+}
+
+/* A dirty phone form keeps its native Save and discard controls in view. */
+.ui-inspector-docked > .ui-inspector-footer:has(> .media-image-inspector-footer[data-pinned]) {
+  position: sticky;
+  bottom: 0;
+  z-index: 1;
+}
+
+.media-image-inspector-footer .media-form-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: var(--cms-space-2);
+}
+
+/* Keep the two metadata actions readable at the inspector's 18rem minimum,
+   including the phone sheet. Upload forms keep their stacked phone actions. */
+.media-image-inspector:not(.ui-inspector-docked) .media-image-inspector-footer .media-form-actions {
+  flex-direction: row;
+  flex-wrap: nowrap;
+  align-items: center;
+}
+
+.media-image-inspector:not(.ui-inspector-docked) .media-image-inspector-footer .media-form-actions .button {
+  width: auto;
+  flex: none;
+  white-space: nowrap;
+}
+
+.media-audio-inspector .media-image-inspector-footer {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+}
+
+.media-audio-inspector .media-image-inspector-footer .media-form-actions {
+  flex: 1 1 auto;
+}
+
+.media-audio-inspector .media-image-inspector-footer .button {
+  min-width: 0;
+}
+
+.favorite-media-library {
+  --media-grid-gap: var(--cms-space-4);
+  --media-card-pad: 10px;
+  min-width: 0;
+  display: grid;
+  gap: var(--cms-space-5);
+  padding: var(--cms-space-8);
+}
+
+.media-workspace > .favorite-media-library {
+  padding: 0;
+}
+
+.favorite-media-video-preview {
+  display: grid;
+  place-items: center;
+  width: 100%;
+  height: 100%;
+  min-height: 5rem;
+  background: var(--cms-surface-muted);
+  color: var(--cms-ink-muted);
+}
+
+.favorite-media-video-preview svg {
+  width: 3rem;
+  height: 3rem;
+}
+
+.favorite-media-grid[data-layout="list"] .media-row-thumb {
+  position: relative;
+}
+
+.favorite-media-grid[data-layout="list"] .favorite-media-video-preview {
+  position: absolute;
+  inset: 0;
+  min-height: 0;
+  height: auto;
+}
+
+.favorite-media-grid[data-layout="list"] .favorite-media-video-preview svg {
+  width: 1.25rem;
+  height: 1.25rem;
+}
+
+.favorite-media-unavailable {
+  display: grid;
+  align-content: start;
+  gap: var(--cms-space-2);
+  min-width: 0;
+  border: var(--border-width) solid var(--cms-line);
+  border-radius: var(--radius-surface);
+  padding: var(--cms-space-4);
+  background: var(--cms-surface-soft);
+}
+
+.favorite-media-unavailable > button:first-child {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--cms-space-3);
+  min-height: 44px;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--cms-ink);
+  font: inherit;
+  text-align: left;
+  overflow-wrap: normal;
+}
+
+.favorite-media-unavailable p {
+  margin: var(--cms-space-1) 0 0;
+  color: var(--cms-ink-muted);
+  font-size: var(--cms-font-sm);
+}
+
+.favorite-media-unavailable > .media-favorite-button {
+  justify-self: start;
+}
+
+.favorite-media-unavailable-row .media-row-sub {
+  display: block;
+  color: var(--cms-ink-muted);
+}
+
+.favorite-media-unavailable-row .media-row-actions > .media-favorite-button {
+  min-width: var(--cms-control-height);
+  width: var(--cms-control-height);
+}
+
+@media (max-width: 61.99rem) {
+  .media-library .media-library-layout:has(> .ui-inspector:not([hidden])) {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+@media (max-width: 720px) {
+  .media-library,
+  .favorite-media-library,
+  .content-area-studio:has(> .media-library) {
+    padding: var(--cms-space-4);
+  }
+
+  .content-area-studio > .media-library {
+    padding: 0;
+  }
+
+  .media-library .media-library-layout,
+  .media-library .media-library-layout:has(> .ui-inspector:not([hidden])) {
+    grid-template-columns: minmax(0, 1fr);
+    gap: var(--cms-space-5);
+  }
+
+  .media-library .media-results {
+    grid-column: 1;
+  }
+
+  /* Phones: thumbnail size sets the column count. Small 3, Medium 2, Large 1. */
+  :is(.media-library, .favorite-media-library, .media-collection-items-shell) .media-grid {
+    --media-grid-phone-columns: 2;
+    gap: var(--cms-space-2);
+  }
+
+  :is(.media-library, .favorite-media-library, .media-collection-items-shell)[data-thumbnail="s"] .media-grid {
+    --media-grid-phone-columns: 3;
+  }
+
+  :is(.media-library, .favorite-media-library, .media-collection-items-shell)[data-thumbnail="l"] .media-grid {
+    --media-grid-phone-columns: 1;
+  }
+}
+
+/* The narrowest phones: Small 2, Medium and Large 1. */
+@media (max-width: 340px) {
+  :is(.media-library, .favorite-media-library, .media-collection-items-shell) .media-grid {
+    --media-grid-phone-columns: 1;
+  }
+
+  :is(.media-library, .favorite-media-library, .media-collection-items-shell)[data-thumbnail="s"] .media-grid {
+    --media-grid-phone-columns: 2;
+  }
+}

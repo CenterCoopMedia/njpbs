@@ -1,0 +1,21 @@
+import type { PublicReleasePair } from "../../packages/content-core/src/public-release";
+import type { PairTaskIdentity, PairExecutionError } from "./public-release-pair-work";
+import type { PairViewCursor } from "./public-release-pair-view";
+import type { Firestore, Transaction } from "firebase-admin/firestore";
+export class PairCatalogImageError extends PairExecutionError { readonly reason: "catalog-invalid" | "catalog-unlisted" | "catalog-baseline-collision" | "catalog-owner-mismatch";
+  constructor(reason?: PairCatalogImageError["reason"]); }
+export type PairCatalogImageAuthority = Readonly<{ authorityDigest: string; catalogDigest: string; inputFile: string; inputDigest: string; provenanceDigest: string;
+  originalPairDigest: string; rendererSha: string; readerContractDigest: string; readerReceiptDigest: string; sourceSealDigest: string }>;
+export type PairCatalogImageMember = Readonly<{ path: string; mime: string; size: number; sha256: string; authorities: readonly string[] }>;
+export type PairCatalogImagesManifest = Readonly<{ schemaVersion: 1; kind: "pair-catalog-images"; pairDigest: string; inputManifestDigest: string;
+  cursor: PairViewCursor; catalogs: readonly PairCatalogImageAuthority[]; members: readonly PairCatalogImageMember[] }>;
+export function parsePublicReleasePairCatalogImages(value: unknown, pair: PublicReleasePair, identity: PairTaskIdentity, cursor?: PairViewCursor): PairCatalogImagesManifest;
+export function assertPublicReleasePairCatalogBaseline(manifest: PairCatalogImagesManifest, baseline: { members: readonly { path: string; source: string; family: string; mime: string; sha256: string; size: number }[] }): void;
+export type PairCatalogImagesProof = Readonly<{ schemaVersion: 1; kind: "pair-catalog-images-proof"; status: "staged"; pairDigest: string; taskId: string;
+  identity: PairTaskIdentity; claimDigest: string; viewManifestDigest: string; viewReadbackDigest: string; inputManifestDigest: string; cursor: PairViewCursor;
+  descriptor: Readonly<{ digest: string; key: string; bytes: number }>; memberCount: number; memberBytes: number;
+  authority: Readonly<{ baselineInputManifestDigest: string; baselineCodePackManifestDigest: string; baselineViewManifestDigest: string; codeAssetManifestDigest: string }> }>;
+export function publicReleasePairCatalogImagesProofPath(pair: PublicReleasePair, digest: string): string;
+export function parsePublicReleasePairCatalogImagesProof(value: unknown, pair: PublicReleasePair, identity: PairTaskIdentity, claimDigest: string, viewManifestDigest: string): PairCatalogImagesProof;
+export function assertReadPublicReleasePairCatalogImagesInTransaction(args: { firestore: Firestore; transaction: Transaction; pair: PublicReleasePair;
+  identity: PairTaskIdentity; claimDigest: string; viewManifestDigest: string; manifest: unknown; manifestDigest: string }): Promise<PairCatalogImagesProof>;

@@ -1,0 +1,167 @@
+/* The Display popover: labels in one column, controls in
+   the other, and Reset to default in a footer under a line. */
+.media-display-popover {
+  width: min(26rem, calc(100vw - (2 * var(--cms-space-2))));
+}
+
+.media-display-popover.ui-popover-sheet {
+  width: auto;
+}
+
+/* A long label ("Show on cards and in list columns") wraps at 9rem rather than narrowing the
+   controls beside it. */
+.media-display-rows {
+  display: grid;
+  grid-template-columns: fit-content(9rem) minmax(0, 1fr);
+  gap: var(--cms-space-3) var(--cms-space-4);
+  align-items: center;
+}
+
+.media-display-label {
+  color: var(--cms-ink-secondary);
+  font-size: var(--cms-font-sm);
+  font-weight: 700;
+}
+
+.media-display-rows .field-control {
+  width: 100%;
+}
+
+/* Thumbnail sizes end where the selects under them end; the options stay equal widths. */
+.media-display-rows .ui-segmented {
+  display: grid;
+  width: 100%;
+}
+
+.media-display-fields-label {
+  align-self: start;
+  padding-top: calc((var(--cms-control-height) - 1.25rem) / 2);
+}
+
+.media-display-field-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  column-gap: var(--cms-space-3);
+}
+
+.media-display-name {
+  display: flex;
+  grid-column: 1 / -1;
+  flex-wrap: wrap;
+  align-items: center;
+  column-gap: var(--cms-space-2);
+}
+
+.media-display-note {
+  color: var(--cms-ink-secondary);
+  font-size: var(--cms-font-xs);
+}
+
+/* Under the fields, in the controls column: why the list keeps Updated. */
+.media-display-list-note {
+  grid-column: 2;
+  margin: calc(-1 * var(--cms-space-2)) 0 0;
+}
+
+.media-display-per-page {
+  display: flex;
+  align-items: center;
+  gap: var(--cms-space-3);
+}
+
+.media-display-per-page .field-control {
+  width: 5rem;
+  flex: none;
+}
+
+.media-display-note-below {
+  display: grid;
+  gap: var(--cms-space-1);
+}
+
+.media-display-saved {
+  display: grid;
+  gap: var(--cms-space-3);
+  margin-top: var(--cms-space-4);
+  padding-top: var(--cms-space-3);
+  border-top: var(--cms-border-width) solid var(--cms-line);
+}
+
+.media-display-saved-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--cms-space-3);
+}
+
+.media-display-saved-heading h3,
+.media-display-saved-heading p,
+.media-display-saved-status,
+.media-display-saved-error {
+  margin: 0;
+}
+
+.media-display-saved-heading h3 {
+  font-size: var(--cms-font-control);
+}
+
+.media-display-saved-heading p,
+.media-display-saved-status {
+  color: var(--cms-ink-secondary);
+  font-size: var(--cms-font-xs);
+}
+
+.media-display-saved-form {
+  display: grid;
+  gap: var(--cms-space-2);
+}
+
+.media-display-saved-form > label {
+  color: var(--cms-ink-secondary);
+  font-size: var(--cms-font-sm);
+  font-weight: 700;
+}
+
+.media-display-saved-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--cms-space-2);
+}
+
+.media-display-saved-error {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--cms-space-2);
+  color: var(--cms-danger);
+  font-size: var(--cms-font-sm);
+}
+
+.media-display-reset-filters {
+  justify-self: start;
+}
+
+.media-display-footer {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: var(--cms-space-4);
+  padding-top: var(--cms-space-3);
+  border-top: var(--cms-border-width) solid var(--cms-line);
+}
+
+/* Phones stack each label over its control. */
+@media (max-width: 47.99rem) {
+  .media-display-rows {
+    grid-template-columns: minmax(0, 1fr);
+    row-gap: var(--cms-space-2);
+  }
+
+  .media-display-fields-label {
+    padding-top: var(--cms-space-2);
+  }
+
+  .media-display-list-note {
+    grid-column: 1;
+    margin: 0;
+  }
+}

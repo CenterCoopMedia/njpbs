@@ -1,0 +1,60 @@
+/* The applied-filter chip row. Desktop wraps; phones
+   keep one line that scrolls inside the row, so the page never widens. */
+.media-filter-chips {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--cms-space-2);
+  min-width: 0;
+}
+
+.media-filter-chips > .ui-chip {
+  flex: none;
+}
+
+.media-filter-scope {
+  color: var(--cms-ink-muted);
+  font-size: var(--cms-font-sm);
+  white-space: nowrap;
+}
+
+@media (max-width: 47.99rem) {
+  .media-filter-chips {
+    flex-wrap: nowrap;
+    /* Room for the removers' 44px hit areas and the focus ring inside the scrolling box. */
+    padding-block: var(--cms-space-2);
+    overflow-x: auto;
+    scrollbar-width: none;
+  }
+
+  .media-filter-chips::-webkit-scrollbar {
+    display: none;
+  }
+
+  .media-filter-chips > .button {
+    flex: none;
+  }
+
+  .media-filter-chips[data-fade="end"] {
+    mask-image: linear-gradient(to right, black calc(100% - 28px), transparent);
+  }
+
+  .media-filter-chips[data-fade="mid"] {
+    mask-image: linear-gradient(to right, transparent, black 28px, black calc(100% - 28px), transparent);
+  }
+
+  .media-filter-chips[data-fade="start"] {
+    mask-image: linear-gradient(to right, transparent, black 28px);
+  }
+}
+
+@media (forced-colors: active) {
+  .media-filter-chips[data-fade] {
+    mask-image: none;
+  }
+
+  .media-filter-chips .ui-chip-body:focus-visible,
+  .media-filter-chips .ui-chip-remove:focus-visible {
+    outline: 2px solid Highlight;
+  }
+}

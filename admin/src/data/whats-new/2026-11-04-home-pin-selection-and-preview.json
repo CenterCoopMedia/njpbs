@@ -1,0 +1,8 @@
+{
+  "date": "2026-11-04",
+  "kind": "fixed",
+  "title": "Keep Home pins when changing selection",
+  "body": "Home keeps pinned stories when you switch between categories and tags. Saved Preview uses the current published Pages for pins.",
+  "order": 1793826879864,
+  "prs": []
+}

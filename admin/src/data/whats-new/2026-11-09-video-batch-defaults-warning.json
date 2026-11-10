@@ -1,0 +1,8 @@
+{
+  "date": "2026-11-09",
+  "order": 1794264636011,
+  "kind": "fixed",
+  "title": "Get a warning before leaving upload defaults",
+  "body": "Boardwalk warns before you reload or leave Videos with a batch title, description or metadata update request, even before you choose files. Clear the defaults when you no longer need them.",
+  "prs": []
+}

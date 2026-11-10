@@ -1,0 +1,16 @@
+{
+  "date": "2026-09-29",
+  "kind": "improved",
+  "title": "Page through every media tab the same way",
+  "body": "Images, Videos, Audio, Favorites and Collections now share the same toolbar, page controls and viewer. Move between pages with the buttons or the keyboard, and your place stays the same in each tab.",
+  "prs": [
+    2419,
+    2423,
+    2426,
+    2427,
+    2428,
+    2429,
+    2430
+  ],
+  "order": 0
+}

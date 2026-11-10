@@ -1,0 +1,8 @@
+{
+  "date": "2026-10-20",
+  "kind": "improved",
+  "title": "Open links in staff comments",
+  "body": "In Media, web addresses in staff comments open as links in a new tab. Your current media item and any unsaved comment or reply draft stay in place.",
+  "prs": [],
+  "order": 0
+}

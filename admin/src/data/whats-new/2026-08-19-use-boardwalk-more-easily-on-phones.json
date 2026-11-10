@@ -1,0 +1,16 @@
+{
+  "date": "2026-08-19",
+  "kind": "improved",
+  "title": "Use Boardwalk more easily on phones",
+  "body": "Editor actions, long titles, gallery controls, page outlines and staff access records now fit narrow screens. Page content stays in the main editor area, and mobile lists have cleaner spacing.",
+  "prs": [
+    1062,
+    1061,
+    1059,
+    1002,
+    992,
+    990,
+    974
+  ],
+  "order": -3
+}

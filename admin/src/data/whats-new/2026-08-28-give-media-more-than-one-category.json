@@ -1,0 +1,11 @@
+{
+  "date": "2026-08-28",
+  "kind": "new",
+  "title": "Give media more than one category",
+  "body": "Each item in the Media library can have more than one category. Categories come from a managed list, so names stay the same for everyone.",
+  "prs": [
+    1336,
+    1337
+  ],
+  "order": 0
+}

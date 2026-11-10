@@ -1,0 +1,10 @@
+{
+  "date": "2026-09-10",
+  "kind": "fixed",
+  "title": "Direct links to Boardwalk screens open",
+  "body": "A bookmarked or shared link to a Boardwalk screen now opens that screen instead of an error.",
+  "prs": [
+    1731
+  ],
+  "order": -3
+}

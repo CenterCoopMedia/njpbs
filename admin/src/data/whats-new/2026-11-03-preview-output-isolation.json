@@ -1,0 +1,10 @@
+{
+  "date": "2026-11-03",
+  "kind": "fixed",
+  "title": "Open previews during background updates",
+  "body": "Post previews can open when supporting content is verified, even if a recent publish or a background search or feed update is still finishing.",
+  "prs": [
+    4741
+  ],
+  "order": 1793772858366
+}

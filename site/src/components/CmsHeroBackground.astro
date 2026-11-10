@@ -1,0 +1,87 @@
+---
+import { createPageImageLoading, type PageImageLoading } from "../../../packages/content-core/src/image-loading";
+interface HeroBackgroundImage {
+  url: string;
+  width: number;
+  height: number;
+}
+
+interface Props {
+  image?: HeroBackgroundImage | null;
+  position?: "center" | "top" | "bottom" | "right";
+  runtimePageId?: "contact";
+  /** Share the route assembler's one priority slot with its lead image. */
+  imageLoading?: PageImageLoading;
+}
+
+const {
+  image,
+  position = "center",
+  runtimePageId,
+  imageLoading = createPageImageLoading(),
+} = Astro.props as Props;
+const loading = imageLoading(image, "lcp");
+---
+
+{
+  (image || runtimePageId) && (
+    <div
+      class="cms-hero-background"
+      data-cms-runtime-hero={runtimePageId}
+      aria-hidden="true"
+    >
+      {image && (
+        <>
+          <img
+            class="cms-hero-background__image"
+            src={image.url}
+            width={image.width}
+            height={image.height}
+            alt=""
+            {...loading}
+            style={`object-position: ${position};`}
+          />
+          <span class="cms-hero-background__overlay"></span>
+        </>
+      )}
+    </div>
+  )
+}
+
+<style is:global>
+  .cms-hero-surface {
+    position: relative;
+    isolation: isolate;
+  }
+
+  .cms-hero-surface > :not(.cms-hero-background) {
+    position: relative;
+    z-index: 1;
+  }
+
+  .cms-hero-background {
+    position: absolute;
+    inset: 0;
+    z-index: 0;
+    overflow: hidden;
+    pointer-events: none;
+  }
+
+  .cms-hero-background__image,
+  .cms-hero-background__overlay {
+    position: absolute;
+    inset: 0;
+    display: block;
+    width: 100%;
+    height: 100%;
+  }
+
+  .cms-hero-background__image {
+    object-fit: cover;
+  }
+
+  .cms-hero-background__overlay {
+    background: var(--color-black);
+    opacity: 0.68;
+  }
+</style>

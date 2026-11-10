@@ -1,0 +1,10 @@
+{
+  "date": "2026-11-03",
+  "kind": "fixed",
+  "title": "Keep the homepage current during publishing",
+  "body": "The public homepage keeps recent Posts visible when several updates publish close together. Public Pages return an available saved copy sooner during a publishing interruption.",
+  "prs": [
+    4738
+  ],
+  "order": 1793765368790
+}

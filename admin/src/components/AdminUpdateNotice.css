@@ -1,0 +1,17 @@
+.admin-update-notice .inline-message-copy {
+  display: grid;
+  gap: var(--space-2);
+}
+
+.admin-update-notice p { margin: 0; }
+
+.admin-update-notes-link {
+  display: inline-flex;
+  align-items: center;
+  min-height: var(--target-comfortable);
+  padding-inline: var(--space-2);
+}
+
+@media print {
+  .inline-message.admin-update-notice { display: none; }
+}

@@ -1,0 +1,88 @@
+title: "[Help] "
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Ask in your own words. You do not need technical terms.
+
+        - A change you want in the product: [Ideas](https://github.com/CenterCoopMedia/njpbs/discussions/new?category=ideas)
+        - Handbook: [docs/collaboration](https://github.com/CenterCoopMedia/njpbs/blob/main/docs/collaboration/README.md)
+
+        Do not include passwords, Access codes, donor or member data, private contact details, unpublished agreements, or other protected information.
+  - type: dropdown
+    id: role
+    attributes:
+      label: I am
+      options:
+        - A staff editor (I use the CMS)
+        - Looking at the public site or a preview
+        - A CCM or MSU collaborator
+        - A stakeholder
+        - Someone else
+    validations:
+      required: true
+  - type: dropdown
+    id: help-type
+    attributes:
+      label: What do you need help with?
+      options:
+        - A question or unclear step
+        - A content problem on a public page
+        - Something in the CMS (edit, save, publish, access)
+        - An interface or interaction problem
+        - An accessibility problem
+        - An account or permission problem
+        - Something else
+    validations:
+      required: true
+  - type: textarea
+    id: task
+    attributes:
+      label: What were you trying to do?
+      description: Describe the task in one or two sentences.
+      placeholder: I was trying to update tonight's schedule on the Watch page.
+    validations:
+      required: true
+  - type: textarea
+    id: result
+    attributes:
+      label: What happened?
+      description: Tell us what you saw. Copy a short error message if one appeared.
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: What did you expect?
+    validations:
+      required: true
+  - type: input
+    id: location
+    attributes:
+      label: Where did this happen?
+      description: A path is enough (`/watch`, Watch editor). Omit tokens and query strings.
+      placeholder: /watch or the schedule editor
+    validations:
+      required: true
+  - type: dropdown
+    id: impact
+    attributes:
+      label: Can your work continue?
+      options:
+        - Yes. This is confusing or untidy.
+        - Yes, with a temporary way around the problem.
+        - No. Work cannot continue, or public information is wrong.
+    validations:
+      required: true
+  - type: textarea
+    id: context
+    attributes:
+      label: Optional context
+      description: Device, browser, or a cropped screenshot. Remove private information first.
+  - type: checkboxes
+    id: privacy
+    attributes:
+      label: Privacy check
+      options:
+        - label: I checked that this post does not include protected or private information.
+          required: true

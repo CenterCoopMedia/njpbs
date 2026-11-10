@@ -1,0 +1,8 @@
+{
+  "date": "2026-11-01",
+  "kind": "fixed",
+  "title": "See when a profile is still publishing",
+  "body": "A newly published profile shows a short message while its author page finishes publishing. Check back in a few minutes to open the page.",
+  "prs": [],
+  "order": -8
+}

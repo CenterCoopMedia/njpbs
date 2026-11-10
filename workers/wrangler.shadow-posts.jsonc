@@ -1,0 +1,35 @@
+{
+  "$schema": "../node_modules/wrangler/config-schema.json",
+  // Dev-only shadow. The workflow supplies the secret and explicit pilot vars.
+  "name": "njpbs-shadow-posts",
+  "main": "./src/shadow-post-entry.ts",
+  "compatibility_date": "2026-10-07",
+  "compatibility_flags": ["nodejs_compat"],
+  "workers_dev": false,
+  "preview_urls": false,
+  "routes": [{ "pattern": "https://dev-public.example.org/posts/*", "zone_name": "njpbs.org" }],
+  "vars": { "SHADOW_POSTS_ENABLED": "false", "SHADOW_POST_SLUGS": "" },
+  "services": [
+    { "binding": "PUBLISHED_POSTS", "service": "njpbs-shadow-published-posts-reader" },
+    { "binding": "STAFF_ACCESS", "service": "njpbs-cms-api", "entrypoint": "StaffSiteEntrypoint" }
+  ],
+  "assets": {
+    "directory": "../site/.shadow-renderer/client",
+    "binding": "SHADOW_ASSETS",
+    "run_worker_first": ["/posts/*"]
+  },
+  // Explicit opt-in profile. Render with --env kv and a configured namespace.
+  // The ordinary dev workflow renders without this profile or any KV binding.
+  "env": {
+    "kv": {
+      "name": "njpbs-shadow-posts",
+      "vars": { "SHADOW_POSTS_ENABLED": "false", "SHADOW_POST_SLUGS": "", "SHADOW_POST_REVISIONS_ENABLED": "false" },
+      "kv_namespaces": [{ "binding": "SHADOW_POST_REVISIONS", "id": "${SHADOW_POST_REVISIONS_KV_NAMESPACE_ID}" }],
+      "services": [
+        { "binding": "PUBLISHED_POSTS", "service": "njpbs-shadow-published-posts-reader" },
+        { "binding": "STAFF_ACCESS", "service": "njpbs-cms-api", "entrypoint": "StaffSiteEntrypoint" }
+      ]
+    }
+  },
+  "observability": { "enabled": true }
+}

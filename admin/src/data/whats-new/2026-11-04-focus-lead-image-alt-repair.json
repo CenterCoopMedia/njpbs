@@ -1,0 +1,8 @@
+{
+  "date": "2026-11-04",
+  "kind": "fixed",
+  "title": "Go directly to a lead image description error",
+  "body": "If a decorative lead image still has description text, Save takes you to that field. Clear the text or turn off the decorative mark, then save again.",
+  "prs": [],
+  "order": 1793825100000
+}

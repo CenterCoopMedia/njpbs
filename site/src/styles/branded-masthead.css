@@ -1,0 +1,41 @@
+/* Shared Post and Home masthead artwork. Motion belongs to content controls. */
+.branded-masthead {
+  position: relative;
+  isolation: isolate;
+  overflow: hidden;
+  border-bottom: 1px solid var(--line);
+  background:
+    radial-gradient(68% 130% at 88% -14%, rgba(77, 94, 232, 0.42), transparent 63%),
+    radial-gradient(70% 105% at 2% 112%, rgba(0, 172, 0, 0.13), transparent 68%),
+    linear-gradient(148deg, var(--bg-1), var(--bg-0));
+}
+
+.branded-masthead::after {
+  position: absolute;
+  right: -12rem;
+  bottom: -18rem;
+  z-index: -1;
+  width: clamp(24rem, 50vw, 46rem);
+  aspect-ratio: 1;
+  border: 1px solid var(--line);
+  border-radius: 50%;
+  content: "";
+  opacity: 0.65;
+  pointer-events: none;
+}
+
+.branded-signal {
+  display: grid;
+  grid-template-columns: 1.2fr 0.7fr 0.35fr;
+  gap: 0.45rem;
+  width: min(100%, 18rem);
+  height: 0.42rem;
+}
+
+.branded-signal span {
+  border-radius: var(--radius-pill);
+  background: var(--pbs-blue-bright);
+}
+
+.branded-signal span:nth-child(2) { background: var(--color-nj-green); opacity: 0.72; }
+.branded-signal span:nth-child(3) { background: var(--text-quiet); opacity: 0.58; }

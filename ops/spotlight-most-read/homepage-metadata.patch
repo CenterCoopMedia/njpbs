@@ -1,0 +1,15 @@
+--- a/helpers/spotlight-homepage-helpers.php
++++ b/helpers/spotlight-homepage-helpers.php
+@@ -247 +247,3 @@
+-	$content .= "</a></li>";
++	$content .= "</a>";
++	if (function_exists('spotlight_home_story_meta')) { $content .= spotlight_home_story_meta($pid); }
++	$content .= "</li>";
+@@ -494 +496 @@
+-					<div class='meta'>" . $author . "</div>
++					" . (function_exists('spotlight_home_story_meta') ? spotlight_home_story_meta($pid, $author) : "<div class='meta'>" . $author . "</div>") . "
+@@ -709,0 +712,4 @@
++		if (function_exists('spotlight_home_story_meta')) {
++			$author = function_exists('spotlight_author') ? spotlight_author($featured_post_id, false) : '';
++			$content .= spotlight_home_story_meta($featured_post_id, $author);
++		}

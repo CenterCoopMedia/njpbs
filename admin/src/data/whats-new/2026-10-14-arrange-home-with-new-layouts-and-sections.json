@@ -1,0 +1,25 @@
+{
+  "date": "2026-10-14",
+  "kind": "new",
+  "title": "Arrange Home with new layouts and sections",
+  "body": "In Home, you can choose a rotating or lead-story layout, edit story button text and move sections. New sections include the newscast, a newsletter bar and a giving section.",
+  "prs": [
+    3480,
+    3477,
+    3439,
+    3407,
+    3478,
+    3474,
+    3154,
+    3162,
+    3140,
+    3137,
+    3135,
+    3132,
+    3131,
+    3129,
+    3127,
+    2922
+  ],
+  "order": -1
+}

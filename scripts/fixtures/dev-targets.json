@@ -1,0 +1,21 @@
+{
+  "FIREBASE_PROJECT_ID": "njpbs-site-dev",
+  "FIREBASE_WEB_APP_ID": "1:123456789012:web:abcdef1234567890",
+  "CMS_API_WORKER": "template-dev-cms-api",
+  "CMS_PREVIEW_WORKER": "template-dev-cms-preview",
+  "CMS_PREVIEW_RENDERER": "template-dev-cms-preview-renderer",
+  "CMS_PREVIEW_STAFF_WORKER": "template-dev-preview-staff-sites",
+  "CMS_SITE_PAGES": "template-dev",
+  "CMS_ADMIN_PAGES": "template-dev-admin",
+  "CMS_MEDIA_BUCKET": "template-dev-media",
+  "CMS_PREVIEW_BUCKET": "template-dev-cms-previews",
+  "CMS_ADMIN_ORIGIN": "https://dev-admin.example.org",
+  "CMS_API_ORIGIN": "https://dev-api.example.org",
+  "CMS_PREVIEW_ORIGIN": "https://dev-preview.example.org",
+  "CMS_SITE_ORIGIN": "https://dev-public.example.org",
+  "CMS_MEDIA_ORIGIN": "https://dev-media.example.org",
+  "FUNCTIONS_ORIGIN": "https://us-central1-njpbs-site-dev.cloudfunctions.net",
+  "CMS_DEPLOYMENT_ENVIRONMENT": "development",
+  "CLOUDFLARE_ACCOUNT_ID": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  "CMS_ADMIN_PAGES_BRANCH": "main"
+}

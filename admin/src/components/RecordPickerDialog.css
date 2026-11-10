@@ -1,0 +1,23 @@
+.record-picker-dialog {
+  width: min(42rem, calc(100vw - 2rem));
+  max-height: min(44rem, calc(100vh - 2rem));
+  overflow: auto;
+  padding: 1.5rem;
+  border: var(--border-width) solid var(--color-border);
+  border-radius: var(--radius-surface);
+  background: var(--color-surface);
+  color: var(--color-text-on-surface);
+}
+.record-picker-dialog::backdrop { background: rgb(0 0 0 / 55%); }
+.record-picker-dialog__head,
+.record-picker-dialog__results button {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+}
+.record-picker-dialog__filters { display: grid; gap: 0.5rem; }
+.record-picker-dialog__results { list-style: none; padding: 0; }
+.record-picker-dialog__results li { margin-block: 0.5rem; }
+.record-picker-dialog__results button { width: 100%; min-height: 3rem; text-align: left; }
+.record-picker-dialog__results img { object-fit: cover; flex: none; }

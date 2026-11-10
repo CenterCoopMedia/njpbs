@@ -1,0 +1,11 @@
+{
+  "date": "2026-09-29",
+  "kind": "new",
+  "title": "Edit the newsletter button in the site header",
+  "body": "Open Admin settings, then the Public website section. You can show or hide the header newsletter button, change its label and link, and choose whether it opens in a new tab.",
+  "prs": [
+    2414,
+    2415
+  ],
+  "order": -1
+}

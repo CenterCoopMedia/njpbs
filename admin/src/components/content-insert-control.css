@@ -1,0 +1,35 @@
+.content-row-add .content-insert-control.action-control {
+  display: flex;
+  justify-content: flex-start;
+  flex-basis: auto;
+  gap: var(--cms-space-2);
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
+  min-height: var(--cms-editor-control-size);
+  height: auto;
+  border-style: dashed;
+  border-radius: var(--cms-radius-control);
+  padding: var(--cms-space-2) var(--cms-space-3);
+  box-shadow: none;
+  font-size: var(--cms-font-sm);
+  font-weight: 500;
+  text-align: start;
+  white-space: normal;
+}
+
+.content-row-add[data-placement="page"] > .content-insert-control { width: auto; }
+.content-insert-control .icon { flex: none; }
+.content-insert-label { min-width: 0; overflow-wrap: anywhere; }
+
+.content-row-add .content-insert-control.action-control[aria-expanded="true"] {
+  background: var(--cms-action-secondary-hover);
+}
+
+.content-row-add .content-insert-control.action-control:focus-visible {
+  outline: var(--cms-focus-outline);
+  outline-offset: var(--cms-focus-offset);
+}
+
+/* The outline can be much narrower than a canvas column. */
+.content-outline .content-row-add { min-width: 0; max-width: 100%; }

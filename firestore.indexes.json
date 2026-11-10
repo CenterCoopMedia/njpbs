@@ -1,0 +1,2053 @@
+{
+  "indexes": [
+    {
+      "collectionGroup": "admin_logs",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "actorUid", "order": "ASCENDING" },
+        { "fieldPath": "action", "order": "ASCENDING" },
+        { "fieldPath": "timestamp", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "cuezTransferOperations",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "initiatedBy", "order": "ASCENDING" },
+        { "fieldPath": "updatedAt", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "liveProductionSessions",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "createdAtMs", "order": "DESCENDING" },
+        { "fieldPath": "__name__", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "banners",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "archived", "order": "ASCENDING" },
+        { "fieldPath": "order", "order": "ASCENDING" },
+        { "fieldPath": "__name__", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "cmsPublishQueue",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "status", "order": "ASCENDING" },
+        { "fieldPath": "triggeredAt", "order": "DESCENDING" }
+      ]
+    },
+    { "collectionGroup": "releases", "queryScope": "COLLECTION", "fields": [
+      { "fieldPath": "runtime.owner", "order": "ASCENDING" },
+      { "fieldPath": "runtime.release", "order": "ASCENDING" },
+      { "fieldPath": "nextAttemptAt", "order": "ASCENDING" }
+    ] },
+    {
+      "collectionGroup": "ugcSubmissions",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "status", "order": "ASCENDING" },
+        { "fieldPath": "createdAt", "order": "DESCENDING" },
+        { "fieldPath": "__name__", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "media_assets",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "lifecycle", "order": "ASCENDING" },
+        { "fieldPath": "purgeAfter", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "mediaPurgeQueue",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "state", "order": "ASCENDING" },
+        { "fieldPath": "eligibleAt", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "mediaSourceTranscriptAlignmentJobs",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "active", "order": "ASCENDING" },
+        { "fieldPath": "createdAt", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "mediaSourceOrientationExports",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "active", "order": "ASCENDING" },
+        { "fieldPath": "createdAt", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "mediaSourceOrientationExports",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "active", "order": "ASCENDING" },
+        { "fieldPath": "uploadDeadline", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "mediaSourceOrientationExports",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "assetId", "order": "ASCENDING" },
+        { "fieldPath": "createdAt", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "mediaSourcePreviewJobs",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "actorUid", "order": "ASCENDING" },
+        { "fieldPath": "active", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "mediaSourceTranscriptJobs",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "active", "order": "ASCENDING" },
+        { "fieldPath": "provider", "order": "ASCENDING" },
+        { "fieldPath": "createdAt", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "mediaSourceClipJobs",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "requestedBy", "order": "ASCENDING" },
+        { "fieldPath": "assetId", "order": "ASCENDING" },
+        { "fieldPath": "requestedAt", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "mediaSourceClipJobs",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "requestedBy", "order": "ASCENDING" },
+        { "fieldPath": "assetId", "order": "ASCENDING" },
+        { "fieldPath": "sourceObjectVersionId", "order": "ASCENDING" },
+        { "fieldPath": "inputObjectVersionId", "order": "ASCENDING" },
+        { "fieldPath": "requestedAt", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "mediaSourceClipJobs",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "requestedBy", "order": "ASCENDING" },
+        { "fieldPath": "assetId", "order": "ASCENDING" },
+        { "fieldPath": "sourceObjectVersionId", "order": "ASCENDING" },
+        { "fieldPath": "scope", "order": "ASCENDING" },
+        { "fieldPath": "requestedAt", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "mediaSourceAssets",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "sourceId", "order": "ASCENDING" },
+        { "fieldPath": "lifecycle", "order": "ASCENDING" },
+        { "fieldPath": "updatedAtSort", "order": "ASCENDING" },
+        { "fieldPath": "__name__", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "mediaSourceAssets",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "sourceId", "order": "ASCENDING" },
+        { "fieldPath": "lifecycle", "order": "ASCENDING" },
+        { "fieldPath": "tags", "arrayConfig": "CONTAINS" },
+        { "fieldPath": "updatedAtSort", "order": "DESCENDING" },
+        { "fieldPath": "__name__", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "mediaSourceAssets",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "sourceId", "order": "ASCENDING" },
+        { "fieldPath": "lifecycle", "order": "ASCENDING" },
+        { "fieldPath": "tags", "arrayConfig": "CONTAINS" },
+        { "fieldPath": "updatedAtSort", "order": "ASCENDING" },
+        { "fieldPath": "__name__", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "mediaSourceAssets",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "sourceId", "order": "ASCENDING" },
+        { "fieldPath": "lifecycle", "order": "ASCENDING" },
+        { "fieldPath": "tags", "arrayConfig": "CONTAINS" },
+        { "fieldPath": "nameSort", "order": "ASCENDING" },
+        { "fieldPath": "__name__", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "mediaSourceAssets",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "sourceId", "order": "ASCENDING" },
+        { "fieldPath": "lifecycle", "order": "ASCENDING" },
+        { "fieldPath": "createdBy", "order": "ASCENDING" },
+        { "fieldPath": "updatedAtSort", "order": "DESCENDING" },
+        { "fieldPath": "__name__", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "mediaSourceAssets",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "sourceId", "order": "ASCENDING" },
+        { "fieldPath": "lifecycle", "order": "ASCENDING" },
+        { "fieldPath": "createdBy", "order": "ASCENDING" },
+        { "fieldPath": "updatedAtSort", "order": "ASCENDING" },
+        { "fieldPath": "__name__", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "mediaSourceAssets",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "sourceId", "order": "ASCENDING" },
+        { "fieldPath": "lifecycle", "order": "ASCENDING" },
+        { "fieldPath": "createdBy", "order": "ASCENDING" },
+        { "fieldPath": "nameSort", "order": "ASCENDING" },
+        { "fieldPath": "__name__", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "mediaSourceAssets",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "sourceId", "order": "ASCENDING" },
+        { "fieldPath": "lifecycle", "order": "ASCENDING" },
+        { "fieldPath": "rightsStatus", "order": "ASCENDING" },
+        { "fieldPath": "updatedAtSort", "order": "DESCENDING" },
+        { "fieldPath": "__name__", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "mediaSourceAssets",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "sourceId", "order": "ASCENDING" },
+        { "fieldPath": "lifecycle", "order": "ASCENDING" },
+        { "fieldPath": "rightsStatus", "order": "ASCENDING" },
+        { "fieldPath": "updatedAtSort", "order": "ASCENDING" },
+        { "fieldPath": "__name__", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "mediaSourceAssets",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "sourceId", "order": "ASCENDING" },
+        { "fieldPath": "lifecycle", "order": "ASCENDING" },
+        { "fieldPath": "rightsStatus", "order": "ASCENDING" },
+        { "fieldPath": "nameSort", "order": "ASCENDING" },
+        { "fieldPath": "__name__", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "mediaSourceAssets",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "sourceId", "order": "ASCENDING" },
+        { "fieldPath": "lifecycle", "order": "ASCENDING" },
+        { "fieldPath": "updatedAtSort", "order": "DESCENDING" },
+        { "fieldPath": "__name__", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "mediaSourceAssets",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "sourceId", "order": "ASCENDING" },
+        { "fieldPath": "lifecycle", "order": "ASCENDING" },
+        { "fieldPath": "nameSort", "order": "ASCENDING" },
+        { "fieldPath": "__name__", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "mediaSourceAssets",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "sourceId", "order": "ASCENDING" },
+        { "fieldPath": "lifecycle", "order": "ASCENDING" },
+        { "fieldPath": "sizeBytes", "order": "DESCENDING" },
+        { "fieldPath": "__name__", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "mediaSourceAssets",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "sourceId", "order": "ASCENDING" },
+        { "fieldPath": "lifecycle", "order": "ASCENDING" },
+        { "fieldPath": "sizeBytes", "order": "ASCENDING" },
+        { "fieldPath": "__name__", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "mediaSourceAssets",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "sourceId", "order": "ASCENDING" },
+        { "fieldPath": "lifecycle", "order": "ASCENDING" },
+        { "fieldPath": "tags", "arrayConfig": "CONTAINS" },
+        { "fieldPath": "sizeBytes", "order": "DESCENDING" },
+        { "fieldPath": "__name__", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "mediaSourceAssets",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "sourceId", "order": "ASCENDING" },
+        { "fieldPath": "lifecycle", "order": "ASCENDING" },
+        { "fieldPath": "tags", "arrayConfig": "CONTAINS" },
+        { "fieldPath": "sizeBytes", "order": "ASCENDING" },
+        { "fieldPath": "__name__", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "mediaSourceAssets",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "sourceId", "order": "ASCENDING" },
+        { "fieldPath": "lifecycle", "order": "ASCENDING" },
+        { "fieldPath": "createdBy", "order": "ASCENDING" },
+        { "fieldPath": "sizeBytes", "order": "DESCENDING" },
+        { "fieldPath": "__name__", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "mediaSourceAssets",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "sourceId", "order": "ASCENDING" },
+        { "fieldPath": "lifecycle", "order": "ASCENDING" },
+        { "fieldPath": "createdBy", "order": "ASCENDING" },
+        { "fieldPath": "sizeBytes", "order": "ASCENDING" },
+        { "fieldPath": "__name__", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "mediaSourceAssets",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "sourceId", "order": "ASCENDING" },
+        { "fieldPath": "lifecycle", "order": "ASCENDING" },
+        { "fieldPath": "rightsStatus", "order": "ASCENDING" },
+        { "fieldPath": "sizeBytes", "order": "DESCENDING" },
+        { "fieldPath": "__name__", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "mediaSourceAssets",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "sourceId", "order": "ASCENDING" },
+        { "fieldPath": "lifecycle", "order": "ASCENDING" },
+        { "fieldPath": "rightsStatus", "order": "ASCENDING" },
+        { "fieldPath": "sizeBytes", "order": "ASCENDING" },
+        { "fieldPath": "__name__", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "cmsPreviewQueue",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "exactTargetKey", "order": "ASCENDING" },
+        { "fieldPath": "exactAttempt", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "cmsVersionHistory",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "collection", "order": "ASCENDING" },
+        { "fieldPath": "documentId", "order": "ASCENDING" },
+        { "fieldPath": "before.version", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "cmsVersionHistory",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "collection", "order": "ASCENDING" },
+        { "fieldPath": "documentId", "order": "ASCENDING" },
+        { "fieldPath": "after.version", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "staffAccessEmailOutbox",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "state", "order": "ASCENDING" },
+        { "fieldPath": "nextAttemptAt", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "staffAccessEmailOutbox",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "state", "order": "ASCENDING" },
+        { "fieldPath": "leaseUntil", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "staffAccessNotificationOutbox",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "state", "order": "ASCENDING" },
+        { "fieldPath": "nextAttemptAt", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "staffAccessNotificationOutbox",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "state", "order": "ASCENDING" },
+        { "fieldPath": "leaseUntil", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "cmsVersionHistory",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "collection", "order": "ASCENDING" },
+        { "fieldPath": "documentId", "order": "ASCENDING" },
+        { "fieldPath": "at", "order": "DESCENDING" },
+        { "fieldPath": "__name__", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "cmsPages",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "status", "order": "ASCENDING" },
+        { "fieldPath": "publishAt", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "cmsPosts",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "status", "order": "ASCENDING" },
+        { "fieldPath": "publishAt", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "cmsPosts",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "status", "order": "ASCENDING" },
+        { "fieldPath": "section", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "cmsPages",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "status", "order": "ASCENDING" },
+        { "fieldPath": "reviewRequest.requestedAt", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "cmsPosts",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "status", "order": "ASCENDING" },
+        { "fieldPath": "reviewRequest.requestedAt", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "cmsPages",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "status", "order": "ASCENDING" },
+        { "fieldPath": "section", "order": "ASCENDING" },
+        { "fieldPath": "reviewRequest.requestedAt", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "cmsPosts",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "status", "order": "ASCENDING" },
+        { "fieldPath": "section", "order": "ASCENDING" },
+        { "fieldPath": "reviewRequest.requestedAt", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "cmsPages",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "status", "order": "ASCENDING" },
+        { "fieldPath": "publishBuildPending", "order": "ASCENDING" },
+        { "fieldPath": "publishBuildQueueId", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "cmsPosts",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "status", "order": "ASCENDING" },
+        { "fieldPath": "publishBuildPending", "order": "ASCENDING" },
+        { "fieldPath": "publishBuildQueueId", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "cmsPublishQueue",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "status", "order": "ASCENDING" },
+        { "fieldPath": "serializerClaim.serializerId", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "cmsPublishQueue",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "status", "order": "ASCENDING" },
+        { "fieldPath": "transport", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "cmsPublishQueue",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "status", "order": "ASCENDING" },
+        { "fieldPath": "transport", "order": "ASCENDING" },
+        { "fieldPath": "triggeredAt", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "cmsPreviewQueue",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "status", "order": "ASCENDING" },
+        { "fieldPath": "transport", "order": "ASCENDING" },
+        { "fieldPath": "rendererSha", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "cmsPreviewQueue",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "status", "order": "ASCENDING" },
+        { "fieldPath": "serializerClaim.serializerId", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "cmsPreviewQueue",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "status", "order": "ASCENDING" },
+        { "fieldPath": "transport", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "mediaUsage",
+      "queryScope": "COLLECTION_GROUP",
+      "fields": [
+        { "fieldPath": "state", "order": "ASCENDING" },
+        { "fieldPath": "assetIds", "arrayConfig": "CONTAINS" }
+      ]
+    },
+    {
+      "collectionGroup": "mediaUsage",
+      "queryScope": "COLLECTION_GROUP",
+      "fields": [
+        { "fieldPath": "state", "order": "ASCENDING" },
+        { "fieldPath": "generation", "order": "ASCENDING" },
+        { "fieldPath": "assetIds", "arrayConfig": "CONTAINS" }
+      ]
+    },
+    {
+      "collectionGroup": "bug_reports",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "reporter.uid", "order": "ASCENDING" },
+        { "fieldPath": "createdAt", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "bug_reports",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "status", "order": "ASCENDING" },
+        { "fieldPath": "createdAt", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "bug_reports",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "status", "order": "ASCENDING" },
+        { "fieldPath": "severity", "order": "ASCENDING" },
+        { "fieldPath": "createdAt", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "bugReportDeliveryOutbox",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "state", "order": "ASCENDING" },
+        { "fieldPath": "nextAttemptAt", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "bugReportGithubOutbox",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "state", "order": "ASCENDING" },
+        { "fieldPath": "nextAttemptAt", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "bugReportGithubOutbox",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "state", "order": "ASCENDING" },
+        { "fieldPath": "leaseUntil", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "bugReportDeliveryOutbox",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "state", "order": "ASCENDING" },
+        { "fieldPath": "leaseUntil", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "bugReportAutofixOutbox",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "state", "order": "ASCENDING" },
+        { "fieldPath": "nextAttemptAt", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "bugReportAutofixOutbox",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "state", "order": "ASCENDING" },
+        { "fieldPath": "leaseUntil", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "bugReportFollowupOutbox",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "state", "order": "ASCENDING" },
+        { "fieldPath": "nextAttemptAt", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "bugReportFollowupOutbox",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "state", "order": "ASCENDING" },
+        { "fieldPath": "leaseUntil", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "admin_logs",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "target", "order": "ASCENDING" },
+        { "fieldPath": "at", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "cmsPosts",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "published.authorIds", "arrayConfig": "CONTAINS" },
+        { "fieldPath": "publiclyVisible", "order": "ASCENDING" },
+        { "fieldPath": "published.metadata.type", "order": "ASCENDING" },
+        { "fieldPath": "__name__", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "cmsPosts",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "published.metadata.type", "order": "ASCENDING" },
+        { "fieldPath": "published.metadata.slug", "order": "ASCENDING" },
+        { "fieldPath": "__name__", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "cmsPosts",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "published.metadata.previousSlugs", "arrayConfig": "CONTAINS" },
+        { "fieldPath": "published.metadata.type", "order": "ASCENDING" },
+        { "fieldPath": "__name__", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "cmsPosts",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "type", "order": "ASCENDING" },
+        { "fieldPath": "updatedAt", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "cmsPosts",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "type", "order": "ASCENDING" },
+        { "fieldPath": "updatedAt", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "cmsPosts",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "status", "order": "ASCENDING" },
+        { "fieldPath": "updatedAt", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "cmsPosts",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "status", "order": "ASCENDING" },
+        { "fieldPath": "updatedAt", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "cmsPosts",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "updatedBy", "order": "ASCENDING" },
+        { "fieldPath": "updatedAt", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "cmsPosts",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "assignee", "order": "ASCENDING" },
+        { "fieldPath": "updatedAt", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "mediaSourceTranscriptJobs",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "provider", "order": "ASCENDING" },
+        { "fieldPath": "active", "order": "ASCENDING" },
+        { "fieldPath": "__name__", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "mediaSourceTranscriptJobs",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "sourceId", "order": "ASCENDING" },
+        { "fieldPath": "assetId", "order": "ASCENDING" },
+        { "fieldPath": "__name__", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "mediaCollections",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "scope", "order": "ASCENDING" },
+        { "fieldPath": "ownerUid", "order": "ASCENDING" },
+        { "fieldPath": "lifecycle", "order": "ASCENDING" },
+        { "fieldPath": "updatedAt", "order": "DESCENDING" },
+        { "fieldPath": "__name__", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "mediaCollections",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "scope", "order": "ASCENDING" },
+        { "fieldPath": "lifecycle", "order": "ASCENDING" },
+        { "fieldPath": "updatedAt", "order": "DESCENDING" },
+        { "fieldPath": "__name__", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "media_assets",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "createdBy", "order": "ASCENDING" },
+        { "fieldPath": "category", "order": "ASCENDING" },
+        { "fieldPath": "lifecycle", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "media_assets",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "mediaDiscovery.schema",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "mediaDiscovery.eligible",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "mediaDiscovery.terms",
+          "arrayConfig": "CONTAINS"
+        },
+        {
+          "fieldPath": "mediaDiscovery.nameKey",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "__name__",
+          "order": "ASCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "media_assets",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "mediaDiscovery.schema",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "mediaDiscovery.eligible",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "mediaDiscovery.terms",
+          "arrayConfig": "CONTAINS"
+        },
+        {
+          "fieldPath": "mediaDiscovery.nameKey",
+          "order": "DESCENDING"
+        },
+        {
+          "fieldPath": "__name__",
+          "order": "DESCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "media_assets",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "mediaDiscovery.schema",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "mediaDiscovery.eligible",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "mediaDiscovery.terms",
+          "arrayConfig": "CONTAINS"
+        },
+        {
+          "fieldPath": "mediaDiscovery.updatedAtKey",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "mediaDiscovery.nameKey",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "__name__",
+          "order": "ASCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "media_assets",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "mediaDiscovery.schema",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "mediaDiscovery.eligible",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "mediaDiscovery.terms",
+          "arrayConfig": "CONTAINS"
+        },
+        {
+          "fieldPath": "mediaDiscovery.updatedAtKey",
+          "order": "DESCENDING"
+        },
+        {
+          "fieldPath": "mediaDiscovery.nameKey",
+          "order": "DESCENDING"
+        },
+        {
+          "fieldPath": "__name__",
+          "order": "DESCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "media_assets",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "mediaDiscovery.schema",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "mediaDiscovery.eligible",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "mediaDiscovery.terms",
+          "arrayConfig": "CONTAINS"
+        },
+        {
+          "fieldPath": "mediaDiscovery.createdAtKey",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "mediaDiscovery.nameKey",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "__name__",
+          "order": "ASCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "media_assets",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "mediaDiscovery.schema",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "mediaDiscovery.eligible",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "mediaDiscovery.terms",
+          "arrayConfig": "CONTAINS"
+        },
+        {
+          "fieldPath": "mediaDiscovery.createdAtKey",
+          "order": "DESCENDING"
+        },
+        {
+          "fieldPath": "mediaDiscovery.nameKey",
+          "order": "DESCENDING"
+        },
+        {
+          "fieldPath": "__name__",
+          "order": "DESCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "media_assets",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "mediaDiscovery.schema",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "mediaDiscovery.eligible",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "mediaDiscovery.terms",
+          "arrayConfig": "CONTAINS"
+        },
+        {
+          "fieldPath": "mediaDiscovery.sizeBytesKey",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "mediaDiscovery.nameKey",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "__name__",
+          "order": "ASCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "media_assets",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "mediaDiscovery.schema",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "mediaDiscovery.eligible",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "mediaDiscovery.terms",
+          "arrayConfig": "CONTAINS"
+        },
+        {
+          "fieldPath": "mediaDiscovery.sizeBytesKey",
+          "order": "DESCENDING"
+        },
+        {
+          "fieldPath": "mediaDiscovery.nameKey",
+          "order": "DESCENDING"
+        },
+        {
+          "fieldPath": "__name__",
+          "order": "DESCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "media_assets",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "mediaDiscovery.schema",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "mediaDiscovery.eligible",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "category",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "mediaDiscovery.terms",
+          "arrayConfig": "CONTAINS"
+        },
+        {
+          "fieldPath": "mediaDiscovery.nameKey",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "__name__",
+          "order": "ASCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "media_assets",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "mediaDiscovery.schema",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "mediaDiscovery.eligible",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "category",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "mediaDiscovery.terms",
+          "arrayConfig": "CONTAINS"
+        },
+        {
+          "fieldPath": "mediaDiscovery.nameKey",
+          "order": "DESCENDING"
+        },
+        {
+          "fieldPath": "__name__",
+          "order": "DESCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "media_assets",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "mediaDiscovery.schema",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "mediaDiscovery.eligible",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "category",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "mediaDiscovery.terms",
+          "arrayConfig": "CONTAINS"
+        },
+        {
+          "fieldPath": "mediaDiscovery.updatedAtKey",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "mediaDiscovery.nameKey",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "__name__",
+          "order": "ASCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "media_assets",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "mediaDiscovery.schema",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "mediaDiscovery.eligible",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "category",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "mediaDiscovery.terms",
+          "arrayConfig": "CONTAINS"
+        },
+        {
+          "fieldPath": "mediaDiscovery.updatedAtKey",
+          "order": "DESCENDING"
+        },
+        {
+          "fieldPath": "mediaDiscovery.nameKey",
+          "order": "DESCENDING"
+        },
+        {
+          "fieldPath": "__name__",
+          "order": "DESCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "media_assets",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "mediaDiscovery.schema",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "mediaDiscovery.eligible",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "category",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "mediaDiscovery.terms",
+          "arrayConfig": "CONTAINS"
+        },
+        {
+          "fieldPath": "mediaDiscovery.createdAtKey",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "mediaDiscovery.nameKey",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "__name__",
+          "order": "ASCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "media_assets",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "mediaDiscovery.schema",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "mediaDiscovery.eligible",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "category",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "mediaDiscovery.terms",
+          "arrayConfig": "CONTAINS"
+        },
+        {
+          "fieldPath": "mediaDiscovery.createdAtKey",
+          "order": "DESCENDING"
+        },
+        {
+          "fieldPath": "mediaDiscovery.nameKey",
+          "order": "DESCENDING"
+        },
+        {
+          "fieldPath": "__name__",
+          "order": "DESCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "media_assets",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "mediaDiscovery.schema",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "mediaDiscovery.eligible",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "category",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "mediaDiscovery.terms",
+          "arrayConfig": "CONTAINS"
+        },
+        {
+          "fieldPath": "mediaDiscovery.sizeBytesKey",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "mediaDiscovery.nameKey",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "__name__",
+          "order": "ASCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "media_assets",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "mediaDiscovery.schema",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "mediaDiscovery.eligible",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "category",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "mediaDiscovery.terms",
+          "arrayConfig": "CONTAINS"
+        },
+        {
+          "fieldPath": "mediaDiscovery.sizeBytesKey",
+          "order": "DESCENDING"
+        },
+        {
+          "fieldPath": "mediaDiscovery.nameKey",
+          "order": "DESCENDING"
+        },
+        {
+          "fieldPath": "__name__",
+          "order": "DESCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "media_assets",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "lifecycle", "order": "ASCENDING" },
+        { "fieldPath": "kind", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "media_assets",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "lifecycle", "order": "ASCENDING" },
+        { "fieldPath": "kind", "order": "ASCENDING" },
+        { "fieldPath": "category", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "media_assets",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "mediaDiscovery.schema",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "mediaDiscovery.eligible",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "kind",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "mediaDiscovery.terms",
+          "arrayConfig": "CONTAINS"
+        },
+        {
+          "fieldPath": "mediaDiscovery.nameKey",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "__name__",
+          "order": "ASCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "media_assets",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "mediaDiscovery.schema",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "mediaDiscovery.eligible",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "kind",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "mediaDiscovery.terms",
+          "arrayConfig": "CONTAINS"
+        },
+        {
+          "fieldPath": "mediaDiscovery.nameKey",
+          "order": "DESCENDING"
+        },
+        {
+          "fieldPath": "__name__",
+          "order": "DESCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "media_assets",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "mediaDiscovery.schema",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "mediaDiscovery.eligible",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "kind",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "mediaDiscovery.terms",
+          "arrayConfig": "CONTAINS"
+        },
+        {
+          "fieldPath": "mediaDiscovery.updatedAtKey",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "mediaDiscovery.nameKey",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "__name__",
+          "order": "ASCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "media_assets",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "mediaDiscovery.schema",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "mediaDiscovery.eligible",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "kind",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "mediaDiscovery.terms",
+          "arrayConfig": "CONTAINS"
+        },
+        {
+          "fieldPath": "mediaDiscovery.updatedAtKey",
+          "order": "DESCENDING"
+        },
+        {
+          "fieldPath": "mediaDiscovery.nameKey",
+          "order": "DESCENDING"
+        },
+        {
+          "fieldPath": "__name__",
+          "order": "DESCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "media_assets",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "mediaDiscovery.schema",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "mediaDiscovery.eligible",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "kind",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "mediaDiscovery.terms",
+          "arrayConfig": "CONTAINS"
+        },
+        {
+          "fieldPath": "mediaDiscovery.createdAtKey",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "mediaDiscovery.nameKey",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "__name__",
+          "order": "ASCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "media_assets",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "mediaDiscovery.schema",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "mediaDiscovery.eligible",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "kind",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "mediaDiscovery.terms",
+          "arrayConfig": "CONTAINS"
+        },
+        {
+          "fieldPath": "mediaDiscovery.createdAtKey",
+          "order": "DESCENDING"
+        },
+        {
+          "fieldPath": "mediaDiscovery.nameKey",
+          "order": "DESCENDING"
+        },
+        {
+          "fieldPath": "__name__",
+          "order": "DESCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "media_assets",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "mediaDiscovery.schema",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "mediaDiscovery.eligible",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "kind",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "mediaDiscovery.terms",
+          "arrayConfig": "CONTAINS"
+        },
+        {
+          "fieldPath": "mediaDiscovery.sizeBytesKey",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "mediaDiscovery.nameKey",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "__name__",
+          "order": "ASCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "media_assets",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "mediaDiscovery.schema",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "mediaDiscovery.eligible",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "kind",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "mediaDiscovery.terms",
+          "arrayConfig": "CONTAINS"
+        },
+        {
+          "fieldPath": "mediaDiscovery.sizeBytesKey",
+          "order": "DESCENDING"
+        },
+        {
+          "fieldPath": "mediaDiscovery.nameKey",
+          "order": "DESCENDING"
+        },
+        {
+          "fieldPath": "__name__",
+          "order": "DESCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "media_assets",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "mediaDiscovery.schema",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "mediaDiscovery.eligible",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "kind",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "category",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "mediaDiscovery.terms",
+          "arrayConfig": "CONTAINS"
+        },
+        {
+          "fieldPath": "mediaDiscovery.nameKey",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "__name__",
+          "order": "ASCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "media_assets",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "mediaDiscovery.schema",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "mediaDiscovery.eligible",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "kind",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "category",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "mediaDiscovery.terms",
+          "arrayConfig": "CONTAINS"
+        },
+        {
+          "fieldPath": "mediaDiscovery.nameKey",
+          "order": "DESCENDING"
+        },
+        {
+          "fieldPath": "__name__",
+          "order": "DESCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "media_assets",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "mediaDiscovery.schema",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "mediaDiscovery.eligible",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "kind",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "category",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "mediaDiscovery.terms",
+          "arrayConfig": "CONTAINS"
+        },
+        {
+          "fieldPath": "mediaDiscovery.updatedAtKey",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "mediaDiscovery.nameKey",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "__name__",
+          "order": "ASCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "media_assets",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "mediaDiscovery.schema",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "mediaDiscovery.eligible",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "kind",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "category",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "mediaDiscovery.terms",
+          "arrayConfig": "CONTAINS"
+        },
+        {
+          "fieldPath": "mediaDiscovery.updatedAtKey",
+          "order": "DESCENDING"
+        },
+        {
+          "fieldPath": "mediaDiscovery.nameKey",
+          "order": "DESCENDING"
+        },
+        {
+          "fieldPath": "__name__",
+          "order": "DESCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "media_assets",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "mediaDiscovery.schema",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "mediaDiscovery.eligible",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "kind",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "category",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "mediaDiscovery.terms",
+          "arrayConfig": "CONTAINS"
+        },
+        {
+          "fieldPath": "mediaDiscovery.createdAtKey",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "mediaDiscovery.nameKey",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "__name__",
+          "order": "ASCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "media_assets",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "mediaDiscovery.schema",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "mediaDiscovery.eligible",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "kind",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "category",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "mediaDiscovery.terms",
+          "arrayConfig": "CONTAINS"
+        },
+        {
+          "fieldPath": "mediaDiscovery.createdAtKey",
+          "order": "DESCENDING"
+        },
+        {
+          "fieldPath": "mediaDiscovery.nameKey",
+          "order": "DESCENDING"
+        },
+        {
+          "fieldPath": "__name__",
+          "order": "DESCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "media_assets",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "mediaDiscovery.schema",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "mediaDiscovery.eligible",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "kind",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "category",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "mediaDiscovery.terms",
+          "arrayConfig": "CONTAINS"
+        },
+        {
+          "fieldPath": "mediaDiscovery.sizeBytesKey",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "mediaDiscovery.nameKey",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "__name__",
+          "order": "ASCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "media_assets",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "mediaDiscovery.schema",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "mediaDiscovery.eligible",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "kind",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "category",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "mediaDiscovery.terms",
+          "arrayConfig": "CONTAINS"
+        },
+        {
+          "fieldPath": "mediaDiscovery.sizeBytesKey",
+          "order": "DESCENDING"
+        },
+        {
+          "fieldPath": "mediaDiscovery.nameKey",
+          "order": "DESCENDING"
+        },
+        {
+          "fieldPath": "__name__",
+          "order": "DESCENDING"
+        }
+      ]
+    },
+    { "collectionGroup": "cmsDatasetUses", "queryScope": "COLLECTION", "fields": [
+      { "fieldPath": "collection", "order": "ASCENDING" },
+      { "fieldPath": "documentId", "order": "ASCENDING" }
+    ] },
+    { "collectionGroup": "cmsDatasetUses", "queryScope": "COLLECTION", "fields": [
+      { "fieldPath": "datasetId", "order": "ASCENDING" },
+      { "fieldPath": "releaseId", "order": "ASCENDING" }
+    ] },
+    { "collectionGroup": "cmsDatasetUses", "queryScope": "COLLECTION", "fields": [
+      { "fieldPath": "datasetId", "order": "ASCENDING" },
+      { "fieldPath": "releasePolicy", "order": "ASCENDING" }
+    ] },
+    { "collectionGroup": "cmsDatasetRefreshJobs", "queryScope": "COLLECTION", "fields": [
+      { "fieldPath": "status", "order": "ASCENDING" },
+      { "fieldPath": "lastProcessedAt", "order": "ASCENDING" }
+    ] },
+    {
+      "collectionGroup": "mediaSourceTranscriptJobs",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "assetId",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "languageCode",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "maxSpeakers",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "createdAt",
+          "order": "DESCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "mediaSourceTranscriptJobs",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "assetId",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "languageCode",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "maxSpeakers",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "phase",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "createdAt",
+          "order": "DESCENDING"
+        }
+      ]
+    }
+  ],
+  "fieldOverrides": [
+    { "collectionGroup": "cmsUsageEvents", "fieldPath": "purgeAt", "ttl": true, "indexes": [] },
+    { "collectionGroup": "cmsUsageEvents", "fieldPath": "events", "indexes": [] },
+    { "collectionGroup": "cmsUsagePresence", "fieldPath": "purgeAt", "ttl": true, "indexes": [] },
+    {
+      "collectionGroup": "mappings",
+      "fieldPath": "deviceId",
+      "indexes": [
+        { "order": "ASCENDING", "queryScope": "COLLECTION" },
+        { "order": "DESCENDING", "queryScope": "COLLECTION" },
+        { "arrayConfig": "CONTAINS", "queryScope": "COLLECTION" },
+        { "order": "ASCENDING", "queryScope": "COLLECTION_GROUP" }
+      ]
+    },
+    { "collectionGroup": "cmsPublishQueue", "fieldPath": "recordConfirmationPendingAt",
+      "indexes": [{ "order": "ASCENDING", "queryScope": "COLLECTION" }]
+    },
+    {
+      "collectionGroup": "superseded", "fieldPath": "recordSeed.master.key",
+      "indexes": [
+        { "order": "ASCENDING", "queryScope": "COLLECTION" },
+        { "order": "DESCENDING", "queryScope": "COLLECTION" },
+        { "order": "ASCENDING", "queryScope": "COLLECTION_GROUP" }
+      ]
+    },
+    { "collectionGroup": "cmsPreviewQueue", "fieldPath": "purgeAt", "ttl": true, "indexes": [] },
+    { "collectionGroup": "mediaSourceClipJobs", "fieldPath": "purgeAt", "ttl": true, "indexes": [] },
+    { "collectionGroup": "premierePairings", "fieldPath": "purgeAt", "ttl": true, "indexes": [] },
+    { "collectionGroup": "premierePairingCodes", "fieldPath": "purgeAt", "ttl": true, "indexes": [] },
+    { "collectionGroup": "premiereSessions", "fieldPath": "purgeAt", "ttl": true, "indexes": [] },
+    { "collectionGroup": "premiereRequestLimits", "fieldPath": "purgeAt", "ttl": true, "indexes": [] },
+    { "collectionGroup": "mediaSourceAssets", "fieldPath": "markers", "indexes": [] },
+    {
+      "collectionGroup": "bugReportEvidence",
+      "fieldPath": "bytes",
+      "indexes": []
+    },
+    {
+      "collectionGroup": "bugReportEvidence",
+      "fieldPath": "expireAt",
+      "ttl": true,
+      "indexes": []
+    },
+    {
+      "collectionGroup": "ugcSubmissions",
+      "fieldPath": "expireAt",
+      "ttl": true,
+      "indexes": []
+    },
+    {
+      "collectionGroup": "media_assets",
+      "fieldPath": "mediaDiscovery",
+      "indexes": []
+    },
+    {
+      "collectionGroup": "items",
+      "fieldPath": "voiceoverMigration.id",
+      "indexes": [
+        {
+          "order": "ASCENDING",
+          "queryScope": "COLLECTION"
+        },
+        {
+          "order": "DESCENDING",
+          "queryScope": "COLLECTION"
+        },
+        {
+          "arrayConfig": "CONTAINS",
+          "queryScope": "COLLECTION"
+        },
+        {
+          "order": "ASCENDING",
+          "queryScope": "COLLECTION_GROUP"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "mediaDiscoveryCursors",
+      "fieldPath": "expireAt",
+      "ttl": true,
+      "indexes": []
+    },
+    {
+      "collectionGroup": "staffAccessRequests",
+      "fieldPath": "expireAt",
+      "ttl": true,
+      "indexes": []
+    },
+    {
+      "collectionGroup": "staffPasswordResetRequests",
+      "fieldPath": "expireAt",
+      "ttl": true,
+      "indexes": []
+    },
+    {
+      "collectionGroup": "bugReportGithubWebhookReceipts",
+      "fieldPath": "expireAt",
+      "ttl": true,
+      "indexes": []
+    },
+    {
+      "collectionGroup": "staffAccessNotificationCooldowns",
+      "fieldPath": "expireAt",
+      "ttl": true,
+      "indexes": []
+    },
+    {
+      "collectionGroup": "staffSignInRefusedCooldowns",
+      "fieldPath": "expireAt",
+      "ttl": true,
+      "indexes": []
+    }
+  ]
+}

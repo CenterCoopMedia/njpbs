@@ -1,0 +1,9 @@
+{
+  "date": "2026-11-06",
+  "order": 1794018269410,
+  "kind": "fixed",
+  "requires": "video-replacement",
+  "title": "Start another video replacement after an upload finishes",
+  "body": "If a saved replacement upload already finished, choose your next file again to start its upload. Cancel saved replacement also clears that finished upload's saved progress and points you to file history.",
+  "prs": [4909]
+}

@@ -1,0 +1,11 @@
+{
+  "date": "2026-08-21",
+  "kind": "new",
+  "title": "Limit editing to an area",
+  "body": "Admins can limit a person to areas such as Watch, Support, Station or Compliance. That person can edit only the pages and Posts in those areas.",
+  "prs": [
+    1085,
+    1091
+  ],
+  "order": -1
+}

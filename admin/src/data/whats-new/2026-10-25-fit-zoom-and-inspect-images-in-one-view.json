@@ -1,0 +1,10 @@
+{
+  "date": "2026-10-25",
+  "kind": "improved",
+  "title": "Fit, zoom and inspect images in one view",
+  "body": "In Images, Favorites and Collections, use Fit, 100% and zoom controls while keeping the same image open. The zoom percentage shows the displayed size. On a phone, Details opens the image fields and returns you to the viewer when closed.",
+  "prs": [
+    4000
+  ],
+  "order": 0
+}

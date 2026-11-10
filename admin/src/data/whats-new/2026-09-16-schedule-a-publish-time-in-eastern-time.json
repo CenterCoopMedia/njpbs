@@ -1,0 +1,10 @@
+{
+  "date": "2026-09-16",
+  "kind": "new",
+  "title": "Schedule a publish time in Eastern time",
+  "body": "A schedule control now sits beside the Publish button. Pick a date and time in New York time, and the Post publishes then.",
+  "prs": [
+    1892
+  ],
+  "order": 0
+}

@@ -1,0 +1,116 @@
+---
+import AdminDocsLayout from "../../layouts/AdminDocsLayout.astro";
+import {
+  ADMIN_DOC_SECTIONS,
+  ADMIN_DOCS_BASE,
+} from "../../lib/admin-docs";
+
+const title = "Boardwalk guide";
+const description =
+  "Task-based instructions for creating, reviewing, publishing, and administering NJ PBS digital content.";
+---
+
+<AdminDocsLayout
+  title={title}
+  description={description}
+  route={ADMIN_DOCS_BASE}
+>
+  <section class="admin-docs-start" aria-labelledby="first-session-title">
+    <div>
+      <h2 id="first-session-title">New to the CMS?</h2>
+      <p>Find your assigned draft, make a small edit, and save it with a reviewer beside you.</p>
+      <a class="admin-docs-start-link" href="/admin/docs/first-session/">Follow your first-session walkthrough</a>
+      <p class="admin-docs-start-time">About 15 minutes · Screenshots and a trainer checklist</p>
+    </div>
+    <a href="/admin/docs/first-session/" aria-label="Open the first-session walkthrough">
+      <p class="admin-docs-image-note">Screenshot omitted from this source distribution.</p>
+    </a>
+  </section>
+
+  <section class="admin-docs-quick-links">
+    <h2>Learn a task on screen</h2>
+    <ul>
+      <li><a href="/admin/docs/pages-posts-and-library/#find-a-record-step-by-step">Find and reopen a record</a></li>
+      <li><a href="/admin/docs/metadata-and-media/#add-an-image-to-a-post">Add an image and check its alt text</a></li>
+      <li><a href="/admin/docs/metadata-and-media/#set-the-focal-point">Adjust an image crop</a></li>
+      <li><a href="/admin/docs/shared-video-library/">Upload or review a shared video</a></li>
+      <li><a href="/admin/docs/voiceover-library/">Review a voiceover take</a></li>
+      <li><a href="/admin/docs/review-preview-and-publish/#read-working-and-public-state-separately">Check whether a change is live</a></li>
+      <li><a href="/admin/docs/drafts-revisions-and-recovery/#respond-to-an-unsaved-work-warning">Leave without losing work</a></li>
+    </ul>
+  </section>
+
+  <section class="admin-docs-index-intro">
+    <h2>Know what a save does</h2>
+    <p>
+      Boardwalk is the staff workspace behind the NJ PBS website. Use it
+      to prepare page and post drafts, manage reusable media, review changes,
+      and move approved work through the publication process. The controls you
+      see depend on your role and any section-specific access you have been
+      granted.
+    </p>
+    <ul class="admin-docs-principles">
+      <li>
+        <strong>Saved is not live</strong>
+        A successful draft save preserves CMS work. It does not by itself
+        change the public website.
+      </li>
+      <li>
+        <strong>Access follows responsibility</strong>
+        The CMS hides workspaces and actions that your account is not authorized
+        to use. A missing control is often an intentional permission boundary.
+      </li>
+      <li>
+        <strong>Evidence supports recovery</strong>
+        Revision history, activity records, exact error text, and the current
+        page address are more useful than reconstructing a problem from memory.
+      </li>
+    </ul>
+  </section>
+
+  {
+    ADMIN_DOC_SECTIONS.map((section) => (
+      <section class="admin-docs-index-section" id={section.id}>
+        <header class="admin-docs-index-section-header">
+          <h2>{section.title}</h2>
+          <p>{section.description}</p>
+        </header>
+        <ul class="admin-docs-index-list">
+          {section.pages.map((page) => (
+            <li>
+              <a href={`${ADMIN_DOCS_BASE}${page.slug}/`}>
+                <span>
+                  <strong>{page.title}</strong>
+                  <span>{page.description}</span>
+                </span>
+                <span class="admin-docs-index-audience">{page.audience}</span>
+              </a>
+            </li>
+          ))}
+        </ul>
+      </section>
+    ))
+  }
+
+  <section class="admin-docs-quick-links">
+    <h2>Common destinations</h2>
+    <ul>
+      <li>
+        <a
+          href="https://admin.njpbs.org/"
+          rel="noopener noreferrer"
+          target="_blank"
+        >
+          Open Boardwalk<span class="sr-only"> (opens in new tab)</span>
+        </a>
+      </li>
+      <li>
+        <a href="/admin/docs/access-and-roles/">Check access and role guidance</a>
+      </li>
+      <li>
+        <a href="/admin/docs/troubleshooting/">Troubleshoot a CMS problem</a>
+      </li>
+      <li><a href="/">Open the public NJ PBS site</a></li>
+    </ul>
+  </section>
+</AdminDocsLayout>

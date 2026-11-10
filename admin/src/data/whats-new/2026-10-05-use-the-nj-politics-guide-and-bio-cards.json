@@ -1,0 +1,12 @@
+{
+  "date": "2026-10-05",
+  "kind": "new",
+  "title": "Use the NJ politics guide and bio cards",
+  "body": "Boardwalk has a staff-only NJ politics guide with a 2026 candidate directory. You can add reviewed bio cards to articles from a picker.",
+  "prs": [
+    2527,
+    2547,
+    2529
+  ],
+  "order": 0
+}

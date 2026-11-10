@@ -1,0 +1,1606 @@
+---
+import type {
+  BakedScheduleData,
+  ScheduleFeedDay,
+} from "../lib/schedule-feed";
+import { formatScheduleDateLabel } from "../lib/schedule-timeline";
+import { resolveInitialScheduleDay } from "../lib/schedule-view";
+import ScheduleDayPanel from "./ScheduleDayPanel.astro";
+import ScheduleNowNext from "./ScheduleNowNext.astro";
+import CmsHeroBackground from "./CmsHeroBackground.astro";
+import ScheduleDownload from "./ScheduleDownload.astro";
+import { renderSchedule } from "../lib/cms-render-context";
+import {
+  buildScheduleExport,
+  scheduleExportTime,
+} from "../lib/schedule-export";
+
+interface Props {
+  data: BakedScheduleData;
+  heroBackgroundImage?: {
+    url: string;
+    width: number;
+    height: number;
+  } | null;
+  heroBackgroundPosition?: "center" | "top" | "bottom";
+}
+
+const {
+  data,
+  heroBackgroundImage,
+  heroBackgroundPosition,
+} = Astro.props as Props;
+const sealedSchedule = renderSchedule(Astro.locals.cmsRender);
+const scheduleExport = sealedSchedule?.exported ?? buildScheduleExport(data, scheduleExportTime());
+const { broadcast: broadcastDays, kids: kidsDays } = data.days;
+const useDaySelect = broadcastDays.length > 14;
+const initialDay = resolveInitialScheduleDay(broadcastDays, new Date());
+if (!initialDay) throw new Error("The baked schedule has no broadcast days.");
+const initialScheduleExpired = !broadcastDays.some(
+  (day) => day.date === initialDay.date,
+);
+
+const kidsByDate = new Map(kidsDays.map((day) => [day.date, day]));
+const matchingKidsDay = (broadcastDay: ScheduleFeedDay): ScheduleFeedDay =>
+  kidsByDate.get(broadcastDay.date) ?? {
+    date: broadcastDay.date,
+    callsign: broadcastDay.callsign,
+    kind: "kids",
+    feedCid: broadcastDay.feedCid,
+    timeZone: broadcastDay.timeZone,
+    entries: [],
+  };
+
+const initialDateLabel = formatScheduleDateLabel(initialDay.date);
+const shortDay = new Intl.DateTimeFormat("en-US", {
+  timeZone: data.timeZone,
+  weekday: "short",
+});
+const shortDate = new Intl.DateTimeFormat("en-US", {
+  timeZone: data.timeZone,
+  month: "short",
+  day: "numeric",
+});
+const dateAtNoon = (date: string) => new Date(`${date}T12:00:00Z`);
+const countLabel = (day: ScheduleFeedDay) =>
+  `${day.entries.length} ${day.entries.length === 1 ? "program" : "programs"}`;
+const download = Astro.locals.cmsRender && !sealedSchedule ? null : scheduleExport;
+---
+
+<div
+  class="native-schedule"
+  data-native-schedule
+  data-schedule-active-date={initialDay.date}
+  data-schedule-window-expired={initialScheduleExpired ? "true" : undefined}
+>
+  <section
+    class:list={[
+      "schedule-intro",
+      { "cms-hero-surface": Boolean(heroBackgroundImage) },
+    ]}
+    aria-labelledby="schedule-page-title"
+  >
+    <CmsHeroBackground
+      image={heroBackgroundImage}
+      position={heroBackgroundPosition}
+    />
+    <div class="schedule-intro__heading">
+      <div>
+        <h1 id="schedule-page-title" tabindex="-1">TV schedule</h1>
+        <p>Now, next, and upcoming NJ PBS listings. All times are Eastern.</p>
+      </div>
+      <p class="schedule-station-fact">
+        <strong>NJ PBS broadcast</strong>{" "}
+        WNJTDT · Listings supplied by PBS{data.source === "pbs-tvss-with-njpbs-corrections" ? " and NJ PBS" : ""}
+      </p>
+    </div>
+    <div class="schedule-summary">
+      <ScheduleNowNext days={broadcastDays} variant="full" />
+    </div>
+  </section>
+
+  <section class="schedule-shell" aria-label="Full broadcast day">
+    <div class="schedule-toolbar-sentinel" data-schedule-toolbar-sentinel aria-hidden="true"></div>
+    <div
+      class="schedule-toolbar"
+      data-schedule-day-switcher
+      role="region"
+      aria-label="Schedule controls"
+      tabindex="-1"
+    >
+      <div class="schedule-toolbar__inner">
+        <div class="schedule-toolbar__top">
+          <div class="schedule-active-context">
+            <strong data-schedule-active-date>{initialDateLabel}</strong>
+            <span>Eastern time · <span data-schedule-active-count>{countLabel(initialDay)}</span></span>
+          </div>
+          <div
+            class:list={[
+              "schedule-quick-actions",
+              { "schedule-quick-actions--with-download": Boolean(download) },
+            ]}
+            aria-label="Schedule shortcuts"
+          >
+            <button type="button" data-schedule-jump-now disabled={initialScheduleExpired ? true : undefined}>Jump to now</button>
+            <button type="button" data-schedule-jump-prime disabled={initialScheduleExpired ? true : undefined}>Primetime</button>
+            {download && <ScheduleDownload schedule={download} />}
+            {!useDaySelect && <button
+              type="button"
+              data-schedule-dates-toggle
+              aria-controls="schedule-day-tabs"
+              aria-expanded="true"
+              hidden
+            >Hide dates</button>}
+          </div>
+        </div>
+
+        <div class="schedule-search" data-schedule-search hidden>
+          <label for="schedule-program-search">Find a program</label>
+          <div class="schedule-search__field">
+            <input
+              id="schedule-program-search"
+              type="search"
+              autocomplete="off"
+              enterkeyhint="search"
+              placeholder="Search title or episode"
+              aria-controls="schedule-search-results"
+              data-schedule-search-input
+            />
+            <button type="button" data-schedule-search-clear hidden>Clear</button>
+          </div>
+          <p data-schedule-search-status role="status" aria-live="polite">
+            Search all {broadcastDays.length} days.
+          </p>
+        </div>
+
+        <div
+          id="schedule-day-tabs"
+          class="schedule-day-tabs"
+          data-schedule-date-grid
+          aria-label="Choose a broadcast day"
+          hidden={useDaySelect}
+        >
+          {
+            broadcastDays.map((day) => (
+              <button
+                type="button"
+                data-schedule-day
+                data-schedule-date={day.date}
+                aria-current={!initialScheduleExpired && day.date === initialDay.date ? "date" : undefined}
+                disabled={initialScheduleExpired ? true : undefined}
+              >
+                <span>{shortDay.format(dateAtNoon(day.date))}</span>
+                <strong>{shortDate.format(dateAtNoon(day.date))}</strong>
+              </button>
+            ))
+          }
+        </div>
+
+        <div class:list={["schedule-day-select-wrap", { "schedule-day-select-wrap--all-screens": useDaySelect }]}>
+          <label for="schedule-day-select">Broadcast day</label>
+          <select id="schedule-day-select" data-schedule-day-select disabled={initialScheduleExpired ? true : undefined}>
+            {initialScheduleExpired && <option value="" selected={initialScheduleExpired}>Listings unavailable</option>}
+            {
+              broadcastDays.map((day) => (
+                <option
+                  value={day.date}
+                  selected={!initialScheduleExpired && day.date === initialDay.date}
+                >
+                  {formatScheduleDateLabel(day.date)}
+                </option>
+              ))
+            }
+          </select>
+        </div>
+      </div>
+    </div>
+
+    <div class="schedule-content">
+      <div data-schedule-panel-host>
+        <ScheduleDayPanel
+          broadcastDay={initialDay}
+          kidsDay={matchingKidsDay(initialDay)}
+        />
+      </div>
+
+      <section
+        id="schedule-search-results"
+        class="schedule-search-results"
+        data-schedule-search-results
+        aria-labelledby="schedule-search-results-heading"
+        hidden
+      >
+        <div class="schedule-search-results__heading">
+          <h2 id="schedule-search-results-heading">Program search results</h2>
+          <p>Every matching showing in the current listings window.</p>
+        </div>
+        <div data-schedule-search-groups></div>
+        <div class="schedule-search-empty" data-schedule-search-empty hidden>
+          <strong>No matching programs</strong>
+          <p data-schedule-search-empty-copy></p>
+        </div>
+      </section>
+
+      {
+        broadcastDays.map((day) => (
+          <template
+            data-schedule-day-template
+            data-schedule-date={day.date}
+            data-schedule-date-label={formatScheduleDateLabel(day.date)}
+            data-schedule-count={countLabel(day)}
+          >
+            <ScheduleDayPanel
+              broadcastDay={day}
+              kidsDay={matchingKidsDay(day)}
+            />
+          </template>
+        ))
+      }
+    </div>
+
+    <p
+      class="sr-only"
+      data-schedule-announcer
+      role="status"
+      aria-live="polite"
+    ></p>
+  </section>
+
+  <dialog
+    class="schedule-dialog"
+    data-program-dialog
+    aria-labelledby="schedule-dialog-title"
+  >
+    <div class="schedule-dialog__inner">
+      <div class="schedule-dialog__top">
+        <div>
+          <h2 id="schedule-dialog-title" tabindex="-1" data-program-dialog-title>Program details</h2>
+          <p class="schedule-dialog__episode" data-program-dialog-episode hidden></p>
+        </div>
+        <button type="button" data-dialog-close aria-label="Close program details">Close</button>
+      </div>
+      <p class="schedule-dialog__time" data-program-dialog-time>Time unavailable</p>
+      <p class="schedule-dialog__meta" data-program-dialog-meta>Program details unavailable</p>
+      <p
+        class="schedule-dialog__episode-description"
+        data-program-dialog-episode-description
+        hidden
+      >
+        <span class="sr-only">This episode:</span>{" "}
+        <span data-program-dialog-episode-description-text></span>
+      </p>
+      <p class="schedule-dialog__description">
+        <span class="sr-only">About the series:</span>{" "}
+        <span data-program-dialog-description
+          >A program description is not available in the feed.</span
+        >
+      </p>
+    </div>
+  </dialog>
+</div>
+
+<script>
+  import {
+    activateInitialScheduleState,
+    activateScheduleDay,
+    clearScheduleSearch,
+    getScheduleScrollBehavior,
+    populateProgramDialog,
+    resolveJumpToNowTarget,
+    resolvePrimetimeTarget,
+    resolveScheduleToolbarSticky,
+    updateScheduleDateGridVisibility,
+    updateScheduleSearch,
+    updateScheduleNowLine,
+  } from "../lib/native-schedule-dom";
+  import { createModalDialog } from "../lib/dialog";
+  import {
+    millisecondsToNextMinute,
+    resolveNowNextClock,
+  } from "../lib/schedule-now-next-dom";
+
+  const MINUTE_MS = 60_000;
+
+  document.querySelectorAll<HTMLElement>("[data-native-schedule]").forEach((root) => {
+    if (root.dataset.nativeScheduleMounted === "true") return;
+
+    const siteHeader = document.querySelector<HTMLElement>(".site-head");
+    const toolbarSentinel = root.querySelector<HTMLElement>(
+      "[data-schedule-toolbar-sentinel]",
+    );
+    const scheduleToolbar = root.querySelector<HTMLElement>(
+      "[data-schedule-day-switcher]",
+    );
+    const desktopDateGrid = window.matchMedia("(min-width: 701px)");
+    let forceDatesExpanded = false;
+    let preserveFocusedDate = false;
+    let expandedToolbarHeight = scheduleToolbar?.getBoundingClientRect().height ?? 0;
+    let toolbarFrame = 0;
+
+    const headerHeight = () => {
+      const configuredOffset = Number.parseFloat(
+        getComputedStyle(root).getPropertyValue("--schedule-header-offset"),
+      );
+      return siteHeader?.getBoundingClientRect().height ??
+        (Number.isFinite(configuredOffset) ? configuredOffset : 0);
+    };
+    const toolbarIsSticky = () =>
+      Boolean(toolbarSentinel && resolveScheduleToolbarSticky({
+        sentinelTop: toolbarSentinel.getBoundingClientRect().top,
+        headerHeight: headerHeight(),
+        datesCollapsed: root.dataset.scheduleDatesCollapsed === "true",
+        expandedToolbarHeight,
+        toolbarHeight: scheduleToolbar?.getBoundingClientRect().height ?? 0,
+      }));
+    const syncDateGrid = () => {
+      if (root.dataset.scheduleDatesCollapsed !== "true" && scheduleToolbar) {
+        expandedToolbarHeight = scheduleToolbar.getBoundingClientRect().height;
+      }
+      const isSticky = toolbarIsSticky();
+      if (!isSticky) forceDatesExpanded = false;
+      const collapsed = updateScheduleDateGridVisibility(root, {
+        isDesktop: desktopDateGrid.matches,
+        isSticky,
+        forceExpanded: forceDatesExpanded,
+        preserveFocusedDate,
+      });
+      if (!collapsed && scheduleToolbar) {
+        expandedToolbarHeight = scheduleToolbar.getBoundingClientRect().height;
+      }
+    };
+    const queueDateGridSync = () => {
+      if (toolbarFrame) return;
+      toolbarFrame = window.requestAnimationFrame(() => {
+        toolbarFrame = 0;
+        syncDateGrid();
+      });
+    };
+
+    if (siteHeader) {
+      const syncHeaderOffset = () => {
+        root.style.setProperty("--schedule-header-offset", `${siteHeader.getBoundingClientRect().height}px`);
+        queueDateGridSync();
+      };
+      syncHeaderOffset();
+      new ResizeObserver(syncHeaderOffset).observe(siteHeader);
+    }
+    window.addEventListener("scroll", queueDateGridSync, { passive: true });
+    window.addEventListener("resize", queueDateGridSync, { passive: true });
+    desktopDateGrid.addEventListener("change", queueDateGridSync);
+    root.addEventListener("keydown", () => {
+      preserveFocusedDate = true;
+    });
+    root.addEventListener("pointerdown", () => {
+      preserveFocusedDate = false;
+    });
+    root
+      .querySelector<HTMLElement>("[data-schedule-date-grid]")
+      ?.addEventListener("focusin", queueDateGridSync);
+    root
+      .querySelector<HTMLElement>("[data-schedule-date-grid]")
+      ?.addEventListener("focusout", () => window.setTimeout(queueDateGridSync));
+    syncDateGrid();
+
+    // One controller for the program dialog, built once and reused for every row.
+    // It owns Escape, the backdrop, the data-dialog-close control, and returning
+    // focus to the button that opened it.
+    const programDialog = root.querySelector<HTMLDialogElement>("[data-program-dialog]");
+    const programModal = programDialog
+      // Focus the programme title, not the first focusable element. That would be
+      // the close button, so a screen-reader user would hear "close program details"
+      // before hearing which programme they opened.
+      ? createModalDialog(programDialog, { initialFocus: "[data-program-dialog-title]" })
+      : null;
+
+    const dates = Array.from(
+      root.querySelectorAll<HTMLElement>("[data-schedule-day]"),
+      (button) => button.dataset.scheduleDate,
+    ).filter((date): date is string => Boolean(date));
+    const clock = resolveNowNextClock(window.location.search, new Date());
+    if (!activateInitialScheduleState(root, dates, window.location.search, new Date())) return;
+
+    const search = root.querySelector<HTMLElement>("[data-schedule-search]");
+    const searchInput = root.querySelector<HTMLInputElement>("[data-schedule-search-input]");
+    if (root.dataset.scheduleWindowExpired !== "true" && search && searchInput) {
+      search.hidden = false;
+      clearScheduleSearch(root);
+      searchInput.addEventListener("input", () => {
+        updateScheduleSearch(root, searchInput.value);
+      });
+    }
+
+    root.dataset.nativeScheduleMounted = "true";
+    const announcer = root.querySelector<HTMLElement>("[data-schedule-announcer]");
+    if (announcer) announcer.textContent = "";
+    const currentClock = () => clock.fixed ? clock.at : new Date();
+    const refreshNowLine = () => {
+      const activeDate = root.dataset.scheduleActiveDate;
+      if (activeDate) updateScheduleNowLine(root, activeDate, currentClock());
+    };
+    const prefersReducedMotion = () =>
+      window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    const scrollTo = (element: HTMLElement) => {
+      const elementBox = element.getBoundingClientRect();
+      const controlsBottom = headerHeight() +
+        (scheduleToolbar?.getBoundingClientRect().height ?? 0);
+      const availableHeight = window.innerHeight - controlsBottom;
+      const targetViewportTop = controlsBottom + Math.max(
+        12,
+        (availableHeight - elementBox.height) / 2,
+      );
+      window.scrollTo({
+        top: window.scrollY + elementBox.top - targetViewportTop,
+        behavior: getScheduleScrollBehavior(root, prefersReducedMotion()),
+      });
+    };
+
+    refreshNowLine();
+    if (!clock.fixed) {
+      window.setTimeout(() => {
+        refreshNowLine();
+        window.setInterval(refreshNowLine, MINUTE_MS);
+      }, millisecondsToNextMinute(Date.now()));
+    }
+
+    root.addEventListener("click", (event) => {
+      const target = event.target;
+      if (!(target instanceof Element)) return;
+
+      if (target.closest("[data-schedule-search-clear]")) {
+        if (clearScheduleSearch(root)) searchInput?.focus();
+        return;
+      }
+
+      if (target.closest("[data-schedule-dates-toggle]")) {
+        forceDatesExpanded = root.dataset.scheduleDatesCollapsed === "true";
+        syncDateGrid();
+        return;
+      }
+
+      const dayButton = target.closest<HTMLElement>("[data-schedule-day]");
+      if (dayButton?.dataset.scheduleDate) {
+        clearScheduleSearch(root);
+        if (activateScheduleDay(root, dayButton.dataset.scheduleDate)) refreshNowLine();
+        forceDatesExpanded = false;
+        queueDateGridSync();
+        return;
+      }
+
+      if (target.closest("[data-schedule-jump-now]")) {
+        clearScheduleSearch(root);
+        const result = resolveJumpToNowTarget(root, dates, currentClock());
+        if (result) scrollTo(result.element);
+        return;
+      }
+
+      if (target.closest("[data-schedule-jump-prime]")) {
+        clearScheduleSearch(root);
+        const date = root.dataset.scheduleActiveDate;
+        if (!date) return;
+        const result = resolvePrimetimeTarget(root, date);
+        if (result) {
+          refreshNowLine();
+          scrollTo(result.element);
+        }
+        return;
+      }
+
+      const programButton = target.closest<HTMLElement>("[data-program-details]");
+      if (!programButton) return;
+      // Populate before opening, and only open once that succeeded: a dialog
+      // whose markup is missing a slot would otherwise show the placeholder copy
+      // as though it were the program.
+      if (programDialog && populateProgramDialog(programDialog, programButton)) {
+        // Pass the button so focus returns to the row the reader came from. The
+        // schedule can run to hundreds of rows, so landing on <body> would cost a
+        // keyboard reader their place in the grid.
+        programModal?.open(programButton);
+      }
+    });
+
+    root
+      .querySelector<HTMLSelectElement>("[data-schedule-day-select]")
+      ?.addEventListener("change", (event) => {
+        const select = event.currentTarget;
+        if (select instanceof HTMLSelectElement && activateScheduleDay(root, select.value)) {
+          clearScheduleSearch(root);
+          refreshNowLine();
+        }
+      });
+
+  });
+</script>
+
+<style is:global>
+  [data-native-schedule] {
+    --schedule-line: color-mix(in srgb, var(--color-white) 18%, transparent);
+    --schedule-line-strong: color-mix(in srgb, var(--color-white) 28%, transparent);
+    --schedule-primary: var(--color-text-on-surface);
+    --schedule-secondary: var(--color-text-muted);
+    --schedule-metadata: var(--color-text-quiet);
+    --schedule-rail: 5.5rem;
+    --schedule-header-offset: 92px;
+    min-width: 0;
+    overflow-x: clip;
+    color: var(--schedule-primary);
+  }
+
+  [data-native-schedule] :is(button, select, a):focus-visible {
+    outline: var(--focus-outline);
+    outline-offset: var(--focus-offset);
+  }
+
+  [data-native-schedule] [hidden] {
+    display: none !important;
+  }
+
+  .schedule-intro,
+  .schedule-toolbar__inner,
+  .schedule-content {
+    /* border-box so the inline padding stays inside the 100% arm on phones. */
+    box-sizing: border-box;
+    width: min(100%, 84rem);
+    margin-inline: auto;
+    padding-inline: clamp(1rem, 3vw, 1.5rem);
+  }
+
+  .schedule-intro {
+    padding-block: clamp(2.25rem, 6vw, 4.5rem) 1rem;
+  }
+
+  .schedule-intro__heading {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(15rem, 0.42fr);
+    align-items: end;
+    gap: 2rem;
+  }
+
+  .schedule-intro h1 {
+    margin: 0 0 0.85rem;
+    font-size: clamp(2.6rem, 7vw, 5.5rem);
+    font-weight: 900;
+    letter-spacing: -0.035em;
+  }
+
+  .schedule-intro__heading > div > p {
+    max-width: 58ch;
+    margin: 0;
+    color: var(--schedule-secondary);
+    font-size: clamp(1.05rem, 1.8vw, 1.25rem);
+  }
+
+  .schedule-station-fact {
+    margin: 0;
+    padding-top: 1rem;
+    border-top: 1px solid var(--schedule-line-strong);
+    color: var(--schedule-secondary);
+    font-size: 0.95rem;
+  }
+
+  .schedule-station-fact strong {
+    display: block;
+    margin-bottom: 0.2rem;
+    color: var(--schedule-primary);
+    font-size: 1.05rem;
+  }
+
+  .schedule-summary {
+    margin-top: clamp(1.15rem, 2.5vw, 1.75rem);
+  }
+
+  .schedule-shell {
+    padding-bottom: 4rem;
+    overflow-anchor: none;
+  }
+
+  .schedule-toolbar-sentinel {
+    height: 0;
+    pointer-events: none;
+  }
+
+  .schedule-toolbar {
+    position: sticky;
+    top: var(--schedule-header-offset);
+    z-index: 19;
+    border-block: 1px solid var(--schedule-line-strong);
+    background: color-mix(in srgb, var(--color-surface-panel) 98%, transparent);
+    box-shadow: 0 14px 34px color-mix(in srgb, var(--color-black) 34%, transparent);
+  }
+
+  .schedule-toolbar__inner {
+    padding-block: 0.65rem 0.75rem;
+  }
+
+  .schedule-toolbar__top {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+    margin-bottom: 0.6rem;
+  }
+
+  .schedule-search {
+    display: grid;
+    grid-template-columns: auto minmax(16rem, 1fr);
+    align-items: center;
+    gap: 0.35rem 0.75rem;
+    margin-bottom: 0.65rem;
+  }
+
+  .schedule-search > label {
+    font-size: 0.9rem;
+    font-weight: 800;
+  }
+
+  .schedule-search__field {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 0.4rem;
+  }
+
+  .schedule-search input,
+  .schedule-search button {
+    min-height: 44px;
+    border: 1px solid var(--schedule-line-strong);
+    border-radius: 3px;
+    color: var(--schedule-primary);
+    background: var(--color-surface-elevated);
+    font: inherit;
+  }
+
+  .schedule-search input {
+    min-width: 0;
+    padding: 0.55rem 0.7rem;
+  }
+
+  .schedule-search button {
+    padding-inline: 0.9rem;
+    font-weight: 750;
+    cursor: pointer;
+  }
+
+  .schedule-search button:hover {
+    border-color: var(--color-focus-ring);
+    background: var(--color-schedule-program-hover-surface);
+  }
+
+  .schedule-search > p {
+    grid-column: 2;
+    margin: 0;
+    color: var(--schedule-secondary);
+    font-size: 0.82rem;
+  }
+
+  .schedule-active-context {
+    min-width: 0;
+    display: flex;
+    align-items: baseline;
+    flex-wrap: wrap;
+    gap: 0.35rem 0.75rem;
+  }
+
+  .schedule-active-context > strong {
+    font-size: clamp(1.05rem, 2vw, 1.25rem);
+    font-weight: 800;
+  }
+
+  .schedule-active-context > span {
+    color: var(--schedule-secondary);
+    font-size: 0.9rem;
+  }
+
+  .schedule-quick-actions {
+    display: flex;
+    flex: none;
+    align-items: start;
+    gap: 0.45rem;
+  }
+
+  .schedule-quick-actions button,
+  .schedule-day-tabs button {
+    min-height: 44px;
+    border: 1px solid var(--schedule-line-strong);
+    border-radius: 3px;
+    color: var(--schedule-primary);
+    background: color-mix(in srgb, var(--color-white) 4.5%, transparent);
+    font: inherit;
+    cursor: pointer;
+  }
+
+  .schedule-quick-actions button {
+    padding: 0.55rem 0.9rem;
+    font-weight: 700;
+  }
+
+  .schedule-quick-actions button:hover,
+  .schedule-day-tabs button:hover {
+    border-color: color-mix(in srgb, var(--color-focus-ring) 62%, transparent);
+    background: color-mix(in srgb, var(--color-brand-bright) 16%, transparent);
+  }
+
+  .schedule-quick-actions button:disabled,
+  .schedule-day-tabs button:disabled,
+  .schedule-day-select-wrap select:disabled {
+    cursor: not-allowed;
+    opacity: 0.62;
+  }
+
+  .schedule-day-tabs {
+    display: grid;
+    grid-template-columns: repeat(7, minmax(0, 1fr));
+    gap: 0.35rem;
+  }
+
+  .schedule-day-tabs button {
+    min-width: 0;
+    padding: 0.45rem 0.35rem;
+    text-align: left;
+  }
+
+  .schedule-day-tabs span,
+  .schedule-day-tabs strong {
+    display: block;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .schedule-day-tabs span {
+    color: var(--schedule-secondary);
+    font-size: 0.78rem;
+  }
+
+  .schedule-day-tabs strong {
+    margin-top: 0.05rem;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .schedule-day-tabs button[aria-current="date"] {
+    border-color: var(--color-focus-ring);
+    background: var(--color-brand);
+  }
+
+  .schedule-day-tabs button[aria-current="date"] span {
+    color: var(--color-schedule-current-date-text);
+  }
+
+  .schedule-day-select-wrap {
+    display: none;
+    grid-template-columns: auto minmax(0, 1fr);
+    align-items: center;
+    gap: 0.65rem;
+  }
+
+  .schedule-day-select-wrap--all-screens {
+    display: grid;
+  }
+
+  .schedule-day-select-wrap label {
+    color: var(--schedule-secondary);
+    font-size: 0.86rem;
+    font-weight: 700;
+  }
+
+  .schedule-day-select-wrap select {
+    width: 100%;
+    min-height: 44px;
+    padding: 0.45rem 2rem 0.45rem 0.65rem;
+    border: 1px solid var(--color-focus-ring);
+    border-radius: 4px;
+    color: var(--schedule-primary);
+    background: var(--color-brand);
+    font: inherit;
+  }
+
+  @media (min-width: 701px) {
+    [data-native-schedule][data-schedule-dates-collapsed="true"] .schedule-toolbar__inner {
+      padding-block: 0.4rem 0.45rem;
+    }
+
+    [data-native-schedule][data-schedule-dates-collapsed="true"] .schedule-toolbar__top {
+      margin-bottom: 0.35rem;
+    }
+
+    [data-native-schedule][data-schedule-dates-collapsed="true"] .schedule-search {
+      margin-bottom: 0;
+    }
+
+    [data-native-schedule][data-schedule-dates-collapsed="true"] .schedule-day-tabs {
+      display: none;
+    }
+  }
+
+  @media (min-width: 1100px) {
+    [data-native-schedule][data-schedule-dates-collapsed="true"] .schedule-toolbar__inner {
+      display: grid;
+      grid-template-columns: minmax(0, 1.3fr) minmax(23rem, 0.7fr);
+      align-items: center;
+      gap: 1rem;
+    }
+
+    [data-native-schedule][data-schedule-dates-collapsed="true"] .schedule-toolbar__top {
+      margin-bottom: 0;
+    }
+  }
+
+  .schedule-content {
+    min-width: 0;
+  }
+
+  .schedule-search-results {
+    padding-block: 2rem 1rem;
+  }
+
+  .schedule-search-results__heading,
+  .schedule-search-group__heading {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 1rem;
+  }
+
+  .schedule-search-results__heading {
+    padding-bottom: 1rem;
+    border-bottom: 1px solid var(--schedule-line-strong);
+  }
+
+  .schedule-search-results__heading h2,
+  .schedule-search-results__heading p,
+  .schedule-search-group__heading h3,
+  .schedule-search-group__heading p {
+    margin: 0;
+  }
+
+  .schedule-search-results__heading h2 {
+    font-size: clamp(1.45rem, 3vw, 2rem);
+  }
+
+  .schedule-search-results__heading p,
+  .schedule-search-group__heading p {
+    color: var(--schedule-secondary);
+    font-size: 0.9rem;
+  }
+
+  .schedule-search-group {
+    padding-top: 1.5rem;
+  }
+
+  .schedule-search-group__heading {
+    margin-bottom: 0.65rem;
+  }
+
+  .schedule-search-group__heading h3 {
+    font-size: 1.15rem;
+  }
+
+  .schedule-search-group__list {
+    display: grid;
+    gap: 0.45rem;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+
+  .schedule-search-result__button {
+    min-height: 72px;
+    height: auto;
+  }
+
+  .schedule-search-empty {
+    margin-top: 1.5rem;
+    padding: 1.35rem;
+    border: 1px solid var(--schedule-line-strong);
+    background: var(--color-surface-elevated);
+  }
+
+  .schedule-search-empty strong {
+    display: block;
+    margin-bottom: 0.3rem;
+  }
+
+  .schedule-search-empty p {
+    margin: 0;
+    color: var(--schedule-secondary);
+  }
+
+  .schedule-board-heading {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 1rem;
+    padding-block: 2rem 1rem;
+  }
+
+  .schedule-board-heading h2 {
+    margin: 0;
+    font-size: clamp(1.45rem, 3vw, 2rem);
+  }
+
+  .schedule-board-heading p {
+    margin: 0;
+    color: var(--schedule-secondary);
+    font-size: 0.9rem;
+  }
+
+  .schedule-timeline {
+    position: relative;
+    display: grid;
+    grid-template-columns: var(--schedule-rail) minmax(0, 1fr);
+    height: var(--schedule-desktop-day-height);
+    border-block: 1px solid var(--schedule-line-strong);
+    background: var(--color-surface-panel);
+    isolation: isolate;
+  }
+
+  .schedule-time-rail {
+    position: relative;
+    z-index: 2;
+    border-right: 1px solid var(--schedule-line-strong);
+    background: var(--color-schedule-rail-surface);
+  }
+
+  .schedule-hour-mark {
+    position: absolute;
+    top: var(--schedule-desktop-top);
+    right: 0;
+    left: 0;
+    height: 0;
+    border-top: 1px solid var(--schedule-line);
+  }
+
+  .schedule-hour-mark span {
+    position: absolute;
+    top: 0;
+    right: 0.8rem;
+    transform: translateY(-50%);
+    padding: 0.12rem 0.3rem;
+    color: var(--color-schedule-hour-text);
+    background: var(--color-schedule-rail-surface);
+    font-size: 0.78rem;
+    font-weight: 650;
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+  }
+
+  .schedule-lane {
+    position: relative;
+    min-width: 0;
+    overflow: clip;
+    background-image: repeating-linear-gradient(
+      to bottom,
+      transparent 0,
+      transparent 143px,
+      color-mix(in srgb, var(--color-white) 10%, transparent) 143px,
+      color-mix(in srgb, var(--color-white) 10%, transparent) 144px
+    );
+  }
+
+  .schedule-primetime-band {
+    position: absolute;
+    top: var(--schedule-desktop-top);
+    right: 0;
+    left: 0;
+    z-index: 0;
+    height: var(--schedule-desktop-height);
+    border-block: 1px solid color-mix(in srgb, var(--color-focus-ring) 22%, transparent);
+    background: color-mix(in srgb, var(--color-brand-bright) 7.5%, transparent);
+    pointer-events: none;
+    scroll-margin-top: 13rem;
+  }
+
+  .schedule-primetime-band span {
+    position: absolute;
+    top: 0.45rem;
+    right: 0.75rem;
+    color: var(--color-schedule-primetime-text);
+    font-size: 0.78rem;
+    font-weight: 700;
+  }
+
+  .schedule-program-list {
+    position: absolute;
+    inset: 0;
+    z-index: 2;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+
+  .schedule-program-slot {
+    position: absolute;
+    top: var(--schedule-desktop-top);
+    right: 0.45rem;
+    left: 0.45rem;
+    height: var(--schedule-desktop-height);
+  }
+
+  .schedule-program {
+    width: 100%;
+    height: 100%;
+    display: grid;
+    grid-template-columns: 6.6rem minmax(0, 1fr) auto;
+    align-items: start;
+    gap: 0.8rem;
+    overflow: hidden;
+    padding: 0.62rem 0.8rem;
+    border: 1px solid color-mix(in srgb, var(--color-white) 14%, transparent);
+    border-radius: 3.75px;
+    color: var(--schedule-primary);
+    background: color-mix(in srgb, var(--color-surface-elevated) 96%, transparent);
+    font: inherit;
+    text-align: left;
+    cursor: pointer;
+    scroll-margin-top: 13rem;
+    transition: border-color 140ms ease, background 140ms ease;
+  }
+
+  .schedule-program:hover {
+    border-color: color-mix(in srgb, var(--color-focus-ring) 52%, transparent);
+    background: var(--color-schedule-program-hover-surface);
+  }
+
+  .schedule-program__time {
+    display: flex;
+    flex-direction: column;
+    gap: 0.1rem;
+    color: var(--color-schedule-time-text);
+    font-size: 0.85rem;
+    font-weight: 750;
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+  }
+
+  .schedule-program__duration {
+    color: var(--schedule-metadata);
+    font-size: 0.75rem;
+    font-weight: 600;
+  }
+
+  .schedule-program__copy {
+    min-width: 0;
+  }
+
+  .schedule-program__title,
+  .schedule-program__episode {
+    display: -webkit-box;
+    overflow: hidden;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 1;
+  }
+
+  .schedule-program__title {
+    color: var(--schedule-primary);
+    font-size: 1rem;
+    font-weight: 800;
+    line-height: 1.2;
+  }
+
+  .schedule-program__episode {
+    margin-top: 0.18rem;
+    color: var(--schedule-secondary);
+    font-size: 0.83rem;
+    line-height: 1.2;
+  }
+
+  .schedule-program__flags {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+    gap: 0.25rem;
+  }
+
+  .schedule-flag {
+    display: inline-flex;
+    min-height: 1.4rem;
+    align-items: center;
+    padding: 0.08rem 0.34rem;
+    border: 1px solid var(--color-border-strong);
+    border-radius: 3px;
+    color: var(--color-schedule-time-text);
+    font-size: 0.7rem;
+    font-weight: 750;
+    line-height: 1;
+  }
+
+  .schedule-now-line {
+    position: absolute;
+    top: var(--schedule-desktop-top);
+    right: 0;
+    left: 0;
+    z-index: 8;
+    height: 2px;
+    background: var(--color-focus-ring);
+    pointer-events: none;
+    scroll-margin-top: 13rem;
+  }
+
+  .schedule-now-line span {
+    position: absolute;
+    top: 50%;
+    left: 0.3rem;
+    transform: translateY(-50%);
+    padding: 0.2rem 0.42rem;
+    border-radius: 3px;
+    color: var(--color-ink);
+    background: var(--color-focus-ring);
+    font-size: 0.72rem;
+    font-weight: 850;
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+  }
+
+  .schedule-empty-state {
+    padding: 1.35rem;
+    border: 1px solid var(--schedule-line-strong);
+    background: var(--color-surface-elevated);
+  }
+
+  .schedule-empty-state strong,
+  .schedule-kids__empty strong {
+    display: block;
+    margin-bottom: 0.3rem;
+    color: var(--schedule-primary);
+    font-size: 1.08rem;
+  }
+
+  .schedule-empty-state p {
+    margin: 0 0 0.75rem;
+    color: var(--schedule-secondary);
+  }
+
+  .schedule-empty-state__links {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem 1.25rem;
+  }
+
+  .schedule-empty-state a {
+    display: inline-flex;
+    min-height: 44px;
+    align-items: center;
+    color: var(--color-schedule-link);
+    font-weight: 750;
+    text-underline-offset: 0.2em;
+  }
+
+  .schedule-kids {
+    padding-top: clamp(3rem, 7vw, 5rem);
+  }
+
+  .schedule-kids__head {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: end;
+    gap: 1.5rem;
+    padding-bottom: 1rem;
+    border-bottom: 1px solid var(--schedule-line-strong);
+  }
+
+  .schedule-kids__head h2 {
+    margin: 0 0 0.35rem;
+    font-size: clamp(1.45rem, 3vw, 2rem);
+  }
+
+  .schedule-kids__head p {
+    max-width: 62ch;
+    margin: 0;
+    color: var(--schedule-secondary);
+  }
+
+  .schedule-kids__live {
+    display: inline-flex;
+    min-height: 44px;
+    align-items: center;
+    justify-content: center;
+    padding: 0.55rem 0.9rem;
+    border: 1px solid var(--color-focus-ring);
+    border-radius: 3px;
+    color: var(--color-text-on-brand);
+    background: color-mix(in srgb, var(--color-brand) 34%, transparent);
+    font-weight: 750;
+    text-decoration: none;
+    white-space: nowrap;
+  }
+
+  .schedule-kids__live:hover {
+    background: var(--color-brand);
+  }
+
+  .schedule-kids__list {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    column-gap: 2rem;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+
+  .schedule-kids__list li {
+    display: grid;
+    grid-template-columns: 5.2rem minmax(0, 1fr);
+    gap: 0.8rem;
+    padding: 0.78rem 0;
+    border-bottom: 1px solid var(--schedule-line);
+  }
+
+  .schedule-kids__list time {
+    color: var(--color-schedule-time-text);
+    font-weight: 750;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .schedule-kids__list strong {
+    display: block;
+  }
+
+  .schedule-kids__list strong + span {
+    display: block;
+    margin-top: 0.15rem;
+    color: var(--schedule-secondary);
+    font-size: 0.88rem;
+  }
+
+  .schedule-kids__empty {
+    padding: 1.2rem 0;
+    border-bottom: 1px solid var(--schedule-line-strong);
+    color: var(--schedule-secondary);
+  }
+
+  .schedule-dialog {
+    width: min(38rem, calc(100% - 2rem));
+    max-height: min(80vh, 42rem);
+    padding: 0;
+    border: 1px solid color-mix(in srgb, var(--color-focus-ring) 55%, transparent);
+    border-radius: 6px;
+    color: var(--schedule-primary);
+    background: var(--color-surface-panel);
+    box-shadow: 0 24px 80px color-mix(in srgb, var(--color-black) 62%, transparent);
+  }
+
+  .schedule-dialog::backdrop {
+    background: var(--color-schedule-dialog-backdrop);
+  }
+
+  .schedule-dialog__inner {
+    padding: clamp(1.15rem, 4vw, 1.75rem);
+  }
+
+  .schedule-dialog__top {
+    display: flex;
+    align-items: start;
+    justify-content: space-between;
+    gap: 1rem;
+  }
+
+  .schedule-dialog h2 {
+    margin: 0 0 0.35rem;
+    font-size: clamp(1.35rem, 3vw, 1.9rem);
+  }
+
+  .schedule-dialog__episode,
+  .schedule-dialog__time,
+  .schedule-dialog__meta,
+  .schedule-dialog__description {
+    color: var(--schedule-secondary);
+  }
+
+  .schedule-dialog__episode {
+    margin: 0 0 0.8rem;
+    font-weight: 650;
+  }
+
+  .schedule-dialog__time {
+    margin: 0 0 0.25rem;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .schedule-dialog__meta {
+    margin: 0 0 1rem;
+  }
+
+  /* The airing's own synopsis reads as the body copy, in the dialog's primary ink,
+     because it is what the viewer opened the dialog to find. The series blurb below
+     it keeps the secondary colour. Declared here rather than left out of the
+     secondary group above, so adding this class to that group cannot quietly erase
+     the distinction. Colour is not the only cue: each paragraph carries an sr-only
+     label, per WCAG 1.4.1. */
+  .schedule-dialog__episode-description {
+    margin: 0 0 0.7rem;
+    line-height: 1.65;
+    color: var(--schedule-primary);
+  }
+
+  .schedule-dialog__description {
+    margin: 0;
+    line-height: 1.65;
+  }
+
+  .schedule-dialog [data-dialog-close] {
+    min-width: 44px;
+    min-height: 44px;
+    border: 1px solid var(--schedule-line-strong);
+    border-radius: 3px;
+    color: var(--schedule-primary);
+    background: color-mix(in srgb, var(--color-white) 6%, transparent);
+    font: inherit;
+    cursor: pointer;
+  }
+
+  @media (max-width: 700px) {
+    [data-native-schedule] {
+      --schedule-rail: 3.65rem;
+      --schedule-header-offset: 74px;
+    }
+
+    .schedule-timeline {
+      height: var(--schedule-mobile-day-height);
+    }
+
+    .schedule-hour-mark,
+    .schedule-primetime-band,
+    .schedule-program-slot,
+    .schedule-now-line {
+      top: var(--schedule-mobile-top);
+    }
+
+    .schedule-primetime-band,
+    .schedule-program-slot {
+      height: var(--schedule-mobile-height);
+    }
+
+    .schedule-lane {
+      background-image: repeating-linear-gradient(
+        to bottom,
+        transparent 0,
+        transparent 137px,
+        color-mix(in srgb, var(--color-white) 10%, transparent) 137px,
+        color-mix(in srgb, var(--color-white) 10%, transparent) 138px
+      );
+    }
+
+    .schedule-intro {
+      padding-block: 0.5rem 1rem;
+    }
+
+    .schedule-intro__heading {
+      display: block;
+    }
+
+    .schedule-intro h1 {
+      margin-bottom: 0.25rem;
+      font-size: 1.8rem;
+    }
+
+    .schedule-intro__heading > div > p,
+    .schedule-station-fact {
+      display: none;
+    }
+
+    .schedule-summary {
+      margin-top: 0.75rem;
+    }
+
+    .schedule-toolbar__top {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr);
+      align-items: center;
+    }
+
+    .schedule-search {
+      grid-template-columns: 1fr;
+      gap: 0.25rem;
+    }
+
+    .schedule-search > p {
+      grid-column: 1;
+    }
+
+    .schedule-search-results__heading {
+      display: block;
+    }
+
+    .schedule-search-results__heading p {
+      margin-top: 0.25rem;
+    }
+
+    .schedule-search-result__button {
+      min-height: 82px;
+    }
+
+    .schedule-active-context {
+      display: block;
+    }
+
+    .schedule-active-context > strong {
+      display: block;
+      overflow: hidden;
+      font-size: 0.95rem;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .schedule-active-context > span {
+      display: none;
+    }
+
+    .schedule-quick-actions {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 0.25rem;
+    }
+
+    .schedule-quick-actions--with-download .schedule-download {
+      grid-column: 1 / -1;
+    }
+
+    .schedule-quick-actions button {
+      padding-inline: 0.45rem;
+      font-size: 1rem;
+    }
+
+    .schedule-day-tabs {
+      display: none;
+    }
+
+    .schedule-day-select-wrap {
+      display: grid;
+    }
+
+    .schedule-board-heading {
+      padding-block: 0.55rem 0.45rem;
+    }
+
+    .schedule-board-heading h2 {
+      font-size: 1.2rem;
+    }
+
+    .schedule-board-heading p {
+      display: none;
+    }
+
+    .schedule-hour-mark span {
+      right: 0.25rem;
+      padding-inline: 0.15rem;
+      font-size: 0.69rem;
+    }
+
+    .schedule-program-slot {
+      right: 0.25rem;
+      left: 0.25rem;
+    }
+
+    .schedule-program {
+      grid-template-columns: minmax(0, 1fr) auto;
+      gap: 0.35rem 0.5rem;
+      padding: 0.48rem 0.58rem;
+    }
+
+    .schedule-program__time {
+      grid-column: 1;
+      flex-direction: row;
+      align-items: baseline;
+      gap: 0.42rem;
+      font-size: 0.78rem;
+    }
+
+    .schedule-program__duration {
+      font-size: 0.7rem;
+    }
+
+    .schedule-program__copy {
+      grid-column: 1 / -1;
+      grid-row: 2;
+    }
+
+    .schedule-program__title {
+      font-size: 0.9rem;
+    }
+
+    .schedule-program__episode {
+      font-size: 0.75rem;
+    }
+
+    .schedule-program__flags {
+      grid-column: 2;
+      grid-row: 1;
+    }
+
+    .schedule-flag {
+      min-height: 1.25rem;
+      font-size: 0.64rem;
+    }
+
+    .schedule-kids__head {
+      grid-template-columns: 1fr;
+      align-items: start;
+    }
+
+    .schedule-kids__live {
+      justify-self: start;
+      white-space: normal;
+    }
+
+    .schedule-kids__list {
+      grid-template-columns: 1fr;
+    }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    [data-native-schedule] *,
+    [data-native-schedule] *::before,
+    [data-native-schedule] *::after {
+      scroll-behavior: auto !important;
+      transition-duration: 0.01ms !important;
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+    }
+  }
+
+  html[data-motion="off"] [data-native-schedule] *,
+  html[data-motion="off"] [data-native-schedule] *::before,
+  html[data-motion="off"] [data-native-schedule] *::after {
+    scroll-behavior: auto !important;
+    transition: none !important;
+    animation: none !important;
+  }
+
+  @media print {
+    .schedule-intro,
+    .schedule-toolbar,
+    .schedule-quick-actions,
+    .schedule-search-results,
+    .schedule-kids,
+    .schedule-dialog,
+    .schedule-time-rail,
+    .schedule-primetime-band,
+    .schedule-now-line {
+      display: none !important;
+    }
+
+    [data-native-schedule] [data-schedule-panel-host] {
+      display: block !important;
+    }
+
+    [data-native-schedule],
+    .schedule-content,
+    .schedule-day-panel,
+    .schedule-timeline,
+    .schedule-lane,
+    .schedule-program-list,
+    .schedule-program-slot,
+    .schedule-program {
+      width: auto;
+      height: auto !important;
+      max-height: none;
+      overflow: visible;
+      color: var(--color-print-ink) !important;
+      background: var(--color-paper) !important;
+      box-shadow: none !important;
+    }
+
+    .schedule-timeline {
+      display: block;
+      border: 0;
+    }
+
+    .schedule-program-list,
+    .schedule-program-slot {
+      position: static;
+    }
+
+    .schedule-program-slot {
+      margin-bottom: 0.3rem;
+      break-inside: avoid;
+    }
+
+    .schedule-program {
+      grid-template-columns: 7rem minmax(0, 1fr) auto;
+      border-color: var(--color-schedule-print-border);
+      page-break-inside: avoid;
+    }
+
+    .schedule-program :is(strong, span, time) {
+      color: var(--color-print-ink) !important;
+    }
+  }
+</style>

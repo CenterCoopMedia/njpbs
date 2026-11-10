@@ -1,0 +1,328 @@
+---
+import { FILE_ACCEPT, MAX_EMAIL_LENGTH, MAX_MESSAGE_LENGTH } from "../lib/share-form";
+
+const isDevelopment = process.env.CMS_DEPLOYMENT_ENVIRONMENT === "development";
+const endpoint = isDevelopment ? "" : (import.meta.env.PUBLIC_SHARE_INTAKE_ENDPOINT ?? "").trim() || "https://intake.njpbs.org";
+if (endpoint && new URL(endpoint).protocol !== "https:") throw new Error("PUBLIC_SHARE_INTAKE_ENDPOINT must be an HTTPS URL.");
+const sitekey = isDevelopment ? "" : (import.meta.env.PUBLIC_TURNSTILE_SITEKEY ?? "").trim();
+const required = !isDevelopment && import.meta.env.PUBLIC_SHARE_REQUIRED === "1";
+if (required && !sitekey) {
+  throw new Error("PUBLIC_TURNSTILE_SITEKEY is required for this deployment.");
+}
+---
+
+<section class="share" data-share data-endpoint={endpoint} data-sitekey={sitekey} aria-label="Photo and video submission">
+  <div data-share-closed>
+    <p data-share-closed-text>This form is not open yet.</p>
+    <button class="btn btn--primary" type="button" disabled>Send submission</button>
+  </div>
+
+  <form data-share-form novalidate hidden>
+    <p class="share__intro">Please complete every field. Staff will review your submission.</p>
+    <div class="share__field">
+      <label for="share-name">Your name</label>
+      <input id="share-name" name="name" autocomplete="name" maxlength="300" required aria-invalid="false" data-share-name />
+      <p class="share__error" id="share-name-error" data-share-error="name" hidden></p>
+    </div>
+    <div class="share__field">
+      <label for="share-email">Email address</label>
+      <input id="share-email" name="email" type="email" autocomplete="email" maxlength={MAX_EMAIL_LENGTH} required aria-invalid="false" data-share-email />
+      <p class="share__error" id="share-email-error" data-share-error="email" hidden></p>
+    </div>
+    <div class="share__field">
+      <label for="share-message">Tell us about your photo or video</label>
+      <textarea id="share-message" name="message" rows="6" minlength="10" maxlength={MAX_MESSAGE_LENGTH} required aria-invalid="false" aria-describedby="share-message-help share-message-count" data-share-message></textarea>
+      <div class="share__meta"><span id="share-message-help">10 to 2,000 characters.</span><span id="share-message-count" aria-live="polite" data-share-count>0 / 2,000</span></div>
+      <p class="share__error" id="share-message-error" data-share-error="message" hidden></p>
+    </div>
+    <div class="share__field">
+      <label for="share-file">Photo or video</label>
+      <input id="share-file" name="file" type="file" accept={FILE_ACCEPT} required aria-invalid="false" aria-describedby="share-file-help" data-share-file />
+      <p id="share-file-help" class="share__help">JPEG, PNG, WebP or AVIF photos up to 25 MiB (100 megapixels); MP4, QuickTime or WebM videos up to 500 MiB.</p>
+      <p class="share__error" id="share-file-error" data-share-error="file" hidden></p>
+    </div>
+    <div class="share__release" data-share-release></div>
+    <div class="share__field">
+      <label class="share__check" for="share-consent"><input id="share-consent" name="consentChecked" type="checkbox" required aria-invalid="false" data-share-consent /><span data-share-checkbox>Consent to the release</span></label>
+      <p class="share__error" id="share-consent-error" data-share-error="consentChecked" hidden></p>
+    </div>
+    <div class="share__field">
+      <label class="share__check" for="share-age"><input id="share-age" name="ageAttested" type="checkbox" required aria-invalid="false" aria-describedby="share-age-help" data-share-age /><span data-share-age-text>Age confirmation</span></label>
+      <p id="share-age-help" class="share__help" data-share-age-help></p>
+      <p class="share__error" id="share-age-error" data-share-error="ageAttested" hidden></p>
+    </div>
+    <div class="share__hp" aria-hidden="true"><label for="share-website">Leave this field empty</label><input id="share-website" name="website" tabindex="-1" autocomplete="off" data-share-hp /></div>
+    <div data-share-turnstile tabindex="-1"></div>
+    <p class="share__error" id="share-turnstile-error" data-share-error="turnstile" hidden></p>
+    <p class="share__status" role="status" aria-live="polite" tabindex="-1" data-share-status></p>
+    <div data-share-progress-wrap hidden>
+      <label for="share-progress">Uploading file <span data-share-progress-text>0%</span></label>
+      <progress id="share-progress" max="100" value="0" data-share-progress></progress>
+      <button class="btn btn--ghost" type="button" data-share-cancel>Cancel upload</button>
+    </div>
+    <button class="btn btn--primary" type="submit" data-share-submit>Send submission</button>
+    <p class="share__help" data-share-privacy></p>
+    <p><a href="/privacy/">Read the privacy policy</a></p>
+  </form>
+  <h2 data-share-thanks tabindex="-1" hidden>Submission received</h2>
+</section>
+
+<script>
+  import { buildShareStartRequest, MIN_DWELL_MS, parseShareConfig, photoDimensionsAllowed, shareErrorMessage, validateShareFields, type ShareFields, type ShareField, type ShareConfig } from "../lib/share-form";
+  import { SHARE_UPLOAD_ORIGIN } from "../../../packages/content-core/src/share-upload-origin";
+
+  const root = document.querySelector<HTMLElement>("[data-share]");
+  if (root) {
+    const endpoint = root.dataset.endpoint?.replace(/\/$/, "") || "";
+    const sitekey = root.dataset.sitekey || "";
+    const form = root.querySelector<HTMLFormElement>("[data-share-form]")!;
+    const closed = root.querySelector<HTMLElement>("[data-share-closed]")!;
+    const closedText = root.querySelector<HTMLElement>("[data-share-closed-text]")!;
+    const thanks = root.querySelector<HTMLElement>("[data-share-thanks]")!;
+    const status = root.querySelector<HTMLElement>("[data-share-status]")!;
+    const submit = root.querySelector<HTMLButtonElement>("[data-share-submit]")!;
+    const name = root.querySelector<HTMLInputElement>("[data-share-name]")!;
+    const email = root.querySelector<HTMLInputElement>("[data-share-email]")!;
+    const message = root.querySelector<HTMLTextAreaElement>("[data-share-message]")!;
+    const file = root.querySelector<HTMLInputElement>("[data-share-file]")!;
+    const consent = root.querySelector<HTMLInputElement>("[data-share-consent]")!;
+    const age = root.querySelector<HTMLInputElement>("[data-share-age]")!;
+    const website = root.querySelector<HTMLInputElement>("[data-share-hp]")!;
+    const count = root.querySelector<HTMLElement>("[data-share-count]")!;
+    const progressWrap = root.querySelector<HTMLElement>("[data-share-progress-wrap]")!;
+    const progress = root.querySelector<HTMLProgressElement>("[data-share-progress]")!;
+    const progressText = root.querySelector<HTMLElement>("[data-share-progress-text]")!;
+    const cancel = root.querySelector<HTMLButtonElement>("[data-share-cancel]")!;
+    const turnstileMount = root.querySelector<HTMLElement>("[data-share-turnstile]")!;
+    const controls: Record<ShareField, HTMLElement> = { name, email, message, file, consentChecked: consent, ageAttested: age, turnstile: turnstileMount };
+    const errorIds: Record<ShareField, string> = { name: "share-name-error", email: "share-email-error", message: "share-message-error", file: "share-file-error", consentChecked: "share-consent-error", ageAttested: "share-age-error", turnstile: "share-turnstile-error" };
+    const descriptions: Record<ShareField, string> = { name: "", email: "", message: "share-message-help share-message-count", file: "share-file-help", consentChecked: "", ageAttested: "share-age-help", turnstile: "" };
+    let config: ShareConfig | null = null;
+    let interactiveAt = 0;
+    let requestId = "";
+    let submissionId = "";
+    let uploadExpiresAt = 0;
+    let uploaded = false;
+    let token = "";
+    let tokenReady: ((value: string) => void) | null = null;
+    let tokenFailed: (() => void) | null = null;
+    let widgetId: string | undefined;
+    let sending = false;
+    let upload: XMLHttpRequest | null = null;
+
+    function setError(field: ShareField, text: string | undefined) {
+      const element = root!.querySelector<HTMLElement>(`#${errorIds[field]}`)!;
+      element.textContent = text || "";
+      element.hidden = !text;
+      controls[field].setAttribute("aria-invalid", String(Boolean(text)));
+      const ids = [descriptions[field], text ? errorIds[field] : ""].filter(Boolean).join(" ");
+      if (ids) controls[field].setAttribute("aria-describedby", ids);
+      else controls[field].removeAttribute("aria-describedby");
+    }
+    function setStatus(text: string, error = false) {
+      status.textContent = text;
+      status.dataset.tone = error ? "error" : "";
+      if (text && error) status.focus();
+    }
+    function fields(): ShareFields {
+      return { name: name.value, email: email.value, message: message.value, file: file.files?.[0] || null, consentChecked: consent.checked, ageAttested: age.checked };
+    }
+    function resetTurnstile() {
+      token = "";
+      if (widgetId !== undefined && window.turnstile) window.turnstile.reset(widgetId);
+    }
+    function clearRequest() {
+      requestId = "";
+      submissionId = "";
+      uploadExpiresAt = 0;
+      uploaded = false;
+    }
+    function refreshTurnstile(): Promise<string> {
+      return new Promise((resolve, reject) => {
+        const clear = () => { window.clearTimeout(timeout); tokenReady = null; tokenFailed = null; };
+        const timeout = window.setTimeout(() => { clear(); reject({ code: "turnstile" }); }, 120_000);
+        tokenReady = (value) => { clear(); resolve(value); };
+        tokenFailed = () => { clear(); reject({ code: "turnstile" }); };
+        resetTurnstile();
+        turnstileMount.focus();
+      });
+    }
+    function showThanks() {
+      form.hidden = true;
+      thanks.textContent = config!.texts.thanks;
+      thanks.hidden = false;
+      thanks.focus();
+      clearRequest();
+    }
+    function renderTurnstile() {
+      if (!sitekey) return;
+      const render = () => {
+        if (!window.turnstile || widgetId !== undefined) return;
+        widgetId = window.turnstile.render(turnstileMount, {
+          sitekey,
+          callback: (value: string) => { token = value; tokenReady?.(value); setError("turnstile", undefined); },
+          "expired-callback": () => { token = ""; tokenFailed?.(); setError("turnstile", "Complete the spam check again."); },
+          "error-callback": () => { token = ""; tokenFailed?.(); setError("turnstile", "The spam check failed. Try again."); },
+        });
+      };
+      if (window.turnstile) { render(); return; }
+      const script = document.createElement("script");
+      script.src = "https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit";
+      script.async = true;
+      script.addEventListener("load", render, { once: true });
+      script.addEventListener("error", () => setStatus("The spam check could not load. Please try again later.", true), { once: true });
+      document.head.appendChild(script);
+    }
+    async function loadConfig() {
+      if (!endpoint || !sitekey) return;
+      try {
+        const response = await fetch(`${endpoint}/config`, { headers: { Accept: "application/json" }, cache: "no-store" });
+        if (!response.ok) return;
+        config = parseShareConfig(await response.json());
+        if (!config) return;
+        closedText.textContent = config.texts.closed;
+        if (!config.open) return;
+        root!.querySelector<HTMLElement>("[data-share-release]")!.textContent = config.texts.release;
+        root!.querySelector<HTMLElement>("[data-share-checkbox]")!.textContent = config.texts.checkbox;
+        root!.querySelector<HTMLElement>("[data-share-age-text]")!.textContent = config.texts.age;
+        root!.querySelector<HTMLElement>("[data-share-age-help]")!.textContent = config.texts.ageHelp;
+        root!.querySelector<HTMLElement>("[data-share-privacy]")!.textContent = config.texts.privacy;
+        closed.hidden = true;
+        form.hidden = false;
+        interactiveAt = performance.now();
+        renderTurnstile();
+      } catch { /* A failed config fetch leaves the form closed. */ }
+    }
+    void loadConfig();
+
+    message.addEventListener("input", () => { count.textContent = `${message.value.length.toLocaleString()} / 2,000`; setError("message", undefined); });
+    for (const [key, control] of Object.entries(controls) as [ShareField, HTMLElement][]) {
+      control.addEventListener("input", () => { if (!sending) clearRequest(); setError(key, undefined); });
+      control.addEventListener("change", () => { if (!sending) clearRequest(); setError(key, undefined); });
+    }
+    cancel.addEventListener("click", () => upload?.abort());
+
+    function putFile(url: string, headers: Record<string, string>, bytes: File): Promise<void> {
+      return new Promise<void>((resolve, reject) => {
+        const xhr = new XMLHttpRequest();
+        upload = xhr;
+        progressWrap.hidden = false;
+        progress.value = 0;
+        progressText.textContent = "0%";
+        setStatus("Uploading");
+        let announcedProgress = 0;
+        xhr.open("PUT", url);
+        for (const [key, value] of Object.entries(headers)) xhr.setRequestHeader(key, value);
+        xhr.upload.addEventListener("progress", (event) => {
+          if (!event.lengthComputable) return;
+          const percent = Math.round(event.loaded / event.total * 100);
+          progress.value = percent;
+          progressText.textContent = `${percent}%`;
+          const milestone = Math.min(75, Math.floor(percent / 25) * 25);
+          if (milestone > announcedProgress) {
+            announcedProgress = milestone;
+            setStatus(`Uploading ${milestone} percent`);
+          }
+        });
+        xhr.addEventListener("load", () => xhr.status >= 200 && xhr.status < 300 || xhr.status === 412 ? resolve() : reject(new Error("upload")));
+        xhr.addEventListener("error", () => reject(new Error("upload")));
+        xhr.addEventListener("abort", () => reject(new Error("cancelled")));
+        xhr.send(bytes);
+      }).finally(() => { upload = null; progressWrap.hidden = true; });
+    }
+    async function post(path: string, body: unknown) {
+      const response = await fetch(`${endpoint}${path}`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) throw { code: data.error, retryAfter: data.retryAfter };
+      return data;
+    }
+    form.addEventListener("submit", async (event) => {
+      event.preventDefault();
+      if (sending || !config?.open) return;
+      const current = fields();
+      const errors = validateShareFields(current);
+      for (const field of Object.keys(errorIds) as ShareField[]) setError(field, errors[field]);
+      if (Object.keys(errors).length) { controls[Object.keys(errors)[0] as ShareField].focus(); return; }
+      const timeElapsed = performance.now() - interactiveAt;
+      if (!uploaded && !token) { setError("turnstile", "Complete the spam check before sending."); turnstileMount.focus(); return; }
+      if (!uploaded && timeElapsed < MIN_DWELL_MS) { setStatus("Please take a moment to review your submission, then try again.", true); return; }
+      sending = true;
+      form.querySelectorAll<HTMLInputElement | HTMLTextAreaElement>("input, textarea").forEach((control) => { control.disabled = true; });
+      submit.disabled = true;
+      submit.textContent = "Sending…";
+      setStatus("");
+      try {
+        if (current.file?.type.startsWith("image/") && "createImageBitmap" in window) {
+          try {
+            const bitmap = await createImageBitmap(current.file as File);
+            const allowed = photoDimensionsAllowed(bitmap.width, bitmap.height);
+            bitmap.close();
+            if (!allowed) { setError("file", "Choose a photo with no more than 100 megapixels."); file.disabled = false; file.focus(); return; }
+          } catch { /* The server inspects file bytes and remains authoritative. */ }
+        }
+        if (!uploaded) {
+          if (requestId && uploadExpiresAt && Date.now() >= uploadExpiresAt) clearRequest();
+          const keptId = Boolean(requestId);
+          requestId ||= crypto.randomUUID();
+          const startRequest = () => buildShareStartRequest(current, config!, { requestId, timeElapsed, turnstileToken: token, website: website.value });
+          let start;
+          try { start = await post("/start", startRequest()); }
+          catch (error) {
+            if (!keptId || (error as { code?: unknown }).code !== "invalid") throw error;
+            clearRequest();
+            requestId = crypto.randomUUID();
+            setStatus("Complete the spam check again to retry.");
+            await refreshTurnstile();
+            start = await post("/start", startRequest());
+          }
+          if (start.ok === true && !start.uploadUrl) { showThanks(); return; }
+          if (typeof start.submissionId !== "string" || typeof start.uploadUrl !== "string" || !start.uploadHeaders || typeof start.uploadHeaders !== "object") throw new Error("Invalid start response");
+          uploadExpiresAt = Date.parse(start.expiresAt);
+          if (!Number.isFinite(uploadExpiresAt)) throw new Error("Invalid start response");
+          submissionId = start.submissionId;
+          // The upload URL comes from the trusted intake Worker and is a presigned R2 URL.
+          const target = new URL(start.uploadUrl);
+          if (target.origin !== SHARE_UPLOAD_ORIGIN) throw new Error("Invalid upload URL");
+          await putFile(start.uploadUrl, start.uploadHeaders as Record<string, string>, current.file as File);
+          uploaded = true;
+        }
+        setStatus("Checking your file");
+        const complete = await post("/complete", { submissionId, requestId });
+        if (complete.ok !== true) throw new Error("Invalid completion response");
+        showThanks();
+      } catch (error) {
+        const detail = error as { code?: unknown; retryAfter?: unknown; message?: string };
+        setStatus(detail.message === "cancelled" ? "Upload canceled. You can try again." : shareErrorMessage(detail.code, detail.retryAfter), true);
+        if (detail.code === "expired") clearRequest();
+        if (detail.code === "missing_upload") uploaded = false;
+        resetTurnstile();
+      } finally {
+        sending = false;
+        form.querySelectorAll<HTMLInputElement | HTMLTextAreaElement>("input, textarea").forEach((control) => { control.disabled = false; });
+        submit.disabled = false;
+        submit.textContent = "Send submission";
+      }
+    });
+  }
+</script>
+
+<style>
+  .share { max-width: 46rem; }
+  .share__intro { color: var(--text-dim); }
+  .share__field { margin-block: 1.5rem; }
+  .share__field > label:not(.share__check), .share__field > label:not(.share__check) + input { display: block; }
+  .share__field > label:not(.share__check) { font-weight: 700; margin-bottom: .5rem; }
+  .share input:not([type="checkbox"]), .share textarea { width: 100%; box-sizing: border-box; border: 1px solid var(--line-strong); border-radius: var(--radius-button); padding: .7rem; background: var(--bg-1); color: var(--text); font: inherit; }
+  .share input[type="file"] { padding: .8rem; }
+  .share__meta { display: flex; justify-content: space-between; gap: 1rem; color: var(--text-dim); font-size: .9rem; }
+  .share__help { color: var(--text-dim); font-size: .95rem; }
+  .share__release { white-space: pre-line; border-inline-start: 3px solid var(--pbs-blue); padding-inline-start: 1.25rem; margin-block: 2rem; }
+  .share__check { display: flex; align-items: flex-start; gap: .75rem; font-weight: 700; }
+  .share__check input { width: 1.25rem; height: 1.25rem; flex: none; }
+  .share__error, .share__status[data-tone="error"] { color: var(--color-error, var(--text)); font-weight: 700; }
+  .share [aria-invalid="true"] { border: 2px solid var(--action-red); }
+  .share__hp { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
+  progress { display: block; width: 100%; height: 1rem; margin-block: .75rem; }
+  button:disabled { opacity: .65; cursor: not-allowed; }
+  :is(input, textarea, button, a, [tabindex="-1"]):focus-visible { outline: var(--focus-outline); outline-offset: var(--focus-offset); }
+</style>

@@ -1,0 +1,8 @@
+{
+  "date": "2026-10-28",
+  "kind": "fixed",
+  "title": "Staff account actions fit the table",
+  "body": "On Staff access, account actions stack at the same width with space inside the Actions cell. The buttons stay easy to use on phones and desktop screens.",
+  "prs": [],
+  "order": -10
+}

@@ -1,0 +1,8 @@
+{
+  "date": "2026-11-08",
+  "order": 1794165000000,
+  "kind": "new",
+  "prs": [],
+  "title": "Usage analytics starts today",
+  "body": "Boardwalk usage analytics now collects destination views, approximate visible time, content publish attempts and saved Preview attempts. Staff with Reports access can see totals in Reports. Raw events expire after 180 days. No keystrokes, field values or screen contents are captured."
+}

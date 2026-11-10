@@ -1,0 +1,631 @@
+---
+// The public landing page IS the chooser, presented as a full-bleed preview: the
+// visitor passes a one-time entry gate (which carries the binding "design preview,
+// not an official property" disclosure), then sees each of the four candidate
+// design directions rendered as a complete, edge-to-edge home page. A floating
+// cycle button in the corner flips between all four.
+//
+// Each direction is a self-contained, CDN-droppable design system (public/kits/<id>/).
+// Their CSS is namespaced (gs-/sig-/post-/glasshouse-) so all four load together without
+// colliding, and only the active one is shown at a time. A single shared Babylon
+// particle-NJ engine mounts into whichever direction is active and re-themes per
+// kit, so the page never runs four WebGL contexts at once.
+//
+// Guardrails (binding): this is a design preview only. Nothing here asserts an
+// operator change, a launch date, a live integration, or real donor/member data.
+// The entry gate states this on arrival; each preview also carries it in its own
+// utility bar and footer, which keeps the disclosure in place for no-JS visitors
+// (who skip the gate) and for anyone who lands mid-page.
+import Base from "../layouts/Base.astro";
+import { CHOOSER_KITS } from "../lib/chooser-kits";
+import GsPreview from "../components/previews/GsPreview.astro";
+import SigPreview from "../components/previews/SigPreview.astro";
+import PostPreview from "../components/previews/PostPreview.astro";
+import GlasshousePreview from "../components/previews/GlasshousePreview.astro";
+
+const PREVIEWS: Record<string, any> = {
+  gs: GsPreview,
+  sig: SigPreview,
+  post: PostPreview,
+  glasshouse: GlasshousePreview,
+};
+---
+
+<Base
+  title="Four design directions — a new public-media site for New Jersey"
+  description="An in-development design preview. Four full design directions for a potential new public-media website in New Jersey — step in and switch between complete home-page previews in each style."
+>
+  <Fragment slot="head">
+    {
+      CHOOSER_KITS.map((kit) => (
+        <link rel="stylesheet" href={`/kits/${kit.id}/${kit.id}.css`} />
+      ))
+    }
+    {
+      CHOOSER_KITS.map((kit) => (
+        <script is:inline defer src={`/kits/${kit.id}/${kit.id}.js`} />
+      ))
+    }
+    {/* No-flash: a visitor who already entered this session skips the gate before
+        first paint, so it never flashes on a reload. */}
+    <script is:inline>
+      try {
+        if (sessionStorage.getItem("njpbs-entered") === "1") {
+          document.documentElement.classList.add("njpbs-entered");
+        }
+      } catch (e) {}
+      // Color mode, applied before first paint so light/dark never flashes and is
+      // consistent across all four directions. Each kit reads its own namespaced
+      // data-<id>-theme; the chooser is their single source of truth. Default to the
+      // visitor's stored choice, else their system preference. (gs has no
+      // system-auto dark, so without this it would sit on light while sig/post
+      // followed a dark OS — the inconsistency the toggle exists to remove.)
+      // Stored in localStorage (not sessionStorage) so an explicit toggle persists
+      // across sessions, matching the per-kit theme keys seeded below; the gate's
+      // own njpbs-entered flag stays in sessionStorage so it re-shows each visit.
+      try {
+        var njStored = localStorage.getItem("njpbs-color-mode");
+        var njMode =
+          njStored === "light" || njStored === "dark"
+            ? njStored
+            : window.matchMedia &&
+                window.matchMedia("(prefers-color-scheme: dark)").matches
+              ? "dark"
+              : "light";
+        var njRoot = document.documentElement;
+        njRoot.setAttribute("data-color-mode", njMode);
+        njRoot.setAttribute("data-gs-theme", njMode);
+        njRoot.setAttribute("data-sig-theme", njMode);
+        njRoot.setAttribute("data-post-theme", njMode);
+        njRoot.setAttribute("data-glasshouse-theme", njMode);
+        // Each kit's own deferred script (gs.js/sig.js/post.js/glasshouse.js) reads its
+        // namespaced localStorage key on init and re-applies data-<id>-theme. Seed
+        // those keys with the chooser's mode so that read returns *our* value
+        // instead of a stale per-kit preference — the chooser stays the single
+        // source of truth regardless of script-execution order, no override, no flash.
+        localStorage.setItem("gs-theme", njMode);
+        localStorage.setItem("sig-theme", njMode);
+        localStorage.setItem("post-theme", njMode);
+        localStorage.setItem("glasshouse-theme", njMode);
+      } catch (e) {}
+    </script>
+    {/* No-JS: the gate can only be dismissed with JS, so hide it when JS is off and
+        let the visitor see the first direction directly (its own utility bar and
+        footer carry the design-preview disclosure). */}
+    <noscript>
+      <style>
+        .enter-gate {
+          display: none !important;
+        }
+      </style>
+    </noscript>
+  </Fragment>
+
+  <!-- Entry gate: carries the binding design-preview disclosure on arrival. -->
+  <div
+    class="enter-gate"
+    role="dialog"
+    aria-modal="true"
+    aria-labelledby="enter-gate-title"
+    aria-describedby="enter-gate-body"
+  >
+    <div class="enter-gate__card">
+      <h2 id="enter-gate-title" class="enter-gate__title">
+        Four design directions for a new public-media website in New Jersey
+      </h2>
+      <div id="enter-gate-body">
+        <p class="enter-gate__lead">
+          Each is a complete design direction, rendered as a full home page. Step
+          inside and switch between all four from the button in the corner.
+        </p>
+        <p class="enter-gate__note">
+          This is a design preview, not an official NJ PBS or PBS property. Nothing
+          here reflects a finished site, a launch date, or a connected service, and
+          every article, schedule, and program entry is placeholder.
+        </p>
+      </div>
+      <button type="button" class="enter-gate__btn" id="enter-btn">
+        Enter the preview
+      </button>
+    </div>
+  </div>
+
+  <!-- The page's persistent <h1>. The previews start at <h2> (the chooser owns the
+       page heading) and the gate heading is an <h2> on the dialog, so this is the one
+       top-level heading. It lives outside both the gate (which is removed after entry)
+       and the stage (which is inert while the gate is open), so a heading stays in the
+       accessibility tree in every state. Visually hidden — each direction shows its
+       own masthead. -->
+  <h1 class="visually-hidden">
+    A design preview of a new public-media website for New Jersey
+  </h1>
+
+  <!-- The full-bleed stage: all four directions in the DOM, only the active one
+       shown. Each preview is a complete, full-width home page. -->
+  <main class="stage" id="stage">
+    {
+      CHOOSER_KITS.map((kit, i) => {
+        const Preview = PREVIEWS[kit.id];
+        return (
+          <div
+            class="theme-slot"
+            id={`slot-${kit.id}`}
+            data-kit-id={kit.id}
+            hidden={i !== 0}
+          >
+            <Preview />
+          </div>
+        );
+      })
+    }
+  </main>
+
+  <!-- Floating cycle control: flips to the next direction. Theme-neutral chrome so
+       it reads on any of the four. Hidden until the visitor enters. -->
+  <div class="switcher" id="switcher">
+    <button type="button" class="switcher__mode" id="mode-btn" aria-label="Switch to dark mode">
+      <svg class="switcher__ic switcher__ic--sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="4.2" /><path d="M12 2v2.4M12 19.6V22M4.2 4.2l1.7 1.7M18.1 18.1l1.7 1.7M2 12h2.4M19.6 12H22M4.2 19.8l1.7-1.7M18.1 5.9l1.7-1.7" /></svg>
+      <svg class="switcher__ic switcher__ic--moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 14.5A8 8 0 1 1 9.5 4a6.2 6.2 0 0 0 10.5 10.5z" /></svg>
+      <span class="switcher__mode-label" id="mode-label">Light</span>
+    </button>
+    <button type="button" class="switcher__btn" id="cycle-btn">
+      <span class="switcher__name" id="switcher-name">Garden State public</span>
+      <span class="switcher__cta" aria-hidden="true">Next direction &#x27F3;</span>
+    </button>
+    <span
+      class="visually-hidden"
+      role="status"
+      aria-live="polite"
+      id="switcher-status"></span>
+  </div>
+
+  <script>
+    // The Babylon hero (../lib/nj-hero) is imported dynamically inside
+    // mountActiveHero(), after the WebGL check — so the heavy 3D engine never ships
+    // to no-WebGL visitors, and the corner switcher keeps working even if that chunk
+    // fails to load.
+    import { CHOOSER_KITS } from "../lib/chooser-kits";
+    import points from "../data/nj-points.json";
+
+    const root = document.documentElement;
+    const stage = document.getElementById("stage");
+    const slots = CHOOSER_KITS.map((k) =>
+      document.getElementById(`slot-${k.id}`),
+    );
+    const cycleBtn = document.getElementById("cycle-btn") as HTMLButtonElement | null;
+    const nameEl = document.getElementById("switcher-name");
+    const statusEl = document.getElementById("switcher-status");
+    const enterBtn = document.getElementById("enter-btn") as HTMLButtonElement | null;
+    const modeBtn = document.getElementById("mode-btn") as HTMLButtonElement | null;
+    const modeLabel = document.getElementById("mode-label");
+
+    let activeIndex = 0;
+    let disposeHero: (() => void) | null = null;
+    let liveCell: HTMLElement | null = null;
+    let disposeKitEffect: (() => void) | null = null;
+    // Bumped on every (re)mount request. A dynamically-imported hero chunk that
+    // resolves after the visitor has switched directions checks this to detect that
+    // a newer mount superseded it, and bails instead of mounting into a stale slot.
+    let heroToken = 0;
+
+    function clearLive() {
+      if (liveCell) {
+        liveCell.classList.remove("nj-live");
+        liveCell = null;
+      }
+    }
+
+    function webglAvailable(): boolean {
+      try {
+        const c = document.createElement("canvas");
+        return !!(c.getContext("webgl2") || c.getContext("webgl"));
+      } catch {
+        return false;
+      }
+    }
+    const canRunHero = webglAvailable();
+
+    // Mount the shared particle engine into the *visible* slot's canvas, themed for
+    // that direction. Dispose any prior mount first so only one WebGL context lives.
+    async function mountActiveHero() {
+      const token = ++heroToken;
+      if (disposeHero) {
+        disposeHero();
+        disposeHero = null;
+      }
+      clearLive();
+      if (disposeKitEffect) {
+        disposeKitEffect();
+        disposeKitEffect = null;
+      }
+      const slot = slots[activeIndex];
+      const kit = CHOOSER_KITS[activeIndex];
+      mountActiveKitEffect(slot, kit?.id);
+      if (!canRunHero) return; // the static SVG fallback stays visible
+      const canvas = slot?.querySelector<HTMLCanvasElement>("[data-nj-canvas]");
+      if (!kit || !canvas) return;
+
+      let mod: typeof import("../lib/nj-hero");
+      try {
+        mod = await import("../lib/nj-hero");
+      } catch {
+        return; // hero chunk failed to load; the static SVG fallback stays visible
+      }
+      // A newer mountActiveHero() ran while the chunk loaded; bail so we never mount
+      // into a slot that is no longer active.
+      if (token !== heroToken) return;
+
+      // In dark mode, fold each kit's dark color overrides (if any) over its base
+      // config so the cloud stays legible on the dark page. gs needs this — its ink
+      // fill is the same near-black as its dark background.
+      const cfg =
+        currentMode() === "dark" && kit.heroConfigDark
+          ? { ...kit.heroConfig, ...kit.heroConfigDark }
+          : kit.heroConfig;
+      disposeHero = mod.mountNJHero(canvas, points as any, cfg);
+      liveCell = canvas.parentElement;
+      if (liveCell) liveCell.classList.add("nj-live");
+    }
+
+    function mountActiveKitEffect(slot: HTMLElement | null, kitId: string | undefined) {
+      if (kitId !== "glasshouse" || !slot) return;
+      const canvas = slot.querySelector<HTMLCanvasElement>("[data-glasshouse-three]");
+      const api = (window as any).Glasshouse;
+      if (!canvas) return;
+      if (api && typeof api.mountThree === "function") {
+        disposeKitEffect = api.mountThree(canvas);
+        return;
+      }
+      document.addEventListener(
+        "glasshouse:ready",
+        () => {
+          if (CHOOSER_KITS[activeIndex]?.id !== "glasshouse" || disposeKitEffect) return;
+          const readyApi = (window as any).Glasshouse;
+          if (readyApi && typeof readyApi.mountThree === "function") {
+            disposeKitEffect = readyApi.mountThree(canvas);
+          }
+        },
+        { once: true },
+      );
+    }
+
+    function updateSwitcher() {
+      const kit = CHOOSER_KITS[activeIndex];
+      if (nameEl) nameEl.textContent = kit.title;
+      if (cycleBtn) {
+        cycleBtn.setAttribute(
+          "aria-label",
+          `Switch design direction. Now showing ${kit.title}.`,
+        );
+      }
+    }
+
+    // userSwitch distinguishes an explicit direction change (cycle button) from the
+    // initial render on load. Only a real switch announces to screen readers and
+    // resets scroll to the masthead — doing that on load would override the browser's
+    // own scroll restoration when a returning visitor reloads or navigates Back.
+    function showDirection(index: number, userSwitch: boolean) {
+      const n = CHOOSER_KITS.length;
+      activeIndex = ((index % n) + n) % n;
+      slots.forEach((s, i) => {
+        if (s) s.hidden = i !== activeIndex;
+      });
+      updateSwitcher();
+      if (userSwitch) {
+        if (statusEl) {
+          statusEl.textContent = `Now showing ${CHOOSER_KITS[activeIndex].title}.`;
+        }
+        // Start each newly chosen direction from its masthead, not wherever the
+        // previous one was scrolled.
+        window.scrollTo({ top: 0, behavior: "auto" });
+      }
+      // The slot is visible now, so its canvas has real dimensions to mount into.
+      mountActiveHero();
+    }
+
+    function enterSite() {
+      try {
+        sessionStorage.setItem("njpbs-entered", "1");
+      } catch (e) {}
+      root.classList.add("njpbs-entered");
+      stage?.removeAttribute("inert");
+      showDirection(activeIndex, false);
+      cycleBtn?.focus();
+    }
+
+    if (cycleBtn) {
+      cycleBtn.addEventListener("click", () => showDirection(activeIndex + 1, true));
+    }
+
+    // Light/dark toggle. The inline head script already applied the mode to all four
+    // kits before paint (data-color-mode + the four data-<id>-theme attributes); this
+    // just flips and persists it and keeps the button's label/icon/aria in sync. One
+    // control re-themes every direction, so switching kits keeps the chosen mode.
+    type ColorMode = "light" | "dark";
+    function currentMode(): ColorMode {
+      return root.getAttribute("data-color-mode") === "dark" ? "dark" : "light";
+    }
+    function applyMode(mode: ColorMode) {
+      root.setAttribute("data-color-mode", mode);
+      root.setAttribute("data-gs-theme", mode);
+      root.setAttribute("data-sig-theme", mode);
+      root.setAttribute("data-post-theme", mode);
+      root.setAttribute("data-glasshouse-theme", mode);
+      // Keep each kit's own localStorage key aligned with the chooser, so a later
+      // re-init of gs.js/sig.js/post.js/glasshouse.js (or a standalone kit page) reads our mode.
+      try {
+        localStorage.setItem("gs-theme", mode);
+        localStorage.setItem("sig-theme", mode);
+        localStorage.setItem("post-theme", mode);
+        localStorage.setItem("glasshouse-theme", mode);
+      } catch (e) {}
+      if (modeLabel) modeLabel.textContent = mode === "dark" ? "Dark" : "Light";
+      if (modeBtn) {
+        modeBtn.setAttribute(
+          "aria-label",
+          mode === "dark" ? "Switch to light mode" : "Switch to dark mode",
+        );
+      }
+    }
+    // Sync the button chrome to whatever the head script set; do not re-decide the mode.
+    applyMode(currentMode());
+    if (modeBtn) {
+      modeBtn.addEventListener("click", () => {
+        const next: ColorMode = currentMode() === "dark" ? "light" : "dark";
+        try {
+          localStorage.setItem("njpbs-color-mode", next);
+        } catch (e) {}
+        applyMode(next);
+        // Re-render the active hero so its fill/edge pick up the new mode (gs flips
+        // its cloud from ink to cream). No-op visually for kits without a dark override.
+        mountActiveHero();
+      });
+    }
+
+    if (root.classList.contains("njpbs-entered")) {
+      // Returning this session: the gate is already hidden by CSS; reveal + mount.
+      showDirection(0, false);
+    } else if (enterBtn) {
+      // First arrival: hold the visitor at the gate. Contain focus to it by making
+      // the stage inert until they enter.
+      stage?.setAttribute("inert", "");
+      enterBtn.addEventListener("click", enterSite);
+      enterBtn.focus();
+    } else {
+      // Defensive: no gate found — reveal directly.
+      showDirection(0, false);
+    }
+
+    window.addEventListener(
+      "pagehide",
+      () => {
+        if (disposeHero) disposeHero();
+        if (disposeKitEffect) disposeKitEffect();
+      },
+      { once: true },
+    );
+  </script>
+
+  <style>
+    html,
+    body {
+      margin: 0;
+    }
+    body {
+      background: #11131a;
+    }
+
+    .visually-hidden {
+      position: absolute;
+      width: 1px;
+      height: 1px;
+      margin: -1px;
+      padding: 0;
+      overflow: hidden;
+      clip: rect(0 0 0 0);
+      white-space: nowrap;
+      border: 0;
+    }
+
+    /* ---- Entry gate ---- */
+    .enter-gate {
+      position: fixed;
+      inset: 0;
+      z-index: 1000;
+      /* Scroll-safe centering: a flex child with margin:auto centers when there is
+         room and collapses to the top (still reachable, with the container scrolling)
+         when the card is taller than the viewport — short landscape screens or high
+         zoom (WCAG 1.4.10 reflow). place-items:center would clip the top unreachably. */
+      display: flex;
+      overflow-y: auto;
+      padding: clamp(1.25rem, 5vw, 3rem);
+      background: #0f1115;
+      color: #f3f2ee;
+      font-family:
+        system-ui,
+        -apple-system,
+        "Segoe UI",
+        sans-serif;
+      line-height: 1.55;
+    }
+    .enter-gate__card {
+      margin: auto;
+      max-width: 42rem;
+    }
+    .enter-gate__title {
+      font-size: clamp(1.7rem, 4.2vw, 2.7rem);
+      line-height: 1.1;
+      letter-spacing: -0.015em;
+      margin: 0 0 1.1rem;
+    }
+    .enter-gate__lead {
+      font-size: 1.12rem;
+      margin: 0 0 1.25rem;
+      color: #e7e6e1;
+    }
+    .enter-gate__note {
+      font-size: 0.95rem;
+      color: #bcc0c8;
+      margin: 0 0 1.9rem;
+      padding-top: 1rem;
+      border-top: 1px solid rgba(255, 255, 255, 0.16);
+    }
+    .enter-gate__btn {
+      font: inherit;
+      font-weight: 600;
+      font-size: 1.05rem;
+      background: #f3f2ee;
+      color: #16181d;
+      border: 0;
+      border-radius: 8px;
+      padding: 0.85rem 1.6rem;
+      min-height: 44px;
+      cursor: pointer;
+    }
+    .enter-gate__btn:hover {
+      background: #fff;
+    }
+    .enter-gate__btn:focus-visible {
+      outline: 3px solid #6ea8fe;
+      outline-offset: 3px;
+    }
+
+    /* ---- Full-bleed stage ---- */
+    .theme-slot[hidden] {
+      display: none;
+    }
+
+    /* ---- Floating switcher (mode toggle + cycle) ---- */
+    .switcher {
+      position: fixed;
+      right: clamp(0.75rem, 2vw, 1.25rem);
+      bottom: clamp(0.75rem, 2vw, 1.25rem);
+      z-index: 900;
+      align-items: flex-end;
+      gap: 0.5rem;
+      font-family:
+        system-ui,
+        -apple-system,
+        "Segoe UI",
+        sans-serif;
+    }
+    .switcher__mode {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.4rem;
+      background: #16181d;
+      color: #fff;
+      border: 1px solid rgba(255, 255, 255, 0.2);
+      border-radius: 11px;
+      padding: 0 0.85rem;
+      min-height: 44px;
+      cursor: pointer;
+      font: inherit;
+      font-size: 0.9rem;
+      font-weight: 600;
+      box-shadow: 0 6px 22px rgba(0, 0, 0, 0.3);
+    }
+    .switcher__mode:hover {
+      background: #1f222b;
+    }
+    .switcher__mode:focus-visible {
+      outline: 3px solid #6ea8fe;
+      outline-offset: 2px;
+    }
+    .switcher__ic {
+      width: 17px;
+      height: 17px;
+      flex: none;
+    }
+    .switcher__ic--sun {
+      display: inline-block;
+    }
+    .switcher__ic--moon {
+      display: none;
+    }
+    .switcher__btn {
+      display: inline-flex;
+      flex-direction: column;
+      align-items: flex-start;
+      gap: 0.12rem;
+      background: #16181d;
+      color: #fff;
+      border: 1px solid rgba(255, 255, 255, 0.2);
+      border-radius: 11px;
+      padding: 0.6rem 0.95rem;
+      min-height: 44px;
+      text-align: left;
+      cursor: pointer;
+      font: inherit;
+      box-shadow: 0 6px 22px rgba(0, 0, 0, 0.3);
+    }
+    .switcher__btn:hover {
+      background: #1f222b;
+    }
+    .switcher__btn:focus-visible {
+      outline: 3px solid #6ea8fe;
+      outline-offset: 2px;
+    }
+    .switcher__name {
+      font-weight: 700;
+      font-size: 0.98rem;
+      line-height: 1.15;
+    }
+    .switcher__cta {
+      font-size: 0.74rem;
+      letter-spacing: 0.02em;
+      color: #c3c6cd;
+    }
+  </style>
+
+  <!-- The gate hides (and the switcher appears) once the visitor enters; the entered
+       flag is set before paint by the inline head script, so a same-session reload
+       skips straight to the site with no gate flash. A canvas inside a hidden slot
+       has no size, so only the active one is mounted. The canvas reveals only once
+       its hero confirms it can render (the mount JS adds .nj-live to the active hero
+       cell); until then the static SVG shows. With no WebGL or no JS, .nj-live is
+       never added, so the fallback stays visible instead of a blank canvas. -->
+  <style is:global>
+    html.njpbs-entered .enter-gate {
+      display: none;
+    }
+    .switcher {
+      display: none;
+    }
+    html.njpbs-entered .switcher {
+      display: flex;
+    }
+    /* Icon tracks the active mode (set on <html> pre-paint, so no flash): sun while
+       light, moon while dark. */
+    html[data-color-mode="dark"] .switcher__ic--sun {
+      display: none;
+    }
+    html[data-color-mode="dark"] .switcher__ic--moon {
+      display: inline-block;
+    }
+
+    [data-nj-canvas] {
+      display: block;
+      opacity: 0;
+      transition: opacity 600ms ease;
+    }
+    .nj-live [data-nj-canvas] {
+      opacity: 1;
+    }
+    [data-nj-fallback] {
+      position: absolute;
+      inset: 0;
+      margin: auto;
+      max-width: 100%;
+      max-height: 100%;
+      width: auto;
+      height: auto;
+      object-fit: contain;
+      pointer-events: none;
+      transition: opacity 400ms ease;
+    }
+    .nj-live [data-nj-fallback] {
+      opacity: 0;
+    }
+  </style>
+</Base>

@@ -1,0 +1,281 @@
+<!DOCTYPE html><html lang="en" data-pagefind-ignore="all"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><!-- Low-bandwidth signal — runs before first paint so CSS can react.
+         Sets html[data-saver] when the user is on a constrained connection, from
+         two independent signals: the Chromium-only Network Information API
+         (Save-Data or a 2g bucket — mirrors isConstrainedConnection() in
+         lib/network-preference.ts, kept in sync by tests) and the
+         prefers-reduced-data media query. Folding both into one attribute lets
+         every downgrade rule key off a single selector. This ONLY downgrades:
+         no signal (Safari/Firefox/fast, the common case) → attribute never set →
+         full experience unchanged. Inline + synchronous on purpose; it must set
+         the attribute before web fonts and decorative layers are requested. --><script>
+      (function () {
+        try {
+          var saver = false;
+          var c = navigator.connection;
+          if (c) {
+            var et = c.effectiveType;
+            if (c.saveData === true || et === "2g" || et === "slow-2g") saver = true;
+          }
+          if (
+            window.matchMedia &&
+            window.matchMedia("(prefers-reduced-data: reduce)").matches
+          ) {
+            saver = true;
+          }
+          if (saver) document.documentElement.setAttribute("data-saver", "");
+        } catch (e) {
+          /* no API → full experience */
+        }
+      })();
+    </script><!-- Motion preference runs before first paint so the saved footer choice
+         applies without a flash of animation. With no saved choice, it follows
+         the OS setting. The @media block below is the no-JS floor. --><script>
+      (function () {
+        try {
+          var pref = localStorage.getItem("njpbs-motion");
+          var reduce =
+            pref === "off" ||
+            (pref !== "on" &&
+              window.matchMedia &&
+              window.matchMedia("(prefers-reduced-motion: reduce)").matches);
+          if (reduce) document.documentElement.setAttribute("data-motion", "off");
+        } catch (e) {
+          /* no storage -> follow the @media floor only */
+        }
+      })();
+    </script><title>Contact NJ PBS — NJ PBS</title><meta name="description" content="Contact NJ PBS for viewer, member, Passport, donation, and website help."><link rel="canonical" href="https://njpbs.org/contact/"><meta name="robots" content="noindex, nofollow"><link rel="icon" type="image/png" href="/favicon.png"><link rel="apple-touch-icon" href="/favicon.png"><meta name="theme-color" content="#0b1f3a"><meta property="og:type" content="website"><meta property="og:title" content="Contact NJ PBS — NJ PBS"><meta property="og:description" content="Contact NJ PBS for viewer, member, Passport, donation, and website help."><meta property="og:url" content="https://njpbs.org/contact/"><meta property="og:image" content="https://njpbs.org/og-default.png"><meta property="og:image:width" content="1200"><meta property="og:image:height" content="630"><meta property="og:site_name" content="NJ PBS"><meta name="twitter:card" content="summary_large_image"><meta name="twitter:title" content="Contact NJ PBS — NJ PBS"><meta name="twitter:description" content="Contact NJ PBS for viewer, member, Passport, donation, and website help."><meta name="twitter:image" content="https://njpbs.org/og-default.png"><!-- page-specific head additions via the named "head" slot --><script>(function () {
+  "use strict";
+  var KEY = "__njpbsConsoleCapture";
+  if (typeof window === "undefined" || typeof console === "undefined") return;
+  if (window[KEY]) return;
+  var MAX_ENTRIES = 50;
+  var MAX_MESSAGE_LENGTH = 500;
+  var LEVELS = ["log", "warn", "error", "info"];
+  var buffer = [];
+  var originals = {};
+  function stringify(value) {
+    if (value === undefined) return "undefined";
+    if (value === null) return "null";
+    if (typeof value === "string") return value;
+    if (typeof value === "number" || typeof value === "boolean") return String(value);
+    if (value instanceof Error) return value.name + ": " + value.message;
+    try {
+      var json = JSON.stringify(value);
+      if (json !== undefined) return json;
+    } catch (e) {}
+    try {
+      return String(value);
+    } catch (e) {
+      return "[unserializable]";
+    }
+  }
+  function addEntry(level, args) {
+    var parts = [];
+    for (var i = 0; i < args.length; i++) parts.push(stringify(args[i]));
+    buffer.push({
+      level: level,
+      message: parts.join(" ").slice(0, MAX_MESSAGE_LENGTH),
+      timestamp: new Date().toISOString(),
+    });
+    if (buffer.length > MAX_ENTRIES) buffer.shift();
+  }
+  var wrapped = [];
+  try {
+    for (var j = 0; j < LEVELS.length; j++) {
+      (function (level) {
+        var original = console[level];
+        originals[level] = original;
+        console[level] = function () {
+          addEntry(level, arguments);
+          if (original) original.apply(console, arguments);
+        };
+        wrapped.push(level);
+      })(LEVELS[j]);
+    }
+  } catch (e) {
+    // A non-writable console method: put back what we already wrapped and leave
+    // the console alone rather than half-hooked.
+    for (var k = 0; k < wrapped.length; k++) {
+      if (originals[wrapped[k]]) console[wrapped[k]] = originals[wrapped[k]];
+    }
+    return;
+  }
+  window[KEY] = { buffer: buffer, originals: originals };
+})();</script><script id="analytics-consent-default">
+      (function () {
+        window.dataLayer = window.dataLayer || [];
+        window.gtag = window.gtag || function () { window.dataLayer.push(arguments); };
+        window.gtag("consent", "default", {
+          analytics_storage: "denied",
+          ad_storage: "denied",
+          ad_user_data: "denied",
+          ad_personalization: "denied",
+          wait_for_update: 500
+        });
+      })();
+    </script><script data-njpbs-console-credit>(function () {
+  try {
+    var host = window.location && window.location.host ? window.location.host : "this site";
+    console.info(
+      "%cNJ PBS%c built by Joe Amditis%c - " + host,
+      "background:#2638c4;color:#fff;font-weight:800;padding:2px 6px;border-radius:4px",
+      "color:#f8fafc;font-weight:800",
+      "color:#9ca3af;font-weight:600"
+    );
+  } catch (error) {
+    /* Console credit only; never affect page behavior. */
+  }
+})();</script><!-- Universal mobile hardening, applied to every page (coming-soon, the
+         internal surfaces and the public wiki alike). Kept to side-effect-free rules so
+         it can't shift any existing layout:
+           • text-size-adjust pins the font size so iOS Safari does not inflate
+             body copy when a phone is rotated to landscape;
+           • media elements never exceed their container, a safety net against
+             horizontal overflow on narrow screens;
+           • a tap-highlight tuned to the brand instead of the default grey box. --><link rel="stylesheet" href="https://njpbs.org/posts/_no-build-assets/_astro/PublicSiteLayout.BpoFU7W5.css"><link rel="stylesheet" href="https://njpbs.org/posts/_no-build-assets/_astro/newsletter-signup.BSavRtX5.css"><style>.document-list,.cms-page__blocks .cms-block ul.document-list{margin:0;padding:0;list-style:none}.document-list__item{border-bottom:1px solid var(--color-border)}.document-list__link{justify-content:space-between;align-items:center;gap:var(--space-4);min-height:44px;padding:var(--space-4) 0;text-decoration:none;display:flex}.document-list__copy{min-width:0}.document-list__title{overflow-wrap:anywhere;text-underline-offset:.2em;text-decoration:underline;display:block}.document-list__meta{margin-top:var(--space-2);color:var(--color-text-muted);font-size:.9rem;display:block}.document-list__format{flex-shrink:0;font-size:.9rem}.document-list__empty{color:var(--color-text-muted)}
+.branded-masthead{isolation:isolate;border-bottom:1px solid var(--line);background:radial-gradient(68% 130% at 88% -14%, #4d5ee86b, transparent 63%), radial-gradient(70% 105% at 2% 112%, #00ac0021, transparent 68%), linear-gradient(148deg, var(--bg-1), var(--bg-0));position:relative;overflow:hidden}.branded-masthead:after{z-index:-1;aspect-ratio:1;border:1px solid var(--line);content:"";opacity:.65;pointer-events:none;border-radius:50%;width:clamp(24rem,50vw,46rem);position:absolute;bottom:-18rem;right:-12rem}.branded-signal{grid-template-columns:1.2fr .7fr .35fr;gap:.45rem;width:min(100%,18rem);height:.42rem;display:grid}.branded-signal span{border-radius:var(--radius-pill);background:var(--pbs-blue-bright)}.branded-signal span:nth-child(2){background:var(--color-nj-green);opacity:.72}.branded-signal span:nth-child(3){background:var(--text-quiet);opacity:.58}
+</style><link rel="stylesheet" href="https://njpbs.org/posts/_no-build-assets/_astro/_..DcK3DFml.css"><link rel="stylesheet" href="https://njpbs.org/posts/_no-build-assets/_astro/staff-directory.CM1rfTuo.css"><style>.cms-hero-surface{isolation:isolate;position:relative}.cms-hero-surface>:not(.cms-hero-background){z-index:1;position:relative}.cms-hero-background{z-index:0;pointer-events:none;position:absolute;inset:0;overflow:hidden}.cms-hero-background__image,.cms-hero-background__overlay{width:100%;height:100%;display:block;position:absolute;inset:0}.cms-hero-background__image{object-fit:cover}.cms-hero-background__overlay{background:var(--color-black);opacity:.68}
+</style><link rel="stylesheet" href="https://njpbs.org/posts/_no-build-assets/_astro/NativeSchedule.BqzYv6Cl.css"></head><body><a class="skip" href="#main" data-astro-cid-lu2e3uhh>Skip to content</a><div class="boardwalk-edit-row" data-astro-cid-njfsrong><a class="boardwalk-edit btn btn--primary" href="/contact/" hidden data-boardwalk-edit data-content-type="page" data-content-id="contact" data-astro-cid-njfsrong>Edit in Boardwalk</a></div><script>(function () {
+  var button = document.querySelector('[data-boardwalk-edit]');
+  if (!button) return;
+  var host = location.hostname;
+  var name = host === 'dev-public.example.org' ? 'bw_staff_dev' :
+    (host === 'njpbs.org' || host === 'www.njpbs.org') ? 'bw_staff' :
+    (host === 'localhost' || host === '127.0.0.1') ? 'bw_staff_local' : null;
+  var origin = host === 'dev-public.example.org' ? 'https://dev-admin.example.org' :
+    (host === 'localhost' || host === '127.0.0.1') ? 'http://' + host + ':5173' : 'https://admin.njpbs.org';
+  function update() {
+    var show = false;
+    try {
+      var hints = document.cookie.split(';').map(function (part) { return part.trim(); })
+        .filter(function (part) { return name && part.indexOf(name + '=') === 0; });
+      show = hints.length === 1 && hints[0] === name + '=1';
+    } catch (_) { /* Cookie restrictions leave the reader view unchanged. */ }
+    if (show) {
+      var params = new URLSearchParams({ type: button.dataset.contentType, id: button.dataset.contentId });
+      button.href = origin + '/open?' + params.toString();
+    }
+    button.hidden = !show;
+    document.documentElement.toggleAttribute('data-boardwalk-edit-visible', show);
+  }
+  update();
+  window.addEventListener('pageshow', update);
+  window.addEventListener('focus', update);
+})();</script><header class="site-head" data-astro-cid-lu2e3uhh><div class="head-inner" data-astro-cid-lu2e3uhh><a class="brand" href="/" aria-label="NJ PBS home" data-astro-cid-lu2e3uhh><img src="/brand/njpbs-horizontal-white.svg" alt="NJ PBS" width="146" height="40" data-astro-cid-lu2e3uhh></a><button class="nav-toggle" type="button" aria-expanded="false" aria-controls="primary-nav" aria-label="Menu" data-astro-cid-lu2e3uhh><span class="nav-toggle__bars" aria-hidden="true" data-astro-cid-lu2e3uhh></span></button><nav class="primary" id="primary-nav" aria-label="Primary" data-astro-cid-lu2e3uhh><ul data-astro-cid-lu2e3uhh><li data-astro-cid-lu2e3uhh><a href="/live/" class data-astro-cid-lu2e3uhh>Live</a></li><li data-astro-cid-lu2e3uhh><a href="https://watch.njpbs.org/" class rel="noopener" target="_blank" data-astro-cid-lu2e3uhh>Watch on demand<span class="sr-only" data-astro-cid-lu2e3uhh> (opens in new tab)</span></a></li><li data-astro-cid-lu2e3uhh><a href="/schedule/" class data-astro-cid-lu2e3uhh>Schedule</a></li><li data-astro-cid-lu2e3uhh><a href="/posts/" class data-astro-cid-lu2e3uhh>Posts</a></li><li data-astro-cid-lu2e3uhh><a href="https://www.njspotlightnews.org/" class rel="noopener" target="_blank" data-astro-cid-lu2e3uhh>NJ Spotlight News<span class="sr-only" data-astro-cid-lu2e3uhh> (opens in new tab)</span></a></li><li data-astro-cid-lu2e3uhh><a href="/kids/" class data-astro-cid-lu2e3uhh>Kids</a></li><li data-astro-cid-lu2e3uhh><a href="/support/" class data-astro-cid-lu2e3uhh>Support</a></li><li class="primary__util" data-astro-cid-lu2e3uhh><a href="/search/" data-astro-cid-lu2e3uhh>Search</a></li><li class="primary__util" data-astro-cid-lu2e3uhh><a class="newsletter" href="https://example.org/newsletter/" rel="noopener" target="_blank" data-astro-cid-lu2e3uhh>Newsletter<span class="sr-only" data-astro-cid-lu2e3uhh> (opens in new tab)</span></a></li></ul></nav><div class="utility" data-astro-cid-lu2e3uhh><a class="util-icon" href="/search/" data-astro-cid-lu2e3uhh>Search</a><a class="newsletter" href="https://example.org/newsletter/" rel="noopener" target="_blank" data-astro-cid-lu2e3uhh>Newsletter<span class="sr-only" data-astro-cid-lu2e3uhh> (opens in new tab)</span></a><a class="donate" href="https://www.pbs.org/donation/?station_id=63b643e1-1a13-4dd9-9bab-ff6f7527715f&amp;campaign=passport" rel="noopener" target="_blank" data-astro-cid-lu2e3uhh><svg class="donate__heart" viewBox="0 0 22 18" aria-hidden="true" focusable="false" data-astro-cid-lu2e3uhh><path fill="currentColor" d="M21.765 5.812C21.765 2.596 19.169 0 15.977 0a5.77 5.77 0 0 0-4.597 2.276A5.77 5.77 0 0 0 6.784 0C3.592 0 .995 2.607.995 5.812c0 1.678.703 3.184 1.83 4.242l6.96 7.234s1.542 1.602 3.138 0l6.98-7.202a5.82 5.82 0 0 0 1.862-4.274" data-astro-cid-lu2e3uhh></path></svg>Donate<span class="sr-only" data-astro-cid-lu2e3uhh> (opens in new tab)</span></a></div></div></header><script>
+    (function () {
+      var toggle = document.querySelector(".nav-toggle");
+      var nav = document.getElementById("primary-nav");
+      if (!toggle || !nav) return;
+      function close() {
+        toggle.setAttribute("aria-expanded", "false");
+        nav.removeAttribute("data-open");
+      }
+      function open() {
+        toggle.setAttribute("aria-expanded", "true");
+        nav.setAttribute("data-open", "");
+      }
+      toggle.addEventListener("click", function () {
+        if (toggle.getAttribute("aria-expanded") === "true") close();
+        else open();
+      });
+      document.addEventListener("keydown", function (e) {
+        if (e.key === "Escape" && toggle.getAttribute("aria-expanded") === "true") {
+          close();
+          toggle.focus();
+        }
+      });
+      document.addEventListener("click", function (e) {
+        if (toggle.getAttribute("aria-expanded") !== "true") return;
+        if (nav.contains(e.target) || toggle.contains(e.target)) return;
+        close();
+      });
+
+      // At desktop widths, use the same menu button when the header links do
+      // not fit on one row. Measure the full row first, then collapse it.
+      var head = document.querySelector(".site-head");
+      var inner = head && head.querySelector(".head-inner");
+      if (!head || !inner || !window.matchMedia) return;
+      function updateBackdrop() {
+        head.toggleAttribute("data-scrolled", window.scrollY > 0);
+      }
+      updateBackdrop();
+      window.addEventListener("scroll", updateBackdrop, { passive: true });
+      var wide = window.matchMedia("(min-width: 80em)");
+      var frame = 0;
+      // A viewport change or a collapse can hide the focused header control,
+      // and the browser then drops focus to the page. Remember a header
+      // control that just lost focus to nothing, and put focus back after the
+      // fit check: on that control if it still shows, else on the menu button,
+      // else on the first header link.
+      var dropped = null;
+      var droppedAt = 0;
+      head.addEventListener("focusout", function (e) {
+        // Only a control the browser hid, not a click elsewhere on the page.
+        if (e.relatedTarget || shows(e.target)) return;
+        dropped = e.target;
+        droppedAt = Date.now();
+      });
+      head.addEventListener("focusin", function () {
+        dropped = null;
+      });
+      function shows(el) {
+        return !!el && el.getClientRects().length > 0;
+      }
+      function fit() {
+        frame = 0;
+        var focused = head.contains(document.activeElement) ? document.activeElement : null;
+        head.removeAttribute("data-nav-collapsed");
+        if (wide.matches && inner.scrollWidth > inner.clientWidth + 1) {
+          head.setAttribute("data-nav-collapsed", "");
+        } else if (wide.matches) {
+          // The links fit on one row, so an open menu has nothing to show.
+          close();
+        }
+        var lost = focused;
+        if (!lost && dropped && Date.now() - droppedAt < 1000) lost = dropped;
+        dropped = null;
+        if (!lost) return;
+        // The browser may not have dropped focus from a hidden control yet, so
+        // a hidden control that still holds focus counts as lost.
+        var active = document.activeElement;
+        if (active === lost && shows(lost)) return;
+        if (active !== lost && active && active !== document.body && active !== document.documentElement) return;
+        var target = shows(lost) ? lost : shows(toggle) ? toggle : nav.querySelector("a");
+        if (target) target.focus({ preventScroll: true });
+      }
+      function refit() {
+        if (!frame) frame = requestAnimationFrame(fit);
+      }
+      fit();
+      window.addEventListener("resize", refit);
+      window.addEventListener("load", refit);
+      if (document.fonts && document.fonts.ready) document.fonts.ready.then(refit);
+    })();
+  </script><main id="main" tabindex="-1" data-pagefind-body="true" data-astro-cid-lu2e3uhh><div class="cms-page" data-cms-page="contact" data-cms-content-mode="published"><article class="public-article" data-cms-runtime-page="contact" data-astro-cid-rcz7yhfx><header class="public-article__head branded-masthead cms-hero-surface" data-cms-runtime-hero-surface="contact" data-astro-cid-rcz7yhfx><div class="cms-hero-background" data-cms-runtime-hero="contact" aria-hidden="true"></div><div class="public-article__head-inner" data-astro-cid-rcz7yhfx><h1 data-cms-runtime-title="contact" data-astro-cid-rcz7yhfx>Contact NJ PBS</h1><span data-cms-runtime-description="contact" data-astro-cid-rcz7yhfx>Email or call NJ PBS for viewer, member, Passport, donation, and site questions.</span></div></header><div class="public-article__body" data-cms-runtime-body="contact" data-astro-cid-rcz7yhfx><div class="cms-page__blocks cms-page__blocks--within-frame" data-cms-page-blocks="contact" data-cms-content-mode="published"><div class="cms-block cms-block--prose" data-block-id="feafc98c-3067-445a-931e-fd474419a35a" data-block-type="prose"><p>Use this page to see NJ PBS contact information before choosing how to get in touch. General help links on this site point here so a browser does not open a mail app automatically.</p></div><div class="cms-block cms-block--prose" data-block-id="b221f69f-ea84-4521-ab47-5293bb15596d" data-block-type="prose"><h2>How to contact NJ PBS</h2><p>Email: njpbs@montclair.edu. Phone: 800-882-6622.</p><p>Mailing address: NJ PBS, 1 Normal Ave., Montclair, NJ 07043.</p><p>Use the email address or phone number above for viewer questions, membership questions, PBS Passport help, donation questions, and questions about this website.</p><p>For press and media inquiries, contact njpbs@montclair.edu.</p></div><div class="cms-block cms-block--cta_row" data-block-id="8c984e99-0637-4789-b000-61b1899bf84a" data-block-type="cta_row"><div class="cta-row"><a class="btn btn--primary" href="mailto:njpbs@montclair.edu?subject=NJ%20PBS%20question">Email NJ PBS</a><a class="btn btn--ghost" href="tel:+18008826622">Call 800-882-6622</a></div></div><div class="cms-block cms-block--prose" data-block-id="da97b770-2a57-4a79-9de1-306339d5decc" data-block-type="prose"><h2>When to use this page</h2><p>Contact NJ PBS if you need help with watching NJ PBS live or on demand; PBS Passport access or account lookup; renewing, starting, or changing a donation; or finding the right page for schedule, public file, accessibility, or captioning information.</p><p>If your question involves a PBS-hosted service, such as the video player, Passport sign-in, the PBS app, or the donation form, NJ PBS will help route the question to the right support path.</p></div><div class="cms-block cms-block--prose" data-block-id="d53f0f64-5c95-48b7-bbf7-daefe9a42ad7" data-block-type="prose"><h2>Other help pages</h2></div><div class="cms-block cms-block--cta_row" data-block-id="f8908040-29dd-4867-8997-14bdc5cb72b1" data-block-type="cta_row"><div class="cta-row"><a class="btn btn--ghost" href="/faq/">Transition FAQ</a><a class="btn btn--ghost" href="/accessibility/">Accessibility</a><a class="btn btn--ghost" href="/closed-captioning/">Closed captioning</a><a class="btn btn--ghost" href="/public-file/">Public file</a></div></div></div></div></article></div></main><aside class="analytics-consent" data-analytics-consent data-measurement-id="G-6W12XCJ3HN" aria-labelledby="analytics-consent-title" hidden data-astro-cid-fg2vtww3><div class="analytics-consent__copy" data-astro-cid-fg2vtww3><p class="analytics-consent__label" data-astro-cid-fg2vtww3>Privacy choice</p><h2 id="analytics-consent-title" data-astro-cid-fg2vtww3>Help us improve njpbs.org</h2><p data-consent-choice data-astro-cid-fg2vtww3>With your permission, NJ PBS will use Google Analytics to understand how people use this site and load Mailchimp newsletter tools. Both stay off unless you allow them.</p><p data-consent-gpc hidden data-astro-cid-fg2vtww3>Your browser sent a Global Privacy Control signal. Analytics and Mailchimp newsletter tools are off.</p><a href="/privacy/#your-privacy-choices" data-astro-cid-fg2vtww3>Read the privacy policy</a></div><div class="analytics-consent__actions" data-consent-choice data-astro-cid-fg2vtww3><button class="btn btn--ghost" type="button" data-consent-deny data-astro-cid-fg2vtww3>Do not allow</button><button class="btn btn--primary" type="button" data-consent-grant data-astro-cid-fg2vtww3>Allow analytics and newsletter tools</button></div><div class="analytics-consent__actions" data-consent-gpc hidden data-astro-cid-fg2vtww3><button class="btn btn--primary" type="button" data-consent-close data-astro-cid-fg2vtww3>Close</button></div></aside><script type="module" src="https://njpbs.org/posts/_no-build-assets/_astro/AnalyticsConsent.astro_astro_type_script_index_0_lang.DYZ-CmDA.js"></script><footer class="site-foot" data-astro-cid-lu2e3uhh><div class="foot-cols" data-astro-cid-lu2e3uhh><nav aria-label="Watch" data-astro-cid-lu2e3uhh><h2 data-astro-cid-lu2e3uhh>Watch</h2><ul data-astro-cid-lu2e3uhh><li data-astro-cid-lu2e3uhh><a href="/live/" class="astro-lu2e3uhh" data-astro-cid-lu2e3uhh>Live</a></li><li data-astro-cid-lu2e3uhh><a href="https://watch.njpbs.org/" rel="noopener" target="_blank" class="astro-lu2e3uhh" data-astro-cid-lu2e3uhh>Watch on demand<span class="sr-only" data-astro-cid-lu2e3uhh> (opens in new tab)</span></a></li><li data-astro-cid-lu2e3uhh><a href="/schedule/" class="astro-lu2e3uhh" data-astro-cid-lu2e3uhh>Schedule</a></li><li data-astro-cid-lu2e3uhh><a href="/kids/" class="astro-lu2e3uhh" data-astro-cid-lu2e3uhh>Kids</a></li></ul></nav><nav aria-label="Passport" data-astro-cid-lu2e3uhh><h2 data-astro-cid-lu2e3uhh>Passport</h2><ul data-astro-cid-lu2e3uhh><li data-astro-cid-lu2e3uhh><a href="https://watch.njpbs.org/passport/learn-more/" rel="noopener" target="_blank" class="astro-lu2e3uhh" data-astro-cid-lu2e3uhh>About Passport<span class="sr-only" data-astro-cid-lu2e3uhh> (opens in new tab)</span></a></li><li data-astro-cid-lu2e3uhh><a href="https://watch.njpbs.org/passport/learn-more/" rel="noopener" target="_blank" class="astro-lu2e3uhh" data-astro-cid-lu2e3uhh>Passport member benefit<span class="sr-only" data-astro-cid-lu2e3uhh> (opens in new tab)</span></a></li><li data-astro-cid-lu2e3uhh><a href="https://watch.njpbs.org/passport/learn-more/" rel="noopener" target="_blank" class="astro-lu2e3uhh" data-astro-cid-lu2e3uhh>PBS Passport help<span class="sr-only" data-astro-cid-lu2e3uhh> (opens in new tab)</span></a></li></ul></nav><nav aria-label="Support" data-astro-cid-lu2e3uhh><h2 data-astro-cid-lu2e3uhh>Support</h2><ul data-astro-cid-lu2e3uhh><li data-astro-cid-lu2e3uhh><a href="https://www.pbs.org/donation/?station_id=63b643e1-1a13-4dd9-9bab-ff6f7527715f&amp;campaign=passport" rel="noopener" target="_blank" class="astro-lu2e3uhh" data-astro-cid-lu2e3uhh>Donate<span class="sr-only" data-astro-cid-lu2e3uhh> (opens in new tab)</span></a></li><li data-astro-cid-lu2e3uhh><a href="/support/" class="astro-lu2e3uhh" data-astro-cid-lu2e3uhh>Membership</a></li></ul></nav><nav aria-label="About" data-astro-cid-lu2e3uhh><h2 data-astro-cid-lu2e3uhh>About</h2><ul data-astro-cid-lu2e3uhh><li data-astro-cid-lu2e3uhh><a href="/about/" class="astro-lu2e3uhh" data-astro-cid-lu2e3uhh>About us</a></li><li data-astro-cid-lu2e3uhh><a href="/staff/" class="astro-lu2e3uhh" data-astro-cid-lu2e3uhh>Staff</a></li><li data-astro-cid-lu2e3uhh><a href="/faq/" class="astro-lu2e3uhh" data-astro-cid-lu2e3uhh>FAQ</a></li><li data-astro-cid-lu2e3uhh><a href="/in-the-news/" class="astro-lu2e3uhh" data-astro-cid-lu2e3uhh>In the news</a></li><li data-astro-cid-lu2e3uhh><a href="/contact/" class="astro-lu2e3uhh" data-astro-cid-lu2e3uhh>Contact</a></li><li data-astro-cid-lu2e3uhh><a href="https://montclair.wd1.myworkdayjobs.com/en-US/JobOpportunities/?q=PBS" rel="noopener" target="_blank" class="astro-lu2e3uhh" data-astro-cid-lu2e3uhh>Careers<span class="sr-only" data-astro-cid-lu2e3uhh> (opens in new tab)</span></a></li></ul></nav></div><div class="foot-fcc" aria-label="FCC public inspection files" data-astro-cid-lu2e3uhh><span data-astro-cid-lu2e3uhh>FCC public inspection file:</span><ul data-astro-cid-lu2e3uhh><li data-astro-cid-lu2e3uhh><a href="/public-file/" data-astro-cid-lu2e3uhh>Public file</a></li><li data-astro-cid-lu2e3uhh><a href="https://publicfiles.fcc.gov/tv-profile/wnjs" rel="noopener" target="_blank" data-astro-cid-lu2e3uhh>WNJS<span class="sr-only" data-astro-cid-lu2e3uhh> (opens in new tab)</span></a></li><li data-astro-cid-lu2e3uhh><a href="https://publicfiles.fcc.gov/tv-profile/wnjn" rel="noopener" target="_blank" data-astro-cid-lu2e3uhh>WNJN<span class="sr-only" data-astro-cid-lu2e3uhh> (opens in new tab)</span></a></li><li data-astro-cid-lu2e3uhh><a href="https://publicfiles.fcc.gov/tv-profile/wnjt" rel="noopener" target="_blank" data-astro-cid-lu2e3uhh>WNJT<span class="sr-only" data-astro-cid-lu2e3uhh> (opens in new tab)</span></a></li><li data-astro-cid-lu2e3uhh><a href="https://publicfiles.fcc.gov/tv-profile/wnjb" rel="noopener" target="_blank" data-astro-cid-lu2e3uhh>WNJB<span class="sr-only" data-astro-cid-lu2e3uhh> (opens in new tab)</span></a></li></ul></div><ul class="foot-legal" data-astro-cid-lu2e3uhh><li data-astro-cid-lu2e3uhh><a href="/meeting-notices/" class="astro-lu2e3uhh" data-astro-cid-lu2e3uhh>Meeting notices</a></li><li data-astro-cid-lu2e3uhh><a href="/closed-captioning/" class="astro-lu2e3uhh" data-astro-cid-lu2e3uhh>Closed captioning</a></li><li data-astro-cid-lu2e3uhh><a href="/accessibility/" class="astro-lu2e3uhh" data-astro-cid-lu2e3uhh>Accessibility</a></li><li data-astro-cid-lu2e3uhh><a href="/privacy/" class="astro-lu2e3uhh" data-astro-cid-lu2e3uhh>Privacy policy</a></li><li data-astro-cid-lu2e3uhh><a href="/privacy/#your-privacy-choices" class="astro-lu2e3uhh" data-astro-cid-lu2e3uhh>Your privacy choices</a></li><li data-astro-cid-lu2e3uhh><a href="https://www.nj.gov/treasury/njpba/assets/files/pdf/2026/FCCANNUALEEOREPORT2026.pdf" rel="noopener" target="_blank" class="astro-lu2e3uhh" data-astro-cid-lu2e3uhh>EEO report<span class="sr-only" data-astro-cid-lu2e3uhh> (opens in new tab)</span></a></li><li data-astro-cid-lu2e3uhh><a href="mailto:njpbs@montclair.edu?subject=Website%20problem%20report" class="foot-report" data-report-open aria-haspopup="dialog" data-astro-cid-lu2e3uhh>Report a problem</a></li><li class="foot-motion" data-astro-cid-lu2e3uhh><button class="motion-toggle" type="button" aria-pressed="false" data-motion-toggle data-astro-cid-lu2e3uhh><span class="motion-toggle__switch" aria-hidden="true" data-astro-cid-lu2e3uhh></span><span class="motion-toggle__label" data-astro-cid-lu2e3uhh>Reduce motion</span></button></li></ul><div class="foot-brand" data-astro-cid-lu2e3uhh><img src="/brand/njpbs-horizontal-white.svg" alt="NJ PBS" width="146" height="40" data-astro-cid-lu2e3uhh><address class="foot-address" data-astro-cid-lu2e3uhh><span data-astro-cid-lu2e3uhh>NJ PBS</span><span data-astro-cid-lu2e3uhh>1 Normal Ave.</span><span data-astro-cid-lu2e3uhh>Montclair, NJ 07043</span></address><p data-astro-cid-lu2e3uhh>NJ PBS — New Jersey's PBS member stations (WNJS, WNJN, WNJT, WNJB). NJ PBS is housed at the College of Communication and Media at Montclair State University.<br data-astro-cid-lu2e3uhh>© 2026 NJ PBS. All rights reserved.</p></div><dialog class="report-dialog" data-report-dialog data-endpoint="https://report.njpbs.org/" data-sitekey="0x4AAAAAADursY39X5DSdJwV" aria-labelledby="report-dialog-title" data-astro-cid-rv5mgfz6><form class="report-dialog__panel" method="dialog" data-report-form novalidate data-astro-cid-rv5mgfz6><div class="report-dialog__head" data-astro-cid-rv5mgfz6><div class="report-dialog__title" data-astro-cid-rv5mgfz6><img class="report-dialog__brand" src="/brand/njpbs-horizontal-white.svg" alt="" width="146" height="40" data-astro-cid-rv5mgfz6><h2 id="report-dialog-title" data-astro-cid-rv5mgfz6>Report a problem</h2></div><button type="button" class="report-dialog__close" data-dialog-close aria-label="Close" data-astro-cid-rv5mgfz6><span aria-hidden="true" data-astro-cid-rv5mgfz6>&times;</span></button></div><p class="report-dialog__intro" data-astro-cid-rv5mgfz6>Found something broken, or have a suggestion? Tell us what happened and we will look into it.</p><fieldset class="report-dialog__field report-dialog__categories" data-astro-cid-rv5mgfz6><legend data-astro-cid-rv5mgfz6>What kind of feedback is this?</legend><label class="report-dialog__choice" data-astro-cid-rv5mgfz6><input type="radio" name="category" value="bug" checked data-astro-cid-rv5mgfz6><span data-astro-cid-rv5mgfz6>Bug or error</span></label><label class="report-dialog__choice" data-astro-cid-rv5mgfz6><input type="radio" name="category" value="suggestion" data-astro-cid-rv5mgfz6><span data-astro-cid-rv5mgfz6>Suggestion</span></label><label class="report-dialog__choice" data-astro-cid-rv5mgfz6><input type="radio" name="category" value="question" data-astro-cid-rv5mgfz6><span data-astro-cid-rv5mgfz6>Question</span></label></fieldset><div class="report-dialog__field" data-astro-cid-rv5mgfz6><label for="report-description" data-astro-cid-rv5mgfz6>Tell us what happened</label><textarea id="report-description" name="description" rows="4" minlength="10" maxlength="2000" required aria-invalid="false" aria-describedby="report-description-hint report-description-count" placeholder="Describe the issue, suggestion, or question." data-report-description data-astro-cid-rv5mgfz6></textarea><div class="report-dialog__meta" data-astro-cid-rv5mgfz6><span id="report-description-hint" data-report-hint data-astro-cid-rv5mgfz6>At least 10 characters.</span><span id="report-description-count" data-report-count data-astro-cid-rv5mgfz6>0 / 2000</span></div><p class="report-dialog__error" id="report-description-error" data-report-description-error hidden data-astro-cid-rv5mgfz6>Enter at least 10 characters.</p></div><div class="report-dialog__field" data-astro-cid-rv5mgfz6><label for="report-email" data-astro-cid-rv5mgfz6>Email <span class="report-dialog__optional" data-astro-cid-rv5mgfz6>(optional, for confirmation and updates)</span></label><input type="email" id="report-email" name="email" autocomplete="email" placeholder="you@example.com" aria-invalid="false" data-report-email data-astro-cid-rv5mgfz6><p class="report-dialog__error" id="report-email-error" data-report-email-error hidden data-astro-cid-rv5mgfz6>Enter a valid email address or leave this field blank.</p></div><div class="report-dialog__hp" aria-hidden="true" data-astro-cid-rv5mgfz6><label for="report-website" data-astro-cid-rv5mgfz6>Leave this field empty</label><input type="text" id="report-website" name="website" tabindex="-1" autocomplete="off" data-report-hp data-astro-cid-rv5mgfz6></div><div data-report-turnstile data-astro-cid-rv5mgfz6></div><p class="report-dialog__status" role="status" aria-live="polite" data-report-status data-astro-cid-rv5mgfz6></p><button type="button" class="report-dialog__btn report-dialog__btn--ghost report-dialog__retry" data-report-retry hidden data-astro-cid-rv5mgfz6>Retry spam check</button><p class="report-dialog__note" data-report-note hidden data-astro-cid-rv5mgfz6></p><div class="report-dialog__actions" data-astro-cid-rv5mgfz6><button type="button" class="report-dialog__btn report-dialog__btn--ghost" data-dialog-close data-astro-cid-rv5mgfz6>Cancel</button><button type="submit" class="report-dialog__btn report-dialog__btn--primary" data-report-submit disabled data-astro-cid-rv5mgfz6>Send report</button></div></form></dialog><script type="module" src="https://njpbs.org/posts/_no-build-assets/_astro/ReportProblemDialog.astro_astro_type_script_index_0_lang.DD-v9lHu.js"></script></footer><script>
+    (function () {
+      const KEY = "njpbs-motion";
+      var root = document.documentElement;
+      var button = document.querySelector("[data-motion-toggle]");
+      if (!button) return;
+      function reduced() {
+        return root.getAttribute("data-motion") === "off";
+      }
+      function sync() {
+        button.setAttribute("aria-pressed", reduced() ? "true" : "false");
+      }
+      function set(on) {
+        if (on) root.setAttribute("data-motion", "off");
+        else root.removeAttribute("data-motion");
+        try {
+          localStorage.setItem(KEY, on ? "off" : "on");
+        } catch (e) {
+          /* choice does not persist when storage is unavailable */
+        }
+        sync();
+      }
+      sync();
+      button.addEventListener("click", function () {
+        set(!reduced());
+      });
+    })();
+  </script></body></html><script type="module" src="https://njpbs.org/posts/_no-build-assets/_astro/PublicSiteLayout.astro_astro_type_script_index_0_lang.Cf_aiHe5.js"></script>

@@ -1,0 +1,10 @@
+{
+  "date": "2026-11-05",
+  "kind": "fixed",
+  "title": "Restore older video originals",
+  "body": "If you manage video, select Restore original in a video's details to bring back an older original. Boardwalk no longer sends you to an administrator. Viewers see a note to ask a person who manages video, because this restore is charged. Restore can take up to 12 hours. The restored original stays ready for at least 7 days.",
+  "prs": [
+    4881
+  ],
+  "order": 1793898999648
+}

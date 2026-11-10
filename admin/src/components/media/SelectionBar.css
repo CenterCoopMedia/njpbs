@@ -1,0 +1,219 @@
+/* The floating selection bar. The dock spans the results so
+   the bar can read their width; the bar itself is only as wide as its controls. */
+.media-selection-dock {
+  position: sticky;
+  bottom: var(--cms-space-4);
+  z-index: var(--cms-z-selection-bar);
+  display: flex;
+  justify-content: center;
+  min-width: 0;
+  container: media-selection / inline-size;
+  pointer-events: none;
+}
+
+.media-selection-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--cms-space-1);
+  max-width: 100%;
+  max-height: max(var(--cms-control-standard-target), calc(100dvh - var(--workspace-header-height, 0px) - var(--media-chrome-height, 0px) - 2 * var(--cms-space-4)));
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  border: var(--cms-border-width) solid var(--cms-line);
+  border-radius: var(--cms-radius-panel);
+  padding: var(--cms-space-2) var(--cms-space-2) var(--cms-space-2) var(--cms-space-4);
+  background: var(--cms-surface);
+  box-shadow: var(--cms-shadow-menu);
+  pointer-events: auto;
+  animation: media-selection-bar-rise var(--cms-motion-normal) var(--cms-ease);
+}
+
+@supports ((-webkit-backdrop-filter: blur(1px)) or (backdrop-filter: blur(1px))) {
+  .media-selection-bar {
+    background: var(--cms-chrome);
+    -webkit-backdrop-filter: blur(var(--cms-chrome-blur));
+    backdrop-filter: blur(var(--cms-chrome-blur));
+  }
+}
+
+@keyframes media-selection-bar-rise {
+  from {
+    opacity: 0;
+    transform: translateY(var(--cms-space-2));
+  }
+}
+
+.media-selection-bar-summary {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--cms-space-1);
+  margin: 0 var(--cms-space-2) 0 0;
+  color: var(--cms-ink);
+  font-size: var(--cms-font-control);
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.media-selection-bar-off-page {
+  color: var(--cms-ink-muted);
+  font-weight: 500;
+}
+
+.media-selection-bar-page {
+  min-height: var(--cms-control-standard-target);
+  padding-inline: var(--cms-space-2);
+  font-size: var(--cms-font-control);
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+.media-selection-bar-page-short {
+  display: none;
+}
+
+.media-selection-bar-divider {
+  align-self: stretch;
+  width: var(--cms-border-width);
+  margin: var(--cms-space-1) var(--cms-space-2);
+  background: var(--cms-line);
+}
+
+.media-selection-bar-action {
+  flex: 0 0 auto;
+  min-width: var(--cms-control-standard-target);
+  min-height: var(--cms-control-standard-target);
+  gap: var(--cms-space-2);
+  padding-inline: var(--cms-space-3);
+  white-space: nowrap;
+}
+
+/* Dock controls scroll inside their own port, not by the results' dock clearance. */
+.media-selection-bar :is(button, input, [tabindex]) {
+  scroll-margin-block: var(--cms-space-1);
+}
+
+/* The reason takes its own line under the controls without widening the bar. */
+.media-selection-bar-error {
+  flex-basis: 100%;
+  contain: inline-size;
+  margin: 0;
+  padding-inline: var(--cms-space-2);
+  color: var(--cms-danger);
+  font-size: var(--cms-font-sm);
+  white-space: normal;
+}
+
+/* Under40rem icon presentation keeps compact actions. Text presentation puts
+   every action on its own line below the count/checkbox, consistently for every count. */
+@container media-selection (max-width: 40rem) {
+  .media-selection-bar {
+    gap: 2px;
+  }
+
+  .media-selection-bar-off-page,
+  .media-selection-bar-page-long {
+    display: none;
+  }
+
+  .media-selection-bar-page-short {
+    display: inline;
+  }
+
+  .media-selection-bar[data-presentation="icons"] .media-selection-bar-label {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
+
+  .media-selection-bar[data-presentation="icons"] .media-selection-bar-action {
+    width: var(--cms-control-standard-target);
+    padding: 0;
+  }
+
+  .media-selection-bar-divider {
+    margin-inline: 2px;
+  }
+
+  .media-selection-bar[data-presentation="text"] { display: grid; grid-template-columns: minmax(0, 1fr) auto; }
+  .media-selection-bar[data-presentation="text"] .media-selection-bar-summary { grid-column: 1; grid-row: 1; }
+  .media-selection-bar[data-presentation="text"] .media-selection-bar-page { grid-column: 2; grid-row: 1; margin: 0; }
+  .media-selection-bar[data-presentation="text"] > :is(.media-selection-bar-action, .action-control-disabled-trigger) { grid-column: 1 / -1; width: 100%; }
+  .media-selection-bar[data-presentation="text"] .media-selection-bar-action { justify-content: flex-start; width: 100%; min-width: 0; white-space: normal; }
+  .media-selection-bar[data-presentation="text"] .media-selection-bar-label { text-align: start; overflow-wrap: anywhere; }
+  .media-selection-bar[data-presentation="text"] .media-selection-bar-divider { display: none; }
+  .media-selection-bar[data-presentation="text"] .media-selection-bar-error { grid-column: 1 / -1; }
+}
+
+/* Phones drop cap words while retaining the count, reasons and pointer-specific targets. */
+@container media-selection (max-width: 25rem) {
+  .media-selection-bar {
+    gap: 0;
+  }
+
+  .media-selection-bar-cap {
+    display: none;
+  }
+
+  .media-selection-bar-summary {
+    gap: 0;
+    margin-right: var(--cms-space-1);
+    font-size: var(--cms-font-sm);
+  }
+
+  .media-selection-bar-page {
+    padding-inline: 0;
+  }
+
+  .media-selection-bar .ui-checkbox.media-selection-bar-page .ui-checkbox-box {
+    margin-inline-start: var(--cms-space-2);
+  }
+}
+
+/* The narrowest results keep the page checkbox without its words and drop the dividers;
+   the checkbox's name stays "Select this page". */
+@container media-selection (max-width: 21rem) {
+  .media-selection-bar-page-short,
+  .media-selection-bar-divider {
+    display: none;
+  }
+
+  .media-selection-bar-page {
+    gap: 0;
+  }
+
+  /* No words: center the box in the checkbox's own target. */
+  .media-selection-bar .ui-checkbox.media-selection-bar-page .ui-checkbox-box {
+    margin-inline: calc((var(--checkbox-target) - var(--checkbox-box)) / 2);
+  }
+}
+
+/* Phones: the bar spans the results, selection state at the left, actions packed right. */
+@media (max-width: 45rem), (max-height: 500px) {
+  .media-selection-bar {
+    flex: 1 1 auto;
+    padding: var(--cms-space-1) var(--cms-space-1) var(--cms-space-1) var(--cms-space-3);
+    background: var(--cms-surface);
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
+  }
+
+  .media-selection-bar-page {
+    margin-right: auto;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .media-selection-bar {
+    animation: none;
+  }
+}
+
+@media (forced-colors: active) {
+  .media-selection-bar {
+    border-color: CanvasText;
+  }
+}

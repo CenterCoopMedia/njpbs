@@ -1,0 +1,8 @@
+{
+  "date": "2026-11-04",
+  "kind": "fixed",
+  "title": "Staff profile links wait for their pages",
+  "body": "New profiles stay visible in the Staff directory while their pages finish publishing. The profile link appears when the page is ready.",
+  "prs": [],
+  "order": 1793825805051
+}

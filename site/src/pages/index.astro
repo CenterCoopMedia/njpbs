@@ -1,0 +1,685 @@
+---
+import { resolveHomeComposition, homeContentAreas } from "../../../packages/content-core/src/home-composition";
+// The apex (njpbs.org). Two build targets share this route:
+//
+//   • Full build (root public routes enabled) — the apex is the public homepage:
+//     the cinematic shell with published navigation and links.
+//   • PUBLIC_ONLY build — the apex stays the
+//     placeholder below, and the root public page collections emit no routes.
+//
+// The coming-soon page: a static NJ signal graphic over a
+// deep-navy "on-air" surface, with a short headline. Guardrail-safe by design —
+// no operator claim, no launch date, no logo image, only a text-set wordmark.
+import Base from "../layouts/Base.astro";
+import PublicSiteLayout from "../layouts/PublicSiteLayout.astro";
+import CinematicHomePage from "../components/CinematicHomePage.astro";
+import { cmsImageAsset } from "../lib/cms-responsive-image";
+import { getEntry, getCollection } from "astro:content";
+import { resolveHomeHeroItems } from "../lib/home-hero-items";
+import { renderPage } from "../lib/cms-render-context";
+import { getImage } from "astro:assets";
+import { SIGNAL, COMING_SOON_LINKS } from "../lib/coming-soon-theme";
+import heroImagesCsv from "../data/hero-images.csv?raw";
+import { internalSurfaceRoutesEnabled, publicRootRoutesEnabled } from "../lib/build-target";
+import { STAGED_HOMEPAGE_NEWS_TOPICS } from "../lib/homepage-news-topics";
+import { resolveCmsResponsiveAssets } from "../lib/cms-responsive-image";
+import { admittedHomePromotions } from "../lib/home-admission";
+import {
+  parseHeroImagesCsv,
+  pickInitialHeroImage,
+  toCssImageUrl,
+  toHeroImagePayload,
+} from "../lib/hero-images";
+
+const showHomepage = publicRootRoutesEnabled(process.env);
+const stagedNewsTopics = internalSurfaceRoutesEnabled(process.env)
+  ? STAGED_HOMEPAGE_NEWS_TOPICS
+  : [];
+// CMS migration is page-by-page. An absent or not-yet-published home document
+// therefore means "home has not migrated yet" and retains the committed launch
+// page, even in a strict build that publishes a different CMS route. Strict
+// mode still fails in the loader when an admitted home snapshot is malformed;
+// this branch cannot hide that error.
+const cmsHome = showHomepage
+  ? (Astro.locals.cmsRender ? renderPage(Astro.locals.cmsRender, "home") : await getEntry("cmsPages", "home"))
+  : undefined;
+const homeAnnouncement = showHomepage
+  ? (Astro.locals.cmsRender
+    ? { data: Astro.locals.cmsRender.content.settings.find(setting => setting.settingId === "public-homepage-banner") }
+    : await getEntry("cmsPublicSettings", "public-homepage-banner"))
+  : undefined;
+const cmsHomeSocialImageId = cmsHome?.data.social?.imageAssetId;
+const cmsHomeSocialImage = cmsHomeSocialImageId
+  ? cmsHome?.data.assets[cmsHomeSocialImageId]?.url
+  : undefined;
+const cmsHomeHeroBackgroundImage = cmsHome?.data.heroBackgroundImage
+  ? cmsImageAsset(cmsHome.data.assets[cmsHome.data.heroBackgroundImage])
+  : undefined;
+const homePromotions = admittedHomePromotions(cmsHome?.data.blocks ?? []);
+const homeComposition = resolveHomeComposition(
+  cmsHome?.data.homeCompositionVersion,
+  cmsHome?.data.blocks ?? [],
+  cmsHome?.data.assets,
+  { complete: cmsHome?.data.contentMode !== "draft" },
+);
+// Legacy unconverted Home blocks remain recovery data, never new public content.
+const homeContent = cmsHome && homeComposition
+  ? Object.fromEntries(Object.entries(homeContentAreas(cmsHome.data.blocks))
+      .filter(([, blocks]) => blocks.length > 0)
+      .map(([area, blocks]) => [area, { ...cmsHome, data: { ...cmsHome.data, blocks } }]))
+  : {};
+const homePromotionAssets = cmsHome && homePromotions.length
+  ? await resolveCmsResponsiveAssets(homePromotions, cmsHome.data.assets, getImage)
+  : new Map();
+const heroSources = showHomepage && cmsHome?.data.homeHero
+  ? (Astro.locals.cmsRender?.homeSources ?? (await getEntry("publicHomeSources", "home"))?.data)
+  : undefined;
+const heroPosts = showHomepage && cmsHome?.data.homeHero
+  ? (Astro.locals.cmsRender?.content.posts ?? (await getCollection("cmsPosts")).map(entry => entry.data))
+  : [];
+const heroAuthors = showHomepage && cmsHome?.data.homeHero
+  ? (Astro.locals.cmsRender?.content.authors ?? (await getCollection("cmsAuthorsPublic")).map(entry => entry.data))
+  : [];
+const heroPages = showHomepage && cmsHome?.data.homeHero
+  ? (Astro.locals.cmsRender?.content.homeHeroPages ?? Astro.locals.cmsRender?.content.pages ?? (await getCollection("cmsPages")).map(entry => entry.data)) : [];
+const heroItems = resolveHomeHeroItems(cmsHome?.data.homeHero, heroSources, heroPosts, cmsHome?.data.assets, heroAuthors, heroPages);
+
+// Coming-soon data is only needed for the PUBLIC_ONLY branch; compute it lazily so
+// the full-build apex never touches the hero-image CSV path.
+const comingSoon = showHomepage
+  ? null
+  : (() => {
+      const heroImages = parseHeroImagesCsv(heroImagesCsv);
+      const initialHeroImage = pickInitialHeroImage(heroImages);
+      if (!initialHeroImage) {
+        throw new Error("At least one hero image must be enabled.");
+      }
+      const heroImagePayload = toHeroImagePayload(heroImages);
+      return {
+        initialHeroImage,
+        heroImagePayload,
+        heroImagePayloadJson: JSON.stringify(heroImagePayload),
+      };
+    })();
+---
+
+{showHomepage ? (
+  <PublicSiteLayout
+    title={cmsHome?.data.title ?? "Home"}
+    description={cmsHome?.data.description ?? "The new NJ PBS — New Jersey's public television, live and on demand."}
+    seoTitle={cmsHome?.data.seo?.title}
+    seoDescription={cmsHome?.data.seo?.description}
+    socialTitle={cmsHome?.data.social?.title}
+    socialDescription={cmsHome?.data.social?.description}
+    socialImage={cmsHomeSocialImage}
+    preview={cmsHome?.data.contentMode === "draft"}
+    canonicalPath="/"
+    noindex={cmsHome?.data.noindex ?? false}
+    childDirected={cmsHome?.data.childDirected}
+  >
+    <CinematicHomePage
+      heroTitle={cmsHome?.data.homeHeroTitle}
+      heroSubtitle={cmsHome?.data.homeHeroSubtitle}
+      heroItems={heroItems}
+      heroConfig={cmsHome?.data.homeHero}
+      heroBackgroundImage={cmsHomeHeroBackgroundImage}
+      heroBackgroundPosition={cmsHome?.data.heroBackgroundPosition}
+      composition={homeComposition}
+      orderedContent={cmsHome?.data.homeCompositionVersion === 2 ? cmsHome : undefined}
+      content={homeContent}
+      promotions={homePromotions}
+      promotionAssets={homePromotionAssets}
+      announcement={homeAnnouncement?.data}
+      newsTopics={stagedNewsTopics}
+    />
+  </PublicSiteLayout>
+) : (
+<Base
+  title="New NJ PBS — coming soon"
+  description="Something new is taking shape. The new njpbs.org is in development."
+  noindex={true}
+>
+  <main
+    class="soon"
+    data-hero-backgrounds={comingSoon!.heroImagePayloadJson}
+    data-hero-rotation-ms="12000"
+  >
+    <div class="soon__hero">
+      <img src="/nj-static-signal.svg" width="420" height="740"
+        alt="New Jersey, drawn as a field of points" />
+    </div>
+    <div class="soon__content">
+      <h1 class="soon__mark">New NJ PBS</h1>
+      <p class="soon__tagline">Something new is taking shape.</p>
+      <p class="soon__status">
+        The new njpbs.org is in development. Check back soon.
+      </p>
+      <ul class="soon__links">
+        {
+          COMING_SOON_LINKS.map((link) => (
+            <li class="soon__links-item">
+              {link.href ? (
+                <a class="soon__link" href={link.href}>
+                  {link.label}
+                </a>
+              ) : (
+                <span class="soon__link soon__link--pending">
+                  {link.label}
+                  <span class="soon__link-note">{link.pending}</span>
+                </span>
+              )}
+            </li>
+          ))
+        }
+      </ul>
+    </div>
+    {
+      comingSoon!.heroImagePayload.length > 1 && (
+        <div
+          class="soon__choices"
+          role="group"
+          aria-label="Background scene controls"
+        >
+          <div class="soon__choices-head">
+            <p class="soon__choices-kicker">Signal views</p>
+            <button
+              class="soon__pause"
+              type="button"
+              data-hero-toggle
+              aria-pressed="false"
+            >
+              Pause rotation
+            </button>
+          </div>
+          {comingSoon!.heroImagePayload.map((image, index) => (
+            <button
+              class="soon__choice"
+              type="button"
+              data-hero-choice={String(index)}
+              aria-current={index === 0 ? "true" : "false"}
+              aria-label={`Show background ${index + 1}: ${image.label}. ${
+                image.caption ?? image.alt
+              }`}
+              style={`--choiceAccent: ${image.accent}`}
+            >
+              <span class="soon__choice-index">
+                {String(index + 1).padStart(2, "0")}
+              </span>
+              <span class="soon__choice-copy">
+                <span class="soon__choice-label">{image.label}</span>
+                {image.caption && (
+                  <span class="soon__choice-caption">{image.caption}</span>
+                )}
+              </span>
+            </button>
+          ))}
+        </div>
+      )
+    }
+  </main>
+
+  <style is:global>
+    /* Base.astro renders html/body, so this reset must be global to reach them —
+       a scoped rule would leave the browser's default body margin as a light
+       border around the dark surface. */
+    html,
+    body {
+      margin: 0;
+    }
+
+    /* Low-bandwidth downgrades (html[data-saver]; set pre-paint by Base.astro on
+       Save-Data / 2g / prefers-reduced-data). Global because html is rendered by
+       Base.astro, not this page — and the define:vars block above ships verbatim,
+       so :global() wouldn't be stripped there. The particle hero is already gated
+       off in the island; here we shed the decorative layers — the photographic
+       background, the screen-blend texture overlay, and the control-panel blur —
+       leaving the solid navy surface and the copy, fully legible. */
+    html[data-saver] .soon::before {
+      background-image: none;
+    }
+    html[data-saver] .soon::after {
+      display: none;
+    }
+    html[data-saver] .soon__choices {
+      backdrop-filter: none;
+      -webkit-backdrop-filter: none;
+      background: rgba(5, 10, 45, 0.92);
+    }
+  </style>
+
+  <style
+    define:vars={{
+      surface: SIGNAL.surface,
+      nearWhite: SIGNAL.nearWhite,
+      heroBackgroundImage: toCssImageUrl(comingSoon!.initialHeroImage.src),
+      heroBackgroundPosition: comingSoon!.initialHeroImage.position,
+      heroScrim: String(comingSoon!.initialHeroImage.scrim),
+      heroAccent: comingSoon!.initialHeroImage.accent,
+    }}
+  >
+    .soon {
+      position: relative;
+      min-height: 100svh;
+      display: grid;
+      place-items: center;
+      overflow: hidden;
+      background: var(--surface);
+      color: var(--color-text-on-surface);
+      font-family:
+        system-ui,
+        -apple-system,
+        "Segoe UI",
+        Roboto,
+        Helvetica,
+        Arial,
+        sans-serif;
+    }
+
+    /* The static NJ map fills the viewport behind the copy. */
+    .soon__hero {
+      position: absolute;
+      inset: 0;
+      z-index: 1;
+    }
+    .soon::before {
+      content: "";
+      position: absolute;
+      inset: 0;
+      z-index: 0;
+      background-image:
+        linear-gradient(
+          90deg,
+          rgba(10, 20, 90, var(--heroScrim)),
+          rgba(10, 20, 90, 0.34) 48%,
+          rgba(10, 20, 90, var(--heroScrim))
+        ),
+        var(--heroBackgroundImage);
+      background-position: var(--heroBackgroundPosition);
+      background-size: cover;
+      transform: scale(1.02);
+    }
+    .soon::after {
+      content: "";
+      position: absolute;
+      inset: -10%;
+      z-index: 0;
+      pointer-events: none;
+      background-image:
+        radial-gradient(
+          circle at var(--heroBackgroundPosition),
+          color-mix(in srgb, var(--heroAccent) 38%, transparent),
+          transparent 24rem
+        ),
+        repeating-linear-gradient(
+          115deg,
+          rgba(238, 241, 249, 0.08) 0 1px,
+          transparent 1px 5.5rem
+        ),
+        repeating-linear-gradient(
+          0deg,
+          rgba(238, 241, 249, 0.04) 0 1px,
+          transparent 1px 1.4rem
+        );
+      mix-blend-mode: screen;
+      opacity: 0.72;
+    }
+    .soon__hero > img {
+      position: absolute;
+      inset: 0;
+      margin: auto;
+      max-height: 100%;
+      width: auto;
+      object-fit: contain;
+      pointer-events: none;
+    }
+
+    .soon__content {
+      position: relative;
+      z-index: 2;
+      max-width: 40rem;
+      padding: 2rem;
+      text-align: center;
+    }
+    /* Legibility scrim: a soft navy radial behind the copy so the tested
+       white-on-navy contrast holds even where bright edge points sit behind the
+       text. An accessibility device, not decoration — no border, no tint, no
+       gradient text. The navy here matches the Signal surface token. */
+    .soon__content::before {
+      content: "";
+      position: absolute;
+      z-index: -1;
+      inset: -15% -25%;
+      background: radial-gradient(
+        ellipse at center,
+        rgba(10, 20, 90, 0.92) 35%,
+        rgba(10, 20, 90, 0) 78%
+      );
+    }
+
+    .soon__mark {
+      margin: 0;
+      font-size: clamp(2.4rem, 8vw, 5rem);
+      font-weight: 700;
+      line-height: 1.02;
+      letter-spacing: -0.02em;
+      color: var(--color-text-on-surface);
+    }
+    .soon__tagline {
+      margin: 1rem 0 0;
+      font-size: clamp(1.1rem, 3vw, 1.6rem);
+      font-weight: 500;
+      line-height: 1.3;
+      color: var(--color-text-on-surface);
+    }
+    .soon__status {
+      margin: 1.4rem 0 0;
+      font-size: clamp(0.95rem, 2.2vw, 1.15rem);
+      line-height: 1.5;
+      color: var(--nearWhite);
+    }
+
+    .soon__links {
+      margin: 1.6rem 0 0;
+      padding: 0;
+      list-style: none;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.5rem 1.5rem;
+      font-size: clamp(0.95rem, 2.2vw, 1.1rem);
+    }
+    .soon__links-item {
+      margin: 0;
+    }
+    /* Active link: full white + underline. Pending slot: muted near-white, no
+       underline, with a "coming soon" note — it is a real <a> only once a URL
+       exists (see COMING_SOON_LINKS), so the pending state is never a dead link. */
+    .soon__link {
+      font-weight: 600;
+      color: var(--color-text-on-surface);
+    }
+    a.soon__link {
+      text-decoration: underline;
+      text-underline-offset: 0.22em;
+      text-decoration-thickness: 0.07em;
+    }
+    a.soon__link:hover,
+    a.soon__link:focus-visible {
+      text-decoration-thickness: 0.13em;
+    }
+    a.soon__link:focus-visible {
+      outline: var(--focus-outline);
+      outline-offset: var(--focus-offset);
+      border-radius: 2px;
+    }
+    .soon__link--pending {
+      color: var(--nearWhite);
+      font-weight: 500;
+    }
+    .soon__link-note {
+      color: var(--nearWhite);
+      font-size: 0.82em;
+      font-weight: 500;
+    }
+    .soon__link-note::before {
+      content: "·";
+      margin: 0 0.4rem 0 0.3rem;
+    }
+
+    .soon__choices {
+      position: absolute;
+      z-index: 3;
+      right: clamp(1rem, 4vw, 2rem);
+      bottom: clamp(1rem, 4vw, 2rem);
+      display: grid;
+      width: min(22rem, calc(100% - 2rem));
+      gap: 0.45rem;
+      padding: 0.65rem;
+      border: 1px solid rgba(238, 241, 249, 0.28);
+      border-radius: 1.15rem;
+      background:
+        linear-gradient(135deg, rgba(255, 255, 255, 0.08), transparent 42%),
+        rgba(5, 10, 45, 0.68);
+      box-shadow: 0 1rem 3rem rgba(0, 0, 0, 0.24);
+      backdrop-filter: blur(14px);
+    }
+    .soon__choices-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 0.5rem;
+      margin-bottom: 0.2rem;
+    }
+    .soon__choices-kicker {
+      margin: 0;
+      padding: 0 0.25rem;
+      font-size: 0.68rem;
+      font-weight: 800;
+      letter-spacing: 0.16em;
+      text-transform: uppercase;
+      color: rgba(238, 241, 249, 0.68);
+    }
+    .soon__pause {
+      flex: none;
+      padding: 0.3rem 0.6rem;
+      border: 1px solid rgba(238, 241, 249, 0.28);
+      border-radius: 0.6rem;
+      background: rgba(255, 255, 255, 0.06);
+      color: rgba(238, 241, 249, 0.86);
+      font-size: 0.62rem;
+      font-weight: 700;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      cursor: pointer;
+    }
+    .soon__pause:hover,
+    .soon__pause:focus-visible {
+      background: rgba(255, 255, 255, 0.12);
+      border-color: rgba(238, 241, 249, 0.4);
+      color: var(--color-text-on-surface);
+      outline: none;
+    }
+    .soon__pause:focus-visible {
+      outline: var(--focus-outline);
+      outline-offset: var(--focus-offset);
+    }
+    .soon__choice {
+      display: grid;
+      grid-template-columns: 2.2rem 1fr;
+      gap: 0.7rem;
+      width: 100%;
+      padding: 0.7rem;
+      border: 1px solid transparent;
+      border-left: 0.22rem solid var(--choiceAccent);
+      border-radius: 0.8rem;
+      background: transparent;
+      color: rgba(238, 241, 249, 0.78);
+      text-align: left;
+      cursor: pointer;
+    }
+    .soon__choice:hover,
+    .soon__choice:focus-visible,
+    .soon__choice[aria-current="true"] {
+      background:
+        linear-gradient(90deg, color-mix(in srgb, var(--choiceAccent) 18%, transparent), transparent 54%),
+        rgba(255, 255, 255, 0.1);
+      border-color: rgba(238, 241, 249, 0.36);
+      border-left-color: var(--choiceAccent);
+      color: var(--color-text-on-surface);
+      outline: none;
+    }
+    .soon__choice:focus-visible {
+      outline: var(--focus-outline);
+      outline-offset: var(--focus-offset);
+    }
+    .soon__choice-index {
+      font-size: 0.74rem;
+      font-weight: 700;
+      letter-spacing: 0.12em;
+      color: var(--choiceAccent);
+    }
+    .soon__choice-copy {
+      display: grid;
+      gap: 0.22rem;
+    }
+    .soon__choice-label {
+      font-size: 0.86rem;
+      font-weight: 700;
+      line-height: 1.15;
+    }
+    .soon__choice-caption {
+      font-size: 0.76rem;
+      line-height: 1.3;
+      color: rgba(238, 241, 249, 0.72);
+    }
+
+    /* On narrow or short viewports the pinned control stack can rise
+       into the centered copy once several scenes are enabled. Drop it into normal
+       flow below the copy and let the section scroll, so the controls and the
+       status text never overlap. */
+    @media (max-width: 40rem), (max-height: 34rem) {
+      .soon {
+        align-content: center;
+        gap: 1.5rem;
+        padding-block: 2.5rem;
+        overflow-y: auto;
+      }
+      .soon__choices {
+        position: static;
+        margin-inline: auto;
+      }
+    }
+
+    /* A brief staggered rise-in for the copy. Only when the visitor has not asked
+       for reduced motion; otherwise the text is simply present from first paint. */
+    @media (prefers-reduced-motion: no-preference) {
+      .soon__mark,
+      .soon__tagline,
+      .soon__status,
+      .soon__links {
+        opacity: 0;
+        transform: translateY(0.6rem);
+        animation: soon-rise 0.7s cubic-bezier(0.2, 0.7, 0.2, 1) forwards;
+      }
+      .soon__mark {
+        animation-delay: 0.15s;
+      }
+      .soon__tagline {
+        animation-delay: 0.38s;
+      }
+      .soon__status {
+        animation-delay: 0.6s;
+      }
+      .soon__links {
+        animation-delay: 0.78s;
+      }
+    }
+    @keyframes soon-rise {
+      to {
+        opacity: 1;
+        transform: none;
+      }
+    }
+  </style>
+
+  <script>
+    interface HeroBackground {
+      id: string;
+      src: string;
+      position: string;
+      scrim: number;
+      accent: string;
+    }
+
+    function cssImageUrl(src: string): string {
+      return `url(${JSON.stringify(src)})`;
+    }
+
+    const hero = document.querySelector<HTMLElement>(
+      "[data-hero-backgrounds]",
+    );
+
+    if (hero) {
+      let images: HeroBackground[] = [];
+      try {
+        images = JSON.parse(hero.dataset.heroBackgrounds ?? "[]");
+      } catch {
+        images = [];
+      }
+
+      const buttons = Array.from(
+        hero.querySelectorAll<HTMLButtonElement>("[data-hero-choice]"),
+      );
+
+      if (images.length > 1) {
+        const rotationMs = Number(hero.dataset.heroRotationMs) || 12000;
+        let index = 0;
+        let timer: number | undefined;
+
+        const setImage = (nextIndex: number) => {
+          const next = images[nextIndex];
+          if (!next) return;
+          index = nextIndex;
+          hero.style.setProperty("--heroBackgroundImage", cssImageUrl(next.src));
+          hero.style.setProperty("--heroBackgroundPosition", next.position);
+          hero.style.setProperty("--heroScrim", String(next.scrim));
+          hero.style.setProperty("--heroAccent", next.accent);
+          buttons.forEach((button, buttonIndex) => {
+            button.setAttribute(
+              "aria-current",
+              buttonIndex === nextIndex ? "true" : "false",
+            );
+          });
+        };
+
+        const toggle = hero.querySelector<HTMLButtonElement>(
+          "[data-hero-toggle]",
+        );
+
+        const updateToggle = (paused: boolean) => {
+          if (!toggle) return;
+          toggle.setAttribute("aria-pressed", paused ? "true" : "false");
+          toggle.textContent = paused ? "Resume rotation" : "Pause rotation";
+        };
+
+        const stopRotation = () => {
+          if (timer) window.clearInterval(timer);
+          timer = undefined;
+          updateToggle(true);
+        };
+
+        const startRotation = () => {
+          stopRotation();
+          timer = window.setInterval(() => {
+            setImage((index + 1) % images.length);
+          }, rotationMs);
+          updateToggle(false);
+        };
+
+        buttons.forEach((button, buttonIndex) => {
+          button.addEventListener("click", () => {
+            stopRotation();
+            setImage(buttonIndex);
+          });
+        });
+
+        if (toggle) {
+          toggle.addEventListener("click", () => {
+            if (timer) stopRotation();
+            else startRotation();
+          });
+        }
+
+        const reducedMotion = window.matchMedia(
+          "(prefers-reduced-motion: reduce)",
+        ).matches;
+        if (reducedMotion) {
+          // Rotation never starts, so there is nothing to pause.
+          if (toggle) toggle.hidden = true;
+        } else {
+          startRotation();
+        }
+      }
+    }
+  </script>
+</Base>
+)}

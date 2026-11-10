@@ -1,0 +1,119 @@
+.media-upload-tray-dock {
+  position: sticky;
+  z-index: var(--cms-z-selection-bar);
+  bottom: var(--cms-space-4);
+  display: flex;
+  justify-content: flex-end;
+  min-width: 0;
+  pointer-events: none;
+}
+
+.media-upload-tray {
+  display: grid;
+  width: min(22rem, 100%);
+  max-height: min(28rem, calc(100dvh - var(--cms-space-8)));
+  overflow: auto;
+  border: var(--cms-border-width) solid var(--cms-line);
+  border-radius: var(--cms-radius-panel);
+  background: var(--cms-surface);
+  box-shadow: var(--cms-shadow-menu);
+  pointer-events: auto;
+}
+
+.media-upload-tray[data-collapsed="true"] {
+  width: auto;
+  max-width: 100%;
+  overflow: visible;
+  border: 0;
+  border-radius: var(--cms-radius-round);
+}
+
+.media-upload-tray-header,
+.media-upload-tray-row-head,
+.media-upload-tray-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--cms-space-2);
+}
+
+.media-upload-tray-header {
+  padding: var(--cms-space-2);
+  border-bottom: var(--cms-border-width) solid var(--cms-line);
+}
+
+.media-upload-tray-header h2 {
+  margin: 0;
+  font-size: var(--cms-font-base);
+}
+
+.media-upload-tray-header > span {
+  flex: 1 1 auto;
+  color: var(--cms-ink-muted);
+  font-size: var(--cms-font-sm);
+}
+
+.media-upload-tray-rows {
+  display: grid;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.media-upload-tray-row {
+  display: grid;
+  gap: var(--cms-space-2);
+  min-width: 0;
+  padding: var(--cms-space-3);
+}
+
+.media-upload-tray-row + .media-upload-tray-row {
+  border-top: var(--cms-border-width) solid var(--cms-line);
+}
+
+.media-upload-tray-row-head strong {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.media-upload-tray-row progress {
+  width: 100%;
+  accent-color: var(--cms-brand);
+}
+
+.media-upload-tray-row p {
+  margin: 0;
+  color: var(--cms-ink-muted);
+  font-size: var(--cms-font-sm);
+  overflow-wrap: anywhere;
+}
+
+.media-upload-tray-actions {
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.media-upload-tray-pill {
+  min-height: var(--cms-control-height);
+  margin: 0;
+  border: var(--cms-border-width) solid var(--cms-line);
+  border-radius: var(--cms-radius-round);
+  padding: var(--cms-space-2) var(--cms-space-4);
+  background: var(--cms-chrome);
+  box-shadow: var(--cms-shadow-menu);
+  color: var(--cms-ink);
+  font-size: var(--cms-font-control);
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+/* The selection dock owns the floating bottom edge when both controls are present. */
+:is(.media-results, .source-video-results):has(.media-selection-dock) .media-upload-tray-dock {
+  position: static;
+}
+
+/* A focused result must stay physically clear even when the expanded tray is taller than
+   the remaining viewport. Let the tray return to normal flow until focus leaves results. */
+:is(.media-results, .source-video-results):has(:focus):not(:has(.media-upload-tray-dock :focus)):not(:has(.media-selection-dock :focus)) .media-upload-tray-dock {
+  position: static;
+}

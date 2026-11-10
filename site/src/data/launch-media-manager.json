@@ -1,0 +1,202 @@
+{
+  "source": "media-manager",
+  "checkedAt": "2026-06-29T19:43:58.507Z",
+  "request": {
+    "audience": "WNJT",
+    "url": "https://media.services.pbs.org/api/v1/shows/?audience-scope=local&audience=WNJT&page-size=100"
+  },
+  "cards": [
+    {
+      "source": "media-manager",
+      "id": "050acb51-e20b-4995-bc91-95f93b2178e4",
+      "title": "Painting Community",
+      "description": "With the stroke of a brush, a story is created, communities gather, and the walls talk.",
+      "href": "https://watch.njpbs.org/show/painting-community/",
+      "image": "https://image.pbs.org/contentchannels/m3L1qFK-show-mezzanine16x9-Uyjvdy5.jpg"
+    },
+    {
+      "source": "media-manager",
+      "id": "4117eb9d-765f-4a24-90b7-f82a73434bbd",
+      "title": "From That Small Island: The Story of the Irish Feature Film",
+      "description": "The fascinating history of an island people who have truly left their mark on the world.",
+      "href": "https://watch.njpbs.org/show/from-that-small-island-the-story-of-the-irish-feature-film/",
+      "image": "https://image.pbs.org/contentchannels/xU29P1C-show-mezzanine16x9-kJ3DjLB.jpg"
+    },
+    {
+      "source": "media-manager",
+      "id": "85e62ec4-2328-4f5c-87d1-109301dcd965",
+      "title": "America's Home Cooking: Easy Recipes for Thrifty Cooking",
+      "description": "Guest cooks present recipes that are easy on the cook and the pocketbook.",
+      "href": "https://watch.njpbs.org/show/americas-home-cooking-easy-recipes-for-thrifty-cooking/",
+      "image": "https://image.pbs.org/contentchannels/5dCQYqL-show-mezzanine16x9-5x3ojo2.jpg"
+    },
+    {
+      "source": "media-manager",
+      "id": "f90ccebf-9fb5-43ad-b235-7eda2b52702e",
+      "title": "The Everly Brothers: Harmonies From Heaven",
+      "description": "The story of Phil and Don Everly, two of the most influential early rock ’n’ roll stars.",
+      "href": "https://watch.njpbs.org/show/the-everly-brothers-harmonies-from-heaven/",
+      "image": "https://image.pbs.org/contentchannels/Y4aTyy7-show-mezzanine16x9-JSWUU08.jpg"
+    },
+    {
+      "source": "media-manager",
+      "id": "f1608e9e-d66f-4e95-9d68-e264c6b28449",
+      "title": "Judy Collins: Wildflowers in Concert",
+      "description": "The legendary folk singer performs her groundbreaking 1967 album, Wildflowers.",
+      "href": "https://watch.njpbs.org/show/judy-collins-wildflowers-in-concert/",
+      "image": "https://image.pbs.org/contentchannels/NDl8w5G-show-mezzanine16x9-9l86qsM.jpg"
+    },
+    {
+      "source": "media-manager",
+      "id": "edf61be8-54a4-4c20-af7c-34c4931d4c33",
+      "title": "Tina Turner: One Last Time",
+      "description": "Tina Turner performs \"What's Love Got to Do With It,\" \"The Best,\" \"Proud Mary\" and more.",
+      "href": "https://watch.njpbs.org/show/tina-turner-one-last-time/",
+      "image": "https://image.pbs.org/contentchannels/VmyhtKZ-show-mezzanine16x9-QnQtIjf.jpg"
+    },
+    {
+      "source": "media-manager",
+      "id": "e193c62b-aa0e-42e3-978e-15e79995efe8",
+      "title": "James Taylor: One Man Band",
+      "description": "James Taylor's most important songs, interspersed with personal anecdotes and more.",
+      "href": "https://watch.njpbs.org/show/james-taylor-one-man-band/",
+      "image": "https://image.pbs.org/contentchannels/0IPBTE0-show-mezzanine16x9-5Y33lvH.jpg"
+    },
+    {
+      "source": "media-manager",
+      "id": "db61ce47-2c3c-42e9-a8b3-4fa3a2db3253",
+      "title": "Marian Anderson: Once in a Hundred Years",
+      "description": "Traces the arc of Marian Anderson’s life and her struggles against racism and poverty.",
+      "href": "https://watch.njpbs.org/show/marian-anderson-once-hundred-years/",
+      "image": "https://image.pbs.org/contentchannels/FOsF2zJ-show-mezzanine16x9-xWN4hHA.jpg"
+    },
+    {
+      "source": "media-manager",
+      "id": "b4933ca2-2304-4fed-924e-62ab4138a7cb",
+      "title": "The Four Phantoms in Concert",
+      "description": "Veteran Phantom performers celebrate the music of Broadway and more.",
+      "href": "https://watch.njpbs.org/show/the-four-phantoms-in-concert/",
+      "image": "https://image.pbs.org/contentchannels/u5B4ldP-show-mezzanine16x9-nrVDaNJ.jpg"
+    },
+    {
+      "source": "media-manager",
+      "id": "b41e57bd-a112-497b-aaca-564d6aa00617",
+      "title": "Marvin Gaye: Greatest Hits Alive",
+      "description": "This classic performance was recorded on Marvin Gaye’s first European Tour in 1976.",
+      "href": "https://watch.njpbs.org/show/marvin-gaye-greatest-hits-alive/",
+      "image": "https://image.pbs.org/contentchannels/c9TcppP-show-mezzanine16x9-rOfGICQ.jpg"
+    },
+    {
+      "source": "media-manager",
+      "id": "a2ef3932-7207-4aa3-8303-2214b025b29a",
+      "title": "Quincy Jones: A Musical Celebration in Paris",
+      "description": "Quincy Jones brings together nearly 100 musicians at the AccorHotels Arena in Paris.",
+      "href": "https://watch.njpbs.org/show/quincy-jones-musical-celebration-paris/",
+      "image": "https://image.pbs.org/contentchannels/s7zgieY-show-mezzanine16x9-6NR8WYi.jpg"
+    },
+    {
+      "source": "media-manager",
+      "id": "9da21191-ef32-4ab8-8b36-cd841a98f523",
+      "title": "Kenny Rogers Farewell Concert Celebration: All In for the Gambler",
+      "description": "Celebrate Kenny Rogers’ farewell to Nashville with Dolly Parton and other special guests.",
+      "href": "https://watch.njpbs.org/show/kenny-rogers-farewell-concert-celebration-all-gambler/",
+      "image": "https://image.pbs.org/contentchannels/b637sq6-show-mezzanine16x9-BKxbWI5.jpg"
+    },
+    {
+      "source": "media-manager",
+      "id": "90162bbf-4e70-41f1-bb53-da4db956210c",
+      "title": "Lang Lang - Favourite Melodies",
+      "description": "Pianist Lang Lang takes us on a personal journey through his favorite melodies.",
+      "href": "https://watch.njpbs.org/show/lang-lang-favourite-melodies/",
+      "image": "https://image.pbs.org/contentchannels/GdiITHH-show-mezzanine16x9-0mChnir.jpg"
+    },
+    {
+      "source": "media-manager",
+      "id": "820d9125-8406-4784-a1ba-1de6094da7f7",
+      "title": "Showstoppers! Great Women of TV Variety",
+      "description": "A salute to the history-making women of 1960s and '70s TV Variety.",
+      "href": "https://watch.njpbs.org/show/showstoppers-great-women-of-tv-variety/",
+      "image": "https://image.pbs.org/contentchannels/7V4up0U-show-mezzanine16x9-0sT05l3.jpg"
+    },
+    {
+      "source": "media-manager",
+      "id": "5c297800-8d79-4195-bd12-b3fe4a218b78",
+      "title": "Michael Flatley's Lord of the Dance: The Impossible Tour",
+      "description": "The legendary dance show returns with a new generation.",
+      "href": "https://watch.njpbs.org/show/michael-flatleys-lord-dance-impossible-tour/",
+      "image": "https://image.pbs.org/contentchannels/TJs7ZXp-show-mezzanine16x9-0Fa9Y7o.jpg"
+    },
+    {
+      "source": "media-manager",
+      "id": "50f1a50f-dccc-4912-86fe-36a3726b6ae2",
+      "title": "The Rolling Stones Rock and Roll Circus",
+      "description": "A 1968 concert featuring the Rolling Stones performing at the “Rock and Roll Circus.”",
+      "href": "https://watch.njpbs.org/show/the-rolling-stones-rock-and-roll-circus/",
+      "image": "https://image.pbs.org/contentchannels/MqtWGeg-show-mezzanine16x9-KmF5wtg.jpg"
+    },
+    {
+      "source": "media-manager",
+      "id": "42f60407-a400-4917-bb65-835b406759d0",
+      "title": "John Farnham and Olivia Newton-John - Two Strong Hearts",
+      "description": "Two long-time friends showcase a catalog of monster hits and fan favorites.",
+      "href": "https://watch.njpbs.org/show/john-farnham-and-olivia-newton-john-two-strong-hearts/",
+      "image": "https://image.pbs.org/contentchannels/zqfVt0o-show-mezzanine16x9-wMDVgKQ.jpg"
+    },
+    {
+      "source": "media-manager",
+      "id": "2f2d6af7-bb7e-4357-b1a9-005bfeea0b84",
+      "title": "Luther Vandross - Always and Forever: An Evening of Songs at Albert Hall",
+      "description": "The smooth and sensuous Luther Vandross performs his greatest hits and favorite covers.",
+      "href": "https://watch.njpbs.org/show/luther-vandross-always-and-forever-evening-songs-albert-hall/",
+      "image": "https://image.pbs.org/contentchannels/9HG4jHN-show-mezzanine16x9-Al06YC7.jpg"
+    },
+    {
+      "source": "media-manager",
+      "id": "26615cd2-e006-46da-b818-9e1d10b2c601",
+      "title": "Johnny Mathis: Wonderful, Wonderful",
+      "description": "Johnny Mathis celebrates 50 years in the music business.",
+      "href": "https://watch.njpbs.org/show/johnny-mathis-wonderful-wonderful/",
+      "image": "https://image.pbs.org/contentchannels/HEL7kxK-show-mezzanine16x9-CAd9eHd.jpg"
+    },
+    {
+      "source": "media-manager",
+      "id": "23a7f999-1ea0-41c6-8426-12f68150a3dd",
+      "title": "Love Train: The Sound of Philadelphia - Live in Concert",
+      "description": "A dynamic concert featuring soul and R&B superstars, including The O Jays and many more.",
+      "href": "https://watch.njpbs.org/show/love-train-the-sound-of-philadelphia-live-in-concert/",
+      "image": "https://image.pbs.org/contentchannels/I7Qy12q-show-mezzanine16x9-6GaiIwO.jpg"
+    },
+    {
+      "source": "media-manager",
+      "id": "0b4fa0f4-1c0d-4af5-b641-51825d6e6626",
+      "title": "Sinatra: A Man and His Music + Ella + Jobim",
+      "description": "This music special pairs Frank Sinatra with Ella Fitzgerald and Antonio Carlos Jobim.",
+      "href": "https://watch.njpbs.org/show/sinatra-man-and-his-music-ella-jobim/",
+      "image": "https://image.pbs.org/contentchannels/7KtQVp8-show-mezzanine16x9-FhtyPqn.jpg"
+    },
+    {
+      "source": "media-manager",
+      "id": "5cf0f126-8391-48c4-8bdd-5e4e30a12b20",
+      "title": "America's Home Cooking: Sweets",
+      "description": "Host Chris Fennimore walks you through some of his favorite dessert recipes.",
+      "href": "https://watch.njpbs.org/show/americas-home-cooking-sweets/",
+      "image": "https://image.pbs.org/contentchannels/sAM0j3r-show-mezzanine16x9-WW2U4gQ.jpg"
+    },
+    {
+      "source": "media-manager",
+      "id": "af1d3c3f-f600-4e93-a7c2-4df875fd58d1",
+      "title": "Country's Legendary Duets",
+      "description": "A look back at some of the great country music duet performers of all time.",
+      "href": "https://watch.njpbs.org/show/countrys-legendary-duets/",
+      "image": "https://image.pbs.org/contentchannels/QrHIv9K-show-mezzanine16x9-TPwXCvo.jpg"
+    },
+    {
+      "source": "media-manager",
+      "id": "0dec9f64-1fb2-4f10-9c09-7e7c472f8a6b",
+      "title": "Ella Fitzgerald Live in Montreux 1969",
+      "description": "The “First Lady of Song” delivers a set that combines contemporary tracks with jazz classics.",
+      "href": "https://watch.njpbs.org/show/ella-fitzgerald-live-in-montreux-1969/",
+      "image": "https://image.pbs.org/contentchannels/Ny6fvhG-show-mezzanine16x9-qeqGCYI.jpg"
+    }
+  ]
+}

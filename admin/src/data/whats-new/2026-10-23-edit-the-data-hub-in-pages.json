@@ -1,0 +1,17 @@
+{
+  "date": "2026-10-23",
+  "kind": "new",
+  "title": "Edit the Data Hub in Pages",
+  "body": "Open Data Hub in Pages to reorder sections and edit headings and introductions. In Related reporting, choose tags and categories, pin or hide stories, and preview the matches before publishing. Figure values, sources and dates keep their reviewed content.",
+  "prs": [
+    3907,
+    3912,
+    3921,
+    3922,
+    3948,
+    3957,
+    3941,
+    3953
+  ],
+  "order": -1
+}

@@ -1,0 +1,11 @@
+{
+  "date": "2026-09-10",
+  "kind": "new",
+  "title": "Get email updates on reported problems",
+  "body": "After you use Report a problem, you get a receipt email. You get another email when the problem is resolved.",
+  "prs": [
+    1706,
+    1734
+  ],
+  "order": -2
+}

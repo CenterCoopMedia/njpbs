@@ -1,0 +1,2 @@
+.media-copy-link-panel { display: grid; gap: var(--cms-space-3); max-width: min(28rem, calc(100vw - 2rem)); }
+.media-copy-link-panel input { width: 100%; min-width: 0; min-height: var(--cms-control-height); }

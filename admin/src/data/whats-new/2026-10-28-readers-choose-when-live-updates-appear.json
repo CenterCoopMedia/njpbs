@@ -1,0 +1,8 @@
+{
+  "date": "2026-10-28",
+  "kind": "improved",
+  "title": "Readers choose when live updates appear",
+  "body": "A live blog checks for new entries while its tab is open. Readers see a bright count button, such as 3 new updates, and choose when to load them. It stays below the site header while they read older entries. Coverage stays in place until they load the latest published Post; saved drafts stay private.",
+  "prs": [],
+  "order": -3
+}

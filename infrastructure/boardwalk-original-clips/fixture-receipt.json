@@ -1,0 +1,64 @@
+{
+  "id": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  "attemptId": "00000000-0000-4000-8000-000000000001",
+  "original": {
+    "mimeType": "video/quicktime",
+    "container": "quicktime",
+    "videoCodec": "h264",
+    "sizeBytes": 117211,
+    "sha256": "d1383afc673fd2f1672b6261750b0dfe2aaa00c399e4e450957882b51b4bcbdc",
+    "width": 160,
+    "height": 90,
+    "durationSeconds": 4.0,
+    "sourceFrameDurationSeconds": 0.04,
+    "sourceStartSeconds": 2.0,
+    "sourceEndSeconds": 6.0,
+    "requestedInMs": 2500,
+    "requestedOutMs": 4500,
+    "provenance": {
+      "revision": "original-copy-v1",
+      "sourceObjectVersionId": "fixture-version-1",
+      "sourceSizeBytes": 229725,
+      "timingEvidence": "verified-packet-subsequence",
+      "streams": [
+        {
+          "sourceIndex": 0,
+          "outputIndex": 0,
+          "kind": "video",
+          "codec": "h264",
+          "packetCount": 100,
+          "packetSha256": "cf4de12c6c825f570a8826f6049808e026a04c40390f9ea97cedff26ee4c908a",
+          "sourceTimeBase": "1/12800",
+          "outputTimeBase": "1/12800",
+          "sourceStartSeconds": 2.0,
+          "sourceEndSeconds": 6.0,
+          "outputStartSeconds": 0.0,
+          "outputEndSeconds": 4.0,
+          "timestampOffsetSeconds": -2.0,
+          "initialSkipSamples": 0,
+          "discardPadding": 0
+        },
+        {
+          "sourceIndex": 1,
+          "outputIndex": 1,
+          "kind": "audio",
+          "codec": "aac",
+          "packetCount": 191,
+          "packetSha256": "54e3c550b5c92fed59e5cb42a6199f5e68e5d2b2a3556e1169b76071fa6c3cc4",
+          "sourceTimeBase": "1/48000",
+          "outputTimeBase": "1/48000",
+          "sourceStartSeconds": 1.92,
+          "sourceEndSeconds": 5.994666666666666,
+          "outputStartSeconds": -0.08,
+          "outputEndSeconds": 3.994666666666667,
+          "timestampOffsetSeconds": -2.0,
+          "initialSkipSamples": 3840,
+          "discardPadding": 0
+        }
+      ],
+      "ffmpegArtifactSha256": "485bf6967feb43aea66b42a14c8e531789c07edf8944f7dc2d31493ccf5b0462"
+    },
+    "objectKey": "outputs/clips/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/00000000-0000-4000-8000-000000000001/original.mov",
+    "objectVersionId": "output-version-1"
+  }
+}

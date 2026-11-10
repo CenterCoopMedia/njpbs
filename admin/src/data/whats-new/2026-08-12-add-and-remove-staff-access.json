@@ -1,0 +1,15 @@
+{
+  "date": "2026-08-12",
+  "kind": "new",
+  "title": "Add and remove staff access",
+  "body": "Administrators can now add new staff, give site-wide editing access and remove access safely. Boardwalk shows what each change does first and stops you from locking yourself out.",
+  "prs": [
+    797,
+    792,
+    622,
+    649,
+    535,
+    421
+  ],
+  "order": -2
+}

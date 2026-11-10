@@ -1,0 +1,10 @@
+{
+  "date": "2026-09-07",
+  "kind": "new",
+  "title": "Add searchable data tables",
+  "body": "Posts and pages can include a data table. Readers can search the table on the public site.",
+  "prs": [
+    1613
+  ],
+  "order": 0
+}

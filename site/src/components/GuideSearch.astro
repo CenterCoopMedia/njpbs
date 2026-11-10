@@ -1,0 +1,153 @@
+<section class="guide-search" data-guide-search data-pagefind-ignore aria-label="Search the Boardwalk guide">
+  <form role="search" aria-label="Boardwalk guide search">
+    <label class="sr-only" for="guide-search-query">Search the guide</label>
+    <input id="guide-search-query" type="search" maxlength="200" placeholder="Search or ask a question" aria-controls="guide-search-results" autocomplete="off" />
+  </form>
+  <div class="guide-search-results" id="guide-search-results" tabindex="-1" hidden>
+    <p class="guide-search-status" data-meaning-status role="status" aria-live="polite">Preparing search…</p>
+    <ol aria-label="Guide search results" hidden></ol>
+  </div>
+</section>
+<script>
+  import { plainExcerpt } from "../lib/search-excerpt";
+  import { createPageMeaningSearch } from "../lib/meaning-search";
+  for (const root of document.querySelectorAll<HTMLElement>(
+    "[data-guide-search]",
+  )) {
+    const input = root.querySelector<HTMLInputElement>("input")!;
+    const panel = root.querySelector<HTMLElement>(".guide-search-results")!;
+    const list = root.querySelector<HTMLOListElement>("ol")!;
+    const status = root.querySelector<HTMLElement>("[role=status]")!;
+    let revision = 0;
+    let composing = false;
+    let timer: ReturnType<typeof setTimeout>;
+    const search = createPageMeaningSearch(
+      "guide",
+      (message) => {
+        status.textContent = message;
+      },
+      () => {
+        if (input.value.trim()) void update();
+      },
+    );
+    async function update() {
+      const id = ++revision,
+        query = input.value.trim();
+      panel.hidden = !query;
+      list.hidden = !query;
+      if (!query) {
+        list.replaceChildren();
+        return;
+      }
+      const words = query.toLocaleLowerCase().split(/\s+/).filter(Boolean);
+      const keyword = search.passages
+        .map((p) => ({
+          passage: p,
+          score: words.reduce(
+            (n, w) =>
+              n +
+              Number((p.title + " " + p.text).toLocaleLowerCase().includes(w)),
+            0,
+          ),
+        }))
+        .filter((p) => p.score === words.length)
+        .sort((a, b) => b.score - a.score)
+        .slice(0, 20);
+      function render(meaning: typeof search.passages) {
+        const focused =
+          document.activeElement instanceof HTMLAnchorElement &&
+          list.contains(document.activeElement)
+            ? document.activeElement.href
+            : null;
+        const ranks = new Map<
+          string,
+          { passage: (typeof search.passages)[number]; score: number }
+        >();
+        for (const [items, weight] of [
+          [keyword.map((p) => p.passage), 1],
+          [meaning, 1],
+        ] as const)
+          items.forEach((passage, index) => {
+            const old = ranks.get(passage.url);
+            const score = weight / (61 + index);
+            if (old) old.score += score;
+            else ranks.set(passage.url, { passage, score });
+          });
+        list.replaceChildren(
+          ...[...ranks.values()]
+            .sort((a, b) => b.score - a.score)
+            .slice(0, 8)
+            .map(({ passage }) => {
+              const item = document.createElement("li"),
+                link = document.createElement("a"),
+                excerpt = document.createElement("p");
+              link.href = passage.url;
+              link.textContent = passage.title;
+              excerpt.textContent = plainExcerpt(passage.text, 200);
+              item.append(link, excerpt);
+              return item;
+            }),
+        );
+        if (focused)
+          Array.from(list.querySelectorAll("a"))
+            .find((link) => link.href === focused)
+            ?.focus();
+        status.textContent = list.children.length
+          ? `${list.children.length} matching sections${search.ready ? "" : search.unavailable ? ". Meaning search is unavailable" : ". Meaning search is preparing"}.`
+          : search.ready || search.unavailable
+            ? "No matching sections. Try a different question."
+            : "Preparing search. You can also browse the guide below.";
+      }
+      render([]);
+      if (!search.ready) return;
+      const meaning = await search.search(query).catch(() => []);
+      if (id !== revision) return;
+      render(meaning);
+    }
+    input.addEventListener("input", () => {
+      revision++;
+      clearTimeout(timer);
+      if (!composing) timer = setTimeout(() => void update(), 200);
+    });
+    input.addEventListener("compositionstart", () => {
+      composing = true;
+      clearTimeout(timer);
+      revision++;
+    });
+    input.addEventListener("compositionend", () => {
+      composing = false;
+      void update();
+    });
+    root.querySelector("form")!.addEventListener("submit", (event) => {
+      event.preventDefault();
+      clearTimeout(timer);
+      void update();
+    });
+    root.addEventListener("keydown", (event) => {
+      if (event.key !== "Escape" || event.isComposing) return;
+      clearTimeout(timer);
+      input.value = "";
+      void update();
+      input.focus();
+    });
+    window.addEventListener("pagehide", (event) => {
+      if (!event.persisted) search.dispose();
+    });
+  }
+</script>
+<style>
+  .guide-search { --color-focus-ring:var(--color-focus-ring-on-light); --focus-outline:3px solid var(--color-focus-ring); position:relative; width:17rem; max-width:100%; }
+  form { margin:0; }
+  input { width:100%; min-height:44px; padding:.55rem .75rem; border:1px solid var(--color-border-strong); border-radius:var(--radius-control); font:inherit; color:var(--admin-docs-paper-ink); background:var(--admin-docs-paper); }
+  input:focus-visible { outline:var(--focus-outline); outline-offset:var(--focus-offset-inset); }
+  .guide-search-results { position:absolute; z-index:30; inset-block-start:calc(100% + .5rem); inset-inline-end:0; width:min(32rem, calc(100vw - 2rem)); max-height:65vh; overflow:auto; padding:1rem; border:1px solid var(--admin-docs-paper-line); border-radius:var(--radius-control); background:var(--admin-docs-paper); color:var(--admin-docs-paper-ink); }
+  .guide-search:not(:focus-within) .guide-search-results { display:none; }
+  p { margin:0; font-size:.9rem; }
+  ol { list-style:none; padding:0; margin:.5rem 0 0; }
+  ol :global(li) { border-top:1px solid var(--admin-docs-paper-line); padding:.6rem 0; overflow-wrap:anywhere; }
+  .guide-search ol :global(a) { font-weight:700; color:var(--admin-docs-paper-link); display:inline-block; padding-block:.35rem; }
+  .guide-search ol :global(a:hover) { color:var(--admin-docs-paper-link); text-decoration:underline; }
+  ol :global(p) { margin:.35rem 0 0; }
+  [hidden] {display:none;}
+  @media (max-width:48rem) { .guide-search { width:100%; } }
+</style>

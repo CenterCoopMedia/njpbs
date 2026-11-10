@@ -1,0 +1,22 @@
+{
+  "name": "njpbs-publisher-alerts",
+  "main": "alerts.ts",
+  "compatibility_date": "2026-09-10",
+  "compatibility_flags": ["nodejs_compat"],
+  "workers_dev": false,
+  "preview_urls": false,
+  "routes": [
+    { "pattern": "publisher-alerts.njpbs.org", "custom_domain": true },
+  ],
+  // Empty preserves legacy identities until a reviewed future cutover is staged.
+  "vars": { "CLOUDFLARE_ACCOUNT_ID": "", "ALERT_INTAKE_URL": "", "ALERT_TRANSITION_CUTOVER": "2026-10-14T18:00:00Z" },
+  "secrets": {
+    "required": [
+      "ALERT_WEBHOOK_SECRET",
+      "INTAKE_SECRET",
+      "CF_ACCESS_CLIENT_ID",
+      "CF_ACCESS_CLIENT_SECRET",
+    ],
+  },
+  "observability": { "enabled": true, "head_sampling_rate": 1 },
+}

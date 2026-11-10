@@ -1,0 +1,10 @@
+{
+  "date": "2026-10-20",
+  "kind": "improved",
+  "title": "Queue more free video transcripts",
+  "body": "In Videos, you can queue many free transcripts while another runs. They run in order without a daily limit. Paid backup keeps its daily limits. Open Paid backup details to see possible charges.",
+  "prs": [
+    3851
+  ],
+  "order": -1
+}

@@ -1,0 +1,8 @@
+{
+  "date": "2026-11-04",
+  "kind": "improved",
+  "title": "Sign in every 60 days",
+  "body": "Boardwalk now asks you to sign in again 60 days after your last sign-in. Autosaved drafts are still there when you sign in with the same account.",
+  "prs": [4801],
+  "order": 1793816000001
+}

@@ -1,0 +1,5 @@
+CMS publish public receipt runtime v1.
+
+When this marker is present in the reviewed production source, cms-publish.yml
+must verify the exact generated _publication.json through https://njpbs.org
+before it records the publish as publicly visible.

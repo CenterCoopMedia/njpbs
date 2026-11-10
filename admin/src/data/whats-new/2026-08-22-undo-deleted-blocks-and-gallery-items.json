@@ -1,0 +1,12 @@
+{
+  "date": "2026-08-22",
+  "kind": "improved",
+  "title": "Undo deleted blocks and gallery items",
+  "body": "If you delete a block or a gallery item by mistake, you can undo it. Undo also restores the order of reordered cards.",
+  "prs": [
+    1106,
+    1126,
+    1153
+  ],
+  "order": -2
+}

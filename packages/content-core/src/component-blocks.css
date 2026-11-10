@@ -1,0 +1,225 @@
+/* Shared public component styles. Keep block rules inside their page owner. */
+.cms-page__blocks[data-cms-page-blocks] {
+    display: grid;
+    gap: clamp(1.25rem, 3vw, 2.4rem);
+    padding-block: clamp(2.5rem, 6vw, 5rem);
+  }
+
+  .cms-page__blocks > .cms-block {
+    width: 100%;
+    margin-inline: 0;
+    color: var(--text);
+    line-height: 1.7;
+  }
+
+  /* A CMS block fills its page frame. Only an explicit row reserves columns. */
+
+  .cms-page__blocks > .cms-block--coverage_list,
+  .cms-page__blocks > .link-card-directory {
+    width: 100%;
+    max-width: 100%;
+    margin-inline: 0;
+  }
+
+  .cms-page__blocks > .cms-block p,
+  .cms-page__blocks > .cms-block ul,
+  .cms-page__blocks > .cms-block ol,
+  .cms-page__blocks > .cms-block blockquote {
+    margin-block: 0 1.1rem;
+  }
+
+  .cms-page__blocks > .cms-block ul,
+  .cms-page__blocks > .cms-block ol {
+    padding-left: 1.3rem;
+  }
+
+  .cms-page__blocks > .cms-block a:not(.btn) {
+    color: var(--color-link);
+    text-underline-offset: 0.22em;
+  }
+
+  .cms-page__blocks > .cms-block h2,
+  .cms-page__blocks > .cms-block h3,
+  .cms-page__blocks > .cms-block h4,
+  .cms-page__blocks > .cms-block h5,
+  .cms-page__blocks > .cms-block h6 {
+    margin: 0;
+    line-height: 1.16;
+    text-wrap: balance;
+  }
+
+  .cms-page__blocks > .cms-block hr {
+    border: 0;
+    border-top: 1px solid var(--line);
+  }
+
+  .cms-page__blocks > .cms-block figure {
+    margin: 0;
+  }
+
+  .cms-page__blocks > .cms-block img {
+    display: block;
+    width: 100%;
+    height: auto;
+    border-radius: 1rem;
+    background: var(--surface-raised);
+  }
+
+  .cms-page__blocks > .cms-block figcaption {
+    margin-top: 0.65rem;
+    color: var(--text-dim);
+    font-size: 0.9rem;
+  }
+
+  .image-link {
+    display: block;
+    border-radius: 1rem;
+    color: inherit;
+    text-decoration: none;
+  }
+
+  .image-link:hover figcaption {
+    text-decoration: underline;
+  }
+
+  .cms-page__blocks > .cms-block .cta-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.75rem;
+  }
+
+  .cms-page__blocks > .cms-block .card-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(min(100%, 15rem), 1fr));
+    gap: 1rem;
+  }
+
+  .cms-page__blocks > .cms-block .card-grid__card,
+  .cms-page__blocks > .cms-block .faq-item,
+  .cms-page__blocks > .cms-block .embed {
+    padding: 1.25rem;
+    border: 1px solid var(--line);
+    border-radius: 1rem;
+    background: var(--surface-raised);
+  }
+
+  .cms-page__blocks > .cms-block .embed--video,
+  .cms-block .embed--video {
+    padding: 0;
+    border: 0;
+    background: none;
+  }
+
+  .cms-page__blocks > .cms-block .embed__heading,
+  .cms-block .embed__heading {
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+    margin: 0 0 0.75rem;
+  }
+
+  .cms-block .embed__live-light {
+    flex: none;
+    width: 0.75rem;
+    height: 0.75rem;
+    border-radius: 50%;
+    background: var(--color-schedule-live);
+    /* Blinks for under five seconds, then stays lit (WCAG 2.2.2). */
+    animation: embed-live-blink 1.2s ease-in-out 4;
+  }
+
+  .html-frame__frame {
+    display: block;
+    width: 100%;
+    height: 9.5rem;
+    border: 0;
+  }
+  /* Opt-in fixed card height for the documented NJ Decides Datawrapper snippet. */
+  .html-frame__frame[title="NJ Decides map"] { height: 940px; }
+
+  .cms-block .embed__frame {
+    width: min(100%, var(--embed-max-width, 100%));
+    aspect-ratio: var(--embed-aspect-ratio, 16 / 9);
+    margin-inline: auto;
+    overflow: hidden;
+    border: 1px solid var(--line);
+    border-radius: 1rem;
+  }
+
+  .cms-block .embed__frame iframe {
+    display: block;
+    width: 100%;
+    height: 100%;
+    border: 0;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .cms-block .embed__live-light {
+      animation: none;
+    }
+  }
+
+  /* The optional editorial label is a kicker above the card title, not a heading. */
+  .cms-page__blocks > .cms-block .card-grid__label {
+    display: block;
+    margin-block: 0 0.35rem;
+    color: var(--color-link);
+    font-size: 0.78rem;
+    font-weight: 800;
+    letter-spacing: 0.12em;
+    line-height: 1.4;
+    text-transform: uppercase;
+  }
+
+  .cms-page__blocks > .cms-block .card-grid__card > .card-grid__title,
+  .cms-page__blocks > .cms-block .faq-item > .faq-item__question {
+    margin-block: 0 0.65rem;
+    /* Preserve the former h3 scale while page context sets the semantic rank. */
+    font-size: 1.17em;
+  }
+
+  .cms-page__blocks > .cms-block .content-shelf {
+    display: grid;
+    gap: 1rem;
+  }
+
+  .cms-page__blocks > .cms-block .content-shelf__head {
+    display: flex;
+    align-items: end;
+    justify-content: space-between;
+    gap: 1rem;
+    border-bottom: 1px solid var(--line);
+    padding-bottom: 0.75rem;
+  }
+
+  .cms-page__blocks > .cms-block .content-shelf__items {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(min(100%, 15rem), 1fr));
+    gap: 1rem;
+    min-height: 4rem;
+    border: 1px dashed var(--line);
+    border-radius: 1rem;
+    background: var(--surface-raised);
+  }
+.sponsor-strip ul { display: flex; flex-wrap: wrap; gap: 1.5rem; align-items: center; list-style: none; padding: 0; margin: 1rem 0; }
+.sponsor-strip--grid ul { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 10rem), 1fr)); }
+.sponsor-strip li { min-width: 0; }
+.sponsor-strip a { display: inline-flex; align-items: center; gap: .5rem; min-height: 2.75rem; }
+.sponsor-strip img { display: block; max-width: 12rem; max-height: 5rem; width: auto; height: auto; object-fit: contain; }
+/* Static newsletter signup cards. Provider pages open through ordinary links. */
+.newsletter-signup { margin-block: 2rem; }
+.newsletter-signup__grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 17rem), 1fr)); gap: 1.5rem; margin-top: 1.25rem; }
+.newsletter-signup__card { border: 1px solid var(--border, currentColor); border-radius: .75rem; overflow: hidden; }
+.newsletter-signup__image { display: block; width: 100%; height: auto; }
+.newsletter-signup__copy { padding: 1.25rem; }
+.newsletter-signup__frequency { font-weight: 700; }
+.newsletter-signup__card .btn { display: inline-flex; min-height: 44px; align-items: center; margin-top: 1rem; }
+
+@keyframes embed-live-blink {
+  50% {
+    opacity: 0.25;
+  }
+}
+
+/* Post-only current library credit, separate from the frozen caption. */
+.cms-image-credit { display: block; }

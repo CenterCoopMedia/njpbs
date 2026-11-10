@@ -1,0 +1,15 @@
+import type { Firestore } from "firebase-admin/firestore";
+import type { PublicReleasePair, PublicReleaseSelector } from "../../packages/content-core/src/public-release";
+import type { SelectorReceipt } from "../../packages/content-core/src/public-release-routing";
+import type { PairTaskIdentity } from "./public-release-pair-work";
+export type PairViewLocator = Readonly<{ pairDigest: string; identity: PairTaskIdentity; claimDigest: string; manifestDigest: string; manifestBytes: number }>;
+export type PairRouteReceipt = Readonly<{ kind: "serve" | "gone" | "redirect"; family: "page" | "post" | "record"; id: string;
+  operationId: string; sourceVersion: number; snapshotDigest: string; canonicalPath: string;
+  ownerPath: string; owner: Readonly<Record<string, unknown>>; sourcePath?: string; sourceDigest?: string }> | Readonly<{ kind: "unowned" }>;
+export type PairServingDecision = Readonly<{ kind: "decision"; epoch: number; pairId: string; contentHead: PublicReleaseSelector["contentHead"];
+  locator: PairViewLocator; composition?: Readonly<{ artifactPath: string; proofLocator?: PairViewLocator | null; expectedBodyDigest: string | null; absent: boolean; witnessDigest: string }> | null;
+  targetProof: Readonly<{ digest: string; key: string; bytes: number }> | null;
+  route: PairRouteReceipt; path: string; authorityDigest: string }>;
+export function readPublicReleaseSelector(input: { firestore: Firestore; environment: "production" | "development"; now?: () => number }): Promise<SelectorReceipt>;
+export function readPublicReleaseDecision(input: { firestore: Firestore; environment: "production" | "development"; pair: PublicReleasePair;
+  selection: SelectorReceipt; path: string; now?: () => number; composedReadersEnabled?: boolean }): Promise<PairServingDecision | { kind: "reselect" }>;

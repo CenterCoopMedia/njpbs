@@ -1,0 +1,54 @@
+---
+import type { BoardwalkEditTarget } from "../../../packages/content-core/src/boardwalk-edit";
+import { BOARDWALK_EDIT_SCRIPT } from "../../../packages/content-core/src/boardwalk-edit-script";
+interface Props { target: BoardwalkEditTarget }
+const { target } = Astro.props;
+---
+<div class="boardwalk-edit-row">
+  <a class="boardwalk-edit btn btn--primary" href={Astro.url.pathname} hidden data-boardwalk-edit data-content-type={target.type} data-content-id={target.id}>
+    Edit in Boardwalk
+  </a>
+</div>
+<script is:inline set:html={BOARDWALK_EDIT_SCRIPT} />
+<style>
+  /* Reserve a separate row so the persistent action cannot cover page controls. */
+  .boardwalk-edit-row {
+    display: none;
+    position: sticky;
+    z-index: 21;
+    top: 0;
+    height: 44px;
+    padding-inline: 0;
+    justify-content: center;
+    background: var(--bg-1);
+  }
+  :global(html[data-boardwalk-edit-visible]) .boardwalk-edit-row { display: flex; }
+  .boardwalk-edit {
+    box-sizing: border-box;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    height: 44px;
+    min-height: 44px;
+    width: 100%;
+    border-radius: 0;
+    padding: 0 var(--space-4);
+    font-size: .875rem;
+    border: 1px solid var(--color-border-strong);
+  }
+  .boardwalk-edit:focus-visible {
+    outline: var(--focus-outline);
+    outline-offset: var(--focus-offset);
+  }
+  .boardwalk-edit[hidden] { display: none; }
+  :global(html[data-boardwalk-edit-visible]) { scroll-padding-top: calc(5rem + 44px); }
+  :global(html[data-boardwalk-edit-visible] .site-head) { top: 44px; }
+  /* Consent and the phone navigation retain their existing overlay priority. */
+  :global(body:has(.analytics-consent:not([hidden])) .boardwalk-edit),
+  :global(body:has(.nav-toggle[aria-expanded="true"]) .boardwalk-edit) { visibility: hidden; }
+  /* Keep the desktop focus ring inside the full-width link; preserve phone focus. */
+  @media (width > 48rem) {
+    .boardwalk-edit:focus-visible { outline-offset: var(--focus-offset-inset); }
+  }
+  @media print { .boardwalk-edit-row, .boardwalk-edit { display: none !important; } }
+</style>

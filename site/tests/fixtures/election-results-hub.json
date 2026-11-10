@@ -1,0 +1,452 @@
+{
+  "data": {
+    "races": [
+      {
+        "asOf": "2026-11-03T01:14:17.868Z",
+        "candidates": [
+          {
+            "id": "us-senate-cory-booker",
+            "name": "Cory Booker",
+            "party": "Democratic",
+            "share": null,
+            "votes": null
+          },
+          {
+            "id": "us-senate-justin-murphy",
+            "name": "Justin Murphy",
+            "party": "Republican",
+            "share": null,
+            "votes": null
+          },
+          {
+            "id": "us-senate-veronica-fernandez",
+            "name": "Veronica Fernandez",
+            "party": "End the Corruption!",
+            "share": null,
+            "votes": null
+          },
+          {
+            "id": "us-senate-joanne-kuniansky",
+            "name": "Joanne Kuniansky",
+            "party": "Socialist Workers Party",
+            "share": null,
+            "votes": null
+          }
+        ],
+        "district": "New Jersey",
+        "id": "us-senate",
+        "office": "U.S. Senate",
+        "reportingShare": null,
+        "sourceKind": "ap",
+        "sourceLabel": "The Associated Press",
+        "sourceUrl": "https://apnews.com/hub/election-2026",
+        "status": "awaiting"
+      },
+      {
+        "asOf": "2026-11-03T01:14:17.868Z",
+        "candidates": [
+          {
+            "id": "us-house-01-donald-norcross",
+            "name": "Donald Norcross",
+            "party": "Democratic",
+            "share": null,
+            "votes": null
+          },
+          {
+            "id": "us-house-01-damon-galdo",
+            "name": "Damon Galdo",
+            "party": "Republican",
+            "share": null,
+            "votes": null
+          }
+        ],
+        "district": "District 1",
+        "id": "us-house-01",
+        "office": "U.S. House",
+        "reportingShare": null,
+        "sourceKind": "ap",
+        "sourceLabel": "The Associated Press",
+        "sourceUrl": "https://apnews.com/hub/election-2026",
+        "status": "awaiting"
+      },
+      {
+        "asOf": "2026-11-03T01:14:17.868Z",
+        "candidates": [
+          {
+            "id": "us-house-02-jeff-van-drew",
+            "name": "Jeff Van Drew",
+            "party": "Republican",
+            "share": null,
+            "votes": null
+          },
+          {
+            "id": "us-house-02-zack-mullock",
+            "name": "Zack Mullock",
+            "party": "Democratic",
+            "share": null,
+            "votes": null
+          },
+          {
+            "id": "us-house-02-ramon-mora-jr",
+            "name": "Ramon Mora Jr.",
+            "party": "Independent",
+            "share": null,
+            "votes": null
+          }
+        ],
+        "district": "District 2",
+        "id": "us-house-02",
+        "office": "U.S. House",
+        "reportingShare": null,
+        "sourceKind": "ap",
+        "sourceLabel": "The Associated Press",
+        "sourceUrl": "https://apnews.com/hub/election-2026",
+        "status": "awaiting"
+      },
+      {
+        "asOf": "2026-11-03T01:14:17.868Z",
+        "candidates": [
+          {
+            "id": "us-house-03-herb-conaway",
+            "name": "Herb Conaway",
+            "party": "Democratic",
+            "share": null,
+            "votes": null
+          },
+          {
+            "id": "us-house-03-michael-p-mcguire",
+            "name": "Michael P. McGuire",
+            "party": "Republican",
+            "share": null,
+            "votes": null
+          },
+          {
+            "id": "us-house-03-ryan-michael-kelly",
+            "name": "Ryan Michael Kelly",
+            "party": "Affordability, Accountability, People",
+            "share": null,
+            "votes": null
+          },
+          {
+            "id": "us-house-03-steven-welzer",
+            "name": "Steven Welzer",
+            "party": "Green Party",
+            "share": null,
+            "votes": null
+          }
+        ],
+        "district": "District 3",
+        "id": "us-house-03",
+        "office": "U.S. House",
+        "reportingShare": null,
+        "sourceKind": "ap",
+        "sourceLabel": "The Associated Press",
+        "sourceUrl": "https://apnews.com/hub/election-2026",
+        "status": "awaiting"
+      },
+      {
+        "asOf": "2026-11-03T01:14:17.868Z",
+        "candidates": [
+          {
+            "id": "us-house-04-christopher-h-smith",
+            "name": "Christopher H. Smith",
+            "party": "Republican",
+            "share": null,
+            "votes": null
+          },
+          {
+            "id": "us-house-04-rachel-peace",
+            "name": "Rachel Peace",
+            "party": "Democratic",
+            "share": null,
+            "votes": null
+          }
+        ],
+        "district": "District 4",
+        "id": "us-house-04",
+        "office": "U.S. House",
+        "reportingShare": null,
+        "sourceKind": "ap",
+        "sourceLabel": "The Associated Press",
+        "sourceUrl": "https://apnews.com/hub/election-2026",
+        "status": "awaiting"
+      },
+      {
+        "asOf": "2026-11-03T01:14:17.868Z",
+        "candidates": [
+          {
+            "id": "us-house-05-josh-gottheimer",
+            "name": "Josh Gottheimer",
+            "party": "Democratic",
+            "share": null,
+            "votes": null
+          },
+          {
+            "id": "us-house-05-sean-kirrane",
+            "name": "Sean Kirrane",
+            "party": "Republican",
+            "share": null,
+            "votes": null
+          },
+          {
+            "id": "us-house-05-adam-rueda",
+            "name": "Adam Rueda",
+            "party": "Humane Sustainable Future",
+            "share": null,
+            "votes": null
+          }
+        ],
+        "district": "District 5",
+        "id": "us-house-05",
+        "office": "U.S. House",
+        "reportingShare": null,
+        "sourceKind": "ap",
+        "sourceLabel": "The Associated Press",
+        "sourceUrl": "https://apnews.com/hub/election-2026",
+        "status": "awaiting"
+      },
+      {
+        "asOf": "2026-11-03T01:14:17.868Z",
+        "candidates": [
+          {
+            "id": "us-house-06-frank-pallone-jr",
+            "name": "Frank Pallone Jr.",
+            "party": "Democratic",
+            "share": null,
+            "votes": null
+          },
+          {
+            "id": "us-house-06-hillary-herzig",
+            "name": "Hillary Herzig",
+            "party": "Republican",
+            "share": null,
+            "votes": null
+          }
+        ],
+        "district": "District 6",
+        "id": "us-house-06",
+        "office": "U.S. House",
+        "reportingShare": null,
+        "sourceKind": "ap",
+        "sourceLabel": "The Associated Press",
+        "sourceUrl": "https://apnews.com/hub/election-2026",
+        "status": "awaiting"
+      },
+      {
+        "asOf": "2026-11-03T01:14:17.868Z",
+        "candidates": [
+          {
+            "id": "us-house-07-thomas-h-kean-jr",
+            "name": "Thomas H. Kean Jr.",
+            "party": "Republican",
+            "share": null,
+            "votes": null
+          },
+          {
+            "id": "us-house-07-rebecca-bennett",
+            "name": "Rebecca Bennett",
+            "party": "Democratic",
+            "share": null,
+            "votes": null
+          },
+          {
+            "id": "us-house-07-seamus-patrick-otoole",
+            "name": "Seamus Patrick O\u2019Toole",
+            "party": "Stop Israel\u2019s Genocide",
+            "share": null,
+            "votes": null
+          }
+        ],
+        "district": "District 7",
+        "id": "us-house-07",
+        "office": "U.S. House",
+        "reportingShare": null,
+        "sourceKind": "ap",
+        "sourceLabel": "The Associated Press",
+        "sourceUrl": "https://apnews.com/hub/election-2026",
+        "status": "awaiting"
+      },
+      {
+        "asOf": "2026-11-03T01:14:17.868Z",
+        "candidates": [
+          {
+            "id": "us-house-08-rob-menendez",
+            "name": "Rob Menendez",
+            "party": "Democratic",
+            "share": null,
+            "votes": null
+          },
+          {
+            "id": "us-house-08-aristotle-eliopoulos",
+            "name": "Aristotle Eliopoulos",
+            "party": "Independent",
+            "share": null,
+            "votes": null
+          },
+          {
+            "id": "us-house-08-craig-honts",
+            "name": "Craig Honts",
+            "party": "Socialist Workers Party",
+            "share": null,
+            "votes": null
+          },
+          {
+            "id": "us-house-08-dashone-hughey",
+            "name": "Da\u2019Shone Hughey",
+            "party": "We the People",
+            "share": null,
+            "votes": null
+          }
+        ],
+        "district": "District 8",
+        "id": "us-house-08",
+        "office": "U.S. House",
+        "reportingShare": null,
+        "sourceKind": "ap",
+        "sourceLabel": "The Associated Press",
+        "sourceUrl": "https://apnews.com/hub/election-2026",
+        "status": "awaiting"
+      },
+      {
+        "asOf": "2026-11-03T01:14:17.868Z",
+        "candidates": [
+          {
+            "id": "us-house-09-nelida-pou",
+            "name": "Nelida Pou",
+            "party": "Democratic",
+            "share": null,
+            "votes": null
+          },
+          {
+            "id": "us-house-09-rosie-pino",
+            "name": "Rosie Pino",
+            "party": "Republican",
+            "share": null,
+            "votes": null
+          },
+          {
+            "id": "us-house-09-terrisa-bukovinac",
+            "name": "Terrisa Bukovinac",
+            "party": "Save Our Babies",
+            "share": null,
+            "votes": null
+          }
+        ],
+        "district": "District 9",
+        "id": "us-house-09",
+        "office": "U.S. House",
+        "reportingShare": null,
+        "sourceKind": "ap",
+        "sourceLabel": "The Associated Press",
+        "sourceUrl": "https://apnews.com/hub/election-2026",
+        "status": "awaiting"
+      },
+      {
+        "asOf": "2026-11-03T01:14:17.868Z",
+        "candidates": [
+          {
+            "id": "us-house-10-lamonica-r-mciver",
+            "name": "LaMonica R. McIver",
+            "party": "Democratic",
+            "share": null,
+            "votes": null
+          },
+          {
+            "id": "us-house-10-carmen-bucco",
+            "name": "Carmen Bucco",
+            "party": "Republican",
+            "share": null,
+            "votes": null
+          }
+        ],
+        "district": "District 10",
+        "id": "us-house-10",
+        "office": "U.S. House",
+        "reportingShare": null,
+        "sourceKind": "ap",
+        "sourceLabel": "The Associated Press",
+        "sourceUrl": "https://apnews.com/hub/election-2026",
+        "status": "awaiting"
+      },
+      {
+        "asOf": "2026-11-03T01:14:17.868Z",
+        "candidates": [
+          {
+            "id": "us-house-11-analilia-mejia",
+            "name": "Analilia Mejia",
+            "party": "Democratic",
+            "share": null,
+            "votes": null
+          },
+          {
+            "id": "us-house-11-joe-hathaway",
+            "name": "Joe Hathaway",
+            "party": "Republican",
+            "share": null,
+            "votes": null
+          },
+          {
+            "id": "us-house-11-alan-b-bond",
+            "name": "Alan B. Bond",
+            "party": "Hope for Tomorrow",
+            "share": null,
+            "votes": null
+          }
+        ],
+        "district": "District 11",
+        "id": "us-house-11",
+        "office": "U.S. House",
+        "reportingShare": null,
+        "sourceKind": "ap",
+        "sourceLabel": "The Associated Press",
+        "sourceUrl": "https://apnews.com/hub/election-2026",
+        "status": "awaiting"
+      },
+      {
+        "asOf": "2026-11-03T01:14:17.868Z",
+        "candidates": [
+          {
+            "id": "us-house-12-adam-hamawy",
+            "name": "Adam Hamawy",
+            "party": "Democratic",
+            "share": null,
+            "votes": null
+          },
+          {
+            "id": "us-house-12-gregg-mele",
+            "name": "Gregg Mele",
+            "party": "Republican",
+            "share": null,
+            "votes": null
+          },
+          {
+            "id": "us-house-12-andres-jinete",
+            "name": "Andres Jinete",
+            "party": "Green Party",
+            "share": null,
+            "votes": null
+          },
+          {
+            "id": "us-house-12-winston-jordan",
+            "name": "Winston Jordan",
+            "party": "Get Money Out",
+            "share": null,
+            "votes": null
+          }
+        ],
+        "district": "District 12",
+        "id": "us-house-12",
+        "office": "U.S. House",
+        "reportingShare": null,
+        "sourceKind": "ap",
+        "sourceLabel": "The Associated Press",
+        "sourceUrl": "https://apnews.com/hub/election-2026",
+        "status": "awaiting"
+      }
+    ]
+  },
+  "id": "97679801-b710-4fc7-8e15-a422faaaff1a",
+  "order": 4,
+  "type": "election_results",
+  "visible": true
+}

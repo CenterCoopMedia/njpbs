@@ -1,0 +1,15 @@
+{
+  "date": "2026-09-05",
+  "kind": "improved",
+  "title": "Edit more easily on a phone",
+  "body": "On a phone, editor actions are grouped in a compact menu and you get more room to write. Images and image picker buttons stay inside narrow columns.",
+  "prs": [
+    1587,
+    1543,
+    1544,
+    1560,
+    1581,
+    1145
+  ],
+  "order": -1
+}

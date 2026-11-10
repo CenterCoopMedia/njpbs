@@ -1,0 +1,12 @@
+rules_version = '2';
+
+// Deny-all storage ruleset. Every client read and write is denied. Server code
+// reaches Cloud Storage through the Firebase Admin SDK, which these rules do not
+// govern.
+service firebase.storage {
+  match /b/{bucket}/o {
+    match /{allPaths=**} {
+      allow read, write: if false;
+    }
+  }
+}

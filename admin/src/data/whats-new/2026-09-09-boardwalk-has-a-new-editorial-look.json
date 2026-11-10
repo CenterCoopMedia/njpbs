@@ -1,0 +1,13 @@
+{
+  "date": "2026-09-09",
+  "kind": "improved",
+  "title": "Boardwalk has a new editorial look",
+  "body": "Screens across Boardwalk use a new editorial design with simpler editor controls. One loading indicator now tells you what Boardwalk is doing while you wait.",
+  "prs": [
+    1670,
+    1680,
+    1686,
+    1693
+  ],
+  "order": -1
+}

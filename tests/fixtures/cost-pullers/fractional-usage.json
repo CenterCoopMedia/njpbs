@@ -1,0 +1,107 @@
+{
+  "aws": {
+    "ResultsByTime": [
+      {
+        "Groups": [
+          {
+            "Keys": [
+              "Amazon Simple Storage Service"
+            ],
+            "Metrics": {
+              "UnblendedCost": {
+                "Amount": "0.004",
+                "Unit": "USD"
+              }
+            }
+          },
+          {
+            "Keys": [
+              "Amazon Simple Storage Service"
+            ],
+            "Metrics": {
+              "UnblendedCost": {
+                "Amount": "0.004",
+                "Unit": "USD"
+              }
+            }
+          },
+          {
+            "Keys": [
+              "Amazon Lightsail"
+            ],
+            "Metrics": {
+              "UnblendedCost": {
+                "Amount": "-0.004",
+                "Unit": "USD"
+              }
+            }
+          },
+          {
+            "Keys": [
+              "Amazon Lightsail"
+            ],
+            "Metrics": {
+              "UnblendedCost": {
+                "Amount": "-0.004",
+                "Unit": "USD"
+              }
+            }
+          },
+          {
+            "Keys": [
+              "Other A"
+            ],
+            "Metrics": {
+              "UnblendedCost": {
+                "Amount": "0.014999999999999999",
+                "Unit": "USD"
+              }
+            }
+          },
+          {
+            "Keys": [
+              "Other B"
+            ],
+            "Metrics": {
+              "UnblendedCost": {
+                "Amount": "-0.01",
+                "Unit": "USD"
+              }
+            }
+          },
+          {
+            "Keys": [
+              "Other B"
+            ],
+            "Metrics": {
+              "UnblendedCost": {
+                "Amount": "0.000000000000000001",
+                "Unit": "USD"
+              }
+            }
+          }
+        ]
+      }
+    ]
+  },
+  "github": {
+    "usageItems": [
+      {
+        "product": "actions",
+        "netAmount": 0.004
+      },
+      {
+        "product": "actions",
+        "netAmount": 0.004
+      },
+      {
+        "product": "other",
+        "netAmount": -0.004
+      },
+      {
+        "product": "other",
+        "netAmount": -0.004
+      }
+    ]
+  }
+}

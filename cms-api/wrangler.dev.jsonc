@@ -1,0 +1,30 @@
+{
+  "$schema": "../node_modules/wrangler/config-schema.json",
+  "name": "template-dev-cms-api",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-08-13",
+  "compatibility_flags": ["nodejs_compat", "enable_request_signal"],
+  "version_metadata": { "binding": "CMS_API_WORKER_VERSION" },
+  "workers_dev": false,
+  "preview_urls": false,
+  "observability": { "enabled": true, "head_sampling_rate": 1 },
+  "vars": {
+    "LIVE_PRODUCTION_STREAM_ENABLED": "true",
+    "CMS_BYLINE_EDGE_ENABLED": "false",
+    "CMS_DEPLOYMENT_ENVIRONMENT": "development",
+    "CMS_DEV_REPORT_INTAKE_MODE": "stored-only",
+    "CMS_READER_BRIDGE_ENABLED": "false",
+    "ALLOW_LOCAL_ORIGINS": "false",
+    "FIREBASE_PROJECT_ID": "njpbs-site-dev",
+    "FUNCTIONS_ORIGIN": "https://us-central1-njpbs-site-dev.cloudfunctions.net",
+    "ADMIN_ORIGIN": "https://dev-admin.example.org"
+  },
+  "durable_objects": {
+    "bindings": [{ "name": "RATE_LIMITERS", "class_name": "CmsRateLimiter" },
+      { "name": "LIVE_PRODUCTION_RELAYS", "class_name": "LiveProductionRelay" }]
+  },
+  "migrations": [{ "tag": "v1", "new_sqlite_classes": ["CmsRateLimiter"] },
+    { "tag": "v2-live-production-relay", "new_sqlite_classes": ["LiveProductionRelay"] }],
+  "services": [{ "binding": "PREVIEW_RENDERER", "service": "template-dev-cms-preview-renderer" }],
+  "routes": [{ "pattern": "dev-api.example.org", "custom_domain": true }]
+}

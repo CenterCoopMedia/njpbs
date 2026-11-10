@@ -1,0 +1,16 @@
+{
+  "date": "2026-10-14",
+  "kind": "improved",
+  "title": "See one clear publish status",
+  "body": "Pages and Posts show one live status while content publishes. Page publishing shows real progress, and Boardwalk tells you when publishing pauses for a short time or cannot continue.",
+  "prs": [
+    3460,
+    3427,
+    3429,
+    3225,
+    3234,
+    3165,
+    2809
+  ],
+  "order": -2
+}

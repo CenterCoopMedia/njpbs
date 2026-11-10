@@ -1,0 +1,10 @@
+{
+  "date": "2026-09-25",
+  "kind": "improved",
+  "title": "See page outlines while Boardwalk loads",
+  "body": "Busy screens such as All content, Pages, Media library and Admin settings now show a gray outline of the page while they load. The layout does not jump when the content arrives.",
+  "prs": [
+    2333
+  ],
+  "order": 0
+}

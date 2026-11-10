@@ -1,0 +1,10 @@
+{
+  "date": "2026-09-25",
+  "kind": "new",
+  "title": "Open the Around NJ guide from the rail",
+  "body": "The Boardwalk rail now has an Around NJ link. It opens the Around NJ guide in a new tab.",
+  "prs": [
+    2319
+  ],
+  "order": -10
+}

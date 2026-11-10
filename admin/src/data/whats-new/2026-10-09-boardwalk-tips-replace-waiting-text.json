@@ -1,0 +1,10 @@
+{
+  "date": "2026-10-09",
+  "kind": "improved",
+  "title": "Boardwalk tips replace waiting text",
+  "body": "Loading screens now show short Boardwalk tips while real progress continues to show.",
+  "prs": [
+    2910
+  ],
+  "order": -2
+}

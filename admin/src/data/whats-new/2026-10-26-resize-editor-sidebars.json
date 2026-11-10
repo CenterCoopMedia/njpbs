@@ -1,0 +1,8 @@
+{
+  "date": "2026-10-26",
+  "kind": "improved",
+  "title": "Resize editor sidebars",
+  "body": "In Pages and Posts, drag the edge of Outline or Details to change its width. You can also focus the edge and use the arrow keys, or open the width menu beside the pane heading. Boardwalk remembers your widths in this browser. On phones, the panes keep their full-width sheet layout.",
+  "prs": [],
+  "order": -2
+}

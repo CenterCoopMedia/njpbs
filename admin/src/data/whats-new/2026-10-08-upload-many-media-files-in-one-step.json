@@ -1,0 +1,13 @@
+{
+  "date": "2026-10-08",
+  "kind": "new",
+  "title": "Upload many media files in one step",
+  "body": "Image and video uploads now open in the same upload sheet. You can upload a batch in one action, and failed uploads stay open so you can try again.",
+  "prs": [
+    2435,
+    2437,
+    2438,
+    2855
+  ],
+  "order": -1
+}

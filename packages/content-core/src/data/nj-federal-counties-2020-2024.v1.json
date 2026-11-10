@@ -1,0 +1,799 @@
+{
+  "schemaVersion": 1,
+  "id": "nj-federal-counties-2020-2024-v1",
+  "downloadedAt": "2026-11-03",
+  "rowCount": 21,
+  "source": "New Jersey Division of Elections, official general election results and voter turnout",
+  "methodology": {
+    "margin": "Democratic minus Republican votes, divided by all votes for listed candidates, in percentage points. Other includes every other listed candidate. Write-ins are not separately reported in the statewide candidate files.",
+    "change": "2024 Democratic-minus-Republican margin minus the 2020 margin; positive means toward Democratic candidates.",
+    "turnout": "Ballots cast divided by registered voters, calculated from official counts. Ballots cast includes ballots without a vote for the office; it is not the candidate vote total.",
+    "house": "County totals combine all House districts within each county by candidate party. This is a county party vote comparison, not a district result, seat winner or comparison of unchanged districts. Congressional boundaries changed between these elections.",
+    "reconciliation": "All candidate county sums match the official candidate totals. Turnout county sums match statewide registered-voter and ballots-cast totals in both years. No mismatches found."
+  },
+  "sources": [
+    {
+      "year": 2020,
+      "measure": "senate",
+      "url": "https://nj.gov/state/elections/assets/pdf/election-results/2020/2020-official-general-results-us-senate.pdf",
+      "sha256": "cb2185ebb0991fbb6c2495d2c3f34dcfd9cd761ce9b72fabf390f1a315011467",
+      "countyRows": 21,
+      "candidateRows": 5
+    },
+    {
+      "year": 2020,
+      "measure": "house",
+      "url": "https://nj.gov/state/elections/assets/pdf/election-results/2020/2020-official-general-results-us-house.pdf",
+      "sha256": "02b26f443654aa2cdb2c3830a10f514bd048af8853721bb27ea13699d029eca1",
+      "countyRows": 21,
+      "candidateRows": 39
+    },
+    {
+      "year": 2020,
+      "measure": "turnout",
+      "url": "https://nj.gov/state/elections/assets/pdf/election-results/2020/2020-official-general-voter-turnout.pdf",
+      "sha256": "c49eb515e79f2bee1ea4889e8854bbe5ab922f84a24d75b457e1a325fe141388",
+      "countyRows": 21
+    },
+    {
+      "year": 2024,
+      "measure": "senate",
+      "url": "https://nj.gov/state/elections/assets/pdf/election-results/2024/2024-official-general-results-us-senate.pdf",
+      "sha256": "c747e835b52131f29b9f31369fa330199496befe80567f745875b4966403f62e",
+      "countyRows": 21,
+      "candidateRows": 6
+    },
+    {
+      "year": 2024,
+      "measure": "house",
+      "url": "https://nj.gov/state/elections/assets/pdf/election-results/2024/2024-official-general-results-us-house.pdf",
+      "sha256": "b2d06d33e804d9632f5207b9b4565e191af7e58118b78d5a330d26c9ba24a295",
+      "countyRows": 21,
+      "candidateRows": 54
+    },
+    {
+      "year": 2024,
+      "measure": "turnout",
+      "url": "https://nj.gov/state/elections/assets/pdf/election-results/2024/2024-official-general-voter-turnout.pdf",
+      "sha256": "e1e0a34dd777927d782369475d26ebf9b1257b56cca97f9884368c886fc797fe",
+      "countyRows": 21
+    }
+  ],
+  "counties": [
+    {
+      "county": "Atlantic",
+      "2020": {
+        "senate": {
+          "democratic": 71420,
+          "republican": 61568,
+          "other": 2690
+        },
+        "house": {
+          "democratic": 69566,
+          "republican": 65354,
+          "other": 2150
+        },
+        "turnout": {
+          "registered": 204801,
+          "ballotsCast": 143474
+        }
+      },
+      "2024": {
+        "senate": {
+          "democratic": 58942,
+          "republican": 60859,
+          "other": 2429
+        },
+        "house": {
+          "democratic": 56453,
+          "republican": 66446,
+          "other": 751
+        },
+        "turnout": {
+          "registered": 207405,
+          "ballotsCast": 130789
+        }
+      }
+    },
+    {
+      "county": "Bergen",
+      "2020": {
+        "senate": {
+          "democratic": 280054,
+          "republican": 195193,
+          "other": 8103
+        },
+        "house": {
+          "democratic": 284369,
+          "republican": 189689,
+          "other": 6789
+        },
+        "turnout": {
+          "registered": 670313,
+          "ballotsCast": 503114
+        }
+      },
+      "2024": {
+        "senate": {
+          "democratic": 224775,
+          "republican": 192452,
+          "other": 10607
+        },
+        "house": {
+          "democratic": 234322,
+          "republican": 182395,
+          "other": 9994
+        },
+        "turnout": {
+          "registered": 684900,
+          "ballotsCast": 463837
+        }
+      }
+    },
+    {
+      "county": "Burlington",
+      "2020": {
+        "senate": {
+          "democratic": 150160,
+          "republican": 102136,
+          "other": 3250
+        },
+        "house": {
+          "democratic": 159307,
+          "republican": 95176,
+          "other": 2216
+        },
+        "turnout": {
+          "registered": 344034,
+          "ballotsCast": 267122
+        }
+      },
+      "2024": {
+        "senate": {
+          "democratic": 134884,
+          "republican": 83225,
+          "other": 3722
+        },
+        "house": {
+          "democratic": 126495,
+          "republican": 87976,
+          "other": 3879
+        },
+        "turnout": {
+          "registered": 372410,
+          "ballotsCast": 231573
+        }
+      }
+    },
+    {
+      "county": "Camden",
+      "2020": {
+        "senate": {
+          "democratic": 173335,
+          "republican": 85406,
+          "other": 2700
+        },
+        "house": {
+          "democratic": 173168,
+          "republican": 88587,
+          "other": 91
+        },
+        "turnout": {
+          "registered": 398475,
+          "ballotsCast": 273555
+        }
+      },
+      "2024": {
+        "senate": {
+          "democratic": 156445,
+          "republican": 79545,
+          "other": 3418
+        },
+        "house": {
+          "democratic": 145494,
+          "republican": 85323,
+          "other": 6175
+        },
+        "turnout": {
+          "registered": 394178,
+          "ballotsCast": 252220
+        }
+      }
+    },
+    {
+      "county": "Cape May",
+      "2020": {
+        "senate": {
+          "democratic": 22952,
+          "republican": 31317,
+          "other": 945
+        },
+        "house": {
+          "democratic": 21899,
+          "republican": 34627,
+          "other": 558
+        },
+        "turnout": {
+          "registered": 75436,
+          "ballotsCast": 58693
+        }
+      },
+      "2024": {
+        "senate": {
+          "democratic": 20096,
+          "republican": 30905,
+          "other": 616
+        },
+        "house": {
+          "democratic": 19155,
+          "republican": 33347,
+          "other": 204
+        },
+        "turnout": {
+          "registered": 76562,
+          "ballotsCast": 55204
+        }
+      }
+    },
+    {
+      "county": "Cumberland",
+      "2020": {
+        "senate": {
+          "democratic": 31992,
+          "republican": 26626,
+          "other": 2102
+        },
+        "house": {
+          "democratic": 31266,
+          "republican": 28744,
+          "other": 1502
+        },
+        "turnout": {
+          "registered": 89731,
+          "ballotsCast": 63579
+        }
+      },
+      "2024": {
+        "senate": {
+          "democratic": 25186,
+          "republican": 25441,
+          "other": 1583
+        },
+        "house": {
+          "democratic": 24066,
+          "republican": 28336,
+          "other": 618
+        },
+        "turnout": {
+          "registered": 97718,
+          "ballotsCast": 56462
+        }
+      }
+    },
+    {
+      "county": "Essex",
+      "2020": {
+        "senate": {
+          "democratic": 260604,
+          "republican": 69750,
+          "other": 4715
+        },
+        "house": {
+          "democratic": 255468,
+          "republican": 70840,
+          "other": 4702
+        },
+        "turnout": {
+          "registered": 568320,
+          "ballotsCast": 351931
+        }
+      },
+      "2024": {
+        "senate": {
+          "democratic": 216580,
+          "republican": 75420,
+          "other": 7887
+        },
+        "house": {
+          "democratic": 218213,
+          "republican": 74054,
+          "other": 7348
+        },
+        "turnout": {
+          "registered": 590268,
+          "ballotsCast": 315739
+        }
+      }
+    },
+    {
+      "county": "Gloucester",
+      "2020": {
+        "senate": {
+          "democratic": 85489,
+          "republican": 80943,
+          "other": 3487
+        },
+        "house": {
+          "democratic": 86281,
+          "republican": 82271,
+          "other": 1264
+        },
+        "turnout": {
+          "registered": 223090,
+          "ballotsCast": 175674
+        }
+      },
+      "2024": {
+        "senate": {
+          "democratic": 80034,
+          "republican": 77303,
+          "other": 2012
+        },
+        "house": {
+          "democratic": 76848,
+          "republican": 80418,
+          "other": 1681
+        },
+        "turnout": {
+          "registered": 225029,
+          "ballotsCast": 166287
+        }
+      }
+    },
+    {
+      "county": "Hudson",
+      "2020": {
+        "senate": {
+          "democratic": 176658,
+          "republican": 56917,
+          "other": 6538
+        },
+        "house": {
+          "democratic": 174246,
+          "republican": 57136,
+          "other": 5563
+        },
+        "turnout": {
+          "registered": 413401,
+          "ballotsCast": 254866
+        }
+      },
+      "2024": {
+        "senate": {
+          "democratic": 135615,
+          "republican": 64050,
+          "other": 8239
+        },
+        "house": {
+          "democratic": 124855,
+          "republican": 66802,
+          "other": 13501
+        },
+        "turnout": {
+          "registered": 420791,
+          "ballotsCast": 234440
+        }
+      }
+    },
+    {
+      "county": "Hunterdon",
+      "2020": {
+        "senate": {
+          "democratic": 36728,
+          "republican": 43951,
+          "other": 2041
+        },
+        "house": {
+          "democratic": 36815,
+          "republican": 46443,
+          "other": 0
+        },
+        "turnout": {
+          "registered": 98982,
+          "ballotsCast": 85107
+        }
+      },
+      "2024": {
+        "senate": {
+          "democratic": 34983,
+          "republican": 40273,
+          "other": 1843
+        },
+        "house": {
+          "democratic": 34744,
+          "republican": 42257,
+          "other": 1407
+        },
+        "turnout": {
+          "registered": 108820,
+          "ballotsCast": 81841
+        }
+      }
+    },
+    {
+      "county": "Mercer",
+      "2020": {
+        "senate": {
+          "democratic": 117821,
+          "republican": 52248,
+          "other": 2527
+        },
+        "house": {
+          "democratic": 111821,
+          "republican": 56829,
+          "other": 3289
+        },
+        "turnout": {
+          "registered": 260888,
+          "ballotsCast": 180909
+        }
+      },
+      "2024": {
+        "senate": {
+          "democratic": 105685,
+          "republican": 46932,
+          "other": 3907
+        },
+        "house": {
+          "democratic": 102107,
+          "republican": 49862,
+          "other": 3114
+        },
+        "turnout": {
+          "registered": 270617,
+          "ballotsCast": 165154
+        }
+      }
+    },
+    {
+      "county": "Middlesex",
+      "2020": {
+        "senate": {
+          "democratic": 221802,
+          "republican": 135398,
+          "other": 8727
+        },
+        "house": {
+          "democratic": 227008,
+          "republican": 134533,
+          "other": 2040
+        },
+        "turnout": {
+          "registered": 553249,
+          "ballotsCast": 382030
+        }
+      },
+      "2024": {
+        "senate": {
+          "democratic": 188482,
+          "republican": 140676,
+          "other": 13544
+        },
+        "house": {
+          "democratic": 191592,
+          "republican": 139031,
+          "other": 12732
+        },
+        "turnout": {
+          "registered": 590286,
+          "ballotsCast": 369365
+        }
+      }
+    },
+    {
+      "county": "Monmouth",
+      "2020": {
+        "senate": {
+          "democratic": 173609,
+          "republican": 191700,
+          "other": 7045
+        },
+        "house": {
+          "democratic": 166968,
+          "republican": 199359,
+          "other": 5294
+        },
+        "turnout": {
+          "registered": 466325,
+          "ballotsCast": 384251
+        }
+      },
+      "2024": {
+        "senate": {
+          "democratic": 151920,
+          "republican": 185197,
+          "other": 7112
+        },
+        "house": {
+          "democratic": 146642,
+          "republican": 191957,
+          "other": 6430
+        },
+        "turnout": {
+          "registered": 505732,
+          "ballotsCast": 363680
+        }
+      }
+    },
+    {
+      "county": "Morris",
+      "2020": {
+        "senate": {
+          "democratic": 146148,
+          "republican": 141373,
+          "other": 3453
+        },
+        "house": {
+          "democratic": 147956,
+          "republican": 144075,
+          "other": 0
+        },
+        "turnout": {
+          "registered": 389909,
+          "ballotsCast": 305874
+        }
+      },
+      "2024": {
+        "senate": {
+          "democratic": 127727,
+          "republican": 135636,
+          "other": 5289
+        },
+        "house": {
+          "democratic": 134215,
+          "republican": 132711,
+          "other": 4097
+        },
+        "turnout": {
+          "registered": 398506,
+          "ballotsCast": 288123
+        }
+      }
+    },
+    {
+      "county": "Ocean",
+      "2020": {
+        "senate": {
+          "democratic": 116036,
+          "republican": 207751,
+          "other": 5501
+        },
+        "house": {
+          "democratic": 121011,
+          "republican": 206098,
+          "other": 5495
+        },
+        "turnout": {
+          "registered": 442976,
+          "ballotsCast": 346059
+        }
+      },
+      "2024": {
+        "senate": {
+          "democratic": 109610,
+          "republican": 197040,
+          "other": 2883
+        },
+        "house": {
+          "democratic": 93899,
+          "republican": 221668,
+          "other": 2336
+        },
+        "turnout": {
+          "registered": 481397,
+          "ballotsCast": 340300
+        }
+      }
+    },
+    {
+      "county": "Passaic",
+      "2020": {
+        "senate": {
+          "democratic": 131195,
+          "republican": 80827,
+          "other": 6593
+        },
+        "house": {
+          "democratic": 134692,
+          "republican": 80270,
+          "other": 3362
+        },
+        "turnout": {
+          "registered": 327853,
+          "ballotsCast": 226599
+        }
+      },
+      "2024": {
+        "senate": {
+          "democratic": 91719,
+          "republican": 86654,
+          "other": 7655
+        },
+        "house": {
+          "democratic": 94506,
+          "republican": 85797,
+          "other": 6161
+        },
+        "turnout": {
+          "registered": 339508,
+          "ballotsCast": 205563
+        }
+      }
+    },
+    {
+      "county": "Salem",
+      "2020": {
+        "senate": {
+          "democratic": 14515,
+          "republican": 17910,
+          "other": 1111
+        },
+        "house": {
+          "democratic": 14249,
+          "republican": 18251,
+          "other": 1138
+        },
+        "turnout": {
+          "registered": 49390,
+          "ballotsCast": 34323
+        }
+      },
+      "2024": {
+        "senate": {
+          "democratic": 12561,
+          "republican": 17338,
+          "other": 809
+        },
+        "house": {
+          "democratic": 11733,
+          "republican": 18602,
+          "other": 443
+        },
+        "turnout": {
+          "registered": 50425,
+          "ballotsCast": 31255
+        }
+      }
+    },
+    {
+      "county": "Somerset",
+      "2020": {
+        "senate": {
+          "democratic": 105681,
+          "republican": 75622,
+          "other": 2520
+        },
+        "house": {
+          "democratic": 102905,
+          "republican": 78639,
+          "other": 1350
+        },
+        "turnout": {
+          "registered": 256911,
+          "ballotsCast": 189727
+        }
+      },
+      "2024": {
+        "senate": {
+          "democratic": 95344,
+          "republican": 71652,
+          "other": 4272
+        },
+        "house": {
+          "democratic": 92851,
+          "republican": 74798,
+          "other": 3650
+        },
+        "turnout": {
+          "registered": 263540,
+          "ballotsCast": 179794
+        }
+      }
+    },
+    {
+      "county": "Sussex",
+      "2020": {
+        "senate": {
+          "democratic": 33919,
+          "republican": 49885,
+          "other": 2525
+        },
+        "house": {
+          "democratic": 35201,
+          "republican": 50020,
+          "other": 1049
+        },
+        "turnout": {
+          "registered": 114553,
+          "ballotsCast": 88857
+        }
+      },
+      "2024": {
+        "senate": {
+          "democratic": 29959,
+          "republican": 49734,
+          "other": 2571
+        },
+        "house": {
+          "democratic": 31048,
+          "republican": 48280,
+          "other": 2282
+        },
+        "turnout": {
+          "registered": 120644,
+          "ballotsCast": 85228
+        }
+      }
+    },
+    {
+      "county": "Union",
+      "2020": {
+        "senate": {
+          "democratic": 166997,
+          "republican": 76677,
+          "other": 4014
+        },
+        "house": {
+          "democratic": 160395,
+          "republican": 81977,
+          "other": 2176
+        },
+        "turnout": {
+          "registered": 372854,
+          "ballotsCast": 258344
+        }
+      },
+      "2024": {
+        "senate": {
+          "democratic": 138186,
+          "republican": 79183,
+          "other": 4855
+        },
+        "house": {
+          "democratic": 134344,
+          "republican": 83503,
+          "other": 4432
+        },
+        "turnout": {
+          "registered": 394244,
+          "ballotsCast": 244439
+        }
+      }
+    },
+    {
+      "county": "Warren",
+      "2020": {
+        "senate": {
+          "democratic": 24124,
+          "republican": 33893,
+          "other": 1623
+        },
+        "house": {
+          "democratic": 24596,
+          "republican": 34170,
+          "other": 720
+        },
+        "turnout": {
+          "registered": 85806,
+          "ballotsCast": 61598
+        }
+      },
+      "2024": {
+        "senate": {
+          "democratic": 22758,
+          "republican": 34074,
+          "other": 1462
+        },
+        "house": {
+          "democratic": 22261,
+          "republican": 35290,
+          "other": 1195
+        },
+        "turnout": {
+          "registered": 89719,
+          "ballotsCast": 60628
+        }
+      }
+    }
+  ]
+}

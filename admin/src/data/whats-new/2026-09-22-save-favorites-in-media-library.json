@@ -1,0 +1,11 @@
+{
+  "date": "2026-09-22",
+  "kind": "new",
+  "title": "Save favorites in Media library",
+  "body": "Select the heart on a media item to add it to your Favorites. Only you can see your Favorites. Open the Favorites tab to find them again.",
+  "prs": [
+    2123,
+    2132
+  ],
+  "order": -1
+}

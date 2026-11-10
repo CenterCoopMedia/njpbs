@@ -1,0 +1,25 @@
+{
+  "$schema": "../node_modules/wrangler/config-schema.json",
+  "name": "template-dev-public",
+  "main": "src/dev-public-worker.ts",
+  "r2_buckets": [{ "binding": "DURABLE_POST_WITHDRAWALS", "bucket_name": "njpbs-dev-cms-publication" }],
+  "compatibility_date": "2026-07-09",
+  "workers_dev": false,
+  "preview_urls": false,
+  "routes": [],
+  "vars": { "NO_BUILD_POST_RENDERER_SHA": "", "NO_BUILD_PAGE_RENDERER_SHA": "", "DATA_FIGURE_VERSION": "", "ELECTION_RESULTS_VERSION": "" },
+  "services": [
+    { "binding": "CMS_API", "service": "template-dev-cms-api", "entrypoint": "PublicContentEntrypoint" }
+  ],
+  "assets": {
+    "directory": "../dev-publication/dist",
+    "binding": "ASSETS",
+    "run_worker_first": true,
+    "html_handling": "force-trailing-slash",
+    "not_found_handling": "404-page"
+  },
+  "observability": {
+    "enabled": true,
+    "head_sampling_rate": 1
+  }
+}

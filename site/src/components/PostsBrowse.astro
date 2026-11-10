@@ -1,0 +1,99 @@
+---
+import type { PostsBrowseConfig } from "../../../packages/content-core/src/posts-browse";
+import { postsBrowseCollections, type BrowsePost } from "../lib/posts-browse";
+import PostsBrowseIcon from "./PostsBrowseIcon.astro";
+interface Props { posts: readonly BrowsePost[]; configured?: PostsBrowseConfig }
+const { collections, subjects } = postsBrowseCollections(Astro.props.posts, Astro.props.configured);
+const tiles = collections.filter(group => group.id !== "unassigned-subjects");
+const categoryCount = subjects.filter(term => term.filter === "category").length;
+const topicCount = subjects.length - categoryCount;
+---
+<section class="posts-browse" aria-labelledby="posts-browse-heading" data-posts-browse>
+  <div class="posts-browse__heading">
+    <h2 id="posts-browse-heading">Browse Posts</h2>
+    <form class="posts-browse__search" role="search" data-browse-search hidden>
+      <label class="sr-only" for="posts-browse-query">Find a topic or category</label>
+      <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="10" cy="10" r="6"/><path d="m15 15 6 6"/></svg>
+      <input id="posts-browse-query" type="search" name="subject" placeholder="Find a topic" />
+      <button type="submit" aria-label="Search topics and categories" title="Search topics and categories"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 12h16m-6-6 6 6-6 6"/></svg></button>
+    </form>
+  </div>
+  {tiles.length > 0 && <div class="posts-browse__tiles">{tiles.map(group => <a class="posts-browse__tile" href={`#posts-topic-${group.id}`} data-browse-group={group.id}>
+    {group.image && <img src={group.image.url} width={group.image.width} height={group.image.height} alt="" loading="lazy" decoding="async" />}
+    <span class="posts-browse__shade" aria-hidden="true"></span>
+    <span class="posts-browse__tile-label"><PostsBrowseIcon icon={group.icon} />{group.label}</span>
+    <span class="posts-browse__expand" aria-hidden="true">+</span>
+  </a>)}</div>}
+  <details class="posts-browse__directory" id="posts-topic-directory" data-browse-directory>
+    <summary data-browse-open>All topics &amp; categories <span aria-hidden="true">›</span></summary>
+    <div data-browse-panel>
+      <div class="posts-browse__dialog-heading"><h2 id="posts-directory-title" tabindex="-1">Topics &amp; categories</h2><button type="button" data-browse-close hidden aria-label="Close topic browser" title="Close topic browser">×</button></div>
+      <label class="posts-browse__search" data-browse-filter-label hidden>
+        <span class="sr-only">Search all topics and categories</span>
+        <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="10" cy="10" r="6"/><path d="m15 15 6 6"/></svg>
+        <input type="search" data-browse-filter placeholder="Find a topic" />
+      </label>
+      <p class="posts-browse__status" role="status" aria-live="polite" data-browse-status data-categories={categoryCount} data-topics={topicCount}>{categoryCount} {categoryCount === 1 ? "category" : "categories"} · {topicCount} {topicCount === 1 ? "topic" : "topics"}</p>
+      {collections.map(group => <details class="posts-browse__group" data-directory-group={group.id}>
+        <summary><PostsBrowseIcon icon={group.icon} /><span>{group.label}</span><span class="posts-browse__group-count" data-group-count aria-label={`${group.items.length} ${group.items.length === 1 ? "subject" : "subjects"}`}>{group.items.length}</span><span class="posts-browse__chevron" aria-hidden="true">⌄</span></summary>
+        <ul id={`posts-topic-${group.id}`} tabindex="-1" aria-label={`${group.label} subjects`}>{group.items.map(term => <li data-browse-term={term.value.toLocaleLowerCase("en-US")}><a href={term.href}><span>{term.value}<small>{term.filter === "category" ? "Category" : "Topic"}</small></span><span class="posts-browse__count">{term.count}<span class="sr-only"> {term.count === 1 ? "Post" : "Posts"}</span></span></a></li>)}</ul>
+      </details>)}
+    </div>
+  </details>
+</section>
+
+<script>
+  import { enhancePostsBrowse } from "../lib/posts-browse-client";
+  document.querySelectorAll<HTMLElement>("[data-posts-browse]").forEach(enhancePostsBrowse);
+</script>
+
+<style>
+  .posts-browse { margin-top: var(--space-8, 2rem); }
+  .posts-browse__heading { display: flex; align-items: center; justify-content: space-between; gap: var(--space-4, 1rem); }
+  .posts-browse h2 { margin: 0; font-size: clamp(1.25rem, 2vw, 1.5rem); }
+  .posts-browse__search { display: flex; gap: var(--space-3, .75rem); align-items: center; min-height: var(--target-comfortable); padding-inline: var(--space-3, .75rem); border: 1px solid var(--line); border-radius: var(--radius-surface); background: var(--color-surface-elevated); }
+  .posts-browse__search[hidden], [data-browse-close][hidden] { display: none; }
+  .posts-browse__heading .posts-browse__search { width: min(24rem, 50%); }
+  .posts-browse__search svg { width: 1.2rem; height: 1.2rem; flex: none; fill: none; stroke: currentColor; stroke-width: 2; }
+  .posts-browse__search input { width: 100%; min-width: 0; min-height: var(--target-comfortable); border: 0; outline: 0; background: transparent; color: var(--text); font: inherit; }
+  .posts-browse__search input::placeholder { color: var(--text-quiet); }
+  .posts-browse__search:focus-within { outline: var(--focus-outline); outline-offset: var(--focus-offset); }
+  .posts-browse__search button, [data-browse-close] { display: grid; place-items: center; flex: none; min-width: var(--target-comfortable); min-height: var(--target-comfortable); border: 0; background: transparent; color: var(--text); cursor: pointer; }
+  .posts-browse__tiles { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--space-3, .75rem); margin-top: var(--space-4, 1rem); }
+  .posts-browse__tile { position: relative; display: flex; align-items: end; min-width: 0; min-height: calc(var(--space-8) * 4); padding: var(--space-4, 1rem); overflow: hidden; border: 1px solid var(--line); border-radius: var(--radius-accent); background: var(--pbs-blue); color: white; text-decoration: none; }
+  .posts-browse__tile img, .posts-browse__shade { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
+  .posts-browse__shade { background: linear-gradient(180deg, rgb(0 0 0 / .6), rgb(0 0 0 / .9)); }
+  .posts-browse__tile-label { flex: 1; min-width: 0; position: relative; display: flex; align-items: center; gap: var(--space-2, .5rem); font-weight: 700; line-height: 1.3; padding-right: var(--space-4, 1rem); overflow-wrap: anywhere; }
+  .posts-browse__tile-label :global(svg) { width: 1.4rem; height: 1.4rem; flex: none; }
+  .posts-browse__expand { position: absolute; top: var(--space-3, .75rem); right: var(--space-3, .75rem); display: grid; place-items: center; width: 1.6rem; height: 1.6rem; background: rgb(0 0 0 / .65); border-radius: var(--radius-pill); }
+  .posts-browse__directory > summary { display: flex; justify-content: end; align-items: center; gap: var(--space-3, .75rem); min-height: var(--target-comfortable); cursor: pointer; color: var(--color-link); font-size: .9rem; list-style: none; }
+  .posts-browse__dialog-heading { display: flex; justify-content: space-between; align-items: center; gap: var(--space-4, 1rem); margin-bottom: var(--space-4, 1rem); }
+  .posts-browse__dialog-heading button { font-size: 2rem; border: 1px solid var(--line); border-radius: var(--radius-surface); }
+  .posts-browse__status { color: var(--text-quiet); font-size: .85rem; }
+  .posts-browse__group { border-top: 1px solid var(--line); }
+  .posts-browse__group > summary { display: flex; align-items: center; gap: var(--space-3, .75rem); min-height: var(--target-comfortable); padding-block: var(--space-3, .75rem); cursor: pointer; list-style: none; }
+  .posts-browse__group > summary :global(svg) { flex: none; width: 1.5rem; height: 1.5rem; color: var(--color-link); }
+  .posts-browse__group > summary > span:first-of-type { flex: 1; font-weight: 700; overflow-wrap: anywhere; }
+  .posts-browse__group-count { color: var(--text-quiet); font-size: .8rem; }
+  .posts-browse__group[open] > summary .posts-browse__chevron { transform: rotate(180deg); }
+  .posts-browse__group ul { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-2, .5rem); margin: 0 0 var(--space-4, 1rem); padding: 0; list-style: none; }
+  .posts-browse__group li a { display: flex; align-items: center; justify-content: space-between; gap: var(--space-3, .75rem); min-height: var(--target-comfortable); padding: var(--space-2, .5rem) var(--space-3, .75rem); border-radius: var(--radius-surface); color: var(--text-dim); text-decoration: none; overflow-wrap: anywhere; }
+  .posts-browse__group li a:hover { background: var(--color-surface-elevated); }
+  .posts-browse__group li small { display: block; color: var(--text-quiet); font-size: .72rem; }
+  .posts-browse__count { flex: none; color: var(--text-quiet); font-size: .8rem; font-variant-numeric: tabular-nums; }
+  .posts-browse__group li[hidden], .posts-browse__group[hidden] { display: none; }
+  .posts-browse :is(a, button, summary):focus-visible { outline: var(--focus-outline); outline-offset: var(--focus-offset); }
+  .posts-browse :global(.posts-browse__dialog) { width: min(42rem, calc(100% - var(--space-8, 2rem))); max-height: 85dvh; padding: var(--space-6, 1.5rem); border: 1px solid var(--line); border-radius: var(--radius-accent); background: var(--color-surface-panel); color: var(--text); }
+  .posts-browse :global(.posts-browse__dialog)::backdrop { background: rgb(0 0 0 / .7); }
+  @media (max-width: 600px) {
+    .posts-browse__heading { flex-wrap: wrap; }
+    .posts-browse__heading .posts-browse__search { width: 100%; box-sizing: border-box; }
+    .posts-browse__tiles { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-2, .5rem); }
+    .posts-browse__tile { padding: var(--space-3, .75rem); }
+    .posts-browse__tile-label { display: block; font-size: .82rem; padding: 0; }
+    .posts-browse__tile-label :global(svg) { display: block; margin-bottom: var(--space-2, .5rem); }
+    .posts-browse__group ul { grid-template-columns: minmax(0, 1fr); }
+    .posts-browse :global(.posts-browse__dialog) { width: calc(100% - var(--space-4, 1rem)); padding: var(--space-4, 1rem); max-height: 90dvh; }
+  }
+  @media (forced-colors: active) { .posts-browse__tile { background: Canvas; color: CanvasText; } .posts-browse__shade, .posts-browse__tile img { display: none; } }
+</style>

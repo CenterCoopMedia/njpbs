@@ -1,0 +1,23 @@
+---
+import PageRoute from "../../../../../src/pages/[...slug].astro";
+import type { CollectionEntry } from "astro:content";
+import { results } from "../../results";
+
+export function getStaticPaths() {
+  return ["hub", "results", "override", "ordinary"].map(kind => {
+    const data: CollectionEntry<"cmsPages">["data"] = {
+      pageId: `social-${kind}`, path: kind === "hub" ? "/nj-decides/" : `/election-${kind}/`,
+      family: "article", template: "genericPage", title: "Election <coverage>", description: "Page description",
+      noindex: false, blocks: kind === "results" ? [results] : [],
+      social: { title: "Social title", description: "Social description",
+        ...(kind === "override" ? { imageAssetId: "chosen" } : {}) },
+      seo: { title: "Search title", description: "Search description" },
+      assets: { chosen: { url: "https://media.njpbs.org/editor.png", mimeType: "image/png", width: 1200, height: 630 } },
+      contentMode: "published", sourceVersion: 1, publishedAt: "2026-10-27T12:00:00.000Z",
+    };
+    if (kind === "override") data.path = "/nj-decides/override/";
+    return { params: { kind }, props: { cmsEntry: { id: data.pageId, collection: "cmsPages" as const, data } } };
+  });
+}
+---
+<PageRoute {...Astro.props} />

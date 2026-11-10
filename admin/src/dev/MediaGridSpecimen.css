@@ -1,0 +1,101 @@
+/* Gallery frame for the shared grid, selection bar and context menu specimens. */
+.media-grid-specimen {
+  display: grid;
+  gap: var(--cms-space-5);
+  min-width: 0;
+  padding: var(--cms-space-4);
+  background: var(--cms-canvas);
+  color: var(--cms-ink);
+}
+
+.media-grid-specimen-note,
+.media-grid-specimen-log {
+  margin: 0;
+  color: var(--cms-ink-secondary);
+  font-size: var(--cms-font-sm);
+}
+
+.media-grid-specimen-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: end;
+  gap: var(--cms-space-3);
+}
+
+.media-grid-specimen-search {
+  display: grid;
+  flex: 1 1 12rem;
+  gap: var(--cms-space-1);
+  font-size: var(--cms-font-sm);
+  font-weight: 700;
+}
+
+.media-grid-specimen-search input {
+  min-height: var(--cms-control-height);
+  border: var(--cms-border-width) solid var(--cms-control-border);
+  border-radius: var(--cms-radius-button);
+  padding-inline: var(--cms-space-3);
+  background: var(--cms-surface);
+  color: var(--cms-ink);
+  font: inherit;
+  font-weight: 400;
+}
+
+.media-grid-specimen-paging {
+  display: flex;
+  gap: var(--cms-space-2);
+}
+
+.media-grid-specimen-paging [aria-current="page"] {
+  border-color: var(--cms-brand);
+}
+
+.media-grid-specimen-results {
+  display: grid;
+  gap: var(--cms-space-4);
+  min-width: 0;
+}
+
+.media-grid-specimen-figure {
+  display: grid;
+  gap: var(--cms-space-2);
+  min-width: 0;
+  margin: 0;
+}
+
+.media-grid-specimen-figure figcaption {
+  color: var(--cms-ink-secondary);
+  font-size: var(--cms-font-xs);
+}
+
+/* A still frame for the bar: it sits in the flow instead of floating over results. */
+.media-grid-specimen-bar-frame {
+  min-width: 0;
+  border: var(--cms-border-width) dashed var(--cms-line-strong);
+  border-radius: var(--cms-radius-panel);
+  padding: var(--cms-space-4) 0;
+  background: var(--cms-surface-muted);
+}
+
+.media-grid-specimen-bar-frame .media-selection-dock {
+  position: static;
+}
+
+.media-grid-specimen-bar-narrow {
+  max-width: 20rem;
+}
+
+/* Each context menu frame keeps room for its open menu over the card. */
+.media-context-specimen {
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 18rem), 1fr));
+  align-items: start;
+}
+
+.media-context-specimen-figure {
+  min-height: 26rem;
+  align-content: start;
+}
+
+.media-context-specimen-tile {
+  width: min(100%, 16rem);
+}

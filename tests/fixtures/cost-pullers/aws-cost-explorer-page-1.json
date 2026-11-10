@@ -1,0 +1,8 @@
+{
+  "ResultsByTime": [{
+    "Groups": [
+      { "Keys": ["Amazon Simple Storage Service"], "Metrics": { "UnblendedCost": { "Amount": "1.25", "Unit": "USD" } } }
+    ]
+  }],
+  "NextPageToken": "fixture-next"
+}

@@ -1,0 +1,8 @@
+{
+  "date": "2026-11-04",
+  "kind": "improved",
+  "title": "Keep Page planks safe during updates",
+  "body": "Pages pause a save or publish when a new plank needs a site update. Your saved content stays intact. You can remove that plank or try again after the update.",
+  "prs": [],
+  "order": 1793824200000
+}

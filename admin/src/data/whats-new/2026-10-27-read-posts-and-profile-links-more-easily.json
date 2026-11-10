@@ -1,0 +1,8 @@
+{
+  "date": "2026-10-27",
+  "kind": "fixed",
+  "title": "Read Posts and profile links more easily",
+  "body": "Post paragraphs keep a comfortable reading width. Topic links, public profile social links and the links in Profile preview have larger touch targets. The Staff directory keeps portraits at a consistent size when only a few profiles are published.",
+  "prs": [],
+  "order": -9
+}

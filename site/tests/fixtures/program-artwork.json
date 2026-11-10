@@ -1,0 +1,123 @@
+{
+  "kind": "synthetic-program-artwork-fixture",
+  "correction": {
+    "assetId": "8ba39d8d-adc2-47d9-af5f-c07dcdf3f10b"
+  },
+  "programs": [
+    {
+      "record": {
+        "status": "draft",
+        "type": "program",
+        "title": "Program fixture one",
+        "slug": "program-fixture-one",
+        "description": {
+          "type": "doc",
+          "content": [
+            {
+              "type": "paragraph",
+              "content": [
+                {
+                  "type": "text",
+                  "text": "Synthetic program synopsis."
+                }
+              ]
+            }
+          ]
+        }
+      },
+      "artworkStatus": "MISSING: synthetic no-art fixture"
+    },
+    {
+      "record": {
+        "status": "draft",
+        "type": "program",
+        "title": "State of Affairs",
+        "slug": "state-of-affairs",
+        "description": {
+          "type": "doc",
+          "content": [
+            {
+              "type": "paragraph",
+              "content": [
+                {
+                  "type": "text",
+                  "text": "Synthetic program synopsis."
+                }
+              ]
+            }
+          ]
+        }
+      },
+      "artworkStatus": "MISSING: synthetic no-art fixture"
+    },
+    {
+      "record": {
+        "status": "draft",
+        "type": "program",
+        "title": "Program fixture three",
+        "slug": "program-fixture-three",
+        "description": {
+          "type": "doc",
+          "content": [
+            {
+              "type": "paragraph",
+              "content": [
+                {
+                  "type": "text",
+                  "text": "Synthetic program synopsis."
+                }
+              ]
+            }
+          ]
+        }
+      },
+      "artworkStatus": "MISSING: synthetic no-art fixture"
+    },
+    {
+      "record": {
+        "status": "draft",
+        "type": "program",
+        "title": "Program fixture four",
+        "slug": "program-fixture-four",
+        "description": {
+          "type": "doc",
+          "content": [
+            {
+              "type": "paragraph",
+              "content": [
+                {
+                  "type": "text",
+                  "text": "Synthetic program synopsis."
+                }
+              ]
+            }
+          ]
+        }
+      },
+      "artworkStatus": "MISSING: synthetic no-art fixture"
+    },
+    {
+      "record": {
+        "status": "draft",
+        "type": "program",
+        "title": "Program fixture five",
+        "slug": "program-fixture-five",
+        "description": {
+          "type": "doc",
+          "content": [
+            {
+              "type": "paragraph",
+              "content": [
+                {
+                  "type": "text",
+                  "text": "Synthetic program synopsis."
+                }
+              ]
+            }
+          ]
+        }
+      },
+      "artworkStatus": "MISSING: synthetic no-art fixture"
+    }
+  ]
+}

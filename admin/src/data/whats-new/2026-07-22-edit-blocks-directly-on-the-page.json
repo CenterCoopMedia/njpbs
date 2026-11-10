@@ -1,0 +1,15 @@
+{
+  "date": "2026-07-22",
+  "kind": "new",
+  "title": "Edit blocks directly on the page",
+  "body": "You can now edit text, headings, images, buttons, galleries, card grids, FAQs and embeds where they appear. Long pages get easier navigation and a quieter block palette.",
+  "prs": [
+    526,
+    547,
+    549,
+    524,
+    647,
+    674
+  ],
+  "order": -2
+}

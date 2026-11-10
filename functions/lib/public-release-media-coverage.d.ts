@@ -1,0 +1,17 @@
+import type { Firestore, Transaction } from "firebase-admin/firestore";
+import type { PublicReleasePair } from "../../packages/content-core/src/public-release";
+import type { PairInputReceipt } from "./public-release-pair-input";
+export type PairMediaCoverage = Readonly<{ schemaVersion: 2; kind: "pair-media-input-coverage"; pairDigest: string; ledgerId: string;
+  phase: "tracking" | "needs-migration"; totalInputs: number; pinnedInputs: number; pendingInputs: number; revision: number }>;
+export type PairMediaCoverageMarker = Readonly<{ schemaVersion: 2; kind: "pair-media-input-coverage-member";
+  pairDigest: string; ledgerId: string; inputManifestDigest: string; inputReceiptDigest: string; status: "pending" | "pinned"; pinDigest: string | null }>;
+export function coveragePath(pair: PublicReleasePair): string;
+export function markerPath(pair: PublicReleasePair, inputManifestDigest: string): string;
+export function parseCoverage(value: unknown, pair: PublicReleasePair): PairMediaCoverage;
+export function parseMarker(value: unknown, pair: PublicReleasePair, receipt: PairInputReceipt): PairMediaCoverageMarker;
+export function preparePairMediaInputCoverageInTransaction(input: { firestore: Firestore; transaction: Transaction;
+  pair: PublicReleasePair; receipt: PairInputReceipt }): Promise<() => void>;
+export function preparePairMediaPinCoverageInTransaction(input: { firestore: Firestore; transaction: Transaction;
+  pair: PublicReleasePair; receipt: PairInputReceipt; pinDigest: string }): Promise<() => void>;
+export function initializePublicReleasePairMediaCoverage(input: { firestore: Firestore; pair: PublicReleasePair }): Promise<PairMediaCoverage>;
+export function assertPairMediaCoverageInTransaction(input: { firestore: Firestore; transaction: Transaction; pair: PublicReleasePair }): Promise<PairMediaCoverage>;

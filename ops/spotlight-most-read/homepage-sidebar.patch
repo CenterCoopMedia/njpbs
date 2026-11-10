@@ -1,0 +1,10 @@
+--- a/views/home/home-view.php
++++ b/views/home/home-view.php
+@@ -44,6 +44,7 @@
+ 				}
+ 				echo "</ul>";
+ 			}
++			if (function_exists('spotlight_most_read_sidebar')) { echo spotlight_most_read_sidebar(); }
+ 		?>
+ 		</div>
+ 

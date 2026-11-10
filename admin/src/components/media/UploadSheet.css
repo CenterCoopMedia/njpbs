@@ -1,0 +1,9 @@
+.media-upload-sheet {
+  width: var(--cms-inspector-max);
+  min-width: var(--cms-inspector-max);
+}
+
+.media-upload-sheet.ui-inspector-sheet {
+  width: min(var(--cms-inspector-max), 100vw);
+  min-width: 0;
+}

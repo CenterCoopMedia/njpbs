@@ -1,0 +1,8 @@
+{
+  "date": "2026-10-26",
+  "kind": "new",
+  "title": "Add approved election results",
+  "body": "Add Election results to a Page or Post. Enter candidates, votes, sources and update times. Request review, Approve, then Publish. Changed results stay private until they are approved. Each race keeps its approval history.",
+  "prs": [],
+  "order": -4
+}

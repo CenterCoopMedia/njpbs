@@ -1,0 +1,8 @@
+{
+  "date": "2026-11-02",
+  "kind": "fixed",
+  "title": "Keep connected election results updating",
+  "body": "Connected election results accept the feed's precise update times. Awaiting results, vote counts and race calls follow your selected approval mode, and polling resumes after a temporary query limit.",
+  "prs": [],
+  "order": -2
+}

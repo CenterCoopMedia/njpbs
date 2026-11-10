@@ -1,0 +1,8 @@
+{
+  "date": "2026-11-04",
+  "kind": "improved",
+  "title": "Election results check every 10 minutes",
+  "body": "Connected election results now check for updates every 10 minutes after broadcasts end. Accepted results keep their newer update time when a full check confirms the same values.",
+  "prs": [],
+  "order": 1793770877198
+}

@@ -1,0 +1,10 @@
+{
+  "date": "2026-11-03",
+  "kind": "new",
+  "title": "Place content beside live updates",
+  "body": "In a live blog Post, open a standalone plank\u2019s Settings and choose Live updates sidebar as its destination. Sidebar content sits beside updates on desktop and below them on smaller screens. Readers can expand entry images and open the full image.",
+  "prs": [
+    4718
+  ],
+  "order": 1793769021324
+}

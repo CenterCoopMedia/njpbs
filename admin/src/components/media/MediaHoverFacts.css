@@ -1,0 +1,33 @@
+/* Hover card facts for media cards and rows. */
+.media-hover-facts {
+  width: min(18rem, calc(100vw - (4 * var(--cms-space-4))));
+}
+
+.media-hover-facts-name {
+  margin: 0 0 var(--cms-space-2);
+  color: var(--cms-ink);
+  font-weight: 700;
+  overflow-wrap: anywhere;
+}
+
+.media-hover-facts-list {
+  display: grid;
+  gap: var(--cms-space-1);
+  margin: 0;
+}
+
+.media-hover-facts-list > div {
+  display: grid;
+  grid-template-columns: 5.5rem minmax(0, 1fr);
+  gap: var(--cms-space-2);
+}
+
+.media-hover-facts-list dt {
+  color: var(--cms-ink-muted);
+}
+
+.media-hover-facts-list dd {
+  margin: 0;
+  color: var(--cms-ink);
+  overflow-wrap: anywhere;
+}

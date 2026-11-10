@@ -1,0 +1,19 @@
+{
+  "schemaVersion": 1,
+  "viewerIp": {
+    "capacity": 60,
+    "refillPerSecond": 2
+  },
+  "viewerAggregate": {
+    "capacity": 400,
+    "refillPerSecond": 200
+  },
+  "rpc": {
+    "capacity": 2400,
+    "refillPerSecond": 1200
+  },
+  "proof": {
+    "capacity": 400,
+    "refillPerSecond": 200
+  }
+}

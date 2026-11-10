@@ -1,0 +1,9 @@
+{
+  "ResultsByTime": [{
+    "Groups": [
+      { "Keys": ["Amazon Simple Storage Service"], "Metrics": { "UnblendedCost": { "Amount": "1.25", "Unit": "USD" } } },
+      { "Keys": ["Amazon Lightsail"], "Metrics": { "UnblendedCost": { "Amount": "3.50", "Unit": "USD" } } },
+      { "Keys": ["Amazon EC2"], "Metrics": { "UnblendedCost": { "Amount": "0.10", "Unit": "USD" } } }
+    ]
+  }]
+}

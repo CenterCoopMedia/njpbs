@@ -1,0 +1,7 @@
+.video-rights-dialog { width: min(32rem, calc(100% - 2 * var(--cms-space-3))); }
+.video-rights-dialog[open] { grid-template-rows: auto minmax(0, 1fr); }
+.video-rights-form { display: grid; grid-template-rows: minmax(0, 1fr) auto; min-height: 0; }
+.video-rights-form .content-picker-body { display: grid; align-content: start; gap: var(--cms-space-3); }
+.video-rights-form p { margin: 0; }
+.video-rights-name { font-weight: 700; overflow-wrap: anywhere; }
+.video-rights-fields { display: grid; min-width: 0; margin: 0; padding: 0; border: 0; gap: var(--cms-space-3); }

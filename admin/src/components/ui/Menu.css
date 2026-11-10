@@ -1,0 +1,159 @@
+/* Menu button and context menu surface. */
+.ui-menu-trigger {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--cms-space-2);
+  min-width: var(--cms-control-height);
+  min-height: var(--cms-control-height);
+  padding: 0 var(--cms-space-2);
+  border: 0;
+  border-radius: var(--cms-radius-button);
+  background: transparent;
+  color: var(--cms-ink-secondary);
+  font: inherit;
+  cursor: pointer;
+}
+
+.ui-menu-trigger .icon {
+  width: 1.25rem;
+  height: 1.25rem;
+}
+
+@media (hover: hover) {
+  button.ui-menu-trigger:hover {
+    background: var(--cms-action-quiet-hover);
+    color: var(--cms-ink);
+  }
+}
+
+button.ui-menu-trigger[aria-expanded="true"] {
+  background: var(--cms-action-quiet-pressed);
+  color: var(--cms-ink);
+}
+
+.ui-menu-trigger:focus-visible,
+.ui-menu-item:focus-visible {
+  outline: var(--cms-focus-outline);
+  outline-offset: -3px;
+}
+
+.ui-menu {
+  position: fixed;
+  z-index: var(--cms-z-popover);
+  display: grid;
+  min-width: 13rem;
+  max-width: min(20rem, calc(100vw - (2 * var(--cms-space-2))));
+  max-height: calc(100vh - (2 * var(--cms-space-2)));
+  padding: var(--cms-space-1);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  border: var(--cms-border-width) solid var(--cms-line);
+  border-radius: var(--cms-radius-panel);
+  background: var(--cms-surface);
+  box-shadow: var(--cms-shadow-menu);
+}
+
+.ui-menu[data-positioned="false"] {
+  visibility: hidden;
+}
+
+.ui-menu[data-fit-below] { scrollbar-gutter: stable; }
+.ui-menu[data-fit-below] .ui-menu-item { padding-block: var(--cms-space-1); }
+
+/* The global reduced-motion rule gives every property a 0.01ms transition. Visibility would
+   then still read hidden when the menu is placed and focus moves in, so focus stayed on the
+   trigger. Nothing here needs a transition with reduced motion. */
+@media (prefers-reduced-motion: reduce) {
+  .ui-menu,
+  .ui-menu * {
+    transition-property: none;
+  }
+}
+
+.ui-menu-title {
+  padding: var(--cms-space-2) var(--cms-space-3) var(--cms-space-1);
+  color: var(--cms-ink-muted);
+  font-size: var(--cms-font-xs);
+  font-weight: 700;
+}
+
+.ui-menu-item {
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  width: 100%;
+  gap: var(--cms-space-3);
+  min-height: var(--cms-control-height);
+  padding: 0 var(--cms-space-3);
+  border: 0;
+  border-radius: var(--cms-radius-control);
+  background: none;
+  color: var(--cms-ink);
+  font: inherit;
+  font-size: var(--cms-font-control);
+  font-weight: 400;
+  text-decoration: none;
+  text-align: start;
+  cursor: pointer;
+}
+
+.ui-menu-item .icon,
+.ui-menu-icon-space {
+  flex: none;
+  width: 1.125rem;
+  height: 1.125rem;
+}
+
+/* A shortcut hint sits at the end of the row; aria-keyshortcuts states it to assistive technology. */
+.ui-menu-shortcut {
+  flex: none;
+  margin-inline-start: auto;
+  padding-inline-start: var(--cms-space-3);
+  color: var(--cms-ink-muted);
+  font-size: var(--cms-font-xs);
+  font-variant-numeric: tabular-nums;
+}
+
+.ui-menu-item:hover,
+.ui-menu-item:focus {
+  background: var(--cms-action-quiet-hover);
+}
+
+.ui-menu-item-danger {
+  color: var(--cms-danger);
+}
+
+.ui-menu-item-danger:hover,
+.ui-menu-item-danger:focus {
+  background: var(--cms-danger-soft);
+}
+
+.ui-menu-separator {
+  height: var(--cms-border-width);
+  margin: var(--cms-space-1) var(--cms-space-2);
+  background: var(--cms-line);
+}
+
+.ui-context-area {
+  display: contents;
+}
+
+.ui-menu-button { white-space: nowrap; }
+.ui-menu-item-description { display: block; color: var(--cms-ink-muted); font-size: var(--cms-font-xs); }
+
+/* Header disclosures and contextual menus share this row, including async icon slots. */
+.ui-menu-item .async-action-label { justify-content: flex-start; gap: var(--cms-space-3); }
+.ui-menu-item .async-action-icon-slot { width: 1.125rem; height: 1.125rem; flex-basis: 1.125rem; }
+.ui-menu-item .async-action-icon-slot > .button-compact-icon { width: 100%; height: 100%; }
+.ui-menu-item:disabled,
+.ui-menu-item[aria-disabled="true"] { color: var(--cms-ink-muted); cursor: not-allowed; }
+.ui-menu-item:disabled:is(:hover, :focus),
+.ui-menu-item[aria-disabled="true"]:is(:hover, :focus) { background: none; }
+.ui-menu-unavailable-reason {
+  padding: 0 var(--cms-space-3) var(--cms-space-2) calc(1.125rem + 2 * var(--cms-space-3));
+  color: var(--cms-ink-secondary);
+}
+@media (max-width: 48rem) {
+  .ui-menu-item { min-height: max(44px, var(--cms-control-height)); }
+}

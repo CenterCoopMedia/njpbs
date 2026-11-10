@@ -1,0 +1,11 @@
+{
+  "date": "2026-09-24",
+  "kind": "new",
+  "title": "Add link card directories to Pages",
+  "body": "A new block shows a directory of link cards on a Page. Page content now uses the full page width, and long headlines stay inside the page frame.",
+  "prs": [
+    2257,
+    2261
+  ],
+  "order": -3
+}

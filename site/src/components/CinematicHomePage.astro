@@ -1,0 +1,230 @@
+---
+// The homepage composes a branded editorial hero and content rails. A full
+// build renders it at the apex; PUBLIC_ONLY selects the coming-soon surface.
+import HomeHero from "./HomeHero.astro";
+import type { HomeHeroItem } from "../lib/home-hero-presentation";
+import type { HomeHeroConfig } from "../../../packages/content-core/src/home-hero";
+import "../styles/home-editorial.css";
+import type { HomeComposition, HomeContentArea } from "../../../packages/content-core/src/home-composition";
+import CmsBlocks from "./CmsBlocks.astro";
+import HomepagePromotionPlaylist from "./HomepagePromotionPlaylist.astro";
+import HomepageAnnouncement from "./HomepageAnnouncement.astro";
+import HomepageNewsTopicBar from "./HomepageNewsTopicBar.astro";
+import {
+  donateUrl,
+  passportLearnMoreUrl,
+  pbsVideoUrl,
+} from "../data/launch-fallback";
+import type { PromotionPlaylistBlock } from "../../../packages/content-core/src/content-model";
+import type { CmsResponsiveRenderAsset } from "../lib/cms-responsive-image";
+import type { PublicHomepageBannerBuildData } from "../lib/public-homepage-banner";
+import { getEntry, type CollectionEntry } from "astro:content";
+import type { HomepageNewsTopic } from "../lib/homepage-news-topics";
+import {
+  HOME_HERO_CONTENT,
+  HOME_PASSPORT_CONTENT,
+  renderHomePassport,
+} from "../../../packages/content-core/src/home-section-render";
+import {
+  renderHomeProgramRail,
+  renderHomeNewsRail,
+  type HomeProgramRailCard,
+} from "../../../packages/content-core/src/home-rail-render";
+
+import HomeCompositionSections from "./HomeCompositionSections.astro";
+import { renderStandardHomeNewsletter } from "../../../packages/content-core/src/home-newsletter-section";
+
+interface Props {
+  heroItems?: readonly HomeHeroItem[];
+  heroConfig?: HomeHeroConfig;
+  heroTitle?: string;
+  heroSubtitle?: string;
+  promotions?: readonly PromotionPlaylistBlock[];
+  promotionAssets?: ReadonlyMap<string, CmsResponsiveRenderAsset>;
+  announcement?: PublicHomepageBannerBuildData;
+  newsTopics?: readonly HomepageNewsTopic[];
+  composition?: HomeComposition | null;
+  // Home without a saved Newsletter identity retains the template band.
+  orderedContent?: CollectionEntry<"cmsPages">;
+  content?: Partial<Record<HomeContentArea, CollectionEntry<"cmsPages">>>;
+  heroBackgroundImage?: {
+    url: string;
+    width: number;
+    height: number;
+  } | null;
+  heroBackgroundPosition?: "center" | "top" | "bottom";
+}
+
+const {
+  heroItems = [],
+  heroConfig,
+  heroTitle = HOME_HERO_CONTENT.title,
+  heroSubtitle = HOME_HERO_CONTENT.subtitle,
+  promotions = [],
+  promotionAssets = new Map(),
+  announcement,
+  newsTopics = [],
+  composition,
+  orderedContent,
+  content = {},
+  heroBackgroundImage,
+  heroBackgroundPosition,
+} = Astro.props as Props;
+const watchHref = pbsVideoUrl;
+const giveHref = donateUrl;
+const aboutHref = "/about/";
+const passportHref = passportLearnMoreUrl;
+const passportContent = composition?.passport ?? HOME_PASSPORT_CONTENT;
+// The template band follows the retained Start boundary until a saved identity
+// owns Newsletter placement. Hidden saved identities suppress that fallback.
+// Both render slices derive from the single admitted array; there is no second
+// saved section-order authority.
+const ownsNewsletter = orderedContent?.data.blocks.some(block => block.section === "home-newsletter");
+const startBoundary = orderedContent?.data.blocks.findIndex(block => block.section === "home-start") ?? -1;
+if (orderedContent && startBoundary < 0) throw new Error("The Home Start boundary is missing");
+const orderedEntry = (blocks: CollectionEntry<"cmsPages">["data"]["blocks"]) => orderedContent
+  ? { ...orderedContent, data: { ...orderedContent.data, blocks } } : undefined;
+const beforeNewsletter = orderedContent ? orderedEntry(ownsNewsletter ? orderedContent.data.blocks : orderedContent.data.blocks.slice(0, startBoundary)) : undefined;
+const afterNewsletter = orderedContent && !ownsNewsletter ? orderedEntry(orderedContent.data.blocks.slice(startBoundary)) : undefined;
+
+const sourceEntry = Astro.locals.cmsRender
+  ? { data: Astro.locals.cmsRender.homeSources }
+  : await getEntry("publicHomeSources", "home");
+if (!sourceEntry) throw new Error("The Home source snapshot is missing");
+const homeSources = sourceEntry.data;
+const featuredCards: HomeProgramRailCard[] = homeSources.pbs.featured.map((card, index) => ({
+  title: card.title,
+  description: card.description,
+  href: card.href,
+  image: card.image,
+  external: /^https?:\/\//.test(card.href),
+  index,
+}));
+const recentCards: HomeProgramRailCard[] = homeSources.pbs.more.map((card, index) => ({
+  title: card.title,
+  description: card.description,
+  href: card.href,
+  image: card.image,
+  external: /^https?:\/\//.test(card.href),
+  index: index + 8,
+}));
+const spotlightCards = homeSources.spotlight.cards;
+---
+
+{newsTopics.length > 0 && <HomepageNewsTopicBar topics={newsTopics} />}
+
+{announcement?.enabled && !announcement.njDecides && (
+  <HomepageAnnouncement message={announcement.message} link={announcement.link} secondLink={announcement.secondLink} />
+)}
+
+<HomeHero items={heroItems} config={heroConfig} title={heroTitle} subtitle={heroSubtitle}
+  image={heroBackgroundImage} position={heroBackgroundPosition}
+  watchHref={watchHref} watchLabel="Watch on demand"
+  giveHref={giveHref} aboutHref={aboutHref} externalActions={true} />
+
+{!orderedContent && content.before_start && <CmsBlocks entry={content.before_start} />}
+{!orderedContent && promotions.filter(block => block.data.placement === "before_start").map(block => (
+  <HomepagePromotionPlaylist block={block} assets={promotionAssets} />
+))}
+
+{beforeNewsletter && composition && <HomeCompositionSections entry={beforeNewsletter} composition={composition} featured={featuredCards} more={recentCards} spotlight={spotlightCards} promotionAssets={promotionAssets} catalog={homeSources.editorial?.catalog} />}
+
+{!ownsNewsletter && <Fragment set:html={renderStandardHomeNewsletter()} />}
+
+{afterNewsletter && composition && <HomeCompositionSections entry={afterNewsletter} composition={composition} featured={featuredCards} more={recentCards} spotlight={spotlightCards} promotionAssets={promotionAssets} catalog={homeSources.editorial?.catalog} />}
+
+{!orderedContent && content.before_featured && <CmsBlocks entry={content.before_featured} />}
+{!orderedContent && promotions.filter(block => block.data.placement === "before_featured").map(block => (
+  <HomepagePromotionPlaylist block={block} assets={promotionAssets} />
+))}
+
+<!-- Featured lineup -->
+{!orderedContent && <Fragment set:html={renderHomeProgramRail("featured", composition ? featuredCards.slice(0, composition.featured.itemLimit) : featuredCards, watchHref, true, composition?.featured)} />}
+
+{!orderedContent && content.before_passport && <CmsBlocks entry={content.before_passport} />}
+{!orderedContent && promotions.filter(block => block.data.placement === "before_passport").map(block => (
+  <HomepagePromotionPlaylist block={block} assets={promotionAssets} />
+))}
+
+{!orderedContent && <Fragment set:html={renderHomePassport(passportContent, passportHref, true)} />}
+
+{!orderedContent && content.before_more && <CmsBlocks entry={content.before_more} />}
+{!orderedContent && promotions.filter(block => block.data.placement === "before_more").map(block => (
+  <HomepagePromotionPlaylist block={block} assets={promotionAssets} />
+))}
+
+{!orderedContent && <Fragment set:html={renderHomeProgramRail("more", composition ? recentCards.slice(0, composition.more.itemLimit) : recentCards, watchHref, true, composition?.more)} />}
+
+<script is:inline>
+  (function () {
+    function setupRails() {
+      document.querySelectorAll(".rail__track").forEach(function (track) {
+        var id = track.id;
+        if (!id || track.dataset.railReady === "true") return;
+        track.dataset.railReady = "true";
+        var prev = document.querySelector('[data-rail-prev="' + id + '"]');
+        var next = document.querySelector('[data-rail-next="' + id + '"]');
+        var update = function () { updateButtonState(track, prev, next); };
+        update();
+        track.addEventListener("scroll", update, { passive: true });
+        window.addEventListener("resize", update);
+        if (window.ResizeObserver) new ResizeObserver(update).observe(track);
+      });
+    }
+
+    function updateButtonState(track, prev, next) {
+      if (!track || !prev || !next) return;
+      var max = track.scrollWidth - track.clientWidth;
+      var hasOverflow = max > 8;
+      prev.disabled = track.scrollLeft <= 2;
+      next.disabled = track.scrollLeft >= max - 2;
+      prev.hidden = !hasOverflow || prev.disabled;
+      next.hidden = !hasOverflow || next.disabled;
+    }
+
+    document.addEventListener("click", function (event) {
+      var button = event.target.closest("[data-rail-prev], [data-rail-next]");
+      if (!button) return;
+      var targetId = button.getAttribute("data-rail-prev") || button.getAttribute("data-rail-next");
+      var track = targetId ? document.getElementById(targetId) : null;
+      if (!track) return;
+      var direction = button.hasAttribute("data-rail-prev") ? -1 : 1;
+      var max = track.scrollWidth - track.clientWidth;
+      var current = track.scrollLeft;
+      var amount = direction * Math.max(320, track.clientWidth * 0.78);
+      var nextLeft = Math.max(0, Math.min(max, current + amount));
+      var reduceMotion =
+        document.documentElement.dataset.motion === "off" ||
+        window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+      track.scrollTo({ left: nextLeft, behavior: reduceMotion ? "auto" : "smooth" });
+      track.focus({ preventScroll: true });
+    });
+
+    if (document.readyState === "loading") {
+      document.addEventListener("DOMContentLoaded", setupRails);
+    } else {
+      setupRails();
+    }
+  })();
+</script>
+
+{!orderedContent && content.before_spotlight && <CmsBlocks entry={content.before_spotlight} />}
+{!orderedContent && promotions.filter(block => block.data.placement === "before_spotlight").map(block => (
+  <HomepagePromotionPlaylist block={block} assets={promotionAssets} />
+))}
+
+{!orderedContent && <Fragment set:html={renderHomeNewsRail(composition ? spotlightCards.slice(0, composition.spotlight.itemLimit) : spotlightCards, composition?.spotlight)} />}
+{!orderedContent && content.after_spotlight && <CmsBlocks entry={content.after_spotlight} />}
+
+
+
+<style>
+
+  @media (prefers-reduced-motion: reduce) {
+    .card:hover .card__art { transform: none; }
+    .btn { transition: none; }
+  }
+  :global(html[data-motion="off"]) .card:hover .card__art {
+    transform: none;
+  }
+</style>

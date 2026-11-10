@@ -1,0 +1,34 @@
+.election-results-editor { display: grid; gap: 1rem; }
+.election-results-editor p { margin: 0; }
+.election-results-editor__race { border: 1px solid var(--border, #cbd1da); border-radius: .4rem; overflow: clip; }
+.election-results-editor summary { cursor: pointer; min-height: 44px; padding: .75rem; overflow-wrap: anywhere; }
+.election-results-editor__race > summary { display: flex; flex-wrap: wrap; gap: .5rem; justify-content: space-between; background: var(--surface-secondary, #f2f4f7); font-weight: 700; }
+.election-results-editor__approval { font-size: .85rem; font-weight: 400; }
+.election-results-editor fieldset { margin: 0; padding: 1rem; border: 0; min-width: 0; display: grid; gap: 1rem; }
+.election-results-editor__fields { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 14rem), 1fr)); gap: 1rem; }
+.election-results-editor__fields label { display: grid; align-content: start; gap: .35rem; min-width: 0; }
+.election-results-editor__fields :is(input, select) { max-width: 100%; min-width: 0; }
+.election-results-editor__wide { grid-column: 1 / -1; min-width: 0; }
+.election-results-editor__candidates { display: grid; gap: .75rem; }
+.election-results-editor__candidates > details { border: 1px solid var(--border, #cbd1da); padding: 0 .75rem .75rem; border-radius: .3rem; min-width: 0; }
+.election-results-editor__candidates > details > summary { margin: 0 -.75rem .75rem; font-weight: 700; }
+.election-results-editor__history { margin: 0 1rem 1rem; overflow-wrap: anywhere; }
+.election-results-editor__history :is(p, ol) { margin: .5rem 0; }
+.election-results-editor summary:focus-visible { outline: 3px solid var(--focus, #2356c8); outline-offset: -3px; }
+.election-results-editor small { font-weight: 400; }
+
+.election-source-host:empty { display: none; }
+.election-source-host { display: grid; gap: 1rem; margin-bottom: 1rem; }
+.election-source-panel { border: 1px solid var(--border, #cbd1da); border-radius: .4rem; padding: 1rem; min-width: 0; overflow-wrap: anywhere; }
+.election-source-panel h3 { margin: 0; font-size: 1rem; }
+.election-source-panel label { display: grid; gap: .35rem; min-width: 0; }
+.election-source-panel :is(input, select) { max-width: 100%; min-width: 0; }
+.election-source-panel__actions { display: flex; flex-wrap: wrap; gap: .5rem; }
+.election-source-panel__times { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 2fr); gap: .5rem; margin: 0; }
+.election-source-panel__times dd { margin: 0; }
+.election-source-panel__roster { border: 1px solid var(--border, #cbd1da); padding: .5rem; min-width: 0; }
+.election-source-panel__roster > summary { font-weight: 600; }
+.election-source-panel__candidate { display: grid; gap: .75rem; padding-block: .75rem; border-top: 1px solid var(--border, #cbd1da); }
+.election-source-panel .election-source-panel__check { display: flex; align-items: center; gap: .5rem; min-height: 44px; }
+.election-source-panel details > :is(p, label) { margin-block: .75rem; }
+@media (max-width: 480px) { .election-source-panel__times { grid-template-columns: minmax(0, 1fr); gap: .25rem; } .election-source-panel__times dd { margin-bottom: .5rem; } }

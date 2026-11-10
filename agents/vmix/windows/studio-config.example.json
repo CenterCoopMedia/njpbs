@@ -1,0 +1,19 @@
+{
+  "schemaVersion": 1,
+  "vmixHost": "REPLACE_ME",
+  "vmixPort": null,
+  "apiAccessMode": "REPLACE_ME",
+  "backgroundInput": null,
+  "inputs": {
+    "headline": null,
+    "name_title": null
+  },
+  "overlayInputs": {
+    "headline": null,
+    "name_title": null
+  },
+  "titleFiles": {
+    "headline": "REPLACE_ME.gtzip",
+    "name_title": "REPLACE_ME.gtzip"
+  }
+}

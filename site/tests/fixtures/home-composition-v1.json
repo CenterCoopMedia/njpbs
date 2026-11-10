@@ -1,0 +1,201 @@
+{
+  "id": "home",
+  "template": "home",
+  "title": "Home",
+  "status": "draft",
+  "version": 7,
+  "homeCompositionVersion": 1,
+  "blocks": [
+    {
+      "id": "new-home-start",
+      "section": "home-start",
+      "order": 0,
+      "visible": true,
+      "type": "card_grid",
+      "data": {
+        "cards": [
+          {
+            "title": "LIVE",
+            "href": "/live/",
+            "body": {
+              "type": "doc",
+              "content": [
+                {
+                  "type": "paragraph",
+                  "content": [
+                    {
+                      "type": "text",
+                      "text": "Stream the NJ PBS broadcast channel right now"
+                    }
+                  ]
+                }
+              ]
+            }
+          },
+          {
+            "title": "Programs on demand",
+            "href": "https://watch.njpbs.org/",
+            "body": {
+              "type": "doc",
+              "content": [
+                {
+                  "type": "paragraph",
+                  "content": [
+                    {
+                      "type": "text",
+                      "text": "Browse full episodes and specials any time"
+                    }
+                  ]
+                }
+              ]
+            }
+          },
+          {
+            "title": "TV schedule",
+            "href": "/schedule/",
+            "body": {
+              "type": "doc",
+              "content": [
+                {
+                  "type": "paragraph",
+                  "content": [
+                    {
+                      "type": "text",
+                      "text": "See what is airing today and all week"
+                    }
+                  ]
+                }
+              ]
+            }
+          },
+          {
+            "title": "PBS Kids",
+            "href": "/kids/",
+            "body": {
+              "type": "doc",
+              "content": [
+                {
+                  "type": "paragraph",
+                  "content": [
+                    {
+                      "type": "text",
+                      "text": "Trusted, ad-free shows and games for children"
+                    }
+                  ]
+                }
+              ]
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "new-home-start-action",
+      "section": "home-start-action",
+      "order": 1,
+      "visible": true,
+      "type": "cta_row",
+      "data": {
+        "ctas": [
+          {
+            "label": "Full schedule",
+            "href": "/schedule/"
+          }
+        ]
+      }
+    },
+    {
+      "id": "new-home-featured",
+      "section": "home-featured",
+      "order": 2,
+      "visible": true,
+      "type": "content_shelf",
+      "data": {
+        "title": "Featured on NJ PBS",
+        "source": "pbs_featured",
+        "itemLimit": 8,
+        "moreLabel": "Browse all",
+        "moreHref": "https://watch.njpbs.org/"
+      }
+    },
+    {
+      "id": "new-home-passport-copy",
+      "section": "home-passport-copy",
+      "order": 3,
+      "visible": true,
+      "type": "prose",
+      "data": {
+        "content": {
+          "type": "doc",
+          "content": [
+            {
+              "type": "heading",
+              "attrs": {
+                "level": 2
+              },
+              "content": [
+                {
+                  "type": "text",
+                  "text": "Stream more with PBS Passport"
+                }
+              ]
+            },
+            {
+              "type": "paragraph",
+              "content": [
+                {
+                  "type": "text",
+                  "text": "Members unlock a library of PBS and NJ PBS programs on demand. Learn how the Passport member benefit works through PBS."
+                }
+              ]
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "new-home-passport-action",
+      "section": "home-passport-action",
+      "order": 4,
+      "visible": true,
+      "type": "cta_row",
+      "data": {
+        "ctas": [
+          {
+            "label": "Explore Passport",
+            "href": "https://watch.njpbs.org/passport/learn-more/",
+            "variant": "primary"
+          }
+        ]
+      }
+    },
+    {
+      "id": "new-home-more",
+      "section": "home-more",
+      "order": 5,
+      "visible": true,
+      "type": "content_shelf",
+      "data": {
+        "title": "More to watch",
+        "source": "pbs_more",
+        "itemLimit": 16,
+        "moreLabel": "Browse all",
+        "moreHref": "https://watch.njpbs.org/"
+      }
+    },
+    {
+      "id": "new-home-spotlight",
+      "section": "home-spotlight",
+      "order": 6,
+      "visible": true,
+      "type": "content_shelf",
+      "data": {
+        "title": "NJ Spotlight News",
+        "source": "spotlight_news",
+        "itemLimit": 8,
+        "moreLabel": "More news",
+        "moreHref": "https://www.njspotlightnews.org/"
+      }
+    }
+  ]
+}

@@ -1,0 +1,73 @@
+title: "[Idea] "
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Start with the need and the result you want. An early idea does not need a design or a technical plan.
+
+        How-to questions belong in [Q&A](https://github.com/CenterCoopMedia/njpbs/discussions/new?category=q-a).
+
+        Do not include passwords, Access codes, donor or member data, private contact details, unpublished agreements, or other protected information.
+  - type: dropdown
+    id: role
+    attributes:
+      label: I would use this as
+      options:
+        - A staff editor
+        - A viewer of njpbs.org
+        - A CCM or MSU collaborator
+        - A stakeholder
+    validations:
+      required: true
+  - type: dropdown
+    id: surface
+    attributes:
+      label: This is about
+      options:
+        - The public site
+        - The staff CMS
+        - How we work together
+        - I am not sure
+    validations:
+      required: true
+  - type: textarea
+    id: need
+    attributes:
+      label: What is hard, slow, confusing, or missing?
+    validations:
+      required: true
+  - type: textarea
+    id: people
+    attributes:
+      label: Who would this help?
+      description: Staff role, audience, or collaborator group.
+    validations:
+      required: true
+  - type: textarea
+    id: result
+    attributes:
+      label: What result do you want?
+      description: What a good outcome would make easier.
+    validations:
+      required: true
+  - type: textarea
+    id: example
+    attributes:
+      label: Do you have an example?
+      description: A page, screen, or short comparison. Remove private information first.
+  - type: checkboxes
+    id: limits
+    attributes:
+      label: Important limits
+      options:
+        - label: Mobile use matters.
+        - label: Accessibility needs special attention.
+        - label: This affects public content.
+        - label: This needs an editorial or policy decision.
+  - type: checkboxes
+    id: privacy
+    attributes:
+      label: Privacy check
+      options:
+        - label: I checked that this post does not include protected or private information.
+          required: true

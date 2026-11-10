@@ -1,0 +1,403 @@
+---
+import ReaderTextSize from "./ReaderTextSize.astro";
+import { createPageImageLoading } from "../../../packages/content-core/src/image-loading";
+import type { CollectionEntry } from "astro:content";
+import PostPublication from "./PostPublication.astro";
+import PostBlockList from "./PostBlockList.astro";
+import PostByline from "./PostByline.astro";
+import PostShareControls from "./PostShareControls.astro";
+import CmsHeroBackground from "./CmsHeroBackground.astro";
+import PostLeadPlayer from "./PostLeadPlayer.astro";
+import PostImageCaption from "./PostImageCaption.astro";
+import {
+  postMediaInventory,
+  postMediaInventoryText,
+} from "../lib/post-media";
+import {
+  primaryPostTopic,
+  publicPostCategories,
+  publicPostTopics,
+} from "../lib/post-formats";
+import { postIndexFilterHref } from "../lib/post-index-links";
+
+type PublicCredit = CollectionEntry<"cmsPosts">["data"]["credits"][number];
+
+interface Props {
+  entry: CollectionEntry<"cmsPosts">;
+  credits: readonly PublicCredit[];
+  canonicalUrl: string;
+}
+
+const { entry, credits, canonicalUrl } = Astro.props as Props;
+const post = entry.data;
+const topics = publicPostTopics(post.tags);
+const categories = publicPostCategories(post.categories);
+const subject = post.categories.map((category) => category.trim()).find(Boolean)
+  ?? primaryPostTopic(post.tags);
+const inventory = postMediaInventory(post);
+const inventoryText = postMediaInventoryText(inventory);
+const videoLead = post.leadMedia && post.leadMedia.kind !== "image";
+const hero = videoLead ? null : post.heroImage;
+const imageLoading = createPageImageLoading();
+const heroLoading = imageLoading(hero, "lcp");
+const heroAlt = post.heroImageDecorative ? "" : post.heroImageAlt;
+---
+
+<article class="multimedia-feature" data-post-presentation="multimedia">
+  <div class="multimedia-feature__brand">
+    <strong>NJ PBS Multimedia Feature</strong>
+    <span>{subject}</span>
+  </div>
+
+  <header
+    class:list={[
+      "multimedia-feature__masthead",
+      { "cms-hero-surface": Boolean(post.heroBackgroundImage) },
+    ]}
+  >
+    <CmsHeroBackground
+      image={post.heroBackgroundImage}
+      imageLoading={imageLoading}
+      position={post.heroBackgroundPosition}
+    />
+    <div class="multimedia-feature__introduction">
+      <PostPublication spotlightNews={post.spotlightNews} coverageLabelId={post.coverageLabelId} />
+      <h1>{post.title}</h1>
+      {post.summary && <p class="multimedia-feature__summary">{post.summary}</p>}
+      <PostByline
+        credits={credits}
+        displayDate={post.displayDate}
+        updateShown={post.updateShown}
+        updatedAt={post.updatedAt}
+        updatedDate={post.updatedDate}
+      />
+      <PostShareControls title={post.title} url={canonicalUrl} placement="top" />
+      {inventory.totalModules > 0 && <p class="multimedia-feature__inventory">
+        <strong>Media in this feature:</strong> {inventoryText}
+      </p>}
+    </div>
+
+    {hero && (
+      <figure class="multimedia-feature__lead-media">
+        <img
+          src={hero.url}
+          width={hero.width}
+          height={hero.height}
+          alt={heroAlt}
+          {...heroLoading}
+        />
+        <PostImageCaption caption={post.heroImageCaption} credit={hero.credit} />
+      </figure>
+    )}
+    {videoLead && <figure class="multimedia-feature__lead-media"><PostLeadPlayer post={post} /></figure>}
+  </header>
+
+  <ReaderTextSize />
+
+  <div class="multimedia-feature__story">
+    <PostBlockList
+      entry={entry}
+      className="multimedia-feature__body"
+      presentation="multimedia"
+    />
+
+    <PostShareControls title={post.title} url={canonicalUrl} placement="bottom" />
+
+    {(categories.length > 0 || topics.length > 0) && (
+      <footer class="multimedia-feature__topics">
+        {categories.length > 0 && (
+          <><h2>Categories</h2><ul>{categories.map((category) => (
+            <li><a href={postIndexFilterHref("category", category)}>{category}</a></li>
+          ))}</ul></>
+        )}
+        {topics.length > 0 && (
+          <><h2>Tags</h2><ul>{topics.map((topic) => (
+            <li><a href={postIndexFilterHref("tag", topic)}>{topic}</a></li>
+          ))}</ul></>
+        )}
+      </footer>
+    )}
+  </div>
+</article>
+
+<style is:global>
+  .multimedia-feature {
+    min-height: 70vh;
+    overflow-x: clip;
+    background: var(--color-black);
+    color: var(--color-text-on-surface);
+  }
+
+  .multimedia-feature__brand {
+    display: flex;
+    gap: 1rem 2rem;
+    justify-content: space-between;
+    padding: 1rem max(var(--gutter), calc((100vw - var(--wrap)) / 2 + var(--gutter)));
+    border-bottom: 1px solid var(--color-border-strong);
+    background: var(--color-black);
+    color: var(--color-white);
+    font-size: 1rem;
+    line-height: 1.35;
+  }
+
+  .multimedia-feature__brand strong {
+    font-weight: 900;
+    letter-spacing: 0.035em;
+    text-transform: uppercase;
+  }
+
+  .multimedia-feature__brand span {
+    font-weight: 700;
+  }
+
+  .multimedia-feature__masthead {
+    border-bottom: 1px solid var(--color-border);
+    background: var(--color-black);
+  }
+
+  .multimedia-feature__introduction {
+    max-width: var(--wrap);
+    margin: 0 auto;
+    padding: clamp(3.5rem, 8vw, 7rem) var(--gutter) clamp(2.5rem, 5vw, 4rem);
+  }
+
+  .multimedia-feature__introduction h1 {
+    margin: 0;
+    color: var(--color-white);
+    font-size: clamp(3.2rem, 8vw, 7rem);
+    font-weight: 900;
+    letter-spacing: var(--heading-tracking);
+    line-height: 0.94;
+    overflow-wrap: anywhere;
+    text-wrap: balance;
+  }
+
+  .multimedia-feature__summary {
+    margin: 1.5rem 0 0;
+    color: var(--color-text-soft);
+    font-size: clamp(1.12rem, 2vw, 1.4rem);
+    line-height: 1.62;
+  }
+
+  .multimedia-feature__introduction .post-byline {
+    margin-top: 1.5rem;
+  }
+
+  .multimedia-feature__inventory {
+    margin: 1.5rem 0 0;
+    padding-top: 1rem;
+    border-top: 1px solid var(--color-border-strong);
+    color: var(--color-text-muted);
+    font-size: 1rem;
+    line-height: 1.55;
+  }
+
+  .multimedia-feature__inventory strong {
+    color: var(--color-white);
+  }
+
+  .multimedia-feature__lead-media {
+    width: 100%;
+    margin: 0;
+    background: var(--color-black);
+  }
+
+  .multimedia-feature__lead-media :is(.post-image-caption, .post-lead-player__caption, .cms-video__caption, .embed__heading) {
+    padding-inline: max(var(--gutter), calc((100vw - var(--wrap)) / 2 + var(--gutter)));
+  }
+
+  .multimedia-feature__lead-media img {
+    display: block;
+    width: 100%;
+    height: auto;
+    max-height: 86vh;
+    border-radius: 0;
+    object-fit: contain;
+  }
+
+  .multimedia-feature__story {
+    max-width: var(--wrap);
+    margin: 0 auto;
+    padding: clamp(3rem, 7vw, 6rem) var(--gutter) clamp(4rem, 9vw, 8rem);
+  }
+
+  .multimedia-feature__body {
+    display: grid;
+    gap: clamp(2rem, 5vw, 4.5rem);
+    margin: 0;
+    color: var(--color-text-soft);
+    font-size: 1.25rem;
+    line-height: 1.8;
+  }
+
+  .multimedia-feature__body > .cms-block {
+    width: 100%;
+    max-width: none;
+    margin-inline: 0;
+    color: inherit;
+  }
+
+  .multimedia-feature__body > :is(
+      .cms-block--image,
+      .cms-block--image_gallery,
+      .cms-block--embed,
+      .cms-block--cta_row,
+      .cms-block--topic_shelf
+    ) {
+    width: min(92rem, calc(100vw - 2rem));
+    margin-left: 50%;
+    transform: translateX(-50%);
+  }
+
+  .multimedia-feature__body :is(p, ul, ol, blockquote) {
+    margin-block: 0 1.2rem;
+  }
+
+  .multimedia-feature__body :is(ul, ol) {
+    padding-left: 1.4rem;
+  }
+
+  .multimedia-feature__body li:not([class]) + li:not([class]) {
+    margin-top: 0.45rem;
+  }
+
+  .multimedia-feature__body a:not(.btn) {
+    color: var(--color-link);
+    text-decoration-thickness: 0.09em;
+    text-underline-offset: 0.22em;
+  }
+
+  .multimedia-feature__body a:not(.btn):hover {
+    color: var(--color-white);
+  }
+
+  .multimedia-feature__body a:focus-visible {
+    outline: var(--focus-outline);
+    outline-offset: var(--focus-offset);
+  }
+
+  .multimedia-feature__body :is(h2, h3, h4) {
+    margin: clamp(0.75rem, 2.5vw, 1.75rem) 0 0;
+    color: var(--color-white);
+    letter-spacing: -0.025em;
+    line-height: 1.1;
+    text-wrap: balance;
+  }
+
+  .multimedia-feature__body h2 {
+    font-size: clamp(1.9rem, 4vw, 3rem);
+  }
+
+  .multimedia-feature__body h3 {
+    font-size: clamp(1.4rem, 3vw, 2rem);
+  }
+
+  .multimedia-feature__body figure {
+    margin: 0;
+  }
+
+  .multimedia-feature__body img {
+    display: block;
+    width: 100%;
+    height: auto;
+    border-radius: 0;
+    background: var(--color-black);
+  }
+
+  .multimedia-feature__body figcaption {
+    margin: 0.9rem 0 0;
+    color: var(--color-text-muted);
+    font-size: 1rem;
+    line-height: 1.55;
+  }
+
+  .multimedia-feature__body blockquote {
+    padding: 1.5rem 0;
+    border-top: 2px solid var(--color-border-strong);
+    border-bottom: 2px solid var(--color-border-strong);
+    color: var(--color-white);
+    font-size: calc(clamp(1.2rem, 2.4vw, 1.65rem) * var(--reader-text-scale, 1));
+    font-weight: 700;
+    line-height: 1.5;
+  }
+
+  .multimedia-feature__body hr {
+    width: 100%;
+    margin: 0;
+    border: 0;
+    border-top: 2px solid var(--color-border-strong);
+  }
+
+  .multimedia-feature__body .image-gallery-shell,
+  .multimedia-feature__body .image-gallery {
+    background: var(--color-black);
+  }
+
+  .multimedia-feature__body .embed {
+    padding: clamp(2rem, 5vw, 4rem) max(1rem, calc((100vw - 70rem) / 2));
+    border-top: 1px solid var(--color-border-strong);
+    border-bottom: 1px solid var(--color-border-strong);
+    background: var(--color-surface-panel);
+    font-size: clamp(1.1rem, 2vw, 1.35rem);
+    font-weight: 800;
+    text-align: center;
+  }
+
+  .multimedia-feature__body .btn {
+    border-radius: 0;
+    box-shadow: none;
+  }
+
+  .multimedia-feature__topics {
+    margin: clamp(3rem, 7vw, 5rem) 0 0;
+    padding-top: 1.5rem;
+    border-top: 1px solid var(--color-border-strong);
+  }
+
+  .multimedia-feature__topics h2 {
+    margin: 0;
+    color: var(--color-white);
+    font-size: 1.15rem;
+    line-height: 1.3;
+  }
+
+  .multimedia-feature__topics ul {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem 0;
+    margin: 0.8rem 0 0;
+    padding: 0;
+    list-style: none;
+  }
+
+  .multimedia-feature__topics li {
+    color: var(--color-text-muted);
+    font-size: 1rem;
+    line-height: 1.45;
+  }
+
+  .multimedia-feature__topics a {
+    color: inherit;
+    text-underline-offset: 0.2em;
+  }
+
+  .multimedia-feature__topics li:not(:last-child)::after {
+    margin: 0 0.65rem;
+    color: var(--color-text-quiet);
+    content: "·";
+  }
+
+  @media (max-width: 560px) {
+    .multimedia-feature__brand {
+      align-items: flex-start;
+      flex-direction: column;
+    }
+
+    .multimedia-feature__introduction,
+    .multimedia-feature__story,
+    .multimedia-feature__lead-media :is(.post-lead-player__caption, .cms-video__caption, .embed__heading) {
+      padding-right: 1rem;
+      padding-left: 1rem;
+    }
+  }
+</style>

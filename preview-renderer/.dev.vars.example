@@ -1,0 +1,6 @@
+FIREBASE_SERVICE_ACCOUNT=""
+R2_PREVIEW_CREDENTIAL=""
+# Same account used by the deployment CLI and R2 endpoint.
+CLOUDFLARE_ACCOUNT_ID="REPLACE_ME"
+# JSON list of trusted workflow actors; an empty list denies release admission.
+CMS_PUBLISH_GITHUB_TRUSTED_ACTORS="[]"

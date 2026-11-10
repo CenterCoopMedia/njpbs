@@ -1,0 +1,22 @@
+.reorder-handle.button {
+  flex: 0 0 auto;
+  min-width: var(--target-comfortable);
+  min-height: var(--target-comfortable);
+  padding: var(--space-2);
+  cursor: grab;
+  /* Only the dedicated grip owns touch gestures. The rest of each row scrolls normally. */
+  touch-action: none;
+}
+.reorder-handle:active { cursor: grabbing; }
+[data-reorder-dragging="true"] { opacity: 0.65; }
+[data-reorder-item] { position: relative; }
+[data-reorder-drop]::after {
+  content: "";
+  position: absolute;
+  inset-inline: 0;
+  border-top: 3px solid var(--color-brand);
+  pointer-events: none;
+  z-index: 1;
+}
+[data-reorder-drop="before"]::after { top: 0; }
+[data-reorder-drop="after"]::after { bottom: 0; }

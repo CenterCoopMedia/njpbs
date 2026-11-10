@@ -1,0 +1,9 @@
+---
+import NjDecidesBand from "./NjDecidesBand.astro";
+interface Props { title: string; description?: string }
+const { title, description } = Astro.props as Props;
+---
+<header class="nj-decides-page-heading" data-page-theme="nj-decides">
+  <h1 class="sr-only">{title}</h1>
+  <NjDecidesBand copy={description} />
+</header>

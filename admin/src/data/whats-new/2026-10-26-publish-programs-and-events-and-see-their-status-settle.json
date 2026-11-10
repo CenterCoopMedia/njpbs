@@ -1,0 +1,21 @@
+{
+  "date": "2026-10-26",
+  "kind": "fixed",
+  "title": "Publish Programs and Events and see their status settle",
+  "body": "Programs and Events support Publish, Schedule, Unpublish and Archive again. Published items leave the pending state when confirmation catches up. Page publishing also completes for Meeting notices and the full TV schedule.",
+  "prs": [
+    3933,
+    3934,
+    3936,
+    3949,
+    3950,
+    3952,
+    3958,
+    3959,
+    3960,
+    3979,
+    4032,
+    4033
+  ],
+  "order": -6
+}

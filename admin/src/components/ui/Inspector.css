@@ -1,0 +1,240 @@
+/* Details inspector, its modal narrow-screen sheet and its docked mode. */
+.ui-inspector {
+  position: sticky;
+  top: var(--cms-space-4);
+  display: flex;
+  flex: none;
+  flex-direction: column;
+  align-self: flex-start;
+  min-width: var(--cms-inspector-min);
+  max-width: var(--cms-inspector-max);
+  max-height: calc(100dvh - (2 * var(--cms-space-4)));
+  border: var(--cms-border-width) solid var(--cms-line);
+  border-radius: var(--cms-radius-panel);
+  background: var(--cms-surface-context);
+  color: var(--cms-ink);
+}
+
+.ui-inspector[hidden] {
+  display: none;
+}
+
+.ui-inspector-sheet {
+  position: fixed;
+  inset: 0 0 0 auto;
+  z-index: var(--cms-z-sheet);
+  /* Box alignment applies to fixed boxes too; flex-start would size the sheet to its content. */
+  align-self: stretch;
+  width: min(var(--cms-inspector-max), 100vw);
+  min-width: 0;
+  max-width: none;
+  max-height: none;
+  border-block: 0;
+  border-inline-end: 0;
+  border-radius: 0;
+  box-shadow: var(--cms-shadow-menu);
+  padding-bottom: env(safe-area-inset-bottom);
+}
+
+/* Under 62rem the sheet is modal: the scrim dims the page, which is inert behind it. The scrim
+   comes first in the document, so the sheet paints over it on the same layer. */
+.ui-inspector-scrim {
+  position: fixed;
+  inset: 0;
+  z-index: var(--cms-z-sheet);
+  background: var(--cms-scrim);
+}
+
+.ui-inspector-sheet .ui-inspector-header {
+  padding-top: calc(var(--cms-space-2) + env(safe-area-inset-top));
+}
+
+/* Only the opening animates, and only when motion is welcome. Neither surface is hidden until
+   placed, so nothing transitions visibility. */
+@media (prefers-reduced-motion: no-preference) {
+  .ui-inspector-sheet {
+    animation: ui-inspector-slide var(--cms-motion-normal) var(--cms-ease);
+  }
+
+  .ui-inspector-scrim {
+    animation: ui-inspector-fade var(--cms-motion-normal) var(--cms-ease);
+  }
+}
+
+@keyframes ui-inspector-slide {
+  from {
+    transform: translateX(1.5rem);
+    opacity: 0;
+  }
+}
+
+@keyframes ui-inspector-fade {
+  from {
+    opacity: 0;
+  }
+}
+
+/* Docked in a dialog such as the video viewer: a column beside the player that fills the
+   dialog's height, with no resize handle. */
+.ui-inspector-docked {
+  position: relative;
+  top: 0;
+  align-self: stretch;
+  width: var(--cms-inspector-width);
+  max-height: 100%;
+  min-height: 0;
+  border-width: 0 0 0 var(--cms-border-width);
+  border-radius: 0;
+}
+
+.ui-inspector-docked .ui-inspector-footer {
+  position: sticky;
+  bottom: 0;
+}
+
+/* Under 62rem it stacks under the player and scrolls with the dialog's body. */
+@media (max-width: 61.99rem) {
+  .ui-inspector-docked {
+    width: 100%;
+    min-width: 0;
+    max-width: none;
+    max-height: none;
+    border-width: var(--cms-border-width) 0 0;
+  }
+
+  .ui-inspector-docked .ui-inspector-body {
+    overflow: visible;
+  }
+
+  .ui-inspector-docked .ui-inspector-footer {
+    position: static;
+  }
+}
+
+.ui-inspector-header {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: var(--cms-space-2);
+  padding: var(--cms-space-2) var(--cms-space-2) var(--cms-space-2) var(--cms-space-4);
+  border-bottom: var(--cms-border-width) solid var(--cms-line);
+  background: var(--cms-surface-header);
+}
+
+.ui-inspector-heading {
+  flex: 1 1 auto;
+  min-width: 0;
+  margin: 0;
+  overflow: hidden;
+  font-size: var(--cms-font-base);
+  line-height: var(--cms-line-tight);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ui-inspector-heading:focus-visible {
+  outline: var(--cms-focus-outline);
+  outline-offset: 2px;
+}
+
+.ui-inspector-body {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: auto;
+  overscroll-behavior: contain;
+}
+
+.ui-inspector-section + .ui-inspector-section {
+  border-top: var(--cms-border-width) solid var(--cms-line);
+}
+
+/* The disclosure button fills the heading; a section menu sits beside it, never inside it. */
+.ui-inspector-section-head {
+  display: flex;
+  align-items: center;
+}
+
+.ui-inspector-section-heading {
+  flex: 1 1 auto;
+  min-width: 0;
+  margin: 0;
+  font-size: var(--cms-font-sm);
+}
+
+.ui-inspector-section-heading button {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--cms-space-2);
+  width: 100%;
+  min-height: var(--cms-control-standard-target);
+  padding: 0 var(--cms-space-3) 0 var(--cms-space-4);
+  border: 0;
+  background: transparent;
+  color: var(--cms-ink);
+  font: inherit;
+  font-weight: 600;
+  text-align: start;
+  cursor: pointer;
+}
+
+.ui-inspector-section-heading button:hover {
+  background: var(--cms-surface-soft);
+}
+
+.ui-inspector-section-heading button:focus-visible {
+  outline: var(--cms-focus-outline);
+  outline-offset: -3px;
+}
+
+.ui-inspector-section-heading .icon {
+  flex: none;
+  color: var(--cms-ink-muted);
+}
+
+/* The title and its count wrap rather than clip. */
+.ui-inspector-section-title {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0 var(--cms-space-2);
+  min-width: 0;
+  padding-block: var(--cms-space-2);
+  overflow-wrap: anywhere;
+}
+
+.ui-inspector-section-count {
+  color: var(--cms-ink-muted);
+  font-size: var(--cms-font-xs);
+  font-weight: 500;
+}
+
+.ui-inspector-section-actions {
+  display: flex;
+  flex: none;
+  align-items: center;
+  max-width: 55%;
+  margin-right: var(--cms-space-2);
+}
+
+.ui-inspector-section-body {
+  display: grid;
+  gap: var(--cms-space-3);
+  padding: 0 var(--cms-space-4) var(--cms-space-4);
+}
+
+.ui-inspector-section-body[hidden] {
+  display: none;
+}
+
+/* Save stays in reach however long the form is. */
+.ui-inspector-footer {
+  display: flex;
+  flex: none;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: var(--cms-space-2);
+  padding: var(--cms-space-3) var(--cms-space-4);
+  border-top: var(--cms-border-width) solid var(--cms-line);
+  background: var(--cms-surface-header);
+}

@@ -1,0 +1,10 @@
+{
+  "date": "2026-11-02",
+  "kind": "new",
+  "title": "Add a town election lookup to a Page",
+  "body": "Add the Town election lookup plank to a standard or program Page so readers can find past presidential and federal results, 2024 turnout and a map of their municipality. Edit its heading, introduction and source line, then move or remove it like other planks.",
+  "prs": [
+    4660
+  ],
+  "order": 30
+}

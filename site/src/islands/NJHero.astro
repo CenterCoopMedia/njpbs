@@ -1,0 +1,250 @@
+---
+// The 3D particle-New-Jersey hero island.
+// Renders a <canvas> plus a static SVG fallback. The Babylon engine mounts only
+// after the hero is near the viewport, the page has finished loading, and the
+// browser grants idle time (with a bounded fallback for browsers without
+// requestIdleCallback). Without WebGL the static SVG stays. prefers-reduced-motion
+// still mounts but renders a single static frame with no animation loop. Either
+// way the page is usable with zero JS.
+import type { NJHeroConfig } from "../lib/nj-hero";
+
+interface Props {
+  config?: Partial<NJHeroConfig>;
+  /** accessible description of what the hero depicts */
+  label?: string;
+  /** static SVG shown without WebGL; theme it to match the live config */
+  fallbackSrc?: string;
+  class?: string;
+}
+
+const {
+  config = {},
+  label = "New Jersey, drawn as a field of points",
+  fallbackSrc = "/nj-static.svg",
+  class: className = "",
+} = Astro.props;
+---
+
+<div
+  class:list={["nj-hero", className]}
+  data-nj-hero
+  data-nj-config={JSON.stringify(config)}
+>
+  <canvas class="nj-hero__canvas" aria-hidden="true"></canvas>
+  <img
+    class="nj-hero__fallback"
+    src={fallbackSrc}
+    width="420"
+    height="740"
+    alt={label}
+    loading="eager"
+    decoding="async"
+  />
+</div>
+
+<script>
+  // The Babylon engine and the ~90 KB point cloud are loaded with DYNAMIC
+  // imports below, not statically, so they are code-split into a chunk that is
+  // fetched only after the hero is visible, every capability gate has passed,
+  // and the initial page-load work has yielded. Static imports here would bundle
+  // Babylon into the island script that every hero page downloads up front,
+  // defeating the fallback for the exact low-end/no-WebGL audience.
+  import { readConnection, shouldLoadHeavyEnhancement } from "../lib/network-preference";
+
+  type IdleCapableWindow = Window & {
+    requestIdleCallback?: (
+      callback: () => void,
+      options?: { timeout?: number },
+    ) => number;
+    cancelIdleCallback?: (handle: number) => void;
+  };
+
+  const mounted = new WeakSet<HTMLElement>();
+  const scheduled = new WeakSet<HTMLElement>();
+  const HERO_IDLE_TIMEOUT_MS = 3_000;
+  const HERO_IDLE_FALLBACK_MS = 1_000;
+
+  function webglAvailable(): boolean {
+    try {
+      const c = document.createElement("canvas");
+      return !!(c.getContext("webgl2") || c.getContext("webgl"));
+    } catch {
+      return false;
+    }
+  }
+
+  async function init(el: HTMLElement) {
+    if (mounted.has(el)) return;
+    const canvas = el.querySelector<HTMLCanvasElement>(".nj-hero__canvas");
+    if (!canvas || !webglAvailable()) return; // SVG fallback stays visible
+    // Low-bandwidth gate: skip the Babylon engine + point cloud entirely and
+    // leave the static SVG when constrained. Two inputs, so every constrained
+    // signal is honored: html[data-saver] is the single source of truth set
+    // pre-paint by Base.astro (Save-Data / 2g / prefers-reduced-data — the
+    // last of which navigator.connection can't see), and the connection check
+    // adds the 3g threshold the attribute doesn't cover. Absent signal
+    // (Safari/Firefox/fast) → loads as before.
+    const constrained =
+      el.ownerDocument.documentElement.hasAttribute("data-saver") ||
+      !shouldLoadHeavyEnhancement(readConnection());
+    if (constrained) return;
+    mounted.add(el);
+    let config = {};
+    try {
+      config = JSON.parse(el.dataset.njConfig || "{}");
+    } catch {
+      /* fall back to engine defaults */
+    }
+    // Fetch the heavy chunk only now that every gate has passed.
+    const [{ mountNJHero }, { default: points }] = await Promise.all([
+      import("../lib/nj-hero"),
+      import("../data/nj-points.json"),
+    ]);
+    el.classList.add("nj-hero--live");
+    const dispose = mountNJHero(canvas, points as any, config);
+    window.addEventListener("pagehide", dispose, { once: true });
+  }
+
+  // Visibility alone should not turn the decorative enhancement into startup
+  // work. Wait until window.load, then ask the browser for an idle slice. The
+  // timeout guarantees capable browsers eventually receive the enhancement;
+  // the separate fallback covers browsers without requestIdleCallback.
+  function scheduleInit(el: HTMLElement) {
+    if (scheduled.has(el) || mounted.has(el)) return;
+    scheduled.add(el);
+
+    const idleWindow = window as IdleCapableWindow;
+    let started = false;
+    let waitingForRestore = false;
+    let idleHandle: number | null = null;
+    let fallbackHandle: number | null = null;
+
+    function clearScheduledWork() {
+      if (
+        idleHandle !== null &&
+        typeof idleWindow.cancelIdleCallback === "function"
+      ) {
+        idleWindow.cancelIdleCallback(idleHandle);
+      }
+      if (fallbackHandle !== null) window.clearTimeout(fallbackHandle);
+      idleHandle = null;
+      fallbackHandle = null;
+    }
+
+    function clearPending() {
+      window.removeEventListener("load", queueWhenIdle);
+      window.removeEventListener("pagehide", handlePageHide);
+      window.removeEventListener("pageshow", resumeAfterRestore);
+      clearScheduledWork();
+    }
+
+    function start() {
+      if (started) return;
+      started = true;
+      clearPending();
+      void init(el);
+    }
+
+    function cancel() {
+      if (started) return;
+      started = true;
+      clearPending();
+    }
+
+    function queueWhenIdle() {
+      if (started) return;
+      clearScheduledWork();
+      if (typeof idleWindow.requestIdleCallback === "function") {
+        idleHandle = idleWindow.requestIdleCallback(start, {
+          timeout: HERO_IDLE_TIMEOUT_MS,
+        });
+      } else {
+        fallbackHandle = window.setTimeout(start, HERO_IDLE_FALLBACK_MS);
+      }
+    }
+
+    function resumeAfterRestore() {
+      waitingForRestore = false;
+      if (started) return;
+      queueWhenIdle();
+    }
+
+    function handlePageHide(event: PageTransitionEvent) {
+      if (started) return;
+      if (event.persisted) {
+        // A bfcache navigation freezes this document rather than discarding it.
+        // Cancel the old callback, then ask for a fresh idle slice when the same
+        // document is restored; permanently cancel only a real unload.
+        clearScheduledWork();
+        window.removeEventListener("load", queueWhenIdle);
+        if (!waitingForRestore) {
+          waitingForRestore = true;
+          window.addEventListener("pageshow", resumeAfterRestore, {
+            once: true,
+          });
+        }
+        return;
+      }
+      cancel();
+    }
+
+    window.addEventListener("pagehide", handlePageHide);
+    if (document.readyState === "complete") queueWhenIdle();
+    else window.addEventListener("load", queueWhenIdle, { once: true });
+  }
+
+  const heroes = Array.from(
+    document.querySelectorAll<HTMLElement>("[data-nj-hero]"),
+  );
+  if ("IntersectionObserver" in window) {
+    const io = new IntersectionObserver(
+      (entries) => {
+        for (const e of entries) {
+          if (e.isIntersecting) {
+            scheduleInit(e.target as HTMLElement);
+            io.unobserve(e.target);
+          }
+        }
+      },
+      { rootMargin: "200px" },
+    );
+    heroes.forEach((h) => io.observe(h));
+  } else {
+    heroes.forEach(scheduleInit);
+  }
+</script>
+
+<style>
+  .nj-hero {
+    position: relative;
+    width: 100%;
+    height: 100%;
+    min-height: 60svh;
+  }
+  .nj-hero__canvas {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    display: block;
+    /* canvas is hidden until the engine confirms it can run */
+    opacity: 0;
+    transition: opacity 600ms ease;
+  }
+  .nj-hero--live .nj-hero__canvas {
+    opacity: 1;
+  }
+  .nj-hero--live .nj-hero__fallback {
+    opacity: 0;
+  }
+  .nj-hero__fallback {
+    position: absolute;
+    inset: 0;
+    margin: auto;
+    max-height: 100%;
+    width: auto;
+    object-fit: contain;
+    pointer-events: none;
+    transition: opacity 400ms ease;
+  }
+</style>

@@ -1,0 +1,385 @@
+{
+  "AWSTemplateFormatVersion": "2010-09-09",
+  "Description": "Private retained master replicas with separate source namespaces and ordinary CMS-role denial for regional recovery; video replacement cleanup has a documented shared-identity exception.",
+  "Metadata": {
+    "AWSToolsMetrics": {
+      "AWSAgentToolkit": "aws-cloudformation@2"
+    },
+    "com.aws.cloudformation.Context": {
+      "arch": "One retained versioned Deep Archive destination per Ohio originals source; source stack owns replication rules and service roles.",
+      "must": [
+        {
+          "Fn::Sub": "Deploy only to account ${AWS::AccountId} in us-west-2."
+        },
+        "Never enable public access, ordinary CMS-role access, completed-version expiration, or delete-marker propagation. The separately authorized video cleanup exception is documented in docs/cms/functions-deploy.md#video-replacement-cleanup.",
+        "This regional copy shares the source account; account administrators retain control.",
+        "No destination access-log bucket or replica LoggingConfiguration. Monitor source logs, replication status and Batch reports."
+      ],
+      "ref": []
+    }
+  },
+  "Resources": {
+    "VideoOriginalsReplicaBucket": {
+      "Type": "AWS::S3::Bucket",
+      "DeletionPolicy": "Retain",
+      "UpdateReplacePolicy": "Retain",
+      "Metadata": {
+        "com.aws.cloudformation.Context": {
+          "why": "Separate source namespace avoids ambiguous keys when both originals buckets contain the same key; retain all replicated versions for operator recovery.",
+          "must": [
+            "Keep versioning, SSE-S3, blocked public access, disabled ACLs and CMS denial.",
+            "No completed-object expiration or browser CORS. Destination class comes from the source replication rule."
+          ],
+          "mutable": "review-required",
+          "mutability": {
+            "BucketName": "must-never-change"
+          }
+        }
+      },
+      "Properties": {
+        "BucketName": {
+          "Fn::Sub": "njpbs-video-originals-replica-${AWS::AccountId}-${AWS::Region}"
+        },
+        "BucketEncryption": {
+          "ServerSideEncryptionConfiguration": [
+            {
+              "ServerSideEncryptionByDefault": {
+                "SSEAlgorithm": "AES256"
+              }
+            }
+          ]
+        },
+        "VersioningConfiguration": {
+          "Status": "Enabled"
+        },
+        "OwnershipControls": {
+          "Rules": [
+            {
+              "ObjectOwnership": "BucketOwnerEnforced"
+            }
+          ]
+        },
+        "PublicAccessBlockConfiguration": {
+          "BlockPublicAcls": true,
+          "BlockPublicPolicy": true,
+          "IgnorePublicAcls": true,
+          "RestrictPublicBuckets": true
+        },
+        "LifecycleConfiguration": {
+          "Rules": [
+            {
+              "Id": "AbortIncompleteReplicaUploads",
+              "Status": "Enabled",
+              "AbortIncompleteMultipartUpload": {
+                "DaysAfterInitiation": 7
+              }
+            }
+          ]
+        },
+        "Tags": [
+          {
+            "Key": "Project",
+            "Value": "njpbs"
+          },
+          {
+            "Key": "Purpose",
+            "Value": "video-originals-regional-replica"
+          }
+        ]
+      }
+    },
+    "VideoOriginalsReplicaBucketPolicy": {
+      "Type": "AWS::S3::BucketPolicy",
+      "DeletionPolicy": "Retain",
+      "UpdateReplacePolicy": "Retain",
+      "Metadata": {
+        "com.aws.cloudformation.Context": {
+          "why": "Explicit CMS/media-role denial survives accidental identity-policy broadening; same-account scoped replication roles use their own write path. Governance Object Lock is not introduced.",
+          "must": [
+            "Keep the policy with a retained bucket.",
+            "No ordinary CMS-role or non-TLS access; see docs/cms/functions-deploy.md#video-replacement-cleanup for the authorized video-cleanup exception. Operators own recovery and policy changes."
+          ],
+          "mutable": "review-required"
+        }
+      },
+      "Properties": {
+        "Bucket": {
+          "Ref": "VideoOriginalsReplicaBucket"
+        },
+        "PolicyDocument": {
+          "Version": "2012-10-17",
+          "Statement": [
+            {
+              "Sid": "DenyInsecureTransport",
+              "Effect": "Deny",
+              "Principal": "*",
+              "Action": "s3:*",
+              "Resource": [
+                {
+                  "Fn::GetAtt": [
+                    "VideoOriginalsReplicaBucket",
+                    "Arn"
+                  ]
+                },
+                {
+                  "Fn::Sub": [
+                    "${BucketArn}/*",
+                    {
+                      "BucketArn": {
+                        "Fn::GetAtt": [
+                          "VideoOriginalsReplicaBucket",
+                          "Arn"
+                        ]
+                      }
+                    }
+                  ]
+                }
+              ],
+              "Condition": {
+                "Bool": {
+                  "aws:SecureTransport": "false"
+                }
+              }
+            },
+            {
+              "Sid": "DenyCMSAndMediaRoles",
+              "Effect": "Deny",
+              "Principal": "*",
+              "Action": "s3:*",
+              "Resource": [
+                {
+                  "Fn::GetAtt": [
+                    "VideoOriginalsReplicaBucket",
+                    "Arn"
+                  ]
+                },
+                {
+                  "Fn::Sub": [
+                    "${BucketArn}/*",
+                    {
+                      "BucketArn": {
+                        "Fn::GetAtt": [
+                          "VideoOriginalsReplicaBucket",
+                          "Arn"
+                        ]
+                      }
+                    }
+                  ]
+                }
+              ],
+              "Condition": {
+                "ArnLike": {
+                  "aws:PrincipalArn": [
+                    {
+                      "Fn::Sub": "arn:${AWS::Partition}:iam::${AWS::AccountId}:role/njpbs-boardwalk-*"
+                    },
+                    {
+                      "Fn::Sub": "arn:${AWS::Partition}:iam::${AWS::AccountId}:role/njpbs-mediaconvert-*"
+                    }
+                  ]
+                }
+              }
+            }
+          ]
+        }
+      }
+    },
+    "ArchiveOriginalsReplicaBucket": {
+      "Type": "AWS::S3::Bucket",
+      "DeletionPolicy": "Retain",
+      "UpdateReplacePolicy": "Retain",
+      "Metadata": {
+        "com.aws.cloudformation.Context": {
+          "why": "Separate source namespace avoids ambiguous keys when both originals buckets contain the same key; retain all replicated versions for operator recovery.",
+          "must": [
+            "Keep versioning, SSE-S3, blocked public access, disabled ACLs and CMS denial.",
+            "No completed-object expiration or browser CORS. Destination class comes from the source replication rule."
+          ],
+          "mutable": "review-required",
+          "mutability": {
+            "BucketName": "must-never-change"
+          }
+        }
+      },
+      "Properties": {
+        "BucketName": {
+          "Fn::Sub": "njpbs-archive-originals-replica-${AWS::AccountId}-${AWS::Region}"
+        },
+        "BucketEncryption": {
+          "ServerSideEncryptionConfiguration": [
+            {
+              "ServerSideEncryptionByDefault": {
+                "SSEAlgorithm": "AES256"
+              }
+            }
+          ]
+        },
+        "VersioningConfiguration": {
+          "Status": "Enabled"
+        },
+        "OwnershipControls": {
+          "Rules": [
+            {
+              "ObjectOwnership": "BucketOwnerEnforced"
+            }
+          ]
+        },
+        "PublicAccessBlockConfiguration": {
+          "BlockPublicAcls": true,
+          "BlockPublicPolicy": true,
+          "IgnorePublicAcls": true,
+          "RestrictPublicBuckets": true
+        },
+        "LifecycleConfiguration": {
+          "Rules": [
+            {
+              "Id": "AbortIncompleteReplicaUploads",
+              "Status": "Enabled",
+              "AbortIncompleteMultipartUpload": {
+                "DaysAfterInitiation": 7
+              }
+            }
+          ]
+        },
+        "Tags": [
+          {
+            "Key": "Project",
+            "Value": "njpbs"
+          },
+          {
+            "Key": "Purpose",
+            "Value": "archive-originals-regional-replica"
+          }
+        ]
+      }
+    },
+    "ArchiveOriginalsReplicaBucketPolicy": {
+      "Type": "AWS::S3::BucketPolicy",
+      "DeletionPolicy": "Retain",
+      "UpdateReplacePolicy": "Retain",
+      "Metadata": {
+        "com.aws.cloudformation.Context": {
+          "why": "Explicit CMS/media-role denial survives accidental identity-policy broadening; same-account scoped replication roles use their own write path. Governance Object Lock is not introduced.",
+          "must": [
+            "Keep the policy with a retained bucket.",
+            "No ordinary CMS-role or non-TLS access; see docs/cms/functions-deploy.md#video-replacement-cleanup for the authorized video-cleanup exception. Operators own recovery and policy changes."
+          ],
+          "mutable": "review-required"
+        }
+      },
+      "Properties": {
+        "Bucket": {
+          "Ref": "ArchiveOriginalsReplicaBucket"
+        },
+        "PolicyDocument": {
+          "Version": "2012-10-17",
+          "Statement": [
+            {
+              "Sid": "DenyInsecureTransport",
+              "Effect": "Deny",
+              "Principal": "*",
+              "Action": "s3:*",
+              "Resource": [
+                {
+                  "Fn::GetAtt": [
+                    "ArchiveOriginalsReplicaBucket",
+                    "Arn"
+                  ]
+                },
+                {
+                  "Fn::Sub": [
+                    "${BucketArn}/*",
+                    {
+                      "BucketArn": {
+                        "Fn::GetAtt": [
+                          "ArchiveOriginalsReplicaBucket",
+                          "Arn"
+                        ]
+                      }
+                    }
+                  ]
+                }
+              ],
+              "Condition": {
+                "Bool": {
+                  "aws:SecureTransport": "false"
+                }
+              }
+            },
+            {
+              "Sid": "DenyCMSAndMediaRoles",
+              "Effect": "Deny",
+              "Principal": "*",
+              "Action": "s3:*",
+              "Resource": [
+                {
+                  "Fn::GetAtt": [
+                    "ArchiveOriginalsReplicaBucket",
+                    "Arn"
+                  ]
+                },
+                {
+                  "Fn::Sub": [
+                    "${BucketArn}/*",
+                    {
+                      "BucketArn": {
+                        "Fn::GetAtt": [
+                          "ArchiveOriginalsReplicaBucket",
+                          "Arn"
+                        ]
+                      }
+                    }
+                  ]
+                }
+              ],
+              "Condition": {
+                "ArnLike": {
+                  "aws:PrincipalArn": [
+                    {
+                      "Fn::Sub": "arn:${AWS::Partition}:iam::${AWS::AccountId}:role/njpbs-boardwalk-*"
+                    },
+                    {
+                      "Fn::Sub": "arn:${AWS::Partition}:iam::${AWS::AccountId}:role/njpbs-mediaconvert-*"
+                    }
+                  ]
+                }
+              }
+            }
+          ]
+        }
+      }
+    }
+  },
+  "Outputs": {
+    "VideoOriginalsReplicaBucketName": {
+      "Description": "Private video master replica bucket name",
+      "Value": {
+        "Ref": "VideoOriginalsReplicaBucket"
+      }
+    },
+    "VideoOriginalsReplicaBucketArn": {
+      "Description": "Private video master replica bucket arn",
+      "Value": {
+        "Fn::GetAtt": [
+          "VideoOriginalsReplicaBucket",
+          "Arn"
+        ]
+      }
+    },
+    "ArchiveOriginalsReplicaBucketName": {
+      "Description": "Private archive master replica bucket name",
+      "Value": {
+        "Ref": "ArchiveOriginalsReplicaBucket"
+      }
+    },
+    "ArchiveOriginalsReplicaBucketArn": {
+      "Description": "Private archive master replica bucket arn",
+      "Value": {
+        "Fn::GetAtt": [
+          "ArchiveOriginalsReplicaBucket",
+          "Arn"
+        ]
+      }
+    }
+  }
+}

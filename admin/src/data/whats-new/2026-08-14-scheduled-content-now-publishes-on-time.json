@@ -1,0 +1,10 @@
+{
+  "date": "2026-08-14",
+  "kind": "fixed",
+  "title": "Scheduled content now publishes on time",
+  "body": "Some scheduled items waited behind others and did not publish at their set time. Boardwalk now releases each scheduled item in order.",
+  "prs": [
+    948
+  ],
+  "order": -3
+}

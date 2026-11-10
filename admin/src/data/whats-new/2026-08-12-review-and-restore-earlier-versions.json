@@ -1,0 +1,11 @@
+{
+  "date": "2026-08-12",
+  "kind": "new",
+  "title": "Review and restore earlier versions",
+  "body": "Revision history now shows each saved version, who saved it and when. Authorized roles can restore an earlier version as the new draft.",
+  "prs": [
+    915,
+    917
+  ],
+  "order": 0
+}

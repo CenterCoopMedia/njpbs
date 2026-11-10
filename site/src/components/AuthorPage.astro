@@ -1,0 +1,688 @@
+---
+import { contentLink } from "../../../packages/content-core/src/content-link.ts";
+import PostPublication from "./PostPublication.astro";
+import AuthorSocialLinks from "./AuthorSocialLinks.astro";
+import { formatEditorialDate } from "../lib/editorial-date-format";
+import { staffInitials } from "../lib/staff-directory";
+import type { AuthorPostListing } from "../lib/author-pages";
+
+interface Author {
+  displayName: string;
+  jobTitle: string | null;
+  bio: string | null;
+  photo: {
+    url: string;
+    displayUrl: string;
+    width: number;
+    height: number;
+    focalX: number;
+    focalY: number;
+    credit: string | null;
+  } | null;
+  links: readonly { platform: "x" | "bluesky" | "linkedin"; url: string }[];
+}
+
+interface Props {
+  author: Author;
+  listings: readonly AuthorPostListing[];
+}
+
+const { author, listings } = Astro.props as Props;
+const initials = staffInitials(author.displayName);
+const featured = listings.find((item) => item.pinned) ?? null;
+const recent = featured
+  ? listings.filter((item) => item.postId !== featured.postId)
+  : listings;
+---
+
+<div class="author-page">
+  <header class="author-hero">
+    <div class="author-hero__inner">
+      <a class="author-hero__back" href="/staff/">
+        <span aria-hidden="true">←</span> Staff directory
+      </a>
+
+      <div class="author-hero__grid">
+        <figure class="author-portrait">
+          <div class="author-portrait__media">
+            {author.photo ? (
+              <img
+                src={author.photo.displayUrl}
+                width={author.photo.width}
+                height={author.photo.height}
+                alt=""
+                decoding="async"
+                style={`object-position: ${author.photo.focalX}% ${author.photo.focalY}%`}
+              />
+            ) : (
+              <span class="author-portrait__initials" aria-hidden="true">
+                {initials}
+              </span>
+            )}
+            <span class="author-portrait__wash" aria-hidden="true"></span>
+          </div>
+          {author.photo?.credit && (
+            <figcaption>Photo: {author.photo.credit}</figcaption>
+          )}
+        </figure>
+
+        <div class="author-identity">
+          <p class="author-identity__kicker">NJ PBS staff profile</p>
+          <h1>{author.displayName}</h1>
+          {author.jobTitle && (
+            <p class="author-identity__title">{author.jobTitle}</p>
+          )}
+          {author.bio && <p class="author-identity__bio">{author.bio}</p>}
+          <AuthorSocialLinks
+            displayName={author.displayName}
+            links={author.links}
+          />
+        </div>
+      </div>
+    </div>
+  </header>
+
+  <section class="author-work" aria-labelledby="author-work-title">
+    <header class="author-work__head">
+      <div>
+        <p class="author-work__kicker">Published work</p>
+        <h2 id="author-work-title">Posts by {author.displayName}</h2>
+      </div>
+      <span class="author-work__count">
+        {listings.length} {listings.length === 1 ? "Post" : "Posts"}
+      </span>
+    </header>
+
+    {listings.length === 0 ? (
+      <div class="author-work__empty">
+        <h3>There are no public Posts to show yet.</h3>
+        <p>Published work credited to this profile will appear here.</p>
+      </div>
+    ) : (
+      <>
+        {featured && (
+          <article class="featured-post">
+            <a class="featured-post__link" href={contentLink(featured, featured.path).href} target={contentLink(featured, featured.path).target} rel={contentLink(featured, featured.path).rel}>
+              {contentLink(featured, featured.path).newTab && <span class="sr-only"> (opens in new tab)</span>}
+              <span class="featured-post__media">
+                {featured.thumbnail ? (
+                  <img
+                    src={featured.thumbnail.url}
+                    width={featured.thumbnail.width}
+                    height={featured.thumbnail.height}
+                    alt={featured.thumbnail.alt}
+                    loading="lazy"
+                    decoding="async"
+                  />
+                ) : (
+                  <span class="post-art-fallback" aria-hidden="true">
+                    <span>NJ</span>
+                  </span>
+                )}
+                <span class="featured-post__badge">Featured Post</span>
+              </span>
+              <span class="featured-post__body">
+                <span class="featured-post__eyebrow">Selected by the author</span>
+                <PostPublication spotlightNews={featured.spotlightNews} coverageLabelId={featured.coverageLabelId} placement="card" />
+                <span class="featured-post__title">{featured.title}</span>
+                {featured.summary && (
+                  <span class="featured-post__summary">{featured.summary}</span>
+                )}
+                {featured.displayDate && (
+                  <time
+                    class="featured-post__date"
+                    datetime={featured.displayDate}
+                  >
+                    {formatEditorialDate(featured.displayDate)}
+                  </time>
+                )}
+                <span class="featured-post__action">
+                  Read Post <span aria-hidden="true">→</span>
+                </span>
+              </span>
+            </a>
+          </article>
+        )}
+
+        {recent.length > 0 && (
+          <ul class="post-grid">
+            {recent.map((item) => (
+              <li>
+                <article class="post-card">
+                  <a class="post-card__link" href={contentLink(item, item.path).href} target={contentLink(item, item.path).target} rel={contentLink(item, item.path).rel}>
+              {contentLink(item, item.path).newTab && <span class="sr-only"> (opens in new tab)</span>}
+                    <span class="post-card__media">
+                      {item.thumbnail ? (
+                        <img
+                          src={item.thumbnail.url}
+                          width={item.thumbnail.width}
+                          height={item.thumbnail.height}
+                          alt={item.thumbnail.alt}
+                          loading="lazy"
+                          decoding="async"
+                        />
+                      ) : (
+                        <span class="post-art-fallback" aria-hidden="true">
+                          <span>NJ</span>
+                        </span>
+                      )}
+                    </span>
+                    <span class="post-card__body">
+                      <PostPublication spotlightNews={item.spotlightNews} coverageLabelId={item.coverageLabelId} placement="card" />
+                      <span class="post-card__title">{item.title}</span>
+                      {item.summary && (
+                        <span class="post-card__summary">{item.summary}</span>
+                      )}
+                      {item.displayDate && (
+                        <time
+                          class="post-card__date"
+                          datetime={item.displayDate}
+                        >
+                          {formatEditorialDate(item.displayDate)}
+                        </time>
+                      )}
+                      <span class="post-card__action">
+                        Read Post <span aria-hidden="true">→</span>
+                      </span>
+                    </span>
+                  </a>
+                </article>
+              </li>
+            ))}
+          </ul>
+        )}
+      </>
+    )}
+  </section>
+</div>
+
+<style>
+  .author-page {
+    min-height: 70vh;
+  }
+
+  .author-hero {
+    position: relative;
+    isolation: isolate;
+    overflow: hidden;
+    border-bottom: 1px solid var(--line);
+    background:
+      radial-gradient(
+        65% 115% at 86% -8%,
+        rgba(77, 94, 232, 0.4),
+        transparent 62%
+      ),
+      radial-gradient(
+        70% 105% at 0% 110%,
+        rgba(0, 172, 0, 0.13),
+        transparent 66%
+      ),
+      linear-gradient(150deg, var(--bg-1), var(--bg-0));
+  }
+
+  .author-hero::after {
+    position: absolute;
+    top: 12%;
+    right: -12rem;
+    z-index: -1;
+    width: clamp(19rem, 42vw, 36rem);
+    aspect-ratio: 1;
+    border: 1px solid var(--line);
+    border-radius: 50%;
+    content: "";
+    opacity: 0.6;
+  }
+
+  .author-hero__inner {
+    max-width: var(--wrap);
+    margin: 0 auto;
+    padding: clamp(1.5rem, 4vw, 2.5rem) var(--gutter)
+      clamp(3rem, 7vw, 6rem);
+  }
+
+  .author-hero__back {
+    display: inline-flex;
+    gap: 0.45rem;
+    align-items: center;
+    min-height: var(--target-comfortable);
+    color: var(--text-dim);
+    font-size: 0.88rem;
+    font-weight: 700;
+    text-decoration: none;
+  }
+
+  .author-hero__back:hover {
+    color: var(--text);
+  }
+
+  .author-hero__back:focus-visible {
+    outline: var(--focus-outline);
+    outline-offset: var(--focus-offset);
+  }
+
+  .author-hero__grid {
+    display: grid;
+    grid-template-columns: minmax(12rem, 19rem) minmax(0, 1fr);
+    gap: clamp(2rem, 6vw, 6rem);
+    align-items: center;
+    margin-top: clamp(1.5rem, 4vw, 3.25rem);
+  }
+
+  .author-portrait {
+    margin: 0;
+  }
+
+  .author-portrait__media {
+    position: relative;
+    display: grid;
+    place-items: center;
+    aspect-ratio: 1;
+    overflow: hidden;
+    border: 1px solid var(--line-strong);
+    border-radius: var(--radius-accent);
+    background:
+      radial-gradient(
+        95% 90% at 72% 10%,
+        rgba(77, 94, 232, 0.56),
+        transparent 61%
+      ),
+      radial-gradient(
+        85% 90% at 0% 100%,
+        rgba(0, 172, 0, 0.18),
+        transparent 70%
+      ),
+      var(--color-surface-elevated);
+    box-shadow:
+      inset 0 1px 0 rgba(255, 255, 255, 0.12),
+      0 28px 68px rgba(0, 0, 0, 0.32);
+  }
+
+  .author-portrait__media img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+  }
+
+  .author-portrait__wash {
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    background:
+      linear-gradient(145deg, rgba(255, 255, 255, 0.1), transparent 38%),
+      linear-gradient(180deg, transparent 72%, rgba(6, 7, 15, 0.32));
+  }
+
+  .author-portrait__initials {
+    color: var(--text);
+    font-size: clamp(3.5rem, 10vw, 7rem);
+    font-weight: 900;
+    letter-spacing: -0.07em;
+  }
+
+  .author-portrait figcaption {
+    margin-top: 0.65rem;
+    color: var(--text-quiet);
+    font-size: 0.75rem;
+    line-height: 1.4;
+  }
+
+  .author-identity__kicker,
+  .author-work__kicker,
+  .featured-post__eyebrow {
+    margin: 0;
+    color: var(--color-link);
+    font-size: 0.78rem;
+    font-weight: 800;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+  }
+
+  .author-identity h1 {
+    margin: 0.55rem 0 0;
+    color: var(--text);
+    font-size: clamp(2.75rem, 7vw, 5.5rem);
+    font-weight: 900;
+    letter-spacing: var(--heading-tracking);
+    line-height: 0.96;
+  }
+
+  .author-identity__title {
+    margin: 1rem 0 0;
+    color: var(--text);
+    font-size: clamp(1.05rem, 2vw, 1.3rem);
+    font-weight: 700;
+    line-height: 1.35;
+  }
+
+  .author-identity__bio {
+    margin: 1.35rem 0 0;
+    color: var(--text-dim);
+    font-size: clamp(1rem, 1.6vw, 1.13rem);
+    line-height: 1.72;
+    white-space: pre-line;
+  }
+
+  .author-identity :global(.author-social) {
+    margin-top: 1.5rem;
+  }
+
+  .author-work {
+    max-width: var(--wrap);
+    margin: 0 auto;
+    padding: clamp(3rem, 7vw, 6rem) var(--gutter)
+      clamp(4rem, 9vw, 8rem);
+  }
+
+  .author-work__head {
+    display: flex;
+    gap: 1.25rem 2rem;
+    align-items: end;
+    justify-content: space-between;
+    padding-bottom: 1.35rem;
+    border-bottom: 1px solid var(--line);
+  }
+
+  .author-work__head h2 {
+    margin: 0.45rem 0 0;
+    color: var(--text);
+    font-size: clamp(1.8rem, 4vw, 3rem);
+    line-height: 1.06;
+  }
+
+  .author-work__count {
+    color: var(--text-quiet);
+    font-size: 0.8rem;
+    font-weight: 750;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    white-space: nowrap;
+  }
+
+  .featured-post {
+    margin-top: clamp(1.5rem, 4vw, 2.5rem);
+  }
+
+  .featured-post__link {
+    display: grid;
+    grid-template-columns: minmax(0, 1.2fr) minmax(17rem, 0.8fr);
+    overflow: hidden;
+    border: 1px solid var(--line);
+    border-radius: var(--radius-accent);
+    background:
+      linear-gradient(150deg, rgba(77, 94, 232, 0.14), transparent 55%),
+      var(--color-surface-panel);
+    color: inherit;
+    text-decoration: none;
+    box-shadow:
+      inset 0 1px 0 rgba(255, 255, 255, 0.07),
+      0 24px 58px rgba(0, 0, 0, 0.24);
+    transition:
+      border-color var(--motion-duration-standard) var(--motion-ease-standard),
+      transform var(--motion-duration-standard) var(--motion-ease-standard),
+      box-shadow var(--motion-duration-standard) var(--motion-ease-standard);
+  }
+
+  .featured-post__link:hover {
+    border-color: var(--line-strong);
+    box-shadow:
+      inset 0 1px 0 rgba(255, 255, 255, 0.1),
+      0 30px 66px rgba(0, 0, 0, 0.34);
+    transform: translateY(-3px);
+  }
+
+  .featured-post__link:focus-visible,
+  .post-card__link:focus-visible {
+    outline: var(--focus-outline);
+    outline-offset: var(--focus-offset);
+  }
+
+  .featured-post__media,
+  .post-card__media {
+    position: relative;
+    display: block;
+    overflow: hidden;
+    background: var(--color-surface-elevated);
+  }
+
+  .featured-post__media {
+    min-height: 20rem;
+  }
+
+  .featured-post__media img,
+  .post-card__media img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    transition: transform var(--motion-duration-emphasis)
+      var(--motion-ease-standard);
+  }
+
+  .featured-post__link:hover img,
+  .post-card__link:hover img {
+    transform: scale(1.025);
+  }
+
+  .featured-post__badge {
+    position: absolute;
+    top: 1rem;
+    left: 1rem;
+    padding: 0.42rem 0.68rem;
+    border: 1px solid var(--line-strong);
+    border-radius: var(--radius-pill);
+    background: rgba(6, 7, 15, 0.84);
+    color: var(--text);
+    font-size: 0.72rem;
+    font-weight: 800;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    backdrop-filter: blur(8px);
+  }
+
+  .featured-post__body,
+  .post-card__body {
+    display: flex;
+    flex-direction: column;
+  }
+
+  .featured-post__body {
+    justify-content: center;
+    padding: clamp(1.5rem, 4vw, 3rem);
+  }
+
+  .featured-post__title,
+  .post-card__title {
+    color: var(--text);
+    font-weight: 850;
+    letter-spacing: -0.025em;
+    text-wrap: balance;
+  }
+
+  .featured-post__title {
+    margin-top: 0.7rem;
+    font-size: clamp(1.65rem, 3.5vw, 2.7rem);
+    line-height: 1.05;
+  }
+
+  .featured-post__summary,
+  .post-card__summary {
+    color: var(--text-dim);
+    line-height: 1.62;
+  }
+
+  .featured-post__summary {
+    margin-top: 1rem;
+    font-size: 1rem;
+  }
+
+  .featured-post__date,
+  .post-card__date {
+    color: var(--text-quiet);
+    font-size: 0.82rem;
+  }
+
+  .featured-post__date {
+    margin-top: 1rem;
+  }
+
+  .featured-post__action,
+  .post-card__action {
+    display: inline-flex;
+    gap: 0.4rem;
+    align-items: center;
+    margin-top: 1.25rem;
+    color: var(--color-link);
+    font-size: 0.8rem;
+    font-weight: 800;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+  }
+
+  .post-grid {
+    display: grid;
+    grid-template-columns: repeat(
+      auto-fit,
+      minmax(min(100%, 18rem), 1fr)
+    );
+    gap: clamp(1rem, 2.5vw, 1.5rem);
+    margin: clamp(1.5rem, 4vw, 2.5rem) 0 0;
+    padding: 0;
+    list-style: none;
+  }
+
+  .post-grid > li {
+    min-width: 0;
+  }
+
+  .post-card {
+    height: 100%;
+  }
+
+  .post-card__link {
+    display: grid;
+    grid-template-rows: auto 1fr;
+    height: 100%;
+    overflow: hidden;
+    border: 1px solid var(--line);
+    border-radius: var(--radius-accent);
+    background:
+      linear-gradient(155deg, rgba(255, 255, 255, 0.05), transparent 40%),
+      var(--color-surface-panel);
+    color: inherit;
+    text-decoration: none;
+    transition:
+      border-color var(--motion-duration-standard) var(--motion-ease-standard),
+      transform var(--motion-duration-standard) var(--motion-ease-standard),
+      box-shadow var(--motion-duration-standard) var(--motion-ease-standard);
+  }
+
+  .post-card__link:hover {
+    border-color: var(--line-strong);
+    box-shadow: 0 22px 52px rgba(0, 0, 0, 0.28);
+    transform: translateY(-3px);
+  }
+
+  .post-card__media {
+    aspect-ratio: 16 / 9;
+  }
+
+  .post-card__body {
+    padding: 1.15rem 1.2rem 1.25rem;
+  }
+
+  .post-card__title {
+    font-size: 1.18rem;
+    line-height: 1.18;
+  }
+
+  .post-card__summary {
+    margin-top: 0.65rem;
+    font-size: 0.91rem;
+  }
+
+  .post-card__date {
+    margin-top: 0.85rem;
+  }
+
+  .post-card__action {
+    margin-top: auto;
+    padding-top: 1.1rem;
+  }
+
+  .post-art-fallback {
+    display: grid;
+    place-items: center;
+    width: 100%;
+    height: 100%;
+    min-height: 10rem;
+    background:
+      radial-gradient(
+        85% 100% at 82% 0%,
+        rgba(77, 94, 232, 0.5),
+        transparent 62%
+      ),
+      radial-gradient(
+        80% 100% at 0% 100%,
+        rgba(0, 172, 0, 0.16),
+        transparent 68%
+      ),
+      var(--color-surface-elevated);
+  }
+
+  .post-art-fallback span {
+    color: var(--text);
+    font-size: clamp(2.25rem, 7vw, 4.5rem);
+    font-weight: 900;
+    letter-spacing: -0.08em;
+    opacity: 0.86;
+  }
+
+  .author-work__empty {
+    max-width: 42rem;
+    margin-top: 1.5rem;
+    padding: clamp(1.25rem, 3vw, 2rem);
+    border: 1px solid var(--line);
+    border-radius: var(--radius-accent);
+    background: var(--color-surface-panel);
+  }
+
+  .author-work__empty h3 {
+    margin: 0;
+    color: var(--text);
+    font-size: 1.25rem;
+  }
+
+  .author-work__empty p {
+    margin: 0.65rem 0 0;
+    color: var(--text-dim);
+    line-height: 1.6;
+  }
+
+  @media (max-width: 780px) {
+    .author-hero__grid,
+    .featured-post__link {
+      grid-template-columns: 1fr;
+    }
+
+    .author-portrait {
+      max-width: 18rem;
+    }
+
+    .featured-post__media {
+      min-height: 0;
+      aspect-ratio: 16 / 9;
+    }
+  }
+
+  @media (max-width: 560px) {
+    .author-work__head {
+      align-items: start;
+      flex-direction: column;
+    }
+
+    .author-hero__inner,
+    .author-work {
+      padding-right: 1rem;
+      padding-left: 1rem;
+    }
+  }
+</style>

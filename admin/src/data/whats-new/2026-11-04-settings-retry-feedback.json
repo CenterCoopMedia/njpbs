@@ -1,0 +1,10 @@
+{
+  "date": "2026-11-04",
+  "kind": "fixed",
+  "title": "Clearer feedback when a site update cannot retry",
+  "body": "A site update retry with unavailable publication work now shows the retry message instead of a generic error. Your saved settings stay intact.",
+  "prs": [
+    4823
+  ],
+  "order": 1793825100001
+}

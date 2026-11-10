@@ -1,0 +1,10 @@
+{
+  "date": "2026-10-09",
+  "kind": "fixed",
+  "title": "Review requests stay visible to your desk",
+  "body": "Another desk can no longer hide a review request that belongs to you.",
+  "prs": [
+    2989
+  ],
+  "order": 0
+}

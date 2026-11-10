@@ -1,0 +1,16 @@
+import type { Firestore, Transaction } from "firebase-admin/firestore";
+import type { PublicReleasePair } from "../../packages/content-core/src/public-release";
+import type { PairTaskIdentity } from "./public-release-pair-work";
+import type { PairViewCursor } from "./public-release-pair-view";
+export type PairOutputNamespaceKind = "search" | "content-feed";
+export type PairOutputNamespaceProof = Readonly<{ schemaVersion: 1; kind: "pair-search-namespace-proof" | "pair-content-feed-namespace-proof"; status: "staged";
+  pairDigest: string; taskId: string; identity: PairTaskIdentity; claimDigest: string; viewManifestDigest: string; viewReadbackDigest: string; inputManifestDigest: string;
+  namespace: "/pagefind/" | "/api/v1/content/"; cursor: PairViewCursor; namespaceRootDigest: string; namespaceManifestDigest: string;
+  descriptor: Readonly<{ digest: string; key: string; bytes: number }>; memberCount: number; memberBytes: number;
+  authority: Readonly<{ baselineInputManifestDigest: string; baselineCodePackManifestDigest: string; baselineViewManifestDigest: string; codeAssetManifestDigest: string;
+    namespaceAuthorityDigest: string; sourceCensusDigest: string; searchInputDigest: string }> }>;
+export function publicReleasePairNamespaceProofPath(pair: PublicReleasePair, viewManifestDigest: string, kind: PairOutputNamespaceKind): string;
+export function parsePublicReleasePairNamespaceProof(value: unknown, pair: PublicReleasePair, identity: PairTaskIdentity, claimDigest: string, viewManifestDigest: string, kind: PairOutputNamespaceKind): PairOutputNamespaceProof;
+export function assertReadPublicReleasePairNamespaceInTransaction(args: { firestore: Firestore; transaction: Transaction; pair: PublicReleasePair;
+  identity: PairTaskIdentity; claimDigest: string; viewManifestDigest: string; manifest: { cursor: PairViewCursor; members: readonly { size: number }[] };
+  namespaceRootDigest: string; namespaceManifestDigest: string; kind: PairOutputNamespaceKind }): Promise<PairOutputNamespaceProof>;

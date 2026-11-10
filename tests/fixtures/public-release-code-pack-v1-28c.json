@@ -1,0 +1,224 @@
+{
+  "schemaVersion": 1,
+  "inventoryVersion": 1,
+  "commitSha": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  "codeAssetManifestDigest": "1c68b577486f02d194df4ad4ffe6c41e45b868001c04ee3c96fe0c4f6ca7d317",
+  "members": [
+    {
+      "path": "/_astro/client.js",
+      "mime": "application/javascript; charset=utf-8",
+      "size": 8,
+      "sha256": "7776e321976f2e306eaf074bc244953a71013c5165cbe4f5491f6bdd55470468",
+      "family": "clientAsset",
+      "source": "compiled",
+      "dynamic": false
+    },
+    {
+      "path": "/_content-status.json",
+      "mime": "application/json; charset=utf-8",
+      "size": 193,
+      "sha256": "7119ab583659291031212eff6138886afc52187f4700e14c3f234c499cc970d9",
+      "family": "aggregate",
+      "source": "aggregate",
+      "dynamic": true
+    },
+    {
+      "path": "/_home-sources.json",
+      "mime": "application/json; charset=utf-8",
+      "size": 2,
+      "sha256": "44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a",
+      "family": "aggregate",
+      "source": "aggregate",
+      "dynamic": true
+    },
+    {
+      "path": "/_pair-compiled/client/client.js",
+      "mime": "application/javascript; charset=utf-8",
+      "size": 8,
+      "sha256": "7776e321976f2e306eaf074bc244953a71013c5165cbe4f5491f6bdd55470468",
+      "family": "compiledGraph",
+      "source": "compiled",
+      "dynamic": false
+    },
+    {
+      "path": "/_pair-compiled/pair-content-feed-namespace.json",
+      "mime": "application/json; charset=utf-8",
+      "size": 216,
+      "sha256": "c4d89dd0994f43da4efdba13eba80b824428243614060feb18feb63fc43d15ce",
+      "family": "compiledGraph",
+      "source": "compiled",
+      "dynamic": false
+    },
+    {
+      "path": "/_pair-compiled/pair-renderer-release.json",
+      "mime": "application/json; charset=utf-8",
+      "size": 671,
+      "sha256": "bd3beb5f2f878dbe839ac2c9a1db588f3cfefc9982b66046e1072a9d0ba7cdaa",
+      "family": "compiledGraph",
+      "source": "compiled",
+      "dynamic": false
+    },
+    {
+      "path": "/_pair-compiled/pair-search-namespace.json",
+      "mime": "application/json; charset=utf-8",
+      "size": 240,
+      "sha256": "ee513859066d949920b3bdd273d2500e787fdaec2835982bff732c42858156ec",
+      "family": "compiledGraph",
+      "source": "compiled",
+      "dynamic": false
+    },
+    {
+      "path": "/_pair-compiled/pair-source-inputs.json",
+      "mime": "application/json; charset=utf-8",
+      "size": 397,
+      "sha256": "a237183ce2a686d5f733c69113b2913926d886951c0b25dc4dbf0856b28f91a4",
+      "family": "compiledGraph",
+      "source": "compiled",
+      "dynamic": false
+    },
+    {
+      "path": "/_pair-compiled/renderer-release.json",
+      "mime": "application/json; charset=utf-8",
+      "size": 76,
+      "sha256": "fa70a8f0d49294fa85425b235d7296869dbf0670d0b9cbfdb9ddee8517891722",
+      "family": "compiledGraph",
+      "source": "compiled",
+      "dynamic": false
+    },
+    {
+      "path": "/_pair-compiled/server/entry.mjs",
+      "mime": "application/javascript; charset=utf-8",
+      "size": 8,
+      "sha256": "7776e321976f2e306eaf074bc244953a71013c5165cbe4f5491f6bdd55470468",
+      "family": "compiledGraph",
+      "source": "compiled",
+      "dynamic": false
+    },
+    {
+      "path": "/_publication.json",
+      "mime": "application/json; charset=utf-8",
+      "size": 407,
+      "sha256": "94516e82404c29813356f721a44e9852abac67a1dd531cf0d08556b1ab548117",
+      "family": "aggregate",
+      "source": "aggregate",
+      "dynamic": true
+    },
+    {
+      "path": "/_schedule-sources.json",
+      "mime": "application/json; charset=utf-8",
+      "size": 2,
+      "sha256": "44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a",
+      "family": "schedule",
+      "source": "aggregate",
+      "dynamic": true
+    },
+    {
+      "path": "/api/v1/content.json",
+      "mime": "application/json; charset=utf-8",
+      "size": 288,
+      "sha256": "8e9616a54e54e7fd4b90e6357c1988c5a8065e57b6112840103693cac0ac0ba7",
+      "family": "feed",
+      "source": "aggregate",
+      "dynamic": true
+    },
+    {
+      "path": "/api/v1/content/1.json",
+      "mime": "application/json; charset=utf-8",
+      "size": 585,
+      "sha256": "3bed3d32bc4bc9ef44208b2ae8032887ca0a3500d2bab7d3aa3541ab031cda65",
+      "family": "contentFeedPages",
+      "source": "aggregate",
+      "dynamic": true
+    },
+    {
+      "path": "/brand/logo.svg",
+      "mime": "image/svg+xml",
+      "size": 6,
+      "sha256": "d4dc56669143034f31aa309635d4113d9ad76a02b1739da22c965ed2049be9e6",
+      "family": "static",
+      "source": "static",
+      "dynamic": false
+    },
+    {
+      "path": "/feeds/news.xml",
+      "mime": "application/xml; charset=utf-8",
+      "size": 6,
+      "sha256": "b8a3805e669decf7180d8c7f4af5d4706d615d0678c424bd1c6b853def3bf3d2",
+      "family": "feed",
+      "source": "aggregate",
+      "dynamic": true
+    },
+    {
+      "path": "/index.html",
+      "mime": "text/html; charset=utf-8",
+      "size": 30,
+      "sha256": "7af7f35ab123c19e7fb66d8c8012d673ad4422d30cb1383c572a1ee1db5509db",
+      "family": "fallbackAsset",
+      "source": "static",
+      "dynamic": false
+    },
+    {
+      "path": "/pagefind/pagefind-entry.json",
+      "mime": "application/json; charset=utf-8",
+      "size": 2,
+      "sha256": "44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a",
+      "family": "searchIndex",
+      "source": "aggregate",
+      "dynamic": true
+    },
+    {
+      "path": "/pagefind/pagefind.js",
+      "mime": "application/javascript; charset=utf-8",
+      "size": 8,
+      "sha256": "7776e321976f2e306eaf074bc244953a71013c5165cbe4f5491f6bdd55470468",
+      "family": "searchIndex",
+      "source": "aggregate",
+      "dynamic": true
+    },
+    {
+      "path": "/schedule/downloads/nj-pbs-schedule.pdf",
+      "mime": "application/pdf",
+      "size": 16,
+      "sha256": "326f08384935076431efafc84c9ee42b1a4b7b706671956f780d39ceb83e0116",
+      "family": "schedule",
+      "source": "aggregate",
+      "dynamic": true
+    },
+    {
+      "path": "/search/meaning-index.json",
+      "mime": "application/json; charset=utf-8",
+      "size": 116,
+      "sha256": "5cf1e9e59496bea08b444244e6c62f5f2c897f9e94c83b46661d314fa791552c",
+      "family": "search",
+      "source": "aggregate",
+      "dynamic": true
+    },
+    {
+      "path": "/sitemap-0.xml",
+      "mime": "application/xml; charset=utf-8",
+      "size": 9,
+      "sha256": "f4a378ab0f1ded281a61db0a9de0934667cebf1f9301fdf52713467d7f3d7057",
+      "family": "sitemap",
+      "source": "aggregate",
+      "dynamic": true
+    },
+    {
+      "path": "/sitemap-index.xml",
+      "mime": "application/xml; charset=utf-8",
+      "size": 15,
+      "sha256": "ae9374d08bcf6cb07197e7af11eb6e85691ce68f82b664fa3a85cf68c9f73b1c",
+      "family": "sitemap",
+      "source": "aggregate",
+      "dynamic": true
+    },
+    {
+      "path": "/wiki/index.html",
+      "mime": "text/html; charset=utf-8",
+      "size": 24,
+      "sha256": "e21bdacbfcf94ca24ec7e004c04d5dc0b83461476bc84aefd834dfac80af88d7",
+      "family": "wiki",
+      "source": "aggregate",
+      "dynamic": false
+    }
+  ]
+}

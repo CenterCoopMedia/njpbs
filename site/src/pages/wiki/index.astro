@@ -1,0 +1,132 @@
+---
+// The public OKF wiki landing (/wiki/). Builds the hub and the sidebar from the
+// PUBLIC concepts in the bundle, grouped by section.
+import WikiLayout from "../../layouts/WikiLayout.astro";
+import { getCollection } from "astro:content";
+import { idToSlug, slugToPath, groupPublicPages } from "../../lib/wiki";
+
+const all = await getCollection("wiki", (e) => e.data.public === true);
+const pages = all.map((e) => {
+  const slug = idToSlug(e.id);
+  return {
+    id: e.id,
+    slug,
+    path: slugToPath(slug),
+    title: e.data.title ?? e.id,
+    description: e.data.description ?? "",
+    type: e.data.type,
+  };
+});
+const groups = groupPublicPages(pages);
+---
+
+<WikiLayout
+  title="NJ PBS public record"
+  description="Public history and context about NJ PBS, its operators, its publicly announced staff, and the 2026 transition."
+  nav={groups}
+  current=""
+>
+  <article class="wiki-prose">
+    <h1>NJ PBS public record</h1>
+    <p>
+      These pages provide public history and context about NJ PBS, its operators,
+      publicly announced staff, and the 2026 change from WNET operation to
+      Montclair State University operation.
+    </p>
+    <p>
+      Each entry summarizes dated official announcements and public reporting.
+      Source links are included when a stable public page is available.
+    </p>
+  </article>
+
+  <div class="wiki-sections">
+    {
+      groups.map((group) => (
+        <section class="wiki-sec" id={group.section.dir}>
+          <h2>
+            <a href={`/wiki/#${group.section.dir}`}>{group.section.label}</a>
+          </h2>
+          <p class="wiki-sec__blurb">{group.section.blurb}</p>
+          <ul class="wiki-cards">
+            {group.pages.map((p) => (
+              <li>
+                <a href={p.path}>
+                  <span class="wiki-card__title">{p.title}</span>
+                  {p.description && (
+                    <span class="wiki-card__desc">{p.description}</span>
+                  )}
+                </a>
+              </li>
+            ))}
+          </ul>
+        </section>
+      ))
+    }
+  </div>
+
+  <style>
+    .wiki-sections {
+      margin-top: 2.5rem;
+    }
+    .wiki-sec {
+      margin: 0 0 2.5rem;
+      scroll-margin-top: 1rem;
+    }
+    .wiki-sec h2 {
+      font-size: 1.4rem;
+      margin: 0 0 0.3rem;
+    }
+    .wiki-sec h2 a {
+      color: var(--color-light-text);
+      text-decoration: none;
+    }
+    .wiki-sec h2 a:hover {
+      color: var(--color-light-link);
+    }
+    .wiki-sec__blurb {
+      margin: 0 0 1rem;
+      color: var(--color-light-text-muted);
+    }
+    .wiki-cards {
+      list-style: none;
+      margin: 0;
+      padding: 0;
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(min(15rem, 100%), 1fr));
+      gap: 0.75rem;
+    }
+    .wiki-cards a {
+      display: block;
+      height: 100%;
+      box-sizing: border-box;
+      padding: 0.85rem 1rem;
+      border: 1px solid var(--color-light-line);
+      border-radius: 10px;
+      text-decoration: none;
+      background: var(--color-paper);
+      transition:
+        border-color 0.12s ease,
+        box-shadow 0.12s ease;
+    }
+    .wiki-cards a:hover {
+      border-color: var(--color-light-line-strong);
+      box-shadow: 0 4px 16px rgba(34, 48, 168, 0.08);
+    }
+    .wiki-card__title {
+      display: block;
+      font-weight: 700;
+      color: var(--color-light-link);
+      margin-bottom: 0.2rem;
+    }
+    .wiki-card__desc {
+      display: block;
+      font-size: 0.86rem;
+      color: var(--color-light-text-muted);
+      line-height: 1.45;
+    }
+    .wiki-cards a:focus-visible {
+      outline: var(--focus-outline);
+      outline-offset: var(--focus-offset);
+    }
+  </style>
+</WikiLayout>

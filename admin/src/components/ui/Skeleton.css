@@ -1,0 +1,145 @@
+/* Loading skeletons. See Skeleton.tsx for the contract. Shapes use the muted surface and a
+   soft sweep; under reduced motion or forced colors they hold still. */
+
+.skeleton-region {
+  position: relative;
+}
+
+/* The shapes wrapper does not make a box, so a region that takes the loaded container's class
+   lays out its shapes with that container's own grid or flex rules. */
+.skeleton-region-shapes {
+  display: contents;
+}
+
+.skeleton-shape {
+  display: block;
+  background-color: var(--cms-surface-muted);
+  background-image: linear-gradient(
+    90deg,
+    transparent 0%,
+    var(--cms-surface-soft) 50%,
+    transparent 100%
+  );
+  background-repeat: no-repeat;
+  background-size: 50% 100%;
+  background-position: -150% 0;
+  animation: skeleton-sweep 1.6s var(--cms-ease) infinite;
+}
+
+@keyframes skeleton-sweep {
+  to {
+    background-position: 250% 0;
+  }
+}
+
+.skeleton-radius-small {
+  border-radius: var(--cms-radius-small);
+}
+
+.skeleton-radius-control {
+  border-radius: var(--cms-radius-control);
+}
+
+.skeleton-radius-panel {
+  border-radius: var(--cms-radius-panel);
+}
+
+.skeleton-radius-round {
+  border-radius: var(--cms-radius-round);
+}
+
+.skeleton-block {
+  max-width: 100%;
+}
+
+/* A text line is one line box of the parent's font, with a bar of about cap height inside,
+   so a skeleton paragraph is as tall as the paragraph it stands for. */
+.skeleton-text {
+  display: block;
+  width: 100%;
+}
+
+.skeleton-text-line {
+  display: flex;
+  align-items: center;
+  height: 1lh;
+}
+
+.skeleton-text-bar {
+  width: 100%;
+  height: 0.7em;
+  border-radius: var(--cms-radius-small);
+}
+
+.skeleton-thumb {
+  flex: none;
+}
+
+.skeleton-thumb-square {
+  border-radius: var(--cms-radius-small);
+}
+
+.skeleton-thumb-round {
+  border-radius: var(--cms-radius-round);
+}
+
+/* A thumbnail with a title beside it stands for a title column, which the loaded table sizes
+   from its longest title; the minimum keeps the column from collapsing around the shapes. */
+.skeleton-media-cell {
+  display: flex;
+  align-items: center;
+  gap: var(--cms-space-3);
+  min-width: 14rem;
+}
+
+.skeleton-media-cell .skeleton-text {
+  flex: 1;
+  min-width: 0;
+}
+
+.skeleton-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--cms-space-2);
+}
+
+.skeleton-card-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: var(--cms-space-4);
+}
+
+.skeleton-card {
+  display: grid;
+  gap: var(--cms-space-3);
+  padding: var(--cms-space-5);
+  border: var(--cms-border-width) solid var(--cms-line);
+  border-radius: var(--cms-radius-panel);
+  background: var(--cms-surface);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .skeleton-shape {
+    animation: none;
+    background-image: none;
+  }
+}
+
+@media (forced-colors: active) {
+  .skeleton-shape {
+    animation: none;
+    background-image: none;
+    outline: 1px solid GrayText;
+    outline-offset: -1px;
+  }
+}
+
+/* Editor fields while a document or the editor code loads. See EditorSkeleton.tsx. */
+.editor-skeleton-fields {
+  display: grid;
+  gap: var(--cms-space-5);
+}
+
+.editor-skeleton-body {
+  height: 20rem;
+}

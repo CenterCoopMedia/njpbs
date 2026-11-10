@@ -1,0 +1,60 @@
+[Unit]
+Description=NJ PBS private CMS preview serializer
+Wants=network-online.target
+After=network-online.target
+StartLimitIntervalSec=5min
+StartLimitBurst=5
+
+[Service]
+Type=simple
+User=njpbs
+Group=njpbs
+WorkingDirectory=/opt/njpbs-cms-preview/current
+EnvironmentFile=/etc/njpbs-cms-preview/release.env
+LoadCredential=r2-preview:/etc/njpbs-cms-preview/r2-preview
+LoadCredential=firebase-service-account:/etc/njpbs-cms-preview/firebase-service-account
+RuntimeDirectory=njpbs-cms-preview
+RuntimeDirectoryMode=0700
+StateDirectory=njpbs-cms-preview
+StateDirectoryMode=0700
+UMask=0077
+ExecStart=/usr/bin/bash /opt/njpbs-cms-preview/current/scripts/run-cms-preview-serializer.sh --serve ${CMS_PREVIEW_RENDERER_SHA} ${CMS_PREVIEW_SERIALIZER_ID}
+Restart=on-failure
+RestartSec=15s
+TimeoutStopSec=10min
+KillSignal=SIGTERM
+KillMode=control-group
+OOMPolicy=stop
+
+NoNewPrivileges=true
+PrivateDevices=true
+PrivateTmp=true
+ProtectClock=true
+ProtectControlGroups=true
+ProtectHome=read-only
+ProtectKernelModules=true
+ProtectSystem=strict
+# ProtectHostname/KernelLogs/KernelTunables add locked /proc submounts, which
+# prevent unprivileged Bubblewrap from mounting its private /proc. Keep /sys
+# read-only and deny hostname/log syscalls without masking host /proc paths.
+# The operator is unprivileged with no capabilities; the renderer has private
+# process/network namespaces and no host /proc or /sys mount.
+ReadOnlyPaths=/sys
+SystemCallFilter=~syslog sethostname setdomainname
+# Bubblewrap creates the build's user/mount/PID/network namespaces. Do not copy
+# the publisher's RestrictNamespaces=true: preflight would correctly refuse it.
+RestrictRealtime=true
+RestrictSUIDSGID=true
+LockPersonality=true
+CapabilityBoundingSet=
+AmbientCapabilities=
+SystemCallArchitectures=native
+TasksMax=256
+MemoryHigh=1G
+MemoryMax=2G
+MemorySwapMax=512M
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target

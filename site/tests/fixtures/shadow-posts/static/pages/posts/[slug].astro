@@ -1,0 +1,23 @@
+---
+// Test-only static build of the unchanged production Post route and shell.
+import PostRoute from "../../../../../../src/pages/posts/[...slug].astro";
+import { projectCmsPost } from "../../../../../../src/lib/cms-posts-projection";
+import { projectAuthorSnapshot } from "../../../../../../src/lib/cms-authors-projection";
+import { resolvePublicCreditLinks } from "../../../../../../src/lib/public-author-links";
+import { prose, video, spotlight, registeredAuthor, withdrawnAuthor, uploadedImages, uploadedAuthors } from "../../../fixtures";
+import { catalogFixtures } from "../../../block-catalog";
+export function getStaticPaths() {
+  return [prose, video, ...spotlight, registeredAuthor, withdrawnAuthor, ...uploadedImages, ...uploadedAuthors, ...catalogFixtures].map(read => {
+    const post = projectCmsPost(read.document, { now: new Date("2026-10-07T13:00:00Z"), assets: new Map(read.assets.map(asset => [asset.id, asset])) })!;
+    const authors = "authors" in read && Array.isArray(read.authors) ? read.authors.flatMap((snapshot: (typeof registeredAuthor.authors)[number]) => {
+      const author = projectAuthorSnapshot(snapshot.id, snapshot);
+      return author ? [author] : [];
+    }) : [];
+    return { params: { slug: post.slug }, props: {
+      entry: { id: post.postId, collection: "cmsPosts" as const, data: { ...post, heroImageCaption: post.heroImageCaption ?? "", seo: post.seo ? { ...post.seo } : undefined, social: post.social ? { ...post.social } : undefined } }, credits: resolvePublicCreditLinks(post.credits, authors),
+    } };
+  });
+}
+const { entry, credits } = Astro.props;
+---
+<PostRoute entry={entry} credits={credits} />

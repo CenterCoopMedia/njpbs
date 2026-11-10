@@ -1,0 +1,11 @@
+{
+  "date": "2026-10-09",
+  "kind": "new",
+  "title": "Mark posts as NJ Spotlight News stories",
+  "body": "A post can carry optional NJ Spotlight News details. The public post then shows a small NJ Spotlight News label.",
+  "prs": [
+    2633,
+    2634
+  ],
+  "order": -1
+}

@@ -1,0 +1,8 @@
+{
+  "date": "2026-11-09",
+  "order": 1794257715507,
+  "kind": "fixed",
+  "title": "Reach rich-text controls after scrolling",
+  "body": "Formatting tips dismiss when you scroll. The floating formatting toolbar stays with visible text, keeping link controls and Review & publish clear. Scroll back to your selection to continue formatting.",
+  "prs": []
+}

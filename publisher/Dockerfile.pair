@@ -1,0 +1,52 @@
+FROM node:22-bookworm-slim@sha256:a6385bc33f0f9d6a08482c87f52baee537a9184e2b47dea1ed97caac62f8960c AS pair-common
+RUN apt-get update && apt-get install -y --no-install-recommends bubblewrap ca-certificates git \
+    && rm -rf /var/lib/apt/lists/* \
+    && ln -s /usr/local/bin/node /usr/bin/node \
+    && install -d -o node -g node /app \
+    && install -d -m 700 -o node -g node /var/lib/njpbs-cms-publisher
+WORKDIR /app
+COPY --chown=node:node source/package.json source/package-lock.json /app/
+COPY --chown=node:node source/functions/package.json /app/functions/
+COPY --chown=node:node source/admin/package.json /app/admin/
+COPY --chown=node:node source/cms-api/package.json /app/cms-api/
+COPY --chown=node:node source/site/package.json source/site/package-lock.json /app/site/
+USER node
+# Containers use CPU inference; optional GPU downloads are not runtime inputs.
+RUN export ONNXRUNTIME_NODE_INSTALL=skip \
+    && npm ci --workspace=functions --include-workspace-root --omit=dev --no-audit --no-fund \
+    && npm --prefix site ci --no-audit --no-fund \
+    && npm cache clean --force
+COPY --chown=node:node source/ /app/
+RUN node --import /app/site/node_modules/tsx/dist/loader.mjs /app/site/scripts/prepare-search-model.ts
+ARG CMS_DEPLOYMENT_ENVIRONMENT=development
+ARG PUBLIC_GA4_MEASUREMENT_ID
+ARG PUBLIC_REPORT_ENDPOINT
+ARG PUBLIC_TURNSTILE_SITEKEY
+ARG PUBLIC_SHARE_INTAKE_ENDPOINT
+ARG PUBLIC_SHARE_UPLOAD_ORIGIN
+ARG PUBLIC_SHARE_PAGE
+RUN CMS_DEPLOYMENT_ENVIRONMENT=$CMS_DEPLOYMENT_ENVIRONMENT DATA_HUB_PUBLIC=1 \
+    npm --prefix site run build:public-post-renderer -- --compile-only
+ENV NODE_ENV=production ASTRO_TELEMETRY_DISABLED=1 TZ=America/New_York
+EXPOSE 8080
+CMD ["/usr/bin/node", "--import", "/app/site/node_modules/tsx/dist/loader.mjs", "/app/site/scripts/run-cms-publication-pair-cloud.ts", "--serve"]
+
+# The first-install context adapter supplies this actual enrolled baseline
+# outside source/. It never dirties or relabels an older target source tree.
+FROM pair-common AS pair-first-install
+USER root
+RUN install -d -m 700 -o node -g node /pair-inputs
+USER node
+COPY --chown=node:node pair-source-inputs.json /pair-inputs/pair-source-inputs.json
+RUN CMS_DEPLOYMENT_ENVIRONMENT=$CMS_DEPLOYMENT_ENVIRONMENT DATA_HUB_PUBLIC=1 \
+    node --import /app/site/node_modules/tsx/dist/loader.mjs /app/site/scripts/build-public-release-pair-renderer.ts \
+      --source-inputs /pair-inputs/pair-source-inputs.json
+RUN CMS_DEPLOYMENT_ENVIRONMENT=$CMS_DEPLOYMENT_ENVIRONMENT DATA_HUB_PUBLIC=1 \
+    node --import /app/site/node_modules/tsx/dist/loader.mjs --input-type=module -e \
+    'import {writeFileSync} from "node:fs"; import {publicPostRenderEnvironment} from "/app/site/scripts/public-post-render-environment.ts"; writeFileSync("/pair-inputs/public-build-environment.json", JSON.stringify(publicPostRenderEnvironment(process.env)) + "\n", {flag:"wx", mode:0o600});'
+
+# Ordinary callers keep their existing build contract. The first-install
+# adapter always selects pair-first-install explicitly, with no fallback.
+FROM pair-common AS pair
+RUN CMS_DEPLOYMENT_ENVIRONMENT=$CMS_DEPLOYMENT_ENVIRONMENT DATA_HUB_PUBLIC=1 \
+    node --import /app/site/node_modules/tsx/dist/loader.mjs /app/site/scripts/build-public-release-pair-renderer.ts

@@ -1,0 +1,8 @@
+{
+  "date": "2026-11-04",
+  "kind": "fixed",
+  "title": "Keep embed settings matched to the link",
+  "body": "Changing an embed link between an AP map and a video clears the previous link type’s layout settings, so hidden settings cannot block Save.",
+  "prs": [],
+  "order": 1793826059744
+}

@@ -1,0 +1,8 @@
+{
+  "date": "2026-11-09",
+  "order": 1794267390000,
+  "kind": "improved",
+  "title": "Keep large image batches moving",
+  "body": "Large image uploads share a size allowance. If a batch reaches it, Boardwalk waits before continuing and keeps the files already uploaded.",
+  "prs": []
+}

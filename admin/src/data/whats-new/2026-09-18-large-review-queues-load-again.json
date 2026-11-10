@@ -1,0 +1,10 @@
+{
+  "date": "2026-09-18",
+  "kind": "fixed",
+  "title": "Large review queues load again",
+  "body": "The review queue now opens when it holds many items. It shows the newest items first and skips empty desk filters.",
+  "prs": [
+    1967
+  ],
+  "order": -1
+}

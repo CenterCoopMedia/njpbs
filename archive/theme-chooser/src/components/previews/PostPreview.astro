@@ -1,0 +1,202 @@
+---
+// Garden State poster (post) home-page preview slice for the New NJ PBS chooser.
+// Presentational only: no imports, no client JS. Uses only real post- / --post-
+// classes from public/kits/post/post.css. The chooser page owns the page <h1>,
+// so this slice's top heading is an <h2>. The shared particle-NJ point cloud is
+// mounted by the chooser into [data-nj-canvas] inside .post-hero__stage.
+// Sample copy only: no operator-change claim, no launch date, no live integration.
+// Donate/support buttons and the newsletter form are sample UI (href="#" / non-submitting).
+---
+
+<section class="kit-preview post" data-kit="post" aria-label="Garden State poster preview">
+  <!-- 1. Utility bar -->
+  <div class="post-utility">
+    <div class="post-utility__inner">
+      <span>A new public-media home for New Jersey is in development — this is a design preview.</span>
+      <div class="post-utility__group">
+        <a href="#">Watch live</a>
+      </div>
+    </div>
+  </div>
+
+  <!-- 2. Masthead -->
+  <header class="post-masthead">
+    <div class="post-masthead__inner">
+      <a class="post-brand" href="#">
+        <span class="post-brand__name">New NJ PBS</span>
+      </a>
+      <nav id="post-preview-nav" class="post-nav" aria-label="Primary">
+        <a href="#" aria-current="page">Watch</a>
+        <a href="#">Schedule</a>
+        <a href="#">Shows</a>
+        <a href="#">News</a>
+      </nav>
+      <a class="post-btn post-btn--primary" href="#">Support</a>
+      <button
+        type="button"
+        class="post-nav-toggle"
+        data-post-nav-toggle
+        aria-controls="post-preview-nav"
+        aria-expanded="false"
+        aria-label="Menu"
+      >
+        <svg class="post-ic-menu" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><line x1="3" y1="6" x2="21" y2="6" /><line x1="3" y1="12" x2="21" y2="12" /><line x1="3" y1="18" x2="21" y2="18" /></svg>
+        <svg class="post-ic-close" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><line x1="5" y1="5" x2="19" y2="19" /><line x1="19" y1="5" x2="5" y2="19" /></svg>
+      </button>
+    </div>
+  </header>
+
+  <!-- 3. Hero -->
+  <section class="post-hero" aria-labelledby="post-hero-title">
+    <div class="post-hero__stage">
+      <canvas data-nj-canvas aria-hidden="true"></canvas>
+      <!-- Static fallback: shown until the chooser confirms the hero can run
+           (no WebGL / no JS keeps it visible). Decorative; the heading carries meaning. -->
+      <img class="nj-fallback" data-nj-fallback src="/nj-static.svg" alt="" aria-hidden="true" width="420" height="740" decoding="async" />
+    </div>
+    <div class="post-hero__halftone" aria-hidden="true"></div>
+    <div class="post-hero__inner">
+      <div class="post-hero__content">
+        <h2 id="post-hero-title">Public media for New Jersey</h2>
+        <p class="post-lead">A statewide home for news, documentaries, and local arts — in development, and built to be read.</p>
+        <div class="post-hero__actions">
+          <a class="post-btn post-btn--primary" href="#">Watch live</a>
+          <a class="post-btn post-btn--outline" href="#">Browse the schedule</a>
+        </div>
+        <p class="post-hero__meta">Prototype // design direction: Garden State poster</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- 4. Schedule strip (sample, static — no live status indicator) -->
+  <div class="post-onair">
+    <div class="post-onair__inner">
+      <span class="post-onair__label">Sample schedule</span>
+      <span class="post-onair__title">Evening newscast</span>
+      <span class="post-onair__time">Next: documentary hour, 8:00 p.m. ET</span>
+    </div>
+  </div>
+
+  <div class="post-shell">
+    <!-- 5. Section head + lead story -->
+    <div class="post-sec-head">
+      <span class="post-sec-head__num">01</span>
+      <h2>Featured</h2>
+      <span class="post-sec-head__meta">From the newsroom</span>
+    </div>
+
+    <article class="post-lead-story">
+      <div class="post-lead-story__media" aria-hidden="true"></div>
+      <div class="post-lead-story__body">
+        <span class="post-lead-story__kicker">Documentary hour</span>
+        <h3>A look at the people shaping New Jersey's next chapter</h3>
+        <p>A sample feature placeholder describing a long-form documentary, written to fill the lead slot.</p>
+        <p class="post-lead-story__meta">Documentary · 52 min</p>
+      </div>
+    </article>
+
+    <!-- 6. Card grid -->
+    <div class="post-sec-head">
+      <span class="post-sec-head__num">02</span>
+      <h2>What's on</h2>
+      <span class="post-sec-head__meta">Programs</span>
+    </div>
+
+    <div class="post-card-grid">
+      <article class="post-card">
+        <div class="post-card__media" aria-hidden="true"></div>
+        <div class="post-card__body">
+          <span class="post-card__label">News</span>
+          <h4>Evening newscast</h4>
+          <p>Statewide news, weeknights · 30 min</p>
+        </div>
+      </article>
+
+      <article class="post-card">
+        <div class="post-card__media" aria-hidden="true"></div>
+        <div class="post-card__body">
+          <span class="post-card__label">Documentary</span>
+          <h4>Documentary hour</h4>
+          <p>Long-form stories from across the state · 60 min</p>
+        </div>
+      </article>
+
+      <article class="post-card">
+        <div class="post-card__media" aria-hidden="true"></div>
+        <div class="post-card__body">
+          <span class="post-card__label">Arts</span>
+          <h4>Arts profile</h4>
+          <p>Conversations with New Jersey artists · 30 min</p>
+        </div>
+      </article>
+    </div>
+
+    <!-- 7. Support block -->
+    <div class="post-support">
+      <div>
+        <h2 class="post-support__title">Support public media in New Jersey</h2>
+        <p>Become a member. A recurring gift is the steadiest way to keep statewide public media free for everyone, at any amount that works for you.</p>
+      </div>
+      <div class="post-support__actions">
+        <a class="post-pill" href="#">
+          <span class="post-pill__dot" aria-hidden="true"></span>
+          Become a member
+        </a>
+        <a class="post-btn post-btn--outline" href="#">Give once</a>
+      </div>
+    </div>
+
+    <!-- Guardrail callout -->
+    <div class="post-callout post-callout--note">
+      <p class="post-callout__title">Sample interface</p>
+      <p>Support options shown here are a design sample and are not connected to any payment system.</p>
+    </div>
+
+    <!-- 8. Newsletter capture (sample UI — does not submit) -->
+    <div class="post-newsletter">
+      <h2 class="post-newsletter__title">Get the weekly guide</h2>
+      <p>A short, sample sign-up for what's coming up on air. This preview does not submit.</p>
+      <form class="post-form">
+        <div class="post-field">
+          <label for="post-preview-email">Email address</label>
+          <input id="post-preview-email" type="email" name="email" autocomplete="email" />
+        </div>
+        <button class="post-btn post-btn--primary" type="button">Subscribe</button>
+        <p class="post-consent">Sample field — this form does not submit and collects no data.</p>
+      </form>
+    </div>
+
+    <!-- Constructivist diagonal (decorative, used once) -->
+    <div class="post-diagonal" aria-hidden="true"></div>
+  </div>
+
+  <!-- 9. Footer -->
+  <footer class="post-footer">
+    <div class="post-footer__inner">
+      <div class="post-footer__col">
+        <p class="post-footer__brand">New NJ PBS</p>
+      </div>
+      <div class="post-footer__col">
+        <h5>Watch</h5>
+        <a href="#">Live stream</a>
+        <a href="#">Schedule</a>
+        <a href="#">Shows</a>
+      </div>
+      <div class="post-footer__col">
+        <h5>News</h5>
+        <a href="#">Latest reporting</a>
+        <a href="#">Newsletters</a>
+        <a href="#">Public file</a>
+      </div>
+      <div class="post-footer__col">
+        <h5>Support</h5>
+        <a href="#">Become a member</a>
+        <a href="#">Other ways to give</a>
+        <a href="#">Volunteer</a>
+      </div>
+    </div>
+    <div class="post-footer__legal">
+      Design preview — not an official NJ PBS or PBS property.
+    </div>
+  </footer>
+</section>

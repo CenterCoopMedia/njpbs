@@ -1,0 +1,11 @@
+{
+  "date": "2026-11-04",
+  "kind": "new",
+  "requires": "video-replacement",
+  "title": "Replace video files in place",
+  "body": "Use Replace file in a video's details to upload a corrected file without losing its title, credits, tags or placements. The current video keeps playing while the replacement processes. Open views refresh after a replacement, and previews and downloads check that they match the file shown. File history lets you restore one previous file for 14 days. After 14 days, older files are permanently removed once their protected work has finished. Another replacement can upload while protected older work waits for cleanup.",
+  "prs": [
+    4679
+  ],
+  "order": 1793771090987
+}

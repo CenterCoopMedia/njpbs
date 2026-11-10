@@ -1,0 +1,147 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Boardwalk</title>
+    <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='90'%3EB%3C/text%3E%3C/svg%3E" />
+    <link rel="stylesheet" href="brand/tokens.css" />
+    <link rel="stylesheet" href="index.css" />
+  </head>
+  <body>
+    <div class="app">
+      <header class="mast">
+        <div class="mast-row"><img class="brand-logo" src="brand/njpbs-horizontal-white.svg" alt="NJ PBS" /><h1>Boardwalk</h1></div>
+        <p id="project-name" class="status">Checking Premiere project...</p>
+      </header>
+      <nav aria-label="Panel views" class="tabs">
+        <div role="button" tabindex="0" id="tab-library" aria-pressed="true">Library</div>
+        <div role="button" tabindex="0" id="tab-return" aria-pressed="false">Return</div>
+        <div role="button" tabindex="0" id="tab-settings" aria-pressed="false">Settings</div>
+      </nav>
+      <main id="content">
+        <div id="message" role="status" aria-live="polite" class="message" hidden></div>
+        <section id="connection" class="section">
+          <h2>Your library, in Premiere</h2>
+          <p>Connect your Boardwalk account to browse shared video and bring it into your project.</p>
+          <div role="button" tabindex="0" id="connect" class="primary">Connect Boardwalk</div>
+          <div id="pairing" hidden>
+            <p>Review this code in Boardwalk. Confirm that it matches before you approve this computer.</p>
+            <label for="pair-code">Connection code</label>
+            <div class="pair-code-row">
+              <input id="pair-code" class="pair-code" type="text" readonly aria-describedby="pair-code-hint" />
+              <div role="button" tabindex="0" id="copy-code">Copy code</div>
+            </div>
+            <p id="pair-code-hint" class="hint">The hyphen is optional.</p>
+            <p id="copy-code-status" class="hint copy-code-status" role="status" aria-live="polite" aria-atomic="true"></p>
+            <div class="status activity-row"><span id="pair-loading" class="activity" aria-hidden="true"><span></span><span></span><span></span></span><span id="pair-status" role="status">Waiting for browser approval...</span></div>
+            <div role="button" tabindex="0" id="open-browser">Open Boardwalk</div>
+            <div role="button" tabindex="0" id="cancel-pairing">Cancel</div>
+          </div>
+          <p class="hint">Stay connected for 30 days. Sign out on a shared computer.</p>
+        </section>
+        <section id="view-library" hidden>
+          <div id="library-list">
+            <div class="section-heading"><h2>Shared video library</h2><div role="button" tabindex="0" id="refresh">Refresh</div></div>
+            <div class="search-row"><input id="search" type="text" aria-label="Find by name" placeholder="Start of a video name" /></div>
+            <div class="status activity-row"><span id="library-loading" class="activity" aria-hidden="true"><span></span><span></span><span></span></span><span id="library-status" role="status"></span></div>
+            <p class="hint">Browse thumbnails and metadata. Video files download only when you choose an import action.</p>
+            <div id="assets" class="assets"></div>
+            <div role="button" tabindex="0" id="more" hidden>Load more</div>
+          </div>
+          <div id="asset-detail" hidden>
+            <div role="button" tabindex="0" id="back">Back to library</div>
+            <div class="detail-thumbnail"><img id="detail-poster" class="asset-poster" alt="" hidden /><p id="detail-poster-empty" class="hint">Thumbnail unavailable</p></div>
+            <h2 id="asset-name"></h2>
+            <p id="asset-description"></p><p id="asset-meta" class="hint"></p>
+            <p id="asset-rights" class="rights"></p>
+            <label for="format">Import format</label>
+            <select id="format"><option value="original" selected>Original</option><option value="prores_mov">ProRes</option></select>
+            <div class="check"><input id="remember-format" type="checkbox" /><label for="remember-format">Remember on this computer</label></div>
+            <label for="range">Media to download</label>
+            <select id="range"><option value="source" selected>Full video</option><option value="clip">In/out range</option></select>
+            <div id="range-fields" class="range-fields" hidden>
+              <label for="in-seconds">In (seconds)<input id="in-seconds" type="number" min="0" step="0.001" value="0" /></label>
+              <label for="out-seconds">Out (seconds)<input id="out-seconds" type="number" min="0.001" step="0.001" /></label>
+            </div>
+            <p id="format-note" class="hint">Downloads the camera original without conversion.</p>
+            <p id="actual-range" class="hint" role="status"></p>
+            <div role="button" tabindex="0" id="import" class="primary">Download and import</div>
+            <div role="button" tabindex="0" id="import-cached" hidden>Import downloaded file</div>
+            <div class="section">
+              <h3>Source markers</h3>
+              <div class="hint activity-row"><span id="marker-loading" class="activity" aria-hidden="true"><span></span><span></span><span></span></span><span id="marker-count" role="status"></span></div><div id="marker-list"></div>
+              <p class="hint">Select this asset's downloaded clip in Premiere's Project panel. For ranges, markers crossing a boundary stay unchanged in Boardwalk.</p>
+              <div class="check"><input id="replace-markers" type="checkbox" /><label for="replace-markers">Replace the selected clip's markers</label></div>
+              <div role="button" tabindex="0" id="apply-markers">Apply Boardwalk markers</div>
+              <div role="button" tabindex="0" id="read-markers">Read selected clip markers</div>
+              <p id="marker-draft-status" class="hint"></p>
+              <div role="button" tabindex="0" id="save-markers" hidden>Save markers to Boardwalk</div>
+            </div>
+          </div>
+        </section>
+        <section id="view-return" hidden>
+          <h2>Return a finished video</h2>
+          <p>Create a new library asset from your exported file.</p>
+          <div role="button" tabindex="0" id="choose-return">Choose video</div><p id="return-file" class="hint">No file selected.</p>
+          <label for="return-name">Name <span class="hint">(required)</span></label><input id="return-name" type="text" maxlength="500" />
+          <label for="return-description">Description</label><textarea id="return-description" maxlength="2000" rows="3"></textarea>
+          <label for="return-credit">Credit</label><input id="return-credit" type="text" maxlength="500" />
+          <label for="return-tags">Tags <span class="hint">(comma separated)</span></label><input id="return-tags" type="text" />
+          <div class="section"><h3>Source link</h3>
+            <p id="return-source" class="hint">No source linked.</p>
+            <div role="button" tabindex="0" id="link-source">Link selected Premiere clip</div>
+            <div role="button" tabindex="0" id="clear-source">Remove source link</div>
+            <div class="check"><input id="return-markers" type="checkbox" /><label for="return-markers">Include linked clip markers as returned-video metadata</label></div>
+            <p class="hint">Only include markers if the export keeps the linked clip's timing. Edited sequences can have different times.</p>
+          </div>
+          <p class="hint">Rights review stays pending. Your source remains unchanged.</p>
+          <div role="button" tabindex="0" id="upload" class="primary">Upload new asset</div>
+          <div role="button" tabindex="0" id="resume-upload" hidden>Resume upload</div>
+          <div role="button" tabindex="0" id="cancel-upload" hidden>Cancel upload</div>
+        </section>
+        <section id="view-settings" hidden>
+          <h2>Account and cache</h2>
+          <p id="account-name">Not connected.</p><p id="account-expiry" class="hint"></p>
+          <div role="button" tabindex="0" id="sign-out" hidden>Sign out</div>
+          <div class="section"><h3>Help and reports</h3>
+            <p class="hint">Unexpected failures send a diagnostic alert to Boardwalk administrators. Repeated failures are grouped for 15 minutes.</p>
+            <div role="button" tabindex="0" id="report-open" aria-controls="report-form" aria-expanded="false">Report a problem</div>
+            <div id="report-form" hidden>
+              <label for="report-description">What happened? <span class="hint">(optional)</span></label>
+              <textarea id="report-description" maxlength="2000" placeholder="What were you trying to do?" rows="3"></textarea>
+              <p id="report-note" class="hint"></p>
+              <div role="button" tabindex="0" id="send-report" class="primary">Send report</div>
+              <div class="status activity-row"><span id="report-loading" class="activity" aria-hidden="true"><span></span><span></span><span></span></span><span id="report-status" role="status"></span></div>
+            </div>
+          </div>
+          <div class="section"><h3>Media cache</h3><p id="cache-path" class="hint">Choose a per-user folder for downloaded media.</p>
+          <div role="button" tabindex="0" id="choose-cache">Choose cache folder</div>
+          <p class="hint">Keep cached files while a Premiere project uses them. Removing them makes those clips offline.</p>
+          <div class="check"><input id="confirm-clear-cache" type="checkbox" /><label for="confirm-clear-cache">I no longer need this account's downloaded files in the selected cache</label></div>
+          <div role="button" tabindex="0" id="clear-cache">Clear downloaded files</div></div>
+          <div class="section"><h3>Premiere connection</h3><div role="button" tabindex="0" id="check-project">Refresh project</div>
+          <div role="button" tabindex="0" id="test-import">Import a local video</div></div>
+        </section>
+      </main>
+      <footer id="batch-actions" class="batch-dock" hidden>
+        <div class="selection-row"><p id="selection-count" role="status">No videos selected</p><div role="button" tabindex="0" id="clear-selection">Clear</div></div>
+        <div class="batch-options">
+          <div class="batch-format"><label for="batch-format">Format</label>
+          <select id="batch-format"><option value="original" selected>Original</option><option value="prores_mov">ProRes</option></select></div>
+          <div role="button" tabindex="-1" aria-disabled="true" id="import-selected" class="primary">Download and import selected</div>
+        </div>
+      </footer>
+        <section id="transfer" class="section" hidden>
+          <h2 id="transfer-title">Transferring video</h2><progress id="transfer-progress" max="100" value="0"></progress>
+          <div id="credit-warning" role="group" aria-label="On-screen credit required" hidden>
+            <p>This video requires an on-screen credit:</p><p id="download-credit"></p>
+            <div role="button" tabindex="0" id="credit-cancel">Cancel download</div>
+            <div role="button" tabindex="0" id="credit-continue" class="primary">Continue download</div>
+          </div>
+          <div class="activity-row"><span id="transfer-loading" class="activity" aria-hidden="true"><span></span><span></span><span></span></span><span id="transfer-status" role="status"></span></div><div role="button" tabindex="0" id="stop-transfer">Stop transfer</div>
+        </section>
+
+    </div>
+    <script src="index.js"></script>
+  </body>
+</html>

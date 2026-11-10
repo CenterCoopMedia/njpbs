@@ -1,0 +1,9 @@
+/* Dev-only frame: identical list box for before/after density measurements. */
+.transcript-specimen { padding: 12px; background: var(--cms-surface); }
+.transcript-specimen > h1 { font-size: 1.125rem; margin: 0; }
+.transcript-specimen > p { margin: 4px 0 12px; }
+.transcript-specimen-layout { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 2fr); gap: 24px; }
+.transcript-specimen-layout > aside { padding: 16px; background: var(--cms-surface-soft); align-self: start; overflow-wrap: anywhere; }
+.transcript-specimen-owner { min-width: 0; }
+.transcript-specimen .transcript-passages { block-size: 657px; max-block-size: none; flex: none; overflow-y: auto; margin: 0; }
+@media (max-width: 780px) { .transcript-specimen-layout { grid-template-columns: minmax(0, 1fr); } .transcript-specimen-layout > aside { display: none; } }

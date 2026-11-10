@@ -1,0 +1,8 @@
+{
+  "date": "2026-11-09",
+  "kind": "fixed",
+  "title": "Keep your place after offboarding",
+  "body": "In Staff access, keyboard focus moves to Reactivate when a completed account shutdown removes Retry offboarding.",
+  "prs": [],
+  "order": 1794274466753
+}

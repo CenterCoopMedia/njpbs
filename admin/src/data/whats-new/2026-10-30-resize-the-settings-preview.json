@@ -1,0 +1,8 @@
+{
+  "date": "2026-10-30",
+  "kind": "improved",
+  "title": "Resize the settings preview",
+  "body": "In Admin settings, drag the preview edge to make it wider or narrower. You can also focus the edge and use the arrow keys. Your width stays saved. The NJ Decides preview shows the full horizontal banner and grows with the available width. Choose Open full-size preview to see it in a larger window.",
+  "prs": [],
+  "order": -3
+}

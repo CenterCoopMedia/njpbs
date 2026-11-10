@@ -1,0 +1,242 @@
+---
+// Garden signal glasshouse — full home-page preview slice for the chooser.
+// Presentational only. Sample copy avoids operator-change, launch-date, and live
+// integration claims. Buttons and forms are intentionally non-functional.
+---
+
+<section class="kit-preview glasshouse" data-kit="glasshouse" aria-label="Garden signal glasshouse preview">
+  <a class="glasshouse-skip" href="#glasshouse-main">Skip to content</a>
+
+  <div class="glasshouse-utility">
+    <div class="glasshouse-utility__inner">
+      <span class="glasshouse-utility__msg">A garden-forward public-media design preview. Sample content only.</span>
+      <button type="button" class="glasshouse-utility__dismiss" data-glasshouse-dismiss>Dismiss</button>
+    </div>
+  </div>
+
+  <header class="glasshouse-masthead">
+    <div class="glasshouse-masthead__inner">
+      <a href="#" class="glasshouse-brand">
+        <span class="glasshouse-brand__mark">New NJ PBS</span>
+        <span class="glasshouse-brand__lockup">Public media for New Jersey</span>
+      </a>
+      <nav id="glasshouse-preview-nav" class="glasshouse-nav" aria-label="Primary">
+        <a href="#" class="glasshouse-nav__link is-active">Watch</a>
+        <a href="#" class="glasshouse-nav__link">Garden guide</a>
+        <a href="#" class="glasshouse-nav__link">Schedule</a>
+        <a href="#" class="glasshouse-nav__link">Stories</a>
+      </nav>
+      <div class="glasshouse-masthead__actions">
+        <button type="button" class="glasshouse-theme-toggle" data-glasshouse-toggle-theme aria-pressed="false">
+          <span data-glasshouse-theme-label>Light</span>
+        </button>
+        <a href="#" class="glasshouse-btn glasshouse-btn--primary">Support</a>
+        <button
+          type="button"
+          class="glasshouse-nav-toggle"
+          data-glasshouse-nav-toggle
+          aria-controls="glasshouse-preview-nav"
+          aria-expanded="false"
+          aria-label="Menu"
+        >
+          ☰
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <main id="glasshouse-main" class="glasshouse-shell">
+    <section class="glasshouse-hero" aria-label="Featured">
+      <div class="glasshouse-hero__stage">
+        <div class="glasshouse-hero__copy">
+          <p class="glasshouse-kicker">Garden signal glasshouse</p>
+          <h2>A public garden tuned through retro television glass</h2>
+          <p class="glasshouse-hero__deck">
+            A fourth design direction where local stories grow from signal paths,
+            schedule rails feel like seed markers, and the 3D New Jersey hero
+            glows like phosphor in a greenhouse.
+          </p>
+          <div class="glasshouse-hero__actions">
+            <a href="#" class="glasshouse-btn glasshouse-btn--primary">Explore the preview</a>
+            <a href="#" class="glasshouse-btn glasshouse-btn--outline">Review accessibility</a>
+          </div>
+          <div class="glasshouse-hero__meta-row">
+            <p class="glasshouse-hero__meta">Design preview // decorative 3D // no connected services</p>
+            <div class="glasshouse-signal-meter" aria-hidden="true">
+              <span style="--i: 0"></span>
+              <span style="--i: 1"></span>
+              <span style="--i: 2"></span>
+              <span style="--i: 3"></span>
+              <span style="--i: 4"></span>
+            </div>
+          </div>
+        </div>
+        <div class="glasshouse-hero__glass" aria-hidden="true">
+          <div class="glasshouse-signal-orbit" aria-hidden="true">
+            <span></span>
+            <span></span>
+            <span></span>
+          </div>
+          <div class="glasshouse-vine-field" aria-hidden="true">
+            <span style="--x: 14%; --y: 18%; --d: 0s"></span>
+            <span style="--x: 78%; --y: 22%; --d: -2s"></span>
+            <span style="--x: 22%; --y: 74%; --d: -4s"></span>
+            <span style="--x: 68%; --y: 70%; --d: -6s"></span>
+          </div>
+          <canvas class="glasshouse-three" data-glasshouse-three aria-hidden="true"></canvas>
+          <canvas class="glasshouse-hero__canvas" data-nj-canvas aria-hidden="true"></canvas>
+          <div class="glasshouse-scan-window" aria-hidden="true"></div>
+          <img class="nj-fallback" data-nj-fallback src="/nj-static.svg" alt="" aria-hidden="true" width="420" height="740" decoding="async" />
+        </div>
+      </div>
+    </section>
+
+    <section class="glasshouse-onair" aria-labelledby="glasshouse-schedule-title">
+      <div>
+        <p class="glasshouse-kicker glasshouse-onair__label">Sample schedule</p>
+        <h2 id="glasshouse-schedule-title" class="glasshouse-onair__title">What is growing on air</h2>
+        <p>Static schedule samples shown as garden markers, not a live programming feed.</p>
+      </div>
+      <div class="glasshouse-schedule" aria-label="Sample schedule items">
+        <div class="glasshouse-time" style="--tune: 62%"><span>7:00 p.m.</span><strong>Evening newscast</strong><span>30 min</span></div>
+        <div class="glasshouse-time" style="--tune: 78%"><span>8:00 p.m.</span><strong>Documentary hour</strong><span>60 min</span></div>
+        <div class="glasshouse-time" style="--tune: 46%"><span>9:00 p.m.</span><strong>Arts profile</strong><span>30 min</span></div>
+      </div>
+    </section>
+
+    <div class="glasshouse-sec-head">
+      <span class="glasshouse-sec-head__num">01</span>
+      <h2>Stories in bloom</h2>
+      <span class="glasshouse-sec-head__meta">Featured</span>
+    </div>
+
+    <section class="glasshouse-grid" aria-label="Featured sample stories">
+      <a href="#" class="glasshouse-card glasshouse-card--feature">
+        <div class="glasshouse-card__media" aria-hidden="true"></div>
+        <div class="glasshouse-card__body">
+          <p class="glasshouse-card__meta">Statewide report</p>
+          <h3>Local reporting planted where communities gather</h3>
+          <p>Sample lead story copy for the visual system. The card keeps text on a solid surface while motion stays decorative.</p>
+        </div>
+      </a>
+      <aside class="glasshouse-panel" aria-labelledby="glasshouse-a11y-title">
+        <p class="glasshouse-kicker">Axe through line</p>
+        <h3 id="glasshouse-a11y-title" class="glasshouse-panel__title">Designed for keyboard, contrast, and reduced motion from the first sketch</h3>
+        <p>Token pairings are declared for testing, focus is visible, and the 3D layers are decorative.</p>
+        <a href="#" class="glasshouse-btn glasshouse-btn--signal">Read the notes</a>
+      </aside>
+    </section>
+
+    <section class="glasshouse-dial" aria-labelledby="glasshouse-dial-title">
+      <div>
+        <p class="glasshouse-kicker">Tuning bed</p>
+        <h2 id="glasshouse-dial-title">A page that keeps breathing while the content stays still</h2>
+      </div>
+      <div class="glasshouse-dial__screen" aria-hidden="true">
+        <span></span>
+        <span></span>
+        <span></span>
+        <span></span>
+      </div>
+    </section>
+
+    <div class="glasshouse-sec-head">
+      <span class="glasshouse-sec-head__num">02</span>
+      <h2>Watch trays</h2>
+      <span class="glasshouse-sec-head__meta">Programs</span>
+    </div>
+
+    <section class="glasshouse-mini-grid" aria-label="Sample programs">
+      <a href="#" class="glasshouse-card glasshouse-mini">
+        <div class="glasshouse-card__media" aria-hidden="true"></div>
+        <div class="glasshouse-card__body">
+          <p class="glasshouse-card__meta">Documentary</p>
+          <h3>Coastal field notes</h3>
+          <p>Long-form sample programming from around the state.</p>
+        </div>
+      </a>
+      <a href="#" class="glasshouse-card glasshouse-mini">
+        <div class="glasshouse-card__media" aria-hidden="true"></div>
+        <div class="glasshouse-card__body">
+          <p class="glasshouse-card__meta">Education</p>
+          <h3>Classroom greenhouse</h3>
+          <p>Resource sample for teachers and families.</p>
+        </div>
+      </a>
+      <a href="#" class="glasshouse-card glasshouse-mini">
+        <div class="glasshouse-card__media" aria-hidden="true"></div>
+        <div class="glasshouse-card__body">
+          <p class="glasshouse-card__meta">Arts</p>
+          <h3>Studio in flower</h3>
+          <p>Profile sample for makers and performers.</p>
+        </div>
+      </a>
+    </section>
+
+    <section class="glasshouse-support" aria-labelledby="glasshouse-support-title">
+      <div>
+        <p class="glasshouse-kicker">Membership sample</p>
+        <h2 id="glasshouse-support-title" class="glasshouse-support__title">Grow the signal</h2>
+        <p>Support prompts are sample interface elements and are not connected to a payment system.</p>
+      </div>
+      <div class="glasshouse-hero__actions">
+        <a href="#" class="glasshouse-btn glasshouse-btn--primary">Donate monthly</a>
+        <a href="#" class="glasshouse-btn glasshouse-btn--outline">Give once</a>
+      </div>
+    </section>
+
+    <section class="glasshouse-newsletter" aria-labelledby="glasshouse-newsletter-title">
+      <div>
+        <p class="glasshouse-kicker">Weekly guide</p>
+        <h2 id="glasshouse-newsletter-title" class="glasshouse-newsletter__title">A small trellis for what to watch next</h2>
+        <p>This sample form demonstrates labels, hints, and touch targets. It does not submit.</p>
+      </div>
+      <div class="glasshouse-form-row">
+        <div class="glasshouse-field">
+          <label for="glasshouse-email">Email address</label>
+          <input id="glasshouse-email" type="email" name="email" autocomplete="email" />
+          <span class="glasshouse-field__hint">Sample field — no data is collected.</span>
+        </div>
+        <button class="glasshouse-btn glasshouse-btn--signal" type="button">Subscribe</button>
+      </div>
+    </section>
+  </main>
+
+  <footer class="glasshouse-foot">
+    <div class="glasshouse-foot__inner">
+      <div class="glasshouse-foot__grid">
+        <div>
+          <p class="glasshouse-foot__brand">New NJ PBS</p>
+          <p>A design preview for a public-media website in development.</p>
+        </div>
+        <div>
+          <h3>Watch</h3>
+          <ul>
+            <li><a href="#">Live sample</a></li>
+            <li><a href="#">Schedule sample</a></li>
+            <li><a href="#">Shows sample</a></li>
+          </ul>
+        </div>
+        <div>
+          <h3>About</h3>
+          <ul>
+            <li><a href="#">Mission sample</a></li>
+            <li><a href="#">Contact sample</a></li>
+            <li><a href="#">Accessibility sample</a></li>
+          </ul>
+        </div>
+        <div>
+          <h3>Support</h3>
+          <ul>
+            <li><a href="#">Membership sample</a></li>
+            <li><a href="#">Ways to give sample</a></li>
+            <li><a href="#">Volunteer sample</a></li>
+          </ul>
+        </div>
+      </div>
+      <p class="glasshouse-foot__fine">
+        Design preview — not an official NJ PBS or PBS property.
+      </p>
+    </div>
+  </footer>
+</section>

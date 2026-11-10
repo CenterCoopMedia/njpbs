@@ -1,0 +1,8 @@
+{
+  "date": "2026-11-01",
+  "kind": "fixed",
+  "title": "Preview feed cards with trusted artwork",
+  "body": "Home previews load feed artwork only from approved image sources and leave out the referring page address. Other feed images use the existing fallback artwork; titles and links stay available.",
+  "prs": [],
+  "order": -3
+}

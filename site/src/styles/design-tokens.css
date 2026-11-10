@@ -1,0 +1,313 @@
+/*
+  Shared design tokens for every NJ PBS surface.
+
+  Palette values live only here. Components consume the role-based aliases so
+  contrast, focus, target size, motion, and type decisions stay consistent.
+*/
+
+:root {
+  /* NJ Decides 2026. Opt-in sub-brand; never replace the station palette. */
+  --color-nj-decides-navy: #011375;
+  --color-nj-decides-red: #8b0000;
+  --color-nj-decides-gold: #e4bf76;
+  --color-nj-decides-field: #e9eaee;
+  --color-nj-decides-paper: var(--color-paper);
+  --color-nj-decides-surface: var(--color-nj-decides-navy);
+  --color-nj-decides-text: var(--color-nj-decides-paper);
+  --color-nj-decides-ink: var(--color-nj-decides-navy);
+  --color-nj-decides-action: var(--color-nj-decides-red);
+  --color-nj-decides-link: var(--color-nj-decides-navy);
+  --color-nj-decides-rule: var(--color-nj-decides-red);
+  --color-nj-decides-accent: var(--color-nj-decides-navy);
+  --color-nj-decides-focus: var(--color-nj-decides-gold);
+  --font-nj-decides: var(--font-sans);
+
+  /* Source snapshot palette for the Data Hub charts and portable exports. */
+  --color-data-hub-muted: #c8cce0;
+  --color-data-hub-link: #bdc8ff;
+  --color-data-hub-button-hover: #4053dd;
+  --color-data-hub-focus: #e2e6ff;
+  --color-data-hub-skip-ink: #070819;
+  --color-data-hub-notice: #15192b;
+  --color-data-hub-hover: #20253d;
+  --color-data-hub-search-edge: #8c94b1;
+  --color-data-hub-chart-track: #252a3d;
+  --color-data-hub-bar: #889aff;
+  --color-data-hub-bar-last: #bed0ff;
+  --color-data-hub-input: #070a14;
+  --color-data-hub-input-edge: #838ba7;
+  --color-data-hub-label: #242a41;
+  --color-data-hub-shadow: #0009;
+  --color-data-hub-control-edge: #828ca9;
+  --color-data-hub-edge: #8892ad;
+  --color-data-hub-series: #9db1ff;
+  --color-data-hub-muted-label: #a6acc2;
+  --color-data-hub-chart-panel: #0e1223;
+  --color-data-hub-panel-hover: #171d31;
+  --color-data-hub-table-edge: #2b3452;
+  --color-data-hub-strong-text: #f7f8ff;
+  --color-data-hub-positive-text: #a6e8cb;
+  --color-data-hub-negative-text: #ffbfbd;
+  --color-data-hub-axis-edge: #9298b3;
+  --color-data-hub-negative-bar: #bd818b;
+  --color-data-hub-positive-bar: #83c5ac;
+  --color-data-hub-track: #101426;
+  --color-data-hub-emphasis: #e5e8ff;
+  --color-data-hub-axis: #8f9ab9;
+  --color-data-hub-chart-surface: #080c1a;
+  --color-data-hub-chart-text: #d9e0ff;
+  --color-data-hub-subtle-edge: #55586a;
+  --color-data-hub-export-bar: #a0b0ff;
+  --color-data-hub-chart-edge: #606579;
+  --color-data-hub-chart-rule: #73788f;
+  --color-data-hub-chart-axis: #61677f;
+  --color-data-hub-axis-muted: #72778e;
+  --color-data-hub-export-muted: #aeb6d1;
+  --color-data-hub-comparison-edge: var(--color-data-hub-grid-edge);
+  --color-data-hub-table-track: #263047;
+  --color-data-hub-line-highlight: #9cb0ff;
+  --color-data-hub-export-emphasis: #ecf0ff;
+  --color-data-hub-grid-edge: #7083a6;
+  --color-data-hub-export-edge: #69718d;
+  --color-data-hub-table-rule: #454b61;
+
+  /* Brand palette. */
+  --pbs-blue: #2638c4;
+  --pbs-blue-bright: #4d5ee8;
+  --focus: #aeb7ff;
+  --bg-0: #06070f;
+  --bg-1: #0b0e1d;
+  --bg-2: #131736;
+  --bg-now: #1b2352;
+  --text: #f3f4fb;
+  --text-dim: #c0c5dc;
+  --text-quiet: #aeb4d0;
+  --line: rgba(255, 255, 255, 0.13);
+  --line-strong: rgba(255, 255, 255, 0.24);
+  --ink: #10131f;
+  --action-red: #b3261e;
+  --status-green: #55d98b;
+  --progress-track: #183126;
+
+  /* Shared primitives used by role aliases and print/light surfaces. */
+  --color-white: #fff;
+  --color-black: #000;
+  --color-paper: #ffffff;
+  --color-print-ink: #10131f;
+  --color-nj-green: #00ac00;
+  --color-theme-navy: #0b1f3a;
+
+  /* Homepage email newsletter. */
+  --color-newsletter-surface: #090d1e;
+  --color-newsletter-eyebrow: #b5c7ff;
+  --color-newsletter-text: #d1dafa;
+  --color-newsletter-action: #eef2ff;
+  --color-newsletter-action-text: #111e50;
+  --color-newsletter-action-hover-text: #101940;
+
+  /* Static editorial Home. The copy scrim is legible over white source art. */
+  --color-home-lead-scrim: rgba(6, 7, 15, 0.82);
+  --color-home-story-scrim: rgba(6, 7, 15, 0.75);
+  --home-lead-art-fade: linear-gradient(180deg, transparent 40%, var(--color-surface-page) 100%);
+
+  /* Semantic color roles. */
+  --color-brand: var(--pbs-blue);
+  --color-brand-bright: var(--pbs-blue-bright);
+  --color-focus-ring: var(--focus);
+  --color-focus-ring-on-light: var(--pbs-blue);
+  --color-surface-page: var(--bg-0);
+  --color-surface-panel: var(--bg-1);
+  --color-surface-elevated: var(--bg-2);
+  --color-surface-current: var(--bg-now);
+  --color-text-on-surface: var(--text);
+  --color-text-muted: var(--text-dim);
+  --color-text-quiet: var(--text-quiet);
+  --color-text-on-brand: var(--color-white);
+  --color-text-on-action: var(--color-white);
+  --color-link: var(--focus);
+  --color-border: var(--line);
+  --color-border-strong: var(--line-strong);
+  /* Edge for a control sitting on the frosted header. That header is
+     translucent, so its effective backdrop is whatever scrolls beneath it,
+     anywhere from the page background to a white content card. Clearing WCAG
+     1.4.11's 3:1 across that whole range takes a luminance of roughly 0.32 or
+     above, which rules out every brand blue and the translucent --line tokens.
+     --text sits well past that floor, and is used here so the edge tracks the
+     theme rather than pinning a raw hex. */
+  --color-control-edge-on-glass: var(--text);
+  --color-icon-button: var(--text-dim);
+  --color-action: var(--action-red);
+  --color-status: var(--status-green);
+  --color-progress-track: var(--progress-track);
+  --color-ink: var(--ink);
+
+  /* Existing art and light-document roles, centralized to keep authors on tokens. */
+  --color-text-soft: #d7daf0;
+  --color-text-emphasis: #e7eaff;
+  --color-player-surface: #050611;
+  --color-light-text: #1d1f2b;
+  --color-light-text-muted: #515a72;
+  --color-light-link: #2230a8;
+  --color-light-link-strong: #1f2a6b;
+  --color-light-heading: #10143f;
+  --color-light-copy: #3a4152;
+  --color-light-line: #e2e6f0;
+  --color-light-line-strong: #b9c2e6;
+  --color-light-surface-soft: #f4f6fb;
+  --color-light-surface-blue: #eef2fb;
+  --color-light-surface-blue-strong: #e9ecfb;
+  --color-light-surface-muted: #eaecf7;
+  --color-light-line-soft: #eef0f6;
+  --color-light-code: #f1f3f9;
+  --color-light-note: #f6f8fd;
+  --color-light-note-text: #3a3f55;
+  --color-light-body: #25283a;
+  --color-light-blue-copy: #2a3350;
+  --color-announcement-surface: #14193a;
+  --color-announcement-link: #8a97ff;
+  --color-announcement-copy: #c5cbe8;
+  --color-danger-text: #ff9ba1;
+  --color-success-text: #8fe0b8;
+  --color-footer-quiet: #7f86ad;
+  --color-schedule-live: #e5484d;
+  --color-schedule-on-demand: #6a5ae0;
+  --color-schedule-grid: #1fb6b0;
+  --color-schedule-kids: #2fb457;
+  --color-schedule-current-date-text: #e6e9ff;
+  --color-schedule-rail-surface: #090b18;
+  --color-schedule-hour-text: #d8dbee;
+  --color-schedule-primetime-text: #cbd0ec;
+  --color-schedule-program-hover-surface: #19204a;
+  --color-schedule-time-text: #e5e7f4;
+  --color-schedule-link: #dfe3ff;
+  --color-schedule-dialog-backdrop: rgba(3, 4, 10, 0.78);
+  --color-schedule-summary-shadow: rgba(1, 9, 18, 0.26);
+  --color-schedule-print-border: #727784;
+  --color-map-water: #070a16;
+  --color-map-land: #12182b;
+  --color-map-nj-land: #18245a;
+  --color-map-state-line: #343d61;
+  --color-map-nj-edge: #8897ff;
+  --color-map-county-line: rgba(174, 183, 255, 0.25);
+  --color-map-label: #f4f6ff;
+  --color-map-label-quiet: #929bbd;
+  --color-map-place: #cbd2ff;
+  --color-map-nj-full: #7184ff;
+  --color-map-nj-low: #5ae093;
+  --color-map-nj-coming: #ffa85c;
+  --color-map-whyy: #ffc65a;
+  --color-map-wnet: #ff7d8f;
+  --color-map-lehigh: #4cd3d0;
+  --color-map-marker-center: #ffffff;
+  --color-map-label-shadow: #070a16;
+  --color-map-shadow: rgba(0, 0, 0, 0.36);
+  --color-map-control-active: #1d2b70;
+  --color-map-detail-glow: rgba(77, 94, 232, 0.16);
+  --color-map-dot-ring: rgba(255, 255, 255, 0.08);
+  --color-kids-surface: #0a0d12;
+  --color-kids-block: #3fae49;
+  --color-kids-block-yellow: #f2b21d;
+  --color-legacy-link: #1a4fa0;
+  --color-signal-surface: #0a145a;
+  --color-signal-near-white: #eef1f9;
+  --color-hero-default-fill: #3b6fb0;
+  --color-hero-default-edge: #e0322d;
+  --color-hero-default-compact-fill: #7d93cf;
+  --color-hero-default-compact-edge: #9eb2ff;
+  --color-hero-cinematic-fill: #a9c2ff;
+  --color-hero-cinematic-edge: #37d95a;
+  --color-hero-cinematic-compact-fill: #8193d8;
+  --color-hero-cinematic-compact-edge: #b7c5ff;
+  --color-event-date-accent: #6f80f5;
+  --color-badge-free-bg: #0f5132;
+  --color-badge-free-fg: #eafaf0;
+  --color-badge-passport-bg: #1e2b98;
+  --color-badge-passport-fg: #eef0ff;
+  --color-badge-leaving-bg: #f6b21b;
+  --color-badge-leaving-fg: #231903;
+  --color-badge-media-bg: #242a52;
+  --color-badge-media-fg: #dfe3f7;
+  --tile-gradient-0: linear-gradient(135deg, #16225c, #2638c4);
+  --tile-gradient-1: linear-gradient(135deg, #0b3b2e, #0a7d28);
+  --tile-gradient-2: linear-gradient(135deg, #13213f, #3b6fb0);
+  --tile-gradient-3: linear-gradient(135deg, #0e2a3a, #1f7a8c);
+  --tile-gradient-4: linear-gradient(135deg, #1a2350, #4d5ee8);
+  --tile-gradient-5: linear-gradient(135deg, #06301f, #15a83a);
+  --tile-gradient-6: linear-gradient(135deg, #102a4c, #2a6f97);
+  --tile-gradient-7: linear-gradient(135deg, #11324a, #1ca37a);
+
+  /* Type and numeric data. */
+  --font-sans: "PBS Sans", "Avenir Next", Avenir, Frutiger, "Segoe UI", sans-serif;
+  --heading-tracking: -0.035em;
+  --number-variant: tabular-nums;
+
+  /* Layout, spacing, and target sizes. */
+  --wrap: 84rem;
+  --reading-width: 48rem;
+  --section-title-size: clamp(1.3rem, 2.4vw, 1.6rem);
+  --gutter: clamp(1rem, 3vw, 1.5rem);
+  --space-1: 0.25rem;
+  --space-2: 0.5rem;
+  --space-3: 0.75rem;
+  --space-4: 1rem;
+  --space-6: 1.5rem;
+  --space-8: 2rem;
+  --target-min: 1.5rem;
+  --target-comfortable: 2.75rem;
+
+  /* Optional Home presentations share these values with the staff preview. */
+  --home-section-gap: clamp(2rem, 4vw, 3.5rem);
+  --home-content-gap: clamp(1.5rem, 3vw, 3rem);
+  --home-lead-min-height: clamp(25rem, 42vw, 38rem);
+  --home-lead-headroom: clamp(12rem, 24vw, 22rem);
+  --home-lead-copy-padding: clamp(1rem, 2.4vw, 2rem);
+  --home-lead-title-size: clamp(2rem, 3.6vw, 3.6rem);
+  --home-headline-size: clamp(1.1rem, 1.6vw, 1.4rem);
+  --home-section-title-size: clamp(1.4rem, 2.2vw, 1.85rem);
+  --home-shelf-title-size: clamp(0.95rem, 1.4vw, 1.15rem);
+  --home-shelf-gap: clamp(0.75rem, 1.8vw, 1.5rem);
+  --home-shelf-row-gap: clamp(1.25rem, 2.4vw, 2rem);
+  --home-art-radius: var(--radius-surface);
+
+  /* Control and surface geometry, button corners, and the sparing accent corner. */
+  --radius-control: 4px;
+  --radius-button: 23px;
+  --radius-surface: 5px;
+  --radius-accent: 4px 18px 4px 4px;
+  --radius-pill: 999px;
+
+  /* Focus and motion. */
+  --focus-outline: 3px solid var(--color-focus-ring);
+  --focus-offset: 3px;
+  /* Edge-to-edge links inside clipped frames retain a visible focus ring. */
+  --focus-offset-inset: -6px;
+  --motion-duration-fast: 150ms;
+  --motion-duration-standard: 200ms;
+  --motion-duration-emphasis: 360ms;
+  --motion-duration-loop: 5.6s;
+  --motion-ease-standard: cubic-bezier(0.2, 0, 0, 1);
+}
+
+:where(h1, h2, h3) {
+  text-wrap: balance;
+}
+
+:where(time, .tabular-nums, [data-duration], [data-count]) {
+  font-variant-numeric: var(--number-variant);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --motion-duration-fast: 0.01ms;
+    --motion-duration-standard: 0.01ms;
+    --motion-duration-emphasis: 0.01ms;
+    --motion-duration-loop: 0.01ms;
+  }
+}
+
+html[data-motion="off"] {
+  --motion-duration-fast: 0.01ms;
+  --motion-duration-standard: 0.01ms;
+  --motion-duration-emphasis: 0.01ms;
+  --motion-duration-loop: 0.01ms;
+}

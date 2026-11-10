@@ -1,0 +1,10 @@
+{
+  "date": "2026-08-19",
+  "kind": "new",
+  "title": "Upload images while you edit a Post",
+  "body": "You can now upload an image directly from the Post editor. The image goes into the Media library and appears in your Post.",
+  "prs": [
+    1060
+  ],
+  "order": -2
+}

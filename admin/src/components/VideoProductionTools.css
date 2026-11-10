@@ -1,0 +1,27 @@
+.video-production-actions { display: flex; flex-wrap: wrap; align-items: start; gap: var(--cms-space-2); margin-block: var(--cms-space-4); }
+.video-production-sections details { border-block-start: var(--border-width) solid var(--cms-line); padding-block-start: var(--cms-space-3); }
+.video-production-sections summary { cursor: pointer; font-weight: 700; }
+.video-production-sections label { display: grid; gap: var(--cms-space-2); margin-block: var(--cms-space-3); font-weight: 600; }
+.video-production-actions .button { white-space: normal; }
+.video-production-buttons { display: flex; flex-wrap: wrap; gap: var(--cms-space-2); }
+.video-transcript { margin-block-start: var(--cms-space-5); border-block-start: var(--border-width) solid var(--cms-line); padding-block-start: var(--cms-space-4); }
+.video-transcript ol { list-style: none; padding: 0; }
+.video-transcript li { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: var(--cms-space-3); padding-block: var(--cms-space-3); border-block-end: var(--border-width) solid var(--cms-line); }
+.video-transcript li .button { align-self: start; font-variant-numeric: tabular-nums; }
+.video-transcript p { overflow-wrap: anywhere; }
+@media (max-width: 36rem) { .video-transcript li { grid-template-columns: minmax(0, 1fr); } }
+
+.video-recent-clips { list-style: none; padding: 0; display: grid; gap: var(--cms-space-2); }
+
+.video-transcript-export-options fieldset { min-width: 0; margin-block: var(--cms-space-3); padding: var(--cms-space-3); border: var(--border-width) solid var(--cms-line); border-radius: var(--radius-control); }
+.video-transcript-export-options legend { font-weight: 700; }
+
+.video-production-sections .video-paid-consent { display: flex; align-items: flex-start; gap: var(--cms-space-2); }
+.video-paid-consent input { flex: none; margin-block-start: var(--cms-space-1); }
+
+.video-production-sections { display: grid; gap: var(--cms-space-4); min-width: 0; }
+.video-production-sections summary { padding-block: var(--cms-space-3); }
+.video-production-sections p, .video-production-sections label { overflow-wrap: anywhere; }
+.video-production-sections .button { white-space: normal; }
+.video-production-actions > div:empty { display: none; }
+.video-production-actions > div:not(.video-production-buttons) { flex-basis: 100%; }

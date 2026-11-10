@@ -1,0 +1,8 @@
+{
+  "date": "2026-10-27",
+  "kind": "new",
+  "title": "Connect election results to a source",
+  "body": "Staff with publish access can connect a published election section to a shared spreadsheet or an approved results feed. Choose approval once, automatic counts with calls by click, or fully automatic updates. Boardwalk shows pending changes and source holds, and you can pause updates for a manual correction. Some feeds need activation by the release owner. Manual entry remains available for races without a source.",
+  "prs": [],
+  "order": -4
+}

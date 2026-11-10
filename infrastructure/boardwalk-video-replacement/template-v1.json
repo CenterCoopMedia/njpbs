@@ -1,0 +1,195 @@
+{
+  "AWSTemplateFormatVersion": "2010-09-09",
+  "Description": "Shared-identity exact-version deletion throughout the named source/replica video buckets and listed derived prefixes; application transactions select retained versions.",
+  "Metadata": {
+    "AWSToolsMetrics": {
+      "AWSAgentToolkit": "aws-cloudformation@2"
+    },
+    "com.aws.cloudformation.Context": {
+      "arch": "Companion cleanup role. Firestore cleanup ownership gates every exact version deletion; R2 remains behind its existing separate credentials.",
+      "must": [
+        "No resource creation besides this role.",
+        "Never grant access to archive buckets, source writes, current-version delete markers or Object Lock bypass.",
+        "Activation requires separate deployment authorization."
+      ],
+      "ref": [
+        "docs/cms/functions-deploy.md"
+      ]
+    }
+  },
+  "Parameters": {
+    "OriginalVideoBucketName": {
+      "Type": "String",
+      "Description": "Existing private source bucket; no ownership change.",
+      "AllowedPattern": "^[a-z0-9][a-z0-9.-]{1,61}[a-z0-9]$"
+    },
+    "ReplicaVideoBucketName": {
+      "Type": "String",
+      "Description": "Existing replica; explicit deletion is required for permanent removal.",
+      "AllowedPattern": "^[a-z0-9][a-z0-9.-]{1,61}[a-z0-9]$"
+    },
+    "RenditionBucketName": {
+      "Type": "String",
+      "Description": "Existing derived-video and transcript bucket.",
+      "AllowedPattern": "^[a-z0-9][a-z0-9.-]{1,61}[a-z0-9]$"
+    },
+    "GoogleOAuth2ClientId": {
+      "Type": "String",
+      "Description": "Exact existing Boardwalk Google azp.",
+      "AllowedPattern": "^[0-9]{12,30}$"
+    },
+    "GoogleServiceAccountUniqueId": {
+      "Type": "String",
+      "Description": "Exact existing Boardwalk Google sub.",
+      "AllowedPattern": "^[0-9]{12,30}$"
+    }
+  },
+  "Resources": {
+    "VideoReplacementCleanupRole": {
+      "Type": "AWS::IAM::Role",
+      "Metadata": {
+        "com.aws.cloudformation.Context": {
+          "why": "Separate permanent-deletion authority from the ordinary read/upload role.",
+          "must": [
+            "Trust only the pinned Google identity and audience.",
+            "Delete only explicit S3 version IDs; no DeleteObject, GetObject, PutObject, ListAllMyBuckets, KMS, or retention bypass.",
+            "Inventory only the listed derived prefixes."
+          ]
+        }
+      },
+      "Properties": {
+        "Description": "Grants exact-version deletion across both named video buckets and listed derived prefixes; application transactions protect current and referenced versions.",
+        "RoleName": "njpbs-video-version-cleanup",
+        "MaxSessionDuration": 3600,
+        "AssumeRolePolicyDocument": {
+          "Version": "2012-10-17",
+          "Statement": [
+            {
+              "Effect": "Allow",
+              "Principal": {
+                "Federated": "accounts.google.com"
+              },
+              "Action": "sts:AssumeRoleWithWebIdentity",
+              "Condition": {
+                "StringEquals": {
+                  "accounts.google.com:aud": {
+                    "Ref": "GoogleOAuth2ClientId"
+                  },
+                  "accounts.google.com:oaud": "njpbs-boardwalk-s3",
+                  "accounts.google.com:sub": {
+                    "Ref": "GoogleServiceAccountUniqueId"
+                  }
+                }
+              }
+            }
+          ]
+        },
+        "Policies": [
+          {
+            "PolicyName": "delete-replaced-video-versions",
+            "PolicyDocument": {
+              "Version": "2012-10-17",
+              "Statement": [
+                {
+                  "Sid": "ExactOriginalVersions",
+                  "Effect": "Allow",
+                  "Action": [
+                    "s3:DeleteObjectVersion"
+                  ],
+                  "Resource": [
+                    {
+                      "Fn::Sub": "arn:${AWS::Partition}:s3:::${OriginalVideoBucketName}/*"
+                    },
+                    {
+                      "Fn::Sub": "arn:${AWS::Partition}:s3:::${ReplicaVideoBucketName}/*"
+                    }
+                  ],
+                  "Condition": {
+                    "Bool": {
+                      "aws:SecureTransport": "true"
+                    },
+                    "StringEquals": {
+                      "s3:ResourceAccount": {
+                        "Ref": "AWS::AccountId"
+                      }
+                    }
+                  }
+                },
+                {
+                  "Sid": "ExactDerivedVersions",
+                  "Effect": "Allow",
+                  "Action": [
+                    "s3:DeleteObjectVersion"
+                  ],
+                  "Resource": [
+                    {
+                      "Fn::Sub": "arn:${AWS::Partition}:s3:::${RenditionBucketName}/outputs/*"
+                    },
+                    {
+                      "Fn::Sub": "arn:${AWS::Partition}:s3:::${RenditionBucketName}/staging/*"
+                    },
+                    {
+                      "Fn::Sub": "arn:${AWS::Partition}:s3:::${RenditionBucketName}/transcripts/inputs/*"
+                    },
+                    {
+                      "Fn::Sub": "arn:${AWS::Partition}:s3:::${RenditionBucketName}/transcripts/results/*"
+                    }
+                  ],
+                  "Condition": {
+                    "Bool": {
+                      "aws:SecureTransport": "true"
+                    },
+                    "StringEquals": {
+                      "s3:ResourceAccount": {
+                        "Ref": "AWS::AccountId"
+                      }
+                    }
+                  }
+                },
+                {
+                  "Sid": "InventoryDerivedVersionsOnly",
+                  "Effect": "Allow",
+                  "Action": [
+                    "s3:ListBucketVersions"
+                  ],
+                  "Resource": {
+                    "Fn::Sub": "arn:${AWS::Partition}:s3:::${RenditionBucketName}"
+                  },
+                  "Condition": {
+                    "Bool": {
+                      "aws:SecureTransport": "true"
+                    },
+                    "StringEquals": {
+                      "s3:ResourceAccount": {
+                        "Ref": "AWS::AccountId"
+                      }
+                    },
+                    "StringLike": {
+                      "s3:prefix": [
+                        "outputs/*",
+                        "staging/*",
+                        "transcripts/inputs/*",
+                        "transcripts/results/*"
+                      ]
+                    }
+                  }
+                }
+              ]
+            }
+          }
+        ]
+      }
+    }
+  },
+  "Outputs": {
+    "CleanupRoleArn": {
+      "Description": "Set CMS_VIDEO_REPLACEMENT_CLEANUP_ROLE_ARN only during the separately approved release.",
+      "Value": {
+        "Fn::GetAtt": [
+          "VideoReplacementCleanupRole",
+          "Arn"
+        ]
+      }
+    }
+  }
+}

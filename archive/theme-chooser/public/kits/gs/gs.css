@@ -1,0 +1,458 @@
+/* ===================================================================
+   Garden State public  (gs)
+   A civic-editorial public-media design kit.
+   Ink on warm paper, one heritage-blue anchor, one warm cranberry accent.
+   A newspaper's credibility plus a public broadcaster's warmth, on a
+   strict grid. Light by default, with an opt-in dark theme.
+
+   White, ink and one accent with hairline borders, shared-border grids,
+   sharp corners and tint + title-color callouts. The Garden State
+   palette pairs with a Source Serif 4 editorial headline voice.
+
+   Tokens live on :root, namespaced --gs-. Base typography applies under
+   .gs; components carry their own look and also work inside .gs. The
+   gs- / --gs- prefix lets this coexist with sibling kits on one page.
+   =================================================================== */
+
+/* Fonts load from a standard CDN. Self-hosted subsets may use
+   font-display: swap with the same system fallback stack below. */
+@import url('https://fonts.googleapis.com/css2?family=Source+Serif+4:opsz,wght@8..60,400;8..60,600;8..60,700&family=Public+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap');
+
+/* ---------- Tokens ---------- */
+:root {
+  /* Surfaces */
+  --gs-bg: #F7F5F0;            /* paper: default page background, warm off-white */
+  --gs-paper: #F7F5F0;
+  --gs-white: #FFFFFF;         /* card / content well */
+  --gs-surface: #FFFFFF;
+  --gs-sky: #E8EEFA;           /* tinted callout / section fill, active-nav fill, table zebra */
+
+  /* Brand */
+  --gs-navy: #0B2A6B;          /* primary brand surface: masthead, footer, primary buttons */
+  --gs-blue: #1746C4;          /* links, interactive text, secondary buttons, focus ring */
+
+  /* Text */
+  --gs-ink: #16181D;           /* body, headlines on light; near-black, not #000 */
+  --gs-text: #16181D;
+  --gs-muted: #5A5F69;         /* secondary text: timestamps, captions, category labels */
+  --gs-on-navy: #FFFFFF;       /* text on the navy brand surface */
+  --gs-on-navy-dim: #C7D2EC;   /* muted text on navy (footer captions) */
+
+  /* Lines */
+  --gs-hairline: #D9D6CE;      /* all borders, rules, dividers — uniform, warm gray */
+  --gs-hairline-strong: #A9A599;
+
+  /* Accent (the one warm accent: support / live) */
+  --gs-cranberry: #B11E3C;
+  --gs-cranberry-dim: rgba(177, 30, 60, 0.07);  /* tint behind cranberry callouts */
+  --gs-cranberry-hover: #8E152F;
+
+  /* Fill-only highlight (never small text on light) */
+  --gs-amber: #FFCF00;
+
+  /* Type */
+  --gs-font-display: 'Source Serif 4', Georgia, 'Times New Roman', serif;
+  --gs-font-body: 'Public Sans', system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --gs-font-mono: 'IBM Plex Mono', ui-monospace, 'SF Mono', Consolas, monospace;
+
+  --gs-pad: 40px;              /* page side padding; drops to 20px under 1000px */
+  --gs-maxw: 1200px;           /* content max width — strict 12-col grid lives inside */
+  --gs-measure: 68ch;          /* article measure */
+
+  /* Focus ring (heritage blue, non-color-only because it is also a 2px outline) */
+  --gs-focus: var(--gs-blue);
+}
+
+/* Dark: optional, opt-in only. The light editorial mode is canonical;
+   the incumbent site is dark, so choosing light is the deliberate break
+   and dark stays a user toggle, not a system-auto default. */
+[data-gs-theme="dark"], .gs-dark {
+  --gs-bg: #16181D;
+  --gs-paper: #16181D;
+  --gs-white: #1F2229;         /* card lifts off the ink page */
+  --gs-surface: #1F2229;
+  --gs-sky: #1B2740;           /* deep navy-tint fill */
+
+  --gs-navy: #0B2A6B;          /* navy becomes a deep surface tint, not the page */
+  --gs-blue: #9FBDFF;          /* links lighten (on ink = 8.3:1) */
+
+  --gs-ink: #F2F0EA;           /* paper text */
+  --gs-text: #F2F0EA;
+  --gs-muted: #A7ACB6;         /* lightened metadata for AA on the ink page */
+  --gs-on-navy: #FFFFFF;
+  --gs-on-navy-dim: #C7D2EC;
+
+  --gs-hairline: #34373F;
+  --gs-hairline-strong: #4B4F59;
+
+  --gs-cranberry: #FF8DA3;     /* lightened so it carries small text on the ink page */
+  --gs-cranberry-dim: rgba(255, 141, 163, 0.12);
+  --gs-cranberry-hover: #FFB3C2;
+
+  --gs-focus: #9FBDFF;
+}
+
+/* ---------- Base (opt in with class="gs") ---------- */
+.gs, .gs *, .gs *::before, .gs *::after { box-sizing: border-box; min-width: 0; }
+.gs * { margin: 0; padding: 0; }
+
+/* Only smooth-scroll when the kit owns the whole page (body.gs), so an
+   embedded widget never changes a host document's scroll behavior. */
+html:has(body.gs) { scroll-behavior: smooth; }
+
+.gs {
+  font-family: var(--gs-font-body);
+  background: var(--gs-bg);
+  color: var(--gs-text);
+  line-height: 1.6;
+  overflow-wrap: break-word;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Skip link — visible on focus only, lands above everything. */
+.gs-skip {
+  position: absolute; left: -9999px; top: 0; z-index: 500;
+  background: var(--gs-navy); color: var(--gs-on-navy);
+  font-family: var(--gs-font-body); font-weight: 600; font-size: 15px;
+  padding: 12px 18px; text-decoration: none;
+}
+.gs-skip:focus { left: 8px; top: 8px; }
+
+/* Content container — the 12-col grid sits inside this max width. */
+.gs-container { width: 100%; max-width: var(--gs-maxw); margin: 0 auto; padding: 0 var(--gs-pad); }
+.gs-grid { display: grid; grid-template-columns: repeat(12, 1fr); gap: 24px; }
+
+/* Visible focus ring everywhere: 2px ring, 2px offset. */
+.gs :focus-visible,
+.gs-skip:focus-visible { outline: 2px solid var(--gs-focus); outline-offset: 2px; }
+
+.gs a { color: var(--gs-blue); text-decoration: underline; text-underline-offset: 2px; text-decoration-thickness: 1px; }
+.gs a:hover { color: var(--gs-ink); }
+[data-gs-theme="dark"] .gs a:hover, .gs-dark .gs a:hover { color: var(--gs-white); }
+
+.gs code, .gs-code {
+  font-family: var(--gs-font-mono); font-size: 0.86em;
+  background: var(--gs-sky); color: var(--gs-ink);
+  padding: 1px 5px; border: 1px solid var(--gs-hairline); word-break: break-word;
+}
+.gs b, .gs strong { font-weight: 700; color: var(--gs-ink); }
+
+/* ---------- Utility / status bar (thin sky-tint strip, top) ---------- */
+.gs-utility {
+  background: var(--gs-sky); color: var(--gs-ink);
+  border-bottom: 1px solid var(--gs-hairline);
+  font-size: 13.5px;
+}
+.gs-utility__inner {
+  max-width: var(--gs-maxw); margin: 0 auto; padding: 8px var(--gs-pad);
+  display: flex; align-items: center; gap: 14px; min-height: 44px;
+}
+.gs-utility__msg { flex: 1; }
+.gs-utility__dismiss {
+  font-family: var(--gs-font-body); font-size: 13px; color: var(--gs-blue);
+  background: none; border: none; cursor: pointer; text-decoration: underline;
+  min-height: 44px; padding: 0 6px;
+}
+
+/* ---------- Masthead / header (Garden State navy bar) ---------- */
+.gs-masthead { background: var(--gs-navy); color: var(--gs-on-navy); position: sticky; top: 0; z-index: 200; }
+/* Brand + nav are anchors; the generic `.gs a` link rule (0,1,1) outranks their
+   single-class color (0,1,0) and would paint them heritage blue on the navy bar.
+   Re-assert on-navy text for masthead links (ties `.gs a`, wins on source order). */
+.gs-masthead a { color: var(--gs-on-navy); }
+.gs-masthead__inner {
+  max-width: var(--gs-maxw); margin: 0 auto; padding: 0 var(--gs-pad);
+  display: flex; align-items: center; gap: 20px; min-height: 64px;
+}
+.gs-brand { display: flex; flex-direction: column; gap: 1px; text-decoration: none; color: var(--gs-on-navy); padding: 8px 0; }
+.gs-brand:hover { color: var(--gs-on-navy); }
+.gs-brand__mark { font-family: var(--gs-font-display); font-weight: 700; font-size: 22px; letter-spacing: -0.01em; line-height: 1; }
+.gs-brand__lockup { font-family: var(--gs-font-body); font-size: 11px; color: var(--gs-on-navy-dim); letter-spacing: 0.02em; }
+
+.gs-nav { display: flex; align-items: center; gap: 4px; margin-left: auto; }
+.gs-nav__link {
+  font-family: var(--gs-font-body); font-size: 15px; font-weight: 500;
+  color: var(--gs-on-navy); text-decoration: none;
+  padding: 0 12px; min-height: 44px; display: inline-flex; align-items: center;
+  border-bottom: 2px solid transparent;            /* active = bottom underline, never a top/left sliver */
+}
+.gs-nav__link:hover { color: var(--gs-on-navy); border-bottom-color: var(--gs-on-navy-dim); }
+.gs-nav__link.is-active { font-weight: 700; border-bottom-color: var(--gs-amber); }
+.gs-masthead :focus-visible { outline-color: #FFFFFF; }
+
+.gs-masthead__actions { display: flex; align-items: center; gap: 10px; }
+.gs-search {
+  background: none; border: none; color: var(--gs-on-navy); cursor: pointer;
+  width: 44px; height: 44px; display: inline-flex; align-items: center; justify-content: center;
+}
+.gs-search svg { width: 18px; height: 18px; }
+
+/* ---------- Buttons ---------- */
+.gs-btn {
+  font-family: var(--gs-font-body); font-size: 15px; font-weight: 600;
+  display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+  min-height: 44px; padding: 0 18px; cursor: pointer;
+  text-decoration: none; border: 1px solid transparent; white-space: nowrap;
+}
+/* Scoped under .gs so button text color (0,2,0) beats the generic `.gs a` link
+   rule (0,1,1); otherwise anchor buttons take link blue over the brand fill. */
+/* primary: navy fill, white text (13.5:1) */
+.gs .gs-btn--primary { background: var(--gs-navy); color: var(--gs-on-navy); border-color: var(--gs-navy); }
+.gs-btn--primary:hover { background: #082052; color: var(--gs-on-navy); }
+/* the one place cranberry leads: the support / donate pill */
+.gs .gs-btn--donate { background: var(--gs-cranberry); color: #FFFFFF; border-color: var(--gs-cranberry); }
+.gs-btn--donate:hover { background: var(--gs-cranberry-hover); color: #FFFFFF; }
+[data-gs-theme="dark"] .gs-btn--donate, .gs-dark .gs-btn--donate { color: #16181D; }
+/* outline: on the navy bar (Watch live), white outline on navy */
+.gs .gs-btn--outline-light { background: transparent; color: var(--gs-on-navy); border-color: rgba(255,255,255,0.55); }
+.gs-btn--outline-light:hover { background: rgba(255,255,255,0.12); color: var(--gs-on-navy); border-color: #FFFFFF; }
+/* outline on light surfaces: heritage-blue outline */
+.gs-btn--outline { background: transparent; color: var(--gs-blue); border-color: var(--gs-blue); }
+.gs-btn--outline:hover { background: var(--gs-sky); color: var(--gs-blue); }
+
+/* ---------- Theme toggle ---------- */
+.gs-theme-toggle {
+  width: 44px; height: 44px;
+  background: transparent; border: 1px solid rgba(255,255,255,0.55); color: var(--gs-on-navy); cursor: pointer;
+  display: inline-flex; align-items: center; justify-content: center;
+}
+.gs-theme-toggle:hover { background: rgba(255,255,255,0.12); }
+.gs-theme-toggle .gs-ic-sun { display: none; }
+.gs-theme-toggle .gs-ic-moon { display: block; }
+.gs-theme-toggle[data-mode="dark"] .gs-ic-sun { display: block; }
+.gs-theme-toggle[data-mode="dark"] .gs-ic-moon { display: none; }
+.gs-theme-toggle svg { width: 18px; height: 18px; }
+
+/* ---------- Hero stage (wrapper for the particle-NJ canvas) ---------- */
+.gs-hero { position: relative; padding: 56px 0 48px; border-bottom: 1px solid var(--gs-hairline); }
+/* The copy column is capped for readability, so give the canvas the larger share and
+   a tall cell: New Jersey is a tall, narrow shape, so the cloud is height-bound — a
+   taller cell is what actually enlarges it. This fills the open right-hand space
+   instead of stranding a small shape in a big empty cell. */
+.gs-hero__stage {
+  position: relative; min-height: 540px;
+  display: grid; grid-template-columns: 0.95fr 1.05fr; gap: 32px; align-items: center;
+}
+/* The canvas sits transparent over paper — ink-on-paper, not a dark 3D box. */
+.gs-hero__canvas {
+  width: 100%; height: 100%; min-height: 540px; display: block;
+  /* No touch-action override: the canvas is decorative and only reads native
+     scroll (passive), so the browser must keep full pan/zoom over it. Suppressing
+     touch here blocked vertical panning on mobile — a scroll-jacking violation. */
+}
+.gs-hero__canvas-cell { position: relative; min-height: 540px; }
+.gs-hero__copy { max-width: 30ch; }
+.gs-hero__copy h1 {
+  font-family: var(--gs-font-display); font-weight: 700;
+  font-size: clamp(34px, 5.2vw, 61px); line-height: 1.05; letter-spacing: -0.015em;
+  color: var(--gs-ink); margin-bottom: 18px;
+}
+.gs-hero__deck { font-size: clamp(17px, 0.7vw + 15px, 20px); color: var(--gs-text); margin-bottom: 24px; max-width: 46ch; }
+.gs-hero__actions { display: flex; flex-wrap: wrap; gap: 12px; }
+.gs-hero__meta { font-family: var(--gs-font-mono); font-size: 12px; color: var(--gs-muted); margin-top: 26px; }
+
+/* Hero load stagger — one orchestrated reveal. */
+@keyframes gs-fade-up { from { opacity: 0; transform: translateY(12px); } to { opacity: 1; transform: none; } }
+.gs-hero__copy > * { animation: gs-fade-up 0.5s ease both; }
+.gs-hero__copy h1 { animation-delay: 0.05s; }
+.gs-hero__deck { animation-delay: 0.12s; }
+.gs-hero__actions { animation-delay: 0.18s; }
+.gs-hero__meta { animation-delay: 0.24s; }
+
+/* ---------- Section heads (mono number + flush-right meta, top rule) ---------- */
+.gs-sec-head {
+  display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px 18px;
+  margin: 64px 0 18px; padding-top: 24px; border-top: 1px solid var(--gs-hairline-strong);
+  scroll-margin-top: 80px;
+}
+.gs-sec-head__num { font-family: var(--gs-font-mono); font-size: 14px; font-weight: 500; color: var(--gs-cranberry); flex-shrink: 0; }
+.gs-sec-head h2 { font-family: var(--gs-font-display); font-size: clamp(25px, 3vw, 39px); font-weight: 700; letter-spacing: -0.012em; color: var(--gs-ink); line-height: 1.1; }
+.gs-sec-head__meta { margin-left: auto; font-family: var(--gs-font-mono); font-size: 11px; text-transform: uppercase; letter-spacing: 0.1em; color: var(--gs-muted); align-self: center; }
+
+/* ---------- Editorial divider ---------- */
+.gs-rule { border: none; border-top: 1px solid var(--gs-hairline); margin: 40px 0; }
+.gs-rule--strong { border-top-color: var(--gs-hairline-strong); }
+
+/* ---------- Prose ---------- */
+.gs-prose { color: var(--gs-text); max-width: var(--gs-measure); font-size: 18px; }
+.gs-prose p { margin-bottom: 16px; }
+.gs-prose ul, .gs-prose ol { margin: 8px 0 16px; padding-left: 1.3em; }
+.gs-prose li { margin-bottom: 9px; }
+.gs-prose li::marker { color: var(--gs-cranberry); }
+
+/* ---------- On-air strip (now / next, scroll-snap on mobile) ---------- */
+.gs-onair { border: 1px solid var(--gs-hairline); background: var(--gs-white); margin: 8px 0; }
+.gs-onair__head {
+  display: flex; align-items: center; gap: 12px; padding: 12px 16px;
+  border-bottom: 1px solid var(--gs-hairline); background: var(--gs-sky);
+}
+.gs-onair__title { font-family: var(--gs-font-body); font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.1em; color: var(--gs-ink); }
+.gs-onair__full { margin-left: auto; font-size: 13px; }
+.gs-onair__tiles { display: grid; grid-template-columns: 1fr 1fr; gap: 0; }
+.gs-onair__tile { padding: 16px; border-right: 1px solid var(--gs-hairline); }
+.gs-onair__tile:last-child { border-right: none; }
+.gs-onair__slot { font-family: var(--gs-font-mono); font-size: 11px; color: var(--gs-muted); text-transform: uppercase; letter-spacing: 0.08em; }
+.gs-onair__time { font-family: var(--gs-font-mono); font-size: 13px; color: var(--gs-ink); margin: 4px 0 6px; }
+.gs-onair__prog { font-family: var(--gs-font-display); font-size: 18px; font-weight: 600; color: var(--gs-ink); line-height: 1.2; }
+
+/* ---------- Lead / story card (soft shadow on the single lead only) ---------- */
+.gs-lead { background: var(--gs-white); border: 1px solid var(--gs-hairline); box-shadow: 0 10px 30px rgba(11, 42, 107, 0.10); }
+.gs-lead__media { aspect-ratio: 16 / 9; background: var(--gs-sky); display: block; width: 100%; object-fit: cover; }
+.gs-lead__body { padding: 24px 28px 28px; }
+.gs-lead__cat { font-family: var(--gs-font-body); font-size: 13px; color: var(--gs-muted); margin-bottom: 8px; }
+.gs-lead h3 { font-family: var(--gs-font-display); font-size: clamp(24px, 2.4vw, 31px); font-weight: 700; line-height: 1.12; letter-spacing: -0.01em; color: var(--gs-ink); margin-bottom: 10px; }
+.gs-lead__deck { color: var(--gs-text); max-width: 60ch; margin-bottom: 16px; }
+.gs-lead__byline { font-size: 13px; color: var(--gs-muted); }
+
+/* ---------- Program / story card grid (shared-border) ---------- */
+.gs-card-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 0; margin: 8px 0; border: 1px solid var(--gs-hairline); }
+.gs-card {
+  background: var(--gs-white); padding: 0;
+  border-right: 1px solid var(--gs-hairline); border-bottom: 1px solid var(--gs-hairline);
+  display: flex; flex-direction: column;
+}
+.gs-card__media { aspect-ratio: 16 / 9; background: var(--gs-sky); width: 100%; object-fit: cover; display: block; }
+.gs-card__body { padding: 16px 18px 20px; display: flex; flex-direction: column; gap: 8px; flex: 1; }
+.gs-card h3, .gs-card__title { font-family: var(--gs-font-display); font-size: 19px; font-weight: 600; line-height: 1.2; color: var(--gs-ink); }
+.gs-card__meta { font-family: var(--gs-font-body); font-size: 13px; color: var(--gs-muted); margin-top: auto; }
+/* Passport member badge: amber fill behind dark ink only (never small light text). */
+.gs-badge { display: inline-flex; align-items: center; align-self: flex-start; font-family: var(--gs-font-body); font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; color: #16181D; background: var(--gs-amber); padding: 3px 8px; }
+/* hover lift on standalone cards (no color-edge change) */
+.gs-card--link { text-decoration: none; color: inherit; transition: box-shadow 0.14s; }
+.gs-card--link:hover { box-shadow: 0 8px 22px rgba(11, 42, 107, 0.12); }
+
+/* ---------- Support / donate block (tinted, uniform border) ---------- */
+.gs-support {
+  background: var(--gs-sky); border: 1px solid var(--gs-hairline);
+  padding: 28px 30px; margin: 24px 0;
+  display: grid; grid-template-columns: 1.4fr 1fr; gap: 28px; align-items: center;
+}
+.gs-support h2 { font-family: var(--gs-font-display); font-size: clamp(22px, 2.4vw, 31px); font-weight: 700; color: var(--gs-ink); line-height: 1.15; margin-bottom: 10px; }
+.gs-support p { color: var(--gs-text); max-width: 52ch; margin-bottom: 8px; }
+.gs-support__actions { display: flex; flex-direction: column; gap: 12px; align-items: flex-start; }
+.gs-support__secondary { font-size: 14px; }
+
+/* ---------- Newsletter capture (labels not placeholders, focus ring) ---------- */
+.gs-newsletter { background: var(--gs-sky); border: 1px solid var(--gs-hairline); padding: 26px 28px; margin: 24px 0; }
+.gs-newsletter h2 { font-family: var(--gs-font-display); font-size: 25px; font-weight: 700; color: var(--gs-ink); margin-bottom: 6px; }
+.gs-newsletter__intro { color: var(--gs-text); max-width: 56ch; margin-bottom: 18px; }
+.gs-form { display: flex; flex-wrap: wrap; gap: 14px; align-items: flex-end; }
+.gs-field { display: flex; flex-direction: column; gap: 6px; flex: 1 1 240px; }
+.gs-label { font-family: var(--gs-font-body); font-size: 13px; font-weight: 600; color: var(--gs-ink); }
+.gs-label .gs-req { color: var(--gs-cranberry); font-weight: 700; }       /* required cue is text + symbol, not color alone */
+.gs-input {
+  font-family: var(--gs-font-body); font-size: 16px; color: var(--gs-ink);
+  background: var(--gs-white); border: 1px solid var(--gs-hairline-strong);
+  padding: 0 14px; min-height: 44px;
+}
+.gs-input:hover { border-color: var(--gs-muted); }
+.gs-input:focus-visible { outline: 2px solid var(--gs-focus); outline-offset: 2px; border-color: var(--gs-blue); }
+.gs-consent { font-size: 13px; color: var(--gs-muted); margin-top: 12px; max-width: 60ch; }
+.gs-consent a { color: var(--gs-blue); }
+.gs-form__submit { flex: 0 0 auto; }
+
+/* ---------- Tinted callout (tint + title color, no edge stripe) ---------- */
+.gs-callout { padding: 18px 20px; border: 1px solid var(--gs-hairline); background: var(--gs-white); margin: 24px 0; }
+.gs-callout__title { font-family: var(--gs-font-body); font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.1em; margin-bottom: 9px; color: var(--gs-callt, var(--gs-ink)); }
+.gs-callout p { font-size: 15px; color: var(--gs-text); }
+.gs-callout--info { background: var(--gs-sky); border-color: var(--gs-hairline); --gs-callt: var(--gs-navy); }
+.gs-callout--support { background: var(--gs-cranberry-dim); border-color: var(--gs-cranberry); --gs-callt: var(--gs-cranberry); }
+.gs-callout--note { --gs-callt: var(--gs-ink); }
+
+/* ---------- Data table (ruled, mono time column, sky zebra) ---------- */
+.gs-table { border: 1px solid var(--gs-hairline); margin: 10px 0; }
+.gs-table__scroll { overflow-x: auto; }
+table.gs-data { width: 100%; border-collapse: collapse; font-size: 14px; }
+table.gs-data caption { text-align: left; font-family: var(--gs-font-body); font-size: 13px; color: var(--gs-muted); padding: 0 0 8px; }
+table.gs-data th { background: var(--gs-white); font-family: var(--gs-font-body); font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; color: var(--gs-muted); text-align: left; padding: 12px 15px; border-bottom: 1px solid var(--gs-hairline-strong); white-space: nowrap; }
+table.gs-data td { padding: 12px 15px; border-bottom: 1px solid var(--gs-hairline); vertical-align: top; color: var(--gs-text); }
+table.gs-data tbody tr:nth-child(even) td { background: var(--gs-sky); }
+table.gs-data tbody tr:last-child td { border-bottom: none; }
+table.gs-data .gs-time { font-family: var(--gs-font-mono); color: var(--gs-ink); white-space: nowrap; }
+
+/* ---------- Footer (Garden State navy) ---------- */
+.gs-foot { background: var(--gs-navy); color: var(--gs-on-navy); margin-top: 72px; }
+.gs-foot__inner { max-width: var(--gs-maxw); margin: 0 auto; padding: 48px var(--gs-pad) 36px; display: grid; grid-template-columns: repeat(4, 1fr); gap: 32px; }
+.gs-foot__col h2 { font-family: var(--gs-font-body); font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.1em; color: var(--gs-on-navy); margin-bottom: 14px; }
+.gs-foot__col ul { list-style: none; }
+.gs-foot__col li { margin-bottom: 9px; }
+.gs-foot__col a { color: var(--gs-on-navy-dim); text-decoration: none; font-size: 14px; }
+.gs-foot__col a:hover { color: var(--gs-on-navy); text-decoration: underline; }
+.gs-foot__bottom { border-top: 1px solid rgba(255,255,255,0.18); }
+.gs-foot__bottom-inner { max-width: var(--gs-maxw); margin: 0 auto; padding: 18px var(--gs-pad); font-size: 12.5px; color: var(--gs-on-navy-dim); display: flex; flex-wrap: wrap; gap: 6px 18px; }
+.gs-foot :focus-visible { outline-color: #FFFFFF; }
+
+/* ---------- Tag ---------- */
+.gs-tag { font-family: var(--gs-font-mono); font-size: 10px; padding: 2px 7px; border: 1px solid var(--gs-hairline-strong); color: var(--gs-muted); white-space: nowrap; }
+.gs-tag--accent { border-color: var(--gs-cranberry); color: var(--gs-cranberry); }
+
+/* ---------- Small utilities ---------- */
+.gs-mono { font-family: var(--gs-font-mono); }
+.gs-serif { font-family: var(--gs-font-display); }
+.gs-text-muted { color: var(--gs-muted); }
+.gs-text-accent { color: var(--gs-cranberry); }
+.gs-visually-hidden { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }
+
+/* ---------- Reduced motion ---------- */
+@media (prefers-reduced-motion: reduce) {
+  html:has(body.gs) { scroll-behavior: auto; }
+  .gs *, .gs *::before, .gs *::after { animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; }
+}
+
+/* ---------- Responsive ---------- */
+@media (max-width: 1000px) {
+  :root { --gs-pad: 20px; }
+  .gs-hero { padding: 40px 0 32px; }
+  /* The desktop hero floors stage/canvas at 540px to fill the wide two-column
+     layout. Stacked on mobile that floor is far too tall, so drop it back to a
+     compact single-column cloud instead of letting the desktop value cascade. */
+  .gs-hero__stage { grid-template-columns: 1fr; gap: 24px; min-height: 0; }
+  .gs-hero__canvas-cell { order: -1; min-height: 300px; }
+  .gs-hero__canvas { min-height: 300px; }
+  .gs-support { grid-template-columns: 1fr; gap: 18px; }
+  .gs-foot__inner { grid-template-columns: 1fr 1fr; }
+
+  /* Masthead collapses to a hamburger; Donate + Watch live stay visible. */
+  .gs-nav {
+    display: none; position: absolute; top: 100%; left: 0; right: 0;
+    flex-direction: column; align-items: stretch; gap: 0;
+    background: var(--gs-navy); border-top: 1px solid rgba(255,255,255,0.18);
+    box-shadow: 0 16px 32px rgba(0,0,0,0.30); padding: 6px 0; margin-left: 0;
+  }
+  .gs-masthead.is-open .gs-nav { display: flex; }
+  .gs-nav__link { padding: 0 var(--gs-pad); border-bottom: 1px solid rgba(255,255,255,0.10); min-height: 48px; }
+  /* In the stacked menu, active stays weight-based (the desktop underline reads as a row border here). */
+  .gs-nav__link.is-active { font-weight: 700; }
+}
+@media (max-width: 600px) {
+  .gs-onair__tiles { grid-template-columns: 1fr; }
+  .gs-onair__tile { border-right: none; border-bottom: 1px solid var(--gs-hairline); }
+  .gs-onair__tile:last-child { border-bottom: none; }
+  .gs-foot__inner { grid-template-columns: 1fr; gap: 24px; }
+}
+
+/* Hamburger toggle: hidden on desktop, shown under 1000px. */
+.gs-nav-toggle {
+  display: none; width: 44px; height: 44px; align-items: center; justify-content: center;
+  background: transparent; border: 1px solid rgba(255,255,255,0.55); color: var(--gs-on-navy); cursor: pointer;
+}
+.gs-nav-toggle:hover { background: rgba(255,255,255,0.12); }
+.gs-nav-toggle .gs-ic-close { display: none; }
+.gs-nav-toggle[aria-expanded="true"] .gs-ic-menu { display: none; }
+.gs-nav-toggle[aria-expanded="true"] .gs-ic-close { display: block; }
+.gs-nav-toggle svg { width: 20px; height: 20px; }
+/* Reveal under 1000px. Must follow the base `display: none` above: media queries
+   add no specificity, so an equal-specificity rule only wins by coming later in
+   source order. Placed earlier (inside the masthead-collapse block) it lost to the
+   base rule and the hamburger stayed hidden at every width. */
+@media (max-width: 1000px) {
+  .gs-nav-toggle { display: inline-flex; }
+}
+
+/* ---------- Print ---------- */
+@media print {
+  .gs-theme-toggle, .gs-nav-toggle, .gs-utility__dismiss, .gs-search { display: none !important; }
+  .gs { background: #fff; color: #000; }
+  .gs-masthead, .gs-foot { background: #fff; color: #000; }
+  .gs-lead { box-shadow: none; }
+}

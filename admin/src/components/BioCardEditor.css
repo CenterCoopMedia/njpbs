@@ -1,0 +1,23 @@
+.bio-card-editor { display: grid; gap: 1rem; }
+.bio-card-editor .bio-editor-actions { display: flex; flex-wrap: wrap; gap: .5rem; align-items: center; }
+.bio-editor-note { color: var(--cms-ink-muted); font-size: var(--cms-font-sm); line-height: 1.5; }
+.bio-editor-fields { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1rem; }
+.bio-editor-fields > :is([data-field-name="summary"], [data-field-name="sourceUrl"]) { grid-column: 1 / -1; }
+.bio-editor-fields label, .bio-editor-image label { display: block; font-weight: 600; margin-bottom: .35rem; }
+.bio-editor-fields :is(input, textarea) { width: 100%; }
+.bio-editor-image { border-top: 1px solid var(--cms-control-border); padding-top: 1rem; }
+.bio-editor-image summary { cursor: pointer; padding: .75rem 0; font-weight: 650; }
+.bio-picker-dialog { width: min(44rem, calc(100vw - 2rem)); max-height: calc(100dvh - 2rem); overflow: auto; padding: 1.5rem; border: 1px solid var(--cms-control-border); border-radius: var(--cms-radius-panel); background: var(--cms-surface); color: var(--cms-ink); }
+.bio-picker-dialog::backdrop { background: rgb(0 0 0 / 55%); }
+.bio-picker-header { display: flex; gap: 1rem; align-items: center; justify-content: space-between; }
+.bio-picker-dialog :is(h2, h3) { margin: 0; }
+.bio-picker-filters { display: grid; gap: .5rem; }
+.bio-picker-results { list-style: none; padding: 0; display: grid; gap: .5rem; max-height: 20rem; overflow: auto; }
+.bio-picker-results button { display: flex; flex-direction: column; align-items: flex-start; width: 100%; text-align: left; gap: .2rem; padding: .75rem; min-height: 44px; }
+.bio-picker-results button[aria-pressed="true"] { outline: 2px solid var(--cms-brand); outline-offset: -2px; }
+.bio-picker-results small { color: inherit; }
+.bio-picker-preview { border-top: 2px solid var(--cms-brand); padding-top: 1rem; }
+.bio-picker-dialog > p, .bio-picker-evidence { margin-block: .75rem; }
+.bio-picker-preview p { margin-block: .5rem; }
+.bio-picker-dialog :is(a, button, input, select):focus-visible { outline: var(--cms-focus-outline); outline-offset: 3px; }
+@media (max-width: 600px) { .bio-editor-fields { grid-template-columns: 1fr; } .bio-picker-dialog { padding: 1rem; } }

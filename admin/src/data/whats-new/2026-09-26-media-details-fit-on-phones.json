@@ -1,0 +1,11 @@
+{
+  "date": "2026-09-26",
+  "kind": "fixed",
+  "title": "Media details fit on phones",
+  "body": "The media details panel no longer covers other controls on phones. The current media tab also shows again after the page finishes loading.",
+  "prs": [
+    2363,
+    2381
+  ],
+  "order": -3
+}

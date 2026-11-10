@@ -1,0 +1,132 @@
+.ugc-queue {
+  display: grid;
+  gap: var(--cms-space-6);
+  padding: var(--cms-space-8);
+  min-width: 0;
+}
+
+.ugc-queue-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: end;
+  justify-content: space-between;
+  gap: var(--cms-space-3);
+}
+
+.ugc-queue-header {
+  display: grid;
+  justify-items: start;
+  gap: var(--cms-space-3);
+}
+
+.ugc-queue-header p { margin: 0; }
+
+.ugc-queue-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: end;
+  gap: var(--cms-space-3);
+  width: 100%;
+}
+
+.ugc-queue-header h1,
+.ugc-queue-detail h2 {
+  margin: 0;
+}
+
+.ugc-queue-header p {
+  color: var(--cms-ink-secondary);
+}
+
+.ugc-queue-header label,
+.ugc-queue-category {
+  display: grid;
+  gap: var(--cms-space-2);
+  min-width: 12rem;
+}
+
+.ugc-queue-layout {
+  display: grid;
+  grid-template-columns: minmax(14rem, 18rem) minmax(0, 1fr);
+  gap: var(--cms-space-5);
+  min-width: 0;
+}
+
+.ugc-queue-list {
+  display: grid;
+  align-content: start;
+  gap: var(--cms-space-2);
+}
+
+.ugc-queue-item {
+  display: grid;
+  gap: var(--cms-space-1);
+  width: 100%;
+  text-align: left;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
+.ugc-queue-item[aria-pressed="true"] {
+  outline: var(--cms-focus-outline);
+  outline-offset: calc(-1 * var(--cms-focus-width));
+}
+
+.ugc-queue-item span,
+.ugc-queue-detail dt {
+  color: var(--cms-ink-secondary);
+  font-size: var(--cms-font-sm);
+}
+
+.ugc-queue-detail {
+  display: grid;
+  align-content: start;
+  gap: var(--cms-space-5);
+  min-width: 0;
+  padding: var(--cms-space-5);
+  border: var(--cms-border-width) solid var(--cms-line);
+  border-radius: var(--cms-radius-control);
+}
+
+.ugc-queue-detail dl {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(11rem, 1fr));
+  gap: var(--cms-space-3);
+  margin: 0;
+}
+
+.ugc-queue-detail dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.ugc-queue-message {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.ugc-preview {
+  display: block;
+  width: 100%;
+  max-height: 28rem;
+  object-fit: contain;
+  background: var(--cms-surface-soft);
+}
+
+.ugc-reject-dialog {
+  width: min(30rem, calc(100vw - 2rem));
+  padding: var(--cms-space-6);
+  border: var(--cms-border-width) solid var(--cms-line);
+  border-radius: var(--cms-radius-control);
+  color: var(--cms-ink);
+  background: var(--cms-surface);
+}
+
+.ugc-reject-dialog::backdrop {
+  background: rgb(0 0 0 / 50%);
+}
+
+@media (max-width: 47.99rem) {
+  .ugc-queue { padding: var(--cms-space-4); }
+  .ugc-queue-layout { grid-template-columns: 1fr; }
+}

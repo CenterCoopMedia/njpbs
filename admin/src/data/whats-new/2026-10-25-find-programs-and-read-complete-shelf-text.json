@@ -1,0 +1,12 @@
+{
+  "date": "2026-10-25",
+  "kind": "improved",
+  "title": "Find programs and read complete shelf text",
+  "body": "On the public Search page, use Program and Genre to narrow results, with or without search words. On horizontal shelves, Show full text reveals complete titles and descriptions without opening each item. Pages and Posts give the lead image priority while other images wait until needed.",
+  "prs": [
+    3985,
+    3990,
+    4005
+  ],
+  "order": -4
+}

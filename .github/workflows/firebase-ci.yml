@@ -1,0 +1,285 @@
+name: Firebase CI
+
+# Boots the Firebase emulator suite and runs the rules, functions, and CMS loader
+# e2e test suites. Required CI calls it only when the central classifier selects
+# the Firebase consumer. Node is pinned to 22 to match the Cloud Functions runtime
+# and the supported firebase-admin toolchain used by the emulator suites.
+#
+# Functions runs eight deterministic Vitest parts across four jobs, with fresh
+# emulators for each part. Each part keeps --no-file-parallelism because its test
+# files share one emulator project. Paired parts run sequentially in each job.
+
+on:
+  workflow_call:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: firebase-ci-${{ github.event_name == 'workflow_dispatch' && github.run_id || github.ref }}
+  # A newer merge must not cancel the active main proof needed by a deploy.
+  cancel-in-progress: ${{ github.event_name != 'push' || github.ref != 'refs/heads/main' }}
+
+env:
+  CANONICAL_GITHUB_REPOSITORY: ${{ vars.CANONICAL_GITHUB_REPOSITORY }}
+  CANONICAL_GITHUB_REPOSITORY_ID: ${{ vars.CANONICAL_GITHUB_REPOSITORY_ID }}
+
+jobs:
+  firebase:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45 # Runaway guard; investigate unexpectedly slow runs.
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: "22"
+          cache: npm
+          package-manager-cache: true
+          cache-dependency-path: package-lock.json
+      - name: Cache pinned JDK toolcache
+        uses: actions/cache@v6
+        with:
+          path: ${{ runner.tool_cache }}/Java_Temurin-Hotspot_jdk/21.0.13-9.0.LTS
+          key: ${{ runner.os }}-${{ runner.arch }}-temurin-jdk-21.0.13-9.0.LTS
+      - uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: "21.0.13+9.0.LTS"
+          check-latest: false
+      - name: Install dependencies
+        run: |
+          set -euo pipefail
+          # Separate node_modules trees; keep at most two installers active.
+          npm ci --ignore-scripts &
+          workspace_pid=$!
+          (
+            npm ci --prefix premiere-boardwalk-panel --ignore-scripts
+            npm ci --prefix preview-renderer --ignore-scripts
+            npm ci --prefix publisher --ignore-scripts
+            npm ci --prefix site --ignore-scripts
+          ) &
+          components_pid=$!
+          status=0
+          wait "$workspace_pid" || { status=$?; echo "::error::Workspace install failed (exit $status)"; }
+          wait "$components_pid" || { status=$?; echo "::error::Component installs failed (exit $status)"; }
+          exit "$status"
+      - name: Dev configuration contracts
+        # The supplier test reads packages from the workspace install; the Policy job has none.
+        run: >-
+          node --test
+          tests/dev-cms-config.test.mjs
+          tests/prepare-dev-preview-renderer.test.mjs
+          tests/scripts/render-development-config.test.mjs
+          tests/scripts/workflow-suppliers.test.mjs
+          .github/scripts/firebase-ci-parallel.test.mjs
+      - name: Functions lint
+        run: npm run lint -w njpbs-functions
+      - name: Premiere panel contracts and build
+        run: |
+          npm --prefix premiere-boardwalk-panel test
+          npm --prefix premiere-boardwalk-panel run build -- --test
+      - name: Ensure supported sandboxed Chrome for the panel
+        run: node .github/scripts/ensure-panel-browser-deps.mjs
+      - name: Premiere panel browser flows
+        run: npm --prefix premiere-boardwalk-panel run test:browser
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+      - name: Original-copy storage and job contracts
+        run: |
+          python -m pip install boto3==1.42.69
+          python -m unittest discover -s infrastructure/boardwalk-original-clips -p test_worker.py -k ContractTest -v
+      - name: CMS API Worker checks
+        run: |
+          npm run cms-api:check
+          npm run cms-api:test
+          npx --no-install wrangler deploy --cwd cms-api --dry-run
+      - name: Public Worker tests
+        run: npm run test:public-worker
+      - name: Private preview Worker checks
+        run: |
+          npm run check:preview-worker
+          npm run test:preview-worker
+          npx --no-install wrangler types --config workers/wrangler.preview.jsonc --include-runtime=false --check workers/src/preview-worker-configuration.d.ts
+          npx --no-install wrangler deploy --config workers/wrangler.preview.jsonc --dry-run
+      - name: Cloud preview renderer and publisher checks
+        env:
+          CLOUDFLARE_ACCOUNT_ID: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+          CMS_DEV_ACCESS_ORIGIN: https://access.example.org
+        run: |
+          set -euo pipefail
+          # Each prepared Worker uses its own temporary checkout and output.
+          (
+            npm --prefix preview-renderer run check
+            npm run test:preview-renderer
+            node preview-renderer/node_modules/wrangler/bin/wrangler.js types --config preview-renderer/wrangler.jsonc --strict-vars=false --include-runtime=false --check preview-renderer/worker-configuration.d.ts
+            node scripts/check-prepared-worker.mjs preview-renderer "$(git rev-parse HEAD)"
+            node scripts/check-prepared-worker.mjs dev-preview-renderer "$(git rev-parse HEAD)"
+          ) &
+          renderer_pid=$!
+          (
+            npm --prefix publisher run check
+            npm run test:cloud-publisher
+            node publisher/node_modules/wrangler/bin/wrangler.js types --config publisher/wrangler.json --strict-vars=false --include-runtime=false --check publisher/worker-configuration.d.ts
+            node scripts/check-prepared-worker.mjs cloud-publisher "$(git rev-parse HEAD)"
+            node publisher/node_modules/wrangler/bin/wrangler.js deploy --config publisher/wrangler.alerts.jsonc --dry-run
+          ) &
+          publisher_pid=$!
+          status=0
+          wait "$renderer_pid" || { status=$?; echo "::error::Preview renderer checks failed (exit $status)"; }
+          wait "$publisher_pid" || { status=$?; echo "::error::Publisher checks failed (exit $status)"; }
+          exit "$status"
+      - name: Select own-site crawl checks
+        id: crawl-paths
+        env:
+          EVENT_BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before }}
+          EVENT_NAME: ${{ github.event_name }}
+        run: |
+          set -euo pipefail
+          if [[ "$EVENT_NAME" != 'pull_request' ]]; then
+            echo 'changed=true' >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          if [[ ! "$EVENT_BASE_SHA" =~ ^[0-9a-f]{40}$ || "$EVENT_BASE_SHA" =~ ^0+$ ]]; then
+            echo 'changed=true' >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          git fetch --no-tags --depth=1 origin "$EVENT_BASE_SHA"
+          git diff --name-only --no-renames "$EVENT_BASE_SHA" HEAD -- crawl-worker/ package.json package-lock.json .github/workflows/firebase-ci.yml > "$RUNNER_TEMP/crawl-changed.txt"
+          if [[ -s "$RUNNER_TEMP/crawl-changed.txt" ]]; then
+            echo 'changed=true' >> "$GITHUB_OUTPUT"
+          else
+            echo 'changed=false' >> "$GITHUB_OUTPUT"
+          fi
+      - name: Own-site crawl Worker checks
+        if: steps.crawl-paths.outputs.changed == 'true'
+        env:
+          WRANGLER_SEND_METRICS: "false"
+        run: |
+          npm ci --prefix crawl-worker --ignore-scripts
+          npm --prefix crawl-worker test
+          npx --no-install wrangler deploy --config crawl-worker/wrangler.jsonc --dry-run
+      - name: Check CMS staff-site login
+        run: |
+          npm run check:staff-sites
+          npm run test:staff-sites
+          npx --no-install wrangler types --config workers/wrangler.public.dev.jsonc --include-runtime=false --env-interface DevPublicBindings --check workers/src/dev-public-worker-configuration.d.ts
+          npx --no-install wrangler types --config workers/wrangler.staff-sites.dev.jsonc --config cms-api/wrangler.dev.jsonc --include-runtime=false --env-interface DevStaffSiteBindings --check workers/src/staff-site-dev-worker-configuration.d.ts
+          npx --no-install wrangler types --config workers/wrangler.staff-sites.jsonc --config cms-api/wrangler.jsonc --config cms-api/wrangler.dev.jsonc --include-runtime=false --env-interface StaffSiteEnv --check workers/src/staff-site-worker-configuration.d.ts
+      - name: Dev preview release contracts
+        run: >-
+          npx --no-install vitest run
+          tests/dev-preview-release.test.ts tests/dev-preview-gateways.test.ts
+          tests/datasets-contract.test.ts tests/data-figure.test.ts
+          tests/dev-renderer-bootstrap-inputs.test.mjs tests/dev-current-code-preflight.test.ts
+          tests/dev-renderer-workflow.test.mjs tests/development-install-command-files.test.ts
+          --maxWorkers=1 --no-file-parallelism
+      - name: Check shadow Post Worker
+        env:
+          WRANGLER_SEND_METRICS: "false"
+        run: |
+          npx --no-install tsc --project workers/tsconfig.shadow-posts.json
+          npm run test:published-post-reader
+          npx --no-install wrangler deploy --config workers/wrangler.published-post-reader.jsonc --dry-run
+          npx --no-install wrangler types --config workers/wrangler.shadow-posts.jsonc --config cms-api/wrangler.jsonc --include-runtime=false --strict-vars=false --env-interface ShadowPostEnv --check workers/src/shadow-post-worker-configuration.d.ts
+          npm --prefix site run build:shadow
+          npm --prefix site run test:shadow
+      - name: Cache Firebase emulator binaries
+        uses: actions/cache@v6
+        with:
+          path: ~/.cache/firebase/emulators
+          key: ${{ runner.os }}-firebase-emulators-15.26.0
+      - name: Rules tests
+        run: npm run test:rules
+      - name: Loader e2e tests
+        run: npm run test:loader
+
+  functions:
+    name: functions (${{ matrix.shard }})
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45 # Runaway guard; investigate unexpectedly slow runs.
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - shard: 1
+            parts: "5 8"
+          - shard: 2
+            parts: "1 4"
+          - shard: 3
+            parts: "2 6"
+          - shard: 4
+            parts: "3 7"
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: "22"
+          cache: npm
+          package-manager-cache: true
+          cache-dependency-path: package-lock.json
+      - name: Cache pinned JDK toolcache
+        uses: actions/cache@v6
+        with:
+          path: ${{ runner.tool_cache }}/Java_Temurin-Hotspot_jdk/21.0.13-9.0.LTS
+          key: ${{ runner.os }}-${{ runner.arch }}-temurin-jdk-21.0.13-9.0.LTS
+      - uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: "21.0.13+9.0.LTS"
+          check-latest: false
+      - name: Install dependencies
+        # Functions import Site TypeScript, whose config needs site/node_modules.
+        # Install both independent dependency trees before any tests start.
+        run: |
+          set -euo pipefail
+          npm ci --ignore-scripts &
+          workspace_pid=$!
+          npm ci --prefix site --ignore-scripts &
+          site_pid=$!
+          status=0
+          wait "$workspace_pid" || { status=$?; echo "::error::Workspace install failed (exit $status)"; }
+          wait "$site_pid" || { status=$?; echo "::error::Site install failed (exit $status)"; }
+          exit "$status"
+      - name: Prepare hosted offline preview sandbox
+        if: runner.environment == 'github-hosted'
+        run: |
+          set -euo pipefail
+          if ! command -v bwrap >/dev/null; then
+            sudo apt-get update
+            sudo apt-get install -y --no-install-recommends bubblewrap
+          fi
+          # This disposable, secretless test VM runs the real offline child.
+          if [ -f /proc/sys/kernel/apparmor_restrict_unprivileged_userns ]; then
+            sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
+          fi
+      - name: Require offline preview sandbox
+        run: |
+          set -euo pipefail
+          if [ ! -x /usr/bin/bwrap ]; then
+            echo "::error::Functions preview tests require /usr/bin/bwrap in the runner image. Keep fleet overflow disabled until the image is qualified."
+            exit 1
+          fi
+          /usr/bin/bwrap --unshare-all --unshare-user --die-with-parent --ro-bind / / --dev /dev --proc /proc --tmpfs /tmp -- /bin/true || {
+            echo "::error::Functions preview tests require user and network namespaces in the runner image. Keep fleet overflow disabled until the image is qualified."
+            exit 1
+          }
+      - name: Cache Firebase emulator binaries
+        uses: actions/cache@v6
+        with:
+          path: ~/.cache/firebase/emulators
+          key: ${{ runner.os }}-firebase-emulators-15.26.0
+      - name: Functions preflight tests
+        if: matrix.shard == 1
+        run: npm run test:preflight
+      - name: Functions tests
+        env:
+          FUNCTIONS_JOB_PARTS: ${{ matrix.parts }}
+        # Run the selected shard parts sequentially within this job.
+        run: |
+          for part in $FUNCTIONS_JOB_PARTS; do
+            VITEST_SHARD_ARGS="--shard=${part}/8" npm run --ignore-scripts test:functions
+          done
+      - name: Build-free publication restore drill
+        if: matrix.shard == 1
+        run: node scripts/test-build-free-restore.mjs

@@ -1,0 +1,12 @@
+{
+  "name": "Boardwalk studio",
+  "short_name": "Studio",
+  "description": "Full-screen live production show controls for NJ PBS Overlay 1.",
+  "start_url": "/live-production/studio",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#e6ebf0",
+  "theme_color": "#0c203a",
+  "icons": [{ "src": "/favicon.png", "sizes": "447x447", "type": "image/png" }]
+}

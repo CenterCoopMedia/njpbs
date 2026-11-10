@@ -1,0 +1,8 @@
+{
+  "date": "2026-11-04",
+  "kind": "fixed",
+  "title": "Keep Home hero edits when changing Selection",
+  "body": "Changing Selection cancels pending Page and Post pins. A slow pin request no longer replaces your newer manual edits.",
+  "prs": [],
+  "order": 1793820124192
+}

@@ -1,0 +1,10 @@
+{
+  "date": "2026-11-04",
+  "kind": "fixed",
+  "title": "Check live blog author details",
+  "body": "Live blog author notices check each reporter's profile details consistently. Complete profiles no longer show an unavailable-profile warning.",
+  "prs": [
+    4703
+  ],
+  "order": 1793769816908
+}

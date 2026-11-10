@@ -1,0 +1,15 @@
+.coverage-labels-settings__layout { display: grid; grid-template-columns: minmax(11rem, 1fr) minmax(0, 2fr); gap: 1.5rem; }
+.coverage-labels-settings__list-heading { display: flex; align-items: center; justify-content: space-between; gap: 1rem; }
+.coverage-labels-settings__list { list-style: none; padding: 0; display: grid; gap: 0.5rem; }
+.coverage-labels-settings__list button { width: 100%; white-space: normal; overflow-wrap: anywhere; text-align: start; }
+.coverage-labels-settings__list button[aria-pressed="true"] { border-color: var(--color-brand); box-shadow: inset 3px 0 var(--color-brand); font-weight: 700; }
+.coverage-labels-settings__fields { display: grid; align-content: start; gap: 1rem; min-width: 0; border: 0; padding: 0; }
+.coverage-labels-settings__fields legend { margin-block-end: 1rem; font-weight: 700; }
+.coverage-labels-settings__previews { display: grid; grid-template-columns: minmax(0, 1fr); gap: 1rem; }
+.coverage-labels-settings__preview { display: grid; align-content: start; gap: 0.75rem; padding: 1rem; border-radius: var(--radius-surface); border: 1px solid var(--color-border); }
+.coverage-labels-settings__preview--light { background: #fff; color: #1d1f2b; }
+.coverage-labels-settings__preview--dark { background: #080b1a; color: #fff; }
+.coverage-labels-settings__preview > span { font-size: 0.8125rem; }
+@media (max-width: 619px) {
+  .coverage-labels-settings__layout, .coverage-labels-settings__previews { grid-template-columns: minmax(0, 1fr); }
+}

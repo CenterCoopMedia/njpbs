@@ -1,0 +1,1302 @@
+@import "../../../packages/content-core/src/content-layout.css";
+
+/*
+  Shared streaming design system for the NJ PBS preview.
+
+  The cinematic homepage (components/CinematicHomePage.astro) proved this vocabulary;
+  this file is the canonical home for it so every inner page reuses the same
+  rails, cards, buttons, and bands instead of reinventing them (and drifting).
+  Tokens come from styles/design-tokens.css through Base.astro. This file is
+  imported once, globally, by PublicSiteLayout.
+
+  Placeholder tiles use brand duotones. The .designed-for notice labels
+  supported integration slots.
+*/
+
+/* ---- Layout container ---- */
+.wrap {
+  max-width: var(--wrap);
+  margin: 0 auto;
+  padding-inline: var(--gutter);
+}
+
+/* ---- Buttons ---- */
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  min-height: var(--target-comfortable);
+  padding: 0.55rem 1.28rem;
+  border-radius: var(--radius-button);
+  font-weight: 700;
+  line-height: 1;
+  text-decoration: none;
+  touch-action: manipulation;
+  transition:
+    background var(--motion-duration-fast) var(--motion-ease-standard),
+    color var(--motion-duration-fast) var(--motion-ease-standard),
+    transform var(--motion-duration-fast) var(--motion-ease-standard);
+}
+.btn:is(button) { border-radius: 17px; }
+.btn--primary { background: var(--pbs-blue); color: var(--color-text-on-brand); }
+.btn--primary:hover { background: var(--pbs-blue-bright); }
+.btn--ghost {
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--color-text-on-surface);
+  border: 1px solid rgba(255, 255, 255, 0.25);
+}
+.btn--ghost:hover { background: rgba(255, 255, 255, 0.16); }
+.btn--text { color: var(--text); padding-left: 0.4rem; }
+.btn--text::after { content: " \2192"; }
+.btn--text:hover { color: var(--color-text-on-surface); }
+
+/* ---- Page hero band (inner pages) ----
+   A quieter relative of the homepage particle hero: title + lead over the same
+   atmospheric wash. Inner pages lead with this instead of a bare H1. */
+.page-hero {
+  position: relative;
+  isolation: isolate;
+  overflow: hidden;
+  border-bottom: 1px solid var(--line);
+}
+.page-hero::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  background:
+    radial-gradient(80% 120% at 82% -10%, rgba(38, 56, 196, 0.32), transparent 60%),
+    radial-gradient(70% 90% at 10% 110%, rgba(0, 172, 0, 0.1), transparent 65%);
+}
+/* padding-block sets only top/bottom so the hero keeps .wrap's left/right gutter.
+   (A `padding: T 0 B` shorthand here would zero the horizontal padding and run the
+   hero title flush to the viewport edge on mobile, where .wrap's max-width margin
+   doesn't yet apply.) */
+.page-hero__inner { padding-block: clamp(2.25rem, 5vw, 3.75rem) clamp(1.75rem, 4vw, 2.75rem); }
+.page-hero__kicker {
+  /* metadata sits flush on the title baseline, never as a floating eyebrow */
+  color: var(--text-dim);
+  font-size: 0.85rem;
+  font-weight: 500;
+}
+.page-hero h1 {
+  font-weight: 900;
+  font-size: clamp(2rem, 4.5vw, 3.25rem);
+  line-height: 1.04;
+  margin: 0.35rem 0 0.6rem;
+  text-wrap: balance;
+}
+.page-hero__lead {
+  color: var(--text-dim);
+  font-size: clamp(1rem, 1.4vw, 1.18rem);
+  margin: 0;
+}
+.page-hero__cta { display: flex; flex-wrap: wrap; gap: 0.75rem; margin-top: 1.5rem; }
+
+/* a title row with metadata pushed flush-right on the same baseline */
+.title-row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 0.5rem 1.5rem;
+}
+
+/* ---- Sections ---- */
+.section { padding: 2.4rem 0; }
+.section__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding-bottom: 1.1rem;
+}
+.section__head h2 { font-size: 1.4rem; margin: 0; }
+.section__head a {
+  display: inline-flex;
+  align-items: center;
+  min-height: var(--target-comfortable);
+  padding: 0 0.25rem;
+  color: var(--text-dim);
+  font-size: 0.9rem;
+  text-decoration: none;
+  white-space: nowrap;
+}
+.section__head a:hover { color: var(--color-text-on-surface); }
+
+/* ---- CMS image galleries ----
+   Page and post bodies both use the shared static block renderer. Keep gallery
+   presentation global so the same markup has the same layout in both hosts. */
+.cms-block .image-gallery {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 15rem), 1fr));
+  gap: 1rem;
+}
+
+.cms-block .image-gallery-shell {
+  display: grid;
+  gap: 0.5rem;
+}
+
+.cms-block .image-gallery__hint {
+  margin: 0;
+  color: var(--text-dim);
+  font-size: 0.9rem;
+  font-weight: 700;
+  text-align: right;
+}
+
+/* The carousel gallery mode uses the site's scroll-snapped rail idiom.
+   The container is focusable in the markup, so it also shows its focus. Item
+   width is measured against the viewport so one image fits at 320 pixels and
+   at 400% zoom without pushing the page itself sideways. */
+.cms-block .image-gallery--carousel {
+  display: flex;
+  gap: 1rem;
+  /* The row gets its width from the layout. This also gives each figure a unit
+     to size against. */
+  container-type: inline-size;
+  /* Keep positioned gallery content inside the scroll container and page clip. */
+  position: relative;
+  overflow-x: auto;
+  scroll-snap-type: x proximity;
+  scrollbar-gutter: stable;
+  scroll-padding-left: 0.25rem;
+  padding-bottom: 0.35rem;
+  overscroll-behavior-x: contain;
+}
+
+.cms-block .image-gallery--carousel:focus-visible {
+  outline: var(--focus-outline);
+  outline-offset: var(--focus-offset);
+}
+
+.cms-block .image-gallery--carousel > figure {
+  flex: 0 0 min(18rem, 78cqi);
+  scroll-snap-align: start;
+}
+
+/* ---- Runtime CMS page blocks ----
+   The Contact edge preview injects the shared renderer's markup after Astro's
+   scoped component CSS is built. These global rules are the generic-page
+   palette needed by that injected content. Scope them to the dedicated Contact
+   wrapper so Post bodies keep their own typography. */
+[data-cms-runtime-page="contact"] .cms-page__blocks {
+  display: grid;
+  gap: clamp(1.25rem, 3vw, 2.4rem);
+  padding-block: clamp(2.5rem, 6vw, 5rem);
+}
+[data-cms-runtime-page="contact"] .cms-block {
+  width: 100%;
+  margin-inline: 0;
+  color: var(--text);
+  line-height: 1.7;
+}
+[data-cms-runtime-page="contact"] .cms-block :is(p, ul, ol, blockquote) { margin-block: 0 1.1rem; }
+[data-cms-runtime-page="contact"] .cms-block :is(ul, ol) { padding-left: 1.3rem; }
+[data-cms-runtime-page="contact"] .cms-block a:not(.btn) {
+  color: var(--color-link);
+  text-underline-offset: 0.22em;
+}
+[data-cms-runtime-page="contact"] .cms-block :is(h2, h3, h4, h5, h6) {
+  margin: 0;
+  line-height: 1.16;
+  text-wrap: balance;
+}
+[data-cms-runtime-page="contact"] .cms-block hr { border: 0; border-top: 1px solid var(--line); }
+[data-cms-runtime-page="contact"] .cms-block figure { margin: 0; }
+[data-cms-runtime-page="contact"] .cms-block img {
+  display: block;
+  width: 100%;
+  height: auto;
+  border-radius: 1rem;
+  background: var(--surface-raised);
+}
+[data-cms-runtime-page="contact"] .cms-block figcaption {
+  margin-top: 0.65rem;
+  color: var(--text-dim);
+  font-size: 0.9rem;
+}
+.cms-video { margin: 0; }
+.cms-video__player {
+  display: block;
+  width: 100%;
+  height: auto;
+  border-radius: 1rem;
+  background: var(--color-black);
+}
+/* Draft previews only: holds the player's space until the video is published. */
+.cms-video__placeholder {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.35rem;
+  aspect-ratio: 16 / 9;
+  padding: 1rem;
+  border-radius: 1rem;
+  background: var(--color-black);
+  color: var(--color-white);
+  text-align: center;
+}
+.cms-video__placeholder-title { font-weight: 700; }
+.cms-video__placeholder-note { font-size: 0.9rem; opacity: 0.85; }
+.cms-video__caption {
+  margin-top: 0.65rem;
+  color: var(--text-dim);
+  font-size: 0.9rem;
+}
+[data-cms-runtime-page="contact"] .cms-block .cta-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+}
+[data-cms-runtime-page="contact"] .cms-block .faq-item,
+[data-cms-runtime-page="contact"] .cms-block .embed {
+  padding: 1.25rem;
+  border: 1px solid var(--line);
+  border-radius: 1rem;
+  background: var(--surface-raised);
+}
+[data-cms-runtime-page="contact"] .cms-block .faq-item > .faq-item__question {
+  margin-block: 0 0.65rem;
+  font-size: 1.17em;
+}
+
+/* ---- Rails (horizontal scrollers) ---- */
+.rail {
+  overflow-x: clip;
+  padding: 2.4rem 0;
+}
+.rail__head {
+  max-width: var(--wrap);
+  margin: 0 auto;
+  padding: 0 var(--gutter) 1.1rem;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+}
+.rail__head h2 { font-size: 1.4rem; margin: 0; }
+.rail__head a {
+  display: inline-flex;
+  align-items: center;
+  min-height: var(--target-comfortable);
+  padding: 0 0.25rem;
+  color: var(--text-dim);
+  font-size: 0.9rem;
+  text-decoration: none;
+  white-space: nowrap;
+}
+.rail__head a:hover { color: var(--color-text-on-surface); }
+.rail__frame {
+  /* Arrowed rails use 230px-wide, 16:9 media. Half of its 129.375px height
+     keeps each control on the artwork's center line. */
+  --rail-track-top-padding: 0.45rem;
+  --rail-media-center: 64.6875px;
+  position: relative;
+  max-width: 84rem;
+  margin: 0 auto;
+}
+.rail__arrow {
+  position: absolute;
+  top: calc(var(--rail-track-top-padding) + var(--rail-media-center));
+  transform: translateY(-50%);
+  z-index: 2;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: clamp(3.8rem, 5.5vw, 5.3rem);
+  height: clamp(5rem, 7.2vw, 6.9rem);
+  border: none;
+  border-radius: 0.8625rem;
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  /* the chevron is drawn, not typeset, so this is purely the size token the
+     wedge scales from - see .rail__arrow svg below */
+  font-size: clamp(7.5rem, 10.75vw, 10.9rem);
+  line-height: 1;
+  cursor: pointer;
+  touch-action: manipulation;
+  transition:
+    color var(--motion-duration-fast) var(--motion-ease-standard),
+    transform var(--motion-duration-fast) var(--motion-ease-standard);
+}
+.rail__arrow span {
+  display: block;
+  /* no background plate behind the control - the chevron carries
+     its own legibility over any card artwork, light or dark, via a paired
+     drop-shadow: a tight dark contact shadow plus a soft ambient one. */
+  filter:
+    drop-shadow(0 1px 2px rgba(6, 7, 15, 0.85))
+    drop-shadow(0 2px 10px rgba(6, 7, 15, 0.55));
+}
+.rail__arrow svg {
+  /* A block box centers the geometric chevron without font metrics.
+     Keep its 208:396 aspect ratio and existing responsive size. */
+  display: block;
+  width: 0.208em;
+  height: 0.396em;
+  fill: currentColor;
+}
+.rail__arrow--prev { left: clamp(-1.7rem, -1.4vw, -0.65rem); }
+.rail__arrow--next { right: clamp(-1.7rem, -1.4vw, -0.65rem); }
+@media (max-width: 86rem) {
+  .rail__arrow--prev { left: 0.65rem; }
+  .rail__arrow--next { right: 0.65rem; }
+}
+.rail__arrow:hover {
+  color: var(--pbs-blue-bright);
+  transform: translateY(calc(-50% - 1px));
+}
+.rail__arrow:focus-visible {
+  outline: var(--focus-outline);
+  outline-offset: var(--focus-offset);
+}
+.rail__arrow:disabled {
+  cursor: default;
+  color: rgba(255, 255, 255, 0.32);
+}
+.rail__arrow:disabled span {
+  filter: drop-shadow(0 1px 2px rgba(6, 7, 15, 0.55));
+}
+[hidden].rail__arrow { display: none; }
+.rail__track {
+  max-width: var(--wrap);
+  margin: 0 auto;
+  display: flex;
+  gap: 1rem;
+  overflow-x: auto;
+  scroll-snap-type: x proximity;
+  /* a snapped card lands flush with the gutter, not jammed against the edge */
+  scroll-padding-left: var(--gutter);
+  padding: var(--rail-track-top-padding) var(--gutter) 1.15rem;
+  scrollbar-width: none;
+  /* momentum scrolling on older iOS, and keep a horizontal flick inside the rail
+     instead of letting it bubble up into the browser's back/forward swipe */
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior-x: contain;
+}
+.rail__track:focus-visible { outline: var(--focus-outline); outline-offset: var(--focus-offset); }
+.rail__track::-webkit-scrollbar { display: none; }
+
+/* Flush rails: when a rail sits *inside* a .wrap (e.g. the watch and passport
+   pages), the container already supplies the horizontal gutter, so the rail's own
+   max-width + auto-centering + side padding would double-indent the row. This
+   modifier strips them and lets the rail span the wrap's content box. */
+.rail--flush,
+.rail--flush .rail__frame {
+  --rail-track-top-padding: 0.25rem;
+}
+.rail--flush { padding: 1.75rem 0 0.5rem; }
+.rail--flush .rail__head--flush,
+.rail--flush .rail__track {
+  max-width: none;
+  margin: 0;
+  padding-left: 0;
+  padding-right: 0;
+}
+.rail--flush .rail__head--flush { padding-bottom: 1rem; }
+.rail--flush .rail__track {
+  padding-bottom: 1rem;
+  padding-top: var(--rail-track-top-padding);
+}
+/* the flush rail has no left gutter of its own, so snap to its true left edge */
+.rail--flush .rail__track { scroll-padding-left: 0; }
+
+/* ---- Cards ---- */
+.card {
+  scroll-snap-align: start;
+  flex: 0 0 auto;
+  width: 230px;
+  text-decoration: none;
+  color: inherit;
+}
+.card--lg { width: 330px; }
+.card__art {
+  display: flex;
+  align-items: flex-end;
+  aspect-ratio: 16 / 9;
+  border-radius: 12px;
+  padding: 0.85rem;
+  position: relative;
+  overflow: hidden;
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+.card__image {
+  display: block;
+  width: 100%;
+  height: auto;
+  aspect-ratio: 16 / 9;
+  border-radius: 12px;
+  object-fit: cover;
+  background: rgba(255, 255, 255, 0.04);
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+.card__art::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(180deg, transparent 35%, rgba(0, 0, 0, 0.7));
+}
+.card__title {
+  position: relative;
+  z-index: 1;
+  font-weight: 700;
+  font-size: 1.02rem;
+  line-height: 1.2;
+}
+.card__title--below {
+  display: -webkit-box;
+  margin-top: 0.7rem;
+  min-height: 2lh;
+  max-height: 2lh;
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+.card__meta {
+  display: -webkit-box;
+  color: var(--text-dim);
+  font-size: 0.82rem;
+  margin-top: 0.45rem;
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+.card:hover .card__art {
+  transform: translateY(-4px);
+  box-shadow: 0 14px 34px rgba(0, 0, 0, 0.55);
+}
+.card:hover .card__image {
+  transform: translateY(-4px);
+  box-shadow: 0 14px 34px rgba(0, 0, 0, 0.55);
+}
+.card--cta {
+  color: inherit;
+}
+.card__cta-art {
+  display: block;
+  aspect-ratio: 16 / 9;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background:
+    linear-gradient(145deg, rgba(255, 255, 255, 0.14), rgba(255, 255, 255, 0.035)),
+    radial-gradient(90% 85% at 75% 20%, rgba(77, 94, 232, 0.34), transparent 58%),
+    radial-gradient(95% 90% at 15% 90%, rgba(0, 172, 0, 0.14), transparent 65%),
+    rgba(255, 255, 255, 0.045);
+  position: relative;
+  overflow: hidden;
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+.card__cta-art::before {
+  content: "";
+  position: absolute;
+  right: -1.5rem;
+  top: -1.5rem;
+  width: 7rem;
+  aspect-ratio: 1;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 999px;
+}
+.card__cta-art::after {
+  content: "+";
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  font-size: clamp(3.8rem, 6vw, 5rem);
+  font-weight: 300;
+  line-height: 1;
+  color: rgba(255, 255, 255, 0.72);
+}
+.card--cta:hover .card__cta-art {
+  background:
+    linear-gradient(145deg, rgba(255, 255, 255, 0.2), rgba(255, 255, 255, 0.06)),
+    radial-gradient(90% 85% at 75% 20%, rgba(77, 94, 232, 0.44), transparent 58%),
+    radial-gradient(95% 90% at 15% 90%, rgba(0, 172, 0, 0.16), transparent 65%),
+    rgba(255, 255, 255, 0.07);
+  transform: translateY(-4px);
+  box-shadow: 0 14px 34px rgba(0, 0, 0, 0.55);
+}
+.card:focus-visible { outline: none; }
+.card:focus-visible .card__art { outline: var(--focus-outline); outline-offset: var(--focus-offset); }
+.card:focus-visible .card__image { outline: var(--focus-outline); outline-offset: var(--focus-offset); }
+
+/* ---- NJ Spotlight News ---- */
+.spotlight { padding-bottom: 4rem; }
+.spotlight__track { padding-bottom: 0.5rem; }
+.spotlight-card {
+  flex: 0 0 auto;
+  width: 230px;
+  color: inherit;
+  text-decoration: none;
+  scroll-snap-align: start;
+}
+.spotlight-card--cta {
+  color: inherit;
+}
+.spotlight-card__media--cta {
+  background:
+    linear-gradient(145deg, rgba(255, 255, 255, 0.14), rgba(255, 255, 255, 0.035)),
+    radial-gradient(90% 85% at 75% 20%, rgba(77, 94, 232, 0.32), transparent 58%),
+    radial-gradient(95% 90% at 15% 90%, rgba(0, 172, 0, 0.12), transparent 65%),
+    rgba(255, 255, 255, 0.045);
+}
+.spotlight-card__media--cta::before {
+  content: "";
+  position: absolute;
+  right: -1.5rem;
+  top: -1.5rem;
+  width: 7rem;
+  aspect-ratio: 1;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 999px;
+}
+.spotlight-card__media--cta::after {
+  content: "+";
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  font-size: clamp(3.8rem, 6vw, 5rem);
+  font-weight: 300;
+  line-height: 1;
+  color: rgba(255, 255, 255, 0.72);
+}
+.spotlight-card:hover { color: inherit; }
+.spotlight-card__media {
+  display: block;
+  position: relative;
+  overflow: hidden;
+  aspect-ratio: 16 / 9;
+  border-radius: 12px;
+  background:
+    linear-gradient(135deg, rgba(38, 56, 196, 0.5), rgba(0, 172, 0, 0.12)),
+    rgba(255, 255, 255, 0.04);
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+.spotlight-card__media::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background:
+    linear-gradient(180deg, rgba(6, 7, 15, 0), rgba(6, 7, 15, 0.32)),
+    radial-gradient(90% 90% at 20% 20%, rgba(255, 255, 255, 0.14), transparent 55%);
+}
+.spotlight-card__image {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  opacity: 0.68;
+  filter: saturate(0.75) contrast(1.05);
+  transform: scale(1.08);
+}
+.spotlight-card__kicker {
+  display: block;
+  margin-top: 0.7rem;
+  color: var(--text-dim);
+  font-size: 0.72rem;
+  font-weight: 800;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+.spotlight-card__title {
+  display: -webkit-box;
+  min-height: 2lh;
+  max-height: 2lh;
+  margin-top: 0.25rem;
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  font-size: 1.02rem;
+  font-weight: 700;
+  line-height: 1.2;
+  text-decoration: none;
+}
+.spotlight-card__meta {
+  display: -webkit-box;
+  color: var(--text-dim);
+  font-size: 0.82rem;
+  margin-top: 0.45rem;
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+.spotlight-card:hover .spotlight-card__media {
+  transform: translateY(-4px);
+  box-shadow: 0 14px 34px rgba(0, 0, 0, 0.55);
+}
+.spotlight-card:focus-visible { outline: none; }
+.spotlight-card:focus-visible .spotlight-card__media {
+  outline: var(--focus-outline);
+  outline-offset: var(--focus-offset);
+}
+
+/* a poster-shaped card variant for "all programs" / show grids */
+.card--poster { width: auto; }
+.card--poster .card__art { aspect-ratio: 3 / 4; }
+
+/* ---- Responsive grid (no horizontal scroll; for browse/all-programs) ---- */
+.grid {
+  display: grid;
+  gap: 1.1rem 1rem;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+}
+.grid--wide { grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); }
+
+/* ---- Schedule strip (homepage "tonight") ---- */
+.sched {
+  overflow-x: clip;
+  padding: 2.4rem 0;
+}
+.sched__track {
+  max-width: var(--wrap);
+  margin: 0 auto;
+  display: flex;
+  gap: 0.85rem;
+  overflow-x: auto;
+  padding: 0.45rem var(--gutter) 1rem;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(77, 94, 232, 0.75) rgba(255, 255, 255, 0.08);
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior-x: contain;
+}
+.sched__track:focus-visible { outline: var(--focus-outline); outline-offset: var(--focus-offset); }
+.sched__item {
+  flex: 0 0 auto;
+  display: block;
+  width: 190px;
+  padding: 1rem 1.1rem;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid var(--line);
+  color: inherit;
+  text-decoration: none;
+}
+.sched__item:hover {
+  background: rgba(255, 255, 255, 0.08);
+}
+.sched__show { margin-top: 0.35rem; font-weight: 700; }
+.sched__detail { color: var(--text-dim); font-size: 0.84rem; line-height: 1.35; margin-top: 0.45rem; }
+
+.sched--public .sched__track {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  overflow: visible;
+  gap: 1rem;
+  padding-bottom: 0.25rem;
+}
+.sched--public .sched__item {
+  /* Per-function accent; each --kind modifier below overrides it. The tinted
+     surface + border is the color-coding cue (a real differentiation, not an
+     edge sliver), applied uniformly so no card reads as a template accent. */
+  --accent: var(--pbs-blue-bright);
+  position: relative;
+  overflow: hidden;
+  isolation: isolate;
+  width: auto;
+  min-height: 13.75rem;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-start;
+  gap: 0.5rem;
+  padding: 1rem;
+  border-radius: 12px;
+  /* Fallbacks for browsers without color-mix(): a whole declaration containing an
+     unsupported color-mix() is dropped, so declare plain border/background first
+     (kept by old browsers) before the accent-tinted versions (used by modern ones).
+     Without this the cards render with no border and a transparent background. */
+  border: 1px solid var(--line);
+  border: 1px solid color-mix(in srgb, var(--accent) 22%, var(--line));
+  background: var(--bg-2);
+  background:
+    linear-gradient(160deg, color-mix(in srgb, var(--accent) 14%, transparent), rgba(255, 255, 255, 0.02)),
+    var(--bg-2);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.1),
+    0 16px 38px rgba(0, 0, 0, 0.22);
+  transition: border-color 0.15s ease, box-shadow 0.15s ease, transform 0.15s ease;
+}
+.sched--public .sched__item--live { --accent: var(--color-schedule-live); }
+.sched--public .sched__item--ondemand { --accent: var(--color-schedule-on-demand); }
+.sched--public .sched__item--schedule { --accent: var(--color-schedule-grid); }
+.sched--public .sched__item--kids { --accent: var(--color-schedule-kids); }
+/* Watch live leads: stronger accent fill + shadow at the same footprint, so the
+   most common intent is the obvious first choice without breaking the even grid. */
+.sched--public .sched__item--primary {
+  border-color: color-mix(in srgb, var(--accent) 45%, var(--line));
+  background:
+    linear-gradient(160deg, color-mix(in srgb, var(--accent) 26%, transparent), rgba(255, 255, 255, 0.03)),
+    var(--bg-2);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.14),
+    0 18px 42px color-mix(in srgb, var(--accent) 20%, rgba(0, 0, 0, 0.3));
+}
+.sched--public .sched__item:focus-visible {
+  outline: var(--focus-outline);
+  outline-offset: var(--focus-offset);
+}
+.sched--public .sched__item::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  background:
+    linear-gradient(
+      145deg,
+      rgba(255, 255, 255, 0.2),
+      rgba(255, 255, 255, 0.065) 28%,
+      transparent 52%
+    );
+  opacity: 0.3;
+}
+.sched--public .sched__item > :not(.sr-only) {
+  position: relative;
+  z-index: 1;
+}
+.sched--public .sched__item:hover {
+  border-color: color-mix(in srgb, var(--accent) 55%, var(--line));
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.16),
+    0 20px 46px color-mix(in srgb, var(--accent) 24%, rgba(0, 0, 0, 0.34));
+  transform: translateY(-3px);
+}
+/* Bigger label + one plain-language purpose line: the card states its function
+   without needing a separate kicker (the eyebrow is dropped in the public build). */
+.sched--public .sched__show {
+  margin-top: 0.7rem;
+  /* Larger title for legibility (readable for glasses-wearers). */
+  font-size: 1.35rem;
+  font-weight: 800;
+  line-height: 1.2;
+  letter-spacing: -0.01em;
+}
+.sched--public .sched__detail {
+  margin-top: 0.45rem;
+  font-size: 0.95rem;
+  line-height: 1.4;
+}
+.sched--public .sched__media {
+  position: relative;
+  display: block;
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  overflow: hidden;
+  border-radius: 8px;
+  background:
+    linear-gradient(135deg, rgba(38, 56, 196, 0.5), rgba(0, 172, 0, 0.12)),
+    rgba(255, 255, 255, 0.04);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.18),
+    inset 0 -30px 45px rgba(6, 7, 15, 0.36);
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+.sched--public .sched__media::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  pointer-events: none;
+  background:
+    linear-gradient(
+      135deg,
+      rgba(255, 255, 255, 0.1),
+      rgba(255, 255, 255, 0.03) 24%,
+      transparent 50%
+    );
+}
+.sched--public .sched__media::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  background:
+    linear-gradient(180deg, rgba(6, 7, 15, 0), rgba(6, 7, 15, 0.14)),
+    radial-gradient(90% 90% at 20% 20%, rgba(255, 255, 255, 0.08), transparent 55%);
+}
+.sched--public .sched__image {
+  position: relative;
+  z-index: 0;
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  /* Full-clarity function imagery: the point of the redesign. Text sits below
+     the media, not over it, so the image does not need to be dimmed for legibility. */
+  opacity: 1;
+  filter: saturate(1) contrast(1.02);
+  transform: scale(1.02);
+}
+.sched--public .sched__item:hover .sched__media {
+  transform: translateY(-2px);
+}
+/* Live card: a slow neon "breathing" glow recreated in CSS from the still frame
+   (no GIF shipped). The halo hue is driven by --glow-rgb, so extending this to
+   another card is just adding the variable + the kind to the selectors below. */
+.sched--public .sched__item--live { --glow-rgb: 255, 61, 52; }
+.sched--public .sched__item--live .sched__pulse {
+  position: absolute;
+  inset: 0;
+  z-index: 3;
+  pointer-events: none;
+  background: radial-gradient(
+    46% 56% at 50% 52%,
+    rgba(var(--glow-rgb, 255, 61, 52), 0.62),
+    rgba(var(--glow-rgb, 255, 61, 52), 0) 68%
+  );
+  mix-blend-mode: screen;
+  opacity: 0.4;
+  transform: scale(0.94);
+  animation: sched-glow-pulse 2.6s ease-in-out infinite;
+  will-change: opacity, transform;
+}
+.sched--public .sched__item--live .sched__image {
+  animation: sched-glow-breathe 2.6s ease-in-out infinite;
+}
+@keyframes sched-glow-pulse {
+  0%, 100% { opacity: 0.3; transform: scale(0.9); }
+  50% { opacity: 0.9; transform: scale(1.08); }
+}
+@keyframes sched-glow-breathe {
+  /* Only the light moves; the base scale(1.02) on .sched__image is preserved. */
+  0%, 100% { filter: saturate(1) contrast(1.02) brightness(1); }
+  50% { filter: saturate(1.12) contrast(1.04) brightness(1.12); }
+}
+/* Kids card: the flat still frame is replaced by inline SVG toy blocks that
+   tumble and settle back into the exact starting layout for a seamless loop
+   (rebuilt as vector shapes because the blocks can't be separated from the
+   webp). Each block returns to identity at 0%/100%, so every loop reassembles
+   the same tower. Motion switches off under prefers-reduced-motion below. */
+.sched--public .sched__blocks-bg { fill: var(--color-kids-surface); }
+.sched--public .sched__blocks .blocks {
+  filter:
+    drop-shadow(0 0 8px rgba(74, 214, 92, 0.5))
+    drop-shadow(0 0 18px rgba(74, 214, 92, 0.26));
+}
+.sched--public .sched__blocks .b {
+  fill: var(--color-kids-block);
+  transform-box: fill-box;
+  transform-origin: center;
+  animation-duration: var(--motion-duration-loop);
+  animation-timing-function: cubic-bezier(0.45, 0.05, 0.35, 1);
+  animation-iteration-count: infinite;
+  will-change: transform;
+}
+/* Rounded corners on the pointed shapes come from a same-color round-join stroke. */
+.sched--public .sched__blocks .b--round {
+  stroke: var(--color-kids-block);
+  stroke-width: 13;
+  stroke-linejoin: round;
+}
+.sched--public .sched__blocks .b--yellow { fill: var(--color-kids-block-yellow); stroke: var(--color-kids-block-yellow); }
+.sched--public .sched__blocks .b1 { animation-name: kids-t1; }
+.sched--public .sched__blocks .b2 { animation-name: kids-t2; }
+.sched--public .sched__blocks .b3 { animation-name: kids-t3; }
+.sched--public .sched__blocks .b4 { animation-name: kids-t4; }
+.sched--public .sched__blocks .b5 { animation-name: kids-t5; }
+.sched--public .sched__blocks .b6 { animation-name: kids-t6; }
+.sched--public .sched__blocks .b7 { animation-name: kids-t7; }
+.sched--public .sched__blocks .b8 { animation-name: kids-t8; }
+@keyframes kids-t1 {
+  0%, 7% { transform: translate(0, 0) rotate(0deg); }
+  30% { transform: translate(-30px, -64px) rotate(-150deg); }
+  55% { transform: translate(36px, -18px) rotate(-250deg); }
+  80% { transform: translate(-10px, 6px) rotate(-330deg); }
+  93%, 100% { transform: translate(0, 0) rotate(-360deg); }
+}
+@keyframes kids-t2 {
+  0%, 7% { transform: translate(0, 0) rotate(0deg); }
+  28% { transform: translate(44px, -40px) rotate(90deg); }
+  52% { transform: translate(-50px, -8px) rotate(210deg); }
+  78% { transform: translate(16px, 10px) rotate(320deg); }
+  92%, 100% { transform: translate(0, 0) rotate(360deg); }
+}
+@keyframes kids-t3 {
+  0%, 7% { transform: translate(0, 0) rotate(0deg); }
+  32% { transform: translate(-58px, -6px) rotate(-120deg); }
+  58% { transform: translate(-20px, 44px) rotate(-250deg); }
+  82% { transform: translate(-6px, -10px) rotate(-330deg); }
+  93%, 100% { transform: translate(0, 0) rotate(-360deg); }
+}
+@keyframes kids-t4 {
+  0%, 8% { transform: translate(0, 0) rotate(0deg); }
+  30% { transform: translate(46px, -14px) rotate(140deg); }
+  56% { transform: translate(12px, 46px) rotate(300deg); }
+  80% { transform: translate(-14px, 10px) rotate(340deg); }
+  92%, 100% { transform: translate(0, 0) rotate(360deg); }
+}
+@keyframes kids-t5 {
+  0%, 6% { transform: translate(0, 0) rotate(0deg); }
+  34% { transform: translate(30px, -30px) rotate(200deg); }
+  60% { transform: translate(-36px, -10px) rotate(420deg); }
+  84% { transform: translate(8px, -16px) rotate(620deg); }
+  94%, 100% { transform: translate(0, 0) rotate(720deg); }
+}
+@keyframes kids-t6 {
+  0%, 7% { transform: translate(0, 0) rotate(0deg); }
+  30% { transform: translate(-40px, -34px) rotate(-110deg); }
+  55% { transform: translate(24px, -40px) rotate(-230deg); }
+  80% { transform: translate(10px, 8px) rotate(-320deg); }
+  92%, 100% { transform: translate(0, 0) rotate(-360deg); }
+}
+@keyframes kids-t7 {
+  0%, 8% { transform: translate(0, 0) rotate(0deg); }
+  29% { transform: translate(8px, -50px) rotate(120deg); }
+  53% { transform: translate(-44px, -16px) rotate(250deg); }
+  79% { transform: translate(14px, -8px) rotate(330deg); }
+  92%, 100% { transform: translate(0, 0) rotate(360deg); }
+}
+@keyframes kids-t8 {
+  0%, 6% { transform: translate(0, 0) rotate(0deg); }
+  33% { transform: translate(-50px, -24px) rotate(-180deg); }
+  58% { transform: translate(34px, -30px) rotate(-360deg); }
+  83% { transform: translate(-12px, -10px) rotate(-520deg); }
+  94%, 100% { transform: translate(0, 0) rotate(-720deg); }
+}
+
+/* ---- Filter chips (channel / genre / day) ---- */
+.chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.chip {
+  display: inline-flex;
+  align-items: center;
+  min-height: var(--target-comfortable);
+  padding: 0.35rem 0.9rem;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--text-dim);
+  font-size: 0.85rem;
+  font-weight: 500;
+  text-decoration: none;
+  white-space: nowrap;
+}
+.chip:hover { color: var(--color-text-on-surface); background: rgba(255, 255, 255, 0.08); }
+.chip[aria-current="true"],
+.chip--on {
+  color: var(--color-text-on-brand);
+  background: var(--pbs-blue);
+  border-color: transparent;
+}
+
+/* ---- "Designed for, not connected" guardrail notice ----
+   Tinted background + uniform border (never a left-accent sliver). States plainly
+   that a feature is designed for an integration the preview does not wire up. */
+.designed-for {
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: rgba(38, 56, 196, 0.07);
+  padding: 1.1rem 1.35rem;
+  color: var(--text-dim);
+  font-size: 0.92rem;
+  max-width: 70ch;
+}
+.designed-for strong { color: var(--text); font-weight: 700; }
+
+/* a quieter reserved block for placement-held sections (e.g. Spotlight) */
+.reserved {
+  border: 1px dashed var(--line);
+  border-radius: 12px;
+  padding: 1.5rem 1.75rem;
+  background: rgba(255, 255, 255, 0.02);
+}
+.reserved h2 { font-size: 1.25rem; margin: 0 0 0.4rem; }
+.reserved p { color: var(--text-dim); margin: 0; max-width: 60ch; }
+
+/* ---- Passport band ---- */
+.passport {
+  background:
+    radial-gradient(80% 140% at 100% 0%, rgba(38, 56, 196, 0.4), transparent 60%),
+    var(--bg-2);
+  margin: 2rem 0;
+}
+.passport__inner {
+  position: relative;
+  overflow: hidden;
+  max-width: 84rem;
+  margin: 0 auto;
+  padding: 2.5rem 1.5rem;
+  display: grid;
+  grid-template-columns: minmax(14rem, 0.72fr) minmax(22rem, 1fr) auto;
+  align-items: center;
+  gap: 2rem 2.25rem;
+}
+.passport__inner::after {
+  content: "";
+  position: absolute;
+  right: -4rem;
+  top: 50%;
+  width: min(28rem, 42vw);
+  aspect-ratio: 1;
+  background: url("/brand/pbs-passport-compass.png") center / contain no-repeat;
+  opacity: 0.12;
+  transform: translateY(-50%) rotate(-8deg);
+  pointer-events: none;
+}
+.passport__identity,
+.passport__body,
+.passport__action {
+  position: relative;
+  z-index: 1;
+}
+.passport__identity {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  min-width: 0;
+}
+.passport__icon {
+  flex: none;
+  width: clamp(4rem, 6vw, 5rem);
+  height: clamp(4rem, 6vw, 5rem);
+  border-radius: 22%;
+  box-shadow: 0 16px 38px rgba(0, 0, 0, 0.35);
+}
+.passport__mark {
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.15rem;
+  line-height: 1.05;
+}
+.passport__mark-pre {
+  font-size: clamp(0.9rem, 2vw, 1.1rem);
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--text-dim);
+}
+.passport__mark-name {
+  font-size: clamp(1.9rem, 5vw, 2.6rem);
+  font-weight: 900;
+  letter-spacing: 0;
+  color: var(--text);
+}
+.passport__body { min-width: 0; }
+.passport__body h2 { font-size: 1.5rem; margin: 0 0 0.5rem; }
+.passport__body p { color: var(--text-dim); max-width: 56ch; margin: 0; }
+.passport__action { justify-self: end; }
+
+/* ---- Prose (text pages: about, contact, policy, rendered markdown) ---- */
+.prose { color: var(--text); }
+.prose > * + * { margin-top: 1.05rem; }
+.prose h2 { font-size: 1.5rem; margin-top: 2.25rem; }
+.prose h3 { font-size: 1.15rem; margin-top: 1.75rem; }
+.prose a { color: var(--color-link); text-underline-offset: 3px; }
+.prose ul, .prose ol { padding-left: 1.25rem; }
+.prose li + li { margin-top: 0.4rem; }
+.prose blockquote {
+  margin: 1.25rem 0;
+  padding: 0.75rem 1.25rem;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.03);
+  color: var(--text-dim);
+}
+
+/* ---- Narrow phones ---- */
+@media (max-width: 30rem) {
+  .rail--flush .rail__track { scroll-padding-left: 0; }
+  /* The wide featured card is nearly full-width on a phone; shrink it so a sliver
+     of the next card peeks, signalling the row scrolls. */
+  .card--lg { width: min(82vw, 300px); }
+}
+
+@media (max-width: 56rem) {
+  .sched--public .sched__track { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .passport__inner {
+    grid-template-columns: 1fr;
+    align-items: start;
+  }
+  .passport__action { justify-self: start; }
+}
+
+@media (max-width: 36rem) {
+  .rail__arrow { width: 2.9rem; height: 4.4rem; border-radius: 0.7125rem; }
+  .rail__arrow--prev { left: 0.45rem; }
+  .rail__arrow--next { right: 0.45rem; }
+  .sched--public .sched__track { grid-template-columns: 1fr; }
+  .passport__identity { align-items: flex-start; }
+  .passport__icon { width: 3.75rem; height: 3.75rem; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .card:hover .card__art { transform: none; }
+  .card:hover .card__image { transform: none; }
+  .spotlight-card:hover .spotlight-card__media { transform: none; }
+  .sched--public .sched__item,
+  .sched--public .sched__media {
+    transition: none;
+  }
+  .sched--public .sched__item:hover,
+  .sched--public .sched__item:hover .sched__media {
+    transform: none;
+  }
+  .sched--public .sched__item--live .sched__pulse,
+  .sched--public .sched__item--live .sched__image,
+  .sched--public .sched__blocks .b {
+    /* Also drop will-change so no compositing layers linger with motion off. */
+    animation: none;
+    will-change: auto;
+  }
+  .btn { transition: none; }
+}
+
+html[data-motion="off"] .card:hover .card__art,
+html[data-motion="off"] .card:hover .card__image,
+html[data-motion="off"] .spotlight-card:hover .spotlight-card__media,
+html[data-motion="off"] .sched--public .sched__item:hover,
+html[data-motion="off"] .sched--public .sched__item:hover .sched__media {
+  transform: none;
+}
+
+/* The dynamic shelves: a related-story shelf and a video playlist.
+
+   These live here rather than in a component's scoped styles because TWO renderers place
+   the same markup: CmsBlocks.astro on a CMS page and PostArticle.astro in a post body,
+   which is a surface the related-story shelf is explicitly placeable on. A copy in one
+   component would leave the other showing the card row as a bulleted list -- the post body
+   bullets and indents every ul it contains -- so the rules key on the `.cms-block` wrapper
+   both renderers emit and are written once.
+
+   Both are resolved at build and baked into the page, so there is no loading state and no
+   placeholder frame: what is here is what the query found. The grid is measured against
+   the viewport rather than a fixed column count, so one card still fits at 320 pixels and
+   at 400% zoom without the page scrolling sideways. */
+.cms-block .dynamic-shelf {
+  display: grid;
+  gap: 1rem;
+}
+
+.cms-block .topic-shelf__head,
+.cms-block .video-playlist__head {
+  border-bottom: 1px solid var(--line);
+  padding-bottom: 0.75rem;
+}
+
+.cms-block .topic-shelf__title,
+.cms-block .video-playlist__title {
+  margin: 0;
+}
+
+/* Three classes give this rule higher specificity than PostArticle's scoped
+   .post__body :global(ul), keeping article bullets and indents off shelf rows. */
+.cms-block .dynamic-shelf .shelf-track {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 15rem), 1fr));
+  gap: 1rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.cms-block .shelf-card {
+  border: 1px solid var(--line);
+  border-radius: 1rem;
+  background: var(--surface-raised);
+}
+
+.cms-block .shelf-card__link {
+  display: grid;
+  gap: 0.4rem;
+  align-content: start;
+  height: 100%;
+  padding: 1rem;
+  /* The whole card is one link, so the title carries the site's link colour and the
+     supporting facts stay muted; the underline arrives on hover and focus. */
+  text-decoration: none;
+}
+
+.cms-block .shelf-card__link:hover .shelf-card__title,
+.cms-block .shelf-card__link:focus-visible .shelf-card__title {
+  text-decoration: underline;
+  text-underline-offset: 0.22em;
+}
+
+.cms-block .shelf-card__link:focus-visible {
+  outline: var(--focus-outline);
+  outline-offset: var(--focus-offset);
+}
+
+.cms-block .shelf-card__kicker {
+  color: var(--text-dim);
+  font-size: 0.78rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.cms-block .shelf-card__title {
+  font-weight: 650;
+  line-height: 1.3;
+  text-wrap: pretty;
+}
+
+.cms-block .shelf-card__summary,
+.cms-block .shelf-card__meta {
+  color: var(--text-dim);
+  font-size: 0.9rem;
+}
+
+/* The runtime, the caption state, and the member gate read as one line of facts. */
+.cms-block .shelf-card__fact + .shelf-card__fact::before {
+  content: " \00b7 ";
+}
+
+/* Same contest as the track: the post body styles `img` through a scoped rule, so this
+   needs to outrank (0,2,1) rather than tie and depend on stylesheet order. */
+.cms-block .shelf-card .shelf-card__media img {
+  display: block;
+  width: 100%;
+  height: auto;
+  border-radius: 0.6rem;
+}
+
+.cms-block .shelf-empty {
+  margin: 0;
+  color: var(--text-dim);
+}
+
+/* Full text sits below the rail so it cannot be clipped by horizontal scrolling. */
+.shelf-full-text {
+  max-width: var(--wrap);
+  margin: 0.5rem auto 0;
+  padding-inline: var(--gutter);
+  overflow-wrap: anywhere;
+}
+.shelf-full-text > summary {
+  width: fit-content;
+  min-height: var(--target-comfortable);
+  align-content: center;
+  cursor: pointer;
+  color: var(--text-dim);
+  font-size: 0.9rem;
+}
+.shelf-full-text > summary:focus-visible {
+  outline: var(--focus-outline);
+  outline-offset: var(--focus-offset);
+}
+.shelf-full-text__less,
+.shelf-full-text[open] .shelf-full-text__show { display: none; }
+.shelf-full-text[open] .shelf-full-text__less { display: inline; }
+.shelf-full-text > ul {
+  display: grid;
+  gap: 1.25rem;
+  margin: 0.75rem 0 0;
+  padding: 0;
+  list-style: none;
+}
+.shelf-full-text li { min-width: 0; }
+.shelf-full-text li > a { font-weight: 700; }
+.shelf-full-text li > p { margin: 0.4rem 0 0; color: var(--text-dim); }

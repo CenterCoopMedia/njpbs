@@ -1,0 +1,158 @@
+NJ PBS Studio connector for Windows
+
+Run only a package you downloaded from Boardwalk > Live production > Studio setup.
+If you got it any other way, do not run it. Download it again from Boardwalk.
+
+Use this only with the studio safely off air. Keep all broadcast feeds
+physically disconnected from the rehearsal output. Keep recording and streaming
+off. vMix Overlay 1 affects vMix's output even during this test. "Preview" in
+Boardwalk does not protect a connected broadcast feed.
+
+What this is
+The Studio connector sends saved banner text from Boardwalk to this PC's vMix.
+It runs in your own Windows user folder. It needs no administrator rights, Node
+installation or firewall change. It connects out to Boardwalk and uses vMix on
+this PC only. It opens no incoming port and gives no one remote desktop access.
+Keep the same Windows account for setup and every show.
+
+1. Extract and set up
+In Boardwalk, open Live production > Prepare > Studio setup. Select Download for
+Windows and save the ZIP. Right-click it, choose Extract All, then Extract. Open
+the extracted folder. Do not run the files from inside the ZIP.
+Double-click "Set up Studio connector.cmd". If file extensions are hidden,
+Windows may show it as "Set up Studio connector" (Windows Command Script).
+Wait for "PASS: The connector self-test passed." This checks the connector only;
+it does not prove the studio PC can reach Boardwalk or control the real vMix.
+
+Windows may mark a downloaded ZIP and its files as coming from the internet
+(Mark of the Web). Setup clears that mark on its own installed files. If Windows
+blocks the launcher, right-click the original ZIP, select Properties, select
+Unblock if shown, then Apply. Extract it again. SmartScreen may show
+"Windows protected your PC". If you downloaded this package from Boardwalk,
+select More info > Run anyway, if those choices are available. If campus policy
+still blocks it or asks for an administrator, stop and contact njpbs@montclair.edu.
+Do not turn off Windows security or change a machine execution policy.
+
+Fallback if the launcher is blocked but PowerShell is allowed: Open the extracted
+folder in File Explorer, click the address bar, type powershell and press Enter.
+Paste this one line, then press Enter:
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File ".\setup.ps1"
+This changes policy for that PowerShell process only. It makes no saved policy
+change. If a policy still blocks it, stop and contact njpbs@montclair.edu.
+
+2. Pair this PC and connect the session
+Use your own staff login at https://admin.njpbs.org. Open Live production,
+select Prepare, then open Studio setup. Choose the existing Production session
+for your program. If none exists, select Create studio session, choose the Program,
+enter a Session name and select Create studio session. Keep that session for
+later shows. Open Studio setup again and find Live production devices.
+Admins can also use Admin settings > Live production devices.
+Enter a clear Studio PC name, such as "Example studio", then select
+Create pairing code. The code lasts five minutes and works
+once. Do not email, photograph or share it. Keep the window with the code open.
+In setup on the PC, type yes when asked if you have a fresh code. At the hidden
+code prompt, type or paste the code, then press Enter. It will not appear.
+If you have no code yet, press Enter at the yes/no question. Setup stops safely;
+run the installed Set up Studio connector again when ready. Your installed
+folder is %LOCALAPPDATA%\NJPBS\vmix-agent (paste that into File Explorer).
+
+After pairing, select Refresh devices in Boardwalk. Check the PC says Enrolled.
+If pairing fails, stop: Contact njpbs@montclair.edu. Support must revoke the failed device
+before a new enrollment. Keep credential.dpapi private; never send or delete it
+as a troubleshooting step.
+
+Before pairing, ask support to copy studio-config.example.json to
+studio-config.json in the installed folder and supply this studio's private
+preset values. Never commit that file or include it in a distributed package.
+Setup reads it once, before pairing, and stops on missing or placeholder values.
+
+The configuration supplies vmixHost, vmixPort, apiAccessMode, backgroundInput,
+inputs, overlayInputs and titleFiles. This connector supports loopback API reads
+without a login only: vmixHost must be 127.0.0.1 and apiAccessMode must be
+loopback-without-login. Keep network restrictions enabled. If policy does not
+allow that access mode, stop and contact support; setup cannot bypass it.
+The packaged pairing.json supplies the API origin selected at package build.
+
+Open the configured off-air vMix preset. Setup reads both configured GT text
+inputs, both configured overlay targets and the background input. It verifies
+each overlay target contains its matching text input and background as direct
+layers. It checks input numbers, GT types and text field names. It does not
+infer source GT files from display names. Check the actual files against
+titleFiles in studio-config.json yourself.
+Confirm the two yes/no checks only when you have checked them. Check that these
+four inputs have no other composite, overlay, direct-output or additional-mix
+route. If you are unsure, press Enter to stop and contact njpbs@montclair.edu.
+If setup finds different inputs, it stops. Do not rename inputs or edit a mapping
+version to make it pass. Tell support the short stop message, without raw XML.
+
+Setup saves studio-inputs.json in the installed folder. This file contains only
+the four input identities, with no banner text or credential.
+In Boardwalk, open Live production > Prepare > Studio setup. Reuse the existing
+program's Production session. If there is none, select Create studio session,
+choose the Program, enter a Session name, then select Create studio session.
+Do not make a new session for each show.
+Under Connect the studio PC, choose this PC in Paired studio PC. Use Load studio
+input details to load studio-inputs.json. Check the four displayed inputs against
+vMix. Check "I confirmed both GT title files with the studio operator" only after
+you checked the files. Select Save studio connection. Check "I checked that
+Overlay 1 is reserved for Boardwalk" only after the output-routing check.
+Use Copy session ID next to Session ID. Paste that ID into the setup window.
+Then use Copy connector setup. Return to setup and press Enter; it reads the
+nonsecret setup data from the clipboard. Do not paste a pairing code there.
+
+If Studio setup controls are unavailable, stop setup and contact support at
+njpbs@montclair.edu. Continue when a session ID and connector setup are available
+in Boardwalk. Use the settings for this PC; do not invent a session ID or copy
+settings from another PC.
+
+Setup runs the existing mapping verification. Wait for "PASS: Boardwalk and
+vMix agree on this session mapping." No title text is changed by verification.
+If it fails, keep the session in draft and contact njpbs@montclair.edu. Do not edit config
+or mapping versions. Once it passes, return to Studio setup in Boardwalk and
+select Refresh studio setup, then Mark ready, then Make active. These are
+separate from pairing.
+
+3. Start, test both lower thirds, and stop
+In the installed folder, double-click "Start Studio connector.cmd". Keep its
+window open. Run only one copy. In Boardwalk select Refresh (Refresh studio),
+then wait for a fresh Observed output. Compare it with the vMix monitor. Do not
+Take when it says Stale, Unknown or Outcome unknown. First confirm again that
+the test output is disconnected from every broadcast feed.
+
+In Live production select Prepare, then Add banner. Select Headline, enter
+"Studio test - headline", then select Add banner to save it. Add a Name and title
+banner with "Studio test name" and "Studio test title", then select Add banner. Selecting or saving a
+banner sends nothing to vMix. Select Show to operate the saved rundown.
+
+Select the headline banner, check its saved text, then press Take saved banner
+once. On the rehearsal monitor, check the configured headline text input appears
+through its configured headline overlay target on Overlay 1. In Boardwalk, Requested action and Observed output
+are separate: Wait for fresh "On air" with "Boardwalk" as the source, then
+compare the actual text.
+Press Clear Overlay 1. Check the banner disappears on the vMix monitor and the
+fresh Observed output says Clear. Clear removes ANY graphic on Overlay 1,
+including one placed there with native vMix controls.
+
+Repeat Take saved banner and Clear Overlay 1 for the Name and title banner.
+Check the configured name/title text fields appear through their configured
+overlay target, in the right order.
+If either result differs, stop. Do not press Take repeatedly to test an uncertain
+result. Use native vMix controls to check and clear the rehearsal output.
+
+When finished, clear the test graphic and confirm the monitor. Press Ctrl+C in
+the connector window and wait for it to finish. Stopping sends no Clear command.
+If you close the window and the next Start fails, ask support to check stale
+locks. Do not remove locks yourself.
+Keep the reusable program session; do not select End studio session after a show.
+Ending is permanent and does not remove a graphic. Do not delete the journal,
+config.json or credential.dpapi. There is no automatic startup or service to undo.
+To disable the connector, leave it stopped. To revoke this PC's access, use
+Live production > Prepare > Studio setup > Live production devices > Revoke >
+Confirm revocation after
+checking native output. Revoking also sends no Clear.
+
+For help, contact NJ PBS support or contact njpbs@montclair.edu. Send the PC name, the short plain
+stop message and which test failed. Do not attach credentials, pairing codes,
+config, journals, raw vMix XML or screenshots of a code. Tell us what appeared on
+the rehearsal monitor and whether both Take/Clear tests passed. This short check
+does not establish that the studio is safe for broadcast.

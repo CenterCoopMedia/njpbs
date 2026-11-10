@@ -1,0 +1,32 @@
+.media-drop-target {
+  position: relative;
+  min-width: 0;
+}
+
+.media-drop-overlay {
+  position: absolute;
+  z-index: calc(var(--cms-z-selection-bar) - 1);
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--cms-space-2);
+  border: 2px dashed var(--cms-brand);
+  border-radius: var(--cms-radius-panel);
+  padding: var(--cms-space-6);
+  background: var(--cms-brand-soft);
+  color: var(--cms-brand-ink);
+  text-align: center;
+  pointer-events: none;
+}
+
+.media-drop-overlay[data-blocked] {
+  border-color: var(--cms-line);
+  background: var(--cms-surface);
+  color: var(--cms-ink);
+}
+
+.media-drop-overlay span {
+  color: var(--cms-ink-muted);
+}

@@ -1,0 +1,57 @@
+---
+import { getEntry } from "astro:content";
+import { renderPage, renderSchedule } from "../../lib/cms-render-context";
+import NativeSchedule from "../../components/NativeSchedule.astro";
+import CmsBlocks from "../../components/CmsBlocks.astro";
+import { cmsImageAsset } from "../../lib/cms-responsive-image";
+import scheduleData from "../../data/schedule.json";
+import PublicSiteLayout from "../../layouts/PublicSiteLayout.astro";
+import { containsVideo } from "../../../../packages/content-core/src/video-block";
+import { publicRootRoutesEnabled } from "../../lib/build-target";
+import type { BakedScheduleData } from "../../lib/schedule-feed";
+import { loadScheduleData } from "../../lib/schedule-data";
+
+export function getStaticPaths() {
+  if (!publicRootRoutesEnabled(process.env)) return [];
+  return [{ params: { schedule: undefined } }];
+}
+
+const cmsSchedule = Astro.locals.cmsRender
+  ? renderPage(Astro.locals.cmsRender, "schedule") : await getEntry("cmsPages", "schedule");
+const socialImageId = cmsSchedule?.data.social?.imageAssetId;
+const socialImage = socialImageId
+  ? cmsSchedule?.data.assets[socialImageId]?.url
+  : undefined;
+const sealedSchedule = renderSchedule(Astro.locals.cmsRender);
+const bakedSchedule = sealedSchedule?.data ?? await loadScheduleData(scheduleData as BakedScheduleData);
+const heroBackgroundImage = cmsSchedule?.data.heroBackgroundImage
+  ? cmsImageAsset(cmsSchedule.data.assets[cmsSchedule.data.heroBackgroundImage])
+  : undefined;
+---
+
+<PublicSiteLayout
+  title={cmsSchedule?.data.title ?? "TV schedule"}
+  description={cmsSchedule?.data.description ?? "Search current and upcoming NJ PBS listings."}
+  seoTitle={cmsSchedule?.data.seo?.title}
+  seoDescription={cmsSchedule?.data.seo?.description}
+  socialTitle={cmsSchedule?.data.social?.title}
+  socialDescription={cmsSchedule?.data.social?.description}
+  socialImage={socialImage}
+  preview={cmsSchedule?.data.contentMode === "draft"}
+  canonicalPath={cmsSchedule?.data.path ?? "/schedule/"}
+  metaRefreshTo={cmsSchedule && cmsSchedule.data.path !== "/schedule/" ? cmsSchedule.data.path : undefined}
+  noindex={Boolean(cmsSchedule && cmsSchedule.data.path !== "/schedule/") || (cmsSchedule?.data.noindex ?? false)}
+  noAnalytics={containsVideo(cmsSchedule?.data.blocks)}
+  childDirected={cmsSchedule?.data.childDirected}
+>
+  {cmsSchedule && cmsSchedule.data.path !== "/schedule/" ? <main><h1>Page moved</h1><p><a href={cmsSchedule.data.path}>Continue to the page</a></p></main> : <>
+  <NativeSchedule
+    data={bakedSchedule}
+    heroBackgroundImage={heroBackgroundImage}
+    heroBackgroundPosition={cmsSchedule?.data.heroBackgroundPosition}
+  />
+  {cmsSchedule && <CmsBlocks entry={cmsSchedule} readerControls />}
+  </>}
+</PublicSiteLayout>
+
+

@@ -1,0 +1,11 @@
+{
+  "date": "2026-08-05",
+  "kind": "new",
+  "title": "Preview a saved draft before it goes live",
+  "body": "Reviewers can now open a protected preview of the exact saved draft. The preview shows the public page design and does not change the public site.",
+  "prs": [
+    710,
+    821
+  ],
+  "order": -1
+}

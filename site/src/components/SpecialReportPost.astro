@@ -1,0 +1,463 @@
+---
+import ReaderTextSize from "./ReaderTextSize.astro";
+import { createPageImageLoading } from "../../../packages/content-core/src/image-loading";
+import type { CollectionEntry } from "astro:content";
+import PostPublication from "./PostPublication.astro";
+import PostBlockList from "./PostBlockList.astro";
+import PostByline from "./PostByline.astro";
+import PostShareControls from "./PostShareControls.astro";
+import CmsHeroBackground from "./CmsHeroBackground.astro";
+import PostLeadPlayer from "./PostLeadPlayer.astro";
+import PostImageCaption from "./PostImageCaption.astro";
+import { postChapters } from "../lib/post-chapters";
+import {
+  primaryPostTopic,
+  publicPostCategories,
+  publicPostTopics,
+} from "../lib/post-formats";
+import { postIndexFilterHref } from "../lib/post-index-links";
+
+type PublicCredit = CollectionEntry<"cmsPosts">["data"]["credits"][number];
+
+interface Props {
+  entry: CollectionEntry<"cmsPosts">;
+  credits: readonly PublicCredit[];
+  canonicalUrl: string;
+}
+
+const { entry, credits, canonicalUrl } = Astro.props as Props;
+const post = entry.data;
+const chapters = postChapters(post.blocks);
+const showContents = chapters.length >= 2;
+const topics = publicPostTopics(post.tags);
+const categories = publicPostCategories(post.categories);
+const subject = post.categories.map((category) => category.trim()).find(Boolean)
+  ?? primaryPostTopic(post.tags);
+const videoLead = post.leadMedia && post.leadMedia.kind !== "image";
+const hero = videoLead ? null : post.heroImage;
+const imageLoading = createPageImageLoading();
+const heroLoading = imageLoading(hero, "lcp");
+const heroAlt = post.heroImageDecorative ? "" : post.heroImageAlt;
+---
+
+<article class="special-report" data-post-presentation="special-report">
+  <div class="special-report__brand">
+    <strong>NJ PBS Special Report</strong>
+    <span>{subject}</span>
+  </div>
+
+  <header
+    class:list={[
+      "special-report__masthead",
+      {
+        "special-report__masthead--text": !hero && !videoLead,
+        "cms-hero-surface": Boolean(post.heroBackgroundImage),
+      },
+    ]}
+  >
+    <CmsHeroBackground
+      image={post.heroBackgroundImage}
+      imageLoading={imageLoading}
+      position={post.heroBackgroundPosition}
+    />
+    <div class="special-report__masthead-inner">
+      <div class="special-report__introduction">
+        <PostPublication spotlightNews={post.spotlightNews} coverageLabelId={post.coverageLabelId} />
+        <h1>{post.title}</h1>
+        {post.summary && <p class="special-report__summary">{post.summary}</p>}
+        <PostByline
+          credits={credits}
+          displayDate={post.displayDate}
+          updateShown={post.updateShown}
+          updatedAt={post.updatedAt}
+          updatedDate={post.updatedDate}
+        />
+        <PostShareControls title={post.title} url={canonicalUrl} placement="top" />
+      </div>
+
+      {hero && (
+        <figure class="special-report__lead-media">
+          <img
+            src={hero.url}
+            width={hero.width}
+            height={hero.height}
+            alt={heroAlt}
+            {...heroLoading}
+          />
+          <PostImageCaption caption={post.heroImageCaption} credit={hero.credit} />
+        </figure>
+      )}
+      {videoLead && <figure class="special-report__lead-media"><PostLeadPlayer post={post} /></figure>}
+    </div>
+  </header>
+
+  <ReaderTextSize />
+
+  <div class:list={["special-report__layout", { "special-report__layout--single": !showContents }]}> 
+    {showContents && (
+      <nav class="special-report__contents" aria-labelledby="report-contents-title">
+        <h2 id="report-contents-title">Inside this report</h2>
+        <ul>
+          {chapters.map((chapter) => (
+            <li><a href={`#${chapter.id}`}>{chapter.label}</a></li>
+          ))}
+        </ul>
+      </nav>
+    )}
+
+    <div class="special-report__story">
+      <PostBlockList
+        entry={entry}
+        className="special-report__body"
+        presentation="special-report"
+        chapters={chapters}
+      />
+
+      <PostShareControls title={post.title} url={canonicalUrl} placement="bottom" />
+
+      {(categories.length > 0 || topics.length > 0) && (
+        <footer class="special-report__topics">
+          {categories.length > 0 && (
+            <><h2>Categories</h2><ul>{categories.map((category) => (
+              <li><a href={postIndexFilterHref("category", category)}>{category}</a></li>
+            ))}</ul></>
+          )}
+          {topics.length > 0 && (
+            <><h2>Tags</h2><ul>{topics.map((topic) => (
+              <li><a href={postIndexFilterHref("tag", topic)}>{topic}</a></li>
+            ))}</ul></>
+          )}
+        </footer>
+      )}
+    </div>
+  </div>
+</article>
+
+<style is:global>
+  .special-report {
+    min-height: 70vh;
+    background: var(--color-surface-page);
+    color: var(--color-text-on-surface);
+  }
+
+  .special-report__brand {
+    display: flex;
+    gap: 1rem 2rem;
+    justify-content: space-between;
+    padding: 1rem max(var(--gutter), calc((100vw - var(--wrap)) / 2 + var(--gutter)));
+    background: var(--color-brand);
+    color: var(--color-text-on-brand);
+    font-size: 1rem;
+    line-height: 1.35;
+  }
+
+  .special-report__brand strong {
+    font-weight: 900;
+    letter-spacing: 0.035em;
+    text-transform: uppercase;
+  }
+
+  .special-report__brand span {
+    font-weight: 700;
+  }
+
+  .special-report__masthead {
+    background: var(--color-surface-panel);
+    border-bottom: 1px solid var(--color-border);
+  }
+
+  .special-report__masthead-inner {
+    display: grid;
+    grid-template-columns: minmax(0, 0.92fr) minmax(22rem, 1.08fr);
+    gap: clamp(2rem, 6vw, 6rem);
+    align-items: center;
+    max-width: var(--wrap);
+    margin: 0 auto;
+    padding: clamp(3rem, 7vw, 6.5rem) var(--gutter);
+  }
+
+  .special-report__masthead--text .special-report__masthead-inner {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .special-report__introduction {
+    min-width: 0;
+  }
+
+  .special-report__introduction h1 {
+    margin: 0;
+    color: var(--color-text-on-surface);
+    font-size: clamp(3rem, 7.5vw, 6.5rem);
+    font-weight: 900;
+    letter-spacing: var(--heading-tracking);
+    line-height: 0.96;
+    text-wrap: balance;
+  }
+
+  .special-report__summary {
+    margin: 1.5rem 0 0;
+    color: var(--color-text-muted);
+    font-size: clamp(1.1rem, 2vw, 1.35rem);
+    line-height: 1.62;
+  }
+
+  .special-report__introduction .post-byline {
+    margin-top: 1.5rem;
+  }
+
+  .special-report__lead-media {
+    margin: 0;
+  }
+
+  .special-report__lead-media img {
+    display: block;
+    width: 100%;
+    height: auto;
+    border-radius: 0;
+    background: var(--color-surface-elevated);
+  }
+
+  .special-report__layout {
+    display: grid;
+    grid-template-columns: minmax(12rem, 16rem) minmax(0, 1fr);
+    gap: clamp(2rem, 5vw, 5rem);
+    max-width: var(--wrap);
+    margin: 0 auto;
+    padding: clamp(2.5rem, 6vw, 5rem) var(--gutter) clamp(4rem, 9vw, 8rem);
+  }
+
+  .special-report__layout--single {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .special-report__contents {
+    position: sticky;
+    top: 6.5rem;
+    align-self: start;
+    padding: 1.25rem 0;
+    border-top: 1px solid var(--color-border-strong);
+    border-bottom: 1px solid var(--color-border-strong);
+  }
+
+  .special-report__contents h2 {
+    margin: 0;
+    color: var(--color-text-on-surface);
+    font-size: 1.1rem;
+    line-height: 1.3;
+  }
+
+  .special-report__contents ul {
+    display: grid;
+    gap: 0;
+    margin: 0.75rem 0 0;
+    padding: 0;
+    list-style: none;
+  }
+
+  .special-report__contents a {
+    display: block;
+    min-height: var(--target-comfortable);
+    padding: 0.7rem 0;
+    border-top: 1px solid var(--color-border);
+    color: var(--color-text-muted);
+    font-size: 1rem;
+    line-height: 1.45;
+    text-decoration: underline;
+    text-decoration-thickness: 0.08em;
+    text-underline-offset: 0.2em;
+  }
+
+  .special-report__contents a:hover {
+    color: var(--color-text-on-surface);
+  }
+
+  .special-report__contents a:focus-visible {
+    outline: var(--focus-outline);
+    outline-offset: var(--focus-offset);
+  }
+
+  .special-report__story {
+    min-width: 0;
+  }
+
+  .special-report__body {
+    display: grid;
+    gap: clamp(1.25rem, 2.8vw, 2rem);
+    width: 100%;
+    color: var(--color-text-muted);
+    font-size: 1.25rem;
+    line-height: 1.8;
+  }
+
+  .special-report__body > .cms-block {
+    width: 100%;
+    margin-inline: 0;
+    color: inherit;
+  }
+
+  .special-report__body > :is(
+      .cms-block--image,
+      .cms-block--image_gallery,
+      .cms-block--embed,
+      .cms-block--cta_row,
+      .cms-block--topic_shelf
+    ) {
+    width: 100%;
+  }
+
+  .special-report__body :is(p, ul, ol, blockquote) {
+    margin-block: 0 1.2rem;
+  }
+
+  .special-report__body :is(ul, ol) {
+    padding-left: 1.4rem;
+  }
+
+  .special-report__body li + li {
+    margin-top: 0.45rem;
+  }
+
+  .special-report__body a:not(.btn) {
+    color: var(--color-link);
+    text-decoration-thickness: 0.09em;
+    text-underline-offset: 0.22em;
+  }
+
+  .special-report__body a:not(.btn):hover {
+    color: var(--color-text-on-surface);
+  }
+
+  .special-report__body a:focus-visible {
+    outline: var(--focus-outline);
+    outline-offset: var(--focus-offset);
+  }
+
+  .special-report__body :is(h2, h3, h4) {
+    scroll-margin-top: 7rem;
+    margin: clamp(1rem, 3vw, 2.25rem) 0 0;
+    color: var(--color-text-on-surface);
+    letter-spacing: -0.025em;
+    line-height: 1.1;
+    text-wrap: balance;
+  }
+
+  .special-report__body h2 {
+    font-size: clamp(2rem, 4vw, 3.35rem);
+  }
+
+  .special-report__body h3 {
+    font-size: clamp(1.45rem, 3vw, 2.15rem);
+  }
+
+  .special-report__body figure {
+    margin: 0;
+  }
+
+  .special-report__body img {
+    display: block;
+    width: 100%;
+    height: auto;
+    border-radius: 0;
+    background: var(--color-surface-elevated);
+  }
+
+  .special-report__body figcaption {
+    margin: 0.8rem 0 0;
+    color: var(--color-text-muted);
+    font-size: 1rem;
+    line-height: 1.55;
+  }
+
+  .special-report__body blockquote {
+    padding: 1.5rem 0;
+    border-top: 2px solid var(--color-border-strong);
+    border-bottom: 2px solid var(--color-border-strong);
+    color: var(--color-text-on-surface);
+    font-size: calc(clamp(1.2rem, 2.4vw, 1.6rem) * var(--reader-text-scale, 1));
+    font-weight: 700;
+    line-height: 1.5;
+  }
+
+  .special-report__body hr {
+    width: 100%;
+    margin: 1rem 0;
+    border: 0;
+    border-top: 2px solid var(--color-border-strong);
+  }
+
+  .special-report__body .embed {
+    padding: 1.25rem 0;
+    border-top: 1px solid var(--color-border-strong);
+    border-bottom: 1px solid var(--color-border-strong);
+    font-size: 1.1rem;
+    font-weight: 750;
+  }
+
+  .special-report__body .btn {
+    border-radius: 0;
+    box-shadow: none;
+  }
+
+  .special-report__topics {
+    margin: clamp(3rem, 7vw, 5rem) 0 0;
+    padding-top: 1.5rem;
+    border-top: 1px solid var(--color-border-strong);
+  }
+
+  .special-report__topics h2 {
+    margin: 0;
+    color: var(--color-text-on-surface);
+    font-size: 1.15rem;
+    line-height: 1.3;
+  }
+
+  .special-report__topics ul {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem 0;
+    margin: 0.8rem 0 0;
+    padding: 0;
+    list-style: none;
+  }
+
+  .special-report__topics li {
+    color: var(--color-text-muted);
+    font-size: 1rem;
+    line-height: 1.45;
+  }
+
+  .special-report__topics a {
+    color: inherit;
+    text-underline-offset: 0.2em;
+  }
+
+  .special-report__topics li:not(:last-child)::after {
+    margin: 0 0.65rem;
+    color: var(--color-text-quiet);
+    content: "·";
+  }
+
+  @media (max-width: 900px) {
+    .special-report__masthead-inner,
+    .special-report__layout {
+      grid-template-columns: 1fr;
+    }
+
+    .special-report__contents {
+      position: static;
+    }
+  }
+
+  @media (max-width: 560px) {
+    .special-report__brand {
+      align-items: flex-start;
+      flex-direction: column;
+    }
+
+    .special-report__masthead-inner,
+    .special-report__layout {
+      padding-right: 1rem;
+      padding-left: 1rem;
+    }
+  }
+</style>

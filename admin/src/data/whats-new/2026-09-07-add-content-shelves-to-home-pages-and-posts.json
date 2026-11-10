@@ -1,0 +1,13 @@
+{
+  "date": "2026-09-07",
+  "kind": "new",
+  "title": "Add content shelves to Home, pages and Posts",
+  "body": "Content shelves show a set of stories or videos on Home, pages and Posts. You can choose the shelf layout and the content it shows.",
+  "prs": [
+    1608,
+    1609,
+    1573,
+    1299
+  ],
+  "order": -2
+}

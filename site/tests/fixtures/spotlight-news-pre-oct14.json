@@ -1,0 +1,97 @@
+{
+  "source": "nj-spotlight-news-rss",
+  "checkedAt": "2026-06-29T19:51:36.757Z",
+  "request": {
+    "url": "https://www.njspotlightnews.org/feed/"
+  },
+  "cards": [
+    {
+      "source": "nj-spotlight-news-rss",
+      "title": "Op-Ed: Cutting spending on homelessness would cost NJ a fortune",
+      "href": "https://www.njspotlightnews.org/2026/06/op-ed-cutting-spending-on-homelessness-would-cost-nj-a-fortune/",
+      "category": "Social Issues",
+      "topic": "Social Issues",
+      "topicSlug": "social-issues",
+      "publishedAt": "Mon, 29 Jun 2026 04:15:53 +0000",
+      "dateLabel": "Jun 29, 2026",
+      "image": "/brand/spotlight/social-issues.jpg"
+    },
+    {
+      "source": "nj-spotlight-news-rss",
+      "title": "Driver charged in Delaney Hall crash blamed protesters, police say",
+      "href": "https://www.njspotlightnews.org/2026/06/driver-charged-in-delaney-hall-crash-blamed-protesters-police-say/",
+      "category": "Immigration",
+      "topic": "Immigration",
+      "topicSlug": "immigration",
+      "publishedAt": "Mon, 29 Jun 2026 04:12:16 +0000",
+      "dateLabel": "Jun 29, 2026",
+      "image": "/brand/spotlight/immigration.jpg"
+    },
+    {
+      "source": "nj-spotlight-news-rss",
+      "title": "NJ has crucial choices on data centers, environmentalist says",
+      "href": "https://www.njspotlightnews.org/2026/06/nj-has-crucial-choices-on-data-centers-environmentalist-says/",
+      "category": "Business",
+      "topic": "Business",
+      "topicSlug": "business",
+      "publishedAt": "Mon, 29 Jun 2026 04:10:15 +0000",
+      "dateLabel": "Jun 29, 2026",
+      "image": "/brand/spotlight/business.jpg"
+    },
+    {
+      "source": "nj-spotlight-news-rss",
+      "title": "Here’s how much federal funding NJ lawmakers secured for local, state projects",
+      "href": "https://www.njspotlightnews.org/2026/06/heres-how-much-federal-funding-nj-lawmakers-secured-for-local-state-projects/",
+      "category": "Energy & Environment",
+      "topic": "Energy & Environment",
+      "topicSlug": "energy-environment",
+      "publishedAt": "Mon, 29 Jun 2026 04:09:09 +0000",
+      "dateLabel": "Jun 29, 2026",
+      "image": "/brand/spotlight/energy-environment.jpg"
+    },
+    {
+      "source": "nj-spotlight-news-rss",
+      "title": "Democrats ready NJ’s largest-ever budget for final votes",
+      "href": "https://www.njspotlightnews.org/2026/06/democrats-ready-njs-largest-ever-budget-for-final-votes/",
+      "category": "Budget",
+      "topic": "Budget",
+      "topicSlug": "budget",
+      "publishedAt": "Mon, 29 Jun 2026 04:08:12 +0000",
+      "dateLabel": "Jun 29, 2026",
+      "image": "/brand/spotlight/budget.jpg"
+    },
+    {
+      "source": "nj-spotlight-news-rss",
+      "title": "NJ Spotlight News: June 26, 2026",
+      "href": "https://www.njspotlightnews.org/video/nj-spotlight-news-june-26-2026/",
+      "category": "Watch",
+      "topic": "Watch",
+      "topicSlug": "watch",
+      "publishedAt": "Fri, 26 Jun 2026 22:30:04 +0000",
+      "dateLabel": "Jun 26, 2026",
+      "image": "/brand/spotlight/watch.jpg"
+    },
+    {
+      "source": "nj-spotlight-news-rss",
+      "title": "Bipartisan housing effort in limbo after Trump sinks popular bill",
+      "href": "https://www.njspotlightnews.org/2026/06/bipartisan-housing-effort-in-limbo-after-trump-sinks-popular-bill/",
+      "category": "Business",
+      "topic": "Business",
+      "topicSlug": "business",
+      "publishedAt": "Fri, 26 Jun 2026 04:05:02 +0000",
+      "dateLabel": "Jun 26, 2026",
+      "image": "/brand/spotlight/business.jpg"
+    },
+    {
+      "source": "nj-spotlight-news-rss",
+      "title": "NJ Spotlight News: June 25, 2026",
+      "href": "https://www.njspotlightnews.org/video/nj-spotlight-news-june-25-2026/",
+      "category": "Watch",
+      "topic": "Watch",
+      "topicSlug": "watch",
+      "publishedAt": "Thu, 25 Jun 2026 22:30:43 +0000",
+      "dateLabel": "Jun 25, 2026",
+      "image": "/brand/spotlight/watch.jpg"
+    }
+  ]
+}

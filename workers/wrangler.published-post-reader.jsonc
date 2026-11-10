@@ -1,0 +1,10 @@
+{
+  "$schema": "../node_modules/wrangler/config-schema.json",
+  // Source only. Private binding relay; no route, public alias or credential.
+  "name": "njpbs-shadow-published-posts-reader",
+  "main": "./src/published-post-reader-worker.ts",
+  "compatibility_date": "2026-10-07",
+  "workers_dev": false,
+  "preview_urls": false,
+  "vars": { "PUBLISHED_POST_FUNCTION_URL": "" }
+}

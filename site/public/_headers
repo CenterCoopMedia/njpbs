@@ -1,0 +1,49 @@
+# Security-header baseline and report-only CSP for njpbs.org.
+#
+# Source of truth: docs/security-headers-policy.md. Refs #253.
+#
+# Astro copies this file into the build output for static asset responses.
+# Worker responses must apply the same security-header contract.
+# Report-only CSP records violations without blocking requests. Configure
+# collection and review observed script hosts before enabling enforcement.
+#
+# Meaning search uses a same-origin module worker and WASM runtime. Only public
+# pinned model files connect to Hugging Face and its observed weight redirect.
+# Queries and passage text are encoded locally. Third-party scripts stay limited
+# to the named PBS, Cloudflare, Google, Mailchimp and Wisepops hosts below.
+#
+/_publication.json
+  Access-Control-Allow-Origin: https://admin.njpbs.org
+
+/_content-status.json
+  Access-Control-Allow-Origin: https://admin.njpbs.org
+
+/_home-sources.json
+  Access-Control-Allow-Origin: https://admin.njpbs.org
+
+/_schedule-sources.json
+  Access-Control-Allow-Origin: https://admin.njpbs.org
+  Cache-Control: no-store
+
+# A Post URL can change from missing to published, or back, in one generation.
+# Apply this to the requested path, including the shared 404.html fallback.
+/posts/*
+  Cache-Control: no-store
+
+# Protected previews must not be cached or indexed.
+/resources/nj-politics/*
+  Cache-Control: private, no-store
+  X-Robots-Tag: noindex, nofollow, noarchive
+  Referrer-Policy: no-referrer
+
+/*
+  X-Content-Type-Options: nosniff
+  Referrer-Policy: strict-origin-when-cross-origin
+  # Bare max-age on purpose. Do not add includeSubDomains or preload until every
+  # *.njpbs.org host (watch.njpbs.org is PBS-run) is confirmed HTTPS-only, or it
+  # forces HTTPS on all of them, not just the apex. See the HSTS row in
+  # docs/security-headers-policy.md.
+  Strict-Transport-Security: max-age=31536000
+  X-Frame-Options: SAMEORIGIN
+  Permissions-Policy: geolocation=(self "https://player.pbs.org"), encrypted-media=(self "https://player.pbs.org" "https://www.youtube-nocookie.com" "https://www.youtube.com" "https://player.vimeo.com" "https://www.facebook.com"), camera=(), microphone=(), payment=(), usb=()
+  Content-Security-Policy-Report-Only: default-src 'self'; script-src 'self' 'wasm-unsafe-eval' 'sha256-eXKMS8gR/WCZpNe9ah+6h86pPn7rAz4PSKuJbosPg+s=' https://jaws-prod.cdn.pbs.org https://public.flourish.studio https://challenges.cloudflare.com https://www.googletagmanager.com https://chimpstatic.com https://cdn.wisepops.com https://app.getwisp.co https://wisepops.net https://cdn.wisepops.net; style-src 'self' 'unsafe-inline'; img-src 'self' data: https://public.flourish.studio https://image.pbs.org https://media.njpbs.org https://*.google-analytics.com https://www.googletagmanager.com https://cdn.wisepops.com https://tracking.wisepops.com https://dx4nr741tfc02.cloudfront.net https://wisp-production-storage.s3.amazonaws.com https://cdn.wisepops.net https://assets.wisepops.net; media-src 'self' https://media.njpbs.org; font-src 'self' https://media.njpbs.org; frame-src https://flo.uri.sh https://datawrapper.dwcdn.net https://interactives.apelections.org https://player.pbs.org https://www.youtube-nocookie.com https://www.youtube.com https://player.vimeo.com https://www.tiktok.com https://www.instagram.com https://www.facebook.com https://challenges.cloudflare.com https://notifications.wisepops.com https://wisepops.net; worker-src 'self'; connect-src 'self' https://huggingface.co https://us.aws.cdn.hf.co https://challenges.cloudflare.com https://report.njpbs.org https://intake.njpbs.org https://uploads.example.org https://*.google-analytics.com https://*.analytics.google.com https://www.googletagmanager.com https://activity.wisepops.com https://tracking.wisepops.com https://app.getwisp.co https://wisepops.net; frame-ancestors 'self'; base-uri 'self'; form-action 'self'; object-src 'none'

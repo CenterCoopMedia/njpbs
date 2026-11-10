@@ -1,0 +1,23 @@
+---
+import type { RecordCardPayload } from "../../lib/record-card-resolution";
+interface Props { card: RecordCardPayload; headingLevel: number }
+const { card, headingLevel } = Astro.props;
+const Heading = `h${Math.max(2, Math.min(6, headingLevel))}` as "h2" | "h3" | "h4" | "h5" | "h6";
+const event = card.kind === "event" ? card.event : null;
+const compact = card.variant === "compact";
+const date = event ? new Intl.DateTimeFormat("en-US", { dateStyle: "medium", timeStyle: "short", timeZone: "America/New_York" }).format(new Date(event.startsAt)) : "";
+---
+{event ? <article class:list={["record-card", "record-card--event", `record-card--${card.variant ?? "card"}`]}>
+  <a href={event.url}>
+    {!compact && event.image ? <img src={event.image.url} width={event.image.width} height={event.image.height} alt={event.imageAlt} loading="lazy" decoding="async" /> : null}
+    <Heading>{event.title}</Heading>
+  </a>
+  {!compact ? <p><time datetime={event.startsAt}>{date}</time>{event.location ? ` · ${event.location}` : ""}</p> : null}
+</article> : card.kind === "event" ? <a href={card.href}>{card.title}</a> : null}
+<style>
+  .record-card--event img { display: block; width: 100%; height: auto; object-fit: cover; }
+  .record-card--event a { display: block; min-height: 44px; }
+  .record-card--event p { margin-block: .5rem 0; }
+  .record-card--event.record-card--compact { padding: .75rem 1rem; }
+  .record-card--event.record-card--compact a { display: flex; align-items: center; }
+</style>

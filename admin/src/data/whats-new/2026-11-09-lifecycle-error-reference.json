@@ -1,0 +1,8 @@
+{
+  "date": "2026-11-09",
+  "kind": "improved",
+  "title": "See simpler status-change errors",
+  "body": "Unexpected errors when changing a record's status or restoring media show a short message instead of internal details.",
+  "prs": [],
+  "order": 1794255394000
+}

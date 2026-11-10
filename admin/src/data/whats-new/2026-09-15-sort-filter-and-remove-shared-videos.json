@@ -1,0 +1,10 @@
+{
+  "date": "2026-09-15",
+  "kind": "improved",
+  "title": "Sort, filter and remove shared videos",
+  "body": "The Videos tab has clearer filters and sorting, shows who added each video, and lets you remove a video safely. A removal that was interrupted finishes when you try again.",
+  "prs": [
+    1853
+  ],
+  "order": -2
+}

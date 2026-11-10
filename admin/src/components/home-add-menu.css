@@ -1,0 +1,10 @@
+.home-add-toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); padding-block: var(--space-2); }
+.home-add-toolbar .ui-menu-button.button .button-compact-label {
+  position: static;
+  width: auto;
+  height: auto;
+  overflow: visible;
+  clip-path: none;
+  white-space: normal;
+}
+.home-add-toolbar > p { flex-basis: 100%; margin: 0; }

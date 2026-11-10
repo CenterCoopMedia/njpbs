@@ -1,0 +1,10 @@
+{
+  "date": "2026-08-14",
+  "kind": "improved",
+  "title": "Edit in a rebuilt editor screen",
+  "body": "The editor screen has a new layout for fields, blocks and actions. The main editing tasks are now easier to find.",
+  "prs": [
+    939
+  ],
+  "order": -2
+}

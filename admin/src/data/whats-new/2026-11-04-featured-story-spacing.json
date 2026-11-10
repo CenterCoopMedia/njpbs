@@ -1,0 +1,8 @@
+{
+  "date": "2026-11-04",
+  "kind": "fixed",
+  "title": "Featured story spacing",
+  "body": "The featured story on the public homepage has the same text inset as the Latest stories cards. Labels and story text now sit clear of the image edge on phones and larger screens.",
+  "prs": [],
+  "order": 1793809200000
+}

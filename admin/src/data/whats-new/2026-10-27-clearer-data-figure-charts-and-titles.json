@@ -1,0 +1,8 @@
+{
+  "date": "2026-10-27",
+  "kind": "fixed",
+  "title": "Clearer data figure charts and titles",
+  "body": "Data figures show wages, prices and counts against zero, with units on the axis and year labels for annual series. End labels stay inside the chart. After approved values load, editor cards and actions show the dataset title.",
+  "prs": [],
+  "order": -1
+}

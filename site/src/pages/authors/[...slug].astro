@@ -1,0 +1,97 @@
+---
+// `/authors/{slug}/` — one author page, plus a stub at every slug they retired.
+//
+// The listing is built from the same `cmsPosts` collection the Post routes use,
+// grouped by the stable `authorId` frozen into each published byline. Withdrawal
+// again needs no code: the loader reads only snapshots that exist, so an
+// unpublished profile has no entry, no route, while its slug stays reserved so
+// republishing restores the same URL.
+import { getCollection, type CollectionEntry } from "astro:content";
+import PublicSiteLayout from "../../layouts/PublicSiteLayout.astro";
+import AuthorPage from "../../components/AuthorPage.astro";
+import PermanentRedirect from "../../components/PermanentRedirect.astro";
+import { cmsRoutedContentEnabled } from "../../lib/build-target";
+import { authorPageContent } from "../../lib/author-pages";
+import { jsonLdHtml, profilePageJsonLd } from "../../lib/structured-data";
+import { authorPublicPath } from "../../../../packages/content-core/src/author-profiles";
+import { renderAuthors } from "../../lib/cms-render-context";
+
+type Props = {
+  entry: CollectionEntry<"cmsAuthorsPublic">;
+  redirectFrom?: string;
+};
+
+export async function getStaticPaths() {
+  // Open-set routes require either an ordinary credentialed review build or the
+  // validated v3 bundle from the canonical production reservation cutoff.
+  if (!cmsRoutedContentEnabled(process.env)) return [];
+  const authors = await getCollection("cmsAuthorsPublic");
+  return authors.flatMap((entry) => [
+    {
+      params: { slug: entry.data.slug },
+      props: { entry } satisfies Props,
+    },
+    ...entry.data.previousSlugs.map((previous) => ({
+      params: { slug: previous },
+      props: { entry, redirectFrom: previous } satisfies Props,
+    })),
+  ]);
+}
+
+const context = Astro.locals.cmsRender;
+const supplied = Astro.props as Props;
+const entry = context ? renderAuthors(context).find(author => author.data.path === context.content.target.pagePath) : supplied.entry;
+if (!entry) throw new Error("Frozen author page input is unavailable");
+const redirectFrom = context ? context.staticRedirect?.from : supplied.redirectFrom;
+const author = entry.data;
+const canonicalPath = authorPublicPath(author.slug);
+
+// The listing is only built for the live page. A stub redirects instantly and
+// must not spend a build reading and rendering the whole archive twice.
+const listings = redirectFrom
+  ? []
+  : authorPageContent(author, context ? context.content.posts : (await getCollection("cmsPosts")).map((post) => post.data))
+      .listings;
+
+// The page description is what a search result and a social card show. The job
+// title is the honest one-line answer when there is one; otherwise it says what
+// the page is rather than inventing a biography.
+const description = author.jobTitle
+  ? `${author.displayName}, ${author.jobTitle} at NJ PBS.`
+  : `Work by ${author.displayName} at NJ PBS.`;
+
+const profileJsonLd = redirectFrom
+  ? null
+  : profilePageJsonLd({
+      displayName: author.displayName,
+      jobTitle: author.jobTitle,
+      bio: author.bio,
+      canonicalPath,
+      imageUrl: author.photo?.url ?? null,
+      sameAs: author.links.map((link) => link.url),
+      site: Astro.site!,
+    });
+---
+
+<PublicSiteLayout
+  title={author.displayName}
+  description={description}
+  socialImage={author.photo?.url}
+  preview={false}
+  canonicalPath={canonicalPath}
+  noindex={Boolean(redirectFrom)}
+  metaRefreshTo={redirectFrom ? canonicalPath : undefined}
+>
+  {profileJsonLd && (
+    <script
+      type="application/ld+json"
+      is:inline
+      set:html={jsonLdHtml(profileJsonLd)}
+    />
+  )}
+  {redirectFrom ? (
+    <PermanentRedirect to={canonicalPath} label={author.displayName} />
+  ) : (
+    <AuthorPage author={author} listings={listings} />
+  )}
+</PublicSiteLayout>

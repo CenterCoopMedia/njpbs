@@ -1,0 +1,142 @@
+{
+  "id": "support",
+  "template": "programLanding",
+  "version": 7,
+  "contentVersion": 7,
+  "status": "published",
+  "publiclyVisible": true,
+  "publishAt": "2026-10-06T10:00:00.000Z",
+  "title": "Support example",
+  "description": "Synthetic support page",
+  "blocks": [
+    {
+      "id": "fixture-hero-actions",
+      "type": "cta_row",
+      "visible": true,
+      "order": 0,
+      "section": "hero-actions",
+      "data": {
+        "ctas": [
+          {
+            "label": "Support example",
+            "href": "https://example.org/support"
+          }
+        ]
+      }
+    },
+    {
+      "id": "fixture-transition-notice",
+      "type": "prose",
+      "visible": true,
+      "order": 1,
+      "section": "transition-notice",
+      "data": {
+        "content": {
+          "type": "doc",
+          "content": [
+            {
+              "type": "paragraph",
+              "content": [
+                {
+                  "type": "text",
+                  "text": "Example support information."
+                }
+              ]
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "fixture-transition-actions",
+      "type": "cta_row",
+      "visible": true,
+      "order": 2,
+      "section": "transition-actions",
+      "data": {
+        "ctas": [
+          {
+            "label": "Support example",
+            "href": "https://example.org/support"
+          }
+        ]
+      }
+    },
+    {
+      "id": "fixture-body-copy",
+      "type": "prose",
+      "visible": true,
+      "order": 3,
+      "section": "body-copy",
+      "data": {
+        "content": {
+          "type": "doc",
+          "content": [
+            {
+              "type": "paragraph",
+              "content": [
+                {
+                  "type": "text",
+                  "text": "Example support information."
+                }
+              ]
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "fixture-service-destinations",
+      "type": "card_grid",
+      "visible": true,
+      "order": 4,
+      "section": "service-destinations",
+      "data": {
+        "cards": [
+          {
+            "itemId": "fixture-card-0",
+            "label": "Example",
+            "title": "Example destination",
+            "body": {
+              "type": "doc",
+              "content": [
+                {
+                  "type": "paragraph",
+                  "content": [
+                    {
+                      "type": "text",
+                      "text": "Example support option."
+                    }
+                  ]
+                }
+              ]
+            },
+            "href": "https://example.org/support"
+          }
+        ]
+      }
+    },
+    {
+      "id": "fixture-daf",
+      "type": "prose",
+      "visible": true,
+      "order": 5,
+      "data": {
+        "content": {
+          "type": "doc",
+          "content": [
+            {
+              "type": "paragraph",
+              "content": [
+                {
+                  "type": "text",
+                  "text": "Example support information."
+                }
+              ]
+            }
+          ]
+        }
+      }
+    }
+  ]
+}

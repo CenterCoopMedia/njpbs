@@ -1,0 +1,42 @@
+{
+  "$schema": "../node_modules/wrangler/config-schema.json",
+  "name": "njpbs-cms-api",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-08-13",
+  "compatibility_flags": ["nodejs_compat", "enable_request_signal"],
+  "version_metadata": { "binding": "CMS_API_WORKER_VERSION" },
+  "services": [{ "binding": "PREVIEW_RENDERER", "service": "njpbs-cms-preview-renderer" }],
+  "observability": {
+    "enabled": true,
+    "head_sampling_rate": 1
+  },
+  "vars": {
+    "LIVE_PRODUCTION_STREAM_ENABLED": "true",
+    "CMS_BYLINE_EDGE_ENABLED": "true",
+    "ALLOW_LOCAL_ORIGINS": "false",
+    "FIREBASE_PROJECT_ID": "njpbs-site",
+    "FUNCTIONS_ORIGIN": "https://us-central1-njpbs-site.cloudfunctions.net"
+  },
+  "durable_objects": {
+    "bindings": [
+      { "name": "LIVE_PRODUCTION_RELAYS", "class_name": "LiveProductionRelay" },
+      {
+        "name": "RATE_LIMITERS",
+        "class_name": "CmsRateLimiter"
+      }
+    ]
+  },
+  "migrations": [
+    {
+      "tag": "v1",
+      "new_sqlite_classes": ["CmsRateLimiter"]
+    },
+    { "tag": "v2-live-production-relay", "new_sqlite_classes": ["LiveProductionRelay"] }
+  ],
+  "routes": [
+    {
+      "pattern": "api.example.org",
+      "custom_domain": true
+    }
+  ]
+}

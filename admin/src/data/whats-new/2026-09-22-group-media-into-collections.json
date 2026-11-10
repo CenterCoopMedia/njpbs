@@ -1,0 +1,11 @@
+{
+  "date": "2026-09-22",
+  "kind": "new",
+  "title": "Group media into collections",
+  "body": "Collections hold sets of media items. Make a private collection for yourself or a shared collection for the team, and give it a color. Open the Collections tab to see them.",
+  "prs": [
+    2147,
+    2246
+  ],
+  "order": 0
+}

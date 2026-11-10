@@ -1,0 +1,8 @@
+{
+  "date": "2026-11-09",
+  "order": 1794258139493,
+  "kind": "fixed",
+  "title": "Clearer interrupted transcript status",
+  "body": "If a paid transcript result is missing or cannot be verified, its status explains what an administrator needs to check. Boardwalk keeps the original request and does not submit another paid transcription automatically.",
+  "prs": []
+}

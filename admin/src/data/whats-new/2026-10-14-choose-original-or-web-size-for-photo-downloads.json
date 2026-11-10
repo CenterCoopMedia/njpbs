@@ -1,0 +1,11 @@
+{
+  "date": "2026-10-14",
+  "kind": "new",
+  "title": "Choose original or web size for photo downloads",
+  "body": "When you download a photo, you can pick the original file or a smaller web copy. Downloads save as files with the original file name.",
+  "prs": [
+    3414,
+    2663
+  ],
+  "order": -3
+}

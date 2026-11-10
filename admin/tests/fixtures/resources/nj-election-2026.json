@@ -1,0 +1,240 @@
+{
+  "schemaVersion": 1,
+  "electionDate": "2026-11-03",
+  "checkedAt": "2026-10-04",
+  "note": "Synthetic roster",
+  "sources": [
+    {
+      "id": "official-list",
+      "jurisdiction": "Statewide",
+      "title": "Example roster",
+      "url": "https://example.org/roster.pdf",
+      "sourceDate": "2026-09-01",
+      "checkedAt": "2026-10-04",
+      "status": "verified-roster",
+      "notes": ""
+    }
+  ],
+  "candidates": [
+    {
+      "id": "candidate-one",
+      "name": "Example Candidate",
+      "office": "U.S. Senate",
+      "level": "federal",
+      "county": null,
+      "counties": [
+        "Atlantic",
+        "Bergen",
+        "Burlington",
+        "Camden",
+        "Cape May",
+        "Cumberland",
+        "Essex",
+        "Gloucester",
+        "Hudson",
+        "Hunterdon",
+        "Mercer",
+        "Middlesex",
+        "Monmouth",
+        "Morris",
+        "Ocean",
+        "Passaic",
+        "Salem",
+        "Somerset",
+        "Sussex",
+        "Union",
+        "Warren"
+      ],
+      "municipality": null,
+      "district": "Statewide",
+      "party": "Independent",
+      "ballotLabel": null,
+      "ballotLabelsByCounty": {
+        "Bergen": "Local ballot label"
+      },
+      "term": "6 years",
+      "seats": "1",
+      "electionDate": "2026-11-03",
+      "sourceId": "official-list",
+      "sourceUrl": "https://example.org/roster.pdf#page=1"
+    }
+  ],
+  "coverage": [
+    {
+      "jurisdiction": "Atlantic",
+      "status": "partial",
+      "notes": "Synthetic coverage",
+      "sourceIds": [
+        "official-list"
+      ]
+    },
+    {
+      "jurisdiction": "Bergen",
+      "status": "partial",
+      "notes": "Synthetic coverage",
+      "sourceIds": [
+        "official-list"
+      ]
+    },
+    {
+      "jurisdiction": "Burlington",
+      "status": "partial",
+      "notes": "Synthetic coverage",
+      "sourceIds": [
+        "official-list"
+      ]
+    },
+    {
+      "jurisdiction": "Camden",
+      "status": "partial",
+      "notes": "Synthetic coverage",
+      "sourceIds": [
+        "official-list"
+      ]
+    },
+    {
+      "jurisdiction": "Cape May",
+      "status": "partial",
+      "notes": "Synthetic coverage",
+      "sourceIds": [
+        "official-list"
+      ]
+    },
+    {
+      "jurisdiction": "Cumberland",
+      "status": "partial",
+      "notes": "Synthetic coverage",
+      "sourceIds": [
+        "official-list"
+      ]
+    },
+    {
+      "jurisdiction": "Essex",
+      "status": "partial",
+      "notes": "Synthetic coverage",
+      "sourceIds": [
+        "official-list"
+      ]
+    },
+    {
+      "jurisdiction": "Gloucester",
+      "status": "partial",
+      "notes": "Synthetic coverage",
+      "sourceIds": [
+        "official-list"
+      ]
+    },
+    {
+      "jurisdiction": "Hudson",
+      "status": "partial",
+      "notes": "Synthetic coverage",
+      "sourceIds": [
+        "official-list"
+      ]
+    },
+    {
+      "jurisdiction": "Hunterdon",
+      "status": "partial",
+      "notes": "Synthetic coverage",
+      "sourceIds": [
+        "official-list"
+      ]
+    },
+    {
+      "jurisdiction": "Mercer",
+      "status": "partial",
+      "notes": "Synthetic coverage",
+      "sourceIds": [
+        "official-list"
+      ]
+    },
+    {
+      "jurisdiction": "Middlesex",
+      "status": "partial",
+      "notes": "Synthetic coverage",
+      "sourceIds": [
+        "official-list"
+      ]
+    },
+    {
+      "jurisdiction": "Monmouth",
+      "status": "partial",
+      "notes": "Synthetic coverage",
+      "sourceIds": [
+        "official-list"
+      ]
+    },
+    {
+      "jurisdiction": "Morris",
+      "status": "partial",
+      "notes": "Synthetic coverage",
+      "sourceIds": [
+        "official-list"
+      ]
+    },
+    {
+      "jurisdiction": "Ocean",
+      "status": "partial",
+      "notes": "Synthetic coverage",
+      "sourceIds": [
+        "official-list"
+      ]
+    },
+    {
+      "jurisdiction": "Passaic",
+      "status": "partial",
+      "notes": "Synthetic coverage",
+      "sourceIds": [
+        "official-list"
+      ]
+    },
+    {
+      "jurisdiction": "Salem",
+      "status": "partial",
+      "notes": "Synthetic coverage",
+      "sourceIds": [
+        "official-list"
+      ]
+    },
+    {
+      "jurisdiction": "Somerset",
+      "status": "partial",
+      "notes": "Synthetic coverage",
+      "sourceIds": [
+        "official-list"
+      ]
+    },
+    {
+      "jurisdiction": "Sussex",
+      "status": "partial",
+      "notes": "Synthetic coverage",
+      "sourceIds": [
+        "official-list"
+      ]
+    },
+    {
+      "jurisdiction": "Union",
+      "status": "partial",
+      "notes": "Synthetic coverage",
+      "sourceIds": [
+        "official-list"
+      ]
+    },
+    {
+      "jurisdiction": "Warren",
+      "status": "partial",
+      "notes": "Synthetic coverage",
+      "sourceIds": [
+        "official-list"
+      ]
+    },
+    {
+      "jurisdiction": "Statewide",
+      "status": "partial",
+      "notes": "Synthetic coverage",
+      "sourceIds": [
+        "official-list"
+      ]
+    }
+  ]
+}

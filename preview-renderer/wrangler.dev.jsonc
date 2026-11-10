@@ -1,0 +1,29 @@
+{
+  "name": "template-dev-cms-preview-renderer",
+  "main": "worker.ts",
+  "compatibility_date": "2026-09-09",
+  "compatibility_flags": ["nodejs_compat", "global_fetch_strictly_public"],
+  "workers_dev": false,
+  "preview_urls": false,
+  "secrets": { "required": ["FIREBASE_SERVICE_ACCOUNT", "R2_PREVIEW_CREDENTIAL", "CMS_DEV_ACCESS_CLIENT_ID", "CMS_DEV_ACCESS_CLIENT_SECRET"] },
+  "vars": {
+    "CLOUDFLARE_ACCOUNT_ID": "",
+    "PREVIEW_RENDERER_ENABLED": "false",
+    "PREVIEW_RENDERER_SHA": "",
+    "PREVIEW_SERIALIZER_ID": "cloudflare-preview",
+    "CMS_DEPLOYMENT_ENVIRONMENT": "development",
+    "FIREBASE_PROJECT_ID": "njpbs-site-dev"
+  },
+  "triggers": { "crons": ["* * * * *"] },
+  "containers": [{
+    "name": "template-dev-cms-preview-renderer",
+    "class_name": "PreviewRenderer",
+    "image": "./Dockerfile",
+    "image_build_context": "./build",
+    "instance_type": "standard-2",
+    "max_instances": 1
+  }],
+  "durable_objects": { "bindings": [{ "name": "RENDERER", "class_name": "PreviewRenderer" }] },
+  "migrations": [{ "tag": "v1", "new_sqlite_classes": ["PreviewRenderer"] }],
+  "observability": { "enabled": true, "head_sampling_rate": 1 }
+}

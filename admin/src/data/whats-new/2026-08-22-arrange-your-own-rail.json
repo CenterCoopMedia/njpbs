@@ -1,0 +1,13 @@
+{
+  "date": "2026-08-22",
+  "kind": "new",
+  "title": "Arrange your own rail",
+  "body": "Put the destinations in your rail in the order you want and hide the ones you seldom use. Back returns you to where you were, and screens open faster.",
+  "prs": [
+    1121,
+    1115,
+    1108,
+    1135
+  ],
+  "order": 0
+}

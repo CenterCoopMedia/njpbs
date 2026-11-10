@@ -1,0 +1,1222 @@
+---
+// Branded public shell for the NJ PBS site — dark, cinematic,
+// streaming-platform register (Apple TV+ / Hulu / Netflix), rooted in New
+// Jersey. In preview mode it is noindex; in public mode it renders the root site.
+//
+// Header and footer columns come from the published site navigation setting, or
+// from its committed seed. The FCC block, the legal row and the utility actions
+// stay in code because they carry compliance and account obligations. The header
+// newsletter action comes from the published public-site chrome setting, or
+// from its source default.
+//
+// Brand marks are root-relative files under public/brand/, emitted verbatim
+// rather than inlined into shared chunks. A build excluding them must strip
+// the files explicitly; PUBLIC_ONLY does not filter the public directory.
+import Base from "./Base.astro";
+import { deferYoutubeEmbeds } from "../lib/deferred-youtube-html";
+import PublicElectionBanner from "../components/PublicElectionBanner.astro";
+import BoardwalkEdit from "../components/BoardwalkEdit.astro";
+import ApEmbedControls from "../components/ApEmbedControls.astro";
+import DeferredYoutubeEmbeds from "../components/DeferredYoutubeEmbeds.astro";
+import type { BoardwalkEditTarget } from "../../../packages/content-core/src/boardwalk-edit";
+import { PUBLIC_PAGES } from "../../../packages/content-core/src/public-pages";
+import {
+  breadcrumbJsonLd,
+  jsonLdHtml,
+  organizationJsonLd,
+} from "../lib/structured-data";
+import { getCollection, getEntry } from "astro:content";
+import { donateUrl } from "../data/launch-fallback";
+import { resolveSiteNavigation } from "../../../packages/content-core/src/site-navigation";
+import { PUBLIC_SITE_CHROME_SETTINGS_ID } from "../../../packages/content-core/src/cms-settings";
+import { resolvePublicSiteChromeNewsletter } from "../../../packages/content-core/src/public-site-chrome";
+// Shared streaming design system (rails, cards, buttons, bands, prose). Imported
+// here so every page rendered through this shell — homepage and inner pages —
+// draws from one vocabulary instead of each redefining it.
+import "../styles/public-site.css";
+import "../../../packages/content-core/src/custom-shelf.css";
+import "../../../packages/content-core/src/town-lookup.css";
+import "../../../packages/content-core/src/data-table.css";
+import "../../../packages/content-core/src/data-figure.css";
+import "../../../packages/content-core/src/election-results.css";
+import "../../../packages/content-core/src/county-comparison.css";
+// Public "report a problem" dialog. Server-rendered on non-Kids routes;
+// submission is gated on PUBLIC_REPORT_ENDPOINT (see the island).
+import ReportProblem from "../islands/ReportProblem.astro";
+import {
+  ANALYTICS_DEFAULT_SNIPPET,
+  MAILCHIMP_CONSENT_SNIPPET,
+  WISEPOPS_CONSENT_SNIPPET,
+} from "../lib/analytics-consent-head";
+import { isChildDirectedPage } from "../lib/analytics-page-policy";
+import { hasVideoPlayer } from "../../../packages/content-core/src/video-page";
+import AnalyticsConsent from "../components/AnalyticsConsent.astro";
+import {
+  isGa4MeasurementId,
+} from "../lib/analytics-consent";
+// Boot-time console capture for the report dialog. Emitted as an inline script in
+// the document head (via Base's "head" slot) so it records console output from
+// the earliest page scripts — which run before the footer island mounts — and the
+// island's console-capture module then adopts this same buffer. Present exactly
+// where the report widget is (this shell), so preview and public match and the
+// wiki / coming-soon shells are untouched.
+import { EARLY_CONSOLE_CAPTURE_SNIPPET } from "../lib/console-capture-early";
+import { cmsRoutedContentEnabled } from "../lib/build-target";
+
+interface Props {
+  title: string;
+  description: string;
+  editTarget?: BoardwalkEditTarget;
+  seoTitle?: string;
+  seoDescription?: string;
+  socialTitle?: string;
+  socialDescription?: string;
+  socialImage?: string;
+  socialImageAlt?: string;
+  preview?: boolean;
+  canonicalPath?: string;
+  noindex?: boolean;
+  searchable?: boolean;
+  /** A themed Page supplies its own election identity instead of the sitewide band. */
+  hasNjDecidesPageHeading?: boolean;
+  /**
+   * Root-relative route this page should send a browser to immediately.
+   *
+   * Only for retired-slug stubs on static hosts without HTTP redirects. A
+   * renamed post or author keeps its old URL as a noindex page that
+   * canonicalizes to the new one and refreshes there. Never set on a real page.
+   */
+  metaRefreshTo?: string;
+  /** Locales this page has a published translation in. Forwarded to Base, which
+      turns them into hreflang alternates. Empty until the translation exists. */
+  translations?: readonly string[];
+  /** Turns analytics off for this page. Set when the page content plays a video. */
+  noAnalytics?: boolean;
+  /** Child-directed templates/metadata must suppress every site tracker. */
+  childDirected?: boolean;
+}
+interface LayoutLink {
+  href: string;
+  label: string;
+  external?: boolean;
+}
+
+const {
+  title,
+  description,
+  seoTitle,
+  seoDescription,
+  socialTitle,
+  socialDescription,
+  socialImage,
+  socialImageAlt,
+  preview = true,
+  canonicalPath,
+  noindex = true,
+  searchable = true,
+  hasNjDecidesPageHeading = false,
+  metaRefreshTo,
+  translations = [],
+  noAnalytics = false,
+  childDirected = false,
+  editTarget,
+} = Astro.props;
+const path = Astro.url.pathname;
+const builtinEditPage = PUBLIC_PAGES.find(page => page.path === (canonicalPath ?? path) ||
+  ("aliases" in page && page.aliases.some(alias => alias === (canonicalPath ?? path))));
+const resolvedEditTarget = editTarget ?? (builtinEditPage ? {
+  type: builtinEditPage.id === "home" ? "home" as const : "page" as const, id: builtinEditPage.id,
+} : undefined);
+const pathSegments = path.split("/").filter(Boolean);
+const isKidsRoute = isChildDirectedPage({ path, canonicalPath, childDirected,
+  pageId: resolvedEditTarget?.type === "page" ? resolvedEditTarget.id : undefined });
+// Set the shared policy before rendering child slots, including their picker.
+Astro.locals.readerTextSizeDisabled = isKidsRoute;
+const pageContent = await Astro.slots.render("default");
+const deferredPageContent = isKidsRoute ? pageContent : deferYoutubeEmbeds(pageContent);
+const isVideoRoute = pathSegments.at(-1) === "live" || hasVideoPlayer(pageContent);
+const isDevelopment = process.env.CMS_DEPLOYMENT_ENVIRONMENT === "development";
+const ga4MeasurementId = isDevelopment ? undefined : process.env.PUBLIC_GA4_MEASUREMENT_ID?.trim();
+const analyticsRequired =
+  !isDevelopment && (process.env.PUBLIC_GA4_REQUIRED === "1" || process.env.WORKERS_CI === "1");
+if (analyticsRequired && !isGa4MeasurementId(ga4MeasurementId)) {
+  throw new Error(
+    "PUBLIC_GA4_MEASUREMENT_ID must contain a GA4 G- measurement ID for this deployment.",
+  );
+}
+const analyticsEnabled =
+  !preview &&
+  !isKidsRoute &&
+  !isVideoRoute &&
+  !noAnalytics &&
+  isGa4MeasurementId(ga4MeasurementId);
+const mailchimpConnectedSiteEnabled = analyticsEnabled && !noindex;
+const wisepopsEnabled = analyticsEnabled && !noindex && !metaRefreshTo;
+const pageHref = (publicSlug: string) => `/${publicSlug}/`;
+const homeHref = "/";
+const donateHref = donateUrl;
+const searchHref = pageHref("search");
+const accountHref = pageHref("account");
+const isActive = (href: string) =>
+  href.startsWith("/") && (path === href || path === href.replace(/\/$/, ""));
+// Navigation links carry the resolver's opensInNewTab; only the fixed legal
+// links use this local rule.
+const opensInNewTab = (link: LayoutLink) =>
+  link.external === true && /^https?:\/\//i.test(link.href);
+
+// Structured data (issue #222), indexed public pages only: the Organization
+// entity on the homepage, a home-to-page breadcrumb trail everywhere else.
+// Preview renders are noindex, so they carry none. The breadcrumb
+// advertises the canonical URL, so an alias route (/donate/ canonicalizes to
+// /give/) never hands crawlers a trail that disagrees with its canonical tag.
+const structuredData = noindex
+  ? null
+  : path === "/"
+    ? organizationJsonLd(Astro.site!)
+    : breadcrumbJsonLd(title, canonicalPath ?? path, Astro.site!);
+
+const showPostsNav = cmsRoutedContentEnabled(process.env);
+
+// The compiled renderer passes its exact bundle content; a static build reads
+// the navigation collection. Either source is validated again by the resolver,
+// and an absent or invalid value renders the seed.
+const cmsRender = Astro.locals.cmsRender;
+const storedNavigation = cmsRender
+  ? cmsRender.content.settings.find((setting) => setting.settingId === "site-navigation")
+  : (await getEntry("cmsSiteNavigation", "site-navigation"))?.data;
+const publishedPages = cmsRender
+  ? cmsRender.content.kind === "private-preview" ? cmsRender.content.pages : cmsRender.content.navigationPages
+  : (await getCollection("cmsPages")).map((entry) => entry.data);
+const publishedPagePaths = new Map(publishedPages.map((page) => [page.pageId, page.path]));
+const publishedPaths = new Set(publishedPagePaths.values());
+const navigation = resolveSiteNavigation(
+  storedNavigation && "header" in storedNavigation
+    ? { header: storedNavigation.header, footer: storedNavigation.footer }
+    : undefined,
+  {
+    postsIndexEnabled: showPostsNav,
+    pagePath: (pageId) => publishedPagePaths.get(pageId),
+    hasPublishedPath: (candidate) => publishedPaths.has(candidate),
+  },
+);
+const primaryNav = navigation.header;
+
+// One resolved newsletter action feeds both header renderings. Kids pages keep
+// their code-owned exclusion whatever the setting says.
+const newsletter = resolvePublicSiteChromeNewsletter(
+  cmsRender
+    ? cmsRender.content.settings.find((setting) => setting.settingId === PUBLIC_SITE_CHROME_SETTINGS_ID)
+    : (await getEntry("cmsPublicSiteChrome", PUBLIC_SITE_CHROME_SETTINGS_ID))?.data,
+);
+const showNewsletter = !isKidsRoute && newsletter.enabled;
+const footerCols = navigation.footer;
+
+// FCC public inspection file — tied to the licenses (NJPBA), carried over unchanged.
+// Required: a direct homepage link to the online public file.
+const fccStations = [
+  { call: "WNJS", href: "https://publicfiles.fcc.gov/tv-profile/wnjs" },
+  { call: "WNJN", href: "https://publicfiles.fcc.gov/tv-profile/wnjn" },
+  { call: "WNJT", href: "https://publicfiles.fcc.gov/tv-profile/wnjt" },
+  { call: "WNJB", href: "https://publicfiles.fcc.gov/tv-profile/wnjb" },
+];
+
+// New Montclair-specific policy pages + carried-over legal links.
+const legalLinks: LayoutLink[] = [
+  { href: pageHref("meeting-notices"), label: "Meeting notices" },
+  { href: pageHref("closed-captioning"), label: "Closed captioning" },
+  { href: pageHref("accessibility"), label: "Accessibility" },
+  { href: pageHref("privacy"), label: "Privacy policy" },
+  // The sale and targeted-advertising opt-out has to be reachable in one click if
+  // NJDPA reaches the station, which turns on the unresolved state-agency question
+  // (#248). Reachable either way costs one link, so this anchors into the privacy
+  // page's choices section rather than waiting on that answer or on a preferences
+  // surface of its own.
+  { href: `${pageHref("privacy")}#your-privacy-choices`, label: "Your privacy choices" },
+  {
+    href: "https://www.nj.gov/treasury/njpba/assets/files/pdf/2026/FCCANNUALEEOREPORT2026.pdf",
+    label: "EEO report",
+    external: true,
+  },
+];
+---
+
+<Base
+  title={`${seoTitle ?? title} — NJ PBS${preview ? " preview" : ""}`}
+  description={seoDescription ?? description}
+  ogTitle={socialTitle}
+  ogDescription={socialDescription}
+  ogImage={socialImage}
+  ogImageAlt={socialImageAlt}
+  canonicalPath={canonicalPath}
+  noindex={noindex}
+  translations={translations}
+>
+  {/* Must run before every other page script, so it goes in the head via the
+      "head" slot rather than the body. Inline + classic (is:inline) so it is not
+      bundled into a deferred module that would run after the body scripts it is
+      meant to observe. */}
+  <script is:inline slot="head" set:html={EARLY_CONSOLE_CAPTURE_SNIPPET} />
+  {isKidsRoute && <meta slot="head" name="njpbs-child-directed" content="true" data-child-directed />}
+  {mailchimpConnectedSiteEnabled && (
+    <script id="mcjs" is:inline slot="head" set:html={MAILCHIMP_CONSENT_SNIPPET} />
+  )}
+  {analyticsEnabled && (
+    <script id="analytics-consent-default" is:inline slot="head" set:html={ANALYTICS_DEFAULT_SNIPPET} />
+  )}
+  {metaRefreshTo && (
+    <meta slot="head" http-equiv="refresh" content={`0; url=${metaRefreshTo}`} />
+  )}
+
+  <a class="skip" href="#main">Skip to content</a>
+
+  {structuredData && (
+    <script is:inline type="application/ld+json" set:html={jsonLdHtml(structuredData)} />
+  )}
+
+  {preview && (
+    <p class="preview-ribbon" role="note">
+      Private preview. The public site has not changed.
+    </p>
+  )}
+
+  {resolvedEditTarget && !pathSegments.includes("kids") && !metaRefreshTo && <BoardwalkEdit target={resolvedEditTarget} />}
+
+  <header class="site-head">
+    <div class="head-inner">
+      <a class="brand" href={homeHref} aria-label="NJ PBS home">
+        <img src="/brand/njpbs-horizontal-white.svg" alt="NJ PBS" width="146" height="40" />
+      </a>
+      <button
+        class="nav-toggle"
+        type="button"
+        aria-expanded="false"
+        aria-controls="primary-nav"
+        aria-label="Menu"
+      >
+        <span class="nav-toggle__bars" aria-hidden="true"></span>
+      </button>
+      <nav class="primary" id="primary-nav" aria-label="Primary">
+        <ul>
+          {
+            primaryNav.map((n) => (
+              <li>
+                <a
+                  href={n.href}
+                  class={isActive(n.href) ? "active" : ""}
+                  aria-current={isActive(n.href) ? "page" : undefined}
+                  {...(n.opensInNewTab ? { rel: "noopener", target: "_blank" } : {})}
+                >
+                  {n.label}
+                  {n.opensInNewTab && <span class="sr-only"> (opens in new tab)</span>}
+                </a>
+              </li>
+            ))
+          }
+          <li class="primary__util"><a href={searchHref} aria-current={isActive(searchHref) ? "page" : undefined}>Search</a></li>
+          {preview && <li class="primary__util"><a href={accountHref}>Sign in</a></li>}
+          {showNewsletter && (
+            <li class="primary__util">
+              <a
+                class="newsletter"
+                href={newsletter.href}
+                {...(newsletter.opensInNewTab ? { rel: "noopener", target: "_blank" } : {})}
+              >
+                {newsletter.label}
+                {newsletter.opensInNewTab && <span class="sr-only"> (opens in new tab)</span>}
+              </a>
+            </li>
+          )}
+        </ul>
+      </nav>
+      <div class="utility">
+        <a class="util-icon" href={searchHref} aria-current={isActive(searchHref) ? "page" : undefined}>Search</a>
+        {preview && <a class="util-icon" href={accountHref}>Sign in</a>}
+        {showNewsletter && (
+          <a
+            class="newsletter"
+            href={newsletter.href}
+            {...(newsletter.opensInNewTab ? { rel: "noopener", target: "_blank" } : {})}
+          >
+            {newsletter.label}
+            {newsletter.opensInNewTab && <span class="sr-only"> (opens in new tab)</span>}
+          </a>
+        )}
+        <a
+          class="donate"
+          href={donateHref}
+          rel="noopener"
+          target="_blank"
+        >
+          {/* The decorative heart keeps the donation action recognizable. */}
+          <svg
+            class="donate__heart"
+            viewBox="0 0 22 18"
+            aria-hidden="true"
+            focusable="false"
+          >
+            <path
+              fill="currentColor"
+              d="M21.765 5.812C21.765 2.596 19.169 0 15.977 0a5.77 5.77 0 0 0-4.597 2.276A5.77 5.77 0 0 0 6.784 0C3.592 0 .995 2.607.995 5.812c0 1.678.703 3.184 1.83 4.242l6.96 7.234s1.542 1.602 3.138 0l6.98-7.202a5.82 5.82 0 0 0 1.862-4.274"
+            />
+          </svg>
+          Donate
+          <span class="sr-only"> (opens in new tab)</span>
+        </a>
+      </div>
+    </div>
+  </header>
+
+  <script is:inline>
+    (function () {
+      var toggle = document.querySelector(".nav-toggle");
+      var nav = document.getElementById("primary-nav");
+      if (!toggle || !nav) return;
+      function close() {
+        toggle.setAttribute("aria-expanded", "false");
+        nav.removeAttribute("data-open");
+      }
+      function open() {
+        toggle.setAttribute("aria-expanded", "true");
+        nav.setAttribute("data-open", "");
+      }
+      toggle.addEventListener("click", function () {
+        if (toggle.getAttribute("aria-expanded") === "true") close();
+        else open();
+      });
+      document.addEventListener("keydown", function (e) {
+        if (e.key === "Escape" && toggle.getAttribute("aria-expanded") === "true") {
+          close();
+          toggle.focus();
+        }
+      });
+      document.addEventListener("click", function (e) {
+        if (toggle.getAttribute("aria-expanded") !== "true") return;
+        if (nav.contains(e.target) || toggle.contains(e.target)) return;
+        close();
+      });
+
+      // At desktop widths, use the same menu button when the header links do
+      // not fit on one row. Measure the full row first, then collapse it.
+      var head = document.querySelector(".site-head");
+      var inner = head && head.querySelector(".head-inner");
+      if (!head || !inner || !window.matchMedia) return;
+      function updateBackdrop() {
+        head.toggleAttribute("data-scrolled", window.scrollY > 0);
+      }
+      updateBackdrop();
+      window.addEventListener("scroll", updateBackdrop, { passive: true });
+      var wide = window.matchMedia("(min-width: 80em)");
+      var frame = 0;
+      // A viewport change or a collapse can hide the focused header control,
+      // and the browser then drops focus to the page. Remember a header
+      // control that just lost focus to nothing, and put focus back after the
+      // fit check: on that control if it still shows, else on the menu button,
+      // else on the first header link.
+      var dropped = null;
+      var droppedAt = 0;
+      head.addEventListener("focusout", function (e) {
+        // Only a control the browser hid, not a click elsewhere on the page.
+        if (e.relatedTarget || shows(e.target)) return;
+        dropped = e.target;
+        droppedAt = Date.now();
+      });
+      head.addEventListener("focusin", function () {
+        dropped = null;
+      });
+      function shows(el) {
+        return !!el && el.getClientRects().length > 0;
+      }
+      function fit() {
+        frame = 0;
+        var focused = head.contains(document.activeElement) ? document.activeElement : null;
+        head.removeAttribute("data-nav-collapsed");
+        if (wide.matches && inner.scrollWidth > inner.clientWidth + 1) {
+          head.setAttribute("data-nav-collapsed", "");
+        } else if (wide.matches) {
+          // The links fit on one row, so an open menu has nothing to show.
+          close();
+        }
+        var lost = focused;
+        if (!lost && dropped && Date.now() - droppedAt < 1000) lost = dropped;
+        dropped = null;
+        if (!lost) return;
+        // The browser may not have dropped focus from a hidden control yet, so
+        // a hidden control that still holds focus counts as lost.
+        var active = document.activeElement;
+        if (active === lost && shows(lost)) return;
+        if (active !== lost && active && active !== document.body && active !== document.documentElement) return;
+        var target = shows(lost) ? lost : shows(toggle) ? toggle : nav.querySelector("a");
+        if (target) target.focus({ preventScroll: true });
+      }
+      function refit() {
+        if (!frame) frame = requestAnimationFrame(fit);
+      }
+      fit();
+      window.addEventListener("resize", refit);
+      window.addEventListener("load", refit);
+      if (document.fonts && document.fonts.ready) document.fonts.ready.then(refit);
+    })();
+  </script>
+
+  {/*
+    searchable opts this page into the search index with data-pagefind-body (#226). Pagefind's
+    rule is all-or-nothing across the build: while ANY page carries the
+    attribute, only tagged pages are indexed. That is what keeps the public
+    /wiki/ and internal surfaces out of the index. Removing this
+    attribute does not shrink the index, it silently publishes those surfaces —
+    measured, and the reason scripts/pagefind-scope-dist.test.ts exists.
+
+    It sits on <main> rather than <body> so header, nav and footer text stay out
+    of every page's indexed content and search excerpts.
+  */}
+  {!hasNjDecidesPageHeading && <PublicElectionBanner canonicalPath={canonicalPath ?? path} />}
+
+  <main id="main" tabindex="-1" data-pagefind-body={searchable ? true : undefined}>
+    <Fragment set:html={deferredPageContent} />
+  </main>
+
+  {analyticsEnabled && <AnalyticsConsent measurementId={ga4MeasurementId} activeCampaign={!noindex && !metaRefreshTo} />}
+
+  <footer class="site-foot">
+    <div class="foot-cols">
+      {
+        footerCols.map((col) => (
+          <nav aria-label={col.heading}>
+            <h2>{col.heading}</h2>
+            <ul>
+              {col.links.map((l) => (
+                <li>
+                  <a
+                    href={l.href}
+                    {...(l.opensInNewTab ? { rel: "noopener", target: "_blank" } : {})}
+                  >
+                    {l.label}
+                    {l.opensInNewTab && <span class="sr-only"> (opens in new tab)</span>}
+                  </a>
+                </li>
+              ))}
+            </ul>
+          </nav>
+        ))
+      }
+    </div>
+
+    <div class="foot-fcc" aria-label="FCC public inspection files">
+      <span>FCC public inspection file:</span>
+      <ul>
+        <li><a href={pageHref("public-file")}>Public file</a></li>
+        {
+          fccStations.map((s) => (
+            <li><a href={s.href} rel="noopener" target="_blank">{s.call}<span class="sr-only"> (opens in new tab)</span></a></li>
+          ))
+        }
+      </ul>
+    </div>
+
+    <ul class="foot-legal">
+      {
+        legalLinks.map((l) => (
+          <li>
+            <a
+              href={l.href}
+              {...(opensInNewTab(l) ? { rel: "noopener", target: "_blank" } : {})}
+            >
+              {l.label}
+              {opensInNewTab(l) && <span class="sr-only"> (opens in new tab)</span>}
+            </a>
+          </li>
+        ))
+      }
+      <li>
+        <a
+          href="mailto:njpbs@montclair.edu?subject=Website%20problem%20report"
+          class="foot-report"
+          data-report-open={isKidsRoute || isDevelopment ? undefined : ""}
+          aria-haspopup={isKidsRoute || isDevelopment ? undefined : "dialog"}
+        >
+          Report a problem
+        </a>
+      </li>
+      <li class="foot-motion">
+        <button class="motion-toggle" type="button" aria-pressed="false" data-motion-toggle>
+          <span class="motion-toggle__switch" aria-hidden="true"></span>
+          <span class="motion-toggle__label">Reduce motion</span>
+        </button>
+      </li>
+    </ul>
+
+    <div class="foot-brand">
+      <img src="/brand/njpbs-horizontal-white.svg" alt="NJ PBS" width="146" height="40" />
+      <address class="foot-address">
+        <span>NJ PBS</span>
+        <span>1 Normal Ave.</span>
+        <span>Montclair, NJ 07043</span>
+      </address>
+      <p>
+        NJ PBS — New Jersey's PBS member stations (WNJS, WNJN, WNJT, WNJB).
+        NJ PBS is housed at the College of Communication and Media at Montclair State University.
+        {/* TODO: confirm the legal copyright entity before changing the footer
+            copyright name. */}
+        <br />© 2026 NJ PBS. All rights reserved.
+      </p>
+    </div>
+
+    <ReportProblem />
+  </footer>
+
+
+  <script is:inline>
+    (function () {
+      const KEY = "njpbs-motion";
+      var root = document.documentElement;
+      var button = document.querySelector("[data-motion-toggle]");
+      if (!button) return;
+      function reduced() {
+        return root.getAttribute("data-motion") === "off";
+      }
+      function sync() {
+        button.setAttribute("aria-pressed", reduced() ? "true" : "false");
+      }
+      function set(on) {
+        if (on) root.setAttribute("data-motion", "off");
+        else root.removeAttribute("data-motion");
+        try {
+          localStorage.setItem(KEY, on ? "off" : "on");
+        } catch (e) {
+          /* choice does not persist when storage is unavailable */
+        }
+        sync();
+      }
+      sync();
+      button.addEventListener("click", function () {
+        set(!reduced());
+      });
+    })();
+  </script>
+
+  <style is:global>
+    /* PBS Sans — official brand typeface (web kit, WOFF2). */
+    @font-face {
+      font-family: "PBS Sans";
+      src: url("https://media.njpbs.org/cms-media/fonts/f5b121c412775fea2088ea19d170364abf29e7db73a541259b517be880784a9b/PBSSans-Light.woff2") format("woff2");
+      font-weight: 300; font-style: normal; font-display: swap;
+    }
+    @font-face {
+      font-family: "PBS Sans";
+      src: url("https://media.njpbs.org/cms-media/fonts/6d1461f427c030aed42aaa039eb8ce7409a261a7a62e46ff0854d7c79db00123/PBSSans.woff2") format("woff2");
+      font-weight: 400; font-style: normal; font-display: swap;
+    }
+    @font-face {
+      font-family: "PBS Sans";
+      src: url("https://media.njpbs.org/cms-media/fonts/1a6fab5544c4b6b5d57d60e4c2e9a1d82488a4a510a54b6ec652e77261627cc1/PBSSans-Medium.woff2") format("woff2");
+      font-weight: 500; font-style: normal; font-display: swap;
+    }
+    @font-face {
+      font-family: "PBS Sans";
+      src: url("https://media.njpbs.org/cms-media/fonts/d2a1a10beac03a9cf986714d6388978379efaa9d9b4a662ec374b262104851b5/PBSSans-Bold.woff2") format("woff2");
+      font-weight: 700; font-style: normal; font-display: swap;
+    }
+    @font-face {
+      font-family: "PBS Sans";
+      src: url("https://media.njpbs.org/cms-media/fonts/5b13467ba9da8daed32c4989a1f46bb11ece667e4607b9552c74315368b98cc9/PBSSans-Black.woff2") format("woff2");
+      font-weight: 900; font-style: normal; font-display: swap;
+    }
+
+    html {
+      color-scheme: dark;
+      background: var(--bg-0);
+      /* keep targets of in-page jumps (e.g. the skip link to #main) clear of the
+         sticky header rather than tucked underneath it */
+      scroll-padding-top: 5rem;
+    }
+    body {
+      margin: 0;
+      font-family: var(--font-sans);
+      color: var(--text);
+      background:
+        radial-gradient(1200px 600px at 80% -10%, rgba(38, 56, 196, 0.25), transparent 60%),
+        linear-gradient(180deg, var(--bg-1) 0%, var(--bg-0) 100%);
+      background-attachment: fixed;
+      line-height: 1.6;
+    }
+    h1, h2, h3 { font-weight: 700; line-height: 1.15; letter-spacing: 0; }
+    ::selection { background: var(--color-brand); color: var(--color-text-on-brand); }
+
+    /* Low-bandwidth downgrades — keyed off html[data-saver], set pre-paint by the
+       Base.astro head script (Save-Data / 2g / prefers-reduced-data). Only the
+       constrained path is affected; the default render is untouched. */
+    html[data-saver] body {
+      /* Drop "PBS Sans" from the stack so no glyph ever references it and the
+         118 KB woff2 set is never fetched. The system stack carries this path;
+         every element inherits family from body, so this one override is enough. */
+      font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+    }
+    html[data-saver] .site-head {
+      /* backdrop blur forces a full-width GPU compositing pass that's expensive
+         on low-end devices — drop it and lean opaque so legibility holds */
+      backdrop-filter: none;
+      -webkit-backdrop-filter: none;
+      background: rgba(6, 7, 15, 0.95);
+    }
+
+    /* Keep page text out of the navigation even when backdrop blur is absent. */
+    html .site-head[data-scrolled] {
+      background: var(--color-surface-page);
+      backdrop-filter: none;
+      -webkit-backdrop-filter: none;
+    }
+    @media (scripting: none), (prefers-reduced-transparency: reduce) {
+      html:root .site-head {
+        background: var(--color-surface-page);
+        backdrop-filter: none;
+        -webkit-backdrop-filter: none;
+      }
+    }
+
+    /* Print: the screen theme is dark ink on a near-black surface, which prints
+       blank because browsers drop the dark background and leave the light --text
+       colour invisible on white paper. Reset to dark ink on white and drop the
+       on-screen-only chrome so every public page -- the schedule most of all
+       (issue #360) -- prints legibly. These rules apply only to the print
+       medium; the screen render is untouched. */
+    @media print {
+      html {
+        color-scheme: light;
+        background: var(--color-paper);
+        scroll-padding-top: 0;
+      }
+      body {
+        color: var(--color-print-ink);
+        background: var(--color-paper);
+      }
+      /* Navigation and footer are on-screen wayfinding, not printed content. */
+      .site-head,
+      .site-foot,
+      .skip {
+        display: none !important;
+      }
+      /* Force content to dark ink and shed decorative fills, gradients, and
+         shadows that either waste ink or drop out and strand content on white. */
+      #main,
+      #main *,
+      #main *::before,
+      #main *::after {
+        color: var(--color-print-ink) !important;
+        background: transparent !important;
+        box-shadow: none !important;
+        text-shadow: none !important;
+      }
+      /* Keep links identifiable once colour flattens to ink. */
+      #main a {
+        text-decoration: underline;
+      }
+    }
+  </style>
+
+  <style>
+    .skip { position: absolute; left: -999px; }
+    .skip:focus {
+      --color-focus-ring: var(--color-focus-ring-on-light);
+      left: 0.5rem; top: 0.5rem; z-index: 30;
+      background: var(--color-paper); color: var(--color-black); padding: 0.5rem 0.75rem;
+    }
+
+    /* Header — translucent, sticky, frosted (Apple TV register) */
+    .site-head {
+      position: sticky;
+      top: 0;
+      z-index: 20;
+      background: rgba(6, 7, 15, 0.72);
+      backdrop-filter: saturate(140%) blur(14px);
+      -webkit-backdrop-filter: saturate(140%) blur(14px);
+      border-bottom: 1px solid var(--line);
+    }
+    .head-inner {
+      position: relative;
+      display: flex;
+      align-items: center;
+      gap: 2rem;
+      max-width: 84rem;
+      margin: 0 auto;
+      padding: 0.85rem 1.5rem;
+    }
+    .brand { flex: none; display: inline-flex; align-items: center; min-height: var(--target-comfortable); }
+    .brand img { display: block; height: 40px; width: auto; }
+
+    /* Hamburger — only shown below the collapse breakpoint */
+    .nav-toggle {
+      display: none;
+      align-items: center;
+      justify-content: center;
+      min-height: var(--target-comfortable);
+      min-width: var(--target-comfortable);
+      padding: 0;
+      margin-left: auto;
+      background: rgba(255, 255, 255, 0.06);
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      color: var(--text);
+      font-family: inherit;
+      font-weight: 500;
+      font-size: 0.9rem;
+      cursor: pointer;
+    }
+    .nav-toggle:hover { background: rgba(255, 255, 255, 0.12); }
+    .nav-toggle:focus-visible {
+      outline: var(--focus-outline);
+      outline-offset: var(--focus-offset);
+    }
+    .nav-toggle__bars,
+    .nav-toggle__bars::before,
+    .nav-toggle__bars::after {
+      content: "";
+      display: block;
+      width: 18px;
+      height: 2px;
+      background: currentColor;
+      border-radius: 2px;
+    }
+    .nav-toggle__bars { position: relative; flex: none; }
+    .nav-toggle__bars::before { position: absolute; top: -6px; }
+    .nav-toggle__bars::after { position: absolute; top: 6px; }
+
+    /* "Search" / "Sign in" links folded into the collapsed nav panel */
+    .primary__util { display: none; }
+
+    .primary { flex: 1 1 auto; }
+    .primary ul {
+      display: flex;
+      flex-direction: row;
+      flex-wrap: nowrap;
+      gap: 1.6rem;
+      list-style: none;
+      margin: 0;
+      padding: 0;
+    }
+    .primary a { white-space: nowrap; }
+    .primary a:not(.newsletter) {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      min-height: var(--target-comfortable);
+      min-width: var(--target-comfortable);
+      gap: 0.4rem;
+      padding: 0.55rem 0;
+      color: var(--text-dim);
+      text-decoration: none;
+      font-weight: 500;
+      font-size: 0.95rem;
+      border-bottom: 2px solid transparent; /* bottom underline = active, never top/left */
+      transition: color var(--motion-duration-fast) var(--motion-ease-standard);
+    }
+    .primary a:not(.newsletter):hover { color: var(--text); }
+    .primary a.active {
+      color: var(--color-text-on-surface);
+      font-weight: 700;
+      border-bottom-color: var(--pbs-blue-bright);
+    }
+
+    .utility {
+      display: flex;
+      align-items: center;
+      gap: 1.1rem;
+      flex: none;
+      font-size: 0.9rem;
+      font-weight: 500;
+    }
+    .util-icon {
+      display: inline-flex;
+      align-items: center;
+      min-height: var(--target-comfortable);
+      padding: 0 0.25rem;
+      color: var(--text-dim);
+      text-decoration: none;
+    }
+    .util-icon:hover { color: var(--text); }
+
+    /* Opaque light surfaces keep these actions clear over the frosted header. */
+    .newsletter,
+    .donate {
+      box-sizing: border-box;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 0.5rem;
+      min-height: var(--target-comfortable);
+      padding: 0.625rem 1rem;
+      border: 1px solid var(--color-control-edge-on-glass);
+      border-radius: 12px;
+      background: var(--color-text-on-surface);
+      color: var(--color-theme-navy);
+      font-weight: 700;
+      line-height: 1;
+      white-space: nowrap;
+      text-decoration: none;
+      touch-action: manipulation;
+      transition:
+        background-color var(--motion-duration-fast) var(--motion-ease-standard),
+        color var(--motion-duration-fast) var(--motion-ease-standard);
+    }
+    .newsletter {
+      background: var(--color-newsletter-eyebrow);
+      font-weight: 500;
+    }
+    .donate__heart {
+      display: block;
+      flex: none;
+      width: 1rem;
+      height: auto;
+      color: var(--color-action);
+    }
+    .newsletter:hover,
+    .donate:hover {
+      background: var(--color-text-soft);
+      color: var(--pbs-blue);
+    }
+
+    main { display: block; }
+
+    /* Footer */
+    .site-foot {
+      background: var(--bg-0);
+      color: var(--text-dim);
+      padding: 2.4rem 1.5rem 4rem;
+      padding-bottom: max(4rem, calc(env(safe-area-inset-bottom) + 2.5rem));
+      border-top: 1px solid var(--line);
+    }
+    .site-foot a { color: var(--text-dim); text-decoration: none; }
+    .site-foot a:hover,
+    .site-foot a:focus-visible {
+      color: var(--color-text-on-surface);
+      text-decoration: underline;
+      text-underline-offset: 0.22em;
+    }
+    .foot-cols {
+      max-width: 84rem;
+      margin: 0 auto;
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+      gap: 1.1rem 2rem;
+    }
+    .foot-cols h2 { font-size: 0.95rem; color: var(--color-text-on-surface); margin: 0 0 0.55rem; }
+    .foot-cols ul { list-style: none; margin: 0; padding: 0; font-size: 0.88rem; }
+    .foot-cols li { margin: 0; }
+    .foot-cols li a {
+      display: inline-flex;
+      align-items: center;
+      min-height: 26px;
+      padding: 0;
+      line-height: 1.2;
+    }
+    .foot-fcc {
+      max-width: 84rem;
+      margin: 1.65rem auto 0;
+      padding-top: 1.1rem;
+      border-top: 1px solid var(--line);
+      display: flex;
+      flex-wrap: nowrap;
+      align-items: center;
+      gap: 0.35rem 1.75rem;
+      overflow-x: auto;
+      -webkit-overflow-scrolling: touch;
+      font-size: 0.85rem;
+    }
+    .foot-fcc > span { white-space: nowrap; }
+    .foot-fcc ul {
+      display: flex;
+      flex-wrap: nowrap;
+      gap: 0 1.75rem;
+      list-style: none;
+      margin: 0;
+      padding: 0;
+    }
+    .foot-fcc a {
+      display: inline-flex;
+      align-items: center;
+      justify-content: flex-start;
+      min-height: 30px;
+      min-width: var(--target-comfortable);
+      padding: 0.05rem 0.45rem;
+    }
+
+    .foot-legal {
+      max-width: 84rem;
+      margin: 0.45rem auto 0;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.15rem 1.25rem;
+      list-style: none;
+      padding: 0;
+      font-size: 0.82rem;
+    }
+    .foot-legal a {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      min-height: 30px;
+      min-width: var(--target-comfortable);
+      padding: 0.05rem 0.45rem;
+    }
+    .motion-toggle {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.45rem;
+      min-height: var(--target-comfortable);
+      padding: 0.05rem 0.45rem;
+      background: none;
+      border: 0;
+      color: var(--text-dim);
+      font: inherit;
+      line-height: 1;
+      cursor: pointer;
+      white-space: nowrap;
+    }
+    .motion-toggle:hover,
+    .motion-toggle:focus-visible { color: var(--color-text-on-surface); }
+    .motion-toggle__switch {
+      position: relative;
+      flex: none;
+      width: 38px;
+      height: 22px;
+      border: 1px solid currentColor;
+      border-radius: 999px;
+      background: var(--line);
+    }
+    .motion-toggle__switch::after {
+      content: "";
+      position: absolute;
+      inset: 2px auto auto 2px;
+      width: 16px;
+      height: 16px;
+      border-radius: 50%;
+      background: var(--color-text-on-surface);
+    }
+    .motion-toggle[aria-pressed="true"] { color: var(--color-text-on-surface); }
+    .motion-toggle[aria-pressed="true"] .motion-toggle__switch {
+      background: var(--pbs-blue-bright);
+    }
+    .motion-toggle[aria-pressed="true"] .motion-toggle__switch::after {
+      left: 18px;
+    }
+    /* The report trigger is a button (it opens a dialog, not a page), styled to
+       sit in the legal row as if it were one of the links. */
+    .foot-report {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      min-height: 30px;
+      min-width: var(--target-comfortable);
+      padding: 0.05rem 0.45rem;
+      border: 0;
+      background: none;
+      color: var(--text-dim);
+      font: inherit;
+      text-decoration: none;
+      cursor: pointer;
+    }
+    .foot-report:hover,
+    .foot-report:focus-visible {
+      color: var(--color-text-on-surface);
+      text-decoration: underline;
+      text-underline-offset: 0.22em;
+    }
+
+    .foot-brand {
+      max-width: 84rem;
+      margin: 0.85rem auto 0;
+      padding-top: 1rem;
+      border-top: 1px solid var(--line);
+      display: flex;
+      align-items: center;
+      gap: 1.2rem;
+      font-size: 0.88rem;
+      line-height: 1.45;
+      color: var(--color-footer-quiet);
+    }
+    .foot-brand img { flex: none; width: 112px; height: auto; opacity: 0.95; }
+    .foot-address { flex: none; margin: 0; font-style: normal; }
+    .foot-address span { display: block; }
+    .foot-brand p { margin: 0; }
+
+    @media (max-width: 520px) {
+      .foot-motion { width: 100%; }
+      .motion-toggle {
+        width: 100%;
+        padding-inline: 0.75rem;
+        gap: 0.65rem;
+        border-radius: 0.75rem;
+        background: var(--color-surface-elevated);
+      }
+      .foot-fcc {
+        align-items: flex-start;
+        flex-direction: column;
+        overflow-x: visible;
+      }
+      .foot-fcc ul {
+        flex-wrap: wrap;
+        gap: 0.15rem 0.65rem;
+      }
+      .foot-brand {
+        align-items: flex-start;
+        flex-direction: column;
+        gap: 0.65rem;
+      }
+    }
+
+    a:focus-visible { outline: var(--focus-outline); outline-offset: var(--focus-offset); }
+
+    /* Keep the inline navigation intact through narrower desktop widths. Font-relative
+       breakpoints also move the disclosure wider when a reader enlarges text. */
+    @media (80em <= width <= 86.1875em) {
+      .head-inner { gap: 1.25rem; }
+      .primary ul { gap: 0.8rem; }
+    }
+
+    /* Collapse with a small cross-browser fit margin below 1280px, moving the
+       nav behind a hamburger disclosure. Brand + menu button + Donate stay. */
+    @media (width < 80em) {
+      .nav-toggle { display: inline-flex; }
+      .utility .util-icon,
+      .utility .newsletter { display: none; }
+
+      /* Reclaim vertical space on phones. Tighten the header padding and shrink
+         the wordmark a touch. */
+      .head-inner { padding: 0.55rem 1.25rem; gap: 1rem; }
+      /* Shrink the wordmark for the tighter bar; the brand link keeps its 44px
+         tap target (the 44px toggle/Donate already set the row height). */
+      .brand img { height: 34px; }
+
+      .primary {
+        position: absolute;
+        left: 0;
+        right: 0;
+        top: 100%;
+        display: none;
+        /* Fully opaque: this panel sits over page content, so readability can't
+           depend on backdrop-filter compositing (which not every engine honors). */
+        background: var(--color-surface-page);
+        border-bottom: 1px solid var(--line);
+        box-shadow: 0 16px 40px rgba(0, 0, 0, 0.5);
+      }
+      .primary[data-open] {
+        display: block;
+        /* The full menu (8 sections + Search + Sign in) is taller than a phone in
+           landscape; cap it to the space below the header and let it scroll so the
+           lower items stay reachable instead of running off-screen. vh fallback
+           first for engines without svh; the svh value overrides where supported. */
+        max-height: calc(100vh - 3.75rem);
+        max-height: calc(100svh - 3.75rem);
+        overflow-y: auto;
+        -webkit-overflow-scrolling: touch;
+        overscroll-behavior: contain;
+      }
+      .primary ul {
+        flex-direction: column;
+        flex-wrap: nowrap;
+        gap: 0;
+        max-width: 84rem;
+        margin: 0 auto;
+        padding: 0.5rem 1.5rem 1rem;
+      }
+      .primary li { width: 100%; }
+      .primary a { white-space: normal; overflow-wrap: anywhere; }
+      .primary a:not(.newsletter) {
+        width: 100%;
+        min-height: 48px;
+        padding: 0.65rem 0;
+        font-size: 1rem;
+        border-bottom: 1px solid var(--line);
+      }
+      .primary .newsletter { width: 100%; min-height: 48px; font-size: 1rem; }
+      .primary a.active { border-bottom-color: var(--pbs-blue-bright); }
+      .primary__util { display: block; }
+      .site-head { position: sticky; }
+    }
+
+    /* Desktop fit fallback. The header script sets data-nav-collapsed when the
+       header links do not fit on one row at 80em or wider. The header then uses
+       the same menu button and panel as the narrow layout. */
+    .site-head[data-nav-collapsed] .nav-toggle { display: inline-flex; }
+    .site-head[data-nav-collapsed] .utility .util-icon,
+    .site-head[data-nav-collapsed] .utility .newsletter { display: none; }
+    .site-head[data-nav-collapsed] .primary {
+      position: absolute;
+      left: 0;
+      right: 0;
+      top: 100%;
+      display: none;
+      background: var(--color-surface-page);
+      border-bottom: 1px solid var(--line);
+      box-shadow: 0 16px 40px rgba(0, 0, 0, 0.5);
+    }
+    .site-head[data-nav-collapsed] .primary[data-open] {
+      display: block;
+      max-height: calc(100vh - 4.5rem);
+      max-height: calc(100svh - 4.5rem);
+      overflow-y: auto;
+      overscroll-behavior: contain;
+    }
+    .site-head[data-nav-collapsed] .primary ul {
+      flex-direction: column;
+      gap: 0;
+      max-width: 84rem;
+      margin: 0 auto;
+      padding: 0.5rem 1.5rem 1rem;
+    }
+    .site-head[data-nav-collapsed] .primary li { width: 100%; }
+    .site-head[data-nav-collapsed] .primary a { white-space: normal; overflow-wrap: anywhere; }
+    .site-head[data-nav-collapsed] .primary a:not(.newsletter) {
+      width: 100%;
+      min-height: 48px;
+      padding: 0.65rem 0;
+      font-size: 1rem;
+      border-bottom: 1px solid var(--line);
+    }
+    .site-head[data-nav-collapsed] .primary .newsletter { width: 100%; min-height: 48px; font-size: 1rem; }
+    .site-head[data-nav-collapsed] .primary a.active { border-bottom-color: var(--pbs-blue-bright); }
+    .site-head[data-nav-collapsed] .primary__util { display: block; }
+
+    /* Without scripts the menu button cannot open, so a desktop header whose
+       links do not fit wraps them instead of overflowing the page. */
+    @media (scripting: none) and (width >= 80em) {
+      .primary { min-width: 0; }
+      .primary ul { flex-wrap: wrap; }
+    }
+
+    @media (max-width: 360px) {
+      .head-inner { padding-inline: 0.75rem; gap: 0.5rem; }
+      .brand img { height: 32px; }
+      .donate { padding-inline: 0.75rem; }
+    }
+  </style>
+  {!isKidsRoute && <ApEmbedControls slot="body-end" />}
+  {!isKidsRoute && <DeferredYoutubeEmbeds slot="body-end" />}
+  {wisepopsEnabled && (
+    <script
+      id="wisepopsjs"
+      data-cfasync="false"
+      is:inline
+      slot="body-end"
+      set:html={WISEPOPS_CONSENT_SNIPPET}
+    />
+  )}
+</Base>
+
+<script>
+  import { mountSpotlightImages } from "../../../packages/content-core/src/spotlight-image-dom";
+  mountSpotlightImages(document);
+  import { installCustomShelfControls } from "../../../packages/content-core/src/custom-shelf-controls";
+  installCustomShelfControls(document);
+  import { installElectionResults } from "../../../packages/content-core/src/election-results-dom";
+  installElectionResults(window);
+  import { installDataTableControls } from "../../../packages/content-core/src/data-table-controls";
+  installDataTableControls(document);
+  import { installCountyComparisonControls } from "../../../packages/content-core/src/county-comparison-controls";
+  installCountyComparisonControls(document);
+  import { installTownLookupControls } from "../../../packages/content-core/src/town-lookup-controls";
+  installTownLookupControls(document);
+  import { installHtmlFrameControls } from "../../../packages/content-core/src/html-frame-controls";
+  installHtmlFrameControls(window);
+  import { setupCoverageListDirectory } from "../lib/coverage-list-directory";
+  document.querySelectorAll<HTMLElement>("[data-coverage-list]").forEach(setupCoverageListDirectory);
+</script>

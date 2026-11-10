@@ -1,0 +1,83 @@
+@font-face { font-family: "PBS Sans"; font-style: normal; font-weight: 400; font-display: swap; src: url("https://media.njpbs.org/cms-media/fonts/6d1461f427c030aed42aaa039eb8ce7409a261a7a62e46ff0854d7c79db00123/PBSSans.woff2") format("woff2"); }
+@font-face { font-family: "PBS Sans"; font-style: normal; font-weight: 700; font-display: swap; src: url("https://media.njpbs.org/cms-media/fonts/d2a1a10beac03a9cf986714d6388978379efaa9d9b4a662ec374b262104851b5/PBSSans-Bold.woff2") format("woff2"); }
+@font-face { font-family: "PBS Sans"; font-style: normal; font-weight: 900; font-display: swap; src: url("https://media.njpbs.org/cms-media/fonts/5b13467ba9da8daed32c4989a1f46bb11ece667e4607b9552c74315368b98cc9/PBSSans-Black.woff2") format("woff2"); }
+/* Recovery content has no loading dependency or video autoplay. */
+/* Base has no body reset; without one the default margin frames this full-bleed page. */
+body:has(.nf-page) { margin: 0; }
+.nf-page { background: var(--color-surface-page); color: var(--color-text-on-surface); font-family: var(--font-sans); min-height: 100svh; padding-inline: clamp(1rem, 5vw, 5rem); }
+.nf-page *, .nf-page *::before, .nf-page *::after { box-sizing: border-box; }
+.nf-page a { color: inherit; }
+.nf-header, .nf-main, .nf-footer { max-width: var(--wrap); margin-inline: auto; }
+/* The minimal wordmark shell is used only by the coming-soon rollback. */
+.nf-header { display: flex; align-items: center; justify-content: space-between; gap: 1rem; min-height: 6rem; border-bottom: 1px solid var(--color-border); }
+.nf-wordmark { display: inline-flex; align-items: center; gap: .7rem; font-size: 1.75rem; font-weight: 900; letter-spacing: -.06em; text-decoration: none; }
+.nf-wordmark span { color: var(--color-brand-bright); font-size: .9rem; }
+.nf-header-link { font-size: .9rem; text-decoration: none; padding-block: 1rem; }
+.nf-header-link:hover { text-decoration: underline; }
+.nf-footer { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 1rem; border-top: 1px solid var(--color-border); padding-block: 1.5rem; font-size: .85rem; color: var(--color-text-muted); }
+.nf-footer p { margin: 0; }
+.nf-hero { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); align-items: center; gap: clamp(1rem, 4vw, 4rem); padding-block: clamp(2.5rem, 5vw, 5rem); }
+.nf-copy h1 { margin: 0; font-size: clamp(2.6rem, 5.9vw, 5.7rem); font-weight: 900; line-height: .99; letter-spacing: -.055em; }
+.nf-error { margin: 1.5rem 0 0; color: var(--color-text-muted); font-size: .9rem; letter-spacing: .045em; }
+.nf-description { max-width: 34ch; font-size: clamp(1.05rem, 1.4vw, 1.3rem); line-height: 1.55; color: var(--color-text-muted); margin-block: 1.2rem 1.7rem; }
+.nf-home { display: inline-flex; align-items: center; justify-content: space-between; gap: 2.5rem; padding: .95rem 1.2rem; min-height: var(--target-comfortable); background: var(--color-brand); border: 1px solid var(--color-brand-bright); border-radius: .3rem; color: var(--color-text-on-brand); font-weight: 700; text-decoration: none; }
+.nf-home:hover { background: var(--color-brand-bright); }
+.nf-instrument { min-width: 0; }
+.nf-dial { width: min(100%, 32rem); margin-inline: auto; aspect-ratio: 1; position: relative; overflow: clip; isolation: isolate; background: radial-gradient(ellipse, color-mix(in srgb, var(--color-brand) 22%, transparent), transparent 69%); }
+.nf-dial-offset { position: absolute; inset: 0; transform: rotate(var(--dial-offset, 0deg)); }
+.nf-ring { position: absolute; border-radius: 50%; border: 1px solid var(--color-border-strong); }
+.nf-ring::before { content: ""; position: absolute; inset: -.25rem; border-radius: inherit; border: .35rem solid transparent; border-top-color: var(--color-brand-bright); border-right-color: var(--color-brand-bright); }
+.nf-ring i { position: absolute; inset: .65rem; border-radius: 50%; border: 1px dashed var(--color-border-strong); }
+.nf-ring--outer { inset: 7%; transform: rotate(28deg); }
+.nf-ring--middle { inset: 17%; transform: rotate(-65deg); }
+.nf-ring--middle::before { border-width: .65rem; border-top-color: var(--color-focus-ring); border-right-color: transparent; }
+.nf-ring--inner { inset: 26%; transform: rotate(160deg); }
+.nf-ring--inner::before { border-width: .2rem; border-top-color: var(--color-text-quiet); border-right-color: var(--color-text-quiet); }
+.nf-dial-number { position: absolute; top: 40%; left: 50%; transform: translateX(-50%); font-size: clamp(3.8rem, 7.5vw, 7.6rem); font-weight: 900; line-height: 1; letter-spacing: -.08em; font-variant-numeric: var(--number-variant); }
+.nf-dial-label { position: absolute; top: 64%; left: 50%; transform: translateX(-50%); font-size: .7rem; letter-spacing: .04em; white-space: nowrap; color: var(--color-text-muted); }
+.nf-dial-tick { position: absolute; left: 50%; width: 1px; height: 1.4rem; background: var(--color-text-quiet); }
+.nf-dial-tick--top { top: 1%; } .nf-dial-tick--bottom { bottom: 1%; }
+[data-turning="true"] .nf-ring--outer { animation: nf-outer 3.2s cubic-bezier(.18,.8,.28,1) both; }
+[data-turning="true"] .nf-ring--middle { animation: nf-middle 3.2s cubic-bezier(.18,.8,.28,1) both; }
+[data-turning="true"] .nf-ring--inner { animation: nf-inner 3.2s cubic-bezier(.18,.8,.28,1) both; }
+@keyframes nf-outer { from { transform: rotate(-290deg); } to { transform: rotate(28deg); } }
+@keyframes nf-middle { from { transform: rotate(260deg); } to { transform: rotate(-65deg); } }
+@keyframes nf-inner { from { transform: rotate(-180deg); } to { transform: rotate(160deg); } }
+.nf-dial-controls:not([hidden]) { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: .7rem; align-items: center; max-width: 23rem; margin: .4rem auto 0; font-size: .85rem; }
+.nf-dial-controls input { width: 100%; min-height: var(--target-comfortable); accent-color: var(--color-focus-ring); }
+.nf-dial-controls button { min-height: var(--target-comfortable); padding: .5rem .8rem; border: 1px solid var(--color-text-quiet); border-radius: .3rem; background: transparent; color: inherit; font: inherit; cursor: pointer; }
+.nf-dial-controls button:disabled { cursor: default; opacity: .6; }
+.nf-dial-controls p { grid-column: 1 / -1; text-align: center; color: var(--color-text-muted); margin: 0; font-size: .75rem; }
+.nf-discovery { padding-block: 2.5rem 4rem; border-top: 1px solid var(--color-border-strong); }
+.nf-discovery-heading { display: flex; justify-content: space-between; align-items: baseline; gap: 1rem; margin-bottom: 1.5rem; }
+.nf-discovery h2 { margin: 0; font-size: clamp(1.7rem, 2.7vw, 2.5rem); line-height: 1.1; letter-spacing: var(--heading-tracking); }
+.nf-discovery-heading p { margin: 0; color: var(--color-text-quiet); font-size: .95rem; }
+.nf-cards { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: clamp(1rem, 2.3vw, 2rem); }
+.nf-cards li { min-width: 0; }
+.nf-card { display: flex; flex-direction: column; height: 100%; text-decoration: none; }
+.nf-card-art { display: block; width: 100%; aspect-ratio: 16/9; position: relative; overflow: hidden; border: 1px solid var(--color-border); background: var(--color-surface-elevated); }
+.nf-card-art img { width: 100%; height: 100%; object-fit: cover; transition: transform 240ms ease-out; }
+.nf-card-art--0 { background: var(--tile-gradient-0); }
+.nf-card-art--1 { background: var(--tile-gradient-4); }
+.nf-card-art--2 { background: var(--tile-gradient-2); }
+.nf-card-number { position: absolute; bottom: .65rem; right: .8rem; padding: .3rem .5rem; background: var(--color-surface-page); font-size: .85rem; font-variant-numeric: tabular-nums; }
+.nf-card-pattern { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; gap: 5%; overflow: hidden; }
+.nf-card-pattern span { display: block; width: 22%; height: 80%; border: 1px solid var(--color-text-muted); transform: rotate(25deg); border-radius: 50%; }
+.nf-card h3 { font-size: clamp(1.2rem, 1.6vw, 1.55rem); line-height: 1.25; letter-spacing: -.02em; margin: 1rem 0 .55rem; overflow-wrap: anywhere; }
+.nf-card-source { color: var(--color-text-muted); margin: 0 0 .65rem; font-size: .82rem; line-height: 1.5; }
+.nf-card time { display: block; color: var(--color-text-quiet); font-size: .8rem; margin-bottom: .8rem; }
+.nf-card-action { margin-top: auto; padding-top: .65rem; color: var(--color-link); font-size: .9rem; font-weight: 700; }
+.nf-card:hover h3 { text-decoration: underline; text-underline-offset: .2em; }
+@media (hover: hover) and (prefers-reduced-motion: no-preference) { .nf-card:hover img { transform: scale(1.035); } }
+.nf-page :focus-visible, .nf-skip:focus-visible { outline: var(--focus-outline); outline-offset: var(--focus-offset); }
+.nf-sr, .nf-skip:not(:focus) { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+.nf-skip:focus { position: fixed; top: 1rem; left: 1rem; padding: 1rem; z-index: 10; background: var(--color-surface-page); color: var(--color-text-on-surface); }
+@media (max-width: 48rem) { .nf-hero { grid-template-columns: minmax(0, 1fr); } .nf-copy h1 { font-size: clamp(2.6rem, 10vw, 4.5rem); } .nf-dial { max-width: 25rem; } .nf-dial-number { font-size: clamp(3.7rem, 19vw, 6.2rem); } .nf-cards { grid-template-columns: minmax(0, 1fr); gap: 2rem; } .nf-discovery-heading { display: block; } .nf-discovery-heading p { margin-top: .6rem; } }
+@media (prefers-reduced-motion: reduce) { .nf-ring { animation: none !important; } .nf-dial-offset { transform: none; } .nf-card-art img { transition: none; transform: none !important; } }
+html[data-motion="off"] .nf-ring, html[data-saver] .nf-ring { animation: none !important; }
+html[data-motion="off"] .nf-dial-offset, html[data-saver] .nf-dial-offset { transform: none; }
+html[data-motion="off"] .nf-card-art img, html[data-saver] .nf-card-art img { transition: none; transform: none !important; }
+@media (forced-colors: active) { .nf-page { background: Canvas; color: CanvasText; } .nf-ring, .nf-ring::before, .nf-ring i { border-color: CanvasText; } .nf-dial-number, .nf-dial-label, .nf-page a { color: CanvasText; } .nf-home, .nf-card-art { border: 1px solid CanvasText; } }
+
+html[data-saver] .nf-page { font-family: system-ui, sans-serif; }
+@media (prefers-reduced-data: reduce) { .nf-page { font-family: system-ui, sans-serif; } .nf-ring { animation: none !important; } }

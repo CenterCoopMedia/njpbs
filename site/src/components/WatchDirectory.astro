@@ -1,0 +1,745 @@
+---
+import { watchDeliveryTypes, watchOptions } from "../data/watch-options";
+import { sortWatchOptions, uniqueWatchValues } from "../lib/watch-directory";
+
+const initialOptions = sortWatchOptions(watchOptions, "provider", "asc");
+const providers = uniqueWatchValues(watchOptions, "provider");
+const areas = uniqueWatchValues(watchOptions, "area");
+const deliveryById = new Map(watchDeliveryTypes.map((delivery) => [delivery.id, delivery]));
+---
+
+<section class="watch-directory wrap" data-watch-directory aria-labelledby="ways-to-watch-title">
+  <header class="watch-directory__intro">
+    <div>
+      <p class="watch-directory__kicker">Channel and streaming guide</p>
+      <h2 id="ways-to-watch-title">Find a way to watch NJ PBS</h2>
+      <p>
+        Search by provider, place, or channel. You can also narrow the guide by how the
+        signal or program reaches you.
+      </p>
+    </div>
+    <div class="watch-directory__intro-actions">
+      <button type="button" class="watch-action" data-watch-copy-link>Copy filtered link</button>
+      <button type="button" class="watch-action" data-watch-print>Print guide</button>
+      <span class="watch-action-status" role="status" aria-live="polite" data-watch-action-status></span>
+    </div>
+  </header>
+
+  <div class="watch-directory__controls" aria-label="Filter ways to watch">
+    <div class="watch-search">
+      <label for="watch-search">Search the guide</label>
+      <input
+        id="watch-search"
+        type="search"
+        inputmode="search"
+        autocomplete="off"
+        placeholder="Provider, town, channel, or service"
+        data-watch-search
+      />
+    </div>
+
+    <div class="watch-delivery-filter">
+      <span id="watch-delivery-label">Delivery type</span>
+      <div class="watch-pills" role="group" aria-labelledby="watch-delivery-label">
+        <button type="button" class="watch-pill" data-watch-delivery="all" aria-pressed="true">
+          All
+        </button>
+        {watchDeliveryTypes.map((delivery) => (
+          <button
+            type="button"
+            class="watch-pill"
+            data-watch-delivery={delivery.id}
+            aria-pressed="false"
+          >
+            <span>{delivery.label}</span>
+            <small>{delivery.abbreviation}</small>
+          </button>
+        ))}
+      </div>
+    </div>
+
+    <div class="watch-selects">
+      <label>
+        <span>Provider</span>
+        <select data-watch-provider>
+          <option value="">All providers</option>
+          {providers.map((provider) => <option value={provider}>{provider}</option>)}
+        </select>
+      </label>
+      <label>
+        <span>Area or market</span>
+        <select data-watch-area>
+          <option value="">All areas</option>
+          {areas.map((area) => <option value={area}>{area}</option>)}
+        </select>
+      </label>
+      <label class="watch-mobile-sort">
+        <span>Sort results</span>
+        <select data-watch-mobile-sort>
+          <option value="provider:asc">Provider, A to Z</option>
+          <option value="provider:desc">Provider, Z to A</option>
+          <option value="area:asc">Area, A to Z</option>
+          <option value="area:desc">Area, Z to A</option>
+          <option value="channel:asc">Channel, low to high</option>
+          <option value="channel:desc">Channel, high to low</option>
+          <option value="delivery:asc">Delivery type, broadcast first</option>
+          <option value="delivery:desc">Delivery type, member video first</option>
+        </select>
+      </label>
+    </div>
+
+    <div class="watch-directory__control-footer">
+      <p class="watch-results-status" role="status" aria-live="polite" aria-atomic="true" data-watch-status>
+        {watchOptions.length} ways to watch
+      </p>
+      <button type="button" class="watch-reset" data-watch-reset disabled>Reset filters</button>
+    </div>
+  </div>
+
+  <div class="watch-directory__results">
+    <div class="watch-table-wrap">
+      <table class="watch-table">
+        <caption class="sr-only">NJ PBS channel and streaming options</caption>
+        <thead>
+          <tr>
+            <th scope="col" data-watch-sort-heading="delivery">
+              <button type="button" data-watch-sort="delivery">Delivery</button>
+            </th>
+            <th scope="col" aria-sort="ascending" data-watch-sort-heading="provider">
+              <button type="button" data-watch-sort="provider">Provider</button>
+            </th>
+            <th scope="col" data-watch-sort-heading="area">
+              <button type="button" data-watch-sort="area">Area or market</button>
+            </th>
+            <th scope="col" data-watch-sort-heading="channel">
+              <button type="button" data-watch-sort="channel">Channel or access point</button>
+            </th>
+            <th scope="col">Access</th>
+          </tr>
+        </thead>
+        <tbody data-watch-table-body>
+          {initialOptions.map((option) => {
+            const delivery = deliveryById.get(option.delivery);
+            return (
+              <tr data-watch-option-id={option.id}>
+                <td>
+                  <span class="watch-type">
+                    <strong>{delivery?.abbreviation}</strong>
+                    <span>{delivery?.label}</span>
+                  </span>
+                </td>
+                <th scope="row">
+                  <button
+                    type="button"
+                    class="watch-option-button"
+                    data-watch-option-select={option.id}
+                    aria-controls="watch-option-detail"
+                    aria-expanded="false"
+                  >
+                    {option.provider}
+                  </button>
+                </th>
+                <td>{option.area}</td>
+                <td class="watch-channel">{option.channel}</td>
+                <td>{option.access}</td>
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
+    </div>
+
+    <div class="watch-card-list" data-watch-card-list>
+      {initialOptions.map((option) => {
+        const delivery = deliveryById.get(option.delivery);
+        return (
+          <article class="watch-card" data-watch-option-id={option.id}>
+            <div class="watch-card__heading">
+              <span class="watch-type">
+                <strong>{delivery?.abbreviation}</strong>
+                <span>{delivery?.label}</span>
+              </span>
+              <span class="watch-card__channel">{option.channel}</span>
+            </div>
+            <h3>{option.provider}</h3>
+            <p>{option.area}</p>
+            <p class="watch-card__access">{option.access}</p>
+            <button
+              type="button"
+              class="watch-option-button"
+              data-watch-option-select={option.id}
+              aria-controls="watch-option-detail"
+              aria-expanded="false"
+            >
+              View details
+            </button>
+          </article>
+        );
+      })}
+    </div>
+
+    <div class="watch-empty" data-watch-empty hidden>
+      <h3>No matching ways to watch</h3>
+      <p>Try a different search or clear the filters to see the full guide.</p>
+      <button type="button" class="watch-action" data-watch-empty-reset>Show all options</button>
+    </div>
+  </div>
+
+  <aside
+    id="watch-option-detail"
+    class="watch-detail"
+    aria-labelledby="watch-detail-title"
+    data-watch-detail
+    hidden
+  >
+    <div>
+      <p class="watch-detail__eyebrow" data-watch-detail-delivery></p>
+      <h3 id="watch-detail-title" tabindex="-1" data-watch-detail-provider>Viewing details</h3>
+    </div>
+    <dl>
+      <div><dt>Area or market</dt><dd data-watch-detail-area></dd></div>
+      <div><dt>Channel or access point</dt><dd data-watch-detail-channel></dd></div>
+      <div><dt>Access</dt><dd data-watch-detail-access></dd></div>
+      <div data-watch-detail-notes-row><dt>Good to know</dt><dd data-watch-detail-notes></dd></div>
+    </dl>
+    <div class="watch-detail__actions">
+      <a class="watch-detail__link" href="https://njpbs.org/watch/" data-watch-detail-link hidden>
+        Open viewing option
+      </a>
+      <button type="button" class="watch-action" data-watch-detail-close>Close details</button>
+    </div>
+  </aside>
+
+  <details class="watch-glossary">
+    <summary>What do these delivery terms mean?</summary>
+    <dl>
+      {watchDeliveryTypes.map((delivery) => (
+        <div>
+          <dt>{delivery.abbreviation}: {delivery.label}</dt>
+          <dd>{delivery.description}</dd>
+        </div>
+      ))}
+    </dl>
+  </details>
+
+  <p class="watch-directory__note">
+    Channel placement and streaming availability can vary by address and subscription package.
+    Confirm the current lineup with your provider. Over-the-air numbers are the channels viewers
+    tune to, not the station's underlying radio-frequency channel.
+  </p>
+</section>
+
+<script>
+  import { watchDeliveryTypes, watchOptions, type WatchOption } from "../data/watch-options";
+  import {
+    defaultWatchDirectoryState,
+    filterWatchOptions,
+    parseWatchDirectoryState,
+    serializeWatchDirectoryState,
+    sortWatchOptions,
+    type WatchDirectoryState,
+    type WatchSortDirection,
+    type WatchSortKey,
+  } from "../lib/watch-directory";
+
+  const deliveryLabels = new Map(watchDeliveryTypes.map((delivery) => [
+    delivery.id,
+    `${delivery.abbreviation}: ${delivery.label}`,
+  ]));
+  const optionsById = new Map(watchOptions.map((option) => [option.id, option]));
+
+  document.querySelectorAll<HTMLElement>("[data-watch-directory]").forEach((root) => {
+    const search = root.querySelector<HTMLInputElement>("[data-watch-search]");
+    const provider = root.querySelector<HTMLSelectElement>("[data-watch-provider]");
+    const area = root.querySelector<HTMLSelectElement>("[data-watch-area]");
+    const mobileSort = root.querySelector<HTMLSelectElement>("[data-watch-mobile-sort]");
+    const status = root.querySelector<HTMLElement>("[data-watch-status]");
+    const reset = root.querySelector<HTMLButtonElement>("[data-watch-reset]");
+    const emptyReset = root.querySelector<HTMLButtonElement>("[data-watch-empty-reset]");
+    const empty = root.querySelector<HTMLElement>("[data-watch-empty]");
+    const tableBody = root.querySelector<HTMLTableSectionElement>("[data-watch-table-body]");
+    const cardList = root.querySelector<HTMLElement>("[data-watch-card-list]");
+    const actionStatus = root.querySelector<HTMLElement>("[data-watch-action-status]");
+    const detail = root.querySelector<HTMLElement>("[data-watch-detail]");
+    const detailTitle = root.querySelector<HTMLElement>("[data-watch-detail-provider]");
+    let state = parseWatchDirectoryState(window.location.search, watchOptions);
+    let detailReturnTarget: HTMLButtonElement | null = null;
+
+    if (!search || !provider || !area || !mobileSort || !status || !reset || !empty ||
+      !tableBody || !cardList || !detail || !detailTitle) return;
+
+    const setText = (selector: string, value: string) => {
+      const element = root.querySelector<HTMLElement>(selector);
+      if (element) element.textContent = value;
+    };
+
+    const setControlsFromState = () => {
+      search.value = state.query;
+      provider.value = state.provider;
+      area.value = state.area;
+      mobileSort.value = `${state.sort}:${state.direction}`;
+      root.querySelectorAll<HTMLButtonElement>("[data-watch-delivery]").forEach((button) => {
+        button.setAttribute("aria-pressed", String(button.dataset.watchDelivery === state.delivery));
+      });
+    };
+
+    const syncUrl = () => {
+      const params = serializeWatchDirectoryState(state, new URLSearchParams(window.location.search));
+      const query = params.toString();
+      window.history.replaceState(null, "", `${window.location.pathname}${query ? `?${query}` : ""}${window.location.hash}`);
+    };
+
+    const closeDetail = (restoreFocus = false) => {
+      let returnTarget = detailReturnTarget;
+      if (restoreFocus && (!returnTarget || returnTarget.getClientRects().length === 0)) {
+        returnTarget = [...root.querySelectorAll<HTMLButtonElement>("[data-watch-option-select]")]
+          .find((button) => button.dataset.watchOptionSelect === state.selectedId &&
+            button.getClientRects().length > 0) ?? null;
+      }
+      if (restoreFocus) returnTarget?.focus();
+      state.selectedId = "";
+      detail.hidden = true;
+      detailReturnTarget = null;
+      root.querySelectorAll<HTMLButtonElement>("[data-watch-option-select]").forEach((button) => {
+        button.setAttribute("aria-expanded", "false");
+      });
+    };
+
+    const showDetail = (
+      option: WatchOption,
+      moveFocus = false,
+      returnTarget: HTMLButtonElement | null = null,
+    ) => {
+      state.selectedId = option.id;
+      if (returnTarget) detailReturnTarget = returnTarget;
+      detail.hidden = false;
+      setText("[data-watch-detail-delivery]", deliveryLabels.get(option.delivery) ?? option.delivery);
+      setText("[data-watch-detail-provider]", option.provider);
+      setText("[data-watch-detail-area]", option.area);
+      setText("[data-watch-detail-channel]", option.channel);
+      setText("[data-watch-detail-access]", option.access);
+      setText("[data-watch-detail-notes]", option.notes ?? "");
+
+      const notesRow = root.querySelector<HTMLElement>("[data-watch-detail-notes-row]");
+      if (notesRow) notesRow.hidden = !option.notes;
+      const link = root.querySelector<HTMLAnchorElement>("[data-watch-detail-link]");
+      if (link) {
+        link.hidden = !option.url;
+        if (option.url) link.href = option.url;
+        else link.removeAttribute("href");
+      }
+      root.querySelectorAll<HTMLButtonElement>("[data-watch-option-select]").forEach((button) => {
+        button.setAttribute("aria-expanded", String(button.dataset.watchOptionSelect === option.id));
+      });
+      if (moveFocus) detailTitle.focus();
+    };
+
+    const render = (announce = true) => {
+      const filtered = filterWatchOptions(watchOptions, state);
+      const results = sortWatchOptions(filtered, state.sort, state.direction);
+      const visibleIds = new Set(results.map((option) => option.id));
+
+      for (const option of results) {
+        const row = tableBody.querySelector<HTMLElement>(`[data-watch-option-id="${option.id}"]`);
+        const card = cardList.querySelector<HTMLElement>(`[data-watch-option-id="${option.id}"]`);
+        if (row) tableBody.append(row);
+        if (card) cardList.append(card);
+      }
+      root.querySelectorAll<HTMLElement>("[data-watch-option-id]").forEach((element) => {
+        element.hidden = !visibleIds.has(element.dataset.watchOptionId ?? "");
+      });
+
+      const countLabel = `${results.length} ${results.length === 1 ? "way" : "ways"} to watch`;
+      if (announce || status.textContent?.trim() !== countLabel) status.textContent = countLabel;
+      empty.hidden = results.length !== 0;
+      reset.disabled = state.query === "" && state.delivery === "all" &&
+        state.provider === "" && state.area === "" && state.sort === "provider" &&
+        state.direction === "asc" && state.selectedId === "";
+
+      root.querySelectorAll<HTMLElement>("[data-watch-sort-heading]").forEach((heading) => {
+        const active = heading.dataset.watchSortHeading === state.sort;
+        if (active) heading.setAttribute("aria-sort", state.direction === "asc" ? "ascending" : "descending");
+        else heading.removeAttribute("aria-sort");
+      });
+      root.querySelectorAll<HTMLButtonElement>("[data-watch-sort]").forEach((button) => {
+        const active = button.dataset.watchSort === state.sort;
+        button.toggleAttribute("data-sort-active", active);
+        button.dataset.sortDirection = active ? state.direction : "";
+      });
+
+      const selected = optionsById.get(state.selectedId);
+      if (selected && visibleIds.has(selected.id)) showDetail(selected);
+      else closeDetail();
+      setControlsFromState();
+      syncUrl();
+    };
+
+    const resetDirectory = () => {
+      state = { ...defaultWatchDirectoryState };
+      render();
+      search.focus();
+    };
+
+    search.addEventListener("input", () => {
+      state.query = search.value;
+      render();
+    });
+    provider.addEventListener("change", () => {
+      state.provider = provider.value;
+      render();
+    });
+    area.addEventListener("change", () => {
+      state.area = area.value;
+      render();
+    });
+    mobileSort.addEventListener("change", () => {
+      const [sort, direction] = mobileSort.value.split(":") as [WatchSortKey, WatchSortDirection];
+      state.sort = sort;
+      state.direction = direction;
+      render();
+    });
+    root.querySelectorAll<HTMLButtonElement>("[data-watch-delivery]").forEach((button) => {
+      button.addEventListener("click", () => {
+        state.delivery = button.dataset.watchDelivery as WatchDirectoryState["delivery"];
+        render();
+      });
+    });
+    root.querySelectorAll<HTMLButtonElement>("[data-watch-sort]").forEach((button) => {
+      button.addEventListener("click", () => {
+        const sort = button.dataset.watchSort as WatchSortKey;
+        state.direction = state.sort === sort && state.direction === "asc" ? "desc" : "asc";
+        state.sort = sort;
+        render();
+      });
+    });
+    root.querySelectorAll<HTMLButtonElement>("[data-watch-option-select]").forEach((button) => {
+      button.addEventListener("click", () => {
+        const option = optionsById.get(button.dataset.watchOptionSelect ?? "");
+        if (!option) return;
+        if (state.selectedId === option.id && !detail.hidden) closeDetail();
+        else showDetail(option, true, button);
+        syncUrl();
+      });
+    });
+    reset.addEventListener("click", resetDirectory);
+    emptyReset?.addEventListener("click", resetDirectory);
+    root.querySelector<HTMLButtonElement>("[data-watch-detail-close]")?.addEventListener("click", () => {
+      closeDetail(true);
+      syncUrl();
+    });
+    root.querySelector<HTMLButtonElement>("[data-watch-print]")?.addEventListener("click", () => {
+      document.documentElement.setAttribute("data-print-watch-directory", "");
+      window.addEventListener("afterprint", () => {
+        document.documentElement.removeAttribute("data-print-watch-directory");
+      }, { once: true });
+      window.print();
+    });
+    root.querySelector<HTMLButtonElement>("[data-watch-copy-link]")?.addEventListener("click", async () => {
+      const url = new URL(window.location.href);
+      url.hash = "ways-to-watch-title";
+      try {
+        await navigator.clipboard.writeText(url.toString());
+        if (actionStatus) actionStatus.textContent = "Filtered guide link copied.";
+      } catch {
+        if (actionStatus) actionStatus.textContent = "Copy is unavailable. Use your browser's address bar.";
+      }
+    });
+    window.addEventListener("popstate", () => {
+      state = parseWatchDirectoryState(window.location.search, watchOptions);
+      render(false);
+    });
+
+    setControlsFromState();
+    render(false);
+  });
+</script>
+
+<style>
+  .watch-directory {
+    padding-block: clamp(3rem, 7vw, 6rem);
+  }
+  .watch-directory__intro {
+    display: flex;
+    align-items: end;
+    justify-content: space-between;
+    gap: 1.5rem;
+    margin-bottom: 1.5rem;
+  }
+  .watch-directory__intro > div:first-child { max-width: 65ch; }
+  .watch-directory__kicker,
+  .watch-detail__eyebrow {
+    margin: 0 0 0.4rem;
+    color: var(--color-map-nj-low);
+    font-size: 0.76rem;
+    font-weight: 800;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+  }
+  .watch-directory h2 {
+    margin: 0;
+    font-size: clamp(1.8rem, 4vw, 2.7rem);
+  }
+  .watch-directory__intro p:last-child,
+  .watch-directory__note { color: var(--color-text-muted); line-height: 1.65; }
+  .watch-directory__intro-actions,
+  .watch-detail__actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.6rem;
+  }
+  .watch-action-status {
+    flex: 1 1 100%;
+    min-height: 1.4em;
+    color: var(--color-text-muted);
+    font-size: 0.875rem;
+    line-height: 1.4;
+  }
+  .watch-action-status:empty { display: none; }
+  .watch-action,
+  .watch-reset,
+  .watch-detail__link,
+  .watch-option-button {
+    min-height: var(--target-comfortable);
+    border: 1px solid var(--color-border-strong);
+    border-radius: 3px;
+    font: inherit;
+    font-weight: 700;
+    cursor: pointer;
+  }
+  .watch-action,
+  .watch-reset {
+    padding: 0.55rem 0.8rem;
+    background: var(--color-surface-elevated);
+    color: var(--color-text-on-surface);
+  }
+  .watch-action:hover,
+  .watch-reset:hover:not(:disabled) { background: var(--color-surface-current); }
+  .watch-reset:disabled { opacity: 0.5; cursor: default; }
+  .watch-directory__controls {
+    padding: clamp(1rem, 3vw, 1.5rem);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-accent);
+    background: var(--color-surface-panel);
+  }
+  .watch-search label,
+  .watch-selects label,
+  .watch-delivery-filter > span {
+    display: block;
+    margin-bottom: 0.4rem;
+    color: var(--color-text-on-surface);
+    font-size: 0.82rem;
+    font-weight: 800;
+  }
+  .watch-search input,
+  .watch-selects select {
+    box-sizing: border-box;
+    width: 100%;
+    min-height: var(--target-comfortable);
+    border: 1px solid var(--color-border-strong);
+    border-radius: var(--radius-control);
+    background: var(--color-surface-page);
+    color: var(--color-text-on-surface);
+    font: inherit;
+  }
+  .watch-search input { padding: 0.75rem 0.9rem; font-size: 1rem; }
+  .watch-selects select { padding: 0.55rem 2.2rem 0.55rem 0.65rem; }
+  .watch-search input::placeholder { color: var(--color-text-quiet); }
+  .watch-delivery-filter { margin-top: 1rem; }
+  .watch-pills { display: flex; flex-wrap: wrap; gap: 0.45rem; }
+  .watch-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+    min-height: var(--target-comfortable);
+    padding: 0.45rem 0.75rem;
+    border: 1px solid var(--color-border-strong);
+    border-radius: 16.5px;
+    background: var(--color-surface-page);
+    color: var(--color-text-muted);
+    font: inherit;
+    font-weight: 700;
+    cursor: pointer;
+  }
+  .watch-pill small { color: var(--color-text-quiet); font-size: 0.68rem; letter-spacing: 0.04em; }
+  .watch-pill[aria-pressed="true"] {
+    border-color: var(--color-map-nj-edge);
+    background: var(--color-map-control-active);
+    color: var(--color-text-on-surface);
+  }
+  .watch-pill[aria-pressed="true"] small { color: var(--color-text-on-surface); }
+  .watch-selects {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0.8rem;
+    margin-top: 1rem;
+  }
+  .watch-mobile-sort { display: none; }
+  .watch-directory__control-footer {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+    margin-top: 1rem;
+    padding-top: 1rem;
+    border-top: 1px solid var(--color-border);
+  }
+  .watch-results-status { margin: 0; font-weight: 800; font-variant-numeric: tabular-nums; }
+  .watch-directory__results { margin-top: 1rem; }
+  .watch-table-wrap {
+    overflow-x: auto;
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-surface);
+  }
+  .watch-table { width: 100%; border-collapse: collapse; background: var(--color-surface-panel); }
+  .watch-table th,
+  .watch-table td { padding: 0.9rem 0.8rem; border-bottom: 1px solid var(--color-border); text-align: left; vertical-align: top; }
+  .watch-table thead th { background: var(--color-surface-elevated); color: var(--color-text-on-surface); }
+  .watch-table thead button {
+    display: inline-flex;
+    align-items: center;
+    min-height: var(--target-comfortable);
+    padding: 0;
+    border: 0;
+    background: transparent;
+    color: inherit;
+    font: inherit;
+    font-weight: 800;
+    text-align: left;
+    cursor: pointer;
+  }
+  .watch-table thead button[data-sort-active]::after { content: " ↑"; margin-left: 0.35rem; }
+  .watch-table thead button[data-sort-active][data-sort-direction="desc"]::after { content: " ↓"; }
+  .watch-table tbody tr:last-child th,
+  .watch-table tbody tr:last-child td { border-bottom: 0; }
+  .watch-table tbody tr:hover { background: var(--color-map-detail-glow); }
+  .watch-table td { color: var(--color-text-muted); line-height: 1.45; }
+  .watch-channel { color: var(--color-text-on-surface) !important; font-weight: 800; font-variant-numeric: tabular-nums; }
+  .watch-type { display: inline-flex; flex-direction: column; gap: 0.1rem; }
+  .watch-type strong { color: var(--color-map-nj-low); font-size: 0.75rem; letter-spacing: 0.05em; }
+  .watch-type span { color: var(--color-text-quiet); font-size: 0.76rem; }
+  .watch-option-button {
+    padding: 0.25rem 0.45rem;
+    border-color: transparent;
+    background: transparent;
+    color: var(--color-link);
+    text-align: left;
+    text-decoration: underline;
+    text-underline-offset: 0.2em;
+  }
+  .watch-option-button:hover { background: var(--color-surface-current); }
+  .watch-card-list { display: none; }
+  .watch-empty {
+    padding: 2rem;
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-surface);
+    background: var(--color-surface-panel);
+    text-align: center;
+  }
+  .watch-empty h3 { margin-top: 0; }
+  .watch-empty p { color: var(--color-text-muted); }
+  .watch-detail {
+    margin-top: 1rem;
+    padding: clamp(1rem, 3vw, 1.5rem);
+    border: 1px solid var(--color-map-nj-edge);
+    border-radius: var(--radius-accent);
+    background: var(--color-surface-elevated);
+  }
+  .watch-detail h3 { margin: 0; font-size: 1.45rem; }
+  .watch-detail dl { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1rem; }
+  .watch-detail dl div { min-width: 0; }
+  .watch-detail dt { color: var(--color-text-quiet); font-size: 0.76rem; font-weight: 800; text-transform: uppercase; }
+  .watch-detail dd { margin: 0.25rem 0 0; color: var(--color-text-on-surface); line-height: 1.5; }
+  .watch-detail__link {
+    display: inline-flex;
+    align-items: center;
+    padding: 0.55rem 0.8rem;
+    border-color: var(--color-map-nj-edge);
+    background: var(--color-brand);
+    color: var(--color-text-on-brand);
+    text-decoration: none;
+  }
+  .watch-detail__link:hover { background: var(--color-brand-bright); }
+  .watch-detail__link[hidden] { display: none; }
+  .watch-glossary {
+    margin-top: 1rem;
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-surface);
+    background: var(--color-surface-panel);
+  }
+  .watch-glossary summary {
+    min-height: var(--target-comfortable);
+    padding: 0.9rem 1rem;
+    color: var(--color-text-on-surface);
+    font-weight: 800;
+    cursor: pointer;
+  }
+  .watch-glossary dl { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1rem; margin: 0; padding: 0 1rem 1rem; }
+  .watch-glossary dt { font-weight: 800; }
+  .watch-glossary dd { margin: 0.2rem 0 0; color: var(--color-text-muted); line-height: 1.5; }
+  .watch-directory__note { max-width: 80ch; margin: 1rem 0 0; font-size: 0.84rem; }
+  .watch-action:focus-visible,
+  .watch-reset:focus-visible,
+  .watch-detail__link:focus-visible,
+  .watch-option-button:focus-visible,
+  .watch-pill:focus-visible,
+  .watch-table thead button:focus-visible,
+  .watch-search input:focus-visible,
+  .watch-selects select:focus-visible,
+  .watch-glossary summary:focus-visible {
+    outline: var(--focus-outline);
+    outline-offset: var(--focus-offset);
+  }
+
+  @media (max-width: 52rem) {
+    .watch-directory__intro { align-items: flex-start; flex-direction: column; }
+    .watch-directory__intro-actions { width: 100%; }
+    .watch-directory__intro-actions .watch-action { flex: 1 1 auto; }
+    .watch-pills { flex-wrap: nowrap; margin-inline: calc(var(--gutter) * -1); padding: 0.2rem var(--gutter) 0.55rem; overflow-x: auto; }
+    .watch-pill { flex: 0 0 auto; }
+    .watch-selects { grid-template-columns: 1fr; }
+    .watch-mobile-sort { display: block; }
+    .watch-table-wrap { display: none; }
+    .watch-card-list { display: grid; gap: 0.75rem; }
+    .watch-card {
+      padding: 1rem;
+      border: 1px solid var(--color-border);
+      border-radius: var(--radius-surface);
+      background: var(--color-surface-panel);
+    }
+    .watch-card__heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 1rem; }
+    .watch-card__channel { color: var(--color-text-on-surface); font-weight: 900; font-variant-numeric: tabular-nums; text-align: right; }
+    .watch-card h3 { margin: 0.85rem 0 0.2rem; }
+    .watch-card p { margin: 0.2rem 0; color: var(--color-text-muted); line-height: 1.45; }
+    .watch-card__access { font-size: 0.84rem; }
+    .watch-card .watch-option-button { margin-top: 0.65rem; }
+    .watch-detail dl,
+    .watch-glossary dl { grid-template-columns: 1fr; }
+  }
+
+  @media (max-width: 30rem) {
+    .watch-directory__control-footer { align-items: stretch; flex-direction: column; }
+    .watch-reset { width: 100%; }
+  }
+
+  @media print {
+    :global(html[data-print-watch-directory] .site-head),
+    :global(html[data-print-watch-directory] .site-foot),
+    :global(html[data-print-watch-directory] main > :not([data-watch-directory])) {
+      display: none !important;
+    }
+    .watch-directory__intro-actions,
+    .watch-directory__controls,
+    .watch-card-list,
+    .watch-detail,
+    .watch-glossary { display: none !important; }
+    .watch-table-wrap { display: block; overflow: visible; border-color: var(--color-print-ink); }
+    .watch-table { background: var(--color-paper); color: var(--color-print-ink); }
+    .watch-table th,
+    .watch-table td,
+    .watch-table .watch-channel,
+    .watch-table .watch-type strong,
+    .watch-table .watch-type span,
+    .watch-option-button { color: var(--color-print-ink) !important; }
+    .watch-table thead button { pointer-events: none; }
+  }
+</style>

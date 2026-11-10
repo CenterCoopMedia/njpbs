@@ -1,0 +1,79 @@
+/* Media toolbar with a More overflow. It never wraps. */
+.ui-overflow-toolbar {
+  --overflow-control-target: var(--cms-control-height);
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: var(--cms-space-2);
+  min-width: 0;
+  min-height: calc(var(--overflow-control-target) + (2 * var(--cms-space-2)));
+}
+
+.ui-overflow-toolbar[data-control-size="standard"] { --overflow-control-target: var(--cms-control-standard-target); }
+.ui-overflow-toolbar[data-control-size="compact"] { --overflow-control-target: var(--cms-control-compact-target); }
+.ui-overflow-toolbar[data-control-size="comfortable"] { --overflow-control-target: var(--cms-control-comfortable-target); }
+
+.ui-overflow-toolbar-leading,
+.ui-overflow-toolbar-trailing {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: var(--cms-space-2);
+}
+
+/* The center takes only the space the other zones leave (a zero basis), so its width does
+   not depend on which controls it currently shows. Overflow is clipped outside a margin as
+   wide as the focus ring, so a focused control keeps its whole ring. */
+.ui-overflow-toolbar-center {
+  --ui-overflow-toolbar-ring: calc(var(--cms-focus-width) + var(--cms-focus-offset));
+  display: flex;
+  flex: 1 1 0;
+  align-items: center;
+  gap: var(--cms-space-2);
+  /* Room for the More control is kept even when the trailing zone is wide. */
+  min-width: calc(var(--overflow-control-target) + (2 * var(--ui-overflow-toolbar-ring)));
+  padding: var(--ui-overflow-toolbar-ring);
+  margin: calc(-1 * var(--ui-overflow-toolbar-ring));
+  overflow: hidden;
+}
+
+.ui-overflow-toolbar-item {
+  display: flex;
+  flex: none;
+}
+
+.ui-overflow-toolbar-trailing {
+  flex: 0 1 auto;
+  min-width: 0;
+  margin-inline-start: auto;
+}
+
+/* Trailing buttons keep their full label; More absorbs them instead (see the component). */
+.ui-overflow-toolbar-trailing > :not(input) {
+  flex: none;
+}
+
+/* A search field gives up width before any control is clipped. */
+.ui-overflow-toolbar-trailing > input {
+  flex: 1 1 14rem;
+  width: 14rem;
+  min-width: 7rem;
+}
+
+/* A search wrapper, such as a form holding the field and its clear button, sizes like a
+   bare field. Its two classes outrank the :not(input) rule, which stays as it is. */
+.ui-overflow-toolbar-trailing > .ui-overflow-toolbar-search {
+  flex: 0 1 19rem;
+  width: 19rem;
+  min-width: 7rem;
+}
+
+@media (max-width: 60rem) {
+  .ui-overflow-toolbar-trailing > .ui-overflow-toolbar-search {
+    flex-basis: 14rem;
+    width: 14rem;
+  }
+}
+
+/* With no center actions or More menu, trailing controls use the whole toolbar. */
+.ui-overflow-toolbar-center:empty { display: none; }

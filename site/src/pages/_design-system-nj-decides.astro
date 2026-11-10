@@ -1,0 +1,59 @@
+---
+// Internal-only fixture: the actual public shell and band, with sample CMS input.
+import PublicSiteLayout from "../layouts/PublicSiteLayout.astro";
+import PublicArticle from "../components/PublicArticle.astro";
+import PublicSubpage from "../components/PublicSubpage.astro";
+import type { LaunchFallbackPage } from "../data/launch-fallback";
+import { projectCmsServicePage } from "../lib/cms-service-page";
+import CmsPage from "../components/CmsPage.astro";
+import type { CollectionEntry } from "astro:content";
+import type { CmsRenderContext } from "../lib/cms-render-context";
+export function getStaticPaths() {
+  return ["before", "after", "hub-before", "hub-after", "service-before", "service-after", "live-after", "contact-runtime", "hub-sitewide", "hub-unthemed-sitewide", "service-sitewide", "contact-sitewide", ...["home", "page", "post"].flatMap(kind => ["hidden", "shown"].map(state => `visibility-${kind}-${state}`))].map(variant => ({ params: { variant } }));
+}
+const visibility = /^visibility-(home|page|post)-(hidden|shown)$/.exec(Astro.params.variant ?? "");
+const visibilityPath = visibility ? ({ home: "/", page: "/election/", post: "/posts/election-guide/" }[visibility[1]] ?? "/") : undefined;
+const hub = Astro.params.variant?.startsWith("hub-");
+const serviceVariant = Astro.params.variant?.startsWith("service-") || Astro.params.variant === "live-after";
+// Keep specimen actions local instead of loading the public fallback link catalog.
+const liveService = Astro.params.variant === "live-after";
+const serviceFrame: LaunchFallbackPage = {
+  slug: liveService ? "live" : "watch",
+  title: liveService ? "PBS Livestream" : "Watch NJ PBS",
+  description: liveService
+    ? "Watch the NJ PBS broadcast stream through PBS live video."
+    : "Browse NJ PBS programs and PBS series on demand.",
+  body: [],
+  destinationCards: true,
+  primaryAction: { label: "Sample action", href: "#sample-coverage" },
+};
+const service = projectCmsServicePage({ frame: serviceFrame, title: serviceFrame.title,
+  description: "Sample saved service introduction.", assets: {}, blocks: [{ id: "saved-hero-actions", type: "cta_row", section: "hero-actions", order: 0, visible: true,
+    data: { ctas: [1, 2, 3].map(number => ({ label: `Saved action ${number}`, href: `/design-system/specimens/election/service-after/#saved-${number}`, variant: "primary" as const })) } }] });
+const pageEntry: CollectionEntry<"cmsPages"> = {
+  id: "page-11111111111111111111111111111111", collection: "cmsPages",
+  data: { pageId: "page-11111111111111111111111111111111", path: "/election/", family: "article", template: "genericPage",
+    title: "NJ Decides 2026", description: "Follow election night coverage and find voting information.",
+    ...(["hub-after", "hub-sitewide"].includes(Astro.params.variant ?? "") ? { pageTheme: "nj-decides" as const } : {}),
+    noindex: true, contentMode: "published", sourceVersion: 1, publishedAt: "2026-10-26T12:00:00.000Z", assets: {},
+    blocks: [
+      { id: "intro-heading", type: "headline", order: 0, visible: true, data: { text: "Election night coverage", level: 2 } },
+      { id: "intro-copy", type: "prose", order: 1, visible: true, data: { content: { type: "doc", content: [{ type: "paragraph", content: [{ type: "text", text: "Sample coverage copy. Staff choose the Page sections and order in Boardwalk." }] }] } } },
+      { id: "voter-heading", type: "headline", order: 2, visible: true, data: { text: "Voting information", level: 2 } },
+    ],
+  },
+};
+const banner = { settingId: "public-homepage-banner", enabled: true, njDecides: true,
+  message: "Follow election night coverage and find voting information.",
+  liveLabel: "Election night", link: { label: "Election hub", href: "/design-system/specimens/election/after/#sample-coverage" },
+  ...(visibility ? { excludedPaths: visibility[2] === "hidden" ? [visibilityPath!] : ["/elsewhere/"] } : {}),
+  sourceVersion: 1, publishedAt: "2026-10-26T12:00:00.000Z" };
+Astro.locals.cmsRender = { content: { kind: "private-preview", pages: [], posts: [], programs: [], authors: [], recordCards: [],
+  settings: Astro.params.variant?.endsWith("sitewide") ? [banner] : hub || serviceVariant || Astro.params.variant === "before" ? [] : [banner] },
+  homeSources: {} } as unknown as CmsRenderContext;
+---
+<PublicSiteLayout canonicalPath={visibilityPath} hasNjDecidesPageHeading={pageEntry.data.pageTheme === "nj-decides" || (serviceVariant && Astro.params.variant !== "service-before")} title="Election coverage fixture" description="Sample Page inside the public site layout." preview noindex>
+  {["contact-runtime", "contact-sitewide"].includes(Astro.params.variant ?? "") ? <PublicArticle title="Contact runtime title" description="Contact runtime summary" runtimePageId="contact" pageTheme="nj-decides"><p>Local runtime-hook fixture.</p></PublicArticle> : serviceVariant ? <PublicSubpage page={service.page} cmsService={service} pageTheme={Astro.params.variant === "service-before" ? "default" : "nj-decides"} /> : hub ? <CmsPage entry={pageEntry} /> : <PublicArticle title="Election coverage" description="Sample CMS-owned Page content. The election band is shared site chrome.">
+    <section id="sample-coverage"><h2>Latest coverage</h2><p>Staff arrange this Page's content in Boardwalk. These labels are fixture content.</p><a href="#main">Return to the Page</a></section>
+  </PublicArticle>}
+</PublicSiteLayout>

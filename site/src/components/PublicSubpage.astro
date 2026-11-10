@@ -1,0 +1,792 @@
+---
+import ReaderTextSize from "./ReaderTextSize.astro";
+import {
+  donateUrl,
+  givingTransitionNotice,
+  passportLearnMoreUrl,
+  passportLookupUrl,
+  pbsAppUrl,
+  pbsKidsUrl,
+  pbsLivestreamEmbedUrl,
+  pbsVideoUrl,
+  transitionNoticeSlugs,
+  type LaunchFallbackPage,
+  type LaunchLink,
+} from "../data/launch-fallback";
+import {
+  buildScheduleWidgetConfig,
+  SCHEDULE_WIDGET_SRC,
+} from "../lib/schedule-widget";
+import { renderLivePlayerFrame } from "../lib/live-player-render";
+import { HOMEPAGE_ANNOUNCEMENT } from "../lib/homepage-announcement";
+import ScheduleNowNext from "./ScheduleNowNext.astro";
+import scheduleData from "../data/schedule.json";
+import { renderSchedule } from "../lib/cms-render-context";
+import type { BakedScheduleData } from "../lib/schedule-feed";
+import { loadScheduleData } from "../lib/schedule-data";
+import type { CmsServicePageProjection } from "../lib/cms-service-page";
+import { renderServiceIntroduction, renderServiceNotice, renderServiceBody, servicePageClass } from "../lib/cms-service-render";
+import { njDecidesServiceHeading } from "../../../packages/content-core/src/nj-decides-page";
+import NjDecidesPageHeading from "./NjDecidesPageHeading.astro";
+import type { PageTheme } from "../../../packages/content-core/src/content-model";
+import CmsHeroBackground from "./CmsHeroBackground.astro";
+import "../styles/service-page.css";
+
+interface Props {
+  page: LaunchFallbackPage;
+  pageTheme?: PageTheme;
+  cmsService?: CmsServicePageProjection;
+  heroBackgroundImage?: {
+    url: string;
+    width: number;
+    height: number;
+  } | null;
+  heroBackgroundPosition?: "center" | "top" | "bottom";
+}
+
+interface DetailCard extends LaunchLink {
+  title: string;
+  description: string;
+  image?: string;
+}
+
+// An optional headed prose section under the page copy. Gives a page like /about
+// real information structure (scannable h2s) without changing the shared
+// LaunchFallbackPage shape. `actions` render as text links after the prose.
+interface DetailSection {
+  heading: string;
+  body: string[];
+  actions?: LaunchLink[];
+}
+
+// The PBS JAWS schedule widget. Rendered like a player: an embed section between
+// the hero and the body. gc.js reads the global PBS_CHROME_CONFIG and injects the
+// full week grid into its placeholder at runtime, so the page ships static fallback
+// content for no-JS and failed loads rather than linking out to the PBS station
+// schedule router (which redirects back to this page and loops). It is one widget
+// by design: gc.js reloads jQuery once per declared widget, and a second widget
+// broke the grid's datepicker (see src/lib/schedule-widget.ts). gc.js also injects
+// PBS's own site masthead as #jaws_header; the schedule styles hide it since we
+// only want the listings, not PBS chrome.
+interface PageSchedule {
+  heading: string;
+  help: string;
+  caption: string;
+}
+
+interface PageDetails {
+  summary: string;
+  player?: true;
+  scheduleWidget?: PageSchedule;
+  cards: DetailCard[];
+  sections?: DetailSection[];
+  note?: string;
+}
+
+const {
+  page,
+  pageTheme,
+  cmsService,
+  heroBackgroundImage,
+  heroBackgroundPosition,
+} = Astro.props as Props;
+const electionHeading = cmsService ? njDecidesServiceHeading(cmsService) : undefined;
+const bakedSchedule = renderSchedule(Astro.locals.cmsRender)?.data ?? await loadScheduleData(scheduleData as BakedScheduleData);
+const opensInNewTab = (link: LaunchLink) =>
+  link.external === true && /^https?:\/\//.test(link.href);
+
+const details: Record<string, PageDetails> = {
+  watch: {
+    summary:
+      "Find NJ PBS programs, PBS series, full episodes, specials, and Passport video on demand.",
+    cards: [
+      {
+        label: "Watch",
+        title: "Programs on demand",
+        description: "Open the PBS-hosted video portal for full episodes and specials.",
+        href: pbsVideoUrl,
+        external: true,
+        image: "/brand/spotlight/watch.jpg",
+      },
+      {
+        label: "Member",
+        title: "PBS Passport",
+        description: "Learn about the member streaming benefit and account help.",
+        href: passportLearnMoreUrl,
+        external: true,
+        image: "/brand/spotlight/support.jpg",
+      },
+      {
+        label: "Live",
+        title: "Livestream",
+        description: "Watch the NJ PBS broadcast stream from the live page.",
+        href: "/live/",
+        image: "/brand/spotlight/under-the-dome.jpg",
+      },
+      {
+        label: "App",
+        title: "PBS app",
+        description: "Use the PBS app on phones, tablets, and connected-TV devices.",
+        href: pbsAppUrl,
+        external: true,
+        image: "/brand/spotlight/about.jpg",
+      },
+    ],
+    note: "PBS handles the player, app, account sign-in, and video availability.",
+  },
+  live: {
+    summary:
+      "Watch the NJ PBS broadcast stream through the PBS livestream player.",
+    player: true,
+    sections: [
+      {
+        heading: "Watching with captions",
+        body: [
+          "Captions are available on NJ PBS programming. To turn them on, use the CC, or closed-caption, control in the PBS player toolbar.",
+          "You can also change how captions look, including their size and color, in your device settings or the PBS app settings.",
+        ],
+        actions: [
+          { label: "Closed captioning", href: "/closed-captioning/" },
+          { label: "Accessibility", href: "/accessibility/" },
+        ],
+      },
+    ],
+    cards: [
+      {
+        label: "Play",
+        title: "Open PBS player",
+        description: "Open the livestream directly on PBS video.",
+        href: pbsLivestreamEmbedUrl,
+        external: true,
+        image: "/brand/spotlight/watch.jpg",
+      },
+      {
+        label: "Guide",
+        title: "Schedule",
+        description: "See what is airing now and later this week.",
+        href: "/schedule/",
+        image: "/brand/spotlight/under-the-dome.jpg",
+      },
+      {
+        label: "Browse",
+        title: "On demand",
+        description: "Find programs after broadcast from the Watch page.",
+        href: "/watch/",
+        image: "/brand/spotlight/support.jpg",
+      },
+    ],
+    note: "The stream itself runs through PBS video systems.",
+  },
+  schedule: {
+    summary:
+      "Check what is airing on NJ PBS today and this week, then watch live or find a program on demand.",
+    scheduleWidget: {
+      heading: "NJ PBS TV schedule",
+      help: "Browse the full week grid below. Use Now or Primetime to jump to a time, the date picker or arrows to change the day, and scroll the grid sideways for later times. Program titles link to full details on PBS.",
+      caption:
+        "Listings are provided by PBS and load in your browser. If they do not appear, use the links below to watch live or on demand.",
+    },
+    cards: [
+      {
+        label: "Watch",
+        title: "Live stream",
+        description: "Go from the schedule to the NJ PBS livestream page.",
+        href: "/live/",
+        image: "/brand/spotlight/under-the-dome.jpg",
+      },
+      {
+        label: "Stream",
+        title: "On demand",
+        description: "Catch programs after broadcast through the NJ PBS video portal.",
+        href: pbsVideoUrl,
+        external: true,
+        image: "/brand/spotlight/watch.jpg",
+      },
+      {
+        label: "App",
+        title: "PBS app",
+        description: "Watch NJ PBS on phones, tablets, and connected-TV devices.",
+        href: pbsAppUrl,
+        external: true,
+        image: "/brand/spotlight/about.jpg",
+      },
+    ],
+  },
+  kids: {
+    summary:
+      "PBS Kids gives families trusted shows, games, and learning activities from PBS.",
+    sections: [
+      {
+        heading: "Watch on NJ PBS",
+        body: [
+          "Want a child watching on the broadcast channel? Start the NJ PBS livestream, or see the full NJ PBS TV schedule to find kids shows.",
+        ],
+        actions: [
+          { label: "Watch NJ PBS live", href: "/live/" },
+          { label: "See the NJ PBS TV schedule", href: "/schedule/" },
+        ],
+      },
+    ],
+    cards: [
+      {
+        label: "Watch",
+        title: "PBS Kids video",
+        description: "Open PBS Kids videos and favorite series for young viewers.",
+        href: `${pbsKidsUrl}video/`,
+        external: true,
+      },
+      {
+        label: "Play",
+        title: "PBS Kids games",
+        description: "Find games and activities built around PBS Kids characters.",
+        href: `${pbsKidsUrl}games/`,
+        external: true,
+      },
+      {
+        label: "Learn",
+        title: "Family resources",
+        description: "Use PBS resources for parents, caregivers, and classrooms.",
+        href: "https://www.pbs.org/parents/",
+        external: true,
+      },
+    ],
+  },
+  support: {
+    summary:
+      "Support NJ PBS and keep public media available for New Jersey.",
+    cards: [
+      {
+        label: "Give",
+        title: "Donate",
+        description: "Open the secure PBS payment form for NJ PBS.",
+        href: page.primaryAction.href,
+        external: page.primaryAction.external,
+        image: "/brand/spotlight/give.jpg",
+      },
+      {
+        label: "Member",
+        title: "Passport access",
+        description: "Learn about the Passport member benefit before you watch.",
+        href: "/passport/",
+        image: "/brand/spotlight/passport.jpg",
+      },
+      {
+        label: "Help",
+        title: "Contact NJ PBS",
+        description: "Reach the station team with membership or site questions.",
+        href: "/contact/",
+        image: "/brand/spotlight/contact.jpg",
+      },
+    ],
+  },
+  give: {
+    summary:
+      "Make a gift to NJ PBS and support public television, statewide reporting, education, arts, and culture.",
+    cards: [
+      {
+        label: "Donate",
+        title: "PBS donation form",
+        description: "Open the secure PBS payment form for NJ PBS.",
+        href: donateUrl,
+        external: true,
+        image: "/brand/spotlight/give.jpg",
+      },
+      {
+        label: "Member",
+        title: "Passport",
+        description: "Learn how the member streaming benefit works.",
+        href: "/passport/",
+        image: "/brand/spotlight/passport.jpg",
+      },
+      {
+        label: "Help",
+        title: "Contact NJ PBS",
+        description: "Reach the station team with membership or donation questions.",
+        href: "/contact/",
+        image: "/brand/spotlight/contact.jpg",
+      },
+    ],
+    note: "For online gifts, payment information is collected by PBS, not by this website.",
+  },
+  donate: {
+    summary:
+      "Make a gift to NJ PBS online through the PBS-hosted donation form, or by mailing a check.",
+    cards: [
+      {
+        label: "Donate",
+        title: "PBS donation form",
+        description: "Open the secure PBS payment form for NJ PBS.",
+        href: page.primaryAction.href,
+        external: page.primaryAction.external,
+        image: "/brand/spotlight/give.jpg",
+      },
+      {
+        label: "Member",
+        title: "Passport",
+        description: "Learn about the member streaming benefit.",
+        href: "/passport/",
+        image: "/brand/spotlight/passport.jpg",
+      },
+      {
+        label: "Contact",
+        title: "Membership help",
+        description: "Ask the station team about donations or membership.",
+        href: "/contact/",
+        image: "/brand/spotlight/contact.jpg",
+      },
+    ],
+  },
+  passport: {
+    summary:
+      "Learn how PBS Passport works for NJ PBS supporters before signing in, donating, or looking up an account.",
+    cards: [
+      {
+        label: "Give",
+        title: "Donate through PBS",
+        description: "Support NJ PBS and start or renew the Passport member benefit.",
+        href: donateUrl,
+        external: true,
+        image: "/brand/spotlight/give.jpg",
+      },
+      {
+        label: "Lookup",
+        title: "Find Passport access",
+        description: "Use PBS account lookup if you already donate and need help.",
+        href: passportLookupUrl,
+        external: true,
+        image: "/brand/spotlight/passport.jpg",
+      },
+      {
+        label: "Learn",
+        title: "PBS Passport help",
+        description: "Read PBS guidance on how the Passport member benefit works.",
+        href: passportLearnMoreUrl,
+        external: true,
+        image: "/brand/spotlight/support.jpg",
+      },
+    ],
+    note: "Passport account lookup, sign-in, and member verification are handled by PBS.",
+  },
+  about: {
+    summary:
+      "NJ PBS connects viewers across New Jersey with public television: trusted PBS programs, local journalism, arts and culture, learning for children, and coverage of the issues facing the state. As of July 1, 2026, Montclair State University is the new operator of NJ PBS.",
+    sections: [
+      {
+        heading: "What NJ PBS is",
+        body: [
+          "NJ PBS is New Jersey's PBS member service, part of the national Public Broadcasting Service. It brings national PBS programming together with New Jersey storytelling: documentaries, arts and music, history, children's learning, and public-affairs coverage made for and about the state.",
+          "The service is nonprofit and viewer-supported. Programming is free to watch over the air and through PBS-hosted streaming, and member donations help keep it that way.",
+        ],
+      },
+      {
+        heading: "Montclair's role",
+        body: [
+          "NJ PBS is housed at the College of Communication and Media at Montclair State University. The transition became official on July 1, 2026, after the State of New Jersey selected Montclair to program and manage New Jersey's four FCC-licensed public television stations.",
+          "This summer, Montclair is hiring staff, setting up systems, and preparing programming that informs, connects, and educates residents across the Garden State.",
+        ],
+      },
+      {
+        heading: "NJ Spotlight News",
+        body: [HOMEPAGE_ANNOUNCEMENT.aboutDescription],
+        actions: [
+          { ...HOMEPAGE_ANNOUNCEMENT.link, external: true },
+        ],
+      },
+      {
+        heading: "The member stations",
+        body: [
+          "NJ PBS reaches the state over four broadcast stations licensed to the New Jersey Public Broadcasting Authority: WNJS in Camden, WNJN in Montclair, WNJT in Trenton, and WNJB in New Brunswick. Together they cover New Jersey and reach into neighboring markets.",
+          "Each station keeps its own FCC online public inspection file. The four files are linked in the footer of every page on this site.",
+        ],
+      },
+      {
+        heading: "What continues",
+        body: [
+          "WNET operated NJ PBS from July 1, 2011, through June 30, 2026. Programming continues during the transition to Montclair, and viewers can keep watching the broadcast channel, PBS programs, and NJ PBS video through PBS-hosted services.",
+          "Eligible members retain their PBS Passport benefit while Montclair sets up the next phase of NJ PBS operations. If you have a question about your membership, contact the station team.",
+        ],
+      },
+      {
+        heading: "How to reach us",
+        body: [
+          "For questions about programs, membership, donations, or NJ PBS service, contact the station team. If you have trouble using any part of this site, our accessibility page explains how to report a barrier and what to expect.",
+          "For press and media inquiries, email njpbs@montclair.edu.",
+          "Mailing address: NJ PBS, 1 Normal Ave., Montclair, NJ 07043.",
+        ],
+        actions: [
+          { label: "Contact NJ PBS", href: "/contact/" },
+          { label: "Transition FAQ", href: "/faq/" },
+          { label: "Accessibility", href: "/accessibility/" },
+        ],
+      },
+    ],
+    cards: [],
+    note:
+      "Video playback, account sign-in, Passport access, and online payment processing are handled by PBS-hosted services.",
+  },
+};
+
+const detail = details[page.slug] ?? {
+  summary: page.description,
+  cards: [
+    {
+      title: page.primaryAction.label,
+      label: "Open",
+      description: page.description,
+      href: page.primaryAction.href,
+      external: page.primaryAction.external,
+    },
+  ],
+};
+
+const cardGridClass = [
+  "public-page__cards",
+  (cmsService?.cards.length ?? detail.cards.length) === 4
+    ? "public-page__cards--four"
+    : "",
+]
+  .filter(Boolean)
+  .join(" ");
+
+const hasMedia = Boolean(detail.player || detail.scheduleWidget);
+
+// The giving-family pages (/give/, /support/, /passport/, /donate/) carry a static
+// transition notice near the top so the donation-cutoff and Passport guidance
+// reach people at the moment of action, not only on /faq/.
+const showTransitionNotice = (
+  transitionNoticeSlugs as readonly string[]
+).includes(page.slug);
+
+// The PBS JAWS widget embed. gc.js reads PBS_CHROME_CONFIG (which must exist
+// before it loads) and renders the declared widget into its placeholder id. Both
+// tags are is:inline so Astro emits them verbatim instead of bundling them. The
+// config is built by the shared module so the single-widget rule is testable.
+const scheduleWidgetConfig = buildScheduleWidgetConfig();
+
+const articleClass = [
+  "public-page",
+  detail.player ? "public-page--with-player" : "",
+  detail.scheduleWidget ? "public-page--with-schedule" : "",
+  page.destinationCards
+    ? "public-page--wide-cards"
+    : "",
+]
+  .filter(Boolean)
+  .join(" ");
+---
+
+<article
+  class={cmsService ? servicePageClass(cmsService.page) : articleClass}
+  data-cms-service-page={cmsService ? page.slug : undefined}
+>
+  {pageTheme === "nj-decides" ? <>
+    <NjDecidesPageHeading title={cmsService?.page.title ?? page.title} description={electionHeading ? electionHeading.description : page.description} />
+    {electionHeading?.actionsHtml && <div class="public-page__themed-actions"><Fragment set:html={electionHeading.actionsHtml} /></div>}
+  </> : <section
+    class:list={[
+      "public-page__hero",
+      { "cms-hero-surface": Boolean(heroBackgroundImage) },
+    ]}
+  >
+    <CmsHeroBackground
+      image={heroBackgroundImage}
+      position={heroBackgroundPosition}
+    />
+    <div>
+      <h1>{cmsService?.page.title ?? page.title}</h1>
+      {
+        cmsService && cmsService.page.slug !== "live" ? (
+          <Fragment set:html={renderServiceIntroduction(cmsService)} />
+        ) : !hasMedia && !cmsService && (
+          <>
+            <p>{detail.summary}</p>
+            <div class="public-page__actions">
+              <a
+                class="btn btn--primary"
+                href={page.primaryAction.href}
+                {...(opensInNewTab(page.primaryAction) ? { rel: "noopener", target: "_blank" } : {})}
+              >
+                {page.primaryAction.label}
+                {opensInNewTab(page.primaryAction) && <span class="sr-only"> (opens in new tab)</span>}
+              </a>
+              {page.secondaryAction && (
+                <a
+                  class="btn btn--ghost"
+                  href={page.secondaryAction.href}
+                  {...(opensInNewTab(page.secondaryAction) ? { rel: "noopener", target: "_blank" } : {})}
+                >
+                  {page.secondaryAction.label}
+                  {opensInNewTab(page.secondaryAction) && <span class="sr-only"> (opens in new tab)</span>}
+                </a>
+              )}
+            </div>
+          </>
+        )
+      }
+    </div>
+  </section>}
+
+  <ReaderTextSize />
+
+  {
+    showTransitionNotice && !cmsService && (
+      <aside class="public-page__notice" aria-label={givingTransitionNotice.heading}>
+        <div class="public-page__notice-inner">
+          <h2>{givingTransitionNotice.heading}</h2>
+          {givingTransitionNotice.paragraphs.map((paragraph) => (
+            <p>{paragraph}</p>
+          ))}
+          <p class="public-page__notice-link">
+            {givingTransitionNotice.links.map((link, index) => (
+              <>
+                {index > 0 && <span aria-hidden="true"> · </span>}
+                <a
+                  href={link.href}
+                  rel={link.external ? "noopener" : undefined}
+                  target={link.external ? "_blank" : undefined}
+                >
+                  {link.label}
+                  {link.external && <span class="sr-only"> (opens in new tab)</span>}
+                </a>
+              </>
+            ))}
+          </p>
+        </div>
+      </aside>
+    )
+  }
+
+  {cmsService && <Fragment set:html={renderServiceNotice(cmsService)} />}
+
+  {/* Cross-origin player failures cannot be detected here. Keep both live
+      alternatives visible even when PBS rejects or cannot load the embed. */}
+  {detail.player && <Fragment set:html={renderLivePlayerFrame()} />}
+
+  {
+    page.slug === "live" && (
+      <ScheduleNowNext days={bakedSchedule.days.broadcast} variant="compact" />
+    )
+  }
+
+  {
+    detail.scheduleWidget && (
+      <>
+        <section
+          class="public-page__schedule-section"
+          aria-label={detail.scheduleWidget.heading}
+        >
+          <figure class="public-page__schedule">
+            <p class="public-page__schedule-help">{detail.scheduleWidget.help}</p>
+
+            <div class="public-page__schedule-block">
+              <h2 class="public-page__schedule-label">Full week grid</h2>
+              <div class="public-page__schedule-frame">
+                <div id="tvschedule">
+                  <p class="public-page__schedule-fallback">
+                    Live TV listings load here. If they do not appear, watch the{" "}
+                    <a href="/live/">NJ PBS livestream</a> or browse{" "}
+                    <a href={pbsVideoUrl} rel="noopener" target="_blank">
+                      video on demand<span class="sr-only"> (opens in new tab)</span>
+                    </a>
+                    .
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            {/* Persistent, empty live region: kept in the a11y tree so setting
+                its text on failure fires a screen-reader announcement, which
+                un-hiding a pre-filled region does not do reliably. */}
+            <p class="sr-only" data-schedule-announce role="status" aria-live="polite" />
+
+            <div class="public-page__schedule-status" data-schedule-fallback hidden>
+              <p>
+                Live TV listings are temporarily unavailable. Watch the{" "}
+                <a href="/live/">NJ PBS livestream</a> or browse{" "}
+                <a href={pbsVideoUrl} rel="noopener" target="_blank">
+                  video on demand<span class="sr-only"> (opens in new tab)</span>
+                </a>
+                .
+              </p>
+            </div>
+
+            <figcaption>{detail.scheduleWidget.caption}</figcaption>
+          </figure>
+        </section>
+        <script is:inline set:html={scheduleWidgetConfig} />
+        <script is:inline src={SCHEDULE_WIDGET_SRC} data-schedule-loader />
+        <script>
+          import {
+            applyScheduleWidgetStatus,
+            isWidgetRendered,
+            resolveScheduleWidgetStatus,
+            SCHEDULE_RENDER_DEADLINE_MS,
+          } from "../lib/schedule-widget-health";
+
+          // gc.js renders the PBS schedule grid into its placeholder at runtime. If it
+          // fails to load, or loads but its upstream PBS fetch fails and leaves the
+          // placeholder empty, hide the dead grid block and reveal the honest
+          // fallback (livestream and video-on-demand links) instead of a blank box.
+          const mount = document.getElementById("tvschedule");
+          const block = mount?.closest<HTMLElement>(
+            ".public-page__schedule-block",
+          );
+          const fallback = document.querySelector<HTMLElement>(
+            "[data-schedule-fallback]",
+          );
+          const announcer = document.querySelector<HTMLElement>(
+            "[data-schedule-announce]",
+          );
+          const loader = document.querySelector<HTMLScriptElement>(
+            "[data-schedule-loader]",
+          );
+
+          if (mount && block && fallback) {
+            let loaderErrored = false;
+            let deadlineReached = false;
+            let deadline = 0;
+            let observer: MutationObserver;
+
+            // Reconcile the frame to the widget's current state, and keep it honest
+            // as that state changes. applyScheduleWidgetStatus owns the status-to-DOM
+            // policy (reveal the grid, reveal the fallback, announce once, clear on
+            // recovery) and reports when the widget has settled; only then do we drop
+            // the observer and timeout. It reports not-settled for a deadline-driven
+            // "unavailable" so a slow gc.js that renders afterward (a slow mobile
+            // connection, PBS answering late) still flips the page back to the grid.
+            const reconcile = () => {
+              const status = resolveScheduleWidgetStatus({
+                loaderErrored,
+                widgetRendered: isWidgetRendered(mount),
+                deadlineReached,
+              });
+              const settled = applyScheduleWidgetStatus(status, {
+                block,
+                fallback,
+                announcer,
+              });
+              if (settled) {
+                observer.disconnect();
+                window.clearTimeout(deadline);
+              }
+            };
+
+            // gc.js renders listings by adding nodes or by marking an existing
+            // scaffold with data-program-title; watch both paths so a render at
+            // any time, including after the deadline, reconciles.
+            observer = new MutationObserver(reconcile);
+            observer.observe(mount, {
+              childList: true,
+              subtree: true,
+              attributes: true,
+              attributeFilter: ["data-program-title"],
+            });
+
+            // Fast path: a failed load fires an error event. Best-effort, because
+            // this module is deferred and gc.js is inline, so gc.js may already
+            // have settled before this listener attaches. The deadline is the
+            // backstop, and the observer catches a late render either way.
+            loader?.addEventListener("error", () => {
+              loaderErrored = true;
+              reconcile();
+            });
+
+            deadline = window.setTimeout(() => {
+              deadlineReached = true;
+              reconcile();
+            }, SCHEDULE_RENDER_DEADLINE_MS);
+
+            // gc.js is inline and may have rendered before this deferred module
+            // ran, which fires no mutation; check once now so an already-loaded
+            // grid resolves immediately instead of waiting out the deadline.
+            reconcile();
+          }
+        </script>
+      </>
+    )
+  }
+
+  {cmsService ? <Fragment set:html={renderServiceBody(cmsService)} /> : <section class="public-page__body" aria-label={`${page.title} details`}>
+    <div class="public-page__copy">
+      {(
+        <>
+          {hasMedia && <p class="public-page__summary">{detail.summary}</p>}
+          {hasMedia && (
+            <div class="public-page__actions public-page__actions--below">
+              <a class="btn btn--primary" href={page.primaryAction.href}
+                {...(opensInNewTab(page.primaryAction) ? { rel: "noopener", target: "_blank" } : {})}>
+                {page.primaryAction.label}
+                {opensInNewTab(page.primaryAction) && <span class="sr-only"> (opens in new tab)</span>}
+              </a>
+              {page.secondaryAction && (
+                <a class="btn btn--ghost" href={page.secondaryAction.href}
+                  {...(opensInNewTab(page.secondaryAction) ? { rel: "noopener", target: "_blank" } : {})}>
+                  {page.secondaryAction.label}
+                  {opensInNewTab(page.secondaryAction) && <span class="sr-only"> (opens in new tab)</span>}
+                </a>
+              )}
+            </div>
+          )}
+          {page.body.map((paragraph) => <p>{paragraph}</p>)}
+          {detail.sections?.map((section) => (
+            <section class="public-page__section">
+              <h2>{section.heading}</h2>
+              {section.body.map((paragraph) => <p>{paragraph}</p>)}
+              {section.actions && (
+                <p class="public-page__section-links">
+                  {section.actions.map((action) => (
+                    <a href={action.href}
+                      {...(opensInNewTab(action) ? { rel: "noopener", target: "_blank" } : {})}>
+                      {action.label}
+                      {opensInNewTab(action) && <span class="sr-only"> (opens in new tab)</span>}
+                    </a>
+                  ))}
+                </p>
+              )}
+            </section>
+          ))}
+          {detail.note && <p class="public-page__note">{detail.note}</p>}
+        </>
+      )}
+    </div>
+    {page.destinationCards && <div class="public-page__side">
+      <div class={cardGridClass}>
+        {
+          !cmsService &&
+            detail.cards.map((card) => (
+              <a
+                class="public-page__card"
+                href={card.href}
+                {...(opensInNewTab(card)
+                  ? { rel: "noopener", target: "_blank" }
+                  : {})}
+              >
+                {card.image && (
+                  <span class="public-page__card-media" aria-hidden="true">
+                    <img
+                      class="public-page__card-image"
+                      src={card.image}
+                      alt=""
+                      loading="lazy"
+                      width="640"
+                      height="360"
+                    />
+                  </span>
+                )}
+                <span class="public-page__card-label">{card.label}</span>
+                <strong>{card.title}</strong>
+                <em>{card.description}</em>
+                {opensInNewTab(card) && (
+                  <span class="sr-only"> (opens in new tab)</span>
+                )}
+              </a>
+            ))
+        }
+      </div>
+    </div>}
+  </section>}
+</article>
+
+<style>
+  .public-page__themed-actions { max-width: var(--wrap); margin-inline: auto; padding: 1.25rem var(--gutter) 0; }
+</style>

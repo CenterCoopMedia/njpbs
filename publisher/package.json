@@ -1,0 +1,19 @@
+{
+  "name": "njpbs-cloud-publisher",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "types": "wrangler types --strict-vars=false --include-runtime=false worker-configuration.d.ts",
+    "check": "tsc --noEmit && tsc --noEmit -p tsconfig.pair.json"
+  },
+  "dependencies": { "@cloudflare/containers": "0.3.7" },
+  "devDependencies": {
+    "@cloudflare/workers-types": "5.20260917.1",
+    "typescript": "5.9.3",
+    "wrangler": "4.134.0"
+  },
+  "overrides": {
+    "sharp": "0.35.5"
+  }
+}

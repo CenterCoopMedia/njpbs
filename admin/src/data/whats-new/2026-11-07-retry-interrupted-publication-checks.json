@@ -1,0 +1,8 @@
+{
+  "date": "2026-11-07",
+  "kind": "fixed",
+  "title": "Retry interrupted publication checks",
+  "body": "Interrupted checks for Posts, Pages and Home now finish with a retry option instead of staying pending.",
+  "prs": [],
+  "order": 1794081720000
+}

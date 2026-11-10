@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="100%" height="100%" viewBox="0 0 180 240" preserveAspectRatio="none" aria-hidden="true" focusable="false">
+  <path fill="var(--color-nj-decides-accent)" d="M90 0H180V240H0Z"/>
+  <path fill="var(--color-nj-decides-paper)" d="M132 0H158L68 240H42Z M180 13V83L120 240H94Z"/>
+  <path fill="var(--color-nj-decides-rule)" d="M158 0H180V13L94 240H68Z M180 83V153L146 240H120Z"/>
+  <path fill="var(--color-nj-decides-paper)" d="m122 20 4 12h13l-10 8 4 12-11-8-11 8 4-12-10-8h13z m-22 54 4 12h13l-10 8 4 12-11-8-11 8 4-12-10-8h13z m-22 54 4 12h13l-10 8 4 12-11-8-11 8 4-12-10-8h13z"/>
+</svg>

@@ -1,0 +1,8 @@
+{
+  "date": "2026-11-09",
+  "order": 1794267330000,
+  "kind": "improved",
+  "title": "Open image previews with less waiting",
+  "body": "Images in the editor reuse recent previews as you move between planks and their controls. Leaving a preview stops image requests that are no longer needed.",
+  "prs": []
+}

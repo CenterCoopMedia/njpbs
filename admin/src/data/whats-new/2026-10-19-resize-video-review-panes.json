@@ -1,0 +1,10 @@
+{
+  "date": "2026-10-19",
+  "kind": "improved",
+  "title": "Resize video review panes",
+  "body": "In Videos, drag the divider to resize the player and transcript. Comments now open beside the player on wider screens, so you can watch while you read and reply.",
+  "prs": [
+    3797
+  ],
+  "order": -1
+}

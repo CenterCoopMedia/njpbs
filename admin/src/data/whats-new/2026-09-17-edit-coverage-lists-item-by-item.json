@@ -1,0 +1,10 @@
+{
+  "date": "2026-09-17",
+  "kind": "new",
+  "title": "Edit coverage lists item by item",
+  "body": "A coverage list block holds outside articles. Add, edit, reorder or remove each title, outlet, date and link. Boardwalk offers to turn a plain-text list of articles into a coverage list.",
+  "prs": [
+    1961
+  ],
+  "order": -1
+}

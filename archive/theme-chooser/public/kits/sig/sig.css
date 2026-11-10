@@ -1,0 +1,518 @@
+/* ===================================================================
+   Signal  —  sig / --sig-
+   Confident television. A crisp white studio field, PBS blue at full
+   strength as structure, a thin SMPTE seven-bar signature rule, mono
+   channel numerals, and a lower-third caption pattern.
+
+   One of three sibling public-media kits. Namespaced sig- / --sig-
+   so it never collides with gs- (Garden State public) or post- (Garden
+   State poster) on the chooser page.
+
+   Tokens live on :root. Base typography applies under .sig.
+   Components carry their own look and work inside .sig. Light is the
+   default; dark is opt-in via [data-sig-theme="dark"] or .sig-dark.
+
+   Craft rules (shared house style): sharp corners (no border-radius on
+   components), uniform hairline borders, shared-border grids, callouts
+   by tint + title color (never an edge stripe), section heads with a
+   mono number + flush-right meta. No eyebrow kickers, no gradient text.
+   =================================================================== */
+
+@import url('https://fonts.googleapis.com/css2?family=Archivo:wght@500;600;700;800;900&family=Public+Sans:ital,wght@0,400;0,500;0,600;0,700;1,400&family=IBM+Plex+Mono:wght@400;500;600&display=swap');
+
+/* ---------- Tokens ---------- */
+:root {
+  --sig-bg: #ffffff;            /* the studio field / page */
+  --sig-surface: #ffffff;       /* card / panel */
+  --sig-surface-2: #eef1f9;     /* cool tint: callout fill, zebra, insets */
+  --sig-ink: #0e1116;           /* body text + strong rules */
+  --sig-text: #0e1116;
+  --sig-text-dim: #5a6172;      /* metadata, captions */
+  --sig-border: #d5d9e4;        /* hairline */
+  --sig-border-bright: #a9b0c6; /* a heavier hairline for controls */
+
+  --sig-blue: #2638c4;          /* PBS blue — primary structure */
+  --sig-blue-dim: rgba(38,56,196,0.07);
+  --sig-navy: #0a145a;          /* deepest surface bands */
+  --sig-accent: #c42b16;        /* broadcast red — support / live */
+  --sig-accent-dim: rgba(196,43,22,0.08);
+
+  /* SMPTE 75% seven-bar sequence — fill only, decorative, never text-bearing. */
+  --sig-smpte-1: #bfbfbf;       /* gray */
+  --sig-smpte-2: #bfbf00;       /* yellow */
+  --sig-smpte-3: #00bfbf;       /* cyan */
+  --sig-smpte-4: #00bf00;       /* green */
+  --sig-smpte-5: #bf00bf;       /* magenta */
+  --sig-smpte-6: #bf0000;       /* red */
+  --sig-smpte-7: #0000bf;       /* blue */
+
+  --sig-font-display: 'Archivo', system-ui, -apple-system, sans-serif;
+  --sig-font-body: 'Public Sans', system-ui, -apple-system, sans-serif;
+  --sig-font-mono: 'IBM Plex Mono', 'SF Mono', Consolas, monospace;
+
+  --sig-pad: 44px;              /* page side padding; drops to 22px under 1000px */
+  --sig-max: 1200px;            /* content column max */
+  --sig-measure: 68ch;          /* body text measure */
+  --sig-focus: var(--sig-blue); /* focus-ring color */
+
+  /* Fixed-fill brand colors. --sig-blue / --sig-accent lighten in dark mode (right
+     when read as link/accent text on the dark page), but that drops white-on-fill
+     below AA. Filled controls (buttons, brand bands) use these instead — they hold
+     the AA-with-white brand value in BOTH themes. --sig-on-brand-dim is the fixed
+     light text for the navy/blue bands, whose plain --sig-surface-2 flips dark. */
+  --sig-blue-cta: #2638c4;
+  --sig-accent-cta: #c42b16;
+  --sig-on-brand-dim: #eef1f9;
+}
+
+/* Dark: auto from system when no explicit theme is set... */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-sig-theme]) {
+    --sig-bg: #070a18; --sig-surface: #0d1227; --sig-surface-2: #141a34;
+    --sig-ink: #f3f5fc; --sig-text: #eef1f9; --sig-text-dim: #a3abc6;
+    --sig-border: #2a3258; --sig-border-bright: #424c7e;
+    --sig-blue: #6f86ff; --sig-blue-dim: rgba(111,134,255,0.14);
+    --sig-navy: #05091f; --sig-accent: #ff7a63; --sig-accent-dim: rgba(255,122,99,0.16);
+    --sig-focus: #6f86ff;
+  }
+}
+/* ...or explicitly via the toggle / a wrapper class. */
+[data-sig-theme="dark"], .sig-dark {
+  --sig-bg: #070a18; --sig-surface: #0d1227; --sig-surface-2: #141a34;
+  --sig-ink: #f3f5fc; --sig-text: #eef1f9; --sig-text-dim: #a3abc6;
+  --sig-border: #2a3258; --sig-border-bright: #424c7e;
+  --sig-blue: #6f86ff; --sig-blue-dim: rgba(111,134,255,0.14);
+  --sig-navy: #05091f; --sig-accent: #ff7a63; --sig-accent-dim: rgba(255,122,99,0.16);
+  --sig-focus: #6f86ff;
+}
+
+/* ---------- Base (opt in with class="sig") ---------- */
+.sig, .sig *, .sig *::before, .sig *::after { box-sizing: border-box; min-width: 0; }
+.sig * { margin: 0; padding: 0; }
+
+/* Only smooth-scroll when Signal owns the whole page (body.sig), so an
+   embedded widget never changes a host document's scroll behavior. */
+html:has(body.sig) { scroll-behavior: smooth; }
+
+.sig {
+  font-family: var(--sig-font-body);
+  background: var(--sig-bg);
+  color: var(--sig-text);
+  line-height: 1.6;
+  font-size: 16px;
+  overflow-wrap: break-word;
+  -webkit-font-smoothing: antialiased;
+}
+.sig a { color: var(--sig-blue); text-decoration: underline; text-underline-offset: 2px; text-decoration-thickness: 1px; }
+.sig a:hover { text-decoration-thickness: 2px; }
+.sig b, .sig strong { font-weight: 700; color: var(--sig-ink); }
+.sig code, .sig-code {
+  font-family: var(--sig-font-mono); font-size: 0.86em;
+  background: var(--sig-surface-2); color: var(--sig-ink);
+  padding: 1px 5px; border: 1px solid var(--sig-border); word-break: break-word;
+}
+
+/* Visible focus ring — 2px, 2px offset, on every interactive element. */
+.sig :focus-visible {
+  outline: 2px solid var(--sig-focus);
+  outline-offset: 2px;
+}
+
+/* Skip link: hidden until focused. */
+.sig-skip {
+  position: absolute; left: 8px; top: -48px; z-index: 500;
+  background: var(--sig-blue-cta); color: #fff; padding: 10px 16px;
+  font-family: var(--sig-font-mono); font-size: 13px; text-decoration: none;
+  transition: top 0.16s;
+}
+.sig-skip:focus { top: 8px; }
+
+/* ---------- Page shell ---------- */
+.sig-shell { max-width: var(--sig-max); margin: 0 auto; padding: 0 var(--sig-pad); }
+.sig-section { padding: 56px 0; }
+.sig-section + .sig-section { border-top: 1px solid var(--sig-border); }
+
+/* ---------- Utility bar (thin, above the masthead) ---------- */
+.sig-utility {
+  background: var(--sig-navy); color: var(--sig-on-brand-dim);
+  font-family: var(--sig-font-mono); font-size: 12px;
+}
+.sig-utility__inner {
+  max-width: var(--sig-max); margin: 0 auto; padding: 7px var(--sig-pad);
+  display: flex; align-items: center; gap: 18px; flex-wrap: wrap;
+  min-height: 36px;
+}
+.sig-utility a { color: var(--sig-on-brand-dim); text-decoration: none; }
+.sig-utility a:hover { text-decoration: underline; text-underline-offset: 2px; }
+.sig-utility__spacer { margin-left: auto; }
+
+/* The channel clock — a mono "station number / timecode" wink. */
+.sig-clock {
+  font-family: var(--sig-font-mono); font-variant-numeric: tabular-nums;
+  letter-spacing: 0.06em; display: inline-flex; align-items: center; gap: 8px;
+}
+.sig-clock__dot { width: 7px; height: 7px; background: var(--sig-accent); flex-shrink: 0; }
+
+/* ---------- Masthead / header ---------- */
+.sig-masthead {
+  position: sticky; top: 0; z-index: 200;
+  background: var(--sig-bg); border-bottom: 1px solid var(--sig-ink);
+}
+.sig-masthead__inner {
+  max-width: var(--sig-max); margin: 0 auto; padding: 0 var(--sig-pad);
+  display: flex; align-items: center; gap: 20px; min-height: 64px;
+}
+.sig-brand {
+  display: inline-flex; align-items: center; gap: 11px;
+  font-family: var(--sig-font-display); font-weight: 900;
+  font-size: 21px; letter-spacing: -0.02em; color: var(--sig-ink);
+  text-decoration: none; white-space: nowrap;
+}
+.sig-brand:hover { color: var(--sig-ink); }
+.sig-brand__mark { width: 26px; height: 26px; flex-shrink: 0; display: block; }
+.sig-nav { display: flex; align-items: center; gap: 4px; margin-left: auto; }
+.sig-nav a {
+  font-family: var(--sig-font-body); font-size: 15px; font-weight: 600;
+  color: var(--sig-ink); text-decoration: none; padding: 21px 12px;
+  border-bottom: 3px solid transparent; line-height: 1; display: inline-flex; align-items: center;
+  min-height: 44px;
+}
+.sig-nav a:hover { color: var(--sig-blue); }
+/* Active nav = weight + bottom underline (never a top/left sliver). */
+.sig-nav a.is-active { color: var(--sig-blue); border-bottom-color: var(--sig-blue); }
+
+/* Mobile nav toggle (hamburger) — hidden on desktop. */
+.sig-nav-toggle {
+  display: none; width: 44px; height: 44px; margin-left: auto;
+  background: var(--sig-surface); border: 1px solid var(--sig-ink); color: var(--sig-ink);
+  cursor: pointer; align-items: center; justify-content: center;
+}
+.sig-nav-toggle .sig-ic-close { display: none; }
+.sig-nav-toggle[aria-expanded="true"] .sig-ic-menu { display: none; }
+.sig-nav-toggle[aria-expanded="true"] .sig-ic-close { display: block; }
+
+/* ---------- SMPTE seven-bar signature rule (fill only, decorative) ---------- */
+/* A thin band of the seven 75% bars. Never carries text, never full-bleed
+   as a hero, never animated. aria-hidden in markup. */
+.sig-bars {
+  display: grid; grid-template-columns: repeat(7, 1fr); height: 4px;
+  width: 100%; line-height: 0;
+}
+.sig-bars > i { display: block; height: 100%; }
+.sig-bars > i:nth-child(1) { background: var(--sig-smpte-1); }
+.sig-bars > i:nth-child(2) { background: var(--sig-smpte-2); }
+.sig-bars > i:nth-child(3) { background: var(--sig-smpte-3); }
+.sig-bars > i:nth-child(4) { background: var(--sig-smpte-4); }
+.sig-bars > i:nth-child(5) { background: var(--sig-smpte-5); }
+.sig-bars > i:nth-child(6) { background: var(--sig-smpte-6); }
+.sig-bars > i:nth-child(7) { background: var(--sig-smpte-7); }
+.sig-bars--tall { height: 8px; }
+
+/* ---------- Hero stage (wraps the particle-NJ canvas) ---------- */
+/* Title-safe / registration-mark grid: subtle corner ticks frame the stage. */
+.sig-hero { position: relative; padding: 0; border-bottom: 1px solid var(--sig-ink); }
+.sig-hero__inner {
+  max-width: var(--sig-max); margin: 0 auto; padding: 72px var(--sig-pad) 56px;
+  position: relative; display: grid; grid-template-columns: 1.1fr 1fr; gap: 40px; align-items: center;
+}
+.sig-hero__stage {
+  position: relative; min-height: 340px; align-self: stretch;
+  border: 1px solid var(--sig-border);
+  background:
+    /* faint baseline-grid texture as broadcast discipline */
+    repeating-linear-gradient(to bottom, transparent 0 23px, var(--sig-blue-dim) 23px 24px);
+}
+.sig-hero__stage canvas, .sig-hero__stage > [data-sig-hero] { display: block; width: 100%; height: 100%; }
+/* Registration corner ticks (the "title-safe" frame). */
+.sig-hero__stage::before, .sig-hero__stage::after {
+  content: ""; position: absolute; width: 18px; height: 18px; pointer-events: none;
+  border-color: var(--sig-blue); border-style: solid;
+}
+.sig-hero__stage::before { top: 9px; left: 9px; border-width: 2px 0 0 2px; }
+.sig-hero__stage::after { bottom: 9px; right: 9px; border-width: 0 2px 2px 0; }
+.sig-hero__copy { min-width: 0; }
+/* hero headline: h1 in real use; h2 when embedded in a preview that owns the page h1 */
+.sig-hero :is(h1, h2) {
+  font-family: var(--sig-font-display); font-weight: 900;
+  font-size: clamp(36px, 6vw, 68px); line-height: 0.98; letter-spacing: -0.03em;
+  color: var(--sig-ink); margin-bottom: 22px; max-width: 14ch;
+}
+.sig-hero .sig-lead {
+  font-size: clamp(17px, 0.7vw + 14px, 20px); color: var(--sig-text);
+  max-width: 50ch; margin-bottom: 22px;
+}
+.sig-hero__meta { font-family: var(--sig-font-mono); font-size: 12px; color: var(--sig-text-dim); margin-top: 24px; }
+
+/* Hero load stagger — one orchestrated reveal, not scattered micro-motion. */
+@keyframes sig-fade-up { from { opacity: 0; transform: translateY(12px); } to { opacity: 1; transform: none; } }
+.sig-hero__copy > * { animation: sig-fade-up 0.55s ease both; }
+.sig-hero :is(h1, h2) { animation-delay: 0.05s; }
+.sig-hero .sig-lead { animation-delay: 0.12s; }
+.sig-hero__actions { animation-delay: 0.18s; }
+.sig-hero__meta { animation-delay: 0.26s; }
+
+/* ---------- Buttons ---------- */
+.sig-btn {
+  display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+  font-family: var(--sig-font-body); font-size: 15px; font-weight: 700;
+  min-height: 44px; padding: 10px 22px; cursor: pointer; text-decoration: none;
+  border: 1px solid transparent; transition: background 0.14s, color 0.14s, border-color 0.14s;
+  white-space: nowrap;
+}
+/* Scoped under .sig so the button text color (0,2,0) beats the generic `.sig a`
+   link rule (0,1,1). Without the kit-class prefix, anchor buttons take the link
+   blue — which on the brand fill renders as near-invisible same-color text. */
+.sig .sig-btn--primary { background: var(--sig-blue-cta); color: #fff; border-color: var(--sig-blue-cta); }
+.sig-btn--primary:hover { background: var(--sig-navy); border-color: var(--sig-navy); color: #fff; }
+.sig-btn--outline { background: transparent; color: var(--sig-blue); border-color: var(--sig-blue); }
+.sig-btn--outline:hover { background: var(--sig-blue-dim); color: var(--sig-blue); }
+.sig .sig-btn--support { background: var(--sig-accent-cta); color: #fff; border-color: var(--sig-accent-cta); }
+.sig-btn--support:hover { filter: brightness(0.92); color: #fff; }
+.sig-hero__actions { display: flex; flex-wrap: wrap; gap: 12px; margin-bottom: 8px; }
+
+/* ---------- On-air strip (navy band, white text) ---------- */
+.sig-onair {
+  background: var(--sig-navy); color: #fff;
+}
+.sig-onair__inner {
+  max-width: var(--sig-max); margin: 0 auto; padding: 14px var(--sig-pad);
+  display: flex; align-items: center; gap: 16px 24px; flex-wrap: wrap; min-height: 44px;
+}
+.sig-onair__label {
+  font-family: var(--sig-font-mono); font-size: 11px; font-weight: 600;
+  text-transform: uppercase; letter-spacing: 0.16em; color: #fff; flex-shrink: 0;
+}
+.sig-onair__now { font-weight: 700; }
+.sig-onair__next { color: var(--sig-on-brand-dim); }
+.sig-onair__time { font-family: var(--sig-font-mono); font-variant-numeric: tabular-nums; color: var(--sig-on-brand-dim); margin-left: auto; }
+
+/* ---------- Section heads (mono number + flush-right meta) ---------- */
+.sig-sec-head {
+  display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px 18px;
+  margin: 0 0 22px; padding-top: 22px; border-top: 1px solid var(--sig-ink);
+  scroll-margin-top: 80px;
+}
+.sig-sec-head__num { font-family: var(--sig-font-mono); font-size: 14px; font-weight: 600; color: var(--sig-blue); flex-shrink: 0; }
+.sig-sec-head h2 {
+  font-family: var(--sig-font-display); font-size: clamp(23px, 3vw, 32px); font-weight: 800;
+  letter-spacing: -0.02em; color: var(--sig-ink); line-height: 1.05;
+}
+.sig-sec-head__meta {
+  margin-left: auto; font-family: var(--sig-font-mono); font-size: 11px;
+  text-transform: uppercase; letter-spacing: 0.12em; color: var(--sig-text-dim); align-self: center;
+}
+
+/* ---------- Lead / story card ---------- */
+.sig-lead-story {
+  display: grid; grid-template-columns: 1.4fr 1fr; gap: 0;
+  border: 1px solid var(--sig-ink); background: var(--sig-surface);
+}
+.sig-lead-story__media {
+  background: var(--sig-surface-2); min-height: 240px; position: relative;
+  border-right: 1px solid var(--sig-ink);
+}
+.sig-lead-story__body { padding: 28px; display: flex; flex-direction: column; gap: 12px; }
+.sig-lead-story__kicker {
+  font-family: var(--sig-font-mono); font-size: 11px; font-weight: 600;
+  text-transform: uppercase; letter-spacing: 0.14em; color: var(--sig-accent);
+}
+.sig-lead-story h3 {
+  font-family: var(--sig-font-display); font-size: clamp(22px, 2.4vw, 30px); font-weight: 800;
+  letter-spacing: -0.02em; line-height: 1.08; color: var(--sig-ink);
+}
+.sig-lead-story h3 a { color: var(--sig-ink); text-decoration: none; }
+.sig-lead-story h3 a:hover { color: var(--sig-blue); text-decoration: underline; text-underline-offset: 3px; }
+.sig-lead-story p { color: var(--sig-text); }
+.sig-lead-story__meta { font-family: var(--sig-font-mono); font-size: 12px; color: var(--sig-text-dim); margin-top: auto; }
+
+/* ---------- Lower-third caption (name + role + place) ---------- */
+/* Sits over media; the chyron grammar — hairline rule + small color tab. */
+.sig-lowerthird {
+  position: absolute; left: 0; right: 0; bottom: 0;
+  background: var(--sig-navy); color: #fff; padding: 12px 16px 12px 18px;
+  border-top: 2px solid var(--sig-accent);
+}
+.sig-lowerthird__name { font-family: var(--sig-font-display); font-weight: 800; font-size: 16px; letter-spacing: -0.01em; }
+.sig-lowerthird__role { font-family: var(--sig-font-mono); font-size: 11px; text-transform: uppercase; letter-spacing: 0.12em; color: var(--sig-on-brand-dim); margin-top: 3px; }
+/* Standalone caption block (not over media) reuses the same grammar. */
+.sig-caption {
+  background: var(--sig-navy); color: #fff; padding: 14px 18px;
+  border-left: none; display: flex; align-items: baseline; gap: 14px; flex-wrap: wrap;
+}
+.sig-caption__tab { width: 4px; align-self: stretch; background: var(--sig-accent); flex-shrink: 0; }
+.sig-caption__name { font-family: var(--sig-font-display); font-weight: 800; font-size: 16px; }
+.sig-caption__role { font-family: var(--sig-font-mono); font-size: 11px; text-transform: uppercase; letter-spacing: 0.12em; color: var(--sig-on-brand-dim); }
+
+/* ---------- Program card grid (shared-border) ---------- */
+.sig-program-grid {
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); gap: 0;
+  border: 1px solid var(--sig-border); margin: 4px 0;
+}
+.sig-program {
+  background: var(--sig-surface); padding: 0;
+  border-right: 1px solid var(--sig-border); border-bottom: 1px solid var(--sig-border);
+  display: flex; flex-direction: column;
+}
+.sig-program__media { background: var(--sig-surface-2); aspect-ratio: 16 / 9; position: relative; border-bottom: 1px solid var(--sig-border); }
+.sig-program__body { padding: 16px 18px 20px; display: flex; flex-direction: column; gap: 7px; }
+.sig-program__num { font-family: var(--sig-font-mono); font-size: 11px; font-weight: 600; color: var(--sig-blue); font-variant-numeric: tabular-nums; }
+.sig-program h3 { font-family: var(--sig-font-display); font-size: 18px; font-weight: 700; letter-spacing: -0.01em; line-height: 1.15; color: var(--sig-ink); }
+.sig-program h3 a { color: var(--sig-ink); text-decoration: none; }
+.sig-program h3 a:hover { color: var(--sig-blue); text-decoration: underline; text-underline-offset: 2px; }
+.sig-program p { font-size: 14px; color: var(--sig-text-dim); }
+.sig-program__meta { font-family: var(--sig-font-mono); font-size: 11px; color: var(--sig-text-dim); margin-top: auto; padding-top: 6px; }
+
+/* ---------- Support / donate block (tinted, uniform border) ---------- */
+.sig-support {
+  background: var(--sig-accent-dim); border: 1px solid var(--sig-accent);
+  padding: 28px; display: grid; grid-template-columns: 1fr auto; gap: 22px 32px; align-items: center;
+}
+.sig-support__title { font-family: var(--sig-font-display); font-size: clamp(20px, 2.2vw, 26px); font-weight: 800; letter-spacing: -0.02em; color: var(--sig-ink); margin-bottom: 8px; }
+.sig-support__copy { color: var(--sig-text); max-width: 56ch; }
+.sig-support__action { display: flex; flex-direction: column; gap: 10px; align-items: stretch; }
+
+/* ---------- Newsletter capture (labels, not placeholders; focus ring) ---------- */
+.sig-newsletter {
+  border: 1px solid var(--sig-ink); background: var(--sig-surface); padding: 28px;
+}
+.sig-newsletter__title { font-family: var(--sig-font-display); font-size: clamp(20px, 2.2vw, 26px); font-weight: 800; letter-spacing: -0.02em; color: var(--sig-ink); margin-bottom: 8px; }
+.sig-newsletter__copy { color: var(--sig-text-dim); margin-bottom: 20px; max-width: 56ch; }
+.sig-field { display: grid; gap: 6px; margin-bottom: 16px; max-width: 420px; }
+.sig-field label { font-family: var(--sig-font-mono); font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.1em; color: var(--sig-text-dim); }
+.sig-field input, .sig-field select, .sig-field textarea {
+  font-family: var(--sig-font-body); font-size: 15px; color: var(--sig-ink);
+  background: var(--sig-bg); border: 1px solid var(--sig-border-bright);
+  padding: 11px 13px; min-height: 44px; width: 100%;
+}
+.sig-field input:hover, .sig-field select:hover { border-color: var(--sig-ink); }
+.sig-field input::placeholder { color: var(--sig-text-dim); }
+.sig-field__hint { font-size: 13px; color: var(--sig-text-dim); }
+.sig-form__row { display: flex; flex-wrap: wrap; gap: 12px; align-items: flex-end; }
+
+/* ---------- Tinted callout (tint + title color, no edge stripe) ---------- */
+.sig-callout {
+  padding: 18px 20px; border: 1px solid var(--sig-border);
+  background: var(--sig-surface); margin: 22px 0;
+}
+.sig-callout__title {
+  font-family: var(--sig-font-body); font-size: 11px; font-weight: 700;
+  text-transform: uppercase; letter-spacing: 0.12em; margin-bottom: 9px;
+  color: var(--sig-callt, var(--sig-ink));
+}
+.sig-callout p { font-size: 15px; }
+.sig-callout--info { background: var(--sig-surface-2); border-color: var(--sig-border-bright); --sig-callt: var(--sig-blue); }
+.sig-callout--support { background: var(--sig-accent-dim); border-color: var(--sig-accent); --sig-callt: var(--sig-accent); }
+.sig-callout--note { --sig-callt: var(--sig-ink); }
+
+/* ---------- Data table (ruled, mono uppercase headers) ---------- */
+.sig-table { border: 1px solid var(--sig-border); margin: 10px 0; }
+.sig-table__scroll { overflow-x: auto; }
+table.sig-data { width: 100%; border-collapse: collapse; font-size: 14px; }
+table.sig-data caption { text-align: left; font-family: var(--sig-font-mono); font-size: 12px; color: var(--sig-text-dim); padding: 12px 15px; border-bottom: 1px solid var(--sig-border); }
+table.sig-data th {
+  background: var(--sig-surface-2); font-family: var(--sig-font-mono); font-size: 11px; font-weight: 600;
+  text-transform: uppercase; letter-spacing: 0.08em; color: var(--sig-text-dim);
+  text-align: left; padding: 12px 15px; border-bottom: 1px solid var(--sig-ink); white-space: nowrap;
+}
+table.sig-data td { padding: 13px 15px; border-bottom: 1px solid var(--sig-border); vertical-align: top; }
+table.sig-data tbody tr:last-child td { border-bottom: none; }
+table.sig-data td.sig-num { font-family: var(--sig-font-mono); font-variant-numeric: tabular-nums; color: var(--sig-ink); }
+
+/* ---------- Navy / blue section bands (white text) ---------- */
+.sig-band {
+  background: var(--sig-blue-cta); color: #fff;
+}
+.sig-band--navy { background: var(--sig-navy); }
+.sig-band__inner { max-width: var(--sig-max); margin: 0 auto; padding: 56px var(--sig-pad); }
+.sig-band h2 { font-family: var(--sig-font-display); font-weight: 800; font-size: clamp(24px, 3vw, 34px); letter-spacing: -0.02em; margin-bottom: 14px; color: #fff; }
+.sig-band p { color: var(--sig-on-brand-dim); max-width: var(--sig-measure); }
+.sig-band a { color: #fff; text-decoration-thickness: 2px; }
+
+/* ---------- Stat strip (shared-border) ---------- */
+.sig-stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 0; border: 1px solid var(--sig-border); margin: 4px 0; }
+.sig-stat { padding: 18px 20px; border-right: 1px solid var(--sig-border); }
+.sig-stat:last-child { border-right: none; }
+.sig-stat__val { font-family: var(--sig-font-display); font-size: 34px; font-weight: 800; color: var(--sig-ink); letter-spacing: -0.03em; line-height: 1; font-variant-numeric: tabular-nums; }
+.sig-stat__label { font-family: var(--sig-font-mono); font-size: 11px; text-transform: uppercase; letter-spacing: 0.1em; color: var(--sig-text-dim); margin-top: 10px; }
+
+/* ---------- Tags ---------- */
+.sig-tag { font-family: var(--sig-font-mono); font-size: 10px; padding: 3px 8px; border: 1px solid var(--sig-border-bright); color: var(--sig-text-dim); white-space: nowrap; text-transform: uppercase; letter-spacing: 0.08em; }
+.sig-tag--blue { border-color: var(--sig-blue); color: var(--sig-blue); }
+.sig-tag--support { border-color: var(--sig-accent); color: var(--sig-accent); }
+
+/* ---------- Footer ---------- */
+.sig-foot { background: var(--sig-navy); color: var(--sig-on-brand-dim); margin-top: 0; }
+.sig-foot__inner { max-width: var(--sig-max); margin: 0 auto; padding: 48px var(--sig-pad) 40px; }
+.sig-foot__grid { display: grid; grid-template-columns: 1.4fr repeat(3, 1fr); gap: 32px; }
+.sig-foot h4 { font-family: var(--sig-font-mono); font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.14em; color: #fff; margin-bottom: 14px; }
+.sig-foot ul { list-style: none; }
+.sig-foot li { margin-bottom: 9px; }
+.sig-foot a { color: var(--sig-on-brand-dim); text-decoration: none; font-size: 14px; }
+.sig-foot a:hover { color: #fff; text-decoration: underline; text-underline-offset: 2px; }
+.sig-foot__brand { font-family: var(--sig-font-display); font-weight: 900; font-size: 19px; color: #fff; letter-spacing: -0.02em; margin-bottom: 12px; }
+.sig-foot__fine { font-family: var(--sig-font-mono); font-size: 12px; color: var(--sig-on-brand-dim); margin-top: 28px; padding-top: 24px; border-top: 1px solid rgba(255,255,255,0.16); }
+
+/* ---------- Theme toggle ---------- */
+.sig-theme-toggle {
+  width: 44px; height: 44px;
+  background: var(--sig-surface); border: 1px solid var(--sig-ink); color: var(--sig-ink); cursor: pointer;
+  display: inline-flex; align-items: center; justify-content: center; transition: background 0.12s;
+}
+.sig-theme-toggle:hover { background: var(--sig-surface-2); }
+.sig-theme-toggle .sig-ic-sun { display: none; }
+.sig-theme-toggle .sig-ic-moon { display: block; }
+.sig-theme-toggle[data-mode="dark"] .sig-ic-sun { display: block; }
+.sig-theme-toggle[data-mode="dark"] .sig-ic-moon { display: none; }
+
+/* ---------- Small utilities ---------- */
+.sig-rule { border: none; border-top: 1px solid var(--sig-ink); margin: 32px 0; }
+.sig-mono { font-family: var(--sig-font-mono); }
+.sig-text-blue { color: var(--sig-blue); }
+.sig-text-dim { color: var(--sig-text-dim); }
+.sig-visually-hidden {
+  position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px;
+  overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0;
+}
+
+/* ---------- Reduced motion ---------- */
+@media (prefers-reduced-motion: reduce) {
+  html:has(body.sig) { scroll-behavior: auto; }
+  .sig *, .sig *::before, .sig *::after { animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; }
+}
+
+/* ---------- Responsive ---------- */
+@media (max-width: 1000px) {
+  :root { --sig-pad: 22px; }
+
+  .sig-hero__inner { grid-template-columns: 1fr; gap: 28px; padding: 44px var(--sig-pad) 36px; }
+  .sig-hero__stage { min-height: 260px; order: -1; }
+  .sig-lead-story { grid-template-columns: 1fr; }
+  .sig-lead-story__media { border-right: none; border-bottom: 1px solid var(--sig-ink); }
+  .sig-support { grid-template-columns: 1fr; }
+  .sig-foot__grid { grid-template-columns: 1fr 1fr; }
+
+  /* Hamburger nav */
+  .sig-nav-toggle { display: inline-flex; }
+  .sig-nav {
+    display: none; position: absolute; top: 100%; left: 0; right: 0;
+    flex-direction: column; align-items: stretch; gap: 0; margin: 0;
+    background: var(--sig-bg); border-bottom: 1px solid var(--sig-ink);
+    box-shadow: 0 16px 32px rgba(10,20,90,0.18);
+  }
+  .sig-masthead.is-open .sig-nav { display: flex; }
+  .sig-nav a { padding: 14px var(--sig-pad); border-bottom: 1px solid var(--sig-border); border-left: none; }
+  .sig-nav a.is-active { border-bottom-color: var(--sig-border); color: var(--sig-blue); }
+  .sig-masthead__inner { position: relative; }
+}
+
+@media (max-width: 560px) {
+  .sig-foot__grid { grid-template-columns: 1fr; }
+  .sig-utility__inner { font-size: 11px; gap: 12px; }
+}
+
+/* ---------- Print ---------- */
+@media print {
+  .sig-theme-toggle, .sig-nav-toggle, .sig-utility, .sig-bars { display: none !important; }
+  .sig-masthead { position: static; }
+  .sig, .sig-band, .sig-foot { background: #fff !important; color: #000 !important; }
+}

@@ -1,0 +1,8 @@
+{
+  "date": "2026-11-06",
+  "order": 1793952001000,
+  "kind": "fixed",
+  "title": "Transcript edits show the saved result",
+  "body": "After a transcript edit is saved, a later connection error does not report that the save failed. Errors from an edit that did not save stay visible.",
+  "prs": []
+}

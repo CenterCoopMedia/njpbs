@@ -1,0 +1,10 @@
+{
+  "date": "2026-09-17",
+  "kind": "improved",
+  "title": "Pages, Posts and Home share one editor",
+  "body": "Pages, Posts and Home now use the same writing layout. Use the content outline to jump to a block or move it up and down. Home shows its sections in public order.",
+  "prs": [
+    1965
+  ],
+  "order": 0
+}

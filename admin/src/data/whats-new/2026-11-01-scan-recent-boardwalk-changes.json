@@ -1,0 +1,8 @@
+{
+  "date": "2026-11-01",
+  "kind": "improved",
+  "title": "Scan recent Boardwalk changes",
+  "body": "What's new shows the last three weeks of changes, grouped by month with the newest first.",
+  "prs": [],
+  "order": -5
+}

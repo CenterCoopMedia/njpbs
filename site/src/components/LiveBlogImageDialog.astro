@@ -1,0 +1,27 @@
+---
+interface Props { fallbackUrl: string }
+const { fallbackUrl } = Astro.props;
+---
+<dialog class="live-blog-image-dialog" data-live-blog-image-dialog aria-label="Expanded live update image" aria-describedby="live-blog-image-caption">
+  <div class="live-blog-image-dialog__controls">
+    <a data-full-image href={fallbackUrl} target="_blank" rel="noopener">Open full image<span class="live-blog__sr-only"> (opens in a new tab)</span></a>
+    <button type="button" data-dialog-close>Close image</button>
+  </div>
+  <figure>
+    <img data-expanded-image alt="" />
+    <figcaption id="live-blog-image-caption" data-image-caption></figcaption>
+  </figure>
+</dialog>
+
+<style>
+  .live-blog-image-dialog { box-sizing: border-box; inline-size: min(96vw, 90rem); max-block-size: 94dvh; padding: var(--space-4); border: 1px solid var(--line-strong); border-radius: var(--radius-surface); color: var(--text); background: var(--color-surface-elevated); }
+  .live-blog-image-dialog::backdrop { background: rgb(0 0 0 / 85%); }
+  .live-blog-image-dialog__controls { display: flex; gap: var(--space-4); justify-content: space-between; align-items: center; flex-wrap: wrap; margin-block-end: var(--space-4); }
+  .live-blog-image-dialog :is(a, button) { display: inline-flex; align-items: center; min-block-size: var(--target-comfortable); padding: var(--space-2) var(--space-3); font: inherit; color: var(--color-link); }
+  .live-blog-image-dialog button { border: 1px solid var(--line-strong); border-radius: var(--radius-control); background: var(--color-surface-page); cursor: pointer; }
+  .live-blog-image-dialog :is(a, button):focus-visible { outline: var(--focus-outline); outline-offset: var(--focus-offset); }
+  figure { margin: 0; }
+  img { display: block; max-inline-size: 100%; max-block-size: 72dvh; inline-size: auto; block-size: auto; margin-inline: auto; object-fit: contain; }
+  figcaption :global(.cms-image-credit) { display: block; }
+  figcaption { margin-block-start: var(--space-3); white-space: pre-line; overflow-wrap: anywhere; }
+</style>

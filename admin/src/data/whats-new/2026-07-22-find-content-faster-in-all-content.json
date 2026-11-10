@@ -1,0 +1,13 @@
+{
+  "date": "2026-07-22",
+  "kind": "new",
+  "title": "Find content faster in All content",
+  "body": "All content now combines pages and posts in one library with search and filters. You can save personal views and archive several items at once.",
+  "prs": [
+    648,
+    673,
+    687,
+    690
+  ],
+  "order": 0
+}

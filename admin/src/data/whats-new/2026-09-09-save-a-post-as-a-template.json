@@ -1,0 +1,11 @@
+{
+  "date": "2026-09-09",
+  "kind": "new",
+  "title": "Save a Post as a template",
+  "body": "You can save a Post layout as a template. When you start a new Post, choose a template to begin with its structure instead of a blank draft.",
+  "prs": [
+    1690,
+    1692
+  ],
+  "order": 0
+}

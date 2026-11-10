@@ -1,0 +1,1337 @@
+{
+  "id": "support",
+  "template": "programLanding",
+  "version": 8,
+  "contentVersion": 8,
+  "status": "published",
+  "publiclyVisible": true,
+  "publicSourceVersion": 7,
+  "title": "Support NJ PBS",
+  "description": "Support NJ PBS and keep public media available for New Jersey.",
+  "blocks": [
+    {
+      "id": "fixture-hero-actions",
+      "type": "cta_row",
+      "visible": true,
+      "order": 0,
+      "data": {
+        "ctas": [
+          {
+            "label": "Donate",
+            "href": "https://www.pbs.org/donation/?station_id=63b643e1-1a13-4dd9-9bab-ff6f7527715f&campaign=passport",
+            "variant": "primary"
+          },
+          {
+            "label": "Contact NJ PBS",
+            "href": "/contact/",
+            "variant": "secondary"
+          }
+        ]
+      }
+    },
+    {
+      "id": "fixture-transition-notice",
+      "type": "prose",
+      "visible": true,
+      "order": 1,
+      "data": {
+        "content": {
+          "type": "doc",
+          "content": [
+            {
+              "type": "heading",
+              "attrs": {
+                "level": 2
+              },
+              "content": [
+                {
+                  "type": "text",
+                  "text": "Giving and Passport during the transition"
+                }
+              ]
+            },
+            {
+              "type": "paragraph",
+              "content": [
+                {
+                  "type": "text",
+                  "text": "Existing gifts, including one-time and recurring gifts, ended June 30, 2026. If you would like to continue supporting NJ PBS, you will need to set up a new monthly recurring gift or make a one-time donation through the new donation portal. "
+                }
+              ]
+            },
+            {
+              "type": "paragraph",
+              "content": [
+                {
+                  "type": "text",
+                  "text": "PBS manages Passport account status. Use the PBS Passport lookup tool to check an existing account. If access does not appear or a renewal is due, contact NJ PBS for help with the current account or donation path."
+                }
+              ]
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "fixture-transition-actions",
+      "type": "cta_row",
+      "visible": true,
+      "order": 2,
+      "data": {
+        "ctas": [
+          {
+            "label": "See the full transition FAQ",
+            "href": "/faq/",
+            "variant": "secondary"
+          },
+          {
+            "label": "Look up Passport access",
+            "href": "https://www.pbs.org/passport/lookup/",
+            "variant": "secondary"
+          }
+        ]
+      }
+    },
+    {
+      "id": "fixture-body-copy",
+      "type": "prose",
+      "visible": true,
+      "order": 3,
+      "data": {
+        "content": {
+          "type": "doc",
+          "content": [
+            {
+              "type": "heading",
+              "attrs": {
+                "level": 2
+              },
+              "content": [
+                {
+                  "type": "text",
+                  "text": "Prefer to mail a check?"
+                }
+              ]
+            },
+            {
+              "type": "paragraph",
+              "content": [
+                {
+                  "type": "text",
+                  "text": "Make checks payable to NJ PBS and mail to: "
+                },
+                {
+                  "type": "text",
+                  "text": "NJ PBS, 1 Normal Ave., Montclair, NJ 07043",
+                  "marks": [
+                    {
+                      "type": "bold"
+                    }
+                  ]
+                },
+                {
+                  "type": "text",
+                  "text": "."
+                }
+              ]
+            },
+            {
+              "type": "paragraph",
+              "content": [
+                {
+                  "type": "text",
+                  "text": "Online donation processing is handled through PBS, and this site does not collect payment information. A mailed check supports NJ PBS but does not activate PBS Passport; to start or renew Passport streaming, donate through the new donation portal."
+                }
+              ]
+            },
+            {
+              "type": "paragraph",
+              "content": []
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "fixture-daf",
+      "type": "prose",
+      "visible": true,
+      "order": 4,
+      "data": {
+        "content": {
+          "type": "doc",
+          "content": [
+            {
+              "type": "heading",
+              "attrs": {
+                "level": 2
+              },
+              "content": [
+                {
+                  "type": "text",
+                  "text": "Give to NJ PBS through your donor advised fund"
+                }
+              ]
+            },
+            {
+              "type": "paragraph",
+              "content": [
+                {
+                  "type": "text",
+                  "text": "Already have a donor advised fund? It's one of the easiest ways to support NJ PBS.",
+                  "marks": [
+                    {
+                      "type": "bold"
+                    }
+                  ]
+                },
+                {
+                  "type": "text",
+                  "text": " You've already set that money aside for charity, and in most cases you took the tax deduction when you put it in the fund. Now you get to choose where it goes. A grant to NJ PBS takes just a few minutes to recommend from your fund's website. You can make a one-time gift or set up a gift that repeats every year. "
+                }
+              ]
+            },
+            {
+              "type": "paragraph",
+              "content": [
+                {
+                  "type": "text",
+                  "text": "One thing to know first: "
+                },
+                {
+                  "type": "text",
+                  "text": "you may not find us when you search your giving platform.",
+                  "marks": [
+                    {
+                      "type": "bold"
+                    }
+                  ]
+                },
+                {
+                  "type": "text",
+                  "text": " That's expected. NJ PBS is supported by a nonprofit called Friends of NJ Public Media Incorporated, and some platforms haven't added it to their lists yet. You can add us yourself easily. "
+                }
+              ]
+            },
+            {
+              "type": "blockquote",
+              "content": [
+                {
+                  "type": "paragraph",
+                  "content": [
+                    {
+                      "type": "text",
+                      "text": "Here's the information you need to donate to us:",
+                      "marks": [
+                        {
+                          "type": "bold"
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "type": "orderedList",
+                  "content": [
+                    {
+                      "type": "listItem",
+                      "content": [
+                        {
+                          "type": "paragraph",
+                          "content": [
+                            {
+                              "type": "text",
+                              "text": "Organization name:",
+                              "marks": [
+                                {
+                                  "type": "bold"
+                                }
+                              ]
+                            },
+                            {
+                              "type": "text",
+                              "text": " Friends of NJ Public Media Incorporated"
+                            }
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "type": "listItem",
+                      "content": [
+                        {
+                          "type": "paragraph",
+                          "content": [
+                            {
+                              "type": "text",
+                              "text": "EIN:",
+                              "marks": [
+                                {
+                                  "type": "bold"
+                                }
+                              ]
+                            },
+                            {
+                              "type": "text",
+                              "text": " 42-5060925"
+                            }
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "type": "listItem",
+                      "content": [
+                        {
+                          "type": "paragraph",
+                          "content": [
+                            {
+                              "type": "text",
+                              "text": "Phone:",
+                              "marks": [
+                                {
+                                  "type": "bold"
+                                }
+                              ]
+                            },
+                            {
+                              "type": "text",
+                              "text": " (800) 882-6622"
+                            }
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "type": "listItem",
+                      "content": [
+                        {
+                          "type": "paragraph",
+                          "content": [
+                            {
+                              "type": "text",
+                              "text": "Contact:",
+                              "marks": [
+                                {
+                                  "type": "bold"
+                                }
+                              ]
+                            },
+                            {
+                              "type": "text",
+                              "text": " Samantha Bennet, "
+                            },
+                            {
+                              "type": "text",
+                              "text": "info@njpbs.org",
+                              "marks": [
+                                {
+                                  "type": "link",
+                                  "attrs": {
+                                    "href": "mailto:bennets@njpbs.org"
+                                  }
+                                }
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "type": "listItem",
+                      "content": [
+                        {
+                          "type": "paragraph",
+                          "content": [
+                            {
+                              "type": "text",
+                              "text": "Mailing address:",
+                              "marks": [
+                                {
+                                  "type": "bold"
+                                }
+                              ]
+                            },
+                            {
+                              "type": "text",
+                              "text": " 1 Normal Avenue, Montclair, NJ 07043"
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "type": "paragraph",
+                  "content": []
+                }
+              ]
+            },
+            {
+              "type": "paragraph",
+              "content": [
+                {
+                  "type": "text",
+                  "text": "And here's how you can give to use through your donor advised fund (DAF): ",
+                  "marks": [
+                    {
+                      "type": "bold"
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "type": "orderedList",
+              "content": [
+                {
+                  "type": "listItem",
+                  "content": [
+                    {
+                      "type": "paragraph",
+                      "content": [
+                        {
+                          "type": "text",
+                          "text": "Log in to your DAF account and start a new grant."
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "type": "listItem",
+                  "content": [
+                    {
+                      "type": "paragraph",
+                      "content": [
+                        {
+                          "type": "text",
+                          "text": "Search for \"Friends of NJ Public Media.\" If it doesn't appear, choose the option to add or suggest a new charity."
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "type": "listItem",
+                  "content": [
+                    {
+                      "type": "paragraph",
+                      "content": [
+                        {
+                          "type": "text",
+                          "text": "Enter the details above."
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "type": "listItem",
+                  "content": [
+                    {
+                      "type": "paragraph",
+                      "content": [
+                        {
+                          "type": "text",
+                          "text": "In the purpose or note field, write \"NJ PBS.\""
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "type": "listItem",
+                  "content": [
+                    {
+                      "type": "paragraph",
+                      "content": [
+                        {
+                          "type": "text",
+                          "text": "Submit your grant, then email "
+                        },
+                        {
+                          "type": "text",
+                          "text": "info@njpbs.org ",
+                          "marks": [
+                            {
+                              "type": "link",
+                              "attrs": {
+                                "href": "mailto:bennets@njpbs.org"
+                              }
+                            }
+                          ]
+                        },
+                        {
+                          "type": "text",
+                          "text": "so we know to expect it."
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "type": "paragraph",
+              "content": [
+                {
+                  "type": "text",
+                  "text": "Frequently Asked Questions",
+                  "marks": [
+                    {
+                      "type": "bold"
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "type": "paragraph",
+              "content": [
+                {
+                  "type": "text",
+                  "text": "Why can't I find NJ PBS?",
+                  "marks": [
+                    {
+                      "type": "italic"
+                    }
+                  ]
+                },
+                {
+                  "type": "hardBreak"
+                },
+                {
+                  "type": "text",
+                  "text": "Our nonprofit's legal name is Friends of NJ Public Media Incorporated, and some platforms haven't added it to their databases yet. Entering the details above sends your grant to the right place."
+                }
+              ]
+            },
+            {
+              "type": "paragraph",
+              "content": [
+                {
+                  "type": "text",
+                  "text": "I've given through my DAF before. Do I need to do anything?",
+                  "marks": [
+                    {
+                      "type": "italic"
+                    }
+                  ]
+                },
+                {
+                  "type": "hardBreak"
+                },
+                {
+                  "type": "text",
+                  "text": "Yes. Please enter our details again rather than using a saved recipient, which may point to our former operator."
+                }
+              ]
+            },
+            {
+              "type": "paragraph",
+              "content": [
+                {
+                  "type": "text",
+                  "text": "My platform is asking for documentation.",
+                  "marks": [
+                    {
+                      "type": "italic"
+                    }
+                  ]
+                },
+                {
+                  "type": "hardBreak"
+                },
+                {
+                  "type": "text",
+                  "text": "Call (800) 882-6622 or email "
+                },
+                {
+                  "type": "text",
+                  "text": "info@njpbs.org",
+                  "marks": [
+                    {
+                      "type": "link",
+                      "attrs": {
+                        "href": "mailto:bennets@njpbs.org"
+                      }
+                    }
+                  ]
+                },
+                {
+                  "type": "text",
+                  "text": " and we'll send what they need."
+                }
+              ]
+            },
+            {
+              "type": "paragraph",
+              "content": [
+                {
+                  "type": "text",
+                  "text": "Will I get a tax receipt?",
+                  "marks": [
+                    {
+                      "type": "italic"
+                    }
+                  ]
+                },
+                {
+                  "type": "hardBreak"
+                },
+                {
+                  "type": "text",
+                  "text": "You usually take your tax deduction when you put money into your fund, not when the fund makes a grant. We'll send you a thank-you acknowledgment, but it isn't a receipt for a new deduction."
+                }
+              ]
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "fixture-service-destinations",
+      "type": "card_grid",
+      "visible": true,
+      "order": 5,
+      "data": {
+        "cards": [
+          {
+            "itemId": "fixture-card-0",
+            "label": "Give",
+            "title": "Donate",
+            "body": {
+              "type": "doc",
+              "content": [
+                {
+                  "type": "paragraph",
+                  "content": [
+                    {
+                      "type": "text",
+                      "text": "Open the secure PBS payment form for NJ PBS."
+                    }
+                  ]
+                }
+              ]
+            },
+            "href": "https://www.pbs.org/donation/?station_id=63b643e1-1a13-4dd9-9bab-ff6f7527715f&campaign=passport",
+            "imageAssetId": "launch-give"
+          },
+          {
+            "itemId": "fixture-card-1",
+            "label": "Member",
+            "title": "Passport access",
+            "body": {
+              "type": "doc",
+              "content": [
+                {
+                  "type": "paragraph",
+                  "content": [
+                    {
+                      "type": "text",
+                      "text": "Learn about the Passport member benefit before you watch."
+                    }
+                  ]
+                }
+              ]
+            },
+            "href": "/passport/",
+            "imageAssetId": "launch-passport"
+          },
+          {
+            "itemId": "fixture-card-2",
+            "label": "Help",
+            "title": "Contact NJ PBS",
+            "body": {
+              "type": "doc",
+              "content": [
+                {
+                  "type": "paragraph",
+                  "content": [
+                    {
+                      "type": "text",
+                      "text": "Reach the station team with membership or site questions."
+                    }
+                  ]
+                }
+              ]
+            },
+            "href": "/contact/",
+            "imageAssetId": "launch-contact"
+          }
+        ]
+      }
+    }
+  ],
+  "published": {
+    "metadata": {
+      "title": "Support NJ PBS",
+      "description": "Support NJ PBS and keep public media available for New Jersey.",
+      "serviceCompositionVersion": 1
+    },
+    "blocks": [
+      {
+        "id": "fixture-hero-actions",
+        "type": "cta_row",
+        "visible": true,
+        "order": 0,
+        "data": {
+          "ctas": [
+            {
+              "label": "Donate",
+              "href": "https://www.pbs.org/donation/?station_id=63b643e1-1a13-4dd9-9bab-ff6f7527715f&campaign=passport",
+              "variant": "primary"
+            },
+            {
+              "label": "Contact NJ PBS",
+              "href": "/contact/",
+              "variant": "secondary"
+            }
+          ]
+        }
+      },
+      {
+        "id": "fixture-transition-notice",
+        "type": "prose",
+        "visible": true,
+        "order": 1,
+        "data": {
+          "content": {
+            "type": "doc",
+            "content": [
+              {
+                "type": "heading",
+                "attrs": {
+                  "level": 2
+                },
+                "content": [
+                  {
+                    "type": "text",
+                    "text": "Giving and Passport during the transition"
+                  }
+                ]
+              },
+              {
+                "type": "paragraph",
+                "content": [
+                  {
+                    "type": "text",
+                    "text": "Existing gifts, including one-time and recurring gifts, ended June 30, 2026. If you would like to continue supporting NJ PBS, you will need to set up a new monthly recurring gift or make a one-time donation through the new donation portal. "
+                  }
+                ]
+              },
+              {
+                "type": "paragraph",
+                "content": [
+                  {
+                    "type": "text",
+                    "text": "PBS manages Passport account status. Use the PBS Passport lookup tool to check an existing account. If access does not appear or a renewal is due, contact NJ PBS for help with the current account or donation path."
+                  }
+                ]
+              }
+            ]
+          }
+        }
+      },
+      {
+        "id": "fixture-transition-actions",
+        "type": "cta_row",
+        "visible": true,
+        "order": 2,
+        "data": {
+          "ctas": [
+            {
+              "label": "See the full transition FAQ",
+              "href": "/faq/",
+              "variant": "secondary"
+            },
+            {
+              "label": "Look up Passport access",
+              "href": "https://www.pbs.org/passport/lookup/",
+              "variant": "secondary"
+            }
+          ]
+        }
+      },
+      {
+        "id": "fixture-body-copy",
+        "type": "prose",
+        "visible": true,
+        "order": 3,
+        "data": {
+          "content": {
+            "type": "doc",
+            "content": [
+              {
+                "type": "heading",
+                "attrs": {
+                  "level": 2
+                },
+                "content": [
+                  {
+                    "type": "text",
+                    "text": "Prefer to mail a check?"
+                  }
+                ]
+              },
+              {
+                "type": "paragraph",
+                "content": [
+                  {
+                    "type": "text",
+                    "text": "Make checks payable to NJ PBS and mail to: "
+                  },
+                  {
+                    "type": "text",
+                    "text": "NJ PBS, 1 Normal Ave., Montclair, NJ 07043",
+                    "marks": [
+                      {
+                        "type": "bold"
+                      }
+                    ]
+                  },
+                  {
+                    "type": "text",
+                    "text": "."
+                  }
+                ]
+              },
+              {
+                "type": "paragraph",
+                "content": [
+                  {
+                    "type": "text",
+                    "text": "Online donation processing is handled through PBS, and this site does not collect payment information. A mailed check supports NJ PBS but does not activate PBS Passport; to start or renew Passport streaming, donate through the new donation portal."
+                  }
+                ]
+              },
+              {
+                "type": "paragraph",
+                "content": []
+              }
+            ]
+          }
+        }
+      },
+      {
+        "id": "fixture-daf",
+        "type": "prose",
+        "visible": true,
+        "order": 4,
+        "data": {
+          "content": {
+            "type": "doc",
+            "content": [
+              {
+                "type": "heading",
+                "attrs": {
+                  "level": 2
+                },
+                "content": [
+                  {
+                    "type": "text",
+                    "text": "Give to NJ PBS through your donor advised fund"
+                  }
+                ]
+              },
+              {
+                "type": "paragraph",
+                "content": [
+                  {
+                    "type": "text",
+                    "text": "Already have a donor advised fund? It's one of the easiest ways to support NJ PBS.",
+                    "marks": [
+                      {
+                        "type": "bold"
+                      }
+                    ]
+                  },
+                  {
+                    "type": "text",
+                    "text": " You've already set that money aside for charity, and in most cases you took the tax deduction when you put it in the fund. Now you get to choose where it goes. A grant to NJ PBS takes just a few minutes to recommend from your fund's website. You can make a one-time gift or set up a gift that repeats every year. "
+                  }
+                ]
+              },
+              {
+                "type": "paragraph",
+                "content": [
+                  {
+                    "type": "text",
+                    "text": "One thing to know first: "
+                  },
+                  {
+                    "type": "text",
+                    "text": "you may not find us when you search your giving platform.",
+                    "marks": [
+                      {
+                        "type": "bold"
+                      }
+                    ]
+                  },
+                  {
+                    "type": "text",
+                    "text": " That's expected. NJ PBS is supported by a nonprofit called Friends of NJ Public Media Incorporated, and some platforms haven't added it to their lists yet. You can add us yourself easily. "
+                  }
+                ]
+              },
+              {
+                "type": "blockquote",
+                "content": [
+                  {
+                    "type": "paragraph",
+                    "content": [
+                      {
+                        "type": "text",
+                        "text": "Here's the information you need to donate to us:",
+                        "marks": [
+                          {
+                            "type": "bold"
+                          }
+                        ]
+                      }
+                    ]
+                  },
+                  {
+                    "type": "orderedList",
+                    "content": [
+                      {
+                        "type": "listItem",
+                        "content": [
+                          {
+                            "type": "paragraph",
+                            "content": [
+                              {
+                                "type": "text",
+                                "text": "Organization name:",
+                                "marks": [
+                                  {
+                                    "type": "bold"
+                                  }
+                                ]
+                              },
+                              {
+                                "type": "text",
+                                "text": " Friends of NJ Public Media Incorporated"
+                              }
+                            ]
+                          }
+                        ]
+                      },
+                      {
+                        "type": "listItem",
+                        "content": [
+                          {
+                            "type": "paragraph",
+                            "content": [
+                              {
+                                "type": "text",
+                                "text": "EIN:",
+                                "marks": [
+                                  {
+                                    "type": "bold"
+                                  }
+                                ]
+                              },
+                              {
+                                "type": "text",
+                                "text": " 42-5060925"
+                              }
+                            ]
+                          }
+                        ]
+                      },
+                      {
+                        "type": "listItem",
+                        "content": [
+                          {
+                            "type": "paragraph",
+                            "content": [
+                              {
+                                "type": "text",
+                                "text": "Phone:",
+                                "marks": [
+                                  {
+                                    "type": "bold"
+                                  }
+                                ]
+                              },
+                              {
+                                "type": "text",
+                                "text": " (800) 882-6622"
+                              }
+                            ]
+                          }
+                        ]
+                      },
+                      {
+                        "type": "listItem",
+                        "content": [
+                          {
+                            "type": "paragraph",
+                            "content": [
+                              {
+                                "type": "text",
+                                "text": "Contact:",
+                                "marks": [
+                                  {
+                                    "type": "bold"
+                                  }
+                                ]
+                              },
+                              {
+                                "type": "text",
+                                "text": " Samantha Bennet, "
+                              },
+                              {
+                                "type": "text",
+                                "text": "info@njpbs.org",
+                                "marks": [
+                                  {
+                                    "type": "link",
+                                    "attrs": {
+                                      "href": "mailto:bennets@njpbs.org"
+                                    }
+                                  }
+                                ]
+                              }
+                            ]
+                          }
+                        ]
+                      },
+                      {
+                        "type": "listItem",
+                        "content": [
+                          {
+                            "type": "paragraph",
+                            "content": [
+                              {
+                                "type": "text",
+                                "text": "Mailing address:",
+                                "marks": [
+                                  {
+                                    "type": "bold"
+                                  }
+                                ]
+                              },
+                              {
+                                "type": "text",
+                                "text": " 1 Normal Avenue, Montclair, NJ 07043"
+                              }
+                            ]
+                          }
+                        ]
+                      }
+                    ]
+                  },
+                  {
+                    "type": "paragraph",
+                    "content": []
+                  }
+                ]
+              },
+              {
+                "type": "paragraph",
+                "content": [
+                  {
+                    "type": "text",
+                    "text": "And here's how you can give to use through your donor advised fund (DAF): ",
+                    "marks": [
+                      {
+                        "type": "bold"
+                      }
+                    ]
+                  }
+                ]
+              },
+              {
+                "type": "orderedList",
+                "content": [
+                  {
+                    "type": "listItem",
+                    "content": [
+                      {
+                        "type": "paragraph",
+                        "content": [
+                          {
+                            "type": "text",
+                            "text": "Log in to your DAF account and start a new grant."
+                          }
+                        ]
+                      }
+                    ]
+                  },
+                  {
+                    "type": "listItem",
+                    "content": [
+                      {
+                        "type": "paragraph",
+                        "content": [
+                          {
+                            "type": "text",
+                            "text": "Search for \"Friends of NJ Public Media.\" If it doesn't appear, choose the option to add or suggest a new charity."
+                          }
+                        ]
+                      }
+                    ]
+                  },
+                  {
+                    "type": "listItem",
+                    "content": [
+                      {
+                        "type": "paragraph",
+                        "content": [
+                          {
+                            "type": "text",
+                            "text": "Enter the details above."
+                          }
+                        ]
+                      }
+                    ]
+                  },
+                  {
+                    "type": "listItem",
+                    "content": [
+                      {
+                        "type": "paragraph",
+                        "content": [
+                          {
+                            "type": "text",
+                            "text": "In the purpose or note field, write \"NJ PBS.\""
+                          }
+                        ]
+                      }
+                    ]
+                  },
+                  {
+                    "type": "listItem",
+                    "content": [
+                      {
+                        "type": "paragraph",
+                        "content": [
+                          {
+                            "type": "text",
+                            "text": "Submit your grant, then email "
+                          },
+                          {
+                            "type": "text",
+                            "text": "info@njpbs.org ",
+                            "marks": [
+                              {
+                                "type": "link",
+                                "attrs": {
+                                  "href": "mailto:bennets@njpbs.org"
+                                }
+                              }
+                            ]
+                          },
+                          {
+                            "type": "text",
+                            "text": "so we know to expect it."
+                          }
+                        ]
+                      }
+                    ]
+                  }
+                ]
+              },
+              {
+                "type": "paragraph",
+                "content": [
+                  {
+                    "type": "text",
+                    "text": "Frequently Asked Questions",
+                    "marks": [
+                      {
+                        "type": "bold"
+                      }
+                    ]
+                  }
+                ]
+              },
+              {
+                "type": "paragraph",
+                "content": [
+                  {
+                    "type": "text",
+                    "text": "Why can't I find NJ PBS?",
+                    "marks": [
+                      {
+                        "type": "italic"
+                      }
+                    ]
+                  },
+                  {
+                    "type": "hardBreak"
+                  },
+                  {
+                    "type": "text",
+                    "text": "Our nonprofit's legal name is Friends of NJ Public Media Incorporated, and some platforms haven't added it to their databases yet. Entering the details above sends your grant to the right place."
+                  }
+                ]
+              },
+              {
+                "type": "paragraph",
+                "content": [
+                  {
+                    "type": "text",
+                    "text": "I've given through my DAF before. Do I need to do anything?",
+                    "marks": [
+                      {
+                        "type": "italic"
+                      }
+                    ]
+                  },
+                  {
+                    "type": "hardBreak"
+                  },
+                  {
+                    "type": "text",
+                    "text": "Yes. Please enter our details again rather than using a saved recipient, which may point to our former operator."
+                  }
+                ]
+              },
+              {
+                "type": "paragraph",
+                "content": [
+                  {
+                    "type": "text",
+                    "text": "My platform is asking for documentation.",
+                    "marks": [
+                      {
+                        "type": "italic"
+                      }
+                    ]
+                  },
+                  {
+                    "type": "hardBreak"
+                  },
+                  {
+                    "type": "text",
+                    "text": "Call (800) 882-6622 or email "
+                  },
+                  {
+                    "type": "text",
+                    "text": "info@njpbs.org",
+                    "marks": [
+                      {
+                        "type": "link",
+                        "attrs": {
+                          "href": "mailto:bennets@njpbs.org"
+                        }
+                      }
+                    ]
+                  },
+                  {
+                    "type": "text",
+                    "text": " and we'll send what they need."
+                  }
+                ]
+              },
+              {
+                "type": "paragraph",
+                "content": [
+                  {
+                    "type": "text",
+                    "text": "Will I get a tax receipt?",
+                    "marks": [
+                      {
+                        "type": "italic"
+                      }
+                    ]
+                  },
+                  {
+                    "type": "hardBreak"
+                  },
+                  {
+                    "type": "text",
+                    "text": "You usually take your tax deduction when you put money into your fund, not when the fund makes a grant. We'll send you a thank-you acknowledgment, but it isn't a receipt for a new deduction."
+                  }
+                ]
+              }
+            ]
+          }
+        }
+      },
+      {
+        "id": "fixture-service-destinations",
+        "type": "card_grid",
+        "visible": true,
+        "order": 5,
+        "data": {
+          "cards": [
+            {
+              "itemId": "fixture-card-0",
+              "label": "Give",
+              "title": "Donate",
+              "body": {
+                "type": "doc",
+                "content": [
+                  {
+                    "type": "paragraph",
+                    "content": [
+                      {
+                        "type": "text",
+                        "text": "Open the secure PBS payment form for NJ PBS."
+                      }
+                    ]
+                  }
+                ]
+              },
+              "href": "https://www.pbs.org/donation/?station_id=63b643e1-1a13-4dd9-9bab-ff6f7527715f&campaign=passport",
+              "imageAssetId": "launch-give"
+            },
+            {
+              "itemId": "fixture-card-1",
+              "label": "Member",
+              "title": "Passport access",
+              "body": {
+                "type": "doc",
+                "content": [
+                  {
+                    "type": "paragraph",
+                    "content": [
+                      {
+                        "type": "text",
+                        "text": "Learn about the Passport member benefit before you watch."
+                      }
+                    ]
+                  }
+                ]
+              },
+              "href": "/passport/",
+              "imageAssetId": "launch-passport"
+            },
+            {
+              "itemId": "fixture-card-2",
+              "label": "Help",
+              "title": "Contact NJ PBS",
+              "body": {
+                "type": "doc",
+                "content": [
+                  {
+                    "type": "paragraph",
+                    "content": [
+                      {
+                        "type": "text",
+                        "text": "Reach the station team with membership or site questions."
+                      }
+                    ]
+                  }
+                ]
+              },
+              "href": "/contact/",
+              "imageAssetId": "launch-contact"
+            }
+          ]
+        }
+      }
+    ],
+    "publishedAt": "2026-10-06T10:00:00.000Z",
+    "publishedBy": "fixture-editor",
+    "sourceVersion": 8
+  },
+  "publishAt": "2026-10-06T10:00:00.000Z",
+  "serviceCompositionVersion": 1
+}

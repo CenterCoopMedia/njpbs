@@ -1,0 +1,8 @@
+{
+  "date": "2026-09-05",
+  "kind": "new",
+  "title": "Arrange content in rows and columns",
+  "body": "Group blocks into rows with columns on pages and Posts. Rows stay in place when you save and publish, and revision history shows which row each change belongs to.",
+  "prs": [],
+  "order": 0
+}

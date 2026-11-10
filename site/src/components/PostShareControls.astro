@@ -1,0 +1,295 @@
+---
+import { buildPostShareLinks } from "../lib/post-share-links";
+
+interface Props {
+  title: string;
+  url: string;
+  placement: "top" | "bottom";
+}
+
+const { title, url, placement } = Astro.props as Props;
+const links = buildPostShareLinks({ title, url });
+const heading = placement === "top" ? "Share this post" : "Share this post with others";
+---
+
+<section
+  class:list={["post-share", `post-share--${placement}`]}
+  aria-label={heading}
+  data-post-share
+  data-post-share-title={links.title}
+  data-post-share-url={url}
+>
+  <details class="post-share__disclosure" data-post-share-disclosure>
+    <summary class="post-share__trigger" data-post-share-summary>
+      <svg aria-hidden="true" viewBox="0 0 24 24" focusable="false">
+        <circle cx="18" cy="5" r="2.5"></circle>
+        <circle cx="6" cy="12" r="2.5"></circle>
+        <circle cx="18" cy="19" r="2.5"></circle>
+        <path d="m8.2 10.8 7.6-4.5M8.2 13.2l7.6 4.5"></path>
+      </svg>
+      <span>Share</span>
+    </summary>
+    <div class="post-share__panel">
+      <div class="post-share__actions" role="group" aria-label="Share options">
+        <button
+          type="button"
+          class="post-share__action"
+          title="Copy link"
+          data-post-share-copy
+          hidden
+        >
+          <svg aria-hidden="true" viewBox="0 0 24 24" focusable="false">
+            <rect x="8" y="8" width="11" height="11" rx="2"></rect>
+            <path d="M16 8V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h2"></path>
+          </svg>
+          <span class="post-share__visually-hidden">Copy link</span>
+        </button>
+        <a class="post-share__action" href={links.email} title="Email">
+          <svg aria-hidden="true" viewBox="0 0 24 24" focusable="false">
+            <rect x="3" y="5" width="18" height="14" rx="2"></rect>
+            <path d="m4 7 8 6 8-6"></path>
+          </svg>
+          <span class="post-share__visually-hidden">Share by email</span>
+        </a>
+        <a
+          class="post-share__action"
+          href={links.facebook}
+          target="_blank"
+          rel="noopener noreferrer"
+          title="Facebook"
+        >
+          <svg aria-hidden="true" viewBox="0 0 24 24" focusable="false">
+            <path
+              fill="currentColor"
+              stroke="none"
+              d="M24 12.07C24 5.4 18.63 0 12 0S0 5.4 0 12.07c0 6.03 4.39 11.03 10.13 11.93v-8.43H7.08v-3.5h3.05V9.4c0-3.02 1.79-4.68 4.53-4.68 1.31 0 2.69.23 2.69.23v2.97h-1.51c-1.49 0-1.96.93-1.96 1.88v2.27h3.33l-.53 3.5h-2.8V24C19.61 23.1 24 18.1 24 12.07Z"
+            ></path>
+          </svg>
+          <span class="post-share__visually-hidden">Share on Facebook (opens in new tab)</span>
+        </a>
+        <a
+          class="post-share__action"
+          href={links.x}
+          target="_blank"
+          rel="noopener noreferrer"
+          title="X"
+        >
+          <svg aria-hidden="true" viewBox="0 0 24 24" focusable="false">
+            <path
+              fill="currentColor"
+              stroke="none"
+              d="M17.53 3h3.02l-6.6 7.54L21.75 21h-5.94l-4.65-6.08L5.8 21H2.78l7.06-8.07L2.25 3h6.09l4.2 5.56L17.53 3Zm-1.06 16.2h1.67L7.6 4.71H5.81l10.66 14.49Z"
+            ></path>
+          </svg>
+          <span class="post-share__visually-hidden">Share on X (opens in new tab)</span>
+        </a>
+        <a
+          class="post-share__action"
+          href={links.linkedin}
+          target="_blank"
+          rel="noopener noreferrer"
+          title="LinkedIn"
+        >
+          <svg aria-hidden="true" viewBox="0 0 24 24" focusable="false">
+            <path
+              fill="currentColor"
+              stroke="none"
+              d="M4.98 3.5a2.5 2.5 0 1 1 0 5 2.5 2.5 0 0 1 0-5ZM3 9h4v12H3V9Zm6.5 0h3.83v1.64h.05c.53-.96 1.83-1.97 3.77-1.97 4.03 0 4.78 2.5 4.78 5.75V21h-4v-5.7c0-1.36-.02-3.11-1.95-3.11-1.95 0-2.25 1.48-2.25 3.01V21h-4V9Z"
+            ></path>
+          </svg>
+          <span class="post-share__visually-hidden">Share on LinkedIn (opens in new tab)</span>
+        </a>
+        <button
+          type="button"
+          class="post-share__action"
+          title="Share with device"
+          data-post-share-native
+          hidden
+        >
+          <svg aria-hidden="true" viewBox="0 0 24 24" focusable="false">
+            <path d="M12 16V3m-5 5 5-5 5 5"></path>
+            <path d="M5 12v7a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-7"></path>
+          </svg>
+          <span class="post-share__visually-hidden">Share with device</span>
+        </button>
+      </div>
+    </div>
+  </details>
+  <p class="post-share__status" role="status" aria-live="polite" data-post-share-status></p>
+  <label class="post-share__fallback" data-post-share-fallback hidden>
+    <span>Article URL</span>
+    <input type="text" readonly value={url} data-post-share-fallback-url />
+  </label>
+</section>
+
+<script>
+  import { mountPostShareControls } from "../lib/post-share-dom";
+
+  document.querySelectorAll<HTMLElement>("[data-post-share]").forEach((root) => {
+    mountPostShareControls(root, navigator);
+  });
+</script>
+
+<style>
+  .post-share {
+    max-width: 49rem;
+    color: var(--color-text-muted, var(--text-dim));
+  }
+
+  .post-share--top {
+    margin-top: 1.4rem;
+  }
+
+  .post-share--bottom {
+    width: 100%;
+    max-width: var(--post-prose-width, 49rem);
+    margin: clamp(2.5rem, 6vw, 4.5rem) 0 0;
+    padding-top: 1.25rem;
+    border-top: 1px solid var(--color-border, var(--line));
+  }
+
+  .post-share__disclosure {
+    width: min(100%, 22rem);
+  }
+
+  .post-share__trigger {
+    display: inline-flex;
+    min-height: var(--target-comfortable);
+    box-sizing: border-box;
+    gap: 0.5rem;
+    align-items: center;
+    justify-content: center;
+    padding: 0.55rem 0.85rem;
+    border: 1px solid var(--color-border-strong, var(--line-strong));
+    border-radius: 16.5px;
+    background: var(--color-surface-panel, rgba(255, 255, 255, 0.035));
+    color: var(--color-text-on-surface, var(--text));
+    font-size: 0.9rem;
+    font-weight: 800;
+    line-height: 1.25;
+    list-style: none;
+    cursor: pointer;
+  }
+
+  .post-share__trigger::-webkit-details-marker {
+    display: none;
+  }
+
+  .post-share__trigger svg,
+  .post-share__action svg {
+    width: 1.25rem;
+    height: 1.25rem;
+    flex: none;
+    fill: none;
+    stroke: currentColor;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+    stroke-width: 1.8;
+  }
+
+  .post-share__disclosure[open] .post-share__trigger {
+    border-color: var(--color-focus-ring, var(--color-link));
+  }
+
+  .post-share__panel {
+    font-size: 1rem;
+    width: min(100%, 22rem);
+    box-sizing: border-box;
+    margin-top: 0.65rem;
+    padding: 0.7rem;
+    border: 1px solid var(--color-border, var(--line));
+    border-radius: var(--radius-surface);
+    background: var(--color-surface-elevated);
+  }
+
+  .post-share__actions {
+    display: flex;
+    min-width: 0;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+  }
+
+  .post-share__action {
+    display: inline-flex;
+    width: var(--target-comfortable);
+    height: var(--target-comfortable);
+    flex: 0 0 var(--target-comfortable);
+    box-sizing: border-box;
+    align-items: center;
+    justify-content: center;
+    padding: 0;
+    border: 1px solid var(--color-border-strong, var(--line-strong));
+    border-radius: 16.5px;
+    background: var(--color-surface-panel, rgba(255, 255, 255, 0.035));
+    color: var(--color-text-on-surface, var(--text));
+    font: inherit;
+    text-decoration: none;
+    cursor: pointer;
+  }
+
+  .post-share__action:hover {
+    border-color: var(--color-focus-ring, var(--color-link));
+    color: var(--color-link);
+  }
+
+  .post-share__action[hidden] {
+    display: none;
+  }
+
+  .post-share__trigger:focus-visible,
+  .post-share__action:focus-visible,
+  .post-share__fallback input:focus-visible {
+    outline: var(--focus-outline);
+    outline-offset: var(--focus-offset);
+  }
+
+  .post-share__visually-hidden {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    margin: -1px;
+    padding: 0;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+    border: 0;
+  }
+
+  .post-share__status {
+    min-height: 1.35em;
+    margin: 0.65rem 0 0;
+    color: var(--color-text-muted, var(--text-dim));
+    font-size: 0.9rem;
+    line-height: 1.45;
+  }
+
+  .post-share__status:empty {
+    min-height: 0;
+    margin-top: 0;
+  }
+
+  .post-share__fallback {
+    display: grid;
+    gap: 0.35rem;
+    margin-top: 0.7rem;
+    color: var(--color-text-on-surface, var(--text));
+    font-size: 0.9rem;
+    font-weight: 700;
+  }
+
+  .post-share__fallback[hidden] {
+    display: none;
+  }
+
+  .post-share__fallback input {
+    width: 100%;
+    min-height: var(--target-comfortable);
+    box-sizing: border-box;
+    padding: 0.55rem 0.7rem;
+    border: 1px solid var(--color-border-strong, var(--line-strong));
+    border-radius: var(--radius-surface);
+    background: var(--color-surface-elevated);
+    color: var(--color-text-on-surface, var(--text));
+    font: inherit;
+  }
+</style>

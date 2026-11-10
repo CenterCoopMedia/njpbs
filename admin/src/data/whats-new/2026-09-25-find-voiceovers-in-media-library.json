@@ -1,0 +1,11 @@
+{
+  "date": "2026-09-25",
+  "kind": "improved",
+  "title": "Find voiceovers in Media library",
+  "body": "Voiceovers are now in the Audio tab of Media library. Rows show at once, and each take loads its player only when you listen.",
+  "prs": [
+    1845,
+    2290
+  ],
+  "order": -9
+}

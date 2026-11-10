@@ -1,0 +1,679 @@
+{
+  "schemaVersion": 1,
+  "electionDate": "2026-11-03",
+  "races": [
+    {
+      "id": "us-senate",
+      "office": "U.S. Senate",
+      "district": "New Jersey",
+      "candidateIds": [
+        "us-senate-cory-booker",
+        "us-senate-justin-murphy",
+        "us-senate-veronica-fernandez",
+        "us-senate-joanne-kuniansky"
+      ]
+    },
+    {
+      "id": "us-house-01",
+      "office": "U.S. House",
+      "district": "District 1",
+      "candidateIds": [
+        "us-house-01-donald-norcross",
+        "us-house-01-damon-galdo"
+      ]
+    },
+    {
+      "id": "us-house-02",
+      "office": "U.S. House",
+      "district": "District 2",
+      "candidateIds": [
+        "us-house-02-jeff-van-drew",
+        "us-house-02-zack-mullock",
+        "us-house-02-ramon-mora-jr"
+      ]
+    },
+    {
+      "id": "us-house-03",
+      "office": "U.S. House",
+      "district": "District 3",
+      "candidateIds": [
+        "us-house-03-herb-conaway",
+        "us-house-03-michael-p-mcguire",
+        "us-house-03-ryan-michael-kelly",
+        "us-house-03-steven-welzer"
+      ]
+    },
+    {
+      "id": "us-house-04",
+      "office": "U.S. House",
+      "district": "District 4",
+      "candidateIds": [
+        "us-house-04-christopher-h-smith",
+        "us-house-04-rachel-peace"
+      ]
+    },
+    {
+      "id": "us-house-05",
+      "office": "U.S. House",
+      "district": "District 5",
+      "candidateIds": [
+        "us-house-05-josh-gottheimer",
+        "us-house-05-sean-kirrane",
+        "us-house-05-adam-rueda"
+      ]
+    },
+    {
+      "id": "us-house-06",
+      "office": "U.S. House",
+      "district": "District 6",
+      "candidateIds": [
+        "us-house-06-frank-pallone-jr",
+        "us-house-06-hillary-herzig"
+      ]
+    },
+    {
+      "id": "us-house-07",
+      "office": "U.S. House",
+      "district": "District 7",
+      "candidateIds": [
+        "us-house-07-thomas-h-kean-jr",
+        "us-house-07-rebecca-bennett",
+        "us-house-07-seamus-patrick-otoole"
+      ]
+    },
+    {
+      "id": "us-house-08",
+      "office": "U.S. House",
+      "district": "District 8",
+      "candidateIds": [
+        "us-house-08-rob-menendez",
+        "us-house-08-aristotle-eliopoulos",
+        "us-house-08-craig-honts",
+        "us-house-08-dashone-hughey"
+      ]
+    },
+    {
+      "id": "us-house-09",
+      "office": "U.S. House",
+      "district": "District 9",
+      "candidateIds": [
+        "us-house-09-nelida-pou",
+        "us-house-09-rosie-pino",
+        "us-house-09-terrisa-bukovinac"
+      ]
+    },
+    {
+      "id": "us-house-10",
+      "office": "U.S. House",
+      "district": "District 10",
+      "candidateIds": [
+        "us-house-10-lamonica-r-mciver",
+        "us-house-10-carmen-bucco"
+      ]
+    },
+    {
+      "id": "us-house-11",
+      "office": "U.S. House",
+      "district": "District 11",
+      "candidateIds": [
+        "us-house-11-analilia-mejia",
+        "us-house-11-joe-hathaway",
+        "us-house-11-alan-b-bond"
+      ]
+    },
+    {
+      "id": "us-house-12",
+      "office": "U.S. House",
+      "district": "District 12",
+      "candidateIds": [
+        "us-house-12-adam-hamawy",
+        "us-house-12-gregg-mele",
+        "us-house-12-andres-jinete",
+        "us-house-12-winston-jordan"
+      ]
+    }
+  ],
+  "candidates": [
+    {
+      "id": "us-senate-cory-booker",
+      "raceId": "us-senate",
+      "name": "Cory Booker",
+      "firstName": "Cory",
+      "lastName": "Booker",
+      "ballotLabel": "Democratic",
+      "party": "Democratic",
+      "incumbent": true,
+      "campaignWebsite": "https://corybooker.com/",
+      "ballotStatus": "listed",
+      "aliases": []
+    },
+    {
+      "id": "us-senate-justin-murphy",
+      "raceId": "us-senate",
+      "name": "Justin Murphy",
+      "firstName": "Justin",
+      "lastName": "Murphy",
+      "ballotLabel": "Republican",
+      "party": "Republican",
+      "incumbent": false,
+      "campaignWebsite": "https://jerseyjustin4senate.org/",
+      "ballotStatus": "listed",
+      "aliases": []
+    },
+    {
+      "id": "us-senate-veronica-fernandez",
+      "raceId": "us-senate",
+      "name": "Veronica Fernandez",
+      "firstName": "Veronica",
+      "lastName": "Fernandez",
+      "ballotLabel": "End the Corruption!",
+      "party": "Independent or minor party",
+      "incumbent": false,
+      "campaignWebsite": "https://veronicaforsenate.com/",
+      "ballotStatus": "listed",
+      "aliases": []
+    },
+    {
+      "id": "us-senate-joanne-kuniansky",
+      "raceId": "us-senate",
+      "name": "Joanne Kuniansky",
+      "firstName": "Joanne",
+      "lastName": "Kuniansky",
+      "ballotLabel": "Socialist Workers Party",
+      "party": "Independent or minor party",
+      "incumbent": false,
+      "campaignWebsite": "",
+      "ballotStatus": "listed",
+      "aliases": []
+    },
+    {
+      "id": "us-house-01-donald-norcross",
+      "raceId": "us-house-01",
+      "name": "Donald Norcross",
+      "firstName": "Donald",
+      "lastName": "Norcross",
+      "ballotLabel": "Democratic",
+      "party": "Democratic",
+      "incumbent": true,
+      "campaignWebsite": "https://www.donaldnorcrossforcongress.com/",
+      "ballotStatus": "listed",
+      "aliases": []
+    },
+    {
+      "id": "us-house-01-damon-galdo",
+      "raceId": "us-house-01",
+      "name": "Damon Galdo",
+      "firstName": "Damon",
+      "lastName": "Galdo",
+      "ballotLabel": "Republican",
+      "party": "Republican",
+      "incumbent": false,
+      "campaignWebsite": "https://votedamongaldo.com/",
+      "ballotStatus": "listed",
+      "aliases": []
+    },
+    {
+      "id": "us-house-02-jeff-van-drew",
+      "raceId": "us-house-02",
+      "name": "Jeff Van Drew",
+      "firstName": "Jeff",
+      "lastName": "Van Drew",
+      "ballotLabel": "Republican",
+      "party": "Republican",
+      "incumbent": true,
+      "campaignWebsite": "https://vandrewforcongress.com/",
+      "ballotStatus": "listed",
+      "aliases": []
+    },
+    {
+      "id": "us-house-02-zack-mullock",
+      "raceId": "us-house-02",
+      "name": "Zack Mullock",
+      "firstName": "Zack",
+      "lastName": "Mullock",
+      "ballotLabel": "Democratic",
+      "party": "Democratic",
+      "incumbent": false,
+      "campaignWebsite": "https://mullockforcongress.com/",
+      "ballotStatus": "listed",
+      "aliases": []
+    },
+    {
+      "id": "us-house-02-ramon-mora-jr",
+      "raceId": "us-house-02",
+      "name": "Ramon Mora Jr.",
+      "firstName": "Ramon",
+      "lastName": "Mora Jr.",
+      "ballotLabel": "Independent",
+      "party": "Independent or minor party",
+      "incumbent": false,
+      "campaignWebsite": "https://www.southjerseygrit.com/",
+      "ballotStatus": "listed",
+      "aliases": [
+        "Ramon Mora"
+      ]
+    },
+    {
+      "id": "us-house-03-herb-conaway",
+      "raceId": "us-house-03",
+      "name": "Herb Conaway",
+      "firstName": "Herb",
+      "lastName": "Conaway",
+      "ballotLabel": "Democratic",
+      "party": "Democratic",
+      "incumbent": true,
+      "campaignWebsite": "https://www.herbforcongress.com/",
+      "ballotStatus": "listed",
+      "aliases": []
+    },
+    {
+      "id": "us-house-03-michael-p-mcguire",
+      "raceId": "us-house-03",
+      "name": "Michael P. McGuire",
+      "firstName": "Michael",
+      "lastName": "McGuire",
+      "ballotLabel": "Republican",
+      "party": "Republican",
+      "incumbent": false,
+      "campaignWebsite": "https://michaelmcguireforcongress.com/",
+      "ballotStatus": "listed",
+      "aliases": [
+        "Michael McGuire"
+      ]
+    },
+    {
+      "id": "us-house-03-ryan-michael-kelly",
+      "raceId": "us-house-03",
+      "name": "Ryan Michael Kelly",
+      "firstName": "Ryan Michael",
+      "lastName": "Kelly",
+      "ballotLabel": "Affordability, Accountability, People",
+      "party": "Independent or minor party",
+      "incumbent": false,
+      "campaignWebsite": "https://www.kellyfornj03.com/",
+      "ballotStatus": "listed",
+      "aliases": [
+        "Ryan Kelly"
+      ]
+    },
+    {
+      "id": "us-house-03-steven-welzer",
+      "raceId": "us-house-03",
+      "name": "Steven Welzer",
+      "firstName": "Steven",
+      "lastName": "Welzer",
+      "ballotLabel": "Green Party",
+      "party": "Independent or minor party",
+      "incumbent": false,
+      "campaignWebsite": "https://www.welzerforcongress.org/",
+      "ballotStatus": "listed",
+      "aliases": []
+    },
+    {
+      "id": "us-house-04-christopher-h-smith",
+      "raceId": "us-house-04",
+      "name": "Christopher H. Smith",
+      "firstName": "Christopher",
+      "lastName": "Smith",
+      "ballotLabel": "Republican",
+      "party": "Republican",
+      "incumbent": true,
+      "campaignWebsite": "https://smith4nj.com/",
+      "ballotStatus": "listed",
+      "aliases": [
+        "Chris Smith",
+        "Christopher Smith"
+      ]
+    },
+    {
+      "id": "us-house-04-rachel-peace",
+      "raceId": "us-house-04",
+      "name": "Rachel Peace",
+      "firstName": "Rachel",
+      "lastName": "Peace",
+      "ballotLabel": "Democratic",
+      "party": "Democratic",
+      "incumbent": false,
+      "campaignWebsite": "https://www.peace4shore.com/",
+      "ballotStatus": "listed",
+      "aliases": []
+    },
+    {
+      "id": "us-house-05-josh-gottheimer",
+      "raceId": "us-house-05",
+      "name": "Josh Gottheimer",
+      "firstName": "Josh",
+      "lastName": "Gottheimer",
+      "ballotLabel": "Democratic",
+      "party": "Democratic",
+      "incumbent": true,
+      "campaignWebsite": "https://josh4jersey.com/",
+      "ballotStatus": "listed",
+      "aliases": []
+    },
+    {
+      "id": "us-house-05-sean-kirrane",
+      "raceId": "us-house-05",
+      "name": "Sean Kirrane",
+      "firstName": "Sean",
+      "lastName": "Kirrane",
+      "ballotLabel": "Republican",
+      "party": "Republican",
+      "incumbent": false,
+      "campaignWebsite": "https://www.seankirrane.com/",
+      "ballotStatus": "listed",
+      "aliases": []
+    },
+    {
+      "id": "us-house-05-adam-rueda",
+      "raceId": "us-house-05",
+      "name": "Adam Rueda",
+      "firstName": "Adam",
+      "lastName": "Rueda",
+      "ballotLabel": "Humane Sustainable Future",
+      "party": "Independent or minor party",
+      "incumbent": false,
+      "campaignWebsite": "https://adamruedafornj5.com/",
+      "ballotStatus": "listed",
+      "aliases": []
+    },
+    {
+      "id": "us-house-06-frank-pallone-jr",
+      "raceId": "us-house-06",
+      "name": "Frank Pallone Jr.",
+      "firstName": "Frank",
+      "lastName": "Pallone Jr.",
+      "ballotLabel": "Democratic",
+      "party": "Democratic",
+      "incumbent": true,
+      "campaignWebsite": "https://www.pallonefornewjersey.com/",
+      "ballotStatus": "listed",
+      "aliases": [
+        "Frank Pallone"
+      ]
+    },
+    {
+      "id": "us-house-06-hillary-herzig",
+      "raceId": "us-house-06",
+      "name": "Hillary Herzig",
+      "firstName": "Hillary",
+      "lastName": "Herzig",
+      "ballotLabel": "Republican",
+      "party": "Republican",
+      "incumbent": false,
+      "campaignWebsite": "https://www.herzigforcongress.com/",
+      "ballotStatus": "listed",
+      "aliases": []
+    },
+    {
+      "id": "us-house-07-thomas-h-kean-jr",
+      "raceId": "us-house-07",
+      "name": "Thomas H. Kean Jr.",
+      "firstName": "Thomas",
+      "lastName": "Kean Jr.",
+      "ballotLabel": "Republican",
+      "party": "Republican",
+      "incumbent": true,
+      "campaignWebsite": "https://tomkean.com/",
+      "ballotStatus": "listed",
+      "aliases": [
+        "Tom Kean Jr.",
+        "Thomas Kean"
+      ]
+    },
+    {
+      "id": "us-house-07-rebecca-bennett",
+      "raceId": "us-house-07",
+      "name": "Rebecca Bennett",
+      "firstName": "Rebecca",
+      "lastName": "Bennett",
+      "ballotLabel": "Democratic",
+      "party": "Democratic",
+      "incumbent": false,
+      "campaignWebsite": "https://rebeccabennettforcongress.com/",
+      "ballotStatus": "listed",
+      "aliases": []
+    },
+    {
+      "id": "us-house-07-seamus-patrick-otoole",
+      "raceId": "us-house-07",
+      "name": "Seamus Patrick O’Toole",
+      "firstName": "Seamus Patrick",
+      "lastName": "O’Toole",
+      "ballotLabel": "Stop Israel’s Genocide",
+      "party": "Independent or minor party",
+      "incumbent": false,
+      "campaignWebsite": "",
+      "ballotStatus": "listed",
+      "aliases": [
+        "Seamus Patrick O'Toole",
+        "Seamus O'Toole"
+      ]
+    },
+    {
+      "id": "us-house-08-rob-menendez",
+      "raceId": "us-house-08",
+      "name": "Rob Menendez",
+      "firstName": "Rob",
+      "lastName": "Menendez",
+      "ballotLabel": "Democratic",
+      "party": "Democratic",
+      "incumbent": true,
+      "campaignWebsite": "https://www.robmenendez.com/",
+      "ballotStatus": "listed",
+      "aliases": []
+    },
+    {
+      "id": "us-house-08-aristotle-eliopoulos",
+      "raceId": "us-house-08",
+      "name": "Aristotle Eliopoulos",
+      "firstName": "Aristotle",
+      "lastName": "Eliopoulos",
+      "ballotLabel": "Independent",
+      "party": "Independent or minor party",
+      "incumbent": false,
+      "campaignWebsite": "",
+      "ballotStatus": "listed",
+      "aliases": [
+        "Ari Eliopoulos"
+      ]
+    },
+    {
+      "id": "us-house-08-craig-honts",
+      "raceId": "us-house-08",
+      "name": "Craig Honts",
+      "firstName": "Craig",
+      "lastName": "Honts",
+      "ballotLabel": "Socialist Workers Party",
+      "party": "Independent or minor party",
+      "incumbent": false,
+      "campaignWebsite": "",
+      "ballotStatus": "listed",
+      "aliases": []
+    },
+    {
+      "id": "us-house-08-dashone-hughey",
+      "raceId": "us-house-08",
+      "name": "Da’Shone Hughey",
+      "firstName": "Da’Shone",
+      "lastName": "Hughey",
+      "ballotLabel": "We the People",
+      "party": "Independent or minor party",
+      "incumbent": false,
+      "campaignWebsite": "https://www.votedashonehughey.com/",
+      "ballotStatus": "listed",
+      "aliases": [
+        "Da'Shone Hughey",
+        "Dashone Hughey"
+      ]
+    },
+    {
+      "id": "us-house-09-nelida-pou",
+      "raceId": "us-house-09",
+      "name": "Nelida Pou",
+      "firstName": "Nelida",
+      "lastName": "Pou",
+      "ballotLabel": "Democratic",
+      "party": "Democratic",
+      "incumbent": true,
+      "campaignWebsite": "https://www.nelliepoufornewjersey.com/",
+      "ballotStatus": "listed",
+      "aliases": [
+        "Nellie Pou"
+      ]
+    },
+    {
+      "id": "us-house-09-rosie-pino",
+      "raceId": "us-house-09",
+      "name": "Rosie Pino",
+      "firstName": "Rosie",
+      "lastName": "Pino",
+      "ballotLabel": "Republican",
+      "party": "Republican",
+      "incumbent": false,
+      "campaignWebsite": "https://rosiepinofornj.com/",
+      "ballotStatus": "listed",
+      "aliases": [
+        "Rosemary Pino"
+      ]
+    },
+    {
+      "id": "us-house-09-terrisa-bukovinac",
+      "raceId": "us-house-09",
+      "name": "Terrisa Bukovinac",
+      "firstName": "Terrisa",
+      "lastName": "Bukovinac",
+      "ballotLabel": "Save Our Babies",
+      "party": "Independent or minor party",
+      "incumbent": false,
+      "campaignWebsite": "https://terrisa2026.com/",
+      "ballotStatus": "listed",
+      "aliases": []
+    },
+    {
+      "id": "us-house-10-lamonica-r-mciver",
+      "raceId": "us-house-10",
+      "name": "LaMonica R. McIver",
+      "firstName": "LaMonica",
+      "lastName": "McIver",
+      "ballotLabel": "Democratic",
+      "party": "Democratic",
+      "incumbent": true,
+      "campaignWebsite": "https://www.lamonicaforcongress.com/",
+      "ballotStatus": "listed",
+      "aliases": [
+        "LaMonica McIver"
+      ]
+    },
+    {
+      "id": "us-house-10-carmen-bucco",
+      "raceId": "us-house-10",
+      "name": "Carmen Bucco",
+      "firstName": "Carmen",
+      "lastName": "Bucco",
+      "ballotLabel": "Republican",
+      "party": "Republican",
+      "incumbent": false,
+      "campaignWebsite": "https://carmenbucco.com/",
+      "ballotStatus": "listed",
+      "aliases": []
+    },
+    {
+      "id": "us-house-11-analilia-mejia",
+      "raceId": "us-house-11",
+      "name": "Analilia Mejia",
+      "firstName": "Analilia",
+      "lastName": "Mejia",
+      "ballotLabel": "Democratic",
+      "party": "Democratic",
+      "incumbent": true,
+      "campaignWebsite": "https://www.analiliafornj.com/",
+      "ballotStatus": "listed",
+      "aliases": [
+        "Analilia Mejía"
+      ]
+    },
+    {
+      "id": "us-house-11-joe-hathaway",
+      "raceId": "us-house-11",
+      "name": "Joe Hathaway",
+      "firstName": "Joe",
+      "lastName": "Hathaway",
+      "ballotLabel": "Republican",
+      "party": "Republican",
+      "incumbent": false,
+      "campaignWebsite": "https://www.joehathawayforcongress.com/",
+      "ballotStatus": "listed",
+      "aliases": []
+    },
+    {
+      "id": "us-house-11-alan-b-bond",
+      "raceId": "us-house-11",
+      "name": "Alan B. Bond",
+      "firstName": "Alan",
+      "lastName": "Bond",
+      "ballotLabel": "Hope for Tomorrow",
+      "party": "Independent or minor party",
+      "incumbent": false,
+      "campaignWebsite": "https://hopefortomorrownj.org/",
+      "ballotStatus": "listed",
+      "aliases": [
+        "Alan Bond"
+      ]
+    },
+    {
+      "id": "us-house-12-adam-hamawy",
+      "raceId": "us-house-12",
+      "name": "Adam Hamawy",
+      "firstName": "Adam",
+      "lastName": "Hamawy",
+      "ballotLabel": "Democratic",
+      "party": "Democratic",
+      "incumbent": false,
+      "campaignWebsite": "https://hamawyfornj.com/",
+      "ballotStatus": "listed",
+      "aliases": []
+    },
+    {
+      "id": "us-house-12-gregg-mele",
+      "raceId": "us-house-12",
+      "name": "Gregg Mele",
+      "firstName": "Gregg",
+      "lastName": "Mele",
+      "ballotLabel": "Republican",
+      "party": "Republican",
+      "incumbent": false,
+      "campaignWebsite": "",
+      "ballotStatus": "listed",
+      "aliases": []
+    },
+    {
+      "id": "us-house-12-andres-jinete",
+      "raceId": "us-house-12",
+      "name": "Andres Jinete",
+      "firstName": "Andres",
+      "lastName": "Jinete",
+      "ballotLabel": "Green Party",
+      "party": "Independent or minor party",
+      "incumbent": false,
+      "campaignWebsite": "https://andresjinete.org/",
+      "ballotStatus": "listed",
+      "aliases": [
+        "Andrés Jinete"
+      ]
+    },
+    {
+      "id": "us-house-12-winston-jordan",
+      "raceId": "us-house-12",
+      "name": "Winston Jordan",
+      "firstName": "Winston",
+      "lastName": "Jordan",
+      "ballotLabel": "Get Money Out",
+      "party": "Independent or minor party",
+      "incumbent": false,
+      "campaignWebsite": "https://www.winstonforcongress.com/",
+      "ballotStatus": "listed",
+      "aliases": []
+    }
+  ]
+}

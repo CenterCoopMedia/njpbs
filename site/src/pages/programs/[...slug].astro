@@ -1,0 +1,85 @@
+---
+// Published Program pages and retired-slug redirects.
+import { getCollection, type CollectionEntry } from "astro:content";
+import PublicSiteLayout from "../../layouts/PublicSiteLayout.astro";
+import ProgramPage from "../../components/ProgramPage.astro";
+import PermanentRedirect from "../../components/PermanentRedirect.astro";
+import { cmsRoutedContentEnabled } from "../../lib/build-target";
+import { jsonLdHtml, tvSeriesJsonLd } from "../../lib/structured-data";
+import { programPublicPath } from "../../lib/public-content-routes";
+import { isPrivatePreviewRender } from "../../lib/cms-render-context";
+
+type Props = {
+  entry: CollectionEntry<"cmsPrograms">;
+  /** Set on a retired-slug stub; absent on the live page. */
+  redirectFrom?: string;
+};
+
+export async function getStaticPaths() {
+  // Open-set routes require either an ordinary credentialed review build or the
+  // validated v3 bundle from the canonical production reservation cutoff.
+  if (!cmsRoutedContentEnabled(process.env)) return [];
+  const programs = await getCollection("cmsPrograms");
+
+  return programs.flatMap((entry) => [
+    {
+      params: { slug: entry.data.slug },
+      props: { entry } satisfies Props,
+    },
+    ...entry.data.previousSlugs.map((previous) => ({
+      params: { slug: previous },
+      props: { entry, redirectFrom: previous } satisfies Props,
+    })),
+  ]);
+}
+
+const renderContext = Astro.locals.cmsRender;
+const publicRecordRender = renderContext?.content.kind === "public-record-family";
+const renderProgram = renderContext?.content.programs.find(program => program.programId === renderContext.content.target.documentId);
+if (renderContext && !renderProgram) throw new Error("Compiled Program target is missing");
+const privatePreview = isPrivatePreviewRender(renderContext);
+const { entry, redirectFrom } = (renderProgram ? {
+  entry: { id: renderProgram.programId, collection: "cmsPrograms", data: renderProgram },
+  ...(publicRecordRender ? { redirectFrom: Astro.params.slug === renderProgram.slug ? undefined : Astro.params.slug } : {}),
+} : Astro.props) as Props;
+const program = entry.data;
+const canonicalPath = programPublicPath(program.slug);
+
+// A stub is noindex, so it carries no structured data (the post-build guardrail
+// requires that, and a stub is not the program page anyway).
+const seriesJsonLd = redirectFrom
+  ? null
+  : tvSeriesJsonLd({
+      title: program.title,
+      genre: program.genre,
+      canonicalPath,
+      site: Astro.site!,
+    });
+
+const description = program.genre
+  ? `${program.title} on NJ PBS — ${program.genre}.`
+  : `${program.title} on NJ PBS.`;
+---
+
+<PublicSiteLayout
+    editTarget={{ type: "program", id: program.programId }}
+  title={program.title}
+  description={description}
+  preview={privatePreview}
+  canonicalPath={canonicalPath}
+  noindex={privatePreview || Boolean(redirectFrom)}
+  metaRefreshTo={redirectFrom ? canonicalPath : undefined}
+>
+  {seriesJsonLd && (
+    <script
+      type="application/ld+json"
+      is:inline
+      set:html={jsonLdHtml(seriesJsonLd)}
+    />
+  )}
+  {redirectFrom ? (
+    <PermanentRedirect to={canonicalPath} label={program.title} />
+  ) : (
+    <ProgramPage entry={entry} />
+  )}
+</PublicSiteLayout>

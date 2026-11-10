@@ -1,0 +1,60 @@
+.video-inspector-form,
+.video-inspector-field {
+  display: grid;
+  gap: var(--cms-space-2);
+}
+
+.video-inspector-field,
+.video-inspector-readonly-field > span,
+.video-inspector-facts dt {
+  font-size: var(--cms-font-sm);
+  font-weight: 700;
+}
+
+.video-inspector-readonly-field p,
+.video-inspector-facts,
+.video-inspector-facts dd,
+.video-inspector-help,
+.video-inspector-footer p {
+  margin: 0;
+}
+
+.video-inspector-readonly-field p,
+.video-inspector-facts dd,
+.video-inspector-help {
+  overflow-wrap: anywhere;
+  color: var(--cms-ink-secondary);
+  font-size: var(--cms-font-sm);
+}
+
+.video-inspector-facts {
+  display: grid;
+  gap: var(--cms-space-3);
+}
+
+.video-inspector-facts > div {
+  display: grid;
+  gap: var(--cms-space-1);
+}
+
+.video-inspector-footer {
+  display: grid;
+  flex: 1 1 100%;
+  gap: var(--cms-space-2);
+}
+
+.video-inspector-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: var(--cms-space-2);
+}
+
+.video-inspector-footer > p {
+  color: var(--cms-ink-secondary);
+  font-size: var(--cms-font-sm);
+}
+
+.video-inspector-form > [role="tabpanel"]:not([hidden]) { display: grid; gap: var(--cms-space-2); }
+.video-context-tabs { position: sticky; top: 0; z-index: 1; }
+@media (max-height: 35rem) { .video-context-tabs { position: static; } }

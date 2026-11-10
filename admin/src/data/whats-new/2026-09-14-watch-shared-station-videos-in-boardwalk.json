@@ -1,0 +1,13 @@
+{
+  "date": "2026-09-14",
+  "kind": "new",
+  "title": "Watch shared station videos in Boardwalk",
+  "body": "The Videos tab holds the station's shared video library. Boardwalk makes a private web copy and thumbnail for each video so you can play it in the browser. Interrupted transfers can resume.",
+  "prs": [
+    1831,
+    1832,
+    1848,
+    1849
+  ],
+  "order": 0
+}

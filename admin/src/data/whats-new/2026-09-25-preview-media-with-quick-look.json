@@ -1,0 +1,11 @@
+{
+  "date": "2026-09-25",
+  "kind": "new",
+  "title": "Preview media with Quick Look",
+  "body": "Choose Quick Look or Open full size from a media item's actions. In the viewer, use the arrow keys or buttons to step to the next or previous item.",
+  "prs": [
+    2273,
+    2298
+  ],
+  "order": -1
+}

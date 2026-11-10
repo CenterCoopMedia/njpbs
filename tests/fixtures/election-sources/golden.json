@@ -1,0 +1,72 @@
+{
+  "races": [
+    {
+      "id": "us-senate",
+      "status": "counting",
+      "asOf": "2026-11-04T01:00:00Z",
+      "reportingShare": 50,
+      "sourceKind": "official",
+      "sourceLabel": "New Jersey Division of Elections",
+      "sourceUrl": "https://www.nj.gov/state/elections/",
+      "candidates": [
+        {
+          "id": "us-senate-cory-booker",
+          "name": "Cory Booker",
+          "party": "Democratic",
+          "votes": 25,
+          "share": 25
+        },
+        {
+          "id": "us-senate-justin-murphy",
+          "name": "Justin Murphy",
+          "party": "Republican",
+          "votes": 25,
+          "share": 25
+        },
+        {
+          "id": "us-senate-veronica-fernandez",
+          "name": "Veronica Fernandez",
+          "party": "End the Corruption!",
+          "votes": 25,
+          "share": 25
+        },
+        {
+          "id": "us-senate-joanne-kuniansky",
+          "name": "Joanne Kuniansky",
+          "party": "Socialist Workers Party",
+          "votes": 25,
+          "share": 25
+        }
+      ],
+      "office": "U.S. Senate",
+      "district": "New Jersey"
+    },
+    {
+      "id": "us-house-01",
+      "status": "counting",
+      "asOf": "2026-11-04T01:00:00Z",
+      "reportingShare": null,
+      "sourceKind": "official",
+      "sourceLabel": "New Jersey Division of Elections",
+      "sourceUrl": "https://www.nj.gov/state/elections/",
+      "candidates": [
+        {
+          "id": "us-house-01-donald-norcross",
+          "name": "Donald Norcross",
+          "party": "Democratic",
+          "votes": 50,
+          "share": 50
+        },
+        {
+          "id": "us-house-01-damon-galdo",
+          "name": "Damon Galdo",
+          "party": "Republican",
+          "votes": 50,
+          "share": 50
+        }
+      ],
+      "office": "U.S. House",
+      "district": "District 1"
+    }
+  ]
+}

@@ -1,0 +1,10 @@
+{
+  "date": "2026-08-19",
+  "kind": "new",
+  "title": "Request a staff account from the sign-in page",
+  "body": "People without an account can now ask for access from the Boardwalk sign-in page. An administrator reviews and approves each request before the account works.",
+  "prs": [
+    1049
+  ],
+  "order": -1
+}

@@ -1,0 +1,66 @@
+---
+import { getCollection, type CollectionEntry } from "astro:content";
+import PublicSiteLayout from "../../layouts/PublicSiteLayout.astro";
+import PermanentRedirect from "../../components/PermanentRedirect.astro";
+import { cmsRoutedContentEnabled } from "../../lib/build-target";
+import { eventPublicPath } from "../../lib/public-content-routes";
+import { jsonLdHtml, eventJsonLd } from "../../lib/structured-data";
+import { renderRichText } from "../../../../packages/content-core/src/content-model";
+
+type Props = { entry: CollectionEntry<"cmsEvents">; redirectFrom?: string };
+export async function getStaticPaths() {
+  if (!cmsRoutedContentEnabled(process.env)) return [];
+  const events = await getCollection("cmsEvents");
+  return events.flatMap(entry => [
+    { params: { slug: entry.data.slug }, props: { entry } satisfies Props },
+    ...entry.data.previousSlugs.map(redirectFrom => ({ params: { slug: redirectFrom }, props: { entry, redirectFrom } satisfies Props })),
+  ]);
+}
+const renderContext = Astro.locals.cmsRender;
+const publicRecordRender = renderContext?.content.kind === "public-record-family";
+const renderEvent = renderContext?.content.events?.find(event => event.eventId === renderContext.content.target.documentId);
+if (renderContext && !renderEvent) throw new Error("Compiled renderer Event target is missing");
+const { entry, redirectFrom } = (renderEvent
+  ? { entry: { id: renderEvent.eventId, collection: "cmsEvents", data: renderEvent },
+      ...(publicRecordRender ? { redirectFrom: Astro.params.slug === renderEvent.slug ? undefined : Astro.params.slug } : {}) }
+  : Astro.props) as Props;
+const event = entry.data;
+const canonicalPath = eventPublicPath(event.slug);
+const date = new Intl.DateTimeFormat("en-US", { timeZone: "America/New_York", dateStyle: "full" });
+const time = new Intl.DateTimeFormat("en-US", { timeZone: "America/New_York", timeStyle: "short" });
+const startDate = date.format(new Date(event.startsAt));
+const startTime = time.format(new Date(event.startsAt));
+const endTime = event.endsAt ? time.format(new Date(event.endsAt)) : null;
+const endDate = event.endsAt ? date.format(new Date(event.endsAt)) : null;
+const ld = redirectFrom ? null : eventJsonLd({ ...event, canonicalPath, site: Astro.site! });
+---
+<PublicSiteLayout editTarget={{ type: "event", id: event.eventId }} title={event.title} description={`${event.title} on ${startDate}.`} preview={Boolean(renderContext) && !publicRecordRender} canonicalPath={canonicalPath} noindex={(Boolean(renderContext) && !publicRecordRender) || Boolean(redirectFrom)} metaRefreshTo={redirectFrom ? canonicalPath : undefined}>
+  {ld && <script type="application/ld+json" is:inline set:html={jsonLdHtml(ld)} />}
+  {redirectFrom ? <PermanentRedirect to={canonicalPath} label={event.title} /> : (
+    <article class="event-page">
+      <p class="eyebrow">NJ PBS event</p>
+      <h1>{event.title}</h1>
+      <p class="event-date"><time datetime={event.startsAt}>{startDate}, {startTime}</time>{endTime && <> – <time datetime={event.endsAt!}>{endDate === startDate ? endTime : `${endDate}, ${endTime}`}</time></>} ET</p>
+      {event.image && <img src={event.image.url} width={event.image.width} height={event.image.height} alt={event.imageDecorative ? "" : event.imageAlt} />}
+      <div class="event-facts">
+        {(event.location || event.venueAddress) && <p><strong>Location</strong><br />{event.location}{event.location && event.venueAddress && <br />}{event.venueAddress}</p>}
+        {event.onlineUrl && <p><strong>Online</strong><br /><a href={event.onlineUrl}>Join online</a></p>}
+        {(event.isFree || event.priceText) && <p><strong>Admission</strong><br />{event.isFree ? "Free" : event.priceText}</p>}
+      </div>
+      <div class="event-body" set:html={renderRichText(event.description)} />
+      {event.registrationUrl && <p class="event-action"><a class="btn btn--primary" href={event.registrationUrl}>{event.registrationLabel}</a></p>}
+      <p><a href="/events/">All events</a></p>
+    </article>
+  )}
+</PublicSiteLayout>
+<style>
+  .event-page { max-width: var(--wrap); margin: auto; padding: clamp(2.5rem, 6vw, 4rem) var(--gutter) 5rem; }
+  .event-page h1 { margin: 0; font-size: clamp(2.1rem, 5vw, 3.4rem); line-height: 1.08; }
+  .eyebrow { color: var(--text-quiet); text-transform: uppercase; letter-spacing: .09em; font-weight: 600; }
+  .event-date { font-size: 1.25rem; }
+  .event-page img { display: block; max-width: 100%; height: auto; margin-block: 1.5rem; }
+  .event-facts { display: flex; flex-wrap: wrap; gap: 1rem 3rem; margin-block: 1.5rem; }
+  .event-body { max-width: 72ch; line-height: 1.7; }
+  .event-action { margin-block: 2rem; }
+  a:not(.btn) { color: var(--color-link); text-underline-offset: .2em; }
+</style>

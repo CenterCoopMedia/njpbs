@@ -1,0 +1,120 @@
+/* Applied-filter and tag chips. */
+.ui-chip {
+  display: inline-flex;
+  align-items: center;
+  max-width: 100%;
+  min-width: 0;
+  border-radius: var(--cms-radius-round);
+  font-size: var(--cms-font-sm);
+  line-height: var(--cms-line-tight);
+}
+
+.ui-chip-filter {
+  min-height: 2rem;
+  border: var(--cms-border-width) solid var(--cms-info-line);
+  background: var(--cms-brand-soft);
+  color: var(--cms-brand);
+}
+
+.ui-chip-tag {
+  min-height: 1.5rem;
+  border-radius: var(--cms-radius-small);
+  background: var(--cms-surface-muted);
+  color: var(--cms-ink-secondary);
+  font-size: var(--cms-font-xs);
+  font-weight: 500;
+}
+
+.ui-chip-body {
+  display: inline-flex;
+  align-items: center;
+  min-width: 0;
+  min-height: inherit;
+  padding: 0 var(--cms-space-3);
+  overflow: hidden;
+  border: 0;
+  border-radius: inherit;
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ui-chip-tag .ui-chip-body {
+  padding: 0 var(--cms-space-2);
+}
+
+button.ui-chip-body {
+  cursor: pointer;
+}
+
+.ui-chip-property {
+  white-space: pre;
+}
+
+.ui-chip-filter .ui-chip-value {
+  font-weight: 700;
+}
+
+.ui-chip-tag.ui-chip-pressed {
+  background: var(--cms-brand);
+  color: var(--cms-action-text);
+}
+
+.ui-chip-remove {
+  position: relative;
+  display: inline-grid;
+  flex: none;
+  place-items: center;
+  width: 1.5rem;
+  height: 1.5rem;
+  margin-inline-end: var(--cms-space-1);
+  padding: 0;
+  border: 0;
+  border-radius: var(--cms-radius-round);
+  background: none;
+  color: inherit;
+  cursor: pointer;
+}
+
+/* The drawn control is 24px. The hit area grows up, down and outward to reach the 44px
+   target, but never toward the body, so a press on the body always opens the picker. */
+.ui-chip-remove::before {
+  position: absolute;
+  inset: -0.625rem -0.25rem -0.625rem 0;
+  content: "";
+}
+
+.ui-chip:has(.ui-chip-remove) .ui-chip-body {
+  padding-inline-end: var(--cms-space-1);
+}
+
+.ui-chip-remove .icon {
+  width: 0.875rem;
+  height: 0.875rem;
+  stroke-width: 2.2;
+}
+
+@media (hover: hover) {
+  .ui-chip-filter button.ui-chip-body:hover,
+  .ui-chip-filter .ui-chip-remove:hover {
+    background: var(--cms-brand-soft-hover);
+  }
+
+  .ui-chip-tag:not(.ui-chip-pressed) button.ui-chip-body:hover {
+    background: var(--cms-action-quiet-hover);
+  }
+}
+
+.ui-chip-body:focus-visible,
+.ui-chip-remove:focus-visible {
+  outline: var(--cms-focus-outline);
+  outline-offset: 2px;
+}
+
+@media (forced-colors: active) {
+  .ui-chip {
+    border: var(--cms-border-width) solid CanvasText;
+  }
+}

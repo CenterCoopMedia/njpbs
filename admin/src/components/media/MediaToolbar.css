@@ -1,0 +1,145 @@
+/* The images toolbar and its sticky chrome. The chrome
+   holds the toolbar row and the chip row, so a first chip stays inside the pinned layer. */
+.media-chrome {
+  position: sticky;
+  top: var(--workspace-header-height, 0px);
+  z-index: var(--cms-z-chrome);
+  display: grid;
+  gap: var(--cms-space-2);
+  min-width: 0;
+  padding: 4px 20px;
+  min-height: 46px;
+  border-bottom: var(--cms-border-width) solid var(--cms-line);
+  background: var(--cms-surface-workspace);
+  box-shadow: none;
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+}
+
+/* These labels belong to the toolbar owner, including when it is portaled out of
+   its original library section. Upload remains a visible, consequential action. */
+.media-chrome .button:is(.media-toolbar-upload, .media-toolbar-filter) > .button-compact-label {
+  position: static;
+  width: auto;
+  height: auto;
+  overflow: visible;
+  clip-path: none;
+}
+
+.media-toolbar-count {
+  display: inline-grid;
+  place-items: center;
+  min-width: 1.25rem;
+  height: 1.25rem;
+  padding: 0 var(--cms-space-1);
+  border-radius: var(--cms-radius-round);
+  background: var(--cms-brand-soft-hover);
+  color: var(--cms-brand);
+  font-size: var(--cms-font-xs);
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+}
+
+.media-toolbar-divider {
+  flex: none;
+  align-self: center;
+  width: var(--cms-border-width);
+  height: 1.5rem;
+  background: var(--cms-line);
+}
+
+/* With no center controls the center is only a spacer; once Display collapses it holds More. */
+.media-library-toolbar .ui-overflow-toolbar-center:empty {
+  flex: 0 0 0;
+  min-width: 0;
+  padding: 0;
+  margin: 0;
+}
+
+/* Phones: Filter, Sort and the chips share one line that scrolls sideways inside the row,
+   so the page never widens. The padding keeps focus rings inside the scrolling box. */
+.media-toolbar-secondary {
+  /* The containing block for visually hidden text, such as the Sort prefix, so it scrolls
+     with the row instead of widening the page. */
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: var(--cms-space-2);
+  min-width: 0;
+  padding: var(--cms-space-1);
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.media-toolbar-secondary::-webkit-scrollbar {
+  display: none;
+}
+
+.media-toolbar-secondary > .button,
+.media-toolbar-secondary > .media-filter-chips {
+  flex: none;
+}
+
+.media-toolbar-secondary > .media-filter-chips {
+  padding-block: 0;
+  overflow: visible;
+  mask-image: none;
+}
+
+.media-chrome-compact .media-toolbar-filter,
+.media-chrome-compact .media-sort-control,
+.media-chrome-compact .media-toolbar-upload {
+  padding-inline: var(--cms-space-3);
+}
+
+/* The sort icon is decoration; the field and arrow carry the meaning on phones. */
+.media-chrome-compact .media-sort-control > .icon:first-child {
+  display: none;
+}
+
+/* Phones: search fills the toolbar row beside Display and Upload. */
+.media-chrome-compact .ui-overflow-toolbar-trailing {
+  flex: 1 1 auto;
+}
+
+.media-chrome-compact .ui-overflow-toolbar-trailing > .ui-overflow-toolbar-search {
+  flex: 1 1 7rem;
+  width: auto;
+}
+
+/* Short viewports, such as a phone on its side, pin only the toolbar row. */
+@media (max-height: 500px) {
+  .media-chrome {
+    display: contents;
+  }
+
+  .media-chrome > .media-library-toolbar {
+    position: sticky;
+    top: var(--workspace-header-height, 0px);
+    z-index: var(--cms-z-chrome);
+    padding: 4px 20px;
+    border-bottom: var(--cms-border-width) solid var(--cms-line);
+    background: var(--cms-surface-workspace);
+    box-shadow: none;
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
+  }
+}
+
+@media (max-width: 619px) {
+  .media-chrome { padding-inline: 12px; }
+}
+@media (max-width: 619px) and (max-height: 500px) {
+  .media-chrome > .media-library-toolbar { padding-inline: 12px; }
+}
+
+@media (forced-colors: active) {
+  .media-toolbar-count {
+    border: 1px solid CanvasText;
+  }
+
+  .media-toolbar-divider {
+    background: CanvasText;
+  }
+}

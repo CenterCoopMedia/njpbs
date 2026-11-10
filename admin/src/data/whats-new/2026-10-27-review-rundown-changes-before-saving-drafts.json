@@ -1,0 +1,10 @@
+{
+  "date": "2026-10-27",
+  "kind": "new",
+  "title": "Review rundown changes before saving drafts",
+  "body": "In Live production, open Prepare to review marked rundown suggestions from an approved document. Compare each suggestion with the saved banner, then Accept into draft or Ignore suggestion. Producer edits stay protected unless you choose to replace them. Accept saves a draft; use Take or Update live separately when ready. Source reading needs activation by the release owner.",
+  "prs": [
+    4073
+  ],
+  "order": -7
+}

@@ -1,0 +1,435 @@
+/* One row of the images or video list layout.
+   The list shares the media library layout;
+   video rows use the same anatomy with a 16:9 poster and Display columns. */
+.media-row {
+  position: relative;
+  min-width: 0;
+  border-bottom: var(--cms-border-width) solid var(--cms-line);
+  background: var(--cms-surface);
+  container-type: inline-size;
+  font-size: var(--cms-font-sm);
+}
+
+.media-row:last-child {
+  border-bottom: 0;
+}
+
+.media-row-track {
+  display: grid;
+  grid-template-columns: var(--media-row-columns);
+  align-items: center;
+  gap: var(--cms-browse-asset-gap);
+  min-height: 62px;
+  padding: var(--cms-browse-asset-padding-block) var(--cms-space-3);
+}
+
+.media-row-header {
+  background: var(--cms-browse-table-header);
+  color: var(--cms-ink-secondary);
+  font-size: var(--cms-font-xs);
+  font-weight: 700;
+}
+
+.media-row-header .media-row-track {
+  min-height: 41px;
+  padding-block: 4px;
+}
+
+@media (hover: hover) {
+  .media-row:not(.media-row-header, [data-selected]):hover {
+    background: var(--cms-surface-chrome);
+  }
+}
+
+/* Opened: a brand border only. Selected: the selection wash and a brand bar at the start. */
+.media-row[data-opened] {
+  box-shadow: inset 0 0 0 var(--cms-border-width) var(--cms-brand);
+}
+
+.media-row[data-selected] {
+  background: var(--cms-selection);
+  box-shadow: inset 2px 0 0 var(--cms-brand);
+}
+
+.media-row:has(.media-row-open:focus-visible) {
+  outline: var(--cms-focus-outline);
+  outline-offset: calc(-1 * var(--cms-focus-width));
+}
+
+.media-row-mark {
+  justify-content: center;
+}
+
+.media-row-mark .ui-checkbox-box {
+  margin: 0;
+}
+
+.media-row-mark-cell,
+.media-row-actions {
+  position: relative;
+  z-index: 1;
+}
+
+.media-row-thumb {
+  display: grid;
+  width: 60px;
+  height: 44px;
+  place-items: center;
+  overflow: hidden;
+  border-radius: var(--cms-radius-small);
+  background: var(--cms-surface-muted);
+  color: var(--cms-ink-muted);
+}
+
+.media-row-header .media-row-thumb {
+  background: none;
+}
+
+.media-row-thumb img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.media-row-thumb .icon {
+  width: 1.25rem;
+  height: 1.25rem;
+}
+
+.media-row-audio-facts {
+  display: block;
+  color: var(--cms-ink-secondary);
+  overflow-wrap: anywhere;
+}
+
+/* Video: a 16:9 poster frame (VideoPoster) with a small play glyph centered on it. */
+.media-row[data-surface="video"] .media-row-thumb {
+  position: relative;
+  width: 4rem;
+  height: 2.25rem;
+  background: var(--cms-sidebar);
+  color: var(--cms-sidebar-muted);
+}
+
+.media-row-header[data-surface="video"] .media-row-thumb {
+  background: none;
+}
+
+.media-row-thumb .source-video-card-preview {
+  display: grid;
+  width: 100%;
+  height: 100%;
+  place-items: center;
+}
+
+.media-row-thumb .source-video-card-preview > img {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.media-row-thumb .source-video-play {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  display: grid;
+  width: 1.25rem;
+  height: 1.25rem;
+  place-items: center;
+  border: var(--cms-border-width) solid var(--cms-sidebar-muted);
+  border-radius: 50%;
+  background: var(--cms-thumb-scrim);
+  color: var(--cms-sidebar-text);
+  transform: translate(-50%, -50%);
+  pointer-events: none;
+}
+
+.media-row-thumb .source-video-play .icon {
+  width: 0.75rem;
+  height: 0.75rem;
+}
+
+.media-row-main {
+  display: grid;
+  min-width: 0;
+}
+
+.media-row-open {
+  display: block;
+  max-width: 100%;
+  padding: 0;
+  overflow: hidden;
+  border: 0;
+  background: none;
+  color: var(--cms-ink);
+  font: inherit;
+  font-weight: 700;
+  text-align: left;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+/* The whole row opens the item. The mark and the actions sit above it. */
+.media-row-open::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+}
+
+.media-row-open:focus-visible {
+  outline: none;
+}
+
+/* Facts wrap rather than clip: a touch screen has no hover card to show a clipped fact. */
+.media-row-sub {
+  display: none;
+  min-width: 0;
+  color: var(--cms-ink-muted);
+  font-size: var(--cms-font-xs);
+  overflow-wrap: anywhere;
+}
+
+.media-row[data-surface="video"] .media-row-sub {
+  display: block;
+}
+
+.media-row[data-surface="video"] .media-row-sub-medium,
+.media-row[data-surface="video"] .media-row-sub-narrow,
+.media-row[data-surface="video"] .media-row-sub-small {
+  display: none;
+}
+
+.media-row-sub-status {
+  margin-right: var(--cms-space-2);
+}
+
+.media-row-fact {
+  display: inline-block;
+  max-width: 100%;
+  overflow-wrap: anywhere;
+}
+
+/* The separator stays with the fact before it, so a dot never starts a line or stands alone. */
+.media-row-sep {
+  white-space: nowrap;
+}
+
+.media-row-sub-narrow {
+  display: none;
+}
+
+.media-row-sub-favorite {
+  display: none;
+  color: var(--cms-brand);
+}
+
+.media-row-sub-favorite .icon {
+  display: inline-block;
+  width: 0.8125rem;
+  height: 0.8125rem;
+  fill: currentColor;
+  vertical-align: -2px;
+}
+
+.media-row-cell {
+  min-width: 0;
+  color: var(--cms-ink-secondary);
+  font-variant-numeric: tabular-nums;
+  overflow-wrap: anywhere;
+}
+
+.media-row-header .media-row-cell {
+  color: inherit;
+}
+
+/* Sortable headings: Name, Size and Updated. Only the sorted one shows an arrow. */
+.media-row-sort {
+  display: inline-flex;
+  min-width: var(--cms-control-compact-target);
+  min-height: var(--cms-control-compact-target);
+  align-items: center;
+  gap: var(--cms-space-1);
+  padding: 0;
+  border: 0;
+  border-radius: var(--cms-radius-control);
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.media-row-main > .media-row-sort {
+  justify-self: start;
+}
+
+.media-row-sort .icon {
+  flex: none;
+  width: 0.875rem;
+  height: 0.875rem;
+}
+
+.media-row-sort[data-sorted] {
+  color: var(--cms-ink);
+}
+
+@media (hover: hover) {
+  .media-row-sort:hover {
+    color: var(--cms-ink);
+  }
+}
+
+.media-row-sort:focus-visible {
+  outline: var(--cms-focus-outline);
+  outline-offset: 2px;
+}
+
+.media-row-actions {
+  display: flex;
+  justify-content: flex-end;
+}
+
+.media-row-actions .media-row-action,
+.media-row-actions .media-row-action.button {
+  width: var(--cms-control-compact-target);
+  min-width: var(--cms-control-compact-target);
+  min-height: var(--cms-control-compact-target);
+  padding: 0;
+  border: 0;
+  border-radius: var(--cms-radius-control);
+  background: transparent;
+  color: var(--cms-ink-secondary);
+}
+
+@media (hover: hover) {
+  .media-row-actions .media-row-action:hover:not(:disabled) {
+    background: var(--cms-action-quiet-hover);
+    color: var(--cms-ink);
+  }
+}
+
+.media-row-actions :is(.media-row-favorite, .media-row-unavailable-favorite)[aria-pressed="true"] {
+  color: var(--cms-brand);
+}
+.media-row-favorite:not([aria-pressed="true"]) { opacity: 0; pointer-events: none; }
+.media-row:focus-within .media-row-favorite { opacity: 1; pointer-events: auto; }
+@media (hover: hover) {
+  .media-row:hover .media-row-favorite { opacity: 1; pointer-events: auto; }
+}
+
+:is(.media-row-favorite, .media-row-unavailable-favorite)[aria-pressed="true"] .icon {
+  fill: currentColor;
+}
+
+.media-row-actions .media-row-action:focus-visible {
+  outline: var(--cms-focus-outline);
+  outline-offset: -3px;
+}
+
+/* Narrower rows: Type, Category, Dimensions and Tags move into the name's meta line; so do a
+   video row's Duration and Uploaded by. */
+@container (max-width: 70rem) {
+  .media-row-track {
+    grid-template-columns: var(--media-row-columns-medium);
+  }
+
+  .media-row-cell-wide {
+    display: none;
+  }
+
+  .media-row-sub {
+    display: block;
+  }
+
+  .media-row-sub-small {
+    display: none;
+  }
+
+  .media-row[data-surface="video"] .media-row-sub-medium {
+    display: inline;
+  }
+}
+
+/* Narrow video rows keep Rights as a column; the other configured facts move into the meta line. */
+@container (max-width: 54rem) {
+  :where(.media-row[data-surface="video"]) .media-row-track {
+    grid-template-columns: var(--media-row-columns-narrow);
+  }
+
+  :where(.media-row[data-surface="video"]) .media-row-cell-narrow {
+    display: none;
+  }
+
+  .media-row[data-surface="video"] .media-row-sub-medium {
+    display: none;
+  }
+
+  .media-row[data-surface="video"] .media-row-sub-narrow {
+    display: inline;
+  }
+}
+
+/* Phones: mark, thumbnail, the name with its meta line, and More. */
+@container (max-width: 43rem) {
+  .media-row-track {
+    grid-template-columns: var(--cms-control-compact-target) 60px minmax(0, 1fr) var(--cms-control-compact-target);
+    gap: var(--cms-space-2);
+    padding-block: var(--cms-space-2);
+    padding-right: 0;
+  }
+
+  .media-row-cell,
+  .media-row-actions .media-row-favorite {
+    display: none;
+  }
+
+  .media-row-sub-favorite,
+  .media-row-sub-small {
+    display: inline;
+  }
+
+  .media-row[data-surface="video"] .media-row-sub-small {
+    display: inline;
+  }
+
+  .media-row-sub-medium {
+    display: none;
+  }
+
+  .media-row-sub-narrow {
+    display: none;
+  }
+
+  .media-row[data-surface="video"] .media-row-sub-narrow {
+    display: none;
+  }
+
+  :where(.media-row[data-surface="video"]) .media-row-track {
+    grid-template-columns: var(--cms-control-height) 4rem minmax(0, 1fr) var(--cms-control-height);
+  }
+
+  .media-row-header .media-row-main {
+    grid-column: 3 / -1;
+  }
+
+  .media-row-header .media-row-actions {
+    display: none;
+  }
+
+  .media-row-open {
+    display: -webkit-box;
+    white-space: normal;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
+  }
+}
+
+@media (forced-colors: active) {
+  .media-row[data-selected] {
+    outline: 2px solid Highlight;
+    outline-offset: -2px;
+  }
+}

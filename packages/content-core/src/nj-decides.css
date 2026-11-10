@@ -1,0 +1,55 @@
+/* Scoped kit styles serve the public renderer and the staff preview. */
+.nj-decides-band {
+  --color-nj-decides-paper: white;
+  position: relative;
+  isolation: isolate;
+  display: grid;
+  grid-template-columns: minmax(14rem, 22rem) minmax(0, 1fr);
+  align-items: center;
+  gap: 1.5rem;
+  padding: 1rem 9% 1rem 1.5rem;
+  color: var(--color-nj-decides-ink);
+  background: var(--color-nj-decides-field);
+  border-top: 2px solid var(--color-nj-decides-rule);
+  border-bottom: 2px solid var(--color-nj-decides-accent);
+  font-family: var(--font-nj-decides, var(--cms-font-sans, "PBS Sans", sans-serif));
+}
+.nj-decides-band__identity { min-width: 0; width: 100%; }
+.nj-decides-band .nj-decides__logo { display: block; width: 100%; height: auto; max-height: 8rem; object-fit: contain; }
+.nj-decides-band__copy {
+  /* An opaque chosen-color surface proves contrast even over arbitrary art. */
+  position: relative;
+  padding: 0.75rem;
+  background: var(--color-nj-decides-field);
+  overflow-wrap: anywhere;
+  font-size: 1.05rem;
+  line-height: 1.5;
+}
+.nj-decides-band__copy p { margin: 0 0 0.75rem; color: inherit; }
+.nj-decides-band__links { display: flex; flex-wrap: wrap; gap: 0 1.5rem; }
+.nj-decides-band__links a {
+  display: inline-flex;
+  align-items: center;
+  min-height: 2.75rem;
+  min-width: 0;
+  max-width: 100%;
+  color: var(--color-nj-decides-link);
+  font-weight: 900;
+  text-transform: uppercase;
+  text-decoration: underline;
+  text-underline-offset: 0.2em;
+}
+.nj-decides-band :focus-visible { outline: 3px solid var(--color-nj-decides-focus); outline-offset: 3px; }
+.nj-decides-band__copy:empty { display: none; }
+.nj-decides-band:has(.nj-decides-band__copy:empty) { grid-template-columns: minmax(0, 22rem); justify-content: center; }
+.nj-decides-band__flag { position: absolute; inset: 0 0 0 auto; width: 9%; height: 100%; opacity: 0.3; z-index: -1; pointer-events: none; }
+.nj-decides-band__background { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; opacity: 0.18; z-index: -2; pointer-events: none; }
+.nj-decides-band__stars { position: absolute; inset: 0; background: url("/brand/nj-decides/stars.svg") repeat; opacity: var(--nj-decides-star-opacity); z-index: -2; pointer-events: none; }
+@media (max-width: 640px) {
+  .nj-decides-band { grid-template-columns: minmax(0, 1fr); gap: 0.75rem; padding: 1rem 3.5rem 1rem 1rem; }
+  .nj-decides-band__identity { max-width: 20rem; justify-self: center; }
+  .nj-decides-band__copy { padding: 0.5rem; }
+  .nj-decides-band__flag { width: 3rem; }
+}
+
+.nj-decides-band__live-label { display: table; padding: 0.15rem 0.5rem; margin-bottom: 0.5rem; border: 1px solid currentColor; font-size: 0.8rem; font-weight: 900; letter-spacing: 0.06em; text-transform: uppercase; }

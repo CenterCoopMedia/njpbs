@@ -1,0 +1,97 @@
+name: Dev staff gateway deploy
+
+on:
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: Stage without routes or update the existing isolated owner; route changes use the routing guard
+        type: choice
+        required: true
+        default: stage
+        options: [stage, update]
+      prerequisites_verified:
+        description: Dev writers held, old deploys drained, dev API/Admin verified, Access policies and audience verified
+        type: boolean
+        required: true
+        default: false
+
+permissions:
+  contents: read
+
+env:
+  CLOUDFLARE_DEV_PUBLIC_WORKER: ${{ vars.CLOUDFLARE_DEV_PUBLIC_WORKER }}
+  CMS_DEV_ADMIN_ORIGIN: ${{ vars.CMS_DEV_ADMIN_ORIGIN }}
+  CMS_DEV_ADMIN_PAGES: ${{ vars.CMS_DEV_ADMIN_PAGES }}
+  CMS_DEV_API_ORIGIN: ${{ vars.CMS_DEV_API_ORIGIN }}
+  CMS_DEV_API_WORKER: ${{ vars.CMS_DEV_API_WORKER }}
+  CMS_DEV_MEDIA_BUCKET: ${{ vars.CMS_DEV_MEDIA_BUCKET }}
+  CMS_DEV_MEDIA_ORIGIN: ${{ vars.CMS_DEV_MEDIA_ORIGIN }}
+  CMS_DEV_PREVIEW_BUCKET: ${{ vars.CMS_DEV_PREVIEW_BUCKET }}
+  CMS_DEV_PREVIEW_ORIGIN: ${{ vars.CMS_DEV_PREVIEW_ORIGIN }}
+  CMS_DEV_PREVIEW_RENDERER: ${{ vars.CMS_DEV_PREVIEW_RENDERER }}
+  CMS_DEV_PREVIEW_STAFF_WORKER: ${{ vars.CMS_DEV_PREVIEW_STAFF_WORKER }}
+  CMS_DEV_PREVIEW_WORKER: ${{ vars.CMS_DEV_PREVIEW_WORKER }}
+  CMS_DEV_PUBLIC_ORIGIN: ${{ vars.CMS_DEV_PUBLIC_ORIGIN }}
+  CMS_DEV_SITE_PAGES: ${{ vars.CMS_DEV_SITE_PAGES }}
+  CMS_PRODUCTION_API_ORIGIN: ${{ vars.CMS_PRODUCTION_API_ORIGIN }}
+  CANONICAL_GITHUB_REPOSITORY: ${{ vars.CANONICAL_GITHUB_REPOSITORY }}
+  CANONICAL_GITHUB_REPOSITORY_ID: ${{ vars.CANONICAL_GITHUB_REPOSITORY_ID }}
+  VITE_CANONICAL_GITHUB_REPOSITORY: ${{ vars.CANONICAL_GITHUB_REPOSITORY }}
+  CMS_DEV_CLOUDFLARE_ACCOUNT_ID: ${{ vars.CMS_DEV_CLOUDFLARE_ACCOUNT_ID }}
+  CMS_DEPLOY_OWNER: ${{ vars.CMS_DEPLOY_OWNER }}
+  CMS_DEV_ACCESS_ORIGIN: ${{ vars.CMS_DEV_ACCESS_ORIGIN }}
+
+concurrency:
+  group: dev-staff-gateway-deploy
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    if: >-
+      github.event_name == 'workflow_dispatch' &&
+      github.ref == 'refs/heads/main' &&
+      (vars.CANONICAL_GITHUB_REPOSITORY != '' && vars.CANONICAL_GITHUB_REPOSITORY_ID != '' && github.repository_id == vars.CANONICAL_GITHUB_REPOSITORY_ID && github.workflow_ref == format('{0}/.github/workflows/dev-staff-gateway-deploy.yml@refs/heads/main', vars.CANONICAL_GITHUB_REPOSITORY)) &&
+      (vars.CMS_DEPLOY_OWNER != '' && github.triggering_actor == vars.CMS_DEPLOY_OWNER)
+    environment: development
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - name: Metered-API source scan (before any scanned code runs)
+        run: node .github/scripts/metered-api-scan.mjs
+      - name: Check out trusted configuration renderer
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          ref: ${{ github.sha }}
+          path: .configuration-render-gate
+          persist-credentials: false
+          sparse-checkout: |
+            scripts/render-development-config.mjs
+            config/development-inputs.json
+          sparse-checkout-cone-mode: false
+      - name: Render deployment resource configuration
+        working-directory: ${{ github.workspace }}
+        run: |
+          set -euo pipefail
+          mv .configuration-render-gate "$RUNNER_TEMP/configuration-render-gate"
+          node "$RUNNER_TEMP/configuration-render-gate/scripts/render-development-config.mjs" --root "$GITHUB_WORKSPACE"
+      - name: Validate development Access origin
+        run: node --input-type=module -e "import { devAccessOrigin } from './scripts/lib/deployment-settings.mjs'; devAccessOrigin();"
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        with:
+          node-version: '22'
+          cache: npm
+      - name: Install reviewed dependencies
+        run: npm ci --ignore-scripts
+      - name: Deploy the isolated dev gateway and verify readback
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_DEV_WORKER_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
+          DEV_ACCESS_AUDIENCE: ${{ vars.DEV_ACCESS_AUDIENCE }}
+          CMS_DEV_PUBLISH_ENABLED: ${{ vars.CMS_DEV_PUBLISH_ENABLED }}
+          GATEWAY_MODE: ${{ inputs.mode }}
+          GATEWAY_PREREQUISITES_VERIFIED: ${{ inputs.prerequisites_verified }}
+        run: node scripts/deploy-dev-staff-gateway.mjs

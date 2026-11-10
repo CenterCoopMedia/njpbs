@@ -1,0 +1,11 @@
+{
+  "date": "2026-08-25",
+  "kind": "new",
+  "title": "Edit your profile and photo",
+  "body": "Open the account menu to edit your staff profile. You can upload a profile photo or reuse an image from the Media library.",
+  "prs": [
+    1089,
+    1094
+  ],
+  "order": 0
+}

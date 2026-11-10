@@ -1,0 +1,19 @@
+.publication-recheck-action {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--cms-space-2);
+  margin-block-start: var(--cms-space-2);
+  overflow-wrap: anywhere;
+}
+
+.publication-recheck-action > .button,
+.publication-recheck-record {
+  min-width: 44px;
+  min-height: 44px;
+}
+
+.publication-recheck-record {
+  display: inline-flex;
+  align-items: center;
+}

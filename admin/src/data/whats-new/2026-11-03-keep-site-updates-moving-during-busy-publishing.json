@@ -1,0 +1,10 @@
+{
+  "date": "2026-11-03",
+  "kind": "fixed",
+  "title": "Keep site updates moving during busy publishing",
+  "body": "Publishing another change lets the current list update finish, then applies the latest changes. Posts, author pages and search keep updating while staff publish.",
+  "prs": [
+    4711
+  ],
+  "order": 1793765829170
+}

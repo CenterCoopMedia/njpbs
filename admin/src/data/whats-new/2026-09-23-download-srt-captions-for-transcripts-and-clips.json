@@ -1,0 +1,11 @@
+{
+  "date": "2026-09-23",
+  "kind": "new",
+  "title": "Download SRT captions for transcripts and clips",
+  "body": "Below the video player, choose Download SRT captions to get an SRT file. For a saved clip, you can download the matching part of the transcript.",
+  "prs": [
+    2130,
+    2164
+  ],
+  "order": -2
+}

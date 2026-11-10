@@ -1,0 +1,11 @@
+{
+  "date": "2026-09-25",
+  "kind": "improved",
+  "title": "Large photos upload as a web copy",
+  "body": "When you upload a large photo, the public site gets a smaller web copy and Boardwalk keeps the original privately. Large batches of uploads now continue at a steady pace instead of failing.",
+  "prs": [
+    2303,
+    2311
+  ],
+  "order": -4
+}

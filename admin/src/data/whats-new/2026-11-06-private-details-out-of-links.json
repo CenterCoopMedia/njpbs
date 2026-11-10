@@ -1,0 +1,8 @@
+{
+  "date": "2026-11-06",
+  "order": 1794007200000,
+  "kind": "fixed",
+  "title": "Keep sign-in details out of public links",
+  "body": "Public web links cannot contain a username or password. Remove those details before publishing.",
+  "prs": []
+}

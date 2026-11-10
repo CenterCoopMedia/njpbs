@@ -1,0 +1,93 @@
+# The global robots policy applies to the Admin shell and every static asset.
+/*
+  X-Robots-Tag: noindex, nofollow, noarchive
+  Content-Security-Policy: frame-ancestors 'none'
+  X-Frame-Options: DENY
+
+# Keep route documents and mutable status files out of browser caches. These
+# paths mirror the SPA rewrites in _redirects so a deep link stays fresh.
+/
+  Cache-Control: private, no-store
+
+/index.html
+  Cache-Control: private, no-store
+
+/404.html
+  Cache-Control: private, no-store
+
+/admin-status.json
+  Cache-Control: private, no-store
+
+# One prefix rule per SPA rewrite family keeps the Pages rule count bounded.
+/dashboard*
+  Cache-Control: private, no-store
+
+/open*
+  Cache-Control: private, no-store
+
+/account*
+  Cache-Control: private, no-store
+
+/premiere/connect*
+  Cache-Control: private, no-store
+
+/admin/settings*
+  Cache-Control: private, no-store
+
+/analytics*
+  Cache-Control: private, no-store
+
+/activity*
+  Cache-Control: private, no-store
+
+/media*
+  Cache-Control: private, no-store
+
+/voiceovers*
+  Cache-Control: private, no-store
+
+/content*
+  Cache-Control: private, no-store
+
+/post-templates*
+  Cache-Control: private, no-store
+
+/publish-queue*
+  Cache-Control: private, no-store
+
+/reports*
+  Cache-Control: private, no-store
+
+/resources*
+  Cache-Control: private, no-store
+
+/schedule*
+  Cache-Control: private, no-store
+
+/live-production*
+  Cache-Control: private, no-store
+
+/staff-access*
+  Cache-Control: private, no-store
+
+/staff-profiles*
+  Cache-Control: private, no-store
+
+/cuez-storydesk*
+  Cache-Control: private, no-store
+
+# Covers the guide shell, protected content, and guide-video-sw.js.
+# The guide-content function adds its security headers after staff admission.
+/guide*
+  Cache-Control: private, no-store
+
+# The Vite build validates fingerprinted assets and appends one /assets/* rule.
+# The Pages middleware removes immutable caching from errors and HTML fallbacks.
+
+# Brand files use stable names. Cache them for repeat visits, then revalidate.
+/brand/*.svg
+  Cache-Control: public, max-age=604800, stale-while-revalidate=86400
+
+/favicon.png
+  Cache-Control: public, max-age=86400, stale-while-revalidate=604800
+

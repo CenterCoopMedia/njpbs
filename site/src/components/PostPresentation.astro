@@ -1,0 +1,38 @@
+---
+import type { CollectionEntry } from "astro:content";
+import "../styles/branded-post-formats.css";
+import InteractiveDataPost from "./InteractiveDataPost.astro";
+import MultimediaFeaturePost from "./MultimediaFeaturePost.astro";
+import PostPage from "./PostPage.astro";
+import PostBioEnhancement from "./PostBioEnhancement.astro";
+import SpecialReportPost from "./SpecialReportPost.astro";
+import { postPresentationError, resolvePostPresentation } from "../lib/post-formats";
+
+type PublicCredit = CollectionEntry<"cmsPosts">["data"]["credits"][number];
+
+interface Props {
+  entry: CollectionEntry<"cmsPosts">;
+  credits: readonly PublicCredit[];
+  canonicalUrl: string;
+}
+
+const { entry, credits, canonicalUrl } = Astro.props as Props;
+const requestedPresentation = resolvePostPresentation(entry.data.tags);
+// Older immutable snapshots may predate the publication requirements. Keep them readable.
+// Multimedia keeps its layout if a now-unavailable optional lead was its only media.
+const presentation = entry.data.liveBlog ? "standard"
+  : requestedPresentation === "multimedia" || !postPresentationError(entry.data)
+    ? requestedPresentation : "standard";
+---
+
+{presentation === "special-report" ? (
+  <SpecialReportPost entry={entry} credits={credits} canonicalUrl={canonicalUrl} />
+) : presentation === "multimedia" ? (
+  <MultimediaFeaturePost entry={entry} credits={credits} canonicalUrl={canonicalUrl} />
+) : presentation === "interactive" ? (
+  <InteractiveDataPost entry={entry} credits={credits} canonicalUrl={canonicalUrl} />
+) : (
+  <PostPage entry={entry} credits={credits} canonicalUrl={canonicalUrl} />
+)}
+
+<PostBioEnhancement />

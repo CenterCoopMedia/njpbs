@@ -1,0 +1,91 @@
+Section-scoped content enforcement (#845) -- multi-role emulator proof
+run at 2026-08-21T22:59:54.229Z
+
+Four people signed in to the real Admin app against the Firebase emulator suite.
+Each assertion below was made with that person's own signed-in ID token against the
+same authenticated function boundary the app calls.
+
+PASS  super admin lists every record, in every desk and none
+        expected: ["proof-legacy-1","proof-own-in-desk","proof-own-out-of-desk","proof-station-1","proof-watch-1"]
+        actual:   ["proof-legacy-1","proof-own-in-desk","proof-own-out-of-desk","proof-station-1","proof-watch-1"]
+PASS  site-wide editor still lists every record, sectioned or not
+        expected: ["proof-legacy-1","proof-own-in-desk","proof-own-out-of-desk","proof-station-1","proof-watch-1"]
+        actual:   ["proof-legacy-1","proof-own-in-desk","proof-own-out-of-desk","proof-station-1","proof-watch-1"]
+PASS  site-wide editor reads a station record
+        expected: 200
+        actual:   200
+PASS  site-wide editor reads an unsectioned record
+        expected: 200
+        actual:   200
+PASS  a create naming no desk is refused even site-wide
+        expected: 400
+        actual:   400
+PASS  and it says why
+        expected: "A new record requires a section"
+        actual:   "A new record requires a section"
+PASS  watch-scoped editor lists only watch-desk records
+        expected: ["proof-own-in-desk","proof-watch-1"]
+        actual:   ["proof-own-in-desk","proof-watch-1"]
+        note:     station and unsectioned records are absent, including one owned by somebody else
+PASS  watch-scoped editor reads a watch record
+        expected: 200
+        actual:   200
+PASS  watch-scoped editor is refused a station record
+        expected: 403
+        actual:   403
+PASS  watch-scoped editor is refused an unsectioned record
+        expected: 403
+        actual:   403
+PASS  watch-scoped editor saves a watch record
+        expected: 200
+        actual:   200
+PASS  watch-scoped editor is refused a station save
+        expected: 403
+        actual:   403
+PASS  watch-scoped editor is refused an unsectioned save
+        expected: 403
+        actual:   403
+PASS  watch-scoped editor lists a watch record's history
+        expected: 200
+        actual:   200
+PASS  watch-scoped editor is refused a station record's history
+        expected: 403
+        actual:   403
+PASS  watch-scoped editor reads the /watch/ page
+        expected: 200
+        actual:   200
+PASS  watch-scoped editor is refused the /support/ page
+        expected: 403
+        actual:   403
+PASS  watch-scoped editor creates into their own desk
+        expected: 200
+        actual:   200
+PASS  the created record carries that desk
+        expected: "watch"
+        actual:   "watch"
+PASS  watch-scoped editor cannot create into another desk
+        expected: 403
+        actual:   403
+PASS  a scoped create naming no desk is refused at authorization
+        expected: 403
+        actual:   403
+        note:     the resource states no section, so the scoped grant matches nothing; the create requirement never has to fire
+PASS  the create form offers the registry desks with an unchosen default
+        expected: ["","watch","support","station","compliance","newsroom"]
+        actual:   ["","watch","support","station","compliance","newsroom"]
+        note:     newsroom is registered only in Firestore and appears in no seed table, so the picker can only offer it by reading the live registry
+PASS  watch-scoped contributor lists only their own watch-desk work
+        expected: ["proof-own-in-desk"]
+        actual:   ["proof-own-in-desk"]
+        note:     their own station draft is excluded: ownership does not punch through the scope
+PASS  contributor is refused their own out-of-desk draft
+        expected: 403
+        actual:   403
+PASS  contributor reads their own in-desk draft
+        expected: 200
+        actual:   200
+PASS  contributor is refused a watch record they do not own
+        expected: 403
+        actual:   403
+
+26 assertions, 0 failed.

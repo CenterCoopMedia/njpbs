@@ -1,0 +1,8 @@
+{
+  "date": "2026-11-09",
+  "order": 1794243360000,
+  "kind": "fixed",
+  "title": "Browse media while files upload",
+  "body": "Open another file's details while uploads continue. New files are ready to open as soon as uploading finishes. Click away to hide the upload panel and keep your queued files and details. The panel now lines up with the library.",
+  "prs": []
+}

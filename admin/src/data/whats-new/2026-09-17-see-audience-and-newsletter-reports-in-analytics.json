@@ -1,0 +1,11 @@
+{
+  "date": "2026-09-17",
+  "kind": "new",
+  "title": "See audience and newsletter reports in Analytics",
+  "body": "Managers and Site owners can open Analytics to read audience, newsletter and website delivery reports. Reports show the last 7 days by default.",
+  "prs": [
+    1894,
+    1952
+  ],
+  "order": -3
+}

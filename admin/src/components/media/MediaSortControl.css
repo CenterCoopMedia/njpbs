@@ -1,0 +1,63 @@
+/* The media sort control. The trigger is an unmodified
+   secondary button; these rules only arrange its parts and the popover's radio groups. */
+.media-sort-control-field {
+  min-width: 0;
+  overflow-wrap: anywhere;
+  font-weight: 700;
+}
+
+/* A long sort label at enlarged text must still fit its horizontal focus port. */
+.media-toolbar-secondary > .media-sort-control {
+  max-width: 100%;
+  white-space: normal;
+}
+
+.media-sort-fields {
+  display: grid;
+  gap: var(--cms-space-3);
+}
+
+.media-sort-fields fieldset {
+  display: grid;
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.media-sort-fields legend {
+  margin-bottom: var(--cms-space-1);
+  padding: 0;
+  color: var(--cms-ink-secondary);
+  font-size: var(--cms-font-sm);
+  font-weight: 700;
+}
+
+.media-sort-option {
+  display: flex;
+  align-items: center;
+  gap: var(--cms-space-2);
+  min-height: var(--cms-control-height);
+  color: var(--cms-ink);
+  cursor: pointer;
+}
+
+.media-sort-option input {
+  width: 1.125rem;
+  height: 1.125rem;
+  margin: 0;
+  accent-color: var(--cms-brand);
+}
+
+/* At 60rem or less the prefix is heard, not shown, so the trigger stays short. */
+@media (max-width: 60rem) {
+  .media-sort-control-prefix {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip: rect(0 0 0 0);
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
+}

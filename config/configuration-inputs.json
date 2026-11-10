@@ -1,0 +1,1101 @@
+{
+  "suppliers": {
+    "process-environment": {
+      "supplier": "Process environment or explicit configuration input",
+      "scope": "Local build, operator or service process",
+      "deployStep": "Supply the named input before the build or operator command starts."
+    },
+    "github-variable": {
+      "supplier": "GitHub Actions variable",
+      "scope": "Repository or selected deployment environment",
+      "deployStep": "Configure the named variable before invoking its workflow; the workflow passes it to the command."
+    },
+    "github-secret": {
+      "supplier": "GitHub Actions secret",
+      "scope": "Repository or selected deployment environment",
+      "deployStep": "Provision the named secret before invoking the existing workflow; keep values out of logs."
+    },
+    "functions-parameter": {
+      "supplier": "Firebase Functions parameter",
+      "scope": "Selected Firebase project",
+      "deployStep": "Supply the named parameter in the deployment environment file before Functions deployment."
+    },
+    "functions-secret": {
+      "supplier": "Firebase Functions secret parameter",
+      "scope": "Selected Firebase project secret binding",
+      "deployStep": "Provision the named secret and bind it during the separately authorized Functions deployment."
+    },
+    "worker-binding": {
+      "supplier": "Worker environment binding",
+      "scope": "Selected Worker and deployment environment",
+      "deployStep": "Set the named variable, secret or resource binding before the Worker deployment."
+    },
+    "wordpress-environment": {
+      "supplier": "WordPress process environment",
+      "scope": "Selected WordPress installation",
+      "deployStep": "Set the named setting before PHP bootstrap and scheduled import execution."
+    },
+    "wrangler-template": {
+      "supplier": "Deployment process environment",
+      "scope": "Selected Wrangler template",
+      "deployStep": "Run node scripts/render-wrangler-config.mjs --config TEMPLATE with the named environment inputs before invoking Wrangler; pass --env to both for a selected profile and remove the generated config afterward."
+    },
+    "vite-build": {
+      "supplier": "Vite build environment",
+      "scope": "Selected admin or public-site build",
+      "deployStep": "Supply the named build variable before compiling the browser assets."
+    },
+    "workflow-context": {
+      "supplier": "GitHub Actions step environment",
+      "scope": "Workflow job outputs and event context",
+      "deployStep": "Pass classifier outputs and selected event fields to the existing workflow step; map DISPATCH_SECRET from its configured dispatch secret before authorization."
+    },
+    "ambient-process": {
+      "supplier": "Inherited process environment",
+      "scope": "Guarded operator and test processes",
+      "deployStep": "Inspect or forward only allowed inherited names before startup; refusal-only credential and emulator inputs must remain unset."
+    },
+    "source-render": {
+      "supplier": "Build and deployment process environment",
+      "scope": "Disposable source checkout before builds or operator startup",
+      "deployStep": "Run node scripts/render-development-config.mjs --root CHECKOUT with every config/development-inputs.json input before starting tools or builds. Retained renderer sources are verified, then rendered with the same inputs."
+    },
+    "mail-routing": {
+      "supplier": "FANOUT_DESTINATIONS_JSON Worker secret",
+      "scope": "Selected email-routing Worker",
+      "deployStep": "Set the default, info, engineering, programming and desk arrays before the separately authorized Worker deployment. Supply complete info membership, including shared default recipients, from private configuration. Verify each destination through Email Routing before use."
+    }
+  },
+  "inputs": [
+    {
+      "suppliers": [
+        "ambient-process"
+      ],
+      "names": [
+        "CLOUDSDK_AUTH_ACCESS_TOKEN",
+        "CLOUDSDK_AUTH_CREDENTIAL_FILE_OVERRIDE",
+        "CLOUDSDK_CONFIG",
+        "FIREBASE_CLI_TOKEN",
+        "FIREBASE_STORAGE_EMULATOR_HOST",
+        "FIREBASE_TOKEN",
+        "GOOGLE_APPLICATION_CREDENTIALS_JSON",
+        "GOOGLE_APPLICATION_DEFAULT_CREDENTIALS",
+        "GOOGLE_CLOUD_QUOTA_PROJECT",
+        "JAVA_HOME",
+        "LANG",
+        "LC_ALL",
+        "LC_CTYPE",
+        "NO_COLOR",
+        "SHELL",
+        "SystemRoot",
+        "TEMP",
+        "TERM",
+        "TMP",
+        "USERPROFILE"
+      ]
+    },
+    {
+      "suppliers": [
+        "functions-parameter"
+      ],
+      "names": [
+        "CMS_STUDIO_TITLE_FILES"
+      ]
+    },
+    {
+      "suppliers": [
+        "functions-parameter",
+        "github-secret",
+        "process-environment"
+      ],
+      "names": [
+        "CMS_BUG_REPORT_TELEGRAM_ADMIN_MAP",
+        "CMS_BUG_REPORT_TELEGRAM_CHAT_ID"
+      ]
+    },
+    {
+      "suppliers": [
+        "functions-parameter",
+        "github-variable",
+        "process-environment"
+      ],
+      "names": [
+        "BILLING_ALERT_URL",
+        "BILLING_BUDGET_TOPIC",
+        "BOOTSTRAP_SUPER_ADMINS",
+        "CMS_ADMIN_BUILD_REVISION",
+        "CMS_ANALYTICS_CF_ZONE_ID",
+        "CMS_ANALYTICS_GA4_PROPERTY_ID",
+        "CMS_ANALYTICS_MAILCHIMP_AUDIENCE_ID",
+        "CMS_BUG_REPORT_EMAIL_BCC",
+        "CMS_BUG_REPORT_EMAIL_FROM",
+        "CMS_BUG_REPORT_EMAIL_REPLY_TO",
+        "CMS_BUG_REPORT_GITHUB_REPOSITORY",
+        "CMS_MEDIA_AWS_ARCHIVE_ACCOUNT_ID",
+        "CMS_MEDIA_AWS_ARCHIVE_ENABLED",
+        "CMS_MEDIA_AWS_ARCHIVE_ORIGINALS_BUCKET",
+        "CMS_MEDIA_AWS_ARCHIVE_ORIGINALS_PREFIX",
+        "CMS_MEDIA_AWS_ARCHIVE_ROLE_ARN",
+        "CMS_MEDIA_AWS_ARCHIVE_WORKING_BUCKET",
+        "CMS_MEDIA_AWS_ARCHIVE_WORKING_PREFIX",
+        "CMS_MEDIA_AWS_AUDIENCE",
+        "CMS_MEDIA_AWS_RENDITION_BUCKET",
+        "CMS_MEDIA_AWS_VIDEO_ACCOUNT_ID",
+        "CMS_MEDIA_AWS_VIDEO_BUCKET",
+        "CMS_MEDIA_AWS_VIDEO_ENABLED",
+        "CMS_MEDIA_AWS_VIDEO_PREFIX",
+        "CMS_MEDIA_AWS_VIDEO_ROLE_ARN",
+        "CMS_MEDIA_CLIP_PROCESSING_ENABLED",
+        "CMS_MEDIA_CLOUDFLARE_ZONE_ID",
+        "CMS_MEDIA_EDITOR_EXPORTS_ENABLED",
+        "CMS_MEDIA_MASTER_R2_BUCKET",
+        "CMS_MEDIA_ORIGINAL_BUCKETS",
+        "CMS_MEDIA_ORIGINAL_COPIES_ENABLED",
+        "CMS_MEDIA_PREVIEW_CONTROL_ROLE_ARN",
+        "CMS_MEDIA_PREVIEW_PROCESSING_ENABLED",
+        "CMS_MEDIA_PREVIEW_WORKFLOW_ARN",
+        "CMS_MEDIA_TRANSCRIPT_ALIGNMENT_CACHE_SHA256",
+        "CMS_MEDIA_TRANSCRIPT_ALIGNMENT_ENABLED",
+        "CMS_MEDIA_TRANSCRIPT_ALIGNMENT_MODEL_REPOSITORY",
+        "CMS_MEDIA_TRANSCRIPT_ALIGNMENT_MODEL_REVISION",
+        "CMS_MEDIA_TRANSCRIPT_AUDIO_ARTIFACT_SHA256",
+        "CMS_MEDIA_TRANSCRIPT_AUDIO_ENABLED",
+        "CMS_MEDIA_TRANSCRIPT_AUDIO_FUNCTION_ARN",
+        "CMS_MEDIA_TRANSCRIPT_BYOK_DATA_ROLE_ARN",
+        "CMS_MEDIA_TRANSCRIPT_BYOK_ENABLED",
+        "CMS_MEDIA_TRANSCRIPT_CONTROL_ROLE_ARN",
+        "CMS_MEDIA_TRANSCRIPT_DATA_ROLE_ARN",
+        "CMS_MEDIA_TRANSCRIPT_FALLBACK_ENABLED",
+        "CMS_MEDIA_TRANSCRIPT_LOCAL_ENABLED",
+        "CMS_MEDIA_TRANSCRIPT_PROCESSING_ENABLED",
+        "CMS_PREVIEW_RENDERER_SHA",
+        "CMS_PREVIEW_SERIALIZER_READY",
+        "CMS_PREVIEW_TRANSPORT",
+        "CMS_PRIVATE_VIDEO_ENABLED",
+        "CMS_PRIVATE_VIDEO_R2_BUCKET",
+        "CMS_PUBLISH_GITHUB_APP_ID",
+        "CMS_PUBLISH_GITHUB_INSTALLATION_ID",
+        "CMS_PUBLISH_TRANSPORT",
+        "CMS_STAFF_EMAIL_FROM",
+        "CMS_STAFF_EMAIL_REPLY_TO",
+        "CMS_TRANSCRIPTION_CREDENTIAL_KEY_VERSION",
+        "CMS_VIDEO_REPLACEMENT_CLEANUP_DRY_RUN",
+        "CMS_VIDEO_REPLACEMENT_CLEANUP_ROLE_ARN",
+        "CMS_VIDEO_REPLACEMENT_REPLICA_BUCKET",
+        "CMS_VOICEOVER_R2_BUCKET",
+        "CMS_WRITEBACK_CONFIGURED",
+        "PROXY_EXTRA_ORIGINS",
+        "TVSS_CALLSIGN",
+        "UGC_R2_BUCKET"
+      ]
+    },
+    {
+      "suppliers": [
+        "functions-parameter",
+        "github-variable",
+        "process-environment",
+        "worker-binding"
+      ],
+      "names": [
+        "CMS_DEPLOYMENT_ENVIRONMENT",
+        "CMS_MEDIA_R2_BUCKET"
+      ]
+    },
+    {
+      "suppliers": [
+        "functions-parameter",
+        "process-environment"
+      ],
+      "names": [
+        "CMS_BUG_REPORT_ADMIN_ORIGIN",
+        "CMS_MEDIA_MAX_UPLOAD_BYTES",
+        "CMS_MEDIA_PUBLIC_ORIGIN",
+        "CMS_PRIVATE_VIDEO_R2_ENDPOINT",
+        "CMS_PUBLISH_GITHUB_REPOSITORY",
+        "CMS_STAFF_EMAIL_ACCOUNT_ID",
+        "CMS_STAFF_EMAIL_ADMIN_ORIGIN",
+        "CMS_VOICEOVER_R2_ENDPOINT"
+      ]
+    },
+    {
+      "suppliers": [
+        "functions-parameter",
+        "process-environment",
+        "worker-binding"
+      ],
+      "names": [
+        "CMS_MEDIA_R2_ENDPOINT"
+      ]
+    },
+    {
+      "suppliers": [
+        "functions-secret",
+        "github-secret",
+        "process-environment"
+      ],
+      "names": [
+        "CMS_BUG_REPORT_GITHUB_TOKEN",
+        "CMS_BUG_REPORT_GITHUB_WEBHOOK_SECRET",
+        "CMS_BUG_REPORT_TELEGRAM_BOT_TOKEN",
+        "CMS_BUG_REPORT_TELEGRAM_WEBHOOK_SECRET",
+        "CMS_MEDIA_CACHE_PURGE_TOKEN",
+        "CMS_MEDIA_R2_ACCESS_KEY_ID",
+        "CMS_MEDIA_R2_SECRET_ACCESS_KEY",
+        "CMS_STAFF_EMAIL_API_TOKEN",
+        "CMS_VOICEOVER_R2_ACCESS_KEY_ID",
+        "CMS_VOICEOVER_R2_SECRET_ACCESS_KEY",
+        "PUBLISHED_POST_READER_HMAC_KEY"
+      ]
+    },
+    {
+      "suppliers": [
+        "functions-secret",
+        "github-secret",
+        "process-environment",
+        "worker-binding"
+      ],
+      "names": [
+        "CMS_DEV_ACCESS_CLIENT_ID",
+        "CMS_DEV_ACCESS_CLIENT_SECRET",
+        "CMS_EDGE_ORIGIN_SECRET"
+      ]
+    },
+    {
+      "suppliers": [
+        "functions-secret",
+        "process-environment"
+      ],
+      "names": [
+        "BILLING_ALERT_TOKEN",
+        "CMS_ANALYTICS_CF_TOKEN",
+        "CMS_ANALYTICS_MAILCHIMP_KEY",
+        "CMS_DEV_PUBLISH_APP_ID",
+        "CMS_DEV_PUBLISH_APP_PRIVATE_KEY",
+        "CMS_MEDIA_PURGE_R2_ACCESS_KEY_ID",
+        "CMS_MEDIA_PURGE_R2_SECRET_ACCESS_KEY",
+        "CMS_PRIVATE_VIDEO_R2_READ_ACCESS_KEY_ID",
+        "CMS_PRIVATE_VIDEO_R2_READ_SECRET_ACCESS_KEY",
+        "CMS_PRIVATE_VIDEO_R2_WRITE_ACCESS_KEY_ID",
+        "CMS_PRIVATE_VIDEO_R2_WRITE_SECRET_ACCESS_KEY",
+        "CMS_PUBLISH_GITHUB_TOKEN",
+        "CMS_TRANSCRIPTION_CREDENTIAL_KEY",
+        "CUEZ_STORYDESK_API_KEY",
+        "HEALTHCHECKS_MEDIA_PURGE_SWEEP",
+        "HEALTHCHECKS_PUBLISH_RECONCILE",
+        "PBS_TVSS_AUTH",
+        "SHADOW_POST_REVISIONS_TOKEN",
+        "SHADOW_POST_ROUTE_PURGE_TOKEN",
+        "UGC_R2_ACCESS_KEY_ID",
+        "UGC_R2_SECRET_ACCESS_KEY"
+      ]
+    },
+    {
+      "suppliers": [
+        "github-secret"
+      ],
+      "names": [
+        "CLOUDFLARE_DEV_PAGES_TOKEN",
+        "CLOUDFLARE_DEV_PREVIEW_RENDERER_TOKEN",
+        "CLOUDFLARE_DEV_PUBLIC_WORKER_TOKEN",
+        "CLOUDFLARE_DEV_WORKER_TOKEN",
+        "CMS_ADMIN_ACCESS_API_TOKEN",
+        "FIREBASE_PUBLISH_SERVICE_ACCOUNT",
+        "HEALTHCHECKS_SCHEDULE_BAKE",
+        "PRODUCTION_DEPLOY_DISPATCH_SECRET",
+        "SCHEDULE_BAKE_APP_PRIVATE_KEY"
+      ]
+    },
+    {
+      "suppliers": [
+        "github-secret",
+        "github-variable",
+        "process-environment",
+        "vite-build"
+      ],
+      "names": [
+        "VITE_FIREBASE_API_KEY",
+        "VITE_FIREBASE_APPCHECK_SITE_KEY",
+        "VITE_FIREBASE_APP_ID",
+        "VITE_FIREBASE_AUTH_DOMAIN",
+        "VITE_FIREBASE_PROJECT_ID",
+        "VITE_FUNCTIONS_BASE_URL"
+      ]
+    },
+    {
+      "suppliers": [
+        "github-secret",
+        "github-variable",
+        "process-environment",
+        "worker-binding"
+      ],
+      "names": [
+        "CLOUDFLARE_ACCOUNT_ID"
+      ]
+    },
+    {
+      "suppliers": [
+        "github-secret",
+        "process-environment"
+      ],
+      "names": [
+        "CLOUDFLARE_API_TOKEN",
+        "CMS_DEV_PREVIEW_FIREBASE_ACCOUNT",
+        "CMS_DEV_PREVIEW_R2_CREDENTIAL",
+        "CMS_PREVIEW_R2_CREDENTIAL",
+        "CMS_PUBLISH_GITHUB_TOKEN_PROVISIONING",
+        "MEDIA_MANAGER_API_KEY",
+        "MEDIA_MANAGER_API_SECRET"
+      ]
+    },
+    {
+      "suppliers": [
+        "github-secret",
+        "process-environment",
+        "worker-binding"
+      ],
+      "names": [
+        "FIREBASE_SERVICE_ACCOUNT"
+      ]
+    },
+    {
+      "suppliers": [
+        "github-secret",
+        "vite-build"
+      ],
+      "names": [
+        "VITE_CMS_STUDIO_CONFIGURATION"
+      ]
+    },
+    {
+      "suppliers": [
+        "github-variable"
+      ],
+      "names": [
+        "AUTHOR_PAGES_LIVE",
+        "BILLING_DISABLE_THRESHOLD",
+        "CMS_BUG_REPORT_TELEGRAM_BOT_ID",
+        "CMS_BUG_REPORT_TELEGRAM_BOT_USERNAME",
+        "CMS_DEV_PUBLISH_OIDC_PROVIDER",
+        "CMS_DEV_PUBLISH_SERVICE_ACCOUNT",
+        "CMS_PREVIEW_ACCESS_VERIFIED",
+        "CMS_PREVIEW_CLOUD_ENABLED",
+        "CMS_STUDIO_API_ORIGIN",
+        "FIREBASE_DEV_APPCHECK_SITE_KEY",
+        "FIREBASE_DEV_AUTH_DOMAIN",
+        "FIREBASE_DEV_DEPLOY_SERVICE_ACCOUNT",
+        "FIREBASE_DEV_WEB_API_KEY",
+        "FIREBASE_DEV_WORKLOAD_IDENTITY_PROVIDER",
+        "FIREBASE_WEB_APP_ID",
+        "LIVE_PRODUCTION_ENABLED",
+        "SCHEDULE_BAKE_APP_CLIENT_ID",
+        "SCHEDULE_BAKE_APP_SLUG",
+        "SHADOW_PUBLISHED_POST_FUNCTION_URL"
+      ]
+    },
+    {
+      "suppliers": [
+        "github-variable",
+        "process-environment"
+      ],
+      "names": [
+        "AUTHOR_PROFILE_MAPPING",
+        "CANONICAL_GITHUB_REPOSITORY",
+        "CANONICAL_GITHUB_REPOSITORY_ID",
+        "CMS_DEPLOY_OWNER",
+        "CMS_DEV_ADMIN_SOURCE_SHA",
+        "CMS_DEV_CMS_SOURCE_SHA",
+        "CMS_DEV_DISPATCH_ACTOR",
+        "CMS_DEV_FIREBASE_WEB_APP_ID",
+        "CMS_DEV_PUBLISH_ENABLED",
+        "CMS_DEV_RENDERER_SOURCE_SHA",
+        "CMS_MEDIA_PURGE_REAL_DELETES_ENABLED",
+        "CMS_MEDIA_PURGE_SWEEP_ENABLED",
+        "CMS_PUBLISH_GITHUB_TRUSTED_ACTORS",
+        "COST_LEDGER_AWS_PULL",
+        "COST_LEDGER_CLOUDFLARE_ACCOUNT_ID",
+        "COST_LEDGER_CLOUDFLARE_PULL",
+        "COST_LEDGER_GCP_BILLING_TABLE",
+        "COST_LEDGER_GCP_PROJECT",
+        "COST_LEDGER_GCP_PULL",
+        "COST_LEDGER_GITHUB_ACCOUNT",
+        "COST_LEDGER_GITHUB_ACCOUNT_TYPE",
+        "COST_LEDGER_GITHUB_PULL",
+        "DEV_PREVIEW_ACCESS_AUDIENCE",
+        "FIREBASE_DEPLOY_SERVICE_ACCOUNT",
+        "PAIR_PRIVATE_HTTP_ENABLED",
+        "PREMIERE_DESKTOP_ENABLED",
+        "SHADOW_POST_READER_ENABLED",
+        "SHADOW_POST_READER_SLUGS"
+      ]
+    },
+    {
+      "suppliers": [
+        "github-variable",
+        "process-environment",
+        "source-render"
+      ],
+      "names": [
+        "CLOUDFLARE_DEV_PUBLIC_WORKER",
+        "CMS_DEV_PREVIEW_BUCKET",
+        "CMS_DEV_PUBLIC_ORIGIN"
+      ]
+    },
+    {
+      "suppliers": [
+        "github-variable",
+        "process-environment",
+        "vite-build"
+      ],
+      "names": [
+        "VITE_CMS_PREVIEW_ENABLED",
+        "VITE_VIDEO_REPLACEMENT_ENABLED"
+      ]
+    },
+    {
+      "suppliers": [
+        "github-variable",
+        "process-environment",
+        "worker-binding"
+      ],
+      "names": [
+        "CMS_DEV_ACCESS_ORIGIN",
+        "CMS_DEV_CLOUDFLARE_ACCOUNT_ID",
+        "DEV_ACCESS_AUDIENCE",
+        "FIREBASE_PROJECT_ID",
+        "NO_BUILD_POST_BACKGROUND_BUCKET",
+        "NO_BUILD_POST_ENABLED",
+        "NO_BUILD_POST_ID",
+        "PAIR_ACCESS_AUDIENCE",
+        "PAIR_ACCESS_CLIENT_ID",
+        "PAIR_COMMIT_SHA",
+        "PAIR_ENVIRONMENT",
+        "PAIR_EXECUTOR_READY",
+        "PAIR_ID",
+        "PAIR_JOURNAL_NAMESPACE",
+        "PAIR_PRIVATE_ORIGIN",
+        "PAIR_PROOF_ORIGIN",
+        "PAIR_READER_ACCESS_JSON",
+        "PREVIEW_RENDERER_ENABLED",
+        "PREVIEW_RENDERER_SHA",
+        "PUBLICATION_COMMIT_SHA",
+        "PUBLIC_GA4_MEASUREMENT_ID",
+        "PUBLIC_PAIR_BOOTSTRAP_ID",
+        "PUBLIC_PAIR_IDENTITIES_JSON",
+        "PUBLIC_PAIR_INGRESS_ENABLED",
+        "PUBLIC_PAIR_ORIGINAL_RECOVERY_ENABLED",
+        "PUBLIC_PAIR_RECOVERY_CAPTURE_ENABLED",
+        "PUBLIC_REPORT_ENDPOINT",
+        "PUBLIC_SHARE_INTAKE_ENDPOINT",
+        "PUBLIC_SHARE_PAGE",
+        "PUBLIC_SHARE_UPLOAD_ORIGIN",
+        "PUBLIC_TURNSTILE_SITEKEY"
+      ]
+    },
+    {
+      "suppliers": [
+        "github-variable",
+        "source-render"
+      ],
+      "names": [
+        "CMS_DEV_ADMIN_ORIGIN",
+        "CMS_DEV_ADMIN_PAGES",
+        "CMS_DEV_API_ORIGIN",
+        "CMS_DEV_API_WORKER",
+        "CMS_DEV_MEDIA_BUCKET",
+        "CMS_DEV_MEDIA_ORIGIN",
+        "CMS_DEV_PREVIEW_ORIGIN",
+        "CMS_DEV_PREVIEW_RENDERER",
+        "CMS_DEV_PREVIEW_STAFF_WORKER",
+        "CMS_DEV_PREVIEW_WORKER",
+        "CMS_DEV_SITE_PAGES",
+        "CMS_PRODUCTION_API_ORIGIN"
+      ]
+    },
+    {
+      "suppliers": [
+        "mail-routing"
+      ],
+      "names": [
+        "FANOUT_DESTINATIONS_JSON"
+      ]
+    },
+    {
+      "suppliers": [
+        "process-environment"
+      ],
+      "names": [
+        "ACCOUNT_ID",
+        "ACTIONS_TOKEN",
+        "ADMIN_BOOT_URL",
+        "ADMIN_DEPLOY_ALLOW_UNREVIEWED",
+        "ADMIN_DEPLOY_CHECK",
+        "ADMIN_DEPLOY_RELEASE_SHA",
+        "ADMIN_DEPLOY_ROLLBACK",
+        "ADMIN_DEV_ALLOWED_HOSTS",
+        "ADMIN_E2E_RUNTIME_DIR",
+        "ADMIN_GALLERY_PORT",
+        "ADMIN_PERF_BASE_URL",
+        "ADMIN_PERF_EMAIL",
+        "ADMIN_PERF_PASSWORD",
+        "ADMIN_STATUS_MANIFEST_BASE64",
+        "ALERT_INTAKE_URL",
+        "ALERT_TRANSITION_CUTOVER",
+        "ALERT_WEBHOOK_SECRET",
+        "AUDIO_CANARY_FIREBASE_API_KEY",
+        "AWS_ACCOUNT_ID",
+        "AWS_PROFILE",
+        "BASE_SHA",
+        "BENCH_BUILD",
+        "BENCH_CACHE",
+        "BENCH_REPEATS",
+        "BENCH_ROUTES",
+      "BOARDWALK_INPUT_HOST",
+      "BOARDWALK_OUTPUT_HOST",
+      "BOARDWALK_PRIVATE_R2_INPUT_BUCKET",
+        "BOARDWALK_PRIVATE_R2_INPUT_HOST",
+        "BOARDWALK_SYNC_INTEGRATION",
+        "BOARDWALK_VIDEO_PREVIEW_WORKFLOW_ARN",
+        "BUILD_BATCH_ID",
+        "CI",
+        "CI_INPUTS_HASH",
+        "CI_VARIABLES",
+        "CI_WAIT_DEADLINE",
+        "CI_WORKFLOW_ID",
+        "CLASSIFIER_RESULT",
+        "CLOUDFLARE_PUBLIC_ROUTE_ID",
+        "CLOUDFLARE_PUBLIC_ZONE_ID",
+        "CLOUDFLARE_TOKEN_ENTRY",
+        "CLOUD_PUBLICATION_WAKE_ENABLED",
+        "CLOUD_PUBLICATION_WAKE_ENVIRONMENT",
+        "CMS_COMPILED_RENDERER_SHA",
+        "CMS_CONTENT_MODE",
+        "CMS_DEBUG_BROWSER_CREDENTIAL_REF",
+        "CMS_DEPLOYMENT_VARIABLES_JSON",
+        "CMS_DEPLOY_MIGRATIONS",
+        "CMS_DEV_ARTIFACT_DIRECTORY",
+        "CMS_DEV_EDITOR_EMAIL",
+        "CMS_DEV_FROZEN_BUILD",
+        "CMS_DEV_INBOX_COMMAND",
+        "CMS_DEV_INSTALL_READER_BRIDGE",
+        "CMS_DEV_PRESERVE_PREVIEW_PAUSE",
+        "CMS_DEV_READER_INSTALL_AUTHORIZATION",
+        "CMS_DEV_READER_OPERATION_ID",
+        "CMS_DEV_RELEASE_PREVIEW_RENDERER",
+        "CMS_DEV_RENDERER_ONLY",
+        "CMS_DEV_RENDERER_REQUESTED_SOURCE_SHA",
+        "CMS_DEV_RESTORE_PREVIEW_BOOTSTRAP",
+        "CMS_DEV_SDK_CLIENT_EMAIL",
+        "CMS_EDGE_ORIGIN_SECRET_FINGERPRINT",
+        "CMS_FUNCTION_DEPLOY_PHASE",
+        "CMS_FUNCTION_DEPLOY_TARGETS",
+        "CMS_LOADER_STRICT",
+        "CMS_MEDIA_PUBLIC_CREDIT_REPAIR_ID",
+        "CMS_OFFLINE_BUILD",
+        "CMS_PREVIEW_COLLECTION",
+        "CMS_PREVIEW_EXPORT_PATH",
+        "CMS_PREVIEW_EXPORT_SHA256",
+        "CMS_PREVIEW_FIREBASE_ACCOUNT",
+        "CMS_PREVIEW_FUNCTION_TARGETS",
+        "CMS_PREVIEW_INPUT_PATH",
+        "CMS_PREVIEW_INPUT_SHA256",
+        "CMS_PREVIEW_PAGE_ID",
+        "CMS_PREVIEW_PAIR_MODE",
+        "CMS_PREVIEW_PERSISTENT",
+        "CMS_PREVIEW_QUEUE_ID",
+        "CMS_PREVIEW_SERIALIZER_ID",
+        "CMS_PREVIEW_WORKER_VERSION",
+        "CMS_PRODUCTION_INSTALL_READER_BRIDGE",
+        "CMS_PRODUCTION_READER_INSTALL_AUTHORIZATION",
+        "CMS_PRODUCTION_READER_OPERATION_ID",
+        "CMS_PUBLICATION_ACTIVATION_TOKEN",
+        "CMS_PUBLICATION_COMMIT_SHA",
+        "CMS_PUBLICATION_FIREBASE_ACCOUNT",
+        "CMS_PUBLICATION_MEDIA_MANAGER_CREDENTIAL",
+        "CMS_PUBLICATION_MEDIA_R2_CREDENTIAL",
+        "CMS_PUBLICATION_PAIR_JSON",
+        "CMS_PUBLICATION_PAIR_ORIGINAL_RECOVERY_ENABLED",
+        "CMS_PUBLICATION_PAIR_SWITCH_CODE_ENABLED",
+        "CMS_PUBLICATION_PREVIEW_R2_CREDENTIAL",
+        "CMS_PUBLICATION_R2_CREDENTIAL",
+        "CMS_PUBLICATION_RELEASE_STATE_DIRECTORY",
+        "CMS_PUBLICATION_SERIALIZER_ID",
+        "CMS_PUBLICATION_WAKE_TOKEN",
+        "CMS_PUBLIC_RELEASE_REVIEW_RECEIPT_SCHEMA",
+        "CMS_PUBLIC_RELEASE_REVIEW_VERIFIER",
+        "CMS_READER_BRIDGE_CMS_API_CANDIDATE",
+        "CMS_READER_BRIDGE_FUNCTIONS_CANDIDATE",
+        "CMS_READER_CREDENTIAL_PIPES",
+        "CMS_READER_TEST_REPORT",
+        "CMS_RETAINED_IMAGES_READY",
+        "CMS_VOICEOVER_IMPORT_R2_ACCESS_KEY_ID",
+        "CMS_VOICEOVER_IMPORT_R2_SECRET_ACCESS_KEY",
+        "CONFIGURATION_REQUIRES_RELEASE",
+        "CONTAINER_ENGINE",
+        "COST_LEDGER_AWS_ACCESS_KEY_ID",
+        "COST_LEDGER_AWS_SECRET_ACCESS_KEY",
+        "COST_LEDGER_CLOUDFLARE_API_TOKEN",
+        "COST_LEDGER_GCP_BILLING_SA",
+        "COST_LEDGER_GITHUB_TOKEN",
+        "CREDENTIALS_DIRECTORY",
+        "DATA_HUB_PUBLIC",
+        "DEBUG",
+        "DEPLOYMENT_OUTCOME",
+        "DEPLOYMENT_RECEIPT",
+        "DEPLOY_RUNTIME_VERSION",
+        "DEPLOY_SHA",
+        "DEV_BRIDGE_REQUEST_A",
+        "DEV_BRIDGE_REQUEST_B",
+        "DEV_CLOSE_PACKET",
+        "DEV_CLOSE_PACKET_SHA256",
+        "DEV_CONSUMER_ADAPTER_A",
+        "DEV_CONSUMER_ADAPTER_A_SHA256",
+        "DEV_CONTROLS_PACKET",
+        "DEV_CONTROLS_PACKET_SHA256",
+        "DEV_DISPATCH_ACTOR",
+        "DEV_EDGE_ENTRY",
+        "DEV_ENROLLMENT_REQUEST",
+        "DEV_GATEWAY_PACKET",
+        "DEV_GATEWAY_PACKET_SHA256",
+        "DEV_GOOGLE_READ_ENTRY",
+        "DEV_HISTORY_PACKET",
+        "DEV_HISTORY_PACKET_SHA256",
+        "DEV_INITIAL_PACKET",
+        "DEV_INITIAL_PACKET_SHA256",
+        "DEV_INITIAL_PAIRS_PACKET",
+        "DEV_INITIAL_PAIRS_PACKET_SHA256",
+        "DEV_INSTALL_EVIDENCE",
+        "DEV_MEDIA_INIT_PACKET",
+        "DEV_MEDIA_INIT_PACKET_SHA256",
+        "DEV_OLD_CODE_PACKET",
+        "DEV_OLD_CODE_PACKET_SHA256",
+        "DEV_PAIR_CODE_PACK_LABEL",
+        "DEV_PAIR_CODE_PACK_PACKET",
+        "DEV_PAIR_CODE_PACK_PACKET_SHA256",
+        "DEV_PAIR_READER_ACCESS_ENTRY",
+        "DEV_PAIR_STAGING_PACKET",
+        "DEV_PAIR_STAGING_PACKET_SHA256",
+        "DEV_PREVIEW_IDENTITY",
+        "DEV_PREVIEW_PAUSE_PACKET",
+        "DEV_PREVIEW_PAUSE_PACKET_SHA256",
+        "DEV_PREVIEW_REQUEST",
+        "DEV_PROVIDER_TOKEN_ENTRY",
+        "DEV_PUBLIC_PAUSE_PACKET",
+        "DEV_PUBLIC_PAUSE_PACKET_SHA256",
+        "DEV_PUBLIC_PAUSE_RECOVERY_PACKET",
+        "DEV_PUBLIC_PAUSE_RECOVERY_PACKET_SHA256",
+        "DEV_R2_READ_ENTRY",
+        "DEV_R2_WRITE_ENTRY",
+        "DEV_READER_ADAPTER",
+        "DEV_READER_ADAPTER_SHA256",
+        "DEV_RECONCILE_GENERATION",
+        "DEV_RECONCILE_RUN_SHA",
+        "DEV_RECONCILE_WORKER_VERSION_ID",
+        "DEV_RESUME_PACKET",
+        "DEV_RESUME_PACKET_SHA256",
+        "DEV_ROUTING_CHANGE_APPROVED",
+        "DEV_RUNTIME_INIT_PACKET",
+        "DEV_RUNTIME_INIT_PACKET_SHA256",
+        "DEV_SCHEDULE_PACKET",
+        "DEV_SCHEDULE_PACKET_SHA256",
+        "DEV_SDK_ENTRY",
+        "DEV_SDK_PACKET",
+        "DEV_SDK_PACKET_SHA256",
+        "DEV_SLOT_PLAN",
+        "DEV_STAFF_JWT_ENTRY",
+        "DEV_VIEWER_ACCESS_ENTRY",
+        "EDGE_ENTRY",
+        "ELECTION_LATENCY_REPORT",
+        "EMERGENCY_AUTHORIZATION",
+        "EMERGENCY_RELEASE",
+        "ENROLLMENT_REQUEST",
+        "ENROLLMENT_SDK_PACKET",
+        "ENROLLMENT_SDK_PACKET_SHA256",
+        "EVENT_ACTION",
+        "EVENT_ACTOR",
+        "EVENT_ENVIRONMENT",
+        "EVENT_NAME",
+        "EVENT_PROJECT",
+        "EVENT_REF",
+        "EVENT_SENDER",
+        "EXPECTED_BUCKET_OWNER",
+        "FFMPEG_ARTIFACT_SHA256",
+        "FFMPEG_DIRECTORY",
+        "FFMPEG_MANIFEST_PATH",
+        "FFMPEG_PATH",
+        "FFPROBE_PATH",
+        "FIREBASE_APPCHECK_SITE_KEY",
+        "FIREBASE_AUTH_EMULATOR_HOST",
+        "FIREBASE_CONFIG",
+        "FIREBASE_SERVICE_ACCOUNT_CONFIGURED",
+        "FIRESTORE_EMULATOR_HOST",
+        "FIRESTORE_EMULATOR_PORT",
+        "FIXTURE_FFMPEG",
+        "FORCE_FIREBASE",
+        "FUNCTIONS_EMULATOR",
+        "FUNCTIONS_EMULATOR_HOST",
+        "FUNCTION_TARGETS",
+        "GATEWAY_MODE",
+        "GATEWAY_PREREQUISITES_VERIFIED",
+        "GCLOUD_PROJECT",
+        "GCP_PROJECT_NUMBER",
+        "GH_TOKEN",
+        "GITHUB_ACTOR",
+        "GITHUB_API_URL",
+        "GITHUB_ENV",
+        "GITHUB_EVENT_NAME",
+        "GITHUB_EVENT_PATH",
+        "GITHUB_OUTPUT",
+        "GITHUB_REF",
+        "GITHUB_REPOSITORY",
+        "GITHUB_REPOSITORY_ID",
+        "GITHUB_RUN_ATTEMPT",
+        "GITHUB_RUN_ID",
+        "GITHUB_SHA",
+        "GITHUB_STEP_SUMMARY",
+        "GITHUB_TOKEN",
+        "GITHUB_TRIGGERING_ACTOR",
+        "GITHUB_WORKFLOW_REF",
+        "GITHUB_WORKFLOW_SHA",
+        "GITHUB_WORKSPACE",
+        "GOOGLE_APPLICATION_CREDENTIALS",
+        "GOOGLE_CLOUD_PROJECT",
+        "GOOGLE_RUNTIME_EMAIL",
+        "GUIDE_CAPTURE_OUTPUT",
+        "GUIDE_VIDEOS",
+        "GUIDE_VIDEOS_ARCHIVE",
+        "GUIDE_VIDEOS_R2_ACCESS_KEY_ID",
+        "GUIDE_VIDEOS_R2_ACCOUNT_ID",
+        "GUIDE_VIDEOS_R2_BUCKET",
+        "GUIDE_VIDEOS_R2_SECRET_ACCESS_KEY",
+        "GUIDE_VIDEOS_UPLOAD",
+        "HEADER_FIT_SCREENS",
+        "HEADLESS",
+        "HEAD_REF",
+        "HEAD_SHA",
+        "HEALTHCHECKS_CONFIGURED",
+        "HF_HUB_OFFLINE",
+        "INTERNAL_SURFACES",
+        "ISOLATE_START_ANALYTICS",
+        "JAVA_TOOL_OPTIONS",
+        "JOB_JSON",
+        "K_REVISION",
+        "LAUNCH_CONTENT_DATA_PATH",
+        "LAUNCH_CONTENT_OUTPUT",
+        "LEAD_MEDIA_EVIDENCE",
+        "LEAD_MEDIA_FILES",
+        "LEAD_MEDIA_URL",
+        "LEAD_PICKER_AFTER_URL",
+        "LEAD_PICKER_BEFORE_URL",
+        "LEAD_PICKER_EMPTY_ONLY",
+        "LEAD_PICKER_EVIDENCE",
+        "LEAD_PICKER_IMAGE",
+        "LEAD_PICKER_PROXY_SOCKET",
+        "LEAD_REVIEW_AFTER_URL",
+        "LEAD_REVIEW_BEFORE_URL",
+        "LEAD_REVIEW_EVIDENCE",
+        "LEAD_REVIEW_IMAGE",
+        "LEAD_REVIEW_PICKER",
+        "LEAD_REVIEW_PROXY_SOCKET",
+        "LEAD_REVIEW_STANDALONE_BEFORE_ONLY",
+        "LOCALAPPDATA",
+        "MEDIA_MANAGER_AUDIENCE",
+        "MEDIA_MANAGER_BASE_URL",
+        "MEDIA_MANAGER_PAGE_SIZE",
+        "MEDIA_MANAGER_PROBE_OUTPUT",
+        "MEDIA_PERF_SEED_PASSWORD",
+        "METADATA_SERVER_DETECTION",
+        "NEW_READER_ACCESS_ENTRY",
+        "NJPBS_DEV_PROOF_PIPE_IDENTITIES",
+        "NJPBS_FIREBASE_WEB_API_KEY",
+        "NJPBS_SHADOW_COMPARE_COOKIE_FILE",
+        "NJPBS_VIDEO_BACKUP_AWS_PROFILE",
+        "NJPBS_VIDEO_BACKUP_BUCKET",
+        "NJPBS_VIDEO_BACKUP_ENABLED",
+        "NJPBS_VIDEO_BACKUP_SECRET_ENTRY",
+        "NJPBS_VIDEO_BACKUP_STATE_DIR",
+        "NJPBS_VMIX_CREDENTIAL_PATH",
+        "NODE_DEBUG",
+        "NODE_ENV",
+        "NODE_OPTIONS",
+        "OLD_READER_ACCESS_ENTRY",
+        "ORIGINAL_BUCKET",
+        "OUTPUT_DIR",
+        "PACKET",
+        "PACKET_SHA256",
+        "PAGEFIND_EXTENDED_BINARY_PATH",
+        "PAGES_DEPLOYMENT_ID",
+        "PAIR_PREFLIGHT",
+        "PAIR_READER_GATEWAY_ENABLED",
+        "PAIR_ROUTING_ANALYTICS",
+        "PAIR_SEMANTIC_MODEL_CACHE",
+        "PAIR_SLOT_READER",
+        "PLAYWRIGHT_CHROMIUM_EXECUTABLE",
+        "PLAYWRIGHT_MODULE",
+        "POLICY_RESULT",
+        "POLITICS_PREVIEW_FIXTURE_MODE",
+        "PRIVATE_INSTALL_TOKEN_FD",
+        "PROD_BOOTSTRAP_OUTPUT",
+        "PROD_BOOTSTRAP_PACKET",
+        "PROD_BOOTSTRAP_PACKET_SHA256",
+        "PROD_GOOGLE_READ_ENTRY",
+        "PROD_R2_READ_ENTRY",
+        "PROD_SDK_ENTRY",
+        "PR_NUMBER",
+        "PUBLIC_ARTIFACT_BATCH_MODE",
+        "PUBLIC_ARTIFACT_BUNDLE_PATH",
+        "PUBLIC_ARTIFACT_BUNDLE_SCHEMA_VERSION",
+        "PUBLIC_ARTIFACT_DEPLOYED_CONTEXT_PATH",
+        "PUBLIC_ARTIFACT_INVENTORY_PATH",
+        "PUBLIC_ARTIFACT_RETAINED_BUNDLE_PATH",
+        "PUBLIC_ARTIFACT_RETAINED_CONTEXT_PATH",
+        "PUBLIC_ARTIFACT_RETAINED_IMAGES_PATH",
+        "PUBLIC_BUILD_BATCH_ID",
+        "PUBLIC_BUILD_COMMIT_SHA",
+        "PUBLIC_ISOLATE_START_MEASUREMENT_ENABLED",
+        "PUBLIC_ONLY",
+        "PUBLIC_PAIR_ROUTING_MEASUREMENT_ENABLED",
+        "PUBLIC_POST_RENDERER_COMPILE",
+        "PUBLIC_RECEIPT_OUTCOME",
+        "PUBLIC_RECEIPT_READY",
+        "PUBLIC_RELEASE_COMPOSED_READERS_ENABLED",
+        "PUBLIC_URL",
+        "PUBLISHED_POSTS",
+        "PWDEBUG",
+        "PYANNOTE_METRICS_ENABLED",
+        "QUEUE_ID",
+        "R2_READ_ENTRY",
+        "R2_WRITE_ENTRY",
+        "RENDERER_TARGET_SHA",
+        "RENDITION_BUCKET",
+        "REQUIRE_FRESH_CONTENT",
+        "RESULT",
+        "RETAINED_GENERATION",
+        "RETAINED_QUEUE_ID",
+        "RETAINED_RUN_ID",
+        "RETAINED_WORKER_VERSION_ID",
+        "RUNNER_ENVIRONMENT",
+        "RUNNER_TEMP",
+        "RUN_ATTEMPT",
+        "RUN_ID",
+        "SCHEDULE_CI_OUTCOME",
+        "SCHEDULE_DATA_PATH",
+        "SCHEDULE_FEED_BASE_URL",
+        "SCHEDULE_MONITOR_KUMA_ORIGIN",
+        "SCHEDULE_OUTPUT",
+        "SCHEDULE_REQUEST_CONCURRENCY",
+        "SCHEDULE_REQUEST_TIMEOUT_MS",
+        "SDK_ENTRY",
+        "SHADOW_ASSETS",
+        "SHADOW_POST_REVISIONS",
+        "SHADOW_POST_REVISIONS_ACCOUNT_ID",
+        "SHADOW_POST_REVISIONS_ENABLED",
+        "SHADOW_POST_REVISIONS_NAMESPACE_ID",
+        "SHADOW_POST_REVISIONS_ORIGIN",
+        "SHADOW_POST_REVISIONS_SLUGS",
+        "SHADOW_POST_REVISIONS_ZONE_ID",
+        "SHADOW_POST_ROUTE_PURGE_ENABLED",
+        "SHADOW_POST_ROUTE_PURGE_ENVIRONMENT",
+        "SHADOW_POST_ROUTE_PURGE_PROJECT_ID",
+        "SHADOW_POST_ROUTE_PURGE_ZONE_ID",
+        "SOURCE_SHA",
+        "SOURCE_VERSION",
+        "SPOTLIGHT_NEWS_DATA_PATH",
+        "SPOTLIGHT_NEWS_FEED_URL",
+        "SPOTLIGHT_NEWS_LIMIT",
+        "SPOTLIGHT_NEWS_OUTPUT",
+        "SPOTLIGHT_WP_PATH",
+        "SPOTLIGHT_WP_URL",
+        "SSR",
+        "TMPDIR",
+        "TRIGGERING_ACTOR",
+        "VISIBLE_AT_MS",
+        "VITEST_SHARD_ARGS",
+        "WORKERS_CI",
+        "WORKERS_CI_BRANCH",
+        "XDG_RUNTIME_DIR"
+      ]
+    },
+    {
+      "suppliers": [
+        "process-environment",
+        "vite-build"
+      ],
+      "names": [
+        "DEV",
+        "PUBLIC_GA4_REQUIRED",
+        "PUBLIC_REPORT_REQUIRED",
+        "PUBLIC_SHARE_REQUIRED",
+        "SITE",
+        "VITE_",
+        "VITE_AUTHOR_PAGES_LIVE",
+        "VITE_CANONICAL_GITHUB_REPOSITORY",
+        "VITE_CMS_DEPLOYMENT_ENVIRONMENT",
+        "VITE_CMS_HOME_LAYOUTS_ENABLED",
+        "VITE_CMS_READER_BRIDGE_ENABLED",
+        "VITE_CMS_READER_BRIDGE_MANIFEST",
+        "VITE_FIREBASE_EXPECTED_DEV_APP_ID",
+        "VITE_FIRESTORE_EMULATOR_PORT",
+        "VITE_LIVE_PRODUCTION_ENABLED",
+        "VITE_PUBLIC_SITE_ORIGIN",
+        "VITE_USE_EMULATORS",
+        "VITE_VERIFICATION_EMAIL_SENDER"
+      ]
+    },
+    {
+      "suppliers": [
+        "process-environment",
+        "wordpress-environment"
+      ],
+      "names": [
+        "NJSPOTLIGHT_BLOG_ID",
+        "NJSPOTLIGHT_CONTEXT",
+        "NJSPOTLIGHT_POSTING_ACCOUNT",
+        "NJSPOTLIGHT_SEARCH_PAGE_ID"
+      ]
+    },
+    {
+      "suppliers": [
+        "process-environment",
+        "worker-binding"
+      ],
+      "names": [
+        "ACTIVATION_TOKEN",
+        "ADMIN_ORIGIN",
+        "ALLOWED_ORIGIN",
+        "ALLOW_LOCAL_ORIGINS",
+        "ASSETS",
+        "CF_ACCESS_CLIENT_ID",
+        "CF_ACCESS_CLIENT_SECRET",
+        "CF_VERSION_METADATA",
+        "CLOUDFLARE_PUBLIC_WORKER_TAG",
+        "CMS_API",
+        "CMS_API_WORKER_VERSION",
+        "CMS_BYLINE_EDGE_ENABLED",
+        "CMS_DEV_REPORT_INTAKE_MODE",
+        "CMS_READER_BRIDGE_ENABLED",
+        "CMS_READER_BRIDGE_OPERATION_ID",
+        "CRAWL_ENABLED",
+        "CRAWL_LIMITER",
+        "CRAWL_TOKEN",
+        "DEV_PREVIEW",
+        "DEV_PUBLIC",
+        "DEV_STAFF_ACCESS",
+        "DEV_STAFF_SITE_MODE",
+        "DURABLE_POST_WITHDRAWALS",
+        "FANOUT_DELIVERIES",
+        "FBASE_PROJECT",
+        "FIREBASE_WEB_API_KEY",
+        "FUNCTIONS_BASE_URL",
+        "FUNCTIONS_ORIGIN",
+        "HOME",
+        "INTAKE_SECRET",
+        "INTAKE_URL",
+        "IP_HASH_SALT",
+        "LIVE_PRODUCTION_RELAYS",
+        "LIVE_PRODUCTION_STREAM_ENABLED",
+        "MEASUREMENT_CASES_JSON",
+        "MEASUREMENT_ID",
+        "MEASUREMENT_SECRET",
+        "MEDIA_MANAGER_CREDENTIAL",
+        "NO_BUILD_CODE_POST_RENDERER_SHA",
+        "NO_BUILD_PAGE_RENDERER_SHA",
+        "NO_BUILD_POST_RENDERER_SHA",
+        "NO_BUILD_RECORD_RENDERER_SHA",
+        "PAIR_CONTENT",
+        "PAIR_INGRESS_PROOF",
+        "PAIR_PUBLISHER",
+        "PAIR_READER",
+        "PAIR_SLOT_NEW",
+        "PAIR_SLOT_OLD",
+        "PAIR_WORKER_VERSION",
+        "PATH",
+        "PREVIEW",
+        "PREVIEWS",
+        "PREVIEW_PAIR_BINDINGS_JSON",
+        "PREVIEW_PAIR_MODE",
+        "PREVIEW_PAIR_WAKE_ENABLED",
+        "PREVIEW_RENDERER",
+        "PREVIEW_SERIALIZER_ID",
+        "PREVIEW_WORKER_VERSION",
+        "PUBLICATION_ENABLED",
+        "PUBLICATION_SERIALIZER_ID",
+        "PUBLICATION_WAKE_TOKEN",
+        "PUBLIC_PAIR_IDENTITY_JSON",
+        "PUBLIC_PAIR_OWNER_WRITE_ENABLED",
+        "PUBLIC_PAIR_SLOT_ENABLED",
+        "PUBLIC_PAIR_SWITCH_CODE_ENABLED",
+        "PUBLIC_PAIR_TERMINAL_ENABLED",
+        "PUBLIC_RELEASE_INGRESS_PROOF",
+        "PUBLIC_RELEASE_RATE_CONTROLS_ENABLED",
+        "PUBLIC_RELEASE_READERS_ENABLED",
+        "PUBLIC_RELEASE_ROUTING_EXPERIMENT_ENABLED",
+        "PUBLIC_RELEASE_ROUTING_MEASUREMENT_ENABLED",
+        "PUBLIC_WORKER_RECOVERY_VERSION_ID",
+        "PUBLISHED_POST_FUNCTION_URL",
+        "PUBLISHER",
+        "R2_MEDIA_CREDENTIAL",
+        "R2_PREVIEW_CREDENTIAL",
+        "R2_PUBLICATION_CREDENTIAL",
+        "RATE_LIMIT",
+        "RATE_LIMITER",
+        "RATE_LIMITERS",
+        "RENDERER",
+        "STAFF_ACCESS",
+        "TURNSTILE_SECRET"
+      ]
+    },
+    {
+      "suppliers": [
+        "worker-binding"
+      ],
+      "names": [
+        "PREVIEW_PAIR_NEW",
+        "PREVIEW_PAIR_OLD"
+      ]
+    },
+    {
+      "suppliers": [
+        "worker-binding",
+        "wrangler-template"
+      ],
+      "names": [
+        "RATE_LIMIT_KV_NAMESPACE_ID",
+        "REPORT_INTAKE_URL"
+      ]
+    },
+    {
+      "suppliers": [
+        "workflow-context"
+      ],
+      "names": [
+        "ADMIN_RESULT",
+        "ADMIN_SELECTED",
+        "CMS_RELEASE_CHECKS_SHA",
+        "CMS_TRUSTED_WORKFLOW_SHA",
+        "DISPATCH_SECRET",
+        "DOCS_RESULT",
+        "DOCS_SELECTED",
+        "FIREBASE_RESULT",
+        "FIREBASE_SELECTED",
+        "INPUT_DEPLOY_REF",
+        "PAYLOAD_DEPLOY_REF",
+        "PAYLOAD_REFRESH_ID",
+        "PAYLOAD_SIGNATURE",
+        "PAYLOAD_TIMESTAMP",
+        "PR_BASE_REF",
+        "PR_HEAD_SHA",
+        "SITE_RESULT",
+        "SITE_SELECTED"
+      ]
+    },
+    {
+      "suppliers": [
+        "wrangler-template"
+      ],
+      "names": [
+        "CRAWL_RATE_LIMIT_NAMESPACE_ID",
+        "SHADOW_POST_REVISIONS_KV_NAMESPACE_ID"
+      ]
+    }
+  ]
+}

@@ -1,0 +1,346 @@
+{
+  "schemaVersion": 1,
+  "electionDate": "2026-11-03",
+  "generatedAt": "2026-11-04T01:00:00Z",
+  "sample": false,
+  "races": [
+    {
+      "id": "us-senate",
+      "status": "counting",
+      "asOf": "2026-11-04T01:00:00Z",
+      "reportingShare": 50,
+      "sourceKind": "official",
+      "sourceLabel": "New Jersey Division of Elections",
+      "sourceUrl": "https://www.nj.gov/state/elections/",
+      "candidates": [
+        {
+          "id": "us-senate-cory-booker",
+          "votes": 25,
+          "share": 25
+        },
+        {
+          "id": "us-senate-justin-murphy",
+          "votes": 25,
+          "share": 25
+        },
+        {
+          "id": "us-senate-veronica-fernandez",
+          "votes": 25,
+          "share": 25
+        },
+        {
+          "id": "us-senate-joanne-kuniansky",
+          "votes": 25,
+          "share": 25
+        }
+      ]
+    },
+    {
+      "id": "us-house-01",
+      "status": "counting",
+      "asOf": "2026-11-04T01:00:00Z",
+      "reportingShare": null,
+      "sourceKind": "official",
+      "sourceLabel": "New Jersey Division of Elections",
+      "sourceUrl": "https://www.nj.gov/state/elections/",
+      "candidates": [
+        {
+          "id": "us-house-01-donald-norcross",
+          "votes": 50,
+          "share": 50
+        },
+        {
+          "id": "us-house-01-damon-galdo",
+          "votes": 50,
+          "share": 50
+        }
+      ]
+    },
+    {
+      "id": "us-house-02",
+      "status": "awaiting",
+      "asOf": "2026-11-04T01:00:00Z",
+      "reportingShare": null,
+      "sourceKind": "official",
+      "sourceLabel": "New Jersey Division of Elections",
+      "sourceUrl": "https://www.nj.gov/state/elections/",
+      "candidates": [
+        {
+          "id": "us-house-02-jeff-van-drew",
+          "votes": null,
+          "share": null
+        },
+        {
+          "id": "us-house-02-zack-mullock",
+          "votes": null,
+          "share": null
+        },
+        {
+          "id": "us-house-02-ramon-mora-jr",
+          "votes": null,
+          "share": null
+        }
+      ]
+    },
+    {
+      "id": "us-house-03",
+      "status": "awaiting",
+      "asOf": "2026-11-04T01:00:00Z",
+      "reportingShare": null,
+      "sourceKind": "official",
+      "sourceLabel": "New Jersey Division of Elections",
+      "sourceUrl": "https://www.nj.gov/state/elections/",
+      "candidates": [
+        {
+          "id": "us-house-03-herb-conaway",
+          "votes": null,
+          "share": null
+        },
+        {
+          "id": "us-house-03-michael-p-mcguire",
+          "votes": null,
+          "share": null
+        },
+        {
+          "id": "us-house-03-ryan-michael-kelly",
+          "votes": null,
+          "share": null
+        },
+        {
+          "id": "us-house-03-steven-welzer",
+          "votes": null,
+          "share": null
+        }
+      ]
+    },
+    {
+      "id": "us-house-04",
+      "status": "awaiting",
+      "asOf": "2026-11-04T01:00:00Z",
+      "reportingShare": null,
+      "sourceKind": "official",
+      "sourceLabel": "New Jersey Division of Elections",
+      "sourceUrl": "https://www.nj.gov/state/elections/",
+      "candidates": [
+        {
+          "id": "us-house-04-christopher-h-smith",
+          "votes": null,
+          "share": null
+        },
+        {
+          "id": "us-house-04-rachel-peace",
+          "votes": null,
+          "share": null
+        }
+      ]
+    },
+    {
+      "id": "us-house-05",
+      "status": "awaiting",
+      "asOf": "2026-11-04T01:00:00Z",
+      "reportingShare": null,
+      "sourceKind": "official",
+      "sourceLabel": "New Jersey Division of Elections",
+      "sourceUrl": "https://www.nj.gov/state/elections/",
+      "candidates": [
+        {
+          "id": "us-house-05-josh-gottheimer",
+          "votes": null,
+          "share": null
+        },
+        {
+          "id": "us-house-05-sean-kirrane",
+          "votes": null,
+          "share": null
+        },
+        {
+          "id": "us-house-05-adam-rueda",
+          "votes": null,
+          "share": null
+        }
+      ]
+    },
+    {
+      "id": "us-house-06",
+      "status": "awaiting",
+      "asOf": "2026-11-04T01:00:00Z",
+      "reportingShare": null,
+      "sourceKind": "official",
+      "sourceLabel": "New Jersey Division of Elections",
+      "sourceUrl": "https://www.nj.gov/state/elections/",
+      "candidates": [
+        {
+          "id": "us-house-06-frank-pallone-jr",
+          "votes": null,
+          "share": null
+        },
+        {
+          "id": "us-house-06-hillary-herzig",
+          "votes": null,
+          "share": null
+        }
+      ]
+    },
+    {
+      "id": "us-house-07",
+      "status": "awaiting",
+      "asOf": "2026-11-04T01:00:00Z",
+      "reportingShare": null,
+      "sourceKind": "official",
+      "sourceLabel": "New Jersey Division of Elections",
+      "sourceUrl": "https://www.nj.gov/state/elections/",
+      "candidates": [
+        {
+          "id": "us-house-07-thomas-h-kean-jr",
+          "votes": null,
+          "share": null
+        },
+        {
+          "id": "us-house-07-rebecca-bennett",
+          "votes": null,
+          "share": null
+        },
+        {
+          "id": "us-house-07-seamus-patrick-otoole",
+          "votes": null,
+          "share": null
+        }
+      ]
+    },
+    {
+      "id": "us-house-08",
+      "status": "awaiting",
+      "asOf": "2026-11-04T01:00:00Z",
+      "reportingShare": null,
+      "sourceKind": "official",
+      "sourceLabel": "New Jersey Division of Elections",
+      "sourceUrl": "https://www.nj.gov/state/elections/",
+      "candidates": [
+        {
+          "id": "us-house-08-rob-menendez",
+          "votes": null,
+          "share": null
+        },
+        {
+          "id": "us-house-08-aristotle-eliopoulos",
+          "votes": null,
+          "share": null
+        },
+        {
+          "id": "us-house-08-craig-honts",
+          "votes": null,
+          "share": null
+        },
+        {
+          "id": "us-house-08-dashone-hughey",
+          "votes": null,
+          "share": null
+        }
+      ]
+    },
+    {
+      "id": "us-house-09",
+      "status": "awaiting",
+      "asOf": "2026-11-04T01:00:00Z",
+      "reportingShare": null,
+      "sourceKind": "official",
+      "sourceLabel": "New Jersey Division of Elections",
+      "sourceUrl": "https://www.nj.gov/state/elections/",
+      "candidates": [
+        {
+          "id": "us-house-09-nelida-pou",
+          "votes": null,
+          "share": null
+        },
+        {
+          "id": "us-house-09-rosie-pino",
+          "votes": null,
+          "share": null
+        },
+        {
+          "id": "us-house-09-terrisa-bukovinac",
+          "votes": null,
+          "share": null
+        }
+      ]
+    },
+    {
+      "id": "us-house-10",
+      "status": "awaiting",
+      "asOf": "2026-11-04T01:00:00Z",
+      "reportingShare": null,
+      "sourceKind": "official",
+      "sourceLabel": "New Jersey Division of Elections",
+      "sourceUrl": "https://www.nj.gov/state/elections/",
+      "candidates": [
+        {
+          "id": "us-house-10-lamonica-r-mciver",
+          "votes": null,
+          "share": null
+        },
+        {
+          "id": "us-house-10-carmen-bucco",
+          "votes": null,
+          "share": null
+        }
+      ]
+    },
+    {
+      "id": "us-house-11",
+      "status": "awaiting",
+      "asOf": "2026-11-04T01:00:00Z",
+      "reportingShare": null,
+      "sourceKind": "official",
+      "sourceLabel": "New Jersey Division of Elections",
+      "sourceUrl": "https://www.nj.gov/state/elections/",
+      "candidates": [
+        {
+          "id": "us-house-11-analilia-mejia",
+          "votes": null,
+          "share": null
+        },
+        {
+          "id": "us-house-11-joe-hathaway",
+          "votes": null,
+          "share": null
+        },
+        {
+          "id": "us-house-11-alan-b-bond",
+          "votes": null,
+          "share": null
+        }
+      ]
+    },
+    {
+      "id": "us-house-12",
+      "status": "awaiting",
+      "asOf": "2026-11-04T01:00:00Z",
+      "reportingShare": null,
+      "sourceKind": "official",
+      "sourceLabel": "New Jersey Division of Elections",
+      "sourceUrl": "https://www.nj.gov/state/elections/",
+      "candidates": [
+        {
+          "id": "us-house-12-adam-hamawy",
+          "votes": null,
+          "share": null
+        },
+        {
+          "id": "us-house-12-gregg-mele",
+          "votes": null,
+          "share": null
+        },
+        {
+          "id": "us-house-12-andres-jinete",
+          "votes": null,
+          "share": null
+        },
+        {
+          "id": "us-house-12-winston-jordan",
+          "votes": null,
+          "share": null
+        }
+      ]
+    }
+  ]
+}

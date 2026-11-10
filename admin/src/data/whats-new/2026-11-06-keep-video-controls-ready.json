@@ -1,0 +1,8 @@
+{
+  "date": "2026-11-06",
+  "order": 1793952000000,
+  "kind": "fixed",
+  "title": "Keep video controls ready after a file changes",
+  "body": "If a video file changes while a download is starting, the old download link is discarded. The Download and Close controls stay available. Library posters refresh for the new file. If unsaved edits delay a video refresh, the message tells you to save or discard them first.",
+  "prs": []
+}

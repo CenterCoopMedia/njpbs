@@ -1,0 +1,11 @@
+{
+  "date": "2026-09-22",
+  "kind": "fixed",
+  "title": "Stalled video uploads recover",
+  "body": "A video upload queue that stops now starts again. A new upload that the security check refuses resets so you can try it again.",
+  "prs": [
+    2086,
+    2125
+  ],
+  "order": -4
+}

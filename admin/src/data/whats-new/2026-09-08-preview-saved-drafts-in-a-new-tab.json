@@ -1,0 +1,13 @@
+{
+  "date": "2026-09-08",
+  "kind": "improved",
+  "title": "Preview saved drafts in a new tab",
+  "body": "Preview opens a private copy of your saved page or Post in a new tab. Status shows right away, and you can share a preview link with a reviewer.",
+  "prs": [
+    1332,
+    1375,
+    1113,
+    1397
+  ],
+  "order": -5
+}

@@ -1,0 +1,12 @@
+{
+  "date": "2026-10-23",
+  "kind": "fixed",
+  "title": "Publish Newsletter and Sponsor cards again",
+  "body": "In Newsletters and Sponsors, Approve publishes the card. Unpublish or Archive removes it, and Unpublish returns the record to Draft. Later draft edits keep the last approved card live. Publishing shows progress and offers a retry when needed.",
+  "prs": [
+    3938,
+    3940,
+    3943
+  ],
+  "order": 0
+}

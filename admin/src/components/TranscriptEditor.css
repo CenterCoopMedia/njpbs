@@ -1,0 +1,207 @@
+.transcript-workspace { display: flex; flex-direction: column; min-width: 0; min-height: 0; }
+.transcript-workspace .transcript-command-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--cms-space-2);
+  padding-block: var(--cms-space-2);
+  border-block-end: var(--border-width) solid var(--cms-line);
+  background: var(--cms-surface);
+}
+.transcript-workspace .transcript-command-bar h3 { margin: 0; }
+.transcript-command-actions, .transcript-results-bar, .transcript-results-bar nav, .transcript-page-footer {
+  display: flex; flex-wrap: wrap; align-items: center; gap: var(--cms-space-2);
+}
+.transcript-workspace .transcript-command-actions .button { min-block-size: 2.75rem; }
+/* State text must not move a phone reading control between pointerdown and click. */
+.transcript-workspace .transcript-follow { inline-size: 12em; max-inline-size: 100%; flex: none; }
+.transcript-workspace .transcript-find-controls {
+  display: grid;
+  grid-template-columns: minmax(0, 2fr) minmax(0, 1fr) minmax(0, 1fr);
+  gap: var(--cms-space-2);
+  align-items: end;
+  margin-block: var(--cms-space-2);
+}
+.transcript-workspace .transcript-find-controls label { margin: 0; min-width: 0; }
+.transcript-workspace .transcript-jump { display: flex; align-items: end; gap: var(--cms-space-2); min-width: 0; }
+.transcript-workspace .transcript-jump label { flex: 1; }
+.transcript-workspace .transcript-jump .button { flex: none; }
+.transcript-workspace > p, .transcript-help { margin-block: var(--cms-space-2); }
+.transcript-help { font-size: var(--font-size-sm); }
+.transcript-help summary { cursor: pointer; }
+.transcript-results-bar { justify-content: space-between; margin-block: var(--cms-space-2); }
+.transcript-results-bar p { margin: 0; }
+.transcript-results-bar nav { font-variant-numeric: tabular-nums; }
+/* One reading scroll owner; command, task and paging bars stay outside it. */
+.transcript-workspace .transcript-passages {
+  flex: 1 1 auto;
+  min-block-size: 8rem;
+  max-block-size: min(70dvh, 41.0625rem);
+  overflow-y: auto;
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+.transcript-workspace .transcript-row {
+  display: grid;
+  grid-template-columns: 4.875rem 5rem minmax(0, 1fr) 1.75rem;
+  align-items: start;
+  gap: 0.5625rem;
+  padding: 0.4375rem var(--cms-space-3);
+  border-block-end: var(--border-width) solid var(--cms-line);
+  border-inline-start: 3px solid transparent;
+  scroll-margin-block: var(--cms-space-2);
+}
+.transcript-workspace .transcript-row[data-selecting] { grid-template-columns: 2.75rem 4.875rem 5rem minmax(0, 1fr) 1.75rem; }
+.transcript-workspace .transcript-row[data-selected] { border-inline-start-color: var(--cms-brand); background: var(--cms-surface-soft); }
+.transcript-workspace .transcript-row[data-playing] { border-inline-start-color: var(--cms-ink); background: var(--cms-surface-soft); }
+.transcript-playing-label { display: block; font-size: var(--cms-font-xs); font-weight: 700; }
+.transcript-comment { padding: var(--cms-space-2) var(--cms-space-3); border-block-end: var(--cms-border-width) solid var(--cms-line); font-size: var(--cms-font-sm); }
+.transcript-comment summary { cursor: pointer; min-block-size: 2.75rem; }
+.transcript-comment summary > span:first-child { font-weight: 600; }
+.transcript-comment-preview { display: block; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; color: var(--cms-ink-secondary); }
+.transcript-comment-body { display: grid; gap: var(--cms-space-2); padding-block-start: var(--cms-space-2); overflow-wrap: anywhere; }
+.transcript-comment-body p { margin: 0; white-space: pre-wrap; }
+.transcript-comment-body ol { display: grid; gap: var(--cms-space-2); padding-inline-start: var(--cms-space-4); }
+.transcript-comment summary:focus-visible { outline: var(--cms-focus-outline); outline-offset: 2px; }
+.transcript-workspace .transcript-timestamp {
+  min-block-size: 1.75rem;
+  min-inline-size: 0;
+  width: auto;
+  padding: 0;
+  border: 0;
+  font-size: 0.6875rem;
+  font-variant-numeric: tabular-nums;
+  text-align: start;
+  white-space: nowrap;
+  color: var(--cms-ink-muted);
+}
+.transcript-workspace .transcript-speaker {
+  min-width: 0;
+  padding-block: 0.25rem;
+  overflow-wrap: anywhere;
+  font-size: 0.6875rem;
+  line-height: 1.55;
+  font-weight: 600;
+  color: var(--cms-ink-secondary);
+}
+.transcript-workspace .transcript-speaker[data-continuation] { color: var(--cms-ink-muted); font-weight: 400; }
+.transcript-workspace .transcript-row-menu {
+  width: 1.75rem;
+  min-width: 1.75rem;
+  min-height: 1.75rem;
+  padding: 0;
+}
+.transcript-workspace .transcript-selection-check,
+.transcript-workspace .transcript-review-check { display: flex; align-items: center; gap: var(--cms-space-2); min-block-size: 2.75rem; margin: 0; cursor: pointer; }
+.transcript-workspace .transcript-selection-check { min-inline-size: 44px; min-block-size: 2.75rem; justify-content: center; }
+.transcript-workspace .transcript-selection-check input,
+.transcript-workspace .transcript-review-check input { flex: none; margin: 0; }
+.transcript-workspace .transcript-passage { min-width: 0; overflow-wrap: anywhere; font-size: 0.9375rem; line-height: 1.55; }
+.transcript-workspace .transcript-passage p { margin: 0; }
+.transcript-workspace .transcript-passage-text { display: inline; white-space: pre-wrap; }
+.transcript-workspace .transcript-passage-facts,
+.transcript-workspace .transcript-passage-flags,
+.transcript-workspace .transcript-draft-flag,
+.transcript-workspace .transcript-passage-details { font-size: 0.75rem; }
+.transcript-workspace .transcript-passage-flags { margin-inline-start: var(--cms-space-2); font-weight: 600; color: var(--cms-warning); }
+.transcript-workspace .transcript-draft-flag { color: var(--cms-brand); }
+.transcript-workspace .transcript-passage-details { margin-block-start: var(--cms-space-2); }
+.transcript-workspace .transcript-editor { display: contents; }
+.transcript-workspace .transcript-editor fieldset { min-width: 0; border: var(--border-width) solid var(--cms-line); border-radius: var(--radius-control); padding: var(--cms-space-3); }
+.transcript-workspace .transcript-editor legend { font-weight: 700; }
+.transcript-workspace .transcript-speaker-names { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 16rem), 1fr)); gap: var(--cms-space-3); margin-block: var(--cms-space-3); }
+.transcript-workspace :is(.transcript-speaker-fields, .transcript-passage-editor) label { display: grid; gap: var(--cms-space-2); min-width: 0; font-weight: 600; }
+.transcript-workspace .transcript-editor textarea { min-height: 6rem; font-size: inherit; line-height: inherit; }
+.transcript-workspace .transcript-speaker-fields, .transcript-passage-editor { display: grid; gap: var(--cms-space-2); min-width: 0; }
+.transcript-workspace .transcript-edit-actions,
+.transcript-workspace .transcript-selection-bar {
+  display: grid;
+  gap: var(--cms-space-2);
+  padding: var(--cms-space-3);
+  border: var(--border-width) solid var(--cms-line);
+  border-radius: var(--radius-control);
+  background: var(--cms-surface);
+}
+.transcript-workspace .transcript-edit-actions p,
+.transcript-workspace .transcript-selection-bar p { margin: 0; }
+.transcript-workspace :is(.transcript-alignment, .transcript-review) { display: grid; gap: var(--cms-space-3); min-width: 0; border: var(--border-width) solid var(--cms-line); border-radius: var(--radius-control); padding: var(--cms-space-4); margin-block: var(--cms-space-4); }
+.transcript-workspace :is(.transcript-alignment, .transcript-review) h4,
+.transcript-workspace .transcript-alignment p { margin: 0; }
+.transcript-workspace :is(.transcript-row, h3):focus-visible { outline: 2px solid var(--cms-brand); outline-offset: -3px; }
+@media (any-pointer: coarse), (hover: none) {
+  .transcript-workspace .transcript-row { grid-template-columns: 4.875rem 5rem minmax(0, 1fr) 2.75rem; }
+  .transcript-workspace .transcript-row[data-selecting] { grid-template-columns: 2.75rem 4.875rem 5rem minmax(0, 1fr) 2.75rem; }
+  .transcript-workspace .transcript-row-menu { width: 2.75rem; min-width: 2.75rem; min-height: 2.75rem; }
+  .transcript-workspace .transcript-timestamp, .transcript-workspace .transcript-selection-check { min-block-size: 2.75rem; }
+}
+@media (max-width: 60rem) {
+  .transcript-workspace .transcript-find-controls { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .transcript-workspace .transcript-find-controls > label:first-child { grid-column: 1 / -1; }
+}
+@media (max-width: 48rem) {
+  .transcript-workspace .transcript-row { grid-template-columns: 3.5rem minmax(0, 1fr) 2.75rem; column-gap: var(--cms-space-2); row-gap: 0; padding-inline: var(--cms-space-2); }
+  .transcript-workspace .transcript-row[data-selecting] { grid-template-columns: 3.5rem minmax(0, 1fr) 2.75rem; }
+  .transcript-workspace .transcript-timestamp { grid-column: 1; grid-row: 1 / span 2; }
+  .transcript-workspace .transcript-speaker { grid-column: 2; grid-row: 1; }
+  .transcript-workspace .transcript-passage { grid-column: 2; grid-row: 2; }
+  .transcript-workspace .transcript-row-menu { grid-column: 3; grid-row: 1 / span 2; width: 2.75rem; min-width: 2.75rem; min-height: 2.75rem; }
+  .transcript-workspace .transcript-selection-check { grid-column: 1; grid-row: 1; min-block-size: 2.75rem; }
+  .transcript-workspace .transcript-row[data-selecting] .transcript-timestamp { grid-column: 1; grid-row: 2; }
+  .transcript-workspace .transcript-row[data-selecting] .transcript-speaker,
+  .transcript-workspace .transcript-row[data-selecting] .transcript-passage { grid-column: 2; }
+  .transcript-workspace .transcript-row[data-selecting] .transcript-row-menu { grid-column: 3; }
+}
+@media (max-width: 36rem) {
+  .transcript-workspace .transcript-command-actions { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); width: 100%; }
+  .transcript-workspace .transcript-find-controls { grid-template-columns: minmax(0, 1fr); }
+  .transcript-workspace .transcript-timestamp { min-block-size: 2.75rem; }
+}
+/* On phones, give enlarged passage text the full row rather than a narrow column. */
+@media (max-width: 30rem) {
+  .transcript-workspace .transcript-row,
+  .transcript-workspace .transcript-row[data-selecting] { grid-template-columns: auto minmax(0, 1fr) auto; column-gap: var(--cms-space-2); row-gap: 0.3125rem; align-items: center; }
+  .transcript-workspace .transcript-timestamp { grid-column: 1; grid-row: 1; }
+  .transcript-workspace .transcript-speaker { grid-column: 2; grid-row: 1; }
+  .transcript-workspace .transcript-row-menu { grid-column: 3; grid-row: 1; }
+  .transcript-workspace .transcript-passage { grid-column: 1 / -1; grid-row: 2; }
+  .transcript-workspace .transcript-row[data-selecting] .transcript-timestamp { grid-column: 2; grid-row: 1; }
+  .transcript-workspace .transcript-row[data-selecting] .transcript-speaker { grid-column: 1 / -1; grid-row: 2; }
+  .transcript-workspace .transcript-row[data-selecting] .transcript-passage { grid-column: 1 / -1; grid-row: 3; }
+}
+
+/* A bounded reader in the video viewer; the shared passage rows stay unchanged. */
+.transcript-workspace[data-pane] { flex: 1; margin: 0; padding: 0; border: 0; overflow: visible; }
+.transcript-workspace[data-pane] > * { flex-shrink: 0; min-width: 0; }
+.transcript-workspace[data-pane] .transcript-command-bar { justify-content: start; gap: var(--cms-space-2); padding: var(--cms-space-2) var(--cms-space-3); background: var(--cms-surface-chrome); }
+.transcript-workspace[data-pane] .transcript-command-bar > label { flex: 1; min-width: 8rem; font-size: 0; margin: 0; }
+.transcript-workspace[data-pane] .transcript-command-bar input { font-size: var(--cms-font-sm); }
+.transcript-workspace[data-pane] .transcript-command-actions { flex: 0 1 auto; max-width: 100%; width: auto; display: flex; }
+.transcript-workspace[data-pane] .transcript-command-actions .button { min-block-size: var(--control-target-size, 36px); }
+.transcript-workspace[data-pane] .transcript-find-controls { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); align-items: start; margin: 0; padding: calc(var(--cms-space-1) / 2) var(--cms-space-3); background: var(--cms-surface-soft); }
+.transcript-workspace[data-pane] .transcript-find-controls > label:first-child { grid-column: auto; font-size: 0; }
+.transcript-workspace[data-pane] .transcript-find-controls select { min-height: 29px; padding-block: 4px; font-size: var(--cms-font-sm); }
+.transcript-workspace[data-pane] .transcript-tools { min-width: 0; font-size: var(--cms-font-sm); }
+.transcript-tools > summary { cursor: pointer; min-height: 36px; padding-block: var(--cms-space-2); }
+.transcript-workspace[data-pane] .transcript-tools[open] { grid-column: 1 / -1; max-height: 35dvh; overflow-y: auto; }
+.transcript-workspace[data-pane] .transcript-coverage { margin: 0; padding: var(--cms-space-1) var(--cms-space-3); font-size: var(--cms-font-xs); color: var(--cms-ink-muted); }
+.transcript-workspace[data-pane] .transcript-results-bar { margin: 0; padding: var(--cms-space-1) var(--cms-space-3); border-top: var(--cms-border-width) solid var(--cms-line); background: var(--cms-surface-chrome); font-size: var(--cms-font-xs); }
+.transcript-workspace[data-pane] .transcript-passages { flex: 1 1 0; min-block-size: 8rem; max-block-size: none; }
+.transcript-workspace[data-pane] .transcript-page-footer[hidden] { display: none; }
+.transcript-workspace[data-pane] :is(.transcript-edit-actions, .transcript-selection-bar) { border-inline: 0; border-radius: 0; padding: var(--cms-space-2) var(--cms-space-3); font-size: var(--cms-font-xs); }
+.transcript-workspace[data-pane][data-mode="speakers"] { overflow-y: auto; }
+.transcript-workspace[data-pane][data-mode="speakers"] .transcript-passages { flex: none; min-block-size: 12rem; max-block-size: 40dvh; }
+@media (max-width: 780px) {
+  .transcript-workspace[data-pane] .transcript-command-bar h3 { display: none; }
+  .transcript-workspace[data-pane] .transcript-command-bar > label { min-width: 6rem; }
+}
+@media (max-height: 35rem) {
+  .transcript-workspace[data-pane] { flex: none; min-height: 100%; overflow: visible; }
+  .transcript-workspace[data-pane] .transcript-passages { flex: none; min-block-size: 12rem; max-block-size: 45dvh; }
+  .transcript-workspace[data-pane] .transcript-tools[open] { max-height: none; overflow: visible; }
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .transcript-workspace[data-pane] .transcript-timestamp { min-height: 1.75rem; min-block-size: 1.75rem; padding: 0; }
+}

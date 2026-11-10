@@ -1,0 +1,8 @@
+{
+  "date": "2026-10-30",
+  "kind": "improved",
+  "title": "Read live updates more easily",
+  "body": "Live blog updates have a clearer layout for reporter details, times, headlines and media, with day labels, corrections and withdrawals. Add short follow-ups beneath an update, and choose reporter photos, reporter cards and Playful style in Live blog appearance. Boardwalk warns when a reporter’s public profile needs details. Preview shows the same update layout readers see on the Post.",
+  "prs": [],
+  "order": -2
+}

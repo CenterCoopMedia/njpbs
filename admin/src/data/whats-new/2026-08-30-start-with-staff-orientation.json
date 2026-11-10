@@ -1,0 +1,11 @@
+{
+  "date": "2026-08-30",
+  "kind": "new",
+  "title": "Start with staff orientation",
+  "body": "New staff get a private invite and an orientation in Boardwalk. The orientation guides you through your first 90 days.",
+  "prs": [
+    1361,
+    1364
+  ],
+  "order": 0
+}

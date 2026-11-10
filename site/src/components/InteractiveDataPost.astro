@@ -1,0 +1,503 @@
+---
+import ReaderTextSize from "./ReaderTextSize.astro";
+import { createPageImageLoading } from "../../../packages/content-core/src/image-loading";
+import type { CollectionEntry } from "astro:content";
+import PostPublication from "./PostPublication.astro";
+import PostBlockList from "./PostBlockList.astro";
+import PostByline from "./PostByline.astro";
+import PostShareControls from "./PostShareControls.astro";
+import CmsHeroBackground from "./CmsHeroBackground.astro";
+import PostLeadPlayer from "./PostLeadPlayer.astro";
+import PostImageCaption from "./PostImageCaption.astro";
+import {
+  assertInteractiveInventory,
+  interactiveInventoryText,
+  interactivePostInventory,
+} from "../lib/post-interactive";
+import { postChapters } from "../lib/post-chapters";
+import { publicPostCategories, publicPostTopics } from "../lib/post-formats";
+import { postIndexFilterHref } from "../lib/post-index-links";
+
+type PublicCredit = CollectionEntry<"cmsPosts">["data"]["credits"][number];
+
+interface Props {
+  entry: CollectionEntry<"cmsPosts">;
+  credits: readonly PublicCredit[];
+  canonicalUrl: string;
+}
+
+const { entry, credits, canonicalUrl } = Astro.props as Props;
+const post = entry.data;
+const topics = publicPostTopics(post.tags);
+const categories = publicPostCategories(post.categories);
+const chapters = postChapters(post.blocks);
+const showContents = chapters.length >= 2;
+const inventory = interactivePostInventory(post.blocks);
+assertInteractiveInventory(inventory);
+const inventoryText = interactiveInventoryText(inventory, chapters.length);
+const videoLead = post.leadMedia && post.leadMedia.kind !== "image";
+const hero = videoLead ? null : post.heroImage;
+const imageLoading = createPageImageLoading();
+const heroLoading = imageLoading(hero, "lcp");
+const heroAlt = post.heroImageDecorative ? "" : post.heroImageAlt;
+---
+
+<article class="interactive-data" data-post-presentation="interactive">
+  <div class="interactive-data__brand">
+    <strong>NJ PBS Interactive</strong>
+    <span>Data Lab</span>
+  </div>
+
+  <header
+    class:list={[
+      "interactive-data__masthead",
+      { "cms-hero-surface": Boolean(post.heroBackgroundImage) },
+    ]}
+  >
+    <CmsHeroBackground
+      image={post.heroBackgroundImage}
+      imageLoading={imageLoading}
+      position={post.heroBackgroundPosition}
+    />
+    <div class="interactive-data__introduction">
+      <PostPublication spotlightNews={post.spotlightNews} coverageLabelId={post.coverageLabelId} />
+      <h1>{post.title}</h1>
+      {post.summary && <p class="interactive-data__summary">{post.summary}</p>}
+      <PostByline
+        credits={credits}
+        displayDate={post.displayDate}
+        updateShown={post.updateShown}
+        updatedAt={post.updatedAt}
+        updatedDate={post.updatedDate}
+      />
+      <PostShareControls title={post.title} url={canonicalUrl} placement="top" />
+      <p class="interactive-data__inventory">{inventoryText}</p>
+    </div>
+
+    {hero && (
+      <figure class="interactive-data__lead-media">
+        <img
+          src={hero.url}
+          width={hero.width}
+          height={hero.height}
+          alt={heroAlt}
+          {...heroLoading}
+        />
+        <PostImageCaption caption={post.heroImageCaption} credit={hero.credit} />
+      </figure>
+    )}
+    {videoLead && <figure class="interactive-data__lead-media"><PostLeadPlayer post={post} /></figure>}
+  </header>
+
+  <ReaderTextSize />
+
+  <div class="interactive-data__layout">
+    <aside class="interactive-data__rail" aria-label="Interactive page guide">
+      <div class="interactive-data__rail-section">
+        <h2>On this page</h2>
+        <p>{inventoryText}</p>
+      </div>
+
+      {showContents && (
+        <nav class="interactive-data__contents" aria-label="Reporting sections">
+          <ul>
+            {chapters.map((chapter) => (
+              <li><a href={`#${chapter.id}`}>{chapter.label}</a></li>
+            ))}
+          </ul>
+        </nav>
+      )}
+
+      {(categories.length > 0 || topics.length > 0) && (
+        <div class="interactive-data__rail-section">
+          {categories.length > 0 && (
+            <><h2>Categories</h2><ul class="interactive-data__topics">{categories.map((category) => (
+              <li><a href={postIndexFilterHref("category", category)}>{category}</a></li>
+            ))}</ul></>
+          )}
+          {topics.length > 0 && (
+            <><h2>Tags</h2><ul class="interactive-data__topics">{topics.map((topic) => (
+              <li><a href={postIndexFilterHref("tag", topic)}>{topic}</a></li>
+            ))}</ul></>
+          )}
+        </div>
+      )}
+    </aside>
+
+    <div class="interactive-data__story">
+      <PostBlockList
+        entry={entry}
+        className="interactive-data__body"
+        presentation="interactive"
+        chapters={chapters}
+      />
+      <PostShareControls title={post.title} url={canonicalUrl} placement="bottom" />
+    </div>
+  </div>
+</article>
+
+<style is:global>
+  .interactive-data {
+    min-height: 70vh;
+    overflow-x: clip;
+    background: var(--color-surface-page);
+    color: var(--color-text-on-surface);
+  }
+
+  .interactive-data__brand {
+    display: flex;
+    gap: 1rem 2rem;
+    justify-content: space-between;
+    padding: 1rem max(var(--gutter), calc((100vw - var(--wrap)) / 2 + var(--gutter)));
+    background: var(--color-brand);
+    color: var(--color-text-on-brand);
+    font-size: 1rem;
+    line-height: 1.35;
+  }
+
+  .interactive-data__brand strong {
+    font-weight: 900;
+    letter-spacing: 0.035em;
+    text-transform: uppercase;
+  }
+
+  .interactive-data__brand span {
+    font-weight: 800;
+  }
+
+  .interactive-data__masthead {
+    border-bottom: 1px solid var(--color-border-strong);
+    background: var(--color-surface-current);
+  }
+
+  .interactive-data__introduction {
+    max-width: var(--wrap);
+    margin: 0 auto;
+    padding: clamp(3.5rem, 8vw, 7rem) var(--gutter) clamp(2.5rem, 5vw, 4rem);
+  }
+
+  .interactive-data__introduction h1 {
+    margin: 0;
+    color: var(--color-text-on-surface);
+    font-size: clamp(3rem, 7.5vw, 6.5rem);
+    font-weight: 900;
+    letter-spacing: var(--heading-tracking);
+    line-height: 0.96;
+    overflow-wrap: anywhere;
+    text-wrap: balance;
+  }
+
+  .interactive-data__summary {
+    margin: 1.5rem 0 0;
+    color: var(--color-text-muted);
+    font-size: clamp(1.12rem, 2vw, 1.4rem);
+    line-height: 1.62;
+  }
+
+  .interactive-data__introduction .post-byline {
+    margin-top: 1.5rem;
+  }
+
+  .interactive-data__inventory {
+    margin: 1.5rem 0 0;
+    padding-top: 1rem;
+    border-top: 1px solid var(--color-border-strong);
+    color: var(--color-text-on-surface);
+    font-size: 1.05rem;
+    font-weight: 750;
+    line-height: 1.5;
+  }
+
+  .interactive-data__lead-media {
+    max-width: var(--wrap);
+    margin: 0 auto;
+    padding: 0 var(--gutter) clamp(2.5rem, 6vw, 5rem);
+  }
+
+  .interactive-data__lead-media img {
+    display: block;
+    width: 100%;
+    height: auto;
+    max-height: 78vh;
+    border-radius: 0;
+    object-fit: contain;
+    background: var(--color-surface-page);
+  }
+
+  .interactive-data__layout {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(13rem, 17rem);
+    gap: clamp(2rem, 5vw, 5rem);
+    max-width: var(--wrap);
+    margin: 0 auto;
+    padding: clamp(3rem, 7vw, 6rem) var(--gutter) clamp(4rem, 9vw, 8rem);
+  }
+
+  .interactive-data__rail {
+    position: sticky;
+    top: 6.5rem;
+    grid-column: 2;
+    grid-row: 1;
+    align-self: start;
+    border-top: 1px solid var(--color-border-strong);
+    border-bottom: 1px solid var(--color-border-strong);
+  }
+
+  .interactive-data__rail-section {
+    padding: 1.25rem 0;
+  }
+
+  .interactive-data__rail-section + .interactive-data__rail-section {
+    border-top: 1px solid var(--color-border);
+  }
+
+  .interactive-data__rail h2 {
+    margin: 0;
+    color: var(--color-text-on-surface);
+    font-size: 1.1rem;
+    line-height: 1.3;
+  }
+
+  .interactive-data__rail p {
+    margin: 0.7rem 0 0;
+    color: var(--color-text-muted);
+    font-size: 1rem;
+    line-height: 1.55;
+  }
+
+  .interactive-data__contents {
+    border-top: 1px solid var(--color-border);
+  }
+
+  .interactive-data__contents ul,
+  .interactive-data__topics {
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+
+  .interactive-data__contents a {
+    display: block;
+    min-height: var(--target-comfortable);
+    padding: 0.75rem 0;
+    border-bottom: 1px solid var(--color-border);
+    color: var(--color-text-muted);
+    font-size: 1rem;
+    line-height: 1.45;
+    text-decoration: underline;
+    text-decoration-thickness: 0.08em;
+    text-underline-offset: 0.2em;
+  }
+
+  .interactive-data__contents a:hover {
+    color: var(--color-text-on-surface);
+  }
+
+  .interactive-data__contents a:focus-visible {
+    outline: var(--focus-outline);
+    outline-offset: var(--focus-offset);
+  }
+
+  .interactive-data__topics {
+    display: grid;
+    gap: 0.4rem;
+    margin-top: 0.75rem;
+  }
+
+  .interactive-data__topics li {
+    color: var(--color-text-muted);
+    font-size: 1rem;
+    line-height: 1.45;
+  }
+
+  .interactive-data__topics a {
+    color: inherit;
+    text-underline-offset: 0.2em;
+  }
+
+  .interactive-data__story {
+    min-width: 0;
+    grid-column: 1;
+    grid-row: 1;
+  }
+
+  .interactive-data__body {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    gap: clamp(1.5rem, 3vw, 2.25rem);
+    margin: 0;
+    color: var(--color-text-muted);
+    font-size: 1.25rem;
+    line-height: 1.8;
+  }
+
+  .interactive-data__body > .cms-block {
+    box-sizing: border-box;
+    width: 100%;
+    max-width: none;
+    margin-inline: 0;
+    color: inherit;
+  }
+
+  .interactive-data__body :is(p, ul, ol, blockquote) {
+    margin-block: 0 1.2rem;
+  }
+
+  .interactive-data__body :is(ul, ol) {
+    padding-left: 1.4rem;
+  }
+
+  .interactive-data__body li:not([class]) + li:not([class]) {
+    margin-top: 0.45rem;
+  }
+
+  .interactive-data__body a:not(.btn) {
+    color: var(--color-link);
+    text-decoration-thickness: 0.09em;
+    text-underline-offset: 0.22em;
+  }
+
+  .interactive-data__body a:not(.btn):hover {
+    color: var(--color-text-on-surface);
+  }
+
+  .interactive-data__body a:focus-visible {
+    outline: var(--focus-outline);
+    outline-offset: var(--focus-offset);
+  }
+
+  .interactive-data__body :is(h2, h3, h4) {
+    scroll-margin-top: 7rem;
+    margin: clamp(0.8rem, 2.5vw, 1.75rem) 0 0;
+    color: var(--color-text-on-surface);
+    letter-spacing: -0.025em;
+    line-height: 1.1;
+    text-wrap: balance;
+  }
+
+  .interactive-data__body h2 {
+    font-size: clamp(1.9rem, 4vw, 3rem);
+  }
+
+  .interactive-data__body h3 {
+    font-size: clamp(1.4rem, 3vw, 2rem);
+  }
+
+  .interactive-data__body figure {
+    margin: 0;
+  }
+
+  .interactive-data__body img {
+    display: block;
+    width: 100%;
+    height: auto;
+    border-radius: 0;
+    background: var(--color-surface-elevated);
+  }
+
+  .interactive-data__body figcaption {
+    margin: 0.8rem 0 0;
+    color: var(--color-text-muted);
+    font-size: 1rem;
+    line-height: 1.55;
+  }
+
+  .interactive-data__body blockquote {
+    padding: 1.5rem 0;
+    border-top: 2px solid var(--color-border-strong);
+    border-bottom: 2px solid var(--color-border-strong);
+    color: var(--color-text-on-surface);
+    font-size: calc(clamp(1.15rem, 2.2vw, 1.5rem) * var(--reader-text-scale, 1));
+    font-weight: 700;
+    line-height: 1.55;
+  }
+
+  .interactive-data__body hr {
+    width: 100%;
+    margin: 0;
+    border: 0;
+    border-top: 2px solid var(--color-border-strong);
+  }
+
+  .interactive-data__body > .cms-block--embed {
+    padding: clamp(2rem, 5vw, 4rem);
+    border-top: 2px solid var(--color-border-strong);
+    border-bottom: 2px solid var(--color-border-strong);
+    background: var(--color-surface-panel);
+  }
+
+  .interactive-data__body .embed {
+    font-size: clamp(1.35rem, 3vw, 2.1rem);
+    font-weight: 850;
+    line-height: 1.25;
+  }
+
+  .interactive-data__body .embed a {
+    display: block;
+    min-height: var(--target-comfortable);
+    color: var(--color-text-on-surface);
+    text-decoration: underline;
+    text-decoration-thickness: 0.08em;
+    text-underline-offset: 0.22em;
+    overflow-wrap: anywhere;
+  }
+
+  .interactive-data__body pre,
+  .interactive-data__body table {
+    max-width: 100%;
+    overflow-x: auto;
+    border-radius: 0;
+  }
+
+  .interactive-data__body table {
+    display: block;
+    border-collapse: collapse;
+  }
+
+  .interactive-data__body th,
+  .interactive-data__body td {
+    padding: 0.75rem;
+    border: 1px solid var(--color-border-strong);
+    text-align: left;
+  }
+
+  .interactive-data__body .btn {
+    border-radius: 0;
+    box-shadow: none;
+  }
+
+  @media (max-width: 900px) {
+    .interactive-data__layout {
+      grid-template-columns: 1fr;
+    }
+
+    .interactive-data__rail,
+    .interactive-data__story {
+      position: static;
+      grid-column: 1;
+    }
+
+    .interactive-data__rail {
+      grid-row: 1;
+    }
+
+    .interactive-data__story {
+      grid-row: 2;
+    }
+
+  }
+
+  @media (max-width: 560px) {
+    .interactive-data__brand {
+      align-items: flex-start;
+      flex-direction: column;
+    }
+
+    .interactive-data__introduction,
+    .interactive-data__lead-media,
+    .interactive-data__layout {
+      padding-right: 1rem;
+      padding-left: 1rem;
+    }
+  }
+</style>

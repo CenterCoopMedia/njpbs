@@ -1,0 +1,52 @@
+.town-lookup { min-width: 0; max-width: 100%; color: var(--color-text-on-surface, #172033); container-type: inline-size; }
+.town-lookup [hidden] { display: none !important; }
+.town-lookup :is(h2, h3, h4, h5, h6) { margin: 0; font-size: clamp(1.65rem, 4cqi, 2.5rem); line-height: 1.15; overflow-wrap: anywhere; }
+.cms-block .town-lookup p { margin: .75rem 0; }
+.town-lookup header p { max-width: 65ch; }
+.town-lookup__search { display: grid; gap: .4rem; max-width: 36rem; margin-top: 1.5rem; }
+.town-lookup__search-row { display: flex; gap: .5rem; }
+.town-lookup__search-row input { min-width: 0; flex: 1; }
+.town-lookup button { min-height: 48px; padding: .65rem .85rem; border: 1px solid var(--color-link, #2047c7); border-radius: 3px; background: var(--color-link, #2047c7); color: var(--color-surface-page, #fff); font: inherit; font-weight: 700; cursor: pointer; }
+.town-lookup__search label { font-weight: 700; }
+.town-lookup input { width: 100%; box-sizing: border-box; min-height: 48px; padding: .75rem; border: 1px solid var(--color-border-strong, #bac4d4); border-radius: 3px; background: var(--color-surface-page, #fff); color: inherit; font: inherit; }
+.town-lookup__search p, .town-lookup__status, .town-lookup__method, .town-lookup footer { font-size: .9rem; line-height: 1.5; }
+.cms-block .town-lookup__search p { margin: 0; }
+.town-lookup__selected { display: grid; grid-template-columns: minmax(0, 1fr) 12rem; gap: 1.5rem; margin-block: 1.5rem; align-items: start; }
+.town-lookup__results { min-width: 0; }
+.town-lookup table { display: table; border-collapse: collapse; width: 100%; margin: 0; color: inherit; font-size: 1rem; line-height: 1.5; }
+.town-lookup caption { text-align: left; font-size: 1.2rem; font-weight: 750; padding-bottom: .75rem; }
+.town-lookup :is(th, td) { padding: .75rem; border-bottom: 1px solid var(--color-border, #d6deea); text-align: left; vertical-align: top; overflow-wrap: anywhere; }
+.town-lookup thead { background: var(--color-surface-panel, #f1f4f8); }
+.town-lookup th { font-weight: 700; }
+.town-lookup td { font-variant-numeric: tabular-nums; }
+.town-lookup :is(th, td) span { display: block; }
+.town-lookup tbody th span { font-weight: 400; }
+.town-lookup__map { margin: 0; padding: .75rem; background: var(--color-surface-panel, #f1f4f8); text-align: center; }
+.town-lookup__map svg { width: 100%; height: 16rem; display: block; }
+.town-lookup__counties { fill: var(--color-surface-page, #fff); stroke: var(--color-text-on-surface, #172033); stroke-width: 1; }
+.town-lookup__highlight { fill: var(--color-link, #284bff); stroke: var(--color-text-on-surface, #172033); stroke-width: 2; }
+.town-lookup__marker { fill: none; stroke: var(--color-text-on-surface, #172033); stroke-width: 2; }
+.town-lookup__map figcaption { font-size: .9rem; font-weight: 700; overflow-wrap: anywhere; }
+.town-lookup__map a { font-size: .8rem; }
+.town-lookup a { color: var(--color-link, #2047c7); text-decoration: underline; text-underline-offset: .15em; }
+.town-lookup a:hover { text-decoration-thickness: 2px; }
+.town-lookup summary { min-height: 44px; box-sizing: border-box; padding: .75rem 0; cursor: pointer; font-weight: 700; }
+.town-lookup__scroll { max-width: 100%; overflow: auto; max-height: 36rem; border: 1px solid var(--color-border-strong, #bac4d4); }
+.town-lookup__all table { min-width: 80rem; }
+.town-lookup__all thead { position: sticky; top: 0; }
+.town-lookup footer { margin-top: 1rem; border-top: 1px solid var(--color-border, #d6deea); overflow-wrap: anywhere; }
+.town-lookup :is(a, button, input, summary, [tabindex]):focus-visible { outline: var(--focus-outline, 3px solid #284bff); outline-offset: 3px; }
+@container (max-width: 620px) {
+  .town-lookup__search-row { flex-wrap: wrap; }
+  .town-lookup__search-row input { flex-basis: 100%; }
+  .town-lookup__selected { grid-template-columns: minmax(0, 1fr); gap: 1rem; }
+  .town-lookup__map { display: grid; grid-template-columns: 6rem minmax(0, 1fr); align-items: center; gap: .5rem 1rem; text-align: left; }
+  .town-lookup__map svg { grid-row: span 2; height: 9rem; }
+  .town-lookup__results table { font-size: .9rem; }
+  .town-lookup__results :is(th, td) { padding: .65rem .4rem; }
+  .town-lookup__results tbody th { width: 40%; }
+}
+@media (forced-colors: active) {
+  .town-lookup__highlight { fill: Highlight; }
+  .town-lookup__marker { stroke: CanvasText; }
+}

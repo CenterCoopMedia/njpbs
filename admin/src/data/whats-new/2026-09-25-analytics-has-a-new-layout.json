@@ -1,0 +1,10 @@
+{
+  "date": "2026-09-25",
+  "kind": "improved",
+  "title": "Analytics has a new layout",
+  "body": "The Analytics workspace has a new design with clearer sections and larger info buttons. The campaign control on the overview opens the Newsletters tab.",
+  "prs": [
+    2282
+  ],
+  "order": -5
+}

@@ -1,0 +1,13 @@
+{
+  "rules": [
+    {
+      "id": "ugc-browser-upload",
+      "allowed": {
+        "origins": ["https://njpbs.org"],
+        "methods": ["PUT", "HEAD"],
+        "headers": ["Content-Type", "If-None-Match"]
+      },
+      "maxAgeSeconds": 600
+    }
+  ]
+}

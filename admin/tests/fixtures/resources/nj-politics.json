@@ -1,0 +1,260 @@
+{
+  "schemaVersion": 1,
+  "meta": {
+    "title": "Synthetic politics reference",
+    "asOf": "2026-09-26",
+    "researchAsOf": "2026-09-01",
+    "lastTargetedUpdate": "2026-09-26",
+    "sourceWorkbook": "Synthetic fixture",
+    "notes": [
+      "Entirely fictional test records."
+    ]
+  },
+  "people": [
+    {
+      "id": "person-example-official",
+      "name": "Alex Example",
+      "sortName": "Example, Alex",
+      "party": "D",
+      "role": "Acting secretary",
+      "summary": "Synthetic official used to verify profiles, source links and incomplete research fields.",
+      "records": [
+        {
+          "sectionId": "governor-and-cabinet",
+          "recordId": "example-official"
+        }
+      ]
+    },
+    {
+      "id": "person-former-official",
+      "name": "Taylor Sample",
+      "sortName": "Sample, Taylor",
+      "party": "R",
+      "role": "Former secretary",
+      "summary": "Synthetic former official.",
+      "records": []
+    }
+  ],
+  "sections": [
+    {
+      "id": "governor-and-cabinet",
+      "title": "Example cabinet",
+      "columns": [
+        {
+          "key": "name",
+          "label": "Name"
+        },
+        {
+          "key": "role",
+          "label": "Role"
+        },
+        {
+          "key": "organization",
+          "label": "Organization"
+        },
+        {
+          "key": "currentTerm",
+          "label": "Current term"
+        },
+        {
+          "key": "formalAuthority",
+          "label": "Formal authority"
+        },
+        {
+          "key": "background",
+          "label": "Background"
+        },
+        {
+          "key": "officialSource",
+          "label": "Official source"
+        },
+        {
+          "key": "ageSource",
+          "label": "Age source"
+        }
+      ],
+      "records": [
+        {
+          "id": "example-official",
+          "values": {
+            "name": "Alex Example",
+            "role": "Acting secretary",
+            "organization": "Example Department",
+            "currentTerm": "Not publicly confirmed",
+            "formalAuthority": "This fictional appointment has limited authority.",
+            "background": "Example Law School",
+            "officialSource": "Official source",
+            "ageSource": null
+          },
+          "links": {
+            "officialSource": {
+              "label": "Official source",
+              "url": "https://example.org/official"
+            }
+          },
+          "personId": "person-example-official"
+        }
+      ]
+    },
+    {
+      "id": "federal-delegation",
+      "title": "Example delegation",
+      "columns": [
+        {
+          "key": "party",
+          "label": "Party"
+        }
+      ],
+      "records": [
+        {
+          "id": "house-a",
+          "values": {
+            "party": "D",
+            "chamber": "U.S. House"
+          },
+          "links": {}
+        },
+        {
+          "id": "house-b",
+          "values": {
+            "party": "R",
+            "chamber": "U.S. House"
+          },
+          "links": {}
+        },
+        {
+          "id": "senate-a",
+          "values": {
+            "party": "D",
+            "chamber": "U.S. Senate"
+          },
+          "links": {}
+        }
+      ]
+    },
+    {
+      "id": "state-senate",
+      "title": "Example senate",
+      "columns": [
+        {
+          "key": "party",
+          "label": "Party"
+        }
+      ],
+      "records": [
+        {
+          "id": "senate-d",
+          "values": {
+            "party": "D"
+          },
+          "links": {}
+        },
+        {
+          "id": "senate-r",
+          "values": {
+            "party": "R"
+          },
+          "links": {}
+        }
+      ]
+    },
+    {
+      "id": "general-assembly",
+      "title": "Example assembly",
+      "columns": [
+        {
+          "key": "party",
+          "label": "Party"
+        }
+      ],
+      "records": [
+        {
+          "id": "assembly-d1",
+          "values": {
+            "party": "D"
+          },
+          "links": {}
+        },
+        {
+          "id": "assembly-d2",
+          "values": {
+            "party": "D"
+          },
+          "links": {}
+        },
+        {
+          "id": "assembly-r",
+          "values": {
+            "party": "R"
+          },
+          "links": {}
+        }
+      ]
+    },
+    {
+      "id": "congressional-districts",
+      "title": "Congressional districts",
+      "columns": [
+        {
+          "key": "district",
+          "label": "District"
+        },
+        {
+          "key": "foreignBorn",
+          "label": "Foreign born",
+          "format": "percent"
+        },
+        {
+          "key": "censusSource",
+          "label": "Census source"
+        },
+        {
+          "key": "towns",
+          "label": "Towns"
+        }
+      ],
+      "records": [
+        {
+          "id": "nj-cd-01",
+          "values": {
+            "district": 1,
+            "counties": "Example County",
+            "foreignBorn": 0.2,
+            "censusSource": "Census source",
+            "towns": "Open town list"
+          },
+          "links": {
+            "censusSource": {
+              "label": "Census source",
+              "url": "https://example.org/census"
+            },
+            "towns": {
+              "label": "Open town list",
+              "sectionId": "district-towns",
+              "recordId": "nj-cd-01"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": "district-towns",
+      "title": "District towns",
+      "columns": [
+        {
+          "key": "party",
+          "label": "Party"
+        }
+      ],
+      "records": [
+        {
+          "id": "nj-cd-01",
+          "values": {
+            "name": "Example Town"
+          },
+          "links": {}
+        }
+      ]
+    }
+  ]
+}

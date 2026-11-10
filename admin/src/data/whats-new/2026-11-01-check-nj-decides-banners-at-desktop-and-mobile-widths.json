@@ -1,0 +1,8 @@
+{
+  "date": "2026-11-01",
+  "kind": "improved",
+  "title": "Check NJ Decides banners at desktop and mobile widths",
+  "body": "In Admin settings, use Desktop or Mobile in the NJ Decides draft preview. The choice stays selected when you switch between Homepage banner and NJ Decides brand. Preview widths do not change saved drafts or the public site.",
+  "prs": [],
+  "order": -6
+}

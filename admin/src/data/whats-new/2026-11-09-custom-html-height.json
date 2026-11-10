@@ -1,0 +1,8 @@
+{
+  "date": "2026-11-09",
+  "order": 1794247200000,
+  "kind": "fixed",
+  "title": "Embedded charts show their full height",
+  "body": "Custom HTML planks on the public site fit their embedded content, including charts that finish loading before the page is ready. Readers can see the whole chart without it being cut off.",
+  "prs": []
+}

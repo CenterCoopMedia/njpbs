@@ -1,0 +1,18 @@
+---
+import type { RecordCardPayload } from "../lib/record-card-resolution";
+import ProgramCard from "./record-cards/ProgramCard.astro";
+import EventCard from "./record-cards/EventCard.astro";
+import SponsorCard from "./record-cards/SponsorCard.astro";
+import NewsletterCard from "./record-cards/NewsletterCard.astro";
+
+interface Props { card: RecordCardPayload; headingLevel: number }
+const { card, headingLevel } = Astro.props;
+export const recordCardRenderers = {
+  program: ProgramCard,
+  event: EventCard,
+  sponsor: SponsorCard,
+  newsletter: NewsletterCard,
+} as const;
+const Renderer = recordCardRenderers[card.kind];
+---
+<Renderer card={card} headingLevel={headingLevel} />

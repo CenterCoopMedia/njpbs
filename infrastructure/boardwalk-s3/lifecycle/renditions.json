@@ -1,0 +1,63 @@
+{
+  "Rules": [
+    {
+      "Expiration": {
+        "Days": 3
+      },
+      "ID": "ExpireStagingVersions",
+      "Filter": {
+        "Prefix": "staging/"
+      },
+      "Status": "Enabled",
+      "NoncurrentVersionExpiration": {
+        "NoncurrentDays": 1
+      }
+    },
+    {
+      "Expiration": {
+        "ExpiredObjectDeleteMarker": true
+      },
+      "ID": "RemoveExpiredStagingDeleteMarkers",
+      "Filter": {
+        "Prefix": "staging/"
+      },
+      "Status": "Enabled"
+    },
+    {
+      "ID": "AbortIncompleteRenditionUploads",
+      "Filter": {
+        "Prefix": ""
+      },
+      "Status": "Enabled",
+      "AbortIncompleteMultipartUpload": {
+        "DaysAfterInitiation": 7
+      }
+    },
+    {
+      "Expiration": {
+        "Days": 7
+      },
+      "ID": "ExpireClips",
+      "Filter": {
+        "Prefix": "outputs/clips/"
+      },
+      "Status": "Enabled",
+      "NoncurrentVersionExpiration": {
+        "NoncurrentDays": 7
+      }
+    },
+    {
+      "Expiration": {
+        "Days": 7
+      },
+      "ID": "ExpireTranscriptInputs",
+      "Filter": {
+        "Prefix": "transcripts/inputs/"
+      },
+      "Status": "Enabled",
+      "NoncurrentVersionExpiration": {
+        "NoncurrentDays": 7
+      }
+    }
+  ]
+}

@@ -1,0 +1,116 @@
+{
+  "apiVersion": "3.2",
+  "apiBuild": "3.2.507",
+  "electionDate": "2026-11-03",
+  "timestamp": "2026-11-04T02:59:59.987654Z",
+  "races": [
+    {
+      "eventID": "20261103",
+      "stateID": "31",
+      "test": false,
+      "resultsType": "live",
+      "raceID": "100",
+      "raceType": "General",
+      "raceTypeID": "G",
+      "tabulationStatus": "Awaiting Poll Close",
+      "raceCallStatus": "Too Early to Call",
+      "officeID": "S",
+      "officeName": "U.S. Senate",
+      "eevp": 0,
+      "national": true,
+      "reportingUnits": [
+        {
+          "statePostal": "NJ",
+          "stateName": "New Jersey",
+          "reportingunitID": "31",
+          "reportingunitLevel": 1,
+          "level": "state",
+          "pollClosingTime": "2026-11-04T01:00:00.000000Z",
+          "lastUpdated": "2026-11-04T02:59:00.243000Z",
+          "precinctsReporting": 0,
+          "precinctsTotal": 541,
+          "precinctsReportingPct": 0,
+          "eevp": 0,
+          "candidates": [
+            {
+              "candidateID": "0",
+              "voteCount": 0
+            },
+            {
+              "candidateID": "1",
+              "voteCount": 0
+            },
+            {
+              "candidateID": "2",
+              "voteCount": 0
+            },
+            {
+              "candidateID": "3",
+              "voteCount": 0
+            }
+          ],
+          "bestSources": {
+            "cumulative": "live",
+            "absenteeMail": "live",
+            "advanceInPerson": "live",
+            "advanceTotal": "live",
+            "electionDayInPerson": "live",
+            "provisional": "live"
+          }
+        }
+      ]
+    },
+    {
+      "eventID": "20261103",
+      "stateID": "31",
+      "test": false,
+      "resultsType": "live",
+      "raceID": "101",
+      "raceType": "General",
+      "raceTypeID": "G",
+      "tabulationStatus": "Awaiting Poll Close",
+      "raceCallStatus": "Too Early to Call",
+      "officeID": "H",
+      "officeName": "U.S. House",
+      "eevp": 0,
+      "national": true,
+      "seatName": "District 1",
+      "seatNum": "1",
+      "censusDistrict": "01",
+      "reportingUnits": [
+        {
+          "statePostal": "NJ",
+          "stateName": "New Jersey",
+          "reportingunitID": "31",
+          "reportingunitLevel": 1,
+          "level": "state",
+          "pollClosingTime": "2026-11-04T01:00:00.000000Z",
+          "lastUpdated": "2026-11-04T02:59:00.243000Z",
+          "precinctsReporting": 0,
+          "precinctsTotal": 541,
+          "precinctsReportingPct": 0,
+          "eevp": 0,
+          "candidates": [
+            {
+              "candidateID": "10",
+              "voteCount": 0
+            },
+            {
+              "candidateID": "11",
+              "voteCount": 0
+            }
+          ],
+          "bestSources": {
+            "cumulative": "live",
+            "absenteeMail": "live",
+            "advanceInPerson": "live",
+            "advanceTotal": "live",
+            "electionDayInPerson": "live",
+            "provisional": "live"
+          }
+        }
+      ]
+    }
+  ],
+  "nextrequest": "https://api.ap.org/v3/elections/2026-11-03?candidateinfo=brief&format=json&level=state&raceid=100%2C101&resultstype=b&statepostal=NJ&minDateTime=2026-11-04T02%3A59%3A40.023512Z"
+}

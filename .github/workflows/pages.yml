@@ -1,0 +1,664 @@
+name: Deploy site
+
+# A repository dispatch does not return its Actions run ID. Put the caller's
+# unique refresh ID in the run title so the signed scheduler can find and watch
+# only the run that it started. Manual dispatches name the reviewed deploy ref.
+run-name: >-
+  ${{ github.event_name == 'repository_dispatch'
+      && format('production_deploy {0}', github.event.client_payload.refresh_id || 'invalid')
+      || github.event_name == 'workflow_dispatch'
+      && format('Deploy {0}', inputs.deploy_ref || 'production')
+      || format('Deploy {0}', github.ref_name) }}
+
+# Builds the Astro site in site/ and publishes it to GitHub Pages.
+# Production deploys are intentionally split from `main`: PRs and pushes to main
+# produce preview artifacts, while live Pages deploys come only from the
+# `production` branch, an owner-only manual run from `main`, or an authenticated
+# scheduler dispatch from the default branch. The deploy gate is the deliberate
+# act of advancing `production` to one reviewed full release SHA from main
+# history. Later main commits wait for the next release. The github-pages
+# environment has no required reviewers, so there is no environment approval
+# step; the reviewed advance of `production` is the gate.
+on:
+  push:
+    branches: [production]
+    paths:
+      - "site/**"
+      # The site renders the public wiki from the repo-root bundle, so a
+      # wiki-only change (a public file edit, or flipping a `public:` flag) must
+      # redeploy too — otherwise /wiki/ goes stale until an unrelated site change.
+      - "wiki/**"
+      # Same reasoning for the content core the site compiles in from
+      # packages/content-core: a core-only change alters the built pages without
+      # touching site/, so production would serve stale HTML until some unrelated
+      # site change happened to redeploy it.
+      - "packages/**"
+      - ".github/workflows/pages.yml"
+  repository_dispatch:
+    types: [production_deploy]
+  workflow_dispatch:
+    inputs:
+      emergency_release:
+        description: "Coordinator-authorized freeze fix from recorded live source"
+        required: false
+        default: false
+        type: boolean
+      emergency_authorization:
+        description: "<EMERGENCY|CRITICAL> <exact SHA> FROM <live base SHA> #<issue>: <reason>"
+        required: false
+        default: ""
+        type: string
+      deploy_ref:
+        description: "Reviewed branch, tag, or full commit SHA to deploy"
+        required: false
+        default: production
+        type: string
+
+permissions:
+  contents: read
+
+# Never cancel an in-flight production deploy.
+concurrency:
+  group: pages
+  queue: max
+  cancel-in-progress: false
+
+
+env:
+  CMS_PRODUCTION_API_ORIGIN: ${{ vars.CMS_PRODUCTION_API_ORIGIN }}
+  CANONICAL_GITHUB_REPOSITORY: ${{ vars.CANONICAL_GITHUB_REPOSITORY }}
+  CANONICAL_GITHUB_REPOSITORY_ID: ${{ vars.CANONICAL_GITHUB_REPOSITORY_ID }}
+  VITE_CANONICAL_GITHUB_REPOSITORY: ${{ vars.CANONICAL_GITHUB_REPOSITORY }}
+
+jobs:
+  authorize:
+    env:
+      CMS_DEPLOY_OWNER: ${{ vars.CMS_DEPLOY_OWNER }}
+    # Both main dispatches and production pushes need this environment.
+    environment: github-pages
+    # repository_dispatch authenticates a scheduler request with HMAC before any
+    # repository code is checked out. Manual runs must load this workflow from
+    # main. Repeat the actor and ref checks in later jobs for partial re-runs.
+    if: >-
+      (vars.CANONICAL_GITHUB_REPOSITORY != '' && vars.CANONICAL_GITHUB_REPOSITORY_ID != '' && github.repository == vars.CANONICAL_GITHUB_REPOSITORY && github.repository_id == vars.CANONICAL_GITHUB_REPOSITORY_ID) &&
+      (vars.CMS_DEPLOY_OWNER != '' && github.triggering_actor == vars.CMS_DEPLOY_OWNER) &&
+      (github.event_name == 'push' || github.ref == 'refs/heads/main')
+    outputs:
+      deploy_ref: ${{ steps.dispatch.outputs.deploy_ref }}
+      require_fresh: ${{ steps.dispatch.outputs.require_fresh }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 2
+    permissions: {}
+    steps:
+      - name: Authenticate production deploy request
+        id: dispatch
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          EVENT_REF: ${{ github.ref }}
+          TRIGGERING_ACTOR: ${{ github.triggering_actor }}
+          INPUT_DEPLOY_REF: ${{ inputs.deploy_ref || '' }}
+          PAYLOAD_DEPLOY_REF: ${{ github.event.client_payload.deploy_ref || '' }}
+          PAYLOAD_REFRESH_ID: ${{ github.event.client_payload.refresh_id || '' }}
+          PAYLOAD_TIMESTAMP: ${{ github.event.client_payload.timestamp || '' }}
+          PAYLOAD_SIGNATURE: ${{ github.event.client_payload.signature || '' }}
+          DISPATCH_SECRET: ${{ github.event_name == 'repository_dispatch' && secrets.PRODUCTION_DEPLOY_DISPATCH_SECRET || '' }}
+        run: |
+          set -euo pipefail
+          # BEGIN PRODUCTION_DEPLOY_AUTH
+          node <<'NODE'
+          const { appendFileSync } = require("node:fs");
+          const { createHmac, timingSafeEqual } = require("node:crypto");
+
+          const fail = (message) => {
+            console.error(`Production deploy authorization failed: ${message}`);
+            process.exit(1);
+          };
+          // config-input: CMS_DEPLOY_OWNER, DISPATCH_SECRET, EVENT_NAME, EVENT_REF, INPUT_DEPLOY_REF, PAYLOAD_DEPLOY_REF
+          // config-input: PAYLOAD_REFRESH_ID, PAYLOAD_SIGNATURE, PAYLOAD_TIMESTAMP, TRIGGERING_ACTOR
+          const value = (name) => process.env[name] || "";
+          const eventName = value("EVENT_NAME");
+          const eventRef = value("EVENT_REF");
+          const actor = value("TRIGGERING_ACTOR");
+          let deployRef;
+          let requireFresh = "0";
+
+          const owner = value("CMS_DEPLOY_OWNER");
+          if (!/^[A-Za-z0-9][A-Za-z0-9-]{0,38}$/.test(owner) || actor !== owner) fail("triggering actor is not the configured owner");
+
+          if (eventName === "push") {
+            if (eventRef !== "refs/heads/production") {
+              fail("push did not come from production");
+            }
+            deployRef = eventRef;
+          } else if (eventName === "workflow_dispatch") {
+            if (eventRef !== "refs/heads/main") {
+              fail("manual workflow definition did not come from main");
+            }
+            deployRef = value("INPUT_DEPLOY_REF") || "production";
+          } else if (eventName === "repository_dispatch") {
+            if (eventRef !== "refs/heads/main") {
+              fail("scheduler workflow definition did not come from main");
+            }
+            deployRef = value("PAYLOAD_DEPLOY_REF") || "production";
+            const refreshId = value("PAYLOAD_REFRESH_ID");
+            const timestamp = value("PAYLOAD_TIMESTAMP");
+            const signature = value("PAYLOAD_SIGNATURE");
+            const secret = value("DISPATCH_SECRET");
+            if (secret.length < 32) fail("dispatch secret is missing or too short");
+            if (!/^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/.test(refreshId)) {
+              fail("refresh id is missing or invalid");
+            }
+            if (!/^\d{10}$/.test(timestamp)) fail("timestamp is invalid");
+            if (Math.abs(Math.floor(Date.now() / 1000) - Number(timestamp)) > 600) {
+              fail("timestamp is outside the 10-minute window");
+            }
+            if (!/^[a-fA-F0-9]{64}$/.test(signature)) fail("signature is invalid");
+            const expected = createHmac("sha256", secret)
+              .update(`${timestamp}\n${refreshId}\n${deployRef}`)
+              .digest();
+            const supplied = Buffer.from(signature, "hex");
+            if (expected.length !== supplied.length || !timingSafeEqual(expected, supplied)) {
+              fail("signature does not match the request");
+            }
+            requireFresh = "1";
+          } else {
+            fail("event type is not allowed");
+          }
+
+          if (!/^[A-Za-z0-9][A-Za-z0-9._/-]{0,199}$/.test(deployRef) || deployRef.includes("..")) {
+            fail("deploy ref contains unsupported characters");
+          }
+          appendFileSync(
+            process.env.GITHUB_OUTPUT,
+            `deploy_ref=${deployRef}\nrequire_fresh=${requireFresh}\n`,
+          );
+          NODE
+          # END PRODUCTION_DEPLOY_AUTH
+
+  build:
+    environment: github-pages
+    # `github.actor` remains the original actor on a re-run. The triggering actor
+    # is the person who actually pressed Run or Re-run. Repeat this on every job
+    # because a partial re-run does not re-evaluate jobs that already succeeded.
+    needs: authorize
+    outputs:
+      artifact_ready: ${{ steps.artifact_runtime.outputs.ready }}
+      source_sha: ${{ steps.source.outputs.sha }}
+      build_batch_id: ${{ steps.active_artifact.outputs.build_batch_id }}
+    if: >-
+      (vars.CANONICAL_GITHUB_REPOSITORY != '' && vars.CANONICAL_GITHUB_REPOSITORY_ID != '' && github.repository == vars.CANONICAL_GITHUB_REPOSITORY && github.repository_id == vars.CANONICAL_GITHUB_REPOSITORY_ID) &&
+      (vars.CMS_DEPLOY_OWNER != '' && github.triggering_actor == vars.CMS_DEPLOY_OWNER) &&
+      needs.authorize.result == 'success' &&
+      (github.event_name == 'push' || github.ref == 'refs/heads/main')
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    # configure-pages reads the Pages site metadata (GET /repos/{owner}/{repo}/pages),
+    # which needs pages: read. Workflow-level permissions above set every unspecified
+    # scope to none, so grant the minimum here — never pages: write or id-token: write,
+    # which stay on the deploy job. Without this the build's configure-pages step 403s.
+    permissions:
+      contents: read
+      actions: read
+      pages: read
+    env:
+      CMS_DEPLOY_OWNER: ${{ vars.CMS_DEPLOY_OWNER }}
+      FIREBASE_SERVICE_ACCOUNT_CONFIGURED: ${{ (secrets.FIREBASE_PUBLISH_SERVICE_ACCOUNT || secrets.FIREBASE_SERVICE_ACCOUNT) != '' }}
+    defaults:
+      run:
+        working-directory: site
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ needs.authorize.outputs.deploy_ref }}
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Check out trusted release source gate
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ github.sha }}
+          path: .release-gate
+          sparse-checkout: |
+            .github/scripts
+            scripts/lib
+          persist-credentials: false
+      - name: Require reviewed deploy ref
+        id: reviewed_ref
+        working-directory: .
+        env:
+          EMERGENCY_RELEASE: ${{ inputs.emergency_release || false }}
+          EMERGENCY_AUTHORIZATION: ${{ inputs.emergency_authorization || '' }}
+          GH_TOKEN: ${{ github.token }}
+          DEPLOY_REF: ${{ needs.authorize.outputs.deploy_ref }}
+        run: |
+          set -euo pipefail
+          deploy_sha="$(git rev-parse HEAD)"
+          # Keep the exact-source renderer build free of this nested checkout.
+          trap 'rm -rf .release-gate' EXIT
+          if [ "${EMERGENCY_RELEASE:-false}" = "true" ]; then
+            # Emergency inputs exist only on the owner-only manual main workflow.
+            [ "$GITHUB_EVENT_NAME" = "workflow_dispatch" ]
+            export DEPLOY_SHA="$deploy_sha"
+            node .release-gate/.github/scripts/require-release-source.mjs
+            node .release-gate/.github/scripts/require-main-ci.mjs
+            exit 0
+          fi
+          if [ -n "${EMERGENCY_AUTHORIZATION:-}" ]; then
+            echo "::error::Emergency authorization requires emergency mode."
+            exit 1
+          fi
+          if git merge-base --is-ancestor HEAD origin/main; then
+            echo "source_sha=$deploy_sha" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          # production keeps its promotion receipts as merge commits, so the
+          # branch tip itself is not in main history. Accept that shape only
+          # when its second parent is reviewed main history and the merge tree
+          # is byte-for-byte identical to that parent; conflict resolutions or
+          # production-only edits therefore fail closed.
+          parent_count="$(git rev-list --parents -n 1 HEAD | awk '{print NF - 1}')"
+          if [ "$parent_count" -eq 2 ]; then
+            reviewed_main_sha="$(git rev-parse HEAD^2)"
+            if git merge-base --is-ancestor "$reviewed_main_sha" origin/main &&
+               git diff --quiet "$reviewed_main_sha" HEAD
+            then
+              echo "source_sha=$reviewed_main_sha" >> "$GITHUB_OUTPUT"
+              exit 0
+            fi
+          fi
+
+          echo "::error::deploy_ref must resolve to a commit already on main or a tree-identical production promotion merge whose reviewed parent is on main; '$DEPLOY_REF' resolved to $deploy_sha."
+          exit 1
+      - name: Detect regular Pages artifact runtime
+        id: artifact_runtime
+        working-directory: .
+        run: |
+          set -euo pipefail
+          marker_v3="scripts/pages-public-artifact-runtime-v3.txt"
+          if [ -f "$marker_v3" ]; then
+            for required in \
+              scripts/select-active-public-artifact.cjs \
+              site/scripts/prepare-pages-public-context.ts \
+              site/scripts/cms-preview-cloud-storage.ts \
+              functions/lib/pages-public-artifact.js \
+              functions/lib/public-deployment-coordinator.js \
+              site/scripts/build-with-production-sync.mjs \
+              site/src/lib/public-artifact-build.ts \
+              site/src/lib/public-artifact-bundle.ts \
+              site/src/lib/public-artifact-inventory.ts
+            do
+              if [ ! -f "$required" ]; then
+                echo "Regular Pages artifact runtime v3 marker exists but $required is missing." >&2
+                exit 1
+              fi
+            done
+            if ! grep -Fq "selectActivePublicBuildBatch" scripts/select-active-public-artifact.cjs ||
+               ! grep -Fq "PUBLIC_ARTIFACT_BUNDLE_PATH" site/scripts/build-with-production-sync.mjs
+            then
+              echo "Regular Pages artifact runtime v3 marker conflicts with its implementation." >&2
+              exit 1
+            fi
+            echo "version=v3" >> "$GITHUB_OUTPUT"
+            echo "ready=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          marker_v2="scripts/pages-public-artifact-runtime-v2.txt"
+          if [ -f "$marker_v2" ]; then
+            for required in \
+              scripts/prepare-public-artifact.cjs \
+              scripts/update-publish-status.cjs \
+              functions/lib/public-deployment-coordinator.js \
+              site/scripts/build-with-production-sync.mjs \
+              site/src/lib/public-artifact-build.ts \
+              site/src/lib/public-artifact-bundle.ts \
+              site/src/lib/public-artifact-inventory.ts
+            do
+              if [ ! -f "$required" ]; then
+                echo "Regular Pages artifact runtime v2 marker exists but $required is missing." >&2
+                exit 1
+              fi
+            done
+            if ! grep -Fq "preparePublicArtifactBundle" site/scripts/build-with-production-sync.mjs ||
+               ! grep -Fq "PUBLIC_ARTIFACT_BUNDLE_PATH" site/scripts/build-with-production-sync.mjs
+            then
+              echo "Regular Pages artifact runtime v2 marker conflicts with its implementation." >&2
+              exit 1
+            fi
+            echo "version=v2" >> "$GITHUB_OUTPUT"
+            echo "ready=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          marker="scripts/pages-public-artifact-runtime-v1.txt"
+          marker_present=false
+          if [ -f "$marker" ]; then
+            marker_present=true
+          fi
+          runtime_complete=true
+          for required in \
+            scripts/prepare-public-artifact.cjs \
+            scripts/update-publish-status.cjs \
+            functions/lib/public-deployment-coordinator.js \
+            site/scripts/build-with-production-sync.mjs \
+            site/src/lib/cms-loader.ts \
+            site/src/lib/public-artifact-inventory.ts
+          do
+            if [ ! -f "$required" ]; then
+              runtime_complete=false
+              if [ "$marker_present" = "true" ]; then
+                echo "Regular Pages artifact runtime marker exists but $required is missing." >&2
+                exit 1
+              fi
+            fi
+          done
+          if [ "$runtime_complete" = "true" ] &&
+             { ! grep -Fq "reservePublicBuildBatch" scripts/prepare-public-artifact.cjs ||
+               ! grep -Fq "PUBLIC_ARTIFACT_INVENTORY_CANDIDATE_PATH" site/scripts/build-with-production-sync.mjs; }
+          then
+            runtime_complete=false
+            if [ "$marker_present" = "true" ]; then
+              echo "Regular Pages artifact runtime marker conflicts with its implementation." >&2
+              exit 1
+            fi
+          fi
+          if [ "$runtime_complete" != "true" ]; then
+            echo "version=legacy" >> "$GITHUB_OUTPUT"
+            echo "ready=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::Selected deploy source predates the exact artifact runtime; using its prior production build path."
+            exit 0
+          fi
+          if [ "$marker_present" != "true" ]; then
+            echo "::notice::Selected deploy source contains the verified pre-marker exact artifact runtime."
+          fi
+          echo "version=v1" >> "$GITHUB_OUTPUT"
+          echo "ready=true" >> "$GITHUB_OUTPUT"
+      - name: Reject generation-reserving Pages artifact runtimes
+        if: >-
+          steps.artifact_runtime.outputs.ready == 'true' &&
+          steps.artifact_runtime.outputs.version != 'v3'
+        working-directory: .
+        run: |
+          echo "The selected source predates the active-batch Pages runtime and would reserve an unsettled public generation." >&2
+          exit 1
+      - name: Detect prepared Worker artifact runtime
+        id: worker_artifact_runtime
+        working-directory: .
+        run: |
+          set -euo pipefail
+          marker="scripts/public-worker-artifact-runtime-v1.txt"
+          if [ ! -f "$marker" ]; then
+            echo "ready=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::Selected deploy source predates the prepared Worker artifact runtime; preserving its prior Pages artifact."
+            exit 0
+          fi
+          for required in \
+            site/package.json \
+            site/scripts/prepare-public-worker-artifact.ts \
+            site/src/lib/public-artifact-inventory.ts \
+            site/src/lib/public-worker-artifact.ts
+          do
+            if [ ! -f "$required" ]; then
+              echo "Prepared Worker artifact marker exists but $required is missing." >&2
+              exit 1
+            fi
+          done
+          if ! grep -Fq '"prepare:public-worker-artifact"' site/package.json; then
+            echo "The prepared Worker artifact marker conflicts with its package command." >&2
+            exit 1
+          fi
+          echo "ready=true" >> "$GITHUB_OUTPUT"
+      - name: Require published CMS build credentials
+        if: >-
+          steps.artifact_runtime.outputs.ready == 'true' &&
+          env.FIREBASE_SERVICE_ACCOUNT_CONFIGURED != 'true'
+        working-directory: .
+        run: |
+          echo "A production Pages build requires FIREBASE_PUBLISH_SERVICE_ACCOUNT or FIREBASE_SERVICE_ACCOUNT so it cannot erase published CMS content." >&2
+          exit 1
+      - name: Verify the CMS artifact credential's project
+        id: verify_cms_creds
+        if: steps.artifact_runtime.outputs.ready == 'true'
+        working-directory: .
+        env:
+          SA: ${{ secrets.FIREBASE_PUBLISH_SERVICE_ACCOUNT || secrets.FIREBASE_SERVICE_ACCOUNT }}
+        run: |
+          set -euo pipefail
+          project_id="$(printf '%s' "$SA" | node -e 'let s="";process.stdin.on("data",d=>{s+=d});process.stdin.on("end",()=>{try{const p=JSON.parse(s).project_id;if(p)process.stdout.write(p)}catch(e){}})' || true)"
+          if [ "$project_id" != "njpbs-site" ]; then
+            echo "The CMS artifact credential belongs to '${project_id:-<unreadable>}', not njpbs-site." >&2
+            exit 1
+          fi
+          echo "project_id=$project_id" >> "$GITHUB_OUTPUT"
+      - uses: actions/setup-node@v7
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: |
+            package-lock.json
+            site/package-lock.json
+      - run: npm ci --ignore-scripts
+      - name: Install artifact reservation deps
+        if: steps.artifact_runtime.outputs.ready == 'true'
+        working-directory: .
+        run: npm ci --ignore-scripts
+      - name: Install retained context storage deps
+        if: steps.artifact_runtime.outputs.version == 'v3'
+        working-directory: functions
+        run: npm ci --ignore-scripts
+      # The dependency-free bootstrap runs before package lifecycle hooks and
+      # before the sync scripts below can reach deploy secrets (issue #607).
+      - name: Metered-API source scan (before any scanned code runs)
+        run: node ../.github/scripts/metered-api-scan.mjs
+      - name: Check out trusted configuration renderer
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ github.sha }}
+          path: .configuration-render-gate
+          persist-credentials: false
+          sparse-checkout: |
+            scripts/render-development-config.mjs
+            config/development-inputs.json
+          sparse-checkout-cone-mode: false
+      - name: Render deployment resource configuration
+        working-directory: ${{ github.workspace }}
+        run: |
+          set -euo pipefail
+          mv .configuration-render-gate "$RUNNER_TEMP/configuration-render-gate"
+          node "$RUNNER_TEMP/configuration-render-gate/scripts/render-development-config.mjs" --production --root "$GITHUB_WORKSPACE"
+      - name: Prepare local search model for frozen builds
+        working-directory: site
+        run: |
+          # Older reviewed release refs do not have this build dependency.
+          if [ -f scripts/prepare-search-model.ts ]; then
+            node --import ./node_modules/tsx/dist/loader.mjs scripts/prepare-search-model.ts
+          fi
+      # Finish the credential-bearing shell before public feed code starts.
+      - name: Refresh Media Manager content
+        env:
+          REQUIRE_FRESH_CONTENT: ${{ needs.authorize.outputs.require_fresh }}
+          MEDIA_MANAGER_API_KEY: ${{ secrets.MEDIA_MANAGER_API_KEY }}
+          MEDIA_MANAGER_API_SECRET: ${{ secrets.MEDIA_MANAGER_API_SECRET }}
+          MEDIA_MANAGER_AUDIENCE: WNJT
+          MEDIA_MANAGER_PAGE_SIZE: "100"
+        # Inline commands also work when deploying an older reviewed source.
+        run: npm run sync:launch-content
+      - name: Refresh external content concurrently
+        env:
+          REQUIRE_FRESH_CONTENT: ${{ needs.authorize.outputs.require_fresh }}
+        run: |
+          set -euo pipefail
+          npm run sync:spotlight-news &
+          spotlight_pid=$!
+          npm run sync:schedule &
+          schedule_pid=$!
+          # Wait for all writers even after a failure. Never reserve a snapshot
+          # or build a replacement artifact from a partially refreshed tree.
+          result=0
+          for sync_pid in "$spotlight_pid" "$schedule_pid"; do
+            if ! wait "$sync_pid"; then
+              result=1
+            fi
+          done
+          exit "$result"
+      - name: Configure published CMS build credentials
+        if: steps.artifact_runtime.outputs.ready == 'true'
+        working-directory: .
+        env:
+          SA: ${{ secrets.FIREBASE_PUBLISH_SERVICE_ACCOUNT || secrets.FIREBASE_SERVICE_ACCOUNT }}
+          PROJECT_ID: ${{ steps.verify_cms_creds.outputs.project_id }}
+        run: |
+          credentials_path="$RUNNER_TEMP/service-account.json"
+          printf '%s' "$SA" > "$credentials_path"
+          echo "GOOGLE_APPLICATION_CREDENTIALS=$credentials_path" >> "$GITHUB_ENV"
+          echo "FIREBASE_PROJECT_ID=$PROJECT_ID" >> "$GITHUB_ENV"
+      - name: Capture production artifact source
+        id: source
+        working-directory: .
+        env:
+          REVIEWED_SOURCE_SHA: ${{ steps.reviewed_ref.outputs.source_sha }}
+        run: echo "sha=$REVIEWED_SOURCE_SHA" >> "$GITHUB_OUTPUT"
+      # Reuse the deployed Worker's immutable CMS cutoff. A retained Pages build
+      # must not advance the Worker publication generation counter.
+      - name: Reuse active public artifact cutoff
+        id: active_artifact
+        if: steps.artifact_runtime.outputs.ready == 'true'
+        working-directory: .
+        env:
+          SOURCE_SHA: ${{ steps.source.outputs.sha }}
+        run: |
+          set -euo pipefail
+          active_batch_id="$(node scripts/select-active-public-artifact.cjs "$SOURCE_SHA")"
+          echo "PUBLIC_BUILD_BATCH_ID=$active_batch_id" >> "$GITHUB_ENV"
+          echo "build_batch_id=$active_batch_id" >> "$GITHUB_OUTPUT"
+      - name: Fetch frozen active public content
+        if: steps.artifact_runtime.outputs.version == 'v3'
+        working-directory: .
+        env:
+          CMS_PREVIEW_R2_CREDENTIAL: ${{ secrets.CMS_PREVIEW_R2_CREDENTIAL }}
+          SOURCE_SHA: ${{ steps.source.outputs.sha }}
+          BUILD_BATCH_ID: ${{ steps.active_artifact.outputs.build_batch_id }}
+        run: |
+          node --import ./site/node_modules/tsx/dist/loader.mjs \
+            site/scripts/prepare-pages-public-context.ts \
+            "$SOURCE_SHA" "$BUILD_BATCH_ID" "$RUNNER_TEMP/pages-public-context.json"
+      # Full build: the apex and root routes form the public NJ PBS site.
+      # The guardrail scan below is binding — it fails the deploy on any operator
+      # claim or logo-image reference in the emitted HTML/CSS.
+      - name: Build
+        run: npm run build
+        # Astro inlines import.meta.env.PUBLIC_* at build time, and Actions does
+        # not expose repo vars to the build unless they are mapped here (issue
+        # #302). Both values are public by nature — the Worker endpoint URL and
+        # the Turnstile sitekey — so they are repo vars, not secrets; the Turnstile
+        # *secret* stays only in the Worker. Inert until the owner configures the variables: an
+        # unset var is empty, so the report form renders its disabled state exactly
+        # as it does today.
+        env:
+          CMS_LOADER_STRICT: ${{ steps.artifact_runtime.outputs.ready == 'true' && '1' || '' }}
+          CMS_CONTENT_MODE: ${{ steps.artifact_runtime.outputs.ready == 'true' && 'published' || '' }}
+          PUBLIC_ARTIFACT_BATCH_MODE: ${{ steps.artifact_runtime.outputs.version == 'v3' && 'deployed' || '' }}
+          PUBLIC_ARTIFACT_DEPLOYED_CONTEXT_PATH: ${{ steps.artifact_runtime.outputs.version == 'v3' && format('{0}/pages-public-context.json', runner.temp) || '' }}
+          PUBLIC_BUILD_BATCH_ID: ${{ steps.artifact_runtime.outputs.ready == 'true' && steps.active_artifact.outputs.build_batch_id || '' }}
+          PUBLIC_BUILD_COMMIT_SHA: ${{ steps.artifact_runtime.outputs.ready == 'true' && steps.source.outputs.sha || '' }}
+          PUBLIC_ARTIFACT_INVENTORY_PATH: ${{ steps.artifact_runtime.outputs.ready == 'true' && format('{0}/public-artifact.json', runner.temp) || '' }}
+          PUBLIC_GA4_REQUIRED: "1"
+          PUBLIC_GA4_MEASUREMENT_ID: ${{ vars.PUBLIC_GA4_MEASUREMENT_ID }}
+          PUBLIC_REPORT_ENDPOINT: ${{ vars.PUBLIC_REPORT_ENDPOINT }}
+          PUBLIC_SHARE_INTAKE_ENDPOINT: ${{ vars.PUBLIC_SHARE_INTAKE_ENDPOINT || 'https://intake.njpbs.org' }}
+          PUBLIC_SHARE_PAGE: ${{ vars.PUBLIC_SHARE_PAGE || '' }}
+          PUBLIC_TURNSTILE_SITEKEY: ${{ vars.PUBLIC_TURNSTILE_SITEKEY }}
+      - name: Public homepage contract before publish
+        run: npm run assert:public-contract
+      - name: Guardrail scan before publish
+        run: npm run guardrails
+      - name: Bind the final public Worker artifact
+        if: >-
+          steps.artifact_runtime.outputs.ready == 'true' &&
+          steps.worker_artifact_runtime.outputs.ready == 'true'
+        working-directory: site
+        run: >-
+          npm run prepare:public-worker-artifact --
+          "$RUNNER_TEMP/public-artifact.json"
+          "$RUNNER_TEMP/public-worker-artifact.json"
+      # The build can take long enough for a content-only publication to advance
+      # the active generation. Fail closed unless the frozen batch is still the
+      # pointer-aligned active batch immediately before artifact publication.
+      - name: Revalidate active public artifact
+        if: steps.artifact_runtime.outputs.ready == 'true'
+        working-directory: .
+        env:
+          SOURCE_SHA: ${{ steps.source.outputs.sha }}
+          BUILD_BATCH_ID: ${{ steps.active_artifact.outputs.build_batch_id }}
+        run: |
+          set -euo pipefail
+          current_batch_id="$(node scripts/select-active-public-artifact.cjs "$SOURCE_SHA")"
+          if [ "$current_batch_id" != "$BUILD_BATCH_ID" ]; then
+            echo "::error::The selected public artifact is no longer active."
+            exit 1
+          fi
+      - name: Clean up published CMS build credentials
+        if: always() && steps.artifact_runtime.outputs.ready == 'true'
+        working-directory: .
+        run: rm -f "$RUNNER_TEMP/service-account.json" "$RUNNER_TEMP/pages-public-context.json"
+      - uses: actions/configure-pages@v6
+      - uses: actions/upload-pages-artifact@v5
+        with:
+          path: site/dist
+
+  deploy:
+    env:
+      CMS_DEPLOY_OWNER: ${{ vars.CMS_DEPLOY_OWNER }}
+    needs: [authorize, build]
+    if: >-
+      (vars.CANONICAL_GITHUB_REPOSITORY != '' && vars.CANONICAL_GITHUB_REPOSITORY_ID != '' && github.repository == vars.CANONICAL_GITHUB_REPOSITORY && github.repository_id == vars.CANONICAL_GITHUB_REPOSITORY_ID) &&
+      (vars.CMS_DEPLOY_OWNER != '' && github.triggering_actor == vars.CMS_DEPLOY_OWNER) &&
+      needs.authorize.result == 'success' &&
+      (github.event_name == 'push' || github.ref == 'refs/heads/main')
+    runs-on: ubuntu-24.04
+    timeout-minutes: 8
+    permissions:
+      contents: read
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v7
+        if: needs.build.outputs.artifact_ready == 'true'
+        with:
+          ref: ${{ needs.build.outputs.source_sha }}
+          persist-credentials: false
+      - uses: actions/setup-node@v7
+        if: needs.build.outputs.artifact_ready == 'true'
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: package-lock.json
+      - name: Install active-artifact check dependencies
+        if: needs.build.outputs.artifact_ready == 'true'
+        run: npm ci --ignore-scripts
+      - name: Revalidate active public artifact at deployment
+        if: needs.build.outputs.artifact_ready == 'true'
+        env:
+          SA: ${{ secrets.FIREBASE_PUBLISH_SERVICE_ACCOUNT || secrets.FIREBASE_SERVICE_ACCOUNT }}
+          SOURCE_SHA: ${{ needs.build.outputs.source_sha }}
+          BUILD_BATCH_ID: ${{ needs.build.outputs.build_batch_id }}
+        run: |
+          set -euo pipefail
+          umask 077
+          credentials_path="$RUNNER_TEMP/pages-deploy-service-account.json"
+          trap 'rm -f "$credentials_path"' EXIT
+          project_id="$(printf '%s' "$SA" | node -e 'let s="";process.stdin.on("data",d=>{s+=d});process.stdin.on("end",()=>{try{const p=JSON.parse(s).project_id;if(p)process.stdout.write(p)}catch(e){}})' || true)"
+          if [ "$project_id" != "njpbs-site" ]; then
+            echo "::error::The Pages credential is not for njpbs-site."
+            exit 1
+          fi
+          printf '%s' "$SA" > "$credentials_path"
+          export GOOGLE_APPLICATION_CREDENTIALS="$credentials_path"
+          current_batch_id="$(node scripts/select-active-public-artifact.cjs "$SOURCE_SHA")"
+          if [ "$current_batch_id" != "$BUILD_BATCH_ID" ]; then
+            echo "::error::The selected public artifact is no longer active at deployment."
+            exit 1
+          fi
+      - id: deployment
+        uses: actions/deploy-pages@v5

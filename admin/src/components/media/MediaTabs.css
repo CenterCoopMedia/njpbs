@@ -1,0 +1,114 @@
+/* The media tab strip. One row of links that scrolls
+   sideways with edge fades and never wraps. */
+.media-tabs-frame {
+  min-width: 0;
+  border-bottom: var(--cms-border-width) solid var(--cms-line);
+}
+
+.media-tabs {
+  position: relative;
+  display: flex;
+  gap: 18px;
+  padding-top: 0;
+  overflow-x: auto;
+  overflow-y: hidden;
+  scrollbar-width: none;
+}
+
+.media-tabs::-webkit-scrollbar {
+  display: none;
+}
+
+/* data-fade names the edge that has more tabs past it. */
+.media-tabs[data-fade="end"] {
+  mask-image: linear-gradient(to right, black calc(100% - 40px), transparent);
+}
+
+.media-tabs[data-fade="mid"] {
+  mask-image: linear-gradient(to right, transparent, black 40px, black calc(100% - 40px), transparent);
+}
+
+.media-tabs[data-fade="start"] {
+  mask-image: linear-gradient(to right, transparent, black 40px);
+}
+
+.media-tab {
+  position: relative;
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  gap: var(--cms-space-2);
+  min-height: var(--cms-control-standard-target);
+  padding: 0 0 9px;
+  border-radius: 0;
+  color: var(--cms-ink-secondary);
+  font-size: var(--cms-font-sm);
+  font-weight: 500;
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+.media-tab .icon {
+  width: 18px;
+  height: 18px;
+  flex: none;
+  color: var(--cms-ink-muted);
+}
+
+.media-tab-count {
+  color: var(--cms-ink-muted);
+  font-size: var(--cms-font-xs);
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+}
+
+.media-tab[aria-current="page"] {
+  color: var(--cms-brand-ink);
+  font-weight: 650;
+}
+
+.media-tab[aria-current="page"] .icon,
+.media-tab[aria-current="page"] .media-tab-count {
+  color: var(--cms-brand-ink);
+}
+
+.media-tab[aria-current="page"]::after {
+  content: "";
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  height: 2px;
+  border-radius: 0;
+  background: var(--cms-brand);
+}
+
+/* The strip clips its overflow, so the ring sits inside the tab. */
+.media-tab:focus-visible {
+  outline: var(--cms-focus-outline);
+  outline-offset: calc(-1 * var(--cms-focus-width));
+}
+
+@media (hover: hover) {
+  .media-tab:hover {
+    background: var(--cms-action-quiet);
+    color: var(--cms-ink);
+  }
+}
+
+/* Phones hide counts so labels stay short; desktop widths keep them, and the strip scrolls. */
+@media (max-width: 47.99rem) {
+  .media-tab-count {
+    display: none;
+  }
+}
+
+@media (forced-colors: active) {
+  .media-tabs[data-fade] {
+    mask-image: none;
+  }
+
+  .media-tab[aria-current="page"]::after {
+    background: LinkText;
+  }
+}

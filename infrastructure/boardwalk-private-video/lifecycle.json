@@ -1,0 +1,12 @@
+{
+  "rules": [
+    {
+      "id": "Abort incomplete private delivery uploads",
+      "enabled": true,
+      "conditions": { "prefix": "private-" },
+      "abortMultipartUploadsTransition": {
+        "condition": { "type": "Age", "maxAge": 86400 }
+      }
+    }
+  ]
+}

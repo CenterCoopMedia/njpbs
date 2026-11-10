@@ -1,0 +1,15 @@
+{
+  "date": "2026-10-13",
+  "kind": "new",
+  "title": "More staff can report a problem",
+  "body": "Every approved staff role, including Viewers, can use Report a problem and read their own reports. The sign-in page links to public reporting. Report progress stays current, and receipts fit phone screens.",
+  "prs": [
+    3299,
+    2868,
+    3315,
+    3308,
+    2873,
+    3398
+  ],
+  "order": -1
+}

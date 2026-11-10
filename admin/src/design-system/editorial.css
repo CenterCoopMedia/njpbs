@@ -1,0 +1,11 @@
+@import "./tokens.css";
+@import "./legacy-aliases.css";
+
+:root[data-cms-theme="editorial"] {
+  color-scheme: light;
+}
+
+/* Low specificity lets navigation and public previews keep their own link roles. */
+:where(:root[data-cms-theme="editorial"]) a:where(:not(.button)) {
+  color: var(--cms-brand-ink);
+}

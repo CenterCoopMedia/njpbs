@@ -1,0 +1,11 @@
+[Unit]
+Description=Refresh NJ Spotlight estimated article rankings
+
+[Service]
+Type=oneshot
+EnvironmentFile=/etc/spotlight-most-read.env
+ExecStart=/usr/bin/flock -n /var/lib/spotlight-most-read/refresh.lock /bin/sh /usr/local/lib/spotlight-most-read/refresh.sh
+TimeoutStartSec=120
+Nice=10
+PrivateTmp=true
+NoNewPrivileges=true

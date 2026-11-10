@@ -1,0 +1,140 @@
+---
+import ReaderTextSize from "./ReaderTextSize.astro";
+import type { CollectionEntry } from "astro:content";
+import NjDecidesPageHeading from "./NjDecidesPageHeading.astro";
+import type { PageTheme } from "../../../packages/content-core/src/content-model";
+import CmsHeroBackground from "./CmsHeroBackground.astro";
+import "../styles/branded-masthead.css";
+
+interface Props {
+  entry?: CollectionEntry<"pages">;
+  title?: string;
+  pageTheme?: PageTheme;
+  description?: string;
+  runtimePageId?: "contact";
+  heroBackgroundImage?: {
+    url: string;
+    width: number;
+    height: number;
+  } | null;
+  heroBackgroundPosition?: "center" | "top" | "bottom";
+}
+
+const {
+  entry,
+  title: suppliedTitle,
+  description: suppliedDescription,
+  runtimePageId: suppliedRuntimePageId,
+  heroBackgroundImage,
+  heroBackgroundPosition,
+  pageTheme,
+} =
+  Astro.props as Props;
+const title = entry?.data.title ?? suppliedTitle;
+const description = entry?.data.description ?? suppliedDescription;
+const runtimePageId =
+  suppliedRuntimePageId ?? (entry?.id === "contact" ? "contact" : undefined);
+if (!title || description === undefined) {
+  throw new Error("PublicArticle requires an entry or explicit title and description");
+}
+---
+
+<article
+  class="public-article"
+  data-cms-runtime-page={runtimePageId}
+>
+  {pageTheme === "nj-decides" && !runtimePageId ? <NjDecidesPageHeading title={title} description={description} /> : <header
+    class:list={[
+      "public-article__head",
+      "branded-masthead",
+      { "cms-hero-surface": Boolean(heroBackgroundImage) || Boolean(runtimePageId) },
+    ]}
+    data-cms-runtime-hero-surface={runtimePageId}
+  >
+    <CmsHeroBackground
+      image={heroBackgroundImage}
+      position={heroBackgroundPosition}
+      runtimePageId={runtimePageId}
+    />
+    <div class="public-article__head-inner">
+      <h1 data-cms-runtime-title={runtimePageId}>{title}</h1>
+      <span data-cms-runtime-description={runtimePageId}>{description}</span>
+    </div>
+  </header>}
+
+  <ReaderTextSize />
+  <div class="public-article__body" data-cms-runtime-body={runtimePageId}>
+    <slot />
+  </div>
+</article>
+
+<style>
+  .public-article {
+    min-width: 0;
+  }
+  .public-article__head {
+    display: flex;
+    align-items: center;
+  }
+  /* A hero image sets the title near the bottom of a modest band, with an
+     even inner margin, so no tall empty area sits below the description. */
+  .public-article__head:has(.cms-hero-background__image) {
+    min-height: clamp(18rem, 30vw, 24rem);
+    align-items: flex-end;
+  }
+  .public-article__head-inner {
+    width: 100%;
+    max-width: var(--wrap);
+    margin-inline: auto;
+    padding: clamp(3.5rem, 7vw, 6rem) var(--gutter);
+  }
+  .public-article__head:has(.cms-hero-background__image) .public-article__head-inner {
+    padding-block: clamp(2.5rem, 5vw, 4rem);
+  }
+  h1 {
+    margin: 0;
+    color: var(--text);
+    font-size: clamp(2.6rem, 6vw, 4.8rem);
+    line-height: 0.98;
+  }
+  .public-article__head-inner > span {
+    display: block;
+    margin-top: 1rem;
+    color: var(--text-dim);
+    font-size: 1.12rem;
+    line-height: 1.55;
+  }
+  /* An empty summary keeps no margin, so the hero margins stay even. */
+  .public-article__head-inner > span:empty {
+    display: none;
+  }
+  .public-article__body {
+    max-width: var(--wrap);
+    margin-inline: auto;
+    padding: clamp(2.5rem, 5vw, 5rem) var(--gutter) clamp(4rem, 8vw, 6rem);
+    color: var(--text-dim);
+    font-size: 1.02rem;
+    line-height: 1.75;
+  }
+  /* The body padding already sets the gaps below the head and above the
+     footer. CMS blocks drop their own block padding here so neither doubles. */
+  .public-article__body > :global(.cms-page__blocks) {
+    padding-block: 0;
+  }
+  .public-article__body :global(p),
+  .public-article__body :global(ul),
+  .public-article__body :global(ol) {
+    margin-block: 0 1.2rem;
+  }
+  .public-article__body :global(a) {
+    color: var(--color-link);
+    text-underline-offset: 0.22em;
+  }
+  .public-article__body :global(a:hover) {
+    color: var(--color-text-on-surface);
+  }
+  .public-article__body :global(ul),
+  .public-article__body :global(ol) {
+    padding-left: 1.25rem;
+  }
+</style>

@@ -1,0 +1,7 @@
+.source-video-surface { position: relative; min-width: 0; width: 100%; margin-inline: auto; }
+.video-review-seek { position: relative; min-width: 0; margin-block-start: var(--cms-space-1); padding-inline: var(--cms-space-1); border-radius: var(--cms-radius-control); background: var(--cms-surface); }
+.video-review-seek .media-comment-timeline { margin: 0; }
+.video-review-seek .media-comment-track { background: transparent; }
+.video-review-seek input[type="range"] { display: block; box-sizing: border-box; width: 100%; height: 24px; margin: 0; padding-inline: 4px; accent-color: var(--cms-brand); }
+.video-review-seek input:focus-visible { outline: var(--cms-focus-outline); outline-offset: 2px; }
+.video-review-seek .media-comment-card { top: auto; bottom: calc(100% + var(--cms-space-1)); }

@@ -1,0 +1,12 @@
+Build failed with status: EXPIRED and message: An unexpected error occurred. Refer to build logs: https://console.cloud.google.com/cloud-build/builds;region=us-central1/00000000-0000-4000-8000-000000000001?project=123456789012. For more details see the logs at https://console.cloud.google.com/cloud-build/builds;region=us-central1/00000000-0000-4000-8000-000000000001?project=123456789012.
+Build failed with status: EXPIRED and message: An unexpected error occurred. Refer to build logs: https://console.cloud.google.com/cloud-build/builds;region=us-central1/00000000-0000-4000-8000-000000000002?project=123456789012. For more details see the logs at https://console.cloud.google.com/cloud-build/builds;region=us-central1/00000000-0000-4000-8000-000000000002?project=123456789012.
+Build failed with status: EXPIRED and message: An unexpected error occurred. Refer to build logs: https://console.cloud.google.com/cloud-build/builds;region=us-central1/00000000-0000-4000-8000-000000000003?project=123456789012. For more details see the logs at https://console.cloud.google.com/cloud-build/builds;region=us-central1/00000000-0000-4000-8000-000000000003?project=123456789012.
+functions: Deploys failed. Skipping deletes.
+Functions deploy had errors with the following functions:
+	exampleFunctionB(us-central1)
+	exampleFunctionC(us-central1)
+	exampleFunctionD(us-central1)
+Error: There was an error deploying functions:
+- Error Failed to update function exampleFunctionB in region us-central1
+- Error Failed to update function exampleFunctionD in region us-central1
+- Error Failed to update function exampleFunctionC in region us-central1

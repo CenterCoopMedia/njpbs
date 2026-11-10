@@ -1,0 +1,347 @@
+{
+  "id": "home",
+  "template": "home",
+  "title": "Saved Home v2 parity",
+  "status": "draft",
+  "version": 7,
+  "homeCompositionVersion": 2,
+  "blocks": [
+    {
+      "id": "saved-home-newsletter",
+      "section": "home-newsletter",
+      "type": "newsletter_signup",
+      "order": 0,
+      "visible": true,
+      "data": {
+        "newsletterIds": [
+          "parity-newsletter"
+        ],
+        "actionLabel": "Get station updates",
+        "heading": "Saved Newsletter heading",
+        "intro": "Saved Newsletter summary",
+        "selectionReceipt": {
+          "buildBatchId": "cms-HOME6CatalogProof001",
+          "generation": 21,
+          "commitSha": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "digest": "e6887be4f86bbc04c8364d9f7f10d5aa3c0e24af9824e4fb4f85b3df4f4ccfc9"
+        }
+      }
+    },
+    {
+      "id": "saved-home-more",
+      "section": "home-more",
+      "order": 1,
+      "visible": true,
+      "type": "content_shelf",
+      "data": {
+        "title": "More to watch",
+        "source": "pbs_more",
+        "itemLimit": 16,
+        "moreLabel": "Browse all",
+        "moreHref": "https://watch.njpbs.org/",
+        "selectedIds": [
+          "https://watch.njpbs.org/show/the-four-phantoms-in-concert/",
+          "https://watch.njpbs.org/show/parity-missing/",
+          "https://watch.njpbs.org/show/marvin-gaye-greatest-hits-alive/"
+        ],
+        "selectionReceipt": {
+          "buildBatchId": "cms-HOME6CatalogProof001",
+          "generation": 21,
+          "commitSha": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "digest": "e6887be4f86bbc04c8364d9f7f10d5aa3c0e24af9824e4fb4f85b3df4f4ccfc9"
+        },
+        "presentation": "grid",
+        "columns": 3
+      }
+    },
+    {
+      "id": "saved-home-passport-copy",
+      "section": "home-passport-copy",
+      "order": 2,
+      "visible": true,
+      "type": "prose",
+      "data": {
+        "content": {
+          "type": "doc",
+          "content": [
+            {
+              "type": "heading",
+              "attrs": {
+                "level": 2
+              },
+              "content": [
+                {
+                  "type": "text",
+                  "text": "Stream more with PBS Passport"
+                }
+              ]
+            },
+            {
+              "type": "paragraph",
+              "content": [
+                {
+                  "type": "text",
+                  "text": "Members unlock a library of PBS and NJ PBS programs on demand. Learn how the Passport member benefit works through PBS."
+                }
+              ]
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "saved-home-passport-action",
+      "section": "home-passport-action",
+      "order": 3,
+      "visible": true,
+      "type": "cta_row",
+      "data": {
+        "ctas": [
+          {
+            "label": "Explore Passport",
+            "href": "https://watch.njpbs.org/passport/learn-more/",
+            "variant": "primary"
+          }
+        ]
+      }
+    },
+    {
+      "id": "saved-home-spotlight",
+      "section": "home-spotlight",
+      "order": 4,
+      "visible": true,
+      "type": "content_shelf",
+      "data": {
+        "title": "NJ Spotlight News",
+        "source": "spotlight_news",
+        "itemLimit": 8,
+        "moreLabel": "More news",
+        "moreHref": "https://www.njspotlightnews.org/",
+        "selectedIds": [
+          "https://www.njspotlightnews.org/2026/10/from-delaney-hall-hunger-strike-to-freedom/",
+          "https://www.njspotlightnews.org/2026/10/parity-missing/",
+          "https://www.njspotlightnews.org/2026/10/dale-caldwell-were-all-due-due-process/"
+        ],
+        "selectionReceipt": {
+          "buildBatchId": "cms-HOME6CatalogProof001",
+          "generation": 21,
+          "commitSha": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "digest": "e6887be4f86bbc04c8364d9f7f10d5aa3c0e24af9824e4fb4f85b3df4f4ccfc9"
+        },
+        "presentation": "grid",
+        "columns": 3
+      }
+    },
+    {
+      "id": "saved-home-donor",
+      "section": "home-donor",
+      "type": "card_grid",
+      "order": 5,
+      "visible": true,
+      "data": {
+        "cards": [
+          {
+            "title": "Support NJ PBS with a donor advised fund",
+            "body": {
+              "type": "doc",
+              "content": [
+                {
+                  "type": "paragraph",
+                  "content": [
+                    {
+                      "type": "text",
+                      "text": "Saved giving summary."
+                    }
+                  ]
+                }
+              ]
+            },
+            "label": "Explore giving",
+            "href": "/support/"
+          }
+        ]
+      }
+    },
+    {
+      "id": "saved-home-featured",
+      "section": "home-featured",
+      "order": 6,
+      "visible": true,
+      "type": "content_shelf",
+      "data": {
+        "title": "Featured on NJ PBS",
+        "source": "pbs_featured",
+        "itemLimit": 8,
+        "moreLabel": "Browse all",
+        "moreHref": "https://watch.njpbs.org/",
+        "selectedIds": [
+          "https://watch.njpbs.org/show/painting-community/",
+          "https://watch.njpbs.org/show/parity-missing/",
+          "https://watch.njpbs.org/show/from-that-small-island-the-story-of-the-irish-feature-film/"
+        ],
+        "selectionReceipt": {
+          "buildBatchId": "cms-HOME6CatalogProof001",
+          "generation": 21,
+          "commitSha": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "digest": "e6887be4f86bbc04c8364d9f7f10d5aa3c0e24af9824e4fb4f85b3df4f4ccfc9"
+        },
+        "presentation": "grid",
+        "columns": 3
+      }
+    },
+    {
+      "id": "saved-home-posts",
+      "type": "content_shelf",
+      "section": "home-posts",
+      "visible": true,
+      "order": 7,
+      "data": {
+        "title": "From NJ PBS",
+        "source": "station_posts",
+        "itemLimit": 24,
+        "moreLabel": "More from NJ PBS",
+        "moreHref": "/posts/",
+        "presentation": "grid",
+        "columns": 3,
+        "selectedIds": [
+          "1208e81a5470be941e3fb392eac674ae",
+          "57298ff3b0d0917f9e653f80bada063d"
+        ],
+        "selectionReceipt": {
+          "buildBatchId": "cms-HOME6CatalogProof001",
+          "generation": 21,
+          "commitSha": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "digest": "e6887be4f86bbc04c8364d9f7f10d5aa3c0e24af9824e4fb4f85b3df4f4ccfc9"
+        }
+      }
+    },
+    {
+      "id": "saved-home-start",
+      "section": "home-start",
+      "order": 8,
+      "visible": true,
+      "type": "card_grid",
+      "data": {
+        "cards": [
+          {
+            "title": "LIVE",
+            "href": "/live/",
+            "body": {
+              "type": "doc",
+              "content": [
+                {
+                  "type": "paragraph",
+                  "content": [
+                    {
+                      "type": "text",
+                      "text": "Stream the NJ PBS broadcast channel right now"
+                    }
+                  ]
+                }
+              ]
+            }
+          },
+          {
+            "title": "Programs on demand",
+            "href": "https://watch.njpbs.org/",
+            "body": {
+              "type": "doc",
+              "content": [
+                {
+                  "type": "paragraph",
+                  "content": [
+                    {
+                      "type": "text",
+                      "text": "Browse full episodes and specials any time"
+                    }
+                  ]
+                }
+              ]
+            }
+          },
+          {
+            "title": "TV schedule",
+            "href": "/schedule/",
+            "body": {
+              "type": "doc",
+              "content": [
+                {
+                  "type": "paragraph",
+                  "content": [
+                    {
+                      "type": "text",
+                      "text": "See what is airing today and all week"
+                    }
+                  ]
+                }
+              ]
+            }
+          },
+          {
+            "title": "PBS Kids",
+            "href": "/kids/",
+            "body": {
+              "type": "doc",
+              "content": [
+                {
+                  "type": "paragraph",
+                  "content": [
+                    {
+                      "type": "text",
+                      "text": "Trusted, ad-free shows and games for children"
+                    }
+                  ]
+                }
+              ]
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "saved-home-start-action",
+      "section": "home-start-action",
+      "order": 9,
+      "visible": true,
+      "type": "cta_row",
+      "data": {
+        "ctas": [
+          {
+            "label": "Full schedule",
+            "href": "/schedule/"
+          }
+        ]
+      }
+    },
+    {
+      "id": "saved-home-newscast",
+      "section": "home-newscast",
+      "type": "home_newscast",
+      "order": 10,
+      "visible": true,
+      "data": {
+        "showId": "ad1f378e-9779-4ef1-a629-40a8a6f8f8d5",
+        "heading": "Latest newscast",
+        "summary": "Saved automatic Newscast summary",
+        "layout": "feature",
+        "watchLabel": "Watch the latest",
+        "pastLabel": "Past newscasts",
+        "liveLabel": "Watch live"
+      }
+    }
+  ],
+  "homeHeroTitle": "Saved editorial Home",
+  "homeHeroSubtitle": "One snapshot across every Home surface",
+  "homeHero": {
+    "mode": "manual",
+    "presentation": "editorial",
+    "items": [
+      {
+        "itemId": "parity-hero",
+        "title": "Saved lead story",
+        "summary": "Saved lead summary",
+        "href": "/about/"
+      }
+    ]
+  }
+}

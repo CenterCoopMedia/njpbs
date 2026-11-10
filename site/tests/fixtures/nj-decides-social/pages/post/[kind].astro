@@ -1,0 +1,24 @@
+---
+import PostRoute from "../../../../../src/pages/posts/[...slug].astro";
+import { postLeadFixture } from "../../../post-lead-media";
+import { projectCmsPost } from "../../../../../src/lib/cms-posts-projection";
+
+export function getStaticPaths() {
+  return ["election", "override", "ordinary", "missing", "retired"].map(kind => {
+    const read = postLeadFixture("standard", "image");
+    const post = projectCmsPost(read.document, { now: new Date("2026-10-27T12:00:00Z"),
+      assets: new Map(read.assets.map(asset => [asset.id, asset])) })!;
+    const data = { ...post, blocks: [], tags: kind === "ordinary" ? [] : ["NJ Decides 2026"],
+      categories: [], heroImageCaption: "", title: "Election Post", summary: "Post summary",
+      seo: { title: "Post search title", description: "Post search description" },
+      social: { title: "Post social title", description: "Post social description",
+        ...(kind === "override" ? { imageAssetId: "upload" } : kind === "missing" ? { imageAssetId: "missing" } : {}) },
+    };
+    return { params: { kind }, props: {
+      entry: { id: data.postId, collection: "cmsPosts" as const, data }, credits: data.credits,
+      ...(kind === "retired" ? { redirectFrom: "retired-election" } : {}),
+    } };
+  });
+}
+---
+<PostRoute {...Astro.props} />

@@ -1,0 +1,530 @@
+name: CMS dev publish
+run-name: CMS dev publish ${{ github.event.client_payload.queueId || github.sha }}
+
+on:
+  workflow_dispatch:
+    inputs:
+      run_id:
+        description: Failed dev publish run that owns the retained artifact
+        type: string
+        required: true
+      queue_id:
+        description: Exact retained dev queue ID
+        type: string
+        required: true
+      generation:
+        description: Exact retained generation
+        type: string
+        required: true
+      worker_version_id:
+        description: Exact retained private Worker candidate version
+        type: string
+        required: true
+  repository_dispatch:
+    types: [cms_dev_publish]
+  push:
+    branches: [main]
+    paths:
+      - "site/**"
+      - "packages/**"
+      - "scripts/lib/dev-publication.cjs"
+      - "functions/lib/public-worker-candidate.js"
+      - ".github/scripts/dev-publication-source-checkout.mjs"
+      - ".github/scripts/dev-publication-input-artifact.mjs"
+      - "workers/src/dev-public-worker.ts"
+      - "workers/src/dev-public-worker-configuration.d.ts"
+      - "workers/src/no-build-post-worker.ts"
+      - "workers/src/transitional-post-read-worker.ts"
+      - "workers/src/durable-post-withdrawals.ts"
+      - "functions/lib/transitional-post-fallback.js"
+      - "functions/lib/transitional-post-fallback.d.ts"
+      - "functions/lib/publication-target.js"
+      - "functions/lib/publication-target.d.ts"
+      - "workers/wrangler.public.dev.jsonc"
+      - ".github/workflows/cms-dev-publish.yml"
+
+permissions:
+  contents: read
+
+# Code refresh and editorial publication share one owner. Never cancel a run
+# after it could have uploaded bytes. Uncertain uploads retain their DB lease.
+concurrency:
+  group: cms-dev-publication
+  queue: max
+  cancel-in-progress: false
+
+env:
+  CMS_DEV_ADMIN_ORIGIN: ${{ vars.CMS_DEV_ADMIN_ORIGIN }}
+  CMS_DEV_ADMIN_PAGES: ${{ vars.CMS_DEV_ADMIN_PAGES }}
+  CMS_DEV_API_ORIGIN: ${{ vars.CMS_DEV_API_ORIGIN }}
+  CMS_DEV_API_WORKER: ${{ vars.CMS_DEV_API_WORKER }}
+  CMS_DEV_MEDIA_BUCKET: ${{ vars.CMS_DEV_MEDIA_BUCKET }}
+  CMS_DEV_MEDIA_ORIGIN: ${{ vars.CMS_DEV_MEDIA_ORIGIN }}
+  CMS_DEV_PREVIEW_ORIGIN: ${{ vars.CMS_DEV_PREVIEW_ORIGIN }}
+  CMS_DEV_PREVIEW_RENDERER: ${{ vars.CMS_DEV_PREVIEW_RENDERER }}
+  CMS_DEV_PREVIEW_STAFF_WORKER: ${{ vars.CMS_DEV_PREVIEW_STAFF_WORKER }}
+  CMS_DEV_PREVIEW_WORKER: ${{ vars.CMS_DEV_PREVIEW_WORKER }}
+  CMS_DEV_SITE_PAGES: ${{ vars.CMS_DEV_SITE_PAGES }}
+  CMS_PRODUCTION_API_ORIGIN: ${{ vars.CMS_PRODUCTION_API_ORIGIN }}
+  CANONICAL_GITHUB_REPOSITORY: ${{ vars.CANONICAL_GITHUB_REPOSITORY }}
+  CANONICAL_GITHUB_REPOSITORY_ID: ${{ vars.CANONICAL_GITHUB_REPOSITORY_ID }}
+  VITE_CANONICAL_GITHUB_REPOSITORY: ${{ vars.CANONICAL_GITHUB_REPOSITORY }}
+  CMS_PUBLISH_GITHUB_TRUSTED_ACTORS: ${{ vars.CMS_PUBLISH_GITHUB_TRUSTED_ACTORS }}
+  CMS_DEV_FIREBASE_WEB_APP_ID: ${{ vars.CMS_DEV_FIREBASE_WEB_APP_ID }}
+  CMS_DEV_CLOUDFLARE_ACCOUNT_ID: ${{ vars.CMS_DEV_CLOUDFLARE_ACCOUNT_ID }}
+  CMS_DEPLOYMENT_ENVIRONMENT: development
+  FIREBASE_PROJECT_ID: njpbs-site-dev
+  CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
+  CLOUDFLARE_DEV_PUBLIC_WORKER: ${{ vars.CLOUDFLARE_DEV_PUBLIC_WORKER }}
+  CMS_DEV_PUBLIC_ORIGIN: ${{ vars.CMS_DEV_PUBLIC_ORIGIN }}
+  CMS_DEV_PREVIEW_BUCKET: ${{ vars.CMS_DEV_PREVIEW_BUCKET }}
+  CMS_DEV_ARTIFACT_DIRECTORY: ${{ github.workspace }}/dev-publication
+  SOURCE_SHA: ${{ github.sha }}
+  QUEUE_ID: ${{ github.event.client_payload.queueId }}
+
+jobs:
+  reconcile:
+    if: >-
+      github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main' &&
+      (vars.CANONICAL_GITHUB_REPOSITORY != '' && vars.CANONICAL_GITHUB_REPOSITORY_ID != '' && github.repository_id == vars.CANONICAL_GITHUB_REPOSITORY_ID && github.workflow_ref == format('{0}/.github/workflows/cms-dev-publish.yml@refs/heads/main', vars.CANONICAL_GITHUB_REPOSITORY)) &&
+      contains(fromJSON(vars.CMS_PUBLISH_GITHUB_TRUSTED_ACTORS || '[]'), github.actor) && contains(fromJSON(vars.CMS_PUBLISH_GITHUB_TRUSTED_ACTORS || '[]'), github.triggering_actor) &&
+      vars.CMS_DEV_PUBLISH_ENABLED == 'false'
+    environment: development
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      actions: read
+      id-token: write
+    env:
+      CMS_DEV_PUBLISH_ENABLED: ${{ vars.CMS_DEV_PUBLISH_ENABLED }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: |
+            package-lock.json
+            site/package-lock.json
+      - name: Validate original run and exact recovery inputs
+        env:
+          GH_TOKEN: ${{ github.token }}
+          CMS_DEV_DISPATCH_ACTOR: ${{ vars.CMS_DEV_DISPATCH_ACTOR }}
+          RETAINED_RUN_ID: ${{ inputs.run_id }}
+          RETAINED_QUEUE_ID: ${{ inputs.queue_id }}
+          RETAINED_GENERATION: ${{ inputs.generation }}
+          RETAINED_WORKER_VERSION_ID: ${{ inputs.worker_version_id }}
+        run: node .github/scripts/dev-reconcile-input.mjs
+      - name: Retain verified original run source
+        run: echo "DEV_RECONCILE_RUN_SHA=$SOURCE_SHA" >> "$GITHUB_ENV"
+      - run: node .github/scripts/metered-api-scan.mjs
+      - name: Check out trusted configuration renderer
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ github.sha }}
+          path: .configuration-render-gate
+          persist-credentials: false
+          sparse-checkout: |
+            scripts/render-development-config.mjs
+            config/development-inputs.json
+          sparse-checkout-cone-mode: false
+      - name: Render deployment resource configuration
+        working-directory: ${{ github.workspace }}
+        run: |
+          set -euo pipefail
+          mv .configuration-render-gate "$RUNNER_TEMP/configuration-render-gate"
+          node "$RUNNER_TEMP/configuration-render-gate/scripts/render-development-config.mjs" --root "$GITHUB_WORKSPACE"
+      - run: npm ci --ignore-scripts
+      - run: npm ci --ignore-scripts --prefix site
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: dev-publication-artifact
+          github-token: ${{ github.token }}
+          run-id: ${{ inputs.run_id }}
+          path: dev-publication
+      - name: Verify retained Post renderer files
+        run: |
+          test -f dev-publication/renderer/server/entry.mjs
+          test -f dev-publication/renderer/renderer-release.json
+          test -f dev-publication/dist/posts/_no-build-assets/renderer-release.json
+      - name: Authenticate only as the dev publisher
+        uses: google-github-actions/auth@7c6bc770dae815cd3e89ee6cdf493a5fab2cc093 # v3
+        with:
+          workload_identity_provider: ${{ vars.CMS_DEV_PUBLISH_OIDC_PROVIDER }}
+          service_account: ${{ vars.CMS_DEV_PUBLISH_SERVICE_ACCOUNT }}
+          project_id: njpbs-site-dev
+          create_credentials_file: true
+      - name: Select accepted dev source without changing ownership
+        run: node --import ./site/node_modules/tsx/dist/loader.mjs site/scripts/cms-dev-publication.mjs source
+      - name: Check retained source ancestry before repaired reconciliation
+        run: node .github/scripts/dev-publication-source-checkout.mjs verify
+      - name: Reconcile the retained candidate without rebuilding or uploading
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_DEV_PUBLIC_WORKER_TOKEN }}
+          CMS_DEV_PREVIEW_R2_CREDENTIAL: ${{ secrets.CMS_DEV_PREVIEW_R2_CREDENTIAL }}
+          CMS_DEV_ACCESS_CLIENT_ID: ${{ secrets.CMS_DEV_ACCESS_CLIENT_ID }}
+          CMS_DEV_ACCESS_CLIENT_SECRET: ${{ secrets.CMS_DEV_ACCESS_CLIENT_SECRET }}
+          CMS_DEV_CMS_SOURCE_SHA: ${{ vars.CMS_DEV_CMS_SOURCE_SHA }}
+          CMS_DEV_ADMIN_SOURCE_SHA: ${{ vars.CMS_DEV_ADMIN_SOURCE_SHA }}
+          CMS_DEV_RENDERER_SOURCE_SHA: ${{ vars.CMS_DEV_RENDERER_SOURCE_SHA }}
+        run: |
+          chmod 700 dev-publication
+          chmod 600 dev-publication/public-context.json
+          node --import ./site/node_modules/tsx/dist/loader.mjs site/scripts/cms-dev-publication.mjs reconcile
+      - name: Retain reconciliation receipt
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: dev-reconciliation-receipt
+          path: dev-publication/deployment.json
+          if-no-files-found: error
+          retention-days: 30
+
+  prepare:
+    outputs:
+      source_sha: ${{ steps.source.outputs.source_sha }}
+    if: >-
+      vars.CMS_DEV_PUBLISH_ENABLED == 'true' && github.ref == 'refs/heads/main' &&
+      ((github.event_name == 'repository_dispatch' && github.event.action == 'cms_dev_publish' &&
+        vars.CMS_DEV_DISPATCH_ACTOR != '' && !contains(fromJSON(vars.CMS_PUBLISH_GITHUB_TRUSTED_ACTORS || '[]'), vars.CMS_DEV_DISPATCH_ACTOR) &&
+        github.event.sender.login == vars.CMS_DEV_DISPATCH_ACTOR &&
+        github.actor == vars.CMS_DEV_DISPATCH_ACTOR &&
+        (github.triggering_actor == vars.CMS_DEV_DISPATCH_ACTOR ||
+         (github.run_attempt > 1 && contains(fromJSON(vars.CMS_PUBLISH_GITHUB_TRUSTED_ACTORS || '[]'), github.triggering_actor)))) ||
+       (github.event_name == 'push' && contains(fromJSON(vars.CMS_PUBLISH_GITHUB_TRUSTED_ACTORS || '[]'), github.event.sender.login) && contains(fromJSON(vars.CMS_PUBLISH_GITHUB_TRUSTED_ACTORS || '[]'), github.triggering_actor)))
+    environment: development
+    runs-on: ubuntu-24.04
+    timeout-minutes: 13 # Runaway guard: 3x max 4m02s (14d, 2026-10-26; #2657).
+    permissions:
+      contents: read
+      actions: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: |
+            package-lock.json
+            site/package-lock.json
+      - run: node .github/scripts/metered-api-scan.mjs
+      - name: Check out trusted configuration renderer
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ github.sha }}
+          path: .configuration-render-gate
+          persist-credentials: false
+          sparse-checkout: |
+            scripts/render-development-config.mjs
+            config/development-inputs.json
+          sparse-checkout-cone-mode: false
+      - name: Render deployment resource configuration
+        working-directory: ${{ github.workspace }}
+        run: |
+          set -euo pipefail
+          mv .configuration-render-gate "$RUNNER_TEMP/configuration-render-gate"
+          node "$RUNNER_TEMP/configuration-render-gate/scripts/render-development-config.mjs" --root "$GITHUB_WORKSPACE"
+      - name: Validate exact dispatch and source
+        env:
+          CMS_DEV_DISPATCH_ACTOR: ${{ vars.CMS_DEV_DISPATCH_ACTOR }}
+        run: |
+          test "$(git rev-parse HEAD)" = "$SOURCE_SHA"
+          node <<'NODE'
+          const event = require(process.env.GITHUB_EVENT_PATH);
+          const { trustedPublishActors } = require('./functions/lib/cms-publish-dispatch');
+          const trusted = trustedPublishActors();
+          if (!trusted.length) throw new Error('Configure trusted publication actors');
+          if (process.env.GITHUB_EVENT_NAME === 'repository_dispatch') {
+            if (process.env.GITHUB_TRIGGERING_ACTOR !== process.env.CMS_DEV_DISPATCH_ACTOR &&
+                !(Number(process.env.GITHUB_RUN_ATTEMPT) > 1 && trusted.includes(process.env.GITHUB_TRIGGERING_ACTOR))) {
+              throw new Error('Invalid development publication rerunner');
+            }
+            require('./functions/lib/cms-publish-dispatch').assertPublishDispatch({
+              eventName: process.env.GITHUB_EVENT_NAME, action: event.action,
+              ref: process.env.GITHUB_REF, sender: event.sender.login,
+              actor: process.env.GITHUB_ACTOR, payload: event.client_payload,
+            }, 'development', process.env.CMS_DEV_DISPATCH_ACTOR);
+          } else if (process.env.GITHUB_EVENT_NAME !== 'push' || process.env.GITHUB_REF !== 'refs/heads/main' ||
+                     !trusted.includes(event.sender.login) || !trusted.includes(process.env.GITHUB_TRIGGERING_ACTOR)) {
+            throw new Error('Invalid development code refresh');
+          }
+          NODE
+      - run: npm ci --ignore-scripts
+      - run: npm ci --ignore-scripts --prefix site
+      - run: node .github/scripts/metered-api-scan.mjs
+      - name: Authenticate only to dev Firestore
+        uses: google-github-actions/auth@7c6bc770dae815cd3e89ee6cdf493a5fab2cc093 # v3
+        with:
+          workload_identity_provider: ${{ vars.CMS_DEV_PUBLISH_OIDC_PROVIDER }}
+          service_account: ${{ vars.CMS_DEV_PUBLISH_SERVICE_ACCOUNT }}
+          project_id: njpbs-site-dev
+          create_credentials_file: true
+      - name: Require retained input on rerun
+        if: github.run_attempt != 1
+        id: retry
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: node --import ./site/node_modules/tsx/dist/loader.mjs site/scripts/cms-dev-publication.mjs inspect-retry
+      - name: Restore frozen input on rerun
+        if: steps.retry.outputs.exists == 'true'
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: dev-publication-input
+          github-token: ${{ github.token }}
+          run-id: ${{ github.run_id }}
+          path: dev-publication
+      - name: Select accepted dev source without changing ownership
+        run: node --import ./site/node_modules/tsx/dist/loader.mjs site/scripts/cms-dev-publication.mjs source
+      - name: Preserve the trusted metered-API scanner
+        run: |
+          mkdir -p "$RUNNER_TEMP/metered-api-gate/.github/scripts"
+          cp .github/scripts/metered-api-scan.mjs "$RUNNER_TEMP/metered-api-gate/.github/scripts/metered-api-scan.mjs"
+      - name: Check trusted source ancestry and restore exact code
+        id: source
+        run: |
+          node .github/scripts/dev-publication-source-checkout.mjs
+          echo "source_sha=$SOURCE_SHA" >> "$GITHUB_OUTPUT"
+      - run: npm ci --ignore-scripts
+      - run: npm ci --ignore-scripts --prefix site
+      - name: Scan accepted source before reserving public work
+        run: node "$RUNNER_TEMP/metered-api-gate/.github/scripts/metered-api-scan.mjs" --target-root "$GITHUB_WORKSPACE"
+      - name: Render deployment resource configuration
+        run: node "$RUNNER_TEMP/configuration-render-gate/scripts/render-development-config.mjs" --root "$GITHUB_WORKSPACE"
+      - name: Reserve generation and freeze published inputs
+        run: |
+          chmod 700 dev-publication 2>/dev/null || true
+          node --import ./site/node_modules/tsx/dist/loader.mjs site/scripts/cms-dev-publication.mjs prepare
+      - name: Retain exact input for retry
+        if: github.run_attempt == 1
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: dev-publication-input
+          path: dev-publication/
+          if-no-files-found: error
+          retention-days: 30
+
+  build:
+    needs: prepare
+    env:
+      SOURCE_SHA: ${{ needs.prepare.outputs.source_sha }}
+    if: >-
+      vars.CMS_DEV_PUBLISH_ENABLED == 'true' && github.ref == 'refs/heads/main' &&
+      ((github.event_name == 'repository_dispatch' && github.event.action == 'cms_dev_publish' &&
+        vars.CMS_DEV_DISPATCH_ACTOR != '' && !contains(fromJSON(vars.CMS_PUBLISH_GITHUB_TRUSTED_ACTORS || '[]'), vars.CMS_DEV_DISPATCH_ACTOR) &&
+        github.event.sender.login == vars.CMS_DEV_DISPATCH_ACTOR &&
+        github.actor == vars.CMS_DEV_DISPATCH_ACTOR &&
+        (github.triggering_actor == vars.CMS_DEV_DISPATCH_ACTOR ||
+         (github.run_attempt > 1 && contains(fromJSON(vars.CMS_PUBLISH_GITHUB_TRUSTED_ACTORS || '[]'), github.triggering_actor)))) ||
+       (github.event_name == 'push' && contains(fromJSON(vars.CMS_PUBLISH_GITHUB_TRUSTED_ACTORS || '[]'), github.event.sender.login) && contains(fromJSON(vars.CMS_PUBLISH_GITHUB_TRUSTED_ACTORS || '[]'), github.triggering_actor)))
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30 # Runaway guard: 3x max rounds to 23m; retain 30m floor (#2657).
+    permissions:
+      contents: read
+      actions: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          ref: ${{ env.SOURCE_SHA }}
+          persist-credentials: false
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: |
+            package-lock.json
+            site/package-lock.json
+      - run: npm ci --ignore-scripts
+      - run: npm ci --ignore-scripts --prefix site
+      - run: node .github/scripts/metered-api-scan.mjs
+      - name: Check out trusted configuration renderer
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ github.sha }}
+          path: .configuration-render-gate
+          persist-credentials: false
+          sparse-checkout: |
+            scripts/render-development-config.mjs
+            config/development-inputs.json
+          sparse-checkout-cone-mode: false
+      - name: Render deployment resource configuration
+        working-directory: ${{ github.workspace }}
+        run: |
+          set -euo pipefail
+          mv .configuration-render-gate "$RUNNER_TEMP/configuration-render-gate"
+          node "$RUNNER_TEMP/configuration-render-gate/scripts/render-development-config.mjs" --root "$GITHUB_WORKSPACE"
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: dev-publication-input
+          github-token: ${{ github.token }}
+          run-id: ${{ github.run_id }}
+          path: dev-publication
+      - name: Find retained build
+        id: retained
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          count=$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID/artifacts" --jq '[.artifacts[] | select(.name == "dev-publication-artifact" and .expired == false)] | length')
+          echo "exists=$([ "$count" = 1 ] && echo true || echo false)" >> "$GITHUB_OUTPUT"
+      - name: Restore exact artifact on retry
+        if: steps.retained.outputs.exists == 'true'
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: dev-publication-artifact
+          github-token: ${{ github.token }}
+          run-id: ${{ github.run_id }}
+          path: dev-publication
+      - name: Prepare pinned search model for offline build
+        if: steps.retained.outputs.exists != 'true'
+        run: node --import ./site/node_modules/tsx/dist/loader.mjs site/scripts/prepare-search-model.ts
+      - name: Prepare hosted offline build sandbox
+        if: steps.retained.outputs.exists != 'true'
+        run: |
+          set -euo pipefail
+          test "$RUNNER_ENVIRONMENT" = github-hosted
+          if ! command -v bwrap >/dev/null; then
+            sudo apt-get update
+            sudo apt-get install -y --no-install-recommends bubblewrap
+          fi
+          # Permit bwrap's user namespace on this disposable, secretless VM only.
+          # Ubuntu 24.04 restricts unprivileged user namespaces by default.
+          if [ -f /proc/sys/kernel/apparmor_restrict_unprivileged_userns ]; then
+            sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
+          fi
+      - name: Require offline build sandbox
+        if: steps.retained.outputs.exists != 'true'
+        run: command -v bwrap
+      - name: Verify offline build sandbox
+        if: steps.retained.outputs.exists != 'true'
+        run: bwrap --unshare-net --die-with-parent --ro-bind / / --dev /dev --proc /proc --tmpfs /tmp -- /bin/true
+      - name: Build from frozen input without network or credentials
+        if: steps.retained.outputs.exists != 'true'
+        run: |
+          chmod 700 dev-publication
+          node --import ./site/node_modules/tsx/dist/loader.mjs site/scripts/cms-dev-publication.mjs build
+      - name: Check built content
+        if: steps.retained.outputs.exists != 'true'
+        run: npm --prefix site run guardrails
+        env:
+          INTERNAL_SURFACES: "0"
+      - name: Verify retained Post renderer files
+        run: |
+          test -f dev-publication/renderer/server/entry.mjs
+          test -f dev-publication/renderer/renderer-release.json
+          test -f dev-publication/dist/posts/_no-build-assets/renderer-release.json
+      # Retain the server graph and client assets together for upload and recovery.
+      - name: Retain artifact and private receipts
+        if: steps.retained.outputs.exists != 'true'
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: dev-publication-artifact
+          path: dev-publication/
+          if-no-files-found: error
+          retention-days: 30
+
+  finalize:
+    needs: [prepare, build]
+    env:
+      SOURCE_SHA: ${{ needs.prepare.outputs.source_sha }}
+    if: >-
+      always() && needs.prepare.result != 'skipped' && needs.prepare.outputs.source_sha != '' &&
+      vars.CMS_DEV_PUBLISH_ENABLED == 'true' && github.ref == 'refs/heads/main' &&
+      ((github.event_name == 'repository_dispatch' && github.event.action == 'cms_dev_publish' &&
+        vars.CMS_DEV_DISPATCH_ACTOR != '' && !contains(fromJSON(vars.CMS_PUBLISH_GITHUB_TRUSTED_ACTORS || '[]'), vars.CMS_DEV_DISPATCH_ACTOR) &&
+        github.event.sender.login == vars.CMS_DEV_DISPATCH_ACTOR &&
+        github.actor == vars.CMS_DEV_DISPATCH_ACTOR &&
+        (github.triggering_actor == vars.CMS_DEV_DISPATCH_ACTOR ||
+         (github.run_attempt > 1 && contains(fromJSON(vars.CMS_PUBLISH_GITHUB_TRUSTED_ACTORS || '[]'), github.triggering_actor)))) ||
+       (github.event_name == 'push' && contains(fromJSON(vars.CMS_PUBLISH_GITHUB_TRUSTED_ACTORS || '[]'), github.event.sender.login) && contains(fromJSON(vars.CMS_PUBLISH_GITHUB_TRUSTED_ACTORS || '[]'), github.triggering_actor)))
+    environment: development
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15 # Runaway guard: 3x max rounds to 9m; retain 15m floor (#2657).
+    permissions:
+      contents: read
+      actions: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          ref: ${{ env.SOURCE_SHA }}
+          persist-credentials: false
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: |
+            package-lock.json
+            site/package-lock.json
+      - run: npm ci --ignore-scripts
+      - run: npm ci --ignore-scripts --prefix site
+      - run: node .github/scripts/metered-api-scan.mjs
+      - name: Check out trusted configuration renderer
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ github.sha }}
+          path: .configuration-render-gate
+          persist-credentials: false
+          sparse-checkout: |
+            scripts/render-development-config.mjs
+            config/development-inputs.json
+          sparse-checkout-cone-mode: false
+      - name: Render deployment resource configuration
+        working-directory: ${{ github.workspace }}
+        run: |
+          set -euo pipefail
+          mv .configuration-render-gate "$RUNNER_TEMP/configuration-render-gate"
+          node "$RUNNER_TEMP/configuration-render-gate/scripts/render-development-config.mjs" --root "$GITHUB_WORKSPACE"
+      - uses: google-github-actions/auth@7c6bc770dae815cd3e89ee6cdf493a5fab2cc093 # v3
+        id: auth
+        with:
+          workload_identity_provider: ${{ vars.CMS_DEV_PUBLISH_OIDC_PROVIDER }}
+          service_account: ${{ vars.CMS_DEV_PUBLISH_SERVICE_ACCOUNT }}
+          project_id: njpbs-site-dev
+          create_credentials_file: true
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        if: needs.build.result == 'success'
+        with:
+          name: dev-publication-artifact
+          github-token: ${{ github.token }}
+          run-id: ${{ github.run_id }}
+          path: dev-publication
+      - name: Verify retained Post renderer files
+        if: needs.build.result == 'success'
+        run: |
+          test -f dev-publication/renderer/server/entry.mjs
+          test -f dev-publication/renderer/renderer-release.json
+          test -f dev-publication/dist/posts/_no-build-assets/renderer-release.json
+      - name: Upload only to dev, verify receipts, and settle dev queue
+        id: upload
+        if: needs.build.result == 'success'
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_DEV_PUBLIC_WORKER_TOKEN }}
+          CMS_DEV_PREVIEW_R2_CREDENTIAL: ${{ secrets.CMS_DEV_PREVIEW_R2_CREDENTIAL }}
+          CMS_DEV_ACCESS_CLIENT_ID: ${{ secrets.CMS_DEV_ACCESS_CLIENT_ID }}
+          CMS_DEV_ACCESS_CLIENT_SECRET: ${{ secrets.CMS_DEV_ACCESS_CLIENT_SECRET }}
+          CMS_DEV_CMS_SOURCE_SHA: ${{ vars.CMS_DEV_CMS_SOURCE_SHA }}
+          CMS_DEV_ADMIN_SOURCE_SHA: ${{ vars.CMS_DEV_ADMIN_SOURCE_SHA }}
+          CMS_DEV_RENDERER_SOURCE_SHA: ${{ vars.CMS_DEV_RENDERER_SOURCE_SHA }}
+        run: |
+          chmod 700 dev-publication
+          chmod 600 dev-publication/public-context.json
+          node --import ./site/node_modules/tsx/dist/loader.mjs site/scripts/cms-dev-publication.mjs upload
+      - name: Record failure or preserve uncertain upload
+        if: always() && steps.auth.outcome == 'success' && steps.upload.outcome != 'success'
+        run: node --import ./site/node_modules/tsx/dist/loader.mjs site/scripts/cms-dev-publication.mjs fail
+      - name: Retain terminal evidence
+        if: always() && needs.build.result == 'success'
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: dev-publication-receipt-${{ github.run_attempt }}
+          path: dev-publication/deployment.json
+          if-no-files-found: ignore
+          retention-days: 30

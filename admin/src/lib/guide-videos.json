@@ -1,0 +1,98 @@
+[
+  {
+    "id": "shared-video-library",
+    "title": "Find, upload, and organize shared videos",
+    "page": "shared-video-library",
+    "heading": "Open Videos"
+  },
+  {
+    "id": "media-library",
+    "title": "Find and check images and documents",
+    "page": "metadata-and-media",
+    "heading": "Open the media library"
+  },
+  {
+    "id": "post-editor",
+    "title": "Write, save, and publish a post",
+    "page": "pages-posts-and-library",
+    "heading": "Work with Posts"
+  },
+  {
+    "id": "pages-editor",
+    "title": "Edit a site page",
+    "page": "pages-posts-and-library",
+    "heading": "Work with Pages"
+  },
+  {
+    "id": "set-up-your-profile",
+    "title": "Set up your profile after your first sign-in",
+    "page": "profiles-access-and-administration",
+    "heading": "Maintain your profile"
+  },
+  {
+    "id": "home-and-navigation",
+    "title": "Find your way around Boardwalk",
+    "page": "navigation-and-preferences",
+    "heading": "Read the shell before the workspace"
+  },
+  {
+    "id": "content-library",
+    "title": "Find pages, posts, and other content",
+    "page": "pages-posts-and-library",
+    "heading": "Use All content"
+  },
+  {
+    "id": "review-and-publish",
+    "title": "Review and publish work",
+    "page": "review-preview-and-publish",
+    "heading": "Separate editorial review from publication"
+  },
+  {
+    "id": "activity",
+    "title": "Review administrative activity",
+    "page": "profiles-access-and-administration",
+    "heading": "Use Activity"
+  },
+  {
+    "id": "broadcast-schedule",
+    "title": "Read the broadcast schedule",
+    "page": "overview",
+    "heading": "Main workspaces"
+  },
+  {
+    "id": "analytics",
+    "title": "Read site analytics",
+    "page": "analytics",
+    "heading": "Start with a newsroom question"
+  },
+  {
+    "id": "staff-access",
+    "title": "Manage staff access and roles",
+    "page": "profiles-access-and-administration",
+    "heading": "Review Staff access"
+  },
+  {
+    "id": "admin-settings",
+    "title": "Change the public homepage banner",
+    "page": "profiles-access-and-administration",
+    "heading": "Maintain Admin settings"
+  },
+  {
+    "id": "first-saved-edit",
+    "title": "Your first saved edit in Boardwalk",
+    "page": "first-session",
+    "heading": "Follow the walkthrough"
+  },
+  {
+    "id": "transcript-passage-to-clip",
+    "title": "Turn a transcript passage into a clip",
+    "page": "shared-video-library",
+    "heading": "Select and download a clip"
+  },
+  {
+    "id": "pause-resume-upload",
+    "title": "Pause and resume a video upload",
+    "page": "shared-video-library",
+    "heading": "Pause, resume, or cancel a transfer"
+  }
+]

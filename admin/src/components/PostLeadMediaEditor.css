@@ -1,0 +1,8 @@
+.post-lead-media-editor { min-width: 0; margin: 0; padding: var(--space-4, 1rem); border: 1px solid var(--border-color, #d2d6dc); border-radius: var(--radius-md, .5rem); display: grid; gap: var(--space-3, .75rem); overflow-wrap: anywhere; }
+.post-lead-media-editor legend { font-weight: 600; padding-inline: .25rem; }
+.post-lead-media-editor > p { margin: 0; }
+.post-lead-media-editor :is(input, select, textarea, fieldset, .video-block-editor) { min-width: 0; max-width: 100%; }
+.post-lead-media-editor .post-lead-media-nudge { font-size: .875rem; color: var(--text-muted, #545c69); }
+.post-lead-media-editor .video-block-editor { padding: 0; border: 0; background: transparent; }
+fieldset.post-lead-media-editor .asset-field { grid-template-columns: minmax(0, 1fr); }
+.post-lead-media-editor .asset-field-preview { width: 64px; }

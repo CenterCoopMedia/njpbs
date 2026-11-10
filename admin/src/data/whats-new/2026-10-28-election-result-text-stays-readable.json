@@ -1,0 +1,8 @@
+{
+  "date": "2026-10-28",
+  "kind": "fixed",
+  "title": "Election result text stays readable",
+  "body": "Candidate names, race status, source links and explanatory text use readable colors on election result cards. The same results and table remain available on phones and wide screens.",
+  "prs": [],
+  "order": -8
+}

@@ -1,0 +1,254 @@
+{
+  "source": "nj-spotlight-news-rss",
+  "checkedAt": "2026-10-14T17:50:35.789Z",
+  "cards": [
+    {
+      "source": "nj-spotlight-news-rss",
+      "title": "Example community story 1",
+      "href": "https://www.njspotlightnews.org/2026/10/example-story-1/",
+      "sourceCategories": [
+        "News"
+      ],
+      "byline": "Example Reporter",
+      "category": "News",
+      "topic": "News",
+      "topicSlug": "news",
+      "publishedAt": "Wed, 14 Oct 2026 09:15:00 +0000",
+      "image": "https://media.njpbs.org/cms-media/spotlight/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb.jpg",
+      "sourceImage": {
+        "url": "https://example.org/story-1.jpg",
+        "width": 300,
+        "height": 169
+      },
+      "fallbackImage": "/brand/spotlight/energy-environment-02.jpg",
+      "imageCopy": {
+        "schemaVersion": 1,
+        "sourceUrl": "https://example.org/story-1.jpg",
+        "fetchedUrl": "https://example.org/story-1-large.jpg",
+        "key": "cms-media/spotlight/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb.jpg",
+        "sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "bytes": 90000,
+        "mimeType": "image/jpeg",
+        "width": 1536,
+        "height": 864
+      }
+    },
+    {
+      "source": "nj-spotlight-news-rss",
+      "title": "Example community story 2",
+      "href": "https://www.njspotlightnews.org/2026/10/example-story-2/",
+      "sourceCategories": [
+        "News"
+      ],
+      "byline": "Example Reporter",
+      "category": "News",
+      "topic": "News",
+      "topicSlug": "news",
+      "publishedAt": "Wed, 14 Oct 2026 09:15:00 +0000",
+      "image": "https://media.njpbs.org/cms-media/spotlight/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb.jpg",
+      "sourceImage": {
+        "url": "https://example.org/story-2.jpg",
+        "width": 300,
+        "height": 169
+      },
+      "fallbackImage": "/brand/spotlight/energy-environment-02.jpg",
+      "imageCopy": {
+        "schemaVersion": 1,
+        "sourceUrl": "https://example.org/story-2.jpg",
+        "fetchedUrl": "https://example.org/story-2-large.jpg",
+        "key": "cms-media/spotlight/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb.jpg",
+        "sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "bytes": 90000,
+        "mimeType": "image/jpeg",
+        "width": 1536,
+        "height": 864
+      }
+    },
+    {
+      "source": "nj-spotlight-news-rss",
+      "title": "Example community story 3",
+      "href": "https://www.njspotlightnews.org/2026/10/example-story-3/",
+      "sourceCategories": [
+        "News"
+      ],
+      "byline": "Example Reporter",
+      "category": "News",
+      "topic": "News",
+      "topicSlug": "news",
+      "publishedAt": "Wed, 14 Oct 2026 09:15:00 +0000",
+      "image": "https://media.njpbs.org/cms-media/spotlight/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb.jpg",
+      "sourceImage": {
+        "url": "https://example.org/story-3.jpg",
+        "width": 300,
+        "height": 169
+      },
+      "fallbackImage": "/brand/spotlight/energy-environment-02.jpg",
+      "imageCopy": {
+        "schemaVersion": 1,
+        "sourceUrl": "https://example.org/story-3.jpg",
+        "fetchedUrl": "https://example.org/story-3-large.jpg",
+        "key": "cms-media/spotlight/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb.jpg",
+        "sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "bytes": 90000,
+        "mimeType": "image/jpeg",
+        "width": 1536,
+        "height": 864
+      }
+    },
+    {
+      "source": "nj-spotlight-news-rss",
+      "title": "Example community story 4",
+      "href": "https://www.njspotlightnews.org/2026/10/example-story-4/",
+      "sourceCategories": [
+        "News"
+      ],
+      "byline": "Example Reporter",
+      "category": "News",
+      "topic": "News",
+      "topicSlug": "news",
+      "publishedAt": "Wed, 14 Oct 2026 09:15:00 +0000",
+      "image": "https://media.njpbs.org/cms-media/spotlight/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb.jpg",
+      "sourceImage": {
+        "url": "https://example.org/story-4.jpg",
+        "width": 300,
+        "height": 169
+      },
+      "fallbackImage": "/brand/spotlight/energy-environment-02.jpg",
+      "imageCopy": {
+        "schemaVersion": 1,
+        "sourceUrl": "https://example.org/story-4.jpg",
+        "fetchedUrl": "https://example.org/story-4-large.jpg",
+        "key": "cms-media/spotlight/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb.jpg",
+        "sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "bytes": 90000,
+        "mimeType": "image/jpeg",
+        "width": 1536,
+        "height": 864
+      }
+    },
+    {
+      "source": "nj-spotlight-news-rss",
+      "title": "Example community story 5",
+      "href": "https://www.njspotlightnews.org/2026/10/example-story-5/",
+      "sourceCategories": [
+        "News"
+      ],
+      "byline": "Example Reporter",
+      "category": "News",
+      "topic": "News",
+      "topicSlug": "news",
+      "publishedAt": "Wed, 14 Oct 2026 09:15:00 +0000",
+      "image": "https://media.njpbs.org/cms-media/spotlight/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb.jpg",
+      "sourceImage": {
+        "url": "https://example.org/story-5.jpg",
+        "width": 300,
+        "height": 169
+      },
+      "fallbackImage": "/brand/spotlight/energy-environment-02.jpg",
+      "imageCopy": {
+        "schemaVersion": 1,
+        "sourceUrl": "https://example.org/story-5.jpg",
+        "fetchedUrl": "https://example.org/story-5-large.jpg",
+        "key": "cms-media/spotlight/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb.jpg",
+        "sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "bytes": 90000,
+        "mimeType": "image/jpeg",
+        "width": 1536,
+        "height": 864
+      }
+    },
+    {
+      "source": "nj-spotlight-news-rss",
+      "title": "Example community story 6",
+      "href": "https://www.njspotlightnews.org/2026/10/example-story-6/",
+      "sourceCategories": [
+        "News"
+      ],
+      "byline": "Example Reporter",
+      "category": "News",
+      "topic": "News",
+      "topicSlug": "news",
+      "publishedAt": "Wed, 14 Oct 2026 09:15:00 +0000",
+      "image": "https://media.njpbs.org/cms-media/spotlight/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb.jpg",
+      "sourceImage": {
+        "url": "https://example.org/story-6.jpg",
+        "width": 300,
+        "height": 169
+      },
+      "fallbackImage": "/brand/spotlight/energy-environment-02.jpg",
+      "imageCopy": {
+        "schemaVersion": 1,
+        "sourceUrl": "https://example.org/story-6.jpg",
+        "fetchedUrl": "https://example.org/story-6-large.jpg",
+        "key": "cms-media/spotlight/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb.jpg",
+        "sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "bytes": 90000,
+        "mimeType": "image/jpeg",
+        "width": 1536,
+        "height": 864
+      }
+    },
+    {
+      "source": "nj-spotlight-news-rss",
+      "title": "Example community story 7",
+      "href": "https://www.njspotlightnews.org/2026/10/example-story-7/",
+      "sourceCategories": [
+        "News"
+      ],
+      "byline": "Example Reporter",
+      "category": "News",
+      "topic": "News",
+      "topicSlug": "news",
+      "publishedAt": "Wed, 14 Oct 2026 09:15:00 +0000",
+      "image": "https://media.njpbs.org/cms-media/spotlight/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb.jpg",
+      "sourceImage": {
+        "url": "https://example.org/story-7.jpg",
+        "width": 300,
+        "height": 169
+      },
+      "fallbackImage": "/brand/spotlight/energy-environment-02.jpg",
+      "imageCopy": {
+        "schemaVersion": 1,
+        "sourceUrl": "https://example.org/story-7.jpg",
+        "fetchedUrl": "https://example.org/story-7-large.jpg",
+        "key": "cms-media/spotlight/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb.jpg",
+        "sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "bytes": 90000,
+        "mimeType": "image/jpeg",
+        "width": 1536,
+        "height": 864
+      }
+    },
+    {
+      "source": "nj-spotlight-news-rss",
+      "title": "Example community story 8",
+      "href": "https://www.njspotlightnews.org/2026/10/example-story-8/",
+      "sourceCategories": [
+        "News"
+      ],
+      "byline": "Example Reporter",
+      "category": "News",
+      "topic": "News",
+      "topicSlug": "news",
+      "publishedAt": "Wed, 14 Oct 2026 09:15:00 +0000",
+      "image": "https://media.njpbs.org/cms-media/spotlight/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb.jpg",
+      "sourceImage": {
+        "url": "https://example.org/story-8.jpg",
+        "width": 300,
+        "height": 169
+      },
+      "fallbackImage": "/brand/spotlight/energy-environment-02.jpg",
+      "imageCopy": {
+        "schemaVersion": 1,
+        "sourceUrl": "https://example.org/story-8.jpg",
+        "fetchedUrl": "https://example.org/story-8-large.jpg",
+        "key": "cms-media/spotlight/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb.jpg",
+        "sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "bytes": 90000,
+        "mimeType": "image/jpeg",
+        "width": 1536,
+        "height": 864
+      }
+    }
+  ]
+}

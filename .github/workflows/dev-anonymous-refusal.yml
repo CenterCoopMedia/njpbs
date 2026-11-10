@@ -1,0 +1,77 @@
+name: Dev anonymous refusal
+
+on:
+  schedule:
+    # Twice a day: 6:07 AM and 9:07 PM Eastern daylight time (GitHub cron is UTC;
+    # in standard time these run at 5:07 AM and 8:07 PM).
+    # Minute 7 avoids GitHub's top-of-hour scheduling load, which delays or drops runs.
+    - cron: '7 1,10 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  CMS_DEV_ADMIN_ORIGIN: ${{ vars.CMS_DEV_ADMIN_ORIGIN }}
+  CMS_DEV_PUBLIC_ORIGIN: ${{ vars.CMS_DEV_PUBLIC_ORIGIN }}
+  CMS_DEV_ACCESS_ORIGIN: ${{ vars.CMS_DEV_ACCESS_ORIGIN }}
+
+concurrency:
+  group: dev-anonymous-refusal
+  cancel-in-progress: false
+
+jobs:
+  refusal:
+    if: github.ref == 'refs/heads/main'
+    # Credential-free public HTTP probes run without authenticated session state.
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10 # Runaway guard; investigate unexpectedly slow runs.
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+          fetch-depth: 1
+      - name: Check for the runner's Node 22
+        id: node
+        run: |
+          if command -v node >/dev/null && node -e 'process.exit(process.versions.node.startsWith("22.") ? 0 : 1)'; then
+            echo 'ready=true' >> "$GITHUB_OUTPUT"
+          else
+            echo 'ready=false' >> "$GITHUB_OUTPUT"
+          fi
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        if: steps.node.outputs.ready != 'true'
+        with:
+          node-version: '22'
+      - name: Check out trusted configuration renderer
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ github.sha }}
+          path: .configuration-render-gate
+          persist-credentials: false
+          sparse-checkout: |
+            scripts/render-development-config.mjs
+            config/development-inputs.json
+          sparse-checkout-cone-mode: false
+      - name: Render deployment resource configuration
+        working-directory: ${{ github.workspace }}
+        run: |
+          set -euo pipefail
+          mv .configuration-render-gate "$RUNNER_TEMP/configuration-render-gate"
+          node "$RUNNER_TEMP/configuration-render-gate/scripts/render-development-config.mjs" --inputs CMS_DEV_ADMIN_ORIGIN,CMS_DEV_PUBLIC_ORIGIN --root "$GITHUB_WORKSPACE"
+      - name: Validate development Access origin
+        run: node --input-type=module -e "import { devAccessOrigin } from './scripts/lib/deployment-settings.mjs'; devAccessOrigin();"
+      - name: Check anonymous GET and HEAD on both dev hosts
+        id: probe
+        run: node scripts/check-dev-anonymous-refusal.mjs
+      - name: Report failed dev access boundary
+        if: failure() && steps.probe.outcome == 'failure'
+        run: |
+          echo '::error::Dev anonymous refusal proof failed. Stop dependent writes and routing changes until access is verified. Inspect safe probe statuses; transport failures leave access unverified. Check the configured routing and access policy.'
+          echo 'Dev refusal failed. Review the safe probe statuses and configured access boundary.' >> "$GITHUB_STEP_SUMMARY"
+      - name: Report monitor setup failure
+        if: failure() && steps.probe.outcome != 'failure'
+        run: |
+          echo '::error::Dev refusal monitor setup failed. The probe did not complete; access state is unverified. Check checkout and Node setup before evaluating access state.'
+          echo 'Infrastructure failure: The dev refusal probe did not complete. Check the failed setup step.' >> "$GITHUB_STEP_SUMMARY"

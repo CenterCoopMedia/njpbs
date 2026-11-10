@@ -1,0 +1,11 @@
+blank_issues_enabled: true
+contact_links:
+  - name: I need help using the site or CMS
+    url: https://github.com/CenterCoopMedia/njpbs/discussions/new?category=q-a
+    about: How-to questions, wrong public content, and hard-to-use screens. You do not need Git.
+  - name: I have an idea for the site or CMS
+    url: https://github.com/CenterCoopMedia/njpbs/discussions/new?category=ideas
+    about: Describe the need. A maintainer will open an issue if it becomes tracked work.
+  - name: Collaboration handbook
+    url: https://github.com/CenterCoopMedia/njpbs/blob/main/docs/collaboration/README.md
+    about: Who should post where, and what not to put in GitHub.

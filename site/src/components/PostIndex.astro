@@ -1,0 +1,497 @@
+---
+import { postCardImage } from "../../../packages/content-core/src/post-card-image.ts";
+import { contentLink } from "../../../packages/content-core/src/content-link.ts";
+import { getCollection } from "astro:content";
+import BrowseGroup from "./BrowseGroup.astro";
+import PostsBrowse from "./PostsBrowse.astro";
+import PostByline from "./PostByline.astro";
+import PostPublication from "./PostPublication.astro";
+import PublicSiteLayout from "../layouts/PublicSiteLayout.astro";
+import { compareEditorialRecency } from "../lib/author-pages";
+import { publicPostCategories, publicPostTopics } from "../lib/post-formats";
+import { resolvePublicCreditLinks } from "../lib/public-author-links";
+import { postIndexFilterHref } from "../lib/post-index-links";
+
+const [entries, authors, navigation] = await Promise.all([
+  getCollection("cmsPosts"),
+  getCollection("cmsAuthorsPublic"),
+  getCollection("cmsSiteNavigation"),
+]);
+const publicAuthors = authors.map((author) => ({
+  authorId: author.data.authorId,
+  displayName: author.data.displayName,
+  slug: author.data.slug,
+}));
+const posts = entries
+  .filter((entry) => !entry.data.noindex)
+  .map((entry) => ({
+    entry,
+    credits: resolvePublicCreditLinks(entry.data.credits, publicAuthors),
+  }))
+  .sort((left, right) =>
+    compareEditorialRecency(left.entry.data, right.entry.data),
+  );
+
+type BrowseFilter = "by" | "category" | "tag";
+interface BrowseItem {
+  label: string;
+  count: number;
+  href: string;
+}
+
+const browseItems = (
+  values: readonly string[],
+  filter: BrowseFilter,
+): BrowseItem[] => {
+  const counts = new Map<string, number>();
+  for (const value of values) counts.set(value, (counts.get(value) ?? 0) + 1);
+  return [...counts]
+    .sort(([left], [right]) => left.localeCompare(right, "en-US"))
+    .map(([label, count]) => ({
+      label,
+      count,
+      href: postIndexFilterHref(filter, label),
+    }));
+};
+
+const browseBylines = browseItems(
+  posts.flatMap(({ credits }) =>
+    credits.filter((credit) => !credit.authorId).map((credit) => credit.name),
+  ),
+  "by",
+);
+---
+
+<PublicSiteLayout
+  title="Posts"
+  description="The latest posts from NJ PBS."
+  preview={false}
+  canonicalPath="/posts/"
+>
+  <section class="post-index" data-post-index>
+    <header class="post-index__head">
+      <p class="post-index__kicker">Latest from NJ PBS</p>
+      <h1 data-post-index-title>Posts</h1>
+      <p class="post-index__intro">
+        News, announcements and stories from NJ PBS, newest first.
+      </p>
+      <a class="post-index__clear" href="/posts/" data-post-index-clear hidden>
+        Show all Posts
+      </a>
+    </header>
+
+    {posts.length > 0 ? (
+      <Fragment>
+      <PostsBrowse posts={posts.map(({ entry }) => ({
+        categories: publicPostCategories(entry.data.categories), tags: publicPostTopics(entry.data.tags),
+        image: postCardImage(entry.data)?.image,
+      }))} configured={navigation.find(item => item.id === "site-navigation")?.data.postsBrowse} />
+      {browseBylines.length > 0 && <details class="post-index__bylines"><summary>Browse by byline</summary><BrowseGroup title="Byline" items={browseBylines} /></details>}
+      <div class="post-index__layout">
+        <div class="post-index__results">
+          <p class="post-index__count" role="status" aria-live="polite" data-post-index-count>
+            {posts.length} {posts.length === 1 ? "Post" : "Posts"}
+          </p>
+          <ol class="post-index__list">
+            {posts.map(({ entry, credits }) => {
+              const post = entry.data;
+              const selectedImage = postCardImage(post);
+              const categories = publicPostCategories(post.categories);
+              const tags = publicPostTopics(post.tags);
+              return (
+                <li
+                  data-post-index-item
+                  data-post-categories={JSON.stringify(categories)}
+                  data-post-tags={JSON.stringify(tags)}
+                  data-post-credits={JSON.stringify(
+                    credits
+                      .filter((credit) => !credit.authorId)
+                      .map((credit) => credit.name),
+                  )}
+                >
+                  <article class="post-index-card">
+                    <a
+                      class:list={[
+                        "post-index-card__media",
+                        { "post-index-card__media--fallback": !selectedImage },
+                      ]}
+                      href={contentLink(post, post.path).href} target={contentLink(post, post.path).target} rel={contentLink(post, post.path).rel}
+                      tabindex="-1"
+                      aria-label={
+                        contentLink(post, post.path).newTab
+                          ? `${post.title} (opens in new tab)`
+                          : selectedImage
+                          ? selectedImage.decorative
+                            ? post.title
+                            : undefined
+                          : post.title
+                      }
+                    >
+                      {selectedImage ? (
+                        <img
+                          src={selectedImage.image.url}
+                          width={selectedImage.image.width}
+                          height={selectedImage.image.height}
+                          alt={selectedImage.decorative ? "" : selectedImage.alt}
+                          loading="lazy"
+                          decoding="async"
+                        />
+                      ) : (
+                        <img
+                          class="post-index-card__fallback-logo"
+                          src="/brand/njpbs-vertical-white.svg"
+                          width="496"
+                          height="371"
+                          alt=""
+                          loading="lazy"
+                          decoding="async"
+                        />
+                      )}
+                    </a>
+                    <div class="post-index-card__body">
+                      <PostPublication spotlightNews={post.spotlightNews} coverageLabelId={post.coverageLabelId} placement="card" linked={true} />
+                      <h2><a href={contentLink(post, post.path).href} target={contentLink(post, post.path).target} rel={contentLink(post, post.path).rel}>{post.title}{contentLink(post, post.path).newTab && <span class="sr-only"> (opens in new tab)</span>}</a></h2>
+                      {(post.summary || post.excerpt) && (
+                        <p class="post-index-card__summary">{post.summary || post.excerpt}</p>
+                      )}
+                      <PostByline
+                        credits={credits}
+                        displayDate={post.displayDate}
+                        updateShown={post.updateShown}
+                        updatedAt={post.updatedAt}
+                        updatedDate={post.updatedDate}
+                      />
+                      {categories.length > 0 && (
+                        <ul class="post-index-card__topics" aria-label={`Categories for ${post.title}`}>
+                          {categories.map((category) => (
+                            <li><a href={postIndexFilterHref("category", category)}>{category}</a></li>
+                          ))}
+                        </ul>
+                      )}
+                      {tags.length > 0 && (
+                        <ul class="post-index-card__topics" aria-label={`Tags for ${post.title}`}>
+                          {tags.map((tag) => (
+                            <li><a href={postIndexFilterHref("tag", tag)}>{tag}</a></li>
+                          ))}
+                        </ul>
+                      )}
+                    </div>
+                  </article>
+                </li>
+              );
+            })}
+          </ol>
+          <p class="post-index__empty" data-post-index-empty hidden>
+            No published Posts match this filter.
+          </p>
+        </div>
+
+
+      </div>
+      </Fragment>
+    ) : (
+      <p class="post-index__empty">No Posts have been published yet.</p>
+    )}
+  </section>
+</PublicSiteLayout>
+
+<script>
+  const root = document.querySelector<HTMLElement>("[data-post-index]");
+  if (root) {
+    const params = new URLSearchParams(window.location.search);
+    const filter = params.has("category")
+      ? "category"
+      : params.has("tag")
+        ? "tag"
+        : params.has("by")
+          ? "by"
+          : null;
+    const rawValue = filter ? params.get(filter)?.trim() ?? "" : "";
+    if (filter && rawValue) {
+      const expected = rawValue.toLocaleLowerCase("en-US");
+      const attribute =
+        filter === "category"
+          ? "postCategories"
+          : filter === "tag"
+            ? "postTags"
+            : "postCredits";
+      let visible = 0;
+      root.querySelectorAll<HTMLElement>("[data-post-index-item]").forEach((item) => {
+        const values = JSON.parse(item.dataset[attribute] ?? "[]") as unknown;
+        const matches =
+          Array.isArray(values) &&
+          values.some(
+            (value) =>
+              typeof value === "string" &&
+              value.trim().toLocaleLowerCase("en-US") === expected,
+          );
+        item.hidden = !matches;
+        if (matches) visible += 1;
+      });
+
+      const title = root.querySelector<HTMLElement>("[data-post-index-title]");
+      const count = root.querySelector<HTMLElement>("[data-post-index-count]");
+      const clear = root.querySelector<HTMLElement>("[data-post-index-clear]");
+      const empty = root.querySelector<HTMLElement>("[data-post-index-empty]");
+      if (title) {
+        title.textContent =
+          filter === "category"
+            ? `Posts in “${rawValue}”`
+            : filter === "tag"
+              ? `Posts tagged “${rawValue}”`
+              : `Posts by ${rawValue}`;
+      }
+      if (count) count.textContent = `${visible} ${visible === 1 ? "Post" : "Posts"}`;
+      if (clear) clear.hidden = false;
+      if (empty) empty.hidden = visible !== 0;
+    }
+  }
+</script>
+
+<style>
+  .post-index {
+    max-width: var(--wrap);
+    min-height: 70vh;
+    margin: 0 auto;
+    padding: clamp(3rem, 7vw, 6rem) var(--gutter) clamp(4rem, 9vw, 8rem);
+  }
+
+  .post-index__kicker {
+    margin: 0;
+    color: var(--color-link);
+    font-size: 0.78rem;
+    font-weight: 800;
+    letter-spacing: 0.12em;
+    line-height: 1.3;
+    text-transform: uppercase;
+  }
+
+  .post-index h1 {
+    margin: 0.6rem 0 0;
+    color: var(--text);
+    font-size: clamp(2.8rem, 7vw, 5.2rem);
+    line-height: 1;
+  }
+
+  .post-index__intro {
+    margin: 1rem 0 0;
+    color: var(--text-dim);
+    font-size: clamp(1.05rem, 2vw, 1.25rem);
+    line-height: 1.6;
+  }
+
+  .post-index__clear[hidden] { display: none; }
+  .post-index__bylines > summary { min-height: var(--target-comfortable); align-content: center; cursor: pointer; color: var(--color-link); }
+
+  .post-index__clear {
+    display: inline-flex;
+    align-items: center;
+    min-height: var(--target-comfortable);
+    margin-top: 1rem;
+    color: var(--color-link);
+    font-weight: 700;
+    text-underline-offset: 0.2em;
+  }
+
+  .post-index__count {
+    margin: 0 0 1rem;
+    color: var(--text-quiet);
+    font-size: 0.9rem;
+  }
+
+  .post-index__layout {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    gap: clamp(1.5rem, 4vw, 3.5rem);
+    align-items: start;
+    margin-top: clamp(2.5rem, 6vw, 4.5rem);
+  }
+
+  .post-index__results {
+    min-width: 0;
+  }
+
+  .post-index__list {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 1rem;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+
+  .post-index__list > li[hidden] {
+    display: none;
+  }
+
+  .post-index-card {
+    display: grid;
+    grid-template-columns: minmax(0, 10rem) minmax(0, 1fr);
+    overflow: hidden;
+    border: 1px solid var(--line);
+    border-radius: var(--radius-accent);
+    background: var(--color-surface-panel);
+  }
+
+  .post-index-card__media {
+    min-height: 100%;
+    background: var(--color-surface-elevated);
+  }
+
+  .post-index-card__media img {
+    display: block;
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+  }
+
+  .post-index-card__media--fallback {
+    display: grid;
+    box-sizing: border-box;
+    min-height: 14rem;
+    place-items: center;
+    padding: clamp(1.5rem, 3vw, 2.25rem);
+    background: var(--pbs-blue);
+  }
+
+  .post-index-card__media--fallback .post-index-card__fallback-logo {
+    width: min(100%, 10rem);
+    height: auto;
+    object-fit: contain;
+  }
+
+  .post-index-card__body {
+    min-width: 0;
+    padding: clamp(1.25rem, 3vw, 2rem);
+  }
+
+  .post-index-card h2 {
+    margin: 0;
+    color: var(--text);
+    font-size: clamp(1.4rem, 3vw, 2.1rem);
+    line-height: 1.15;
+  }
+
+  .post-index-card h2 a {
+    color: inherit;
+    text-decoration: none;
+  }
+
+  .post-index-card h2 a:hover {
+    color: var(--color-link);
+    text-decoration: underline;
+    text-underline-offset: 0.18em;
+  }
+
+  .post-index-card h2 a:focus-visible,
+  .post-index-card__media:focus-visible,
+  .post-index-card__topics a:focus-visible {
+    outline: var(--focus-outline);
+    outline-offset: var(--focus-offset);
+  }
+
+  .post-index-card__summary {
+    margin: 0.75rem 0 0;
+    color: var(--text-dim);
+    line-height: 1.6;
+  }
+
+  .post-index-card :global(.post-byline) {
+    margin-top: 0.85rem;
+  }
+
+  .post-index-card__topics {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.45rem;
+    margin: 0.9rem 0 0;
+    padding: 0;
+    list-style: none;
+  }
+
+  .post-index-card__topics a {
+    display: block;
+    padding: 0.32rem 0.62rem;
+    border: 1px solid var(--line);
+    border-radius: var(--radius-pill);
+    color: var(--text-dim);
+    font-size: 0.8rem;
+    line-height: 1.3;
+    text-decoration: none;
+  }
+
+  .post-index-card__topics a:hover {
+    border-color: var(--color-link);
+    color: var(--text);
+  }
+
+  .post-index__empty {
+    margin: clamp(2.5rem, 6vw, 4.5rem) 0 0;
+    color: var(--text-dim);
+    font-size: 1.1rem;
+  }
+
+  .post-index__browse {
+    position: sticky;
+    top: calc(var(--site-header-height, 5rem) + 1.5rem);
+    padding: clamp(1.25rem, 2.5vw, 1.75rem);
+    border: 1px solid var(--line);
+    border-radius: var(--radius-accent);
+    background:
+      linear-gradient(150deg, rgba(77, 94, 232, 0.12), transparent 55%),
+      var(--color-surface-panel);
+  }
+
+  .post-index__browse-kicker {
+    margin: 0;
+    color: var(--color-link);
+    font-size: 0.72rem;
+    font-weight: 800;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+  }
+
+  .post-index__browse h2 {
+    margin: 0.45rem 0 0;
+    color: var(--text);
+    font-size: clamp(1.4rem, 2.5vw, 1.85rem);
+    line-height: 1.1;
+  }
+
+  .post-index__browse-all {
+    display: inline-flex;
+    align-items: center;
+    min-height: var(--target-comfortable);
+    margin-top: 0.75rem;
+    color: var(--color-link);
+    font-weight: 750;
+    text-underline-offset: 0.2em;
+  }
+
+  .post-index__browse :global(.post-index-browse-group) {
+    margin-top: 1.35rem;
+    padding-top: 1.15rem;
+    border-top: 1px solid var(--line);
+  }
+
+  @media (max-width: 900px) {
+    .post-index__layout {
+      grid-template-columns: 1fr;
+    }
+
+    .post-index__browse {
+      position: static;
+    }
+  }
+
+  @media (max-width: 640px) {
+    .post-index-card {
+      grid-template-columns: 1fr;
+    }
+
+    .post-index-card__media {
+      max-height: 16rem;
+    }
+  }
+  @media (max-width: 900px) { .post-index__list { grid-template-columns: minmax(0, 1fr); } }
+</style>

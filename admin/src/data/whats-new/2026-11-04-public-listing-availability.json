@@ -1,0 +1,8 @@
+{
+  "date": "2026-11-04",
+  "kind": "fixed",
+  "title": "Keep public listings available during updates",
+  "body": "Public story lists keep showing their verified copy while an unrelated update publishes. Removals and changes to the source still receive the usual safety checks.",
+  "prs": [],
+  "order": 1793814930000
+}

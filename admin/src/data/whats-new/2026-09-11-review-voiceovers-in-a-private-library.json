@@ -1,0 +1,13 @@
+{
+  "date": "2026-09-11",
+  "kind": "new",
+  "title": "Review voiceovers in a private library",
+  "body": "Staff can listen to and review voiceover takes in a private library. Each row is compact and plays inline with a waveform.",
+  "prs": [
+    1721,
+    1722,
+    1732,
+    1760
+  ],
+  "order": -1
+}

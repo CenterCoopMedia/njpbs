@@ -1,0 +1,10 @@
+{
+  "date": "2026-11-02",
+  "kind": "fixed",
+  "title": "Finish site settings updates",
+  "body": "Site settings updates can finish their public checks when the site has many Posts. Completion still waits for Pages, Posts and Home to pass.",
+  "prs": [
+    4664
+  ],
+  "order": 5
+}

@@ -1,0 +1,12 @@
+{
+  "date": "2026-08-19",
+  "kind": "new",
+  "title": "Post a banner on the Boardwalk home",
+  "body": "Authorized staff can now write a plain newsroom banner at the top of the Boardwalk home. The home also shows the current Boardwalk build and milestone status.",
+  "prs": [
+    1055,
+    1048,
+    1015
+  ],
+  "order": 0
+}

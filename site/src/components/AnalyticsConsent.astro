@@ -1,0 +1,149 @@
+---
+interface Props {
+  measurementId: string;
+  activeCampaign?: boolean;
+}
+
+const { measurementId, activeCampaign = false } = Astro.props;
+---
+
+<aside
+  class="analytics-consent"
+  data-analytics-consent
+  data-measurement-id={measurementId}
+  data-activecampaign-enabled={activeCampaign ? "" : undefined}
+  aria-labelledby="analytics-consent-title"
+  hidden
+>
+  <div class="analytics-consent__copy">
+    <p class="analytics-consent__label">Privacy choice</p>
+    <h2 id="analytics-consent-title">Help us improve njpbs.org</h2>
+    <p data-consent-choice>
+      With your permission, NJ PBS will use Google Analytics to understand how
+      people use this site and load Mailchimp and Wisepops newsletter tools. On
+      eligible pages, ActiveCampaign will record page visits and your IP address
+      for newsletter marketing and may associate visits with an existing contact
+      record. These tools stay off unless you allow them. You can withdraw
+      permission through the privacy policy at any time.
+    </p>
+    <p data-consent-gpc hidden>
+      Your browser sent a Global Privacy Control signal. Google Analytics,
+      Mailchimp, ActiveCampaign and Wisepops are off.
+    </p>
+    <a href="/privacy/#your-privacy-choices">Read the privacy policy</a>
+  </div>
+  <div class="analytics-consent__actions" data-consent-choice>
+    <button class="btn btn--ghost" type="button" data-consent-deny>
+      Do not allow
+    </button>
+    <button class="btn btn--primary" type="button" data-consent-grant>
+      Allow analytics and newsletter tools
+    </button>
+  </div>
+  <div class="analytics-consent__actions" data-consent-gpc hidden>
+    <button class="btn btn--primary" type="button" data-consent-close>Close</button>
+  </div>
+</aside>
+
+<script>
+  import {
+    initAnalyticsConsent,
+    recordDonateClick,
+  } from "../lib/analytics-consent";
+
+  const root = document.querySelector<HTMLElement>("[data-analytics-consent]");
+  if (root) {
+    initAnalyticsConsent(root);
+    document.addEventListener("click", recordDonateClick);
+  }
+</script>
+
+<style>
+  .analytics-consent {
+    position: fixed;
+    z-index: 100;
+    right: var(--gutter);
+    bottom: var(--gutter);
+    left: var(--gutter);
+    display: flex;
+    align-items: flex-end;
+    justify-content: space-between;
+    gap: var(--space-6);
+    max-width: 72rem;
+    margin-inline: auto;
+    padding: var(--space-6);
+    color: var(--color-text-on-surface);
+    background: var(--color-surface-elevated);
+    border: 1px solid var(--color-border-strong);
+    border-radius: var(--radius-surface);
+    box-shadow: 0 1rem 3rem rgba(0, 0, 0, 0.45);
+  }
+
+  .analytics-consent[hidden],
+  .analytics-consent [hidden] {
+    display: none;
+  }
+
+  .analytics-consent__copy {
+    max-width: 46rem;
+  }
+
+  .analytics-consent__label {
+    margin: 0 0 var(--space-1);
+    color: var(--color-text-muted);
+    font-size: 0.82rem;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+  }
+
+  .analytics-consent h2 {
+    margin: 0;
+    font-size: clamp(1.25rem, 3vw, 1.6rem);
+  }
+
+  .analytics-consent p:not(.analytics-consent__label) {
+    margin: var(--space-2) 0;
+    color: var(--color-text-muted);
+  }
+
+  .analytics-consent a {
+    color: var(--color-link);
+    text-underline-offset: 3px;
+  }
+
+  .analytics-consent__actions {
+    display: flex;
+    flex: none;
+    flex-wrap: wrap;
+    gap: var(--space-2);
+  }
+
+  .analytics-consent button {
+    border: 1px solid transparent;
+    cursor: pointer;
+    font: inherit;
+  }
+
+  .analytics-consent .btn--ghost {
+    border-color: var(--color-border-strong);
+  }
+
+  @media (max-width: 48rem) {
+    .analytics-consent {
+      align-items: stretch;
+      flex-direction: column;
+    }
+
+    .analytics-consent__actions,
+    .analytics-consent button {
+      width: 100%;
+    }
+  }
+
+  @media print {
+    .analytics-consent {
+      display: none;
+    }
+  }
+</style>

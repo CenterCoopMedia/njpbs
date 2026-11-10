@@ -1,0 +1,17 @@
+---
+import { isPostLeadMedia } from "../../../packages/content-core/src/post-lead-media.ts";
+import { renderPostMediaPlayer } from "../../../packages/content-core/src/post-media-player.ts";
+import { isPrivatePreviewRender } from "../lib/cms-render-context";
+import type { CmsPostBuildData } from "../lib/cms-posts-projection";
+import "../styles/post-media-player.css";
+interface Props { post: CmsPostBuildData }
+const { post } = Astro.props;
+const preview = isPrivatePreviewRender(Astro.locals.cmsRender);
+const html = isPostLeadMedia(post.leadMedia, !preview) && post.leadMedia.kind !== "image"
+  ? renderPostMediaPlayer(post.leadMedia, { preview, poster: post.heroImage }) : "";
+---
+<Fragment set:html={html} />
+<script>
+  import { installPostMediaPlayers } from "../lib/post-media-player";
+  installPostMediaPlayers(document);
+</script>

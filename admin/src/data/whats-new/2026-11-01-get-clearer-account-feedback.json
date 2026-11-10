@@ -1,0 +1,8 @@
+{
+  "date": "2026-11-01",
+  "kind": "fixed",
+  "title": "Get clearer account feedback",
+  "body": "If your account is turned off, sign-in tells you to ask a CMS administrator to turn it back on. On Staff access, Dismiss stays on one line in account notices on phones.",
+  "prs": [],
+  "order": -10
+}

@@ -1,0 +1,8 @@
+{
+  "date": "2026-11-06",
+  "kind": "fixed",
+  "title": "Edit rows from Arrange",
+  "body": "Boardwalk now leaves Arrange and opens the full row editor when you choose Edit row in Details.",
+  "prs": [],
+  "order": 1794005321390
+}

@@ -1,0 +1,12 @@
+---
+import type { RenderedContentGroup } from "../../../packages/content-core/src/content-row-render";
+import { renderLinkCardDirectory } from "../../../packages/content-core/src/link-card-directory-groups";
+
+interface Props {
+  groups: RenderedContentGroup[];
+}
+
+const { groups } = Astro.props as Props;
+---
+
+<Fragment set:html={renderLinkCardDirectory(groups)} />

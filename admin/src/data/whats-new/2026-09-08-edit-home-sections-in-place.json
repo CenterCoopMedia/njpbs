@@ -1,0 +1,14 @@
+{
+  "date": "2026-09-08",
+  "kind": "new",
+  "title": "Edit Home sections in place",
+  "body": "Open Home to see its public sections and edit them in a draft. You can change the hero heading and subtitle and add rows between sections.",
+  "prs": [
+    1652,
+    1572,
+    1574,
+    1575,
+    1582
+  ],
+  "order": -4
+}

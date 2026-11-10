@@ -1,0 +1,23 @@
+{
+  "sponsor": {
+    "name": "",
+    "href": "",
+    "logoAssetId": "",
+    "logoAlt": "",
+    "logoDecorative": false,
+    "tier": "",
+    "description": "",
+    "activeFrom": "",
+    "activeUntil": ""
+  },
+  "newsletter": {
+    "title": "",
+    "summary": "",
+    "frequency": "",
+    "signupUrl": "",
+    "imageAssetId": "",
+    "imageAlt": "",
+    "imageDecorative": false,
+    "body": { "type": "doc", "content": [{ "type": "paragraph" }] }
+  }
+}

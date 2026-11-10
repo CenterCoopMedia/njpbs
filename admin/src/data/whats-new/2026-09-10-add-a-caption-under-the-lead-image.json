@@ -1,0 +1,11 @@
+{
+  "date": "2026-09-10",
+  "kind": "new",
+  "title": "Add a caption under the lead image",
+  "body": "Posts and Post templates have an optional Lead image caption field. Use it for a description or photo credit that shows under the image on the published Post.",
+  "prs": [
+    1709,
+    1710
+  ],
+  "order": -1
+}

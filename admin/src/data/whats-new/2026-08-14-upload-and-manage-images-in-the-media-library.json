@@ -1,0 +1,16 @@
+{
+  "date": "2026-08-14",
+  "kind": "new",
+  "title": "Upload and manage images in the Media library",
+  "body": "The Media library now stores uploaded images in one place. You can search it, see where each image is used and recover an interrupted upload.",
+  "prs": [
+    930,
+    933,
+    935,
+    940,
+    943,
+    961,
+    962
+  ],
+  "order": 0
+}

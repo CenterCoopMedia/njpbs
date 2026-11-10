@@ -1,0 +1,4 @@
+.election-results-history { overflow-wrap: anywhere; }
+.election-results-history > summary { min-height: 44px; padding-block: .75rem; cursor: pointer; }
+.election-results-history section { padding-block: .75rem; }
+.election-results-history :is(h3, p, ol) { margin-block: .5rem; }

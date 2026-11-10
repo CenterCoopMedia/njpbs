@@ -1,0 +1,411 @@
+{
+  "home": {
+    "id": "home",
+    "template": "home",
+    "title": "Home",
+    "status": "draft",
+    "version": 7,
+    "homeCompositionVersion": 2,
+    "blocks": [
+      {
+        "id": "new-home-start",
+        "section": "home-start",
+        "order": 0,
+        "visible": true,
+        "type": "card_grid",
+        "data": {
+          "cards": [
+            {
+              "title": "LIVE",
+              "href": "/live/",
+              "body": {
+                "type": "doc",
+                "content": [
+                  {
+                    "type": "paragraph",
+                    "content": [
+                      {
+                        "type": "text",
+                        "text": "Stream the NJ PBS broadcast channel right now"
+                      }
+                    ]
+                  }
+                ]
+              }
+            },
+            {
+              "title": "Programs on demand",
+              "href": "https://watch.njpbs.org/",
+              "body": {
+                "type": "doc",
+                "content": [
+                  {
+                    "type": "paragraph",
+                    "content": [
+                      {
+                        "type": "text",
+                        "text": "Browse full episodes and specials any time"
+                      }
+                    ]
+                  }
+                ]
+              }
+            },
+            {
+              "title": "TV schedule",
+              "href": "/schedule/",
+              "body": {
+                "type": "doc",
+                "content": [
+                  {
+                    "type": "paragraph",
+                    "content": [
+                      {
+                        "type": "text",
+                        "text": "See what is airing today and all week"
+                      }
+                    ]
+                  }
+                ]
+              }
+            },
+            {
+              "title": "PBS Kids",
+              "href": "/kids/",
+              "body": {
+                "type": "doc",
+                "content": [
+                  {
+                    "type": "paragraph",
+                    "content": [
+                      {
+                        "type": "text",
+                        "text": "Trusted, ad-free shows and games for children"
+                      }
+                    ]
+                  }
+                ]
+              }
+            }
+          ]
+        }
+      },
+      {
+        "id": "new-home-start-action",
+        "section": "home-start-action",
+        "order": 1,
+        "visible": true,
+        "type": "cta_row",
+        "data": {
+          "ctas": [
+            {
+              "label": "Full schedule",
+              "href": "/schedule/"
+            }
+          ]
+        }
+      },
+      {
+        "id": "new-home-featured",
+        "section": "home-featured",
+        "order": 2,
+        "visible": true,
+        "type": "content_shelf",
+        "data": {
+          "title": "Featured on NJ PBS",
+          "source": "pbs_featured",
+          "itemLimit": 8,
+          "moreLabel": "Browse all",
+          "moreHref": "https://watch.njpbs.org/",
+          "selectedIds": [
+            "https://watch.njpbs.org/show/from-that-small-island-the-story-of-the-irish-feature-film/",
+            "https://watch.njpbs.org/show/painting-community/"
+          ],
+          "selectionReceipt": {
+            "buildBatchId": "cms-HOME6CatalogProof001",
+            "generation": 21,
+            "commitSha": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "digest": "e6887be4f86bbc04c8364d9f7f10d5aa3c0e24af9824e4fb4f85b3df4f4ccfc9"
+          },
+          "presentation": "grid",
+          "columns": 3
+        }
+      },
+      {
+        "id": "new-home-passport-copy",
+        "section": "home-passport-copy",
+        "order": 3,
+        "visible": true,
+        "type": "prose",
+        "data": {
+          "content": {
+            "type": "doc",
+            "content": [
+              {
+                "type": "heading",
+                "attrs": {
+                  "level": 2
+                },
+                "content": [
+                  {
+                    "type": "text",
+                    "text": "Stream more with PBS Passport"
+                  }
+                ]
+              },
+              {
+                "type": "paragraph",
+                "content": [
+                  {
+                    "type": "text",
+                    "text": "Members unlock a library of PBS and NJ PBS programs on demand. Learn how the Passport member benefit works through PBS."
+                  }
+                ]
+              }
+            ]
+          }
+        }
+      },
+      {
+        "id": "new-home-passport-action",
+        "section": "home-passport-action",
+        "order": 4,
+        "visible": true,
+        "type": "cta_row",
+        "data": {
+          "ctas": [
+            {
+              "label": "Explore Passport",
+              "href": "https://watch.njpbs.org/passport/learn-more/",
+              "variant": "primary"
+            }
+          ]
+        }
+      },
+      {
+        "id": "new-home-more",
+        "section": "home-more",
+        "order": 5,
+        "visible": true,
+        "type": "content_shelf",
+        "data": {
+          "title": "More to watch",
+          "source": "pbs_more",
+          "itemLimit": 16,
+          "moreLabel": "Browse all",
+          "moreHref": "https://watch.njpbs.org/",
+          "selectedIds": [
+            "https://watch.njpbs.org/show/marvin-gaye-greatest-hits-alive/",
+            "https://watch.njpbs.org/show/the-four-phantoms-in-concert/"
+          ],
+          "selectionReceipt": {
+            "buildBatchId": "cms-HOME6CatalogProof001",
+            "generation": 21,
+            "commitSha": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "digest": "e6887be4f86bbc04c8364d9f7f10d5aa3c0e24af9824e4fb4f85b3df4f4ccfc9"
+          },
+          "presentation": "grid",
+          "columns": 3
+        }
+      },
+      {
+        "id": "new-home-spotlight",
+        "section": "home-spotlight",
+        "order": 6,
+        "visible": true,
+        "type": "content_shelf",
+        "data": {
+          "title": "NJ Spotlight News",
+          "source": "spotlight_news",
+          "itemLimit": 8,
+          "moreLabel": "More news",
+          "moreHref": "https://www.njspotlightnews.org/",
+          "selectedIds": [
+            "https://www.njspotlightnews.org/2026/10/dale-caldwell-were-all-due-due-process/",
+            "https://www.njspotlightnews.org/2026/10/from-delaney-hall-hunger-strike-to-freedom/"
+          ],
+          "selectionReceipt": {
+            "buildBatchId": "cms-HOME6CatalogProof001",
+            "generation": 21,
+            "commitSha": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "digest": "e6887be4f86bbc04c8364d9f7f10d5aa3c0e24af9824e4fb4f85b3df4f4ccfc9"
+          },
+          "presentation": "grid",
+          "columns": 3
+        }
+      },
+      {
+        "id": "saved-home-posts",
+        "type": "content_shelf",
+        "section": "home-posts",
+        "visible": true,
+        "order": 7,
+        "data": {
+          "title": "From NJ PBS",
+          "source": "station_posts",
+          "itemLimit": 24,
+          "moreLabel": "More from NJ PBS",
+          "moreHref": "/posts/",
+          "presentation": "grid",
+          "columns": 3,
+          "selectedIds": [
+            "57298ff3b0d0917f9e653f80bada063d",
+            "1208e81a5470be941e3fb392eac674ae"
+          ],
+          "selectionReceipt": {
+            "buildBatchId": "cms-HOME6CatalogProof001",
+            "generation": 21,
+            "commitSha": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "digest": "e6887be4f86bbc04c8364d9f7f10d5aa3c0e24af9824e4fb4f85b3df4f4ccfc9"
+          }
+        }
+      }
+    ]
+  },
+  "editorial": {
+    "catalog": {
+      "schemaVersion": 1,
+      "cutoffAt": "2026-10-11T19:00:00.000Z",
+      "sources": {
+        "home-featured": {
+          "status": "ready",
+          "checkedAt": "2026-06-29T19:43:58.507Z",
+          "cards": [
+            {
+              "id": "https://watch.njpbs.org/show/painting-community/",
+              "source": "pbs_featured",
+              "title": "Painting Community",
+              "href": "https://watch.njpbs.org/show/painting-community/",
+              "summary": "With the stroke of a brush, a story is created, communities gather, and the walls talk.",
+              "sourceLabel": "PBS · NJ PBS",
+              "image": {
+                "url": "https://image.pbs.org/contentchannels/m3L1qFK-show-mezzanine16x9-Uyjvdy5.jpg",
+                "alt": ""
+              }
+            },
+            {
+              "id": "https://watch.njpbs.org/show/from-that-small-island-the-story-of-the-irish-feature-film/",
+              "source": "pbs_featured",
+              "title": "From That Small Island: The Story of the Irish Feature Film",
+              "href": "https://watch.njpbs.org/show/from-that-small-island-the-story-of-the-irish-feature-film/",
+              "summary": "The fascinating history of an island people who have truly left their mark on the world.",
+              "sourceLabel": "PBS · NJ PBS",
+              "image": {
+                "url": "https://image.pbs.org/contentchannels/xU29P1C-show-mezzanine16x9-kJ3DjLB.jpg",
+                "alt": ""
+              }
+            }
+          ]
+        },
+        "home-more": {
+          "status": "ready",
+          "checkedAt": "2026-06-29T19:43:58.507Z",
+          "cards": [
+            {
+              "id": "https://watch.njpbs.org/show/the-four-phantoms-in-concert/",
+              "source": "pbs_more",
+              "title": "The Four Phantoms in Concert",
+              "href": "https://watch.njpbs.org/show/the-four-phantoms-in-concert/",
+              "summary": "Veteran Phantom performers celebrate the music of Broadway and more.",
+              "sourceLabel": "PBS · NJ PBS",
+              "image": {
+                "url": "https://image.pbs.org/contentchannels/u5B4ldP-show-mezzanine16x9-nrVDaNJ.jpg",
+                "alt": ""
+              }
+            },
+            {
+              "id": "https://watch.njpbs.org/show/marvin-gaye-greatest-hits-alive/",
+              "source": "pbs_more",
+              "title": "Marvin Gaye: Greatest Hits Alive",
+              "href": "https://watch.njpbs.org/show/marvin-gaye-greatest-hits-alive/",
+              "summary": "This classic performance was recorded on Marvin Gaye’s first European Tour in 1976.",
+              "sourceLabel": "PBS · NJ PBS",
+              "image": {
+                "url": "https://image.pbs.org/contentchannels/c9TcppP-show-mezzanine16x9-rOfGICQ.jpg",
+                "alt": ""
+              }
+            }
+          ]
+        },
+        "home-spotlight": {
+          "status": "ready",
+          "checkedAt": "2026-10-11T14:49:53.477Z",
+          "cards": [
+            {
+              "id": "https://www.njspotlightnews.org/2026/10/from-delaney-hall-hunger-strike-to-freedom/",
+              "source": "spotlight_news",
+              "title": "From Delaney Hall hunger strike to freedom",
+              "href": "https://www.njspotlightnews.org/2026/10/from-delaney-hall-hunger-strike-to-freedom/",
+              "sourceLabel": "NJ Spotlight News",
+              "publishedAt": "2026-10-08T21:00:00.000Z",
+              "displayDate": "2026-10-08",
+              "byline": "jmooney",
+              "image": {
+                "url": "/brand/spotlight/immigration-02.jpg",
+                "alt": ""
+              }
+            },
+            {
+              "id": "https://www.njspotlightnews.org/2026/10/dale-caldwell-were-all-due-due-process/",
+              "source": "spotlight_news",
+              "title": "Dale Caldwell: ‘We’re all due due process’",
+              "href": "https://www.njspotlightnews.org/2026/10/dale-caldwell-were-all-due-due-process/",
+              "sourceLabel": "NJ Spotlight News",
+              "publishedAt": "2026-10-07T22:59:31.000Z",
+              "displayDate": "2026-10-07",
+              "byline": "NJ Spotlight",
+              "image": {
+                "url": "/brand/spotlight/politics.jpg",
+                "alt": ""
+              }
+            }
+          ]
+        },
+        "home-posts": {
+          "status": "ready",
+          "checkedAt": "2026-10-11T19:00:00.000Z",
+          "cards": [
+            {
+              "id": "1208e81a5470be941e3fb392eac674ae",
+              "source": "station_posts",
+              "sourceVersion": 40,
+              "title": "NJ PBS announces Rob Nelson as anchor of new daily newscast",
+              "href": "/posts/nj-pbs-announces-rob-nelson-as-anchor-of-new-daily-newscast/",
+              "publishedAt": "2026-10-03T22:56:21.054Z",
+              "sourceLabel": "NJ PBS",
+              "summary": "Veteran journalist and New Jersey native will lead NJ PBS News with Rob Nelson, launching as part of the station's new era under Montclair State University",
+              "displayDate": "2026-09-16",
+              "byline": "NJ PBS",
+              "image": {
+                "url": "https://media.njpbs.org/cms-media/general/0f5dfc5a-cd5c-4a1d-ab59-c8ad44fbce6d/6780ec064586141fc9c99eed52b6fa9457a1645e7cab1d45cda2cd58bfd02080.png",
+                "alt": "A portrait of journalist Rob Nelson smiling and wearing a suit."
+              }
+            },
+            {
+              "id": "57298ff3b0d0917f9e653f80bada063d",
+              "source": "station_posts",
+              "sourceVersion": 55,
+              "title": "NJ PBS announces six staff appointments",
+              "href": "/posts/nj-pbs-announces-six-staff-appointments/",
+              "publishedAt": "2026-10-03T22:56:58.520Z",
+              "sourceLabel": "NJ PBS",
+              "summary": "New leaders and producers bring experience across public media, journalism, audience development, programming, digital storytelling and broadcast operations",
+              "displayDate": "2026-09-01",
+              "byline": "NJ PBS",
+              "image": {
+                "url": "https://media.njpbs.org/cms-media/general/a4a5b023-de4c-42d8-af3a-ae549bca4e76/bcd1b579bd40d2d11539f7fe09e5e1d01b81fb1d5c16f1b9c7889620d587086e.webp",
+                "alt": "Six newly appointed NJ PBS staff members pictured in individual headshots arranged in a two-by-three grid against a blue geometric background. The appointments support the newsroom, programming, audience development, digital content and media operations."
+              }
+            }
+          ]
+        }
+      }
+    },
+    "receipt": {
+      "buildBatchId": "cms-HOME6CatalogProof001",
+      "generation": 21,
+      "commitSha": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "digest": "e6887be4f86bbc04c8364d9f7f10d5aa3c0e24af9824e4fb4f85b3df4f4ccfc9"
+    }
+  }
+}

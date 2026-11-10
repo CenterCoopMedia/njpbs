@@ -1,0 +1,13 @@
+{
+  "date": "2026-08-19",
+  "kind": "improved",
+  "title": "Read Boardwalk with roomier spacing and clearer labels",
+  "body": "Boardwalk now uses comfortable spacing by default. The rail uses the labels All content and Media library, and screens use more consistent spacing.",
+  "prs": [
+    1053,
+    1058,
+    926,
+    744
+  ],
+  "order": -4
+}

@@ -1,0 +1,32 @@
+{
+  "compilerOptions": {
+    "allowImportingTsExtensions": true,
+    "lib": [
+      "ES2023",
+      "WebWorker",
+      "WebWorker.Iterable",
+      "DOM.Iterable"
+    ],
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    "noEmit": true,
+    "skipLibCheck": true,
+    "strict": true,
+    "target": "ES2023",
+    "types": [
+      "@cloudflare/workers-types",
+      "node"
+    ]
+  },
+  "include": [
+    "src/shadow-post-worker.ts",
+    "src/published-post-reader-worker.ts",
+    "src/shadow-post-worker-configuration.d.ts",
+    "src/shadow-post-entry.ts",
+    "../site/src/shadow-renderer.d.ts",
+    "../site/src/env.d.ts",
+    "../site/.astro/types.d.ts",
+    "src/staff-site-worker-configuration.d.ts",
+    "../cms-api/worker-configuration.d.ts"
+  ]
+}

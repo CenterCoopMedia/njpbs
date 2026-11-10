@@ -1,0 +1,11 @@
+{
+  "date": "2026-10-13",
+  "kind": "new",
+  "title": "Schedule without approval and see the time",
+  "body": "Publishers can schedule a draft without a separate approval. Unscheduling returns the item to draft. Home, Pages and Posts lists show the scheduled publish time.",
+  "prs": [
+    3385,
+    2765
+  ],
+  "order": 0
+}

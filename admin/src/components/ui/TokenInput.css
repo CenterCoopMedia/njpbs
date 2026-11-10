@@ -1,0 +1,213 @@
+/* Tag token field. */
+.ui-token-input {
+  display: grid;
+  gap: var(--cms-space-1);
+  min-width: 0;
+}
+
+.ui-token-anchor {
+  min-width: 0;
+  position: relative;
+}
+
+.ui-token-field {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--cms-space-2);
+  min-height: var(--cms-control-height);
+  padding: var(--cms-space-2);
+  border: var(--cms-border-width) solid var(--cms-control-border);
+  border-radius: var(--cms-radius-control);
+  background: var(--cms-surface);
+  cursor: text;
+}
+
+.ui-token-field:focus-within {
+  outline: var(--cms-focus-outline);
+  outline-offset: 1px;
+}
+
+.ui-token-field-disabled {
+  background: var(--cms-surface-muted);
+  cursor: not-allowed;
+}
+
+.ui-token {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--cms-space-1);
+  min-height: 1.75rem;
+  max-width: 100%;
+  padding-inline: var(--cms-space-2) var(--cms-space-1);
+  border: var(--cms-border-width) solid transparent;
+  border-radius: var(--cms-radius-small);
+  background: var(--cms-brand-soft);
+  color: var(--cms-brand);
+  font-size: var(--cms-font-sm);
+  font-weight: 700;
+}
+
+/* A long tag wraps inside its token instead of clipping with an ellipsis. */
+.ui-token-value {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.ui-token-mixed {
+  border: var(--cms-border-width) dashed var(--cms-control-border);
+  background: var(--cms-surface);
+  color: var(--cms-ink);
+}
+
+.ui-token-mixed-label {
+  color: var(--cms-ink-muted);
+  font-size: var(--cms-font-xs);
+  font-weight: 400;
+}
+
+.ui-token-pending {
+  outline: 2px solid var(--cms-brand);
+  outline-offset: 1px;
+}
+
+.ui-token-remove {
+  position: relative;
+  display: inline-grid;
+  place-items: center;
+  width: 1.5rem;
+  height: 1.5rem;
+  padding: 0;
+  border: 0;
+  border-radius: var(--cms-radius-round);
+  background: none;
+  color: inherit;
+  cursor: pointer;
+}
+
+.ui-token-remove::before {
+  position: absolute;
+  inset: -0.625rem;
+  content: "";
+}
+
+.ui-token-remove .icon {
+  width: 0.875rem;
+  height: 0.875rem;
+  stroke-width: 2.2;
+}
+
+@media (hover: hover) {
+  .ui-token-remove:hover {
+    background: var(--cms-brand-soft-hover);
+  }
+}
+
+.ui-token-remove:focus-visible {
+  outline: var(--cms-focus-outline);
+  outline-offset: 1px;
+}
+
+.ui-token-text {
+  flex: 1 1 6rem;
+  min-width: 6rem;
+  min-height: 1.75rem;
+  padding: 0 var(--cms-space-1);
+  border: 0;
+  background: transparent;
+  color: var(--cms-ink);
+  font: inherit;
+  font-size: var(--cms-font-control);
+}
+
+.ui-token-text:focus {
+  outline: none;
+}
+
+/* The suggestion list sits on the fixed layer beside the field (floating.ts), so a scrolling
+   panel cannot clip it. It stays hidden until placed. */
+.ui-token-popup {
+  position: fixed;
+  z-index: var(--cms-z-popover);
+  display: grid;
+  width: max-content;
+  min-width: 12rem;
+  max-width: calc(100vw - (2 * var(--cms-space-2)));
+  border: var(--cms-border-width) solid var(--cms-line);
+  border-radius: var(--cms-radius-panel);
+  background: var(--cms-surface);
+  box-shadow: var(--cms-shadow-menu);
+}
+
+.ui-token-popup[data-positioned="false"] {
+  visibility: hidden;
+}
+
+.ui-token-popup[hidden] {
+  display: none;
+}
+
+/* The admin's reduced-motion rule gives every property a tiny transition; a list that is
+   hidden until placed must not transition visibility, or it can stay hidden for a frame. */
+@media (prefers-reduced-motion: reduce) {
+  .ui-token-popup,
+  .ui-token-popup * {
+    transition-property: none;
+  }
+}
+
+.ui-token-options {
+  max-height: 14rem;
+  margin: 0;
+  padding: var(--cms-space-1);
+  overflow: auto;
+  overscroll-behavior: contain;
+  list-style: none;
+}
+
+/* Option labels wrap instead of clipping (facts wrap; only item names clamp). */
+.ui-token-option {
+  display: flex;
+  align-items: center;
+  min-height: var(--cms-control-height);
+  padding: var(--cms-space-2) var(--cms-space-3);
+  border-radius: var(--cms-radius-control);
+  overflow-wrap: anywhere;
+  cursor: pointer;
+}
+
+.ui-token-option:hover,
+.ui-token-option[aria-selected="true"] {
+  background: var(--cms-action-quiet-hover);
+}
+
+/* Where the suggestions come from: the list's last line, not an option. */
+.ui-token-note {
+  margin: 0;
+  padding: var(--cms-space-2) var(--cms-space-3);
+  border-top: var(--cms-border-width) solid var(--cms-line);
+  color: var(--cms-ink-muted);
+  font-size: var(--cms-font-xs);
+  line-height: var(--cms-line-tight);
+}
+
+.ui-token-message {
+  min-height: 1.25rem;
+  margin: 0;
+  color: var(--cms-danger);
+  font-size: var(--cms-font-xs);
+}
+
+.ui-token-message-hint {
+  color: var(--cms-ink-muted);
+}
+
+.ui-token-message:empty {
+  min-height: 0;
+}
+
+@media (forced-colors: active) {
+  .ui-token {
+    border-color: CanvasText;
+  }
+}

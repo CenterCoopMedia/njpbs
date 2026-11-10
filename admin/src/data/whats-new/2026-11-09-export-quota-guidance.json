@@ -1,0 +1,8 @@
+{
+  "date": "2026-11-09",
+  "kind": "improved",
+  "title": "Know when video export allowances reset",
+  "body": "Video export messages explain whether your allowance or the station's allowance stopped a request. They show the remaining allowance and the exact date it resets at midnight UTC.",
+  "order": 1794263000000,
+  "prs": []
+}

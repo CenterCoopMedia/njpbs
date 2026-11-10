@@ -1,0 +1,19 @@
+{
+  "date": "2026-09-16",
+  "kind": "improved",
+  "title": "Boardwalk loads content lists faster",
+  "body": "Home, All content and Media library make fewer requests when they open. Lists no longer check each row's public status one at a time.",
+  "prs": [
+    1812,
+    1909,
+    1910,
+    1911,
+    1912,
+    1913,
+    1914,
+    1915,
+    1916,
+    1917
+  ],
+  "order": -1
+}

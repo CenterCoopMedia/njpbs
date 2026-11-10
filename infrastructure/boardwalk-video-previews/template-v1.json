@@ -1,0 +1,2204 @@
+{
+  "AWSTemplateFormatVersion": "2010-09-09",
+  "Description": "Private version-bound video copies with S3, MediaConvert and a managed Step Functions workflow.",
+  "Metadata": {
+    "AWSToolsMetrics": {
+      "AWSAgentToolkit": "aws-cloudformation@2"
+    },
+    "com.aws.cloudformation.Context": {
+      "arch": "Boardwalk starts one named Standard workflow per asset version. Native S3 tasks stage an exact source version; Lambda inspects media; MediaConvert sync generates a viewing copy or bounded editor export; Lambda verifies exact output versions and technical metadata. Boardwalk reads terminal results. Optional original-copy jobs run a bounded Fargate task against the pinned source, without staging a full copy; the helper reads its bounded verified receipt.",
+      "must": [
+        {
+          "Fn::Sub": "Deploy only to AWS account ${AWS::AccountId} in us-east-2."
+        },
+        "Keep the rendition bucket private, encrypted, versioned, and bucket-owner enforced.",
+        "Keep originals and both archive buckets outside this stack.",
+        "Use the exact Google token azp and sub values for boardwalk-s3-media and the fixed audience njpbs-boardwalk-s3.",
+        "Copy only an explicit original version to staging/ and write MediaConvert results only to outputs/."
+      ],
+      "ref": [
+        "infrastructure/boardwalk-video-previews/README.md",
+        "infrastructure/boardwalk-s3/aws-role-federation.json"
+      ]
+    }
+  },
+  "Parameters": {
+    "GoogleOAuth2ClientId": {
+      "Type": "String",
+      "AllowedPattern": "^[0-9]+$",
+      "Description": "Exact azp claim already verified for the boardwalk-s3-media Google service account."
+    },
+    "GoogleServiceAccountUniqueId": {
+      "Type": "String",
+      "AllowedPattern": "^[0-9]+$",
+      "Description": "Exact sub claim already verified for the boardwalk-s3-media Google service account."
+    },
+    "OriginalVideoBucketName": {
+      "Type": "String",
+      "Description": "Existing Boardwalk video-originals bucket. This stack reads it but does not manage it."
+    },
+    "ExistingBoardwalkVideoReadRoleName": {
+      "Type": "String",
+      "Default": "njpbs-boardwalk-video-read",
+      "AllowedValues": [
+        "njpbs-boardwalk-video-read"
+      ],
+      "Description": "Existing Boardwalk role that will receive a separate output-read policy."
+    },
+    "RenditionBucketName": {
+      "Type": "String",
+      "AllowedPattern": "^[a-z0-9][a-z0-9.-]{1,61}[a-z0-9]$",
+      "Description": "Private S3 bucket for temporary staging copies and durable video-preview outputs."
+    },
+    "TranscriptAudioPreparationFunctionArn": {
+      "Type": "String",
+      "Default": "",
+      "AllowedPattern": "^$|^arn:aws:lambda:us-east-2:[0-9]{12}:function:[A-Za-z0-9-_]{1,64}$",
+      "Description": "Optional exact transcript-audio preparation function ARN. Leave empty until its image canary is approved."
+    },
+    "OriginalCopyImageUri": {
+      "Type": "String",
+      "Default": "",
+      "AllowedPattern": "^$|^[0-9]{12}\\.dkr\\.ecr\\.us-east-2\\.amazonaws\\.com/[a-z0-9][a-z0-9._/-]*@sha256:[a-f0-9]{64}$",
+      "Description": "Verified original-copy image digest in an existing ECR repository. Empty disables original-copy compute."
+    },
+    "ExistingOriginalCopyClusterArn": {
+      "Type": "String",
+      "Default": "",
+      "AllowedPattern": "^$|^arn:aws:ecs:us-east-2:[0-9]{12}:cluster/[A-Za-z0-9_-]+$",
+      "Description": "Existing inventoried ECS cluster; this stack creates no cluster."
+    },
+    "ExistingOriginalCopySubnetIds": {
+      "Type": "String",
+      "Default": "",
+      "AllowedPattern": "^$|^subnet-[a-f0-9]+(,subnet-[a-f0-9]+)*$",
+      "Description": "Inventoried subnet IDs with S3, ECR and logs connectivity, comma separated."
+    },
+    "ExistingOriginalCopySecurityGroupIds": {
+      "Type": "String",
+      "Default": "",
+      "AllowedPattern": "^$|^sg-[a-f0-9]+(,sg-[a-f0-9]+)*$",
+      "Description": "Existing task security groups with no inbound access required, comma separated."
+    },
+    "OriginalCopyAssignPublicIp": {
+      "Type": "String",
+      "Default": "DISABLED",
+      "AllowedValues": [
+        "DISABLED",
+        "ENABLED"
+      ],
+      "Description": "Enable only for public subnets with an internet gateway and task security groups that deny inbound connections."
+    },
+    "OriginalCopyArtifactSha256": {
+      "Type": "String",
+      "Default": "",
+      "AllowedPattern": "^$|^[a-f0-9]{64}$",
+      "Description": "Verified FFmpeg artifact hash from the pinned image build receipt."
+    },
+    "DeploymentAccountId": {
+      "Type": "String",
+      "AllowedPattern": "^[0-9]{12}$",
+      "Description": "Explicit account authorized for this deployment."
+    }
+  },
+  "Rules": {
+    "TargetAccountAndRegion": {
+      "Assertions": [
+        {
+          "Assert": {
+            "Fn::Equals": [
+              {
+                "Ref": "AWS::AccountId"
+              },
+              {
+                "Ref": "DeploymentAccountId"
+              }
+            ]
+          },
+          "AssertDescription": "Deploy this stack only to the configured AWS account."
+        },
+        {
+          "Assert": {
+            "Fn::Equals": [
+              {
+                "Ref": "AWS::Region"
+              },
+              "us-east-2"
+            ]
+          },
+          "AssertDescription": "Deploy this stack only in us-east-2."
+        }
+      ]
+    },
+    "OriginalCopyInputs": {
+      "Assertions": [
+        {
+          "Assert": {
+            "Fn::Or": [
+              {
+                "Fn::Equals": [
+                  {
+                    "Ref": "OriginalCopyImageUri"
+                  },
+                  ""
+                ]
+              },
+              {
+                "Fn::And": [
+                  {
+                    "Fn::Not": [
+                      {
+                        "Fn::Equals": [
+                          {
+                            "Ref": "ExistingOriginalCopyClusterArn"
+                          },
+                          ""
+                        ]
+                      }
+                    ]
+                  },
+                  {
+                    "Fn::Not": [
+                      {
+                        "Fn::Equals": [
+                          {
+                            "Ref": "ExistingOriginalCopySubnetIds"
+                          },
+                          ""
+                        ]
+                      }
+                    ]
+                  },
+                  {
+                    "Fn::Not": [
+                      {
+                        "Fn::Equals": [
+                          {
+                            "Ref": "ExistingOriginalCopySecurityGroupIds"
+                          },
+                          ""
+                        ]
+                      }
+                    ]
+                  },
+                  {
+                    "Fn::Not": [
+                      {
+                        "Fn::Equals": [
+                          {
+                            "Ref": "OriginalCopyArtifactSha256"
+                          },
+                          ""
+                        ]
+                      }
+                    ]
+                  }
+                ]
+              }
+            ]
+          },
+          "AssertDescription": "An enabled image requires its verified artifact hash and inventoried existing cluster, private subnets and security groups."
+        }
+      ]
+    }
+  },
+  "Resources": {
+    "VideoRenditionBucket": {
+      "Type": "AWS::S3::Bucket",
+      "DeletionPolicy": "Retain",
+      "UpdateReplacePolicy": "Retain",
+      "Metadata": {
+        "com.aws.cloudformation.Context": {
+          "why": "Hold short-lived version-pinned staging copies and durable private browser-ready outputs without exposing either prefix publicly.",
+          "must": [
+            "Keep all four public-access blocks enabled and ACLs disabled.",
+            "Allow browser CORS only from https://admin.njpbs.org and only for GET and HEAD.",
+            "Expire staging current versions after three days; retain each noncurrent staging version for one day before permanent deletion.",
+            "Expire only superseded-tagged noncurrent transcript result versions after seven days; retain referenced transcript results.",
+            "Do not expire outputs/ through this stack.",
+            "Delete only the exact staging version after output verification succeeds; keep failed attempts for the 3/1-day lifecycle backstop."
+          ],
+          "mutable": "review-required",
+          "mutability": {
+            "BucketName": "must-never-change",
+            "CorsConfiguration": "change-with-constraints",
+            "LifecycleConfiguration": "change-with-constraints"
+          },
+          "ops": "Deletion/replacement retains the bucket; inventory retained data before any later cleanup."
+        }
+      },
+      "Properties": {
+        "BucketName": {
+          "Ref": "RenditionBucketName"
+        },
+        "BucketEncryption": {
+          "ServerSideEncryptionConfiguration": [
+            {
+              "ServerSideEncryptionByDefault": {
+                "SSEAlgorithm": "AES256"
+              }
+            }
+          ]
+        },
+        "CorsConfiguration": {
+          "CorsRules": [
+            {
+              "Id": "BoardwalkPrivateReads",
+              "AllowedHeaders": [
+                "Range",
+                "If-Match",
+                "If-None-Match",
+                "If-Modified-Since",
+                "If-Unmodified-Since"
+              ],
+              "AllowedMethods": [
+                "GET",
+                "HEAD"
+              ],
+              "AllowedOrigins": [
+                "https://admin.njpbs.org"
+              ],
+              "ExposedHeaders": [
+                "Accept-Ranges",
+                "Content-Length",
+                "Content-Range",
+                "ETag",
+                "x-amz-version-id"
+              ],
+              "MaxAge": 3600
+            }
+          ]
+        },
+        "LifecycleConfiguration": {
+          "Rules": [
+            {
+              "Id": "ExpireStagingVersions",
+              "Prefix": "staging/",
+              "Status": "Enabled",
+              "ExpirationInDays": 3,
+              "NoncurrentVersionExpiration": {
+                "NoncurrentDays": 1
+              }
+            },
+            {
+              "Id": "RemoveExpiredStagingDeleteMarkers",
+              "Prefix": "staging/",
+              "Status": "Enabled",
+              "ExpiredObjectDeleteMarker": true
+            },
+            {
+              "Id": "AbortIncompleteRenditionUploads",
+              "Status": "Enabled",
+              "AbortIncompleteMultipartUpload": {
+                "DaysAfterInitiation": 7
+              }
+            },
+            {
+              "Id": "ExpireClips",
+              "Status": "Enabled",
+              "Prefix": "outputs/clips/",
+              "ExpirationInDays": 7,
+              "NoncurrentVersionExpiration": {
+                "NoncurrentDays": 7
+              }
+            },
+            {
+              "Id": "ExpireTranscriptInputs",
+              "Status": "Enabled",
+              "Prefix": "transcripts/inputs/",
+              "ExpirationInDays": 7,
+              "NoncurrentVersionExpiration": {
+                "NoncurrentDays": 7
+              }
+            },
+            {
+              "Id": "ExpireNoncurrentTranscriptResults",
+              "Status": "Enabled",
+              "Prefix": "transcripts/results/",
+              "TagFilters": [
+                {
+                  "Key": "transcript-retention",
+                  "Value": "superseded"
+                }
+              ],
+              "NoncurrentVersionExpiration": {
+                "NoncurrentDays": 7
+              }
+            }
+          ]
+        },
+        "OwnershipControls": {
+          "Rules": [
+            {
+              "ObjectOwnership": "BucketOwnerEnforced"
+            }
+          ]
+        },
+        "PublicAccessBlockConfiguration": {
+          "BlockPublicAcls": true,
+          "BlockPublicPolicy": true,
+          "IgnorePublicAcls": true,
+          "RestrictPublicBuckets": true
+        },
+        "VersioningConfiguration": {
+          "Status": "Enabled"
+        },
+        "Tags": [
+          {
+            "Key": "Project",
+            "Value": "njpbs"
+          },
+          {
+            "Key": "System",
+            "Value": "boardwalk"
+          },
+          {
+            "Key": "DataClass",
+            "Value": "private-video-renditions"
+          }
+        ]
+      }
+    },
+    "VideoRenditionBucketPolicy": {
+      "Type": "AWS::S3::BucketPolicy",
+      "Metadata": {
+        "com.aws.cloudformation.Context": {
+          "why": "Reject every cleartext request; same-account role policies provide the only positive access grants.",
+          "must": [
+            "Keep the aws:SecureTransport deny on both bucket and object ARNs.",
+            "Do not add a public allow statement."
+          ],
+          "mutable": "change-with-constraints"
+        }
+      },
+      "Properties": {
+        "Bucket": {
+          "Ref": "VideoRenditionBucket"
+        },
+        "PolicyDocument": {
+          "Version": "2012-10-17",
+          "Statement": [
+            {
+              "Sid": "DenyInsecureTransport",
+              "Effect": "Deny",
+              "Principal": "*",
+              "Action": "s3:*",
+              "Resource": [
+                {
+                  "Fn::GetAtt": [
+                    "VideoRenditionBucket",
+                    "Arn"
+                  ]
+                },
+                {
+                  "Fn::Sub": "${VideoRenditionBucket.Arn}/*"
+                }
+              ],
+              "Condition": {
+                "Bool": {
+                  "aws:SecureTransport": "false"
+                }
+              }
+            }
+          ]
+        }
+      }
+    },
+    "VideoPreviewQueue": {
+      "Type": "AWS::MediaConvert::Queue",
+      "Metadata": {
+        "com.aws.cloudformation.Context": {
+          "why": "Isolate Boardwalk preview jobs and cap initial processing to one concurrent job.",
+          "must": [
+            "Keep PricingPlan ON_DEMAND because CloudFormation cannot create reserved queues.",
+            "Start at one concurrent job; raise only after a cost and throughput review."
+          ],
+          "mutable": "change-with-constraints",
+          "mutability": {
+            "Name": "must-never-change",
+            "ConcurrentJobs": "review-required"
+          }
+        }
+      },
+      "Properties": {
+        "Name": "njpbs-boardwalk-video-preview",
+        "Description": "Private Boardwalk browser-preview video jobs.",
+        "PricingPlan": "ON_DEMAND",
+        "Status": "ACTIVE",
+        "ConcurrentJobs": 1,
+        "Tags": {
+          "Project": "njpbs",
+          "System": "boardwalk-video-preview"
+        }
+      }
+    },
+    "MediaConvertPreviewServiceRole": {
+      "Type": "AWS::IAM::Role",
+      "Metadata": {
+        "com.aws.cloudformation.Context": {
+          "why": "Let only the dedicated MediaConvert queue read staged inputs and write private rendition outputs.",
+          "must": [
+            "Trust MediaConvert only for the exact queue ARN and account.",
+            "Read only staging/ and write only outputs/ in the rendition bucket.",
+            "Do not grant access to the originals or archive buckets."
+          ],
+          "mutable": "change-with-constraints",
+          "trust": "mediaconvert.amazonaws.com + exact queue SourceArn + account SourceAccount"
+        }
+      },
+      "Properties": {
+        "RoleName": "njpbs-mediaconvert-video-preview",
+        "Description": "MediaConvert access to private Boardwalk staging inputs and preview outputs.",
+        "MaxSessionDuration": 3600,
+        "AssumeRolePolicyDocument": {
+          "Version": "2012-10-17",
+          "Statement": [
+            {
+              "Sid": "MediaConvertPreviewQueue",
+              "Effect": "Allow",
+              "Principal": {
+                "Service": "mediaconvert.amazonaws.com"
+              },
+              "Action": "sts:AssumeRole",
+              "Condition": {
+                "ArnEquals": {
+                  "aws:SourceArn": {
+                    "Fn::GetAtt": [
+                      "VideoPreviewQueue",
+                      "Arn"
+                    ]
+                  }
+                },
+                "StringEquals": {
+                  "aws:SourceAccount": {
+                    "Ref": "AWS::AccountId"
+                  }
+                }
+              }
+            }
+          ]
+        },
+        "Policies": [
+          {
+            "PolicyName": "njpbs-mediaconvert-video-preview",
+            "PolicyDocument": {
+              "Version": "2012-10-17",
+              "Statement": [
+                {
+                  "Sid": "ReadStagedInputs",
+                  "Effect": "Allow",
+                  "Action": "s3:GetObject",
+                  "Resource": {
+                    "Fn::Sub": "arn:${AWS::Partition}:s3:::${RenditionBucketName}/staging/*"
+                  }
+                },
+                {
+                  "Sid": "WritePreviewOutputs",
+                  "Effect": "Allow",
+                  "Action": "s3:PutObject",
+                  "Resource": {
+                    "Fn::Sub": "arn:${AWS::Partition}:s3:::${RenditionBucketName}/outputs/*"
+                  }
+                }
+              ]
+            }
+          }
+        ],
+        "Tags": [
+          {
+            "Key": "Project",
+            "Value": "njpbs"
+          },
+          {
+            "Key": "System",
+            "Value": "boardwalk-video-preview"
+          },
+          {
+            "Key": "AccessScope",
+            "Value": "mediaconvert-staging-output"
+          }
+        ]
+      }
+    },
+    "BoardwalkVideoPreviewControlRole": {
+      "Type": "AWS::IAM::Role",
+      "Metadata": {
+        "com.aws.cloudformation.Context": {
+          "why": "Google-federated caller may start and inspect only this workflow.",
+          "must": [
+            "Preserve exact Google workload identity trust.",
+            "No original writes or archive access."
+          ]
+        }
+      },
+      "Properties": {
+        "RoleName": "njpbs-boardwalk-video-preview-control",
+        "Description": "Boardwalk control access for private video preview staging and MediaConvert jobs.",
+        "MaxSessionDuration": 3600,
+        "AssumeRolePolicyDocument": {
+          "Version": "2012-10-17",
+          "Statement": [
+            {
+              "Sid": "GoogleBoardwalkRuntime",
+              "Effect": "Allow",
+              "Principal": {
+                "Federated": "accounts.google.com"
+              },
+              "Action": "sts:AssumeRoleWithWebIdentity",
+              "Condition": {
+                "StringEquals": {
+                  "accounts.google.com:aud": {
+                    "Ref": "GoogleOAuth2ClientId"
+                  },
+                  "accounts.google.com:oaud": "njpbs-boardwalk-s3",
+                  "accounts.google.com:sub": {
+                    "Ref": "GoogleServiceAccountUniqueId"
+                  }
+                }
+              }
+            }
+          ]
+        },
+        "Policies": [
+          {
+            "PolicyName": "start-and-read-preview-workflow",
+            "PolicyDocument": {
+              "Version": "2012-10-17",
+              "Statement": [
+                {
+                  "Effect": "Allow",
+                  "Action": "states:StartExecution",
+                  "Resource": {
+                    "Fn::Sub": "arn:${AWS::Partition}:states:${AWS::Region}:${AWS::AccountId}:stateMachine:${AWS::StackName}-workflow"
+                  }
+                },
+                {
+                  "Effect": "Allow",
+                  "Action": "states:DescribeExecution",
+                  "Resource": {
+                    "Fn::Sub": "arn:${AWS::Partition}:states:${AWS::Region}:${AWS::AccountId}:execution:${AWS::StackName}-workflow:*"
+                  }
+                }
+              ]
+            }
+          }
+        ],
+        "Tags": [
+          {
+            "Key": "Project",
+            "Value": "njpbs"
+          },
+          {
+            "Key": "System",
+            "Value": "boardwalk-video-preview"
+          },
+          {
+            "Key": "AccessScope",
+            "Value": "video-preview-control"
+          }
+        ]
+      }
+    },
+    "ExistingVideoReadRoleRenditionPolicy": {
+      "Type": "AWS::IAM::Policy",
+      "Metadata": {
+        "com.aws.cloudformation.Context": {
+          "why": "Add private output playback and HEAD support to the deployed Boardwalk video role without replacing its trust or original-bucket policy.",
+          "must": [
+            "Attach only to njpbs-boardwalk-video-read.",
+            "Grant reads only under outputs/ in the rendition bucket.",
+            "Do not grant staging, list, write, delete, archive, IAM, or queue access."
+          ],
+          "mutable": "change-with-constraints",
+          "gaps": "S3 authorizes HeadObject with s3:GetObject; IAM has no separate HeadObject action."
+        }
+      },
+      "Properties": {
+        "PolicyName": "njpbs-boardwalk-video-rendition-read",
+        "Roles": [
+          {
+            "Ref": "ExistingBoardwalkVideoReadRoleName"
+          }
+        ],
+        "PolicyDocument": {
+          "Version": "2012-10-17",
+          "Statement": [
+            {
+              "Sid": "ReadPreviewOutputVersions",
+              "Effect": "Allow",
+              "Action": [
+                "s3:GetObject",
+                "s3:GetObjectVersion"
+              ],
+              "Resource": {
+                "Fn::Sub": "arn:${AWS::Partition}:s3:::${RenditionBucketName}/outputs/*"
+              }
+            }
+          ]
+        }
+      }
+    },
+    "PreviewHelperRole": {
+      "Type": "AWS::IAM::Role",
+      "Properties": {
+        "AssumeRolePolicyDocument": {
+          "Version": "2012-10-17",
+          "Statement": [
+            {
+              "Effect": "Allow",
+              "Principal": {
+                "Service": "lambda.amazonaws.com"
+              },
+              "Action": "sts:AssumeRole"
+            }
+          ]
+        },
+        "Policies": [
+          {
+            "PolicyName": "preview-workflow",
+            "PolicyDocument": {
+              "Version": "2012-10-17",
+              "Statement": [
+                {
+                  "Effect": "Allow",
+                  "Action": "s3:GetObjectVersion",
+                  "Resource": {
+                    "Fn::Sub": "arn:${AWS::Partition}:s3:::${OriginalVideoBucketName}/objects/*"
+                  }
+                },
+                {
+                  "Effect": "Allow",
+                  "Action": [
+                    "s3:GetObject",
+                    "s3:GetObjectVersion"
+                  ],
+                  "Resource": [
+                    {
+                      "Fn::Sub": "arn:${AWS::Partition}:s3:::${RenditionBucketName}/staging/*"
+                    },
+                    {
+                      "Fn::Sub": "arn:${AWS::Partition}:s3:::${RenditionBucketName}/outputs/*"
+                    }
+                  ]
+                },
+                {
+                  "Effect": "Allow",
+                  "Action": "mediaconvert:Probe",
+                  "Resource": "*"
+                },
+                {
+                  "Effect": "Allow",
+                  "Action": [
+                    "logs:CreateLogStream",
+                    "logs:PutLogEvents"
+                  ],
+                  "Resource": {
+                    "Fn::Sub": "arn:${AWS::Partition}:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/lambda/${AWS::StackName}-helper:*"
+                  }
+                },
+                {
+                  "Fn::If": [
+                    "HasOriginalCopyImage",
+                    {
+                      "Effect": "Allow",
+                      "Action": [
+                        "s3:GetObject",
+                        "s3:GetObjectVersion"
+                      ],
+                      "Resource": {
+                        "Fn::Sub": "arn:${AWS::Partition}:s3:::${RenditionBucketName}/outputs/clips/*"
+                      }
+                    },
+                    {
+                      "Ref": "AWS::NoValue"
+                    }
+                  ]
+                }
+              ]
+            }
+          }
+        ]
+      },
+      "Metadata": {
+        "com.aws.cloudformation.Context": {
+          "why": "Managed private video processing with bounded permissions and retained source identity.",
+          "must": [
+            "Keep source files unchanged.",
+            "Do not expose public URLs or credentials.",
+            "Original-copy compute is optional and preserves existing encoded preview/export paths."
+          ]
+        }
+      }
+    },
+    "PreviewHelperLog": {
+      "Type": "AWS::Logs::LogGroup",
+      "Properties": {
+        "LogGroupName": {
+          "Fn::Sub": "/aws/lambda/${AWS::StackName}-helper"
+        },
+        "RetentionInDays": 14
+      },
+      "Metadata": {
+        "com.aws.cloudformation.Context": {
+          "why": "Managed private video processing with bounded permissions and retained source identity.",
+          "must": [
+            "Keep source files unchanged.",
+            "Do not expose public URLs or credentials."
+          ]
+        }
+      }
+    },
+    "PreviewHelper": {
+      "Type": "AWS::Lambda::Function",
+      "DependsOn": [
+        "PreviewHelperLog"
+      ],
+      "Properties": {
+        "FunctionName": {
+          "Fn::Sub": "${AWS::StackName}-helper"
+        },
+        "Runtime": "python3.13",
+        "Handler": "index.handler",
+        "Timeout": 120,
+        "MemorySize": 256,
+        "Role": {
+          "Fn::GetAtt": [
+            "PreviewHelperRole",
+            "Arn"
+          ]
+        },
+        "Code": {
+          "ZipFile": "\"\"\"Small metadata and validation steps; Step Functions owns the job lifecycle.\"\"\"\nimport hashlib\nimport json\nimport math\nimport os\nimport re\nfrom urllib.parse import quote\n\nimport boto3\nfrom botocore.config import Config\n\nCONFIG = Config(retries={\"mode\": \"standard\", \"total_max_attempts\": 3},\n                connect_timeout=5, read_timeout=60)\ns3 = boto3.client(\"s3\", config=CONFIG)\nmedia = boto3.client(\"mediaconvert\", config=CONFIG)\nBUCKET = os.environ[\"RENDITION_BUCKET\"]\nORIGINALS = os.environ[\"ORIGINAL_BUCKET\"]\nACCOUNT = os.environ[\"ACCOUNT_ID\"]\nPART_BYTES = 512 * 1024 * 1024\nMAX_PREVIEW_FRAME_RATE = 60\nMAX_EXPORT_DURATION_SECONDS = 86400\nMAX_SOURCE_DURATION_DRIFT_SECONDS = 1.001\nBROADCAST_FRAME_RATE = (30000, 1001)\nFRAME_RATE_TARGETS = {\n    \"broadcast\": BROADCAST_FRAME_RATE,\n    \"24000/1001\": (24000, 1001),\n    \"24/1\": (24, 1),\n    \"25/1\": (25, 1),\n    \"30/1\": (30, 1),\n    \"50/1\": (50, 1),\n    \"60000/1001\": (60000, 1001),\n    \"60/1\": (60, 1),\n}\n\n\ndef export_scope(job):\n    return job.get(\"scope\", \"clip\")\n\n\ndef export_format(job):\n    return job.get(\"format\", \"web_mp4\")\n\n\ndef frame_rate_mode(job):\n    return job.get(\"frameRateMode\", \"source\")\n\n\ndef clip_settings(job):\n    resolution = job.get(\"resolution\", \"source\")\n    quality = job.get(\"quality\", \"balanced\")\n    if resolution not in (\"source\", \"1080p\", \"720p\", \"480p\") or quality not in (\"smaller\", \"balanced\", \"high\"):\n        raise ValueError(\"clip_settings_invalid\")\n    return resolution, quality\n\n\ndef validate_job(job):\n    if job.get(\"sourceId\") != \"video-library\":\n        raise ValueError(\"source_not_allowed\")\n    if not re.fullmatch(r\"[A-Za-z0-9_-]{1,128}\", job.get(\"assetId\", \"\")):\n        raise ValueError(\"asset_invalid\")\n    if not re.fullmatch(r\"[A-Za-z0-9_-]{1,128}\", job.get(\"attemptId\", \"\")):\n        raise ValueError(\"attempt_invalid\")\n    key = job.get(\"sourceObjectKey\", \"\")\n    version = job.get(\"sourceObjectVersionId\", \"\")\n    size = job.get(\"sourceSizeBytes\")\n    if not key.startswith(\"objects/\") or len(key) > 1024 or not version or len(version) > 1024:\n        raise ValueError(\"original_invalid\")\n    if type(size) is not int or not 0 < size <= 250 * 1024 ** 3:\n        raise ValueError(\"size_invalid\")\n    identity = [job[\"sourceId\"], job[\"assetId\"], key, version, size, 1]\n    if job.get(\"kind\") == \"clip\":\n        scope, output_format = export_scope(job), export_format(job)\n        if scope not in (\"clip\", \"source\") or output_format not in (\"web_mp4\", \"broadcast_mxf\", \"prores_mov\", \"avid_mxf\", \"broadcast_mp4\", \"original_copy\"):\n            raise ValueError(\"clip_format_invalid\")\n        if output_format == \"broadcast_mp4\" and (scope != \"source\" or \"frameRateMode\" not in job):\n            raise ValueError(\"broadcast_copy_invalid\")\n        if scope == \"source\":\n            if (output_format in (\"web_mp4\", \"original_copy\") or job.get(\"inMs\") != 0 or\n                    type(job.get(\"outMs\")) is not int or not 0 < job[\"outMs\"] <= MAX_EXPORT_DURATION_SECONDS * 1000):\n                raise ValueError(\"source_export_invalid\")\n            identity = [job[\"sourceId\"], job[\"assetId\"], key, version, size,\n                        \"source-export-v1\", output_format]\n        else:\n            input_key = job.get(\"inputObjectKey\", \"\")\n            input_version = job.get(\"inputObjectVersionId\", \"\")\n            input_size = job.get(\"inputSizeBytes\")\n            if not re.fullmatch(r\"outputs/[a-f0-9]{64}/[A-Za-z0-9_-]{1,128}/preview\\.mp4\", input_key):\n                raise ValueError(\"clip_input_invalid\")\n            if not input_version or len(input_version) > 1024 or type(input_size) is not int or not 0 < input_size <= 250 * 1024 ** 3:\n                raise ValueError(\"clip_input_invalid\")\n            start, end = job.get(\"inMs\"), job.get(\"outMs\")\n            if type(start) is not int or type(end) is not int or start < 0 or not 250 <= end - start <= 1800000:\n                raise ValueError(\"clip_range_invalid\")\n            identity = [job[\"sourceId\"], job[\"assetId\"], key, version, size,\n                        input_key, input_version, input_size, start, end]\n            if output_format != \"web_mp4\":\n                if \"resolution\" in job or \"quality\" in job:\n                    raise ValueError(\"clip_settings_invalid\")\n                identity.extend([\"original-copy-v1\" if output_format == \"original_copy\" else \"clip-v3\", output_format])\n            else:\n                resolution, quality = clip_settings(job)\n                identity.extend([\"clip-v1\"] if (resolution, quality) == (\"source\", \"balanced\")\n                                else [\"clip-v2\", resolution, quality])\n    elif job.get(\"kind\") is not None:\n        raise ValueError(\"job_kind_invalid\")\n    if \"frameRateMode\" in job:\n        if frame_rate_mode(job) not in (\"source\", *FRAME_RATE_TARGETS):\n            raise ValueError(\"frame_rate_mode_invalid\")\n        identity.extend([\"frame-rate-v1\", frame_rate_mode(job)])\n    digest = hashlib.sha256(json.dumps(identity, separators=(\",\", \":\"), ensure_ascii=False).encode()).hexdigest()\n    if digest != job.get(\"id\"):\n        raise ValueError(\"identity_invalid\")\n    return job\n\n\ndef prepare(job):\n    head = s3.head_object(Bucket=ORIGINALS, Key=job[\"sourceObjectKey\"],\n                          VersionId=job[\"sourceObjectVersionId\"], ExpectedBucketOwner=ACCOUNT)\n    if head.get(\"VersionId\") != job[\"sourceObjectVersionId\"] or head[\"ContentLength\"] != job[\"sourceSizeBytes\"]:\n        raise ValueError(\"original_changed\")\n    bucket, key, version, size = ORIGINALS, job[\"sourceObjectKey\"], job[\"sourceObjectVersionId\"], job[\"sourceSizeBytes\"]\n    if job.get(\"kind\") == \"clip\" and export_scope(job) == \"clip\" and export_format(job) == \"web_mp4\":\n        bucket, key, version, size = BUCKET, job[\"inputObjectKey\"], job[\"inputObjectVersionId\"], job[\"inputSizeBytes\"]\n        head = s3.head_object(Bucket=bucket, Key=key, VersionId=version, ExpectedBucketOwner=ACCOUNT)\n        if head.get(\"VersionId\") != version or head.get(\"ContentLength\") != size:\n            raise ValueError(\"clip_input_changed\")\n    return {\n        \"job\": job,\n        \"sourceVersion\": version,\n        \"stagingKey\": f'staging/{job[\"id\"]}/{job[\"attemptId\"]}/source',\n        \"copySource\": f'{bucket}/{quote(key, safe=\"/\")}?versionId={quote(version, safe=\"\")}',\n        \"parts\": [{\"number\": index + 1, \"range\": f'bytes={index * PART_BYTES}-{min((index + 1) * PART_BYTES, size) - 1}'}\n                  for index in range(math.ceil(size / PART_BYTES))],\n    }\n\n\ndef output_prefix(job):\n    category = \"outputs/clips\" if job.get(\"kind\") == \"clip\" else \"outputs\"\n    return f'{category}/{job[\"id\"]}/{job[\"attemptId\"]}/'\n\n\ndef probe_duration(container, video_track, prefer_video=False):\n    primary, fallback = (video_track, container) if prefer_video else (container, video_track)\n    duration = primary.get(\"Duration\")\n    return fallback.get(\"Duration\") if duration is None else duration\n\n\ndef clip_timing(job, probe, prefer_video_duration=False):\n    container = probe.get(\"Container\", {})\n    track = next((item for item in container.get(\"Tracks\", []) if item.get(\"TrackType\") == \"video\"), {})\n    rate = track.get(\"VideoProperties\", {}).get(\"FrameRate\", {})\n    numerator, denominator = rate.get(\"Numerator\"), rate.get(\"Denominator\")\n    duration = probe_duration(container, track, prefer_video_duration)\n    if type(numerator) is not int or type(denominator) is not int or min(numerator, denominator) <= 0:\n        raise ValueError(\"clip_frame_rate_missing\")\n    fps = numerator / denominator\n    if not 1 <= fps <= 60:\n        raise ValueError(\"clip_frame_rate_unsupported\")\n    if not isinstance(duration, (int, float)) or not math.isfinite(duration) or duration <= 0:\n        raise ValueError(\"clip_duration_invalid\")\n    end_tolerance_ms = 1000 if export_format(job) != \"web_mp4\" else 0\n    if job[\"outMs\"] > math.ceil(duration * 1000) + end_tolerance_ms or duration > MAX_EXPORT_DURATION_SECONDS:\n        raise ValueError(\"clip_range_outside_input\")\n    start_frame = job[\"inMs\"] * numerator // (1000 * denominator)\n    end_frame = min(math.ceil(job[\"outMs\"] * numerator / (1000 * denominator)), math.ceil(duration * fps))\n    if end_frame <= start_frame:\n        raise ValueError(\"clip_range_empty\")\n    nominal = math.ceil(fps)\n\n    def timecode(frame):\n        seconds, frames = divmod(frame, nominal)\n        minutes, seconds = divmod(seconds, 60)\n        hours, minutes = divmod(minutes, 60)\n        return f\"{hours:02d}:{minutes:02d}:{seconds:02d}:{frames:02d}\"\n\n    # MediaConvert includes both boundary frames. UI out is exclusive.\n    clipping = {\"StartTimecode\": timecode(start_frame)}\n    if job[\"outMs\"] < math.floor(duration * 1000):\n        clipping[\"EndTimecode\"] = timecode(end_frame - 1)\n    return {\n        \"timecodes\": clipping,\n        \"sourceStartSeconds\": start_frame * denominator / numerator,\n        \"sourceEndSeconds\": min(duration, end_frame * denominator / numerator),\n        \"sourceFrameDurationSeconds\": denominator / numerator,\n    }\n\n\ndef clip_timecodes(job, probe, prefer_video_duration=False):\n    return clip_timing(job, probe, prefer_video_duration)[\"timecodes\"]\n\n\ndef normalized_rate(properties):\n    rate = properties.get(\"FrameRate\", {})\n    numerator, denominator = rate.get(\"Numerator\"), rate.get(\"Denominator\")\n    if type(numerator) is not int or type(denominator) is not int or min(numerator, denominator) <= 0:\n        raise ValueError(\"broadcast_frame_rate_missing\")\n    common = math.gcd(numerator, denominator)\n    return numerator // common, denominator // common\n\n\ndef scan_type(properties):\n    scan = str(properties.get(\"CodecMetadata\", {}).get(\"ScanType\", \"\")).lower()\n    if \"interlac\" in scan or \"mbaff\" in scan:\n        return \"interlaced\"\n    if \"progress\" in scan:\n        return \"progressive\"\n    raise ValueError(\"broadcast_scan_type_missing\")\n\n\ndef editor_profile(probe, output_format, rate_mode=\"source\", prefer_video_duration=False):\n    container = probe.get(\"Container\", {})\n    tracks = container.get(\"Tracks\", [])\n    video_tracks = [track for track in tracks if track.get(\"TrackType\") == \"video\"]\n    if len(video_tracks) != 1:\n        raise ValueError(\"broadcast_video_track_unsupported\")\n    duration = probe_duration(container, video_tracks[0], prefer_video_duration)\n    if not isinstance(duration, (int, float)) or not math.isfinite(duration) or not 0 < duration <= MAX_EXPORT_DURATION_SECONDS:\n        raise ValueError(\"broadcast_duration_unsupported\")\n    properties = video_tracks[0].get(\"VideoProperties\", {})\n    dimensions = properties.get(\"Width\"), properties.get(\"Height\")\n    rate = normalized_rate(properties)\n    scan = scan_type(properties)\n    standard_rates = {(24000, 1001), (24, 1), (25, 1), (30000, 1001), (30, 1),\n                      (50, 1), (60000, 1001), (60, 1)}\n    xdcam_rates = {\n        (1920, 1080, \"progressive\"): {(24000, 1001), (25, 1), (30000, 1001)},\n        (1920, 1080, \"interlaced\"): {(25, 1), (30000, 1001)},\n        (1280, 720, \"progressive\"): {(24000, 1001), (25, 1), (50, 1), (30000, 1001), (60000, 1001)},\n    }\n    avid_rates = {(1920, 1080, \"progressive\"): standard_rates,\n                  (1920, 1080, \"interlaced\"): {(25, 1), (30000, 1001), (30, 1)},\n                  (1280, 720, \"progressive\"): standard_rates}\n    dimensions_valid = all(type(value) is int and value > 0 for value in dimensions)\n    source_rate_valid = 1 <= rate[0] / rate[1] <= MAX_PREVIEW_FRAME_RATE\n    if output_format == \"broadcast_mp4\":\n        if not dimensions_valid or not source_rate_valid:\n            raise ValueError(\"broadcast_video_format_unsupported\")\n    elif output_format == \"prores_mov\":\n        # AWS limits ProRes to 4096x4096; VideoDescription requires at least 32 pixels.\n        # https://docs.aws.amazon.com/mediaconvert/latest/ug/supported-output-resolution-maximums-by-codec.html\n        if (any(type(size) is not int or not 32 <= size <= 4096 or size % 2 for size in dimensions) or\n                (rate not in standard_rates if rate_mode == \"source\" else not source_rate_valid)):\n            raise ValueError(\"prores_video_format_unsupported\")\n    elif output_format == \"avid_mxf\":\n        # CLASS_145_8BIT is DNxHD, not the variable-raster DNxHR codec.\n        if (rate not in avid_rates.get((*dimensions, scan), set()) if rate_mode == \"source\"\n                else dimensions not in ((1920, 1080), (1280, 720)) or not source_rate_valid):\n            raise ValueError(\"avid_video_format_unsupported\")\n    elif output_format == \"broadcast_mxf\":\n        if (rate not in xdcam_rates.get((*dimensions, scan), set()) if rate_mode == \"source\"\n                else dimensions not in ((1920, 1080), (1280, 720)) or not source_rate_valid):\n            raise ValueError(\"broadcast_video_format_unsupported\")\n    audio_tracks = [track for track in tracks if track.get(\"TrackType\") == \"audio\"]\n    channel_counts = []\n    for track in audio_tracks:\n        channels = track.get(\"AudioProperties\", {}).get(\"Channels\")\n        if type(channels) is not int or not 1 <= channels <= 8:\n            raise ValueError(\"broadcast_audio_layout_unsupported\")\n        channel_counts.append(channels)\n    total_channels = sum(channel_counts)\n    allowed_channels = (2, 4, 8) if output_format == \"broadcast_mxf\" else tuple(range(9))\n    if total_channels not in allowed_channels:\n        raise ValueError(\"broadcast_audio_layout_unsupported\")\n    return {\"width\": dimensions[0], \"height\": dimensions[1], \"rate\": rate, \"scanType\": scan,\n            \"durationSeconds\": duration, \"audioChannelCounts\": channel_counts,\n            \"audioChannels\": total_channels}\n\n\ndef conversion_plan(job, profile):\n    output_format = export_format(job)\n    mode = frame_rate_mode(job)\n    target_rate = profile[\"rate\"] if mode == \"source\" else FRAME_RATE_TARGETS[mode]\n    target_fps = target_rate[0] / target_rate[1]\n    film_to_broadcast = profile[\"rate\"] == (24000, 1001) and target_rate == BROADCAST_FRAME_RATE\n    if output_format == \"broadcast_mxf\" and mode != \"source\" and target_rate not in {\n            (24000, 1001), (25, 1), BROADCAST_FRAME_RATE, (50, 1), (60000, 1001)}:\n        # The XDCAM RDD9 output table has no exact 24, 30, or 60 fps profile.\n        raise ValueError(\"broadcast_frame_rate_format_unsupported\")\n\n    method = \"none\"\n    if target_rate != profile[\"rate\"]:\n        method = (\"telecine\" if film_to_broadcast and profile[\"scanType\"] == \"progressive\"\n                  else \"interpolate\")\n\n    def geometry():\n        if output_format == \"broadcast_mp4\":\n            return (1080, 1920) if profile[\"height\"] > profile[\"width\"] else (1920, 1080)\n        if (method == \"telecine\" and (profile[\"width\"], profile[\"height\"]) == (1280, 720) and\n                output_format in (\"broadcast_mxf\", \"avid_mxf\")):\n            return 1920, 1080\n        if (mode != \"source\" and target_fps > 30 and\n                output_format in (\"broadcast_mxf\", \"avid_mxf\") and profile[\"height\"] == 1080):\n            return 1280, 720\n        return profile[\"width\"], profile[\"height\"]\n\n    if method == \"telecine\":\n        output_scan = \"interlaced\"\n    elif mode != \"source\" and (profile[\"height\"] == 720 or target_fps > 30 or film_to_broadcast or\n                               target_rate in ((24000, 1001), (24, 1), (30, 1))):\n        output_scan = \"progressive\"\n    else:\n        output_scan = profile[\"scanType\"]\n    deinterlace = profile[\"scanType\"] == \"interlaced\" and output_scan == \"progressive\"\n    width, height = geometry()\n    return {\"rate\": target_rate, \"scanType\": output_scan, \"method\": method,\n            \"width\": width, \"height\": height, \"deinterlace\": deinterlace,\n            \"gopSize\": 15 if target_rate == BROADCAST_FRAME_RATE else 12}\n\n\ndef apply_frame_rate(settings, mode, conversion):\n    if mode == \"source\":\n        settings[\"FramerateControl\"] = \"INITIALIZE_FROM_SOURCE\"\n    else:\n        settings.update({\"FramerateControl\": \"SPECIFIED\",\n                         \"FramerateNumerator\": conversion[\"rate\"][0],\n                         \"FramerateDenominator\": conversion[\"rate\"][1]})\n    if conversion[\"method\"] == \"telecine\":\n        settings[\"Telecine\"] = \"HARD\"\n    elif conversion[\"method\"] == \"interpolate\":\n        settings[\"FramerateConversionAlgorithm\"] = \"INTERPOLATE\"\n\n\ndef editor_audio(profile, output_format):\n    selectors = {}\n    descriptions = []\n    for track_index, channels in enumerate(profile[\"audioChannelCounts\"], 1):\n        selector = f\"Audio {track_index}\"\n        selectors[selector] = {\"SelectorType\": \"TRACK\", \"Tracks\": [track_index]}\n        for channel in range(channels):\n            mapping = [-60] * channels\n            mapping[channel] = 0\n            codec = \"AIFF\" if output_format == \"prores_mov\" else \"WAV\"\n            settings_key = \"AiffSettings\" if codec == \"AIFF\" else \"WavSettings\"\n            descriptions.append({\"AudioSourceName\": selector,\n                                 \"CodecSettings\": {\"Codec\": codec, settings_key: {\n                                     \"BitDepth\": 24, \"Channels\": 1, \"SampleRate\": 48000}},\n                                 \"RemixSettings\": {\"ChannelsIn\": channels, \"ChannelsOut\": 1,\n                                     \"ChannelMapping\": {\"OutputChannels\": [{\"InputChannels\": mapping}]}}})\n    return selectors, descriptions\n\n\ndef editor_format(output_format):\n    formats = {\n        \"broadcast_mxf\": {\"key\": \"broadcast\", \"filename\": \"broadcast.mxf\", \"mimeType\": \"application/mxf\",\n                          \"container\": \"mxf\", \"videoCodec\": \"mpeg2\", \"profile\": \"xdcam_rdd9\"},\n        \"prores_mov\": {\"key\": \"prores\", \"filename\": \"prores.mov\", \"mimeType\": \"video/quicktime\",\n                       \"container\": \"quicktime\", \"videoCodec\": \"prores\", \"profile\": \"prores_422_hq\"},\n        \"avid_mxf\": {\"key\": \"avid\", \"filename\": \"avid.mxf\", \"mimeType\": \"application/mxf\",\n                     \"container\": \"mxf\", \"videoCodec\": \"vc3\", \"profile\": \"vc3_class_145_8bit\"},\n        \"broadcast_mp4\": {\"key\": \"broadcastMp4\", \"filename\": \"broadcast.mp4\", \"mimeType\": \"video/mp4\",\n                          \"container\": \"mp4\", \"probeContainers\": (\"mp4\", \"mpeg-4\"),\n                          \"videoCodec\": \"h264\", \"profile\": \"frame_rate_copy\"},\n    }\n    try:\n        return formats[output_format]\n    except KeyError:\n        raise ValueError(\"clip_format_invalid\") from None\n\n\ndef editor_settings(job, staging_key, probe):\n    output_format = export_format(job)\n    explicit_mode = \"frameRateMode\" in job\n    profile = editor_profile(probe, output_format, frame_rate_mode(job), explicit_mode)\n    if export_scope(job) == \"source\":\n        # Request bounds and allowance use the viewing copy's container duration.\n        # Output verification still uses the original video track duration.\n        container = probe.get(\"Container\", {})\n        video_track = next(track for track in container.get(\"Tracks\", []) if track.get(\"TrackType\") == \"video\")\n        duration = probe_duration(container, video_track)\n        if (not isinstance(duration, (int, float)) or not math.isfinite(duration) or\n                abs(duration - job[\"outMs\"] / 1000) > MAX_SOURCE_DURATION_DRIFT_SECONDS or\n                profile[\"durationSeconds\"] - job[\"outMs\"] / 1000 > MAX_SOURCE_DURATION_DRIFT_SECONDS):\n            raise ValueError(\"source_export_duration_mismatch\")\n    format_settings = editor_format(output_format)\n    conversion = conversion_plan(job, profile)\n    video_selector = {\"Rotate\": \"AUTO\"} if output_format == \"broadcast_mp4\" else {}\n    source = {\"FileInput\": f\"s3://{BUCKET}/{staging_key}\", \"TimecodeSource\": \"ZEROBASED\",\n              \"VideoSelector\": video_selector}\n    if export_scope(job) == \"clip\":\n        source[\"InputClippings\"] = [clip_timecodes(job, probe, explicit_mode)]\n    if output_format == \"broadcast_mp4\":\n        selectors = {\"Audio\": {\"DefaultSelection\": \"DEFAULT\"}} if profile[\"audioChannels\"] else {}\n        audio = [] if not selectors else [{\"AudioSourceName\": \"Audio\", \"CodecSettings\": {\"Codec\": \"AAC\",\n            \"AacSettings\": {\"Bitrate\": 128000, \"CodingMode\": \"CODING_MODE_2_0\", \"SampleRate\": 48000}}}]\n    else:\n        selectors, audio = editor_audio(profile, output_format)\n    if selectors:\n        source[\"AudioSelectors\"] = selectors\n    interlaced = conversion[\"scanType\"] == \"interlaced\"\n    if output_format == \"broadcast_mxf\":\n        container = {\"Container\": \"MXF\", \"MxfSettings\": {\"Profile\": \"XDCAM_RDD9\"}}\n        settings = {\n            \"RateControlMode\": \"CBR\", \"Bitrate\": 50000000, \"CodecProfile\": \"PROFILE_422\",\n            \"GopSize\": conversion[\"gopSize\"], \"GopSizeUnits\": \"FRAMES\",\n            \"InterlaceMode\": \"FOLLOW_TOP_FIELD\" if interlaced else \"PROGRESSIVE\"}\n        codec = {\"Codec\": \"MPEG2\", \"Mpeg2Settings\": settings}\n    elif output_format == \"prores_mov\":\n        container = {\"Container\": \"MOV\", \"MovSettings\": {}}\n        settings = {\"CodecProfile\": \"APPLE_PRORES_422_HQ\", \"ParControl\": \"INITIALIZE_FROM_SOURCE\",\n                    \"InterlaceMode\": \"FOLLOW_TOP_FIELD\" if interlaced else \"PROGRESSIVE\"}\n        codec = {\"Codec\": \"PRORES\", \"ProresSettings\": settings}\n    elif output_format == \"avid_mxf\":\n        # An omitted profile makes MediaConvert select Generic OP1a for VC-3.\n        container = {\"Container\": \"MXF\", \"MxfSettings\": {}}\n        settings = {\"Vc3Class\": \"CLASS_145_8BIT\",\n                    \"InterlaceMode\": \"INTERLACED\" if interlaced else \"PROGRESSIVE\"}\n        codec = {\"Codec\": \"VC3\", \"Vc3Settings\": settings}\n    else:\n        container = {\"Container\": \"MP4\", \"Mp4Settings\": {\"MoovPlacement\": \"PROGRESSIVE_DOWNLOAD\"}}\n        hd_1080 = max(conversion[\"width\"], conversion[\"height\"]) == 1920\n        settings = {\"RateControlMode\": \"QVBR\", \"MaxBitrate\": 6000000 if hd_1080 else 4000000,\n                    \"QvbrSettings\": {\"QvbrQualityLevel\": 9 if hd_1080 else 8},\n                    \"QualityTuningLevel\": \"SINGLE_PASS_HQ\", \"CodecProfile\": \"HIGH\", \"CodecLevel\": \"AUTO\",\n                    \"GopSize\": conversion[\"gopSize\"], \"GopSizeUnits\": \"FRAMES\",\n                    \"ParControl\": \"INITIALIZE_FROM_SOURCE\",\n                    \"InterlaceMode\": \"FOLLOW_TOP_FIELD\" if interlaced else \"PROGRESSIVE\"}\n        codec = {\"Codec\": \"H_264\", \"H264Settings\": settings}\n    apply_frame_rate(settings, frame_rate_mode(job), conversion)\n    video = {\"Width\": conversion[\"width\"], \"Height\": conversion[\"height\"], \"CodecSettings\": codec}\n    if output_format == \"broadcast_mp4\":\n        video[\"ScalingBehavior\"] = \"FIT_NO_UPSCALE\"\n    if conversion[\"deinterlace\"]:\n        video[\"VideoPreprocessors\"] = {\"Deinterlacer\": {\"Algorithm\": \"INTERPOLATE\", \"Mode\": \"ADAPTIVE\"}}\n    if \"frameRateMode\" in job:\n        if conversion[\"rate\"] == BROADCAST_FRAME_RATE:\n            video[\"DropFrameTimecode\"] = \"ENABLED\"\n        if conversion[\"method\"] == \"none\" and output_format != \"avid_mxf\":\n            video[\"TimecodeInsertion\"] = \"PIC_TIMING_SEI\"\n    output = {\"ContainerSettings\": container, \"VideoDescription\": video,\n              \"Extension\": format_settings[\"filename\"].rsplit(\".\", 1)[1]}\n    if audio:\n        output[\"AudioDescriptions\"] = audio\n    timecode_source = \"EMBEDDED\" if \"frameRateMode\" in job else \"ZEROBASED\"\n    return {\"TimecodeConfig\": {\"Source\": timecode_source}, \"Inputs\": [source],\n            \"OutputGroups\": [{\"Name\": \"Editor export\", \"OutputGroupSettings\": {\"Type\": \"FILE_GROUP_SETTINGS\",\n                \"FileGroupSettings\": {\"Destination\": f's3://{BUCKET}/{output_prefix(job)}{format_settings[\"filename\"].rsplit(\".\", 1)[0]}'}},\n                \"Outputs\": [output]}]}\n\n\ndef preview_audio(tracks):\n    \"\"\"Keep every camera track/channel in the browser and transcript mix.\"\"\"\n    audio_tracks = [track for track in tracks if track.get(\"TrackType\") == \"audio\"]\n    if not audio_tracks:\n        return {}, []\n    counts = [track.get(\"AudioProperties\", {}).get(\"Channels\") for track in audio_tracks]\n    if any(type(count) is not int or count < 1 for count in counts) or sum(counts) > 64:\n        raise ValueError(\"source_audio_channels_unsupported\")\n    channels = sum(counts)\n    # Tracks are numbered among audio tracks, independently of container/video indexes.\n    selectors = {\"Audio\": {\"SelectorType\": \"TRACK\", \"Tracks\": list(range(1, len(counts) + 1)),\n                           \"DefaultSelection\": \"NOT_DEFAULT\"}}\n    # Preserve stereo/four-channel camera pairs. Without layout metadata, center\n    # other channel counts so surround dialogue never plays on only one side.\n    # Headroom prevents clipping when several live microphones share an output.\n    mapping = []\n    for side in range(2):\n        selected = []\n        offset = 0\n        for count in counts:\n            selected.extend(range(offset + side, offset + count, 2) if count in (2, 4)\n                            else range(offset, offset + count))\n            offset += count\n        gain = round(-20 * math.log10(len(selected)), 3)\n        mapping.append({\"InputChannelsFineTune\": [gain if index in selected else -60\n                                                 for index in range(channels)]})\n    description = {\"AudioSourceName\": \"Audio\", \"CodecSettings\": {\"Codec\": \"AAC\",\n        \"AacSettings\": {\"Bitrate\": 128000, \"CodingMode\": \"CODING_MODE_2_0\", \"SampleRate\": 48000}},\n        \"RemixSettings\": {\"ChannelsIn\": channels, \"ChannelsOut\": 2,\n                          \"ChannelMapping\": {\"OutputChannels\": mapping}},\n        # Correct the measured mix after summing, including silent camera inputs.\n        \"AudioNormalizationSettings\": {\"Algorithm\": \"ITU_BS_1770_4\", \"AlgorithmControl\": \"CORRECT_AUDIO\",\n            \"TargetLkfs\": -23, \"PeakCalculation\": \"TRUE_PEAK\", \"TruePeakLimiterThreshold\": -2}}\n    return selectors, [description]\n\n\ndef encode_settings(job, staging_key, probe):\n    if job.get(\"kind\") == \"clip\" and export_format(job) != \"web_mp4\":\n        return editor_settings(job, staging_key, probe)\n    container = probe.get(\"Container\", {})\n    tracks = probe.get(\"Container\", {}).get(\"Tracks\", [])\n    video_track = next((track for track in tracks if track.get(\"TrackType\") == \"video\"), None)\n    if not video_track:\n        raise ValueError(\"video_track_missing\")\n    properties = video_track.get(\"VideoProperties\", {})\n    width, height = properties.get(\"Width\"), properties.get(\"Height\")\n    if not isinstance(width, int) or not isinstance(height, int) or min(width, height) <= 0:\n        raise ValueError(\"dimensions_missing\")\n    if job.get(\"kind\") != \"clip\":\n        duration = probe_duration(container, video_track)\n        if (not isinstance(duration, (int, float)) or not math.isfinite(duration) or duration <= 0):\n            raise ValueError(\"source_duration_invalid\")\n        rate = properties.get(\"FrameRate\", {})\n        numerator, denominator = rate.get(\"Numerator\"), rate.get(\"Denominator\")\n        if (type(numerator) is not int or type(denominator) is not int or min(numerator, denominator) <= 0 or\n                not 1 <= numerator / denominator <= MAX_PREVIEW_FRAME_RATE):\n            raise ValueError(\"source_frame_rate_unsupported\")\n    portrait = height > width\n    cap_width, cap_height = (1080, 1920) if portrait else (1920, 1080)\n    max_bitrate, quality_level = 5000000, 7\n    if job.get(\"kind\") == \"clip\":\n        resolution, quality = clip_settings(job)\n        cap = 1080 if resolution == \"source\" else int(resolution[:-1])\n        if resolution != \"source\" and cap > min(width, height):\n            raise ValueError(\"clip_resolution_upscale\")\n        long_cap = {1080: 1920, 720: 1280, 480: 854}[cap]\n        cap_width, cap_height = (cap, long_cap) if portrait else (long_cap, cap)\n        quality_level = {\"smaller\": 6, \"balanced\": 7, \"high\": 9}[quality]\n        max_bitrate = {\"smaller\": {1080: 2500000, 720: 1500000, 480: 800000},\n                       \"balanced\": {1080: 5000000, 720: 3000000, 480: 1500000},\n                       \"high\": {1080: 8000000, 720: 5000000, 480: 2500000}}[quality][cap]\n    video = {\n        \"Width\": cap_width, \"Height\": cap_height, \"ScalingBehavior\": \"FIT_NO_UPSCALE\",\n        \"CodecSettings\": {\"Codec\": \"H_264\", \"H264Settings\": {\n            \"RateControlMode\": \"QVBR\", \"MaxBitrate\": max_bitrate,\n            \"QvbrSettings\": {\"QvbrQualityLevel\": quality_level}, \"QualityTuningLevel\": \"SINGLE_PASS_HQ\",\n            \"CodecProfile\": \"MAIN\", \"CodecLevel\": \"AUTO\", \"InterlaceMode\": \"PROGRESSIVE\",\n            \"FramerateControl\": \"INITIALIZE_FROM_SOURCE\", \"GopSize\": 2, \"GopSizeUnits\": \"SECONDS\",\n            \"ParControl\": \"SPECIFIED\", \"ParNumerator\": 1, \"ParDenominator\": 1,\n        }},\n    }\n    scan = str(properties.get(\"CodecMetadata\", {}).get(\"ScanType\", \"\")).lower()\n    if \"interlac\" in scan or \"mbaff\" in scan:\n        video[\"VideoPreprocessors\"] = {\"Deinterlacer\": {\"Algorithm\": \"INTERPOLATE\", \"Mode\": \"ADAPTIVE\"}}\n    source = {\"FileInput\": f\"s3://{BUCKET}/{staging_key}\", \"TimecodeSource\": \"ZEROBASED\",\n              \"VideoSelector\": {\"Rotate\": \"AUTO\"}}\n    if job.get(\"kind\") == \"clip\":\n        source[\"InputClippings\"] = [clip_timecodes(job, probe)]\n    web = {\"ContainerSettings\": {\"Container\": \"MP4\", \"Mp4Settings\": {\"MoovPlacement\": \"PROGRESSIVE_DOWNLOAD\"}},\n           \"VideoDescription\": video}\n    selectors, audio = preview_audio(tracks)\n    if selectors:\n        if job.get(\"kind\") == \"clip\":\n            # Web clips inherit the viewing copy's level, including quiet passages.\n            audio[0].pop(\"AudioNormalizationSettings\")\n        source[\"AudioSelectors\"] = selectors\n        web[\"AudioDescriptions\"] = audio\n    poster = {\"NameModifier\": \"-poster\", \"ContainerSettings\": {\"Container\": \"RAW\"},\n              \"VideoDescription\": {\"Width\": 360 if portrait else 640, \"Height\": 640 if portrait else 360,\n                  \"ScalingBehavior\": \"FIT_NO_UPSCALE\", \"CodecSettings\": {\"Codec\": \"FRAME_CAPTURE\",\n                      \"FrameCaptureSettings\": {\"FramerateNumerator\": 1, \"FramerateDenominator\": 1,\n                                                \"MaxCaptures\": 1, \"Quality\": 80}}}}\n    return {\"TimecodeConfig\": {\"Source\": \"ZEROBASED\"}, \"Inputs\": [source],\n            \"OutputGroups\": [{\"Name\": \"Web copy\", \"OutputGroupSettings\": {\"Type\": \"FILE_GROUP_SETTINGS\",\n                \"FileGroupSettings\": {\"Destination\": f's3://{BUCKET}/{output_prefix(job)}preview'}},\n                \"Outputs\": [web] if job.get(\"kind\") == \"clip\" else [web, poster]}]}\n\n\ndef inspect(job, event):\n    key = f'staging/{job[\"id\"]}/{job[\"attemptId\"]}/source'\n    head = s3.head_object(Bucket=BUCKET, Key=key, VersionId=event[\"stagingVersionId\"], ExpectedBucketOwner=ACCOUNT)\n    uses_web_copy = (job.get(\"kind\") == \"clip\" and export_scope(job) == \"clip\" and\n                     export_format(job) == \"web_mp4\")\n    expected_size = job[\"inputSizeBytes\"] if uses_web_copy else job[\"sourceSizeBytes\"]\n    if head[\"ContentLength\"] != expected_size or head.get(\"Metadata\", {}).get(\"rendition\") != job[\"id\"]:\n        raise ValueError(\"staging_invalid\")\n    result = media.probe(InputFiles=[{\"FileUrl\": f\"s3://{BUCKET}/{key}\"}])\n    probes = result.get(\"ProbeResults\", [])\n    if len(probes) != 1:\n        raise ValueError(\"probe_failed\")\n    return encode_settings(job, key, probes[0])\n\n\ndef probe_one(key):\n    result = media.probe(InputFiles=[{\"FileUrl\": f\"s3://{BUCKET}/{key}\"}])\n    probes = result.get(\"ProbeResults\", [])\n    if len(probes) != 1:\n        raise ValueError(\"probe_failed\")\n    return probes[0]\n\n\ndef source_timing(job, probe):\n    explicit_mode = \"frameRateMode\" in job\n    if export_scope(job) == \"clip\":\n        timing = clip_timing(job, probe, explicit_mode)\n        timing.pop(\"timecodes\")\n        return timing\n    profile = editor_profile(probe, export_format(job), frame_rate_mode(job), explicit_mode)\n    return {\"sourceStartSeconds\": 0, \"sourceEndSeconds\": profile[\"durationSeconds\"],\n            \"sourceFrameDurationSeconds\": profile[\"rate\"][1] / profile[\"rate\"][0]}\n\n\ndef verify_editor(job, prefix, output, source_probe):\n    output_format = export_format(job)\n    explicit_mode = \"frameRateMode\" in job\n    format_settings = editor_format(output_format)\n    output_probe = probe_one(prefix + format_settings[\"filename\"])\n    source_profile = editor_profile(source_probe, output_format, frame_rate_mode(job), explicit_mode)\n    conversion = conversion_plan(job, source_profile)\n    container = output_probe.get(\"Container\", {})\n    tracks = container.get(\"Tracks\", [])\n    videos = [track for track in tracks if track.get(\"TrackType\") == \"video\"]\n    audios = [track for track in tracks if track.get(\"TrackType\") == \"audio\"]\n    probe_containers = format_settings.get(\"probeContainers\", (format_settings[\"container\"],))\n    if str(container.get(\"Format\", \"\")).strip().lower() not in probe_containers or len(videos) != 1:\n        raise ValueError(\"broadcast_output_format_invalid\")\n    reported_codec = str(videos[0].get(\"Codec\", \"\")).lower()\n    if reported_codec == format_settings[\"videoCodec\"]:\n        codec_evidence = \"probe\"\n    elif output_format == \"avid_mxf\" and reported_codec == \"mpeg2\":\n        # For VC-3 jobs with MPEG2 probe metadata, use the validated encoder\n        # setting as codec evidence.\n        codec_evidence = \"encoder-setting\"\n    else:\n        raise ValueError(\"broadcast_output_format_invalid\")\n    properties = videos[0].get(\"VideoProperties\", {})\n    output_rate = normalized_rate(properties)\n    if output_format == \"prores_mov\" and not properties.get(\"CodecMetadata\"):\n        # MediaConvert Probe can omit ProRes scan metadata. The encoder was\n        # configured from the validated source scan type.\n        output_scan = conversion[\"scanType\"]\n        scan_evidence = \"encoder-setting\"\n    else:\n        output_scan = scan_type(properties)\n        scan_evidence = \"probe\"\n    output_width, output_height = properties.get(\"Width\"), properties.get(\"Height\")\n    if output_format == \"broadcast_mp4\":\n        source_long = max(source_profile[\"width\"], source_profile[\"height\"])\n        source_short = min(source_profile[\"width\"], source_profile[\"height\"])\n        dimensions_valid = (type(output_width) is int and type(output_height) is int and\n                            min(output_width, output_height) > 0 and max(output_width, output_height) <= 1920 and\n                            min(output_width, output_height) <= 1080 and\n                            max(output_width, output_height) <= source_long and\n                            min(output_width, output_height) <= source_short)\n    else:\n        dimensions_valid = (output_width, output_height) == (conversion[\"width\"], conversion[\"height\"])\n    if (not dimensions_valid or output_rate != conversion[\"rate\"] or output_scan != conversion[\"scanType\"]):\n        raise ValueError(\"broadcast_output_video_invalid\")\n    if output_format == \"broadcast_mp4\":\n        expected_audio_tracks = 1 if source_profile[\"audioChannels\"] else 0\n        if len(audios) != expected_audio_tracks:\n            raise ValueError(\"broadcast_output_audio_invalid\")\n        for track in audios:\n            audio = track.get(\"AudioProperties\", {})\n            if (str(track.get(\"Codec\", \"\")).lower() != \"aac\" or audio.get(\"Channels\") != 2 or\n                    audio.get(\"SampleRate\") != 48000):\n                raise ValueError(\"broadcast_output_audio_invalid\")\n        audio_channels, audio_codec, audio_bit_depth = (2, \"aac\", None) if audios else (0, \"none\", None)\n    else:\n        if len(audios) != source_profile[\"audioChannels\"]:\n            raise ValueError(\"broadcast_output_audio_invalid\")\n        for track in audios:\n            audio = track.get(\"AudioProperties\", {})\n            if track.get(\"Codec\") != \"PCM\" or audio.get(\"Channels\") != 1 or audio.get(\"SampleRate\") != 48000 or audio.get(\"BitDepth\") != 24:\n                raise ValueError(\"broadcast_output_audio_invalid\")\n        audio_channels, audio_codec = source_profile[\"audioChannels\"], \"none\" if not audios else \"pcm\"\n        audio_bit_depth = None if not audios else 24\n    duration = probe_duration(container, videos[0], explicit_mode)\n    if not isinstance(duration, (int, float)) or not math.isfinite(duration) or duration <= 0:\n        raise ValueError(\"broadcast_output_duration_invalid\")\n    timing = source_timing(job, source_probe)\n    tolerance = (conversion[\"rate\"][1] / conversion[\"rate\"][0] if frame_rate_mode(job) != \"source\"\n                 else max(0.5, timing[\"sourceFrameDurationSeconds\"] * 2))\n    if abs(duration - (timing[\"sourceEndSeconds\"] - timing[\"sourceStartSeconds\"])) > tolerance:\n        raise ValueError(\"broadcast_output_duration_invalid\")\n    output.update({\"container\": format_settings[\"container\"], \"videoCodec\": format_settings[\"videoCodec\"],\n                   \"videoCodecEvidence\": codec_evidence,\n                   \"profile\": format_settings[\"profile\"],\n                   \"width\": output_width, \"height\": output_height,\n                   \"durationSeconds\": duration, \"frameRateNumerator\": output_rate[0],\n                   \"frameRateDenominator\": output_rate[1],\n                   \"sourceFrameRateNumerator\": source_profile[\"rate\"][0],\n                   \"sourceFrameRateDenominator\": source_profile[\"rate\"][1],\n                   \"conversionMethod\": conversion[\"method\"],\n                   \"timecodeMode\": \"embedded_or_zero_based\" if \"frameRateMode\" in job else \"zero_based\",\n                   \"scanType\": output_scan,\n                   \"scanTypeEvidence\": scan_evidence,\n                   \"audioChannels\": audio_channels, \"audioTracks\": len(audios),\n                   \"audioCodec\": audio_codec,\n                   \"audioSampleRate\": None if not audios else 48000,\n                   \"audioBitDepth\": audio_bit_depth, **timing})\n    if \"frameRateMode\" in job:\n        output[\"frameRateMode\"] = frame_rate_mode(job)\n\n\ndef verify(job):\n    prefix = output_prefix(job)\n    editor = job.get(\"kind\") == \"clip\" and export_format(job) != \"web_mp4\"\n    format_settings = editor_format(export_format(job)) if editor else None\n    targets = [(format_settings[\"key\"], format_settings[\"filename\"], format_settings[\"mimeType\"])] if editor else [(\"web\", \"preview.mp4\", \"video/mp4\")]\n    if job.get(\"kind\") != \"clip\":\n        targets.append((\"poster\", \"preview-poster.0000000.jpg\", \"image/jpeg\"))\n    outputs = {}\n    for name, filename, mime in targets:\n        head = s3.head_object(Bucket=BUCKET, Key=prefix + filename, ExpectedBucketOwner=ACCOUNT)\n        if not head.get(\"VersionId\") or head.get(\"ContentLength\", 0) <= 0:\n            raise ValueError(\"output_missing\")\n        outputs[name] = {\"objectKey\": prefix + filename, \"objectVersionId\": head[\"VersionId\"],\n                         \"sizeBytes\": head[\"ContentLength\"], \"mimeType\": mime}\n    if editor:\n        source_probe = probe_one(f'staging/{job[\"id\"]}/{job[\"attemptId\"]}/source')\n        verify_editor(job, prefix, outputs[format_settings[\"key\"]], source_probe)\n        primary = format_settings[\"key\"]\n    else:\n        output_probe = probe_one(prefix + \"preview.mp4\")\n        container = output_probe.get(\"Container\", {})\n        track = next((item for item in container.get(\"Tracks\", []) if item.get(\"TrackType\") == \"video\"), {})\n        properties = track.get(\"VideoProperties\", {})\n        width, height = properties.get(\"Width\"), properties.get(\"Height\")\n        if type(width) is not int or type(height) is not int or min(width, height) <= 0 or max(width, height) > 1920 or min(width, height) > 1080:\n            raise ValueError(\"output_dimensions_invalid\")\n        outputs[\"web\"].update({\"width\": width, \"height\": height})\n        duration = probe_duration(container, track)\n        if isinstance(duration, (float, int)) and math.isfinite(duration) and duration >= 0:\n            outputs[\"web\"][\"durationSeconds\"] = duration\n        if job.get(\"kind\") == \"clip\":\n            resolution, _ = clip_settings(job)\n            cap = 1080 if resolution == \"source\" else int(resolution[:-1])\n            if min(width, height) > cap or max(width, height) > {1080: 1920, 720: 1280, 480: 854}[cap]:\n                raise ValueError(\"clip_output_dimensions_invalid\")\n            rate = properties.get(\"FrameRate\", {})\n            numerator, denominator = rate.get(\"Numerator\"), rate.get(\"Denominator\")\n            if type(numerator) is not int or type(denominator) is not int or min(numerator, denominator) <= 0 or not 1 <= numerator / denominator <= 60:\n                raise ValueError(\"clip_output_frame_rate_invalid\")\n            frame_seconds = denominator / numerator\n            timing = clip_timing(job, probe_one(f'staging/{job[\"id\"]}/{job[\"attemptId\"]}/source'))\n            timing.pop(\"timecodes\")\n            outputs[\"web\"].update({\"frameDurationSeconds\": frame_seconds, **timing})\n            tolerance_ms = max(500, frame_seconds * 2000)\n            if not isinstance(duration, (float, int)) or not math.isfinite(duration) or duration <= 0 or abs(duration * 1000 - (job[\"outMs\"] - job[\"inMs\"])) > tolerance_ms:\n                raise ValueError(\"clip_output_duration_invalid\")\n        else:\n            source_probe = probe_one(f'staging/{job[\"id\"]}/{job[\"attemptId\"]}/source')\n            source_track = next((item for item in source_probe.get(\"Container\", {}).get(\"Tracks\", [])\n                                 if item.get(\"TrackType\") == \"video\"), {})\n            source_rate = normalized_rate(source_track.get(\"VideoProperties\", {}))\n            if not 1 <= source_rate[0] / source_rate[1] <= MAX_PREVIEW_FRAME_RATE:\n                raise ValueError(\"source_frame_rate_unsupported\")\n            outputs[\"web\"].update({\"sourceFrameRateNumerator\": source_rate[0],\n                                   \"sourceFrameRateDenominator\": source_rate[1]})\n            # Frame-accurate comments use the web copy's own rate; a variable-rate source can differ.\n            try:\n                output_rate = normalized_rate(properties)\n            except ValueError:\n                output_rate = None\n            if output_rate is not None:\n                outputs[\"web\"].update({\"frameRateNumerator\": output_rate[0],\n                                       \"frameRateDenominator\": output_rate[1]})\n        primary = \"web\"\n    current = s3.head_object(Bucket=BUCKET, Key=outputs[primary][\"objectKey\"], ExpectedBucketOwner=ACCOUNT)\n    if current.get(\"VersionId\") != outputs[primary][\"objectVersionId\"]:\n        raise ValueError(\"output_changed\")\n    return {\"id\": job[\"id\"], \"attemptId\": job[\"attemptId\"], **outputs}\n\n\ndef verify_original(job):\n    if export_format(job) != \"original_copy\" or export_scope(job) != \"clip\":\n        raise ValueError(\"original_format_invalid\")\n    prefix = output_prefix(job)\n    receipt_key = prefix + \"original-receipt.json\"\n    receipt_head = s3.head_object(Bucket=BUCKET, Key=receipt_key, ExpectedBucketOwner=ACCOUNT)\n    if not receipt_head.get(\"VersionId\") or not 0 < receipt_head.get(\"ContentLength\", 0) <= 65536:\n        raise ValueError(\"original_receipt_invalid\")\n    response = s3.get_object(Bucket=BUCKET, Key=receipt_key, VersionId=receipt_head[\"VersionId\"], ExpectedBucketOwner=ACCOUNT)\n    try:\n        raw = response[\"Body\"].read(65537)\n    finally:\n        response[\"Body\"].close()\n    if len(raw) != receipt_head[\"ContentLength\"] or response.get(\"VersionId\") != receipt_head[\"VersionId\"]:\n        raise ValueError(\"original_receipt_changed\")\n    result = json.loads(raw)\n    if (result.get(\"id\") == job[\"id\"] and result.get(\"attemptId\") == job[\"attemptId\"] and\n            result.get(\"errorCode\") in (\"original_media_unsupported\", \"original_timing_unsupported\", \"original_output_limit\")):\n        raise ValueError(result[\"errorCode\"])\n    output = result.get(\"original\", {})\n    proof = output.get(\"provenance\", {})\n    if (result.get(\"id\") != job[\"id\"] or result.get(\"attemptId\") != job[\"attemptId\"] or\n            output.get(\"objectKey\") != prefix + \"original.mov\" or not output.get(\"objectVersionId\") or\n            output.get(\"mimeType\") != \"video/quicktime\" or output.get(\"container\") != \"quicktime\" or\n            output.get(\"videoCodec\") not in (\"h264\", \"prores\") or\n            type(output.get(\"sizeBytes\")) is not int or not 0 < output[\"sizeBytes\"] <= 64 * 1024 ** 3 or\n            not re.fullmatch(r\"[a-f0-9]{64}\", output.get(\"sha256\", \"\")) or\n            output.get(\"requestedInMs\") != job[\"inMs\"] or output.get(\"requestedOutMs\") != job[\"outMs\"] or\n            proof.get(\"revision\") != \"original-copy-v1\" or proof.get(\"timingEvidence\") != \"verified-packet-subsequence\" or\n            proof.get(\"sourceObjectVersionId\") != job[\"sourceObjectVersionId\"] or proof.get(\"sourceSizeBytes\") != job[\"sourceSizeBytes\"] or\n            not re.fullmatch(r\"[a-f0-9]{64}\", proof.get(\"ffmpegArtifactSha256\", \"\"))):\n        raise ValueError(\"original_receipt_invalid\")\n    start, end = output.get(\"sourceStartSeconds\"), output.get(\"sourceEndSeconds\")\n    duration, frame = output.get(\"durationSeconds\"), output.get(\"sourceFrameDurationSeconds\")\n    if (not all(type(value) in (int, float) and math.isfinite(value) for value in (start, end, duration, frame)) or\n            not 0 <= start < end <= MAX_EXPORT_DURATION_SECONDS or not 0 < frame <= 1 or duration <= 0 or\n            not -1e-6 <= job[\"inMs\"] / 1000 - start <= 30 or not -1e-6 <= end - job[\"outMs\"] / 1000 <= 30 or\n            abs(duration - (end - start)) > max(0.5, frame * 2)):\n        raise ValueError(\"original_output_timing_invalid\")\n    head = s3.head_object(Bucket=BUCKET, Key=output[\"objectKey\"], VersionId=output[\"objectVersionId\"], ExpectedBucketOwner=ACCOUNT)\n    if (head.get(\"VersionId\") != output[\"objectVersionId\"] or head.get(\"ContentLength\") != output[\"sizeBytes\"] or\n            head.get(\"Metadata\", {}).get(\"sha256\") != output[\"sha256\"]):\n        raise ValueError(\"original_output_changed\")\n    # Firestore admission applies the bounded stream-proof schema before marking ready.\n    return {\"id\": job[\"id\"], \"attemptId\": job[\"attemptId\"], \"original\": output}\n\n\ndef handler(event, context):\n    job = validate_job(event[\"job\"])\n    operations = {\"prepare\": prepare, \"verify\": verify, \"verify_original\": verify_original}\n    if event.get(\"operation\") == \"inspect\":\n        return inspect(job, event)\n    operation = operations.get(event.get(\"operation\"))\n    if not operation:\n        raise ValueError(\"operation_invalid\")\n    return operation(job)\n"
+        },
+        "Environment": {
+          "Variables": {
+            "RENDITION_BUCKET": {
+              "Ref": "RenditionBucketName"
+            },
+            "ORIGINAL_BUCKET": {
+              "Ref": "OriginalVideoBucketName"
+            },
+            "ACCOUNT_ID": {
+              "Ref": "AWS::AccountId"
+            }
+          }
+        }
+      },
+      "Metadata": {
+        "com.aws.cloudformation.Context": {
+          "why": "Managed private video processing with bounded permissions and retained source identity.",
+          "must": [
+            "Keep source files unchanged.",
+            "Do not expose public URLs or credentials.",
+            "Original-copy compute is optional and preserves existing encoded preview/export paths."
+          ]
+        }
+      }
+    },
+    "PreviewWorkflowRole": {
+      "Type": "AWS::IAM::Role",
+      "Properties": {
+        "AssumeRolePolicyDocument": {
+          "Version": "2012-10-17",
+          "Statement": [
+            {
+              "Effect": "Allow",
+              "Principal": {
+                "Service": "states.amazonaws.com"
+              },
+              "Action": "sts:AssumeRole",
+              "Condition": {
+                "StringEquals": {
+                  "aws:SourceAccount": {
+                    "Ref": "AWS::AccountId"
+                  }
+                },
+                "ArnLike": {
+                  "aws:SourceArn": {
+                    "Fn::Sub": "arn:${AWS::Partition}:states:${AWS::Region}:${AWS::AccountId}:stateMachine:${AWS::StackName}-workflow"
+                  }
+                }
+              }
+            }
+          ]
+        },
+        "Policies": [
+          {
+            "PolicyName": "preview-workflow",
+            "PolicyDocument": {
+              "Version": "2012-10-17",
+              "Statement": [
+                {
+                  "Effect": "Allow",
+                  "Action": "lambda:InvokeFunction",
+                  "Resource": {
+                    "Fn::GetAtt": [
+                      "PreviewHelper",
+                      "Arn"
+                    ]
+                  }
+                },
+                {
+                  "Effect": "Allow",
+                  "Action": "s3:GetObjectVersion",
+                  "Resource": {
+                    "Fn::Sub": "arn:${AWS::Partition}:s3:::${OriginalVideoBucketName}/objects/*"
+                  }
+                },
+                {
+                  "Effect": "Allow",
+                  "Action": [
+                    "s3:PutObject",
+                    "s3:AbortMultipartUpload"
+                  ],
+                  "Resource": {
+                    "Fn::Sub": "arn:${AWS::Partition}:s3:::${RenditionBucketName}/staging/*"
+                  }
+                },
+                {
+                  "Effect": "Allow",
+                  "Action": "mediaconvert:CreateJob",
+                  "Resource": {
+                    "Fn::GetAtt": [
+                      "VideoPreviewQueue",
+                      "Arn"
+                    ]
+                  }
+                },
+                {
+                  "Effect": "Allow",
+                  "Action": [
+                    "mediaconvert:GetJob",
+                    "mediaconvert:CancelJob"
+                  ],
+                  "Resource": {
+                    "Fn::Sub": "arn:${AWS::Partition}:mediaconvert:${AWS::Region}:${AWS::AccountId}:jobs/*"
+                  },
+                  "Condition": {
+                    "StringEquals": {
+                      "aws:ResourceTag/ManagedByService": "AWSStepFunctions"
+                    }
+                  }
+                },
+                {
+                  "Effect": "Allow",
+                  "Action": "iam:PassRole",
+                  "Resource": {
+                    "Fn::GetAtt": [
+                      "MediaConvertPreviewServiceRole",
+                      "Arn"
+                    ]
+                  },
+                  "Condition": {
+                    "StringEquals": {
+                      "iam:PassedToService": "mediaconvert.amazonaws.com"
+                    }
+                  }
+                },
+                {
+                  "Effect": "Allow",
+                  "Action": [
+                    "events:PutTargets",
+                    "events:PutRule",
+                    "events:DescribeRule"
+                  ],
+                  "Resource": {
+                    "Fn::Sub": "arn:${AWS::Partition}:events:${AWS::Region}:${AWS::AccountId}:rule/StepFunctionsGetEventsForMediaConvertJobRule"
+                  }
+                },
+                {
+                  "Effect": "Allow",
+                  "Action": "s3:GetObjectVersion",
+                  "Resource": {
+                    "Fn::Sub": "arn:${AWS::Partition}:s3:::${RenditionBucketName}/outputs/*"
+                  }
+                },
+                {
+                  "Fn::If": [
+                    "HasOriginalCopyImage",
+                    {
+                      "Effect": "Allow",
+                      "Action": "ecs:RunTask",
+                      "Resource": {
+                        "Ref": "OriginalCopyTask"
+                      },
+                      "Condition": {
+                        "ArnEquals": {
+                          "ecs:cluster": {
+                            "Ref": "ExistingOriginalCopyClusterArn"
+                          }
+                        }
+                      }
+                    },
+                    {
+                      "Ref": "AWS::NoValue"
+                    }
+                  ]
+                },
+                {
+                  "Fn::If": [
+                    "HasOriginalCopyImage",
+                    {
+                      "Effect": "Allow",
+                      "Action": [
+                        "ecs:DescribeTasks",
+                        "ecs:StopTask"
+                      ],
+                      "Resource": {
+                        "Fn::Sub": "arn:${AWS::Partition}:ecs:${AWS::Region}:${AWS::AccountId}:task/*"
+                      },
+                      "Condition": {
+                        "ArnEquals": {
+                          "ecs:cluster": {
+                            "Ref": "ExistingOriginalCopyClusterArn"
+                          }
+                        }
+                      }
+                    },
+                    {
+                      "Ref": "AWS::NoValue"
+                    }
+                  ]
+                },
+                {
+                  "Fn::If": [
+                    "HasOriginalCopyImage",
+                    {
+                      "Effect": "Allow",
+                      "Action": "iam:PassRole",
+                      "Resource": [
+                        {
+                          "Fn::GetAtt": [
+                            "OriginalCopyTaskRole",
+                            "Arn"
+                          ]
+                        },
+                        {
+                          "Fn::GetAtt": [
+                            "OriginalCopyExecutionRole",
+                            "Arn"
+                          ]
+                        }
+                      ],
+                      "Condition": {
+                        "StringEquals": {
+                          "iam:PassedToService": "ecs-tasks.amazonaws.com"
+                        }
+                      }
+                    },
+                    {
+                      "Ref": "AWS::NoValue"
+                    }
+                  ]
+                },
+                {
+                  "Fn::If": [
+                    "HasOriginalCopyImage",
+                    {
+                      "Effect": "Allow",
+                      "Action": [
+                        "events:PutTargets",
+                        "events:PutRule",
+                        "events:DescribeRule"
+                      ],
+                      "Resource": {
+                        "Fn::Sub": "arn:${AWS::Partition}:events:${AWS::Region}:${AWS::AccountId}:rule/StepFunctionsGetEventsForECSTaskRule"
+                      }
+                    },
+                    {
+                      "Ref": "AWS::NoValue"
+                    }
+                  ]
+                },
+                {
+                  "Effect": "Allow",
+                  "Action": "s3:DeleteObjectVersion",
+                  "Resource": {
+                    "Fn::Sub": "arn:${AWS::Partition}:s3:::${RenditionBucketName}/staging/*"
+                  }
+                }
+              ]
+            }
+          }
+        ]
+      },
+      "Metadata": {
+        "com.aws.cloudformation.Context": {
+          "why": "Managed private video processing with bounded permissions and retained source identity.",
+          "must": [
+            "Keep source files unchanged.",
+            "Do not expose public URLs or credentials.",
+            "Original-copy compute is optional and preserves existing encoded preview/export paths."
+          ]
+        }
+      }
+    },
+    "PreviewWorkflow": {
+      "Type": "AWS::StepFunctions::StateMachine",
+      "Properties": {
+        "StateMachineName": {
+          "Fn::Sub": "${AWS::StackName}-workflow"
+        },
+        "StateMachineType": "STANDARD",
+        "RoleArn": {
+          "Fn::GetAtt": [
+            "PreviewWorkflowRole",
+            "Arn"
+          ]
+        },
+        "Definition": {
+          "Comment": "Version-bound private Boardwalk video conversion. No automatic retry of paid conversion.",
+          "StartAt": "Validate original",
+          "TimeoutSeconds": 172800,
+          "States": {
+            "Validate original": {
+              "Type": "Task",
+              "Resource": "arn:aws:states:::lambda:invoke",
+              "Parameters": {
+                "FunctionName": {
+                  "Fn::GetAtt": [
+                    "PreviewHelper",
+                    "Arn"
+                  ]
+                },
+                "Payload": {
+                  "operation": "prepare",
+                  "job.$": "$"
+                }
+              },
+              "OutputPath": "$.Payload",
+              "Retry": [
+                {
+                  "ErrorEquals": [
+                    "Lambda.ServiceException",
+                    "Lambda.AWSLambdaException",
+                    "Lambda.SdkClientException",
+                    "Lambda.TooManyRequestsException"
+                  ],
+                  "IntervalSeconds": 2,
+                  "MaxAttempts": 3,
+                  "BackoffRate": 2
+                }
+              ],
+              "Next": "Choose original copy or encode"
+            },
+            "Start staging copy": {
+              "Type": "Task",
+              "Resource": "arn:aws:states:::aws-sdk:s3:createMultipartUpload",
+              "Parameters": {
+                "Bucket": {
+                  "Ref": "RenditionBucketName"
+                },
+                "Key.$": "$.stagingKey",
+                "ExpectedBucketOwner": {
+                  "Ref": "AWS::AccountId"
+                },
+                "Metadata": {
+                  "rendition.$": "$.job.id"
+                }
+              },
+              "ResultPath": "$.upload",
+              "Next": "Copy exact original parts",
+              "Retry": [
+                {
+                  "ErrorEquals": [
+                    "S3.SdkClientException"
+                  ],
+                  "IntervalSeconds": 2,
+                  "MaxAttempts": 5,
+                  "BackoffRate": 2,
+                  "MaxDelaySeconds": 30,
+                  "JitterStrategy": "FULL"
+                }
+              ]
+            },
+            "Copy exact original parts": {
+              "Type": "Map",
+              "ItemsPath": "$.parts",
+              "MaxConcurrency": 4,
+              "ItemSelector": {
+                "part.$": "$$.Map.Item.Value",
+                "uploadId.$": "$.upload.UploadId",
+                "stagingKey.$": "$.stagingKey",
+                "copySource.$": "$.copySource",
+                "sourceVersion.$": "$.sourceVersion"
+              },
+              "ItemProcessor": {
+                "ProcessorConfig": {
+                  "Mode": "INLINE"
+                },
+                "StartAt": "Copy part",
+                "States": {
+                  "Copy part": {
+                    "Type": "Task",
+                    "Resource": "arn:aws:states:::aws-sdk:s3:uploadPartCopy",
+                    "Parameters": {
+                      "Bucket": {
+                        "Ref": "RenditionBucketName"
+                      },
+                      "Key.$": "$.stagingKey",
+                      "UploadId.$": "$.uploadId",
+                      "PartNumber.$": "$.part.number",
+                      "CopySource.$": "$.copySource",
+                      "CopySourceRange.$": "$.part.range",
+                      "ExpectedBucketOwner": {
+                        "Ref": "AWS::AccountId"
+                      },
+                      "ExpectedSourceBucketOwner": {
+                        "Ref": "AWS::AccountId"
+                      }
+                    },
+                    "ResultPath": "$.result",
+                    "Next": "Check copied version",
+                    "Retry": [
+                      {
+                        "ErrorEquals": [
+                          "S3.SdkClientException"
+                        ],
+                        "IntervalSeconds": 2,
+                        "MaxAttempts": 5,
+                        "BackoffRate": 2,
+                        "MaxDelaySeconds": 30,
+                        "JitterStrategy": "FULL"
+                      }
+                    ]
+                  },
+                  "Check copied version": {
+                    "Type": "Choice",
+                    "Choices": [
+                      {
+                        "Variable": "$.result.CopySourceVersionId",
+                        "StringEqualsPath": "$.sourceVersion",
+                        "Next": "Retain part"
+                      }
+                    ],
+                    "Default": "Wrong original version"
+                  },
+                  "Wrong original version": {
+                    "Type": "Fail",
+                    "Error": "OriginalVersionChanged"
+                  },
+                  "Retain part": {
+                    "Type": "Pass",
+                    "Parameters": {
+                      "PartNumber.$": "$.part.number",
+                      "ETag.$": "$.result.CopyPartResult.ETag"
+                    },
+                    "End": true
+                  }
+                }
+              },
+              "ResultPath": "$.copiedParts",
+              "Next": "Complete staging copy"
+            },
+            "Complete staging copy": {
+              "Type": "Task",
+              "Resource": "arn:aws:states:::aws-sdk:s3:completeMultipartUpload",
+              "Parameters": {
+                "Bucket": {
+                  "Ref": "RenditionBucketName"
+                },
+                "Key.$": "$.stagingKey",
+                "UploadId.$": "$.upload.UploadId",
+                "ExpectedBucketOwner": {
+                  "Ref": "AWS::AccountId"
+                },
+                "MultipartUpload": {
+                  "Parts.$": "$.copiedParts"
+                }
+              },
+              "ResultPath": "$.staging",
+              "Next": "Inspect video",
+              "Retry": [
+                {
+                  "ErrorEquals": [
+                    "S3.SdkClientException"
+                  ],
+                  "IntervalSeconds": 2,
+                  "MaxAttempts": 5,
+                  "BackoffRate": 2,
+                  "MaxDelaySeconds": 30,
+                  "JitterStrategy": "FULL"
+                }
+              ]
+            },
+            "Inspect video": {
+              "Type": "Task",
+              "Resource": "arn:aws:states:::lambda:invoke",
+              "Parameters": {
+                "FunctionName": {
+                  "Fn::GetAtt": [
+                    "PreviewHelper",
+                    "Arn"
+                  ]
+                },
+                "Payload": {
+                  "operation": "inspect",
+                  "job.$": "$.job",
+                  "stagingVersionId.$": "$.staging.VersionId"
+                }
+              },
+              "ResultSelector": {
+                "settings.$": "$.Payload"
+              },
+              "ResultPath": "$.encoding",
+              "Retry": [
+                {
+                  "ErrorEquals": [
+                    "Lambda.ServiceException",
+                    "Lambda.AWSLambdaException",
+                    "Lambda.SdkClientException",
+                    "Lambda.TooManyRequestsException"
+                  ],
+                  "IntervalSeconds": 2,
+                  "MaxAttempts": 3,
+                  "BackoffRate": 2
+                }
+              ],
+              "Next": "Create viewing copy"
+            },
+            "Create viewing copy": {
+              "Type": "Task",
+              "Resource": "arn:aws:states:::mediaconvert:createJob.sync",
+              "Parameters": {
+                "Role": {
+                  "Fn::GetAtt": [
+                    "MediaConvertPreviewServiceRole",
+                    "Arn"
+                  ]
+                },
+                "Queue": {
+                  "Fn::GetAtt": [
+                    "VideoPreviewQueue",
+                    "Arn"
+                  ]
+                },
+                "ClientRequestToken.$": "$.job.attemptId",
+                "UserMetadata": {
+                  "renditionId.$": "$.job.id",
+                  "attemptId.$": "$.job.attemptId"
+                },
+                "Settings.$": "$.encoding.settings"
+              },
+              "ResultPath": "$.conversion",
+              "Next": "Verify output versions"
+            },
+            "Verify output versions": {
+              "Type": "Task",
+              "Resource": "arn:aws:states:::lambda:invoke",
+              "Parameters": {
+                "FunctionName": {
+                  "Fn::GetAtt": [
+                    "PreviewHelper",
+                    "Arn"
+                  ]
+                },
+                "Payload": {
+                  "operation": "verify",
+                  "job.$": "$.job"
+                }
+              },
+              "Retry": [
+                {
+                  "ErrorEquals": [
+                    "Lambda.ServiceException",
+                    "Lambda.AWSLambdaException",
+                    "Lambda.SdkClientException",
+                    "Lambda.TooManyRequestsException"
+                  ],
+                  "IntervalSeconds": 2,
+                  "MaxAttempts": 3,
+                  "BackoffRate": 2
+                }
+              ],
+              "ResultPath": "$.verification",
+              "Next": "Delete verified staging copy"
+            },
+            "Choose original copy or encode": {
+              "Type": "Choice",
+              "Choices": [
+                {
+                  "And": [
+                    {
+                      "Variable": "$.job.format",
+                      "IsPresent": true
+                    },
+                    {
+                      "Variable": "$.job.format",
+                      "StringEquals": "original_copy"
+                    }
+                  ],
+                  "Next": "Copy original range"
+                }
+              ],
+              "Default": "Start staging copy"
+            },
+            "Copy original range": {
+              "Fn::If": [
+                "HasOriginalCopyImage",
+                {
+                  "Type": "Task",
+                  "Resource": "arn:aws:states:::ecs:runTask.sync",
+                  "TimeoutSeconds": 3900,
+                  "Parameters": {
+                    "LaunchType": "FARGATE",
+                    "PlatformVersion": "1.4.0",
+                    "Cluster": {
+                      "Ref": "ExistingOriginalCopyClusterArn"
+                    },
+                    "TaskDefinition": {
+                      "Ref": "OriginalCopyTask"
+                    },
+                    "NetworkConfiguration": {
+                      "AwsvpcConfiguration": {
+                        "Subnets": {
+                          "Fn::Split": [
+                            ",",
+                            {
+                              "Ref": "ExistingOriginalCopySubnetIds"
+                            }
+                          ]
+                        },
+                        "SecurityGroups": {
+                          "Fn::Split": [
+                            ",",
+                            {
+                              "Ref": "ExistingOriginalCopySecurityGroupIds"
+                            }
+                          ]
+                        },
+                        "AssignPublicIp": {
+                          "Ref": "OriginalCopyAssignPublicIp"
+                        }
+                      }
+                    },
+                    "Overrides": {
+                      "ContainerOverrides": [
+                        {
+                          "Name": "original-copy",
+                          "Environment": [
+                            {
+                              "Name": "JOB_JSON",
+                              "Value.$": "States.JsonToString($.job)"
+                            }
+                          ]
+                        }
+                      ]
+                    },
+                    "ClientToken.$": "$.job.attemptId"
+                  },
+                  "ResultSelector": {},
+                  "ResultPath": "$.originalCopyTask",
+                  "Next": "Verify original range"
+                },
+                {
+                  "Type": "Pass",
+                  "Next": "Verify original range"
+                }
+              ]
+            },
+            "Verify original range": {
+              "Fn::If": [
+                "HasOriginalCopyImage",
+                {
+                  "Type": "Task",
+                  "Resource": "arn:aws:states:::lambda:invoke",
+                  "Parameters": {
+                    "FunctionName": {
+                      "Fn::GetAtt": [
+                        "PreviewHelper",
+                        "Arn"
+                      ]
+                    },
+                    "Payload": {
+                      "operation": "verify_original",
+                      "job.$": "$.job"
+                    }
+                  },
+                  "OutputPath": "$.Payload",
+                  "End": true
+                },
+                {
+                  "Type": "Fail",
+                  "Error": "OriginalCopyDisabled",
+                  "Cause": "Original-copy compute is not configured."
+                }
+              ]
+            },
+            "Delete verified staging copy": {
+              "Type": "Task",
+              "Resource": "arn:aws:states:::aws-sdk:s3:deleteObject",
+              "Parameters": {
+                "Bucket": {
+                  "Ref": "RenditionBucketName"
+                },
+                "Key.$": "$.stagingKey",
+                "VersionId.$": "$.staging.VersionId",
+                "ExpectedBucketOwner": {
+                  "Ref": "AWS::AccountId"
+                }
+              },
+              "ResultPath": "$.stagingCleanup",
+              "Retry": [
+                {
+                  "ErrorEquals": [
+                    "States.TaskFailed",
+                    "States.Timeout"
+                  ],
+                  "IntervalSeconds": 2,
+                  "MaxAttempts": 5,
+                  "BackoffRate": 2,
+                  "MaxDelaySeconds": 30,
+                  "JitterStrategy": "FULL"
+                }
+              ],
+              "Next": "Return verified outputs",
+              "TimeoutSeconds": 60,
+              "Catch": [
+                {
+                  "ErrorEquals": [
+                    "States.ALL"
+                  ],
+                  "ResultPath": "$.stagingCleanupError",
+                  "Next": "Return verified outputs"
+                }
+              ]
+            },
+            "Return verified outputs": {
+              "Type": "Pass",
+              "OutputPath": "$.verification.Payload",
+              "End": true
+            }
+          }
+        }
+      },
+      "Metadata": {
+        "com.aws.cloudformation.Context": {
+          "why": "Managed private video processing with bounded permissions and retained source identity.",
+          "must": [
+            "Keep source files unchanged.",
+            "Do not expose public URLs or credentials.",
+            "Original-copy compute is optional and preserves existing encoded preview/export paths.",
+            "Preserve the validated job across the ECS task without retaining its response fields.",
+            "Retry copy tasks only for the verified S3.SdkClientException transport failure. Idempotent exact-version staging cleanup may retry task failures and timeouts within its bounds, then return verified outputs with the lifecycle backstop."
+          ]
+        }
+      }
+    },
+    "TranscriptDataRole": {
+      "Type": "AWS::IAM::Role",
+      "Properties": {
+        "RoleName": "njpbs-boardwalk-transcript-data",
+        "AssumeRolePolicyDocument": {
+          "Version": "2012-10-17",
+          "Statement": [
+            {
+              "Effect": "Allow",
+              "Action": "sts:AssumeRole",
+              "Principal": {
+                "Service": "transcribe.amazonaws.com"
+              },
+              "Condition": {
+                "StringEquals": {
+                  "aws:SourceAccount": {
+                    "Ref": "AWS::AccountId"
+                  }
+                },
+                "ArnLike": {
+                  "aws:SourceArn": {
+                    "Fn::Sub": "arn:${AWS::Partition}:transcribe:${AWS::Region}:${AWS::AccountId}:*"
+                  }
+                }
+              }
+            }
+          ]
+        },
+        "Policies": [
+          {
+            "PolicyName": "private-transcription-data",
+            "PolicyDocument": {
+              "Version": "2012-10-17",
+              "Statement": [
+                {
+                  "Effect": "Allow",
+                  "Action": [
+                    "s3:GetObject"
+                  ],
+                  "Resource": {
+                    "Fn::Sub": "arn:${AWS::Partition}:s3:::${RenditionBucketName}/transcripts/inputs/*"
+                  }
+                },
+                {
+                  "Effect": "Allow",
+                  "Action": [
+                    "s3:PutObject"
+                  ],
+                  "Resource": [
+                    {
+                      "Fn::Sub": "arn:${AWS::Partition}:s3:::${RenditionBucketName}/transcripts/results/*.json"
+                    },
+                    {
+                      "Fn::Sub": "arn:${AWS::Partition}:s3:::${RenditionBucketName}/transcripts/results/.write_access_check_file.temp"
+                    }
+                  ]
+                },
+                {
+                  "Effect": "Allow",
+                  "Action": "s3:ListBucket",
+                  "Resource": {
+                    "Fn::Sub": "arn:${AWS::Partition}:s3:::${RenditionBucketName}"
+                  },
+                  "Condition": {
+                    "StringLike": {
+                      "s3:prefix": [
+                        "transcripts/inputs/*"
+                      ]
+                    }
+                  }
+                }
+              ]
+            }
+          }
+        ]
+      },
+      "Metadata": {
+        "com.aws.cloudformation.Context": {
+          "why": "Transcribe reads immutable prepared inputs and writes private transcript JSON plus its exact output-prefix access-check file.",
+          "must": [
+            "No original writes or public access.",
+            "Trust only Transcribe in this exact account and Region.",
+            "Writes are limited to transcript JSON and transcripts/results/.write_access_check_file.temp."
+          ]
+        }
+      }
+    },
+    "TranscriptControlRole": {
+      "Type": "AWS::IAM::Role",
+      "Properties": {
+        "RoleName": "njpbs-boardwalk-transcript-control",
+        "AssumeRolePolicyDocument": {
+          "Version": "2012-10-17",
+          "Statement": [
+            {
+              "Sid": "GoogleBoardwalkRuntime",
+              "Effect": "Allow",
+              "Principal": {
+                "Federated": "accounts.google.com"
+              },
+              "Action": "sts:AssumeRoleWithWebIdentity",
+              "Condition": {
+                "StringEquals": {
+                  "accounts.google.com:aud": {
+                    "Ref": "GoogleOAuth2ClientId"
+                  },
+                  "accounts.google.com:oaud": "njpbs-boardwalk-s3",
+                  "accounts.google.com:sub": {
+                    "Ref": "GoogleServiceAccountUniqueId"
+                  }
+                }
+              }
+            }
+          ]
+        },
+        "Policies": [
+          {
+            "PolicyName": "private-transcript-control",
+            "PolicyDocument": {
+              "Version": "2012-10-17",
+              "Statement": [
+                {
+                  "Effect": "Allow",
+                  "Action": [
+                    "transcribe:GetTranscriptionJob"
+                  ],
+                  "Resource": {
+                    "Fn::Sub": "arn:${AWS::Partition}:transcribe:${AWS::Region}:${AWS::AccountId}:transcription-job/njpbs-boardwalk-transcript-*"
+                  }
+                },
+                {
+                  "Effect": "Allow",
+                  "Action": "transcribe:StartTranscriptionJob",
+                  "Resource": "*",
+                  "Condition": {
+                    "StringEquals": {
+                      "aws:RequestedRegion": {
+                        "Ref": "AWS::Region"
+                      },
+                      "transcribe:OutputBucketName": {
+                        "Ref": "RenditionBucketName"
+                      }
+                    },
+                    "StringLike": {
+                      "transcribe:OutputKey": "transcripts/results/*.json"
+                    }
+                  }
+                },
+                {
+                  "Effect": "Allow",
+                  "Action": [
+                    "s3:GetObjectVersion"
+                  ],
+                  "Resource": {
+                    "Fn::Sub": "arn:${AWS::Partition}:s3:::${RenditionBucketName}/outputs/*"
+                  }
+                },
+                {
+                  "Effect": "Allow",
+                  "Action": [
+                    "s3:GetObject",
+                    "s3:GetObjectVersion",
+                    "s3:PutObject"
+                  ],
+                  "Resource": [
+                    {
+                      "Fn::Sub": "arn:${AWS::Partition}:s3:::${RenditionBucketName}/transcripts/inputs/*"
+                    },
+                    {
+                      "Fn::Sub": "arn:${AWS::Partition}:s3:::${RenditionBucketName}/transcripts/results/*"
+                    }
+                  ]
+                },
+                {
+                  "Effect": "Allow",
+                  "Action": [
+                    "s3:DeleteObjectVersion",
+                    "s3:PutObjectVersionTagging"
+                  ],
+                  "Resource": {
+                    "Fn::Sub": "arn:${AWS::Partition}:s3:::${RenditionBucketName}/transcripts/results/*.edited.*"
+                  }
+                },
+                {
+                  "Effect": "Allow",
+                  "Action": "iam:PassRole",
+                  "Resource": {
+                    "Fn::GetAtt": [
+                      "TranscriptDataRole",
+                      "Arn"
+                    ]
+                  },
+                  "Condition": {
+                    "StringEquals": {
+                      "iam:PassedToService": "transcribe.amazonaws.com"
+                    }
+                  }
+                }
+              ]
+            }
+          }
+        ]
+      },
+      "Metadata": {
+        "com.aws.cloudformation.Context": {
+          "why": "Existing Google workload identity creates private diarized transcript jobs and caches results. StartTranscriptionJob requires Resource *; supported condition keys restrict its Region and output location.",
+          "must": [
+            "Preserve exact Google workload trust.",
+            "Restrict transcription starts to this Region and the private transcript result prefix.",
+            "Delete or tag only exact edited-result versions and delete exact temporary Amazon M4A versions after provider completion.",
+            "No access to original or archive buckets.",
+            "No source deletion."
+          ]
+        }
+      }
+    },
+    "TranscriptAudioPreparationInvokePolicy": {
+      "Type": "AWS::IAM::Policy",
+      "Condition": "HasTranscriptAudioPreparationFunction",
+      "Properties": {
+        "PolicyName": "invoke-transcript-audio-preparation",
+        "Roles": [
+          {
+            "Ref": "TranscriptControlRole"
+          }
+        ],
+        "PolicyDocument": {
+          "Version": "2012-10-17",
+          "Statement": [
+            {
+              "Sid": "InvokeExactAudioPreparationFunction",
+              "Effect": "Allow",
+              "Action": "lambda:InvokeFunction",
+              "Resource": {
+                "Ref": "TranscriptAudioPreparationFunctionArn"
+              }
+            },
+            {
+              "Sid": "ReadSharedAudioAndReceipts",
+              "Effect": "Allow",
+              "Action": [
+                "s3:GetObject",
+                "s3:GetObjectVersion"
+              ],
+              "Resource": {
+                "Fn::Sub": "arn:${AWS::Partition}:s3:::${RenditionBucketName}/transcripts/inputs/audio/*"
+              },
+              "Condition": {
+                "StringEquals": {
+                  "s3:ResourceAccount": {
+                    "Ref": "AWS::AccountId"
+                  },
+                  "aws:RequestedRegion": {
+                    "Ref": "AWS::Region"
+                  }
+                },
+                "Bool": {
+                  "aws:SecureTransport": "true"
+                }
+              }
+            },
+            {
+              "Sid": "DeleteExactSharedAudioVersion",
+              "Effect": "Allow",
+              "Action": "s3:DeleteObjectVersion",
+              "Resource": {
+                "Fn::Sub": "arn:${AWS::Partition}:s3:::${RenditionBucketName}/transcripts/inputs/audio/*/attempts/*/input.m4a"
+              },
+              "Condition": {
+                "StringEquals": {
+                  "s3:ResourceAccount": {
+                    "Ref": "AWS::AccountId"
+                  },
+                  "aws:RequestedRegion": {
+                    "Ref": "AWS::Region"
+                  }
+                },
+                "Bool": {
+                  "aws:SecureTransport": "true"
+                }
+              }
+            },
+            {
+              "Sid": "DeleteExactAmazonAudioCopy",
+              "Effect": "Allow",
+              "Action": "s3:DeleteObjectVersion",
+              "Resource": {
+                "Fn::Sub": "arn:${AWS::Partition}:s3:::${RenditionBucketName}/transcripts/inputs/amazon/*/attempts/*/input.m4a"
+              },
+              "Condition": {
+                "StringEquals": {
+                  "s3:ResourceAccount": {
+                    "Ref": "AWS::AccountId"
+                  },
+                  "aws:RequestedRegion": {
+                    "Ref": "AWS::Region"
+                  }
+                },
+                "Bool": {
+                  "aws:SecureTransport": "true"
+                }
+              }
+            }
+          ]
+        }
+      },
+      "Metadata": {
+        "com.aws.cloudformation.Context": {
+          "why": "Invoke the exact audio preparer, read version-bound M4A and receipts, and delete only terminal shared audio versions through the fenced job registry.",
+          "must": [
+            "Keep this policy absent until the worker ARN is set after its canary.",
+            "Never delete a version referenced by a running or uncertain job.",
+            "Grant no original-media, bucket administration or unversioned deletion."
+          ]
+        }
+      }
+    },
+    "OriginalCopyLogs": {
+      "Type": "AWS::Logs::LogGroup",
+      "Condition": "HasOriginalCopyImage",
+      "DeletionPolicy": "Retain",
+      "UpdateReplacePolicy": "Retain",
+      "Properties": {
+        "RetentionInDays": 14
+      },
+      "Metadata": {
+        "com.aws.cloudformation.Context": {
+          "why": "Keep bounded worker diagnostics separate from CMS preview logs.",
+          "must": [
+            "Never log signed URLs or credentials."
+          ]
+        }
+      }
+    },
+    "OriginalCopyExecutionRole": {
+      "Type": "AWS::IAM::Role",
+      "Condition": "HasOriginalCopyImage",
+      "Metadata": {
+        "com.aws.cloudformation.Context": {
+          "why": "Pull one verified image from an existing registry and write task logs.",
+          "must": [
+            "No media or staff data permissions."
+          ]
+        }
+      },
+      "Properties": {
+        "AssumeRolePolicyDocument": {
+          "Version": "2012-10-17",
+          "Statement": [
+            {
+              "Effect": "Allow",
+              "Principal": {
+                "Service": "ecs-tasks.amazonaws.com"
+              },
+              "Action": "sts:AssumeRole",
+              "Condition": {
+                "StringEquals": {
+                  "aws:SourceAccount": {
+                    "Ref": "AWS::AccountId"
+                  }
+                },
+                "ArnLike": {
+                  "aws:SourceArn": {
+                    "Fn::Sub": "arn:${AWS::Partition}:ecs:${AWS::Region}:${AWS::AccountId}:*"
+                  }
+                }
+              }
+            }
+          ]
+        },
+        "Policies": [
+          {
+            "PolicyName": "pull-image-and-write-logs",
+            "PolicyDocument": {
+              "Version": "2012-10-17",
+              "Statement": [
+                {
+                  "Effect": "Allow",
+                  "Action": "ecr:GetAuthorizationToken",
+                  "Resource": "*",
+                  "Condition": {
+                    "StringEquals": {
+                      "aws:RequestedRegion": {
+                        "Ref": "AWS::Region"
+                      }
+                    }
+                  }
+                },
+                {
+                  "Effect": "Allow",
+                  "Action": [
+                    "ecr:BatchCheckLayerAvailability",
+                    "ecr:GetDownloadUrlForLayer",
+                    "ecr:BatchGetImage"
+                  ],
+                  "Resource": {
+                    "Fn::Sub": [
+                      "arn:${AWS::Partition}:ecr:${AWS::Region}:${AWS::AccountId}:repository/${Repository}",
+                      {
+                        "Repository": {
+                          "Fn::Select": [
+                            0,
+                            {
+                              "Fn::Split": [
+                                "@",
+                                {
+                                  "Fn::Select": [
+                                    1,
+                                    {
+                                      "Fn::Split": [
+                                        ".amazonaws.com/",
+                                        {
+                                          "Ref": "OriginalCopyImageUri"
+                                        }
+                                      ]
+                                    }
+                                  ]
+                                }
+                              ]
+                            }
+                          ]
+                        }
+                      }
+                    ]
+                  }
+                },
+                {
+                  "Effect": "Allow",
+                  "Action": [
+                    "logs:CreateLogStream",
+                    "logs:PutLogEvents"
+                  ],
+                  "Resource": {
+                    "Fn::GetAtt": [
+                      "OriginalCopyLogs",
+                      "Arn"
+                    ]
+                  }
+                }
+              ]
+            }
+          }
+        ]
+      }
+    },
+    "OriginalCopyTaskRole": {
+      "Type": "AWS::IAM::Role",
+      "Condition": "HasOriginalCopyImage",
+      "Metadata": {
+        "com.aws.cloudformation.Context": {
+          "why": "Read pinned originals and write verified copy artifacts in existing storage.",
+          "must": [
+            "No original writes, archive access or staff database credentials.",
+            "Outputs remain private and expire through the existing clips lifecycle."
+          ]
+        }
+      },
+      "Properties": {
+        "AssumeRolePolicyDocument": {
+          "Version": "2012-10-17",
+          "Statement": [
+            {
+              "Effect": "Allow",
+              "Principal": {
+                "Service": "ecs-tasks.amazonaws.com"
+              },
+              "Action": "sts:AssumeRole",
+              "Condition": {
+                "StringEquals": {
+                  "aws:SourceAccount": {
+                    "Ref": "AWS::AccountId"
+                  }
+                },
+                "ArnLike": {
+                  "aws:SourceArn": {
+                    "Fn::Sub": "arn:${AWS::Partition}:ecs:${AWS::Region}:${AWS::AccountId}:*"
+                  }
+                }
+              }
+            }
+          ]
+        },
+        "Policies": [
+          {
+            "PolicyName": "copy-private-video-range",
+            "PolicyDocument": {
+              "Version": "2012-10-17",
+              "Statement": [
+                {
+                  "Effect": "Allow",
+                  "Action": "s3:GetObjectVersion",
+                  "Resource": {
+                    "Fn::Sub": "arn:${AWS::Partition}:s3:::${OriginalVideoBucketName}/objects/*"
+                  }
+                },
+                {
+                  "Effect": "Allow",
+                  "Action": [
+                    "s3:PutObject",
+                    "s3:GetObject",
+                    "s3:GetObjectVersion",
+                    "s3:AbortMultipartUpload",
+                    "s3:ListMultipartUploadParts",
+                    "s3:DeleteObjectVersion"
+                  ],
+                  "Resource": {
+                    "Fn::Sub": "arn:${AWS::Partition}:s3:::${RenditionBucketName}/outputs/clips/*"
+                  }
+                }
+              ]
+            }
+          }
+        ]
+      }
+    },
+    "OriginalCopyTask": {
+      "Type": "AWS::ECS::TaskDefinition",
+      "Condition": "HasOriginalCopyImage",
+      "Metadata": {
+        "com.aws.cloudformation.Context": {
+          "why": "Run original audio/video packet copies on demand without sharing CMS preview compute.",
+          "must": [
+            "Pin the reviewed image digest.",
+            "Worker enforces one-hour deadline and 64GiB media output bound.",
+            "Use existing cluster, networking and storage; no persistent service."
+          ]
+        }
+      },
+      "Properties": {
+        "Cpu": "2048",
+        "Memory": "8192",
+        "NetworkMode": "awsvpc",
+        "RequiresCompatibilities": [
+          "FARGATE"
+        ],
+        "RuntimePlatform": {
+          "CpuArchitecture": "X86_64",
+          "OperatingSystemFamily": "LINUX"
+        },
+        "EphemeralStorage": {
+          "SizeInGiB": 160
+        },
+        "ExecutionRoleArn": {
+          "Fn::GetAtt": [
+            "OriginalCopyExecutionRole",
+            "Arn"
+          ]
+        },
+        "TaskRoleArn": {
+          "Fn::GetAtt": [
+            "OriginalCopyTaskRole",
+            "Arn"
+          ]
+        },
+        "ContainerDefinitions": [
+          {
+            "Name": "original-copy",
+            "Image": {
+              "Ref": "OriginalCopyImageUri"
+            },
+            "Essential": true,
+            "StopTimeout": 120,
+            "LinuxParameters": {
+              "InitProcessEnabled": true
+            },
+            "Environment": [
+              {
+                "Name": "ORIGINAL_BUCKET",
+                "Value": {
+                  "Ref": "OriginalVideoBucketName"
+                }
+              },
+              {
+                "Name": "RENDITION_BUCKET",
+                "Value": {
+                  "Ref": "RenditionBucketName"
+                }
+              },
+              {
+                "Name": "ACCOUNT_ID",
+                "Value": {
+                  "Ref": "AWS::AccountId"
+                }
+              },
+              {
+                "Name": "OUTPUT_DIR",
+                "Value": "/work"
+              },
+              {
+                "Name": "PYTHONDONTWRITEBYTECODE",
+                "Value": "1"
+              },
+              {
+                "Name": "FFMPEG_ARTIFACT_SHA256",
+                "Value": {
+                  "Ref": "OriginalCopyArtifactSha256"
+                }
+              }
+            ],
+            "LogConfiguration": {
+              "LogDriver": "awslogs",
+              "Options": {
+                "awslogs-group": {
+                  "Ref": "OriginalCopyLogs"
+                },
+                "awslogs-region": {
+                  "Ref": "AWS::Region"
+                },
+                "awslogs-stream-prefix": "original-copy"
+              }
+            }
+          }
+        ]
+      }
+    }
+  },
+  "Outputs": {
+    "BoardwalkVideoPreviewControlRoleArn": {
+      "Description": "Google-federated role ARN for staging copies and MediaConvert job control.",
+      "Value": {
+        "Fn::GetAtt": [
+          "BoardwalkVideoPreviewControlRole",
+          "Arn"
+        ]
+      }
+    },
+    "MediaConvertPreviewServiceRoleArn": {
+      "Description": "Service role ARN to include in each Boardwalk MediaConvert job.",
+      "Value": {
+        "Fn::GetAtt": [
+          "MediaConvertPreviewServiceRole",
+          "Arn"
+        ]
+      }
+    },
+    "OutputsPrefix": {
+      "Description": "Durable private optimized viewing-copy and poster output prefix.",
+      "Value": "outputs/"
+    },
+    "RenditionBucketArn": {
+      "Description": "Private bucket ARN for staging and preview outputs.",
+      "Value": {
+        "Fn::GetAtt": [
+          "VideoRenditionBucket",
+          "Arn"
+        ]
+      }
+    },
+    "RenditionBucketName": {
+      "Description": "Private bucket name for staging and preview outputs.",
+      "Value": {
+        "Ref": "VideoRenditionBucket"
+      }
+    },
+    "StagingPrefix": {
+      "Description": "Temporary version-pinned input-copy prefix.",
+      "Value": "staging/"
+    },
+    "VideoPreviewQueueArn": {
+      "Description": "Dedicated on-demand MediaConvert queue ARN with one concurrent job.",
+      "Value": {
+        "Fn::GetAtt": [
+          "VideoPreviewQueue",
+          "Arn"
+        ]
+      }
+    },
+    "WorkflowArn": {
+      "Description": "Managed private video workflow",
+      "Value": {
+        "Ref": "PreviewWorkflow"
+      }
+    },
+    "TranscriptControlRoleArn": {
+      "Value": {
+        "Fn::GetAtt": [
+          "TranscriptControlRole",
+          "Arn"
+        ]
+      }
+    },
+    "TranscriptDataRoleArn": {
+      "Value": {
+        "Fn::GetAtt": [
+          "TranscriptDataRole",
+          "Arn"
+        ]
+      }
+    }
+  },
+  "Conditions": {
+    "HasTranscriptAudioPreparationFunction": {
+      "Fn::Not": [
+        {
+          "Fn::Equals": [
+            {
+              "Ref": "TranscriptAudioPreparationFunctionArn"
+            },
+            ""
+          ]
+        }
+      ]
+    },
+    "HasOriginalCopyImage": {
+      "Fn::Not": [
+        {
+          "Fn::Equals": [
+            {
+              "Ref": "OriginalCopyImageUri"
+            },
+            ""
+          ]
+        }
+      ]
+    }
+  }
+}

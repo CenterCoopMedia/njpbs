@@ -1,0 +1,8 @@
+{
+  "date": "2026-10-28",
+  "kind": "new",
+  "title": "Start a live blog in Posts",
+  "body": "Open a Post and choose Start live blog draft in Live updates. Add reporting, credits and media, then save, preview and publish through the usual Post workflow. Remove the live blog before any update is public, or correct and withdraw published updates and pause or end coverage.",
+  "prs": [],
+  "order": -4
+}

@@ -1,0 +1,11 @@
+{
+  "date": "2026-10-21",
+  "kind": "improved",
+  "title": "Open live Posts and preview saved drafts sooner",
+  "body": "In the Post editor, View live post opens the published story in a new tab. Saved previews check for readiness without an extra wait after the preview changes state.",
+  "prs": [
+    3856,
+    3892
+  ],
+  "order": -1
+}

@@ -1,0 +1,10 @@
+{
+  "date": "2026-09-11",
+  "kind": "improved",
+  "title": "New Boardwalk sign-in screen",
+  "body": "The sign-in screen now shows the Boardwalk name and artwork. Short notes explain any wait, and the layout adjusts for phones and large text.",
+  "prs": [
+    1749
+  ],
+  "order": -2
+}

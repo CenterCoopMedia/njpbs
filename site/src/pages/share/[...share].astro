@@ -1,0 +1,32 @@
+---
+import PublicSiteLayout from "../../layouts/PublicSiteLayout.astro";
+import ShareSubmission from "../../islands/ShareSubmission.astro";
+import { sharePageEnabled } from "../../lib/build-target";
+
+export function getStaticPaths() {
+  if (!sharePageEnabled(process.env)) return [];
+  return [{ params: { share: undefined } }];
+}
+---
+
+<PublicSiteLayout
+  title="Share a photo or video"
+  description="Send a photo or video to NJ PBS for review."
+  canonicalPath="/share/"
+  preview={false}
+  noindex={true}
+>
+  <main>
+    <header class="page-hero">
+      <div class="page-hero__inner wrap">
+        <h1>Share a photo or video</h1>
+        <p class="page-hero__lead">Send your work to NJ PBS for review.</p>
+      </div>
+    </header>
+    <div class="wrap share-page"><ShareSubmission /></div>
+  </main>
+</PublicSiteLayout>
+
+<style>
+  .share-page { padding-block: clamp(2rem, 5vw, 4rem); }
+</style>

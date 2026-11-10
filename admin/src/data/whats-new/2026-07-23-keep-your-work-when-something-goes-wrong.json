@@ -1,0 +1,15 @@
+{
+  "date": "2026-07-23",
+  "kind": "improved",
+  "title": "Keep your work when something goes wrong",
+  "body": "Boardwalk keeps unsaved changes when you switch screens and lets you retry a failed load. Undo covers all block changes, and drafts reopen without a loading flash.",
+  "prs": [
+    597,
+    621,
+    644,
+    645,
+    723,
+    633
+  ],
+  "order": -1
+}

@@ -1,0 +1,95 @@
+NJ PBS code, brand and media notice
+
+Licensing decision, November 4, 2026: MIT for code; copyright holder NJ PBS.
+
+The MIT license in LICENSE applies to the repository's code and associated
+software documentation, subject to the exclusions and separate licenses below.
+
+The code license gives no rights to logos, trademarks, photos, video, fonts
+or editorial content. These materials are excluded from the code license,
+including when embedded in source files, fixtures, screenshots or generated
+output. The exclusions apply wherever these materials appear; the paths below
+identify known locations rather than limit the exclusions.
+Audio recordings and externally sourced editorial datasets are also excluded.
+
+Excluded material by path
+
+Paths ending in / include their contents recursively; patterns name matching
+files. Directory entries and patterns cover only the described non-code
+material. Accompanying implementation code remains under the code license,
+subject to any separate third-party license.
+
+- admin/public/brand/: brand artwork, photos and logos.
+- admin/public/favicon.png: brand icon.
+- admin/src/dev/fixtures/: study images and sample editorial content.
+- admin/tests/visual/baselines/*.png: screenshots containing brand and UI material.
+- admin/tests/visual/fixtures/media-frame-preview.mp4: generated synthetic video fixture.
+- branding/: brand images.
+- functions/assets/njpbs-horizontal-white.png: NJ PBS logo.
+- infrastructure/boardwalk-transcription-worker/fixtures/alignment-english-h264-aac.mp4
+  and infrastructure/boardwalk-transcription-worker/fixtures/alignment-english.wav:
+  generated video and audio fixtures.
+- packages/content-core/src/nj-decides-flag.svg: NJ Decides artwork.
+- premiere-boardwalk-panel/icons/: panel artwork.
+- site/public/brand/: logos, photos and artwork.
+- site/public/favicon.png and site/public/og-default.png: brand images.
+- site/public/hero/: placeholder artwork.
+- site/public/meeting-notices/: published meeting documents.
+- site/public/nj-static.svg and site/public/nj-static-signal.svg: artwork.
+- site/src/content/: public editorial pages.
+- wiki/: public editorial articles and research notes.
+- site/src/internal/name-atlas/reader.html: atlas artwork, name histories, annotations and source material.
+- site/src/data/: editorial copy, schedule and catalog records, image metadata,
+  geographic data and data-hub content, including data embedded in source files.
+- packages/content-core/data/ and packages/content-core/src/data/: election,
+  geographic and editorial datasets.
+- packages/content-core/src/launch-fallback.ts and
+  packages/content-core/src/contact-page-fallback.ts:
+  embedded public-page editorial copy.
+- packages/content-core/src/support-page-rollout-defaults.json and
+  site/src/components/PublicSubpage.astro: embedded public-page editorial copy.
+- admin/tests/fixtures/, site/tests/fixtures/, tests/fixtures/,
+  tests/functions/fixtures/ and crawl-worker/test/fixtures/: editorial copy,
+  recorded provider data and media within fixtures.
+- functions/fixtures/election-rehearsal-2015-roster.json: election roster data.
+
+Third-party licenses and supplied notices
+
+Public Sans Regular, Bold and Black in site/src/assets/pdf-fonts/ are under
+the SIL Open Font License 1.1, not MIT. The unchanged upstream OFL.txt and
+LICENSE.md accompany them. Source: https://github.com/uswds/public-sans
+(commit e40fcf567e44b4f5f08a658247663275fa1ad741, fonts/ttf/).
+
+Third-party code and assets retain their own licenses and supplied copyright,
+attribution and other notices. Keep those licenses and notices intact. The
+repository's MIT license does not replace them or grant additional rights to
+those materials. Installed dependencies retain the licenses supplied with them.
+
+- site/public/vendor/three/: Three.js code; retain its LICENSE and the upstream
+  source details in its README.md.
+- crawl-worker/: retain LICENSE.upstream for the upstream code identified in
+  its README.md.
+- functions/assets/LICENSE-DejaVuSans.txt: retain the supplied DejaVu Sans notice;
+  it applies only to DejaVu Sans material.
+- site/src/internal/name-atlas/reader.html: retain the embedded third-party
+  notices for D3, Arjun Barrett, Lucide Icons and Contributors, and Cole Bemis.
+- cms-api/worker-configuration.d.ts: generated runtime types with supplied
+  Apache-2.0 notices naming Cloudflare and Microsoft; retain those notices.
+
+The generated runtime types in cms-api/worker-configuration.d.ts include
+Apache-2.0-licensed material with the following copyright notices:
+
+Copyright (c) Cloudflare. All rights reserved.
+Copyright (c) 2022-2025 Cloudflare, Inc.
+Copyright (c) 2024 Cloudflare, Inc.
+Copyright (c) 2022-2023 Cloudflare, Inc.
+Copyright (c) Microsoft Corporation. All rights reserved.
+
+The Apache License, Version 2.0 text is in LICENSES/Apache-2.0.txt.
+
+The icon geometry in admin/src/components/ui/Icon.tsx includes material
+from Feather (https://github.com/feathericons/feather), licensed under MIT.
+
+Copyright (c) 2013-2023 Cole Bemis
+
+The MIT License text for Feather is in LICENSES/Feather-MIT.txt.

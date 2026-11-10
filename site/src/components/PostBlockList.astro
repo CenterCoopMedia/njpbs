@@ -1,0 +1,83 @@
+---
+import "../../../packages/content-core/src/component-blocks.css";
+import "../../../packages/content-core/src/link-card.css";
+import "../../../packages/content-core/src/link-card-directory.css";
+import "../../../packages/content-core/src/component-blocks.css";
+import { getCollection, type CollectionEntry } from "astro:content";
+import { getImage } from "astro:assets";
+import { renderContentGroups } from "../../../packages/content-core/src/content-row-render";
+import {
+  generatedHeadingLevelAt,
+  renderBlock,
+} from "../../../packages/content-core/src/content-render";
+import {
+  resolveCmsPostAssets,
+  responsiveImageKey,
+} from "../lib/cms-responsive-image";
+import {
+  chapterHeadingIdResolver,
+  type PostChapter,
+} from "../lib/post-chapters";
+import type { PostPresentation } from "../lib/post-formats";
+import { groupLinkCardDirectories } from "../../../packages/content-core/src/link-card-directory-groups";
+import LinkCardDirectory from "./LinkCardDirectory.astro";
+import CmsBlockGroup from "./CmsBlockGroup.astro";
+import { sponsorCardsFromRecordCards } from "../lib/record-card-resolution";
+import { newsletterSignupResolution } from "../lib/newsletter-signup";
+import { isPrivatePreviewRender, renderDatasetFigures, renderRecordCards } from "../lib/cms-render-context";
+
+interface Props {
+  entry: CollectionEntry<"cmsPosts">;
+  className: string;
+  presentation: PostPresentation;
+  chapters?: readonly PostChapter[];
+}
+
+const {
+  entry,
+  className,
+  presentation,
+  chapters = [],
+} = Astro.props as Props;
+const post = entry.data;
+const recordCards = renderRecordCards(Astro.locals.cmsRender, Astro.locals.cmsRender
+  ? []
+  : (await getCollection("cmsRecordCards")).map(item => item.data));
+const sponsors = sponsorCardsFromRecordCards(recordCards);
+const resolveDataFigure = renderDatasetFigures(post.datasetFigures);
+const responsiveAssets = await resolveCmsPostAssets(
+  post.blocks,
+  post.assets,
+);
+const newsletters = await newsletterSignupResolution(post.blocks, getImage, recordCards);
+const headingResolvers = new Map(
+  post.blocks.map((block) => [
+    block.id,
+    chapterHeadingIdResolver(chapters, block.id),
+  ]),
+);
+const draftPreview = isPrivatePreviewRender(Astro.locals.cmsRender);
+const groups = renderContentGroups(post.blocks, (block, index) => ({
+  generatedHeadingLevel: generatedHeadingLevelAt(post.blocks, index),
+  html: renderBlock(block, {
+    allowBios: true,
+    showImageCredits: true,
+    sponsors,
+    resolveDataFigure,
+    resolveAsset: (assetId, placement) =>
+      responsiveAssets.get(responsiveImageKey(assetId, placement)) ?? newsletters.images.get(assetId) ?? null,
+    resolveNewsletter: id => newsletters.cards.get(id) ?? null,
+    externalLinksNewTab: true,
+    generatedHeadingLevel: generatedHeadingLevelAt(post.blocks, index),
+    richTextHeadingId: headingResolvers.get(block.id),
+    videoPlaceholder: draftPreview,
+  }),
+}));
+const publicGroups = groupLinkCardDirectories(groups);
+---
+
+<div class={className} data-post-block-presentation={presentation}>
+  {publicGroups.map((item) => item.kind === "link-card-directory" ? (
+    <LinkCardDirectory groups={item.groups} />
+  ) : <CmsBlockGroup group={item.group} cards={recordCards} />)}
+</div>

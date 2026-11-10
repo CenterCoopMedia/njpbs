@@ -1,0 +1,516 @@
+---
+import BrowseGroup from "../components/BrowseGroup.astro";
+import ContentTile from "../components/ContentTile.astro";
+import HomepageAnnouncement from "../components/HomepageAnnouncement.astro";
+import PostByline from "../components/PostByline.astro";
+import PostShareControls from "../components/PostShareControls.astro";
+import NjDecidesBand from "../components/NjDecidesBand.astro";
+import type { ContentTileData } from "../lib/content-tile";
+import "../styles/design-tokens.css";
+import "../styles/public-site.css";
+
+const tiles: readonly ContentTileData[] = [
+  {
+    title: "A free full episode",
+    href: "/watch/",
+    access: "free",
+    mediaKind: "episode",
+    meta: "Public television",
+  },
+  {
+    title: "A Passport member episode",
+    href: "/passport/",
+    access: "passport",
+    mediaKind: "episode",
+    meta: "Member benefit",
+  },
+  {
+    title: "A clip with a closing free window",
+    href: "/watch/",
+    access: "free",
+    mediaKind: "clip",
+    leavingPublicOn: "2026-10-15",
+    meta: "News and public affairs",
+  },
+];
+---
+
+<!doctype html>
+<html lang="en" data-motion="off">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width" />
+    <meta name="robots" content="noindex, nofollow" />
+    <title>NJ PBS public component specimens</title>
+  </head>
+  <body>
+    <a class="specimen-skip" href="#specimens">Skip to specimens</a>
+    <main id="specimens" class="specimen-page" data-pagefind-ignore>
+      <header class="specimen-intro">
+        <p>Production component fixture</p>
+        <h1>Public-site specimens</h1>
+        <span>Labels and counts are sample content. Component markup and styles are live.</span>
+        <span>Destination links stay inside this fixture so the comparison cannot be lost.</span>
+        <span class="specimen-navigation-status" aria-live="polite" data-specimen-navigation-status></span>
+      </header>
+
+      <section class="specimen-section" aria-labelledby="nj-decides-specimen">
+        <div class="specimen-label">
+          <h2 id="nj-decides-specimen">NJ Decides 2026 election kit</h2>
+          <p>Scoped identity for election coverage</p>
+        </div>
+        <NjDecidesBand
+          copy="Live results and coverage election night, Tuesday, November 3."
+          links={[{ label: "Live results", href: "#nj-decides-specimen" }, { label: "Watch live", href: "#nj-decides-specimen" }]}
+        />
+        <details><summary>Without optional copy or links</summary><NjDecidesBand /></details>
+      </section>
+
+      <section class="specimen-section" aria-labelledby="token-probe-specimen">
+        <div class="specimen-label">
+          <h2 id="token-probe-specimen">Playground token probes</h2>
+          <p>Observable checks for every foundation exposed by the draft controls</p>
+        </div>
+        <div class="token-probe-grid">
+          <article class="token-probe token-probe--colors">
+            <h3>Color foundations</h3>
+            <ul>
+              <li data-token-probe="--pbs-blue"><span class="probe-pbs-blue"></span><code>--pbs-blue</code></li>
+              <li data-token-probe="--pbs-blue-bright"><span class="probe-pbs-blue-bright"></span><code>--pbs-blue-bright</code></li>
+              <li data-token-probe="--focus"><span class="probe-focus"></span><code>--focus</code></li>
+              <li data-token-probe="--bg-0"><span class="probe-bg-0"></span><code>--bg-0</code></li>
+              <li data-token-probe="--bg-1"><span class="probe-bg-1"></span><code>--bg-1</code></li>
+              <li data-token-probe="--bg-2"><span class="probe-bg-2"></span><code>--bg-2</code></li>
+              <li data-token-probe="--bg-now"><span class="probe-bg-now"></span><code>--bg-now</code></li>
+              <li data-token-probe="--text"><span class="probe-text"></span><code>--text</code></li>
+              <li data-token-probe="--text-dim"><span class="probe-text-dim"></span><code>--text-dim</code></li>
+              <li data-token-probe="--text-quiet"><span class="probe-text-quiet"></span><code>--text-quiet</code></li>
+              <li data-token-probe="--action-red"><span class="probe-action-red"></span><code>--action-red</code></li>
+              <li data-token-probe="--status-green"><span class="probe-status-green"></span><code>--status-green</code></li>
+            </ul>
+          </article>
+
+          <article class="token-probe token-probe--spacing">
+            <h3>Spacing</h3>
+            <div data-token-probe="--space-4"><span class="probe-space-4"></span><code>--space-4</code></div>
+            <div data-token-probe="--space-6"><span class="probe-space-6"></span><code>--space-6</code></div>
+            <div data-token-probe="--space-8"><span class="probe-space-8"></span><code>--space-8</code></div>
+          </article>
+
+          <article class="token-probe token-probe--shape">
+            <h3 data-token-probe="--heading-tracking">Shape and heading rhythm</h3>
+            <div class="probe-radius-row">
+              <span class="probe-radius-control" data-token-probe="--radius-control"><code>Control</code></span>
+              <span class="probe-radius-surface" data-token-probe="--radius-surface"><code>Surface</code></span>
+            </div>
+          </article>
+
+          <article class="token-probe token-probe--motion">
+            <h3>Motion</h3>
+            <button type="button" data-token-probe="--motion-duration-standard">
+              Hover or focus to test standard motion
+            </button>
+          </article>
+        </div>
+      </section>
+
+      <section class="specimen-section" aria-labelledby="announcement-specimen">
+        <div class="specimen-label">
+          <h2 id="announcement-specimen">Homepage announcement</h2>
+          <p>Published message with an internal call to action</p>
+        </div>
+        <div class="specimen-surface specimen-surface--flush">
+          <HomepageAnnouncement
+            message="A concise station update appears here when the CMS setting is published."
+            link={{ label: "View the schedule", href: "/schedule/" }}
+          />
+        </div>
+      </section>
+
+      <section class="specimen-section" aria-labelledby="content-tile-specimen">
+        <div class="specimen-label">
+          <h2 id="content-tile-specimen">Content tiles and status states</h2>
+          <p>Free, Passport, media-kind, and time-limited access labels</p>
+        </div>
+        <div class="specimen-surface">
+          <div class="tile-grid">
+            {tiles.map((tile) => <ContentTile tile={tile} />)}
+          </div>
+        </div>
+      </section>
+
+      <section class="specimen-section" aria-labelledby="story-meta-specimen">
+        <div class="specimen-label">
+          <h2 id="story-meta-specimen">Story attribution and sharing</h2>
+          <p>Multi-credit updated byline with the public share disclosure</p>
+        </div>
+        <div class="specimen-surface">
+          <div class="story-fixture">
+            <p class="story-fixture__kicker">Sample public post</p>
+            <h3>How a reader sees the post metadata system</h3>
+            <PostByline
+              credits={[{ name: "NJ PBS Staff" }, { name: "Sample Contributor" }]}
+              displayDate="2026-09-03T14:00:00Z"
+              updateShown={true}
+              updatedAt="2026-09-03T16:30:00Z"
+              updatedDate="2026-09-03T16:30:00Z"
+            />
+            <PostShareControls
+              title="How a reader sees the post metadata system"
+              url="https://njpbs.org/posts/design-system-specimen/"
+              placement="top"
+            />
+          </div>
+        </div>
+      </section>
+
+      <section class="specimen-section" aria-labelledby="browse-specimen">
+        <div class="specimen-label">
+          <h2 id="browse-specimen">Browse group</h2>
+          <p>Linked labels, readable counts, and full-size interaction targets</p>
+        </div>
+        <div class="specimen-surface specimen-surface--narrow">
+          <BrowseGroup
+            title="Topics"
+            items={[
+              { label: "Arts and culture", count: 8, href: "/posts/" },
+              { label: "Environment", count: 12, href: "/posts/" },
+              { label: "New Jersey politics", count: 24, href: "/posts/" },
+            ]}
+          />
+        </div>
+      </section>
+    </main>
+  </body>
+</html>
+
+<script>
+  const specimenNavigationStatus = document.querySelector<HTMLElement>(
+    "[data-specimen-navigation-status]",
+  );
+
+  const containFixtureNavigation = (event: MouseEvent) => {
+    if (!(event.target instanceof Element)) return;
+    const link = event.target.closest<HTMLAnchorElement>("a[href]");
+    const href = link?.getAttribute("href") ?? "";
+    if (!link || href.startsWith("#")) return;
+
+    event.preventDefault();
+    if (specimenNavigationStatus) {
+      specimenNavigationStatus.textContent =
+        "Fixture link contained. The specimen comparison is still active.";
+    }
+  };
+
+  document.addEventListener("click", containFixtureNavigation);
+  document.addEventListener("auxclick", containFixtureNavigation);
+</script>
+
+<style>
+  @font-face {
+    font-family: "PBS Sans";
+    src: url("https://media.njpbs.org/cms-media/fonts/f5b121c412775fea2088ea19d170364abf29e7db73a541259b517be880784a9b/PBSSans-Light.woff2") format("woff2");
+    font-weight: 300;
+    font-style: normal;
+    font-display: swap;
+  }
+
+  @font-face {
+    font-family: "PBS Sans";
+    src: url("https://media.njpbs.org/cms-media/fonts/6d1461f427c030aed42aaa039eb8ce7409a261a7a62e46ff0854d7c79db00123/PBSSans.woff2") format("woff2");
+    font-weight: 400;
+    font-style: normal;
+    font-display: swap;
+  }
+
+  @font-face {
+    font-family: "PBS Sans";
+    src: url("https://media.njpbs.org/cms-media/fonts/1a6fab5544c4b6b5d57d60e4c2e9a1d82488a4a510a54b6ec652e77261627cc1/PBSSans-Medium.woff2") format("woff2");
+    font-weight: 500;
+    font-style: normal;
+    font-display: swap;
+  }
+
+  @font-face {
+    font-family: "PBS Sans";
+    src: url("https://media.njpbs.org/cms-media/fonts/d2a1a10beac03a9cf986714d6388978379efaa9d9b4a662ec374b262104851b5/PBSSans-Bold.woff2") format("woff2");
+    font-weight: 700;
+    font-style: normal;
+    font-display: swap;
+  }
+
+  @font-face {
+    font-family: "PBS Sans";
+    src: url("https://media.njpbs.org/cms-media/fonts/5b13467ba9da8daed32c4989a1f46bb11ece667e4607b9552c74315368b98cc9/PBSSans-Black.woff2") format("woff2");
+    font-weight: 900;
+    font-style: normal;
+    font-display: swap;
+  }
+
+  :global(*) {
+    box-sizing: border-box;
+  }
+
+  :global(body) {
+    margin: 0;
+    background: var(--color-surface-page);
+    color: var(--color-text-on-surface);
+    font-family: var(--font-sans);
+    line-height: 1.6;
+  }
+
+  .specimen-skip {
+    position: fixed;
+    z-index: 10;
+    top: var(--space-2);
+    left: var(--space-2);
+    translate: 0 -200%;
+    padding: var(--space-2) var(--space-3);
+    border-radius: var(--radius-control);
+    background: var(--color-focus-ring);
+    color: var(--color-ink);
+  }
+
+  .specimen-skip:focus {
+    translate: 0;
+  }
+
+  .specimen-page {
+    width: min(100% - 2rem, 80rem);
+    margin: 0 auto;
+    padding: clamp(1.5rem, 5vw, 4rem) 0;
+  }
+
+  .specimen-intro {
+    max-width: 54rem;
+    margin-bottom: clamp(2rem, 6vw, 4rem);
+  }
+
+  .specimen-intro p,
+  .story-fixture__kicker {
+    margin: 0;
+    color: var(--color-brand-bright);
+    font-size: 0.82rem;
+    font-weight: 800;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+  }
+
+  .specimen-intro h1 {
+    margin: var(--space-2) 0;
+    font-size: clamp(2rem, 7vw, 4.5rem);
+    line-height: 1;
+  }
+
+  .specimen-intro > span,
+  .specimen-label p {
+    display: block;
+    color: var(--color-text-muted);
+    line-height: 1.5;
+  }
+
+  .specimen-navigation-status {
+    min-height: 1.5em;
+    margin-top: var(--space-2);
+    color: var(--color-text-quiet);
+    font-size: 0.9rem;
+  }
+
+  .specimen-section + .specimen-section {
+    margin-top: clamp(2.5rem, 8vw, 6rem);
+  }
+
+  .specimen-label {
+    margin-bottom: var(--space-4);
+  }
+
+  .specimen-label h2,
+  .specimen-label p {
+    margin: 0;
+  }
+
+  .specimen-label h2 {
+    font-size: 1.15rem;
+  }
+
+  .specimen-label p {
+    margin-top: var(--space-1);
+    font-size: 0.9rem;
+  }
+
+  .specimen-surface {
+    padding: clamp(1rem, 4vw, 2.5rem);
+    border: 1px solid var(--color-border-strong);
+    border-radius: var(--radius-surface);
+    background: var(--color-surface-panel);
+  }
+
+  .specimen-surface--flush {
+    overflow: hidden;
+    padding: 0;
+  }
+
+  .specimen-surface--narrow {
+    max-width: 32rem;
+  }
+
+  .token-probe-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: var(--space-6);
+  }
+
+  .token-probe {
+    padding: var(--space-6);
+    border: 1px solid var(--color-border-strong);
+    border-radius: var(--radius-surface);
+    background: var(--color-surface-panel);
+  }
+
+  .token-probe h3 {
+    margin: 0 0 var(--space-4);
+    color: var(--color-text-on-surface);
+    font-size: 1rem;
+  }
+
+  .token-probe code {
+    overflow-wrap: anywhere;
+    color: var(--color-text-muted);
+    font-size: 0.75rem;
+  }
+
+  .token-probe--colors ul {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: var(--space-4);
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+
+  .token-probe--colors li {
+    display: grid;
+    grid-template-columns: 2rem minmax(0, 1fr);
+    gap: var(--space-2);
+    align-items: center;
+  }
+
+  .token-probe--colors li span {
+    width: 2rem;
+    height: 2rem;
+    border: 1px solid var(--color-border-strong);
+    border-radius: var(--radius-control);
+  }
+
+  .probe-pbs-blue { background: var(--pbs-blue); }
+  .probe-pbs-blue-bright { background: var(--pbs-blue-bright); }
+  .probe-focus { background: var(--focus); }
+  .probe-bg-0 { background: var(--bg-0); }
+  .probe-bg-1 { background: var(--bg-1); }
+  .probe-bg-2 { background: var(--bg-2); }
+  .probe-bg-now { background: var(--bg-now); }
+  .probe-text { background: var(--text); }
+  .probe-text-dim { background: var(--text-dim); }
+  .probe-text-quiet { background: var(--text-quiet); }
+  .probe-action-red { background: var(--action-red); }
+  .probe-status-green { background: var(--status-green); }
+
+  .token-probe--spacing > div {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 7rem;
+    gap: var(--space-3);
+    align-items: center;
+  }
+
+  .token-probe--spacing > div + div {
+    margin-top: var(--space-4);
+  }
+
+  .token-probe--spacing span {
+    display: block;
+    min-height: 0.75rem;
+    background: var(--color-brand-bright);
+  }
+
+  .probe-space-4 { width: var(--space-4); }
+  .probe-space-6 { width: var(--space-6); }
+  .probe-space-8 { width: var(--space-8); }
+
+  .token-probe--shape h3 {
+    letter-spacing: var(--heading-tracking);
+  }
+
+  .probe-radius-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-4);
+  }
+
+  .probe-radius-row span {
+    display: grid;
+    min-height: 5rem;
+    flex: 1 1 8rem;
+    place-items: center;
+    border: 2px solid var(--color-brand-bright);
+    background: var(--color-surface-page);
+  }
+
+  .probe-radius-control { border-radius: var(--radius-control); }
+  .probe-radius-surface { border-radius: var(--radius-surface); }
+
+  .token-probe--motion button {
+    width: 100%;
+    min-height: var(--target-comfortable);
+    border: 0;
+    border-radius: 3px;
+    padding: var(--space-3) var(--space-4);
+    background: var(--color-brand);
+    color: var(--color-text-on-brand);
+    font: inherit;
+    font-weight: 800;
+    transition: translate var(--motion-duration-standard) var(--motion-ease-standard);
+  }
+
+  .token-probe--motion button:hover,
+  .token-probe--motion button:focus-visible {
+    translate: var(--space-2) 0;
+  }
+
+  .token-probe--motion button:focus-visible {
+    outline: var(--focus-outline);
+    outline-offset: var(--focus-offset);
+  }
+
+  .tile-grid {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: var(--space-6);
+  }
+
+  .story-fixture {
+    max-width: 49rem;
+  }
+
+  .story-fixture h3 {
+    max-width: 22ch;
+    margin: var(--space-2) 0 0;
+    font-size: clamp(1.8rem, 5vw, 3.5rem);
+    line-height: 1.02;
+  }
+
+  @media (max-width: 760px) {
+    .token-probe-grid {
+      grid-template-columns: 1fr;
+    }
+
+    .tile-grid {
+      grid-template-columns: 1fr;
+    }
+  }
+
+  @media (max-width: 420px) {
+    .token-probe--colors ul {
+      grid-template-columns: 1fr;
+    }
+  }
+</style>

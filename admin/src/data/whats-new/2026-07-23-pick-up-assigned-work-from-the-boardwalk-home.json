@@ -1,0 +1,12 @@
+{
+  "date": "2026-07-23",
+  "kind": "new",
+  "title": "Pick up assigned work from the Boardwalk home",
+  "body": "The Boardwalk home now shows queues of work assigned to you and items you can resume. Assignments stay with each record.",
+  "prs": [
+    638,
+    677,
+    699
+  ],
+  "order": 0
+}

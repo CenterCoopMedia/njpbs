@@ -1,0 +1,68 @@
+/* Publication and coverage identifiers share one eyebrow treatment. */
+.post-branding-group {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.4rem 0.75rem;
+  max-width: 100%;
+  margin-block-end: 0.75rem;
+}
+.post-branding-group > .post-publication { margin-block-end: 0; align-self: center; }
+.post-publication,
+.post-coverage {
+  display: inline-flex;
+  align-items: center;
+  align-self: flex-start;
+  max-width: 100%;
+  box-sizing: border-box;
+  border-inline-start: 0.2rem solid var(--color-nj-green, var(--cms-brand-green));
+  padding-inline-start: 0.65rem;
+  color: inherit;
+  font: inherit;
+  font-size: 0.8125rem;
+  font-weight: 700;
+  line-height: 1.4;
+  letter-spacing: 0.02em;
+}
+.post-coverage {
+  position: relative;
+  border-inline-start-color: transparent;
+  overflow-wrap: anywhere;
+  text-decoration: none;
+}
+.post-coverage::before {
+  content: "";
+  position: absolute;
+  inset-inline-start: -0.2rem;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 0.2rem;
+  height: 1.4em;
+  background: var(--coverage-bar);
+  /* Keep even a white or dark custom bar visible against either surface. */
+  box-shadow: 0 0 0 0.5px currentColor;
+}
+.post-coverage[data-coverage-label="nj-decides-2026"]::before {
+  background: linear-gradient(to bottom,
+    var(--coverage-red) 0% 33.333333%,
+    white 33.333333% 66.666667%,
+    var(--coverage-blue) 66.666667% 100%);
+  box-shadow: 0 0 0 1px var(--coverage-blue);
+}
+a.post-coverage { min-height: 44px; min-width: 44px; }
+a.post-coverage:hover { text-decoration: underline; }
+a.post-coverage:focus-visible { outline: 2px solid currentColor; outline-offset: 2px; }
+.post-publication--headline { margin-block-end: 0.75rem; }
+.post-publication--card,
+.post-coverage--card { font-size: 0.75rem; }
+.post-publication--card { margin-block-end: 0.4rem; }
+@media (forced-colors: active) {
+  .post-publication { border-color: CanvasText; }
+  .post-coverage { color: CanvasText; }
+  .post-coverage::before,
+  .post-coverage[data-coverage-label="nj-decides-2026"]::before {
+    background: CanvasText;
+    box-shadow: none;
+  }
+  a.post-coverage:focus-visible { outline-color: LinkText; }
+}

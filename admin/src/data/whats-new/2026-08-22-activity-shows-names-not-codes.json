@@ -1,0 +1,11 @@
+{
+  "date": "2026-08-22",
+  "kind": "improved",
+  "title": "Activity shows names, not codes",
+  "body": "The Activity list shows the names of people and content instead of internal codes. It also records sign-ins and deletions.",
+  "prs": [
+    1104,
+    1125
+  ],
+  "order": -3
+}

@@ -1,0 +1,12 @@
+{
+  "date": "2026-10-07",
+  "kind": "new",
+  "title": "Comment on exact video frames and reply",
+  "body": "Media reviews support comments at a frame or a time range, shown on a player timeline. You can reply, mention staff and mark a comment resolved.",
+  "prs": [
+    2649,
+    2668,
+    2574
+  ],
+  "order": -3
+}

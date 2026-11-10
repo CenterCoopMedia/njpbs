@@ -1,0 +1,276 @@
+{
+  "AWSTemplateFormatVersion": "2010-09-09",
+  "Description": "Source-scoped S3 media roles for the NJ PBS Boardwalk Google runtime identity.",
+  "Metadata": {
+    "AWSToolsMetrics": {
+      "AWSAgentToolkit": "aws-cloudformation@2"
+    },
+    "com.aws.cloudformation.Context": {
+      "why": "Give Boardwalk short-lived access to the existing private video and archive buckets without access keys.",
+      "must": [
+        {
+          "Fn::Sub": "Deploy only to account ${AWS::AccountId}."
+        },
+        "Use the exact Google token azp and sub values observed from the dedicated Boardwalk runtime identity.",
+        "Keep the audience fixed to njpbs-boardwalk-s3.",
+        "Allow multipart writes only under objects/ in the video and archive working buckets.",
+        "Do not add writes to archive originals, deletion, bucket administration, IAM, or access-key permissions."
+      ]
+    }
+  },
+  "Parameters": {
+    "GoogleOAuth2ClientId": {
+      "Type": "String",
+      "AllowedPattern": "^[0-9]+$",
+      "Description": "Exact azp claim observed in the Google service-account ID token."
+    },
+    "GoogleServiceAccountUniqueId": {
+      "Type": "String",
+      "AllowedPattern": "^[0-9]+$",
+      "Description": "Exact sub claim observed in the Google service-account ID token."
+    }
+  },
+  "Resources": {
+    "BoardwalkVideoReadRole": {
+      "Type": "AWS::IAM::Role",
+      "Metadata": {
+        "com.aws.cloudformation.Context": {
+          "why": "Let the Boardwalk shared-video source list, read, and upload versioned video objects.",
+          "must": [
+            "Trust only the dedicated Google service account and fixed audience.",
+            {
+              "Fn::Sub": "Allow reads only from njpbs-video-originals-${AWS::AccountId}-us-east-2."
+            },
+            "Allow multipart writes only under objects/ and do not allow deletion."
+          ]
+        }
+      },
+      "Properties": {
+        "RoleName": "njpbs-boardwalk-video-read",
+        "Description": "Boardwalk read access to the NJ PBS video originals bucket.",
+        "MaxSessionDuration": 3600,
+        "AssumeRolePolicyDocument": {
+          "Version": "2012-10-17",
+          "Statement": [
+            {
+              "Sid": "GoogleBoardwalkRuntime",
+              "Effect": "Allow",
+              "Principal": {
+                "Federated": "accounts.google.com"
+              },
+              "Action": "sts:AssumeRoleWithWebIdentity",
+              "Condition": {
+                "StringEquals": {
+                  "accounts.google.com:aud": {
+                    "Ref": "GoogleOAuth2ClientId"
+                  },
+                  "accounts.google.com:oaud": "njpbs-boardwalk-s3",
+                  "accounts.google.com:sub": {
+                    "Ref": "GoogleServiceAccountUniqueId"
+                  }
+                }
+              }
+            }
+          ]
+        },
+        "Policies": [
+          {
+            "PolicyName": "njpbs-boardwalk-video-read",
+            "PolicyDocument": {
+              "Version": "2012-10-17",
+              "Statement": [
+                {
+                  "Sid": "ListVideoVersions",
+                  "Effect": "Allow",
+                  "Action": [
+                    "s3:ListBucket",
+                    "s3:ListBucketVersions"
+                  ],
+                  "Resource": {
+                    "Fn::Sub": "arn:aws:s3:::njpbs-video-originals-${AWS::AccountId}-us-east-2"
+                  }
+                },
+                {
+                  "Sid": "ReadVideoVersions",
+                  "Effect": "Allow",
+                  "Action": [
+                    "s3:GetObject",
+                    "s3:GetObjectVersion",
+                    "s3:RestoreObject"
+                  ],
+                  "Resource": {
+                    "Fn::Sub": "arn:aws:s3:::njpbs-video-originals-${AWS::AccountId}-us-east-2/*"
+                  }
+                },
+                {
+                  "Sid": "WriteVideoObjects",
+                  "Effect": "Allow",
+                  "Action": [
+                    "s3:AbortMultipartUpload",
+                    "s3:ListMultipartUploadParts",
+                    "s3:PutObject"
+                  ],
+                  "Resource": {
+                    "Fn::Sub": "arn:aws:s3:::njpbs-video-originals-${AWS::AccountId}-us-east-2/objects/*"
+                  }
+                }
+              ]
+            }
+          }
+        ],
+        "Tags": [
+          {
+            "Key": "Project",
+            "Value": "njpbs"
+          },
+          {
+            "Key": "System",
+            "Value": "boardwalk"
+          },
+          {
+            "Key": "AccessScope",
+            "Value": "video-media"
+          }
+        ]
+      }
+    },
+    "BoardwalkArchiveReadRole": {
+      "Type": "AWS::IAM::Role",
+      "Metadata": {
+        "com.aws.cloudformation.Context": {
+          "why": "Let archive-authorized Boardwalk requests read both archive buckets and upload working objects.",
+          "must": [
+            "Trust only the dedicated Google service account and fixed audience.",
+            "Allow reads only from the archive originals and archive working buckets.",
+            "Allow multipart writes only under archive working objects/ and do not allow writes to originals or deletion."
+          ]
+        }
+      },
+      "Properties": {
+        "RoleName": "njpbs-boardwalk-archive-read",
+        "Description": "Boardwalk read access to the NJ PBS archive buckets.",
+        "MaxSessionDuration": 3600,
+        "AssumeRolePolicyDocument": {
+          "Version": "2012-10-17",
+          "Statement": [
+            {
+              "Sid": "GoogleBoardwalkRuntime",
+              "Effect": "Allow",
+              "Principal": {
+                "Federated": "accounts.google.com"
+              },
+              "Action": "sts:AssumeRoleWithWebIdentity",
+              "Condition": {
+                "StringEquals": {
+                  "accounts.google.com:aud": {
+                    "Ref": "GoogleOAuth2ClientId"
+                  },
+                  "accounts.google.com:oaud": "njpbs-boardwalk-s3",
+                  "accounts.google.com:sub": {
+                    "Ref": "GoogleServiceAccountUniqueId"
+                  }
+                }
+              }
+            }
+          ]
+        },
+        "Policies": [
+          {
+            "PolicyName": "njpbs-boardwalk-archive-read",
+            "PolicyDocument": {
+              "Version": "2012-10-17",
+              "Statement": [
+                {
+                  "Sid": "ListArchiveVersions",
+                  "Effect": "Allow",
+                  "Action": [
+                    "s3:ListBucket",
+                    "s3:ListBucketVersions"
+                  ],
+                  "Resource": [
+                    {
+                      "Fn::Sub": "arn:aws:s3:::njpbs-archive-originals-${AWS::AccountId}-us-east-2"
+                    },
+                    {
+                      "Fn::Sub": "arn:aws:s3:::njpbs-archive-working-${AWS::AccountId}-us-east-2"
+                    }
+                  ]
+                },
+                {
+                  "Sid": "ReadArchiveVersions",
+                  "Effect": "Allow",
+                  "Action": [
+                    "s3:GetObject",
+                    "s3:GetObjectVersion"
+                  ],
+                  "Resource": [
+                    {
+                      "Fn::Sub": "arn:aws:s3:::njpbs-archive-originals-${AWS::AccountId}-us-east-2/*"
+                    },
+                    {
+                      "Fn::Sub": "arn:aws:s3:::njpbs-archive-working-${AWS::AccountId}-us-east-2/*"
+                    }
+                  ]
+                },
+                {
+                  "Sid": "RestoreArchiveOriginalVersions",
+                  "Effect": "Allow",
+                  "Action": "s3:RestoreObject",
+                  "Resource": {
+                    "Fn::Sub": "arn:aws:s3:::njpbs-archive-originals-${AWS::AccountId}-us-east-2/*"
+                  }
+                },
+                {
+                  "Sid": "WriteArchiveWorkingObjects",
+                  "Effect": "Allow",
+                  "Action": [
+                    "s3:AbortMultipartUpload",
+                    "s3:ListMultipartUploadParts",
+                    "s3:PutObject"
+                  ],
+                  "Resource": {
+                    "Fn::Sub": "arn:aws:s3:::njpbs-archive-working-${AWS::AccountId}-us-east-2/objects/*"
+                  }
+                }
+              ]
+            }
+          }
+        ],
+        "Tags": [
+          {
+            "Key": "Project",
+            "Value": "njpbs"
+          },
+          {
+            "Key": "System",
+            "Value": "boardwalk"
+          },
+          {
+            "Key": "AccessScope",
+            "Value": "archive-media"
+          }
+        ]
+      }
+    }
+  },
+  "Outputs": {
+    "ArchiveReadRoleArn": {
+      "Description": "Server-owned role ARN for restricted archive sources.",
+      "Value": {
+        "Fn::GetAtt": [
+          "BoardwalkArchiveReadRole",
+          "Arn"
+        ]
+      }
+    },
+    "VideoReadRoleArn": {
+      "Description": "Server-owned role ARN for the shared video source.",
+      "Value": {
+        "Fn::GetAtt": [
+          "BoardwalkVideoReadRole",
+          "Arn"
+        ]
+      }
+    }
+  }
+}

@@ -1,0 +1,4 @@
+# Regenerable run outputs. Reproduce them with the qa/*.py scripts against a
+# served build. Historical findings belong in dated audits, not current output.
+audit-findings.json
+axe-findings.json

@@ -1,0 +1,432 @@
+name: CMS dev deploy
+
+on:
+  workflow_dispatch:
+    inputs:
+      deploy_ref:
+        description: Full reviewed dev application SHA; omitted means this immutable workflow commit
+        type: string
+        required: false
+        default: ''
+      release_preview_renderer:
+        description: Release the dev renderer image under an authorized publication hold
+        type: boolean
+        required: false
+        default: false
+      renderer_only:
+        description: Install the legacy development renderer inside a paused bootstrap
+        type: boolean
+        required: false
+        default: false
+      renderer_source_sha:
+        description: Exact retained OLD renderer source on main ancestry
+        type: string
+        required: false
+        default: ''
+      preserve_preview_pause:
+        description: Keep the original bootstrap fences and preview admission paused
+        type: boolean
+        required: false
+        default: false
+      restore_preview_bootstrap:
+        description: Restore the original captured image and paused control for this bootstrap
+        type: boolean
+        required: false
+        default: false
+
+      install_reader_bridge:
+        description: Separately authorized first installation of the dev reader mounts and original receipts
+        type: boolean
+        required: false
+        default: false
+      reader_operation_id:
+        description: Original reader operation ID (reader-...) for the authorized installation
+        type: string
+        required: false
+        default: ''
+      reader_install_authorization:
+        description: 'Coordinator authorization literal INSTALL_DEV_READERS'
+        type: string
+        required: false
+        default: ''
+
+permissions:
+  contents: read
+
+env:
+  CLOUDFLARE_DEV_PUBLIC_WORKER: ${{ vars.CLOUDFLARE_DEV_PUBLIC_WORKER }}
+  CMS_DEV_ADMIN_ORIGIN: ${{ vars.CMS_DEV_ADMIN_ORIGIN }}
+  CMS_DEV_ADMIN_PAGES: ${{ vars.CMS_DEV_ADMIN_PAGES }}
+  CMS_DEV_API_ORIGIN: ${{ vars.CMS_DEV_API_ORIGIN }}
+  CMS_DEV_API_WORKER: ${{ vars.CMS_DEV_API_WORKER }}
+  CMS_DEV_MEDIA_BUCKET: ${{ vars.CMS_DEV_MEDIA_BUCKET }}
+  CMS_DEV_MEDIA_ORIGIN: ${{ vars.CMS_DEV_MEDIA_ORIGIN }}
+  CMS_DEV_PREVIEW_BUCKET: ${{ vars.CMS_DEV_PREVIEW_BUCKET }}
+  CMS_DEV_PREVIEW_ORIGIN: ${{ vars.CMS_DEV_PREVIEW_ORIGIN }}
+  CMS_DEV_PREVIEW_RENDERER: ${{ vars.CMS_DEV_PREVIEW_RENDERER }}
+  CMS_DEV_PREVIEW_STAFF_WORKER: ${{ vars.CMS_DEV_PREVIEW_STAFF_WORKER }}
+  CMS_DEV_PREVIEW_WORKER: ${{ vars.CMS_DEV_PREVIEW_WORKER }}
+  CMS_DEV_PUBLIC_ORIGIN: ${{ vars.CMS_DEV_PUBLIC_ORIGIN }}
+  CMS_DEV_SITE_PAGES: ${{ vars.CMS_DEV_SITE_PAGES }}
+  CMS_PRODUCTION_API_ORIGIN: ${{ vars.CMS_PRODUCTION_API_ORIGIN }}
+  CANONICAL_GITHUB_REPOSITORY: ${{ vars.CANONICAL_GITHUB_REPOSITORY }}
+  CANONICAL_GITHUB_REPOSITORY_ID: ${{ vars.CANONICAL_GITHUB_REPOSITORY_ID }}
+  VITE_CANONICAL_GITHUB_REPOSITORY: ${{ vars.CANONICAL_GITHUB_REPOSITORY }}
+  CMS_DEPLOY_OWNER: ${{ vars.CMS_DEPLOY_OWNER }}
+  CMS_PUBLISH_GITHUB_TRUSTED_ACTORS: ${{ vars.CMS_PUBLISH_GITHUB_TRUSTED_ACTORS }}
+  CMS_DEV_FIREBASE_WEB_APP_ID: ${{ vars.CMS_DEV_FIREBASE_WEB_APP_ID }}
+  CMS_DEV_CLOUDFLARE_ACCOUNT_ID: ${{ vars.CMS_DEV_CLOUDFLARE_ACCOUNT_ID }}
+  CMS_DEV_ACCESS_ORIGIN: ${{ vars.CMS_DEV_ACCESS_ORIGIN }}
+
+concurrency:
+  group: cms-dev-deploy
+  cancel-in-progress: false
+
+jobs:
+  preview-renderer:
+    # Omitted optional inputs keep the routine renderer-release selector false.
+    if: >-
+      (inputs.release_preview_renderer || inputs.renderer_only || (inputs.renderer_source_sha || '') != '' || inputs.preserve_preview_pause || inputs.restore_preview_bootstrap || false) &&
+      github.ref == 'refs/heads/main' && (vars.CMS_DEPLOY_OWNER != '' && github.actor == vars.CMS_DEPLOY_OWNER) && (vars.CMS_DEPLOY_OWNER != '' && github.triggering_actor == vars.CMS_DEPLOY_OWNER) &&
+      (vars.CANONICAL_GITHUB_REPOSITORY != '' && vars.CANONICAL_GITHUB_REPOSITORY_ID != '' && github.repository_id == vars.CANONICAL_GITHUB_REPOSITORY_ID && github.workflow_ref == format('{0}/.github/workflows/cms-dev-deploy.yml@refs/heads/main', vars.CANONICAL_GITHUB_REPOSITORY))
+    environment: development
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    permissions:
+      contents: read
+      actions: read
+    outputs:
+      renderer_sha: ${{ steps.ready.outputs.renderer_sha }}
+    env:
+      DEPLOY_SHA: ${{ inputs.deploy_ref || github.sha }}
+      FIREBASE_PROJECT_ID: njpbs-site-dev
+      FIREBASE_WEB_APP_ID: ${{ vars.FIREBASE_WEB_APP_ID }}
+      CMS_API_WORKER: ${{ vars.CMS_DEV_API_WORKER }}
+      CMS_PREVIEW_WORKER: ${{ vars.CMS_DEV_PREVIEW_WORKER }}
+      CMS_PREVIEW_RENDERER: ${{ vars.CMS_DEV_PREVIEW_RENDERER }}
+      CMS_PREVIEW_STAFF_WORKER: ${{ vars.CMS_DEV_PREVIEW_STAFF_WORKER }}
+      CMS_SITE_PAGES: ${{ vars.CMS_DEV_SITE_PAGES }}
+      CMS_ADMIN_PAGES: ${{ vars.CMS_DEV_ADMIN_PAGES }}
+      CMS_MEDIA_BUCKET: ${{ vars.CMS_DEV_MEDIA_BUCKET }}
+      CMS_PREVIEW_BUCKET: ${{ vars.CMS_DEV_PREVIEW_BUCKET }}
+      CMS_ADMIN_ORIGIN: ${{ vars.CMS_DEV_ADMIN_ORIGIN }}
+      CMS_API_ORIGIN: ${{ vars.CMS_DEV_API_ORIGIN }}
+      CMS_PREVIEW_ORIGIN: ${{ vars.CMS_DEV_PREVIEW_ORIGIN }}
+      CMS_SITE_ORIGIN: ${{ vars.CMS_DEV_PUBLIC_ORIGIN }}
+      CMS_MEDIA_ORIGIN: ${{ vars.CMS_DEV_MEDIA_ORIGIN }}
+      FUNCTIONS_ORIGIN: https://us-central1-njpbs-site-dev.cloudfunctions.net
+      CMS_DEPLOYMENT_ENVIRONMENT: development
+      CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
+      CMS_ADMIN_PAGES_BRANCH: main
+      CMS_DEV_RELEASE_PREVIEW_RENDERER: 'true'
+      CMS_DEV_RENDERER_ONLY: ${{ inputs.renderer_only }}
+      CMS_DEV_RENDERER_REQUESTED_SOURCE_SHA: ${{ inputs.renderer_source_sha }}
+      CMS_DEV_PRESERVE_PREVIEW_PAUSE: ${{ inputs.preserve_preview_pause }}
+      CMS_DEV_RESTORE_PREVIEW_BOOTSTRAP: ${{ inputs.restore_preview_bootstrap }}
+      CMS_DEV_INSTALL_READER_BRIDGE: ${{ inputs.install_reader_bridge }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+          ref: ${{ inputs.deploy_ref || github.sha }}
+          fetch-depth: 0
+      - name: Check out trusted dev source gates
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ github.sha }}
+          path: .dev-deploy-gate
+          persist-credentials: false
+      - name: Verify dev deploy source gates
+        uses: ./.dev-deploy-gate/.github/actions/dev-deploy-source-gates
+        with:
+          github-token: ${{ github.token }}
+          artifact-name: dev-release-sources-renderer
+          renderer-only: ${{ inputs.renderer_only }}
+          install-reader-bridge: ${{ inputs.install_reader_bridge }}
+      - name: Metered-API source scan before execution
+        run: node .github/scripts/metered-api-scan.mjs
+      - name: Validate development Access origin
+        run: node --input-type=module -e "import { devAccessOrigin } from './scripts/lib/deployment-settings.mjs'; devAccessOrigin();"
+      - name: Check renderer-only input and source provenance before credentials
+        env:
+          CMS_DEV_RELEASE_PREVIEW_RENDERER: ${{ inputs.release_preview_renderer }}
+        run: node .github/scripts/check-dev-renderer-release-source.mjs
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '22'
+          cache: npm
+      - name: Check out trusted configuration renderer
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ github.sha }}
+          path: .configuration-render-gate
+          persist-credentials: false
+          sparse-checkout: |
+            scripts/render-development-config.mjs
+            config/development-inputs.json
+          sparse-checkout-cone-mode: false
+      - name: Render deployment resource configuration
+        working-directory: ${{ github.workspace }}
+        run: |
+          set -euo pipefail
+          mv .configuration-render-gate "$RUNNER_TEMP/configuration-render-gate"
+          node "$RUNNER_TEMP/configuration-render-gate/scripts/render-development-config.mjs" --root "$GITHUB_WORKSPACE"
+      - name: Check exact dev targets and configs
+        run: node scripts/assert-dev-cms-targets.mjs
+      - name: Validate the separate dev reader installation authorization
+        env:
+          CMS_DEV_INSTALL_READER_BRIDGE: ${{ inputs.install_reader_bridge }}
+          CMS_DEV_READER_OPERATION_ID: ${{ inputs.reader_operation_id }}
+          CMS_DEV_READER_INSTALL_AUTHORIZATION: ${{ inputs.reader_install_authorization }}
+          CMS_DEV_PUBLISH_ENABLED: ${{ vars.CMS_DEV_PUBLISH_ENABLED }}
+        run: node --input-type=module -e 'import deployment from "./functions/lib/dev-reader-deployment.js"; deployment.devReaderDeployment();'
+      - name: Require the dev publication hold and preview audience
+        env:
+          CMS_DEV_PUBLISH_ENABLED: ${{ vars.CMS_DEV_PUBLISH_ENABLED }}
+          DEV_PREVIEW_ACCESS_AUDIENCE: ${{ vars.DEV_PREVIEW_ACCESS_AUDIENCE }}
+        run: |
+          test "$CMS_DEV_PUBLISH_ENABLED" = false
+          [[ "$DEV_PREVIEW_ACCESS_AUDIENCE" =~ ^[a-f0-9]{64}$ ]]
+      - name: Install reviewed dependencies
+        run: |
+          npm ci --ignore-scripts --no-audit --no-fund
+          npm --prefix site ci --ignore-scripts --no-audit --no-fund
+      - name: Deploy and verify the exact dev renderer
+        id: ready
+        env:
+          CMS_DEV_PREVIEW_FIREBASE_ACCOUNT: ${{ secrets.CMS_DEV_PREVIEW_FIREBASE_ACCOUNT }}
+          CMS_DEV_PREVIEW_R2_CREDENTIAL: ${{ !inputs.preserve_preview_pause && secrets.CMS_DEV_PREVIEW_R2_CREDENTIAL || '' }}
+          CMS_DEV_ACCESS_CLIENT_ID: ${{ !inputs.preserve_preview_pause && secrets.CMS_DEV_ACCESS_CLIENT_ID || '' }}
+          CMS_DEV_ACCESS_CLIENT_SECRET: ${{ !inputs.preserve_preview_pause && secrets.CMS_DEV_ACCESS_CLIENT_SECRET || '' }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_DEV_PREVIEW_RENDERER_TOKEN }}
+          CMS_DEV_PUBLISH_ENABLED: ${{ vars.CMS_DEV_PUBLISH_ENABLED }}
+        run: |
+          if [ "$CMS_DEV_RENDERER_ONLY" = true ]; then
+            node --import ./site/node_modules/tsx/dist/loader.mjs preview-renderer/bootstrap-dev.mjs "$CMS_DEV_RENDERER_REQUESTED_SOURCE_SHA" "$RUNNER_TEMP/dev-preview-renderer-receipt.json"
+            node --input-type=module - "$RUNNER_TEMP/dev-preview-renderer-receipt.json" >> "$GITHUB_OUTPUT" <<'NODE'
+          import { readFileSync } from 'node:fs';
+          const row = JSON.parse(readFileSync(process.argv[2], 'utf8'));
+          const source = row.receipt?.sourceSha ?? row.sourceSha;
+          if (!/^[a-f0-9]{40}$/.test(source ?? '')) throw new Error('Renderer receipt source refused');
+          console.log(`renderer_sha=${source}`);
+          NODE
+          else
+            node --import ./site/node_modules/tsx/dist/loader.mjs preview-renderer/deploy-dev.mjs "$DEPLOY_SHA" "$RUNNER_TEMP/dev-preview-renderer-receipt.json"
+            printf 'renderer_sha=%s\n' "$DEPLOY_SHA" >> "$GITHUB_OUTPUT"
+          fi
+      - name: Retain safe dev renderer identity receipt
+        if: ${{ always() && (steps.ready.outcome == 'success' || steps.ready.outcome == 'failure') }}
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: dev-preview-renderer-receipt
+          path: ${{ runner.temp }}/dev-preview-renderer-receipt.json
+          if-no-files-found: error
+          retention-days: 7
+  deploy:
+    needs: preview-renderer
+    if: >-
+      always() && !cancelled() && !inputs.renderer_only &&
+      (needs.preview-renderer.result == 'success' ||
+       (needs.preview-renderer.result == 'skipped' && !inputs.release_preview_renderer)) &&
+      github.ref == 'refs/heads/main' && (vars.CMS_DEPLOY_OWNER != '' && github.actor == vars.CMS_DEPLOY_OWNER) && (vars.CMS_DEPLOY_OWNER != '' && github.triggering_actor == vars.CMS_DEPLOY_OWNER) &&
+      (vars.CANONICAL_GITHUB_REPOSITORY != '' && vars.CANONICAL_GITHUB_REPOSITORY_ID != '' && github.repository_id == vars.CANONICAL_GITHUB_REPOSITORY_ID && github.workflow_ref == format('{0}/.github/workflows/cms-dev-deploy.yml@refs/heads/main', vars.CANONICAL_GITHUB_REPOSITORY))
+    environment: development
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45 # Runaway guard: 3x max rounds to 15m; retain 45m floor (#2657).
+    permissions:
+      contents: read
+      id-token: write
+      actions: read
+    env:
+      DEPLOY_SHA: ${{ inputs.deploy_ref || github.sha }}
+      FIREBASE_PROJECT_ID: njpbs-site-dev
+      FIREBASE_WEB_APP_ID: ${{ vars.FIREBASE_WEB_APP_ID }}
+      CMS_API_WORKER: ${{ vars.CMS_DEV_API_WORKER }}
+      CMS_PREVIEW_WORKER: ${{ vars.CMS_DEV_PREVIEW_WORKER }}
+      CMS_PREVIEW_RENDERER: ${{ vars.CMS_DEV_PREVIEW_RENDERER }}
+      CMS_PREVIEW_STAFF_WORKER: ${{ vars.CMS_DEV_PREVIEW_STAFF_WORKER }}
+      CMS_SITE_PAGES: ${{ vars.CMS_DEV_SITE_PAGES }}
+      CMS_ADMIN_PAGES: ${{ vars.CMS_DEV_ADMIN_PAGES }}
+      CMS_MEDIA_BUCKET: ${{ vars.CMS_DEV_MEDIA_BUCKET }}
+      CMS_PREVIEW_BUCKET: ${{ vars.CMS_DEV_PREVIEW_BUCKET }}
+      CMS_ADMIN_ORIGIN: ${{ vars.CMS_DEV_ADMIN_ORIGIN }}
+      CMS_API_ORIGIN: ${{ vars.CMS_DEV_API_ORIGIN }}
+      CMS_PREVIEW_ORIGIN: ${{ vars.CMS_DEV_PREVIEW_ORIGIN }}
+      CMS_SITE_ORIGIN: ${{ vars.CMS_DEV_PUBLIC_ORIGIN }}
+      CMS_MEDIA_ORIGIN: ${{ vars.CMS_DEV_MEDIA_ORIGIN }}
+      FUNCTIONS_ORIGIN: https://us-central1-njpbs-site-dev.cloudfunctions.net
+      CMS_DEPLOYMENT_ENVIRONMENT: development
+      CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
+      CMS_ADMIN_PAGES_BRANCH: main
+      CMS_DEV_RELEASE_PREVIEW_RENDERER: ${{ inputs.release_preview_renderer }}
+      CMS_DEV_RENDERER_SOURCE_SHA: ${{ inputs.release_preview_renderer && needs.preview-renderer.outputs.renderer_sha || vars.CMS_DEV_RENDERER_SOURCE_SHA }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.deploy_ref || github.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Check out trusted dev source gates
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ github.sha }}
+          path: .dev-deploy-gate
+          persist-credentials: false
+      - name: Verify dev deploy source gates
+        uses: ./.dev-deploy-gate/.github/actions/dev-deploy-source-gates
+        with:
+          github-token: ${{ github.token }}
+          artifact-name: dev-release-sources-deploy
+          renderer-only: ${{ inputs.renderer_only }}
+          install-reader-bridge: ${{ inputs.install_reader_bridge }}
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '22'
+          cache: npm
+      - name: Check out trusted configuration renderer
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ github.sha }}
+          path: .configuration-render-gate
+          persist-credentials: false
+          sparse-checkout: |
+            scripts/render-development-config.mjs
+            config/development-inputs.json
+          sparse-checkout-cone-mode: false
+      - name: Render deployment resource configuration
+        working-directory: ${{ github.workspace }}
+        run: |
+          set -euo pipefail
+          mv .configuration-render-gate "$RUNNER_TEMP/configuration-render-gate"
+          node "$RUNNER_TEMP/configuration-render-gate/scripts/render-development-config.mjs" --root "$GITHUB_WORKSPACE"
+      - name: Check exact dev targets and configs
+        run: node scripts/assert-dev-cms-targets.mjs
+      - name: Validate the separate dev reader installation authorization
+        env:
+          CMS_DEV_INSTALL_READER_BRIDGE: ${{ inputs.install_reader_bridge }}
+          CMS_DEV_READER_OPERATION_ID: ${{ inputs.reader_operation_id }}
+          CMS_DEV_READER_INSTALL_AUTHORIZATION: ${{ inputs.reader_install_authorization }}
+          CMS_DEV_PUBLISH_ENABLED: ${{ vars.CMS_DEV_PUBLISH_ENABLED }}
+        run: node --input-type=module -e 'import deployment from "./functions/lib/dev-reader-deployment.js"; deployment.devReaderDeployment();'
+      - name: Require the dev publication hold before mutation
+        env:
+          CMS_DEV_PUBLISH_ENABLED: ${{ vars.CMS_DEV_PUBLISH_ENABLED }}
+        run: test "$CMS_DEV_PUBLISH_ENABLED" = false
+      - name: Install reviewed dependencies
+        run: |
+          npm ci --ignore-scripts
+          npm --prefix site ci --ignore-scripts --no-audit --no-fund
+      - name: Verify the pinned dev renderer for a routine deploy
+        if: ${{ !inputs.release_preview_renderer }}
+        env:
+          CMS_DEV_PREVIEW_FIREBASE_ACCOUNT: ${{ secrets.CMS_DEV_PREVIEW_FIREBASE_ACCOUNT }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_DEV_PREVIEW_RENDERER_TOKEN }}
+        run: node --import ./site/node_modules/tsx/dist/loader.mjs preview-renderer/deploy-dev.mjs --verify-pinned "$CMS_DEV_RENDERER_SOURCE_SHA" "$RUNNER_TEMP/dev-preview-renderer-pin-receipt.json"
+      - name: Retain safe existing renderer verification receipt
+        if: ${{ !inputs.release_preview_renderer }}
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: dev-preview-renderer-pin-receipt
+          path: ${{ runner.temp }}/dev-preview-renderer-pin-receipt.json
+          if-no-files-found: error
+          retention-days: 7
+      - name: Select and check dev Functions entry
+        run: |
+          node scripts/assert-dev-cms-targets.mjs
+          node scripts/prepare-cloud-publication-wake.mjs development false
+          npm pkg set main=dev-index.js --workspace=njpbs-functions
+          GCLOUD_PROJECT=njpbs-site-dev node -e 'const {devFunctionManifest}=require("./functions/dev-manifest"); const {readCloudPublicationWakeDeployment}=require("./functions/lib/cloud-publication-wake-deployment"); const expected=Object.keys(devFunctionManifest(readCloudPublicationWakeDeployment())).sort().join(); const actual=Object.keys(require("./functions/dev-index")).sort().join(); if(actual!==expected) process.exit(1)'
+      - name: Verify the complete dev smoke manifest before mutation
+        run: node scripts/smoke-dev-cms-functions.mjs --manifest-only
+      - name: Authenticate to dev Firebase with OIDC
+        uses: google-github-actions/auth@7c6bc770dae815cd3e89ee6cdf493a5fab2cc093 # v3
+        with:
+          workload_identity_provider: ${{ vars.FIREBASE_DEV_WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ vars.FIREBASE_DEV_DEPLOY_SERVICE_ACCOUNT }}
+          project_id: njpbs-site-dev
+      - name: Deploy dev Firestore rules and indexes
+        run: |
+          node scripts/assert-dev-cms-targets.mjs
+          npx --no-install firebase deploy --project njpbs-site-dev --config firebase.dev.json --only firestore:rules,firestore:indexes --non-interactive
+      - name: Set the matched dev Admin revision
+        run: |
+          node scripts/assert-dev-cms-targets.mjs
+          [[ "$DEPLOY_SHA" =~ ^[0-9a-f]{40}$ ]]
+          test "$(git rev-parse HEAD)" = "$DEPLOY_SHA"
+          printf 'CMS_ADMIN_BUILD_REVISION=%s\n' "$DEPLOY_SHA" >> functions/.env.njpbs-site-dev
+          node -e 'if (!require("./functions/lib/cms-publish-dispatch").trustedPublishActors().length) throw new Error("Configure trusted publication actors")'
+          printf 'CMS_PUBLISH_GITHUB_TRUSTED_ACTORS=%s\n' "$CMS_PUBLISH_GITHUB_TRUSTED_ACTORS" >> functions/.env.njpbs-site-dev
+          [[ "$CMS_DEV_RENDERER_SOURCE_SHA" =~ ^[0-9a-f]{40}$ ]]
+          if [ "$CMS_DEV_RELEASE_PREVIEW_RENDERER" = true ]; then
+            test "$CMS_DEV_RENDERER_SOURCE_SHA" = "$DEPLOY_SHA"
+          fi
+          printf 'CMS_PREVIEW_SERIALIZER_READY=true\nCMS_PREVIEW_RENDERER_SHA=%s\n' "$CMS_DEV_RENDERER_SOURCE_SHA" >> functions/.env.njpbs-site-dev
+      - name: Deploy and attest dev reader mounts
+        env:
+          CMS_DEV_INSTALL_READER_BRIDGE: ${{ inputs.install_reader_bridge }}
+          CMS_DEV_READER_OPERATION_ID: ${{ inputs.reader_operation_id }}
+          CMS_DEV_READER_INSTALL_AUTHORIZATION: ${{ inputs.reader_install_authorization }}
+          CMS_DEV_PUBLISH_ENABLED: ${{ vars.CMS_DEV_PUBLISH_ENABLED }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_DEV_WORKER_TOKEN }}
+        run: node scripts/deploy-dev-reader-mounts.mjs "$RUNNER_TEMP/dev-reader-deployment-receipt.json"
+      - name: Retain original dev reader deployment identities
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: dev-reader-deployment-receipt
+          path: ${{ runner.temp }}/dev-reader-deployment-receipt.json
+          if-no-files-found: error
+          retention-days: 7
+      - name: Deploy and verify isolated dev exact-preview gateways
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_DEV_WORKER_TOKEN }}
+          DEV_PREVIEW_ACCESS_AUDIENCE: ${{ vars.DEV_PREVIEW_ACCESS_AUDIENCE }}
+          CMS_DEV_PUBLISH_ENABLED: ${{ vars.CMS_DEV_PUBLISH_ENABLED }}
+        run: node scripts/deploy-dev-preview-gateways.mjs "$RUNNER_TEMP/dev-preview-gateway-receipt.json"
+      - name: Retain safe dev preview gateway receipt
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: dev-preview-gateway-receipt
+          path: ${{ runner.temp }}/dev-preview-gateway-receipt.json
+          if-no-files-found: error
+          retention-days: 7
+      - name: Build dev Admin
+        env:
+          VITE_FIREBASE_API_KEY: ${{ vars.FIREBASE_DEV_WEB_API_KEY }}
+          VITE_FIREBASE_AUTH_DOMAIN: ${{ vars.FIREBASE_DEV_AUTH_DOMAIN }}
+          VITE_FIREBASE_PROJECT_ID: njpbs-site-dev
+          VITE_FIREBASE_APP_ID: ${{ vars.FIREBASE_WEB_APP_ID }}
+          VITE_FIREBASE_EXPECTED_DEV_APP_ID: ${{ vars.CMS_DEV_FIREBASE_WEB_APP_ID }}
+          VITE_FIREBASE_APPCHECK_SITE_KEY: ${{ vars.FIREBASE_DEV_APPCHECK_SITE_KEY }}
+          VITE_FUNCTIONS_BASE_URL: ${{ vars.CMS_DEV_API_ORIGIN }}
+          VITE_PUBLIC_SITE_ORIGIN: ${{ vars.CMS_DEV_PUBLIC_ORIGIN }}
+          VITE_USE_EMULATORS: 'false'
+          VITE_CMS_PREVIEW_ENABLED: 'true'
+          VITE_CMS_DEPLOYMENT_ENVIRONMENT: development
+        run: |
+          node scripts/assert-dev-cms-targets.mjs
+          test -n "$VITE_FIREBASE_API_KEY" && test -n "$VITE_FIREBASE_AUTH_DOMAIN" && test -n "$VITE_FIREBASE_APPCHECK_SITE_KEY"
+          test "$VITE_FIREBASE_AUTH_DOMAIN" = njpbs-site-dev.firebaseapp.com
+          npm run admin:build
+      - name: Upload dev Admin to Pages
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_DEV_PAGES_TOKEN }}
+        run: |
+          node scripts/assert-dev-cms-targets.mjs
+          test -n "$CLOUDFLARE_API_TOKEN"
+          upload_directory="$(mktemp -d)"
+          trap 'rm -rf "$upload_directory"' EXIT
+          cd "$upload_directory"
+          env -i PATH="$PATH" HOME="$HOME" \
+            CLOUDFLARE_ACCOUNT_ID="$CLOUDFLARE_ACCOUNT_ID" \
+            CLOUDFLARE_API_TOKEN="$CLOUDFLARE_API_TOKEN" WRANGLER_SEND_METRICS=false \
+            "$GITHUB_WORKSPACE/node_modules/.bin/wrangler" pages deploy "$GITHUB_WORKSPACE/admin/dist" \
+            --project-name="$CMS_ADMIN_PAGES" --branch=main --commit-hash="$DEPLOY_SHA" --commit-dirty=true
+      - name: Smoke-test the pinned dev CMS boundaries
+        run: node scripts/smoke-dev-cms-functions.mjs
+      - name: Retain dev smoke source and boundary proof
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: dev-smoke-receipt
+          path: ${{ runner.temp }}/dev-smoke-receipt.json
+          if-no-files-found: error
+          retention-days: 7

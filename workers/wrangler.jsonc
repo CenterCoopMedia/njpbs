@@ -1,0 +1,95 @@
+{
+  // Cloudflare Workers Builds config for njpbs-production. This project serves the Astro
+  // static build from the repository’s site/dist. The Worker runs first so encoded paths cannot
+  // bypass retained Post and background ownership. Runtime admission selects Posts;
+  // the transitional authority cache keeps full-build Assets available.
+  //
+  // Workers Builds uploads from the repo root using an explicit config path. The
+  // dashboard deploy command must be `npx wrangler versions upload --config workers/wrangler.jsonc` so a branch
+  // build can prepare an immutable version but cannot change production traffic.
+  // Do not use `wrangler deploy`; the lease-backed CMS activation operator owns
+  // every traffic change.
+  //
+  // The dashboard build command must be:
+  //   cd site && npm ci --ignore-scripts && node ../.github/scripts/metered-api-scan.mjs && npm run build:workers
+  //
+  // The dashboard command performs the protected install and scan while keeping
+  // dependency lifecycle hooks disabled for the whole job.
+  // build:workers repeats the scan as defense in depth before any repo build
+  // code, including the schedule sync described below.
+  // Workers Builds injects WORKERS_CI=1. The site's build script uses that signal
+  // to run sync:schedule before Astro, so the schedule hook stays in reviewed code
+  // without changing the dashboard-owned command. Local and GitHub Actions builds
+  // do not set that signal and remain network-free.
+  //
+  // After the source scan, build:workers runs sync:launch-content and
+  // sync:spotlight-news before the build. Keep the Media Manager credentials and
+  // public report variables required by those scripts. Missing configuration can
+  // fall back to committed shelf data.
+  //
+  // Verify the current HTTPS route before changing public traffic.
+  // This config has no $schema pointer. The root package declares wrangler, and
+  // sibling configs point to ../node_modules/wrangler/config-schema.json.
+  // Validate changes with `npx wrangler deploy --config workers/wrangler.jsonc --dry-run` from the repo root.
+  "name": "njpbs-production",
+  // Serve production only through the proxied custom-domain route so its zone
+  // abuse controls also protect Contact's metered content lookup.
+  "workers_dev": false,
+  "preview_urls": false,
+  "main": "./src/public-no-build-entry.ts",
+  "r2_buckets": [{ "binding": "DURABLE_POST_WITHDRAWALS", "bucket_name": "njpbs-cms-publication" }],
+  "compatibility_date": "2026-07-09",
+  "assets": {
+    "directory": "../site/dist",
+    "binding": "ASSETS",
+    "run_worker_first": true,
+    // Astro builds with `build: { format: "directory" }`, emitting folder index
+    // files (/foo/index.html) and trailing-slash canonicals. force-trailing-slash
+    // serves /foo/ from /foo/index.html with a 200 and 307-redirects /foo to /foo/,
+    // matching the current GitHub Pages URL shape and Astro's canonical URLs.
+    "html_handling": "force-trailing-slash",
+    // The Astro build emits a 404.html; 404-page serves the nearest 404.html with a
+    // 404 status for any request that does not match an asset, matching GitHub Pages.
+    "not_found_handling": "404-page"
+  },
+  // Pair ingress and measurement remain off. The bootstrap configuration builder
+  // supplies both private slot bindings before a separately authorized install.
+  "vars": { "PUBLIC_PAIR_INGRESS_ENABLED": "false", "PUBLIC_PAIR_ROUTING_MEASUREMENT_ENABLED": "false", "NO_BUILD_POST_ENABLED": "false", "NO_BUILD_POST_ID": "", "NO_BUILD_PAGE_RENDERER_SHA": "" },
+  "services": [
+    {
+      "binding": "CMS_API",
+      "service": "njpbs-cms-api",
+      "entrypoint": "PublicContentEntrypoint"
+    }
+  ],
+  // Route application is separate from version upload and activation. This
+  // one HTTPS apex pattern leaves www and all service subdomains unchanged.
+  // A source merge is not proof that this route is applied to the zone.
+  "routes": [
+    {
+      "pattern": "https://njpbs.org/*",
+      "zone_name": "njpbs.org"
+    }
+  ],
+  // Mirrors the observability settings enabled in the dashboard (logs and traces
+  // persisted, 100% sampling, no external export). The config is the source of
+  // truth on deploy, so omitting this block would reset those settings. The
+  // dashboard's suggested snippet set the top-level enabled flag to false with the
+  // nested flags true; the precedence between them is undocumented, so the top-level
+  // flag is set to true to keep logs and traces on under either interpretation.
+  "observability": {
+    "enabled": true,
+    "head_sampling_rate": 1,
+    "logs": {
+      "enabled": true,
+      "head_sampling_rate": 1,
+      "persist": true,
+      "invocation_logs": true
+    },
+    "traces": {
+      "enabled": true,
+      "persist": true,
+      "head_sampling_rate": 1
+    }
+  }
+}

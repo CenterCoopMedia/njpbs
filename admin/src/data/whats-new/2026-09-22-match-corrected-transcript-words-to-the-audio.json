@@ -1,0 +1,11 @@
+{
+  "date": "2026-09-22",
+  "kind": "new",
+  "title": "Match corrected transcript words to the audio",
+  "body": "After you correct a transcript, ask Boardwalk to align the corrected words with the audio. Review the result before you approve it. Captions then use the corrected timing.",
+  "prs": [
+    2008,
+    2139
+  ],
+  "order": -2
+}

@@ -1,0 +1,10 @@
+{
+  "date": "2026-10-26",
+  "kind": "fixed",
+  "title": "Profile photos stay protected during file replacement",
+  "body": "In Media, Replace file stops if an author profile uses the image, even before the profile is published. Remove the image from the profile or upload a new image. An image being replaced cannot become a profile photo until replacement finishes.",
+  "prs": [
+    4027
+  ],
+  "order": -5
+}

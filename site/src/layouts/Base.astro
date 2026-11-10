@@ -1,0 +1,279 @@
+---
+// Base layout: carries the full <head> contract every page must meet —
+// favicon, canonical, and complete Open Graph + Twitter meta.
+import { CONSOLE_CREDIT_TAG } from "../../scripts/console-credit.mjs";
+import { DEFAULT_LOCALE, hreflangAlternates } from "../lib/hreflang";
+import "../styles/design-tokens.css";
+import { readerTextSizeEnabled } from "../lib/reader-text-size-policy";
+
+interface Props {
+  title: string;
+  description: string;
+  /** Open Graph/Twitter copy can differ from search metadata. */
+  ogTitle?: string;
+  ogDescription?: string;
+  /** path-relative OG image, resolved against the site origin */
+  ogImage?: string;
+  ogImageAlt?: string;
+  /** path-relative canonical override for alias routes */
+  canonicalPath?: string;
+  noindex?: boolean;
+  /**
+   * Locales this page has actually been translated into, excluding the default.
+   * Only these become hreflang alternates. A page that lists a locale it has no
+   * published translation for points search engines at a 404, so this stays
+   * empty until the translated page exists.
+   */
+  translations?: readonly string[];
+}
+
+const {
+  title,
+  description,
+  ogTitle = title,
+  ogDescription = description,
+  ogImage = "/og-default.png",
+  ogImageAlt,
+  canonicalPath,
+  noindex = false,
+  translations = [],
+} = Astro.props;
+
+const canonical = new URL(canonicalPath ?? Astro.url.pathname, Astro.site);
+// Pagefind does not honor robots or canonical tags. Exclude the whole document
+// so a nested body marker cannot make a preview or alias searchable.
+const excludeFromSearch = noindex ||
+  canonical.href !== new URL(Astro.url.pathname, Astro.site).href;
+const ogImageUrl = new URL(ogImage, Astro.site);
+// The cluster is per page, not per site: a page declares an alternate only for a
+// locale it has actually been translated into (see lib/hreflang.ts). Pages pass
+// their own set via `translations`; the default is none, so this is an empty
+// list everywhere until a translated page opts in.
+const alternates = hreflangAlternates(canonical.pathname, Astro.site!, [
+  DEFAULT_LOCALE,
+  // Filtered rather than trusted: the default locale is already the first
+  // member, and a caller that passed it again would produce a duplicate that
+  // clears the "has a translation" gate and declares a /en/ twin of itself.
+  ...translations.filter((locale) => locale !== DEFAULT_LOCALE),
+]);
+---
+
+<!doctype html>
+<html lang="en" data-pagefind-ignore={excludeFromSearch ? "all" : undefined}>
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+
+    <!-- Low-bandwidth signal — runs before first paint so CSS can react.
+         Sets html[data-saver] when the user is on a constrained connection, from
+         two independent signals: the Chromium-only Network Information API
+         (Save-Data or a 2g bucket — mirrors isConstrainedConnection() in
+         lib/network-preference.ts, kept in sync by tests) and the
+         prefers-reduced-data media query. Folding both into one attribute lets
+         every downgrade rule key off a single selector. This ONLY downgrades:
+         no signal (Safari/Firefox/fast, the common case) → attribute never set →
+         full experience unchanged. Inline + synchronous on purpose; it must set
+         the attribute before web fonts and decorative layers are requested. -->
+    <script is:inline>
+      (function () {
+        try {
+          var saver = false;
+          var c = navigator.connection;
+          if (c) {
+            var et = c.effectiveType;
+            if (c.saveData === true || et === "2g" || et === "slow-2g") saver = true;
+          }
+          if (
+            window.matchMedia &&
+            window.matchMedia("(prefers-reduced-data: reduce)").matches
+          ) {
+            saver = true;
+          }
+          if (saver) document.documentElement.setAttribute("data-saver", "");
+        } catch (e) {
+          /* no API → full experience */
+        }
+      })();
+    </script>
+
+    <!-- Motion preference runs before first paint so the saved footer choice
+         applies without a flash of animation. With no saved choice, it follows
+         the OS setting. The @media block below is the no-JS floor. -->
+    <script is:inline>
+      (function () {
+        try {
+          var pref = localStorage.getItem("njpbs-motion");
+          var reduce =
+            pref === "off" ||
+            (pref !== "on" &&
+              window.matchMedia &&
+              window.matchMedia("(prefers-reduced-motion: reduce)").matches);
+          if (reduce) document.documentElement.setAttribute("data-motion", "off");
+        } catch (e) {
+          /* no storage -> follow the @media floor only */
+        }
+      })();
+    </script>
+
+    <!-- Restore reading size before the first paint. This attribute also lets
+         the picker CSS reserve its space until the controls are ready. -->
+    {readerTextSizeEnabled(Astro.url.pathname, Astro.locals.readerTextSizeDisabled) && <script is:inline>
+      (function () {
+        var size = "standard";
+        try {
+          var saved = localStorage.getItem("njpbs-reader-text-size");
+          if (saved === "large" || saved === "largest") size = saved;
+        } catch (e) {
+          /* Storage denial keeps the standard size and usable controls. */
+        }
+        document.documentElement.setAttribute("data-reader-text-size", size);
+      })();
+    </script>}
+
+    <title>{title}</title>
+    <meta name="description" content={description} />
+    <link rel="canonical" href={canonical} />
+    {alternates.map((alt) => (
+      <link rel="alternate" hreflang={alt.hreflang} href={alt.href} />
+    ))}
+    {noindex && <meta name="robots" content="noindex, nofollow" />}
+
+    <link rel="icon" type="image/png" href="/favicon.png" />
+    <link rel="apple-touch-icon" href="/favicon.png" />
+    <meta name="theme-color" content="#0b1f3a" />
+
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content={ogTitle} />
+    <meta property="og:description" content={ogDescription} />
+    <meta property="og:url" content={canonical} />
+    <meta property="og:image" content={ogImageUrl} />
+    {ogImageAlt && <meta property="og:image:alt" content={ogImageAlt} />}
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:site_name" content="NJ PBS" />
+
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content={ogTitle} />
+    <meta name="twitter:description" content={ogDescription} />
+    <meta name="twitter:image" content={ogImageUrl} />
+    {ogImageAlt && <meta name="twitter:image:alt" content={ogImageAlt} />}
+
+    <!-- page-specific head additions via the named "head" slot -->
+    <slot name="head" />
+
+    <Fragment set:html={CONSOLE_CREDIT_TAG} />
+
+    <!-- Universal mobile hardening, applied to every page (coming-soon, the
+         internal surfaces and the public wiki alike). Kept to side-effect-free rules so
+         it can't shift any existing layout:
+           • text-size-adjust pins the font size so iOS Safari does not inflate
+             body copy when a phone is rotated to landscape;
+           • media elements never exceed their container, a safety net against
+             horizontal overflow on narrow screens;
+           • a tap-highlight tuned to the brand instead of the default grey box. -->
+    <style is:global>
+      html {
+        -webkit-text-size-adjust: 100%;
+        text-size-adjust: 100%;
+      }
+      img,
+      svg,
+      video,
+      canvas {
+        max-width: 100%;
+      }
+      a,
+      button,
+      summary,
+      [role="button"] {
+        -webkit-tap-highlight-color: rgba(38, 56, 196, 0.24);
+      }
+
+      /* ── Low-bandwidth downgrades ──────────────────────────────────────────
+         Triggered by html[data-saver] (set by the head script above on
+         Save-Data / 2g) OR the prefers-reduced-data media query (a no-JS signal
+         that needs no API). Strictly additive: the full experience is the
+         default and these rules only subtract weight or GPU work when an
+         explicit constrained signal is present, so the normal-bandwidth render
+         is byte-for-byte unchanged. Component-level overrides (fonts, blur,
+         hero imagery) live next to the properties they replace; these are the
+         universal ones. */
+      html[data-saver] body {
+        /* a fixed background forces a full-page compositing layer that's costly
+           to repaint on low-end GPUs — pin it to normal scroll instead */
+        background-attachment: scroll;
+      }
+      @media (prefers-reduced-data: reduce) {
+        body {
+          background-attachment: scroll;
+        }
+      }
+
+      /* ── Site-wide accessibility floor ─────────────────────────────────────
+         Applied to every shell (apex launch, inner subpages, wiki) because Base
+         is the only layer they all share. Each rule is additive and low-priority
+         so per-component styling still wins where it exists. */
+
+      /* Screen-reader-only text: visible to assistive tech, removed from the
+         visual layout. Used for cues like "(opens in new tab)" on links that
+         open a new window, where the visual target already implies it. */
+      .sr-only {
+        position: absolute;
+        width: 1px;
+        height: 1px;
+        padding: 0;
+        margin: -1px;
+        overflow: hidden;
+        clip: rect(0, 0, 0, 0);
+        white-space: nowrap;
+        border: 0;
+      }
+
+      /* A keyboard-focus floor for every interactive element. :where() keeps the
+         specificity at zero, so a component's own :focus-visible rule overrides
+         it; this fills any gap with the shared 3px semantic focus treatment. */
+      :where(a, button, input, select, textarea, summary, [tabindex]):focus-visible {
+        outline: var(--focus-outline);
+        outline-offset: var(--focus-offset);
+      }
+
+      /* Windows High Contrast / forced-colors: let the system color carry the
+         focus ring so it can't disappear into the forced palette. */
+      @media (forced-colors: active) {
+        :where(a, button, input, select, textarea, summary, [tabindex]):focus-visible {
+          outline-color: Highlight;
+        }
+      }
+
+      /* Honor the OS "reduce motion" setting everywhere, including any animation
+         a component forgets to guard. Near-zero (not zero) durations keep
+         transitionend/animationend listeners firing so JS that waits on them
+         still completes. */
+      @media (prefers-reduced-motion: reduce) {
+        *,
+        *::before,
+        *::after {
+          animation-duration: var(--motion-duration-fast) !important;
+          animation-iteration-count: 1 !important;
+          transition-duration: var(--motion-duration-fast) !important;
+          scroll-behavior: auto !important;
+        }
+      }
+
+      /* Keep the same reset for the pre-paint attribute that script-aware
+         components observe. The OS media query above remains the no-JS floor. */
+      html[data-motion="off"] *,
+      html[data-motion="off"] *::before,
+      html[data-motion="off"] *::after {
+        animation-duration: var(--motion-duration-fast) !important;
+        animation-iteration-count: 1 !important;
+        transition-duration: var(--motion-duration-fast) !important;
+        scroll-behavior: auto !important;
+      }
+    </style>
+  </head>
+  <body>
+    <slot />
+    <slot name="body-end" />
+  </body>
+</html>

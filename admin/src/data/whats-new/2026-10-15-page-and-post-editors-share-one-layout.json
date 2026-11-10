@@ -1,0 +1,14 @@
+{
+  "date": "2026-10-15",
+  "kind": "improved",
+  "title": "Page and Post editors share one layout",
+  "body": "The Page and Post editors now use the same top bar, side panes and status wording. On a phone, you can open the main menu from inside the editor.",
+  "prs": [
+    3535,
+    3536,
+    3547,
+    3534,
+    3550
+  ],
+  "order": 0
+}

@@ -1,0 +1,6 @@
+.document-list-editor__items { display: grid; gap: var(--cms-editor-gap); padding: 0; list-style: none; }
+.document-list-editor__item { display: grid; gap: var(--cms-space-3); padding: var(--cms-editor-content-padding); border: var(--cms-border-width) solid var(--cms-editor-frame-border); border-radius: var(--cms-editor-frame-radius); background: var(--cms-surface); }
+.document-list-editor__item label { display: grid; gap: .35rem; }
+.document-list-editor__item p { margin: 0; }
+.document-list-editor__item input, .document-list-editor__item select { min-width: 0; width: 100%; }
+.document-list-editor .button-row { display: flex; flex-wrap: wrap; gap: .5rem; }

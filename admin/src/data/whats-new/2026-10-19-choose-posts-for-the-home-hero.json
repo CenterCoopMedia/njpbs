@@ -1,0 +1,10 @@
+{
+  "date": "2026-10-19",
+  "kind": "new",
+  "title": "Choose Posts for the Home hero",
+  "body": "When Home selects by tags, select Show in Home hero on a Post, then save and publish it. You can also add several tags in Home hero settings. A Post can match any listed tag. The current order and limit still apply.",
+  "prs": [
+    3805
+  ],
+  "order": 0
+}

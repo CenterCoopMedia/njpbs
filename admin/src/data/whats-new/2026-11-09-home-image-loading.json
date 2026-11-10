@@ -1,0 +1,8 @@
+{
+  "date": "2026-11-09",
+  "kind": "improved",
+  "title": "Home images load faster",
+  "body": "Home opens sooner on slower connections. Images keep their size and descriptions.",
+  "prs": [],
+  "order": 1794250800000
+}

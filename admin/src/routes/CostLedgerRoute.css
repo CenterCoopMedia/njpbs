@@ -1,0 +1,1043 @@
+.cost-ledger {
+  display: grid;
+  min-width: 0;
+  gap: var(--cms-space-5);
+  color: var(--cms-ink);
+}
+
+.cost-ledger :is(section, form, fieldset) {
+  min-width: 0;
+}
+.cost-ledger :is(h2, h3, h4, p) {
+  margin: 0;
+}
+.cost-ledger p {
+  color: var(--cms-ink-muted);
+  font-size: var(--cms-font-control);
+}
+.cost-ledger h2 {
+  font-size: var(--cms-font-title);
+}
+.cost-ledger h3 {
+  font-size: var(--cms-font-base);
+}
+.cost-ledger h4 {
+  font-size: var(--cms-font-control);
+}
+
+.cost-ledger-intro,
+.cost-ledger-header-actions,
+.cost-ledger-section-heading,
+.cost-ledger-tools,
+.cost-ledger-month-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--cms-space-2);
+}
+.cost-ledger-intro > div:first-child {
+  display: grid;
+  gap: var(--cms-space-1);
+}
+.cost-ledger-header-actions {
+  justify-content: flex-end;
+  align-items: flex-end;
+  max-width: 100%;
+}
+.cost-ledger-header-actions:has(> .cost-ledger-period) {
+  display: grid;
+  grid-template-columns: minmax(0, max-content) max-content;
+  grid-template-rows: auto auto;
+  align-items: stretch;
+}
+.cost-ledger-header-actions:has(> .cost-ledger-period) > .button {
+  grid-column: 2;
+  grid-row: 2;
+}
+.cost-ledger-period {
+  display: grid;
+  grid-row: span 2;
+  grid-template-rows: subgrid;
+  min-width: 0;
+  gap: inherit;
+  font-size: var(--cms-font-control);
+}
+.cost-ledger-period select[aria-disabled="true"] {
+  color: var(--cms-ink-disabled);
+  border-color: var(--cms-line-strong);
+  background: var(--cms-surface-muted);
+  cursor: not-allowed;
+}
+.cost-ledger-period-reason {
+  grid-column: 1 / -1;
+  grid-row: 3;
+  min-inline-size: 0;
+  contain: inline-size;
+}
+.cost-ledger-layout {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--cms-space-5);
+  min-width: 0;
+}
+.cost-ledger-main {
+  container-type: inline-size;
+  flex: 1;
+  min-width: 0;
+  display: grid;
+  gap: var(--cms-space-3);
+}
+.cost-ledger-total-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-rows: auto auto auto;
+  background: var(--cms-surface-content);
+  border: 1px solid var(--cms-boundary-strong);
+  border-radius: var(--cms-radius-panel);
+}
+.cost-ledger-total {
+  display: grid;
+  grid-row: span 3;
+  grid-template-rows: subgrid;
+  gap: var(--cms-space-2);
+  padding: var(--cms-space-4);
+  border: 0;
+  border-radius: 0;
+  border-inline-end: 1px solid var(--cms-line);
+  background: transparent;
+  box-shadow: none;
+}
+.cost-ledger-total:last-child {
+  border-inline-end: 0;
+}
+.cost-ledger-total > span {
+  color: var(--cms-ink-muted);
+  font-size: var(--cms-font-control);
+}
+.cost-ledger-total strong {
+  font-size: clamp(1rem, 2.6cqw, 1.75rem);
+  font-variant-numeric: tabular-nums;
+  overflow-wrap: anywhere;
+  line-height: 1.25;
+}
+.cost-ledger-total p {
+  font-size: var(--cms-font-sm);
+}
+.cost-ledger-coverage {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: var(--cms-space-3);
+  padding: var(--cms-space-2) var(--cms-space-3);
+  border: 1px solid var(--cms-warning-line);
+  border-radius: var(--cms-radius-small);
+  background: var(--cms-warning-soft);
+  font-size: var(--cms-font-control);
+}
+.cost-ledger-coverage .button {
+  flex: none;
+}
+.cost-ledger-section-heading {
+  margin-bottom: var(--cms-space-3);
+}
+.cost-ledger-section-heading > .cost-ledger-tools {
+  margin-bottom: 0;
+}
+.cost-ledger-tools {
+  justify-content: flex-start;
+  margin-bottom: var(--cms-space-2);
+}
+.cost-ledger-tools > .field-control {
+  flex: 1;
+  width: 8rem;
+  min-width: 0;
+}
+.cost-ledger-filter {
+  min-width: 0;
+}
+.cost-ledger-filter-toggle {
+  display: none;
+}
+.cost-ledger-scopes {
+  font-size: var(--cms-font-sm);
+  color: var(--cms-ink-muted);
+}
+.cost-ledger-scopes label {
+  display: flex;
+  align-items: center;
+  gap: var(--cms-space-1);
+}
+.cost-ledger-scopes .field-control {
+  min-height: var(--cms-field-compact-height);
+  padding-block: var(--cms-space-1);
+  width: auto;
+  font-size: var(--cms-font-control);
+}
+.cost-ledger-table-frame {
+  max-width: 100%;
+}
+
+/* The native ledger keeps its columns at every width; secondary facts move to Details. */
+.cost-ledger-lines-table {
+  --ledger-row-height: var(--cms-table-row-compact);
+  width: 100%;
+  border-collapse: collapse;
+  table-layout: fixed;
+  font-size: var(--cms-table-font-body);
+  background: var(--cms-surface-content);
+}
+.cost-ledger[data-density="comfortable"] .cost-ledger-lines-table {
+  --ledger-row-height: var(--cms-table-row-comfortable);
+}
+.cost-ledger-lines-table th {
+  padding: var(--cms-space-2) var(--cms-browse-cell-padding-inline);
+  background: var(--cms-browse-table-header);
+  border-bottom: 1px solid var(--cms-browse-table-header-line);
+  font-size: var(--cms-font-sm);
+  text-align: start;
+}
+.cost-ledger-lines-table td {
+  /* Native table-cell height is a minimum; larger text and wrapping grow the row. */
+  height: var(--ledger-row-height);
+  padding: 5px var(--cms-browse-cell-padding-inline);
+  border-bottom: 1px solid var(--cms-browse-table-line);
+  vertical-align: middle;
+  line-height: 1.3;
+}
+.cost-ledger-lines-table th:first-child {
+  width: 30%;
+}
+.cost-ledger-lines-table th:nth-child(2) {
+  width: 17%;
+}
+.cost-ledger-lines-table th:nth-child(3) {
+  width: 12%;
+}
+.cost-ledger-lines-table th:nth-child(4) {
+  width: 19%;
+}
+.cost-ledger-lines-table th:last-child {
+  width: calc(var(--cms-control-compact-target) + 6px);
+}
+.cost-ledger-lines-table td:last-child {
+  padding-inline: 3px;
+}
+.cost-ledger-lines-table tr:nth-child(even) {
+  background: var(--cms-browse-table-stripe);
+}
+.cost-ledger-lines-table tr[data-selected="true"] {
+  background: var(--cms-surface-selected);
+}
+.cost-ledger-lines-table tr[data-selected="true"] > td:first-child {
+  box-shadow: inset 2px 0 var(--cms-brand);
+}
+.cost-ledger-lines-table
+  tr:focus-within:not(:has(.cost-ledger-amount:focus-visible)) {
+  outline: 2px solid var(--cms-focus);
+  outline-offset: -2px;
+}
+.cost-ledger-lines-table .cost-ledger-number {
+  text-align: end;
+}
+.cost-ledger-number {
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.cost-ledger-name,
+.cost-ledger-amount {
+  border: 0;
+  border-radius: var(--cms-radius-small);
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+  min-height: var(--cms-control-compact-target);
+  max-width: 100%;
+  padding: 0;
+}
+.cost-ledger-name {
+  text-align: start;
+  font-weight: 600;
+  overflow-wrap: break-word;
+}
+.cost-ledger-amount {
+  text-align: end;
+  font-weight: 600;
+}
+.cost-ledger-blank {
+  color: var(--cms-warning);
+  font-weight: 400;
+}
+.cost-ledger-source small {
+  display: block;
+  color: var(--cms-ink-muted);
+  font-size: var(--cms-font-xs);
+}
+.cost-ledger-mobile-meta {
+  display: none;
+}
+.cost-ledger-pending {
+  display: block;
+  font-weight: 400;
+  color: var(--cms-brand);
+  font-size: var(--cms-font-xs);
+}
+.cost-ledger-inspector {
+  flex: none;
+  width: var(--cms-pane-details-width);
+}
+.cost-ledger-inspector .ui-inspector-body {
+  padding: var(--cms-space-4);
+}
+.cost-ledger-detail-section {
+  display: grid;
+  gap: var(--cms-space-3);
+  padding-block-end: var(--cms-space-4);
+  margin-block-end: var(--cms-space-4);
+  border-bottom: 1px solid var(--cms-line);
+}
+.cost-ledger-detail-section form,
+.cost-ledger-comparison-edit,
+.cost-ledger-comparison-edit fieldset {
+  display: grid;
+  gap: var(--cms-space-3);
+}
+.cost-ledger :is(form, fieldset) {
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+.cost-ledger-detail-section label,
+.cost-ledger-comparison-edit label {
+  display: grid;
+  gap: var(--cms-field-gap);
+  font-size: var(--cms-font-control);
+}
+.cost-ledger-detail-section .field-control,
+.cost-ledger-comparison-edit .field-control {
+  width: 100%;
+  min-width: 0;
+}
+.cost-ledger-detail-section label:has([type="checkbox"]) {
+  display: flex;
+  align-items: center;
+  min-height: var(--cms-target-coarse);
+}
+.cost-ledger-facts,
+.cost-ledger-breakdown dl {
+  display: grid;
+  gap: var(--cms-space-2);
+  margin: 0;
+  font-size: var(--cms-font-control);
+}
+.cost-ledger-facts > div,
+.cost-ledger-breakdown dl > div {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: var(--cms-space-3);
+}
+.cost-ledger-facts dd,
+.cost-ledger-breakdown dd {
+  margin: 0;
+  text-align: end;
+  overflow-wrap: break-word;
+}
+.cost-ledger-facts dt,
+.cost-ledger-breakdown dt {
+  color: var(--cms-ink-muted);
+}
+.cost-ledger-breakdown {
+  display: grid;
+  gap: var(--cms-space-3);
+  padding: var(--cms-space-4) 0;
+  border: 0;
+  border-radius: 0;
+  border-top: 1px solid var(--cms-line);
+  background: transparent;
+  box-shadow: none;
+}
+.cost-ledger-month-actions {
+  justify-content: flex-end;
+}
+
+/* Ancillary tables use the existing responsive card layout until their task-tab pass. */
+.cost-ledger-table {
+  width: 100%;
+  min-width: 0;
+}
+.cost-ledger-table td {
+  vertical-align: top;
+  overflow-wrap: break-word;
+}
+.cost-ledger-table td > small {
+  display: block;
+  color: var(--cms-ink-muted);
+  font-size: var(--cms-font-sm);
+}
+.cost-ledger-hardware-table .field-control {
+  width: 100%;
+  min-width: 0;
+}
+.cost-ledger-comparison-edit summary {
+  cursor: pointer;
+  color: var(--cms-brand);
+}
+.cost-ledger-skeleton {
+  display: grid;
+  gap: var(--cms-space-5);
+  min-width: 0;
+}
+.cost-ledger-skeleton-breakdowns {
+  display: none;
+}
+
+@media (max-width: 760px) {
+  .cost-ledger {
+    gap: var(--cms-space-3);
+  }
+  .cost-ledger-total-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .cost-ledger-total {
+    padding: var(--cms-space-3);
+    gap: var(--cms-space-1);
+  }
+  .cost-ledger-total:nth-child(2) {
+    border-inline-end: 0;
+  }
+  .cost-ledger-total:last-child {
+    grid-column: 1 / -1;
+    grid-row: auto;
+    border-top: 1px solid var(--cms-line);
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: var(--cms-space-2);
+    padding-block: var(--cms-space-2);
+  }
+  .cost-ledger-total:last-child strong {
+    font-size: 1rem;
+  }
+  .cost-ledger-total:last-child p {
+    margin-inline-start: auto;
+  }
+  .cost-ledger-total strong {
+    font-size: 1.25rem;
+  }
+  .cost-ledger-coverage {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: var(--cms-space-1);
+  }
+  .cost-ledger-coverage .button {
+    min-height: var(--cms-target-coarse);
+  }
+  .cost-ledger-intro {
+    align-items: stretch;
+  }
+  .cost-ledger-header-actions {
+    justify-content: flex-start;
+  }
+  .cost-ledger-lines-table
+    :is(.cost-ledger-category, .cost-ledger-project, .cost-ledger-source) {
+    display: none;
+  }
+  .cost-ledger-lines-table th:first-child {
+    width: auto;
+  }
+  .cost-ledger-lines-table th:nth-child(4) {
+    width: 7.8rem;
+  }
+  .cost-ledger-lines-table th:last-child {
+    width: calc(var(--cms-control-compact-target) + 6px);
+  }
+  .cost-ledger-lines-table :is(th, td) {
+    padding-inline: var(--cms-space-2);
+  }
+  .cost-ledger-lines-table td {
+    height: max(var(--ledger-row-height), 64px);
+  }
+  .cost-ledger-mobile-meta {
+    display: block;
+    font-size: var(--cms-font-xs);
+    color: var(--cms-ink-muted);
+    margin-top: var(--cms-space-1);
+  }
+  .cost-ledger-filter-toggle {
+    display: inline-flex;
+  }
+  .cost-ledger-filter {
+    display: none;
+  }
+  [data-filters-open="true"] .cost-ledger-filter {
+    display: block;
+    flex: 1 1 40%;
+  }
+  .cost-ledger-filter .field-control {
+    width: 100%;
+  }
+}
+@media (any-pointer: coarse) {
+  .cost-ledger-name,
+  .cost-ledger-amount {
+    min-height: var(--cms-target-coarse);
+  }
+}
+@media (max-height: 540px) and (min-width: 62rem) {
+  .cost-ledger-inspector:not(.ui-inspector-sheet) {
+    position: static;
+    max-height: none !important;
+  }
+}
+@media (forced-colors: active) {
+  .cost-ledger-lines-table tr[data-selected="true"] {
+    outline: 2px solid Highlight;
+    outline-offset: -2px;
+  }
+  .cost-ledger-lines-table tr[data-selected="true"] > td:first-child {
+    box-shadow: none;
+  }
+  .cost-ledger-name,
+  .cost-ledger-amount {
+    color: ButtonText;
+  }
+}
+
+.cost-ledger-lines-table:has(.action-control-text) th:last-child {
+  width: calc(
+    var(--cms-control-compact-target) + 2 * var(--cms-control-padding-inline)
+  );
+}
+
+.cost-ledger-tools .field-control {
+  min-height: var(--cms-field-compact-height);
+  height: max(var(--cms-field-compact-height), calc(1.4em + 18px));
+  padding: 8px 10px;
+  font-size: var(--cms-font-control);
+  line-height: 1.4;
+}
+@media (any-pointer: coarse) {
+  .cost-ledger-tools .field-control {
+    font-size: max(16px, 1rem);
+  }
+}
+
+/* Keep secondary facts in Details when enlarged type outgrows the table. */
+@container (max-width: 35rem) {
+  .cost-ledger-lines-table
+    :is(.cost-ledger-category, .cost-ledger-project, .cost-ledger-source) {
+    display: none;
+  }
+  .cost-ledger-lines-table th:first-child {
+    width: auto;
+  }
+  .cost-ledger-lines-table th:nth-child(4) {
+    width: 7.8rem;
+  }
+  .cost-ledger-mobile-meta {
+    display: block;
+    font-size: var(--cms-font-xs);
+    color: var(--cms-ink-muted);
+    margin-top: var(--cms-space-1);
+  }
+}
+
+.cost-ledger-task-body {
+  display: grid;
+  gap: var(--cms-space-4);
+  min-width: 0;
+}
+.cost-ledger-history-periods {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--cms-space-2);
+}
+.cost-ledger-save-state {
+  font-size: var(--cms-font-control);
+  white-space: nowrap;
+}
+.cost-ledger-header-actions select {
+  width: auto;
+  max-width: 12rem;
+}
+.cost-ledger-reference-table th:first-child,
+.cost-ledger-fleet-table th:first-child {
+  width: 32%;
+}
+.cost-ledger-reference-table th:nth-child(2),
+.cost-ledger-fleet-table th:nth-child(2) {
+  width: 24%;
+}
+.cost-ledger-reference-table th:nth-child(3),
+.cost-ledger-fleet-table th:nth-child(3) {
+  width: auto;
+}
+.cost-ledger-reference-table th:last-child,
+.cost-ledger-fleet-table th:last-child {
+  width: calc(var(--cms-control-compact-target) + 6px);
+}
+:is(.cost-ledger-reference-table, .cost-ledger-fleet-table) small {
+  display: block;
+  font-size: var(--cms-font-xs);
+  color: var(--cms-ink-muted);
+}
+.cost-ledger-lines-frame {
+  overflow: visible;
+}
+.cost-ledger-lines-frame th {
+  position: sticky;
+  top: var(--costs-sticky-offset, 0px);
+  z-index: 2;
+}
+
+.cost-ledger-inspector:not(.ui-inspector-sheet) {
+  top: var(--costs-sticky-offset, 0px);
+  max-height: calc(100dvh - var(--costs-sticky-offset, 0px));
+}
+.workspace-shell[data-costs-short] > .workspace-chrome {
+  position: static;
+}
+@media (max-width: 760px) {
+  .cost-ledger-reference-table th:nth-child(3),
+  .cost-ledger-reference-table td:nth-child(3),
+  .cost-ledger-fleet-table th:nth-child(3),
+  .cost-ledger-fleet-table td:nth-child(3) {
+    display: none;
+  }
+  .cost-ledger-reference-table th:first-child,
+  .cost-ledger-fleet-table th:first-child {
+    width: auto;
+  }
+  .cost-ledger-reference-table th:nth-child(2),
+  .cost-ledger-fleet-table th:nth-child(2) {
+    width: 40%;
+  }
+  [data-browsing-workspace] .cost-ledger-intro {
+    display: none;
+  }
+  .cost-ledger-header-actions {
+    gap: var(--cms-space-1);
+  }
+  .cost-ledger-header-actions select {
+    max-width: 10rem;
+  }
+}
+
+.cost-ledger-history-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: var(--cms-table-font-body);
+}
+.cost-ledger-history-table :is(th, td) {
+  text-align: start;
+  padding: var(--cms-space-3);
+  border-bottom: 1px solid var(--cms-line);
+}
+.cost-ledger-history-table th {
+  background: var(--cms-browse-table-header);
+}
+@media (max-width: 760px) {
+  .cost-ledger-history-table thead {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+  }
+  .cost-ledger-history-table tbody {
+    display: grid;
+    gap: var(--cms-space-3);
+  }
+  .cost-ledger-history-table tr {
+    display: grid;
+    border: 1px solid var(--cms-line);
+  }
+  .cost-ledger-history-table td {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    gap: var(--cms-space-3);
+    text-align: end;
+    overflow-wrap: break-word;
+  }
+  .cost-ledger-history-table td::before {
+    content: attr(data-label);
+    text-align: start;
+    color: var(--cms-ink-muted);
+  }
+}
+
+.cost-ledger-phone-state {
+  display: none;
+}
+@media (max-width: 760px) {
+  .cost-ledger-phone-state {
+    display: inline;
+    font-size: var(--cms-font-control);
+  }
+}
+
+.cost-ledger-month-review {
+  width: calc(100% - 2 * var(--cms-space-4));
+  max-height: calc(100dvh - 2 * var(--cms-space-4));
+  overflow: auto;
+}
+.cost-ledger-month-review::backdrop {
+  background: var(--color-scrim);
+}
+.cost-ledger-month-review .cost-ledger-facts {
+  margin-block: var(--cms-space-4);
+}
+
+@media (min-width: 761px) and (max-width: 1023px) {
+  .cost-ledger-pending-copy {
+    display: none;
+  }
+}
+
+.cost-ledger-month-controls {
+  display: flex;
+  align-items: center;
+  gap: var(--cms-space-1);
+  min-width: 0;
+}
+
+/* Costs controls and portalled task Inspectors keep the same row and section rhythm. */
+.cost-ledger-header-actions:has(> .cost-ledger-month-controls) {
+  align-items: stretch;
+}
+.cost-ledger-month-controls {
+  align-items: stretch;
+}
+.cost-ledger-header-actions select {
+  max-width: none;
+}
+.cost-ledger-lines-table thead,
+.cost-ledger-lines-table thead tr {
+  background: var(--cms-browse-table-header);
+}
+.cost-ledger-tools .field-control {
+  height: max(var(--cms-field-compact-height), calc(1.4em + 18px));
+  min-height: var(--cms-field-compact-height);
+  padding: 8px 10px;
+  font-size: var(--cms-font-control);
+  line-height: 1.4;
+}
+.cost-ledger-inspector :is(form, fieldset) {
+  margin: 0;
+  padding: 0;
+  border: 0;
+  min-width: 0;
+}
+.cost-ledger-inspector .ui-inspector-body > p {
+  margin: 0;
+}
+.cost-ledger-inspector .ui-inspector-body > .inline-message + p,
+.cost-ledger-inspector .ui-inspector-body > p + p,
+.cost-ledger-inspector .ui-inspector-body > p + form {
+  margin-block-start: var(--cms-space-3);
+}
+.cost-ledger-comparison-edit > fieldset legend {
+  padding: 0;
+  margin-block-end: var(--cms-space-2);
+  font-size: var(--cms-font-sm);
+  font-weight: 600;
+  color: var(--cms-ink);
+}
+.cost-ledger-history-periods > .button {
+  padding-inline: 0;
+}
+
+@media (any-pointer: coarse) {
+  .cost-ledger-tools .field-control {
+    font-size: max(16px, 1rem);
+  }
+}
+
+.cost-ledger-phone-actions {
+  display: none;
+}
+@media (max-width: 619px) {
+  .workspace-shell:has(.cost-ledger-header-actions) .workspace-document-bar {
+    display: grid;
+    grid-template-columns: var(--cms-control-standard-target) minmax(0, 1fr);
+    gap: var(--cms-space-2);
+  }
+  .workspace-shell:has(.cost-ledger-header-actions) .editor-menu-trigger {
+    grid-column: 1;
+    grid-row: 1;
+  }
+  .workspace-shell:has(.cost-ledger-header-actions) .workspace-heading {
+    grid-column: 2;
+    grid-row: 1;
+  }
+  .workspace-shell:has(.cost-ledger-header-actions) .workspace-tools {
+    grid-column: 1 / -1;
+    grid-row: 2;
+    display: flex;
+    width: 100%;
+    max-width: none;
+  }
+  .workspace-shell:has(.cost-ledger-header-actions)
+    .browse-workspace-find
+    .workspace-finder-trigger {
+    display: none;
+  }
+  .workspace-shell:has(.cost-ledger-header-actions) .workspace-actions {
+    flex: 1;
+    min-width: 0;
+  }
+  .cost-ledger-header-actions {
+    flex-wrap: nowrap;
+    width: 100%;
+  }
+  .workspace-shell:has(.cost-ledger-header-actions)
+    .cost-ledger-header-actions
+    > .button[aria-label="Download CSV"],
+  .workspace-shell:has(.cost-ledger-header-actions)
+    .cost-ledger-header-actions
+    > .ui-menu-trigger {
+    display: none;
+  }
+  .cost-ledger-month-controls {
+    flex: 1;
+  }
+  .cost-ledger-header-actions select {
+    width: 100%;
+    min-width: 0;
+  }
+  .cost-ledger-phone-actions {
+    display: grid;
+    gap: 0;
+  }
+}
+
+.cost-ledger-inspector
+  .cost-ledger-comparison-edit
+  > label
+  > :is(input, select) {
+  min-height: var(--cms-field-standard-height);
+  height: max(var(--cms-field-standard-height), calc(1.4em + 18px));
+  padding: 8px 10px;
+  font-size: var(--cms-font-control);
+  line-height: 1.4;
+}
+@media (any-pointer: coarse) {
+  .cost-ledger-inspector
+    .cost-ledger-comparison-edit
+    > label
+    > :is(input, select) {
+    font-size: max(16px, 1rem);
+  }
+}
+
+.cost-ledger-fleet-table th.cost-ledger-number {
+  white-space: normal;
+}
+.cost-ledger-global-save:not([aria-busy="true"]) .async-action-copy {
+  transform: translateX(
+    calc((var(--cms-icon-control-size) + var(--cms-control-label-gap)) / -2)
+  );
+}
+
+@media (max-width: 619px) {
+  .workspace-shell:has(.cost-ledger-global-save) .workspace-document-bar {
+    position: relative;
+  }
+  .workspace-shell:has(.cost-ledger-global-save) .cost-ledger-global-save {
+    position: absolute;
+    inset-block-start: 10px;
+    inset-inline-end: 12px;
+  }
+}
+
+.cost-ledger-month-review .cost-ledger-draft-actions {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+}
+.cost-ledger-month-review .cost-ledger-draft-actions > .button {
+  width: 100%;
+}
+.cost-ledger-month-review .cost-ledger-discard {
+  color: var(--cms-danger);
+  border-color: var(--cms-danger);
+}
+.cost-ledger-month-review .cost-ledger-month-actions {
+  flex-direction: row;
+}
+.cost-ledger-month-review .async-action-button {
+  position: relative;
+  padding-inline: calc(
+    var(--cms-control-padding-inline) + var(--cms-icon-control-size) +
+      var(--cms-control-label-gap)
+  );
+}
+.cost-ledger-month-review .async-action-icon-slot {
+  display: none;
+}
+.cost-ledger-month-review [aria-busy="true"] .async-action-icon-slot {
+  display: inline-flex;
+  position: absolute;
+  inset-inline-start: var(--cms-control-padding-inline);
+}
+@media (max-width: 32rem) {
+  .cost-ledger-month-review .cost-ledger-month-actions {
+    flex-direction: column;
+    align-items: stretch;
+  }
+}
+
+@media (max-width: 619px) {
+  .cost-ledger-header-actions[data-month-locked="true"] {
+    align-items: flex-start;
+  }
+  .cost-ledger-header-actions[data-month-locked="true"]
+    .cost-ledger-month-controls {
+    flex-direction: column;
+    gap: var(--cms-space-1);
+  }
+}
+.cost-ledger-month-hint {
+  margin: 0;
+  align-self: stretch;
+  contain: inline-size;
+  color: var(--cms-ink-muted);
+  font-size: var(--cms-font-control);
+  line-height: 1.4;
+}
+.cost-ledger-month-controls select[aria-disabled="true"] {
+  color: var(--cms-ink-disabled);
+  border-color: var(--cms-line-strong);
+  background: var(--cms-surface-muted);
+  cursor: not-allowed;
+}
+
+.cost-ledger-retained-amount dl {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--cms-space-2);
+}
+.cost-ledger-retained-amount dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+@media (min-width: 761px) and (max-width: 1023px) {
+  .cost-ledger-header-actions[data-month-locked="true"] {
+    align-items: flex-start;
+  }
+  .cost-ledger-header-actions[data-month-locked="true"]
+    .cost-ledger-month-controls {
+    flex-direction: column;
+    gap: var(--cms-space-1);
+  }
+  .workspace-shell:has(.cost-ledger-header-actions[data-month-locked="true"])
+    .workspace-document-bar,
+  .workspace-shell:has(.cost-ledger-header-actions[data-month-locked="true"])
+    .workspace-tools {
+    align-items: flex-start;
+  }
+  .workspace-shell:has(.cost-ledger-header-actions[data-month-locked="true"])
+    .workspace-heading {
+    min-height: var(--cms-control-height);
+  }
+}
+
+@media (min-width: 620px) and (max-width: 760px) {
+  .workspace-shell:has(.cost-ledger-header-actions) .workspace-document-bar {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    gap: var(--cms-space-2);
+  }
+  .workspace-shell:has(.cost-ledger-header-actions) .workspace-heading {
+    grid-column: 1;
+    grid-row: 1;
+    min-height: var(--cms-control-height);
+  }
+  .workspace-shell:has(.cost-ledger-header-actions) .workspace-tools {
+    grid-column: 1;
+    grid-row: 2;
+    width: 100%;
+    max-width: none;
+    align-items: flex-start;
+  }
+  .workspace-shell:has(.cost-ledger-header-actions) .workspace-actions {
+    flex: 1;
+    min-width: 0;
+  }
+  .cost-ledger-header-actions {
+    gap: var(--cms-space-2);
+  }
+  .cost-ledger-header-actions[data-month-locked="true"] {
+    width: 100%;
+    align-items: flex-start;
+  }
+  .cost-ledger-header-actions[data-month-locked="true"]
+    .cost-ledger-month-controls {
+    flex-direction: column;
+    gap: var(--cms-space-1);
+  }
+}
+
+.cost-ledger-load-error .inline-message-copy {
+  flex-wrap: wrap;
+}
+.cost-ledger-load-error .inline-message-copy > p {
+  flex: 1 1 20rem;
+}
+.cost-ledger-load-error .inline-message-copy > button {
+  flex-shrink: 0;
+}
+
+/* Keep an active Costs operation visible in the existing phone status slot. */
+@media (max-width: 619px) {
+  .workspace-editor-document-bar
+    .workspace-status:has(.cost-ledger-save-state[data-activity="true"]) {
+    display: flex;
+    min-width: 0;
+  }
+}
+
+@media (min-width: 620px) and (max-width: 1023px) {
+  .cost-ledger-save-state[data-activity="true"] {
+    max-inline-size: 7rem;
+    white-space: normal;
+  }
+}
+
+@media (max-width: 619px) {
+  .workspace-shell:has(.cost-ledger-global-save)
+    .workspace-heading:has(.cost-ledger-save-state[data-activity="true"]) {
+    display: grid;
+    grid-template-rows: var(--cms-control-height) auto;
+    gap: var(--cms-space-1);
+  }
+  .workspace-shell:has(.cost-ledger-global-save)
+    .workspace-status:has(.cost-ledger-save-state[data-activity="true"]) {
+    margin-inline-start: 0;
+    justify-self: start;
+  }
+}
+
+@media (min-width: 620px) and (max-width: 1023px) {
+  .workspace-shell:has(.cost-ledger-global-save)
+    .workspace-heading:has(.cost-ledger-save-state[data-activity="true"]) {
+    display: grid;
+    grid-template-columns: max-content minmax(0, 1fr);
+    grid-template-rows: var(--cms-control-height) auto;
+    gap: var(--cms-space-1) var(--cms-space-2);
+  }
+  .workspace-shell:has(.cost-ledger-global-save)
+    .workspace-heading:has(.cost-ledger-save-state[data-activity="true"])
+    .workspace-title {
+    grid-column: 2;
+    grid-row: 1;
+  }
+  .workspace-shell:has(.cost-ledger-global-save)
+    .workspace-status:has(.cost-ledger-save-state[data-activity="true"]) {
+    grid-column: 1 / -1;
+    grid-row: 2;
+    margin-inline-start: 0;
+    justify-self: start;
+  }
+}

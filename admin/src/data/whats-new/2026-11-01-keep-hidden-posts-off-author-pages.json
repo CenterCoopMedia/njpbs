@@ -1,0 +1,8 @@
+{
+  "date": "2026-11-01",
+  "kind": "fixed",
+  "title": "Keep hidden Posts off author pages",
+  "body": "Posts hidden from search engines stay off author pages, including pinned Posts. The Pinned post field explains this rule. Each Post remains available at its own address.",
+  "prs": [],
+  "order": -4
+}

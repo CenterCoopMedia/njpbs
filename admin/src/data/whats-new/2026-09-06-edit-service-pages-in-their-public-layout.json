@@ -1,0 +1,10 @@
+{
+  "date": "2026-09-06",
+  "kind": "new",
+  "title": "Edit service pages in their public layout",
+  "body": "Service pages, such as Live, open in the editor with their public layout. The Live page shows the current TV schedule while you edit.",
+  "prs": [
+    1584
+  ],
+  "order": 0
+}

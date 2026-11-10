@@ -1,0 +1,13 @@
+{
+  "date": "2026-09-16",
+  "kind": "new",
+  "title": "Choose slides for the Home hero",
+  "body": "The Home hero now shows branded slides that you choose. Hero controls are in the main editing panel. NJ Spotlight News selections keep their story image and show the story date.",
+  "prs": [
+    1789,
+    1801,
+    1805,
+    1891
+  ],
+  "order": -2
+}

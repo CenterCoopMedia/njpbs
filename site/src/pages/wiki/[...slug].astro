@@ -1,0 +1,67 @@
+---
+// Public OKF wiki concept pages (/wiki/<section>/<concept>/). One route per
+// PUBLIC concept in the bundle; the markdown body renders through WikiLayout, and
+// its concept-to-concept .md links are rewritten by the rehype plugin.
+import WikiLayout from "../../layouts/WikiLayout.astro";
+import { getCollection, render } from "astro:content";
+import {
+  idToSlug,
+  slugToPath,
+  dirOf,
+  groupPublicPages,
+  WIKI_SECTIONS,
+} from "../../lib/wiki";
+
+export async function getStaticPaths() {
+  const all = await getCollection("wiki", (e) => e.data.public === true);
+  // Concept pages only — directory index/log files are never public, but guard
+  // anyway so a future public index.md can't collide with the /wiki/ landing.
+  const concepts = all.filter(
+    (e) => e.id !== "index" && !e.id.endsWith("/index"),
+  );
+
+  const navPages = concepts.map((e) => {
+    const slug = idToSlug(e.id);
+    return {
+      id: e.id,
+      slug,
+      path: slugToPath(slug),
+      title: e.data.title ?? e.id,
+      description: e.data.description ?? "",
+      type: e.data.type,
+    };
+  });
+  const nav = groupPublicPages(navPages);
+
+  return concepts.map((entry) => ({
+    params: { slug: idToSlug(entry.id) },
+    props: { entry, nav },
+  }));
+}
+
+const { entry, nav } = Astro.props;
+const { Content } = await render(entry);
+
+const slug = idToSlug(entry.id);
+const section = WIKI_SECTIONS.find((s) => s.dir === dirOf(entry.id));
+const verified = entry.data.verified
+  ? new Date(entry.data.verified).toISOString().slice(0, 10)
+  : null;
+const description =
+  entry.data.description ?? `${entry.data.title ?? entry.id}, from the NJ PBS public record.`;
+---
+
+<WikiLayout
+  title={entry.data.title ?? entry.id}
+  description={description}
+  nav={nav}
+  current={slug}
+  section={section}
+  type={entry.data.type}
+  verified={verified}
+  tags={entry.data.tags}
+>
+  <article class="wiki-prose">
+    <Content />
+  </article>
+</WikiLayout>

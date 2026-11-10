@@ -1,0 +1,58 @@
+---
+import { escapeHtml } from "../../../packages/content-core/src/content-model";
+import { renderBlock } from "../../../packages/content-core/src/content-render.ts";
+import { renderPostMediaPlayer } from "../../../packages/content-core/src/post-media-player.ts";
+import { resolveCmsPostAssets, responsiveImageKey } from "../lib/cms-responsive-image";
+import type { CmsPostBuildData } from "../lib/cms-posts-projection";
+import { renderLiveBlog } from "../../../packages/content-core/src/live-blog-render.ts";
+import { isPrivatePreviewRender, renderAuthors } from "../lib/cms-render-context";
+import type { LiveBlogData } from "../../../packages/content-core/src/live-blog.ts";
+import { getEntry, getCollection } from "astro:content";
+import { NJ_DECIDES_SETTINGS_ID } from "../../../packages/content-core/src/cms-settings";
+import { renderNjDecidesBand } from "../../../packages/content-core/src/nj-decides-render";
+import "../../../packages/content-core/src/live-blog.css";
+import "../../../packages/content-core/src/nj-decides.css";
+import "../styles/post-media-player.css";
+import LiveBlogImageDialog from "./LiveBlogImageDialog.astro";
+
+interface Props { postId: string; publishedAt: string; liveBlog: LiveBlogData; assets: CmsPostBuildData["assets"]; canonicalUrl: string }
+const { postId, publishedAt, liveBlog, assets, canonicalUrl } = Astro.props;
+const preview = isPrivatePreviewRender(Astro.locals.cmsRender);
+const branding = liveBlog.branding !== "nj-decides-2026" ? undefined : Astro.locals.cmsRender
+  ? Astro.locals.cmsRender.content.settings.find(setting => setting.settingId === NJ_DECIDES_SETTINGS_ID)
+  : (await getEntry("cmsPublicSiteChrome", NJ_DECIDES_SETTINGS_ID))?.data;
+const mediaBlocks = liveBlog.updates.flatMap((entry, order) => entry.media?.kind === "image"
+  ? [{ id: entry.id, type: "image" as const, order, visible: true, data: entry.media.data }] : []);
+const resolved = await resolveCmsPostAssets(mediaBlocks, assets);
+const authors = Astro.locals.cmsRender ? renderAuthors(Astro.locals.cmsRender) : await getCollection("cmsAuthorsPublic");
+const html = renderLiveBlog(liveBlog, { id: postId, asOf: publishedAt, preview, canonicalUrl, reporters: authors.map(author => author.data),
+  renderBranding: () => renderNjDecidesBand({ branding }), renderMedia(media, id) {
+  if (media.kind !== "image") return renderPostMediaPlayer(media, { id, preview, headingLevel: 4, lazyPoster: true,
+    poster: media.posterAssetId ? assets[media.posterAssetId] ?? null : null });
+  const rendered = renderBlock({ id, type: "image", order: 0, visible: true, data: media.data }, {
+    showImageCredits: true, generatedHeadingLevel: 4,
+    resolveAsset: (assetId, placement) => resolved.get(responsiveImageKey(assetId, placement)) ?? null,
+  });
+  const full = assets[media.data.assetId];
+  return full ? `<a class="live-blog__image-link" data-live-blog-image href="${escapeHtml(full.url)}" target="_blank" rel="noopener"><span class="live-blog__sr-only">Expand image. </span>${rendered}<span class="live-blog__image-hint" aria-hidden="true">Expand image ↗</span><span class="live-blog__sr-only" data-live-blog-image-fallback> (opens in a new tab)</span></a>` : rendered;
+} });
+---
+<Fragment set:html={html} />
+<LiveBlogImageDialog fallbackUrl={canonicalUrl} />
+
+<script>
+  import { installLiveBlogImages } from "../lib/live-blog-images";
+  import { installLiveBlogPagination } from "../lib/live-blog-pagination";
+  import { installLiveBlogFollowUps } from "../lib/live-blog-follow-ups";
+  import { installLiveBlogUpdates } from "../lib/live-blog-updates";
+  import { installPostMediaPlayers } from "../lib/post-media-player";
+  import { installLiveBlogInteractions } from "../../../packages/content-core/src/live-blog-interactions";
+  document.querySelectorAll<HTMLElement>("[data-live-blog]").forEach(root => {
+    installLiveBlogImages(root);
+    installLiveBlogFollowUps(root);
+    installLiveBlogInteractions(root);
+    installLiveBlogUpdates(root, () => { installPostMediaPlayers(document); installLiveBlogImages(root); });
+    installLiveBlogPagination(root);
+  });
+  installPostMediaPlayers(document);
+</script>

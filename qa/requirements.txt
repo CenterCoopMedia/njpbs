@@ -1,0 +1,9 @@
+# Python dependencies for axe_scan_browser_test.py and axe_scan.py. Other QA scripts use
+# the standard library.
+#
+#   pip install -r qa/requirements.txt
+#   Use installed Google Chrome 156.0.8078.73 or later; no bundled browser download.
+#
+# axe_scan.py also needs the pinned axe-core from site/node_modules.
+#
+playwright==1.64.1

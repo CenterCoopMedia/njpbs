@@ -1,0 +1,33 @@
+{
+  "Rules": [
+    {
+      "ID": "AbortIncompleteMultipartUploads",
+      "Filter": {
+        "Prefix": ""
+      },
+      "Status": "Enabled",
+      "AbortIncompleteMultipartUpload": {
+        "DaysAfterInitiation": 7
+      }
+    },
+    {
+      "ID": "TransitionOriginalsToIntelligentTiering",
+      "Status": "Enabled",
+      "Filter": {
+        "ObjectSizeGreaterThan": 0
+      },
+      "Transitions": [
+        {
+          "Days": 0,
+          "StorageClass": "INTELLIGENT_TIERING"
+        }
+      ],
+      "NoncurrentVersionTransitions": [
+        {
+          "NoncurrentDays": 30,
+          "StorageClass": "INTELLIGENT_TIERING"
+        }
+      ]
+    }
+  ]
+}

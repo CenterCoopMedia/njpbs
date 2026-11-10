@@ -1,0 +1,13 @@
+{
+  "date": "2026-10-09",
+  "kind": "new",
+  "title": "Add your own links and sections to the rail",
+  "body": "You can add custom planks and group them into spans in the rail. Grips show which items you can drag, and navigation settings take less space.",
+  "prs": [
+    2598,
+    2559,
+    2670,
+    2956
+  ],
+  "order": -4
+}

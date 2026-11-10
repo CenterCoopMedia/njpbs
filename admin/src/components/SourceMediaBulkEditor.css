@@ -1,0 +1,19 @@
+.source-bulk-editor, .source-bulk-fields, .source-bulk-fields fieldset { display: grid; gap: var(--cms-space-4); min-width: 0; }
+.source-bulk-fields p { margin: 0; color: var(--cms-ink-secondary); }
+.source-bulk-fields fieldset { margin: 0; padding: var(--cms-space-4); border: var(--border-width) solid var(--cms-line); border-radius: var(--radius-control); }
+.source-bulk-fields legend { padding-inline: var(--cms-space-2); font-weight: 700; }
+.source-bulk-fields label { display: grid; gap: var(--cms-space-2); min-width: 0; }
+.source-bulk-fields select, .source-bulk-fields input, .source-bulk-fields textarea { width: 100%; min-width: 0; }
+.source-bulk-fields textarea { min-height: 6rem; }
+.source-bulk-editor summary { cursor: pointer; min-height: 44px; padding-block: var(--cms-space-3); font-weight: 600; overflow-wrap: anywhere; }
+.source-bulk-metadata > fieldset { margin-top: var(--cms-space-3); }
+.source-bulk-fields .source-bulk-warning { padding: var(--cms-space-3); border-inline-start: 3px solid var(--cms-brand); background: var(--cms-brand-soft); color: var(--cms-brand-ink); }
+.source-bulk-review { display: grid; gap: var(--cms-space-4); list-style: none; padding: 0; }
+.source-bulk-review > li { min-width: 0; padding: var(--cms-space-4); border: var(--border-width) solid var(--cms-line); border-radius: var(--radius-control); overflow-wrap: anywhere; }
+.source-bulk-review-heading { display: flex; flex-wrap: wrap; justify-content: space-between; gap: var(--cms-space-2); }
+.source-bulk-review p { margin-block: var(--cms-space-2); color: var(--cms-ink-secondary); }
+.source-bulk-review dl, .source-bulk-review dd { display: grid; gap: var(--cms-space-2); margin: 0; }
+.source-bulk-review dt { margin-top: var(--cms-space-3); font-weight: 700; }
+.source-bulk-review dd span { white-space: pre-wrap; }
+.source-bulk-editor progress { width: 100%; accent-color: var(--cms-brand); }
+

@@ -1,0 +1,33 @@
+name: Pages fallback safety
+
+on:
+  # PR and merge-queue validation run this guard in required CI's Policy job.
+  # Keep the separate exact-commit status only for production promotion.
+  push:
+    branches:
+      - main
+      - "production-candidate/**"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  # Production promotion needs a result for each exact main/candidate commit.
+  group: pages-fallback-safety-${{ github.event_name == 'push' && github.sha || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  pages-fallback-safety:
+    name: Pages fallback safety
+    runs-on: ubuntu-24.04
+    timeout-minutes: 4 # Runaway guard; investigate unexpectedly slow runs.
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - name: Require the non-reserving Pages runtime
+        run: |
+          node .github/scripts/pages-fallback-safety.mjs
+          node --test .github/scripts/pages-fallback-safety.test.mjs
+          node --test .github/scripts/pages-reviewed-source.test.mjs

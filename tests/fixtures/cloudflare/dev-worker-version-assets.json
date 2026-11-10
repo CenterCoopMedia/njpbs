@@ -1,0 +1,7 @@
+{
+  "html_handling": "force-trailing-slash",
+  "not_found_handling": "404-page",
+  "serve_directly": false,
+  "raw_run_worker_first": true,
+  "base_path": "/"
+}

@@ -1,0 +1,446 @@
+/* Shared sign-in/admission artwork. Keep these rules scoped to the entry frame. */
+.auth-screen {
+  container: auth-entry / inline-size;
+  position: relative;
+  isolation: isolate;
+  display: grid;
+  min-height: 100dvh;
+  overflow: hidden;
+  place-items: center;
+  padding: clamp(var(--cms-space-4), 4vw, var(--cms-space-12));
+  background-color: var(--cms-auth-navy);
+  background-image:
+    radial-gradient(ellipse at 48% 44%, var(--cms-auth-screen-haze), transparent 66%),
+    linear-gradient(var(--cms-auth-grid) var(--cms-border-width), transparent var(--cms-border-width)),
+    linear-gradient(90deg, var(--cms-auth-grid) var(--cms-border-width), transparent var(--cms-border-width)),
+    linear-gradient(var(--cms-auth-grid-coarse) var(--cms-border-width), transparent var(--cms-border-width)),
+    linear-gradient(90deg, var(--cms-auth-grid-coarse) var(--cms-border-width), transparent var(--cms-border-width));
+  background-size: auto, 25px 25px, 25px 25px, 100px 100px, 100px 100px;
+}
+
+.auth-screen::before,
+.auth-screen::after {
+  position: absolute;
+  z-index: -1;
+  aspect-ratio: 1;
+  border: var(--cms-border-width) solid var(--cms-auth-orb-border);
+  border-radius: 50%;
+  background: radial-gradient(circle at 60% 40%, var(--cms-auth-orb-highlight), var(--cms-auth-orb-middle) 56%, var(--cms-auth-orb-shade));
+  box-shadow: var(--cms-shadow-auth-orb);
+  content: "";
+  pointer-events: none;
+}
+
+.auth-screen::before { width: 34rem; top: -22rem; left: -21rem; }
+.auth-screen::after { width: 44rem; right: -29.5rem; bottom: -26.5rem; }
+
+.auth-scene {
+  position: absolute;
+  z-index: -1;
+  inset: 0;
+  overflow: hidden;
+  pointer-events: none;
+  user-select: none;
+}
+
+.auth-dots {
+  position: absolute;
+  width: 6.6rem;
+  height: 6.6rem;
+  background: radial-gradient(circle, var(--cms-auth-dots) 1px, transparent 1.5px) 0 0 / 21px 21px;
+  opacity: .7;
+}
+.auth-dots-start { top: 25.4%; left: 1.4rem; }
+.auth-dots-end { top: 57.6%; right: 1.4rem; height: 5.25rem; }
+
+.auth-margin-copy,
+.auth-brand-caption {
+  display: grid;
+  width: max-content;
+  margin: 0;
+  color: var(--cms-auth-lettering);
+  font-size: .625rem;
+  font-weight: 500;
+  line-height: 1.85;
+  letter-spacing: .17rem;
+  text-transform: uppercase;
+}
+
+.auth-margin-copy { position: absolute; opacity: .55; }
+.auth-margin-copy-start { bottom: 3.2rem; left: 3.4rem; }
+.auth-margin-copy-end { top: 2.7rem; right: 2.75rem; }
+.auth-margin-copy::after,
+.auth-brand-caption::after {
+  display: block;
+  width: 2.25rem;
+  height: 1px;
+  margin-top: var(--cms-space-4);
+  background: currentColor;
+  content: "";
+}
+
+.auth-layout {
+  position: relative;
+  z-index: 1;
+  isolation: isolate;
+  display: grid;
+  grid-template-columns: minmax(0, 44fr) minmax(0, 56fr);
+  width: min(100%, var(--cms-layout-auth));
+  min-height: 41rem;
+  align-items: stretch;
+  gap: 0;
+  /* The glow must escape the card; only its two painted panels clip at the corners. */
+  overflow: visible;
+  border: var(--cms-border-width) solid var(--cms-auth-edge);
+  border-radius: var(--cms-radius-panel);
+  background: var(--cms-surface);
+  box-shadow: var(--cms-shadow-auth);
+}
+
+/* Uneven, soft paint haze rather than a uniform neon outline. Static: no extra motion. */
+.auth-layout::before {
+  position: absolute;
+  z-index: -1;
+  inset: -1.25rem -1.75rem;
+  border-radius: inherit;
+  background:
+    radial-gradient(ellipse at 48% 99%, var(--cms-auth-haze-bottom), transparent 40%),
+    radial-gradient(ellipse at 7% 5%, var(--cms-auth-haze-start), transparent 32%),
+    radial-gradient(ellipse at 65% 1%, var(--cms-auth-haze-top), transparent 37%);
+  filter: blur(24px);
+  content: "";
+  pointer-events: none;
+}
+
+.auth-brand-column {
+  position: relative;
+  display: grid;
+  min-width: 0;
+  overflow: hidden;
+  align-content: start;
+  padding: 2.75rem;
+  border-radius: var(--cms-auth-radius-child-inline-start);
+  background: var(--cms-auth-art-navy);
+  color: var(--cms-white);
+}
+
+/* The supplied reference's cleaned artwork contains the building AND the NJ silhouette.
+   It is already navy-graded: another dark scrim would hide the very detail being restored. */
+.auth-brand-column::before {
+  position: absolute;
+  inset: 0;
+  background: url("/brand/auth-newsroom-art.webp") center bottom / cover no-repeat;
+  content: "";
+  pointer-events: none;
+}
+
+.auth-brand-copy {
+  min-width: 0;
+  position: relative;
+  z-index: 1;
+  display: grid;
+  gap: 1.375rem;
+  margin-top: 6.25rem;
+}
+.auth-brand-column .brand-lockup { display: flex; flex-wrap: wrap; gap: var(--cms-space-4); }
+.auth-brand-column .brand-image { width: 10.75rem; max-width: 100%; height: auto; flex: 0 0 auto; }
+.auth-brand-column .brand-product {
+  display: block;
+  padding-left: var(--cms-space-4);
+  border-left: var(--cms-border-width) solid var(--cms-auth-lockup-divider);
+  color: var(--cms-auth-product-text);
+  font-size: var(--cms-font-lg);
+  white-space: nowrap;
+}
+.auth-brand-copy > p {
+  max-width: 24rem;
+  margin: 0;
+  color: var(--cms-white);
+  font-size: 1.25rem;
+  line-height: var(--cms-line-copy);
+  text-wrap: pretty;
+}
+.auth-brand-caption {
+  position: absolute;
+  bottom: 1.75rem;
+  left: 2.75rem;
+  font-size: .6875rem;
+  line-height: 1.65;
+  opacity: .7;
+}
+.auth-brand-caption::after { width: 1.875rem; margin-top: .875rem; }
+
+.auth-panel.panel {
+  display: grid;
+  min-width: 0;
+  align-content: center;
+  gap: var(--cms-space-4);
+  border: 0;
+  border-left: var(--cms-border-width) solid var(--cms-auth-panel-divider);
+  border-radius: var(--cms-auth-radius-child-inline-end);
+  padding: 2.75rem 2.875rem 2.5rem 3.25rem;
+  background: var(--cms-surface);
+  box-shadow: none;
+}
+.auth-panel > * { min-width: 0; }
+.auth-copy { display: grid; gap: var(--cms-space-1); margin-bottom: var(--cms-space-2); }
+.auth-copy h1 {
+  margin: 0;
+  color: var(--cms-ink);
+  font-size: 2.125rem;
+  font-weight: 700;
+  line-height: var(--cms-line-tight);
+  letter-spacing: -.045rem;
+  text-wrap: balance;
+}
+.auth-copy p {
+  margin: 0;
+  color: var(--cms-ink-muted);
+  font-size: var(--cms-font-lg);
+  line-height: var(--cms-line-copy);
+  text-wrap: pretty;
+}
+.auth-primary-action,
+.auth-google-action { width: 100%; }
+.auth-panel .button { min-height: var(--cms-auth-action-height); border-radius: var(--cms-radius-button); }
+.auth-google-action.button { min-height: var(--cms-auth-google-action-height); gap: var(--cms-space-4); font-size: var(--cms-font-lg); }
+.auth-google-logo {
+  box-sizing: content-box;
+  width: 1.5rem;
+  height: 1.5rem;
+  padding: var(--cms-space-1);
+  border-radius: var(--cms-radius-small);
+  background: var(--cms-white);
+  flex: 0 0 auto;
+}
+.auth-domain-note {
+  margin: 0;
+  color: var(--cms-ink-muted);
+  font-size: var(--cms-font-xs);
+  line-height: var(--cms-line-copy);
+  text-align: center;
+}
+.auth-mode-switch {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: .625rem;
+}
+.auth-mode-switch .button { min-width: 0; }
+/* Mode selection is contextual; the next account action owns primary emphasis. */
+.auth-mode-switch .button[aria-pressed="true"] {
+  border-color: var(--cms-brand);
+  background: var(--cms-brand-soft);
+  color: var(--cms-brand-ink);
+  font-weight: 700;
+}
+.auth-handoff { align-content: center; gap: var(--cms-space-4); }
+.auth-handoff > p { margin: 0; }
+.auth-form { display: grid; gap: var(--cms-space-3); }
+.auth-form label {
+  margin-bottom: calc(-1 * var(--cms-space-2));
+  font-size: var(--cms-font-base);
+  font-weight: 700;
+}
+.auth-form .field-control { min-height: var(--cms-control-height); border-radius: var(--cms-radius-control); }
+.auth-form .field-hint { margin-top: calc(-1 * var(--cms-space-2)); }
+.auth-input-wrap { position: relative; min-width: 0; }
+.auth-input-wrap > .field-control { width: 100%; padding-left: 3.25rem; }
+.auth-input-wrap > .auth-input-icon {
+  position: absolute;
+  top: .75rem;
+  left: .875rem;
+  width: 1.25rem;
+  height: 1.25rem;
+  color: var(--cms-ink-muted);
+  pointer-events: none;
+}
+.auth-password-wrap > .field-control { padding-right: 3rem; }
+.auth-password-toggle.button {
+  position: absolute;
+  inset: 0 0 0 auto;
+  width: var(--cms-control-height);
+  min-width: var(--cms-control-height);
+  min-height: var(--cms-control-height);
+  padding: var(--cms-space-2);
+  border: 0;
+  background: transparent;
+  color: var(--cms-ink-muted);
+}
+.auth-password-toggle.button:hover:not(:disabled) { background: var(--cms-brand-soft); }
+.auth-password-toggle.button:focus-visible {
+  outline: var(--cms-focus-outline);
+  outline-offset: var(--cms-focus-ring-offset);
+}
+.auth-panel :is(.inline-message, .auth-domain-note) { overflow-wrap: anywhere; }
+.auth-form > .button-ghost { min-height: var(--cms-control-height); }
+.auth-divider {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+  min-height: 1.5rem;
+  align-items: center;
+  gap: 1.125rem;
+  color: var(--cms-ink-muted);
+  font-size: var(--cms-font-sm);
+}
+.auth-divider::before,
+.auth-divider::after { height: var(--cms-border-width); background: var(--cms-line); content: ""; }
+.auth-panel > .button-row { padding-top: var(--cms-space-2); }
+
+/* The checklist still follows the real admission state; never advance it for visual effect. */
+.auth-panel:has(.bootstrap-status) { align-content: start; padding-top: var(--cms-space-12); }
+.auth-panel:has(.bootstrap-status) .auth-copy { gap: .375rem; margin-bottom: var(--cms-space-3); }
+.auth-panel:has(.bootstrap-status) h1 { font-size: 2.5rem; font-weight: 900; }
+.bootstrap-status { display: grid; gap: var(--cms-space-5); }
+.bootstrap-status > .loading-indicator { gap: var(--cms-space-6); padding-block: var(--cms-space-2); }
+.bootstrap-status > .loading-indicator > .spinner {
+  --spinner-size: 6.5rem;
+  color: var(--cms-brand);
+  background: url("/brand/auth-pbs-mark.svg") center / 2.5rem 2.5rem no-repeat;
+}
+.bootstrap-status > .loading-indicator > .spinner .spinner-orbit { stroke-width: 2; }
+.bootstrap-status > .loading-indicator > .spinner :is(.spinner-core, .spinner-orbit-inner) {
+  display: none;
+}
+.bootstrap-status .loading-indicator-label { color: var(--cms-ink); font-size: 1.25rem; font-weight: 700; }
+.bootstrap-status .loading-indicator-stage { font-size: var(--cms-font-base); }
+.bootstrap-status .loading-indicator-pause { font-size: var(--cms-font-control); }
+.bootstrap-phases {
+  display: grid;
+  gap: 0;
+  margin: 0;
+  padding: 0 0 0 2.375rem;
+  color: var(--cms-ink);
+  font-size: var(--cms-font-lg);
+  list-style: none;
+}
+.bootstrap-phase {
+  position: relative;
+  display: grid;
+  grid-template-columns: 1.875rem minmax(0, 1fr);
+  align-items: start;
+  gap: var(--cms-space-8);
+  min-height: 4.875rem;
+}
+.bootstrap-phase:not(:last-child)::after {
+  position: absolute;
+  top: 2.5rem;
+  bottom: .5rem;
+  left: .875rem;
+  width: 2px;
+  background: radial-gradient(circle, var(--cms-brand) .75px, transparent 1px) 0 0 / 2px 6px;
+  opacity: .65;
+  content: "";
+}
+.bootstrap-phase-mark {
+  position: relative;
+  z-index: 1;
+  display: inline-flex;
+  width: 1.875rem;
+  height: 1.875rem;
+  margin-top: .125rem;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  border: calc(2 * var(--cms-border-width)) solid var(--cms-line-strong);
+  border-radius: 50%;
+  background: var(--cms-surface);
+  color: var(--cms-brand);
+}
+.bootstrap-phase-mark .icon { width: 1.25rem; height: 1.25rem; color: inherit; }
+.bootstrap-phase-copy { display: grid; gap: var(--cms-space-1); padding-bottom: var(--cms-space-4); line-height: 1.35; }
+.bootstrap-phase-detail { color: var(--cms-ink-muted); font-size: var(--cms-font-base); font-weight: 400; }
+.bootstrap-phase[data-state="done"] .bootstrap-phase-mark {
+  border-color: var(--cms-brand);
+  background: var(--cms-brand);
+  color: var(--cms-action-text);
+}
+.bootstrap-phase[data-state="active"] .bootstrap-phase-mark { border: calc(3 * var(--cms-border-width)) solid var(--cms-brand); }
+.bootstrap-slow {
+  margin: 0;
+  border-left: calc(3 * var(--cms-border-width)) solid var(--cms-brand);
+  padding: var(--cms-space-3) var(--cms-space-4);
+  background: var(--cms-brand-soft);
+  color: var(--cms-ink-secondary);
+  font-size: var(--cms-font-sm);
+  line-height: var(--cms-line-copy);
+}
+/* Staff-site handoff still uses the screen without the shared card. */
+.auth-screen > :is(p, a) { position: relative; z-index: 1; color: var(--cms-white); }
+
+@media (max-width: 86rem) {
+  .auth-margin-copy, .auth-dots { display: none; }
+}
+@container auth-entry (min-width: 60.001rem) and (max-width: 68rem) {
+  .auth-brand-column { padding-inline: var(--cms-space-8); }
+  .auth-brand-caption { left: var(--cms-space-8); }
+  .auth-panel.panel { padding-inline: var(--cms-space-8); }
+  .auth-copy h1 { font-size: 1.875rem; }
+  .auth-panel:has(.bootstrap-status) h1 { font-size: 2.125rem; }
+}
+@media (max-width: 60rem) {
+  .auth-screen { overflow: clip; place-items: start center; padding: var(--cms-space-4); }
+  .auth-screen::before { width: 28rem; top: -18rem; left: -18rem; }
+  .auth-screen::after { width: 36rem; right: -24rem; bottom: -22rem; }
+}
+/* Container rem queries also honor enlarged text, unlike viewport breakpoints. */
+@container auth-entry (max-width: 60rem) {
+  .auth-layout { grid-template-columns: minmax(0, 1fr); width: min(100%, 36rem); min-height: 0; }
+  .auth-brand-column { min-height: 0; padding: var(--cms-space-6); border-radius: var(--cms-auth-radius-child-block-start); }
+  .auth-brand-column::before { background-position: center 44%; opacity: .45; }
+  .auth-brand-copy { gap: var(--cms-space-3); margin-top: 0; }
+  .auth-brand-copy > p { max-width: 30rem; font-size: var(--cms-font-base); }
+  .auth-brand-caption { display: none; }
+  .auth-panel.panel { border-top: var(--cms-border-width) solid var(--cms-auth-panel-divider); border-left: 0; border-radius: var(--cms-auth-radius-child-block-end); padding: var(--cms-space-6); }
+  .auth-panel:has(.bootstrap-status) { padding-top: 1.75rem; }
+  .auth-copy h1, .auth-panel:has(.bootstrap-status) h1 { font-size: clamp(1.5rem, 5vw, 2rem); text-wrap: pretty; }
+  .auth-copy p { font-size: var(--cms-font-base); }
+  .bootstrap-status > .loading-indicator { gap: var(--cms-space-4); }
+  .bootstrap-status > .loading-indicator > .spinner { --spinner-size: 4.5rem; background-size: 1.875rem; }
+  .bootstrap-status .loading-indicator-label { font-size: var(--cms-font-lg); }
+  .bootstrap-phases { padding-left: var(--cms-space-5); font-size: var(--cms-font-base); }
+  .bootstrap-phase { gap: 1.375rem; min-height: 4.875rem; }
+  .bootstrap-phase-detail { font-size: var(--cms-font-control); }
+}
+@media (max-width: 26rem) {
+  .auth-screen { padding: var(--cms-space-3); }
+}
+@container auth-entry (max-width: 26rem) {
+  .auth-brand-column, .auth-panel.panel { padding: var(--cms-space-5); }
+  .auth-brand-column .brand-image { width: 9.5rem; }
+  .auth-brand-column .brand-lockup { gap: var(--cms-space-3); }
+  .auth-brand-column .brand-product { padding-left: var(--cms-space-3); font-size: var(--cms-font-sm); white-space: normal; }
+  .auth-domain-note { text-align: left; }
+  .auth-divider { gap: var(--cms-space-3); font-size: var(--cms-font-xs); }
+}
+@media (forced-colors: active) {
+  .auth-screen::before, .auth-screen::after, .auth-scene,
+  .auth-layout::before, .auth-brand-column::before, .auth-brand-caption { display: none; }
+  .auth-layout { border-color: CanvasText; }
+  .auth-password-toggle.button:focus-visible { outline-color: Highlight; }
+  .bootstrap-status > .loading-indicator > .spinner { background-image: none; }
+  .bootstrap-phase[data-state="done"] .bootstrap-phase-mark { border-color: Highlight; background: Highlight; color: HighlightText; }
+  .bootstrap-phase[data-state="active"] .bootstrap-phase-mark { border-color: Highlight; }
+}
+
+/* Secondary explanations never control the real admission state. */
+.bootstrap-wait-copy { display: grid; gap: var(--cms-space-1); min-width: 0; }
+.bootstrap-wait-copy .boardwalk-tip {
+  display: block;
+  min-block-size: 3em;
+  line-height: var(--cms-line-copy);
+  overflow-wrap: anywhere;
+  animation: auth-note-enter var(--motion-standard) var(--ease-standard) both;
+}
+.bootstrap-wait-copy .loading-indicator-pause {
+  justify-self: start;
+  min-height: var(--cms-control-height);
+  padding-block: var(--cms-space-1);
+  text-align: left;
+}
+.bootstrap-wait-copy[data-paused="true"] .boardwalk-tip { animation: none; }
+@keyframes auth-note-enter { from { opacity: .25; } to { opacity: 1; } }
+@media (prefers-reduced-motion: reduce) {
+  .bootstrap-wait-copy .boardwalk-tip { animation: none; }
+  .auth-screen .spinner * { animation: none; }
+}
+@container auth-entry (max-width: 26rem) { .bootstrap-wait-copy .boardwalk-tip { min-block-size: 4.5em; } }

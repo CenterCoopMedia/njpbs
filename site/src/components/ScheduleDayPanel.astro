@@ -1,0 +1,212 @@
+---
+import type {
+  ScheduleFeedDay,
+  ScheduleListing,
+} from "../lib/schedule-feed";
+import {
+  PRIMETIME_END_MINUTE,
+  PRIMETIME_START_MINUTE,
+  buildScheduleHourMarks,
+  buildScheduleRows,
+  formatScheduleDateLabel,
+  formatScheduleRange,
+  formatScheduleTime,
+  scheduleDayLengthMinutes,
+  scheduleLocalHourMinute,
+  scheduleRowHeightPx,
+} from "../lib/schedule-timeline";
+import {
+  filterKidsListings,
+  getScheduleDayState,
+} from "../lib/schedule-view";
+
+interface Props {
+  broadcastDay: ScheduleFeedDay;
+  kidsDay: ScheduleFeedDay;
+}
+
+const { broadcastDay, kidsDay } = Astro.props as Props;
+const dayState = getScheduleDayState(broadcastDay);
+const rows = buildScheduleRows(dayState.entries);
+const kidsListings = filterKidsListings(kidsDay.entries);
+const hasListings = dayState.kind === "ready" && rows.length > 0;
+const hasKidsListings = kidsListings.length > 0;
+const dateLabel = formatScheduleDateLabel(broadcastDay.date);
+const DESKTOP_PIXELS_PER_MINUTE = 2.4;
+const MOBILE_PIXELS_PER_MINUTE = 2.3;
+const hourMarks = buildScheduleHourMarks(broadcastDay.date);
+const dayLengthMinutes = scheduleDayLengthMinutes(broadcastDay.date);
+const primetimeStartMinute =
+  scheduleLocalHourMinute(broadcastDay.date, PRIMETIME_START_MINUTE / 60);
+const primetimeEndMinute =
+  scheduleLocalHourMinute(broadcastDay.date, PRIMETIME_END_MINUTE / 60);
+
+const programMeta = (listing: ScheduleListing, durationMinutes: number) => [
+  `${durationMinutes} min`,
+  ...(listing.hd ? ["HD"] : []),
+  ...(listing.closedCaptions ? ["CC"] : []),
+].join(" · ");
+---
+
+<section
+  class="schedule-day-panel"
+  data-schedule-day-panel
+  data-schedule-date={broadcastDay.date}
+  aria-label={`NJ PBS schedule for ${dateLabel}`}
+>
+  <div class="schedule-board-heading">
+    <h2>Full broadcast day</h2>
+    <p>{rows.length} programs · midnight to midnight · ET</p>
+  </div>
+
+  <div
+    class="schedule-timeline"
+    data-schedule-timeline
+    aria-label={`NJ PBS schedule timeline for ${dateLabel}`}
+    style={`--schedule-desktop-day-height:${dayLengthMinutes * DESKTOP_PIXELS_PER_MINUTE}px;--schedule-mobile-day-height:${dayLengthMinutes * MOBILE_PIXELS_PER_MINUTE}px`}
+    hidden={!hasListings}
+  >
+    <div class="schedule-time-rail" aria-hidden="true">
+      {
+        hourMarks.map((mark) => (
+          <div
+            class="schedule-hour-mark"
+            style={`--schedule-desktop-top:${mark.minute * DESKTOP_PIXELS_PER_MINUTE}px;--schedule-mobile-top:${mark.minute * MOBILE_PIXELS_PER_MINUTE}px`}
+          >
+            <span>{mark.label}</span>
+          </div>
+        ))
+      }
+    </div>
+    <div class="schedule-lane">
+      <div
+        class="schedule-primetime-band"
+        data-schedule-primetime
+        aria-hidden="true"
+        style={`--schedule-desktop-top:${primetimeStartMinute * DESKTOP_PIXELS_PER_MINUTE}px;--schedule-mobile-top:${primetimeStartMinute * MOBILE_PIXELS_PER_MINUTE}px;--schedule-desktop-height:${(primetimeEndMinute - primetimeStartMinute) * DESKTOP_PIXELS_PER_MINUTE}px;--schedule-mobile-height:${(primetimeEndMinute - primetimeStartMinute) * MOBILE_PIXELS_PER_MINUTE}px`}
+      >
+        <span>Primetime</span>
+      </div>
+      <ol class="schedule-program-list">
+        {
+          rows.map(({ listing, startMinute, durationMinutes }, index) => {
+            const nextStartMinute = rows[index + 1]?.startMinute ?? null;
+            const desktopHeight = scheduleRowHeightPx({
+              startMinute,
+              durationMinutes,
+              nextStartMinute,
+              pixelsPerMinute: DESKTOP_PIXELS_PER_MINUTE,
+              minHeightPx: 68,
+            });
+            const mobileHeight = scheduleRowHeightPx({
+              startMinute,
+              durationMinutes,
+              nextStartMinute,
+              pixelsPerMinute: MOBILE_PIXELS_PER_MINUTE,
+              minHeightPx: 65,
+            });
+            const range = formatScheduleRange(listing);
+            const meta = programMeta(listing, durationMinutes);
+            return (
+              <li
+                class="schedule-program-slot"
+                style={`--schedule-desktop-top:${startMinute * DESKTOP_PIXELS_PER_MINUTE}px;--schedule-mobile-top:${startMinute * MOBILE_PIXELS_PER_MINUTE}px;--schedule-desktop-height:${desktopHeight}px;--schedule-mobile-height:${mobileHeight}px`}
+              >
+                <button
+                  class="schedule-program"
+                  type="button"
+                  data-program-details
+                  data-program-title={listing.title}
+                  data-program-episode={listing.episodeTitle}
+                  data-program-time={range}
+                  data-program-meta={meta}
+                  data-program-description={listing.description}
+                  data-program-episode-description={listing.episodeDescription}
+                  aria-label={`Program details for ${listing.title}, ${range}`}
+                >
+                  <span class="schedule-program__time">
+                    <time datetime={listing.startsAt}>{formatScheduleTime(listing.startsAt)}</time>{" "}
+                    <span class="schedule-program__duration">{durationMinutes} min</span>
+                  </span>
+                  {" "}<span class="schedule-program__copy">
+                    <strong class="schedule-program__title">{listing.title}</strong>{" "}
+                    {
+                      listing.episodeTitle && (
+                        <span class="schedule-program__episode">{listing.episodeTitle}</span>
+                      )
+                    }
+                  </span>
+                  <span class="schedule-program__flags" aria-label="Program features" data-pagefind-ignore>
+                    {listing.hd && <span class="schedule-flag">HD</span>}
+                    {listing.closedCaptions && <span class="schedule-flag">CC</span>}
+                  </span>
+                </button>
+              </li>
+            );
+          })
+        }
+      </ol>
+    </div>
+    <div
+      class="schedule-now-line"
+      data-schedule-now-line
+      aria-hidden="true"
+      hidden
+    >
+      <span data-schedule-now-label>Now</span>
+    </div>
+  </div>
+
+  <div
+    class="schedule-empty-state"
+    data-schedule-empty-state
+    hidden={hasListings}
+  >
+    <strong>Listings temporarily unavailable</strong>
+    <p>Watch NJ PBS live or browse programs on demand while the schedule catches up.</p>
+    <div class="schedule-empty-state__links">
+      <a href="/live/">Watch live</a>
+      <a href="https://watch.njpbs.org/" target="_blank" rel="noopener">
+        Browse on demand<span class="sr-only"> (opens in new tab)</span>
+      </a>
+    </div>
+  </div>
+
+  <section class="schedule-kids" aria-labelledby={`kids-heading-${broadcastDay.date}`}>
+    <div class="schedule-kids__head">
+      <div>
+        <h2 id={`kids-heading-${broadcastDay.date}`}>Kids on NJ PBS</h2>
+        <p>These are the children’s programs airing on the main NJ PBS broadcast channel for the selected day.</p>
+      </div>
+      <a
+        class="schedule-kids__live"
+        href="https://pbskids.org/videos/watch/live"
+        target="_blank"
+        rel="noopener"
+      >
+        Watch PBS Kids 24/7<span class="sr-only"> (opens in new tab)</span>
+      </a>
+    </div>
+    <ol class="schedule-kids__list" hidden={!hasKidsListings}>
+      {
+        kidsListings.map((listing) => (
+          <li>
+            <time datetime={listing.startsAt}>{formatScheduleTime(listing.startsAt)}</time>{" "}
+            <span>
+              <strong>{listing.title}</strong>{" "}
+              {listing.episodeTitle && <span>{listing.episodeTitle}</span>}
+            </span>
+          </li>
+        ))
+      }
+    </ol>
+    <div
+      class="schedule-kids__empty"
+      data-kids-empty-state
+      hidden={hasKidsListings}
+    >
+      <strong>No kids block airs on NJ PBS this day.</strong>
+      <span>The PBS Kids 24/7 livestream is still available.</span>
+    </div>
+  </section>
+</section>

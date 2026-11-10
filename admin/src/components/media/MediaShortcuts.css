@@ -1,0 +1,66 @@
+/* Keyboard shortcuts from the toolbar's More: keys in
+   one column, what they do in the other. The action text wraps; it never narrows the keys. */
+.media-shortcuts {
+  width: min(24rem, calc(100vw - (2 * var(--cms-space-2))));
+}
+
+.media-shortcuts.ui-popover-sheet {
+  width: auto;
+}
+
+.media-shortcuts-title {
+  margin: 0 0 var(--cms-space-3);
+  font-size: var(--cms-font-sm);
+  font-weight: 700;
+}
+
+.media-shortcuts-list {
+  display: grid;
+  grid-template-columns: fit-content(8rem) minmax(0, 1fr);
+  gap: var(--cms-space-2) var(--cms-space-4);
+  margin: 0;
+}
+
+/* Each row joins the list's two columns, so every key lines up. */
+.media-shortcuts-row {
+  display: contents;
+}
+
+.media-shortcuts-row dt,
+.media-shortcuts-row dd {
+  margin: 0;
+}
+
+.media-shortcuts-row kbd {
+  display: inline-block;
+  padding: 1px 6px;
+  border: var(--cms-border-width) solid var(--cms-line);
+  border-radius: var(--cms-radius-small);
+  background: var(--cms-surface-soft);
+  color: var(--cms-ink);
+  font-family: inherit;
+  font-size: var(--cms-font-xs);
+  font-weight: 700;
+  line-height: 1.3;
+  white-space: nowrap;
+}
+
+.media-shortcuts-row dd {
+  color: var(--cms-ink-secondary);
+  font-size: var(--cms-font-sm);
+  overflow-wrap: anywhere;
+}
+
+.media-shortcuts-note {
+  margin: var(--cms-space-3) 0 0;
+  padding-top: var(--cms-space-3);
+  border-top: var(--cms-border-width) solid var(--cms-line);
+  color: var(--cms-ink-secondary);
+  font-size: var(--cms-font-xs);
+}
+
+@media (forced-colors: active) {
+  .media-shortcuts-row kbd {
+    border-color: CanvasText;
+  }
+}

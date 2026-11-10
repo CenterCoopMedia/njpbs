@@ -1,0 +1,191 @@
+---
+import { createPageImageLoading } from "../../../packages/content-core/src/image-loading";
+// Published Program page.
+import type { CollectionEntry } from "astro:content";
+import { getImage } from "astro:assets";
+import { resolveCmsResponsiveImage } from "../lib/cms-responsive-image";
+import { renderRichText } from "../../../packages/content-core/src/content-model";
+import { isIncorrectProgramArtwork } from "../lib/program-artwork";
+
+interface Props {
+  entry: CollectionEntry<"cmsPrograms">;
+}
+
+const { entry } = Astro.props as Props;
+const program = entry.data;
+const context = Astro.locals.cmsRender?.content;
+const prepared = context?.kind === "public-record-family"
+  ? context.programImageDescriptors?.programs.find(record => record.programId === program.programId)?.content : undefined;
+const art = isIncorrectProgramArtwork(program.path, program.keyArt)
+  ? null
+  : prepared ?? (program.keyArt ? await resolveCmsResponsiveImage(program.keyArt, "content", getImage) : null);
+const artLoading = createPageImageLoading()(art, "lcp");
+---
+
+<article class="program">
+  <header class="program__head">
+    <p class="program__eyebrow">NJ PBS program</p>
+    <h1 data-pagefind-filter="show" data-pagefind-meta="title">{program.title}</h1>
+    <ul class="program__facts">
+      {program.genre && <li class="program__fact" data-pagefind-filter="genre">{program.genre}</li>}
+      {program.memberOnly && (
+        <li class="program__fact program__fact--member">Passport members</li>
+      )}
+    </ul>
+  </header>
+
+  {art && <picture class="program__art">
+    {art.sources?.map((source) => <source type={source.type} srcset={source.srcset} sizes={art.sizes} />)}
+    <img src={art.url} srcset={art.srcset} sizes={art.sizes} width={art.width} height={art.height} alt={program.keyArtDecorative ? "" : program.keyArtAlt} {...artLoading} />
+  </picture>}
+
+  <div class="program__body" set:html={renderRichText(program.description)} />
+
+  <footer class="program__watch">
+    <h2>Where to watch</h2>
+    <p>
+      Watch NJ PBS live on the broadcast channel or stream the livestream online.
+      Full episodes and specials are on the NJ PBS video portal.
+    </p>
+    <div class="program__actions">
+      <a class="btn btn--primary" href={program.watchUrl ?? "https://watch.njpbs.org/"}>Watch {program.watchUrl ? "this program" : "on demand"}</a>
+      <a class="btn btn--ghost" href="/live/">Watch live</a>
+      <a class="btn btn--ghost" href="/schedule/">See the schedule</a>
+    </div>
+    {program.memberOnly && (
+      <p class="program__member-note">
+        This program is available to NJ PBS Passport members.
+        <a href="https://watch.njpbs.org/passport/learn-more/">Learn about Passport</a>
+      </p>
+    )}
+  </footer>
+</article>
+
+<style>
+  .program {
+    max-width: var(--wrap);
+    margin: 0 auto;
+    padding: clamp(2.75rem, 6vw, 4.5rem) var(--gutter) clamp(3.5rem, 8vw, 6rem);
+  }
+
+  .program__eyebrow {
+    margin: 0 0 0.75rem;
+    color: var(--text-quiet);
+    font-size: 0.82rem;
+    font-weight: 600;
+    letter-spacing: 0.09em;
+    text-transform: uppercase;
+  }
+
+  .program__head h1 {
+    margin: 0;
+    color: var(--text);
+    font-size: clamp(2.1rem, 5vw, 3.4rem);
+    line-height: 1.06;
+    text-wrap: balance;
+  }
+
+  .program__facts {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    margin: 1.15rem 0 0;
+    padding: 0;
+    list-style: none;
+  }
+
+  .program__facts:empty {
+    display: none;
+  }
+
+  .program__fact {
+    padding: 0.3rem 0.7rem;
+    border: 1px solid var(--line);
+    border-radius: 999px;
+    color: var(--text-dim);
+    font-size: 0.88rem;
+  }
+
+  .program__fact--member {
+    border-color: var(--color-link);
+    color: var(--color-link);
+  }
+
+  /* Plain flow, not a grid. The synopsis arrives from renderRichText as bare
+     paragraphs, so a grid gap here would stack on top of their own margins and
+     double-space every break. */
+  .program__art { display: block; margin-top: 2rem; }
+  .program__art img { display: block; width: 100%; height: auto; }
+
+  .program__body {
+    margin-top: clamp(1.75rem, 4vw, 2.5rem);
+    color: var(--text-dim);
+    font-size: 1.05rem;
+    line-height: 1.75;
+  }
+
+  .program__body :global(p),
+  .program__body :global(ul),
+  .program__body :global(ol),
+  .program__body :global(blockquote) {
+    margin-block: 0 1.1rem;
+  }
+
+  .program__body :global(> :last-child) {
+    margin-bottom: 0;
+  }
+
+  .program__body :global(ul),
+  .program__body :global(ol) {
+    padding-left: 1.3rem;
+  }
+
+  .program__body :global(a) {
+    color: var(--color-link);
+    text-underline-offset: 0.22em;
+  }
+
+  .program__watch {
+    margin-top: clamp(2rem, 5vw, 3rem);
+    padding-top: 1.5rem;
+    border-top: 1px solid var(--line);
+  }
+
+  .program__watch h2 {
+    margin: 0 0 0.6rem;
+    color: var(--text);
+    font-size: 1.25rem;
+    line-height: 1.2;
+  }
+
+  .program__watch p {
+    margin: 0;
+    color: var(--text-dim);
+    font-size: 1rem;
+    line-height: 1.65;
+  }
+
+  .program__actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.75rem;
+    margin-top: 1.25rem;
+  }
+
+  .program__member-note {
+    margin-top: 1.25rem;
+    font-size: 0.95rem;
+  }
+
+  .program__member-note a {
+    margin-left: 0.4rem;
+    color: var(--color-link);
+    text-underline-offset: 0.22em;
+  }
+
+  @media (max-width: 520px) {
+    .program__actions .btn {
+      width: 100%;
+    }
+  }
+</style>

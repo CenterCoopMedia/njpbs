@@ -1,0 +1,8 @@
+{
+  "date": "2026-11-08",
+  "kind": "fixed",
+  "title": "Confirm site settings after page refreshes",
+  "body": "Site settings keep checking while a public page refreshes. An older copy of a page does not count as a confirmed update.",
+  "prs": [],
+  "order": 1794185580000
+}

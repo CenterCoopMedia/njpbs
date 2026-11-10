@@ -1,0 +1,13 @@
+{
+  "date": "2026-08-13",
+  "kind": "new",
+  "title": "Approve, publish and schedule in Boardwalk",
+  "body": "Editors can now approve a saved draft, publish it at once or schedule it. You enter schedule times in station time, and Boardwalk hides actions your role cannot use.",
+  "prs": [
+    922,
+    919,
+    925,
+    849
+  ],
+  "order": 0
+}

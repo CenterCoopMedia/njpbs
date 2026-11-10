@@ -1,0 +1,10 @@
+{
+  "date": "2026-09-03",
+  "kind": "new",
+  "title": "See how long items wait for review",
+  "body": "The editorial queue shows how long each item has waited for review. Scheduled items show their reserved publish time.",
+  "prs": [
+    1099
+  ],
+  "order": 0
+}

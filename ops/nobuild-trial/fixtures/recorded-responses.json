@@ -1,0 +1,195 @@
+{
+  "expectedPost": {
+    "publishedVersion": "7",
+    "operationId": "pilot-op-7",
+    "htmlSha256": "9ae3b556b0bfc7ce155474747bbaff3cb53ab0e499289f3bf9bfdba11ff89616"
+  },
+  "post": {
+    "canonicalUrl": "https://njpbs.org/posts/pilot-post-7/",
+    "staleCached": {
+      "requestLabel": "plain",
+      "status": 200,
+      "atUtc": "2026-10-09T12:00:03.000Z",
+      "elapsedMsFromStart": 3000,
+      "headers": {
+        "cacheControl": "no-store",
+        "cfCacheStatus": "HIT",
+        "sourceVersion": "6",
+        "publicationOperation": "pilot-op-6",
+        "htmlSha256": "1111111111111111111111111111111111111111111111111111111111111111",
+        "contentType": "text/html; charset=utf-8"
+      },
+      "bodySha256": "1111111111111111111111111111111111111111111111111111111111111111"
+    },
+    "currentPlain": {
+      "requestLabel": "plain",
+      "status": 200,
+      "atUtc": "2026-10-09T12:00:15.000Z",
+      "elapsedMsFromStart": 15000,
+      "headers": {
+        "cacheControl": "no-store",
+        "cfCacheStatus": "MISS",
+        "sourceVersion": "7",
+        "publicationOperation": "pilot-op-7",
+        "htmlSha256": "9ae3b556b0bfc7ce155474747bbaff3cb53ab0e499289f3bf9bfdba11ff89616",
+        "contentType": "text/html; charset=utf-8"
+      },
+      "bodySha256": "9ae3b556b0bfc7ce155474747bbaff3cb53ab0e499289f3bf9bfdba11ff89616"
+    },
+    "currentCached": {
+      "requestLabel": "plain",
+      "status": 200,
+      "atUtc": "2026-10-09T12:00:16.000Z",
+      "elapsedMsFromStart": 16000,
+      "headers": {
+        "cacheControl": "public, max-age=60",
+        "cfCacheStatus": "HIT",
+        "age": "1",
+        "sourceVersion": "7",
+        "publicationOperation": "pilot-op-7",
+        "htmlSha256": "9ae3b556b0bfc7ce155474747bbaff3cb53ab0e499289f3bf9bfdba11ff89616",
+        "contentType": "text/html; charset=utf-8"
+      },
+      "bodySha256": "9ae3b556b0bfc7ce155474747bbaff3cb53ab0e499289f3bf9bfdba11ff89616"
+    },
+    "currentUniqueQuery": {
+      "requestLabel": "unique-query-diagnostic",
+      "status": 200,
+      "atUtc": "2026-10-09T12:00:10.000Z",
+      "elapsedMsFromStart": 10000,
+      "headers": {
+        "cacheControl": "no-store",
+        "cfCacheStatus": "DYNAMIC",
+        "sourceVersion": "7",
+        "publicationOperation": "pilot-op-7",
+        "htmlSha256": "9ae3b556b0bfc7ce155474747bbaff3cb53ab0e499289f3bf9bfdba11ff89616",
+        "contentType": "text/html; charset=utf-8"
+      },
+      "bodySha256": "9ae3b556b0bfc7ce155474747bbaff3cb53ab0e499289f3bf9bfdba11ff89616"
+    },
+    "currentBodyMismatch": {
+      "requestLabel": "plain",
+      "status": 200,
+      "atUtc": "2026-10-09T12:00:16.000Z",
+      "elapsedMsFromStart": 16000,
+      "headers": {
+        "cacheControl": "public, max-age=60",
+        "cfCacheStatus": "HIT",
+        "sourceVersion": "7",
+        "publicationOperation": "pilot-op-7",
+        "htmlSha256": "9ae3b556b0bfc7ce155474747bbaff3cb53ab0e499289f3bf9bfdba11ff89616",
+        "contentType": "text/html; charset=utf-8"
+      },
+      "bodySha256": "2222222222222222222222222222222222222222222222222222222222222222"
+    },
+    "currentJsonReceipt": {
+      "requestLabel": "plain",
+      "status": 200,
+      "atUtc": "2026-10-09T12:00:17.000Z",
+      "elapsedMsFromStart": 17000,
+      "headers": { "cacheControl": "no-store", "contentType": "application/json" },
+      "receipt": {
+        "sourceVersion": 7,
+        "operationId": "pilot-op-7",
+        "htmlDigest": "9ae3b556b0bfc7ce155474747bbaff3cb53ab0e499289f3bf9bfdba11ff89616"
+      },
+      "bodySha256": "3333333333333333333333333333333333333333333333333333333333333333"
+    },
+    "aliasDirect": {
+      "requestLabel": "plain",
+      "status": 308,
+      "atUtc": "2026-10-09T12:00:16.000Z",
+      "elapsedMsFromStart": 16000,
+      "location": "https://njpbs.org/posts/pilot-post-7/",
+      "headers": { "cacheControl": "no-store", "cfCacheStatus": "BYPASS" }
+    },
+    "aliasChain": {
+      "requestLabel": "plain",
+      "status": 308,
+      "atUtc": "2026-10-09T12:00:16.000Z",
+      "elapsedMsFromStart": 16000,
+      "location": "https://njpbs.org/posts/old-alias/",
+      "headers": { "cacheControl": "no-store", "cfCacheStatus": "HIT" }
+    },
+    "gone": {
+      "requestLabel": "plain",
+      "status": 410,
+      "atUtc": "2026-10-09T12:00:18.000Z",
+      "elapsedMsFromStart": 18000,
+      "headers": { "cacheControl": "no-store", "cfCacheStatus": "MISS" }
+    },
+    "unavailable": {
+      "requestLabel": "plain",
+      "status": 503,
+      "atUtc": "2026-10-09T12:00:19.000Z",
+      "elapsedMsFromStart": 19000,
+      "headers": { "cacheControl": "no-store", "cfCacheStatus": "DYNAMIC" }
+    },
+    "networkError": {
+      "requestLabel": "plain",
+      "status": null,
+      "atUtc": "2026-10-09T12:00:16.500Z",
+      "elapsedMsFromStart": 16500,
+      "headers": {},
+      "error": "TimeoutError: The operation was aborted"
+    }
+  },
+  "aggregates": {
+    "contains": {
+      "home": {
+        "name": "home",
+        "url": "https://njpbs.org/",
+        "needle": "/posts/pilot-post-7/",
+        "presence": "contains",
+        "samples": [
+          { "index": 0, "requestLabel": "plain", "status": 200, "atUtc": "2026-10-09T12:00:02.000Z", "elapsedMsFromStart": 2000, "body": "<main>Latest news</main>" },
+          { "index": 1, "requestLabel": "plain", "status": 200, "atUtc": "2026-10-09T12:00:21.000Z", "elapsedMsFromStart": 21000, "body": "<main><a href=\"/posts/pilot-post-7/\">Pilot</a></main>" },
+          { "index": 2, "requestLabel": "plain", "status": 200, "atUtc": "2026-10-09T12:00:25.000Z", "elapsedMsFromStart": 25000, "body": "<main><a href=\"/posts/pilot-post-7/\">Pilot</a></main>" },
+          { "index": 3, "requestLabel": "plain", "status": 200, "atUtc": "2026-10-09T12:00:29.000Z", "elapsedMsFromStart": 29000, "body": "<main><a href=\"/posts/pilot-post-7/\">Pilot</a></main>" },
+          { "index": 4, "requestLabel": "plain", "status": 200, "atUtc": "2026-10-09T12:00:30.000Z", "elapsedMsFromStart": 30000, "body": "<main><a href=\"/posts/pilot-post-7/\">Pilot</a></main>" }
+        ]
+      },
+      "feeds": {
+        "name": "feeds",
+        "url": "https://njpbs.org/feeds/news.xml",
+        "needle": "/posts/pilot-post-7/",
+        "presence": "contains",
+        "samples": [
+          { "index": 0, "requestLabel": "plain", "status": 200, "atUtc": "2026-10-09T12:00:02.000Z", "elapsedMsFromStart": 2000, "body": "<rss><item><link>https://njpbs.org/posts/older/</link></item></rss>" },
+          { "index": 1, "requestLabel": "plain", "status": 200, "atUtc": "2026-10-09T12:00:22.000Z", "elapsedMsFromStart": 22000, "body": "<rss><item><link>https://njpbs.org/posts/pilot-post-7/</link></item></rss>" },
+          { "index": 2, "requestLabel": "plain", "status": 200, "atUtc": "2026-10-09T12:00:26.000Z", "elapsedMsFromStart": 26000, "body": "<rss><item><link>https://njpbs.org/posts/pilot-post-7/</link></item></rss>" },
+          { "index": 3, "requestLabel": "plain", "status": 200, "atUtc": "2026-10-09T12:00:30.000Z", "elapsedMsFromStart": 30000, "body": "<rss><item><link>https://njpbs.org/posts/pilot-post-7/</link></item></rss>" },
+          { "index": 4, "requestLabel": "plain", "status": 200, "atUtc": "2026-10-09T12:00:31.000Z", "elapsedMsFromStart": 31000, "body": "<rss><item><link>https://njpbs.org/posts/pilot-post-7/</link></item></rss>" }
+        ]
+      },
+      "search": {
+        "name": "search",
+        "url": "https://njpbs.org/search/meaning-index.json",
+        "needle": "pilot-post-7",
+        "presence": "contains",
+        "samples": [
+          { "index": 0, "requestLabel": "plain", "status": 200, "atUtc": "2026-10-09T12:00:04.000Z", "elapsedMsFromStart": 4000, "body": "{\"entries\":[]}" },
+          { "index": 1, "requestLabel": "plain", "status": 200, "atUtc": "2026-10-09T12:00:24.000Z", "elapsedMsFromStart": 24000, "body": "{\"entries\":[{\"slug\":\"pilot-post-7\"}]}" },
+          { "index": 2, "requestLabel": "plain", "status": 200, "atUtc": "2026-10-09T12:00:28.000Z", "elapsedMsFromStart": 28000, "body": "{\"entries\":[{\"slug\":\"pilot-post-7\"}]}" },
+          { "index": 3, "requestLabel": "plain", "status": 200, "atUtc": "2026-10-09T12:00:30.000Z", "elapsedMsFromStart": 30000, "body": "{\"entries\":[{\"slug\":\"pilot-post-7\"}]}" },
+          { "index": 4, "requestLabel": "plain", "status": 200, "atUtc": "2026-10-09T12:00:31.000Z", "elapsedMsFromStart": 31000, "body": "{\"entries\":[{\"slug\":\"pilot-post-7\"}]}" }
+        ]
+      }
+    },
+    "omits": {
+      "sitemap": {
+        "name": "sitemap",
+        "url": "https://njpbs.org/sitemap-index.xml",
+        "needle": "/posts/pilot-post-7/",
+        "presence": "omits",
+        "samples": [
+          { "index": 0, "requestLabel": "plain", "status": 200, "atUtc": "2026-10-09T12:00:02.000Z", "elapsedMsFromStart": 2000, "body": "<urlset><loc>https://njpbs.org/posts/pilot-post-7/</loc></urlset>" },
+          { "index": 1, "requestLabel": "plain", "status": 200, "atUtc": "2026-10-09T12:00:24.000Z", "elapsedMsFromStart": 24000, "body": "<urlset><loc>https://njpbs.org/posts/another-post/</loc></urlset>" },
+          { "index": 2, "requestLabel": "plain", "status": 200, "atUtc": "2026-10-09T12:00:28.000Z", "elapsedMsFromStart": 28000, "body": "<urlset><loc>https://njpbs.org/posts/another-post/</loc></urlset>" },
+          { "index": 3, "requestLabel": "plain", "status": 200, "atUtc": "2026-10-09T12:00:30.000Z", "elapsedMsFromStart": 30000, "body": "<urlset><loc>https://njpbs.org/posts/another-post/</loc></urlset>" },
+          { "index": 4, "requestLabel": "plain", "status": 200, "atUtc": "2026-10-09T12:00:31.000Z", "elapsedMsFromStart": 31000, "body": "<urlset><loc>https://njpbs.org/posts/another-post/</loc></urlset>" }
+        ]
+      }
+    }
+  }
+}

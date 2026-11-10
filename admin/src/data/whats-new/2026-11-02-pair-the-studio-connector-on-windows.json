@@ -1,0 +1,8 @@
+{
+  "date": "2026-11-02",
+  "kind": "fixed",
+  "title": "Pair the Studio connector on Windows",
+  "body": "Studio connector pairing saves the device credential under your Windows account and shows a short reason if storage fails. In Live production devices, you can delete revoked or failed devices that no studio session or saved mapping uses.",
+  "prs": [],
+  "order": -1
+}

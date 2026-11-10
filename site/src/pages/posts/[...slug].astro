@@ -1,0 +1,140 @@
+---
+import { contentLink } from "../../../../packages/content-core/src/content-link.ts";
+import { homeExternalLinkNotice } from "../../../../packages/content-core/src/home-rail-render";
+// `/posts/{slug}/` — one published Post, plus a stub at every slug it retired.
+//
+// Everything this route emits comes from published snapshots. Registered
+// bylines use the current public profile's name and link. A withdrawn profile
+// keeps the frozen Post name without linking to its removed route.
+import { getCollection, type CollectionEntry } from "astro:content";
+import PublicSiteLayout from "../../layouts/PublicSiteLayout.astro";
+import PostIndex from "../../components/PostIndex.astro";
+import PostPresentation from "../../components/PostPresentation.astro";
+import PermanentRedirect from "../../components/PermanentRedirect.astro";
+import { cmsRoutedContentEnabled } from "../../lib/build-target";
+import { resolvePublicCreditLinks } from "../../lib/public-author-links";
+import { jsonLdHtml, newsArticleJsonLd } from "../../lib/structured-data";
+import { liveBlogPostingJsonLd } from "../../lib/live-blog-structured-data";
+import { containsVideo } from "../../../../packages/content-core/src/video-block";
+import { postPublicPath } from "../../lib/public-content-routes";
+import { resolveNjDecidesSocialImage } from "../../lib/nj-decides-social-images";
+
+type PublicCredit = CollectionEntry<"cmsPosts">["data"]["credits"][number];
+
+type PostProps = {
+  entry: CollectionEntry<"cmsPosts">;
+  credits: PublicCredit[];
+  /** Set on a retired-slug stub; absent on the live page. */
+  redirectFrom?: string;
+};
+
+type Props = { index: true } | PostProps;
+
+export async function getStaticPaths() {
+  // Open-set routes require either an ordinary credentialed review build or the
+  // validated v3 bundle from the canonical production reservation cutoff.
+  if (!cmsRoutedContentEnabled(process.env)) return [];
+  const [posts, authors] = await Promise.all([
+    getCollection("cmsPosts"),
+    getCollection("cmsAuthorsPublic"),
+  ]);
+  const publicAuthors = authors.map((author) => ({
+    authorId: author.data.authorId,
+    displayName: author.data.displayName,
+    slug: author.data.slug,
+  }));
+
+  return [{ params: { slug: undefined }, props: { index: true } satisfies Props }, ...posts.flatMap((entry) => {
+    const credits = resolvePublicCreditLinks(entry.data.credits, publicAuthors);
+    return [
+      {
+        params: { slug: entry.data.slug },
+        props: { entry, credits } satisfies Props,
+      },
+      ...entry.data.previousSlugs.map((previous) => ({
+        params: { slug: previous },
+        props: { entry, credits, redirectFrom: previous } satisfies Props,
+      })),
+    ];
+  })];
+}
+
+const renderContext = Astro.locals.cmsRender;
+const renderPost = renderContext?.content.posts.find(post => post.postId === renderContext.content.target.documentId);
+if (renderContext && !renderPost) throw new Error("Compiled renderer Post target is missing");
+const props: Props = renderContext && renderPost
+  ? { entry: { id: renderPost.postId, collection: "cmsPosts",
+      data: { ...renderPost, spotlightNews: renderPost.spotlightNews === true,
+        heroImageCaption: renderPost.heroImageCaption ?? "",
+        seo: renderPost.seo ? { ...renderPost.seo } : undefined,
+        social: renderPost.social ? { ...renderPost.social } : undefined } },
+    credits: resolvePublicCreditLinks(renderPost.credits, renderContext.content.authors),
+    ...(renderContext.staticRedirect ? { redirectFrom: renderContext.staticRedirect.from } : {}) }
+  : Astro.props as Props;
+const index = "index" in props;
+const entry = index ? null : props.entry;
+const credits = index ? [] : props.credits;
+const redirectFrom = index ? undefined : props.redirectFrom;
+const post = entry?.data;
+const canonicalPath = post ? postPublicPath(post.slug) : "/posts/";
+const outbound = post && renderContext?.content.kind !== "private-preview" ? contentLink(post, canonicalPath) : null;
+const canonicalUrl = new URL(canonicalPath, Astro.site).toString();
+const socialImage = resolveNjDecidesSocialImage(post ? { kind: "post", ...post } : undefined);
+
+// A stub is noindex, so it carries no structured data (the post-build guardrail
+// requires that, and a stub is not the Post anyway).
+const baseArticleJsonLd =
+  !post || redirectFrom || outbound?.external || post.noindex
+    ? null
+    : newsArticleJsonLd({
+        title: post.title,
+        description: post.seo?.description ?? post.summary,
+        canonicalPath,
+        datePublished: post.displayDate,
+        dateModified: post.updateShown ? post.updatedDate : null,
+        imageUrl: post.heroImage?.url ?? null,
+        credits,
+        site: Astro.site!,
+      });
+const articleJsonLd = baseArticleJsonLd && post?.liveBlog && post.liveBlog.coverageState !== "ended" ? {
+  ...baseArticleJsonLd,
+  ...liveBlogPostingJsonLd({ postId: post.postId, title: post.title, canonicalPath,
+    datePublished: post.displayDate, liveBlog: post.liveBlog, site: Astro.site! }),
+} : baseArticleJsonLd;
+---
+
+{index ? (
+  <PostIndex />
+) : post && entry ? (
+  <PublicSiteLayout
+    editTarget={{ type: "post", id: post.postId }}
+    title={post.title}
+    description={post.summary || post.excerpt || post.title}
+    seoTitle={post.seo?.title?.trim() || undefined}
+    seoDescription={post.seo?.description}
+    socialTitle={post.social?.title?.trim() || post.title}
+    socialDescription={post.social?.description}
+    socialImage={socialImage?.url}
+    socialImageAlt={socialImage?.alt}
+    preview={false}
+    canonicalPath={canonicalPath}
+    noindex={Boolean(redirectFrom) || Boolean(outbound?.external) || post.noindex}
+    metaRefreshTo={outbound?.external ? outbound.href : redirectFrom ? canonicalPath : undefined}
+    noAnalytics={containsVideo(post.blocks) || Boolean(post.leadMedia && post.leadMedia.kind !== "image")}
+  >
+    {articleJsonLd && (
+      <script
+        type="application/ld+json"
+        is:inline
+        set:html={jsonLdHtml(articleJsonLd)}
+      />
+    )}
+    {outbound?.external ? (
+      <p><a href={outbound.href} target={outbound.target} rel={outbound.rel}>Continue to {post.title}{outbound.newTab && <Fragment set:html={homeExternalLinkNotice} />}</a></p>
+    ) : redirectFrom ? (
+      <PermanentRedirect to={canonicalPath} label={post.title} />
+    ) : (
+      <PostPresentation entry={entry} credits={credits} canonicalUrl={canonicalUrl} />
+    )}
+  </PublicSiteLayout>
+) : null}

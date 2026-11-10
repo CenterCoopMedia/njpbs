@@ -1,0 +1,88 @@
+/* Segmented control for Layout and Thumbnails. */
+.ui-segmented {
+  --segmented-target: var(--cms-control-height);
+  display: inline-grid;
+  grid-auto-columns: minmax(0, 1fr);
+  grid-auto-flow: column;
+  gap: var(--cms-space-1);
+  padding: var(--cms-space-1);
+  border-radius: var(--cms-radius-control);
+  background: var(--cms-surface-muted);
+}
+.ui-segmented[data-control-size="standard"] { --segmented-target: var(--cms-control-standard-target); }
+.ui-segmented[data-control-size="compact"] { --segmented-target: var(--cms-control-compact-target); }
+.ui-segmented[data-control-size="comfortable"] { --segmented-target: var(--cms-control-comfortable-target); }
+.ui-segmented:not([data-control-size="legacy"]) { padding: 0; gap: 3px; background: transparent; }
+.ui-segmented:not([data-control-size="legacy"]) .ui-segmented-face { min-height: var(--segmented-target); }
+.ui-segmented:not([data-control-size="legacy"]) .ui-segmented-input:checked + .ui-segmented-face {
+  background: var(--cms-surface-selected);
+  color: var(--cms-brand);
+  box-shadow: inset 0 -2px var(--cms-brand);
+}
+
+.ui-segmented-option {
+  position: relative;
+  display: grid;
+  min-width: var(--segmented-target);
+}
+
+.ui-segmented-input {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  opacity: 0;
+  cursor: pointer;
+}
+
+.ui-segmented-face {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--cms-space-2);
+  min-height: calc(var(--segmented-target) - (2 * var(--cms-space-1)));
+  padding: 0 var(--cms-space-3);
+  border-radius: var(--cms-radius-control);
+  color: var(--cms-ink-secondary);
+  font-size: var(--cms-font-control);
+  white-space: nowrap;
+  transition: background-color var(--cms-motion-fast) var(--cms-ease);
+}
+
+.ui-segmented-face .icon {
+  width: 1.125rem;
+  height: 1.125rem;
+}
+
+.ui-segmented-input:checked + .ui-segmented-face {
+  background: var(--cms-surface);
+  box-shadow: var(--cms-shadow-surface);
+  color: var(--cms-ink);
+  font-weight: 700;
+}
+
+@media (hover: hover) {
+  .ui-segmented-input:not(:checked):not(:disabled):hover + .ui-segmented-face {
+    background: var(--cms-action-quiet-hover);
+  }
+}
+
+.ui-segmented-input:focus-visible + .ui-segmented-face {
+  outline: var(--cms-focus-outline);
+  outline-offset: 1px;
+}
+
+.ui-segmented-input:disabled {
+  cursor: not-allowed;
+}
+
+.ui-segmented-input:disabled + .ui-segmented-face {
+  color: var(--cms-ink-muted);
+}
+
+@media (forced-colors: active) {
+  .ui-segmented-input:checked + .ui-segmented-face {
+    outline: 2px solid Highlight;
+  }
+}

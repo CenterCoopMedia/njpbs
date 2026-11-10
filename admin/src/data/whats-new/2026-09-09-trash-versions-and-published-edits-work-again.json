@@ -1,0 +1,10 @@
+{
+  "date": "2026-09-09",
+  "kind": "fixed",
+  "title": "Trash, versions and published edits work again",
+  "body": "Items you remove go to the trash, and you can restore them. Editing a published item and viewing its earlier versions now work as expected.",
+  "prs": [
+    1681
+  ],
+  "order": -3
+}

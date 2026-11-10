@@ -1,0 +1,13 @@
+{
+  "date": "2026-10-22",
+  "kind": "new",
+  "title": "Explore findings and related stories in the public Data Hub",
+  "body": "The public Data Hub brings together Featured and latest findings, comparisons and Related reporting. Open a figure to read its sources and download a dated copy. Comparisons use the stated source periods and explain differences in how figures are measured.",
+  "prs": [
+    3879,
+    3884,
+    3896,
+    3901
+  ],
+  "order": -1
+}

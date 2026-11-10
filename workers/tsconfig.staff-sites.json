@@ -1,0 +1,33 @@
+{
+  "compilerOptions": {
+    "allowImportingTsExtensions": true,
+    "forceConsistentCasingInFileNames": true,
+    "isolatedModules": true,
+    "lib": [
+      "ES2023",
+      "WebWorker",
+      "WebWorker.Iterable"
+    ],
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    "noEmit": true,
+    "skipLibCheck": true,
+    "strict": true,
+    "target": "ES2023",
+    "types": [
+      "@cloudflare/workers-types",
+      "node"
+    ]
+  },
+  "include": [
+    "src/staff-site-worker.ts",
+    "src/staff-site-dev-worker.ts",
+    "src/dev-preview-staff-worker.ts",
+    "src/staff-site-worker-configuration.d.ts",
+    "../cms-api/worker-configuration.d.ts",
+    "src/staff-site-dev-worker-configuration.d.ts",
+    "src/dev-public-worker.ts",
+    "src/dev-public-worker-configuration.d.ts",
+    "src/public-post-renderer.d.ts"
+  ]
+}

@@ -1,0 +1,8 @@
+{
+  "date": "2026-11-04",
+  "kind": "fixed",
+  "title": "Choose a Post area beside its title",
+  "body": "Area now appears beside the Post title and summary. A new Post selects its area when only one choice is available.",
+  "prs": [],
+  "order": 1793819348183
+}

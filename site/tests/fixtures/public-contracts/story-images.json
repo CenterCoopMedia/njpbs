@@ -1,0 +1,60 @@
+{
+  "images": [
+    {
+      "id": "njspotlight-851e750f9a757a42e2d083a22ae8ccb81af320d52d5227d62fc4bad4c8e1faae",
+      "articleUrl": "https://www.njspotlightnews.org/2026/08/its-not-your-imagination-bracket-creep-costing-you-more-in-taxes/",
+      "thumbnail": {
+        "url": "https://media.njpbs.org/cms-media/spotlight/1d8a624c901423a554da02a1710a446eda699d3475888239d5c8cf3d8f2f8251/43b02cd0d7d4d20e02efa7ee6f117bfd9d7d29183d4b01afb824a58850d972fa.jpg",
+        "alt": ""
+      },
+      "sha256": "43b02cd0d7d4d20e02efa7ee6f117bfd9d7d29183d4b01afb824a58850d972fa",
+      "mediaUrl": "https://media.njpbs.org/cms-media/spotlight/1d8a624c901423a554da02a1710a446eda699d3475888239d5c8cf3d8f2f8251/43b02cd0d7d4d20e02efa7ee6f117bfd9d7d29183d4b01afb824a58850d972fa.jpg",
+      "sourceUrl": "https://www.njspotlightnews.org/wp-content/uploads/sites/123/2026/04/IMG_4482-scaled-e1787940433129.jpeg"
+    },
+    {
+      "id": "njspotlight-982f6096f17a048be49dc851513c9c332b8caf1297771f05dd0409fea175fcde",
+      "articleUrl": "https://www.njspotlightnews.org/2026/08/democratic-districts-cashed-in-as-nj-lawmakers-drafted-spending-bills/",
+      "thumbnail": {
+        "url": "https://media.njpbs.org/cms-media/spotlight/90564cfd4362a2d3462986c4cbcb246304f8582ee8dfc6a49f4299042889bc7f/e03683dcd40ccbdd56b42cbc5ae17a2436c290471053fe716e2c4d002c6fd74d.jpg",
+        "alt": ""
+      },
+      "sha256": "e03683dcd40ccbdd56b42cbc5ae17a2436c290471053fe716e2c4d002c6fd74d",
+      "mediaUrl": "https://media.njpbs.org/cms-media/spotlight/90564cfd4362a2d3462986c4cbcb246304f8582ee8dfc6a49f4299042889bc7f/e03683dcd40ccbdd56b42cbc5ae17a2436c290471053fe716e2c4d002c6fd74d.jpg",
+      "sourceUrl": "https://www.njspotlightnews.org/wp-content/uploads/sites/123/2026/07/55367595423_9cc0975c62_o-scaled.jpg"
+    },
+    {
+      "id": "njspotlight-2acbffdf0e46d846d37f7fcd3a1664bcc373a7d178accac4961ebe8b52e64818",
+      "articleUrl": "https://www.njspotlightnews.org/2026/08/nj-treasury-tax-collections-ticked-up-in-july/",
+      "thumbnail": {
+        "url": "https://media.njpbs.org/cms-media/spotlight/cb58376680a73df9362999413185d01bd2b0b6a260d16fb612475c5e0dabcae9/b2fdeece6cec886de89c0ee2c6726e1928887dc07eb82bec44398742400326f0.jpg",
+        "alt": ""
+      },
+      "sha256": "b2fdeece6cec886de89c0ee2c6726e1928887dc07eb82bec44398742400326f0",
+      "mediaUrl": "https://media.njpbs.org/cms-media/spotlight/cb58376680a73df9362999413185d01bd2b0b6a260d16fb612475c5e0dabcae9/b2fdeece6cec886de89c0ee2c6726e1928887dc07eb82bec44398742400326f0.jpg",
+      "sourceUrl": "https://www.njspotlightnews.org/wp-content/uploads/sites/123/2022/04/New-Jersey-State-Capitol.jpg"
+    },
+    {
+      "id": "njspotlight-f04d0b79f709214dfae42d370d353fb64b33b2654a0ba36464efc0d30cb187a0",
+      "articleUrl": "https://www.njspotlightnews.org/2026/08/workers-retirees-among-those-urging-nj-pension-to-look-beyond-the-bottom-line/",
+      "thumbnail": {
+        "url": "https://media.njpbs.org/cms-media/spotlight/77abda1058885842264827a77c093955df56f04ca2685be102786866dd1642e5/d700ed67f6689e1410fad8d8c8ba9e0547bb517cef91679e4fe157c6672e40a8.jpg",
+        "alt": ""
+      },
+      "sha256": "d700ed67f6689e1410fad8d8c8ba9e0547bb517cef91679e4fe157c6672e40a8",
+      "mediaUrl": "https://media.njpbs.org/cms-media/spotlight/77abda1058885842264827a77c093955df56f04ca2685be102786866dd1642e5/d700ed67f6689e1410fad8d8c8ba9e0547bb517cef91679e4fe157c6672e40a8.jpg",
+      "sourceUrl": "https://www.njspotlightnews.org/wp-content/uploads/sites/123/2026/06/AP25127627165864-scaled-e1781718535465.jpg"
+    },
+    {
+      "id": "njspotlight-acc13f01c6c9a678bd00f138a47f3ef2081b41e617660ea2895e391b12d53591",
+      "articleUrl": "https://www.njspotlightnews.org/2026/07/funding-gap-delays-njs-new-mental-health-crisis-centers/",
+      "thumbnail": {
+        "url": "https://media.njpbs.org/cms-media/spotlight/b219a651c49d95a98be60d71024ee72b6832d786fdef05c11508e96eb5aa648a/1ee8bc08e4a13cf93fb64ddcebdc2ca470360bb640cd998f598cde9215165276.jpg",
+        "alt": ""
+      },
+      "sha256": "1ee8bc08e4a13cf93fb64ddcebdc2ca470360bb640cd998f598cde9215165276",
+      "mediaUrl": "https://media.njpbs.org/cms-media/spotlight/b219a651c49d95a98be60d71024ee72b6832d786fdef05c11508e96eb5aa648a/1ee8bc08e4a13cf93fb64ddcebdc2ca470360bb640cd998f598cde9215165276.jpg",
+      "sourceUrl": "https://www.njspotlightnews.org/wp-content/uploads/sites/123/2023/09/mental-health-suicide-guidance.jpg"
+    }
+  ],
+  "provenance": "Featured images for the first five budget stories verified against publisher RSS and WordPress featured-media records on 2026-09-13. Story dates, topics and order are unchanged."
+}

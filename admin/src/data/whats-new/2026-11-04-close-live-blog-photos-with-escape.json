@@ -1,0 +1,8 @@
+{
+  "date": "2026-11-04",
+  "kind": "fixed",
+  "title": "Keep your place after viewing live blog photos",
+  "body": "Pressing Escape closes only the expanded live blog photo. Focus returns to the photo link, and an open reporter card stays open.",
+  "prs": [],
+  "order": 1793774841901
+}

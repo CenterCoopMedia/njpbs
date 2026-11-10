@@ -1,0 +1,61 @@
+# Cloudflare Pages SPA proxies for the Admin app. Each admitted route serves the root app entry
+# with HTTP 200 so a direct link or reload keeps the requested browser URL for React Router.
+# Both exact path forms are explicit. The four existing splats retain deep editor and detail URLs.
+# A top-level 404.html disables Pages' implicit all-path SPA fallback, so a missing asset or path
+# outside these prefixes cannot receive the Admin shell. A path under one of the four retained
+# splats still boots the app and can render its client-side Not found view. Static rules stay
+# before dynamic splats as Pages requires.
+/open / 200
+/open/ / 200
+/cuez-storydesk / 200
+/cuez-storydesk/ / 200
+/dashboard / 200
+/dashboard/ / 200
+/account / 200
+/account/ / 200
+/account/settings / 200
+/account/settings/ / 200
+/account/profile / 200
+/account/profile/ / 200
+/premiere/connect / 200
+/premiere/connect/ / 200
+/admin/settings/costs / 200
+/admin/settings/costs/ / 200
+/admin/settings / 200
+/admin/settings/ / 200
+/analytics / 200
+/analytics/ / 200
+/activity / 200
+/activity/ / 200
+/media / 200
+/media/ / 200
+/voiceovers / 200
+/voiceovers/ / 200
+/content / 200
+/content/ / 200
+/post-templates / 200
+/post-templates/ / 200
+/publish-queue / 200
+/publish-queue/ / 200
+/reports / 200
+/reports/ / 200
+/resources/nj-politics / 200
+/resources/nj-politics/ / 200
+/live-production / 200
+/live-production/ / 200
+/live-production/studio / 200
+/live-production/studio/ / 200
+/schedule / 200
+/schedule/ / 200
+/staff-access / 200
+/staff-access/ / 200
+/staff-profiles / 200
+/staff-profiles/ / 200
+/account/* / 200
+/content/* / 200
+/media/* / 200
+/post-templates/* / 200
+/reports/* / 200
+/guide / 200
+/guide/ / 200
+/guide/* / 200

@@ -1,0 +1,49 @@
+name: Dev deploy source gates
+description: Verify the pinned dev source with immutable trusted workflow checks.
+inputs:
+  github-token:
+    description: Read-only token for exact main CI lookup.
+    required: true
+  artifact-name:
+    description: Distinct identity artifact for this job.
+    required: true
+  renderer-only:
+    description: Preserve the exact-source bootstrap restriction.
+    default: 'false'
+  install-reader-bridge:
+    description: Preserve the exact-source reader installation restriction.
+    default: 'false'
+runs:
+  using: composite
+  steps:
+    - name: Scan trusted dev source gates
+      working-directory: .dev-deploy-gate
+      shell: bash
+      run: node .github/scripts/metered-api-scan.mjs
+    - name: Require the exact reviewed dev pin
+      env:
+        CMS_DEV_RENDERER_ONLY: ${{ inputs.renderer-only }}
+        CMS_DEV_INSTALL_READER_BRIDGE: ${{ inputs.install-reader-bridge }}
+      shell: bash
+      run: node .dev-deploy-gate/.github/scripts/require-dev-deploy-source.mjs
+    - name: Require successful main CI for the exact dev pin
+      env:
+        GH_TOKEN: ${{ inputs.github-token }}
+      shell: bash
+      run: node .dev-deploy-gate/.github/scripts/require-main-ci.mjs
+    - name: Require compatible dev Firestore rules
+      shell: bash
+      run: node .dev-deploy-gate/.github/scripts/cms-deploy-compatibility.mjs --target-root "$GITHUB_WORKSPACE"
+    - name: Metered-API source scan before execution
+      shell: bash
+      run: node .dev-deploy-gate/.github/scripts/metered-api-scan.mjs --target-root "$GITHUB_WORKSPACE"
+    - name: Retain separate dev release and trusted workflow identities
+      uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+      with:
+        name: ${{ inputs.artifact-name }}
+        path: ${{ runner.temp }}/dev-release-sources.json
+        if-no-files-found: error
+        retention-days: 7
+    - name: Remove the temporary trusted gate checkout
+      shell: bash
+      run: rm -rf -- .dev-deploy-gate

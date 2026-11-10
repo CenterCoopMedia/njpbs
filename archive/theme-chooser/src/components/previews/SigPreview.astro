@@ -1,0 +1,233 @@
+---
+// Signal (sig) home-page preview slice for the New NJ PBS chooser.
+// Presentational only: no imports, no client JS. Uses only real sig- / --sig-
+// classes from public/kits/sig/sig.css. The chooser page owns the page <h1>,
+// so this slice's top heading is an <h2>. The shared particle-NJ point cloud is
+// mounted by the chooser into [data-nj-canvas] inside the hero stage.
+---
+
+<section class="kit-preview sig" data-kit="sig" aria-label="Signal preview">
+  <!-- 1. Utility bar -->
+  <div class="sig-utility">
+    <div class="sig-utility__inner">
+      <span class="sig-clock">
+        <span class="sig-clock__dot" aria-hidden="true"></span>
+        <span>Public media for New Jersey</span>
+      </span>
+      <span class="sig-utility__spacer"></span>
+      <a href="#">Watch live</a>
+    </div>
+  </div>
+
+  <!-- 2. Masthead -->
+  <header class="sig-masthead">
+    <div class="sig-masthead__inner">
+      <a class="sig-brand" href="#">New NJ PBS</a>
+      <nav id="sig-preview-nav" class="sig-nav" aria-label="Primary">
+        <a href="#" class="is-active">Watch</a>
+        <a href="#">Schedule</a>
+        <a href="#">Shows</a>
+        <a href="#">News</a>
+      </nav>
+      <a class="sig-btn sig-btn--support" href="#">Support</a>
+      <button
+        type="button"
+        class="sig-nav-toggle"
+        data-sig-nav-toggle
+        aria-controls="sig-preview-nav"
+        aria-expanded="false"
+        aria-label="Menu"
+      >
+        <svg class="sig-ic-menu" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><line x1="3" y1="6" x2="21" y2="6" /><line x1="3" y1="12" x2="21" y2="12" /><line x1="3" y1="18" x2="21" y2="18" /></svg>
+        <svg class="sig-ic-close" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><line x1="5" y1="5" x2="19" y2="19" /><line x1="19" y1="5" x2="5" y2="19" /></svg>
+      </button>
+    </div>
+  </header>
+
+  <!-- SMPTE signature rule (decorative) -->
+  <div class="sig-bars sig-bars--tall" aria-hidden="true">
+    <i></i><i></i><i></i><i></i><i></i><i></i><i></i>
+  </div>
+
+  <!-- 3. Hero -->
+  <section class="sig-hero" aria-labelledby="sig-hero-title">
+    <div class="sig-hero__inner">
+      <div class="sig-hero__copy">
+        <h2 id="sig-hero-title">A new public-media home for New Jersey is taking shape.</h2>
+        <p class="sig-lead">
+          A statewide home for news, documentaries, and local arts is in
+          development, built in the open for everyone in New Jersey.
+        </p>
+        <div class="sig-hero__actions">
+          <a class="sig-btn sig-btn--primary" href="#">Watch live</a>
+          <a class="sig-btn sig-btn--outline" href="#">Browse the schedule</a>
+        </div>
+        <p class="sig-hero__meta">Prototype · design direction: Signal</p>
+      </div>
+      <div class="sig-hero__stage">
+        <canvas data-nj-canvas aria-hidden="true"></canvas>
+        <!-- Static fallback: shown until the chooser confirms the hero can run
+             (no WebGL / no JS keeps it visible). Decorative; the heading carries meaning. -->
+        <img class="nj-fallback" data-nj-fallback src="/nj-static.svg" alt="" aria-hidden="true" width="420" height="740" decoding="async" />
+      </div>
+    </div>
+  </section>
+
+  <!-- 4. Schedule strip (sample, static — no live status indicator) -->
+  <div class="sig-onair">
+    <div class="sig-onair__inner">
+      <span class="sig-onair__label">Sample schedule</span>
+      <span class="sig-onair__now">Now: Evening newscast</span>
+      <span class="sig-onair__next">Next: Documentary hour</span>
+      <span class="sig-onair__time">8:00 p.m. ET</span>
+    </div>
+  </div>
+
+  <div class="sig-shell">
+    <!-- 5. Section head + lead story -->
+    <section class="sig-section" aria-labelledby="sig-featured-title">
+      <div class="sig-sec-head">
+        <span class="sig-sec-head__num">01</span>
+        <h2 id="sig-featured-title">Featured</h2>
+        <span class="sig-sec-head__meta">Featured</span>
+      </div>
+
+      <div class="sig-lead-story">
+        <div class="sig-lead-story__media" aria-hidden="true"></div>
+        <div class="sig-lead-story__body">
+          <span class="sig-lead-story__kicker">Documentary</span>
+          <h3><a href="#">A look at the people shaping New Jersey's next chapter</a></h3>
+          <p>A sample feature placeholder describing a documentary hour, written to fill the lead slot.</p>
+          <p class="sig-lead-story__meta">Documentary hour · 52 min</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- 6. Card grid -->
+    <section class="sig-section" aria-labelledby="sig-watch-title">
+      <div class="sig-sec-head">
+        <span class="sig-sec-head__num">02</span>
+        <h2 id="sig-watch-title">What's on</h2>
+        <span class="sig-sec-head__meta">Programs</span>
+      </div>
+
+      <div class="sig-program-grid">
+        <article class="sig-program">
+          <div class="sig-program__media" aria-hidden="true"></div>
+          <div class="sig-program__body">
+            <span class="sig-program__num">CH 23</span>
+            <h3><a href="#">Evening newscast</a></h3>
+            <p>Statewide news, weeknights.</p>
+            <p class="sig-program__meta">News · 30 min</p>
+          </div>
+        </article>
+
+        <article class="sig-program">
+          <div class="sig-program__media" aria-hidden="true"></div>
+          <div class="sig-program__body">
+            <span class="sig-program__num">CH 23</span>
+            <h3><a href="#">Documentary hour</a></h3>
+            <p>Long-form stories from across the state.</p>
+            <p class="sig-program__meta">Documentary · 60 min</p>
+          </div>
+        </article>
+
+        <article class="sig-program">
+          <div class="sig-program__media" aria-hidden="true"></div>
+          <div class="sig-program__body">
+            <span class="sig-program__num">CH 23</span>
+            <h3><a href="#">Arts profile</a></h3>
+            <p>Conversations with New Jersey artists.</p>
+            <p class="sig-program__meta">Arts · 30 min</p>
+          </div>
+        </article>
+      </div>
+    </section>
+
+    <!-- 7. Support block -->
+    <section class="sig-section" aria-labelledby="sig-support-title">
+      <div class="sig-sec-head">
+        <span class="sig-sec-head__num">03</span>
+        <h2 id="sig-support-title">Support public media in New Jersey</h2>
+        <span class="sig-sec-head__meta">Membership</span>
+      </div>
+
+      <div class="sig-support">
+        <div>
+          <p class="sig-support__title">Become a member</p>
+          <p class="sig-support__copy">
+            Members keep statewide public media free for everyone. A recurring
+            gift is the steadiest way to help, at any amount that works for you.
+          </p>
+        </div>
+        <div class="sig-support__action">
+          <a class="sig-btn sig-btn--support" href="#">Donate monthly</a>
+          <a class="sig-btn sig-btn--outline" href="#">Give once</a>
+        </div>
+      </div>
+
+      <div class="sig-callout sig-callout--note">
+        <p class="sig-callout__title">Sample interface</p>
+        <p>Support options shown here are a design sample and are not connected to any payment system.</p>
+      </div>
+    </section>
+
+    <!-- 8. Newsletter capture -->
+    <section class="sig-section" aria-labelledby="sig-newsletter-title">
+      <div class="sig-newsletter">
+        <p class="sig-newsletter__title" id="sig-newsletter-title">Get the weekly guide</p>
+        <p class="sig-newsletter__copy">
+          A short, sample sign-up for what's coming up on air. This preview does
+          not submit.
+        </p>
+        <div class="sig-form__row">
+          <div class="sig-field">
+            <label for="sig-email">Email address</label>
+            <input id="sig-email" type="email" name="email" autocomplete="email" />
+            <span class="sig-field__hint">Sample field — this form does not submit.</span>
+          </div>
+          <button class="sig-btn sig-btn--primary" type="button">Subscribe</button>
+        </div>
+      </div>
+    </section>
+  </div>
+
+  <!-- 9. Footer -->
+  <footer class="sig-foot">
+    <div class="sig-foot__inner">
+      <div class="sig-foot__grid">
+        <div>
+          <p class="sig-foot__brand">New NJ PBS</p>
+          <p>A new home for public media in New Jersey, in development.</p>
+        </div>
+        <div>
+          <h4>Watch</h4>
+          <ul>
+            <li><a href="#">Live</a></li>
+            <li><a href="#">Schedule</a></li>
+            <li><a href="#">Shows</a></li>
+          </ul>
+        </div>
+        <div>
+          <h4>About</h4>
+          <ul>
+            <li><a href="#">Our mission</a></li>
+            <li><a href="#">Contact</a></li>
+            <li><a href="#">Careers</a></li>
+          </ul>
+        </div>
+        <div>
+          <h4>Support</h4>
+          <ul>
+            <li><a href="#">Become a member</a></li>
+            <li><a href="#">Ways to give</a></li>
+            <li><a href="#">Volunteer</a></li>
+          </ul>
+        </div>
+      </div>
+      <p class="sig-foot__fine">
+        Design preview — not an official NJ PBS or PBS property.
+      </p>
+    </div>
+  </footer>
+</section>

@@ -1,0 +1,5 @@
+.post-lead-media-review { min-width: 0; margin: var(--space-5) 0 0; border: 0; padding: 0; overflow-wrap: anywhere; }
+.post-lead-media-review p { margin: 0; }
+.post-lead-media-review img { display: block; width: 100%; height: auto; max-height: 20rem; object-fit: contain; }
+.post-lead-media-review--template legend { padding-inline: 0; }
+.post-lead-media-review--template img { max-width: 20rem; object-position: left; }

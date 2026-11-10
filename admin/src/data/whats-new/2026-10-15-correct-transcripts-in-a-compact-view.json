@@ -1,0 +1,12 @@
+{
+  "date": "2026-10-15",
+  "kind": "improved",
+  "title": "Correct transcripts in a compact view",
+  "body": "Transcript rows take less space, and a correction keeps focus on the passage you edit. You can retry a stuck alignment job. Caption exports split long paragraphs into short SRT and VTT captions.",
+  "prs": [
+    3559,
+    3008,
+    2772
+  ],
+  "order": -1
+}

@@ -1,0 +1,12 @@
+{
+  "date": "2026-10-08",
+  "kind": "new",
+  "title": "Post meeting notices as PDFs",
+  "body": "The Meeting notices page, formerly Public meetings, lists PDF notices that you add in the Page editor. A link to it appears in the site footer.",
+  "prs": [
+    2764,
+    2763,
+    2802
+  ],
+  "order": 0
+}

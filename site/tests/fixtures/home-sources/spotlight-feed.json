@@ -1,0 +1,202 @@
+{
+  "source": "nj-spotlight-news-rss",
+  "checkedAt": "2026-10-11T14:49:53.477Z",
+  "cards": [
+    {
+      "source": "nj-spotlight-news-rss",
+      "title": "From Delaney Hall hunger strike to freedom",
+      "href": "https://www.njspotlightnews.org/2026/10/from-delaney-hall-hunger-strike-to-freedom/",
+      "sourceCategories": [
+        "Immigration",
+        "Delaney Hall",
+        "dhs",
+        "hunger strike",
+        "immigration"
+      ],
+      "byline": "jmooney",
+      "category": "Immigration",
+      "topic": "Immigration",
+      "topicSlug": "immigration",
+      "publishedAt": "Thu, 08 Oct 2026 21:00:00 +0000",
+      "dateLabel": "Oct 8, 2026",
+      "image": "/brand/spotlight/immigration-02.jpg",
+      "sourceImage": {
+        "url": "https://www.njspotlightnews.org/wp-content/uploads/sites/123/2025/02/Delaney-Hall-300x169.jpg",
+        "width": 300,
+        "height": 169
+      }
+    },
+    {
+      "source": "nj-spotlight-news-rss",
+      "title": "Dale Caldwell: ‘We’re all due due process’",
+      "href": "https://www.njspotlightnews.org/2026/10/dale-caldwell-were-all-due-due-process/",
+      "sourceCategories": [
+        "Politics",
+        "Dale Caldwell",
+        "lieutenant governor"
+      ],
+      "byline": "NJ Spotlight",
+      "category": "Politics",
+      "topic": "Politics",
+      "topicSlug": "politics",
+      "publishedAt": "Wed, 07 Oct 2026 22:59:31 +0000",
+      "dateLabel": "Oct 7, 2026",
+      "image": "/brand/spotlight/politics.jpg",
+      "sourceImage": {
+        "url": "https://www.njspotlightnews.org/wp-content/uploads/sites/123/2026/10/caldwell-300x200.png",
+        "width": 300,
+        "height": 200
+      }
+    },
+    {
+      "source": "nj-spotlight-news-rss",
+      "title": "NJ Spotlight joins NJ PBS at Montclair State University",
+      "href": "https://www.njspotlightnews.org/2026/10/nj-spotlight-joins-nj-pbs-at-montclair-state-university/",
+      "sourceCategories": [],
+      "byline": "jmooney",
+      "category": "More Issues",
+      "topic": "More Issues",
+      "topicSlug": "more-issues",
+      "publishedAt": "Thu, 01 Oct 2026 04:05:07 +0000",
+      "dateLabel": "Oct 1, 2026",
+      "image": "/brand/spotlight/more-issues.jpg",
+      "sourceImage": {
+        "url": "https://www.njspotlightnews.org/wp-content/uploads/sites/123/2025/09/NJ-Spotlight-News-Mezzanine-16x9-1-300x169.jpg",
+        "width": 300,
+        "height": 169
+      }
+    },
+    {
+      "source": "nj-spotlight-news-rss",
+      "title": "NJ Spotlight News: September 30, 2026",
+      "href": "https://www.njspotlightnews.org/video/nj-spotlight-news-september-30-2026/",
+      "sourceCategories": [
+        "Full Episodes"
+      ],
+      "byline": "NJ Spotlight",
+      "category": "Watch",
+      "topic": "Watch",
+      "topicSlug": "watch",
+      "publishedAt": "Wed, 30 Sep 2026 22:30:47 +0000",
+      "dateLabel": "Sep 30, 2026",
+      "image": "/brand/spotlight/watch-02.jpg",
+      "sourceImage": {
+        "url": "https://www.njspotlightnews.org/wp-content/uploads/sites/123/2026/09/NJSN_20260930_16066-300x169.jpg",
+        "width": 300,
+        "height": 169
+      }
+    },
+    {
+      "source": "nj-spotlight-news-rss",
+      "title": "Op-Ed: Inflation costs New Jerseyans more than a rebate check",
+      "href": "https://www.njspotlightnews.org/2026/09/op-ed-inflation-costs-new-jerseyans-more-than-a-rebate-check/",
+      "sourceCategories": [
+        "More Issues",
+        "Opinion",
+        "bracket creep",
+        "Income Taxes",
+        "Janelle Fritts",
+        "tax policy",
+        "taxes",
+        "The Tax Foundation"
+      ],
+      "byline": "Elise Young",
+      "category": "Opinion",
+      "topic": "Opinion",
+      "topicSlug": "opinion",
+      "publishedAt": "Wed, 30 Sep 2026 13:23:33 +0000",
+      "dateLabel": "Sep 30, 2026",
+      "image": "/brand/spotlight/opinion.jpg",
+      "sourceImage": {
+        "url": "https://www.njspotlightnews.org/wp-content/uploads/sites/123/2025/01/grocery-store-food-shopping-300x169.png",
+        "width": 300,
+        "height": 169
+      }
+    },
+    {
+      "source": "nj-spotlight-news-rss",
+      "title": "Inflation is once again lifting earnings of NJ’s lowest-paid",
+      "href": "https://www.njspotlightnews.org/2026/09/inflation-is-once-again-lifting-earnings-of-njs-lowest-paid/",
+      "sourceCategories": [
+        "More Issues",
+        "Social Issues",
+        "consumer price index",
+        "Department of Labor & Workforce Development",
+        "Gov. Phil Murphy",
+        "lowest-paid workers",
+        "Minimum wage"
+      ],
+      "byline": "Elise Young",
+      "category": "Social Issues",
+      "topic": "Social Issues",
+      "topicSlug": "social-issues",
+      "publishedAt": "Wed, 30 Sep 2026 04:12:32 +0000",
+      "dateLabel": "Sep 30, 2026",
+      "image": "/brand/spotlight/social-issues-02.jpg",
+      "sourceImage": {
+        "url": "https://www.njspotlightnews.org/wp-content/uploads/sites/123/2024/06/farm-workers-heat-protections-300x169.jpg",
+        "width": 300,
+        "height": 169
+      }
+    },
+    {
+      "source": "nj-spotlight-news-rss",
+      "title": "Sherrill shuffles NJ election leadership after Caldwell resignation",
+      "href": "https://www.njspotlightnews.org/2026/09/sherrill-shuffles-nj-election-leadership-after-caldwell-resignation/",
+      "sourceCategories": [
+        "Elections",
+        "NJ Decides 2026",
+        "bureaucracy",
+        "bureaucrats",
+        "county clerks",
+        "county government",
+        "Dale Caldwell",
+        "Division of Elections",
+        "elections",
+        "Gov. Mikie Sherrill",
+        "motor vehicle commission",
+        "New Jersey League of Women Voters",
+        "NJ Attorney General’s Office",
+        "NJ lieutenant governor",
+        "NJ secretary of state",
+        "noncitizens voting",
+        "officialdom",
+        "officials",
+        "Republicans",
+        "U.S. Department of Justice"
+      ],
+      "byline": "codea",
+      "category": "NJ Decides 2026",
+      "topic": "NJ Decides 2026",
+      "topicSlug": "nj-decides",
+      "publishedAt": "Wed, 30 Sep 2026 04:02:31 +0000",
+      "dateLabel": "Sep 30, 2026",
+      "image": "/brand/spotlight/nj-decides-02.jpg",
+      "sourceImage": {
+        "url": "https://www.njspotlightnews.org/wp-content/uploads/sites/123/2025/11/AP25309117538766-300x200.jpg",
+        "width": 300,
+        "height": 200
+      }
+    },
+    {
+      "source": "nj-spotlight-news-rss",
+      "title": "NJ Spotlight News: September 29, 2026",
+      "href": "https://www.njspotlightnews.org/video/nj-spotlight-news-september-29-2026/",
+      "sourceCategories": [
+        "Full Episodes"
+      ],
+      "byline": "NJ Spotlight",
+      "category": "Watch",
+      "topic": "Watch",
+      "topicSlug": "watch",
+      "publishedAt": "Tue, 29 Sep 2026 22:30:58 +0000",
+      "dateLabel": "Sep 29, 2026",
+      "image": "/brand/spotlight/watch.jpg",
+      "sourceImage": {
+        "url": "https://www.njspotlightnews.org/wp-content/uploads/sites/123/2026/09/NJSN_20260929_16065_1-300x169.jpg",
+        "width": 300,
+        "height": 169
+      }
+    }
+  ]
+}

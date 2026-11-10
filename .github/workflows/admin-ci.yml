@@ -1,0 +1,176 @@
+name: Admin CI
+
+# Required CI selects this reusable Admin consumer. Unit tests use two
+# deterministic Vitest shards and visual tests use four Playwright shards.
+# Each visual shard keeps one worker and the committed baselines. Browser
+# downloads use the same pinned headless shell as the golden recipe.
+
+on:
+  workflow_call:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: admin-ci-${{ github.event_name == 'workflow_dispatch' && github.run_id || github.ref }}
+  # A newer merge must not cancel the active main proof needed by a deploy.
+  cancel-in-progress: ${{ github.event_name != 'push' || github.ref != 'refs/heads/main' }}
+
+env:
+  CANONICAL_GITHUB_REPOSITORY: ${{ vars.CANONICAL_GITHUB_REPOSITORY }}
+  CANONICAL_GITHUB_REPOSITORY_ID: ${{ vars.CANONICAL_GITHUB_REPOSITORY_ID }}
+  VITE_CANONICAL_GITHUB_REPOSITORY: ${{ vars.CANONICAL_GITHUB_REPOSITORY }}
+
+jobs:
+  admin:
+    runs-on: ubuntu-24.04
+    # Runaway guard only, not an expected duration: about 3x the slowest normal
+    # run on a loaded runner. Check slow runs; do not tighten this.
+    timeout-minutes: 90 # Runaway guard; investigate unexpectedly slow runs.
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2]
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: "22"
+          cache: npm
+          package-manager-cache: true
+          cache-dependency-path: package-lock.json
+      - name: Install dependencies
+        run: npm ci --ignore-scripts
+      - name: Admin build
+        if: matrix.shard == 1
+        env:
+          VITE_FIREBASE_API_KEY: demo-api-key
+          VITE_FIREBASE_AUTH_DOMAIN: demo-njpbs.firebaseapp.com
+          VITE_FIREBASE_PROJECT_ID: demo-njpbs
+          VITE_FIREBASE_APP_ID: demo-app-id
+          VITE_USE_EMULATORS: "false"
+        run: npm run admin:build
+      - name: Ensure supported sandboxed Chrome for the built boot check
+        if: matrix.shard == 1
+        run: node .github/scripts/ensure-panel-browser-deps.mjs
+      - name: Built Admin boot check
+        if: matrix.shard == 1
+        run: npm run test:boot -w njpbs-admin
+      - name: Admin tests
+        # Use the same named shard command that developers can run locally.
+        run: npm run test:shard:${{ matrix.shard }} -w njpbs-admin
+
+  admin-visual:
+    runs-on: ubuntu-24.04
+    # Runaway guard only, not an expected duration: about 3x the slowest normal
+    # run on a loaded runner. Check slow runs; do not tighten this.
+    timeout-minutes: 91 # Runaway guard; investigate unexpectedly slow runs.
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3, 4]
+    outputs:
+      shard-1: ${{ steps.complete.outputs.shard-1 }}
+      shard-2: ${{ steps.complete.outputs.shard-2 }}
+      shard-3: ${{ steps.complete.outputs.shard-3 }}
+      shard-4: ${{ steps.complete.outputs.shard-4 }}
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: "22"
+          cache: npm
+          package-manager-cache: true
+          cache-dependency-path: package-lock.json
+      - name: Install dependencies
+        run: npm ci --ignore-scripts
+      # Keep the approved headless-shell revision without changing release packages.
+      - name: Cache approved visual browser
+        id: visual-browser-cache
+        uses: actions/cache@v6
+        with:
+          path: ~/.cache/ms-playwright
+          key: ${{ runner.os }}-${{ runner.arch }}-visual-playwright-1.65.0
+      - name: Install Chromium and hosted dependencies for the visual suite
+        if: runner.environment == 'github-hosted' && steps.visual-browser-cache.outputs.cache-hit != 'true'
+        run: npx --yes --package=@playwright/test@1.65.0 playwright install --with-deps chromium
+        timeout-minutes: 15 # Successful installs take 11-695s; bound hung downloads (#4885).
+      # An exact cache hit restored the pinned browser; install only its system packages.
+      - name: Install hosted dependencies for the cached visual browser
+        if: runner.environment == 'github-hosted' && steps.visual-browser-cache.outputs.cache-hit == 'true'
+        run: npx --yes --package=@playwright/test@1.65.0 playwright install-deps chromium
+        timeout-minutes: 15 # Same bound as the full install; apt can stall on busy mirrors.
+      - name: Select approved visual browser
+        run: echo "PLAYWRIGHT_CHROMIUM_EXECUTABLE=$HOME/.cache/ms-playwright/chromium_headless_shell-1254/chrome-headless-shell-linux64/chrome-headless-shell" >> "$GITHUB_ENV"
+      - name: Permit sandboxed Chromium on hosted runners
+        if: runner.environment == 'github-hosted'
+        run: |
+          if [ -f /proc/sys/kernel/apparmor_restrict_unprivileged_userns ]; then
+            sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
+          fi
+      - name: Ensure supported sandboxed visual browser
+        run: node .github/scripts/ensure-panel-browser-deps.mjs
+      - name: Verify visual browser sandbox and executable
+        run: |
+          node --input-type=module <<'NODE'
+          import assert from 'node:assert/strict';
+          import { readFileSync, realpathSync } from 'node:fs';
+          import { chromium } from 'playwright';
+          const server = await chromium.launchServer({ executablePath: process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE, headless: true, chromiumSandbox: true });
+          try {
+            const processPath = `/proc/${server.process().pid}`;
+            const commandLine = readFileSync(`${processPath}/cmdline`, 'utf8');
+            assert.equal(realpathSync(`${processPath}/exe`), realpathSync(process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE));
+            assert.ok(!commandLine.includes('--no-sandbox'), 'Browser sandbox must remain enabled');
+            console.log(JSON.stringify({ chromiumSandbox: true, args: commandLine.split(String.fromCharCode(0)).filter(Boolean) }));
+          } finally { await server.close(); }
+          NODE
+      - name: Admin visual regression
+        # Split individual tests so the large specimens file cannot dominate a shard.
+        # The config still limits each runner to one worker, preserving capture timing.
+        run: npm run test:visual -w njpbs-admin -- --fully-parallel --shard=${{ matrix.shard }}/4
+      - name: Upload visual diffs
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: admin-visual-diffs-${{ matrix.shard }}
+          path: admin/test-results/
+          retention-days: 7
+          if-no-files-found: ignore
+      - name: Upload report progress evidence
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: report-progress-evidence-${{ matrix.shard }}
+          path: admin/test-results/report-progress-evidence/
+          retention-days: 7
+          if-no-files-found: ignore
+      - name: Admin boundary tests
+        if: matrix.shard == 1
+        run: >-
+          npx --no-install vitest run
+          tests/preflight/admin-env-boundary.test.js
+          tests/preflight/admin-e2e-local.test.js
+          tests/preflight/admin-status-manifest.test.js
+      - name: Record successful visual shard
+        id: complete
+        run: echo "shard-${{ matrix.shard }}=success" >> "$GITHUB_OUTPUT"
+
+  admin-visual-complete:
+    needs: [admin-visual]
+    if: ${{ !cancelled() }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5 # Runaway guard; investigate unexpectedly slow runs.
+    steps:
+      - name: Require all four visual shards
+        env:
+          RESULT: ${{ needs.admin-visual.result }}
+          SHARD_1: ${{ needs.admin-visual.outputs.shard-1 }}
+          SHARD_2: ${{ needs.admin-visual.outputs.shard-2 }}
+          SHARD_3: ${{ needs.admin-visual.outputs.shard-3 }}
+          SHARD_4: ${{ needs.admin-visual.outputs.shard-4 }}
+        run: |
+          test "$RESULT" = success
+          for shard in "$SHARD_1" "$SHARD_2" "$SHARD_3" "$SHARD_4"; do
+            test "$shard" = success || exit 1
+          done

@@ -1,0 +1,12 @@
+{
+  "date": "2026-09-14",
+  "kind": "improved",
+  "title": "Edit components in a larger dialog",
+  "body": "Page and Post components open in a shared dialog. You can expand and move the text formatting controls, and open Phone preview to check the component on a small screen.",
+  "prs": [
+    1816,
+    1817,
+    1822
+  ],
+  "order": -1
+}

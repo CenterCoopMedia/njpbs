@@ -1,0 +1,30 @@
+/* Curated Home layouts share these rules with the Boardwalk preview frame. */
+.home-curated__two_features,
+.home-curated__list {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: var(--home-shelf-row-gap) var(--home-content-gap);
+  box-sizing: border-box;
+  max-width: var(--wrap);
+  margin: 0 auto;
+  padding: 0 var(--gutter);
+  list-style: none;
+}
+.home-curated__two_features li,
+.home-curated__list li { min-width: 0; }
+.home-curated__two_features .home-shelf__title { font-size: var(--home-headline-size); }
+.home-curated__list .home-shelf__title { margin-top: 0; }
+.home-curated__list .home-shelf__card { min-height: var(--target-comfortable); }
+.home-curated__list li + li { border-top: 1px solid var(--color-border); padding-top: var(--space-4); }
+.home-curated__list .home-curated__summary {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+  overflow: hidden;
+}
+@media (min-width: 64rem) {
+  .home-curated__two_features { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .home-curated__list { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .home-curated__list li + li { border-top: 0; padding-top: 0; }
+  .home-curated__list li:not(:nth-child(3n + 1)) { border-inline-start: 1px solid var(--color-border); padding-inline-start: var(--space-4); }
+}

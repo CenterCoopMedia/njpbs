@@ -1,0 +1,68 @@
+---
+import { getCollection } from "astro:content";
+import { renderPage, renderAuthors } from "../../lib/cms-render-context";
+import CmsBlocks from "../../components/CmsBlocks.astro";
+import { cmsImageAsset } from "../../lib/cms-responsive-image";
+import StaffDirectory from "../../components/StaffDirectory.astro";
+import PublicSiteLayout from "../../layouts/PublicSiteLayout.astro";
+import { containsVideo } from "../../../../packages/content-core/src/video-block";
+import { cmsRoutedContentEnabled } from "../../lib/build-target";
+import { staffDirectoryEntries } from "../../lib/staff-directory";
+import { resolveNjDecidesSocialImage } from "../../lib/nj-decides-social-images";
+
+// `/staff/` is a fixed view of the same detached public snapshots that back the
+// open `/authors/{slug}/` family. It follows the same fail-closed release
+// boundary: an ordinary credentialed review build or a validated v3 production
+// bundle can render it, while every other artifact build emits no directory.
+export async function getStaticPaths() {
+  if (!cmsRoutedContentEnabled(process.env)) return [];
+  return [{ params: { index: undefined } }];
+}
+
+const cmsEntry = Astro.locals.cmsRender ? renderPage(Astro.locals.cmsRender, "staff") : (await getCollection("cmsPages")).find(
+  (entry) => entry.data.pageId === "staff",
+);
+const staff = staffDirectoryEntries(
+  (Astro.locals.cmsRender ? renderAuthors(Astro.locals.cmsRender) : await getCollection("cmsAuthorsPublic")).map((entry) => entry.data),
+);
+const title = cmsEntry?.data.title ?? "Staff";
+const description =
+  cmsEntry?.data.description ??
+  "Meet the people who make NJ PBS.";
+const socialImage = resolveNjDecidesSocialImage(cmsEntry ? { kind: "page", ...cmsEntry.data } : undefined);
+const heroBackgroundImage = cmsEntry?.data.heroBackgroundImage
+  ? cmsImageAsset(cmsEntry.data.assets[cmsEntry.data.heroBackgroundImage])
+  : undefined;
+
+// A build can have no published Staff Page yet. The committed presentation
+// remains live until the normal CMS publication path supplies one.
+const noindex = (cmsEntry?.data.noindex ?? false) || staff.length === 0;
+---
+
+<PublicSiteLayout
+  title={title}
+  description={description}
+  seoTitle={cmsEntry?.data.seo?.title}
+  seoDescription={cmsEntry?.data.seo?.description}
+  socialTitle={cmsEntry?.data.social?.title?.trim() || title}
+  socialDescription={cmsEntry?.data.social?.description?.trim() || description}
+  socialImage={socialImage?.url}
+  socialImageAlt={socialImage?.alt}
+  preview={cmsEntry?.data.contentMode === "draft"}
+  canonicalPath={cmsEntry?.data.path ?? "/staff/"}
+  metaRefreshTo={cmsEntry && cmsEntry.data.path !== "/staff/" ? cmsEntry.data.path : undefined}
+  noindex={Boolean(cmsEntry && cmsEntry.data.path !== "/staff/") || noindex}
+  noAnalytics={containsVideo(cmsEntry?.data.blocks)}
+  childDirected={cmsEntry?.data.childDirected}
+>
+  {cmsEntry && cmsEntry.data.path !== "/staff/" ? <main><h1>Page moved</h1><p><a href={cmsEntry.data.path}>Continue to the page</a></p></main> : <>
+  <StaffDirectory
+    staff={staff}
+    title={title}
+    description={description}
+    heroBackgroundImage={heroBackgroundImage}
+    heroBackgroundPosition={cmsEntry?.data.heroBackgroundPosition}
+  />
+  {cmsEntry && cmsEntry.data.blocks.length > 0 && <CmsBlocks entry={cmsEntry} readerControls />}
+  </>}
+</PublicSiteLayout>

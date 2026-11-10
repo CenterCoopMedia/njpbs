@@ -1,0 +1,10 @@
+{
+  "date": "2026-09-14",
+  "kind": "new",
+  "title": "Edit data tables as a grid",
+  "body": "Data table blocks now open as a grid of cells. You can upload a CSV file to fill the table or export the table as CSV.",
+  "prs": [
+    1821
+  ],
+  "order": -2
+}
