@@ -6,7 +6,7 @@
 const PAGE_READER_VERSION = 1;
 const { editorTemplateForPage } = require("./public-page-contract");
 const PAGE_BLOCK_TYPES = Object.freeze(["bio_card", "town_lookup", "data_table", "data_figure", "election_results",
-  "county_comparison", "data_hub_section", "row", "headline", "prose", "image", "video", "image_gallery", "cta_row",
+  "county_comparison", "data_hub_section", "row", "headline", "prose", "image", "video", "image_gallery", "cta_row", "support_appeal",
   "card_grid", "link_card", "document_list", "faq_item", "coverage_list", "embed", "html", "content_shelf",
   "promotion_playlist", "newsletter_signup", "home_newscast", "topic_shelf", "video_playlist", "record_card", "sponsor_strip", "divider"]);
 function requiredPageReaderVersion(blocks, pageId) {

@@ -71,8 +71,8 @@ try {
     }
     if (phase === "after" && picker && !locked) assert.equal(await page.getByRole("combobox", { name: "Lead media type", exact: true }).isEnabled(), true);
     await page.evaluate(() => { if (document.activeElement instanceof HTMLElement) document.activeElement.blur(); });
-    if (!["empty", "invalid"].includes(kind) && (!picker || locked)) await page.screenshot({ path: join(output, `${phase}-template-${picker ? "locked-" : ""}${kind}-${width}.jpg`), fullPage: true, type: "jpeg", quality: 80, animations: "disabled" });
-    results.push({ phase, kind, width, locked, contained: true, inspectable: phase === "after" });
+    if (!["empty", "invalid"].includes(kind) && locked === picker) await page.screenshot({ path: join(output, `${phase}-template-${picker ? "locked-" : ""}${kind}-${width}.jpg`), fullPage: true, type: "jpeg", quality: 80, animations: "disabled" });
+    results.push({ phase, kind, width, locked, contained: true, inspectable: phase === "after" && (!picker || locked) });
   }
   assert.deepEqual(errors, []);
   await writeFile(join(output, "browser-results.json"), JSON.stringify({ browserVersion: browser.version(), checks: results.length, results, errors }, null, 2));

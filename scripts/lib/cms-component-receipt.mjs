@@ -318,7 +318,8 @@ export function functionGraphSource(source, file, metadata, parser) {
       "03a54c485188b8ed2a22b7b652a1d36a7a003771",
       "39b977a39305cb271978f3fa909f7614677f1437",
       "8fe9788251e154766254d97c493284b9e9e2ca57",
-      "816e8601c9a30ebcb234337b6e77d18d8d650e88"].includes(metadata?.split(" ").at(-1))) {
+      "816e8601c9a30ebcb234337b6e77d18d8d650e88",
+      "4bddc4d456a5e6cd475b2af6675a9e6f67c6dac1"].includes(metadata?.split(" ").at(-1))) {
       throw new Error("Unknown retained-reader module loader");
     }
     return source.replace(/\b(?:requireModule|require2)(\s*\()/g, "require$1");

@@ -225,6 +225,13 @@ export function selectedBlock(block: PageBlock): Record<string, unknown> {
         })),
       };
       break;
+    case "support_appeal":
+      data = {
+        heading: block.data.heading, copy: block.data.copy,
+        buttonLabel: block.data.buttonLabel, href: block.data.href, style: block.data.style,
+        ...(block.data.backgroundImageAssetId !== undefined ? { backgroundImageAssetId: block.data.backgroundImageAssetId } : {}),
+      };
+      break;
     case "cta_row":
       data = {
         ctas: block.data.ctas.map((cta) => ({
@@ -482,6 +489,9 @@ function validateAssetSlots(
   }
   for (const block of blocks) {
     switch (block.type) {
+      case "support_appeal":
+        images.add(block.data.backgroundImageAssetId);
+        break;
       case "document_list":
         for (const document of block.data.documents) documents.add(document.assetId);
         break;

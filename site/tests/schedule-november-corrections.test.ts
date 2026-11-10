@@ -37,20 +37,25 @@ function feed(date = "2026-11-02"): BakedScheduleData {
   };
 }
 
+function oneOnOne(data: BakedScheduleData, date: string) {
+  return data.days.broadcast.find((day) => day.date === date)!.entries
+    .filter((entry) => entry.title === "One on One With Steve Adubato");
+}
+
 describe("November One-on-One episode corrections", () => {
-  it("updates both views through the loader without changing intervals or other programs", async () => {
+  it("keeps approved episode details on the workbook airings in both views", async () => {
     const input = feed();
     const result = await loadScheduleData(input, {});
     expect(result.source).toBe("pbs-tvss-with-njpbs-corrections");
-    expect(result.request).toBe(input.request);
+    expect(result.request.dates).toHaveLength(30);
     for (const kind of ["broadcast", "kids"] as const) {
-      const day = result.days[kind][0];
-      expect(day.sourceCheckedAt).toBe(input.days[kind][0].sourceCheckedAt);
-      expect(day).not.toHaveProperty("sourceRevision");
-      expect(day.entries[1]).toBe(input.days[kind][0].entries[1]);
-      for (const index of [0, 2]) {
-        expect(day.entries[index]).toEqual({
-          ...input.days[kind][0].entries[index],
+      const day = result.days[kind].find((day) => day.date === "2026-11-02")!;
+      expect(day.sourceRevision).toBe("2026-11-02");
+      expect(day.sourceCheckedAt).toBeUndefined();
+      const airings = day.entries.filter((entry) => entry.title === "One on One With Steve Adubato");
+      expect(airings.map((entry) => entry.startsAt.slice(11, 16))).toEqual(["05:30", "19:00", "23:30"]);
+      for (const airing of airings) {
+        expect(airing).toMatchObject({
           episodeNumber: 2950,
           episodeTitle: "Jessica Jenkins; Bryan Felt; Emmie Bleznick",
           episodeDescription: expect.stringContaining("Senior Correspondent Jacqui Tricarico speaks with Jessica Jenkins"),
@@ -69,35 +74,34 @@ describe("November One-on-One episode corrections", () => {
     ["2026-11-26", 2954, "Celebrating 30 Years of the Russ Berrie Making A Difference Award"],
     ["2026-11-29", 2981, "Lisa Marie Falbo; Jocelyn Carley"],
   ])("uses the approved source decision for %s", (date, episodeNumber, episodeTitle) => {
-    expect(applyScheduleCorrections(feed(String(date))).days.broadcast[0].entries[0])
+    expect(oneOnOne(applyScheduleCorrections(feed(String(date))), String(date))[0])
       .toMatchObject({ episodeNumber, episodeTitle });
   });
 
-  it("keeps PBS retrieval for all November dates and leaves missing airings absent", () => {
+  it("keeps PBS metadata retrieval and restores missing airings from the workbook", () => {
     expect(uncorrectedScheduleDates(["2026-10-31", "2026-11-01", "2026-11-30"]))
       .toEqual(["2026-11-01", "2026-11-30"]);
     const input = feed();
     const day = { ...input.days.broadcast[0], entries: [input.days.broadcast[0].entries[1]] };
     const noAirings = { ...input, days: { broadcast: [day], kids: [] } };
-    expect(applyScheduleCorrections(noAirings)).toBe(noAirings);
-    expect(applyScheduleCorrections(feed("2026-12-01"))).toEqual(feed("2026-12-01"));
+    expect(oneOnOne(applyScheduleCorrections(noAirings), "2026-11-02")).toHaveLength(3);
+    expect(applyScheduleCorrections(feed("2026-12-01")).days.broadcast[0].sourceRevision).toBe("2026-11-09");
   });
 
-  it("exports the corrected guest title with the feed times and PBS evidence", () => {
+  it("exports approved episode details with workbook times and revision evidence", () => {
     const result = buildScheduleExport(applyScheduleCorrections(feed()), new Date("2026-11-02T13:00:00Z"));
-    expect(result.days[0].entries[0]).toMatchObject({
+    expect(result.days[0].entries.find((entry) => entry.title === "One on One With Steve Adubato")).toMatchObject({
       episodeTitle: "Jessica Jenkins; Bryan Felt; Emmie Bleznick",
-      startsAt: "2026-11-02T04:30:00-05:00", endsAt: "2026-11-02T05:00:00-05:00",
+      startsAt: "2026-11-02T05:30:00-05:00", endsAt: "2026-11-02T06:00:00-05:00",
     });
-    expect(result.sourceRevisionDates).toEqual([]);
-    expect(result.sourceLabel).toBe("PBS TVSS and NJ PBS episode details");
-    expect(result.pbsCheckedDayCount).toBe(1);
-    expect(result.missingDates).toHaveLength(13);
+    expect(result.sourceRevisionDates).toEqual(["2026-11-02"]);
+    expect(result.correctedDayCount).toBe(14);
+    expect(result.pbsCheckedDayCount).toBe(0);
+    expect(result.missingDates).toHaveLength(0);
   });
 
   it("keeps the original DOCX separators between description segments", () => {
-    const description = (date: string) => applyScheduleCorrections(feed(date))
-      .days.broadcast[0].entries[0].episodeDescription;
+    const description = (date: string) => oneOnOne(applyScheduleCorrections(feed(date)), date)[0].episodeDescription;
     expect(description("2026-11-01")).toContain("New Jersey. Cost n’ Mayor");
     expect(description("2026-11-09")).toContain("New Jersey Globe Milton Allimadi");
     expect(description("2026-11-12")).toContain("Panelists Include: Jose German-Gomez");
@@ -145,15 +149,19 @@ describe("November One-on-One episode corrections", () => {
       if (!("days" in result)) throw new Error("Expected a fresh later November bake");
       expect(fetchFeed).toHaveBeenCalledTimes(28);
       expect(result.source).toBe("pbs-tvss-with-njpbs-corrections");
-      expect(result.request.dates).toHaveLength(14);
+      expect(result.request.dates).toHaveLength(30);
       for (const kind of ["broadcast", "kids"] as const) {
-        for (const day of result.days[kind]) {
+        for (const day of result.days[kind].filter((day) => day.date >= start && day.date <= "2026-11-30")) {
           const expected = laterEpisodes.find(([date]) => date === day.date)!;
-          expect(day.entries[0]).toMatchObject({
-            episodeNumber: expected[1], episodeTitle: expected[2],
-            startsAt: `${day.date}T04:30:00-05:00`, endsAt: `${day.date}T05:00:00-05:00`,
-            episodeDescription: expect.any(String),
-          });
+          const airings = day.entries.filter((entry) => entry.title === "One on One With Steve Adubato");
+          const weekday = new Date(`${day.date}T12:00:00Z`).getUTCDay();
+          expect(airings).toHaveLength(weekday === 0 || weekday === 6 ? 1 : 3);
+          for (const airing of airings) {
+            expect(airing).toMatchObject({
+              episodeNumber: expected[1], episodeTitle: expected[2],
+              episodeDescription: expect.any(String),
+            });
+          }
         }
       }
       const saved = await readFile(outputPath, "utf8");

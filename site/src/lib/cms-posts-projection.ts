@@ -211,6 +211,7 @@ export function resolveImage(
 export function postAssetIds(metadata: unknown, blocks: readonly PageBlock[]): string[] {
   const ids = new Set<string>();
   for (const block of blocks) {
+    if (block.type === "support_appeal" && block.data.backgroundImageAssetId) ids.add(block.data.backgroundImageAssetId);
     if (block.type === "image") ids.add(block.data.assetId);
     if (block.type === "bio_card" && block.data.image?.assetId) ids.add(block.data.image.assetId);
     if (block.type === "election_results") {

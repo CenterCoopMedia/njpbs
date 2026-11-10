@@ -135,6 +135,7 @@ const INLINE_TYPES: readonly BlockType[] = [
   "divider",
   "image",
   "cta_row",
+  "support_appeal",
   "image_gallery",
   "card_grid",
   "link_card",
@@ -369,6 +370,20 @@ export function InlineBlockSurface({
           onChange={onChange}
         />
       );
+
+    case "support_appeal": {
+      const fields = editorFieldsForBlock("support_appeal");
+      return <fieldset className="inline-block-surface" disabled={readOnly}
+        aria-invalid={hasError || undefined} aria-describedby={hasError ? errorId : undefined}>
+        <legend className="sr-only">Support appeal</legend>{fields.map(field => (
+        <FieldRenderer key={field.key} field={field} fieldId={`block-${block.id}-field-${field.key}`}
+          error={hasError ? editorFieldValidationMessage(field, block.data[field.key], { siblings: block.data, fields }) ?? undefined : undefined}
+          loadMedia={loadMedia} mediaPickerUnavailable={mediaPickerUnavailable} uploadMedia={uploadMedia}
+          mediaCategories={mediaCategories} defaultUploadCategory={defaultUploadCategory} canUploadCategory={canUploadCategory}
+          onMediaPickerDirtyChange={onMediaPickerDirtyChange}
+          value={block.data[field.key]} onChange={value => onChange({ ...block.data, [field.key]: value })} />
+      ))}</fieldset>;
+    }
 
     case "cta_row":
       return (

@@ -387,6 +387,7 @@ describe("parseBlocks", () => {
       image: { assetId: "asset-1" },
       image_gallery: { images: [{ assetId: "asset-1" }] },
       cta_row: { ctas: [{ label: "Watch" }] },
+      support_appeal: { heading: "Support NJ PBS", copy: "Help local stories.", buttonLabel: "Donate", href: "/support/", style: "pink" },
       card_grid: { cards: [{}] },
       link_card: { title: "Missing link" },
       faq_item: { question: "Question?" },
@@ -460,6 +461,7 @@ describe("parseBlocks", () => {
       image: { assetId: "asset-1", alt: "Description" },
       image_gallery: { images: [{ assetId: "asset-1", alt: "Description" }] },
       cta_row: { ctas: [{ label: "Watch", href: "/watch/" }] },
+      support_appeal: { heading: "Support NJ PBS", copy: "Help local stories.", buttonLabel: "Donate", href: "/support/", style: "blue" },
       card_grid: { cards: [{ title: "Program" }] },
       link_card: {
         title: "NJ PBS coverage",

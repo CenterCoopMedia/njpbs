@@ -92,6 +92,7 @@ const renderGroups = (blocks: typeof post.blocks) => renderContentGroups(blocks,
     externalLinksNewTab: true,
     generatedHeadingLevel: generatedHeadingLevelAt(blocks, index),
     videoPlaceholder: isPrivatePreviewRender(Astro.locals.cmsRender),
+    publicElectionResults: !isPrivatePreviewRender(Astro.locals.cmsRender),
   }),
 }));
 const publicGroups = groupLinkCardDirectories(renderGroups(bodyBlocks));

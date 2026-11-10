@@ -1,0 +1,7 @@
+{
+  "date": "2026-11-10",
+  "kind": "fixed",
+  "title": "Keep video picker controls compact",
+  "body": "Load more videos stays compact in the video chooser on phones and larger screens.",
+  "prs": []
+}

@@ -48,6 +48,7 @@ export interface ImageViewerBodyProps extends Omit<
   ImageViewerProps,
   "steppingOrder" | "onStep" | "onClose" | "onDirtyChange" | "onSavingChange" | "favoriteControl"
 > {
+  comparisonAssets?: readonly MediaAssetSummary[];
   onDirtyChange: (dirty: boolean) => void;
   onSavingChange: (saving: boolean) => void;
   closePrompt?: ReactNode;
@@ -137,6 +138,7 @@ export function ImageViewerBody({
   navigationPrompt,
   reloadError,
   reloadBusy = false,
+  comparisonAssets,
   onDirtyChange,
   onSavingChange,
   ...inspectorProps
@@ -153,7 +155,7 @@ export function ImageViewerBody({
   if (asset.kind === "image") return <>
     {closePrompt}
     <MediaDialogNotice>{navigationPrompt}{reloadError ? <InlineMessage tone="error" title="Reload failed">{reloadError}</InlineMessage> : null}</MediaDialogNotice>
-    <ImageViewingSurface asset={asset} inspector={inspector} />
+    <ImageViewingSurface asset={asset} inspector={inspector} comparisonAssets={comparisonAssets} />
   </>;
   return <>
     <div className="component-editor-dialog-content image-viewer-content">
@@ -343,6 +345,7 @@ export function ImageViewer({
           key={asset.id}
           {...bodyProps}
           asset={asset}
+          comparisonAssets={steppingOrder}
           footerTarget={footerTarget}
           onDirtyChange={setDirty}
           onSavingChange={setBusy}

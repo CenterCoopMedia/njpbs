@@ -235,9 +235,14 @@ test("history and unknown video checks use real unavailable-service states", asy
 
 test("header crop, lead image and byline retain independent canonical owners", async ({ page }) => {
   await open(page, "post");
+  await page.locator('[data-image-role="leadMedia"] > summary').click();
+  const picker = page.getByRole("dialog", { name: "Choose an image", exact: true });
+  await picker.locator(".media-picker-card").filter({ hasText: "Story image" }).click();
+  await expect(picker).toHaveCount(0);
   await page.locator('[data-image-role="heroBackgroundImage"] summary').click();
   const background = page.getByRole("textbox", { name: "Hero background image", exact: true });
-  const lead = page.locator("#record-post-heroImage");
+  const lead = page.getByRole("textbox", { name: "Lead image", exact: true, includeHidden: true });
+  await expect(lead).toHaveValue("Story image");
   const originalBackground = await background.inputValue(); const originalLead = await lead.inputValue();
   await page.getByRole("group", { name: "Background crop position", exact: true }).getByRole("button", { name: "Top", exact: true }).click();
   await expect(background).toHaveValue(originalBackground); await expect(lead).toHaveValue(originalLead);

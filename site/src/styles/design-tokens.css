@@ -96,6 +96,8 @@
   --color-print-ink: #10131f;
   --color-nj-green: #00ac00;
   --color-theme-navy: #0b1f3a;
+  --color-support-appeal-light: #e2e6ff;
+  --color-support-appeal-accent: #48d3cd;
 
   /* Homepage email newsletter. */
   --color-newsletter-surface: #090d1e;

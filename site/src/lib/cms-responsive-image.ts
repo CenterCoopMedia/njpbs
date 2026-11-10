@@ -139,6 +139,10 @@ export function cmsResponsiveImageRequests(
 
   for (const block of blocks) {
     if (!block.visible) continue;
+    if (block.type === "support_appeal" && block.data.backgroundImageAssetId) {
+      add(block.data.backgroundImageAssetId, "grid");
+      continue;
+    }
     if (block.type === "image") {
       add(block.data.assetId, "content");
       continue;

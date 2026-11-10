@@ -34,6 +34,7 @@ const data = {
       posterUrl: `https://media.njpbs.org/cms-media/video/video-one/${videoHash}.jpg`, width: 1920, height: 1080, mimeType: "video/mp4" } },
   image_gallery: { images: [image], presentation: "carousel" },
   cta_row: { ctas: [{ label: "Watch", href: "/watch/", variant: "primary" }] },
+  support_appeal: { heading: "Support NJ PBS", copy: "Help local stories.", buttonLabel: "Donate", href: "/support/", style: "blue", backgroundImageAssetId: "photo" },
   card_grid: { cards: [{ title: "Program", imageAssetId: "photo", href: "/watch/", body: doc }] },
   link_card: { title: "Coverage", url: "https://example.org/story", source: "Example news", date: "2026-10-03", summary: "Story summary" },
   document_list: { documents: [{ itemId: "notice", assetId: "pdf", title: "Board notice", publisher: "njpba", addedAt: "2026-10-07T12:00:00.000Z" }] },
@@ -88,7 +89,7 @@ describe("public block registry parity", () => {
     expect(parseBlocks([selected]).ok).toBe(true);
   });
 
-  it.each(BLOCK_TYPES.filter(type => type !== "bio_card"))("preserves %s through a published Page RPC", async type => {
+  it.each(BLOCK_TYPES.filter(type => type !== "bio_card" && type !== "support_appeal"))("preserves %s through a published Page RPC", async type => {
     const pageId = type === "data_hub_section" ? "data-hub"
       : SECTION_BLOCK_CATALOG.genericPage.includes(type) ? "contact" : "home";
     const candidate = block(type);
@@ -96,6 +97,10 @@ describe("public block registry parity", () => {
     expect(result.state).toBe("live");
     if (result.state !== "live") throw new Error("Expected published Page");
     expect(result.page.blocks).toEqual([candidate]);
+  });
+
+  it("refuses the Post-only support appeal on a published Page", async () => {
+    await expect(read("contact", [block("support_appeal")])).rejects.toThrow("Invalid projection");
   });
 
   it("keeps the captured election hub results block through the published Page RPC", async () => {

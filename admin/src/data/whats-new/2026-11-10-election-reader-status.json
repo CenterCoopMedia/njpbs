@@ -1,0 +1,8 @@
+{
+  "date": "2026-11-10",
+  "kind": "new",
+  "title": "See when election results are updating",
+  "body": "Public election results show Live updates after the reader's page successfully checks the published results. Readers can pause or resume updates, and see when checks are delayed or offline. Each race keeps its source update time.",
+  "prs": [],
+  "order": 1794307602346
+}

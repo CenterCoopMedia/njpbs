@@ -1,0 +1,44 @@
+{
+  "source": "pbs-tvss",
+  "generatedAt": "2026-11-10T17:06:13.595Z",
+  "timeZone": "America/New_York",
+  "request": {
+    "station": "WNJT",
+    "dates": [
+      "2026-11-23"
+    ]
+  },
+  "days": {
+    "broadcast": [
+      {
+        "date": "2026-11-23",
+        "callsign": "wnjt",
+        "kind": "broadcast",
+        "feedCid": "4211290e-ce30-49e5-9be1-2c412c5b3278",
+        "timeZone": "America/New_York",
+        "entries": [
+          {
+            "startsAt": "2026-11-23T20:30:00-05:00",
+            "endsAt": "2026-11-23T22:30:00-05:00",
+            "title": "The American Revolution",
+            "episodeTitle": "The Most Sacred Thing",
+            "description": "Examining how America's founding turned the world upside-down as the thirteen British colonies on the Atlantic Coast rose\u202fin rebellion, won their independence and established a new form of government that radically reshaped the continent.",
+            "episodeDescription": "British General Cornwallis struggles to pacify the southern states; supported by the French, a victory at Yorktown secures independence for the Americans.",
+            "hd": true,
+            "closedCaptions": true,
+            "seasonNumber": 1,
+            "episodeNumber": 6,
+            "airingType": "Taped",
+            "nolaRoot": "AMRN",
+            "programId": 69447,
+            "programExternalId": "SH060025880000",
+            "cid": "630585c1-d004-4e5f-9ae3-6b52fb17dc49",
+            "isKids": false,
+            "feedKind": "broadcast"
+          }
+        ]
+      }
+    ],
+    "kids": []
+  }
+}

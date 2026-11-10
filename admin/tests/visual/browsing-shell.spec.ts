@@ -290,15 +290,30 @@ for (const width of [620, 800]) {
     await expect(page.getByRole("button", { name: "Expand primary navigation", exact: true })).toBeVisible();
     const finder = page.locator(".sidebar").getByRole("button", { name: "Find a workspace", exact: true });
     await finder.click();
+    // Exercise the close notification arriving after CSS has hidden its rail opener.
+    const deliverClose = await page.locator("dialog[open]").evaluateHandle(dialog => {
+      dialog.addEventListener("close", event => {
+        event.stopImmediatePropagation();
+      }, { once: true, capture: true });
+      return () => dialog.dispatchEvent(new Event("close"));
+    });
     await expect(page.getByRole("dialog", { name: "Find a workspace", exact: true })).toBeVisible();
     await page.keyboard.press("Escape");
     await expect(finder).toBeFocused();
     await page.setViewportSize({ width: 390, height: 800 });
     const phoneFinder = page.locator(".browse-workspace-find").getByRole("button", { name: "Find a workspace", exact: true });
     await expect(phoneFinder).toBeVisible();
+    await deliverClose.evaluate(deliver => deliver());
+    await deliverClose.dispose();
     await page.keyboard.press("Control+k");
     await expect(page.getByRole("dialog", { name: "Find a workspace", exact: true })).toBeVisible();
     await page.keyboard.press("Escape");
+    await expect(phoneFinder).toBeFocused();
+    // Native close requests (for example a platform dismiss action) share the same return.
+    await phoneFinder.click();
+    const dialog = page.getByRole("dialog", { name: "Find a workspace", exact: true });
+    await dialog.evaluate(element => (element as HTMLDialogElement).requestClose());
+    await expect(dialog).toBeHidden();
     await expect(phoneFinder).toBeFocused();
   });
 }

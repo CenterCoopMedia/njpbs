@@ -983,6 +983,7 @@ export function MediaFavoritesLibrary({
             },
           })}</>;
           return <ImageViewerBody getIdToken={getIdToken} key={mediaFavoriteKey(record.ref)} asset={record.asset}
+            comparisonAssets={viewerOrder.filter(isR2Favorite).map(item => item.asset)}
             categories={categoryRegistry.categories}
             canEdit={canManageMediaMetadata(principal, record.asset.category) && !pending.has(mediaFavoriteKey(record.ref))}
             deleteMedia={async asset => cmsDeleteMedia(await getIdToken(), asset)}

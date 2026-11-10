@@ -121,7 +121,11 @@ function deleteLocally(asset: MediaAssetSummary): Promise<DeleteMediaResponse> {
 
 /** The shipped full-size image viewer with local assets and local metadata actions. */
 export function ImageViewerSpecimen() {
-  const [assets, setAssets] = useState<readonly MediaAssetSummary[]>(INITIAL_ASSETS);
+  const [assets, setAssets] = useState<readonly MediaAssetSummary[]>(() => new URLSearchParams(window.location.search).has("comparison")
+    ? [...INITIAL_ASSETS,
+      image("gallery-portrait", "Transparent portrait", "/comparison-portrait.svg", { mimeType: "image/svg+xml", width: 800, height: 1600 }),
+      image("gallery-missing", "Unavailable preview", "/comparison-missing.svg")]
+    : INITIAL_ASSETS);
   const [activeId, setActiveId] = useState(INITIAL_ASSETS[1].id);
   const [favorite, setFavorite] = useState(true);
   const current = assets.find((candidate) => candidate.id === activeId) ?? assets[0];

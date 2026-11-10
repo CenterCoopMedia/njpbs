@@ -1,0 +1,8 @@
+{
+  "date": "2026-11-10",
+  "order": 1794299040000,
+  "kind": "fixed",
+  "title": "Keep workspace headers steady while loading",
+  "body": "Workspace headers stay at a steady height while the editor loads on a slower connection.",
+  "prs": []
+}

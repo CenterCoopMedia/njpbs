@@ -2,6 +2,49 @@ import { expect, test } from "./fixtures";
 import { join } from "node:path";
 
 for (const width of [390, 1280]) {
+  test(`paginated video choices keep a compact Load more control at ${width}px`, async ({ page }) => {
+    await page.setViewportSize({ width, height: 900 });
+    await page.route("**/*", route => new URL(route.request().url()).origin === new URL(test.info().project.use.baseURL!).origin
+      ? route.continue() : route.abort());
+    const cursors: unknown[] = [];
+    await page.route("**/cmsListSourceMedia", route => {
+      const { cursor } = route.request().postDataJSON();
+      cursors.push(cursor ?? null);
+      const more = cursor === "next-page";
+      return route.fulfill({ json: {
+        success: true,
+        records: Array.from({ length: more ? 1 : 48 }, (_, index) => ({
+          id: `video-${more ? 49 : index + 1}`, name: `Library video ${more ? 49 : index + 1}`,
+          credit: "NJ PBS", rightsStatus: "complete", license: "owned", viewingCopy: { state: "ready", durationSeconds: 123 },
+        })),
+        posters: [], hasMore: !more, nextCursor: more ? null : "next-page", total: 49,
+      } });
+    });
+    await page.goto("/lead-media.html?template=1&kind=library-video");
+    await page.getByText("Lead media and background", { exact: true }).click();
+    await page.getByRole("button", { name: "Choose a different video", exact: true }).click();
+    const picker = page.getByRole("dialog", { name: "Choose a video", exact: true });
+    await expect(picker.getByRole("status")).toHaveText("48 ready videos found");
+    const more = picker.getByRole("button", { name: "Load more videos", exact: true });
+    await more.scrollIntoViewIfNeeded();
+    await page.evaluate(() => document.fonts.ready);
+    const control = await more.boundingBox();
+    const grid = await picker.locator(".video-picker-results").boundingBox();
+    expect(control!.width).toBeLessThan(grid!.width - 16);
+    expect(Math.abs(control!.x - grid!.x)).toBeLessThanOrEqual(1);
+    expect(control!.height).toBeGreaterThanOrEqual(44);
+    expect(await picker.evaluate(element => element.scrollWidth <= element.clientWidth + 1)).toBe(true);
+    cursors.length = 0;
+    await more.click();
+    await expect(picker.getByRole("status")).toHaveText("49 ready videos found");
+    await expect(picker.locator(".video-picker-choice")).toHaveCount(49);
+    await expect(more).toHaveCount(0);
+    expect(cursors).toEqual(["next-page"]);
+    await picker.getByRole("button", { name: "Library video 49", exact: true }).click();
+    await expect(picker).not.toBeVisible();
+    await expect(page.getByRole("textbox", { name: /^Video title/ })).toHaveValue("The New Jersey boardwalk");
+  });
+
   test(`lead video choices use the dialog width and clear search spacing at ${width}px`, async ({ page }) => {
     await page.setViewportSize({ width, height: 900 });
     await page.route("**/*", route => new URL(route.request().url()).origin === new URL(test.info().project.use.baseURL!).origin

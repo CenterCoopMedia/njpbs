@@ -839,6 +839,22 @@ small {
   line-height: 1.4;
 }
 
+select:is(.field-control, .field):not([multiple], [size]:not([size="1"])) {
+  appearance: none;
+  padding-right: 36px;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12'%3E%3Cpath d='m3 4.5 3 3 3-3' fill='none' stroke='%2313223b' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-size: 12px 12px;
+  background-position: right 12px center;
+}
+
+@media (forced-colors: active) {
+  select:is(.field-control, .field):not([multiple], [size]:not([size="1"])) {
+    appearance: auto;
+    background-image: none;
+  }
+}
+
 /* Preserve readable touch entry without Safari's sub-16px field-focus zoom.
    Explicitly sized fine-pointer controls retain the study's compact type. */
 @media (any-pointer: coarse) {
@@ -2300,7 +2316,7 @@ small {
   top: 0;
   z-index: 8;
   display: flex;
-  min-height: var(--workspace-header-height);
+  min-height: var(--cms-header-height);
   align-items: center;
   justify-content: space-between;
   gap: var(--space-3);
@@ -8305,7 +8321,7 @@ small {
 @media (max-width: 900px) {
   .workspace-header {
     position: static;
-    min-height: var(--workspace-header-height);
+    min-height: var(--cms-header-height);
   }
 
   .workspace-header-studio {
@@ -9311,7 +9327,7 @@ small {
 }
 /* Compact editorial workspace contract. These rules keep the working surface flat and aligned. */
 .workspace-header-studio {
-  min-height: var(--workspace-header-height);
+  min-height: var(--cms-header-height);
   padding-block: var(--space-1);
 }
 

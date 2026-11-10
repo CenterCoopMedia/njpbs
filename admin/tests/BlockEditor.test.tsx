@@ -292,6 +292,7 @@ describe("BlockEditor palette", () => {
       "video or embed",
       "custom HTML",
       "buttons",
+      "support appeal",
       "link card",
       "related stories",
       "manual content shelf",

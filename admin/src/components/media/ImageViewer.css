@@ -101,10 +101,28 @@
   min-width: 0;
 }
 .image-viewer-workspace[data-details-open="false"] { grid-template-columns: minmax(0, 1fr); }
+.image-viewer-panes {
+  display: grid;
+  grid-column: 1;
+  grid-row: 2;
+  min-width: 0;
+  min-height: 0;
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-rows: auto minmax(0, 1fr);
+}
+.image-viewer-panes[data-comparing="true"] { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.image-viewer-pane { display: grid; grid-column: 1; grid-row: 1 / 3; grid-template-rows: subgrid; min-width: 0; min-height: 0; }
+.image-viewer-pane + .image-viewer-pane { grid-column: 2; border-inline-start: var(--cms-border-width) solid var(--cms-line); }
+.image-viewer-identity { width: 100%; margin: 0; font-weight: 600; overflow-wrap: anywhere; }
+.image-viewer-compare-control { display: flex; align-items: center; gap: var(--cms-space-2); min-width: 0; max-width: 24rem; flex: 1 1 16rem; font-size: var(--cms-font-xs); }
+.image-viewer-compare-control select { min-width: 0; flex: 1; font: inherit; min-height: var(--cms-control-height); padding: var(--cms-space-1) var(--cms-space-2); border: var(--cms-border-width) solid var(--cms-line); border-radius: var(--radius-control); background: var(--cms-surface-chrome); color: var(--cms-ink); }
+.image-viewer-compare-control select:focus-visible { outline: var(--cms-focus-outline); outline-offset: 2px; }
+.image-viewer-workspace-controls,
 .image-viewer-toolbar {
   display: flex;
   align-items: center;
   flex-wrap: wrap;
+  align-content: start;
   grid-column: 1;
   grid-row: 1;
   gap: var(--cms-space-1);
@@ -163,7 +181,10 @@
   .image-viewer-preview-size { display: none; }
   .image-viewer-workspace { grid-template-columns: minmax(0, 1fr); }
   .image-viewer-details { grid-column: 1; grid-row: 1 / 4; border-inline-start: 0; }
-  .image-viewer-workspace[data-details-open="true"] > :is(.image-viewer-toolbar, .image-viewer-stage, .image-viewer-preview-note) { display: none; }
+  .image-viewer-panes[data-comparing="true"] { grid-template-columns: minmax(0, 1fr); grid-template-rows: auto minmax(12rem, 1fr) auto minmax(12rem, 1fr); overflow: auto; }
+  .image-viewer-compare-control select { min-height: 44px; }
+  .image-viewer-pane + .image-viewer-pane { grid-column: 1; grid-row: 3 / 5; border-inline-start: 0; border-block-start: var(--cms-border-width) solid var(--cms-line); }
+  .image-viewer-workspace[data-details-open="true"] > :is(.image-viewer-workspace-controls, .image-viewer-panes, .image-viewer-preview-note) { display: none; }
 }
 @media (max-height: 35rem) {
   .component-editor-dialog-body:has(.image-viewer-workspace) { overflow: auto; }

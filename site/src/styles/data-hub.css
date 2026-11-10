@@ -42,6 +42,17 @@
 .data-hub .button:hover { background: var(--color-data-hub-hover); }
 .data-hub .button--primary { background: var(--pbs-blue); border-color: var(--pbs-blue); color: white; }
 .data-hub .button--primary:hover { background: var(--pbs-blue-hover); }
+.data-hub .back-to-top {
+  position: fixed;
+  inset-inline-end: max(1rem, env(safe-area-inset-right));
+  bottom: max(1rem, env(safe-area-inset-bottom));
+  z-index: 10;
+  gap: .5rem;
+  background: var(--panel);
+  border-color: var(--muted);
+  box-shadow: 0 2px 12px var(--color-data-hub-shadow);
+}
+.data-hub .back-to-top:hover { background: var(--page); }
 .data-hub .intro { border-bottom: 1px solid var(--soft-line); }
 .data-hub .intro__inner { padding-block: clamp(2.6rem, 6.5vw, 5.25rem) clamp(2.5rem, 5vw, 4.5rem); }
 .data-hub .intro h1 { max-width: none; font-weight: 750; font-size: clamp(2.7rem, 5.5vw, 5rem); letter-spacing: -.045em; line-height: 1.06; margin: 0; }
@@ -808,3 +819,77 @@
 .data-hub .uninsured-table th:first-child{text-align:left}
 .data-hub .uninsured-table th:not(:first-child),.data-hub .uninsured-table td{text-align:right;font-variant-numeric:tabular-nums}
 @media(max-width:780px){.data-hub .uninsured-svg{width:900px;min-width:900px}.data-hub .uninsured-toggle button{flex:1;min-width:135px}.data-hub .uninsured-table{font-size:.9rem}}
+
+
+/* SNAP: matched-month year-over-year changes and separate policy context. */
+.data-hub .snap-yoy{margin-top:1.15rem}
+.data-hub .snap-yoy-heading{margin:0 0 1.2rem}
+.data-hub .snap-yoy-change{display:block;font-size:clamp(1.9rem,4vw,2.65rem);font-weight:800;letter-spacing:-.025em;line-height:1.15;font-variant-numeric:tabular-nums}
+.data-hub .snap-yoy-heading span{font-weight:700;font-size:1rem;line-height:1.5}
+.data-hub .snap-yoy-heading p{margin:.25rem 0 0;line-height:1.5}
+.data-hub .snap-yoy-plot,.data-hub .snap-table-scroll{max-width:100%;overflow-x:auto}
+.data-hub .snap-yoy-svg{width:100%;height:auto;display:block;max-width:none}
+.data-hub .snap-yoy-details{margin:1.1rem 0}
+.data-hub .snap-yoy-details summary{font-size:1rem;font-weight:730;cursor:pointer;min-height:44px;padding:.7rem 0}
+.data-hub .snap-yoy-table{width:100%;min-width:660px;border-collapse:collapse;font-size:.92rem;line-height:1.4}
+.data-hub .snap-yoy-table caption{text-align:left;font-weight:700;font-size:1rem;padding:.45rem 0}
+.data-hub .snap-yoy-table th,.data-hub .snap-yoy-table td{padding:.66rem .45rem;border-bottom:1px solid var(--color-data-hub-table-rule)}
+.data-hub .snap-yoy-table th:not(:first-child),.data-hub .snap-yoy-table td:not(:first-child){text-align:right;font-variant-numeric:tabular-nums}
+.data-hub .snap-policy-context{margin:1.4rem 0;border-top:1px solid var(--color-data-hub-table-rule);padding:1rem 0 0}
+.data-hub .snap-policy-context h5{font-size:1.1rem;font-weight:750;margin:0 0 .4rem}
+.data-hub .snap-policy-context p{font-size:.97rem;line-height:1.55;margin:.4rem 0 .85rem}
+.data-hub .snap-policy-context ol{padding-left:1.5rem;margin:.8rem 0}
+.data-hub .snap-policy-context li{padding:.4rem 0;line-height:1.45}
+.data-hub .snap-policy-context li time{font-variant-numeric:tabular-nums}
+.data-hub .snap-policy-context li span{display:block;color:var(--color-data-hub-muted);line-height:1.5}
+@media(max-width:760px){.data-hub .snap-yoy-svg{width:800px;min-width:800px}.data-hub .snap-yoy-heading{margin-bottom:.7rem}.data-hub .snap-yoy-table{font-size:.85rem}}
+
+/* State-four-year graduation cohort: signed delta line and student group chart. */
+.data-hub .graduation-figure{margin-top:1.1rem}
+.data-hub .graduation-toggle{display:flex;flex-wrap:wrap;gap:.55rem;margin:1rem 0}
+.data-hub .graduation-toggle button{min-height:44px;padding:.6rem .95rem;border:1px solid var(--color-data-hub-subtle-edge);border-radius:4px;background:transparent;color:var(--text);font:inherit;font-weight:700;cursor:pointer}
+.data-hub .graduation-toggle button[aria-pressed="true"]{background:var(--bg-1);border-color:var(--color-data-hub-link);text-decoration:underline;text-underline-offset:4px}
+.data-hub .graduation-toggle button:focus-visible{outline:3px solid var(--color-data-hub-focus);outline-offset:3px}
+.data-hub .graduation-chart-panel h4{font-weight:750;font-size:1.18rem;margin:1rem 0 .35rem;line-height:1.35}
+.data-hub .graduation-chart-panel p{line-height:1.55}
+.data-hub .graduation-chart-subtitle{font-size:.95rem;color:var(--color-data-hub-muted)}
+.data-hub .graduation-chart-scroll,.data-hub .graduation-table-scroll{max-width:100%;overflow-x:auto}
+.data-hub .graduation-svg{display:block;width:100%;height:auto;max-width:none}
+.data-hub .graduation-exact-table{min-width:490px;width:100%;border-collapse:collapse;font-size:.95rem}
+.data-hub .graduation-exact-table caption{text-align:left;font-size:1rem;font-weight:700;padding:.65rem 0}
+.data-hub .graduation-exact-table th,.data-hub .graduation-exact-table td{padding:.65rem .5rem;border-bottom:1px solid var(--color-data-hub-table-rule)}
+.data-hub .graduation-exact-table th:first-child{text-align:left}
+.data-hub .graduation-exact-table td:not(:first-child),.data-hub .graduation-exact-table th:not(:first-child){text-align:right;font-variant-numeric:tabular-nums}
+@media(max-width:740px){.data-hub .graduation-svg{min-width:770px;width:770px}.data-hub .graduation-toggle button{flex:1;min-width:130px}.data-hub .graduation-exact-table{font-size:.87rem}}
+
+/* ACS 2025 median gross rent: same-table national and regional comparisons */
+.data-hub .gross-rent-toggle{display:flex;flex-wrap:wrap;gap:.6rem;margin:1rem 0}
+.data-hub .gross-rent-toggle button{min-height:44px;padding:.65rem 1rem;border:1px solid var(--color-data-hub-subtle-edge);border-radius:4px;background:transparent;color:var(--text);font:inherit;font-weight:700;cursor:pointer}
+.data-hub .gross-rent-toggle button[aria-pressed="true"]{border-color:var(--color-data-hub-link);background:var(--bg-1);text-decoration:underline;text-underline-offset:4px}
+.data-hub .gross-rent-toggle button:focus-visible{outline:3px solid var(--color-data-hub-focus);outline-offset:3px}
+.data-hub .gross-rent-panel h4{font-size:1.16rem;font-weight:740;line-height:1.3;margin:.7rem 0 .25rem}
+.data-hub .gross-rent-panel p{line-height:1.5;margin:.35rem 0}
+.data-hub .gross-rent-chart-scroll,.data-hub .gross-rent-table-scroll{max-width:100%;overflow-x:auto}
+.data-hub .gross-rent-svg{display:block;max-width:none;width:100%;height:auto}
+.data-hub .gross-rent-table{width:100%;border-collapse:collapse;min-width:500px}
+.data-hub .gross-rent-table caption{text-align:left;font-weight:740;padding:.65rem 0}
+.data-hub .gross-rent-table th,.data-hub .gross-rent-table td{padding:.7rem .5rem;border-bottom:1px solid var(--color-data-hub-table-rule)}
+.data-hub .gross-rent-table th:first-child{text-align:left}
+.data-hub .gross-rent-table td,.data-hub .gross-rent-table th:not(:first-child){text-align:right;font-variant-numeric:tabular-nums}
+@media(max-width:750px){.data-hub .gross-rent-svg{min-width:790px;width:790px}.data-hub .gross-rent-toggle button{flex:1;min-width:135px}}
+
+/* September 2026 NY–Newark metro CPI: matched national benchmark or validated BLS history */
+.data-hub .metro-cpi-toggle{display:flex;flex-wrap:wrap;gap:.6rem;margin:1rem 0}
+.data-hub .metro-cpi-toggle button{min-height:44px;padding:.65rem 1rem;border:1px solid var(--color-data-hub-subtle-edge);border-radius:4px;background:transparent;color:var(--text);font:inherit;font-weight:700;cursor:pointer}
+.data-hub .metro-cpi-toggle button[aria-pressed="true"]{border-color:var(--color-data-hub-link);background:var(--bg-1);text-decoration:underline;text-underline-offset:4px}
+.data-hub .metro-cpi-toggle button:focus-visible{outline:3px solid var(--color-data-hub-focus);outline-offset:3px}
+.data-hub .metro-cpi-panel h4{font-size:1.16rem;font-weight:740;line-height:1.35;margin:.75rem 0 .25rem}
+.data-hub .metro-cpi-panel p{line-height:1.55}
+.data-hub .metro-cpi-plot,.data-hub .metro-cpi-data{max-width:100%;overflow-x:auto}
+.data-hub .metro-cpi-svg{display:block;width:100%;height:auto;max-width:none}
+.data-hub .metro-cpi-data table{min-width:400px;width:100%;border-collapse:collapse;font-size:.94rem}
+.data-hub .metro-cpi-data caption{text-align:left;font-size:1rem;font-weight:740;padding:.65rem 0}
+.data-hub .metro-cpi-data th,.data-hub .metro-cpi-data td{padding:.65rem .5rem;border-bottom:1px solid var(--color-data-hub-table-rule)}
+.data-hub .metro-cpi-data th:first-child{text-align:left}
+.data-hub .metro-cpi-data td,.data-hub .metro-cpi-data th:not(:first-child){text-align:right;font-variant-numeric:tabular-nums}
+@media(max-width:730px){.data-hub .metro-cpi-svg{min-width:760px;width:760px}.data-hub .metro-cpi-toggle button{flex:1;min-width:145px}}

@@ -1,5 +1,6 @@
 import october from "../data/schedule-corrections-2026-10.json";
 import november from "../data/schedule-corrections-2026-11.json";
+import december from "../data/schedule-corrections-2026-12.json";
 import {
   TVSS_TIME_ZONE,
   TVSS_WNJT_FEED_CID,
@@ -18,28 +19,74 @@ interface WorkbookEntry {
   endTime: string | null;
 }
 
-const correctionDates = new Set(october.days.map((day) => day.date));
+interface WorkbookSource {
+  source: { revision: string };
+  unresolved: { date: string; cells: string[] }[];
+  days: { date: string; entries: WorkbookEntry[] }[];
+}
 
-/** Filter dates supplied by the loaded correction source. */
+const workbooks: readonly WorkbookSource[] = [october, november.workbook, december];
+const workbookOnlyDates = new Set(october.days.map((day) => day.date));
+
+/** Filter loaded workbook dates; October replaces feed entries while later months retain matching PBS details. */
 export function uncorrectedScheduleDates(dates: readonly string[]): string[] {
-  return dates.filter((date) => !correctionDates.has(date));
+  return dates.filter((date) => !workbookOnlyDates.has(date));
 }
 
 function instant(date: string, time: string): string {
   if (time === "24:00") {
     const tomorrow = new Date(`${date}T12:00:00Z`);
     tomorrow.setUTCDate(tomorrow.getUTCDate() + 1);
-    return `${tomorrow.toISOString().slice(0, 10)}T00:00:00-04:00`;
+    return instant(tomorrow.toISOString().slice(0, 10), "00:00");
   }
-  // This correction is limited to October 2026, before the DST transition.
-  if (!/^2026-10-\d{2}$/.test(date) || !/^(?:[01]\d|2[0-3]):[0-5]\d$/.test(time)) {
-    throw new Error("The October schedule correction has an invalid time.");
+  if (!/^202[67]-\d{2}-\d{2}$/.test(date) || !/^(?:[01]\d|2[0-3]):[0-5]\d$/.test(time)) {
+    throw new Error("The schedule correction has an invalid time.");
   }
-  return `${date}T${time}:00-04:00`;
+  // These approved sources span the November 1, 2026 fall-back transition.
+  const daylight = date < "2026-11-01" || (date === "2026-11-01" && time < "02:00");
+  return `${date}T${time}:00${daylight ? "-04:00" : "-05:00"}`;
 }
 
 function identity(value: string): string {
   return value.toLowerCase().replace(/[^a-z0-9]/g, "");
+}
+
+function programWords(value: string): string {
+  return value.toLowerCase().replace(/^the\s+/, "").replace(/&/g, "and")
+    .replace(/[^a-z0-9]+/g, " ").trim()
+    .replace(/^dw (?=focus on europe$)/, "")
+    .replace(/\bchitmacha\b/, "chitimacha");
+}
+
+function truncatedProgramTitle(feedTitle: string, workbookTitle: string): boolean {
+  const feed = programWords(feedTitle);
+  const workbook = programWords(workbookTitle);
+  return feed.length >= 30 && workbook.startsWith(feed) &&
+    /^[a-z]/.test(workbook.slice(feed.length, feed.length + 1));
+}
+
+/** Titles can omit an article, name a special after a colon, or be cut short by PBS. */
+export function sameScheduleProgram(feedTitle: string, workbookTitle: string): boolean {
+  return programWords(feedTitle) === programWords(workbookTitle) ||
+    programWords(feedTitle.split(":")[0]) === programWords(workbookTitle) ||
+    truncatedProgramTitle(feedTitle, workbookTitle);
+}
+
+function episodeIdentity(value: string): string {
+  const parts: Record<string, string> = { one: "1", two: "2", three: "3", four: "4", i: "1", ii: "2", iii: "3", iv: "4" };
+  return value.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase()
+    .replace(/^the\s+/, "").replace(/&/g, "and").replace(/\+/g, "plus").replace(/=/g, "equals")
+    .replace(/\b(?:part|pt\.?)\s*(one|two|three|four|i{1,3}|iv|[1-9]\d*)\b/g,
+      (_match, part: string) => `part${parts[part] ?? part}`)
+    .replace(/[^a-z0-9]/g, "");
+}
+
+/** House/catalog numbers do not establish episode identity; explicit titles do. */
+export function scheduleEpisodeDiffers(
+  feed: Pick<ScheduleListing, "episodeTitle">,
+  title?: string,
+): boolean {
+  return Boolean(title && episodeIdentity(title) !== episodeIdentity(feed.episodeTitle ?? ""));
 }
 
 function consistentSeriesDescriptions(
@@ -68,23 +115,41 @@ function listing(
   description?: string,
 ): ScheduleListing {
   if (!entry.startTime || !entry.endTime) throw new Error("The correction has an unresolved interval.");
-  // A program at the same clock time can be a different show or episode. Keep
-  // upstream metadata only when both explicit identities agree.
-  const matching = !description && entry.episodeTitle
-    ? metadata.find((candidate) => candidate.episodeTitle &&
-      identity(candidate.title) === identity(entry.title) &&
-      identity(candidate.episodeTitle) === identity(entry.episodeTitle!))
-    : undefined;
+  // Match the new lineups by program and clock time. October's episode-specific
+  // correction retains its stricter explicit episode match.
+  const matching = description ? undefined : metadata.find((candidate) => {
+    if (!date.startsWith("2026-10")) {
+      const start = Date.parse(instant(date, entry.startTime!));
+      return sameScheduleProgram(candidate.title, entry.title) &&
+        Date.parse(candidate.startsAt) <= start && Date.parse(candidate.endsAt) > start;
+    }
+    return identity(candidate.title) === identity(entry.title) &&
+      entry.episodeTitle && candidate.episodeTitle &&
+      identity(candidate.episodeTitle) === identity(entry.episodeTitle);
+  });
   const resolvedDescription = description ??
     matching?.description ??
     seriesDescriptions.get(identity(entry.title));
+  const episodeDiffers = !date.startsWith("2026-10") && matching && scheduleEpisodeDiffers(matching, entry.episodeTitle);
+  const retained = matching ? { ...matching } : undefined;
+  if (retained && episodeDiffers) {
+    delete retained.episodeTitle;
+    delete retained.episodeDescription;
+    delete retained.airingType;
+    delete retained.hd;
+    delete retained.closedCaptions;
+    retained.seasonNumber = null;
+    retained.episodeNumber = null;
+    retained.cid = null;
+  }
   return {
-    ...(matching ?? {
+    ...(retained ?? {
       seasonNumber: null, episodeNumber: null, nolaRoot: null,
       programId: null, programExternalId: null, cid: null,
     }),
-    title: entry.title,
-    ...(entry.episodeTitle ? { episodeTitle: matching?.episodeTitle ?? entry.episodeTitle } : {}),
+    title: matching && !date.startsWith("2026-10") && !truncatedProgramTitle(matching.title, entry.title)
+      ? matching.title : entry.title,
+    ...((!matching || episodeDiffers) && entry.episodeTitle ? { episodeTitle: entry.episodeTitle } : {}),
     ...(resolvedDescription ? { description: resolvedDescription } : {}),
     startsAt: instant(date, entry.startTime),
     endsAt: instant(date, entry.endTime),
@@ -98,6 +163,7 @@ function correctedDay(
   day: { date: string; entries: readonly WorkbookEntry[] },
   metadata: readonly ScheduleListing[],
   seriesDescriptions: ReadonlyMap<string, string>,
+  source: WorkbookSource,
 ): ScheduleFeedDay {
   const entries: ScheduleListing[] = [];
   for (let index = 0; index < day.entries.length; index += 1) {
@@ -106,43 +172,62 @@ function correctedDay(
       entries.push(listing(day.date, entry, metadata, seriesDescriptions));
       continue;
     }
-    const next = day.entries[index + 1];
-    const documented = october.unresolved.some((item) => item.date === day.date &&
-      item.cells[0] === entry.cells && item.cells[1] === next?.cells);
-    if (!documented || !entry.startTime || next?.startTime !== null || !next.endTime) {
-      throw new Error("The October schedule has an undocumented unresolved boundary.");
+    const group = [entry];
+    while (group.at(-1)!.endTime === null) {
+      const previous = group.at(-1)!;
+      const next = day.entries[++index];
+      const documented = source.unresolved.some((item) => item.date === day.date &&
+        item.cells[0] === previous.cells && item.cells[1] === next?.cells);
+      if (!documented || !entry.startTime || next?.startTime !== null) {
+        throw new Error("The schedule has an undocumented unresolved boundary.");
+      }
+      group.push(next);
     }
+    const programs = group.filter((item) => item.title !== "Fill");
+    if (programs.length === 1 && programs.length < group.length) {
+      const airing = listing(day.date, { ...programs[0], endTime: group.at(-1)!.endTime }, metadata, seriesDescriptions);
+      entries.push({ ...airing, title: `${airing.title.replace(/: Timing to be confirmed$/, "")}: Timing to be confirmed` });
+      continue;
+    }
+    const titles = programs.map((item) => item.title);
     entries.push(listing(day.date, {
-      ...entry, title: `${entry.title} / ${next.title}: Timing to be confirmed`,
-      episodeTitle: undefined, episodeCode: null, isKids: false, endTime: next.endTime,
-    }, [], seriesDescriptions, `${entry.title} is followed by ${next.title}. The program order is confirmed; the exact changeover time is awaiting confirmation.`));
-    index += 1;
+      ...entry, title: `${titles.join(" / ")}: Timing to be confirmed`,
+      episodeTitle: undefined, episodeCode: null, isKids: false, endTime: group.at(-1)!.endTime,
+    }, [], seriesDescriptions, `${titles.join(" is followed by ")}. The program order is confirmed; the exact changeover time is awaiting confirmation.`));
   }
   return {
     date: day.date, callsign: "wnjt", kind: "broadcast", feedCid: TVSS_WNJT_FEED_CID,
-    timeZone: TVSS_TIME_ZONE, sourceRevision: october.source.revision, entries,
+    timeZone: TVSS_TIME_ZONE, sourceRevision: source.source.revision, entries,
   };
 }
 
-function applyOctoberScheduleCorrections(data: BakedScheduleData): BakedScheduleData {
-  if (!data.request.dates.some((date) => correctionDates.has(date))) return data;
+function applyWorkbookScheduleCorrections(data: BakedScheduleData): BakedScheduleData {
+  const active = workbooks.find((source) => source.days.some((day) => data.request.dates.includes(day.date)));
+  if (!active) return data;
+  // Expand the first covered month only. Adjacent months use the rolling window,
+  // which keeps the existing 45-day source bound at month boundaries.
+  const dates = [...new Set([...data.request.dates, ...active.days.map((day) => day.date)])].sort();
+  if (dates.length > 45) throw new Error("The corrected schedule exceeds the 45-day source limit.");
+  const includedDates = new Set(dates);
   const broadcast = new Map(data.days.broadcast.map((day) => [day.date, day]));
   const kids = new Map(data.days.kids.map((day) => [day.date, day]));
   const seriesDescriptions = consistentSeriesDescriptions(data.days.broadcast);
-  for (const day of october.days) {
-    const corrected = correctedDay(
-      day,
-      broadcast.get(day.date)?.entries ?? [],
-      seriesDescriptions,
-    );
-    broadcast.set(day.date, corrected);
-    kids.set(day.date, {
-      ...corrected, kind: "kids",
-      entries: corrected.entries.map((entry) => ({ ...entry, feedKind: "kids" })),
-    });
+  for (const source of workbooks) {
+    for (const day of source.days) {
+      if (!includedDates.has(day.date)) continue;
+      const corrected = correctedDay(
+        day,
+        broadcast.get(day.date)?.entries ?? [],
+        seriesDescriptions,
+        source,
+      );
+      broadcast.set(day.date, corrected);
+      kids.set(day.date, {
+        ...corrected, kind: "kids",
+        entries: corrected.entries.map((entry) => ({ ...entry, feedKind: "kids" })),
+      });
+    }
   }
-  const dates = [...new Set([...data.request.dates, ...correctionDates])].sort();
-  if (dates.length > 45) throw new Error("The corrected schedule exceeds the 45-day source limit.");
   return {
     ...data, source: "pbs-tvss-with-njpbs-corrections",
     request: { ...data.request, dates },
@@ -155,7 +240,7 @@ function applyOctoberScheduleCorrections(data: BakedScheduleData): BakedSchedule
 
 const novemberEpisodes = new Map(november.dates.map((episode) => [episode.date, episode]));
 
-/** November supplies episode details, not a replacement channel timeline. */
+/** Apply the separately approved November episode details after the lineup. */
 function applyNovemberEpisodeCorrections(data: BakedScheduleData): BakedScheduleData {
   let changed = false;
   function correctDay(day: ScheduleFeedDay): ScheduleFeedDay {
@@ -185,5 +270,5 @@ function applyNovemberEpisodeCorrections(data: BakedScheduleData): BakedSchedule
 
 /** Apply the same dated sources to baked pages, publisher input and refresh checks. */
 export function applyScheduleCorrections(data: BakedScheduleData): BakedScheduleData {
-  return applyNovemberEpisodeCorrections(applyOctoberScheduleCorrections(data));
+  return applyNovemberEpisodeCorrections(applyWorkbookScheduleCorrections(data));
 }
