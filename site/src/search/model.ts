@@ -32,30 +32,37 @@ export async function fetchSearchModel(input: string | URL, init?: RequestInit) 
   }
 }
 
-/** Frozen publication builds use only the model cache packaged with the release. */
+/** Prefer the pinned cache; frozen publication builds never download missing files. */
 export async function loadSearchEncoder(
   offline = Boolean(process.env.PUBLIC_ARTIFACT_BUNDLE_PATH),
 ) {
-  const { pipeline, env } = await import("@huggingface/transformers");
-  env.allowLocalModels = offline;
-  env.allowRemoteModels = !offline;
-  env.useFSCache = !offline;
+  const { pipeline, env, ModelFileNotFoundError } = await import("@huggingface/transformers");
   env.remotePathTemplate = `{model}/resolve/${MODEL_REVISION}/`;
-  // The exact local directory lets discovery probes find the pinned metadata
-  // without a network request or cache write.
-  if (offline && !env.cacheDir)
-    throw new Error("Search model cache is unavailable");
-  const model = offline
-    ? path.join(env.cacheDir!, MODEL_ID, MODEL_REVISION)
-    : MODEL_ID;
   const originalFetch = env.fetch;
-  if (!offline) env.fetch = fetchSearchModel;
-  try {
-    return await pipeline("feature-extraction", model, {
+  const load = (cacheOnly: boolean) => {
+    env.allowLocalModels = cacheOnly;
+    env.allowRemoteModels = !cacheOnly;
+    env.useFSCache = !cacheOnly;
+    env.fetch = cacheOnly ? originalFetch : fetchSearchModel;
+    // The exact directory keeps optional discovery probes local too.
+    if (cacheOnly && !env.cacheDir)
+      throw new Error("Search model cache is unavailable");
+    const model = cacheOnly
+      ? path.join(env.cacheDir!, MODEL_ID, MODEL_REVISION)
+      : MODEL_ID;
+    return pipeline("feature-extraction", model, {
       dtype: "q8",
       revision: MODEL_REVISION,
-      local_files_only: offline,
+      local_files_only: cacheOnly,
     });
+  };
+  try {
+    try {
+      return await load(true);
+    } catch (error) {
+      if (offline || !(error instanceof ModelFileNotFoundError)) throw error;
+      return await load(false);
+    }
   } finally {
     env.fetch = originalFetch;
   }

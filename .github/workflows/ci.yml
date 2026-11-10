@@ -31,6 +31,7 @@ concurrency:
   # PR and queue runs still cancel superseded work. Manual runs are isolated.
   cancel-in-progress: ${{ github.event_name != 'push' || github.ref != 'refs/heads/main' }}
 env:
+  WRANGLER_SEND_METRICS: "false"
   CANONICAL_GITHUB_REPOSITORY: ${{ vars.CANONICAL_GITHUB_REPOSITORY }}
   CANONICAL_GITHUB_REPOSITORY_ID: ${{ vars.CANONICAL_GITHUB_REPOSITORY_ID }}
   VITE_CANONICAL_GITHUB_REPOSITORY: ${{ vars.CANONICAL_GITHUB_REPOSITORY }}
