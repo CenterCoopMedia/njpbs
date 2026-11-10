@@ -175,14 +175,6 @@ class EmittedRoutes(BrowserChecks):
         self.assertTrue(paths, f"no emitted HTML under {DIST}")
         self.assertIsNone(mode_mismatch(paths, MODE))
         with self.browser.new_context() as context:
-            # Local preview uses proof fonts; production font CORS is a live-origin check.
-            def serve_proof_font(route):
-                name = route.request.url.rsplit("/", 1)[-1]
-                face = "Black" if name == "PBSSans-Black.woff2" else "Bold" if name == "PBSSans-Bold.woff2" else "Regular"
-                font = Path(__file__).resolve().parent.parent / "site/src/assets/pdf-fonts" / f"PublicSans-{face}.ttf"
-                route.fulfill(path=str(font), content_type="font/ttf", headers={"access-control-allow-origin": "*"})
-
-            context.route(re.compile(r"^https://media\.njpbs\.org/cms-media/fonts/[a-f0-9]{64}/PBSSans(?:-(?:Light|Medium|Bold|Black))?\.woff2$"), serve_proof_font)
             # Endless third-party player embeds are outside the top-document
             # contract, as in the axe scan. Fulfill them without an abort error.
             context.route(is_blocked_embed, lambda route: route.fulfill(status=200, body=""))

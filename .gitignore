@@ -42,6 +42,7 @@ credentials.json
 token.json
 
 # Branding: Version-control the canonical favicon.
+/site/public/brand/fonts/
 # The brand source logos and the large third-party PBS style-guide PDF stay local.
 branding/*
 !branding/njpbs-favicon.png

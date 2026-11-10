@@ -1,6 +1,8 @@
 import { assertDevelopmentSource, hasRenderedDevelopmentInputs } from "../../scripts/render-development-config.mjs";
 import { execFile } from "node:child_process";
-import { realpath } from "node:fs/promises";
+import { createHash } from "node:crypto";
+import { constants } from "node:fs";
+import { lstat, open, readFile, readdir, realpath } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -109,6 +111,29 @@ export async function assertCmsPreviewSourceCheckout(expectedCommitSha: string, 
   // The compiled directory has a separate exact-source/file-digest check at
   // startup and inside each sandbox job; it is never an arbitrary source root.
   const allowed = new Set([".rendered-deployment-inputs.json", "node_modules/", "site/node_modules/", "admin/node_modules/", "functions/node_modules/", "cms-api/node_modules/", "site/.astro/", "site/.compiled-renderer/", "site/.public-post-renderer/"]);
+  const fontPath = "site/public/brand/fonts/";
+  if (ignored.value.split("\0").includes(fontPath)) {
+    try {
+      const root = (await git(["rev-parse", "--show-toplevel"])).trim();
+      if (!path.isAbsolute(root)) throw new Error("Invalid source root");
+      const directory = path.join(root, fontPath);
+      if (!(await lstat(directory)).isDirectory()) throw new Error("Invalid font directory");
+      const manifest = JSON.parse(await readFile(path.join(root, "site/scripts/public-fonts.json"), "utf8"));
+      const files = await readdir(directory, { withFileTypes: true });
+      if (files.some(file => !file.isFile() || !/^PBSSans(?:-(?:Light|Medium|Bold|Black))?\.woff2$/.test(file.name)) ||
+          JSON.stringify(files.map(file => file.name).sort()) !== JSON.stringify(Object.keys(manifest).sort())) throw new Error("Invalid font inventory");
+      for (const file of files) {
+        const handle = await open(path.join(directory, file.name), constants.O_RDONLY | constants.O_NOFOLLOW);
+        try {
+          const stat = await handle.stat();
+          if (!stat.isFile() || stat.nlink !== 1 || createHash("sha256").update(await handle.readFile()).digest("hex") !== manifest[file.name]) {
+            throw new Error("Invalid font bytes");
+          }
+        } finally { await handle.close(); }
+      }
+      allowed.add(fontPath);
+    } catch { runtimeError("The private preview source contains invalid prepared public fonts"); }
+  }
   if (ignored.value.split("\0").filter(Boolean).some(file => !allowed.has(file))) {
     runtimeError("The private preview source contains unexpected ignored files");
   }

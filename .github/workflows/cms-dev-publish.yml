@@ -382,6 +382,9 @@ jobs:
           github-token: ${{ github.token }}
           run-id: ${{ github.run_id }}
           path: dev-publication
+      - name: Prepare pinned public fonts for offline build
+        if: steps.retained.outputs.exists != 'true'
+        run: node site/scripts/prepare-public-fonts.mjs
       - name: Prepare pinned search model for offline build
         if: steps.retained.outputs.exists != 'true'
         run: node --import ./site/node_modules/tsx/dist/loader.mjs site/scripts/prepare-search-model.ts

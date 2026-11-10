@@ -17,7 +17,8 @@ RUN export ONNXRUNTIME_NODE_INSTALL=skip \
     && npm --prefix site ci --no-audit --no-fund \
     && npm cache clean --force
 COPY --chown=node:node source/ /app/
-RUN node --import /app/site/node_modules/tsx/dist/loader.mjs /app/site/scripts/build-compiled-renderer.ts \
+RUN node /app/site/scripts/prepare-public-fonts.mjs \
+    && node --import /app/site/node_modules/tsx/dist/loader.mjs /app/site/scripts/build-compiled-renderer.ts \
     && mkdir -p site/.astro site/node_modules/.astro site/node_modules/.vite
 ENV NODE_ENV=production ASTRO_TELEMETRY_DISABLED=1 TZ=America/New_York
 EXPOSE 8080

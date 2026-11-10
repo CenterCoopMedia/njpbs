@@ -258,6 +258,13 @@ jobs:
       - name: Install site dependencies
         working-directory: site
         run: npm ci --ignore-scripts
+      - name: Cache pinned public fonts
+        uses: actions/cache@v6
+        with:
+          path: site/public/brand/fonts
+          key: public-fonts-${{ hashFiles('site/scripts/public-fonts.json') }}
+      - name: Seed and verify public fonts before renderer and frozen builds
+        run: node site/scripts/prepare-public-fonts.mjs
       - name: Cache pinned search model
         uses: actions/cache@v6
         with:

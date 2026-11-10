@@ -372,6 +372,9 @@ jobs:
       # A CMS deployment replaces the complete Pages artifact. Refresh the same
       # external data as pages.yml before reserving the Firestore cutoff so one
       # editorial change cannot restore an older committed cache.
+      - name: Prepare pinned public fonts for frozen builds
+        working-directory: site
+        run: node scripts/prepare-public-fonts.mjs
       - name: Prepare local search model for frozen builds
         working-directory: site
         run: |

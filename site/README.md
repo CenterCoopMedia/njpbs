@@ -25,6 +25,16 @@ Builds that need content services require their environment configuration.
 `CMS_OFFLINE_BUILD=1` uses retained content without remote content reads.
 `PUBLIC_ONLY=1` builds the small public landing page and public wiki.
 
+Public builds prepare the five licensed PBS Sans font files at
+`public/brand/fonts/`, which is ignored by Git. The build downloads them from
+the public station site and verifies the checked-in SHA-256 manifest at
+`scripts/public-fonts.json`. Cached files are verified on every build.
+Before a development server, standalone renderer, offline or frozen build, run
+`node scripts/prepare-public-fonts.mjs` once with network access. Offline and
+frozen builds never download fonts: missing or corrupt files stop the build.
+CI restores the manifest-keyed cache and runs that same preparation command
+before renderer checks. Font bytes remain outside the code license and Git.
+
 The published schedule snapshot is tracked in `src/data/schedule.json` and used
 by site builds. `NOTICE` excludes schedule data from the MIT license grant.
 Schedule feed credentials remain configured secrets and must not enter source.

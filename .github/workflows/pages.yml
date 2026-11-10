@@ -464,6 +464,9 @@ jobs:
           set -euo pipefail
           mv .configuration-render-gate "$RUNNER_TEMP/configuration-render-gate"
           node "$RUNNER_TEMP/configuration-render-gate/scripts/render-development-config.mjs" --production --root "$GITHUB_WORKSPACE"
+      - name: Prepare pinned public fonts for frozen builds
+        working-directory: site
+        run: node scripts/prepare-public-fonts.mjs
       - name: Prepare local search model for frozen builds
         working-directory: site
         run: |
