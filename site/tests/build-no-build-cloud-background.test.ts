@@ -3,8 +3,13 @@ import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
+import { fileURLToPath } from "node:url";
 
-const boundary = vi.hoisted(() => ({ execFile: vi.fn(), sandbox: vi.fn() }));
+const boundary = vi.hoisted(() => ({ execFile: vi.fn(), sandbox: vi.fn(), realpath: vi.fn() }));
+vi.mock("node:fs/promises", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("node:fs/promises")>();
+  return { ...actual, realpath: boundary.realpath.mockImplementation(actual.realpath) };
+});
 vi.mock("node:child_process", () => ({ execFile: boundary.execFile }));
 vi.mock("../scripts/process-cms-preview", () => ({ privatePreviewSandbox: boundary.sandbox }));
 vi.mock("../scripts/cms-publication-runtime-guard", () => ({ assertCmsPublicationSourceCheckout: vi.fn(async () => {}) }));
@@ -75,6 +80,19 @@ it("captures spawn failure without retaining the command or trusting arbitrary c
 it("copies the verified receipt and public context after a successful child build", async () => {
   const { privatePreviewSandbox } = await vi.importActual<typeof import("../scripts/process-cms-preview")>("../scripts/process-cms-preview");
   boundary.sandbox.mockImplementation(privatePreviewSandbox);
+  // Supply installed-dependency locations at the filesystem boundary; Site CI
+  // installs only Site dependencies. Keep the actual sandbox argument builder.
+  const rootDependencies = path.join(directory, "root-dependencies");
+  const siteDependencies = path.join(directory, "site-dependencies");
+  await mkdir(rootDependencies);
+  await mkdir(siteDependencies);
+  const dependencies = new Map([
+    [fileURLToPath(new URL("../../node_modules", import.meta.url)), rootDependencies],
+    [fileURLToPath(new URL("../node_modules", import.meta.url)), siteDependencies],
+  ]);
+  const actualFs = await vi.importActual<typeof import("node:fs/promises")>("node:fs/promises");
+  boundary.realpath.mockImplementation((file) => dependencies.has(String(file))
+    ? actualFs.realpath(dependencies.get(String(file))!) : actualFs.realpath(file));
   const dist = path.join(directory, "dist");
   await mkdir(dist, { mode: 0o700 });
   const cutoffAt = { seconds: 1700000000, nanoseconds: 0, toMillis: () => 1700000000000 };
@@ -97,6 +115,12 @@ it("copies the verified receipt and public context after a successful child buil
   expect(env.PUBLIC_ARTIFACT_RETAINED_IMAGES_PATH).toBe("/background/remote-images.json");
   expect(env.SCHEDULE_DATA_PATH).toBe("/background/schedule.json");
   const args = boundary.execFile.mock.calls[0][1];
+  expect(args).toContain("--unshare-all");
+  expect(args).toContain("--unshare-user");
+  for (const dependency of [rootDependencies, siteDependencies]) {
+    const index = args.indexOf(dependency);
+    expect(args.slice(index - 1, index + 2)).toEqual(["--ro-bind", dependency, dependency]);
+  }
   expect(args).not.toContain("/preview/schedule.json");
   const schedule = args.indexOf("/background/schedule.json");
   expect(args.slice(schedule - 2, schedule + 1)).toEqual(["--ro-bind", path.join(directory, "schedule.json"), "/background/schedule.json"]);

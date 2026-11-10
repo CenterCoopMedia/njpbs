@@ -1,0 +1,7 @@
+{
+  "date": "2026-11-10",
+  "kind": "fixed",
+  "title": "Keep workspace search ready after resizing",
+  "body": "After you resize Boardwalk, Ctrl+K or Command+K opens the Finder for the current screen size. Closing it returns focus to a visible control.",
+  "prs": [1]
+}

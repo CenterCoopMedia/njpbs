@@ -5,6 +5,7 @@ import { fileURLToPath } from "node:url";
 import { readFile, writeFile } from "node:fs/promises";
 import sitemap from "@astrojs/sitemap";
 import { meaningSearchIndex } from "./src/search/build-corpus.ts";
+import { publicFonts } from "./scripts/prepare-public-fonts.mjs";
 import { rehypeAdminGuideVideos } from "./src/lib/rehype-admin-guide-videos.mjs";
 import { rehypePublicContentLinks } from "./src/lib/public-content-links.ts";
 import { rehypeStripComments } from "./src/lib/rehype-strip-comments.ts";
@@ -204,6 +205,7 @@ export default defineConfig({
     ],
   },
   integrations: [
+    publicFonts,
     meaningSearchIndex(),
     internalSurfaceRoutes,
     publicAuxiliaryRoutes,

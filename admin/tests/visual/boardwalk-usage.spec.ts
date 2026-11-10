@@ -1,4 +1,4 @@
-import { expect, test } from "@playwright/test";
+import { expect, installProofFonts, test } from "./fixtures";
 
 for (const width of [390, 1280]) {
   test(`usage analytics history, empty, failure and populated views at ${width}px`, async ({ page, baseURL }, testInfo) => {
@@ -14,6 +14,7 @@ for (const width of [390, 1280]) {
       }
       return route.continue();
     });
+    await installProofFonts(page);
     await page.route("**/src/lib/functions.ts*", route => route.fulfill({ contentType: "text/javascript", body: `
       export class HttpError extends Error {}
       export async function cmsListBugReports(){return {reports:[],truncated:false,sharedReportsActive:true};}

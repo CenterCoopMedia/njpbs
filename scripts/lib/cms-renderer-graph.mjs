@@ -17,7 +17,7 @@ const LAUNCH_CONTRACTS = {
   "scripts/lib/deployment-settings.mjs": "e2438b3a0bc4087fc62c363f2eb056fd99f024be",
   ".dockerignore": null,
   "preview-renderer/Dockerfile.dockerignore": null,
-  "preview-renderer/Dockerfile": "c4bf9f798c60be1a60e8efddfdec1d0989aa777f",
+  "preview-renderer/Dockerfile": "719cd3ac193cbd4d06a774ef4d58c556bade651e",
   "preview-renderer/worker.ts": "8afb604441bc62f95acdace555b5de75c297afec",
   "preview-renderer/wrangler.jsonc": "de29eeb62adaa32ddd720e48ca3a6f6032beeab5",
   "scripts/prepare-preview-renderer.mjs": "eee8b9e46b78489bf1cbf0dfbc1c8470f7d46c13",
@@ -30,7 +30,7 @@ const LAUNCH_CONTRACTS = {
   "site/scripts/process-cms-preview.ts": "99833050f6abb21b74abb33e0e584392664bef5d",
   "site/scripts/run-cms-preview-cloud.ts": "aa8a210eeb0de195bb1ca71e5ae6f6c6c405eb3a",
   "site/scripts/render-compiled-preview.ts": "4f8bc132ec4a460149734b0b2c5e6a43f3481ab2",
-  "site/scripts/cms-publication-runtime-guard.ts": "d24c6c497b54aa389f66c009acdd20431d873f12",
+  "site/scripts/cms-publication-runtime-guard.ts": "4d4022a20284beb50ca042dda859c87b9b061442",
   "site/scripts/cms-preview-operator-checks.ts": "d6c68503575b378001082a83a9556eb95a578c71",
 };
 const GUARDS = ["site", "preview-renderer", "packages", ".npmrc", "package.json", "package-lock.json",

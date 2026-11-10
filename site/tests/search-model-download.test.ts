@@ -1,6 +1,15 @@
 // @vitest-environment node
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { fetchSearchModel } from "../src/search/model";
+import path from "node:path";
+import { fetchSearchModel, loadSearchEncoder } from "../src/search/model";
+import { MODEL_ID, MODEL_REVISION } from "../../packages/browser-search/contracts";
+
+const transformers = vi.hoisted(() => ({
+  pipeline: vi.fn(),
+  env: { cacheDir: "/model-cache", fetch: vi.fn(), allowRemoteModels: true },
+  ModelFileNotFoundError: class extends Error {},
+}));
+vi.mock("@huggingface/transformers", () => transformers);
 
 const modelUrl = "https://huggingface.co/example/resolve/pinned/config.json";
 const networkError = () =>
@@ -9,6 +18,60 @@ const networkError = () =>
 afterEach(() => {
   vi.unstubAllGlobals();
   vi.useRealTimers();
+  vi.unstubAllEnvs();
+  transformers.pipeline.mockReset();
+});
+
+describe("pinned search model cache", () => {
+  const cachedModel = path.join("/model-cache", MODEL_ID, MODEL_REVISION);
+  const encoder = vi.fn();
+
+  it("loads a warm cache without permitting a remote probe", async () => {
+    vi.stubEnv("PUBLIC_ARTIFACT_BUNDLE_PATH", "");
+    transformers.pipeline.mockImplementation(async (_task, model, options) => {
+      expect(transformers.env.allowRemoteModels).toBe(false);
+      expect(model).toBe(cachedModel);
+      expect(options).toMatchObject({ local_files_only: true, revision: MODEL_REVISION, dtype: "q8" });
+      return encoder;
+    });
+    expect(await loadSearchEncoder()).toBe(encoder);
+    expect(transformers.pipeline).toHaveBeenCalledTimes(1);
+  });
+
+  it("downloads the pinned revision only when required cache files are missing", async () => {
+    const originalFetch = transformers.env.fetch;
+    transformers.pipeline
+      .mockRejectedValueOnce(new transformers.ModelFileNotFoundError("missing model"))
+      .mockImplementationOnce(async (_task, model, options) => {
+        expect(transformers.env.allowRemoteModels).toBe(true);
+        expect(transformers.env.fetch).toBe(fetchSearchModel);
+        expect(model).toBe(MODEL_ID);
+        expect(options).toMatchObject({ local_files_only: false, revision: MODEL_REVISION, dtype: "q8" });
+        return encoder;
+      });
+    expect(await loadSearchEncoder(false)).toBe(encoder);
+    expect(transformers.pipeline).toHaveBeenCalledTimes(2);
+    expect(transformers.env.fetch).toBe(originalFetch);
+  });
+
+  it.each(["explicit", "frozen artifact"])("never downloads for %s offline publication", async (kind) => {
+    vi.stubEnv("PUBLIC_ARTIFACT_BUNDLE_PATH", kind === "frozen artifact" ? "/release" : "");
+    const missing = new transformers.ModelFileNotFoundError("missing model");
+    transformers.pipeline.mockRejectedValue(missing);
+    await expect(kind === "explicit" ? loadSearchEncoder(true) : loadSearchEncoder()).rejects.toBe(missing);
+    expect(transformers.pipeline).toHaveBeenCalledTimes(1);
+    expect(transformers.env.allowRemoteModels).toBe(false);
+  });
+
+  it("does not replace an invalid cached model with a network download", async () => {
+    const originalFetch = transformers.env.fetch;
+    const error = new Error("model integrity mismatch");
+    transformers.pipeline.mockRejectedValue(error);
+    await expect(loadSearchEncoder(false)).rejects.toBe(error);
+    expect(transformers.pipeline).toHaveBeenCalledTimes(1);
+    expect(transformers.env.allowRemoteModels).toBe(false);
+    expect(transformers.env.fetch).toBe(originalFetch);
+  });
 });
 
 describe("search model download", () => {

@@ -44,6 +44,24 @@ incarnations. It supplies no general retirement/slot-reuse escape. Do not edit
 records to bypass capacity. Retiring accepted-work/assets/media/requests requires
 their actual owner proof first.
 
+## Public checkout font preparation
+
+In a networked Node.js 22 checkout preparation session on macOS or Linux, run
+this block from the public repository root before entering the protected WSL
+first-install session. It downloads the five licensed fonts into the ignored
+`site/public/brand/fonts/` directory and verifies the checked-in SHA-256 pins.
+Do this before enabling offline/frozen mode or mounting the checkout read-only;
+the build refuses missing or corrupt fonts and never fetches while offline.
+Keep these verified files in the target checkout used by first-install builds.
+Publisher images perform the same preparation in their Dockerfiles.
+
+```sh
+node site/scripts/prepare-public-fonts.mjs
+```
+
+The private `njpbs-site` repository keeps its tracked fonts and needs no added
+preparation. These steps apply to the public source split.
+
 ## Source, session and credential boundary
 
 All attended first-install blocks run one at a time in their protected, retained

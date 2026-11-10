@@ -1,5 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { join } from "node:path";
+import { existsSync, readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import {
   markdownlintConfigOffenders,
@@ -106,6 +107,16 @@ describe("source obeys the no-metered-API guardrail (#245)", () => {
     ]);
     expect(manifestOffenders(repoRoot, [...SCANNED_MANIFESTS])).toEqual([]);
     expect(manifestOffenders(repoRoot, scanPackageManifestFiles(repoRoot))).toEqual([]);
+    // The fixture compilers create Vite module metadata after a clean checkout.
+    // Keep scanning it and require its exact non-executable shape.
+    const generatedManifests = [
+      "site/.public-page-fixture-cache/vite-sync/deps/package.json",
+      "site/.public-page-static-fixtures/record-cache/vite-sync/deps/package.json",
+      "site/.public-post-fixture-cache/vite-sync/deps/package.json",
+    ].filter((file) => existsSync(join(repoRoot, file)));
+    for (const file of generatedManifests) {
+      expect(JSON.parse(readFileSync(join(repoRoot, file), "utf8"))).toEqual({ type: "module" });
+    }
     expect(scanPackageManifestFiles(repoRoot)).toEqual([
       "admin/package.json",
       "agents/vmix/package.json",
@@ -119,7 +130,8 @@ describe("source obeys the no-metered-API guardrail (#245)", () => {
       "publisher/package.json",
       "site/package.json",
       "tests/public-post-runtime/package.json",
-    ]);
+      ...generatedManifests,
+    ].sort());
   });
 
   it("scans every supported Markdown lint config tree-wide and forbids custom rules", () => {

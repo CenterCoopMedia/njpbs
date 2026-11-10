@@ -7,7 +7,7 @@ import { Icon } from "./ui/Icon";
 import { Button } from "./ui/Primitives";
 
 /** Searches the already-authorized, personally arranged rail; never reads CMS data. */
-export function WorkspaceFinder({ destinations, shortcutEnabled = true, triggerRef, fallbackFocusRef }: { destinations: readonly NavDestinationDef[]; shortcutEnabled?: boolean; triggerRef?: Ref<HTMLButtonElement>; fallbackFocusRef?: RefObject<HTMLButtonElement> }) {
+export function WorkspaceFinder({ destinations, shortcutEnabled, triggerRef, fallbackFocusRef }: { destinations: readonly NavDestinationDef[]; shortcutEnabled?: () => boolean; triggerRef?: Ref<HTMLButtonElement>; fallbackFocusRef?: RefObject<HTMLButtonElement> }) {
   const dialogRef = useRef<HTMLDialogElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const headingId = useId();
@@ -28,7 +28,8 @@ export function WorkspaceFinder({ destinations, shortcutEnabled = true, triggerR
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
-      if (!shortcutEnabled || event.defaultPrevented || event.repeat || event.altKey || event.shiftKey ||
+      // Viewport matches can change before responsive effects update their state.
+      if ((shortcutEnabled && !shortcutEnabled()) || event.defaultPrevented || event.repeat || event.altKey || event.shiftKey ||
           !(event.ctrlKey || event.metaKey) || event.key.toLowerCase() !== "k") return;
       // Leave rich-text link shortcuts, ordinary typing, and other modal flows alone.
       const target = event.target;

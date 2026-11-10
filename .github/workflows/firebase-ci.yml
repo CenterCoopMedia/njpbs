@@ -21,6 +21,7 @@ concurrency:
   cancel-in-progress: ${{ github.event_name != 'push' || github.ref != 'refs/heads/main' }}
 
 env:
+  WRANGLER_SEND_METRICS: "false"
   CANONICAL_GITHUB_REPOSITORY: ${{ vars.CANONICAL_GITHUB_REPOSITORY }}
   CANONICAL_GITHUB_REPOSITORY_ID: ${{ vars.CANONICAL_GITHUB_REPOSITORY_ID }}
 
@@ -153,8 +154,6 @@ jobs:
           fi
       - name: Own-site crawl Worker checks
         if: steps.crawl-paths.outputs.changed == 'true'
-        env:
-          WRANGLER_SEND_METRICS: "false"
         run: |
           npm ci --prefix crawl-worker --ignore-scripts
           npm --prefix crawl-worker test
@@ -175,8 +174,6 @@ jobs:
           tests/dev-renderer-workflow.test.mjs tests/development-install-command-files.test.ts
           --maxWorkers=1 --no-file-parallelism
       - name: Check shadow Post Worker
-        env:
-          WRANGLER_SEND_METRICS: "false"
         run: |
           npx --no-install tsc --project workers/tsconfig.shadow-posts.json
           npm run test:published-post-reader

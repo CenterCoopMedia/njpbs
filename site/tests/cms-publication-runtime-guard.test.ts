@@ -1,6 +1,7 @@
 // @vitest-environment node
 
-import { mkdir, mkdtemp, rm, symlink, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm, symlink, writeFile } from "node:fs/promises";
+import { createHash } from "node:crypto";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import { tmpdir } from "node:os";
@@ -22,6 +23,42 @@ afterEach(async () => {
 });
 
 describe("CMS publication runtime guard", () => {
+  it("admits only exact manifest-pinned regular font files in a real clean checkout", async () => {
+    const root = await mkdtemp(path.join(tmpdir(), "preview-font-source-"));
+    temporaryDirectories.push(root);
+    const git = async (args: string[]) => (await promisify(execFile)("/usr/bin/git", ["-c", "core.hooksPath=/dev/null", "-C", root, ...args])).stdout;
+    await git(["init", "--quiet"]);
+    await writeFile(path.join(root, ".gitignore"), "site/public/brand/fonts/\nnode_modules/\n");
+    const names = Object.keys(JSON.parse(await readFile(new URL("../scripts/public-fonts.json", import.meta.url), "utf8")));
+    const manifest = Object.fromEntries(names.map(name => [name, createHash("sha256").update(`fixture ${name}`).digest("hex")]));
+    await mkdir(path.join(root, "site/scripts"), { recursive: true });
+    await mkdir(path.join(root, "site/public/brand"), { recursive: true });
+    await writeFile(path.join(root, "site/public/brand/source.txt"), "tracked brand asset");
+    await writeFile(path.join(root, "site/scripts/public-fonts.json"), JSON.stringify(manifest));
+    await git(["add", "."]);
+    await git(["-c", "user.name=Fixture Author", "-c", "user.email=fixture-author@example.org", "commit", "--quiet", "-m", "Pinned font fixture"]);
+    const sha = (await git(["rev-parse", "HEAD"])).trim();
+    const fonts = path.join(root, "site/public/brand/fonts");
+    await mkdir(fonts, { recursive: true });
+    for (const name of names) await writeFile(path.join(fonts, name), `fixture ${name}`);
+    await expect(assertCmsPreviewSourceCheckout(sha, git)).resolves.toBeUndefined();
+
+    const first = path.join(fonts, names[0]);
+    await writeFile(first, "corrupt");
+    await expect(assertCmsPreviewSourceCheckout(sha, git)).rejects.toThrow("invalid prepared public fonts");
+    await writeFile(first, `fixture ${names[0]}`);
+    await writeFile(path.join(fonts, "unexpected.txt"), "unreviewed");
+    await expect(assertCmsPreviewSourceCheckout(sha, git)).rejects.toThrow("invalid prepared public fonts");
+    await rm(path.join(fonts, "unexpected.txt"));
+    await mkdir(path.join(root, "node_modules"));
+    const linked = path.join(root, "node_modules/font.woff2");
+    await writeFile(linked, `fixture ${names[0]}`);
+    await rm(first); await symlink(linked, first);
+    await expect(assertCmsPreviewSourceCheckout(sha, git)).rejects.toThrow("invalid prepared public fonts");
+    await rm(first);
+    await expect(assertCmsPreviewSourceCheckout(sha, git)).rejects.toThrow("invalid prepared public fonts");
+  });
+
   it.each([".env\0", "site/service-account.json\0", "scratch/\0"])("refuses ignored preview source files: %s", async ignored => {
     const git = vi.fn(async ([command]) => command === "rev-parse" ? `${COMMIT_SHA}\n` : command === "ls-files" ? ignored : "");
     await expect(assertCmsPreviewSourceCheckout(COMMIT_SHA, git)).rejects.toThrow("unexpected ignored files");

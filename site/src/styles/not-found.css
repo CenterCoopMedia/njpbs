@@ -1,6 +1,6 @@
-@font-face { font-family: "PBS Sans"; font-style: normal; font-weight: 400; font-display: swap; src: url("https://media.njpbs.org/cms-media/fonts/6d1461f427c030aed42aaa039eb8ce7409a261a7a62e46ff0854d7c79db00123/PBSSans.woff2") format("woff2"); }
-@font-face { font-family: "PBS Sans"; font-style: normal; font-weight: 700; font-display: swap; src: url("https://media.njpbs.org/cms-media/fonts/d2a1a10beac03a9cf986714d6388978379efaa9d9b4a662ec374b262104851b5/PBSSans-Bold.woff2") format("woff2"); }
-@font-face { font-family: "PBS Sans"; font-style: normal; font-weight: 900; font-display: swap; src: url("https://media.njpbs.org/cms-media/fonts/5b13467ba9da8daed32c4989a1f46bb11ece667e4607b9552c74315368b98cc9/PBSSans-Black.woff2") format("woff2"); }
+@font-face { font-family: "PBS Sans"; font-style: normal; font-weight: 400; font-display: swap; src: url("/brand/fonts/PBSSans.woff2") format("woff2"); }
+@font-face { font-family: "PBS Sans"; font-style: normal; font-weight: 700; font-display: swap; src: url("/brand/fonts/PBSSans-Bold.woff2") format("woff2"); }
+@font-face { font-family: "PBS Sans"; font-style: normal; font-weight: 900; font-display: swap; src: url("/brand/fonts/PBSSans-Black.woff2") format("woff2"); }
 /* Recovery content has no loading dependency or video autoplay. */
 /* Base has no body reset; without one the default margin frames this full-bleed page. */
 body:has(.nf-page) { margin: 0; }
