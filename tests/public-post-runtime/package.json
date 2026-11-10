@@ -8,6 +8,7 @@
     "test": "npm run check && vitest run"
   },
   "devDependencies": {
+    "@cloudflare/workers-types": "5.20260917.1",
     "@types/node": "^22.0.0",
     "esbuild": "0.28.2",
     "miniflare": "5.20260917.0-alpha",
