@@ -1089,7 +1089,10 @@ export function SiteNavigationSettings({
           if (footerHasErrors && !event.currentTarget.open) event.currentTarget.open = true;
           setFooterOpen(event.currentTarget.open);
         }}>
-          <summary>Footer columns · {draft.footer.length} {draft.footer.length === 1 ? "column" : "columns"}</summary>
+          <summary onClick={event => {
+            event.preventDefault();
+            setFooterOpen(footerHasErrors || !footerOpen);
+          }}>Footer columns · {draft.footer.length} {draft.footer.length === 1 ? "column" : "columns"}</summary>
         <fieldset className="site-nav-area">
           <legend className="sr-only">Footer columns</legend>
           <p className="muted">
