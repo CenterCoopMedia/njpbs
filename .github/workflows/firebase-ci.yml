@@ -185,7 +185,7 @@ jobs:
         uses: actions/cache@v6
         with:
           path: ~/.cache/firebase/emulators
-          key: ${{ runner.os }}-firebase-emulators-15.26.0
+          key: ${{ runner.os }}-firebase-emulators-15.31.0
       - name: Rules tests
         run: npm run test:rules
       - name: Loader e2e tests
@@ -265,7 +265,7 @@ jobs:
         uses: actions/cache@v6
         with:
           path: ~/.cache/firebase/emulators
-          key: ${{ runner.os }}-firebase-emulators-15.26.0
+          key: ${{ runner.os }}-firebase-emulators-15.31.0
       - name: Functions preflight tests
         if: matrix.shard == 1
         run: npm run test:preflight

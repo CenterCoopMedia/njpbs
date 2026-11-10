@@ -61,7 +61,7 @@
     "esbuild": "^0.28.1",
     "firebase": "^11",
     "firebase-admin": "^14.2.0",
-    "firebase-tools": "^15.26.0",
+    "firebase-tools": "15.31.0",
     "vitest": "^4.1.12"
   },
   "dependencies": {
