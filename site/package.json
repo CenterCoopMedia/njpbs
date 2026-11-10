@@ -54,12 +54,17 @@
     "@babylonjs/core": "^7",
     "@huggingface/transformers": "4.3.0",
     "astro": "^7.4.4",
-    "mermaid": "11.17.2",
     "pdfkit": "^0.20.2",
     "react": "18.3.1",
     "react-dom": "18.3.1",
     "react-router": "7.18.2",
     "sitemap": "9.0.1"
+  },
+  "overrides": {
+    "glob": "14.0.2",
+    "@typescript-eslint/typescript-estree@8.62.1": { "minimatch": "11.0.1" },
+    "@npmcli/map-workspaces@3.0.6": { "minimatch": "11.0.1" },
+    "micromark-extension-math@3.1.0": { "katex": "0.18.2" }
   },
   "devDependencies": {
     "@astrojs/check": "^0.9.9",
@@ -74,7 +79,7 @@
     "eslint": "^9.39.4",
     "eslint-plugin-astro": "^1.7.0",
     "eslint-plugin-jsx-a11y": "^6.10.2",
-    "firebase-admin": "^14.2.0",
+    "firebase-admin": "14.4.0",
     "happy-dom": "^21.0.4",
     "markdownlint": "0.41.1",
     "pagefind": "1.5.0",
