@@ -1,4 +1,4 @@
-import { expect, test } from "./fixtures";
+import { expect, installProofFonts, test } from "./fixtures";
 import { mkdir } from "node:fs/promises";
 import { resolve } from "node:path";
 import type { BugReportRecord } from "../../src/lib/functions";
@@ -33,6 +33,7 @@ for (const width of [390, 1280]) {
       }
       return route.continue();
     });
+    await installProofFonts(page);
     page.on("pageerror", (error) => errors.push(error.message));
     await page.setViewportSize({ width, height: 900 });
     // Replacing the application API module keeps every read inside this fixture.

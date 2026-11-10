@@ -1,9 +1,9 @@
 import { readFileSync } from "node:fs";
-import { test as base, type BrowserContext } from "@playwright/test";
+import { test as base, type BrowserContext, type Page } from "@playwright/test";
 export * from "@playwright/test";
 
-/** Install on explicit contexts too, before their first navigation. */
-export async function installProofFonts(context: BrowserContext): Promise<void> {
+/** Serve proof fonts on a context or a page with its own request guard. */
+export async function installProofFonts(context: BrowserContext | Page): Promise<void> {
   await context.route(/^https:\/\/media\.njpbs\.org\/cms-media\/fonts\//, route => {
     const face = route.request().url().endsWith("PBSSans-Black.woff2") ? "Black"
       : route.request().url().endsWith("PBSSans-Bold.woff2") ? "Bold" : "Regular";

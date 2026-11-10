@@ -323,7 +323,7 @@ describe("CMS deployment smoke gate", () => {
       }
       writeFileSync(
         join(bin, "gcloud"),
-        `#!/usr/bin/node
+        `#!${process.execPath}
 if(process.env.CMS_BUG_REPORT_TELEGRAM_ADMIN_MAP)process.exit(8); require("node:fs").writeFileSync(${JSON.stringify(marker)}, process.env.CLOUDSDK_AUTH_CREDENTIAL_FILE_OVERRIDE); console.log("ENABLED");
 `,
       );
