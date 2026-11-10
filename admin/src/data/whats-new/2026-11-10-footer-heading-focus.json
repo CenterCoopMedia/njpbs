@@ -1,0 +1,8 @@
+{
+  "date": "2026-11-10",
+  "kind": "fixed",
+  "title": "Keep footer headings open while editing",
+  "body": "In Admin settings, Site navigation keeps the footer columns open when you clear and replace a column heading, so you can continue editing without losing focus.",
+  "order": 1,
+  "prs": []
+}

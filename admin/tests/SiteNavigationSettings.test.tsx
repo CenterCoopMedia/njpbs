@@ -282,7 +282,9 @@ describe("Site navigation settings", () => {
   it("shows duplicate heading errors beside each affected column and blocks save", async () => {
     await renderPanel();
     const headings = within(footerArea()).getAllByRole("textbox", { name: "Column heading" });
+    fireEvent.change(headings[0], { target: { value: "" } });
     fireEvent.change(headings[0], { target: { value: "Watch more" } });
+    expect(headings[0]).toBeVisible();
     fireEvent.change(headings[1], { target: { value: "  WATCH   more  " } });
     for (const heading of headings.slice(0, 2)) {
       expect(heading).toHaveAttribute("aria-invalid", "true");
