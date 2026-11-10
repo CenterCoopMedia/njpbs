@@ -35,6 +35,11 @@
     "rehype-slug": "^6.0.0",
     "remark-gfm": "^4.0.1"
   },
+  "overrides": {
+    "@firebase/firestore": {
+      "@grpc/grpc-js": "1.13.6"
+    }
+  },
   "devDependencies": {
     "@playwright/test": "^1.62.1",
     "@tailwindcss/vite": "^4.1.17",
