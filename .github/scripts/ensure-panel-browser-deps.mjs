@@ -2,7 +2,7 @@ import { spawnSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import { resolve } from "node:path";
-import { pathToFileURL } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 import { verifyBrowserSafety } from "../../scripts/cms-debug-browser.mjs";
 
 // Chromium runtime group from Playwright v1.62.1, nativeDeps.ts, ubuntu24.04-x64:
@@ -30,11 +30,11 @@ export function ensureRuntimeDependencies(packages, run = spawnSync, log = conso
     log("Chromium runtime dependencies are already installed");
     return missing;
   }
-  for (const args of [
-    ["apt-get", "-o", "Acquire::Retries=0", "update"],
-    ["apt-get", "-o", "Acquire::Retries=0", "install", "-y", "--no-install-recommends", ...missing],
+  for (const [command, args] of [
+    ["bash", [fileURLToPath(new URL("./prepare-hosted-apt.sh", import.meta.url))]],
+    ["sudo", ["apt-get", "-o", "Acquire::Retries=0", "install", "-y", "--no-install-recommends", ...missing]],
   ]) {
-    const result = run("sudo", args, { stdio: "inherit" });
+    const result = run(command, args, { stdio: "inherit" });
     if (result.error || result.status !== 0) throw new Error("Chromium dependency installation failed");
   }
   return missing;
