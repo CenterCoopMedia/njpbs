@@ -1,0 +1,8 @@
+{
+  "date": "2026-11-10",
+  "kind": "fixed",
+  "title": "Read the complete Costs month on a phone",
+  "body": "The Costs month selector keeps room for the full month and its open or closed status on a narrow phone screen. More cost actions moves below it when the controls need more space.",
+  "order": 1794351600000,
+  "prs": []
+}

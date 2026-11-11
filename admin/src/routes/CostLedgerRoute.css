@@ -775,6 +775,7 @@
     grid-column: 1 / -1;
     grid-row: 2;
     display: flex;
+    flex-wrap: wrap;
     width: 100%;
     max-width: none;
   }
@@ -784,8 +785,9 @@
     display: none;
   }
   .workspace-shell:has(.cost-ledger-header-actions) .workspace-actions {
-    flex: 1;
-    min-width: 0;
+    flex: 1 1 auto;
+    min-width: auto;
+    max-width: 100%;
   }
   .cost-ledger-header-actions {
     flex-wrap: nowrap;
