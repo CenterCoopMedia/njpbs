@@ -1,0 +1,60 @@
+name: Promote production
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read
+
+concurrency:
+  group: promote-production
+  cancel-in-progress: false
+
+env:
+  CANONICAL_GITHUB_REPOSITORY: ${{ vars.CANONICAL_GITHUB_REPOSITORY }}
+  CANONICAL_GITHUB_REPOSITORY_ID: ${{ vars.CANONICAL_GITHUB_REPOSITORY_ID }}
+
+jobs:
+  promote:
+    if: >-
+      github.event_name == 'workflow_dispatch' &&
+      github.ref == 'refs/heads/main' &&
+      vars.CANONICAL_GITHUB_REPOSITORY != '' &&
+      vars.CANONICAL_GITHUB_REPOSITORY_ID != '' &&
+      github.repository_id == vars.CANONICAL_GITHUB_REPOSITORY_ID &&
+      github.workflow_ref == format('{0}/.github/workflows/promote.yml@refs/heads/main', vars.CANONICAL_GITHUB_REPOSITORY) &&
+      vars.CMS_DEPLOY_OWNER != '' && github.triggering_actor == vars.CMS_DEPLOY_OWNER
+    environment: production
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - name: Create repository-scoped promotion token
+        id: app
+        uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3
+        with:
+          client-id: ${{ vars.CCM_PROMOTE_APP_CLIENT_ID }}
+          private-key: ${{ secrets.CCM_PROMOTE_APP_PRIVATE_KEY }}
+          owner: ${{ github.repository_owner }}
+          repositories: ${{ github.event.repository.name }}
+          permission-contents: write
+          permission-workflows: write
+      - name: Check out the immutable dispatch SHA
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          token: ${{ steps.app.outputs.token }}
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+      - name: Require main ancestry and an existing production branch
+        run: |
+          set -euo pipefail
+          git fetch --no-tags origin +refs/heads/main:refs/remotes/origin/main +refs/heads/production:refs/remotes/origin/production
+          node .github/scripts/require-release-source.mjs
+          git merge-base --is-ancestor origin/production "$GITHUB_SHA"
+      - name: Require successful main CI for this SHA
+        env:
+          GH_TOKEN: ${{ github.token }}
+          DEPLOY_SHA: ${{ github.sha }}
+        run: node .github/scripts/require-main-ci.mjs
+      - name: Fast-forward production
+        run: git push origin HEAD:refs/heads/production
