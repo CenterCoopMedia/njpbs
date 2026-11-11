@@ -181,10 +181,13 @@ describe("Route D Cut A boundary placement", () => {
       const env = { PATH: process.env.PATH, RUNNER_TEMP: directory, GITHUB_RUN_ID: "42", GITHUB_RUN_ATTEMPT: "1" };
       expect(spawnSync("bash", ["-c", contract.find(row => row.id === "admin_digest").run], { cwd: directory, env: { ...env, GITHUB_OUTPUT: outputs } }).status).toBe(0);
       const proved = Object.fromEntries(readFileSync(outputs, "utf8").trim().split("\n").map(line => line.split("=")));
-      const run = attempt => spawnSync("bash", ["-c", binding.run], { cwd: directory, env: { ...env, GITHUB_RUN_ATTEMPT: attempt, DEPLOY_SHA: sha,
-        PROVED_ADMIN_DIGEST: proved.value, PROVED_RUN_ID: proved.run_id, PROVED_RUN_ATTEMPT: proved.run_attempt } }).status;
+      const run = (attempt, overrides = {}) => spawnSync("bash", ["-c", binding.run], { cwd: directory, env: { ...env, GITHUB_RUN_ATTEMPT: attempt, DEPLOY_SHA: sha,
+        PROVED_ADMIN_DIGEST: proved.value, PROVED_RUN_ID: proved.run_id, PROVED_RUN_ATTEMPT: proved.run_attempt, ...overrides } }).status;
       expect(run("1")).toBe(0);
       expect(run("2")).not.toBe(0);
+      expect(run("1", { PROVED_RUN_ID: "another-run" })).not.toBe(0);
+      expect(run("1", { PROVED_ADMIN_DIGEST: "" })).not.toBe(0);
+      expect(run("1", { PROVED_ADMIN_DIGEST: "a".repeat(64) })).not.toBe(0);
       // Within one attempt, a proof captured two contract budgets ago no longer binds.
       summary(Date.now() - 470_000);
       expect(run("1")).toBe(0);

@@ -334,3 +334,5 @@ jobs:
         env:
           CMS_PUBLIC_CONTRACT_SEALED: "1"
         run: node scripts/run-firebase-emulators.mjs exec auth,firestore,functions "node scripts/run-functions-tests.mjs tests/functions/cms-public-contract.test.ts"
+      - name: Singleton contract script acceptance
+        run: npx --no-install vitest run tests/scripts/cms-public-contract.test.js

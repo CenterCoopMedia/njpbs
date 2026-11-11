@@ -318,11 +318,23 @@ jobs:
         run: |
           npm ci --ignore-scripts
           npm --prefix site ci --ignore-scripts --no-audit --no-fund
+      - name: Check out trusted singleton contract source
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ github.sha }}
+          path: .cms-contract-source
+          persist-credentials: false
+      - name: Isolate trusted singleton contract source
+        run: |
+          set -euo pipefail
+          mv .cms-contract-source "$RUNNER_TEMP/cms-contract-source"
+          ln -s "$GITHUB_WORKSPACE/node_modules" "$RUNNER_TEMP/cms-contract-source/node_modules"
+          ln -s "$GITHUB_WORKSPACE/site/node_modules" "$RUNNER_TEMP/cms-contract-source/site/node_modules"
       - name: Prepare the singleton contract runtime before credentials
         env:
           CMS_DEV_PUBLISH_ENABLED: ${{ vars.CMS_DEV_PUBLISH_ENABLED }}
         run: >-
-          node --import ./site/node_modules/tsx/dist/loader.mjs .dev-deploy-gate/scripts/check-cms-public-contract.mjs prepare
+          node --import ./site/node_modules/tsx/dist/loader.mjs "$RUNNER_TEMP/cms-contract-source/scripts/check-cms-public-contract.mjs" prepare
           --environment development --candidate "$DEPLOY_SHA" --source-root "$GITHUB_WORKSPACE"
           --state-directory "$RUNNER_TEMP/cms-public-contract-private"
       - name: Verify the pinned dev renderer for a routine deploy
@@ -357,7 +369,7 @@ jobs:
         env:
           CMS_DEV_PUBLISH_ENABLED: ${{ vars.CMS_DEV_PUBLISH_ENABLED }}
         run: >-
-          node --import ./site/node_modules/tsx/dist/loader.mjs .dev-deploy-gate/scripts/check-cms-public-contract.mjs prove
+          node --import ./site/node_modules/tsx/dist/loader.mjs "$RUNNER_TEMP/cms-contract-source/scripts/check-cms-public-contract.mjs" prove
           --environment development --boundary preflight --candidate "$DEPLOY_SHA" --source-root "$GITHUB_WORKSPACE"
           --state-directory "$RUNNER_TEMP/cms-public-contract-private"
           --summary "$RUNNER_TEMP/cms-public-contract-summary-preflight.json"
@@ -428,7 +440,7 @@ jobs:
         env:
           CMS_DEV_PUBLISH_ENABLED: ${{ vars.CMS_DEV_PUBLISH_ENABLED }}
         run: >-
-          node --import ./site/node_modules/tsx/dist/loader.mjs .dev-deploy-gate/scripts/check-cms-public-contract.mjs prove
+          node --import ./site/node_modules/tsx/dist/loader.mjs "$RUNNER_TEMP/cms-contract-source/scripts/check-cms-public-contract.mjs" prove
           --environment development --boundary before-upload --candidate "$DEPLOY_SHA" --source-root "$GITHUB_WORKSPACE"
           --state-directory "$RUNNER_TEMP/cms-public-contract-private"
           --summary "$RUNNER_TEMP/cms-public-contract-summary-before-upload.json" --previous-summary "$RUNNER_TEMP/cms-public-contract-summary-preflight.json"
@@ -459,7 +471,7 @@ jobs:
         env:
           CMS_DEV_PUBLISH_ENABLED: ${{ vars.CMS_DEV_PUBLISH_ENABLED }}
         run: >-
-          node --import ./site/node_modules/tsx/dist/loader.mjs .dev-deploy-gate/scripts/check-cms-public-contract.mjs prove
+          node --import ./site/node_modules/tsx/dist/loader.mjs "$RUNNER_TEMP/cms-contract-source/scripts/check-cms-public-contract.mjs" prove
           --environment development --boundary settlement --candidate "$DEPLOY_SHA" --source-root "$GITHUB_WORKSPACE"
           --state-directory "$RUNNER_TEMP/cms-public-contract-private"
           --summary "$RUNNER_TEMP/cms-public-contract-summary-settlement.json" --previous-summary "$RUNNER_TEMP/cms-public-contract-summary-before-upload.json"
