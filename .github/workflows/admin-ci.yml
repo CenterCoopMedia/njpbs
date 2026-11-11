@@ -91,15 +91,22 @@ jobs:
         with:
           path: ~/.cache/ms-playwright
           key: ${{ runner.os }}-${{ runner.arch }}-visual-playwright-1.65.0
-      - name: Install Chromium and hosted dependencies for the visual suite
+      - name: Cache Chromium dependency packages
+        if: runner.environment == 'github-hosted'
+        uses: actions/cache@v6
+        with:
+          path: |
+            ~/.cache/njpbs-ci-debs/chromium-1.65.0/*.deb
+            ~/.cache/njpbs-ci-debs/chromium-1.65.0/sha256.json
+          key: ${{ runner.os }}-${{ runner.arch }}-chromium-seed-${{ hashFiles('config/ci-system-dependencies.json', '.github/scripts/playwright-chromium-packages.txt') }}
+      - name: Install hosted browser dependencies
+        if: runner.environment == 'github-hosted'
+        run: node .github/scripts/install-hosted-deps.mjs chromium "$HOME/.cache/njpbs-ci-debs/chromium-1.65.0"
+        timeout-minutes: 15 # Bound the GitHub download and package installation.
+      - name: Install approved Chromium for the visual suite
         if: runner.environment == 'github-hosted' && steps.visual-browser-cache.outputs.cache-hit != 'true'
-        run: npx --yes --package=@playwright/test@1.65.0 playwright install --with-deps chromium
+        run: npx --yes --package=@playwright/test@1.65.0 playwright install chromium
         timeout-minutes: 15 # Successful installs take 11-695s; bound hung downloads (#4885).
-      # An exact cache hit restored the pinned browser; install only its system packages.
-      - name: Install hosted dependencies for the cached visual browser
-        if: runner.environment == 'github-hosted' && steps.visual-browser-cache.outputs.cache-hit == 'true'
-        run: npx --yes --package=@playwright/test@1.65.0 playwright install-deps chromium
-        timeout-minutes: 15 # Same bound as the full install; apt can stall on busy mirrors.
       - name: Select approved visual browser
         run: echo "PLAYWRIGHT_CHROMIUM_EXECUTABLE=$HOME/.cache/ms-playwright/chromium_headless_shell-1254/chrome-headless-shell-linux64/chrome-headless-shell" >> "$GITHUB_ENV"
       - name: Permit sandboxed Chromium on hosted runners

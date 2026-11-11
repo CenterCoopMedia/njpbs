@@ -388,15 +388,32 @@ jobs:
       - name: Prepare pinned search model for offline build
         if: steps.retained.outputs.exists != 'true'
         run: node --import ./site/node_modules/tsx/dist/loader.mjs site/scripts/prepare-search-model.ts
+      - name: Check out trusted hosted package setup
+        if: steps.retained.outputs.exists != 'true'
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          ref: ${{ github.sha }}
+          path: .hosted-apt-gate
+          persist-credentials: false
+          sparse-checkout: |
+            .github/scripts/install-hosted-deps.mjs
+            config/ci-system-dependencies.json
+          sparse-checkout-cone-mode: false
+      - name: Isolate trusted hosted package setup
+        if: steps.retained.outputs.exists != 'true'
+        run: mv .hosted-apt-gate "$RUNNER_TEMP/hosted-apt-gate"
+      - name: Cache hosted sandbox package
+        if: steps.retained.outputs.exists != 'true'
+        uses: actions/cache@v6
+        with:
+          path: ~/.cache/njpbs-ci-debs/bubblewrap-0.9.0-1ubuntu0.3
+          key: ${{ runner.os }}-${{ runner.arch }}-bubblewrap-deb-0.9.0-1ubuntu0.3
       - name: Prepare hosted offline build sandbox
         if: steps.retained.outputs.exists != 'true'
         run: |
           set -euo pipefail
           test "$RUNNER_ENVIRONMENT" = github-hosted
-          if ! command -v bwrap >/dev/null; then
-            sudo apt-get update
-            sudo apt-get install -y --no-install-recommends bubblewrap
-          fi
+          node "$RUNNER_TEMP/hosted-apt-gate/.github/scripts/install-hosted-deps.mjs" bubblewrap "$HOME/.cache/njpbs-ci-debs/bubblewrap-0.9.0-1ubuntu0.3"
           # Permit bwrap's user namespace on this disposable, secretless VM only.
           # Ubuntu 24.04 restricts unprivileged user namespaces by default.
           if [ -f /proc/sys/kernel/apparmor_restrict_unprivileged_userns ]; then
