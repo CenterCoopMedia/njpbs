@@ -91,6 +91,7 @@ jobs:
         with:
           ref: ${{ inputs.deploy_ref }}
           fetch-depth: 0
+          filter: blob:none
           persist-credentials: true
       - name: Check out trusted release source gate
         uses: actions/checkout@v7
@@ -392,6 +393,7 @@ jobs:
         with:
           ref: ${{ inputs.deploy_ref }}
           fetch-depth: 0
+          filter: blob:none
           persist-credentials: false
       - name: Check out trusted release source gate
         uses: actions/checkout@v7
@@ -547,6 +549,7 @@ jobs:
         with:
           ref: ${{ needs.admin-build.outputs.deploy_sha }}
           fetch-depth: 0
+          filter: blob:none
           persist-credentials: true
       - name: Check out trusted release source gate
         uses: actions/checkout@v7
@@ -853,6 +856,7 @@ jobs:
         with:
           ref: ${{ needs.admin-build.outputs.deploy_sha }}
           fetch-depth: 0
+          filter: blob:none
           persist-credentials: true
       - name: Check out trusted release source gate
         uses: actions/checkout@v7
@@ -1116,6 +1120,7 @@ jobs:
         with:
           ref: ${{ needs.admin-build.outputs.deploy_sha }}
           fetch-depth: 0
+          filter: blob:none
           persist-credentials: true
       - name: Check out trusted release source gate
         uses: actions/checkout@v7
@@ -1635,6 +1640,7 @@ jobs:
         with:
           ref: ${{ needs.admin-build.outputs.deploy_sha }}
           fetch-depth: 0
+          filter: blob:none
           persist-credentials: false
       - name: Check out trusted release source gate
         if: vars.CMS_PREVIEW_CLOUD_ENABLED == 'true'

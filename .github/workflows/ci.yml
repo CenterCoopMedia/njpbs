@@ -78,6 +78,7 @@ jobs:
       - uses: actions/checkout@v7
         with:
           fetch-depth: 0
+          filter: blob:none
       # Classify with base-branch code before PR code can change the checkout or runner
       # environment. Manual runs read the classifier from the default branch.
       - name: Classify the exact base diff

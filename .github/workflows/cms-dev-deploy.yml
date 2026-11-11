@@ -130,6 +130,7 @@ jobs:
           persist-credentials: false
           ref: ${{ inputs.deploy_ref || github.sha }}
           fetch-depth: 0
+          filter: blob:none
       - name: Check out trusted dev source gates
         uses: actions/checkout@v7
         with:
@@ -265,6 +266,7 @@ jobs:
         with:
           ref: ${{ inputs.deploy_ref || github.sha }}
           fetch-depth: 0
+          filter: blob:none
           persist-credentials: false
       - name: Check out trusted dev source gates
         uses: actions/checkout@v7

@@ -144,6 +144,7 @@ jobs:
         with:
           ref: ${{ needs.authorize.outputs.deploy_ref }}
           fetch-depth: 0
+          filter: blob:none
           persist-credentials: false
       - name: Require reviewed production source
         env:

@@ -211,6 +211,7 @@ jobs:
         with:
           ref: ${{ needs.authorize.outputs.deploy_ref }}
           fetch-depth: 0
+          filter: blob:none
           persist-credentials: false
       - name: Check out trusted release source gate
         uses: actions/checkout@v7
