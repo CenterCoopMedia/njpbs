@@ -10,10 +10,15 @@ branch while Pages deployment jobs skip. Deploy admission is unchanged here.
 
 The `production` branch selects a release by fast-forwarding to a green commit
 already on `main`. The only trigger for `promote.yml` is `workflow_dispatch`,
-with no commit input. It checks out the immutable dispatch SHA, verifies main
+with a required `sha` input of 40 lowercase hexadecimal characters. The dispatch
+ref stays `main`; the input selects an immutable commit already on main. It
+checks out that selected SHA, verifies main
 ancestry and successful main-push `CI / ci` through the existing release checks,
 and pushes without force. It refuses to bootstrap a missing production branch.
-Later main commits cannot change the selected SHA. A stale dispatch that would
+Later main commits cannot change the selected SHA. The run title is
+`Promote production <sha>`, so API readback can verify the selected input.
+The workflow run's `head_sha` identifies the main workflow revision, which can
+differ from the selected source. A stale dispatch that would
 move production backward fails the ancestry check or the push.
 
 The GitHub App `ccm-njpbs-promote` (numeric App ID `5705771`) is installed only

@@ -1,7 +1,13 @@
 name: Promote production
+run-name: Promote production ${{ inputs.sha }}
 
 on:
   workflow_dispatch:
+    inputs:
+      sha:
+        description: Full main commit SHA to promote
+        required: true
+        type: string
 
 permissions:
   contents: read
@@ -29,6 +35,12 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 5
     steps:
+      - name: Validate the selected SHA
+        env:
+          SELECTED_SHA: ${{ inputs.sha }}
+        run: |
+          set -euo pipefail
+          [[ "$SELECTED_SHA" =~ ^[0-9a-f]{40}$ ]] || { echo 'A full lowercase main SHA is required'; exit 1; }
       - name: Create repository-scoped promotion token
         id: app
         uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3
@@ -39,22 +51,24 @@ jobs:
           repositories: ${{ github.event.repository.name }}
           permission-contents: write
           permission-workflows: write
-      - name: Check out the immutable dispatch SHA
+      - name: Check out the selected main SHA
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           token: ${{ steps.app.outputs.token }}
-          ref: ${{ github.sha }}
+          ref: ${{ inputs.sha }}
           fetch-depth: 0
       - name: Require main ancestry and an existing production branch
+        env:
+          SELECTED_SHA: ${{ inputs.sha }}
         run: |
           set -euo pipefail
           git fetch --no-tags origin +refs/heads/main:refs/remotes/origin/main +refs/heads/production:refs/remotes/origin/production
           node .github/scripts/require-release-source.mjs
-          git merge-base --is-ancestor origin/production "$GITHUB_SHA"
+          git merge-base --is-ancestor origin/production "$SELECTED_SHA"
       - name: Require successful main CI for this SHA
         env:
           GH_TOKEN: ${{ github.token }}
-          DEPLOY_SHA: ${{ github.sha }}
+          DEPLOY_SHA: ${{ inputs.sha }}
         run: node .github/scripts/require-main-ci.mjs
       - name: Fast-forward production
         run: git push origin HEAD:refs/heads/production
