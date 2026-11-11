@@ -68,7 +68,7 @@ type StoredObject = {
 
 function s3() {
   const objects = new Map<string, StoredObject>();
-  let intercept: ((command: GetObjectCommand | PutObjectCommand) => void) | null =
+  let intercept: ((command: GetObjectCommand | PutObjectCommand, options?: { abortSignal?: AbortSignal }) => void | Promise<void>) | null =
     null;
   const store = (key: string, bytes: Buffer) => {
     objects.set(key, {
@@ -83,8 +83,8 @@ function s3() {
     });
   };
   const send = vi.fn(
-    async (command: GetObjectCommand | PutObjectCommand) => {
-      intercept?.(command);
+    async (command: GetObjectCommand | PutObjectCommand, options?: { abortSignal?: AbortSignal }) => {
+      await intercept?.(command, options);
       const key = command.input.Key!;
       if (command instanceof PutObjectCommand) {
         if (command.input.IfNoneMatch === "*" && objects.has(key)) {
@@ -259,6 +259,26 @@ describe("CMS publication cloud storage", () => {
     await expect(
       cloud.storage.restoreArtifact(IDENTITY, restored),
     ).resolves.toBe(false);
+  });
+
+  it("stops a stalled restoration when the caller's deadline ends", async () => {
+    const cloud = s3();
+    const source = await privateDirectory("deadline-source");
+    const restored = await privateDirectory("deadline-restore");
+    await writeArtifact(source, "deadline");
+    await cloud.storage.checkpointArtifact(IDENTITY, source);
+    // Artifact file reads stall at the network boundary until their signal aborts.
+    cloud.intercept((command, options) => {
+      if (!(command instanceof GetObjectCommand) || !command.input.Key!.includes("/files/")) return;
+      return new Promise((_resolve, reject) => {
+        options?.abortSignal?.addEventListener("abort", () => reject(options.abortSignal!.reason), { once: true });
+      });
+    });
+    const startedAt = Date.now();
+    await expect(
+      cloud.storage.restoreArtifact(IDENTITY, restored, undefined, AbortSignal.timeout(50)),
+    ).rejects.toThrow();
+    expect(Date.now() - startedAt).toBeLessThan(5_000);
   });
 
   it.each(["corrupt", "missing"] as const)(

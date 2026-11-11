@@ -1106,7 +1106,7 @@ if(process.env.CMS_BUG_REPORT_TELEGRAM_ADMIN_MAP)process.exit(8); require("node:
     expect(workflow).toContain(
       "needs: [admin-build, firebase-preflight, firebase]",
     );
-    expect(parse(workflow).jobs["admin-deploy"].needs).toEqual(["admin-build", "cms-api", "firebase", "preview-renderer", "firebase-preflight"]);
+    expect(parse(workflow).jobs["admin-deploy"].needs).toEqual(["admin-build", "cms-api", "firebase", "preview-renderer", "firebase-preflight", "admin-contract"]);
     expect(parse(workflow).jobs["firebase"].needs).toEqual(["admin-build", "firebase-preflight", "smoke-manifest", "verify"]);
     expect(parse(workflow).jobs["live-smoke"].needs).toEqual(["admin-build", "firebase", "admin-deploy"]);
     expect(workflow).toContain("node scripts/component-runner.mjs functions verify-config");

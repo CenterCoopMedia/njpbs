@@ -173,7 +173,9 @@ describe("CMS release source contract", () => {
       expect(gate.env.CMS_RELEASE_CHECKS_SHA, name).toBe("${{ inputs.deploy_ref }}");
       expect(gate.env.CMS_TRUSTED_WORKFLOW_SHA, name).toBe("${{ github.sha }}");
       const firstSelectedCommand = job.steps.findIndex(step => /(?:node |import .*from ["'])\.?\/?scripts\//.test(step.run ?? ""));
-      expect(firstSelectedCommand, name).toBeGreaterThan(job.steps.indexOf(gate));
+      // The before-upload contract job runs only the trusted checker against the release tree.
+      if (name === "admin-contract") expect(firstSelectedCommand, name).toBe(-1);
+      else expect(firstSelectedCommand, name).toBeGreaterThan(job.steps.indexOf(gate));
       if (name === "preview-renderer") expect(gate.if).toBe("vars.CMS_PREVIEW_CLOUD_ENABLED == 'true'");
       for (const step of job.steps) expect(step.run ?? "").not.toMatch(/cp \.(?:metered-api|cms-smoke)-gate\/scripts\//);
     }

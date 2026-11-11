@@ -400,6 +400,15 @@ describe("CMS deploy one commit past the live renderer", () => {
     expect(result.output).toContain("site/renderer.ts");
   });
 
+  it("keeps Cut A ancestry refusal when a local file claims singleton proof", async () => {
+    const proof = join(root, "cms-public-contract-summary.json");
+    writeFileSync(proof, JSON.stringify({ schemaVersion: 1, candidateSha: sameCatalogSha, result: "proved", proofDigest: "a".repeat(64) }));
+    try {
+      const result = await workflowGate(sameCatalogSha);
+      expect(result.code).toBe(1);
+      expect(result.output).toContain(`ancestor of live public renderer ${currentSha}`);
+    } finally { rmSync(proof); }
+  });
   it("passes a deploy at or behind the renderer", async () => {
     expect((await deployGate(currentSha)).code).toBe(0);
     receipt = { commitSha: futureBlockSha };

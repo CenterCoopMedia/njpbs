@@ -860,7 +860,7 @@ describe("cms staging deploy surface", () => {
     );
     expect(liveSmokeJob).toContain("node scripts/component-runner.mjs functions smoke");
     expect(liveSmokeJob).not.toContain("FIREBASE_SERVICE_ACCOUNT");
-    expect(adminDeployJob).toContain("needs: [admin-build, cms-api, firebase, preview-renderer, firebase-preflight]");
+    expect(adminDeployJob).toContain("needs: [admin-build, cms-api, firebase, preview-renderer, firebase-preflight, admin-contract]");
     expect(adminDeployJob).toContain("uses: actions/download-artifact@v8");
     expect(adminDeployJob).toContain("name: cms-staging-admin");
     expect(adminDeployJob).toContain("path: admin/dist");

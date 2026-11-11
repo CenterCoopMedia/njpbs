@@ -614,6 +614,13 @@ jobs:
         run: |
           npm ci --ignore-scripts
           npm --prefix site ci --ignore-scripts --no-audit --no-fund
+      - name: Prepare the singleton contract runtime before credentials
+        env:
+          DEPLOY_SHA: ${{ needs.admin-build.outputs.deploy_sha }}
+        run: >-
+          node --import ./site/node_modules/tsx/dist/loader.mjs .cms-smoke-gate/scripts/check-cms-public-contract.mjs prepare
+          --environment production --candidate "$DEPLOY_SHA" --source-root "$GITHUB_WORKSPACE"
+          --state-directory "$RUNNER_TEMP/cms-public-contract-private"
       - name: Authenticate Firebase deploy service account
         uses: google-github-actions/auth@7c6bc770dae815cd3e89ee6cdf493a5fab2cc093 # v3
         with:
@@ -621,6 +628,45 @@ jobs:
           project_id: njpbs-site
       - name: Require the legacy preview protocol before provider mutations
         run: node scripts/component-runner.mjs functions protocol
+      - name: Verify the singleton public contract at preflight
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          DEPLOY_SHA: ${{ needs.admin-build.outputs.deploy_sha }}
+          CMS_BUG_REPORT_TELEGRAM_CHAT_ID: ${{ secrets.CMS_BUG_REPORT_TELEGRAM_CHAT_ID }}
+          CMS_BUG_REPORT_TELEGRAM_ADMIN_MAP: ${{ secrets.CMS_BUG_REPORT_TELEGRAM_ADMIN_MAP }}
+          CMS_DEPLOYMENT_VARIABLES_JSON: ${{ toJSON(vars) }}
+          CMS_MEDIA_CACHE_PURGE_TOKEN: ${{ secrets.CMS_MEDIA_CACHE_PURGE_TOKEN }}
+          CMS_VOICEOVER_R2_ACCESS_KEY_ID: ${{ secrets.CMS_VOICEOVER_R2_ACCESS_KEY_ID }}
+          CMS_VOICEOVER_R2_SECRET_ACCESS_KEY: ${{ secrets.CMS_VOICEOVER_R2_SECRET_ACCESS_KEY }}
+          CMS_STAFF_EMAIL_API_TOKEN: ${{ secrets.CMS_STAFF_EMAIL_API_TOKEN }}
+          CMS_BUG_REPORT_TELEGRAM_BOT_TOKEN: ${{ secrets.CMS_BUG_REPORT_TELEGRAM_BOT_TOKEN }}
+          CMS_BUG_REPORT_TELEGRAM_WEBHOOK_SECRET: ${{ secrets.CMS_BUG_REPORT_TELEGRAM_WEBHOOK_SECRET }}
+          CMS_BUG_REPORT_GITHUB_TOKEN: ${{ secrets.CMS_BUG_REPORT_GITHUB_TOKEN }}
+          CMS_BUG_REPORT_GITHUB_WEBHOOK_SECRET: ${{ secrets.CMS_BUG_REPORT_GITHUB_WEBHOOK_SECRET }}
+          CMS_PUBLISH_GITHUB_TOKEN_PROVISIONING: ${{ secrets.CMS_PUBLISH_GITHUB_TOKEN_PROVISIONING }}
+          FORCE_FIREBASE: ${{ inputs.force_firebase }}
+          CMS_EDGE_ORIGIN_SECRET: ${{ secrets.CMS_EDGE_ORIGIN_SECRET }}
+          CLOUD_PUBLICATION_WAKE_ENVIRONMENT: production
+          CLOUD_PUBLICATION_WAKE_ENABLED: "true"
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          FIREBASE_WEB_API_KEY: ${{ vars.VITE_FIREBASE_API_KEY || secrets.VITE_FIREBASE_API_KEY }}
+          CMS_PREVIEW_R2_CREDENTIAL: ${{ secrets.CMS_PREVIEW_R2_CREDENTIAL }}
+          CMS_TRUSTED_WORKFLOW_SHA: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          umask 077
+          node --import ./site/node_modules/tsx/dist/loader.mjs .cms-smoke-gate/scripts/check-cms-public-contract.mjs prove \
+            --environment production --boundary preflight --candidate "$DEPLOY_SHA" --source-root "$GITHUB_WORKSPACE" \
+            --summary "$RUNNER_TEMP/cms-public-contract-summary-preflight.json" \
+            --state-directory "$RUNNER_TEMP/cms-public-contract-private" 4<<< "$CMS_PREVIEW_R2_CREDENTIAL"
+      - name: Retain only the sanitized singleton contract summary
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: cms-public-contract-preflight
+          path: ${{ runner.temp }}/cms-public-contract-summary-preflight.json
+          if-no-files-found: error
+          overwrite: true
       - name: Set up Google Cloud CLI
         uses: google-github-actions/setup-gcloud@aa5489c8933f4cc7a4f7d45035b3b1440c9c10db # v3
         with:
@@ -834,6 +880,13 @@ jobs:
           export CMS_MEDIA_R2_ACCESS_KEY_ID="$id" CMS_MEDIA_R2_SECRET_ACCESS_KEY="$secret"
           export CMS_MEDIA_R2_ENDPOINT="https://${CLOUDFLARE_ACCOUNT_ID}.r2.cloudflarestorage.com"
           node scripts/upload-studio-connector.mjs "$RUNNER_TEMP/studio-connector/manifest.json"
+      - name: Remove private singleton contract inputs and processes
+        if: always()
+        run: |
+          set -euo pipefail
+          mapfile -t containers < <(docker ps --all --quiet --filter "label=njpbs.cms-contract=$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT-$GITHUB_JOB")
+          if [ "${#containers[@]}" -gt 0 ]; then docker rm --force "${containers[@]}"; fi
+          sudo rm -rf -- "$RUNNER_TEMP/cms-public-contract-private"
 
   cms-api:
     env:
@@ -1772,6 +1825,7 @@ jobs:
       - uses: actions/checkout@v7
         with:
           ref: ${{ needs.admin-build.outputs.deploy_sha }}
+          fetch-depth: 0
           persist-credentials: false
       - name: Check out the exact CMS smoke gate source
         uses: actions/checkout@v7
@@ -1813,6 +1867,22 @@ jobs:
       - uses: actions/setup-node@v7
         with:
           node-version: "22.23.5"
+      - name: Install singleton contract dependencies before credentials
+        run: |
+          npm ci --ignore-scripts
+          npm --prefix site ci --ignore-scripts --no-audit --no-fund
+      - name: Download the sanitized singleton contract summary
+        uses: actions/download-artifact@v8
+        with:
+          name: cms-public-contract-before-upload
+          path: ${{ runner.temp }}/cms-contract-proof
+      - name: Prepare the singleton contract runtime before credentials
+        env:
+          DEPLOY_SHA: ${{ needs.admin-build.outputs.deploy_sha }}
+        run: >-
+          node --import ./site/node_modules/tsx/dist/loader.mjs .cms-smoke-gate/scripts/check-cms-public-contract.mjs prepare
+          --environment production --candidate "$DEPLOY_SHA" --source-root "$GITHUB_WORKSPACE"
+          --state-directory "$RUNNER_TEMP/cms-public-contract-private" --previous-summary "$RUNNER_TEMP/cms-contract-proof/cms-public-contract-summary-before-upload.json"
       - name: Smoke-test deployed CMS boundaries
         env:
           DEPLOY_SHA: ${{ needs.admin-build.outputs.deploy_sha }}
@@ -1829,12 +1899,35 @@ jobs:
         env:
           ADMIN_BOOT_URL: https://admin.njpbs.org/
         run: npm run test:boot -w njpbs-admin
-
+      - name: Verify the singleton public contract at settlement
+        env:
+          DEPLOY_SHA: ${{ needs.admin-build.outputs.deploy_sha }}
+          CMS_TRUSTED_WORKFLOW_SHA: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          umask 077
+          node --import ./site/node_modules/tsx/dist/loader.mjs .cms-smoke-gate/scripts/check-cms-public-contract.mjs prove \
+            --environment production --boundary settlement --candidate "$DEPLOY_SHA" --source-root "$GITHUB_WORKSPACE" \
+            --summary "$RUNNER_TEMP/cms-public-contract-summary-settlement.json" \
+            --state-directory "$RUNNER_TEMP/cms-public-contract-private" --previous-summary "$RUNNER_TEMP/cms-contract-proof/cms-public-contract-summary-before-upload.json"
+      - name: Retain only the sanitized singleton contract summary
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: cms-public-contract-settlement-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/cms-public-contract-summary-settlement.json
+          if-no-files-found: error
+      - name: Remove private singleton contract inputs and processes
+        if: always()
+        run: |
+          set -euo pipefail
+          mapfile -t containers < <(docker ps --all --quiet --filter "label=njpbs.cms-contract=$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT-$GITHUB_JOB")
+          if [ "${#containers[@]}" -gt 0 ]; then docker rm --force "${containers[@]}"; fi
+          sudo rm -rf -- "$RUNNER_TEMP/cms-public-contract-private"
 
   admin-deploy:
     env:
       CMS_DEPLOY_OWNER: ${{ vars.CMS_DEPLOY_OWNER }}
-    needs: [admin-build, cms-api, firebase, preview-renderer, firebase-preflight]
+    needs: [admin-build, cms-api, firebase, preview-renderer, firebase-preflight, admin-contract]
     environment: production
     if: >-
       (vars.CANONICAL_GITHUB_REPOSITORY != '' && vars.CANONICAL_GITHUB_REPOSITORY_ID != '' && github.repository == vars.CANONICAL_GITHUB_REPOSITORY && github.repository_id == vars.CANONICAL_GITHUB_REPOSITORY_ID) &&
@@ -1936,6 +2029,28 @@ jobs:
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
         run: node scripts/check-admin-pages-security.mjs predeploy
+      - name: Download the sanitized singleton contract summary
+        uses: actions/download-artifact@v8
+        with:
+          name: cms-public-contract-before-upload
+          path: ${{ runner.temp }}/cms-contract-proof
+      - name: Require the before-upload proof for this exact Admin artifact
+        env:
+          DEPLOY_SHA: ${{ needs.admin-build.outputs.deploy_sha }}
+          PROVED_ADMIN_DIGEST: ${{ needs.admin-contract.outputs.admin_digest }}
+          PROVED_RUN_ID: ${{ needs.admin-contract.outputs.proof_run_id }}
+          PROVED_RUN_ATTEMPT: ${{ needs.admin-contract.outputs.proof_run_attempt }}
+        run: |
+          set -euo pipefail
+          # A rerun of this job alone reuses an earlier attempt's proof, so rerun admin-contract with it.
+          test "$PROVED_RUN_ID" = "$GITHUB_RUN_ID" && test "$PROVED_RUN_ATTEMPT" = "$GITHUB_RUN_ATTEMPT"
+          digest="$(find admin/dist -type f -print0 | LC_ALL=C sort -z | xargs -0 sha256sum | sha256sum | cut -d" " -f1)"
+          test -n "$PROVED_ADMIN_DIGEST" && test "$digest" = "$PROVED_ADMIN_DIGEST"
+          # Capture and replay take at most one 240 s contract budget. The handoff to this step took
+          # 60-106 s in six production deploys (Nov. 2-7, 2026), so a second budget bounds it.
+          node -e 'const s = JSON.parse(require("fs").readFileSync(process.argv[1], "utf8")); const age = Date.now() - s.capturedAt;
+            if (s.candidateSha !== process.env.DEPLOY_SHA || !Number.isSafeInteger(s.capturedAt) || age < 0 || age >= 480000) process.exit(1)' \
+            "$RUNNER_TEMP/cms-contract-proof/cms-public-contract-summary-before-upload.json"
       - name: Deploy edge-based admin Pages project
         uses: cloudflare/wrangler-action@953926a2e2182532811c01a25e53647d93bf07c0 # v4.1.3
         with:
@@ -1958,3 +2073,132 @@ jobs:
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
         run: node scripts/check-admin-pages-security.mjs postdeploy
+
+  admin-contract:
+    env:
+      CMS_DEPLOY_OWNER: ${{ vars.CMS_DEPLOY_OWNER }}
+    needs: [admin-build, cms-api, firebase, preview-renderer, firebase-preflight]
+    environment: production
+    if: >-
+      (vars.CANONICAL_GITHUB_REPOSITORY != '' && vars.CANONICAL_GITHUB_REPOSITORY_ID != '' && github.repository == vars.CANONICAL_GITHUB_REPOSITORY && github.repository_id == vars.CANONICAL_GITHUB_REPOSITORY_ID) &&
+      (vars.CMS_DEPLOY_OWNER != '' && github.triggering_actor == vars.CMS_DEPLOY_OWNER) && github.ref == 'refs/heads/main'
+    # The before-upload proof needs job ADC, so it runs apart from the Admin upload's Cloudflare tools.
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20 # Runaway guard: two bounded four-minute captures plus setup.
+    outputs:
+      admin_digest: ${{ steps.admin_digest.outputs.value }}
+      proof_run_id: ${{ steps.admin_digest.outputs.run_id }}
+      proof_run_attempt: ${{ steps.admin_digest.outputs.run_attempt }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ needs.admin-build.outputs.deploy_sha }}
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Check out current metered-API scanner
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ github.sha }}
+          path: .metered-api-gate
+          sparse-checkout: .github/scripts
+          persist-credentials: false
+      - name: Require pinned release and trusted workflow identities
+        env:
+          CMS_RELEASE_CHECKS_SHA: ${{ inputs.deploy_ref }}
+          CMS_TRUSTED_WORKFLOW_SHA: ${{ github.sha }}
+        run: node .metered-api-gate/.github/scripts/require-cms-release-sources.mjs
+      - name: Metered-API source scan (before any scanned code runs)
+        run: node .metered-api-gate/.github/scripts/metered-api-scan.mjs --target-root "$GITHUB_WORKSPACE"
+      - name: Check out trusted singleton contract source
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ github.sha }}
+          path: .cms-contract-source
+          persist-credentials: false
+      - name: Metered-API source scan for the singleton checker
+        run: node .metered-api-gate/.github/scripts/metered-api-scan.mjs --target-root .cms-contract-source
+      - uses: actions/setup-node@v7
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: package-lock.json
+      - name: Install workspace deps
+        run: |
+          npm ci --ignore-scripts
+          npm --prefix site ci --ignore-scripts --no-audit --no-fund
+      - name: Download admin artifact
+        uses: actions/download-artifact@v8
+        with:
+          name: cms-staging-admin
+          path: admin/dist
+      - name: Record the proved Admin artifact digest
+        id: admin_digest
+        run: |
+          set -euo pipefail
+          digest="$(find admin/dist -type f -print0 | LC_ALL=C sort -z | xargs -0 sha256sum | sha256sum | cut -d" " -f1)"
+          echo "value=$digest" >> "$GITHUB_OUTPUT"
+          echo "run_id=$GITHUB_RUN_ID" >> "$GITHUB_OUTPUT"
+          echo "run_attempt=$GITHUB_RUN_ATTEMPT" >> "$GITHUB_OUTPUT"
+      - name: Download the sanitized singleton contract summary
+        uses: actions/download-artifact@v8
+        with:
+          name: cms-public-contract-preflight
+          path: ${{ runner.temp }}/cms-contract-proof
+      - name: Prepare the singleton contract runtime before credentials
+        env:
+          DEPLOY_SHA: ${{ needs.admin-build.outputs.deploy_sha }}
+        run: >-
+          node --import ./site/node_modules/tsx/dist/loader.mjs .cms-contract-source/scripts/check-cms-public-contract.mjs prepare
+          --environment production --candidate "$DEPLOY_SHA" --source-root "$GITHUB_WORKSPACE"
+          --state-directory "$RUNNER_TEMP/cms-public-contract-private" --previous-summary "$RUNNER_TEMP/cms-contract-proof/cms-public-contract-summary-preflight.json"
+      - name: Authenticate Firebase deploy service account
+        uses: google-github-actions/auth@v3
+        with:
+          credentials_json: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+          project_id: njpbs-site
+      - name: Verify the singleton public contract at before-upload
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          DEPLOY_SHA: ${{ needs.admin-build.outputs.deploy_sha }}
+          CMS_BUG_REPORT_TELEGRAM_CHAT_ID: ${{ secrets.CMS_BUG_REPORT_TELEGRAM_CHAT_ID }}
+          CMS_BUG_REPORT_TELEGRAM_ADMIN_MAP: ${{ secrets.CMS_BUG_REPORT_TELEGRAM_ADMIN_MAP }}
+          CMS_DEPLOYMENT_VARIABLES_JSON: ${{ toJSON(vars) }}
+          CMS_MEDIA_CACHE_PURGE_TOKEN: ${{ secrets.CMS_MEDIA_CACHE_PURGE_TOKEN }}
+          CMS_VOICEOVER_R2_ACCESS_KEY_ID: ${{ secrets.CMS_VOICEOVER_R2_ACCESS_KEY_ID }}
+          CMS_VOICEOVER_R2_SECRET_ACCESS_KEY: ${{ secrets.CMS_VOICEOVER_R2_SECRET_ACCESS_KEY }}
+          CMS_STAFF_EMAIL_API_TOKEN: ${{ secrets.CMS_STAFF_EMAIL_API_TOKEN }}
+          CMS_BUG_REPORT_TELEGRAM_BOT_TOKEN: ${{ secrets.CMS_BUG_REPORT_TELEGRAM_BOT_TOKEN }}
+          CMS_BUG_REPORT_TELEGRAM_WEBHOOK_SECRET: ${{ secrets.CMS_BUG_REPORT_TELEGRAM_WEBHOOK_SECRET }}
+          CMS_BUG_REPORT_GITHUB_TOKEN: ${{ secrets.CMS_BUG_REPORT_GITHUB_TOKEN }}
+          CMS_BUG_REPORT_GITHUB_WEBHOOK_SECRET: ${{ secrets.CMS_BUG_REPORT_GITHUB_WEBHOOK_SECRET }}
+          CMS_PUBLISH_GITHUB_TOKEN_PROVISIONING: ${{ secrets.CMS_PUBLISH_GITHUB_TOKEN_PROVISIONING }}
+          FORCE_FIREBASE: ${{ inputs.force_firebase }}
+          CMS_EDGE_ORIGIN_SECRET: ${{ secrets.CMS_EDGE_ORIGIN_SECRET }}
+          CLOUD_PUBLICATION_WAKE_ENVIRONMENT: production
+          CLOUD_PUBLICATION_WAKE_ENABLED: "true"
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          FIREBASE_WEB_API_KEY: ${{ vars.VITE_FIREBASE_API_KEY || secrets.VITE_FIREBASE_API_KEY }}
+          CMS_PREVIEW_R2_CREDENTIAL: ${{ secrets.CMS_PREVIEW_R2_CREDENTIAL }}
+          CMS_TRUSTED_WORKFLOW_SHA: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          umask 077
+          node --import ./site/node_modules/tsx/dist/loader.mjs .cms-contract-source/scripts/check-cms-public-contract.mjs prove \
+            --environment production --boundary before-upload --candidate "$DEPLOY_SHA" --source-root "$GITHUB_WORKSPACE" \
+            --summary "$RUNNER_TEMP/cms-public-contract-summary-before-upload.json" \
+            --state-directory "$RUNNER_TEMP/cms-public-contract-private" --previous-summary "$RUNNER_TEMP/cms-contract-proof/cms-public-contract-summary-preflight.json" 4<<< "$CMS_PREVIEW_R2_CREDENTIAL"
+      - name: Retain only the sanitized singleton contract summary
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: cms-public-contract-before-upload
+          path: ${{ runner.temp }}/cms-public-contract-summary-before-upload.json
+          if-no-files-found: error
+          overwrite: true
+      - name: Remove private singleton contract inputs and processes
+        if: always()
+        run: |
+          set -euo pipefail
+          mapfile -t containers < <(docker ps --all --quiet --filter "label=njpbs.cms-contract=$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT-$GITHUB_JOB")
+          if [ "${#containers[@]}" -gt 0 ]; then docker rm --force "${containers[@]}"; fi
+          sudo rm -rf -- "$RUNNER_TEMP/cms-public-contract-private"

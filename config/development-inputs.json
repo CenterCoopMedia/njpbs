@@ -48,6 +48,7 @@
       "kind": "origin",
       "placeholder": "https://dev-admin.example.org",
       "files": [
+        "scripts/lib/cms-public-contract.mjs",
         "admin/src/lib/staff-site-read.ts",
         "admin/tests/staff-site-read.test.ts",
         "cms-api/src/index.ts",
@@ -140,6 +141,7 @@
       "kind": "resource",
       "placeholder": "template-dev-cms-api",
       "files": [
+        "scripts/lib/cms-public-contract.mjs",
         "cms-api/wrangler.dev.jsonc",
         "workers/src/dev-public-worker-configuration.d.ts",
         "functions/lib/public-worker-candidate.js",
@@ -262,6 +264,7 @@
       "kind": "resource",
       "placeholder": "template-dev-cms-preview-renderer",
       "files": [
+        "scripts/lib/cms-public-contract.mjs",
         "cms-api/wrangler.dev.jsonc",
         "functions/lib/dev-preview-renderer-bootstrap.js",
         "preview-renderer/bootstrap-dev.mjs",
