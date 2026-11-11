@@ -395,7 +395,9 @@ jobs:
           ref: ${{ github.sha }}
           path: .hosted-apt-gate
           persist-credentials: false
-          sparse-checkout: .github/scripts/install-hosted-deps.mjs
+          sparse-checkout: |
+            .github/scripts/install-hosted-deps.mjs
+            config/ci-system-dependencies.json
           sparse-checkout-cone-mode: false
       - name: Isolate trusted hosted package setup
         if: steps.retained.outputs.exists != 'true'

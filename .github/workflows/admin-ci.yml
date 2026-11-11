@@ -95,7 +95,9 @@ jobs:
         if: runner.environment == 'github-hosted'
         uses: actions/cache@v6
         with:
-          path: ~/.cache/njpbs-ci-debs/chromium-1.65.0
+          path: |
+            ~/.cache/njpbs-ci-debs/chromium-1.65.0/*.deb
+            ~/.cache/njpbs-ci-debs/chromium-1.65.0/sha256.json
           key: ${{ runner.os }}-${{ runner.arch }}-chromium-debs-${{ hashFiles('.github/scripts/playwright-chromium-packages.txt') }}
       - name: Install hosted browser dependencies
         if: runner.environment == 'github-hosted'

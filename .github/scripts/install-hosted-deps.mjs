@@ -9,7 +9,7 @@ import { pathToFileURL } from "node:url";
 // https://packages.ubuntu.com/noble-updates/amd64/bubblewrap/download
 const bubblewrapFile = "bubblewrap_0.9.0-1ubuntu0.3_amd64.deb";
 const bubblewrapHash = "2461f1beee9cb04c8942739fe1a2b37e7b7c2a3d518f0779dc75f9245baa3094";
-const bubblewrapUrl = "https://github.com/CenterCoopMedia/njpbs/releases/download/ci-bubblewrap-0.9.0-1ubuntu0.3/" + bubblewrapFile;
+const bubblewrapUrl = JSON.parse(readFileSync(new URL("../../config/ci-system-dependencies.json", import.meta.url), "utf8")).bubblewrapDownloadUrl;
 const digest = (bytes) => createHash("sha256").update(bytes).digest("hex");
 
 function execute(run, command, args) {

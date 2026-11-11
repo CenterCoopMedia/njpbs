@@ -154,8 +154,8 @@ describe("development publication target and receipts", () => {
     expect(sandbox.if).toBe("steps.retained.outputs.exists != 'true'");
     expect(sandbox["continue-on-error"]).toBeUndefined();
     expect(setup.run).toContain('test "$RUNNER_ENVIRONMENT" = github-hosted');
-    expect(setup.run).toContain("if ! command -v bwrap >/dev/null; then");
-    expect(setup.run).toContain("sudo apt-get install -y --no-install-recommends bubblewrap");
+    expect(setup.run).toContain('node "$RUNNER_TEMP/hosted-apt-gate/.github/scripts/install-hosted-deps.mjs" bubblewrap "$HOME/.cache/njpbs-ci-debs/bubblewrap-0.9.0-1ubuntu0.3"');
+    expect(setup.run).not.toContain("apt-get");
     expect(setup.run).toContain("sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0");
     expect(probe.run).toBe("bwrap --unshare-net --die-with-parent --ro-bind / / --dev /dev --proc /proc --tmpfs /tmp -- /bin/true");
     for (const step of [setup, probe]) {
@@ -164,6 +164,23 @@ describe("development publication target and receipts", () => {
     }
     expect(build.if).toBe(sandbox.if);
     const steps = workflow.jobs.build.steps;
+    const helper = steps.find(step => step.name === "Check out trusted hosted package setup");
+    const isolate = steps.find(step => step.name === "Isolate trusted hosted package setup");
+    const cache = steps.find(step => step.name === "Cache hosted sandbox package");
+    expect(helper.with.ref).toBe("${{ github.sha }}");
+    expect(helper.with["persist-credentials"]).toBe(false);
+    expect(helper.with["sparse-checkout"]).toContain(".github/scripts/install-hosted-deps.mjs");
+    expect(helper.with["sparse-checkout"]).toContain("config/ci-system-dependencies.json");
+    expect(isolate.run).toBe('mv .hosted-apt-gate "$RUNNER_TEMP/hosted-apt-gate"');
+    expect(cache.with.path).toBe("~/.cache/njpbs-ci-debs/bubblewrap-0.9.0-1ubuntu0.3");
+    expect(cache.with.key).toContain("bubblewrap-deb-0.9.0-1ubuntu0.3");
+    for (const step of [helper, isolate, cache]) {
+      expect(step.if).toBe(sandbox.if);
+      expect(step["continue-on-error"]).toBeUndefined();
+    }
+    expect(steps.indexOf(helper)).toBeLessThan(steps.indexOf(isolate));
+    expect(steps.indexOf(isolate)).toBeLessThan(steps.indexOf(cache));
+    expect(steps.indexOf(cache)).toBeLessThan(steps.indexOf(setup));
     expect(steps.indexOf(model)).toBeLessThan(steps.indexOf(probe));
     expect(steps.indexOf(setup)).toBeLessThan(steps.indexOf(sandbox));
     expect(steps.indexOf(sandbox)).toBeLessThan(steps.indexOf(probe));
