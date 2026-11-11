@@ -12,7 +12,8 @@ The `production` branch selects a release by fast-forwarding to a green commit
 already on `main`. The only trigger for `promote.yml` is `workflow_dispatch`,
 with a required `sha` input of 40 lowercase hexadecimal characters. The dispatch
 ref stays `main`; the input selects an immutable commit already on main. It
-checks out that selected SHA, verifies main
+keeps policy scripts at the immutable main workflow revision, verifies the
+selected SHA's main
 ancestry and successful main-push `CI / ci` through the existing release checks,
 and pushes without force. It refuses to bootstrap a missing production branch.
 Later main commits cannot change the selected SHA. The run title is

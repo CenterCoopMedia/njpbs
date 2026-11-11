@@ -51,11 +51,11 @@ jobs:
           repositories: ${{ github.event.repository.name }}
           permission-contents: write
           permission-workflows: write
-      - name: Check out the selected main SHA
+      - name: Check out the trusted workflow revision
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           token: ${{ steps.app.outputs.token }}
-          ref: ${{ inputs.sha }}
+          ref: ${{ github.sha }}
           fetch-depth: 0
       - name: Require main ancestry and an existing production branch
         env:
@@ -63,7 +63,7 @@ jobs:
         run: |
           set -euo pipefail
           git fetch --no-tags origin +refs/heads/main:refs/remotes/origin/main +refs/heads/production:refs/remotes/origin/production
-          node .github/scripts/require-release-source.mjs
+          git merge-base --is-ancestor "$SELECTED_SHA" origin/main
           git merge-base --is-ancestor origin/production "$SELECTED_SHA"
       - name: Require successful main CI for this SHA
         env:
@@ -71,4 +71,6 @@ jobs:
           DEPLOY_SHA: ${{ inputs.sha }}
         run: node .github/scripts/require-main-ci.mjs
       - name: Fast-forward production
-        run: git push origin HEAD:refs/heads/production
+        env:
+          SELECTED_SHA: ${{ inputs.sha }}
+        run: git push origin "$SELECTED_SHA:refs/heads/production"
