@@ -199,6 +199,8 @@ export interface ResolvedRenderAsset {
 export type RenderAssetPlacement = "content" | "grid";
 
 export interface RenderBlockOptions {
+  /** Only public Page/Post assembly enables reader status and snapshot downloads. */
+  publicElectionResults?: boolean;
   resolveDataHubSection?: (data: DataHubSectionData, headingLevel: number) => string;
   resolveDataFigure?: (blockId: string, data: DataFigureData) => DatasetPublicProjection | null;
   /** Current library credit is visible only on Post images. */
@@ -567,6 +569,18 @@ export function renderBlock(
       return renderImageFigure(block.data, options, "content", block.data);
     case "video":
       return renderVideoBlock(block.data, { placeholder: options.videoPlaceholder === true });
+    case "support_appeal": {
+      const { heading, copy, buttonLabel, style, backgroundImageAssetId } = block.data;
+      const href = safeHref(block.data.href);
+      if (!heading.trim() || !copy.trim() || !buttonLabel.trim() || href === null) return "";
+      const level = clampHeadingLevel(options.generatedHeadingLevel);
+      const headingId = `support-${block.id}-heading`;
+      const newTab = opensExternalInNewTab(href, options);
+      const image = backgroundImageAssetId ? options.resolveAsset?.(backgroundImageAssetId, "grid") : null;
+      const art = image ? `<div class="support-appeal__image" aria-hidden="true">${renderResolvedImage(backgroundImageAssetId!, "", image)}</div>` : "";
+      const paragraphs = copy.trim().split(/\n\s*\n/).map(text => `<p class="support-appeal__copy">${escapeHtml(text)}</p>`).join("");
+      return `<section class="support-appeal support-appeal--${style === "light" ? "light" : style === "dark" ? "dark" : "blue"}${image ? " support-appeal--with-image" : ""}" aria-labelledby="${escapeHtml(headingId)}">${art}<h${level} class="support-appeal__heading" id="${escapeHtml(headingId)}">${escapeHtml(heading)}</h${level}>${paragraphs}<a class="btn support-appeal__button" href="${escapeHtml(href)}"${newTab ? EXTERNAL_LINK_ATTRIBUTES : ""}>${escapeHtml(buttonLabel)}${newTab ? EXTERNAL_LINK_NOTICE : ""}</a></section>`;
+    }
     case "cta_row": {
       const ctas = block.data.ctas.map((cta) => {
         const variantClass = ctaVariantClass(cta.variant);
@@ -703,7 +717,7 @@ export function renderBlock(
         const photo = candidate.photo;
         const asset = photo ? options.resolveAsset?.(photo.assetId, "grid") : null;
         return photo && asset ? renderResolvedImage(photo.assetId, photo.alt, asset) : "";
-      });
+      }, options.publicElectionResults === true);
     case "html":
       return renderHtmlBlock(block.data);
     case "embed": {

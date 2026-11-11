@@ -1,0 +1,8 @@
+{
+  "date": "2026-11-10",
+  "kind": "new",
+  "title": "Download election results",
+  "body": "Readers can choose Download CSV below the election results filters. The file includes all races in that section, with source links and update times. Unknown values stay blank.",
+  "prs": [],
+  "order": 1794303540496
+}

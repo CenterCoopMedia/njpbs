@@ -88,9 +88,31 @@ function resultsExplainer(): string {
   return `<details class="election-results__explainer"><summary>How to read these results</summary><div>${text.split(/\n\s*\n/).map(paragraph => `<p>${escapeHtml(paragraph)}</p>`).join("")}</div></details>`;
 }
 
+function resultsCsv(data: ElectionResultsData): string {
+  const rows: (string | number | null | undefined)[][] = [[
+    "Office", "District", "Status", "Candidate", "Party", "Votes", "Share (%)", "Reporting (%)",
+    "Expected vote counted (fraction)", "Source", "Source URL", "Source updated (ISO 8601)",
+    "AP called winner", "AP call URL",
+  ]];
+  for (const race of data.races) {
+    for (const candidate of race.candidates) rows.push([
+      race.office, race.district, ELECTION_RACE_STATUSES[race.status], candidate.name, candidate.party,
+      candidate.votes, candidate.share, race.reportingShare, race.expectedVoteShare,
+      race.sourceLabel, race.sourceUrl, race.asOf,
+      race.status === "called" && race.calledCandidateId === candidate.id ? "Yes" : "", race.apCallUrl,
+    ]);
+  }
+  return "\uFEFF" + rows.map(row => row.map(value => {
+    const text = String(value ?? "");
+    // CSV quotes preserve delimiters; the apostrophe prevents spreadsheet formulas.
+    const safe = /^[\s\u0000-\u001f\u007f-\u009f]*[=+@-]/u.test(text) ? `'${text}` : text;
+    return `"${safe.replaceAll('"', '""')}"`;
+  }).join(",")).join("\r\n") + "\r\n";
+}
+
 /** Static HTML works in full builds, fast publication and private saved previews. */
 export function renderElectionResults(blockId: string, data: ElectionResultsData, heading = 2,
-  resolvePhoto?: (candidate: ElectionCandidate) => string): string {
+  resolvePhoto?: (candidate: ElectionCandidate) => string, publicResults = false): string {
   if (electionResultsError(data, true)) return '<p class="election-results__unavailable">Election results are not available.</p>';
   const level = Math.min(6, Math.max(2, heading));
   const raceLevel = Math.min(6, level + 1);
@@ -98,7 +120,16 @@ export function renderElectionResults(blockId: string, data: ElectionResultsData
   const raceAnchor = (race: ElectionRace) => `election-${blockId}-${race.id}`;
   const jumps = `<nav class="election-results__jumps" aria-label="Jump to a race"><p>Jump to a race</p><ul role="list">${data.races.map(race => `<li><a data-election-jump="${escapeHtml(race.id)}" href="#${escapeHtml(raceAnchor(race))}">${escapeHtml(jumpLabel(race))}</a></li>`).join("")}</ul></nav>`;
   const filters = `<div class="election-results__filters" data-election-filters hidden><label>Search races<input type="search" data-election-search-input placeholder="Office, district or candidate" autocomplete="off" /></label><label>Race status<select data-election-status-input><option value="all">All races</option><option value="called">AP called</option><option value="awaiting">Awaiting results</option></select></label><p class="election-results__filter-count" data-election-filter-count role="status" aria-live="polite" aria-atomic="true"></p></div><p class="election-results__no-matches" data-election-no-matches hidden>No races match. Change the search or race status.</p>`;
-  return `<section class="election-results" data-election-results="${escapeHtml(blockId)}" aria-label="Election results"><h${level} class="election-results__title">Election results</h${level}><p class="election-results__refresh election-results__sr-only" role="status" aria-live="polite" aria-atomic="true" data-election-results-update></p>${filters}${resultsExplainer()}<div data-election-results-content>${jumps}${data.races.map(race => {
+  const csvHelp = escapeHtml(`election-${blockId}-csv-help`);
+  const download = publicResults ? `<div class="election-results__download" data-election-download hidden><button type="button" class="election-results__button" aria-describedby="${csvHelp}">Download CSV</button><p id="${csvHelp}">All races, including those hidden by filters. Unknown values are blank.</p></div>` : "";
+  const liveHelp = escapeHtml(`election-${blockId}-live-help`);
+  const update = publicResults
+    ? `<div class="election-results__live" data-election-live hidden><p class="election-results__refresh" role="status" aria-live="polite" aria-atomic="true" data-election-results-update><span class="election-results__live-dot" data-election-live-dot aria-hidden="true" hidden></span><span data-election-live-text>Checking for updates</span><span data-election-update-time></span></p><button type="button" class="election-results__button" aria-describedby="${liveHelp}">Pause updates</button><p class="election-results__sr-only" id="${liveHelp}">Checks for result updates every minute. Each race shows its source time. Pause applies to all results on this page.</p></div>`
+    : '<p class="election-results__refresh election-results__sr-only" role="status" aria-live="polite" aria-atomic="true" data-election-results-update></p>';
+  // Character references retain CRLF through HTML parsing. The inert payload moves
+  // atomically with its cards/tables, including when a refresh is deferred for focus.
+  const csv = publicResults ? `<template data-election-csv>${escapeHtml(resultsCsv(data)).replaceAll("\r", "&#13;")}</template>` : "";
+  return `<section class="election-results" data-election-results="${escapeHtml(blockId)}" aria-label="Election results"><h${level} class="election-results__title">Election results</h${level}>${update}${filters}${download}${resultsExplainer()}<div data-election-results-content>${csv}${jumps}${data.races.map(race => {
     const leading = leadingCandidate(race);
     const credits = race.candidates.filter(candidate => candidate.photo?.caption?.trim())
       .map(candidate => `${candidate.name}: ${candidate.photo!.caption!.trim()}`).join("; ");

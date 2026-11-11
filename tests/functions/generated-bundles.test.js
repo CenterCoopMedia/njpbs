@@ -30,6 +30,7 @@ describe("generated functions bundles", () => {
     expect(generators.map((generator) => generator.outfile)).toEqual(expect.arrayContaining([
       "functions/lib/block-content-validation.js",
       "functions/lib/post-formats.js",
+      "functions/lib/posts-browse-contract.js",
       "functions/lib/video-block.js",
     ]));
   });

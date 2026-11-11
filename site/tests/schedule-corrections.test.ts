@@ -170,17 +170,17 @@ describe("approved October schedule", () => {
     expect(oct20.entries.filter((entry) => entry.title.includes("Timing to be confirmed")).every((entry) => !entry.isKids)).toBe(true);
   });
 
-  it("is idempotent, includes 44 dates on October 31, and expires on November 1", () => {
+  it("is idempotent and keeps a bounded window across the monthly workbooks", () => {
     const october31 = rawWindow("2026-10-31T12:00:00Z");
     const corrected = applyScheduleCorrections(october31);
     expect(corrected.request.dates).toHaveLength(44);
     expect(corrected.request.dates.at(-1)).toBe("2026-11-13");
-    expect(corrected.days.broadcast.at(-1)).toBe(october31.days.broadcast.at(-1));
+    expect(corrected.days.broadcast.at(-1)?.sourceRevision).toBe("2026-11-02");
     expect(applyScheduleCorrections(corrected)).toEqual(corrected);
     const november = rawWindow("2026-11-01T12:00:00Z");
-    expect(applyScheduleCorrections(november)).toBe(november);
-    expect(november.request.dates).toHaveLength(14);
-    expect(november.source).toBe("pbs-tvss");
+    expect(applyScheduleCorrections(november).request.dates).toHaveLength(30);
+    const january = rawWindow("2027-01-01T12:00:00Z");
+    expect(applyScheduleCorrections(january)).toBe(january);
     expect(uncorrectedScheduleDates(["2025-10-02", "2026-10-02", "2026-11-01"])).toEqual(["2025-10-02", "2026-11-01"]);
   });
 
@@ -250,8 +250,8 @@ describe("approved October schedule", () => {
       new Date("2026-11-01T16:00:00Z"), vi.fn());
     if (!("days" in november)) throw new Error("Expected a fresh November schedule.");
     expect(fetchFeed).toHaveBeenCalledTimes(28);
-    expect(november.source).toBe("pbs-tvss");
-    expect(november.days.broadcast).toHaveLength(14);
+    expect(november.source).toBe("pbs-tvss-with-njpbs-corrections");
+    expect(november.days.broadcast).toHaveLength(30);
     expect(november.request.dates[0]).toBe("2026-11-01");
   });
 });

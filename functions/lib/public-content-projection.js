@@ -201,6 +201,12 @@ function selectedBlock(block) {
         })),
       };
       break;
+    case "support_appeal":
+      data = {
+        heading: block.data.heading, copy: block.data.copy,
+        buttonLabel: block.data.buttonLabel, href: block.data.href, style: block.data.style,
+      };
+      break;
     case "cta_row":
       data = {
         ctas: block.data.ctas.map((cta) => ({

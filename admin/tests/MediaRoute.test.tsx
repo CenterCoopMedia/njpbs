@@ -4417,7 +4417,7 @@ describe("MediaRoute images grid", () => {
     document.body.focus();
     await act(async () => { await router.navigate("/media/images?q=desk"); });
     fireEvent.click(within(viewer).getByRole("button", { name: "Keep editing" }));
-    const target = detailsVisible ? name : within(viewer).getByRole("group", { name: "Image view controls" }).querySelector(".image-viewer-details-toggle");
+    const target = detailsVisible ? name : within(viewer).getByRole("group", { name: "Image workspace controls" }).querySelector(".image-viewer-details-toggle");
     await waitFor(() => expect(target).toHaveFocus());
   });
 
@@ -5658,7 +5658,7 @@ describe("image personal saved views", () => {
     fireEvent.click(screen.getByRole("button", { name: /^Filter/ }));
 
     await waitFor(() => expect(router.state.location.search).toBe("?q=News&kind=image&sort=name"));
-    expect(screen.getByRole("region", { name: "Notifications" })).toHaveTextContent("Current filters were kept.");
+    await waitFor(() => expect(screen.getByRole("region", { name: "Notifications" })).toHaveTextContent("Current filters were kept."));
   });
 
   it("removes a missing view marker without blocking unsaved asset details", async () => {

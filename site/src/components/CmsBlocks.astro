@@ -73,6 +73,7 @@ const groups = renderContentGroups(blocks, (block, index) => ({
     // Composed service pages keep the public page frame's rule: external links open in a new tab.
     externalLinksNewTab: usesServiceComposition(entry.data),
     videoPlaceholder: entry.data.contentMode === "draft",
+    publicElectionResults: entry.data.contentMode === "published",
   }),
 }));
 const publicGroups = groupLinkCardDirectories(groups);

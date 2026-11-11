@@ -145,7 +145,7 @@ export function VideoPickerDialog({ open, getIdToken, onClose, onChoose }: {
             </Button>
           </li>;
         })}</ul>
-        {state.nextCursor ? <Button disabled={state.busy}
+        {state.nextCursor ? <Button className="video-picker-load-more" disabled={state.busy}
           onClick={() => setRequest(previous => ({ ...previous, cursor: state.nextCursor }))}>
           {state.busy ? "Loading more videos…" : "Load more videos"}
         </Button> : null}

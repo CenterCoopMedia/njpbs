@@ -32,6 +32,7 @@ const DATA_FIELDS = Object.freeze({
   embed: ["url", "host", "caption", "width", "height", "heading", "mapSize", "mobileHeight", "mapWidth"],
   html: ["html", "title"],
   cta_row: ["ctas"],
+  support_appeal: ["heading", "copy", "buttonLabel", "href", "style", "backgroundImageAssetId"],
   link_card: ["title", "url", "source", "date", "summary"],
   topic_shelf: ["title", "topic", "source", "itemLimit", "sort", "pinned"],
   promotion_playlist: ["title", "placement", "presentation", "columns", "cards"],
@@ -68,6 +69,7 @@ function captureData(block, mode) {
     case "embed": return { ...pick(data, ["width", "height", "mapSize", "mobileHeight", "mapWidth"]), url: "", caption: "" };
     case "html": return { html: "", title: "" };
     case "cta_row": return { ctas: data.ctas.map(cta => ({ ...pick(cta, ["variant"]), label: "", href: "" })) };
+    case "support_appeal": return { style: data.style, heading: "", copy: "", buttonLabel: "", href: "" };
     case "link_card": return { title: "", url: "", source: "", date: "", summary: "" };
     // Topic/source are reusable query settings; explicit story pins are not.
     case "topic_shelf": return { ...pick(data, ["topic", "source", "itemLimit", "sort"]), title: "", pinned: [] };

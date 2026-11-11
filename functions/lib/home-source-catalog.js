@@ -615,6 +615,7 @@ var BLOCK_TYPES = [
   "video",
   "image_gallery",
   "cta_row",
+  "support_appeal",
   "card_grid",
   "link_card",
   "document_list",
@@ -650,6 +651,17 @@ var GALLERY_PRESENTATION_SPECS = Object.freeze([
   })
 ]);
 var GALLERY_PRESENTATION_SET = new Set(GALLERY_PRESENTATIONS);
+var SUPPORT_APPEAL_DEFAULTS = Object.freeze({
+  heading: "Before you go, a request for help\u2026",
+  copy: [
+    "NJ PBS is entering a dynamic new chapter; operating out of Montclair State, we're delivering state-of-the-art public reporting while training New Jersey's next generation of journalists, storytellers, and technical leaders alongside seasoned media veterans\u2013in addition to streaming your favorite shows!",
+    "Because we operate as an independent entity and can no longer rely on federal subsidies, our strength and sustainability rest directly with you.",
+    "Will you join us in building the future of New Jersey public media? Your year-end contribution directly funds our independent newsroom, fuels homegrown Jersey storytelling, and equips future media leaders."
+  ].join("\n\n"),
+  buttonLabel: "Donate to the NJ PBS Year-End Fund",
+  href: "https://www.pbs.org/donation/?station_id=63b643e1-1a13-4dd9-9bab-ff6f7527715f&campaign=passport",
+  style: "blue"
+});
 var LINK_CARD_LIMITS = Object.freeze({
   title: 250,
   source: 120,

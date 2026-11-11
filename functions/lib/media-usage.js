@@ -81,7 +81,7 @@ function addBlockAssets(occurrences, blocks, { visibleOnly, documentOccurrences 
       throw new MediaUsageError("Each content block must be an object");
     }
     if (visibleOnly && (block.visible !== true || hiddenRows.has(block.layout?.rowId))) continue;
-    addAsset(occurrences, block.data?.backgroundImageAssetId, "Home band background");
+    addAsset(occurrences, block.data?.backgroundImageAssetId, block.type === "support_appeal" ? "Support appeal image" : "Home band background");
     if (block.type === "document_list") {
       if (!Array.isArray(block.data?.documents)) throw new MediaUsageError("PDF notices must contain a document list");
       for (const item of block.data.documents) addAsset(documentOccurrences, item?.assetId, "PDF notice");

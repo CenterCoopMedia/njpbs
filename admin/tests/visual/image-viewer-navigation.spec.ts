@@ -6,7 +6,7 @@ for (const width of [320, 390]) {
     await page.setViewportSize({ width, height: 800 });
     await page.goto("/gallery.html?embed=image-viewer&presentation=text&navigation-prompt");
     const viewer = page.getByRole("dialog", { name: "Statehouse dome at dusk" });
-    await viewer.getByRole("group", { name: "Image view controls" }).getByRole("button", { name: "Details", exact: true }).click();
+    await viewer.getByRole("group", { name: "Image workspace controls" }).getByRole("button", { name: "Details", exact: true }).click();
     const prompt = viewer.getByRole("status").filter({ hasText: "Unsaved media changes" });
     const details = viewer.getByRole("complementary", { name: "Asset details" });
     await expect(prompt).toBeVisible();

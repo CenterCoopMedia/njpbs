@@ -54,7 +54,9 @@ it("seals and reads an exact JSON/PDF pair with the frozen clock and 14-day DST 
     exportedAt: "2026-10-30T15:00:00.000Z", generatedAt: "2026-10-30T13:00:00.000Z" });
   const read = await readCloudSchedulePacket({ inputs, packet, storage });
   expect(read.exported.dates).toEqual(dates);
-  expect(read.schedule.days.broadcast.some(day => day.date === "2026-11-01" && day.entries[0]?.startsAt.endsWith("-05:00"))).toBe(true);
+  expect(read.schedule.days.broadcast.some(day => day.date === "2026-11-01" &&
+    day.entries[0]?.startsAt === "2026-11-01T00:00:00-04:00" &&
+    day.entries.some(entry => entry.startsAt === "2026-11-01T02:00:00-05:00"))).toBe(true);
   expect(read.pdf.subarray(0, 8).toString()).toBe("%PDF-1.7");
   const document = read.pdf.toString("latin1");
   const reference = /\/CreationDate (\d+) 0 R/.exec(document);

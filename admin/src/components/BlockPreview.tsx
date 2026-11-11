@@ -2,18 +2,20 @@ import { DATA_HUB_SECTIONS, type DataHubSectionId } from "../../../packages/cont
 import type { DataHubSectionData } from "../../../packages/content-core/src/data-hub-composition";
 import { SectionSourcePreview, VideoResourcePreview } from "./EditorResourcePreview";
 import { createElement, lazy, Suspense, type ReactNode } from "react";
-import { isRichTextDoc, renderRichText, richTextRendersEmpty, type RichTextNode } from "../../../packages/content-core/src/content-model";
-import { clampHeadingLevel } from "../../../packages/content-core/src/content-render";
+import { isRichTextDoc, parseBlocks, renderRichText, richTextRendersEmpty, type RichTextNode } from "../../../packages/content-core/src/content-model";
+import { clampHeadingLevel, renderBlock } from "../../../packages/content-core/src/content-render";
 import { parseDataTable } from "../../../packages/content-core/src/data-table";
 import { pageSeedAsset } from "../../../packages/content-core/src/page-composition-seeds";
 import type { AdminBlock } from "../lib/block-factory";
 import { outlineSummary } from "../lib/content-outline";
 import type { MediaPickerLoader } from "./MediaPickerDialog";
 import { AssetImage } from "./ui/AssetImage";
-import { mediaImageSources } from "../lib/media-image";
+import { mediaImageSources, mediaPreviewUrl } from "../lib/media-image";
 import { useResolvedMediaAsset } from "./useResolvedMediaAsset";
 import "./BlockPreview.css";
 import { newestNoticeDocuments, noticeAddedDate, type NoticeDocument } from "../../../packages/content-core/src/document-list";
+import { HomePreviewFrame } from "./HomePreviewFrame";
+import blockStyles from "../../../packages/content-core/src/component-blocks.css?inline";
 
 const DataHubSectionPreview = lazy(() => import("./DataHubSectionPreview"));
 function text(value: unknown): string { return typeof value === "string" ? value : ""; }
@@ -60,11 +62,24 @@ function TablePreview({ data }: { data: Record<string, unknown> }) {
   </>;
 }
 
+function SupportAppealPreview({ block, loadMedia, generatedHeadingLevel }: { block: AdminBlock; loadMedia?: MediaPickerLoader; generatedHeadingLevel: number }) {
+  const imageId = typeof block.data.backgroundImageAssetId === "string" ? block.data.backgroundImageAssetId : "";
+  const image = useResolvedMediaAsset(imageId, loadMedia);
+  const parsed = parseBlocks([{ ...block, layout: undefined }], { complete: false });
+  return parsed.ok ? <><HomePreviewFrame title="Support appeal preview" styles={blockStyles}
+    html={renderBlock(parsed.blocks[0], { generatedHeadingLevel, resolveAsset: () => image ? {
+      url: mediaPreviewUrl(image, 960), width: image.width ?? undefined, height: image.height ?? undefined,
+    } : null }) || "<p>Complete the appeal fields to see its preview.</p>"} />
+    {imageId && !image ? <p role="status">Image preview is loading or unavailable.</p> : null}</>
+    : <p>Complete the appeal fields to see its preview.</p>;
+}
+
 export function BlockPreview({ resolvedDataFigureLabel, block, loadMedia, showPageSeedAssets = false, generatedHeadingLevel = 2, editorFrame, onInspect, onMediaPickerDirtyChange }: {
   resolvedDataFigureLabel?: string;
   block: AdminBlock; loadMedia?: MediaPickerLoader; showPageSeedAssets?: boolean; generatedHeadingLevel?: number; editorFrame?: "page" | "post"; onInspect?: () => void; onMediaPickerDirtyChange?: (dirty: boolean) => void;
 }) {
   const data = block.data;
+  if (block.type === "support_appeal") return <SupportAppealPreview block={block} loadMedia={loadMedia} generatedHeadingLevel={generatedHeadingLevel} />;
   if (editorFrame && block.type === "video") return <div className="block-preview"><VideoResourcePreview block={block} onInspect={onInspect} onMediaPickerDirtyChange={onMediaPickerDirtyChange} /></div>;
   if (editorFrame === "page" && ["content_shelf", "home_newscast", "embed", "newsletter_signup"].includes(block.type)) return <div className="block-preview"><SectionSourcePreview block={block} /></div>;
   const image = (assetId: unknown, caption?: string) => <Thumbnail assetId={text(assetId)} caption={caption} loadMedia={loadMedia} showPageSeedAssets={showPageSeedAssets} />;

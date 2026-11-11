@@ -134,6 +134,7 @@ describe("SECTION_BLOCK_CATALOG", () => {
       "embed",
       "html",
       "cta_row",
+      "support_appeal",
       "link_card",
       "topic_shelf",
       "promotion_playlist",

@@ -49,7 +49,12 @@ describe("the public Data Hub page", () => {
     expect(HUB_HTML).not.toContain('Editorial design preview — not published on NJ PBS');
     expect(HUB_HTML).toContain('Published on NJ PBS. Downloads preserve this dated source snapshot.');
     expect(HUB_HTML).toContain('id="source-data" type="application/json"');
-    expect(HUB_HTML).toContain('"asOf":"2026-10-20"');
+    const sourceJson = HUB_HTML.split('id="source-data" type="application/json">')[1]?.split("</script>")[0];
+    expect(sourceJson).toBeDefined();
+    const savedSource = JSON.parse(sourceJson!);
+    expect(savedSource.asOf).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+    expect(savedSource.asOf >= "2026-11-09").toBe(true);
+    expect(savedSource.metrics).toHaveLength(18);
     expect(HUB_HTML).not.toMatch(/staff-mode-toggle|editor-dialog|figure-cms-panel|localStorage/);
   });
 });

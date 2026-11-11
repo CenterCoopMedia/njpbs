@@ -3,7 +3,7 @@ import { TOWN_LOOKUP_DEFAULTS } from "../../../packages/content-core/src/town-lo
 import type { EditorBlock } from "../../../packages/content-core/src/editor-admin";
 import { adminFieldsForBlock, homeLayoutsEnabled } from "./home-layouts";
 import { defaultValueForField } from "./field-defaults";
-import type { BlockLayout, BlockType } from "../../../packages/content-core/src/content-model";
+import { SUPPORT_APPEAL_DEFAULTS, type BlockLayout, type BlockType } from "../../../packages/content-core/src/content-model";
 import { HOME_NEWSCAST_DEFAULTS, createHomeNewscastBlock } from "../../../packages/content-core/src/home-newscast-section";
 
 // An admin working block: an `EditorBlock` (the id / type / order the reducer addresses and
@@ -23,6 +23,7 @@ export interface AdminBlock extends EditorBlock {
 // inserted block is already in a shape the descriptor renderer can edit and the save
 // boundary can validate. A divider has no editor fields, so its data is empty.
 export function defaultBlockData(type: BlockType): Record<string, unknown> {
+  if (type === "support_appeal") return { ...SUPPORT_APPEAL_DEFAULTS };
   if (type === "home_newscast") return { ...HOME_NEWSCAST_DEFAULTS };
   if (type === "document_list") return { documents: [] };
   if (type === "bio_card") return { profileId: "", kind: "person", name: "", role: "", summary: "", sourceUrl: "", sourceLabel: "", asOf: "" };

@@ -612,6 +612,7 @@ export function MediaCollectionItems({
         if (!record) return null;
         if (isR2Item(record)) {
           return <><ImageViewerBody getIdToken={getIdToken} key={mediaFullViewerKey(record.ref)} asset={record.asset}
+            comparisonAssets={viewerOrder.filter(isR2Item).map(item => item.asset)}
             categories={categories} canEdit={canManageMediaMetadata(principal, record.asset.category)}
             deleteMedia={async asset => cmsDeleteMedia(await getIdToken(), asset)}
             saveMetadata={async (asset, metadata) => cmsUpdateMediaMetadata(await getIdToken(), asset, metadata)}

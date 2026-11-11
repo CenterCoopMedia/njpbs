@@ -6,6 +6,8 @@ interface ResultsBlock {
   element: HTMLElement;
   content: HTMLElement;
   html: string;
+  state: "checking" | "active" | "stale";
+  updated: string;
 }
 
 /** The public HTML already has the publisher's current authority and cache rules.
@@ -15,28 +17,70 @@ export function installElectionResults(view: Window): () => void {
   const blocks: ResultsBlock[] = Array.from(doc.querySelectorAll<HTMLElement>("[data-election-results]"))
     .flatMap(element => {
       const content = element.querySelector<HTMLElement>(CONTENT);
-      return content ? [{ element, content, html: content.innerHTML }] : [];
+      return content ? [{ element, content, html: content.innerHTML, state: "checking" as const, updated: "" }] : [];
     });
   if (!blocks.length) return () => {};
   const stopFilters = blocks.map(block => installFilters(block.element, view));
+  const stopDownloads = blocks.map(block => installDownload(block.element, view));
   let delay = INTERVAL;
   let nextCheck = Date.now() + delay;
   let timer = 0;
   let request: AbortController | undefined;
   let stopped = false;
+  let paused = false;
+  const liveControls = blocks.map(block => ({
+    block,
+    control: block.element.querySelector<HTMLElement>("[data-election-live]"),
+    button: block.element.querySelector<HTMLButtonElement>("[data-election-live] button"),
+  }));
+  const canRead = () => !stopped && !doc.hidden && !paused && view.navigator.onLine !== false;
+
+  function paint() {
+    for (const { block, control, button } of liveControls) {
+      if (!control || !button) continue;
+      const state = doc.hidden ? "background" : paused ? "paused"
+        : view.navigator.onLine === false ? "disconnected" : block.state;
+      const text = { checking: "Checking for updates", active: "Live updates", stale: "Updates delayed",
+        background: "Updates paused in background tab", paused: "Updates paused", disconnected: "Offline; updates paused" }[state];
+      control.dataset.state = state;
+      const label = control.querySelector<HTMLElement>("[data-election-live-text]")!;
+      const time = control.querySelector<HTMLElement>("[data-election-update-time]")!;
+      // Do not reannounce unchanged minute checks or replace the live region.
+      if (label.textContent !== text) label.textContent = text;
+      const updated = block.updated ? ` · ${block.updated}` : "";
+      if (time.textContent !== updated) time.textContent = updated;
+      control.querySelector<HTMLElement>("[data-election-live-dot]")!.hidden = state !== "active";
+      const action = paused ? "Resume updates" : "Pause updates";
+      if (button.textContent !== action) button.textContent = action;
+    }
+  }
+
+  function environment(reason: string) {
+    view.clearTimeout(timer);
+    if (!canRead()) request?.abort(reason);
+    else blocks.forEach(block => { if (block.state === "active") block.state = "checking"; });
+    paint();
+    schedule();
+  }
+  const togglePause = () => { paused = !paused; environment("paused"); };
+  for (const { control, button } of liveControls) {
+    if (!control || !button) continue;
+    button.addEventListener("click", togglePause);
+    control.hidden = false;
+  }
 
   function schedule() {
     view.clearTimeout(timer);
-    if (!stopped && !doc.hidden && !request) {
+    if (canRead() && !request) {
       timer = view.setTimeout(refresh, Math.max(1_000, nextCheck - Date.now()));
     }
   }
 
   async function refresh() {
-    if (stopped || doc.hidden || request) return;
+    if (!canRead() || request) return;
     const controller = new AbortController();
     request = controller;
-    const timeout = view.setTimeout(() => controller.abort(), 15_000);
+    const timeout = view.setTimeout(() => controller.abort("timeout"), 15_000);
     try {
       // Omit query/hash and cookies so the existing shared published-page cache
       // can serve readers. Redirects must never turn this into a cross-origin GET.
@@ -47,7 +91,7 @@ export function installElectionResults(view: Window): () => void {
           response.headers.get("x-njpbs-publication-refresh") === "pending" ||
           response.headers.get("publication-refresh") === "pending") throw new Error("Results unavailable");
       const html = await response.text();
-      if (stopped || doc.hidden || controller.signal.aborted) return;
+      if (!canRead() || controller.signal.aborted) return;
       // Template contents cannot load the page shell's images or embeds while
       // we extract the results. Only the selected results nodes become live.
       const published = doc.createElement("template");
@@ -56,42 +100,83 @@ export function installElectionResults(view: Window): () => void {
         const current = Array.from(published.content.querySelectorAll<HTMLElement>("[data-election-results]"))
           .find(element => element.dataset.electionResults === block.element.dataset.electionResults);
         const content = current?.querySelector<HTMLElement>(CONTENT);
-        if (!content) throw new Error("Results block unavailable");
+        if (!content?.querySelector("[data-election-race]")) throw new Error("Results block unavailable");
         const nextHtml = content.innerHTML;
-        if (nextHtml === block.html) continue;
-        if (!replaceResults(view, block.content, content)) continue;
+        if (nextHtml === block.html) { block.state = "active"; continue; }
+        if (!replaceResults(view, block.content, content)) { block.state = "stale"; continue; }
         block.html = nextHtml;
-        const status = block.element.querySelector<HTMLElement>("[data-election-results-update]");
+        block.state = "active";
         const time = new Intl.DateTimeFormat("en-US", {
           timeZone: "America/New_York", hour: "numeric", minute: "2-digit",
         }).format(new Date());
-        if (status) status.textContent = `Results updated ${time} ET`;
+        block.updated = `Results updated ${time} ET`;
+        if (!block.element.querySelector("[data-election-live]")) {
+          const status = block.element.querySelector<HTMLElement>("[data-election-results-update]");
+          if (status) status.textContent = block.updated;
+        }
       }
       delay = INTERVAL;
     } catch {
-      if (!doc.hidden && !stopped) delay = Math.min(delay * 2, MAX_DELAY);
+      if (canRead() && (!controller.signal.aborted || controller.signal.reason === "timeout")) {
+        blocks.forEach(block => { block.state = "stale"; });
+        delay = Math.min(delay * 2, MAX_DELAY);
+      }
     } finally {
       view.clearTimeout(timeout);
       request = undefined;
       nextCheck = Date.now() + delay;
+      paint();
       schedule();
     }
   }
 
-  const visibility = () => {
-    if (doc.hidden) {
-      view.clearTimeout(timer);
-      request?.abort();
-    } else schedule();
-  };
+  const visibility = () => environment("background");
+  const network = () => environment("offline");
   doc.addEventListener("visibilitychange", visibility);
+  view.addEventListener("online", network);
+  view.addEventListener("offline", network);
+  paint();
   schedule();
   return () => {
     stopped = true;
     view.clearTimeout(timer);
-    request?.abort();
+    request?.abort("stopped");
     doc.removeEventListener("visibilitychange", visibility);
+    view.removeEventListener("online", network);
+    view.removeEventListener("offline", network);
+    for (const { control, button } of liveControls) {
+      button?.removeEventListener("click", togglePause);
+      if (control) control.hidden = true;
+    }
     stopFilters.forEach(stop => stop());
+    stopDownloads.forEach(stop => stop());
+  };
+}
+
+function installDownload(element: HTMLElement, view: Window): () => void {
+  const control = element.querySelector<HTMLElement>("[data-election-download]");
+  const button = control?.querySelector("button");
+  if (!control || !button || !element.querySelector("template[data-election-csv]")) return () => {};
+  const download = () => {
+    // Read the currently displayed snapshot, not the one present at installation.
+    const csv = element.querySelector<HTMLTemplateElement>("template[data-election-csv]")?.content.textContent;
+    if (!csv) return;
+    const url = URL.createObjectURL(new Blob([csv], { type: "text/csv;charset=utf-8" }));
+    const link = element.ownerDocument.createElement("a");
+    link.href = url;
+    link.download = "nj-decides-results.csv";
+    element.ownerDocument.body.appendChild(link);
+    try { link.click(); }
+    finally {
+      link.remove();
+      view.setTimeout(() => URL.revokeObjectURL(url), 0);
+    }
+  };
+  button.addEventListener("click", download);
+  control.hidden = false;
+  return () => {
+    button.removeEventListener("click", download);
+    control.hidden = true;
   };
 }
 

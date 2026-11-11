@@ -1,0 +1,8 @@
+{
+  "date": "2026-11-09",
+  "kind": "fixed",
+  "title": "Keep keyboard focus after workspace search",
+  "body": "Closing Find a workspace keeps keyboard focus in the right place when you resize between the navigation rail and phone layout.",
+  "prs": [],
+  "order": 1794289050000
+}

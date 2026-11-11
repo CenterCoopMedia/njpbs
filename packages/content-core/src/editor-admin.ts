@@ -183,6 +183,7 @@ export const SECTION_BLOCK_CATALOG: Readonly<Record<SectionId, readonly BlockTyp
       "embed",
       "html",
       "cta_row",
+      "support_appeal",
       "link_card",
       "topic_shelf",
       "promotion_playlist",
@@ -215,7 +216,7 @@ export const SECTION_BLOCK_MAX: Readonly<
   }),
   programLanding: Object.freeze({ promotion_playlist: 8, headline: 1, cta_row: 2, video_playlist: 1 }),
   genericPage: Object.freeze({ promotion_playlist: 8, headline: 1, cta_row: 2, coverage_list: 1, topic_shelf: 2, video_playlist: 1, video: 4 }),
-  post: Object.freeze({ promotion_playlist: 8, image_gallery: 2, cta_row: 2, topic_shelf: 1, video: 4 }),
+  post: Object.freeze({ promotion_playlist: 8, image_gallery: 2, cta_row: 2, support_appeal: 1, topic_shelf: 1, video: 4 }),
 });
 
 export function allowedBlocksForSection(section: SectionId): BlockType[] {
@@ -293,6 +294,7 @@ export const BLOCK_LABELS: Readonly<Record<BlockType, string>> = Object.freeze({
   video: "uploaded video",
   image_gallery: "image gallery",
   cta_row: "buttons",
+  support_appeal: "support appeal",
   card_grid: "card set",
   link_card: "link card",
   document_list: "PDF notices",
@@ -1163,6 +1165,15 @@ const BLOCK_FIELDS: { readonly [T in BlockType]: readonly BlockFieldFor<T>[] } =
   ],
   cta_row: [
     { key: "ctas", label: "Buttons", help: "Add one or more buttons, each with a label and a link.", kind: "list", required: true, itemFields: CTA_ITEM_FIELDS },
+  ],
+  support_appeal: [
+    { key: "heading", label: "Heading", help: "A short invitation to support NJ PBS. Place this block at the end of the story.", kind: "text", required: true, maxLength: 120 },
+    { key: "copy", label: "Appeal text", help: "Explain why readers should give. Separate paragraphs with a blank line.", kind: "text", multiline: true, required: true, maxLength: 2000 },
+    { key: "buttonLabel", label: "Button text", help: "A short action such as Donate.", kind: "text", required: true, maxLength: 60 },
+    { key: "href", label: "Button link", help: "The Support page or a secure donation link.", kind: "url", required: true, maxLength: 2000 },
+    { key: "backgroundImageAssetId", label: "Decorative image", help: "Optional image from the media library. It fills the right third on wide screens and is hidden on phones. Keep all information in the text.", kind: "asset", required: false },
+    { key: "style", label: "Style", help: "Choose a coordinated background, text and button palette with accessible contrast.", kind: "select", required: true,
+      options: [{ value: "blue", label: "PBS blue" }, { value: "light", label: "Light (lavender)" }, { value: "dark", label: "Dark with teal accent" }] },
   ],
   card_grid: [
     { key: "cards", label: "Cards", help: "Add cards, each with a title and an optional image, text, and link.", kind: "list", required: true, maxItems: NESTED_MEDIA_COLLECTION_MAX, itemFields: CARD_ITEM_FIELDS },

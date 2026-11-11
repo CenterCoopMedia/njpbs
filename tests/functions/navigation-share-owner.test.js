@@ -1,6 +1,7 @@
 import { clearEmulatorFirestore } from "../helpers/emulator-firestore.js";
 import { aroundAll, beforeEach, describe, expect, it } from "vitest";
 import { withFunctionTriggersDisabled } from "@firebase/rules-unit-testing";
+import { Timestamp } from "firebase-admin/firestore";
 import firebase from "../../functions/lib/firebase.js";
 import endpoint from "../../functions/navigation-share-owner.js";
 
@@ -20,14 +21,27 @@ const shared = (id, extra = {}) => ({
   ...extra,
 });
 
+function removalEventTime(timestamp) {
+  // Timestamp.toDate() rounds the final half millisecond into the next second.
+  return new Date(timestamp.seconds * 1000).toISOString().replace(
+    /\.\d{3}Z$/, `.${String(timestamp.nanoseconds).padStart(9, "0")}Z`,
+  );
+}
+
 async function removalEvent(deleted = false) {
   const before = await owner().get();
   const result = deleted ? await owner().delete() : await owner().update({ active: false });
-  const time = result.writeTime.toDate().toISOString().replace(
-    /\.\d{3}Z$/, `.${String(result.writeTime.nanoseconds).padStart(9, "0")}Z`,
-  );
-  return { time, params: { uid: ownerUid }, data: { before, after: await owner().get() } };
+  return { time: removalEventTime(result.writeTime), params: { uid: ownerUid }, data: { before, after: await owner().get() } };
 }
+
+it.each([
+  [0, "2026-01-01T00:00:00.000000000Z"],
+  [999_499_999, "2026-01-01T00:00:00.999499999Z"],
+  [999_500_000, "2026-01-01T00:00:00.999500000Z"],
+  [999_999_999, "2026-01-01T00:00:00.999999999Z"],
+])("keeps the removal event's second at %i nanoseconds", (nanoseconds, expected) => {
+  expect(removalEventTime(new Timestamp(1_767_225_600, nanoseconds))).toBe(expected);
+});
 
 describe("shared rail owner cleanup on the Firestore emulator", () => {
   aroundAll(async (runSuite) => {

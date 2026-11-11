@@ -433,7 +433,7 @@ for (const coarse of [false, true]) {
     for (const presentation of ["icons", "text"] as const) {
       test(`image phone ${presentation} keeps Save with its form and a readable title through resize`, async ({ page }) => {
         await openSpecimen(page, { id: "image-viewer", title: "Image details", width: 320, presentation }, { normalizeGeneratedIds: false });
-        await page.getByRole("group", { name: "Image view controls" }).getByRole("button", { name: "Details", exact: true }).click();
+        await page.getByRole("group", { name: "Image workspace controls" }).getByRole("button", { name: "Details", exact: true }).click();
         const header = page.locator(".component-editor-dialog-header");
         await expect(header.getByRole("button", { name: "Save details", exact: true })).toHaveCount(0);
         const save = page.locator(".media-image-inspector-footer").getByRole("button", { name: "Save details", exact: true });

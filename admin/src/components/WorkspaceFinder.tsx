@@ -18,12 +18,18 @@ export function WorkspaceFinder({ destinations, shortcutEnabled, triggerRef, fal
     dialogRef.current?.showModal();
     inputRef.current?.focus();
   }, []);
-  const close = () => dialogRef.current?.close();
   const restoreVisibleFocus = () => {
     const active = document.activeElement;
-    if (active instanceof HTMLElement && active !== document.body && active.checkVisibility() && !active.closest("dialog:not([open])")) return;
+    if (active instanceof HTMLElement && active !== document.body && !active.closest("dialog:not([open])") && active.checkVisibility()) return;
     const fallback = fallbackFocusRef?.current;
     if (fallback?.checkVisibility()) fallback.focus();
+  };
+  const close = () => {
+    const dialog = dialogRef.current;
+    if (!dialog?.open) return;
+    dialog.close();
+    // Native close restores its opener now; the close event can arrive after a resize.
+    restoreVisibleFocus();
   };
 
   useEffect(() => {
@@ -56,7 +62,8 @@ export function WorkspaceFinder({ destinations, shortcutEnabled, triggerRef, fal
         aria-label="Find a workspace" aria-haspopup="dialog" onClick={open} title="Find a workspace (Ctrl or Command K)">
         <Icon name="search" /><span>Find a workspace</span><kbd>K</kbd>
       </button>
-      {createPortal(<dialog className="workspace-finder" ref={dialogRef} onClose={restoreVisibleFocus} aria-labelledby={headingId}
+      {createPortal(<dialog className="workspace-finder" ref={dialogRef} aria-labelledby={headingId}
+        onCancel={(event) => { event.preventDefault(); close(); }}
         onKeyDown={(event) => {
           if (event.key !== "Escape") return;
           // Search inputs consume Escape to clear their value; the finder promises to close.

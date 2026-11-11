@@ -415,6 +415,7 @@ var BLOCK_TYPES = [
   "video",
   "image_gallery",
   "cta_row",
+  "support_appeal",
   "card_grid",
   "link_card",
   "document_list",
@@ -451,6 +452,17 @@ var GALLERY_PRESENTATION_SPECS = Object.freeze([
   })
 ]);
 var GALLERY_PRESENTATION_SET = new Set(GALLERY_PRESENTATIONS);
+var SUPPORT_APPEAL_DEFAULTS = Object.freeze({
+  heading: "Before you go, a request for help\u2026",
+  copy: [
+    "NJ PBS is entering a dynamic new chapter; operating out of Montclair State, we're delivering state-of-the-art public reporting while training New Jersey's next generation of journalists, storytellers, and technical leaders alongside seasoned media veterans\u2013in addition to streaming your favorite shows!",
+    "Because we operate as an independent entity and can no longer rely on federal subsidies, our strength and sustainability rest directly with you.",
+    "Will you join us in building the future of New Jersey public media? Your year-end contribution directly funds our independent newsroom, fuels homegrown Jersey storytelling, and equips future media leaders."
+  ].join("\n\n"),
+  buttonLabel: "Donate to the NJ PBS Year-End Fund",
+  href: "https://www.pbs.org/donation/?station_id=63b643e1-1a13-4dd9-9bab-ff6f7527715f&campaign=passport",
+  style: "blue"
+});
 var LINK_CARD_LIMITS = Object.freeze({
   title: 250,
   source: 120,
@@ -774,6 +786,7 @@ var SECTION_BLOCK_CATALOG = Object.freeze({
     "embed",
     "html",
     "cta_row",
+    "support_appeal",
     "link_card",
     "topic_shelf",
     "promotion_playlist",
@@ -797,7 +810,7 @@ var SECTION_BLOCK_MAX = Object.freeze({
   }),
   programLanding: Object.freeze({ promotion_playlist: 8, headline: 1, cta_row: 2, video_playlist: 1 }),
   genericPage: Object.freeze({ promotion_playlist: 8, headline: 1, cta_row: 2, coverage_list: 1, topic_shelf: 2, video_playlist: 1, video: 4 }),
-  post: Object.freeze({ promotion_playlist: 8, image_gallery: 2, cta_row: 2, topic_shelf: 1, video: 4 })
+  post: Object.freeze({ promotion_playlist: 8, image_gallery: 2, cta_row: 2, support_appeal: 1, topic_shelf: 1, video: 4 })
 });
 var SECTION_BLOCK_TOTAL_MAX = Object.freeze({
   home: 40,
@@ -820,6 +833,7 @@ var BLOCK_LABELS = Object.freeze({
   video: "uploaded video",
   image_gallery: "image gallery",
   cta_row: "buttons",
+  support_appeal: "support appeal",
   card_grid: "card set",
   link_card: "link card",
   document_list: "PDF notices",
@@ -1244,6 +1258,21 @@ var BLOCK_FIELDS = {
   ],
   cta_row: [
     { key: "ctas", label: "Buttons", help: "Add one or more buttons, each with a label and a link.", kind: "list", required: true, itemFields: CTA_ITEM_FIELDS }
+  ],
+  support_appeal: [
+    { key: "heading", label: "Heading", help: "A short invitation to support NJ PBS. Place this block at the end of the story.", kind: "text", required: true, maxLength: 120 },
+    { key: "copy", label: "Appeal text", help: "Explain why readers should give. Separate paragraphs with a blank line.", kind: "text", multiline: true, required: true, maxLength: 2e3 },
+    { key: "buttonLabel", label: "Button text", help: "A short action such as Donate.", kind: "text", required: true, maxLength: 60 },
+    { key: "href", label: "Button link", help: "The Support page or a secure donation link.", kind: "url", required: true, maxLength: 2e3 },
+    { key: "backgroundImageAssetId", label: "Decorative image", help: "Optional image from the media library. It fills the right third on wide screens and is hidden on phones. Keep all information in the text.", kind: "asset", required: false },
+    {
+      key: "style",
+      label: "Style",
+      help: "Choose a coordinated background, text and button palette with accessible contrast.",
+      kind: "select",
+      required: true,
+      options: [{ value: "blue", label: "PBS blue" }, { value: "light", label: "Light (lavender)" }, { value: "dark", label: "Dark with teal accent" }]
+    }
   ],
   card_grid: [
     { key: "cards", label: "Cards", help: "Add cards, each with a title and an optional image, text, and link.", kind: "list", required: true, maxItems: NESTED_MEDIA_COLLECTION_MAX, itemFields: CARD_ITEM_FIELDS }

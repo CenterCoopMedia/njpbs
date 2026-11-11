@@ -111,6 +111,13 @@ export const catalogReads: Readonly<Record<string, ReturnType<typeof read>>> = {
       html: "<p>Results update <strong>live</strong>.</p><script>document.body.dataset.ready = \"1\";</script><img src=x onerror=\"alert(1)\">" } },
     { id: "untitled", type: "html", visible: true, data: { html: "<table><tr><td>Plain</td></tr></table>" } },
   ]),
+  support_appeal: read("catalog-support-appeal", [
+    { id: "story", type: "prose", visible: true, data: { content: paragraph("This local fixture demonstrates a staff-placed appeal at the end of a story.") } },
+    { id: "appeal", type: "support_appeal", visible: true, data: {
+      heading: "Support NJ PBS", copy: "Your support helps keep local stories and public media available to everyone.",
+      buttonLabel: "Donate", href: "/support/", style: "blue", backgroundImageAssetId: "upload",
+    } },
+  ]),
   cta_row: read("catalog-cta-row", [
     { id: "ctas", type: "cta_row", visible: true, data: { ctas: [
       { label: "Donate", href: "https://www.pbs.org/donation/?station_id=63b643e1-1a13-4dd9-9bab-ff6f7527715f&campaign=passport", variant: "primary" },

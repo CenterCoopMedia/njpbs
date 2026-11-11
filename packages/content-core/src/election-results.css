@@ -47,6 +47,14 @@
 .election-results__filters label:first-child { flex: 1 1 18rem; }
 .election-results__filters :is(input, select) { width: 100%; min-height: 44px; border: 1px solid var(--results-muted); border-radius: .2rem; padding: .65rem; background: var(--results-surface); color: var(--results-text); font: inherit; }
 .election-results__filters :is(input, select):focus-visible { outline: 3px solid var(--results-focus); outline-offset: 3px; }
+.election-results__download { display: flex; flex-wrap: wrap; align-items: center; gap: .5rem 1rem; margin: 1rem 1.5rem; }
+.election-results__button { min-height: 44px; padding: .5rem .75rem; border: 1px solid var(--results-border); border-radius: .2rem; background: var(--results-surface); color: var(--results-action); font: inherit; font-weight: 700; cursor: pointer; }
+.election-results__button:focus-visible { outline: 3px solid var(--results-focus); outline-offset: 3px; }
+.election-results__download p { margin: 0; font-size: .9rem; color: var(--results-muted); }
+.election-results__live { display: flex; flex-wrap: wrap; align-items: center; gap: .5rem 1rem; margin-inline: 1.5rem; color: var(--results-muted); }
+.election-results__live[data-state="active"] .election-results__refresh { color: var(--results-navy); }
+.election-results__refresh { font-weight: 700; }
+.election-results__live-dot { display: inline-block; width: .6rem; height: .6rem; margin-right: .5rem; border-radius: 50%; background: currentColor; }
 .election-results__filter-count { color: var(--results-muted); font-size: .9rem; padding-block: .65rem; }
 .election-results__no-matches { padding-inline: 1.5rem; }
 .election-results__jumps > p { font-size: .9rem; font-weight: 700; }
@@ -164,5 +172,5 @@
 .election-results__name a, .election-results th[scope="row"] > a { display: inline-block; padding-block: .3rem; }
 
 @container (max-width: 620px) {
-  .election-results__explainer { margin-inline: 1rem; }
+  .election-results__explainer, .election-results__download, .election-results__live { margin-inline: 1rem; }
 }

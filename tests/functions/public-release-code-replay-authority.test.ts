@@ -1,5 +1,6 @@
 import { afterAll, beforeAll, expect, it } from "vitest";
-import { Miniflare } from "miniflare";
+import type { Miniflare } from "miniflare";
+import { publicReleaseR2Fixture } from "../helpers/public-release-r2-fixture";
 import { isolatedFirestore } from "../helpers/emulator-firestore.js";
 import { switchedPairFixture } from "../helpers/public-release-switched-pair";
 import { stagedPublicReleasePairCompositeFixture } from "../helpers/staged-public-release-pair-composite";
@@ -11,10 +12,7 @@ import producer from "../../functions/lib/public-release-producer.js";
 let runtime: Miniflare, fixture: Awaited<ReturnType<typeof switchedPairFixture>>;
 let store: Awaited<ReturnType<Miniflare["getR2Bucket"]>>, entry: any;
 beforeAll(async () => {
-  runtime = new Miniflare({ workers: [{ config: { name: "code-replay", type: "worker", compatibilityDate: "2026-07-09",
-    manifest: { mainModule: "index.js", modules: { "index.js": { type: "esm", contents: "export default {fetch(){return new Response(null,{status:404})}}" } } },
-    env: { CONTENT: { type: "r2", name: "code-replay" } } } }] });
-  store = await runtime.getR2Bucket("CONTENT");
+  ({ runtime, store } = await publicReleaseR2Fixture("code-replay"));
   fixture = await switchedPairFixture(isolatedFirestore("code-replay-authority"), store);
   entry = (await fixture.firestore.doc("system/publicReleaseChanges/entries/0000000000000001").get()).data();
 }, 30_000);

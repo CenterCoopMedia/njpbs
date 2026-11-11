@@ -7,6 +7,12 @@ beforeEach(() => vi.stubEnv("VITE_CMS_HOME_LAYOUTS_ENABLED", undefined));
 afterEach(() => vi.unstubAllEnvs());
 
 describe("defaultBlockData", () => {
+  it("starts an explicitly inserted support appeal ready to publish", () => {
+    const block = createBlock("support_appeal", "appeal");
+    expect(block.data).toMatchObject({ heading: "Before you go, a request for help…", buttonLabel: "Donate to the NJ PBS Year-End Fund",
+      href: "https://www.pbs.org/donation/?station_id=63b643e1-1a13-4dd9-9bab-ff6f7527715f&campaign=passport", style: "blue" });
+    expect(parseBlocks([block]).ok).toBe(true);
+  });
   it("creates production-compatible content shelves when Home layouts are disabled", () => {
     vi.stubEnv("VITE_CMS_HOME_LAYOUTS_ENABLED", "false");
     expect(createBlock("content_shelf", "shelf").data).toEqual({

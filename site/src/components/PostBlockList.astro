@@ -71,6 +71,7 @@ const groups = renderContentGroups(post.blocks, (block, index) => ({
     generatedHeadingLevel: generatedHeadingLevelAt(post.blocks, index),
     richTextHeadingId: headingResolvers.get(block.id),
     videoPlaceholder: draftPreview,
+    publicElectionResults: !draftPreview,
   }),
 }));
 const publicGroups = groupLinkCardDirectories(groups);

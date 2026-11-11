@@ -47,6 +47,7 @@ const BLOCK_TYPES = [
   "video",
   "image_gallery",
   "cta_row",
+  "support_appeal",
   "card_grid",
   "link_card",
   "document_list",
@@ -388,6 +389,16 @@ function hasValidBlockData(type, data, publishable, homeNewsletter = false) {
           (typeof data.presentation === "string" &&
             GALLERY_PRESENTATION_SET.has(data.presentation)))
       );
+    case "support_appeal":
+      return Object.keys(data).every(key => ["heading", "copy", "buttonLabel", "href", "style", "backgroundImageAssetId"].includes(key))
+        && [["heading", 120], ["copy", 2000], ["buttonLabel", 60]].every(([key, max]) => {
+        const value = data[key];
+        return typeof value === "string" && value.length <= max && (!publishable || value.trim().length > 0);
+      })
+        && typeof data.href === "string" && data.href.length <= 2000
+        && (data.href === "" && !publishable || isSafeHref(data.href))
+        && (data.style === "blue" || data.style === "light" || data.style === "dark")
+        && (data.backgroundImageAssetId === undefined || typeof data.backgroundImageAssetId === "string" && /^[A-Za-z0-9_-]{0,128}$/.test(data.backgroundImageAssetId));
     case "cta_row":
       return (
         Array.isArray(data.ctas) &&
@@ -592,7 +603,7 @@ function parseBlocks(input, { complete = true, pageId } = {}) {
     if (!isRecord(block.data)) {
       return { ok: false, error: `blocks[${i}] is missing a data object` };
     }
-    if (Object.hasOwn(block.data, "backgroundImageAssetId")) {
+    if (Object.hasOwn(block.data, "backgroundImageAssetId") && block.type !== "support_appeal") {
       const band = block.section === "home-newsletter" && block.type === "newsletter_signup" ||
         block.section === "home-passport-copy" && block.type === "prose" ||
         block.section === "home-donor" && block.type === "card_grid";

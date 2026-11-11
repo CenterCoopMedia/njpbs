@@ -482,8 +482,8 @@ const expectedCmsSafeHrefReferences: Readonly<Record<string, number>> = {
   "cms-service-page.ts": 2,
   "cms-service-render.ts": 1,
   "cms-settings.ts": 4,
-  "content-model.ts": 4,
-  "content-render.ts": 10,
+  "content-model.ts": 5,
+  "content-render.ts": 11,
   "coverage-list.ts": 1,
   "data-table-render.ts": 1,
   "data-table.ts": 1,
@@ -520,7 +520,7 @@ const expectedCmsAnchorEmitters: Readonly<Record<string, number>> = {
   "bio-render.ts": 1,
   "cms-service-render.ts": 1,
   "content-model.ts": 1,
-  "content-render.ts": 10,
+  "content-render.ts": 11,
   // Row fragments and reviewed DOE/GIS sources only; executable exemption below.
   "county-comparison-render.ts": 3,
   "coverage-list.ts": 1,
@@ -738,6 +738,14 @@ const cmsDonationFixtures = [
       renderCmsBlock("cta_row", {
         ctas: [{ label: "Donate", href: donateUrl }],
       }),
+  },
+  {
+    name: "Post support appeal button link",
+    blockType: "support_appeal",
+    render: () => renderCmsBlock("support_appeal", {
+      heading: "Support NJ PBS", copy: "Independent local reporting.",
+      buttonLabel: "Donate", href: donateUrl, style: "blue",
+    }),
   },
   {
     name: "card title link",

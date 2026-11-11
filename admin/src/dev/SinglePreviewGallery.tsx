@@ -12,7 +12,7 @@ interface PreviewFixture {
   requests: PreviewTarget[];
   reads: string[];
   releaseSave(): void;
-  releaseStatus(): void;
+  releaseStatus(status?: "ready" | "failed"): void;
 }
 declare global { interface Window { __CMS_PREVIEW_FIXTURE__?: PreviewFixture } }
 const queueId = "abcdefghijklmnopqrst";
@@ -67,10 +67,12 @@ function transport() {
   const pagePath = page ? "/contact/" : `/${kind}s/preview-story/`;
   let release = () => {};
   let releaseStatus = () => {};
+  let terminalStatus: "ready" | "failed" = "ready";
   const statusReady = parameters.get("waitStatus") === "1"
     ? new Promise<void>(resolve => { releaseStatus = resolve; })
     : Promise.resolve();
-  const state: PreviewFixture = { saves: 0, requests: [], reads: [], releaseSave: () => release(), releaseStatus: () => releaseStatus() };
+  const state: PreviewFixture = { saves: 0, requests: [], reads: [], releaseSave: () => release(),
+    releaseStatus: (status = "ready") => { terminalStatus = status; releaseStatus(); } };
   let stored: Record<string, unknown> = { id: "preview-story", type: kind, title: "Preview test draft", slug: "preview-story", status: "draft", version: 7, blocks: [], credits: [],
     ...(kind === "post" ? {} : { description: { type: "doc", content: [{ type: "paragraph", content: [{ type: "text", text: "Saved preview synopsis and details." }] }] },
       startsAt: "2026-10-13T18:00:00.000Z", previousSlugs: [], locale: "en" }) };
@@ -107,8 +109,9 @@ function transport() {
       state.reads.push(queue);
       await statusReady;
       return { success: true as const, queueId: queue, ...accepted, pageId: accepted.documentId, rendererSha: "a".repeat(40),
-        pagePath, previewUrl: `https://preview.njpbs.org/p/${queue}/`,
-        status: "ready" as const, requestedAt: null, completedAt: null, expiresAt: null, error: null };
+        pagePath, previewUrl: terminalStatus === "ready" ? `https://preview.njpbs.org/p/${queue}/` : null,
+        status: terminalStatus, requestedAt: null, completedAt: null, expiresAt: null,
+        error: terminalStatus === "failed" ? "Preview build failed" : null };
     },
   } };
 }

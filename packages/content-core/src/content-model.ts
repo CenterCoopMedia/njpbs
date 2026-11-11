@@ -850,6 +850,7 @@ export const BLOCK_TYPES = [
   "video",
   "image_gallery",
   "cta_row",
+  "support_appeal",
   "card_grid",
   "link_card",
   "document_list",
@@ -991,6 +992,25 @@ export function galleryPresentation(data: ImageGalleryData): GalleryPresentation
 export interface CtaRowData {
   ctas: Array<{ label: string; href: string; variant?: "primary" | "secondary" }>;
 }
+export interface SupportAppealData {
+  heading: string;
+  copy: string;
+  buttonLabel: string;
+  href: string;
+  style: "blue" | "light" | "dark";
+  backgroundImageAssetId?: string;
+}
+export const SUPPORT_APPEAL_DEFAULTS: Readonly<SupportAppealData> = Object.freeze({
+  heading: "Before you go, a request for help…",
+  copy: [
+    "NJ PBS is entering a dynamic new chapter; operating out of Montclair State, we're delivering state-of-the-art public reporting while training New Jersey's next generation of journalists, storytellers, and technical leaders alongside seasoned media veterans–in addition to streaming your favorite shows!",
+    "Because we operate as an independent entity and can no longer rely on federal subsidies, our strength and sustainability rest directly with you.",
+    "Will you join us in building the future of New Jersey public media? Your year-end contribution directly funds our independent newsroom, fuels homegrown Jersey storytelling, and equips future media leaders.",
+  ].join("\n\n"),
+  buttonLabel: "Donate to the NJ PBS Year-End Fund",
+  href: "https://www.pbs.org/donation/?station_id=63b643e1-1a13-4dd9-9bab-ff6f7527715f&campaign=passport",
+  style: "blue",
+});
 export interface CardGridData {
   /** Decorative Home band override. Empty restores the existing default. */
   backgroundImageAssetId?: string;
@@ -1197,6 +1217,7 @@ export type ImageBlock = BlockEnvelope<"image", ImageBlockData>;
 export type VideoBlock = BlockEnvelope<"video", VideoBlockData>;
 export type ImageGalleryBlock = BlockEnvelope<"image_gallery", ImageGalleryData>;
 export type CtaRowBlock = BlockEnvelope<"cta_row", CtaRowData>;
+export type SupportAppealBlock = BlockEnvelope<"support_appeal", SupportAppealData>;
 export type CardGridBlock = BlockEnvelope<"card_grid", CardGridData>;
 export type LinkCardBlock = BlockEnvelope<"link_card", LinkCardData>;
 export type DocumentListBlock = BlockEnvelope<"document_list", DocumentListData>;
@@ -1238,6 +1259,7 @@ export type PageBlock =
   | VideoBlock
   | ImageGalleryBlock
   | CtaRowBlock
+  | SupportAppealBlock
   | CardGridBlock
   | LinkCardBlock
   | DocumentListBlock
@@ -1516,6 +1538,16 @@ function hasValidBlockData(
         && (data.presentation === undefined
           || (typeof data.presentation === "string"
             && GALLERY_PRESENTATION_SET.has(data.presentation)));
+    case "support_appeal":
+      return Object.keys(data).every(key => ["heading", "copy", "buttonLabel", "href", "style", "backgroundImageAssetId"].includes(key))
+        && ([["heading", 120], ["copy", 2000], ["buttonLabel", 60]] as const).every(([key, max]) => {
+        const value = data[key];
+        return typeof value === "string" && value.length <= max && (!publishable || value.trim().length > 0);
+      })
+        && typeof data.href === "string" && data.href.length <= 2000
+        && (data.href === "" && !publishable || safeHref(data.href) !== null)
+        && (data.style === "blue" || data.style === "light" || data.style === "dark")
+        && (data.backgroundImageAssetId === undefined || typeof data.backgroundImageAssetId === "string" && /^[A-Za-z0-9_-]{0,128}$/.test(data.backgroundImageAssetId));
     case "cta_row":
       return Array.isArray(data.ctas) && data.ctas.every((cta) => {
         if (!isRecord(cta)) return false;
@@ -1700,7 +1732,7 @@ export function parseBlocks(input: unknown, { complete = true, pageId }: { compl
     if (!isRecord(block.data)) {
       return { ok: false, error: `blocks[${i}] is missing a data object` };
     }
-    if (Object.hasOwn(block.data, "backgroundImageAssetId")) {
+    if (Object.hasOwn(block.data, "backgroundImageAssetId") && block.type !== "support_appeal") {
       const band = block.section === "home-newsletter" && block.type === "newsletter_signup" ||
         block.section === "home-passport-copy" && block.type === "prose" ||
         block.section === "home-donor" && block.type === "card_grid";

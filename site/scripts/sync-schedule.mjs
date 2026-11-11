@@ -298,7 +298,7 @@ function isValidBakedScheduleData(value, today) {
     !Array.isArray(dates) ||
     (value.source === "pbs-tvss"
       ? dates.length !== DAYS_TO_BAKE
-      : dates.length !== DAYS_TO_BAKE && (dates.length < 31 || dates.length > 45)) ||
+      : dates.length < DAYS_TO_BAKE || dates.length > 45) ||
     !dates.every(isBroadcastDate) ||
     new Set(dates).size !== dates.length ||
     !dates.includes(today)

@@ -89,6 +89,7 @@ const SECTION_BLOCK_CATALOG = Object.freeze({
     "embed",
     "html",
     "cta_row",
+    "support_appeal",
     "link_card",
     "topic_shelf",
     "promotion_playlist",
@@ -127,6 +128,7 @@ const SECTION_BLOCK_MAX = Object.freeze({
     video: 4,
   }),
   post: Object.freeze({
+    support_appeal: 1,
     image_gallery: 2,
     cta_row: 2,
     promotion_playlist: 8,

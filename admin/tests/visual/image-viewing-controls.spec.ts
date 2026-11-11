@@ -25,7 +25,7 @@ for (const id of ["image-viewer", "media-favorites-viewer-image", "media-collect
       await stage.evaluate(element => { element.scrollLeft = 60; element.scrollTop = 40; });
       const before = await stage.evaluate(element => ({ left: element.scrollLeft, top: element.scrollTop }));
       expect(before.left).toBeGreaterThan(0);
-      await toolbar.getByRole("button", { name: "Details", exact: true }).click();
+      await viewer.getByRole("button", { name: "Details", exact: true }).click();
       const close = viewer.getByRole("button", { name: "Close image details", exact: true });
       const name = viewer.getByRole("textbox", { name: "Name", exact: true });
       await expect(name).toBeVisible();
@@ -36,7 +36,7 @@ for (const id of ["image-viewer", "media-favorites-viewer-image", "media-collect
       }
       await name.fill("A retained image draft");
       await close.click();
-      await expect(toolbar.getByRole("button", { name: "Details", exact: true })).toBeFocused();
+      await expect(viewer.getByRole("button", { name: "Details", exact: true })).toBeFocused();
       await expect(image).toBeVisible();
       expect(await image.evaluate((element, old) => element === old, imageNode)).toBe(true);
       await expect(toolbar.getByRole("status", { name: "Image zoom" })).toHaveText("225%");
@@ -45,7 +45,7 @@ for (const id of ["image-viewer", "media-favorites-viewer-image", "media-collect
       await stage.press("ArrowRight");
       await expect(viewer).toBeVisible();
       expect(await image.evaluate((element, old) => element === old, imageNode)).toBe(true);
-      await toolbar.getByRole("button", { name: "Details", exact: true }).click();
+      await viewer.getByRole("button", { name: "Details", exact: true }).click();
       await expect(name).toHaveValue("A retained image draft");
       await close.click();
       await toolbar.getByRole("button", { name: "Fit", exact: true }).click();

@@ -51,6 +51,7 @@ const BLOCK_SETTINGS_FIELDS: Readonly<
   // A gallery settles how it is presented publicly, so its Settings control stays (#1034).
   image_gallery: [GALLERY_PRESENTATION_FIELD],
   cta_row: [],
+  support_appeal: [],
   card_grid: [],
   link_card: [],
   document_list: [],
