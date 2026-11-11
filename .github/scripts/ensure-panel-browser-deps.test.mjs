@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
+import { spawnSync } from "node:child_process";
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { test } from "node:test";
 import { homedir, tmpdir } from "node:os";
@@ -61,7 +62,13 @@ function cachedDeb(directory) {
   writeFileSync(join(directory, "sha256.json"), JSON.stringify({
     [name]: createHash("sha256").update(bytes).digest("hex"),
   }));
-  return name;
+  return {
+    name,
+    seed: {
+      packagePlanSha256: createHash("sha256").update(readFileSync(new URL("./playwright-chromium-packages.txt", import.meta.url))).digest("hex"),
+      manifestSha256: createHash("sha256").update(readFileSync(join(directory, "sha256.json"))).digest("hex"),
+    },
+  };
 }
 
 test("an installed bubblewrap makes no download or privileged call", async (t) => {
@@ -84,48 +91,63 @@ test("a corrupt pinned bubblewrap cache is refused before installation", async (
   assert.ok(calls.every(([command]) => command === "bash"));
 });
 
-test("a valid Chromium cache uses dpkg without apt or download", (t) => {
+test("a valid Chromium cache uses dpkg without apt or download", async (t) => {
   const directory = cacheFixture(t);
-  const name = cachedDeb(directory);
+  const { name, seed } = cachedDeb(directory);
   const calls = [];
-  installChromiumDependencies(directory, (command, args) => {
+  await installChromiumDependencies(directory, (command, args) => {
     calls.push([command, args]);
     return { status: 0 };
-  });
-  assert.deepEqual(calls, [["sudo", ["dpkg", "-i", "--refuse-downgrade", join(directory, name)]]]);
+  }, () => assert.fail("download started"), seed);
+  assert.deepEqual(calls, [["sudo", ["env", "DEBIAN_FRONTEND=noninteractive", "dpkg", "-i", "--refuse-downgrade",
+    "--force-confdef", "--force-confold", join(directory, name)]]]);
 });
 
-test("a tampered Chromium cache never starts a privileged command", (t) => {
+test("a tampered Chromium cache never starts a privileged command", async (t) => {
   const directory = cacheFixture(t);
-  const name = cachedDeb(directory);
+  const { name, seed } = cachedDeb(directory);
   writeFileSync(join(directory, name), "tampered");
-  assert.throws(() => installChromiumDependencies(directory, () => assert.fail("process started")), /checksum mismatch/);
+  await assert.rejects(installChromiumDependencies(directory, () => assert.fail("process started"),
+    () => assert.fail("download started"), seed), /checksum mismatch/);
+  cachedDeb(directory);
+  writeFileSync(join(directory, "sha256.json"), "{}");
+  await assert.rejects(installChromiumDependencies(directory, () => assert.fail("process started"),
+    () => assert.fail("download started"), seed), /manifest checksum mismatch/);
 });
 
-test("a Chromium cache miss retries update once and records downloaded packages", (t) => {
+test("a Chromium cache miss verifies the GitHub seed before dpkg without apt", async (t) => {
+  const source = cacheFixture(t);
+  const { name, seed } = cachedDeb(source);
+  const archive = spawnSync("tar", ["-czf", "-", "-C", source, "sha256.json", name]);
+  assert.equal(archive.status, 0, archive.stderr.toString());
+  Object.assign(seed, {
+    downloadUrl: "https://example.org/chromium-seed.tar.gz",
+    size: archive.stdout.length,
+    sha256: createHash("sha256").update(archive.stdout).digest("hex"),
+  });
   const directory = cacheFixture(t);
   const calls = [];
-  let updates = 0;
-  installChromiumDependencies(directory, (command, args) => {
+  await installChromiumDependencies(directory, (command, args) => {
     calls.push([command, args]);
-    if (args.includes("update")) return { status: ++updates === 1 ? 100 : 0 };
-    if (args.includes("--download-only")) writeFileSync(join(directory, "example_1_amd64.deb"), "package");
+    if (command === "tar") return spawnSync(command, args);
+    assert.equal(command, "sudo");
+    assert.ok(args.includes("dpkg"));
     return { status: 0 };
-  });
-  assert.equal(updates, 2);
-  assert.equal(calls.filter(([, args]) => args.includes("--download-only")).length, 1);
-  assert.equal(calls.filter(([, args]) => args[0] === "dpkg").length, 1);
-  assert.deepEqual(Object.keys(JSON.parse(readFileSync(join(directory, "sha256.json"), "utf8"))), ["example_1_amd64.deb"]);
+  }, async (url) => {
+    assert.equal(url, seed.downloadUrl);
+    return { ok: true, arrayBuffer: async () => archive.stdout };
+  }, seed);
+  assert.deepEqual(calls.map(([command]) => command), ["tar", "sudo"]);
+  assert.deepEqual(Object.keys(JSON.parse(readFileSync(join(directory, "sha256.json"), "utf8"))), [name]);
 });
 
-test("two failed metadata updates stop before downloading or installing", (t) => {
-  const calls = [];
-  assert.throws(() => installChromiumDependencies(cacheFixture(t), (command, args) => {
-    calls.push([command, args]);
-    return { status: 100 };
-  }), /command failed/);
-  assert.equal(calls.length, 2);
-  assert.ok(calls.every(([, args]) => args.at(-1) === "update"));
+test("a failed or corrupt Chromium download stops before extraction or installation", async (t) => {
+  const { seed } = cachedDeb(cacheFixture(t));
+  Object.assign(seed, { downloadUrl: "https://example.org/chromium-seed.tar.gz", size: 10, sha256: "0".repeat(64) });
+  for (const response of [{ ok: false, status: 503 }, { ok: true, arrayBuffer: async () => Buffer.from("corrupt") }]) {
+    await assert.rejects(installChromiumDependencies(cacheFixture(t), () => assert.fail("process started"),
+      async () => response, seed), /download failed|checksum mismatch/);
+  }
 });
 
 test("invalid dependency plans cannot become privileged command arguments", () => {

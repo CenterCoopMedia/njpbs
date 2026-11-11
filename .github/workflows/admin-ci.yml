@@ -98,11 +98,11 @@ jobs:
           path: |
             ~/.cache/njpbs-ci-debs/chromium-1.65.0/*.deb
             ~/.cache/njpbs-ci-debs/chromium-1.65.0/sha256.json
-          key: ${{ runner.os }}-${{ runner.arch }}-chromium-debs-${{ hashFiles('.github/scripts/playwright-chromium-packages.txt') }}
+          key: ${{ runner.os }}-${{ runner.arch }}-chromium-seed-${{ hashFiles('config/ci-system-dependencies.json', '.github/scripts/playwright-chromium-packages.txt') }}
       - name: Install hosted browser dependencies
         if: runner.environment == 'github-hosted'
         run: node .github/scripts/install-hosted-deps.mjs chromium "$HOME/.cache/njpbs-ci-debs/chromium-1.65.0"
-        timeout-minutes: 15 # Match the dependency steps below; bound stalled mirrors.
+        timeout-minutes: 15 # Bound the GitHub download and package installation.
       - name: Install approved Chromium for the visual suite
         if: runner.environment == 'github-hosted' && steps.visual-browser-cache.outputs.cache-hit != 'true'
         run: npx --yes --package=@playwright/test@1.65.0 playwright install chromium

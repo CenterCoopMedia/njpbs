@@ -76,7 +76,7 @@ describe("workflow policy", () => {
     const visual = readRepo(".github/workflows/admin-ci.yml").split("\n  admin-visual:\n")[1].split("\n  admin-visual-complete:\n")[0];
     assert.match(visual, /npx --yes --package=@playwright\/test@1\.65\.0 playwright install chromium/);
     assert.match(visual, /if: runner\.environment == 'github-hosted' && steps\.visual-browser-cache\.outputs\.cache-hit != 'true'\n        run: npx --yes --package=@playwright\/test@1\.65\.0 playwright install chromium/);
-    assert.match(visual, /hashFiles\('\.github\/scripts\/playwright-chromium-packages\.txt'\)/);
+    assert.match(visual, /chromium-seed-\$\{\{ hashFiles\('config\/ci-system-dependencies\.json', '\.github\/scripts\/playwright-chromium-packages\.txt'\) \}\}/);
     assert.match(visual, /path: \|\n\s+~\/\.cache\/njpbs-ci-debs\/chromium-1\.65\.0\/\*\.deb\n\s+~\/\.cache\/njpbs-ci-debs\/chromium-1\.65\.0\/sha256\.json/);
     assert.match(visual, /node \.github\/scripts\/install-hosted-deps\.mjs chromium/);
     assert.doesNotMatch(visual, /playwright install-deps|playwright install --with-deps/);

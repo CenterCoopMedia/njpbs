@@ -1,3 +1,10 @@
 {
-  "bubblewrapDownloadUrl": "https://github.com/CenterCoopMedia/njpbs/releases/download/ci-bubblewrap-0.9.0-1ubuntu0.3/bubblewrap_0.9.0-1ubuntu0.3_amd64.deb"
+  "bubblewrapDownloadUrl": "https://github.com/CenterCoopMedia/njpbs/releases/download/ci-bubblewrap-0.9.0-1ubuntu0.3/bubblewrap_0.9.0-1ubuntu0.3_amd64.deb",
+  "chromiumSeed": {
+    "downloadUrl": "https://github.com/CenterCoopMedia/njpbs/releases/download/ci-bubblewrap-0.9.0-1ubuntu0.3/chromium-deps-1.65.0-ubuntu24.04-amd64.tar.gz",
+    "size": 111131801,
+    "sha256": "d44893dde1eaab6a7b0a0fac74c537ae827ae0cabd607c6511ab509e1d650dc5",
+    "manifestSha256": "639c67c1ae6fd13759ab84433cd7c8b2a46588595a016d5331f31a987476be96",
+    "packagePlanSha256": "6b5601a50fb99bfc797c856d53de6b3c4ea17a83a7cb7938062095494c0e083a"
+  }
 }
