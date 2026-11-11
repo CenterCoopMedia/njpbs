@@ -1,0 +1,9 @@
+[
+  "@firebase/util",
+  "esbuild",
+  "fsevents",
+  "onnxruntime-node",
+  "protobufjs",
+  "re2",
+  "workerd"
+]

@@ -100,6 +100,12 @@ jobs:
         run: node .github/scripts/identity-boundary-guard.mjs
       - name: Require the non-reserving Pages runtime
         run: node .github/scripts/pages-fallback-safety.mjs
+      - name: Record and check dependency lock delta
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.merge_group.base_sha || github.event.before || format('{0}^', github.sha) }}
+        run: >-
+          node scripts/check-lock-delta.mjs "$BASE_SHA" "$GITHUB_SHA"
+          --output "$RUNNER_TEMP/lock-delta.json" --summary "$GITHUB_STEP_SUMMARY"
       - name: Find an identical tree with full CI success
         id: reuse
         env:
@@ -127,6 +133,7 @@ jobs:
           tests/scripts/dev-access-guards.test.mjs
           tests/scripts/ugc-r2-policy.test.mjs
           tests/scripts/write-ugc-consent-config.test.mjs
+          tests/scripts/check-lock-delta.test.mjs
       - uses: actions/setup-node@v7
         if: steps.reuse.outputs.reused != 'true'
         with:
