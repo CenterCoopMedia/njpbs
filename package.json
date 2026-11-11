@@ -60,7 +60,7 @@
     "@playwright/mcp": "0.0.82",
     "esbuild": "^0.28.1",
     "firebase": "^11",
-    "firebase-admin": "^14.2.0",
+    "firebase-admin": "14.2.0",
     "firebase-tools": "15.31.0",
     "vitest": "^4.1.12"
   },
@@ -69,6 +69,9 @@
     "wrangler": "4.134.0"
   },
   "overrides": {
+    "glob": "14.0.2",
+    "qs": "6.16.1",
+    "uuid@<11.1.1": "11.1.1",
     "miniflare@5.20260811.1-alpha": {
       "sharp": "0.35.5",
       "undici": "7.30.1"
