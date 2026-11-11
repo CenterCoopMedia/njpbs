@@ -93,7 +93,7 @@ jobs:
           key: ${{ runner.os }}-${{ runner.arch }}-visual-playwright-1.65.0
       - name: Cache Chromium dependency packages
         if: runner.environment == 'github-hosted'
-        uses: actions/cache@v6
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: |
             ~/.cache/njpbs-ci-debs/chromium-1.65.0/*.deb
