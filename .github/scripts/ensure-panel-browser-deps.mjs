@@ -1,14 +1,15 @@
 import { spawnSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { createRequire } from "node:module";
-import { resolve } from "node:path";
+import { homedir } from "node:os";
+import { join, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { verifyBrowserSafety } from "../../scripts/cms-debug-browser.mjs";
 
 // Chromium runtime group from Playwright v1.62.1, nativeDeps.ts, ubuntu24.04-x64:
 // https://github.com/microsoft/playwright/blob/v1.62.1/packages/playwright-core/src/server/registry/nativeDeps.ts
-// Panel flows are headless contracts, so they do not need the optional font/Xvfb
-// tool bundle. These are system browser libraries, independent of the JS client.
+// Skip setup when the runtime is ready; a missing library uses the shared
+// cached package plan for the approved browser.
 const chromiumRuntimePackages = [
   "libasound2t64", "libatk-bridge2.0-0t64", "libatk1.0-0t64", "libatspi2.0-0t64",
   "libcairo2", "libcups2t64", "libdbus-1-3", "libdrm2", "libgbm1", "libglib2.0-0t64",
@@ -30,13 +31,9 @@ export function ensureRuntimeDependencies(packages, run = spawnSync, log = conso
     log("Chromium runtime dependencies are already installed");
     return missing;
   }
-  for (const [command, args] of [
-    ["bash", [fileURLToPath(new URL("./prepare-hosted-apt.sh", import.meta.url))]],
-    ["sudo", ["apt-get", "-o", "Acquire::Retries=0", "install", "-y", "--no-install-recommends", ...missing]],
-  ]) {
-    const result = run(command, args, { stdio: "inherit" });
-    if (result.error || result.status !== 0) throw new Error("Chromium dependency installation failed");
-  }
+  const result = run(process.execPath, [fileURLToPath(new URL("./install-hosted-deps.mjs", import.meta.url)),
+    "chromium", join(homedir(), ".cache/njpbs-ci-debs/chromium-1.65.0")], { stdio: "inherit" });
+  if (result.error || result.status !== 0) throw new Error("Chromium dependency installation failed");
   return missing;
 }
 

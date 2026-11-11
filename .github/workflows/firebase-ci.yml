@@ -238,14 +238,17 @@ jobs:
           wait "$workspace_pid" || { status=$?; echo "::error::Workspace install failed (exit $status)"; }
           wait "$site_pid" || { status=$?; echo "::error::Site install failed (exit $status)"; }
           exit "$status"
+      - name: Cache hosted sandbox package
+        if: runner.environment == 'github-hosted'
+        uses: actions/cache@v6
+        with:
+          path: ~/.cache/njpbs-ci-debs/bubblewrap-0.9.0-1ubuntu0.3
+          key: ${{ runner.os }}-${{ runner.arch }}-bubblewrap-deb-0.9.0-1ubuntu0.3
       - name: Prepare hosted offline preview sandbox
         if: runner.environment == 'github-hosted'
         run: |
           set -euo pipefail
-          if ! command -v bwrap >/dev/null; then
-            bash .github/scripts/prepare-hosted-apt.sh
-            sudo apt-get install -y --no-install-recommends bubblewrap
-          fi
+          node .github/scripts/install-hosted-deps.mjs bubblewrap "$HOME/.cache/njpbs-ci-debs/bubblewrap-0.9.0-1ubuntu0.3"
           # This disposable, secretless test VM runs the real offline child.
           if [ -f /proc/sys/kernel/apparmor_restrict_unprivileged_userns ]; then
             sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0

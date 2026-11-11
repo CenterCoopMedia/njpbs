@@ -74,10 +74,12 @@ describe("workflow policy", () => {
 
   it("keeps the approved sandboxed headless browser for visual baselines", () => {
     const visual = readRepo(".github/workflows/admin-ci.yml").split("\n  admin-visual:\n")[1].split("\n  admin-visual-complete:\n")[0];
-    assert.match(visual, /npx --yes --package=@playwright\/test@1\.65\.0 playwright install --with-deps chromium/);
-    // A cache hit installs only system packages, for the same pinned Playwright release.
-    assert.match(visual, /if: runner\.environment == 'github-hosted' && steps\.visual-browser-cache\.outputs\.cache-hit != 'true'\n        run: npx --yes --package=@playwright\/test@1\.65\.0 playwright install --with-deps chromium/);
-    assert.match(visual, /if: runner\.environment == 'github-hosted' && steps\.visual-browser-cache\.outputs\.cache-hit == 'true'\n        run: npx --yes --package=@playwright\/test@1\.65\.0 playwright install-deps chromium/);
+    assert.match(visual, /npx --yes --package=@playwright\/test@1\.65\.0 playwright install chromium/);
+    assert.match(visual, /if: runner\.environment == 'github-hosted' && steps\.visual-browser-cache\.outputs\.cache-hit != 'true'\n        run: npx --yes --package=@playwright\/test@1\.65\.0 playwright install chromium/);
+    assert.match(visual, /hashFiles\('\.github\/scripts\/playwright-chromium-packages\.txt'\)/);
+    assert.match(visual, /node \.github\/scripts\/install-hosted-deps\.mjs chromium/);
+    assert.doesNotMatch(visual, /playwright install-deps|playwright install --with-deps/);
+    assert.ok(visual.indexOf("Install hosted browser dependencies") < visual.indexOf("Install approved Chromium for the visual suite"));
     assert.match(visual, /PLAYWRIGHT_CHROMIUM_EXECUTABLE=\$HOME\/\.cache\/ms-playwright\/chromium_headless_shell-1254\/chrome-headless-shell-linux64\/chrome-headless-shell/);
     assert.doesNotMatch(visual, /chrome-for-testing-public/);
     assert.match(visual, /executablePath: process\.env\.PLAYWRIGHT_CHROMIUM_EXECUTABLE, headless: true, chromiumSandbox: true/);

@@ -1,0 +1,35 @@
+# Playwright 1.65.0 ubuntu24.04-x64 tools + chromium; keep the approved visual package set.
+# https://github.com/microsoft/playwright/blob/v1.65.0/packages/playwright-core/src/server/registry/nativeDeps.ts
+xvfb
+fonts-noto-color-emoji
+fonts-unifont
+libfontconfig1
+libfreetype6
+xfonts-cyrillic
+xfonts-scalable
+fonts-liberation
+fonts-ipafont-gothic
+fonts-wqy-zenhei
+fonts-tlwg-loma-otf
+fonts-freefont-ttf
+libasound2t64
+libatk-bridge2.0-0t64
+libatk1.0-0t64
+libatspi2.0-0t64
+libcairo2
+libcups2t64
+libdbus-1-3
+libdrm2
+libgbm1
+libglib2.0-0t64
+libnspr4
+libnss3
+libpango-1.0-0
+libx11-6
+libxcb1
+libxcomposite1
+libxdamage1
+libxext6
+libxfixes3
+libxkbcommon0
+libxrandr2
