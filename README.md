@@ -63,9 +63,11 @@ node --test .github/scripts/*.test.mjs
 ```
 
 CI selects Docs, Site, Admin and Firebase checks from the exact pull request diff.
-Admin and Firebase run as reusable workflows. The default branch checks all four
-areas unless the same tree has valid full-CI proof. Independent review uses a
-different model provider from the author, with verified findings fixed before submission.
+Admin and Firebase run as reusable workflows. Merge queue entries check all four
+areas on the combined tree and report the required `ci` check. The default branch
+checks all four areas unless the same tree has valid full-CI proof. Independent
+review uses a different model provider from the author, with verified findings
+fixed before submission.
 
 The configuration input check scans current source reads against
 `config/configuration-inputs.json`. Each input needs a named supplier, scope and
