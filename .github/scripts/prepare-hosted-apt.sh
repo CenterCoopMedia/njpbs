@@ -17,9 +17,9 @@ for path in sources:
             path.write_text(updated)
 PY
 
-if ! sudo apt-get -o Acquire::Retries=0 -o APT::Update::Error-Mode=any update; then
+if ! sudo apt-get -o Acquire::Retries=0 update; then
   echo "::warning::APT metadata update failed; retrying once."
-  sudo apt-get -o Acquire::Retries=0 -o APT::Update::Error-Mode=any update || {
+  sudo apt-get -o Acquire::Retries=0 update || {
     echo "::error::APT metadata update failed after one retry; Ubuntu mirror is archive.ubuntu.com."
     exit 1
   }

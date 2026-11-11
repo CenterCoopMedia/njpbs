@@ -94,6 +94,7 @@ jobs:
       - name: Prepare hosted package sources
         if: runner.environment == 'github-hosted'
         run: bash .github/scripts/prepare-hosted-apt.sh
+        timeout-minutes: 15 # Match the dependency steps below; bound stalled mirrors.
       - name: Install Chromium and hosted dependencies for the visual suite
         if: runner.environment == 'github-hosted' && steps.visual-browser-cache.outputs.cache-hit != 'true'
         run: npx --yes --package=@playwright/test@1.65.0 playwright install --with-deps chromium
