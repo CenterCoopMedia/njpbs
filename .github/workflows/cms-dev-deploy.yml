@@ -328,8 +328,6 @@ jobs:
         run: |
           set -euo pipefail
           mv .cms-contract-source "$RUNNER_TEMP/cms-contract-source"
-          ln -s "$GITHUB_WORKSPACE/node_modules" "$RUNNER_TEMP/cms-contract-source/node_modules"
-          ln -s "$GITHUB_WORKSPACE/site/node_modules" "$RUNNER_TEMP/cms-contract-source/site/node_modules"
       - name: Prepare the singleton contract runtime before credentials
         env:
           CMS_DEV_PUBLISH_ENABLED: ${{ vars.CMS_DEV_PUBLISH_ENABLED }}
