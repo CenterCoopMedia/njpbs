@@ -785,9 +785,8 @@
     display: none;
   }
   .workspace-shell:has(.cost-ledger-header-actions) .workspace-actions {
-    flex: 1 1 auto;
-    min-width: auto;
-    max-width: 100%;
+    flex: 1 0 100%;
+    min-width: 0;
   }
   .cost-ledger-header-actions {
     flex-wrap: nowrap;

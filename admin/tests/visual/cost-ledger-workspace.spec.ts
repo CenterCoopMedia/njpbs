@@ -285,12 +285,12 @@ for (const state of ["", "closed"]) {
       .poll(async () => {
         const a = (await month.boundingBox())!,
           b = (await more.boundingBox())!;
-        return Math.abs(a.y - b.y);
+        return b.y - a.y - a.height;
       })
-      .toBeLessThanOrEqual(1);
+      .toBeGreaterThanOrEqual(0);
     const a = (await month.boundingBox())!,
       b = (await more.boundingBox())!;
-    expect(b.x).toBeGreaterThanOrEqual(a.x + a.width);
+    expect(b.x).toBeCloseTo(a.x, 0);
     await more.click();
     const panel = page.locator("#workspace-more-panel");
     await expect(
