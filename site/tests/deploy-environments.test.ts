@@ -68,6 +68,27 @@ describe("deploy credential environments", () => {
     for (const step of job.steps.filter((step: any) => step.uses)) expect(step.uses).toMatch(/@[a-f0-9]{40}$/);
   });
 
+  it("restricts production promotion to configured main dispatches and a repository-scoped App token", () => {
+    const definition = workflow("promote");
+    expect(Object.keys(definition.on)).toEqual(["workflow_dispatch"]);
+    expect(definition.permissions).toEqual({ contents: "read", actions: "read" });
+    const job = definition.jobs.promote;
+    expect(job.environment).toBe("production");
+    assertConfiguredAdmission(job, "promote");
+    expect(job.permissions).toBeUndefined();
+    expect(secretNames(definition)).toEqual(["CCM_PROMOTE_APP_PRIVATE_KEY"]);
+    for (const step of job.steps.filter((step: any) => step.uses)) expect(step.uses).toMatch(/@[a-f0-9]{40}$/);
+    const token = job.steps.find((step: any) => step.uses?.startsWith("actions/create-github-app-token@"));
+    expect(token?.with).toEqual({
+      "client-id": "${{ vars.CCM_PROMOTE_APP_CLIENT_ID }}",
+      "private-key": "${{ secrets.CCM_PROMOTE_APP_PRIVATE_KEY }}",
+      owner: "${{ github.repository_owner }}",
+      repositories: "${{ github.event.repository.name }}",
+      "permission-contents": "write",
+      "permission-workflows": "write",
+    });
+  });
+
   it("restricts the isolated dev staff gateway to explicit main-only development dispatches", () => {
     const definition = workflow("dev-staff-gateway-deploy");
     expect(Object.keys(definition.on)).toEqual(["workflow_dispatch"]);
