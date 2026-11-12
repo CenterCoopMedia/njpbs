@@ -1,9 +1,12 @@
 faster-whisper==1.2.1
+av==18.0.0
 pyannote.audio==4.0.7
-torch==2.8.0
-torchaudio==2.8.0
-torchcodec==0.7.0
+torch==2.13.0
+torchaudio==2.11.1
+torchcodec==0.13.0
 soundfile==0.14.0
 keyring==25.7.0
 ctranslate2==4.8.2
+nvidia-cublas-cu12==12.9.2.10
+nvidia-cuda-nvrtc-cu12==12.9.86
 qwen-asr==0.0.6
