@@ -6,24 +6,13 @@ const { parsePublicReleasePair, publicReleasePairReference, parseVersionedPublic
   PublicReleaseProtocolError, publicReleaseDigest, exact, digest, positive, freeze } = require("./public-release-pair");
 const { publicationTarget, assertPublicationDatabase } = require("./publication-target");
 const pairInputs = require("./public-release-pair-input");
+const { isPairFailureCode, PairExecutionError, assertPrivatePairResources } = require("./public-release-pair-execution");
 
 const PAIRS = "system/publicReleasePairs";
 const KINDS = new Set(["accepted", "qualification", "recovery"]);
 const LEASE_MS = 60_000;
 const MAX_ATTEMPTS = 4;
-const FAILURES = new Set(["input-unavailable", "render-failed", "byte-mismatch", "storage-unavailable",
-  "author-input-missing", "author-input-mismatch", "author-route-collision", "author-owner-mismatch",
-  ...["request", "code", "schedule", "program-images"].flatMap(family => ["missing", "mismatch"].map(reason => `replay-frozen-${family}-${reason}`)),
-  "unsupported-cross-source-schedule", "unsupported-cross-source-record-images", "reader-mismatch", "lease-lost", "lease-expired", "unexpected-executor-error"]);
 function refuse() { throw new PublicReleaseProtocolError(); }
-class PairExecutionError extends Error {
-  constructor(code) {
-    if (!FAILURES.has(code)) refuse();
-    super("Private pair execution failed");
-    this.name = "PairExecutionError";
-    Object.defineProperty(this, "code", { value: code, enumerable: true });
-  }
-}
 
 /** Read-only, non-transactional hint for the private Worker. Claim/settlement
  * always revalidate their SDK transaction; this cannot certify a publication.
@@ -74,14 +63,6 @@ function database(firestore, pair) {
   assertPrivatePairResources(pair);
   const emulator = /^127\.0\.0\.1:\d+$/.test(process.env.FIRESTORE_EMULATOR_HOST ?? "") && /^demo-[a-z0-9-]+$/.test(firestore.projectId);
   if (!emulator) assertPublicationDatabase(firestore, publicationTarget(pair.environment));
-}
-function assertPrivatePairResources(pair) {
-  if (pair.publisher.application !== `njpbs-pair-publisher-${pair.publicWorker.incarnation}` ||
-      pair.publicWorker.service !== `njpbs-pair-slot-${pair.publicWorker.incarnation}`) refuse();
-  const targets = [publicationTarget("production"), publicationTarget("development")];
-  const liveWorkers = new Set(targets.flatMap(target => [target.workerName, target.publisherWorker]));
-  if (liveWorkers.has(pair.publisher.application) || liveWorkers.has(pair.publicWorker.service) ||
-      targets.some(target => pair.publisher.journalNamespace === target.serializerId)) refuse();
 }
 function control(value, pairId) {
   exact(value, ["schemaVersion", "pairId", "status"]);
@@ -154,7 +135,7 @@ function parseTask(value, pair, taskId) {
   if (!samePair(identity, expected) || publicReleaseDigest(identity) !== taskId ||
       !["pending", "running", "complete", "failed"].includes(value.status) ||
       !Number.isSafeInteger(value.attempts) || value.attempts < 0 || value.attempts > MAX_ATTEMPTS ||
-      !(value.lastFailure === null || FAILURES.has(value.lastFailure)) ||
+      !(value.lastFailure === null || isPairFailureCode(value.lastFailure)) ||
       value.acceptedDueAt !== (identity.kind === "accepted" ? value.nextAttemptAt : null)) refuse();
   if (value.status === "pending" && (value.attempts !== 0 || value.claimDigest !== null || value.leaseUntil !== null ||
       value.nextAttemptAt !== 0 || value.receiptDigest !== null || value.lastFailure !== null)) refuse();
@@ -370,7 +351,7 @@ async function settlePublicReleasePairWork({ firestore, pair: rawPair, taskId, t
   if (!digest(taskId) || typeof token !== "string" || !/^[a-f0-9-]{36}$/.test(token) || !positive(now) ||
       !(manifestDigest === null || digest(manifestDigest)) || !(retryAt === null || positive(retryAt) && retryAt > now) ||
       manifestDigest !== null && retryAt !== null ||
-      (manifestDigest === null ? !FAILURES.has(failureCode) : failureCode !== null)) refuse();
+      (manifestDigest === null ? !isPairFailureCode(failureCode) : failureCode !== null)) refuse();
   return firestore.runTransaction(async transaction => {
     const { pairRef, status, selector } = await authority(transaction, firestore, pair);
     const journalRef = pairRef.collection("journals").doc(pair.publisher.journalNamespace);

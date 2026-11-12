@@ -4,7 +4,7 @@ import type { PairRenderRoute } from "./public-release-pair-render-plan";
 import type { HomeSourceSnapshot } from "../src/lib/home-sources";
 import protocol from "../../functions/lib/public-release-pair.js";
 import views from "../../functions/lib/public-release-pair-view.js";
-import work from "../../functions/lib/public-release-pair-work.js";
+import work from "../../functions/lib/public-release-pair-execution.js";
 import { parsePublicReleasePairRenderRequest } from "./public-release-pair-render-request";
 import { projectPublishedPostRead, type PublishedPostContent } from "../src/lib/published-post-shadow";
 import { projectPublishedPageRead, type PublishedPageContent } from "../src/lib/published-page-render";

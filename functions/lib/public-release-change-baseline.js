@@ -4,6 +4,7 @@ const log = require("./public-release-change-log");
 const source = require("./public-release-source-body");
 const { publiclyVisible } = require("./public-video-references");
 const { shapeJoinedRecord } = require("./joined-records");
+const { parsePublicReleaseChangeBaseline } = require("./public-release-change-baseline-receipt");
 const ROOT = "system/publicReleaseChanges";
 const LIMIT = 10_000;
 const AUTHORITY_COLLECTIONS = ["system/publicDeployment/noBuildPostOwners", "system/publicDeployment/noBuildPageOwners",
@@ -31,16 +32,6 @@ function parseCensus(values) {
   let previous = "";
   return values.map(value => { const row = censusRow(value), key = `${row.collection}/${row.id}`;
     if (key <= previous) refuse(); previous = key; return row; });
-}
-function parsePublicReleaseChangeBaseline(value) {
-  protocol.exact(value, ["schemaVersion", "logEpoch", "baselineCursor", "liveReleaseSha", "sourceMemberCensusDigest",
-    "codeAssetManifestDigest", "createdAt", ...(value?.codeAssetManifestDigest === null ? ["codeAssetManifestReason"] : [])]);
-  if (value.schemaVersion !== 2 || !require("./public-deployment-pointer").isPublicDeploymentIdentifier(value.logEpoch) ||
-      !/^[a-f0-9]{40}$/.test(value.liveReleaseSha ?? "") || !/^[a-f0-9]{64}$/.test(value.sourceMemberCensusDigest ?? "") ||
-      !(value.codeAssetManifestDigest === null && value.codeAssetManifestReason === "legacy-release-predates-code-packs" ||
-        /^[a-f0-9]{64}$/.test(value.codeAssetManifestDigest ?? "")) ||
-      typeof value.createdAt !== "string" || !Number.isFinite(Date.parse(value.createdAt)) || new Date(value.createdAt).toISOString() !== value.createdAt) refuse();
-  return protocol.freeze({ ...value, baselineCursor: parseCursor(value.baselineCursor) });
 }
 async function rows(transaction, firestore, collection) {
   const result = await transaction.get(firestore.collection(collection).limit(LIMIT + 1));

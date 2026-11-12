@@ -6,10 +6,10 @@ import type { PairAuthorOwner } from "../../functions/lib/public-release-pair-au
 import protocol from "../../functions/lib/public-release-pair.js";
 import inputs from "../../functions/lib/public-release-pair-input.js";
 import views from "../../functions/lib/public-release-pair-view.js";
-import work from "../../functions/lib/public-release-pair-work.js";
+import work from "../../functions/lib/public-release-pair-execution.js";
 import log from "../../functions/lib/public-release-change-log.js";
-import baseline from "../../functions/lib/public-release-change-baseline.js";
-import { validateCurrentCodeReference } from "../../functions/lib/current-public-code-source.js";
+import baseline from "../../functions/lib/public-release-change-baseline-receipt.js";
+import { validateCurrentCodeReference } from "../../functions/lib/current-public-code-reference.js";
 import { authorPublicPath } from "../../packages/content-core/src/author-profiles";
 import { projectAuthorSnapshot, assertAuthorRouteUniqueness, type CmsAuthorBuildData } from "../src/lib/cms-authors-projection";
 import { projectCmsPost, assertPostRouteUniqueness } from "../src/lib/cms-posts-projection";

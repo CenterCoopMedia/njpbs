@@ -13,12 +13,8 @@ export type PairTaskIdentity = PairTaskInput & Readonly<{ schemaVersion: 2; pair
 export type PairClaim = Readonly<{ taskId: string; token: string; leaseUntil: number; identity: PairTaskIdentity; outputPrefix: string }>;
 export const PAIRS: "system/publicReleasePairs";
 export const LEASE_MS: 60000;
-export type PairFailureCode = "input-unavailable" | "render-failed" | "byte-mismatch" | "storage-unavailable" |
-  "author-input-missing" | "author-input-mismatch" | "author-route-collision" | "author-owner-mismatch" |
-  `replay-frozen-${"request" | "code" | "schedule" | "program-images"}-${"missing" | "mismatch"}` |
-  "unsupported-cross-source-schedule" | "unsupported-cross-source-record-images" | "reader-mismatch" | "lease-lost" | "lease-expired" | "unexpected-executor-error";
-export class PairExecutionError extends Error { constructor(code: PairFailureCode); readonly code: PairFailureCode }
-export function assertPrivatePairResources(pair: PublicReleasePair): void;
+import type { PairFailureCode } from "./public-release-pair-execution";
+export { PairExecutionError, assertPrivatePairResources, type PairFailureCode } from "./public-release-pair-execution";
 export function publicReleasePairKey(pairId: string): string;
 export function publicReleasePairPath(pairId: string): string;
 export function readPublicReleasePairWorkHint(input: {

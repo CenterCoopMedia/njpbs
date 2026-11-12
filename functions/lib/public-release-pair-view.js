@@ -3,7 +3,7 @@
 const { isPublicDeploymentIdentifier } = require("./public-deployment-pointer");
 const { PublicReleaseProtocolError, parsePublicReleasePair, parsePublicReleasePairReference,
   publicReleasePairReference, publicReleaseDigest, exact, digest, positive, freeze } = require("./public-release-pair");
-const { assertPrivatePairResources } = require("./public-release-pair-work");
+const { assertPrivatePairResources } = require("./public-release-pair-execution");
 
 const VIEW_PAGE_OUTPUT_LIMIT = 256;
 const VIEW_PAGE_BYTES_LIMIT = 512 * 1024;

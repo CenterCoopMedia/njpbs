@@ -1,5 +1,5 @@
 import type { PairRenderRoute } from "./public-release-pair-render-plan";
-import work from "../../functions/lib/public-release-pair-work.js";
+import work from "../../functions/lib/public-release-pair-execution.js";
 export type PairRenderRequest = Readonly<{ schemaVersion: 1; read: unknown; homeSourcesFile: string | null;
   resources: readonly Readonly<{ url: string; file: string; contentType: string }>[] }>;
 /** Reader payloads keep their established individual validators. This envelope

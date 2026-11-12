@@ -4,7 +4,7 @@ const { projectPublishedCmsSettings, SITE_NAVIGATION_SETTINGS_ID, PUBLIC_SITE_CH
 const { PUBLIC_PAGE_DEFINITIONS } = require("./public-page-contract");
 const { selectedAssets, publicPageNavigationIdentity } = require("./public-content-projection");
 const { projectPairedAsset } = require("./joined-records");
-const { assertPublishedMediaReadiness } = require("./public-deployment");
+const { assertPublishedMediaReadiness } = require("./public-deployment-pointer");
 const PUBLIC_CHROME_SETTINGS_IDS = Object.freeze([SITE_NAVIGATION_SETTINGS_ID, PUBLIC_SITE_CHROME_SETTINGS_ID,
   NJ_DECIDES_SETTINGS_ID, PUBLIC_HOMEPAGE_BANNER_SETTINGS_ID, require("./cms-settings-contract").COVERAGE_LABELS_SETTINGS_ID]);
 /** Pure projection over raw public read records. Both the live reader and

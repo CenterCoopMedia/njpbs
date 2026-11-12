@@ -21,16 +21,12 @@
     "@aws-sdk/credential-providers": "^3.1132.0",
     "@aws-sdk/s3-request-presigner": "^3.1132.0",
     "busboy": "^1.6.0",
-    "firebase-admin": "14.2.0",
+    "firebase-admin": "14.5.0",
     "firebase-functions": "^7.3.2",
     "google-auth-library": "10.6.2",
     "parse5": "8.0.0",
     "pdf-lib": "^1.17.1",
     "sharp": "^0.35.5"
-  },
-  "overrides": {
-    "glob": "14.0.2",
-    "uuid@<11.1.1": "11.1.1"
   },
   "devDependencies": {
     "@eslint/js": "^9",
