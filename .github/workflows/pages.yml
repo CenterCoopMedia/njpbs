@@ -13,8 +13,9 @@ run-name: >-
 # Builds the Astro site in site/ and publishes it to GitHub Pages.
 # Production deploys are intentionally split from `main`: PRs and pushes to main
 # produce preview artifacts, while live Pages deploys come only from the
-# `production` branch, an owner-only manual run from `main`, or an authenticated
-# scheduler dispatch from the default branch. The deploy gate is the deliberate
+# `production` branch by the owner or configured promotion App, an owner-only
+# manual run from `main`, or an authenticated scheduler dispatch from the default
+# branch. The deploy gate is the deliberate
 # act of advancing `production` to one reviewed full release SHA from main
 # history. Later main commits wait for the next release. The github-pages
 # environment has no required reviewers, so there is no environment approval
@@ -74,6 +75,7 @@ jobs:
   authorize:
     env:
       CMS_DEPLOY_OWNER: ${{ vars.CMS_DEPLOY_OWNER }}
+      CCM_PROMOTE_APP_SLUG: ${{ vars.CCM_PROMOTE_APP_SLUG }}
     # Both main dispatches and production pushes need this environment.
     environment: github-pages
     # repository_dispatch authenticates a scheduler request with HMAC before any
@@ -81,8 +83,13 @@ jobs:
     # main. Repeat the actor and ref checks in later jobs for partial re-runs.
     if: >-
       (vars.CANONICAL_GITHUB_REPOSITORY != '' && vars.CANONICAL_GITHUB_REPOSITORY_ID != '' && github.repository == vars.CANONICAL_GITHUB_REPOSITORY && github.repository_id == vars.CANONICAL_GITHUB_REPOSITORY_ID) &&
-      (vars.CMS_DEPLOY_OWNER != '' && github.triggering_actor == vars.CMS_DEPLOY_OWNER) &&
-      (github.event_name == 'push' || github.ref == 'refs/heads/main')
+      vars.CMS_DEPLOY_OWNER != '' &&
+      ((github.event_name == 'push' && github.ref == 'refs/heads/production' &&
+        ((github.actor == vars.CMS_DEPLOY_OWNER && github.triggering_actor == vars.CMS_DEPLOY_OWNER) ||
+         (vars.CCM_PROMOTE_APP_SLUG != '' && github.actor == format('{0}[bot]', vars.CCM_PROMOTE_APP_SLUG) &&
+          (github.triggering_actor == github.actor || (github.run_attempt > 1 && github.triggering_actor == vars.CMS_DEPLOY_OWNER))))) ||
+       ((github.event_name == 'workflow_dispatch' || github.event_name == 'repository_dispatch') &&
+        github.ref == 'refs/heads/main' && github.triggering_actor == vars.CMS_DEPLOY_OWNER))
     outputs:
       deploy_ref: ${{ steps.dispatch.outputs.deploy_ref }}
       require_fresh: ${{ steps.dispatch.outputs.require_fresh }}
@@ -95,6 +102,9 @@ jobs:
         env:
           EVENT_NAME: ${{ github.event_name }}
           EVENT_REF: ${{ github.ref }}
+          EVENT_SHA: ${{ github.sha }}
+          EVENT_ACTOR: ${{ github.actor }}
+          RUN_ATTEMPT: ${{ github.run_attempt }}
           TRIGGERING_ACTOR: ${{ github.triggering_actor }}
           INPUT_DEPLOY_REF: ${{ inputs.deploy_ref || '' }}
           PAYLOAD_DEPLOY_REF: ${{ github.event.client_payload.deploy_ref || '' }}
@@ -113,23 +123,32 @@ jobs:
             console.error(`Production deploy authorization failed: ${message}`);
             process.exit(1);
           };
-          // config-input: CMS_DEPLOY_OWNER, DISPATCH_SECRET, EVENT_NAME, EVENT_REF, INPUT_DEPLOY_REF, PAYLOAD_DEPLOY_REF
-          // config-input: PAYLOAD_REFRESH_ID, PAYLOAD_SIGNATURE, PAYLOAD_TIMESTAMP, TRIGGERING_ACTOR
+          // config-input: CCM_PROMOTE_APP_SLUG, CMS_DEPLOY_OWNER, DISPATCH_SECRET, EVENT_ACTOR, EVENT_NAME, EVENT_REF, EVENT_SHA
+          // config-input: INPUT_DEPLOY_REF, PAYLOAD_DEPLOY_REF, PAYLOAD_REFRESH_ID, PAYLOAD_SIGNATURE, PAYLOAD_TIMESTAMP, RUN_ATTEMPT, TRIGGERING_ACTOR
           const value = (name) => process.env[name] || "";
           const eventName = value("EVENT_NAME");
           const eventRef = value("EVENT_REF");
           const actor = value("TRIGGERING_ACTOR");
+          const originalActor = value("EVENT_ACTOR");
           let deployRef;
           let requireFresh = "0";
 
           const owner = value("CMS_DEPLOY_OWNER");
-          if (!/^[A-Za-z0-9][A-Za-z0-9-]{0,38}$/.test(owner) || actor !== owner) fail("triggering actor is not the configured owner");
+          if (!/^[A-Za-z0-9][A-Za-z0-9-]{0,38}$/.test(owner)) fail("deploy owner is not configured");
+          if (eventName !== "push" && actor !== owner) fail("triggering actor is not the configured owner");
 
           if (eventName === "push") {
             if (eventRef !== "refs/heads/production") {
               fail("push did not come from production");
             }
-            deployRef = eventRef;
+            const appSlug = value("CCM_PROMOTE_APP_SLUG");
+            const ownerPush = originalActor === owner && actor === owner;
+            const appPush = /^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(appSlug) &&
+              originalActor === `${appSlug}[bot]` &&
+              (actor === originalActor || (Number(value("RUN_ATTEMPT")) > 1 && actor === owner));
+            if (!ownerPush && !appPush) fail("push actor or rerun requester is not authorized");
+            deployRef = value("EVENT_SHA");
+            if (!/^[a-f0-9]{40}$/.test(deployRef)) fail("push source SHA is invalid");
           } else if (eventName === "workflow_dispatch") {
             if (eventRef !== "refs/heads/main") {
               fail("manual workflow definition did not come from main");
@@ -177,9 +196,9 @@ jobs:
 
   build:
     environment: github-pages
-    # `github.actor` remains the original actor on a re-run. The triggering actor
-    # is the person who actually pressed Run or Re-run. Repeat this on every job
-    # because a partial re-run does not re-evaluate jobs that already succeeded.
+    # The original push must be from the owner or configured App. Only the App
+    # or an owner-requested rerun may continue its push. Repeat admission on
+    # every job because partial reruns do not re-evaluate successful jobs.
     needs: authorize
     outputs:
       artifact_ready: ${{ steps.artifact_runtime.outputs.ready }}
@@ -187,9 +206,14 @@ jobs:
       build_batch_id: ${{ steps.active_artifact.outputs.build_batch_id }}
     if: >-
       (vars.CANONICAL_GITHUB_REPOSITORY != '' && vars.CANONICAL_GITHUB_REPOSITORY_ID != '' && github.repository == vars.CANONICAL_GITHUB_REPOSITORY && github.repository_id == vars.CANONICAL_GITHUB_REPOSITORY_ID) &&
-      (vars.CMS_DEPLOY_OWNER != '' && github.triggering_actor == vars.CMS_DEPLOY_OWNER) &&
       needs.authorize.result == 'success' &&
-      (github.event_name == 'push' || github.ref == 'refs/heads/main')
+      vars.CMS_DEPLOY_OWNER != '' &&
+      ((github.event_name == 'push' && github.ref == 'refs/heads/production' &&
+        ((github.actor == vars.CMS_DEPLOY_OWNER && github.triggering_actor == vars.CMS_DEPLOY_OWNER) ||
+         (vars.CCM_PROMOTE_APP_SLUG != '' && github.actor == format('{0}[bot]', vars.CCM_PROMOTE_APP_SLUG) &&
+          (github.triggering_actor == github.actor || (github.run_attempt > 1 && github.triggering_actor == vars.CMS_DEPLOY_OWNER))))) ||
+       ((github.event_name == 'workflow_dispatch' || github.event_name == 'repository_dispatch') &&
+        github.ref == 'refs/heads/main' && github.triggering_actor == vars.CMS_DEPLOY_OWNER))
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     # configure-pages reads the Pages site metadata (GET /repos/{owner}/{repo}/pages),
@@ -613,9 +637,14 @@ jobs:
     needs: [authorize, build]
     if: >-
       (vars.CANONICAL_GITHUB_REPOSITORY != '' && vars.CANONICAL_GITHUB_REPOSITORY_ID != '' && github.repository == vars.CANONICAL_GITHUB_REPOSITORY && github.repository_id == vars.CANONICAL_GITHUB_REPOSITORY_ID) &&
-      (vars.CMS_DEPLOY_OWNER != '' && github.triggering_actor == vars.CMS_DEPLOY_OWNER) &&
       needs.authorize.result == 'success' &&
-      (github.event_name == 'push' || github.ref == 'refs/heads/main')
+      vars.CMS_DEPLOY_OWNER != '' &&
+      ((github.event_name == 'push' && github.ref == 'refs/heads/production' &&
+        ((github.actor == vars.CMS_DEPLOY_OWNER && github.triggering_actor == vars.CMS_DEPLOY_OWNER) ||
+         (vars.CCM_PROMOTE_APP_SLUG != '' && github.actor == format('{0}[bot]', vars.CCM_PROMOTE_APP_SLUG) &&
+          (github.triggering_actor == github.actor || (github.run_attempt > 1 && github.triggering_actor == vars.CMS_DEPLOY_OWNER))))) ||
+       ((github.event_name == 'workflow_dispatch' || github.event_name == 'repository_dispatch') &&
+        github.ref == 'refs/heads/main' && github.triggering_actor == vars.CMS_DEPLOY_OWNER))
     runs-on: ubuntu-24.04
     timeout-minutes: 8
     permissions:

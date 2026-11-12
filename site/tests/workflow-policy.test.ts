@@ -154,7 +154,7 @@ function expectOrdered(workflow: string, first: string, second: string): void {
 }
 
 describe("production deploy authority", () => {
-  it("allows only the configured owner to start or re-run a public Pages deployment", () => {
+  it("keeps public Pages deployment admission on every job", () => {
     expect(productionWorkflow).toContain(
       "repository_dispatch:\n    types: [production_deploy]",
     );
@@ -190,7 +190,7 @@ describe("production deploy authority", () => {
     expect(jobNames).not.toHaveLength(0);
     for (const jobName of jobNames) {
       expect(workflowJob(productionWorkflow, jobName)).toContain(
-        "vars.CMS_DEPLOY_OWNER != '' && github.triggering_actor == vars.CMS_DEPLOY_OWNER",
+        "github.triggering_actor == vars.CMS_DEPLOY_OWNER",
       );
     }
   });
