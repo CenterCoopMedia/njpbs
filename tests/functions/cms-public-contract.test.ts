@@ -60,14 +60,21 @@ async function localClone(destination: string, revision: string) {
   }
 }
 
+async function clientApiOrigin(source: string) {
+  const config = target.environment === "development" ? "cms-api/wrangler.dev.jsonc" : "cms-api/wrangler.jsonc";
+  const { routes } = JSON.parse(await readFile(join(source, config), "utf8"));
+  return `https://${routes[0].pattern}`;
+}
+
 async function bundleClient(source: string, revision: string, name: string) {
   const file = join(scratch, `${name}.mjs`);
   const project = target.projectId;
   const development = target.environment === "development";
+  const appId = development ? "1:123456789012:web:0123456789abcdef012345" : "synthetic-emulator-app";
   const env = { DEV: false, VITE_USE_EMULATORS: "false", VITE_FIREBASE_API_KEY: "synthetic-emulator-key",
     VITE_FIREBASE_AUTH_DOMAIN: `${project}.firebaseapp.com`, VITE_FIREBASE_PROJECT_ID: project,
-    VITE_FIREBASE_APP_ID: development ? "1:123456789012:web:0123456789abcdef012345" : "synthetic-emulator-app",
-    VITE_CMS_DEPLOYMENT_ENVIRONMENT: target.environment, VITE_FUNCTIONS_BASE_URL: development ? "https://dev-cms-api.njpbs.org" : "https://cms-api.njpbs.org" };
+    VITE_FIREBASE_APP_ID: appId, VITE_FIREBASE_EXPECTED_DEV_APP_ID: development ? appId : undefined,
+    VITE_CMS_DEPLOYMENT_ENVIRONMENT: target.environment, VITE_FUNCTIONS_BASE_URL: await clientApiOrigin(source) };
   await build({ stdin: { resolveDir: source, contents: `
     export * from './admin/src/lib/functions.ts';
     export * from './admin/src/lib/content-save-request.ts';
@@ -248,6 +255,7 @@ beforeAll(async () => {
     expect(unsupportedArtifact.rendererSha).toBe(unsupportedSha);
   }
   if (!/^[a-f0-9]{40}$/.test(candidateSha) || !/^[a-f0-9]{40}$/.test(rendererSha)) throw new Error("Exact source revisions are required");
+  const apiOrigins = new Set(await Promise.all([c0, c1].map(clientApiOrigin)));
   nativeFetch = globalThis.fetch;
   const { createApp } = createRequire(import.meta.url)("firebase-tools/lib/emulator/auth/server.js");
   const authApp = await createApp(target.projectId);
@@ -293,7 +301,7 @@ beforeAll(async () => {
   }
   rememberGlobal("fetch", async (url: any, init?: any) => {
     const selected = new URL(typeof url === "string" ? url : url.url ?? String(url));
-    if (["cms-api.njpbs.org", "dev-cms-api.njpbs.org"].includes(selected.hostname)) {
+    if (apiOrigins.has(selected.origin)) {
       return nativeFetch(`${origin}${selected.pathname}`, { ...init, headers: { ...init?.headers, "x-njpbs-cms-edge": "local-cms-edge-only" } });
     }
     if (selected.hostname !== "127.0.0.1" && selected.hostname !== "localhost") throw new Error("External network is forbidden in the contract corpus");

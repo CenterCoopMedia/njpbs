@@ -150,8 +150,13 @@ describe("default-off development reader installation", () => {
     expect(assertDevReaderContext(env)).toMatchObject({ CMS_READER_BRIDGE_ENABLED: "true",
       PUBLIC_RELEASE_READERS_ENABLED: "true", PUBLIC_RELEASE_COMPOSED_READERS_ENABLED: "true",
       CMS_READER_BRIDGE_FUNCTIONS_CANDIDATE: "functions-123-1", CMS_READER_BRIDGE_CMS_API_CANDIDATE: "cmsApi-123-1" });
+    // Contract capture tokens do not authorize reader installation.
+    const proofTokens = ["CMS_CONTRACT_PUBLIC_TOKEN", "CMS_CONTRACT_PREVIEW_TOKEN"];
+    for (const key of proofTokens) {
+      expect(assertDevReaderContext({ ...env, [key]: undefined })).toEqual(assertDevReaderContext(env));
+    }
     for (const key of Object.keys(env)) {
-      if (["CMS_DEV_RELEASE_PREVIEW_RENDERER", "CMS_DEV_RENDERER_SOURCE_SHA"].includes(key)) continue;
+      if (["CMS_DEV_RELEASE_PREVIEW_RENDERER", "CMS_DEV_RENDERER_SOURCE_SHA", ...proofTokens].includes(key)) continue;
       expect(() => assertDevReaderContext({ ...env, [key]: undefined }), key).toThrow();
     }
     for (const patch of [{ FIREBASE_PROJECT_ID: "njpbs-site" }, { CMS_API_WORKER: "njpbs-cms-api" },
