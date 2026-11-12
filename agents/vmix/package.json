@@ -10,7 +10,7 @@
     "build": "node build.mjs"
   },
   "dependencies": {
-    "fast-xml-parser": "5.10.1",
+    "fast-xml-parser": "5.12.0",
     "ws": "8.22.0"
   },
   "devDependencies": {
