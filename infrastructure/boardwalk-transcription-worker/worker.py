@@ -561,6 +561,21 @@ def assign_speakers(words, turns, max_speakers, regular_turns=None,
     return segments
 
 
+def load_transcription_cuda(torch):
+    # CTranslate2 uses CUDA 12 cuBLAS alongside Torch's CUDA 13 runtime.
+    # Keep both library sets inside the worker's installed environment.
+    import ctypes
+    from importlib.resources import files
+    cublas = files('nvidia.cublas')
+    nvrtc = files('nvidia.cuda_nvrtc')
+    if os.name == 'nt':
+        directories = [cublas / 'bin', nvrtc / 'bin', Path(torch.__file__).parent / 'lib']
+        os.environ['PATH'] = os.pathsep.join(map(str, directories)) + os.pathsep + os.environ.get('PATH', '')
+    else:
+        for library in [cublas / 'lib/libcublasLt.so.12', cublas / 'lib/libcublas.so.12', nvrtc / 'lib/libnvrtc.so.12']:
+            ctypes.CDLL(str(library), mode=ctypes.RTLD_GLOBAL)
+
+
 def transcribe(path, job, lease, asr_path, diarization_path):
     # Imports are lazy so protocol tests do not need a GPU or model installation.
     os.environ['HF_HUB_OFFLINE'] = '1'
@@ -571,9 +586,7 @@ def transcribe(path, job, lease, asr_path, diarization_path):
     with av.open(str(path)) as container:
         if not container.streams.audio:
             return []
-    # CUDA libraries stay scoped to this worker process.
-    if os.name == "nt":
-        os.environ["PATH"] = str(Path(torch.__file__).parent / "lib") + os.pathsep + os.environ.get("PATH", "")
+    load_transcription_cuda(torch)
     from faster_whisper import WhisperModel
     from faster_whisper.audio import decode_audio
     from pyannote.audio import Pipeline
