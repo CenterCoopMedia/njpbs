@@ -32,18 +32,9 @@ jobs:
           ref: ${{ github.sha }}
           persist-credentials: false
           fetch-depth: 1
-      - name: Check for the runner's Node 22
-        id: node
-        run: |
-          if command -v node >/dev/null && node -e 'process.exit(process.versions.node.startsWith("22.") ? 0 : 1)'; then
-            echo 'ready=true' >> "$GITHUB_OUTPUT"
-          else
-            echo 'ready=false' >> "$GITHUB_OUTPUT"
-          fi
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
-        if: steps.node.outputs.ready != 'true'
         with:
-          node-version: '22'
+          node-version: '22.23.5'
       - name: Check out trusted configuration renderer
         uses: actions/checkout@v7
         with:

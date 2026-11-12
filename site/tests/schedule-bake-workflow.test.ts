@@ -27,7 +27,7 @@ describe("schedule bake automation", () => {
     expect(workflow).toContain("cancel-in-progress: false");
     expect(workflow).toContain("actions/checkout@v7");
     expect(workflow).toContain("actions/setup-node@v7");
-    expect(workflow).toContain('node-version: "22"');
+    expect(workflow).toContain('node-version: "22.23.5"');
     expect(workflow).toContain("cache-dependency-path: site/package-lock.json");
     expect(workflow).toContain("npm ci");
     expect(workflow).toContain("npm run sync:schedule");

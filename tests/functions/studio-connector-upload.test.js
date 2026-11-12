@@ -14,8 +14,8 @@ const sourceSha = "7786c6693887b2d9ecb14c57ce78042d34150a4e";
 const zipBytes = Buffer.from("Synthetic artifact bytes; no executable");
 const sha256 = createHash("sha256").update(zipBytes).digest("hex");
 const manifest = { schemaVersion: 1, sourceSha, sha256, bundleSha256: "9db6897273ae4a8dc6019aa1ef77f4442312488b33109f9eddc710662d75b843",
-  sizeBytes: zipBytes.length, filename: "NJPBS-Studio-connector-7786c669.zip", nodeVersion: "22.23.4",
-  nodeArchiveSha256: "cbc74b5e0982c9dbb41525fd8fb5dcd32fbee237863f7829072f4639a1ce5f20" };
+  sizeBytes: zipBytes.length, filename: "NJPBS-Studio-connector-7786c669.zip", nodeVersion: "22.23.5",
+  nodeArchiveSha256: "4a191082e9706866830379d577d2cc8a50c776fcd9436a8d061b063ed0d9a0e3" };
 async function fixture(bytes = zipBytes) {
   const directory = await mkdtemp(join(tmpdir(), "connector-upload-test-"));
   directories.push(directory);
@@ -86,7 +86,7 @@ describe("exact-source connector deployment", () => {
     expect(describeBuildFailure(buildError)).toMatch(/checksum/);
   });
   it("refuses an unverified runtime even when supplied checksum text claims the pinned release", () => {
-    const sums = `${manifest.nodeArchiveSha256}  node-v22.23.4-win-x64.zip\n`;
+    const sums = `${manifest.nodeArchiveSha256}  node-v22.23.5-win-x64.zip\n`;
     expect(() => verifyRuntime(Buffer.from("Altered runtime"), sums)).toThrow(/checksum/);
     expect(() => verifyRuntime(Buffer.from("Altered runtime"), "")).toThrow(/checksum/);
   });

@@ -1,4 +1,4 @@
-FROM node:22-bookworm-slim@sha256:a6385bc33f0f9d6a08482c87f52baee537a9184e2b47dea1ed97caac62f8960c
+FROM node:22.23.5-bookworm-slim@sha256:e9f565d32859f0cbfb52125eafe8be39390f24dac302dc3cdf566e8ba3ab21ee
 RUN apt-get update && apt-get install -y --no-install-recommends bubblewrap ca-certificates git \
     && rm -rf /var/lib/apt/lists/* \
     && ln -s /usr/local/bin/node /usr/bin/node \
