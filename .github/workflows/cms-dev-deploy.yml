@@ -316,6 +316,23 @@ jobs:
         run: |
           npm ci --ignore-scripts
           npm --prefix site ci --ignore-scripts --no-audit --no-fund
+      - name: Check out trusted singleton contract source
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ github.sha }}
+          path: .cms-contract-source
+          persist-credentials: false
+      - name: Isolate trusted singleton contract source
+        run: |
+          set -euo pipefail
+          mv .cms-contract-source "$RUNNER_TEMP/cms-contract-source"
+      - name: Prepare the singleton contract runtime before credentials
+        env:
+          CMS_DEV_PUBLISH_ENABLED: ${{ vars.CMS_DEV_PUBLISH_ENABLED }}
+        run: >-
+          node --import ./site/node_modules/tsx/dist/loader.mjs "$RUNNER_TEMP/cms-contract-source/scripts/check-cms-public-contract.mjs" prepare
+          --environment development --candidate "$DEPLOY_SHA" --source-root "$GITHUB_WORKSPACE"
+          --state-directory "$RUNNER_TEMP/cms-public-contract-private"
       - name: Verify the pinned dev renderer for a routine deploy
         if: ${{ !inputs.release_preview_renderer }}
         env:
@@ -344,6 +361,14 @@ jobs:
           workload_identity_provider: ${{ vars.FIREBASE_DEV_WORKLOAD_IDENTITY_PROVIDER }}
           service_account: ${{ vars.FIREBASE_DEV_DEPLOY_SERVICE_ACCOUNT }}
           project_id: njpbs-site-dev
+      - name: Verify the singleton public contract at preflight
+        env:
+          CMS_DEV_PUBLISH_ENABLED: ${{ vars.CMS_DEV_PUBLISH_ENABLED }}
+        run: >-
+          node --import ./site/node_modules/tsx/dist/loader.mjs "$RUNNER_TEMP/cms-contract-source/scripts/check-cms-public-contract.mjs" prove
+          --environment development --boundary preflight --candidate "$DEPLOY_SHA" --source-root "$GITHUB_WORKSPACE"
+          --state-directory "$RUNNER_TEMP/cms-public-contract-private"
+          --summary "$RUNNER_TEMP/cms-public-contract-summary-preflight.json"
       - name: Deploy dev Firestore rules and indexes
         run: |
           node scripts/assert-dev-cms-targets.mjs
@@ -407,6 +432,14 @@ jobs:
           test -n "$VITE_FIREBASE_API_KEY" && test -n "$VITE_FIREBASE_AUTH_DOMAIN" && test -n "$VITE_FIREBASE_APPCHECK_SITE_KEY"
           test "$VITE_FIREBASE_AUTH_DOMAIN" = njpbs-site-dev.firebaseapp.com
           npm run admin:build
+      - name: Verify the singleton public contract at before-upload
+        env:
+          CMS_DEV_PUBLISH_ENABLED: ${{ vars.CMS_DEV_PUBLISH_ENABLED }}
+        run: >-
+          node --import ./site/node_modules/tsx/dist/loader.mjs "$RUNNER_TEMP/cms-contract-source/scripts/check-cms-public-contract.mjs" prove
+          --environment development --boundary before-upload --candidate "$DEPLOY_SHA" --source-root "$GITHUB_WORKSPACE"
+          --state-directory "$RUNNER_TEMP/cms-public-contract-private"
+          --summary "$RUNNER_TEMP/cms-public-contract-summary-before-upload.json" --previous-summary "$RUNNER_TEMP/cms-public-contract-summary-preflight.json"
       - name: Upload dev Admin to Pages
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_DEV_PAGES_TOKEN }}
@@ -430,3 +463,24 @@ jobs:
           path: ${{ runner.temp }}/dev-smoke-receipt.json
           if-no-files-found: error
           retention-days: 7
+      - name: Verify the singleton public contract at settlement
+        env:
+          CMS_DEV_PUBLISH_ENABLED: ${{ vars.CMS_DEV_PUBLISH_ENABLED }}
+        run: >-
+          node --import ./site/node_modules/tsx/dist/loader.mjs "$RUNNER_TEMP/cms-contract-source/scripts/check-cms-public-contract.mjs" prove
+          --environment development --boundary settlement --candidate "$DEPLOY_SHA" --source-root "$GITHUB_WORKSPACE"
+          --state-directory "$RUNNER_TEMP/cms-public-contract-private"
+          --summary "$RUNNER_TEMP/cms-public-contract-summary-settlement.json" --previous-summary "$RUNNER_TEMP/cms-public-contract-summary-before-upload.json"
+      - name: Retain only the sanitized singleton contract summary
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: cms-dev-public-contract-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/cms-public-contract-summary-settlement.json
+          if-no-files-found: error
+      - name: Remove private singleton contract inputs and processes
+        if: always()
+        run: |
+          set -euo pipefail
+          mapfile -t containers < <(docker ps --all --quiet --filter "label=njpbs.cms-contract=$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT-$GITHUB_JOB")
+          if [ "${#containers[@]}" -gt 0 ]; then docker rm --force "${containers[@]}"; fi
+          sudo rm -rf -- "$RUNNER_TEMP/cms-public-contract-private"

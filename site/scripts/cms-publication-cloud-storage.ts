@@ -234,13 +234,16 @@ export function createCmsPublicationCloudStorage({
       }),
       maxAttempts: 3,
     });
-  const options = () => ({ abortSignal: AbortSignal.timeout(60_000) });
-  async function read(key: string): Promise<Buffer | null> {
+  // A caller's deadline also cancels the request, not only the per-request timeout.
+  const options = (signal?: AbortSignal) => ({
+    abortSignal: signal ? AbortSignal.any([AbortSignal.timeout(60_000), signal]) : AbortSignal.timeout(60_000),
+  });
+  async function read(key: string, signal?: AbortSignal): Promise<Buffer | null> {
     let object;
     try {
       object = await storage.send(
         new GetObjectCommand({ Bucket: BUCKET, Key: key }),
-        options(),
+        options(signal),
       );
     } catch (error) {
       if (
@@ -310,10 +313,11 @@ export function createCmsPublicationCloudStorage({
     identity: CloudPublicationIdentity,
     directory: string,
     expectedDigest?: string,
+    signal?: AbortSignal,
   ): Promise<boolean> {
     assertIdentity(identity);
     await privateDirectory(directory);
-    const bytes = await read(`${prefix(identity.queueId)}/manifest.json`);
+    const bytes = await read(`${prefix(identity.queueId)}/manifest.json`, signal);
     if (!bytes) return false;
     if (expectedDigest !== undefined && (!DIGEST.test(expectedDigest) || digest(bytes) !== expectedDigest)) throw new Error("Cloud release manifest digest differs");
     const manifest = parseManifest(bytes, identity, includeRenderer);
@@ -322,6 +326,7 @@ export function createCmsPublicationCloudStorage({
       await transferFiles(manifest.files, async (file) => {
         const payload = await read(
           `${prefix(identity.queueId)}/files/${file.sha256}`,
+          signal,
         );
         if (
           !payload ||

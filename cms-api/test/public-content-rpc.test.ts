@@ -1,10 +1,50 @@
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { createExecutionContext, env as workerEnv } from "cloudflare:test";
 
 import {
   fetchPublicPageProjection,
+  PublicContentEntrypoint,
   type CmsApiEnv,
 } from "../src/index";
 import { LIVE } from "./fixtures/published-page";
+import post from "../../site/tests/fixtures/shadow-posts/post.json";
+
+afterEach(() => vi.unstubAllGlobals());
+
+// The isolated Route D executor supplies the exact native emulator replies
+// after real C1/C0 writes. Ordinary unit runs use the existing wire fixtures at
+// the same third-party Functions-fetch boundary; no repository owner is mocked.
+const supplied = (workerEnv as unknown as { CMS_ROUTE_D_REPLIES?: string }).CMS_ROUTE_D_REPLIES;
+const routeDReplies = supplied ? JSON.parse(supplied) : {
+  postChrome: [{ value: { kind: "post", receipt: { rendererSha: "a".repeat(40), admissionRevision: 1 }, published: post } }],
+  capabilities: [{ value: { kind: "page", receipt: { rendererSha: "a".repeat(40) }, published: LIVE } }],
+};
+
+it.each(["postChrome", "capabilities"])("Route D source-bound native %s RPC preserves the reply", async feature => {
+  expect(routeDReplies[feature].length).toBeGreaterThan(0);
+  for (const row of routeDReplies[feature]) {
+    const value = row.value;
+    const rendererSha = (value.receipt ?? value.contextReceipt).rendererSha;
+    const path = feature === "postChrome" ? `/posts/${value.receipt.slug ?? "shadow-fixture"}/` : value.receipt?.path ?? value.renderContext?.path ?? "/contact/";
+    const wire = JSON.stringify(value);
+    const network = vi.fn(async (url: string, init?: RequestInit) => {
+      expect(url).toBe("https://us-central1-njpbs-site.cloudfunctions.net/cmsGetPublicPage");
+      expect(init?.method).toBe("POST");
+      expect(new Headers(init?.headers).get("x-njpbs-cms-edge")).toBe("synthetic-edge");
+      expect(JSON.parse(String(init?.body))).toMatchObject({ path, rendererSha, method: "GET",
+        mode: feature === "postChrome" ? "no-build-post-v1" : "no-build-page-v1" });
+      return new Response(wire, { headers: { "content-type": "application/json" } });
+    });
+    vi.stubGlobal("fetch", network);
+    const { PREVIEW_RENDERER: _previewRenderer, ...publicBindings } = workerEnv;
+    const rpcEnv: CmsApiEnv = { ...env(), ...publicBindings, CMS_EDGE_ORIGIN_SECRET: "synthetic-edge",
+      CMS_DEPLOYMENT_ENVIRONMENT: "production", FIREBASE_PROJECT_ID: "njpbs-site", FUNCTIONS_ORIGIN: "https://us-central1-njpbs-site.cloudfunctions.net" };
+    const rpc = new PublicContentEntrypoint(createExecutionContext(), rpcEnv);
+    const result = feature === "postChrome" ? await rpc.getNoBuildPost(path, rendererSha) : await rpc.getNoBuildPage(path, rendererSha);
+    expect(JSON.stringify(result)).toBe(wire);
+    expect(network).toHaveBeenCalledOnce();
+  }
+});
 
 function env(): CmsApiEnv {
   return {

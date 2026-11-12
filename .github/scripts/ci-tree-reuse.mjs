@@ -14,6 +14,7 @@ export const fullJobs = [
   "Admin / admin-visual-complete",
   "Firebase / firebase",
   ...[1, 2, 3, 4].map((shard) => `Firebase / functions (${shard})`),
+  "Firebase / functions-sealed",
 ];
 
 function ranOnGithubHostedRunner(job) {

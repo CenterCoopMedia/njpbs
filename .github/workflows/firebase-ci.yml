@@ -283,3 +283,56 @@ jobs:
       - name: Build-free publication restore drill
         if: matrix.shard == 1
         run: node scripts/test-build-free-restore.mjs
+
+  # The sealed acceptance case builds and runs Docker. Fleet runners have no
+  # container socket, so this one case has a separate job; the shards exclude it.
+  functions-sealed:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20 # Runaway guard: setup plus one 120 s sealed case (26.5 s measured).
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: "22.23.5"
+          cache: npm
+          package-manager-cache: true
+          cache-dependency-path: package-lock.json
+      - name: Cache pinned JDK toolcache
+        uses: actions/cache@v6
+        with:
+          path: ${{ runner.tool_cache }}/Java_Temurin-Hotspot_jdk/21.0.13-9.0.LTS
+          key: ${{ runner.os }}-${{ runner.arch }}-temurin-jdk-21.0.13-9.0.LTS
+      - uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: "21.0.13+9.0.LTS"
+          check-latest: false
+      - name: Install dependencies
+        run: |
+          npm ci --ignore-scripts
+          npm ci --prefix site --ignore-scripts
+      - name: Prepare hosted offline preview sandbox
+        run: |
+          set -euo pipefail
+          if ! command -v bwrap >/dev/null; then
+            sudo apt-get update
+            sudo apt-get install -y --no-install-recommends bubblewrap
+          fi
+          if [ -f /proc/sys/kernel/apparmor_restrict_unprivileged_userns ]; then
+            sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
+          fi
+      - name: Cache Firebase emulator binaries
+        uses: actions/cache@v6
+        with:
+          path: ~/.cache/firebase/emulators
+          key: ${{ runner.os }}-firebase-emulators-15.26.0
+      # Pulling the pinned base images and emulator jar took most of a cold 70.8 s case
+      # (run 42511735643). Build the same runtime first so the case measures the proof.
+      - name: Build the sealed contract runtime image
+        run: docker build --file scripts/cms-public-contract-runtime.Dockerfile "$(mktemp -d)"
+      - name: Sealed Docker contract acceptance
+        env:
+          CMS_PUBLIC_CONTRACT_SEALED: "1"
+        run: node scripts/run-firebase-emulators.mjs exec auth,firestore,functions "node scripts/run-functions-tests.mjs tests/functions/cms-public-contract.test.ts"
+      - name: Singleton contract script acceptance
+        run: npx --no-install vitest run tests/scripts/cms-public-contract.test.js

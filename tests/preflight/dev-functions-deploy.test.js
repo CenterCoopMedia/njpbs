@@ -49,6 +49,9 @@ async function fixture(work) {
 
 describe("dev Functions deployment boundary", () => {
   it("requires the workflow hold before the first provider mutation", () => {
+    for (const key of ["CMS_CONTRACT_PUBLIC_TOKEN", "CMS_CONTRACT_PREVIEW_TOKEN"]) {
+      expect(workflow.jobs.deploy.env).not.toHaveProperty(key);
+    }
     const steps = workflow.jobs.deploy.steps;
     const hold = steps.findIndex(step => step.name === "Require the dev publication hold before mutation");
     expect(hold).toBeGreaterThan(steps.findIndex(step => step.name === "Check exact dev targets and configs"));
