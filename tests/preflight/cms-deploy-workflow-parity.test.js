@@ -235,7 +235,7 @@ describe("Route D Cut A boundary placement", () => {
       expect(run("1")).not.toBe(0);
     } finally { rmSync(directory, { recursive: true, force: true }); }
   });
-  it("binds the public-first summary that the before-upload writer emits", async () => {
+  it("binds the public-first summary without evaluating selected target code", async () => {
     const binding = production.jobs["admin-deploy"].steps.find(row => row.name === "Require the before-upload proof for this exact Admin artifact");
     const head = spawnSync("git", ["rev-parse", "HEAD"], { cwd: root, encoding: "utf8" }).stdout.trim();
     const directory = mkdtempSync(join(tmpdir(), "cms-proof-public-first-"));
@@ -243,17 +243,22 @@ describe("Route D Cut A boundary placement", () => {
     vi.stubGlobal("fetch", async () => new Response(JSON.stringify({ commitSha: head }), { headers: { "content-type": "application/json" } }));
     try {
       const { main } = await import("../../scripts/check-cms-public-contract.mjs");
+      const selected = join(directory, "selected");
+      mkdirSync(join(selected, "functions/lib"), { recursive: true });
+      writeFileSync(join(selected, "package.json"), "{}");
+      writeFileSync(join(selected, "functions/lib/publication-target.js"), 'throw new Error("Selected target code executed");');
+      vi.stubEnv("GIT_DIR", spawnSync("git", ["rev-parse", "--absolute-git-dir"], { cwd: root, encoding: "utf8" }).stdout.trim());
       mkdirSync(join(directory, "cms-contract-proof"));
       const summary = join(directory, "cms-contract-proof/cms-public-contract-summary-before-upload.json");
       await main(["prove", "--environment", "production", "--boundary", "before-upload", "--candidate", head,
-        "--source-root", new URL(".", root).pathname, "--summary", summary, "--state-directory", join(directory, "state")]);
+        "--source-root", selected, "--summary", summary, "--state-directory", join(directory, "state")]);
       expect(JSON.parse(readFileSync(summary, "utf8")).result).toBe("public-first");
       mkdirSync(join(directory, "admin/dist"), { recursive: true });
       writeFileSync(join(directory, "admin/dist/index.html"), "admin");
       const digest = spawnSync("bash", ["-c", 'find admin/dist -type f -print0 | LC_ALL=C sort -z | xargs -0 sha256sum | sha256sum | cut -d" " -f1'], { cwd: directory, encoding: "utf8" }).stdout.trim();
       expect(spawnSync("bash", ["-c", binding.run], { cwd: directory, env: { PATH: process.env.PATH, RUNNER_TEMP: directory, GITHUB_RUN_ID: "42", GITHUB_RUN_ATTEMPT: "1",
         DEPLOY_SHA: head, PROVED_ADMIN_DIGEST: digest, PROVED_RUN_ID: "42", PROVED_RUN_ATTEMPT: "1" } }).status).toBe(0);
-    } finally { vi.unstubAllGlobals(); rmSync(directory, { recursive: true, force: true }); }
+    } finally { vi.unstubAllGlobals(); vi.unstubAllEnvs(); rmSync(directory, { recursive: true, force: true }); }
   });
   it("proves before upload apart from Cloudflare tools and binds the exact uploaded Admin", () => {
     const contractJob = production.jobs["admin-contract"], deployJob = production.jobs["admin-deploy"];

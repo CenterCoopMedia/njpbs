@@ -620,7 +620,7 @@ export async function main(argv = process.argv.slice(2)) {
   const environment = options["--environment"], boundary = options["--boundary"];
   if (!["production", "development"].includes(environment) || !["preflight", "before-upload", "settlement"].includes(boundary)) refuse("arguments");
   const cwd = resolve(options["--source-root"] ?? process.cwd());
-  const source = createRequire(join(cwd, "package.json"));
+  const source = createRequire(join(environment === "production" ? trustedRoot : cwd, "package.json"));
   const target = contractTarget(environment, process.env, source("./functions/lib/publication-target.js").publicationTarget(environment));
   const candidateSha = options["--candidate"];
   if (!SHA.test(candidateSha ?? "") || !options["--summary"]) refuse("arguments");
