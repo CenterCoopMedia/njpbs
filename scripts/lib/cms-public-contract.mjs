@@ -80,7 +80,7 @@ export function contractDigest(value) {
 export function contractTarget(environment, env = {}, target = targets.publicationTarget(environment)) {
   if (env.FIREBASE_PROJECT_ID !== undefined && env.FIREBASE_PROJECT_ID !== target.projectId ||
       env.CMS_DEPLOYMENT_ENVIRONMENT !== undefined && env.CMS_DEPLOYMENT_ENVIRONMENT !== environment ||
-      Object.keys(env).some(key => /EMULATOR/.test(key) && env[key] !== undefined)) refuse("capture-target");
+      Object.entries(env).some(([key, value]) => /EMULATOR/.test(key) && value !== undefined)) refuse("capture-target");
   return { ...target, databaseId: "(default)", apiWorker: environment === "production" ? "njpbs-cms-api" : env.CMS_DEV_API_WORKER ?? "template-dev-cms-api",
     previewWorker: environment === "production" ? "njpbs-cms-preview-renderer" : env.CMS_DEV_PREVIEW_RENDERER ?? "template-dev-cms-preview-renderer",
     adminOrigin: environment === "production" ? "https://admin.njpbs.org" : env.CMS_DEV_ADMIN_ORIGIN ?? "https://dev-admin.example.org" };
