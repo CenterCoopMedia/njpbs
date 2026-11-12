@@ -260,8 +260,6 @@ jobs:
       CMS_ADMIN_PAGES_BRANCH: main
       CMS_DEV_RELEASE_PREVIEW_RENDERER: ${{ inputs.release_preview_renderer }}
       CMS_DEV_RENDERER_SOURCE_SHA: ${{ inputs.release_preview_renderer && needs.preview-renderer.outputs.renderer_sha || vars.CMS_DEV_RENDERER_SOURCE_SHA }}
-      CMS_CONTRACT_PUBLIC_TOKEN: ${{ secrets.CLOUDFLARE_DEV_PUBLIC_WORKER_TOKEN }}
-      CMS_CONTRACT_PREVIEW_TOKEN: ${{ secrets.CLOUDFLARE_DEV_PREVIEW_RENDERER_TOKEN }}
     steps:
       - uses: actions/checkout@v7
         with:
