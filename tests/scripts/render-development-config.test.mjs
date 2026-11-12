@@ -274,7 +274,7 @@ test(`trusted gates resolve workspace dependencies from a separate temporary dir
 }));
 }
 
-for (const job of ["firebase-preflight", "live-smoke"]) {
+for (const job of ["firebase-preflight", "admin-contract", "contract-settlement"]) {
 test(`proof installs preserve the candidate dependency graph (${job})`, () => {
   const directory = mkdtempSync(join(tmpdir(), "proof-install-boundary-"));
   const runtime = mkdtempSync(join(tmpdir(), "proof-install-runtime-"));
