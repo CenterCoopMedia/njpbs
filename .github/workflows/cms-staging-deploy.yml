@@ -477,6 +477,16 @@ jobs:
           set -euo pipefail
           mv .cms-smoke-gate "$RUNNER_TEMP/cms-smoke-gate"
           ln -s "$GITHUB_WORKSPACE/node_modules" "$RUNNER_TEMP/cms-smoke-gate/node_modules"
+      - name: Check out trusted singleton contract source
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ github.sha }}
+          path: .cms-contract-source
+          persist-credentials: false
+      - name: Isolate trusted singleton contract source
+        run: |
+          set -euo pipefail
+          mv .cms-contract-source "$RUNNER_TEMP/cms-contract-source"
       - name: Require pinned release and trusted workflow identities
         env:
           CMS_RELEASE_CHECKS_SHA: ${{ inputs.deploy_ref }}
@@ -618,7 +628,7 @@ jobs:
         env:
           DEPLOY_SHA: ${{ needs.admin-build.outputs.deploy_sha }}
         run: >-
-          node --import ./site/node_modules/tsx/dist/loader.mjs "$RUNNER_TEMP/cms-smoke-gate/scripts/check-cms-public-contract.mjs" prepare
+          node --import ./site/node_modules/tsx/dist/loader.mjs "$RUNNER_TEMP/cms-contract-source/scripts/check-cms-public-contract.mjs" prepare
           --environment production --candidate "$DEPLOY_SHA" --source-root "$GITHUB_WORKSPACE"
           --state-directory "$RUNNER_TEMP/cms-public-contract-private"
       - name: Authenticate Firebase deploy service account
@@ -656,7 +666,7 @@ jobs:
         run: |
           set -euo pipefail
           umask 077
-          node --import ./site/node_modules/tsx/dist/loader.mjs "$RUNNER_TEMP/cms-smoke-gate/scripts/check-cms-public-contract.mjs" prove \
+          node --import ./site/node_modules/tsx/dist/loader.mjs "$RUNNER_TEMP/cms-contract-source/scripts/check-cms-public-contract.mjs" prove \
             --environment production --boundary preflight --candidate "$DEPLOY_SHA" --source-root "$GITHUB_WORKSPACE" \
             --summary "$RUNNER_TEMP/cms-public-contract-summary-preflight.json" \
             --state-directory "$RUNNER_TEMP/cms-public-contract-private" 4<<< "$CMS_PREVIEW_R2_CREDENTIAL"
@@ -1838,6 +1848,16 @@ jobs:
           set -euo pipefail
           mv .cms-smoke-gate "$RUNNER_TEMP/cms-smoke-gate"
           ln -s "$GITHUB_WORKSPACE/node_modules" "$RUNNER_TEMP/cms-smoke-gate/node_modules"
+      - name: Check out trusted singleton contract source
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ github.sha }}
+          path: .cms-contract-source
+          persist-credentials: false
+      - name: Isolate trusted singleton contract source
+        run: |
+          set -euo pipefail
+          mv .cms-contract-source "$RUNNER_TEMP/cms-contract-source"
       - name: Require pinned release and trusted workflow identities
         env:
           CMS_RELEASE_CHECKS_SHA: ${{ inputs.deploy_ref }}
@@ -1880,7 +1900,7 @@ jobs:
         env:
           DEPLOY_SHA: ${{ needs.admin-build.outputs.deploy_sha }}
         run: >-
-          node --import ./site/node_modules/tsx/dist/loader.mjs "$RUNNER_TEMP/cms-smoke-gate/scripts/check-cms-public-contract.mjs" prepare
+          node --import ./site/node_modules/tsx/dist/loader.mjs "$RUNNER_TEMP/cms-contract-source/scripts/check-cms-public-contract.mjs" prepare
           --environment production --candidate "$DEPLOY_SHA" --source-root "$GITHUB_WORKSPACE"
           --state-directory "$RUNNER_TEMP/cms-public-contract-private" --previous-summary "$RUNNER_TEMP/cms-contract-proof/cms-public-contract-summary-before-upload.json"
       - name: Smoke-test deployed CMS boundaries
@@ -1906,7 +1926,7 @@ jobs:
         run: |
           set -euo pipefail
           umask 077
-          node --import ./site/node_modules/tsx/dist/loader.mjs "$RUNNER_TEMP/cms-smoke-gate/scripts/check-cms-public-contract.mjs" prove \
+          node --import ./site/node_modules/tsx/dist/loader.mjs "$RUNNER_TEMP/cms-contract-source/scripts/check-cms-public-contract.mjs" prove \
             --environment production --boundary settlement --candidate "$DEPLOY_SHA" --source-root "$GITHUB_WORKSPACE" \
             --summary "$RUNNER_TEMP/cms-public-contract-summary-settlement.json" \
             --state-directory "$RUNNER_TEMP/cms-public-contract-private" --previous-summary "$RUNNER_TEMP/cms-contract-proof/cms-public-contract-summary-before-upload.json"
