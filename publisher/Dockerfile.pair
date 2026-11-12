@@ -13,8 +13,8 @@ COPY --chown=node:node source/site/package.json source/site/package-lock.json /a
 USER node
 # Containers use CPU inference; optional GPU downloads are not runtime inputs.
 RUN export ONNXRUNTIME_NODE_INSTALL=skip \
-    && npm ci --workspace=functions --include-workspace-root --omit=dev --no-audit --no-fund \
-    && npm --prefix site ci --no-audit --no-fund \
+    && npm ci --ignore-scripts --workspace=functions --include-workspace-root --omit=dev --no-audit --no-fund \
+    && npm --prefix site ci --ignore-scripts --omit=dev --no-audit --no-fund \
     && npm cache clean --force
 COPY --chown=node:node source/ /app/
 RUN node /app/site/scripts/prepare-public-fonts.mjs \
