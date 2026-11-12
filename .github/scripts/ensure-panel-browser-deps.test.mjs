@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import { spawnSync } from "node:child_process";
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { describe, test } from "node:test";
 import { homedir, tmpdir } from "node:os";
 import { join } from "node:path";
@@ -151,18 +151,33 @@ test("a valid Chromium cache uses dpkg without apt or download", async (t) => {
   }, () => assert.fail("download started"), seed);
   assert.deepEqual(calls, [["sudo", ["env", "DEBIAN_FRONTEND=noninteractive", "dpkg", "-i", "--refuse-downgrade",
     "--force-confdef", "--force-confold", join(directory, name)]]]);
+  await assert.rejects(installChromiumDependencies(directory, () => ({ status: 1 }),
+    () => assert.fail("download started"), seed), /Hosted dependency command failed: sudo/);
+  assert.ok(existsSync(join(directory, "sha256.json")), "installation failure preserves a verified cache");
 });
 
-test("a tampered Chromium cache never starts a privileged command", async (t) => {
-  const directory = cacheFixture(t);
-  const { name, seed } = cachedDeb(directory);
-  writeFileSync(join(directory, name), "tampered");
-  await assert.rejects(installChromiumDependencies(directory, () => assert.fail("process started"),
-    () => assert.fail("download started"), seed), /checksum mismatch/);
-  cachedDeb(directory);
-  writeFileSync(join(directory, "sha256.json"), "{}");
-  await assert.rejects(installChromiumDependencies(directory, () => assert.fail("process started"),
-    () => assert.fail("download started"), seed), /manifest checksum mismatch/);
+test("invalid Chromium caches are refused and only the marker is removed for the next call", async (t) => {
+  for (const failure of ["package", "manifest", "missing"]) {
+    const directory = cacheFixture(t);
+    const { name, seed } = cachedDeb(directory);
+    const packagePath = join(directory, name);
+    const manifestPath = join(directory, "sha256.json");
+    if (failure === "package") writeFileSync(packagePath, "tampered");
+    if (failure === "manifest") writeFileSync(manifestPath, "{}");
+    if (failure === "missing") rmSync(packagePath);
+    const packageBytes = existsSync(packagePath) ? readFileSync(packagePath) : null;
+    await assert.rejects(installChromiumDependencies(directory, () => assert.fail("process started"),
+      () => assert.fail("download started"), seed), failure === "missing" ? /ENOENT/ : /checksum mismatch/);
+    assert.equal(existsSync(manifestPath), false, `${failure} marker remains`);
+    assert.equal(existsSync(packagePath), packageBytes !== null);
+    if (packageBytes) assert.deepEqual(readFileSync(packagePath), packageBytes);
+    let downloads = 0;
+    await assert.rejects(installChromiumDependencies(directory, () => assert.fail("process started"), async () => {
+      downloads++;
+      return { ok: false, status: 503 };
+    }, seed), /download failed/);
+    assert.equal(downloads, 1, `${failure} cache must reach the downloader on the next call`);
+  }
 });
 
 test("a Chromium cache miss verifies the GitHub seed before dpkg without apt", async (t) => {
@@ -198,6 +213,23 @@ test("a failed or corrupt Chromium download stops before extraction or installat
     await assert.rejects(installChromiumDependencies(cacheFixture(t), () => assert.fail("process started"),
       async () => response, seed), /download failed|checksum mismatch/);
   }
+});
+
+test("a partial Chromium extraction removes only its manifest marker", async (t) => {
+  const directory = cacheFixture(t);
+  const { name, seed } = cachedDeb(cacheFixture(t));
+  const bytes = Buffer.from("synthetic archive");
+  Object.assign(seed, { downloadUrl: "https://example.org/seed.tar.gz", size: bytes.length,
+    sha256: createHash("sha256").update(bytes).digest("hex") });
+  await assert.rejects(installChromiumDependencies(directory, (command) => {
+    assert.equal(command, "tar");
+    writeFileSync(join(directory, "sha256.json"), "partial manifest");
+    writeFileSync(join(directory, name), "partial package");
+    return { status: 1 };
+  }, async () => ({ ok: true, arrayBuffer: async () => bytes }), seed), /Hosted dependency command failed: tar/);
+  assert.equal(existsSync(join(directory, "sha256.json")), false);
+  assert.equal(existsSync(join(directory, "seed.tar.gz")), false);
+  assert.equal(readFileSync(join(directory, name), "utf8"), "partial package");
 });
 
 test("invalid dependency plans cannot become privileged command arguments", () => {

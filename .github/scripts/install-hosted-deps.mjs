@@ -45,32 +45,38 @@ export async function installChromiumDependencies(cacheDirectory, run = spawnSyn
   if (digest(plan) !== seed.packagePlanSha256) throw new Error("Chromium seed does not match the package plan");
   mkdirSync(cacheDirectory, { recursive: true });
   const manifestPath = join(cacheDirectory, "sha256.json");
-  if (existsSync(manifestPath)) {
-    console.log("Using cached Chromium dependency packages");
-  } else {
-    console.log("Downloading pinned Chromium dependency seed from GitHub");
-    const response = await download(seed.downloadUrl, { signal: AbortSignal.timeout(120_000) });
-    if (!response.ok) throw new Error(`Chromium seed download failed (${response.status})`);
-    const bytes = Buffer.from(await response.arrayBuffer());
-    if (bytes.length !== seed.size || digest(bytes) !== seed.sha256) throw new Error("Chromium seed checksum mismatch");
-    const archivePath = join(cacheDirectory, "seed.tar.gz");
-    writeFileSync(archivePath, bytes);
-    try {
-      execute(run, "tar", ["-xzf", archivePath, "-C", cacheDirectory, "--no-same-owner", "--no-same-permissions"]);
-    } finally {
-      rmSync(archivePath, { force: true });
+  let files;
+  try {
+    if (existsSync(manifestPath)) {
+      console.log("Using cached Chromium dependency packages");
+    } else {
+      console.log("Downloading pinned Chromium dependency seed from GitHub");
+      const response = await download(seed.downloadUrl, { signal: AbortSignal.timeout(120_000) });
+      if (!response.ok) throw new Error(`Chromium seed download failed (${response.status})`);
+      const bytes = Buffer.from(await response.arrayBuffer());
+      if (bytes.length !== seed.size || digest(bytes) !== seed.sha256) throw new Error("Chromium seed checksum mismatch");
+      const archivePath = join(cacheDirectory, "seed.tar.gz");
+      writeFileSync(archivePath, bytes);
+      try {
+        execute(run, "tar", ["-xzf", archivePath, "-C", cacheDirectory, "--no-same-owner", "--no-same-permissions"]);
+      } finally {
+        rmSync(archivePath, { force: true });
+      }
     }
+    const manifest = readFileSync(manifestPath);
+    if (digest(manifest) !== seed.manifestSha256) throw new Error("Chromium package manifest checksum mismatch");
+    const hashes = JSON.parse(manifest);
+    if (!hashes || Array.isArray(hashes) || typeof hashes !== "object" || !Object.keys(hashes).length) throw new Error("Empty Chromium dependency cache");
+    files = Object.entries(hashes).map(([name, expected]) => {
+      if (basename(name) !== name || !name.endsWith(".deb")) throw new Error("Invalid cached package path");
+      const path = join(cacheDirectory, name);
+      if (digest(readFileSync(path)) !== expected) throw new Error(`Cached package checksum mismatch: ${name}`);
+      return path;
+    });
+  } catch (error) {
+    rmSync(manifestPath, { force: true });
+    throw error;
   }
-  const manifest = readFileSync(manifestPath);
-  if (digest(manifest) !== seed.manifestSha256) throw new Error("Chromium package manifest checksum mismatch");
-  const hashes = JSON.parse(manifest);
-  if (!hashes || Array.isArray(hashes) || typeof hashes !== "object" || !Object.keys(hashes).length) throw new Error("Empty Chromium dependency cache");
-  const files = Object.entries(hashes).map(([name, expected]) => {
-    if (basename(name) !== name || !name.endsWith(".deb")) throw new Error("Invalid cached package path");
-    const path = join(cacheDirectory, name);
-    if (digest(readFileSync(path)) !== expected) throw new Error(`Cached package checksum mismatch: ${name}`);
-    return path;
-  });
   // A cached package must not downgrade a newer runner security update.
   execute(run, "sudo", ["env", "DEBIAN_FRONTEND=noninteractive", "dpkg", "-i", "--refuse-downgrade",
     "--force-confdef", "--force-confold", ...files]);
