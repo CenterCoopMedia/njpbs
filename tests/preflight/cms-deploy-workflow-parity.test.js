@@ -146,6 +146,15 @@ describe("Route D Cut A boundary placement", () => {
     expect(step(job(deploy, "admin-build"), "Require CMS deploy compatibility floor"))
       .toContain('node "$RUNNER_TEMP/admin-status-gate"/.github/scripts/cms-deploy-compatibility.mjs');
     expect(production.jobs["live-smoke"]["runs-on"]).toBe("ubuntu-24.04");
+    for (const deployJob of Object.values(production.jobs)) {
+      const steps = deployJob.steps ?? [];
+      if (!steps.some(row => row.run?.includes("cms-contract-source/scripts/check-cms-public-contract.mjs"))) continue;
+      expect(steps.find(row => row.with?.path === ".cms-contract-source")?.with)
+        .toEqual({ ref: "${{ github.sha }}", path: ".cms-contract-source", "persist-credentials": false });
+      const isolate = steps.find(row => row.name === "Isolate trusted singleton contract source");
+      expect(isolate?.run).toContain('mv .cms-contract-source "$RUNNER_TEMP/cms-contract-source"');
+      expect(isolate.run).not.toContain("node_modules");
+    }
   });
   it("prepares before authentication and proves after protocol validation before the first provider mutation", () => {
     const steps = production.jobs["firebase-preflight"].steps;
