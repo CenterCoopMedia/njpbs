@@ -6,6 +6,13 @@ const { Buffer } = require("node:buffer");
 const { publicationRuntime } = require("./publication-runtime-owner");
 
 const PUBLIC_DEPLOYMENT_SCHEMA_VERSION = 1;
+class PublicDeploymentFenceError extends Error {
+  constructor(message = "Media lifecycle changes are temporarily unavailable.") {
+    super(message);
+    this.name = "PublicDeploymentFenceError";
+    this.status = 503;
+  }
+}
 const PUBLIC_DEPLOYMENT_POINTER_FIELDS = [
   "schemaVersion",
   "mediaLifecycleReady",
@@ -193,4 +200,37 @@ function readPublicDeploymentPointer(value) {
   return Object.freeze(assertPublicDeploymentPointer(projected));
 }
 
-module.exports = { PUBLIC_DEPLOYMENT_SCHEMA_VERSION, PublicDeploymentStateError, plainObject, isPublicDeploymentIdentifier, isCommitSha, timestampMillis, hasOnlyFields, validDeploymentReceipt, initialPublicDeploymentPointer, assertPublicDeploymentPointer, readPublicDeploymentPointer };
+// Immutable uploads stay readable while the next generation is leased.
+function assertPublishedMediaReadiness(value) {
+  let pointer;
+  try { pointer = readPublicDeploymentPointer(value); }
+  catch { throw new PublicDeploymentFenceError(); }
+  if (pointer.mediaLifecycleReady !== true || pointer.activeGeneration < 1) {
+    throw new PublicDeploymentFenceError();
+  }
+  return pointer;
+}
+
+function assertMediaLifecycleDeploymentFence(value) {
+  let pointer;
+  try {
+    pointer = assertPublicDeploymentPointer(value);
+  } catch {
+    throw new PublicDeploymentFenceError();
+  }
+  const ready = Boolean(
+    pointer.mediaLifecycleReady === true &&
+    pointer.state === "idle" &&
+    pointer.activeGeneration > 0 &&
+    pointer.newestEligibleGeneration === pointer.activeGeneration &&
+    pointer.lastReservedGeneration === pointer.activeGeneration,
+  );
+  if (!ready) throw new PublicDeploymentFenceError();
+  return Object.freeze({
+    generation: pointer.activeGeneration,
+    deploymentId: pointer.activeDeploymentId,
+    commitSha: pointer.activeCommitSha,
+  });
+}
+
+module.exports = { PUBLIC_DEPLOYMENT_SCHEMA_VERSION, PublicDeploymentStateError, PublicDeploymentFenceError, assertPublishedMediaReadiness, assertMediaLifecycleDeploymentFence, plainObject, isPublicDeploymentIdentifier, isCommitSha, timestampMillis, hasOnlyFields, validDeploymentReceipt, initialPublicDeploymentPointer, assertPublicDeploymentPointer, readPublicDeploymentPointer };

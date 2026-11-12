@@ -22,13 +22,16 @@ beforeAll(async () => {
   const output = path.join(directory, "entry.mjs");
   // Compile the actual private and unchanged public entry code. Only Astro's
   // generated application is a boundary fixture; real projectors/seals run.
-  await build({ entryPoints: [fileURLToPath(new URL("../../site/scripts/compiled-public-release-pair-entry.ts", import.meta.url))], outfile: output,
+  const graph = await build({ entryPoints: [fileURLToPath(new URL("../../site/scripts/compiled-public-release-pair-entry.ts", import.meta.url))], outfile: output, metafile: true,
     bundle: true, platform: "node", format: "esm", target: "node22", define: { __CMS_RENDERER_SHA__: JSON.stringify(pair.commitSha), __CMS_DATA_HUB_PUBLIC__: "false" },
     banner: { js: 'import { createRequire as __pairTestCreateRequire } from "node:module"; const require = __pairTestCreateRequire(import.meta.url);' },
     plugins: [{ name: "fixture-astro-app", setup(builder) {
       builder.onResolve({ filter: /^astro\/app\/entrypoint$/ }, () => ({ path: "app", namespace: "fixture" }));
       builder.onLoad({ filter: /.*/, namespace: "fixture" }, () => ({ contents: "export const createApp = () => ({render: (...args) => globalThis.__pairReplayTestRender(...args)});" }));
     } }] });
+  // Frozen rendering uses retained bytes and pure contracts. Loading live
+  // database owners here also bundles their SDK and its growing transport graph.
+  expect(Object.keys(graph.metafile.inputs).filter(input => /(?:^|\/)node_modules\/firebase-admin\//.test(input))).toEqual([]);
   vi.stubGlobal("__pairReplayTestRender", app.render);
   compiled = await import(/* @vite-ignore */ pathToFileURL(output).href);
 });

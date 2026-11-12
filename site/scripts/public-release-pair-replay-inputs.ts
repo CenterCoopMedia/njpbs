@@ -1,8 +1,8 @@
 import { createHash } from "node:crypto";
 import { readPageSchedulePacket, type PageScheduleInputs } from "../src/lib/page-schedule-packet";
-import { validateCurrentCodeReference } from "../../functions/lib/current-public-code-source.js";
+import { validateCurrentCodeReference } from "../../functions/lib/current-public-code-reference.js";
 import protocol from "../../functions/lib/public-release-pair.js";
-import work from "../../functions/lib/public-release-pair-work.js";
+import work from "../../functions/lib/public-release-pair-execution.js";
 import { PAIR_CODE_PACK_CHUNK_BYTES, decodePublicReleasePairCodePackChunk } from "./public-release-pair-code-pack-chunks";
 
 export type FrozenReplayFileReader = (name: string) => Promise<Uint8Array>;

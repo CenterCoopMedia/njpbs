@@ -3,7 +3,7 @@
 const { isDeepStrictEqual } = require("node:util");
 const { runtimeFields, assertRuntimeSource } = require("./publication-runtime-owner");
 
-const { PUBLIC_DEPLOYMENT_SCHEMA_VERSION, PublicDeploymentStateError, plainObject, isPublicDeploymentIdentifier, isCommitSha, timestampMillis, hasOnlyFields, validDeploymentReceipt, initialPublicDeploymentPointer, assertPublicDeploymentPointer, readPublicDeploymentPointer } = require("./public-deployment-pointer");
+const { PUBLIC_DEPLOYMENT_SCHEMA_VERSION, PublicDeploymentStateError, PublicDeploymentFenceError, assertPublishedMediaReadiness, assertMediaLifecycleDeploymentFence, plainObject, isPublicDeploymentIdentifier, isCommitSha, timestampMillis, hasOnlyFields, validDeploymentReceipt, initialPublicDeploymentPointer, assertPublicDeploymentPointer, readPublicDeploymentPointer } = require("./public-deployment-pointer");
 const PUBLIC_BUILD_RESERVATION_FIELDS = [
   "runtime",
   "noBuildStaticInput",
@@ -117,16 +117,6 @@ function projectPublicDeploymentRestoreReceipt(value) {
     throw new PublicDeploymentStateError("The restored predecessor receipt is invalid");
   }
   return Object.freeze(Object.fromEntries([...RESTORED_PREDECESSOR_FIELDS].map(field => [field, value[field]])));
-}
-
-class PublicDeploymentFenceError extends Error {
-  constructor(
-    message = "Media lifecycle changes are temporarily unavailable.",
-  ) {
-    super(message);
-    this.name = "PublicDeploymentFenceError";
-    this.status = 503;
-  }
 }
 
 function projectPublicBuildReservation(value, expectedBuildBatchId = null) {
@@ -646,40 +636,6 @@ function projectPublicBuildSupersession(value, expectedBuildBatchId = null) {
     supersededAt: batch.supersededAt,
     supersededByGeneration: batch.supersededByGeneration,
     supersededByBuildBatchId: batch.supersededByBuildBatchId,
-  });
-}
-
-// Reading an existing immutable upload does not mutate media custody. A valid
-// active, ready deployment remains readable while the next generation is leased.
-function assertPublishedMediaReadiness(value) {
-  let pointer;
-  try { pointer = readPublicDeploymentPointer(value); }
-  catch { throw new PublicDeploymentFenceError(); }
-  if (pointer.mediaLifecycleReady !== true || pointer.activeGeneration < 1) {
-    throw new PublicDeploymentFenceError();
-  }
-  return pointer;
-}
-
-function assertMediaLifecycleDeploymentFence(value) {
-  let pointer;
-  try {
-    pointer = assertPublicDeploymentPointer(value);
-  } catch {
-    throw new PublicDeploymentFenceError();
-  }
-  const ready = Boolean(
-    pointer.mediaLifecycleReady === true &&
-    pointer.state === "idle" &&
-    pointer.activeGeneration > 0 &&
-    pointer.newestEligibleGeneration === pointer.activeGeneration &&
-    pointer.lastReservedGeneration === pointer.activeGeneration,
-  );
-  if (!ready) throw new PublicDeploymentFenceError();
-  return Object.freeze({
-    generation: pointer.activeGeneration,
-    deploymentId: pointer.activeDeploymentId,
-    commitSha: pointer.activeCommitSha,
   });
 }
 

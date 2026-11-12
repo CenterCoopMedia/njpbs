@@ -14,7 +14,7 @@ const { isMediaAssetId } = require("./media-library");
 const { mediaReplacementRef } = require("./media-replacement");
 const {
   assertMediaLifecycleDeploymentFence,
-} = require("./public-deployment");
+} = require("./public-deployment-pointer");
 const {
   CMS_SETTINGS_SCHEMAS,
   CmsSettingsContractError,
