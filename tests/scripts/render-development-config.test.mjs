@@ -250,25 +250,29 @@ test("runs the documented Bash dry-render block in a disposable worktree", () =>
   assert.match(result.stdout, /Development configuration rendered: \d+ files/);
 });
 
-test("trusted gates resolve workspace dependencies from a separate temporary directory", () => fixture(directory => {
+for (const job of ["firebase-preflight", "live-smoke"]) {
+test(`trusted gates resolve workspace dependencies from a separate temporary directory (${job})`, () => fixture(directory => {
   const runtime = mkdtempSync(join(tmpdir(), "external-trusted-gate-"));
   try {
     const gate = join(directory, ".cms-smoke-gate"); mkdirSync(gate);
-    for (const name of ["scripts", "config", "agents/vmix"]) {
+    for (const name of ["scripts", "config", "agents/vmix", ".github/scripts"]) {
       cpSync(join(root, name), join(gate, name), { recursive: true });
     }
     symlinkSync(join(root, "node_modules"), join(directory, "node_modules"));
     const workflow = parse(readFileSync(join(root, ".github/workflows/cms-staging-deploy.yml"), "utf8"));
-    const step = workflow.jobs["firebase-preflight"].steps.find(step => step.name === "Isolate trusted cms-smoke-gate checkout");
+    const step = workflow.jobs[job].steps.find(step => step.name === "Isolate trusted cms-smoke-gate checkout");
     const moved = spawnSync("bash", ["-c", step.run], { cwd: directory,
       env: { PATH: process.env.PATH, RUNNER_TEMP: runtime, GITHUB_WORKSPACE: directory }, encoding: "utf8" });
     assert.equal(moved.status, 0, moved.stderr);
     const imported = spawnSync(process.execPath, ["--input-type=module", "-e",
-      `await import(${JSON.stringify(pathToFileURL(join(runtime, "cms-smoke-gate/scripts/cms-component-receipt.mjs")).href)});`],
+      `await import(${JSON.stringify(pathToFileURL(join(runtime, "cms-smoke-gate/scripts/cms-component-receipt.mjs")).href)});
+       const {createRequire} = await import('node:module');
+       createRequire(${JSON.stringify(join(runtime, "cms-smoke-gate/.github/scripts/ensure-panel-browser-deps.mjs"))})('playwright');`],
       { cwd: directory, env: { PATH: process.env.PATH }, encoding: "utf8", timeout: 5000 });
     assert.equal(imported.status, 0, imported.stderr);
   } finally { rmSync(runtime, { recursive: true, force: true }); }
 }));
+}
 
 test("admits only an exact committed helper copy while retaining untracked-file refusal", () => fixture(directory => {
   renderDevelopmentConfig(directory, inputs);
