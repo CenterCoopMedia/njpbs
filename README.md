@@ -86,6 +86,14 @@ cloud write. Set `CMS_DEV_ACCESS_ORIGIN` to the configured HTTPS issuer origin,
 without a path or trailing slash. The schedule monitor reads its configured
 `SCHEDULE_MONITOR_KUMA_ORIGIN` from the service environment.
 
+Pages production pushes additionally admit the App selected by the
+`CCM_PROMOTE_APP_SLUG` Actions variable, with no default. Configure the verified
+promotion App slug before activating promotion. Its original bot actor may
+start a production push deployment; the configured owner may rerun it. Other
+rerun requesters are refused. Push deployments check out the immutable event
+SHA. Manual and signed scheduler dispatches still require `CMS_DEPLOY_OWNER`
+and the main workflow ref. Source changes do not activate this route.
+
 Read [the contributor rules](AGENTS.md) and [support guide](SUPPORT.md) before
 opening a pull request. Site questions can go to <njpbs@montclair.edu>.
 
