@@ -86,7 +86,7 @@
     "eslint-plugin-jsx-a11y": "^6.10.2",
     "happy-dom": "^21.0.4",
     "markdownlint": "0.41.1",
-    "playwright": "^1.61.1",
+    "playwright": "1.65.0",
     "remark-parse": "11.0.0",
     "remark-validate-links": "13.1.0",
     "typescript": "^5.9.3",
