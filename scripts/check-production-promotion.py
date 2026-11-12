@@ -150,8 +150,9 @@ class Precheck:
         require(install["repository_selection"] == "selected", "installation must use selected repositories")
         repos = self.listing(f"/user/installations/{install['id']}/repositories", "repositories")
         require(len(repos) == 1 and repos[0]["full_name"].lower() == self.repository.lower(),
-                "installation must select only the requested repository")
-        return "selected repository only"
+                "visible selection differs from the requested repository")
+        raise NotReady("user-visible repository list cannot prove installation-wide isolation; "
+                       "complete organization installation settings readback required")
 
     def variable(self, scope, name, expected):
         value = self.get(f"{self.prefix}/{scope}/variables/{name}")

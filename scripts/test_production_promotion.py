@@ -2,6 +2,7 @@
 import copy
 import importlib.util
 from pathlib import Path
+import re
 import subprocess
 import unittest
 from unittest.mock import patch
@@ -63,11 +64,12 @@ class Fixture:
 
 
 class PromotionTests(unittest.TestCase):
-    def test_ready_configuration_reads_all_conditions_once(self):
+    def test_configuration_reads_all_conditions_and_refuses_unproven_scope(self):
         fixture = Fixture()
         rows = fixture.check.run()
         self.assertEqual(len(rows), 16)
-        self.assertTrue(all(row[0] for row in rows), rows)
+        self.assertEqual([row[1] for row in rows if not row[0]], ["installation repository selection"])
+        self.assertIn("cannot prove installation-wide isolation", next(row[2] for row in rows if not row[0]))
         self.assertEqual(len(fixture.calls), len(set(fixture.calls)))
 
     def test_ci_rejects_wrong_event_source_identity_and_job(self):
@@ -147,18 +149,46 @@ class PromotionTests(unittest.TestCase):
 
     def test_source_and_environment_identity_refusals(self):
         cases = [
-            (f"{PREFIX}/compare/{BASE}...{SHA}", "status", "diverged"),
-            (f"{PREFIX}/compare/{BASE}...{SHA}", "status", "behind"),
-            (f"{PREFIX}/environments/production", "deployment_branch_policy", {"protected_branches": True, "custom_branch_policies": False}),
-            (f"{PREFIX}/environments/production/variables/CCM_PROMOTE_APP_CLIENT_ID", "value", "wrong-client"),
-            (f"{PREFIX}/actions/variables/CCM_PROMOTE_APP_SLUG", "value", "wrong-app"),
+            (f"{PREFIX}/compare/{BASE}...{SHA}", "status", "diverged", "reviewed workflow and admission"),
+            (f"{PREFIX}/compare/{BASE}...{SHA}", "status", "behind", "production fast-forward baseline"),
+            (f"{PREFIX}/environments/production", "deployment_branch_policy", {"protected_branches": True, "custom_branch_policies": False}, "production environment policy"),
+            (f"{PREFIX}/environments/production/variables/CCM_PROMOTE_APP_CLIENT_ID", "value", "wrong-client", "environment App client ID"),
+            (f"{PREFIX}/actions/variables/CCM_PROMOTE_APP_SLUG", "value", "wrong-app", "Actions variable"),
         ]
-        for path, key, value in cases:
+        for path, key, value, condition in cases:
             with self.subTest(path=path, key=key):
                 fixture = Fixture()
                 fixture.routes[path][key] = value
                 rows = fixture.check.run()
-                self.assertTrue(any(not row[0] for row in rows), rows)
+                self.assertFalse(next(row[0] for row in rows if row[1] == condition), rows)
+
+    def test_single_user_visible_repository_cannot_certify_hidden_selection(self):
+        # This API response is identical when another selected repository is
+        # hidden from the authenticated user. It can never prove full scope.
+        fixture = Fixture()
+        with self.assertRaisesRegex(promotion.NotReady, "cannot prove installation-wide isolation"):
+            fixture.check.installation_repositories()
+
+    def test_runbook_requires_operator_target_for_every_activation_write(self):
+        source = (Path(__file__).resolve().parents[1] / "docs/release/production-branch.md").read_text()
+        blocks = re.findall(r"^[ \t]*```sh\n(.*?)\n[ \t]*```", source, re.S | re.M)
+        writes = [line.strip() for block in blocks for line in block.splitlines()
+                  if re.search(r"gh (?:variable set|secret set|workflow run|api --method (?:POST|PUT|DELETE))\b", line)]
+        self.assertTrue(writes)
+        for command in writes:
+            with self.subTest(command=command):
+                self.assertIn("$PROMOTION_REPOSITORY", command)
+                self.assertNotIn("CenterCoopMedia/njpbs", command)
+        setups = [block for block in blocks if "PROMOTION_REPOSITORY='" in block]
+        self.assertEqual(len(setups), 1)
+        setup = setups[0]
+        result = subprocess.run(["/bin/bash"], input=setup, text=True, capture_output=True, env={"PATH": ""}, check=False)
+        self.assertEqual(result.returncode, 1)
+        self.assertEqual(result.stdout, "")
+        self.assertEqual(result.stderr, "")
+        for block in blocks:
+            result = subprocess.run(["/bin/bash", "-n"], input=block, text=True, capture_output=True, check=False)
+            self.assertEqual(result.returncode, 0, result.stderr)
 
     def test_late_page_secret_supplier_refuses(self):
         fixture = Fixture()

@@ -92,11 +92,33 @@ separately reviewed forward commit on main; promotion never rewinds production.
 ## Read-only precheck
 
 Run from the repository root in a Bash session with Python 3 and authenticated
-`gh`. Choose a full SHA already on main; the script accepts no default repository
-or App slug. For the November 12 staging observation, the named SHA was:
+`gh`. Supply the independently approved target; this runbook supplies no default
+repository or numeric repository ID. Replace both placeholders, validate them,
+and require this checkout's HTTPS origin to match before any activation write.
 
 ```sh
-python3 scripts/check-production-promotion.py --repo CenterCoopMedia/njpbs --sha cf3ac408c12afc73c3e3f355f6dd70db58ea1af7 --app-slug ccm-njpbs-promote --workflow-sha cf3ac408c12afc73c3e3f355f6dd70db58ea1af7 --admission-sha 13650ac1d8fd4e42d60afc7a859b55305ae2e52c
+PROMOTION_REPOSITORY='REPLACE_WITH_APPROVED_OWNER_REPOSITORY'
+PROMOTION_REPOSITORY_ID='REPLACE_WITH_APPROVED_NUMERIC_REPOSITORY_ID'
+[[ "$PROMOTION_REPOSITORY" =~ ^[A-Za-z0-9][A-Za-z0-9-]{0,38}/[A-Za-z0-9_.-]+$ ]] || exit 1
+[[ "$PROMOTION_REPOSITORY_ID" =~ ^[1-9][0-9]*$ ]] || exit 1
+test "$(git remote get-url origin)" = "https://github.com/$PROMOTION_REPOSITORY.git" || exit 1
+gh api --method GET "/repos/$PROMOTION_REPOSITORY"
+gh api --method GET "/repos/$PROMOTION_REPOSITORY/actions/variables/CANONICAL_GITHUB_REPOSITORY"
+gh api --method GET "/repos/$PROMOTION_REPOSITORY/actions/variables/CANONICAL_GITHUB_REPOSITORY_ID"
+gh api --method GET "/repos/$PROMOTION_REPOSITORY/actions/variables/CMS_DEPLOY_OWNER"
+```
+
+Require API `full_name` and numeric `id`, both canonical variables and the
+authorized dispatcher to equal the independently approved identities. An
+origin, identity or authorization mismatch stops the session; never infer the
+approved target from the checkout or from API output. Every write below uses
+this verified operator-supplied `PROMOTION_REPOSITORY` in the same Bash session.
+
+Choose a full SHA already on main. The script accepts no default repository or
+App slug. For the November 12 staging observation, the named SHA was:
+
+```sh
+python3 scripts/check-production-promotion.py --repo "$PROMOTION_REPOSITORY" --sha cf3ac408c12afc73c3e3f355f6dd70db58ea1af7 --app-slug ccm-njpbs-promote --workflow-sha cf3ac408c12afc73c3e3f355f6dd70db58ea1af7 --admission-sha 13650ac1d8fd4e42d60afc7a859b55305ae2e52c
 ```
 
 The script makes only GET requests. It prints every configuration check even
@@ -116,9 +138,12 @@ The App API returned public client ID `Iv23lieue1kCmSfTYl5b` on November 12, 202
 The organization installation API returned installation `180720324`, selected
 repositories, and exactly Contents write, Workflows write and Metadata read.
 The precheck's current output is an observation, not a source of expected values.
-The selected-repository listing may require `read:user` on the operator's
-existing authentication; a 403 remains FAIL. Do not fetch the App key or expand
-authentication merely to make the staging check pass.
+The user installation repository API lists only repositories visible to its
+authenticated user. Even a successful one-repository response cannot establish
+installation-wide isolation. The script reports FAIL for that prerequisite
+until complete selection evidence exists outside this user-filtered API; it
+never certifies isolation from a partial view. Do not fetch the App key or
+expand authentication merely to make the staging check pass.
 
 A passing configuration check cannot grant approval, prove key provenance or
 replace the live acceptance, refusal and deployment evidence required by #57.
@@ -145,22 +170,27 @@ permissions to #57 and the payloads. Installation permissions must already be
 approved; this runbook changes none.
 
 ```sh
-gh api --method GET /apps/ccm-njpbs-promote
-gh api --method GET /orgs/CenterCoopMedia/installations
-gh api --method GET /user/installations/180720324/repositories
+gh api --method GET "/apps/ccm-njpbs-promote"
+gh api --method GET "/orgs/${PROMOTION_REPOSITORY%%/*}/installations"
 ```
 
 Require App ID `5705771`, the public client ID above, installation `180720324`
-unsuspended, exactly the three permissions, and only this selected repository.
-An unreadable prerequisite stops activation until the coordinator supplies the
-missing read evidence. Check canonical repository name/ID and `CMS_DEPLOY_OWNER`
-against the independently approved repository and dispatcher before proceeding.
+unsuspended and exactly the three permissions. Separately, an organization owner
+must inspect this installation's full repository selection in the organization's
+App installation settings and record only the approved target and selected count
+in #57. Require selected repositories, count one and exactly the verified target.
+The user-scoped API and a repository-restricted installation token cannot prove
+that no hidden repository is selected. This prevents a partial-visibility false
+pass; the precheck keeps its scope row FAIL rather than accepting that evidence.
+Activation stops until the coordinator has this complete settings readback.
+No credential access or installation token creation is needed for that settings
+inspection. Check canonical repository name/ID and `CMS_DEPLOY_OWNER` as above.
 
 1. Technical setup: set the App-push deployment variable, then read it back.
 
    ```sh
-   gh variable set CCM_PROMOTE_APP_SLUG --repo CenterCoopMedia/njpbs --body ccm-njpbs-promote
-   gh api --method GET /repos/CenterCoopMedia/njpbs/actions/variables/CCM_PROMOTE_APP_SLUG
+   gh variable set CCM_PROMOTE_APP_SLUG --repo "$PROMOTION_REPOSITORY" --body ccm-njpbs-promote
+   gh api --method GET "/repos/$PROMOTION_REPOSITORY/actions/variables/CCM_PROMOTE_APP_SLUG"
    ```
 
 2. Read-only: record the selected bootstrap SHA and its successful main-push
@@ -171,7 +201,7 @@ against the independently approved repository and dispatcher before proceeding.
    a newly approved green main SHA.
 
    ```sh
-   gh api --method GET /repos/CenterCoopMedia/njpbs/git/ref/heads/main
+   gh api --method GET "/repos/$PROMOTION_REPOSITORY/git/ref/heads/main"
    ```
 
    Set operator inputs in the same Bash session (replace the placeholders):
@@ -179,7 +209,7 @@ against the independently approved repository and dispatcher before proceeding.
    ```sh
    BOOTSTRAP_SHA='REPLACE_WITH_RECORDED_GREEN_MAIN_SHA'
    PROMOTE_SHA='REPLACE_WITH_LATER_GREEN_MAIN_SHA'
-   python3 scripts/check-production-promotion.py --repo CenterCoopMedia/njpbs --sha "$BOOTSTRAP_SHA" --app-slug ccm-njpbs-promote --workflow-sha cf3ac408c12afc73c3e3f355f6dd70db58ea1af7 --admission-sha 13650ac1d8fd4e42d60afc7a859b55305ae2e52c
+   python3 scripts/check-production-promotion.py --repo "$PROMOTION_REPOSITORY" --sha "$BOOTSTRAP_SHA" --app-slug ccm-njpbs-promote --workflow-sha cf3ac408c12afc73c3e3f355f6dd70db58ea1af7 --admission-sha 13650ac1d8fd4e42d60afc7a859b55305ae2e52c
    ```
 
 3. Technical setup: require the environment to be absent or reconcile its
@@ -189,10 +219,10 @@ against the independently approved repository and dispatcher before proceeding.
    back, then establish its sole branch entry and read back the complete list.
 
    ```sh
-   gh api --method PUT /repos/CenterCoopMedia/njpbs/environments/production --input docs/release/production-environment.json
-   gh api --method GET /repos/CenterCoopMedia/njpbs/environments/production
-   gh api --method POST /repos/CenterCoopMedia/njpbs/environments/production/deployment-branch-policies -f name=main -f type=branch
-   gh api --method GET '/repos/CenterCoopMedia/njpbs/environments/production/deployment-branch-policies?per_page=100'
+   gh api --method PUT "/repos/$PROMOTION_REPOSITORY/environments/production" --input docs/release/production-environment.json
+   gh api --method GET "/repos/$PROMOTION_REPOSITORY/environments/production"
+   gh api --method POST "/repos/$PROMOTION_REPOSITORY/environments/production/deployment-branch-policies" -f name=main -f type=branch
+   gh api --method GET "/repos/$PROMOTION_REPOSITORY/environments/production/deployment-branch-policies?per_page=100"
    ```
 
    Create the entry only when it is absent. If other entries exist, delete each
@@ -202,10 +232,10 @@ against the independently approved repository and dispatcher before proceeding.
 
    ```sh
    POLICY_ID='REPLACE_WITH_EXTRA_POLICY_ID'
-   gh api --method DELETE "/repos/CenterCoopMedia/njpbs/environments/production/deployment-branch-policies/$POLICY_ID"
-   gh api --method GET '/repos/CenterCoopMedia/njpbs/environments/production/deployment-branch-policies?per_page=100'
-   gh variable set CCM_PROMOTE_APP_CLIENT_ID --repo CenterCoopMedia/njpbs --env production --body Iv23lieue1kCmSfTYl5b
-   gh api --method GET /repos/CenterCoopMedia/njpbs/environments/production/variables/CCM_PROMOTE_APP_CLIENT_ID
+   gh api --method DELETE "/repos/$PROMOTION_REPOSITORY/environments/production/deployment-branch-policies/$POLICY_ID"
+   gh api --method GET "/repos/$PROMOTION_REPOSITORY/environments/production/deployment-branch-policies?per_page=100"
+   gh variable set CCM_PROMOTE_APP_CLIENT_ID --repo "$PROMOTION_REPOSITORY" --env production --body Iv23lieue1kCmSfTYl5b
+   gh api --method GET "/repos/$PROMOTION_REPOSITORY/environments/production/variables/CCM_PROMOTE_APP_CLIENT_ID"
    ```
 
    Require the exact policy object above, only branch main and no tag entries,
@@ -217,16 +247,16 @@ against the independently approved repository and dispatcher before proceeding.
    absent rulesets; do not duplicate an existing ruleset or overwrite drift.
 
    ```sh
-   gh api --method GET '/repos/CenterCoopMedia/njpbs/rulesets?includes_parents=true&per_page=100'
+   gh api --method GET "/repos/$PROMOTION_REPOSITORY/rulesets?includes_parents=true&per_page=100"
    ```
 
    4a. Technical setup: install the no-bypass CI/history ruleset, then get its
    full payload using the ID returned by POST.
 
    ```sh
-   gh api --method POST /repos/CenterCoopMedia/njpbs/rulesets --input docs/release/production-checks.ruleset.json
+   gh api --method POST "/repos/$PROMOTION_REPOSITORY/rulesets" --input docs/release/production-checks.ruleset.json
    CHECKS_RULESET_ID='REPLACE_WITH_CREATED_RULESET_ID'
-   gh api --method GET "/repos/CenterCoopMedia/njpbs/rulesets/$CHECKS_RULESET_ID"
+   gh api --method GET "/repos/$PROMOTION_REPOSITORY/rulesets/$CHECKS_RULESET_ID"
    ```
 
    4b. Joe's production authorization: require production to be absent; if it
@@ -234,10 +264,10 @@ against the independently approved repository and dispatcher before proceeding.
    then create production at the approved green main SHA and read it back.
 
    ```sh
-   gh api --method GET /repos/CenterCoopMedia/njpbs/git/ref/heads/production
-   gh api --method GET /repos/CenterCoopMedia/njpbs/git/ref/heads/main
-   gh api --method POST /repos/CenterCoopMedia/njpbs/git/refs -f ref=refs/heads/production -f sha="$BOOTSTRAP_SHA"
-   gh api --method GET /repos/CenterCoopMedia/njpbs/git/ref/heads/production
+   gh api --method GET "/repos/$PROMOTION_REPOSITORY/git/ref/heads/production"
+   gh api --method GET "/repos/$PROMOTION_REPOSITORY/git/ref/heads/main"
+   gh api --method POST "/repos/$PROMOTION_REPOSITORY/git/refs" -f ref=refs/heads/production -f sha="$BOOTSTRAP_SHA"
+   gh api --method GET "/repos/$PROMOTION_REPOSITORY/git/ref/heads/production"
    ```
 
    The initial production GET must be a confirmed 404, rather than an auth or
@@ -248,12 +278,12 @@ against the independently approved repository and dispatcher before proceeding.
    payloads and SHAs before provisioning a credential.
 
    ```sh
-   gh api --method POST /repos/CenterCoopMedia/njpbs/rulesets --input docs/release/production-updates.ruleset.json
+   gh api --method POST "/repos/$PROMOTION_REPOSITORY/rulesets" --input docs/release/production-updates.ruleset.json
    UPDATES_RULESET_ID='REPLACE_WITH_CREATED_RULESET_ID'
-   gh api --method GET "/repos/CenterCoopMedia/njpbs/rulesets/$UPDATES_RULESET_ID"
-   gh api --method GET "/repos/CenterCoopMedia/njpbs/rulesets/$CHECKS_RULESET_ID"
-   gh api --method GET /repos/CenterCoopMedia/njpbs/git/ref/heads/main
-   gh api --method GET /repos/CenterCoopMedia/njpbs/git/ref/heads/production
+   gh api --method GET "/repos/$PROMOTION_REPOSITORY/rulesets/$UPDATES_RULESET_ID"
+   gh api --method GET "/repos/$PROMOTION_REPOSITORY/rulesets/$CHECKS_RULESET_ID"
+   gh api --method GET "/repos/$PROMOTION_REPOSITORY/git/ref/heads/main"
+   gh api --method GET "/repos/$PROMOTION_REPOSITORY/git/ref/heads/production"
    ```
 
 5. Joe's credential activation authorization: in the landofjawn credential
@@ -265,10 +295,10 @@ against the independently approved repository and dispatcher before proceeding.
    ```sh
    PROMOTION_KEY_ENTRY='REPLACE_WITH_APPROVED_ENTRY_POINTER'
    set -o pipefail
-   pass show "$PROMOTION_KEY_ENTRY" | gh secret set CCM_PROMOTE_APP_PRIVATE_KEY --env production --repo CenterCoopMedia/njpbs
-   gh secret list --env production --repo CenterCoopMedia/njpbs
-   gh api --method GET '/repos/CenterCoopMedia/njpbs/actions/secrets?per_page=100'
-   gh api --method GET '/repos/CenterCoopMedia/njpbs/actions/organization-secrets?per_page=100'
+   pass show "$PROMOTION_KEY_ENTRY" | gh secret set CCM_PROMOTE_APP_PRIVATE_KEY --env production --repo "$PROMOTION_REPOSITORY"
+   gh secret list --env production --repo "$PROMOTION_REPOSITORY"
+   gh api --method GET "/repos/$PROMOTION_REPOSITORY/actions/secrets?per_page=100"
+   gh api --method GET "/repos/$PROMOTION_REPOSITORY/actions/organization-secrets?per_page=100"
    ```
 
    The setter must receive the approved store stream, never manually pasted
@@ -280,14 +310,17 @@ against the independently approved repository and dispatcher before proceeding.
 6. Joe's first promotion/public switch authorization: select a later green main
    `PROMOTE_SHA` that fast-forwards production and whose range includes a
    reviewed workflow-file change. Rerun the precheck at it and require every
-   check to pass. Inspect that range before dispatch; a successful run without
+   API-verifiable check to pass, plus the complete installation settings
+   readback above for the scope prerequisite that this user-filtered API cannot
+   certify. A missing scope readback stops activation. Inspect the range before
+   dispatch; a successful run without
    a workflow-file change does not prove Workflows write.
 
    ```sh
-   python3 scripts/check-production-promotion.py --repo CenterCoopMedia/njpbs --sha "$PROMOTE_SHA" --app-slug ccm-njpbs-promote --workflow-sha cf3ac408c12afc73c3e3f355f6dd70db58ea1af7 --admission-sha 13650ac1d8fd4e42d60afc7a859b55305ae2e52c
-   gh api --method GET "/repos/CenterCoopMedia/njpbs/compare/$BOOTSTRAP_SHA...$PROMOTE_SHA"
-   gh workflow run promote.yml --repo CenterCoopMedia/njpbs --ref main -f sha="$PROMOTE_SHA"
-   gh api --method GET '/repos/CenterCoopMedia/njpbs/actions/workflows/promote.yml/runs?event=workflow_dispatch&branch=main&per_page=10'
+   python3 scripts/check-production-promotion.py --repo "$PROMOTION_REPOSITORY" --sha "$PROMOTE_SHA" --app-slug ccm-njpbs-promote --workflow-sha cf3ac408c12afc73c3e3f355f6dd70db58ea1af7 --admission-sha 13650ac1d8fd4e42d60afc7a859b55305ae2e52c
+   gh api --method GET "/repos/$PROMOTION_REPOSITORY/compare/$BOOTSTRAP_SHA...$PROMOTE_SHA"
+   gh workflow run promote.yml --repo "$PROMOTION_REPOSITORY" --ref main -f sha="$PROMOTE_SHA"
+   gh api --method GET "/repos/$PROMOTION_REPOSITORY/actions/workflows/promote.yml/runs?event=workflow_dispatch&branch=main&per_page=10"
    ```
 
    Identify the new run by its dispatch time, authorized actor and exact title
@@ -297,8 +330,8 @@ against the independently approved repository and dispatcher before proceeding.
 
    ```sh
    PROMOTION_RUN_ID='REPLACE_WITH_OBSERVED_RUN_ID'
-   gh api --method GET "/repos/CenterCoopMedia/njpbs/actions/runs/$PROMOTION_RUN_ID"
-   gh api --method GET /repos/CenterCoopMedia/njpbs/git/ref/heads/production
+   gh api --method GET "/repos/$PROMOTION_REPOSITORY/actions/runs/$PROMOTION_RUN_ID"
+   gh api --method GET "/repos/$PROMOTION_REPOSITORY/git/ref/heads/production"
    ```
 
    Require a successful promotion and production exactly at `PROMOTE_SHA`.
@@ -318,8 +351,8 @@ against the independently approved repository and dispatcher before proceeding.
    existing deployment checks have been proved together.
 
    ```sh
-   gh api --method GET "/repos/CenterCoopMedia/njpbs/actions/workflows/pages.yml/runs?event=push&branch=production&head_sha=$PROMOTE_SHA&per_page=10"
-   gh api --method GET /repos/CenterCoopMedia/njpbs/git/ref/heads/production
+   gh api --method GET "/repos/$PROMOTION_REPOSITORY/actions/workflows/pages.yml/runs?event=push&branch=production&head_sha=$PROMOTE_SHA&per_page=10"
+   gh api --method GET "/repos/$PROMOTION_REPOSITORY/git/ref/heads/production"
    ```
 
 ## Refusal probes without a destructive lab
@@ -350,4 +383,5 @@ authorized promotion, server refusal and live deployment evidence exists.
 - [Ruleset behavior and bypass actors](https://docs.github.com/en/repositories/configuring-branches-and-merges-in-your-repository/managing-rulesets/about-rulesets)
 - [Deployment branch policies](https://docs.github.com/en/rest/deployments/branch-policies)
 - [GitHub App metadata and installation permissions](https://docs.github.com/en/rest/apps/apps)
+- [User-filtered installation repository listing](https://docs.github.com/en/rest/apps/installations#list-repositories-accessible-to-the-user-access-token)
 - [Repository rulesets API](https://docs.github.com/en/rest/repos/rules)
