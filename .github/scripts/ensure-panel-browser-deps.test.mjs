@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import { spawnSync } from "node:child_process";
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
-import { test } from "node:test";
+import { describe, test } from "node:test";
 import { homedir, tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -22,9 +22,14 @@ test("ready or held runtime libraries make no APT request", () => {
 
 test("missing or partially installed libraries trigger one shared installation", () => {
   const calls = [];
+  let installed = false;
   const run = (name, args) => {
     calls.push([name, args]);
-    if (name !== "dpkg-query") return { status: 0 };
+    if (name !== "dpkg-query") {
+      installed = true;
+      return { status: 0 };
+    }
+    if (installed) return { status: 0, stdout: "install ok installed" };
     if (args.at(-1) === "libmissing:amd64") return { status: 1, stdout: "" };
     return { status: 0, stdout: args.at(-1) === "libpartial:amd64" ? "install reinstreq half-installed" : "install ok installed" };
   };
@@ -32,6 +37,9 @@ test("missing or partially installed libraries trigger one shared installation",
   assert.deepEqual(calls.filter(([name]) => name !== "dpkg-query"), [
     [process.execPath, [fileURLToPath(new URL("./install-hosted-deps.mjs", import.meta.url)), "chromium",
       join(homedir(), ".cache/njpbs-ci-debs/chromium-1.65.0")]],
+  ]);
+  assert.deepEqual(calls.filter(([name]) => name === "dpkg-query").map(([, args]) => args.at(-1)), [
+    "libready:amd64", "libmissing:amd64", "libpartial:amd64", "libmissing:amd64", "libpartial:amd64",
   ]);
 });
 
@@ -47,6 +55,48 @@ test("query and shared installation failures stop the check", () => {
     assert.throws(() => ensureRuntimeDependencies(["libmissing"], run, () => {}));
     assert.equal(calls.filter(([name]) => name !== "dpkg-query").length, failure === "query" ? 0 : 1);
   }
+});
+
+describe("runtime verification after seed installation", () => {
+  test("a successful installer must report the names that remain missing", () => {
+    const calls = [];
+    let installed = false;
+    const run = (command, args) => {
+      calls.push([command, args]);
+      if (command !== "dpkg-query") {
+        installed = true;
+        return { status: 0 };
+      }
+      return installed && args.at(-1) === "librecovered:amd64"
+        ? { status: 0, stdout: "install ok installed" }
+        : { status: 1, stdout: "" };
+    };
+    assert.throws(() => ensureRuntimeDependencies(["libmissing-a", "librecovered", "libmissing-b"], run, () => {}), {
+      message: "Chromium runtime dependencies are still missing after installation: libmissing-a, libmissing-b",
+    });
+    assert.equal(calls.filter(([command]) => command !== "dpkg-query").length, 1);
+    assert.deepEqual(calls.slice(-3).map(([, args]) => args.at(-1)), [
+      "libmissing-a:amd64", "librecovered:amd64", "libmissing-b:amd64",
+    ]);
+  });
+
+  test("a failed post-install query names the package and does not retry installation", () => {
+    const calls = [];
+    let installed = false;
+    const run = (command, args) => {
+      calls.push([command, args]);
+      if (command !== "dpkg-query") {
+        installed = true;
+        return { status: 0 };
+      }
+      return installed ? { status: 2, stdout: "" } : { status: 1, stdout: "" };
+    };
+    assert.throws(() => ensureRuntimeDependencies(["libmissing"], run, () => {}), {
+      message: "Cannot inspect dependency libmissing",
+    });
+    assert.equal(calls.filter(([command]) => command !== "dpkg-query").length, 1);
+    assert.equal(calls.length, 3);
+  });
 });
 
 function cacheFixture(t) {
