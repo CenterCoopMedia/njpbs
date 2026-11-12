@@ -170,6 +170,28 @@ describe("Route D Cut A boundary placement", () => {
     expect(mutations).toContain("node scripts/component-runner.mjs functions prepare");
     expect(mutations).toContain("node scripts/component-runner.mjs functions deploy");
   });
+  it.each([["firebase-preflight", "preflight"], ["admin-contract", "before-upload"], ["live-smoke", "settlement"]])(
+    "supplies authenticated provider and planner inputs at %s", (jobName, boundary) => {
+      const steps = production.jobs[jobName].steps;
+      const captureAt = proof(steps, boundary);
+      const capture = steps[captureAt];
+      const planner = production.jobs["firebase-preflight"].steps.find(row => row.name === "Plan Functions and renderer release");
+      expect(capture.env).toMatchObject({ ...planner.env,
+        FIREBASE_WEB_API_KEY: "${{ vars.VITE_FIREBASE_API_KEY || secrets.VITE_FIREBASE_API_KEY }}",
+        CMS_PREVIEW_R2_CREDENTIAL: "${{ secrets.CMS_PREVIEW_R2_CREDENTIAL }}",
+        CMS_TRUSTED_WORKFLOW_SHA: "${{ github.sha }}" });
+      expect(capture.run).toContain('4<<< "$CMS_PREVIEW_R2_CREDENTIAL"');
+      const authAt = steps.findIndex(row => row.uses?.startsWith("google-github-actions/auth@"));
+      const prepareAt = steps.findIndex(row => row.name === "Prepare the singleton contract runtime before credentials");
+      expect(authAt).toBeGreaterThan(prepareAt);
+      expect(authAt).toBeLessThan(captureAt);
+      expect(steps[authAt].with).toEqual({ credentials_json: "${{ secrets.FIREBASE_SERVICE_ACCOUNT }}", project_id: "njpbs-site" });
+      const result = spawnSync("bash", ["-c", `node() { test "$VITE_LIVE_PRODUCTION_ENABLED" = false && test "$(cat <&4)" = fixture-archive-access; }\n${capture.run}`], {
+        env: { PATH: process.env.PATH, RUNNER_TEMP: tmpdir(), GITHUB_WORKSPACE: "/fixture", DEPLOY_SHA: "a".repeat(40),
+          VITE_LIVE_PRODUCTION_ENABLED: "false", CMS_PREVIEW_R2_CREDENTIAL: "fixture-archive-access" }, encoding: "utf8",
+      });
+      expect(result.status, result.stderr).toBe(0);
+    });
   it("retains successful upstream summaries when only failed deployment jobs rerun", () => {
     for (const [producer, consumer, name] of [["firebase-preflight", "admin-contract", "cms-public-contract-preflight"],
       ["admin-contract", "admin-deploy", "cms-public-contract-before-upload"], ["admin-contract", "live-smoke", "cms-public-contract-before-upload"]]) {
@@ -272,7 +294,8 @@ describe("Route D Cut A boundary placement", () => {
       const capture = steps.find(row => row.name?.startsWith("Verify the singleton public contract"));
       expect(capture.run).toContain("umask 077");
       expect(JSON.stringify(capture)).not.toMatch(/GOOGLE_APPLICATION_CREDENTIALS|service-account\.json/);
-      if (steps === smoke) expect(Object.keys(capture.env).sort()).toEqual(["CMS_TRUSTED_WORKFLOW_SHA", "DEPLOY_SHA"]);
+      if (steps === smoke) expect(steps.findIndex(row => row.uses?.startsWith("google-github-actions/auth@")))
+        .toBe(steps.indexOf(capture) - 1);
       expect(capture.run).toContain("--previous-summary");
     }
   });

@@ -645,6 +645,8 @@ jobs:
           CMS_BUG_REPORT_TELEGRAM_CHAT_ID: ${{ secrets.CMS_BUG_REPORT_TELEGRAM_CHAT_ID }}
           CMS_BUG_REPORT_TELEGRAM_ADMIN_MAP: ${{ secrets.CMS_BUG_REPORT_TELEGRAM_ADMIN_MAP }}
           CMS_DEPLOYMENT_VARIABLES_JSON: ${{ toJSON(vars) }}
+          VITE_CMS_STUDIO_CONFIGURATION: ${{ secrets.VITE_CMS_STUDIO_CONFIGURATION }}
+          VITE_LIVE_PRODUCTION_ENABLED: ${{ vars.LIVE_PRODUCTION_ENABLED || 'false' }}
           CMS_MEDIA_CACHE_PURGE_TOKEN: ${{ secrets.CMS_MEDIA_CACHE_PURGE_TOKEN }}
           CMS_VOICEOVER_R2_ACCESS_KEY_ID: ${{ secrets.CMS_VOICEOVER_R2_ACCESS_KEY_ID }}
           CMS_VOICEOVER_R2_SECRET_ACCESS_KEY: ${{ secrets.CMS_VOICEOVER_R2_SECRET_ACCESS_KEY }}
@@ -655,6 +657,7 @@ jobs:
           CMS_BUG_REPORT_GITHUB_WEBHOOK_SECRET: ${{ secrets.CMS_BUG_REPORT_GITHUB_WEBHOOK_SECRET }}
           CMS_PUBLISH_GITHUB_TOKEN_PROVISIONING: ${{ secrets.CMS_PUBLISH_GITHUB_TOKEN_PROVISIONING }}
           FORCE_FIREBASE: ${{ inputs.force_firebase }}
+          CMS_DEPLOY_MIGRATIONS: ${{ inputs.migrations }}
           CMS_EDGE_ORIGIN_SECRET: ${{ secrets.CMS_EDGE_ORIGIN_SECRET }}
           CLOUD_PUBLICATION_WAKE_ENVIRONMENT: production
           CLOUD_PUBLICATION_WAKE_ENABLED: "true"
@@ -1919,9 +1922,38 @@ jobs:
         env:
           ADMIN_BOOT_URL: https://admin.njpbs.org/
         run: npm run test:boot -w njpbs-admin
+      - name: Authenticate Firebase deploy service account
+        uses: google-github-actions/auth@7c6bc770dae815cd3e89ee6cdf493a5fab2cc093 # v3
+        with:
+          credentials_json: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+          project_id: njpbs-site
       - name: Verify the singleton public contract at settlement
         env:
+          GITHUB_TOKEN: ${{ github.token }}
           DEPLOY_SHA: ${{ needs.admin-build.outputs.deploy_sha }}
+          CMS_BUG_REPORT_TELEGRAM_CHAT_ID: ${{ secrets.CMS_BUG_REPORT_TELEGRAM_CHAT_ID }}
+          CMS_BUG_REPORT_TELEGRAM_ADMIN_MAP: ${{ secrets.CMS_BUG_REPORT_TELEGRAM_ADMIN_MAP }}
+          CMS_DEPLOYMENT_VARIABLES_JSON: ${{ toJSON(vars) }}
+          VITE_CMS_STUDIO_CONFIGURATION: ${{ secrets.VITE_CMS_STUDIO_CONFIGURATION }}
+          VITE_LIVE_PRODUCTION_ENABLED: ${{ vars.LIVE_PRODUCTION_ENABLED || 'false' }}
+          CMS_MEDIA_CACHE_PURGE_TOKEN: ${{ secrets.CMS_MEDIA_CACHE_PURGE_TOKEN }}
+          CMS_VOICEOVER_R2_ACCESS_KEY_ID: ${{ secrets.CMS_VOICEOVER_R2_ACCESS_KEY_ID }}
+          CMS_VOICEOVER_R2_SECRET_ACCESS_KEY: ${{ secrets.CMS_VOICEOVER_R2_SECRET_ACCESS_KEY }}
+          CMS_STAFF_EMAIL_API_TOKEN: ${{ secrets.CMS_STAFF_EMAIL_API_TOKEN }}
+          CMS_BUG_REPORT_TELEGRAM_BOT_TOKEN: ${{ secrets.CMS_BUG_REPORT_TELEGRAM_BOT_TOKEN }}
+          CMS_BUG_REPORT_TELEGRAM_WEBHOOK_SECRET: ${{ secrets.CMS_BUG_REPORT_TELEGRAM_WEBHOOK_SECRET }}
+          CMS_BUG_REPORT_GITHUB_TOKEN: ${{ secrets.CMS_BUG_REPORT_GITHUB_TOKEN }}
+          CMS_BUG_REPORT_GITHUB_WEBHOOK_SECRET: ${{ secrets.CMS_BUG_REPORT_GITHUB_WEBHOOK_SECRET }}
+          CMS_PUBLISH_GITHUB_TOKEN_PROVISIONING: ${{ secrets.CMS_PUBLISH_GITHUB_TOKEN_PROVISIONING }}
+          FORCE_FIREBASE: ${{ inputs.force_firebase }}
+          CMS_DEPLOY_MIGRATIONS: ${{ inputs.migrations }}
+          CMS_EDGE_ORIGIN_SECRET: ${{ secrets.CMS_EDGE_ORIGIN_SECRET }}
+          CLOUD_PUBLICATION_WAKE_ENVIRONMENT: production
+          CLOUD_PUBLICATION_WAKE_ENABLED: "true"
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          FIREBASE_WEB_API_KEY: ${{ vars.VITE_FIREBASE_API_KEY || secrets.VITE_FIREBASE_API_KEY }}
+          CMS_PREVIEW_R2_CREDENTIAL: ${{ secrets.CMS_PREVIEW_R2_CREDENTIAL }}
           CMS_TRUSTED_WORKFLOW_SHA: ${{ github.sha }}
         run: |
           set -euo pipefail
@@ -1929,7 +1961,7 @@ jobs:
           node --import ./site/node_modules/tsx/dist/loader.mjs "$RUNNER_TEMP/cms-contract-source/scripts/check-cms-public-contract.mjs" prove \
             --environment production --boundary settlement --candidate "$DEPLOY_SHA" --source-root "$GITHUB_WORKSPACE" \
             --summary "$RUNNER_TEMP/cms-public-contract-summary-settlement.json" \
-            --state-directory "$RUNNER_TEMP/cms-public-contract-private" --previous-summary "$RUNNER_TEMP/cms-contract-proof/cms-public-contract-summary-before-upload.json"
+            --state-directory "$RUNNER_TEMP/cms-public-contract-private" --previous-summary "$RUNNER_TEMP/cms-contract-proof/cms-public-contract-summary-before-upload.json" 4<<< "$CMS_PREVIEW_R2_CREDENTIAL"
       - name: Retain only the sanitized singleton contract summary
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
@@ -2194,6 +2226,8 @@ jobs:
           CMS_BUG_REPORT_TELEGRAM_CHAT_ID: ${{ secrets.CMS_BUG_REPORT_TELEGRAM_CHAT_ID }}
           CMS_BUG_REPORT_TELEGRAM_ADMIN_MAP: ${{ secrets.CMS_BUG_REPORT_TELEGRAM_ADMIN_MAP }}
           CMS_DEPLOYMENT_VARIABLES_JSON: ${{ toJSON(vars) }}
+          VITE_CMS_STUDIO_CONFIGURATION: ${{ secrets.VITE_CMS_STUDIO_CONFIGURATION }}
+          VITE_LIVE_PRODUCTION_ENABLED: ${{ vars.LIVE_PRODUCTION_ENABLED || 'false' }}
           CMS_MEDIA_CACHE_PURGE_TOKEN: ${{ secrets.CMS_MEDIA_CACHE_PURGE_TOKEN }}
           CMS_VOICEOVER_R2_ACCESS_KEY_ID: ${{ secrets.CMS_VOICEOVER_R2_ACCESS_KEY_ID }}
           CMS_VOICEOVER_R2_SECRET_ACCESS_KEY: ${{ secrets.CMS_VOICEOVER_R2_SECRET_ACCESS_KEY }}
@@ -2204,6 +2238,7 @@ jobs:
           CMS_BUG_REPORT_GITHUB_WEBHOOK_SECRET: ${{ secrets.CMS_BUG_REPORT_GITHUB_WEBHOOK_SECRET }}
           CMS_PUBLISH_GITHUB_TOKEN_PROVISIONING: ${{ secrets.CMS_PUBLISH_GITHUB_TOKEN_PROVISIONING }}
           FORCE_FIREBASE: ${{ inputs.force_firebase }}
+          CMS_DEPLOY_MIGRATIONS: ${{ inputs.migrations }}
           CMS_EDGE_ORIGIN_SECRET: ${{ secrets.CMS_EDGE_ORIGIN_SECRET }}
           CLOUD_PUBLICATION_WAKE_ENVIRONMENT: production
           CLOUD_PUBLICATION_WAKE_ENABLED: "true"
