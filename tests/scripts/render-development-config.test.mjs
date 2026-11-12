@@ -274,6 +274,40 @@ test(`trusted gates resolve workspace dependencies from a separate temporary dir
 }));
 }
 
+for (const job of ["firebase-preflight", "admin-contract", "contract-settlement"]) {
+test(`proof installs preserve the candidate dependency graph (${job})`, () => {
+  const directory = mkdtempSync(join(tmpdir(), "proof-install-boundary-"));
+  const runtime = mkdtempSync(join(tmpdir(), "proof-install-runtime-"));
+  try {
+    const candidateModules = join(directory, "node_modules"); mkdirSync(candidateModules);
+    writeFileSync(join(candidateModules, "candidate-marker"), "candidate dependency graph");
+    const lock = '{"name":"proof-fixture","version":"1.0.0","lockfileVersion":3,"packages":{"":{"name":"proof-fixture","version":"1.0.0"}}}';
+    writeFileSync(join(directory, "package-lock.json"), lock);
+    const checkout = join(directory, ".cms-contract-source"); mkdirSync(checkout);
+    writeFileSync(join(checkout, "package.json"), '{"name":"proof-fixture","version":"1.0.0"}');
+    writeFileSync(join(checkout, "package-lock.json"), lock);
+    const workflow = parse(readFileSync(join(root, ".github/workflows/cms-staging-deploy.yml"), "utf8"));
+    const steps = workflow.jobs[job].steps;
+    const source = steps.find(step => step.with?.path === ".cms-contract-source");
+    assert.deepEqual(source?.with, { ref: "${{ github.sha }}", path: ".cms-contract-source", "persist-credentials": false });
+    const commands = steps.filter(step => step.run?.includes("check-cms-public-contract.mjs"));
+    assert.equal(commands.length, 2);
+    for (const step of commands) assert.ok(step.run.includes('$RUNNER_TEMP/cms-contract-source/scripts/check-cms-public-contract.mjs'));
+    const isolate = steps.find(step => step.name === "Isolate trusted singleton contract source");
+    const moved = spawnSync("bash", ["-c", isolate.run], { cwd: directory,
+      env: { PATH: process.env.PATH, RUNNER_TEMP: runtime, GITHUB_WORKSPACE: directory }, encoding: "utf8" });
+    assert.equal(moved.status, 0, moved.stderr);
+    const proof = join(runtime, "cms-contract-source");
+    const installed = spawnSync("npm", ["ci", "--ignore-scripts", "--offline", "--no-audit", "--no-fund"], {
+      cwd: proof, env: { PATH: process.env.PATH, HOME: runtime, npm_config_cache: join(runtime, "cache") }, encoding: "utf8", timeout: 10000 });
+    assert.equal(installed.status, 0, installed.stderr);
+    assert.equal(readFileSync(join(candidateModules, "candidate-marker"), "utf8"), "candidate dependency graph");
+    assert.equal(readFileSync(join(directory, "package-lock.json"), "utf8"), lock);
+    assert.equal(readFileSync(join(proof, "package-lock.json"), "utf8"), lock);
+  } finally { rmSync(runtime, { recursive: true, force: true }); rmSync(directory, { recursive: true, force: true }); }
+});
+}
+
 test("admits only an exact committed helper copy while retaining untracked-file refusal", () => fixture(directory => {
   renderDevelopmentConfig(directory, inputs);
   const source = "scripts/render-development-config.mjs", target = "trusted-runner.mjs";
