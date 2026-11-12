@@ -12,7 +12,7 @@ if mode == "extract":
     with zipfile.ZipFile(source) as archive:
         for entry in archive.infolist():
             parts = pathlib.PurePosixPath(entry.filename).parts
-            if parts[0] != "node-v22.23.4-win-x64" or ".." in parts:
+            if parts[0] != "node-v22.23.5-win-x64" or ".." in parts:
                 raise ValueError("Unexpected Node runtime archive path")
             relative = pathlib.Path(*parts[1:])
             destination = target / relative

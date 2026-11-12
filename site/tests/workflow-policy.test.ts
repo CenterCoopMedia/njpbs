@@ -732,7 +732,7 @@ describe("cms staging deploy surface", () => {
     expect(stagingDeployWorkflow).toContain("workflow_dispatch:");
     expect(stagingDeployWorkflow).not.toContain("repository_dispatch:");
     expect(stagingDeployWorkflow).not.toContain("pull_request:");
-    expect(stagingDeployWorkflow).toContain('node-version: "22"');
+    expect(stagingDeployWorkflow).toContain('node-version: "22.23.5"');
     expect(stagingDeployWorkflow).toContain("FIREBASE_SERVICE_ACCOUNT");
     expect(stagingDeployWorkflow).toContain(
       '--only "firestore:rules,firestore:indexes,storage"',

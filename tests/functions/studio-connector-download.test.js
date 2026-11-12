@@ -6,12 +6,12 @@ import contract from "../../functions/lib/studio-connector-package.js";
 import downloads from "../../functions/lib/studio-connector-download.js";
 
 const sourceSha = "7786c6693887b2d9ecb14c57ce78042d34150a4e";
-// The October 22 package receipt supplies these independent artifact values.
+// Package identity fields are fixed fixtures; runtime metadata follows the November 2026 Node release.
 const manifest = { schemaVersion: 1, sourceSha,
   sha256: "792be25d72a7c376b702839c48df32e08bbd42a29310a267818fb56ac68c4444",
   bundleSha256: "9db6897273ae4a8dc6019aa1ef77f4442312488b33109f9eddc710662d75b843",
-  sizeBytes: 37357523, filename: "NJPBS-Studio-connector-7786c669.zip", nodeVersion: "22.23.4",
-  nodeArchiveSha256: "cbc74b5e0982c9dbb41525fd8fb5dcd32fbee237863f7829072f4639a1ce5f20" };
+  sizeBytes: 37357523, filename: "NJPBS-Studio-connector-7786c669.zip", nodeVersion: "22.23.5",
+  nodeArchiveSha256: "4a191082e9706866830379d577d2cc8a50c776fcd9436a8d061b063ed0d9a0e3" };
 const staff = { approvedActive: true, principal: { id: "producer", grants: [{ role: "editor" }] } };
 function storage({ record = manifest, metadata = { source: sourceSha, sha256: manifest.sha256 }, missing = false } = {}) {
   return { bucket: "private-test-bucket", client: new S3Client({ region: "auto", endpoint: "https://account.r2.cloudflarestorage.com",
@@ -40,7 +40,7 @@ describe("Studio connector artifact contract", () => {
   });
   it.each([
     { sourceSha: "a".repeat(40) }, { sha256: [manifest.sha256] }, { sha256: "bad" }, { sizeBytes: 0 },
-    { sizeBytes: 65 * 1024 * 1024 }, { filename: "../connector.zip" }, { nodeVersion: "24.0.0" }, { nodeVersion: "22.23.3" }, { token: "not-allowed" },
+    { sizeBytes: 65 * 1024 * 1024 }, { filename: "../connector.zip" }, { nodeVersion: "24.0.0" }, { nodeVersion: "22.23.4" }, { token: "not-allowed" },
   ])("rejects a mismatched or unsafe manifest %j", fields => {
     expect(() => contract.parseConnectorManifest({ ...manifest, ...fields }, sourceSha)).toThrow();
   });

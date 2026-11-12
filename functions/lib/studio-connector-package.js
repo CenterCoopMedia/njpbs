@@ -7,7 +7,7 @@ const isDigest = value => typeof value === "string" && DIGEST.test(value);
 function isSupportedNode(value) {
   if (typeof value !== "string" || !/^22\.\d+\.\d+$/.test(value)) return false;
   const [, minor, patch] = value.split(".").map(Number);
-  return minor > 23 || (minor === 23 && patch >= 4);
+  return minor > 23 || (minor === 23 && patch >= 5);
 }
 
 function assertSourceSha(value) {
