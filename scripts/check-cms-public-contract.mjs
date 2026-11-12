@@ -76,9 +76,9 @@ export async function prepareContractRuntime(directory) {
 
 export async function prepareDependencies({ directory, cwd, environment, candidateSha, previous }) {
   const source = createRequire(join(cwd, "package.json"));
-  const target = contractTarget(environment, process.env, environment === "development"
-    ? source("./functions/lib/publication-target.js").publicationTarget(environment) : undefined);
-  if (environment === "development" && (!target.origin || !process.env.CMS_DEV_ADMIN_ORIGIN)) refuse("capture-target");
+  const configured = environment === "development" ? source("./functions/lib/publication-target.js").publicationTarget(environment) : undefined;
+  if (environment === "development" && (!configured?.origin || !process.env.CMS_DEV_ADMIN_ORIGIN)) refuse("capture-target");
+  const target = contractTarget(environment, process.env, configured);
   const logs = await privateDirectory(directory, "prepare-");
   const install = async root => {
     const home = join(logs, "home"); await mkdir(home, { recursive: true, mode: 0o700 });

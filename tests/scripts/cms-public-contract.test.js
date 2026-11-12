@@ -83,11 +83,12 @@ describe("configured development prepare", () => {
       expect(calls).toEqual(["https://configured-public.example.org/_publication.json", "https://configured-admin.example.org/admin-status.json"]);
     });
   });
-  it.each(["project", "environment", "missing-publication", "missing-admin"])("refuses %s before metadata access", async failure => {
+  it.each(["project", "environment", "missing-publication", "empty-publication", "missing-admin"])("refuses %s before metadata access", async failure => {
     await fixture(async ({ source, prepare, calls }) => {
       if (failure === "project") vi.stubEnv("FIREBASE_PROJECT_ID", "another-project");
       if (failure === "environment") vi.stubEnv("CMS_DEPLOYMENT_ENVIRONMENT", "production");
       if (failure === "missing-publication") await rm(join(source, "functions/lib/publication-target.js"));
+      if (failure === "empty-publication") await writeFile(join(source, "functions/lib/publication-target.js"), "module.exports = { publicationTarget: () => undefined };\n");
       if (failure === "missing-admin") vi.stubEnv("CMS_DEV_ADMIN_ORIGIN", "");
       await expect(prepare()).rejects.toThrow();
       expect(calls).toEqual([]);
