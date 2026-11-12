@@ -4,6 +4,7 @@
       "main"
     ],
     "secrets": [
+      "CCM_PROMOTE_APP_PRIVATE_KEY",
       "CLOUDFLARE_ACCOUNT_ID",
       "CLOUDFLARE_API_TOKEN",
       "CMS_ADMIN_ACCESS_API_TOKEN",

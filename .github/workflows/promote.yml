@@ -1,0 +1,76 @@
+name: Promote production
+run-name: Promote production ${{ inputs.sha }}
+
+on:
+  workflow_dispatch:
+    inputs:
+      sha:
+        description: Full main commit SHA to promote
+        required: true
+        type: string
+
+permissions:
+  contents: read
+  actions: read
+
+concurrency:
+  group: promote-production
+  cancel-in-progress: false
+
+env:
+  CANONICAL_GITHUB_REPOSITORY: ${{ vars.CANONICAL_GITHUB_REPOSITORY }}
+  CANONICAL_GITHUB_REPOSITORY_ID: ${{ vars.CANONICAL_GITHUB_REPOSITORY_ID }}
+
+jobs:
+  promote:
+    if: >-
+      github.event_name == 'workflow_dispatch' &&
+      github.ref == 'refs/heads/main' &&
+      vars.CANONICAL_GITHUB_REPOSITORY != '' &&
+      vars.CANONICAL_GITHUB_REPOSITORY_ID != '' &&
+      github.repository_id == vars.CANONICAL_GITHUB_REPOSITORY_ID &&
+      github.workflow_ref == format('{0}/.github/workflows/promote.yml@refs/heads/main', vars.CANONICAL_GITHUB_REPOSITORY) &&
+      vars.CMS_DEPLOY_OWNER != '' && github.triggering_actor == vars.CMS_DEPLOY_OWNER
+    environment: production
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - name: Validate the selected SHA
+        env:
+          SELECTED_SHA: ${{ inputs.sha }}
+        run: |
+          set -euo pipefail
+          [[ "$SELECTED_SHA" =~ ^[0-9a-f]{40}$ ]] || { echo 'A full lowercase main SHA is required'; exit 1; }
+      - name: Create repository-scoped promotion token
+        id: app
+        uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3
+        with:
+          client-id: ${{ vars.CCM_PROMOTE_APP_CLIENT_ID }}
+          private-key: ${{ secrets.CCM_PROMOTE_APP_PRIVATE_KEY }}
+          owner: ${{ github.repository_owner }}
+          repositories: ${{ github.event.repository.name }}
+          permission-contents: write
+          permission-workflows: write
+      - name: Check out the trusted workflow revision
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          token: ${{ steps.app.outputs.token }}
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+      - name: Require main ancestry and an existing production branch
+        env:
+          SELECTED_SHA: ${{ inputs.sha }}
+        run: |
+          set -euo pipefail
+          git fetch --no-tags origin +refs/heads/main:refs/remotes/origin/main +refs/heads/production:refs/remotes/origin/production
+          git merge-base --is-ancestor "$SELECTED_SHA" origin/main
+          git merge-base --is-ancestor origin/production "$SELECTED_SHA"
+      - name: Require successful main CI for this SHA
+        env:
+          GH_TOKEN: ${{ github.token }}
+          DEPLOY_SHA: ${{ inputs.sha }}
+        run: node .github/scripts/require-main-ci.mjs
+      - name: Fast-forward production
+        env:
+          SELECTED_SHA: ${{ inputs.sha }}
+        run: git push origin "$SELECTED_SHA:refs/heads/production"
