@@ -141,7 +141,7 @@ async function requestTranscript({ firestore, source, request, actor, now = Date
       return { job: attemptSlot.job, cached: true };
     }
     let freeRetryLimits = null;
-    if (request.provider === "local") {
+    if (request.provider === "local" && request.newAttemptOf) {
       freeRetryLimits = await readFreeRetryLimits(tx, firestore, request.newAttemptOf, actor.uid, day);
     }
     const input = transcriptInput(asset);

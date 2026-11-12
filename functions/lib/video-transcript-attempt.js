@@ -38,7 +38,6 @@ async function transcriptAttempt(tx, firestore, asset, source, newAttemptOf, att
 }
 
 async function readAttemptSlot(tx, firestore, asset, source, request) {
-  if (!request.newAttemptOf) return null;
   const id = createHash("sha256").update(JSON.stringify(["transcript-attempt-slot-v1", source.id, source.bucket,
     asset.id, asset.objectKey, asset.objectVersionId, asset.sizeBytes, request.languageCode, request.maxSpeakers])).digest("hex");
   const ref = firestore.collection("mediaSourceTranscriptAttempts").doc(id);

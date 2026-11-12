@@ -271,7 +271,7 @@ async function admit({
       if (parentRef) tx.update(parentRef, { paidFallbackState: "waiting", fallbackTranscriptId: cached.id });
       return { job: cached, cached: true };
     }
-    const attemptSlot = await readAttemptSlot(tx, firestore, asset, source, request);
+    const attemptSlot = request.newAttemptOf ? await readAttemptSlot(tx, firestore, asset, source, request) : null;
     if (attemptSlot?.job) {
       assertAttemptProvider(attemptSlot.job, PROVIDER, { id: credential.id, revision: request.credentialRevision });
       return { job: attemptSlot.job, cached: true };

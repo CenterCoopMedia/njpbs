@@ -97,7 +97,7 @@ describe('free local transcript queue', () => {
     expect((await queueRef.get()).data().activeIds).toHaveLength(500);
   });
 
-  it('uses three document reads with a 499-job queue and rejects job 501 clearly', async () => {
+  it('bounds admission to five reads with a 499-job queue and rejects job 501 clearly', async () => {
     const ids = Array.from({ length: 499 }, (_, i) => `older-${i}`);
     const batch = firestore.batch();
     for (const id of ids) batch.set(jobRef(id), { id, active: true, provider: 'local' });
@@ -111,7 +111,8 @@ describe('free local transcript queue', () => {
         create: (...args) => tx.create(...args), set: (...args) => tx.set(...args),
       })) };
     await enqueue('last', { firestore: measured });
-    expect(reads).toEqual(['mediaSourceAssets/last', `mediaSourceTranscriptJobs/${contract.transcriptId(asset('last'), source.bucket, request('last'))}`, queueRef.path]);
+    expect(reads).toEqual(['mediaSourceAssets/last', `mediaSourceTranscriptJobs/${contract.transcriptId(asset('last'), source.bucket, request('last'))}`,
+      expect.stringMatching(/^mediaSourceTranscriptAttempts\//), 'query', queueRef.path]);
     await expect(enqueue('overflow')).rejects.toMatchObject({ status: 429, message: expect.stringContaining('500 queued or running local transcripts') });
   });
 

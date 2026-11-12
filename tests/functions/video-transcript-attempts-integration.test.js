@@ -7,6 +7,7 @@ import paidJobs from "../../functions/lib/video-transcript-byok-job.js";
 import credentials from "../../functions/lib/video-transcription-credentials.js";
 import renditions from "../../functions/lib/source-media-rendition.js";
 import fallback from "../../functions/lib/video-transcript-paid-fallback.js";
+import localWorker from "../../functions/lib/video-transcript-worker.js";
 import { createHash } from "node:crypto";
 
 const source = { id: "video-library", bucket: "originals", prefix: "", writable: true, access: "active_staff" };
@@ -263,10 +264,36 @@ it("caps free retries at five per UTC day after active and ready cache reuse", a
   expect(blocked.body.error).toBe("You have reached five free transcript retries today");
 });
 
-it("keeps initial local requests outside free retry counters", async () => {
-  const initial = await call("request", { ...identity, ...settings });
+it.each([undefined, "local"])("keeps initial local requests outside free retry counters (provider %s)", async (provider) => {
+  const initial = await call("request", { ...identity, ...settings, ...(provider ? { provider } : {}) });
   expect(initial.statusCode).toBe(200);
   expect((await firestore.collection("mediaSourceTranscriptFreeRetryLimits").get()).size).toBe(0);
+});
+
+it.each(["offline", "failed"])("never routes an initial explicit local request to a paid provider when the worker is %s", async (failure) => {
+  const initial = await call("request", { ...identity, ...settings, provider: "local" });
+  expect(initial.statusCode).toBe(200);
+  const jobRef = ref(initial.body.transcript.id);
+  const job = (await jobRef.get()).data();
+  expect(job).toMatchObject({ provider: "local", requestedProvider: "local", processingPolicy: "local-first-v1" });
+  const now = Date.parse(job.createdAt);
+  if (failure === "offline") {
+    await localWorker.routeLocalFallback({ firestore, ref: jobRef, source, now: now + 120_001, fallbackEnabled: true });
+  } else {
+    const claimed = await localWorker.claimLocalJob({ firestore, source, now });
+    await localWorker.failLocalJob({ firestore, source, now: now + 1, fallbackEnabled: true,
+      request: { jobId: job.id, leaseToken: claimed.localLeaseToken, errorCode: "local_processing_failed" } });
+  }
+  expect((await jobRef.get()).data()).toMatchObject({ provider: "local", requestedProvider: "local", phase: "needs_reconciliation", active: false });
+  expect((await jobRef.get()).data().paidFallbackState).toBeUndefined();
+  expect((await firestore.collection(jobs.TRANSCRIPT_JOBS).get()).size).toBe(1);
+  expect((await firestore.collection("mediaSourceTranscriptFreeRetryLimits").get()).size).toBe(0);
+});
+
+it.each([{ enabled: false }, { localEnabled: false }])("refuses an initial local-only request when its deployed switches are off (%o)", async (switches) => {
+  const result = await call("request", { ...identity, ...settings, provider: "local" }, { configuration: { ...config, ...switches } });
+  expect(result.statusCode).toBe(503);
+  expect((await firestore.collection(jobs.TRANSCRIPT_JOBS).get()).size).toBe(0);
 });
 
 it("fails closed when a free retry counter is malformed", async () => {
@@ -295,13 +322,27 @@ it("reuses already-active paid work when no attempt slot was recorded", async ()
   expect(result.body.transcript.id).toBe(existing.body.transcript.id);
 });
 
-it.each(["local", "amazon-transcribe"])("rejects provider-only %s admission before creating another job", async provider => {
+it.each(["local", "amazon-transcribe"])("rejects provider-only %s admission while another job is active", async provider => {
   const initial = await call("request", { ...identity, ...settings });
   const before = await firestore.collection(jobs.TRANSCRIPT_JOBS).get();
   const result = await call("request", { ...identity, ...settings, provider });
-  expect(initial.statusCode).toBe(200); expect(result.statusCode).toBe(400);
+  expect(initial.statusCode).toBe(200); expect(result.statusCode).toBe(provider === "local" ? 409 : 400);
   expect((await firestore.collection(jobs.TRANSCRIPT_JOBS).get()).size).toBe(before.size);
   expect((await ref(initial.body.transcript.id).get()).data()).toMatchObject({ active: true });
+});
+
+it.each([true, false])("prevents a default request from duplicating initial local-only work (local enabled %s)", async localEnabled => {
+  const initial = await call("request", { ...identity, ...settings, provider: "local" });
+  const result = await call("request", { ...identity, ...settings }, { configuration: { ...config, localEnabled } });
+  expect(initial.statusCode).toBe(200);
+  expect(result.statusCode).toBe(localEnabled ? 200 : 409);
+  if (localEnabled) {
+    expect(result.body.cached).toBe(true);
+    expect(result.body.transcript.id).toBe(initial.body.transcript.id);
+  }
+  const all = await firestore.collection(jobs.TRANSCRIPT_JOBS).get();
+  expect(all.size).toBe(1);
+  expect(all.docs[0].data()).toMatchObject({ active: true, provider: "local", requestedProvider: "local", processingPolicy: "local-first-v1" });
 });
 
 it("shows an active Amazon parent after its newer ElevenLabs child fails preparation", async () => {
