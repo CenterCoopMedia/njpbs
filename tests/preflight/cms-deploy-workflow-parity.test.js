@@ -144,7 +144,7 @@ describe("Route D Cut A boundary placement", () => {
     expect(Object.keys(production.on)).toEqual(["workflow_dispatch"]);
     expect(Object.keys(development.on)).toEqual(["workflow_dispatch"]);
     expect(step(job(deploy, "admin-build"), "Require CMS deploy compatibility floor"))
-      .toContain("node .admin-status-gate/.github/scripts/cms-deploy-compatibility.mjs");
+      .toContain('node "$RUNNER_TEMP/admin-status-gate"/.github/scripts/cms-deploy-compatibility.mjs');
     expect(production.jobs["live-smoke"]["runs-on"]).toBe("ubuntu-24.04");
   });
   it("prepares before authentication and proves after protocol validation before the first provider mutation", () => {
@@ -153,8 +153,13 @@ describe("Route D Cut A boundary placement", () => {
     const auth = steps.findIndex(row => row.name === "Authenticate Firebase deploy service account");
     const protocol = steps.findIndex(row => row.name === "Require the legacy preview protocol before provider mutations");
     expect(prepare).toBeLessThan(auth); expect(auth).toBeLessThan(protocol); expect(protocol).toBeLessThan(proof(steps, "preflight"));
-    for (const name of ["Verify CMS API edge secret IAM and media secret IAM", "Enable verified email and password accounts", "Enable expiring record TTL policies", "Provision CMS API edge origin secret"])
+    for (const name of ["Verify Functions configuration without provider writes", "Verify selected event trigger IAM before mutation"])
       expect(steps.findIndex(row => row.name === name)).toBeGreaterThan(proof(steps, "preflight"));
+    // Provider mutations now run through the component runner in the dependent job.
+    expect(production.jobs.firebase.needs).toContain("firebase-preflight");
+    const mutations = JSON.stringify(production.jobs.firebase.steps);
+    expect(mutations).toContain("node scripts/component-runner.mjs functions prepare");
+    expect(mutations).toContain("node scripts/component-runner.mjs functions deploy");
   });
   it("retains successful upstream summaries when only failed deployment jobs rerun", () => {
     for (const [producer, consumer, name] of [["firebase-preflight", "admin-contract", "cms-public-contract-preflight"],
@@ -237,11 +242,11 @@ describe("Route D Cut A boundary placement", () => {
     expect(source.with).toEqual({ ref: "${{ github.sha }}", path: ".cms-contract-source", "persist-credentials": false });
     const scan = contract.findIndex(row => row.name === "Metered-API source scan for the singleton checker");
     expect(scan).toBeGreaterThan(contract.indexOf(source));
-    expect(contract[scan].run).toBe("node .metered-api-gate/.github/scripts/metered-api-scan.mjs --target-root .cms-contract-source");
+    expect(contract[scan].run).toBe('node "$RUNNER_TEMP/metered-api-gate"/.github/scripts/metered-api-scan.mjs --target-root "$RUNNER_TEMP/cms-contract-source"');
     const prepare = contract.findIndex(row => row.name === "Prepare the singleton contract runtime before credentials");
     const auth = contract.findIndex(row => row.name === "Authenticate Firebase deploy service account");
     expect(prepare).toBeGreaterThan(scan); expect(auth).toBeGreaterThan(prepare); expect(proof(contract, "before-upload")).toBe(auth + 1);
-    for (const row of [contract[prepare], contract[proof(contract, "before-upload")]]) expect(row.run).toContain(".cms-contract-source/scripts/check-cms-public-contract.mjs");
+    for (const row of [contract[prepare], contract[proof(contract, "before-upload")]]) expect(row.run).toContain('$RUNNER_TEMP/cms-contract-source/scripts/check-cms-public-contract.mjs');
     const digest = contract.find(row => row.id === "admin_digest");
     expect(contractJob.outputs.admin_digest).toBe("${{ steps.admin_digest.outputs.value }}");
     const binding = admin.findIndex(row => row.name === "Require the before-upload proof for this exact Admin artifact");
