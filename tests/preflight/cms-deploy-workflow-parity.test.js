@@ -138,8 +138,8 @@ describe("credential-free deploy verification", () => {
 describe("Route D Cut A boundary placement", () => {
   const production = parse(deploy), development = parse(read(".github/workflows/cms-dev-deploy.yml"));
   const proof = (steps, boundary) => steps.findIndex(row => row.name === `Verify the singleton public contract at ${boundary}`);
-  it("adds only the before-upload contract job and keeps triggers and production ancestry admission", () => {
-    expect(Object.keys(production.jobs).sort()).toEqual(["admin-build", "verify", "smoke-manifest", "firebase-preflight", "cms-api", "firebase", "preview-renderer", "admin-contract", "live-smoke", "admin-deploy"].sort());
+  it("isolates both contract jobs and keeps triggers and production ancestry admission", () => {
+    expect(Object.keys(production.jobs).sort()).toEqual(["admin-build", "verify", "smoke-manifest", "firebase-preflight", "cms-api", "firebase", "preview-renderer", "admin-contract", "live-smoke", "admin-deploy", "contract-settlement"].sort());
     expect(Object.keys(development.jobs).sort()).toEqual(["deploy", "preview-renderer"]);
     expect(Object.keys(production.on)).toEqual(["workflow_dispatch"]);
     expect(Object.keys(development.on)).toEqual(["workflow_dispatch"]);
@@ -170,7 +170,7 @@ describe("Route D Cut A boundary placement", () => {
     expect(mutations).toContain("node scripts/component-runner.mjs functions prepare");
     expect(mutations).toContain("node scripts/component-runner.mjs functions deploy");
   });
-  it.each([["firebase-preflight", "preflight"], ["admin-contract", "before-upload"], ["live-smoke", "settlement"]])(
+  it.each([["firebase-preflight", "preflight"], ["admin-contract", "before-upload"], ["contract-settlement", "settlement"]])(
     "supplies authenticated provider and planner inputs at %s", (jobName, boundary) => {
       const steps = production.jobs[jobName].steps;
       const captureAt = proof(steps, boundary);
@@ -194,7 +194,7 @@ describe("Route D Cut A boundary placement", () => {
     });
   it("retains successful upstream summaries when only failed deployment jobs rerun", () => {
     for (const [producer, consumer, name] of [["firebase-preflight", "admin-contract", "cms-public-contract-preflight"],
-      ["admin-contract", "admin-deploy", "cms-public-contract-before-upload"], ["admin-contract", "live-smoke", "cms-public-contract-before-upload"]]) {
+      ["admin-contract", "admin-deploy", "cms-public-contract-before-upload"], ["admin-contract", "contract-settlement", "cms-public-contract-before-upload"]]) {
       const upload = production.jobs[producer].steps.find(row => row.uses?.startsWith("actions/upload-artifact@") && row.with.name === name);
       const download = production.jobs[consumer].steps.find(row => row.uses?.startsWith("actions/download-artifact@") && row.with.name === name);
       expect(upload.with.overwrite).toBe(true);
@@ -257,7 +257,7 @@ describe("Route D Cut A boundary placement", () => {
   });
   it("proves before upload apart from Cloudflare tools and binds the exact uploaded Admin", () => {
     const contractJob = production.jobs["admin-contract"], deployJob = production.jobs["admin-deploy"];
-    const contract = contractJob.steps, admin = deployJob.steps, smoke = production.jobs["live-smoke"].steps;
+    const contract = contractJob.steps, admin = deployJob.steps, settlementJob = production.jobs["contract-settlement"], settlement = settlementJob.steps;
     // The capture follows every backend mutation, and the upload waits for it.
     expect(contractJob.needs).toEqual(deployJob.needs.filter(name => name !== "admin-contract"));
     expect(deployJob.needs).toContain("admin-contract");
@@ -287,14 +287,18 @@ describe("Route D Cut A boundary placement", () => {
       PROVED_RUN_ID: "${{ needs.admin-contract.outputs.proof_run_id }}", PROVED_RUN_ATTEMPT: "${{ needs.admin-contract.outputs.proof_run_attempt }}" });
     expect(admin[binding].run).toContain(digest.run.match(/digest="\$\((.+)\)"/)[1]);
     expect(contractJob.outputs).toMatchObject({ proof_run_id: "${{ steps.admin_digest.outputs.run_id }}", proof_run_attempt: "${{ steps.admin_digest.outputs.run_attempt }}" });
-    expect(proof(smoke, "settlement")).toBeGreaterThan(smoke.findIndex(row => row.name === "Smoke-test the deployed signed-out Admin shell"));
-    for (const steps of [contract, smoke]) {
+    expect(settlementJob.needs).toEqual(["admin-build", "live-smoke"]);
+    expect(settlementJob.if).toBe(production.jobs["live-smoke"].if);
+    expect(settlementJob.environment).toBe("production");
+    expect(JSON.stringify(settlement)).not.toMatch(/cms-smoke-gate|functions smoke|test:boot|ensure-panel-browser-deps|\bwrangler\b/);
+    expect(JSON.stringify(production.jobs["live-smoke"])).not.toContain("FIREBASE_SERVICE_ACCOUNT");
+    for (const steps of [contract, settlement]) {
       const prepare = steps.find(row => row.name === "Prepare the singleton contract runtime before credentials");
       expect(prepare.env.SA).toBeUndefined();
       const capture = steps.find(row => row.name?.startsWith("Verify the singleton public contract"));
       expect(capture.run).toContain("umask 077");
       expect(JSON.stringify(capture)).not.toMatch(/GOOGLE_APPLICATION_CREDENTIALS|service-account\.json/);
-      if (steps === smoke) expect(steps.findIndex(row => row.uses?.startsWith("google-github-actions/auth@")))
+      if (steps === settlement) expect(steps.findIndex(row => row.uses?.startsWith("google-github-actions/auth@")))
         .toBe(steps.indexOf(capture) - 1);
       expect(capture.run).toContain("--previous-summary");
     }
