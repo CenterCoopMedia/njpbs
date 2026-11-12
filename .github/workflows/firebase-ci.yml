@@ -185,7 +185,7 @@ jobs:
         uses: actions/cache@v6
         with:
           path: ~/.cache/firebase/emulators
-          key: ${{ runner.os }}-firebase-emulators-15.31.0
+          key: ${{ runner.os }}-firebase-emulators-15.36.0
       - name: Rules tests
         run: npm run test:rules
       - name: Loader e2e tests
@@ -268,7 +268,7 @@ jobs:
         uses: actions/cache@v6
         with:
           path: ~/.cache/firebase/emulators
-          key: ${{ runner.os }}-firebase-emulators-15.31.0
+          key: ${{ runner.os }}-firebase-emulators-15.36.0
       - name: Functions preflight tests
         if: matrix.shard == 1
         run: npm run test:preflight
@@ -325,7 +325,7 @@ jobs:
         uses: actions/cache@v6
         with:
           path: ~/.cache/firebase/emulators
-          key: ${{ runner.os }}-firebase-emulators-15.26.0
+          key: ${{ runner.os }}-firebase-emulators-15.36.0
       # Pulling the pinned base images and emulator jar took most of a cold 70.8 s case
       # (run 42511735643). Build the same runtime first so the case measures the proof.
       - name: Build the sealed contract runtime image
