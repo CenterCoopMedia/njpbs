@@ -9,7 +9,7 @@ import { Timestamp } from "firebase-admin/firestore";
 import { CONTRACT_SETTINGS, CmsPublicContractError, assertUnchangedPlan, devMutationSelection, contractTarget,
   encodeContractValue, decodeContractValue, writePrivateCapsule, readPrivateCapsule, boundedContractProof,
   contractDigest, contractSummary, recheckContractSummary } from "../../scripts/lib/cms-public-contract.mjs";
-import { devCompletedBaseline, prepareContractRuntime, refusalLine, replayDockerArguments, replayRefusal, restoreRendererArchive, retainRendererArchive } from "../../scripts/check-cms-public-contract.mjs";
+import { devCompletedBaseline, prepareDependencies, prepareContractRuntime, refusalLine, replayDockerArguments, replayRefusal, restoreRendererArchive, retainRendererArchive } from "../../scripts/check-cms-public-contract.mjs";
 import { createCmsPublicationCloudStorage } from "../../site/scripts/cms-publication-cloud-storage.ts";
 import { repositoryFixture } from "../helpers/repository-identity.mjs";
 
@@ -46,6 +46,53 @@ describe("singleton admission and development mutation selection", () => {
     expect(() => contractTarget("production", { FIREBASE_PROJECT_ID: "njpbs-site-dev" })).toThrow(CmsPublicContractError);
     expect(() => contractTarget("production", { FIRESTORE_EMULATOR_HOST: "127.0.0.1:18464" })).toThrow(CmsPublicContractError);
     expect(() => contractTarget("production", { FUNCTIONS_EMULATOR: "false" })).toThrow(CmsPublicContractError);
+  });
+});
+
+describe("configured development prepare", () => {
+  async function fixture(run) {
+    const source = await mkdtemp(join(tmpdir(), "cms-prepare-source-"));
+    const calls = [];
+    try {
+      await mkdir(join(source, "functions/lib"), { recursive: true });
+      await writeFile(join(source, "package.json"), '{"type":"commonjs"}');
+      const template = await readFile(resolve("functions/lib/publication-target.js"), "utf8");
+      expect(template).toContain("https://dev-public.example.org");
+      await writeFile(join(source, "functions/lib/publication-target.js"),
+        template.replace("https://dev-public.example.org", "https://configured-public.example.org"));
+      // npm is the process boundary; this case checks target selection without installing packages.
+      await mkdir(join(source, "bin"));
+      await writeFile(join(source, "bin/npm"), "#!/bin/sh\nexit 0\n", { mode: 0o700 });
+      vi.stubEnv("PATH", `${join(source, "bin")}:${process.env.PATH}`);
+      vi.stubEnv("FIREBASE_PROJECT_ID", "njpbs-site-dev");
+      vi.stubEnv("CMS_DEPLOYMENT_ENVIRONMENT", "development");
+      vi.stubEnv("CMS_DEV_ADMIN_ORIGIN", "https://configured-admin.example.org");
+      vi.stubEnv("CMS_DEV_ACCESS_CLIENT_ID", "synthetic-client");
+      vi.stubEnv("CMS_DEV_ACCESS_CLIENT_SECRET", "synthetic-secret");
+      vi.stubGlobal("fetch", async url => {
+        calls.push(url);
+        return new Response(JSON.stringify({ commitSha: sha, build: { revision: sha } }));
+      });
+      await run({ source, calls, prepare: () => prepareDependencies({ directory: join(source, "state"), cwd: source,
+        environment: "development", candidateSha: sha }) });
+    } finally { vi.unstubAllGlobals(); vi.unstubAllEnvs(); await rm(source, { recursive: true, force: true }); }
+  }
+  it("looks up the configured source publication and Admin metadata instead of the trusted template", async () => {
+    await fixture(async ({ prepare, calls }) => {
+      await prepare();
+      expect(calls).toEqual(["https://configured-public.example.org/_publication.json", "https://configured-admin.example.org/admin-status.json"]);
+    });
+  });
+  it.each(["project", "environment", "missing-publication", "empty-publication", "missing-admin"])("refuses %s before metadata access", async failure => {
+    await fixture(async ({ source, prepare, calls }) => {
+      if (failure === "project") vi.stubEnv("FIREBASE_PROJECT_ID", "another-project");
+      if (failure === "environment") vi.stubEnv("CMS_DEPLOYMENT_ENVIRONMENT", "production");
+      if (failure === "missing-publication") await rm(join(source, "functions/lib/publication-target.js"));
+      if (failure === "empty-publication") await writeFile(join(source, "functions/lib/publication-target.js"), "module.exports = { publicationTarget: () => undefined };\n");
+      if (failure === "missing-admin") vi.stubEnv("CMS_DEV_ADMIN_ORIGIN", "");
+      await expect(prepare()).rejects.toThrow();
+      expect(calls).toEqual([]);
+    });
   });
 });
 
