@@ -3,10 +3,13 @@
 Status: **App route untested.** This document describes the proposed switch;
 committing these files applies no GitHub configuration. Activation requires
 separate approval. The promotion workflow must stay undispatched until then.
-The existing Pages workflow rejects App-bot pushes; complete
-[the deploy admission prerequisite](https://github.com/CenterCoopMedia/njpbs/issues/29)
-before activating this route. Until then, an App promotion would advance the
-branch while Pages deployment jobs skip. Deploy admission is unchanged here.
+Track the remaining activation work and live probes in
+[issue #57](https://github.com/CenterCoopMedia/njpbs/issues/57).
+Complete [the deploy admission prerequisite](https://github.com/CenterCoopMedia/njpbs/issues/29)
+in [PR #54](https://github.com/CenterCoopMedia/njpbs/pull/54) before activating
+this route. It admits the promotion App's `push` to `refs/heads/production` and
+deploys the immutable event SHA, matching this workflow's fast-forward push.
+Deploy admission is unchanged here.
 
 The `production` branch selects a release by fast-forwarding to a green commit
 already on `main`. The only trigger for `promote.yml` is `workflow_dispatch`,
@@ -22,8 +25,16 @@ The workflow run's `head_sha` identifies the main workflow revision, which can
 differ from the selected source. A stale dispatch that would
 move production backward fails the ancestry check or the push.
 
-The GitHub App `ccm-njpbs-promote` (numeric App ID `5705771`) is installed only
-on this repository. Its token may bypass only the update lock below. Keep
+The GitHub App `ccm-njpbs-promote` (numeric App ID `5705771`) has a
+selected-repository installation. On November 12, 2026, the GitHub App and
+organization installation APIs confirmed exactly **Contents: Read and write**,
+**Workflows: Read and write**, and **Metadata: Read**. The Workflows approval
+step is complete; it permits promoting ranges that change workflow files.
+The production environment, App secret, and production rulesets still need
+configuration under separate activation authorization.
+
+Keep the installation restricted to this repository. Its token may bypass
+only the update lock below. Keep
 history and CI protections in a second ruleset with no bypass actors: bypass
 applies to a whole ruleset, so combining these payloads would let the App
 bypass every protection.
@@ -138,42 +149,38 @@ These are future operator steps, not commands executed by this PR. Creating or
 advancing `production` can trigger existing deployment workflows, so branch
 bootstrap and acceptance probes require explicit production authorization.
 
-1. Add **Workflows: Read and write to App 5705771 (Joe approves the permission
-   change)**. Keep Contents: Read and write and its installation restricted to
-   this repository. The current Contents-only grant cannot promote ranges that
-   change workflow files. Approve the installation's expanded permission before
-   trying the route; do not change the App as part of preparing this PR.
-2. Complete [App-push deploy admission](https://github.com/CenterCoopMedia/njpbs/issues/29).
-   The current Pages authorization conditions and script accept only the
-   configured owner. Keep deploy workflows off until this prerequisite is
-   reviewed and tested; an App push alone currently does not deploy the site.
-3. After the draft has been approved for release, merge the reviewed workflow
+1. Complete [App-push deploy admission](https://github.com/CenterCoopMedia/njpbs/issues/29)
+   in [PR #54](https://github.com/CenterCoopMedia/njpbs/pull/54). Set the
+   repository Actions variable `CCM_PROMOTE_APP_SLUG` to `ccm-njpbs-promote` and
+   read it back. It has no default; without it, App-push deployment is refused.
+   Keep deploy workflows off until this prerequisite is reviewed and tested.
+2. After the PR has been approved for release, merge the reviewed workflow
    and wait for the exact main SHA to pass the main-push `CI / ci` job. Record
    that bootstrap SHA and successful run. Do not select an arbitrary PR SHA.
-4. Configure the production environment's exact main-only policy and client ID.
+3. Configure the production environment's exact main-only policy and client ID.
    Read them back, including the absence of tag policies. Keep the private key
    unprovisioned while setting up the branch protections.
-5. Install the no-bypass CI/history ruleset. Under the authorized switch, create
+4. Install the no-bypass CI/history ruleset. Under the authorized switch, create
    `production` at the recorded green main SHA, install the App-only update
    lock, then read back both rulesets and both branch SHAs. Stop if production
    differs from the recorded main commit. The workflow never creates this
    initial branch. Existing production state must be reconciled before this
    step rather than overwritten or force-pushed.
-6. Stream the App key from its approved credential store directly into the
+5. Stream the App key from its approved credential store directly into the
    environment secret setter, without displaying it or writing it to a file.
    Verify secret metadata only. Confirm no repository or organization secret
    supplies this name. This is the credential activation point.
-7. In an explicitly authorized test, prove a main dispatch promotes a newer
+6. In an explicitly authorized test, prove a main dispatch promotes a newer
    green main SHA as a fast-forward. Include a workflow-file change in the
    promoted range to prove the Workflows permission. Record the workflow run
    and production SHA; the App token must not bypass the CI/history ruleset.
-8. Prove refusal for a non-main branch/tag dispatch, an ordinary writer's
+7. Prove refusal for a non-main branch/tag dispatch, an ordinary writer's
    production update, missing or failed CI, a backward update, and deletion.
    Use a separately authorized lab for destructive refusal probes; this PR
    supplies no authority to perform them against production. Preserve the
    exact refusals and source SHAs. Confirm rejected probes leave the branch
    unchanged. Keep the route marked untested until these results exist.
-9. Verify the deployment triggered by the production update and its live source
+8. Verify the deployment triggered by the production update and its live source
    SHA. Retire any superseded manual production-ref update route only after
    this App route and the existing deployment checks have been proved together.
 
