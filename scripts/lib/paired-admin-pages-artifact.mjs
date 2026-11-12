@@ -72,8 +72,7 @@ export async function preparePairedAdminArtifact({ directory, sourceSha, environ
   if (require('wrangler/package.json').version !== '4.134.0') refuseAdminProvider('artifact-toolchain-invalid');
   const root = resolve(directory), rootState = await lstat(root);
   if (!rootState.isDirectory() || rootState.isSymbolicLink()) refuseAdminProvider('artifact-path-invalid');
-  const mimeModule = wranglerRequire('mime');
-  const mime = mimeModule.default ?? mimeModule;
+  const mime = require('mime');
   const { hash } = wranglerRequire('blake3-wasm');
   const files = new Map(), special = new Map();
   let size = 0, count = 0;
