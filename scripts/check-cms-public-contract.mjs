@@ -25,7 +25,7 @@ const DIGEST = /^[a-f0-9]{64}$/;
 const UUID = /^[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}$/;
 const IMAGE_FILE = "cms-public-contract-image.txt";
 const MAX_WIRE = 8 * 1024 * 1024;
-const SOURCE_PATHS = ["admin", "functions", "packages", "config", "cms-api", "preview-renderer", "site/src", "site/scripts", "site/tests/fixtures", "site/package.json", "site/tsconfig.json",
+const SOURCE_PATHS = ["admin", "functions", "packages", "config", "agents/vmix/configuration.mjs", "cms-api", "preview-renderer", "site/src", "site/scripts", "site/tests/fixtures", "site/package.json", "site/tsconfig.json",
   "scripts", "tests/helpers", "tests/setup", "tests/functions/cms-public-contract.test.ts", "package.json", "package-lock.json", "site/package-lock.json", ".npmrc", "firestore.rules", "firestore.indexes.json",
   "firebase.json", "firebase.dev.json", ".firebaserc", "vitest.config.mjs"];
 

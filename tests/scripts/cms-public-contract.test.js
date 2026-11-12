@@ -195,6 +195,8 @@ describe("Docker isolation at the process boundary", () => {
     await cp(resolve("scripts"), join(inputs, "trusted/scripts"), { recursive: true });
     await cp(resolve("functions/lib"), join(inputs, "trusted/functions/lib"), { recursive: true });
     await cp(resolve("config"), join(inputs, "trusted/config"), { recursive: true });
+    await mkdir(join(inputs, "trusted/agents/vmix"), { recursive: true });
+    await cp(resolve("agents/vmix/configuration.mjs"), join(inputs, "trusted/agents/vmix/configuration.mjs"));
     await mkdir(join(inputs, "trusted/node_modules"), { recursive: true });
     await mkdir(join(inputs, "trusted/site/node_modules"), { recursive: true });
     await mkdir(join(inputs, "trusted"), { recursive: true });
