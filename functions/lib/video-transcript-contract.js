@@ -124,7 +124,7 @@ function parseTranscriptRequest(value, { read = false, download = false, variant
     throw new SourceMediaValidationError("Choose a saved clip and a text, caption or soundbite log format");
   }
   if (requesting && ((value.provider !== undefined && !["local", "amazon-transcribe"].includes(value.provider)) ||
-      (value.newAttemptOf !== undefined && !value.provider) || (value.provider !== undefined && !value.newAttemptOf))) {
+      (value.newAttemptOf !== undefined && !value.provider) || (value.provider === "amazon-transcribe" && !value.newAttemptOf))) {
     throw new SourceMediaValidationError("Choose a transcript provider");
   }
   const attempt = requesting ? require("./video-transcript-attempt").parseNewAttempt(value.newAttemptOf, value.attemptKey) : {};

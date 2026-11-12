@@ -926,7 +926,7 @@ describe('provider-specific attempts at the callable boundary', () => {
     Object.assign(store.rows.get(`${jobs.TRANSCRIPT_JOBS}/${pending.body.transcript.id}`), { phase: 'failed', active: false });
     expect((await call(get)).body.transcript.id).toBe(nextId);
   });
-  it.each([{ provider: 'elevenlabs' }, { provider: 'unknown' }, { provider: 'local' }, { provider: 'amazon-transcribe' }, { newAttemptOf: 'a'.repeat(64) }, { provider: 'local', newAttemptOf: 'bad' }])('rejects malformed attempt settings %j before admission', async fields => {
+  it.each([{ provider: 'elevenlabs' }, { provider: 'unknown' }, { provider: 'amazon-transcribe' }, { newAttemptOf: 'a'.repeat(64) }, { provider: 'local', newAttemptOf: 'bad' }])('rejects malformed attempt settings %j before admission', async fields => {
     const store = memoryStore();
     expect((await call(requestHandler(store), { ...request, ...fields })).statusCode).toBe(400);
     expect(store.rows.size).toBe(1);
