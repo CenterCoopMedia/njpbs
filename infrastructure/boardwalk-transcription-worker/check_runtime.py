@@ -13,6 +13,8 @@ from unittest.mock import patch
 import worker
 
 TEXT = 'This is a short English speech sample. Each spoken word has a clear place in time.'
+# Characterization: recorded with the unchanged main worker and trusted model.
+AAC_TRANSCRIPT = 'is in a short English speech sample, each spoken word from a clear place in time.'
 SECOND_CLAUSE = 'Each spoken word has a clear place in time.'
 
 
@@ -73,12 +75,8 @@ def check_fixture(path, args):
         lease, args.asr_model, args.diarization_model)
     words = [word for segment in transcript for word in segment['words']]
     transcript_text = ' '.join(segment['text'] for segment in transcript)
-    if path.suffix == '.wav':
-        assert tokens(transcript_text) == tokens(TEXT), transcript_text
-    else:
-        # AAC changes the synthetic voice's recognition. Check the known speech
-        # anchor and report the complete result rather than demand perfect ASR.
-        assert 'english speech sample' in ' '.join(tokens(transcript_text)), transcript_text
+    expected_transcript = TEXT if path.suffix == '.wav' else AAC_TRANSCRIPT
+    assert tokens(transcript_text) == tokens(expected_transcript), transcript_text
     assert 0 < len(words) <= 200_000
     assert all(0 <= word['startSeconds'] <= word['endSeconds'] <= duration for word in words)
     assert all(0 <= word['confidence'] <= 1 for word in words)
