@@ -3,7 +3,7 @@
 const { isDeepStrictEqual } = require("node:util");
 const { runtimeFields, assertRuntimeSource } = require("./publication-runtime-owner");
 
-const { PUBLIC_DEPLOYMENT_SCHEMA_VERSION, PublicDeploymentStateError, PublicDeploymentFenceError, assertPublishedMediaReadiness, assertMediaLifecycleDeploymentFence, plainObject, isPublicDeploymentIdentifier, isCommitSha, timestampMillis, hasOnlyFields, validDeploymentReceipt, initialPublicDeploymentPointer, assertPublicDeploymentPointer, readPublicDeploymentPointer } = require("./public-deployment-pointer");
+const { PUBLIC_DEPLOYMENT_SCHEMA_VERSION, PublicDeploymentStateError, PublicDeploymentFenceError, assertPublishedMediaReadiness, assertMediaLifecycleDeploymentFence, plainObject, isPublicDeploymentIdentifier, isCommitSha, timestampMillis, hasOnlyFields, validDeploymentReceipt, initialPublicDeploymentPointer, assertPublicDeploymentPointer } = require("./public-deployment-pointer");
 const PUBLIC_BUILD_RESERVATION_FIELDS = [
   "runtime",
   "noBuildStaticInput",
