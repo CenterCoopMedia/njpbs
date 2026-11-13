@@ -388,6 +388,34 @@ describe("published Post reader with the real Firestore emulator", () => {
     expect((await disabled.json()).joinedRecords).toEqual([]);
   });
 
+  it("keeps an authored newsletter block while an opted-out story omits global CTA cards", async () => {
+    const value = document();
+    value.published.metadata.disableStoryCtas = true;
+    value.published.blocks.push({ id: "authored-newsletter", type: "newsletter_signup", visible: true, order: 1,
+      data: { heading: "From this story", newsletterIds: ["authored-weekly"] } });
+    await put("cmsPosts/reader-fixture", value);
+    for (const [id, title] of [["authored-weekly", "Authored weekly"], ["automatic-weekly", "Automatic weekly"]]) {
+      const approved = { type: "newsletter", status: "approved", version: 2, title,
+        signupUrl: `https://example.org/${id}`, body: { type: "doc", content: [] } };
+      await put(`cmsPosts/${id}`, { ...approved, status: "draft", version: 3, title: `Private ${title}` });
+      await put(`cmsVersionHistory/${id}-approval`, { collection: "cmsPosts", documentId: id, action: "approve", after: approved });
+    }
+    const rule = { id: "automatic-weekly", label: "Automatic newsletter", enabled: true, target: { contentTypes: ["post"] },
+      position: { kind: "end" }, content: { type: "newsletter_signup", data: { newsletterIds: ["automatic-weekly"] } } };
+    await put("cmsSettings/story-ctas", { schemaVersion: 2, version: 2, values: { rules: [] }, published: {
+      schemaVersion: 2, sourceVersion: 1, publishedAt: "2026-10-07T12:00:00.000Z", values: { rules: [rule] },
+    } });
+
+    const response = await call(authenticated());
+    expect(response.status).toBe(200);
+    const read = await response.json();
+    expect(read.document.published.metadata.disableStoryCtas).toBe(true);
+    expect(read.document.published.blocks).toEqual(value.published.blocks);
+    expect(read.joinedRecords.map((record: { id: string }) => record.id)).toEqual(["authored-weekly"]);
+    expect(read.joinedRecords[0].approvedLibraryVersion.title).toBe("Authored weekly");
+    expect(JSON.stringify(read)).not.toMatch(/Automatic weekly|Private Authored weekly/);
+  });
+
   it("keeps shadow Posts available when a built-in Page has an unmigrated block-only snapshot", async () => {
     await put("cmsPosts/reader-fixture", document());
     // The publisher's legacy Page fixture has no document-level publishAt.

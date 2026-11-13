@@ -43,7 +43,7 @@ const {
 } = Astro.props as Props;
 const post = entry.data;
 const settings = Astro.locals.cmsRender?.content.settings ?? (await getCollection("cmsPublicSiteChrome")).map(item => item.data);
-const blocks = storyCtaComposition(post.blocks, settings).body;
+const blocks = storyCtaComposition(post.blocks, settings, { optOut: post.disableStoryCtas }).body;
 const recordCards = renderRecordCards(Astro.locals.cmsRender, Astro.locals.cmsRender
   ? []
   : (await getCollection("cmsRecordCards")).map(item => item.data));

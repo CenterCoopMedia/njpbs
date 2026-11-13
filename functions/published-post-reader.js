@@ -333,7 +333,7 @@ async function readPublishedPost({ firestore, slug, now, transaction, includeChr
       Object.assign(joinedSafe, selectedAssets({ assetIds: extraAssetIds }, projected));
     }
     const joinedAssets = extraAssetIds.filter(id => joinedSafe[id]).map(id => ({ id, ...joinedSafe[id] }));
-    const ctaCards = cardsOnly ? [] : await require("./lib/story-cta-dependencies").readStoryCtaCards({
+    const ctaCards = cardsOnly || published.metadata.disableStoryCtas === true ? [] : await require("./lib/story-cta-dependencies").readStoryCtaCards({
       firestore, transaction: tx, bodyIds: recordIds, settings: chrome.settings?.find(setting => setting.id === "story-ctas") });
     const result = { kind: cardsOnly ? "published-post-card" : "published-post", document: { id: owner.id, status: "published", publiclyVisible: true, deleted: false,
       publishAt: published.publishedAt, published }, assets: [...assetIds.filter(id => safeAssets[id]).map(id => ({ id, ...safeAssets[id] })), ...joinedAssets],

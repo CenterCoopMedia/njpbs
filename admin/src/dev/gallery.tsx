@@ -1615,7 +1615,9 @@ function CustomShelfGallery() {
 }
 
 function PostPresentationGallery() {
-  const [stored, setStored] = useState<Record<string, unknown>>({ title: "A walk along the river", tags: ["New Jersey"], blocks: [] });
+  const optOut = new URLSearchParams(window.location.search).get("storyCtas") === "off";
+  const [stored, setStored] = useState<Record<string, unknown>>({ title: "A walk along the river", tags: ["New Jersey"], blocks: [],
+    ...(optOut ? { disableStoryCtas: true } : {}) });
   const [opened, setOpened] = useState(stored);
   const [revision, setRevision] = useState(0);
   return <div className="content-studio">

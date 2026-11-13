@@ -74,14 +74,23 @@ describe("story CTA settings boundary", () => {
 });
 
 describe("end-of-story CTA insertion", () => {
+  it("leaves authored CTA blocks intact when the story opts out of every automatic position", () => {
+    const manual: PageBlock = { ...rule().content, id: "manual-appeal", order: 1, visible: true };
+    const body = [paragraph, manual];
+    const rules = [rule(), after(1), rule({ id: "start", position: { kind: "start" } })];
+    expect(insertStoryCtas(body, rules, { optOut: true })).toEqual(body);
+    const registry = projectStoryCtas({ version: 4, published: { ...published(), schemaVersion: 2, values: { rules } } })!.data;
+    expect(storyCtaComposition(body, [registry], { optOut: true })).toEqual({ body, afterUpdates: [] });
+    expect(storyCtaComposition(body, [registry], { liveBlog: true, optOut: true })).toEqual({ body, afterUpdates: [] });
+  });
   it("places live-blog end CTAs after the update stream, leaving the intro intact", () => {
     const registry = projectStoryCtas({ version: 4, published: published() })!.data;
     const input = [{ ...paragraph, id: "story-cta-donate" }];
-    const output = storyCtaComposition(input, [registry], true);
+    const output = storyCtaComposition(input, [registry], { liveBlog: true });
     expect(output.body).toEqual(input);
     expect(output.afterUpdates.map(block => block.type)).toEqual(["support_appeal"]);
     expect(output.afterUpdates[0].id).toBe("story-cta-donate-cta");
-    expect(storyCtaComposition([], [registry], true).afterUpdates.map(block => block.type)).toEqual(["support_appeal"]);
+    expect(storyCtaComposition([], [registry], { liveBlog: true }).afterUpdates.map(block => block.type)).toEqual(["support_appeal"]);
   });
   it("inserts after the body without editing its saved blocks", () => {
     const input = structuredClone([paragraph]);
@@ -95,7 +104,7 @@ describe("end-of-story CTA insertion", () => {
   });
   it("leaves disabled rules and pages unchanged", () => {
     expect(insertStoryCtas([paragraph], [rule({ enabled: false })])).toEqual([paragraph]);
-    expect(insertStoryCtas([paragraph], [rule()], "page")).toEqual([paragraph]);
+    expect(insertStoryCtas([paragraph], [rule()], { contentType: "page" })).toEqual([paragraph]);
   });
   it("keeps list order and avoids collisions with authored ids", () => {
     const output = insertStoryCtas([{ ...paragraph, id: "story-cta-donate" }], [rule(), rule({ id: "second" })]);
@@ -177,7 +186,7 @@ describe("paragraph positions from issue 72", () => {
   it("keeps start and paragraph CTAs in live-blog intros and end CTAs below updates", () => {
     const rules = [rule({ id: "last" }), after(1), rule({ id: "first", position: { kind: "start" } })];
     const registry = projectStoryCtas({ version: 4, published: { ...published(), schemaVersion: 2, values: { rules } } })!.data;
-    const result = storyCtaComposition([prose("intro", [p("One"), p("Two")])], [registry], true);
+    const result = storyCtaComposition([prose("intro", [p("One"), p("Two")])], [registry], { liveBlog: true });
     expect(labels(result.body)).toEqual(["support_appeal", "One", "support_appeal", "Two"]);
     expect(result.afterUpdates.map(block => block.id)).toEqual(["story-cta-last"]);
   });

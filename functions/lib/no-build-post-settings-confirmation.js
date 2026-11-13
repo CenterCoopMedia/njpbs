@@ -33,8 +33,11 @@ async function postSettingsCoverage({ firestore, transaction, identity, target, 
   const recordId = identity.recordId ?? identity.documentId;
   const ctaSettings = recordId ? await transaction.get(firestore.doc("cmsSettings/story-ctas")) : null;
   const ctaIds = require("./story-cta-dependencies").storyCtaNewsletterIds(ctaSettings?.data());
-  const required = rows.docs.filter(row => publiclyVisible(row.data()) &&
-    (!recordId || joinedRecordIds(row.data().published.blocks).includes(recordId) || ctaIds.includes(recordId)))
+  const required = rows.docs.filter(row => {
+    const document = row.data(), published = document.published;
+    return publiclyVisible(document) && (!recordId || joinedRecordIds(published.blocks).includes(recordId) ||
+      published.metadata.disableStoryCtas !== true && ctaIds.includes(recordId));
+  })
     .sort((a, b) => a.id.localeCompare(b.id));
   const missingPosts = [];
   const entries = [];
