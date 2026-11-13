@@ -1,3 +1,5 @@
+.story-cta-settings .settings-section-fields { container: story-cta-fields / inline-size; }
+
 .story-cta-settings__layout {
   display: grid;
   grid-template-columns: minmax(12rem, 0.8fr) minmax(0, 1.6fr);
@@ -127,11 +129,11 @@
   background: var(--color-surface-page);
 }
 
-@container settings-form (max-width: 700px) {
+@container story-cta-fields (max-width: 700px) {
   .story-cta-settings__layout { grid-template-columns: minmax(0, 1fr); }
 }
 
-@container settings-form (max-width: 420px) {
+@container story-cta-fields (max-width: 420px) {
   .story-cta-settings__list > li { grid-template-columns: minmax(0, 1fr); }
   .story-cta-settings__rule-actions { justify-content: flex-start; }
 }
