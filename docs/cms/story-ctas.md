@@ -35,6 +35,20 @@ draft is ready. Publication updates the public settings context and dependent
 story output through the existing fast settings publication. It does not write
 automatic blocks into saved stories and does not require a code deployment.
 
+## Skip automatic CTAs on one story
+
+Open the Post metadata panel and turn on **Skip automatic CTAs** for sponsored
+or sensitive coverage. Save and publish the Post. The published story then omits
+every automatic support appeal and newsletter rule. The setting does not remove
+support appeals, newsletter signups or other calls to action that an editor added
+to the story body.
+
+The saved draft choice does not change the public story until that Post is
+published. Turn the option off, save and publish again to restore the current
+automatic rules. Newsletter approval and withdrawal updates skip opted-out
+stories when the newsletter appears only in a global rule. They still update an
+opted-out story that contains an authored block for that newsletter.
+
 ## Stored rule contract
 
 The `story-ctas` settings document stores an ordered list of rules. Publish its
@@ -81,7 +95,9 @@ The existing settings publication updates the public context and dependent story
 outputs without a code deployment or full site build. Both compiled public
 rendering and full artifact rendering consume the same rule contract.
 Newsletter approval and withdrawal confirmation include stories that reference
-the card through an enabled CTA rule, even when their authored body has no card.
+the card through an enabled CTA rule, even when their authored body has no card,
+unless the published story has opted out. Authored card references remain part of
+confirmation for opted-out stories.
 Static story routes use the existing request-time context adapter once the CTA
 settings document exists. Turning all rules off keeps that adapter active so
 an older built appeal cannot reappear.

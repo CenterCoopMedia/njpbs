@@ -39,6 +39,14 @@ async function fixture(document = post()) {
   await db.doc("cmsVersionHistory/newsletter-approval").set({ collection: "cmsPosts", documentId: "newsletter-one", action: "approve", after: approved });
   return () => consumer.readCodePostConsumer({ firestore: db, path, rendererSha, currentCodeRequest: boundary!.request });
 }
+async function publishGlobalNewsletterRule() {
+  await db.doc("cmsSettings/story-ctas").set({ version: 1, schemaVersion: 2, values: { rules: [] }, published: {
+    schemaVersion: 2, sourceVersion: 1, publishedAt: "2026-10-07T12:00:00.000Z", values: { rules: [{
+      id: "weekly", label: "Newsletter", enabled: true, target: { contentTypes: ["post"] }, position: { kind: "end" },
+      content: { type: "newsletter_signup", data: { newsletterIds: ["newsletter-one"] } },
+    }] },
+  } });
+}
 beforeAll(() => {
   if (!/^127\.0\.0\.1:\d+$/.test(process.env.FIRESTORE_EMULATOR_HOST ?? "") ||
       process.env.GCLOUD_PROJECT !== "demo-njpbs") throw new Error("Use the local demo Firestore emulator.");
@@ -128,18 +136,39 @@ it.each([true, false])("refreshes a static story with global end rules, includin
 it("refreshes a CTA-only newsletter reference after approval and withdrawal", async () => {
   const document = post(); document.published.blocks.pop();
   const read = await fixture(document);
-  await db.doc("cmsSettings/story-ctas").set({ version: 1, schemaVersion: 2, values: { rules: [] }, published: {
-    schemaVersion: 2, sourceVersion: 1, publishedAt: "2026-10-07T12:00:00.000Z", values: { rules: [{
-      id: "weekly", label: "Newsletter", enabled: true, target: { contentTypes: ["post"] }, position: { kind: "end" },
-      content: { type: "newsletter_signup", data: { newsletterIds: ["newsletter-one"] } },
-    }] },
-  } });
+  await publishGlobalNewsletterRule();
   expect((await read()).published.joinedRecords[0].approvedLibraryVersion.title).toBe("Approved newsletter");
   await db.doc("cmsVersionHistory/newsletter-next").set({ collection: "cmsPosts", documentId: "newsletter-one", action: "approve",
     after: { type: "newsletter", status: "approved", version: 8, title: "Current newsletter", signupUrl: "https://example.org/current" } });
   expect((await read()).published.joinedRecords[0].approvedLibraryVersion.title).toBe("Current newsletter");
   await db.doc("cmsPosts/newsletter-one").update({ status: "archived" });
   expect((await read()).published.joinedRecords).toEqual([]);
+  const capture = await consumer.captureCodePostConsumers({ firestore: db, rendererSha, request: boundary!.request });
+  const coverage = await db.runTransaction(transaction => postSettingsConfirmation.postSettingsCoverage({ firestore: db, transaction,
+    identity: { recordId: "newsletter-one", rendererSha, contextRevision: 4, contextDigest: context.publicContextDigest(4) },
+    target: publicationTarget("development"), codeCapture: capture }), { readOnly: true });
+  expect(coverage.entries.map((entry: any) => entry.postId)).toEqual(["shadow-fixture"]);
+  expect(coverage.missingPosts).toEqual([]);
+});
+
+it("excludes an opted-out story from CTA-only newsletter settings coverage", async () => {
+  const document = post();
+  document.published.blocks.pop();
+  document.published.metadata.disableStoryCtas = true;
+  await fixture(document);
+  await publishGlobalNewsletterRule();
+  const coverage = await db.runTransaction(transaction => postSettingsConfirmation.postSettingsCoverage({ firestore: db, transaction,
+    identity: { recordId: "newsletter-one", rendererSha, contextRevision: 4, contextDigest: context.publicContextDigest(4) },
+    target: publicationTarget("development") }), { readOnly: true });
+  expect(coverage.entries).toEqual([]);
+  expect(coverage.missingPosts).toEqual([]);
+});
+
+it("keeps an opted-out story in settings coverage for its authored newsletter block", async () => {
+  const document = post();
+  document.published.metadata.disableStoryCtas = true;
+  await fixture(document);
+  await publishGlobalNewsletterRule();
   const capture = await consumer.captureCodePostConsumers({ firestore: db, rendererSha, request: boundary!.request });
   const coverage = await db.runTransaction(transaction => postSettingsConfirmation.postSettingsCoverage({ firestore: db, transaction,
     identity: { recordId: "newsletter-one", rendererSha, contextRevision: 4, contextDigest: context.publicContextDigest(4) },
