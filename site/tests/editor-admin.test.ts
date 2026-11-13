@@ -985,6 +985,7 @@ describe("record field descriptors", () => {
       "date",
       "recordMeaningfulUpdate",
       "showUpdatedDate",
+      "disableStoryCtas",
       "coverageLabelId",
       "showInHomeHero",
       "spotlightNews",
