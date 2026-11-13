@@ -59,12 +59,17 @@ export function SettingsPreviewWidthControls({ mode, onChange }: {
   </div>;
 }
 
-export function SettingsPreviewSummary({ html }: { html: string }) {
+export function SettingsPreviewSummary({ html, textOnly = false }: { html: string; textOnly?: boolean }) {
   const summary = useRef<HTMLDivElement>(null);
   useLayoutEffect(() => {
     // The text alternative stays readable to AT without adding invisible Tab stops.
     summary.current?.querySelectorAll("a").forEach(link => { link.tabIndex = -1; });
   }, [html]);
+  if (textOnly) {
+    const document = typeof DOMParser === "undefined" ? null : new DOMParser().parseFromString(html, "text/html");
+    const text = document ? Array.from(document.querySelectorAll("h1, h2, h3, h4, p, li"), node => node.textContent).join(" ") : "";
+    return <p className="sr-only">{text}</p>;
+  }
   return <div className="sr-only" ref={summary} dangerouslySetInnerHTML={{ __html: html }} onClick={event => {
     if ((event.target as Element).closest("a")) event.preventDefault();
   }} />;

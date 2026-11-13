@@ -109,6 +109,20 @@ const newsletterSources = {
 };
 
 describe("Story CTA settings", () => {
+  it("keeps focus on a remaining rule or Add after keyboard removal", async () => {
+    render(<StoryCtaSettings {...transport({ load: vi.fn(async () => response({ rules: [appealRule(), { ...appealRule(), id: "second", label: "Second appeal" }] })) })} />);
+    await screen.findByRole("checkbox", { name: "Enabled on stories" });
+    fireEvent.click(screen.getByRole("button", { name: "Second appeal Enabled" }));
+    const removeFirst = screen.getByRole("button", { name: "Remove End-of-story support appeal" });
+    removeFirst.focus();
+    fireEvent.click(removeFirst);
+    expect(screen.getByRole("button", { name: "Second appeal Enabled" })).toHaveFocus();
+    const removeLast = screen.getByRole("button", { name: "Remove Second appeal" });
+    removeLast.focus();
+    fireEvent.click(removeLast);
+    expect(screen.getByRole("button", { name: "Add story CTA rule" })).toHaveFocus();
+    expect(screen.queryByRole("heading", { name: "Sample New Jersey story" })).not.toBeInTheDocument();
+  });
   it("loads a valid version 1 end rule, toggles its preview, saves through version 2, and publishes", async () => {
     const versionOne = values();
     const api = transport({ load: vi.fn(async () => response(versionOne, 4, 1)) });

@@ -274,14 +274,14 @@ function SampleStoryPreview({ rules }: { rules: readonly StoryCtaRule[] }) {
       styles={previewStyles}
       title={`Story CTA ${mode} sample preview`}
     />
-    <SettingsPreviewSummary html={html} />
+    <SettingsPreviewSummary html={html} textOnly />
     <Button aria-haspopup="dialog" onClick={() => setOpen(true)}>Open full-size sample</Button>
     {open ? <ComponentEditorDialog open={active} onClose={() => setOpen(false)} title="Full-size sample story preview"
       description="Review the automatic story calls to action at the selected public width." className="settings-banner-dialog"
       footerNote={null} closeLabel="Close preview" closeActionLabel="Close full-size sample preview">
       <SettingsPreviewWidthControls mode={mode} onChange={setMode} />
       <FittedSettingsPreview html={html} mode={mode} styles={previewStyles} title={`Story CTA ${mode} full-size sample preview`} />
-      <SettingsPreviewSummary html={html} />
+      <SettingsPreviewSummary html={html} textOnly />
     </ComponentEditorDialog> : null}
     <p className="editor-field-help">The divider in this sample does not count toward an after-paragraph position. Optional newsletter images are omitted from this preview.</p>
   </>;
@@ -300,7 +300,8 @@ function StoryCtaSettingsEditor({ load, save, publish }: Omit<StoryCtaSettingsTr
   const prefix = useId();
   const ruleEditor = useRef<HTMLFieldSetElement>(null);
   const ruleButtons = useRef(new Map<string, HTMLButtonElement>());
-  const focusTarget = useRef<"name" | "content" | "selection" | null>(null);
+  const addRuleButton = useRef<HTMLButtonElement>(null);
+  const focusTarget = useRef<"name" | "content" | "selection" | "add" | null>(null);
   const { publication, observe, retry, retrying, refresh, needsRefresh } = useSettingsPublication(
     load,
     sourceVersion => publish({ id: STORY_CTAS_SETTINGS_ID, baseVersion: sourceVersion }),
@@ -325,13 +326,14 @@ function StoryCtaSettingsEditor({ load, save, publish }: Omit<StoryCtaSettingsTr
 
   const selected = draft.rules.find(rule => rule.id === selectedId);
   useEffect(() => {
-    if (!selected || !focusTarget.current) return;
+    if (!focusTarget.current) return;
     const target = focusTarget.current;
     focusTarget.current = null;
-    if (target === "selection") ruleButtons.current.get(selected.id)?.focus();
+    if (target === "add") addRuleButton.current?.focus();
+    else if (target === "selection" && selected) ruleButtons.current.get(selected.id)?.focus();
     else if (target === "name") document.getElementById(`${prefix}-name`)?.focus();
     else ruleEditor.current?.querySelector<HTMLElement>(".story-cta-settings__content input, .story-cta-settings__content textarea, .story-cta-settings__content select, .story-cta-settings__content button")?.focus();
-  }, [prefix, selected?.content.type, selected?.id]);
+  }, [prefix, selected?.content.type, selected?.id, draft.rules.length]);
 
   const validationError = validateCmsSettingsValues(currentSchema, draft);
   const dirty = Boolean(ready && !same(draft, ready.values));
@@ -362,7 +364,7 @@ function StoryCtaSettingsEditor({ load, save, publish }: Omit<StoryCtaSettingsTr
     const remaining = draft.rules.filter((_, at) => at !== index);
     const next = remaining[index] ?? remaining[index - 1];
     replaceRules(remaining);
-    focusTarget.current = next ? "selection" : null;
+    focusTarget.current = next ? "selection" : "add";
     setSelectedId(next?.id);
   }
 
@@ -440,7 +442,7 @@ function StoryCtaSettingsEditor({ load, save, publish }: Omit<StoryCtaSettingsTr
         <div className="story-cta-settings__layout">
           <div className="story-cta-settings__rules">
             <div className="story-cta-settings__list-heading"><h3>Rules</h3>
-              <ActionControl action="add-item" accessibleName="Add story CTA rule" disabled={pending !== null || draft.rules.length >= MAX_STORY_CTA_RULES} onClick={add} /></div>
+              <ActionControl ref={addRuleButton} action="add-item" accessibleName="Add story CTA rule" disabled={pending !== null || draft.rules.length >= MAX_STORY_CTA_RULES} onClick={add} /></div>
             {draft.rules.length ? <ol className="story-cta-settings__list">{draft.rules.map((rule, index) => <li key={rule.id}>
               <Button
                 aria-pressed={rule.id === selectedId}
