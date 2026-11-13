@@ -24,6 +24,7 @@ import {
 } from "../../../packages/content-core/src/public-record-kinds.ts";
 import {
   COVERAGE_LABELS_SETTINGS_ID,
+  STORY_CTAS_SETTINGS_ID,
   PUBLIC_HOMEPAGE_BANNER_SETTINGS_ID,
   PUBLIC_SITE_CHROME_SETTINGS_ID,
   NJ_DECIDES_SETTINGS_ID,
@@ -109,6 +110,7 @@ const SETTINGS_FALLBACK_FIELDS = new Set(["documentId", "sourceVersion"]);
 // The public settings documents a build may read. Each contributes to every
 // page from the root identity and owns no route of its own.
 const PUBLIC_SETTINGS_IDS: ReadonlySet<string> = new Set([
+  STORY_CTAS_SETTINGS_ID,
   COVERAGE_LABELS_SETTINGS_ID,
   NJ_DECIDES_SETTINGS_ID,
   PUBLIC_HOMEPAGE_BANNER_SETTINGS_ID,
@@ -118,12 +120,13 @@ const PUBLIC_SETTINGS_IDS: ReadonlySet<string> = new Set([
 // Only navigation and header chrome have a source default. The banner fails a
 // strict build instead.
 const FALLBACK_SETTINGS_IDS: ReadonlySet<string> = new Set([
+  STORY_CTAS_SETTINGS_ID,
   COVERAGE_LABELS_SETTINGS_ID,
   NJ_DECIDES_SETTINGS_ID,
   PUBLIC_SITE_CHROME_SETTINGS_ID,
   SITE_NAVIGATION_SETTINGS_ID,
 ]);
-type FallbackSettingsId = typeof COVERAGE_LABELS_SETTINGS_ID | typeof PUBLIC_SITE_CHROME_SETTINGS_ID | typeof SITE_NAVIGATION_SETTINGS_ID | typeof NJ_DECIDES_SETTINGS_ID;
+type FallbackSettingsId = typeof STORY_CTAS_SETTINGS_ID | typeof COVERAGE_LABELS_SETTINGS_ID | typeof PUBLIC_SITE_CHROME_SETTINGS_ID | typeof SITE_NAVIGATION_SETTINGS_ID | typeof NJ_DECIDES_SETTINGS_ID;
 const FAMILY_FIELDS = new Set(["collection", "complete", "artifacts"]);
 const ARTIFACT_FIELDS = new Set([
   "documentId",
@@ -185,6 +188,7 @@ export interface PublicArtifactPageInput {
 
 export interface PublicArtifactSettingsInput {
   documentId:
+    | typeof STORY_CTAS_SETTINGS_ID
     | typeof COVERAGE_LABELS_SETTINGS_ID
     | typeof NJ_DECIDES_SETTINGS_ID
     | typeof PUBLIC_HOMEPAGE_BANNER_SETTINGS_ID

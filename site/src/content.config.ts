@@ -18,6 +18,7 @@ import { publicHomepageBannerLoader } from "./lib/public-homepage-banner";
 import { siteNavigationLoader } from "./lib/site-navigation";
 import { publicSiteChromeLoader } from "./lib/public-site-chrome";
 import { isCoverageLabelsBuildData, type CoverageLabelsBuildData } from "../../packages/content-core/src/coverage-labels.ts";
+import { isStoryCtasBuildData, type StoryCtasBuildData } from "../../packages/content-core/src/story-ctas.ts";
 import { isNjDecidesBuildData, type NjDecidesBuildData } from "./lib/nj-decides-settings";
 import type {
   SiteNavigationColumn,
@@ -361,7 +362,7 @@ const cmsSiteNavigation = defineCollection({
 // default when this collection is empty.
 const cmsPublicSiteChrome = defineCollection({
   loader: cmsPreviewExportLoader("cmsPublicSiteChrome") ?? publicSiteChromeLoader(previewContent),
-  schema: z.union([z.custom<CoverageLabelsBuildData>(isCoverageLabelsBuildData), z.custom<NjDecidesBuildData>(isNjDecidesBuildData), z.object({
+  schema: z.union([z.custom<StoryCtasBuildData>(isStoryCtasBuildData), z.custom<CoverageLabelsBuildData>(isCoverageLabelsBuildData), z.custom<NjDecidesBuildData>(isNjDecidesBuildData), z.object({
     settingId: z.literal("public-site-chrome"),
     newsletterEnabled: z.boolean(),
     newsletterLabel: z.string(),

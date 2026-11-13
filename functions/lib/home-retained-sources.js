@@ -4114,6 +4114,29 @@ function validatePostsBrowse(value) {
   return total > 600 ? "Posts browsing can arrange at most 600 subjects; other subjects remain searchable." : null;
 }
 
+// packages/content-core/src/story-cta-rules.ts
+var MAX_STORY_CTA_RULES = 20;
+var object7 = (value) => value !== null && typeof value === "object" && !Array.isArray(value);
+var only = (value, keys2) => Object.keys(value).every((key2) => keys2.includes(key2));
+function validateStoryCtaRules(value) {
+  if (!Array.isArray(value) || value.length > MAX_STORY_CTA_RULES) return "Use at most 20 story CTA rules.";
+  const ids = /* @__PURE__ */ new Set();
+  for (const rule of value) {
+    if (!object7(rule) || !only(rule, ["id", "label", "enabled", "target", "position", "content"]) || typeof rule.id !== "string" || !/^[a-z0-9][a-z0-9-]{0,79}$/.test(rule.id) || ids.has(rule.id)) return "Each rule needs a unique valid id.";
+    ids.add(rule.id);
+    if (typeof rule.label !== "string" || !rule.label.trim() || rule.label !== rule.label.trim() || rule.label.length > 100 || /[\u0000-\u001f\u007f]/.test(rule.label)) return "Give each rule a name of at most 100 characters.";
+    if (typeof rule.enabled !== "boolean") return "Rule enabled must be a boolean.";
+    if (!object7(rule.target) || !only(rule.target, ["contentTypes"]) || !Array.isArray(rule.target.contentTypes) || rule.target.contentTypes.length !== 1 || rule.target.contentTypes[0] !== "post") return "Rules can target stories only.";
+    if (!object7(rule.position) || !only(rule.position, ["kind"]) || rule.position.kind !== "end") return "Choose the end of the story body.";
+    const content = rule.content;
+    if (!object7(content) || !only(content, ["type", "data"]) || content.type !== "support_appeal" || !object7(content.data)) return "Choose a support appeal block.";
+    if (content.data.backgroundImageAssetId) return "Automatic appeals use text and a button. Add images in the story body.";
+    const parsed = parseBlocks([{ id: "cta", order: 0, visible: true, ...content }]);
+    if (!parsed.ok) return "Complete the CTA block with a safe link and its required text.";
+  }
+  return null;
+}
+
 // packages/content-core/src/cms-settings.ts
 var MAX_CMS_SETTINGS_FIELDS = 50;
 var MAX_CMS_SETTINGS_FIELD_NAME_BYTES = 128;
@@ -4124,6 +4147,7 @@ var NEWSROOM_HOME_SETTINGS_ID = "newsroom-home";
 var NEWSROOM_MILESTONE_SETTINGS_ID = "newsroom-milestone";
 var NJ_DECIDES_SETTINGS_ID = "nj-decides-brand";
 var COVERAGE_LABELS_SETTINGS_ID = "coverage-labels";
+var STORY_CTAS_SETTINGS_ID = "story-ctas";
 var MAX_COVERAGE_LABELS = 100;
 function validateCoverageLabels(value) {
   if (!Array.isArray(value) || value.length > MAX_COVERAGE_LABELS) return "Coverage labels must be a list of at most 100 labels.";
@@ -4238,6 +4262,9 @@ var DEFAULT_SITE_NAVIGATION = deepFreeze({
   ]
 });
 var CMS_SETTINGS_SCHEMAS = Object.freeze({
+  [STORY_CTAS_SETTINGS_ID]: Object.freeze({ currentVersion: 1, versions: Object.freeze({
+    1: Object.freeze({ schemaVersion: 1, fields: Object.freeze({ rules: Object.freeze({ kind: "storyCtaRules", required: true }) }) })
+  }) }),
   [COVERAGE_LABELS_SETTINGS_ID]: Object.freeze({ currentVersion: 1, versions: Object.freeze({
     1: Object.freeze({ schemaVersion: 1, fields: Object.freeze({ labels: Object.freeze({ kind: "coverageLabels", required: true }) }) })
   }) }),
@@ -4804,6 +4831,7 @@ function cloneNavigationLink(link3) {
   };
 }
 function cloneSettingsValue(definition, value) {
+  if (definition.kind === "storyCtaRules") return structuredClone(value);
   if (definition.kind === "postsBrowse") return JSON.parse(JSON.stringify(value));
   if (definition.kind === "coverageLabels" && Array.isArray(value)) return value.map((label) => ({ ...label }));
   if (definition.kind === "navigationLinks" && Array.isArray(value)) {
@@ -4880,7 +4908,7 @@ function isCmsSettingsFieldDefinition(definition) {
       Number(definition.hrefMaxBytes)
     ) && keys2.size === 0;
   }
-  return (definition.kind === "boolean" || definition.kind === "assetId" || definition.kind === "coverageLabels" || definition.kind === "postsBrowse") && keys2.size === 0;
+  return (definition.kind === "boolean" || definition.kind === "assetId" || definition.kind === "coverageLabels" || definition.kind === "postsBrowse" || definition.kind === "storyCtaRules") && keys2.size === 0;
 }
 function schemaError(schema) {
   if (!plainObject2(schema) || !positiveVersion(schema.schemaVersion) || !plainObject2(schema.fields) || Object.keys(schema).some(
@@ -4965,6 +4993,11 @@ function validateCmsSettingsValues(schema, values) {
     switch (definition.kind) {
       case "postsBrowse": {
         const error = validatePostsBrowse(value);
+        if (error) return error;
+        break;
+      }
+      case "storyCtaRules": {
+        const error = validateStoryCtaRules(value);
         if (error) return error;
         break;
       }
@@ -5143,6 +5176,13 @@ function isCoverageLabelsBuildData(value) {
   return Object.keys(data).every((key2) => ["settingId", "labels", "sourceVersion", "publishedAt"].includes(key2)) && data.settingId === COVERAGE_LABELS_SETTINGS_ID && !validateCoverageLabels(data.labels) && Number.isSafeInteger(data.sourceVersion) && Number(data.sourceVersion) > 0 && typeof data.publishedAt === "string" && Number.isFinite(Date.parse(data.publishedAt)) && new Date(data.publishedAt).toISOString() === data.publishedAt;
 }
 
+// packages/content-core/src/story-ctas.ts
+function isStoryCtasBuildData(value) {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return false;
+  const data = value;
+  return Object.keys(data).every((key2) => ["settingId", "rules", "sourceVersion", "publishedAt"].includes(key2)) && data.settingId === STORY_CTAS_SETTINGS_ID && !validateStoryCtaRules(data.rules) && Number.isSafeInteger(data.sourceVersion) && Number(data.sourceVersion) > 0 && typeof data.publishedAt === "string" && Number.isFinite(Date.parse(data.publishedAt)) && new Date(data.publishedAt).toISOString() === data.publishedAt;
+}
+
 // packages/content-core/src/service-composition.ts
 function serviceCompositionError(pageId, version) {
   if (version === void 0) return null;
@@ -5167,12 +5207,12 @@ var ProgramImagePreparationError = class extends Error {
     this.code = code;
   }
 };
-var object7 = (value) => value !== null && typeof value === "object" && !Array.isArray(value);
+var object8 = (value) => value !== null && typeof value === "object" && !Array.isArray(value);
 function refuse2(code = "program_image_contract") {
   throw new ProgramImagePreparationError(code);
 }
 function fields2(value, names) {
-  if (!object7(value) || Object.keys(value).some((name) => !names.includes(name))) refuse2();
+  if (!object8(value) || Object.keys(value).some((name) => !names.includes(name))) refuse2();
 }
 function sized(value, ceiling) {
   if (!Number.isSafeInteger(value) || Number(value) <= 0) refuse2();
@@ -5341,11 +5381,11 @@ function eventPublicPath(slug) {
 }
 
 // packages/content-core/src/nj-decides-brand.ts
-function object8(value) {
+function object9(value) {
   return value !== null && typeof value === "object" && !Array.isArray(value);
 }
 function resolveNjDecidesImage(value) {
-  if (!object8(value) || typeof value.url !== "string" || !["image/png", "image/jpeg", "image/webp"].includes(String(value.mimeType)) || !Number.isSafeInteger(value.width) || Number(value.width) < 1 || !Number.isSafeInteger(value.height) || Number(value.height) < 1 || Number(value.width) * Number(value.height) > 1e8) return void 0;
+  if (!object9(value) || typeof value.url !== "string" || !["image/png", "image/jpeg", "image/webp"].includes(String(value.mimeType)) || !Number.isSafeInteger(value.width) || Number(value.width) < 1 || !Number.isSafeInteger(value.height) || Number(value.height) < 1 || Number(value.width) * Number(value.height) > 1e8) return void 0;
   try {
     if (safeHref(value.url) !== value.url || !/^\/(?!\/)/.test(value.url) && new URL(value.url).protocol !== "https:") return void 0;
   } catch {
@@ -5442,14 +5482,14 @@ function isDatasetPublicProjection(value) {
 
 // packages/content-core/src/dataset-figures.ts
 var key = (release) => `${release.datasetId}/${release.releaseId}/${release.revision}/${release.digest}`;
-function object9(value) {
+function object10(value) {
   return Boolean(value) && typeof value === "object" && !Array.isArray(value);
 }
 function fields3(value, allowed) {
   return Object.keys(value).every((field) => allowed.includes(field));
 }
 function isDatasetFigures(value) {
-  if (!object9(value) || !fields3(value, ["figures", "releases"]) || !Array.isArray(value.figures) || value.figures.length > 200 || !Array.isArray(value.releases) || value.releases.length > 200) return false;
+  if (!object10(value) || !fields3(value, ["figures", "releases"]) || !Array.isArray(value.figures) || value.figures.length > 200 || !Array.isArray(value.releases) || value.releases.length > 200) return false;
   const releases = /* @__PURE__ */ new Set();
   for (const release of value.releases) {
     if (!isDatasetPublicProjection(release) || releases.has(key(release))) return false;
@@ -5458,7 +5498,7 @@ function isDatasetFigures(value) {
   const blocks = /* @__PURE__ */ new Set();
   const used = /* @__PURE__ */ new Set();
   for (const binding of value.figures) {
-    if (!object9(binding) || !validDatasetId(binding.blockId) || !validDatasetId(binding.datasetId) || blocks.has(binding.blockId)) return false;
+    if (!object10(binding) || !validDatasetId(binding.blockId) || !validDatasetId(binding.datasetId) || blocks.has(binding.blockId)) return false;
     blocks.add(binding.blockId);
     if (binding.withdrawn === true) {
       if (!fields3(binding, ["blockId", "datasetId", "withdrawn"])) return false;
@@ -5566,6 +5606,7 @@ var RECEIPT_FIELDS = /* @__PURE__ */ new Set([
 var SETTINGS_FALLBACKS_FIELD = "settingsFallbacks";
 var SETTINGS_FALLBACK_FIELDS = /* @__PURE__ */ new Set(["documentId", "sourceVersion"]);
 var PUBLIC_SETTINGS_IDS = /* @__PURE__ */ new Set([
+  STORY_CTAS_SETTINGS_ID,
   COVERAGE_LABELS_SETTINGS_ID,
   NJ_DECIDES_SETTINGS_ID,
   PUBLIC_HOMEPAGE_BANNER_SETTINGS_ID,
@@ -5573,6 +5614,7 @@ var PUBLIC_SETTINGS_IDS = /* @__PURE__ */ new Set([
   SITE_NAVIGATION_SETTINGS_ID
 ]);
 var FALLBACK_SETTINGS_IDS = /* @__PURE__ */ new Set([
+  STORY_CTAS_SETTINGS_ID,
   COVERAGE_LABELS_SETTINGS_ID,
   NJ_DECIDES_SETTINGS_ID,
   PUBLIC_SITE_CHROME_SETTINGS_ID,
@@ -5981,10 +6023,14 @@ function assertPublicArtifactBundle(value) {
     if (error) throw new Error(error);
   }
   const settingIds = value.settings.map((setting) => setting.settingId);
-  if (value.settings.length > 5 || new Set(settingIds).size !== settingIds.length) {
+  if (value.settings.length > 6 || new Set(settingIds).size !== settingIds.length) {
     throw new Error("The public artifact bundle settings list is invalid");
   }
   for (const setting of value.settings) {
+    if (setting.settingId === STORY_CTAS_SETTINGS_ID) {
+      if (!isStoryCtasBuildData(setting)) throw new Error("The story CTA settings are invalid");
+      continue;
+    }
     if (setting.settingId === COVERAGE_LABELS_SETTINGS_ID) {
       if (!isCoverageLabelsBuildData(setting)) throw new Error("The coverage label settings are invalid");
       continue;

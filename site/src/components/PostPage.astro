@@ -1,5 +1,6 @@
 ---
 import ReaderTextSize from "./ReaderTextSize.astro";
+import { storyCtaComposition } from "../lib/story-ctas";
 import { createPageImageLoading } from "../../../packages/content-core/src/image-loading";
 import "../../../packages/content-core/src/component-blocks.css";
 import PostPublication from "./PostPublication.astro";
@@ -56,6 +57,7 @@ interface Props {
 
 const { entry, credits, canonicalUrl } = Astro.props as Props;
 const post = entry.data;
+const settings = Astro.locals.cmsRender?.content.settings ?? (await getCollection("cmsPublicSiteChrome")).map(item => item.data);
 const layout = choosePostLayout(post);
 const eyebrow = postEyebrow(post.categories, post.tags);
 const categories = publicPostCategories(post.categories);
@@ -78,7 +80,9 @@ const recordCards = renderRecordCards(Astro.locals.cmsRender, Astro.locals.cmsRe
 const sponsors = sponsorCardsFromRecordCards(recordCards);
 const resolveDataFigure = renderDatasetFigures(post.datasetFigures);
 const newsletters = await newsletterSignupResolution(post.blocks, getImage, recordCards);
-const { body: bodyBlocks, sidebar: sidebarBlocks } = splitLiveBlogBlocks(post.blocks, Boolean(post.liveBlog));
+const { body: authoredBody, sidebar: sidebarBlocks } = splitLiveBlogBlocks(post.blocks, Boolean(post.liveBlog));
+const composition = storyCtaComposition(authoredBody, settings, Boolean(post.liveBlog));
+const bodyBlocks = composition.body;
 const renderGroups = (blocks: typeof post.blocks) => renderContentGroups(blocks, (block, index) => ({
   generatedHeadingLevel: generatedHeadingLevelAt(blocks, index),
   html: renderBlock(block, {
@@ -96,6 +100,7 @@ const renderGroups = (blocks: typeof post.blocks) => renderContentGroups(blocks,
   }),
 }));
 const publicGroups = groupLinkCardDirectories(renderGroups(bodyBlocks));
+const afterUpdateGroups = renderGroups(composition.afterUpdates);
 const sidebarGroups = groupLinkCardDirectories(renderGroups(sidebarBlocks).filter(group => cmsBlockGroupHasContent(group, recordCards)));
 ---
 
@@ -180,6 +185,10 @@ const sidebarGroups = groupLinkCardDirectories(renderGroups(sidebarBlocks).filte
         ) : <CmsBlockGroup group={item.group} cards={recordCards} />)}
       </div>
     </PostLiveBlogLayout> : <PostLiveBlog postId={post.postId} publishedAt={post.publishedAt} liveBlog={post.liveBlog} assets={post.assets} canonicalUrl={canonicalUrl} />)}
+
+    {afterUpdateGroups.length > 0 && <div class="post-body" data-post-cta-placement="end">
+      {afterUpdateGroups.map(group => <CmsBlockGroup group={group} cards={recordCards} />)}
+    </div>}
 
     <PostShareControls title={post.title} url={canonicalUrl} placement="bottom" />
 

@@ -1,5 +1,7 @@
 import type { ContentLinkMetadata } from "../../../packages/content-core/src/content-link.ts";
 import { COVERAGE_LABELS_SETTINGS_ID } from "../../../packages/content-core/src/cms-settings.ts";
+import { STORY_CTAS_SETTINGS_ID } from "../../../packages/content-core/src/cms-settings.ts";
+import { projectStoryCtas } from "../../../packages/content-core/src/story-ctas.ts";
 import { projectCoverageLabels } from "../../../packages/content-core/src/coverage-labels.ts";
 import { projectCmsPage, isLegacyBlockOnlySnapshot, referencedAssetIds } from "./cms-page-projection.ts";
 export { projectCmsPage } from "./cms-page-projection.ts";
@@ -243,6 +245,7 @@ export interface PublicArtifactContentRead {
   chrome?: PublicSiteChromeDocument;
   njDecides?: { id: string; [key: string]: unknown };
   coverageLabels?: { id: string; [key: string]: unknown };
+  storyCtas?: { id: string; [key: string]: unknown };
   assets: CmsPublicAsset[];
   reservation: PublicBuildReservation;
   admissionTime: Date;
@@ -525,12 +528,13 @@ export async function readPublicArtifactContentFromDatabase(
         settingsCollection.doc(PUBLIC_SITE_CHROME_SETTINGS_ID),
         settingsCollection.doc(NJ_DECIDES_SETTINGS_ID),
         settingsCollection.doc(COVERAGE_LABELS_SETTINGS_ID),
+        settingsCollection.doc(STORY_CTAS_SETTINGS_ID),
       ),
       transaction.get(postCollection),
       transaction.get(authorCollection),
     ]);
-    if (settingsSnapshots.length !== 5) throw new Error("The canonical settings read is incomplete");
-    const [settingsSnapshot, navigationSnapshot, chromeSnapshot, njDecidesSnapshot, coverageLabelsSnapshot] = settingsSnapshots;
+    if (settingsSnapshots.length !== 6) throw new Error("The canonical settings read is incomplete");
+    const [settingsSnapshot, navigationSnapshot, chromeSnapshot, njDecidesSnapshot, coverageLabelsSnapshot, storyCtasSnapshot] = settingsSnapshots;
     // All page identities, including custom pages, share this reservation's historical read time.
     const pages = pageSnapshot.docs.filter(snapshot => snapshot.exists)
       .map(snapshot => ({ ...snapshot.data(), id: snapshot.id }) as CmsPageDoc);
@@ -547,7 +551,7 @@ export async function readPublicArtifactContentFromDatabase(
     if (
       navigationSnapshot.id !== SITE_NAVIGATION_SETTINGS_ID ||
       chromeSnapshot.id !== PUBLIC_SITE_CHROME_SETTINGS_ID || njDecidesSnapshot.id !== NJ_DECIDES_SETTINGS_ID ||
-      coverageLabelsSnapshot.id !== COVERAGE_LABELS_SETTINGS_ID
+      coverageLabelsSnapshot.id !== COVERAGE_LABELS_SETTINGS_ID || storyCtasSnapshot.id !== STORY_CTAS_SETTINGS_ID
     ) {
       throw new Error("The canonical cmsSettings read returned the wrong document");
     }
@@ -573,6 +577,7 @@ export async function readPublicArtifactContentFromDatabase(
       assetIdsForBuild(pages, { mode: "published" }, admissionTime),
     );
     const coverageLabels = coverageLabelsSnapshot.exists ? { ...coverageLabelsSnapshot.data(), id: COVERAGE_LABELS_SETTINGS_ID } : undefined;
+    const storyCtas = storyCtasSnapshot.exists ? { ...storyCtasSnapshot.data(), id: STORY_CTAS_SETTINGS_ID } : undefined;
     const njDecides = njDecidesSnapshot.exists ? { ...njDecidesSnapshot.data(), id: NJ_DECIDES_SETTINGS_ID } : undefined;
     const brand = projectNjDecidesSettings(njDecides);
     const optionalBrandAssets = new Set<string>();
@@ -630,7 +635,7 @@ export async function readPublicArtifactContentFromDatabase(
         id: snapshot.id,
         ...snapshot.data(),
       })) as CmsPublicAsset[];
-    return { pages, posts, authors, setting, navigation, chrome, njDecides, coverageLabels, assets, reservation, admissionTime };
+    return { pages, posts, authors, setting, navigation, chrome, njDecides, coverageLabels, storyCtas, assets, reservation, admissionTime };
   }, { readOnly: true, readTime: reservation.cutoffAt });
 }
 
@@ -713,6 +718,7 @@ export function projectPublicArtifactContent(
   // Header chrome follows the same rule: it never fails the build.
   const projectedChrome = projectPublicSiteChromeArtifact(read.chrome);
   const projectedCoverageLabels = projectCoverageLabels(read.coverageLabels);
+  const projectedStoryCtas = projectStoryCtas(read.storyCtas);
   const projectedNjDecides = projectNjDecidesSettings(read.njDecides, pageAssetMap);
   if (projectedChrome.status === "invalid") {
     console.warn(
@@ -721,6 +727,11 @@ export function projectPublicArtifactContent(
   }
   const settings: PublicSettingBuildData[] = [];
   const receiptSettings: PublicArtifactSettingsInput[] = [];
+  if (projectedStoryCtas) {
+    settings.push(projectedStoryCtas.data);
+    receiptSettings.push({ documentId: STORY_CTAS_SETTINGS_ID, sourceVersion: projectedStoryCtas.data.sourceVersion,
+      publishedSnapshot: projectedStoryCtas.publishedSnapshot });
+  }
   if (projectedCoverageLabels) {
     settings.push(projectedCoverageLabels.data);
     receiptSettings.push({ documentId: COVERAGE_LABELS_SETTINGS_ID, sourceVersion: projectedCoverageLabels.data.sourceVersion, publishedSnapshot: projectedCoverageLabels.publishedSnapshot });
@@ -755,6 +766,10 @@ export function projectPublicArtifactContent(
     });
   }
   const settingsFallbacks: PublicArtifactSettingsFallback[] = [];
+  const ctaSource = (read.storyCtas?.published as { sourceVersion?: unknown } | undefined)?.sourceVersion;
+  if (!projectedStoryCtas && Number.isSafeInteger(ctaSource) && Number(ctaSource) > 0) {
+    settingsFallbacks.push({ documentId: STORY_CTAS_SETTINGS_ID, sourceVersion: Number(ctaSource) });
+  }
   const coverageSource = (read.coverageLabels?.published as { sourceVersion?: unknown } | undefined)?.sourceVersion;
   if (!projectedCoverageLabels && Number.isSafeInteger(coverageSource) && Number(coverageSource) > 0) {
     settingsFallbacks.push({ documentId: COVERAGE_LABELS_SETTINGS_ID, sourceVersion: Number(coverageSource) });
