@@ -8,6 +8,11 @@ import { afterAll, vi } from "vitest";
 // editor render can take longer, so allow 5 s before reporting a missing element.
 configure({ asyncUtilTimeout: 5_000 });
 
+// jsdom has no layout and omits Range geometry used by ProseMirror's selection
+// scrolling. Browser tests verify actual geometry; component tests need the API.
+if (!Range.prototype.getClientRects) Range.prototype.getClientRects = () => [] as unknown as DOMRectList;
+if (!Range.prototype.getBoundingClientRect) Range.prototype.getBoundingClientRect = () => new DOMRect();
+
 // @tiptap/react destroys an unmounted editor on a 1 ms timer. Testing Library
 // unmounts after the last test, and jsdom is torn down right after the file
 // finishes, so on a slow runner that timer ran without `window` and Vitest
