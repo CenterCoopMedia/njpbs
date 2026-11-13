@@ -1,5 +1,7 @@
 import { CoverageLabelsSettings, COVERAGE_LABELS_SETTINGS_ID, type CoverageLabelsSettingsTransport } from "../components/CoverageLabelsSettings";
 import type { CoverageLabelsSettingsValues } from "../../../packages/content-core/src/cms-settings";
+import { StoryCtaSettings, STORY_CTAS_SETTINGS_ID, type StoryCtaSettingsTransport } from "../components/StoryCtaSettings";
+import type { StoryCtasSettingsValues } from "../../../packages/content-core/src/story-cta-rules";
 import { SettingsWorkspace, useSettingsDirty } from "../components/SettingsWorkspace";
 import { ConnectedLiveProductionDevices } from "../components/LiveProductionDevices";
 import type { LoadedRecord } from "../components/EditorWorkspace";
@@ -8,7 +10,7 @@ import { encodeContentQuery, type ContentQuery } from "../lib/content-query";
 import { InfoTooltip } from "../components/ui/InfoTooltip";
 // Costs shares the existing lazy settings asset.
 export { CostLedgerRoute } from "./CostLedgerRoute";
-import { type ReactNode, type FormEvent, useCallback, useEffect, useState } from "react";
+import { type ReactNode, type FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 import { useLocation } from "react-router";
 import {
   DEFAULT_NEWSROOM_BANNER_HEADING,
@@ -697,6 +699,24 @@ export function ConnectedCoverageLabelsSettings() {
   return <CoverageLabelsSettings load={load} save={save} publish={publish} />;
 }
 
+export function ConnectedStoryCtaSettings() {
+  const { getIdToken } = useAuth();
+  const load = useCallback(() => getIdToken().then(token => cmsGetSettings<StoryCtasSettingsValues>(token, { id: STORY_CTAS_SETTINGS_ID })), [getIdToken]);
+  const save = useCallback<StoryCtaSettingsTransport["save"]>(request => getIdToken().then(token => cmsSaveSettings<StoryCtasSettingsValues>(token, request)), [getIdToken]);
+  const publish = useCallback<StoryCtaSettingsTransport["publish"]>(request => getIdToken().then(token => cmsPublishSettings<StoryCtasSettingsValues>(token, request)), [getIdToken]);
+  const loadLibrarySelection = useCallback(async (query: ContentQuery) =>
+    cmsListContent(await getIdToken(), encodeContentQuery(query)), [getIdToken]);
+  const loadRecord = useCallback(async (kind: RecordKind, id: string): Promise<LoadedRecord> => {
+    const response = await cmsGetContent(await getIdToken(), { collection: "cmsPosts", id });
+    if (!response.found || !response.document) return { status: "missing" };
+    if (response.document.deleted === true) return { status: "deleted" };
+    if (kind !== "newsletter" || response.document.type !== "newsletter") return { status: "invalid" };
+    return { status: "ready", record: { ...response.document, id } };
+  }, [getIdToken]);
+  const contentSources = useMemo(() => ({ loadLibrarySelection, loadRecord }), [loadLibrarySelection, loadRecord]);
+  return <StoryCtaSettings contentSources={contentSources} load={load} save={save} publish={publish} />;
+}
+
 function ConnectedNjDecidesSettings() {
   const { getIdToken, state } = useAuth();
   const principal = state?.status === "signed-in" ? state.principal : null;
@@ -797,6 +817,7 @@ export function AdminSettingsRoute() {
           { id: "public-homepage-banner", label: "Homepage banner", group: "Public website", content: <ConnectedPublicHomepageBannerSettings /> },
           { id: "nj-decides-brand", label: "NJ Decides brand", headingId: "nj-decides-settings-heading", group: "Public website", content: <ConnectedNjDecidesSettings /> },
           { id: "coverage-labels", label: "Coverage labels", group: "Public website", content: <ConnectedCoverageLabelsSettings /> },
+          { id: "story-ctas", label: "Story CTAs", group: "Public website", content: <ConnectedStoryCtaSettings /> },
           { id: "site-navigation", label: "Site navigation", group: "Public website", content: <ConnectedSiteNavigationSettings /> },
           { id: "public-site-chrome", label: "Header newsletter", group: "Public website", content: <ConnectedPublicSiteChromeSettings /> },
           { id: "media-categories", label: "Media categories", group: "Workspace", content: <ConnectedMediaCategorySettings /> },

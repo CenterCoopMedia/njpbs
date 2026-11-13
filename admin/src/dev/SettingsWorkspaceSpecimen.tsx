@@ -1,6 +1,9 @@
 import { useMemo } from "react";
 import { DEFAULT_NJ_DECIDES_SETTINGS, DEFAULT_PUBLIC_HOMEPAGE_BANNER_SETTINGS, DEFAULT_PUBLIC_SITE_CHROME_SETTINGS, DEFAULT_SITE_NAVIGATION } from "../../../packages/content-core/src/cms-settings";
+import { SUPPORT_APPEAL_DEFAULTS } from "../../../packages/content-core/src/content-model";
+import type { StoryCtasSettingsValues } from "../../../packages/content-core/src/story-cta-rules";
 import { CoverageLabelsSettings, DEFAULT_COVERAGE_LABELS } from "../components/CoverageLabelsSettings";
+import { StoryCtaSettings } from "../components/StoryCtaSettings";
 import { SettingsWorkspace } from "../components/SettingsWorkspace";
 import { PublicHomepageBannerSettings, type PublicHomepageBannerValues } from "../components/PublicHomepageBannerSettings";
 import type { NjDecidesValues } from "../components/NjDecidesSettings";
@@ -42,12 +45,56 @@ const refuseCategoryMutation = async () => { throw new Error("This visual fixtur
 const loadMilestones = async (): Promise<AdminStatusManifest> => ({
   schemaVersion: 2, status: "unavailable", environment: "Local", generatedAt: "2026-10-29T13:00:00.000Z", refreshAfter: "2026-10-29T13:00:00.000Z", build: null, milestone: null, milestones: null,
 });
+const newsletterRecord = {
+  id: "garden-state-weekly",
+  type: "newsletter",
+  title: "Garden State Weekly",
+  status: "approved",
+  signupUrl: "https://example.org/newsletters/garden-state-weekly",
+  frequency: "Every Friday",
+  summary: "Reporting and public affairs programs from across New Jersey.",
+  body: { type: "doc", content: [] },
+};
+const storyCtaSources = {
+  loadLibrarySelection: async () => ({
+    records: [{ id: newsletterRecord.id, kind: "newsletter" as const, title: newsletterRecord.title, status: newsletterRecord.status }],
+    total: 1,
+    allCount: 1,
+    mineCount: 0,
+    assignedCount: 0,
+    page: 1,
+    pageCount: 1,
+    statusCounts: { draft: 0, in_review: 0, approved: 1, scheduled: 0, published: 0, archived: 0 },
+  }),
+  loadRecord: async (kind: string, id: string) => kind === "newsletter" && id === newsletterRecord.id
+    ? { status: "ready" as const, record: newsletterRecord }
+    : { status: "missing" as const },
+};
+const storyCtas: StoryCtasSettingsValues = { rules: [
+  {
+    id: "weekly-newsletter",
+    label: "Mid-story newsletter",
+    enabled: true,
+    target: { contentTypes: ["post"] },
+    position: { kind: "after-paragraph", count: 2 },
+    content: { type: "newsletter_signup", data: { newsletterIds: [newsletterRecord.id], heading: "Stay informed", intro: "Get trusted New Jersey reporting each week." } },
+  },
+  {
+    id: "reader-support",
+    label: "End-of-story support appeal",
+    enabled: true,
+    target: { contentTypes: ["post"] },
+    position: { kind: "end" },
+    content: { type: "support_appeal", data: structuredClone(SUPPORT_APPEAL_DEFAULTS) },
+  },
+] };
 
 export function SettingsWorkspaceSpecimen() {
   const api = useMemo(() => ({
     banner: transport<PublicHomepageBannerValues>("public-homepage-banner", { ...DEFAULT_PUBLIC_HOMEPAGE_BANNER_SETTINGS, enabled: true, njDecides: true, message: "Find voting information for New Jersey.", linkLabel: "NJ Decides 2026", linkHref: "/nj-decides-2026/" }, 2, new URLSearchParams(location.search).has("pending-save") ? 1_000 : 0),
     brand: transport<NjDecidesValues>("nj-decides-brand", DEFAULT_NJ_DECIDES_SETTINGS),
     coverage: transport("coverage-labels", DEFAULT_COVERAGE_LABELS),
+    storyCtas: transport("story-ctas", storyCtas, 2),
     navigation: transport("site-navigation", DEFAULT_SITE_NAVIGATION),
     chrome: transport<PublicSiteChromeValues>("public-site-chrome", DEFAULT_PUBLIC_SITE_CHROME_SETTINGS),
     home: transport<BannerSettingsValues>("newsroom-home", { bannerHeading: "Build and publication details" }),
@@ -57,6 +104,7 @@ export function SettingsWorkspaceSpecimen() {
     { id: "public-homepage-banner", label: "Homepage banner", group: "Public website", content: <PublicHomepageBannerSettings {...api.banner} /> },
     { id: "nj-decides-brand", label: "NJ Decides brand", headingId: "nj-decides-settings-heading", group: "Public website", content: <RoutedNjDecidesSettings {...api.brand} loadMedia={loadMedia} /> },
     { id: "coverage-labels", label: "Coverage labels", group: "Public website", content: <CoverageLabelsSettings {...api.coverage} /> },
+    { id: "story-ctas", label: "Story CTAs", group: "Public website", content: <StoryCtaSettings {...api.storyCtas} contentSources={storyCtaSources} /> },
     { id: "site-navigation", label: "Site navigation", group: "Public website", content: <SiteNavigationSettings {...api.navigation} loadPages={loadPages} /> },
     { id: "public-site-chrome", label: "Header newsletter", group: "Public website", content: <PublicSiteChromeSettings {...api.chrome} /> },
     { id: "media-categories", label: "Media categories", group: "Workspace", content: <MediaCategorySettings load={loadCategories} mutate={refuseCategoryMutation} /> },

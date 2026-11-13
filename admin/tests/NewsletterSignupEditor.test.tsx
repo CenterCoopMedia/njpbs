@@ -7,6 +7,19 @@ import type { LibrarySelection } from "../src/lib/content-library";
 afterEach(cleanup);
 
 describe("Newsletter signup editor", () => {
+  it("searches on Enter and prevents a parent form submission", async () => {
+    const loadLibrarySelection = vi.fn().mockResolvedValue({
+      records: [{ id: "weekly", kind: "newsletter", title: "Weekly", status: "approved" }], page: 1, pageCount: 1,
+    } as LibrarySelection);
+    render(<form><ContentShelfSources.Provider value={{ loadLibrarySelection }}>
+      <NewsletterSignupEditor data={{ newsletterIds: [] }} onChange={vi.fn()} />
+    </ContentShelfSources.Provider><button type="submit">Save draft</button></form>);
+    const search = screen.getByRole("textbox", { name: "Find newsletters" });
+    fireEvent.change(search, { target: { value: "Weekly" } });
+    expect(fireEvent.keyDown(search, { key: "Enter", code: "Enter" })).toBe(false);
+    expect(await screen.findByRole("button", { name: "Add Weekly" })).toBeVisible();
+    expect(loadLibrarySelection).toHaveBeenCalledWith(expect.objectContaining({ types: ["newsletter"], q: "Weekly" }));
+  });
   it("searches Newsletter records and selects at most four IDs", async () => {
     const result = { records: [
       { id: "weekly", kind: "newsletter", title: "Weekly", status: "draft" },

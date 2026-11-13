@@ -69,7 +69,11 @@ export function NewsletterSignupEditor({ data, onChange, readOnly = false }: {
     <p>Choose one to four newsletters. Each needs a secure signup link to appear on the public page.</p>
     <ul>{ids.map(recordId => <li key={recordId}>{chosen[recordId]?.title ?? `Newsletter ${recordId}`}{chosen[recordId] ? ` · ${chosen[recordId].status}` : ""}{" "}<Button disabled={readOnly} onClick={() => update(ids.filter(id => id !== recordId))}>Remove</Button>{warnings[recordId] ? <p role="status">{warnings[recordId]}</p> : null}</li>)}</ul>
     <label htmlFor={`${id}-search`}>Find newsletters</label>
-    <TextInput id={`${id}-search`} value={query} disabled={readOnly} onChange={event => setQuery(event.target.value)} />
+    <TextInput id={`${id}-search`} value={query} disabled={readOnly} onChange={event => setQuery(event.target.value)} onKeyDown={event => {
+      if (event.key !== "Enter" || event.nativeEvent.isComposing) return;
+      event.preventDefault();
+      if (!readOnly && !busy) void search();
+    }} />
     <Button disabled={readOnly || busy || !sources.loadLibrarySelection} onClick={() => void search()}>Search newsletters</Button>
     {error ? <p role="alert">{error}</p> : null}
     {busy ? <p role="status">Loading newsletters…</p> : null}
