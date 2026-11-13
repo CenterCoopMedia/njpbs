@@ -175,6 +175,7 @@
       "kind": "resource",
       "placeholder": "template-dev-media",
       "files": [
+        "functions/.env.njpbs-site-dev",
         "scripts/assert-dev-cms-targets.mjs",
         "scripts/fixtures/dev-targets.json",
         "scripts/seed-dev-published.mjs",
@@ -187,6 +188,7 @@
       "placeholder": "https://dev-media.example.org",
       "files": [
         "cms-api/test/public-content-rpc.test.ts",
+        "functions/.env.njpbs-site-dev",
         "functions/lib/block-content-validation.js",
         "functions/lib/home-retained-sources.js",
         "functions/lib/home-source-catalog.js",

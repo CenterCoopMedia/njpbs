@@ -6,6 +6,7 @@ export const devDeploymentEnvironment = Object.freeze({
   CMS_DEV_CLOUDFLARE_ACCOUNT_ID: "a".repeat(32), CLOUDFLARE_ACCOUNT_ID: "a".repeat(32),
   CMS_DEV_FIREBASE_WEB_APP_ID: `1:123456789013:web:${"a".repeat(32)}`,
   FIREBASE_WEB_APP_ID: `1:123456789013:web:${"a".repeat(32)}`,
+  CMS_PUBLISH_GITHUB_APP_ID: "1000001", CMS_PUBLISH_GITHUB_INSTALLATION_ID: "2000002",
 });
 
 export function devFunctionsEnvironment(targets, root = new URL("../../", import.meta.url)) {
@@ -16,6 +17,8 @@ export function devFunctionsEnvironment(targets, root = new URL("../../", import
     CMS_DEPLOYMENT_ENVIRONMENT: "development", CMS_DEV_REPORT_INTAKE_MODE: "stored-only",
     CMS_WRITEBACK_CONFIGURED: "true", CMS_PUBLISH_TRANSPORT: "github",
     CMS_PUBLISH_GITHUB_REPOSITORY: repositoryFixture.CANONICAL_GITHUB_REPOSITORY,
+    CMS_PUBLISH_GITHUB_APP_ID: devDeploymentEnvironment.CMS_PUBLISH_GITHUB_APP_ID,
+    CMS_PUBLISH_GITHUB_INSTALLATION_ID: devDeploymentEnvironment.CMS_PUBLISH_GITHUB_INSTALLATION_ID,
     CMS_MEDIA_R2_BUCKET: targets.CMS_MEDIA_BUCKET, CMS_MEDIA_PUBLIC_ORIGIN: targets.CMS_MEDIA_ORIGIN,
     CMS_PREVIEW_SERIALIZER_READY: "false", CMS_PREVIEW_RENDERER_SHA: "",
     CMS_MEDIA_AWS_AUDIENCE: "", CMS_MEDIA_AWS_VIDEO_ENABLED: "false",

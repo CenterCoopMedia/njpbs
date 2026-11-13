@@ -3,7 +3,7 @@ import { readFileSync } from "node:fs";
 import { assertDevDeployCheckout } from "./lib/dev-deploy-source.mjs";
 import { createRequire } from "node:module";
 import { pathToFileURL } from "node:url";
-import { assertDevTargets, assertDevConfigs } from "./assert-dev-cms-targets.mjs";
+import { assertDevTargets, assertDevConfigs, devPublicationIdentity } from "./assert-dev-cms-targets.mjs";
 import { assertNoFunctionDeletions, loadFunctionDeployManifest, readFunctionsDeployInventory } from "./lib/functions-deploy-inventory.mjs";
 
 export async function deployDevFunctions({ env = process.env, root = new URL("../", import.meta.url), request, runCommand = execFileSync } = {}) {
@@ -15,6 +15,10 @@ export async function deployDevFunctions({ env = process.env, root = new URL("..
   const revisions = dotenv.split(/\r?\n/).filter(line => line.startsWith("CMS_ADMIN_BUILD_REVISION=") && line !== "CMS_ADMIN_BUILD_REVISION=");
   if (revisions.length !== 1 || revisions[0] !== `CMS_ADMIN_BUILD_REVISION=${sourceSha}`) {
     throw new Error("Dev Functions revision differs from the selected pin");
+  }
+  for (const [key, value] of Object.entries(devPublicationIdentity(env))) {
+    const lines = dotenv.split(/\r?\n/).filter(line => line.startsWith(`${key}=`));
+    if (lines.length !== 1 || lines[0] !== `${key}=${value}`) throw new Error("Dev Functions publication identity differs from configuration");
   }
   const require = createRequire(new URL("package.json", root));
   const { devFunctionManifest } = require("./functions/dev-manifest.js");

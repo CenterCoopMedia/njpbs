@@ -108,6 +108,19 @@ test("dev dispatch repository admits only the approved repository without admitt
       writeFileSync(envPath, original.replace("CMS_PUBLISH_GITHUB_REPOSITORY=CenterCoopMedia/njpbs", `CMS_PUBLISH_GITHUB_REPOSITORY=${repository}`));
       assert.throws(() => assertDevConfigs(root), /Dev deployment config refused/);
     }
+    // Before the deploy step appends the identity, the rendered file holds none of it.
+    const identityLine = /^CMS_PUBLISH_GITHUB_(REPOSITORY|APP_ID|INSTALLATION_ID)=.*\n/gm;
+    const rendered = original.replace(identityLine, "");
+    writeFileSync(envPath, rendered);
+    assert.equal(assertDevConfigs(root), true);
+    writeFileSync(envPath, rendered + `CMS_PUBLISH_GITHUB_REPOSITORY=${repositoryFixture.CANONICAL_GITHUB_REPOSITORY}\n`);
+    assert.throws(() => assertDevConfigs(root), /Dev deployment config refused/);
+    writeFileSync(envPath, original.replace(/^CMS_PUBLISH_GITHUB_APP_ID=.*$/m, "CMS_PUBLISH_GITHUB_APP_ID=1000009"));
+    assert.throws(() => assertDevConfigs(root), /Dev deployment config refused/);
+    for (const id of ["", "0", "12a", "${{ vars.CMS_PUBLISH_GITHUB_APP_ID }}"]) {
+      writeFileSync(envPath, rendered);
+      assert.throws(() => assertDevConfigs(root, { ...process.env, CMS_PUBLISH_GITHUB_APP_ID: id }), /Dev publication identity refused/);
+    }
   } finally { rmSync(workspace, { recursive: true, force: true }); }
 });
 
@@ -381,7 +394,9 @@ test("Admin upload executes only the checked dev Pages target outside repository
       env: { PATH: process.env.PATH, HOME: workspace, ...job.env, ...DEV_TARGETS, ...repositoryFixture, GITHUB_WORKSPACE: workspace,
         GITHUB_SHA: "b".repeat(40), DEPLOY_SHA: "a".repeat(40), CLOUDFLARE_ACCOUNT_ID: "a".repeat(32), CLOUDFLARE_API_TOKEN: "fixture-token",
         CMS_DEV_CLOUDFLARE_ACCOUNT_ID: "a".repeat(32), FIREBASE_WEB_APP_ID: process.env.FIREBASE_WEB_APP_ID,
-        CMS_DEV_FIREBASE_WEB_APP_ID: process.env.CMS_DEV_FIREBASE_WEB_APP_ID, ...extra } });
+        CMS_DEV_FIREBASE_WEB_APP_ID: process.env.CMS_DEV_FIREBASE_WEB_APP_ID,
+        CMS_PUBLISH_GITHUB_APP_ID: process.env.CMS_PUBLISH_GITHUB_APP_ID,
+        CMS_PUBLISH_GITHUB_INSTALLATION_ID: process.env.CMS_PUBLISH_GITHUB_INSTALLATION_ID, ...extra } });
     const result = run({});
     assert.equal(result.status, 0, result.stderr);
     const output = JSON.parse(result.stdout.split("\n").at(-1));
@@ -425,12 +440,14 @@ test("dev deployment writes the exact Admin source revision before Functions dep
     const run = (revision, pin = sha, releasing = true) => spawnSync("bash", ["-e", "-c", writer.run], {
       cwd: workspace, encoding: "utf8", env: { PATH: process.env.PATH, GITHUB_SHA: "f".repeat(40), DEPLOY_SHA: revision,
         CMS_DEV_RENDERER_SOURCE_SHA: pin, CMS_DEV_RELEASE_PREVIEW_RENDERER: String(releasing),
-        CMS_PUBLISH_GITHUB_TRUSTED_ACTORS: JSON.stringify(["fixture-owner"]) },
+        CMS_PUBLISH_GITHUB_TRUSTED_ACTORS: JSON.stringify(["fixture-owner"]),
+        CANONICAL_GITHUB_REPOSITORY: repositoryFixture.CANONICAL_GITHUB_REPOSITORY,
+        CMS_PUBLISH_GITHUB_APP_ID: "1000001", CMS_PUBLISH_GITHUB_INSTALLATION_ID: "2000002" },
     });
     const result = run(sha);
     assert.equal(result.status, 0, result.stderr);
     assert.equal(readFileSync(join(workspace, "functions/.env.njpbs-site-dev"), "utf8"),
-      `CMS_WRITEBACK_CONFIGURED=true\nCMS_ADMIN_BUILD_REVISION=${sha}\nCMS_PUBLISH_GITHUB_TRUSTED_ACTORS=["fixture-owner"]\nCMS_PREVIEW_SERIALIZER_READY=true\nCMS_PREVIEW_RENDERER_SHA=${sha}\n`);
+      `CMS_WRITEBACK_CONFIGURED=true\nCMS_ADMIN_BUILD_REVISION=${sha}\nCMS_PUBLISH_GITHUB_TRUSTED_ACTORS=["fixture-owner"]\nCMS_PUBLISH_GITHUB_REPOSITORY=${repositoryFixture.CANONICAL_GITHUB_REPOSITORY}\nCMS_PUBLISH_GITHUB_APP_ID=1000001\nCMS_PUBLISH_GITHUB_INSTALLATION_ID=2000002\nCMS_PREVIEW_SERIALIZER_READY=true\nCMS_PREVIEW_RENDERER_SHA=${sha}\n`);
     assert.notEqual(run("0".repeat(40)).status, 0);
     assert.notEqual(run(sha, "b".repeat(40), true).status, 0);
     assert.notEqual(run(sha, "", false).status, 0);
@@ -438,7 +455,7 @@ test("dev deployment writes the exact Admin source revision before Functions dep
     const pinned = "b".repeat(40);
     assert.equal(run(sha, pinned, false).status, 0);
     assert.equal(readFileSync(join(workspace, "functions/.env.njpbs-site-dev"), "utf8"),
-      `CMS_WRITEBACK_CONFIGURED=true\nCMS_ADMIN_BUILD_REVISION=${sha}\nCMS_PUBLISH_GITHUB_TRUSTED_ACTORS=["fixture-owner"]\nCMS_PREVIEW_SERIALIZER_READY=true\nCMS_PREVIEW_RENDERER_SHA=${pinned}\n`);
+      `CMS_WRITEBACK_CONFIGURED=true\nCMS_ADMIN_BUILD_REVISION=${sha}\nCMS_PUBLISH_GITHUB_TRUSTED_ACTORS=["fixture-owner"]\nCMS_PUBLISH_GITHUB_REPOSITORY=${repositoryFixture.CANONICAL_GITHUB_REPOSITORY}\nCMS_PUBLISH_GITHUB_APP_ID=1000001\nCMS_PUBLISH_GITHUB_INSTALLATION_ID=2000002\nCMS_PREVIEW_SERIALIZER_READY=true\nCMS_PREVIEW_RENDERER_SHA=${pinned}\n`);
   } finally { rmSync(workspace, { recursive: true, force: true }); }
 });
 

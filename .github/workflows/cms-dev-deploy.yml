@@ -74,6 +74,8 @@ env:
   VITE_CANONICAL_GITHUB_REPOSITORY: ${{ vars.CANONICAL_GITHUB_REPOSITORY }}
   CMS_DEPLOY_OWNER: ${{ vars.CMS_DEPLOY_OWNER }}
   CMS_PUBLISH_GITHUB_TRUSTED_ACTORS: ${{ vars.CMS_PUBLISH_GITHUB_TRUSTED_ACTORS }}
+  CMS_PUBLISH_GITHUB_APP_ID: ${{ vars.CMS_PUBLISH_GITHUB_APP_ID }}
+  CMS_PUBLISH_GITHUB_INSTALLATION_ID: ${{ vars.CMS_PUBLISH_GITHUB_INSTALLATION_ID }}
   CMS_DEV_FIREBASE_WEB_APP_ID: ${{ vars.CMS_DEV_FIREBASE_WEB_APP_ID }}
   CMS_DEV_CLOUDFLARE_ACCOUNT_ID: ${{ vars.CMS_DEV_CLOUDFLARE_ACCOUNT_ID }}
   CMS_DEV_ACCESS_ORIGIN: ${{ vars.CMS_DEV_ACCESS_ORIGIN }}
@@ -381,6 +383,9 @@ jobs:
           printf 'CMS_ADMIN_BUILD_REVISION=%s\n' "$DEPLOY_SHA" >> functions/.env.njpbs-site-dev
           node -e 'if (!require("./functions/lib/cms-publish-dispatch").trustedPublishActors().length) throw new Error("Configure trusted publication actors")'
           printf 'CMS_PUBLISH_GITHUB_TRUSTED_ACTORS=%s\n' "$CMS_PUBLISH_GITHUB_TRUSTED_ACTORS" >> functions/.env.njpbs-site-dev
+          [[ "$CMS_PUBLISH_GITHUB_APP_ID" =~ ^[1-9][0-9]*$ && "$CMS_PUBLISH_GITHUB_INSTALLATION_ID" =~ ^[1-9][0-9]*$ ]]
+          printf 'CMS_PUBLISH_GITHUB_REPOSITORY=%s\nCMS_PUBLISH_GITHUB_APP_ID=%s\nCMS_PUBLISH_GITHUB_INSTALLATION_ID=%s\n' \
+            "$CANONICAL_GITHUB_REPOSITORY" "$CMS_PUBLISH_GITHUB_APP_ID" "$CMS_PUBLISH_GITHUB_INSTALLATION_ID" >> functions/.env.njpbs-site-dev
           [[ "$CMS_DEV_RENDERER_SOURCE_SHA" =~ ^[0-9a-f]{40}$ ]]
           if [ "$CMS_DEV_RELEASE_PREVIEW_RENDERER" = true ]; then
             test "$CMS_DEV_RENDERER_SOURCE_SHA" = "$DEPLOY_SHA"

@@ -15,6 +15,7 @@ import { readReceipt, collectLiveIdentities, functionsInventoryIdentity, fingerp
 import { FUNCTION_RUNTIME_VARIABLES } from "./lib/cms-release-plan.mjs";
 import { repositoryMatches } from "./lib/repository-identity.mjs";
 import { readDeploymentManifest, renderCommittedDeploymentSource } from "./render-development-config.mjs";
+import { devPublicationIdentity } from "./assert-dev-cms-targets.mjs";
 
 const execute = promisify(execFile);
 const trustedRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
@@ -274,7 +275,7 @@ async function nativeDevelopmentPlan({ state, target, candidateSha, cwd, signal 
   const parameters = Object.fromEntries(stdout.split(/\r?\n/).filter(line => line && !line.startsWith("#")).map(line => {
     const at = line.indexOf("="); if (at < 1) refuse("dev-configuration"); return [line.slice(0, at), line.slice(at + 1)];
   }));
-  Object.assign(parameters, { CMS_ADMIN_BUILD_REVISION: state.identity.priorAdminSha, CMS_PREVIEW_SERIALIZER_READY: "true",
+  Object.assign(parameters, devPublicationIdentity(process.env), { CMS_ADMIN_BUILD_REVISION: state.identity.priorAdminSha, CMS_PREVIEW_SERIALIZER_READY: "true",
     CMS_PREVIEW_RENDERER_SHA: state.identity.backend.previewRendererSha });
   for (const fn of state.providerFunctions) {
     if (Object.entries(parameters).some(([key, value]) => fn.serviceConfig?.environmentVariables?.[key] !== value)) refuse("dev-configuration");

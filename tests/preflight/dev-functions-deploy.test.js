@@ -1,5 +1,5 @@
 import { repositoryFixture } from "../helpers/repository-identity.mjs";
-import { writeDevFunctionsEnvironment } from "../helpers/dev-deployment-config.mjs";
+import { devDeploymentEnvironment, writeDevFunctionsEnvironment } from "../helpers/dev-deployment-config.mjs";
 import { DEV_TARGETS } from "../../scripts/assert-dev-cms-targets.mjs";
 import { cpSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -12,6 +12,11 @@ import { deployDevFunctions } from "../../scripts/deploy-dev-functions.mjs";
 
 const repo = fileURLToPath(new URL("../../", import.meta.url));
 const workflow = parse(readFileSync(join(repo, ".github/workflows/cms-dev-deploy.yml"), "utf8"));
+
+// The workflow appends trusted actors and the configured publication identity after the revision.
+const appended = env => `CMS_PUBLISH_GITHUB_TRUSTED_ACTORS=${env.CMS_PUBLISH_GITHUB_TRUSTED_ACTORS}\n` +
+  `CMS_PUBLISH_GITHUB_REPOSITORY=${env.CANONICAL_GITHUB_REPOSITORY}\nCMS_PUBLISH_GITHUB_APP_ID=${env.CMS_PUBLISH_GITHUB_APP_ID}\n` +
+  `CMS_PUBLISH_GITHUB_INSTALLATION_ID=${env.CMS_PUBLISH_GITHUB_INSTALLATION_ID}\n`;
 
 async function fixture(work) {
   const root = mkdtempSync(join(tmpdir(), "dev-functions-deploy-"));
@@ -38,6 +43,8 @@ async function fixture(work) {
       CMS_DEPLOY_OWNER: "fixture-user", GITHUB_ACTOR: "fixture-user", GITHUB_TRIGGERING_ACTOR: "fixture-user", GITHUB_REF: "refs/heads/main",
       GITHUB_WORKFLOW_REF: `${repositoryFixture.CANONICAL_GITHUB_REPOSITORY}/.github/workflows/cms-dev-deploy.yml@refs/heads/main`,
       CLOUDFLARE_ACCOUNT_ID: process.env.CLOUDFLARE_ACCOUNT_ID, FIREBASE_WEB_APP_ID: process.env.FIREBASE_WEB_APP_ID,
+      CMS_PUBLISH_GITHUB_APP_ID: devDeploymentEnvironment.CMS_PUBLISH_GITHUB_APP_ID,
+      CMS_PUBLISH_GITHUB_INSTALLATION_ID: devDeploymentEnvironment.CMS_PUBLISH_GITHUB_INSTALLATION_ID,
       CMS_DEV_PUBLISH_ENABLED: "false", DEPLOY_SHA: sha, GITHUB_SHA: "b".repeat(40), GITHUB_WORKFLOW_SHA: "b".repeat(40), RUNNER_ENVIRONMENT: "github-hosted" } });
   } finally {
     for (const [name, value] of Object.entries(prior)) {
@@ -79,6 +86,19 @@ describe("dev Functions deployment boundary", () => {
     writeFileSync(path, readFileSync(path, "utf8") + `CMS_ADMIN_BUILD_REVISION=${"f".repeat(40)}\n`);
     await expect(deployDevFunctions({ ...options, request: async () => { called = true; }, runCommand: () => { called = true; },
     })).rejects.toThrow("revision differs");
+    expect(called).toBe(false);
+  }));
+
+  it("refuses Functions deployment until the configured publication identity is appended", async () => fixture(async options => {
+    let called = false;
+    const path = new URL("functions/.env.njpbs-site-dev", options.root);
+    const appendedIdentity = readFileSync(path, "utf8");
+    writeFileSync(path, appendedIdentity.replace(/^CMS_PUBLISH_GITHUB_(REPOSITORY|APP_ID|INSTALLATION_ID)=.*\n/gm, ""));
+    await expect(deployDevFunctions({ ...options, request: async () => { called = true; }, runCommand: () => { called = true; },
+    })).rejects.toThrow("publication identity differs");
+    writeFileSync(path, appendedIdentity + `CMS_PUBLISH_GITHUB_APP_ID=${options.env.CMS_PUBLISH_GITHUB_APP_ID}\n`);
+    await expect(deployDevFunctions({ ...options, request: async () => { called = true; }, runCommand: () => { called = true; },
+    })).rejects.toThrow("publication identity differs");
     expect(called).toBe(false);
   }));
 
@@ -192,9 +212,11 @@ it("accepts only the reviewed checkout plus the workflow's exact dev preparation
       GITHUB_REF: "refs/heads/main", GITHUB_ACTOR: "fixture-user", GITHUB_TRIGGERING_ACTOR: "fixture-user",
       RUNNER_ENVIRONMENT: "github-hosted",
       GITHUB_WORKFLOW_REF: `${repositoryFixture.CANONICAL_GITHUB_REPOSITORY}/.github/workflows/cms-dev-deploy.yml@refs/heads/main`,
-      CMS_DEV_RENDERER_SOURCE_SHA: "b".repeat(40) };
+      CMS_DEV_RENDERER_SOURCE_SHA: "b".repeat(40), CMS_PUBLISH_GITHUB_TRUSTED_ACTORS: JSON.stringify(["fixture-user"]),
+      CMS_PUBLISH_GITHUB_APP_ID: devDeploymentEnvironment.CMS_PUBLISH_GITHUB_APP_ID,
+      CMS_PUBLISH_GITHUB_INSTALLATION_ID: devDeploymentEnvironment.CMS_PUBLISH_GITHUB_INSTALLATION_ID };
     writeFileSync(join(root, "functions/package.json"), JSON.stringify({ ...pkg, main: "dev-index.js" }));
-    const expected = `CMS_READER_BRIDGE_ENABLED=false\nCMS_ADMIN_BUILD_REVISION=${sha}\nCMS_PREVIEW_SERIALIZER_READY=true\nCMS_PREVIEW_RENDERER_SHA=${env.CMS_DEV_RENDERER_SOURCE_SHA}\n`;
+    const expected = `CMS_READER_BRIDGE_ENABLED=false\nCMS_ADMIN_BUILD_REVISION=${sha}\n${appended(env)}CMS_PREVIEW_SERIALIZER_READY=true\nCMS_PREVIEW_RENDERER_SHA=${env.CMS_DEV_RENDERER_SOURCE_SHA}\n`;
     writeFileSync(join(root, "functions/.env.njpbs-site-dev"), expected);
     writeFileSync(join(root, "functions/cloud-publication-wake.generated.json"), JSON.stringify({ schemaVersion: 1, environment: "development", enabled: false }));
     const url = pathToFileURL(`${root}/`);
@@ -206,6 +228,44 @@ it("accepts only the reviewed checkout plus the workflow's exact dev preparation
     expect(() => assertDevReaderCheckout(env, url)).toThrow();
     writeFileSync(join(root, "functions/.env.njpbs-site-dev"), expected);
     writeFileSync(join(root, "functions/package.json"), JSON.stringify({ ...pkg, main: "dev-index.js", extra: true }));
+    expect(() => assertDevReaderCheckout(env, url)).toThrow();
+  } finally { rmSync(root, { recursive: true, force: true }); }
+});
+
+it("compares the dev Functions environment with its committed template rendered by the same inputs", async () => {
+  const { assertDevReaderCheckout } = await import("../../scripts/deploy-dev-reader-mounts.mjs");
+  const root = mkdtempSync(join(tmpdir(), "dev-reader-rendered-"));
+  const git = args => execFileSync("git", args, { cwd: root, encoding: "utf8" }).trim();
+  try {
+    mkdirSync(join(root, "functions")); mkdirSync(join(root, "config"));
+    const pkg = { name: "fixture", main: "index.js" };
+    writeFileSync(join(root, "functions/package.json"), JSON.stringify(pkg));
+    writeFileSync(join(root, "functions/.env.njpbs-site-dev"), "CMS_MEDIA_R2_BUCKET=template-dev-media\n");
+    writeFileSync(join(root, "config/development-inputs.json"), JSON.stringify({ schemaVersion: 1, inputs: {
+      CMS_DEV_MEDIA_BUCKET: { kind: "resource", placeholder: "template-dev-media", files: ["functions/.env.njpbs-site-dev"] } } }));
+    writeFileSync(join(root, ".gitignore"), "functions/cloud-publication-wake.generated.json\n");
+    git(["init", "-q"]); git(["add", "."]);
+    git(["-c", "user.name=Fixture", "-c", "user.email=fixture@example.test", "commit", "-qm", "Fixture"]);
+    const sha = git(["rev-parse", "HEAD"]), env = { ...workflow.jobs.deploy.env, ...DEV_TARGETS, ...repositoryFixture,
+      CMS_DEPLOY_OWNER: "fixture-user", GITHUB_REPOSITORY: repositoryFixture.CANONICAL_GITHUB_REPOSITORY,
+      GITHUB_REPOSITORY_ID: repositoryFixture.CANONICAL_GITHUB_REPOSITORY_ID,
+      DEPLOY_SHA: sha, GITHUB_SHA: "c".repeat(40), GITHUB_WORKFLOW_SHA: "c".repeat(40),
+      GITHUB_REF: "refs/heads/main", GITHUB_ACTOR: "fixture-user", GITHUB_TRIGGERING_ACTOR: "fixture-user",
+      RUNNER_ENVIRONMENT: "github-hosted",
+      GITHUB_WORKFLOW_REF: `${repositoryFixture.CANONICAL_GITHUB_REPOSITORY}/.github/workflows/cms-dev-deploy.yml@refs/heads/main`,
+      CMS_DEV_RENDERER_SOURCE_SHA: "b".repeat(40), CMS_DEV_MEDIA_BUCKET: "fixture-dev-media",
+      CMS_PUBLISH_GITHUB_TRUSTED_ACTORS: JSON.stringify(["fixture-user"]),
+      CMS_PUBLISH_GITHUB_APP_ID: devDeploymentEnvironment.CMS_PUBLISH_GITHUB_APP_ID,
+      CMS_PUBLISH_GITHUB_INSTALLATION_ID: devDeploymentEnvironment.CMS_PUBLISH_GITHUB_INSTALLATION_ID };
+    writeFileSync(join(root, "functions/package.json"), JSON.stringify({ ...pkg, main: "dev-index.js" }));
+    writeFileSync(join(root, "functions/cloud-publication-wake.generated.json"), JSON.stringify({ schemaVersion: 1, environment: "development", enabled: false }));
+    const prepared = `CMS_ADMIN_BUILD_REVISION=${sha}\n${appended(env)}CMS_PREVIEW_SERIALIZER_READY=true\nCMS_PREVIEW_RENDERER_SHA=${env.CMS_DEV_RENDERER_SOURCE_SHA}\n`;
+    const url = pathToFileURL(`${root}/`);
+    writeFileSync(join(root, "functions/.env.njpbs-site-dev"), "CMS_MEDIA_R2_BUCKET=fixture-dev-media\n" + prepared);
+    expect(() => assertDevReaderCheckout(env, url)).not.toThrow();
+    writeFileSync(join(root, "functions/.env.njpbs-site-dev"), "CMS_MEDIA_R2_BUCKET=template-dev-media\n" + prepared);
+    expect(() => assertDevReaderCheckout(env, url)).toThrow();
+    writeFileSync(join(root, "functions/.env.njpbs-site-dev"), "CMS_MEDIA_R2_BUCKET=other-dev-media\n" + prepared);
     expect(() => assertDevReaderCheckout(env, url)).toThrow();
   } finally { rmSync(root, { recursive: true, force: true }); }
 });

@@ -26,6 +26,7 @@ const cms = require("../../functions/lib/cms-preview-pair.js");
 const sha = execFileSync("git", ["rev-parse", "HEAD"], { encoding: "utf8" }).trim();
 const rendererSha = "a".repeat(40);
 const env = { ...repositoryFixture, ...DEV_TARGETS, CMS_DEV_INSTALL_READER_BRIDGE: "true", CMS_DEV_PUBLISH_ENABLED: "false",
+  CMS_PUBLISH_GITHUB_APP_ID: "1000001", CMS_PUBLISH_GITHUB_INSTALLATION_ID: "2000002",
   GITHUB_REPOSITORY: repositoryFixture.CANONICAL_GITHUB_REPOSITORY, GITHUB_REPOSITORY_ID: repositoryFixture.CANONICAL_GITHUB_REPOSITORY_ID,
   CMS_DEV_READER_OPERATION_ID: "reader-dev-deploy", CMS_DEV_READER_INSTALL_AUTHORIZATION: "INSTALL_DEV_READERS",
   CMS_DEV_RENDERER_SOURCE_SHA: rendererSha, DEPLOY_SHA: sha, GITHUB_SHA: sha, GITHUB_WORKFLOW_SHA: sha,
@@ -63,7 +64,8 @@ beforeEach(async () => {
   const vars = Object.fromEntries(readFileSync(path, "utf8").split(/\r?\n/)
     .filter(line => line && !line.startsWith("#"))
     .map(line => [line.slice(0, line.indexOf("=")), line.slice(line.indexOf("=") + 1)]));
-  Object.assign(vars, { CMS_PUBLISH_GITHUB_REPOSITORY: repositoryFixture.CANONICAL_GITHUB_REPOSITORY, CMS_ADMIN_BUILD_REVISION: sha, CMS_PUBLISH_TRANSPORT: "github",
+  Object.assign(vars, { CMS_PUBLISH_GITHUB_REPOSITORY: repositoryFixture.CANONICAL_GITHUB_REPOSITORY,
+    CMS_PUBLISH_GITHUB_APP_ID: env.CMS_PUBLISH_GITHUB_APP_ID, CMS_PUBLISH_GITHUB_INSTALLATION_ID: env.CMS_PUBLISH_GITHUB_INSTALLATION_ID, CMS_ADMIN_BUILD_REVISION: sha, CMS_PUBLISH_TRANSPORT: "github",
     CMS_PREVIEW_SERIALIZER_READY: "true", CMS_PREVIEW_RENDERER_SHA: rendererSha,
     CMS_DEV_REPORT_INTAKE_MODE: "stored-only", CMS_WRITEBACK_CONFIGURED: "true",
     CMS_MEDIA_R2_BUCKET: "template-dev-media", CMS_MEDIA_PUBLIC_ORIGIN: "https://dev-media.example.org",
