@@ -1865,7 +1865,7 @@ const BlockCard = memo(function BlockCard({
   const customHtmlLocked = !useContext(CustomHtmlEditing) && block.type === "html";
   const lastRequest = useRef(0);
   const editButton = useRef<HTMLButtonElement>(null);
-  const removeButton = useRef<HTMLButtonElement>(null);
+  const removeButton = useRef<HTMLButtonElement | null>(null);
   // Labels belong to this editor instance, never the saved figure payload.
   const figureKey = block.type === "data_figure" ? JSON.stringify([block.data.datasetId, block.data.version]) : "";
   const [figureLabel, setFigureLabel] = useState<{ key: string; label: string | null } | null>(null);
@@ -2015,6 +2015,10 @@ const BlockCard = memo(function BlockCard({
       {arrangeHomeSection && block.section === "home-newscast" ? <HomeNewscastEditor block={block} readOnly={readOnly} onChange={changeData} loadSources={loadHomeSources} /> : arrangeHomeSection && block.section === "home-newsletter" ? <HomeNewsletterEditor block={block} readOnly={readOnly} onChange={changeData} loadSources={loadHomeSources} /> : arrangeHomeSection && block.section === "home-donor" ? <HomeDonorEditor block={block} readOnly={readOnly} onChange={changeData} /> : arrangeHomeSection && block.type === "content_shelf" ? <HomeCuratedShelfEditor block={block} blocks={blocks ?? [block]} readOnly={readOnly} onChange={changeData} loadSources={loadHomeSources} /> : isInlineBlockType(block.type) ? <InlineBlockSurface homeShelf={homeShelf} block={block} readOnly={readOnly}
         textLinkActions={textLinkActions} generatedHeadingLevel={generatedHeadingLevel} onChange={changeData}
         onHomeText={onHomeText}
+        onRemoveImage={view?.kind && !requiredHomeRegion ? trigger => {
+          removeButton.current = trigger;
+          onRemove(block.id, position);
+        } : undefined}
         onResolvedDataFigureLabel={resolveFigureLabel}
         onConvertCoverage={onConvertCoverage ? convertCoverage : undefined}
         coverageCardCapacity={coverageCardCapacity}

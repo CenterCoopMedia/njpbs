@@ -278,6 +278,7 @@ interface BlockSurfaceProps {
   canUploadCategory?: (category: string) => boolean;
   onMediaPickerDirtyChange?: (dirty: boolean) => void;
   onChange: (data: Record<string, unknown>, discrete?: boolean) => void;
+  onRemoveImage?: (trigger: HTMLButtonElement) => void;
   onConvertCoverage?: (entries: CoverageEntry[]) => void;
   coverageCardCapacity?: number;
   showPageSeedAssets?: boolean;
@@ -301,6 +302,7 @@ export function InlineBlockSurface({
   canUploadCategory,
   onMediaPickerDirtyChange,
   onChange,
+  onRemoveImage,
   onConvertCoverage,
   coverageCardCapacity = Number.POSITIVE_INFINITY,
   showPageSeedAssets = false,
@@ -368,6 +370,7 @@ export function InlineBlockSurface({
           canUploadCategory={canUploadCategory}
           onMediaPickerDirtyChange={onMediaPickerDirtyChange}
           onChange={onChange}
+          onRemoveImage={onRemoveImage}
         />
       );
 
@@ -708,6 +711,7 @@ interface InlineImageEditorProps {
   canUploadCategory?: (category: string) => boolean;
   onMediaPickerDirtyChange?: (dirty: boolean) => void;
   onChange: (image: ImageData) => void;
+  onRemove?: (trigger: HTMLButtonElement) => void;
 }
 
 function InlineImageEditor({
@@ -724,6 +728,7 @@ function InlineImageEditor({
   canUploadCategory,
   onMediaPickerDirtyChange,
   onChange,
+  onRemove,
 }: InlineImageEditorProps) {
   const suffix = labelSuffix ? ` ${labelSuffix}` : "";
   const assetIdInput = `${idPrefix}-asset-id`;
@@ -858,7 +863,7 @@ function InlineImageEditor({
                   {image.assetId ? "Change image" : "Choose image"}
                 </Button>
                 {image.assetId ? (
-                  <Button variant="ghost" onClick={clearAsset}>
+                  <Button variant="ghost" onClick={onRemove ? event => onRemove(event.currentTarget) : clearAsset}>
                     Remove image
                   </Button>
                 ) : null}
@@ -975,6 +980,7 @@ function InlineImage({
   canUploadCategory,
   onMediaPickerDirtyChange,
   onChange,
+  onRemoveImage,
 }: BlockSurfaceProps) {
   const image = imageFromValue(block.data);
   const fields = editorFieldsForBlock("image");
@@ -994,6 +1000,7 @@ function InlineImage({
         canUploadCategory={canUploadCategory}
         onMediaPickerDirtyChange={onMediaPickerDirtyChange}
         onChange={(next) => onChange({ ...block.data, ...next })}
+        onRemove={onRemoveImage}
       />
       <div className="inline-image-link-fields">
         {linkFields.map(field => {
