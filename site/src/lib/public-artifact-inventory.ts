@@ -1069,7 +1069,7 @@ async function atomicWriteJson(outputPath: string, value: unknown): Promise<void
     `.${path.basename(outputPath)}.${process.pid}.${randomUUID()}.tmp`,
   );
   try {
-    await writeFile(temporaryPath, `${JSON.stringify(value, null, 2)}\n`, {
+    await writeFile(temporaryPath, `${JSON.stringify(value)}\n`, {
       encoding: "utf8",
       flag: "wx",
     });

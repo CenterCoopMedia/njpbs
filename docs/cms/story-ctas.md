@@ -32,5 +32,7 @@ rendering and full artifact rendering consume the same rule contract.
 Static story routes use the existing request-time context adapter once the CTA
 settings document exists. Turning all rules off keeps that adapter active so
 an older built appeal cannot reappear.
-The existing route-hint transport supports up to 10,000 canonical story paths.
-This limit and the settings publication roster bound still apply to CTA updates.
+Route hints keep their existing 10,000-route and 2 MiB serialized-file bounds.
+The inventory is written without indentation to preserve byte headroom. The
+route-count bound does not guarantee that every catalog fits the byte bound.
+These bounds and the settings publication roster bound still apply to CTA updates.
