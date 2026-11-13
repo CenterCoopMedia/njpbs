@@ -83,7 +83,10 @@ type Ready = {
 const currentSchema = currentCmsSettingsSchemaFor(STORY_CTAS_SETTINGS_ID)!;
 const supportAppealFields = editorFieldsForBlock("support_appeal").filter(
   field => field.key !== "backgroundImageAssetId",
-);
+).map(field => field.key === "heading" ? {
+  ...field,
+  help: "A short invitation to support NJ PBS. Choose where it appears with Position.",
+} : field);
 const same = (left: unknown, right: unknown) => JSON.stringify(left) === JSON.stringify(right);
 
 function readyFromResponse(response: GetSettingsResponse<StoryCtasSettingsValues>): Ready {
