@@ -66,6 +66,7 @@ const EVENT_METADATA_FIELDS = [
   "isFree", "priceText",
 ];
 const POST_METADATA_FIELDS = [
+  "disableStoryCtas",
   "type",
   "spotlightNews",
   "coverageLabelId",
@@ -261,6 +262,9 @@ function createPublishedSnapshot({
     if (document.isFree === true && typeof document.priceText === "string" && document.priceText.trim()) throw new PublishSnapshotError("Free events cannot have a price");
   }
   if (kind === "post") {
+    if (document.disableStoryCtas !== undefined && typeof document.disableStoryCtas !== "boolean") {
+      throw new PublishSnapshotError("disableStoryCtas must be a boolean");
+    }
     if (document.liveBlog !== undefined) {
       try {
         const project = allowIncompletePresentation ? require("./live-blog").previewLiveBlogData : require("./live-blog").publicLiveBlogData;

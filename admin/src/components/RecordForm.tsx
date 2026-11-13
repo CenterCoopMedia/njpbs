@@ -561,7 +561,7 @@ export const RecordForm = forwardRef<RecordFormHandle, RecordFormProps>(function
     if (kind !== "post" || !editorView?.kind) return source;
     const basic = source.find(group => group.id === "basics")!;
     const organization = source.find(group => group.id === "organization")!;
-    const isIdentity = (field: EditorField) => !field.path && ["credits", "coverageLabelId", "spotlightNews", "showInHomeHero"].includes(field.key);
+    const isIdentity = (field: EditorField) => !field.path && ["credits", "coverageLabelId", "spotlightNews", "showInHomeHero", "disableStoryCtas"].includes(field.key);
     const isSlug = (field: EditorField) => !field.path && field.key === "slug";
     return [
       { ...basic, label: "Post identity", help: "The people credited for this story.", fields: [...basic.fields.filter(field => !isSlug(field)), ...organization.fields.filter(isIdentity)] },
@@ -1686,7 +1686,7 @@ export const RecordForm = forwardRef<RecordFormHandle, RecordFormProps>(function
     return (
       <Fragment key={pathKey}>
       <FieldRenderer
-        togglePresentation={editorView?.kind === "post" && ["spotlightNews", "showInHomeHero"].includes(field.key) ? "inline" : undefined}
+        togglePresentation={editorView?.kind === "post" && ["spotlightNews", "showInHomeHero", "disableStoryCtas"].includes(field.key) ? "inline" : undefined}
         assetSummary={editorView?.kind === "post" && ["heroBackgroundImage", "heroImage"].includes(field.key) ? {
           label: field.key === "heroBackgroundImage" ? "Header background" : "Lead image",
           autoChoose: field.key === "heroImage", disabled: interactionLocked,

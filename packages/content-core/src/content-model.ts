@@ -631,6 +631,8 @@ export interface PostPublishedMetadata
   coverageLabelId?: string;
   /** Include this published Post in Home hero tag selections without a public tag. */
   showInHomeHero?: boolean;
+  /** Suppress automatic CTA rules for this published story only. */
+  disableStoryCtas?: boolean;
   title: string;
   /** Ordered editorial sections. The first non-empty value is the main category. */
   categories?: string[];
@@ -693,6 +695,8 @@ export interface PostRecord
   coverageLabelId?: string | null;
   /** Include this published Post in Home hero tag selections without a public tag. */
   showInHomeHero?: boolean;
+  /** Save and publish to suppress automatic CTAs; authored blocks stay. */
+  disableStoryCtas?: boolean;
   title: string;
   /** Ordered editorial sections. The first non-empty value is the main category. */
   categories?: string[];

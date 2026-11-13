@@ -46,7 +46,10 @@ export function validateStoryCtaRules(value: unknown, version = 2): string | nul
 }
 
 /** Render a composition without writing automatic blocks into the saved story. */
-export function insertStoryCtas(blocks: readonly PageBlock[], rules: readonly StoryCtaRule[], contentType = "post"): PageBlock[] {
+export function insertStoryCtas(blocks: readonly PageBlock[], rules: readonly StoryCtaRule[], { contentType = "post", optOut = false }: {
+  contentType?: string; optOut?: boolean;
+} = {}): PageBlock[] {
+  if (optOut) return [...blocks];
   const selected = rules.filter(rule => rule.enabled && rule.target.contentTypes.some(type => type === contentType));
   if (!selected.length) return [...blocks];
   const ids = new Set(blocks.map(block => block.id));
