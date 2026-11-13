@@ -37,7 +37,7 @@ automatic blocks into saved stories and does not require a code deployment.
 
 ## Skip automatic CTAs on one story
 
-Open the Post metadata panel and turn on **Skip automatic CTAs** for sponsored
+Open the Post identity panel and turn on **Skip automatic CTAs** for sponsored
 or sensitive coverage. Save and publish the Post. The published story then omits
 every automatic support appeal and newsletter rule. The setting does not remove
 support appeals, newsletter signups or other calls to action that an editor added
