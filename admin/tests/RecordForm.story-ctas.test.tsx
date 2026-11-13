@@ -11,7 +11,7 @@ describe("per-story automatic CTA choice", () => {
     const toggle = screen.getByRole("checkbox", { name: "Skip automatic CTAs" });
     expect(toggle).not.toBeChecked();
     fireEvent.click(toggle);
-    fireEvent.click(screen.getByRole("button", { name: "Save", exact: true }));
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
     await waitFor(() => expect(save).toHaveBeenCalledOnce());
     expect(save.mock.calls[0]![0].disableStoryCtas).toBe(true);
     view.unmount();

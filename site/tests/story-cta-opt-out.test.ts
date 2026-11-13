@@ -12,7 +12,7 @@ describe("story CTA opt-out persistence", () => {
     expect(metadata.validateKnownMetadata(document)).toBeNull();
     const published = snapshots.createPublishedSnapshot({ collection: "cmsPosts", document,
       publishedAt: "2026-11-13T12:00:00.000Z", publishedBy: "fixture-editor" });
-    expect(published.metadata.disableStoryCtas).toBe(disabled);
+    expect(published.metadata).toMatchObject({ disableStoryCtas: disabled });
     const output = projectCmsPost({ id: "fixture-story", status: "published", publiclyVisible: true,
       publishAt: published.publishedAt, disableStoryCtas: !disabled, published }, { now: new Date("2026-11-13T13:00:00.000Z") });
     expect(output?.disableStoryCtas).toBe(disabled);
