@@ -1,0 +1,7 @@
+{
+  "date": "2026-11-13",
+  "kind": "fixed",
+  "title": "Remove an image from a page or post",
+  "body": "Remove image in the section details asks you to confirm, then removes the image plank. Cancel keeps it. Use Undo to restore it before you save.",
+  "prs": []
+}
