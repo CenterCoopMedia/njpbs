@@ -1,15 +1,18 @@
 import { clearEmulatorFirestore } from "../helpers/emulator-firestore.js";
+import { createRequire } from "node:module";
 import { afterAll, afterEach, beforeAll, beforeEach, expect, it } from "vitest";
 import { initializeApp, deleteApp } from "firebase-admin/app";
 import { getFirestore } from "firebase-admin/firestore";
-import consumer from "../../functions/lib/no-build-code-post-consumer.js";
 import deployment from "../../functions/lib/public-deployment.js";
 import { schedulePacketFixture } from "./page-schedule-packet-fixture";
 import postFixture from "../../site/tests/fixtures/shadow-posts/post.json";
 import { createNoBuildCodePostWorker } from "../../workers/src/no-build-code-post-worker";
 import { publicationTarget } from "../../functions/lib/publication-target.js";
-import postSettingsConfirmation from "../../functions/lib/no-build-post-settings-confirmation.js";
 import context from "../../functions/lib/public-context-revision.js";
+
+const require = createRequire(import.meta.url);
+const consumer = require("../../functions/lib/no-build-code-post-consumer.js");
+const postSettingsConfirmation = require("../../functions/lib/no-build-post-settings-confirmation.js");
 
 const rendererSha = "a".repeat(40), path = "/posts/shadow-fixture/";
 const app = initializeApp({ projectId: "njpbs-site-dev" }, "code-post-local-fixture");
