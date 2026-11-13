@@ -349,7 +349,7 @@ describe("the link command enforces the allowlist on manual entry (#514)", () =>
 
 describe("pasting a URL over a selection cannot bypass the allowlist (#514)", () => {
   // The other #514 tests cover setLink and autolink, both of which run isAllowedUri.
-  // TipTap 2.27's linkOnPaste is the exception: its paste handler applies the pasted
+  // The linkOnPaste handler applies the pasted
   // href with a bare setMark and never consults isAllowedUri, so a pasted ftp URL over
   // a selection would persist a link mark the renderer strips. rich-text.ts disables
   // linkOnPaste for exactly that reason; these prove the ungated path is gone.
