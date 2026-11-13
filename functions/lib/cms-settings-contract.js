@@ -100,8 +100,9 @@ const DEFAULT_PUBLIC_HOMEPAGE_BANNER_SETTINGS = Object.freeze({
 // Deployable mirror of the approved product-owned settings catalog. The parity
 // suite compares this complete object with packages/content-core.
 const CMS_SETTINGS_SCHEMAS = Object.freeze({
-  [STORY_CTAS_SETTINGS_ID]: Object.freeze({ currentVersion: 1, versions: Object.freeze({
+  [STORY_CTAS_SETTINGS_ID]: Object.freeze({ currentVersion: 2, versions: Object.freeze({
     1: Object.freeze({ schemaVersion: 1, fields: Object.freeze({ rules: Object.freeze({ kind: "storyCtaRules", required: true }) }) }),
+    2: Object.freeze({ schemaVersion: 2, fields: Object.freeze({ rules: Object.freeze({ kind: "storyCtaRules", required: true, version: 2 }) }) }),
   }) }),
   [COVERAGE_LABELS_SETTINGS_ID]: Object.freeze({ currentVersion: 1, versions: Object.freeze({
     1: Object.freeze({ schemaVersion: 1, fields: Object.freeze({ labels: Object.freeze({ kind: "coverageLabels", required: true }) }) }),
@@ -903,7 +904,10 @@ function schemaError(schema) {
       ) {
         return "The CMS settings schema is invalid";
       }
-    } else if (definition.kind !== "boolean" && definition.kind !== "assetId" && definition.kind !== "coverageLabels" && definition.kind !== "postsBrowse" && definition.kind !== "storyCtaRules") {
+    } else if (definition.kind === "storyCtaRules") {
+      keys.delete("version");
+      if (definition.version !== undefined && definition.version !== 2) return "The CMS settings schema is invalid";
+    } else if (definition.kind !== "boolean" && definition.kind !== "assetId" && definition.kind !== "coverageLabels" && definition.kind !== "postsBrowse") {
       return "The CMS settings schema is invalid";
     }
     if (keys.size > 0) return "The CMS settings schema is invalid";
@@ -1029,7 +1033,7 @@ function validateCmsSettingsValues(schema, values) {
         if (error) return error;
         break;
       }
-      case "storyCtaRules": { const error = validateStoryCtaRules(value); if (error) return error; break; }
+      case "storyCtaRules": { const error = validateStoryCtaRules(value, definition.version ?? 1); if (error) return error; break; }
       case "coverageLabels": { const error = validateCoverageLabels(value); if (error) return error; break; }
       case "boolean":
         if (typeof value !== "boolean") return `${field} must be a boolean`;

@@ -232,7 +232,7 @@ export const DEFAULT_SITE_NAVIGATION: SiteNavigationSettingsValues = deepFreeze(
 } satisfies SiteNavigationSettingsValues);
 
 export type CmsSettingsField =
-  | { readonly kind: "storyCtaRules"; readonly required?: boolean }
+  | { readonly kind: "storyCtaRules"; readonly required?: boolean; readonly version?: 2 }
   | { readonly kind: "postsBrowse"; readonly required?: boolean }
   | { readonly kind: "coverageLabels"; readonly required?: boolean }
   | { readonly kind: "boolean"; readonly required?: boolean }
@@ -319,8 +319,9 @@ export interface CmsSettingsDocument {
 // The catalog is closed to approved product-owned documents. Historical
 // versions are never removed after a settings document is admitted.
 export const CMS_SETTINGS_SCHEMAS: CmsSettingsSchemaCatalog = Object.freeze({
-  [STORY_CTAS_SETTINGS_ID]: Object.freeze({ currentVersion: 1, versions: Object.freeze({
+  [STORY_CTAS_SETTINGS_ID]: Object.freeze({ currentVersion: 2, versions: Object.freeze({
     1: Object.freeze({ schemaVersion: 1, fields: Object.freeze({ rules: Object.freeze({ kind: "storyCtaRules", required: true }) }) }),
+    2: Object.freeze({ schemaVersion: 2, fields: Object.freeze({ rules: Object.freeze({ kind: "storyCtaRules", required: true, version: 2 }) }) }),
   }) }),
   [COVERAGE_LABELS_SETTINGS_ID]: Object.freeze({ currentVersion: 1, versions: Object.freeze({
     1: Object.freeze({ schemaVersion: 1, fields: Object.freeze({ labels: Object.freeze({ kind: "coverageLabels", required: true }) }) }),
@@ -1022,6 +1023,10 @@ function isCmsSettingsFieldDefinition(
   const keys = new Set(Object.keys(definition));
   keys.delete("kind");
   keys.delete("required");
+  if (definition.kind === "storyCtaRules") {
+    keys.delete("version");
+    return keys.size === 0 && (definition.version === undefined || definition.version === 2);
+  }
   if (definition.kind === "string" || definition.kind === "safeHref") {
     keys.delete("maxBytes");
     keys.delete("pairedWith");
@@ -1293,7 +1298,7 @@ export function validateCmsSettingsValues(
         if (error) return error;
         break;
       }
-      case "storyCtaRules": { const error = validateStoryCtaRules(value); if (error) return error; break; }
+      case "storyCtaRules": { const error = validateStoryCtaRules(value, definition.version ?? 1); if (error) return error; break; }
       case "coverageLabels": {
         const error = validateCoverageLabels(value);
         if (error) return error;

@@ -359,6 +359,29 @@ describe("published Post reader with the real Firestore emulator", () => {
     expect((await reader.read("shadow-fixture") as any).navigationPages).toEqual([]);
   });
 
+  it("joins approved newsletter cards selected by published CTA rules without copying draft fields", async () => {
+    await put("cmsPosts/reader-fixture", document());
+    const approved = { type: "newsletter", status: "approved", version: 2, title: "Weekly reporting",
+      signupUrl: "https://example.org/newsletter", body: { type: "doc", content: [] } };
+    await put("cmsPosts/cta-weekly", { ...approved, version: 3, status: "draft", title: "Private draft newsletter", signupUrl: "https://example.org/private" });
+    await put("cmsVersionHistory/cta-weekly-approval", { collection: "cmsPosts", documentId: "cta-weekly", action: "approve", after: approved });
+    const rule = { id: "weekly", label: "Weekly newsletter", enabled: true, target: { contentTypes: ["post"] },
+      position: { kind: "after-paragraph", count: 2 }, content: { type: "newsletter_signup", data: { newsletterIds: ["cta-weekly"] } } };
+    const published = { schemaVersion: 2, sourceVersion: 1, publishedAt: "2026-10-07T12:00:00.000Z", values: { rules: [rule] } };
+    await put("cmsSettings/story-ctas", { schemaVersion: 2, version: 2, values: { rules: [] }, published });
+    const response = await call(authenticated());
+    expect(response.status).toBe(200);
+    const read = await response.json();
+    expect(read.joinedRecords).toHaveLength(1);
+    expect(read.joinedRecords[0]).toMatchObject({ id: "cta-weekly", approvedLibraryVersion: { title: "Weekly reporting", signupUrl: "https://example.org/newsletter" } });
+    expect(read.document.published.blocks).toEqual(fixture.document.published.blocks);
+    expect(JSON.stringify(read)).not.toContain("Private draft newsletter");
+    await db.doc("cmsSettings/story-ctas").update({ "published.values.rules": [{ ...rule, enabled: false }] });
+    const disabled = await call(authenticated());
+    expect(disabled.status).toBe(200);
+    expect((await disabled.json()).joinedRecords).toEqual([]);
+  });
+
   it("keeps shadow Posts available when a built-in Page has an unmigrated block-only snapshot", async () => {
     await put("cmsPosts/reader-fixture", document());
     // The publisher's legacy Page fixture has no document-level publishAt.

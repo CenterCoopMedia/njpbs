@@ -296,7 +296,10 @@ async function readPublishedPost({ firestore, slug, now, transaction, includeChr
       catch (error) { refuseReaderMedia(error, releaseSelector); }
     }
     const safeAssets = projectPublishedPostAssets(assetIds, media, uploadedMediaReady, optional);
-    const recordIds = joinedRecordIds(published.blocks);
+    const chrome = includeChrome ? await readPublishedChrome(firestore, tx, now) : {};
+    const ctaRules = chrome.settings?.find(setting => setting.id === "story-ctas")?.published.values.rules ?? [];
+    const ctaBlocks = ctaRules.filter(rule => rule.enabled).map((rule, order) => ({ ...rule.content, id: `story-cta-${rule.id}`, visible: true, order }));
+    const recordIds = [...new Set([...joinedRecordIds(published.blocks), ...joinedRecordIds(ctaBlocks)])];
     if (recordIds.length > 100) throw readerFailure("reader_unsupported_dependency");
     const joinedRecords = [];
     if (recordIds.length) {
@@ -332,7 +335,6 @@ async function readPublishedPost({ firestore, slug, now, transaction, includeChr
       Object.assign(joinedSafe, selectedAssets({ assetIds: extraAssetIds }, projected));
     }
     const joinedAssets = extraAssetIds.filter(id => joinedSafe[id]).map(id => ({ id, ...joinedSafe[id] }));
-    const chrome = includeChrome ? await readPublishedChrome(firestore, tx, now) : {};
     const result = { kind: cardsOnly ? "published-post-card" : "published-post", document: { id: owner.id, status: "published", publiclyVisible: true, deleted: false,
       publishAt: published.publishedAt, published }, assets: [...assetIds.filter(id => safeAssets[id]).map(id => ({ id, ...safeAssets[id] })), ...joinedAssets],
       joinedRecords, authors, ...chrome };
