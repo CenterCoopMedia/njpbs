@@ -67,7 +67,7 @@ export function SettingsPreviewSummary({ html, textOnly = false }: { html: strin
   }, [html]);
   if (textOnly) {
     const document = typeof DOMParser === "undefined" ? null : new DOMParser().parseFromString(html, "text/html");
-    const text = document ? Array.from(document.querySelectorAll("h1, h2, h3, h4, p, li"), node => node.textContent).join(" ") : "";
+    const text = document ? Array.from(document.querySelectorAll("h1, h2, h3, h4, h5, h6, p, li, a"), node => node.textContent).join(" ") : "";
     return <p className="sr-only">{text}</p>;
   }
   return <div className="sr-only" ref={summary} dangerouslySetInnerHTML={{ __html: html }} onClick={event => {
