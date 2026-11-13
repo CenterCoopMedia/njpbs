@@ -45,17 +45,18 @@ async function expectMenuReachable(page: Page): Promise<void> {
       viewportWidth: window.innerWidth,
     };
   });
-  await expect.poll(async () => (await readGeometry()).left).toBeGreaterThanOrEqual(0);
+  // Reflow and Popper update asynchronously. Require all edges in the same read;
+  // separate successful polls can describe different layouts during one resize.
+  let geometry = await readGeometry();
   await expect.poll(async () => {
-    const geometry = await readGeometry();
-    return geometry.viewportWidth - geometry.right;
-  }).toBeGreaterThanOrEqual(0);
-  await expect.poll(async () => (await readGeometry()).top).toBeGreaterThanOrEqual(0);
-  await expect.poll(async () => {
-    const geometry = await readGeometry();
-    return geometry.viewportHeight - geometry.bottom;
-  }).toBeGreaterThanOrEqual(0);
-  const geometry = await readGeometry();
+    geometry = await readGeometry();
+    return {
+      left: geometry.left >= 0,
+      right: geometry.right <= geometry.viewportWidth,
+      top: geometry.top >= 0,
+      bottom: geometry.bottom <= geometry.viewportHeight,
+    };
+  }).toEqual({ left: true, right: true, top: true, bottom: true });
   expect(geometry.left).toBeGreaterThanOrEqual(0);
   expect(geometry.right).toBeLessThanOrEqual(geometry.viewportWidth);
   expect(geometry.top).toBeGreaterThanOrEqual(0);
