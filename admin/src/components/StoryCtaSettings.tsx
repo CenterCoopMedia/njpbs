@@ -351,7 +351,7 @@ function StoryCtaSettingsEditor({ load, save, publish }: Omit<StoryCtaSettingsTr
 
   function editContent(data: Record<string, unknown>) {
     if (!selected) return;
-    edit({ content: { type: selected.content.type, data } as StoryCtaRule["content"] });
+    edit({ content: { type: selected.content.type, data } as unknown as StoryCtaRule["content"] });
   }
 
   function add() {
@@ -452,7 +452,7 @@ function StoryCtaSettingsEditor({ load, save, publish }: Omit<StoryCtaSettingsTr
                 aria-pressed={rule.id === selectedId}
                 onClick={() => setSelectedId(rule.id)}
                 ref={node => { if (node) ruleButtons.current.set(rule.id, node); else ruleButtons.current.delete(rule.id); }}
-              ><span>{rule.label || "Untitled rule"}</span><small>{rule.enabled ? "Enabled" : "Disabled"}</small></Button>
+              ><span>{rule.label || "Untitled rule"}</span>{" "}<small>{rule.enabled ? "Enabled" : "Disabled"}</small></Button>
               <div className="story-cta-settings__rule-actions" aria-label={`Arrange ${rule.label || "untitled rule"}`}>
                 <ActionControl action="move-up" accessibleName={`Move up, ${rule.label || "untitled rule"}`} disabled={pending !== null || index === 0} onClick={() => move(index, -1)} />
                 <ActionControl action="move-down" accessibleName={`Move down, ${rule.label || "untitled rule"}`} disabled={pending !== null || index === draft.rules.length - 1} onClick={() => move(index, 1)} />

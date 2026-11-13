@@ -171,8 +171,9 @@ describe("Story CTA settings", () => {
     fireEvent.click(await screen.findByRole("button", { name: "Add Garden State Weekly" }));
     await screen.findByText(/Approved projection shown/);
     const preview = screen.getByTestId("story-preview");
-    expect(within(preview).getByRole("heading", { name: "Garden State Weekly" })).toBeVisible();
-    expect(within(preview).getByRole("link", { name: "Sign up for Garden State Weekly" })).toBeVisible();
+    expect(preview.closest('[aria-hidden="true"]')).not.toBeNull();
+    expect(within(preview).getByRole("heading", { name: "Garden State Weekly", hidden: true })).toBeVisible();
+    expect(within(preview).getByRole("link", { name: "Sign up for Garden State Weekly", hidden: true })).toBeVisible();
 
     fireEvent.click(screen.getByRole("button", { name: "Move up, Mid-story newsletter" }));
     fireEvent.click(screen.getByRole("button", { name: "Save draft" }));
