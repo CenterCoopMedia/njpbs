@@ -29,3 +29,6 @@ parameters to the donation link.
 The existing settings publication updates the public context and dependent story
 outputs without a code deployment or full site build. Both compiled public
 rendering and full artifact rendering consume the same rule contract.
+Static story routes use the existing request-time context adapter once the CTA
+settings document exists. Turning all rules off keeps that adapter active so
+an older built appeal cannot reappear.
