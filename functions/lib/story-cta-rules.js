@@ -12,6 +12,7 @@ function validateStoryCtaRules(value) {
     if (!object(rule) || !only(rule, ["id", "label", "enabled", "target", "position", "content"]) ||
         typeof rule.id !== "string" || !/^[a-z0-9][a-z0-9-]{0,79}$/.test(rule.id) || ids.has(rule.id)) return "Each rule needs a unique valid id.";
     ids.add(rule.id);
+    // eslint-disable-next-line no-control-regex -- Labels must reject ASCII control characters.
     if (typeof rule.label !== "string" || !rule.label.trim() || rule.label !== rule.label.trim() || rule.label.length > 100 ||
         /[\u0000-\u001f\u007f]/.test(rule.label)) return "Give each rule a name of at most 100 characters.";
     if (typeof rule.enabled !== "boolean") return "Rule enabled must be a boolean.";
