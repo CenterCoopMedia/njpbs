@@ -113,6 +113,11 @@ describe("Story CTA settings", () => {
     render(<StoryCtaSettings {...transport({ load: vi.fn(async () => response({ rules: [appealRule(), { ...appealRule(), id: "second", label: "Second appeal" }] })) })} />);
     await screen.findByRole("checkbox", { name: "Enabled on stories" });
     fireEvent.click(screen.getByRole("button", { name: "Second appeal Enabled" }));
+    const moveUp = screen.getByRole("button", { name: "Move up, Second appeal" });
+    moveUp.focus();
+    fireEvent.click(moveUp);
+    expect(screen.getByRole("button", { name: "Second appeal Enabled" })).toHaveFocus();
+    expect(screen.getByText("Second appeal moved to position 1 of 2.")).toBeInTheDocument();
     const removeFirst = screen.getByRole("button", { name: "Remove End-of-story support appeal" });
     removeFirst.focus();
     fireEvent.click(removeFirst);

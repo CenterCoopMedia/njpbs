@@ -297,6 +297,7 @@ function StoryCtaSettingsEditor({ load, save, publish }: Omit<StoryCtaSettingsTr
   const [message, setMessage] = useState<string>();
   const [messageTone, setMessageTone] = useState<"success" | "error">("success");
   const [conflict, setConflict] = useState(false);
+  const [arrangement, setArrangement] = useState("");
   const prefix = useId();
   const ruleEditor = useRef<HTMLFieldSetElement>(null);
   const ruleButtons = useRef(new Map<string, HTMLButtonElement>());
@@ -333,7 +334,7 @@ function StoryCtaSettingsEditor({ load, save, publish }: Omit<StoryCtaSettingsTr
     else if (target === "selection" && selected) ruleButtons.current.get(selected.id)?.focus();
     else if (target === "name") document.getElementById(`${prefix}-name`)?.focus();
     else ruleEditor.current?.querySelector<HTMLElement>(".story-cta-settings__content input, .story-cta-settings__content textarea, .story-cta-settings__content select, .story-cta-settings__content button")?.focus();
-  }, [prefix, selected?.content.type, selected?.id, draft.rules.length]);
+  }, [prefix, selected?.content.type, selected?.id, draft.rules]);
 
   const validationError = validateCmsSettingsValues(currentSchema, draft);
   const dirty = Boolean(ready && !same(draft, ready.values));
@@ -373,6 +374,9 @@ function StoryCtaSettingsEditor({ load, save, publish }: Omit<StoryCtaSettingsTr
     if (target < 0 || target >= draft.rules.length) return;
     const rules = [...draft.rules];
     [rules[index], rules[target]] = [rules[target]!, rules[index]!];
+    focusTarget.current = "selection";
+    setSelectedId(rules[target]!.id);
+    setArrangement(`${rules[target]!.label} moved to position ${target + 1} of ${rules.length}.`);
     replaceRules(rules);
   }
 
@@ -456,6 +460,7 @@ function StoryCtaSettingsEditor({ load, save, publish }: Omit<StoryCtaSettingsTr
               </div>
             </li>)}</ol> : <p>No story CTA rules yet. Add a rule to begin.</p>}
             <p className="muted">{draft.rules.length} of {MAX_STORY_CTA_RULES} rules</p>
+            <p className="sr-only" role="status">{arrangement}</p>
           </div>
 
           {selected ? <fieldset className="story-cta-settings__fields" disabled={pending !== null} ref={ruleEditor}>
