@@ -369,7 +369,7 @@ describe("published Post reader with the real Firestore emulator", () => {
     await put("cmsPosts/cta-weekly", { ...approved, version: 3, status: "draft", title: "Private draft newsletter", signupUrl: "https://example.org/private" });
     await put("cmsVersionHistory/cta-weekly-approval", { collection: "cmsPosts", documentId: "cta-weekly", action: "approve", after: approved });
     const rule = { id: "weekly", label: "Weekly newsletter", enabled: true, target: { contentTypes: ["post"] },
-      position: { kind: "after-paragraph", count: 2 }, content: { type: "newsletter_signup", data: { newsletterIds: ["cta-weekly"] } } };
+      position: { kind: "after-paragraph", count: 2 }, content: { type: "newsletter_signup", data: { newsletterIds: ["bad/id", "cta-weekly"] } } };
     const published = { schemaVersion: 2, sourceVersion: 1, publishedAt: "2026-10-07T12:00:00.000Z", values: { rules: [rule] } };
     await put("cmsSettings/story-ctas", { schemaVersion: 2, version: 2, values: { rules: [] }, published });
     const response = await call(authenticated());

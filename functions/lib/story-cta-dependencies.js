@@ -1,13 +1,14 @@
 "use strict";
 const { STORY_CTAS_SETTINGS_ID, projectPublishedCmsSettings } = require("./cms-settings-contract");
-const { shapeJoinedRecord, readLibraryHistory } = require("./joined-records");
+const { shapeJoinedRecord, readLibraryHistory, joinedRecordIds } = require("./joined-records");
 
 function storyCtaNewsletterIds(document) {
   let snapshot;
   try { snapshot = projectPublishedCmsSettings({ documentId: STORY_CTAS_SETTINGS_ID, document }); }
   catch { return []; }
-  return [...new Set((snapshot?.values.rules ?? []).filter(rule => rule.enabled && rule.content.type === "newsletter_signup")
-    .flatMap(rule => rule.content.data.newsletterIds))];
+  return joinedRecordIds((snapshot?.values.rules ?? [])
+    .filter(rule => rule.enabled && rule.content.type === "newsletter_signup")
+    .map((rule, order) => ({ id: rule.id, type: "newsletter_signup", visible: true, order, data: rule.content.data })));
 }
 
 /** Global CTAs are optional text/link cards. They cannot add media fences or
@@ -22,7 +23,10 @@ async function readStoryCtaCards({ firestore, transaction, settings, bodyIds }) 
     return newsletters.flatMap(row => {
       const record = shapeJoinedRecord(row.id, row.data(), history.get(row.id) ?? []);
       if (!record) return [];
-      const { imageAssetId, imageAlt, imageDecorative, ...card } = record.approvedLibraryVersion;
+      const card = { ...record.approvedLibraryVersion };
+      delete card.imageAssetId;
+      delete card.imageAlt;
+      delete card.imageDecorative;
       return [{ ...record, approvedLibraryVersion: card }];
     });
   } catch { return []; }
