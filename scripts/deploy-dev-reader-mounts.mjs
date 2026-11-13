@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-import { assertDevelopmentSource } from "./render-development-config.mjs";
+import { assertDevelopmentSource, readDeploymentManifest, renderCommittedDeploymentSource } from "./render-development-config.mjs";
 import { workflowMatches } from "./lib/repository-identity.mjs";
 import { deploymentOwner } from "./lib/deployment-settings.mjs";
 import { execFileSync } from "node:child_process";
@@ -9,7 +9,7 @@ import { createRequire } from "node:module";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { applicationDefault, initializeApp, deleteApp } from "firebase-admin/app";
 import { getFirestore } from "firebase-admin/firestore";
-import { assertDevTargets, assertDevConfigs } from "./assert-dev-cms-targets.mjs";
+import { assertDevTargets, assertDevConfigs, devPublicationIdentity } from "./assert-dev-cms-targets.mjs";
 import { deployDevFunctions } from "./deploy-dev-functions.mjs";
 import deployment from "../functions/lib/dev-reader-deployment.js";
 import mount from "../functions/lib/cms-reader-mount-descriptor.js";
@@ -131,8 +131,11 @@ export function assertDevReaderCheckout(env, root = new URL("../", import.meta.u
   const expectedPackage = JSON.parse(git(["show", `${sourceSha}:functions/package.json`]));
   expectedPackage.main = "dev-index.js";
   if (JSON.stringify(JSON.parse(readFileSync(new URL("functions/package.json", root), "utf8"))) !== JSON.stringify(expectedPackage)) refuse();
-  const expectedEnv = git(["show", `${sourceSha}:functions/.env.njpbs-site-dev`]) +
-    `CMS_ADMIN_BUILD_REVISION=${sourceSha}\nCMS_PREVIEW_SERIALIZER_READY=true\nCMS_PREVIEW_RENDERER_SHA=${env.CMS_DEV_RENDERER_SOURCE_SHA}\n`;
+  const expectedEnv = renderCommittedDeploymentSource("functions/.env.njpbs-site-dev",
+    git(["show", `${sourceSha}:functions/.env.njpbs-site-dev`]), env, readDeploymentManifest(fileURLToPath(root))) +
+    `CMS_ADMIN_BUILD_REVISION=${sourceSha}\nCMS_PUBLISH_GITHUB_TRUSTED_ACTORS=${env.CMS_PUBLISH_GITHUB_TRUSTED_ACTORS}\n` +
+    Object.entries(devPublicationIdentity(env)).map(([key, value]) => `${key}=${value}\n`).join("") +
+    `CMS_PREVIEW_SERIALIZER_READY=true\nCMS_PREVIEW_RENDERER_SHA=${env.CMS_DEV_RENDERER_SOURCE_SHA}\n`;
   if (readFileSync(new URL("functions/.env.njpbs-site-dev", root), "utf8") !== expectedEnv) refuse();
   // Discovery and runtime must use the same default-off cloud wake artifact.
   const wake = JSON.parse(readFileSync(new URL("functions/cloud-publication-wake.generated.json", root), "utf8"));

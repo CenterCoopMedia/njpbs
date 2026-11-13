@@ -36,6 +36,17 @@ export function assertDevTargets(actual) {
   return true;
 }
 
+// The deploy workflow appends these after rendering; the tracked file holds no identity literal.
+export function devPublicationIdentity(env) {
+  const identity = { CMS_PUBLISH_GITHUB_REPOSITORY: env.CANONICAL_GITHUB_REPOSITORY,
+    CMS_PUBLISH_GITHUB_APP_ID: env.CMS_PUBLISH_GITHUB_APP_ID, CMS_PUBLISH_GITHUB_INSTALLATION_ID: env.CMS_PUBLISH_GITHUB_INSTALLATION_ID };
+  if (!repositoryMatches(identity.CMS_PUBLISH_GITHUB_REPOSITORY, env) ||
+      ![identity.CMS_PUBLISH_GITHUB_APP_ID, identity.CMS_PUBLISH_GITHUB_INSTALLATION_ID].every(id => /^[1-9][0-9]*$/.test(id ?? ""))) {
+    throw new Error("Dev publication identity refused");
+  }
+  return identity;
+}
+
 export function assertDevConfigs(root = new URL("../", import.meta.url), deploymentEnv = process.env) {
   const api = JSON.parse(readFileSync(new URL("cms-api/wrangler.dev.jsonc", root), "utf8"));
   const renderer = JSON.parse(readFileSync(new URL("preview-renderer/wrangler.dev.jsonc", root), "utf8"));
@@ -47,6 +58,12 @@ export function assertDevConfigs(root = new URL("../", import.meta.url), deploym
   const functionVars = Object.fromEntries(env.split(/\r?\n/)
     .filter(line => line && !line.startsWith("#"))
     .map(line => [line.slice(0, line.indexOf("=")), line.slice(line.indexOf("=") + 1)]));
+  // Every stage checks the configured identity. Before the deploy step appends it,
+  // the file holds none of it; afterwards it holds exactly these values.
+  const identity = devPublicationIdentity(deploymentEnv);
+  const appended = Object.keys(identity).filter(key => Object.hasOwn(functionVars, key));
+  const identityRefused = appended.length !== 0 && (appended.length !== Object.keys(identity).length ||
+    appended.some(key => functionVars[key] !== identity[key]));
   const readerVars = deploymentEnv.CMS_READER_BRIDGE_ENABLED === "true" && deploymentEnv.CMS_DEV_INSTALL_READER_BRIDGE !== "true"
     ? devReaders.devReaderUpdateDeployment(deploymentEnv) : devReaders.devReaderDeployment(deploymentEnv);
   for (const key of ["CMS_READER_BRIDGE_ENABLED", "CMS_READER_BRIDGE_OPERATION_ID",
@@ -103,7 +120,7 @@ export function assertDevConfigs(root = new URL("../", import.meta.url), deploym
           functionVars.CMS_PREVIEW_RENDERER_SHA === deploymentEnv.CMS_DEV_RENDERER_SOURCE_SHA)) ||
       functionVars.CMS_MEDIA_R2_BUCKET !== DEV_TARGETS.CMS_MEDIA_BUCKET ||
       functionVars.CMS_MEDIA_PUBLIC_ORIGIN !== DEV_TARGETS.CMS_MEDIA_ORIGIN ||
-      !repositoryMatches(functionVars.CMS_PUBLISH_GITHUB_REPOSITORY, deploymentEnv) ||
+      identityRefused ||
       Object.entries(functionVars).some(([name, value]) => name !== "CMS_PUBLISH_GITHUB_REPOSITORY" &&
         /(^|[^a-z])njpbs-site(?!-dev)|https:\/\/(?:admin|preview|media|cms-api)\.njpbs\.org/.test(value))) {
     throw new Error("Dev deployment config refused");
