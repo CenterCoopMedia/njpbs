@@ -57,14 +57,14 @@ describe("story CTA settings boundary", () => {
     expect(projectChrome({ settings: [document] }).settings).toEqual([projected.data]);
     expect(isStoryCtasBuildData(projected.data)).toBe(true);
     expect(storyCtaComposition([paragraph], [projected.data]).body.map(block => block.type)).toEqual(["prose", "support_appeal"]);
-    expect(projectStoryCtas({ values: document.values })).toBeNull();
-    expect(projectStoryCtas({ published: { ...published(), values: { rules: [null] } } })).toBeNull();
+    expect(projectStoryCtas({ version: 4, values: document.values })).toBeNull();
+    expect(projectStoryCtas({ version: 4, published: { ...published(), values: { rules: [null] } } })).toBeNull();
   });
 });
 
 describe("end-of-story CTA insertion", () => {
   it("places live-blog end CTAs after the update stream, leaving the intro intact", () => {
-    const registry = projectStoryCtas({ published: published() })!.data;
+    const registry = projectStoryCtas({ version: 4, published: published() })!.data;
     const input = [{ ...paragraph, id: "story-cta-donate" }];
     const output = storyCtaComposition(input, [registry], true);
     expect(output.body).toEqual(input);
