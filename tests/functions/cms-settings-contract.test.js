@@ -73,6 +73,7 @@ const valuesV2 = (overrides = {}) => ({
 describe("CMS settings contract", () => {
   it("admits the newsroom home settings and resolves exact schema versions", () => {
     expect(CMS_SETTINGS_SCHEMAS).toEqual({
+      "story-ctas": { currentVersion: 1, versions: { 1: { schemaVersion: 1, fields: { rules: { kind: "storyCtaRules", required: true } } } } },
       "coverage-labels": { currentVersion: 1, versions: { 1: { schemaVersion: 1, fields: { labels: { kind: "coverageLabels", required: true } } } } },
       "newsroom-home": {
         currentVersion: 1,

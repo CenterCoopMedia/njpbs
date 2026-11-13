@@ -27,7 +27,7 @@ async function codeAuthority({ firestore, transaction, rendererSha, code }) {
   return { pointer, manifest: stored };
 }
 
-/** Only existing immutable Posts with joined cards need this adapter. Dynamic
+/** Immutable Posts with joined cards or global CTA settings need this adapter. Dynamic
  * Post owners retain their existing publication and withdrawal reader. */
 async function selectCodePost({ firestore, transaction, path }) {
   const match = typeof path === "string" && /^\/posts\/([a-z0-9]+(?:-[a-z0-9]+)*)\/$/.exec(path);
@@ -40,7 +40,13 @@ async function selectCodePost({ firestore, transaction, path }) {
   const rows = new Map([...canonical.docs, ...aliases.docs].map(row => [row.id, row]));
   if (rows.size > 1) refuse();
   const row = [...rows.values()][0];
-  if (!row || !joinedRecordIds(row.data().published?.blocks).length) return null;
+  if (!row) return null;
+  if (!joinedRecordIds(row.data().published?.blocks).length) {
+    const ctas = await transaction.get(firestore.doc("cmsSettings/story-ctas"));
+    // Retain request-time rendering when all rules are disabled, so an appeal
+    // from the immutable build cannot reappear after staff turns it off.
+    if (!ctas.exists) return null;
+  }
   const owner = await readNoBuildPostOwner({ firestore, transaction, postId: row.id });
   if (owner.state && owner.state.mode !== "static") return null;
   const document = row.data(), version = document.published?.sourceVersion;

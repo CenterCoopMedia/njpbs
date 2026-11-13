@@ -106,6 +106,20 @@ it("leaves Posts without joined cards with their existing reader", async () => {
   expect(await consumer.readCodePostConsumer({ firestore: db, path, rendererSha })).toEqual({ kind: "pass" });
 });
 
+it.each([true, false])("refreshes a static story with global end rules, including enabled=%s", async enabled => {
+  const document = post(); document.published.blocks.pop();
+  const read = await fixture(document);
+  const rule = { id: "donate", label: "Support reporting", enabled, target: { contentTypes: ["post"] },
+    position: { kind: "end" }, content: { type: "support_appeal", data: { heading: "Support reporting", copy: "Your gift helps.",
+      buttonLabel: "Donate", href: "https://example.org/donate", style: "blue" } } };
+  await db.doc("cmsSettings/story-ctas").set({ version: 1, schemaVersion: 1, values: { rules: [] },
+    published: { schemaVersion: 1, sourceVersion: 1, publishedAt: "2026-10-07T12:00:00.000Z", values: { rules: [rule] } } });
+  const decision = await read();
+  expect(decision.kind).toBe("code-post");
+  expect(decision.published.document.published.blocks).toHaveLength(1);
+  expect(decision.published.settings.find((setting: any) => setting.id === "story-ctas").published.values.rules[0].enabled).toBe(enabled);
+});
+
 it("logs fixed refusal classes without copying private transport details", async () => {
   await fixture();
   const warnings: unknown[] = [];

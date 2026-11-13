@@ -1,4 +1,5 @@
 import { COVERAGE_LABELS_SETTINGS_ID } from "../../../packages/content-core/src/cms-settings";
+import { STORY_CTAS_SETTINGS_ID } from "../../../packages/content-core/src/cms-settings";
 import { usageActionCollector } from "./boardwalk-usage";
 import { projectCoverageLabels, type CoverageLabelsBuildData } from "../../../packages/content-core/src/coverage-labels";
 import { invalidateMediaLists, markMediaTabCountsStale, type MediaTabCounts } from "./media-session-cache";
@@ -2575,7 +2576,7 @@ export function cmsPublishSettings<TValues = unknown>(
   return postFunction<MutateSettingsResponse<TValues>>(
     "cmsPublishSettings",
     idToken,
-    [COVERAGE_LABELS_SETTINGS_ID, PUBLIC_HOMEPAGE_BANNER_SETTINGS_ID, PUBLIC_SITE_CHROME_SETTINGS_ID, SITE_NAVIGATION_SETTINGS_ID, NJ_DECIDES_SETTINGS_ID].some(id => id === body.id)
+    [STORY_CTAS_SETTINGS_ID, COVERAGE_LABELS_SETTINGS_ID, PUBLIC_HOMEPAGE_BANNER_SETTINGS_ID, PUBLIC_SITE_CHROME_SETTINGS_ID, SITE_NAVIGATION_SETTINGS_ID, NJ_DECIDES_SETTINGS_ID].some(id => id === body.id)
       ? { ...body, publicationTransport: "public-context-no-build-v1" }
       : body,
   );

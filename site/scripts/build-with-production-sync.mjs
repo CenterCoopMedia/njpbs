@@ -1,6 +1,5 @@
 import { execFileSync } from "node:child_process";
 import { build } from "astro";
-import joinedRecords from "../../functions/lib/joined-records.js";
 import { readFile, mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
@@ -248,7 +247,9 @@ export async function runBuild(env = process.env, programImageReaders) {
       const bundle = await readPublicArtifactBundle(request.bundlePath);
       await finalizePublicArtifactInventoryReceipt({
         receipt: bundle.receipt,
-        recordContextPostPaths: (bundle.posts ?? []).filter(post => joinedRecords.joinedRecordIds(post.blocks).length > 0).map(post => post.path),
+        // Every story can receive a global CTA after this build. Retain the
+        // current-context hint even before the first rule is published.
+        recordContextPostPaths: (bundle.posts ?? []).map(post => post.path),
         distDirectory: distDir,
         outputPath: request.outputPath,
       });

@@ -1,4 +1,6 @@
 import { isCoverageLabelsBuildData, type CoverageLabelsBuildData } from "../../../packages/content-core/src/coverage-labels.ts";
+import { isStoryCtasBuildData, type StoryCtasBuildData } from "../../../packages/content-core/src/story-ctas.ts";
+import { STORY_CTAS_SETTINGS_ID } from "../../../packages/content-core/src/cms-settings.ts";
 import { serviceCompositionError } from "../../../packages/content-core/src/service-composition.ts";
 import { assertHomeSourcePublication } from "./home-editorial-catalog.ts";
 import { createHash, randomUUID } from "node:crypto";
@@ -43,6 +45,7 @@ export const PUBLIC_ARTIFACT_BUNDLE_SCHEMA_VERSION = 3;
 
 /** One published public setting. Each settingId appears at most once. */
 export type PublicSettingBuildData =
+  | StoryCtasBuildData
   | CoverageLabelsBuildData
   | PublicHomepageBannerBuildData
   | PublicSiteChromeBuildData
@@ -290,12 +293,16 @@ export function assertPublicArtifactBundle(value: unknown): PublicArtifactBundle
   }
   const settingIds = value.settings.map((setting) => setting.settingId);
   if (
-    value.settings.length > 5 ||
+    value.settings.length > 6 ||
     new Set(settingIds).size !== settingIds.length
   ) {
     throw new Error("The public artifact bundle settings list is invalid");
   }
   for (const setting of value.settings) {
+    if (setting.settingId === STORY_CTAS_SETTINGS_ID) {
+      if (!isStoryCtasBuildData(setting)) throw new Error("The story CTA settings are invalid");
+      continue;
+    }
     if (setting.settingId === COVERAGE_LABELS_SETTINGS_ID) {
       if (!isCoverageLabelsBuildData(setting)) throw new Error("The coverage label settings are invalid");
       continue;

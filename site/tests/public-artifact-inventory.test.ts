@@ -664,6 +664,13 @@ it("marks only released canonical Posts selected for joined-card context", async
   const status = JSON.parse(await readFile(path.join(distDirectory, "_content-status.json"), "utf8"));
   expect(status.routes.filter((route: { recordContext?: boolean }) => route.recordContext).map((route: { path: string }) => route.path))
     .toEqual(["/posts/with-joins/"]);
+  // A build marks every story before the first global CTA is published. The
+  // existing context flag must also survive for stories without authored joins.
+  await finalizePublicArtifactInventoryReceipt({ receipt: value, distDirectory, outputPath,
+    recordContextPostPaths: ["/posts/with-joins/", "/posts/without-joins/"] });
+  const allStories = JSON.parse(await readFile(path.join(distDirectory, "_content-status.json"), "utf8"));
+  expect(allStories.routes.filter((route: { recordContext?: boolean }) => route.recordContext).map((route: { path: string }) => route.path))
+    .toEqual(["/posts/with-joins/", "/posts/without-joins/"]);
   for (const recordContextPostPaths of [["/posts/unknown/"], ["/posts/old-with-joins/"], ["/programs/with-joins/"],
     ["/posts/with-joins/", "/posts/with-joins/"]]) {
     await expect(finalizePublicArtifactInventoryReceipt({ receipt: value, distDirectory, outputPath, recordContextPostPaths })).rejects.toThrow("catalog");

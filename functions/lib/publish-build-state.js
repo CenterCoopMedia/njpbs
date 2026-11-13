@@ -11,6 +11,7 @@ const {
 const CONTENT_PUBLISHABLE_COLLECTIONS = new Set(["cmsPages", "cmsPosts"]);
 // The settings documents the public build reads at its cutoff.
 const PUBLIC_SETTINGS_IDS = new Set([
+  require("./cms-settings-contract").STORY_CTAS_SETTINGS_ID,
   require("./cms-settings-contract").COVERAGE_LABELS_SETTINGS_ID,
   NJ_DECIDES_SETTINGS_ID,
   PUBLIC_HOMEPAGE_BANNER_SETTINGS_ID,

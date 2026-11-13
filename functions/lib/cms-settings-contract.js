@@ -1,5 +1,6 @@
 "use strict";
 const { validatePostsBrowse } = require("./posts-browse-contract");
+const { validateStoryCtaRules } = require("./story-cta-rules");
 
 // Deployable mirror of packages/content-core/src/cms-settings.ts. Firebase
 // deploys functions/ alone, so the parity suite covers success and failure paths.
@@ -17,6 +18,7 @@ const NEWSROOM_HOME_SETTINGS_ID = "newsroom-home";
 const NEWSROOM_MILESTONE_SETTINGS_ID = "newsroom-milestone";
 const NJ_DECIDES_SETTINGS_ID = "nj-decides-brand";
 const COVERAGE_LABELS_SETTINGS_ID = "coverage-labels";
+const STORY_CTAS_SETTINGS_ID = "story-ctas";
 const MAX_COVERAGE_LABELS = 100;
 function isCoverageLabelId(value) {
   return typeof value === "string" && /^[a-z0-9][a-z0-9-]{0,63}$/.test(value);
@@ -98,6 +100,9 @@ const DEFAULT_PUBLIC_HOMEPAGE_BANNER_SETTINGS = Object.freeze({
 // Deployable mirror of the approved product-owned settings catalog. The parity
 // suite compares this complete object with packages/content-core.
 const CMS_SETTINGS_SCHEMAS = Object.freeze({
+  [STORY_CTAS_SETTINGS_ID]: Object.freeze({ currentVersion: 1, versions: Object.freeze({
+    1: Object.freeze({ schemaVersion: 1, fields: Object.freeze({ rules: Object.freeze({ kind: "storyCtaRules", required: true }) }) }),
+  }) }),
   [COVERAGE_LABELS_SETTINGS_ID]: Object.freeze({ currentVersion: 1, versions: Object.freeze({
     1: Object.freeze({ schemaVersion: 1, fields: Object.freeze({ labels: Object.freeze({ kind: "coverageLabels", required: true }) }) }),
   }) }),
@@ -735,6 +740,7 @@ function cloneNavigationLink(link) {
 }
 
 function cloneSettingsValue(definition, value) {
+  if (definition.kind === "storyCtaRules") return structuredClone(value);
   if (definition.kind === "postsBrowse") return JSON.parse(JSON.stringify(value));
   if (definition.kind === "coverageLabels" && Array.isArray(value)) return value.map(label => ({ ...label }));
   if (definition.kind === "navigationLinks" && Array.isArray(value)) {
@@ -897,7 +903,7 @@ function schemaError(schema) {
       ) {
         return "The CMS settings schema is invalid";
       }
-    } else if (definition.kind !== "boolean" && definition.kind !== "assetId" && definition.kind !== "coverageLabels" && definition.kind !== "postsBrowse") {
+    } else if (definition.kind !== "boolean" && definition.kind !== "assetId" && definition.kind !== "coverageLabels" && definition.kind !== "postsBrowse" && definition.kind !== "storyCtaRules") {
       return "The CMS settings schema is invalid";
     }
     if (keys.size > 0) return "The CMS settings schema is invalid";
@@ -1023,6 +1029,7 @@ function validateCmsSettingsValues(schema, values) {
         if (error) return error;
         break;
       }
+      case "storyCtaRules": { const error = validateStoryCtaRules(value); if (error) return error; break; }
       case "coverageLabels": { const error = validateCoverageLabels(value); if (error) return error; break; }
       case "boolean":
         if (typeof value !== "boolean") return `${field} must be a boolean`;
@@ -1320,6 +1327,7 @@ function projectPublishedCmsSettings({
 }
 
 module.exports = {
+  STORY_CTAS_SETTINGS_ID,
   COVERAGE_LABELS_SETTINGS_ID, MAX_COVERAGE_LABELS, isCoverageLabelId, validateCoverageLabels,
   CMS_SETTINGS_READ_SCHEMAS,
   CMS_SETTINGS_SCHEMAS,
