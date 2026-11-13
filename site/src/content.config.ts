@@ -18,6 +18,7 @@ import { publicHomepageBannerLoader } from "./lib/public-homepage-banner";
 import { siteNavigationLoader } from "./lib/site-navigation";
 import { publicSiteChromeLoader } from "./lib/public-site-chrome";
 import { isCoverageLabelsBuildData, type CoverageLabelsBuildData } from "../../packages/content-core/src/coverage-labels.ts";
+import { isStoryCtasBuildData, type StoryCtasBuildData } from "../../packages/content-core/src/story-ctas.ts";
 import { isNjDecidesBuildData, type NjDecidesBuildData } from "./lib/nj-decides-settings";
 import type {
   SiteNavigationColumn,
@@ -189,6 +190,7 @@ const cmsPosts = defineCollection({
     spotlightNews: z.boolean().default(false),
     coverageLabelId: z.string().regex(/^[a-z0-9][a-z0-9-]{0,63}$/).optional(),
     showInHomeHero: z.boolean().optional(),
+    disableStoryCtas: z.boolean().optional(),
     summary: z.string(),
     excerpt: z.string(),
     categories: z.array(z.string()),
@@ -361,7 +363,7 @@ const cmsSiteNavigation = defineCollection({
 // default when this collection is empty.
 const cmsPublicSiteChrome = defineCollection({
   loader: cmsPreviewExportLoader("cmsPublicSiteChrome") ?? publicSiteChromeLoader(previewContent),
-  schema: z.union([z.custom<CoverageLabelsBuildData>(isCoverageLabelsBuildData), z.custom<NjDecidesBuildData>(isNjDecidesBuildData), z.object({
+  schema: z.union([z.custom<StoryCtasBuildData>(isStoryCtasBuildData), z.custom<CoverageLabelsBuildData>(isCoverageLabelsBuildData), z.custom<NjDecidesBuildData>(isNjDecidesBuildData), z.object({
     settingId: z.literal("public-site-chrome"),
     newsletterEnabled: z.boolean(),
     newsletterLabel: z.string(),

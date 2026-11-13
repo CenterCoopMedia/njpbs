@@ -4,6 +4,7 @@ import { assertPublicArtifactBundle } from "../src/lib/public-artifact-bundle";
 import { PUBLIC_PAGES } from "../../packages/content-core/src/public-pages";
 import {
   COVERAGE_LABELS_SETTINGS_ID,
+  STORY_CTAS_SETTINGS_ID,
   DEFAULT_PUBLIC_SITE_CHROME_SETTINGS,
   DEFAULT_NJ_DECIDES_SETTINGS,
   NJ_DECIDES_SETTINGS_ID,
@@ -108,6 +109,7 @@ function databaseFixture({
   chrome,
   njDecides,
   coverageLabels,
+  storyCtas,
 }: {
   documents?: Record<string, CmsPageDoc>;
   storedReservation?: Record<string, unknown>;
@@ -120,6 +122,7 @@ function databaseFixture({
   chrome?: Record<string, unknown>;
   njDecides?: Record<string, unknown>;
   coverageLabels?: Record<string, unknown>;
+  storyCtas?: Record<string, unknown>;
 } = {}) {
   const readBatches: string[][] = [];
   const queryReads: string[] = [];
@@ -143,12 +146,13 @@ function databaseFixture({
       const paths = refs.map(({ path }) => path);
       readBatches.push(paths);
       if (
-        paths.length === 5 &&
+        paths.length === 6 &&
         paths[0] === `cmsSettings/${PUBLIC_HOMEPAGE_BANNER_SETTINGS_ID}` &&
         paths[1] === `cmsSettings/${SITE_NAVIGATION_SETTINGS_ID}` &&
         paths[2] === `cmsSettings/${PUBLIC_SITE_CHROME_SETTINGS_ID}` &&
         paths[3] === `cmsSettings/${NJ_DECIDES_SETTINGS_ID}` &&
-        paths[4] === `cmsSettings/${COVERAGE_LABELS_SETTINGS_ID}`
+        paths[4] === `cmsSettings/${COVERAGE_LABELS_SETTINGS_ID}` &&
+        paths[5] === `cmsSettings/${STORY_CTAS_SETTINGS_ID}`
       ) {
         return [
           snapshot(PUBLIC_HOMEPAGE_BANNER_SETTINGS_ID, setting),
@@ -156,6 +160,7 @@ function databaseFixture({
           snapshot(PUBLIC_SITE_CHROME_SETTINGS_ID, chrome),
           snapshot(NJ_DECIDES_SETTINGS_ID, njDecides),
           snapshot(COVERAGE_LABELS_SETTINGS_ID, coverageLabels),
+          snapshot(STORY_CTAS_SETTINGS_ID, storyCtas),
         ];
       }
       if (refs.every(({ path }) => path.startsWith("media_assets_public/"))) {
@@ -453,6 +458,7 @@ describe("public artifact Firestore build read", () => {
         `cmsSettings/${PUBLIC_SITE_CHROME_SETTINGS_ID}`,
         `cmsSettings/${NJ_DECIDES_SETTINGS_ID}`,
         `cmsSettings/${COVERAGE_LABELS_SETTINGS_ID}`,
+        `cmsSettings/${STORY_CTAS_SETTINGS_ID}`,
       ],
     ]);
     expect(queryReads).toEqual(["cmsPages", "cmsPosts", "cmsAuthorProfilesPublic"]);

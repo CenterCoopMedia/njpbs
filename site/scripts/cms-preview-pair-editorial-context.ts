@@ -1,4 +1,4 @@
-import { COVERAGE_LABELS_SETTINGS_ID } from "../../packages/content-core/src/cms-settings.ts";
+import { COVERAGE_LABELS_SETTINGS_ID, STORY_CTAS_SETTINGS_ID } from "../../packages/content-core/src/cms-settings.ts";
 import { createRequire } from "node:module";
 import { isDeepStrictEqual } from "node:util";
 import { firebaseAdminRuntime } from "./firebase-admin-runtime.ts";
@@ -47,7 +47,7 @@ export async function projectPairEditorialPreviewSource(raw: PairEditorialContex
   const posts = await resolveApprovedLibraryVersions(frozen, rows("cmsPosts"));
   const input = { pages: rows("cmsPages"), posts, authors: rows("cmsAuthorProfilesPublic").map(({ id, ...data }) => ({ authorId: id, data })),
     setting: setting(PUBLIC_HOMEPAGE_BANNER_SETTINGS_ID), navigation: setting(SITE_NAVIGATION_SETTINGS_ID),
-    chrome: setting(PUBLIC_SITE_CHROME_SETTINGS_ID), njDecides: setting(NJ_DECIDES_SETTINGS_ID), coverageLabels: setting(COVERAGE_LABELS_SETTINGS_ID), assets: rows("media_assets_public"),
+    chrome: setting(PUBLIC_SITE_CHROME_SETTINGS_ID), njDecides: setting(NJ_DECIDES_SETTINGS_ID), coverageLabels: setting(COVERAGE_LABELS_SETTINGS_ID), storyCtas: setting(STORY_CTAS_SETTINGS_ID), assets: rows("media_assets_public"),
     reservation: { schemaVersion: 1, ...publication, reservedAgainstGeneration: 0,
       reservedAgainstDeploymentId: null, reservedAgainstCommitSha: null, cutoffAt: time, reservedAt: time },
     admissionTime: time.toDate() } as unknown as PublicArtifactContentRead;

@@ -1,6 +1,8 @@
 import { contentLinkReadFits, contentLinkDirectoryFits, contentLinkMetadata } from "../../../packages/content-core/src/content-link.ts";
 import type { ContentLinkEntry } from "./content-link-render";
 import { projectCoverageLabels } from "../../../packages/content-core/src/coverage-labels.ts";
+import { projectStoryCtas } from "../../../packages/content-core/src/story-ctas.ts";
+import { STORY_CTAS_SETTINGS_ID } from "../../../packages/content-core/src/cms-settings.ts";
 import { projectPublishedCmsSettings, type PublicSiteChromeSettingsValues } from "../../../packages/content-core/src/cms-settings.ts";
 import { NJ_DECIDES_SETTINGS_ID, PUBLIC_HOMEPAGE_BANNER_SETTINGS_ID } from "../../../packages/content-core/src/cms-settings.ts";
 import { projectPublicHomepageBanner } from "./public-homepage-banner-data.ts";
@@ -105,7 +107,7 @@ export function projectChrome(input: Record<string, unknown>) {
   const documents = input.settings ?? [];
   const pages = input.navigationPages ?? [];
   if (!Array.isArray(documents) || !Array.isArray(pages)) throw new Error("Invalid published chrome");
-  const knownIds = ["site-navigation", "public-site-chrome", NJ_DECIDES_SETTINGS_ID, PUBLIC_HOMEPAGE_BANNER_SETTINGS_ID];
+  const knownIds = ["site-navigation", "public-site-chrome", NJ_DECIDES_SETTINGS_ID, PUBLIC_HOMEPAGE_BANNER_SETTINGS_ID, STORY_CTAS_SETTINGS_ID];
   const settings: PublicSettingBuildData[] = documents.flatMap((document): PublicSettingBuildData[] => {
     if (!object(document) || typeof document.id !== "string" || !document.id) {
       throw new Error("Invalid published setting");
@@ -114,6 +116,10 @@ export function projectChrome(input: Record<string, unknown>) {
     // them before projection; known documents still use their strict contracts.
     // The complete published read retains its two-megabyte transport bound.
     if (!knownIds.includes(document.id)) return [];
+    if (document.id === STORY_CTAS_SETTINGS_ID) {
+      const projected = projectStoryCtas(document);
+      return projected ? [projected.data] : [];
+    }
     if (document.id === PUBLIC_HOMEPAGE_BANNER_SETTINGS_ID) {
       const banner = projectPublicHomepageBanner({ ...document, id: PUBLIC_HOMEPAGE_BANNER_SETTINGS_ID });
       if (!banner) throw new Error("Invalid published election banner");

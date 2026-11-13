@@ -61,9 +61,9 @@ it.each(modes)("keeps legacy live-reader JSON byte-identical and frozen projecti
   const read = store(input), original = await legacy.readPublishedChrome(read.firestore, read.transaction, now);
   const currentRead = store(input);
   const current = await live.readPublishedChrome(currentRead.firestore, currentRead.transaction, now);
-  // Coverage labels add one published settings dependency; every other legacy read remains exact.
+  // Coverage labels and story CTAs add published settings dependencies; other reads remain exact.
   expect(currentRead.trace[0]).toEqual(["getAll", ["cmsSettings/site-navigation", "cmsSettings/public-site-chrome",
-    "cmsSettings/nj-decides-brand", "cmsSettings/public-homepage-banner", "cmsSettings/coverage-labels"]]);
+    "cmsSettings/nj-decides-brand", "cmsSettings/public-homepage-banner", "cmsSettings/coverage-labels", "cmsSettings/story-ctas"]]);
   expect(currentRead.trace.slice(1, -2)).toEqual(read.trace.slice(1));
   expect(currentRead.trace.slice(-2)).toEqual([
     ["get", "cmsPages", "publiclyVisible", true, 500],

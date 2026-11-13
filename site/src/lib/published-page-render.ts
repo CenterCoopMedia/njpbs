@@ -130,7 +130,7 @@ export function projectPageRenderDependencies(input: Record<string, unknown>, pa
     }
   }
   const settingsInput = input.settings;
-  if (!Array.isArray(settingsInput) || settingsInput.length > 4 || new Set(settingsInput.map(setting => setting?.id)).size !== settingsInput.length) {
+  if (!Array.isArray(settingsInput) || settingsInput.length > 5 || new Set(settingsInput.map(setting => setting?.id)).size !== settingsInput.length) {
     throw new Error("Invalid Page settings");
   }
   const chrome = projectChrome(input);

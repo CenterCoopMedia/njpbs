@@ -320,6 +320,10 @@ field.
 Removal is different from hiding. It deletes the block from the current draft
 composition when the draft is saved.
 
+For a standalone image in a Page or Post, select **Remove image** in its section
+details. Confirm to remove the image plank, or cancel to keep it. **Undo** restores
+it before you save. Gallery and card images keep their own selection controls.
+
 Before removing:
 
 - Confirm the record and block title.

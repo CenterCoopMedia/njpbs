@@ -205,6 +205,7 @@ const CONTENT_DOCUMENT_CONTRACTS = Object.freeze({
       spotlightNews: "boolean",
       coverageLabelId: "coverageLabelId",
       showInHomeHero: "boolean",
+      disableStoryCtas: "boolean",
       title: "text",
       summary: "string",
       excerpt: "string",

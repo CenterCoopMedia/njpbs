@@ -1408,6 +1408,7 @@ var POST_DATE_FIELDS = [
   { key: "showUpdatedDate", label: "Show the update date on the post", help: "Turn this on to show readers when the story was last meaningfully updated.", kind: "toggle", required: false }
 ];
 var POST_ORGANIZATION_FIELDS = [
+  { key: "disableStoryCtas", label: "Skip automatic CTAs", help: "Use for sponsored or sensitive stories. Save and publish to hide rule-based calls to action on this story. Blocks you added yourself stay visible.", kind: "toggle", required: false },
   { key: "coverageLabelId", label: "Coverage label", help: "Choose a published series or special coverage label. Save and publish to update it on the public site.", kind: "text", required: false },
   { key: "showInHomeHero", label: "Show in Home hero", help: "Includes this Post when Home selects by tags. Keeps the current order and limit.", kind: "toggle", required: false },
   { key: "spotlightNews", label: "Spotlight News", help: "Show NJ Spotlight News above this headline and on post listings. Leave off for other posts. Save and publish to update the public label.", kind: "toggle", required: false },

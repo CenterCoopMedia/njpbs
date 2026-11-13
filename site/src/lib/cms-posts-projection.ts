@@ -102,6 +102,7 @@ export interface CmsPostBuildData extends ContentLinkMetadata {
   spotlightNews?: boolean;
   coverageLabelId?: string;
   showInHomeHero?: boolean;
+  disableStoryCtas?: boolean;
   summary: string;
   excerpt: string;
   categories: string[];
@@ -486,6 +487,9 @@ export function projectCmsPost(
   if (metadata.showInHomeHero !== undefined && typeof metadata.showInHomeHero !== "boolean") {
     throw new Error(`post ${doc.id} showInHomeHero must be a boolean`);
   }
+  if (metadata.disableStoryCtas !== undefined && typeof metadata.disableStoryCtas !== "boolean") {
+    throw new Error(`post ${doc.id} disableStoryCtas must be a boolean`);
+  }
   const credits = publicCredits(publishedCredits(metadata));
   const seo = metadataGroup<SearchMetadata>(metadata.seo, "seo");
   const social = metadataGroup<SocialMetadata>(metadata.social, "social");
@@ -503,6 +507,7 @@ export function projectCmsPost(
     spotlightNews: metadata.spotlightNews === true,
     ...(postCoverageLabelId(metadata) ? { coverageLabelId: postCoverageLabelId(metadata) } : {}),
     ...(metadata.showInHomeHero === undefined ? {} : { showInHomeHero: metadata.showInHomeHero }),
+    ...(metadata.disableStoryCtas === undefined ? {} : { disableStoryCtas: metadata.disableStoryCtas }),
     summary: optionalString(metadata.summary, "summary") ?? "",
     excerpt: optionalString(metadata.excerpt, "excerpt") ?? "",
     categories,

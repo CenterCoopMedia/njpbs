@@ -1,13 +1,18 @@
 import { clearEmulatorFirestore } from "../helpers/emulator-firestore.js";
+import { createRequire } from "node:module";
 import { afterAll, afterEach, beforeAll, beforeEach, expect, it } from "vitest";
 import { initializeApp, deleteApp } from "firebase-admin/app";
 import { getFirestore } from "firebase-admin/firestore";
-import consumer from "../../functions/lib/no-build-code-post-consumer.js";
 import deployment from "../../functions/lib/public-deployment.js";
 import { schedulePacketFixture } from "./page-schedule-packet-fixture";
 import postFixture from "../../site/tests/fixtures/shadow-posts/post.json";
 import { createNoBuildCodePostWorker } from "../../workers/src/no-build-code-post-worker";
 import { publicationTarget } from "../../functions/lib/publication-target.js";
+import context from "../../functions/lib/public-context-revision.js";
+
+const require = createRequire(import.meta.url);
+const consumer = require("../../functions/lib/no-build-code-post-consumer.js");
+const postSettingsConfirmation = require("../../functions/lib/no-build-post-settings-confirmation.js");
 
 const rendererSha = "a".repeat(40), path = "/posts/shadow-fixture/";
 const app = initializeApp({ projectId: "njpbs-site-dev" }, "code-post-local-fixture");
@@ -33,6 +38,14 @@ async function fixture(document = post()) {
   await db.doc("cmsPosts/newsletter-one").set({ ...approved, status: "draft", version: 9, title: "Private working newsletter" });
   await db.doc("cmsVersionHistory/newsletter-approval").set({ collection: "cmsPosts", documentId: "newsletter-one", action: "approve", after: approved });
   return () => consumer.readCodePostConsumer({ firestore: db, path, rendererSha, currentCodeRequest: boundary!.request });
+}
+async function publishGlobalNewsletterRule() {
+  await db.doc("cmsSettings/story-ctas").set({ version: 1, schemaVersion: 2, values: { rules: [] }, published: {
+    schemaVersion: 2, sourceVersion: 1, publishedAt: "2026-10-07T12:00:00.000Z", values: { rules: [{
+      id: "weekly", label: "Newsletter", enabled: true, target: { contentTypes: ["post"] }, position: { kind: "end" },
+      content: { type: "newsletter_signup", data: { newsletterIds: ["newsletter-one"] } },
+    }] },
+  } });
 }
 beforeAll(() => {
   if (!/^127\.0\.0\.1:\d+$/.test(process.env.FIRESTORE_EMULATOR_HOST ?? "") ||
@@ -104,6 +117,64 @@ it("leaves Posts without joined cards with their existing reader", async () => {
   value.published.blocks.pop();
   await db.doc("cmsPosts/shadow-fixture").set(value);
   expect(await consumer.readCodePostConsumer({ firestore: db, path, rendererSha })).toEqual({ kind: "pass" });
+});
+
+it.each([true, false])("refreshes a static story with global end rules, including enabled=%s", async enabled => {
+  const document = post(); document.published.blocks.pop();
+  const read = await fixture(document);
+  const rule = { id: "donate", label: "Support reporting", enabled, target: { contentTypes: ["post"] },
+    position: { kind: "end" }, content: { type: "support_appeal", data: { heading: "Support reporting", copy: "Your gift helps.",
+      buttonLabel: "Donate", href: "https://example.org/donate", style: "blue" } } };
+  await db.doc("cmsSettings/story-ctas").set({ version: 1, schemaVersion: 1, values: { rules: [] },
+    published: { schemaVersion: 1, sourceVersion: 1, publishedAt: "2026-10-07T12:00:00.000Z", values: { rules: [rule] } } });
+  const decision = await read();
+  expect(decision.kind).toBe("code-post");
+  expect(decision.published.document.published.blocks).toHaveLength(1);
+  expect(decision.published.settings.find((setting: any) => setting.id === "story-ctas").published.values.rules[0].enabled).toBe(enabled);
+});
+
+it("refreshes a CTA-only newsletter reference after approval and withdrawal", async () => {
+  const document = post(); document.published.blocks.pop();
+  const read = await fixture(document);
+  await publishGlobalNewsletterRule();
+  expect((await read()).published.joinedRecords[0].approvedLibraryVersion.title).toBe("Approved newsletter");
+  await db.doc("cmsVersionHistory/newsletter-next").set({ collection: "cmsPosts", documentId: "newsletter-one", action: "approve",
+    after: { type: "newsletter", status: "approved", version: 8, title: "Current newsletter", signupUrl: "https://example.org/current" } });
+  expect((await read()).published.joinedRecords[0].approvedLibraryVersion.title).toBe("Current newsletter");
+  await db.doc("cmsPosts/newsletter-one").update({ status: "archived" });
+  expect((await read()).published.joinedRecords).toEqual([]);
+  const capture = await consumer.captureCodePostConsumers({ firestore: db, rendererSha, request: boundary!.request });
+  const coverage = await db.runTransaction(transaction => postSettingsConfirmation.postSettingsCoverage({ firestore: db, transaction,
+    identity: { recordId: "newsletter-one", rendererSha, contextRevision: 4, contextDigest: context.publicContextDigest(4) },
+    target: publicationTarget("development"), codeCapture: capture }), { readOnly: true });
+  expect(coverage.entries.map((entry: any) => entry.postId)).toEqual(["shadow-fixture"]);
+  expect(coverage.missingPosts).toEqual([]);
+});
+
+it("excludes an opted-out story from CTA-only newsletter settings coverage", async () => {
+  const document = post();
+  document.published.blocks.pop();
+  document.published.metadata.disableStoryCtas = true;
+  await fixture(document);
+  await publishGlobalNewsletterRule();
+  const coverage = await db.runTransaction(transaction => postSettingsConfirmation.postSettingsCoverage({ firestore: db, transaction,
+    identity: { recordId: "newsletter-one", rendererSha, contextRevision: 4, contextDigest: context.publicContextDigest(4) },
+    target: publicationTarget("development") }), { readOnly: true });
+  expect(coverage.entries).toEqual([]);
+  expect(coverage.missingPosts).toEqual([]);
+});
+
+it("keeps an opted-out story in settings coverage for its authored newsletter block", async () => {
+  const document = post();
+  document.published.metadata.disableStoryCtas = true;
+  await fixture(document);
+  await publishGlobalNewsletterRule();
+  const capture = await consumer.captureCodePostConsumers({ firestore: db, rendererSha, request: boundary!.request });
+  const coverage = await db.runTransaction(transaction => postSettingsConfirmation.postSettingsCoverage({ firestore: db, transaction,
+    identity: { recordId: "newsletter-one", rendererSha, contextRevision: 4, contextDigest: context.publicContextDigest(4) },
+    target: publicationTarget("development"), codeCapture: capture }), { readOnly: true });
+  expect(coverage.entries.map((entry: any) => entry.postId)).toEqual(["shadow-fixture"]);
+  expect(coverage.missingPosts).toEqual([]);
 });
 
 it("logs fixed refusal classes without copying private transport details", async () => {

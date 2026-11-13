@@ -1,4 +1,5 @@
 import { COVERAGE_LABELS_SETTINGS_ID } from "../../../packages/content-core/src/cms-settings.ts";
+import { STORY_CTAS_SETTINGS_ID } from "../../../packages/content-core/src/cms-settings.ts";
 import type { Loader } from "astro/loaders";
 import { createCmsPreviewContentSource, type CmsPreviewContentSource } from "./cms-preview-content.ts";
 import {
@@ -110,7 +111,7 @@ export function publicSiteChromeLoader(previewContent: CmsPreviewContentSource |
         ? await previewContent.load()
         : await readPublicArtifactBundle(artifactBundlePath!);
       const chrome = bundle.settings.filter(
-        (setting) => setting.settingId === COVERAGE_LABELS_SETTINGS_ID || setting.settingId === PUBLIC_SITE_CHROME_SETTINGS_ID || setting.settingId === NJ_DECIDES_SETTINGS_ID,
+        (setting) => setting.settingId === STORY_CTAS_SETTINGS_ID || setting.settingId === COVERAGE_LABELS_SETTINGS_ID || setting.settingId === PUBLIC_SITE_CHROME_SETTINGS_ID || setting.settingId === NJ_DECIDES_SETTINGS_ID,
       );
       for (const setting of chrome) store.set({
         id: setting.settingId,

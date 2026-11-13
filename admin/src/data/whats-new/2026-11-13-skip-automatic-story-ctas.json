@@ -1,0 +1,8 @@
+{
+  "date": "2026-11-13",
+  "kind": "new",
+  "title": "Skip automatic CTAs on one story",
+  "body": "For sponsored or sensitive coverage, turn on Skip automatic CTAs in the Post identity panel, then save and publish. Donation and newsletter rules will skip that story. Calls to action you added as story blocks stay visible.",
+  "order": 1794592860000,
+  "prs": []
+}

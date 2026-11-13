@@ -1,5 +1,6 @@
 import { validatePostsBrowse, type PostsBrowseConfig } from "./posts-browse.ts";
 import { isCoverageLabelId } from "./coverage-label-id.ts";
+import { validateStoryCtaRules } from "./story-cta-rules.ts";
 export { isCoverageLabelId } from "./coverage-label-id.ts";
 // Pure contract for versioned CMS settings. Each product-owned settings document
 // has one exact id and immutable schema history. Request data never defines a
@@ -20,6 +21,7 @@ export const NEWSROOM_HOME_SETTINGS_ID = "newsroom-home";
 export const NEWSROOM_MILESTONE_SETTINGS_ID = "newsroom-milestone";
 export const NJ_DECIDES_SETTINGS_ID = "nj-decides-brand";
 export const COVERAGE_LABELS_SETTINGS_ID = "coverage-labels";
+export const STORY_CTAS_SETTINGS_ID = "story-ctas";
 export const MAX_COVERAGE_LABELS = 100;
 export interface CoverageLabel {
   readonly id: string;
@@ -230,6 +232,7 @@ export const DEFAULT_SITE_NAVIGATION: SiteNavigationSettingsValues = deepFreeze(
 } satisfies SiteNavigationSettingsValues);
 
 export type CmsSettingsField =
+  | { readonly kind: "storyCtaRules"; readonly required?: boolean; readonly version?: 2 }
   | { readonly kind: "postsBrowse"; readonly required?: boolean }
   | { readonly kind: "coverageLabels"; readonly required?: boolean }
   | { readonly kind: "boolean"; readonly required?: boolean }
@@ -316,6 +319,10 @@ export interface CmsSettingsDocument {
 // The catalog is closed to approved product-owned documents. Historical
 // versions are never removed after a settings document is admitted.
 export const CMS_SETTINGS_SCHEMAS: CmsSettingsSchemaCatalog = Object.freeze({
+  [STORY_CTAS_SETTINGS_ID]: Object.freeze({ currentVersion: 2, versions: Object.freeze({
+    1: Object.freeze({ schemaVersion: 1, fields: Object.freeze({ rules: Object.freeze({ kind: "storyCtaRules", required: true }) }) }),
+    2: Object.freeze({ schemaVersion: 2, fields: Object.freeze({ rules: Object.freeze({ kind: "storyCtaRules", required: true, version: 2 }) }) }),
+  }) }),
   [COVERAGE_LABELS_SETTINGS_ID]: Object.freeze({ currentVersion: 1, versions: Object.freeze({
     1: Object.freeze({ schemaVersion: 1, fields: Object.freeze({ labels: Object.freeze({ kind: "coverageLabels", required: true }) }) }),
   }) }),
@@ -986,6 +993,7 @@ function cloneNavigationLink(link: SiteNavigationLink): SiteNavigationLink {
 }
 
 function cloneSettingsValue(definition: CmsSettingsField, value: unknown): unknown {
+  if (definition.kind === "storyCtaRules") return structuredClone(value);
   if (definition.kind === "postsBrowse") return JSON.parse(JSON.stringify(value));
   if (definition.kind === "coverageLabels" && Array.isArray(value)) return value.map(label => ({ ...label }));
   if (definition.kind === "navigationLinks" && Array.isArray(value)) {
@@ -1015,6 +1023,10 @@ function isCmsSettingsFieldDefinition(
   const keys = new Set(Object.keys(definition));
   keys.delete("kind");
   keys.delete("required");
+  if (definition.kind === "storyCtaRules") {
+    keys.delete("version");
+    return keys.size === 0 && (definition.version === undefined || definition.version === 2);
+  }
   if (definition.kind === "string" || definition.kind === "safeHref") {
     keys.delete("maxBytes");
     keys.delete("pairedWith");
@@ -1133,7 +1145,7 @@ function isCmsSettingsFieldDefinition(
     );
   }
   return (
-    (definition.kind === "boolean" || definition.kind === "assetId" || definition.kind === "coverageLabels" || definition.kind === "postsBrowse") &&
+    (definition.kind === "boolean" || definition.kind === "assetId" || definition.kind === "coverageLabels" || definition.kind === "postsBrowse" || definition.kind === "storyCtaRules") &&
     keys.size === 0
   );
 }
@@ -1286,6 +1298,7 @@ export function validateCmsSettingsValues(
         if (error) return error;
         break;
       }
+      case "storyCtaRules": { const error = validateStoryCtaRules(value, definition.version ?? 1); if (error) return error; break; }
       case "coverageLabels": {
         const error = validateCoverageLabels(value);
         if (error) return error;

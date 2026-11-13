@@ -2,6 +2,7 @@ import { contentLinkFallbackHtml } from "../src/lib/content-link-render";
 import { contentLink, type ContentLinkMetadata } from "../../packages/content-core/src/content-link.ts";
 import { publishedContentLinkRecords } from "../src/lib/content-link-search";
 import { COVERAGE_LABELS_SETTINGS_ID } from "../../packages/content-core/src/cms-settings.ts";
+import { STORY_CTAS_SETTINGS_ID } from "../../packages/content-core/src/cms-settings.ts";
 import { PUBLIC_PAGES } from "../../packages/content-core/src/public-pages";
 import type { PublicArtifactInventoryReceipt } from "../src/lib/public-artifact-inventory";
 import { createHash } from "node:crypto";
@@ -54,7 +55,7 @@ export function projectPublicReleasePairStaticArtifact({ pair, identity, source,
   const setting = (id: string) => { const value = documents.get(`cmsSettings/${id}`); return value ? { ...value, id } : undefined; };
   const read: PublicArtifactContentRead = { pages: rows("cmsPages/"), posts, assets: rows("media_assets_public/"),
     authors: [...documents].filter(([name]) => name.startsWith("cmsAuthorProfilesPublic/")).map(([name, data]) => ({ authorId: name.split("/")[1], data })),
-    setting: setting(PUBLIC_HOMEPAGE_BANNER_SETTINGS_ID), navigation: setting(SITE_NAVIGATION_SETTINGS_ID), chrome: setting(PUBLIC_SITE_CHROME_SETTINGS_ID), njDecides: setting(NJ_DECIDES_SETTINGS_ID), coverageLabels: setting(COVERAGE_LABELS_SETTINGS_ID), reservation, admissionTime };
+    setting: setting(PUBLIC_HOMEPAGE_BANNER_SETTINGS_ID), navigation: setting(SITE_NAVIGATION_SETTINGS_ID), chrome: setting(PUBLIC_SITE_CHROME_SETTINGS_ID), njDecides: setting(NJ_DECIDES_SETTINGS_ID), coverageLabels: setting(COVERAGE_LABELS_SETTINGS_ID), storyCtas: setting(STORY_CTAS_SETTINGS_ID), reservation, admissionTime };
   return projectPublicArtifactContent(read);
 }
 /** The full live finalizer requires both emitted CMS aliases and aliases of

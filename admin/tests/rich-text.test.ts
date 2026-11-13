@@ -65,10 +65,9 @@ describe("rich-text schema is narrowed to what the renderer supports", () => {
   // so this asserts the contract without mounting anything in jsdom.
   const schema = getSchema(richTextExtensions());
 
-  it("includes the renderer's marks and excludes strike", () => {
+  it("includes only the renderer's marks", () => {
     const marks = Object.keys(schema.marks);
-    expect(marks).toEqual(expect.arrayContaining(["bold", "italic", "code", "link"]));
-    expect(marks).not.toContain("strike");
+    expect(marks.sort()).toEqual(["bold", "code", "italic", "link"]);
   });
 
   it("includes every block node the renderer emits", () => {
@@ -350,7 +349,7 @@ describe("the link command enforces the allowlist on manual entry (#514)", () =>
 
 describe("pasting a URL over a selection cannot bypass the allowlist (#514)", () => {
   // The other #514 tests cover setLink and autolink, both of which run isAllowedUri.
-  // TipTap 2.27's linkOnPaste is the exception: its paste handler applies the pasted
+  // The linkOnPaste handler applies the pasted
   // href with a bare setMark and never consults isAllowedUri, so a pasted ftp URL over
   // a selection would persist a link mark the renderer strips. rich-text.ts disables
   // linkOnPaste for exactly that reason; these prove the ungated path is gone.

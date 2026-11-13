@@ -1,5 +1,6 @@
 ---
 import "../../../packages/content-core/src/component-blocks.css";
+import { storyCtaComposition } from "../lib/story-ctas";
 import "../../../packages/content-core/src/link-card.css";
 import "../../../packages/content-core/src/link-card-directory.css";
 import "../../../packages/content-core/src/component-blocks.css";
@@ -16,6 +17,7 @@ import {
 } from "../lib/cms-responsive-image";
 import {
   chapterHeadingIdResolver,
+  postChapters,
   type PostChapter,
 } from "../lib/post-chapters";
 import type { PostPresentation } from "../lib/post-formats";
@@ -40,6 +42,8 @@ const {
   chapters = [],
 } = Astro.props as Props;
 const post = entry.data;
+const settings = Astro.locals.cmsRender?.content.settings ?? (await getCollection("cmsPublicSiteChrome")).map(item => item.data);
+const blocks = storyCtaComposition(post.blocks, settings, { optOut: post.disableStoryCtas }).body;
 const recordCards = renderRecordCards(Astro.locals.cmsRender, Astro.locals.cmsRender
   ? []
   : (await getCollection("cmsRecordCards")).map(item => item.data));
@@ -49,16 +53,17 @@ const responsiveAssets = await resolveCmsPostAssets(
   post.blocks,
   post.assets,
 );
-const newsletters = await newsletterSignupResolution(post.blocks, getImage, recordCards);
+const newsletters = await newsletterSignupResolution(blocks, getImage, recordCards);
+const composedChapters = chapters.length ? postChapters(blocks) : [];
 const headingResolvers = new Map(
-  post.blocks.map((block) => [
+  blocks.map((block) => [
     block.id,
-    chapterHeadingIdResolver(chapters, block.id),
+    chapterHeadingIdResolver(composedChapters, block.id),
   ]),
 );
 const draftPreview = isPrivatePreviewRender(Astro.locals.cmsRender);
-const groups = renderContentGroups(post.blocks, (block, index) => ({
-  generatedHeadingLevel: generatedHeadingLevelAt(post.blocks, index),
+const groups = renderContentGroups(blocks, (block, index) => ({
+  generatedHeadingLevel: generatedHeadingLevelAt(blocks, index),
   html: renderBlock(block, {
     allowBios: true,
     showImageCredits: true,
@@ -68,7 +73,7 @@ const groups = renderContentGroups(post.blocks, (block, index) => ({
       responsiveAssets.get(responsiveImageKey(assetId, placement)) ?? newsletters.images.get(assetId) ?? null,
     resolveNewsletter: id => newsletters.cards.get(id) ?? null,
     externalLinksNewTab: true,
-    generatedHeadingLevel: generatedHeadingLevelAt(post.blocks, index),
+    generatedHeadingLevel: generatedHeadingLevelAt(blocks, index),
     richTextHeadingId: headingResolvers.get(block.id),
     videoPlaceholder: draftPreview,
     publicElectionResults: !draftPreview,

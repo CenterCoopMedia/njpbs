@@ -11,7 +11,7 @@ import type { PairViewStore } from './public-release-pair-view-storage';
 import { freezeRetainedPublicImages } from './retained-public-images';
 import { assertContextMatchesPublication } from '../src/lib/retained-public-context';
 import { PUBLIC_HOMEPAGE_BANNER_SETTINGS_ID, SITE_NAVIGATION_SETTINGS_ID, PUBLIC_SITE_CHROME_SETTINGS_ID,
-  NJ_DECIDES_SETTINGS_ID, COVERAGE_LABELS_SETTINGS_ID } from '../../packages/content-core/src/cms-settings';
+  NJ_DECIDES_SETTINGS_ID, COVERAGE_LABELS_SETTINGS_ID, STORY_CTAS_SETTINGS_ID } from '../../packages/content-core/src/cms-settings';
 import { firstInstallHash as hash, firstInstallRefused as refuse, assertFirstInstallSource,
   firstInstallInventory, createFirstInstallDirectory, writeFirstInstallFile } from './public-release-first-install-files';
 import { firstInstallBuildEnvironment, type FirstInstallPublicBuildSettings } from './public-release-first-install-environment';
@@ -56,7 +56,7 @@ export async function freezeFirstInstallPublicReleasePair(options: FirstInstallF
     posts: rows('cmsPosts').map(record => ({ ...record, approvedLibraryVersion: approvals.approvedLibraryVersion(record, rows('cmsVersionHistory')) })),
     assets: rows('media_assets_public'), authors: rows('cmsAuthorProfilesPublic').map(({ id, ...data }) => ({ authorId: id, data })),
     setting: setting(PUBLIC_HOMEPAGE_BANNER_SETTINGS_ID), navigation: setting(SITE_NAVIGATION_SETTINGS_ID), chrome: setting(PUBLIC_SITE_CHROME_SETTINGS_ID),
-    njDecides: setting(NJ_DECIDES_SETTINGS_ID), coverageLabels: setting(COVERAGE_LABELS_SETTINGS_ID), reservation, admissionTime: new Date(renderedAt) });
+    njDecides: setting(NJ_DECIDES_SETTINGS_ID), coverageLabels: setting(COVERAGE_LABELS_SETTINGS_ID), storyCtas: setting(STORY_CTAS_SETTINGS_ID), reservation, admissionTime: new Date(renderedAt) });
   const bundle = assertPublicArtifactBundle({ schemaVersion: 3, ...projected });
   // Retain original dependency DTOs independently. The target source creates a
   // new rendered Home catalog and prepared artifact; no old receipt is retagged.

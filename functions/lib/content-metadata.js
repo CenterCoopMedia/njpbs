@@ -102,6 +102,9 @@ function validateKnownMetadata(document, { descriptionIsString = true } = {}) {
   // other cmsPosts record kinds can carry unrelated root values with the same key,
   // so their values remain opaque to this shared metadata boundary.
   if (document.type === "post") {
+    if (document.disableStoryCtas !== undefined && typeof document.disableStoryCtas !== "boolean") {
+      return "disableStoryCtas must be a boolean";
+    }
     if (document.leadMedia != null && !isPostLeadMedia(document.leadMedia, false)) return "Check the lead media details.";
     if (document.coverageLabelId !== undefined && document.coverageLabelId !== null && !require("./cms-settings-contract").isCoverageLabelId(document.coverageLabelId)) return "coverageLabelId must be a valid coverage label id";
     if (document.spotlightNews !== undefined && typeof document.spotlightNews !== "boolean") {

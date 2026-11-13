@@ -9,8 +9,26 @@ import { publishedPageRead, retainedHomeSources, staticFixtureContent, pageIds, 
 import { resolveHomeHeroItems } from "../src/lib/home-hero-items";
 import { homeSourcePreviewSnapshot } from "../src/lib/home-hero-items";
 import { rebuildHomeSourcesForPosts } from "../src/lib/home-editorial-catalog";
+import { DEFAULT_NJ_DECIDES_SETTINGS } from "../../packages/content-core/src/cms-settings";
 
 describe("published Page render boundary", () => {
+  it("admits all five chrome settings while keeping story CTAs off Home content", async () => {
+    const input = publishedPageRead("home");
+    input.settings.push(
+      { id: "nj-decides-brand", version: 4, published: { schemaVersion: 1, sourceVersion: 3,
+        publishedAt: "2026-10-12T10:00:00.000Z", values: structuredClone(DEFAULT_NJ_DECIDES_SETTINGS) } } as never,
+      { id: "story-ctas", version: 4, published: { schemaVersion: 1, sourceVersion: 3,
+        publishedAt: "2026-10-12T10:00:00.000Z", values: { rules: [] } } } as never,
+    );
+    expect(input.settings.map(setting => setting.id)).toEqual([
+      "site-navigation", "public-site-chrome", "public-homepage-banner", "nj-decides-brand", "story-ctas",
+    ]);
+    const content = await projectPublishedPageRead(input, "home", "a".repeat(40), now, retainedHomeSources());
+    expect(content.settings.map(setting => setting.settingId)).toEqual(input.settings.map(setting => setting.id));
+    expect(content.pages[0].blocks).toEqual(staticFixtureContent().pages.find(page => page.pageId === "home")!.blocks);
+    input.settings.push({ ...input.settings[0] } as never);
+    await expect(projectPublishedPageRead(input, "home", "a".repeat(40), now, retainedHomeSources())).rejects.toThrow("Invalid Page settings");
+  });
   it("never retains stale Page cards in public Home source snapshots or either build-free refresh", async () => {
     const sources = retainedHomeSources();
     sources.heroCatalog = [...(sources.heroCatalog ?? []), { id: "contact", source: "cms_pages", title: "Withdrawn Page", summary: "Old summary", href: "/contact/", categories: [], tags: [] }];
