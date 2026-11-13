@@ -1,5 +1,42 @@
 # Automatic story calls to action
 
+## Manage rules in Boardwalk
+
+Open **Settings**, then select **Story CTAs** under Public website. The ordered
+rule list controls the order of automatic calls to action that share a position.
+Select a rule to edit it, or use the add, move and remove controls beside the
+list.
+
+Each rule has these controls:
+
+- **Rule name** identifies the rule for staff. Readers do not see it.
+- **Enabled on stories** controls insertion without deleting the rule. Disabled
+  rules stay editable and remain in the saved list.
+- **Applies to** is fixed to Stories (posts). Category and tag targeting are not
+  available yet.
+- **Position** places the CTA at the start, at the end or after a paragraph
+  number. Photos, dividers, headings and other blocks do not count as
+  paragraphs. A story with fewer than the selected number does not show that
+  rule.
+- **CTA type** uses the existing support appeal or newsletter signup content.
+  Automatic support appeals do not use a decorative image. Newsletter rules
+  select one to four existing newsletter records.
+
+The sample story has four paragraphs and a divider. It uses the same insertion
+and block renderer as public stories. The preview identifies each newsletter as
+an approved or draft projection. A draft projection helps staff check the
+layout, but public stories use only approved newsletter cards. If a selected
+newsletter is unavailable or cannot be loaded, the preview states that result
+instead of creating substitute content. Optional newsletter images are not
+shown in this settings preview.
+
+Select **Save draft** to keep changes private. Select **Publish** after the saved
+draft is ready. Publication updates the public settings context and dependent
+story output through the existing fast settings publication. It does not write
+automatic blocks into saved stories and does not require a code deployment.
+
+## Stored rule contract
+
 The `story-ctas` settings document stores an ordered list of rules. Publish its
 saved version with the normal settings publication method. The public site reads
 the published snapshot; later draft edits do not change readers' pages.
