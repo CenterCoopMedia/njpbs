@@ -176,7 +176,7 @@ describe("paragraph positions from issue 72", () => {
   });
   it("keeps start and paragraph CTAs in live-blog intros and end CTAs below updates", () => {
     const rules = [rule({ id: "last" }), after(1), rule({ id: "first", position: { kind: "start" } })];
-    const registry = projectStoryCtas({ published: { ...published(), schemaVersion: 2, values: { rules } } })!.data;
+    const registry = projectStoryCtas({ version: 4, published: { ...published(), schemaVersion: 2, values: { rules } } })!.data;
     const result = storyCtaComposition([prose("intro", [p("One"), p("Two")])], [registry], true);
     expect(labels(result.body)).toEqual(["support_appeal", "One", "support_appeal", "Two"]);
     expect(result.afterUpdates.map(block => block.id)).toEqual(["story-cta-last"]);
