@@ -32,3 +32,5 @@ rendering and full artifact rendering consume the same rule contract.
 Static story routes use the existing request-time context adapter once the CTA
 settings document exists. Turning all rules off keeps that adapter active so
 an older built appeal cannot reappear.
+The existing route-hint transport supports up to 10,000 canonical story paths.
+This limit and the settings publication roster bound still apply to CTA updates.
