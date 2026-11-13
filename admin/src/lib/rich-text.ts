@@ -84,6 +84,11 @@ export function richTextExtensions(
     StarterKit.configure({
       strike: false,
       heading: false,
+      // Preserve the supported schema and editing behavior; EditorialLink owns links.
+      link: false,
+      underline: false,
+      listKeymap: false,
+      trailingNode: false,
       ...(shortTextOnly ? { blockquote: false, bulletList: false, orderedList: false, listItem: false,
         code: false, codeBlock: false, hardBreak: false, horizontalRule: false } as const : {}),
     }),
@@ -200,13 +205,8 @@ export function richTextExtensions(
     EditorialLink.configure({
       openOnClick: false,
       autolink: true,
-      // Paste-over-selection is the one link path TipTap 2.27 does not route through
-      // isAllowedUri: its paste handler calls the generic setMark with the pasted href
-      // directly, so pasting an ftp://host over selected text (linkify recognizes it)
-      // would persist a link mark the renderer strips to an empty href -- the exact
-      // drift isAllowedUri closes on the setLink and autolink paths. Turn it off so the
-      // editor makes links only through those two gated paths; the toolbar link dialog
-      // still covers "link this selection".
+      // Keep paste-over-selection from adding links. Autolink and the toolbar
+      // dialog use the same URL gate as the public renderer.
       linkOnPaste: false,
       HTMLAttributes: { rel: "noopener noreferrer" },
       // Offer only links the renderer will keep. TipTap's default validation admits

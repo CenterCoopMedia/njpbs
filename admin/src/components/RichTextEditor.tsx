@@ -209,6 +209,7 @@ export function RichTextEditor({
   );
 
   const editor = useEditor({
+    shouldRerenderOnTransaction: true,
     // Placeholder is an editor-only affordance (a view decoration, not a schema node), so it
     // is composed here rather than in the shared richTextExtensions() that mirrors the
     // renderer's schema.
@@ -384,7 +385,7 @@ export function RichTextEditor({
       // the sync also does not loop back through onChange.
       editor
         .chain()
-        .setContent(incoming, false)
+        .setContent(incoming, { emitUpdate: false })
         .command(({ tr }) => {
           tr.setMeta("addToHistory", false);
           return true;

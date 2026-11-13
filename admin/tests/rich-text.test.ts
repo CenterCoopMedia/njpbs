@@ -65,10 +65,9 @@ describe("rich-text schema is narrowed to what the renderer supports", () => {
   // so this asserts the contract without mounting anything in jsdom.
   const schema = getSchema(richTextExtensions());
 
-  it("includes the renderer's marks and excludes strike", () => {
+  it("includes only the renderer's marks", () => {
     const marks = Object.keys(schema.marks);
-    expect(marks).toEqual(expect.arrayContaining(["bold", "italic", "code", "link"]));
-    expect(marks).not.toContain("strike");
+    expect(marks.sort()).toEqual(["bold", "code", "italic", "link"]);
   });
 
   it("includes every block node the renderer emits", () => {
