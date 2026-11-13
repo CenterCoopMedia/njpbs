@@ -360,9 +360,12 @@ describe("published Post reader with the real Firestore emulator", () => {
   });
 
   it("joins approved newsletter cards selected by published CTA rules without copying draft fields", async () => {
-    await put("cmsPosts/reader-fixture", document());
+    const value = document();
+    value.published.blocks.push(...Array.from({ length: 100 }, (_, index) => ({ id: `body-card-${index}`, type: "record_card", visible: true, order: index + 1,
+      data: { recordKind: "newsletter", recordId: `absent-body-${index}` } })));
+    await put("cmsPosts/reader-fixture", value);
     const approved = { type: "newsletter", status: "approved", version: 2, title: "Weekly reporting",
-      signupUrl: "https://example.org/newsletter", body: { type: "doc", content: [] } };
+      signupUrl: "https://example.org/newsletter", imageAssetId: "missing-image", body: { type: "doc", content: [] } };
     await put("cmsPosts/cta-weekly", { ...approved, version: 3, status: "draft", title: "Private draft newsletter", signupUrl: "https://example.org/private" });
     await put("cmsVersionHistory/cta-weekly-approval", { collection: "cmsPosts", documentId: "cta-weekly", action: "approve", after: approved });
     const rule = { id: "weekly", label: "Weekly newsletter", enabled: true, target: { contentTypes: ["post"] },
@@ -374,8 +377,11 @@ describe("published Post reader with the real Firestore emulator", () => {
     const read = await response.json();
     expect(read.joinedRecords).toHaveLength(1);
     expect(read.joinedRecords[0]).toMatchObject({ id: "cta-weekly", approvedLibraryVersion: { title: "Weekly reporting", signupUrl: "https://example.org/newsletter" } });
-    expect(read.document.published.blocks).toEqual(fixture.document.published.blocks);
+    expect(read.joinedRecords[0].approvedLibraryVersion.imageAssetId).toBeUndefined();
+    expect(read.document.published.blocks).toEqual(value.published.blocks);
     expect(JSON.stringify(read)).not.toContain("Private draft newsletter");
+    const cardOnly = await readerModule.readPublishedPost({ firestore: db, slug: "shadow-fixture", now, cardsOnly: true });
+    expect(cardOnly.joinedRecords).toEqual([]);
     await db.doc("cmsSettings/story-ctas").update({ "published.values.rules": [{ ...rule, enabled: false }] });
     const disabled = await call(authenticated());
     expect(disabled.status).toBe(200);

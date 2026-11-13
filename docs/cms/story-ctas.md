@@ -22,6 +22,9 @@ and `data`. A support appeal needs a heading, copy, button label, safe link and
 existing color style. Automatic appeals use text and a button. Images remain
 part of authored story blocks. A newsletter CTA selects one to four newsletter
 records; only their current approved public cards and safe signup links render.
+Automatic newsletter cards use text and links; optional images do not add a
+site-wide media dependency. Missing cards are omitted. Authored block dependencies
+keep their existing limits and media checks. Card-only story reads omit CTA joins.
 Up to 20 rules are allowed. Version 2 admits these positions and newsletter
 blocks; existing version 1 end appeals remain readable without migration.
 
@@ -40,6 +43,8 @@ parameters to the donation link.
 The existing settings publication updates the public context and dependent story
 outputs without a code deployment or full site build. Both compiled public
 rendering and full artifact rendering consume the same rule contract.
+Newsletter approval and withdrawal confirmation include stories that reference
+the card through an enabled CTA rule, even when their authored body has no card.
 Static story routes use the existing request-time context adapter once the CTA
 settings document exists. Turning all rules off keeps that adapter active so
 an older built appeal cannot reappear.

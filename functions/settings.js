@@ -321,6 +321,10 @@ function isSiteNavigationUpgrade(documentId, stored, currentSchema) {
   return documentId === "site-navigation" && stored?.schemaVersion === 1 && currentSchema?.schemaVersion === 2;
 }
 
+function isStoryCtasUpgrade(documentId, stored, currentSchema) {
+  return documentId === "story-ctas" && stored?.schemaVersion === 1 && currentSchema?.schemaVersion === 2;
+}
+
 function settingsSchemaForPublication(
   documentId,
   stored,
@@ -328,7 +332,7 @@ function settingsSchemaForPublication(
   settingsSchemas,
 ) {
   if (stored.schemaVersion === currentSchema.schemaVersion) return currentSchema;
-  if (isPublicHomepageBannerUpgrade(documentId, stored, currentSchema) || isSiteNavigationUpgrade(documentId, stored, currentSchema)) {
+  if (isPublicHomepageBannerUpgrade(documentId, stored, currentSchema) || isSiteNavigationUpgrade(documentId, stored, currentSchema) || isStoryCtasUpgrade(documentId, stored, currentSchema)) {
     const storedSchema = cmsSettingsSchemaFor(
       documentId,
       stored.schemaVersion,
@@ -686,7 +690,7 @@ function createCmsSaveSettingsHandler(deps = {}) {
           if (id === "site-navigation" && before.values.postsBrowse && !Object.hasOwn(req.body.values, "postsBrowse")) {
             throw new SettingsRejection(409, "Posts browsing has been arranged. Reload the latest Boardwalk before saving navigation.");
           }
-          const upgrading = isPublicHomepageBannerUpgrade(id, before, currentSchema) || isSiteNavigationUpgrade(id, before, currentSchema);
+          const upgrading = isPublicHomepageBannerUpgrade(id, before, currentSchema) || isSiteNavigationUpgrade(id, before, currentSchema) || isStoryCtasUpgrade(id, before, currentSchema);
           if (before.schemaVersion !== currentSchema.schemaVersion && !upgrading) {
             throw new SettingsRejection(
               409,

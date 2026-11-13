@@ -1071,6 +1071,18 @@ describe("site navigation settings", () => {
   const PRODUCTION_PUBLISHABLE = new Set(["public-homepage-banner", "site-navigation"]);
   const seed = () => JSON.parse(JSON.stringify(DEFAULT_SITE_NAVIGATION));
 
+  it("publishes a stored v1 CTA draft and upgrades it on its next save without changing its public rules", async () => {
+    const ref = db.collection("cmsSettings").doc("story-ctas");
+    await ref.set({ schemaVersion: 1, values: { rules: [] }, version: 4 });
+    const deps = handlerDeps({ settingsSchemas: undefined, publishableSettingsIds: new Set(["story-ctas"]) });
+    const published = await call(createCmsPublishSettingsHandler(deps), { id: "story-ctas", baseVersion: 4, publicationTransport: "public-context-no-build-v1" });
+    expect(published.statusCode).toBe(200);
+    expect(published.body.settings.published).toMatchObject({ schemaVersion: 1, sourceVersion: 4, values: { rules: [] } });
+    const saved = await call(createCmsSaveSettingsHandler(deps), { id: "story-ctas", baseVersion: 5, values: { rules: [] } });
+    expect(saved.statusCode).toBe(200);
+    expect(saved.body.settings).toEqual({ schemaVersion: 2, version: 6, values: { rules: [] }, published: published.body.settings.published });
+  });
+
   it("upgrades a v1 draft without changing its publication and rejects old-client omission of browsing", async () => {
     const values = seed();
     const published = { schemaVersion: 1, values, sourceVersion: 3, publishedAt: "2026-09-25T14:00:00.000Z" };
