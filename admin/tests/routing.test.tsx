@@ -261,8 +261,6 @@ async function expectScheduleWatchLiveLabel(label: string) {
 beforeAll(() => adminRoutePreloaders.content());
 
 beforeEach(() => {
-  if (!Range.prototype.getClientRects) Range.prototype.getClientRects = () => [] as unknown as DOMRectList;
-  if (!Range.prototype.getBoundingClientRect) Range.prototype.getBoundingClientRect = () => new DOMRect();
   vi.clearAllMocks();
   reviewMocks.cmsListReviewQueue.mockResolvedValue({
     success: true,

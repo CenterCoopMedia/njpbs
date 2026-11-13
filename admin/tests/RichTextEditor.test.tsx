@@ -125,16 +125,18 @@ describe("RichTextEditor", () => {
     // instance a different item's body. TipTap reads `content` only at creation, so
     // without a value->editor sync the surface would keep showing the old body and the
     // next keystroke would write it back onto the wrong item.
+    const onChange = vi.fn();
     const { rerender } = render(
-      <RichTextEditor value={docWithText("Alpha")} onChange={() => {}} ariaLabel="Body" />,
+      <RichTextEditor value={docWithText("Alpha")} onChange={onChange} ariaLabel="Body" />,
     );
     fireEvent.focus(screen.getByRole("textbox", { name: "Body" }));
     expect(screen.getByRole("textbox").textContent).toContain("Alpha");
     rerender(
-      <RichTextEditor value={docWithText("Bravo")} onChange={() => {}} ariaLabel="Body" />,
+      <RichTextEditor value={docWithText("Bravo")} onChange={onChange} ariaLabel="Body" />,
     );
     expect(screen.getByRole("textbox").textContent).toContain("Bravo");
     expect(screen.getByRole("textbox").textContent).not.toContain("Alpha");
+    expect(onChange).not.toHaveBeenCalled();
   });
 
   it("keeps an external value sync out of the undo history", () => {
