@@ -376,7 +376,7 @@ function StoryCtaSettingsEditor({ load, save, publish }: Omit<StoryCtaSettingsTr
     [rules[index], rules[target]] = [rules[target]!, rules[index]!];
     focusTarget.current = "selection";
     setSelectedId(rules[target]!.id);
-    setArrangement(`${rules[target]!.label} moved to position ${target + 1} of ${rules.length}.`);
+    setArrangement(`${rules[target]!.label || "Untitled rule"} moved to position ${target + 1} of ${rules.length}.`);
     replaceRules(rules);
   }
 
