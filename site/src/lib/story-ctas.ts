@@ -9,6 +9,7 @@ export function storyCtaComposition(blocks: readonly PageBlock[], settings: read
   const registry = settings.find(isStoryCtasBuildData);
   const rules = registry?.rules ?? [];
   return liveBlog
-    ? { body: [...blocks], afterUpdates: insertStoryCtas(blocks, rules).slice(blocks.length) }
+    ? { body: insertStoryCtas(blocks, rules.filter(rule => rule.position.kind !== "end")),
+      afterUpdates: insertStoryCtas(blocks, rules.filter(rule => rule.position.kind === "end")).slice(blocks.length) }
     : { body: insertStoryCtas(blocks, rules), afterUpdates: [] };
 }

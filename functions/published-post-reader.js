@@ -296,6 +296,7 @@ async function readPublishedPost({ firestore, slug, now, transaction, includeChr
       catch (error) { refuseReaderMedia(error, releaseSelector); }
     }
     const safeAssets = projectPublishedPostAssets(assetIds, media, uploadedMediaReady, optional);
+    const chrome = includeChrome ? await readPublishedChrome(firestore, tx, now) : {};
     const recordIds = joinedRecordIds(published.blocks);
     if (recordIds.length > 100) throw readerFailure("reader_unsupported_dependency");
     const joinedRecords = [];
@@ -332,10 +333,15 @@ async function readPublishedPost({ firestore, slug, now, transaction, includeChr
       Object.assign(joinedSafe, selectedAssets({ assetIds: extraAssetIds }, projected));
     }
     const joinedAssets = extraAssetIds.filter(id => joinedSafe[id]).map(id => ({ id, ...joinedSafe[id] }));
-    const chrome = includeChrome ? await readPublishedChrome(firestore, tx, now) : {};
+    const ctaCards = cardsOnly ? [] : await require("./lib/story-cta-dependencies").readStoryCtaCards({
+      firestore, transaction: tx, bodyIds: recordIds, settings: chrome.settings?.find(setting => setting.id === "story-ctas") });
     const result = { kind: cardsOnly ? "published-post-card" : "published-post", document: { id: owner.id, status: "published", publiclyVisible: true, deleted: false,
       publishAt: published.publishedAt, published }, assets: [...assetIds.filter(id => safeAssets[id]).map(id => ({ id, ...safeAssets[id] })), ...joinedAssets],
       joinedRecords, authors, ...chrome };
+    for (const card of ctaCards) {
+      joinedRecords.push(card);
+      if (!require("./lib/content-link").contentLinkReadFits(result, 2 * 1024 * 1024)) joinedRecords.pop();
+    }
     if (!require("./lib/content-link").contentLinkReadFits(result, 2 * 1024 * 1024)) throw readerFailure("reader_invalid_snapshot");
     return result;
   };

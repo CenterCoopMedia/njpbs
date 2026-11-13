@@ -4118,7 +4118,7 @@ function validatePostsBrowse(value) {
 var MAX_STORY_CTA_RULES = 20;
 var object7 = (value) => value !== null && typeof value === "object" && !Array.isArray(value);
 var only = (value, keys2) => Object.keys(value).every((key2) => keys2.includes(key2));
-function validateStoryCtaRules(value) {
+function validateStoryCtaRules(value, version = 2) {
   if (!Array.isArray(value) || value.length > MAX_STORY_CTA_RULES) return "Use at most 20 story CTA rules.";
   const ids = /* @__PURE__ */ new Set();
   for (const rule of value) {
@@ -4127,9 +4127,13 @@ function validateStoryCtaRules(value) {
     if (typeof rule.label !== "string" || !rule.label.trim() || rule.label !== rule.label.trim() || rule.label.length > 100 || /[\u0000-\u001f\u007f]/.test(rule.label)) return "Give each rule a name of at most 100 characters.";
     if (typeof rule.enabled !== "boolean") return "Rule enabled must be a boolean.";
     if (!object7(rule.target) || !only(rule.target, ["contentTypes"]) || !Array.isArray(rule.target.contentTypes) || rule.target.contentTypes.length !== 1 || rule.target.contentTypes[0] !== "post") return "Rules can target stories only.";
-    if (!object7(rule.position) || !only(rule.position, ["kind"]) || rule.position.kind !== "end") return "Choose the end of the story body.";
+    const position = rule.position;
+    if (!object7(position)) return "Choose a story body position.";
+    if (version === 1 && (!only(position, ["kind"]) || position.kind !== "end")) return "Choose the end of the story body.";
+    if (version === 2 && (position.kind === "after-paragraph" ? !only(position, ["kind", "count"]) || !Number.isSafeInteger(position.count) || Number(position.count) < 1 || Number(position.count) > 1e4 : !only(position, ["kind"]) || !["start", "end"].includes(String(position.kind)))) return "Choose start, end, or a paragraph number from 1 to 10000.";
     const content = rule.content;
-    if (!object7(content) || !only(content, ["type", "data"]) || content.type !== "support_appeal" || !object7(content.data)) return "Choose a support appeal block.";
+    const types = version === 1 ? ["support_appeal"] : ["support_appeal", "newsletter_signup"];
+    if (!object7(content) || !only(content, ["type", "data"]) || !types.includes(String(content.type)) || !object7(content.data)) return "Choose a supported CTA block.";
     if (content.data.backgroundImageAssetId) return "Automatic appeals use text and a button. Add images in the story body.";
     const parsed = parseBlocks([{ id: "cta", order: 0, visible: true, ...content }]);
     if (!parsed.ok) return "Complete the CTA block with a safe link and its required text.";
@@ -4262,8 +4266,9 @@ var DEFAULT_SITE_NAVIGATION = deepFreeze({
   ]
 });
 var CMS_SETTINGS_SCHEMAS = Object.freeze({
-  [STORY_CTAS_SETTINGS_ID]: Object.freeze({ currentVersion: 1, versions: Object.freeze({
-    1: Object.freeze({ schemaVersion: 1, fields: Object.freeze({ rules: Object.freeze({ kind: "storyCtaRules", required: true }) }) })
+  [STORY_CTAS_SETTINGS_ID]: Object.freeze({ currentVersion: 2, versions: Object.freeze({
+    1: Object.freeze({ schemaVersion: 1, fields: Object.freeze({ rules: Object.freeze({ kind: "storyCtaRules", required: true }) }) }),
+    2: Object.freeze({ schemaVersion: 2, fields: Object.freeze({ rules: Object.freeze({ kind: "storyCtaRules", required: true, version: 2 }) }) })
   }) }),
   [COVERAGE_LABELS_SETTINGS_ID]: Object.freeze({ currentVersion: 1, versions: Object.freeze({
     1: Object.freeze({ schemaVersion: 1, fields: Object.freeze({ labels: Object.freeze({ kind: "coverageLabels", required: true }) }) })
@@ -4853,6 +4858,10 @@ function isCmsSettingsFieldDefinition(definition) {
   const keys2 = new Set(Object.keys(definition));
   keys2.delete("kind");
   keys2.delete("required");
+  if (definition.kind === "storyCtaRules") {
+    keys2.delete("version");
+    return keys2.size === 0 && (definition.version === void 0 || definition.version === 2);
+  }
   if (definition.kind === "string" || definition.kind === "safeHref") {
     keys2.delete("maxBytes");
     keys2.delete("pairedWith");
@@ -4997,7 +5006,7 @@ function validateCmsSettingsValues(schema, values) {
         break;
       }
       case "storyCtaRules": {
-        const error = validateStoryCtaRules(value);
+        const error = validateStoryCtaRules(value, definition.version ?? 1);
         if (error) return error;
         break;
       }

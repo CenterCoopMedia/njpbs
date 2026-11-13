@@ -79,10 +79,10 @@ const recordCards = renderRecordCards(Astro.locals.cmsRender, Astro.locals.cmsRe
   : (await getCollection("cmsRecordCards")).map(item => item.data));
 const sponsors = sponsorCardsFromRecordCards(recordCards);
 const resolveDataFigure = renderDatasetFigures(post.datasetFigures);
-const newsletters = await newsletterSignupResolution(post.blocks, getImage, recordCards);
 const { body: authoredBody, sidebar: sidebarBlocks } = splitLiveBlogBlocks(post.blocks, Boolean(post.liveBlog));
 const composition = storyCtaComposition(authoredBody, settings, Boolean(post.liveBlog));
 const bodyBlocks = composition.body;
+const newsletters = await newsletterSignupResolution([...bodyBlocks, ...sidebarBlocks, ...composition.afterUpdates], getImage, recordCards);
 const renderGroups = (blocks: typeof post.blocks) => renderContentGroups(blocks, (block, index) => ({
   generatedHeadingLevel: generatedHeadingLevelAt(blocks, index),
   html: renderBlock(block, {

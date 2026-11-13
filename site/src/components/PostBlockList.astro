@@ -17,6 +17,7 @@ import {
 } from "../lib/cms-responsive-image";
 import {
   chapterHeadingIdResolver,
+  postChapters,
   type PostChapter,
 } from "../lib/post-chapters";
 import type { PostPresentation } from "../lib/post-formats";
@@ -52,11 +53,12 @@ const responsiveAssets = await resolveCmsPostAssets(
   post.blocks,
   post.assets,
 );
-const newsletters = await newsletterSignupResolution(post.blocks, getImage, recordCards);
+const newsletters = await newsletterSignupResolution(blocks, getImage, recordCards);
+const composedChapters = chapters.length ? postChapters(blocks) : [];
 const headingResolvers = new Map(
-  post.blocks.map((block) => [
+  blocks.map((block) => [
     block.id,
-    chapterHeadingIdResolver(chapters, block.id),
+    chapterHeadingIdResolver(composedChapters, block.id),
   ]),
 );
 const draftPreview = isPrivatePreviewRender(Astro.locals.cmsRender);
