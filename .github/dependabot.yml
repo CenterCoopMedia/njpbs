@@ -9,4 +9,12 @@ updates:
     groups:
       actions-all:
         patterns: ["*"]
-  # Only GitHub Actions updates are configured here; npm packages are not listed.
+  # Keep the recovered billing lockfile pinned during the 48-hour switch watch.
+  # Remove this block through the reviewed hash-refresh work in #100.
+  - package-ecosystem: npm
+    directory: /infrastructure/billing-kill-switch
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 0
+    ignore:
+      - dependency-name: "*"
