@@ -22,6 +22,9 @@ const NO_GATES = Object.freeze({
 
 const DOC_EXTENSIONS = /\.(?:md|mdx)$/i;
 const SOURCE_POLICY_PATHS = new Set([
+  "config/release-surfaces.json",
+  "scripts/check-release-surfaces.mjs",
+  "tests/scripts/release-surfaces.test.mjs",
   "config/configuration-inputs.json",
   "scripts/check-configuration-inputs.py",
   "tests/scripts/configuration-inputs.test.py",
