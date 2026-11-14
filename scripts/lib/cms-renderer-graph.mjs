@@ -34,7 +34,7 @@ const LAUNCH_CONTRACTS = {
   "site/scripts/cms-preview-operator-checks.ts": "d6c68503575b378001082a83a9556eb95a578c71",
   // This build-only DOM evaluates the committed raw reader, whose bytes and
   // snapshots are covered by the Site guard. Any helper edit needs a new contract.
-  "site/src/lib/data-hub-embed-pages.ts": "5f2b280e41f47cc58d785a4991ac6e04fccb5754",
+  "site/src/lib/data-hub-embed-pages.ts": "8df9dd2bd108207a2482fccd6f94844ec8654737",
 };
 const GUARDS = ["site", "preview-renderer", "packages", ".npmrc", "package.json", "package-lock.json",
   "functions/package.json", "admin/package.json", "cms-api/package.json", "scripts/prepare-preview-renderer.mjs",

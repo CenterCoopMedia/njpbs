@@ -3,8 +3,8 @@ import { dataHubPageEnabled } from "./build-target";
 import reader from "../data/njpbs-data-hub-v16.html?raw";
 import tokens from "../styles/design-tokens.css?raw";
 
-const sourcePattern = /(<script id="source-data" type="application\/json">)[\s\S]*?(<\/script>)/;
-const script = reader.match(/<script>([\s\S]*?)<\/script>/)![1];
+const sourcePattern = /(<script id="source-data" type="application\/json">)[\s\S]*?(<\/script>)/i;
+const script = reader.match(/<script>([\s\S]*?)<\/script>/i)![1];
 
 type Snapshot = { asOf: string; metrics: { id: string; status: string; value: number | null; sourceUrl: string; editorialOverride?: boolean }[] };
 export type FigureEmbedPage = { id: string; snapshot: string | undefined; html: string };
@@ -51,7 +51,7 @@ let pages: Promise<FigureEmbedPage[]> | undefined;
 export function dataHubEmbedPages(env: Record<string, string | undefined>): Promise<FigureEmbedPage[]> {
   if (!dataHubPageEnabled(env)) return Promise.resolve([]);
   return pages ??= (async () => {
-    const current: Snapshot = JSON.parse(reader.match(/<script id="source-data" type="application\/json">([\s\S]*?)<\/script>/)![1]);
+    const current: Snapshot = JSON.parse(reader.match(/<script id="source-data" type="application\/json">([\s\S]*?)<\/script>/i)![1]);
     const published = snapshots[`../data/data-hub-revisions/${current.asOf}.json`];
     if (JSON.stringify(published) !== JSON.stringify(current)) {
       throw new Error("Save the updated Data Hub source under a new snapshot date before publishing embed code.");
