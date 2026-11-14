@@ -882,9 +882,6 @@ function reportForReporter(record, reporterUid) {
     role: record.reporter.role,
   };
   projection.progress = reportProgress(record);
-  if (record.fixPullRequestRepository !== undefined || record.fixPullRequestRepositoryId !== undefined) {
-    projection.links = pullLinksForRepository(projection.links, record.fixPullRequestRepository);
-  }
   projection.nudge = nudgeForReporter(record);
   return projection;
 }

@@ -1052,7 +1052,9 @@ async function settleGithubFailure(row, error, deps = {}) {
     let stalePulls = false;
     if (row.pullRepository) {
       try {
-        stalePulls = !sameRepository(reportPullRepository(current, row.issueRepository, row.fixRepository), row.pullRepository);
+        const currentRepository = reportPullRepository(current, row.issueRepository, row.fixRepository);
+        stalePulls = !sameRepository(currentRepository, row.originalPullRepository) &&
+          !sameRepository(currentRepository, row.pullRepository);
       } catch { /* Preserve the failure when the current identity itself is invalid. */ }
     }
     settledState = stalePulls ? "pending" : jobState;

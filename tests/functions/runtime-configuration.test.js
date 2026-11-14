@@ -41,13 +41,24 @@ describe("private report destination", () => {
   it.each([undefined, "", " \n\t ", "owner/repo/extra", "https://example.org/repo"])(
     "refuses missing or malformed configuration: %s", (value) => {
       vi.stubEnv("CMS_BUG_REPORT_GITHUB_REPOSITORY", value);
-      expect(() => reportConfig.githubRepository()).toThrow("A private report repository must be configured");
+      expect(() => reportConfig.githubIssueRepository()).toThrow("A GitHub repository name and numeric ID must be configured");
     },
   );
 
   it("uses only the explicitly configured report repository", () => {
     vi.stubEnv("CMS_BUG_REPORT_GITHUB_REPOSITORY", " example-owner/private-reports \n");
-    expect(reportConfig.githubRepository()).toBe("example-owner/private-reports");
+    vi.stubEnv("CMS_BUG_REPORT_GITHUB_REPOSITORY_ID", "1000001");
+    vi.stubEnv("CMS_BUG_REPORT_FIX_GITHUB_REPOSITORY", "example-owner/public-code");
+    vi.stubEnv("CMS_BUG_REPORT_FIX_GITHUB_REPOSITORY_ID", "1000002");
+    expect(reportConfig.githubIssueRepository()).toEqual({ repository: "example-owner/private-reports", repositoryId: 1000001 });
+    expect(reportConfig.githubFixRepository()).toEqual({ repository: "example-owner/public-code", repositoryId: 1000002 });
+  });
+
+  it.each(["", "0", "-1", "1.2", "9007199254740992"])("refuses missing or invalid immutable IDs: %s", (value) => {
+    vi.stubEnv("CMS_BUG_REPORT_GITHUB_REPOSITORY_ID", value);
+    vi.stubEnv("CMS_BUG_REPORT_FIX_GITHUB_REPOSITORY_ID", value);
+    expect(() => reportConfig.githubIssueRepository()).toThrow("A GitHub repository name and numeric ID must be configured");
+    expect(() => reportConfig.githubFixRepository()).toThrow("A GitHub repository name and numeric ID must be configured");
   });
 });
 
