@@ -5,6 +5,7 @@ import { parse, type DefaultTreeAdapterMap } from "parse5";
 import * as pagefind from "pagefind";
 import { decodePagefindFragment } from "../src/lib/pagefind-index";
 import { dataHubPageEnabled } from "../src/lib/build-target";
+import snapshot from "../src/data/data-hub-revisions/2026-11-09.json";
 
 const dist = fileURLToPath(new URL("../dist/", import.meta.url));
 
@@ -22,6 +23,22 @@ function countRobots(node: DefaultTreeAdapterMap["node"]): number {
 }
 
 describe("Data Hub HTML route emission", () => {
+  it("emits script-free latest and dated embed documents only with the Data Hub", () => {
+    const figures = `${dist}data/figures`;
+    if (!dataHubPageEnabled(process.env)) {
+      expect(existsSync(figures)).toBe(false);
+      return;
+    }
+    for (const metric of snapshot.metrics) {
+      for (const suffix of ["", "number/", `${snapshot.asOf}/chart/`, `${snapshot.asOf}/number/`]) {
+        const html = readFileSync(`${figures}/${metric.id}/embed/${suffix}index.html`, "utf8");
+        expect(html).toContain('href="https://njpbs.org/data-hub/"');
+        expect(html).toContain(`datetime="${snapshot.asOf}"`);
+        expect(html).not.toMatch(/<script\b|<iframe\b|googletagmanager|document\.cookie/);
+      }
+    }
+  });
+
   it("emits the public route only with its launch flag outside rollback", async () => {
     const route = `${dist}data-hub/index.html`;
     if (!dataHubPageEnabled(process.env)) {

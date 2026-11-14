@@ -1,4 +1,5 @@
 import { publicRecordFamily, readDurableRecordAuthority } from "./durable-record-withdrawals";
+import { serveDataHubEmbed } from "../../packages/content-core/src/data-hub-embed";
 import { createTransitionalPostReadWorker } from "./transitional-post-read-worker";
 import { createNoBuildPageWorker, isPageScheduleExportPath } from "./no-build-page-worker";
 import { pendingAuthorResponse } from "./public-author-pending";
@@ -28,6 +29,8 @@ export default {
     if (new URL(request.url).origin !== target.origin) {
       return new Response(null, { status: 404, headers: { "cache-control": "no-store" } });
     }
+    const figure = serveDataHubEmbed(request, assetRequest => env.ASSETS.fetch(assetRequest));
+    if (figure) return figure;
     if (env.NO_BUILD_PAGE_RENDERER_SHA || env.DURABLE_POST_WITHDRAWALS || isPageScheduleExportPath(new URL(request.url).pathname)) {
       const pages = createNoBuildPageWorker({ target, rendererSha, render: content => {
         if (!graph.renderPublishedPage) throw new Error("Page graph unavailable");

@@ -3,6 +3,7 @@ import { readFileSync } from "node:fs";
 import { spawnSync } from "node:child_process";
 import { Window, type HTMLAnchorElement, type HTMLButtonElement, type HTMLDialogElement, type HTMLInputElement } from "happy-dom";
 import { afterEach, describe, expect, it } from "vitest";
+import { dataHubEmbedPages } from "../src/lib/data-hub-embed-pages";
 
 const html = readFileSync(new URL("../src/data/njpbs-data-hub-v16.html", import.meta.url), "utf8");
 const script = [...html.matchAll(/<script>([\s\S]*?)<\/script>/g)][0][1];
@@ -49,11 +50,40 @@ function sourceWith(change: (payload: typeof seed) => void) {
     (_, open, close) => `${open}${JSON.stringify(payload)}${close}`);
 }
 
-afterEach(() => {
-  for (const win of windows.splice(0)) win.happyDOM.abort();
+afterEach(async () => {
+  await Promise.all(windows.splice(0).map(win => win.happyDOM.close()));
 });
 
 describe("Data Hub reader and downloads", () => {
+  it.each([
+    ["medianrent", "data-gross-rent-view", "regional"],
+    ["medianincome", "data-income-view", "regional"],
+    ["statebudget", "data-budget-view", "departments"],
+    ["familycare", "data-familycare-view", "categories"],
+    ["uninsured", "data-uninsured-view", "ages"],
+    ["graduation", "data-graduation-view", "groups"],
+    ["inflationmetro", "data-metro-view", "history"],
+  ])("keeps the %s embed preview on its published comparison without changing selected downloads", async (id, attribute, variant) => {
+    const { doc, exportText } = mount();
+    const selected = () => doc.querySelector(`#metric-${id} [${attribute}="${variant}"]`) as HTMLButtonElement;
+    expect(selected(), id).not.toBeNull();
+    selected().click();
+    const downloaded = await exportText(id, "html");
+    const preview = (doc.querySelector("#figure-frame") as unknown as { srcdoc: string }).srcdoc;
+    const published = (await dataHubEmbedPages({ DATA_HUB_PUBLIC: "1" }))
+      .find(page => page.id === id && page.snapshot === "2026-11-09/chart")!.html;
+    const text = (source: string) => {
+      const window = new Window();
+      windows.push(window);
+      window.document.write(source);
+      window.document.querySelectorAll("style").forEach(style => style.remove());
+      return window.document.body.textContent.replace(/\s+/g, " ").trim();
+    };
+    expect(text(preview)).toBe(text(published));
+    expect(text(downloaded)).not.toBe(text(published));
+    expect(selected().getAttribute("aria-pressed")).toBe("true");
+  });
+
   it("keeps the regional rent tick labels inside the chart viewport", () => {
     const { doc } = mount();
     (doc.querySelector('#metric-medianrent [data-gross-rent-view="regional"]') as HTMLButtonElement).click();
