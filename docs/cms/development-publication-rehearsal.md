@@ -7,10 +7,11 @@ repository stay unchanged.
 
 The order is: Complete a public code refresh, initialize its matching runtime,
 then publish one synthetic Post. New editorial jobs require the runtime. The
-existing push code-refresh owner can publish without it. Do not initialize the
+existing code-refresh owner can publish without it. Its owner-only manual
+`refresh` action starts a new run. Do not initialize the
 runtime at a commit that exists only in the previous repository.
 
-Run the operator commands in a held **Bash session on officejawn**, with Node 22
+Run the operator commands in a held **Bash session on the approved operator host**, with Node 22
 and a clean reviewed public checkout. Hosted Actions runs all builds and CI.
 Keep packets and evidence outside the checkout. Set `PUB` to the configured
 canonical repository, `CANDIDATE` to a green public main commit and
@@ -41,12 +42,15 @@ an inferred serializer identity or a direct document patch.
 
 ## Complete the public code refresh
 
-D12 first deploys the public development candidate. Set the three development
+D12 starts after the manual-refresh support is merged with
+`CMS_DEV_PUBLISH_ENABLED=false` and its main CI passes. Keep publishing off at
+merge so that the workflow change does not start an automatic code refresh.
+Then deploy the public development candidate. Set the three development
 source pins through the normal reviewed preparation to public source commits.
 When the renderer pin changes, release it with the deployment:
 
 ```bash
-gh workflow run cms-dev-deploy.yml --repo "$PUB" --ref main -f release_preview_renderer=true
+gh workflow run cms-dev-deploy.yml --repo "$PUB" --ref main -f deploy_ref="$CANDIDATE" -f release_preview_renderer=true
 ```
 
 Read the run conclusion and verify the deployed development Functions point to
@@ -56,21 +60,23 @@ the public repository and expected source. Then run the machine receipt proof:
 gh workflow run dev-machine-receipt-proof.yml --repo "$PUB" --ref main
 ```
 
-Choose one existing public `cms-dev-publish.yml` **push** run whose exact main
-commit is the candidate. Its source CI must pass, its original sender and rerun
-actor must pass the configured trusted-actor checks, and it must have skipped
-because publishing was off. Record its ID and source. Do not rerun a failed or
-partly uploaded publication as a fresh code release.
-
-In the authorized development window, enable the public development publishing
-flag and rerun that skipped push once:
+The configured deployment owner must also be in the trusted publication actors.
+Keep main stable during the development window. Enable development publishing
+and start a **new** manual code-refresh run at the candidate on main:
 
 ```bash
 gh variable set CMS_DEV_PUBLISH_ENABLED --repo "$PUB" --body true
-gh run rerun "$CODE_REFRESH_RUN" --repo "$PUB"
+gh workflow run cms-dev-publish.yml --repo "$PUB" --ref main -f action=refresh
 ```
 
-The original workflow owns queue creation, frozen input, build, upload,
+Leave all four recovery inputs empty. The workflow checks the exact canonical
+repository and main workflow identity, the original owner and rerunner, and
+successful main CI for that source before opening development credentials.
+Record the new run ID and confirm its head is the candidate. Do not rerun a
+skipped or failed run to create fresh input: Later attempts still require their
+original frozen artifact.
+
+The existing publication owner handles queue creation, frozen input, build, upload,
 activation and terminal writeback. Wait for it to finish. Require its exact
 queue to be `success`, its batch to be `deployed`, the pointer to be idle at the
 candidate, and its schema-two Post capability to name the same renderer. Check
@@ -80,7 +86,10 @@ receipt bytes must all agree. Keep these bytes, including whitespace.
 
 Set the publishing flag back to `false` before preparing 08a. If the refresh is
 uncertain, preserve its original run and artifacts and use the existing retained
-publication reconciliation procedure. Do not initialize against uncertain state.
+publication reconciliation procedure with `action=reconcile` and its original
+run, queue, generation and Worker version. Owner manual refreshes retain the
+deterministic queue identity derived from their original run ID. Do not
+initialize against uncertain state.
 
 ## Initialize the matching runtime (08a)
 

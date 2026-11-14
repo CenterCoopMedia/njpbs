@@ -48,7 +48,7 @@ function assertIdentity(identity) {
   if (!/^[A-Za-z0-9]{20}$/.test(identity.queueId ?? "") || identity.buildBatchId !== "cms-" + identity.queueId ||
       !/^[a-f0-9]{40}$/.test(identity.commitSha ?? "")) throw new Error("Invalid development publication identity");
 }
-async function selectDevPublicationSource(db, { eventName, eventSha, queueId, retainedIdentity }) {
+async function selectDevPublicationSource(db, { eventName, eventSha, queueId, retainedIdentity, codeRefresh = false }) {
   assertDevDatabase(db);
   if (!["push", "repository_dispatch", "workflow_dispatch"].includes(eventName) ||
       !/^[A-Za-z0-9]{20}$/.test(queueId ?? "")) throw new Error("Invalid dev source selection input");
@@ -57,7 +57,7 @@ async function selectDevPublicationSource(db, { eventName, eventSha, queueId, re
       db.collection("cmsPublishQueue").doc(queueId));
     if (legacy.exists) throw new Error("The legacy development publication journal requires a drained-state migration after all work is terminal");
     let commitSha = eventSha;
-    if (eventName !== "push") {
+    if (eventName !== "push" && !(eventName === "workflow_dispatch" && codeRefresh)) {
       if (!queueRow.exists) throw new Error("The development publication queue is missing");
       const queue = assertDevQueue(queueRow.data());
       if (!queue.runtime) throw new Error("The development queue requires a cloud runtime migration with matching metadata");

@@ -9,6 +9,7 @@ import { fileURLToPath } from "node:url";
 import path from "node:path";
 import { isDeepStrictEqual } from "node:util";
 import { hasRetainedDevInput } from "../../.github/scripts/dev-publication-input-artifact.mjs";
+import { manualDevCodeRefresh } from "../../.github/scripts/dev-code-refresh-input.mjs";
 import { firebaseAdminRuntime } from "./firebase-admin-runtime.ts";
 import { preparePublicArtifactBundle } from "../src/lib/public-artifact-build.ts";
 import { assertPublicArtifactInventoryReceipt } from "../src/lib/public-artifact-inventory.ts";
@@ -34,6 +35,12 @@ const cloudflareAccount = () => devCloudflareAccount(process.env);
 const directory = path.resolve(process.env.CMS_DEV_ARTIFACT_DIRECTORY || path.join(root, "dev-publication"));
 const json = async file => JSON.parse(await readFile(file, "utf8"));
 const save = (file, data) => writeFile(file, `${JSON.stringify(data)}\n`, { mode: 0o600 });
+
+async function codeRefresh(env = process.env) {
+  if (env.GITHUB_EVENT_NAME === "push") return true;
+  if (env.GITHUB_EVENT_NAME !== "workflow_dispatch") return false;
+  return manualDevCodeRefresh(await json(env.GITHUB_EVENT_PATH), env);
+}
 
 function target() {
   cloudflareAccount();
@@ -77,7 +84,7 @@ export async function resolveDevPublicationSource(db, env = process.env) {
   const frozenPath = path.join(directory, "frozen.json");
   const frozen = await lstat(frozenPath).then(() => json(frozenPath), () => null);
   return state.selectDevPublicationSource(db, { eventName: env.GITHUB_EVENT_NAME,
-    eventSha: env.GITHUB_SHA, queueId, retainedIdentity: frozen?.identity });
+    eventSha: env.GITHUB_SHA, queueId, retainedIdentity: frozen?.identity, codeRefresh: await codeRefresh(env) });
 }
 
 async function writeDevPublicationSource() {
@@ -122,7 +129,7 @@ export async function prepare(db) {
   }
   if (Number(process.env.GITHUB_RUN_ATTEMPT ?? "1") > 1) state.assertDevPublicationUnreserved(current);
   assertFreshDevInputAttempt();
-  if (process.env.GITHUB_EVENT_NAME === "push") {
+  if (await codeRefresh()) {
     if (process.env.GITHUB_REF !== "refs/heads/main") throw new Error("Code refresh requires main");
     const ref = db.collection("cmsPublishQueue").doc(id.queueId);
     await db.runTransaction(async transaction => {

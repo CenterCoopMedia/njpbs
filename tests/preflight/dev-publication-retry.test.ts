@@ -62,6 +62,31 @@ it("still allows the original attempt to reach its create-only code-refresh queu
     expect.objectContaining({ triggeredBy: "dev-code-refresh", status: "pending" }));
 });
 
+it("a fresh owner manual refresh reaches the same create-only queue boundary; a rerun still refuses", async () => {
+  const eventPath = path.join(directory, "event.json");
+  await writeFile(eventPath, JSON.stringify({ inputs: { action: "refresh" } }));
+  const owner = "fixture-owner";
+  for (const [name, value] of Object.entries({ ...repositoryFixture,
+    GITHUB_EVENT_NAME: "workflow_dispatch", GITHUB_EVENT_PATH: eventPath, GITHUB_REF: "refs/heads/main",
+    GITHUB_REPOSITORY: repositoryFixture.CANONICAL_GITHUB_REPOSITORY,
+    GITHUB_REPOSITORY_ID: repositoryFixture.CANONICAL_GITHUB_REPOSITORY_ID,
+    GITHUB_WORKFLOW_REF: `${repositoryFixture.CANONICAL_GITHUB_REPOSITORY}/.github/workflows/cms-dev-publish.yml@refs/heads/main`,
+    GITHUB_ACTOR: owner, GITHUB_TRIGGERING_ACTOR: owner, CMS_DEPLOY_OWNER: owner,
+    CMS_PUBLISH_GITHUB_TRUSTED_ACTORS: JSON.stringify([owner]), GITHUB_RUN_ID: "444", QUEUE_ID: "",
+    GITHUB_RUN_ATTEMPT: "1",
+  })) vi.stubEnv(name, value);
+  const { prepare } = await import("../../site/scripts/cms-dev-publication.mjs");
+  const { db, writes } = database();
+  const queueId = hash("dev-code-refresh:444").slice(0, 20);
+  await expect(prepare(db)).rejects.toThrow("mutation boundary reached");
+  expect(writes).toHaveBeenCalledExactlyOnceWith(expect.objectContaining({ path: `cmsPublishQueue/${queueId}` }),
+    expect.objectContaining({ triggeredBy: "dev-code-refresh", changes: [], runtime: { owner: "cloudflare", release: identity.commitSha } }));
+  writes.mockClear();
+  vi.stubEnv("GITHUB_RUN_ATTEMPT", "2");
+  await expect(prepare(db)).rejects.toThrow("reruns require retained frozen input");
+  expect(writes).not.toHaveBeenCalled();
+});
+
 it("reuses exact retained input on a later attempt without reading current content or creating work", async () => {
   vi.stubEnv("GITHUB_RUN_ATTEMPT", "2");
   const names = ["bundle.json", "schedule.json", "launch.json", "spotlight.json", "post-routes.json"];
