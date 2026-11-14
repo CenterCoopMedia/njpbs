@@ -82,8 +82,16 @@ test("a new Firebase Functions package needs an entrypoint registry row", t => {
 
 test("new computed development manifest producers are refused", t => {
   const f = fixture(t);
-  f.write("functions/dev-manifest.js", 'const DEV_FUNCTIONS = Object.freeze({ health: "./health" }); function devFunctionManifest() { return extraHandlers; }\n');
-  assert.throws(() => sourceInventory(f.directory), /Changed Functions manifest producer/);
+  for (const body of [
+    "return extraHandlers;",
+    'const selected = { ...DEV_FUNCTIONS, extra: "./health" }; return Object.freeze(selected);',
+    'const selected = { ...DEV_FUNCTIONS }; const target = selected; target.extra = "./health"; return Object.freeze(selected);',
+    'let selected = { ...DEV_FUNCTIONS }; selected = extraHandlers; return Object.freeze(selected);',
+    'const selected = { ...DEV_FUNCTIONS }; Reflect.set(selected, "extra", "./health"); return Object.freeze(selected);',
+  ]) {
+    f.write("functions/dev-manifest.js", `const DEV_FUNCTIONS = Object.freeze({ health: "./health" }); function devFunctionManifest() { ${body} }\n`);
+    assert.throws(() => sourceInventory(f.directory), /Changed Functions manifest producer|Computed Functions manifest/);
+  }
 });
 
 test("removed surfaces and machine owners cannot remain registered", t => {

@@ -141,11 +141,20 @@ function devExports(read, files) {
   }
   const inspectProducer = node => {
     if (enclosingFunction(node) === "devFunctionManifest") {
+      if (ts.isVariableDeclaration(node)) {
+        if (node.initializer?.getText() === "selected") throw new Error(`Computed Functions manifest alias: ${path}`);
+        if (node.name.getText() === "selected") {
+          const value = node.initializer;
+          if (!value || !ts.isObjectLiteralExpression(value) || value.properties.length !== 1 ||
+            !ts.isSpreadAssignment(value.properties[0]) || value.properties[0].expression.getText() !== "DEV_FUNCTIONS") throw new Error(`Changed Functions manifest producer: ${path}`);
+        }
+      }
       if (ts.isReturnStatement(node) && !["DEV_FUNCTIONS", "Object.freeze(selected)"].includes(node.expression?.getText())) throw new Error(`Changed Functions manifest producer: ${path}`);
+      if (ts.isBinaryExpression(node) && node.operatorToken.kind === ts.SyntaxKind.EqualsToken && node.left.getText() === "selected") throw new Error(`Computed Functions manifest: ${path}`);
       if (ts.isBinaryExpression(node) && node.operatorToken.kind === ts.SyntaxKind.EqualsToken && /^selected(?:\.|\[)/.test(node.left.getText())) {
         if (node.left.getText() !== "selected[name]" || !cloudWakeLoop(node) || literal(node.right, path) !== "./no-build-cloud-wake") throw new Error(`Computed Functions manifest: ${path}`);
       }
-      if (ts.isCallExpression(node) && /^Object\.(?:assign|definePropert)/.test(node.expression.getText()) && node.arguments[0]?.getText() === "selected") throw new Error(`Computed Functions manifest: ${path}`);
+      if (ts.isCallExpression(node) && node.arguments.some(argument => argument.getText() === "selected") && node.expression.getText() !== "Object.freeze") throw new Error(`Computed Functions manifest: ${path}`);
     }
     ts.forEachChild(node, inspectProducer);
   };
