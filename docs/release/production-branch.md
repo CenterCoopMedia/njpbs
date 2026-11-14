@@ -342,13 +342,37 @@ inspection. Check canonical repository name/ID and `CMS_DEPLOY_OWNER` as above.
    A successful mutation is a failed probe; stop the switch. Preserve the
    specific refusal, input SHA, actor/ref and any run URL.
 
-8. Verify the resulting Pages deployment and live source SHA using the existing
-   deployment workflow's exact-source checks. Require the production push run
-   to identify the promotion App and `PROMOTE_SHA`, successful deployment and
-   live source equality before calling the route proved. Record that evidence
-   in #57; leave it open until the work is live and verified by the coordinator.
-   Retire the manual production-ref update route only after promotion and the
-   existing deployment checks have been proved together.
+8. Verify every production release surface and the live serving source. Require
+   the production push run to identify the promotion App and `PROMOTE_SHA` and
+   pass the deployment workflow's exact-source checks. Separately verify the
+   Cloudflare `njpbs-production` Worker deployment, its Workers Builds source
+   repository and branch, and the CMS publication and preview runtime pins.
+   Public HTML is served through Cloudflare and the CMS renderer; check
+   `x-njpbs-content-source` and `x-njpbs-renderer-sha` on live public responses
+   against the approved serving source. A successful Pages deployment alone
+   does not prove that source is serving readers.
+
+   Read the Worker, runtime pins, component receipts and ordinary-route proof
+   using the [public Worker contract](../cms/public-worker-deploy.md) and
+   [coordinated release receipt view](../cms/staging-deploy-runbook.md#receipt-view).
+   The approved switch packet must name the Workers Builds trigger and its
+   expected source repository, branch and upload command for provider readback.
+
+   The switch packet must also supply the retained private Pages repository's
+   name and numeric ID. Validate that second target against its repository API
+   before reading its Pages configuration, as in the identity precheck above;
+   do not infer it from a checkout or CNAME. Check the promotion repository's
+   Pages configuration separately and record an absent site explicitly.
+   Verify the `www` redirect independently. The retained Pages custom domain can
+   still supply the redirect through the proxied `www` GitHub origin. Moving
+   that redirect to Cloudflare and removing the private Pages custom domain
+   require Joe's separate production-change authorization, supervised by the
+   coordinator. After that authorized change, verify the Cloudflare redirect
+   before removing the private Pages custom domain. Record the deployment,
+   provider binding, runtime and live
+   response evidence in #57; leave it open until the coordinator verifies the
+   switch. Retire the manual production-ref update route after promotion and
+   these serving checks pass together.
 
    ```sh
    gh api --method GET "/repos/$PROMOTION_REPOSITORY/actions/workflows/pages.yml/runs?event=push&branch=production&head_sha=$PROMOTE_SHA&per_page=10"
