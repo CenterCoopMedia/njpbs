@@ -45,10 +45,19 @@ builds or publication work. Rendering is build preparation: compiled Workers,
 browser assets, Functions and containers contain resolved pins. No secret-store
 lookup, private-repository fetch or substitution runs on a request path.
 
-Production build workflows and production renderer images use `--production`
-to resolve only `CMS_PRODUCTION_API_ORIGIN`. They do not require development
-resource settings. Development-only branches retain inert neutral pins in those
-artifacts. The offline prepared-Worker bundle check uses synthetic suppliers.
+Production build workflows and production publisher/renderer images require
+`CMS_PRODUCTION_API_ORIGIN`, `CMS_LOCAL_PUBLICATION_OWNER` and `CMS_GPU_WORKER_ID`.
+The `--production` renderer resolves all three before deployment; missing or
+template values refuse. It does not require development resource settings.
+The selected source must declare each production input in its own manifest;
+otherwise preparation refuses. Recover through reviewed compatible forward
+source rather than dropping required identity inputs.
+Keep the recorded local publication owner and shared GPU slot from the live
+deployment across repository/host moves. The local owner cannot be `cloudflare`.
+These inputs preserve accepted queues, leases, worker authentication, capability
+check-ins and immutable retirement receipts without an alias or data rewrite.
+Development-only branches retain inert neutral pins in production artifacts.
+The offline prepared-Worker bundle check uses distinct synthetic suppliers.
 
 The renderer also recalculates the inline editor script's CSP hash from its
 resolved bytes. An ignored, commit-bound input receipt lets isolated container

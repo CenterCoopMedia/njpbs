@@ -20,7 +20,7 @@ const LAUNCH_CONTRACTS = {
   "preview-renderer/Dockerfile": "42a38a31586875ca036c505f0c95409ae87cc10f",
   "preview-renderer/worker.ts": "8afb604441bc62f95acdace555b5de75c297afec",
   "preview-renderer/wrangler.jsonc": "de29eeb62adaa32ddd720e48ca3a6f6032beeab5",
-  "scripts/prepare-preview-renderer.mjs": "eee8b9e46b78489bf1cbf0dfbc1c8470f7d46c13",
+  "scripts/prepare-preview-renderer.mjs": "c71f50fa21d7942c033b60daf14f9eb46398ca9d",
   "site/scripts/deploy-cms-preview-cloud.ts": "9b2ebf2d2a3d464e0f8050dcaa151d18ea863a08",
   "site/astro.renderer.config.mjs": "7357d79b8e0f57d78689d8f8871e9d359cf1471c",
   "site/src/lib/public-content-links.ts": "526e8f43707ce45118ec827c74f67b00f83bf60b",

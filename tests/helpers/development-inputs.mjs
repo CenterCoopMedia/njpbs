@@ -1,4 +1,6 @@
 export const developmentInputFixture = Object.freeze({
+  CMS_LOCAL_PUBLICATION_OWNER: "fixture-publication-owner",
+  CMS_GPU_WORKER_ID: "fixture-gpu-worker",
   CLOUDFLARE_DEV_PUBLIC_WORKER: "fixture-dev-public",
   CMS_DEV_ADMIN_ORIGIN: "https://dev-admin.fixture.test",
   CMS_DEV_ADMIN_PAGES: "fixture-dev-admin",

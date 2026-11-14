@@ -34,7 +34,7 @@ environment unchanged.
   --alignment-cache-sha256 "$ALIGNMENT_CACHE_SHA256"
 ```
 
-Before installing the worker, supply `CMS_PRODUCTION_API_ORIGIN` and run `node scripts/render-development-config.mjs --production --root <disposable-checkout>` with the source tools. Install only from that verified rendered checkout. The worker validates the resolved HTTPS broker at startup, before reading a token or making a request; an unrendered placeholder refuses. Focused tests use a synthetic broker.
+Before installing the worker, supply `CMS_PRODUCTION_API_ORIGIN`, `CMS_LOCAL_PUBLICATION_OWNER` and `CMS_GPU_WORKER_ID`, then run `node scripts/render-development-config.mjs --production --root <disposable-checkout>` with the source tools. Keep the GPU ID equal to the recorded worker authentication and Windows vault user; this preserves the existing credential lookup and shared lease slot. Install only from that verified rendered checkout. The worker validates the resolved HTTPS broker at startup, before reading a token or making a request; an unrendered placeholder refuses. Focused tests use a synthetic broker.
 
 ## Video exports
 
@@ -48,7 +48,7 @@ host refuses before credentials are read or jobs are claimed. Workers without
 FFmpeg do not need this input.
 
 In a Bash session in a disposable source checkout, with
-CMS_PRODUCTION_API_ORIGIN supplied, render the broker before installation:
+all three production inputs supplied, render the broker and worker identity before installation:
 
 ```bash
 node scripts/render-development-config.mjs --production --root "$PWD"
