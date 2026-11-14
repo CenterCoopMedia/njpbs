@@ -1,0 +1,76 @@
+name: Deploy recovered services
+
+# Issue #92 restores source ownership without enabling a production writer.
+# The .disabled suffix keeps this file outside GitHub's workflow registry.
+# Activation requires a separate reviewed authorization and supplied bindings.
+on:
+  workflow_dispatch:
+    inputs:
+      service:
+        type: choice
+        required: true
+        options: [media-fanout, subdomain-redirects, newnjpbs-redirect, billing-kill-switch]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: recovered-services-deploy
+  cancel-in-progress: false
+
+jobs:
+  worker:
+    if: inputs.service != 'billing-kill-switch'
+    environment: production
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v7
+        with:
+          node-version: "22.23.5"
+      - run: npm ci --ignore-scripts --no-audit --no-fund
+      - name: Deploy selected recovered Worker
+        env:
+          CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_WORKER_TOKEN }}
+          MEDIA_FANOUT_BINDINGS_JSON: ${{ secrets.MEDIA_FANOUT_BINDINGS_JSON }}
+          SERVICE: ${{ inputs.service }}
+          WRANGLER_SEND_METRICS: "false"
+        run: |
+          set -euo pipefail
+          config="site/worker-$SERVICE/wrangler.json"
+          test -f "$config"
+          if [ "$SERVICE" = media-fanout ]; then
+            test -n "$MEDIA_FANOUT_BINDINGS_JSON"
+            printf '%s' "$MEDIA_FANOUT_BINDINGS_JSON" | npx --no-install wrangler secret bulk --config "$config"
+          fi
+          npx --no-install wrangler deploy --no-bundle --config "$config"
+  billing:
+    if: inputs.service == 'billing-kill-switch'
+    environment: production
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: google-github-actions/auth@7c6bc770dae815cd3e89ee6cdf493a5fab2cc093
+        with:
+          workload_identity_provider: ${{ vars.BILLING_WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ vars.BILLING_DEPLOY_SERVICE_ACCOUNT }}
+      - uses: google-github-actions/setup-gcloud@v3
+      - name: Update source on the existing billing function
+        env:
+          BILLING_PROJECT_ID: ${{ vars.BILLING_PROJECT_ID }}
+          BILLING_REGION: ${{ vars.BILLING_REGION }}
+        run: |
+          set -euo pipefail
+          : "${BILLING_PROJECT_ID:?}" "${BILLING_REGION:?}"
+          test "$(gcloud functions describe billingKillSwitch --gen2 --project "$BILLING_PROJECT_ID" --region "$BILLING_REGION" --format='value(eventTrigger.eventType)')" = google.cloud.pubsub.topic.v1.messagePublished
+          gcloud functions deploy billingKillSwitch --gen2 --project "$BILLING_PROJECT_ID" --region "$BILLING_REGION" --runtime nodejs22 --entry-point stopBillingOnBudgetAlert --source infrastructure/billing-kill-switch --quiet
