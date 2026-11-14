@@ -90,6 +90,24 @@ test("a new Firebase Functions package needs an entrypoint registry row", t => {
   assert.throws(() => checkRegistry(f.registry, sourceInventory(f.directory)), /Functions entrypoints.*missing=.*backend\/index.js/);
 });
 
+test("standalone billing Function exports are inventoried without loading the module", t => {
+  const f = fixture(t);
+  const path = "infrastructure/billing-kill-switch/index.js";
+  f.write(path, "export async function stopBillingOnBudgetAlert(event) {}\n");
+  f.track();
+  f.registry.functions.push({ entrypoint: path, exports: [{ name: "stopBillingOnBudgetAlert", module: path }] });
+  assert.doesNotThrow(() => checkRegistry(f.registry, sourceInventory(f.directory)));
+  f.write(path, "export async function stopBillingOnBudgetAlert(event) {}\nexport function newHandler() {}\n");
+  assert.throws(() => checkRegistry(f.registry, sourceInventory(f.directory)), /missing=.*newHandler/);
+});
+
+test("static ESM exports keep their exported names and wildcard exports are refused", () => {
+  const path = "functions/index.js";
+  const entries = entryExports("export function handler() {} export const option = 1; export { handler as renamed }; export default handler;", path, new Set());
+  assert.deepEqual([...entries.keys()], ["handler", "option", "renamed", "default"]);
+  assert.throws(() => entryExports('export * from "./handlers.js";', path, new Set()), /Unsupported Functions re-export/);
+});
+
 test("new computed development manifest producers are refused", t => {
   const f = fixture(t);
   for (const body of [

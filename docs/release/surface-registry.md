@@ -31,11 +31,18 @@ The source inventory check does not infer new implicit application machines or
 prove unchanged state semantics. Keep that review explicit.
 
 The Functions reader parses JavaScript with the site's locked TypeScript
-dependency. It reads literal `lazyExport` calls and static CommonJS export
-assignments without importing application code. The current dev adapter reads
-the frozen `DEV_FUNCTIONS` object and `CLOUD_WAKE_FUNCTIONS` list. Computed
-registrations require an explicit source-reader change and a contract test;
-they must not disappear from the inventory silently.
+dependency. It reads literal `lazyExport` calls and static CommonJS and ESM
+exports without importing application code. It discovers Firebase package
+entrypoints, the development adapter and the recovered standalone billing
+Function's module. All symbols exported by that module are inventoried;
+helper exports are source declarations, not a deployed-function census.
+
+The dev adapter reads the frozen `DEV_FUNCTIONS` object and
+`CLOUD_WAKE_FUNCTIONS` list. Its registration program must match the recognized
+syntax shape, with the literal registration object inventoried separately.
+Comments, whitespace and quote style do not change that shape. Unknown producer
+programs and wildcard re-exports require an explicit source-reader change and
+a contract test; they must not disappear from the inventory silently.
 
 ## Hosted check
 

@@ -986,6 +986,35 @@
           "module": "functions/video-transcript-worker.js"
         }
       ]
+    },
+    {
+      "entrypoint": "infrastructure/billing-kill-switch/index.js",
+      "exports": [
+        {
+          "name": "buildProjectBillingName",
+          "module": "infrastructure/billing-kill-switch/index.js"
+        },
+        {
+          "name": "decodeBudgetNotification",
+          "module": "infrastructure/billing-kill-switch/index.js"
+        },
+        {
+          "name": "disableBilling",
+          "module": "infrastructure/billing-kill-switch/index.js"
+        },
+        {
+          "name": "handleBudgetNotification",
+          "module": "infrastructure/billing-kill-switch/index.js"
+        },
+        {
+          "name": "shouldDisableBilling",
+          "module": "infrastructure/billing-kill-switch/index.js"
+        },
+        {
+          "name": "stopBillingOnBudgetAlert",
+          "module": "infrastructure/billing-kill-switch/index.js"
+        }
+      ]
     }
   ],
   "machines": [

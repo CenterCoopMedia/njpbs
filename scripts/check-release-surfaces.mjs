@@ -40,6 +40,22 @@ function exportTarget(node) {
   return text === "exports" || text === "module.exports";
 }
 
+function esmExports(node, path) {
+  if (ts.isExportDeclaration(node)) {
+    if (!node.exportClause || !ts.isNamedExports(node.exportClause)) throw new Error(`Unsupported Functions re-export: ${path}`);
+    return node.exportClause.elements.map(element => staticName(element.name, path));
+  }
+  if (ts.isExportAssignment(node)) {
+    if (node.isExportEquals) throw new Error(`Unsupported Functions export: ${path}`);
+    return ["default"];
+  }
+  if (!node.modifiers?.some(modifier => modifier.kind === ts.SyntaxKind.ExportKeyword)) return [];
+  if (node.modifiers.some(modifier => modifier.kind === ts.SyntaxKind.DefaultKeyword)) return ["default"];
+  if (ts.isFunctionDeclaration(node) || ts.isClassDeclaration(node)) return [staticName(node.name, path)];
+  if (ts.isVariableStatement(node)) return node.declarationList.declarations.map(declaration => staticName(declaration.name, path));
+  throw new Error(`Unsupported Functions export: ${path}`);
+}
+
 function enclosingFunction(node) {
   for (let parent = node.parent; parent; parent = parent.parent) {
     if (ts.isFunctionDeclaration(parent)) return parent.name?.text;
@@ -91,6 +107,7 @@ export function entryExports(source, path, files, { devAdapter = false } = {}) {
     exports.set(name, module);
   };
   const visit = node => {
+    for (const name of esmExports(node, path)) add(name, path);
     if (ts.isVariableDeclaration(node) && exportTarget(node.initializer)) throw new Error(`Unsupported Functions export alias: ${path}`);
     if (ts.isCallExpression(node) && node.expression.getText() === "lazyExport") {
       add(literal(node.arguments[0], path), moduleFile(literal(node.arguments[1], path), path, files));
@@ -177,6 +194,9 @@ export function sourceInventory(root) {
     if (pkg.dependencies?.["firebase-functions"]) entrypoints.add(posix.normalize(posix.join(posix.dirname(path), pkg.main ?? "index.js")));
   }
   entrypoints.add("functions/dev-index.js");
+  // Recovered standalone GCP Function, outside the Firebase package manifest.
+  const billing = "infrastructure/billing-kill-switch/index.js";
+  if (files.has(billing)) entrypoints.add(billing);
   const functions = [...entrypoints].sort().map(path => {
     const devAdapter = path === "functions/dev-index.js";
     const entries = entryExports(read(path), path, files, { devAdapter });
