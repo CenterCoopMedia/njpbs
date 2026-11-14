@@ -1,0 +1,8 @@
+{
+  "date": "2026-11-14",
+  "kind": "fixed",
+  "title": "Follow the correct proposed fix from a report",
+  "body": "Reported problems keep their proposed fix links and review status with the correct code repository, including when the report and its fix live in different repositories.",
+  "prs": [],
+  "order": 1794681600000
+}

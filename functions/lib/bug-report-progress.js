@@ -32,6 +32,29 @@ function numberedRows(value) {
     row.number <= 2_147_483_647 && ["open", "closed"].includes(row.state)).slice(0, 10);
 }
 
+function pullLinksForRepository(links = {}, repository) {
+  const belongs = (value, pullNumber = null) => {
+    try {
+      const url = new URL(value);
+      const prefix = `/${String(repository).toLowerCase()}/`;
+      return url.protocol === "https:" &&
+        (["github.com", "api.github.com"].includes(url.hostname) || url.hostname.endsWith(".githubusercontent.com")) &&
+        (pullNumber === null ? url.pathname.toLowerCase().startsWith(prefix)
+          : url.hostname === "github.com" && url.pathname.toLowerCase() === `${prefix}pull/${pullNumber}`);
+    } catch { return false; }
+  };
+  const pullRequests = (links.pullRequests ?? []).filter((pull) => belongs(pull.url, pull.number));
+  const known = new Set(pullRequests.map((pull) => pull.number));
+  return {
+    ...links,
+    pullRequests,
+    ...(links.discoveredPullRequestNumbers
+      ? { discoveredPullRequestNumbers: links.discoveredPullRequestNumbers.filter((number) => known.has(number)) } : {}),
+    workflowRunUrls: (links.workflowRunUrls ?? []).filter((url) => belongs(url)),
+    deploymentRunUrls: (links.deploymentRunUrls ?? []).filter((url) => belongs(url)),
+  };
+}
+
 function progressEvidence(record) {
   return JSON.stringify({
     status: record?.status, ownerUid: record?.ownerUid ?? null,
@@ -72,7 +95,9 @@ function progressChangeFields(before, after, at) {
 function reportProgress(record, { now = new Date() } = {}) {
   const delivery = record?.githubDelivery ?? {};
   const issueRows = numberedRows(record?.links?.githubIssues);
-  const pullRows = numberedRows(record?.links?.pullRequests);
+  const scopedLinks = record?.fixPullRequestRepository === undefined && record?.fixPullRequestRepositoryId === undefined
+    ? record?.links : pullLinksForRepository(record?.links, record?.fixPullRequestRepository);
+  const pullRows = numberedRows(scopedLinks?.pullRequests);
   const issues = issueRows.map(({ number, state, unavailable }) => ({ number, state: unavailable ? "unavailable" : state }));
   const pullRequests = pullRows.map((pull) => ({
     number: pull.number,
@@ -229,4 +254,4 @@ function mergeGithubLinks(current = {}, result, { observedAt = null } = {}) {
   };
 }
 
-module.exports = { STALE_AFTER_MILLIS, lastProgressAt, progressChangeFields, mergeGithubEvidence, mergeGithubLinks, manualPullRequestNumbers, reportProgress };
+module.exports = { STALE_AFTER_MILLIS, lastProgressAt, progressChangeFields, mergeGithubEvidence, mergeGithubLinks, manualPullRequestNumbers, pullLinksForRepository, reportProgress };

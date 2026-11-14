@@ -17,11 +17,12 @@ const source = (number, repository = repo) => ({
 });
 function boundary(pages, { timelineStatus = 200, existing = [], beforePullRead, connectionErrors, connectionErrorType } = {}) {
   const requests = [];
-  const client = github.createGithubClient({ token: "synthetic-http-token", repository: repo,
+  const client = github.createGithubClient({ token: "synthetic-http-token", repository: repo, repositoryId: 1000001,
     fetchFn: async (input, init) => {
       const url = new URL(input);
       const path = url.pathname.replace(`/repos/${repo}`, "");
       requests.push(`${init.method} ${path}${url.search}`);
+      if (path === "") return Response.json({ id: 1000001, full_name: repo });
       if (path === "/issues/3390") return Response.json({ number: 3390, state: "open", html_url: `https://github.com/${repo}/issues/3390`, updated_at: at });
       if (path === "/issues/3390/timeline") return Response.json(pages[Number(url.searchParams.get("page")) - 1] ?? [], { status: timelineStatus });
       if (path === "/graphql") {

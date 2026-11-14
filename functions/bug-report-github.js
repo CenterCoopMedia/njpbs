@@ -5,7 +5,7 @@
 // queues outbox work; Firestore creation events, signed webhooks, and a
 // scheduled owner recover missed GitHub writes.
 
-const { mergeGithubLinks, manualPullRequestNumbers, progressChangeFields } = require("./lib/bug-report-progress");
+const { mergeGithubLinks, manualPullRequestNumbers, progressChangeFields, pullLinksForRepository } = require("./lib/bug-report-progress");
 const { createHmac, timingSafeEqual } = require("node:crypto");
 const logger = require("firebase-functions/logger");
 const { defineSecret } = require("firebase-functions/params");
@@ -22,7 +22,7 @@ const GITHUB_TOKEN = defineSecret("CMS_BUG_REPORT_GITHUB_TOKEN");
 const GITHUB_WEBHOOK_SECRET = defineSecret(
   "CMS_BUG_REPORT_GITHUB_WEBHOOK_SECRET",
 );
-const { githubRepository } = require("./lib/bug-report-github-config");
+const { githubIssueRepository, githubFixRepository, repositoryIdentity } = require("./lib/bug-report-github-config");
 
 const API_VERSION = "2022-11-28";
 const MAX_ATTEMPTS = 5;
@@ -34,12 +34,12 @@ const TIMELINE_PAGE_LIMIT = 10;
 const DUPLICATE_SCORE_MINIMUM = 0.55;
 const DUPLICATE_SCORE_GAP = 0.1;
 const WEBHOOK_RECEIPT_RETENTION_MILLIS = 90 * 24 * 60 * 60 * 1_000;
-const GITHUB_REPOSITORY_PATTERN = /^[A-Za-z0-9_.-]{1,100}\/[A-Za-z0-9_.-]{1,100}$/;
 const GITHUB_DELIVERY_PATTERN = /^[A-Za-z0-9-]{1,100}$/;
 const GITHUB_SIGNATURE_PATTERN = /^sha256=[0-9a-f]{64}$/;
 const GITHUB_ISSUE_STATES = new Set(["open", "closed", "all"]);
 const MAX_GITHUB_NUMBER = 2_147_483_647;
 const MAX_WEBHOOK_BODY_BYTES = 1024 * 1024;
+const WEBHOOK_REPORT_LIMIT = 50;
 const MAX_ISSUE_BODY = 20_000;
 const MAX_COMMENT_BODY = 10_000;
 const MAX_ISSUE_COMMENTS = 50;
@@ -252,13 +252,11 @@ function renderGithubIssueComment(record, origin = ADMIN_ORIGIN) {
 
 function createGithubClient(deps = {}) {
   const fetchFn = deps.fetchFn ?? fetch;
+  const { repository, repositoryId } = deps.repository === undefined
+    ? githubIssueRepository() : repositoryIdentity(deps.repository, deps.repositoryId);
   const token = deps.token ?? process.env.CMS_BUG_REPORT_GITHUB_TOKEN?.trim() ??
     GITHUB_TOKEN.value().trim();
-  const repository = deps.repository ?? githubRepository();
   if (!token) throw new GithubHandoffError("GitHub handoff is not configured", { kind: "retryable" });
-  if (!GITHUB_REPOSITORY_PATTERN.test(repository)) {
-    throw new GithubHandoffError("GitHub repository is invalid");
-  }
 
   const apiRequest = async (method, path, body, readOnly = false) => {
     let response;
@@ -302,11 +300,17 @@ function createGithubClient(deps = {}) {
     });
   };
 
-  const request = (method, path, body) => apiRequest(
-    method,
-    `/repos/${repository}${path}`,
-    body,
-  );
+  let verifiedRepository;
+  const request = async (method, path, body) => {
+    verifiedRepository ??= apiRequest("GET", `/repos/${repository}`).then((identity) => {
+      if (identity?.id !== repositoryId ||
+          typeof identity?.full_name !== "string" || identity.full_name.toLowerCase() !== repository.toLowerCase()) {
+        throw new GithubHandoffError("GitHub repository identity does not match configuration");
+      }
+    });
+    await verifiedRepository;
+    return apiRequest(method, `/repos/${repository}${path}`, body);
+  };
 
   return {
     getAuthenticatedUser: () => apiRequest("GET", "/user"),
@@ -368,7 +372,32 @@ function createGithubClient(deps = {}) {
     ),
     listReviews: (number) => request("GET", `/pulls/${number}/reviews?per_page=100`),
     repository,
+    repositoryId,
   };
+}
+
+function sameRepository(left, right) {
+  return left.repository.toLowerCase() === right.repository.toLowerCase() &&
+    left.repositoryId === right.repositoryId;
+}
+
+function reportPullRepository(record, issueRepository, fixRepository) {
+  if (record.fixPullRequestRepository === undefined && record.fixPullRequestRepositoryId === undefined) {
+    return issueRepository;
+  }
+  if (!Number.isSafeInteger(record.fixPullRequestRepositoryId) || record.fixPullRequestRepositoryId < 1) {
+    throw new GithubHandoffError("The report pull request repository ID is invalid");
+  }
+  let identity;
+  try {
+    identity = repositoryIdentity(record.fixPullRequestRepository, record.fixPullRequestRepositoryId);
+  } catch {
+    throw new GithubHandoffError("The report pull request repository is invalid");
+  }
+  if (![issueRepository, fixRepository].some((allowed) => sameRepository(identity, allowed))) {
+    throw new GithubHandoffError("The report pull request repository is not configured");
+  }
+  return identity;
 }
 
 function issueState(issue) {
@@ -591,9 +620,9 @@ function timelinePullRequestNumber(issue, repository) {
     ? number : null;
 }
 
-async function timelineEventPullRequestNumbers(client, event, issueNumber) {
+async function timelineEventPullRequestNumbers(client, event, issueNumber, pullRepository) {
   if (event?.event === "cross-referenced") {
-    const number = timelinePullRequestNumber(event.source?.issue, client.repository);
+    const number = timelinePullRequestNumber(event.source?.issue, pullRepository);
     return number ? [number] : [];
   }
   if (!["connected", "disconnected"].includes(event?.event) || typeof event.node_id !== "string" ||
@@ -606,12 +635,13 @@ async function timelineEventPullRequestNumbers(client, event, issueNumber) {
   const belongsToIssue = endpoints.some((node) => node?.__typename === "Issue" &&
     node.number === issueNumber && isConfiguredRepo(node));
   if (!belongsToIssue) return [];
-  return endpoints.filter((node) => node?.__typename === "PullRequest" && isConfiguredRepo(node) &&
+  return endpoints.filter((node) => node?.__typename === "PullRequest" &&
+    node?.repository?.nameWithOwner?.toLowerCase() === pullRepository.toLowerCase() &&
     Number.isSafeInteger(node.number) && node.number > 0 && node.number <= MAX_GITHUB_NUMBER)
     .map((node) => node.number);
 }
 
-async function discoverIssuePullRequests(client, issues, manualNumbers) {
+async function discoverIssuePullRequests(client, issues, manualNumbers, pullRepository = client.repository) {
   if (manualNumbers.length >= 10) return [];
   const manual = new Set(manualNumbers);
   const references = new Map();
@@ -628,7 +658,7 @@ async function discoverIssuePullRequests(client, issues, manualNumbers) {
       const events = await client.listIssueTimeline(issue.number, page);
       if (!Array.isArray(events)) throw new GithubHandoffError("The GitHub timeline response is invalid");
       for (const event of events) {
-        const numbers = await timelineEventPullRequestNumbers(client, event, issue.number);
+        const numbers = await timelineEventPullRequestNumbers(client, event, issue.number, pullRepository);
         const at = timestampMillis(event?.created_at ?? event?.updated_at);
         const rank = { at: Number.isFinite(at) ? at : 0, sequence: ++sequence };
         for (const number of numbers) {
@@ -647,6 +677,7 @@ async function discoverIssuePullRequests(client, issues, manualNumbers) {
 }
 
 async function executeGithubOperation(row, client, origin = ADMIN_ORIGIN, deps = {}) {
+  const pullClient = deps.pullRequestClient ?? client;
   if (["create_issue", "create_issue_and_fix"].includes(row.operation)) {
     const existing = await reconcileCreatedIssue(client, row.record);
     if (existing) return {
@@ -703,13 +734,14 @@ async function executeGithubOperation(row, client, origin = ADMIN_ORIGIN, deps =
     return { issues: [issueState(await client.getIssue(row.targetNumber))], pullRequests: [], workflowRunUrls: [], deploymentRunUrls: [] };
   }
   if (row.operation === "attach_pull_request") {
+    const replacing = row.pullRepository && !sameRepository(row.pullRepository, row.originalPullRepository);
     ensureLinkCapacity(
-      manualPullRequestNumbers(row.record.links),
+      replacing ? [] : manualPullRequestNumbers(row.record.links),
       [],
       row.targetNumber,
       "pull request",
     );
-    const pull = await pullRequestState(client, row.targetNumber);
+    const pull = await pullRequestState(pullClient, row.targetNumber);
     return { issues: [], pullRequests: [pull.pullRequest], manualPullRequestNumber: row.targetNumber, workflowRunUrls: pull.workflowRunUrls, deploymentRunUrls: pull.deploymentRunUrls };
   }
   if (row.operation === "sync") {
@@ -726,10 +758,10 @@ async function executeGithubOperation(row, client, origin = ADMIN_ORIGIN, deps =
       }
     }
     const manualNumbers = manualPullRequestNumbers(row.record.links);
-    const discoveredPullRequestNumbers = await discoverIssuePullRequests(client, issues, manualNumbers);
+    const discoveredPullRequestNumbers = await discoverIssuePullRequests(client, issues, manualNumbers, pullClient.repository);
     const pullNumbers = [...manualNumbers, ...discoveredPullRequestNumbers.slice(0, 10 - manualNumbers.length)];
     const pulls = await Promise.all(pullNumbers
-      .map((number) => syncPullRequestState(row, client, number)));
+      .map((number) => syncPullRequestState(row, pullClient, number)));
     return {
       issues,
       pullRequests: pulls.map((entry) => entry.pullRequest),
@@ -852,27 +884,45 @@ async function settleGithubSuccess(row, result, deps = {}) {
     ]);
     if (!jobSnapshot.exists || jobSnapshot.data().state !== "sending" || !reportSnapshot.exists) return;
     const current = reportSnapshot.data();
-    if (row.operation === "attach_pull_request") {
-      ensureLinkCapacity(manualPullRequestNumbers(current.links), [], row.targetNumber, "pull request");
+    const currentRepository = result.pullRepository
+      ? reportPullRepository(current, row.issueRepository, row.fixRepository) : null;
+    const sameCurrentRepository = currentRepository && sameRepository(currentRepository, result.pullRepository);
+    const stalePulls = currentRepository && !sameCurrentRepository &&
+      (row.operation !== "attach_pull_request" || !sameRepository(currentRepository, row.originalPullRepository));
+    const switchingRepository = currentRepository && !sameCurrentRepository && !stalePulls;
+    let currentLinks = currentRepository ? pullLinksForRepository(current.links, currentRepository.repository) : current.links;
+    if (switchingRepository) {
+      currentLinks = { ...currentLinks, pullRequestNumbers: [], pullRequests: [], discoveredPullRequestNumbers: [],
+        workflowRunUrls: [], deploymentRunUrls: [] };
+      delete currentLinks.discoveryObservedAt;
     }
-    const links = mergeGithubLinks(current.links, result, { observedAt: row.readStartedAt });
+    const applicable = stalePulls ? { issues: result.issues, pullRequests: [], workflowRunUrls: [], deploymentRunUrls: [] } : result;
+    if (row.operation === "attach_pull_request") {
+      if (!stalePulls) ensureLinkCapacity(manualPullRequestNumbers(currentLinks), [], row.targetNumber, "pull request");
+    }
+    const links = mergeGithubLinks(currentLinks, applicable, { observedAt: row.readStartedAt });
     const next = {
       ...current,
       links,
+      ...(result.pullRepository && !stalePulls ? {
+        fixPullRequestRepository: result.pullRepository.repository,
+        fixPullRequestRepositoryId: result.pullRepository.repositoryId,
+      } : {}),
       githubDelivery: {
         ...(current.githubDelivery ?? {}),
-        state: "synced",
+        state: stalePulls ? "pending" : "synced",
         attemptCount: row.attemptCount,
         lastAttemptAt: at.toISOString(),
         lastError: null,
         lastOperation: row.operation,
         lastTargetNumber: row.targetNumber ?? null,
-        lastSyncedAt: at.toISOString(),
+        lastSyncedAt: stalePulls ? current.githubDelivery?.lastSyncedAt ?? null : at.toISOString(),
       },
       version: current.version + 1,
       updatedAt: at.toISOString(),
     };
     Object.assign(next, progressChangeFields(current, next, at.toISOString()));
+    if (switchingRepository) next.progressChangedAt = at.toISOString();
     const syncJobId = `${current.id}--sync`;
     const continueSync = shouldContinueSync(current, links);
     const rescheduleCurrentJob = row.operation === "sync" && row.id === syncJobId && continueSync;
@@ -880,7 +930,7 @@ async function settleGithubSuccess(row, result, deps = {}) {
       state: "pending",
       attemptCount: 0,
       leaseUntil: null,
-      nextAttemptAt: new Date(at.getTime() + SYNC_INTERVAL_MILLIS),
+      nextAttemptAt: stalePulls ? at : new Date(at.getTime() + SYNC_INTERVAL_MILLIS),
       lastError: null,
       updatedAt: at,
     } : {
@@ -922,8 +972,12 @@ async function settleGithubSuccess(row, result, deps = {}) {
         actorUid: "system:bug-report-github",
         action: `bug_report.github_${row.operation}_complete`,
         target: `bug_reports/${current.id}`,
-        before: { links: current.links ?? null, githubDelivery: current.githubDelivery ?? null },
-        after: { links, githubDelivery: next.githubDelivery },
+        before: { links: current.links ?? null, githubDelivery: current.githubDelivery ?? null,
+          fixPullRequestRepository: current.fixPullRequestRepository ?? null,
+          fixPullRequestRepositoryId: current.fixPullRequestRepositoryId ?? null },
+        after: { links, githubDelivery: next.githubDelivery,
+          fixPullRequestRepository: next.fixPullRequestRepository ?? null,
+          fixPullRequestRepositoryId: next.fixPullRequestRepositoryId ?? null },
         source: { outboxId: row.id },
       }),
     );
@@ -956,7 +1010,7 @@ async function settleGithubSuccess(row, result, deps = {}) {
           requestedBy: "system:bug-report-github",
           state: "pending",
           attemptCount: 0,
-          nextAttemptAt: new Date(at.getTime() + SYNC_INTERVAL_MILLIS),
+          nextAttemptAt: stalePulls ? at : new Date(at.getTime() + SYNC_INTERVAL_MILLIS),
           leaseUntil: null,
           lastError: null,
           createdAt: at,
@@ -975,6 +1029,7 @@ async function settleGithubFailure(row, error, deps = {}) {
   const canRetry = error.kind === "retryable" && row.attemptCount < MAX_ATTEMPTS;
   const jobState = unknown ? "unknown" : canRetry ? "pending" : "terminal_failed";
   const reportState = unknown ? "unknown" : canRetry ? "retryable_failed" : "terminal_failed";
+  let settledState = jobState;
   const safeError = `${error.kind || "unknown"}${error.status ? ` (${error.status})` : ""}`;
   await firestore.runTransaction(async (transaction) => {
     const [jobSnapshot, reportSnapshot, createLockSnapshot] = await Promise.all([
@@ -995,22 +1050,32 @@ async function settleGithubFailure(row, error, deps = {}) {
       return;
     }
     const current = reportSnapshot.data();
+    let stalePulls = false;
+    if (row.pullRepository) {
+      try {
+        const currentRepository = reportPullRepository(current, row.issueRepository, row.fixRepository);
+        stalePulls = !sameRepository(currentRepository, row.originalPullRepository) &&
+          !sameRepository(currentRepository, row.pullRepository);
+      } catch { /* Preserve the failure when the current identity itself is invalid. */ }
+    }
+    settledState = stalePulls ? "pending" : jobState;
     const nextVersion = current.version + 1;
     transaction.update(row.ref, {
-      state: jobState,
+      state: settledState,
       leaseUntil: null,
-      nextAttemptAt: canRetry ? new Date(at.getTime() + 2 ** (row.attemptCount - 1) * 60_000) : null,
-      lastError: safeError,
+      ...(stalePulls ? { attemptCount: 0 } : {}),
+      nextAttemptAt: stalePulls ? at : canRetry ? new Date(at.getTime() + 2 ** (row.attemptCount - 1) * 60_000) : null,
+      lastError: stalePulls ? null : safeError,
       updatedAt: at,
     });
     const next = {
       ...current,
       githubDelivery: {
         ...(current.githubDelivery ?? {}),
-        state: reportState,
+        state: stalePulls ? "pending" : reportState,
         attemptCount: row.attemptCount,
         lastAttemptAt: at.toISOString(),
-        lastError: safeError,
+        lastError: stalePulls ? null : safeError,
         lastOperation: row.operation,
         lastTargetNumber: row.targetNumber ?? null,
         ...(row.operation === "create_issue_and_fix" && !canRetry ? { fixStatus: "failed" } : {}),
@@ -1039,7 +1104,7 @@ async function settleGithubFailure(row, error, deps = {}) {
       },
     );
   });
-  return jobState;
+  return settledState;
 }
 
 async function processGithubOutboxRow(id, deps = {}) {
@@ -1048,12 +1113,27 @@ async function processGithubOutboxRow(id, deps = {}) {
   const row = await claimGithubOutboxRow(firestore, id, now());
   if (!row) return { state: "skipped" };
   try {
-    const client = deps.client ?? createGithubClient(deps);
+    try {
+      row.issueRepository = githubIssueRepository();
+      row.fixRepository = githubFixRepository();
+    } catch {
+      throw new GithubHandoffError("GitHub repository configuration is invalid");
+    }
+    const client = deps.client ?? createGithubClient({ ...deps, ...row.issueRepository });
+    let pullRequestClient = client;
+    if (["attach_pull_request", "sync"].includes(row.operation)) {
+      row.originalPullRepository = reportPullRepository(row.record, row.issueRepository, row.fixRepository);
+      row.pullRepository = row.operation === "attach_pull_request" ? row.fixRepository : row.originalPullRepository;
+      pullRequestClient = sameRepository(row.pullRepository, row.issueRepository) ? client
+        : deps.pullRequestClient ?? createGithubClient({ ...deps, ...row.pullRepository });
+      row.record = { ...row.record, links: pullLinksForRepository(row.record.links, row.originalPullRepository.repository) };
+    }
     const result = await executeGithubOperation(
       row,
       client,
       deps.adminOrigin ?? ADMIN_ORIGIN,
       {
+        pullRequestClient,
         onReusableIssueSelected: async (number) => {
           const at = now();
           await row.ref.update({
@@ -1064,6 +1144,7 @@ async function processGithubOutboxRow(id, deps = {}) {
         },
       },
     );
+    if (row.pullRepository) result.pullRepository = row.pullRepository;
     await settleGithubSuccess(row, result, { firestore, now });
     return { state: "delivered" };
   } catch (error) {
@@ -1156,30 +1237,49 @@ function webhookTargetNumbers(eventName, payload) {
   };
 }
 
-async function reportsForWebhookEvent(firestore, eventName, payload) {
+async function pullReportsForWebhook(firestore, number, eventRepository, issueRepository, fixRepository) {
+  const query = firestore.collection(BUG_REPORT_COLLECTIONS.reports)
+    .where("links.pullRequestNumbers", "array-contains", number)
+    .limit(WEBHOOK_REPORT_LIMIT);
+  const matches = [];
+  let cursor = null;
+  while (matches.length < WEBHOOK_REPORT_LIMIT) {
+    const page = await (cursor ? query.startAfter(cursor) : query).get();
+    for (const document of page.docs) {
+      try {
+        if (!sameRepository(reportPullRepository(document.data(), issueRepository, fixRepository), eventRepository)) continue;
+      } catch { continue; }
+      matches.push(document);
+      if (matches.length === WEBHOOK_REPORT_LIMIT) break;
+    }
+    if (page.docs.length < WEBHOOK_REPORT_LIMIT) break;
+    cursor = page.docs.at(-1);
+  }
+  return matches;
+}
+
+async function reportsForWebhookEvent(firestore, eventName, payload, eventRepository, issueRepository, fixRepository) {
   const targets = webhookTargetNumbers(eventName, payload);
-  const snapshots = await Promise.all([
+  if (!sameRepository(eventRepository, issueRepository)) targets.issueNumbers = [];
+  const groups = await Promise.all([
     ...targets.issueNumbers.map((number) => firestore
       .collection(BUG_REPORT_COLLECTIONS.reports)
       .where("links.githubIssueNumbers", "array-contains", number)
-      .limit(50)
-      .get()),
-    ...targets.pullRequestNumbers.map((number) => firestore
-      .collection(BUG_REPORT_COLLECTIONS.reports)
-      .where("links.pullRequestNumbers", "array-contains", number)
-      .limit(50)
-      .get()),
+      .limit(WEBHOOK_REPORT_LIMIT)
+      .get().then((snapshot) => snapshot.docs)),
+    ...targets.pullRequestNumbers.map((number) => pullReportsForWebhook(
+      firestore, number, eventRepository, issueRepository, fixRepository,
+    )),
   ]);
   const reports = new Map();
-  for (const snapshot of snapshots) {
-    for (const document of snapshot.docs) reports.set(document.id, document.data());
+  for (const documents of groups) {
+    for (const document of documents) reports.set(document.id, document.data());
   }
   return [...reports.entries()].map(([id, record]) => ({ id, record }));
 }
 
 async function queueGithubWebhookSync({
   firestore,
-  repository,
   eventName,
   deliveryId,
   payload,
@@ -1188,11 +1288,20 @@ async function queueGithubWebhookSync({
   if (!GITHUB_DELIVERY_PATTERN.test(deliveryId)) {
     throw new GithubHandoffError("GitHub delivery id is invalid");
   }
-  if (payload?.repository?.full_name !== repository) {
+  const issueRepository = githubIssueRepository();
+  const fixRepository = githubFixRepository();
+  let eventRepository;
+  try {
+    if (!Number.isSafeInteger(payload?.repository?.id)) throw new Error();
+    eventRepository = repositoryIdentity(payload?.repository?.full_name, payload.repository.id);
+  } catch {
+    throw new GithubHandoffError("GitHub webhook repository is invalid");
+  }
+  if (![issueRepository, fixRepository].some((allowed) => sameRepository(eventRepository, allowed))) {
     throw new GithubHandoffError("GitHub webhook repository is invalid");
   }
   if (!WEBHOOK_EVENTS.has(eventName)) return { state: "ignored", count: 0 };
-  const reports = await reportsForWebhookEvent(firestore, eventName, payload);
+  const reports = await reportsForWebhookEvent(firestore, eventName, payload, eventRepository, issueRepository, fixRepository);
   if (reports.length === 0) return { state: "ignored", count: 0 };
   const at = now();
   const reopenedAt = timestampMillis(payload?.issue?.updated_at);
@@ -1250,7 +1359,6 @@ function verifyGithubWebhookSignature(secret, rawBody, signature) {
 
 async function createGithubWebhookHandler(deps = {}) {
   const firestore = deps.firestore ?? db;
-  const repository = deps.repository ?? githubRepository();
   const secret = deps.secret ?? process.env.CMS_BUG_REPORT_GITHUB_WEBHOOK_SECRET?.trim() ??
     GITHUB_WEBHOOK_SECRET.value().trim();
   return async (req, res) => {
@@ -1277,7 +1385,6 @@ async function createGithubWebhookHandler(deps = {}) {
     try {
       const result = await queueGithubWebhookSync({
         firestore,
-        repository,
         eventName,
         deliveryId,
         payload: req.body,

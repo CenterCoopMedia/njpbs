@@ -10,6 +10,9 @@ process.env.CMS_MEDIA_ORIGINAL_BUCKETS ??= [
   "njpbs-archive-originals-123456789012-us-east-2",
 ].join(",");
 process.env.CMS_BUG_REPORT_GITHUB_REPOSITORY ??= "example-owner/private-reports";
+process.env.CMS_BUG_REPORT_GITHUB_REPOSITORY_ID ??= "1000001";
+process.env.CMS_BUG_REPORT_FIX_GITHUB_REPOSITORY ??= "example-owner/private-reports";
+process.env.CMS_BUG_REPORT_FIX_GITHUB_REPOSITORY_ID ??= "1000001";
 process.env.CLOUDFLARE_ACCOUNT_ID ??= "a".repeat(32);
 process.env.CMS_PUBLISH_GITHUB_TRUSTED_ACTORS ??= JSON.stringify(["fixture-user"]);
 process.env.CMS_DEV_ACCESS_ORIGIN ??= "https://fixture.cloudflareaccess.com";

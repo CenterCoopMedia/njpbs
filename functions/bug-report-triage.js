@@ -8,7 +8,7 @@ const { cmsOnRequest } = require("./lib/cms-edge");
 const { createHash } = require("node:crypto");
 const logger = require("firebase-functions/logger");
 const { db } = require("./lib/firebase");
-const { githubRepository } = require("./lib/bug-report-github-config");
+const { githubIssueRepository } = require("./lib/bug-report-github-config");
 const { hasCapability } = require("./lib/rbac");
 const { requirePrincipal, isAdmin, AuthError, ForbiddenError } = require("./lib/auth");
 const { accessTierReadsActive, userDocUsesAccessTier } = require("./lib/access-tier-activation");
@@ -595,7 +595,7 @@ function createCmsListBugReportsHandler(deps = {}) {
         view,
         truncated: snapshots.docs.length > MAX_LIST_RESULTS,
         sharedReportsActive,
-        ...(admin ? { repository: githubRepository() } : {}),
+        ...(admin ? { repository: githubIssueRepository().repository } : {}),
       });
     } catch (error) {
       sendError(res, error, log, "cmsListBugReports");
