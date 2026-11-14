@@ -51,6 +51,37 @@ privacy changes separately pinned. The check detects accidental recovery edits
 identified in #92; full-diff review also checks the source. Replace each frozen
 recovery pin when a reviewed change intentionally changes that service.
 
+## Dependency updates during the switch watch
+
+Automated dependency PRs for `infrastructure/billing-kill-switch/` are deferred
+until the coordinator confirms that the 48-hour switch watch is complete.
+Issue #100 tracks removal of the directory's temporary npm ignore entry and
+this section, with a reviewed dependency update and hash refresh. The other
+three recovered services have no npm manifest. Dependency alerts and security
+scans remain enabled. The source files, dependency versions and recovery pins
+stay unchanged during this deferral.
+
+The retained versions are affected by these GitHub advisories. Their attack
+preconditions are absent from the current budget handler:
+
+| Dependency | Advisory | Required input or role | Current handler |
+| --- | --- | --- | --- |
+| brace-expansion 2.1.1 | [GHSA-3jxr-9vmj-r5cp](https://github.com/advisories/GHSA-3jxr-9vmj-r5cp), [GHSA-mh99-v99m-4gvg](https://github.com/advisories/GHSA-mh99-v99m-4gvg), [GHSA-rgw5-rvv9-x895](https://github.com/advisories/GHSA-rgw5-rvv9-x895), [GHSA-6j4f-fj2g-mc7p](https://github.com/advisories/GHSA-6j4f-fj2g-mc7p), [GHSA-qhr7-859c-m2p7](https://github.com/advisories/GHSA-qhr7-859c-m2p7), [GHSA-q2hr-2g5m-vwhr](https://github.com/advisories/GHSA-q2hr-2g5m-vwhr) | Attacker-controlled brace or glob pattern | Budget message fields are not used as patterns or paths. |
+| protobufjs 7.6.4 | [GHSA-j3f2-48v5-ccww](https://github.com/advisories/GHSA-j3f2-48v5-ccww) | Attacker-controlled `.proto` schema text | Events use `JSON.parse`; the locked Billing client loads its packaged JSON schemas. |
+| @grpc/grpc-js 1.14.4 | [GHSA-f596-whhp-79r4](https://github.com/advisories/GHSA-f596-whhp-79r4), [GHSA-m9gg-hp2v-232j](https://github.com/advisories/GHSA-m9gg-hp2v-232j) | A gRPC server exposes handler errors or uses optional client certificates for server authentication | The handler creates an outbound Billing client and no gRPC server or server credentials. |
+
+`handleBudgetNotification` uses budget values only to decide whether to make
+the Billing call. That call sends a project name from deployment configuration
+and an empty billing-account string. It does not pass message fields to the
+SDK request, a schema loader or a glob matcher. Reassess this reachability when
+the handler or its inputs change and before the updates in #100. Do not treat
+the deferral as a permanent advisory dismissal.
+
+The follow-up must preserve the original provider hashes and recovery
+provenance. Review the intended dependency delta before refreshing only the
+changed file's committed hash and byte count. Keep the exact hash comparisons
+and hosted billing contracts. Deployment still needs separate authorization.
+
 ## Deployment remains disabled
 
 `.github/workflows/recovered-services-deploy.yml.disabled` is a deployment
