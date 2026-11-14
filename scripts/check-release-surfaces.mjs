@@ -44,6 +44,9 @@ function containsExportTarget(node) {
   if (exportTarget(node)) return true;
   if (ts.isPropertyAccessExpression(node) || ts.isElementAccessExpression(node)) return containsExportTarget(node.expression);
   if (ts.isPropertyAssignment(node)) return containsExportTarget(node.initializer);
+  if (ts.isShorthandPropertyAssignment(node) || ts.isBindingElement(node)) return containsExportTarget(node.name);
+  if (ts.isBinaryExpression(node) && node.operatorToken.kind === ts.SyntaxKind.EqualsToken &&
+    (ts.isArrayLiteralExpression(node.parent) || ts.isPropertyAssignment(node.parent))) return containsExportTarget(node.left);
   return ts.forEachChild(node, containsExportTarget) ?? false;
 }
 
@@ -139,7 +142,8 @@ export function entryExports(source, path, files, { devAdapter = false } = {}) {
       }
     }
     if ((ts.isForOfStatement(node) || ts.isForInStatement(node)) && containsExportTarget(node.initializer)) throw new Error(`Unsupported Functions assignment loop: ${path}`);
-    if ((ts.isPrefixUnaryExpression(node) || ts.isPostfixUnaryExpression(node)) && containsExportTarget(node.operand)) throw new Error(`Unsupported Functions assignment: ${path}`);
+    if ((ts.isPrefixUnaryExpression(node) || ts.isPostfixUnaryExpression(node)) &&
+      [ts.SyntaxKind.PlusPlusToken, ts.SyntaxKind.MinusMinusToken].includes(node.operator) && containsExportTarget(node.operand)) throw new Error(`Unsupported Functions assignment: ${path}`);
     if (ts.isCallExpression(node) && node.arguments.some(exportTarget)) {
       const getter = node.expression.getText() === "Object.defineProperty" &&
         enclosingFunction(node) === "lazyExport" && node.arguments[1]?.getText() === "exportName";

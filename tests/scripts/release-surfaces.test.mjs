@@ -77,6 +77,12 @@ test("comments and strings do not create Functions exports", t => {
   assert.doesNotThrow(() => checkRegistry(f.registry, sourceInventory(f.directory)));
 });
 
+test("read-only export references are not registration writes", t => {
+  const f = fixture(t);
+  f.write("functions/index.js", 'lazyExport("health", "./health"); const present = !exports.health; const number = +exports.count; let value; [value = exports.health] = []; ({ key: value = exports.health } = {}); ({ value = exports.health } = {}); for (const [item = exports.health] of []) {}\n');
+  assert.doesNotThrow(() => checkRegistry(f.registry, sourceInventory(f.directory)));
+});
+
 test("computed registrations are refused rather than omitted", () => {
   for (const source of ['lazyExport(name, "./health");', "exports[name] = handler;", "module.exports = handlers;", "Object.assign(exports, handlers);", "register(exports);", "const target = exports; target.newHandler = handler;", "exports.newHandler ??= handler;", "exports.newHandler ||= handler;", "exports.newHandler &&= handler;", "module.exports ||= {};", "[exports.newHandler] = [handler];", "({ newHandler: exports.newHandler } = handlers);", "for (exports.newHandler of handlers) {}", "exports.newHandler++;"]) {
     assert.throws(() => entryExports(source, "functions/index.js", new Set(["functions/health.js"])), /Computed|Unsupported/);
