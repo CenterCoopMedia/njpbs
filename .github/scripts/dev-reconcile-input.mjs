@@ -2,6 +2,7 @@ import { repositoryMatches } from "../../scripts/lib/repository-identity.mjs";
 import dispatch from "../../functions/lib/cms-publish-dispatch.js";
 import { appendFileSync } from "node:fs";
 import { pathToFileURL } from "node:url";
+import { createHash } from "node:crypto";
 
 const refusalMessages = Object.freeze({
   api_lookup: "Dev reconciliation provenance check failed: API lookup",
@@ -34,8 +35,10 @@ export function devReconcileEnvironment(run, env) {
   const trusted = dispatch.trustedPublishActors(env);
   const actor = run.actor?.login;
   const devActor = env.CMS_DEV_DISPATCH_ACTOR;
-  const admitted = run.event === "push" ? trusted.includes(actor) :
-    run.event === "repository_dispatch" && devActor && !trusted.includes(devActor) && actor === devActor;
+  const manualRefresh = run.event === "workflow_dispatch" && actor === env.CMS_DEPLOY_OWNER && trusted.includes(actor) &&
+    queueId === createHash("sha256").update(`dev-code-refresh:${run.id}`).digest("hex").slice(0, 20);
+  const admitted = manualRefresh || (run.event === "push" ? trusted.includes(actor) :
+    run.event === "repository_dispatch" && devActor && !trusted.includes(devActor) && actor === devActor);
   if (!trusted.length || !admitted || !(run.triggering_actor?.login === actor || trusted.includes(run.triggering_actor?.login))) {
     throw new ReconcileRefusal("actor_admission");
   }

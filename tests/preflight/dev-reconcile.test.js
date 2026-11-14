@@ -6,6 +6,7 @@ import { devReconcileEnvironment, devReconcileRefusalMessage, writeDevReconcileE
 import dev from "../../scripts/lib/dev-publication.cjs";
 import candidateContract from "../../functions/lib/public-worker-candidate.js";
 import { Timestamp } from "firebase-admin/firestore";
+import { createHash } from "node:crypto";
 
 // Synthetic failed publication and retained recovery identity.
 const run = {
@@ -21,9 +22,17 @@ const env = { CANONICAL_GITHUB_REPOSITORY: "CenterCoopMedia/njpbs", CANONICAL_GI
   RETAINED_WORKER_VERSION_ID: "11111111-1111-4111-8111-111111111111",
   CMS_PUBLISH_GITHUB_TRUSTED_ACTORS: JSON.stringify(["fixture-owner"]),
   CMS_DEV_PUBLISH_ENABLED: "false", CMS_DEV_DISPATCH_ACTOR: "njpbs-dev-publisher[bot]",
+  CMS_DEPLOY_OWNER: "fixture-owner",
 };
 
 describe("dev recovery provenance", () => {
+  it("recovers an owner manual code refresh only with that run's deterministic queue", () => {
+    const original = { ...run, event: "workflow_dispatch", actor: { login: "fixture-owner" }, triggering_actor: { login: "fixture-owner" } };
+    const queueId = createHash("sha256").update("dev-code-refresh:1001").digest("hex").slice(0, 20);
+    expect(devReconcileEnvironment(original, { ...env, RETAINED_QUEUE_ID: queueId })).toMatchObject({ QUEUE_ID: queueId, SOURCE_SHA: run.head_sha });
+    expect(() => devReconcileEnvironment(original, env)).toThrow();
+    expect(() => devReconcileEnvironment(original, { ...env, RETAINED_QUEUE_ID: queueId, CMS_DEPLOY_OWNER: "another-owner" })).toThrow();
+  });
   it("uses the original run's content source and the supplied exact identity", () => {
     expect(devReconcileEnvironment(run, env)).toEqual({ SOURCE_SHA: run.head_sha,
       QUEUE_ID: env.RETAINED_QUEUE_ID, DEV_RECONCILE_GENERATION: "12",
@@ -177,7 +186,7 @@ describe("dev source selection boundary", () => {
 
 describe("dev recovery workflow admission", () => {
   const workflow = parse(readFileSync(".github/workflows/cms-dev-publish.yml", "utf8"));
-  const context = { format: (pattern, value) => pattern.replace("{0}", value), github: { repository_id: "1442374012", event_name: "workflow_dispatch", ref: "refs/heads/main",
+  const context = { inputs: { action: "reconcile" }, format: (pattern, value) => pattern.replace("{0}", value), github: { repository_id: "1442374012", event_name: "workflow_dispatch", ref: "refs/heads/main",
     workflow_ref: "CenterCoopMedia/njpbs/.github/workflows/cms-dev-publish.yml@refs/heads/main",
     actor: "fixture-owner", triggering_actor: "fixture-owner" }, vars: { CANONICAL_GITHUB_REPOSITORY: "CenterCoopMedia/njpbs", CANONICAL_GITHUB_REPOSITORY_ID: "1442374012", CMS_DEV_PUBLISH_ENABLED: "false", CMS_DEPLOY_OWNER: "fixture-owner",
       CMS_PUBLISH_GITHUB_TRUSTED_ACTORS: JSON.stringify(["fixture-owner"]) },

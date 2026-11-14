@@ -55,6 +55,15 @@ it("push selects its exact main event SHA without inventing a queue", async () =
   expect((await db.doc("system/publicDeployment").get()).exists).toBe(false);
 });
 
+it("a validated manual code refresh selects its event SHA while recovery still requires a queue", async () => {
+  await queueRef().delete();
+  const input = { eventName: "workflow_dispatch", eventSha: id.commitSha, queueId: id.queueId };
+  await expect(dev.selectDevPublicationSource(db, input)).rejects.toThrow("queue is missing");
+  expect(await dev.selectDevPublicationSource(db, { ...input, codeRefresh: true })).toBe(id.commitSha);
+  expect((await queueRef().get()).exists).toBe(false);
+  expect((await db.doc("system/publicDeployment").get()).exists).toBe(false);
+});
+
 it.each(["accepted editorial queue", "uncreated code refresh"])("allows fresh retry only for an unreserved %s", async mode => {
   if (mode === "uncreated code refresh") await queueRef().delete();
   const before = (await queueRef().get()).data();

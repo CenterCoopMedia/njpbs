@@ -136,7 +136,8 @@ describe("development publication target and receipts", () => {
     const source = readFileSync(".github/workflows/cms-dev-publish.yml", "utf8");
     const workflow = parse(source);
     expect(workflow.on.repository_dispatch.types).toEqual(["cms_dev_publish"]);
-    for (const helper of [".github/scripts/dev-publication-source-checkout.mjs", ".github/scripts/dev-publication-input-artifact.mjs"]) {
+    for (const helper of [".github/scripts/dev-publication-source-checkout.mjs", ".github/scripts/dev-publication-input-artifact.mjs",
+      ".github/scripts/dev-code-refresh-input.mjs"]) {
       expect(workflow.on.push.paths).toContain(helper);
     }
     expect(workflow.concurrency).toEqual({ group: "cms-dev-publication", queue: "max", "cancel-in-progress": false });
@@ -606,6 +607,47 @@ describe("development workflow failure cleanup", () => {
 describe("development workflow rerun admission", () => {
   const workflow = parse(readFileSync(".github/workflows/cms-dev-publish.yml", "utf8"));
   const script = workflow.jobs.prepare.steps.find(step => step.name === "Validate exact dispatch and source").run;
+
+  it.each([
+    ["owner", {}, {}, {}, true],
+    ["other actor", { actor: "collaborator" }, {}, {}, false],
+    ["other rerunner", { triggering_actor: "collaborator" }, {}, {}, false],
+    ["feature ref", { ref: "refs/heads/feature" }, {}, {}, false],
+    ["other repository", { repository_id: "9876543210" }, {}, {}, false],
+    ["other workflow", { workflow_ref: "other" }, {}, {}, false],
+    ["missing owner", {}, { CMS_DEPLOY_OWNER: "" }, {}, false],
+    ["untrusted owner", {}, { CMS_PUBLISH_GITHUB_TRUSTED_ACTORS: "[]" }, {}, false],
+    ["retained queue", {}, {}, { queue_id: queueId }, false],
+    ["retained run", {}, {}, { run_id: "1001" }, false],
+  ])("admits a fresh manual code refresh only for its main owner: %s", (_name, change, variableChange, inputChange, admitted) => {
+    const owner = "fixture-user";
+    const inputs = { action: "refresh", run_id: "", queue_id: "", generation: "", worker_version_id: "", ...inputChange };
+    const github = { event_name: "workflow_dispatch", ref: "refs/heads/main", actor: owner, triggering_actor: owner,
+      repository_id: repositoryFixture.CANONICAL_GITHUB_REPOSITORY_ID,
+      workflow_ref: `${repositoryFixture.CANONICAL_GITHUB_REPOSITORY}/.github/workflows/cms-dev-publish.yml@refs/heads/main`,
+      event: { inputs }, ...change };
+    const vars = { ...repositoryFixture, ...devWorkflowContext.vars, ...variableChange };
+    const context = { ...devWorkflowContext, github, vars, inputs, always: () => true,
+      format: (pattern, value) => pattern.replace("{0}", value),
+      needs: { prepare: { result: "success", outputs: { source_sha: "a".repeat(40) } } } };
+    for (const [name, job] of Object.entries(workflow.jobs)) {
+      expect(runInNewContext(job.if, context), name).toBe(name === "reconcile" ? false : admitted);
+    }
+    const directory = mkdtempSync(join(tmpdir(), "dev-manual-refresh-"));
+    try {
+      const eventPath = join(directory, "event.json");
+      writeFileSync(eventPath, JSON.stringify(github.event));
+      const result = spawnSync("bash", ["-e", "-c", script], { encoding: "utf8", env: {
+        PATH: process.env.PATH, SOURCE_SHA: spawnSync("git", ["rev-parse", "HEAD"], { encoding: "utf8" }).stdout.trim(),
+        ...repositoryFixture, GITHUB_REPOSITORY: repositoryFixture.CANONICAL_GITHUB_REPOSITORY,
+        GITHUB_REPOSITORY_ID: github.repository_id, GITHUB_WORKFLOW_REF: github.workflow_ref,
+        GITHUB_EVENT_PATH: eventPath, GITHUB_EVENT_NAME: github.event_name, GITHUB_REF: github.ref,
+        GITHUB_ACTOR: github.actor, GITHUB_TRIGGERING_ACTOR: github.triggering_actor,
+        CMS_DEPLOY_OWNER: vars.CMS_DEPLOY_OWNER, CMS_PUBLISH_GITHUB_TRUSTED_ACTORS: vars.CMS_PUBLISH_GITHUB_TRUSTED_ACTORS,
+      } });
+      expect(result.status === 0, result.stderr).toBe(admitted);
+    } finally { rmSync(directory, { recursive: true, force: true }); }
+  });
 
   it.each([
     ["original bot dispatch", {}, true],
