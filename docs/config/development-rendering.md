@@ -49,6 +49,9 @@ Production build workflows and production publisher/renderer images require
 `CMS_PRODUCTION_API_ORIGIN`, `CMS_LOCAL_PUBLICATION_OWNER` and `CMS_GPU_WORKER_ID`.
 The `--production` renderer resolves all three before deployment; missing or
 template values refuse. It does not require development resource settings.
+The selected source must declare each production input in its own manifest;
+otherwise preparation refuses. Recover through reviewed compatible forward
+source rather than dropping required identity inputs.
 Keep the recorded local publication owner and shared GPU slot from the live
 deployment across repository/host moves. The local owner cannot be `cloudflare`.
 These inputs preserve accepted queues, leases, worker authentication, capability

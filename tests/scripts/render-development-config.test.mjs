@@ -129,6 +129,8 @@ test("uses the selected source manifest and explicitly preserves older untemplat
     } }));
     git(directory, "add", ".");
     git(directory, "-c", "user.name=Fixture", "-c", "user.email=fixture@example.org", "commit", "-qm", "Older manifest schema");
+    assert.throws(() => renderDevelopmentConfig(directory, inputs, { only: productionDeploymentInputs }));
+    assert.equal(git(directory, "status", "--porcelain"), "");
     assert.equal(renderDevelopmentConfig(directory, { CMS_DEV_PUBLIC_ORIGIN: inputs.CMS_DEV_PUBLIC_ORIGIN }), 1);
     assert.ok(readFileSync(join(directory, "entry.mjs"), "utf8").includes(inputs.CMS_DEV_PUBLIC_ORIGIN));
     assert.equal(assertDevelopmentSource(directory, {}), true); // receipt works before its ignore rule existed
