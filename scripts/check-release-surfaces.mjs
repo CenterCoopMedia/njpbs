@@ -57,35 +57,30 @@ function devManifestLoop(node) {
   return false;
 }
 
-function cloudWakeLoop(node) {
-  for (let parent = node.parent; parent; parent = parent.parent) {
-    if (ts.isForOfStatement(parent)) return parent.expression.getText() === "CLOUD_WAKE_FUNCTIONS";
-  }
-  return false;
+const devProgram = `
+"use strict";
+const { CLOUD_WAKE_FUNCTIONS } = require("./lib/cloud-publication-wake-deployment");
+const DEV_FUNCTIONS = Object.freeze({});
+function devFunctionManifest(deployment) {
+  if (deployment?.enabled !== true || deployment.environment !== "development") return DEV_FUNCTIONS;
+  const selected = { ...DEV_FUNCTIONS };
+  for (const name of CLOUD_WAKE_FUNCTIONS) selected[name] = "./no-build-cloud-wake";
+  return Object.freeze(selected);
 }
+module.exports = { DEV_FUNCTIONS, devFunctionManifest };
+`;
 
-function inDevManifest(node) {
-  for (let parent = node.parent; parent; parent = parent.parent) {
-    if (ts.isFunctionDeclaration(parent) && parent.name?.text === "devFunctionManifest") return true;
-  }
-  return false;
-}
-
-function selectedUse(node, path) {
-  const parent = node.parent;
-  if (ts.isVariableDeclaration(parent) && parent.name === node) {
-    const value = parent.initializer;
-    if (value && ts.isObjectLiteralExpression(value) && value.properties.length === 1 &&
-      ts.isSpreadAssignment(value.properties[0]) && value.properties[0].expression.getText() === "DEV_FUNCTIONS") return;
-  }
-  if (ts.isCallExpression(parent) && parent.expression.getText() === "Object.freeze" &&
-    parent.arguments.length === 1 && parent.arguments[0] === node && ts.isReturnStatement(parent.parent)) return;
-  if (ts.isElementAccessExpression(parent) && parent.expression === node && parent.argumentExpression.getText() === "name") {
-    const assignment = parent.parent;
-    if (ts.isBinaryExpression(assignment) && assignment.left === parent && assignment.operatorToken.kind === ts.SyntaxKind.EqualsToken &&
-      cloudWakeLoop(assignment) && literal(assignment.right, path) === "./no-build-cloud-wake") return;
-  }
-  throw new Error(`Computed Functions manifest use: ${path}`);
+function devProgramShape(source, path) {
+  const shape = node => {
+    // The literal registration object is checked and inventoried separately.
+    if (ts.isVariableDeclaration(node) && node.name.getText() === "DEV_FUNCTIONS") return [node.kind, "DEV_FUNCTIONS", "registry-literals"];
+    const children = [];
+    ts.forEachChild(node, child => { children.push(shape(child)); });
+    const text = ts.isIdentifier(node) || ts.isStringLiteral(node) || ts.isNumericLiteral(node) ? node.text : null;
+    const flags = ts.isVariableDeclarationList(node) ? node.flags & ts.NodeFlags.BlockScoped : 0;
+    return [node.kind, flags, text, children];
+  };
+  return JSON.stringify(shape(syntax(source, path)));
 }
 
 export function entryExports(source, path, files, { devAdapter = false } = {}) {
@@ -131,7 +126,7 @@ function frozenDeclaration(source, path, name) {
   let value;
   const visit = node => {
     if (ts.isVariableDeclaration(node) && node.name.getText() === name) {
-      if (value || !ts.isCallExpression(node.initializer) || node.initializer.expression.getText() !== "Object.freeze") {
+      if (value || !node.initializer || !ts.isCallExpression(node.initializer) || node.initializer.expression.getText() !== "Object.freeze" || node.initializer.arguments.length !== 1) {
         throw new Error(`Changed Functions manifest: ${path}`);
       }
       value = node.initializer.arguments[0];
@@ -146,6 +141,7 @@ function frozenDeclaration(source, path, name) {
 function devExports(read, files) {
   const path = "functions/dev-manifest.js";
   const source = read(path);
+  if (devProgramShape(source, path) !== devProgramShape(devProgram, path)) throw new Error(`Changed Functions manifest producer: ${path}`);
   const object = frozenDeclaration(source, path, "DEV_FUNCTIONS");
   if (!ts.isObjectLiteralExpression(object)) throw new Error(`Changed Functions manifest: ${path}`);
   const result = new Map();
@@ -163,16 +159,6 @@ function devExports(read, files) {
     if (result.has(name)) throw new Error(`Duplicate Functions manifest export: ${wakePath} ${name}`);
     result.set(name, moduleFile("./no-build-cloud-wake", path, files));
   }
-  const inspectProducer = node => {
-    if (inDevManifest(node)) {
-      if (ts.isIdentifier(node) && node.text === "selected") selectedUse(node, path);
-      if (ts.isFunctionDeclaration(node) || ts.isNewExpression(node)) throw new Error(`Changed Functions manifest producer: ${path}`);
-      if (ts.isReturnStatement(node) && !["DEV_FUNCTIONS", "Object.freeze(selected)"].includes(node.expression?.getText())) throw new Error(`Changed Functions manifest producer: ${path}`);
-      if (ts.isCallExpression(node) && node.expression.getText() !== "Object.freeze") throw new Error(`Computed Functions manifest call: ${path}`);
-    }
-    ts.forEachChild(node, inspectProducer);
-  };
-  inspectProducer(syntax(source, path));
   return result;
 }
 

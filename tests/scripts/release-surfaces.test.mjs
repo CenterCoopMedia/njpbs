@@ -24,7 +24,12 @@ function fixture(t) {
   write("functions/health.js", "exports.health = () => {};\n");
   write("functions/index.js", 'lazyExport("health", "./health");\n');
   write("functions/dev-index.js", "for (const [name, modulePath] of Object.entries(devFunctionManifest())) { const handler = require(modulePath)[name]; exports[name] = handler; }\n");
-  write("functions/dev-manifest.js", 'const DEV_FUNCTIONS = Object.freeze({ health: "./health" });\n');
+  const devSource = body => `"use strict";
+const { CLOUD_WAKE_FUNCTIONS } = require("./lib/cloud-publication-wake-deployment");
+const DEV_FUNCTIONS = Object.freeze({ health: "./health" });
+function devFunctionManifest(deployment) { ${body ?? 'if (deployment?.enabled !== true || deployment.environment !== "development") return DEV_FUNCTIONS; const selected = { ...DEV_FUNCTIONS }; for (const name of CLOUD_WAKE_FUNCTIONS) selected[name] = "./no-build-cloud-wake"; return Object.freeze(selected);'} }
+module.exports = { DEV_FUNCTIONS, devFunctionManifest };\n`;
+  write("functions/dev-manifest.js", devSource());
   write("functions/lib/cloud-publication-wake-deployment.js", "const CLOUD_WAKE_FUNCTIONS = Object.freeze([]);\n");
   track();
   const registry = {
@@ -34,7 +39,7 @@ function fixture(t) {
     functions: ["functions/dev-index.js", "functions/index.js"].map(entrypoint => ({ entrypoint, exports: [{ name: "health", module: "functions/health.js" }] })),
     machines: [{ id: "fixture-request", kind: "app", sources: ["functions/health.js"], states: ["pending", "complete"] }],
   };
-  return { directory, write, track, registry };
+  return { directory, write, track, registry, devSource };
 }
 
 test("current tracked deployment surfaces match the reviewed registry", () => {
@@ -49,7 +54,6 @@ for (const [name, path, source, diagnostic] of [
   ["Wrangler variant", "nested/wrangler.public.dev.toml", 'name = "example"\n', /missing=.*wrangler.public.dev.toml/],
   ["Functions export", "functions/index.js", 'lazyExport("health", "./health"); lazyExport("newHandler", "./health");\n', /missing=.*newHandler/],
   ["direct Functions export", "functions/index.js", 'lazyExport("health", "./health"); exports.newHandler = handler;\n', /missing=.*newHandler/],
-  ["dev manifest export", "functions/dev-manifest.js", 'const DEV_FUNCTIONS = Object.freeze({ health: "./health", newHandler: "./health" });\n', /missing=.*newHandler/],
   ["dev direct export", "functions/dev-index.js", 'for (const [name, modulePath] of Object.entries(devFunctionManifest())) { exports[name] = handler; } exports.newHandler = handler;\n', /missing=.*newHandler/],
 ]) {
   test(`an unregistered ${name} fails the source contract`, t => {
@@ -59,6 +63,12 @@ for (const [name, path, source, diagnostic] of [
     assert.throws(() => checkRegistry(f.registry, sourceInventory(f.directory)), diagnostic);
   });
 }
+
+test("a new literal dev manifest export needs a registry row", t => {
+  const f = fixture(t);
+  f.write("functions/dev-manifest.js", f.devSource().replace('health: "./health"', 'health: "./health", newHandler: "./health"'));
+  assert.throws(() => checkRegistry(f.registry, sourceInventory(f.directory)), /missing=.*newHandler/);
+});
 
 test("comments and strings do not create Functions exports", t => {
   const f = fixture(t);
@@ -93,10 +103,14 @@ test("new computed development manifest producers are refused", t => {
     'const selected = { ...DEV_FUNCTIONS }; const [target] = [selected]; target.extra = "./health"; return Object.freeze(selected);',
     'const selected = { ...DEV_FUNCTIONS }; const holder = { target: selected }; holder.target.extra = "./health"; return Object.freeze(selected);',
     'const selected = { ...DEV_FUNCTIONS }; const target = (selected); target.extra = "./health"; return Object.freeze(selected);',
+    'const selected = { ...DEV_FUNCTIONS }; const name = "extra"; for (const n of CLOUD_WAKE_FUNCTIONS) selected[name] = "./no-build-cloud-wake"; return Object.freeze(selected);',
+    'const selected = { ...DEV_FUNCTIONS }; for (let name of CLOUD_WAKE_FUNCTIONS) { name = "extra"; selected[name] = "./no-build-cloud-wake"; } return Object.freeze(selected);',
   ]) {
-    f.write("functions/dev-manifest.js", `const DEV_FUNCTIONS = Object.freeze({ health: "./health" }); function devFunctionManifest() { ${body} }\n`);
+    f.write("functions/dev-manifest.js", f.devSource(body));
     assert.throws(() => sourceInventory(f.directory), /Changed Functions manifest producer|Computed Functions manifest/);
   }
+  f.write("functions/dev-manifest.js", f.devSource().replace(/function devFunctionManifest[\s\S]*?\nmodule.exports/, 'const devFunctionManifest = deployment => Object.freeze({ ...DEV_FUNCTIONS, extra: "./health" });\nmodule.exports'));
+  assert.throws(() => sourceInventory(f.directory), /Changed Functions manifest producer/);
 });
 
 test("removed surfaces and machine owners cannot remain registered", t => {
