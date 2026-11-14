@@ -9,7 +9,10 @@ export const DEFAULT_DESTINATIONS = [
 ] as const;
 
 /** Placeholder membership for the configured info alias. */
-const INFO_DESTINATIONS = [...DEFAULT_DESTINATIONS, "editor-d@example.org"] as const;
+const INFO_DESTINATIONS = [
+  ...DEFAULT_DESTINATIONS.filter((address) => address !== "editor-c@example.org"),
+  "editor-d@example.org",
+] as const;
 
 /** Configurable destination groups. */
 const PROGRAMMING_DESTINATIONS = [

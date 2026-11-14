@@ -48,7 +48,12 @@ function fakeNamespace() {
   return { objects, env: { FANOUT_DELIVERIES: namespace } };
 }
 const recipients = destinationsFor(`social@${ZONE}`);
-const infoRecipients = [...recipients, "editor-d@example.org"];
+const infoRecipients = [
+  "editor-a@example.org",
+  "njpbs@montclair.edu",
+  "editor-b@example.org",
+  "editor-d@example.org",
+];
 function message(
   forward: (destination: string) => Promise<unknown> = async () => {},
   id: string | null = "<incident-2160@example.test>",
