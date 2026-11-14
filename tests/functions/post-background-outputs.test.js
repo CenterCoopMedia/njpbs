@@ -168,6 +168,61 @@ describe("Post background publication at the database, artifact and HTTP boundar
     return { messages, statuses, check };
   }
 
+  it.each(["verified", "failed", "exhausted", "pending", "building"])(
+    "keeps the withdrawal serving fence and alerts only actionable replacement work: %s", async outcome => {
+      await db.doc(contextRevision.PUBLIC_CONTEXT_PATH).set({ schemaVersion: 1, revision: 1, changedAt: new Date(time) });
+      await db.doc("backgroundTestContext/current").set({ digest: contextRevision.publicContextDigest(1) });
+      await accept("publish-1", document());
+      await owner().recover();
+      time += 120_000;
+      const withdrawnAt = time;
+      await accept("withdraw-1", document(2, { publiclyVisible: false }));
+      await db.doc(contextRevision.PUBLIC_CONTEXT_PATH).update({ revision: 2, withdrawalRevision: 1, changedAt: new Date(time) });
+      await db.doc("backgroundTestContext/current").update({ digest: contextRevision.publicContextDigest(2) });
+      const messages = [];
+      const check = () => alerts.checkPostBackgroundAlerts({ firestore: db, now: () => time,
+        send: async message => { messages.push(message); } });
+      time += 59_999;
+      expect((await request("/posts/")).status).toBe(200);
+      await check();
+      time++;
+      expect((await request("/posts/")).status).toBe(503);
+      await check();
+      expect(messages).toEqual([]);
+
+      const replacement = db.doc("cmsPublishQueue/withdraw-1/backgroundOutputs/listings");
+      if (outcome === "verified") {
+        time += 180_000;
+        await owner().recover();
+        expect((await replacement.get()).data().status).toBe("verified");
+        expect((await request("/posts/")).status).toBe(200);
+        await check();
+        time = withdrawnAt + 900_000;
+        await check();
+        expect(messages).toEqual([]);
+        return;
+      }
+      if (outcome === "failed") {
+        await replacement.update({ status: "failed", attempts: 1, nextAttemptAt: null, claim: null });
+      } else if (outcome === "exhausted") {
+        await replacement.update({ status: "building", attempts: 4, nextAttemptAt: time, claim: "expired-claim" });
+      } else {
+        if (outcome === "building") {
+          await replacement.update({ status: "building", attempts: 1, nextAttemptAt: time + 1_200_000, claim: "live-claim" });
+        }
+        time = withdrawnAt + 899_999;
+        await check();
+        expect(messages).toEqual([]);
+        time++;
+      }
+      await check();
+      expect(messages).toHaveLength(1);
+      expect(messages[0]).toContain("NJ PBS listings");
+      expect(messages[0]).toContain("Withdrawal stale limit reached");
+      await check();
+      expect(messages).toHaveLength(1);
+    });
+
   it.each(["paused", "starting"])("suppresses delayed alerts during operator admission %s", async phase => {
     const { messages, check } = await delayedAlertFixture();
     await db.doc("system/cmsPublicationRuntime").set({ schemaVersion: 1, phase: "paused",
@@ -509,7 +564,7 @@ describe("Post background publication at the database, artifact and HTTP boundar
     expect((await request("/posts/")).status).toBe(503);
   });
 
-  it("logs delayed work and alerts withdrawal expiry at the next minute check", async () => {
+  it("logs delayed work and alerts withdrawal expiry after the rebuild window", async () => {
     const messages = [];
     const check = () => alerts.checkPostBackgroundAlerts({ firestore: db, now: () => time,
       send: async message => { messages.push(message); } });
@@ -535,6 +590,9 @@ describe("Post background publication at the database, artifact and HTTP boundar
     await check();
     expect(messages).toHaveLength(0);
     time++;
+    await check();
+    expect(messages).toHaveLength(0);
+    time += 840_000;
     await check();
     expect(messages).toHaveLength(1);
     expect(messages.every(message => message.includes("Withdrawal stale limit"))).toBe(true);
@@ -678,7 +736,7 @@ describe("Post background publication at the database, artifact and HTTP boundar
     expect((await request("/posts/", reader)).status).toBe(200);
   });
 
-  it.each(["before", "during"])("enforces withdrawal %s release regeneration at 60 seconds and alerts", async when => {
+  it.each(["before", "during"])("enforces withdrawal %s release regeneration at 60 seconds and defers alerts", async when => {
     await db.doc(contextRevision.PUBLIC_CONTEXT_PATH).set({ schemaVersion: 1, revision: 1, withdrawalRevision: 0 });
     await db.doc("backgroundTestContext/current").set({ digest: contextRevision.publicContextDigest(1) });
     await accept("publish-1", document());
@@ -716,6 +774,9 @@ describe("Post background publication at the database, artifact and HTTP boundar
         expect(response.headers.get("cache-control")).toBe("no-store");
       }
     }
+    await check();
+    expect(messages).toEqual([]);
+    time += 840_000;
     await check();
     expect(messages.filter(message => message.includes("Withdrawal stale limit"))).toHaveLength(1);
   });

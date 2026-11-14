@@ -34,7 +34,8 @@ const recoveryExhausted = (value, time) => (value?.status === "failed" && value.
 
 function actionableReason(health) {
   if (health.reason === "search_capacity") return null;
-  if (["release_mismatch", "state_unreadable", "withdrawal_expired", "stale_expired"].includes(health.reason)) return health.reason;
+  if (["release_mismatch", "state_unreadable"].includes(health.reason)) return health.reason;
+  if (["withdrawal_expired", "stale_expired"].includes(health.reason)) return health.replacementNeedsAttention ? health.reason : null;
   if (health.terminalFailure) return "recovery_exhausted";
   if (health.reason === "rebuild_delayed" && health.servingBlocked) return "output_blocked";
   return null;
@@ -129,6 +130,8 @@ async function readFamilyHealthInTransaction({ firestore, transaction, time }) {
       health = backgroundHealth(state, source, { ...context, progressAt: selectedFamily ? progressAt : null }, time,
         failed ? 0 : running ? Infinity : REBUILD_ALERT_AFTER_MS);
       health.terminalFailure = selectedFamily && preparationExhausted || matching && recoveryExhausted(task, time) || postPreparationStopped;
+      health.replacementNeedsAttention = failed || health.terminalFailure ||
+        time - Math.max(health.pendingSince, selectedFamily ? progressAt ?? 0 : 0) >= REBUILD_ALERT_AFTER_MS;
     } catch {
       const pendingSince = Number.isFinite(state.pendingSince) ? state.pendingSince : time;
       if (!Number.isFinite(state.pendingSince)) transaction.update(row.ref, { pendingSince });
