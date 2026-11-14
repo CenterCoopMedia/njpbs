@@ -1,0 +1,13 @@
+{
+  "name": "njpbs-billing-kill-switch",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "main": "index.js",
+  "scripts": {
+    "test": "node --test"
+  },
+  "dependencies": {
+    "@google-cloud/billing": "^5.1.2"
+  }
+}

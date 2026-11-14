@@ -1,0 +1,19 @@
+{
+  "name": "njpbs-subdomain-redirects",
+  "main": "njpbs-subdomain-redirects.js",
+  "compatibility_date": "2026-06-30",
+  "workers_dev": false,
+  "preview_urls": false,
+  "keep_vars": true,
+  "routes": [
+    { "pattern": "passport.njpbs.org/*", "zone_name": "njpbs.org" },
+    { "pattern": "schedule.njpbs.org/*", "zone_name": "njpbs.org" },
+    { "pattern": "support.njpbs.org/*", "zone_name": "njpbs.org" },
+    { "pattern": "donate.njpbs.org/*", "zone_name": "njpbs.org" },
+    { "pattern": "video.njpbs.org/*", "zone_name": "njpbs.org" },
+    { "pattern": "watch.njpbs.org/*", "zone_name": "njpbs.org" },
+    { "pattern": "give.njpbs.org/*", "zone_name": "njpbs.org" },
+    { "pattern": "kids.njpbs.org/*", "zone_name": "njpbs.org" },
+    { "pattern": "live.njpbs.org/*", "zone_name": "njpbs.org" }
+  ]
+}

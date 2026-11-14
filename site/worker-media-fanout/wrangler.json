@@ -1,0 +1,12 @@
+{
+  "name": "njpbs-media-fanout",
+  "main": "njpbs-media-fanout.mjs",
+  "compatibility_date": "2026-09-14",
+  "workers_dev": false,
+  "preview_urls": false,
+  "keep_vars": true,
+  "observability": {
+    "enabled": true,
+    "head_sampling_rate": 1
+  }
+}

@@ -1,0 +1,12 @@
+{
+  "name": "newnjpbs-redirect",
+  "main": "newnjpbs-redirect.mjs",
+  "compatibility_date": "2024-11-01",
+  "workers_dev": false,
+  "preview_urls": false,
+  "keep_vars": true,
+  "routes": [
+    { "pattern": "newnjpbs.org/*", "zone_name": "newnjpbs.org" },
+    { "pattern": "www.newnjpbs.org/*", "zone_name": "newnjpbs.org" }
+  ]
+}

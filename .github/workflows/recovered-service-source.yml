@@ -1,0 +1,47 @@
+name: Recovered service source
+
+on:
+  pull_request:
+    paths:
+      - "site/worker-media-fanout/**"
+      - "site/worker-subdomain-redirects/**"
+      - "site/worker-newnjpbs-redirect/**"
+      - "infrastructure/billing-kill-switch/**"
+      - "config/recovered-service-hashes.json"
+      - "scripts/check-recovered-service-hashes.py"
+      - ".github/workflows/recovered-service-source.yml"
+  push:
+    branches: [main]
+    paths:
+      - "site/worker-media-fanout/**"
+      - "site/worker-subdomain-redirects/**"
+      - "site/worker-newnjpbs-redirect/**"
+      - "infrastructure/billing-kill-switch/**"
+      - "config/recovered-service-hashes.json"
+      - "scripts/check-recovered-service-hashes.py"
+      - ".github/workflows/recovered-service-source.yml"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: recovered-service-source-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  source:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: "22.23.5"
+      - name: Verify recovered source hashes
+        run: python3 scripts/check-recovered-service-hashes.py
+      - name: Verify private media routing bindings
+        run: node --test site/worker-media-fanout/test.mjs
+      - name: Install billing handler dependencies without scripts
+        run: npm --prefix infrastructure/billing-kill-switch ci --ignore-scripts --no-audit --no-fund
+      - name: Verify recovered billing contracts without credentials
+        run: npm --prefix infrastructure/billing-kill-switch test

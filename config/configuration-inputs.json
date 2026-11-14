@@ -68,6 +68,14 @@
   },
   "inputs": [
     {
+      "suppliers": ["worker-binding"],
+      "names": ["MEDIA_FANOUT_ADDRESS", "MEDIA_FANOUT_RECIPIENTS_JSON"]
+    },
+    {
+      "suppliers": ["process-environment"],
+      "names": ["BILLING_KILL_SWITCH_MODE", "BILLING_KILL_SWITCH_THRESHOLD"]
+    },
+    {
       "suppliers": [
         "ambient-process"
       ],

@@ -123,6 +123,7 @@ describe("source obeys the no-metered-API guardrail (#245)", () => {
       "cms-api/package.json",
       "crawl-worker/package.json",
       "functions/package.json",
+      "infrastructure/billing-kill-switch/package.json",
       "infrastructure/boardwalk-s3/claim-probe/package.json",
       "package.json",
       "premiere-boardwalk-panel/package.json",

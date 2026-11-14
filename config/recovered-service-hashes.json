@@ -1,0 +1,91 @@
+{
+  "read_at": "2026-11-14T19:16:30Z",
+  "services": [
+    {
+      "service": "njpbs-media-fanout",
+      "owner": "NJ PBS coordinator",
+      "files": [
+        {
+          "path": "site/worker-media-fanout/njpbs-media-fanout.mjs",
+          "provider_sha256": "03ad1c988e751d6f8423b556e389ade479339122a9c41a0885c4dd05a3257d69",
+          "provider_bytes": 748,
+          "committed_sha256": "19af259e82c35c688bd1faba2da1c41e258899b5cc30272de5f8845b4ca526b9",
+          "committed_bytes": 1166,
+          "recovery": "private-address-bindings"
+        }
+      ],
+      "version_id": "7c4fb7a0-cfec-4311-a9b2-f336961317a9"
+    },
+    {
+      "service": "njpbs-subdomain-redirects",
+      "owner": "NJ PBS coordinator",
+      "files": [
+        {
+          "path": "site/worker-subdomain-redirects/njpbs-subdomain-redirects.js",
+          "provider_sha256": "b258f17b2f356010cf2a38267fe6c2ac46edfd613219f289a8df14e7fa7ace51",
+          "provider_bytes": 1180,
+          "committed_sha256": "b258f17b2f356010cf2a38267fe6c2ac46edfd613219f289a8df14e7fa7ace51",
+          "committed_bytes": 1180,
+          "recovery": "exact"
+        }
+      ],
+      "version_id": "2acb5bc1-26cd-4a0b-9bd5-523fd9f7bd9f"
+    },
+    {
+      "service": "newnjpbs-redirect",
+      "owner": "NJ PBS coordinator",
+      "files": [
+        {
+          "path": "site/worker-newnjpbs-redirect/newnjpbs-redirect.mjs",
+          "provider_sha256": "59bc04508843ce16717ac6f85ba6bc4d82daa39d2a22dd175c7948ee10202e07",
+          "provider_bytes": 335,
+          "committed_sha256": "59bc04508843ce16717ac6f85ba6bc4d82daa39d2a22dd175c7948ee10202e07",
+          "committed_bytes": 335,
+          "recovery": "exact"
+        }
+      ],
+      "version_id": "fcd716f5-8d51-47aa-9fd8-d90fe88ff555"
+    },
+    {
+      "service": "billingKillSwitch",
+      "owner": "NJ PBS coordinator",
+      "files": [
+        {
+          "path": "infrastructure/billing-kill-switch/index.js",
+          "provider_sha256": "01ff55da7c998d8f8d29b720b62bc33bf2640574b32b832d428187dd9c35c1dc",
+          "provider_bytes": 3820,
+          "committed_sha256": "01ff55da7c998d8f8d29b720b62bc33bf2640574b32b832d428187dd9c35c1dc",
+          "committed_bytes": 3820,
+          "recovery": "exact"
+        },
+        {
+          "path": "infrastructure/billing-kill-switch/package-lock.json",
+          "provider_sha256": "cb5d6b414383980a0916707d5669810fafe09b11b0af15420378c00aa14c1d70",
+          "provider_bytes": 50597,
+          "committed_sha256": "289ec017f5c338a8811a45979caed60a3a07e60288b03c84aecd497cc0eeef0a",
+          "committed_bytes": 50611,
+          "recovery": "vendor-contact-redacted"
+        },
+        {
+          "path": "infrastructure/billing-kill-switch/package.json",
+          "provider_sha256": "80030cb695ed3f21ddf7f7ae96d233061ffdd20f5c9b6086a18b1067b521eb99",
+          "provider_bytes": 234,
+          "committed_sha256": "80030cb695ed3f21ddf7f7ae96d233061ffdd20f5c9b6086a18b1067b521eb99",
+          "committed_bytes": 234,
+          "recovery": "exact"
+        },
+        {
+          "path": "infrastructure/billing-kill-switch/test/kill-switch.test.js",
+          "provider_sha256": "630c357bb3fea5c6c371d119a7e77b723d98bfe27bc91766bd650e6476ce66c8",
+          "provider_bytes": 4757,
+          "committed_sha256": "630c357bb3fea5c6c371d119a7e77b723d98bfe27bc91766bd650e6476ce66c8",
+          "committed_bytes": 4757,
+          "recovery": "exact"
+        }
+      ],
+      "revision": "billingkillswitch-00008-juv",
+      "storage_generation": "1792709155655404",
+      "source_zip_sha256": "09f6ec6cc7ce4a023286d27eef7d1e64e9e002f87c564144c675b7b96497929c"
+    }
+  ]
+}
