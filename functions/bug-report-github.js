@@ -39,6 +39,7 @@ const GITHUB_SIGNATURE_PATTERN = /^sha256=[0-9a-f]{64}$/;
 const GITHUB_ISSUE_STATES = new Set(["open", "closed", "all"]);
 const MAX_GITHUB_NUMBER = 2_147_483_647;
 const MAX_WEBHOOK_BODY_BYTES = 1024 * 1024;
+const WEBHOOK_REPORT_LIMIT = 50;
 const MAX_ISSUE_BODY = 20_000;
 const MAX_COMMENT_BODY = 10_000;
 const MAX_ISSUE_COMMENTS = 50;
@@ -1236,32 +1237,43 @@ function webhookTargetNumbers(eventName, payload) {
   };
 }
 
+async function pullReportsForWebhook(firestore, number, eventRepository, issueRepository, fixRepository) {
+  const query = firestore.collection(BUG_REPORT_COLLECTIONS.reports)
+    .where("links.pullRequestNumbers", "array-contains", number)
+    .limit(WEBHOOK_REPORT_LIMIT);
+  const matches = [];
+  let cursor = null;
+  while (matches.length < WEBHOOK_REPORT_LIMIT) {
+    const page = await (cursor ? query.startAfter(cursor) : query).get();
+    for (const document of page.docs) {
+      try {
+        if (!sameRepository(reportPullRepository(document.data(), issueRepository, fixRepository), eventRepository)) continue;
+      } catch { continue; }
+      matches.push(document);
+      if (matches.length === WEBHOOK_REPORT_LIMIT) break;
+    }
+    if (page.docs.length < WEBHOOK_REPORT_LIMIT) break;
+    cursor = page.docs.at(-1);
+  }
+  return matches;
+}
+
 async function reportsForWebhookEvent(firestore, eventName, payload, eventRepository, issueRepository, fixRepository) {
   const targets = webhookTargetNumbers(eventName, payload);
   if (!sameRepository(eventRepository, issueRepository)) targets.issueNumbers = [];
-  const snapshots = await Promise.all([
+  const groups = await Promise.all([
     ...targets.issueNumbers.map((number) => firestore
       .collection(BUG_REPORT_COLLECTIONS.reports)
       .where("links.githubIssueNumbers", "array-contains", number)
-      .limit(50)
-      .get().then((snapshot) => ({ snapshot, kind: "issue" }))),
-    ...targets.pullRequestNumbers.map((number) => firestore
-      .collection(BUG_REPORT_COLLECTIONS.reports)
-      .where("links.pullRequestNumbers", "array-contains", number)
-      .limit(50)
-      .get().then((snapshot) => ({ snapshot, kind: "pull" }))),
+      .limit(WEBHOOK_REPORT_LIMIT)
+      .get().then((snapshot) => snapshot.docs)),
+    ...targets.pullRequestNumbers.map((number) => pullReportsForWebhook(
+      firestore, number, eventRepository, issueRepository, fixRepository,
+    )),
   ]);
   const reports = new Map();
-  for (const { snapshot, kind } of snapshots) {
-    for (const document of snapshot.docs) {
-      const record = document.data();
-      if (kind === "pull") {
-        try {
-          if (!sameRepository(reportPullRepository(record, issueRepository, fixRepository), eventRepository)) continue;
-        } catch { continue; }
-      }
-      reports.set(document.id, record);
-    }
+  for (const documents of groups) {
+    for (const document of documents) reports.set(document.id, document.data());
   }
   return [...reports.entries()].map(([id, record]) => ({ id, record }));
 }

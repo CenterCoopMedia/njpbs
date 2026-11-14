@@ -209,6 +209,25 @@ describe("report issues and proposed fixes in separate repositories", () => {
     expect(api.requests).toEqual([{ method: "GET", path: `/repos/${target.repository}` }]);
   });
 
+  it.each([false, true])("finds a webhook target after 50 foreign-namespace rows (legacy target=%s)", async (legacy) => {
+    const target = record({ id: "br_" + "f".repeat(32), ...(legacy ? {} : identityFields(FIX)) });
+    const batch = db.batch();
+    for (let index = 0; index < 50; index += 1) {
+      const foreign = record({ id: "br_" + String(index).padStart(32, "0"), ...(legacy ? identityFields(FIX) : {}) });
+      batch.set(db.collection("bug_reports").doc(foreign.id), foreign);
+    }
+    batch.set(db.collection("bug_reports").doc(target.id), target);
+    await batch.commit();
+    const identity = legacy ? ISSUE : FIX;
+    const deliveryId = `paged-target-${legacy}`;
+    expect(await github.queueGithubWebhookSync({ firestore: db, now: () => NOW,
+      eventName: "pull_request", deliveryId,
+      payload: { repository: { full_name: identity.repository, id: identity.repositoryId }, pull_request: { number: 29 } },
+    })).toEqual({ state: "queued", count: 1 });
+    const receipt = (await db.collection("bugReportGithubWebhookReceipts").doc(deliveryId).get()).data();
+    expect(receipt.reportIds).toEqual([target.id]);
+  });
+
   it("routes webhook targets by repository identity despite colliding PR numbers", async () => {
     const old = record();
     const current = record({ ...identityFields(FIX), id: "br_" + "e".repeat(32) });
