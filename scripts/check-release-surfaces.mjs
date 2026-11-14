@@ -64,6 +64,30 @@ function cloudWakeLoop(node) {
   return false;
 }
 
+function inDevManifest(node) {
+  for (let parent = node.parent; parent; parent = parent.parent) {
+    if (ts.isFunctionDeclaration(parent) && parent.name?.text === "devFunctionManifest") return true;
+  }
+  return false;
+}
+
+function selectedUse(node, path) {
+  const parent = node.parent;
+  if (ts.isVariableDeclaration(parent) && parent.name === node) {
+    const value = parent.initializer;
+    if (value && ts.isObjectLiteralExpression(value) && value.properties.length === 1 &&
+      ts.isSpreadAssignment(value.properties[0]) && value.properties[0].expression.getText() === "DEV_FUNCTIONS") return;
+  }
+  if (ts.isCallExpression(parent) && parent.expression.getText() === "Object.freeze" &&
+    parent.arguments.length === 1 && parent.arguments[0] === node && ts.isReturnStatement(parent.parent)) return;
+  if (ts.isElementAccessExpression(parent) && parent.expression === node && parent.argumentExpression.getText() === "name") {
+    const assignment = parent.parent;
+    if (ts.isBinaryExpression(assignment) && assignment.left === parent && assignment.operatorToken.kind === ts.SyntaxKind.EqualsToken &&
+      cloudWakeLoop(assignment) && literal(assignment.right, path) === "./no-build-cloud-wake") return;
+  }
+  throw new Error(`Computed Functions manifest use: ${path}`);
+}
+
 export function entryExports(source, path, files, { devAdapter = false } = {}) {
   const exports = new Map();
   let adapters = 0;
@@ -140,21 +164,11 @@ function devExports(read, files) {
     result.set(name, moduleFile("./no-build-cloud-wake", path, files));
   }
   const inspectProducer = node => {
-    if (enclosingFunction(node) === "devFunctionManifest") {
-      if (ts.isVariableDeclaration(node)) {
-        if (node.initializer?.getText() === "selected") throw new Error(`Computed Functions manifest alias: ${path}`);
-        if (node.name.getText() === "selected") {
-          const value = node.initializer;
-          if (!value || !ts.isObjectLiteralExpression(value) || value.properties.length !== 1 ||
-            !ts.isSpreadAssignment(value.properties[0]) || value.properties[0].expression.getText() !== "DEV_FUNCTIONS") throw new Error(`Changed Functions manifest producer: ${path}`);
-        }
-      }
+    if (inDevManifest(node)) {
+      if (ts.isIdentifier(node) && node.text === "selected") selectedUse(node, path);
+      if (ts.isFunctionDeclaration(node) || ts.isNewExpression(node)) throw new Error(`Changed Functions manifest producer: ${path}`);
       if (ts.isReturnStatement(node) && !["DEV_FUNCTIONS", "Object.freeze(selected)"].includes(node.expression?.getText())) throw new Error(`Changed Functions manifest producer: ${path}`);
-      if (ts.isBinaryExpression(node) && node.operatorToken.kind === ts.SyntaxKind.EqualsToken && node.left.getText() === "selected") throw new Error(`Computed Functions manifest: ${path}`);
-      if (ts.isBinaryExpression(node) && node.operatorToken.kind === ts.SyntaxKind.EqualsToken && /^selected(?:\.|\[)/.test(node.left.getText())) {
-        if (node.left.getText() !== "selected[name]" || !cloudWakeLoop(node) || literal(node.right, path) !== "./no-build-cloud-wake") throw new Error(`Computed Functions manifest: ${path}`);
-      }
-      if (ts.isCallExpression(node) && node.arguments.some(argument => argument.getText() === "selected") && node.expression.getText() !== "Object.freeze") throw new Error(`Computed Functions manifest: ${path}`);
+      if (ts.isCallExpression(node) && node.expression.getText() !== "Object.freeze") throw new Error(`Computed Functions manifest call: ${path}`);
     }
     ts.forEachChild(node, inspectProducer);
   };

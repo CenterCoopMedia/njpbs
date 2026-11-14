@@ -88,6 +88,11 @@ test("new computed development manifest producers are refused", t => {
     'const selected = { ...DEV_FUNCTIONS }; const target = selected; target.extra = "./health"; return Object.freeze(selected);',
     'let selected = { ...DEV_FUNCTIONS }; selected = extraHandlers; return Object.freeze(selected);',
     'const selected = { ...DEV_FUNCTIONS }; Reflect.set(selected, "extra", "./health"); return Object.freeze(selected);',
+    'const selected = { ...DEV_FUNCTIONS }; selected.extra ??= "./health"; return Object.freeze(selected);',
+    'const selected = { ...DEV_FUNCTIONS }; function add() { selected.extra = "./health"; } add(); return Object.freeze(selected);',
+    'const selected = { ...DEV_FUNCTIONS }; const [target] = [selected]; target.extra = "./health"; return Object.freeze(selected);',
+    'const selected = { ...DEV_FUNCTIONS }; const holder = { target: selected }; holder.target.extra = "./health"; return Object.freeze(selected);',
+    'const selected = { ...DEV_FUNCTIONS }; const target = (selected); target.extra = "./health"; return Object.freeze(selected);',
   ]) {
     f.write("functions/dev-manifest.js", `const DEV_FUNCTIONS = Object.freeze({ health: "./health" }); function devFunctionManifest() { ${body} }\n`);
     assert.throws(() => sourceInventory(f.directory), /Changed Functions manifest producer|Computed Functions manifest/);
