@@ -299,6 +299,42 @@ name, external-link cue, keyboard focus and target size. Test zero, one and two
 links on desktop and mobile, including long messages and labels, and confirm
 wrapping without horizontal overflow.
 
+### Data Hub figure reuse and static embeds
+
+Renders: the Data Hub figure dialog, chart and number previews, copy and download
+controls, and script-free figure documents for embedding on other sites.
+
+Status: source criteria recorded. Hosted checks and manual keyboard,
+screen-reader and reflow verification must be recorded before release.
+
+Criteria specific to it:
+
+- The native dialog has an accessible name, keeps focus within the open dialog,
+  closes with Escape or its close button, and returns focus to the figure trigger.
+- Chart or number and dated or latest choices use named radio groups with
+  programmatic labels and checked states. All copy and download actions remain
+  keyboard-operable with visible focus; unavailable exports remain disabled.
+- The preview iframe has a descriptive title. Keyboard users can move through
+  its source and NJ PBS links and return to the dialog without a focus trap.
+- Copy success and failure use the status region. When clipboard access fails,
+  the labelled embed-code field receives focus and its text is selected for
+  manual copying.
+- Figure titles, values, periods, source links, snapshot dates and credits remain
+  available as text. Charts retain their table or equivalent text alternatives.
+  The chart and number variants preserve that structure.
+- Controls retain the baseline target size and contrast. The dialog and static
+  document reflow on phones and at 200 and 400 percent zoom. Wide data tables may
+  scroll within their labelled container; surrounding content stays readable.
+- Reduced motion suppresses optional interface motion. Static embeds contain no
+  scripts, analytics, forms or nested frames and remain usable without JavaScript.
+
+Verify: use only the keyboard to open a figure, change each radio group, copy
+with clipboard access allowed and refused, download each available format, enter
+and leave the preview, and close the dialog. Confirm names, states, status
+announcements, chart alternatives and focus return with a screen reader. Check
+both figure views and dated and latest documents on a phone and at both zoom
+levels. Record hosted build and accessibility results with the manual evidence.
+
 ## Adding a component
 
 A new or changed design-system component is not done until:

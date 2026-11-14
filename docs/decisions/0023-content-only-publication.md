@@ -11,4 +11,8 @@ Publish admitted content without rebuilding unchanged application code. Bind eac
 
 Implementations must preserve this boundary and verify changes with focused checks.
 
-Keep automatic recovery observations in logs and health. Alert only when public output is blocked or automatic recovery is exhausted. Preserve immediate serve-time withdrawal and stale-age refusal, and the first minute check after expiry.
+Keep automatic recovery observations in logs and health. Preserve immediate
+serve-time withdrawal and stale-age refusal. After expiry, alert when the
+replacement fails, exhausts automatic recovery, or reaches the 15-minute rebuild
+window without progress. Continue minute checks while replacement work runs;
+expiry alone does not send an alert.
