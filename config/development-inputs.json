@@ -19,7 +19,15 @@
         "functions/lib/no-build-post-withdrawal.js",
         "functions/lib/home-source-selection-admission.js",
         "functions/lib/dev-publication-history.js",
-        "scripts/lib/dev-publication-history.cjs"
+        "scripts/lib/dev-publication-history.cjs",
+        "site/scripts/activate-public-worker-candidate.ts",
+        "site/scripts/cms-publication-cloud-token-journal.ts",
+        "site/scripts/no-build-post-background.ts",
+        "site/scripts/no-build-preparation-storage.ts",
+        "site/scripts/public-worker-deployment-reconciliation-owner.ts",
+        "site/scripts/reconcile-public-worker-deployment.ts",
+        "site/scripts/upload-public-worker-candidate.ts",
+        "site/src/lib/retained-public-context.ts"
       ]
     },
     "CMS_GPU_WORKER_ID": {
@@ -27,7 +35,8 @@
       "placeholder": "node-gpu-b",
       "files": [
         "functions/lib/video-transcript-worker.js",
-        "functions/lib/video-orientation-export.js"
+        "functions/lib/video-orientation-export.js",
+        "infrastructure/boardwalk-transcription-worker/worker.py"
       ]
     },
     "CLOUDFLARE_DEV_PUBLIC_WORKER": {
