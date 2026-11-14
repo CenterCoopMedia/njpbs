@@ -34,7 +34,10 @@ const siteRoot = fileURLToPath(new URL("..", import.meta.url));
 // list is not scanned and nothing says so. Add a new one here in the same commit
 // that creates it. tests/ is the one deliberate omission -- a test that calls
 // buildProgram without reporting coverage is doing its job, not baking a catalog.
-const SCAN_ROOTS = ["src", "scripts", "worker", "worker-fanout"];
+const SCAN_ROOTS = [
+  "src", "scripts", "worker", "worker-fanout", "worker-media-fanout",
+  "worker-subdomain-redirects", "worker-newnjpbs-redirect",
+];
 const SOURCE_EXTENSIONS = [".ts", ".tsx", ".astro", ".mjs", ".js"];
 
 const PRODUCER = "buildProgram";
