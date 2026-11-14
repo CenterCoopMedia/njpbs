@@ -30,8 +30,12 @@ function api({ pages, identity = AUTHOR, identityStatus = 200 }) {
   const client = github.createGithubClient({
     token: "test-token-value",
     repository: REPOSITORY,
+    repositoryId: 1000001,
     fetchFn: async (input, init) => {
       const url = new URL(input);
+      if (url.pathname === `/repos/${REPOSITORY}`) {
+        return Response.json({ id: 1000001, full_name: REPOSITORY });
+      }
       if (url.pathname === "/user" && init.method === "GET") {
         return Response.json(identity, { status: identityStatus });
       }

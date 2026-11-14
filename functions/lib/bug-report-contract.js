@@ -1,6 +1,6 @@
 "use strict";
 
-const { reportProgress } = require("./bug-report-progress");
+const { reportProgress, pullLinksForRepository } = require("./bug-report-progress");
 const { nudgeForReporter } = require("./bug-report-nudge");
 const { normalizePremiereReportContext } = require("./premiere-report-contract");
 
@@ -882,6 +882,9 @@ function reportForReporter(record, reporterUid) {
     role: record.reporter.role,
   };
   projection.progress = reportProgress(record);
+  if (record.fixPullRequestRepository !== undefined || record.fixPullRequestRepositoryId !== undefined) {
+    projection.links = pullLinksForRepository(projection.links, record.fixPullRequestRepository);
+  }
   projection.nudge = nudgeForReporter(record);
   return projection;
 }
@@ -892,6 +895,8 @@ function reportForAdmin(record) {
   }
   return {
     ...Object.fromEntries(ADMIN_VISIBLE_FIELDS.map((field) => [field, clone(record[field])])),
+    ...(record.fixPullRequestRepository !== undefined || record.fixPullRequestRepositoryId !== undefined
+      ? { links: pullLinksForRepository(record.links, record.fixPullRequestRepository) } : {}),
     ...(record.automatic ? { automatic: clone(record.automatic) } : {}),
     progress: reportProgress(record),
   };

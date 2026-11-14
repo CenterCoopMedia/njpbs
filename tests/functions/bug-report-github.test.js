@@ -177,12 +177,15 @@ describe("GitHub handoff presentation", () => {
       [" example-owner/private-reports \n", "example-owner/private-reports"],
     ]) {
       vi.stubEnv("CMS_BUG_REPORT_GITHUB_REPOSITORY", configured);
-      const fetchFn = vi.fn(async () => ({ ok: false, status: 503,
-        json: vi.fn(async () => ({ message: "unavailable" })) }));
+      const fetchFn = vi.fn(async (url) => url === `https://api.github.com/repos/${expected}`
+        ? Response.json({ id: 1000001, full_name: expected })
+        : ({ ok: false, status: 503, json: vi.fn(async () => ({ message: "unavailable" })) }));
       const client = github.createGithubClient({ token: "test-token-value", fetchFn });
       await expect(client.createIssue({ title: "Test", body: "Test" }))
         .rejects.toMatchObject({ kind: "ambiguous", status: 503 });
-      expect(fetchFn.mock.calls[0][0]).toBe(`https://api.github.com/repos/${expected}/issues`);
+      expect(fetchFn.mock.calls.map(([url]) => url)).toEqual([
+        `https://api.github.com/repos/${expected}`, `https://api.github.com/repos/${expected}/issues`,
+      ]);
     }
   });
 
@@ -190,6 +193,7 @@ describe("GitHub handoff presentation", () => {
     const client = github.createGithubClient({
       token: "test-token-value",
       repository: "example-owner/private-reports",
+      repositoryId: 1000001,
       fetchFn: vi.fn(async () => ({
         ok: false,
         status: 403,
@@ -206,6 +210,7 @@ describe("GitHub handoff presentation", () => {
     const client = github.createGithubClient({
       token: "test-token-value",
       repository: "example-owner/private-reports",
+      repositoryId: 1000001,
       fetchFn: vi.fn(async () => ({
         ok: false,
         status: 403,
@@ -225,6 +230,7 @@ describe("GitHub handoff presentation", () => {
     const client = github.createGithubClient({
       token: "test-token-value",
       repository: "example-owner/private-reports",
+      repositoryId: 1000001,
       fetchFn: vi.fn(async () => ({
         ok: false,
         status: 403,
@@ -528,11 +534,10 @@ describe("durable GitHub handoff", () => {
     await db.collection("bug_reports").doc(stored.id).set(stored);
     const input = {
       firestore: db,
-      repository: "example-owner/private-reports",
       eventName: "issues",
       deliveryId: "11111111-2222-4333-8444-555555555555",
       payload: {
-        repository: { full_name: "example-owner/private-reports" },
+        repository: { full_name: "example-owner/private-reports", id: 1000001 },
         issue: { number: 706 },
       },
       now: () => new Date(NOW),
@@ -549,11 +554,10 @@ describe("durable GitHub handoff", () => {
   it("does not create a receipt for an event with no linked report", async () => {
     const input = {
       firestore: db,
-      repository: "example-owner/private-reports",
       eventName: "issues",
       deliveryId: "11111111-2222-4333-8444-555555555556",
       payload: {
-        repository: { full_name: "example-owner/private-reports" },
+        repository: { full_name: "example-owner/private-reports", id: 1000001 },
         issue: { number: 9999 },
       },
       now: () => new Date(NOW),
@@ -820,8 +824,8 @@ describe("report progress reconciliation", () => {
       value.links.githubIssueNumbers = [1400];
       await db.collection("bug_reports").doc(value.id).set(value);
     }
-    const input = { firestore: db, repository: "example-owner/private-reports", eventName: "issues", deliveryId: "shared-issue-reopened",
-      payload: { repository: { full_name: "example-owner/private-reports" }, issue: { number: 1400 }, action: "reopened" }, now: () => NOW };
+    const input = { firestore: db, eventName: "issues", deliveryId: "shared-issue-reopened",
+      payload: { repository: { full_name: "example-owner/private-reports", id: 1000001 }, issue: { number: 1400 }, action: "reopened" }, now: () => NOW };
     expect(await github.queueGithubWebhookSync(input)).toEqual({ state: "queued", count: 2 });
     expect(await github.queueGithubWebhookSync(input)).toEqual({ state: "replayed", count: 0 });
     expect((await db.collection("bugReportGithubOutbox").get()).size).toBe(2);
@@ -834,9 +838,9 @@ it("uses a signed reopen hint when the intermediate closed state was missed", as
   stored.links.githubIssues = [{ number: 1400, state: "open", updatedAt: "2026-08-28T23:00:00.000Z" }];
   const ref = db.collection("bug_reports").doc(stored.id);
   await ref.set(stored);
-  await github.queueGithubWebhookSync({ firestore: db, repository: "example-owner/private-reports", eventName: "issues",
+  await github.queueGithubWebhookSync({ firestore: db, eventName: "issues",
     deliveryId: "missed-close-reopen", now: () => NOW,
-    payload: { repository: { full_name: "example-owner/private-reports" }, action: "reopened", issue: { number: 1400, updated_at: NOW.toISOString() } } });
+    payload: { repository: { full_name: "example-owner/private-reports", id: 1000001 }, action: "reopened", issue: { number: 1400, updated_at: NOW.toISOString() } } });
   const client = { listIssueTimeline: vi.fn(async () => []),
       getIssue: vi.fn(async () => ({ number: 1400, html_url: "https://github.com/example-owner/private-reports/issues/1400", state: "open", updated_at: NOW.toISOString() })) };
   await github.processGithubOutboxRow(`${stored.id}--webhook--missed-close-reopen`, { firestore: db, now: () => NOW, client });
@@ -850,9 +854,9 @@ it("does not reopen a report from an old webhook when the authoritative issue is
   stored.links.githubIssueNumbers = [1400];
   const ref = db.collection("bug_reports").doc(stored.id);
   await ref.set(stored);
-  await github.queueGithubWebhookSync({ firestore: db, repository: "example-owner/private-reports", eventName: "issues",
+  await github.queueGithubWebhookSync({ firestore: db, eventName: "issues",
     deliveryId: "old-reopen", now: () => NOW,
-    payload: { repository: { full_name: "example-owner/private-reports" }, action: "reopened", issue: { number: 1400, updated_at: NOW.toISOString() } } });
+    payload: { repository: { full_name: "example-owner/private-reports", id: 1000001 }, action: "reopened", issue: { number: 1400, updated_at: NOW.toISOString() } } });
   const client = { listIssueTimeline: vi.fn(async () => []),
       getIssue: vi.fn(async () => ({ number: 1400, html_url: "https://github.com/example-owner/private-reports/issues/1400", state: "closed", updated_at: NOW.toISOString() })) };
   await github.processGithubOutboxRow(`${stored.id}--webhook--old-reopen`, { firestore: db, now: () => NOW, client });
