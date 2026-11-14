@@ -78,6 +78,11 @@ names and consecutive annotation lines are supported). Run
 to check the reader forms and current source inventory. Only names are stored or
 reported; configuration values stay outside the contract.
 
+The [release surface registry](docs/release/surface-registry.md) records tracked
+workflows, Wrangler config variants, Functions exports and state-machine owner
+paths. Hosted Policy CI rejects missing or stale surface entries. Update the
+registry in the same PR as the source declaration.
+
 The workflows use GitHub-hosted Ubuntu 24.04 runners. Deploy workflows require
 explicit repository variables, environment protection, and deployment credentials.
 No cloud account identifiers or deployment credentials are supplied by this source.

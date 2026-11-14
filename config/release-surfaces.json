@@ -1,0 +1,1392 @@
+{
+  "schemaVersion": 1,
+  "seedPublicRevision": "3709afd0ff38f5c200f361cbd68053a78fb819d8",
+  "workflows": [
+    ".github/workflows/admin-ci.yml",
+    ".github/workflows/ci.yml",
+    ".github/workflows/cms-dev-deploy.yml",
+    ".github/workflows/cms-dev-publish.yml",
+    ".github/workflows/cms-publish.yml",
+    ".github/workflows/cms-staging-deploy.yml",
+    ".github/workflows/dev-anonymous-refusal.yml",
+    ".github/workflows/dev-machine-receipt-proof.yml",
+    ".github/workflows/dev-staff-gateway-deploy.yml",
+    ".github/workflows/firebase-ci.yml",
+    ".github/workflows/pages-fallback-safety.yml",
+    ".github/workflows/pages.yml",
+    ".github/workflows/preview.yml",
+    ".github/workflows/probe-media-manager.yml",
+    ".github/workflows/promote.yml",
+    ".github/workflows/recovered-service-source.yml",
+    ".github/workflows/recovered-services-deploy.yml.disabled",
+    ".github/workflows/schedule-bake.yml",
+    ".github/workflows/shadow-posts-dev-deploy.yml"
+  ],
+  "wrangler": [
+    "admin/wrangler.jsonc",
+    "cms-api/wrangler.dev.jsonc",
+    "cms-api/wrangler.jsonc",
+    "crawl-worker/wrangler.jsonc",
+    "preview-renderer/wrangler.dev.jsonc",
+    "preview-renderer/wrangler.jsonc",
+    "publisher/wrangler.alerts.jsonc",
+    "publisher/wrangler.json",
+    "site/share-intake/wrangler.toml",
+    "site/worker-fanout/wrangler.toml",
+    "site/worker-media-fanout/wrangler.json",
+    "site/worker-newnjpbs-redirect/wrangler.json",
+    "site/worker-subdomain-redirects/wrangler.json",
+    "site/worker/wrangler.toml",
+    "workers/wrangler.jsonc",
+    "workers/wrangler.preview.dev.jsonc",
+    "workers/wrangler.preview.jsonc",
+    "workers/wrangler.public.dev.jsonc",
+    "workers/wrangler.published-post-reader.jsonc",
+    "workers/wrangler.routing-measurement.dev.jsonc",
+    "workers/wrangler.shadow-posts.jsonc",
+    "workers/wrangler.staff-preview.dev.jsonc",
+    "workers/wrangler.staff-sites.dev.jsonc",
+    "workers/wrangler.staff-sites.jsonc"
+  ],
+  "functions": [
+    {
+      "entrypoint": "functions/dev-index.js",
+      "exports": [
+        {
+          "name": "cmsAssignContent",
+          "module": "functions/assign-content.js"
+        },
+        {
+          "name": "cmsCollectBoardwalkUsage",
+          "module": "functions/boardwalk-usage.js"
+        },
+        {
+          "name": "cmsDatasets",
+          "module": "functions/datasets.js"
+        },
+        {
+          "name": "cmsElectionResultsSources",
+          "module": "functions/election-results-sources.js"
+        },
+        {
+          "name": "cmsGetAuthorProfile",
+          "module": "functions/author-profiles.js"
+        },
+        {
+          "name": "cmsGetBoardwalkUsage",
+          "module": "functions/boardwalk-usage.js"
+        },
+        {
+          "name": "cmsGetContent",
+          "module": "functions/get-content.js"
+        },
+        {
+          "name": "cmsGetCoverageLabels",
+          "module": "functions/settings.js"
+        },
+        {
+          "name": "cmsGetNewsroomBanner",
+          "module": "functions/settings.js"
+        },
+        {
+          "name": "cmsGetPublicPage",
+          "module": "functions/public-content.js"
+        },
+        {
+          "name": "cmsGetRevision",
+          "module": "functions/revisions.js"
+        },
+        {
+          "name": "cmsGetSettings",
+          "module": "functions/settings.js"
+        },
+        {
+          "name": "cmsListAudit",
+          "module": "functions/list-audit.js"
+        },
+        {
+          "name": "cmsListBylineAuthors",
+          "module": "functions/author-profiles.js"
+        },
+        {
+          "name": "cmsListContent",
+          "module": "functions/list-content.js"
+        },
+        {
+          "name": "cmsListMedia",
+          "module": "functions/list-media.js"
+        },
+        {
+          "name": "cmsListMediaCategories",
+          "module": "functions/media-categories.js"
+        },
+        {
+          "name": "cmsListMediaUsage",
+          "module": "functions/list-media-usage.js"
+        },
+        {
+          "name": "cmsListRevisions",
+          "module": "functions/revisions.js"
+        },
+        {
+          "name": "cmsPostTemplates",
+          "module": "functions/post-templates.js"
+        },
+        {
+          "name": "cmsPreview",
+          "module": "functions/preview.js"
+        },
+        {
+          "name": "cmsPreviewStatus",
+          "module": "functions/preview.js"
+        },
+        {
+          "name": "cmsPublish",
+          "module": "functions/publish.js"
+        },
+        {
+          "name": "cmsPublishSettings",
+          "module": "functions/settings.js"
+        },
+        {
+          "name": "cmsReadPairCurrentCodeV2",
+          "module": "functions/cms-reader-endpoints.js"
+        },
+        {
+          "name": "cmsReaderV1",
+          "module": "functions/cms-reader-endpoints.js"
+        },
+        {
+          "name": "cmsReaderV2",
+          "module": "functions/cms-reader-endpoints.js"
+        },
+        {
+          "name": "cmsRecheckPublication",
+          "module": "functions/recheck-publication.js"
+        },
+        {
+          "name": "cmsRestoreRevision",
+          "module": "functions/restore-revision.js"
+        },
+        {
+          "name": "cmsSaveContent",
+          "module": "functions/save.js"
+        },
+        {
+          "name": "cmsSaveSettings",
+          "module": "functions/settings.js"
+        },
+        {
+          "name": "cmsSubmitBugReport",
+          "module": "functions/dev-bug-report.js"
+        },
+        {
+          "name": "cmsTransitionContent",
+          "module": "functions/lifecycle-transition.js"
+        },
+        {
+          "name": "cmsValidateSiteAccess",
+          "module": "functions/site-access.js"
+        },
+        {
+          "name": "deactivateStaff",
+          "module": "functions/deactivate-staff.js"
+        },
+        {
+          "name": "getStaffAccessStatus",
+          "module": "functions/dev-staff-access-status.js"
+        },
+        {
+          "name": "grantRole",
+          "module": "functions/roles.js"
+        },
+        {
+          "name": "health",
+          "module": "functions/health.js"
+        },
+        {
+          "name": "onDatasetRefresh",
+          "module": "functions/dataset-refresh.js"
+        },
+        {
+          "name": "onElectionResultsSourcePoll",
+          "module": "functions/election-results-sources.js"
+        },
+        {
+          "name": "onNoBuildCloudCandidate",
+          "module": "functions/no-build-cloud-wake.js"
+        },
+        {
+          "name": "onNoBuildCloudRelease",
+          "module": "functions/no-build-cloud-wake.js"
+        },
+        {
+          "name": "onNoBuildCloudState",
+          "module": "functions/no-build-cloud-wake.js"
+        },
+        {
+          "name": "onNoBuildPostConfirmation",
+          "module": "functions/no-build-post-confirmation.js"
+        },
+        {
+          "name": "onNoBuildPostConfirmationRecovery",
+          "module": "functions/no-build-post-confirmation.js"
+        },
+        {
+          "name": "onScheduledPublish",
+          "module": "functions/scheduled-publish.js"
+        },
+        {
+          "name": "registerStaffProfile",
+          "module": "functions/staff-profile.js"
+        },
+        {
+          "name": "revokeRole",
+          "module": "functions/roles.js"
+        }
+      ]
+    },
+    {
+      "entrypoint": "functions/index.js",
+      "exports": [
+        {
+          "name": "cmsAdminUpdateAuthorProfile",
+          "module": "functions/author-profiles.js"
+        },
+        {
+          "name": "cmsApprovePremierePairing",
+          "module": "functions/premiere-desktop.js"
+        },
+        {
+          "name": "cmsAssignContent",
+          "module": "functions/assign-content.js"
+        },
+        {
+          "name": "cmsBulkArchiveContent",
+          "module": "functions/bulk-archive.js"
+        },
+        {
+          "name": "cmsCancelSourceMediaUpload",
+          "module": "functions/source-media-uploads.js"
+        },
+        {
+          "name": "cmsCancelVideoClip",
+          "module": "functions/video-clips.js"
+        },
+        {
+          "name": "cmsCancelVideoTranscriptAlignment",
+          "module": "functions/video-transcript-alignment.js"
+        },
+        {
+          "name": "cmsCollectBoardwalkUsage",
+          "module": "functions/boardwalk-usage.js"
+        },
+        {
+          "name": "cmsCompleteSourceMediaUpload",
+          "module": "functions/source-media-uploads.js"
+        },
+        {
+          "name": "cmsCostLedger",
+          "module": "functions/cost-ledger.js"
+        },
+        {
+          "name": "cmsCreateMediaDownload",
+          "module": "functions/media-download.js"
+        },
+        {
+          "name": "cmsCreateSourceMediaRead",
+          "module": "functions/source-media.js"
+        },
+        {
+          "name": "cmsCreateVideoClipRead",
+          "module": "functions/video-clips.js"
+        },
+        {
+          "name": "cmsCreateVideoTranscriptRead",
+          "module": "functions/video-transcripts.js"
+        },
+        {
+          "name": "cmsCuezConfirmImport",
+          "module": "functions/cuez-transfers.js"
+        },
+        {
+          "name": "cmsCuezListDestinations",
+          "module": "functions/cuez-transfers.js"
+        },
+        {
+          "name": "cmsCuezListImportCandidates",
+          "module": "functions/cuez-transfers.js"
+        },
+        {
+          "name": "cmsCuezOperationStatus",
+          "module": "functions/cuez-transfers.js"
+        },
+        {
+          "name": "cmsCuezPrepareExport",
+          "module": "functions/cuez-transfers.js"
+        },
+        {
+          "name": "cmsCuezPreviewImport",
+          "module": "functions/cuez-transfers.js"
+        },
+        {
+          "name": "cmsCuezReconcile",
+          "module": "functions/cuez-transfers.js"
+        },
+        {
+          "name": "cmsCuezRetry",
+          "module": "functions/cuez-transfers.js"
+        },
+        {
+          "name": "cmsCuezSendExport",
+          "module": "functions/cuez-transfers.js"
+        },
+        {
+          "name": "cmsCuezStatus",
+          "module": "functions/cuez-transfers.js"
+        },
+        {
+          "name": "cmsDatasets",
+          "module": "functions/datasets.js"
+        },
+        {
+          "name": "cmsDeleteSourceMedia",
+          "module": "functions/source-media-uploads.js"
+        },
+        {
+          "name": "cmsDisconnectTranscriptionCredential",
+          "module": "functions/video-transcription-credentials.js"
+        },
+        {
+          "name": "cmsElectionResultsSources",
+          "module": "functions/election-results-sources.js"
+        },
+        {
+          "name": "cmsGetAnalytics",
+          "module": "functions/analytics.js"
+        },
+        {
+          "name": "cmsGetAuthorProfile",
+          "module": "functions/author-profiles.js"
+        },
+        {
+          "name": "cmsGetBoardwalkUsage",
+          "module": "functions/boardwalk-usage.js"
+        },
+        {
+          "name": "cmsGetBroadcastSchedule",
+          "module": "functions/broadcast-schedule.js"
+        },
+        {
+          "name": "cmsGetBugReport",
+          "module": "functions/bug-report-triage.js"
+        },
+        {
+          "name": "cmsGetBugReportEvidence",
+          "module": "functions/bug-report-triage.js"
+        },
+        {
+          "name": "cmsGetContent",
+          "module": "functions/get-content.js"
+        },
+        {
+          "name": "cmsGetCoverageLabels",
+          "module": "functions/settings.js"
+        },
+        {
+          "name": "cmsGetGithubIssue",
+          "module": "functions/bug-report-github.js"
+        },
+        {
+          "name": "cmsGetMediaReview",
+          "module": "functions/media-feedback.js"
+        },
+        {
+          "name": "cmsGetNewsroomBanner",
+          "module": "functions/settings.js"
+        },
+        {
+          "name": "cmsGetPublicPage",
+          "module": "functions/public-content.js"
+        },
+        {
+          "name": "cmsGetPublishedPost",
+          "module": "functions/published-post-reader.js"
+        },
+        {
+          "name": "cmsGetRevision",
+          "module": "functions/revisions.js"
+        },
+        {
+          "name": "cmsGetSettings",
+          "module": "functions/settings.js"
+        },
+        {
+          "name": "cmsGetSourceVideoReplacement",
+          "module": "functions/source-video-replacement.js"
+        },
+        {
+          "name": "cmsGetTranscriptionOptions",
+          "module": "functions/video-transcript-byok.js"
+        },
+        {
+          "name": "cmsGetUgcSubmissionPreview",
+          "module": "functions/ugc-review.js"
+        },
+        {
+          "name": "cmsGetVideoClip",
+          "module": "functions/video-clips.js"
+        },
+        {
+          "name": "cmsGetVideoSearchCorpus",
+          "module": "functions/video-search-corpus.js"
+        },
+        {
+          "name": "cmsGetVideoTranscript",
+          "module": "functions/video-transcripts.js"
+        },
+        {
+          "name": "cmsGetVoiceoverAudio",
+          "module": "functions/voiceover-audio.js"
+        },
+        {
+          "name": "cmsImportUgcSubmission",
+          "module": "functions/ugc-review.js"
+        },
+        {
+          "name": "cmsListAudit",
+          "module": "functions/list-audit.js"
+        },
+        {
+          "name": "cmsListAuthorPagePosts",
+          "module": "functions/author-profiles.js"
+        },
+        {
+          "name": "cmsListAuthorProfiles",
+          "module": "functions/author-profiles.js"
+        },
+        {
+          "name": "cmsListBinnedMedia",
+          "module": "functions/list-binned-media.js"
+        },
+        {
+          "name": "cmsListBugReports",
+          "module": "functions/bug-report-triage.js"
+        },
+        {
+          "name": "cmsListBylineAuthors",
+          "module": "functions/author-profiles.js"
+        },
+        {
+          "name": "cmsListContent",
+          "module": "functions/list-content.js"
+        },
+        {
+          "name": "cmsListGithubIssues",
+          "module": "functions/bug-report-github.js"
+        },
+        {
+          "name": "cmsListMedia",
+          "module": "functions/list-media.js"
+        },
+        {
+          "name": "cmsListMediaCategories",
+          "module": "functions/media-categories.js"
+        },
+        {
+          "name": "cmsListMediaCollectionItems",
+          "module": "functions/media-collections.js"
+        },
+        {
+          "name": "cmsListMediaCollections",
+          "module": "functions/media-collections.js"
+        },
+        {
+          "name": "cmsListMediaComments",
+          "module": "functions/media-feedback.js"
+        },
+        {
+          "name": "cmsListMediaFavorites",
+          "module": "functions/media-favorites.js"
+        },
+        {
+          "name": "cmsListMediaSources",
+          "module": "functions/source-media.js"
+        },
+        {
+          "name": "cmsListMediaUsage",
+          "module": "functions/list-media-usage.js"
+        },
+        {
+          "name": "cmsListRevisions",
+          "module": "functions/revisions.js"
+        },
+        {
+          "name": "cmsListSourceMedia",
+          "module": "functions/source-media.js"
+        },
+        {
+          "name": "cmsListTranscriptionCredentials",
+          "module": "functions/video-transcription-credentials.js"
+        },
+        {
+          "name": "cmsListUgcSubmissions",
+          "module": "functions/ugc-review-list.js"
+        },
+        {
+          "name": "cmsListVideoOrientationExports",
+          "module": "functions/video-orientation-exports.js"
+        },
+        {
+          "name": "cmsListVideoTranscripts",
+          "module": "functions/video-transcript-byok.js"
+        },
+        {
+          "name": "cmsLiveProduction",
+          "module": "functions/live-production.js"
+        },
+        {
+          "name": "cmsLiveProductionAgent",
+          "module": "functions/live-production.js"
+        },
+        {
+          "name": "cmsLiveProductionDevices",
+          "module": "functions/live-production-enrollment.js"
+        },
+        {
+          "name": "cmsMutateMediaCategory",
+          "module": "functions/media-categories.js"
+        },
+        {
+          "name": "cmsMutateMediaCollection",
+          "module": "functions/media-collections.js"
+        },
+        {
+          "name": "cmsMutateMediaComment",
+          "module": "functions/media-feedback.js"
+        },
+        {
+          "name": "cmsNudgeBugReport",
+          "module": "functions/bug-report-triage.js"
+        },
+        {
+          "name": "cmsPairLiveProductionDevice",
+          "module": "functions/live-production-enrollment.js"
+        },
+        {
+          "name": "cmsPollPremierePairing",
+          "module": "functions/premiere-desktop.js"
+        },
+        {
+          "name": "cmsPostTemplates",
+          "module": "functions/post-templates.js"
+        },
+        {
+          "name": "cmsPremiereRequest",
+          "module": "functions/premiere-desktop.js"
+        },
+        {
+          "name": "cmsPreview",
+          "module": "functions/preview.js"
+        },
+        {
+          "name": "cmsPreviewStatus",
+          "module": "functions/preview.js"
+        },
+        {
+          "name": "cmsPublish",
+          "module": "functions/publish.js"
+        },
+        {
+          "name": "cmsPublishSettings",
+          "module": "functions/settings.js"
+        },
+        {
+          "name": "cmsPublishSourceVideo",
+          "module": "functions/source-video-publication.js"
+        },
+        {
+          "name": "cmsReadPairCurrentCodeV2",
+          "module": "functions/cms-reader-endpoints.js"
+        },
+        {
+          "name": "cmsReaderV1",
+          "module": "functions/cms-reader-endpoints.js"
+        },
+        {
+          "name": "cmsReaderV2",
+          "module": "functions/cms-reader-endpoints.js"
+        },
+        {
+          "name": "cmsRecheckPublication",
+          "module": "functions/recheck-publication.js"
+        },
+        {
+          "name": "cmsRejectUgcSubmission",
+          "module": "functions/ugc-review.js"
+        },
+        {
+          "name": "cmsReplaceMediaBinary",
+          "module": "functions/replace-media.js"
+        },
+        {
+          "name": "cmsRequestByokVideoTranscript",
+          "module": "functions/video-transcript-byok.js"
+        },
+        {
+          "name": "cmsRequestVideoClip",
+          "module": "functions/video-clips.js"
+        },
+        {
+          "name": "cmsRequestVideoOrientationExport",
+          "module": "functions/video-orientation-exports.js"
+        },
+        {
+          "name": "cmsRequestVideoTranscript",
+          "module": "functions/video-transcripts.js"
+        },
+        {
+          "name": "cmsRequestVideoTranscriptAlignment",
+          "module": "functions/video-transcript-alignment.js"
+        },
+        {
+          "name": "cmsRestoreMedia",
+          "module": "functions/set-media-lifecycle.js"
+        },
+        {
+          "name": "cmsRestoreRevision",
+          "module": "functions/restore-revision.js"
+        },
+        {
+          "name": "cmsResumeSourceMediaUpload",
+          "module": "functions/source-media-uploads.js"
+        },
+        {
+          "name": "cmsRevokePremiereSession",
+          "module": "functions/premiere-desktop.js"
+        },
+        {
+          "name": "cmsRollbackSourceVideoReplacement",
+          "module": "functions/source-video-replacement.js"
+        },
+        {
+          "name": "cmsRundownParser",
+          "module": "functions/rundown-parser.js"
+        },
+        {
+          "name": "cmsRundownReview",
+          "module": "functions/rundown-review.js"
+        },
+        {
+          "name": "cmsRundownSource",
+          "module": "functions/rundown-source.js"
+        },
+        {
+          "name": "cmsSaveContent",
+          "module": "functions/save.js"
+        },
+        {
+          "name": "cmsSaveMediaReview",
+          "module": "functions/media-feedback.js"
+        },
+        {
+          "name": "cmsSaveSettings",
+          "module": "functions/settings.js"
+        },
+        {
+          "name": "cmsSaveTranscriptionCredential",
+          "module": "functions/video-transcription-credentials.js"
+        },
+        {
+          "name": "cmsSaveVideoTranscript",
+          "module": "functions/video-transcripts.js"
+        },
+        {
+          "name": "cmsScanMediaUsage",
+          "module": "functions/scan-media-usage.js"
+        },
+        {
+          "name": "cmsSetAuthorProfileVisibility",
+          "module": "functions/author-profiles.js"
+        },
+        {
+          "name": "cmsSetMediaCollectionItems",
+          "module": "functions/media-collections.js"
+        },
+        {
+          "name": "cmsSetMediaFavorite",
+          "module": "functions/media-favorites.js"
+        },
+        {
+          "name": "cmsSetMediaFavorites",
+          "module": "functions/media-favorites.js"
+        },
+        {
+          "name": "cmsSetNavigationPreferences",
+          "module": "functions/navigation-preferences.js"
+        },
+        {
+          "name": "cmsSignSourceMediaUploadParts",
+          "module": "functions/source-media-uploads.js"
+        },
+        {
+          "name": "cmsSourceMediaOriginal",
+          "module": "functions/source-media-originals.js"
+        },
+        {
+          "name": "cmsStartPremierePairing",
+          "module": "functions/premiere-desktop.js"
+        },
+        {
+          "name": "cmsStartSourceMediaUpload",
+          "module": "functions/source-media-uploads.js"
+        },
+        {
+          "name": "cmsSubmitBugReport",
+          "module": "functions/bug-report.js"
+        },
+        {
+          "name": "cmsTransitionContent",
+          "module": "functions/lifecycle-transition.js"
+        },
+        {
+          "name": "cmsUpdateAuthorProfile",
+          "module": "functions/author-profiles.js"
+        },
+        {
+          "name": "cmsUpdateMediaMetadata",
+          "module": "functions/update-media.js"
+        },
+        {
+          "name": "cmsUpdateSourceMediaMetadata",
+          "module": "functions/source-media-uploads.js"
+        },
+        {
+          "name": "cmsUploadMedia",
+          "module": "functions/media.js"
+        },
+        {
+          "name": "cmsValidateSiteAccess",
+          "module": "functions/site-access.js"
+        },
+        {
+          "name": "cmsVoiceoverReview",
+          "module": "functions/voiceover-review.js"
+        },
+        {
+          "name": "deactivateStaff",
+          "module": "functions/deactivate-staff.js"
+        },
+        {
+          "name": "decideStaffAccessRequest",
+          "module": "functions/staff-access.js"
+        },
+        {
+          "name": "getStaffAccessStatus",
+          "module": "functions/staff-access.js"
+        },
+        {
+          "name": "githubBugReportWebhook",
+          "module": "functions/bug-report-github.js"
+        },
+        {
+          "name": "grantRole",
+          "module": "functions/roles.js"
+        },
+        {
+          "name": "health",
+          "module": "functions/health.js"
+        },
+        {
+          "name": "listStaffAccessRequests",
+          "module": "functions/staff-access.js"
+        },
+        {
+          "name": "onBugReportDelivery",
+          "module": "functions/bug-report-delivery.js"
+        },
+        {
+          "name": "onBugReportDeliveryCreated",
+          "module": "functions/bug-report-delivery.js"
+        },
+        {
+          "name": "onBugReportGithubOutboxCreated",
+          "module": "functions/bug-report-github.js"
+        },
+        {
+          "name": "onBugReportGithubSync",
+          "module": "functions/bug-report-github.js"
+        },
+        {
+          "name": "onCmsSaveWarmup",
+          "module": "functions/save-warmup.js"
+        },
+        {
+          "name": "onCostLedgerRefresh",
+          "module": "functions/cost-ledger-refresh.js"
+        },
+        {
+          "name": "onDatasetRefresh",
+          "module": "functions/dataset-refresh.js"
+        },
+        {
+          "name": "onElectionResultsSourcePoll",
+          "module": "functions/election-results-sources.js"
+        },
+        {
+          "name": "onMediaPurgeSweep",
+          "module": "functions/media-purge-sweep.js"
+        },
+        {
+          "name": "onNavigationShareOwnerWrite",
+          "module": "functions/navigation-share-owner.js"
+        },
+        {
+          "name": "onNoBuildCloudCandidate",
+          "module": "functions/no-build-cloud-wake.js"
+        },
+        {
+          "name": "onNoBuildCloudRelease",
+          "module": "functions/no-build-cloud-wake.js"
+        },
+        {
+          "name": "onNoBuildCloudState",
+          "module": "functions/no-build-cloud-wake.js"
+        },
+        {
+          "name": "onNoBuildPostConfirmation",
+          "module": "functions/no-build-post-confirmation.js"
+        },
+        {
+          "name": "onNoBuildPostConfirmationRecovery",
+          "module": "functions/no-build-post-confirmation.js"
+        },
+        {
+          "name": "onPrivateVideoAssetWrite",
+          "module": "functions/private-video-copies.js"
+        },
+        {
+          "name": "onPrivateVideoCopyTick",
+          "module": "functions/private-video-copies.js"
+        },
+        {
+          "name": "onPublicVideoPageWithdrawal",
+          "module": "functions/source-video-publication.js"
+        },
+        {
+          "name": "onPublicVideoPostWithdrawal",
+          "module": "functions/source-video-publication.js"
+        },
+        {
+          "name": "onPublicVideoWithdrawalRecovery",
+          "module": "functions/source-video-publication.js"
+        },
+        {
+          "name": "onScheduledPublish",
+          "module": "functions/scheduled-publish.js"
+        },
+        {
+          "name": "onShadowPostRevisionRetry",
+          "module": "functions/shadow-post-revisions.js"
+        },
+        {
+          "name": "onShadowPostRevisionWrite",
+          "module": "functions/shadow-post-revisions.js"
+        },
+        {
+          "name": "onSourceVideoReplacementTick",
+          "module": "functions/source-video-replacement.js"
+        },
+        {
+          "name": "onStaffAccessEmailRetry",
+          "module": "functions/staff-access-email.js"
+        },
+        {
+          "name": "onStaffAccessNotificationCreated",
+          "module": "functions/staff-access-notification.js"
+        },
+        {
+          "name": "onVideoClipTick",
+          "module": "functions/video-clips.js"
+        },
+        {
+          "name": "onVideoPreviewTick",
+          "module": "functions/video-previews.js"
+        },
+        {
+          "name": "onVideoSearchAssetWrite",
+          "module": "functions/video-search-shards.js"
+        },
+        {
+          "name": "onVideoSearchShardWrite",
+          "module": "functions/video-search-shards.js"
+        },
+        {
+          "name": "onVideoTranscriptByokTick",
+          "module": "functions/video-transcript-byok-runner.js"
+        },
+        {
+          "name": "onVideoTranscriptTick",
+          "module": "functions/video-transcripts.js"
+        },
+        {
+          "name": "reactivateStaff",
+          "module": "functions/reactivate-staff.js"
+        },
+        {
+          "name": "registerStaffProfile",
+          "module": "functions/staff-profile.js"
+        },
+        {
+          "name": "requestStaffPasswordReset",
+          "module": "functions/staff-access.js"
+        },
+        {
+          "name": "revokeRole",
+          "module": "functions/roles.js"
+        },
+        {
+          "name": "setStaffAccessLevel",
+          "module": "functions/staff-access-level.js"
+        },
+        {
+          "name": "submitStaffAccessRequest",
+          "module": "functions/staff-access.js"
+        },
+        {
+          "name": "telegramBugReportCallback",
+          "module": "functions/bug-report-delivery.js"
+        },
+        {
+          "name": "ugcCompleteSubmission",
+          "module": "functions/ugc-intake.js"
+        },
+        {
+          "name": "ugcGetConfig",
+          "module": "functions/ugc-intake.js"
+        },
+        {
+          "name": "ugcStartSubmission",
+          "module": "functions/ugc-intake.js"
+        },
+        {
+          "name": "videoTranscriptWorkerClaim",
+          "module": "functions/video-transcript-worker.js"
+        },
+        {
+          "name": "videoTranscriptWorkerComplete",
+          "module": "functions/video-transcript-worker.js"
+        },
+        {
+          "name": "videoTranscriptWorkerFail",
+          "module": "functions/video-transcript-worker.js"
+        },
+        {
+          "name": "videoTranscriptWorkerHeartbeat",
+          "module": "functions/video-transcript-worker.js"
+        }
+      ]
+    },
+    {
+      "entrypoint": "infrastructure/billing-kill-switch/index.js",
+      "exports": [
+        {
+          "name": "buildProjectBillingName",
+          "module": "infrastructure/billing-kill-switch/index.js"
+        },
+        {
+          "name": "decodeBudgetNotification",
+          "module": "infrastructure/billing-kill-switch/index.js"
+        },
+        {
+          "name": "disableBilling",
+          "module": "infrastructure/billing-kill-switch/index.js"
+        },
+        {
+          "name": "handleBudgetNotification",
+          "module": "infrastructure/billing-kill-switch/index.js"
+        },
+        {
+          "name": "shouldDisableBilling",
+          "module": "infrastructure/billing-kill-switch/index.js"
+        },
+        {
+          "name": "stopBillingOnBudgetAlert",
+          "module": "infrastructure/billing-kill-switch/index.js"
+        }
+      ]
+    }
+  ],
+  "machines": [
+    {"id":"pub-legacy-queue","kind":"release","sources":[".github/workflows/cms-publish.yml","functions/lib/cms-public-deployment-writeback.js","functions/lib/cms-publication-serializer.js","functions/lib/cms-publish-artifact.js","functions/lib/cms-publish-serializer-queue.js","functions/lib/publish-build-state.js","functions/lib/publish-reconcile.js","scripts/lib/dev-publication.cjs","scripts/update-publish-status.cjs"],"states":["reserved","pending","publishing","failed","cancelled","public_unconfirmed","success"]},
+    {"id":"pub-feedback","kind":"release","sources":["functions/lib/publication-recovery.js","functions/lib/publish-build-state.js"],"states":["unowned_pending","owned_pending","failed_pending","artifact_settled","confirmed"]},
+    {"id":"pub-legacy-claim","kind":"release","sources":["functions/lib/cms-publication-serializer.js","functions/lib/publish-build-state.js"],"states":["unclaimed","claimed","terminal"]},
+    {"id":"pub-provenance","kind":"release","sources":["functions/lib/publication-runtime-owner.js"],"states":["legacy_missing","node-compute","cloudflare"]},
+    {"id":"pub-deployment","kind":"release","sources":["functions/lib/public-deployment-coordinator.js","functions/lib/public-deployment-outcome-store.js"],"states":["idle","deploying","reconciling"]},
+    {"id":"pub-batch","kind":"release","sources":["functions/lib/public-deployment-coordinator.js","functions/lib/public-deployment-outcome-store.js"],"states":["reserved","ready","deploying","reconciling","superseded","deployed","failed","cancelled","retired"]},
+    {"id":"pub-candidate","kind":"release","sources":["functions/lib/public-worker-candidate-store.js"],"states":["absent","prepared","eligible","older"]},
+    {"id":"pub-pins","kind":"release","sources":["functions/lib/public-release-promotion.js","site/scripts/cms-publication-cloud-control.ts"],"states":["paused","starting","ready"]},
+    {"id":"pub-post-owner","kind":"release","sources":["functions/lib/no-build-post-publication.js"],"states":["uninitialized","visible_dynamic","withdrawn_dynamic","static"]},
+    {"id":"pub-post-confirm","kind":"release","sources":["functions/lib/no-build-post-recovery.js","functions/lib/publication-recheck.js"],"states":["pending","claimed_pending","success","failed","interrupted_fourth","public_unconfirmed","superseded"]},
+    {"id":"pub-page-confirm","kind":"release","sources":["functions/lib/no-build-page-recovery.js","functions/lib/publication-recheck.js"],"states":["pending","claimed_pending","success","failed","interrupted_fourth","public_unconfirmed","superseded"]},
+    {"id":"pub-post-proof","kind":"release","sources":["functions/lib/no-build-post-recovery.js","functions/lib/publication-recheck.js"],"states":["pending","verified","failed_retrying","failed_exhausted","superseded"]},
+    {"id":"pub-page-owner","kind":"release","sources":["functions/lib/no-build-page-publication.js"],"states":["unowned","visible","withdrawn"]},
+    {"id":"pub-home-refresh","kind":"release","sources":["functions/lib/no-build-home-confirmation.js","functions/lib/no-build-home-ownership.js","functions/lib/no-build-page-recovery.js"],"states":["pending","claimed","verified","failed","superseded","interrupted_fourth"]},
+    {"id":"pub-record-owner","kind":"release","sources":["functions/lib/no-build-record-publication.js"],"states":["unowned","visible","withdrawn"]},
+    {"id":"pub-record-regeneration","kind":"release","sources":["functions/lib/no-build-record-retry.js"],"states":["deferred","active","superseded","complete"]},
+    {"id":"pub-settings-proof","kind":"release","sources":["functions/lib/settings-publication.js"],"states":["pending","success","failed","overdue"]},
+    {"id":"pub-library-card-proof","kind":"release","sources":["functions/lib/no-build-library-card-publication.js"],"states":["pending","success","failed","overdue"]},
+    {"id":"pub-record-proof","kind":"release","sources":["functions/lib/no-build-record-publication.js"],"states":["pending","success","failed","overdue"]},
+    {"id":"pub-cohort","kind":"release","sources":["functions/lib/public-context-publication.js"],"states":["selected_pending","followup_waiting","success","failed","cancelled"]},
+    {"id":"pub-context","kind":"release","sources":["functions/lib/public-context-revision.js"],"states":["current","invalidated"]},
+    {"id":"pub-preparation","kind":"release","sources":["functions/lib/pre-enrollment-history.js","functions/lib/public-context-publication.js","site/scripts/no-build-post-background.ts","site/scripts/retry-public-context-publication.ts"],"states":["absent","building","input_durable","verified","failed","cancelled_history"]},
+    {"id":"pub-early-preview","kind":"release","sources":["site/scripts/no-build-post-background.ts"],"states":["absent","verified"]},
+    {"id":"pub-background","kind":"release","sources":["functions/lib/post-background-outputs.js"],"states":["pending","claimed","verified","failed","superseded"]},
+    {"id":"pub-background-serving","kind":"release","sources":["functions/lib/post-background-outputs.js"],"states":["current","stale_serving","blocked","previous_assets"]},
+    {"id":"pub-external","kind":"release","sources":["site/scripts/cloud-external-refresh.ts"],"states":["missing","fetching","verified","failed","held"]},
+    {"id":"pub-preview-queue","kind":"release","sources":["functions/lib/cms-preview-serializer.js","site/scripts/process-cms-preview.ts"],"states":["pending","building","ready","failed","expired"]},
+    {"id":"pub-preview-head","kind":"release","sources":["functions/preview.js","site/scripts/process-cms-preview.ts"],"states":["none","latest_pending","ready_retained","replacement_pending"]},
+    {"id":"pub-publication-journal","kind":"release","sources":["site/scripts/cms-publication-cloud-token-journal.ts"],"states":["idle","reserved"]},
+    {"id":"pub-preview-journal","kind":"release","sources":["functions/lib/cms-preview-pair.js","site/scripts/cms-preview-cloud-token-journal.ts"],"states":["idle","reserved","retired"]},
+    {"id":"pub-preview-pair","kind":"release","sources":["functions/lib/cms-preview-pair.js"],"states":["selected","switched","old_recovery_retired"]},
+    {"id":"pub-reader-session","kind":"release","sources":["functions/lib/cms-reader-session.js"],"states":["absent","active","expired","swept","quota_wait"]},
+    {"id":"pub-reader-window","kind":"release","sources":["functions/lib/cms-preview-pair-reader-closure.js","functions/lib/cms-reader-session.js"],"states":["open","closed_draining","expired_closed","pair_closed"]},
+    {"id":"pub-search-shard","kind":"release","sources":["functions/lib/video-search-outbox.js","functions/lib/video-search-shards.js"],"states":["pending_tombstone","ready","tombstone","removed"]},
+    {"id":"pub-search-bootstrap","kind":"release","sources":["functions/lib/video-search-shards.js"],"states":["initializing","complete"]},
+    {"id":"pub-search-delete","kind":"release","sources":["functions/lib/video-search-shard-cleanup.js"],"states":["eligible","deleting","deleted","delete-marker"]},
+    {"id":"pub-detached-release","kind":"release","sources":["functions/lib/public-release-preparation.js","functions/lib/public-release-promotion.js"],"states":["detached","checkpointed","candidate","sealed","stale","promoted"]},
+    {"id":"pub-pair-life","kind":"release","sources":["functions/lib/public-release-bootstrap-pairs.js","functions/lib/public-release-pair-work.js"],"states":["candidate","retained","retired"]},
+    {"id":"pub-pair-work","kind":"release","sources":["functions/lib/public-release-pair-work.js"],"states":["pending","running","failed","complete"]},
+    {"id":"pub-pair-upload","kind":"release","sources":["functions/lib/public-release-pair-rollout.js"],"states":["reserved","uncertain","uploaded"]},
+    {"id":"pub-pair-admission","kind":"release","sources":["functions/lib/public-release-admission.js","site/scripts/public-release-original-work-recovery.ts"],"states":["absent","pending","failed"]},
+    {"id":"pub-original-recovery","kind":"release","sources":["site/scripts/public-release-original-work-recovery.ts"],"states":["due","leased","queued","running","rendered","quarantined","retry"]},
+    {"id":"pub-staging","kind":"release","sources":["site/scripts/public-release-pair-executor.ts"],"states":["pending","staged","quarantined"]},
+    {"id":"pub-activation","kind":"release","sources":["site/scripts/public-release-pair-activation-outbox.ts"],"states":["pending","retrying","blocked","activated"]},
+    {"id":"pub-original-continuation","kind":"release","sources":["site/scripts/public-release-original-continuation.ts"],"states":["due","deferred","quarantined","terminal"]},
+    {"id":"pub-pair-terminal","kind":"release","sources":["site/scripts/public-release-publication-terminal.ts"],"states":["pending","prepared","success","superseded"]},
+    {"id":"pub-replay","kind":"release","sources":["functions/lib/public-release-pair-replay.js"],"states":["uninitialized","checkpointed","witness_sealed","behind"]},
+    {"id":"pub-switch","kind":"release","sources":["functions/lib/public-release-switch.js"],"states":["idle_selected","reserved","applied","cancelled"]},
+    {"id":"pub-change-log","kind":"release","sources":["functions/lib/public-release-change-log.js","functions/lib/public-release-producer.js"],"states":["baseline","appended","capture_pending"]},
+    {"id":"pub-routing-mirror","kind":"release","sources":["functions/lib/public-release-routing-mirror-outbox.js"],"states":["pending","running","done"]},
+    {"id":"pub-hold","kind":"release","sources":["functions/lib/public-release-rehearsal-hold.js"],"states":["reserved","held","expired","released","cancelled"]},
+    {"id":"pub-publisher-runtime","kind":"release","sources":["publisher/worker.ts"],"states":["stopped","running","healthy","unhealthy"]},
+    {"id":"pub-release-retry","kind":"release","sources":["site/scripts/no-build-cloud-release.ts"],"states":["pending","claimed","failed_retrying","failed_exhausted","terminal_batch"]},
+    {"id":"pub-family-admission","kind":"release","sources":["functions/lib/no-build-family-admission.js"],"states":["invalid_closed","disabled","selected_enabled","not_selected"]},
+    {"id":"pub-route-purge","kind":"release","sources":["functions/lib/post-route-purge.js"],"states":["pending","processing","retry","success","failed"]},
+    {"id":"pub-withdrawal-proof","kind":"release","sources":["functions/lib/no-build-post-withdrawal.js"],"states":["pending","failed","latched"]},
+    {"id":"pub-withdrawal-build","kind":"release","sources":["functions/lib/transitional-post-withdrawal.js"],"states":["reserved","queued","superseded","retry_reserved"]},
+    {"id":"pub-live-session","kind":"app","sources":["functions/lib/live-production-store.js"],"states":["draft","ready","active","ended"]},
+    {"id":"pub-live-mapping","kind":"app","sources":["functions/lib/live-production-journal.js","functions/lib/live-production-store.js"],"states":["uncommissioned","commissioned"]},
+    {"id":"pub-live-command","kind":"app","sources":["functions/lib/live-production-journal.js"],"states":["accepted","delivered","started","succeeded","failed","outcome_unknown","expired","superseded"]},
+    {"id":"pub-live-observation","kind":"app","sources":["functions/lib/live-production-contract.js","functions/lib/live-production-journal.js","packages/content-core/src/live-production.ts"],"states":["unknown","on_air","clear","stale"]},
+    {"id":"pub-live-banner","kind":"app","sources":["functions/lib/live-production-journal.js","functions/lib/live-production-store.js"],"states":["draft_only","cued","accepted","confirmed_live","archived"]},
+    {"id":"pub-live-enrollment","kind":"app","sources":["functions/live-production-enrollment.js"],"states":["pending","enrolling","enrolled","failed","expired","revoked","projected_failed","deleted"]},
+    {"id":"pub-preview-cleanup","kind":"release","sources":["site/scripts/process-cms-preview.ts"],"states":["ready","cleanup_pending","old_expired","clean"]},
+    {"id":"pub-pair-provider-operation","kind":"release","sources":["functions/lib/public-release-pair-rollout.js"],"states":["absent","reserved","uncertain","verified"]},
+    {"id":"pub-pair-rollout","kind":"release","sources":["functions/lib/public-release-pair-rollout.js"],"states":["absent","reserved","uncertain","verified"]},
+    {"id":"pub-bootstrap-fence","kind":"release","sources":["functions/lib/public-release-bootstrap-adoption.js"],"states":["absent_open","closed","open"]},
+    {"id":"pub-bootstrap-selector","kind":"release","sources":["functions/lib/public-release-bootstrap.js"],"states":["legacy","qualified","adopted"]},
+    {"id":"pub-capture-outbox","kind":"release","sources":["site/scripts/public-release-pair-source-owner.ts"],"states":["pending","pack_captured","captured","pack_failed","global_failed"]},
+    {"id":"pub-switch-code","kind":"release","sources":["site/scripts/public-release-switch-code-continuation.ts"],"states":["due","leased","waiting_task","blocked","activated"]},
+    {"id":"pub-pair-media-coverage","kind":"release","sources":["functions/lib/public-release-media-coverage.js","site/scripts/public-release-media-migration.ts"],"states":["tracking","needs-migration","fully_pinned"]},
+    {"id":"pub-pair-media-input-pin","kind":"release","sources":["functions/lib/public-release-media-coverage.js"],"states":["pending","pinned"]},
+    {"id":"pub-pair-media-hold","kind":"release","sources":["functions/lib/public-release-media-retention.js"],"states":["pair_retained","capture_gap","unproven","no_pair_hold"]},
+    {"id":"pub-pause","kind":"release","sources":["functions/lib/dev-public-release-pause.js"],"states":["not_started","paused_awaiting_drain","drained","paused_failed","ownership_moved"]},
+    {"id":"pub-pause-restore","kind":"release","sources":["functions/lib/dev-public-release-pause.js"],"states":["paused_closed","restored_closed","abandonable","production_failed_stop"]},
+    {"id":"pub-dev-pause-repair","kind":"release","sources":["functions/lib/dev-public-release-pause-recovery.js"],"states":["failed_unproved","quiescent","sealed","historical"]},
+    {"id":"pubr-baseline-admission","kind":"release","sources":["functions/lib/cms-publication-baseline.js","functions/lib/cms-publish-serializer-queue.js"],"states":["absent","reserved","pending","existing"]},
+    {"id":"pubr-baseline-unclaimed-cancel","kind":"release","sources":["functions/lib/cms-publication-baseline-unclaimed-cancellation.js"],"states":["pending_unclaimed","cancelled_receipted"]},
+    {"id":"pubr-baseline-claimed-cancel","kind":"release","sources":["functions/lib/cms-publication-baseline-claimed-cancellation.js"],"states":["publishing_reserved","cancelled_receipted"]},
+    {"id":"pubr-content-claimed-cancel","kind":"release","sources":["functions/lib/cms-publication-content-claimed-cancellation.js"],"states":["publishing_reserved","cancelled_receipted"]},
+    {"id":"pubr-baseline-retire","kind":"release","sources":["functions/lib/cms-publication-baseline-retirement.js"],"states":["reconciling","deployed_queue_open","retired_queue_cancelled"]},
+    {"id":"pubr-unpublished-settlement","kind":"release","sources":["functions/lib/cms-content-unpublished-withdrawal-settlement.js"],"states":["invisible_pending","settled_never_confirmed"]},
+    {"id":"pubr-disk-journal","kind":"release","sources":["site/scripts/cms-publication-token-journal.ts"],"states":["absent","empty","reserved"]},
+    {"id":"pubr-artifact-binding","kind":"release","sources":["functions/lib/cms-public-deployment-writeback.js","functions/lib/cms-publish-artifact.js","functions/lib/publish-build-state.js","functions/lib/publish-reconcile.js","scripts/update-publish-status.cjs"],"states":["unbound","bound","uncertain_bound","retry_bound","settled"]},
+    {"id":"pubr-media-manifest","kind":"release","sources":["functions/lib/public-media-manifest-store.js"],"states":["absent","header","partially_staged","staged","verified"]},
+    {"id":"pubr-media-lifecycle","kind":"release","sources":["functions/lib/cms-publication-baseline-recovery.js","functions/lib/public-media-lifecycle-activation.js"],"states":["disabled_initial","enabled","disabled_recovery"]},
+    {"id":"pubr-health-observation","kind":"release","sources":["publisher/publication-health.ts"],"states":["healthy","overdue","uncertain","exhausted","unreadable","withdrawal_overdue"]},
+    {"id":"pubr-wake-observation","kind":"release","sources":["publisher/pending-work.ts"],"states":["idle","wake","billing_disabled","unhealthy"]},
+    {"id":"pubr-execution-renewal","kind":"release","sources":["site/scripts/public-release-pair-execution-renewal.ts"],"states":["cold","pending","cached","failed","aborted"]},
+    {"id":"pubr-video-withdrawal-intent","kind":"release","sources":["functions/lib/public-video-withdrawal.js"],"states":["absent","pending","retry_reserved","partially_remaining","acknowledged"]},
+    {"id":"pubr-video-withdrawal-lease","kind":"release","sources":["functions/lib/public-video-withdrawal.js"],"states":["available","deferred","withdrawing","objects_deleted","purged","complete"]},
+    {"id":"pubr-private-copy-backfill","kind":"release","sources":["scripts/backfill-private-video-copies.mjs"],"states":["not_started","page_read","checkpointed","complete"]},
+    {"id":"pubr-media-discovery-build","kind":"release","sources":["scripts/backfill-media-discovery.mjs"],"states":["absent","write","verify","probe","blocked","ready"]},
+    {"id":"pubr-media-admission","kind":"release","sources":["functions/lib/media-discovery.js"],"states":["uncached","counted","valid","overflow"]},
+    {"id":"pubr-media-discovery-cursor","kind":"release","sources":["functions/lib/media-discovery-query.js"],"states":["absent","live","expired","invalidated","exhausted"]},
+    {"id":"pubr-media-usage-repair","kind":"release","sources":["functions/scan-media-usage.js"],"states":["missing_owner","stale_or_missing","would_repair","current","repaired"]},
+    {"id":"pubr-preenrollment-retirement","kind":"release","sources":["functions/lib/pre-enrollment-history.js"],"states":["unlisted","listed","refused","retired"]},
+    {"id":"pubr-context-alert","kind":"release","sources":["functions/lib/public-context-alerts.js"],"states":["quiet","leased","acknowledged","retryable"]},
+    {"id":"pubr-family-alert","kind":"release","sources":["functions/lib/post-background-alerts.js"],"states":["quiet","leased","acknowledged","retryable"]},
+    {"id":"pubr-post-proof-alert","kind":"release","sources":["functions/lib/post-background-alerts.js"],"states":["unseen","leased","sent","retryable"]},
+    {"id":"ema-video-upload","kind":"media","sources":["functions/lib/source-video-replacement.js","functions/source-media-uploads.js"],"states":["active","completing","completed","canceling","canceled"]},
+    {"id":"ema-image-upload","kind":"media","sources":["functions/media.js"],"states":["reserved","object_ready","capacity_cleanup","committed","purged"]},
+    {"id":"ema-preview-job","kind":"media","sources":["functions/lib/video-preview-job.js","functions/lib/video-preview-processor.js","functions/video-previews.js","scripts/backfill-video-previews.mjs"],"states":["pending","running","ready","failed","stale","needs_reconciliation"]},
+    {"id":"ema-private-copy","kind":"media","sources":["functions/lib/private-video-copy.js","functions/lib/private-video-transfer.js","functions/private-video-copies.js"],"states":["copying","repair","ready","failed","revoking","deleted"]},
+    {"id":"ema-private-file","kind":"media","sources":["functions/lib/private-video-transfer.js"],"states":["pending","uploading","verifying","ready"]},
+    {"id":"ema-private-audio","kind":"media","sources":["functions/lib/private-transcript-audio.js"],"states":["copying","ready","repair","failed","revoking","deleted"]},
+    {"id":"ema-amazon-transcript","kind":"media","sources":["functions/lib/video-transcript-job.js","functions/lib/video-transcript-processor.js"],"states":["pending","starting","running","ready","failed","stale","needs_reconciliation"]},
+    {"id":"ema-local-transcript","kind":"media","sources":["functions/lib/video-transcript-worker.js"],"states":["pending","running","ready","stale","needs_reconciliation","paid_pending"]},
+    {"id":"ema-worker-slot","kind":"deploy","sources":["functions/lib/video-transcript-alignment-job.js","functions/lib/video-transcript-worker.js"],"states":["idle","transcription","alignment","orientation"]},
+    {"id":"ema-local-admission","kind":"media","sources":["functions/lib/video-transcript-local-queue.js"],"states":["uninitialized","initialized","full"]},
+    {"id":"ema-transcript-budget","kind":"media","sources":["functions/lib/video-transcript-byok-job.js"],"states":["reserved","consumed","released"]},
+    {"id":"ema-paid-fallback","kind":"media","sources":["functions/lib/video-transcript-paid-fallback.js"],"states":["pending","waiting","amazon","ready","needs_reconciliation","local_requeued"]},
+    {"id":"ema-byok-transcript","kind":"media","sources":["functions/lib/video-transcript-byok-job.js"],"states":["pending","running","ready","failed","needs_reconciliation"]},
+    {"id":"ema-audio-preparation","kind":"media","sources":["functions/lib/video-transcript-audio-input.js"],"states":["pending","waiting","retryable","ready","failed","deleting"]},
+    {"id":"ema-audio-use","kind":"media","sources":["functions/lib/video-transcript-audio-runtime.js"],"states":["active","deleting","deleted"]},
+    {"id":"ema-transcript-edit","kind":"media","sources":["functions/lib/video-transcript-job.js"],"states":["unreviewed","reviewed","alignment_review_required"]},
+    {"id":"ema-alignment","kind":"media","sources":["functions/lib/video-transcript-alignment-job.js"],"states":["queued","running","complete","unavailable","cancelled","stale","needs_reconciliation"]},
+    {"id":"ema-alignment-selection","kind":"media","sources":["functions/lib/video-transcript-alignment-job.js","functions/lib/video-transcript-job.js"],"states":["queued","processing","partial","unavailable","review_required","ready","cancelled","stale","needs_reconciliation"]},
+    {"id":"ema-clip","kind":"media","sources":["functions/video-clips.js"],"states":["pending","running","ready","failed","cancelled","needs_reconciliation","expired"]},
+    {"id":"ema-video-replacement","kind":"media","sources":["functions/lib/source-video-replacement.js","functions/source-video-replacement.js"],"states":["uploading","processing","ready","promoting","complete","failed","canceled"]},
+    {"id":"ema-replacement-followup","kind":"media","sources":["functions/source-video-replacement.js"],"states":["migration_pending","migration_failed","migration_done","transcript_pending","transcript_done"]},
+    {"id":"ema-video-retention","kind":"media","sources":["functions/lib/source-video-replacement-cleanup.js","functions/lib/source-video-replacement.js"],"states":["retained","restoring","restored","superseded","deleting"]},
+    {"id":"ema-original-availability","kind":"media","sources":["functions/lib/source-original-state.js"],"states":["available","archived","restoring","restored"]},
+    {"id":"ema-original-restore","kind":"media","sources":["functions/lib/source-originals.js"],"states":["requesting","restoring","restored","stale","failed"]},
+    {"id":"ema-media-bin","kind":"media","sources":["functions/lib/media-purge-executor.js","functions/set-media-lifecycle.js","functions/update-media.js"],"states":["active","tombstoned","purging","purged"]},
+    {"id":"ema-media-purge","kind":"media","sources":["functions/lib/media-purge-executor.js","functions/set-media-lifecycle.js"],"states":["pending","purging","purged","cancelled"]},
+    {"id":"ema-master-cleanup","kind":"media","sources":["functions/lib/media-master-cleanup.js"],"states":["pending","deleting","removed"]},
+    {"id":"ema-video-backup","kind":"media","sources":["functions/lib/video-backup.js"],"states":["pending","verified","failed"]},
+    {"id":"ema-editorial","kind":"media","sources":["functions/lifecycle-transition.js","functions/save.js"],"states":["draft","in_review","approved","scheduled","published","archived"]},
+    {"id":"ema-public-visibility","kind":"media","sources":["functions/lifecycle-transition.js"],"states":["private","live_snapshot","legacy_visibility"]},
+    {"id":"ema-review-envelope","kind":"media","sources":["functions/lifecycle-transition.js"],"states":["absent","current"]},
+    {"id":"ema-assignment","kind":"media","sources":["functions/assign-content.js"],"states":["unassigned","assigned"]},
+    {"id":"ema-author-profile","kind":"media","sources":["functions/lib/author-profile-store.js","packages/content-core/src/author-profiles.ts"],"states":["private","published","archived","deleted"]},
+    {"id":"ema-staff-request","kind":"app","sources":["functions/staff-access.js"],"states":["email_verification","pending","denied","expired","ready"]},
+    {"id":"ema-verification-reservation","kind":"app","sources":["functions/staff-access.js"],"states":["preparing","queued","rate_limited","failed"]},
+    {"id":"ema-staff-email","kind":"app","sources":["functions/staff-access-email.js","functions/staff-access.js"],"states":["pending","sending","sent","failed","unknown"]},
+    {"id":"ema-staff-alert","kind":"app","sources":["functions/lib/staff-access-notification.js"],"states":["pending","sending","delivered","terminal_failed","unknown"]},
+    {"id":"ema-password-reset","kind":"app","sources":["functions/staff-access.js"],"states":["eligible","cooldown"]},
+    {"id":"ema-staff-account","kind":"app","sources":["functions/deactivate-staff.js","functions/reactivate-staff.js"],"states":["active","cms_disabled","auth_disabled","reactivation_pending","offboarding_public_profile","offboarding_sign_in","offboarding_complete"]},
+    {"id":"ema-access-mode","kind":"app","sources":["functions/lib/access-tier-activation.js","functions/staff-access-level.js"],"states":["legacy","tier_active"]},
+    {"id":"ema-server-session","kind":"app","sources":["functions/lib/auth.js"],"states":["unverified","verified_cached","refused"]},
+    {"id":"ema-auth-ui","kind":"ui","sources":["admin/src/context/AuthContext.tsx","admin/src/context/authReducer.ts"],"states":["loading","signed-out","email-unverified","access-denied","signed-in","error"]},
+    {"id":"ema-browser-session","kind":"ui","sources":["admin/src/lib/session-ended.ts"],"states":["none","bound","ended","deliberate"]},
+    {"id":"ema-premiere-pairing","kind":"media","sources":["functions/lib/premiere-desktop-session.js"],"states":["pending","approved","denied","consumed","expired"]},
+    {"id":"ema-premiere-session","kind":"media","sources":["functions/lib/premiere-desktop-session.js"],"states":["active","revoked","expired"]},
+    {"id":"ema-studio-journal","kind":"media","sources":["agents/vmix/src/executor.ts","agents/vmix/src/journal.ts","agents/vmix/src/service.ts"],"states":["started","succeeded","failed","expired","superseded","outcome_unknown","acknowledged"]},
+    {"id":"ema-studio-execution","kind":"media","sources":["agents/vmix/src/executor.ts"],"states":["before_native","field_write","overlay_write","verified","uncertain","refused"]},
+    {"id":"ema-native-visibility","kind":"media","sources":["agents/vmix/src/executor.ts","agents/vmix/src/vmix-client.ts"],"states":["safe_clear","safe_on_air","unsafe","unknown"]},
+    {"id":"ema-studio-service","kind":"deploy","sources":["agents/vmix/src/service.ts"],"states":["connected","paused","stopped"]},
+    {"id":"ema-studio-install","kind":"deploy","sources":["agents/vmix/windows/install.ps1","agents/vmix/windows/setup.ps1"],"states":["ready","installing","self_test_pending","recovery_required"]},
+    {"id":"ema-ugc","kind":"media","sources":["functions/ugc-intake.js","functions/ugc-review.js"],"states":["uploading","pending","rejected","importing","rejecting","imported"]},
+    {"id":"ema-rundown-source","kind":"media","sources":["functions/lib/rundown-source-store.js"],"states":["not_configured","disabled","waiting","current","access_lost","quota","oversized","invalid_source","source_changed","not_activated","unavailable"]},
+    {"id":"ema-rundown-proposal","kind":"media","sources":["functions/lib/rundown-parser-store.js"],"states":["absent","current","expired"]},
+    {"id":"ema-rundown-review","kind":"media","sources":["functions/lib/rundown-review-store.js"],"states":["pending","ignored","accepted","removal_acknowledged"]},
+    {"id":"ema-media-thread","kind":"media","sources":["functions/media-feedback.js"],"states":["open","resolved","deleted"]},
+    {"id":"ema-voiceover-review","kind":"media","sources":["functions/voiceover-review.js"],"states":["absent","saved"]},
+    {"id":"ema-premiere-transfer","kind":"media","sources":["premiere-boardwalk-panel/transfer.js"],"states":["checking","uploading","completing","complete","stopped"]},
+    {"id":"ema-aws-preview-workflow","kind":"deploy","sources":["infrastructure/boardwalk-video-previews/template-v1.json"],"states":["Validate original","Choose original copy or encode","Start staging copy","Copy exact original parts","Complete staging copy","Inspect video","Create viewing copy","Verify output versions","Delete verified staging copy","Return verified outputs","Copy original range","Verify original range","original_copy_complete","execution_failed"]},
+    {"id":"ema-aws-copy-part","kind":"deploy","sources":["infrastructure/boardwalk-video-previews/template-v1.json"],"states":["Copy part","Check copied version","Retain part","Wrong original version"]},
+    {"id":"ema-source-lifecycle","kind":"media","sources":["functions/source-media-uploads.js"],"states":["active","deleted"]},
+    {"id":"ema-rights","kind":"media","sources":["functions/lib/source-media-upload-contract.js","functions/source-media-uploads.js"],"states":["pending","complete"]},
+    {"id":"ema-local-worker-watchdog","kind":"deploy","sources":["infrastructure/boardwalk-transcription-worker/worker.py"],"states":["downloading","transcribing","diarizing","aligning","finalizing","completing","lost","failed"]},
+    {"id":"ema-editor-lock","kind":"media","sources":["admin/src/lib/editor-lock-store.ts","cms-api/src/editor-lease.ts"],"states":["free","held","blocked","requested","released","client_lost"]},
+    {"id":"ema-displaced-work","kind":"ui","sources":["admin/src/lib/editor-work-recovery.ts"],"states":["absent","saved","expired"]},
+    {"id":"ema-editor-hydration","kind":"ui","sources":["admin/src/components/EditorWorkspace.tsx"],"states":["idle","loading","ready","error","missing","deleted","invalid"]},
+    {"id":"ema-save-flight","kind":"ui","sources":["admin/src/hooks/useSaveFlight.ts"],"states":["idle","saving"]},
+    {"id":"ema-block-history","kind":"ui","sources":["admin/src/lib/block-editor-state.ts"],"states":["clean_history","undo_available","redo_available","rejected"]},
+    {"id":"ema-text-history","kind":"ui","sources":["admin/src/context/EditorTextHistory.tsx"],"states":["none","native","rich"]},
+    {"id":"ema-video-upload-ui","kind":"ui","sources":["admin/src/components/VideoUploadPanel.tsx"],"states":["ready","checking","uploading","finishing","paused","error","completed"]},
+    {"id":"ema-upload-router","kind":"ui","sources":["admin/src/lib/upload-router.ts"],"states":["empty","held","routed","rejected"]},
+    {"id":"ema-bulk-metadata-ui","kind":"ui","sources":["admin/src/lib/source-media-bulk.ts"],"states":["pending","unchanged","saving","saved","conflict","failed","unconfirmed"]},
+    {"id":"ema-media-processing-poll","kind":"ui","sources":["admin/src/lib/use-media-processing-poll.ts"],"states":["paused","waiting","in_flight"]},
+    {"id":"ema-saved-media-views-ui","kind":"ui","sources":["admin/src/lib/use-saved-media-views.ts"],"states":["idle","loading","ready","error","mutating"]},
+    {"id":"ema-coverage-label-load","kind":"ui","sources":["admin/src/context/CoverageLabelsContext.tsx"],"states":["unavailable","idle","loading","ready","error"]},
+    {"id":"ema-media-selection","kind":"ui","sources":["admin/src/lib/media-selection.ts"],"states":["none","some","all"]},
+    {"id":"ema-live-workspace-ui","kind":"ui","sources":["admin/src/lib/live-production-state.ts"],"states":["initial","editing","command_pending","accepted","refused","uncertain"]},
+    {"id":"ema-live-blog-coverage","kind":"media","sources":["packages/content-core/src/live-blog-draft.ts","packages/content-core/src/live-blog.ts"],"states":["ongoing","paused","ended"]},
+    {"id":"ema-live-blog-entry","kind":"media","sources":["packages/content-core/src/live-blog-draft.ts"],"states":["unsaved","saved_unpublished","published","corrected","withdrawn"]},
+    {"id":"ema-preview-admission","kind":"media","sources":["functions/lib/source-video-replacement.js","functions/source-media-uploads.js"],"states":["unreserved","reserved","consumed","released"]},
+    {"id":"ema-transcription-credential","kind":"media","sources":["functions/lib/video-transcription-credentials.js"],"states":["absent","enabled","disconnected"]},
+    {"id":"ema-transcript-attempt","kind":"media","sources":["functions/lib/video-transcript-attempt.js"],"states":["no_active","active","limit_reached"]},
+    {"id":"ema-transcript-sweep","kind":"media","sources":["functions/video-transcripts.js"],"states":["idle","leased"]},
+    {"id":"ema-byok-runner","kind":"media","sources":["functions/lib/video-transcript-byok-runner.js"],"states":["idle","leased"]},
+    {"id":"ema-purge-run","kind":"media","sources":["functions/media-purge-sweep.js"],"states":["disabled","idle","leased","dry_run"]},
+    {"id":"ema-master-consumer","kind":"media","sources":["functions/media-master-cleanup-consumer.js"],"states":["disabled","idle","leased","complete","failed"]},
+    {"id":"ema-media-collection","kind":"media","sources":["functions/media-collections.js"],"states":["active","archived","member_absent","member_present"]},
+    {"id":"ema-media-favorite","kind":"media","sources":["functions/media-favorites.js"],"states":["off","on"]},
+    {"id":"ema-backup-runner","kind":"deploy","sources":["scripts/lib/video-backup-runner.mjs"],"states":["inventory","copy","awaiting_copy","copy_complete"]},
+    {"id":"ema-ugc-quota","kind":"media","sources":["functions/lib/ugc-quota.js"],"states":["held_upload","charged_bytes","released_empty"]},
+    {"id":"ema-staff-site-ui-session","kind":"ui","sources":["admin/src/lib/staff-site-read.ts","admin/src/lib/staff-site.ts"],"states":["read","renewing","retried","refused"]},
+    {"id":"ema-media-review-ui","kind":"ui","sources":["admin/src/lib/use-media-feedback.ts"],"states":["loading","clean","dirty","saving","conflict","error"]},
+    {"id":"ema-media-comments-ui","kind":"ui","sources":["admin/src/lib/use-media-feedback.ts"],"states":["loading","current","stale_times","paging","mutating","error"]},
+    {"id":"ema-draft-autosave","kind":"ui","sources":["admin/src/hooks/useDraftAutosave.ts"],"states":["idle","saving","saved","error"]},
+    {"id":"ema-exit-save","kind":"ui","sources":["admin/src/context/ContentQuickActionsContext.tsx"],"states":["clean","dirty","saving","saved","failed","unsaved-elsewhere"]},
+    {"id":"ema-editor-presence-ui","kind":"ui","sources":["admin/src/hooks/useEditorLock.ts"],"states":["disabled","checking","ready","claiming","owned","blocked","yielded","error","displaced"]},
+    {"id":"ema-media-category-registry-ui","kind":"ui","sources":["admin/src/lib/use-media-categories.ts"],"states":["loading","ready_fresh","ready_stale","error"]},
+    {"id":"ema-media-category","kind":"media","sources":["functions/media-categories.js"],"states":["active","archived"]},
+    {"id":"ema-media-favorite-ui","kind":"ui","sources":["admin/src/lib/use-media-favorites.ts"],"states":["awaiting_seed","loading","ready","saving","reconciling","error"]},
+    {"id":"ema-vocabulary-ui","kind":"ui","sources":["admin/src/lib/use-published-vocabulary.ts"],"states":["idle","loading","ready","error"]},
+    {"id":"ema-bootstrap-ui","kind":"ui","sources":["admin/src/lib/bootstrap-phases.ts"],"states":["session","admission","profile","workspace","ready"]},
+    {"id":"ema-account-form-ui","kind":"ui","sources":["admin/src/App.tsx"],"states":["idle","submitting","success","error"]},
+    {"id":"ema-verification-ui","kind":"ui","sources":["admin/src/App.tsx"],"states":["ready","sending","reason_required","feedback","working","success","error"]},
+    {"id":"ema-source-asset-refresh-ui","kind":"ui","sources":["admin/src/lib/use-source-media-asset-refresh.ts"],"states":["idle","reading","queued","deferred","applied"]},
+    {"id":"ema-video-replacement-ui","kind":"ui","sources":["admin/src/components/media/VideoReplaceButton.tsx"],"states":["idle","confirming","busy","processing","recoverable","complete","refused"]},
+    {"id":"ema-image-replacement","kind":"media","sources":["functions/replace-media.js"],"states":["reserved","object_ready","committed_cleanup_pending","committed","superseded"]},
+    {"id":"ema-image-recovery","kind":"media","sources":["functions/media-recovery.js"],"states":["pending","leased","object_ready","committed","abandoned"]},
+    {"id":"ema-cuez-operation","kind":"media","sources":["functions/cuez-transfers.js","functions/lib/cuez-transfer-contract.js","functions/lib/cuez-transfer-operations.js"],"states":["queued","transferring","complete","conflict","failed","reconciliation"]},
+    {"id":"ema-cuez-step","kind":"media","sources":["functions/lib/cuez-transfer-operations.js"],"states":["absent","unknown","not-applied","complete"]},
+    {"id":"ema-cuez-mapping","kind":"media","sources":["functions/lib/cuez-transfer-operations.js"],"states":["absent","reserved","settled","partial_adopted","released"]},
+    {"id":"ema-cuez-export","kind":"media","sources":["functions/lib/cuez-transfer-export.js"],"states":["selected","retained","story_written","payload_written","settled","reconciliation","retryable_partial"]},
+    {"id":"ema-cuez-import","kind":"media","sources":["functions/lib/cuez-transfer-import.js"],"states":["previewed","revalidated","claimed","draft_committed","conflict","retryable"]},
+    {"id":"ema-cuez-provider-write","kind":"media","sources":["functions/lib/cuez-transfer-storydesk.js"],"states":["not_attempted","intent_unknown","created","observed","unsettled","not_applied"]},
+    {"id":"ema-cuez-ui","kind":"ui","sources":["admin/src/components/cuez-transfer-workspace.tsx"],"states":["checking","off","selecting","preparing","prepared","previewed","transferring","outcome","reviewing"]},
+    {"id":"ema-image-thumbnails","kind":"media","sources":["functions/lib/media-thumbnails.js"],"states":["pending","objects_written","ready","unavailable","stale"]},
+    {"id":"ema-byok-spool","kind":"media","sources":["functions/lib/video-transcript-byok-storage.js"],"states":["absent","spooled","spool_receipted","exports_partial","exports_complete","uncertain"]},
+    {"id":"data-dataset-lifecycle","kind":"app","sources":["functions/datasets.js"],"states":["draft","review","approved","archived"]},
+    {"id":"data-dataset-refresh","kind":"app","sources":["functions/lib/dataset-refresh.js"],"states":["preparing","pending","partial","success"]},
+    {"id":"data-dataset-refresh-owner","kind":"app","sources":["functions/lib/dataset-refresh.js"],"states":["unreserved_pending","publication_pending","verified","superseded","failed"]},
+    {"id":"data-dataset-use","kind":"app","sources":["functions/lib/dataset-refresh.js","functions/lib/dataset-usage.js"],"states":["absent","published","withdrawal_pending"]},
+    {"id":"data-election-connection","kind":"app","sources":["functions/lib/election-source-connections.js","functions/lib/election-source-poller.js"],"states":["awaiting_config_approval","enabled","pending_statuses","paused"]},
+    {"id":"data-election-poll","kind":"app","sources":["functions/lib/election-source-connections.js","functions/lib/election-source-poller.js"],"states":["due","leased","staging","pending_approval","unchanged","published","held","paused"]},
+    {"id":"data-ap-budget","kind":"app","sources":["functions/lib/election-source-poller.js"],"states":["disabled","available","exhausted_or_spaced"]},
+    {"id":"data-election-race-approval","kind":"app","sources":["functions/lib/election-results-approval.js","functions/lib/election-results.js","functions/lib/election-source-poller.js"],"states":["awaiting","counting","called","official","certified"]},
+    {"id":"navigation-share","kind":"app","sources":["functions/navigation-preferences.js","functions/navigation-share-owner.js"],"states":["active","removed"]},
+    {"id":"cms-component-receipt","kind":"deploy","sources":["scripts/lib/cms-component-receipt.mjs"],"states":["absent","in_progress","complete"]},
+    {"id":"cms-deployment-candidate","kind":"deploy","sources":["scripts/lib/cms-component-receipt.mjs"],"states":["absent","candidate","verified","reader_committed"]},
+    {"id":"cms-release-planner","kind":"deploy","sources":["scripts/lib/cms-release-plan.mjs"],"states":["abort","full","selective_functions","paired_renderer","unchanged"]},
+    {"id":"cms-api-release-planner","kind":"deploy","sources":["scripts/lib/cms-release-plan.mjs"],"states":["abort","deploy","skip"]},
+    {"id":"cms-function-batch","kind":"deploy","sources":["scripts/deploy-cms-function-batches.mjs"],"states":["ready","deploying","retryable","confirmed","unconfirmed"]},
+    {"id":"reports-status","kind":"app","sources":["functions/bug-report-delivery.js","functions/bug-report-triage.js","functions/lib/bug-report-contract.js"],"states":["open","acknowledged","in_progress","blocked","resolved","dismissed"]},
+    {"id":"reports-delivery","kind":"app","sources":["functions/bug-report-delivery.js","functions/bug-report-triage.js"],"states":["pending","sending","delivered","unknown","terminal_failed","suppressed","blocked_unknown"]},
+    {"id":"reports-delivery-run","kind":"app","sources":["functions/bug-report-delivery.js"],"states":["idle","running","wake_pending","expired"]},
+    {"id":"reports-github","kind":"app","sources":["functions/bug-report-github.js"],"states":["pending","sending","delivered","unknown","terminal_failed"]},
+    {"id":"reports-progress-projection","kind":"app","sources":["functions/lib/bug-report-progress.js"],"states":["received","acknowledged","queued","in_progress","ready_for_review","changes_requested","checks_failed","merged","closed","resolved","dismissed","blocked","needs_attention","reopened"]},
+    {"id":"reports-nudge","kind":"app","sources":["functions/lib/bug-report-nudge.js"],"states":["ineligible","eligible","requested","decided","followup_pending"]},
+    {"id":"cost-period","kind":"app","sources":["functions/lib/cost-ledger-store.js"],"states":["absent","open","closed","open_scheduler_blocked"]},
+    {"id":"cost-freshness","kind":"app","sources":["functions/cost-ledger-refresh.js"],"states":["disabled","fresh","error","manual"]},
+    {"id":"billing-kill-switch","kind":"deploy","sources":["functions/billing.js","functions/lib/billing-state.js"],"states":["enabled","disabled"]},
+    {"id":"install-private-provider","kind":"deploy","sources":["scripts/lib/public-release-private-install-ledger.mjs"],"states":["absent","claimed","not_sent","observed"]},
+    {"id":"install-admin-provider","kind":"deploy","sources":["scripts/lib/paired-admin-provider-operation.mjs"],"states":["reserved","issued","fenced","uploaded","failed"]},
+    {"id":"install-rehearsal-journal","kind":"deploy","sources":["scripts/lib/rehearsal-installed-journal.mjs"],"states":["initialized","prefix_complete","all_steps_complete","invalid"]},
+    {"id":"workflow-cms-deploy","kind":"deploy","sources":[".github/workflows/cms-staging-deploy.yml"],"states":["prechecks","planned","functions_mutating","functions_confirmed","api_mutating","renderer_mutating","admin_upload","smoke_complete","partial_failure"]},
+    {"id":"workflow-pages","kind":"deploy","sources":[".github/workflows/pages.yml"],"states":["requested","authorized","built","revalidated","deployed","refused_or_failed"]},
+    {"id":"workflow-cms-publish","kind":"deploy","sources":[".github/workflows/cms-publish.yml"],"states":["requested","authorized","artifact_ready","pages_success","public_unconfirmed","success","failed_or_cancelled"]},
+    {"id":"workflow-dev-publish","kind":"deploy","sources":[".github/workflows/cms-dev-publish.yml"],"states":["enabled_preparing","frozen_built","uploading","uncertain","reconciling","settled"]},
+    {"id":"workflow-ci","kind":"deploy","sources":[".github/workflows/ci.yml"],"states":["policy","consumers","fallback_all","reused","success","failure","metadata_only"]},
+    {"id":"workflow-schedule","kind":"deploy","sources":[".github/scripts/merge-schedule-pr.sh",".github/workflows/schedule-bake.yml"],"states":["unchanged","pr_open","ci_pending","admitted","behind","merged","failed_or_deferred"]},
+    {"id":"cms-content-ops","kind":"app","sources":["cms-api/src/content-ops-route.ts","cms-api/src/content-ops.ts"],"states":["validated","dry_run","lease_held","media_copied","saved","confirmed","committed_unconfirmed","refused_or_lost"]},
+    {"id":"install-dev-history","kind":"deploy","sources":["scripts/lib/dev-publication-history.cjs"],"states":["reserved","ready","retired","superseded","committed_verified"]},
+    {"id":"cms-renderer-rollout","kind":"deploy","sources":["scripts/lib/cms-component-receipt.mjs"],"states":["pending","progressing","completed_unconverged","confirmed","reverted","replaced","unavailable"]},
+    {"id":"edge-staff-cookie","kind":"app","sources":["admin/src/lib/staff-site.ts","workers/src/staff-site-worker.ts"],"states":["absent","establishing","present","admitted","refused","cleared"]},
+    {"id":"edge-machine-admission","kind":"app","sources":["workers/src/staff-site-worker.ts"],"states":["staff_required","machine_admitted","refused"]},
+    {"id":"edge-jwt-verifier","kind":"app","sources":["cms-api/src/firebase-auth.ts"],"states":["valid_staff","valid_device","token_refused","key_unavailable"]},
+    {"id":"edge-staff-validation","kind":"app","sources":["cms-api/src/index.ts"],"states":["checking","admitted","auth_refused","limited","preview_missing","unavailable"]},
+    {"id":"edge-signin-audit","kind":"app","sources":["cms-api/src/index.ts"],"states":["due","pending","complete"]},
+    {"id":"edge-token-bucket","kind":"app","sources":["cms-api/src/rate-limiter.ts"],"states":["available","exhausted"]},
+    {"id":"auth-tier-reader-activation","kind":"release","sources":["functions/lib/access-tier-activation.js","scripts/activate-staff-tier-readers.mjs"],"states":["absent","checking","refused","active"]},
+    {"id":"pkg-meaning-worker","kind":"app","sources":["packages/browser-search/index.ts"],"states":["absent","alive","disposed"]},
+    {"id":"pkg-meaning-request","kind":"app","sources":["packages/browser-search/index.ts"],"states":["pending","progressing","resolved","rejected","cancelled"]},
+    {"id":"pkg-meaning-model","kind":"app","sources":["packages/browser-search/runtime.ts","packages/browser-search/worker.ts"],"states":["uninitialized","initializing","ready","failed"]},
+    {"id":"pkg-meaning-corpus","kind":"app","sources":["packages/browser-search/runtime.ts"],"states":["unprepared","preparing","retained_subset","prepared","superseded","failed"]},
+    {"id":"pkg-meaning-query","kind":"app","sources":["packages/browser-search/runtime.ts"],"states":["waiting","encoding","ranked","superseded","unavailable"]},
+    {"id":"pkg-page-lcp-slot","kind":"ui","sources":["packages/content-core/src/image-loading.ts"],"states":["available","used"]},
+    {"id":"pkg-home-story-image","kind":"ui","sources":["packages/content-core/src/home-story-image-dom.ts"],"states":["unmounted","visible","hidden"]},
+    {"id":"pkg-spotlight-image-fallback","kind":"ui","sources":["packages/content-core/src/spotlight-image-dom.ts"],"states":["primary","fallback","hidden"]},
+    {"id":"pkg-newscast-activation","kind":"ui","sources":["packages/content-core/src/home-newscast-player.ts"],"states":["at_rest","active","listeners_disposed"]},
+    {"id":"pkg-election-refresh","kind":"ui","sources":["packages/content-core/src/election-results-dom.ts"],"states":["scheduled","reading","backoff","paused","stopped","checking","active","stale","manual_paused","offline"]},
+    {"id":"pkg-election-adoption","kind":"ui","sources":["packages/content-core/src/election-results-dom.ts"],"states":["current","deferred","adopted","focus_retained_filter"]},
+    {"id":"pkg-liveblog-copy","kind":"ui","sources":["packages/content-core/src/live-blog-interactions.ts"],"states":["idle","copying","copied","manual"]},
+    {"id":"pkg-liveblog-popover","kind":"ui","sources":["packages/content-core/src/live-blog-interactions.ts"],"states":["closed","open","rebound"]},
+    {"id":"pkg-ap-frame-sizing","kind":"ui","sources":["packages/content-core/src/ap-embed-controls.ts"],"states":["querying","sized","disposed"]},
+    {"id":"pkg-html-frame-parent-sizing","kind":"ui","sources":["packages/content-core/src/html-frame-controls.ts"],"states":["default","sized","disposed"]},
+    {"id":"pkg-html-frame-child-sizing","kind":"ui","sources":["packages/content-core/src/content-render.ts"],"states":["unmeasured","reported","mirrored"]},
+    {"id":"pkg-boardwalk-edit-hint","kind":"ui","sources":["packages/content-core/src/boardwalk-edit-script.ts"],"states":["hidden","visible"]},
+    {"id":"pkg-data-table-projection","kind":"ui","sources":["packages/content-core/src/data-table-controls.ts"],"states":["original","ascending","descending"]},
+    {"id":"pkg-county-sort-projection","kind":"ui","sources":["packages/content-core/src/county-comparison-controls.ts"],"states":["original","ascending","descending"]},
+    {"id":"pkg-shelf-scroll-projection","kind":"ui","sources":["packages/content-core/src/custom-shelf-controls.ts"],"states":["fits","start","middle","end"]},
+    {"id":"pkg-town-selection-projection","kind":"ui","sources":["packages/content-core/src/town-lookup-controls.ts"],"states":["unselected","selected","no_exact_match"]},
+    {"id":"pkg-data-table-filter","kind":"ui","sources":["packages/content-core/src/data-table-controls.ts"],"states":["all_rows","filtered_rows"]},
+    {"id":"wfr-dev-cms-dag","kind":"deploy","sources":[".github/workflows/cms-dev-deploy.yml"],"states":["source-admitted","renderer-ready","renderer-skipped","renderer-only-terminal","pinned-renderer-verified","firestore-updated","readers-installed","functions-api-updated","gateways-updated","admin-uploaded","boundary-verified","partial-stop"]},
+    {"id":"wfr-shadow-route","kind":"deploy","sources":[".github/workflows/shadow-posts-dev-deploy.yml","scripts/manage-shadow-post-route.mjs"],"states":["admitted","relay-installed","secret-installed","pilot-disabled","pilot-enabled","route-absent","caller-absent","both-workers-absent","refusal-verified","reconcile"]},
+    {"id":"wfr-staff-gateway","kind":"deploy","sources":["scripts/deploy-dev-staff-gateway.mjs"],"states":["old-route-owned","new-route-owned","preflight-verified","deployment-unverified","version-verified","gateway-verified","reconcile"]},
+    {"id":"wfr-preview-gateways","kind":"deploy","sources":["scripts/deploy-dev-preview-gateways.mjs"],"states":["inventory-verified","private-worker-staged","staff-worker-staged","domain-attached","provisioning","verified","partial-stop"]},
+    {"id":"wfr-dev-readers","kind":"deploy","sources":["functions/lib/dev-reader-deployment.js","scripts/deploy-dev-reader-mounts.mjs"],"states":["inert-default","authorized","candidates-started","functions-deployed","api-deployed","providers-verified","live-readers-committed","descriptor-verified","reconciliation-required"]},
+    {"id":"wfr-preview-runtime","kind":"deploy","sources":["preview-renderer/deploy-dev.mjs","site/scripts/cms-preview-cloud-control.ts"],"states":["absent","paused","starting","ready"]},
+    {"id":"wfr-dev-renderer-release","kind":"deploy","sources":["preview-renderer/deploy-dev.mjs"],"states":["prior","paused-drained","old-inactive","releasing","starting","complete","failed-paused","pinned-proof"]},
+    {"id":"wfr-dev-renderer-bootstrap","kind":"deploy","sources":["functions/lib/dev-preview-renderer-bootstrap.js","preview-renderer/bootstrap-dev.mjs"],"states":["absent","claimed","failed","committed-paused","restored-paused","recovery-bound"]},
+    {"id":"wfr-private-preview-install","kind":"deploy","sources":["scripts/lib/install-private-preview-pair.mjs"],"states":["uninstalled","plan-bound","identity-created","version-uploaded","version-deployed","container-created","scheduled","resource-complete","reconciliation-required"]},
+    {"id":"wfr-private-preview-health","kind":"deploy","sources":["scripts/install-private-preview-pair.mjs","scripts/lib/install-private-preview-pair.mjs"],"states":["resource-required","resources-current","candidate-verified","candidate-pointed","health-collected","qualified","renewal-required"]},
+    {"id":"wfr-preview-candidate-pointer","kind":"deploy","sources":["functions/lib/cms-preview-pair-candidate.js"],"states":["unretained","candidate-valid","candidate-expired-or-drifted","retained","disabled"]},
+    {"id":"wfr-inactive-retirement","kind":"deploy","sources":["scripts/lib/dev-inactive-bootstrap.cjs"],"states":["inactive-enrolled","inspected","dry-run-confirmed","archived-retired","legacy-cycle-open","committed-drifted","refused"]},
+    {"id":"wfr-visual-fanin","kind":"deploy","sources":[".github/workflows/admin-ci.yml"],"states":["shards-running","some-markers","all-markers","barrier-success","barrier-failed","cancelled"]},
+    {"id":"edge-dev-route","kind":"deploy","sources":["workers/src/dev-preview-staff-worker.ts","workers/src/shadow-staff-gateway.ts","workers/src/staff-site-dev-worker.ts"],"states":["unadmitted","admitted","callback_consumed","public_served","preview_served","shadow_served","asset_served","refused"]},
+    {"id":"srv-selector-cache","kind":"release","sources":["workers/src/public-release-router.ts"],"states":["empty","refreshing","fresh","expired","invalidated","refused"]},
+    {"id":"srv-forced-selector","kind":"release","sources":["workers/src/public-release-router.ts"],"states":["absent","queued","running","finished"]},
+    {"id":"srv-router-request","kind":"release","sources":["workers/src/public-release-router.ts"],"states":["admitted","selected","reselect","served","recovery","unavailable"]},
+    {"id":"srv-pair-proof","kind":"release","sources":["workers/src/public-release-router.ts"],"states":["requested","before","body","after","proved","refused"]},
+    {"id":"srv-slot-read","kind":"release","sources":["workers/src/public-release-slot.ts"],"states":["requested","decision","terminal_route","bytes_verified","cache_candidate","reselect","served"]},
+    {"id":"srv-decision-projection","kind":"release","sources":["functions/lib/public-release-serving.js"],"states":["requested","retained_epoch","activated","decision","reselect","refused"]},
+    {"id":"srv-committed-recovery","kind":"release","sources":["workers/src/public-release-recovery.ts"],"states":["absent","captured","superseded","expired"]},
+    {"id":"srv-recovery-serving","kind":"release","sources":["workers/src/public-release-recovery.ts"],"states":["current_fence","gone","redirect","body","try_previous","previous_body","refused"]},
+    {"id":"srv-transitional-authority","kind":"release","sources":["workers/src/transitional-post-read-worker.ts"],"states":["missing","refreshing","ready","stale","retry_throttled","unavailable","purged"]},
+    {"id":"srv-purge-witness","kind":"release","sources":["workers/src/transitional-post-read-worker.ts"],"states":["unwitnessed","witnessed","purged","unknown","cacheable"]},
+    {"id":"srv-withdrawal-authority","kind":"release","sources":["workers/src/transitional-post-read-worker.ts"],"states":["missing","reading","live_override","no_override","invalidated","gone"]},
+    {"id":"srv-transitional-dispatch","kind":"release","sources":["workers/src/transitional-post-read-worker.ts"],"states":["authority","owned","code_assets","pending_fallback","rendered","served","retry_once","refused"]},
+    {"id":"srv-record-withdrawal-read","kind":"release","sources":["workers/src/transitional-post-read-worker.ts"],"states":["unowned","disabled","withdrawn","served","unknown"]},
+    {"id":"srv-page-serving","kind":"release","sources":["workers/src/no-build-page-worker.ts"],"states":["decision","gone","rendering","rerender","bounded_churn","current","fallback","pass"]},
+    {"id":"srv-page-response-cache","kind":"release","sources":["workers/src/public-page-response-cache.ts"],"states":["missing","candidate","matched","expired","stored","home_fresh"]},
+    {"id":"srv-post-serving","kind":"release","sources":["workers/src/no-build-post-worker.ts"],"states":["pilot","decision","rendered","rechecked","served","gone","alias","refused"]},
+    {"id":"srv-post-static-overlay","kind":"release","sources":["workers/src/no-build-post-worker.ts"],"states":["static_decision","static_bytes","overlay","served","refused"]},
+    {"id":"srv-background-edge-cache","kind":"release","sources":["workers/src/no-build-post-worker.ts"],"states":["lookup","cached","origin","stored","served","fallback"]},
+    {"id":"srv-code-post","kind":"release","sources":["workers/src/no-build-code-post-worker.ts"],"states":["before","candidate","rendered","proved","served","gone","refused"]},
+    {"id":"srv-last-good","kind":"release","sources":["workers/src/public-content-last-good.ts"],"states":["absent","candidate","served_fallback","eligible_write","sealed","conflict"]},
+    {"id":"srv-baseline-cache","kind":"release","sources":["workers/src/public-content-baseline.ts"],"states":["unread","reading","positive","negative","served","assets"]},
+    {"id":"srv-post-withdrawal-catalog","kind":"release","sources":["publisher/withdrawal-catalog.ts"],"states":["prior","observed","merged","written","retry","refused"]},
+    {"id":"srv-page-withdrawal-catalog","kind":"release","sources":["publisher/page-withdrawal-catalog.ts"],"states":["retained","admitted","merged","published","refused"]},
+    {"id":"srv-record-withdrawal-catalog","kind":"release","sources":["publisher/record-withdrawal-catalog.ts"],"states":["retained","admitted","merged","published","refused"]},
+    {"id":"srv-contact-projection","kind":"release","sources":["workers/src/public-worker.ts"],"states":["lookup","fresh","stale","refreshing","updated","fallback"]},
+    {"id":"srv-code-index-cache","kind":"release","sources":["workers/src/public-release-code-assets.ts"],"states":["missing","loading","cached","evicted","failed"]},
+    {"id":"srv-retained-assets","kind":"release","sources":["workers/src/public-release-code-assets.ts"],"states":["requested","retained","candidate","ambiguous","verified","served","pass"]},
+    {"id":"srv-live-feed","kind":"release","sources":["workers/src/live-blog-feed.ts"],"states":["lookup","candidate","authorized","stored","served","refused"]},
+    {"id":"srv-author-pending","kind":"release","sources":["workers/src/public-author-pending.ts"],"states":["missing","admitted","shell","pending","unchanged"]},
+    {"id":"srv-retained-proof-handler","kind":"release","sources":["workers/src/retained-byte-proof.ts"],"states":["ordinary","challenge","owner","stored","verified","signed","refused"]},
+    {"id":"srv-retained-proof-verifier","kind":"release","sources":["workers/src/retained-byte-proof.ts"],"states":["created","consumed","verified","refused"]},
+    {"id":"srv-pair-container","kind":"release","sources":["publisher/pair-worker.ts"],"states":["asleep","admitted","reader","health","busy","stopped"]},
+    {"id":"srv-pair-server","kind":"release","sources":["site/scripts/public-release-pair-server.ts"],"states":["idle","working","repairing","failed","stopping","closed","waiting_for_executor"]},
+    {"id":"srv-private-reader","kind":"release","sources":["site/scripts/public-release-pair-private-reader.ts"],"states":["requested","admitted","loading","absence","rechecked","replied","refused"]},
+    {"id":"srv-ingress-instance","kind":"release","sources":["workers/src/public-release-ingress-worker.ts"],"states":["disabled","unconfigured","configured","admitted","serving","refused"]},
+    {"id":"srv-isolate-observation","kind":"release","sources":["workers/src/public-isolate-start.ts"],"states":["unattempted","attempted","recorded","skipped"]},
+    {"id":"srv-routing-experiment","kind":"release","sources":["workers/src/public-release-routing-measurement-worker.ts"],"states":["empty","cold","primed","sampled","refused"]},
+    {"id":"srv-withdrawal-read-result","kind":"release","sources":["workers/src/durable-post-withdrawals.ts"],"states":["reading","marker","absent","unknown","carried"]},
+    {"id":"srv-origin-decision-cache","kind":"release","sources":["cms-api/src/index.ts","functions/lib/public-decision-cache.js","functions/public-content.js"],"states":["missing","validated","fresh","stale","stored","evicted"]},
+    {"id":"srv-measurement-selector","kind":"release","sources":["functions/lib/public-release-routing-measurement.js"],"states":["absent","dry_run","created","idempotent","refused"]},
+    {"id":"prv-artifact-liveness","kind":"release","sources":["workers/src/preview-artifact-request.ts","workers/src/preview-worker.ts"],"states":["active","expired","invalid","missing","unavailable"]},
+    {"id":"prv-container-admission","kind":"release","sources":["preview-renderer/worker.ts"],"states":["idle","checking","starting","ready","disabled","refused"]},
+    {"id":"prv-work-probe","kind":"release","sources":["preview-renderer/pending-work.ts"],"states":["unqualified","qualified","work","idle","refused"]},
+    {"id":"prv-launcher-admission","kind":"release","sources":["site/scripts/run-cms-preview-cloud.ts"],"states":["boot","source_verified","package_verified","sandbox_verified","serving","preflight_complete","stopped"]},
+    {"id":"prv-legacy-readiness","kind":"release","sources":["site/scripts/cms-preview-cloud-runtime.ts"],"states":["starting","probing","listening","ready","stopping","stopping_ready","closed"]},
+    {"id":"prv-pair-standby","kind":"release","sources":["site/scripts/cms-preview-pair-standby.ts"],"states":["standby","starting","listening","stopped","closed"]},
+    {"id":"prv-service-orchestration","kind":"deploy","sources":["site/scripts/cms-preview-serializer-service.ts"],"states":["opening","resuming","listening","processing","unconfirmed","cleaning","released"]},
+    {"id":"prv-code-context-cache","kind":"release","sources":["site/scripts/cms-preview-pair-context.ts"],"states":["empty","qualified","cached","hit","refreshing","refused"]},
+    {"id":"prv-editorial-context-cache","kind":"release","sources":["site/scripts/cms-preview-pair-editorial-context.ts"],"states":["empty","reference","cached","hit","refreshing","refused"]},
+    {"id":"prv-context-refresh-window","kind":"release","sources":["site/scripts/cms-preview-cloud-storage.ts"],"states":["probing","waiting","budget_exhausted","ready","aborted"]},
+    {"id":"prv-frozen-input","kind":"release","sources":["site/scripts/cms-preview-cloud-storage.ts","site/scripts/process-cms-preview.ts"],"states":["absent","context_wait","durable","local","validated","refused"]},
+    {"id":"prv-sandbox-render","kind":"release","sources":["site/scripts/process-cms-preview.ts","site/scripts/render-compiled-preview.ts"],"states":["admitted","running","rendered","packed","failed"]},
+    {"id":"prv-artifact-upload","kind":"release","sources":["site/scripts/upload-private-preview.mjs"],"states":["validated","assets","draining","html","complete","failed"]},
+    {"id":"prv-saved-r2-pointer","kind":"release","sources":["site/scripts/upload-private-preview.mjs"],"states":["absent","current","proposed","newer_wins","settled","contended"]},
+    {"id":"prv-datastore-token-cache","kind":"release","sources":["publisher/google-access-token-cache.ts"],"states":["absent","cached","unusable","uncached_return"]},
+    {"id":"prv-record-code-fence","kind":"release","sources":["preview-renderer/record-code-source.ts"],"states":["unqualified","qualified","reading","returned","refused"]},
+    {"id":"prv-private-reader-http","kind":"release","sources":["workers/src/private-pair-access.ts","workers/src/private-pair-reader-gateway.ts","workers/src/public-release-slot-worker.ts"],"states":["untrusted","authorized","bounded_body","forwarded","refused"]},
+    {"id":"prv-private-operator-http","kind":"release","sources":["workers/src/private-pair-operator-worker.ts"],"states":["untrusted","authorized","capture","prove","returned","refused"]},
+    {"id":"prv-code-context-retention","kind":"release","sources":["site/scripts/cms-preview-cloud-storage.ts"],"states":["unretained","manifest","materialized","verified","refused"]},
+    {"id":"prv-editorial-retention-job","kind":"release","sources":["functions/lib/no-build-cloud-work.js","site/scripts/cloud-editorial-preview-retention.ts","site/scripts/cms-preview-cloud-storage.ts"],"states":["absent","building","failed_retryable","verified","exhausted"]},
+    {"id":"prv-editorial-seal","kind":"release","sources":["site/scripts/cms-preview-cloud-storage.ts","site/scripts/cms-preview-editorial-context.ts"],"states":["unmaterialized","object_verified","legacy_unsealed","sealed","current_sealed","refused","unavailable"]},
+    {"id":"prv-listener-drain","kind":"release","sources":["functions/lib/cms-preview-serializer.js"],"states":["idle","draining","closing","closed_ok","closed_error"]},
+    {"id":"ema-orientation-export","kind":"media","sources":["functions/lib/video-orientation-export.js"],"states":["queued","running","stale","needs_reconciliation","failed","complete"]},
+    {"id":"ema-orientation-upload","kind":"media","sources":["functions/lib/video-orientation-export.js"],"states":["not_issued","capacity_wait","issued","deadline_due","settled_complete","settled_failed"]},
+    {"id":"ema-orientation-stray","kind":"media","sources":["functions/lib/video-orientation-export.js"],"states":["waiting","absent","recorded"]},
+    {"id":"ema-orientation-ui","kind":"ui","sources":["admin/src/components/media/VideoOrientationExport.tsx"],"states":["idle","requesting","active","complete","error","unmounted"]},
+    {"id":"ema-usage-collector","kind":"ui","sources":["admin/src/lib/boardwalk-usage.ts"],"states":["disabled","collecting","sending","stopped"]},
+    {"id":"data-usage-batch","kind":"app","sources":["functions/boardwalk-usage.js"],"states":["absent","collected","duplicate"]},
+    {"id":"data-usage-report-cache","kind":"app","sources":["functions/boardwalk-usage.js"],"states":["missing","pending","ready","unavailable_history"]},
+    {"id":"ema-usage-report-ui","kind":"ui","sources":["admin/src/routes/BoardwalkUsageRoute.tsx"],"states":["loading","ready","failed","aborted"]},
+    {"id":"ema-story-cta-settings","kind":"ui","sources":["admin/src/components/StoryCtaSettings.tsx"],"states":["loading","ready","saving","publishing","conflict","load_failed"]},
+    {"id":"ema-story-cta-preview","kind":"ui","sources":["admin/src/components/StoryCtaSettings.tsx"],"states":["empty","loading","resolved","error"]},
+    {"id":"ema-cuez-operation-pages","kind":"ui","sources":["admin/src/lib/cuez-operation-pages.ts"],"states":["initial","loaded","gap_scanning","stalled","joined"]},
+    {"id":"pkg-youtube-activation","kind":"ui","sources":["packages/content-core/src/deferred-youtube.ts"],"states":["unmounted","pending","loaded","drained"]},
+    {"id":"cms-function-retirement","kind":"deploy","sources":["scripts/retire-cms-functions.mjs"],"states":["planned","started","complete"]},
+    {"id":"cms-secret-provisioning","kind":"deploy","sources":["scripts/lib/functions-secret-versions.mjs"],"states":["empty","matching","different","provisioned","uncertain"]},
+    {"id":"workflow-production-promotion","kind":"deploy","sources":[".github/workflows/promote.yml"],"states":["selected","admitted","qualified","promoted"]}
+  ]
+}

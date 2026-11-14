@@ -153,6 +153,11 @@ jobs:
         if: steps.reuse.outputs.reused != 'true'
         # The release gate tests read yaml from the site install above.
         run: node --test .github/scripts/site-resource-reporter.test.mjs .github/scripts/require-main-ci.test.mjs
+      - name: Release surface registry and freshness contracts
+        if: steps.reuse.outputs.reused != 'true'
+        run: |
+          node scripts/check-release-surfaces.mjs
+          node --test tests/scripts/release-surfaces.test.mjs
       - name: Workflow policy unit tests
         if: steps.reuse.outputs.reused != 'true'
         working-directory: site
