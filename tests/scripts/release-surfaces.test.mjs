@@ -52,6 +52,7 @@ for (const [name, path, source, diagnostic] of [
   ["workflow", ".github/workflows/new.yaml", "name: New\non: push\n", /missing=.*new.yaml/],
   ["disabled workflow", ".github/workflows/new.yml.disabled", "name: New\non: push\n", /missing=.*new.yml.disabled/],
   ["Wrangler variant", "nested/wrangler.public.dev.toml", 'name = "example"\n', /missing=.*wrangler.public.dev.toml/],
+  ["repeated-hyphen Wrangler variant", "nested/wrangler---preview.dev.jsonc", "{}\n", /missing=.*wrangler---preview.dev.jsonc/],
   ["Functions export", "functions/index.js", 'lazyExport("health", "./health"); lazyExport("newHandler", "./health");\n', /missing=.*newHandler/],
   ["direct Functions export", "functions/index.js", 'lazyExport("health", "./health"); exports.newHandler = handler;\n', /missing=.*newHandler/],
   ["dev direct export", "functions/dev-index.js", 'for (const [name, modulePath] of Object.entries(devFunctionManifest())) { exports[name] = handler; } exports.newHandler = handler;\n', /missing=.*newHandler/],
@@ -77,7 +78,7 @@ test("comments and strings do not create Functions exports", t => {
 });
 
 test("computed registrations are refused rather than omitted", () => {
-  for (const source of ['lazyExport(name, "./health");', "exports[name] = handler;", "module.exports = handlers;", "Object.assign(exports, handlers);", "register(exports);", "const target = exports; target.newHandler = handler;"]) {
+  for (const source of ['lazyExport(name, "./health");', "exports[name] = handler;", "module.exports = handlers;", "Object.assign(exports, handlers);", "register(exports);", "const target = exports; target.newHandler = handler;", "exports.newHandler ??= handler;", "exports.newHandler ||= handler;", "exports.newHandler &&= handler;", "module.exports ||= {};"]) {
     assert.throws(() => entryExports(source, "functions/index.js", new Set(["functions/health.js"])), /Computed|Unsupported/);
   }
 });

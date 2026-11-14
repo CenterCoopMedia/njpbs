@@ -112,8 +112,11 @@ export function entryExports(source, path, files, { devAdapter = false } = {}) {
     if (ts.isCallExpression(node) && node.expression.getText() === "lazyExport") {
       add(literal(node.arguments[0], path), moduleFile(literal(node.arguments[1], path), path, files));
     }
-    if (ts.isBinaryExpression(node) && node.operatorToken.kind === ts.SyntaxKind.EqualsToken) {
+    if (ts.isBinaryExpression(node) && node.operatorToken.kind >= ts.SyntaxKind.FirstAssignment && node.operatorToken.kind <= ts.SyntaxKind.LastAssignment) {
       const left = node.left;
+      const target = exportTarget(left) ||
+        ((ts.isPropertyAccessExpression(left) || ts.isElementAccessExpression(left)) && exportTarget(left.expression));
+      if (target && node.operatorToken.kind !== ts.SyntaxKind.EqualsToken) throw new Error(`Unsupported Functions assignment: ${path}`);
       if ((ts.isPropertyAccessExpression(left) || ts.isElementAccessExpression(left)) && exportTarget(left.expression)) {
         if (devAdapter && ts.isElementAccessExpression(left) && left.argumentExpression.getText() === "name" && node.right.getText() === "handler") {
           if (!devManifestLoop(node)) throw new Error(`Changed dev Functions adapter: ${path}`);
@@ -186,7 +189,7 @@ export function sourceInventory(root) {
     return readFileSync(resolve(root, path), "utf8");
   };
   const workflows = [...files].filter(path => /^\.github\/workflows\/[^/]+\.ya?ml(?:\.disabled)?$/.test(path)).sort();
-  const wrangler = [...files].filter(path => /^wrangler(?:[.-][\w-]+)*\.(?:jsonc?|toml)$/.test(posix.basename(path))).sort();
+  const wrangler = [...files].filter(isWranglerConfig).sort();
   const entrypoints = new Set();
   for (const path of files) {
     if (posix.basename(path) !== "package.json") continue;
@@ -210,6 +213,16 @@ export function sourceInventory(root) {
     return { entrypoint: path, exports: [...entries].sort(([a], [b]) => a.localeCompare(b)).map(([name, module]) => ({ name, module })) };
   });
   return { workflows, wrangler, functions, files };
+}
+
+function isWranglerConfig(path) {
+  const name = posix.basename(path);
+  const dot = name.lastIndexOf(".");
+  if (!["json", "jsonc", "toml"].includes(name.slice(dot + 1))) return false;
+  const stem = name.slice(0, dot);
+  if (stem === "wrangler") return true;
+  if (!stem.startsWith("wrangler.") && !stem.startsWith("wrangler-")) return false;
+  return stem.slice("wrangler.".length).split(".").every(part => /^[A-Za-z0-9_-]+$/.test(part));
 }
 
 function compare(label, expected, actual) {
