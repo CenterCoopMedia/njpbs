@@ -78,7 +78,7 @@ test("comments and strings do not create Functions exports", t => {
 });
 
 test("computed registrations are refused rather than omitted", () => {
-  for (const source of ['lazyExport(name, "./health");', "exports[name] = handler;", "module.exports = handlers;", "Object.assign(exports, handlers);", "register(exports);", "const target = exports; target.newHandler = handler;", "exports.newHandler ??= handler;", "exports.newHandler ||= handler;", "exports.newHandler &&= handler;", "module.exports ||= {};"]) {
+  for (const source of ['lazyExport(name, "./health");', "exports[name] = handler;", "module.exports = handlers;", "Object.assign(exports, handlers);", "register(exports);", "const target = exports; target.newHandler = handler;", "exports.newHandler ??= handler;", "exports.newHandler ||= handler;", "exports.newHandler &&= handler;", "module.exports ||= {};", "[exports.newHandler] = [handler];", "({ newHandler: exports.newHandler } = handlers);", "for (exports.newHandler of handlers) {}", "exports.newHandler++;"]) {
     assert.throws(() => entryExports(source, "functions/index.js", new Set(["functions/health.js"])), /Computed|Unsupported/);
   }
 });

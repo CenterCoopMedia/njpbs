@@ -40,6 +40,13 @@ function exportTarget(node) {
   return text === "exports" || text === "module.exports";
 }
 
+function containsExportTarget(node) {
+  if (exportTarget(node)) return true;
+  if (ts.isPropertyAccessExpression(node) || ts.isElementAccessExpression(node)) return containsExportTarget(node.expression);
+  if (ts.isPropertyAssignment(node)) return containsExportTarget(node.initializer);
+  return ts.forEachChild(node, containsExportTarget) ?? false;
+}
+
 function esmExports(node, path) {
   if (ts.isExportDeclaration(node)) {
     if (!node.exportClause || !ts.isNamedExports(node.exportClause)) throw new Error(`Unsupported Functions re-export: ${path}`);
@@ -116,6 +123,7 @@ export function entryExports(source, path, files, { devAdapter = false } = {}) {
       const left = node.left;
       const target = exportTarget(left) ||
         ((ts.isPropertyAccessExpression(left) || ts.isElementAccessExpression(left)) && exportTarget(left.expression));
+      if (!target && containsExportTarget(left)) throw new Error(`Unsupported Functions assignment pattern: ${path}`);
       if (target && node.operatorToken.kind !== ts.SyntaxKind.EqualsToken) throw new Error(`Unsupported Functions assignment: ${path}`);
       if ((ts.isPropertyAccessExpression(left) || ts.isElementAccessExpression(left)) && exportTarget(left.expression)) {
         if (devAdapter && ts.isElementAccessExpression(left) && left.argumentExpression.getText() === "name" && node.right.getText() === "handler") {
@@ -130,6 +138,8 @@ export function entryExports(source, path, files, { devAdapter = false } = {}) {
         for (const property of node.right.properties) add(staticName(property.name, path), path);
       }
     }
+    if ((ts.isForOfStatement(node) || ts.isForInStatement(node)) && containsExportTarget(node.initializer)) throw new Error(`Unsupported Functions assignment loop: ${path}`);
+    if ((ts.isPrefixUnaryExpression(node) || ts.isPostfixUnaryExpression(node)) && containsExportTarget(node.operand)) throw new Error(`Unsupported Functions assignment: ${path}`);
     if (ts.isCallExpression(node) && node.arguments.some(exportTarget)) {
       const getter = node.expression.getText() === "Object.defineProperty" &&
         enclosingFunction(node) === "lazyExport" && node.arguments[1]?.getText() === "exportName";
