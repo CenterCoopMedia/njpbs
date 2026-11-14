@@ -75,9 +75,9 @@
   <iframe title="Preview of the selected reusable NJ PBS data figure" id="figure-frame" class="figure-dialog__frame" sandbox="allow-popups allow-popups-to-escape-sandbox allow-same-origin" loading="lazy"></iframe>
   <p class="figure-dialog__status" id="figure-release-status">Published on NJ PBS. Downloads preserve this dated source snapshot.</p>
   <section id="figure-public-panel" class="figure-dialog__panel" aria-label="Public embed and download">
-    <h3>Embed on another page</h3><p>Sample iframe code for the future public NJ PBS embed endpoint. The URL shown here is not yet active.</p>
-    <label for="figure-embed-code">Proposed embed code</label><textarea id="figure-embed-code" class="figure-dialog__code" readonly spellcheck="false"></textarea>
-    <div class="figure-dialog__actions"><button id="figure-copy-embed" type="button">Copy proposed embed</button></div>
+    <h3>Embed on another page</h3><p>Paste this code into another website to show the figure with its source and NJ PBS credit. Keep the published version, or choose the latest approved data. The embed preview uses the published comparison. Downloads keep the comparison selected on the Data Hub.</p>
+    <label for="figure-embed-code">Embed code</label><textarea id="figure-embed-code" class="figure-dialog__code" readonly spellcheck="false"></textarea>
+    <div class="figure-dialog__actions"><button id="figure-copy-embed" type="button">Copy embed</button></div>
     <section class="figure-dialog__panel" aria-label="Download figure"><h3>Download the figure</h3><p>Try a standalone HTML embed, PNG or SVG image, CSV values, or JSON metadata. Files include source credits and reporting periods.</p>
       <div class="figure-dialog__actions"><button type="button" data-export-format="html">HTML</button><button type="button" data-export-format="png">PNG</button><button type="button" data-export-format="svg">SVG</button><button type="button" data-export-format="csv">CSV</button><button type="button" data-export-format="json">JSON</button></div>
     </section>
@@ -427,13 +427,13 @@
   document.addEventListener('keydown',event=>{
     if (event.key === '/' && !document.querySelector('.data-hub dialog[open]') && !['INPUT','TEXTAREA','SELECT'].includes(document.activeElement?.tagName)) {event.preventDefault();$('metric-search').focus();}
   });
-  // Figure reuse previews render in the browser.
+  // The dialog, downloads and static public embeds share this figure renderer.
   const reuseDialog = $('figure-dialog');
   const reuseFrame = $('figure-frame');
   reuseFrame.addEventListener('load',()=>{
     try {
-      // srcdoc preview is script-free and same-origin only for sizing; real cross-site
-      // embedding requires a validated resize message or a generous fallback.
+      // The script-free preview measures its own height. Public cross-origin
+      // frames use the fallback height declared in the copied snippet.
       const doc=reuseFrame.contentDocument;
       if (!doc) return;
       // A large fallback iframe makes documentElement.scrollHeight equal the
@@ -488,8 +488,6 @@
     if (historySeries(m).length) return m.historyKind==='monthly'?850:820;
     return Math.min(1050,Math.max(700,420 + cleanPoints(m.points).length * 65));
   }
-  // This same HTML could be rendered by an approved static embed route.
-  // The preview deliberately uses srcdoc so it does not claim that route exists.
   function figureDocument(m, view, revisionMode) {
     const points = cleanPoints(m.points);
     const max = Math.max(.0001,...points.map(p=>p.value));
@@ -584,11 +582,27 @@
       <footer class="meta"><p><strong>Source:</strong> ${attrSource}</p><p><strong>Checked:</strong> ${xml(dateLabel(m.checked || seed.asOf))}. ${xml(revisionText)}</p><p class="note">${xml(reuseWarnings(m))}</p></footer>
     </main></body></html>`;
   }
-  function plannedEmbedSnippet(m, view, revisionMode) {
+  function creditedFigureDocument(m, view, revisionMode) {
+    const credit = `<footer class="njpbs-figure-credit"><p>Data snapshot: <time datetime="${xml(seed.asOf)}">${xml(dateLabel(seed.asOf))}</time> · <a href="https://njpbs.org/data-hub/" target="_blank" rel="noopener noreferrer">NJ PBS Data Hub<span class="sr-only"> (opens in new tab)</span></a></p></footer>`;
+    const fonts = `<style>@font-face{font-family:"PBS Sans";font-style:normal;font-weight:400;font-display:swap;src:url("https://njpbs.org/brand/fonts/PBSSans.woff2") format("woff2")}@font-face{font-family:"PBS Sans";font-style:normal;font-weight:700 900;font-display:swap;src:url("https://njpbs.org/brand/fonts/PBSSans-Bold.woff2") format("woff2")}</style>`;
+    return figureDocument(m,view,revisionMode).replace('</head>',fonts+'</head>').replace('</main>',credit+'</main>');
+  }
+  function figureEmbedSnippet(m, view, revisionMode) {
     const route = `https://njpbs.org/data/figures/${encodeURIComponent(m.id)}/embed/`;
-    const suffix = `?view=${view}` + (revisionMode === 'pinned' ? '&revision=PUBLISHED_REVISION_ID' : '');
+    const suffix = `?view=${view}` + (revisionMode === 'pinned' ? '&revision='+encodeURIComponent(seed.asOf) : '');
     const height = embedHeight(m,view);
-    return `<!-- DESIGN EXAMPLE ONLY. NJ PBS has not launched this embed endpoint. -->\n<iframe\n  title="${String(m.title).replace(/"/g,'&quot;')} — NJ PBS data figure"\n  src="${route}${suffix.replace(/&/g,'&amp;')}"\n  loading="lazy"\n  style="width:100%;height:${height}px;border:0"\n  referrerpolicy="strict-origin-when-cross-origin"\n></iframe>`;
+    return `<iframe\n  title="${xml(m.title)} — NJ PBS data figure"\n  src="${route}${suffix.replace(/&/g,'&amp;')}"\n  loading="lazy"\n  style="width:100%;height:${height}px;border:0"\n  referrerpolicy="no-referrer"\n></iframe>`;
+  }
+  function embedFigureDocument(m, view, revisionMode) {
+    // Public embeds show one published comparison; other views remain available in downloads.
+    const selected = [incomeView, budgetView, familyCareView, uninsuredView, graduationView, grossRentView, metroView];
+    [incomeView, budgetView, familyCareView, uninsuredView, graduationView, grossRentView, metroView] =
+      ['national', 'types', 'trend', 'national', 'trend', 'national', 'national'];
+    try {
+      return creditedFigureDocument(m,view,revisionMode);
+    } finally {
+      [incomeView, budgetView, familyCareView, uninsuredView, graduationView, grossRentView, metroView] = selected;
+    }
   }
   function historyFigureSVG(m) {
     const comps=compareToHistory(m);
@@ -639,7 +653,7 @@
       const record={format:'njpbs-data-figure-prototype-v1',previewOnly:false,editorialStatus:status,updateMode:reuseRevisionMode(),asOf:seed.asOf,metric:m};
       return downloadBlob(new Blob([JSON.stringify(record,null,2)],{type:'application/json;charset=utf-8'}),base+'.json');
     }
-    if (format==='html') return downloadBlob(new Blob([figureDocument(m,view,reuseRevisionMode())],{type:'text/html;charset=utf-8'}),base+'.html');
+    if (format==='html') return downloadBlob(new Blob([creditedFigureDocument(m,view,reuseRevisionMode())],{type:'text/html;charset=utf-8'}),base+'.html');
     const svg=chartAsSVG(m,view);
     if (format==='svg') return downloadBlob(new Blob([svg],{type:'image/svg+xml;charset=utf-8'}),base+'.svg');
     if (format==='png') {
@@ -668,10 +682,10 @@
     $('figure-dialog-title').textContent=m.title;
     $('figure-source-info').textContent=`${m.period}. Source: ${sourceLine(m)}.`;
     $('figure-release-status').textContent=draftish?'This entry is not approved for public embedding. Exports will be marked as drafts.':'Published on NJ PBS. Downloads preserve this dated source snapshot.';
-    $('figure-preview-label').textContent=`Preview: ${view==='chart'?'comparison':'headline number'} · ${rev==='latest'?'follow the latest approved release':'pinned to the published release'}`;
-    reuseFrame.srcdoc=figureDocument(m,view,rev);
+    $('figure-preview-label').textContent=`Preview: ${view==='chart'?'published comparison':'headline number'} · ${rev==='latest'?'follow the latest approved release':'pinned to the published release'}`;
+    reuseFrame.srcdoc=embedFigureDocument(m,view,rev);
     reuseFrame.style.height=embedHeight(m,view)+'px';
-    reuseEmbedCode.value=plannedEmbedSnippet(m,view,rev);
+    reuseEmbedCode.value=figureEmbedSnippet(m,view,rev);
     $('figure-copy-embed').disabled=draftish;
     document.querySelectorAll('[data-export-format]').forEach(button=>{button.disabled=(draftish && m.value===null && button.dataset.exportFormat!=='json')||(view==='chart' && Boolean(safeEmbed(m.embedUrl)) && ['png','svg'].includes(button.dataset.exportFormat));});
   }
@@ -688,11 +702,11 @@
     try {
       if (!navigator.clipboard?.writeText) throw new Error('Clipboard permission unavailable');
       await navigator.clipboard.writeText(value);
-      reuseFeedback.textContent='Copied. This is a proposed integration format, not a live endpoint.';
+      reuseFeedback.textContent='Embed code copied.';
     } catch {
       const textarea=reuseEmbedCode;
       textarea.focus();textarea.select();
-      reuseFeedback.textContent='Copy is restricted in this browser. The example is selected; use your keyboard to copy it.';
+      reuseFeedback.textContent='Copy is restricted in this browser. The embed code is selected; use your keyboard to copy it.';
     }
   }
   $('metric-results').addEventListener('click',event=>{

@@ -293,6 +293,9 @@ export function classify(pathname: string, opts: ClassifyOptions = {}): LegacyDe
   if (live.has(p) || live.has(p + "/")) return null;
   if (RESERVED_EXACT.has(p)) return null;
 
+  // Public Data Hub figure embeds are unrelated to retired WordPress oEmbed URLs.
+  if (/^\/data\/figures\/[^/]+\/embed(?:\/|$)/.test(p)) return null;
+
   // 3. New-site namespaces with no legacy equivalent reach the origin, so a shape rule
   //    below never turns one into a 410.
   for (const prefix of PROTECTED_NEW_PREFIXES) {

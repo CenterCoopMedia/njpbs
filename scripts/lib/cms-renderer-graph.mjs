@@ -32,6 +32,9 @@ const LAUNCH_CONTRACTS = {
   "site/scripts/render-compiled-preview.ts": "4f8bc132ec4a460149734b0b2c5e6a43f3481ab2",
   "site/scripts/cms-publication-runtime-guard.ts": "4d4022a20284beb50ca042dda859c87b9b061442",
   "site/scripts/cms-preview-operator-checks.ts": "d6c68503575b378001082a83a9556eb95a578c71",
+  // This build-only DOM evaluates the committed raw reader, whose bytes and
+  // snapshots are covered by the Site guard. Any helper edit needs a new contract.
+  "site/src/lib/data-hub-embed-pages.ts": "8df9dd2bd108207a2482fccd6f94844ec8654737",
 };
 const GUARDS = ["site", "preview-renderer", "packages", ".npmrc", "package.json", "package-lock.json",
   "functions/package.json", "admin/package.json", "cms-api/package.json", "scripts/prepare-preview-renderer.mjs",
@@ -272,7 +275,9 @@ export async function fingerprintRendererGraph(sourceSha, deps = {}) {
         const walk = node => {
           if (["getBuiltinModule", "mainModule"].includes(ts.isIdentifier(node) ? node.text : literal(node))) unknown("module_loader_alias");
           if (ts.isIdentifier(node) && ["eval", "Function"].includes(node.text)
-            && !ts.isTypeReferenceNode(node.parent) && !ts.isTypeQueryNode(node.parent)) unknown("dynamic_code");
+            && !ts.isTypeReferenceNode(node.parent) && !ts.isTypeQueryNode(node.parent)
+            && !(file === "site/src/lib/data-hub-embed-pages.ts" && node.text === "eval"
+              && ts.isPropertyAccessExpression(node.parent) && node.parent.expression.getText(tree) === "window")) unknown("dynamic_code");
           if (ts.isIdentifier(node) && node.text === "createRequire") {
             const parent = node.parent;
             if (!ts.isImportSpecifier(parent)) {

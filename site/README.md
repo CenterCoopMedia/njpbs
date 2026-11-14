@@ -79,6 +79,32 @@ Release the publisher, renderer and CMS from the same pinned source commit.
 The route needs no separate variable or secret change. Deployment requires
 separate authorization.
 
+## Data Hub figure embeds
+
+Open a figure in `/data-hub/` and select **Copy embed**. The iframe shows the
+selected chart or headline number, source note, snapshot date and an NJ PBS link.
+The default **Keep this published version** includes a dated `revision`; **Use
+latest approved data** omits it. Both work on another website. These standalone
+documents run no scripts, load no analytics and set no cookies.
+The embed preview shows the published comparison served by that URL. Downloads
+retain the comparison selected on the Data Hub.
+
+The route `/data/figures/<id>/embed/?view=chart&revision=2026-11-09` selects a
+saved source snapshot in `src/data/data-hub-revisions/`. Missing figures,
+revisions and unsupported views return 404. `view=number` selects the headline
+number. A source build renders these documents with the same code as the dialog
+preview; it does not use a second chart renderer. The existing Data Hub build
+flag controls route emission.
+
+When publishing new data, retain every saved JSON snapshot, add the new dated
+snapshot, and update the reader's source payload and `asOf` date together. Each
+date identifies one immutable source snapshot. Never change an existing dated
+file. The public Worker maps revision/view query parameters to the emitted
+documents and applies the frame and privacy headers only to this route family.
+The legacy redirect classifier passes this family through its WordPress embed
+rule; a release must include the classifier's edge artifact as well as the
+public Worker and site assets.
+
 ## Browser checks
 
 The required Site CI consumer runs `qa/axe_scan_browser_test.py` against both

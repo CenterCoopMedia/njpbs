@@ -16,9 +16,9 @@ const document = new Window().document;
 document.body.innerHTML = brand;
 const expectedLogo = document.querySelector("img")!;
 
-// Wiki and opt-in staff specimens have deliberately separate shells. Redirect
+// Wiki, script-free figure embeds and opt-in staff specimens use separate shells. Redirect
 // stubs are not reading pages. The noindex 404 remains inside the public gate.
-const separateShell = /^(?:wiki|design-system|atlas|admin\/docs)\//;
+const separateShell = /^(?:(?:wiki|design-system|atlas|admin\/docs)\/|data\/figures\/[a-z0-9-]+\/embed\/)/;
 describe.skipIf(isPublicOnlyBuild(process.env))("every built public page uses the shared header", () => {
   it("renders the shared logo, primary navigation, menu control and skip target", () => {
     const pages = (readdirSync(dist, { recursive: true }) as string[])

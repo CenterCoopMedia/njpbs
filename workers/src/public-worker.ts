@@ -1,6 +1,7 @@
 export { createPublicReleaseRouter } from "./public-release-router";
 import { escapeHtml } from "../../packages/content-core/src/content-model";
 import { SECURITY_HEADER_BASELINE } from "../../packages/content-core/src/public-security-headers";
+import { serveDataHubEmbed } from "../../packages/content-core/src/data-hub-embed";
 export { SECURITY_HEADER_BASELINE } from "../../packages/content-core/src/public-security-headers";
 import { hasVideoPlayer } from "../../packages/content-core/src/video-page";
 import {
@@ -471,6 +472,8 @@ export async function servePublicRequest(
   deps: PublicWorkerDependencies,
 ): Promise<Response> {
   const url = new URL(request.url);
+  const figure = serveDataHubEmbed(request, deps.fetchAsset);
+  if (figure) return figure;
   // Compiled pair modules are private execution inputs, including encoded paths.
   let compiledPath = url.pathname;
   // Decode valid bytes only for this ASCII-prefix check. A literal percent or
@@ -545,4 +548,3 @@ export default {
     });
   },
 } satisfies ExportedHandler<PublicWorkerEnv>;
-

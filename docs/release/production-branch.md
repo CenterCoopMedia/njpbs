@@ -286,7 +286,7 @@ inspection. Check canonical repository name/ID and `CMS_DEPLOY_OWNER` as above.
    gh api --method GET "/repos/$PROMOTION_REPOSITORY/git/ref/heads/production"
    ```
 
-5. Joe's credential activation authorization: in the landofjawn credential
+5. Joe's credential activation authorization: in the credential authority's
    Bash session, confirm the approved `pass` entry by name without reading its
    value. Set `PROMOTION_KEY_ENTRY` to that approved pointer. The coordinator
    authorized this stdin pipeline for the supervised activation only; never

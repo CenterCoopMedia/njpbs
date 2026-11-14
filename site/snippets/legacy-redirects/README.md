@@ -188,7 +188,7 @@ PBSIS microsite pages.
   passes through.
 - The 21 `LEGACY_TAIL_FAMILIES` at the root and below. These cover retired
   WordPress sections, NJTV/WNET sections, and the NJ PBSIS microsite.
-- Any unprotected path ending in `/embed`.
+- Any unprotected path ending in `/embed`, except current Data Hub figure embeds.
 - `/page/<number>` pagination stubs.
 - Children of `/about`, `/kids`, `/live`, `/passport`, `/support`, and
   `/schedule`. Their bare current routes pass through.
@@ -199,6 +199,10 @@ added to `LIVE_EXACT`, or supplied through `opts.live`, before it is released.
 
 ## Deliberate pass-through decisions
 
+- `/data/figures/<id>/embed` and its saved views pass through before the retired
+  WordPress oEmbed rule. The public Worker serves these script-free Data Hub
+  documents and returns 404 for unknown figures, views or snapshots. Release this
+  classifier exception with the public Worker and figure assets.
 - `/podcast` and `/podcasts` pass through at the root and below. The CDX result
   contains seven episode paths and one series path. NJ PBS still makes those
   podcast subjects, so the namespaces can return in a later release.

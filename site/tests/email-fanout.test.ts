@@ -23,7 +23,12 @@ const STATION_MAILBOXES = [
   "editor-b@example.org",
   "editor-c@example.org",
 ];
-const INFO_MAILBOXES = [...STATION_MAILBOXES, "editor-d@example.org"];
+const INFO_MAILBOXES = [
+  "editor-a@example.org",
+  "njpbs@montclair.edu",
+  "editor-b@example.org",
+  "editor-d@example.org",
+];
 const GENERIC_STATION_LOCALS = STATION_LOCALS.filter((local) => local !== "info");
 const ENGINEERS = ["engineer-a@example.org", "engineer-b@example.org"];
 const PROGRAMMING_MAILBOXES = [
@@ -84,11 +89,13 @@ describe("destinationsFor", () => {
     expect(destinationsFor(`${local}@njpbs.org`)).toEqual(STATION_MAILBOXES);
   });
 
-  it("uses the extra configured membership for info only", () => {
+  it("uses independent configured membership for info only", () => {
     expect(destinationsFor(`info@${ZONE}`)).toEqual(INFO_MAILBOXES);
     expect(destinationsFor(`Info+question@${ZONE}`)).toEqual(INFO_MAILBOXES);
     expect(destinationsFor(`support@${ZONE}`)).toEqual(STATION_MAILBOXES);
     expect(destinationsFor("info@newnjpbs.org")).toEqual(STATION_MAILBOXES);
+    expect(destinationsFor(`info@${ZONE}`)).not.toContain("editor-c@example.org");
+    expect(destinationsFor(`support@${ZONE}`)).toContain("editor-c@example.org");
   });
 
   it(`routes engineering@${ZONE} to the two engineers only`, () => {

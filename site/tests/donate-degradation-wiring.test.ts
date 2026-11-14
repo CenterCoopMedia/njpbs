@@ -526,6 +526,8 @@ const expectedCmsAnchorEmitters: Readonly<Record<string, number>> = {
   "coverage-list.ts": 1,
   "data-table-render.ts": 1,
   "data-figure-render.ts": 1,
+  // The script-free embed 404 links only to the fixed Data Hub destination.
+  "data-hub-embed.ts": 1,
   // Three existing constructors (race jumps, source and AP) plus the reviewed
   // candidate-link helper, whose URLs come only from the fixed 2026 roster map.
   "election-results-render.ts": 4,

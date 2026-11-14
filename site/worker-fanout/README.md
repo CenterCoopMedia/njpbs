@@ -9,7 +9,9 @@ Set the required `FANOUT_DESTINATIONS_JSON` Worker secret containing `default`,
 `info`, `engineering`, `programming`, and `desk` arrays. Each array must contain at least
 one valid recipient address. The `info` array is the complete membership for that
 alias, including any recipients shared with the default group. Other station
-aliases continue to use `default`; off-zone mail also uses `default`. The pure routing helpers contain placeholders for
+aliases continue to use `default`; off-zone mail also uses `default`. A recipient
+can leave `info` while remaining in `default`; update the complete configured
+`info` array without changing the other groups. The pure routing helpers contain placeholders for
 local tests. The Worker rejects missing or malformed configuration before forwarding.
 Replace every placeholder before enabling routing. Email Routing
 rules determine which addresses reach the Worker; those rules and recipient

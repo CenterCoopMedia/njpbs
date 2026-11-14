@@ -1,0 +1,11 @@
+---
+import { dataHubEmbedPages } from "../../../../../lib/data-hub-embed-pages";
+
+export async function getStaticPaths() {
+  return (await dataHubEmbedPages(process.env)).map(({ id, snapshot, html }) => ({
+    params: { id, snapshot }, props: { html },
+  }));
+}
+const { html } = Astro.props;
+---
+<Fragment set:html={html} />
