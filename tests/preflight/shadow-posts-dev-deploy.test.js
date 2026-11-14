@@ -154,6 +154,8 @@ describe("dev shadow deployment boundary", () => {
       CMS_DEV_PUBLIC_ORIGIN: "${{ vars.CMS_DEV_PUBLIC_ORIGIN }}",
       CMS_DEV_SITE_PAGES: "${{ vars.CMS_DEV_SITE_PAGES }}",
       CMS_PRODUCTION_API_ORIGIN: "${{ vars.CMS_PRODUCTION_API_ORIGIN }}",
+      CMS_LOCAL_PUBLICATION_OWNER: "${{ vars.CMS_LOCAL_PUBLICATION_OWNER }}",
+      CMS_GPU_WORKER_ID: "${{ vars.CMS_GPU_WORKER_ID }}",
       CMS_DEPLOY_OWNER: "${{ vars.CMS_DEPLOY_OWNER }}",
       CMS_DEV_ACCESS_ORIGIN: "${{ vars.CMS_DEV_ACCESS_ORIGIN }}",
     });
