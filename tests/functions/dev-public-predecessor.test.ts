@@ -1,4 +1,4 @@
-import { afterAll, beforeAll, beforeEach, expect, it } from "vitest";
+import { afterAll, beforeAll, beforeEach, expect, it, vi } from "vitest";
 import { initializeApp, deleteApp } from "firebase-admin/app";
 import { getFirestore } from "firebase-admin/firestore";
 import { createHash } from "node:crypto";
@@ -17,6 +17,8 @@ import candidateStore from "../../functions/lib/public-worker-candidate-store.js
 import candidates from "../../functions/lib/public-worker-candidate.js";
 import outcomes from "../../functions/lib/public-deployment-outcome-store.js";
 import targets from "../../functions/lib/publication-target.js";
+import devQueue from "../../functions/lib/dev-publication-queue.js";
+import runtimeControl from "../../functions/lib/cms-publication-runtime-control.js";
 import { createPublicArtifactInventoryReceipt } from "../../site/src/lib/public-artifact-inventory";
 
 if (!/^127\.0\.0\.1:\d+$/.test(process.env.FIRESTORE_EMULATOR_HOST ?? "")) throw new Error("Isolated emulator required");
@@ -50,12 +52,14 @@ beforeAll(async () => {
     workerVersionId: versionId, workerVersionTag: candidates.publicWorkerCandidateTag({ generation: batch.generation, artifactDigest: "b".repeat(64) }),
     versionCreatedOn: "2026-11-01T12:00:00.000Z", artifactDigest: "b".repeat(64), artifactReceiptDigest: "c".repeat(64),
     publicationReceiptDigest: createHash("sha256").update(publicReceiptBytes).digest("hex"), mediaManifestDigest: manifest.mediaManifestDigest,
-    artifactFileCount: 2, artifactBytes: 1000, wranglerVersion: "4.123.0" } });
+    artifactFileCount: 2, artifactBytes: 1000, wranglerVersion: "4.123.0",
+    noBuildPost: { schemaVersion: 2, rendererSha: sha, enabled: true, authoritative: true, families: ["posts"] } } });
   const acquisition = await coordinator.acquirePublicDeploymentLease({ firestore: db, buildBatchId, commitSha: sha, runtime, target });
   expect(acquisition.outcome).toBe("acquired");
   await outcomes.settlePublicDeploymentOutcome({ firestore: db, lease: acquisition.lease, runtime, target,
     evidence: { action: "activate", buildBatchId, deploymentId, versionId, commitSha: sha } });
-  const paths = ["system/publicDeployment", batchPath, `${batchPath}/candidates/worker`];
+  const paths = ["system/publicDeployment", batchPath, `${batchPath}/candidates/worker`,
+    "system/publicDeployment/noBuildPosts/capability"];
   retained = await Promise.all(paths.map(async path => ({ path, data: (await db.doc(path).get()).data() })));
   request = { schemaVersion: 1, operationId: "original-dev-init", environment: "development", projectId: "njpbs-site-dev",
     oldRuntime, legacyPointerDigest: adoption.legacyBootstrapPointerDigest(retained[0].data), publicReceiptBytes, deploymentId, versionId };
@@ -63,6 +67,26 @@ beforeAll(async () => {
 beforeEach(async () => {
   await clear();
   const batch = db.batch(); retained.forEach(row => batch.create(db.doc(row.path), row.data)); await batch.commit();
+});
+it("admits editorial publication after a code release creates the pointer and 08a creates its matching runtime", async () => {
+  vi.stubEnv("CMS_DEPLOYMENT_ENVIRONMENT", "development");
+  const admission = () => db.runTransaction(async transaction => devQueue.newDevGithubQueueFields({
+    firestore: db, transaction, transport: "github",
+    control: await runtimeControl.readCmsPublicationRuntimeControlInTransaction({ firestore: db, transaction }),
+  }), { readOnly: true });
+  try {
+    // The real release owners above activated this candidate without a CMS runtime.
+    expect((await db.doc("system/cmsPublicationRuntime").get()).exists).toBe(false);
+    expect((await db.doc("system/publicDeployment/noBuildPosts/capability").get()).data()).toEqual({
+      schemaVersion: 2, rendererSha: sha, servingEnabled: true, generation: 1,
+    });
+    await expect(admission()).rejects.toThrow("Development publication requires its ready cloud renderer.");
+    await apply();
+    expect(await admission()).toEqual({ environment: "development", projectId: "njpbs-site-dev",
+      runtime: { owner: "cloudflare", release: sha } });
+    expect((await db.doc("system/publicDeployment").get()).data()).toEqual(retained[0].data);
+    expect((await db.collection("cmsPublishQueue").get()).empty).toBe(true);
+  } finally { vi.unstubAllEnvs(); }
 });
 it("creates both exact ready OLD pins, then separately activates media with one audit per owner", async () => {
   const before = (await db.doc("system/publicDeployment").get()).data();
