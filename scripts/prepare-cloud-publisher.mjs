@@ -1,4 +1,4 @@
-import { renderDevelopmentConfig } from "./render-development-config.mjs";
+import { renderDevelopmentConfig, productionDeploymentInputs } from "./render-development-config.mjs";
 import { cloudflareAccount, cloudflarePublicWorkerTag } from "../site/scripts/cloudflare-account.mjs";
 import { execFileSync } from "node:child_process";
 import { mkdtemp, readFile, writeFile } from "node:fs/promises";
@@ -54,7 +54,7 @@ export async function prepareCloudPublisher(commitSha, { sourceRepository = repo
   ) {
     throw new Error("Prepared publisher source differs from its commit");
   }
-  renderDevelopmentConfig(source, process.env, targetEnvironment === "development" ? undefined : { only: ["CMS_PRODUCTION_API_ORIGIN"] });
+  renderDevelopmentConfig(source, process.env, targetEnvironment === "development" ? undefined : { only: productionDeploymentInputs });
   const publisherDirectory = path.join(source, "publisher");
   execFileSync("npm", ["ci", "--ignore-scripts", "--no-audit", "--no-fund"], {
     cwd: publisherDirectory,

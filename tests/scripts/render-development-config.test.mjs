@@ -6,10 +6,11 @@ import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { createHash } from "node:crypto";
+import { createRequire } from "node:module";
 import { parse } from "yaml";
 import { developmentInputs, developmentValues, renderDevelopmentText, renderDevelopmentConfig,
   assertDevelopmentSource, restoreDevelopmentTemplates, renderCommittedDeploymentSource,
-  deploymentInputFingerprint, developmentDerivations } from "../../scripts/render-development-config.mjs";
+  deploymentInputFingerprint, developmentDerivations, productionDeploymentInputs } from "../../scripts/render-development-config.mjs";
 import { developmentInputFixture as inputs } from "../helpers/development-inputs.mjs";
 
 const root = fileURLToPath(new URL("../../", import.meta.url));
@@ -19,7 +20,7 @@ const git = (cwd, ...args) => execFileSync("/usr/bin/git", ["-c", "core.hooksPat
 function fixture(run) {
   const directory = mkdtempSync(join(tmpdir(), "development-render-"));
   try {
-    for (const name of [...files, ".gitignore", "config/development-inputs.json", "scripts/render-development-config.mjs", "site/scripts/cms-publication-runtime-guard.ts", "site/package.json"]) {
+    for (const name of [...files, ".gitignore", "config/development-inputs.json", "scripts/render-development-config.mjs", "site/scripts/cms-publication-runtime-guard.ts", "site/package.json", "functions/lib/public-deployment-pointer.js"]) {
       mkdirSync(dirname(join(directory, name)), { recursive: true });
       copyFileSync(join(root, name), join(directory, name));
     }
@@ -40,6 +41,7 @@ test("validates every named supplier before rendering, with value-free diagnosti
   }
   assert.throws(() => developmentValues({ ...inputs, CMS_DEV_API_ORIGIN: inputs.CMS_PRODUCTION_API_ORIGIN }));
   assert.throws(() => developmentValues({ ...inputs, CMS_DEV_API_WORKER: inputs.CLOUDFLARE_DEV_PUBLIC_WORKER }));
+  assert.throws(() => developmentValues({ ...inputs, CMS_LOCAL_PUBLICATION_OWNER: "cloudflare" }));
 });
 
 test("deploy and publish map identical repository variables and render before target-dependent commands", () => {
@@ -163,7 +165,7 @@ test("runs the actual production render block after real gate moves without cred
     const workflow = parse(readFileSync(join(root, ".github/workflows/cms-staging-deploy.yml"), "utf8"));
     const steps = workflow.jobs["admin-build"].steps;
     const env = { PATH: process.env.PATH, RUNNER_TEMP: runtime, GITHUB_WORKSPACE: directory,
-      CMS_PRODUCTION_API_ORIGIN: inputs.CMS_PRODUCTION_API_ORIGIN };
+      ...Object.fromEntries(productionDeploymentInputs.map(name => [name, inputs[name]])) };
     for (const step of steps) {
       if (step.uses?.startsWith("actions/checkout") && step.with?.path) {
         const gate = join(directory, step.with.path);
@@ -202,11 +204,47 @@ test("source proof refuses tampered, staged, unrelated, untracked and symlink ch
   assert.throws(() => assertDevelopmentSource(directory, inputs));
 }));
 
-test("production resolves its API input without requiring development resource settings", () => fixture(directory => {
-  const env = { CMS_PRODUCTION_API_ORIGIN: inputs.CMS_PRODUCTION_API_ORIGIN };
-  const only = ["CMS_PRODUCTION_API_ORIGIN"];
-  assert.equal(renderDevelopmentConfig(directory, env, { only }), developmentInputs.CMS_PRODUCTION_API_ORIGIN.files.length);
+test("production requires both persisted identities and preserves accepted ownership and retired receipts", () => fixture(directory => {
+  const env = Object.fromEntries(productionDeploymentInputs.map(name => [name, inputs[name]]));
+  const only = productionDeploymentInputs;
+  const before = git(directory, "status", "--porcelain");
+  for (const name of ["CMS_LOCAL_PUBLICATION_OWNER", "CMS_GPU_WORKER_ID"]) {
+    const missing = { ...env }; delete missing[name];
+    const result = spawnSync(process.execPath, [script, "--production", "--root", directory], {
+      env: { PATH: process.env.PATH, ...missing }, encoding: "utf8", timeout: 5000,
+    });
+    assert.equal(result.status, 1);
+    assert.equal(git(directory, "status", "--porcelain"), before);
+  }
+  assert.equal(renderDevelopmentConfig(directory, env, { only }),
+    new Set(only.flatMap(name => developmentInputs[name].files)).size);
   assert.equal(assertDevelopmentSource(directory, env), true);
+  const require = createRequire(join(directory, "entry.cjs"));
+  const runtime = require("./functions/lib/publication-runtime-owner.js");
+  const accepted = { runtime: { owner: env.CMS_LOCAL_PUBLICATION_OWNER, release: "a".repeat(40) } };
+  assert.equal(runtime.ownsPublication(accepted, accepted.runtime), true);
+  assert.equal(runtime.ownsPublication(accepted, { ...accepted.runtime, owner: "cloudflare" }), false);
+  assert.throws(() => runtime.publicationRuntime({ ...accepted.runtime, owner: "node-compute" }));
+  const deployment = require("./functions/lib/public-deployment.js");
+  const timestamp = millis => ({ toMillis: () => millis });
+  const retained = { schemaVersion: 1, buildBatchId: "historical-reservation", generation: 1, status: "retired",
+    commitSha: "a".repeat(40), reservedAgainstGeneration: 0, reservedAgainstCommitSha: null,
+    reservedAgainstDeploymentId: null, cutoffAt: timestamp(1), reservedAt: timestamp(1), retiredAt: timestamp(2),
+    retirementReceipt: { schemaVersion: 1, reason: "historical_reserved_below_active", issue: 3195,
+      originalOwner: env.CMS_LOCAL_PUBLICATION_OWNER, activeGeneration: 2, activeCommitSha: "b".repeat(40),
+      activeDeploymentId: "active-deployment", operatorCommitSha: "c".repeat(40), planDigest: "d".repeat(64) } };
+  const retainedBytes = JSON.stringify(retained);
+  assert.equal(deployment.assertPublicDeploymentRetiredBatch(retained), retained);
+  assert.equal(JSON.stringify(retained), retainedBytes);
+  assert.throws(() => deployment.assertPublicDeploymentRetiredBatch({ ...retained,
+    retirementReceipt: { ...retained.retirementReceipt, originalOwner: "node-compute" } }));
+  const transcriptSource = readFileSync(join(directory, "functions/lib/video-transcript-worker.js"), "utf8");
+  assert.ok(transcriptSource.includes(`const WORKER_ID = "${env.CMS_GPU_WORKER_ID}";`));
+  assert.ok(readFileSync(join(directory, "functions/lib/video-orientation-export.js"), "utf8")
+    .includes(`"${env.CMS_GPU_WORKER_ID}-orientation"`));
+  for (const filename of ["scripts/prepare-cloud-publisher.mjs", "scripts/prepare-preview-renderer.mjs"]) {
+    assert.ok(readFileSync(join(root, filename), "utf8").includes("only: productionDeploymentInputs"));
+  }
   const api = JSON.parse(readFileSync(join(directory, "cms-api/wrangler.dev.jsonc"), "utf8"));
   assert.equal(api.name, developmentInputs.CMS_DEV_API_WORKER.placeholder);
   assert.throws(() => renderDevelopmentConfig(directory, {}));

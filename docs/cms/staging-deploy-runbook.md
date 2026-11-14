@@ -35,6 +35,26 @@ Authorization, exact-main CI, compatibility and scans use trusted source.
 Release planner, receipts, deployment helpers, retirement plan, smoke and
 Admin boot checks use NEW. Never copy newer helpers over selected source.
 
+Configure `CMS_LOCAL_PUBLICATION_OWNER` and `CMS_GPU_WORKER_ID` from the live
+deployment before the first public-source release. The existing source renderer
+requires both values in production workflows and isolated publisher/preview
+images; omission refuses before deployment. The committed generic identities
+are source templates, not deployed defaults. Keep the local owner distinct from
+`cloudflare`. The pinned rendering receipt and component fingerprints bind the
+same configuration to compiled consumers and operator source checks.
+
+Keep the recorded local publication owner across queues, background work and
+retirement receipts. Keep the GPU identity across worker authentication,
+transcription/alignment/orientation leases, the shared slot and orientation
+capability check-in. A repository or host rename does not rename accepted work.
+Do not rewrite terminal receipts, clear leases or create another active slot.
+At the authorized handoff, drain the existing owners and read back auth identity,
+all accepted GPU jobs and the shared slot immediately before replacement. Retain
+queued work and its original IDs; install the new source against that same slot.
+Keep an original-source recovery owner for any unsettled claim. A later identity
+change requires its own reviewed move after settlement, with the old consumer
+stopped and its slot retired; this release adds no alias or alternate consumer.
+
 Before selected code or provider authentication, validate both Git identities,
 canonical configured repository name/ID, required helper files, Admin `test:boot`
 and `contracts.cmsReleaseChecks.version: 1`. Keep the editor-lock compatibility

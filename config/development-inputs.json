@@ -1,6 +1,35 @@
 {
   "schemaVersion": 1,
   "inputs": {
+    "CMS_LOCAL_PUBLICATION_OWNER": {
+      "kind": "resource",
+      "placeholder": "node-compute",
+      "files": [
+        "functions/lib/publication-runtime-owner.js",
+        "functions/lib/publication-runtime-owner.d.ts",
+        "functions/lib/editorial-preview-projection.d.ts",
+        "functions/lib/cms-public-deployment-writeback.js",
+        "functions/lib/cms-publication-serializer.js",
+        "functions/lib/cms-publish-artifact.js",
+        "functions/lib/public-deployment.js",
+        "functions/lib/public-deployment-coordinator.js",
+        "functions/lib/public-deployment-outcome-store.js",
+        "functions/lib/public-worker-candidate-store.js",
+        "functions/lib/no-build-post-publication.js",
+        "functions/lib/no-build-post-withdrawal.js",
+        "functions/lib/home-source-selection-admission.js",
+        "functions/lib/dev-publication-history.js",
+        "scripts/lib/dev-publication-history.cjs"
+      ]
+    },
+    "CMS_GPU_WORKER_ID": {
+      "kind": "resource",
+      "placeholder": "node-gpu-b",
+      "files": [
+        "functions/lib/video-transcript-worker.js",
+        "functions/lib/video-orientation-export.js"
+      ]
+    },
     "CLOUDFLARE_DEV_PUBLIC_WORKER": {
       "kind": "resource",
       "placeholder": "template-dev-public",

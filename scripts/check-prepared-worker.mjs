@@ -24,7 +24,8 @@ if (process.argv.length !== 4 || !Object.hasOwn(prepare, target)) {
 // This command is exclusively an offline bundle check. Synthetic suppliers keep
 // account resource names and protected origins out of public CI configuration.
 Object.assign(process.env, Object.fromEntries(Object.entries(developmentInputs).map(([name, input]) =>
-  [name, input.placeholder.replace("template-", "fixture-").replace("example.org", "fixture.test")])));
+  [name, input.kind === "resource" ? "fixture-" + name.toLowerCase().replaceAll("_", "-")
+    : input.placeholder.replace("example.org", "fixture.test")])));
 const prepared = await prepare[target](commit);
 try {
   console.log(`Checking prepared ${target} at ${commit}`);

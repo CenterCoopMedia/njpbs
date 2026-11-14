@@ -8,6 +8,9 @@ import inputManifest from "../config/development-inputs.json" with { type: "json
 
 export const developmentInputs = Object.freeze(inputManifest.inputs);
 export const developmentDerivations = Object.freeze(inputManifest.derivations ?? []);
+export const productionDeploymentInputs = Object.freeze([
+  "CMS_PRODUCTION_API_ORIGIN", "CMS_LOCAL_PUBLICATION_OWNER", "CMS_GPU_WORKER_ID",
+]);
 const refuse = () => { throw new Error("Development configuration refused; configure every named input before rendering"); };
 const escape = value => value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 const gitSource = (root, args, options = {}) => execFileSync("/usr/bin/git", ["--no-optional-locks", "-c", "core.fsmonitor=false", ...args], {
@@ -75,11 +78,12 @@ export function developmentValues(env = process.env, { manifest = inputManifest,
     // config-input: CMS_DEV_API_ORIGIN, CMS_DEV_API_WORKER, CMS_DEV_MEDIA_BUCKET, CMS_DEV_MEDIA_ORIGIN
     // config-input: CMS_DEV_PREVIEW_BUCKET, CMS_DEV_PREVIEW_ORIGIN, CMS_DEV_PREVIEW_RENDERER
     // config-input: CMS_DEV_PREVIEW_STAFF_WORKER, CMS_DEV_PREVIEW_WORKER, CMS_DEV_PUBLIC_ORIGIN
-    // config-input: CMS_DEV_SITE_PAGES, CMS_PRODUCTION_API_ORIGIN
+    // config-input: CMS_DEV_SITE_PAGES, CMS_PRODUCTION_API_ORIGIN, CMS_LOCAL_PUBLICATION_OWNER, CMS_GPU_WORKER_ID
     const value = env[name];
-    if (typeof value !== "string" || /template|replace|placeholder/i.test(value)) refuse();
+    if (typeof value !== "string" || value === input.placeholder || /template|replace|placeholder/i.test(value)) refuse();
     if (input.kind === "resource") {
       if (!/^[a-z][a-z0-9-]{1,61}[a-z0-9]$/.test(value)) refuse();
+      if (name === "CMS_LOCAL_PUBLICATION_OWNER" && value === "cloudflare") refuse();
     } else if (input.kind === "origin") {
       let url;
       try { url = new URL(value); } catch { refuse(); }
@@ -186,7 +190,7 @@ function configuredInputs(env, manifest = inputManifest) {
     // config-input: CMS_DEV_API_ORIGIN, CMS_DEV_API_WORKER, CMS_DEV_MEDIA_BUCKET, CMS_DEV_MEDIA_ORIGIN
     // config-input: CMS_DEV_PREVIEW_BUCKET, CMS_DEV_PREVIEW_ORIGIN, CMS_DEV_PREVIEW_RENDERER
     // config-input: CMS_DEV_PREVIEW_STAFF_WORKER, CMS_DEV_PREVIEW_WORKER, CMS_DEV_PUBLIC_ORIGIN
-    // config-input: CMS_DEV_SITE_PAGES, CMS_PRODUCTION_API_ORIGIN
+    // config-input: CMS_DEV_SITE_PAGES, CMS_PRODUCTION_API_ORIGIN, CMS_LOCAL_PUBLICATION_OWNER, CMS_GPU_WORKER_ID
     const value = env[name];
     return Object.hasOwn(env, name) && value !== undefined && value !== "" && value !== input.placeholder;
   }).map(([name]) => name);
@@ -217,7 +221,7 @@ function sourceEnvironment(root, env, manifest) {
     // config-input: CMS_DEV_API_ORIGIN, CMS_DEV_API_WORKER, CMS_DEV_MEDIA_BUCKET, CMS_DEV_MEDIA_ORIGIN
     // config-input: CMS_DEV_PREVIEW_BUCKET, CMS_DEV_PREVIEW_ORIGIN, CMS_DEV_PREVIEW_RENDERER
     // config-input: CMS_DEV_PREVIEW_STAFF_WORKER, CMS_DEV_PREVIEW_WORKER, CMS_DEV_PUBLIC_ORIGIN
-    // config-input: CMS_DEV_SITE_PAGES, CMS_PRODUCTION_API_ORIGIN
+    // config-input: CMS_DEV_SITE_PAGES, CMS_PRODUCTION_API_ORIGIN, CMS_LOCAL_PUBLICATION_OWNER, CMS_GPU_WORKER_ID
     if (Object.hasOwn(env, name) && env[name] !== value) refuse();
   }
   return { env: values, recorded: true };
@@ -325,7 +329,7 @@ if (process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1]
     while (args.length) {
       const flag = args.shift();
       if (flag === "--check-source" && !checking) checking = true;
-      else if (flag === "--production" && !options.only) options.only = ["CMS_PRODUCTION_API_ORIGIN"];
+      else if (flag === "--production" && !options.only) options.only = productionDeploymentInputs;
       else if (flag === "--inputs" && !options.only && args[0]) options.only = args.shift().split(",");
       else if (flag === "--root" && !root && args[0]) root = args.shift();
       else refuse();
