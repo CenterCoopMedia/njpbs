@@ -31,6 +31,11 @@ failure stop. Provisioning and release remain distinct authorizations.
 
 ## Configuration and provisioning
 
+For the GitHub report token and webhook secret, follow the
+[bug-report credential rotation runbook](bug-report-secret-rotation.md). It keeps
+the private issue tracker separate from the fix-source repository and requires
+runtime adoption before old credentials are retired.
+
 [functions-configuration.json](../../config/functions-configuration.json) owns
 each input's native binding, default/type/required checks, runtime parameter and
 secret role. SDK declarations and actual export bindings supply the export and
