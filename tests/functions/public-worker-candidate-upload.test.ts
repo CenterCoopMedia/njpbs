@@ -229,6 +229,9 @@ afterAll(async () => {
 });
 
 describe("public Worker candidate upload orchestration", () => {
+  const publicBuildSettings = { schemaVersion: 1, commitSha: COMMIT_SHA, overridesAbsent: true,
+    values: { PUBLIC_GA4_MEASUREMENT_ID: "G-TEST123", PUBLIC_REPORT_ENDPOINT: "https://report.example.org/",
+      PUBLIC_SHARE_INTAKE_ENDPOINT: "https://intake.example.org/", PUBLIC_TURNSTILE_SITEKEY: "1x00000000000000000000AA" } };
   async function detachedFixture(checkpoint = true) {
     const oldCommitSha = "b".repeat(40), preparationId = "Release0000000000001";
     await db.doc("system/publicDeployment").set({ ...initialPublicDeploymentPointer(), mediaLifecycleReady: true,
@@ -240,7 +243,7 @@ describe("public Worker candidate upload orchestration", () => {
     const reservation = await preparePublicRelease({ firestore: db, preparationId, oldCommitSha, commitSha: COMMIT_SHA });
     const prepared = await fixture(`cms-${preparationId}`, undefined, false, false, false, reservation);
     if (checkpoint) await recordPreparedPublicReleaseCheckpoint({ firestore: db, preparationId, commitSha: COMMIT_SHA,
-      inputSha256: "e".repeat(64), artifactCheckpointDigest: "f".repeat(64), preparedArtifact: prepared.prepared });
+      inputSha256: "e".repeat(64), artifactCheckpointDigest: "f".repeat(64), preparedArtifact: prepared.prepared, publicBuildSettings });
     const wrangler = fakeWrangler(prepared);
     const input = { ...prepared, firestore: db, runCommand: wrangler.runCommand, preparationId };
     return { prepared, wrangler, input, preparationId };
@@ -278,7 +281,7 @@ describe("public Worker candidate upload orchestration", () => {
   it("keeps the checkpoint immutable and refuses a different artifact before upload", async () => {
     const { input, prepared, preparationId, wrangler } = await detachedFixture();
     await expect(recordPreparedPublicReleaseCheckpoint({ firestore: db, preparationId, commitSha: COMMIT_SHA,
-      inputSha256: "e".repeat(64), artifactCheckpointDigest: "a".repeat(64), preparedArtifact: prepared.prepared }))
+      inputSha256: "e".repeat(64), artifactCheckpointDigest: "a".repeat(64), preparedArtifact: prepared.prepared, publicBuildSettings }))
       .rejects.toThrow("checkpoint cannot change");
     await writeFile(prepared.preparedArtifactPath, JSON.stringify({ ...prepared.prepared, artifactDigest: "f".repeat(64) }));
     await expect(uploadPublicWorkerCandidate(input)).rejects.toThrow("differs from its durable checkpoint");

@@ -829,9 +829,12 @@ describe("one-Post acceptance, ownership and public receipt contracts", () => {
     fullCandidate.workerVersionTag = candidateContract.publicWorkerCandidateTag(fullCandidate);
     const prepared = promotion.preparedArtifactFromCandidate(fullCandidate);
     const inputBytes = Buffer.from("frozen candidate input");
+    const publicBuildValues = { PUBLIC_GA4_MEASUREMENT_ID: "G-TEST123", PUBLIC_REPORT_ENDPOINT: "https://report.example.org/",
+      PUBLIC_SHARE_INTAKE_ENDPOINT: "https://intake.example.org/", PUBLIC_TURNSTILE_SITEKEY: "1x00000000000000000000AA" };
+    const publicBuildSettings = { schemaVersion: 1, commitSha: candidateSha, values: publicBuildValues, overridesAbsent: true };
     const sealInput = { firestore: db, preparationId, commitSha: candidateSha,
       inputSha256: createHash("sha256").update(inputBytes).digest("hex"), artifactCheckpointDigest: "d".repeat(64),
-      preparedArtifact: prepared, mediaManifest };
+      preparedArtifact: prepared, mediaManifest, publicBuildSettings };
     await preparation.recordPreparedPublicReleaseCheckpoint(sealInput);
     await preparation.recordPreparedPublicWorkerCandidate({ firestore: db, preparationId, candidate: fullCandidate });
     await db.doc(`cmsPreviewPublicContexts/${reservation.buildBatchId}`).set({ schemaVersion: 1,
@@ -845,6 +848,8 @@ describe("one-Post acceptance, ownership and public receipt contracts", () => {
     returnDirectories.push(directory);
     const releaseDirectory = path.join(directory, "releases", preparationId);
     await mkdir(releaseDirectory, { recursive: true });
+    await mkdir(path.join(releaseDirectory, "renderer"));
+    await writeFile(path.join(releaseDirectory, "renderer/public-build-settings.json"), JSON.stringify(publicBuildSettings));
     await writeFile(path.join(releaseDirectory, "artifact-inventory.json"), "{}");
     // Only source/artifact/provider IO is stubbed. The producer, marker writer,
     // real Firestore transaction, seal and published-owner checks run unchanged.
@@ -860,7 +865,7 @@ describe("one-Post acceptance, ownership and public receipt contracts", () => {
     try {
       const produce = () => sealPreparedCloudRelease({ firestore: db, queueId: preparationId, commitSha: candidateSha,
         stateDirectory: directory, storage: { readInput: async () => inputBytes, restoreArtifact: async () => true },
-        cloudflareApiToken: "fixture", previewStorageCredential: {} });
+        cloudflareApiToken: "fixture", previewStorageCredential: {}, buildEnvironment: publicBuildValues });
       spies[0].mockRejectedValueOnce(new Error("Wrong source"));
       await expect(produce()).rejects.toThrow("Wrong source");
       expect((await marker.get()).exists).toBe(false);

@@ -23,6 +23,9 @@ const active = "b".repeat(40);
 const queueId = "Release0000000000001";
 const buildBatchId = `cms-${queueId}`;
 const cutoff = 1_800_000_000_000;
+const publicBuildValues = { PUBLIC_GA4_MEASUREMENT_ID: "G-TEST123", PUBLIC_REPORT_ENDPOINT: "https://report.example.org/",
+  PUBLIC_SHARE_INTAKE_ENDPOINT: "https://intake.example.org/", PUBLIC_TURNSTILE_SITEKEY: "1x00000000000000000000AA" };
+const publicBuildSettings = { schemaVersion: 1, commitSha: release, values: publicBuildValues, overridesAbsent: true };
 let root: string;
 let distDirectory: string;
 let rendererDirectory: string;
@@ -52,9 +55,11 @@ function database({ cloudCommit = release, state = "idle", activeCommitSha = act
 
 // The two seals of a compiled renderer: the server graph and its public copy.
 const serverSeal = JSON.stringify({ schemaVersion: 1, rendererSha: release, files: {} });
-async function writeSeals(renderer: string, dist: string, publicSeal: object = { schemaVersion: 1, rendererSha: release }) {
+async function writeSeals(renderer: string, dist: string, publicSeal: object = { schemaVersion: 1, rendererSha: release },
+  settings: unknown = publicBuildSettings) {
   await mkdir(renderer, { recursive: true });
   await writeFile(path.join(renderer, "renderer-release.json"), serverSeal);
+  if (settings !== null) await writeFile(path.join(renderer, "public-build-settings.json"), JSON.stringify(settings));
   await mkdir(path.join(dist, "posts/_no-build-assets"), { recursive: true });
   await writeFile(path.join(dist, "posts/_no-build-assets/renderer-release.json"), JSON.stringify(publicSeal));
 }
@@ -77,14 +82,15 @@ it("accepts the gated production compiler seal and rejects unknown capability ve
   }
 });
 
-function storage({ frozen = null as Buffer | null, restored = false, publicSeal = undefined as object | undefined } = {}) {
+function storage({ frozen = null as Buffer | null, restored = false, publicSeal = undefined as object | undefined,
+  settings = publicBuildSettings as unknown } = {}) {
   let input = frozen;
   return {
     assertReady: vi.fn(async () => undefined),
     readInput: vi.fn(async () => input),
     freezeInput: vi.fn(async (_queueId: string, bytes: Buffer) => (input = bytes)),
     restoreArtifact: vi.fn(async (_identity: object, directory: string) => {
-      if (restored) await writeSeals(path.join(directory, "renderer"), path.join(directory, "dist"), publicSeal);
+      if (restored) await writeSeals(path.join(directory, "renderer"), path.join(directory, "dist"), publicSeal, settings);
       return restored;
     }),
   };
@@ -116,11 +122,11 @@ function dependencies({ generation = 298, publicSeal = undefined as object | und
 }
 
 const run = (overrides: { firestore?: object; storage?: object; dependencies?: object; stateDirectory?: string; now?: () => number;
-  interrupted?: () => boolean; prepareAgainstCommitSha?: string } = {}) =>
+  interrupted?: () => boolean; prepareAgainstCommitSha?: string; buildEnvironment?: Record<string, string> } = {}) =>
   stageCmsPublicationCloudRelease({
     firestore: (overrides.firestore ?? database()) as never, storage: (overrides.storage ?? storage()) as never,
     queueId, commitSha: release, stateDirectory: overrides.stateDirectory ?? stateDirectory, distDirectory, rendererDirectory,
-    buildEnvironment: { PUBLIC_REPORT_ENDPOINT: "https://report.example" }, now: overrides.now ?? (() => cutoff + 1_000),
+    buildEnvironment: overrides.buildEnvironment ?? publicBuildValues, now: overrides.now ?? (() => cutoff + 1_000),
     ...(overrides.interrupted ? { interrupted: overrides.interrupted } : {}),
     ...(overrides.prepareAgainstCommitSha ? { prepareAgainstCommitSha: overrides.prepareAgainstCommitSha } : {}),
     dependencies: (overrides.dependencies ?? dependencies()) as never,
@@ -138,6 +144,8 @@ it("builds and checkpoints NEW while OLD stays pinned, without creating executab
   expect(fakes.readContent).toHaveBeenCalledWith(expect.anything(), { buildBatchId, commitSha: release, preparationId: queueId }, stateDirectory);
   expect(fakes.reserveBatch).not.toHaveBeenCalled();
   expect(fakes.stage).not.toHaveBeenCalled();
+  expect(fakes.recordCheckpoint).toHaveBeenCalledWith(expect.objectContaining({ publicBuildSettings,
+    artifactCheckpointDigest: "d".repeat(64), preparedArtifact: expect.objectContaining({ artifactDigest: "c".repeat(64) }) }));
 });
 
 it("reuses the retained detached build and never stages it on a retry", async () => {
@@ -149,6 +157,30 @@ it("reuses the retained detached build and never stages it on a retry", async ()
   expect(fakes.build).not.toHaveBeenCalled();
   expect(fakes.reserveBatch).not.toHaveBeenCalled();
   expect(fakes.stage).not.toHaveBeenCalled();
+  expect(fakes.recordCheckpoint).toHaveBeenCalledWith(expect.objectContaining({ publicBuildSettings }));
+});
+
+it.each([null, { ...publicBuildSettings, values: { ...publicBuildValues, PUBLIC_GA4_MEASUREMENT_ID: "G-OTHER123" } }])(
+  "rejects absent or changed restored compiler settings before checkpoint writes", async settings => {
+    const fakes = dependencies();
+    await expect(run({ firestore: database({ cloudCommit: active }), dependencies: fakes,
+      prepareAgainstCommitSha: active, storage: storage({ frozen: Buffer.from("original input"), restored: true, settings }) }))
+      .rejects.toThrow("missing or differ");
+    expect(fakes.build).not.toHaveBeenCalled();
+    expect(fakes.checkpoint).not.toHaveBeenCalled();
+    expect(fakes.recordCheckpoint).not.toHaveBeenCalled();
+  });
+
+it("rechecks the settings after checkpoint restores the first complete build", async () => {
+  const fakes = dependencies();
+  fakes.checkpoint.mockImplementationOnce(async () => {
+    await writeFile(path.join(stateDirectory, "releases", queueId, "renderer/public-build-settings.json"),
+      JSON.stringify({ ...publicBuildSettings, values: { ...publicBuildValues, PUBLIC_REPORT_ENDPOINT: "https://other.example.org/" } }));
+    return { prepared: await fakes.readPreparedArtifact(), artifactCheckpointDigest: "d".repeat(64) };
+  });
+  await expect(run({ firestore: database({ cloudCommit: active }), dependencies: fakes, prepareAgainstCommitSha: active }))
+    .rejects.toThrow("missing or differ");
+  expect(fakes.recordCheckpoint).not.toHaveBeenCalled();
 });
 
 it("rejects a detached renderer seal failure before checkpoint or staging", async () => {
@@ -193,7 +225,7 @@ it("builds offline from the frozen input and stages it for the pinned cloud publ
   const retained = path.join(stateDirectory, "inputs", queueId);
   expect(fakes.freezeExternalInputs).toHaveBeenCalledWith(expect.objectContaining({ retainedInputDirectory: retained }));
   expect(fakes.build).toHaveBeenCalledWith(expect.objectContaining({ retainedInputDirectory: retained,
-    buildEnvironment: { PUBLIC_REPORT_ENDPOINT: "https://report.example", PUBLIC_ARTIFACT_BATCH_MODE: "background",
+    buildEnvironment: { ...publicBuildValues, PUBLIC_ARTIFACT_BATCH_MODE: "background",
       CMS_DEPLOYMENT_ENVIRONMENT: "production" } }));
   const directory = path.join(stateDirectory, "releases", queueId);
   expect(fakes.stage).toHaveBeenCalledWith(expect.objectContaining({

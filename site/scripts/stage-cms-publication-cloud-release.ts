@@ -3,6 +3,7 @@ import { readFileSync } from "node:fs";
 import { cp, lstat, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { createRequire } from "node:module";
 import path from "node:path";
+import { expectedPublicBuildValues, readPreparedPublicBuildSettings } from "./prepared-public-build-settings";
 import { fileURLToPath } from "node:url";
 import { isDeepStrictEqual } from "node:util";
 import type { App } from "firebase-admin/app";
@@ -293,6 +294,7 @@ export async function stageCmsPublicationCloudRelease({ firestore, storage, queu
     operatorError("The detached release predecessor is invalid");
   }
   const dependencies = { ...defaultDependencies, ...overrides };
+  const expectedValues = prepareAgainstCommitSha ? expectedPublicBuildValues(commitSha, buildEnvironment) : undefined;
   await dependencies.assertSourceCheckout(commitSha);
   const runtime = { owner: "cloudflare" as const, release: commitSha };
   const buildBatchId = `cms-${queueId}`;
@@ -379,9 +381,12 @@ export async function stageCmsPublicationCloudRelease({ firestore, storage, queu
   await assertProductionRendererSeals(directory, commitSha);
   stopIfInterrupted();
   if (prepareAgainstCommitSha) {
+    await readPreparedPublicBuildSettings(directory, commitSha, expectedValues!);
     const { artifactCheckpointDigest } = await dependencies.checkpoint({ storage, identity, directory });
+    // Check the restored checkpoint, including the first-complete-build winner.
+    const publicBuildSettings = await readPreparedPublicBuildSettings(directory, commitSha, expectedValues!);
     await dependencies.recordCheckpoint({ firestore, preparationId: queueId, commitSha,
-      inputSha256: identity.inputSha256, artifactCheckpointDigest, preparedArtifact: prepared });
+      inputSha256: identity.inputSha256, artifactCheckpointDigest, preparedArtifact: prepared, publicBuildSettings });
     return { queueId, buildBatchId, commitSha, generation: batch.generation, artifactDigest: prepared.artifactDigest,
       artifactCheckpointDigest, status: "prepared" as const };
   }
@@ -442,6 +447,7 @@ export async function main(args = process.argv.slice(2), environment: NodeJS.Pro
     assertProductionReleaseTarget(environment);
     const parsed = parseReleaseArguments(args);
     const { action, queueId, commitSha } = parsed;
+    if (parsed.action === "prepare") expectedPublicBuildValues(commitSha, environment);
     const serviceAccount = parseCmsPublicationFirebaseServiceAccount(readFileSync(FIREBASE_CREDENTIAL_FD, "utf8"));
     const initialize = () => firebaseAdminRuntime.getFirestore(app = firebaseAdminRuntime.initializeApp(
       { credential: firebaseAdminRuntime.cert(serviceAccount), projectId: FIREBASE_PROJECT_ID },

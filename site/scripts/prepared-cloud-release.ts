@@ -10,6 +10,7 @@ import { manifestFromArtifact, restoreDetachedReleaseUploadPaths, uploadPublicWo
 import { retainCloudPreviewPublicContext } from "./cms-preview-cloud-storage";
 import { readFile } from "node:fs/promises";
 import { assertPublicArtifactInventoryReceipt } from "../src/lib/public-artifact-inventory";
+import { expectedPublicBuildValues, readPreparedPublicBuildSettings } from "./prepared-public-build-settings";
 
 const require = createRequire(import.meta.url);
 const { readPublicReleasePreparation, checkPublicReleasePreparation } = require("../../functions/lib/public-release-preparation");
@@ -19,10 +20,12 @@ const { sealPreparedPublicRelease, promotePreparedPublicRelease } = require("../
 /** Called under the producer wrapper's checkout lock while OLD is ready.
  * Every slow transfer and byte proof finishes before this seal can be stored. */
 export async function sealPreparedCloudRelease({ firestore, storage, queueId, commitSha, stateDirectory,
-  cloudflareApiToken, previewStorageCredential }: {
+  cloudflareApiToken, previewStorageCredential, buildEnvironment }: {
   firestore: Firestore; storage: ReturnType<typeof createCmsPublicationCloudStorage>; queueId: string; commitSha: string;
   stateDirectory: string; cloudflareApiToken: string; previewStorageCredential: PreviewStorageCredential;
+  buildEnvironment: Record<string, string | undefined>;
 }) {
+  const expectedValues = expectedPublicBuildValues(commitSha, buildEnvironment);
   await assertCmsPublicationSourceCheckout(commitSha);
   await checkPublicReleasePreparation({ firestore, preparationId: queueId, commitSha });
   const reservation = await readPublicReleasePreparation({ firestore, preparationId: queueId, commitSha });
@@ -32,7 +35,9 @@ export async function sealPreparedCloudRelease({ firestore, storage, queueId, co
     inputSha256: createHash("sha256").update(input).digest("hex") };
   const directory = path.join(stateDirectory, "releases", queueId);
   if (!await storage.restoreArtifact(identity, directory)) throw new Error("The prepared release checkpoint is missing");
+  await readPreparedPublicBuildSettings(directory, commitSha, expectedValues);
   const { prepared, artifactCheckpointDigest } = await checkpointNoBuildCloudRelease({ storage, identity, directory });
+  const publicBuildSettings = await readPreparedPublicBuildSettings(directory, commitSha, expectedValues);
   const preparedArtifactPath = path.join(directory, "prepared-worker.json");
   const distDirectory = await restoreDetachedReleaseUploadPaths(preparedArtifactPath);
   const artifactReceiptPath = path.join(directory, "artifact-inventory.json");
@@ -53,7 +58,7 @@ export async function sealPreparedCloudRelease({ firestore, storage, queueId, co
     });
   }
   await sealPreparedPublicRelease({ firestore, preparationId: queueId, commitSha, inputSha256: identity.inputSha256,
-    artifactCheckpointDigest, preparedArtifact: prepared, mediaManifest });
+    artifactCheckpointDigest, preparedArtifact: prepared, mediaManifest, publicBuildSettings });
   return { queueId, commitSha, generation: candidate.generation, workerVersionId: candidate.workerVersionId, status: "sealed" };
 }
 
