@@ -151,10 +151,14 @@ describe("report issues and proposed fixes in separate repositories", () => {
     const stored = record(identityFields(FIX));
     stored.links.pullRequests = [pull(ISSUE.repository, 29, { state: "closed", merged: true })];
     stored.links.discoveredPullRequestNumbers = [29];
-    const visible = contract.reportForAdmin(stored);
-    expect(visible.links.pullRequests).toEqual([]);
-    expect(visible.progress.pullRequests).toEqual([]);
-    expect(visible.progress.syncState).toBe("pending");
+    // Evaluate freshness at the fixture time, then restore Date before Firestore.
+    vi.setSystemTime(NOW);
+    try {
+      const visible = contract.reportForAdmin(stored);
+      expect(visible.links.pullRequests).toEqual([]);
+      expect(visible.progress.pullRequests).toEqual([]);
+      expect(visible.progress.syncState).toBe("pending");
+    } finally { vi.useRealTimers(); }
     expect(await run(await seed(stored), boundary())).toEqual({ state: "delivered" });
     const next = (await db.collection("bug_reports").doc(stored.id).get()).data();
     expect(next.links.pullRequests[0]).toMatchObject({ number: 29, merged: false,
