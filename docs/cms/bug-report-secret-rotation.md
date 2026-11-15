@@ -17,9 +17,11 @@ Before rotation, read back all four deployed parameters from the
 | `CMS_BUG_REPORT_FIX_GITHUB_REPOSITORY_ID` | Immutable fix repository ID |
 
 Use the approved deployment record for the expected values. Do not infer them
-from the checkout. Record the current token ID, webhook ID, secret version IDs,
-bound runtime revisions and an existing linked report's ID in the private change
-record. Keep report content and account identifiers out of public receipts.
+from the checkout. Inventory every hook that shares the runtime HMAC secret,
+including hooks in both the issue and fix repositories. Record each repository,
+hook ID, URL and event selection, plus the current token ID, secret version IDs,
+bound runtime revisions and an existing linked report's ID. Keep this change
+record private. Keep report content and account identifiers out of public receipts.
 
 ## Credential delivery and Functions release
 
@@ -102,31 +104,33 @@ and a forward configuration release; do not restore a revoked credential.
 ## GitHub webhook secret
 
 The handler verifies one HMAC secret. It has no old/new overlap. Changing either
-side first creates a mismatch interval. Record its start and end, then recover
-every failed delivery from that interval.
+side first creates a mismatch interval for each hook. Record each interval's
+start and end, then recover every failed delivery for every inventoried hook.
 
 1. Generate a fresh random value with the approved credential tool. The source
    requires 32 to 256 characters from letters, digits, `_` and `-`. Store it under
-   the approved replacement pointer. Keep the webhook URL, repository, event
+   the approved replacement pointer. Keep each hook's URL, repository, event
    selection, content type and TLS verification unchanged.
 2. Supply `CMS_BUG_REPORT_GITHUB_WEBHOOK_SECRET`, provision it and complete the
    Functions release above. Confirm the webhook export's new binding and runtime
    revision. Keep the prior version enabled while old consumers still need it.
-3. Have the authorized webhook administrator set that same replacement on the
-   existing issue-repository webhook. Use the approved secret-safe UI or client
+3. Have the authorized webhook administrator set that same replacement on every
+   inventoried hook, including both issue- and fix-repository hooks. Use the
+   approved secret-safe UI or client
    for `PATCH /repos/{owner}/{repo}/hooks/{hook_id}/config`. The runtime token
    must not gain webhook-management permissions. Do not put a secret in a JSON
    payload file, a command argument or an API response log. A config GET or
    update timestamp cannot prove secret equality.
-4. Inspect delivery IDs and statuses across the full mismatch interval. Redeliver
-   each failed delivery through the existing hook. A redelivery request is only
+4. Inspect delivery IDs and statuses across each hook's full mismatch interval.
+   Redeliver each failed delivery through its original hook. A redelivery request is only
    submission: Wait for its result and require 2xx, then verify the queued sync
    reaches its original terminal result. Account for every delivery; do not
    declare success from a small recent sample. Keep payloads private.
-5. Require a valid signed delivery accepted by the new handler and its linked
-   report synchronization. Then disable the unbound old Secret Manager version.
-   Record the hook ID, new binding/version, runtime revision, delivery IDs,
-   outcomes and old-version disabled state without either secret value.
+5. Require valid signed deliveries from both configured repositories accepted by
+   the new handler, with their linked report synchronization. Account for every
+   other inventoried hook before disabling the unbound old Secret Manager version.
+   Record each repository/hook ID, new binding/version, runtime revision,
+   delivery IDs, outcomes and old-version disabled state without either value.
 
 If either side fails, keep the change open and retain the delivery inventory.
 The coordinator selects a matched valid secret for both sides and repeats the
