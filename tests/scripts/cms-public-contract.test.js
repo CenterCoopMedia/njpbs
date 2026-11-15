@@ -9,7 +9,7 @@ import { Timestamp } from "firebase-admin/firestore";
 import { CONTRACT_SETTINGS, CmsPublicContractError, assertUnchangedPlan, devMutationSelection, contractTarget,
   encodeContractValue, decodeContractValue, writePrivateCapsule, readPrivateCapsule, boundedContractProof,
   contractDigest, contractSummary, recheckContractSummary } from "../../scripts/lib/cms-public-contract.mjs";
-import { devCompletedBaseline, prepareDependencies, prepareContractRuntime, refusalLine, replayDockerArguments, replayRefusal, restoreRendererArchive, retainRendererArchive } from "../../scripts/check-cms-public-contract.mjs";
+import { assertActiveRendererCheckpoint, devCompletedBaseline, prepareDependencies, prepareContractRuntime, refusalLine, replayDockerArguments, replayRefusal, restoreRendererArchive, retainRendererArchive } from "../../scripts/check-cms-public-contract.mjs";
 import { createCmsPublicationCloudStorage } from "../../site/scripts/cms-publication-cloud-storage.ts";
 import { repositoryFixture } from "../helpers/repository-identity.mjs";
 
@@ -93,6 +93,39 @@ describe("configured development prepare", () => {
       await expect(prepare()).rejects.toThrow();
       expect(calls).toEqual([]);
     });
+  });
+});
+
+describe("active renderer checkpoint source", () => {
+  it("uses the pinned renderer's checkpoint contract while new candidates require build settings", async () => {
+    const source = await mkdtemp(join(directory, "renderer-source-"));
+    const preparationId = "Release0000000000001";
+    const reservation = { buildBatchId: `cms-${preparationId}`, generation: 2, commitSha: sha };
+    const preparedArtifact = { schemaVersion: 1, digestAlgorithm: "sha256", ...reservation,
+      artifactDigest: digest, artifactReceiptDigest: digest, mediaManifestDigest: digest,
+      publicationReceiptDigest: digest, artifactFileCount: 1, artifactBytes: 100 };
+    const checkpoint = { schemaVersion: 1, preparationId, inputSha256: digest, artifactCheckpointDigest: digest, preparedArtifact };
+    await mkdir(join(source, "functions/lib"), { recursive: true });
+    await writeFile(join(source, "package.json"), '{"type":"commonjs"}');
+    // The native reader is the source boundary. This renderer predates build settings.
+    await writeFile(join(source, "functions/lib/public-release-preparation.js"), `
+      const assert = require("node:assert/strict");
+      module.exports.assertPreparedPublicReleaseCheckpoint = async ({ preparationId, preparedArtifact }) => {
+        const checkpoint = ${JSON.stringify(checkpoint)};
+        assert.equal(preparationId, checkpoint.preparationId);
+        assert.deepEqual(preparedArtifact, checkpoint.preparedArtifact);
+        return checkpoint;
+      };
+    `);
+    const dependencies = { rendererSha: sha, roots: { "R-source": source } };
+    expect(await assertActiveRendererCheckpoint({ dependencies, rendererSha: sha, preparationId, preparedArtifact })).toEqual(checkpoint);
+    const current = createRequire(import.meta.url)("../../functions/lib/public-release-preparation.js");
+    expect(() => current.projectPreparedPublicReleaseCheckpoint(checkpoint, preparationId, reservation)).toThrow("durable checkpoint");
+  });
+  it.each(["changed", "missing-source"])("refuses %s renderer dependencies before loading a reader", async failure => {
+    const dependencies = { rendererSha: failure === "changed" ? "c".repeat(40) : sha,
+      roots: { "R-source": failure === "missing-source" ? undefined : join(directory, "unavailable-source") } };
+    await expect(assertActiveRendererCheckpoint({ dependencies, rendererSha: sha })).rejects.toMatchObject({ code: "prepare-source-changed" });
   });
 });
 

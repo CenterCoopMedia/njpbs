@@ -315,7 +315,16 @@ export async function devCompletedBaseline(priorAdminSha, functions, signal) {
   return { runId: String(run.id), sourceSha: priorAdminSha, completedAt: run.updated_at };
 }
 
-async function readState({ firestore, target, cwd, signal, originalPriorAdminSha }) {
+export async function assertActiveRendererCheckpoint({ dependencies, rendererSha, ...checkpoint }) {
+  const source = dependencies?.roots?.["R-source"];
+  if (!SHA.test(rendererSha ?? "") || dependencies?.rendererSha !== rendererSha || typeof source !== "string" || !source) {
+    refuse("prepare-source-changed");
+  }
+  const preparation = createRequire(join(source, "package.json"))("./functions/lib/public-release-preparation.js");
+  return preparation.assertPreparedPublicReleaseCheckpoint(checkpoint);
+}
+
+async function readState({ firestore, target, cwd, signal, originalPriorAdminSha, dependencies }) {
   const [publicMetadata, admin, worker, api, functions, functionsReceipt, apiReceipt, rendererReceipt, rootRow] = await Promise.all([
     publicJson(`${target.origin}/_publication.json`, target, signal), publicJson(`${target.adminOrigin}/admin-status.json`, target, signal),
     selectedVersion(target.workerName, target, signal), selectedVersion(target.apiWorker, target, signal), listFunctions(target, signal),
@@ -366,12 +375,11 @@ async function readState({ firestore, target, cwd, signal, originalPriorAdminSha
   if (batches.size !== 1 || !/^cms-[A-Za-z0-9]{20}$/.test(batches.docs[0].id)) refuse("checkpoint-unavailable");
   const queueId = batches.docs[0].id.slice(4);
   const candidate = (await batches.docs[0].ref.collection("candidates").doc("worker").get()).data();
-  const preparation = native("./functions/lib/public-release-preparation.js");
   const checkpointRow = await firestore.doc(`system/publicReleasePreparations/entries/${queueId}/checkpoints/artifact`).get();
   const checkpoint = checkpointRow.data();
   if (!candidate || candidate.workerVersionId !== worker.versionId || candidate.commitSha !== rendererSha ||
       candidate.artifactDigest !== publicMetadata.body.artifactDigest || !checkpoint?.preparedArtifact) refuse("renderer-artifact-binding");
-  await preparation.assertPreparedPublicReleaseCheckpoint({ firestore, preparationId: queueId, preparedArtifact: checkpoint.preparedArtifact,
+  await assertActiveRendererCheckpoint({ dependencies, rendererSha, firestore, preparationId: queueId, preparedArtifact: checkpoint.preparedArtifact,
     target: native("./functions/lib/publication-target.js").publicationTarget(target.environment) });
   if (checkpoint.preparedArtifact.artifactDigest !== candidate.artifactDigest) refuse("renderer-artifact-binding");
   const fingerprints = await Promise.all(selectedFunctions.map(async fn => ({ name: fn.name.split("/").at(-1), state: fn.state,
@@ -686,7 +694,7 @@ export async function main(argv = process.argv.slice(2)) {
       const attemptDirectory = await privateDirectory(directory, `attempt-${attempt}-`);
       let state, plan;
       try {
-        state = await readState({ firestore, target, cwd, signal, originalPriorAdminSha: previous?.priorAdminSha });
+        state = await readState({ firestore, target, cwd, signal, originalPriorAdminSha: previous?.priorAdminSha, dependencies });
         await compareContractInputs({ candidateSha, baselineSha: state.identity.backend.baseline.sourceSha, cwd });
         if (process.env.FORCE_FIREBASE === "true" || process.env.CMS_DEV_RENDERER_ONLY === "true" || process.env.CMS_DEV_RELEASE_PREVIEW_RENDERER === "true" ||
             process.env.CMS_DEV_INSTALL_READER_BRIDGE === "true" || process.env.CMS_PRODUCTION_INSTALL_READER_BRIDGE === "true") refuse("plan-not-unchanged");
@@ -701,7 +709,7 @@ export async function main(argv = process.argv.slice(2)) {
         throw error;
       }
       if (environment === "development" && process.env.CMS_DEV_PUBLISH_ENABLED !== "true") refuse("dev-independent-mode");
-      if (dependencies.rendererSha !== state.identity.publicReader.rendererSha || dependencies.priorAdminSha !== state.identity.priorAdminSha) refuse("prepare-source-changed");
+      if (dependencies.priorAdminSha !== state.identity.priorAdminSha) refuse("prepare-source-changed");
       await compareContractInputs({ candidateSha: state.identity.priorAdminSha, baselineSha: state.identity.backend.baseline.sourceSha, cwd });
       if (originalIdentity && contractDigest(originalIdentity) !== contractDigest(state.identity)) refuse("proof-contract-changed");
       originalIdentity ??= state.identity;

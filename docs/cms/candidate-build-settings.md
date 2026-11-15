@@ -23,6 +23,10 @@ Native fresh check compares the sealed settings with the approved operator input
 before pause. The four values are under `publicBuildSettings.values`;
 `overridesAbsent` must be true, and `commitSha` must equal the original NEW source.
 
+CMS contract capture validates the active renderer's checkpoint with the native
+reader from its pinned `R-source` dependency. The freshly observed renderer SHA
+must still match that dependency before the reader is loaded.
+
 Use the existing prepare, seal and fresh-check wrappers with the same original
 operation, source and approved public input values. Their terminal summaries
 keep the existing operation/source/generation/status contract. Native checkpoint
