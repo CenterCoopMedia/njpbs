@@ -16,8 +16,9 @@ checkpoint with the caller's current values.
 The durable record at
 `system/publicReleasePreparations/entries/<operation>/checkpoints/artifact`
 carries `publicBuildSettings`. The immutable `proofs/complete` record carries the
-same snapshot. Native seal checks both against the restored compiler file and
-the requested production settings before provider upload and seal acceptance.
+same snapshot. The seal producer compares the restored compiler file with the
+requested production settings before provider upload. Native seal acceptance
+compares that snapshot with the durable checkpoint.
 Native fresh check compares the sealed settings with the approved operator inputs
 before pause. The four values are under `publicBuildSettings.values`;
 `overridesAbsent` must be true, and `commitSha` must equal the original NEW source.

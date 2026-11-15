@@ -22,13 +22,12 @@ const releaseSeal = { schemaVersion: 1, rendererSha: sha, liveBlogVersion: 1, el
   ...(dataHubPageEnabled(process.env) ? { dataHubReportingVersion: 1, dataHubCompositionVersion: 1 } : {}),
   ...(target.environment === "development" ? { environment: "development" } : {}) };
 const seal = path.join(site, testPages ? ".public-page-renderer/renderer-release.json" : ".public-post-renderer/renderer-release.json");
-const compilerEnvironment = publicPostRenderEnvironment(testPages
-  ? { CMS_DEPLOYMENT_ENVIRONMENT: "development", DATA_HUB_PUBLIC: process.env.DATA_HUB_PUBLIC, PUBLIC_ONLY: process.env.PUBLIC_ONLY }
-  : process.env);
-const publicBuildSettings = target.environment === "production"
-  ? createPublicBuildSettings(sha, compilerEnvironment, process.env) : undefined;
-const settingsFile = path.join(path.dirname(seal), "public-build-settings.json");
 if (phase !== "--copy-assets") {
+  const compilerEnvironment = publicPostRenderEnvironment(testPages
+    ? { CMS_DEPLOYMENT_ENVIRONMENT: "development", DATA_HUB_PUBLIC: process.env.DATA_HUB_PUBLIC, PUBLIC_ONLY: process.env.PUBLIC_ONLY }
+    : process.env);
+  const publicBuildSettings = target.environment === "production"
+    ? createPublicBuildSettings(sha, compilerEnvironment, process.env) : undefined;
   if (!assertDevelopmentSource(repo)) throw new Error("Compile public Post templates from clean exact source");
   execFileSync(process.execPath, [path.join(site, "node_modules/astro/bin/astro.mjs"), "build", "--config",
     testPages ? "astro.public-page-renderer.config.mjs" : "astro.public-post.config.mjs"], {
@@ -37,7 +36,7 @@ if (phase !== "--copy-assets") {
   });
   if (git("rev-parse", "HEAD") !== sha || !assertDevelopmentSource(repo)) throw new Error("Public Post source changed during compilation");
   await writeFile(seal, JSON.stringify(releaseSeal) + "\n");
-  if (publicBuildSettings) await writeFile(settingsFile, JSON.stringify(publicBuildSettings) + "\n");
+  if (publicBuildSettings) await writeFile(path.join(path.dirname(seal), "public-build-settings.json"), JSON.stringify(publicBuildSettings) + "\n");
 }
 if (phase !== "--compile-only" && !testPages) {
   const release = JSON.parse(await readFile(seal, "utf8"));
@@ -46,9 +45,6 @@ if (phase !== "--compile-only" && !testPages) {
   const syncOutputs = ["site/src/data/launch-media-manager.json", "site/src/data/spotlight-news.json", "site/src/data/schedule.json"];
   if (!isDeepStrictEqual(release, releaseSeal) || !assertDevelopmentSource(repo, process.env, { allowedChanges: syncOutputs })) {
     throw new Error("Public Post source changed after compilation");
-  }
-  if (publicBuildSettings && !isDeepStrictEqual(JSON.parse(await readFile(settingsFile, "utf8")), publicBuildSettings)) {
-    throw new Error("Public Post compiler settings changed after compilation");
   }
   const assets = path.join(site, "dist/posts/_no-build-assets");
   await mkdir(assets, { recursive: true });
