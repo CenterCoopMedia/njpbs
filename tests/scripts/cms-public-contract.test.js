@@ -97,7 +97,7 @@ describe("configured development prepare", () => {
 });
 
 describe("active renderer checkpoint source", () => {
-  it("uses the pinned renderer's checkpoint contract while new candidates require build settings", async () => {
+  async function rendererFixture() {
     const source = await mkdtemp(join(directory, "renderer-source-"));
     const preparationId = "Release0000000000001";
     const reservation = { buildBatchId: `cms-${preparationId}`, generation: 2, commitSha: sha };
@@ -118,6 +118,10 @@ describe("active renderer checkpoint source", () => {
       };
     `);
     const dependencies = { rendererSha: sha, roots: { "R-source": source } };
+    return { source, preparationId, reservation, preparedArtifact, checkpoint, dependencies };
+  }
+  it("uses the pinned renderer's checkpoint contract while new candidates require build settings", async () => {
+    const { preparationId, reservation, preparedArtifact, checkpoint, dependencies } = await rendererFixture();
     expect(await assertActiveRendererCheckpoint({ dependencies, rendererSha: sha, preparationId, preparedArtifact })).toEqual(checkpoint);
     const current = createRequire(import.meta.url)("../../functions/lib/public-release-preparation.js");
     expect(() => current.projectPreparedPublicReleaseCheckpoint(checkpoint, preparationId, reservation)).toThrow("durable checkpoint");
@@ -126,6 +130,90 @@ describe("active renderer checkpoint source", () => {
     const dependencies = { rendererSha: failure === "changed" ? "c".repeat(40) : sha,
       roots: { "R-source": failure === "missing-source" ? undefined : join(directory, "unavailable-source") } };
     await expect(assertActiveRendererCheckpoint({ dependencies, rendererSha: sha })).rejects.toMatchObject({ code: "prepare-source-changed" });
+  });
+  it.each(["unchanged", "renderer", "checkpoint"])("rechecks an older checkpoint after replay with %s state", async change => {
+    const { source, preparationId, checkpoint, dependencies } = await rendererFixture();
+    const workerVersion = "11111111-1111-1111-1111-111111111111";
+    const apiVersion = "22222222-2222-2222-2222-222222222222";
+    const target = { environment: "production", projectId: "example-project", databaseId: "(default)",
+      origin: "https://public.example.org", adminOrigin: "https://admin.example.org", workerName: "example-public", apiWorker: "example-api" };
+    const functions = [{ name: "projects/example-project/locations/us-central1/functions/cmsGetPublicPage", state: "ACTIVE",
+      buildConfig: { entryPoint: "cmsGetPublicPage" }, serviceConfig: { allTrafficOnLatestRevision: true, revision: "example-revision" } }];
+    const graph = { exports: { cmsGetPublicPage: { fingerprint: digest } } };
+    const preview = { rendererSha: sha };
+    const receipts = {
+      functions: { state: "complete", mutation: { sourceSha: sha, inputFingerprint: digest, functionGraph: graph, providerIdentities: [] } },
+      cmsApi: { state: "complete", mutation: { sourceSha: sha, inputFingerprint: digest,
+        providerIdentities: { versionId: apiVersion, script: target.apiWorker } } },
+      renderer: { state: "complete", mutation: { providerIdentities: preview } },
+    };
+    let liveRendererSha = sha;
+    const storedCheckpoint = structuredClone(checkpoint);
+    const firestore = {
+      doc: path => ({ get: async () => ({ data: () => {
+        if (path === "system/publicDeployment") return { schemaVersion: 1, state: "idle", activeCommitSha: liveRendererSha, activeGeneration: 2 };
+        if (path === `system/publicReleasePreparations/entries/${preparationId}/checkpoints/artifact`) return storedCheckpoint;
+        throw new Error(`Unexpected document: ${path}`);
+      } }) }),
+      collection: path => {
+        expect(path).toBe("system/publicDeployment/buildBatches");
+        const query = { where: () => query, limit: () => query, get: async () => ({ size: 1, docs: [{ id: `cms-${preparationId}`,
+          ref: { collection: () => ({ doc: () => ({ get: async () => ({ data: () => ({ workerVersionId: workerVersion,
+            commitSha: liveRendererSha, artifactDigest: digest }) }) }) }) } }] }) };
+        return query;
+      },
+    };
+    try {
+      vi.stubEnv("CLOUDFLARE_ACCOUNT_ID", "1".repeat(32));
+      vi.stubEnv("CLOUDFLARE_API_TOKEN", "synthetic-provider-token");
+      vi.stubGlobal("fetch", async url => {
+        if (url === `${target.origin}/_publication.json`) return new Response(JSON.stringify({ commitSha: liveRendererSha, artifactDigest: digest }),
+          { headers: { "x-njpbs-renderer-sha": liveRendererSha } });
+        if (url === `${target.adminOrigin}/admin-status.json`) return new Response(JSON.stringify({ build: { revision: sha } }));
+        const base = `https://api.cloudflare.com/client/v4/accounts/${"1".repeat(32)}/workers/scripts/`;
+        for (const [script, version] of [[target.workerName, workerVersion], [target.apiWorker, apiVersion]]) {
+          if (url === `${base}${script}/deployments`) return new Response(JSON.stringify({ success: true,
+            result: { deployments: [{ id: "example-deployment", versions: [{ version_id: version, percentage: 100 }] }] } }));
+          if (url === `${base}${script}/versions/${version}`) return new Response(JSON.stringify({ success: true,
+            result: { id: version, resources: { bindings: [] } } }));
+        }
+        throw new Error(`Unexpected provider request: ${url}`);
+      });
+      // Provider inventory and source fingerprints are external boundaries; the
+      // state reader, identity checks and pinned native checkpoint reader run.
+      vi.doMock("../../scripts/lib/cms-component-receipt.mjs", async importOriginal => ({
+        ...await importOriginal(),
+        readReceipt: async (_firestore, component) => receipts[component], collectLiveIdentities: async () => preview,
+        functionsInventoryIdentity: () => [], fingerprintInputs: async () => digest,
+        fingerprintFunctionGraph: async () => graph, fingerprintPaths: async () => digest,
+      }));
+      vi.doMock("node:module", async importOriginal => {
+        const actual = await importOriginal();
+        return { ...actual, createRequire: file => {
+          const load = actual.createRequire(file);
+          return name => name === "google-auth-library" ? { GoogleAuth: class {
+            async getClient() { return { request: async () => ({ data: { functions } }) }; }
+          } } : load(name);
+        } };
+      });
+      vi.resetModules();
+      const { readState } = await import("../../scripts/check-cms-public-contract.mjs");
+      const readPinnedState = readState.bind(null, { firestore, target, cwd: source, dependencies });
+      const initial = await readPinnedState({ signal: new AbortController().signal });
+      expect(initial.checkpoint).toEqual(checkpoint);
+      if (change === "renderer") liveRendererSha = "c".repeat(40);
+      if (change === "checkpoint") storedCheckpoint.preparedArtifact.artifactBytes += 1;
+      const fresh = readPinnedState({ signal: new AbortController().signal, originalPriorAdminSha: initial.identity.priorAdminSha });
+      if (change === "unchanged") expect((await fresh).identity).toEqual(initial.identity);
+      else if (change === "renderer") await expect(fresh).rejects.toMatchObject({ code: "prepare-source-changed" });
+      else await expect(fresh).rejects.toMatchObject({ code: "ERR_ASSERTION" });
+    } finally {
+      vi.doUnmock("../../scripts/lib/cms-component-receipt.mjs");
+      vi.doUnmock("node:module");
+      vi.resetModules();
+      vi.unstubAllGlobals();
+      vi.unstubAllEnvs();
+    }
   });
 });
 

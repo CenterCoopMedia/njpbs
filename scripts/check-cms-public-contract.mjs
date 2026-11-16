@@ -324,7 +324,7 @@ export async function assertActiveRendererCheckpoint({ dependencies, rendererSha
   return preparation.assertPreparedPublicReleaseCheckpoint(checkpoint);
 }
 
-async function readState({ firestore, target, cwd, signal, originalPriorAdminSha, dependencies }) {
+export async function readState({ firestore, target, cwd, dependencies }, { signal, originalPriorAdminSha } = {}) {
   const [publicMetadata, admin, worker, api, functions, functionsReceipt, apiReceipt, rendererReceipt, rootRow] = await Promise.all([
     publicJson(`${target.origin}/_publication.json`, target, signal), publicJson(`${target.adminOrigin}/admin-status.json`, target, signal),
     selectedVersion(target.workerName, target, signal), selectedVersion(target.apiWorker, target, signal), listFunctions(target, signal),
@@ -675,6 +675,7 @@ export async function main(argv = process.argv.slice(2)) {
   try {
     const dependencies = JSON.parse(await readFile(join(stateDirectory, "dependencies.json"), "utf8"));
     if (dependencies.candidateSha !== candidateSha) refuse("prepare-source");
+    const readPinnedState = readState.bind(null, { firestore, target, cwd, dependencies });
     const previous = options["--previous-summary"] ? JSON.parse(await readFile(options["--previous-summary"], "utf8")) : null;
     if ((boundary !== "preflight" || Number(process.env.GITHUB_RUN_ATTEMPT ?? 1) > 1) && !previous) refuse("resume-baseline");
     let originalIdentity;
@@ -694,7 +695,7 @@ export async function main(argv = process.argv.slice(2)) {
       const attemptDirectory = await privateDirectory(directory, `attempt-${attempt}-`);
       let state, plan;
       try {
-        state = await readState({ firestore, target, cwd, signal, originalPriorAdminSha: previous?.priorAdminSha, dependencies });
+        state = await readPinnedState({ signal, originalPriorAdminSha: previous?.priorAdminSha });
         await compareContractInputs({ candidateSha, baselineSha: state.identity.backend.baseline.sourceSha, cwd });
         if (process.env.FORCE_FIREBASE === "true" || process.env.CMS_DEV_RENDERER_ONLY === "true" || process.env.CMS_DEV_RELEASE_PREVIEW_RENDERER === "true" ||
             process.env.CMS_DEV_INSTALL_READER_BRIDGE === "true" || process.env.CMS_PRODUCTION_INSTALL_READER_BRIDGE === "true") refuse("plan-not-unchanged");
@@ -727,7 +728,7 @@ export async function main(argv = process.argv.slice(2)) {
       await compareAndRestore({ capsule, state, target, signal });
       const result = await replay({ capsule, candidateSha, baselineSha: state.identity.priorAdminSha,
         rendererSha: state.identity.publicReader.rendererSha, cwd, directory: attemptDirectory, image, signal, archive, dependencyRoots: dependencies.roots });
-      const fresh = await readState({ firestore, target, cwd, signal, originalPriorAdminSha: state.identity.priorAdminSha });
+      const fresh = await readPinnedState({ signal, originalPriorAdminSha: state.identity.priorAdminSha });
       if (contractDigest(fresh.identity) !== contractDigest(state.identity)) refuse("proof-contract-changed");
       const recaptured = await captureNativeContract({ firestore, baselineRoot: source, target, requests, identity: fresh.identity, signal });
       if (contractDigest(capsule.readset) !== contractDigest(recaptured.readset) || contractDigest(capsule.root) !== contractDigest(recaptured.root)) refuse("capture-moved");

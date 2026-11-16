@@ -26,6 +26,7 @@ before pause. The four values are under `publicBuildSettings.values`;
 CMS contract capture validates the active renderer's checkpoint with the native
 reader from its pinned `R-source` dependency. The freshly observed renderer SHA
 must still match that dependency before the reader is loaded.
+Capture and the post-replay state read share the same bound dependency snapshot.
 
 Use the existing prepare, seal and fresh-check wrappers with the same original
 operation, source and approved public input values. Their terminal summaries
