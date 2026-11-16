@@ -208,12 +208,12 @@ export async function assertProductionRendererSeals(directory: string, commitSha
       publicSeal?.dataHubCompositionVersion !== undefined && publicSeal?.dataHubReportingVersion !== 1 ||
       publicSeal?.electionResultsVersion !== undefined && ![1, 2].includes(publicSeal?.electionResultsVersion) ||
       publicSeal?.liveBlogVersion !== undefined && publicSeal?.liveBlogVersion !== 1 ||
-      publicSeal?.pageReaderVersion !== undefined && publicSeal?.pageReaderVersion !== 1 ||
+      publicSeal?.pageReaderVersion !== undefined && ![1, 2].includes(publicSeal?.pageReaderVersion) ||
       !isDeepStrictEqual(publicSeal, { schemaVersion: 1, rendererSha: commitSha,
         ...(publicSeal?.dataHubReportingVersion === 1 ? {dataHubReportingVersion:1} : {}),
         ...(publicSeal?.dataHubCompositionVersion === 1 ? {dataHubCompositionVersion:1} : {}),
         ...(publicSeal?.liveBlogVersion === 1 ? {liveBlogVersion:1} : {}),
-        ...(publicSeal?.pageReaderVersion === 1 ? {pageReaderVersion:1} : {}),
+        ...(publicSeal?.pageReaderVersion !== undefined ? {pageReaderVersion:publicSeal.pageReaderVersion} : {}),
         ...([1, 2].includes(publicSeal?.electionResultsVersion) ? {electionResultsVersion:publicSeal.electionResultsVersion} : {}) })) {
     operatorError("The built renderer is not a production release of this commit");
   }

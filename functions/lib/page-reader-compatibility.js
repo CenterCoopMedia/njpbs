@@ -4,6 +4,7 @@ const p = require("./public-release-pair");
 const contract = require("./page-reader-contract");
 const ROOT = "system/pageReaderContracts";
 const SHA = /^[a-f0-9]{40}$/;
+const knownVersion = version => Number.isInteger(version) && version >= 1 && version <= contract.PAGE_READER_VERSION;
 function refuse() {
   throw Object.assign(new Error("These Page planks are temporarily unavailable. Keep your draft and try again after the site update."),
     { status: 409, code: "page_reader_contract_unavailable", scheduleDeferred: true });
@@ -17,7 +18,7 @@ async function readPageReaderVersion({ firestore, transaction, role, rendererSha
   if (!row.exists) return 0;
   const value = row.data();
   p.exact(value, ["schemaVersion", "rendererSha", "pageReaderVersion"]);
-  if (value.schemaVersion !== 1 || value.rendererSha !== rendererSha || value.pageReaderVersion !== contract.PAGE_READER_VERSION) refuse();
+  if (value.schemaVersion !== 1 || value.rendererSha !== rendererSha || !knownVersion(value.pageReaderVersion)) refuse();
   return value.pageReaderVersion;
 }
 // Call only after verifying the exact compiled renderer's seal/provider bytes.
@@ -25,25 +26,25 @@ async function readPageReaderVersion({ firestore, transaction, role, rendererSha
 async function preparePageReaderMarker({ firestore, transaction, role, rendererSha, version }) {
   const ref = firestore.doc(markerPath(role, rendererSha));
   if (version === undefined) return () => {};
-  if (version !== contract.PAGE_READER_VERSION) refuse();
+  if (!knownVersion(version)) refuse();
   const value = { schemaVersion: 1, rendererSha, pageReaderVersion: version };
   const before = await transaction.get(ref);
   if (before.exists && p.publicReleaseDigest(before.data()) !== p.publicReleaseDigest(value)) refuse();
   return () => { if (!before.exists) transaction.create(ref, value); };
 }
-function writeApiReaderMarker({ firestore, transaction, receipt }) {
-  if (receipt?.component !== "cmsApi" || receipt.state !== "complete" || !SHA.test(receipt.mutation?.sourceSha ?? "")) refuse();
+function writeApiReaderMarker({ firestore, transaction, receipt, version }) {
+  if (!knownVersion(version) || receipt?.component !== "cmsApi" || receipt.state !== "complete" || !SHA.test(receipt.mutation?.sourceSha ?? "")) refuse();
   transaction.set(firestore.doc(`${ROOT}/components/cmsApi`), { schemaVersion: 1,
-    sourceSha: receipt.mutation.sourceSha, receiptDigest: p.publicReleaseDigest(receipt), pageReaderVersion: contract.PAGE_READER_VERSION });
+    sourceSha: receipt.mutation.sourceSha, receiptDigest: p.publicReleaseDigest(receipt), pageReaderVersion: version });
 }
-async function assertApiReader({ firestore, transaction }) {
+async function assertApiReader({ firestore, transaction, requiredVersion }) {
   const [saved, marker] = await transaction.getAll(firestore.doc("cmsDeploymentReceipts/cmsApi"), firestore.doc(`${ROOT}/components/cmsApi`));
   const receipt = saved.data(), value = marker.data();
   if (value) p.exact(value, ["schemaVersion", "sourceSha", "receiptDigest", "pageReaderVersion"]);
   if (!receipt || receipt.schemaVersion !== 1 || receipt.component !== "cmsApi" || receipt.state !== "complete" ||
       !SHA.test(receipt.mutation?.sourceSha ?? "") || !receipt.mutation.providerIdentities ||
       value?.schemaVersion !== 1 || value.sourceSha !== receipt.mutation.sourceSha ||
-      value.receiptDigest !== p.publicReleaseDigest(receipt) || value.pageReaderVersion !== contract.PAGE_READER_VERSION) refuse();
+      value.receiptDigest !== p.publicReleaseDigest(receipt) || !knownVersion(value.pageReaderVersion) || value.pageReaderVersion < requiredVersion) refuse();
 }
 async function assertPreviewPageReader({ firestore, transaction, pageId, blocks, rendererSha }) {
   if (!contract.requiredPageReaderVersion(blocks, pageId)) return;
@@ -58,7 +59,7 @@ async function assertInstalledPageReaders({ firestore, transaction, pageId, bloc
   const capability = await require("./no-build-page-ownership").readNoBuildPageCapability({ firestore, transaction });
   if (!capability?.servingEnabled || capability.rendererSha !== pointer.activeCommitSha ||
       !contract.pageReaderSupports(blocks, pageId, await readPageReaderVersion({ firestore, transaction, role: "public", rendererSha: pointer.activeCommitSha }))) refuse();
-  await assertApiReader({ firestore, transaction });
+  await assertApiReader({ firestore, transaction, requiredVersion: contract.requiredPageReaderVersion(blocks, pageId) });
   if (preview) {
     const runtime = (await transaction.get(firestore.doc("system/cmsPreviewRuntime"))).data();
     if (!runtime || runtime.phase !== "ready" || ![1, 2].includes(runtime.schemaVersion)) refuse();

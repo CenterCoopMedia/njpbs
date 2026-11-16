@@ -54,6 +54,7 @@ const BLOCK_TYPES = [
   "faq_item",
   "coverage_list",
   "embed",
+  "embed_anchor",
   "html",
   "content_shelf",
   "promotion_playlist",
@@ -354,6 +355,8 @@ function hasValidPromotionPlaylistCard(card, publishable) {
 
 function hasValidBlockData(type, data, publishable, homeNewsletter = false) {
   switch (type) {
+    case "embed_anchor":
+      return Object.keys(data).length === 1 && Object.hasOwn(data, "anchorId") && data.anchorId === "njpbssignup";
     case "document_list":
       return isDocumentListData(data, publishable);
     case "bio_card":
@@ -575,6 +578,7 @@ function parseBlocks(input, { complete = true, pageId } = {}) {
     return { ok: false, error: "blocks must be an array" };
   }
   const seenIds = new Set();
+  const seenAnchors = new Set();
   for (let i = 0; i < input.length; i++) {
     const entry = input[i];
     if (typeof entry !== "object" || entry === null) {
@@ -625,6 +629,11 @@ function parseBlocks(input, { complete = true, pageId } = {}) {
     }
     if (!hasValidBlockData(block.type, block.data, block.type === "data_table" ? false : complete && block.visible, block.section === "home-newsletter")) {
       return { ok: false, error: `blocks[${i}] has invalid data for ${block.type}` };
+    }
+    if (block.type === "embed_anchor") {
+      const anchorId = block.data.anchorId;
+      if (seenAnchors.has(anchorId)) return { ok: false, error: `blocks[${i}] repeats embed anchor ${anchorId}` };
+      seenAnchors.add(anchorId);
     }
   }
   if (pageId === "kids" && input.some(block => block.type === "record_card" && block.data.recordKind === "newsletter")) {

@@ -17,6 +17,7 @@ import scheduleData from "../tests/fixtures/schedule-2026-11-15-pbs.json";
 import { loadScheduleData } from "../src/lib/schedule-data";
 import { buildScheduleExport } from "../src/lib/schedule-export";
 import type { BakedScheduleData } from "../src/lib/schedule-feed";
+import { checkNewslettersSignup } from "./check-newsletters-signup";
 
 const require = createRequire(new URL("../../tests/public-post-runtime/package.json", import.meta.url));
 const { Miniflare, Response: WorkerResponse } = require("miniflare");
@@ -195,6 +196,8 @@ try {
     assertPublishedResources(html, read.page.path, "https://dev-public.example.org");
     const baseline = await readFile(new URL(`../.public-page-static-fixtures${read.page.path}index.html`, import.meta.url), "utf8");
     assert.deepEqual(comparePostHtml(baseline, html), [], `Full-build/workerd Page parity for ${read.page.pageId}`);
+    if (read.page.path === "/newsletters/") await checkNewslettersSignup(html);
+    else assert.doesNotMatch(html, /id="njpbssignup"/);
     assert(!html.includes("PRIVATE"));
     if (read.page.pageId === "home") {
       const bannerIndex = html.indexOf('aria-label="Homepage announcement"');
@@ -205,6 +208,18 @@ try {
     const content = await projectPublishedPageRead(read, read.page.pageId, rendererSha, now,
       read.page.pageId === "home" ? sources : undefined);
     assert.deepEqual(comparePostHtml(html, await compiled.renderPublishedPage(content)), []);
+    if (read.page.path === "/newsletters/") {
+      const moved = structuredClone(read);
+      const signup = moved.page.blocks.find(block => block.type === "embed_anchor")!;
+      moved.page.blocks = [signup, ...moved.page.blocks.filter(block => block !== signup)].map((block, order) => ({ ...block, order }));
+      const movedContent = await projectPublishedPageRead(moved, moved.page.pageId, rendererSha, now);
+      const movedHtml = await compiled.renderPublishedPage(movedContent);
+      assert.equal((movedHtml.match(/id="njpbssignup"/g) ?? []).length, 1);
+      assert(movedHtml.indexOf('id="njpbssignup"') < movedHtml.indexOf('data-block-id="row"'), "Signup follows staff ordering");
+      moved.page.blocks[0].visible = false;
+      const hiddenContent = await projectPublishedPageRead(moved, moved.page.pageId, rendererSha, now);
+      assert.doesNotMatch(await compiled.renderPublishedPage(hiddenContent), /id="njpbssignup"/);
+    }
     await assert.rejects(() => compiled.renderPublishedPage({ ...content, kind: "private-preview" }));
     await assert.rejects(() => compiled.renderPublishedPage({ ...content, target: { ...content.target, rendererSha: "f".repeat(40) } }));
   }

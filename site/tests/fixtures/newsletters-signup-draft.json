@@ -1,0 +1,17 @@
+{
+  "template": "genericPage",
+  "slug": "newsletters",
+  "version": 6,
+  "status": "published",
+  "blocks": [
+    {
+      "id": "intro",
+      "type": "prose",
+      "order": 0,
+      "visible": true,
+      "data": { "content": { "type": "doc", "content": [
+        { "type": "paragraph", "content": [{ "type": "text", "text": "Newsletter introduction fixture." }] }
+      ] } }
+    }
+  ]
+}

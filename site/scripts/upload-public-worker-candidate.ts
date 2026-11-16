@@ -425,12 +425,12 @@ export async function uploadPublicWorkerCandidate({
     "liveBlogVersion" in rendererRelease && rendererRelease.liveBlogVersion === 1;
   const pageReaderVersion = rendererRelease !== null && typeof rendererRelease === "object" &&
     "pageReaderVersion" in rendererRelease ? rendererRelease.pageReaderVersion : undefined;
-  if (pageReaderVersion !== undefined && pageReaderVersion !== 1) throw new Error("Unsupported Page reader contract");
+  if (pageReaderVersion !== undefined && ![1, 2].includes(pageReaderVersion as number)) throw new Error("Unsupported Page reader contract");
   if (!isDeepStrictEqual(rendererRelease, { schemaVersion: 1, rendererSha: prepared.commitSha,
     ...(dataHubPublic ? { dataHubReportingVersion: 1 } : {}),
     ...(dataHubComposition ? { dataHubCompositionVersion: 1 } : {}),
     ...(liveBlog ? { liveBlogVersion: 1 } : {}),
-    ...(pageReaderVersion === 1 ? { pageReaderVersion: 1 } : {}),
+    ...(pageReaderVersion !== undefined ? { pageReaderVersion } : {}),
     ...(electionResults ? { electionResultsVersion: electionResults } : {}) })) {
     throw new Error("The public Post renderer does not match its prepared production artifact");
   }
@@ -567,7 +567,7 @@ export async function uploadPublicWorkerCandidate({
     ...(version.noBuildRecord ? { noBuildRecord: version.noBuildRecord } : {}),
     ...(staticProof ? { noBuildStatic: staticProof } : {}),
   });
-  if (pageReaderVersion === 1) {
+  if (pageReaderVersion !== undefined) {
     const { preparePageReaderMarker } = requireModule("../../functions/lib/page-reader-compatibility.js");
     await firestore.runTransaction(async (transaction: unknown) => {
       const write = await preparePageReaderMarker({ firestore, transaction, role: "public",

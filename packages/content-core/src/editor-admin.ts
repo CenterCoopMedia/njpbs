@@ -44,6 +44,7 @@ import {
   EMBED_ASPECT_RATIO_LIMITS,
   EMBED_HEIGHT_LIMITS,
   EMBED_WIDTH_LIMITS,
+  EMBED_ANCHOR_IDS,
   AP_MAP_MOBILE_HEIGHT_LIMITS,
   type CoverageEntry,
   COVERAGE_LIST_LIMITS,
@@ -142,6 +143,7 @@ export const SECTION_BLOCK_CATALOG: Readonly<Record<SectionId, readonly BlockTyp
     ]),
     genericPage: Object.freeze<BlockType[]>([
       "embed",
+      "embed_anchor",
       "data_hub_section",
       "document_list",
       "data_table",
@@ -215,7 +217,7 @@ export const SECTION_BLOCK_MAX: Readonly<
     home_newscast: 1,
   }),
   programLanding: Object.freeze({ promotion_playlist: 8, headline: 1, cta_row: 2, video_playlist: 1 }),
-  genericPage: Object.freeze({ promotion_playlist: 8, headline: 1, cta_row: 2, coverage_list: 1, topic_shelf: 2, video_playlist: 1, video: 4 }),
+  genericPage: Object.freeze({ embed_anchor: 1, promotion_playlist: 8, headline: 1, cta_row: 2, coverage_list: 1, topic_shelf: 2, video_playlist: 1, video: 4 }),
   post: Object.freeze({ promotion_playlist: 8, image_gallery: 2, cta_row: 2, support_appeal: 1, topic_shelf: 1, video: 4 }),
 });
 
@@ -307,6 +309,7 @@ export const BLOCK_LABELS: Readonly<Record<BlockType, string>> = Object.freeze({
   election_results: "election results",
   county_comparison: "county comparison",
   embed: "video or embed",
+  embed_anchor: "signup embed",
   html: "custom HTML",
   content_shelf: "content shelf",
   promotion_playlist: "manual content shelf",
@@ -1231,6 +1234,10 @@ const BLOCK_FIELDS: { readonly [T in BlockType]: readonly BlockFieldFor<T>[] } =
     { key: "caption", label: "Caption", help: "Optional text below an AP map, or a heading above a video player. Enter LIVE to add a red live light to a video player.", kind: "text", required: false },
     { key: "width", label: "Player width", help: "Optional width in pixels. Video players stay responsive on smaller screens. AP results always use the available width; leave this blank for AP.", kind: "number", required: false, ...EMBED_WIDTH_LIMITS, aspectRatioWith: "height", minAspectRatio: EMBED_ASPECT_RATIO_LIMITS.min, maxAspectRatio: EMBED_ASPECT_RATIO_LIMITS.max },
     { key: "height", label: "Player height", help: "Optional video height in pixels. Video players use the pasted ratio or provider default when both size fields are blank. AP layouts have separate map size and mobile height controls.", kind: "number", required: false, ...EMBED_HEIGHT_LIMITS },
+  ],
+  embed_anchor: [
+    { key: "anchorId", label: "Signup", help: "Choose an approved signup. The form appears on the public page after the visitor allows newsletter tools.", kind: "select", required: true,
+      options: EMBED_ANCHOR_IDS.map(value => ({ value, label: "NJ PBS newsletter signup" })) },
   ],
   html: [
     { key: "html", label: "HTML", help: "Paste HTML, CSS, and scripts. They run in a sealed frame that cannot change the rest of the page.", kind: "text", multiline: true, required: true, maxLength: 50_000 },

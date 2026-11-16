@@ -142,6 +142,7 @@ const INLINE_TYPES: readonly BlockType[] = [
   "faq_item",
   "coverage_list",
   "embed",
+  "embed_anchor",
   "html",
   "content_shelf",
   "promotion_playlist",
@@ -478,6 +479,13 @@ export function InlineBlockSurface({
         block={block} onChange={onChange} readOnly={readOnly} loadMedia={loadMedia} mediaPickerUnavailable={mediaPickerUnavailable}
         uploadMedia={uploadMedia} mediaCategories={mediaCategories} defaultUploadCategory={defaultUploadCategory}
         canUploadCategory={canUploadCategory} onMediaPickerDirtyChange={onMediaPickerDirtyChange} /></Suspense>;
+    case "embed_anchor":
+      return <fieldset disabled={readOnly}>
+        <legend>Signup embed</legend>
+        {editorFieldsForBlock("embed_anchor").map(field => <FieldRenderer key={field.key}
+          field={field} fieldId={`signup-${block.id}`} value={block.data[field.key]}
+          onChange={value => { if (!readOnly) onChange({ ...block.data, [field.key]: value }); }} />)}
+      </fieldset>;
     case "html":
       return <InlineHtml block={block} hasError={hasError} onChange={onChange} />;
     case "embed":

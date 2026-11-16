@@ -51,6 +51,7 @@ const SECTION_BLOCK_CATALOG = Object.freeze({
   ]),
   genericPage: Object.freeze([
     "embed",
+    "embed_anchor",
     "data_hub_section",
     "document_list",
     "data_table",
@@ -119,6 +120,7 @@ const SECTION_BLOCK_MAX = Object.freeze({
     video_playlist: 1,
   }),
   genericPage: Object.freeze({
+    embed_anchor: 1,
     headline: 1,
     cta_row: 2,
     coverage_list: 1,

@@ -9,6 +9,7 @@ import { fileURLToPath } from "node:url";
 
 const previewPair = () => createRequire(import.meta.url)("../../functions/lib/cms-preview-pair.js");
 const pageReader = () => createRequire(import.meta.url)("../../functions/lib/page-reader-compatibility.js");
+const pageReaderContract = () => createRequire(import.meta.url)("../../functions/lib/page-reader-contract.js");
 
 const execFileAsync = promisify(execFile);
 
@@ -321,7 +322,8 @@ export function functionGraphSource(source, file, metadata, parser) {
       "816e8601c9a30ebcb234337b6e77d18d8d650e88",
       "4bddc4d456a5e6cd475b2af6675a9e6f67c6dac1",
       "a063e480e9d99547c93e2ac903a161aeae46b4ee",
-      "11492340cf751fcdcda6960a6dfc4a6f5ba8f051"].includes(metadata?.split(" ").at(-1))) {
+      "11492340cf751fcdcda6960a6dfc4a6f5ba8f051",
+      "64d39a0ef7658e8ecd5ba64f9be9e9bc578147d8"].includes(metadata?.split(" ").at(-1))) {
       throw new Error("Unknown retained-reader module loader");
     }
     return source.replace(/\b(?:requireModule|require2)(\s*\()/g, "require$1");
@@ -643,7 +645,8 @@ export async function completeReceipt(firestore, input, { readPageReaderSource =
   if (pageReaderSource !== null) {
     const descriptor = JSON.parse(pageReaderSource);
     if (Object.keys(descriptor).sort().join(",") !== "pageReaderVersion,schemaVersion" ||
-        descriptor.schemaVersion !== 1 || descriptor.pageReaderVersion !== 1) fail("Unsupported CMS API Page reader contract");
+        descriptor.schemaVersion !== 1 || !Number.isInteger(descriptor.pageReaderVersion) ||
+        descriptor.pageReaderVersion < 1 || descriptor.pageReaderVersion > pageReaderContract().PAGE_READER_VERSION) fail("Unsupported CMS API Page reader contract");
     pageReaderVersion = descriptor.pageReaderVersion;
   }
   return firestore.runTransaction(async (transaction) => {
@@ -677,7 +680,7 @@ export async function completeReceipt(firestore, input, { readPageReaderSource =
       mutation,
       lastComplete: mutation,
     };
-    if (pageReaderVersion === 1) pageReader().writeApiReaderMarker({ firestore, transaction, receipt });
+    if (pageReaderVersion >= 1) pageReader().writeApiReaderMarker({ firestore, transaction, receipt, version: pageReaderVersion });
     transaction.set(ref, receipt);
     return { changed: true, receipt };
   });
