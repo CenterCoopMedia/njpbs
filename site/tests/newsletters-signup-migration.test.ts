@@ -20,7 +20,7 @@ function fake(document: Record<string, unknown> = structuredClone(before), histo
     set: (ref: { path: string }, value: Record<string, unknown>) => writes.push({ method: "set", path: ref.path, value }),
   };
   const firestore = { collection: (name: string) => ({ doc: (id = "fixture-audit") => ({ path: `${name}/${id}` }) }),
-    runTransaction: async (callback: (tx: typeof tx) => unknown) => callback(tx) };
+    runTransaction: async (callback: (transaction: typeof tx) => unknown) => callback(tx) };
   vi.spyOn(mediaUsage, "prepareMediaUsageWrite").mockResolvedValue({ ref: { path: "cmsMediaUsage/fixture-working" }, document: { state: "working" } });
   vi.spyOn(pageReaders, "assertInstalledPageReaders").mockResolvedValue(undefined);
   return { firestore: firestore as unknown as Firestore, writes, document };

@@ -1,6 +1,6 @@
 import { assertPublishedResources } from "../src/lib/published-resource-check";
 import { createHomeNewsletterBlock } from "../../packages/content-core/src/home-newsletter-section";
-import { escapeHtml } from "../../packages/content-core/src/content-model";
+import { escapeHtml, type PageBlock } from "../../packages/content-core/src/content-model";
 import { newsletterSignupUrl } from "../../packages/content-core/src/launch-fallback";
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
@@ -210,8 +210,9 @@ try {
     assert.deepEqual(comparePostHtml(html, await compiled.renderPublishedPage(content)), []);
     if (read.page.path === "/newsletters/") {
       const moved = structuredClone(read);
-      const signup = moved.page.blocks.find(block => block.type === "embed_anchor")!;
-      moved.page.blocks = [signup, ...moved.page.blocks.filter(block => block !== signup)].map((block, order) => ({ ...block, order }));
+      const pageBlocks: PageBlock[] = moved.page.blocks;
+      const signup = pageBlocks.find(block => block.type === "embed_anchor")!;
+      moved.page.blocks = [signup, ...pageBlocks.filter(block => block !== signup)].map((block, order) => ({ ...block, order }));
       const movedContent = await projectPublishedPageRead(moved, moved.page.pageId, rendererSha, now);
       const movedHtml = await compiled.renderPublishedPage(movedContent);
       assert.equal((movedHtml.match(/id="njpbssignup"/g) ?? []).length, 1);

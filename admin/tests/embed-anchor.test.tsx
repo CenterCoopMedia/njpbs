@@ -12,7 +12,8 @@ describe("Signup embed plank", () => {
     expect(parseBlocks([block]).ok).toBe(true);
     expect(insertableBlocksForSection("genericPage")).toContain("embed_anchor");
     expect(canPlaceAnotherBlock("genericPage", [block], "embed_anchor")).toBe(false);
-    expect(canPlaceAnotherBlock("genericPage", [{ ...block, visible: false }], "embed_anchor")).toBe(false);
+    const hiddenBlock = { ...block, visible: false };
+    expect(canPlaceAnotherBlock("genericPage", [hiddenBlock], "embed_anchor")).toBe(false);
     expect(validateSection("genericPage", [block, createBlock("embed_anchor", "second", 1)])).not.toBeNull();
     const onChange = vi.fn();
     render(<InlineBlockSurface block={block} hasError={false} onChange={onChange} />);

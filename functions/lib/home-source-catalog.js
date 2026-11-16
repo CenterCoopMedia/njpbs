@@ -622,6 +622,7 @@ var BLOCK_TYPES = [
   "faq_item",
   "coverage_list",
   "embed",
+  "embed_anchor",
   "html",
   "content_shelf",
   "promotion_playlist",
