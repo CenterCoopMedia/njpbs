@@ -91,8 +91,10 @@ separately reviewed forward commit on main; promotion never rewinds production.
 
 ## Read-only precheck
 
-Run from the repository root in a Bash session with Python 3 and authenticated
-`gh`. Supply the independently approved target; this runbook supplies no default
+Run from the repository root in a Bash session with Python 3, OpenSSL and authenticated
+`gh`. Before the scope check, obtain the coordinator's named authorization to
+read the approved App key for a metadata-only installation token. This authority
+does not permit key provisioning or promotion. Supply the independently approved target; this runbook supplies no default
 repository or numeric repository ID. Replace both placeholders, validate them,
 and require this checkout's HTTPS origin to match before any activation write.
 
@@ -115,13 +117,27 @@ approved target from the checkout or from API output. Every write below uses
 this verified operator-supplied `PROMOTION_REPOSITORY` in the same Bash session.
 
 Choose a full SHA already on main. The script accepts no default repository or
-App slug. For the November 12 staging observation, the named SHA was:
+App slug. Stream the approved PEM key to inherited fd 3 only when running the
+precheck. Use the credential authority's Bash session or its approved remote
+credential stream. Never put the key in a file, argument, environment variable
+or terminal output. For the November 12 staging observation, the named SHA was:
 
 ```sh
-python3 scripts/check-production-promotion.py --repo "$PROMOTION_REPOSITORY" --sha cf3ac408c12afc73c3e3f355f6dd70db58ea1af7 --app-slug ccm-njpbs-promote --workflow-sha cf3ac408c12afc73c3e3f355f6dd70db58ea1af7 --admission-sha 13650ac1d8fd4e42d60afc7a859b55305ae2e52c
+PROMOTION_KEY_ENTRY='REPLACE_WITH_APPROVED_ENTRY_POINTER'
+set -o pipefail
+pass show "$PROMOTION_KEY_ENTRY" | python3 scripts/check-production-promotion.py --repo "$PROMOTION_REPOSITORY" --sha cf3ac408c12afc73c3e3f355f6dd70db58ea1af7 --app-slug ccm-njpbs-promote --workflow-sha cf3ac408c12afc73c3e3f355f6dd70db58ea1af7 --admission-sha 13650ac1d8fd4e42d60afc7a859b55305ae2e52c --app-key-fd 3 3<&0
 ```
 
-The script makes only GET requests. It prints every configuration check even
+Configuration reads use GET requests. The scope check signs a short-lived App
+JWT, creates an installation token with only `metadata: read` permission and reads
+`GET /installation/repositories` with that token. Omitting both `repositories`
+and `repository_ids` proves the full installation scope. It requires selected
+repositories, total count one and the approved repository's exact name and ID.
+It revokes the temporary token after the read, including failed reads. The key,
+JWT and token stay in memory and never enter output. These authentication
+requests change no repository, environment, ruleset, variable or secret.
+
+It prints every configuration check even
 when another fails, and exits 1 for any failed or unreadable condition. It checks
 exact-SHA main-push `CI / ci`, main ancestry and inclusion of both reviewed merge
 commits, the slug variable, exact environment
@@ -129,7 +145,8 @@ policy and public App client ID, both documented rulesets, key metadata and
 absence of repository/accessible organization key suppliers, exact App and
 installation permissions, selected repository scope, and the production
 fast-forward baseline. A missing environment or branch is a failure, not proof
-of readiness. It never reads a key or creates an installation token.
+of readiness. A missing key fd, failed signing, unreadable scope or failed token
+revocation fails the scope row while the remaining checks still run.
 
 Expected values come from #57, the payloads above and the App/merged PR APIs.
 PR #30's merge SHA is `cf3ac408c12afc73c3e3f355f6dd70db58ea1af7`; PR #54's is
@@ -138,12 +155,10 @@ The App API returned public client ID `Iv23lieue1kCmSfTYl5b` on November 12, 202
 The organization installation API returned installation `180720324`, selected
 repositories, and exactly Contents write, Workflows write and Metadata read.
 The precheck's current output is an observation, not a source of expected values.
-The user installation repository API lists only repositories visible to its
-authenticated user. Even a successful one-repository response cannot establish
-installation-wide isolation. The script reports FAIL for that prerequisite
-until complete selection evidence exists outside this user-filtered API; it
-never certifies isolation from a partial view. Do not fetch the App key or
-expand authentication merely to make the staging check pass.
+The unfiltered installation-token response establishes installation-wide
+isolation. A user-filtered response or a repository-restricted token cannot
+supply that evidence. Credential access requires authorization for this read;
+a staging observation alone does not grant it.
 
 A passing configuration check cannot grant approval, prove key provenance or
 replace the live acceptance, refusal and deployment evidence required by #57.
@@ -159,6 +174,7 @@ the next step. The public switch remains Joe's decision.
 
 | Order | Authorization |
 | --- | --- |
+| Scope precheck, before 2 and before 6 | Coordinator's named authorization to read the approved App key and mint an unfiltered, metadata-only installation token. No provisioning or production write. |
 | 1, 3, 4a, 4c | Coordinator's named technical setup authorization: variable, environment policy/client ID, rulesets. |
 | 2 | Read-only exact main SHA and green main-push CI proof. |
 | 4b | Joe: production bootstrap, which can trigger deployment. |
@@ -175,16 +191,11 @@ gh api --method GET "/orgs/${PROMOTION_REPOSITORY%%/*}/installations"
 ```
 
 Require App ID `5705771`, the public client ID above, installation `180720324`
-unsuspended and exactly the three permissions. Separately, an organization owner
-must inspect this installation's full repository selection in the organization's
-App installation settings and record only the approved target and selected count
-in #57. Require selected repositories, count one and exactly the verified target.
-The user-scoped API and a repository-restricted installation token cannot prove
-that no hidden repository is selected. This prevents a partial-visibility false
-pass; the precheck keeps its scope row FAIL rather than accepting that evidence.
-Activation stops until the coordinator has this complete settings readback.
-No credential access or installation token creation is needed for that settings
-inspection. Check canonical repository name/ID and `CMS_DEPLOY_OWNER` as above.
+unsuspended and exactly the three permissions. Run the authorized precheck with
+the unfiltered installation token. Record only the installation, selected count
+and approved target in #57. Require selected repositories, count one and exactly
+the verified target. Activation stops if the scope readback fails. Check canonical
+repository name/ID and `CMS_DEPLOY_OWNER` as above.
 
 1. Technical setup: set the App-push deployment variable, then read it back.
 
@@ -209,7 +220,8 @@ inspection. Check canonical repository name/ID and `CMS_DEPLOY_OWNER` as above.
    ```sh
    BOOTSTRAP_SHA='REPLACE_WITH_RECORDED_GREEN_MAIN_SHA'
    PROMOTE_SHA='REPLACE_WITH_LATER_GREEN_MAIN_SHA'
-   python3 scripts/check-production-promotion.py --repo "$PROMOTION_REPOSITORY" --sha "$BOOTSTRAP_SHA" --app-slug ccm-njpbs-promote --workflow-sha cf3ac408c12afc73c3e3f355f6dd70db58ea1af7 --admission-sha 13650ac1d8fd4e42d60afc7a859b55305ae2e52c
+   PROMOTION_KEY_ENTRY='REPLACE_WITH_APPROVED_ENTRY_POINTER'
+   pass show "$PROMOTION_KEY_ENTRY" | python3 scripts/check-production-promotion.py --repo "$PROMOTION_REPOSITORY" --sha "$BOOTSTRAP_SHA" --app-slug ccm-njpbs-promote --workflow-sha cf3ac408c12afc73c3e3f355f6dd70db58ea1af7 --admission-sha 13650ac1d8fd4e42d60afc7a859b55305ae2e52c --app-key-fd 3 3<&0
    ```
 
 3. Technical setup: require the environment to be absent or reconcile its
@@ -310,14 +322,13 @@ inspection. Check canonical repository name/ID and `CMS_DEPLOY_OWNER` as above.
 6. Joe's first promotion/public switch authorization: select a later green main
    `PROMOTE_SHA` that fast-forwards production and whose range includes a
    reviewed workflow-file change. Rerun the precheck at it and require every
-   API-verifiable check to pass, plus the complete installation settings
-   readback above for the scope prerequisite that this user-filtered API cannot
-   certify. A missing scope readback stops activation. Inspect the range before
+   configuration check to pass, including the complete unfiltered installation
+   scope readback. A missing scope readback stops activation. Inspect the range before
    dispatch; a successful run without
    a workflow-file change does not prove Workflows write.
 
    ```sh
-   python3 scripts/check-production-promotion.py --repo "$PROMOTION_REPOSITORY" --sha "$PROMOTE_SHA" --app-slug ccm-njpbs-promote --workflow-sha cf3ac408c12afc73c3e3f355f6dd70db58ea1af7 --admission-sha 13650ac1d8fd4e42d60afc7a859b55305ae2e52c
+   pass show "$PROMOTION_KEY_ENTRY" | python3 scripts/check-production-promotion.py --repo "$PROMOTION_REPOSITORY" --sha "$PROMOTE_SHA" --app-slug ccm-njpbs-promote --workflow-sha cf3ac408c12afc73c3e3f355f6dd70db58ea1af7 --admission-sha 13650ac1d8fd4e42d60afc7a859b55305ae2e52c --app-key-fd 3 3<&0
    gh api --method GET "/repos/$PROMOTION_REPOSITORY/compare/$BOOTSTRAP_SHA...$PROMOTE_SHA"
    gh workflow run promote.yml --repo "$PROMOTION_REPOSITORY" --ref main -f sha="$PROMOTE_SHA"
    gh api --method GET "/repos/$PROMOTION_REPOSITORY/actions/workflows/promote.yml/runs?event=workflow_dispatch&branch=main&per_page=10"
@@ -408,4 +419,6 @@ authorized promotion, server refusal and live deployment evidence exists.
 - [Deployment branch policies](https://docs.github.com/en/rest/deployments/branch-policies)
 - [GitHub App metadata and installation permissions](https://docs.github.com/en/rest/apps/apps)
 - [User-filtered installation repository listing](https://docs.github.com/en/rest/apps/installations#list-repositories-accessible-to-the-user-access-token)
+- [Unfiltered installation token creation](https://docs.github.com/en/rest/apps/apps#create-an-installation-access-token-for-an-app)
+- [Installation repository listing and token revocation](https://docs.github.com/en/rest/apps/installations)
 - [Repository rulesets API](https://docs.github.com/en/rest/repos/rules)

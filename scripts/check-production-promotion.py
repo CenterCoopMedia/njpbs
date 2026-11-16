@@ -1,11 +1,14 @@
 #!/usr/bin/env python3
-"""Read-only #57 configuration precheck. Uses gh's existing authentication."""
+"""Read-only #57 configuration precheck with an authorized App scope read."""
 
 import argparse
+import base64
+import http.client
 import json
 from pathlib import Path
 import re
 import subprocess
+import time
 
 
 class NotReady(Exception):
@@ -34,8 +37,46 @@ def require(condition, message):
         raise NotReady(message)
 
 
+def app_request(method, path, token, body=None):
+    """Keep authentication and response bodies inside this process."""
+    connection = http.client.HTTPSConnection("api.github.com", timeout=45)
+    try:
+        connection.request(method, path, body=json.dumps(body) if body is not None else None,
+                           headers={"Authorization": f"Bearer {token}",
+                                    "Accept": "application/vnd.github+json",
+                                    "Content-Type": "application/json", "User-Agent": "promotion-precheck"})
+        response = connection.getresponse()
+        require(response.status == (204 if method == "DELETE" else 200 if method == "GET" else 201),
+                f"{method} {path} unavailable (HTTP {response.status})")
+        return json.loads(response.read()) if method != "DELETE" else None
+    except (OSError, ValueError, http.client.HTTPException):
+        raise NotReady(f"{method} {path} unavailable") from None
+    finally:
+        connection.close()
+
+
+def app_jwt(client_id, key_fd):
+    def encode(value):
+        return base64.urlsafe_b64encode(value).rstrip(b"=")
+
+    require(key_fd is not None and key_fd >= 3, "approved App key required on --app-key-fd (3 or higher)")
+    now = int(time.time())
+    unsigned = encode(b'{"alg":"RS256","typ":"JWT"}') + b"." + encode(
+        json.dumps({"iat": now - 60, "exp": now + 300, "iss": client_id}).encode())
+    try:
+        result = subprocess.run(
+            ["openssl", "dgst", "-sha256", "-sign", f"/dev/fd/{key_fd}"],
+            input=unsigned, capture_output=True, pass_fds=(key_fd,), timeout=45, check=False,
+        )
+    except (OSError, subprocess.TimeoutExpired):
+        raise NotReady("App JWT signing unavailable") from None
+    require(result.returncode == 0 and bool(result.stdout), "App JWT signing failed")
+    return (unsigned + b"." + encode(result.stdout)).decode()
+
+
 class Precheck:
-    def __init__(self, repository, sha, app_slug, workflow_sha, admission_sha, request=github_get):
+    def __init__(self, repository, sha, app_slug, workflow_sha, admission_sha, request=github_get,
+                 app_key_fd=None):
         require(bool(re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9-]{0,38}/[A-Za-z0-9_.-]+", repository))
                 and repository.split("/")[1] not in (".", ".."), "invalid --repo")
         require(bool(re.fullmatch(r"[a-f0-9]{40}", sha)), "invalid --sha")
@@ -47,6 +88,7 @@ class Precheck:
         self.owner = repository.split("/")[0]
         self.prefix = f"/repos/{repository}"
         self.request, self.cache, self.rows = request, {}, []
+        self.app_key_fd = app_key_fd
         root = Path(__file__).resolve().parents[1] / "docs/release"
         self.payloads = [json.loads((root / f"production-{kind}.ruleset.json").read_text())
                          for kind in ("checks", "updates")]
@@ -146,13 +188,27 @@ class Precheck:
         return f"installation={install['id']}; {self.permissions(install)}"
 
     def installation_repositories(self):
+        self.permissions(self.app())
+        self.installation_permissions()
         install = self.installation()
         require(install["repository_selection"] == "selected", "installation must use selected repositories")
-        repos = self.listing(f"/user/installations/{install['id']}/repositories", "repositories")
-        require(len(repos) == 1 and repos[0]["full_name"].lower() == self.repository.lower(),
-                "visible selection differs from the requested repository")
-        raise NotReady("user-visible repository list cannot prove installation-wide isolation; "
-                       "complete organization installation settings readback required")
+        jwt = app_jwt(self.app()["client_id"], self.app_key_fd)
+        # Narrow permissions, never repositories: a filter could hide wider access.
+        issued = app_request("POST", f"/app/installations/{install['id']}/access_tokens", jwt,
+                             {"permissions": {"metadata": "read"}})
+        token = issued["token"]
+        require(isinstance(token, str) and bool(token), "installation token unavailable")
+        try:
+            scope = app_request("GET", "/installation/repositories?per_page=100", token)
+            repos = scope["repositories"]
+            require(type(scope["total_count"]) is int and scope["total_count"] == 1 and len(repos) == 1,
+                    "expected complete installation selection count one")
+            require(repos[0]["full_name"].lower() == self.repository.lower()
+                    and repos[0]["id"] == self.get(self.prefix)["id"],
+                    "installation selection differs from the requested repository")
+            return f"installation={install['id']}; selected; count=1; repository={self.repository}"
+        finally:
+            app_request("DELETE", "/installation/token", token)
 
     def variable(self, scope, name, expected):
         value = self.get(f"{self.prefix}/{scope}/variables/{name}")
@@ -225,9 +281,11 @@ def main():
     parser.add_argument("--app-slug", required=True, help="expected App slug from the runbook")
     parser.add_argument("--workflow-sha", required=True, help="reviewed promotion workflow merge SHA")
     parser.add_argument("--admission-sha", required=True, help="reviewed App-push admission merge SHA")
+    parser.add_argument("--app-key-fd", type=int, help="inherited fd (3 or higher) supplying the approved PEM key")
     args = parser.parse_args()
     try:
-        rows = Precheck(args.repo, args.sha, args.app_slug, args.workflow_sha, args.admission_sha).run()
+        rows = Precheck(args.repo, args.sha, args.app_slug, args.workflow_sha, args.admission_sha,
+                        app_key_fd=args.app_key_fd).run()
     except NotReady as error:
         parser.error(str(error))
     print(f"Read-only promotion precheck: {args.repo} @ {args.sha}")
