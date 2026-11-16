@@ -68,6 +68,14 @@
   },
   "inputs": [
     {
+      "suppliers": ["github-secret"],
+      "names": ["CLOUDFLARE_PUBLISHER_IMAGE_TOKEN"]
+    },
+    {
+      "suppliers": ["github-variable", "process-environment"],
+      "names": ["PUBLISHER_PUBLIC_VARS_JSON"]
+    },
+    {
       "suppliers": ["worker-binding"],
       "names": ["MEDIA_FANOUT_ADDRESS", "MEDIA_FANOUT_RECIPIENTS_JSON"]
     },

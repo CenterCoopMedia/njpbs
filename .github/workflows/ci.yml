@@ -121,6 +121,7 @@ jobs:
           .github/scripts/evidence-image-policy.test.mjs
           .github/scripts/ci-tree-reuse.test.mjs
           .github/scripts/workflow-policy.test.mjs
+          .github/scripts/publisher-image.test.mjs
           .github/scripts/report-relay.test.mjs
           .github/scripts/dev-reconcile-input.test.mjs
           scripts/lib/deployment-settings.test.mjs

@@ -1,0 +1,111 @@
+import assert from "node:assert/strict";
+import { execFileSync } from "node:child_process";
+import { createHash } from "node:crypto";
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import path from "node:path";
+import { test } from "node:test";
+import { productionConfig, publishImage, receiptFiles, registryReader, verifySource } from "./publisher-image.mjs";
+
+const sha = "a".repeat(40), account = "0123456789abcdef0123456789abcdef";
+const digest = `sha256:${"b".repeat(64)}`;
+const image = `registry.cloudflare.com/${account}/njpbs-cms-publisher@${digest}`;
+const env = { CANONICAL_GITHUB_REPOSITORY: "example/source", CANONICAL_GITHUB_REPOSITORY_ID: "123", GITHUB_REPOSITORY: "example/source", GITHUB_REPOSITORY_ID: "123", GITHUB_WORKFLOW_REF: "example/source/.github/workflows/publisher-image.yml@refs/heads/main" };
+
+function sourceFixture(t) {
+  const cwd = mkdtempSync(path.join(tmpdir(), "publisher-image-test-"));
+  t.after(() => rmSync(cwd, { recursive: true }));
+  const git = (...args) => execFileSync("git", ["-c", "core.hooksPath=/dev/null", "-c", "user.name=Fixture", "-c", "user.email=fixture@example.org", "-c", "commit.gpgsign=false", ...args], { cwd, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] }).trim();
+  git("init", "-b", "main");
+  writeFileSync(path.join(cwd, "source"), "main");
+  git("add", "."); git("commit", "-m", "main fixture");
+  const main = git("rev-parse", "HEAD");
+  git("update-ref", "refs/remotes/origin/main", main);
+  return { cwd, git, main };
+}
+
+function ciRequest(source, { green = true, jobGreen = true } = {}) {
+  return async route => route.includes("/jobs?") ? { total_count: 1, jobs: [{ name: "ci", run_id: 42, head_sha: source, status: "completed", conclusion: jobGreen ? "success" : "failure" }] }
+    : { workflow_runs: green ? [{ id: 42, head_sha: source, head_branch: "main", event: "push", status: "completed", conclusion: "success", path: ".github/workflows/ci.yml", repository: { full_name: "example/source", id: 123 }, head_repository: { full_name: "example/source", id: 123 } }] : [] };
+}
+
+test("SHA admission refuses malformed and off-main source before CI lookup", async t => {
+  const { cwd, git } = sourceFixture(t);
+  const request = () => assert.fail("CI must not run for refused source");
+  await assert.rejects(verifySource({ sha: "main", cwd, env, request }), /full deploy SHA/);
+  git("checkout", "-b", "unmerged");
+  writeFileSync(path.join(cwd, "source"), "unmerged"); git("commit", "-am", "unmerged fixture");
+  await assert.rejects(verifySource({ sha: git("rev-parse", "HEAD"), cwd, env, request }));
+});
+
+test("SHA admission requires successful main source CI and its ci aggregate", async t => {
+  const { cwd, main } = sourceFixture(t);
+  for (const options of [{ green: false }, { jobGreen: false }]) {
+    await assert.rejects(verifySource({ sha: main, cwd, env, request: ciRequest(main, options) }), /No successful main CI/);
+  }
+  assert.equal(await verifySource({ sha: main, cwd, env, request: ciRequest(main) }), 42);
+  await assert.rejects(verifySource({ sha: main, cwd, env: { ...env, GITHUB_WORKFLOW_REF: env.GITHUB_WORKFLOW_REF.replace("main", "feature") }, request: ciRequest(main) }), /identity refused/);
+});
+
+test("a rerun reuses the SHA digest; a new image builds once and reads back by digest", async () => {
+  for (const existing of [true, false]) {
+    let builds = 0, lookups = 0;
+    const result = await publishImage({ sha, account, lookup: async tag => {
+      lookups++;
+      assert.ok(tag === sha || tag === digest);
+      return !existing && lookups === 1 ? null : digest;
+    }, build: async tag => { builds++; assert.equal(tag, `njpbs-cms-publisher:${sha}`); } });
+    assert.equal(result, image); assert.equal(builds, existing ? 0 : 1);
+  }
+  await assert.rejects(publishImage({ sha, account, lookup: async () => { throw new Error("403"); }, build: () => assert.fail("Lookup failure must not push") }), /403/);
+  let calls = 0;
+  await assert.rejects(publishImage({ sha, account, lookup: async () => ++calls === 1 ? digest : null, build: () => assert.fail() }), /readback differs/);
+});
+
+test("registry lookup verifies manifest bytes and treats only 404 as absent", async () => {
+  const manifest = Buffer.from('{"schemaVersion":2}');
+  const manifestDigest = `sha256:${createHash("sha256").update(manifest).digest("hex")}`;
+  let status = 200, header = manifestDigest;
+  const lookup = await registryReader(account, "synthetic-api-token", async (url, options) => {
+    if (options.method === "POST") {
+      assert.match(url, /\/containers\/registries\/registry.cloudflare.com\/credentials$/);
+      assert.deepEqual(JSON.parse(options.body).permissions, ["pull"]);
+      return Response.json({ success: true, result: { password: "synthetic-registry-token" } });
+    }
+    assert.match(url, /\/manifests\//);
+    assert.equal(options.method, "GET");
+    return new Response(manifest, { status, headers: { "Docker-Content-Digest": header } });
+  });
+  assert.equal(await lookup(sha), manifestDigest);
+  status = 404; assert.equal(await lookup(sha), null);
+  status = 403; await assert.rejects(lookup(sha), /lookup refused/);
+  status = 200; header = digest; await assert.rejects(lookup(sha), /digest differs/);
+});
+
+test("receipt config matches release method 3372638c source/config comparison", () => {
+  const source = JSON.parse(readFileSync(new URL("../../publisher/wrangler.json", import.meta.url), "utf8"));
+  const checkout = "/tmp/example-source";
+  const variables = { ...source.vars, CLOUDFLARE_ACCOUNT_ID: account, CLOUDFLARE_PUBLIC_WORKER_TAG: "c".repeat(32), PUBLICATION_ENABLED: "true", CMS_MEDIA_R2_ENDPOINT: "https://media.example.org", PUBLIC_GA4_MEASUREMENT_ID: "G-EXAMPLE", PUBLIC_REPORT_ENDPOINT: "https://report.example.org", PUBLIC_TURNSTILE_SITEKEY: "example-key" };
+  const prepared = structuredClone(source);
+  prepared.main = "/tmp/prepared/source/publisher/worker.ts";
+  prepared.account_id = account;
+  prepared.containers[0].image = "/tmp/prepared/source/publisher/Dockerfile";
+  prepared.containers[0].image_build_context = "/tmp/prepared";
+  const config = productionConfig(source, prepared, { checkout, sha, image, variables });
+  // Independently apply the method's documented substitutions to exact source.
+  const expected = structuredClone(source);
+  expected.main = path.join(checkout, "publisher/worker.ts");
+  expected.account_id = account;
+  expected.vars = { ...variables, PUBLICATION_COMMIT_SHA: sha };
+  expected.containers[0].image = image;
+  delete expected.containers[0].image_build_context;
+  assert.deepEqual(config, expected);
+  const files = receiptFiles({ sha, image, config, checkout, runId: "987654321" });
+  const receipt = JSON.parse(files["receipt.json"]);
+  assert.deepEqual(receipt, { schema: 1, source_sha: sha, image, config: "publisher.json", config_sha256: createHash("sha256").update(files["publisher.json"]).digest("hex"), workflow_run_id: "987654321", source_checkout: checkout });
+  assert.deepEqual(JSON.parse(files[receipt.config]), expected);
+  const changed = structuredClone(prepared); changed.containers[0].max_instances = 2;
+  assert.throws(() => productionConfig(source, changed, { checkout, sha, image, variables }), /differs from exact source/);
+  assert.throws(() => productionConfig({ ...source, main: "other.ts" }, prepared, { checkout, sha, image, variables }), /contract refused/);
+  assert.throws(() => productionConfig(source, prepared, { checkout, sha, image: image.replace(/@.*/, ":main"), variables }), /contract refused/);
+});
