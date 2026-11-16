@@ -74,7 +74,7 @@ test("registry lookup verifies manifest bytes and treats only 404 as absent", as
   let status = 200, header = manifestDigest, redirect = false, corrupt = false;
   const lookup = await registryReader(account, "synthetic-api-token", async (url, options) => {
     if (options.method === "POST") {
-      assert.match(url, /\/containers\/registries\/registry.cloudflare.com\/credentials$/);
+      assert.match(url, /\/containers\/registries\/registry\.cloudflare\.com\/credentials$/);
       assert.deepEqual(JSON.parse(options.body).permissions, ["pull"]);
       return Response.json({ success: true, result: { password: "synthetic-registry-token" } });
     }
