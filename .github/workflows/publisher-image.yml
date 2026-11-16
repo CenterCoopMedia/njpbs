@@ -19,7 +19,14 @@ concurrency:
 
 jobs:
   image:
-    if: github.ref == 'refs/heads/main'
+    if: >-
+      github.event_name == 'workflow_dispatch' &&
+      github.ref == 'refs/heads/main' &&
+      vars.CANONICAL_GITHUB_REPOSITORY != '' &&
+      vars.CANONICAL_GITHUB_REPOSITORY_ID != '' &&
+      github.repository_id == vars.CANONICAL_GITHUB_REPOSITORY_ID &&
+      github.workflow_ref == format('{0}/.github/workflows/publisher-image.yml@refs/heads/main', vars.CANONICAL_GITHUB_REPOSITORY) &&
+      vars.CMS_DEPLOY_OWNER != '' && github.triggering_actor == vars.CMS_DEPLOY_OWNER
     runs-on: ubuntu-24.04
     timeout-minutes: 45
     environment: publisher-image

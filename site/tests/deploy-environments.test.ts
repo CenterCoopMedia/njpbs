@@ -153,6 +153,7 @@ describe("deploy credential environments", () => {
       production: ["main"], "schedule-bake": ["main"], "publisher-image": ["main"], development: ["main"], "github-pages": ["main", "production"],
     });
     expect(environmentPolicy()["publisher-image"].secrets).toEqual(["CLOUDFLARE_PUBLISHER_IMAGE_TOKEN"]);
+    assertConfiguredAdmission(workflow("publisher-image").jobs.image, "publisher-image");
   });
 
   it.each(["pages", "cms-publish"])("keeps both Firebase credential paths available to %s deploy", name => {

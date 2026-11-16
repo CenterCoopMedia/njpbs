@@ -17,6 +17,8 @@ without forwarding registry credentials.
 ## Coordinator setup
 
 Create the protected GitHub environment `publisher-image`, restricted to main.
+Only the configured `CMS_DEPLOY_OWNER` can dispatch or rerun its credential job;
+the workflow also checks the configured repository ID and main workflow ref.
 Set its single secret `CLOUDFLARE_PUBLISHER_IMAGE_TOKEN` to a Cloudflare API token
 limited to managed container registry access for the intended account. It needs
 registry push and pull-credential generation, with no Workers script deployment
@@ -32,7 +34,7 @@ public integration values, and retain `PUBLICATION_ENABLED` as `"true"`.
 Never include secret bindings in this JSON. The account selects the registry;
 there is no source-code account default.
 
-Also supply the existing `CANONICAL_GITHUB_REPOSITORY`,
+Also supply the existing `CMS_DEPLOY_OWNER`, `CANONICAL_GITHUB_REPOSITORY`,
 `CANONICAL_GITHUB_REPOSITORY_ID`, `CMS_PRODUCTION_API_ORIGIN`,
 `CMS_LOCAL_PUBLICATION_OWNER` and `CMS_GPU_WORKER_ID` Actions variables. The
 three CMS inputs render the exact source's production templates before the
