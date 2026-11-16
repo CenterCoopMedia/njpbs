@@ -150,8 +150,9 @@ describe("deploy credential environments", () => {
 
   it("defines only the approved environments and exact deployment branches", () => {
     expect(Object.fromEntries(Object.entries(environmentPolicy()).map(([name, policy]) => [name, policy.branches]))).toEqual({
-      production: ["main"], "schedule-bake": ["main"], development: ["main"], "github-pages": ["main", "production"],
+      production: ["main"], "schedule-bake": ["main"], "publisher-image": ["main"], development: ["main"], "github-pages": ["main", "production"],
     });
+    expect(environmentPolicy()["publisher-image"].secrets).toEqual(["CLOUDFLARE_PUBLISHER_IMAGE_TOKEN"]);
   });
 
   it.each(["pages", "cms-publish"])("keeps both Firebase credential paths available to %s deploy", name => {
