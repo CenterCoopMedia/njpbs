@@ -208,7 +208,7 @@ class PromotionTests(unittest.TestCase):
                     elif method == "GET":
                         assert path == "/installation/repositories?per_page=100"
                         assert headers["Authorization"] == "Bearer " + token
-                        self.response = Response(int(os.environ["SCOPE_STATUS"]), json.loads(os.environ["SCOPE"]))
+                        self.response = Response(int(scope_status), json.loads(scope_json))
                     else:
                         assert method == "DELETE" and path == "/installation/token"
                         assert headers["Authorization"] == "Bearer " + token
@@ -217,7 +217,7 @@ class PromotionTests(unittest.TestCase):
                     return self.response
                 def close(self):
                     pass
-            script, *args = sys.argv[1:]
+            scope_status, scope_json, script, *args = sys.argv[1:]
             sys.argv = [script, *args]
             with patch.object(http.client, "HTTPSConnection", Connection):
                 try:
@@ -243,21 +243,20 @@ class PromotionTests(unittest.TestCase):
                 from pathlib import Path
                 from urllib.parse import urlsplit
                 assert sys.argv[1:4] == ["api", "--method", "GET"]
-                routes = json.loads(Path(os.environ["ROUTES"]).read_text())
+                routes = json.loads(Path(__file__).with_name("routes.json").read_text())
                 print(json.dumps(routes[urlsplit(sys.argv[4]).path]))
             '''))
             gh.chmod(0o700)
-            command = [sys.executable, "-c", child, str(Path(promotion.__file__)),
+            command = [str(Path(promotion.__file__)),
                        "--repo", REPO, "--sha", SHA, "--app-slug", "example-promote",
                        "--workflow-sha", SHA, "--admission-sha", BASE, "--app-key-fd", "3"]
             for status, scope, passed in cases:
                 with self.subTest(status=status, scope=scope):
                     # A pipe supplies the key, just as the operator's fd stream does.
                     result = subprocess.run(
-                        ["/bin/bash", "-c", 'exec 3<&0; exec "$@"', "precheck", *command], input=key,
-                        capture_output=True, env={**os.environ, "PATH": f"{root}:{os.environ['PATH']}",
-                                                  "ROUTES": str(root / "routes.json"),
-                                                  "SCOPE": json.dumps(scope), "SCOPE_STATUS": str(status)},
+                        ["/bin/bash", "-c", 'exec 3<&0; exec "$@"', "precheck", sys.executable,
+                         "-c", child, str(status), json.dumps(scope), *command], input=key,
+                        capture_output=True, env={**os.environ, "PATH": f"{root}:{os.environ['PATH']}"},
                         timeout=15, check=False,
                     )
                     output = result.stdout + result.stderr
