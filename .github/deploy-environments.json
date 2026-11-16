@@ -66,6 +66,14 @@
       "PRODUCTION_DEPLOY_DISPATCH_SECRET"
     ]
   },
+  "publisher-image": {
+    "branches": [
+      "main"
+    ],
+    "secrets": [
+      "CLOUDFLARE_PUBLISHER_IMAGE_TOKEN"
+    ]
+  },
   "schedule-bake": {
     "branches": [
       "main"

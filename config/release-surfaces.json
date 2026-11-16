@@ -17,6 +17,7 @@
     ".github/workflows/preview.yml",
     ".github/workflows/probe-media-manager.yml",
     ".github/workflows/promote.yml",
+    ".github/workflows/publisher-image.yml",
     ".github/workflows/recovered-service-source.yml",
     ".github/workflows/recovered-services-deploy.yml.disabled",
     ".github/workflows/schedule-bake.yml",
