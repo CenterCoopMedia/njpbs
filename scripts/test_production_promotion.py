@@ -1,9 +1,14 @@
 """Focused read-only promotion configuration and refusal contracts."""
 import copy
 import importlib.util
+import json
+import os
 from pathlib import Path
 import re
 import subprocess
+import sys
+import tempfile
+import textwrap
 import unittest
 from unittest.mock import patch
 from urllib.parse import urlsplit, parse_qs
@@ -45,7 +50,6 @@ class Fixture:
                 "account": {"login": "example-org"}, "permissions": permissions,
                 "suspended_at": None, "repository_selection": "selected",
             }]},
-            "/user/installations/10/repositories": {"total_count": 1, "repositories": [identity]},
             f"{PREFIX}/environments/production": {"deployment_branch_policy": {"protected_branches": False, "custom_branch_policies": True}},
             f"{PREFIX}/environments/production/deployment-branch-policies": {"total_count": 1, "branch_policies": [{"id": 1, "name": "main", "type": "branch"}]},
             f"{PREFIX}/environments/production/variables/CCM_PROMOTE_APP_CLIENT_ID": {"name": "CCM_PROMOTE_APP_CLIENT_ID", "value": "Iv1.example"},
@@ -69,7 +73,7 @@ class PromotionTests(unittest.TestCase):
         rows = fixture.check.run()
         self.assertEqual(len(rows), 16)
         self.assertEqual([row[1] for row in rows if not row[0]], ["installation repository selection"])
-        self.assertIn("cannot prove installation-wide isolation", next(row[2] for row in rows if not row[0]))
+        self.assertIn("approved App key required", next(row[2] for row in rows if not row[0]))
         self.assertEqual(len(fixture.calls), len(set(fixture.calls)))
 
     def test_ci_rejects_wrong_event_source_identity_and_job(self):
@@ -122,8 +126,8 @@ class PromotionTests(unittest.TestCase):
                 with self.assertRaises(promotion.NotReady):
                     fixture.check.installation_permissions()
         fixture = Fixture()
-        fixture.routes["/user/installations/10/repositories"] = {"total_count": 2, "repositories": [{"full_name": REPO}, {"full_name": "example-org/other"}]}
-        with self.assertRaises(promotion.NotReady):
+        fixture.routes["/orgs/example-org/installations"]["installations"][0]["repository_selection"] = "all"
+        with self.assertRaisesRegex(promotion.NotReady, "must use selected repositories"):
             fixture.check.installation_repositories()
 
     def test_unavailable_metadata_fails_and_continues_without_secret_output(self):
@@ -162,12 +166,109 @@ class PromotionTests(unittest.TestCase):
                 rows = fixture.check.run()
                 self.assertFalse(next(row[0] for row in rows if row[1] == condition), rows)
 
-    def test_single_user_visible_repository_cannot_certify_hidden_selection(self):
-        # This API response is identical when another selected repository is
-        # hidden from the authenticated user. It can never prove full scope.
+    def test_user_visible_repository_cannot_substitute_for_installation_token(self):
         fixture = Fixture()
-        with self.assertRaisesRegex(promotion.NotReady, "cannot prove installation-wide isolation"):
+        fixture.routes["/user/installations/10/repositories"] = {
+            "total_count": 1, "repositories": [{"id": 23, "full_name": REPO}]}
+        with self.assertRaisesRegex(promotion.NotReady, "approved App key required"):
             fixture.check.installation_repositories()
+        self.assertFalse(any(path.startswith("/user/") for path in fixture.calls))
+
+    def test_cli_proves_unfiltered_scope_and_keeps_credentials_out_of_output(self):
+        # Run the real CLI, signer and gh subprocess boundary. Only GitHub's
+        # network responses are synthetic, following the documented REST schema.
+        key = subprocess.run(["openssl", "genpkey", "-algorithm", "RSA", "-pkeyopt", "rsa_keygen_bits:2048"],
+                             capture_output=True, check=True).stdout
+        child = textwrap.dedent('''
+            import base64, http.client, json, os, runpy, sys, time
+            from unittest.mock import patch
+            calls = []
+            token = "test-installation-token-not-a-credential"
+            class Response:
+                def __init__(self, status, value):
+                    self.status, self.value = status, value
+                def read(self):
+                    return json.dumps(self.value).encode()
+            class Connection:
+                def __init__(self, host, timeout):
+                    assert host == "api.github.com"
+                def request(self, method, path, body, headers):
+                    calls.append(method)
+                    if method == "POST":
+                        assert path == "/app/installations/10/access_tokens"
+                        assert json.loads(body) == {}  # Neither repository filter is allowed.
+                        jwt = headers["Authorization"].removeprefix("Bearer ")
+                        header, claims, signature = jwt.split(".")
+                        decode = lambda value: json.loads(base64.urlsafe_b64decode(value + "=" * (-len(value) % 4)))
+                        assert decode(header)["alg"] == "RS256" and signature
+                        assert decode(claims)["iss"] == "Iv1.example"
+                        assert decode(claims)["iat"] <= time.time() < decode(claims)["exp"]
+                        self.response = Response(201, {"token": token})
+                    elif method == "GET":
+                        assert path == "/installation/repositories?per_page=100"
+                        assert headers["Authorization"] == "Bearer " + token
+                        self.response = Response(int(os.environ["SCOPE_STATUS"]), json.loads(os.environ["SCOPE"]))
+                    else:
+                        assert method == "DELETE" and path == "/installation/token"
+                        assert headers["Authorization"] == "Bearer " + token
+                        self.response = Response(204, None)
+                def getresponse(self):
+                    return self.response
+                def close(self):
+                    pass
+            script, *args = sys.argv[1:]
+            sys.argv = [script, *args]
+            with patch.object(http.client, "HTTPSConnection", Connection):
+                try:
+                    runpy.run_path(script, run_name="__main__")
+                finally:
+                    assert calls == ["POST", "GET", "DELETE"]
+        ''')
+        cases = [
+            (200, {"total_count": 1, "repositories": [{"id": 23, "full_name": REPO}]}, True),
+            (200, {"total_count": 2, "repositories": [{"id": 23, "full_name": REPO},
+                  {"id": 24, "full_name": "example-org/hidden"}]}, False),
+            (200, {"total_count": 1, "repositories": [{"id": 24, "full_name": REPO}]}, False),
+            (200, {"total_count": 1, "repositories": [{"id": 23, "full_name": "example-org/other"}]}, False),
+            (200, {"total_count": 1, "repositories": []}, False),
+            (403, {"message": "test-installation-token-not-a-credential"}, False),
+        ]
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / "routes.json").write_text(json.dumps(Fixture().routes))
+            gh = root / "gh"
+            gh.write_text(f"#!{sys.executable}\n" + textwrap.dedent('''
+                import json, os, sys
+                from pathlib import Path
+                from urllib.parse import urlsplit
+                assert sys.argv[1:4] == ["api", "--method", "GET"]
+                routes = json.loads(Path(os.environ["ROUTES"]).read_text())
+                print(json.dumps(routes[urlsplit(sys.argv[4]).path]))
+            '''))
+            gh.chmod(0o700)
+            command = [sys.executable, "-c", child, str(Path(promotion.__file__)),
+                       "--repo", REPO, "--sha", SHA, "--app-slug", "example-promote",
+                       "--workflow-sha", SHA, "--admission-sha", BASE, "--app-key-fd", "3"]
+            for status, scope, passed in cases:
+                with self.subTest(status=status, scope=scope):
+                    # A pipe supplies the key, just as the operator's fd stream does.
+                    result = subprocess.run(
+                        ["/bin/bash", "-c", 'exec 3<&0; exec "$@"', "precheck", *command], input=key,
+                        capture_output=True, env={**os.environ, "PATH": f"{root}:{os.environ['PATH']}",
+                                                  "ROUTES": str(root / "routes.json"),
+                                                  "SCOPE": json.dumps(scope), "SCOPE_STATUS": str(status)},
+                        timeout=15, check=False,
+                    )
+                    output = result.stdout + result.stderr
+                    self.assertEqual(result.returncode, 0 if passed else 1, output.decode())
+                    self.assertEqual(result.stderr, b"")
+                    self.assertEqual(sum(line.startswith(b"PASS ") for line in result.stdout.splitlines()),
+                                     16 if passed else 15)
+                    self.assertEqual(sum(line.startswith(b"FAIL ") for line in result.stdout.splitlines()),
+                                     0 if passed else 1)
+                    self.assertNotIn(b"test-installation-token-not-a-credential", output)
+                    self.assertNotIn(key, output)
+                    self.assertNotIn(b"PRIVATE KEY", output)
 
     def test_runbook_requires_operator_target_for_every_activation_write(self):
         source = (Path(__file__).resolve().parents[1] / "docs/release/production-branch.md").read_text()
