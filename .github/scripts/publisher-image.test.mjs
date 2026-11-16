@@ -10,6 +10,7 @@ import { productionConfig, publishImage, receiptFiles, registryReader, verifySou
 const sha = "a".repeat(40), account = "0123456789abcdef0123456789abcdef";
 const digest = `sha256:${"b".repeat(64)}`;
 const image = `registry.cloudflare.com/${account}/njpbs-cms-publisher@${digest}`;
+const inputFingerprint = "d".repeat(64);
 const env = { CANONICAL_GITHUB_REPOSITORY: "example/source", CANONICAL_GITHUB_REPOSITORY_ID: "123", GITHUB_REPOSITORY: "example/source", GITHUB_REPOSITORY_ID: "123", GITHUB_WORKFLOW_REF: "example/source/.github/workflows/publisher-image.yml@refs/heads/main" };
 
 function sourceFixture(t) {
@@ -50,33 +51,45 @@ test("SHA admission requires successful main source CI and its ci aggregate", as
 test("a rerun reuses the SHA digest; a new image builds once and reads back by digest", async () => {
   for (const existing of [true, false]) {
     let builds = 0, lookups = 0;
-    const result = await publishImage({ sha, account, lookup: async tag => {
+    const result = await publishImage({ sha, account, inputFingerprint, lookup: async tag => {
       lookups++;
       assert.ok(tag === sha || tag === digest);
-      return !existing && lookups === 1 ? null : digest;
+      return !existing && lookups === 1 ? null : { digest, inputFingerprint };
     }, build: async tag => { builds++; assert.equal(tag, `njpbs-cms-publisher:${sha}`); } });
     assert.equal(result, image); assert.equal(builds, existing ? 0 : 1);
   }
-  await assert.rejects(publishImage({ sha, account, lookup: async () => { throw new Error("403"); }, build: () => assert.fail("Lookup failure must not push") }), /403/);
+  await assert.rejects(publishImage({ sha, account, inputFingerprint, lookup: async () => { throw new Error("403"); }, build: () => assert.fail("Lookup failure must not push") }), /403/);
   let calls = 0;
-  await assert.rejects(publishImage({ sha, account, lookup: async () => ++calls === 1 ? digest : null, build: () => assert.fail() }), /readback differs/);
+  await assert.rejects(publishImage({ sha, account, inputFingerprint, lookup: async () => ++calls === 1 ? { digest, inputFingerprint } : null, build: () => assert.fail() }), /readback differs/);
+  for (const previousInputs of [undefined, "e".repeat(64)]) {
+    await assert.rejects(publishImage({ sha, account, inputFingerprint, lookup: async () => ({ digest, inputFingerprint: previousInputs }), build: () => assert.fail("Changed inputs must not replace the existing SHA image") }), /different deployment inputs/);
+  }
 });
 
 test("registry lookup verifies manifest bytes and treats only 404 as absent", async () => {
-  const manifest = Buffer.from('{"schemaVersion":2}');
+  const config = Buffer.from(JSON.stringify({ config: { Labels: { "org.njpbs.deployment-input-sha256": inputFingerprint } } }));
+  const configDigest = `sha256:${createHash("sha256").update(config).digest("hex")}`;
+  const manifest = Buffer.from(JSON.stringify({ schemaVersion: 2, config: { digest: configDigest } }));
   const manifestDigest = `sha256:${createHash("sha256").update(manifest).digest("hex")}`;
-  let status = 200, header = manifestDigest;
+  let status = 200, header = manifestDigest, redirect = false, corrupt = false;
   const lookup = await registryReader(account, "synthetic-api-token", async (url, options) => {
     if (options.method === "POST") {
       assert.match(url, /\/containers\/registries\/registry.cloudflare.com\/credentials$/);
       assert.deepEqual(JSON.parse(options.body).permissions, ["pull"]);
       return Response.json({ success: true, result: { password: "synthetic-registry-token" } });
     }
-    assert.match(url, /\/manifests\//);
     assert.equal(options.method, "GET");
+    if (url === "https://storage.example.org/image-config") {
+      assert.equal(options.headers?.Authorization, undefined);
+      return new Response(config);
+    }
+    if (url.includes("/blobs/")) return redirect ? new Response(null, { status: 307, headers: { Location: "https://storage.example.org/image-config" } }) : new Response(corrupt ? "changed" : config);
+    assert.match(url, /\/manifests\//);
     return new Response(manifest, { status, headers: { "Docker-Content-Digest": header } });
   });
-  assert.equal(await lookup(sha), manifestDigest);
+  assert.deepEqual(await lookup(sha), { digest: manifestDigest, inputFingerprint });
+  redirect = true; assert.deepEqual(await lookup(sha), { digest: manifestDigest, inputFingerprint });
+  redirect = false; corrupt = true; await assert.rejects(lookup(sha), /config digest differs/); corrupt = false;
   status = 404; assert.equal(await lookup(sha), null);
   status = 403; await assert.rejects(lookup(sha), /lookup refused/);
   status = 200; header = digest; await assert.rejects(lookup(sha), /digest differs/);
@@ -100,9 +113,9 @@ test("receipt config matches release method 3372638c source/config comparison", 
   expected.containers[0].image = image;
   delete expected.containers[0].image_build_context;
   assert.deepEqual(config, expected);
-  const files = receiptFiles({ sha, image, config, checkout, runId: "987654321" });
+  const files = receiptFiles({ sha, image, config, checkout, runId: "987654321", inputFingerprint });
   const receipt = JSON.parse(files["receipt.json"]);
-  assert.deepEqual(receipt, { schema: 1, source_sha: sha, image, config: "publisher.json", config_sha256: createHash("sha256").update(files["publisher.json"]).digest("hex"), workflow_run_id: "987654321", source_checkout: checkout });
+  assert.deepEqual(receipt, { schema: 1, source_sha: sha, image, config: "publisher.json", config_sha256: createHash("sha256").update(files["publisher.json"]).digest("hex"), workflow_run_id: "987654321", source_checkout: checkout, deployment_input_sha256: inputFingerprint });
   assert.deepEqual(JSON.parse(files[receipt.config]), expected);
   const changed = structuredClone(prepared); changed.containers[0].max_instances = 2;
   assert.throws(() => productionConfig(source, changed, { checkout, sha, image, variables }), /differs from exact source/);

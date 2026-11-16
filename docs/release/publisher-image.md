@@ -3,9 +3,16 @@
 `publisher-image.yml` builds the exact main commit after its `CI/ci` result
 succeeds. It prepares the committed source with its locked dependencies, then
 uses `wrangler containers build --push --tag njpbs-cms-publisher:<SHA>`.
+The command follows Cloudflare's [image management documentation](https://developers.cloudflare.com/containers/guides/image-management/).
 It performs no publisher deployment. Concurrent runs for a SHA serialize;
 reruns read and reuse its registry digest before considering a build. A failed
 registry lookup stops the run; only a missing manifest permits a push.
+The generated build Dockerfile adds a label with the existing deployment-input
+fingerprint. Reuse verifies that label through the digest-checked manifest and
+image config blob. Changed or absent fingerprints refuse reuse without pushing;
+corrected production inputs require a new source commit.
+Image-config reads support the [registry protocol's storage redirects](https://distribution.github.io/distribution/spec/api/)
+without forwarding registry credentials.
 
 ## Coordinator setup
 
@@ -38,7 +45,9 @@ One artifact, `publisher-image-<SHA>-<attempt>`, contains `receipt.json` and
 `publisher.json`. The receipt records schema 1, `source_sha`, the immutable
 `image`, the config filename and byte `config_sha256`, `workflow_run_id`, and
 `source_checkout`. A registry GET verifies the manifest bytes at the digest
-before the artifact is written. Authentication failures never trigger a push.
+before the artifact is written. `deployment_input_sha256` records the fingerprint
+of the three production template inputs baked into the image. Authentication
+failures never trigger a push.
 
 The config retains the exact source's resources, replaces the container image
 with that digest, removes `image_build_context`, and uses the absolute
