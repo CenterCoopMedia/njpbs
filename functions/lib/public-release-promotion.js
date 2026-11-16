@@ -6,19 +6,21 @@ const { assertPublicWorkerCandidateDatabase, projectPublicWorkerCandidate } = re
 const { projectPublicBuildReservation, assertMediaLifecycleDeploymentFence } = require("./public-deployment");
 const { parseCmsPublicationRuntimeControl } = require("./cms-publication-runtime-control");
 const { preparedPublicWorkerCandidateRef, readFreshPublicReleasePreparationInTransaction,
-  projectPublicReleasePreparationReservation } = require("./public-release-preparation");
+  projectPublicReleasePreparationReservation, projectPreparedPublicReleaseCheckpoint } = require("./public-release-preparation");
 const { assertNoBuildCandidateInTransaction } = require("./no-build-post-publication");
 const { assertNoBuildPageCandidateInTransaction } = require("./no-build-page-candidate");
 const { assertPublicMediaManifest } = require("./public-media-manifest");
 const { digest } = require("./no-build-page-ownership");
 const { PreparedPublicReleaseError } = require("./public-release-error");
+const { assertPreparedPublicBuildSettings } = require("./public-build-settings");
 
 const validDigest = value => typeof value === "string" && /^[a-f0-9]{64}$/.test(value);
 function refuse(message) { throw new PreparedPublicReleaseError(message); }
 function refs(firestore, preparationId) {
   const candidate = preparedPublicWorkerCandidateRef(firestore, preparationId);
   const preparation = candidate.parent.parent;
-  return { preparation, candidate, proof: preparation.collection("proofs").doc("complete"),
+  return { preparation, candidate, checkpoint: preparation.collection("checkpoints").doc("artifact"),
+    proof: preparation.collection("proofs").doc("complete"),
     promotion: preparation.collection("promotions").doc("reservation"), handover: preparation.collection("proofs").doc("handover") };
 }
 function candidateInput(value) {
@@ -32,11 +34,13 @@ function preparedArtifactFromCandidate(candidate) {
 
 async function readPreparedReleaseProof(transaction, firestore, preparationId, commitSha) {
   const ref = refs(firestore, preparationId);
-  const [proof, candidateSnapshot, context] = await transaction.getAll(ref.proof, ref.candidate,
-    firestore.doc(`cmsPreviewPublicContexts/cms-${preparationId}`));
+  const [proof, candidateSnapshot, context, checkpointSnapshot] = await transaction.getAll(ref.proof, ref.candidate,
+    firestore.doc(`cmsPreviewPublicContexts/cms-${preparationId}`), ref.checkpoint);
   if (!proof.exists || !candidateSnapshot.exists || !context.exists) refuse("The prepared release has no matching complete proof");
   const candidate = candidateInput(candidateSnapshot.data());
   const sealed = proof.data();
+  const checkpoint = projectPreparedPublicReleaseCheckpoint(checkpointSnapshot.data(), preparationId, candidate);
+  const publicBuildSettings = assertPreparedPublicBuildSettings(sealed?.publicBuildSettings, commitSha);
   if (sealed?.schemaVersion !== 1 || sealed.preparationId !== preparationId || sealed.commitSha !== commitSha ||
       !validDigest(sealed.inputSha256) || !validDigest(sealed.artifactCheckpointDigest) ||
       candidate.commitSha !== commitSha || candidate.buildBatchId !== `cms-${preparationId}` ||
@@ -44,6 +48,9 @@ async function readPreparedReleaseProof(transaction, firestore, preparationId, c
       sealed.candidateDigest !== digest(candidate) || !context.exists || sealed.contextManifestDigest !== digest(context.data())) {
     refuse("The prepared release has no matching complete proof");
   }
+  if (checkpoint.inputSha256 !== sealed.inputSha256 || checkpoint.artifactCheckpointDigest !== sealed.artifactCheckpointDigest ||
+      !isDeepStrictEqual(checkpoint.preparedArtifact, preparedArtifactFromCandidate(candidate)) ||
+      !isDeepStrictEqual(checkpoint.publicBuildSettings, publicBuildSettings)) refuse("The sealed build settings differ from the checkpoint");
   assertPublicMediaManifest(sealed.mediaManifest);
   if (sealed.mediaManifest.mediaManifestDigest !== candidate.mediaManifestDigest ||
       sealed.mediaManifest.buildBatchId !== candidate.buildBatchId || sealed.mediaManifest.commitSha !== commitSha ||
@@ -76,16 +83,18 @@ async function handoverPreparedPublicRelease({ firestore, preparationId, commitS
 /** Only the trusted operator calls this after checkpoint/restore, provider
  * verification and private-context retention. This evidence creates no work. */
 async function sealPreparedPublicRelease({ firestore, preparationId, commitSha, inputSha256, artifactCheckpointDigest,
-  preparedArtifact, mediaManifest, target }) {
+  preparedArtifact, mediaManifest, publicBuildSettings, target }) {
   assertPublicWorkerCandidateDatabase(firestore, target);
   if (!validDigest(inputSha256) || !validDigest(artifactCheckpointDigest)) refuse("The prepared release digests are invalid");
+  const settings = assertPreparedPublicBuildSettings(publicBuildSettings, commitSha);
   const ref = refs(firestore, preparationId);
   return firestore.runTransaction(async transaction => {
     const { reservation } = await readFreshPublicReleasePreparationInTransaction({ firestore, transaction,
       preparationId, commitSha, phase: "ready" });
-    const [candidateSnapshot, context, before] = await transaction.getAll(ref.candidate,
-      firestore.doc(`cmsPreviewPublicContexts/${reservation.buildBatchId}`), ref.proof);
+    const [candidateSnapshot, context, before, checkpointSnapshot] = await transaction.getAll(ref.candidate,
+      firestore.doc(`cmsPreviewPublicContexts/${reservation.buildBatchId}`), ref.proof, ref.checkpoint);
     const candidate = candidateInput(candidateSnapshot.data());
+    const checkpoint = projectPreparedPublicReleaseCheckpoint(checkpointSnapshot.data(), preparationId, reservation);
     assertPublicMediaManifest(mediaManifest, reservation);
     const prepared = preparedArtifactFromCandidate(candidate);
     const manifest = context.data();
@@ -94,13 +103,15 @@ async function sealPreparedPublicRelease({ firestore, preparationId, commitSha, 
         candidate.buildBatchId !== reservation.buildBatchId || !isDeepStrictEqual(preparedArtifact, prepared) ||
         manifest?.schemaVersion !== 1 || manifest.buildBatchId !== reservation.buildBatchId ||
         manifest.artifactReceiptDigest !== candidate.artifactReceiptDigest || !validDigest(manifest.sha256) ||
-        mediaManifest.mediaManifestDigest !== candidate.mediaManifestDigest) {
+        mediaManifest.mediaManifestDigest !== candidate.mediaManifestDigest || checkpoint.inputSha256 !== inputSha256 ||
+        checkpoint.artifactCheckpointDigest !== artifactCheckpointDigest || !isDeepStrictEqual(checkpoint.preparedArtifact, prepared) ||
+        !isDeepStrictEqual(checkpoint.publicBuildSettings, settings)) {
       refuse("The prepared release proof differs from its retained artifacts");
     }
     await assertNoBuildCandidateInTransaction({ firestore, transaction, candidate });
     await assertNoBuildPageCandidateInTransaction({ firestore, transaction, candidate });
     const proof = { schemaVersion: 1, preparationId, commitSha, inputSha256, artifactCheckpointDigest,
-      candidateDigest: digest(candidate), contextManifestDigest: digest(manifest), mediaManifest };
+      candidateDigest: digest(candidate), contextManifestDigest: digest(manifest), mediaManifest, publicBuildSettings: settings };
     if (Buffer.byteLength(JSON.stringify(proof)) > 750_000) refuse("The prepared release proof exceeds its document limit");
     if (before.exists) {
       if (!isDeepStrictEqual(before.data(), proof)) refuse("The prepared release proof cannot change");

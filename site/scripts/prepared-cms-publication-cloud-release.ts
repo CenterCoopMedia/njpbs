@@ -5,6 +5,8 @@ import { fileURLToPath } from "node:url";
 import type { App } from "firebase-admin/app";
 import { parsePreviewStorageCredential } from "./cms-preview-storage-credential";
 import { CmsPublicationRuntimeGuardError } from "./cms-publication-runtime-guard";
+import { expectedPublicBuildValues } from "./prepared-public-build-settings";
+import { assertPreparedPublicBuildSettings } from "../../functions/lib/public-build-settings.js";
 
 const require = createRequire(import.meta.url);
 const { PreparedPublicReleaseError } = require("../../functions/lib/public-release-error");
@@ -64,13 +66,16 @@ export async function main(args = process.argv.slice(2), environment: NodeJS.Pro
     const firestore = firebaseAdminRuntime.getFirestore(app);
     let result;
     if (action === "--check") {
+      const expectedValues = expectedPublicBuildValues(commitSha, environment);
       const sealed = await checkSealedPublicRelease({ firestore, preparationId: queueId, commitSha });
+      assertPreparedPublicBuildSettings(sealed.proof.publicBuildSettings, commitSha, expectedValues);
       result = { queueId, commitSha, generation: sealed.candidate.generation, status: "fresh" };
     } else if (action === "--handover") {
       result = await handoverPreparedPublicRelease({ firestore, preparationId: queueId, commitSha });
     } else if (action === "--promote") {
       result = await promotePreparedCloudRelease({ firestore, queueId, commitSha, apply });
     } else {
+      const buildEnvironment = expectedPublicBuildValues(commitSha, environment);
       const stateDirectory = environment.CMS_PUBLICATION_RELEASE_STATE_DIRECTORY ?? "";
       if (!path.isAbsolute(stateDirectory) || !path.relative(root, stateDirectory).startsWith("..")) {
         throw new PreparedReleaseOperatorError("The prepared release state directory must be outside the checkout");
@@ -80,7 +85,7 @@ export async function main(args = process.argv.slice(2), environment: NodeJS.Pro
       const cloudflareApiToken = parseCloudflareToken(readFileSync(6, "utf8"));
       storage = createCmsPublicationCloudStorage({ ...credential, includeRenderer: true });
       result = await sealPreparedCloudRelease({ firestore, storage, queueId, commitSha, stateDirectory,
-        previewStorageCredential, cloudflareApiToken });
+        previewStorageCredential, cloudflareApiToken, buildEnvironment: { ...buildEnvironment } });
     }
     process.stdout.write(`${JSON.stringify(result)}\n`);
   } catch (error) {

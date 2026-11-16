@@ -14,6 +14,9 @@ import { createHash } from "node:crypto";
 import { runNoBuildCloudRelease } from "../../site/scripts/no-build-cloud-release";
 
 const oldCommitSha = "a".repeat(40), commitSha = "b".repeat(40);
+const publicBuildSettings = { schemaVersion: 1, commitSha, overridesAbsent: true,
+  values: { PUBLIC_GA4_MEASUREMENT_ID: "G-TEST123", PUBLIC_REPORT_ENDPOINT: "https://report.example.org/",
+    PUBLIC_SHARE_INTAKE_ENDPOINT: "https://intake.example.org/", PUBLIC_TURNSTILE_SITEKEY: "1x00000000000000000000AA" } };
 const preparationId = "Release0000000000001";
 const path = `system/publicReleasePreparations/entries/${preparationId}`;
 let app, db;
@@ -185,13 +188,14 @@ async function seal() {
   candidate.publicationReceiptDigest = createHash("sha256").update(JSON.stringify(publication)).digest("hex");
   await preparation.recordPreparedPublicReleaseCheckpoint({ firestore: db, preparationId, commitSha,
     inputSha256: "f".repeat(64), artifactCheckpointDigest: "a".repeat(64),
-    preparedArtifact: promotion.preparedArtifactFromCandidate(candidate) });
+    preparedArtifact: promotion.preparedArtifactFromCandidate(candidate), publicBuildSettings });
   await preparation.recordPreparedPublicWorkerCandidate({ firestore: db, preparationId, candidate });
   await db.doc(`cmsPreviewPublicContexts/${reservation.buildBatchId}`).set({ schemaVersion: 1,
     buildBatchId: reservation.buildBatchId, artifactReceiptDigest: candidate.artifactReceiptDigest, sha256: "e".repeat(64),
     byteLength: 100, key: `public-context/${reservation.buildBatchId}/${"e".repeat(64)}.json` });
   const input = { firestore: db, preparationId, commitSha, inputSha256: "f".repeat(64),
-    artifactCheckpointDigest: "a".repeat(64), preparedArtifact: promotion.preparedArtifactFromCandidate(candidate), mediaManifest };
+    artifactCheckpointDigest: "a".repeat(64), preparedArtifact: promotion.preparedArtifactFromCandidate(candidate),
+    mediaManifest, publicBuildSettings };
   const proof = await promotion.sealPreparedPublicRelease(input);
   return { reservation, candidate, proof, input };
 }
@@ -209,7 +213,34 @@ it("seals complete detached evidence while both OLD pins and the generation rema
   expect((await db.doc("system/cmsPublicationRuntime").get()).data().phase).toBe("ready");
   expect((await db.collection("system/publicDeployment/buildBatches").get()).empty).toBe(true);
   await expect(promotion.sealPreparedPublicRelease({ ...input, artifactCheckpointDigest: "b".repeat(64) }))
-    .rejects.toThrow("cannot change");
+    .rejects.toThrow("differs from its retained artifacts");
+});
+
+it("binds the compiler settings to the original checkpoint and rejects later seal or checkpoint drift", async () => {
+  const { proof, input } = await seal();
+  const checkpoint = db.doc(`${path}/checkpoints/artifact`);
+  const original = (await checkpoint.get()).data();
+  expect(proof.publicBuildSettings).toEqual(publicBuildSettings);
+  expect(original.publicBuildSettings).toEqual(publicBuildSettings);
+  expect((await promotion.checkSealedPublicRelease({ firestore: db, preparationId, commitSha })).proof).toEqual(proof);
+  const changed = { ...publicBuildSettings,
+    values: { ...publicBuildSettings.values, PUBLIC_GA4_MEASUREMENT_ID: "G-OTHER123" } };
+  await expect(promotion.sealPreparedPublicRelease({ ...input, publicBuildSettings: changed }))
+    .rejects.toThrow("differs from its retained artifacts");
+  expect((await db.doc(`${path}/proofs/complete`).get()).data()).toEqual(proof);
+  expect((await checkpoint.get()).data()).toEqual(original);
+  await checkpoint.update({ publicBuildSettings: changed });
+  await expect(promotion.checkSealedPublicRelease({ firestore: db, preparationId, commitSha }))
+    .rejects.toThrow("sealed build settings differ");
+});
+
+it("refuses a seal or fresh check without the native compiler settings", async () => {
+  const { input } = await seal();
+  await expect(promotion.sealPreparedPublicRelease({ ...input, publicBuildSettings: undefined }))
+    .rejects.toThrow("missing or differ");
+  await db.doc(`${path}/proofs/complete`).update({ publicBuildSettings: FieldValue.delete() });
+  await expect(promotion.checkSealedPublicRelease({ firestore: db, preparationId, commitSha }))
+    .rejects.toThrow("missing or differ");
 });
 
 it("atomically changes both OLD-paused pins, reserves the planned generation and creates its original work", async () => {

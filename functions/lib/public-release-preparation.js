@@ -10,6 +10,7 @@ const { parseCmsPublicationRuntimeControl } = require("./cms-publication-runtime
 const { PUBLIC_CONTEXT_PATH } = require("./public-context-revision");
 const { publicReleaseFreshnessDigest } = require("./public-release-freshness");
 const { PreparedPublicReleaseError } = require("./public-release-error");
+const { assertPreparedPublicBuildSettings } = require("./public-build-settings");
 
 const COLLECTION = "system/publicReleasePreparations/entries";
 const validId = value => typeof value === "string" && /^[A-Za-z0-9]{20}$/.test(value);
@@ -30,10 +31,10 @@ function checkpointRef(firestore, preparationId) {
 }
 const preparedFields = ["schemaVersion", "digestAlgorithm", "buildBatchId", "generation", "commitSha", "artifactDigest",
   "artifactReceiptDigest", "mediaManifestDigest", "publicationReceiptDigest", "artifactFileCount", "artifactBytes"];
-function projectCheckpoint(value, preparationId, reservation) {
+function projectPreparedPublicReleaseCheckpoint(value, preparationId, reservation) {
   const prepared = value?.preparedArtifact;
   const digestFields = ["artifactDigest", "artifactReceiptDigest", "mediaManifestDigest", "publicationReceiptDigest"];
-  if (!exact(value, ["schemaVersion", "preparationId", "inputSha256", "artifactCheckpointDigest", "preparedArtifact"]) ||
+  if (!exact(value, ["schemaVersion", "preparationId", "inputSha256", "artifactCheckpointDigest", "preparedArtifact", "publicBuildSettings"]) ||
       value.schemaVersion !== 1 || value.preparationId !== preparationId ||
       ![value.inputSha256, value.artifactCheckpointDigest].every(item => typeof item === "string" && /^[a-f0-9]{64}$/.test(item)) ||
       !exact(prepared, preparedFields) || prepared.schemaVersion !== 1 || prepared.digestAlgorithm !== "sha256" ||
@@ -44,21 +45,22 @@ function projectCheckpoint(value, preparationId, reservation) {
       !Number.isSafeInteger(prepared.artifactBytes) || prepared.artifactBytes < 1 || prepared.artifactBytes > 100 * 1024 ** 3) {
     refuse("The detached release has no matching durable checkpoint");
   }
-  return value;
+  return { ...value, publicBuildSettings: assertPreparedPublicBuildSettings(value.publicBuildSettings, reservation.commitSha) };
 }
 
 /** Written only after checkpoint and restore have verified the same bytes. */
 async function recordPreparedPublicReleaseCheckpoint({ firestore, preparationId, commitSha, inputSha256,
-  artifactCheckpointDigest, preparedArtifact, target }) {
+  artifactCheckpointDigest, preparedArtifact, publicBuildSettings, target }) {
   assertPublicWorkerCandidateDatabase(firestore, target);
   const ref = checkpointRef(firestore, preparationId);
   return firestore.runTransaction(async transaction => {
     const [preparation, before] = await transaction.getAll(preparationRef(firestore, preparationId), ref);
     const reservation = projectPublicReleasePreparationReservation(preparation.data(), { preparationId, commitSha });
-    const value = projectCheckpoint({ schemaVersion: 1, preparationId, inputSha256, artifactCheckpointDigest, preparedArtifact },
+    const value = projectPreparedPublicReleaseCheckpoint({ schemaVersion: 1, preparationId, inputSha256, artifactCheckpointDigest,
+      preparedArtifact, publicBuildSettings },
       preparationId, reservation);
     if (before.exists) {
-      if (!isDeepStrictEqual(projectCheckpoint(before.data(), preparationId, reservation), value)) {
+      if (!isDeepStrictEqual(projectPreparedPublicReleaseCheckpoint(before.data(), preparationId, reservation), value)) {
         refuse("The detached release checkpoint cannot change");
       }
     } else transaction.create(ref, value);
@@ -71,7 +73,7 @@ async function assertPreparedPublicReleaseCheckpoint({ firestore, preparationId,
   return firestore.runTransaction(async transaction => {
     const [preparation, checkpoint] = await transaction.getAll(preparationRef(firestore, preparationId), checkpointRef(firestore, preparationId));
     const reservation = projectPublicReleasePreparationReservation(preparation.data(), { preparationId, commitSha: preparedArtifact.commitSha });
-    const value = projectCheckpoint(checkpoint.data(), preparationId, reservation);
+    const value = projectPreparedPublicReleaseCheckpoint(checkpoint.data(), preparationId, reservation);
     if (!isDeepStrictEqual(value.preparedArtifact, preparedArtifact)) refuse("The detached artifact differs from its durable checkpoint");
     return value;
   }, { readOnly: true });
@@ -120,7 +122,7 @@ async function recordPreparedPublicWorkerCandidate({ firestore, preparationId, c
     const reservation = projectPublicReleasePreparationReservation(preparation.data(), {
       preparationId, commitSha: projected.commitSha });
     if (projected.buildBatchId !== reservation.buildBatchId || projected.generation !== reservation.generation) refuse();
-    const retained = projectCheckpoint(checkpoint.data(), preparationId, reservation).preparedArtifact;
+    const retained = projectPreparedPublicReleaseCheckpoint(checkpoint.data(), preparationId, reservation).preparedArtifact;
     if (preparedFields.filter(field => !["schemaVersion", "digestAlgorithm"].includes(field))
       .some(field => retained[field] !== projected[field])) refuse("The detached candidate differs from its durable checkpoint");
     if (before.exists) {
@@ -214,4 +216,4 @@ async function readFreshPublicReleasePreparationInTransaction({ firestore, trans
 module.exports = { preparePublicRelease, readPublicReleasePreparation, projectPublicReleasePreparationReservation,
   preparedPublicWorkerCandidateRef, recordPreparedPublicWorkerCandidate, recordPreparedPublicReleaseCheckpoint,
   assertPreparedPublicReleaseCheckpoint, checkPublicReleasePreparation,
-  readFreshPublicReleasePreparationInTransaction };
+  readFreshPublicReleasePreparationInTransaction, projectPreparedPublicReleaseCheckpoint };

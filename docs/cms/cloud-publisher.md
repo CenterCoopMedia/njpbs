@@ -52,7 +52,10 @@ detached reservation modes cannot reuse each other's identity, even concurrently
 Build offline, compile the same-source renderer, check seals/compatibility and
 checkpoint the complete artifact. Restore and byte-verify before marking it
 prepared. A partial checkpoint or merely complete local directory is not
-uploadable. The optional uploader `--preparation <operation-id>` retains one
+uploadable. The [candidate build settings](candidate-build-settings.md) record binds
+the effective public compiler inputs to the checkpoint and seal. Restored,
+missing or changed inputs must pass that comparison before seal and fresh check.
+The optional uploader `--preparation <operation-id>` retains one
 exact uploaded provider version without taking the live lease, making it
 eligible, registering media or changing traffic. Both receipts, Assets and
 restored renderer must belong to that retained directory/source.
