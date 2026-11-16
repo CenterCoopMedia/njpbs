@@ -196,7 +196,8 @@ class PromotionTests(unittest.TestCase):
                     calls.append(method)
                     if method == "POST":
                         assert path == "/app/installations/10/access_tokens"
-                        assert json.loads(body) == {}  # Neither repository filter is allowed.
+                        # Only metadata read; neither repository filter is allowed.
+                        assert json.loads(body) == {"permissions": {"metadata": "read"}}
                         jwt = headers["Authorization"].removeprefix("Bearer ")
                         header, claims, signature = jwt.split(".")
                         decode = lambda value: json.loads(base64.urlsafe_b64decode(value + "=" * (-len(value) % 4)))

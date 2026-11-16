@@ -193,8 +193,9 @@ class Precheck:
         install = self.installation()
         require(install["repository_selection"] == "selected", "installation must use selected repositories")
         jwt = app_jwt(self.app()["client_id"], self.app_key_fd)
-        # An empty body is essential: a repository filter could hide wider access.
-        issued = app_request("POST", f"/app/installations/{install['id']}/access_tokens", jwt, {})
+        # Narrow permissions, never repositories: a filter could hide wider access.
+        issued = app_request("POST", f"/app/installations/{install['id']}/access_tokens", jwt,
+                             {"permissions": {"metadata": "read"}})
         token = issued["token"]
         require(isinstance(token, str) and bool(token), "installation token unavailable")
         try:

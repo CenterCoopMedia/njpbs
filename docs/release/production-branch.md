@@ -92,8 +92,9 @@ separately reviewed forward commit on main; promotion never rewinds production.
 ## Read-only precheck
 
 Run from the repository root in a Bash session with Python 3, OpenSSL and authenticated
-`gh`. The scope check also needs authorized access to the App key's approved
-credential-store entry. Supply the independently approved target; this runbook supplies no default
+`gh`. Before the scope check, obtain the coordinator's named authorization to
+read the approved App key for a metadata-only installation token. This authority
+does not permit key provisioning or promotion. Supply the independently approved target; this runbook supplies no default
 repository or numeric repository ID. Replace both placeholders, validate them,
 and require this checkout's HTTPS origin to match before any activation write.
 
@@ -128,7 +129,7 @@ pass show "$PROMOTION_KEY_ENTRY" | python3 scripts/check-production-promotion.py
 ```
 
 Configuration reads use GET requests. The scope check signs a short-lived App
-JWT, creates an installation token with an empty request body and reads
+JWT, creates an installation token with only `metadata: read` permission and reads
 `GET /installation/repositories` with that token. Omitting both `repositories`
 and `repository_ids` proves the full installation scope. It requires selected
 repositories, total count one and the approved repository's exact name and ID.
@@ -173,6 +174,7 @@ the next step. The public switch remains Joe's decision.
 
 | Order | Authorization |
 | --- | --- |
+| Scope precheck, before 2 and before 6 | Coordinator's named authorization to read the approved App key and mint an unfiltered, metadata-only installation token. No provisioning or production write. |
 | 1, 3, 4a, 4c | Coordinator's named technical setup authorization: variable, environment policy/client ID, rulesets. |
 | 2 | Read-only exact main SHA and green main-push CI proof. |
 | 4b | Joe: production bootstrap, which can trigger deployment. |
@@ -218,6 +220,7 @@ repository name/ID and `CMS_DEPLOY_OWNER` as above.
    ```sh
    BOOTSTRAP_SHA='REPLACE_WITH_RECORDED_GREEN_MAIN_SHA'
    PROMOTE_SHA='REPLACE_WITH_LATER_GREEN_MAIN_SHA'
+   PROMOTION_KEY_ENTRY='REPLACE_WITH_APPROVED_ENTRY_POINTER'
    pass show "$PROMOTION_KEY_ENTRY" | python3 scripts/check-production-promotion.py --repo "$PROMOTION_REPOSITORY" --sha "$BOOTSTRAP_SHA" --app-slug ccm-njpbs-promote --workflow-sha cf3ac408c12afc73c3e3f355f6dd70db58ea1af7 --admission-sha 13650ac1d8fd4e42d60afc7a859b55305ae2e52c --app-key-fd 3 3<&0
    ```
 
