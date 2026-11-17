@@ -571,7 +571,7 @@ function createCmsListBugReportsHandler(deps = {}) {
       const sharedReportsActive = await accessTierReadsActive(firestore);
       let query = firestore.collection(BUG_REPORT_COLLECTIONS.reports);
       const allReports = view === "all";
-      const admin = allReports && await isAdminFn(user.uid);
+      const admin = allReports && await isAdminFn(user.uid, user.emailVerified, user.authTime);
       if (allReports && !admin && !sharedReportsActive) {
         throw new BugReportTriageError(403, "Admin access required");
       }
@@ -615,7 +615,7 @@ function createCmsGetBugReportHandler(deps = {}) {
       requireJsonPost(req);
       const reportId = validateReportId(req.body.reportId);
       const user = requireApprovedPrincipal(await requirePrincipalFn(req));
-      const admin = await isAdminFn(user.uid);
+      const admin = await isAdminFn(user.uid, user.emailVerified, user.authTime);
       const snapshot = await firestore
         .collection(BUG_REPORT_COLLECTIONS.reports).doc(reportId).get();
       if (!snapshot.exists) throw new BugReportTriageError(404, "This report is not available");
@@ -672,7 +672,7 @@ function createCmsGetBugReportEvidenceHandler(deps = {}) {
       requireJsonPost(req);
       const reportId = validateReportId(req.body.reportId);
       const user = requireApprovedPrincipal(await requirePrincipalFn(req));
-      const admin = await isAdminFn(user.uid);
+      const admin = await isAdminFn(user.uid, user.emailVerified, user.authTime);
       const [reportSnapshot, evidenceSnapshot] = await Promise.all([
         firestore.collection(BUG_REPORT_COLLECTIONS.reports).doc(reportId).get(),
         firestore.collection(BUG_REPORT_COLLECTIONS.evidence).doc(reportId).get(),
@@ -718,7 +718,7 @@ function createCmsUpdateBugReportHandler(deps = {}) {
     try {
       requireJsonPost(req);
       const user = requireApprovedPrincipal(await requirePrincipalFn(req));
-      if (!(await isAdminFn(user.uid))) {
+      if (!(await isAdminFn(user.uid, user.emailVerified, user.authTime))) {
         throw new BugReportTriageError(403, "Admin access required");
       }
       const source = clientSource(req);

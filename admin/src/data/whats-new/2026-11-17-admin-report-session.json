@@ -1,0 +1,7 @@
+{
+  "date": "2026-11-17",
+  "kind": "fixed",
+  "title": "Open private reports after signing in again",
+  "body": "Administrators can read private report details and screenshots after a fresh sign-in, including accounts that had an earlier session revoked.",
+  "prs": []
+}
