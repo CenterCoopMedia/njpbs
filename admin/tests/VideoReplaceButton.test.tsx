@@ -30,6 +30,8 @@ function status(overrides = {}) {
     history: [{ action: "replace", at: "2026-11-03T14:20:00Z", by: "Editor", originalName: "corrected.mp4" }], ...overrides };
 }
 beforeEach(() => {
+  vi.useFakeTimers({ toFake: ["Date"] });
+  vi.setSystemTime(new Date("2026-11-03T14:22:00Z"));
   requests.length = 0; localStorage.clear(); vi.clearAllMocks();
   answer = endpoint => endpoint === "cmsGetSourceVideoReplacement" ? Response.json(status()) : Response.json({ error: "The current file stays live" }, { status: 409 });
   vi.stubGlobal("fetch", vi.fn(async (input, init) => {
@@ -37,7 +39,7 @@ beforeEach(() => {
     const body = JSON.parse(String(init?.body ?? "{}")); requests.push({ endpoint, body }); return answer(endpoint, body);
   }));
 });
-afterEach(() => vi.unstubAllGlobals());
+afterEach(() => { vi.useRealTimers(); vi.unstubAllGlobals(); });
 
 describe("video Replace file", () => {
   it.each(["upload_completed", "session_changed"])("clears only a known completed upload when cancellation returns %s", async code => {
