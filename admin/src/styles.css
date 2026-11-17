@@ -6315,7 +6315,7 @@ select:is(.field-control, .field):not([multiple], [size]:not([size="1"])) {
 }
 
 .inline-image-alt-suggestion {
-  grid-column: 2;
+  grid-column: 1 / -1;
   border-left: 2px solid var(--color-brand);
   padding-left: var(--space-3);
   color: var(--color-text-muted);
