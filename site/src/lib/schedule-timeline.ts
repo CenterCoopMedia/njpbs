@@ -40,6 +40,17 @@ const dateLabelFormatter = new Intl.DateTimeFormat("en-US", {
   day: "numeric",
 });
 
+const zonedPartsFormatter = new Intl.DateTimeFormat("en-CA", {
+  timeZone: SCHEDULE_TIME_ZONE,
+  year: "numeric",
+  month: "2-digit",
+  day: "2-digit",
+  hour: "2-digit",
+  minute: "2-digit",
+  second: "2-digit",
+  hourCycle: "h23",
+});
+
 export function easternStartMinute(timestamp: string): number {
   const instant = new Date(timestamp);
   if (Number.isNaN(instant.getTime())) return Number.NaN;
@@ -245,16 +256,7 @@ function zonedDateTimeKey(instant: number): string {
 }
 
 function zonedParts(instant: number): Record<string, string> {
-  return new Intl.DateTimeFormat("en-CA", {
-    timeZone: SCHEDULE_TIME_ZONE,
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-    hour: "2-digit",
-    minute: "2-digit",
-    second: "2-digit",
-    hourCycle: "h23",
-  })
+  return zonedPartsFormatter
     .formatToParts(new Date(instant))
     .reduce<Record<string, string>>((result, part) => {
       if (part.type !== "literal") result[part.type] = part.value;

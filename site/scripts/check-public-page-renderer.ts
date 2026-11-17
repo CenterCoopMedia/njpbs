@@ -3,6 +3,7 @@ import { createHomeNewsletterBlock } from "../../packages/content-core/src/home-
 import { escapeHtml } from "../../packages/content-core/src/content-model";
 import { newsletterSignupUrl } from "../../packages/content-core/src/launch-fallback";
 import assert from "node:assert/strict";
+import { createHash } from "node:crypto";
 import { execFileSync } from "node:child_process";
 import { readFile, writeFile, cp } from "node:fs/promises";
 import { createRequire } from "node:module";
@@ -12,6 +13,10 @@ import { publishedPageRead, retainedHomeSources, pageIds, fallbackPageRead, fall
 import { projectPublishedPageRead } from "../src/lib/published-page-render";
 import { projectPublicPageContextRead } from "../src/lib/public-page-context-render";
 import { comparePostHtml } from "../src/lib/post-html-comparison";
+import scheduleData from "../tests/fixtures/schedule-2026-11-15-pbs.json";
+import { loadScheduleData } from "../src/lib/schedule-data";
+import { buildScheduleExport } from "../src/lib/schedule-export";
+import type { BakedScheduleData } from "../src/lib/schedule-feed";
 
 const require = createRequire(new URL("../../tests/public-post-runtime/package.json", import.meta.url));
 const { Miniflare, Response: WorkerResponse } = require("miniflare");
@@ -34,14 +39,49 @@ const emptyNewsletterRead = { ...originalHomeRead, page: { ...originalHomeRead.p
   blocks: [...originalHomeRead.page.blocks, createHomeNewsletterBlock("public-empty-newsletter")].map((block, order) => ({ ...block, order })) } };
 const frames = [...fallbackPageIds.map(pageId => fallbackPageRead(pageId, rendererSha)),
   { ...fallbackPageRead("give", rendererSha), path: "/donate/" }];
+const schedule = await loadScheduleData(scheduleData as BakedScheduleData, {});
+const exported = buildScheduleExport(schedule, new Date(schedule.generatedAt));
+const hash = (value: unknown) => createHash("sha256").update(JSON.stringify(value)).digest("hex");
+const scheduleRead = publishedPageRead("schedule", rendererSha);
+const scheduleReceipt = { schemaVersion: 1, contextRevision: scheduleRead.sourceSeal.contextRevision,
+  contextDigest: scheduleRead.sourceSeal.contextDigest,
+  code: { schemaVersion: 1, digestAlgorithm: "sha256", buildBatchId: "schedule-budget", generation: 5,
+    commitSha: rendererSha, deploymentId: "schedule-budget", contextDigest: "a".repeat(64),
+    artifactDigest: "a".repeat(64), artifactReceiptDigest: "b".repeat(64), mediaManifestDigest: "c".repeat(64) },
+  source: { operationId: "S".repeat(20), runtime: { owner: "cloudflare", release: rendererSha },
+    contentDigest: "d".repeat(64), scheduleDigest: hash(schedule), checkedAt: Date.parse(exported.exportedAt) },
+  generatedAt: schedule.generatedAt, exportedAt: exported.exportedAt,
+  inputDigest: hash({ data: schedule, exported }) };
+const scheduleReply = { kind: "page", published: { ...scheduleRead,
+  sourceSeal: { ...scheduleRead.sourceSeal, codeGeneration: 5 },
+  schedule: { data: schedule, exported, receipt: scheduleReceipt } },
+  receipt: { schemaVersion: 1, pageId: "schedule", operationId: "S".repeat(20), sourceVersion: 7,
+    snapshotDigest: "a".repeat(64), path: "/schedule/", ownedPaths: ["/schedule/"], rendererSha,
+    generation: 5, operationGeneration: 5, codeGeneration: 5, visible: true, admissionRevision: 2,
+    contextDigest: scheduleRead.sourceSeal.contextDigest } };
+const recheckMs = 1_500;
 const bundle = await build({ stdin: { resolveDir: repo, contents: `
   import { renderPublishedPage, renderPublicPageContext, rendererSha } from './site/.public-page-renderer/server/entry.mjs';
   import { projectPublishedPageRead } from './site/src/lib/published-page-render.ts';
   import { projectPublicPageContextRead } from './site/src/lib/public-page-context-render.ts';
+  import { createNoBuildPageWorker } from './workers/src/no-build-page-worker.ts';
   const emptyNewsletterRead = ${JSON.stringify(emptyNewsletterRead)};
   const reads = ${JSON.stringify(reads)}; const frames = ${JSON.stringify(frames)}; const sources = ${JSON.stringify(sources)};
   export default { async fetch(request) {
     const url = new URL(request.url);
+    if (url.pathname === '/schedule/') {
+      let decisions = 0;
+      const worker = createNoBuildPageWorker({ rendererSha, rendererReady: true,
+        cache: { match: async () => undefined, put: async () => {} },
+        getDecision: async () => {
+          if (++decisions > 1) await new Promise(resolve => setTimeout(resolve, ${recheckMs}));
+          return ${JSON.stringify(scheduleReply)};
+        },
+        render: renderPublishedPage, readWithdrawal: async () => null,
+        fetchAsset: async () => new Response(null, {status: 503}),
+        now: () => new Date(${JSON.stringify(schedule.generatedAt)}) });
+      return await worker.fetch(request) ?? new Response(null, {status: 404});
+    }
     if (url.searchParams.has('fallback')) {
       const frame = frames.find(frame => frame.path === url.pathname);
       if (!frame) return new Response(null, { status: 404 });
@@ -61,6 +101,31 @@ const runtime = new Miniflare({ workers: [{ config: { name: "public-page-runtime
   dev: { outboundService: { type: "fetcher", handler: () => new WorkerResponse(null, { status: 502 }) } } }] });
 try {
   await runtime.ready;
+  // Use the corrected monthly provider shape, including descriptions and the
+  // DST transition. The authority recheck must fit in the existing 2 s budget.
+  assert(schedule.days.broadcast.length >= 30, "Monthly schedule render coverage");
+  assert(schedule.days.broadcast.reduce((count, day) => count + day.entries.length, 0) >= 1_000);
+  for (const sample of ["cold", "warm"]) {
+    const started = performance.now();
+    const response = await runtime.dispatchFetch("https://dev-public.example.org/schedule/");
+    const html = await response.text();
+    const elapsedMs = performance.now() - started;
+    assert.equal(response.status, 200, `Schedule ${sample}: ${response.headers.get("server-timing")}`);
+    assert.equal(response.headers.get("x-njpbs-content-source"), "cms-page-no-build");
+    assert(elapsedMs < 2_000, `Schedule ${sample} including ${recheckMs} ms recheck: ${elapsedMs} ms`);
+    assert(Buffer.byteLength(html) < 1_800_000, "Schedule HTML payload includes only display data");
+    const embedded = html.match(/<script[^>]*data-now-next-data[^>]*>([\s\S]*?)<\/script>/);
+    assert(embedded, "Now/next data is present");
+    assert(Buffer.byteLength(embedded[1]) < 160_000, "Now/next payload excludes full feed metadata");
+    assert.deepEqual(JSON.parse(embedded[1]), schedule.days.broadcast.map(({date, callsign, entries}) => ({
+      date, callsign, entries: entries.map(({title, episodeTitle, startsAt, endsAt}) => ({
+        title, ...(episodeTitle === undefined ? {} : {episodeTitle}), startsAt, endsAt,
+      })),
+    })));
+    assert.equal((html.match(/data-schedule-day-template(?=[\s>])/g) ?? []).length, schedule.days.broadcast.length);
+    console.log(JSON.stringify({ event: "schedule-render-budget", sample, days: schedule.days.broadcast.length,
+      bytes: Buffer.byteLength(html), elapsedMs, recheckMs }));
+  }
   const compiled = await import(new URL("../.public-page-renderer/server/entry.mjs", import.meta.url).href);
   const homeBannerRead = publishedPageRead("home", rendererSha);
   const bannerSetting = homeBannerRead.settings.find(setting => setting.id === "public-homepage-banner")!;

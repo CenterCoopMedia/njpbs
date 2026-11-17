@@ -1,14 +1,21 @@
 ---
-import type { ScheduleFeedDay } from "../lib/schedule-feed";
+import type { ScheduleDay } from "../lib/schedule-now-next";
 import { renderScheduleNowNextFrame } from "../lib/schedule-now-next-render";
 import "../styles/schedule-now-next.css";
 
 interface Props {
-  days: readonly ScheduleFeedDay[];
+  days: readonly ScheduleDay[];
   variant: "full" | "compact";
 }
 
-const { days, variant } = Astro.props as Props;
+const { days: sourceDays, variant } = Astro.props as Props;
+const days = sourceDays.map(({ date, callsign, entries }) => ({
+  date,
+  callsign,
+  entries: entries.map(({ title, episodeTitle, startsAt, endsAt }) => ({
+    title, episodeTitle, startsAt, endsAt,
+  })),
+}));
 const serializedDays = JSON.stringify(days).replace(/</g, "\\u003c");
 const frame = renderScheduleNowNextFrame(variant);
 ---
