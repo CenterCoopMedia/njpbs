@@ -3,6 +3,7 @@ import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } 
 import admin from "../helpers/firebase-admin.js";
 import auth from "../../functions/lib/auth.js";
 import triage from "../../functions/bug-report-triage.js";
+import github from "../../functions/bug-report-github.js";
 import contract from "../../functions/lib/bug-report-contract.js";
 
 const project = "demo-njpbs";
@@ -12,12 +13,25 @@ const reportId = `br_${"c".repeat(32)}`;
 const now = "2026-11-17T12:00:00.000Z";
 const sessionTime = Math.floor(Date.now() / 1000);
 const screenshot = Buffer.from("synthetic-private-image");
+const issue = { number: 17, title: "Fixture report issue", state: "open",
+  html_url: "https://github.com/example/reports/issues/17", body: "Fixture issue details" };
+const githubClient = () => github.createGithubClient({ repository: "example/reports", repositoryId: 1000001,
+  token: "synthetic-github-token", fetchFn: async input => {
+    const path = new URL(input).pathname;
+    if (path === "/repos/example/reports") return Response.json({ full_name: "example/reports", id: 1000001 });
+    if (path === "/repos/example/reports/issues") return Response.json([issue]);
+    if (path === "/repos/example/reports/issues/17") return Response.json(issue);
+    if (path === "/repos/example/reports/issues/17/comments") return Response.json([]);
+    throw new Error(`Unexpected synthetic GitHub request: ${path}`);
+  } });
 const mutation = { reportId, baseVersion: 1, mutationId: "33333333-3333-4333-8333-333333333333", action: "acknowledge" };
 const operations = [
   { name: "list", create: triage.createCmsListBugReportsHandler, body: { view: "all" } },
   { name: "detail", create: triage.createCmsGetBugReportHandler, body: { reportId } },
   { name: "evidence", create: triage.createCmsGetBugReportEvidenceHandler, body: { reportId } },
   { name: "triage", create: triage.createCmsUpdateBugReportHandler, body: mutation },
+  { name: "GitHub list", create: github.createCmsListGithubIssuesHandler, body: { state: "open" } },
+  { name: "GitHub detail", create: github.createCmsGetGithubIssueHandler, body: { number: 17 } },
 ];
 let db;
 
@@ -25,7 +39,7 @@ async function request(operation) {
   const response = { statusCode: null, body: null,
     set() { return this; }, status(code) { this.statusCode = code; return this; },
     json(body) { this.body = body; return this; } };
-  await operation.create({ now: () => now })({ method: "POST",
+  await operation.create({ now: () => now, createClient: githubClient })({ method: "POST",
     headers: { authorization: `Bearer ${actorUid}` }, body: operation.body }, response);
   return response;
 }
@@ -39,9 +53,10 @@ beforeAll(() => {
 beforeEach(async () => {
   await clearEmulatorFirestore(`http://${firestoreHost}/emulator/v1/projects/${project}/databases/(default)/documents`, { method: "DELETE" });
   vi.stubEnv("CMS_BUG_REPORT_GITHUB_REPOSITORY", "example/reports");
+  vi.stubEnv("CMS_BUG_REPORT_GITHUB_REPOSITORY_ID", "1000001");
   auth.resetAuthTokenCache();
-  // The external token verifier is the only auth fake. Both authorization
-  // checks resolve the actual stored profile, activation and session watermark.
+  // Only the external token verifier and GitHub HTTP boundary are faked.
+  // Authorization resolves the stored profile, activation and session watermark.
   vi.spyOn(admin.auth(), "verifyIdToken").mockResolvedValue({ uid: actorUid,
     email: "admin@example.org", email_verified: true, auth_time: sessionTime });
   await db.doc("system/staffAccessActivation").set({ schema: 1, state: "active", cleanScan: true });
@@ -80,6 +95,12 @@ describe("report administration with stored session watermarks", () => {
     expect(update.statusCode).toBe(200);
     expect(update.body.report.status).toBe("acknowledged");
     expect((await db.collection("bug_reports").doc(reportId).get()).data().version).toBe(2);
+    const githubList = await request(operations[4]);
+    expect(githubList.statusCode).toBe(200);
+    expect(githubList.body.issues[0].number).toBe(17);
+    const githubDetail = await request(operations[5]);
+    expect(githubDetail.statusCode).toBe(200);
+    expect(githubDetail.body.issue.body).toBe("Fixture issue details");
   });
 
   it("accepts the initial zero watermark after a fresh sign-in", async () => {
@@ -110,6 +131,8 @@ describe("report administration with stored session watermarks", () => {
     expect(detail.body.report).not.toHaveProperty("evidence");
     expect((await request(operations[2])).statusCode).toBe(404);
     expect((await request(operations[3])).statusCode).toBe(403);
+    expect((await request(operations[4])).statusCode).toBe(403);
+    expect((await request(operations[5])).statusCode).toBe(403);
     expect((await db.collection("bug_reports").doc(reportId).get()).data().version).toBe(1);
   });
 });

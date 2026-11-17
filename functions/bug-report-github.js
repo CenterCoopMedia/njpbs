@@ -1538,7 +1538,7 @@ function sendGithubIssueError(res, error, log, operation) {
 
 async function requireGithubAdmin(req, deps) {
   const user = requireApprovedPrincipal(await deps.requirePrincipalFn(req));
-  if (!(await deps.isAdminFn(user.uid))) {
+  if (!(await deps.isAdminFn(user.uid, user.emailVerified, user.authTime))) {
     throw new GithubIssueError(403, "Admin access required");
   }
   return user;
