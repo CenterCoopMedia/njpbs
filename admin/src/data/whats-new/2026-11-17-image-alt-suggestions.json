@@ -1,0 +1,7 @@
+{
+  "date": "2026-11-17",
+  "kind": "fixed",
+  "title": "Read image descriptions without crowded controls",
+  "body": "Image description suggestions now use the full row. Gallery fields, empty-description messages and decorative-image controls stay readable on narrow cards and phones.",
+  "prs": []
+}
