@@ -28,7 +28,7 @@ function functionsConfig() {
 function astroAccessibility(astro) {
   return [
     { ignores: ["dist/**", ".astro/**"] },
-    ...astro.configs["jsx-a11y-recommended"],
+    ...astro.configs["flat/jsx-a11y-recommended"],
     {
       files: ["**/*.astro"],
       rules: {
@@ -53,7 +53,7 @@ function reportConfig() {
   return defineConfig(
     { files: scriptFiles, extends: [fromSite("@eslint/js").configs.recommended] },
     { files: typescriptFiles, extends: [ts.configs.recommended] },
-    ...astro.configs.recommended,
+    ...astro.configs["flat/recommended"],
     ...astroAccessibility(astro),
     { files: scriptFiles, languageOptions: { globals: globals.node } },
     {
