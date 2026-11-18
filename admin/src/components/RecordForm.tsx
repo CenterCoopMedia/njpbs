@@ -4,7 +4,7 @@ import { postCoverageLabelId, resolveCoverageLabel } from "../../../packages/con
 import type { ElectionSourceHost } from "../context/ElectionResultsSourceHost";
 import { Link } from "react-router";
 import { ROUTE_PATHS } from "../lib/routes";
-import { LIVE_BLOG_CREATION_ENABLED, liveBlogPublicationIssue, type LiveBlogPublicationIssue } from "../lib/live-blog";
+import { liveBlogPublicationIssue, type LiveBlogPublicationIssue } from "../lib/live-blog";
 import { DataHubReportingEditor, type ReportingEditorTransport } from "./DataHubReportingEditor";
 import { parseDataHubReporting, type DataHubFigure } from "../../../packages/content-core/src/data-hub-reporting";
 import { RetainedEditorHost } from "./RetainedEditorHost";
@@ -363,8 +363,6 @@ interface RecordFormProps {
   // scheduled. The host supplies the controls because it owns permissions, versions, assignment,
   // and lifecycle requests.
   postInspector?: ReactNode;
-  /** Local gallery override when the source creation gate is disabled. */
-  developmentLiveBlogCreation?: boolean;
   // Present only for staff who may publish live blog entries directly on this published
   // live blog. The host reloads the record after the publication lands.
   publishLiveBlogUpdate?: (liveBlog: LiveBlogDraft, baseVersion: number) => Promise<void | { warnings?: string[]; publicationRequested?: boolean }>;
@@ -518,7 +516,6 @@ export const RecordForm = forwardRef<RecordFormHandle, RecordFormProps>(function
   readOnly = false,
   showSaveAction = true,
   postInspector,
-  developmentLiveBlogCreation = false,
   publishLiveBlogUpdate,
   loadMedia,
   mediaPickerUnavailable = false,
@@ -2170,7 +2167,7 @@ export const RecordForm = forwardRef<RecordFormHandle, RecordFormProps>(function
               </div>
             ),
           },
-          ...(record.liveBlog != null || (LIVE_BLOG_CREATION_ENABLED || (import.meta.env.DEV && developmentLiveBlogCreation)) ? [{
+          {
             id: "post-live-blog", title: "Live updates", outlineLabel: "Live updates", defaultZone: "main" as const, allowedZones: ["main"] as const,
             body: record.liveBlog != null ? <>{coverageRegistryMissing ? <p>No coverage labels are published yet. You can still choose NJ Decides election artwork.</p> : null}<LiveBlogEditor value={record.liveBlog as LiveBlogDraft} saved={savedLiveBlog} followUpBaselineKnown={followUpBaselineKnown}
               coverageControl={coverage.status !== "unavailable" && !coverageRegistryMissing ? <CoverageLabelSelect record={record} id={`${formId}-live-blog-coverage`} disabled={interactionLocked || !canSave} onChange={changeCoverageLabel} /> : undefined}
@@ -2184,7 +2181,7 @@ export const RecordForm = forwardRef<RecordFormHandle, RecordFormProps>(function
               {publishLiveBlogUpdate ? <LiveBlogDirectPublish disabledReason={liveBlogDirectDisabledReason} onPublish={publishLiveBlogDirectly}
                 liveBlog={record.liveBlog as LiveBlogDraft} authors={bylineAuthors} authorsLoading={bylineAuthorsLoading} selfAuthorId={selfAuthorId} canManageAuthorProfiles={canManageAuthorProfiles} /> : null}</>
               : <Button ref={startLiveBlogRef} disabled={interactionLocked || !canSave} onClick={() => { focusNewLiveBlog.current = true; changeLiveBlog({ schemaVersion: 1, coverageState: "ongoing", updates: [] }); }}>Start live blog draft</Button>,
-          }] : []),
+          },
           ...postMetadataPanels,
           ...(postInspector
             ? [{
