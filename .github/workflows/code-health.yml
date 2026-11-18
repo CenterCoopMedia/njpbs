@@ -22,7 +22,6 @@ jobs:
       - uses: actions/checkout@v7
         with:
           path: candidate
-          fetch-depth: 2
           persist-credentials: false
       - uses: actions/setup-node@v7
         with:
@@ -36,13 +35,14 @@ jobs:
         env:
           BASE_SHA: ${{ github.event.pull_request.base.sha }}
         run: |
-          npm --prefix candidate ci --ignore-scripts
-          npm --prefix candidate/site ci --ignore-scripts
           if [ -n "$BASE_SHA" ]; then
+            git -C candidate fetch --no-tags --depth=1 origin "$BASE_SHA"
             git -C candidate worktree add --detach ../baseline "$BASE_SHA"
             npm --prefix baseline ci --ignore-scripts
             npm --prefix baseline/site ci --ignore-scripts
           fi
+          npm --prefix candidate ci --ignore-scripts
+          npm --prefix candidate/site ci --ignore-scripts
       - name: Measure lint, Functions types and size
         env:
           BASE_SHA: ${{ github.event.pull_request.base.sha }}
