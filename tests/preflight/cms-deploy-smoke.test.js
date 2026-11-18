@@ -952,7 +952,8 @@ if(process.env.CMS_BUG_REPORT_TELEGRAM_ADMIN_MAP)process.exit(8); require("node:
 
   it("keeps source, dependency and identity checks around component deployment", () => {
     const workflow = readCmsDeployWorkflow();
-    const gateCheckout = workflow.indexOf("path: .cms-smoke-gate");
+    const verify = workflow.indexOf("\n  verify:");
+    const gateCheckout = workflow.indexOf("path: .release-gate", verify);
     const manifestCheck = workflow.indexOf(
       "node scripts/component-runner.mjs functions manifest",
     );
@@ -965,7 +966,7 @@ if(process.env.CMS_BUG_REPORT_TELEGRAM_ADMIN_MAP)process.exit(8); require("node:
 
     expect(gateCheckout).toBeGreaterThan(-1);
     expect(workflow).toContain(
-      "ref: ${{ github.sha }}\n          path: .cms-smoke-gate",
+      "ref: ${{ github.sha }}\n          path: .release-gate",
     );
     expect(manifestCheck).toBeGreaterThan(gateCheckout);
     expect(firebaseDeploy).toBeGreaterThan(manifestCheck);
@@ -993,7 +994,7 @@ if(process.env.CMS_BUG_REPORT_TELEGRAM_ADMIN_MAP)process.exit(8); require("node:
       "needs: [admin-build, firebase-preflight, firebase]",
     );
     expect(firebaseJob).toContain(
-      "needs: [admin-build, firebase-preflight, smoke-manifest, verify]",
+      "needs: [admin-build, firebase-preflight, verify]",
     );
     expect(firebaseJob).not.toContain("needs: [admin-build, cms-api");
     const deployCommand = workflow.slice(firebaseDeploy, smoke);
@@ -1051,8 +1052,8 @@ if(process.env.CMS_BUG_REPORT_TELEGRAM_ADMIN_MAP)process.exit(8); require("node:
     expect(workflow).toContain(
       "CLOUDFLARE_API_TOKEN: ${{ secrets.CMS_ADMIN_ACCESS_API_TOKEN }}",
     );
-    expect(parse(workflow).jobs["smoke-manifest"].needs).toBe("admin-build");
-    expect(parse(workflow).jobs["firebase-preflight"].needs).toEqual(["admin-build", "smoke-manifest", "verify"]);
+    expect(parse(workflow).jobs.verify.needs).toBeUndefined();
+    expect(parse(workflow).jobs["firebase-preflight"].needs).toEqual(["admin-build", "verify"]);
     expect(workflow).toContain("force_firebase:");
     expect(workflow).toContain("node scripts/component-runner.mjs functions plan");
     expect(workflow).toContain("node scripts/component-runner.mjs functions verify");
@@ -1107,7 +1108,7 @@ if(process.env.CMS_BUG_REPORT_TELEGRAM_ADMIN_MAP)process.exit(8); require("node:
       "needs: [admin-build, firebase-preflight, firebase]",
     );
     expect(parse(workflow).jobs["admin-deploy"].needs).toEqual(["admin-build", "cms-api", "firebase", "preview-renderer", "firebase-preflight", "admin-contract"]);
-    expect(parse(workflow).jobs["firebase"].needs).toEqual(["admin-build", "firebase-preflight", "smoke-manifest", "verify"]);
+    expect(parse(workflow).jobs["firebase"].needs).toEqual(["admin-build", "firebase-preflight", "verify"]);
     expect(parse(workflow).jobs["live-smoke"].needs).toEqual(["admin-build", "firebase", "admin-deploy"]);
     expect(workflow).toContain("node scripts/component-runner.mjs functions verify-config");
     expect(NATIVE_CONFIGURATION.databaseId).toBe("(default)");
@@ -1121,30 +1122,30 @@ if(process.env.CMS_BUG_REPORT_TELEGRAM_ADMIN_MAP)process.exit(8); require("node:
 
   it("keeps moving smoke code away from Firebase deploy credentials", () => {
     const workflow = readCmsDeployWorkflow();
-    const smokeManifestStart = workflow.indexOf("\n  smoke-manifest:");
+    const verifyStart = workflow.indexOf("\n  verify:");
     const firebasePreflightStart = workflow.indexOf("\n  firebase-preflight:");
     const cmsApiStart = workflow.indexOf("\n  cms-api:");
     const firebaseStart = workflow.indexOf("\n  firebase:");
     const liveSmokeStart = workflow.indexOf("\n  live-smoke:");
     const adminDeployStart = workflow.indexOf("\n  admin-deploy:");
 
-    expect(smokeManifestStart).toBeGreaterThan(-1);
-    expect(firebasePreflightStart).toBeGreaterThan(smokeManifestStart);
+    expect(verifyStart).toBeGreaterThan(-1);
+    expect(firebasePreflightStart).toBeGreaterThan(verifyStart);
     expect(cmsApiStart).toBeGreaterThan(firebasePreflightStart);
     expect(firebaseStart).toBeGreaterThan(cmsApiStart);
     expect(liveSmokeStart).toBeGreaterThan(firebaseStart);
     expect(adminDeployStart).toBeGreaterThan(liveSmokeStart);
 
-    const smokeManifest = workflow.slice(
-      smokeManifestStart,
+    const verify = workflow.slice(
+      verifyStart,
       firebasePreflightStart,
     );
     const firebase = workflow.slice(firebaseStart, liveSmokeStart);
     const liveSmoke = workflow.slice(liveSmokeStart, adminDeployStart);
-    expect(smokeManifest).toContain(
+    expect(verify).toContain(
       "node scripts/component-runner.mjs functions manifest",
     );
-    expect(smokeManifest).not.toContain("FIREBASE_SERVICE_ACCOUNT");
+    expect(verify).not.toContain("FIREBASE_SERVICE_ACCOUNT");
     expect(firebase).not.toContain(".cms-smoke-gate");
     expect(firebase).not.toContain("smoke-cms-functions.mjs");
     expect(firebase).toContain("Mark the Functions receipt in progress");
@@ -1183,13 +1184,12 @@ if(process.env.CMS_BUG_REPORT_TELEGRAM_ADMIN_MAP)process.exit(8); require("node:
       "node scripts/check-admin-pages-security.mjs",
     );
 
-    const gateCheckouts = workflow.match(
-      /ref: \$\{\{ github\.sha \}\}\n\s+path: \.cms-smoke-gate/g,
-    );
-    expect(gateCheckouts).toHaveLength(3);
-    expect(workflow).not.toContain(
-      "ref: main\n          path: .cms-smoke-gate",
-    );
+    const { jobs } = parse(workflow);
+    for (const [name, path] of [["verify", ".release-gate"], ["firebase-preflight", ".cms-smoke-gate"], ["live-smoke", ".cms-smoke-gate"]]) {
+      const gate = jobs[name].steps.find(step => step.with?.path === path);
+      expect(gate?.with.ref, name).toBe("${{ github.sha }}");
+      expect(gate?.with["persist-credentials"], name).toBe(false);
+    }
   });
 
   it("keeps both private voiceover Functions in the authenticated current manifest", () => {

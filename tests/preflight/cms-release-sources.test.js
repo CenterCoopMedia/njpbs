@@ -124,8 +124,8 @@ describe("CMS release source contract", () => {
       }});
       return new Response(null, {status: init.method === "GET" ? 405 : 401});
     };`);
-    for (const name of ["smoke-manifest", "live-smoke"]) {
-      const script = workflow.jobs[name].steps.find(step => step.name === (name === "smoke-manifest" ? "Require the deployed function manifest to match the smoke gate" : "Smoke-test deployed CMS boundaries")).run;
+    for (const [name, stepName] of [["verify", "Require the deployed function manifest to match the smoke gate"], ["live-smoke", "Smoke-test deployed CMS boundaries"]]) {
+      const script = workflow.jobs[name].steps.find(step => step.name === stepName).run;
       const output = execFileSync("bash", ["-eu", "-c", script], {
         cwd: releaseRoot, encoding: "utf8", env: { ...process.env, CMS_PRODUCTION_API_ORIGIN: "https://cms-api.example.test",
           DEPLOY_SHA: releaseSha, GATE_SHA: trustedWorkflowSha, GITHUB_OUTPUT: join(root, "outputs"), NODE_OPTIONS: `--import=${network}` },

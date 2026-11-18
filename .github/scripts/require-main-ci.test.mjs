@@ -105,7 +105,7 @@ test("main runs finish in parent and reusable workflows; PR and queue work can c
 
 test("deploy runs the gate from its trusted workflow checkout before installing target code", () => {
   const workflow = readFileSync(new URL("../workflows/cms-staging-deploy.yml", import.meta.url), "utf8");
-  const build = workflow.split("\n  admin-build:\n")[1].split("\n  smoke-manifest:\n")[0];
+  const build = workflow.split("\n  admin-build:\n")[1].split("\n  verify:\n")[0];
   assert.match(build, /actions: read/);
   assert.match(build, /node "\$RUNNER_TEMP\/release-gate"\/\.github\/scripts\/require-release-source\.mjs/);
   assert.match(build, /DEPLOY_SHA: \$\{\{ steps.reviewed_ref.outputs.deploy_sha \}\}/);
@@ -214,7 +214,7 @@ test("every CMS ancestry boundary and Pages use trusted gates with step-scoped e
 
 test("every CMS consumer pins clean release helpers separately from trusted workflow gates", async () => {
   const workflow = parse(readCmsDeployWorkflow());
-  const consumers = ["admin-build", "smoke-manifest", "firebase-preflight", "cms-api", "firebase", "preview-renderer", "live-smoke", "admin-deploy"];
+  const consumers = ["admin-build", "verify", "firebase-preflight", "cms-api", "firebase", "preview-renderer", "live-smoke", "admin-deploy"];
   for (const name of consumers) {
     const steps = workflow.jobs[name].steps;
     const gate = steps.find(step => step.name === "Require pinned release and trusted workflow identities");

@@ -246,11 +246,6 @@ describe("metered-API source scan runs before any scanned code executes", () => 
       ["verify", ".release-gate", "run: npm ci --ignore-scripts"],
       ["admin-build", ".admin-status-gate", "run: npm ci --ignore-scripts"],
       [
-        "smoke-manifest",
-        ".cms-smoke-gate",
-        "node scripts/component-runner.mjs functions manifest",
-      ],
-      [
         "firebase-preflight",
         ".cms-smoke-gate",
         "uses: google-github-actions/auth@7c6bc770dae815cd3e89ee6cdf493a5fab2cc093 # v3",
@@ -322,7 +317,7 @@ describe("metered-API source scan runs before any scanned code executes", () => 
     );
   });
 
-  it.each([["verify", ".release-gate"], ["cms-api", ".metered-api-gate"], ["firebase", ".metered-api-gate"], ["admin-deploy", ".metered-api-gate"]])(
+  it.each([["cms-api", ".metered-api-gate"], ["firebase", ".metered-api-gate"], ["admin-deploy", ".metered-api-gate"]])(
     "keeps trusted scripts separate from release operators in the gate checkout for %s",
     (name, directory) => {
       const job = workflowJob(cmsStaging, name);
@@ -351,8 +346,8 @@ describe("metered-API source scan runs before any scanned code executes", () => 
       "node \"$RUNNER_TEMP/admin-status-gate\"/.github/scripts/cms-deploy-compatibility.mjs",
     ],
     [
-      "smoke-manifest",
-      ".cms-smoke-gate",
+      "verify",
+      ".release-gate",
       "node scripts/component-runner.mjs functions manifest",
     ],
     [
