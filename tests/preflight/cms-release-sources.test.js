@@ -8,7 +8,7 @@ import { parse } from "yaml";
 import { readCmsDeployWorkflow } from "../helpers/cms-deploy-workflow.mjs";
 import { CMS_RELEASE_CHECK_FILES, requireCmsReleaseSources } from "../../.github/scripts/require-cms-release-sources.mjs";
 import { requireReleaseSource } from "../../.github/scripts/require-release-source.mjs";
-import { fingerprintExecutionSource, fingerprintReceiptExecutionSource } from "../../scripts/lib/cms-release-plan.mjs";
+import { fingerprintExecutionSource, fingerprintFunctionsRenderSource, fingerprintReceiptExecutionSource } from "../../scripts/lib/cms-release-plan.mjs";
 
 const repoRoot = fileURLToPath(new URL("../../", import.meta.url));
 const workflow = parse(readCmsDeployWorkflow());
@@ -79,6 +79,9 @@ describe("CMS release source contract", () => {
     if (kind === "unavailable workflow object") mutation.trustedWorkflowSha = "f".repeat(40);
     const trustedReceiptFingerprint = await fingerprintReceiptExecutionSource(mutation, { cwd: releaseRoot });
     expect(trustedReceiptFingerprint).toBeNull();
+  });
+  it.each([undefined, "f".repeat(40)])("treats unavailable Functions render source %s as an unknown baseline", async workflowSha => {
+    expect(await fingerprintFunctionsRenderSource(workflowSha, { cwd: releaseRoot })).toBeNull();
   });
   it("fingerprints release helpers at NEW and trusted gates at their separate workflow SHA", async () => {
     const deps = { cwd: releaseRoot };
