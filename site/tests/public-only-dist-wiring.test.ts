@@ -217,18 +217,18 @@ describe("metered-API source scan runs before any scanned code executes", () => 
     );
   });
 
-  it("retains the approved HTTPS apex route and protects owned paths before Assets", () => {
+  it("routes both apex schemes and protects owned paths before Assets", () => {
     const routePatterns = Array.from(
       wrangler.matchAll(/"pattern":\s*"([^"]+)"/g),
       (match) => match[1],
     );
 
-    expect(routePatterns).toEqual(["https://njpbs.org/*"]);
+    expect(routePatterns).toEqual(["njpbs.org/*"]);
     expect(wrangler).toContain(
       '"run_worker_first": true',
     );
     expect(wrangler).toContain(
-      "Verify the current HTTPS route before changing public traffic.",
+      "Verify the current apex route before changing public traffic.",
     );
   });
 

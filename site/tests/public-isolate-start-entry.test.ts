@@ -37,6 +37,23 @@ function load() {
 }
 const request = () => new Request("https://njpbs.org/retained.txt");
 const asset = () => new Response(new Uint8Array([0, 1, 2, 127, 128, 255]), { headers: { "content-type": "application/octet-stream", "x-retained": "exact" } });
+it.each(["GET", "HEAD"])("redirects apex HTTP %s before reading any binding", async method => {
+  const module = load();
+  const binding = vi.fn(() => { throw new Error("HTTP redirect used a binding"); });
+  const env = new Proxy({}, { get: binding });
+  const response = await module.default.fetch(new Request("http://njpbs.org/news/a%20b/?q=%2F&tag=a+b", { method }), env, { waitUntil: vi.fn() });
+  expect(response.status).toBe(301);
+  expect(response.headers.get("location")).toBe("https://njpbs.org/news/a%20b/?q=%2F&tag=a+b");
+  expect(binding).not.toHaveBeenCalled();
+});
+
+it("refuses HTTP requests for other hosts", async () => {
+  const module = load();
+  const response = await module.default.fetch(new Request("http://www.njpbs.org/news/"), {}, { waitUntil: vi.fn() });
+  expect(response.status).toBe(404);
+  expect(response.headers.get("location")).toBeNull();
+});
+
 it("runs the actual configured entry and preserves bytes with measurement disabled", async () => {
   expect(readFileSync(`${root}/workers/wrangler.jsonc`, "utf8")).toMatch(/"main":\s*"\.\/src\/public-no-build-entry\.ts"/);
   const module = load(), flag = vi.fn(() => undefined), binding = vi.fn(() => { throw new Error("No disabled binding access"); });

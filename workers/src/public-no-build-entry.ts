@@ -22,13 +22,17 @@ type PublicEnv = Omit<Env, "CMS_API"> & IsolateStartEnvironment & {
 };
 export default {
   async fetch(request: Request, env: PublicEnv, ctx: ExecutionContext): Promise<Response> {
-    observePublicIsolateStart(env);
     const target = publicationTarget("production");
-    if (new URL(request.url).origin !== target.origin) return new Response(null, { status: 404, headers: { "cache-control": "no-store" } });
+    const url = new URL(request.url);
+    const redirectToHttps = url.protocol === "http:";
+    if (redirectToHttps) url.protocol = "https:";
+    if (url.origin !== target.origin) return new Response(null, { status: 404, headers: { "cache-control": "no-store" } });
+    if (redirectToHttps) return Response.redirect(url.href, 301);
+    observePublicIsolateStart(env);
     const assets = (assetRequest: Request) => env.ASSETS.fetch(assetRequest);
     const fetchAsset = env.DURABLE_POST_WITHDRAWALS ? createContentBaselineAssetReader({
       target, rendererSha, store: env.DURABLE_POST_WITHDRAWALS, fetchAsset: assets }) : assets;
-    if (env.NO_BUILD_PAGE_RENDERER_SHA || env.DURABLE_POST_WITHDRAWALS || isPageScheduleExportPath(new URL(request.url).pathname)) {
+    if (env.NO_BUILD_PAGE_RENDERER_SHA || env.DURABLE_POST_WITHDRAWALS || isPageScheduleExportPath(url.pathname)) {
       const pages = createNoBuildPageWorker({ target, rendererSha, cache: caches.default,
         rendererReady: env.NO_BUILD_PAGE_RENDERER_SHA === rendererSha,
         withdrawalsOnly: !env.NO_BUILD_PAGE_RENDERER_SHA,

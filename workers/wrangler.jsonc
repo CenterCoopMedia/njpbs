@@ -27,7 +27,7 @@
   // public report variables required by those scripts. Missing configuration can
   // fall back to committed shelf data.
   //
-  // Verify the current HTTPS route before changing public traffic.
+  // Verify the current apex route before changing public traffic.
   // This config has no $schema pointer. The root package declares wrangler, and
   // sibling configs point to ../node_modules/wrangler/config-schema.json.
   // Validate changes with `npx wrangler deploy --config workers/wrangler.jsonc --dry-run` from the repo root.
@@ -63,11 +63,11 @@
     }
   ],
   // Route application is separate from version upload and activation. This
-  // one HTTPS apex pattern leaves www and all service subdomains unchanged.
+  // one apex pattern includes HTTP and HTTPS and excludes all subdomains.
   // A source merge is not proof that this route is applied to the zone.
   "routes": [
     {
-      "pattern": "https://njpbs.org/*",
+      "pattern": "njpbs.org/*",
       "zone_name": "njpbs.org"
     }
   ],

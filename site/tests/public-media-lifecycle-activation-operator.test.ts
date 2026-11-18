@@ -72,7 +72,7 @@ function routes(
     result: [
       {
         id: ROUTE_ID,
-        pattern: "https://njpbs.org/*",
+        pattern: "njpbs.org/*",
         script,
       },
       ...additionalRoutes,

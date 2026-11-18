@@ -51,7 +51,7 @@ const { PUBLIC_RECEIPT_URL, activatePublicMediaLifecycle } =
   mediaActivationModule;
 const { projectApiDeploymentStatus } = workerActivationModule;
 
-const FULL_APEX_ROUTE_PATTERN = "https://njpbs.org/*";
+const FULL_APEX_ROUTE_PATTERN = "njpbs.org/*";
 const FIREBASE_PROJECT_ID = "njpbs-site";
 const CLOUDFLARE_WORKER_CREDENTIAL_FD = 3;
 const FIREBASE_CREDENTIAL_FD = 4;
