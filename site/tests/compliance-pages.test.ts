@@ -84,6 +84,13 @@ const MONTCLAIR_PRIVACY_URL =
   "https://www.montclair.edu/privacy-notice/";
 
 describe("compliance pages (NJPBA legal checklist)", () => {
+  it.each(["privacy", "public-file", "eeo", "meeting-notices"])(
+    "keeps the publicly allowlisted %s page published",
+    slug => {
+      expect(frontmatter(slug)).toMatch(/^draft:\s*false\s*$/m);
+    },
+  );
+
   it("public-file covers all four station public files", () => {
     const text = pageText("public-file");
     for (const call of NJ_PBS_CALL_SIGNS) {
