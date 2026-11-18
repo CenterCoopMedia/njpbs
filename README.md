@@ -84,7 +84,6 @@ invocations. An empty list records an audited script with no common required
 setting. Update the contract alongside an entry script's requirements.
 Hosted Policy CI checks the script inventory, explicit required reads, step
 wiring and secret or variable references using the declared supplier names.
-The release command checks live name availability before dispatch.
 
 The [release surface registry](docs/release/surface-registry.md) records tracked
 workflows, Wrangler config variants, Functions exports and state-machine owner
