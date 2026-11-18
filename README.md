@@ -69,6 +69,22 @@ checks all four areas unless the same tree has valid full-CI proof. Independent
 review uses a different model provider from the author, with verified findings
 fixed before submission.
 
+The hosted **Code health** workflow records lint, Functions JavaScript type
+errors, and source size. Download the `code-health` artifact for the measured
+tree, the PR base, the base's ESLint bulk suppressions and the new findings.
+The report uses the same rules on both trees. It compares diagnostic counts
+by file, rule and message so shifted lines keep their baseline. It also
+tracks detected renames. Test files are linted and excluded from size counts.
+
+| Report | Failure it identifies | Existing protection | Removal condition |
+| --- | --- | --- | --- |
+| Lint | New correctness findings such as invalid hooks or undefined JavaScript names | Required Functions lint and Astro accessibility lint, builds and review | Remove a rule when another check catches the same defect |
+| Functions types | New JavaScript type mismatches such as invalid call arguments | Functions unit and emulator tests exercise runtime paths | Remove this pass when equivalent type coverage checks Functions |
+| Size | Source files crossing 1,000 lines or oversized files growing, and functions crossing 200 lines | Code review | Remove the file growth comparison when all files are within the limit |
+
+Complexity warnings help identify functions for review. The quality reports
+run independently of required CI.
+
 The configuration input check scans current source reads against
 `config/configuration-inputs.json`. Each input needs a named supplier, scope and
 preparation step; remove its entry when its last reader leaves. Computed reads

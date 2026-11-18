@@ -1,0 +1,59 @@
+name: Code health
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: code-health-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  code-health:
+    name: Code health report
+    continue-on-error: true
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          path: candidate
+          fetch-depth: 2
+          persist-credentials: false
+      - uses: actions/setup-node@v7
+        with:
+          node-version: "22.23.5"
+          cache: npm
+          package-manager-cache: true
+          cache-dependency-path: |
+            candidate/package-lock.json
+            candidate/site/package-lock.json
+      - name: Install report dependencies
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        run: |
+          npm --prefix candidate ci --ignore-scripts
+          npm --prefix candidate/site ci --ignore-scripts
+          if [ -n "$BASE_SHA" ]; then
+            git -C candidate worktree add --detach ../baseline "$BASE_SHA"
+            npm --prefix baseline ci --ignore-scripts
+          fi
+      - name: Measure lint, Functions types and size
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        run: |
+          baseline=()
+          if [ -n "$BASE_SHA" ]; then baseline=(baseline); fi
+          node --test candidate/.github/scripts/report-code-health.test.mjs
+          node candidate/.github/scripts/report-code-health.mjs "$RUNNER_TEMP/code-health" candidate "${baseline[@]}"
+      - name: Save code health baselines and findings
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: code-health
+          path: ${{ runner.temp }}/code-health
+
