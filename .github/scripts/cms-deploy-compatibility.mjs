@@ -332,6 +332,16 @@ const CMS_ONLY_DEPLOY_PATHS = [
   "functions/lib/boardwalk-usage-config.json", // Used only by the standalone usage module and Admin usage client.
   "tests/functions/boardwalk-usage.test.js", // Usage tests are not run/imported by publisher image builds or runtime.
   "tests/rules/boardwalk-usage.test.js", // Usage rule tests are not run/imported by publisher image builds or runtime.
+  // Release-tooling inputs. No publisher image step, Site build or public Worker reads them.
+  ".github/workflows/", // GitHub Actions definitions; never copied into a build step or read at runtime.
+  ".github/scripts/cms-deploy-compatibility.mjs", // This gate; the CMS workflow runs the trusted main copy.
+  ".github/scripts/require-main-ci.test.mjs", // CI gate test; not run/imported by publisher builds or runtime.
+  "config/functions-deployment.json", // Functions deploy scope and media secret references; read by configure-cms-functions.mjs.
+  "scripts/admin-status-manifest.mjs", // Admin status manifest generator run by the CMS workflow.
+  "docs/cms/admin-deploy.md", // Operator prose, never a renderer/build input.
+  "docs/cms/functions-deploy.md", // Operator prose, never a renderer/build input.
+  "tests/preflight/", // CI preflight tests; not run/imported by publisher builds or runtime.
+  "site/tests/cms-publisher-compatibility.test.ts", // Tests for this gate; the Site build does not read site/tests.
 ];
 
 export async function verifyLivePublisher(repoRoot, receiptUrl) {
