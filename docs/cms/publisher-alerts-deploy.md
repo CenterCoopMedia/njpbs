@@ -46,9 +46,11 @@ These two overrides are deployment inputs, not credential values. Do not print
 their effective private values into public source or release evidence.
 
 Report intake and this relay share the downstream Bearer/Access service token.
-Rotate downstream first and both Worker copies together, prove both paths,
-then revoke the previous service token. Do not provision retired direct-bot
-secrets or assume one Worker's deployment rotated the other.
+Rotate downstream first and both Worker copies together. Before revoking the
+previous token, prove viewer report intake and run the separately approved
+publisher failure exercise to verify durable intake with the new credentials.
+The provider's test acknowledgment verifies only webhook receipt. It supplies
+no intake evidence. Keep both paths on the existing service-token bindings.
 
 ## Identity, ambiguity and recovery
 
@@ -70,5 +72,6 @@ matching report ID. Verify notification delivery separately. Keep the outbox's
 bounded retries and unknown-outcome reconciliation. Crash between delivery and
 receipt can still duplicate a notification; retain the same report/action guard.
 Verify durable report readback, failure controls, recovery history and eventual
-failure delivery separately. Use the webhook test for relay acknowledgment. Do
-not replay historical live alerts as a test.
+failure delivery separately. Use the webhook test for receipt at the relay and
+the approved failure exercise for the intake and delivery proof. Do not replay
+historical live alerts as a test.
