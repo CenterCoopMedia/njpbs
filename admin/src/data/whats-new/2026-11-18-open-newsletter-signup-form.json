@@ -1,0 +1,7 @@
+{
+  "date": "2026-11-18",
+  "kind": "improved",
+  "title": "Open the newsletter sign-up form without changing privacy choices",
+  "body": "Visitors can choose Show sign-up form in the Signup embed plank. Wisepops uses session cookies for that page view. Visitors who allow newsletter tools still see the form automatically.",
+  "prs": [137]
+}

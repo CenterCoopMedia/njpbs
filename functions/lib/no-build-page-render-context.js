@@ -15,7 +15,6 @@ const { selectedAssets, PublicContentProjectionError } = require("./public-conte
 const { PublishedMediaSafetyError } = require("./published-media-safety");
 const { publiclyVisible } = require("./public-video-references");
 const { parsePublishInstant } = require("./publish-instant");
-const { visibleLayoutBlocks } = require("./content-layout");
 
 function refuse(message) { throw Object.assign(new Error(`Build-free Page context: ${message}`), { status: 409 }); }
 const pick = (value, fields) => Object.fromEntries(fields.filter(field => value?.[field] !== undefined)
@@ -142,11 +141,6 @@ async function readPageRenderDependenciesInTransaction({ firestore, transaction,
     ? await require("./home-newsletter-context").readHomeNewslettersInTransaction({ firestore, transaction, pointer, now,
       recordIds: (page?.blocks ?? []).flatMap(block => block.type === "newsletter_signup" && block.section === "home-newsletter" ? block.data.newsletterIds : []) })
     : undefined;
-  const signupNewsletters = visibleLayoutBlocks(page?.blocks ?? []).some(block => block.type === "embed_anchor")
-    ? await require("./home-newsletter-context").readHomeNewslettersInTransaction({
-      firestore, transaction, pointer, now, recordIds: [], includeArt: false, limit: 4,
-    })
-    : undefined;
   if (pageId === "staff") {
     const rows = await transaction.get(firestore.collection("cmsAuthorProfilesPublic").limit(1001));
     if (rows.size > 1000) refuse("Staff author dependencies exceed the current bound");
@@ -212,7 +206,6 @@ async function readPageRenderDependenciesInTransaction({ firestore, transaction,
     ...(homeHeroPages.length ? { homeHeroPages } : {}),
     ...(dataHubSources ? {dataHubSources} : {}),
     ...(homeNewsletters ? { homeNewsletters } : {}),
-    ...(signupNewsletters?.joinedRecords ? { signupNewsletters: signupNewsletters.joinedRecords } : {}),
     ...(schedule ? { schedule } : {}) };
 }
 

@@ -95,6 +95,23 @@ describe("analytics consent", () => {
     ).toBeNull();
   });
 
+  it("keeps automatic tools off when the browser blocks access to cookies", () => {
+    const root = banner();
+    const loadWisepops = vi.fn();
+    (window as TestWindow).njpbsLoadWisepops = loadWisepops;
+    const cookie = vi.spyOn(document, "cookie", "get").mockImplementation(() => {
+      throw new DOMException("Cookie access is blocked", "SecurityError");
+    });
+    try {
+      initAnalyticsConsent(root);
+      expect(root.hidden).toBe(true);
+      expect(loadWisepops).not.toHaveBeenCalled();
+      expect(document.querySelector("script[data-njpbs-google-tag]")).toBeNull();
+    } finally {
+      cookie.mockRestore();
+    }
+  });
+
   it("does not load analytics or newsletter tools before a visitor grants consent", () => {
     const root = banner();
     const loadMailchimp = vi.fn();

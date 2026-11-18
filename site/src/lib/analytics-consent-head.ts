@@ -29,21 +29,25 @@ export const WISEPOPS_SCRIPT_URL =
   "https://wisepops.net/h/WWRBSDzMPa/loader.js?v=3";
 
 export const WISEPOPS_CONSENT_SNIPPET = `(function () {
-  var loaded = false;
+  var mode;
   var nonce = document.currentScript && document.currentScript.nonce;
 
-  window.njpbsLoadWisepops = function () {
-    if (loaded) return;
-    loaded = true;
-
-    window.wisepops = window.wisepops || function () {
-      (window.wisepops.q = window.wisepops.q || []).push(arguments);
-    };
-    window.wisepops.l = Date.now();
-    window.wisepops._nonce = nonce;
-    window.wisepops("options", { defaultConsent: "denied" });
-    window.wisepops("consent", "granted");
-
+  function load(requestedMode) {
+    var firstLoad = !mode;
+    if (firstLoad) {
+      window.wisepops = window.wisepops || function () {
+        (window.wisepops.q = window.wisepops.q || []).push(arguments);
+      };
+      window.wisepops.l = Date.now();
+      window.wisepops._nonce = nonce;
+      window.wisepops("options", { defaultConsent: "denied" });
+      mode = "denied";
+    }
+    if (requestedMode === "granted" && mode !== "granted") {
+      window.wisepops("consent", "granted");
+      mode = "granted";
+    }
+    if (!firstLoad) return;
     var script = document.createElement("script");
     var firstScript = document.getElementsByTagName("script")[0];
     script.setAttribute("data-cfasync", "false");
@@ -52,11 +56,18 @@ export const WISEPOPS_CONSENT_SNIPPET = `(function () {
     script.defer = true;
     script.src = ${JSON.stringify(WISEPOPS_SCRIPT_URL)};
     firstScript.parentNode.insertBefore(script, firstScript);
+  }
+
+  window.njpbsLoadWisepops = function () {
+    if (navigator.globalPrivacyControl !== true) load("granted");
+  };
+
+  window.njpbsShowSignupForm = function () {
+    load("denied");
   };
 
   window.njpbsStopWisepops = function () {
-    if (!loaded) return;
-    window.location.reload();
+    if (mode === "granted") window.location.reload();
   };
 
   try {
@@ -73,7 +84,7 @@ export const WISEPOPS_CONSENT_SNIPPET = `(function () {
       window.njpbsLoadWisepops();
     }
   } catch (error) {
-    /* Keep Wisepops off when the consent cookie cannot be read. */
+    /* An unreadable consent cookie never triggers automatic loading. */
   }
 })();`;
 

@@ -52,23 +52,26 @@ send an email address or call ActiveCampaign's identification features. Its code
 does not load until you allow these tools. Visitors with an older saved choice
 are asked again before any of these tools load.
 
-The same choice controls Wisepops, which NJ PBS uses to display newsletter
-signup forms and messages. If you allow it, Wisepops may use first-party cookies
-to remember which forms and messages you viewed or submitted and may process
-your IP address and country. Information that you enter in a Wisepops form, such
-as your email address, is sent to Wisepops and may be sent to a newsletter
-service that NJ PBS connects to Wisepops.
+The same choice controls automatic loading of Wisepops, which NJ PBS uses to
+display newsletter signup forms and messages. If you allow it, Wisepops may use
+first-party cookies to remember which forms and messages you viewed or submitted.
+You can also choose **Show sign-up form** to load Wisepops for the current page
+without changing your privacy choice. In that mode, Wisepops uses session-only
+cookies that expire when you close your browser. Wisepops may process your IP
+address and country. Information that you enter in a Wisepops form, such as your
+email address, is sent to Wisepops and may be sent to a newsletter service that
+NJ PBS connects to Wisepops.
 
 The site saves your choice in the first-party `njpbs-consent` cookie. The browser
 uses this record to enforce your choice. A denial or Global Privacy Control
-signal keeps Google Analytics, Mailchimp, ActiveCampaign and Wisepops off. NJ PBS
+signal keeps Google Analytics, Mailchimp, ActiveCampaign and automatic Wisepops loading off. NJ PBS
 excludes these tools from Kids and its descendant pages, content marked as
 child-directed, and pages that play video. ActiveCampaign and Wisepops also stay
 off previews, development pages, pages excluded from search-engine indexing and
-redirect stubs. Changing your choice to **Do not allow** stops future loading.
-If ActiveCampaign or Wisepops has loaded in this page, the page reloads to end
-its running code. This cannot recall information already sent. You can request
-deletion using the contact below.
+redirect stubs. Changing your choice to **Do not allow** stops automatic
+loading. If ActiveCampaign or Wisepops has loaded with your permission, the
+page reloads to end its running code. This cannot recall information already
+sent. You can request deletion using the contact below.
 
 ## Third-party services
 

@@ -49,22 +49,6 @@ it("lists unselected immutable approvals while excluding working-only, archived 
   expect((await read()).joinedRecords.map(record => record.id)).toEqual(["roster-one"]);
 });
 
-it("reads approved signup links only for a visible Page embed", async () => {
-  await newsletter("roster-one", { art: true });
-  await newsletter("roster-unapproved", { approved: false });
-  const pageId = `page-${"3".repeat(32)}`;
-  const anchor = { type: "embed_anchor", id: "signup", order: 0, visible: true, data: { anchorId: "njpbssignup" } };
-  const actual = visible => firestore.runTransaction(transaction => context.readPageRenderDependenciesInTransaction({
-    firestore, transaction, pageId, page: { path: "/newsletters/", blocks: [{ ...anchor, visible }] },
-    pointer: deployment.initialPublicDeploymentPointer(),
-  }), { readOnly: true });
-  const result = await actual(true);
-  expect(result.assets).toEqual([]);
-  expect(result.signupNewsletters.map(record => record.approvedLibraryVersion.signupUrl)).toEqual([copy.signupUrl]);
-  expect(JSON.stringify(result.signupNewsletters)).not.toContain("PRIVATE");
-  expect((await actual(false)).signupNewsletters).toBeUndefined();
-});
-
 it("exports only paired approved art and keeps signup text when optional art is missing, mismatched or replacing", async () => {
   await newsletter("roster-one", { art: true });
   const blocks = [...homeFixture.blocks, { id: "selected-newsletter", type: "newsletter_signup", section: "home-newsletter",

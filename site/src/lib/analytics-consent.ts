@@ -282,7 +282,13 @@ export function initAnalyticsConsent(
   const navigatorRef = windowRef.navigator;
   const gpcEnabled = isGlobalPrivacyControlEnabled(navigatorRef);
   let gpcNoticeShown = gpcEnabled;
-  const storedDecision = readAnalyticsConsent(documentRef.cookie);
+  let storedDecision: ConsentDecision;
+  try {
+    storedDecision = readAnalyticsConsent(documentRef.cookie);
+  } catch {
+    // Cookie access can be blocked. Leave optional analytics off.
+    return;
+  }
   const grantButton = root.querySelector<HTMLButtonElement>("[data-consent-grant]")!;
   const denyButton = root.querySelector<HTMLButtonElement>("[data-consent-deny]")!;
   const closeButton = root.querySelector<HTMLButtonElement>("[data-consent-close]")!;

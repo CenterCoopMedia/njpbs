@@ -2,9 +2,9 @@
 
 In a Page's content editor, add a **Signup embed** plank and select **NJ PBS newsletter signup**. Move the plank among the Page's other content, place it in a row, hide it or remove it using the usual controls. Each approved signup can occur once on a Page, including hidden planks. The plank accepts an approved selection, with no HTML or script input.
 
-The Page shows approved newsletter signup links until Wisepops renders its form. Those links also appear when consent is denied or withdrawn, Global Privacy Control is enabled, or the campaign is unavailable. When the approved catalog is empty or unavailable, the Page shows the station's standard signup link. The section reserves space for the form.
+In Wisepops, position the embed inside `#njpbssignup` and target `/newsletters/`. Visitors who have allowed newsletter tools see the form automatically. Other visitors can select **Show sign-up form** to load Wisepops for that page view using session cookies. This preserves their saved privacy choice and applies when Global Privacy Control is active or the consent cookie is unreadable. The section shows a status message if the form is unavailable.
 
-In Wisepops, set the embed's position inside `#njpbssignup` and target `/newsletters/`. The existing consent loader may run the campaign after the visitor allows newsletter tools. The form uses the campaign's phone and desktop layouts.
+On the preview with the configured campaign, verify the form with consent allowed and after selecting **Show sign-up form** without consent. Check phone and desktop layouts, keyboard focus, withdrawal, and the resources used by the form. Pages where the public renderer omits the Wisepops loader show the unavailable message.
 
 The initial newsletters draft can be prepared with `scripts/migrate-newsletters-signup.mts`. Its `--fixture <saved-page.json>` mode is read-only and is exercised in hosted CI. Its operator modes are `--read <project-id> <page-id> <saved-version>` and `--apply <project-id> <page-id> <saved-version>`, with the explicit project's service-account JSON streamed on fd 3 at use time. Production reads use `agent-cms-reader`; applying a draft needs separate production-write authority and credentials. Never save credentials to a file or pass them in arguments.
 

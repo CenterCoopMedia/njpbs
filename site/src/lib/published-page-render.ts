@@ -14,8 +14,6 @@ import { homeSelectedPostIds } from "../../../packages/content-core/src/home-sou
 import type { HomeSourceSnapshot } from "./home-sources";
 import type { PublicSettingBuildData } from "./public-artifact-bundle";
 import { assertAuthorRouteUniqueness, projectAuthorSnapshot } from "./cms-authors-projection";
-import { visibleLayoutBlocks } from "../../../packages/content-core/src/content-layout";
-import { newsletterSignupCards } from "./newsletter-signup";
 
 export type PublishedPageContent = Omit<PublishedPostContent, "kind" | "target"> & {
   readonly kind: "public-page";
@@ -26,7 +24,6 @@ export type PublishedPageContent = Omit<PublishedPostContent, "kind" | "target">
   readonly dataHubSources?: DataHubSources;
   readonly newsletterCards?: readonly unknown[];
   readonly newsletterUnavailable?: boolean;
-  readonly signupNewsletterCards?: ReturnType<typeof newsletterSignupCards>;
   readonly schedule?: import("./page-schedule-packet").PageScheduleInputs;
 };
 
@@ -208,13 +205,6 @@ export async function projectPublishedPageRead(input: unknown, pageId: string, r
     throw new Error("Published Page does not own this target");
   }
   const dependencies = projectPageRenderDependencies(input, pageId, rendererSha, now);
-  let signupNewsletterCardsByPage: PublishedPageContent["signupNewsletterCards"];
-  if (input.signupNewsletters !== undefined && visibleLayoutBlocks(page.blocks).some(block => block.type === "embed_anchor")) {
-    const records = input.signupNewsletters;
-    if (!Array.isArray(records) || records.length > 4 || records.some(record => !object(record) || record.type !== "newsletter") ||
-        new Set(records.map(record => record.id)).size !== records.length) throw new Error("Invalid signup Newsletter context");
-    signupNewsletterCardsByPage = newsletterSignupCards(projectJoinedRecords(records, new Map(), now).recordCards);
-  }
   const heroPins = parseHomeHero(page.homeHero)?.pins ?? [];
   // The compiled renderer hashes this projection for its HTML cache. Expiry
   // must alter that input even when no CMS publication changed the source seal.
@@ -246,7 +236,6 @@ export async function projectPublishedPageRead(input: unknown, pageId: string, r
     rendererSha, pagePath: page.path, contextRevision: Number(input.sourceSeal.contextRevision), contextDigest: String(input.sourceSeal.contextDigest),
     ...(schedule ? { codeGeneration: Number(input.sourceSeal.codeGeneration) } : {}) },
     pages: [page], ...dependencies,
-    ...(signupNewsletterCardsByPage ? { signupNewsletterCards: signupNewsletterCardsByPage } : {}),
     ...(homeHeroPages.length ? { homeHeroPages } : {}),
     ...(sources ? { homeSources: sources } : {}), ...(schedule ? { schedule } : {}) });
 }

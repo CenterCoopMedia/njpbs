@@ -23,12 +23,14 @@ const { measurementId, activeCampaign = false } = Astro.props;
       people use this site and load Mailchimp and Wisepops newsletter tools. On
       eligible pages, ActiveCampaign will record page visits and your IP address
       for newsletter marketing and may associate visits with an existing contact
-      record. These tools stay off unless you allow them. You can withdraw
-      permission through the privacy policy at any time.
+      record. These tools load automatically only if you allow them. You can
+      also open a newsletter sign-up form using session cookies. You can
+      withdraw permission through the privacy policy at any time.
     </p>
     <p data-consent-gpc hidden>
       Your browser sent a Global Privacy Control signal. Google Analytics,
-      Mailchimp, ActiveCampaign and Wisepops are off.
+      Mailchimp and ActiveCampaign are off. Newsletter sign-up forms load only
+      when you ask to open them, with session cookies.
     </p>
     <a href="/privacy/#your-privacy-choices">Read the privacy policy</a>
   </div>

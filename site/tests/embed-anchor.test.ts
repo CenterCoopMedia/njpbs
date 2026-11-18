@@ -3,7 +3,6 @@ import { describe, expect, it } from "vitest";
 import { parseBlocks, type PageBlock } from "../../packages/content-core/src/content-model";
 import { renderBlock } from "../../packages/content-core/src/content-render";
 import { validateSection } from "../../packages/content-core/src/editor-admin";
-import { newsletterSignupUrl } from "../../packages/content-core/src/launch-fallback";
 const require = createRequire(import.meta.url);
 const server = require("../../functions/lib/content-blocks.js");
 const sections = require("../../functions/lib/editor-section-contract.js");
@@ -28,24 +27,13 @@ describe("approved Page signup embeds", () => {
     expect(projected.state).toBe("live");
     expect(projected.page.blocks[0]).toEqual(block);
     const html = renderBlock(projected.page.blocks[0]);
-    expect(html).toContain('id="njpbssignup"></div>');
-    expect(html).toContain(`href="${newsletterSignupUrl}"`);
+    expect(html).toMatch(/<div id="njpbssignup"[^>]*><\/div>/);
+    expect(html).toContain('type="button" data-signup-show>Show sign-up form</button>');
+    expect(html).toContain('data-signup-status role="status"');
     for (const section of ["post", "home", "programLanding"] as const) {
       expect(validateSection(section, [block])).not.toBeNull();
       expect(sections.validateSection(section, [block])).not.toBeNull();
     }
-  });
-
-  it("uses the same escaped links as the native newsletter signup", () => {
-    const signupNewsletterCards = [
-      { title: "News & notes", signupUrl: "https://example.org/signup?q=1&f=2" },
-      { title: "Unusable address", signupUrl: "javascript:void(0)" },
-    ];
-    const html = renderBlock(block, { signupNewsletterCards });
-    expect(html).toContain('href="https://example.org/signup?q=1&amp;f=2"');
-    expect(html).toContain("Sign up for News &amp; notes");
-    expect(html).not.toContain("Unusable address");
-    expect(html).not.toContain(newsletterSignupUrl);
   });
 
   it.each([{}, { anchorId: "other" }, { anchorId: 'njpbssignup"><script>' },

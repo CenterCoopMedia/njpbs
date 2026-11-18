@@ -1,7 +1,0 @@
-{
-  "date": "2026-11-18",
-  "kind": "improved",
-  "title": "Newsletter signup links stay available",
-  "body": "The Signup embed plank shows newsletter signup links whenever the Wisepops form is unavailable or a visitor declines newsletter tools. The form takes its place when it appears.",
-  "prs": []
-}

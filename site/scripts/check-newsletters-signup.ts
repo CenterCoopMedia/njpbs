@@ -1,43 +1,55 @@
 import assert from "node:assert/strict";
 import { runInNewContext } from "node:vm";
 import { readFile } from "node:fs/promises";
+import { fileURLToPath } from "node:url";
+import { build } from "esbuild";
 import { Window } from "happy-dom";
 import { chromium } from "playwright";
 import { ANALYTICS_CONSENT_DENIED, initAnalyticsConsent, readAnalyticsConsent } from "../src/lib/analytics-consent";
 import { WISEPOPS_CONSENT_SNIPPET } from "../src/lib/analytics-consent-head";
-import { observeNewsletterSignupEmbeds } from "../src/lib/newsletter-signup-embed";
 
-async function checkSignupLayout(markup: string) {
+async function checkSignupInteraction(markup: string) {
   const css = await readFile(new URL("../../packages/content-core/src/component-blocks.css", import.meta.url), "utf8");
+  const client = await build({ stdin: {
+    resolveDir: fileURLToPath(new URL("../src/lib/", import.meta.url)),
+    contents: 'import { initNewsletterSignupEmbed } from "./newsletter-signup-embed"; initNewsletterSignupEmbed(document);',
+  }, bundle: true, write: false });
   const browser = await chromium.launch({ channel: "chrome", headless: true, chromiumSandbox: true });
   try {
     const page = await browser.newPage();
+    await page.route("https://wisepops.net/**", route => route.abort());
+    const prepare = async () => {
+      await page.setContent(`<style>${css}</style>${markup}<p id="after-signup">Next section</p><script>${WISEPOPS_CONSENT_SNIPPET}</script>`);
+      await page.addScriptTag({ content: client.outputFiles[0].text });
+    };
+    const button = page.getByRole("button", { name: "Show sign-up form" });
+    const status = page.getByRole("status");
+    const target = page.getByRole("region", { name: "Newsletter sign-up form" });
+    const after = page.locator("#after-signup");
+    const loader = page.locator("script[data-njpbs-wisepops]");
     for (const width of [390, 1440]) {
       await page.setViewportSize({ width, height: 850 });
-      await page.setContent(`<style>${css}</style>${markup}<p id="after-signup">After signup</p>`);
-      await page.addScriptTag({ content: `(${observeNewsletterSignupEmbeds.toString()})(document);` });
-      const links = page.getByRole("link", { name: "Sign up for Station updates" });
-      const target = page.locator("#njpbssignup");
-      const after = page.locator("#after-signup");
+      await prepare();
       const initialOffset = (await after.boundingBox())!.y;
-      assert(await links.isVisible(), "Fallback links are visible before a campaign renders");
-      await target.evaluate(element => { element.innerHTML = "<template>Waiting for campaign</template>"; });
-      assert(await links.isVisible(), "Non-rendering content leaves the fallback visible");
-      await links.focus();
+      assert.equal(await loader.count(), 0, "No vendor request before activation");
+      await button.press("Enter");
+      assert.equal(await loader.count(), 1, "Keyboard activation requests the same loader");
+      assert.equal(await status.textContent(), "Loading the sign-up form…");
+      assert(await status.evaluate(element => element === document.activeElement));
       await target.evaluate(element => {
-        element.innerHTML = '<form aria-label="Newsletter form"><label>Email <input type="email"></label></form>';
+        element.innerHTML = '<form aria-label="Mock form"><label>Email <input type="email"></label></form>';
       });
-      const filled = page.locator(".newsletter-signup-embed[data-signup-form]");
-      await filled.waitFor({ state: "attached" });
-      assert(await links.isVisible(), "A focused fallback link remains available until focus leaves");
-      await links.blur();
-      await links.waitFor({ state: "hidden" });
-      assert(await page.getByRole("form", { name: "Newsletter form" }).isVisible());
+      await page.getByText("Loading the sign-up form…").waitFor({ state: "hidden" });
+      assert(await target.evaluate(element => element === document.activeElement));
+      assert(await page.getByRole("form", { name: "Mock form" }).isVisible());
       assert.equal((await after.boundingBox())!.y, initialOffset, `Signup space is stable at ${width}px`);
-      await target.evaluate(element => element.replaceChildren());
-      await links.waitFor({ state: "visible" });
-      assert.equal((await after.boundingBox())!.y, initialOffset);
     }
+    await page.clock.install();
+    await prepare();
+    await button.click();
+    await page.clock.fastForward(5000);
+    assert.match(await status.textContent() ?? "", /could not load/);
+    assert(await status.evaluate(element => element === document.activeElement));
   } finally {
     await browser.close();
   }
@@ -81,8 +93,7 @@ export async function checkNewslettersSignup(html: string): Promise<void> {
     assert.equal(document.querySelectorAll("#njpbssignup").length, 1);
     const embed = anchor.parentElement!;
     const plank = embed.parentElement!;
-    assert.deepEqual([...embed.querySelectorAll("a")].map(link => link.getAttribute("href")),
-      ["https://example.org/newsletter-1", "https://example.org/newsletter-2"]);
+    assert.equal(embed.querySelector("[data-signup-show]")?.textContent, "Show sign-up form");
     assert.equal(plank.getAttribute("data-block-id"), "signup");
     assert.equal(plank.parentElement?.getAttribute("data-cms-page-blocks"), `page-${"3".repeat(32)}`);
     assert.equal(plank.previousElementSibling?.getAttribute("data-block-id"), "row");
@@ -97,7 +108,7 @@ export async function checkNewslettersSignup(html: string): Promise<void> {
   try {
     const page = openPage(ANALYTICS_CONSENT_DENIED);
     const { document, anchor, click } = page;
-    await checkSignupLayout(page.embed.outerHTML);
+    await checkSignupInteraction(page.embed.outerHTML);
     assert.equal(anchor.innerHTML, "");
     assert.equal(document.querySelectorAll("script[data-njpbs-wisepops]").length, 0);
     assert.equal(page.reloads(), 0);
