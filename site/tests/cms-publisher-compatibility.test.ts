@@ -314,6 +314,15 @@ describe("CMS deploy one commit past the live renderer", () => {
     "docs/cms/staging-deploy-runbook.md",
     "tests/functions/boardwalk-usage.test.js",
     "tests/rules/boardwalk-usage.test.js",
+    ".github/workflows/cms-staging-deploy.yml",
+    ".github/scripts/cms-deploy-compatibility.mjs",
+    ".github/scripts/require-main-ci.test.mjs",
+    "config/functions-deployment.json",
+    "scripts/admin-status-manifest.mjs",
+    "docs/cms/admin-deploy.md",
+    "docs/cms/functions-deploy.md",
+    "tests/preflight/admin-status-manifest.test.js",
+    "site/tests/cms-publisher-compatibility.test.ts",
   ])("allows a CMS-ahead change confined to %s", async path => {
     const cmsAheadSha = commitOnto(currentSha, { [path]: "// CMS-only change\n" });
     expect(await deployGate(cmsAheadSha)).toEqual({ code: 0, output: currentSha });
@@ -365,6 +374,8 @@ describe("CMS deploy one commit past the live renderer", () => {
     "staff-site-worker.ts",
     "dev-public-worker.ts",
     "wiki/web/public.md",
+    ".github/scripts/metered-api-scan.mjs",
+    "site/tests/public-chrome.test.ts",
   ])("refuses a CMS-ahead change to protected input %s", async path => {
     const cmsAheadSha = commitOnto(currentSha, { [path]: "// renderer input change\n" });
     const result = await deployGate(cmsAheadSha);
