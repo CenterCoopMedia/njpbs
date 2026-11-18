@@ -741,7 +741,7 @@ describe("cms staging deploy surface", () => {
       "node scripts/component-runner.mjs functions deploy",
     );
     expect(stagingDeployWorkflow).toContain(
-      "FUNCTION_TARGETS: ${{ needs.smoke-manifest.outputs.function_targets }}",
+      "FUNCTION_TARGETS: ${{ needs.verify.outputs.function_targets }}",
     );
     expect(stagingDeployWorkflow).toContain("CMS_WRITEBACK_CONFIGURED");
     expect(stagingDeployWorkflow).toContain(
@@ -826,10 +826,7 @@ describe("cms staging deploy surface", () => {
   it("builds the admin artifact before Firebase and uploads it afterward", () => {
     const stagingDeployWorkflow = readCmsDeployWorkflow();
     const adminBuildJob = workflowJob(stagingDeployWorkflow, "admin-build");
-    const smokeManifestJob = workflowJob(
-      stagingDeployWorkflow,
-      "smoke-manifest",
-    );
+    const verifyJob = workflowJob(stagingDeployWorkflow, "verify");
     const firebaseJob = workflowJob(stagingDeployWorkflow, "firebase");
     const cmsApiJob = workflowJob(stagingDeployWorkflow, "cms-api");
     const liveSmokeJob = workflowJob(stagingDeployWorkflow, "live-smoke");
@@ -841,10 +838,10 @@ describe("cms staging deploy surface", () => {
     expect(adminBuildJob).toContain("name: cms-staging-admin");
     expect(adminBuildJob).toContain("path: admin/dist/");
     expect(adminBuildJob).not.toContain("firebase deploy");
-    expect(smokeManifestJob).toContain("needs: admin-build");
-    expect(smokeManifestJob).not.toContain("FIREBASE_SERVICE_ACCOUNT");
+    expect(verifyJob).toContain("node scripts/component-runner.mjs functions manifest");
+    expect(verifyJob).not.toContain("FIREBASE_SERVICE_ACCOUNT");
     expect(firebaseJob).toContain(
-      "needs: [admin-build, firebase-preflight, smoke-manifest, verify]",
+      "needs: [admin-build, firebase-preflight, verify]",
     );
     expect(firebaseJob).toContain(
       "ref: ${{ needs.admin-build.outputs.deploy_sha }}",

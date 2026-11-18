@@ -358,6 +358,8 @@ jobs:
       (vars.CMS_DEPLOY_OWNER != '' && github.triggering_actor == vars.CMS_DEPLOY_OWNER) && github.ref == 'refs/heads/main'
     permissions:
       contents: read
+    outputs:
+      function_targets: ${{ steps.function_plan.outputs.function_targets }}
     runs-on: ubuntu-24.04
     timeout-minutes: 12 # About 4-5m expected, with cold-install headroom (#4334).
     steps:
@@ -371,7 +373,6 @@ jobs:
         with:
           ref: ${{ github.sha }}
           path: .release-gate
-          sparse-checkout: .github/scripts
           persist-credentials: false
       - name: Isolate trusted release-gate checkout
         run: |
@@ -393,6 +394,9 @@ jobs:
         run: node "$RUNNER_TEMP/release-gate"/.github/scripts/require-cms-release-sources.mjs
       - name: Metered-API source scan (before any scanned code runs)
         run: node "$RUNNER_TEMP/release-gate"/.github/scripts/metered-api-scan.mjs --target-root "$GITHUB_WORKSPACE"
+      - name: Metered-API source scan for current release gate
+        working-directory: ${{ runner.temp }}/release-gate
+        run: node .github/scripts/metered-api-scan.mjs
       - uses: actions/setup-node@v7
         with:
           node-version: "22.23.5"
@@ -422,72 +426,17 @@ jobs:
           npm run test:preview-renderer
           node preview-renderer/node_modules/wrangler/bin/wrangler.js types --config preview-renderer/wrangler.jsonc --strict-vars=false --include-runtime=false --check preview-renderer/worker-configuration.d.ts
           node scripts/check-prepared-worker.mjs preview-renderer "$(git rev-parse HEAD)"
-
-  smoke-manifest:
-    env:
-      CMS_DEPLOY_OWNER: ${{ vars.CMS_DEPLOY_OWNER }}
-    needs: admin-build
-    if: >-
-      (vars.CANONICAL_GITHUB_REPOSITORY != '' && vars.CANONICAL_GITHUB_REPOSITORY_ID != '' && github.repository == vars.CANONICAL_GITHUB_REPOSITORY && github.repository_id == vars.CANONICAL_GITHUB_REPOSITORY_ID) &&
-      (vars.CMS_DEPLOY_OWNER != '' && github.triggering_actor == vars.CMS_DEPLOY_OWNER) && github.ref == 'refs/heads/main'
-    outputs:
-      function_targets: ${{ steps.function_plan.outputs.function_targets }}
-    runs-on: ubuntu-24.04
-    timeout-minutes: 5 # Runaway guard: 3x max rounds to 3m; retain 5m floor (#2657).
-    steps:
-      - uses: actions/checkout@v7
-        with:
-          ref: ${{ needs.admin-build.outputs.deploy_sha }}
-          persist-credentials: false
-      - name: Check out the exact CMS smoke gate source
-        uses: actions/checkout@v7
-        with:
-          ref: ${{ github.sha }}
-          path: .cms-smoke-gate
-          persist-credentials: false
-      - name: Isolate trusted cms-smoke-gate checkout
-        run: |
-          set -euo pipefail
-          mv .cms-smoke-gate "$RUNNER_TEMP/cms-smoke-gate"
-          ln -s "$GITHUB_WORKSPACE/node_modules" "$RUNNER_TEMP/cms-smoke-gate/node_modules"
-      - name: Require pinned release and trusted workflow identities
-        env:
-          CMS_RELEASE_CHECKS_SHA: ${{ inputs.deploy_ref }}
-          CMS_TRUSTED_WORKFLOW_SHA: ${{ github.sha }}
-        run: node "$RUNNER_TEMP/cms-smoke-gate"/.github/scripts/require-cms-release-sources.mjs
-      - name: Metered-API source scan (before any scanned code runs)
-        run: node "$RUNNER_TEMP/cms-smoke-gate"/.github/scripts/metered-api-scan.mjs --target-root "$GITHUB_WORKSPACE"
-      - name: Check out trusted configuration renderer
-        uses: actions/checkout@v7
-        with:
-          ref: ${{ github.sha }}
-          path: .configuration-render-gate
-          persist-credentials: false
-          sparse-checkout: |
-            scripts/render-development-config.mjs
-            config/development-inputs.json
-          sparse-checkout-cone-mode: false
       - name: Render deployment resource configuration
-        working-directory: ${{ github.workspace }}
-        run: |
-          set -euo pipefail
-          mv .configuration-render-gate "$RUNNER_TEMP/configuration-render-gate"
-          node "$RUNNER_TEMP/configuration-render-gate/scripts/render-development-config.mjs" --production --root "$GITHUB_WORKSPACE"
-      - name: Metered-API source scan for current CMS smoke gate
-        working-directory: ${{ runner.temp }}/cms-smoke-gate
-        run: node .github/scripts/metered-api-scan.mjs
-      - uses: actions/setup-node@v7
-        with:
-          node-version: "22.23.5"
+        run: node "$RUNNER_TEMP/release-gate/scripts/render-development-config.mjs" --production --root "$GITHUB_WORKSPACE"
       - name: Require the deployed function manifest to match the smoke gate
         id: function_plan
         env:
-          DEPLOY_SHA: ${{ needs.admin-build.outputs.deploy_sha }}
+          DEPLOY_SHA: ${{ inputs.deploy_ref }}
         run: node scripts/component-runner.mjs functions manifest
   firebase-preflight:
     env:
       CMS_DEPLOY_OWNER: ${{ vars.CMS_DEPLOY_OWNER }}
-    needs: [admin-build, smoke-manifest, verify]
+    needs: [admin-build, verify]
     permissions:
       contents: read
       actions: read
@@ -665,7 +614,7 @@ jobs:
         run: node "$RUNNER_TEMP/release-gate/.github/scripts/cms-containers-read-probe.mjs"
       - name: Require the provisioned published Post reader secret
         env:
-          FUNCTION_TARGETS: ${{ needs.smoke-manifest.outputs.function_targets }}
+          FUNCTION_TARGETS: ${{ needs.verify.outputs.function_targets }}
         run: |
           set -euo pipefail
           if [[ ",$FUNCTION_TARGETS," != *",functions:cmsGetPublishedPost,"* ]]; then
@@ -1142,7 +1091,7 @@ jobs:
   firebase:
     env:
       CMS_DEPLOY_OWNER: ${{ vars.CMS_DEPLOY_OWNER }}
-    needs: [admin-build, firebase-preflight, smoke-manifest, verify]
+    needs: [admin-build, firebase-preflight, verify]
     environment: production
     if: >-
       (vars.CANONICAL_GITHUB_REPOSITORY != '' && vars.CANONICAL_GITHUB_REPOSITORY_ID != '' && github.repository == vars.CANONICAL_GITHUB_REPOSITORY && github.repository_id == vars.CANONICAL_GITHUB_REPOSITORY_ID) &&
@@ -1315,7 +1264,7 @@ jobs:
         if: needs.firebase-preflight.outputs.functions_mutated == 'true' && !inputs.install_reader_bridge
         env:
           DEPLOY_SHA: ${{ needs.admin-build.outputs.deploy_sha }}
-          FUNCTION_TARGETS: ${{ needs.smoke-manifest.outputs.function_targets }}
+          FUNCTION_TARGETS: ${{ needs.verify.outputs.function_targets }}
           CLOUD_PUBLICATION_WAKE_ENVIRONMENT: production
           CLOUD_PUBLICATION_WAKE_ENABLED: "true"
         run: node scripts/component-runner.mjs functions prepare
@@ -1375,7 +1324,7 @@ jobs:
         if: needs.firebase-preflight.outputs.functions_mutated == 'true' && inputs.install_reader_bridge
         env:
           DEPLOY_SHA: ${{ needs.admin-build.outputs.deploy_sha }}
-          FUNCTION_TARGETS: ${{ needs.smoke-manifest.outputs.function_targets }}
+          FUNCTION_TARGETS: ${{ needs.verify.outputs.function_targets }}
           CLOUD_PUBLICATION_WAKE_ENVIRONMENT: production
           CLOUD_PUBLICATION_WAKE_ENABLED: "true"
         run: node scripts/component-runner.mjs functions prepare
@@ -1488,7 +1437,7 @@ jobs:
         if: vars.CMS_PREVIEW_CLOUD_ENABLED == 'true' && needs.firebase-preflight.outputs.preview_pause_late == 'true' && needs.firebase-preflight.outputs.functions_before_preview != ''
         env:
           DEPLOY_SHA: ${{ needs.admin-build.outputs.deploy_sha }}
-          FUNCTION_TARGETS: ${{ needs.smoke-manifest.outputs.function_targets }}
+          FUNCTION_TARGETS: ${{ needs.verify.outputs.function_targets }}
           CMS_FUNCTION_DEPLOY_TARGETS: ${{ needs.firebase-preflight.outputs.functions_before_preview }}
           CMS_PREVIEW_FUNCTION_TARGETS: ${{ needs.firebase-preflight.outputs.functions_during_preview }}
           CMS_FUNCTION_DEPLOY_PHASE: before-preview
@@ -1516,13 +1465,13 @@ jobs:
           FIRESTORE_DEPLOYED_BEFORE_PREVIEW: ${{ steps.deploy_rules_before_preview.outcome }}
           DEPLOY_SHA: ${{ needs.admin-build.outputs.deploy_sha }}
           CMS_FUNCTION_DEPLOY_TARGETS: ${{ vars.CMS_PREVIEW_CLOUD_ENABLED == 'true' && needs.firebase-preflight.outputs.preview_pause_late == 'true' && needs.firebase-preflight.outputs.functions_during_preview || needs.firebase-preflight.outputs.function_deploy_targets }}
-          FUNCTION_TARGETS: ${{ needs.smoke-manifest.outputs.function_targets }}
+          FUNCTION_TARGETS: ${{ needs.verify.outputs.function_targets }}
           CLOUD_PUBLICATION_WAKE_ENVIRONMENT: production
           CLOUD_PUBLICATION_WAKE_ENABLED: "true"
         run: |
           set -euo pipefail
           if [[ ! "$FUNCTION_TARGETS" =~ ^functions:[A-Za-z][A-Za-z0-9]*(,functions:[A-Za-z][A-Za-z0-9]*)*$ ]]; then
-            echo "The smoke-manifest job returned an invalid Firebase function target list" >&2
+            echo "The verified manifest returned an invalid Firebase function target list" >&2
             exit 1
           fi
           if [ "$FIRESTORE_DEPLOYED_BEFORE_PREVIEW" != success ]; then
@@ -1589,7 +1538,7 @@ jobs:
           FUNCTIONS_CONFIGURATION_FINGERPRINT: ${{ needs.firebase-preflight.outputs.functions_configuration_fingerprint }}
           FUNCTIONS_VARIABLES_FINGERPRINT: ${{ needs.firebase-preflight.outputs.functions_variables_fingerprint }}
           DEPLOY_SHA: ${{ needs.admin-build.outputs.deploy_sha }}
-          FUNCTION_TARGETS: ${{ needs.smoke-manifest.outputs.function_targets }}
+          FUNCTION_TARGETS: ${{ needs.verify.outputs.function_targets }}
         run: |
           set -euo pipefail
           node scripts/component-runner.mjs functions complete \
@@ -1615,7 +1564,7 @@ jobs:
       - name: Verify live Functions inventory without mutating
         if: needs.firebase-preflight.outputs.functions_mutated != 'true'
         env:
-          FUNCTION_TARGETS: ${{ needs.smoke-manifest.outputs.function_targets }}
+          FUNCTION_TARGETS: ${{ needs.verify.outputs.function_targets }}
           CLOUD_PUBLICATION_WAKE_ENVIRONMENT: production
           CLOUD_PUBLICATION_WAKE_ENABLED: "true"
         run: node scripts/component-runner.mjs functions verify

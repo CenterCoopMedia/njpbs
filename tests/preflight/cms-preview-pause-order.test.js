@@ -42,7 +42,7 @@ describe("selective preview pause boundary", () => {
     expect(ordinary.if).toContain("CMS_PREVIEW_CLOUD_ENABLED == 'true'");
     expect(ordinary.env.CMS_FUNCTION_DEPLOY_PHASE).toBe("before-preview");
     expect(ordinary.env.DEPLOY_SHA).toBe("${{ needs.admin-build.outputs.deploy_sha }}");
-    expect(ordinary.env.FUNCTION_TARGETS).toContain("smoke-manifest.outputs.function_targets");
+    expect(ordinary.env.FUNCTION_TARGETS).toBe("${{ needs.verify.outputs.function_targets }}");
     expect(ordinary.env.CMS_PREVIEW_FUNCTION_TARGETS).toContain("functions_during_preview");
     expect(ordinary.run).toBe("node scripts/component-runner.mjs functions deploy");
     const check = "Check preview dependencies before ordinary Functions mutate";

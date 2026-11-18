@@ -80,6 +80,18 @@ describe("credential-free deploy verification", () => {
     expect(checkouts).toHaveLength(2);
     for (const checkout of checkouts) expect(checkout.with["persist-credentials"]).toBe(false);
     expect(checkouts[0].with["fetch-depth"]).toBe(0);
+    expect(checkouts[1].with.ref).toBe("${{ github.sha }}");
+    expect(checkouts[1].with.path).toBe(".release-gate");
+    const verifySteps = workflow.jobs.verify.steps;
+    const trustedScan = verifySteps.findIndex(row => row.name === "Metered-API source scan for current release gate");
+    const render = verifySteps.findIndex(row => row.name === "Render deployment resource configuration");
+    const manifest = verifySteps.findIndex(row => row.run === "node scripts/component-runner.mjs functions manifest");
+    expect(trustedScan).toBeGreaterThan(0);
+    expect(render).toBeGreaterThan(trustedScan);
+    expect(verifySteps[render].run).toContain('"$RUNNER_TEMP/release-gate/scripts/render-development-config.mjs" --production');
+    expect(manifest).toBeGreaterThan(render);
+    expect(verifySteps[manifest].id).toBe("function_plan");
+    expect(workflow.jobs.verify.outputs.function_targets).toBe("${{ steps.function_plan.outputs.function_targets }}");
     expect(workflow.jobs.verify.if).toBe(workflow.jobs.firebase.if);
     for (const name of ["firebase-preflight", "firebase"]) {
       expect(workflow.jobs[name].needs).toContain("verify");
@@ -139,7 +151,7 @@ describe("Route D Cut A boundary placement", () => {
   const production = parse(deploy), development = parse(read(".github/workflows/cms-dev-deploy.yml"));
   const proof = (steps, boundary) => steps.findIndex(row => row.name === `Verify the singleton public contract at ${boundary}`);
   it("isolates both contract jobs and keeps triggers and production ancestry admission", () => {
-    expect(Object.keys(production.jobs).sort()).toEqual(["admin-build", "verify", "smoke-manifest", "firebase-preflight", "cms-api", "firebase", "preview-renderer", "admin-contract", "live-smoke", "admin-deploy", "contract-settlement"].sort());
+    expect(Object.keys(production.jobs).sort()).toEqual(["admin-build", "verify", "firebase-preflight", "cms-api", "firebase", "preview-renderer", "admin-contract", "live-smoke", "admin-deploy", "contract-settlement"].sort());
     expect(Object.keys(development.jobs).sort()).toEqual(["deploy", "preview-renderer"]);
     expect(Object.keys(production.on)).toEqual(["workflow_dispatch"]);
     expect(Object.keys(development.on)).toEqual(["workflow_dispatch"]);
