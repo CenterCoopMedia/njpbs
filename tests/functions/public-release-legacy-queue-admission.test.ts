@@ -1,4 +1,4 @@
-import { beforeEach, expect, it } from "vitest";
+import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { isolatedFirestore, clearEmulatorFirestore } from "../helpers/emulator-firestore.js";
 import { releaseSelector } from "../helpers/private-public-release-pair.js";
 import bootstrap from "../../functions/lib/public-release-bootstrap-admission.js";
@@ -20,6 +20,7 @@ const original = { type: "post", status: "draft", version: 7, publiclyVisible: t
 const state = async (path: string) => (await db.doc(path).get()).data();
 const retry = () => recovery.reservePublicationRetry({ firestore: db, actor, changes: [change], baseVersion: 7,
   source: null, transport: "serializer" });
+afterEach(() => vi.unstubAllEnvs());
 beforeEach(async () => {
   await clearEmulatorFirestore(`http://${process.env.FIRESTORE_EMULATOR_HOST}/emulator/v1/projects/demo-njpbs/databases/(default)/documents`, { method: "DELETE" }, db);
   await db.doc("system/publicDeployment").set({ ...deployment.initialPublicDeploymentPointer(), activeGeneration: 1,
@@ -82,6 +83,12 @@ it("refuses the actual staff retry endpoint after the stored operator fence clos
   expect((await state(`cmsPublishQueue/${failedQueue}`))?.error).toBe("retained-original-failure");
 });
 it.each(["github", "serializer"])("refuses a fresh %s enqueue before any queue, audit or dispatch write", async transport => {
+  if (transport === "github") {
+    vi.stubEnv("CMS_DEPLOYMENT_ENVIRONMENT", "development");
+    vi.stubEnv("GCLOUD_PROJECT", "njpbs-site-dev");
+    vi.stubEnv("GOOGLE_CLOUD_PROJECT", "njpbs-site-dev");
+    vi.stubEnv("CMS_PUBLISH_TRANSPORT", "github");
+  }
   await db.doc(bootstrap.BOOTSTRAP_ADMISSION_FENCE_PATH).set(fence);
   await expect(publish.enqueuePublishBuild({ actor, changes: [change], readiness: { transport } }, {
     firestore: db, assertPublishedMediaSafeFn: async () => {}, dispatchUrl: "https://example.test/dispatch",
