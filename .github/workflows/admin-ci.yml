@@ -132,12 +132,12 @@ jobs:
             console.log(JSON.stringify({ chromiumSandbox: true, args: commandLine.split(String.fromCharCode(0)).filter(Boolean) }));
           } finally { await server.close(); }
           NODE
-      - name: Diagnostic, do not merge, repeat mobile cost tab
-        run: npm run test:visual -w njpbs-admin -- tests/visual/cost-ledger-workspace.spec.ts --grep 'hardware conflict recovery replaces only hardware drafts at 390$' --repeat-each 40 --fully-parallel --shard=${{ matrix.shard }}/4
       - name: Admin visual regression
         # Split individual tests so the large specimens file cannot dominate a shard.
         # The config still limits each runner to one worker, preserving capture timing.
         run: npm run test:visual -w njpbs-admin -- --fully-parallel --shard=${{ matrix.shard }}/4
+      - name: Diagnostic, do not merge, repeat mobile cost tab
+        run: npm run test:visual -w njpbs-admin -- tests/visual/cost-ledger-workspace.spec.ts --grep 'hardware conflict recovery replaces only hardware drafts at 390$' --repeat-each 40 --fully-parallel --shard=${{ matrix.shard }}/4
       - name: Upload visual diffs
         if: always()
         uses: actions/upload-artifact@v7
