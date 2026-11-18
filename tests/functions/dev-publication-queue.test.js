@@ -97,6 +97,23 @@ it("stamps new direct dev jobs with the ready renderer's exact cloud owner", asy
     runtime: { owner: "cloudflare", release: sha }, status: "publishing" });
 });
 
+it("settles the development queue without dispatch when the audit write fails", async () => {
+  const logAdminActionFn = vi.fn().mockRejectedValue(new Error("audit unavailable"));
+  const getDevAppTokenFn = vi.fn(appDispatch.getDevAppTokenFn);
+  const fetchImpl = vi.fn(appDispatch.fetchImpl);
+
+  await expect(enqueue({}, { logAdminActionFn, getDevAppTokenFn, fetchImpl })).rejects.toThrow("audit unavailable");
+
+  expect(logAdminActionFn).toHaveBeenCalledOnce();
+  expect(getDevAppTokenFn).not.toHaveBeenCalled();
+  expect(fetchImpl).not.toHaveBeenCalled();
+  const rows = await db.collection("cmsPublishQueue").get();
+  expect(rows.docs.map(row => row.data())).toEqual([expect.objectContaining({
+    transport: "github", status: "failed", error: "audit unavailable",
+    completedAt: expect.any(admin.firestore.Timestamp),
+  })]);
+});
+
 it.each(["writeback", "credentials", "admission"])("refuses development publication before dispatch when %s is missing", async mode => {
   if (mode === "writeback") vi.stubEnv("CMS_WRITEBACK_CONFIGURED", "false");
   if (mode === "credentials") vi.stubEnv("CMS_DEV_PUBLISH_APP_PRIVATE_KEY", "");
