@@ -34,7 +34,11 @@ function functionIdentity(fn) {
     eventFilters: fn.eventFilters, eventFilterPathPatterns: fn.eventFilterPathPatterns, triggerRegion: fn.triggerRegion });
 }
 
-function inventoryRows(functions, scope, targets) {
+// Rows owned by this Firebase codebase. A function deployed by another tool
+// (such as the gcloud-deployed billingKillSwitch) is never this codebase's to
+// retire; record its name in `unowned` and leave it in place. `regional`
+// collects every function name in the region, whatever its owner.
+function inventoryRows(functions, scope, targets, unowned = new Set(), regional = new Set()) {
   if (!Array.isArray(functions) || functions.length > 5000) refuse();
   const rows = new Map();
   for (const fn of functions) {
@@ -42,12 +46,17 @@ function inventoryRows(functions, scope, targets) {
     if (!match || match[1] !== scope.projectId || !["gcfv1", "gcfv2"].includes(fn.platform)
       || !fn.labels || typeof fn.labels !== "object" || Array.isArray(fn.labels)) refuse();
     if (match[2] !== scope.region) continue;
+    regional.add(match[3]);
     const codebase = fn.labels["firebase-functions-codebase"] ?? "default";
     if (codebase !== scope.codebase) {
       if (targets.has(match[3])) refuse();
       continue;
     }
-    if (typeof fn.labels["deployment-tool"] !== "string" || !fn.labels["deployment-tool"].startsWith("cli-firebase")) refuse("ownership_unverified");
+    if (typeof fn.labels["deployment-tool"] !== "string" || !fn.labels["deployment-tool"].startsWith("cli-firebase")) {
+      if (targets.has(match[3])) refuse("ownership_unverified");
+      unowned.add(match[3]);
+      continue;
+    }
     const existing = rows.get(match[3]);
     // Gen-1 resources can appear in both APIs. Prefer their authoritative v1
     // record; conflicting platforms or ownership never collapse silently.
@@ -104,6 +113,14 @@ function retainedEntry(entry, fn, jobs, scope) {
   return { ...entry, origin: { ...entry.origin } };
 }
 
+// `firebase functions:delete <name>` also deletes every function in the
+// `<name>-` group, so a planned deletion must not reach another function.
+// Pass only names whose function is still live: an entry whose function is
+// already gone gets no delete command, only its Scheduler cleanup.
+function refuseGroupReach(regional, names) {
+  for (const live of regional) if (names.some(name => live.startsWith(`${name}-`))) refuse("delete_reaches_unplanned_function");
+}
+
 export function planFunctionRetirements({ scope: rawScope, targetNames, priorNames = [], functions, jobs = [], pendingPlan = null, ...attempt }) {
   const scope = requireRetirementScope(rawScope), targets = names(targetNames), origin = attemptIdentity(attempt);
   if (pendingPlan) validateRetirementPlan(pendingPlan, { ...pendingPlan, scope });
@@ -111,15 +128,19 @@ export function planFunctionRetirements({ scope: rawScope, targetNames, priorNam
   const pending = new Map((pendingPlan?.entries ?? []).filter(entry => !targets.includes(entry.name)).map(entry => [entry.name, entry]));
   if (!Array.isArray(jobs) || jobs.length > 5000) refuse();
   const target = new Set(targets), known = new Set([...targets, ...prior]);
-  const rows = inventoryRows(functions, scope, target);
+  const regional = new Set();
+  const rows = inventoryRows(functions, scope, target, new Set(), regional);
   const entries = [];
   for (const [name, fn] of rows) {
-    if (!known.has(name)) refuse("unknown_live_function");
-    if (target.has(name)) continue;
+    // Retirement deletes only exports a complete receipt recorded. A live
+    // function in neither the source nor that receipt (cmsGetPublishedSettings
+    // on Nov. 18, 2026) stays in place.
+    if (!known.has(name) || target.has(name)) continue;
     entries.push(pending.has(name) ? retainedEntry(pending.get(name), fn, jobs, scope)
       : { name, platform: fn.platform, fingerprint: functionIdentity(fn), scheduler: schedulerFor(fn, scope, jobs), origin });
   }
   for (const entry of pending.values()) if (!rows.has(entry.name)) entries.push(retainedEntry(entry, null, jobs, scope));
+  refuseGroupReach(regional, entries.map(entry => entry.name).filter(name => rows.has(name)));
   for (const name of prior.filter(name => !target.has(name) && !rows.has(name) && !pending.has(name))) {
     const orphan = `projects/${scope.projectId}/locations/${scope.region}/jobs/firebase-schedule-${name}-${scope.region}`;
     if (jobs.some(job => job?.name === orphan)) refuse("orphan_scheduler_without_original_plan");
@@ -158,10 +179,12 @@ export async function applyFunctionRetirements(plan, context, io, selectedNames)
       selected.some(name => !plan.entries.some(entry => entry.name === name))) refuse("invalid_retirement_selection");
   const entries = plan.entries.filter(entry => selected.includes(entry.name));
   // Keep the immutable full plan as the inventory authority in every phase.
-  const targets = new Set(plan.targetNames), known = new Set([...plan.targetNames, ...plan.entries.map(entry => entry.name)]);
+  const targets = new Set(plan.targetNames);
   const census = async () => {
-    const rows = inventoryRows(await io.listFunctions(), plan.scope, targets);
-    if ([...rows.keys()].some(name => !known.has(name))) refuse("unknown_live_function");
+    const unowned = new Set(), regional = new Set();
+    const rows = inventoryRows(await io.listFunctions(), plan.scope, targets, unowned, regional);
+    if (entries.some(entry => unowned.has(entry.name))) refuse("ownership_unverified");
+    refuseGroupReach(regional, entries.map(entry => entry.name).filter(name => rows.has(name)));
     return rows;
   };
   const readJob = async entry => {
