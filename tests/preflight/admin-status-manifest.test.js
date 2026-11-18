@@ -150,7 +150,7 @@ describe("admin status build contract", () => {
     expect(workflow).toContain("issues: read");
     expect(workflow).toContain("ADMIN_STATUS_MANIFEST_BASE64");
     expect(workflow).toContain("Check out current Admin status gate");
-    expect(workflow).toContain("node scripts/admin-status-manifest.mjs");
+    expect(workflow).toContain('node "$RUNNER_TEMP/admin-status-gate/scripts/admin-status-manifest.mjs"');
     expect(workflow).toContain('--milestones "$RUNNER_TEMP/admin-milestones.json"');
     expect(workflow).not.toContain("milestones/16");
     expect(workflow).not.toContain("VITE_GITHUB");

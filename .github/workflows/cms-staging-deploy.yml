@@ -277,8 +277,9 @@ jobs:
           GITHUB_TOKEN: ""
         run: |
           set -euo pipefail
+          # The trusted main checkout builds this metadata, like the other gate scripts.
           manifest="$({
-            node scripts/admin-status-manifest.mjs \
+            node "$RUNNER_TEMP/admin-status-gate/scripts/admin-status-manifest.mjs" \
               --environment Production \
               --milestones "$RUNNER_TEMP/admin-milestones.json" \
               --repository "$GITHUB_REPOSITORY" \
