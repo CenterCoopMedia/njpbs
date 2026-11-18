@@ -1336,6 +1336,7 @@ jobs:
         env:
           CMS_PREVIEW_FIREBASE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
           CMS_PREVIEW_R2_CREDENTIAL: ${{ secrets.CMS_PREVIEW_R2_CREDENTIAL }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CMS_PREVIEW_TRANSPORT: ${{ vars.CMS_PREVIEW_TRANSPORT || 'serializer' }}
           RENDERER_SHA: ${{ needs.admin-build.outputs.deploy_sha }}
@@ -1465,6 +1466,7 @@ jobs:
         env:
           CMS_PREVIEW_FIREBASE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
           CMS_PREVIEW_R2_CREDENTIAL: ${{ secrets.CMS_PREVIEW_R2_CREDENTIAL }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CMS_PREVIEW_TRANSPORT: ${{ vars.CMS_PREVIEW_TRANSPORT || 'serializer' }}
           RENDERER_SHA: ${{ needs.admin-build.outputs.deploy_sha }}
@@ -1498,6 +1500,7 @@ jobs:
         env:
           CMS_PREVIEW_FIREBASE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
           CMS_PREVIEW_R2_CREDENTIAL: ${{ secrets.CMS_PREVIEW_R2_CREDENTIAL }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CMS_PREVIEW_TRANSPORT: ${{ vars.CMS_PREVIEW_TRANSPORT || 'serializer' }}
           RENDERER_SHA: ${{ needs.admin-build.outputs.deploy_sha }}

@@ -8,6 +8,14 @@ const step = name => steps.find(value => value.name === name);
 const position = name => steps.findIndex(value => value.name === name);
 
 describe("selective preview pause boundary", () => {
+  // Run 44317559254 stopped at the first pause step: the preview cloud script
+  // reads the account from its environment and the step did not pass it.
+  it("passes the Cloudflare account to every step that runs the preview cloud script", () => {
+    const users = Object.values(workflow.jobs).flatMap(job => job.steps ?? [])
+      .filter(value => value.run?.includes("deploy-cms-preview-cloud.ts"));
+    expect(users.length).toBeGreaterThanOrEqual(4);
+    for (const value of users) expect(value.env?.CLOUDFLARE_ACCOUNT_ID, value.name).toBe("${{ secrets.CLOUDFLARE_ACCOUNT_ID }}");
+  });
   it("checks production reader refusals before preview can pause and plans API before reserving its candidate", () => {
     const preflight = "Preflight production reader attempts before preview admission can pause";
     expect(position(preflight)).toBeGreaterThan(-1);
