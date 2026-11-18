@@ -2,7 +2,9 @@
 
 The [relay](../../publisher/alerts.ts) is independent of the publisher container.
 It accepts only the configured authenticated healthcheck webhook and forwards a
-bounded report to `ALERT_INTAKE_URL`. It holds no messaging-bot credential.
+bounded failure or unclassified triage report to `ALERT_INTAKE_URL`. It holds
+no messaging-bot credential. Recovery and provider webhook tests receive a 204
+acknowledgment with no intake request.
 Deployment and notification delivery each require separate authorization/proof.
 
 ## Configuration and release order
@@ -51,22 +53,22 @@ secrets or assume one Worker's deployment rotated the other.
 ## Identity, ambiguity and recovery
 
 Structured start/end or explicit healthy/unhealthy state determines transition.
-Unknown state remains unclassified triage, never implied recovery. Valid
+Unknown state goes to operator triage. Valid
 correlation/check/time after `ALERT_TRANSITION_CUTOVER` yields a stable transition
 key; retries of that transition retain it and later recurrence gets a new key.
-Delivery time never participates. Legacy/missing/invalid timestamps retain the
-documented degraded correlation identity; do not promise recurrence delivery.
+Delivery time never participates. Legacy/missing/invalid timestamps use the
+existing correlation identity, which can group later failures.
 
 The cutover remains fixed for the lifetime of an active deployment. A new
 identity transition requires a reviewed future boundary, 100% active version
 readback and allowance for in-flight old requests before that boundary. Missing
 that allowance stops qualification. Never silently move an already used cutover
-or rewrite stored reports. Recovery does not close issues or alter a failure's
-handled state. Informational webhook tests have their own submission identity.
+or rewrite stored reports. Read recovery in the provider's health-check history.
 
-Relay success requires durable intake acceptance with matching report ID; it
-does not establish actual notification delivery. Keep the receiving outbox's
+Failure delivery through the relay requires durable intake acceptance with the
+matching report ID. Verify notification delivery separately. Keep the outbox's
 bounded retries and unknown-outcome reconciliation. Crash between delivery and
 receipt can still duplicate a notification; retain the same report/action guard.
-Verify durable report readback, intended failure/recovery controls and eventual
-delivery separately. Do not replay historical live alerts as a test.
+Verify durable report readback, failure controls, recovery history and eventual
+failure delivery separately. Use the webhook test for relay acknowledgment. Do
+not replay historical live alerts as a test.

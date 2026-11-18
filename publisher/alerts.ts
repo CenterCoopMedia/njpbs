@@ -152,8 +152,6 @@ function validatedText(payload: Record<string, unknown>, accountId: string): str
   return payload.text;
 }
 
-type PublisherEvent = "failure" | "recovery" | "test";
-
 // Cloudflare health-check timestamps are UTC RFC 3339. Date.parse alone also
 // accepts invalid calendar dates and non-standard formats, so check both.
 function transitionTimestamp(value: unknown, maxFractionalDigits = 9): number | null {
@@ -172,71 +170,52 @@ async function publisherReport(
   payload: Record<string, unknown>, text: string, cutover: string | undefined,
 ) {
   const data = object(payload.data);
-  let event: PublisherEvent;
-  let identity: string;
-  let unclassified = false;
   if (
     !data &&
     Object.keys(payload).length === 1 &&
     text.startsWith("Hello World! This is a test message")
+  ) return null;
+
+  // Structured transitions take precedence over legacy status fields.
+  if (payload.alert_event === "ALERT_STATE_EVENT_END") return null;
+  const rawStatus = data?.new_health_status ?? data?.new_status ?? data?.status;
+  const status = typeof rawStatus === "string" ? rawStatus.trim().toLowerCase() : "";
+  const explicitFailure = payload.alert_event === "ALERT_STATE_EVENT_START";
+  if (!explicitFailure && status === "healthy") return null;
+  const unclassified = !explicitFailure && status !== "unhealthy";
+
+  const rawCheckId = data?.health_check_id;
+  const checkId =
+    typeof rawCheckId === "string" &&
+    /^[A-Za-z0-9_-]{1,128}$/.test(rawCheckId)
+      ? rawCheckId
+      : "publisher-health";
+  const correlation = payload.alert_correlation_id;
+  let identity: string;
+  if (
+    typeof correlation === "string" &&
+    /^[A-Za-z0-9_-]{1,128}$/.test(correlation)
   ) {
-    event = "test";
-    // Each manual test must exercise delivery, even after an earlier test card.
-    identity = `cloudflare-webhook-test:${crypto.randomUUID()}`;
+    const transition = transitionTimestamp(data?.status_change_time);
+    // Date.parse preserves milliseconds; the cutover must be exact at that precision.
+    const boundary = transitionTimestamp(cutover, 3);
+    // Correlation can span several outages. After the fixed cutover,
+    // incidentId identifies one transition. Older retries retain their persisted key.
+    identity = transition !== null && boundary !== null && transition >= boundary
+      ? JSON.stringify([checkId, correlation, data?.status_change_time])
+      : JSON.stringify([checkId, correlation]);
   } else {
-    // Use structured state, never words in the human-readable notification.
-    if (payload.alert_event === "ALERT_STATE_EVENT_START") event = "failure";
-    else if (payload.alert_event === "ALERT_STATE_EVENT_END")
-      event = "recovery";
-    else {
-      const status = String(
-        data?.new_health_status ?? data?.new_status ?? data?.status ?? "",
-      )
-        .trim()
-        .toLowerCase();
-      if (status === "healthy") event = "recovery";
-      else {
-        // A valid authenticated notification must still reach triage if the
-        // provider omits or extends its state fields. Never infer recovery.
-        event = "failure";
-        unclassified = status !== "unhealthy";
-      }
-    }
-    const rawCheckId = data?.health_check_id;
-    const checkId =
-      typeof rawCheckId === "string" &&
-      /^[A-Za-z0-9_-]{1,128}$/.test(rawCheckId)
-        ? rawCheckId
-        : "publisher-health";
-    const correlation = payload.alert_correlation_id;
+    const time = data?.status_change_time;
     if (
-      typeof correlation === "string" &&
-      /^[A-Za-z0-9_-]{1,128}$/.test(correlation)
+      typeof time === "string" &&
+      time.length > 0 &&
+      time.length <= 128 &&
+      !/[\u0000-\u001f\u007f]/.test(time)
     ) {
-      const transition = transitionTimestamp(data?.status_change_time);
-      // Date.parse preserves milliseconds; the cutover must be exact at that precision.
-      const boundary = transitionTimestamp(cutover, 3);
-      // Correlation can span several outages. After the fixed cutover,
-      // incidentId identifies a transition; failure/recovery are not a pair.
-      // Delayed pre-cutover retries retain their original persisted key.
-      identity = transition !== null && boundary !== null && transition >= boundary
-        ? JSON.stringify([checkId, correlation, data?.status_change_time])
-        : JSON.stringify([checkId, correlation]);
+      identity = JSON.stringify([checkId, time]);
     } else {
-      const time = data?.status_change_time;
-      if (
-        typeof time === "string" &&
-        time.length > 0 &&
-        time.length <= 128 &&
-        !/[\u0000-\u001f\u007f]/.test(time)
-      ) {
-        identity = JSON.stringify([checkId, time]);
-      } else {
-        // Last resort: repeated identical legacy notifications share a key.
-        // Changed evidence can create another card without a provider identity;
-        // retaining an alert is preferable to losing the only outage signal.
-        identity = JSON.stringify([checkId, event, text]);
-      }
+      // Repeated identical notifications without an identity share a key.
+      identity = JSON.stringify([checkId, "failure", text]);
     }
   }
   const digest = new Uint8Array(
@@ -247,15 +226,11 @@ async function publisherReport(
   ).join("");
   const heading = unclassified
     ? "[publisher] Unclassified health notification — verify publisher health"
-    : {
-        failure: "[publisher] Publisher health check failed",
-        recovery: "[publisher] Publisher health check recovered",
-        test: "[publisher] Alert relay test",
-      }[event];
+    : "[publisher] Publisher health check failed";
   return {
     source: "publisher",
     incidentId,
-    event,
+    event: "failure",
     description: Array.from(`${heading}\n\n${text}`).slice(0, 2_000).join(""),
     url: HEALTH_URL,
   };
@@ -310,7 +285,7 @@ async function sendReport(
   }
   return intakeReceipt(
     response,
-    `publisher-${report.event[0]}-${report.incidentId}`,
+    `publisher-f-${report.incidentId}`,
   );
 }
 
@@ -345,6 +320,7 @@ export async function handleAlert(
   if (text === null) return emptyResponse(400);
 
   const report = await publisherReport(payload, text, env.ALERT_TRANSITION_CUTOVER);
+  if (report === null) return emptyResponse(204);
   if (!(await sendReport(report, env, requestFn))) return emptyResponse(502);
   return emptyResponse(204);
 }

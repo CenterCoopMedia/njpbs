@@ -133,6 +133,7 @@ describe("Cloudflare health-check report relay", () => {
         text: "Origin unhealthy",
         url: "https://attacker.example/",
         chat_id: "other",
+        data: { ...EVENT.data, new_health_status: "healthy" },
       }),
       environment(),
       requestFn,
@@ -170,12 +171,11 @@ describe("Cloudflare health-check report relay", () => {
     ]);
   });
 
-  it("deduplicates retries by incident identity despite changed text and keeps recovery separate", async () => {
+  it("deduplicates failure retries by incident identity despite changed text", async () => {
     const requestFn = mockedFetch();
     for (const body of [
       { text: "First notification" },
       { text: "Updated failure notification" },
-      { text: "Recovered now", alert_event: "ALERT_STATE_EVENT_END" },
     ]) {
       expect(
         (await handleAlert(alertRequest(body), environment(), requestFn))
@@ -189,7 +189,6 @@ describe("Cloudflare health-check report relay", () => {
     expect(bodies.map((b) => b.event)).toEqual([
       "failure",
       "failure",
-      "recovery",
     ]);
     await handleAlert(
       alertRequest({
@@ -200,7 +199,7 @@ describe("Cloudflare health-check report relay", () => {
       requestFn,
     );
     expect(
-      JSON.parse(String(requestFn.mock.calls[3][1]?.body)).incidentId,
+      JSON.parse(String(requestFn.mock.calls[2][1]?.body)).incidentId,
     ).not.toBe(bodies[0].incidentId);
   });
 
@@ -220,9 +219,10 @@ describe("Cloudflare health-check report relay", () => {
       }), env, requestFn)).status).toBe(204);
     }
     const ids = requestFn.mock.calls.map(([, init]) => JSON.parse(String(init?.body)).incidentId);
+    expect(ids).toHaveLength(4);
     expect(ids[1]).toBe(ids[0]);
-    expect(ids[4]).toBe(ids[0]);
-    expect(new Set([ids[0], ids[2], ids[3]]).size).toBe(3);
+    expect(ids[3]).toBe(ids[0]);
+    expect(ids[2]).not.toBe(ids[0]);
   });
 
   it("preserves pre-cutover keys for late delivery and missing configuration", async () => {
@@ -278,7 +278,7 @@ describe("Cloudflare health-check report relay", () => {
     ).toBe(JSON.parse(String(requestFn.mock.calls[1][1]?.body)).incidentId);
   });
 
-  it("accepts Cloudflare's text-only test as an informational report", async () => {
+  it("acknowledges Cloudflare's text-only webhook test without sending intake", async () => {
     const requestFn = mockedFetch();
     const response = await handleAlert(
       alertRequest(
@@ -288,27 +288,7 @@ describe("Cloudflare health-check report relay", () => {
       requestFn,
     );
     expect(response.status).toBe(204);
-    expect(JSON.parse(String(requestFn.mock.calls[0][1]?.body)).event).toBe(
-      "test",
-    );
-  });
-
-  it("gives repeated webhook tests distinct report IDs for card delivery", async () => {
-    const requestFn = mockedFetch();
-    const raw = JSON.stringify({ text: "Hello World! This is a test message." });
-    for (let run = 0; run < 2; run++) {
-      expect(
-        (await handleAlert(alertRequest(raw), environment(), requestFn)).status,
-      ).toBe(204);
-    }
-    const reports = requestFn.mock.calls.map(([, init]) =>
-      JSON.parse(String(init?.body)),
-    );
-    for (const report of reports) {
-      expect(report.event).toBe("test");
-      expect(report.incidentId).toMatch(/^[a-f0-9]{32}$/);
-    }
-    expect(reports[1].incidentId).not.toBe(reports[0].incidentId);
+    expect(requestFn).not.toHaveBeenCalled();
   });
 
   it.each([
@@ -334,11 +314,11 @@ describe("Cloudflare health-check report relay", () => {
   );
 
   it.each(["new_health_status", "new_status", "status"])(
-    "uses legacy %s and retains unclassified text-only alerts",
+    "skips healthy legacy %s and sends unhealthy and unclassified notifications",
     async (field) => {
       const requestFn = mockedFetch();
       for (const status of ["Healthy", "Unhealthy"]) {
-        await handleAlert(
+        const response = await handleAlert(
           alertRequest({
             text: "Legacy status changed",
             alert_event: null,
@@ -347,6 +327,7 @@ describe("Cloudflare health-check report relay", () => {
           environment(),
           requestFn,
         );
+        expect(response.status).toBe(204);
       }
       await handleAlert(
         alertRequest(JSON.stringify({ text: "Unspecified health notification" })),
@@ -357,14 +338,13 @@ describe("Cloudflare health-check report relay", () => {
         JSON.parse(String(init?.body)),
       );
       expect(bodies.map((body) => body.event)).toEqual([
-        "recovery",
         "failure",
         "failure",
       ]);
       expect(bodies[0].description).toBe(
-        "[publisher] Publisher health check recovered\n\nLegacy status changed",
+        "[publisher] Publisher health check failed\n\nLegacy status changed",
       );
-      expect(bodies[2].description).toContain("Unclassified health notification");
+      expect(bodies[1].description).toContain("Unclassified health notification");
     },
   );
 
