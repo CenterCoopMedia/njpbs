@@ -319,6 +319,7 @@ describe("CMS deploy one commit past the live renderer", () => {
     ".github/scripts/require-main-ci.test.mjs",
     "config/functions-deployment.json",
     "scripts/admin-status-manifest.mjs",
+    "scripts/lib/functions-retirement.mjs",
     "docs/cms/admin-deploy.md",
     "docs/cms/functions-deploy.md",
     "tests/preflight/admin-status-manifest.test.js",

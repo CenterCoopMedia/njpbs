@@ -39,11 +39,33 @@ describe("manifest-scoped Functions retirement", () => {
     expect(() => fixture([fn("health", { labels: other.labels })])).toThrow();
   });
 
+  // Live inventory on Nov. 18, 2026: billingKillSwitch was deployed by gcloud
+  // with no codebase label, and cmsGetPublishedSettings was in neither the
+  // source nor the last complete receipt. Retirement leaves both in place.
   it.each([
-    () => [fn("health"), fn("unknown")],
-    () => [fn("health"), { ...scheduled("oldHandler"), platform: "gcfv1", versionId: "1" }],
+    () => [fn("health"), fn("cmsGetPublishedSettings")],
+    () => [fn("health"), fn("billingKillSwitch", { labels: { "deployment-tool": "cli-gcloud" } })],
     () => [fn("health"), fn("oldHandler", { labels: {} })],
     () => [fn("health"), fn("oldHandler", { labels: { "deployment-tool": "manual" } })],
+  ])("leaves functions this codebase cannot prove it owns in place", async inventory => {
+    const test = fixture(inventory());
+    expect(test.plan.entries).toEqual([]);
+    expect(await applyFunctionRetirements(test.plan, context, test.io)).toEqual({ retired: 0 });
+    expect(test.io.deleteFunction).not.toHaveBeenCalled();
+  });
+
+  it("refuses a deploy target that another tool deployed", () => {
+    expect(() => fixture([fn("health", { labels: { "deployment-tool": "cli-gcloud" } })])).toThrow("ownership_unverified");
+  });
+
+  it("leaves a function added after planning in place", async () => {
+    const test = fixture(); test.functions([fn("health"), fn("oldHandler"), fn("cmsGetPublishedSettings")]);
+    expect(await applyFunctionRetirements(test.plan, context, test.io)).toEqual({ retired: 1 });
+    expect(test.io.deleteFunction).toHaveBeenCalledExactlyOnceWith("oldHandler", scope);
+  });
+
+  it.each([
+    () => [fn("health"), { ...scheduled("oldHandler"), platform: "gcfv1", versionId: "1" }],
     () => [fn("health"), fn("oldHandler", { updateTime: null })],
     () => [fn("health"), fn("oldHandler", { name: "projects/foreign-project/locations/us-central1/functions/oldHandler" })],
   ])("refuses incomplete scope/ownership before mutation", inventory => {

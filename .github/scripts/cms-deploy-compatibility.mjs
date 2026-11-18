@@ -338,6 +338,7 @@ const CMS_ONLY_DEPLOY_PATHS = [
   ".github/scripts/require-main-ci.test.mjs", // CI gate test; not run/imported by publisher builds or runtime.
   "config/functions-deployment.json", // Functions deploy scope and media secret references; read by configure-cms-functions.mjs.
   "scripts/admin-status-manifest.mjs", // Admin status manifest generator run by the CMS workflow.
+  "scripts/lib/functions-retirement.mjs", // Functions retirement plan run by the CMS workflow's firebase job.
   "docs/cms/admin-deploy.md", // Operator prose, never a renderer/build input.
   "docs/cms/functions-deploy.md", // Operator prose, never a renderer/build input.
   "tests/preflight/", // CI preflight tests; not run/imported by publisher builds or runtime.
