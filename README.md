@@ -78,6 +78,13 @@ names and consecutive annotation lines are supported). Run
 to check the reader forms and current source inventory. Only names are stored or
 reported; configuration values stay outside the contract.
 
+`config/step-inputs.json` lists the named environment inputs that the
+CMS staging and publisher image entry scripts require across their workflow
+invocations. An empty list records an audited script with no common required
+setting. Update the contract alongside an entry script's requirements.
+Hosted Policy CI checks the script inventory, explicit required reads, step
+wiring and secret or variable references using the declared supplier names.
+
 The [release surface registry](docs/release/surface-registry.md) records tracked
 workflows, Wrangler config variants, Functions exports and state-machine owner
 paths. Hosted Policy CI rejects missing or stale surface entries. Update the
