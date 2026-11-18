@@ -848,7 +848,11 @@ jobs:
         with:
           ref: ${{ github.sha }}
           path: .release-gate
-          sparse-checkout: .github/scripts
+          sparse-checkout-cone-mode: false
+          sparse-checkout: |
+            .github/scripts
+            scripts/render-development-config.mjs
+            config/development-inputs.json
           persist-credentials: false
       - name: Isolate trusted release-gate checkout
         run: |
@@ -863,41 +867,15 @@ jobs:
           set -euo pipefail
           git fetch origin main:refs/remotes/origin/main
           node "$RUNNER_TEMP/release-gate"/.github/scripts/require-release-source.mjs
-      - name: Check out current metered-API scanner
-        uses: actions/checkout@v7
-        with:
-          ref: ${{ github.sha }}
-          path: .metered-api-gate
-          sparse-checkout: .github/scripts
-          persist-credentials: false
-      - name: Isolate trusted metered-api-gate checkout
-        run: |
-          set -euo pipefail
-          mv .metered-api-gate "$RUNNER_TEMP/metered-api-gate"
-          ln -s "$GITHUB_WORKSPACE/node_modules" "$RUNNER_TEMP/metered-api-gate/node_modules"
       - name: Require pinned release and trusted workflow identities
         env:
           CMS_RELEASE_CHECKS_SHA: ${{ inputs.deploy_ref }}
           CMS_TRUSTED_WORKFLOW_SHA: ${{ github.sha }}
         run: node "$RUNNER_TEMP/release-gate"/.github/scripts/require-cms-release-sources.mjs
       - name: Metered-API source scan (before any scanned code runs)
-        run: node "$RUNNER_TEMP/metered-api-gate"/.github/scripts/metered-api-scan.mjs --target-root "$GITHUB_WORKSPACE"
-      - name: Check out trusted configuration renderer
-        uses: actions/checkout@v7
-        with:
-          ref: ${{ github.sha }}
-          path: .configuration-render-gate
-          persist-credentials: false
-          sparse-checkout: |
-            scripts/render-development-config.mjs
-            config/development-inputs.json
-          sparse-checkout-cone-mode: false
+        run: node "$RUNNER_TEMP/release-gate"/.github/scripts/metered-api-scan.mjs --target-root "$GITHUB_WORKSPACE"
       - name: Render deployment resource configuration
-        working-directory: ${{ github.workspace }}
-        run: |
-          set -euo pipefail
-          mv .configuration-render-gate "$RUNNER_TEMP/configuration-render-gate"
-          node "$RUNNER_TEMP/configuration-render-gate/scripts/render-development-config.mjs" --production --root "$GITHUB_WORKSPACE"
+        run: node "$RUNNER_TEMP/release-gate/scripts/render-development-config.mjs" --production --root "$GITHUB_WORKSPACE"
       - name: Refuse the retired settings-probe bypass
         run: |
           set -euo pipefail
@@ -1111,7 +1089,11 @@ jobs:
         with:
           ref: ${{ github.sha }}
           path: .release-gate
-          sparse-checkout: .github/scripts
+          sparse-checkout-cone-mode: false
+          sparse-checkout: |
+            .github/scripts
+            scripts/render-development-config.mjs
+            config/development-inputs.json
           persist-credentials: false
       - name: Isolate trusted release-gate checkout
         run: |
@@ -1126,41 +1108,15 @@ jobs:
           set -euo pipefail
           git fetch origin main:refs/remotes/origin/main
           node "$RUNNER_TEMP/release-gate"/.github/scripts/require-release-source.mjs
-      - name: Check out current metered-API scanner
-        uses: actions/checkout@v7
-        with:
-          ref: ${{ github.sha }}
-          path: .metered-api-gate
-          sparse-checkout: .github/scripts
-          persist-credentials: false
-      - name: Isolate trusted metered-api-gate checkout
-        run: |
-          set -euo pipefail
-          mv .metered-api-gate "$RUNNER_TEMP/metered-api-gate"
-          ln -s "$GITHUB_WORKSPACE/node_modules" "$RUNNER_TEMP/metered-api-gate/node_modules"
       - name: Require pinned release and trusted workflow identities
         env:
           CMS_RELEASE_CHECKS_SHA: ${{ inputs.deploy_ref }}
           CMS_TRUSTED_WORKFLOW_SHA: ${{ github.sha }}
         run: node "$RUNNER_TEMP/release-gate"/.github/scripts/require-cms-release-sources.mjs
-      - name: Check out trusted configuration renderer
-        uses: actions/checkout@v7
-        with:
-          ref: ${{ github.sha }}
-          path: .configuration-render-gate
-          persist-credentials: false
-          sparse-checkout: |
-            scripts/render-development-config.mjs
-            config/development-inputs.json
-          sparse-checkout-cone-mode: false
       - name: Render deployment resource configuration
-        working-directory: ${{ github.workspace }}
-        run: |
-          set -euo pipefail
-          mv .configuration-render-gate "$RUNNER_TEMP/configuration-render-gate"
-          node "$RUNNER_TEMP/configuration-render-gate/scripts/render-development-config.mjs" --production --root "$GITHUB_WORKSPACE"
+        run: node "$RUNNER_TEMP/release-gate/scripts/render-development-config.mjs" --production --root "$GITHUB_WORKSPACE"
       - name: Metered-API source scan (before any scanned code runs)
-        run: node "$RUNNER_TEMP/metered-api-gate"/.github/scripts/metered-api-scan.mjs --target-root "$GITHUB_WORKSPACE"
+        run: node "$RUNNER_TEMP/release-gate"/.github/scripts/metered-api-scan.mjs --target-root "$GITHUB_WORKSPACE"
       - uses: actions/setup-node@v7
         with:
           node-version: "22.23.5"
@@ -1626,7 +1582,11 @@ jobs:
         with:
           ref: ${{ github.sha }}
           path: .release-gate
-          sparse-checkout: .github/scripts
+          sparse-checkout-cone-mode: false
+          sparse-checkout: |
+            .github/scripts
+            scripts/render-development-config.mjs
+            config/development-inputs.json
           persist-credentials: false
       - name: Isolate trusted release-gate checkout
         if: vars.CMS_PREVIEW_CLOUD_ENABLED == 'true'
@@ -1640,20 +1600,6 @@ jobs:
           EMERGENCY_RELEASE: ${{ inputs.emergency_release || false }}
           EMERGENCY_AUTHORIZATION: ${{ inputs.emergency_authorization || '' }}
         run: node "$RUNNER_TEMP/release-gate"/.github/scripts/require-release-source.mjs
-      - name: Check out current metered-API scanner
-        if: vars.CMS_PREVIEW_CLOUD_ENABLED == 'true'
-        uses: actions/checkout@v7
-        with:
-          ref: ${{ github.sha }}
-          path: .metered-api-gate
-          sparse-checkout: .github/scripts
-          persist-credentials: false
-      - name: Isolate trusted metered-api-gate checkout
-        if: vars.CMS_PREVIEW_CLOUD_ENABLED == 'true'
-        run: |
-          set -euo pipefail
-          mv .metered-api-gate "$RUNNER_TEMP/metered-api-gate"
-          ln -s "$GITHUB_WORKSPACE/node_modules" "$RUNNER_TEMP/metered-api-gate/node_modules"
       - name: Require pinned release and trusted workflow identities
         env:
           CMS_RELEASE_CHECKS_SHA: ${{ inputs.deploy_ref }}
@@ -1662,25 +1608,10 @@ jobs:
         run: node "$RUNNER_TEMP/release-gate"/.github/scripts/require-cms-release-sources.mjs
       - name: Metered-API source scan (before any scanned code runs)
         if: vars.CMS_PREVIEW_CLOUD_ENABLED == 'true'
-        run: node "$RUNNER_TEMP/metered-api-gate"/.github/scripts/metered-api-scan.mjs --target-root "$GITHUB_WORKSPACE"
-      - name: Check out trusted configuration renderer
-        uses: actions/checkout@v7
-        if: vars.CMS_PREVIEW_CLOUD_ENABLED == 'true'
-        with:
-          ref: ${{ github.sha }}
-          path: .configuration-render-gate
-          persist-credentials: false
-          sparse-checkout: |
-            scripts/render-development-config.mjs
-            config/development-inputs.json
-          sparse-checkout-cone-mode: false
+        run: node "$RUNNER_TEMP/release-gate"/.github/scripts/metered-api-scan.mjs --target-root "$GITHUB_WORKSPACE"
       - name: Render deployment resource configuration
         if: vars.CMS_PREVIEW_CLOUD_ENABLED == 'true'
-        working-directory: ${{ github.workspace }}
-        run: |
-          set -euo pipefail
-          mv .configuration-render-gate "$RUNNER_TEMP/configuration-render-gate"
-          node "$RUNNER_TEMP/configuration-render-gate/scripts/render-development-config.mjs" --production --root "$GITHUB_WORKSPACE"
+        run: node "$RUNNER_TEMP/release-gate/scripts/render-development-config.mjs" --production --root "$GITHUB_WORKSPACE"
       - uses: actions/setup-node@v7
         if: vars.CMS_PREVIEW_CLOUD_ENABLED == 'true'
         with:

@@ -247,8 +247,9 @@ describe("metered-API source scan runs before any scanned code executes", () => 
         ".cms-smoke-gate",
         "uses: google-github-actions/auth@7c6bc770dae815cd3e89ee6cdf493a5fab2cc093 # v3",
       ],
-      ["cms-api", ".metered-api-gate", "run: npm ci --ignore-scripts"],
-      ["firebase", ".metered-api-gate", "run: npm ci --ignore-scripts"],
+      ["cms-api", ".release-gate", "run: npm ci --ignore-scripts"],
+      ["firebase", ".release-gate", "run: npm ci --ignore-scripts"],
+      ["preview-renderer", ".release-gate", "npm ci --ignore-scripts --no-audit --no-fund"],
       [
         "live-smoke",
         ".cms-smoke-gate",
@@ -314,13 +315,17 @@ describe("metered-API source scan runs before any scanned code executes", () => 
     );
   });
 
-  it.each([["cms-api", ".metered-api-gate"], ["firebase", ".metered-api-gate"], ["admin-deploy", ".metered-api-gate"]])(
+  it.each([["cms-api", ".release-gate"], ["firebase", ".release-gate"], ["preview-renderer", ".release-gate"], ["admin-deploy", ".metered-api-gate"]])(
     "keeps trusted scripts separate from release operators in the gate checkout for %s",
     (name, directory) => {
       const job = workflowJob(cmsStaging, name);
       const checkout = parse(cmsStaging).jobs[name].steps.find((step: { with?: { path?: string } }) => step.with?.path === directory);
       expect(checkout.with.ref).toBe("${{ github.sha }}");
-      expect(checkout.with["sparse-checkout"]).toBe(".github/scripts");
+      expect(checkout.with["persist-credentials"]).toBe(false);
+      const paths = checkout.with["sparse-checkout"].trim().split("\n");
+      expect(paths).toEqual(directory === ".release-gate"
+        ? [".github/scripts", "scripts/render-development-config.mjs", "config/development-inputs.json"]
+        : [".github/scripts"]);
     },
   );
 
