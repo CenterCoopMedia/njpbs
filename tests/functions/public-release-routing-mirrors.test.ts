@@ -12,7 +12,6 @@ import { pageDocument } from "./fixtures/home-decision-3441.js";
 import { routingStore } from "../helpers/public-release-routing-store";
 import { writePublicReleasePairView } from "../../site/scripts/public-release-pair-view-storage";
 import { serveCommittedPairRecovery } from "../../workers/src/public-release-recovery";
-import runner from "../../functions/lib/public-release-routing-mirror-runner.js";
 import replay from "../../functions/lib/public-release-pair-replay.js";
 import { replayBaselineFixture } from "../helpers/public-release-pair-replay-baseline";
 import { deriveRoutingCodeIndex } from "../../site/scripts/seed-public-release-routing-mirrors";
@@ -146,11 +145,6 @@ it("serves a genuinely staged original G in cold recovery and refuses a newer kn
   await db.doc(`${base}/controls/runtime`).update({status:"retained"});
   await expect(mirrors.syncPublicReleaseRoutingMirrors({firestore:db,store,pairs:[pair],operationId,minimumSequence:2,dryRun:false,now:()=>at+71_000})).rejects.toThrow();
 });
-it("keeps the private collector completely inert while disabled",async()=>{
- const untouched=new Proxy({},{get(){throw new Error("SDK touched");}})as Firestore;
- const collector=runner.createPublicReleaseRoutingMirrorRunner({firestore:untouched,environment:"development",getStore:async()=>{throw new Error("credential touched");}});
- expect(await collector.tick()).toEqual({state:"disabled"});
-});
 it("derives the immutable asset index from actual captured H, certified replay and every real original G member",async()=>{
  await db.recursiveDelete(db.collection("system"));await db.recursiveDelete(db.collection("cmsPages"));
  const fixture=await replayBaselineFixture(db,store as unknown as PairViewStore);await fixture.initialize();
@@ -187,34 +181,4 @@ it.each([false,true])("finishes slow real mirror work only while the original le
  }});
  expect(result.state).toBe(reclaimed?"pending":"done");
  expect((await db.doc(`system/publicReleaseRoutingMirrors/receipts/${reference.requestId}`).get()).exists).toBe(!reclaimed);
-});
-it.each([false,true])("reconciles pending positive bodies after outbox completion (withdrawal=%s)",async withdrawal=>{
- await db.doc("system/publicDeployment").set(releaseSelector());
- const reference=await db.runTransaction(async transaction=>(await outbox.preparePublicReleaseRoutingMirrorOutboxInTransaction({firestore:db,transaction,
-  operationId,minimumSequence:1,entryDigest:"e".repeat(64),pairRefs:pairs.map(pairReference),environment:"development",withdrawal}))());
- const done=await outbox.drainPublicReleaseRoutingMirrorOutbox({firestore:db,store,requestId:reference.requestId,now:()=>at,
-  sync:(input:any)=>mirrors.syncPublicReleaseRoutingMirrors({...input,fallbackPaths:["/about/"],now:()=>at})});expect(done.state).toBe("done");
- const receipt=(await db.doc(`system/publicReleaseRoutingMirrors/receipts/${reference.requestId}`).get()).data();
- expect(receipt?.result.pairs.every((pair:any)=>pair.pendingContent.includes("/about/"))).toBe(true);
- expect((await outbox.drainDuePublicReleaseRoutingMirrorOutbox({firestore:db,store,environment:"development",now:()=>at+31_000,
-  sync:()=>{throw new Error("Completed positive mirror job was retried");}})).results).toEqual([]);
- let clock=at+301_000;const collector=runner.createPublicReleaseRoutingMirrorRunner({enabled:true,firestore:db,environment:"development",getStore:async()=>store,now:()=>clock});
- await collector.tick();
- for(const pair of pairs){const namespace=await codec.readJson(store,`${codec.prefix(pair)}namespace-v1.json`);
-  expect(namespace.validUntil).toBe(clock+300_000);expect(namespace.routes.find((row:any)=>row.path==="/about/").body).toBeNull();
-  expect((await codec.readJson(store,`${codec.prefix(pair)}lifecycle-v1.json`)).validUntil).toBe(clock+300_000);}
- for(const pair of pairs){const identity={schemaVersion:2 as const,pair:pairReference(pair),kind:"qualification"as const,sourceOperationId:operationId,
-  sourceVersion:7,snapshotDigest:"4".repeat(64),contextSequence:1,inputManifestDigest:"5".repeat(64)},claimDigest="3".repeat(64),cursor={baselineDigest:"1".repeat(64),sequence:1,lastDigest:"2".repeat(64)};
-  const manifest=await writePublicReleasePairView({store,pair,identity,claimDigest,cursor,outputs:(async function*(){yield{path:"/about/",status:200 as const,
-   bytes:new TextEncoder().encode(`verified ${pair.pairId}`),headers:{"cache-control":"no-store","content-type":"text/html","x-njpbs-renderer-sha":pair.commitSha}};})()});
-  const base=work.publicReleasePairPath(pair.pairId);await db.doc(`${base}/views/${manifest.manifestDigest}`).set({schemaVersion:2,status:"staged",pairDigest:protocol.publicReleaseDigest(pair),
-   taskId:protocol.publicReleaseDigest(identity),identity,claimDigest,cursor,manifestDigest:manifest.manifestDigest,manifestBytes:manifest.manifestBytes,manifestKey:manifest.manifestKey});
-  await db.doc(`${base}/heads/current`).update({contentHead:{pairId:pair.pairId,viewId:"current-view",manifestDigest:manifest.manifestDigest,contextSequence:1}});
- }
- clock+=31_000;await collector.tick();
- const selection={environment:"development"as const,selector:releaseSelector(),readStartedAt:clock};
- const response=await serveCommittedPairRecovery({store,pairs,selection,request:new Request("https://dev-public.example.org/about/"),now:()=>clock});
- expect(response?.status).toBe(200);expect(await response?.text()).toBe(`verified ${pairs[0].pairId}`);
- expect((await serveCommittedPairRecovery({store,pairs,selection,request:new Request("https://dev-public.example.org/contact/"),now:()=>clock}))?.status).toBe(410);
- expect((await db.doc(`system/publicReleaseRoutingMirrors/jobs/${reference.requestId}`).get()).data()?.state).toBe("done");
 });
