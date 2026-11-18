@@ -1,0 +1,42 @@
+{
+  ".github/scripts/cms-containers-read-probe.mjs": ["CLOUDFLARE_ACCOUNT_ID", "CLOUDFLARE_API_TOKEN"],
+  ".github/scripts/cms-deploy-compatibility.mjs": [],
+  ".github/scripts/ensure-panel-browser-deps.mjs": [],
+  ".github/scripts/metered-api-scan.mjs": [],
+  ".github/scripts/publisher-image.mjs": ["SOURCE_SHA"],
+  ".github/scripts/require-cms-release-sources.mjs": ["CMS_RELEASE_CHECKS_SHA", "CMS_TRUSTED_WORKFLOW_SHA"],
+  ".github/scripts/require-main-ci.mjs": ["DEPLOY_SHA", "GH_TOKEN"],
+  ".github/scripts/require-release-source.mjs": [],
+  "agents/vmix/build-windows.mjs": ["CMS_STUDIO_API_ORIGIN", "VITE_FIREBASE_API_KEY"],
+  "scripts/admin-status-manifest.mjs": [],
+  "scripts/backfill-author-profiles.mjs": ["GOOGLE_APPLICATION_CREDENTIALS"],
+  "scripts/backfill-byline-projections.mjs": ["GOOGLE_APPLICATION_CREDENTIALS"],
+  "scripts/backfill-media-category-assignments.mjs": ["GOOGLE_APPLICATION_CREDENTIALS"],
+  "scripts/backfill-media-discovery.mjs": [],
+  "scripts/backfill-media-thumbnails.mjs": [
+    "CMS_MEDIA_PUBLIC_ORIGIN",
+    "CMS_MEDIA_R2_ACCESS_KEY_ID",
+    "CMS_MEDIA_R2_BUCKET",
+    "CMS_MEDIA_R2_ENDPOINT",
+    "CMS_MEDIA_R2_SECRET_ACCESS_KEY"
+  ],
+  "scripts/backfill-page-seed-media.mjs": ["GOOGLE_APPLICATION_CREDENTIALS"],
+  "scripts/check-admin-pages-security.mjs": ["CLOUDFLARE_API_TOKEN"],
+  "scripts/check-cms-public-contract.mjs": [],
+  "scripts/check-cms-secret-iam.mjs": ["DEPLOY_SHA", "FIREBASE_DEPLOY_SERVICE_ACCOUNT"],
+  "scripts/check-prepared-worker.mjs": [],
+  "scripts/component-runner.mjs": [],
+  "scripts/configure-admin-public-shell.mjs": ["CLOUDFLARE_ACCOUNT_ID", "CLOUDFLARE_API_TOKEN"],
+  "scripts/confirm-admin-revision.mjs": ["DEPLOY_SHA"],
+  "scripts/production-reader-deployment.mjs": ["DEPLOY_SHA"],
+  "scripts/render-development-config.mjs": [],
+  "scripts/seed-content-sections.mjs": ["GOOGLE_APPLICATION_CREDENTIALS"],
+  "scripts/seed-media-categories.mjs": ["GOOGLE_APPLICATION_CREDENTIALS"],
+  "scripts/upload-studio-connector.mjs": [
+    "CMS_MEDIA_MASTER_R2_BUCKET",
+    "CMS_MEDIA_R2_ACCESS_KEY_ID",
+    "CMS_MEDIA_R2_SECRET_ACCESS_KEY",
+    "DEPLOY_SHA"
+  ],
+  "site/scripts/deploy-cms-preview-cloud.ts": ["CLOUDFLARE_ACCOUNT_ID", "CMS_PREVIEW_FIREBASE_ACCOUNT"]
+}

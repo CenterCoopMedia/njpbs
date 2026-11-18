@@ -169,6 +169,7 @@ jobs:
           tests/identity-boundary.test.ts
           tests/public-only-dist-wiring.test.ts
           tests/deploy-environments.test.ts
+          tests/release-step-inputs.test.ts
           tests/cms-preview-export.test.ts
           tests/workflow-secret-guardrail.test.ts
           tests/workflow-secret-inherit-guardrail.test.ts
