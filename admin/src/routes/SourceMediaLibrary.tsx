@@ -1,5 +1,5 @@
 import { originalAccessMessage, originalStatusLabel } from "../lib/video-original";
-import { useVideoOriginalStatus, VideoOriginalStatus, VideoOriginalNotices } from "../components/media/VideoOriginalStatus";
+import { useVideoOriginalStatus, VideoOriginalStatus } from "../components/media/VideoOriginalStatus";
 import { focusMediaDialogNavigation, mediaDialogNavigation } from "../components/media/MediaViewerNavigation";
 import { ActionControl } from "../components/ui/ActionControl";
 import { Menu } from "../components/ui/Menu";
@@ -35,8 +35,8 @@ import { LeaveGuardDialog } from "./LeaveGuardDialog";
 import { useMediaFavorites } from "../lib/use-media-favorites";
 import type { MediaFavoriteRef } from "../lib/media-favorites";
 import { MediaContextMenu } from "../components/media/MediaContextMenu";
-import { MediaGrid, restoreMediaFocus, type MediaGridHandle, type MediaGridItemContext } from "../components/media/MediaGrid";
-import { MediaRow, MediaRowHeader } from "../components/media/MediaRow";
+import { restoreMediaFocus, type MediaGridHandle, type MediaGridItemContext } from "../components/media/MediaGrid";
+import { MediaRow } from "../components/media/MediaRow";
 import { MediaTile } from "../components/media/MediaTile";
 import { ViewerTabs } from "../components/media/ViewerTabs";
 import { VideoDetailsInspector, type VideoContextView, type VideoDetailsSaveReceipt } from "../components/media/VideoDetailsInspector";
@@ -55,10 +55,8 @@ import { selectionAnnouncement } from "../lib/media-filters";
 import { availableSelectionActions, type MediaTileActionId } from "../lib/media-tile-actions";
 import { readRecentTags, recordRecentTags } from "../lib/recent-media-tags";
 import { stepPosition, stepTarget, viewerKeyAction, type StepDirection } from "../lib/media-step";
-import { MediaToolbar, type MediaToolbarSurfaceConfiguration } from "../components/media/MediaToolbar";
-import { MediaPaging } from "../components/media/MediaPaging";
-import { DropOverlay } from "../components/media/DropOverlay";
-import { UploadSheet } from "../components/media/UploadSheet";
+import type { MediaToolbarSurfaceConfiguration } from "../components/media/MediaToolbar";
+import { SourceMediaLibraryBrowse } from "./SourceMediaLibraryBrowse";
 import { DEFAULT_VIDEO_MEDIA_QUERY, parseVideoMediaLocation, encodeVideoMediaLocation, type VideoMediaLocationQuery, type VideoMediaSort } from "../lib/media-query";
 import { clearVideoFilterChips, setVideoStructuredFilter, videoFilterChips, type VideoStructuredFilter } from "../lib/media-filters";
 import { useMediaDisplay } from "../lib/use-media-display";
@@ -1842,88 +1840,72 @@ export function SourceMediaLibrary({ principal, source, getIdToken, userId, onEx
   return <section ref={libraryRef} className="source-media-library" aria-labelledby="video-library-title"
     onDragOver={handleWorkspaceDragOver} onDrop={handleWorkspaceDrop}
     data-density={display.density === "app" ? undefined : display.density} data-thumbnail={display.thumbnail}>
-    <header className="surface-intro"><div><h2 id="video-library-title" tabIndex={-1}>{source.label}</h2><p>{source.description}</p></div></header>
-    <div className="source-media-library-layout">
-      <div className="source-media-library-main">
-        <MediaToolbar configuration={toolbar} savedViews={{
-          userId,
-          surface: `video:${source.id}`,
-          query: encodeVideoMediaLocation({ ...videoQuery, cursor: undefined }, null).toString(),
-          currentViewId: videoLocation.view,
-          display,
-          onApply: applySavedView,
-          onMissing: removeMissingSavedView,
-          onResetFilters: resetSavedViewDefaults,
-        }} />
-        {searchError ? <p role="alert">{searchError}</p> : null}
-        <VideoOriginalNotices sourceId={source.id} getIdToken={getIdToken}
-          onDismissed={() => document.getElementById("video-library-title")?.focus()}
-          onOpen={assetId => {
-            void getIdToken().then(token => listSourceMedia(token, { sourceId: source.id, assetId }))
-              .then(result => { if (result.records[0]) openVideo(result.records[0]); else setLinkError("This video is no longer available."); })
-              .catch(() => setLinkError("This video could not be opened. Try again."));
-          }} />
-        {linkError ? <InlineMessage tone="warning" title="Media link">{linkError}</InlineMessage> : null}
-        {source.id === "video-library" ? <VideoMeaningSearch key={`${userId}:${source.id}:${shownSearchRevision}`} userId={userId} sourceId={source.id} query={search} getIdToken={getIdToken} filters={activeFilter} disabled={contentLocked || !!selected || bulk.open || visibleUploadOpen}
-          renderPoster={asset => <VideoPoster asset={asset} getIdToken={getIdToken} />}
-          onOpen={(asset, seconds) => { if (!contentLockedRef.current && !selectedRef.current && !bulk.open && !visibleUploadOpen) openVideo(asset, { seek: seconds }); }} /> : null}
-        {deletedName ? <InlineMessage tone="success" title="Video deleted from library">{deletedName} was removed. The original is retained for recovery.</InlineMessage> : null}
-        {favorites.loadError || favorites.saveError ? <InlineMessage tone="error" title="Favorites need attention">
-          <span>{favorites.loadError || favorites.saveError}</span>
-          {favorites.loadError ? <Button disabled={favorites.retryDisabled} onClick={favorites.retry}>Try again</Button> : null}
-        </InlineMessage> : null}
-        {bulk.notice}
-        {sizeSortFallback && videoQuery.sort === "updated_desc" ? <InlineMessage tone="info" role="status" title="File-size sorting is getting ready">
-          Videos are shown by most recent update. Try file-size sorting again later.
-        </InlineMessage> : null}
-        <p className="sr-only" role="status">{selectionStatus}</p>
-        <p className="sr-only" role="status">{viewerAnnouncement}</p>
-        {page && !loading && !error ? <p className="source-video-result-summary" ref={resultSummaryRef} role="status" tabIndex={-1}>{page.total === null ? `${page.records.length} videos on this page` : `${page.total} videos`}{videoQuery.by ? ` · Uploaded by ${videoQuery.by === userId ? "Me" : uploaderNames.get(videoQuery.by) ?? "Staff uploader"}` : videoQuery.tag ? ` · Tag: ${videoQuery.tag}` : ""}</p> : null}
-        <DropOverlay
-          blocked={metadataDirty}
-          canUpload={source.canUpload && !suppressUpload && uploadCanIntake && !metadataSaving && !bulk.open && (!selected || metadataDirty) && !quickLook && !visibleUploadOpen && !routedLibraryActive}
-          destination={source.label}
-          onFiles={routeVideoDrop}
-        >
-          <div className="source-video-results" data-bulk-open={bulk.open || undefined}>
-            {loading ? <LoadingIndicator label="Loading videos" /> : error ? <InlineMessage tone="error" title="Video library unavailable">{error}<Button onClick={() => setAttempt(value => value + 1)}>Try again</Button></InlineMessage>
-              : page && <>
-                {page.records.length === 0 ? <EmptyState title="No videos found" description={search || chips.length > 0 ? "Try a different name or clear the filters." : "Videos will appear here after they are added to this library."} />
-                  : <MediaGrid className="source-video-tiles" handleRef={gridRef} header={<MediaRowHeader pageSelection={bulk.pageSelection} surface="video" fields={visibleVideoFields}
-                      sort={search ? undefined : { ...videoListSort(videoQuery.sort),
-                        onSortChange: next => applyDraftQuery({ sort: videoSortFromList(next.sort, next.direction) }) }} />} inert={bulk.open}
-                    items={page.records} label="Videos" layout={view} onEscape={escapeResults} onOpen={asset => openVideo(asset)} onQuickLook={cardsLocked ? undefined : openQuickLook}
-                    onSelectionChange={bulk.changeSelection} renderItem={renderTile} rules={bulk.rules} selection={bulk.selection} />}
-              </>}
-            {page && (cursor || page.hasMore || loadedCursor) && !error ? <MediaPaging mode="cursor" label="Video pages" page={previousCursors.length + 1} isLastPage={!page.nextCursor} loading={loading || loadedPageKey !== queryKey} pageStartRef={resultSummaryRef}
-              onFirst={resetPaging}
-              onPrevious={() => setPaging({ key: videoQueryKey, cursor: previousCursors.at(-1), previous: previousCursors.slice(0, -1) })}
-              onNext={() => setPaging({ key: videoQueryKey, cursor: page.nextCursor ?? undefined, previous: [...previousCursors, cursor] })} /> : null}
-            {/* The bar floats at the bottom of the results while something is selected, as on the
-                images page, so selecting never moves the grid under the pointer. */}
-            {bulk.inspector}
-            {bulk.bar}
-            <div className="source-video-upload-tray" ref={setUploadTrayTarget} />
-          </div>
-        </DropOverlay>
-      </div>
-      {source.canUpload && !suppressUpload ? <UploadSheet heading={`Upload to ${source.label}`} onFocusFallback={() => setUploadFocusRequest(value => value + 1)} onRequestClose={() => setUploadOpen(false)} open={visibleUploadOpen}>
-        <VideoUploadPanel key={`${userId}:${source.id}`} sourceId={source.id} userId={userId} getIdToken={getIdToken}
-          onActiveChange={setTransfersActive}
-          onDefaultsDirtyChange={setUploadDefaultsDirty}
+    <SourceMediaLibraryBrowse
+      label={source.label} description={source.description}
+      toolbar={{ configuration: toolbar, savedViews: {
+        userId,
+        surface: `video:${source.id}`,
+        query: encodeVideoMediaLocation({ ...videoQuery, cursor: undefined }, null).toString(),
+        currentViewId: videoLocation.view,
+        display,
+        onApply: applySavedView,
+        onMissing: removeMissingSavedView,
+        onResetFilters: resetSavedViewDefaults,
+      } }}
+      searchError={searchError} linkError={linkError} deletedName={deletedName}
+      originals={{ sourceId: source.id, getIdToken,
+        onDismissed: () => document.getElementById("video-library-title")?.focus(),
+        onOpen: assetId => {
+          void getIdToken().then(token => listSourceMedia(token, { sourceId: source.id, assetId }))
+            .then(result => { if (result.records[0]) openVideo(result.records[0]); else setLinkError("This video is no longer available."); })
+            .catch(() => setLinkError("This video could not be opened. Try again."));
+        },
+      }}
+      related={source.id === "video-library" ? <VideoMeaningSearch key={`${userId}:${source.id}:${shownSearchRevision}`} userId={userId} sourceId={source.id} query={search} getIdToken={getIdToken} filters={activeFilter} disabled={contentLocked || !!selected || bulk.open || visibleUploadOpen}
+        renderPoster={asset => <VideoPoster asset={asset} getIdToken={getIdToken} />}
+        onOpen={(asset, seconds) => { if (!contentLockedRef.current && !selectedRef.current && !bulk.open && !visibleUploadOpen) openVideo(asset, { seek: seconds }); }} /> : null}
+      favoriteError={favorites.loadError || favorites.saveError}
+      onRetryFavorites={favorites.loadError ? favorites.retry : undefined} favoriteRetryDisabled={favorites.retryDisabled}
+      sizeSortFallback={sizeSortFallback && videoQuery.sort === "updated_desc"}
+      selectionStatus={selectionStatus} viewerAnnouncement={viewerAnnouncement}
+      resultSummaryRef={resultSummaryRef}
+      resultQualifier={videoQuery.by ? ` · Uploaded by ${videoQuery.by === userId ? "Me" : uploaderNames.get(videoQuery.by) ?? "Staff uploader"}` : videoQuery.tag ? ` · Tag: ${videoQuery.tag}` : ""}
+      drop={{ blocked: metadataDirty,
+        canUpload: source.canUpload && !suppressUpload && uploadCanIntake && !metadataSaving && !bulk.open && (!selected || metadataDirty) && !quickLook && !visibleUploadOpen && !routedLibraryActive,
+        destination: source.label, onFiles: routeVideoDrop,
+      }}
+      loading={loading} error={error} onRetry={() => setAttempt(value => value + 1)}
+      page={page} filtered={Boolean(search || chips.length > 0)}
+      grid={{ className: "source-video-tiles", handleRef: gridRef, inert: bulk.open, label: "Videos", layout: view, onEscape: escapeResults,
+        onOpen: asset => openVideo(asset), onQuickLook: cardsLocked ? undefined : openQuickLook, onSelectionChange: bulk.changeSelection,
+        renderItem: renderTile, rules: bulk.rules, selection: bulk.selection,
+      }}
+      rowHeader={{ pageSelection: bulk.pageSelection, surface: "video", fields: visibleVideoFields,
+        sort: search ? undefined : { ...videoListSort(videoQuery.sort), onSortChange: next => applyDraftQuery({ sort: videoSortFromList(next.sort, next.direction) }) },
+      }}
+      paging={page && (cursor || page.hasMore || loadedCursor) && !error ? {
+        mode: "cursor", label: "Video pages", page: previousCursors.length + 1, isLastPage: !page.nextCursor,
+        loading: loading || loadedPageKey !== queryKey, pageStartRef: resultSummaryRef,
+        onFirst: resetPaging,
+        onPrevious: () => setPaging({ key: videoQueryKey, cursor: previousCursors.at(-1), previous: previousCursors.slice(0, -1) }),
+        onNext: () => setPaging({ key: videoQueryKey, cursor: page.nextCursor ?? undefined, previous: [...previousCursors, cursor] }),
+      } : null}
+      bulkOpen={bulk.open} bulkNotice={bulk.notice} bulkInspector={bulk.inspector} bulkBar={bulk.bar}
+      setUploadTrayTarget={setUploadTrayTarget}
+      upload={source.canUpload && !suppressUpload ? {
+        sheet: {
+          heading: `Upload to ${source.label}`, onFocusFallback: () => setUploadFocusRequest(value => value + 1),
+          onRequestClose: () => setUploadOpen(false), open: visibleUploadOpen,
+        },
+        panel: <VideoUploadPanel key={`${userId}:${source.id}`} sourceId={source.id} userId={userId} getIdToken={getIdToken}
+          onActiveChange={setTransfersActive} onDefaultsDirtyChange={setUploadDefaultsDirty}
           onAdmissionFailed={message => notice.show(message, { tone: "error" })}
-          onCanceled={message => notice.show(message)}
-          onIntakeChange={setUploadCanIntake}
-          onOpenSheet={showVideoUpload}
-          onTrayEmptyFocus={() => setUploadFocusRequest(value => value + 1)}
-          onTransferStarted={() => setUploadOpen(false)}
-          openSheetBlockedReason={uploadOpenBlockedReason}
-          presentation="sheet"
-          rejectedFiles={routedRejectedFiles}
-          trayTarget={uploadTrayTarget}
-          onUploaded={asset => { notice.show(`${asset.name} is ready in the video library.`, { preserveOnNextRoute: true }); setMediaSourceCount(source.id, null); resetFilters(); setAttempt(value => value + 1); }} />
-      </UploadSheet> : null}
-    </div>
+          onCanceled={message => notice.show(message)} onIntakeChange={setUploadCanIntake} onOpenSheet={showVideoUpload}
+          onTrayEmptyFocus={() => setUploadFocusRequest(value => value + 1)} onTransferStarted={() => setUploadOpen(false)}
+          openSheetBlockedReason={uploadOpenBlockedReason} presentation="sheet" rejectedFiles={routedRejectedFiles} trayTarget={uploadTrayTarget}
+          onUploaded={asset => { notice.show(`${asset.name} is ready in the video library.`, { preserveOnNextRoute: true }); setMediaSourceCount(source.id, null); resetFilters(); setAttempt(value => value + 1); }} />,
+      } : null}
+    />
 
     {quickLook && quickLookAsset ? <QuickLook item={{ id: quickLookAsset.id, name: quickLookAsset.name, kind: "video",
       previewUrl: quickLookRead?.id === quickLookAsset.id && quickLookRead.fileVersion === quickLookAsset.fileVersion ? quickLookRead.url : quickLookPoster(quickLookAsset).url }}
