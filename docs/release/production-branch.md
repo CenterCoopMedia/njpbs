@@ -169,10 +169,10 @@ the next step. The public switch remains Joe's decision.
 | --- | --- |
 | Scope precheck, before bootstrap selection and first promotion | Coordinator's named authorization to read the approved App key and mint an unfiltered, metadata-only installation token. No provisioning or production write. |
 | 2, 3a, 3c | Coordinator's named technical setup authorization: environment policy, client ID and rulesets. |
-| 2 | Read-only exact main SHA and green main-push CI proof. |
+| 1 | Read-only exact main SHA and green main-push CI proof. |
 | 3b | Joe: production bootstrap, which can trigger deployment. |
-| 5 | Joe: key provisioning, the credential activation point. |
-| 6–8 | Joe: first promotion/public switch, live probes and deployment verification. Destructive probes need a separately authorized lab. |
+| 4 | Joe: key provisioning, the credential activation point. |
+| 5–7 | Joe: first promotion/public switch, live probes and deployment verification. Destructive probes need a separately authorized lab. |
 
 Before writes, read the App and installation APIs and compare their identity and
 permissions to #57 and the payloads. Installation permissions must already be

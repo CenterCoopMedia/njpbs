@@ -24,7 +24,6 @@ Git source does not restore Firestore or media. Public committed assets, private
 R2 objects and provider-hosted images/video have separate owners. A component
 rollout changes only its own surface.
 
-
 ## Release source and prerequisites
 
 Choose full 40-character reviewed NEW once. The normal publisher/public release
