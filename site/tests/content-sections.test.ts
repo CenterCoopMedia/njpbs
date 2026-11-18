@@ -15,7 +15,6 @@ const serverSections = requireModule(
   "../../functions/lib/content-sections.js",
 ) as {
   CONTENT_SECTIONS_COLLECTION: string;
-  REQUIRE_SECTION_ON_RECORD_CREATE: boolean;
   SEEDED_CONTENT_SECTIONS: readonly { id: string }[];
   contentSectionForPage: (pageId: unknown) => string | null;
   isSectionId: (value: unknown) => boolean;

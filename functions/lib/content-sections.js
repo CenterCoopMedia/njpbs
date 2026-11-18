@@ -47,14 +47,6 @@ const SEEDED_CONTENT_SECTIONS = Object.freeze([
   }),
 ]);
 
-// A record create must name a registered section (#619). On since the record editor gained
-// its create-time section picker (#845): every new record is created into a desk, so a
-// scoped grant can reach the work its holder is supposed to do and an unsectioned record is
-// no longer something the admin app can produce. Records written before this stay
-// unsectioned, and a scoped grant is denied on them -- backfill is what moves them, not a
-// later save.
-const REQUIRE_SECTION_ON_RECORD_CREATE = true;
-
 function isSectionId(value) {
   return typeof value === "string" && value.trim() !== "" && value.trim() === value;
 }
@@ -98,7 +90,6 @@ async function unregisteredSections(firestore, sections, transaction) {
 
 module.exports = {
   CONTENT_SECTIONS_COLLECTION,
-  REQUIRE_SECTION_ON_RECORD_CREATE,
   SEEDED_CONTENT_SECTIONS,
   contentSectionForPage,
   isSectionId,

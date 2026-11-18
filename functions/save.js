@@ -135,7 +135,6 @@ const { serviceCompositionError } = require("./lib/service-composition");
 // checks a page-builder block section; these two "section" concepts share a word and
 // nothing else.
 const {
-  REQUIRE_SECTION_ON_RECORD_CREATE,
   contentSectionForPage,
   isSectionId,
   unregisteredSections,
@@ -2324,7 +2323,7 @@ function createCmsSaveHandler(deps = {}) {
             throw new SaveRejection(400, `Unknown section ${effectiveRequestedSection}`);
           }
           recordSection = effectiveRequestedSection;
-        } else if (REQUIRE_SECTION_ON_RECORD_CREATE && !newUnassignedDraft && !isUnassignedPostDraft(stored)) {
+        } else if (!newUnassignedDraft && !isUnassignedPostDraft(stored)) {
           throw new SaveRejection(400, "A new record requires a section");
         }
         const routeFields = await requestedRoute(tx, firestore, collection, docId, compositionBase, requestedSlug, baseVersion);
