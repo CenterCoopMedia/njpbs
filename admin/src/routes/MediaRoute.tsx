@@ -6,10 +6,10 @@ import { useMediaDisplay } from "../lib/use-media-display";
 import { MediaToolbar, type MediaToolbarHandle } from "../components/media/MediaToolbar";
 import type { MediaDisplayPreferences } from "../lib/media-display";
 import type { SavedMediaView } from "../lib/saved-media-views";
-import { MediaResultBar } from "../components/media/MediaResultBar";
+import { MediaLibraryResults } from "./MediaLibraryResults";
 import { MediaContextMenu } from "../components/media/MediaContextMenu";
-import { MediaGrid, restoreMediaFocus, type MediaGridHandle, type MediaGridItemContext } from "../components/media/MediaGrid";
-import { MediaRow, MediaRowHeader } from "../components/media/MediaRow";
+import { restoreMediaFocus, type MediaGridHandle, type MediaGridItemContext } from "../components/media/MediaGrid";
+import { MediaRow } from "../components/media/MediaRow";
 import { MediaTile } from "../components/media/MediaTile";
 import { SelectionBar } from "../components/media/SelectionBar";
 import { DropOverlay } from "../components/media/DropOverlay";
@@ -102,7 +102,7 @@ import {
   EmptyState,
   InlineMessage,
 } from "../components/ui/Primitives";
-import { LoadingIndicator, Spinner } from "../components/ui/LoadingIndicator";
+import { LoadingIndicator } from "../components/ui/LoadingIndicator";
 import { LeaveGuardDialog } from "./LeaveGuardDialog";
 import { useRegisterExitGuard } from "./ExitGuard";
 import { RequireCapability } from "./RequireCapability";
@@ -151,7 +151,7 @@ import {
   parseMediaWorkspacePath,
 } from "../lib/routes";
 import { DeferredMediaTransferGuard, RoutedLibraryLeaveGuard, RoutedVideoLeaveGuard } from "./MediaRouteLeaveGuards";
-import { createMediaSecondarySurface, MediaLoading, MediaSecondaryLoadBoundary, type MediaSecondaryLoader } from "./MediaRouteLoading";
+import { createMediaSecondarySurface, MediaSecondaryLoadBoundary, type MediaSecondaryLoader } from "./MediaRouteLoading";
 
 const loadMediaSecondaryModule: MediaSecondaryLoader = () => import("./MediaSecondaryRoutes");
 const reloadMediaDocument = () => window.location.reload();
@@ -1569,98 +1569,54 @@ export function MediaLibrarySurface({
             setRelatedSelection({ context: selectionContext, asset });
             selectAsset(asset.id);
           }} /> : null}
-          {requestPending && result ? (
-            // Visual only: the result status below the grid announces the refresh.
-            <div className="media-results-updating" aria-hidden="true">
-              <Spinner size="xs" />
-              <span>Updating results</span>
-            </div>
-          ) : null}
-          {state.status === "loading" ? <MediaLoading /> : null}
-          {result ? (
-            <>
-              {result.records.length > 0 ? (
-              <MediaGrid
-                  handleRef={gridRef}
-                  inert={bulkSession !== null || activeImageViewer !== null}
-                  header={(
-                    <MediaRowHeader
-                      fields={display.fields}
-                      pageSelection={{
-                        state: pageSelectionState(collectionAssets, pageAssets),
-                        disabled: cardsLocked,
-                        onChange: (checked) => changeCollectionSelection(setPageSelection(collectionSelection, pageAssets, checked)),
-                      }}
-                      sort={{
-                        sort: location.query.sort,
-                        direction: location.query.direction,
-                        // The same write the Sort control makes: one list request, page 1.
-                        onSortChange: (next) => writeLocation({ ...location, query: { ...location.query, ...next }, view: undefined }),
-                      }}
-                    />
-                  )}
-                  items={result.records}
-                  label={libraryLabel}
-                  layout={display.layout}
-                  onEscape={escapeResults}
-                  onOpen={openAsset}
-                  onQuickLook={quickLookLocked ? undefined : openQuickLook}
-                  onSelectionChange={changeCollectionSelection}
-                  renderItem={renderTile}
-                  selection={collectionSelection}
-                />
-              ) : result.paging === "cursor" && result.nextCursor ? (
-                <EmptyState
-                  title="Search continues"
-                  description="Choose Next to check more items."
-                />
-              ) : result.paging === "cursor" && (result.page > 1 || (result.total ?? 0) > 0) ? (
-                <EmptyState
-                  title="No matches on this page"
-                  description="Return to a previous page."
-                />
-              ) : (
-                <EmptyState
-                  title={location.query.q ? "No keyword matches" : "No media found"}
-                  description="Change or clear the current filters."
-                  action={
-                    filtered ? (
-                      // Clears the search, Type and Category; sort stays.
-                      <Button onClick={clearFilters}>
-                        Clear filters
-                      </Button>
-                    ) : undefined
-                  }
-                />
-              )}
-
-              {result.paging === "cursor" ? <MediaResultBar
-                filterLabels={filterChips(resultQuery, categoryLabel).map((chip) => chip.label)}
-                keyword={Boolean(resultQuery.q)} page={result.page} pageCount={null}
-                paging="cursor" refreshing={requestPending} total={result.total}
-                isLastPage={!result.nextCursor} recordsOnPage={result.records.length}
-                onFirst={() => changeCursorPage({ key: queryKey, previous: [] })}
-                onPrevious={() => changeCursorPage({
-                  key: queryKey,
-                  cursor: previousCursors.at(-1),
-                  previous: previousCursors.slice(0, -1),
-                })}
-                onNext={() => {
-                  if (!result.nextCursor) return;
-                  changeCursorPage({
-                    key: queryKey,
-                    cursor: result.nextCursor,
-                    previous: [...previousCursors, cursor],
-                  });
-                }}
-              /> : <MediaResultBar
-                filterLabels={filterChips(resultQuery, categoryLabel).map((chip) => chip.label)}
-                keyword={Boolean(resultQuery.q)} page={result.page} pageCount={result.pageCount}
-                refreshing={requestPending} total={result.total}
-                onPage={(page) => setLocation({ ...location.query, page }, null, false)}
-              />}
-            </>
-          ) : null}
+          <MediaLibraryResults
+            result={result}
+            loading={state.status === "loading"}
+            requestPending={requestPending}
+            keywordFilter={Boolean(location.query.q)}
+            resultKeyword={Boolean(resultQuery.q)}
+            filterLabels={result ? filterChips(resultQuery, categoryLabel).map((chip) => chip.label) : []}
+            filtered={filtered}
+            clearFilters={clearFilters}
+            grid={{
+              handleRef: gridRef,
+              inert: bulkSession !== null || activeImageViewer !== null,
+              label: libraryLabel,
+              layout: display.layout,
+              onEscape: escapeResults,
+              onOpen: openAsset,
+              onQuickLook: quickLookLocked ? undefined : openQuickLook,
+              onSelectionChange: changeCollectionSelection,
+              renderItem: renderTile,
+              selection: collectionSelection,
+            }}
+            rowHeader={{
+              fields: display.fields,
+              pageSelection: {
+                state: pageSelectionState(collectionAssets, pageAssets),
+                disabled: cardsLocked,
+                onChange: (checked) => changeCollectionSelection(setPageSelection(collectionSelection, pageAssets, checked)),
+              },
+              sort: {
+                sort: location.query.sort,
+                direction: location.query.direction,
+                // The same write the Sort control makes: one list request, page 1.
+                onSortChange: (next) => writeLocation({ ...location, query: { ...location.query, ...next }, view: undefined }),
+              },
+            }}
+            onFirstCursorPage={() => changeCursorPage({ key: queryKey, previous: [] })}
+            onPreviousCursorPage={() => changeCursorPage({
+              key: queryKey,
+              cursor: previousCursors.at(-1),
+              previous: previousCursors.slice(0, -1),
+            })}
+            onNextCursorPage={nextCursor => changeCursorPage({
+              key: queryKey,
+              cursor: nextCursor,
+              previous: [...previousCursors, cursor],
+            })}
+            onPage={(page) => setLocation({ ...location.query, page }, null, false)}
+          />
           {/* The selection bar floats at the bottom of the results while something is selected,
               so selecting never moves the grid under the pointer. */}
           <SelectionBar
