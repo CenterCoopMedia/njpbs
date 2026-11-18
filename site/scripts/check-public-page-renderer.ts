@@ -14,7 +14,7 @@ import { projectPublishedPageRead } from "../src/lib/published-page-render";
 import { projectPublicPageContextRead } from "../src/lib/public-page-context-render";
 import { comparePostHtml } from "../src/lib/post-html-comparison";
 import scheduleData from "../tests/fixtures/schedule-2026-11-15-pbs.json";
-import { applyScheduleCorrections } from "../src/lib/schedule-corrections";
+import { loadScheduleData } from "../src/lib/schedule-data";
 import { buildScheduleExport } from "../src/lib/schedule-export";
 import type { BakedScheduleData } from "../src/lib/schedule-feed";
 import { checkNewslettersSignup } from "./check-newsletters-signup";
@@ -40,7 +40,7 @@ const emptyNewsletterRead = { ...originalHomeRead, page: { ...originalHomeRead.p
   blocks: [...originalHomeRead.page.blocks, createHomeNewsletterBlock("public-empty-newsletter")].map((block, order) => ({ ...block, order })) } };
 const frames = [...fallbackPageIds.map(pageId => fallbackPageRead(pageId, rendererSha)),
   { ...fallbackPageRead("give", rendererSha), path: "/donate/" }];
-const schedule = applyScheduleCorrections(scheduleData as BakedScheduleData);
+const schedule = await loadScheduleData(scheduleData as BakedScheduleData, {});
 const exported = buildScheduleExport(schedule, new Date(schedule.generatedAt));
 const hash = (value: unknown) => createHash("sha256").update(JSON.stringify(value)).digest("hex");
 const scheduleRead = publishedPageRead("schedule", rendererSha);

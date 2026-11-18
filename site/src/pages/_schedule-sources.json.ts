@@ -1,7 +1,7 @@
 import type { APIRoute } from "astro";
 import { getEntry } from "astro:content";
 import { createScheduleSourceSnapshot } from "../lib/schedule-source-snapshot";
-import { loadScheduleData } from "../lib/schedule-data";
+import { loadScheduleData } from "../lib/build/schedule-data";
 
 export const prerender = true;
 

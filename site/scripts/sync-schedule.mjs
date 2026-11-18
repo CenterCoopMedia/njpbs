@@ -2,12 +2,12 @@ import { access, mkdir, readFile, rename, rm, writeFile } from "node:fs/promises
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import {
-  DEFAULT_SCHEDULE_DATA_PATH,
   PBS_KIDS_NOLA_ROOTS,
   TVSS_TIME_ZONE,
   shapeTvssScheduleDay,
   unwrapTvssJsonp,
 } from "../src/lib/schedule-feed.ts";
+import { DEFAULT_SCHEDULE_DATA_PATH } from "../src/lib/build/schedule-data.ts";
 import { applyScheduleCorrections, uncorrectedScheduleDates } from "../src/lib/schedule-corrections.ts";
 
 const DEFAULT_REFERER = "https://njpbs.org/";

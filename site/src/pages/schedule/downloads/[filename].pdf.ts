@@ -1,6 +1,6 @@
 import type { APIRoute, GetStaticPaths } from "astro";
 import { publicRootRoutesEnabled } from "../../../lib/build-target";
-import { loadScheduleData } from "../../../lib/schedule-data";
+import { loadScheduleData } from "../../../lib/build/schedule-data";
 import { buildScheduleExport, scheduleExportTime, type ScheduleExport } from "../../../lib/schedule-export";
 import { renderSchedulePdf } from "../../../lib/schedule-pdf";
 

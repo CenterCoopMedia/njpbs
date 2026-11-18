@@ -7,7 +7,7 @@ import { cmsImageAsset } from "../../lib/cms-responsive-image";
 import PublicSiteLayout from "../../layouts/PublicSiteLayout.astro";
 import { containsVideo } from "../../../../packages/content-core/src/video-block";
 import { publicRootRoutesEnabled } from "../../lib/build-target";
-import { loadScheduleData } from "../../lib/schedule-data";
+import { loadScheduleData } from "../../lib/build/schedule-data";
 
 export function getStaticPaths() {
   if (!publicRootRoutesEnabled(process.env)) return [];

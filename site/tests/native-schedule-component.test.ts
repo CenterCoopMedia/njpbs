@@ -29,7 +29,7 @@ describe("native schedule source wiring", () => {
       'import NativeSchedule from "../../components/NativeSchedule.astro"',
     );
     expect(page).toContain(
-      'import { loadScheduleData } from "../../lib/schedule-data"',
+      'import { loadScheduleData } from "../../lib/build/schedule-data"',
     );
     expect(page).toContain("sealedSchedule?.data ?? await loadScheduleData()");
     expect(page).toContain('cmsSchedule?.data.title ?? "TV schedule"');

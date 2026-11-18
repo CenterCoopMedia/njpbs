@@ -1,4 +1,4 @@
-import { TVSS_TIME_ZONE, TVSS_WNJT_FEED_CID, type BakedScheduleData, type ScheduleFeedDay, type ScheduleListing } from "./schedule-feed.ts";
+import type { ScheduleFeedDay, ScheduleListing } from "./schedule-feed.ts";
 import { scheduleDateKey } from "../../../packages/content-core/src/schedule-clock.ts";
 export {
   scheduleDateKey,
@@ -7,14 +7,6 @@ export {
   SCHEDULE_TIME_ZONE,
   type ScheduleClockState,
 } from "../../../packages/content-core/src/schedule-clock.ts";
-
-export function unavailableScheduleData(now = new Date()): BakedScheduleData {
-  const date = scheduleDateKey(now);
-  const day = { date, callsign: "wnjt", timeZone: TVSS_TIME_ZONE, feedCid: TVSS_WNJT_FEED_CID, entries: [] };
-  return { source: "pbs-tvss", generatedAt: now.toISOString(), timeZone: TVSS_TIME_ZONE,
-    request: { station: "WNJT", dates: [date] },
-    days: { broadcast: [{ ...day, kind: "broadcast" }], kids: [{ ...day, kind: "kids" }] } };
-}
 
 export type ScheduleDayState =
   | {

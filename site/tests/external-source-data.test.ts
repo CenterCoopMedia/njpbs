@@ -5,7 +5,7 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { loadLaunchContentData } from "../src/lib/launch-content-data";
-import { loadScheduleData } from "../src/lib/schedule-data";
+import { loadScheduleData } from "../src/lib/build/schedule-data";
 import scheduleFixture from "../src/data/schedule-fixture.json";
 import octoberFeed from "./fixtures/schedule-corrections-2026-10-source.json";
 

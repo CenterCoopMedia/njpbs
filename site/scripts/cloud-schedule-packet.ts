@@ -75,8 +75,8 @@ export async function createCloudSchedulePacket({ inputs, storage }: { inputs: P
   const original = await readSealed(storage, inputs.files["schedule.json"]);
   let schedule = checkedSchedule(original, source.checkedAt);
   if (schedule.source === "pbs-tvss") {
-    const { applyScheduleCorrections } = await import("../src/lib/schedule-corrections");
-    schedule = applyScheduleCorrections(schedule);
+    const { loadScheduleData } = await import("../src/lib/schedule-data");
+    schedule = await loadScheduleData(schedule, {});
   }
   const exported = buildScheduleExport(schedule, new Date(source.checkedAt));
   const json = Buffer.from(JSON.stringify(schedule));
