@@ -39,6 +39,7 @@ function checkFunctions(ts, cwd, sizes) {
   if (parsed.errors.length) throw new Error(ts.formatDiagnostics(parsed.errors, host));
 
   const files = parsed.fileNames.filter((file) => sizes.has(relative(cwd, file)));
+  const checked = new Set(files.map((file) => relative(cwd, file)));
   const compilerHost = ts.createCompilerHost(parsed.options);
   compilerHost.getCurrentDirectory = () => join(cwd, "functions");
   const program = ts.createProgram(files, parsed.options, compilerHost);
@@ -46,7 +47,7 @@ function checkFunctions(ts, cwd, sizes) {
   for (const diagnostic of ts.getPreEmitDiagnostics(program)) {
     if (diagnostic.category !== ts.DiagnosticCategory.Error) continue;
     const file = diagnostic.file ? relative(cwd, diagnostic.file.fileName) : null;
-    if (file && !sizes.has(file)) continue;
+    if (file && !checked.has(file)) continue;
     const line = diagnostic.start === undefined ? undefined
       : diagnostic.file?.getLineAndCharacterOfPosition(diagnostic.start).line;
     const message = ts.flattenDiagnosticMessageText(diagnostic.messageText, "\n").replaceAll(cwd + "/", "");

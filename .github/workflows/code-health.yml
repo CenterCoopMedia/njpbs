@@ -41,6 +41,7 @@ jobs:
           if [ -n "$BASE_SHA" ]; then
             git -C candidate worktree add --detach ../baseline "$BASE_SHA"
             npm --prefix baseline ci --ignore-scripts
+            npm --prefix baseline/site ci --ignore-scripts
           fi
       - name: Measure lint, Functions types and size
         env:
