@@ -2,7 +2,7 @@ import { CONFIGURATION_INPUTS, configurationInputs } from "../../scripts/lib/fun
 import { describe, expect, it } from "vitest";
 import { readFileSync } from "node:fs";
 import { parse } from "yaml";
-import { FUNCTION_RUNTIME_VARIABLES, functionsForRuntimeComparison, runtimeParametersMatch, boundSecretVersionsCurrent, CMS_RELEASE_SECRET_NAMES, deploymentSecretsUnchanged, deploymentVariablesFingerprint, cloudWakeConfigurationFingerprint, decideRelease, explicitCloudWakeDecision, fingerprintExecutionSource, identitiesMatch, planCmsApiRelease, componentReceiptRunCompleted } from "../../scripts/lib/cms-release-plan.mjs";
+import { FUNCTION_RUNTIME_VARIABLES, functionsForRuntimeComparison, runtimeParametersMatch, boundSecretVersionsCurrent, CMS_RELEASE_SECRET_NAMES, deploymentSecretsUnchanged, deploymentVariablesFingerprint, cloudWakeConfigurationFingerprint, decideRelease, explicitCloudWakeDecision, fingerprintExecutionSource, fingerprintFunctionsRenderSource, identitiesMatch, planCmsApiRelease, componentReceiptRunCompleted } from "../../scripts/lib/cms-release-plan.mjs";
 import { releasePlanOutputLines, desiredRuntimeParameters } from "../../scripts/cms-release-plan.mjs";
 
 const SHA = "a".repeat(40);
@@ -50,7 +50,7 @@ function eligible() {
     deploySha: OTHER, functionGraph: structuredClone(GRAPH), rendererGraphAvailable: true,
     functionsReceipt: completeReceipt("functions"), rendererReceipt: completeReceipt("renderer"),
     functionsFingerprint: FINGERPRINT, configurationFingerprint: EDGE_FP,
-    rendererFingerprint: RENDERER_FP, trustedFingerprint: TRUSTED_FP, trustedReceiptFingerprint: TRUSTED_FP,
+    rendererFingerprint: RENDERER_FP, renderFingerprint: TRUSTED_FP, receiptRenderFingerprint: TRUSTED_FP,
     liveFunctionsIdentities: IDENTITIES, liveRendererIdentities: RENDERER_IDS,
     targetHasAdminRevisionIntake: true, liveHasAdminRevisionIntake: true,
   };
@@ -265,11 +265,11 @@ describe("selective Functions releases", () => {
     expect(decideRelease(config).releaseReason).toBe("functions_configuration_changed");
     expect(decideRelease({ ...eligible(), functionsFingerprint: "9".repeat(64) }).releaseReason).toBe("function_graph_unavailable");
   });
-  it.each(["force", "identities", "trusted", "configuration"])("preserves the full recovery path for %s", reason => {
+  it.each(["force", "identities", "render inputs", "configuration"])("preserves the full recovery path for %s", reason => {
     const input = eligible();
     if (reason === "force") input.forceFirebase = true;
     if (reason === "identities") input.liveFunctionsIdentities = null;
-    if (reason === "trusted") input.trustedReceiptFingerprint = null;
+    if (reason === "render inputs") input.receiptRenderFingerprint = null;
     if (reason === "configuration") input.configurationFingerprint = null;
     expect(decideRelease(input)).toMatchObject({ functionsMutated: true, previewPaused: true, configurationRequiresRelease: true, functionDeployTargets: "all" });
   });
@@ -414,25 +414,31 @@ describe("stopped component receipt recovery", () => {
 });
 
 describe("CMS release plan", () => {
-  it("releases when only the selected secret provisioning helper changes", async () => {
-    const listTree = async (sha, paths) => paths.includes("scripts/lib/functions-secret-versions.mjs")
-      ? `100644 blob ${sha} scripts/lib/functions-secret-versions.mjs\n`
-      : "";
-    const trustedFingerprint = await fingerprintExecutionSource(OTHER, SHA, { listTree });
-    const trustedReceiptFingerprint = await fingerprintExecutionSource(SHA, SHA, { listTree });
-    const plan = decideRelease({
-      functionGraph: GRAPH, deploySha: OTHER, rendererGraphAvailable: true,
-      functionsReceipt: completeReceipt("functions"),
-      rendererReceipt: completeReceipt("renderer"),
-      functionsFingerprint: FINGERPRINT,
-      configurationFingerprint: EDGE_FP,
-      rendererFingerprint: RENDERER_FP,
-      trustedFingerprint,
-      trustedReceiptFingerprint,
+  it("keeps changed-export selection after an edit to the trusted workflow", async () => {
+    const listTree = async (sha, paths) => paths.map(path =>
+      `100644 blob ${path.startsWith(".github/") ? sha : SHA}\t${path}\n`).join("");
+    const deps = { listTree };
+    expect(await fingerprintExecutionSource(SHA, OTHER, deps))
+      .not.toBe(await fingerprintExecutionSource(SHA, SHA, deps));
+    const input = eligible();
+    input.renderFingerprint = await fingerprintFunctionsRenderSource(OTHER, deps);
+    input.receiptRenderFingerprint = await fingerprintFunctionsRenderSource(SHA, deps);
+    input.functionGraph.exports.health.fingerprint = "9".repeat(64);
+    expect(decideRelease(input)).toMatchObject({
+      functionDeployTargets: "functions:health",
+      previewPaused: false,
+      releaseReason: "functions_modules_changed",
     });
-    expect(plan).toMatchObject({
-      functionsMutated: true,
-      releaseReason: "trusted_source_changed",
+  });
+
+  it("fully deploys when trusted render inputs change", async () => {
+    const deps = { listTree: async (sha, paths) => paths.map(path => `100644 blob ${sha}\t${path}\n`).join("") };
+    const input = eligible();
+    input.renderFingerprint = await fingerprintFunctionsRenderSource(OTHER, deps);
+    input.receiptRenderFingerprint = await fingerprintFunctionsRenderSource(SHA, deps);
+    expect(decideRelease(input)).toMatchObject({
+      functionDeployTargets: "all",
+      releaseReason: "functions_render_inputs_changed",
     });
   });
 
@@ -444,8 +450,8 @@ describe("CMS release plan", () => {
       functionsFingerprint: FINGERPRINT,
       configurationFingerprint: EDGE_FP,
       rendererFingerprint: RENDERER_FP,
-      trustedFingerprint: TRUSTED_FP,
-      trustedReceiptFingerprint: TRUSTED_FP,
+      renderFingerprint: TRUSTED_FP,
+      receiptRenderFingerprint: TRUSTED_FP,
       liveFunctionsIdentities: IDENTITIES,
       liveRendererIdentities: RENDERER_IDS,
       currentRun: { runId: "9", runAttempt: 1 },
@@ -473,8 +479,8 @@ describe("CMS release plan", () => {
       functionsFingerprint: FINGERPRINT,
       configurationFingerprint: EDGE_FP,
       rendererFingerprint: RENDERER_FP,
-      trustedFingerprint: TRUSTED_FP,
-      trustedReceiptFingerprint: TRUSTED_FP,
+      renderFingerprint: TRUSTED_FP,
+      receiptRenderFingerprint: TRUSTED_FP,
       liveFunctionsIdentities: IDENTITIES,
       liveRendererIdentities: RENDERER_IDS,
       targetHasAdminRevisionIntake: true,
@@ -506,8 +512,8 @@ describe("CMS release plan", () => {
       functionsFingerprint: FINGERPRINT,
       configurationFingerprint: disabled,
       rendererFingerprint: RENDERER_FP,
-      trustedFingerprint: TRUSTED_FP,
-      trustedReceiptFingerprint: TRUSTED_FP,
+      renderFingerprint: TRUSTED_FP,
+      receiptRenderFingerprint: TRUSTED_FP,
       liveFunctionsIdentities: IDENTITIES,
       liveRendererIdentities: RENDERER_IDS,
       targetHasAdminRevisionIntake: true,
@@ -526,8 +532,8 @@ describe("CMS release plan", () => {
       functionsFingerprint: FINGERPRINT,
       configurationFingerprint: EDGE_FP,
       rendererFingerprint: RENDERER_FP,
-      trustedFingerprint: TRUSTED_FP,
-      trustedReceiptFingerprint: TRUSTED_FP,
+      renderFingerprint: TRUSTED_FP,
+      receiptRenderFingerprint: TRUSTED_FP,
       liveFunctionsIdentities: IDENTITIES,
       liveRendererIdentities: RENDERER_IDS,
       targetHasAdminRevisionIntake: true,
@@ -547,8 +553,8 @@ describe("CMS release plan", () => {
       rendererFingerprint: "9".repeat(64),
       targetHasAdminRevisionIntake: true,
       liveHasAdminRevisionIntake: true,
-      trustedFingerprint: TRUSTED_FP,
-      trustedReceiptFingerprint: TRUSTED_FP,
+      renderFingerprint: TRUSTED_FP,
+      receiptRenderFingerprint: TRUSTED_FP,
       liveFunctionsIdentities: IDENTITIES,
       liveRendererIdentities: RENDERER_IDS,
     });
@@ -570,8 +576,8 @@ describe("CMS release plan", () => {
       functionsFingerprint: FINGERPRINT,
       configurationFingerprint: EDGE_FP,
       rendererFingerprint: RENDERER_FP,
-      trustedFingerprint: TRUSTED_FP,
-      trustedReceiptFingerprint: TRUSTED_FP,
+      renderFingerprint: TRUSTED_FP,
+      receiptRenderFingerprint: TRUSTED_FP,
       liveFunctionsIdentities: IDENTITIES,
       liveRendererIdentities: RENDERER_IDS,
       currentRun: { runId: "9", runAttempt: 1 },
@@ -589,8 +595,8 @@ describe("CMS release plan", () => {
       functionsFingerprint: FINGERPRINT,
       configurationFingerprint: EDGE_FP,
       rendererFingerprint: RENDERER_FP,
-      trustedFingerprint: TRUSTED_FP,
-      trustedReceiptFingerprint: TRUSTED_FP,
+      renderFingerprint: TRUSTED_FP,
+      receiptRenderFingerprint: TRUSTED_FP,
       liveFunctionsIdentities: IDENTITIES,
       liveRendererIdentities: RENDERER_IDS,
     });
@@ -610,8 +616,8 @@ describe("CMS release plan", () => {
       functionsFingerprint: FINGERPRINT,
       configurationFingerprint: EDGE_FP,
       rendererFingerprint: RENDERER_FP,
-      trustedFingerprint: TRUSTED_FP,
-      trustedReceiptFingerprint: TRUSTED_FP,
+      renderFingerprint: TRUSTED_FP,
+      receiptRenderFingerprint: TRUSTED_FP,
       liveFunctionsIdentities: IDENTITIES,
       liveRendererIdentities: RENDERER_IDS,
       currentRun: { runId: "9", runAttempt: 2 },
@@ -634,8 +640,8 @@ describe("CMS release plan", () => {
       functionsFingerprint: FINGERPRINT,
       configurationFingerprint: EDGE_FP,
       rendererFingerprint: RENDERER_FP,
-      trustedFingerprint: TRUSTED_FP,
-      trustedReceiptFingerprint: TRUSTED_FP,
+      renderFingerprint: TRUSTED_FP,
+      receiptRenderFingerprint: TRUSTED_FP,
       liveFunctionsIdentities: IDENTITIES,
       liveRendererIdentities: RENDERER_IDS,
       currentRun: { runId: "9", runAttempt: 1 },
@@ -655,8 +661,8 @@ describe("CMS release plan", () => {
       functionsFingerprint: FINGERPRINT,
       configurationFingerprint: EDGE_FP,
       rendererFingerprint: RENDERER_FP,
-      trustedFingerprint: TRUSTED_FP,
-      trustedReceiptFingerprint: TRUSTED_FP,
+      renderFingerprint: TRUSTED_FP,
+      receiptRenderFingerprint: TRUSTED_FP,
       liveFunctionsIdentities: IDENTITIES,
       liveRendererIdentities: RENDERER_IDS,
       targetHasAdminRevisionIntake: true,

@@ -105,9 +105,13 @@ export function cloudWakeConfigurationFingerprint(edgeFingerprint, decision, var
 
 export const ADMIN_REVISION_INTAKE_FLOOR = "8bf66cc984917486a76c1632182723ef16337d7d";
 
-export const TRUSTED_RELEASE_PATHS = Object.freeze([
+const FUNCTIONS_RENDER_PATHS = Object.freeze([
   "scripts/render-development-config.mjs",
   "config/development-inputs.json",
+]);
+
+export const TRUSTED_RELEASE_PATHS = Object.freeze([
+  ...FUNCTIONS_RENDER_PATHS,
   ".github/workflows/cms-staging-deploy.yml",
   ".github/scripts",
   "scripts/lib/production-reader-authorization.mjs",
@@ -317,8 +321,8 @@ export function decideRelease({
   configurationFingerprint = null,
   rendererFingerprint,
   rendererGraphAvailable = false,
-  trustedFingerprint,
-  trustedReceiptFingerprint,
+  renderFingerprint,
+  receiptRenderFingerprint,
   liveFunctionsIdentities = null,
   liveRendererIdentities = null,
   currentRun = {},
@@ -384,8 +388,8 @@ export function decideRelease({
     || variablesFingerprint !== functionsBase.mutation.variablesFingerprint)) {
     return full("runtime_variables_changed", functionsBase.mutation.sourceSha);
   }
-  if (trustedFingerprint !== trustedReceiptFingerprint) {
-    return full("trusted_source_changed", functionsBase.mutation.sourceSha);
+  if (!FINGERPRINT_PATTERN.test(renderFingerprint ?? "") || renderFingerprint !== receiptRenderFingerprint) {
+    return full("functions_render_inputs_changed", functionsBase.mutation.sourceSha);
   }
   if (
     !FINGERPRINT_PATTERN.test(configurationFingerprint ?? "") ||
@@ -449,6 +453,14 @@ export function decideRelease({
 
 export async function fingerprintTrustedSource(sha, deps = {}) {
   return fingerprintPaths(sha, TRUSTED_RELEASE_PATHS, deps);
+}
+
+export async function fingerprintFunctionsRenderSource(sha, deps = {}) {
+  try {
+    return await fingerprintPaths(sha, FUNCTIONS_RENDER_PATHS, deps);
+  } catch {
+    return null;
+  }
 }
 
 // Compare the code that runs, using each receipt's separate source pins.
