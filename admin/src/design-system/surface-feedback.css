@@ -1,0 +1,248 @@
+.inline-message {
+  display: grid;
+  gap: var(--space-1);
+  border: var(--border-width) solid var(--color-info-border);
+  border-radius: var(--radius-control);
+  padding: var(--studio-row-padding-block, var(--space-3))
+    var(--studio-row-padding-inline, var(--space-4));
+  background: var(--color-info-soft);
+  color: var(--color-info);
+}
+
+.inline-message-title {
+  color: inherit;
+}
+
+/* The validation summary's field links: each message is the control that takes the person to
+   the field it describes, so it reads as a link in the message's own color rather than as a
+   button competing with Save. */
+.record-form-error-list {
+  display: grid;
+  gap: var(--space-1);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.record-form-error-link {
+  display: inline-flex;
+  align-items: center;
+  min-height: var(--target-comfortable);
+  border: 0;
+  padding: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  text-decoration: underline;
+  text-underline-offset: 0.18em;
+  cursor: pointer;
+}
+
+@media (hover: hover) {
+  .record-form-error-link:hover {
+    text-decoration-thickness: 2px;
+  }
+}
+
+.inline-message-copy {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+}
+
+.auth-account-error .inline-message-copy {
+  flex-direction: column;
+  align-items: stretch;
+}
+
+.settings-publication-warning .inline-message-copy {
+  flex-wrap: wrap;
+}
+
+.settings-publication-warning .inline-message-copy > p {
+  flex: 1 1 20rem;
+}
+
+.settings-publication-warning .async-action-button {
+  flex-shrink: 0;
+}
+
+.inline-message-error {
+  border-color: var(--color-danger-border);
+  background: var(--color-danger-soft);
+  color: var(--color-danger-strong);
+}
+
+.inline-message-success {
+  border-color: var(--color-success-border);
+  background: var(--color-success-soft);
+  color: var(--color-success);
+}
+
+.inline-message-warning {
+  border-color: var(--color-warning-border);
+  background: var(--color-warning-soft);
+  color: var(--color-warning);
+}
+
+.editor-lock-message .inline-message-copy {
+  display: grid;
+  gap: var(--space-4);
+}
+
+.editor-lock-message p,
+.editor-lock-status {
+  margin: 0;
+}
+
+.editor-lock-status {
+  color: var(--color-text-muted);
+  font-size: var(--font-size-sm);
+}
+
+/* The presence states have to be tellable apart at a glance, not only by reading the sentence:
+   somebody else has the record, this tab asked for it, this tab was displaced, somebody is
+   asking this tab for it, and this tab handed it over. Tone carries the colour; the accent bar
+   carries the shape, so the difference survives a colour-vision difference too (#1047). */
+.editor-lock-message-readonly,
+.editor-lock-message-displaced,
+.editor-lock-message-requested,
+.editor-lock-message-incoming,
+.editor-lock-message-yielded,
+.editor-lock-message-recovered {
+  border-left-width: var(--space-1);
+}
+
+.editor-lock-message-readonly {
+  border-left-style: solid;
+}
+
+.editor-lock-message-displaced {
+  border-left-style: double;
+}
+
+.editor-lock-message-requested,
+.editor-lock-message-yielded {
+  border-left-style: dashed;
+}
+
+.editor-lock-message-incoming,
+.editor-lock-message-recovered {
+  border-left-style: dotted;
+}
+
+.route-loading {
+  display: grid;
+  gap: var(--space-2);
+  padding: var(--space-6);
+  color: var(--color-text-muted);
+}
+
+/* The route wait inside the shell: the shared indicator, shown only once the route has been
+   loading longer than the delay in ShellLayout, so a fast route never flashes it. */
+.route-loading .loading-indicator {
+  max-width: 32rem;
+}
+
+.empty-state {
+  display: grid;
+  place-items: center;
+  gap: var(--space-2);
+  min-height: var(--studio-empty-height, 10rem);
+  border: var(--border-width) dashed var(--color-border-strong);
+  border-radius: var(--radius-surface);
+  padding: var(--studio-panel-padding, var(--space-4));
+  background: var(--color-surface-soft);
+  text-align: center;
+}
+
+.empty-state-title {
+  color: var(--color-ink);
+  font-weight: 700;
+}
+
+.empty-state-action {
+  margin-top: var(--space-2);
+}
+
+.toolbar,
+.button-row {
+  display: flex;
+  align-items: center;
+  gap: var(--studio-gap, var(--space-3));
+  flex-wrap: wrap;
+}
+
+/* The crashed-surface detail line. It carries the error text the person is asked to pass on, so it
+   is set apart from the explanation above it rather than reading as more prose -- the code surface
+   is the same one used elsewhere for machine output, and it makes the string obviously quotable. */
+.route-error-detail {
+  margin: var(--space-3) 0;
+  padding: var(--space-2) var(--space-3);
+  background: var(--color-code-surface);
+  color: var(--color-code-text);
+  border: var(--border-width) solid var(--color-border);
+  border-radius: var(--radius-2);
+  font-family: monospace;
+  overflow-wrap: anywhere;
+}
+
+/* The leave guard is the admin's first modal. It declares aria-modal and traps focus, so it has to
+   present as one: without these rules it renders in normal document flow after the editor, which on
+   a long page puts it below the fold while focus is already trapped inside it. The person loses
+   their cursor to a dialog they cannot see, and navigation stops with nothing on screen explaining
+   why. Fixed positioning is what makes the question reach them wherever they had scrolled to. */
+.leave-guard-overlay {
+  position: fixed;
+  inset: 0;
+  /* The guard can open over a modal inspector sheet and its portaled menus. */
+  z-index: var(--cms-z-dialog);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--space-6);
+  background: var(--color-scrim);
+}
+
+/* Wide enough for the three choices the guard now offers -- keep editing, save and leave, discard
+   and leave -- to sit on one row. At 30rem the third button wrapped onto its own line, which read
+   as a separate, lesser action rather than the third of three equal answers to the same question
+   (#1032). */
+.leave-guard-dialog {
+  width: 100%;
+  max-width: 34rem;
+  padding: var(--space-6);
+  border: var(--border-width) solid var(--color-border);
+  border-radius: var(--radius-surface);
+  background: var(--color-surface);
+  box-shadow: var(--shadow-auth);
+}
+
+.leave-guard-dialog h2 {
+  margin: 0 0 var(--space-3);
+}
+
+.leave-guard-dialog p {
+  margin: 0 0 var(--space-6);
+  color: var(--color-text-muted);
+}
+
+.leave-guard-dialog .inline-message {
+  margin: 0 0 var(--space-6);
+}
+
+/* On a phone the row cannot hold three choices side by side, so it becomes a deliberate stack of
+   equal, full-width targets instead of a ragged wrap of three different widths. */
+@media (max-width: 32rem) {
+  .leave-guard-dialog .button-row {
+    flex-direction: column-reverse;
+    align-items: stretch;
+  }
+
+  .leave-guard-dialog .button-row > .button {
+    width: 100%;
+    justify-content: center;
+  }
+}

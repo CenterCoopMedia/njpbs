@@ -1,0 +1,279 @@
+/* Staff-reported incidents (#457). The launcher stays in the persistent workspace header, while
+   the native dialog stays in the top layer so it never covers editor controls when it is closed. */
+button.report-problem-launch {
+  min-width: var(--studio-control-height);
+  min-height: var(--studio-control-height);
+  flex: 0 0 auto;
+}
+
+.report-problem-launch .icon {
+  flex: 0 0 auto;
+}
+
+.workspace-header-studio button.report-problem-launch:not(.ui-menu-item) {
+  width: var(--studio-control-height);
+  justify-content: center;
+  padding-inline: var(--space-2);
+}
+
+.workspace-header-studio .report-problem-launch:not(.ui-menu-item) > span {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+.button.cms-guide-link {
+  width: var(--studio-control-height);
+  min-width: var(--studio-control-height);
+  min-height: var(--studio-control-height);
+  flex: 0 0 auto;
+  padding-inline: var(--space-2);
+}
+
+.report-problem-dialog {
+  width: min(46rem, calc(100vw - (2 * var(--space-4))));
+  max-width: none;
+  max-height: calc(100dvh - (2 * var(--space-4)));
+  margin: auto;
+  border: 0;
+  padding: 0;
+  background: transparent;
+  color: var(--color-ink);
+}
+
+.report-problem-dialog-panel {
+  max-height: calc(100dvh - (2 * var(--space-4)));
+  overflow-y: auto;
+  border: var(--border-width) solid var(--color-border);
+  border-radius: var(--radius-surface);
+  padding: var(--space-5);
+  background: var(--color-surface);
+  box-shadow: var(--shadow-panel);
+}
+
+.report-problem-dialog-head,
+.report-detail-head,
+.reports-view-tabs {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--space-3);
+}
+
+.report-problem-dialog-head p,
+.report-kicker,
+.report-row-id,
+.report-screenshot p {
+  color: var(--color-text-muted);
+  font-size: var(--font-size-sm);
+}
+
+.report-problem-form,
+.report-problem-form label {
+  display: grid;
+  gap: var(--space-2);
+}
+
+.report-problem-form {
+  margin-top: var(--space-4);
+  gap: var(--space-4);
+}
+
+.report-problem-short-fields {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-3);
+}
+
+.reports-route {
+  display: grid;
+  gap: var(--space-4);
+}
+
+.reports-view-tabs {
+  justify-content: flex-start;
+  flex-wrap: wrap;
+}
+
+.reports-view-tabs .button[aria-pressed="true"] {
+  border-color: var(--color-brand);
+  background: var(--color-brand);
+  color: var(--color-surface);
+}
+
+.reports-view-tabs .button:last-child {
+  margin-left: auto;
+}
+
+.reports-layout {
+  display: grid;
+  gap: var(--space-5);
+}
+
+.reports-layout-detail {
+  grid-template-columns: minmax(20rem, 0.72fr) minmax(0, 1.28fr);
+  align-items: start;
+}
+
+.reports-table td:first-child a {
+  display: grid;
+  gap: var(--space-1);
+}
+
+.reports-table tr[data-selected="true"] {
+  background: var(--color-surface-muted);
+}
+
+.reports-table .report-row-blocker > td:first-child {
+  border-left: 4px solid var(--color-danger);
+}
+
+.report-detail {
+  display: grid;
+  gap: var(--space-5);
+  min-width: 0;
+  border: var(--border-width) solid var(--color-border);
+  border-radius: var(--radius-surface);
+  padding: var(--space-5);
+  background: var(--color-surface);
+  box-shadow: var(--shadow-surface);
+}
+
+.report-detail h2 {
+  overflow-wrap: anywhere;
+}
+
+.report-facts,
+.report-resolution-view dl {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-3);
+}
+
+.report-facts > div,
+.report-resolution-view dl > div {
+  min-width: 0;
+  border-top: var(--border-width) solid var(--color-border);
+  padding-top: var(--space-2);
+}
+
+.report-facts dt,
+.report-resolution-view dt {
+  color: var(--color-text-muted);
+  font-size: var(--font-size-xs);
+  font-weight: 700;
+}
+
+.report-facts dd,
+.report-resolution-view dd {
+  margin: var(--space-1) 0 0;
+  overflow-wrap: anywhere;
+}
+
+.report-provided-text {
+  display: grid;
+  gap: var(--space-3);
+}
+
+.report-provided-text section {
+  border-left: 3px solid var(--color-border);
+  padding-left: var(--space-3);
+}
+
+.report-provided-text p {
+  white-space: pre-wrap;
+}
+
+.report-console-message {
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+}
+
+.report-screenshot img {
+  display: block;
+  width: auto;
+  max-width: 100%;
+  height: auto;
+  max-height: 42rem;
+  margin-top: var(--space-3);
+  border: var(--border-width) solid var(--color-border);
+  object-fit: contain;
+}
+
+.report-github-body {
+  margin: 0;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.report-issue-labels,
+.report-github-comments {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.report-github-comments {
+  display: grid;
+}
+
+.report-issue-labels li,
+.report-github-comments li {
+  min-width: 0;
+}
+
+.report-github-comments li {
+  display: grid;
+  gap: var(--space-2);
+  border-top: var(--border-width) solid var(--color-border);
+  padding-top: var(--space-3);
+}
+
+.report-resolution-view li + li {
+  margin-top: var(--space-2);
+}
+
+@media (max-width: 1000px) {
+  .reports-layout-detail {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+@media (max-width: 720px) {
+  .report-problem-dialog {
+    width: calc(100vw - (2 * var(--space-2)));
+    max-height: calc(100dvh - (2 * var(--space-2)));
+  }
+
+  .report-problem-dialog-panel {
+    max-height: calc(100dvh - (2 * var(--space-2)));
+    padding: var(--space-4);
+  }
+
+  .report-problem-short-fields,
+  .report-facts,
+  .report-resolution-view dl {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .report-problem-dialog-head,
+  .report-detail-head {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .reports-table {
+    min-width: 42rem;
+  }
+
+  .report-detail {
+    padding: var(--space-4);
+  }
+}
