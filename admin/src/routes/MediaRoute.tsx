@@ -46,7 +46,6 @@ const MediaReplaceButton = lazy(async () => ({
   default: (await import("../components/media/MediaReplaceButton")).MediaReplaceButton,
 }));
 import {
-  Component,
   lazy,
   Suspense,
   useCallback,
@@ -57,7 +56,6 @@ import {
   useState,
   useSyncExternalStore,
   type ReactElement,
-  type ReactNode,
 } from "react";
 import {
   Navigate,
@@ -152,46 +150,11 @@ import {
   mediaVoiceoversPath,
   parseMediaWorkspacePath,
 } from "../lib/routes";
-
-type MediaSecondaryModule = typeof import("./MediaSecondaryRoutes");
-type MediaSecondaryLoader = () => Promise<MediaSecondaryModule>;
+import { DeferredMediaTransferGuard, RoutedLibraryLeaveGuard, RoutedVideoLeaveGuard } from "./MediaRouteLeaveGuards";
+import { createMediaSecondarySurface, MediaLoading, MediaSecondaryLoadBoundary, type MediaSecondaryLoader } from "./MediaRouteLoading";
 
 const loadMediaSecondaryModule: MediaSecondaryLoader = () => import("./MediaSecondaryRoutes");
 const reloadMediaDocument = () => window.location.reload();
-
-class MediaSecondaryLoadError extends Error {
-  constructor(originalError: unknown) {
-    super("The deferred media workspace could not be loaded.", { cause: originalError });
-    this.name = "MediaSecondaryLoadError";
-  }
-}
-
-function createMediaSecondarySurface(load: MediaSecondaryLoader) {
-  return lazy(async () => {
-    try {
-      return { default: (await load()).MediaSecondarySurface };
-    } catch (error) {
-      throw new MediaSecondaryLoadError(error);
-    }
-  });
-}
-
-class MediaSecondaryLoadBoundary extends Component<{
-  children: ReactNode;
-  fallback: ReactNode;
-}, { error: unknown | null }> {
-  state = { error: null as unknown | null };
-
-  static getDerivedStateFromError(error: unknown) {
-    return { error };
-  }
-
-  render() {
-    if (!this.state.error) return this.props.children;
-    if (!(this.state.error instanceof MediaSecondaryLoadError)) throw this.state.error;
-    return this.props.fallback;
-  }
-}
 
 type MediaState =
   | { status: "loading" }
@@ -200,21 +163,6 @@ type MediaState =
   | { status: "ready"; result: ListMediaResponse; query: MediaListQuery; error?: string };
 
 type ImageViewerSession = { order: readonly MediaAssetSummary[]; id: string; userId: string; queryKey: string; permalinkId?: string };
-
-function MediaLoading() {
-  return (
-    <div className="media-loading">
-      <LoadingIndicator
-        label="Loading media library"
-        layout="stack"
-        stages={[
-          "Asking the CMS for the first page of media",
-          "Waiting for the media list",
-        ]}
-      />
-    </div>
-  );
-}
 
 export function MediaLibrarySurface({
   audioLibrary = false,
@@ -2328,75 +2276,6 @@ export function MediaRoute({
   </RequireCapability>;
 }
 
-function DeferredMediaTransferGuard({
-  libraryDirty,
-  videoActive,
-  onDiscardLibrary,
-  onDiscardVideo,
-}: {
-  libraryDirty: boolean;
-  videoActive: boolean;
-  onDiscardLibrary: () => void;
-  onDiscardVideo: () => void;
-}) {
-  const libraryDirtyRef = useRef(libraryDirty);
-  const videoActiveRef = useRef(videoActive);
-  libraryDirtyRef.current = libraryDirty;
-  videoActiveRef.current = videoActive;
-  const hasUnsavedWork = useCallback(
-    () => libraryDirtyRef.current || videoActiveRef.current,
-    [],
-  );
-  const hasRisk = libraryDirty || videoActive;
-  useRegisterExitGuard(hasRisk ? { saving: false, hasUnsavedWork } : null);
-  useBeforeUnload((event) => {
-    if (!hasRisk) return;
-    event.preventDefault();
-    event.returnValue = "";
-  });
-  const discardLibrary = useRef(false);
-  const discardVideo = useRef(false);
-  const blocker = useBlocker(({ nextLocation }) => {
-    const nextRoute = parseMediaWorkspacePath(nextLocation.pathname);
-    const leavesWorkspace = nextRoute.kind === "not-found";
-    const opensRecycleBin = nextRoute.kind === "images"
-      && new URLSearchParams(nextLocation.search).get("bin") === "1";
-    discardLibrary.current = libraryDirty && (leavesWorkspace || opensRecycleBin);
-    discardVideo.current = videoActive && leavesWorkspace;
-    return discardLibrary.current || discardVideo.current;
-  });
-  if (blocker.state !== "blocked") return null;
-  return <LeaveGuardDialog
-    onConfirm={() => {
-      if (discardLibrary.current) onDiscardLibrary();
-      if (discardVideo.current) onDiscardVideo();
-      blocker.proceed();
-    }}
-    onCancel={() => blocker.reset()}
-  />;
-}
-
-function RoutedVideoLeaveGuard() {
-  const blocker = useBlocker(({ nextLocation }) => {
-    const kind = parseMediaWorkspacePath(nextLocation.pathname).kind;
-    return kind === "not-found";
-  });
-  useBeforeUnload((event) => {
-    event.preventDefault();
-    event.returnValue = "";
-  });
-  const hasUnsavedWork = useCallback(() => true, []);
-  useRegisterExitGuard({ saving: false, hasUnsavedWork });
-  if (blocker.state !== "blocked") return null;
-  return <LeaveGuardDialog
-    onConfirm={() => {
-      finishVideoUpload();
-      blocker.proceed();
-    }}
-    onCancel={() => blocker.reset()}
-  />;
-}
-
 function RoutedLibraryUpload({ guardNavigation, onClose, reportDirty, videoSession }: {
   guardNavigation: boolean;
   onClose: () => void;
@@ -2501,26 +2380,6 @@ function RoutedLibraryUpload({ guardNavigation, onClose, reportDirty, videoSessi
       onCancel={() => setConfirmClose(false)}
     /> : null}
   </>;
-}
-
-function RoutedLibraryLeaveGuard({ dirty, onDiscard }: {
-  dirty: boolean;
-  onDiscard: () => void;
-}) {
-  const dirtyRef = useRef(dirty);
-  dirtyRef.current = dirty;
-  const hasUnsavedWork = useCallback(() => dirtyRef.current, []);
-  useRegisterExitGuard(dirty ? { saving: false, hasUnsavedWork } : null);
-  const blocker = useBlocker(({ nextLocation }) => {
-    const nextRoute = parseMediaWorkspacePath(nextLocation.pathname);
-    const opensRecycleBin = nextRoute.kind === "images"
-      && new URLSearchParams(nextLocation.search).get("bin") === "1";
-    return dirty && (opensRecycleBin || nextRoute.kind === "not-found");
-  });
-  return blocker.state === "blocked" ? <LeaveGuardDialog
-    onConfirm={() => { onDiscard(); blocker.proceed(); }}
-    onCancel={() => blocker.reset()}
-  /> : null;
 }
 
 function RoutedVideoUpload({ onActiveChange, onAdmissionFailed, onDestinationUpdated }: {
