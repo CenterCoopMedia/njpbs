@@ -17,6 +17,9 @@ deployed service uses the recorded source. Serving code and ordinary publication
 generations, provider bindings, retained operations and installed host consumers
 still need their own readbacks before a release switch.
 
+The [runtime switch inventory](../config/runtime-switches.md) records owners,
+defaults, supplier evidence, and removal conditions.
+
 ## Update a surface
 
 When adding or removing a workflow, Wrangler config or Functions export, update
