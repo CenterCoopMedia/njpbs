@@ -1,4 +1,5 @@
 import { expect, test } from "./fixtures";
+test.use({ trace: "on" });
 // Keep the phone and docked-details rule bands.
 for (const width of [320, 1280]) {
   test(`Costs measured shared workspace at ${width}`, async ({ page }) => {

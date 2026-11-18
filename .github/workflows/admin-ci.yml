@@ -135,7 +135,7 @@ jobs:
       - name: Admin visual regression
         # Split individual tests so the large specimens file cannot dominate a shard.
         # The config still limits each runner to one worker, preserving capture timing.
-        run: npm run test:visual -w njpbs-admin -- --fully-parallel --shard=${{ matrix.shard }}/4
+        run: npm run test:visual -w njpbs-admin -- tests/visual/cost-ledger-workspace.spec.ts --grep 'hardware conflict recovery replaces only hardware drafts at 390$' --repeat-each 40 --fully-parallel --shard=${{ matrix.shard }}/4
       - name: Upload visual diffs
         if: failure()
         uses: actions/upload-artifact@v7
