@@ -78,7 +78,7 @@ Aug. 14, 2026), and all 12 serving Functions that bind the media credentials,
 including `cmsUploadMedia`, bind version 1. CMS deploy run 44269086649 passed the
 native resource, scoped IAM and secret-value checks before it refused the null
 references. The repository's `mediaCanary` then passed with version 1 against the
-`njpbs` bucket at 2026-11-18T08:55:51Z: Put, Head, Delete and proven absence of
+production media bucket at 2026-11-18T08:55:51Z: Put, Head, Delete and proven absence of
 `cms-media-staging/deploy-preflight-9af235f4-298f-401e-9bee-e724ae253d46`. Rotation requires explicit `provision-config` and a new committed
 reference; no value digest or second ledger exists.
 
