@@ -9,10 +9,6 @@
 // The domain is the editor's own JSON: primitives from text, number, and choice fields, and stored
 // TipTap documents from rich text. Nothing else reaches a record's fields.
 //
-// This is deliberately not `audit-diff.core.ts`'s comparison. That one lives in the site app and
-// compares Firestore snapshots, whose values include the Date that normalized Timestamps produce;
-// this one compares a form's live record inside the admin. They agree in approach and answer
-// different questions over different value sets.
 export function recordsEqual(a: Record<string, unknown>, b: Record<string, unknown>): boolean {
   return canonical(a) === canonical(b);
 }

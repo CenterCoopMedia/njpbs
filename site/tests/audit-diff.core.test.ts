@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { type AuditDiff, diffStates, type FieldChange, type Json } from "../src/lib/audit-diff.core";
+import { type AuditDiff, diffStates, type FieldChange, type Json } from "../../packages/content-core/src/audit-diff";
 
 // Helper: the set of paths a diff touches, sorted (the diff already sorts, but assert it).
 function paths(d: AuditDiff): string[] {
