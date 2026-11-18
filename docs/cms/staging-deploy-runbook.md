@@ -134,8 +134,9 @@ that exception. Deployment and failure recovery never authorize a merge.
    and post-CMS release settlement checks separately. Only then report the
    paired release verified. Report any missing interaction proof.
 
-The planner may reuse only complete receipts with matching input/configuration/
-trusted-source fingerprints and fresh live identities. Missing graph metadata,
+The Functions planner may reuse complete receipts with matching runtime inputs,
+render inputs, configuration and fresh live identities. A workflow-only edit
+does not require a Functions rollout. Missing graph metadata,
 dynamic/unresolved edges, loader/build/asset/export changes and provider drift
 retain conservative selection. It cannot infer a safe no-op from equal source
 alone. Renderer input matching includes its committed dependency closure and

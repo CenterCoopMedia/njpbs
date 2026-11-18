@@ -20,8 +20,7 @@ import {
   deploymentVariablesFingerprint,
   deploymentSecretsUnchanged,
   explicitCloudWakeDecision,
-  fingerprintExecutionSource,
-  fingerprintReceiptExecutionSource,
+  fingerprintFunctionsRenderSource,
   functionsForRuntimeComparison,
   componentReceiptRunCompleted,
   runtimeParametersMatch,
@@ -155,7 +154,7 @@ export async function main() {
     } };
     const secretsUnchanged = await deploymentSecretsUnchanged(process.env,
       (name, desired) => currentVersionMatches(name, desired, readClient));
-    const [functionsReceipt, rendererReceipt, functionsFingerprint, rendererGraph, trustedFingerprint, functionGraph] =
+    const [functionsReceipt, rendererReceipt, functionsFingerprint, rendererGraph, renderFingerprint, functionGraph] =
       await Promise.all([
         readReceipt(firestore, "functions"),
         readReceipt(firestore, "renderer"),
@@ -165,14 +164,14 @@ export async function main() {
           const path = typeof file === "string" && /^[A-Za-z0-9_./-]{1,200}$/.test(file) ? ` (${file})` : "";
           process.stderr.write(`Renderer graph fallback: ${reason}${path}; full paired release required\n`);
         } }),
-        fingerprintExecutionSource(deploySha, trustedSha, { cwd: process.env.GITHUB_WORKSPACE }),
+        fingerprintFunctionsRenderSource(trustedSha, { cwd: process.env.GITHUB_WORKSPACE }),
         fingerprintFunctionGraph(deploySha, { cwd: process.env.GITHUB_WORKSPACE }),
       ]);
     const rendererFingerprint = rendererGraph?.fingerprint ?? await fingerprintInputs(deploySha, "renderer", { cwd: process.env.GITHUB_WORKSPACE });
     const baseline = baselineMutation(functionsReceipt, {
       runId: process.env.GITHUB_RUN_ID, runAttempt: process.env.GITHUB_RUN_ATTEMPT,
     }).mutation;
-    const trustedReceiptFingerprint = await fingerprintReceiptExecutionSource(baseline, { cwd: process.env.GITHUB_WORKSPACE });
+    const receiptRenderFingerprint = await fingerprintFunctionsRenderSource(baseline?.trustedWorkflowSha, { cwd: process.env.GITHUB_WORKSPACE });
     const desiredParameters = await desiredRuntimeParameters(process.env);
     let parametersMatch = false;
     let liveFunctions = null;
@@ -214,8 +213,8 @@ export async function main() {
       configurationFingerprint,
       rendererFingerprint,
       rendererGraphAvailable: rendererGraph !== null,
-      trustedFingerprint,
-      trustedReceiptFingerprint,
+      renderFingerprint,
+      receiptRenderFingerprint,
       liveFunctionsIdentities,
       liveRendererIdentities,
       currentRun: {

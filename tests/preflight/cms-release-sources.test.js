@@ -8,7 +8,7 @@ import { parse } from "yaml";
 import { readCmsDeployWorkflow } from "../helpers/cms-deploy-workflow.mjs";
 import { CMS_RELEASE_CHECK_FILES, requireCmsReleaseSources } from "../../.github/scripts/require-cms-release-sources.mjs";
 import { requireReleaseSource } from "../../.github/scripts/require-release-source.mjs";
-import { decideRelease, fingerprintExecutionSource, fingerprintReceiptExecutionSource } from "../../scripts/lib/cms-release-plan.mjs";
+import { fingerprintExecutionSource, fingerprintFunctionsRenderSource, fingerprintReceiptExecutionSource } from "../../scripts/lib/cms-release-plan.mjs";
 
 const repoRoot = fileURLToPath(new URL("../../", import.meta.url));
 const workflow = parse(readCmsDeployWorkflow());
@@ -71,7 +71,7 @@ describe("CMS release source contract", () => {
     expect(authorize(compatibleLiveBase)).toBe(releaseSha);
     expect(requireCmsReleaseSources({ releaseSha, trustedWorkflowSha, releaseRoot, trustedRoot }).releaseChecksSha).toBe(releaseSha);
   });
-  it.each(["missing source", "missing workflow", "unavailable source object", "unavailable workflow object"])("requires a full release for an unavailable receipt baseline: %s", async kind => {
+  it.each(["missing source", "missing workflow", "unavailable source object", "unavailable workflow object"])("cannot fingerprint an unavailable execution-source baseline: %s", async kind => {
     const mutation = { sourceSha: releaseSha, trustedWorkflowSha };
     if (kind === "missing source") delete mutation.sourceSha;
     if (kind === "missing workflow") delete mutation.trustedWorkflowSha;
@@ -79,11 +79,9 @@ describe("CMS release source contract", () => {
     if (kind === "unavailable workflow object") mutation.trustedWorkflowSha = "f".repeat(40);
     const trustedReceiptFingerprint = await fingerprintReceiptExecutionSource(mutation, { cwd: releaseRoot });
     expect(trustedReceiptFingerprint).toBeNull();
-    const receipt = { schemaVersion: 1, state: "complete", mutation: { sourceSha: releaseSha, inputFingerprint: "e".repeat(64) } };
-    const input = { functionsReceipt: receipt, rendererReceipt: receipt,
-      trustedFingerprint: await fingerprintExecutionSource(releaseSha, trustedWorkflowSha, { cwd: releaseRoot }), trustedReceiptFingerprint };
-    expect(decideRelease(input)).toMatchObject({ functionsMutated: true, releaseReason: "trusted_source_changed" });
-    expect(decideRelease({ ...input, forceFirebase: true })).toMatchObject({ functionsMutated: true, releaseReason: "force_firebase" });
+  });
+  it.each([undefined, "f".repeat(40)])("treats unavailable Functions render source %s as an unknown baseline", async workflowSha => {
+    expect(await fingerprintFunctionsRenderSource(workflowSha, { cwd: releaseRoot })).toBeNull();
   });
   it("fingerprints release helpers at NEW and trusted gates at their separate workflow SHA", async () => {
     const deps = { cwd: releaseRoot };
