@@ -912,6 +912,22 @@ if(process.env.CMS_BUG_REPORT_TELEGRAM_ADMIN_MAP)process.exit(8); require("node:
       .rejects.toMatchObject({ message: "health request failed" });
   });
 
+  it("bounds direct-origin probes and keeps edge probes serial", async () => {
+    const active = new Map(), peak = new Map();
+    const request = async (url, init = {}) => {
+      const { origin } = new URL(url);
+      const count = (active.get(origin) ?? 0) + 1;
+      active.set(origin, count);
+      peak.set(origin, Math.max(peak.get(origin) ?? 0, count));
+      await Promise.resolve();
+      active.set(origin, active.get(origin) - 1);
+      return expectedResponseFor(url, init);
+    };
+    await expect(runCmsFunctionSmoke({ baseUrl: BASE_URL, request })).resolves.toEqual({ checked: 296 });
+    expect(peak.get(BASE_URL)).toBe(1);
+    expect(peak.get(FUNCTIONS_ORIGIN)).toBe(4);
+  });
+
   it("refuses a configured functions URL other than the production bare origin", async () => {
     const request = vi.fn();
 
