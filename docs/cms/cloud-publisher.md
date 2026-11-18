@@ -14,9 +14,10 @@ Functions enqueue publication work for the serializer.
 ## Source and session
 
 Choose one reviewed full 40-character NEW SHA for publisher, public renderer
-and subsequent CMS deployment. Normal source is merged and has its own passing
-main-push CI and native aggregate check. Later main merges belong to the next
-release. Keep trusted operator source separate from application source.
+and subsequent CMS deployment. Normal source is on main and has a passing
+`CI / ci` job for its exact SHA from a main push or its landed main merge group.
+Later main merges belong to the next release. Keep trusted operator source
+separate from application source.
 An emergency release needs the separately authorized exact-source procedure;
 an old freeze date never grants permission or skips CI/compatibility.
 

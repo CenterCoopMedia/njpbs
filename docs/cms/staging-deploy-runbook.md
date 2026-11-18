@@ -79,23 +79,23 @@ first public release; the staging source and local tests are not live proof.
 
 From the root of a clean reviewed checkout in Bash, supply `NEW` and the two
 [canonical identity inputs](../config/repository-identity.md). In the authorized
-operator session, check the exact main-push CI:
+operator session, check the exact landed source CI.
 
 ```bash
 : "${NEW:?Set NEW to the approved full release SHA}"
 : "${CANONICAL_GITHUB_REPOSITORY:?Configure the approved repository}"
+: "${CANONICAL_GITHUB_REPOSITORY_ID:?Configure the approved repository ID}"
 [[ "$NEW" =~ ^[a-f0-9]{40}$ ]] || exit 1
 deploy_sha="$NEW"
-gh run list --repo "$CANONICAL_GITHUB_REPOSITORY" --workflow ci.yml \
-  --event push --branch main --commit "$deploy_sha" \
-  --json databaseId,headSha,status,conclusion
+export CANONICAL_GITHUB_REPOSITORY CANONICAL_GITHUB_REPOSITORY_ID
+node scripts/check-admin-release-ci.mjs "$deploy_sha"
 ```
 
-Require that exact SHA's successful completed main-push `CI` run and successful
-native `ci` job, read with `gh run view RUN_ID --repo "$CANONICAL_GITHUB_REPOSITORY" --json jobs`.
-PR/manual runs, canceled/superseded/skipped/pending or unreadable proof cannot
-substitute. The trusted workflow repeats admission. After separate deployment
-authorization, keep the captured SHA and dispatch:
+Require the exact SHA's completed `CI / ci` success from a main push or its
+landed main merge group. The shared reader verifies repository and source
+identity and checks main ancestry for queue proof. The trusted workflow repeats
+admission. After separate deployment authorization, keep the captured SHA and
+dispatch.
 
 ```bash
 gh workflow run cms-staging-deploy.yml \

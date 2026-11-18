@@ -92,6 +92,30 @@ class PromotionTests(unittest.TestCase):
                 with self.assertRaises(promotion.NotReady):
                     fixture.check.ci()
 
+    def test_ci_requires_a_main_merge_group_sha_to_have_landed(self):
+        runs = f"{PREFIX}/actions/workflows/ci.yml/runs"
+        compare = f"{PREFIX}/compare/{SHA}...{BASE}"
+        for branch, merge_base, expected_error in [
+            ("main", SHA, None),
+            ("other", SHA, "no successful exact-SHA"),
+            ("main", BASE, "selected SHA is not on main"),
+        ]:
+            with self.subTest(branch=branch, merge_base=merge_base):
+                fixture = Fixture()
+                fixture.routes[runs]["workflow_runs"][0].update(
+                    event="merge_group", head_branch=f"gh-readonly-queue/{branch}/pr-137-{BASE}")
+                fixture.routes[f"{PREFIX}/git/ref/heads/main"]["object"]["sha"] = BASE
+                fixture.routes[compare] = {"status": "ahead", "merge_base_commit": {"sha": merge_base}}
+                if expected_error:
+                    with self.assertRaisesRegex(promotion.NotReady, expected_error):
+                        fixture.check.ci()
+                else:
+                    self.assertEqual(fixture.check.ci(), f"CI / ci; run=22; sha={SHA}")
+                    self.assertIn(compare, fixture.calls)
+                queries = [parse_qs(urlsplit(path).query) for path in fixture.calls
+                           if urlsplit(path).path == runs]
+                self.assertEqual([query["event"] for query in queries], [["push"], ["merge_group"]])
+
     def test_rulesets_require_exact_scope_guards_and_bypasses(self):
         for key, value in [
             ("enforcement", "disabled"), ("bypass_actors", [{"actor_type": "RepositoryRole", "actor_id": 5}]),
