@@ -25,7 +25,6 @@
     "guardrails:source": "node ../.github/scripts/metered-api-scan.mjs",
     "guardrails:docs": "vitest run --config vitest.guardrails.config.ts scripts/docs-pointer-guardrail-source.test.ts scripts/onboarding-source-privacy-guardrail-source.test.ts",
     "assert:public-contract": "node scripts/assert-public-contract.mjs",
-    "prepare:public-worker-artifact": "tsx scripts/prepare-public-worker-artifact.ts",
     "upload:public-worker-candidate": "tsx scripts/upload-public-worker-candidate.ts",
     "activate:public-worker-candidate": "bash ../scripts/activate-public-worker-candidate.sh",
     "check:cloud-release-access": "tsx scripts/check-cloud-release-access.ts",

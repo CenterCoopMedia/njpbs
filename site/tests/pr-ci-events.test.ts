@@ -97,7 +97,7 @@ describe("PR events at the Actions workflow boundary", () => {
 describe("Merge queue events at the Actions workflow boundary", () => {
   const workflows = [
     ci,
-    ...["pages-fallback-safety", "admin-ci", "firebase-ci"].map((name) =>
+    ...["admin-ci", "firebase-ci"].map((name) =>
       parse(
         readFileSync(
           new URL(`../../.github/workflows/${name}.yml`, import.meta.url),
@@ -116,22 +116,15 @@ describe("Merge queue events at the Actions workflow boundary", () => {
     },
   });
 
-  it("runs PR and queue safety in required CI without a duplicate promotion run", () => {
+  it("runs PR and queue checks through the required workflow", () => {
     expect(ci.on.merge_group).toEqual({ types: ["checks_requested"] });
     expect(ci.on.pull_request).not.toHaveProperty("paths");
     expect(ci.on.pull_request).not.toHaveProperty("paths-ignore");
-    expect(workflows[1].on).not.toHaveProperty("pull_request");
-    expect(workflows[1].on).not.toHaveProperty("merge_group");
-    const guard = ci.jobs.policy.steps.find((step: { name?: string }) =>
-      step.name === "Require the non-reserving Pages runtime");
-    expect(guard.run).toBe("node .github/scripts/pages-fallback-safety.mjs");
-    expect(guard.if).toBeUndefined();
-    expect(guard["continue-on-error"]).toBeUndefined();
     for (const [index, consumer] of ["admin", "firebase"].entries()) {
       expect(ci.jobs[consumer].uses).toBe(
         `./.github/workflows/${consumer}-ci.yml`,
       );
-      expect(Object.keys(workflows[index + 2].on)).toEqual(["workflow_call"]);
+      expect(Object.keys(workflows[index + 1].on)).toEqual(["workflow_call"]);
     }
   });
 
@@ -146,12 +139,11 @@ describe("Merge queue events at the Actions workflow boundary", () => {
         ref: "refs/heads/main",
       },
     ];
-    const gateWorkflows = [ci, ...workflows.slice(2)];
-    const groups = gateWorkflows.flatMap((workflow) =>
+    const groups = workflows.flatMap((workflow) =>
       contexts.map((github) => group(github, workflow)),
     );
     expect(new Set(groups).size).toBe(groups.length);
-    for (const workflow of gateWorkflows) {
+    for (const workflow of workflows) {
       expect(group(queue(), workflow)).toContain(queue().ref);
       const cancellation = workflow.concurrency["cancel-in-progress"];
       expect(typeof cancellation === "boolean" ? cancellation : expression(cancellation, queue())).toBe(true);
@@ -164,23 +156,6 @@ describe("Merge queue events at the Actions workflow boundary", () => {
     expect(Boolean(expression(ci.jobs.ci.if, queue()))).toBe(true);
     expect(expression(ci.jobs.ci.name, queue())).toBe("ci");
   });
-
-  it.each(["main", "production-candidate/release"])(
-    "preserves the Pages promotion check for each pushed commit on %s",
-    (branch) => {
-      const safety = workflows[1].jobs["pages-fallback-safety"];
-      expect(safety.name).toBe("Pages fallback safety");
-      expect(safety.if).toBeUndefined();
-      const contexts = ["first-sha", "second-sha", "third-sha"].map((sha) => ({
-        event_name: "push",
-        ref: `refs/heads/${branch}`,
-        sha,
-      }));
-      const groups = contexts.map((github) => group(github, workflows[1]));
-      // Different groups also prevent replacement of pending runs.
-      expect(new Set(groups).size).toBe(3);
-    },
-  );
 
   it("selects every consumer even when the classifier would skip it", () => {
     const outputs = Object.fromEntries(

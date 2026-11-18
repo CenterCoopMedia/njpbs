@@ -66,16 +66,9 @@ then prove idle pointer, exact public root receipt, body bytes, family/withdrawa
 and media readiness. Failed proof retains the original attempt for diagnosis.
 No second uncoordinated public writer is permitted.
 
-The retained Pages origin is a separately authorized fallback, with exact
-active-batch/source/cutoff checks before upload and immediately before deploy.
-It must not reserve or advance a public generation. Source changes do not
-authorize a route switch. Use the pause/drain/route/readback/resume sequence in
-[incident recovery](staging-deploy-runbook.md#incident-and-fallback-recovery).
-
 ## Proof boundary
 
 Build/source tests, immutable upload readback, actual active deployment, public
 ordinary-route receipts and signed-in CMS behavior are separate evidence.
-Qualification includes cold/withdrawn/alias/asset cases and current fallback
-copies. Do not use cache-busting URLs to establish removal, stale receipt
+Qualification includes cold, withdrawn, alias and asset cases. Do not use cache-busting URLs to establish removal, stale receipt
 examples as a predecessor, or a provider success as completed content settlement.

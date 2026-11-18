@@ -5,6 +5,9 @@ work recovery. A CMS save, accepted queue, uploaded candidate or process health
 200 is not a public publication receipt. Read current identities through the
 [common receipt view](staging-deploy-runbook.md#receipt-view).
 
+The production CMS workflow pins `CMS_PUBLISH_TRANSPORT=serializer`. The Nov. 18
+rollout used the serializer. [Hosted deployment evidence](https://github.com/CenterCoopMedia/njpbs/actions/runs/44337773774/job/134922602302)
+
 ## Source and session
 
 Choose one reviewed full 40-character NEW SHA for publisher, public renderer

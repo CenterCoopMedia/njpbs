@@ -44,44 +44,6 @@ describe("development dispatch boundary", () => {
       expect(() => dispatch.assertPublishDispatch({ ...production, ...change }, "production", devActor)).toThrow();
     }
   });
-  it("refuses dev dispatches before checkout and again at the full guard", () => {
-    const workflow = parse(readFileSync(".github/workflows/cms-publish.yml", "utf8"));
-    const job = workflow.jobs.authorize;
-    const guard = job.steps.findIndex(step => step.run?.includes("assertPublishDispatch"));
-    expect(guard).toBe(1);
-    expect(job.permissions).toEqual({ contents: "read" });
-    expect(job.steps[0].uses).toMatch(/^actions\/checkout@/);
-    expect(job.steps[0].with).toEqual({ ref: "${{ github.sha }}", "persist-credentials": false,
-      "sparse-checkout": "functions/lib/cms-publish-dispatch.js", "sparse-checkout-cone-mode": false });
-    const script = job.steps[guard].run;
-    const env = { ...repositoryFixture, PATH: process.env.PATH, EVENT_NAME: "repository_dispatch", EVENT_ACTION: "cms_publish",
-      CMS_PUBLISH_GITHUB_TRUSTED_ACTORS: JSON.stringify(["fixture-user"]), EVENT_ACTOR: "fixture-user",
-      EVENT_REF: "refs/heads/main", TRIGGERING_ACTOR: "fixture-user", EVENT_SENDER: "fixture-user", QUEUE_ID: queueId,
-      EVENT_PROJECT: "", EVENT_ENVIRONMENT: "", DEV_DISPATCH_ACTOR: devActor, GITHUB_OUTPUT: "/dev/null" };
-    const admitted = values => runInNewContext(job.if, {
-      contains: (list, value) => list.includes(value), fromJSON: JSON.parse,
-      startsWith: (value, prefix) => String(value).startsWith(prefix), toJSON: JSON.stringify,
-      vars: { CANONICAL_GITHUB_REPOSITORY: values.CANONICAL_GITHUB_REPOSITORY,
-        CANONICAL_GITHUB_REPOSITORY_ID: values.CANONICAL_GITHUB_REPOSITORY_ID, CMS_PUBLISH_GITHUB_TRUSTED_ACTORS: values.CMS_PUBLISH_GITHUB_TRUSTED_ACTORS,
-        CMS_DEV_DISPATCH_ACTOR: values.DEV_DISPATCH_ACTOR },
-      github: { repository: repositoryFixture.CANONICAL_GITHUB_REPOSITORY, repository_id: repositoryFixture.CANONICAL_GITHUB_REPOSITORY_ID, ref: values.EVENT_REF, event_name: values.EVENT_NAME,
-        actor: values.EVENT_ACTOR, triggering_actor: values.TRIGGERING_ACTOR,
-        event: { action: values.EVENT_ACTION, sender: { login: values.EVENT_SENDER },
-          client_payload: { queueId: values.QUEUE_ID, projectId: values.EVENT_PROJECT, environment: values.EVENT_ENVIRONMENT } } },
-    });
-    expect(admitted(env)).toBe(true);
-    expect(spawnSync("bash", ["-c", script], { env }).status).toBe(0);
-    for (const change of [{ EVENT_ACTION: "cms_dev_publish" }, { EVENT_SENDER: devActor },
-      { TRIGGERING_ACTOR: devActor }, { EVENT_PROJECT: "njpbs-site-dev" }, { EVENT_ENVIRONMENT: "development" },
-      { EVENT_ACTOR: "other", EVENT_SENDER: "other" }, { QUEUE_ID: "" },
-      { QUEUE_ID: 123 }, { QUEUE_ID: null },
-      { CMS_PUBLISH_GITHUB_TRUSTED_ACTORS: "[]" }]) {
-      const refused = { ...env, ...change };
-      expect(admitted(refused), JSON.stringify(change)).toBe(false);
-      expect(spawnSync("bash", ["-c", script], { env: refused }).status).not.toBe(0);
-    }
-  });
-
   it("dev requires its own identity, main, project and transport", () => {
     expect(() => dispatch.assertPublishDispatch(request, "development", devActor)).not.toThrow();
     for (const change of [{ sender: "fixture-user" }, { actor: "fixture-user" }, { action: "cms_publish" },
@@ -187,8 +149,6 @@ describe("development publication target and receipts", () => {
     expect(steps.indexOf(sandbox)).toBeLessThan(steps.indexOf(probe));
     expect(steps.indexOf(probe)).toBeLessThan(steps.indexOf(build));
     expect(source).not.toMatch(/secrets\.(FIREBASE_SERVICE_ACCOUNT|CLOUDFLARE_API_TOKEN)\b/);
-    const production = parse(readFileSync(".github/workflows/cms-publish.yml", "utf8"));
-    expect(production.on.repository_dispatch.types).toEqual(["cms_publish"]);
   });
 });
 

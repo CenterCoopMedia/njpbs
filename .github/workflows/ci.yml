@@ -9,9 +9,8 @@ name: CI
 # Classification and the policy gate share one runner so Policy does not wait
 # in the hosted-runner queue after Classify. The policy gate still finishes
 # before any consumer can run package code. The final `ci` job is the one
-# required main-branch result. The narrow Pages fallback safety workflow
-# supplies the separate production-branch status context. Metadata edits must
-# not start another code run in this concurrency group.
+# required main-branch result. Metadata edits must not start another code run
+# in this concurrency group.
 
 on:
   pull_request:
@@ -98,8 +97,6 @@ jobs:
         run: node .github/scripts/evidence-image-policy.mjs
       - name: Identity boundary guard
         run: node .github/scripts/identity-boundary-guard.mjs
-      - name: Require the non-reserving Pages runtime
-        run: node .github/scripts/pages-fallback-safety.mjs
       - name: Record and check dependency lock delta
         env:
           BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.merge_group.base_sha || github.event.before || format('{0}^', github.sha) }}
@@ -128,8 +125,6 @@ jobs:
           scripts/assert-dev-cms-targets.test.mjs
           scripts/cms-debug-browser.test.mjs
           .github/scripts/ensure-panel-browser-deps.test.mjs
-          .github/scripts/pages-fallback-safety.test.mjs
-          .github/scripts/pages-reviewed-source.test.mjs
           tests/scripts/check-dev-machine-receipt.test.mjs
           tests/scripts/dev-access-guards.test.mjs
           tests/scripts/ugc-r2-policy.test.mjs
@@ -179,7 +174,6 @@ jobs:
         run: >-
           npx --no-install vitest run --config vitest.guardrails.config.ts
           scripts/workflow-concurrency-guardrail-source.test.ts
-          scripts/workflow-runner-context-guardrail-source.test.ts
           scripts/workflow-secret-guardrail-source.test.ts
       - name: QA harness unit tests
         if: steps.reuse.outputs.reused != 'true'

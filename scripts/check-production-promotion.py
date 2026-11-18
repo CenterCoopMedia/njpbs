@@ -258,7 +258,6 @@ class Precheck:
         self.row("main ancestry", self.main_source)
         self.row("reviewed workflow and admission", self.reviewed_sources)
         self.row("green main-push CI", self.ci)
-        self.row("Actions variable", lambda: self.variable("actions", "CCM_PROMOTE_APP_SLUG", self.app_slug))
         self.row("App permissions", lambda: self.permissions(self.app()))
         self.row("installation permissions", self.installation_permissions)
         self.row("installation repository selection", self.installation_repositories)

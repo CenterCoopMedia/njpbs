@@ -23,7 +23,6 @@
       "CMS_STAFF_EMAIL_API_TOKEN",
       "CMS_VOICEOVER_R2_ACCESS_KEY_ID",
       "CMS_VOICEOVER_R2_SECRET_ACCESS_KEY",
-      "FIREBASE_PUBLISH_SERVICE_ACCOUNT",
       "FIREBASE_SERVICE_ACCOUNT",
       "PUBLISHED_POST_READER_HMAC_KEY",
       "VITE_FIREBASE_API_KEY",
@@ -50,20 +49,6 @@
       "CMS_DEV_PREVIEW_FIREBASE_ACCOUNT",
       "CMS_DEV_ACCESS_CLIENT_ID",
       "CMS_DEV_ACCESS_CLIENT_SECRET"
-    ]
-  },
-  "github-pages": {
-    "branches": [
-      "main",
-      "production"
-    ],
-    "secrets": [
-      "CMS_PREVIEW_R2_CREDENTIAL",
-      "FIREBASE_PUBLISH_SERVICE_ACCOUNT",
-      "FIREBASE_SERVICE_ACCOUNT",
-      "MEDIA_MANAGER_API_KEY",
-      "MEDIA_MANAGER_API_SECRET",
-      "PRODUCTION_DEPLOY_DISPATCH_SECRET"
     ]
   },
   "publisher-image": {
