@@ -53,7 +53,7 @@ export default defineConfig({
     deviceScaleFactor: 1,
     // Captures should show the resting state, not a transition mid-flight.
     contextOptions: { reducedMotion: "reduce" },
-    trace: "off",
+    trace: process.env.CI ? "retain-on-failure" : "off",
     video: "off",
     screenshot: "off",
   },
