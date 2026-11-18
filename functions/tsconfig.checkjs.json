@@ -5,6 +5,7 @@
     "module": "NodeNext",
     "target": "ES2023",
     "noEmit": true,
+    "noErrorTruncation": true,
     "skipLibCheck": true,
     "types": ["node"]
   },
