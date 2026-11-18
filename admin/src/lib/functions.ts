@@ -2,7 +2,7 @@ import { COVERAGE_LABELS_SETTINGS_ID } from "../../../packages/content-core/src/
 import { STORY_CTAS_SETTINGS_ID } from "../../../packages/content-core/src/cms-settings";
 import { usageActionCollector } from "./boardwalk-usage";
 import { projectCoverageLabels, type CoverageLabelsBuildData } from "../../../packages/content-core/src/coverage-labels";
-import { invalidateMediaLists, markMediaTabCountsStale, type MediaTabCounts } from "./media-session-cache";
+import { invalidateMediaLists, markMediaTabCountsStale } from "./media-session-cache";
 import {
   recordReportRequest,
   type BrowserDiagnostics,
@@ -22,6 +22,60 @@ import type { AccessTier, Role } from "../../../packages/content-core/src/rbac";
 import type { NavigationPreferences } from "./navigation-preferences";
 import { PUBLIC_HOMEPAGE_BANNER_SETTINGS_ID, PUBLIC_SITE_CHROME_SETTINGS_ID,
   SITE_NAVIGATION_SETTINGS_ID, NJ_DECIDES_SETTINGS_ID } from "../../../packages/content-core/src/cms-settings";
+
+import type {
+  BugReportArea,
+  BugReportAuditEntry,
+  BugReportCategory,
+  BugReportNudge,
+  BugReportRecord,
+  BugReportSeverity,
+  BugReportSummary,
+  SharedBugReport,
+} from "./functions-report-types";
+import type {
+  BinnedMediaAsset,
+  ListBinnedMediaResponse,
+  ListMediaCategoriesResponse,
+  ListMediaRequest,
+  ListMediaResponse,
+  MediaAssetSummary,
+  MediaCategoryDefinition,
+  MediaCorpusRequest,
+  MediaCorpusResponse,
+  SelfProfilePhotoListMediaRequest,
+} from "./functions-media-types";
+
+export type {
+  BugReportArea,
+  BugReportAuditEntry,
+  BugReportCategory,
+  BugReportNudge,
+  BugReportProgress,
+  BugReportRecord,
+  BugReportResolution,
+  BugReportSeverity,
+  BugReportStatus,
+  BugReportSummary,
+  SharedBugReport,
+} from "./functions-report-types";
+export type {
+  BinnedMediaAsset,
+  ListBinnedMediaResponse,
+  ListMediaCategoriesResponse,
+  ListMediaRequest,
+  ListMediaResponse,
+  MediaAssetKind,
+  MediaAssetSummary,
+  MediaCategoryDefinition,
+  MediaCorpusRequest,
+  MediaCorpusResponse,
+  MediaKind,
+  MediaListQuery,
+  MediaSortDirection,
+  MediaSortField,
+  SelfProfilePhotoListMediaRequest,
+} from "./functions-media-types";
 
 export interface RoleRequest {
   targetUid?: string;
@@ -532,201 +586,6 @@ async function postMultipartFunction<T>(
   return (await response.json()) as T;
 }
 
-export type BugReportSeverity = "blocker" | "work_impaired" | "minor";
-export type BugReportArea =
-  | "sign_in_access"
-  | "content_editing"
-  | "save_revision"
-  | "review_publish"
-  | "media"
-  | "navigation_ui"
-  | "other";
-export type BugReportCategory = "bug" | "suggestion" | "question";
-
-export type BugReportStatus =
-  | "open"
-  | "acknowledged"
-  | "in_progress"
-  | "blocked"
-  | "resolved"
-  | "dismissed";
-
-export interface BugReportResolution {
-  immediateSafeAction: string;
-  likelyCause: {
-    certainty: "confirmed" | "suspected" | "unknown";
-    summary: string;
-  };
-  recommendedResolution: string[];
-  verification: string;
-  fallback: string;
-  needsAdminInput: string;
-  missingEvidence: string[];
-}
-
-export interface BugReportProgress {
-  stage?: "received" | "investigating" | "fixing" | "review" | "awaiting_live" | "closed";
-  phase: "received" | "acknowledged" | "queued" | "in_progress" | "ready_for_review" | "changes_requested" | "checks_failed" | "merged" | "closed" | "resolved" | "dismissed" | "blocked" | "needs_attention" | "reopened";
-  label: string;
-  detail: string;
-  active: boolean;
-  updatedAt: string | null;
-  lastSyncedAt: string | null;
-  syncState: "not_linked" | "current" | "pending" | "stale" | "unavailable";
-  issues: Array<{ number: number; state: "open" | "closed" | "unavailable" }>;
-  pullRequests: Array<{
-    number: number;
-    state: "open" | "closed" | "unavailable";
-    draft: boolean;
-    merged: boolean;
-    reviewState: "approved" | "changes_requested" | "pending" | "none";
-    checksState: "success" | "failure" | "pending" | "none";
-  }>;
-  deployment: "unverified";
-}
-
-export interface BugReportRecord {
-  shared?: false;
-  nudge?: BugReportNudge;
-  apiVersion: number;
-  id: string;
-  category?: BugReportCategory;
-  severity: BugReportSeverity;
-  area: BugReportArea;
-  tryingToDo: string;
-  happened: string;
-  expected: string;
-  steps: string | null;
-  workaround: string | null;
-  consoleLogs?: Array<{
-    level: "log" | "info" | "warn" | "error" | "debug";
-    message: string;
-    timestamp: string;
-  }>;
-  route: { path: string; url: string | null } | null;
-  affectedRecord: {
-    kind: string;
-    id: string;
-    lifecycle: string | null;
-    version: number | null;
-  } | null;
-  reporter: { uid: string; email?: string; role: string };
-  evidence: {
-    screenshot: {
-      id: string;
-      mimeType: string;
-      sizeBytes: number;
-      width: number;
-      height: number;
-      sha256: string;
-      expiresAt: string;
-    } | null;
-  };
-  environment: {
-    buildRevision: string;
-    deploymentEnvironment: string;
-    browser?: string;
-    operatingSystem?: string;
-    viewport?: { width: number; height: number };
-    online?: boolean;
-    timeZone?: string;
-    diagnostics?: BrowserDiagnostics;
-    native?: {
-      source: "premiere";
-      mode: "manual" | "automatic";
-      pluginVersion: string;
-      premiereVersion: string;
-      uxpVersion: string;
-      pluginRevision?: string;
-      platform: "win32" | "darwin" | "unknown";
-      view: "connection" | "library" | "detail" | "return" | "settings";
-    };
-  };
-  automatic?: {
-    fingerprint: string;
-    repeatCount: number;
-    firstSeenAt: string;
-    lastSeenAt: string;
-    windowExpiresAt: string;
-  };
-  correlationIds: string[];
-  status: BugReportStatus;
-  progress?: BugReportProgress;
-  actionableResolution: BugReportResolution;
-  acknowledgedAt: string | null;
-  assignedAt: string | null;
-  resolvedAt: string | null;
-  dismissedAt: string | null;
-  version: number;
-  createdAt: string;
-  updatedAt: string;
-  ownerUid?: string | null;
-  acknowledgedBy?: string | null;
-  resolvedBy?: string | null;
-  dismissedBy?: string | null;
-  deliveryStatus?: string;
-  githubDelivery?: {
-    state:
-      | "not_linked"
-      | "pending"
-      | "synced"
-      | "retryable_failed"
-      | "unknown"
-      | "terminal_failed";
-    attemptCount: number;
-    lastAttemptAt: string | null;
-    lastError: string | null;
-    lastOperation:
-      | "create_issue"
-      | "create_issue_and_fix"
-      | "attach_issue"
-      | "attach_pull_request"
-      | "sync"
-      | null;
-    lastTargetNumber: number | null;
-    lastSyncedAt: string | null;
-    fixRequestedAt: string | null;
-    fixStatus:
-      | "not_requested"
-      | "pending"
-      | "running"
-      | "draft_pr_open"
-      | "investigation_only"
-      | "failed";
-    fixSessionName: string | null;
-    fixPullRequestUrl: string | null;
-  };
-  links?: {
-    relatedReportIds: string[];
-    githubIssueNumbers: number[];
-    pullRequestNumbers: number[];
-    discoveredPullRequestNumbers?: number[];
-    discoveryObservedAt?: string;
-    workflowRunUrls: string[];
-    deploymentRunUrls: string[];
-    githubIssues?: Array<{
-      number: number;
-      url: string;
-      title: string;
-      state: "open" | "closed";
-      updatedAt: string;
-    }>;
-    pullRequests?: Array<{
-      number: number;
-      url: string;
-      title: string;
-      state: "open" | "closed";
-      draft: boolean;
-      merged: boolean;
-      headSha: string;
-      reviewState: "approved" | "changes_requested" | "pending" | "none";
-      checksState: "success" | "failure" | "pending" | "none";
-      deploymentState: "success" | "failure" | "pending" | "none";
-      updatedAt: string;
-    }>;
-  };
-}
-
 export interface BugReportSubmission {
   category?: BugReportCategory;
   severity: BugReportSeverity;
@@ -786,17 +645,6 @@ export function cmsSubmitBugReport(
   return postMultipartFunction("cmsSubmitBugReport", idToken, form);
 }
 
-export interface BugReportNudge {
-  version: number;
-  eligible: boolean;
-  eligibleAt: string | null;
-  progressAt: string | null;
-  requestedAt: string | null;
-  history: Array<{ requestedAt: string; deliveredAt?: string | null; delivery: "pending" | "delivered" | "unknown" | "terminal_failed" | "cancelled"; decision: "approved" | "ignored" | null; decidedAt: string | null }>;
-  historyTruncated: boolean;
-}
-export type BugReportSummary = Pick<BugReportRecord, "id" | "category" | "severity" | "status" | "createdAt" | "tryingToDo" | "happened" | "progress" | "nudge">;
-export type SharedBugReport = Omit<BugReportSummary, "nudge"> & { shared: true; nudge?: never };
 export function cmsNudgeBugReport(idToken: string, reportId: string, mutationId: string): Promise<{ success: true; nudge: BugReportNudge; replayed: boolean }> {
   return postFunction("cmsNudgeBugReport", idToken, { reportId, mutationId });
 }
@@ -814,16 +662,6 @@ export function cmsListBugReports(
   sharedReportsActive: boolean;
 }> {
   return postFunction("cmsListBugReports", idToken, { view, limit });
-}
-
-export interface BugReportAuditEntry {
-  id: string;
-  action: string;
-  actorUid: string | null;
-  actorEmail: string | null;
-  at: string;
-  before: Record<string, unknown> | null;
-  after: Record<string, unknown> | null;
 }
 
 export function cmsGetBugReport(
@@ -1787,35 +1625,6 @@ export function cmsShareNavigationItem(
   }, {}, { appCheck: true });
 }
 
-/** The kinds the Images tab lists and filters. */
-export type MediaKind = "image" | "document" | "audio";
-/** Every stored media library kind. Audio appears only on the Audio tab. */
-export type MediaAssetKind = MediaKind | "audio";
-export type MediaSortField = "updatedAt" | "createdAt" | "name" | "sizeBytes";
-export type MediaSortDirection = "asc" | "desc";
-
-export interface MediaCategoryDefinition {
-  id: string;
-  label: string;
-  description: string;
-  order: number;
-  active: boolean;
-  reserved: boolean;
-  version: number;
-  etag: string;
-  canUpload: boolean;
-  canManage: boolean;
-  createdAt: string | null;
-  createdBy: string | null;
-  updatedAt: string | null;
-  updatedBy: string | null;
-}
-
-export interface ListMediaCategoriesResponse {
-  success: true;
-  categories: MediaCategoryDefinition[];
-}
-
 export type MutateMediaCategoryRequest =
   | {
       action: "create";
@@ -1841,75 +1650,6 @@ export interface MutateMediaCategoryResponse {
   category: MediaCategoryDefinition;
 }
 
-export interface MediaAssetSummary {
-  id: string;
-  name: string;
-  originalName: string;
-  category: string;
-  categories: string[];
-  tags: string[];
-  description: string | null;
-  altText: string | null;
-  /** True when the nightly sweep wrote the alt text and no person has changed it. */
-  altTextGenerated?: boolean;
-  metadataUpdateRequested?: boolean;
-  license: string | null;
-  credit: string | null;
-  mimeType: string;
-  kind: MediaAssetKind;
-  sizeBytes: number;
-  width: number | null;
-  height: number | null;
-  url: string;
-  thumbnails?: { url: string; width: number; height: number }[];
-  /** True when the stored file has more than one frame. Absent means unclassified. */
-  animated?: boolean;
-  /** A retained private original is recorded; availability is rechecked on download. */
-  originalAvailable?: boolean;
-  /** The retained original's file format, shown in the Download menu. */
-  originalFormat?: "JPG" | "PNG";
-  source?: "upload" | "site_seed" | "voiceover" | null;
-  voiceoverTakeId?: string;
-  voiceover?: import("./voiceovers").VoiceoverTake & { manifestVersion: number; performer_name: string };
-  lifecycle: "active";
-  version: number;
-  etag: string;
-  createdAt: string | null;
-  createdBy: string | null;
-  updatedAt: string | null;
-  updatedBy: string | null;
-}
-
-export interface ListMediaRequest {
-  q?: string;
-  assetIds?: string[];
-  categories?: string[];
-  kinds?: MediaAssetKind[];
-  sort?: MediaSortField;
-  direction?: MediaSortDirection;
-  page?: number;
-  /** Omit to keep the 30-row library page. The maximum is the active-library scan cap. */
-  pageSize?: number;
-  /** Opaque indexed-library continuation. Exact-id and self-profile reads stay on legacy paging. */
-  paging?: "cursor";
-  cursor?: string;
-}
-
-export interface BinnedMediaAsset extends Omit<MediaAssetSummary, "lifecycle"> {
-  lifecycle: "tombstoned" | "purging";
-  purgeAfter: string;
-  tombstonedAt: string | null;
-  tombstonedByName: string | null;
-}
-
-export interface ListBinnedMediaResponse {
-  success: true;
-  records: BinnedMediaAsset[];
-  total: number;
-  page: number;
-  pageCount: number;
-}
-
 export function cmsListBinnedMedia(
   idToken: string,
   body: { page?: number; pageSize?: number } = {},
@@ -1926,60 +1666,6 @@ export async function cmsRestoreMedia(idToken: string, asset: BinnedMediaAsset) 
   }>("cmsRestoreMedia", idToken, { assetId: asset.id }, { "If-Match": asset.etag }));
   markMediaTabCountsStale();
   return result;
-}
-
-/** The Images tab's query. Its Type filter offers only the Images tab's kinds. */
-export type MediaListQuery = Required<
-  Omit<ListMediaRequest, "assetIds" | "pageSize" | "paging" | "cursor" | "kinds">
-> & { kinds: MediaKind[] } & Pick<ListMediaRequest, "assetIds" | "pageSize" | "paging" | "cursor">;
-
-export interface SelfProfilePhotoListMediaRequest extends ListMediaRequest {
-  /** Narrow self-service view: only this caller's staff profile images. */
-  profilePhotoScope: "self";
-}
-
-interface ListMediaResponseBase {
-  success: true;
-  records: MediaAssetSummary[];
-  page: number;
-  /** Present only when the request asked with `counts: true`; never cached with the list. */
-  counts?: MediaTabCounts;
-  /** Favorite states for `records`, only when asked with `favorites: true`; never cached with the list. */
-  favoriteStates?: { ref: { backend: "r2"; id: string }; favorite: boolean }[];
-}
-
-export type ListMediaResponse = ListMediaResponseBase & (
-  | {
-      paging?: undefined;
-      total: number;
-      allCount: number;
-      pageCount: number;
-      categoryCounts: Record<string, number>;
-      kindCounts: Partial<Record<MediaKind, number>>;
-      nextCursor?: undefined;
-    }
-  | {
-      paging: "cursor";
-      nextCursor: string | null;
-      /** Exact only after the indexed scan reaches its terminal page. */
-      total: number | null;
-      /** Exact only for a terminal, unfiltered indexed scan. */
-      allCount: number | null;
-      pageCount: null;
-      categoryCounts: null;
-      kindCounts: null;
-    }
-);
-
-export interface MediaCorpusRequest {
-  cursor?: string;
-  limit?: number;
-}
-
-export interface MediaCorpusResponse {
-  success: true;
-  records: MediaAssetSummary[];
-  nextCursor: string | null;
 }
 
 export function cmsListMediaCorpus(
