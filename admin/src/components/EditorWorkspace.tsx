@@ -5,7 +5,7 @@ import { homeLayoutsEnabled } from "../lib/home-layouts";
 import { seedDataHubPageBlocks } from "../lib/data-hub-page-seed";
 import type { DataHubFigure } from "../../../packages/content-core/src/data-hub-reporting";
 import { useEditorWorkspaceView } from "../context/EditorWorkspaceView";
-import { EditorActionsProvider, EditorActionSlot } from "./EditorActions";
+import { EditorActionsProvider } from "./EditorActions";
 import { HOME_HERO_CONTENT } from "../../../packages/content-core/src/home-section-render";
 import { postPresentationError } from "../../../packages/content-core/src/post-formats";
 import { ContentShelfSources } from "./ContentShelfPicker";
@@ -38,21 +38,24 @@ import { SavedPreview, type SavedPreviewProps } from "./SavedPreview";
 import { useSaveFlight } from "../hooks/useSaveFlight";
 import { editorSaveReceipt, type SavedEditorReceipt } from "../lib/editor-save-receipt";
 import { useDraftAutosave } from "../hooks/useDraftAutosave";
-import { PagePreview } from "./PagePreview";
 import { RevisionHistory } from "./RevisionHistory";
 import { PublishedVersionStatus } from "./PublishedVersionStatus";
 import { LivePostAction } from "./LivePostAction";
 import { LifecycleActionsPanel } from "./LifecycleActionsPanel";
-import { EditorBento, type BentoPanel } from "./EditorBento";
-import { Icon } from "./ui/Icon";
+import {
+  EditorWorkspacePagePanels,
+  type PageBlockEditorControls,
+  type PageEditorSharedControls,
+  type PageMetadataEditorControls,
+  type PageWorkspaceLifecycle,
+  type PageWorkspaceRevisions,
+} from "./EditorWorkspacePagePanels";
 import { useSuccessNotice } from "./ui/SuccessNoticeRegion";
 import {
-  AsyncActionButton,
   Button,
   InlineMessage,
   Panel,
   StatusLabel,
-  Toolbar,
 } from "./ui/Primitives";
 import { LoadingIndicator } from "./ui/LoadingIndicator";
 import { EditorFormSkeleton } from "./EditorSkeleton";
@@ -113,10 +116,8 @@ import {
 import { HOME_EDITABLE_BLOCK_TYPES } from "../lib/public-page-block-ownership";
 import {
   publicPage,
-  publicPagePath,
   type PublicPageId,
 } from "../../../packages/content-core/src/public-pages";
-import { pageCompositionFixedRegions } from "../../../packages/content-core/src/page-composition-seeds";
 import type { AdminBlock } from "../lib/block-factory";
 import type { ContentQuery } from "../lib/content-query";
 import type { LibrarySelection } from "../lib/content-library";
@@ -2935,18 +2936,9 @@ function EditorWorkspaceContent({
       } : {}),
       ...(metadataDraft?.metadata ?? content.metadata),
     };
-    const registryPage = publicPage(pageSurface.pageId);
     const homeCanvas = pageSurface.pageId === "home" && content.homeCompositionVersion !== undefined;
     const homeShelfOnly =
       enforcePublicPageOwnership && pageSurface.pageId === "home" && !homeCanvas;
-    const fixedRegions = homeCanvas
-      ? []
-      : pageCompositionFixedRegions(pageSurface.pageId, {
-          homeCompositionVersion: content.homeCompositionVersion,
-        });
-    const pageTitle = typeof initialMetadata.title === "string" && initialMetadata.title.trim() ? initialMetadata.title : registryPage?.title ?? labelForSurface(pageSurface);
-    const pagePath = publicPagePath(pageSurface.pageId, initialMetadata) ?? registryPage?.path;
-    const blockEditorTargetId = `page-block-editor-${pageSurface.pageId}`;
     const pageKey = surfaceKey(pageSurface);
     const combinedPageActions =
       workspaceActionsAvailable &&
@@ -2969,7 +2961,6 @@ function EditorWorkspaceContent({
           : undefined;
     const pageUpdateDisabled =
       !canSavePage || (saving && !pageUpdateSaving) || !activeSurfaceDirty;
-    const pageUpdateReasonId = `${blockEditorTargetId}-update-reason`;
     async function validatePageForPublication() {
       if (!homeShelfOnly && !pageBlocksEditorRef.current?.validateForPublication()) {
         revealBentoPanel("content");
@@ -3076,597 +3067,287 @@ function EditorWorkspaceContent({
     async function updatePage() {
       await savePageSurface(pageSurface);
     }
-    // Title and summary sit in the main writing column like Posts. Page content stays in
-    // main; metadata, preview, and lifecycle sit in the side column unless the editor moves them.
-    const writingPanel: BentoPanel = {
-      id: "page-title",
-      title: "Title and summary",
-      outlineLabel: "Title and summary",
-      defaultZone: editorView?.kind ? "side" : "main",
-      allowedZones: editorView?.kind ? ["main", "side"] : ["main"],
-      body: <div ref={setPageWritingTarget} className="page-title-editor" />,
+    const pageEditorReadOnly = convertingHome || restoring || changingLifecycle ||
+      (content.pageStatus === "in_review" && !content.expectedAbsent) ||
+      content.pageStatus === "approved" || content.pageStatus === "scheduled";
+    const sharedEditorControls: PageEditorSharedControls = {
+      allowIncomplete: autosaveDraft,
+      loadMedia,
+      mediaPickerUnavailable,
+      uploadMedia,
+      mediaCategories,
+      defaultUploadCategory,
+      canUploadCategory,
+      onMediaPickerDirtyChange,
+      onReload: reloadPage,
+      allowConflictOverwrite: !expectedAbsent.current && !homeCanvas,
+      showSaveAction: !combinedPageActions,
     };
-    const contentPanel: BentoPanel = {
-      id: "content",
-      title: "Page content",
-      presentation: editorView?.kind ? "canvas" : undefined,
-      outlineLabel: "Page content",
-      subtitle: editorView?.kind ? `${editorSectionCount(blockDraft?.blocks ?? savedPageBlocks, pageSurface.pageId)} sections · Select to inspect, pencil to edit` : pageSurface.pageId === "staff"
-        ? "Edit authored blocks. The published roster stays generated and locked."
-        : "Edit page blocks.",
-      defaultZone: "main",
-      allowedZones: ["main"],
-      body: (
-        <div className="page-content-editor">
-          {pageSurface.pageId === "home" ? <div ref={setHomeHeroTarget} /> : null}
-          {fixedRegions.length > 0 ? (
-            <section
-              className="page-fixed-context"
-              role="region"
-              aria-label={`Fixed ${pageTitle} page context`}
-            >
-              <details className="page-fixed-context-details">
-                <summary>
-                  <span className="page-fixed-context-label">
-                    <Icon name="lock" />
-                    Locked content
-                  </span>
-                  <span className="page-fixed-context-count">
-                    {fixedRegions.length} {fixedRegions.length === 1 ? "region" : "regions"}
-                    <Icon name="chevron-down" />
-                  </span>
-                </summary>
-                <ul>
-                  {fixedRegions.map((region) => (
-                    <li key={region.label}>
-                      <strong>{region.label}</strong>
-                      <span>{region.detail}</span>
-                    </li>
-                  ))}
-                </ul>
-              </details>
-            </section>
-          ) : null}
-          {pageSurface.pageId === "home" && content.homeCompositionVersion === 1 && !canConvertHomeV2 && homeConversionError ? (
-            <InlineMessage tone="error">{homeConversionError}</InlineMessage>
-          ) : null}
-          {canConvertHomeV2 && convertHomeV2 ? (
-            <InlineMessage tone="info" title="Editorial Home layout">
-              <div>
-                <p>Start with news first, then arrange and edit your Home sections.</p>
-                <Button ref={homeV2Trigger} aria-expanded={homeV2Confirmation} disabled={Boolean(editorialConversionDisabledReason)}
-                  onClick={() => { setHomeConversionError(undefined); setHomeV2Confirmation(true); }}>Use the editorial layout</Button>
-                {editorialConversionDisabledReason ? <p>{editorialConversionDisabledReason}</p> : null}
-                {homeV2Confirmation ? <div role="group" aria-labelledby="home-v2-confirmation-title" aria-describedby="home-v2-confirmation-description"
-                  className="lifecycle-actions-confirmation" onKeyDown={event => {
-                    if (event.key === "Escape" && !convertingHome) { event.preventDefault(); cancelEditorialConversion(); }
-                  }}>
-                  <strong id="home-v2-confirmation-title">Use the editorial layout?</strong>
-                  <p id="home-v2-confirmation-description">This saves an editorial draft in the starting section order. The live homepage does not change until you press Publish.</p>
-                  <div className="button-row">
-                    <Button ref={homeV2Cancel} disabled={convertingHome} onClick={cancelEditorialConversion}>Cancel</Button>
-                    <AsyncActionButton variant="primary" label="Use the editorial layout" pending={convertingHome}
-                      pendingLabel="Preparing editorial draft…" pendingAnnouncement="Preparing the editorial Home draft."
-                      disabled={Boolean(editorialConversionDisabledReason)} onClick={() => void useEditorialHome()} />
-                  </div>
-                </div> : null}
-                {homeConversionError ? <div role="alert"><p>{homeConversionError}</p>
-                  <Button disabled={saving || activeSurfaceDirty || mediaPickerDirty} onClick={() => { setHomeConversionError(undefined); setHomeV2Confirmation(false); reloadPage(); }}>Reload Home</Button>
-                </div> : null}
-              </div>
-            </InlineMessage>
-          ) : null}
-          {homeShelfOnly ? (
-            <InlineMessage
-              className="page-home-ownership-notice"
-              tone="info"
-              title="Edit the Home sections"
-            >
-              <p>Edit the text, images and shelf settings shown below. Your current content stays in version
-                history. This does not publish the page.</p>
-              {convertHome ? <>
-                <AsyncActionButton variant="primary" label="Enable Home editing"
-                  disabled={Boolean(conversionDisabledReason)} pending={convertingHome}
-                  pendingLabel="Enabling editing…" pendingAnnouncement="Preparing the Home draft."
-                  onClick={() => void enableHomeEditing()} />
-                {conversionDisabledReason ? <p>{conversionDisabledReason}</p> : null}
-              </> : null}
-              {homeConversionError ? <div role="alert">
-                <p>{homeConversionError}</p>
-                <Button disabled={saving || activeSurfaceDirty || mediaPickerDirty} onClick={() => { setHomeConversionError(undefined); reloadPage(); }}>Reload Home</Button>
-              </div> : null}
-            </InlineMessage>
-          ) : null}
-          <div
-            ref={homeEditorTarget}
-            id={blockEditorTargetId}
-            className="page-layout-editor-target"
-            tabIndex={-1}
-          >
-            <BlockEditor
-              ref={pageBlocksEditorRef}
-              electionResultsApprovals={content.electionResultsApprovals}
-              electionSourceHost={electionSources ? { api: electionSources, collection: "cmsPages", documentId: pageSurface.pageId, version: pageCurrentVersion, publicBlocks: content.publishedElectionBlocks, canPublish: can(principal, "content.publish", pageLifecycleResourceValue), locked: saving || !canSaveInActiveEditor, pauseLocked: saving, hasUnsavedWork: hasElectionSourceUnsavedWork, onBusyChange: onElectionSourceBusyChange } : undefined}
-              key={pageSurface.pageId}
-              pageId={pageSurface.pageId}
-              onReportingSelectionChange={pageSurface.pageId === "data-hub" ? setReportingSelection : undefined}
-              pageTitle={typeof initialMetadata?.title === "string" ? initialMetadata.title : undefined}
-              pageDescription={typeof initialMetadata?.description === "string" ? initialMetadata.description : undefined}
-              homeCompositionVersion={content.homeCompositionVersion}
-              loadHomeSources={loadHomeSources}
-              section={pageSurface.section}
-              allowedBlockTypes={
-                homeShelfOnly ? HOME_EDITABLE_BLOCK_TYPES : undefined
-              }
-              canEditCustomHtml={can(principal, "content.publish", pageLifecycleResourceValue)}
-              initialBlocks={blockDraft?.blocks ?? content.blocks}
-              canSave={canSavePage}
-              allowIncomplete={autosaveDraft}
-              saveDisabledReason={pageSaveDisabledReason}
-              newId={newId}
-              loadMedia={loadMedia}
-              mediaPickerUnavailable={mediaPickerUnavailable}
-              uploadMedia={uploadMedia}
-              mediaCategories={mediaCategories}
-              defaultUploadCategory={defaultUploadCategory}
-              canUploadCategory={canUploadCategory}
-              onMediaPickerDirtyChange={onMediaPickerDirtyChange}
-              onSave={
-                savePage
-                  ? async (blocks, options) => {
-                      if (homeCanvas && options?.force) throw new Error("Reload Home before applying edits to its latest version.");
-                      await reserveEditorForSave();
-                      const forced = options?.force === true;
-                      // "Save anyway" asks the adapter to read and explicitly confirm the
-                      // latest saved version. A create-only claim is never dropped: this
-                      // editor has not seen the new document, so BlockEditor offers reload as
-                      // its only safe conflict resolution.
-                      const saved = await savePage(
-                        pageSurface.pageId,
-                        pageSurface.section,
-                        blocks,
-                        pageSaveBaseVersion("blocks", forced),
-                        expectedAbsent.current ? true : undefined,
-                        seedFromLegacyPage.current,
-                        pageSaveSequence.current?.id,
-                      );
-                      // The write that just landed is the new base. Without this a second
-                      // save in the same session would echo the version the first one had
-                      // already superseded, and the editor would conflict with itself.
-                      advancePageAfterSave(
-                        pageSurface,
-                        saved,
-                        "blocks",
-                        forced,
-                      );
-                      pageBaselines.current.set(
-                        surfaceKey(pageSurface),
-                        saved.blocks,
-                      );
-                      return {
-                        blocks: saved.blocks,
-                        mintedIds: saved.mintedIds ?? {},
-                        warnings: saved.warnings ?? [],
-                        savedTarget: editorSaveReceipt("cmsPages", pageSurface.pageId, saved.version),
-                      };
-                    }
-                  : undefined
-              }
-              onReload={reloadPage}
-              allowConflictOverwrite={!expectedAbsent.current && !homeCanvas}
-              onSavingChange={onPageBlocksSavingChange}
-              onDraftChange={(blocks) => trackPageDraft(pageSurface, blocks)}
-              readOnly={
-                convertingHome ||
-                changingElectionSources ||
-                restoring ||
-                changingLifecycle ||
-                (content.pageStatus === "in_review" &&
-                  !content.expectedAbsent) ||
-                content.pageStatus === "approved" ||
-                content.pageStatus === "scheduled"
-              }
-              readOnlyNotice={
-                changingElectionSources ? { title: "Updating the election source connection", message: "Manual editing resumes when the connection change finishes." } : readOnlyNotice({
-                  status: content.pageStatus,
-                  restoring,
-                  changingLifecycle,
-                  noun: "page",
-                }) ?? undefined
-              }
-              showSaveAction={!combinedPageActions}
-            />
-          </div>
-        </div>
-      ),
+    const blocksEditor: PageBlockEditorControls = {
+      ref: pageBlocksEditorRef,
+      electionSourceHost: electionSources ? { api: electionSources, collection: "cmsPages", documentId: pageSurface.pageId, version: pageCurrentVersion, publicBlocks: content.publishedElectionBlocks, canPublish: can(principal, "content.publish", pageLifecycleResourceValue), locked: saving || !canSaveInActiveEditor, pauseLocked: saving, hasUnsavedWork: hasElectionSourceUnsavedWork, onBusyChange: onElectionSourceBusyChange } : undefined,
+      onReportingSelectionChange: pageSurface.pageId === "data-hub" ? setReportingSelection : undefined,
+      loadHomeSources,
+      allowedBlockTypes: homeShelfOnly ? HOME_EDITABLE_BLOCK_TYPES : undefined,
+      canEditCustomHtml: can(principal, "content.publish", pageLifecycleResourceValue),
+      initialBlocks: blockDraft?.blocks ?? content.blocks,
+      canSave: canSavePage,
+      saveDisabledReason: pageSaveDisabledReason,
+      newId,
+      onSave: savePage
+          ? async (blocks, options) => {
+              if (homeCanvas && options?.force) throw new Error("Reload Home before applying edits to its latest version.");
+              await reserveEditorForSave();
+              const forced = options?.force === true;
+              // "Save anyway" asks the adapter to read and explicitly confirm the
+              // latest saved version. A create-only claim is never dropped: this
+              // editor has not seen the new document, so BlockEditor offers reload as
+              // its only safe conflict resolution.
+              const saved = await savePage(
+                pageSurface.pageId,
+                pageSurface.section,
+                blocks,
+                pageSaveBaseVersion("blocks", forced),
+                expectedAbsent.current ? true : undefined,
+                seedFromLegacyPage.current,
+                pageSaveSequence.current?.id,
+              );
+              // The write that just landed is the new base. Without this a second
+              // save in the same session would echo the version the first one had
+              // already superseded, and the editor would conflict with itself.
+              advancePageAfterSave(
+                pageSurface,
+                saved,
+                "blocks",
+                forced,
+              );
+              pageBaselines.current.set(
+                surfaceKey(pageSurface),
+                saved.blocks,
+              );
+              return {
+                blocks: saved.blocks,
+                mintedIds: saved.mintedIds ?? {},
+                warnings: saved.warnings ?? [],
+                savedTarget: editorSaveReceipt("cmsPages", pageSurface.pageId, saved.version),
+              };
+            }
+          : undefined,
+      onSavingChange: onPageBlocksSavingChange,
+      onDraftChange: (blocks) => trackPageDraft(pageSurface, blocks),
+      readOnly: changingElectionSources || pageEditorReadOnly,
+      readOnlyNotice: changingElectionSources
+        ? { title: "Updating the election source connection", message: "Manual editing resumes when the connection change finishes." }
+        : readOnlyNotice({ status: content.pageStatus, restoring, changingLifecycle, noun: "page" }) ?? undefined,
+    };
+    const metadataEditor: PageMetadataEditorControls = {
+      ref: pageMetadataEditorRef,
+      homeHeroTarget: pageSurface.pageId === "home" ? homeHeroTarget : undefined,
+      dataHubReportingTarget: pageSurface.pageId === "data-hub" ? reportingSelection?.target : undefined,
+      dataHubReportingFigure: pageSurface.pageId === "data-hub" ? reportingSelection?.figure : undefined,
+      onReportingFigureReveal: figure => {
+        if (!pageBlocksEditorRef.current?.revealDataHubFigure(figure)) {
+          setReportingSelection(null);
+          if (editorView?.kind) editorView.openPane("details", "document");
+          else revealBentoPanel("metadata");
+        }
+      },
+      reportingTransport,
+      writingTarget: pageWritingTarget,
+      onRevealField: (key, fieldId) => {
+        if (key === "dataHubReporting") {
+          reportingValidationRevealed.current = true;
+          if (editorView?.kind) editorView.openPane("details", reportingSelection ? "selection" : "document");
+          else revealBentoPanel("metadata");
+          return;
+        }
+        revealBentoPanel(
+          key === "title" || key === "description" ? "page-title"
+            : pageSurface.pageId === "home" &&
+              (key === "homeHero" || key.startsWith("homeHero") || key.startsWith("heroBackground"))
+              ? "content"
+              : "metadata",
+          fieldId,
+        );
+      },
+      initialIsClean: !metadataDraft,
+      canManageSettings: canManageSettings(principal),
+      canSave: canSavePage && savePageMetadata !== undefined,
+      saveDisabledReason: !saveDecision.allowed
+          ? saveDecision.reason
+          : canSave && savePageMetadata === undefined
+            ? "Metadata saving is not connected in this workspace."
+            : pageSaveDisabledReason,
+      onSave: savePageMetadata
+          ? async (metadata, options) => {
+              if (homeCanvas && options?.force) throw new Error("Reload Home before applying edits to its latest version.");
+              await reserveEditorForSave();
+              const forced = options?.force === true;
+              // A form with no claim of its own -- a page loaded without a usable version
+              // (#670) -- still claims what an Update sequence's earlier write returned:
+              // that version describes the document this same sequence just wrote, so an
+              // interleaved write by someone else is refused instead of overwritten.
+              const saved = await savePageMetadata(
+                pageSurface.pageId,
+                pageSurface.section,
+                metadata,
+                pageSaveBaseVersion("metadata", forced),
+                expectedAbsent.current ? true : undefined,
+                seedFromLegacyPage.current,
+                pageSaveSequence.current?.id,
+              );
+              const persisted = saved.metadata ?? metadata;
+              advancePageAfterSave(pageSurface, { ...saved, metadata: persisted }, "metadata", forced);
+              pageMetadataBaselines.current.set(
+                pageMetadataKey(pageSurface),
+                persisted,
+              );
+              return {
+                kind: "record-save-receipt" as const,
+                document: persisted,
+                mintedIds: {},
+                savedTarget: editorSaveReceipt("cmsPages", pageSurface.pageId, saved.version),
+              };
+            }
+          : undefined,
+      onSavingChange: onPageMetadataSavingChange,
+      onDraftChange: (metadata) =>
+        trackPageMetadataDraft(pageSurface, metadata),
+      readOnly: pageEditorReadOnly,
+      readOnlyNotice: readOnlyNotice({ status: content.pageStatus, restoring, changingLifecycle, noun: "page" }) ?? undefined,
     };
 
-    const metadataPanel: BentoPanel = {
-      id: "metadata",
-      title: "Page metadata",
-      subtitle: pageSurface.pageId === "staff"
-        ? "Edit the Staff hero background, crop, search, and social settings."
-        : "Edit page labels and link previews.",
-      aside: registryPage ? (
-        <p className="page-public-path">
-          <span>Path</span> <code>{pagePath}</code>
-        </p>
-      ) : undefined,
-      defaultZone: "side",
-      body: (
-        <RecordForm
-          ref={pageMetadataEditorRef}
-          key={pageMetadataKey(pageSurface)}
-          homeHeroTarget={pageSurface.pageId === "home" ? homeHeroTarget : undefined}
-          dataHubReportingTarget={pageSurface.pageId === "data-hub" ? reportingSelection?.target : undefined}
-          dataHubReportingFigure={pageSurface.pageId === "data-hub" ? reportingSelection?.figure : undefined}
-          onReportingFigureReveal={figure => {
-            if (!pageBlocksEditorRef.current?.revealDataHubFigure(figure)) {
-              setReportingSelection(null);
-              if (editorView?.kind) editorView.openPane("details", "document");
-              else revealBentoPanel("metadata");
-            }
-          }}
-          reportingTransport={reportingTransport}
-          writingTarget={pageWritingTarget}
-          onRevealField={(key, fieldId) => {
-            if (key === "dataHubReporting") {
-              reportingValidationRevealed.current = true;
-              if (editorView?.kind) editorView.openPane("details", reportingSelection ? "selection" : "document");
-              else revealBentoPanel("metadata");
-              return;
-            }
-            revealBentoPanel(
-            key === "title" || key === "description" ? "page-title"
-              : pageSurface.pageId === "home" &&
-                (key === "homeHero" || key.startsWith("homeHero") || key.startsWith("heroBackground"))
-                ? "content"
-                : "metadata",
-            fieldId,
-          ); }}
-          kind="page"
-          pageId={pageSurface.pageId}
-          initial={initialMetadata}
-          initialIsClean={!metadataDraft}
-          canManageSettings={canManageSettings(principal)}
-          canSave={canSavePage && savePageMetadata !== undefined}
-          allowIncomplete={autosaveDraft}
-          loadMedia={loadMedia}
-          mediaPickerUnavailable={mediaPickerUnavailable}
-          uploadMedia={uploadMedia}
-          mediaCategories={mediaCategories}
-          defaultUploadCategory={defaultUploadCategory}
-          canUploadCategory={canUploadCategory}
-          onMediaPickerDirtyChange={onMediaPickerDirtyChange}
-          saveDisabledReason={
-            !saveDecision.allowed
-              ? saveDecision.reason
-              : canSave && savePageMetadata === undefined
-                ? "Metadata saving is not connected in this workspace."
-                : pageSaveDisabledReason
-          }
-          onSave={
-            savePageMetadata
-              ? async (metadata, options) => {
-                  if (homeCanvas && options?.force) throw new Error("Reload Home before applying edits to its latest version.");
-                  await reserveEditorForSave();
-                  const forced = options?.force === true;
-                  // A form with no claim of its own -- a page loaded without a usable version
-                  // (#670) -- still claims what an Update sequence's earlier write returned:
-                  // that version describes the document this same sequence just wrote, so an
-                  // interleaved write by someone else is refused instead of overwritten.
-                  const saved = await savePageMetadata(
-                    pageSurface.pageId,
-                    pageSurface.section,
-                    metadata,
-                    pageSaveBaseVersion("metadata", forced),
-                    expectedAbsent.current ? true : undefined,
-                    seedFromLegacyPage.current,
-                    pageSaveSequence.current?.id,
-                  );
-                  const persisted = saved.metadata ?? metadata;
-                  advancePageAfterSave(pageSurface, { ...saved, metadata: persisted }, "metadata", forced);
-                  pageMetadataBaselines.current.set(
-                    pageMetadataKey(pageSurface),
-                    persisted,
-                  );
-                  return {
-                    kind: "record-save-receipt" as const,
-                    document: persisted,
-                    mintedIds: {},
-                    savedTarget: editorSaveReceipt("cmsPages", pageSurface.pageId, saved.version),
-                  };
-                }
-              : undefined
-          }
-          onReload={reloadPage}
-          allowConflictOverwrite={!expectedAbsent.current && !homeCanvas}
-          onSavingChange={onPageMetadataSavingChange}
-          onDraftChange={(metadata) =>
-            trackPageMetadataDraft(pageSurface, metadata)
-          }
-          readOnly={
-            convertingHome ||
-            restoring ||
-            changingLifecycle ||
-            (content.pageStatus === "in_review" && !content.expectedAbsent) ||
-            content.pageStatus === "approved" ||
-            content.pageStatus === "scheduled"
-          }
-          readOnlyNotice={
-            readOnlyNotice({
-              status: content.pageStatus,
-              restoring,
-              changingLifecycle,
-              noun: "page",
-            }) ?? undefined
-          }
-          saveLabel="Save metadata"
-          showSaveAction={!combinedPageActions}
-        />
-      ),
+    const lifecycle: PageWorkspaceLifecycle | null = content.expectedAbsent ? null : {
+      canArchive: can(principal, "content.delete", pageLifecycleResourceValue),
+      canApprove: can(principal, "content.edit.any", pageLifecycleResourceValue),
+      canEdit: can(principal, "content.edit.any", pageLifecycleResourceValue) ||
+        can(principal, "content.edit.own", pageLifecycleResourceValue),
+      canPublish: can(principal, "content.publish", pageLifecycleResourceValue),
+      canRestore: can(principal, "content.delete", pageLifecycleResourceValue),
+      canUnpublish: can(principal, "content.unpublish", pageLifecycleResourceValue),
+      publicationDisabledReason: pageSurface.pageId === "home" && content.homeCompositionVersion === 2 && !homeLayoutsEnabled()
+        ? "Version 2 Home editing is not enabled. Its saved draft has been preserved."
+        : undefined,
+      disabledReason: lifecycleDisabledReason,
+      videos: videosForPublication(content.blocks),
+      onPublish:
+          publishContent
+            ? async (baseVersion, onProgress) => {
+                await validatePageForPublication();
+                await reserveEditorForSave();
+                return publishContent(
+                  "cmsPages",
+                  pageSurface.pageId,
+                  baseVersion,
+                  { blocks: content.blocks, onProgress },
+                );
+              }
+            : undefined,
+      onSchedule:
+          scheduleContent
+            ? async (baseVersion, scheduleAt, onProgress) => {
+                await validatePageForPublication();
+                await reserveEditorForSave();
+                return scheduleContent(
+                  "cmsPages",
+                  pageSurface.pageId,
+                  baseVersion,
+                  scheduleAt,
+                  { blocks: content.blocks, onProgress },
+                );
+              }
+            : undefined,
+      onSubmittingChange: onLifecycleChanging,
+      onTransition:
+          transitionContent
+            ? async (request) => {
+                if (request.action === "submit" || request.action === "approve") await validatePageForPublication();
+                await reserveEditorForSave();
+                return transitionContent(request);
+              }
+            : undefined,
     };
+    const revisions: PageWorkspaceRevisions | null = !content.expectedAbsent && loadRevisions && loadRevision ? {
+      loadRevisions,
+      loadRevision,
+      onRestoringChange: onRevisionRestoringChange,
+      refreshKey: pageSaveRevision,
+      restoreDisabledReason: historyRestoreDisabledReason,
+      restoreRevision: restoreRevision ? restoreFromHistory : undefined,
+    } : null;
+    const savePreviewChanges = canSavePage
+      ? async () => (await savePageSurface(pageSurface)).landed
+      : undefined;
+    const savedPreviewEnabled = !mediaPickerDirty && (!activeSurfaceDirty || canSavePage) &&
+      (Boolean(previewReceipts.current.get(pageKey)) || activeSurfaceDirty);
+    const savedPreviewDisabledReason = mediaPickerDirty ? "Finish or cancel the media changes before previewing."
+      : activeSurfaceDirty && !canSavePage ? "Your access does not allow saving these changes for preview."
+        : "Wait for a saved page to load before previewing.";
 
-    const panels: BentoPanel[] = [writingPanel, contentPanel, metadataPanel];
-    if (registryPage && content.pageStatus !== "archived") {
-      panels.push({
-        id: "preview",
-        title: "Preview",
-        toggleLabel: workspaceActionsAvailable ? "Preview panel" : undefined,
-        subtitle: "Preview the saved page on desktop and mobile.",
-        defaultZone: "side",
-        defaultCollapsed: true,
-        body: requestSavedPreview && loadPagePreviewStatus ? (
-          <SavedPreview
-            key={pageSurface.pageId}
-            collection="cmsPages"
-            documentId={pageSurface.pageId}
-            enabled={!mediaPickerDirty && (!activeSurfaceDirty || canSavePage) &&
-              (!!previewReceipts.current.get(surfaceKey(pageSurface)) || activeSurfaceDirty)}
-            disabledReason={mediaPickerDirty ? "Finish or cancel the media changes before previewing."
-              : activeSurfaceDirty && !canSavePage ? "Your access does not allow saving these changes for preview."
-                : "Wait for a saved page to load before previewing."}
-            preparePreview={preparePreview}
-            requestPreview={requestSavedPreview}
-            prepareSession={preparePreviewSession}
-            loadPreviewStatus={loadPagePreviewStatus}
-          />
-        ) : (
-          <PagePreview
-            key={pageSurface.pageId}
-            pageId={pageSurface.pageId}
-            pagePath={pagePath ?? registryPage.path}
-            dirty={activeSurfaceDirty}
-            saving={saving}
-            savedVersion={pageCurrentVersion ?? 0}
-            requestPreview={requestPagePreview}
-            loadPreviewStatus={loadPagePreviewStatus}
-            // The gate's two ways out of unsaved work are this workspace's own: the same page-save
-            // sequence the Save draft control and the exit guard run (#1032), and the same
-            // discard-and-re-read the conflict banner offers. The preview never gets a private
-            // definition of saved, and never builds from work that is only in the browser (#1042).
-            saveChanges={
-              canSavePage
-                ? async () => (await savePageSurface(pageSurface)).landed
-                : undefined
-            }
-            discardChanges={reloadPageForPreview}
-            startOnMount={previewAfterReload === pageSurface.pageId}
-            onStartOnMountHandled={() => setPreviewAfterReload(null)}
-            headless
-            workspaceAction={workspaceActionsAvailable}
-            onReveal={() => revealBentoPanel("preview")}
-          />
-        ),
-      });
-    }
-    if (!content.expectedAbsent) {
-      panels.push({
-        id: "lifecycle",
-        title: "Lifecycle",
-        subtitle: "Save, review, and publish this version.",
-        defaultZone: "side",
-        body: (
-          <>
-          {content.homeCompositionVersion === 2 && savedPageBlocks.some(block => block.section === "home-newsletter" && block.visible &&
-            Array.isArray(block.data.newsletterIds) && block.data.newsletterIds.length === 0) ? (
-            <InlineMessage tone="info"><p>Publishing shows the standard newsletter band until a newsletter is chosen.</p></InlineMessage>
-          ) : null}
-          <LifecycleActionsPanel
-            recordTitle={pageTitle}
-            baseVersion={pageCurrentVersion}
-            contentVersion={content.contentVersion ?? pageCurrentVersion}
-            canArchive={can(
-              principal,
-              "content.delete",
-              pageLifecycleResourceValue,
-            )}
-            canApprove={can(
-              principal,
-              "content.edit.any",
-              pageLifecycleResourceValue,
-            )}
-            canEdit={
-              can(principal, "content.edit.any", pageLifecycleResourceValue) ||
-              can(principal, "content.edit.own", pageLifecycleResourceValue)
-            }
-            canPublish={can(principal, "content.publish", pageLifecycleResourceValue)}
-            publicationSupported
-            publicationDisabledReason={pageSurface.pageId === "home" && content.homeCompositionVersion === 2 && !homeLayoutsEnabled()
-              ? "Version 2 Home editing is not enabled. Its saved draft has been preserved."
-              : undefined}
-            canRestore={can(
-              principal,
-              "content.delete",
-              pageLifecycleResourceValue,
-            )}
-            canUnpublish={can(
-              principal,
-              "content.unpublish",
-              pageLifecycleResourceValue,
-            )}
-            collection="cmsPages"
-            disabledReason={lifecycleDisabledReason}
-            documentId={pageSurface.pageId}
-            headless
-            liveSourceVersion={pageLiveSourceVersion}
-            publicBuildQueueId={content.publishBuildQueueId ?? null}
-            publicUpdatePending={content.publishBuildPending === true}
-            pendingSourceVersion={content.publishedSourceVersion}
-            onChanged={reloadPage}
-            videos={videosForPublication(content.blocks)}
-            onPublish={
-              publishContent
-                ? async (baseVersion, onProgress) => {
-                    await validatePageForPublication();
-                    await reserveEditorForSave();
-                    return publishContent(
-                      "cmsPages",
-                      pageSurface.pageId,
-                      baseVersion,
-                      { blocks: content.blocks, onProgress },
-                    );
-                  }
-                : undefined
-            }
-            onSchedule={
-              scheduleContent
-                ? async (baseVersion, scheduleAt, onProgress) => {
-                    await validatePageForPublication();
-                    await reserveEditorForSave();
-                    return scheduleContent(
-                      "cmsPages",
-                      pageSurface.pageId,
-                      baseVersion,
-                      scheduleAt,
-                      { blocks: content.blocks, onProgress },
-                    );
-                  }
-                : undefined
-            }
-            onReload={reloadPage}
-            onSubmittingChange={onLifecycleChanging}
-            onTransition={
-              transitionContent
-                ? async (request) => {
-                    if (request.action === "submit" || request.action === "approve") await validatePageForPublication();
-                    await reserveEditorForSave();
-                    return transitionContent(request);
-                  }
-                : undefined
-            }
-            scheduledPublishFailure={content.scheduledPublishFailure}
-            scheduledAt={content.publishAt}
-            status={content.pageStatus}
-            workspaceActions={workspaceActionsAvailable}
-            onReveal={() => revealBentoPanel("lifecycle")}
-          />
-          <ElectionResultsHistory approvals={content.electionResultsApprovals} />
-          </>
-        ),
-      });
-    }
-    if (!content.expectedAbsent && loadRevisions && loadRevision) {
-      panels.push({
-        id: "revisions",
-        presentation: editorView?.kind ? "history" : undefined,
-        title: "Revision history",
-        subtitle: "Review saved versions and changes.",
-        defaultZone: "side",
-        defaultCollapsed: true,
-        body: (
-          <RevisionHistory
-            collection="cmsPages"
-            currentVersion={pageCurrentVersion}
-            documentId={pageSurface.pageId}
-            loadRevisions={loadRevisions}
-            loadRevision={loadRevision}
-            onRestored={reloadPage}
-            onRestoringChange={onRevisionRestoringChange}
-            refreshKey={pageSaveRevision}
-            restoreDisabledReason={historyRestoreDisabledReason}
-            restoreRevision={restoreRevision ? restoreFromHistory : undefined}
-            headless
-          />
-        ),
-      });
-    }
     return (
-      <>
-        {workspaceActionsAvailable ? (
-          <WorkspaceStatus>
-            <span className="status-label" aria-live="polite">
-              {!editorView?.kind ? <span className="status-label-key">Status:</span> : null}
-              {" "}
-              <PublishedVersionStatus collection="cmsPages" documentId={pageSurface.pageId}
-                documentBar={editorView?.kind ? { kind: "page", draftState: saving ? "saving" : activeSurfaceDirty ? "dirty" : pageCurrentVersion ? "saved" : "new" } : undefined}
-                recordTitle={pageTitle}
-                workingStatus={content.pageStatus ?? "draft"} workingVersion={pageCurrentVersion}
-                contentVersion={content.contentVersion} liveSourceVersion={pageLiveSourceVersion}
-                pendingSourceVersion={content.publishedSourceVersion}
-                publicUpdatePending={content.publishBuildPending === true} statusOnly />
-            </span>
-            <ScheduledPublicationTime status={content.pageStatus} publishAt={content.publishAt} />
-          </WorkspaceStatus>
-        ) : null}
-        <EditorBackLink surface={{ kind: "page" }} />
-        {combinedPageActions ? (
-          <EditorActionSlot group="save">
-            <Toolbar className="page-update-actions" aria-label="Save page">
-              <span
-                className="disabled-action-shell"
-                role={pageUpdateDisabledReason ? "group" : undefined}
-                aria-label={
-                  pageUpdateDisabledReason
-                    ? `Save draft unavailable: ${pageUpdateDisabledReason}`
-                    : undefined
-                }
-                title={pageUpdateDisabledReason}
-                tabIndex={pageUpdateDisabledReason ? 0 : undefined}
-              >
-                <AsyncActionButton
-                  variant="secondary"
-                  icon="save"
-                  aria-describedby={
-                    pageUpdateDisabledReason ? pageUpdateReasonId : undefined
-                  }
-                  disabled={pageUpdateDisabled}
-                  label="Save draft"
-                  onClick={() => void updatePage()}
-                  pending={pageUpdateSaving}
-                  pendingAnnouncement="Saving draft."
-                  pendingLabel="Saving…"
-                />
-              </span>
-              {pageUpdateDisabledReason ? (
-                <span className="sr-only" id={pageUpdateReasonId}>
-                  {pageUpdateDisabledReason}
-                </span>
-              ) : null}
-              {pageUpdateSaved && !successNotice.available ? (
-                <span className="success-text" role="status">
-                  Saved.
-                </span>
-              ) : null}
-              {pageUpdateError ? (
-                <span className="error-text" role="alert">
-                  {pageUpdateError}
-                </span>
-              ) : null}
-            </Toolbar>
-          </EditorActionSlot>
-        ) : null}
-        <EditorBento
-          storageKey="page"
-          ariaLabel="Page editor sections"
-          documentOutline={{
-            heading: "Document",
-            settingsLabel: "Page settings",
-          }}
-          panels={panels}
-          revealPanel={bentoReveal}
-        />
-      </>
+      <EditorWorkspacePagePanels
+        pageSurface={pageSurface}
+        content={content}
+        initialMetadata={initialMetadata}
+        homeCanvas={homeCanvas}
+        savedPageBlocks={savedPageBlocks}
+        visiblePageBlocks={blockDraft?.blocks ?? savedPageBlocks}
+        blocksEditor={blocksEditor}
+        metadataEditor={metadataEditor}
+        metadataKey={pageMetadataKey(pageSurface)}
+        sharedEditorControls={sharedEditorControls}
+        inWorkspace={Boolean(editorView?.kind)}
+        workspaceActionsAvailable={workspaceActionsAvailable}
+        bentoReveal={bentoReveal}
+        revealBentoPanel={revealBentoPanel}
+        pageCurrentVersion={pageCurrentVersion}
+        pageLiveSourceVersion={pageLiveSourceVersion}
+        activeSurfaceDirty={activeSurfaceDirty}
+        homeReloadDisabled={saving || activeSurfaceDirty || mediaPickerDirty}
+        saving={saving}
+        homeShelfOnly={homeShelfOnly}
+        canConvertHomeV2={canConvertHomeV2}
+        hasHomeV2Conversion={Boolean(convertHomeV2)}
+        canEnableHome={Boolean(convertHome)}
+        convertingHome={convertingHome}
+        conversionDisabledReason={conversionDisabledReason}
+        editorialConversionDisabledReason={editorialConversionDisabledReason}
+        homeV2Confirmation={homeV2Confirmation}
+        homeConversionError={homeConversionError}
+        setHomeConversionError={setHomeConversionError}
+        setHomeV2Confirmation={setHomeV2Confirmation}
+        cancelEditorialConversion={cancelEditorialConversion}
+        onConvertToEditorialHome={useEditorialHome}
+        enableHomeEditing={enableHomeEditing}
+        homeV2Trigger={homeV2Trigger}
+        homeV2Cancel={homeV2Cancel}
+        setPageWritingTarget={setPageWritingTarget}
+        setHomeHeroTarget={setHomeHeroTarget}
+        homeEditorTarget={homeEditorTarget}
+        pageUpdate={combinedPageActions ? {
+          disabled: pageUpdateDisabled,
+          disabledReason: pageUpdateDisabledReason,
+          saving: pageUpdateSaving,
+          saved: pageUpdateSaved,
+          error: pageUpdateError,
+          localConfirmation: !successNotice.available,
+          updatePage,
+        } : null}
+        savedPreviewEnabled={savedPreviewEnabled}
+        savedPreviewDisabledReason={savedPreviewDisabledReason}
+        preparePreview={preparePreview}
+        requestSavedPreview={requestSavedPreview}
+        preparePreviewSession={preparePreviewSession}
+        loadPagePreviewStatus={loadPagePreviewStatus}
+        requestPagePreview={requestPagePreview}
+        savePreviewChanges={savePreviewChanges}
+        reloadPageForPreview={reloadPageForPreview}
+        previewAfterReload={previewAfterReload}
+        onPreviewStarted={() => setPreviewAfterReload(null)}
+        reloadPage={reloadPage}
+        lifecycle={lifecycle}
+        revisions={revisions}
+      />
     );
   }
 
