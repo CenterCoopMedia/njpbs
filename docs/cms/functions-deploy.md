@@ -196,7 +196,12 @@ only reviewed predecessor exports from the completed receipt that the current
 source omits, within the approved project, region, codebase and native managed
 ownership. A pending entry retains its original source/run/attempt and native
 Function/Scheduler identities when a stopped run moves forward. Current source
-intent controls targets. Unknown managed live names refuse. Before each delete,
+intent controls targets. A live function in neither the current source nor the
+completed receipt stays in place, and so does a function that another tool
+deployed. The plan refuses when another tool or codebase owns a deploy target,
+when a planned deletion has lost Firebase CLI ownership, or when
+`firebase functions:delete <name>` would also reach another live function in
+the `<name>-` group. Before each delete,
 recheck the current receipt owner and original native identity; afterward prove
 Function absence and Scheduler cleanup. Partial/404/lost-response/provider-error
 paths retain the journal and lastComplete until actual readback settles them.
