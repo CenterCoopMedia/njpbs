@@ -5,9 +5,8 @@ name: Firebase CI
 # the Firebase consumer. Node is pinned to 22 to match the Cloud Functions runtime
 # and the supported firebase-admin toolchain used by the emulator suites.
 #
-# Functions runs eight deterministic Vitest parts across four jobs, with fresh
-# emulators for each part. Each part keeps --no-file-parallelism because its test
-# files share one emulator project. Paired parts run sequentially in each job.
+# The Functions unit group runs alongside four emulator shards. Each emulator
+# shard runs files in sequence because they share one emulator project.
 
 on:
   workflow_call:
@@ -198,15 +197,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        include:
-          - shard: 1
-            parts: "5 8"
-          - shard: 2
-            parts: "1 4"
-          - shard: 3
-            parts: "2 6"
-          - shard: 4
-            parts: "3 7"
+        shard: [1, 2, 3, 4, unit]
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-node@v7
@@ -216,11 +207,13 @@ jobs:
           package-manager-cache: true
           cache-dependency-path: package-lock.json
       - name: Cache pinned JDK toolcache
+        if: matrix.shard != 'unit'
         uses: actions/cache@v6
         with:
           path: ${{ runner.tool_cache }}/Java_Temurin-Hotspot_jdk/21.0.13-9.0.LTS
           key: ${{ runner.os }}-${{ runner.arch }}-temurin-jdk-21.0.13-9.0.LTS
       - uses: actions/setup-java@v6
+        if: matrix.shard != 'unit'
         with:
           distribution: temurin
           java-version: "21.0.13+9.0.LTS"
@@ -265,6 +258,7 @@ jobs:
             exit 1
           }
       - name: Cache Firebase emulator binaries
+        if: matrix.shard != 'unit'
         uses: actions/cache@v6
         with:
           path: ~/.cache/firebase/emulators
@@ -273,13 +267,13 @@ jobs:
         if: matrix.shard == 1
         run: npm run test:preflight
       - name: Functions tests
+        if: matrix.shard != 'unit'
         env:
-          FUNCTIONS_JOB_PARTS: ${{ matrix.parts }}
-        # Run the selected shard parts sequentially within this job.
-        run: |
-          for part in $FUNCTIONS_JOB_PARTS; do
-            VITEST_SHARD_ARGS="--shard=${part}/8" npm run --ignore-scripts test:functions
-          done
+          VITEST_SHARD_ARGS: --shard=${{ matrix.shard }}/4
+        run: npm run test:functions:emulator
+      - name: Functions unit tests
+        if: matrix.shard == 'unit'
+        run: npm run test:functions:unit
       - name: Build-free publication restore drill
         if: matrix.shard == 1
         run: node scripts/test-build-free-restore.mjs
