@@ -90,6 +90,8 @@ export interface ScheduleFeedDay extends Omit<ScheduleDay, "entries"> {
   readonly sourceCheckedAt?: string;
   /** Date on an approved replacement lineup; it is not a PBS check. */
   readonly sourceRevision?: string;
+  /** The lineup came from the published corrections document. */
+  readonly publishedCorrection?: true;
   readonly entries: readonly ScheduleListing[];
 }
 

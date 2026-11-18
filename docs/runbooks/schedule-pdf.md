@@ -66,6 +66,47 @@ with its extraction audit. A new source requires a deliberate revision and fresh
 validation. Keep original packets/audits private; the public loader, correction
 assets and schedule tests then validate the supplied result.
 
+## Publish a lineup correction
+
+An authorized Firestore operator publishes the schedule team's approved lineup
+to `system/publicDeployment/scheduleCorrections/current` in the target project.
+Save the previous contents before editing. The document has a `days` array of
+up to 45 maps. Each map has a unique Eastern `date`, the approval date as
+`sourceRevision` (both `YYYY-MM-DD`), and an `entries` array of 1 to 200 airings.
+Each airing contains `title`, `startsAt`, `endsAt` and `isKids`. It can also
+contain `episodeTitle`, `description` and `episodeDescription`. Enter the
+airing times as UTC ISO strings ending in `Z` and list them in broadcast order.
+Intervals must be positive, stay within their Eastern date and never overlap.
+Midnight at the start of the next Eastern day is a valid end time. Include the
+complete approved lineup for each date you replace. Keep other approved dates in
+the document. An empty `days` array removes all published replacements.
+
+The publisher checks the document with its existing 07:00 and 19:00 Eastern
+provider refreshes and applies matching dates to both broadcast views. It
+validates the lineup and seals the JSON and PDF before changing the public
+context. A malformed document logs `Published schedule corrections are invalid`
+and keeps previously approved corrections for dates still in the refreshed
+window. PBS and the other feeds continue updating. A failed provider request or
+readback leaves the last accepted pair available. Restore the saved document
+contents to withdraw a correction at the next refresh.
+
+### Production acceptance
+
+1. Once the reviewed publisher is serving, record `commitSha` and `generation`
+   from `https://njpbs.org/_publication.json?cms-context=code`. Read `/schedule/`,
+   `/_schedule-sources.json` and `/schedule/downloads/nj-pbs-schedule.pdf` on
+   that origin and note the date, start time and title of the airing to correct.
+2. Publish an approved replacement for a date in the current PDF window as a
+   data edit. Record the accepted refresh operation and public context revision.
+3. Open the selected date at `/schedule/` and verify the approved lineup.
+   Confirm the title and start time in `/_schedule-sources.json` and verify the
+   title in `pdftotext` output from the ordinary PDF URL. The schedule page
+   response must show `x-njpbs-content-source: cms-page-context` or
+   `cms-page-no-build`. The JSON and PDF must show `cms-page-schedule`.
+4. Read the CODE endpoint again and confirm the same `commitSha` and
+   `generation`. Record those values, the refresh operation and the three route
+   observations on issue #143 before retiring the bake inputs.
+
 ## Staff broadcast workspace
 
 The signed-in Admin `/schedule` view is read-only partner-packet data from

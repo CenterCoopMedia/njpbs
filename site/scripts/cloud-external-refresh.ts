@@ -5,14 +5,16 @@ import path from "node:path";
 import { createRequire } from "node:module";
 import { isDeepStrictEqual } from "node:util";
 import type { App } from "firebase-admin/app";
-import type { Firestore } from "firebase-admin/firestore";
+import type { Firestore, Timestamp } from "firebase-admin/firestore";
 import { main as syncLaunchContent } from "./sync-launch-content.mjs";
 import { main as syncSpotlightNews } from "./sync-spotlight-news.mjs";
 import { createSpotlightImageStorage } from "./spotlight-image-cache.mjs";
-import { main as syncSchedule } from "./sync-schedule.mjs";
+import { main as syncSchedule, writeScheduleData } from "./sync-schedule.mjs";
+import { applyPublishedScheduleCorrections, readScheduleCorrections, SCHEDULE_CORRECTIONS_PATH } from "./schedule-correction-input";
 import { assertCmsPublicationSourceCheckout } from "./cms-publication-runtime-guard";
 import type { MediaManagerCredential } from "./frozen-publication";
 import { createCloudSchedulePacket, type CloudSchedulePacket } from "./cloud-schedule-packet";
+import { assertScheduleInput } from "../src/lib/schedule-input";
 
 const require = createRequire(import.meta.url);
 const { EXTERNAL_REFRESH_PATH, EXTERNAL_INPUT_FILES, externalRefreshHold, externalRefreshHeld, externalRefreshDue, nextExternalRefreshAt } = require("../../functions/lib/cloud-external-refresh-state");
@@ -33,6 +35,7 @@ function publishedReporting(document: any, now: number) {
 }
 const hash = (bytes: Buffer | string) => createHash("sha256").update(bytes).digest("hex");
 const NO_MAPPING_DIGEST = hash(JSON.stringify(null));
+const documentVersion = (stamp: Timestamp | undefined) => stamp ? `${stamp.seconds}:${stamp.nanoseconds}` : null;
 type Runtime = { owner: "cloudflare"; release: string };
 type Storage = ReturnType<typeof createPostBackgroundStorage>;
 interface InputFile { key: string; digest: string; size: number }
@@ -64,6 +67,15 @@ function assertExternalInputs(value: CloudExternalInputs) {
     }
   }
   return value;
+}
+
+async function readAcceptedScheduleCorrections(inputs: CloudExternalInputs, storage: Storage) {
+  const receipt = assertExternalInputs(inputs).files["schedule.json"];
+  const bytes = Buffer.from(await storage.get(receipt.key, { signal: AbortSignal.timeout(30_000) }));
+  if (bytes.length !== receipt.size || hash(bytes) !== receipt.digest) throw new Error("Frozen schedule digest changed");
+  const schedule: unknown = JSON.parse(bytes.toString("utf8"));
+  assertScheduleInput(schedule);
+  return new Map(schedule.days.broadcast.filter(day => day.publishedCorrection === true).map(day => [day.date, day]));
 }
 
 /** Restore the exact context's immutable inputs. Never fetch fresher providers
@@ -129,6 +141,7 @@ export function cloudExternalRefresh({ firestore, firebaseApp, runtime, backgrou
     if (control.phase !== "ready" || control.commitSha !== runtime.release || control.serializerId !== serializerId) return;
     const operationId = randomUUID().replaceAll("-", "").slice(0, 20);
     const ref = firestore.doc(EXTERNAL_REFRESH_PATH);
+    const correctionsRef = firestore.doc(SCHEDULE_CORRECTIONS_PATH);
     const claim = await firestore.runTransaction(async transaction => {
       const [row, pointer, context, controlRow, reportingPage] = await transaction.getAll(ref, firestore.doc("system/publicDeployment"),
         firestore.doc(PUBLIC_CONTEXT_PATH), firestore.doc("system/cmsPublicationRuntime"), firestore.doc("cmsPages/data-hub"));
@@ -144,6 +157,7 @@ export function cloudExternalRefresh({ firestore, firebaseApp, runtime, backgrou
       const mappingChanged = (previous?.mappingDigest ?? NO_MAPPING_DIGEST) !== mappingDigest;
       const fetching = previous?.status === "fetching" && previous.nextAttemptAt > clock();
       if (!externalRefreshDue(previous, runtime, clock()) && (!mappingChanged || fetching)) return null;
+      const correctionRow = await transaction.get(correctionsRef);
       const startedAt = clock();
       const continuing = !mappingChanged && previous && ownsPublication(previous, runtime) && previous.nextCheckAt > startedAt && previous.status !== "verified";
       const hold = externalRefreshHold(previous, clock());
@@ -152,7 +166,8 @@ export function cloudExternalRefresh({ firestore, firebaseApp, runtime, backgrou
         nextCheckAt: continuing ? previous.nextCheckAt : nextExternalRefreshAt(startedAt), nextAttemptAt: startedAt + 10 * 60_000,
         checkedAt: previous?.checkedAt ?? null, error: null, diagnostic: null };
       transaction.set(ref, next);
-      return { ...next, config, previousInputs: context.data()?.externalInputs };
+      const previousInputs: CloudExternalInputs | undefined = context.data()?.externalInputs;
+      return { ...next, config, correctionRow, previousInputs };
     });
     if (!claim) return;
     const directory = path.join(stateDirectory, "external-refresh", operationId);
@@ -166,11 +181,22 @@ export function cloudExternalRefresh({ firestore, firebaseApp, runtime, backgrou
         SCHEDULE_OUTPUT: path.join(directory, "schedule.json") };
       const request = boundedFetch(fetchImpl);
       stage = "provider";
+      let corrections: ReturnType<typeof readScheduleCorrections>;
+      try { corrections = readScheduleCorrections(claim.correctionRow.data()); }
+      catch {
+        console.warn("Published schedule corrections are invalid");
+        corrections = claim.previousInputs ? await readAcceptedScheduleCorrections(claim.previousInputs, storage) : new Map();
+      }
       let previousReporting;
       try { previousReporting = await readRetainedReporting({ inputs: claim.previousInputs,
         read: (key: string) => storage.get(key,{signal:AbortSignal.timeout(15_000)}) }); } catch { /* Optional source; native Posts remain independent. */ }
       const reporting = claim.config ? refreshSpotlightReporting(reportingMappings(claim.config),previousReporting,{fetchImpl,clock}) : Promise.resolve(undefined);
-      const results = await Promise.allSettled([syncLaunchContent(environment, boundedFetch(fetchImpl, "media-manager")), syncSpotlightNews(environment, request, { storageFactory: spotlightImageStorageFactory }), syncSchedule(environment, request, new Date(clock()))]);
+      const results = await Promise.allSettled([
+        syncLaunchContent(environment, boundedFetch(fetchImpl, "media-manager")),
+        syncSpotlightNews(environment, request, { storageFactory: spotlightImageStorageFactory }),
+        syncSchedule(environment, request, new Date(clock()), (config, data) =>
+          writeScheduleData(config, applyPublishedScheduleCorrections(data, corrections))),
+      ]);
       const reportingSnapshot = await reporting;
       if (results.some(result => result.status === "rejected")) throw new Error("External provider refresh failed");
       // Compose after the feed sync writes its file; never change the three-file receipt shape.
@@ -195,7 +221,7 @@ export function cloudExternalRefresh({ firestore, firebaseApp, runtime, backgrou
       }
       const inputs: CloudExternalInputs = { schemaVersion: 1, operationId, runtime,
         checkedAt: clock(), contentDigest: externalInputContentDigest(files), files: receipts };
-      const previousInputs: CloudExternalInputs | undefined = (await firestore.doc(PUBLIC_CONTEXT_PATH).get()).data()?.externalInputs;
+      const { previousInputs } = claim;
       // Initialize a historical input under a successor context while keeping
       // its original provider identity and clock. Existing pairs stay exact.
       const unchanged = previousInputs?.contentDigest === inputs.contentDigest;
@@ -206,13 +232,14 @@ export function cloudExternalRefresh({ firestore, firebaseApp, runtime, backgrou
       }
       stage = "accept";
       await firestore.runTransaction(async transaction => {
-        const [current, pointer, context, controlRow, reportingPage] = await transaction.getAll(ref, firestore.doc("system/publicDeployment"),
-          firestore.doc(PUBLIC_CONTEXT_PATH), firestore.doc("system/cmsPublicationRuntime"), firestore.doc("cmsPages/data-hub"));
+        const [current, pointer, context, controlRow, reportingPage, correctionRow] = await transaction.getAll(ref, firestore.doc("system/publicDeployment"),
+          firestore.doc(PUBLIC_CONTEXT_PATH), firestore.doc("system/cmsPublicationRuntime"), firestore.doc("cmsPages/data-hub"), correctionsRef);
         const liveControl = cloudCmsPublicationRuntimeControl(controlRow.data());
         if (!current.exists || !ownsPublication(current.data(), runtime) || current.data()?.operationId !== operationId ||
             current.data()?.nextAttemptAt <= clock() || liveControl.phase !== "ready" || liveControl.commitSha !== runtime.release || liveControl.serializerId !== serializerId ||
             pointer.data()?.state !== "idle" || pointer.data()?.activeCommitSha !== runtime.release) throw new Error("External refresh owner changed");
         if (hash(JSON.stringify(publishedReporting(reportingPage.data(),clock()) ?? null)) !== claim.mappingDigest) throw new Error("Reporting mapping changed");
+        if (documentVersion(correctionRow.updateTime) !== documentVersion(claim.correctionRow.updateTime)) throw new Error("Schedule corrections changed");
         if (!isDeepStrictEqual(context.data()?.externalInputs, previousInputs)) throw new Error("External refresh context changed");
         const changed = needsAcceptance;
         const accepted = changed ? await enqueuePublicContextInTransaction({ transaction, firestore, operationId, runtime,
