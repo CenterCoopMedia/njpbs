@@ -8,6 +8,7 @@
     ".github/workflows/cms-dev-publish.yml",
     ".github/workflows/cms-publish.yml",
     ".github/workflows/cms-staging-deploy.yml",
+    ".github/workflows/code-health.yml",
     ".github/workflows/dev-anonymous-refusal.yml",
     ".github/workflows/dev-machine-receipt-proof.yml",
     ".github/workflows/dev-staff-gateway-deploy.yml",

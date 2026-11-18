@@ -133,6 +133,15 @@ describe("metered-API source scan runs before any scanned code executes", () => 
     },
   );
 
+  it("scans the code health candidate before installing or running the report", () => {
+    const workflow = read("../../.github/workflows/code-health.yml");
+    const job = workflowJob(workflow, "code-health");
+    const scan = "run: node candidate/.github/scripts/metered-api-scan.mjs";
+    expectOrdered(job, scan, "- name: Install report dependencies");
+    expectOrdered(job, scan, "node --test candidate/.github/scripts/report-code-health.test.mjs");
+    expectOrdered(job, scan, "node candidate/.github/scripts/report-code-health.mjs");
+  });
+
   it("scans each dev publication job before executing repository code", () => {
     for (const name of ["prepare", "build", "finalize"]) {
       const job = workflowJob(devPublish, name);
