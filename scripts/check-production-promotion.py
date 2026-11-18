@@ -141,20 +141,25 @@ class Precheck:
 
     def ci(self):
         identity = self.get(self.prefix)
-        path = f"{self.prefix}/actions/workflows/ci.yml/runs?branch=main&event=push&status=success&head_sha={self.sha}"
-        for run in self.listing(path, "workflow_runs"):
-            if not (run["event"] == "push" and run["head_branch"] == "main" and
-                    run["head_sha"] == self.sha and run["status"] == "completed" and
-                    run["conclusion"] == "success" and run["path"].split("@")[0] == ".github/workflows/ci.yml" and
-                    all(run[key]["id"] == identity["id"] and
-                        run[key]["full_name"].lower() == self.repository.lower()
-                        for key in ("repository", "head_repository"))):
-                continue
-            jobs = self.listing(f"{self.prefix}/actions/runs/{run['id']}/jobs?filter=latest", "jobs")
-            if any(job["name"] == "ci" and job["run_id"] == run["id"] and job["head_sha"] == self.sha and
-                   job["status"] == "completed" and job["conclusion"] == "success" for job in jobs):
-                return f"CI / ci; run={run['id']}; sha={self.sha}"
-        raise NotReady(f"no successful exact-SHA main-push CI / ci for {self.sha}")
+        for event, query in (("push", "branch=main&event=push"), ("merge_group", "event=merge_group")):
+            path = f"{self.prefix}/actions/workflows/ci.yml/runs?{query}&status=success&head_sha={self.sha}"
+            for run in self.listing(path, "workflow_runs"):
+                branch = run["head_branch"]
+                main_branch = branch == "main" if event == "push" else branch.startswith("gh-readonly-queue/main/")
+                if not (run["event"] == event and main_branch and run["head_sha"] == self.sha and
+                        run["status"] == "completed" and run["conclusion"] == "success" and
+                        run["path"].split("@")[0] == ".github/workflows/ci.yml" and
+                        all(run[key]["id"] == identity["id"] and
+                            run[key]["full_name"].lower() == self.repository.lower()
+                            for key in ("repository", "head_repository"))):
+                    continue
+                jobs = self.listing(f"{self.prefix}/actions/runs/{run['id']}/jobs?filter=latest", "jobs")
+                if any(job["name"] == "ci" and job["run_id"] == run["id"] and job["head_sha"] == self.sha and
+                       job["status"] == "completed" and job["conclusion"] == "success" for job in jobs):
+                    if event == "merge_group":
+                        self.main_source()
+                    return f"CI / ci; run={run['id']}; sha={self.sha}"
+        raise NotReady(f"no successful exact-SHA main-push or landed merge-group CI / ci for {self.sha}")
 
     def reviewed_sources(self):
         for name, sha in self.required_sources.items():

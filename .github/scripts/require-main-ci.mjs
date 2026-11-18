@@ -11,32 +11,39 @@ export async function requireReleaseCi({ repository, sha, request, emergency = f
   if (!repositoryMatches(repository, env)) throw new Error("Canonical repository identity refused");
   releaseAuthorization({ sha, emergency, authorization });
   const proof = emergency ? "emergency" : "main";
-  const filter = emergency ? "" : "branch=main&event=push&";
-  const { workflow_runs: runs } = await request(
-    `/repos/${repository}/actions/workflows/ci.yml/runs?${filter}status=success&head_sha=${sha}&per_page=100`,
-  );
-  for (const run of runs) {
-    const allowedEvent = emergency
-      ? run.event === "workflow_dispatch"
-      : run.event === "push" && run.head_branch === "main";
-    if (!allowedEvent || run.head_sha !== sha ||
-        run.status !== "completed" || run.conclusion !== "success" ||
-        run.path?.split("@")[0] !== ".github/workflows/ci.yml" ||
-        !repositoryMatches(run.repository?.full_name, env, run.repository?.id ?? "") ||
-        !repositoryMatches(run.head_repository?.full_name, env, run.head_repository?.id ?? "") || !Number.isSafeInteger(run.id)) continue;
+  const filters = emergency
+    ? [["workflow_dispatch", ""]]
+    : [["push", "branch=main&event=push&"], ["merge_group", "event=merge_group&"]];
+  for (const [event, filter] of filters) {
+    const { workflow_runs: runs } = await request(
+      `/repos/${repository}/actions/workflows/ci.yml/runs?${filter}status=success&head_sha=${sha}&per_page=100`,
+    );
+    for (const run of runs) {
+      if (run.event !== event || (event === "push" && run.head_branch !== "main") ||
+          (event === "merge_group" && !run.head_branch?.startsWith("gh-readonly-queue/main/")) ||
+          run.head_sha !== sha || run.status !== "completed" || run.conclusion !== "success" ||
+          run.path?.split("@")[0] !== ".github/workflows/ci.yml" ||
+          !repositoryMatches(run.repository?.full_name, env, run.repository?.id ?? "") ||
+          !repositoryMatches(run.head_repository?.full_name, env, run.head_repository?.id ?? "") || !Number.isSafeInteger(run.id)) continue;
 
-    let count = 0;
-    for (let page = 1; page <= 10; page++) {
-      const { jobs, total_count: total } = await request(
-        `/repos/${repository}/actions/runs/${run.id}/jobs?filter=latest&per_page=100&page=${page}`,
-      );
-      if (jobs.some((job) => job.name === "ci" && job.run_id === run.id &&
-          job.head_sha === sha && job.status === "completed" && job.conclusion === "success")) {
-        return run.id;
+      let count = 0;
+      for (let page = 1; page <= 10; page++) {
+        const { jobs, total_count: total } = await request(
+          `/repos/${repository}/actions/runs/${run.id}/jobs?filter=latest&per_page=100&page=${page}`,
+        );
+        if (jobs.some((job) => job.name === "ci" && job.run_id === run.id &&
+            job.head_sha === sha && job.status === "completed" && job.conclusion === "success")) {
+          if (event !== "merge_group") return run.id;
+          // An unlanded queue commit can already have green CI.
+          const comparison = await request(`/repos/${repository}/compare/${sha}...main?per_page=1`);
+          if (comparison.base_commit?.sha === sha && comparison.merge_base_commit?.sha === sha &&
+              ["ahead", "identical"].includes(comparison.status)) return run.id;
+          throw new Error("Merge-group CI requires the exact deploy SHA to be reachable from main");
+        }
+        count += jobs.length;
+        if (count >= total) break;
+        if (jobs.length === 0 || page === 10) throw new Error(`Incomplete ${proof} CI jobs response`);
       }
-      count += jobs.length;
-      if (count >= total) break;
-      if (jobs.length === 0 || page === 10) throw new Error(`Incomplete ${proof} CI jobs response`);
     }
   }
   throw new Error(`No successful ${proof} CI/ci proof for deploy SHA ${sha}`);
