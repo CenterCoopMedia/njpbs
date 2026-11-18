@@ -72,12 +72,15 @@ through actual object readback before credential references can advance.
 
 [functions-deployment.json](../../config/functions-deployment.json) records only
 the approved scope and native media secret version references. Null references
-deliberately refuse verification. **Real census NOT DONE:** before the first
-public release, a separately authorized operator task must census actual native
-resources, complete any needed setup, prove the real canary and serving bindings,
-and commit the resulting references. Local fake-provider tests prove the method;
-they do not prove a live configuration or authorize provider access. Rotation
-requires that explicit procedure again; no value digest or second ledger exists.
+deliberately refuse verification. The references were recorded on Nov. 18, 2026
+from the production census: each media secret has one enabled version (1, created
+Aug. 14, 2026), and all 12 serving Functions that bind the media credentials,
+including `cmsUploadMedia`, bind version 1. CMS deploy run 44269086649 passed the
+native resource, scoped IAM and secret-value checks before it refused the null
+references. The repository's `mediaCanary` then passed with version 1 against the
+production media bucket at 2026-11-18T08:55:51Z: Put, Head, Delete and proven absence of
+`cms-media-staging/deploy-preflight-9af235f4-298f-401e-9bee-e724ae253d46`. Rotation requires explicit `provision-config` and a new committed
+reference; no value digest or second ledger exists.
 
 The trusted source gate requires selected IAM and retention validators to match
 the trusted workflow's committed bytes. A stale validator refuses before selected

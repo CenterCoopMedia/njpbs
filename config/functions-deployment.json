@@ -3,7 +3,7 @@
   "region": "us-central1",
   "codebase": "default",
   "mediaCredentialVersions": {
-    "CMS_MEDIA_R2_ACCESS_KEY_ID": null,
-    "CMS_MEDIA_R2_SECRET_ACCESS_KEY": null
+    "CMS_MEDIA_R2_ACCESS_KEY_ID": "projects/njpbs-site/secrets/CMS_MEDIA_R2_ACCESS_KEY_ID/versions/1",
+    "CMS_MEDIA_R2_SECRET_ACCESS_KEY": "projects/njpbs-site/secrets/CMS_MEDIA_R2_SECRET_ACCESS_KEY/versions/1"
   }
 }
