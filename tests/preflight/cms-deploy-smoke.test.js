@@ -928,6 +928,19 @@ if(process.env.CMS_BUG_REPORT_TELEGRAM_ADMIN_MAP)process.exit(8); require("node:
     expect(peak.get(FUNCTIONS_ORIGIN)).toBe(4);
   });
 
+  it("fails a direct-origin batch when one authorization refusal is missing", async () => {
+    const originPaths = [];
+    const request = async (url, init = {}) => {
+      const { origin, pathname } = new URL(url);
+      if (origin === FUNCTIONS_ORIGIN) originPaths.push(pathname);
+      if (origin === FUNCTIONS_ORIGIN && pathname === "/cmsCuezListDestinations") return { status: 200 };
+      return expectedResponseFor(url, init);
+    };
+    await expect(runCmsFunctionSmoke({ baseUrl: BASE_URL, request }))
+      .rejects.toThrow("cmsCuezListDestinations direct-origin refusal returned 200; expected 403");
+    expect(originPaths).toEqual(["/cmsCuezStatus", "/cmsCuezListDestinations", "/cmsCuezPrepareExport", "/cmsCuezSendExport"]);
+  });
+
   it("refuses a configured functions URL other than the production bare origin", async () => {
     const request = vi.fn();
 
