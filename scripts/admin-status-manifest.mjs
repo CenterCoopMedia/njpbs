@@ -3,7 +3,6 @@ import { repositoryMatches } from "./lib/repository-identity.mjs";
 import { readFileSync } from "node:fs";
 import { pathToFileURL } from "node:url";
 
-const DEFAULT_ADMIN_MILESTONE_NUMBER = 16;
 const MAX_ADMIN_MILESTONES = 100;
 const REFRESH_WINDOW_MS = 72 * 60 * 60 * 1000;
 
@@ -96,12 +95,8 @@ export function createAdminStatusManifest({
   if (new Set(milestones.map(({ number }) => number)).size !== milestones.length) {
     fail("milestone numbers must be unique");
   }
-  const milestone = milestones.find(
-    ({ number }) => number === DEFAULT_ADMIN_MILESTONE_NUMBER,
-  );
-  if (!milestone) {
-    fail(`milestones must include ${DEFAULT_ADMIN_MILESTONE_NUMBER}`);
-  }
+  // Feature the earliest open milestone; when every milestone is closed, the latest one.
+  const milestone = milestones.find(({ state }) => state === "open") ?? milestones.at(-1);
 
   return {
     schemaVersion: 2,

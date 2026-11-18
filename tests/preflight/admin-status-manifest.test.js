@@ -25,7 +25,7 @@ const milestone = {
 const cmsMilestone = {
   number: 6,
   title: "M4: CMS + editorial workflow",
-  state: "open",
+  state: "closed",
   open_issues: 8,
   closed_issues: 87,
   updated_at: "2026-08-24T15:15:06Z",
@@ -76,7 +76,7 @@ describe("admin status build contract", () => {
         {
           number: 6,
           title: "M4: CMS + editorial workflow",
-          state: "open",
+          state: "closed",
           openIssues: 8,
           closedIssues: 87,
           updatedAt: "2026-08-24T15:15:06.000Z",
@@ -98,8 +98,21 @@ describe("admin status build contract", () => {
     ).toEqual(manifest);
   });
 
+  it("features the earliest open milestone, or the latest when all are closed", () => {
+    const build = list => createAdminStatusManifest({
+      environment: "Production",
+      generatedAt: "2026-08-17T18:00:00.000Z",
+      repository: "CenterCoopMedia/njpbs",
+      revision: "d805028221a24448055bf0adcce344d1921547b7",
+      milestones: list,
+    }).milestone.number;
+    expect(build([{ ...milestone, state: "open" }, { ...cmsMilestone, state: "open" }])).toBe(6);
+    expect(build([milestone, cmsMilestone])).toBe(16);
+    expect(build([{ ...milestone, state: "closed" }, cmsMilestone])).toBe(16);
+    expect(build([cmsMilestone])).toBe(6);
+  });
+
   it.each([
-    ["missing default milestone", [cmsMilestone]],
     ["wrong repository URL", [{ ...milestone, html_url: "https://example.com/milestone/16" }]],
     ["negative counts", [{ ...milestone, open_issues: -1 }]],
     ["invalid update time", [{ ...milestone, updated_at: "not-a-date" }]],
@@ -137,13 +150,9 @@ describe("admin status build contract", () => {
     expect(workflow).toContain("issues: read");
     expect(workflow).toContain("ADMIN_STATUS_MANIFEST_BASE64");
     expect(workflow).toContain("Check out current Admin status gate");
-    expect(workflow).toContain("admin/admin-status-contract.json");
-    expect(workflow).toContain(
-      "generator.includes('\"--milestones\"') ? \"2\" : \"1\"",
-    );
     expect(workflow).toContain("node scripts/admin-status-manifest.mjs");
-    expect(workflow).toContain('--milestone "$RUNNER_TEMP/admin-m14-milestone.json"');
     expect(workflow).toContain('--milestones "$RUNNER_TEMP/admin-milestones.json"');
+    expect(workflow).not.toContain("milestones/16");
     expect(workflow).not.toContain("VITE_GITHUB");
   });
 
