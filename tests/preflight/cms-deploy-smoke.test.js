@@ -1184,13 +1184,12 @@ if(process.env.CMS_BUG_REPORT_TELEGRAM_ADMIN_MAP)process.exit(8); require("node:
       "node scripts/check-admin-pages-security.mjs",
     );
 
-    const gateCheckouts = workflow.match(
-      /ref: \$\{\{ github\.sha \}\}\n\s+path: \.cms-smoke-gate/g,
-    );
-    expect(gateCheckouts).toHaveLength(3);
-    expect(workflow).not.toContain(
-      "ref: main\n          path: .cms-smoke-gate",
-    );
+    const { jobs } = parse(workflow);
+    for (const [name, path] of [["verify", ".release-gate"], ["firebase-preflight", ".cms-smoke-gate"], ["live-smoke", ".cms-smoke-gate"]]) {
+      const gate = jobs[name].steps.find(step => step.with?.path === path);
+      expect(gate?.with.ref, name).toBe("${{ github.sha }}");
+      expect(gate?.with["persist-credentials"], name).toBe(false);
+    }
   });
 
   it("keeps both private voiceover Functions in the authenticated current manifest", () => {
