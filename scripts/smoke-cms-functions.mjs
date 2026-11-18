@@ -394,8 +394,12 @@ async function runFunctionSmoke({ baseUrl, functionsOrigin, adminOrigin, deploye
     });
   }
 
-  for (const endpoint of authenticatedPostFunctions) {
-    await check({
+  // Keep the edge requests serial under their shared rate limit. These probes
+  // target separate Functions directly.
+  const originBatchSize = 4;
+  for (let start = 0; start < authenticatedPostFunctions.length; start += originBatchSize) {
+    const endpoints = authenticatedPostFunctions.slice(start, start + originBatchSize);
+    const batch = await Promise.allSettled(endpoints.map(endpoint => check({
       url: endpointUrl(functionsOrigin, endpoint),
       init: {
         method: "POST",
@@ -408,7 +412,9 @@ async function runFunctionSmoke({ baseUrl, functionsOrigin, adminOrigin, deploye
       },
       expected: 403,
       label: `${endpoint} direct-origin refusal`,
-    });
+    })));
+    const failure = batch.find(result => result.status === "rejected");
+    if (failure) throw failure.reason;
   }
 
   for (const endpoint of WORKER_FUNCTION_NAMES.filter(name => deployed.has(name))) {

@@ -912,6 +912,35 @@ if(process.env.CMS_BUG_REPORT_TELEGRAM_ADMIN_MAP)process.exit(8); require("node:
       .rejects.toMatchObject({ message: "health request failed" });
   });
 
+  it("bounds direct-origin probes and keeps edge probes serial", async () => {
+    const active = new Map(), peak = new Map();
+    const request = async (url, init = {}) => {
+      const { origin } = new URL(url);
+      const count = (active.get(origin) ?? 0) + 1;
+      active.set(origin, count);
+      peak.set(origin, Math.max(peak.get(origin) ?? 0, count));
+      await Promise.resolve();
+      active.set(origin, active.get(origin) - 1);
+      return expectedResponseFor(url, init);
+    };
+    await expect(runCmsFunctionSmoke({ baseUrl: BASE_URL, request })).resolves.toEqual({ checked: 296 });
+    expect(peak.get(BASE_URL)).toBe(1);
+    expect(peak.get(FUNCTIONS_ORIGIN)).toBe(4);
+  });
+
+  it("fails a direct-origin batch when one authorization refusal is missing", async () => {
+    const originPaths = [];
+    const request = async (url, init = {}) => {
+      const { origin, pathname } = new URL(url);
+      if (origin === FUNCTIONS_ORIGIN) originPaths.push(pathname);
+      if (origin === FUNCTIONS_ORIGIN && pathname === "/cmsCuezListDestinations") return { status: 200 };
+      return expectedResponseFor(url, init);
+    };
+    await expect(runCmsFunctionSmoke({ baseUrl: BASE_URL, request }))
+      .rejects.toThrow("cmsCuezListDestinations direct-origin refusal returned 200; expected 403");
+    expect(originPaths).toEqual(["/cmsCuezStatus", "/cmsCuezListDestinations", "/cmsCuezPrepareExport", "/cmsCuezSendExport"]);
+  });
+
   it("refuses a configured functions URL other than the production bare origin", async () => {
     const request = vi.fn();
 
