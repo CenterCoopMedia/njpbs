@@ -70,8 +70,8 @@ review uses a different model provider from the author, with verified findings
 fixed before submission.
 
 The hosted **Code health** workflow records lint, Functions JavaScript type
-errors, and source size. Download the `code-health` artifact for the measured
-tree, the PR base, the base's ESLint bulk suppressions and the new findings.
+errors, and source size. Download the `code-health` artifact for the tested
+merge tree, its base, the base's ESLint bulk suppressions and the new findings.
 The report uses the same rules on both trees. It compares diagnostic counts
 by file, rule and message so shifted lines keep their baseline. It also
 tracks detected renames. Test files are linted and excluded from size counts.
