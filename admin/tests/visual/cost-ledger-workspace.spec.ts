@@ -1,5 +1,4 @@
 import { expect, test } from "./fixtures";
-test.use({ trace: "on" });
 // Keep the phone and docked-details rule bands.
 for (const width of [320, 1280]) {
   test(`Costs measured shared workspace at ${width}`, async ({ page }) => {
@@ -419,8 +418,9 @@ test("read-only Costs phone More hides both month mutation actions", async ({
   ).toHaveCount(0);
 });
 
+const tracedHardwareTest = test.extend({ trace: "on" });
 for (const width of [390, 1440]) {
-  test(`hardware conflict recovery replaces only hardware drafts at ${width}`, async ({
+  tracedHardwareTest(`hardware conflict recovery replaces only hardware drafts at ${width}`, async ({
     page,
   }) => {
     await page.setViewportSize({ width, height: 1000 });
