@@ -4,12 +4,10 @@ import { renderPage, renderSchedule } from "../../lib/cms-render-context";
 import NativeSchedule from "../../components/NativeSchedule.astro";
 import CmsBlocks from "../../components/CmsBlocks.astro";
 import { cmsImageAsset } from "../../lib/cms-responsive-image";
-import scheduleData from "../../data/schedule.json";
 import PublicSiteLayout from "../../layouts/PublicSiteLayout.astro";
 import { containsVideo } from "../../../../packages/content-core/src/video-block";
 import { publicRootRoutesEnabled } from "../../lib/build-target";
-import type { BakedScheduleData } from "../../lib/schedule-feed";
-import { loadScheduleData } from "../../lib/schedule-data";
+import { loadScheduleData } from "../../lib/build/schedule-data";
 
 export function getStaticPaths() {
   if (!publicRootRoutesEnabled(process.env)) return [];
@@ -23,7 +21,7 @@ const socialImage = socialImageId
   ? cmsSchedule?.data.assets[socialImageId]?.url
   : undefined;
 const sealedSchedule = renderSchedule(Astro.locals.cmsRender);
-const bakedSchedule = sealedSchedule?.data ?? await loadScheduleData(scheduleData as BakedScheduleData);
+const bakedSchedule = sealedSchedule?.data ?? await loadScheduleData();
 const heroBackgroundImage = cmsSchedule?.data.heroBackgroundImage
   ? cmsImageAsset(cmsSchedule.data.assets[cmsSchedule.data.heroBackgroundImage])
   : undefined;

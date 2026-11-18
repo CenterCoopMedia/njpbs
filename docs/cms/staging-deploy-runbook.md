@@ -266,25 +266,7 @@ the same manifest; unchanged is no-op. Source updates touch only still-matching
 tracked records. No deletion/reset/adoption override exists. Configuration-only
 repair leaves content/runtime controls and existing seed category unchanged.
 
-## Schedule automation and timing evidence
-
-The [schedule workflow](../../.github/workflows/schedule-bake.yml) validates fresh
-public schedule data, commits only `site/src/data/schedule.json` on its automation
-branch and creates/updates the schedule PR. It does not use a private supplier
-or discovery pointer. Bake success does not prove merge or public publication;
-CI completion and deferred merge are separate jobs. Check active/waiting writers
-before manual recovery. The shared
-non-cancelling group has only one waiting job, which another accepted dispatch
-can replace. Closed/superseded/foreign CI completions are refused before entry
-and checked again inside the writer lock before a write token exists.
-
-Deferred merge requires the registered workflow/repository/event/branch, open
-same-repository automation PR against main, exact current head CI, schedule-only
-diff and match-head lease. CI runs outside the writer lock. Missing CI event/API
-failure fails rather than inventing proof; pending rebased CI leaves the PR open
-for its own completion. Never merge a pending/failed head by hand.
-Read current workflow schedule and natural-run receipts instead of old timing
-claims. Failure notification delivery and workflow execution are separate proof.
+## Timing evidence
 
 For latency, retain acceptance, queue wait, cold import/startup, preparation,
 upload/activation, serving observation and CMS settlement separately. Correlate

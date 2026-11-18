@@ -81,16 +81,6 @@ const SITE_CONSUMED_ADMIN_FILES = new Set([
   "admin/src/styles.css",
 ]);
 
-// Schedule automation is checked by Site workflow and Python monitor tests.
-const SITE_TESTED_MONITOR_PATHS = new Set([
-  "scripts/check-schedule-jobs.py",
-  ".github/scripts/wait-schedule-ci.sh",
-  ".github/scripts/merge-schedule-pr.sh",
-  ".github/scripts/admit-schedule-ci.sh",
-  "deploy/systemd/njpbs-schedule-monitor.service",
-  "deploy/systemd/njpbs-schedule-monitor.timer",
-]);
-
 const POLICY_ONLY_WORKFLOWS = new Set([
   ".github/workflows/probe-media-manager.yml",
 ]);
@@ -98,7 +88,6 @@ const POLICY_ONLY_WORKFLOWS = new Set([
 const SITE_WORKFLOWS = new Set([
   ".github/workflows/pages.yml",
   ".github/workflows/preview.yml",
-  ".github/workflows/schedule-bake.yml",
 ]);
 
 // These workflow contracts span Site and Firebase.
@@ -266,7 +255,6 @@ export function classifyPath(value) {
 
   if (path.startsWith(".github/workflows/")) return classifyWorkflow(path);
   if (SITE_SOURCE_POLICY_PATHS.has(path)) return selected("site");
-  if (SITE_TESTED_MONITOR_PATHS.has(path)) return selected("site");
   if (SOURCE_POLICY_PATHS.has(path)) {
     return path.startsWith("site/") ? selected("site") : selected();
   }

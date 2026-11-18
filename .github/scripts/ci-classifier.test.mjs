@@ -241,7 +241,7 @@ describe("CI path classifier", () => {
       gates(true, true, false, false),
     );
     assert.deepEqual(
-      classifyPath("site/src/data/schedule.json"),
+      classifyPath("site/src/data/schedule-corrections-2026-12.json"),
       gates(false, true, false, false),
     );
     assert.deepEqual(
@@ -284,31 +284,16 @@ describe("CI path classifier", () => {
     assert.deepEqual(classifyPath(".github/workflows/cms-dev-publish.yml"), gates(false, true, false, true));
   });
 
-  it("routes the schedule observer and its tests to Site, with its runbooks on Docs", () => {
-    const sitePaths = [
-      "scripts/check-schedule-jobs.py",
-      ".github/scripts/wait-schedule-ci.sh",
-      ".github/scripts/merge-schedule-pr.sh",
-      ".github/scripts/admit-schedule-ci.sh",
-      "deploy/systemd/njpbs-schedule-monitor.service",
-      "deploy/systemd/njpbs-schedule-monitor.timer",
-      ".github/workflows/schedule-bake.yml",
-      "site/tests/schedule-bake-workflow.test.ts",
-      "site/tests/schedule-job-monitor.test.py",
-      "site/tests/schedule-job-monitor.test.ts",
-    ];
+  it("routes documentation and a code-change list to their required checks", () => {
     const docsPaths = [
       "docs/decisions/README.md",
       "docs/collaboration/README.md",
     ];
-    for (const path of sitePaths) {
-      assert.deepEqual(classifyPath(path), gates(false, true, false, false), path);
-    }
     for (const path of docsPaths) {
       assert.deepEqual(classifyPath(path), gates(true, false, false, false), path);
     }
-    assert.deepEqual(classifyChangedPaths([...sitePaths, ...docsPaths]), {
-      gates: gates(true, true, true, true),
+    assert.deepEqual(classifyChangedPaths(["site/src/lib/schedule-data.ts", ...docsPaths]), {
+      gates: gates(true, true, false, false),
       classification: "exact",
       reason: null,
     });
@@ -446,7 +431,6 @@ describe("CI path classifier", () => {
     for (const path of [
       ".github/workflows/pages.yml",
       ".github/workflows/preview.yml",
-      ".github/workflows/schedule-bake.yml",
     ]) {
       assert.deepEqual(
         classifyPath(path),

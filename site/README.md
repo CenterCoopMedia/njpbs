@@ -35,9 +35,10 @@ frozen builds never download fonts: missing or corrupt files stop the build.
 CI restores the manifest-keyed cache and runs that same preparation command
 before renderer checks. Font bytes remain outside the code license and Git.
 
-The published schedule snapshot is tracked in `src/data/schedule.json` and used
-by site builds. `NOTICE` excludes schedule data from the MIT license grant.
-Schedule feed credentials remain configured secrets and must not enter source.
+The public runtime reads the accepted schedule packet. Frozen builds read their
+validated input at `SCHEDULE_DATA_PATH`. For a standalone build with listings,
+run `npm run sync:schedule` from `site/` to prepare its local schedule file.
+`NOTICE` excludes schedule data from the MIT license grant.
 
 ## Configuration
 

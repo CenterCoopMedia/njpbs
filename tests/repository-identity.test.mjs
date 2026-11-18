@@ -1,8 +1,5 @@
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
-import { existsSync, mkdtempSync, writeFileSync, chmodSync, rmSync } from "node:fs";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { test } from "node:test";
 import { repositoryIdentity, repositoryMatches, workflowMatches } from "../scripts/lib/repository-identity.mjs";
@@ -37,28 +34,6 @@ test("canonical URL authorization refuses absent configuration and foreign hosts
       { cwd: root, env: { PATH: process.env.PATH, ...env }, encoding: "utf8" });
     assert.equal(result.status, allowed ? 0 : 1, result.stderr);
   }
-});
-
-test("schedule admission checks configured name, ID and App slug before invoking GitHub", () => {
-  const dir = mkdtempSync(join(tmpdir(), "repository-admission-"));
-  const marker = join(dir, "called");
-  const gh = join(dir, "gh");
-  writeFileSync(gh, '#!/usr/bin/env bash\nprintf called >> "$MARKER"\ncase "$*" in *workflows*) printf 7;; *runs*) printf "{}";; *) printf "[]";; esac\n');
-  chmodSync(gh, 0o700);
-  try {
-    const scheduleConfigured = { ...configured, SCHEDULE_BAKE_APP_SLUG: "schedule-bake-fixture" };
-    for (const [settings, allowed] of [[{}, false], [{ ...scheduleConfigured, CANONICAL_GITHUB_REPOSITORY: "" }, false],
-      [{ ...scheduleConfigured, CANONICAL_GITHUB_REPOSITORY_ID: "42" }, false],
-      [{ ...scheduleConfigured, CANONICAL_GITHUB_REPOSITORY: "other/site" }, false],
-      [{ ...scheduleConfigured, SCHEDULE_BAKE_APP_SLUG: "" }, false], [scheduleConfigured, true]]) {
-      rmSync(marker, { force: true });
-      const result = spawnSync("bash", [".github/scripts/admit-schedule-ci.sh"], { cwd: root, encoding: "utf8",
-        env: { PATH: `${dir}:${process.env.PATH}`, ...settings, RUN_ID: "1", GITHUB_REPOSITORY: "example-org/example-repo",
-          GITHUB_REPOSITORY_ID: "123456", GITHUB_OUTPUT: join(dir, "output"), MARKER: marker } });
-      assert.equal(result.status, allowed ? 0 : 1, result.stderr);
-      assert.equal(existsSync(marker), allowed, "only admitted identity may invoke GitHub");
-    }
-  } finally { rmSync(dir, { recursive: true, force: true }); }
 });
 
 test("CI proof and reuse refuse empty or wrong configured identity before API access", async () => {

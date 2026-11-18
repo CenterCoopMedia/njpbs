@@ -18,7 +18,7 @@ describe("workflow policy", () => {
       const runners = [...source.matchAll(/^    runs-on: (.+)$/gm)];
       assert.ok(runners.length > 0, path);
       for (const [, runner] of runners) assert.equal(runner, "ubuntu-24.04", path);
-      assert.doesNotMatch(source, /self-hosted|NJPBS_CI_.*ENABLED|SCHEDULE_BAKE_FLEET_MONITOR/, path);
+      assert.doesNotMatch(source, /self-hosted|NJPBS_CI_.*ENABLED/, path);
     }
   });
 

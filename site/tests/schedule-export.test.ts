@@ -2,7 +2,7 @@
 import { readFile } from "node:fs/promises";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import workbook from "../src/data/schedule-corrections-2026-10.json";
-import { loadScheduleData } from "../src/lib/schedule-data";
+import { applyScheduleCorrections } from "../src/lib/schedule-corrections";
 import type { BakedScheduleData, ScheduleFeedDay } from "../src/lib/schedule-feed";
 import { buildScheduleExport, scheduleExportTime, SCHEDULE_STALE_AFTER_MS } from "../src/lib/schedule-export";
 import { formatScheduleStartTime, SCHEDULE_PDF_COLORS } from "../src/lib/schedule-pdf";
@@ -102,9 +102,9 @@ describe("baked 14-day schedule export", () => {
     expect(result.coverageNotice).toContain("November 12, 2026");
   });
 
-  it("applies the page's active corrections before selecting the window", async () => {
+  it("applies the page's active corrections before selecting the window", () => {
     const data = { ...fixture([day("2026-10-06")]), generatedAt: "2026-10-06T15:00:00.000Z", request: { station: "WNJT" as const, dates: ["2026-10-06"] } };
-    const result = buildScheduleExport(await loadScheduleData(data, {}), new Date("2026-10-06T16:00:00.000Z"));
+    const result = buildScheduleExport(applyScheduleCorrections(data), new Date("2026-10-06T16:00:00.000Z"));
     const expected = workbook.days.find((item) => item.date === "2026-10-06")!;
     expect(result.startDate).toBe("2026-10-06");
     expect(result.endDate).toBe("2026-10-19");

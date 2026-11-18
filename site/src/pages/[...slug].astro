@@ -8,9 +8,7 @@ import CmsPage from "../components/CmsPage.astro";
 import CmsBlocks from "../components/CmsBlocks.astro";
 import NativeSchedule from "../components/NativeSchedule.astro";
 import StaffDirectory from "../components/StaffDirectory.astro";
-import scheduleData from "../data/schedule.json";
-import type { BakedScheduleData } from "../lib/schedule-feed";
-import { loadScheduleData } from "../lib/schedule-data";
+import { loadScheduleData } from "../lib/build/schedule-data";
 import { staffDirectoryEntries } from "../lib/staff-directory";
 import { renderPage, renderAuthors, renderSchedule } from "../lib/cms-render-context";
 import {
@@ -100,8 +98,6 @@ export async function getStaticPaths() {
 }
 
 const renderContext = Astro.locals.cmsRender;
-const sealedSchedule = renderSchedule(Astro.locals.cmsRender);
-const bakedSchedule = sealedSchedule?.data ?? await loadScheduleData(scheduleData as BakedScheduleData);
 const contextFrame = renderContext?.content.kind === "public-page-context" && renderContext.content.target.source === "site"
   ? publicPage(renderContext.content.target.documentId) : undefined;
 const article = contextFrame?.family === "article" ? articles[`../content/pages/${contextFrame.path.slice(1, -1)}.md`] : undefined;
@@ -110,6 +106,9 @@ const { page, entry, cmsEntry, redirectTo }: Props = renderContext
       ...(contextFrame?.family === "service" ? { page: launchFallbackPages[(renderContext.content.target.pagePath === "/donate/" ? "donate" : contextFrame.id) as keyof typeof launchFallbackPages] } : {}),
       ...(renderContext.staticRedirect ? { redirectTo: renderContext.staticRedirect.to } : {}) }
   : Astro.props;
+const bakedSchedule = !redirectTo && cmsEntry?.data.family === "schedule"
+  ? renderSchedule(renderContext)?.data ?? await loadScheduleData()
+  : null;
 if (renderContext && !cmsEntry && (!contextFrame || (!page && !article))) throw new Error("Compiled renderer Page target is missing");
 const staff = cmsEntry?.data.family === "staff"
   ? staffDirectoryEntries((Astro.locals.cmsRender
@@ -196,7 +195,7 @@ if (cmsEntry?.data.family === "service" && !usesServiceComposition(cmsEntry.data
   childDirected={cmsEntry?.data.childDirected ?? entry?.data.childDirected ?? article?.frontmatter.childDirected === true}
 >
   {redirectTo ? <main><h1>Page moved</h1><p><a href={redirectTo}>Continue to {title}</a></p></main> : <>
-  {cmsEntry?.data.family === "schedule" && <><NativeSchedule data={bakedSchedule} heroBackgroundImage={heroBackgroundImage} heroBackgroundPosition={cmsEntry.data.heroBackgroundPosition} /><CmsBlocks entry={cmsEntry} readerControls /></>}
+  {cmsEntry?.data.family === "schedule" && bakedSchedule && <><NativeSchedule data={bakedSchedule} heroBackgroundImage={heroBackgroundImage} heroBackgroundPosition={cmsEntry.data.heroBackgroundPosition} /><CmsBlocks entry={cmsEntry} readerControls /></>}
   {cmsEntry?.data.family === "staff" && <><StaffDirectory staff={staff} title={title} description={description} heroBackgroundImage={heroBackgroundImage} heroBackgroundPosition={cmsEntry.data.heroBackgroundPosition} /><CmsBlocks entry={cmsEntry} readerControls /></>}
   {cmsEntry && (cmsEntry.data.family === "article" || usesServiceComposition(cmsEntry.data)) && <CmsPage entry={cmsEntry} />}
   {cmsServicePage && cmsEntry && (

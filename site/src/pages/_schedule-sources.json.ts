@@ -1,9 +1,7 @@
 import type { APIRoute } from "astro";
 import { getEntry } from "astro:content";
-import scheduleData from "../data/schedule.json";
-import type { BakedScheduleData } from "../lib/schedule-feed";
 import { createScheduleSourceSnapshot } from "../lib/schedule-source-snapshot";
-import { loadScheduleData } from "../lib/schedule-data";
+import { loadScheduleData } from "../lib/build/schedule-data";
 
 export const prerender = true;
 
@@ -12,7 +10,7 @@ export const GET: APIRoute = async () => {
   // Reuse its public receipt; do not fetch another Firestore snapshot here.
   const context = await getEntry("publicHomeSources", "home");
   if (!context) throw new Error("The public source context is missing");
-  const bakedSchedule = await loadScheduleData(scheduleData as BakedScheduleData);
+  const bakedSchedule = await loadScheduleData();
   const snapshot = createScheduleSourceSnapshot(bakedSchedule, context.data.publication);
   return new Response(`${JSON.stringify(snapshot)}\n`, {
     headers: { "content-type": "application/json; charset=utf-8" },

@@ -20,7 +20,6 @@
     ".github/workflows/publisher-image.yml",
     ".github/workflows/recovered-service-source.yml",
     ".github/workflows/recovered-services-deploy.yml.disabled",
-    ".github/workflows/schedule-bake.yml",
     ".github/workflows/shadow-posts-dev-deploy.yml"
   ],
   "wrangler": [
@@ -1265,7 +1264,6 @@
     {"id":"workflow-cms-publish","kind":"deploy","sources":[".github/workflows/cms-publish.yml"],"states":["requested","authorized","artifact_ready","pages_success","public_unconfirmed","success","failed_or_cancelled"]},
     {"id":"workflow-dev-publish","kind":"deploy","sources":[".github/workflows/cms-dev-publish.yml"],"states":["enabled_preparing","frozen_built","uploading","uncertain","reconciling","settled"]},
     {"id":"workflow-ci","kind":"deploy","sources":[".github/workflows/ci.yml"],"states":["policy","consumers","fallback_all","reused","success","failure","metadata_only"]},
-    {"id":"workflow-schedule","kind":"deploy","sources":[".github/scripts/merge-schedule-pr.sh",".github/workflows/schedule-bake.yml"],"states":["unchanged","pr_open","ci_pending","admitted","behind","merged","failed_or_deferred"]},
     {"id":"cms-content-ops","kind":"app","sources":["cms-api/src/content-ops-route.ts","cms-api/src/content-ops.ts"],"states":["validated","dry_run","lease_held","media_copied","saved","confirmed","committed_unconfirmed","refused_or_lost"]},
     {"id":"install-dev-history","kind":"deploy","sources":["scripts/lib/dev-publication-history.cjs"],"states":["reserved","ready","retired","superseded","committed_verified"]},
     {"id":"cms-renderer-rollout","kind":"deploy","sources":["scripts/lib/cms-component-receipt.mjs"],"states":["pending","progressing","completed_unconverged","confirmed","reverted","replaced","unavailable"]},

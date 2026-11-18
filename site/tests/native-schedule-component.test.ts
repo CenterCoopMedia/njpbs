@@ -21,7 +21,7 @@ describe("native schedule source wiring", () => {
   const client = readSource("../src/lib/native-schedule-dom.ts");
   const combined = `${page}\n${schedule}\n${panel}\n${client}`;
 
-  it("uses the dedicated public route and baked schedule contract", () => {
+  it("uses qualified schedule data or validated build input on the dedicated public route", () => {
     expect(page).toContain(
       'import PublicSiteLayout from "../../layouts/PublicSiteLayout.astro"',
     );
@@ -29,10 +29,9 @@ describe("native schedule source wiring", () => {
       'import NativeSchedule from "../../components/NativeSchedule.astro"',
     );
     expect(page).toContain(
-      'import scheduleData from "../../data/schedule.json"',
+      'import { loadScheduleData } from "../../lib/build/schedule-data"',
     );
-    expect(page).toMatch(/import\s+type\s*\{\s*BakedScheduleData\s*\}/);
-    expect(page).toContain("scheduleData as BakedScheduleData");
+    expect(page).toContain("sealedSchedule?.data ?? await loadScheduleData()");
     expect(page).toContain('cmsSchedule?.data.title ?? "TV schedule"');
     expect(page).toContain("cmsSchedule?.data.description");
     expect(page).toContain(

@@ -47,9 +47,8 @@ describe("shared on-now and up-next component wiring", () => {
 
   it("mounts the compact broadcast strip only on the live page after the player", () => {
     expect(subpage).toContain('import ScheduleNowNext from "./ScheduleNowNext.astro"');
-    expect(subpage).toContain('import scheduleData from "../data/schedule.json"');
-    expect(subpage).toMatch(/import\s+type\s*\{\s*BakedScheduleData\s*\}/);
-    expect(subpage).toMatch(/scheduleData\s+as\s+BakedScheduleData/);
+    expect(subpage).toContain('import { loadScheduleData } from "../lib/build/schedule-data"');
+    expect(subpage).toContain('page.slug === "live" ? renderSchedule(Astro.locals.cmsRender)?.data ?? await loadScheduleData() : null');
     expect(subpage).toMatch(/page\.slug\s*===\s*["']live["'][\s\S]*<ScheduleNowNext/);
     expect(subpage).toMatch(/<ScheduleNowNext[\s\S]*variant=["']compact["']/);
     expect(subpage).toContain("days={bakedSchedule.days.broadcast}");

@@ -15,6 +15,7 @@ import { preparePublicArtifactBundle } from "../src/lib/public-artifact-build.ts
 import { assertPublicArtifactInventoryReceipt } from "../src/lib/public-artifact-inventory.ts";
 import { preparePublicWorkerArtifact } from "../src/lib/public-worker-artifact.ts";
 import { retainCloudPreviewPublicContext } from "./cms-preview-cloud-storage.ts";
+import { main as syncSchedule } from "./sync-schedule.mjs";
 
 import { retryWorkerVersionReceipt, prepareStaticPostProof } from "./upload-public-worker-candidate.ts";
 import { findExactRecentWorkerVersion } from "../src/lib/public-worker-version-recovery.ts";
@@ -108,7 +109,7 @@ export async function inspectDevPublicationRetry(db, env = process.env) {
   return retained;
 }
 
-// Hash every retained input, including committed launch/schedule data. The source
+// Hash every retained input, including the provider schedule. The source
 // SHA pins the renderer and all other repository assets for the offline job.
 async function inputDigest() {
   const files = ["bundle.json", "schedule.json", "launch.json", "spotlight.json", "post-routes.json"];
@@ -153,12 +154,12 @@ export async function prepare(db) {
         family.artifacts.some(item => item.canonicalPath === "/"))) {
       throw new Error("Published CMS homepage is required for development publication");
     }
-    await cp(path.join(site, "src/data/schedule.json"), path.join(directory, "schedule.json"));
+    await syncSchedule({ ...env, REQUIRE_FRESH_CONTENT: "1", SCHEDULE_OUTPUT: path.join(directory, "schedule.json") });
     await cp(path.join(site, "src/data/launch-media-manager.json"), path.join(directory, "launch.json"));
     await cp(path.join(site, "src/data/spotlight-news.json"), path.join(directory, "spotlight.json"));
     await save(path.join(directory, "post-routes.json"), await freezeDevPostRoutes(db, id, artifact, bundle.receipt));
     const frozen = { schemaVersion: 1, target: target(), identity: id, inputDigest: await inputDigest(),
-      inputSources: { schedule: "reviewed source", launch: "reviewed source", rss: "reviewed source" } };
+      inputSources: { schedule: "PBS provider", launch: "reviewed source", rss: "reviewed source" } };
     await save(path.join(directory, "frozen.json"), frozen);
     await state.recordDevInputs(db, id, frozen.inputDigest);
   } catch (error) {

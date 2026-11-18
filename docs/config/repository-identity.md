@@ -2,8 +2,8 @@
 
 Set `CANONICAL_GITHUB_REPOSITORY` to the approved `owner/repository` name and
 `CANONICAL_GITHUB_REPOSITORY_ID` to its immutable numeric GitHub ID. Both are
-required. Local deployment commands and the schedule monitor read these from
-their process environment. Workflows receive them from GitHub repository
+required. Local deployment commands read these from their process environment.
+Workflows receive them from GitHub repository
 variables with the same names. Missing, malformed, or mismatched identity refuses
 authorization. Never derive the expected identity from `GITHUB_REPOSITORY` or a
 remote URL being checked.

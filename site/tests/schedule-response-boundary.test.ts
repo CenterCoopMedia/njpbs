@@ -11,7 +11,6 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { gzipSync } from "node:zlib";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { checkScheduleRefresh } from "../scripts/check-schedule-refresh.mjs";
 import {
   buildScheduleConfig,
   fetchTvssDay,
@@ -190,83 +189,6 @@ describe("Schedule response HTTP boundary", () => {
     },
   );
 
-  it.each(["feed", "/_schedule-sources.json", "/_publication.json"])(
-    "rejects an oversized %s through the refresh check",
-    async (target) => {
-      let disconnected!: () => void;
-      const closed = new Promise<void>((resolve) => {
-        disconnected = resolve;
-      });
-      const url = await serve((_request, response) => {
-        response.on("close", disconnected);
-        response.write(
-          padded(target === "feed" ? fixture : "{}", byteLimit + 1),
-        );
-      });
-      const fetchImpl: typeof fetch = async (input, options) => {
-        const requested = new URL(String(input));
-        const isFeed = requested.hostname === "jaws.pbs.org";
-        if ((target === "feed" && isFeed) || requested.pathname === target)
-          return fetch(url, options);
-        return isFeed ? new Response(fixture) : Response.json({});
-      };
-
-      await expect(checkScheduleRefresh(fetchImpl, now)).rejects.toThrow(
-        /byte limit/i,
-      );
-      await closed;
-    },
-  );
-
-  it.each(["headers", "body"])(
-    "keeps the twenty-second receipt deadline for stalled %s",
-    async (stage) => {
-      let requestReceived!: () => void;
-      const received = new Promise<void>((resolve) => {
-        requestReceived = resolve;
-      });
-      let upstreamResponse!: ServerResponse;
-      const url = await serve((_request, response) => {
-        upstreamResponse = response;
-        requestReceived();
-      });
-      let responseReceived!: () => void;
-      const headers = new Promise<void>((resolve) => {
-        responseReceived = resolve;
-      });
-      const fetchImpl: typeof fetch = async (input, options) => {
-        if (new URL(String(input)).pathname !== "/_schedule-sources.json")
-          return Response.json({});
-        const response = await fetch(url, options);
-        responseReceived();
-        return response;
-      };
-      vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
-      // All October dates use the approved correction, so only receipts are read.
-      const result = checkScheduleRefresh(
-        fetchImpl,
-        new Date("2026-10-02T16:00:00Z"),
-      ).then(
-        () => "completed",
-        (error: Error) => error.name,
-      );
-      let settled = false;
-      void result.then(() => {
-        settled = true;
-      });
-      await received;
-      await vi.advanceTimersByTimeAsync(10_000);
-      if (stage === "body") {
-        upstreamResponse.write("{");
-        await headers;
-      }
-      await vi.advanceTimersByTimeAsync(9_999);
-      expect(settled).toBe(false);
-      await vi.advanceTimersByTimeAsync(1);
-      await expect(result).resolves.toBe("AbortError");
-    },
-  );
-
   it.each([false, true])(
     "leaves a valid saved bake unchanged on oversized input, fresh required: %s",
     async (fresh) => {
@@ -289,7 +211,7 @@ describe("Schedule response HTTP boundary", () => {
         await expect(result).rejects.toThrow(
           "scheduled refresh requires fresh schedule data",
         );
-      else await expect(result).resolves.toEqual({ reusedCommittedData: true });
+      else await expect(result).resolves.toEqual({ reusedSavedData: true });
       expect(await readFile(output, "utf8")).toBe(saved);
     },
   );

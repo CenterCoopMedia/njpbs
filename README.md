@@ -21,7 +21,7 @@ publishing services, and related development tools.
 - `premiere-boardwalk-panel/`: Premiere Pro panel for the shared video library.
 - `ops/`: WordPress packages and a read-only route probe.
 - `config/`: Configuration input contracts and deployment settings.
-- `deploy/`: systemd units for the preview serializer and schedule monitor.
+- `deploy/`: systemd units for the preview serializer.
 - `branding/`: Brand images, such as the site favicon.
 - `archive/`: Reference themes kept outside the active build.
 - `wiki/`: Public notes on organizations and key dates.
@@ -95,8 +95,7 @@ explicit repository variables, environment protection, and deployment credential
 No cloud account identifiers or deployment credentials are supplied by this source.
 Deployment commands require explicit identity and Access-origin settings before a
 cloud write. Set `CMS_DEV_ACCESS_ORIGIN` to the configured HTTPS issuer origin,
-without a path or trailing slash. The schedule monitor reads its configured
-`SCHEDULE_MONITOR_KUMA_ORIGIN` from the service environment.
+without a path or trailing slash.
 
 Pages production pushes additionally admit the App selected by the
 `CCM_PROMOTE_APP_SLUG` Actions variable, with no default. Configure the verified

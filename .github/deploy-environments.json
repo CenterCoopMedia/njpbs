@@ -73,14 +73,5 @@
     "secrets": [
       "CLOUDFLARE_PUBLISHER_IMAGE_TOKEN"
     ]
-  },
-  "schedule-bake": {
-    "branches": [
-      "main"
-    ],
-    "secrets": [
-      "HEALTHCHECKS_SCHEDULE_BAKE",
-      "SCHEDULE_BAKE_APP_PRIVATE_KEY"
-    ]
   }
 }
