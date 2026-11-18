@@ -125,9 +125,13 @@ that exception. Deployment and failure recovery never authorize a merge.
    CMS API must have matching edge secret and live identity even when reused.
 6. Deploy exact Admin artifact only after backend/settings/security readiness.
 7. Run complete inventory/scheduler checks and source-owned deployed smoke.
-8. Read receipts/serving identities and perform staff/public interaction and
-   post-CMS settlement checks separately. Only then report the paired release
-   verified. Missing interaction proof remains explicit.
+8. Recheck the singleton contract after upload if the before-upload check used
+   independent proof. It verifies the native readset, backend and public-reader
+   identity, and the deployed Admin SHA. Its Firebase authentication stays in a
+   separate runner from smoke. A successful public-first result skips this job
+   because settlement would repeat the public renderer compatibility read.
+9. Read receipts and serving identities for post-CMS release acceptance.
+   Record staff and public interaction evidence where the release requires it.
 
 The planner may reuse only complete receipts with matching input/configuration/
 trusted-source fingerprints and fresh live identities. Missing graph metadata,

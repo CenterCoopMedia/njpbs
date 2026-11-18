@@ -1982,6 +1982,7 @@ jobs:
       admin_digest: ${{ steps.admin_digest.outputs.value }}
       proof_run_id: ${{ steps.admin_digest.outputs.run_id }}
       proof_run_attempt: ${{ steps.admin_digest.outputs.run_attempt }}
+      independent: ${{ steps.public_contract.outputs.independent }}
     steps:
       - uses: actions/checkout@v7
         with:
@@ -2059,6 +2060,7 @@ jobs:
           credentials_json: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
           project_id: njpbs-site
       - name: Verify the singleton public contract at before-upload
+        id: public_contract
         env:
           GITHUB_TOKEN: ${{ github.token }}
           DEPLOY_SHA: ${{ needs.admin-build.outputs.deploy_sha }}
@@ -2111,12 +2113,13 @@ jobs:
   contract-settlement:
     env:
       CMS_DEPLOY_OWNER: ${{ vars.CMS_DEPLOY_OWNER }}
-    needs: [admin-build, live-smoke]
+    needs: [admin-build, admin-contract, live-smoke]
     environment: production
     if: >-
       (vars.CANONICAL_GITHUB_REPOSITORY != '' && vars.CANONICAL_GITHUB_REPOSITORY_ID != '' && github.repository == vars.CANONICAL_GITHUB_REPOSITORY && github.repository_id == vars.CANONICAL_GITHUB_REPOSITORY_ID) &&
-      (vars.CMS_DEPLOY_OWNER != '' && github.triggering_actor == vars.CMS_DEPLOY_OWNER) && github.ref == 'refs/heads/main'
-    # Settlement keeps job ADC apart from all smoke-gate code.
+      (vars.CMS_DEPLOY_OWNER != '' && github.triggering_actor == vars.CMS_DEPLOY_OWNER) && github.ref == 'refs/heads/main' &&
+      needs.admin-contract.outputs.independent != 'false'
+    # Keep job ADC apart from smoke-gate code. Only an explicit public-first result skips settlement.
     runs-on: ubuntu-24.04
     timeout-minutes: 20 # Runaway guard: two bounded four-minute captures plus setup.
     steps:

@@ -278,6 +278,10 @@ describe("Route D Cut A boundary placement", () => {
     // The capture follows every backend mutation, and the upload waits for it.
     expect(contractJob.needs).toEqual(deployJob.needs.filter(name => name !== "admin-contract"));
     expect(deployJob.needs).toContain("admin-contract");
+    expect(settlementJob.needs).toEqual(["admin-build", "admin-contract", "live-smoke"]);
+    expect(settlementJob.if).toBe(`${production.jobs["live-smoke"].if} && needs.admin-contract.outputs.independent != 'false'`);
+    expect(contractJob.outputs.independent).toBe("${{ steps.public_contract.outputs.independent }}");
+    expect(contract[proof(contract, "before-upload")].id).toBe("public_contract");
     // Job ADC is allowed here only because nothing Cloudflare-side executes in this job.
     expect(contract.some(row => row.uses?.startsWith("cloudflare/") || /\bwrangler\b/.test(row.run ?? ""))).toBe(false);
     expect(JSON.stringify(contractJob.env ?? {})).not.toContain("CLOUDFLARE");
@@ -304,8 +308,6 @@ describe("Route D Cut A boundary placement", () => {
       PROVED_RUN_ID: "${{ needs.admin-contract.outputs.proof_run_id }}", PROVED_RUN_ATTEMPT: "${{ needs.admin-contract.outputs.proof_run_attempt }}" });
     expect(admin[binding].run).toContain(digest.run.match(/digest="\$\((.+)\)"/)[1]);
     expect(contractJob.outputs).toMatchObject({ proof_run_id: "${{ steps.admin_digest.outputs.run_id }}", proof_run_attempt: "${{ steps.admin_digest.outputs.run_attempt }}" });
-    expect(settlementJob.needs).toEqual(["admin-build", "live-smoke"]);
-    expect(settlementJob.if).toBe(production.jobs["live-smoke"].if);
     expect(settlementJob.environment).toBe("production");
     expect(JSON.stringify(settlement)).not.toMatch(/cms-smoke-gate|functions smoke|test:boot|ensure-panel-browser-deps|\bwrangler\b/);
     expect(JSON.stringify(production.jobs["live-smoke"])).not.toContain("FIREBASE_SERVICE_ACCOUNT");
