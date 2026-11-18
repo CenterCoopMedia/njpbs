@@ -1275,8 +1275,7 @@ describe("section-scoped publish", () => {
     const user = await scopedEditor("watch-editor@example.com", ["watch"]);
     await seedApprovedRecord("watch", "somebody-else");
 
-    // Exactly what the Content tab does: commit the published snapshot, then ask the
-    // transport for the build that makes it public.
+    // The Content tab uses the publication receipt when the save queues the build.
     const saved = await callFn("cmsSaveContent", user.token, {
       collection: "cmsPosts",
       id: POST,
@@ -1286,16 +1285,30 @@ describe("section-scoped publish", () => {
     });
     expect(saved.status).toBe(200);
     const savedBody = await saved.json();
-    const sourceVersion = savedBody.document.version;
-
-    const build = await callFn("cmsPublish", user.token, {
-      changes: [{ collection: "cmsPosts", id: POST, sourceVersion }],
+    expect(savedBody.publication).toMatchObject({
+      queueId: expect.any(String),
+      dispatched: false,
+      status: "pending",
+      transport: "serializer",
     });
-
-    expect(build.status).toBe(200);
-    const queue = await queueDocs();
-    expect(queue).toHaveLength(1);
-    expect(queue[0].triggeredBy).toBe(user.uid);
+    const { queueId } = savedBody.publication;
+    const stored = (await db.collection("cmsPosts").doc(POST).get()).data();
+    expect(stored).toMatchObject({
+      status: "published",
+      version: 2,
+      published: { sourceVersion: 2 },
+      publishBuildPending: true,
+      publishBuildQueueId: queueId,
+    });
+    expect(await queueDocs()).toEqual([
+      expect.objectContaining({
+        id: queueId,
+        status: "pending",
+        transport: "serializer",
+        triggeredBy: user.uid,
+        changes: [{ collection: "cmsPosts", id: POST, sourceVersion: 2 }],
+      }),
+    ]);
   });
 
   it("refuses an out-of-scope publish before the save commits anything", async () => {
