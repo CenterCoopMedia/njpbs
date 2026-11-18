@@ -33,12 +33,12 @@ describe("development dispatch boundary", () => {
     }
     expect(() => dispatch.buildDispatchPayload(payload, { GCLOUD_PROJECT: "njpbs-site-dev" })).toThrow();
   });
-  it("preserves the existing production payload", () => {
-    expect(dispatch.buildDispatchPayload(payload, { GCLOUD_PROJECT: "njpbs-site" })).toEqual({ event_type: "cms_publish", client_payload: payload });
+  it("refuses to create a production GitHub payload", () => {
+    expect(() => dispatch.buildDispatchPayload(payload, { GCLOUD_PROJECT: "njpbs-site" })).toThrow();
   });
   it("production rejects a dev event, sender or project even when the other fields look valid", () => {
     const production = { ...request, action: "cms_publish", sender: "fixture-user", actor: "fixture-user", payload };
-    expect(() => dispatch.assertPublishDispatch(production, "production", devActor)).not.toThrow();
+    expect(() => dispatch.assertPublishDispatch(production, "production", devActor)).toThrow();
     for (const change of [{ action: "cms_dev_publish" }, { sender: devActor }, { actor: devActor },
       { payload: request.payload }, { ref: "refs/heads/feature" }]) {
       expect(() => dispatch.assertPublishDispatch({ ...production, ...change }, "production", devActor)).toThrow();

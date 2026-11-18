@@ -382,7 +382,7 @@ function createScheduledPublishRunner(deps = {}) {
           // Keep the queue invisible to the serializer until every due revision
           // has joined the batch and enqueuePublishBuild atomically opens it.
           status: "reserved",
-          transport: readiness?.transport ?? "github",
+          transport: readiness?.transport ?? "serializer",
           triggeredBy: SCHEDULER_ACTOR,
           triggeredByEmail: null,
           triggeredAt: FieldValue.serverTimestamp(),
@@ -571,7 +571,7 @@ function createScheduledPublishRunner(deps = {}) {
           });
           requireBuildReadiness();
           const queueFields = preparedBatch.changes.length === 0
-            ? await newDevGithubQueueFields({ firestore, transaction, control, transport: readiness?.transport ?? "github" })
+            ? await newDevGithubQueueFields({ firestore, transaction, control, transport: readiness?.transport ?? "serializer" })
             : {};
           if (candidate.collection === "cmsPosts") {
             const metadata = { ...before.published?.metadata };
@@ -645,7 +645,7 @@ function createScheduledPublishRunner(deps = {}) {
         });
         if (!fastRequested) requireBuildReadiness();
         let queueFields = !fastRequested && preparedBatch.changes.length === 0
-          ? await newDevGithubQueueFields({ firestore, transaction, control, transport: readiness?.transport ?? "github" })
+          ? await newDevGithubQueueFields({ firestore, transaction, control, transport: readiness?.transport ?? "serializer" })
           : {};
 
         try {
@@ -838,7 +838,7 @@ function createScheduledPublishRunner(deps = {}) {
               control = await assertSerializerPublicationAdmissionInTransaction({ firestore, transaction });
               requireBuildReadiness();
               queueFields = preparedBatch.changes.length === 0
-                ? await newDevGithubQueueFields({ firestore, transaction, control, transport: readiness?.transport ?? "github" }) : {};
+                ? await newDevGithubQueueFields({ firestore, transaction, control, transport: readiness?.transport ?? "serializer" }) : {};
             }
             if (noBuildPublication) after[PUBLISH_BUILD_QUEUE_FIELD] = noBuildPublication.contentQueueId;
           }

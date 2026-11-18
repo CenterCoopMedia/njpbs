@@ -297,9 +297,8 @@ const postDraft = (title = "A post", over = {}) => ({
 });
 
 describe("cmsSaveContent function", () => {
-  it("binds the publish secret on the deployed save boundary", () => {
+  it("binds only the edge secret on the production save boundary", () => {
     expect(cmsSaveContent.__endpoint.secretEnvironmentVariables).toEqual([
-      { key: "CMS_PUBLISH_GITHUB_TOKEN" },
       { key: "CMS_EDGE_ORIGIN_SECRET" },
     ]);
   });

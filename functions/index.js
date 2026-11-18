@@ -162,14 +162,6 @@ lazyExport("cmsGetVoiceoverAudio", "./voiceover-audio");
 // functions inside their commented export lines: a top-level require runs the
 // module's defineSecret() even when no export is reached.
 //
-// cmsPublish and onScheduledPublish share CMS_PUBLISH_GITHUB_TOKEN. The staging
-// workflow can provision that Secret Manager value from a short-lived GitHub
-// repository secret before Firebase source discovery, then deploys both functions
-// together. publish.js reads the secret-free billing-state core, so the publish
-// transport does not depend on the unrelated BILLING_ALERT_TOKEN notification
-// secret. Both paths still return or fail before changing content when billing,
-// token, or terminal-writeback readiness is missing.
-//
 // cmsPreview and cmsPreviewStatus are deployed together. The request endpoint
 // pins each immutable request to the reviewed renderer revision supplied by the
 // staging deploy. Only the serializer transport is accepted, and its ready gate

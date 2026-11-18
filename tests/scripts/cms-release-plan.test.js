@@ -143,7 +143,6 @@ describe("selective Functions releases", () => {
     expect(await deploymentSecretsUnchanged(env, async () => true)).toBe(true);
     expect(await deploymentSecretsUnchanged(env, async () => { throw Error("synthetic private failure"); })).toBe(false);
     expect(await deploymentSecretsUnchanged(env, async name => name !== "CMS_STAFF_EMAIL_API_TOKEN")).toBe(false);
-    expect(await deploymentSecretsUnchanged({ ...env, CMS_PUBLISH_GITHUB_TOKEN_PROVISIONING: "synthetic" }, async () => true)).toBe(false);
     const fn = version => ({ serviceConfig: { secretEnvironmentVariables: [{ projectId: "njpbs-site", secret: "PBS_TVSS_AUTH", version }] } });
     const latest = async () => ({ name: "projects/123/secrets/PBS_TVSS_AUTH/versions/3", state: "ENABLED" });
     expect(await boundSecretVersionsCurrent([fn("3"), fn("3")], latest)).toBe(true);

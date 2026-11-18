@@ -15,23 +15,22 @@ describe("configured publication actors", () => {
     payload: { ...production.payload, environment: "development", projectId: "njpbs-site-dev", transport: "github" } };
 
   it.each([undefined, "", "[]", "{}", "not-json", '["fixture-user",null]', '["invalid/actor"]'])(
-    "denies both dispatch environments with invalid or empty actor configuration: %s", (value) => {
+    "denies development dispatch with invalid or empty actor configuration: %s", (value) => {
       vi.stubEnv("CMS_PUBLISH_GITHUB_TRUSTED_ACTORS", value);
-      expect(() => dispatch.assertPublishDispatch(production, "production", "fixture-dev[bot]")).toThrow();
       expect(() => dispatch.assertPublishDispatch(development, "development", "fixture-dev[bot]")).toThrow();
     },
   );
 
-  it("admits configured production and separate development actors while keeping identity and environment fences", () => {
+  it("admits the development App and keeps actor identity and environment fences", () => {
     vi.stubEnv("CMS_PUBLISH_GITHUB_TRUSTED_ACTORS", JSON.stringify(["fixture-user", "fixture-reviewer"]));
-    expect(() => dispatch.assertPublishDispatch(production, "production", "fixture-dev[bot]")).not.toThrow();
+    expect(() => dispatch.assertPublishDispatch(production, "production", "fixture-dev[bot]")).toThrow();
     expect(() => dispatch.assertPublishDispatch(development, "development", "fixture-dev[bot]")).not.toThrow();
     for (const value of [
-      { ...production, actor: "fixture-reviewer" },
-      { ...production, actor: "unknown", sender: "unknown" },
-      { ...production, ref: "refs/heads/other" },
-      { ...production, payload: development.payload },
-    ]) expect(() => dispatch.assertPublishDispatch(value, "production", "fixture-dev[bot]")).toThrow();
+      { ...development, actor: "fixture-reviewer" },
+      { ...development, actor: "unknown", sender: "unknown" },
+      { ...development, ref: "refs/heads/other" },
+      { ...development, payload: production.payload },
+    ]) expect(() => dispatch.assertPublishDispatch(value, "development", "fixture-dev[bot]")).toThrow();
     expect(() => dispatch.assertPublishDispatch({ ...development, sender: "fixture-user", actor: "fixture-user" },
       "development", "fixture-user")).toThrow();
   });
@@ -97,7 +96,7 @@ describe("publication App installation", () => {
 describe("publication App identity", () => {
   const directory = fileURLToPath(new URL("../..", import.meta.url));
   const env = { ...process.env, CMS_DEPLOYMENT_ENVIRONMENT: "development",
-    CMS_PUBLISH_GITHUB_TOKEN: "", CMS_DEV_PUBLISH_APP_ID: "1234567",
+    CMS_DEV_PUBLISH_APP_ID: "1234567",
     CMS_DEV_PUBLISH_APP_PRIVATE_KEY: "synthetic-key" };
   const check = (configured, expected) => execFileSync(process.execPath, ["-e", `
     const assert = require("node:assert/strict");

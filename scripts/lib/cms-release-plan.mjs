@@ -30,7 +30,6 @@ export function deploymentVariablesFingerprint(raw) {
 
 // Compare only in memory; receipts contain no new secret-value digest.
 export async function deploymentSecretsUnchanged(env, matches) {
-  if (env.CMS_PUBLISH_GITHUB_TOKEN_PROVISIONING?.trim()) return false;
   try {
     for (const name of CMS_RELEASE_SECRET_NAMES) {
       // config-input: CMS_BUG_REPORT_GITHUB_TOKEN, CMS_BUG_REPORT_GITHUB_WEBHOOK_SECRET, CMS_BUG_REPORT_TELEGRAM_BOT_TOKEN

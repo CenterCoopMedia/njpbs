@@ -137,7 +137,6 @@ describe("atomic public settings acceptance", () => {
     const dispatches = [];
     const result = await call(legacyPublish.createCmsPublishHandler({ ...deps(),
       log: { info() {}, warn() {}, error() {} },
-      getToken: () => "fixture-legacy-dispatch-token", isWritebackConfigured: true,
       fetchImpl: async (...args) => { dispatches.push(args[0]); return { ok: true, status: 202 }; },
       assertPublishedMediaSafeFn: async () => {},
     }), { changes: [{ collection: "cmsSettings", id, sourceVersion: 1 }] });

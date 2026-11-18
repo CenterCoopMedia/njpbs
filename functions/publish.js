@@ -47,14 +47,14 @@ const {
 } = require("./lib/cms-publication-runtime-control");
 
 const FieldValue = admin.firestore.FieldValue || FirestoreFieldValue;
-const { GITHUB_TOKEN, publishSecretBindings, readDevAppCredentials, isDev } =
+const { publishSecretBindings, readDevAppCredentials } =
   require("./lib/cms-publish-credentials");
 const { AppTokenError, createInstallationTokenProvider } = require("./lib/cms-dev-publish-app");
 const { publishGithubRepository } = require("./lib/cms-publish-repository");
 const { newDevGithubQueueFields } = require("./lib/dev-publication-queue");
 const getInstallationToken = createInstallationTokenProvider();
 const PUBLISH_TRANSPORT = defineString("CMS_PUBLISH_TRANSPORT", {
-  default: "github",
+  default: "serializer",
 });
 const CMS_WRITEBACK_CONFIGURED = defineString("CMS_WRITEBACK_CONFIGURED", {
   default: "false",
@@ -68,7 +68,6 @@ function defaultDispatchUrl() {
 const { routePurgeSecretNames } = require("./lib/post-route-purge");
 
 const { buildDispatchPayload } = require("./lib/cms-publish-dispatch");
-const EVENT_TYPE = "cms_publish";
 const QUEUE_COLLECTION = "cmsPublishQueue";
 const WRITEBACK_NOT_CONFIRMED_ERROR =
   "publish pipeline is not fully configured: writeback credential not confirmed";
@@ -78,31 +77,20 @@ const INVALID_PUBLISH_TRANSPORT_ERROR =
   "publish pipeline is not fully configured: publish transport is invalid";
 
 function defaultPublishTransport() {
-  const value = PUBLISH_TRANSPORT.value();
-  // firebase-functions/params returns an empty string outside a deployed
-  // parameter context. Treat that as the documented absent/default case while
-  // keeping every non-empty unknown value fail-closed.
-  return value === undefined || value === null || value === ""
-    ? GITHUB_TRANSPORT
-    : value;
+  return PUBLISH_TRANSPORT.value() || SERIALIZER_TRANSPORT;
 }
 
 function resolvePublishTransport(value) {
   const transport = typeof value === "function" ? value() : value;
-  if (transport === GITHUB_TRANSPORT || transport === SERIALIZER_TRANSPORT) {
+  const requiredTransport = process.env.CMS_DEPLOYMENT_ENVIRONMENT === "development"
+    ? GITHUB_TRANSPORT : SERIALIZER_TRANSPORT;
+  if (transport === requiredTransport) {
     return transport;
   }
   throw failedPrecondition(INVALID_PUBLISH_TRANSPORT_ERROR);
 }
 
 function defaultWritebackConfigured() {
-  if (
-    process.env.CMS_WRITEBACK_CONFIGURED === undefined &&
-    process.env.FUNCTIONS_EMULATOR === "true"
-  ) {
-    return true;
-  }
-
   return CMS_WRITEBACK_CONFIGURED.value() === "true";
 }
 
@@ -114,22 +102,13 @@ function getClientIp(req) {
   return req.headers["x-forwarded-for"]?.split(",")[0]?.trim() || req.ip || null;
 }
 
-async function safeText(response) {
-  try {
-    return await response.text();
-  } catch {
-    return "";
-  }
-}
-
 async function dispatchPublish({
   token,
   url,
   payload,
   fetchImpl = fetch,
-  redactError = false,
 }) {
-  if (!token) return { dispatched: false, skipped: true };
+  if (!token) throw new Error("Development publication App token unavailable");
   url ??= defaultDispatchUrl();
 
   let response;
@@ -144,17 +123,15 @@ async function dispatchPublish({
       },
       body: JSON.stringify(payload),
     });
-  } catch (error) {
-    if (redactError) throw new Error("Development GitHub dispatch unavailable");
-    throw error;
+  } catch {
+    throw new Error("Development GitHub dispatch unavailable");
   }
 
   if (!response.ok) {
     return {
       dispatched: false,
-      skipped: false,
       status: response.status,
-      error: redactError ? "Development GitHub dispatch rejected" : await safeText(response),
+      error: "Development GitHub dispatch rejected",
     };
   }
 
@@ -171,10 +148,8 @@ async function assertPublishReady(fields = {}, deps = {}) {
   const {
     firestore = fields.firestore ?? db,
     assertBillingEnabledFn = assertBillingEnabled,
-    getToken = () => GITHUB_TOKEN.value(),
     getDevCredentials = readDevAppCredentials,
     getTransport = defaultPublishTransport,
-    allowMissingToken = process.env.FUNCTIONS_EMULATOR === "true",
     isWritebackConfigured = defaultWritebackConfigured,
     log = logger,
     now = () => Date.now(),
@@ -199,35 +174,18 @@ async function assertPublishReady(fields = {}, deps = {}) {
   }
 
   if (transport === SERIALIZER_TRANSPORT) {
-    return { transport, token: null, reconciledCount };
+    return { transport, reconciledCount };
   }
 
-  if (isDev) {
-    try {
-      getDevCredentials();
-    } catch {
-      throw failedPrecondition(PUBLISH_TOKEN_NOT_CONFIGURED_ERROR);
-    }
-    if (!resolveWritebackConfigured(isWritebackConfigured)) {
-      throw failedPrecondition(WRITEBACK_NOT_CONFIRMED_ERROR);
-    }
-    return { transport, devApp: true, reconciledCount };
-  }
-
-  let token;
   try {
-    token = getToken();
-  } catch (error) {
-    if (!allowMissingToken) throw error;
-    token = null;
-  }
-  if (!token && !allowMissingToken) {
+    getDevCredentials();
+  } catch {
     throw failedPrecondition(PUBLISH_TOKEN_NOT_CONFIGURED_ERROR);
   }
-  if (token && !resolveWritebackConfigured(isWritebackConfigured)) {
+  if (!resolveWritebackConfigured(isWritebackConfigured)) {
     throw failedPrecondition(WRITEBACK_NOT_CONFIRMED_ERROR);
   }
-  return { transport, token, reconciledCount };
+  return { transport, reconciledCount };
 }
 
 class PublishDispatchError extends Error {
@@ -279,7 +237,7 @@ async function enqueuePublishBuild(fields, deps = {}) {
   // uploaded asset through an unrelated later dispatch.
   await assertPublishedMediaSafeFn({ firestore });
   const transport = resolvePublishTransport(
-    readiness.transport ?? GITHUB_TRANSPORT,
+    readiness.transport ?? defaultPublishTransport,
   );
   if (transport === SERIALIZER_TRANSPORT) {
     return enqueueSerializerBuild({
@@ -305,6 +263,10 @@ async function enqueuePublishBuild(fields, deps = {}) {
     queueRef = queueId
       ? firestore.collection(QUEUE_COLLECTION).doc(queueId)
       : firestore.collection(QUEUE_COLLECTION).doc();
+    const payload = buildDispatchPayload({
+      queueId: queueRef.id,
+      triggeredBy: actor.email ?? actor.uid,
+    });
     const queue = {
       status: "pending",
       transport: GITHUB_TRANSPORT,
@@ -366,34 +328,6 @@ async function enqueuePublishBuild(fields, deps = {}) {
       });
       queueOwned = true;
     }
-    const payload = buildDispatchPayload({
-      queueId: queueRef.id,
-      triggeredBy: actor.email ?? actor.uid,
-    });
-
-    if (!readiness.token && !readiness.devApp) {
-      log.info(
-        "cmsPublish: dispatch skipped, no CMS_PUBLISH_GITHUB_TOKEN configured",
-        { queueId: queueRef.id },
-      );
-      await logAdminActionFn({
-        actorUid: actor.uid,
-        actorEmail: actor.email ?? null,
-        action: "cms.publish",
-        target: queueRef.id,
-        after: { status: "pending", dispatchRequested: false },
-        source,
-      });
-      return {
-        success: true,
-        queueId: queueRef.id,
-        dispatched: false,
-        status: "pending",
-        transport: GITHUB_TRANSPORT,
-        message: "Publish queued. Dispatch skipped: no publish token configured.",
-      };
-    }
-
     await logAdminActionFn({
       actorUid: actor.uid,
       actorEmail: actor.email ?? null,
@@ -409,22 +343,20 @@ async function enqueuePublishBuild(fields, deps = {}) {
       source,
     });
 
-    let dispatchToken = readiness.token;
-    if (readiness.devApp) {
-      try {
-        dispatchToken = await (deps.getDevAppTokenFn ?? getInstallationToken)(readDevAppCredentials());
-      } catch (error) {
-        throw new Error(error instanceof AppTokenError
-          ? error.message
-          : "Development publication App token unavailable");
-      }
+    let dispatchToken;
+    try {
+      const getDevCredentials = deps.getDevCredentials ?? readDevAppCredentials;
+      dispatchToken = await (deps.getDevAppTokenFn ?? getInstallationToken)(getDevCredentials());
+    } catch (error) {
+      throw new Error(error instanceof AppTokenError
+        ? error.message
+        : "Development publication App token unavailable");
     }
     const result = await dispatchPublish({
       token: dispatchToken,
       url: githubDispatchUrl,
       payload,
       fetchImpl,
-      redactError: Boolean(readiness.devApp),
     });
     if (!result.dispatched) {
       const detail =
@@ -809,11 +741,9 @@ module.exports = {
   enqueuePublishBuild,
   buildDispatchPayload,
   dispatchPublish,
-  GITHUB_TOKEN,
   PUBLISH_TRANSPORT,
   CMS_WRITEBACK_CONFIGURED,
   defaultDispatchUrl,
-  EVENT_TYPE,
   QUEUE_COLLECTION,
   defaultWritebackConfigured,
   defaultPublishTransport,

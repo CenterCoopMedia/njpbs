@@ -296,11 +296,8 @@ test("dev dispatch cannot select the production publish event", () => {
     env: { ...process.env, GCLOUD_PROJECT: "njpbs-site", CMS_DEPLOYMENT_ENVIRONMENT: "production" },
     encoding: "utf8",
   });
-  assert.equal(production.status, 0, production.stderr);
-  assert.deepEqual(JSON.parse(production.stdout), {
-    event_type: "cms_publish",
-    client_payload: { queueId: "q1", triggeredBy: "dev" },
-  });
+  assert.notEqual(production.status, 0);
+  assert.match(production.stderr, /Development publication requires/);
   const wrongProject = spawnSync(process.execPath, ["-e", script], {
     cwd: new URL("../", import.meta.url),
     env: { ...process.env, GCLOUD_PROJECT: "njpbs-site", CMS_DEPLOYMENT_ENVIRONMENT: "development", CMS_PUBLISH_TRANSPORT: "github" },
