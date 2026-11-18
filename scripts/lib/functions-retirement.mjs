@@ -36,8 +36,9 @@ function functionIdentity(fn) {
 
 // Rows owned by this Firebase codebase. A function deployed by another tool
 // (such as the gcloud-deployed billingKillSwitch) is never this codebase's to
-// retire; record its name in `unowned` and leave it in place.
-function inventoryRows(functions, scope, targets, unowned = new Set()) {
+// retire; record its name in `unowned` and leave it in place. `regional`
+// collects every function name in the region, whatever its owner.
+function inventoryRows(functions, scope, targets, unowned = new Set(), regional = new Set()) {
   if (!Array.isArray(functions) || functions.length > 5000) refuse();
   const rows = new Map();
   for (const fn of functions) {
@@ -45,6 +46,7 @@ function inventoryRows(functions, scope, targets, unowned = new Set()) {
     if (!match || match[1] !== scope.projectId || !["gcfv1", "gcfv2"].includes(fn.platform)
       || !fn.labels || typeof fn.labels !== "object" || Array.isArray(fn.labels)) refuse();
     if (match[2] !== scope.region) continue;
+    regional.add(match[3]);
     const codebase = fn.labels["firebase-functions-codebase"] ?? "default";
     if (codebase !== scope.codebase) {
       if (targets.has(match[3])) refuse();
@@ -111,6 +113,12 @@ function retainedEntry(entry, fn, jobs, scope) {
   return { ...entry, origin: { ...entry.origin } };
 }
 
+// `firebase functions:delete <name>` also deletes every function in the
+// `<name>-` group, so a planned deletion must not reach another function.
+function refuseGroupReach(regional, names) {
+  for (const live of regional) if (names.some(name => live.startsWith(`${name}-`))) refuse("delete_reaches_unplanned_function");
+}
+
 export function planFunctionRetirements({ scope: rawScope, targetNames, priorNames = [], functions, jobs = [], pendingPlan = null, ...attempt }) {
   const scope = requireRetirementScope(rawScope), targets = names(targetNames), origin = attemptIdentity(attempt);
   if (pendingPlan) validateRetirementPlan(pendingPlan, { ...pendingPlan, scope });
@@ -118,7 +126,8 @@ export function planFunctionRetirements({ scope: rawScope, targetNames, priorNam
   const pending = new Map((pendingPlan?.entries ?? []).filter(entry => !targets.includes(entry.name)).map(entry => [entry.name, entry]));
   if (!Array.isArray(jobs) || jobs.length > 5000) refuse();
   const target = new Set(targets), known = new Set([...targets, ...prior]);
-  const rows = inventoryRows(functions, scope, target);
+  const regional = new Set();
+  const rows = inventoryRows(functions, scope, target, new Set(), regional);
   const entries = [];
   for (const [name, fn] of rows) {
     // Retirement deletes only exports a complete receipt recorded. A live
@@ -129,6 +138,7 @@ export function planFunctionRetirements({ scope: rawScope, targetNames, priorNam
       : { name, platform: fn.platform, fingerprint: functionIdentity(fn), scheduler: schedulerFor(fn, scope, jobs), origin });
   }
   for (const entry of pending.values()) if (!rows.has(entry.name)) entries.push(retainedEntry(entry, null, jobs, scope));
+  refuseGroupReach(regional, entries.map(entry => entry.name));
   for (const name of prior.filter(name => !target.has(name) && !rows.has(name) && !pending.has(name))) {
     const orphan = `projects/${scope.projectId}/locations/${scope.region}/jobs/firebase-schedule-${name}-${scope.region}`;
     if (jobs.some(job => job?.name === orphan)) refuse("orphan_scheduler_without_original_plan");
@@ -169,9 +179,10 @@ export async function applyFunctionRetirements(plan, context, io, selectedNames)
   // Keep the immutable full plan as the inventory authority in every phase.
   const targets = new Set(plan.targetNames);
   const census = async () => {
-    const unowned = new Set();
-    const rows = inventoryRows(await io.listFunctions(), plan.scope, targets, unowned);
+    const unowned = new Set(), regional = new Set();
+    const rows = inventoryRows(await io.listFunctions(), plan.scope, targets, unowned, regional);
     if (entries.some(entry => unowned.has(entry.name))) refuse("ownership_unverified");
+    refuseGroupReach(regional, entries.map(entry => entry.name));
     return rows;
   };
   const readJob = async entry => {

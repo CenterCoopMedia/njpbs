@@ -58,6 +58,14 @@ describe("manifest-scoped Functions retirement", () => {
     expect(() => fixture([fn("health", { labels: { "deployment-tool": "cli-gcloud" } })])).toThrow("ownership_unverified");
   });
 
+  it("refuses a deletion whose Firebase filter also reaches another function", async () => {
+    const child = fn("oldHandler-child", { labels: { "deployment-tool": "cli-gcloud" } });
+    expect(() => fixture([fn("health"), fn("oldHandler"), child])).toThrow("delete_reaches_unplanned_function");
+    const test = fixture(); test.functions([fn("health"), fn("oldHandler"), child]);
+    await expect(applyFunctionRetirements(test.plan, context, test.io)).rejects.toThrow("delete_reaches_unplanned_function");
+    expect(test.io.deleteFunction).not.toHaveBeenCalled();
+  });
+
   it("leaves a function added after planning in place", async () => {
     const test = fixture(); test.functions([fn("health"), fn("oldHandler"), fn("cmsGetPublishedSettings")]);
     expect(await applyFunctionRetirements(test.plan, context, test.io)).toEqual({ retired: 1 });
