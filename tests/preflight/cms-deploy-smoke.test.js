@@ -1044,11 +1044,9 @@ if(process.env.CMS_BUG_REPORT_TELEGRAM_ADMIN_MAP)process.exit(8); require("node:
     );
     expect(CONFIGURATION_INPUTS).toHaveProperty("CMS_PREVIEW_TRANSPORT");
     expect(CONFIGURATION_INPUTS).toHaveProperty("CMS_PREVIEW_SERIALIZER_READY");
-    expect(workflow).toContain(
-      "CMS_PUBLISH_TRANSPORT: ${{ vars.CMS_PUBLISH_TRANSPORT || 'github' }}",
-    );
-    expect(workflow).toContain("github|serializer) ;;");
-    expect(CONFIGURATION_INPUTS).toHaveProperty("CMS_PUBLISH_TRANSPORT");
+    expect(parse(workflow).env.CMS_PUBLISH_TRANSPORT).toBe("serializer");
+    expect(workflow).not.toContain("vars.CMS_PUBLISH_TRANSPORT");
+    expect(CONFIGURATION_INPUTS.CMS_PUBLISH_TRANSPORT).toMatchObject({ default: "serializer", pattern: "^serializer$" });
     expect(workflow).toContain(
       "CLOUDFLARE_API_TOKEN: ${{ secrets.CMS_ADMIN_ACCESS_API_TOKEN }}",
     );

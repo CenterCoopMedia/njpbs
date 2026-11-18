@@ -62,6 +62,7 @@ concurrency:
 
 
 env:
+  CMS_PUBLISH_TRANSPORT: serializer
   CMS_PRODUCTION_API_ORIGIN: ${{ vars.CMS_PRODUCTION_API_ORIGIN }}
   CMS_LOCAL_PUBLICATION_OWNER: ${{ vars.CMS_LOCAL_PUBLICATION_OWNER }}
   CMS_GPU_WORKER_ID: ${{ vars.CMS_GPU_WORKER_ID }}
@@ -1172,7 +1173,6 @@ jobs:
         run: npm --prefix site ci --ignore-scripts --no-audit --no-fund
       - name: Require publish deploy flags
         env:
-          CMS_PUBLISH_TRANSPORT: ${{ vars.CMS_PUBLISH_TRANSPORT || 'github' }}
           CMS_WRITEBACK_CONFIGURED: ${{ vars.CMS_WRITEBACK_CONFIGURED }}
         run: |
           set -euo pipefail
@@ -1180,13 +1180,6 @@ jobs:
             echo "CMS_WRITEBACK_CONFIGURED must be true before staging deploy" >&2
             exit 1
           fi
-          case "$CMS_PUBLISH_TRANSPORT" in
-            github|serializer) ;;
-            *)
-              echo "CMS_PUBLISH_TRANSPORT must be github or serializer" >&2
-              exit 1
-              ;;
-          esac
       - name: Require preview deploy flags
         env:
           CMS_PREVIEW_ACCESS_VERIFIED: ${{ vars.CMS_PREVIEW_ACCESS_VERIFIED || 'false' }}
