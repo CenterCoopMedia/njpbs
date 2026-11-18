@@ -21,7 +21,6 @@ import {
   useState,
   type MutableRefObject,
 } from "react";
-import { Link, useInRouterContext, useLocation } from "react-router";
 import {
   RecordForm,
   isRecordSaveReceipt,
@@ -50,7 +49,6 @@ import { useSuccessNotice } from "./ui/SuccessNoticeRegion";
 import {
   AsyncActionButton,
   Button,
-  EmptyState,
   InlineMessage,
   Panel,
   StatusLabel,
@@ -71,7 +69,6 @@ import {
   registerAdminPerfEditorLeaseRelease,
 } from "../lib/perf-receipts";
 import type { ExitSaveOutcome } from "../lib/exit-save";
-import { editorBackDestination, readListOrigin } from "../lib/editor-back";
 import {
   readOnlyNotice,
   pageLifecycleResource,
@@ -79,11 +76,6 @@ import {
   recordLifecycleResource,
   recordSaveDecision,
 } from "../lib/editor-save-decisions";
-import {
-  contentPagesPath,
-  createRecordPath,
-  recordListPath,
-} from "../lib/routes";
 import { blocksEqual } from "../lib/block-equality";
 import { normalizeLoadedEditorBlocks } from "../lib/block-editor-state";
 import { editorSectionCount } from "../lib/content-outline";
@@ -91,7 +83,6 @@ import { normalizeEditorRecordDates } from "../lib/content-records";
 import { recordsEqual } from "../lib/record-equality";
 import { useEditorLock } from "../hooks/useEditorLock";
 import type {
-  EditorLock,
   EditorLockActor,
   EditorLockClient,
 } from "../lib/editor-locks";
@@ -102,12 +93,19 @@ import {
   writeRecoveredWork,
   type RecoveredEditorWork,
 } from "../lib/editor-work-recovery";
+import { recordDestination } from "../lib/content-nav";
 import {
-  PAGE_DESTINATIONS,
-  RECORD_DESTINATIONS,
-  pageDestination,
-  recordDestination,
-} from "../lib/content-nav";
+  EditorBackLink,
+  labelForSurface,
+  renderIsolatedSurfacePicker,
+  renderUnavailableRecord,
+} from "./EditorWorkspaceNavigation";
+import {
+  lockedSurfaceMessage,
+  recoveredWorkMessage,
+  takeoverRequestMessage,
+  yieldedMessage,
+} from "./EditorWorkspacePresence";
 import {
   type RecordKind,
   type SectionId,
@@ -291,14 +289,6 @@ type RecordLoad =
   | { status: "invalid" }
   | { status: "error"; message: string };
 
-function labelForSurface(surface: Surface): string {
-  if (surface.kind === "page-list") return "Site pages";
-  if (surface.kind === "library") return "All content";
-  return surface.kind === "record" || surface.kind === "record-list"
-    ? recordDestination(surface.record).label
-    : pageDestination(surface.pageId).label;
-}
-
 function isSameSurface(surface: Surface, value: Surface): boolean {
   if (surface.kind !== value.kind) return false;
   if (surface.kind === "page-list" || surface.kind === "library") return true;
@@ -341,13 +331,6 @@ export function editorLockSurfaceKey(surface: Surface): string | null {
     : surface.kind === "record" && surface.id !== null
       ? `cmsPosts:${surface.id}`
       : null;
-}
-
-function lockStartLabel(lock: EditorLock): string {
-  return new Intl.DateTimeFormat(undefined, {
-    dateStyle: "medium",
-    timeStyle: "short",
-  }).format(new Date(lock.acquiredAtMs));
 }
 
 // Work in progress on a surface nobody is looking at right now. Both editors are keyed on the
@@ -3713,203 +3696,13 @@ function EditorWorkspaceContent({
     </ElectionResultsSourceHost.Provider>;
   }
 
-  // The five presence states a person has to be able to tell apart: read-only because somebody
-  // else holds the record, a takeover this tab has asked for, a takeover that displaced this tab,
-  // an expired session, and a save conflict (which stays with the version guard, not here).
-  function lockedSurfaceMessage(
-    lock: EditorLock,
-    options?: { preserveEditor?: boolean; saving?: boolean },
-  ) {
-    const samePerson = lock.ownerId === editorLockActor?.id;
-    // "Somebody else has this" and "somebody took this from me" are different things to be told,
-    // whether or not there was unsaved work in the tab at the time.
-    const displaced = editorLock.displacedBy !== null;
-    const keptWork = options?.preserveEditor === true;
-    const asked = editorLock.outgoingRequestPending;
-    // One ask fits on a lease. Somebody already waiting is not a queue this person can join.
-    const waitingElse = editorLock.requestedByOther;
-    const title = displaced
-      ? `${lock.ownerName} took over this record`
-      : samePerson
-        ? "You are editing this in another tab or window"
-        : asked
-          ? `Waiting for ${lock.ownerName} to hand this over`
-          : `${lock.ownerName} is editing this right now`;
-    const backPath =
-      surface.kind === "record"
-        ? recordListPath(surface.record)
-        : contentPagesPath();
-    return (
-      <InlineMessage
-        tone={displaced ? "warning" : asked ? "info" : "warning"}
-        title={title}
-        className={
-          displaced
-            ? "editor-lock-message editor-lock-message-displaced"
-            : asked
-              ? "editor-lock-message editor-lock-message-requested"
-              : "editor-lock-message editor-lock-message-readonly"
-        }
-      >
-        <p>
-          {options?.saving
-            ? "Another session took over while this tab’s save is finishing. Wait for its result before deciding whether to take over."
-            : keptWork
-              ? "Your unsaved changes are still here and are kept in this browser, so you can come back to them. Saving is off until you hold the record again."
-              : displaced
-                ? `${lock.ownerName} now holds the record and this tab is read-only. Nothing you had already saved was affected.`
-                  : asked
-                  ? `Your request was sent. ${lock.ownerName} can hand the record over, and this page updates on its own when it becomes free.`
-                  : `${samePerson ? "That session" : "The editing session"} began ${lockStartLabel(lock)}. This tab is read-only and has not changed the content.`}
-        </p>
-        <div className="button-row">
-          {editorLock.canTakeOver ? (
-            <Button
-              variant="primary"
-              disabled={editorLock.claiming || options?.saving}
-              onClick={() => void editorLock.takeOver()}
-            >
-              {editorLock.claiming
-                ? "Taking over…"
-                : displaced
-                  ? "Take the record back"
-                  : "Take over editing"}
-            </Button>
-          ) : null}
-          {!samePerson && !asked && !waitingElse && !options?.saving ? (
-            <Button
-              variant={editorLock.canTakeOver ? "secondary" : "primary"}
-              onClick={() => void editorLock.requestTakeover()}
-            >
-              Ask to edit
-            </Button>
-          ) : null}
-          {options?.saving ? null : (
-            <Link className="button button-secondary" to={backPath}>
-              Back out
-            </Link>
-          )}
-        </div>
-        {waitingElse ? (
-          <p>
-            {`${waitingElse.byName} already asked for this record, so there is nobody to ask ahead of them. This page updates on its own when it becomes free.`}
-          </p>
-        ) : null}
-        {!editorLock.canTakeOver && !waitingElse ? (
-          <p>
-            Your role cannot take another editor’s active session, so asking is the
-            way in.
-          </p>
-        ) : null}
-      </InlineMessage>
-    );
-  }
-
-  // Shown to the holder. An ask never moves the record on its own: this is the person who
-  // decides.
-  function takeoverRequestMessage() {
-    const request = editorLock.incomingRequest;
-    if (!request) return null;
-    return (
-      <InlineMessage
-        tone="info"
-        title={`${request.byName} is asking to edit this`}
-        className="editor-lock-message editor-lock-message-incoming"
-      >
-        <p>
-          You still hold the record. Hand it over when you are at a good stopping
-          point, or keep going and answer later.
-        </p>
-        <div className="button-row">
-          <Button
-            variant="primary"
-            disabled={activeSurfaceDirty || saving}
-            onClick={() => void editorLock.yieldEditor()}
-          >
-            Hand over editing
-          </Button>
-          <Button variant="secondary" onClick={() => void editorLock.dismissRequest()}>
-            Keep editing
-          </Button>
-        </div>
-        {activeSurfaceDirty ? (
-          <p>Save or discard your changes first, then hand it over.</p>
-        ) : null}
-      </InlineMessage>
-    );
-  }
-
-  function yieldedMessage() {
-    return (
-      <InlineMessage
-        tone="info"
-        title="You handed this record over"
-        className="editor-lock-message editor-lock-message-yielded"
-      >
-        <p>
-          This tab is read-only until you ask for the record back. Nothing you saved
-          was lost.
-        </p>
-        <div className="button-row">
-          <Button variant="primary" onClick={() => void editorLock.reclaim()}>
-            Take the record back
-          </Button>
-        </div>
-      </InlineMessage>
-    );
-  }
-
-  function recoveredWorkMessage() {
-    if (!recoveredWork) return null;
-    return (
-      <InlineMessage
-        tone="info"
-        title="Recovered your unsaved changes"
-        className="editor-lock-message editor-lock-message-recovered"
-      >
-        <p>
-          {`These are the changes you had open when ${recoveredWork.displacedBy} took over on ${new Intl.DateTimeFormat(undefined, { dateStyle: "medium", timeStyle: "short" }).format(new Date(recoveredWork.savedAtMs))}. Review them before saving, because the record may have changed since.`}
-        </p>
-        <div className="button-row">
-          <Button variant="secondary" onClick={discardRecoveredWork}>
-            Dismiss this notice
-          </Button>
-        </div>
-      </InlineMessage>
-    );
-  }
-
   function unavailableRecord(
     recordSurface: Extract<Surface, { kind: "record" }>,
     title: string,
     description: string,
     allowCreate = true,
   ) {
-    const label = labelForSurface(recordSurface).toLowerCase();
-    return (
-      <EmptyState
-        title={title}
-        description={description}
-        action={
-          <div className="button-row">
-            <Link
-              className="button button-secondary"
-              to={recordListPath(recordSurface.record)}
-            >
-              Back to {label} list
-            </Link>
-            {allowCreate && canSave ? (
-              <Link
-                className="button button-primary"
-                to={createRecordPath(recordSurface.record)}
-              >
-                Create a new {label}
-              </Link>
-            ) : null}
-          </div>
-        }
-      />
-    );
+    return renderUnavailableRecord(recordSurface, title, description, allowCreate && canSave);
   }
 
   const loadedRecordTitle =
@@ -3945,58 +3738,9 @@ function EditorWorkspaceContent({
         </WorkspaceFeedback>
       ) : null}
       <div className="content-studio-layout">
-        {!controlledSurface ? (
-          <div
-            className="content-surface-picker"
-            aria-label="Component surface picker"
-          >
-            {RECORD_DESTINATIONS.map((choice) => (
-              <Button
-                aria-label={choice.label}
-                aria-current={
-                  surface.kind === "record" && surface.record === choice.record
-                    ? "page"
-                    : undefined
-                }
-                disabled={saving}
-                key={choice.record}
-                onClick={() =>
-                  selectIsolatedSurface({
-                    kind: "record",
-                    record: choice.record,
-                    id: null,
-                  })
-                }
-                variant="ghost"
-              >
-                <Icon name="file" />
-                <span>{choice.label}</span>
-              </Button>
-            ))}
-            {PAGE_DESTINATIONS.map((choice) => {
-              const value: Surface = {
-                kind: "page",
-                pageId: choice.pageId,
-                section: choice.section,
-              };
-              return (
-                <Button
-                  aria-label={choice.label}
-                  aria-current={
-                    isSameSurface(surface, value) ? "page" : undefined
-                  }
-                  disabled={saving}
-                  key={choice.pageId}
-                  onClick={() => selectIsolatedSurface(value)}
-                  variant="ghost"
-                >
-                  <Icon name="content" />
-                  <span>{choice.label}</span>
-                </Button>
-              );
-            })}
-          </div>
-        ) : null}
+        {!controlledSurface
+          ? renderIsolatedSurfacePicker(surface, saving, selectIsolatedSurface, isSameSurface)
+          : null}
         <WorkspaceTitle>
           <h1 id="page-title" className="programmatic-focus-target">
             {editorView?.kind === "post" && surface.kind === "record" && surface.id !== null ? "Edit post" : workspaceDocumentTitle}
@@ -4027,11 +3771,14 @@ function EditorWorkspaceContent({
               editorLock.blockingLock &&
               (!saving || changingElectionSources) &&
               !activeSurfaceDirty ? (
-              <>{lockedSurfaceMessage(editorLock.blockingLock)}{lockedElectionSources()}</>
+              <>
+                {lockedSurfaceMessage(editorLock.blockingLock, editorLock, surface, editorLockActor)}
+                {lockedElectionSources()}
+              </>
             ) : (
               <>
                 {editorLockCanGateActiveEditor && editorLock.blockingLock ? (
-                  lockedSurfaceMessage(editorLock.blockingLock, {
+                  lockedSurfaceMessage(editorLock.blockingLock, editorLock, surface, editorLockActor, {
                     preserveEditor: true,
                     saving,
                   })
@@ -4045,7 +3792,7 @@ function EditorWorkspaceContent({
                     protection still guards every save.
                   </InlineMessage>
                 ) : editorLockCanGateActiveEditor && editorLock.yielded ? (
-                  yieldedMessage()
+                  yieldedMessage(editorLock)
                 ) : editorLockCanGateActiveEditor && editorLock.staleLock ? (
                   <InlineMessage
                     tone="info"
@@ -4066,8 +3813,10 @@ function EditorWorkspaceContent({
                     />
                   </div>
                 ) : null}
-                {editorLockCanGateActiveEditor ? takeoverRequestMessage() : null}
-                {recoveredWorkMessage()}
+                {editorLockCanGateActiveEditor
+                  ? takeoverRequestMessage(editorLock, activeSurfaceDirty, saving)
+                  : null}
+                {recoveredWorkMessage(recoveredWork, discardRecoveredWork)}
                 {surface.kind === "page-list" ? (
                   <PagesDirectory api={pageDirectoryApi} persistentEditorDirty={dirty} />
                 ) : surface.kind === "library" || (surface.kind === "record-list" && surface.record === "post") ? (
@@ -4219,43 +3968,5 @@ function EditorWorkspaceContent({
       </div>
     </section>
     </EditorActionsProvider>
-  );
-}
-
-/*
-  The one visible way out of an open editor (#1037). It is a router Link, not a history step, so
-  it rides the same navigation guard as every other exit: a leave that would drop unsaved work is
-  held and confirmed by the content layout's blocker, while a move that keeps the editor mounted
-  goes through with the draft intact. Where it points is decided by editorBackDestination from the
-  list the editor was opened from, so a filtered library comes back filtered while a direct link,
-  or a reload that carried no origin, falls back to the editor's own list.
-*/
-interface EditorBackLinkProps {
-  surface: { kind: "record"; record: RecordKind } | { kind: "page" };
-  listLabel?: string;
-}
-
-// The isolated specimen gallery renders editor surfaces outside a router to check their geometry.
-// There is nowhere to navigate there, so the action is simply absent rather than throwing on a
-// router hook. Every routed surface — every surface a person actually edits in — renders it.
-function EditorBackLink(props: EditorBackLinkProps) {
-  const view = useEditorWorkspaceView();
-  const inRouter = useInRouterContext();
-  if (view?.kind) return null;
-  return inRouter ? <RoutedEditorBackLink {...props} /> : null;
-}
-
-function RoutedEditorBackLink({ surface, listLabel }: EditorBackLinkProps) {
-  const location = useLocation();
-  const destination = editorBackDestination({
-    surface,
-    listLabel,
-    origin: readListOrigin(location.state),
-  });
-  return (
-    <Link className="editor-back" to={destination.to}>
-      <Icon name="arrow-left" />
-      {destination.label}
-    </Link>
   );
 }
