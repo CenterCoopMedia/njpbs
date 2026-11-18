@@ -1865,10 +1865,6 @@ jobs:
           DEPLOY_SHA: ${{ needs.admin-build.outputs.deploy_sha }}
           VITE_FUNCTIONS_BASE_URL: ${{ vars.VITE_FUNCTIONS_BASE_URL || secrets.VITE_FUNCTIONS_BASE_URL }}
         run: node scripts/component-runner.mjs functions smoke
-      - name: Install Admin boot smoke dependencies from the exact release source
-        run: |
-          set -euo pipefail
-          npm ci --ignore-scripts --workspace njpbs-admin --include-workspace-root=false
       - name: Ensure supported sandboxed Chrome for the live Admin boot check
         timeout-minutes: 15
         run: node "$RUNNER_TEMP/cms-smoke-gate"/.github/scripts/ensure-panel-browser-deps.mjs

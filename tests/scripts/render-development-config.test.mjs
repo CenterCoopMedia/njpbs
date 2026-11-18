@@ -399,22 +399,28 @@ test("starts rendered container source guards and refuses tampered source, recei
   writeFileSync(target, before + "\n// tampered\n"); assert.equal(run().status, 1);
 }));
 
-test("installs the live-smoke dependency tree through a dangling link", () => {
+test("the live-smoke install restores the Admin workspace through a dangling link", () => {
   const directory = mkdtempSync(join(tmpdir(), "live-smoke-install-"));
   try {
     const workflow = parse(readFileSync(join(root, ".github/workflows/cms-staging-deploy.yml"), "utf8"));
-    const steps = workflow.jobs["live-smoke"].steps, step = steps.find(step => step.name === "Install Admin boot smoke dependencies from the exact release source");
+    const step = workflow.jobs["live-smoke"].steps.find(step => step.name === "Install workspace deps");
     const pkg = { name: "fixture-root", version: "1.0.0", private: true, workspaces: ["admin"] };
+    const site = { name: "fixture-site", version: "1.0.0" };
     mkdirSync(join(directory, "admin"));
+    mkdirSync(join(directory, "site"));
     writeFileSync(join(directory, "package.json"), JSON.stringify(pkg));
     writeFileSync(join(directory, "admin/package.json"), JSON.stringify({ name: "njpbs-admin", version: "1.0.0" }));
+    writeFileSync(join(directory, "site/package.json"), JSON.stringify(site));
+    writeFileSync(join(directory, "site/package-lock.json"), JSON.stringify({ ...site, lockfileVersion: 3, requires: true, packages: { "": site } }));
     writeFileSync(join(directory, "package-lock.json"), JSON.stringify({ name: pkg.name, version: pkg.version, lockfileVersion: 3, requires: true,
       packages: { "": pkg, admin: { name: "njpbs-admin", version: "1.0.0" }, "node_modules/njpbs-admin": { resolved: "admin", link: true } } }));
     symlinkSync(join(directory, "workspace/node_modules"), join(directory, "node_modules"));
     const result = spawnSync("bash", ["-c", step.run], { cwd: directory,
       env: { PATH: process.env.PATH, npm_config_offline: "true", npm_config_audit: "false", npm_config_fund: "false" },
       encoding: "utf8", timeout: 10000 });
-    assert.equal(result.status, 0, result.stderr); assert.equal(lstatSync(join(directory, "node_modules")).isDirectory(), true);
+    assert.equal(result.status, 0, result.stderr);
+    assert.equal(lstatSync(join(directory, "node_modules")).isDirectory(), true);
+    assert.equal(lstatSync(join(directory, "node_modules/njpbs-admin")).isSymbolicLink(), true);
 
   } finally { rmSync(directory, { recursive: true, force: true }); }
 });
