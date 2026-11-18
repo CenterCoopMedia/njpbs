@@ -73,8 +73,11 @@ async function readSealed(storage: Storage, seal: FileSeal | { key: string; dige
 export async function createCloudSchedulePacket({ inputs, storage }: { inputs: PreparedHomeExternalInputs; storage: Storage }): Promise<CloudSchedulePacket> {
   const source = sourceIdentity(inputs);
   const original = await readSealed(storage, inputs.files["schedule.json"]);
-  const { loadScheduleData } = await import("../src/lib/schedule-data");
-  const schedule = await loadScheduleData(checkedSchedule(original, source.checkedAt), {});
+  let schedule = checkedSchedule(original, source.checkedAt);
+  if (schedule.source === "pbs-tvss") {
+    const { loadScheduleData } = await import("../src/lib/schedule-data");
+    schedule = await loadScheduleData(schedule, {});
+  }
   const exported = buildScheduleExport(schedule, new Date(source.checkedAt));
   const json = Buffer.from(JSON.stringify(schedule));
   const [regularFont, boldFont, blackFont, logo] = await Promise.all([

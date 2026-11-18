@@ -12,5 +12,5 @@ export async function loadScheduleData(
 
   const generated: unknown = JSON.parse(await readFile(inputPath, "utf8"));
   assertScheduleInput(generated);
-  return applyScheduleCorrections(generated);
+  return generated.source === "pbs-tvss" ? applyScheduleCorrections(generated) : generated;
 }

@@ -14,6 +14,9 @@ import { firebaseAdminRuntime } from "../../site/scripts/firebase-admin-runtime"
 import { cloudExternalRefresh, restoreCloudExternalInputs } from "../../site/scripts/cloud-external-refresh";
 import { backgroundStorageFixture } from "./background-storage-fixture";
 import { readCloudSchedulePacket } from "../../site/scripts/cloud-schedule-packet";
+import { readPageSchedulePacket, type PageScheduleAuthority } from "../../site/src/lib/page-schedule-packet";
+import { loadScheduleData } from "../../site/src/lib/schedule-data";
+import { SCHEDULE_CORRECTIONS_PATH } from "../../site/scripts/schedule-correction-input";
 import storageModule from "../../functions/lib/post-background-storage.js";
 import context from "../../functions/lib/public-context-revision.js";
 import state from "../../functions/lib/cloud-external-refresh-state.js";
@@ -197,6 +200,75 @@ it("preserves the accepted schedule pair and clock on unchanged refresh and cold
   expect(read.pdf.equals(exactPdf)).toBe(true);
   expect(requests).toBe(count);
   expect(current.externalInputs.schedulePacket).toEqual(packet);
+});
+
+it("publishes a lineup correction under the same CODE and retains it when the next correction is invalid", async () => {
+  now = Date.parse("2026-10-30T14:00:00Z");
+  const refresh = owner();
+  const source = db.doc(SCHEDULE_CORRECTIONS_PATH);
+  const date = "2026-11-02";
+  const entry = { title: "Updated development lineup", startsAt: `${date}T12:00:00Z`, endsAt: `${date}T13:00:00Z`, isKids: true };
+  const correction = (endsAt: string) => ({ days: [{ date, sourceRevision: date, entries: [{ ...entry, endsAt }] }] });
+  const currentContext = async () => (await db.doc(context.PUBLIC_CONTEXT_PATH).get()).data()!;
+  const storage = storageModule.createPostBackgroundStorage("fixture-bucket", app);
+  const code: PageScheduleAuthority["code"] = { schemaVersion: 1, digestAlgorithm: "sha256", generation: 1,
+    buildBatchId: "fixture", deploymentId: "fixture", commitSha: release, contextDigest: "d".repeat(64),
+    artifactDigest: "e".repeat(64), artifactReceiptDigest: "f".repeat(64), mediaManifestDigest: "a".repeat(64) };
+  const publicPacket = (current: Awaited<ReturnType<typeof currentContext>>) => readPageSchedulePacket({
+    authority: { contextRevision: current.revision, contextDigest: context.publicContextDigest(current.revision),
+      code, inputs: current.externalInputs }, storage,
+  });
+
+  await refresh();
+  const before = await currentContext();
+  const original = await publicPacket(before);
+  expect(original.json.toString()).not.toContain(entry.title);
+  await source.set(correction(entry.endsAt));
+  await refresh();
+  expect(await currentContext()).toEqual(before);
+  now = (await db.doc(state.EXTERNAL_REFRESH_PATH).get()).data()!.nextAttemptAt;
+  await refresh();
+  const accepted = await currentContext();
+  expect(accepted.revision).toBe(before.revision + 1);
+  const revised = await publicPacket(accepted);
+  expect(revised.schedule.receipt.code).toEqual(original.schedule.receipt.code);
+  expect(JSON.parse(revised.json.toString()).days.find(day => day.date === date).entries).toEqual([
+    { title: entry.title, startsAt: `${date}T12:00:00.000Z`, endsAt: `${date}T13:00:00.000Z` },
+  ]);
+  expect(revised.schedule.data.days.kids.find(day => day.date === date)?.entries).toEqual([
+    expect.objectContaining({ title: entry.title, feedKind: "kids", isKids: true }),
+  ]);
+  expect(revised.schedule.exported.days.find(day => day.date === date)).toMatchObject({
+    sourceRevision: date, publishedCorrection: true, entries: [expect.objectContaining({ title: entry.title })],
+  });
+  const workbookDate = revised.schedule.data.days.broadcast.find(day => day.date === "2026-11-03");
+  expect(workbookDate?.sourceRevision).toBeDefined();
+  expect(workbookDate).not.toHaveProperty("publishedCorrection");
+  expect(revised.pdf.equals(original.pdf)).toBe(false);
+  const restored = path.join(directory, "restored-correction");
+  await restoreCloudExternalInputs({ inputs: accepted.externalInputs, storage, directory: restored });
+  expect(await loadScheduleData(original.schedule.data, { SCHEDULE_DATA_PATH: path.join(restored, "schedule.json") }))
+    .toEqual(revised.schedule.data);
+  expect((await db.doc("system/publicDeployment").get()).data()).toMatchObject({ activeCommitSha: release, activeGeneration: 1 });
+
+  await source.set(correction(entry.startsAt));
+  const warning = vi.spyOn(console, "warn").mockImplementation(() => {});
+  title = "Provider story published during invalid correction";
+  const previousRequests = tvssRequests;
+  now = (await db.doc(state.EXTERNAL_REFRESH_PATH).get()).data()!.nextAttemptAt;
+  await refresh();
+  expect(warning).toHaveBeenCalledWith("Published schedule corrections are invalid");
+  const current = await currentContext();
+  expect(current.revision).toBe(accepted.revision + 1);
+  await restoreCloudExternalInputs({ inputs: current.externalInputs, storage, directory: restored });
+  expect(JSON.parse(await readFile(path.join(restored, "spotlight-news.json"), "utf8")).cards[0].title).toBe(title);
+  const retained = await publicPacket(current);
+  expect(tvssRequests).toBeGreaterThan(previousRequests);
+  expect(retained.schedule.data.generatedAt).toBe(new Date(now).toISOString());
+  expect(retained.schedule.data.days.broadcast.find(day => day.date === date))
+    .toEqual(revised.schedule.data.days.broadcast.find(day => day.date === date));
+  expect(retained.schedule.exported.startDate).toBe("2026-10-31");
+  expect((await publicPacket(accepted)).pdf.equals(revised.pdf)).toBe(true);
 });
 
 it("initializes a missing pair in one successor while preserving the historical provider identity", async () => {
