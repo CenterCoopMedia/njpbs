@@ -71,7 +71,7 @@ export const PRODUCTION_BUILD_MARKERS = Object.freeze([
 ]);
 
 const APPROVED_FUNCTIONS_ENV_LOCAL_SHA256 =
-  "15515c3673b38b77998d59cca54fe1598f02fc8bcf3743fbdec06a6047d89804";
+  "2bf05564c0af5a3762be568d6070f3bbf845a579e1c3deb69cfb5a946d530b3e";
 const APPROVED_FUNCTIONS_DOTENV_FILES = Object.freeze([
   ".env.example",
   ".env.local",
