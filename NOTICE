@@ -65,8 +65,6 @@ attribution and other notices. Keep those licenses and notices intact. The
 repository's MIT license does not replace them or grant additional rights to
 those materials. Installed dependencies retain the licenses supplied with them.
 
-- site/public/vendor/three/: Three.js code; retain its LICENSE and the upstream
-  source details in its README.md.
 - crawl-worker/: retain LICENSE.upstream for the upstream code identified in
   its README.md.
 - functions/assets/LICENSE-DejaVuSans.txt: retain the supplied DejaVu Sans notice;

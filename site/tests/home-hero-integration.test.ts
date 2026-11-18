@@ -11,22 +11,11 @@ const cinematicHeroSource = readSiteFile(
   "CinematicHomePage.astro",
 );
 const homeHeroSource = readSiteFile("src", "components", "HomeHero.astro");
-const njHeroSource = readSiteFile("src", "islands", "NJHero.astro");
-const carouselSource = readSiteFile(
-  "src",
-  "components",
-  "HeroContentCarousel.astro",
-);
-
-describe("disabled hero content carousel contracts", () => {
-  it("keeps both legacy 3D paths out of the branded Home hero", () => {
-    expect(njHeroSource).not.toContain("HeroContentCarousel");
-    expect(njHeroSource).not.toContain("contentCarouselEnabled");
-    expect(carouselSource).not.toContain(":global(.hero__grid)");
+describe("Home hero integration", () => {
+  it("uses HomeHero with its background and slides", () => {
     expect(cinematicHeroSource).toContain("<HomeHero");
     for (const source of [cinematicHeroSource, homeHeroSource]) {
       expect(source).not.toContain("<NJHero");
-      expect(source).not.toContain("HeroContentCarousel");
       expect(source).not.toContain("@babylonjs");
     }
     expect(homeHeroSource).not.toContain('class="branded-signal"');
