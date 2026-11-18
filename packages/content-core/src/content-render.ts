@@ -10,6 +10,7 @@ import { renderDataTable } from "./data-table-render";
 import { renderBioCard } from "./bio-render.ts";
 import { renderVideoBlock } from "./video-block.ts";
 import { renderRailArrowIcon } from "./home-rail-render";
+import { newsletterSignupUrl } from "./launch-fallback";
 // The shared block renderer: a validated `PageBlock` -> its canonical rendered
 // markup. This is the single source of truth for how a block looks, so the CMS
 // editor's inline (WYSIWYG) surface and the public page render agree by sharing one
@@ -210,6 +211,7 @@ export interface RenderBlockOptions {
   allowBios?: boolean;
   sponsors?: readonly SponsorRenderData[];
   resolveNewsletter?: (id: string) => NewsletterCardData | null;
+  signupNewsletterCards?: readonly NewsletterCardData[];
   resolveAsset?: (
     assetId: string,
     placement: RenderAssetPlacement,
@@ -250,6 +252,10 @@ export interface SponsorRenderData {
   logoUrl: string | null;
   logoAlt: string;
   logoDecorative: boolean;
+}
+
+function renderNewsletterSignupLink(href: string, label: string): string {
+  return `<a class="btn btn--primary" href="${escapeHtml(href)}" rel="noopener noreferrer">${escapeHtml(label)}</a>`;
 }
 
 /**
@@ -696,7 +702,7 @@ export function renderBlock(
         const imageHtml = image && record.imageAssetId
           ? renderResolvedImage(record.imageAssetId, record.imageAlt ?? "", image, { className: "newsletter-signup__image" })
           : "";
-        return [`<article class="newsletter-signup__card">${imageHtml}<div class="newsletter-signup__copy"><h${Math.min(6, generatedHeadingLevel + (block.data.heading?.trim() ? 1 : 0))}>${escapeHtml(record.title)}</h${Math.min(6, generatedHeadingLevel + (block.data.heading?.trim() ? 1 : 0))}>${record.frequency ? `<p class="newsletter-signup__frequency">${escapeHtml(record.frequency)}</p>` : ""}${record.summary ? `<p>${escapeHtml(record.summary)}</p>` : ""}<a class="btn btn--primary" href="${escapeHtml(record.signupUrl)}" rel="noopener noreferrer">Sign up for ${escapeHtml(record.title)}</a></div></article>`];
+        return [`<article class="newsletter-signup__card">${imageHtml}<div class="newsletter-signup__copy"><h${Math.min(6, generatedHeadingLevel + (block.data.heading?.trim() ? 1 : 0))}>${escapeHtml(record.title)}</h${Math.min(6, generatedHeadingLevel + (block.data.heading?.trim() ? 1 : 0))}>${record.frequency ? `<p class="newsletter-signup__frequency">${escapeHtml(record.frequency)}</p>` : ""}${record.summary ? `<p>${escapeHtml(record.summary)}</p>` : ""}${renderNewsletterSignupLink(record.signupUrl, `Sign up for ${record.title}`)}</div></article>`];
       });
       if (!cards.length) return "";
       return `<section class="newsletter-signup">${block.data.heading?.trim() ? `<h${generatedHeadingLevel}>${escapeHtml(block.data.heading.trim())}</h${generatedHeadingLevel}>` : ""}${block.data.intro?.trim() ? `<p>${escapeHtml(block.data.intro.trim())}</p>` : ""}<div class="newsletter-signup__grid">${cards.join("")}</div></section>`;
@@ -721,9 +727,15 @@ export function renderBlock(
       }, options.publicElectionResults === true);
     case "html":
       return renderHtmlBlock(block.data);
-    case "embed_anchor":
-      return isEmbedAnchorData(block.data as unknown as Record<string, unknown>)
-        ? `<div id="${escapeHtml(block.data.anchorId)}"></div>` : "";
+    case "embed_anchor": {
+      if (!isEmbedAnchorData(block.data as unknown as Record<string, unknown>)) return "";
+      const links = (options.signupNewsletterCards ?? []).flatMap(card => {
+        const href = safeHref(card.signupUrl);
+        return href ? [renderNewsletterSignupLink(href, `Sign up for ${card.title}`)] : [];
+      });
+      if (!links.length) links.push(renderNewsletterSignupLink(newsletterSignupUrl, "Sign up for NJ PBS newsletters"));
+      return `<div class="newsletter-signup-embed"><ul class="newsletter-signup-embed__links">${links.map(link => `<li>${link}</li>`).join("")}</ul><div class="newsletter-signup-embed__target" id="${escapeHtml(block.data.anchorId)}"></div></div>`;
+    }
     case "embed": {
       const apLayout = apResultsLayoutSrc(block.data.url);
       if (apLayout) {

@@ -292,6 +292,16 @@ section.support-appeal--dark .support-appeal__button { border-color: var(--color
 .newsletter-signup__frequency { font-weight: 700; }
 .newsletter-signup__card .btn { display: inline-flex; min-height: 44px; align-items: center; margin-top: 1rem; }
 
+.newsletter-signup-embed { display: grid; align-items: start; min-block-size: 12rem; }
+.newsletter-signup-embed > * { grid-area: 1 / 1; min-inline-size: 0; }
+.newsletter-signup-embed__links { display: flex; flex-wrap: wrap; gap: .75rem; list-style: none; margin: 0; padding: 0; }
+.newsletter-signup-embed__links .btn { display: inline-flex; min-height: 44px; align-items: center; overflow-wrap: anywhere; }
+/* Keep the links in the grid to reserve their space and let focused links stay usable. */
+.newsletter-signup-embed[data-signup-form] .newsletter-signup-embed__links:not(:focus-within),
+.newsletter-signup-embed[data-signup-form] .newsletter-signup-embed__links:focus-within + .newsletter-signup-embed__target {
+  visibility: hidden;
+}
+
 @keyframes embed-live-blink {
   50% {
     opacity: 0.25;

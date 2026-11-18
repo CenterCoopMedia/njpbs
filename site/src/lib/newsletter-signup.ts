@@ -4,6 +4,13 @@ import type { RecordCardPayload } from "./record-card-resolution";
 import { resolveCmsResponsiveImage, type CmsImageOptimizer } from "./cms-responsive-image";
 import type { ResolvedRenderAsset } from "../../../packages/content-core/src/content-render";
 
+export function newsletterSignupCards(records: readonly RecordCardPayload[]): NewsletterCardData[] {
+  return records.flatMap(record => record.kind === "newsletter" && record.newsletter
+    ? [{ id: record.id, card: record.newsletter.card }] : [])
+    .sort((a, b) => a.id.localeCompare(b.id)).slice(0, 4)
+    .map(record => record.card);
+}
+
 /** Resolve signup blocks from the same fixed-cutoff export as record cards. */
 export async function newsletterSignupResolution(
   blocks: readonly PageBlock[], optimizer: CmsImageOptimizer, records: readonly RecordCardPayload[],

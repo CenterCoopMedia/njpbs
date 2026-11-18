@@ -18,16 +18,16 @@ async function getAll(transaction, references) {
 /** A complete bounded approved picker pool, including unselected records.
  * Approval history supplies every public field. Working saves never do.
  * Unavailable optional art is omitted; its private or mismatched bytes never enter Home. */
-async function readHomeNewslettersInTransaction({ firestore, transaction, recordIds, pointer, now = new Date() }) {
+async function readHomeNewslettersInTransaction({ firestore, transaction, recordIds, pointer, now = new Date(), includeArt = true, limit = 200 }) {
   try {
-    return await readRoster({ firestore, transaction, recordIds, pointer, now });
+    return await readRoster({ firestore, transaction, recordIds, pointer, now, includeArt, limit });
   } catch {
     // This optional service must never make the rest of Home unavailable.
     // Do not log database messages or private approval/history documents.
     return { status: "error" };
   }
 }
-async function readRoster({ firestore, transaction, recordIds, pointer, now }) {
+async function readRoster({ firestore, transaction, recordIds, pointer, now, includeArt, limit }) {
   const candidates = await transaction.get(firestore.collection("cmsPosts").where("type", "==", "newsletter").limit(1001));
   // Saturation cannot certify a complete pool. Omit only this service rather
   // than letting accumulated library records make the public Home fail.
@@ -39,10 +39,10 @@ async function readRoster({ firestore, transaction, recordIds, pointer, now }) {
     return !data.deleted && data.status !== "archived" && Number.isSafeInteger(data.version) && data.version > 0;
   }).sort((a, b) => Number(recordIds.includes(b.id)) - Number(recordIds.includes(a.id)) || a.id.localeCompare(b.id));
   const records = [];
-  for (let index = 0; index < eligibleCandidates.length && records.length < 200;) {
+  for (let index = 0; index < eligibleCandidates.length && records.length < limit;) {
     // Parallel waves preserve the small-library read fan-out while allowing
     // a full eligible window to stop before reading the remaining histories.
-    const wave = eligibleCandidates.slice(index, index + Math.ceil((200 - records.length) / 10) * 10);
+    const wave = eligibleCandidates.slice(index, index + Math.ceil((limit - records.length) / 10) * 10);
     const batches = [];
     for (let offset = 0; offset < wave.length; offset += 10) batches.push(wave.slice(offset, offset + 10));
     const histories = await Promise.all(batches.map(batch => transaction.get(firestore.collection("cmsVersionHistory")
@@ -63,7 +63,8 @@ async function readRoster({ firestore, transaction, recordIds, pointer, now }) {
     }
     index += wave.length;
   }
-  records.splice(200);
+  records.splice(limit);
+  if (!includeArt) return { joinedRecords: records, assets: [] };
   const ids = joinedAssetIds(records);
   const media = await getAll(transaction, pairedAssetPaths(ids).map(path => firestore.doc(path)));
   const locks = await getAll(transaction, ids.map(id => mediaReplacementRef(firestore, id)));

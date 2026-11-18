@@ -20,7 +20,7 @@ import LinkCardDirectory from "./LinkCardDirectory.astro";
 import CmsBlockGroup from "./CmsBlockGroup.astro";
 import ReaderTextSize from "./ReaderTextSize.astro";
 import { sponsorCardsFromRecordCards } from "../lib/record-card-resolution";
-import { newsletterSignupResolution } from "../lib/newsletter-signup";
+import { newsletterSignupCards, newsletterSignupResolution } from "../lib/newsletter-signup";
 import { usesServiceComposition } from "../../../packages/content-core/src/service-composition";
 import { renderDatasetFigures, renderRecordCards } from "../lib/cms-render-context";
 
@@ -34,6 +34,7 @@ interface Props {
 
 const { entry, excludeTypes = [], contained = true, readerControls = false, resolveDataHubSection } = Astro.props as Props;
 const blocks = entry.data.blocks.filter((block) => !excludeTypes.includes(block.type));
+const visibleBlocks = visibleLayoutBlocks(blocks);
 const collectedCards = Astro.locals.cmsRender ? [] : (await getCollection("cmsRecordCards")).map(item => item.data);
 const recordCards = renderRecordCards(Astro.locals.cmsRender, collectedCards).filter(card =>
   entry.data.pageId !== "kids" || card.kind !== "newsletter");
@@ -45,6 +46,10 @@ const responsiveAssets = await resolveCmsResponsiveAssets(
   getImage,
 );
 const newsletters = await newsletterSignupResolution(blocks, getImage, recordCards);
+const content = Astro.locals.cmsRender?.content;
+const signupNewsletterCards = content?.kind === "public-page"
+  ? content.signupNewsletterCards
+  : visibleBlocks.some(block => block.type === "embed_anchor") ? newsletterSignupCards(recordCards) : undefined;
 let privacyChoicesAnchorAssigned = false;
 const privacyChoicesHeadingId = (text: string): string | undefined => {
   if (
@@ -68,6 +73,7 @@ const groups = renderContentGroups(blocks, (block, index) => ({
       responsiveAssets.get(responsiveImageKey(assetId, placement)) ?? newsletters.images.get(assetId) ??
       (entry.data.assets[assetId]?.mimeType === "application/pdf" ? entry.data.assets[assetId] : null),
     resolveNewsletter: id => newsletters.cards.get(id) ?? null,
+    signupNewsletterCards,
     generatedHeadingLevel: generatedHeadingLevelAt(blocks, index),
     richTextHeadingId: privacyChoicesHeadingId,
     // Composed service pages keep the public page frame's rule: external links open in a new tab.
@@ -77,7 +83,7 @@ const groups = renderContentGroups(blocks, (block, index) => ({
   }),
 }));
 const publicGroups = groupLinkCardDirectories(groups);
-const hasProse = visibleLayoutBlocks(blocks).some(block => block.type === "prose");
+const hasProse = visibleBlocks.some(block => block.type === "prose");
 ---
 
 {readerControls && hasProse && <ReaderTextSize />}
@@ -99,3 +105,9 @@ const hasProse = visibleLayoutBlocks(blocks).some(block => block.type === "prose
     ) : <CmsBlockGroup group={item.group} cards={recordCards} />)
   }
 </div>
+
+<script>
+  import { observeNewsletterSignupEmbeds } from "../lib/newsletter-signup-embed";
+
+  observeNewsletterSignupEmbeds(document);
+</script>

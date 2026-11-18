@@ -26,6 +26,12 @@ const joinedProgram = { id: "program-one", status: "published", publiclyVisible:
   publishAt: "2026-10-12T10:00:00.000Z", published: { sourceVersion: 4, publishedAt: "2026-10-12T10:00:00.000Z",
     blocks: [], metadata: { type: "program", title: "Published joined program", slug: "program-one", previousSlugs: [], locale: "en",
       keyArtAssetId: mediaAsset.id, description: { type: "doc", content: [{ type: "paragraph", content: [{ type: "text", text: "Public joined program synopsis." }] }] } } } };
+const signupNewsletters = ["Station updates", "The weekend edition"].map((title, index) => {
+  const id = `newsletter-${index + 1}`;
+  return { id, type: "newsletter", status: "approved", deleted: false, version: 2,
+    approvedLibraryVersion: { id, type: "newsletter", status: "approved", deleted: false, version: 2,
+      title, signupUrl: `https://example.org/${id}` } };
+});
 const banner = { id: "public-homepage-banner", version: 5, published: { schemaVersion: 1,
   sourceVersion: 4, publishedAt: "2026-10-12T10:00:00.000Z", values: { enabled: true,
     message: "Published Home announcement", linkLabel: "Read the update", linkHref: "/about/" } } };
@@ -66,6 +72,7 @@ export function publishedPageRead(pageId: string, rendererSha = "a".repeat(40)) 
   return { kind: "published-page", page: { ...projection.page,
     ...(previousSlugs === undefined ? {} : { previousSlugs }) },
     assets: pageId === "contact" ? [mediaAsset] : [], joinedRecords: pageId === "contact" ? [joinedProgram] : [],
+    ...(pageId === newslettersId ? { signupNewsletters } : {}),
     settings: [...chromeSettings("Exact Page newsletter"), ...(pageId === "home" ? [banner] : [])],
     navigationPages: pageIds.map(id => ({ pageId: id,
       path: projectCmsPage(pageDocument(id), { mode: "published", now, assets: new Map([[mediaAsset.id, mediaAsset]]) })!.path })),
@@ -97,7 +104,7 @@ export function staticFixtureContent(rendererSha = "a".repeat(40)) {
   const sources = rebuildHomeSourcesForPosts(retained, postContext.posts, retained.publication!, now.toISOString());
   const chrome = projectChrome({ settings: chromeSettings("Exact Page newsletter"),
     navigationPages: pages.map(page => ({ pageId: page.pageId, path: page.path })) });
-  const joined = projectJoinedRecords([joinedProgram], assets, now);
+  const joined = projectJoinedRecords([joinedProgram, ...signupNewsletters], assets, now);
   return { pages, posts: [...postContext.posts], authors: [...postContext.authors], ...joined,
     settings: [...chrome.settings, projectPublicHomepageBanner(banner)!], homeSources: sources };
 }
