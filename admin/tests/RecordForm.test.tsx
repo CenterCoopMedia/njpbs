@@ -1885,6 +1885,35 @@ describe("RecordForm version and conflict handling (#566)", () => {
     expect(screen.queryByText(/Someone else saved this record/)).toBeNull();
   });
 
+  it("offers reload for an advanced create replay when the host cannot open the saved record", async () => {
+    const onSave = vi.fn().mockRejectedValue(new HttpError(
+      409,
+      "This record changed after it was created. Reload before saving it again.",
+      { conflict: "create-replay-advanced", recordId: "spo-1" },
+    ));
+    const onReload = vi.fn();
+    render(
+      <RecordForm
+        kind="sponsor"
+        initial={{ name: storedSponsor.name, href: storedSponsor.href }}
+        onSave={onSave}
+        onReload={onReload}
+        canSave
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+
+    await screen.findByText("This created record changed before the retry finished");
+    expect(screen.queryByRole("button", { name: "Open saved record, discarding this draft" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Save anyway, overwriting their changes" })).toBeNull();
+    expect(screen.getByLabelText(/^Name/)).toHaveValue(storedSponsor.name);
+    expect(onReload).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole("button", { name: "Reload record, discarding your changes" }));
+    expect(onReload).toHaveBeenCalledOnce();
+    expect(onSave).toHaveBeenCalledOnce();
+  });
+
   it("reloads the stored record only when the person chooses to discard local work", async () => {
     const onSave = vi.fn(async () => {
       throw new HttpError(409, "This record changed since you opened it.");

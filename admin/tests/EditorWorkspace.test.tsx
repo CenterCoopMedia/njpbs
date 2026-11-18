@@ -303,6 +303,53 @@ describe("EditorWorkspace surfaces", () => {
     actionsTarget.remove();
   });
 
+  it("keeps the current Post open when the duplicate receipt has no record ID", async () => {
+    const actionsTarget = document.createElement("div");
+    document.body.append(actionsTarget);
+    const duplicatePost = vi.fn(async () => ({ version: 1 }));
+    const onNavigateSurface = vi.fn();
+    try {
+      render(
+        <MemoryRouter>
+          <WorkspaceActionsProvider target={actionsTarget}>
+            <EditorWorkspace
+              principal={contributor}
+              duplicatePost={duplicatePost}
+              onNavigateSurface={onNavigateSurface}
+              loadRecord={async () => ({
+                status: "ready",
+                record: {
+                  id: "post-1",
+                  type: "post",
+                  title: "Station update",
+                  tags: [],
+                  blocks: [],
+                  status: "draft",
+                  version: 2,
+                  createdBy: "c",
+                  section: "news",
+                },
+              })}
+              surface={{ kind: "record", record: "post", id: "post-1" }}
+            />
+          </WorkspaceActionsProvider>
+        </MemoryRouter>,
+      );
+
+      fireEvent.click(await screen.findByRole("button", { name: "Post actions" }));
+      fireEvent.click(screen.getByRole("button", { name: "Duplicate post" }));
+
+      await screen.findByText("Post was not duplicated");
+      expect(screen.getByText("The duplicate receipt is missing its record ID.")).toBeVisible();
+      expect(duplicatePost).toHaveBeenCalledOnce();
+      expect(duplicatePost).toHaveBeenCalledWith("post-1", 2);
+      expect(onNavigateSurface).not.toHaveBeenCalled();
+      expect(screen.getByRole("textbox", { name: "Post title" })).toHaveValue("Station update");
+    } finally {
+      actionsTarget.remove();
+    }
+  });
+
   it("switches to the event record form", () => {
     render(<EditorWorkspace principal={editor} />);
     clickWorkspaceAction("Event");

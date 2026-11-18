@@ -14,11 +14,12 @@ import {
   type PageContent,
 } from "../src/components/EditorWorkspace";
 import type { AdminBlock } from "../src/lib/block-factory";
-import type {
-  GetRevisionResponse,
-  ListRevisionsResponse,
-  MediaAssetSummary,
-  RestoreRevisionResponse,
+import {
+  HttpError,
+  type GetRevisionResponse,
+  type ListRevisionsResponse,
+  type MediaAssetSummary,
+  type RestoreRevisionResponse,
 } from "../src/lib/functions";
 import type { Principal } from "../../packages/content-core/src/rbac";
 import type { PublicPageId } from "../../packages/content-core/src/public-pages";
@@ -213,6 +214,34 @@ describe("the removal undo affordance (#1035)", () => {
     fireEvent.click(undo);
     expect(kindsInOrder(container)).toEqual(["heading"]);
     expect(removalNotice()).toBeNull();
+  });
+
+  it("keeps removal undo available while a save conflict is open", async () => {
+    const onSave = vi.fn().mockRejectedValue(new HttpError(409, "Reload before saving this version."));
+    const { container } = render(
+      <BlockEditor
+        section="home"
+        initialBlocks={[headline("h1", "Tonight on NJ PBS", 0), writtenText("p1", 1)]}
+        newId={counterIds()}
+        onSave={onSave}
+        onReload={vi.fn()}
+        canSave
+      />,
+    );
+    editComponent("text 2");
+    fireEvent.click(screen.getByRole("button", { name: "Remove text 2" }));
+    fireEvent.click(screen.getByRole("button", { name: "Confirm removal of text 2" }));
+    doneEditing();
+
+    const undo = screen.getByRole("button", { name: "Undo removal" });
+    fireEvent.click(screen.getByRole("button", { name: "Save page" }));
+
+    await screen.findByText("Someone else saved this page while you were editing it");
+    expect(onSave).toHaveBeenCalledOnce();
+    expect(undo).toBeVisible();
+    expect(undo).toBeEnabled();
+    fireEvent.click(undo);
+    expect(kindsInOrder(container)).toEqual(["heading", "text"]);
   });
 
   it("drops the notice once a later edit means Undo would reverse something else", () => {

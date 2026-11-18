@@ -3734,6 +3734,31 @@ describe("MediaRoute images toolbar", () => {
     expect(within(pager).getByRole("button", { name: "Previous page" })).toBeEnabled();
   });
 
+  it.each([409, 410, 503])("returns to the first page after cursor request HTTP %s", async (status) => {
+    const list = cursorPagedList(2);
+    mocks.list.mockImplementation(async (token: string, query: MediaListQuery) => {
+      if (query.cursor) throw new HttpError(status, "This media page could not be opened.");
+      return list(token, query);
+    });
+    const { router } = renderRoute("/media/images?q=studio");
+    const pager = await screen.findByRole("navigation", { name: "Media pages" });
+    const calls = mocks.list.mock.calls.length;
+    fireEvent.click(within(pager).getByRole("button", { name: "Next page" }));
+
+    const restart = await screen.findByRole("button", { name: "Return to first page" });
+    expect(mocks.list.mock.calls.at(-1)?.[1]).toMatchObject({
+      cursor: cursorTokens[0], page: 2, q: "studio",
+    });
+    fireEvent.click(restart);
+
+    await waitFor(() => expect(mocks.list).toHaveBeenCalledTimes(calls + 2));
+    await waitFor(() => expect(screen.queryByText("Media library could not be loaded")).toBeNull());
+    expect(mocks.list.mock.calls.at(-1)?.[1]).toMatchObject({ page: 1, q: "studio" });
+    expect(mocks.list.mock.calls.at(-1)?.[1]?.cursor).toBeUndefined();
+    expect(params(router).get("q")).toBe("studio");
+    expect(within(screen.getByRole("navigation", { name: "Media pages" })).getByRole("button", { name: "Previous page" })).toBeDisabled();
+  });
+
   it("applies Display thumbnail size, density and card fields without a list request", async () => {
     mocks.list.mockResolvedValue(selection([{ ...asset, tags: ["studio", "control", "switcher", "news"] }]));
     renderRoute("/media/images");
