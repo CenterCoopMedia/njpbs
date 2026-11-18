@@ -20,9 +20,7 @@ import {
 import { renderLivePlayerFrame } from "../lib/live-player-render";
 import { HOMEPAGE_ANNOUNCEMENT } from "../lib/homepage-announcement";
 import ScheduleNowNext from "./ScheduleNowNext.astro";
-import scheduleData from "../data/schedule.json";
 import { renderSchedule } from "../lib/cms-render-context";
-import type { BakedScheduleData } from "../lib/schedule-feed";
 import { loadScheduleData } from "../lib/schedule-data";
 import type { CmsServicePageProjection } from "../lib/cms-service-page";
 import { renderServiceIntroduction, renderServiceNotice, renderServiceBody, servicePageClass } from "../lib/cms-service-render";
@@ -91,7 +89,7 @@ const {
   heroBackgroundPosition,
 } = Astro.props as Props;
 const electionHeading = cmsService ? njDecidesServiceHeading(cmsService) : undefined;
-const bakedSchedule = renderSchedule(Astro.locals.cmsRender)?.data ?? await loadScheduleData(scheduleData as BakedScheduleData);
+const bakedSchedule = page.slug === "live" ? renderSchedule(Astro.locals.cmsRender)?.data ?? await loadScheduleData() : null;
 const opensInNewTab = (link: LaunchLink) =>
   link.external === true && /^https?:\/\//.test(link.href);
 
@@ -563,7 +561,7 @@ const articleClass = [
   {detail.player && <Fragment set:html={renderLivePlayerFrame()} />}
 
   {
-    page.slug === "live" && (
+    bakedSchedule && (
       <ScheduleNowNext days={bakedSchedule.days.broadcast} variant="compact" />
     )
   }

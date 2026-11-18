@@ -1,15 +1,18 @@
 // @vitest-environment node
 
-import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { loadLaunchContentData } from "../src/lib/launch-content-data";
 import { loadScheduleData } from "../src/lib/schedule-data";
-import type { BakedScheduleData } from "../src/lib/schedule-feed";
-// Fixed October input; the rolling schedule.json is allowed to move beyond October.
 import scheduleFixture from "../src/data/schedule-fixture.json";
 import octoberFeed from "./fixtures/schedule-corrections-2026-10-source.json";
+
+vi.mock("node:fs/promises", async importOriginal => {
+  const original = await importOriginal<typeof import("node:fs/promises")>();
+  return { ...original, readFile: vi.fn(original.readFile) };
+});
 
 const directories: string[] = [];
 
@@ -30,18 +33,24 @@ afterEach(async () => {
 });
 
 describe("private public-build source data", () => {
-  it("uses committed inputs when no private path is selected", async () => {
+  it("renders unavailable listings when a standalone build has no schedule file", async () => {
     const launch = { source: "media-manager", checkedAt: "2026-06-29T19:43:58.507Z", cards: [{}] };
-    const schedule = {
-      source: "pbs-tvss",
-      generatedAt: "2026-09-18T13:32:43.252Z",
-      timeZone: "America/New_York",
-      request: { station: "WNJT", dates: ["2026-09-18"] },
-      days: { broadcast: [{}], kids: [{}] },
-    } as unknown as BakedScheduleData;
-
     await expect(loadLaunchContentData(launch, {})).resolves.toBe(launch);
-    await expect(loadScheduleData(schedule, {})).resolves.toBe(schedule);
+    vi.mocked(readFile).mockRejectedValueOnce(Object.assign(new Error("Missing file"), { code: "ENOENT" }));
+    const schedule = await loadScheduleData({});
+    expect(readFile).toHaveBeenLastCalledWith(".schedule-cache/schedule.json", "utf8");
+    expect(schedule.days.broadcast).toEqual([expect.objectContaining({ entries: [] })]);
+    expect(schedule.days.kids).toEqual([expect.objectContaining({ entries: [] })]);
+  });
+
+  it("validates local schedule data and propagates other read failures", async () => {
+    const { fixture: _marker, ...schedule } = structuredClone(scheduleFixture);
+    vi.mocked(readFile).mockResolvedValueOnce(JSON.stringify(schedule));
+    await expect(loadScheduleData({})).resolves.toEqual(schedule);
+    expect(readFile).toHaveBeenLastCalledWith(".schedule-cache/schedule.json", "utf8");
+    const permissionError = Object.assign(new Error("Permission denied"), { code: "EACCES" });
+    vi.mocked(readFile).mockRejectedValueOnce(permissionError);
+    await expect(loadScheduleData({})).rejects.toBe(permissionError);
   });
 
   it("loads exact generated Media Manager and schedule files", async () => {
@@ -58,15 +67,12 @@ describe("private public-build source data", () => {
       { source: "manual-fallback", cards: [] },
       { LAUNCH_CONTENT_DATA_PATH: launchPath },
     )).resolves.toEqual(launch);
-    await expect(loadScheduleData(
-      {} as BakedScheduleData,
-      { SCHEDULE_DATA_PATH: schedulePath },
-    )).resolves.toEqual(schedule);
+    await expect(loadScheduleData({ SCHEDULE_DATA_PATH: schedulePath })).resolves.toEqual(schedule);
   });
 
   it("applies approved October corrections after selecting the publisher's external schedule file", async () => {
     const schedulePath = await fixturePath("october.json", octoberFeed);
-    const corrected = await loadScheduleData({} as BakedScheduleData, { SCHEDULE_DATA_PATH: schedulePath });
+    const corrected = await loadScheduleData({ SCHEDULE_DATA_PATH: schedulePath });
     expect(corrected.source).toBe("pbs-tvss-with-njpbs-corrections");
     expect(corrected.request.dates).toHaveLength(31);
     expect(corrected.days.broadcast.find((day) => day.date === "2026-10-02")?.entries).toContainEqual(
@@ -91,7 +97,7 @@ describe("private public-build source data", () => {
 
   it.each(invalidScheduleFiles())("refuses a generated schedule with %s", async (_reason, value) => {
     const inputPath = await fixturePath("invalid-schedule.json", value);
-    await expect(loadScheduleData({} as BakedScheduleData, { SCHEDULE_DATA_PATH: inputPath }))
+    await expect(loadScheduleData({ SCHEDULE_DATA_PATH: inputPath }))
       .rejects.toThrow("Generated PBS schedule data is invalid");
   });
 
@@ -105,7 +111,7 @@ describe("private public-build source data", () => {
     const environment = { [field]: inputPath };
     const read = label === "Media Manager"
       ? loadLaunchContentData({ cards: [] }, environment)
-      : loadScheduleData({} as BakedScheduleData, environment);
+      : loadScheduleData(environment);
     await expect(read).rejects.toThrow(`Generated ${label}`);
   });
 });

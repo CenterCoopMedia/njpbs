@@ -42,7 +42,7 @@ if (phase !== "--compile-only" && !testPages) {
   const release = JSON.parse(await readFile(seal, "utf8"));
   // Workers Builds compiles before its approved syncs. Only those data outputs
   // may differ when copying the compiled client graph after the static build.
-  const syncOutputs = ["site/src/data/launch-media-manager.json", "site/src/data/spotlight-news.json", "site/src/data/schedule.json"];
+  const syncOutputs = ["site/src/data/launch-media-manager.json", "site/src/data/spotlight-news.json"];
   if (!isDeepStrictEqual(release, releaseSeal) || !assertDevelopmentSource(repo, process.env, { allowedChanges: syncOutputs })) {
     throw new Error("Public Post source changed after compilation");
   }

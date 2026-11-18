@@ -247,7 +247,7 @@ it("publishes a lineup correction under the same CODE and retains it when the ne
   expect(revised.pdf.equals(original.pdf)).toBe(false);
   const restored = path.join(directory, "restored-correction");
   await restoreCloudExternalInputs({ inputs: accepted.externalInputs, storage, directory: restored });
-  expect(await loadScheduleData(original.schedule.data, { SCHEDULE_DATA_PATH: path.join(restored, "schedule.json") }))
+  expect(await loadScheduleData({ SCHEDULE_DATA_PATH: path.join(restored, "schedule.json") }))
     .toEqual(revised.schedule.data);
   expect((await db.doc("system/publicDeployment").get()).data()).toMatchObject({ activeCommitSha: release, activeGeneration: 1 });
 

@@ -147,7 +147,7 @@ describe("main", () => {
         (entry: { title: string }) => entry.title === "Weather Hunters",
       ),
     ).toMatchObject({ nolaRoot: "WEHU", kids: false, isKids: true });
-    expect(result.reusedCommittedData).toBe(false);
+    expect(result.reusedSavedData).toBe(false);
   });
 
   it("keeps an existing bake unchanged when any request fails", async () => {
@@ -166,9 +166,23 @@ describe("main", () => {
       new Date("2026-07-10T16:00:00Z"),
     );
 
-    expect(result.reusedCommittedData).toBe(true);
+    expect(result.reusedSavedData).toBe(true);
     expect(await readFile(outputPath, "utf8")).toBe(previous);
     expect(warn).toHaveBeenCalledOnce();
+  });
+
+  it("allows a best-effort build with no saved lineup for the current date", async () => {
+    const fetchImpl = vi.fn<typeof fetch>(async () => new Response(null, { status: 503 }));
+    const write = vi.fn();
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const now = new Date("2032-07-10T16:00:00Z");
+    await expect(main({}, fetchImpl, now, write)).resolves.toEqual({ reusedSavedData: false });
+    expect(warn).toHaveBeenCalledWith("Schedule sync skipped; current listings are unavailable");
+    for (const env of [{ REQUIRE_FRESH_CONTENT: "1" }, { REQUIRE_FRESH_CONTENT: "0" },
+      { WORKERS_CI: "1", WORKERS_CI_BRANCH: "production" }]) {
+      await expect(main(env, fetchImpl, now, write)).rejects.toThrow(/HTTP 503/);
+    }
+    expect(write).not.toHaveBeenCalled();
   });
 
   it("fails a scheduled refresh when the schedule bake is stale", async () => {
@@ -242,7 +256,7 @@ describe("main", () => {
       new Date("2026-07-10T16:00:00Z"),
     );
 
-    expect(result.reusedCommittedData).toBe(true);
+    expect(result.reusedSavedData).toBe(true);
     expect(await readFile(outputPath, "utf8")).toBe(previous);
     expect(warn).toHaveBeenCalledOnce();
   });
@@ -290,7 +304,7 @@ describe("main", () => {
       new Date("2026-07-10T16:00:00Z"),
     );
 
-    expect(result.reusedCommittedData).toBe(true);
+    expect(result.reusedSavedData).toBe(true);
     expect(await readFile(outputPath, "utf8")).toBe(previous);
   });
 
@@ -345,7 +359,7 @@ describe("main", () => {
 
     const observedSignal = requestSignal as AbortSignal | null;
     expect(observedSignal?.aborted).toBe(true);
-    expect(result.reusedCommittedData).toBe(true);
+    expect(result.reusedSavedData).toBe(true);
     expect(await readFile(outputPath, "utf8")).toBe(previous);
   });
 
@@ -389,7 +403,7 @@ describe("main", () => {
 describe("buildScheduleConfig", () => {
   it("uses the baked-data convention and the required referer", () => {
     expect(buildScheduleConfig({})).toMatchObject({
-      outputPath: "src/data/schedule.json",
+      outputPath: ".schedule-cache/schedule.json",
       referer: "https://njpbs.org/",
       requestTimeoutMs: 15_000,
     });

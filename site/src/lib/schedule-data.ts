@@ -1,16 +1,20 @@
 import { readFile } from "node:fs/promises";
-import type { BakedScheduleData } from "./schedule-feed";
+import { DEFAULT_SCHEDULE_DATA_PATH, type BakedScheduleData } from "./schedule-feed";
 import { applyScheduleCorrections } from "./schedule-corrections";
 import { assertScheduleInput } from "./schedule-input";
+import { unavailableScheduleData } from "./schedule-view";
 
 export async function loadScheduleData(
-  committed: BakedScheduleData,
   env: Record<string, string | undefined> = process.env,
 ): Promise<BakedScheduleData> {
   const inputPath = env.SCHEDULE_DATA_PATH?.trim();
-  if (!inputPath) return applyScheduleCorrections(committed);
+  const bytes = await readFile(inputPath || DEFAULT_SCHEDULE_DATA_PATH, "utf8").catch(error => {
+    if (!inputPath && error.code === "ENOENT") return null;
+    throw error;
+  });
+  if (bytes === null) return unavailableScheduleData();
 
-  const generated: unknown = JSON.parse(await readFile(inputPath, "utf8"));
+  const generated: unknown = JSON.parse(bytes);
   assertScheduleInput(generated);
   return generated.source === "pbs-tvss" ? applyScheduleCorrections(generated) : generated;
 }

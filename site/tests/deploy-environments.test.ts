@@ -137,10 +137,6 @@ describe("deploy credential environments", () => {
     ]);
   });
 
-  it("places schedule App jobs in their dedicated main-only environment", () => {
-    for (const id of ["bake", "deferred-merge"]) expect(workflow("schedule-bake").jobs[id].environment).toBe("schedule-bake");
-  });
-
   it("preserves github-pages and scopes production-ref jobs to its two-branch policy", () => {
     for (const name of ["pages", "cms-publish"]) expect(workflow(name).jobs.deploy.environment.name).toBe("github-pages");
     expect(workflow("pages").on.push.branches).toEqual(["production"]);
@@ -150,7 +146,7 @@ describe("deploy credential environments", () => {
 
   it("defines only the approved environments and exact deployment branches", () => {
     expect(Object.fromEntries(Object.entries(environmentPolicy()).map(([name, policy]) => [name, policy.branches]))).toEqual({
-      production: ["main"], "schedule-bake": ["main"], "publisher-image": ["main"], development: ["main"], "github-pages": ["main", "production"],
+      production: ["main"], "publisher-image": ["main"], development: ["main"], "github-pages": ["main", "production"],
     });
     expect(environmentPolicy()["publisher-image"].secrets).toEqual(["CLOUDFLARE_PUBLISHER_IMAGE_TOKEN"]);
     assertConfiguredAdmission(workflow("publisher-image").jobs.image, "publisher-image");
@@ -190,10 +186,6 @@ describe("deploy credential environments", () => {
         for (const secret of secretNames([definition.env, job])) {
           // GITHUB_TOKEN is created by GitHub for each job; it is not migrated.
           if (secret === "GITHUB_TOKEN") continue;
-          if (secret === "SCHEDULE_BAKE_APP_PRIVATE_KEY") {
-            expect(["schedule-bake.yml/bake", "schedule-bake.yml/deferred-merge"]).toContain(context);
-            expect(environment, context).toBe("schedule-bake");
-          }
           if (secretExceptions[context]?.includes(secret)) continue;
           expect(environment, `${context}: ${secret} has no environment`).toBeDefined();
           expect(policy[environment]?.secrets, `${context}: ${secret} is not provisioned`).toContain(secret);

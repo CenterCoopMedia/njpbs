@@ -4,7 +4,6 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { applyScheduleCorrections, uncorrectedScheduleDates } from "../src/lib/schedule-corrections";
-import { loadScheduleData } from "../src/lib/schedule-data";
 import type { BakedScheduleData, ScheduleListing } from "../src/lib/schedule-feed";
 import { buildScheduleExport } from "../src/lib/schedule-export";
 import { main } from "../scripts/sync-schedule.mjs";
@@ -43,9 +42,9 @@ function oneOnOne(data: BakedScheduleData, date: string) {
 }
 
 describe("November One-on-One episode corrections", () => {
-  it("keeps approved episode details on the workbook airings in both views", async () => {
+  it("keeps approved episode details on the workbook airings in both views", () => {
     const input = feed();
-    const result = await loadScheduleData(input, {});
+    const result = applyScheduleCorrections(input);
     expect(result.source).toBe("pbs-tvss-with-njpbs-corrections");
     expect(result.request.dates).toHaveLength(30);
     for (const kind of ["broadcast", "kids"] as const) {
@@ -166,7 +165,7 @@ describe("November One-on-One episode corrections", () => {
       }
       const saved = await readFile(outputPath, "utf8");
       const outage = async () => { throw new Error("ECONNRESET"); };
-      await expect(main({ SCHEDULE_OUTPUT: outputPath }, outage, now)).resolves.toEqual({ reusedCommittedData: true });
+      await expect(main({ SCHEDULE_OUTPUT: outputPath }, outage, now)).resolves.toEqual({ reusedSavedData: true });
       await expect(main({ SCHEDULE_OUTPUT: outputPath, REQUIRE_FRESH_CONTENT: "1" }, outage, now))
         .rejects.toThrow("scheduled refresh requires fresh schedule data");
       expect(await readFile(outputPath, "utf8")).toBe(saved);

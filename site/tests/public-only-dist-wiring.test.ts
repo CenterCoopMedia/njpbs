@@ -91,7 +91,6 @@ describe("metered-API source scan runs before any scanned code executes", () => 
   const devPublish = read("../../.github/workflows/cms-dev-publish.yml");
   const preview = read("../../.github/workflows/preview.yml");
   const cmsPublish = read("../../.github/workflows/cms-publish.yml");
-  const scheduleBake = read("../../.github/workflows/schedule-bake.yml");
   const probeMediaManager = read(
     "../../.github/workflows/probe-media-manager.yml",
   );
@@ -115,7 +114,6 @@ describe("metered-API source scan runs before any scanned code executes", () => 
   const protectedWorkflows = [
     ["pages.yml", pages],
     ["preview.yml", preview],
-    ["schedule-bake.yml", scheduleBake],
     ["probe-media-manager.yml", probeMediaManager],
   ] as const;
 

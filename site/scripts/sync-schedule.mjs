@@ -2,6 +2,7 @@ import { access, mkdir, readFile, rename, rm, writeFile } from "node:fs/promises
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import {
+  DEFAULT_SCHEDULE_DATA_PATH,
   PBS_KIDS_NOLA_ROOTS,
   TVSS_TIME_ZONE,
   shapeTvssScheduleDay,
@@ -9,7 +10,6 @@ import {
 } from "../src/lib/schedule-feed.ts";
 import { applyScheduleCorrections, uncorrectedScheduleDates } from "../src/lib/schedule-corrections.ts";
 
-const DEFAULT_OUTPUT_PATH = "src/data/schedule.json";
 const DEFAULT_REFERER = "https://njpbs.org/";
 const DEFAULT_BASE_URL =
   "https://jaws.pbs.org/tvss/station/WNJT/providers-feed/day/";
@@ -29,7 +29,7 @@ export class UpstreamError extends Error {
 
 export function buildScheduleConfig(env = process.env) {
   return {
-    outputPath: optionalEnv(env.SCHEDULE_OUTPUT) ?? DEFAULT_OUTPUT_PATH,
+    outputPath: optionalEnv(env.SCHEDULE_OUTPUT) ?? DEFAULT_SCHEDULE_DATA_PATH,
     referer: DEFAULT_REFERER,
     baseUrl: optionalEnv(env.SCHEDULE_FEED_BASE_URL) ?? DEFAULT_BASE_URL,
     requestTimeoutMs: positiveIntegerEnv(
@@ -250,13 +250,20 @@ export async function main(
     broadcast = days.slice(0, feedDates.length).map((day) => ({ ...day, sourceCheckedAt }));
     kids = days.slice(feedDates.length).map((day) => ({ ...day, sourceCheckedAt }));
   } catch (error) {
-    if (!(error instanceof UpstreamError) || !hadPreviousBake) throw error;
+    if (!(error instanceof UpstreamError)) throw error;
+    if (!hadPreviousBake) {
+      const releaseSync = env.REQUIRE_FRESH_CONTENT !== undefined ||
+        (env.WORKERS_CI === "1" && env.WORKERS_CI_BRANCH === "production");
+      if (releaseSync || optionalEnv(env.SCHEDULE_OUTPUT)) throw error;
+      console.warn("Schedule sync skipped; current listings are unavailable");
+      return { reusedSavedData: false };
+    }
     const message = error instanceof Error ? error.message : String(error);
-    console.warn(`Schedule sync skipped; using committed data (${message})`);
+    console.warn(`Schedule sync skipped; using saved data (${message})`);
     if (env.REQUIRE_FRESH_CONTENT === "1") {
       throw new Error("scheduled refresh requires fresh schedule data");
     }
-    return { reusedCommittedData: true };
+    return { reusedSavedData: true };
   }
 
   /** @type {import("../src/lib/schedule-feed.ts").BakedScheduleData} */
@@ -271,7 +278,7 @@ export async function main(
   console.log(
     `Schedule sync wrote ${output.days.broadcast.length} broadcast days and ${output.days.kids.length} kids days`,
   );
-  return { ...output, reusedCommittedData: false };
+  return { ...output, reusedSavedData: false };
 }
 
 async function hasValidBakedData(outputPath, today) {

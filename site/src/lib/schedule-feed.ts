@@ -12,6 +12,7 @@ import {
 } from "../../../packages/content-core/src/station-time";
 
 export const TVSS_TIME_ZONE = STATION_TIME_ZONE;
+export const DEFAULT_SCHEDULE_DATA_PATH = ".schedule-cache/schedule.json";
 
 /**
  * Select the WNJT HD feed by its configured identity.
@@ -95,7 +96,7 @@ export interface ScheduleFeedDay extends Omit<ScheduleDay, "entries"> {
   readonly entries: readonly ScheduleListing[];
 }
 
-/** The committed schedule dataset consumed by later native schedule work. */
+/** The normalized schedule dataset shared by the page and exports. */
 export interface BakedScheduleData {
   readonly source: ScheduleSource;
   readonly generatedAt: string;

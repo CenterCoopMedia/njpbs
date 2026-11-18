@@ -5,15 +5,12 @@ import workbook from "../src/data/schedule-corrections-2026-10.json";
 import octoberSource from "./fixtures/schedule-corrections-2026-10-source.json";
 import { applyScheduleCorrections, uncorrectedScheduleDates } from "../src/lib/schedule-corrections";
 import type { BakedScheduleData, ScheduleFeedDay } from "../src/lib/schedule-feed";
-import { loadScheduleData } from "../src/lib/schedule-data";
 import { createScheduleSourceSnapshot, readScheduleSourceSnapshot } from "../src/lib/schedule-source-snapshot";
 import { getScheduleClockState } from "../src/lib/schedule-view";
 import { getEtBroadcastDates, main } from "../scripts/sync-schedule.mjs";
-import { checkScheduleRefresh } from "../scripts/check-schedule-refresh.mjs";
 
 // Fixed PBS input from bf5a92bbeb5e4c13d737ba0c9aac4de30c332fb7, before corrections:
 // the matching Westward Bound episode and the news slot that swallowed Media Matters.
-// The rolling schedule.json is allowed to move beyond October.
 const data = octoberSource as BakedScheduleData;
 const publication = { schemaVersion: 1, generation: 190, buildBatchId: "cms-october", commitSha: "a".repeat(40) };
 
@@ -196,8 +193,7 @@ describe("approved October schedule", () => {
     expect(() => readScheduleSourceSnapshot(tooMany, publication)).toThrow("list is invalid");
   });
 
-  it("applies the correction to the committed loader and the publisher sync without PBS calls for October", async () => {
-    expect(await loadScheduleData(data, {})).toEqual(applyScheduleCorrections(data));
+  it("applies the correction in the publisher sync without PBS calls for October", async () => {
     const fetchImpl = vi.fn(() => { throw new Error("October must use the approved source"); });
     const write = vi.fn();
     const output = await main({ SCHEDULE_OUTPUT: "/tmp/nonexistent-october-test-output" }, fetchImpl,
@@ -209,21 +205,7 @@ describe("approved October schedule", () => {
     expect(output.source).toBe("pbs-tvss-with-njpbs-corrections");
   });
 
-  it("does not repeatedly refresh because the raw PBS feed conflicts with the approved workbook", async () => {
-    const corrected = applyScheduleCorrections({ ...data, days: { broadcast: [], kids: [] } });
-    const snapshot = createScheduleSourceSnapshot(corrected, publication);
-    const fetchImpl = vi.fn<typeof fetch>(async (input) => {
-      const url = new URL(input instanceof Request ? input.url : input);
-      return Response.json(url.pathname === "/_publication.json" ? publication : snapshot);
-    });
-    await expect(checkScheduleRefresh(fetchImpl, new Date("2026-10-02T16:00:00Z"))).resolves.toBe(false);
-    expect(fetchImpl).toHaveBeenCalledTimes(2);
-    snapshot.days[1] = { ...snapshot.days[1], entries: snapshot.days[1].entries.map((entry, index) =>
-      index === 0 ? { ...entry, title: "Stale public title" } : entry) };
-    await expect(checkScheduleRefresh(fetchImpl, new Date("2026-10-02T16:00:00Z"))).resolves.toBe(true);
-  });
-
-  it("continues PBS reads for November, detects November changes and expires the October source", async () => {
+  it("continues PBS reads for November and expires the October source", async () => {
     const fixture = await readFile(new URL("./fixtures/tvss-wnjt-20260710.jsonp", import.meta.url), "utf8");
     const fetchFeed = vi.fn(async () => new Response(fixture));
     const october31 = new Date("2026-10-31T16:00:00Z");
@@ -231,20 +213,6 @@ describe("approved October schedule", () => {
     if (!("days" in output)) throw new Error("Expected a fresh October and November schedule.");
     expect(fetchFeed).toHaveBeenCalledTimes(26);
     expect(output.days.broadcast).toHaveLength(44);
-    const snapshot = createScheduleSourceSnapshot(output, publication);
-    const fetchRefresh = vi.fn<typeof fetch>(async (input) => {
-      const url = new URL(input instanceof Request ? input.url : input);
-      return url.hostname === "jaws.pbs.org"
-        ? new Response(fixture)
-        : Response.json(url.pathname === "/_publication.json" ? publication : snapshot);
-    });
-    await expect(checkScheduleRefresh(fetchRefresh, october31)).resolves.toBe(false);
-    expect(fetchRefresh).toHaveBeenCalledTimes(15);
-    snapshot.days = snapshot.days.map((day) => day.date === "2026-11-01"
-      ? { ...day, entries: day.entries.map((entry, index) => index === 0 ? { ...entry, title: "Stale November title" } : entry) }
-      : day);
-    await expect(checkScheduleRefresh(fetchRefresh, october31)).resolves.toBe(true);
-
     fetchFeed.mockClear();
     const november = await main({ SCHEDULE_OUTPUT: "/tmp/nonexistent-october-test-output" }, fetchFeed,
       new Date("2026-11-01T16:00:00Z"), vi.fn());
