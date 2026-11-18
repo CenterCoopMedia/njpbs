@@ -71,8 +71,11 @@ Public `/admin-status.json` contains build identity with null milestone fields.
 The full catalog is staff-only at `/guide-content/admin-status.json`; Home and
 Settings use an authorized Firebase bearer token. Cache and robots directives
 do not provide admission. Revoked, disabled, pending and unauthorized sessions
-cannot read that catalog. Rollback builds use their own manifest generator and
-declared status schema rather than a newer generator copied over old source.
+cannot read that catalog. The pinned workflow builds the manifest with the
+trusted main generator, like its other gates, so a fix on main also serves an
+existing release source. Every source in this repository declares status
+schema 2; a generator change must keep that schema or the Admin client refuses
+the manifest. The standalone rollback deploy uses its own source's generator.
 
 ## Verification and recovery
 

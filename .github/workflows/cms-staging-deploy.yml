@@ -270,7 +270,6 @@ jobs:
         run: |
           set -euo pipefail
           gh api "repos/$GITHUB_REPOSITORY/milestones?state=all&sort=due_on&direction=asc&per_page=100" > "$RUNNER_TEMP/admin-milestones.json"
-          gh api "repos/$GITHUB_REPOSITORY/milestones/16" > "$RUNNER_TEMP/admin-m14-milestone.json"
       - name: Create Admin status manifest
         env:
           ADMIN_STATUS_REVISION: ${{ steps.reviewed_ref.outputs.deploy_sha }}
@@ -278,42 +277,14 @@ jobs:
           GITHUB_TOKEN: ""
         run: |
           set -euo pipefail
-          status_schema="$(node --input-type=module <<'NODE'
-          import { existsSync, readFileSync } from "node:fs";
-          const markerPath = "admin/admin-status-contract.json";
-          if (!existsSync(markerPath)) {
-            const generator = readFileSync("scripts/admin-status-manifest.mjs", "utf8");
-            process.stdout.write(generator.includes('"--milestones"') ? "2" : "1");
-          } else {
-            const marker = JSON.parse(readFileSync(markerPath, "utf8"));
-            if (
-              typeof marker !== "object" ||
-              marker === null ||
-              Array.isArray(marker) ||
-              Object.keys(marker).length !== 1 ||
-              marker.schemaVersion !== 2
-            ) throw new Error("Unsupported Admin status contract marker");
-            process.stdout.write("2");
-          }
-          NODE
-          )"
-          if [ "$status_schema" = "2" ]; then
-            manifest="$({
-              node scripts/admin-status-manifest.mjs \
-                --environment Production \
-                --milestones "$RUNNER_TEMP/admin-milestones.json" \
-                --repository "$GITHUB_REPOSITORY" \
-                --revision "$ADMIN_STATUS_REVISION"
-            })"
-          else
-            manifest="$({
-              node scripts/admin-status-manifest.mjs \
-                --environment Production \
-                --milestone "$RUNNER_TEMP/admin-m14-milestone.json" \
-                --repository "$GITHUB_REPOSITORY" \
-                --revision "$ADMIN_STATUS_REVISION"
-            })"
-          fi
+          # The trusted main checkout builds this metadata, like the other gate scripts.
+          manifest="$({
+            node "$RUNNER_TEMP/admin-status-gate/scripts/admin-status-manifest.mjs" \
+              --environment Production \
+              --milestones "$RUNNER_TEMP/admin-milestones.json" \
+              --repository "$GITHUB_REPOSITORY" \
+              --revision "$ADMIN_STATUS_REVISION"
+          })"
           printf 'ADMIN_STATUS_MANIFEST_BASE64=%s\n' "$manifest" >> "$GITHUB_ENV"
       - name: Report unavailable Studio connector storage
         if: vars.CMS_MEDIA_MASTER_R2_BUCKET == ''
