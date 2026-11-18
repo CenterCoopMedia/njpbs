@@ -17,7 +17,6 @@ import type { HomeShortcutId } from "../lib/home-shortcuts";
 import homeSelectionFixture from "../../../site/tests/fixtures/home-v2-selections.json";
 import homeCurrentCatalogFixture from "../../../site/tests/fixtures/home-v2-current-catalog.json";
 import { homeCatalogJson, readHomeEditorialSourceReceipt } from "../../../packages/content-core/src/home-source-catalog";
-import { commentThreads, threadMatches, type CommentFilter } from "../lib/media-comment-threads";
 import { HomeShortcuts } from "../components/HomeShortcuts";
 import { EditorStructureSpecimen } from "./EditorStructureSpecimen";
 import supportLayoutFixture from "../../tests/fixtures/support-page.json";
@@ -55,14 +54,7 @@ import { QuickLook, type QuickLookItem } from "../components/media/QuickLook";
 import { ImageViewerSpecimen } from "./ImageViewerSpecimen";
 import { MediaFullViewerSpecimen } from "./MediaFullViewerSpecimen";
 import { MediaRefinementSpecimen } from "./MediaRefinementSpecimen";
-import { DropOverlay } from "../components/media/DropOverlay";
-import { SelectionBar } from "../components/media/SelectionBar";
-import { UploadSheet } from "../components/media/UploadSheet";
-import {
-  UploadTray,
-  UploadTrayRows,
-  type UploadTrayRow,
-} from "../components/media/UploadTray";
+import { MediaDropOverlayGallery, MediaUploadSheetGallery, MediaUploadTrayGallery } from "./GalleryUploadSpecimens";
 import { ScheduleSurface } from "../routes/ScheduleRoute";
 import type { BroadcastSchedule } from "../data/broadcast-schedule";
 import { analyticsFixture } from "./analytics-fixture";
@@ -204,7 +196,6 @@ import {
   useState,
 } from "react";
 import { createRoot } from "react-dom/client";
-import { createPortal } from "react-dom";
 import { BrowserRouter, createMemoryRouter, MemoryRouter, RouterProvider, useLocation } from "react-router";
 import {
   EditorWorkspace,
@@ -233,11 +224,7 @@ import {
   type BannerSettingsTransport,
   type BannerSettingsValues,
 } from "../routes/AdminSettingsRoute";
-import {
-  CostLedgerSurface,
-  type CostLedgerView,
-} from "../routes/CostLedgerRoute";
-import costLedgerStyles from "../routes/CostLedgerRoute.css?inline";
+import { CostLedgerGallery } from "./GalleryCostLedgerSpecimen";
 import {
   PublicHomepageBannerSettings,
   type PublicHomepageBannerSettingsTransport,
@@ -262,7 +249,6 @@ import type {
   ListAuditResponse,
   MediaListQuery,
   ListMediaResponse,
-  MediaCategoryDefinition,
   MediaAssetSummary,
   PreviewRequestResponse,
   PreviewStatusResponse,
@@ -290,14 +276,17 @@ import { clearMediaSessionCache } from "../lib/media-session-cache";
 import { MediaFavoritesLibrary } from "../routes/MediaFavoritesLibrary";
 import type { MediaFavoritePage } from "../lib/media-favorites";
 import { MediaCollectionsLibrary } from "../routes/MediaCollectionsLibrary";
-import type {
-  MediaCollectionItemPage,
-  MediaCollectionPage,
-  MediaCollectionSummary,
-} from "../lib/media-collections";
+import { GALLERY_MEDIA, GALLERY_MEDIA_CATEGORIES, guideCapture } from "./gallery-media-fixtures";
+import {
+  GALLERY_COLLECTION_DOCUMENT,
+  GALLERY_COLLECTION_ID,
+  GALLERY_COLLECTION_IMAGE,
+  GALLERY_COLLECTION_VIDEO,
+  galleryJsonResponse,
+  useGalleryMediaTransport,
+} from "./gallery-media-transport";
 import { parseMediaWorkspacePath } from "../lib/routes";
 import { SourceMediaLibrary } from "../routes/SourceMediaLibrary";
-import type { SourceMediaAssetSummary } from "../lib/source-media";
 import { MediaUploadForm } from "../components/MediaUploadForm";
 import { cmsListMedia, cmsUploadMedia } from "../lib/functions";
 import { invalidateMediaLists } from "../lib/media-session-cache";
@@ -329,17 +318,7 @@ import type {
 import "../styles.css";
 import "../content-scan-flow.css";
 import "../cms-workspace.css";
-// The same stylesheets as strings, to copy into each specimen's shadow root. The side-effect
-// imports above still run: they put the production rules and token layer on the document, and CSS
-// custom properties inherit across the shadow boundary. The copies carry the class rules each
-// specimen needs inside its own tree.
-import stylesText from "../styles.css?inline";
-import mediaRouteStylesText from "../routes/MediaRoute.css?inline";
-import contentScanFlowStylesText from "../content-scan-flow.css?inline";
-import workspaceStylesText from "../cms-workspace.css?inline";
-import dropOverlayStylesText from "../components/media/DropOverlay.css?inline";
-import uploadSheetStylesText from "../components/media/UploadSheet.css?inline";
-import uploadTrayStylesText from "../components/media/UploadTray.css?inline";
+import { EmbeddedSpecimen, ShadowScope, type Shot } from "./GallerySpecimenFrame";
 
 // ---------------------------------------------------------------------------
 // Fixtures
@@ -1154,108 +1133,6 @@ const archiveLibraryRecords = async (
     },
   };
 };
-
-// Public documentation captures use local artwork and sample account details.
-// Keep existing visual-regression fixtures unchanged outside this opt-in mode.
-const guideCapture = new URLSearchParams(window.location.search).get("guide") === "1";
-const GALLERY_MEDIA: MediaAssetSummary[] = [
-  {
-    id: "media-garden-state",
-    name: "Garden State Stories",
-    originalName: "garden-state-stories.jpg",
-    category: "programs",
-    categories: ["programs"],
-    tags: ["program", "New Jersey"],
-    description: "Program artwork for Garden State Stories.",
-    altText: "Garden State Stories program artwork",
-    license: "PBS distribution",
-    credit: "PBS",
-    mimeType: "image/jpeg",
-    kind: "image",
-    sizeBytes: 684_221,
-    width: 1_920,
-    height: 1_080,
-    url: guideCapture ? guideLandscape : "https://image.pbs.org/contentchannels/m3L1qFK-show-mezzanine16x9-Uyjvdy5.jpg",
-    lifecycle: "active",
-    version: 4,
-    etag: '"media.bWVkaWEtZ2FyZGVuLXN0YXRl.4"',
-    createdAt: "2026-08-10T14:00:00.000Z",
-    createdBy: "ed",
-    updatedAt: "2026-08-13T12:10:00.000Z",
-    updatedBy: "ed",
-  },
-  {
-    id: "media-local-news",
-    name: "NJ Spotlight News",
-    originalName: "nj-spotlight-news.jpg",
-    category: "news",
-    categories: ["news", "programs"],
-    tags: ["news", "daily"],
-    description: "Daily newsroom program artwork.",
-    altText: "NJ Spotlight News program artwork",
-    license: "PBS distribution",
-    credit: "NJ PBS",
-    mimeType: "image/jpeg",
-    kind: "image",
-    sizeBytes: 512_884,
-    width: 1_920,
-    height: 1_080,
-    url: guideCapture ? guideLandscape : "https://image.pbs.org/contentchannels/xU29P1C-show-mezzanine16x9-kJ3DjLB.jpg",
-    lifecycle: "active",
-    version: 2,
-    etag: '"media.bWVkaWEtbG9jYWwtbmV3cw.2"',
-    createdAt: "2026-08-11T13:00:00.000Z",
-    createdBy: "ed",
-    updatedAt: "2026-08-13T11:40:00.000Z",
-    updatedBy: "ed",
-  },
-  {
-    id: "media-brand-guide",
-    name: "NJ PBS brand guide",
-    originalName: "njpbs-brand-guide.pdf",
-    category: "brand",
-    categories: ["brand"],
-    tags: ["brand", "standards"],
-    description: "Current station identity and usage guide.",
-    altText: null,
-    license: "NJ PBS owned",
-    credit: "NJ PBS",
-    mimeType: "application/pdf",
-    kind: "document",
-    sizeBytes: 2_862_100,
-    width: null,
-    height: null,
-    url: "https://media.njpbs.org/njpbs-brand-guide.pdf",
-    lifecycle: "active",
-    version: 1,
-    etag: '"media.bWVkaWEtYnJhbmQtZ3VpZGU.1"',
-    createdAt: "2026-08-12T16:00:00.000Z",
-    createdBy: "sa",
-    updatedAt: "2026-08-12T16:00:00.000Z",
-    updatedBy: "sa",
-  },
-];
-
-const GALLERY_MEDIA_CATEGORIES: MediaCategoryDefinition[] = [
-  ["news", "News", true],
-  ["programs", "Programs", false],
-  ["brand", "Brand", false],
-].map(([id, label, canUpload], order) => ({
-  id: String(id),
-  label: String(label),
-  description: `${label} media`,
-  order: (order + 1) * 10,
-  active: true,
-  reserved: false,
-  version: 1,
-  etag: `"media-category.${id}.1"`,
-  canUpload: Boolean(canUpload),
-  canManage: id === "news",
-  createdAt: null,
-  createdBy: null,
-  updatedAt: null,
-  updatedBy: null,
-}));
 
 const EDITOR_GALLERY_MEDIA = GALLERY_MEDIA.filter((asset) => {
   const resource = { section: asset.category };
@@ -2204,176 +2081,6 @@ function bannerTransport(options: {
   };
 }
 
-const COST_LEDGER_SPECIMEN: CostLedgerView = {
-  success: true,
-  canEdit: true,
-  currency: "USD",
-  currentPeriod: "2026-09",
-  period: "2026-09",
-  periodStatus: "open",
-  monthlyCents: 163423,
-  annualRunRateCents: 1961076,
-  yearToDateCents: 1470807,
-  yearToDateMonths: 9,
-  blankLineCount: 1,
-  knownLineCount: 3,
-  byCategory: { cloud: 89423, ai: 74000, saas: 0, hardware: 0 },
-  byProject: { cms: 89423, spotlight: 0, hosting: 0, tooling: 74000 },
-  lines: [
-    {
-      id: "gcp",
-      label: "Google Cloud Platform",
-      category: "cloud",
-      project: "cms",
-      source: "auto",
-      cadence: "monthly",
-      monthlyCents: 89423,
-      standingCents: null,
-      vendor: "Google Cloud",
-      notes: "The weekly pull updates this automatic line.",
-      enabled: true,
-      freshnessStatus: "fresh",
-      freshnessAt: "2026-09-22T13:00:00.000Z",
-      state: "known",
-    },
-    {
-      id: "claude",
-      label: "Claude",
-      category: "ai",
-      project: "tooling",
-      source: "manual",
-      cadence: "monthly",
-      monthlyCents: 74000,
-      standingCents: 74000,
-      vendor: "Anthropic",
-      notes: "A verified manual amount.",
-      enabled: true,
-      freshnessStatus: "manual",
-      freshnessAt: null,
-      state: "known",
-    },
-    {
-      id: "domains",
-      label: "Domain registrations",
-      category: "cloud",
-      project: "hosting",
-      source: "manual",
-      cadence: "annual",
-      monthlyCents: null,
-      standingCents: null,
-      vendor: "Registrar",
-      notes: "Blank stays separate from zero.",
-      enabled: true,
-      freshnessStatus: "blank",
-      freshnessAt: null,
-      state: "blank",
-    },
-    {
-      id: "airtable",
-      label: "Airtable",
-      category: "saas",
-      project: "spotlight",
-      source: "manual",
-      cadence: "monthly",
-      monthlyCents: 0,
-      standingCents: 0,
-      vendor: "Airtable",
-      notes: "A recorded zero is a real zero.",
-      enabled: true,
-      freshnessStatus: "manual",
-      freshnessAt: null,
-      state: "known",
-    },
-  ],
-  comparisons: [
-    {
-      id: "ghost",
-      vendor: "Ghost",
-      product: "Ghost(Pro) Business",
-      status: "published",
-      priceLabel: "$199 per month",
-      monthlyCents: 19900,
-      annualCents: 238800,
-      rangeNote: "Published list price.",
-      sourceUrl: "https://ghost.org/pricing/",
-      sourceReadOn: "2026-09-25",
-      excludes: "labor",
-      notes: "Hosting and CMS only.",
-    },
-    {
-      id: "vip",
-      vendor: "WordPress VIP",
-      product: "WordPress VIP",
-      status: "quote-required",
-      priceLabel: "",
-      monthlyCents: null,
-      annualCents: null,
-      rangeNote: "The vendor requires a quote.",
-      sourceUrl: "https://wpvip.com/pricing/",
-      sourceReadOn: "2026-09-25",
-      excludes: "labor",
-      notes: "Hosting and CMS only.",
-    },
-  ],
-  snapshots: [
-    {
-      id: "2026-09-15",
-      period: "2026-09",
-      takenAt: "2026-09-15T13:00:00.000Z",
-      monthlyCents: 158400,
-      annualRunRateCents: 1900800,
-      blankLineCount: 2,
-    },
-    {
-      id: "2026-09-22",
-      period: "2026-09",
-      takenAt: "2026-09-22T13:00:00.000Z",
-      monthlyCents: 163423,
-      annualRunRateCents: 1961076,
-      blankLineCount: 1,
-    },
-  ],
-  periods: [
-    { id: "2026-08", status: "closed" },
-    { id: "2026-09", status: "open" },
-  ],
-  hardware: {
-    machines: [
-      "node-services",
-      "node-compute",
-      "node-gpu-a",
-      "node-gpu-b",
-      "node-offsite",
-    ].map((id) => ({
-      id,
-      label: id,
-      purchaseCents: 220000,
-      lifeMonths: 48,
-      watts: 300,
-      hoursPerMonth: 120,
-      centsPerKwh: 21,
-      internetShareCents: 1200,
-    })),
-  },
-  csv: "Period,Amount\n2026-09,1634.23\n",
-};
-
-function CostLedgerGallery({ loading = false }: { loading?: boolean }) {
-  const load = loading
-    ? () => new Promise<CostLedgerView>(() => {})
-    : async () => COST_LEDGER_SPECIMEN;
-
-  return (
-    <>
-      <style>{costLedgerStyles}</style>
-      <CostLedgerSurface
-        load={load}
-        mutate={async () => ({ success: true })}
-      />
-    </>
-  );
-}
-
 const GALLERY_PUBLIC_BANNER_VALUES: PublicHomepageBannerValues = {
   enabled: true,
   message: "Storm coverage starts tonight at 8 p.m.",
@@ -2739,369 +2446,6 @@ function MediaFavoritesGallery() {
   return <RouterProvider router={router} />;
 }
 
-const GALLERY_COLLECTION_ID = "c".repeat(64);
-const GALLERY_COLLECTION_IMAGE: MediaAssetSummary = {
-  ...GALLERY_MEDIA[0],
-  id: "gallery-collection-image",
-  name: "Statehouse newsroom still",
-  originalName: "statehouse-newsroom-still.svg",
-  category: "news",
-  categories: ["news"],
-  tags: ["newsroom", "statehouse"],
-  description: "A local image fixture in a mixed collection.",
-  altText: "Blue circles arranged over a navy field",
-  mimeType: "image/svg+xml",
-  sizeBytes: 48_210,
-  width: 960,
-  height: 540,
-  url: `data:image/svg+xml,${encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" width="960" height="540"><rect width="960" height="540" fill="#123354"/><circle cx="360" cy="270" r="116" fill="#67b7df"/><circle cx="600" cy="270" r="116" fill="#ffffff" opacity=".88"/></svg>')}`,
-};
-const GALLERY_COLLECTION_DOCUMENT: MediaAssetSummary = {
-  ...GALLERY_MEDIA.find(asset => asset.kind === "document")!,
-  id: "gallery-collection-document",
-  name: "Field production guide",
-  originalName: "field-production-guide.pdf",
-  description: "A local PDF fixture in a mixed collection.",
-  url: "#gallery-collection-document",
-};
-const GALLERY_COLLECTION_VIDEO: SourceMediaAssetSummary = {
-  id: "gallery-collection-video",
-  sourceId: "archive",
-  name: "Archive interview excerpt",
-  description: "A local private-video fixture in a mixed collection.",
-  originalName: "archive-interview.mov",
-  mimeType: "video/quicktime",
-  kind: "video",
-  sizeBytes: 18_432_000,
-  preview: "download_only",
-  license: "NJ PBS owned",
-  credit: "NJ PBS",
-  tags: ["interview", "archive"],
-  rightsStatus: "pending",
-  version: 2,
-  uploadedBy: { name: "Archive team" },
-  createdAt: "2026-08-18T14:00:00.000Z",
-  updatedAt: "2026-08-20T13:00:00.000Z",
-};
-const GALLERY_COLLECTION: MediaCollectionSummary = {
-  id: GALLERY_COLLECTION_ID,
-  scope: "private",
-  name: "Statehouse reporting package",
-  description: "Images, documents and private video for the reporting team.",
-  color: "blue",
-  lifecycle: "active",
-  version: 4,
-  membershipVersion: 7,
-  cover: GALLERY_COLLECTION_IMAGE,
-  canEdit: true,
-  createdAt: "2026-08-15T14:00:00.000Z",
-  updatedAt: "2026-08-20T14:00:00.000Z",
-  itemCount: 4,
-};
-const GALLERY_COLLECTIONS: readonly MediaCollectionSummary[] = [
-  GALLERY_COLLECTION,
-  { ...GALLERY_COLLECTION, id: "1".repeat(64), scope: "all_staff", name: "Reporting team selects", description: "An all-staff active package.", color: "purple", itemCount: undefined },
-  { ...GALLERY_COLLECTION, id: "2".repeat(64), scope: "all_staff", lifecycle: "archived", name: "Archived pledge drive", description: "Shared stills and clips from the spring drive.", color: "gold", itemCount: undefined },
-  { ...GALLERY_COLLECTION, id: "3".repeat(64), scope: "all_staff", lifecycle: "archived", name: "Retired station IDs", description: "Older station identity files kept for reference.", color: "slate", itemCount: undefined },
-  { ...GALLERY_COLLECTION, id: "4".repeat(64), scope: "private", lifecycle: "archived", name: "Old draft package", description: "A private archived package.", color: "red", itemCount: 2 },
-];
-const GALLERY_COLLECTION_ITEMS_PAGE: MediaCollectionItemPage = {
-  success: true,
-  collection: GALLERY_COLLECTION,
-  items: [
-    { ref: { backend: "r2", id: GALLERY_COLLECTION_IMAGE.id }, addedAt: "2026-08-20T12:00:00.000Z", available: true, asset: GALLERY_COLLECTION_IMAGE },
-    { ref: { backend: "s3", sourceId: GALLERY_COLLECTION_VIDEO.sourceId, id: GALLERY_COLLECTION_VIDEO.id }, addedAt: "2026-08-20T11:00:00.000Z", available: true, asset: GALLERY_COLLECTION_VIDEO },
-    { ref: { backend: "r2", id: GALLERY_COLLECTION_DOCUMENT.id }, addedAt: "2026-08-20T10:00:00.000Z", available: true, asset: GALLERY_COLLECTION_DOCUMENT },
-    { ref: { backend: "s3", sourceId: "archive", id: "missing-collection-video" }, addedAt: "2026-08-20T09:00:00.000Z", available: false },
-  ],
-  nextCursor: null,
-  hasMore: false,
-};
-
-function galleryJsonResponse(body: unknown, status = 200): Response {
-  return new Response(JSON.stringify(body), {
-    status,
-    headers: { "Content-Type": "application/json" },
-  });
-}
-
-function galleryWavBytes(): Uint8Array {
-  const sampleRate = 48_000;
-  const channels = 1;
-  const bytesPerSample = 2;
-  const dataBytes = sampleRate * channels * bytesPerSample;
-  const bytes = new Uint8Array(44 + dataBytes);
-  const view = new DataView(bytes.buffer);
-  for (const [offset, value] of [[0, "RIFF"], [8, "WAVE"], [12, "fmt "], [36, "data"]] as const) {
-    for (let index = 0; index < value.length; index += 1) bytes[offset + index] = value.charCodeAt(index);
-  }
-  view.setUint32(4, bytes.length - 8, true);
-  view.setUint32(16, 16, true);
-  view.setUint16(20, 1, true);
-  view.setUint16(22, channels, true);
-  view.setUint32(24, sampleRate, true);
-  view.setUint32(28, sampleRate * channels * bytesPerSample, true);
-  view.setUint16(32, channels * bytesPerSample, true);
-  view.setUint16(34, bytesPerSample * 8, true);
-  view.setUint32(40, dataBytes, true);
-  return bytes;
-}
-
-function useGalleryMediaTransport(): () => Promise<string> {
-  const [transport] = useState(() => {
-    const originalFetch = window.fetch;
-    let installed = false;
-    const privateWav = galleryWavBytes();
-    const favoriteIds = new Set<string>(["voiceover-soft-spoken-station-id-01"]);
-    let voiceoverReview = {
-      favorite: true,
-      moreLikeThis: false,
-      notes: "Use this warm station identification.",
-      version: 1,
-      updatedAt: "2026-09-12T12:00:00.000Z",
-    };
-    const mediaReviews = new Map<string, { moreLikeThis: boolean; notes: string; version: number; updatedAt: string | null }>();
-    const commentsByRef = new Map<string, Array<{
-      id: string; authorUid: string; authorName: string; text: string; version: number;
-      createdAt: string; updatedAt: string; canEdit: boolean;
-    }>>();
-    const commentIdsByRequest = new Map<string, string>();
-    let createdCommentCount = 0;
-    const feedbackKey = (ref: unknown) => JSON.stringify(ref);
-    const commentsFor = (ref: unknown) => {
-      const key = feedbackKey(ref);
-      const existing = commentsByRef.get(key);
-      if (existing) return existing;
-      const seeded = [
-        { id: "a".repeat(64), authorUid: "gallery-audio", authorName: "Alex Rivera",
-          text: "The clean opening works well for promos.", version: 1,
-          createdAt: "2026-10-04T14:30:00.000Z", updatedAt: "2026-10-04T14:30:00.000Z", canEdit: true },
-        { id: "b".repeat(64), authorUid: "producer", authorName: "Riley Chen",
-          text: "Keep the room tone at the end for a smoother edit.", version: 1,
-          createdAt: "2026-10-04T15:05:00.000Z", updatedAt: "2026-10-04T15:05:00.000Z", canEdit: false },
-      ];
-      commentsByRef.set(key, seeded);
-      return seeded;
-    };
-    const audioRecords: MediaAssetSummary[] = [{ ...GALLERY_COLLECTION_DOCUMENT,
-      id: "station-interview", name: "Station interview", originalName: "station-interview.wav",
-      category: "news", categories: ["news"], tags: ["interview"], altText: null,
-      mimeType: "audio/wav", kind: "audio", source: "upload", license: null, credit: null,
-      url: "https://media.example.test/station-interview.wav", sizeBytes: 96_044,
-      etag: '"media.station-interview.1"', description: "A station interview uploaded by staff." },
-    { ...GALLERY_COLLECTION_DOCUMENT,
-      id: "voiceover-soft-spoken-station-id-01", name: "Station identification",
-      originalName: "soft-spoken-station-id-01.wav", category: "news", categories: ["news"],
-      tags: ["voiceover", "soft-spoken"], description: "You're watching NJ PBS.", altText: null,
-      mimeType: "audio/wav", kind: "audio", source: "voiceover", license: null,
-      credit: "Jordan Avery", sizeBytes: privateWav.byteLength,
-      url: "https://admin.njpbs.org/media/voiceovers?asset=voiceover-soft-spoken-station-id-01",
-      etag: '"media.voiceover-soft-spoken-station-id-01.1"',
-      voiceoverTakeId: "soft-spoken-station-id-01",
-      voiceover: { manifestVersion: 1, id: "soft-spoken-station-id-01",
-        family_id: "station-id", family: "Station identification", take: 1,
-        style: "soft-spoken", performer_id: "jordan-avery", performer_name: "Jordan Avery",
-        text: "You're watching NJ PBS.", display_text: "You're watching NJ PBS.",
-        complete: true, flags: [], duration_seconds: 1 } }];
-    const fixtureFetch: typeof window.fetch = async (input, init) => {
-      const rawUrl = typeof input === "string"
-        ? input
-        : input instanceof URL
-          ? input.href
-          : input.url;
-      const url = new URL(rawUrl, window.location.href);
-      const endpoint = url.pathname.split("/").pop();
-      let request: Record<string, unknown> = {};
-      if (typeof init?.body === "string") {
-        try {
-          request = JSON.parse(init.body) as Record<string, unknown>;
-        } catch {
-          return galleryJsonResponse({ error: "Invalid gallery fixture request." }, 400);
-        }
-      }
-      if (endpoint === "cmsSourceMediaOriginal") return galleryJsonResponse({ success: true,
-        original: { state: "available", archiveTier: null, checkedAt: "2026-08-20T19:00:00.000Z" }, notices: [] });
-      if (endpoint === "cmsListMedia") {
-        const availableRecords = [GALLERY_COLLECTION_IMAGE, GALLERY_COLLECTION_DOCUMENT, ...audioRecords];
-        const requestedIds = Array.isArray(request.assetIds)
-          ? new Set(request.assetIds.filter((id): id is string => typeof id === "string"))
-          : null;
-        const requestedKinds = Array.isArray(request.kinds)
-          ? new Set(request.kinds.filter((kind): kind is MediaAssetSummary["kind"] =>
-            kind === "image" || kind === "audio" || kind === "document"))
-          : null;
-        const records = requestedIds
-          ? availableRecords.filter((asset) => requestedIds.has(asset.id))
-          : requestedKinds
-            ? availableRecords.filter((asset) => requestedKinds.has(asset.kind))
-            : availableRecords;
-        return galleryJsonResponse({
-          success: true, records, paging: "cursor", nextCursor: null, total: records.length,
-          allCount: records.length, categoryCounts: null, kindCounts: null, page: 1,
-          pageCount: null,
-          ...(request.counts === true ? { counts: {
-            images: 1, audio: audioRecords.length, favorites: favoriteIds.size, sources: {},
-          } } : {}),
-          ...(request.favorites === true ? { favoriteStates: records.map(asset => ({
-            ref: { backend: "r2", id: asset.id }, favorite: favoriteIds.has(asset.id),
-          })) } : {}),
-        });
-      }
-      if (endpoint === "cmsListSourceMedia") return galleryJsonResponse({
-        success: true, records: [{ ...GALLERY_COLLECTION_VIDEO, sourceId: request.sourceId ?? "video-library" }],
-        nextCursor: null, hasMore: false, total: 1,
-      });
-      if (endpoint === "cmsUploadMedia" && init?.body instanceof FormData) {
-        const file = init.body.get("file") as File;
-        const uploaded: MediaAssetSummary = { ...audioRecords[0], id: `uploaded-${audioRecords.length}`,
-          name: String(init.body.get("name") ?? file.name), originalName: file.name, sizeBytes: file.size,
-          category: String(init.body.get("category")), license: null,
-          etag: `"media.uploaded-${audioRecords.length}.1"`,
-          url: "https://media.example.test/uploaded.wav" };
-        audioRecords.push(uploaded);
-        return galleryJsonResponse({ success: true, asset: uploaded }, 201);
-      }
-      if (endpoint === "cmsListMediaFavorites") {
-        const refs = Array.isArray(request.refs) ? request.refs : [];
-        return galleryJsonResponse({ success: true, states: refs.map(ref => {
-          const id = typeof ref === "object" && ref !== null && "id" in ref
-            ? String(ref.id)
-            : "";
-          return { ref, favorite: favoriteIds.has(id) };
-        }) });
-      }
-      if (endpoint === "cmsSetMediaFavorite") {
-        const ref = request.ref as { backend: "r2"; id: string };
-        const favorite = request.favorite === true;
-        const changed = favoriteIds.has(ref.id) !== favorite;
-        if (favorite) favoriteIds.add(ref.id); else favoriteIds.delete(ref.id);
-        return galleryJsonResponse({ success: true, ref, favorite, changed });
-      }
-      if (endpoint === "cmsSetMediaFavorites") {
-        const refs = request.refs as { backend: "r2"; id: string }[];
-        const favorite = request.favorite === true;
-        const results = refs.map(ref => {
-          const changed = favoriteIds.has(ref.id) !== favorite;
-          if (favorite) favoriteIds.add(ref.id); else favoriteIds.delete(ref.id);
-          return { ref, favorite, changed };
-        });
-        return galleryJsonResponse({ success: true, favorite, results });
-      }
-      if (endpoint === "cmsGetMediaReview") {
-        const key = feedbackKey(request.ref);
-        const current = mediaReviews.get(key) ?? {
-          moreLikeThis: false,
-          notes: "Use this warm station identification.",
-          version: 1,
-          updatedAt: "2026-09-12T12:00:00.000Z",
-        };
-        mediaReviews.set(key, current);
-        return galleryJsonResponse({ success: true, review: current });
-      }
-      if (endpoint === "cmsSaveMediaReview") {
-        const key = feedbackKey(request.ref);
-        const prior = mediaReviews.get(key);
-        const current = {
-          moreLikeThis: request.moreLikeThis === true,
-          notes: String(request.notes ?? ""),
-          version: (prior?.version ?? 0) + 1,
-          updatedAt: "2026-10-05T14:00:00.000Z",
-        };
-        mediaReviews.set(key, current);
-        return galleryJsonResponse({ success: true, review: current });
-      }
-      if (endpoint === "cmsListMediaComments") {
-        if (typeof request.export === "string") {
-          const comments = commentThreads(commentsFor(request.ref))
-            .filter(thread => threadMatches(thread, request.export as CommentFilter))
-            .flatMap(thread => [thread.comment, ...thread.replies]);
-          return galleryJsonResponse({ success: true, exported: true, comments });
-        }
-        return galleryJsonResponse({ success: true, comments: commentsFor(request.ref), nextCursor: null });
-      }
-      if (endpoint === "cmsMutateMediaComment") {
-        const comments = commentsFor(request.ref);
-        if (request.action === "create") {
-          const requestKey = `${feedbackKey(request.ref)}:${String(request.requestId)}`;
-          const priorId = commentIdsByRequest.get(requestKey);
-          if (priorId) {
-            return galleryJsonResponse({
-              success: true,
-              comment: comments.find(comment => comment.id === priorId) ?? null,
-            });
-          }
-          createdCommentCount += 1;
-          const id = createdCommentCount.toString(16).padStart(64, "0");
-          commentIdsByRequest.set(requestKey, id);
-          const comment = { id, authorUid: "gallery-audio", authorName: "Alex Rivera",
-            text: String(request.text ?? ""), version: 1, createdAt: "2026-10-05T14:15:00.000Z",
-            updatedAt: "2026-10-05T14:15:00.000Z", canEdit: true };
-          comments.push(comment);
-          return galleryJsonResponse({ success: true, comment });
-        }
-        const index = comments.findIndex(comment => comment.id === request.commentId);
-        if (request.action === "edit" && index >= 0) {
-          const comment = { ...comments[index], text: String(request.text ?? ""),
-            version: comments[index].version + 1, updatedAt: "2026-10-05T14:20:00.000Z" };
-          comments[index] = comment;
-          return galleryJsonResponse({ success: true, comment });
-        }
-        if (request.action === "delete" && index >= 0) comments.splice(index, 1);
-        return galleryJsonResponse({ success: true, comment: null });
-      }
-      if (endpoint === "cmsVoiceoverReview" && request.action === "get-media") {
-        return galleryJsonResponse({ success: true, review: voiceoverReview });
-      }
-      if (endpoint === "cmsVoiceoverReview" && request.action === "save-media") {
-        voiceoverReview = { ...voiceoverReview,
-          moreLikeThis: request.moreLikeThis === true, notes: String(request.notes ?? ""),
-          version: voiceoverReview.version + 1, updatedAt: "2026-10-04T16:00:00.000Z" };
-        return galleryJsonResponse({ success: true, review: voiceoverReview });
-      }
-      if (endpoint === "cmsGetVoiceoverAudio") {
-        return new Response(new Uint8Array(privateWav).buffer, { status: 200, headers: {
-          "Content-Type": "audio/wav", "Content-Length": String(privateWav.byteLength),
-        } });
-      }
-      if (endpoint === "cmsListMediaCollections") {
-        const page: MediaCollectionPage = {
-          success: true,
-          collections: GALLERY_COLLECTIONS.filter(collection =>
-            collection.scope === request.scope && collection.lifecycle === request.lifecycle),
-          nextCursor: null,
-          hasMore: false,
-        };
-        return galleryJsonResponse(page);
-      }
-      if (endpoint === "cmsListMediaCollectionItems") return galleryJsonResponse(GALLERY_COLLECTION_ITEMS_PAGE);
-      if (endpoint === "cmsListMediaSources") return galleryJsonResponse({
-        success: true,
-        sources: [{ id: "archive", label: "Archive", description: "Local gallery fixture", mediaKind: "video",
-          canBrowse: true, canUpload: false, canEditMetadata: false, canRequestProduction: false, canDelete: false }],
-      });
-      if (url.hostname === "127.0.0.1" && url.port === "5001") {
-        return galleryJsonResponse({ error: `No gallery fixture for ${endpoint ?? "this request"}.` }, 501);
-      }
-      return originalFetch(input, init);
-    };
-    return {
-      getIdToken: async () => {
-        if (!installed) {
-          window.fetch = fixtureFetch;
-          installed = true;
-        }
-        return "local-gallery-fixture";
-      },
-      restore: () => {
-        if (window.fetch === fixtureFetch) window.fetch = originalFetch;
-        installed = false;
-      },
-    };
-  });
-  useEffect(() => transport.restore, [transport]);
-  return transport.getIdToken;
-}
-
 function AudioLibraryGallery() {
   const getIdToken = useGalleryMediaTransport();
   useState(clearMediaSessionCache);
@@ -3187,15 +2531,6 @@ function PremiereConnectGallery() {
   </section>;
 }
 
-interface Shot {
-  id: string;
-  title: string;
-  note: string;
-  width?: number;
-  isolateDocument?: boolean;
-  render: () => React.ReactNode;
-}
-
 function GuideFocalPoint() {
   const [position, setPosition] = useState({ x: 0.5, y: 0.5 });
   return <section style={{ maxWidth: "60rem", margin: "2rem auto", padding: "1.5rem" }}>
@@ -3239,168 +2574,6 @@ function MediaQuickLookSpecimen() {
     onStep={direction => setPosition(current => direction === "previous" ? Math.max(1, current - 1)
       : Math.min(QUICK_LOOK_SPECIMEN_ITEMS.length, current + 1))}
     onClose={() => setOpen(false)} />;
-}
-
-const UPLOAD_TRAY_ROWS: readonly UploadTrayRow[] = [
-  { id: "active", name: "news-desk.png", status: "uploading", progress: 62 },
-  { id: "complete", name: "station-id.png", status: "succeeded" },
-  { id: "failed", name: "field-briefing.pdf", status: "failed", message: "The upload did not finish." },
-  { id: "video", name: "studio-interview.mp4", status: "paused", progress: 41, message: "Paused. Resume with the original file." },
-];
-
-function MediaUploadTrayGallery() {
-  const [collapsed, setCollapsed] = useState(false);
-  const [sheetOpen, setSheetOpen] = useState(false);
-  const [rows, setRows] = useState(UPLOAD_TRAY_ROWS);
-  const [announcement, setAnnouncement] = useState("news-desk.png is uploading.");
-  const change = (id: string, next: Partial<UploadTrayRow>) => {
-    setRows(current => current.map(row => row.id === id ? { ...row, ...next } : row));
-  };
-  const remove = (id: string) => setRows(current => current.filter(row => row.id !== id));
-  const controlled = rows.map(row => ({
-    ...row,
-    ...(row.status === "uploading" && row.id !== "video" ? { onStop: () => {
-      change(row.id, { status: "failed", progress: undefined, message: "The upload was stopped." });
-      setAnnouncement(`${row.name} was stopped.`);
-    } } : {}),
-    ...(row.status === "uploading" && row.id === "video" ? { onPause: () => {
-      change(row.id, { status: "paused", message: "Paused. Resume with the original file." });
-      setAnnouncement(`${row.name} was paused.`);
-    }, onCancel: () => {
-      remove(row.id);
-      setAnnouncement(`${row.name} was canceled.`);
-    } } : {}),
-    ...(row.status === "paused" && row.id === "video" ? { onResume: () => {
-      change(row.id, { status: "uploading", message: undefined });
-      setAnnouncement(`${row.name} is uploading again.`);
-    }, onCancel: () => {
-      remove(row.id);
-      setAnnouncement(`${row.name} was canceled.`);
-    } } : {}),
-    ...(row.status === "failed" ? { onRetry: () => {
-      change(row.id, { status: "uploading", progress: 0, message: undefined });
-      setAnnouncement(`${row.name} is uploading again.`);
-    } } : {}),
-    ...(row.status === "succeeded" ? { onViewAsset: () => setAnnouncement(`Opening ${row.name}.`) } : {}),
-    ...(row.status !== "uploading" && row.id !== "video" ? { onClear: () => {
-      remove(row.id);
-      setAnnouncement(`${row.name} was cleared.`);
-    } } : {}),
-  }));
-  return (
-    <main className="media-upload-gallery-canvas media-library">
-      <div className="media-library-layout">
-        <div className="media-results">
-          <div className="panel media-upload-gallery-results">
-            <strong>Media results remain available</strong>
-            <span>The tray reads only the supplied local fixture.</span>
-            <div className="media-upload-gallery-actions">
-              <Button onClick={() => setSheetOpen(true)}>Open upload</Button>
-              <Button variant="ghost" onClick={() => undefined}>Focus result control</Button>
-            </div>
-          </div>
-          <SelectionBar
-            actions={[]}
-            count={3}
-            error="Add to collection accepts no more than 30 items at a time. Clear part of the selection and try again."
-            label="Collection selection"
-            offPage={0}
-            onAction={() => undefined}
-            onClear={() => undefined}
-            onPageChange={() => undefined}
-            pageState="some"
-          />
-          <UploadTray
-            announcement={announcement}
-            collapsed={collapsed}
-            onCollapsedChange={setCollapsed}
-            onOpen={() => setSheetOpen(true)}
-            rows={controlled}
-            summary={`Uploading ${controlled.filter(row => row.status === "uploading").length} of ${controlled.length}`}
-          />
-        </div>
-        <UploadSheet heading="Upload images and documents" onRequestClose={() => setSheetOpen(false)} open={sheetOpen}>
-          <div className="media-upload-gallery-form">
-            <p>The route-owned upload draft remains mounted while this sheet is closed.</p>
-            <label>Batch name<input className="field-control" defaultValue="News desk batch" /></label>
-            <UploadTrayRows label="Current uploads" rows={controlled} />
-          </div>
-        </UploadSheet>
-      </div>
-    </main>
-  );
-}
-
-function MediaUploadSheetGallery() {
-  const [open, setOpen] = useState(true);
-  const [rows, setRows] = useState<readonly UploadTrayRow[]>([
-    { id: "video-sheet", name: "studio-interview.mp4", status: "paused", progress: 41, message: "Paused. Resume with the original file." },
-  ]);
-  const controlled = rows.map(row => ({
-    ...row,
-    ...(row.status === "paused" ? { onResume: () => setRows(current => current.map(item => item.id === row.id ? { ...item, status: "uploading", message: undefined } : item)) } : {}),
-    onCancel: () => setRows(current => current.filter(item => item.id !== row.id)),
-  }));
-  return (
-    <main className="media-upload-gallery-canvas media-library">
-      <Button onClick={() => setOpen(true)}>Open upload</Button>
-      {!open ? <p role="status">The upload sheet is closed. Its transfer owner remains available.</p> : null}
-      <div className="media-library-layout">
-        <div className="media-results">
-          <div className="panel media-upload-gallery-results">
-            <strong>Media results</strong>
-            <span>The fixed sheet uses the shared inspector column.</span>
-          </div>
-        </div>
-        <UploadSheet
-          heading="Upload to Video library"
-          onRequestClose={() => setOpen(false)}
-          open={open}
-        >
-          <div className="media-upload-gallery-form">
-            <div className="media-upload-gallery-actions">
-              <Button variant="danger-quiet" onClick={() => setRows([])}>Clear queue</Button>
-              <Button variant="primary" onClick={() => undefined}>Upload media</Button>
-            </div>
-            <p>Choose images, PDFs, or videos. Each file goes to the matching library. After reopening Boardwalk, select the original video to resume a transfer.</p>
-            <UploadTrayRows label="Video transfers" rows={controlled} />
-          </div>
-        </UploadSheet>
-      </div>
-    </main>
-  );
-}
-
-function GalleryDropOverlay({ blocked = false }: { blocked?: boolean }) {
-  const host = useRef<HTMLDivElement>(null);
-  useEffect(() => {
-    const target = host.current?.querySelector(".media-drop-target");
-    if (!target) return;
-    const event = new Event("dragenter", { bubbles: true, cancelable: true });
-    Object.defineProperty(event, "dataTransfer", {
-      value: { types: ["Files"], files: [] },
-    });
-    target.dispatchEvent(event);
-  }, []);
-  return (
-    <div ref={host}>
-      <DropOverlay blocked={blocked} canUpload destination="Images" onFiles={() => undefined}>
-        <div className="panel media-upload-gallery-results">
-          <strong>{blocked ? "Unsaved image details" : "Image library results"}</strong>
-          <span>Drag files over this region.</span>
-        </div>
-      </DropOverlay>
-    </div>
-  );
-}
-
-function MediaDropOverlayGallery() {
-  return (
-    <main className="media-upload-gallery-canvas media-upload-overlay-gallery">
-      <GalleryDropOverlay />
-      <GalleryDropOverlay blocked />
-    </main>
-  );
 }
 
 export const SHOTS: Shot[] = [
@@ -5439,80 +4612,6 @@ if (typeof window !== "undefined") {
 function readHash(): string | null {
   const id = window.location.hash.replace(/^#/, "");
   return SHOTS.some((shot) => shot.id === id) ? id : null;
-}
-
-// A default specimen renders into its own shadow root, so its DOM ids and the
-// aria-labelledby / aria-controls targets they resolve are scoped to that one specimen. A
-// sized specimen instead renders this page again in iframe embed mode. That gives it both a
-// separate id namespace and a real viewport, so the unchanged production media queries run
-// at the proof width. A state-isolated specimen uses the same child-document path without a
-// fixed-width claim; this keeps fixture-only navigation state out of the gallery document.
-// On the all-states view several EditorWorkspace specimens share the page, each carrying the
-// same fixed ids (page-title, and block-<id> from the shared seed); in one document those
-// collide, and a label reference in a later specimen can resolve into the first. These
-// isolated trees make an accessibility audit see the admin's real wiring rather than a
-// gallery artifact (#596).
-//
-// The children are portaled into the shadow root rather than rendered as light-DOM siblings,
-// so they stay part of this one React tree: state, context, and the specimen's own effects
-// behave exactly as they do in the real admin.
-function ShadowScope({ children }: { children: React.ReactNode }) {
-  const hostRef = useRef<HTMLDivElement>(null);
-  const [mount, setMount] = useState<HTMLElement | null>(null);
-
-  useEffect(() => {
-    const host = hostRef.current;
-    if (!host) return;
-    // A host can only hold one shadow root; reuse it if a prior mount (React StrictMode's
-    // double-invoke in dev) already attached one.
-    const shadow = host.shadowRoot ?? host.attachShadow({ mode: "open" });
-    const style = document.createElement("style");
-    // The admin class rules, plus the document-body base the specimen would otherwise inherit
-    // from `body` -- which does not exist inside a shadow tree. The token values come from the
-    // document root by inheritance.
-    style.textContent = `${stylesText}\n${mediaRouteStylesText}\n${contentScanFlowStylesText}\n${workspaceStylesText}\n${dropOverlayStylesText}\n${uploadSheetStylesText}\n${uploadTrayStylesText}\n.gx-specimen{--studio-control-height:var(--target-comfortable);--studio-icon-control:var(--target-comfortable);color:var(--color-ink);font-family:var(--font-sans);font-size:var(--font-size-base);line-height:var(--line-height-copy);}`;
-    shadow.appendChild(style);
-    const container = document.createElement("div");
-    container.className = "gx-specimen";
-    shadow.appendChild(container);
-    setMount(container);
-    return () => {
-      style.remove();
-      container.remove();
-      setMount(null);
-    };
-  }, []);
-
-  return (
-    <div className="gx-host" ref={hostRef}>
-      {mount ? createPortal(children, mount) : null}
-    </div>
-  );
-}
-
-function embeddedShotUrl(id: string): string {
-  const search = new URLSearchParams({ embed: id });
-  return `${window.location.pathname}?${search.toString()}`;
-}
-
-function EmbeddedSpecimen({ shot }: { shot: Shot }) {
-  const width = shot.width;
-  const title = width
-    ? `${shot.title} — ${width}px responsive viewport`
-    : `${shot.title} — isolated document`;
-  return (
-    <iframe
-      className="gx-embedded-specimen"
-      data-gallery-isolated="true"
-      data-gallery-viewport-width={width}
-      height="720"
-      loading="eager"
-      src={embeddedShotUrl(shot.id)}
-      style={{ width: width ? `${width}px` : "100%" }}
-      title={title}
-      width={width}
-    />
-  );
 }
 
 function readEmbeddedShot(): Shot | null {
