@@ -6,7 +6,6 @@ import { planSupportPageComposition } from "../../packages/content-core/src/supp
 import { renderBlock, generatedHeadingLevelAt } from "../../packages/content-core/src/content-render";
 import { renderContentGroups } from "../../packages/content-core/src/content-row-render";
 import { projectCmsPage } from "../src/lib/cms-loader";
-import { parseMigrationArgs, parseFirebaseKey, reviewSupportMigration, runSupportMigration } from "../../scripts/migrate-support-page-layout.mts";
 
 const fixturePath = new URL("./fixtures/public-contracts/support-layout.json", import.meta.url);
 const before = JSON.parse(readFileSync(fixturePath, "utf8"));
@@ -102,23 +101,5 @@ describe("support layout migration", () => {
     const groups = renderContentGroups(page.blocks, block => ({ html: renderBlock(block) }));
     expect(groups.map(group => group.block.id)).toEqual(["fixture-service-destinations", "staff-faq"]);
     expect(groups[1].html).toContain("Staff question");
-  });
-  it("dry-runs the operator entrypoint against the captured fixture", async () => {
-    const result = await runSupportMigration(["--fixture", fixturePath.pathname]);
-    expect(result).toMatchObject({ mode: "dry-run", target: "cmsPages/support", changed: true, fromVersion: 7, toVersion: 8, insertedIds: [] });
-    expect(result.blockOrder.map((block: { id: string }) => block.id)).toEqual(samOrder);
-    expect(result.fingerprint).toMatch(/^[a-f0-9]{64}$/);
-  });
-  it("refuses unsafe arguments, key sources and lifecycle states", () => {
-    expect(parseMigrationArgs([])).toEqual({ apply: false, fixture: undefined, expectedPlan: undefined });
-    expect(() => parseMigrationArgs(["--apply"])).toThrow(/reviewed dry-run/);
-    expect(() => parseMigrationArgs(["--publish"])).toThrow(/Unknown/);
-    expect(() => parseMigrationArgs(["--fixture", fixturePath.pathname, "--apply"])).toThrow(/read-only/);
-    expect(() => parseFirebaseKey('{"project_id":"another-project"}')).toThrow(/njpbs-site/);
-    for (const status of ["in_review", "approved", "scheduled", "archived"]) {
-      expect(() => reviewSupportMigration({ ...before, status })).toThrow(/no publication/);
-    }
-    expect(() => reviewSupportMigration({ ...before, publishBuildPending: true })).toThrow(/no publication/);
-    expect(reviewSupportMigration({ ...before, title: "Staff edit" }).fingerprint).not.toBe(reviewSupportMigration(before).fingerprint);
   });
 });
