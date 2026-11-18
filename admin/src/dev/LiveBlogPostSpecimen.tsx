@@ -47,7 +47,6 @@ function Specimen() {
   return <ControlPresentationProvider value={params.get("presentation") === "text" ? "text" : "icons"}>
     <p>Local specimen. Saved revision: <output>{savedVersion}</output></p>
       {params.has("create") ? <RecordForm kind="post" initial={initial} canSave={state !== "readonly"} readOnly={state === "readonly"} allowIncomplete
-        developmentLiveBlogCreation={state === "before" && params.has("create")}
         loadMedia={loadMedia} onSave={save} /> : <EditorWorkspace principal={principal}
           surface={{ kind: "record", record: "post", id: "post-example" }} loadRecord={loadRecord} loadMedia={loadMedia} saveRecord={(_kind, record) => save(record)}
           onDirtyChange={dirty => { document.documentElement.dataset.liveBlogDirty = String(dirty); }} />}

@@ -1,9 +1,6 @@
 import { parseLiveBlogDraft } from "../../../packages/content-core/src/live-blog-draft";
 import { richTextIsEmpty } from "../../../packages/content-core/src/content-model";
 
-/** Live blogs retain the existing Post edit, preview and publication permissions. */
-export const LIVE_BLOG_CREATION_ENABLED: boolean = true;
-
 export interface LiveBlogPublicationIssue {
   entryId: string;
   field: "headline" | "body" | "byline";
