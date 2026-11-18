@@ -38,9 +38,10 @@ if (filters.some((filter) => !filter.startsWith("tests/functions/") || filter.in
 
 if (group) {
   const unitFiles = JSON.parse(readFileSync(join(repoRoot, "tests/functions/unit-files.json"), "utf8"));
+  const unitPath = /^(?:tests\/functions\/[\w-]+|admin\/tests\/functions)\.test\.[cm]?[jt]sx?$/;
   if (!Array.isArray(unitFiles) || !unitFiles.length ||
-      unitFiles.some(file => typeof file !== "string" || !/^tests\/functions\/[\w-]+\.test\.[cm]?[jt]sx?$/.test(file))) {
-    throw new Error("Functions unit-files.json must list test paths under tests/functions/");
+      unitFiles.some(file => typeof file !== "string" || !unitPath.test(file))) {
+    throw new Error("Functions unit-files.json must list Functions test files");
   }
   if (group === "--unit") {
     if (filters.length) throw new Error("Run the whole Functions unit group without path filters");

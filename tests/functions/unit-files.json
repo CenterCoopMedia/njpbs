@@ -1,4 +1,5 @@
 [
+  "admin/tests/functions.test.ts",
   "tests/functions/activity-action-coverage.test.js",
   "tests/functions/activity-directory.test.js",
   "tests/functions/admin-status-revision.test.js",
