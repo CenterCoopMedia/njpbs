@@ -36,7 +36,6 @@
     "cms:browser": "bash scripts/cms-debug-browser.sh",
     "cms:diagnose": "node scripts/cms-diagnostics.mjs",
     "cms:inventory:article-posts:read-only": "node scripts/inventory-article-posts-read-only.mjs",
-    "cms:migrate:article-to-post": "node scripts/convert-retired-article-to-post.mjs",
     "cms:migrate:media-categories": "node scripts/seed-media-categories.mjs",
     "media:perf:seed": "node scripts/seed-media-perf-fixtures.mjs",
     "cms:migrate:media-category-assignments": "node scripts/backfill-media-category-assignments.mjs",

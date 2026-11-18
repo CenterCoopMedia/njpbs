@@ -41,7 +41,6 @@ const scriptsDir = fileURLToPath(
   new URL("../../scripts/", import.meta.url),
 );
 const OPERATOR_AUDIT_WRITERS = Object.freeze([
-  "convert-retired-article-to-post.mjs",
   "backfill-media-bin.mjs",
   "backfill-video-previews.mjs",
 ]);
@@ -269,7 +268,7 @@ it("labels every recorded literal and composed action code", () => {
   const { literal, composedFiles } = collectWrittenActions();
   // Anchors prevent an empty scan from passing.
   expect(literal.size).toBeGreaterThan(15);
-  for (const code of ["cms.save", "cms.publish", "content.article_converted_to_post", "media.upload", "roles.grant", "staff.deactivate"]) {
+  for (const code of ["cms.save", "cms.publish", "media.upload", "roles.grant", "staff.deactivate"]) {
     expect([...literal]).toContain(code);
   }
   expect([...literal].filter(code => describeActivityAction(code).known !== true)).toEqual([]);
@@ -281,6 +280,12 @@ it("labels every recorded literal and composed action code", () => {
   expect(codes).toEqual(expect.arrayContaining(["media_comment_resolve", "media_comment_reopen"]));
   expect(codes.filter(code => describeActivityAction(code).known !== true)).toEqual([]);
   expect([...composedFiles].sort()).toEqual(Object.keys(COMPOSED_CODES).sort());
+});
+
+it("labels historical Article conversion entries", () => {
+  expect(describeActivityAction("content.article_converted_to_post")).toMatchObject({
+    known: true, label: "Article converted to Post",
+  });
 });
 
 it("names a publication recheck and keeps its queue target as a publish request", () => {
