@@ -227,8 +227,11 @@ test("every CMS consumer pins clean release helpers separately from trusted work
     const sparse = checkout.with["sparse-checkout"];
     assert.ok(sparse === undefined || sparse.includes(".github/scripts"));
     assert.ok(steps.indexOf(checkout) < steps.indexOf(gate));
-    const selectedCode = steps.findIndex(step => /(?:node |import .*from ["'])\.?\/?scripts\//.test(step.run ?? ""));
-    assert.ok(selectedCode > steps.indexOf(gate), name);
+    // Every step that runs release-source scripts must follow the trusted gate.
+    const gateIndex = steps.indexOf(gate);
+    steps.forEach((step, index) => {
+      if (/(?:node |import .*from ["'])\.?\/?scripts\//.test(step.run ?? "")) assert.ok(index > gateIndex, `${name}: ${step.name}`);
+    });
     for (const step of steps) assert.doesNotMatch(step.run ?? "", /cp .*\/scripts\/lib\/repository-identity\.mjs/);
   }
   const { RELEASE_CHECK_PATHS } = await import('../../scripts/lib/cms-release-plan.mjs');
