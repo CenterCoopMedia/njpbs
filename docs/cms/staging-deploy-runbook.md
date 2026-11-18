@@ -130,8 +130,9 @@ that exception. Deployment and failure recovery never authorize a merge.
    identity, and the deployed Admin SHA. Its Firebase authentication stays in a
    separate runner from smoke. A successful public-first result skips this job
    because settlement would repeat the public renderer compatibility read.
-9. Read receipts and serving identities for post-CMS release acceptance.
-   Record staff and public interaction evidence where the release requires it.
+9. Read receipts and serving identities. Perform staff and public interaction
+   and post-CMS release settlement checks separately. Only then report the
+   paired release verified. Report any missing interaction proof.
 
 The planner may reuse only complete receipts with matching input/configuration/
 trusted-source fingerprints and fresh live identities. Missing graph metadata,
