@@ -66,6 +66,15 @@ describe("manifest-scoped Functions retirement", () => {
     expect(test.io.deleteFunction).not.toHaveBeenCalled();
   });
 
+  it("finishes a retirement whose function is already gone beside a new group member", async () => {
+    const child = fn("oldHandler-child", { labels: { "deployment-tool": "cli-gcloud" } });
+    const test = fixture(); test.functions([fn("health"), child]);
+    const retry = planFunctionRetirements({ ...context, priorNames: ["health", "oldHandler"], functions: [fn("health"), child], pendingPlan: test.plan });
+    expect(retry.entries.map(row => row.name)).toEqual(["oldHandler"]);
+    expect(await applyFunctionRetirements(retry, context, test.io)).toEqual({ retired: 1 });
+    expect(test.io.deleteFunction).not.toHaveBeenCalled();
+  });
+
   it("leaves a function added after planning in place", async () => {
     const test = fixture(); test.functions([fn("health"), fn("oldHandler"), fn("cmsGetPublishedSettings")]);
     expect(await applyFunctionRetirements(test.plan, context, test.io)).toEqual({ retired: 1 });

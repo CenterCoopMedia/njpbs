@@ -115,6 +115,8 @@ function retainedEntry(entry, fn, jobs, scope) {
 
 // `firebase functions:delete <name>` also deletes every function in the
 // `<name>-` group, so a planned deletion must not reach another function.
+// Pass only names whose function is still live: an entry whose function is
+// already gone gets no delete command, only its Scheduler cleanup.
 function refuseGroupReach(regional, names) {
   for (const live of regional) if (names.some(name => live.startsWith(`${name}-`))) refuse("delete_reaches_unplanned_function");
 }
@@ -138,7 +140,7 @@ export function planFunctionRetirements({ scope: rawScope, targetNames, priorNam
       : { name, platform: fn.platform, fingerprint: functionIdentity(fn), scheduler: schedulerFor(fn, scope, jobs), origin });
   }
   for (const entry of pending.values()) if (!rows.has(entry.name)) entries.push(retainedEntry(entry, null, jobs, scope));
-  refuseGroupReach(regional, entries.map(entry => entry.name));
+  refuseGroupReach(regional, entries.map(entry => entry.name).filter(name => rows.has(name)));
   for (const name of prior.filter(name => !target.has(name) && !rows.has(name) && !pending.has(name))) {
     const orphan = `projects/${scope.projectId}/locations/${scope.region}/jobs/firebase-schedule-${name}-${scope.region}`;
     if (jobs.some(job => job?.name === orphan)) refuse("orphan_scheduler_without_original_plan");
@@ -182,7 +184,7 @@ export async function applyFunctionRetirements(plan, context, io, selectedNames)
     const unowned = new Set(), regional = new Set();
     const rows = inventoryRows(await io.listFunctions(), plan.scope, targets, unowned, regional);
     if (entries.some(entry => unowned.has(entry.name))) refuse("ownership_unverified");
-    refuseGroupReach(regional, entries.map(entry => entry.name));
+    refuseGroupReach(regional, entries.map(entry => entry.name).filter(name => rows.has(name)));
     return rows;
   };
   const readJob = async entry => {
