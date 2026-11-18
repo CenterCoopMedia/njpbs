@@ -297,6 +297,9 @@ function selectedBlock(block) {
         ...(block.data.mapWidth !== undefined ? { mapWidth: block.data.mapWidth } : {}),
       };
       break;
+    case "embed_anchor":
+      data = { anchorId: block.data.anchorId };
+      break;
     case "html":
       data = {
         html: block.data.html,

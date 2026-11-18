@@ -36,6 +36,7 @@ export const BLOCK_TYPE_ICONS: Readonly<Record<BlockType, IconName>> = {
   election_results: "chart",
   county_comparison: "chart",
   embed: "play",
+  embed_anchor: "check-square",
   html: "code",
   content_shelf: "list",
   promotion_playlist: "queue",

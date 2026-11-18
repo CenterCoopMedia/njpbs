@@ -291,6 +291,16 @@ describe("development renderer, version and baseline boundaries", () => {
     expect(JSON.parse(readFileSync(join(site, ".public-post-renderer/renderer-release.json"), "utf8"))).toEqual(accepted);
     expect(processBoundary).not.toHaveBeenCalled();
   });
+  it.each([1, 2])("retains Page reader contract %s in the restored dev renderer", async pageReaderVersion => {
+    const accepted = { ...release, pageReaderVersion };
+    for (const file of ["renderer/renderer-release.json", "dist/posts/_no-build-assets/renderer-release.json"]) {
+      writeFileSync(join(directory, file), JSON.stringify(accepted) + "\n");
+    }
+    const site = join(directory, "restored-site");
+    await restoreDevPostRenderer(identity.commitSha, directory, site);
+    expect(JSON.parse(readFileSync(join(site, ".public-post-renderer/renderer-release.json"), "utf8"))).toEqual(accepted);
+    expect(processBoundary).not.toHaveBeenCalled();
+  });
   it.each(["source seal", "client seal", "production seal", "missing entry"])("refuses a changed %s before replacing files", async problem => {
     const site = join(directory, "restored-site");
     mkdirSync(join(site, ".public-post-renderer"), { recursive: true });
@@ -310,6 +320,7 @@ describe("development renderer, version and baseline boundaries", () => {
     ["wrong source", { ...release, rendererSha: "b".repeat(40) }],
     ["unknown key", { ...release, unknownVersion: 1 }],
     ["wrong schema", { ...release, schemaVersion: 2 }],
+    ...[0, 3, "2", true, null].map(value => [`pageReaderVersion=${JSON.stringify(value)}`, { ...release, pageReaderVersion: value }]),
     ...Object.keys(release).map(key => [`missing ${key}`, Object.fromEntries(Object.entries(release).filter(([name]) => name !== key))]),
     ...["liveBlogVersion", "electionResultsVersion"].flatMap(key =>
       [0, key === "electionResultsVersion" ? 3 : 2, "1", "2", null, true].map(value =>

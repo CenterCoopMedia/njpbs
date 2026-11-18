@@ -20,7 +20,7 @@ it.each(cases)("requires contract 1 for $type, including its hidden saved form",
 it("pins every supported plank type and refuses unknown contract versions and future types", () => {
   expect([...contract.PAGE_BLOCK_TYPES].sort()).toEqual([...BLOCK_TYPES].sort());
   expect(contract.pageReaderSupports([{ type: "headline" }], "contact", 0)).toBe(true);
-  expect(contract.pageReaderSupports([{ type: "headline" }], "contact", 2)).toBe(false);
+  expect(contract.pageReaderSupports([{ type: "headline" }], "contact", 3)).toBe(false);
   expect(contract.pageReaderSupports([{ type: "future" }], "contact", 1)).toBe(false);
   for (const pageId of ["contact", "data-hub", `page-${"a".repeat(32)}`]) {
     expect(contract.pageReaderSupports([{ type: "embed", visible: false, data: { url: "https://www.youtube.com/watch?v=abcdef12345" } }], pageId, 0)).toBe(false);
@@ -28,4 +28,13 @@ it("pins every supported plank type and refuses unknown contract versions and fu
   for (const pageId of ["home", "watch"]) expect(contract.pageReaderSupports([{ type: "embed" }], pageId, 0)).toBe(true);
   // Expected-vote election data keeps its independent version-2 contract.
   expect(contract.requiredPageReaderVersion([{ type: "election_results", data: { races: [{ expectedVoteShare: 0.8 }] } }], "contact")).toBe(0);
+});
+
+it("requires reader 2 for an approved signup anchor, including hidden planks", () => {
+  for (const visible of [true, false]) {
+    const blocks = [{ type: "embed_anchor", visible, data: { anchorId: "njpbssignup" } }];
+    for (const version of [0, 1]) expect(contract.pageReaderSupports(blocks, "contact", version)).toBe(false);
+    expect(contract.pageReaderSupports(blocks, "contact", 2)).toBe(true);
+  }
+  expect(contract.pageReaderSupports([{ type: "headline" }], "contact", 1)).toBe(true);
 });

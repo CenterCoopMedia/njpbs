@@ -38,6 +38,7 @@ import {
   escapeHtml,
   galleryPresentation,
   isRichTextDoc,
+  isEmbedAnchorData,
   renderRichText,
   richTextRendersEmpty,
   safeHref,
@@ -720,6 +721,9 @@ export function renderBlock(
       }, options.publicElectionResults === true);
     case "html":
       return renderHtmlBlock(block.data);
+    case "embed_anchor":
+      return isEmbedAnchorData(block.data as unknown as Record<string, unknown>)
+        ? `<div id="${escapeHtml(block.data.anchorId)}"></div>` : "";
     case "embed": {
       const apLayout = apResultsLayoutSrc(block.data.url);
       if (apLayout) {

@@ -74,6 +74,7 @@ describe("every editor Post block type publishes build-free", () => {
   // under test is the catalog rule and not a data validation failure.
   const paragraph = { type: "doc", content: [{ type: "paragraph", content: [{ type: "text", text: "Answer." }] }] };
   const outsideData: Record<string, object> = {
+    embed_anchor: { anchorId: "njpbssignup" },
     county_comparison: { datasetVersion: "nj-federal-counties-2020-2024-v1", heading: "", intro: "", source: "" },
     town_lookup: { heading: "Past results", introduction: "", sourceLine: "NJ Spotlight News" },
     data_hub_section: { sectionId: "unemployment", heading: "", introduction: "" },

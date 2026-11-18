@@ -50,7 +50,7 @@ describe("joined record admission", () => {
       expect(supportedSnapshot(post([{ id: type, type, visible: true, order: 0, data: {} }])), type).toBe(true);
     }
     const outsideCatalog = BLOCK_TYPES.filter((type: string) => !SECTION_BLOCK_CATALOG.post.includes(type));
-    expect(outsideCatalog).toEqual(["town_lookup", "county_comparison", "data_hub_section", "headline", "card_grid", "document_list", "faq_item", "coverage_list", "content_shelf", "home_newscast", "video_playlist"]);
+    expect(outsideCatalog).toEqual(["town_lookup", "county_comparison", "data_hub_section", "headline", "card_grid", "document_list", "faq_item", "coverage_list", "embed_anchor", "content_shelf", "home_newscast", "video_playlist"]);
     for (const type of [...outsideCatalog, "unknown_block"]) {
       expect(instantBlockAllowed(type), type).toBe(false);
       expect(unsupportedSnapshotReason(post([{ id: type, type, visible: true, order: 0, data: {} }])))

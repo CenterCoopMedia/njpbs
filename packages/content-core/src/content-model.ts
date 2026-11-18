@@ -861,6 +861,7 @@ export const BLOCK_TYPES = [
   "faq_item",
   "coverage_list",
   "embed",
+  "embed_anchor",
   "html",
   "content_shelf",
   "promotion_playlist",
@@ -1091,6 +1092,14 @@ export const AP_MAP_MOBILE_HEIGHT_LIMITS = Object.freeze({ min: 320, max: 4096 }
 export const EMBED_WIDTH_LIMITS = Object.freeze({ min: 160, max: 4096 });
 export const EMBED_HEIGHT_LIMITS = Object.freeze({ min: 90, max: 4096 });
 export const EMBED_ASPECT_RATIO_LIMITS = Object.freeze({ min: 9 / 16, max: 21 / 9 });
+export const EMBED_ANCHOR_IDS = ["njpbssignup"] as const;
+export interface EmbedAnchorData {
+  anchorId: (typeof EMBED_ANCHOR_IDS)[number];
+}
+export function isEmbedAnchorData(data: Record<string, unknown>): boolean {
+  return Object.keys(data).length === 1 && Object.hasOwn(data, "anchorId") &&
+    EMBED_ANCHOR_IDS.some(id => id === data.anchorId);
+}
 /** Custom HTML runs only inside a sandboxed frame; it never joins the page itself. */
 export interface HtmlData {
   html: string;
@@ -1228,6 +1237,7 @@ export type DocumentListBlock = BlockEnvelope<"document_list", DocumentListData>
 export type FaqItemBlock = BlockEnvelope<"faq_item", FaqItemData>;
 export type CoverageListBlock = BlockEnvelope<"coverage_list", CoverageListData>;
 export type EmbedBlock = BlockEnvelope<"embed", EmbedData>;
+export type EmbedAnchorBlock = BlockEnvelope<"embed_anchor", EmbedAnchorData>;
 export type HtmlBlock = BlockEnvelope<"html", HtmlData>;
 export type ContentShelfBlock = BlockEnvelope<"content_shelf", ContentShelfData>;
 export type PromotionPlaylistBlock = BlockEnvelope<"promotion_playlist", PromotionPlaylistData>;
@@ -1270,6 +1280,7 @@ export type PageBlock =
   | FaqItemBlock
   | CoverageListBlock
   | EmbedBlock
+  | EmbedAnchorBlock
   | HtmlBlock
   | ContentShelfBlock
   | PromotionPlaylistBlock
@@ -1508,6 +1519,8 @@ function hasValidBlockData(
   homeNewsletter = false,
 ): boolean {
   switch (type) {
+    case "embed_anchor":
+      return isEmbedAnchorData(data);
     case "document_list":
       return isDocumentListData(data, publishable);
     case "bio_card":
@@ -1708,6 +1721,7 @@ export function parseBlocks(input: unknown, { complete = true, pageId }: { compl
     return { ok: false, error: "blocks must be an array" };
   }
   const seenIds = new Set<string>();
+  const seenAnchors = new Set<string>();
   for (let i = 0; i < input.length; i++) {
     const entry = input[i];
     if (typeof entry !== "object" || entry === null) {
@@ -1758,6 +1772,11 @@ export function parseBlocks(input: unknown, { complete = true, pageId }: { compl
     }
     if (!hasValidBlockData(block.type as BlockType, block.data, block.type === "data_table" ? false : complete && block.visible, block.section === "home-newsletter")) {
       return { ok: false, error: `blocks[${i}] has invalid data for ${block.type}` };
+    }
+    if (block.type === "embed_anchor") {
+      const anchorId = block.data.anchorId as string;
+      if (seenAnchors.has(anchorId)) return { ok: false, error: `blocks[${i}] repeats embed anchor ${anchorId}` };
+      seenAnchors.add(anchorId);
     }
   }
   if (pageId === "kids" && input.some(block => block.type === "record_card" && block.data.recordKind === "newsletter")) {

@@ -70,6 +70,8 @@ it("accepts the gated production compiler seal and rejects unknown capability ve
   await writeSeals(rendererDirectory,distDirectory,{schemaVersion:1,rendererSha:release,pageReaderVersion:1});
   await expect(assertProductionRendererSeals(root,release)).resolves.toBeUndefined();
   await writeSeals(rendererDirectory,distDirectory,{schemaVersion:1,rendererSha:release,pageReaderVersion:2});
+  await expect(assertProductionRendererSeals(root,release)).resolves.toBeUndefined();
+  await writeSeals(rendererDirectory,distDirectory,{schemaVersion:1,rendererSha:release,pageReaderVersion:3});
   await expect(assertProductionRendererSeals(root,release)).rejects.toThrow("not a production release");
   await writeSeals(rendererDirectory,distDirectory,{schemaVersion:1,rendererSha:release,dataHubReportingVersion:1,dataHubCompositionVersion:1});
   await expect(assertProductionRendererSeals(root,release)).resolves.toBeUndefined();

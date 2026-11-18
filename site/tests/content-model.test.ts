@@ -372,6 +372,7 @@ describe("parseBlocks", () => {
 
   it("rejects invalid data for every declared block discriminant", () => {
     const invalidData: Record<BlockType, Record<string, unknown>> = {
+      embed_anchor: { anchorId: "unapproved" },
       county_comparison: { datasetVersion: "unreviewed", heading: "", intro: "", source: "" },
       town_lookup: { heading: "Past results", introduction: "", sourceLine: 42 },
       election_results: { races: [electionRace({ reportingShare: 101 })] },
@@ -437,6 +438,7 @@ describe("parseBlocks", () => {
 
   it("covers every declared block discriminant", () => {
     const validData: Record<BlockType, Record<string, unknown>> = {
+      embed_anchor: { anchorId: "njpbssignup" },
       county_comparison: { datasetVersion: "nj-federal-counties-2020-2024-v1", heading: "", intro: "", source: "" },
       town_lookup: { heading: "Past results", introduction: "", sourceLine: "NJ Spotlight News" },
       election_results: { races: [electionRace()] },
@@ -944,5 +946,4 @@ describe("the decorative image flag", () => {
     expect(parsed.ok && parsed.blocks[0].data).toMatchObject({ altDecorative: true });
   });
 });
-
 

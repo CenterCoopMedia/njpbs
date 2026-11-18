@@ -13,6 +13,7 @@ const image = { assetId: "photo", alt: "Published photo", caption: "Photo credit
 const videoHash = "a".repeat(64);
 // Payloads follow the canonical content-model and published-content fixture shapes.
 const data = {
+  embed_anchor: { anchorId: "njpbssignup" },
   bio_card: { profileId: "person-one", kind: "person", name: "Example person", role: "State senator",
     summary: "Serves the district.", sourceUrl: "https://example.org/biography", sourceLabel: "Official biography",
     asOf: "2026-10-03", party: "Independent", area: "District 1", image },

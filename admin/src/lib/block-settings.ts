@@ -65,6 +65,7 @@ const BLOCK_SETTINGS_FIELDS: Readonly<
   county_comparison: [],
   embed: [],
   html: [],
+  embed_anchor: [],
   content_shelf: [],
   promotion_playlist: [],
   newsletter_signup: [],
@@ -86,4 +87,3 @@ export function blockSettingsFields(type: BlockType): readonly EditorField[] {
 export function blockHasSettings(type: BlockType): boolean {
   return blockSettingsFields(type).length > 0;
 }
-

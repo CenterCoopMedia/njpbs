@@ -672,6 +672,7 @@ var BLOCK_TYPES = [
   "faq_item",
   "coverage_list",
   "embed",
+  "embed_anchor",
   "html",
   "content_shelf",
   "promotion_playlist",
@@ -743,6 +744,10 @@ var AP_MAP_MOBILE_HEIGHT_LIMITS = Object.freeze({ min: 320, max: 4096 });
 var EMBED_WIDTH_LIMITS = Object.freeze({ min: 160, max: 4096 });
 var EMBED_HEIGHT_LIMITS = Object.freeze({ min: 90, max: 4096 });
 var EMBED_ASPECT_RATIO_LIMITS = Object.freeze({ min: 9 / 16, max: 21 / 9 });
+var EMBED_ANCHOR_IDS = ["njpbssignup"];
+function isEmbedAnchorData(data) {
+  return Object.keys(data).length === 1 && Object.hasOwn(data, "anchorId") && EMBED_ANCHOR_IDS.some((id2) => id2 === data.anchorId);
+}
 var HTML_BLOCK_LIMITS = Object.freeze({ html: 5e4, title: 200 });
 var HTML_DATA_KEY_SET = /* @__PURE__ */ new Set(["html", "title"]);
 var CONTENT_SHELF_SOURCES = [
@@ -904,6 +909,8 @@ function hasValidPromotionPlaylistCard(card, publishable) {
 }
 function hasValidBlockData(type, data, publishable, homeNewsletter = false) {
   switch (type) {
+    case "embed_anchor":
+      return isEmbedAnchorData(data);
     case "document_list":
       return isDocumentListData(data, publishable);
     case "bio_card":
@@ -990,6 +997,7 @@ function parseBlocks(input, { complete = true, pageId } = {}) {
     return { ok: false, error: "blocks must be an array" };
   }
   const seenIds = /* @__PURE__ */ new Set();
+  const seenAnchors = /* @__PURE__ */ new Set();
   for (let i = 0; i < input.length; i++) {
     const entry = input[i];
     if (typeof entry !== "object" || entry === null) {
@@ -1035,6 +1043,11 @@ function parseBlocks(input, { complete = true, pageId } = {}) {
     }
     if (!hasValidBlockData(block.type, block.data, block.type === "data_table" ? false : complete && block.visible, block.section === "home-newsletter")) {
       return { ok: false, error: `blocks[${i}] has invalid data for ${block.type}` };
+    }
+    if (block.type === "embed_anchor") {
+      const anchorId = block.data.anchorId;
+      if (seenAnchors.has(anchorId)) return { ok: false, error: `blocks[${i}] repeats embed anchor ${anchorId}` };
+      seenAnchors.add(anchorId);
     }
   }
   if (pageId === "kids" && input.some((block) => block.type === "record_card" && block.data.recordKind === "newsletter")) {

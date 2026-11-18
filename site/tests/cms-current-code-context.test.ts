@@ -13,18 +13,24 @@ import { createHomeNewsletterBlock } from "../../packages/content-core/src/home-
 import home from "./fixtures/home-composition-v1.json";
 const generated = createRequire(import.meta.url)("../../functions/lib/home-retained-sources.js");
 const digest = (bytes: Buffer | string) => createHash("sha256").update(bytes).digest("hex");
-function fixture(homeBlocks?: PageBlock[] | boolean, postsBrowse?: PostsBrowseConfig) {
+function fixture(homeBlocks?: PageBlock[] | boolean, postsBrowse?: PostsBrowseConfig, signup = false) {
   const timestamp = { seconds: 1_780_000_000, nanoseconds: 0, toMillis: () => 1_780_000_000_000 };
   const reservation = { schemaVersion: 1 as const, buildBatchId: "cms-" + "C".repeat(20), generation: 1, status: "reserved" as const,
     commitSha: "a".repeat(40), reservedAgainstGeneration: 0, reservedAgainstDeploymentId: null, reservedAgainstCommitSha: null, cutoffAt: timestamp, reservedAt: timestamp };
   const blocks = Array.isArray(homeBlocks) ? homeBlocks : [...home.blocks, createHomeNewsletterBlock("empty-newsletter")].map((block, order) => ({ ...block, order }));
-  const pages = homeBlocks ? [{ pageId: "home", path: "/", previousSlugs: [], sourceVersion: 7, homeCompositionVersion: 2, blocks }] : [];
+  const signupBlocks: PageBlock[] = [{ id: "signup", type: "embed_anchor", order: 0, visible: true, data: { anchorId: "njpbssignup" } }];
+  const signupId = `page-${"7".repeat(32)}`;
+  const pages = signup ? [{ pageId: signupId, path: "/newsletters/", previousSlugs: [], sourceVersion: 7,
+    blocks: signupBlocks, datasetFigures: { figures: [], releases: [] } }]
+    : homeBlocks ? [{ pageId: "home", path: "/", previousSlugs: [], sourceVersion: 7, homeCompositionVersion: 2, blocks }] : [];
   const values = { ...DEFAULT_SITE_NAVIGATION, postsBrowse };
   const publishedAt = "2026-05-01T12:00:00.000Z";
   const settings = postsBrowse ? [{ documentId: "site-navigation" as const, sourceVersion: 2,
     publishedSnapshot: { schemaVersion: 2, sourceVersion: 2, publishedAt, values } }] : [];
   const input = { schemaVersion: 3, pages, posts: [], programs: [], authors: [], settings: postsBrowse ? [{ settingId: "site-navigation", ...values, sourceVersion: 2, publishedAt }] : [], receipt:
-    createPublicArtifactInventoryReceipt({ reservation, pages: homeBlocks ? [{ documentId: "home", sourceVersion: 7,
+    createPublicArtifactInventoryReceipt({ reservation, pages: signup ? [{ documentId: signupId, sourceVersion: 7,
+      publishedSnapshot: { blocks: signupBlocks, metadata: { title: "Newsletters", slug: "newsletters" }, sourceVersion: 7 } }]
+      : homeBlocks ? [{ documentId: "home", sourceVersion: 7,
       publishedSnapshot: { blocks, metadata: { title: "Home", homeCompositionVersion: 2 }, sourceVersion: 7 } }] : [],
       posts: [], programs: [], authors: [], settings }) };
   const bytes = Buffer.from(JSON.stringify(input)), publication = { schemaVersion: 1, digestAlgorithm: "sha256", buildBatchId: reservation.buildBatchId,
@@ -38,6 +44,12 @@ function reader(wire: unknown, request = vi.fn(async () => Response.json(wire)),
     firestore: { projectId: "njpbs-site-dev" }, readSecret: () => "synthetic", request }) };
 }
 describe("qualified current CODE Node boundary", () => {
+  it.each([createCurrentCodeContextReader, generated.createCurrentCodeContextReader])("reads signup Page planks through source and generated readers", async createReader => {
+    const f = fixture(undefined, undefined, true);
+    const wire = { schemaVersion: 1, kind: "current-code", reference: f.reference, bytes: f.bytes.toString("base64") };
+    const result = await reader(wire, undefined, createReader).source.readCurrentCodeContext();
+    expect(result.publicContext.pages[0].blocks).toEqual([{ id: "signup", type: "embed_anchor", order: 0, visible: true, data: { anchorId: "njpbssignup" } }]);
+  });
   it.each([createCurrentCodeContextReader, generated.createCurrentCodeContextReader])("reads v2 Posts browsing through source and generated retained readers", async createReader => {
     const postsBrowse: PostsBrowseConfig = { groups: [{ id: "schools", label: "Schools", icon: "heart", terms: [{ filter: "category", value: "Education" }] }] };
     const f = fixture(undefined, postsBrowse);

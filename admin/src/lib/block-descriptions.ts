@@ -30,6 +30,7 @@ export const BLOCK_DESCRIPTIONS: Readonly<Record<BlockType, string>> = Object.fr
   data_table: "A table readers can search and sort, using CSV data you paste.",
   embed: "An AP election results map, or video from YouTube, Vimeo, TikTok, Instagram, Facebook, PBS, or X/Twitter.",
   html: "Your own HTML, CSS, and scripts, shown in a sealed frame.",
+  embed_anchor: "An approved inline signup that you can place among the page's planks.",
   content_shelf: "Programs pulled automatically from PBS Media Manager.",
   promotion_playlist: "Programs or pages you pick by hand and order yourself.",
   newsletter_signup: "Links to signup pages for newsletters you choose.",

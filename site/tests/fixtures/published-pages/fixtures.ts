@@ -17,7 +17,8 @@ const { projectPublicPageDocument } = require("../../../../functions/lib/public-
 
 export const now = new Date("2026-10-12T12:00:00.000Z");
 export const customId = `page-${"2".repeat(32)}`;
-export const pageIds = ["home", "contact", "about", "staff", customId];
+export const newslettersId = `page-${"3".repeat(32)}`;
+export const pageIds = ["home", "contact", "about", "staff", customId, newslettersId];
 export const fallbackPageIds = PUBLIC_PAGES.filter(page => !["schedule", "live", "data-hub"].includes(page.id)).map(page => page.id);
 export const mediaAsset = { id: "page-image", url: "https://media.njpbs.org/cms-media/page-image/fixture.webp",
   mimeType: "image/webp", width: 640, height: 360 };
@@ -33,12 +34,18 @@ export function pageDocument(pageId: string): CmsPageDoc {
     homeHero: { mode: "manual", items: [{ itemId: "native", source: "cms_posts", sourceId: registeredAuthor.document.id }] },
   } : { id: pageId, version: 7, title: "Published Page & context", description: "Immutable Page fixture.",
     ...(pageId === customId ? { slug: "renamed-page", previousSlugs: ["earlier-page"] } : {}),
+    ...(pageId === newslettersId ? { slug: "newsletters" } : {}),
     blocks: [
       { id: "row", type: "row", order: 0, visible: true, data: { columns: [6, 6] } },
       { id: "heading", type: "headline", order: 1, visible: true, layout: { rowId: "row", column: 0 },
         data: { text: "A published heading", level: 2 } },
       { id: "body", type: "prose", order: 2, visible: true, layout: { rowId: "row", column: 1 },
         data: { content: { type: "doc", content: [{ type: "paragraph", content: [{ type: "text", text: "Frozen prose for Page parity." }] }] } } },
+      ...(pageId === newslettersId ? [
+        { id: "signup", type: "embed_anchor", order: 3, visible: true, data: { anchorId: "njpbssignup" } },
+        { id: "later-copy", type: "prose", order: 4, visible: true,
+          data: { content: { type: "doc", content: [{ type: "paragraph", content: [{ type: "text", text: "Staff-arranged content after signup." }] }] } } },
+      ] : []),
       ...(pageId === "contact" ? [
         { id: "image", type: "image", order: 3, visible: true, data: { assetId: mediaAsset.id,
           alt: "Page image fixture", caption: "Immutable image caption." } },
