@@ -1236,7 +1236,7 @@ const BLOCK_FIELDS: { readonly [T in BlockType]: readonly BlockFieldFor<T>[] } =
     { key: "height", label: "Player height", help: "Optional video height in pixels. Video players use the pasted ratio or provider default when both size fields are blank. AP layouts have separate map size and mobile height controls.", kind: "number", required: false, ...EMBED_HEIGHT_LIMITS },
   ],
   embed_anchor: [
-    { key: "anchorId", label: "Signup", help: "Choose an approved signup. The form appears on the public page after the visitor allows newsletter tools.", kind: "select", required: true,
+    { key: "anchorId", label: "Signup", help: "Choose an approved signup. Visitors can choose Show sign-up form or allow newsletter tools for automatic loading.", kind: "select", required: true,
       options: EMBED_ANCHOR_IDS.map(value => ({ value, label: "NJ PBS newsletter signup" })) },
   ],
   html: [

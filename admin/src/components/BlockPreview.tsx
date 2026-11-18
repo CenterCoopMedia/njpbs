@@ -154,7 +154,7 @@ export function BlockPreview({ resolvedDataFigureLabel, block, loadMedia, showPa
     case "cta_row": content = <div className="block-preview-actions">{items(data.ctas).length ? items(data.ctas).slice(0, 4).map((cta, index) => <span key={index}>{text(cta.label) || "Add a button label"}</span>) : <p>Add a button</p>}</div>; break;
     case "embed": content = <><strong>Embedded content</strong><p>{text(data.url) || "Add an embed URL"}</p><p>{text(data.caption)}</p></>; break;
     case "html": content = <><strong>Custom HTML</strong><p>{text(data.title) || "Untitled frame"}</p><p>{text(data.html) ? "Scripts run on the published page, not in this editor." : "Add HTML"}</p></>; break;
-    case "embed_anchor": content = <><strong>NJ PBS newsletter signup</strong><p>The form appears after the visitor allows newsletter tools.</p></>; break;
+    case "embed_anchor": content = <><strong>NJ PBS newsletter signup</strong><p>Visitors can choose Show sign-up form or allow newsletter tools for automatic loading.</p></>; break;
     case "data_table": content = <TablePreview data={data} />; break;
     case "data_hub_section": content = <Suspense fallback={<strong>{DATA_HUB_SECTIONS[data.sectionId as DataHubSectionId]}</strong>}><DataHubSectionPreview data={data as unknown as DataHubSectionData} level={generatedHeadingLevel} /></Suspense>; break;
     case "data_figure": {

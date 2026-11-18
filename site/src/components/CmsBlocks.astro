@@ -99,3 +99,9 @@ const hasProse = visibleLayoutBlocks(blocks).some(block => block.type === "prose
     ) : <CmsBlockGroup group={item.group} cards={recordCards} />)
   }
 </div>
+
+<script>
+  import { initNewsletterSignupEmbed } from "../lib/newsletter-signup-embed";
+
+  initNewsletterSignupEmbed(document);
+</script>

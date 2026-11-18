@@ -1346,7 +1346,7 @@ var BLOCK_FIELDS = {
     {
       key: "anchorId",
       label: "Signup",
-      help: "Choose an approved signup. The form appears on the public page after the visitor allows newsletter tools.",
+      help: "Choose an approved signup. Visitors can choose Show sign-up form or allow newsletter tools for automatic loading.",
       kind: "select",
       required: true,
       options: EMBED_ANCHOR_IDS.map((value) => ({ value, label: "NJ PBS newsletter signup" }))

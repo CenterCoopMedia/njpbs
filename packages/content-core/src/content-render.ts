@@ -723,7 +723,7 @@ export function renderBlock(
       return renderHtmlBlock(block.data);
     case "embed_anchor":
       return isEmbedAnchorData(block.data as unknown as Record<string, unknown>)
-        ? `<div id="${escapeHtml(block.data.anchorId)}"></div>` : "";
+        ? `<div class="newsletter-signup-embed"><div data-signup-prompt><p>The Wisepops sign-up form uses session cookies.</p><button class="btn btn--primary" type="button" data-signup-show>Show sign-up form</button></div><p data-signup-status role="status" tabindex="-1"></p><div id="${escapeHtml(block.data.anchorId)}" data-signup-target role="region" aria-label="Newsletter sign-up form" tabindex="-1"></div></div>` : "";
     case "embed": {
       const apLayout = apResultsLayoutSrc(block.data.url);
       if (apLayout) {

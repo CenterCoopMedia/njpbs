@@ -26,7 +26,10 @@ describe("approved Page signup embeds", () => {
     const projected = projectPublicPageDocument({ pageId, document: { ...document, published }, assets: new Map(), now: new Date("2026-11-16T13:00:00Z") });
     expect(projected.state).toBe("live");
     expect(projected.page.blocks[0]).toEqual(block);
-    expect(renderBlock(projected.page.blocks[0])).toBe('<div id="njpbssignup"></div>');
+    const html = renderBlock(projected.page.blocks[0]);
+    expect(html).toMatch(/<div id="njpbssignup"[^>]*><\/div>/);
+    expect(html).toContain('type="button" data-signup-show>Show sign-up form</button>');
+    expect(html).toContain('data-signup-status role="status"');
     for (const section of ["post", "home", "programLanding"] as const) {
       expect(validateSection(section, [block])).not.toBeNull();
       expect(sections.validateSection(section, [block])).not.toBeNull();
