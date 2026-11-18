@@ -14,7 +14,7 @@
     "miniflare": "5.20260917.0-alpha",
     "typescript": "5.9.3",
     "vitest": "4.1.12",
-    "vite": "8.2.4"
+    "vite": "8.2.6"
   },
   "overrides": {
     "miniflare": {
