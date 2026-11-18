@@ -87,10 +87,8 @@ describe("metered-API source scan runs before any scanned code executes", () => 
   // Lock that guarantee here per workflow: a future reorder or rebuild that
   // defeats it would otherwise stay green in every other test.
   const ci = read("../../.github/workflows/ci.yml");
-  const pages = read("../../.github/workflows/pages.yml");
   const devPublish = read("../../.github/workflows/cms-dev-publish.yml");
   const preview = read("../../.github/workflows/preview.yml");
-  const cmsPublish = read("../../.github/workflows/cms-publish.yml");
   const scheduleBake = read("../../.github/workflows/schedule-bake.yml");
   const probeMediaManager = read(
     "../../.github/workflows/probe-media-manager.yml",
@@ -113,7 +111,6 @@ describe("metered-API source scan runs before any scanned code executes", () => 
   // keep lifecycle hooks disabled. Required CI instead scans once in its policy
   // job before either reusable package workflow can start.
   const protectedWorkflows = [
-    ["pages.yml", pages],
     ["preview.yml", preview],
     ["schedule-bake.yml", scheduleBake],
     ["probe-media-manager.yml", probeMediaManager],
@@ -361,20 +358,6 @@ describe("metered-API source scan runs before any scanned code executes", () => 
     },
   );
 
-
-  it("keeps the post-build public contracts in a CMS data publish", () => {
-    const build = workflowJob(cmsPublish, "build");
-    expect(build).not.toContain("Metered-API source scan");
-    expect(build).toContain("npm run assert:public-contract");
-    expect(build).toContain("npm run guardrails");
-    expect(build).toContain("name: Reserve exact public artifact cutoff");
-    expect(build).toContain("name: Build site");
-    expect(build).toContain("name: Bind the final public Worker artifact");
-    expect(build).toContain(
-      "name: Mark exact artifact ready for deployment",
-    );
-    expect(build).toContain("run: npm ci --ignore-scripts");
-  });
 
   it("keeps only isolated Admin changes out of the Astro consumer gate", () => {
     expect(classifyPath("admin/src/App.tsx")).toEqual({ docs: false, site: false, admin: true, firebase: false });

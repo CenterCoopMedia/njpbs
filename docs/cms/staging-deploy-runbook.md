@@ -21,9 +21,9 @@ Do not infer current live state from a dated source document.
 | Experimental paired release | [Release pairs](release-without-pause.md) | Actual installed OLD/NEW reader, switch, rollback and original-operation proofs |
 
 Git source does not restore Firestore or media. Public committed assets, private
-R2 objects and provider-hosted images/video have separate owners. A retained
-Pages artifact is a recovery origin, not evidence that the apex uses Pages.
-No component mutation implicitly deploys another surface or publishes content.
+R2 objects and provider-hosted images/video have separate owners. A component
+rollout changes only its own surface.
+
 
 ## Release source and prerequisites
 
@@ -293,7 +293,7 @@ probes cannot be summed as wall time. A warm sample, old audit or import-only
 benchmark is not a current percentile or proof of click-to-live. Keep expiry,
 freshness and withdrawal gates while measuring. See [schedule/PDF](../runbooks/schedule-pdf.md).
 
-## Incident and fallback recovery
+## Incident recovery
 
 First read actual affected component source/provider/receipt and trusted tooling.
 Preserve observations privately; fix forward through reviewed source and one
@@ -309,31 +309,6 @@ coordinate downstream-first and both Worker copies. Detaching the intake custom
 domain contains direct posts; hiding the site widget alone does not. Secret
 rotation alone does not contain public spam. Retain exact private incident note,
 timeline, causes, recovery proof and remaining gaps.
-
-A switch to retained Pages is a separately authorized recovery decision:
-
-1. Read live route table, active generation/source/queue/version, and identify
-   the exact successful fallback run/ref/artifact.
-2. Verify source/digest, public contract and guardrails; prove no private Admin,
-   guide, design preview or private media, and only permitted public wiki output.
-3. Confirm existing domain/proxied DNS settings without changing them.
-4. Complete a private reviewed guarded admission-pause transaction at the exact
-   active runtime. Verify deployed Functions enforce manual/scheduled admission.
-5. Keep the owner running until all accepted queues/pending markers/journal/
-   leases drain. Recover original work first; never clear tokens or force idle.
-6. Stop/disable all active/fallback owners and recheck after shutdown. Keep
-   admission paused throughout fallback; do not switch transport implicitly.
-7. Apply the separately reviewed route change preserving Contact, then prove
-   authoritative route ownership and actual Pages origin/content/privacy on
-   ordinary public URLs. A successful upload grants no route authority.
-8. Before resuming, restore verified Worker route/publication and matched owner,
-   idle coordinator and runtime, then guarded transition paused to ready.
-
-Current fallback artifacts reuse the aligned active batch/cutoff without
-reserving a generation; revalidate immediately before upload and deployment.
-An advancing public pointer refuses. Old generation-reserving sources are
-invalid. Independent publication during the provider action remains a race to
-account for, not evidence that a prior check locked the publisher.
 
 Verify apex/www redirects and proxy headers, Home/Post/support/live/watch,
 styled 404, public search and privacy on ordinary URLs; inspect console errors.

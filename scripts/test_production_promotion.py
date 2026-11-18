@@ -43,7 +43,6 @@ class Fixture:
             f"{PREFIX}/actions/runs/22/jobs": {"total_count": 1, "jobs": [{
                 "name": "ci", "run_id": 22, "head_sha": SHA, "status": "completed", "conclusion": "success",
             }]},
-            f"{PREFIX}/actions/variables/CCM_PROMOTE_APP_SLUG": {"name": "CCM_PROMOTE_APP_SLUG", "value": "example-promote"},
             "/apps/example-promote": {"id": 5705771, "client_id": "Iv1.example", "permissions": permissions},
             "/orgs/example-org/installations": {"total_count": 1, "installations": [{
                 "id": 10, "app_id": 5705771, "app_slug": "example-promote", "client_id": "Iv1.example",
@@ -71,7 +70,7 @@ class PromotionTests(unittest.TestCase):
     def test_configuration_reads_all_conditions_and_refuses_unproven_scope(self):
         fixture = Fixture()
         rows = fixture.check.run()
-        self.assertEqual(len(rows), 16)
+        self.assertEqual(len(rows), 15)
         self.assertEqual([row[1] for row in rows if not row[0]], ["installation repository selection"])
         self.assertIn("approved App key required", next(row[2] for row in rows if not row[0]))
         self.assertEqual(len(fixture.calls), len(set(fixture.calls)))
@@ -141,7 +140,7 @@ class PromotionTests(unittest.TestCase):
 
         fixture.check.request = request
         rows = fixture.check.run()
-        self.assertEqual(len(rows), 16)
+        self.assertEqual(len(rows), 15)
         self.assertFalse(next(row[0] for row in rows if row[1] == "production key metadata"))
         self.assertTrue(next(row[0] for row in rows if row[1] == "organization key supplier absent"))
 
@@ -157,7 +156,6 @@ class PromotionTests(unittest.TestCase):
             (f"{PREFIX}/compare/{BASE}...{SHA}", "status", "behind", "production fast-forward baseline"),
             (f"{PREFIX}/environments/production", "deployment_branch_policy", {"protected_branches": True, "custom_branch_policies": False}, "production environment policy"),
             (f"{PREFIX}/environments/production/variables/CCM_PROMOTE_APP_CLIENT_ID", "value", "wrong-client", "environment App client ID"),
-            (f"{PREFIX}/actions/variables/CCM_PROMOTE_APP_SLUG", "value", "wrong-app", "Actions variable"),
         ]
         for path, key, value, condition in cases:
             with self.subTest(path=path, key=key):
@@ -263,7 +261,7 @@ class PromotionTests(unittest.TestCase):
                     self.assertEqual(result.returncode, 0 if passed else 1, output.decode())
                     self.assertEqual(result.stderr, b"")
                     self.assertEqual(sum(line.startswith(b"PASS ") for line in result.stdout.splitlines()),
-                                     16 if passed else 15)
+                                     15 if passed else 14)
                     self.assertEqual(sum(line.startswith(b"FAIL ") for line in result.stdout.splitlines()),
                                      0 if passed else 1)
                     self.assertNotIn(b"test-installation-token-not-a-credential", output)

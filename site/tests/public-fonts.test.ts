@@ -41,8 +41,6 @@ describe("pinned public build fonts", () => {
     ["docs/cms/release-without-pause.md", "node site/scripts/prepare-public-fonts.mjs", "All attended first-install blocks"],
     [".github/workflows/ci.yml", "node site/scripts/prepare-public-fonts.mjs", "Compile and verify private renderer"],
     [".github/workflows/cms-dev-publish.yml", "node site/scripts/prepare-public-fonts.mjs", "Prepare pinned search model for offline build"],
-    [".github/workflows/cms-publish.yml", "node scripts/prepare-public-fonts.mjs", "Prepare local search model for frozen builds"],
-    [".github/workflows/pages.yml", "node scripts/prepare-public-fonts.mjs", "Prepare local search model for frozen builds"],
   ])("seeds verified fonts before the offline boundary in %s", async (file, seed, boundary) => {
     const source = await readFile(new URL(`../../${file}`, import.meta.url), "utf8");
     expect(source.indexOf(seed)).toBeGreaterThan(-1);

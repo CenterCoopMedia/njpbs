@@ -5,13 +5,6 @@ committing these files applies no GitHub configuration. Activation requires
 separate approval. The promotion workflow must stay undispatched until then.
 Track the remaining activation work and live probes in
 [issue #57](https://github.com/CenterCoopMedia/njpbs/issues/57).
-The [deploy admission prerequisite](https://github.com/CenterCoopMedia/njpbs/issues/29)
-merged in [PR #54](https://github.com/CenterCoopMedia/njpbs/pull/54), and the
-promotion workflow merged in [PR #30](https://github.com/CenterCoopMedia/njpbs/pull/30).
-Admission accepts the promotion App's `push` to `refs/heads/production` and
-deploys the immutable event SHA, matching this workflow's fast-forward push.
-Deploy admission is unchanged here.
-
 The `production` branch selects a release by fast-forwarding to a green commit
 already on `main`. The only trigger for `promote.yml` is `workflow_dispatch`,
 with a required `sha` input of 40 lowercase hexadecimal characters. The dispatch
@@ -174,10 +167,10 @@ the next step. The public switch remains Joe's decision.
 
 | Order | Authorization |
 | --- | --- |
-| Scope precheck, before 2 and before 6 | Coordinator's named authorization to read the approved App key and mint an unfiltered, metadata-only installation token. No provisioning or production write. |
-| 1, 3, 4a, 4c | Coordinator's named technical setup authorization: variable, environment policy/client ID, rulesets. |
+| Scope precheck, before bootstrap selection and first promotion | Coordinator's named authorization to read the approved App key and mint an unfiltered, metadata-only installation token. No provisioning or production write. |
+| 2, 3a, 3c | Coordinator's named technical setup authorization: environment policy, client ID and rulesets. |
 | 2 | Read-only exact main SHA and green main-push CI proof. |
-| 4b | Joe: production bootstrap, which can trigger deployment. |
+| 3b | Joe: production bootstrap, which can trigger deployment. |
 | 5 | Joe: key provisioning, the credential activation point. |
 | 6–8 | Joe: first promotion/public switch, live probes and deployment verification. Destructive probes need a separately authorized lab. |
 
@@ -197,14 +190,7 @@ and approved target in #57. Require selected repositories, count one and exactly
 the verified target. Activation stops if the scope readback fails. Check canonical
 repository name/ID and `CMS_DEPLOY_OWNER` as above.
 
-1. Technical setup: set the App-push deployment variable, then read it back.
-
-   ```sh
-   gh variable set CCM_PROMOTE_APP_SLUG --repo "$PROMOTION_REPOSITORY" --body ccm-njpbs-promote
-   gh api --method GET "/repos/$PROMOTION_REPOSITORY/actions/variables/CCM_PROMOTE_APP_SLUG"
-   ```
-
-2. Read-only: record the selected bootstrap SHA and its successful main-push
+1. Read-only: record the selected bootstrap SHA and its successful main-push
    CI run. Replace `BOOTSTRAP_SHA` below with that reviewed 40-character SHA;
    never select a PR head. Run the precheck at that SHA and keep failures from
    still-unconfigured later steps in the record. Before bootstrap, the main
@@ -224,7 +210,7 @@ repository name/ID and `CMS_DEPLOY_OWNER` as above.
    pass show "$PROMOTION_KEY_ENTRY" | python3 scripts/check-production-promotion.py --repo "$PROMOTION_REPOSITORY" --sha "$BOOTSTRAP_SHA" --app-slug ccm-njpbs-promote --workflow-sha cf3ac408c12afc73c3e3f355f6dd70db58ea1af7 --admission-sha 13650ac1d8fd4e42d60afc7a859b55305ae2e52c --app-key-fd 3 3<&0
    ```
 
-3. Technical setup: require the environment to be absent or reconcile its
+2. Technical setup: require the environment to be absent or reconcile its
    existing reviewers, wait timer and protection settings with the coordinator
    before PUT. The payload establishes branch policy; it does not authorize
    removal of another protection. Create/configure the environment and read it
@@ -254,7 +240,7 @@ repository name/ID and `CMS_DEPLOY_OWNER` as above.
    and a client ID equal to the independently read public App API value. Keep
    the private key unprovisioned.
 
-4. Apply the branch protections around the authorized bootstrap, in this order.
+3. Apply the branch protections around the authorized bootstrap, in this order.
    List existing rulesets first. These POST commands are for the observed
    absent rulesets; do not duplicate an existing ruleset or overwrite drift.
 
@@ -262,7 +248,7 @@ repository name/ID and `CMS_DEPLOY_OWNER` as above.
    gh api --method GET "/repos/$PROMOTION_REPOSITORY/rulesets?includes_parents=true&per_page=100"
    ```
 
-   4a. Technical setup: install the no-bypass CI/history ruleset, then get its
+   3a. Technical setup: install the no-bypass CI/history ruleset, then get its
    full payload using the ID returned by POST.
 
    ```sh
@@ -271,7 +257,7 @@ repository name/ID and `CMS_DEPLOY_OWNER` as above.
    gh api --method GET "/repos/$PROMOTION_REPOSITORY/rulesets/$CHECKS_RULESET_ID"
    ```
 
-   4b. Joe's production authorization: require production to be absent; if it
+   3b. Joe's production authorization: require production to be absent; if it
    exists, stop and reconcile it without force. Recheck main and exact-SHA CI,
    then create production at the approved green main SHA and read it back.
 
@@ -285,7 +271,7 @@ repository name/ID and `CMS_DEPLOY_OWNER` as above.
    The initial production GET must be a confirmed 404, rather than an auth or
    transport failure. Both ref SHAs after creation must equal `BOOTSTRAP_SHA`.
 
-   4c. Technical setup: install the App-only update lock after bootstrap, then
+   3c. Technical setup: install the App-only update lock after bootstrap, then
    read back its complete payload, both rulesets and both refs. Require exact
    payloads and SHAs before provisioning a credential.
 
@@ -298,7 +284,7 @@ repository name/ID and `CMS_DEPLOY_OWNER` as above.
    gh api --method GET "/repos/$PROMOTION_REPOSITORY/git/ref/heads/production"
    ```
 
-5. Joe's credential activation authorization: in the credential authority's
+4. Joe's credential activation authorization: in the credential authority's
    Bash session, confirm the approved `pass` entry by name without reading its
    value. Set `PROMOTION_KEY_ENTRY` to that approved pointer. The coordinator
    authorized this stdin pipeline for the supervised activation only; never
@@ -319,7 +305,7 @@ repository name/ID and `CMS_DEPLOY_OWNER` as above.
    all pages on list readbacks; the precheck does this automatically. Record
    store provenance separately because GitHub cannot return a secret's value.
 
-6. Joe's first promotion/public switch authorization: select a later green main
+5. Joe's first promotion/public switch authorization: select a later green main
    `PROMOTE_SHA` that fast-forwards production and whose range includes a
    reviewed workflow-file change. Rerun the precheck at it and require every
    configuration check to pass, including the complete unfiltered installation
@@ -348,20 +334,17 @@ repository name/ID and `CMS_DEPLOY_OWNER` as above.
    Require a successful promotion and production exactly at `PROMOTE_SHA`.
    Preserve the run URL, previous/selected/ref SHAs and changed workflow path.
 
-7. With Joe's probe authorization, run the applicable refusal probes below.
+6. With Joe's probe authorization, run the applicable refusal probes below.
    Read production immediately before and after each and require the same SHA.
    A successful mutation is a failed probe; stop the switch. Preserve the
    specific refusal, input SHA, actor/ref and any run URL.
 
-8. Verify every production release surface and the live serving source. Require
-   the production push run to identify the promotion App and `PROMOTE_SHA` and
-   pass the deployment workflow's exact-source checks. Separately verify the
-   Cloudflare `njpbs-production` Worker deployment, its Workers Builds source
-   repository and branch, and the CMS publication and preview runtime pins.
+7. Read the production branch at `PROMOTE_SHA`. Verify the Cloudflare
+   `njpbs-production` Worker deployment, its Workers Builds source repository
+   and branch, and the CMS publication and preview runtime pins.
    Public HTML is served through Cloudflare and the CMS renderer; check
    `x-njpbs-content-source` and `x-njpbs-renderer-sha` on live public responses
-   against the approved serving source. A successful Pages deployment alone
-   does not prove that source is serving readers.
+   against the approved serving source.
 
    Read the Worker, runtime pins, component receipts and ordinary-route proof
    using the [public Worker contract](../cms/public-worker-deploy.md) and
@@ -386,7 +369,6 @@ repository name/ID and `CMS_DEPLOY_OWNER` as above.
    these serving checks pass together.
 
    ```sh
-   gh api --method GET "/repos/$PROMOTION_REPOSITORY/actions/workflows/pages.yml/runs?event=push&branch=production&head_sha=$PROMOTE_SHA&per_page=10"
    gh api --method GET "/repos/$PROMOTION_REPOSITORY/git/ref/heads/production"
    ```
 

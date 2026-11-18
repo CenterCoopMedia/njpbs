@@ -4,7 +4,6 @@ name: Preview site
 # public-contract and guardrail scans, and uploads the dist as a downloadable
 # approval artifact. Pull requests get the same artifact from ci.yml.
 #
-# Live GitHub Pages deploys come only from pages.yml on the production branch.
 on:
   push:
     branches: [preview, develop]
@@ -26,7 +25,6 @@ on:
       # core-only change has to rebuild the preview artifact.
       - "packages/**"
       - ".github/workflows/preview.yml"
-      - ".github/workflows/pages.yml"
   workflow_dispatch:
 
 # This workflow only builds and uploads the dist artifact, so contents: read is

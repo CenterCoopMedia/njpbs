@@ -10,9 +10,7 @@ const read = (rel: string) =>
   readFileSync(fileURLToPath(new URL(rel, import.meta.url)), "utf8");
 const astroConfig = read("../astro.config.mjs");
 const previewWorkflow = read("../../.github/workflows/preview.yml");
-const productionWorkflow = read("../../.github/workflows/pages.yml");
 const ciWorkflow = read("../../.github/workflows/ci.yml");
-const cmsPublishWorkflow = read("../../.github/workflows/cms-publish.yml");
 const stagingDeployWorkflowPath = new URL(
   "../../.github/workflows/cms-staging-deploy.yml",
   import.meta.url,
@@ -131,18 +129,6 @@ function readDevPublishWorkflow(): string {
   return readFileSync(fileURLToPath(devPublishWorkflow), "utf8");
 }
 
-// One step of the publish workflow, so an assertion about a step cannot be
-// satisfied by a neighbour. A pattern that spans steps reads fine and proves
-// nothing: it matches whichever later step happens to carry the same clause.
-function publishStep(name: string): string {
-  const marker = `      - name: ${name}\n`;
-  const start = cmsPublishWorkflow.indexOf(marker);
-  expect(start, `${name} step missing`).toBeGreaterThanOrEqual(0);
-  const rest = cmsPublishWorkflow.slice(start + marker.length);
-  const next = rest.search(/\n {6}- name: /);
-  return next === -1 ? rest : rest.slice(0, next);
-}
-
 function expectOrdered(workflow: string, first: string, second: string): void {
   const firstIndex = workflow.indexOf(first);
   const secondIndex = workflow.indexOf(second);
@@ -154,58 +140,6 @@ function expectOrdered(workflow: string, first: string, second: string): void {
 }
 
 describe("production deploy authority", () => {
-  it("keeps public Pages deployment admission on every job", () => {
-    expect(productionWorkflow).toContain(
-      "repository_dispatch:\n    types: [production_deploy]",
-    );
-    expect(productionWorkflow).toContain("workflow_dispatch:");
-    expect(productionWorkflow).toContain("run-name: >-");
-    expect(productionWorkflow).toContain("production_deploy {0}");
-    expect(productionWorkflow).toContain(
-      "github.event.client_payload.refresh_id || 'invalid'",
-    );
-    expect(productionWorkflow).toContain("PRODUCTION_DEPLOY_DISPATCH_SECRET");
-    expect(productionWorkflow).toContain("createHmac");
-    expect(productionWorkflow).toContain("timingSafeEqual");
-    expect(productionWorkflow).toContain("timestamp is outside the 10-minute window");
-    // Media Manager and the public feed step both keep the refresh policy.
-    expect(productionWorkflow.match(/REQUIRE_FRESH_CONTENT:/g)).toHaveLength(2);
-    expect(productionWorkflow).toContain(
-      "needs.authorize.outputs.require_fresh",
-    );
-    const authorize = workflowJob(productionWorkflow, "authorize");
-    const build = workflowJob(productionWorkflow, "build");
-    expect(authorize).not.toContain("actions/checkout");
-    expect(authorize).toContain("PRODUCTION_DEPLOY_DISPATCH_SECRET");
-    expect(build).toContain("needs: authorize");
-    expect(build).not.toContain("PRODUCTION_DEPLOY_DISPATCH_SECRET");
-    expect(productionWorkflow).toContain(
-      "ref: ${{ needs.authorize.outputs.deploy_ref }}",
-    );
-    expect(build).not.toContain("github.event.client_payload");
-    expect(build).toContain("git merge-base --is-ancestor HEAD origin/main");
-    expectOrdered(productionWorkflow, "Require reviewed deploy ref", "run: npm ci");
-
-    const jobNames = workflowJobNames(productionWorkflow);
-    expect(jobNames).not.toHaveLength(0);
-    for (const jobName of jobNames) {
-      expect(workflowJob(productionWorkflow, jobName)).toContain(
-        "github.triggering_actor == vars.CMS_DEPLOY_OWNER",
-      );
-    }
-  });
-
-  it("accepts only reviewed main commits or tree-identical promotion merges", () => {
-    const build = workflowJob(productionWorkflow, "build");
-    expect(build).toContain(
-      'reviewed_main_sha="$(git rev-parse HEAD^2)"',
-    );
-    expect(build).toContain(
-      'git merge-base --is-ancestor "$reviewed_main_sha" origin/main',
-    );
-    expect(build).toContain('git diff --quiet "$reviewed_main_sha" HEAD');
-  });
-
   it("allows only the configured owner to start or re-run a full-stack CMS deployment", () => {
     const stagingDeployWorkflow = readCmsDeployWorkflow();
     expect(stagingDeployWorkflow).toContain("workflow_dispatch:");
@@ -322,12 +256,6 @@ describe("public deployment reservation", () => {
     expect(workerActivationOperator).toContain("readFileSync(4");
     expect(workerActivationOperator).not.toContain("process.env.CLOUDFLARE");
     expect(workerActivationOperator).not.toContain("process.env.GOOGLE");
-    expect(productionWorkflow).not.toContain(
-      "activate:public-worker-candidate",
-    );
-    expect(cmsPublishWorkflow).not.toContain(
-      "activate:public-worker-candidate",
-    );
   });
 
   it("records the guarded public media lifecycle activation", () => {
@@ -484,7 +412,6 @@ describe("workflow gate", () => {
 
   it("every workflow that builds the site watches the shared content core", () => {
     const siteBuilders: [string, string][] = [
-      ["pages.yml", productionWorkflow],
       ["preview.yml", previewWorkflow],
       [
         "cms-dev-publish.yml",
@@ -608,77 +535,13 @@ describe("workflow gate", () => {
     expect(readDevPublishWorkflow()).not.toMatch(/\bsecrets\.MEDIA_MANAGER_API_(?:KEY|SECRET)\b/);
   });
 
-  it("keeps production builds on the production artifact contract", () => {
-    expect(productionWorkflow).not.toContain("INTERNAL_SURFACES");
+  it("keeps the full CI build on the public artifact contract", () => {
     expect(ciWorkflow).toMatch(
       // The launch switch for /share/ is the only setting the full build may add.
       /name:\s*Full build\s+working-directory:\s*site\s+(?:env:\s+PUBLIC_SHARE_PAGE:[^\n]*\s+)?run:\s*npm run build/,
     );
-    expect(cmsPublishWorkflow).not.toContain("INTERNAL_SURFACES");
   });
 
-  it("prefers the narrow publish credential over the admin key", () => {
-    const preferred = "secrets.FIREBASE_PUBLISH_SERVICE_ACCOUNT || ";
-    const adminRefs = [
-      ...cmsPublishWorkflow.matchAll(/secrets\.FIREBASE_SERVICE_ACCOUNT/g),
-    ];
-
-    expect(adminRefs.length).toBeGreaterThan(0);
-    for (const ref of adminRefs) {
-      expect(cmsPublishWorkflow.slice(0, ref.index).endsWith(preferred)).toBe(
-        true,
-      );
-    }
-  });
-
-  it("refuses a publish credential from another Firebase project", () => {
-    const guard = 'if [ "$project_id" != "njpbs-site" ]';
-    expect(cmsPublishWorkflow).toContain(guard);
-    expectOrdered(cmsPublishWorkflow, guard, "name: Install site deps");
-
-    // The rejection has to happen before npm ci, and the key still must not be
-    // on disk while npm ci runs: this workflow does not pass --ignore-scripts,
-    // and site/package-lock.json marks packages with hasInstallScript. So the
-    // check reads the secret from stdin, and the credential file is written
-    // only after the install, for the build that actually needs it.
-    expect(
-      publishStep("Verify the publish credential's project"),
-    ).not.toContain("RUNNER_TEMP");
-    expectOrdered(
-      cmsPublishWorkflow,
-      "name: Install site deps",
-      'credentials_path="$RUNNER_TEMP/service-account.json"',
-    );
-  });
-
-  it("blocks writeback for a rejected key without stranding other runs", () => {
-    const readiness = publishStep("Check whether writeback is configured");
-
-    // It judges the key, not another step. Every writeback step materializes
-    // the secret itself instead of reusing the build credential, so a decision
-    // borrowed from the verify step would be about the wrong thing anyway. And
-    // no step outcome can answer this: writeback runs on failure and on
-    // cancellation, and a run cancelled during checkout leaves that outcome
-    // "skipped", which is neither proof the key is ours nor cause to strand the
-    // row. Hence no steps.* reference here at all.
-    expect(readiness).toContain('if [ "$project_id" = "njpbs-site" ]');
-    expect(readiness).not.toContain("steps.");
-    expect(cmsPublishWorkflow).not.toContain("CREDS_OUTCOME");
-
-    // Inline, so the check does not need the checkout that a cancelled run may
-    // never have finished. Asserted as one string with the assignment: read
-    // apart, a hardcoded project_id next to an unrelated stdin line satisfies
-    // both halves.
-    expect(readiness).toContain(
-      'project_id="$(printf \'%s\' "$SA" | node -e \'let s="";process.stdin',
-    );
-
-    for (const trigger of ["if: failure()", "if: cancelled()"]) {
-      expect(cmsPublishWorkflow).toContain(
-        `${trigger} && steps.wb.outputs.ready == 'true'`,
-      );
-    }
-  });
 });
 
 describe("cms staging deploy surface", () => {

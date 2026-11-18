@@ -49,7 +49,7 @@ describe("dev recovery provenance", () => {
       { ...env, GITHUB_REPOSITORY: repository })).toThrow();
   });
   it.each([
-    { id: 1 }, { path: ".github/workflows/pages.yml" }, { event: "workflow_dispatch" },
+    { id: 1 }, { path: ".github/workflows/cms-staging-deploy.yml" }, { event: "workflow_dispatch" },
     { status: "in_progress" }, { conclusion: "success" }, { head_branch: "feature" },
     { head_sha: "wrong" }, { repository: { full_name: "other/repo" } },
     { head_repository: { full_name: "other/repo" } }, { actor: { login: "fixture-owner" } },

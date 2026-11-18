@@ -13,7 +13,6 @@ const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../
 const ciWait = read("../../.github/scripts/wait-schedule-ci.sh");
 const mergeScript = read("../../.github/scripts/merge-schedule-pr.sh");
 const workflow = read("../../.github/workflows/schedule-bake.yml");
-const pagesWorkflow = read("../../.github/workflows/pages.yml");
 const wranglerConfig = read("../../workers/wrangler.jsonc");
 const packageJson = read("../package.json");
 const productionBuild = read("../scripts/build-with-production-sync.mjs");
@@ -514,12 +513,7 @@ fi
     );
   });
 
-  it("bakes before both checked-in production build paths", () => {
-    const pagesSync = pagesWorkflow.indexOf("npm run sync:schedule");
-    const pagesBuild = pagesWorkflow.indexOf("npm run build");
-    expect(pagesSync).toBeGreaterThan(-1);
-    expect(pagesSync).toBeLessThan(pagesBuild);
-
+  it("bakes before the Cloudflare production build", () => {
     expect(packageJson).toContain(
       '"build": "tsx scripts/build-with-production-sync.mjs"',
     );

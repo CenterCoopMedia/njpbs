@@ -81,9 +81,6 @@ describe("CI path classifier", () => {
     ".github/scripts/ci-tree-reuse.mjs",
     ".github/scripts/ci-tree-reuse.test.mjs",
     ".github/scripts/workflow-policy.test.mjs",
-    ".github/scripts/pages-fallback-safety.mjs",
-    ".github/scripts/pages-fallback-safety.test.mjs",
-    ".github/scripts/pages-reviewed-source.test.mjs",
     ".github/scripts/site-resource-reporter.test.mjs",
     "tests/scripts/check-dev-machine-receipt.test.mjs",
     "tests/scripts/dev-access-guards.test.mjs",
@@ -111,7 +108,6 @@ describe("CI path classifier", () => {
     ".github/workflows/dev-anonymous-refusal.yml",
     ".github/workflows/dev-machine-receipt-proof.yml",
     ".github/workflows/dev-staff-gateway-deploy.yml",
-    ".github/workflows/pages-fallback-safety.yml",
     ".github/workflows/cms-dev-deploy.yml",
     ".github/workflows/shadow-posts-dev-deploy.yml",
   ]) {
@@ -343,11 +339,7 @@ describe("CI path classifier", () => {
       "site/src/lib/public-worker-artifact.ts",
       "site/src/lib/workflow-projection.ts",
       "site/scripts/upload-public-worker-candidate.ts",
-      "scripts/public-worker-artifact-runtime-v1.txt",
       "site/tests-e2e/loader.e2e.test.ts",
-      "scripts/prepare-public-artifact.cjs",
-      "tests/preflight/cms-publish-artifact-contract.test.js",
-      "tests/preflight/cms-publish-deploy-contract.test.js",
     ]) {
       assert.deepEqual(
         classifyPath(path),
@@ -444,7 +436,6 @@ describe("CI path classifier", () => {
       gates(false, true, false, false),
     );
     for (const path of [
-      ".github/workflows/pages.yml",
       ".github/workflows/preview.yml",
       ".github/workflows/schedule-bake.yml",
     ]) {
@@ -466,15 +457,6 @@ describe("CI path classifier", () => {
       classifyPath(".github/workflows/cms-staging-deploy.yml"),
       gates(false, false, true, true),
     );
-    for (const path of [
-      ".github/workflows/cms-publish.yml",
-    ]) {
-      assert.deepEqual(
-        classifyPath(path),
-        gates(false, true, false, true),
-        path,
-      );
-    }
     assert.equal(classifyPath(".github/workflows/new-workflow.yml"), null);
   });
 
@@ -867,13 +849,13 @@ describe("Final CI aggregation", () => {
     );
   });
 
-  it("runs release-gate contracts for Pages-only changes", () => {
-    assert.equal(classifyChangedPaths([".github/workflows/pages.yml"]).gates.site, true);
+  it("runs release-gate contracts for CMS workflow changes", () => {
+    assert.equal(classifyChangedPaths([".github/workflows/cms-staging-deploy.yml"]).gates.firebase, true);
     const ci = readFileSync(new URL("workflows/ci.yml", githubDirectory), "utf8");
     const policy = ci.split("\n  policy:\n", 2)[1].split("\n  docs:\n", 1)[0];
     const releaseTests = policy.split(/\n      - /).find(step =>
       step.includes("node --test") && step.includes(".github/scripts/require-main-ci.test.mjs"));
-    assert.ok(releaseTests, "Pages-only changes must run release-gate contracts in Policy");
+    assert.ok(releaseTests, "CMS workflow changes must run release-gate contracts in Policy");
     assert.match(releaseTests, /if: steps\.reuse\.outputs\.reused != 'true'/);
     assert.doesNotMatch(releaseTests, /outputs\.(?:site|firebase|admin|docs)/);
     assert.ok(policy.indexOf("npm ci --ignore-scripts") < policy.indexOf(releaseTests),

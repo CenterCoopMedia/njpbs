@@ -35,9 +35,6 @@ const SOURCE_POLICY_PATHS = new Set([
   ".github/scripts/ci-tree-reuse.mjs",
   ".github/scripts/ci-tree-reuse.test.mjs",
   ".github/scripts/workflow-policy.test.mjs",
-  ".github/scripts/pages-fallback-safety.mjs",
-  ".github/scripts/pages-fallback-safety.test.mjs",
-  ".github/scripts/pages-reviewed-source.test.mjs",
   ".github/scripts/site-resource-reporter.test.mjs",
   "tests/scripts/check-dev-machine-receipt.test.mjs",
   "tests/scripts/dev-access-guards.test.mjs",
@@ -50,7 +47,6 @@ const SOURCE_POLICY_PATHS = new Set([
   ".github/scripts/identity-boundary-guard.d.mts",
   ".github/scripts/identity-boundary-guard.mjs",
   "site/scripts/workflow-concurrency-guardrail-source.test.ts",
-  "site/scripts/workflow-runner-context-guardrail-source.test.ts",
   "site/scripts/workflow-secret-guardrail-source.test.ts",
   "site/src/lib/workflow-secret-guardrail.ts",
   "site/tests/identity-boundary-ci-wiring.test.ts",
@@ -96,7 +92,6 @@ const POLICY_ONLY_WORKFLOWS = new Set([
 ]);
 
 const SITE_WORKFLOWS = new Set([
-  ".github/workflows/pages.yml",
   ".github/workflows/preview.yml",
   ".github/workflows/schedule-bake.yml",
 ]);
@@ -106,12 +101,10 @@ const SITE_FIREBASE_WORKFLOWS = new Set([
   ".github/workflows/dev-anonymous-refusal.yml",
   ".github/workflows/dev-machine-receipt-proof.yml",
   ".github/workflows/dev-staff-gateway-deploy.yml",
-  ".github/workflows/pages-fallback-safety.yml",
 
   ".github/workflows/cms-dev-deploy.yml",
   ".github/workflows/shadow-posts-dev-deploy.yml",
   ".github/workflows/cms-dev-publish.yml",
-  ".github/workflows/cms-publish.yml",
 ]);
 
 const ADMIN_FIREBASE_PATHS = new Set([
@@ -135,15 +128,7 @@ const ADMIN_PATHS = new Set([
 const SITE_FIREBASE_PATHS = new Set([
   // Site workflow policy tests read the Firestore indexes.
   "firestore.indexes.json",
-  "scripts/public-worker-artifact-runtime-v1.txt",
-  "scripts/cms-publish-artifact-runtime-v1.txt",
-  "scripts/pages-public-artifact-runtime-v1.txt",
-  "scripts/prepare-cms-publish-artifact.cjs",
-  "scripts/prepare-public-artifact.cjs",
   "site/public/_headers",
-  "tests/preflight/cms-publish-artifact-contract.test.js",
-  "tests/preflight/cms-publish-deploy-contract.test.js",
-  "tests/preflight/pages-public-artifact-contract.test.js",
 ]);
 
 const FIREBASE_SITE_LOADER_PATHS = new Set([

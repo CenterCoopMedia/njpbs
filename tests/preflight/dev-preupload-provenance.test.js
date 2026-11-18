@@ -83,7 +83,7 @@ it.each(["rerun", "running", "success", "other source", "other workflow", "branc
   if (mode === "running") state.run.status = "in_progress";
   if (mode === "success") state.run.conclusion = "success";
   if (mode === "other source") state.run.head_sha = "b".repeat(40);
-  if (mode === "other workflow") state.run.path = ".github/workflows/cms-publish.yml";
+  if (mode === "other workflow") state.run.path = ".github/workflows/cms-staging-deploy.yml";
   if (mode === "branch") state.run.head_branch = "feature";
   if (mode === "actor") state.run.actor.login = "other";
   if (mode === "triggering actor") state.run.triggering_actor.login = "other";

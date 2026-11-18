@@ -23,21 +23,6 @@ const run = {
 };
 const job = { name: "ci", run_id: run.id, head_sha: sha, status: "completed", conclusion: "success" };
 
-test("the trusted Pages sparse checkout can load its CI proof dependencies", () => {
-  const workflow = readFileSync(new URL("../workflows/pages.yml", import.meta.url), "utf8");
-  const sparseBlock = workflow.match(/path: \.release-gate\n\s+sparse-checkout: \|\n((?: {12}[^\n]+\n)+)/)?.[1];
-  assert.ok(sparseBlock, "trusted gate declares its sparse inputs");
-  const directory = mkdtempSync(join(tmpdir(), "release-gate-checkout-"));
-  const root = new URL("../../", import.meta.url).pathname;
-  try {
-    execFileSync("git", ["clone", "--quiet", "--shared", "--no-checkout", root, directory]);
-    execFileSync("git", ["sparse-checkout", "set", "--cone", ...sparseBlock.trim().split(/\s+/)], { cwd: directory });
-    execFileSync("git", ["checkout", "--quiet", "HEAD"], { cwd: directory });
-    execFileSync(process.execPath, ["--input-type=module", "-e", "await import('./.github/scripts/require-main-ci.mjs')"],
-      { cwd: directory, stdio: ["ignore", "pipe", "pipe"] });
-  } finally { rmSync(directory, { recursive: true, force: true }); }
-});
-
 function check(runs = [run], jobs = [job]) {
   return requireMainCi({ env: repositoryFixture, repository, sha, request: async (path) =>
     path.includes("/jobs?") ? { jobs, total_count: jobs.length } : { workflow_runs: runs },
@@ -192,7 +177,7 @@ test("source gate enforces first-parent descent, exact clean source, and normal 
   } finally { rmSync(cwd, { recursive: true, force: true }); }
 });
 
-test("every CMS ancestry boundary and Pages use trusted gates with step-scoped emergency inputs", () => {
+test("every CMS ancestry boundary uses trusted gates with step-scoped emergency inputs", () => {
   const cms = readFileSync(new URL("../workflows/cms-staging-deploy.yml", import.meta.url), "utf8");
   for (const name of ["admin-build", "firebase-preflight", "cms-api", "firebase", "preview-renderer"]) {
     const block = cms.split(`\n  ${name}:\n`)[1].split(/\n  [a-z-]+:\n/)[0];
@@ -202,14 +187,9 @@ test("every CMS ancestry boundary and Pages use trusted gates with step-scoped e
     assert.match(block, /node "\$RUNNER_TEMP\/release-gate"\/\.github\/scripts\/require-release-source.mjs/);
     assert.ok(block.indexOf("path: .release-gate") < block.indexOf('node "$RUNNER_TEMP/release-gate"/'));
   }
-  const pages = readFileSync(new URL("../workflows/pages.yml", import.meta.url), "utf8");
-  assert.match(pages, /\[ "\$GITHUB_EVENT_NAME" = "workflow_dispatch" \]/);
-  assert.match(pages, /node \.release-gate\/\.github\/scripts\/require-main-ci.mjs/);
-  for (const workflow of [cms, pages]) {
-    assert.match(workflow, /emergency_release:\n(?:.*\n){2}        default: false/);
-    const rootEnv = workflow.match(/^env:\n(?:  .*\n)*/m)?.[0] ?? "";
-    assert.doesNotMatch(rootEnv, /EMERGENCY_RELEASE|EMERGENCY_AUTHORIZATION/);
-  }
+  assert.match(cms, /emergency_release:\n(?:.*\n){2}        default: false/);
+  const rootEnv = cms.match(/^env:\n(?:  .*\n)*/m)?.[0] ?? "";
+  assert.doesNotMatch(rootEnv, /EMERGENCY_RELEASE|EMERGENCY_AUTHORIZATION/);
 });
 
 test("every CMS consumer pins clean release helpers separately from trusted workflow gates", async () => {

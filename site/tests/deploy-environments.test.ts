@@ -120,7 +120,7 @@ describe("deploy credential environments", () => {
 
   it.each([
     ["cms-staging-deploy", ["admin-build", "firebase-preflight", "cms-api", "firebase", "preview-renderer", "live-smoke", "admin-deploy"]],
-    ["cms-publish", ["build", "finalize"]],
+    ["probe-media-manager", ["probe"]],
     ["shadow-posts-dev-deploy", ["deploy"]],
   ] as const)("places main-only secret jobs in production: %s", (name, jobs) => {
     for (const id of jobs) expect(workflow(name).jobs[id].environment).toBe("production");
@@ -141,26 +141,12 @@ describe("deploy credential environments", () => {
     for (const id of ["bake", "deferred-merge"]) expect(workflow("schedule-bake").jobs[id].environment).toBe("schedule-bake");
   });
 
-  it("preserves github-pages and scopes production-ref jobs to its two-branch policy", () => {
-    for (const name of ["pages", "cms-publish"]) expect(workflow(name).jobs.deploy.environment.name).toBe("github-pages");
-    expect(workflow("pages").on.push.branches).toEqual(["production"]);
-    for (const id of ["authorize", "build"]) expect(workflow("pages").jobs[id].environment).toBe("github-pages");
-    expect(workflow("probe-media-manager").jobs.probe.environment).toBe("production");
-  });
-
   it("defines only the approved environments and exact deployment branches", () => {
     expect(Object.fromEntries(Object.entries(environmentPolicy()).map(([name, policy]) => [name, policy.branches]))).toEqual({
-      production: ["main"], "schedule-bake": ["main"], "publisher-image": ["main"], development: ["main"], "github-pages": ["main", "production"],
+      production: ["main"], "schedule-bake": ["main"], "publisher-image": ["main"], development: ["main"],
     });
     expect(environmentPolicy()["publisher-image"].secrets).toEqual(["CLOUDFLARE_PUBLISHER_IMAGE_TOKEN"]);
     assertConfiguredAdmission(workflow("publisher-image").jobs.image, "publisher-image");
-  });
-
-  it.each(["pages", "cms-publish"])("keeps both Firebase credential paths available to %s deploy", name => {
-    const environment = workflow(name).jobs.deploy.environment.name;
-    expect(environmentPolicy()[environment].secrets).toEqual(expect.arrayContaining([
-      "FIREBASE_PUBLISH_SERVICE_ACCOUNT", "FIREBASE_SERVICE_ACCOUNT",
-    ]));
   });
 
   for (const file of readdirSync(new URL("../../.github/workflows/", import.meta.url)).filter(file => /\.ya?ml$/.test(file))) {

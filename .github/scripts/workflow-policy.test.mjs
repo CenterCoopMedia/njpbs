@@ -23,15 +23,13 @@ describe("workflow policy", () => {
   });
 
   it("preserves the supported deployment queue setting", () => {
-    for (const name of ["cms-dev-publish", "cms-publish", "pages"]) {
-      const source = readRepo(`.github/workflows/${name}.yml`);
-      assert.match(source, /^  queue: max$/m);
-      assert.match(source, /^  cancel-in-progress: false$/m);
-    }
+    const source = readRepo(".github/workflows/cms-dev-publish.yml");
+    assert.match(source, /^  queue: max$/m);
+    assert.match(source, /^  cancel-in-progress: false$/m);
   });
 
   it("keeps validation read-only and without deployment secrets", () => {
-    for (const name of ["ci", "admin-ci", "firebase-ci", "pages-fallback-safety", "dev-anonymous-refusal"]) {
+    for (const name of ["ci", "admin-ci", "firebase-ci", "dev-anonymous-refusal"]) {
       const source = readRepo(`.github/workflows/${name}.yml`);
       assert.match(source, /permissions:\n\s+contents: read/);
       assert.doesNotMatch(source, /\bsecrets\s*[.[]/);

@@ -1,6 +1,6 @@
 name: Probe Media Manager
 
-# Read-only wiring check for the GitHub Pages fallback path. It reads credentials
+# Read-only wiring check for the public Media Manager feed. It reads credentials
 # from its declared environment and uploads a redacted summary artifact. It
 # does not deploy, schedule work, or print credentials.
 on:
