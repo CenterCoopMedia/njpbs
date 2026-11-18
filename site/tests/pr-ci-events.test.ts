@@ -495,45 +495,52 @@ describe("Admin boundary admission", () => {
 });
 
 describe("Firebase preflight admission", () => {
-  it("runs preflight once across the Functions shards and suppresses their lifecycle hooks", () => {
-    const workflow = parse(readFileSync(new URL("../../.github/workflows/firebase-ci.yml", import.meta.url), "utf8"));
-    const job = workflow.jobs.functions;
+  const workflow = parse(readFileSync(new URL("../../.github/workflows/firebase-ci.yml", import.meta.url), "utf8"));
+  const job = workflow.jobs.functions;
+  const shards: (number | string)[] = job.strategy.matrix.shard;
+  const emulator = job.steps.find((step: { name?: string }) => step.name === "Functions tests");
+  const unit = job.steps.find((step: { name?: string }) => step.name === "Functions unit tests");
+
+  it("runs hosted preflight once on the first emulator shard and keeps the local preflight", () => {
     const preflight = job.steps.find((step: { run?: string }) => step.run === "npm run test:preflight");
-    const functions = job.steps.find((step: { name?: string }) => step.name === "Functions tests");
-    const admitted = job.strategy.matrix.include.filter((matrix: { shard: number }) =>
-      !preflight.if || expression(preflight.if, {}, { matrix })).map((matrix: { shard: number }) => matrix.shard);
+    const admitted = shards.filter(shard =>
+      !preflight.if || expression(preflight.if, {}, { matrix: { shard } }));
     expect(admitted).toEqual([1]);
-    expect(job.steps.indexOf(preflight)).toBeLessThan(job.steps.indexOf(functions));
-    expect(functions.if).toBeUndefined();
-    expect(functions.run).toContain("npm run --ignore-scripts test:functions");
-    expect(functions.env.FUNCTIONS_JOB_PARTS).toBe("${{ matrix.parts }}");
+    expect(job.steps.indexOf(preflight)).toBeLessThan(job.steps.indexOf(emulator));
     expect(job.name).toBe("functions (${{ matrix.shard }})");
     const workspace = JSON.parse(readFileSync(new URL("../../package.json", import.meta.url), "utf8"));
     expect(workspace.scripts["pretest:functions"]).toBe("npm run test:preflight");
+    expect(workspace.scripts).not.toHaveProperty("pretest:functions:emulator");
+    expect(workspace.scripts).not.toHaveProperty("pretest:functions:unit");
   });
 
-  it("runs every part once and stops a job when its first part fails", () => {
-    const workflow = parse(readFileSync(new URL("../../.github/workflows/firebase-ci.yml", import.meta.url), "utf8"));
-    const job = workflow.jobs.functions;
-    const functions = job.steps.find((step: { name?: string }) => step.name === "Functions tests");
-    const command = `npm() {
-      printf '%s %s\\n' "$VITEST_SHARD_ARGS" "$*"
-      if [ "$VITEST_SHARD_ARGS" = "$FAIL_SHARD" ]; then return 23; fi
-    }
-    ${functions.run}`;
-    const parts = job.strategy.matrix.include.flatMap((matrix: { shard: number; parts: string }) => {
-      const run = (fail = "") => spawnSync("bash", ["-e", "-c", command], {
-        env: { ...process.env, FAIL_SHARD: fail, FUNCTIONS_JOB_PARTS: String(expression(functions.env.FUNCTIONS_JOB_PARTS, {}, { matrix })) },
+  it("runs each emulator shard and the unit group once and propagates a failed command", () => {
+    const commands = shards.map(shard => {
+      const context = { matrix: { shard } };
+      const admitted = [emulator, unit].filter(step => !step.if || expression(step.if, {}, context));
+      expect(admitted).toHaveLength(1);
+      const [step] = admitted;
+      const shardArg = step.env?.VITEST_SHARD_ARGS?.replace(/\$\{\{(.*?)\}\}/g,
+        (_: string, source: string) => String(expression(source, {}, context))) ?? "";
+      const command = `npm() {
+        printf '%s %s\\n' "$VITEST_SHARD_ARGS" "$*"
+        return "$PROBE_EXIT"
+      }
+      ${step.run}`;
+      const run = (status: number) => spawnSync("bash", ["-e", "-c", command], {
+        env: { ...process.env, PROBE_EXIT: String(status), VITEST_SHARD_ARGS: shardArg },
         encoding: "utf8",
       });
-      const result = run();
+      const result = run(0);
       expect(result.status, result.stderr).toBe(0);
-      const lines = result.stdout.trim().split("\n");
-      const failed = run(lines[0].split(" ")[0]);
+      const failed = run(23);
       expect(failed.status).toBe(23);
-      expect(failed.stdout.trim()).toBe(lines[0]);
-      return lines;
+      expect(failed.stdout).toBe(result.stdout);
+      return result.stdout.trim();
     });
-    expect(parts.sort()).toEqual([1, 2, 3, 4, 5, 6, 7, 8].map(part => `--shard=${part}/8 run --ignore-scripts test:functions`));
+    expect(commands.sort()).toEqual([
+      ...[1, 2, 3, 4].map(shard => `--shard=${shard}/4 run test:functions:emulator`),
+      "run test:functions:unit",
+    ]);
   });
 });
