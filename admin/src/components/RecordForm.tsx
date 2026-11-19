@@ -2,8 +2,6 @@ import { useCoverageLabels } from "../context/CoverageLabelsContext";
 import { CoverageLabelSelect } from "./CoverageLabelSelect";
 import { postCoverageLabelId, resolveCoverageLabel } from "../../../packages/content-core/src/coverage-labels";
 import type { ElectionSourceHost } from "../context/ElectionResultsSourceHost";
-import { Link } from "react-router";
-import { ROUTE_PATHS } from "../lib/routes";
 import { liveBlogPublicationIssue, type LiveBlogPublicationIssue } from "../lib/live-blog";
 import { DataHubReportingEditor, type ReportingEditorTransport } from "./DataHubReportingEditor";
 import { parseDataHubReporting, type DataHubFigure } from "../../../packages/content-core/src/data-hub-reporting";
@@ -110,6 +108,8 @@ import { LifecycleFeedbackRevealProvider } from "./LifecycleActionsPanel";
 import { useSuccessNotice } from "./ui/SuccessNoticeRegion";
 import { SavePostTemplateDialog, type TemplateCaptureFields } from "./SavePostTemplateDialog";
 import type { CapturePostTemplateRequest, PostTemplateReceipt } from "../lib/functions";
+import { renderRecordFieldGroup, renderRecordSectionFieldset } from "./RecordFormFieldGroups";
+import { buildPostMetadataPanels, renderPostStoryMetadata } from "./RecordFormPostMetadata";
 
 const RECORD_ASSET_ACCESSIBILITY = {
   post: {
@@ -1759,108 +1759,32 @@ export const RecordForm = forwardRef<RecordFormHandle, RecordFormProps>(function
     group: (typeof groups)[number],
     groupFields: readonly EditorField[] = group.fields,
     headless = false,
-  ) => {
-    if (groupFields.length === 0) return null;
-    if (kind === "page" && record.pageTheme === "nj-decides" && group.id === "hero-image") {
-      return <fieldset className="record-field-group" aria-label="Heading and artwork" key={group.id}>
-        <legend>Heading and artwork</legend>
-        <div>
-          <p className="editor-image-role-note">This Page uses the NJ Decides 2026 theme. Its heading, logo, colors and artwork come from the shared NJ Decides brand, not from this Page.</p>
-          <p className="editor-image-role-note">{canManageSettings
-            ? <Link to={`${ROUTE_PATHS.adminSettings}#nj-decides-settings-heading`}>Edit the NJ Decides brand</Link>
-            : "An admin can change it in Admin settings, NJ Decides brand."}</p>
-        </div>
-      </fieldset>;
-    }
-    // Image role summaries remain inspectable while each role's fieldset owns
-    // the edit lock. An inert group would also hide its native disclosures.
-    if (headless && kind === "post" && group.id === "hero-image") return (
-      <div className="record-field-group" data-field-group={group.id} role="group" aria-label={group.label} key={group.id}>
-        <div className="record-field-group-fields">{groupFields.map(field => !editorView?.kind && field.key.startsWith("heroBackground")
-          ? <fieldset key={fieldPathKey(field)} className="editor-readonly-boundary" disabled={interactionLocked} ref={toggleReadonlyBoundary}>{renderEditorField(field)}</fieldset>
-          : renderEditorField(field))}</div>
-      </div>
-    );
-    return (
-      <fieldset
-        className={headless ? "editor-readonly-boundary record-field-group" : "record-field-group"}
-        data-field-group={group.id}
-        aria-label={group.label}
-        disabled={headless ? interactionLocked : undefined}
-        key={group.id}
-        ref={headless ? toggleReadonlyBoundary : undefined}
-      >
-        <legend className={headless ? "sr-only" : undefined}>
-          {group.label}
-          {!headless && group.help ? <InfoTooltip label={group.label} content={group.help} /> : null}
-        </legend>
-        <div className="record-field-group-fields">
-          {editorView?.kind === "post" && group.id === "basics" ? <>
-            {groupFields.filter(field => field.key === "credits" && !field.path).map(field => <details key="credits" className="editor-byline-details"><summary><span>Byline</span><strong>{Array.isArray(record.credits) ? record.credits.map(credit => {
-            if (!credit || typeof credit !== "object") return "Credit needs review";
-            const value = credit as Record<string, unknown>;
-            return value.kind === "custom" ? String(value.name ?? "") : value.kind === "registered" ? bylineAuthors?.find(author => author.authorId === value.authorId)?.displayName ?? (typeof value.displayName === "string" ? value.displayName : "Author no longer listed") : "Credit needs review";
-          }).join(", ") || "Add a byline" : "Add a byline"}</strong><Icon name="pencil" /></summary><div>{renderEditorField(field)}</div></details>)}
-            <Button variant="ghost" size="compact" className="editor-inspector-summary-row" disabled={interactionLocked}
-              onClick={() => {
-                const focusPresentation = () => { const control = document.getElementById(`${formId}-presentation`); control?.scrollIntoView({ block: "center" }); control?.focus(); };
-                if (editorView.phone) { editorView.closePane("details", false); requestAnimationFrame(focusPresentation); }
-                else focusPresentation();
-              }}>
-              <span>Presentation</span><strong>{POST_PRESENTATIONS.find(choice => choice.value === presentation)?.label ?? "Saved presentation needs review"}</strong><Icon name="pencil" />
-            </Button>
-            {groupFields.filter(field => field.key !== "credits" || field.path).map(renderEditorField)}
-          </> : groupFields.map(renderEditorField)}
-        </div>
-      </fieldset>
-    );
-  };
-  // The desk control. A create or explicitly unassigned Post draft gets the finite picker,
-  // required and marked like any other required field. An assigned stored record gets a plain
-  // reading: the desk is immutable, so a disabled select would still look editable.
-  const sectionHelp = sectionIsEditable
-    ? "Choose the area this content belongs to. Existing area grants can limit access to it."
-    : "This is the record's saved area. Existing area grants can limit access to it.";
-  const renderSectionFieldset = (headless = false) =>
-    sectionField ? (
-      <fieldset
-        className={headless ? "editor-readonly-boundary record-field-group" : "record-field-group"}
-        disabled={headless ? interactionLocked : undefined}
-        key="section"
-        aria-label="Content area"
-        ref={headless ? toggleReadonlyBoundary : undefined}
-      >
-        <legend className={headless ? "sr-only" : undefined}>
-          Content area
-          {!headless ? <InfoTooltip label="Content area" content={sectionHelp} /> : null}
-        </legend>
-        <div className="record-field-group-fields">
-          {sectionIsEditable ? (
-            <FieldRenderer
-              field={sectionField}
-              value={readFieldValue(record, sectionField)}
-              onChange={(value) => changeField(sectionField, value)}
-              fieldId={`record-${kind}-section`}
-              error={errors[fieldPathKey(sectionField)]}
-            />
-          ) : (
-            <FieldRenderer
-              field={{ ...sectionField, required: false }}
-              value={readFieldValue(record, sectionField)}
-              onChange={() => {}}
-              fieldId={`record-${kind}-section`}
-              control={
-                <p className="editor-field-static" data-testid="record-section-display">
-                  {sectionField.options?.find(
-                    (option) => option.value === record[sectionField.key],
-                  )?.label ?? "No area"}
-                </p>
-              }
-            />
-          )}
-        </div>
-      </fieldset>
-    ) : null;
+  ) => renderRecordFieldGroup({
+    group,
+    groupFields,
+    headless,
+    kind,
+    record,
+    canManageSettings,
+    editorView,
+    interactionLocked,
+    toggleReadonlyBoundary,
+    renderEditorField,
+    bylineAuthors,
+    formId,
+    presentation,
+  });
+  const renderSectionFieldset = (headless = false) => renderRecordSectionFieldset({
+    sectionField,
+    sectionIsEditable,
+    headless,
+    interactionLocked,
+    toggleReadonlyBoundary,
+    record,
+    changeField,
+    kind,
+    errors,
+  });
   const sectionFieldset = renderSectionFieldset();
   const postTitleField =
     kind === "post" ? fields.find((field) => field.key === "title" && field.path === undefined) : undefined;
@@ -2050,53 +1974,22 @@ export const RecordForm = forwardRef<RecordFormHandle, RecordFormProps>(function
                   </p>
                 </div>
   );
-  const byline = Array.isArray(record.credits) ? record.credits.map(credit => {
-    if (!credit || typeof credit !== "object") return "";
-    const value = credit as Record<string, unknown>;
-    return value.kind === "custom" ? String(value.name ?? "")
-      : value.kind === "registered" ? bylineAuthors?.find(author => author.authorId === value.authorId)?.displayName ?? (typeof value.displayName === "string" ? value.displayName : "Author no longer listed")
-      : "Credit needs review";
-  }).filter(Boolean).join(", ") : "";
-  const parsedEditorialDate = typeof record.date === "string" && /^\d{4}-\d{2}-\d{2}$/.test(record.date) ? new Date(`${record.date}T12:00:00Z`) : null;
-  const editorialDate = parsedEditorialDate && Number.isFinite(parsedEditorialDate.getTime()) && parsedEditorialDate.toISOString().slice(0, 10) === record.date
-    ? new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric", year: "numeric", timeZone: "UTC" }).format(parsedEditorialDate)
-    : typeof record.date === "string" && record.date.trim() ? record.date : "Date not set";
   const storyMetaLink = (key: string) => {
     const field = fields.find(candidate => candidate.key === key);
     if (field) jumpToField(field);
   };
-  const storyMeta = editorView?.kind === "post" ? <div className="post-story-meta" aria-label="Story metadata">
-    <a href="#record-post-credits" onClick={event => { event.preventDefault(); storyMetaLink("credits"); }}><Icon name="users" />{byline || "Add a byline"}</a>
-    <a href="#record-post-date" onClick={event => { event.preventDefault(); storyMetaLink("date"); }}><Icon name="calendar" />{editorialDate}</a>
-    <a href="#record-post-categories" onClick={event => { event.preventDefault(); storyMetaLink("categories"); }}><Icon name="tag" />{Array.isArray(record.categories) && record.categories.length ? record.categories.join(" · ") : "Add categories"}</a>
-  </div> : null;
-  const postMetadataPanels: BentoPanel[] = kind === "post"
-    ? groups.flatMap((group) => {
-        if (editorView?.kind === "post" && ["social", "excerpt"].includes(group.id)) return [];
-        let groupFields = group.fields.filter(field => !isPostWritingField(field));
-        if (editorView?.kind === "post" && group.id === "hero-image") groupFields = groupFields.filter(field => ["heroBackgroundImage", "heroImage"].includes(field.key));
-        if (editorView?.kind === "post" && group.id === "search") groupFields = [...groupFields, ...(groups.find(group => group.id === "social")?.fields ?? [])];
-        if (editorView?.kind === "post" && group.id === "details") groupFields = [...groupFields, ...(groups.find(group => group.id === "excerpt")?.fields ?? [])];
-        if (groupFields.length === 0) return [];
-        const organizationSummary = (key: "categories" | "tags", label: string) => <div className="editor-organization-summary"><span>{label}</span><span className="editor-organization-chips">{
-          Array.isArray(record[key]) ? (key === "tags" ? publicPostTopics(postTags) : record[key] as unknown[]).map((value, index) => <span className="post-metadata-chip" data-primary={index === 0 || undefined} key={index}>{typeof value === "string" ? value : "Saved value needs review"}</span>)
-          : record[key] == null ? "Not set" : "Saved value needs review"
-        }</span></div>;
-        return [{
-          id: group.id,
-          title: editorView?.kind === "post" && group.id === "search" ? "Search & sharing" : group.label,
-          subtitle: group.help,
-          collapsible: editorView?.kind === "post" && ["basics", "hero-image", "organization"].includes(group.id) ? false : undefined,
-          aside: editorView?.kind === "post" && group.id === "dates" ? <span className="editor-inspector-date">{editorialDate}</span> : undefined,
-          defaultZone: "side",
-          defaultCollapsed: !(editorView?.kind === "post" ? ["basics", "hero-image", "organization"] : ["organization", "hero-image"]).includes(group.id),
-          body: editorView?.kind === "post" && group.id === "organization" ? <details className="editor-organization-details"><summary aria-label={interactionLocked ? "View organization" : "Edit organization"}>
-            {organizationSummary("categories", "Categories · primary first")}{organizationSummary("tags", "Tags · displayed tags first")}<Icon name="pencil" />
-          </summary><div>{renderFieldGroup(group, groupFields, true)}</div></details> : <>{renderFieldGroup(group, groupFields, true)}
-            {editorView?.kind === "post" && group.id === "hero-image" ? <p className="editor-image-role-note">Header background and lead media are set separately; changing one does not change the other.</p> : null}</>,
-        }];
-      })
-    : [];
+  const inPostWorkspace = editorView?.kind === "post";
+  const { editorialDate, storyMeta } = renderPostStoryMetadata(record, bylineAuthors, inPostWorkspace, storyMetaLink);
+  const postMetadataPanels = kind === "post" ? buildPostMetadataPanels({
+    groups,
+    inPostWorkspace,
+    isPostWritingField,
+    record,
+    postTags,
+    editorialDate,
+    interactionLocked,
+    renderFieldGroup,
+  }) : [];
   const postPanels: BentoPanel[] =
     kind === "post" && postTitleField && postSummaryField
       ? [
