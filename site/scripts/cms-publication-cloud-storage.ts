@@ -363,6 +363,7 @@ export function createCmsPublicationCloudStorage({
     checkpointArtifact: async (
       identity: CloudPublicationIdentity,
       directory: string,
+      onRestore?: () => void,
     ) => {
       assertIdentity(identity);
       await privateDirectory(directory);
@@ -394,8 +395,10 @@ export function createCmsPublicationCloudStorage({
       parseManifest(committed, identity, includeRenderer);
       // A retry can finish a different build from the same frozen input. The
       // first complete checkpoint wins and must be used before inclusion.
-      if (!committed.equals(encoded))
+      if (!committed.equals(encoded)) {
+        onRestore?.();
         await restoreArtifact(identity, directory);
+      }
       return digest(committed);
     },
     close: () => {

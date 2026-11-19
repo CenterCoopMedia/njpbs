@@ -135,10 +135,11 @@ export async function freezeBackgroundPublicationInputs({ buildBatchId, commitSh
 /** Build from a retained, digest-verified input without another historical read
  * or external-content refresh. The caller owns reservation and checkpoints. */
 export async function buildFrozenPublication({ buildBatchId, commitSha, artifactReceiptPath,
-  buildEnvironment = {}, mediaManagerCredential, retainedInputDirectory }: {
+  buildEnvironment = {}, mediaManagerCredential, retainedInputDirectory, forwardBuildOutput = true }: {
   buildBatchId: string; commitSha: string; artifactReceiptPath: string;
   buildEnvironment?: Record<string, string | undefined>; mediaManagerCredential?: MediaManagerCredential;
   retainedInputDirectory?: string;
+  forwardBuildOutput?: boolean;
 }): Promise<PublicArtifactInventoryReceipt> {
   await assertCmsPublicationSourceCheckout(commitSha);
   const environment = publicationBuildEnvironment({ buildBatchId, commitSha, artifactReceiptPath, buildEnvironment });
@@ -152,6 +153,6 @@ export async function buildFrozenPublication({ buildBatchId, commitSha, artifact
   } else {
     await freezeBackgroundPublicationInputs({ buildBatchId, commitSha, artifactReceiptPath, buildEnvironment, mediaManagerCredential });
   }
-  await runBuild(environment);
+  await runBuild(environment, forwardBuildOutput);
   return readArtifactReceipt(artifactReceiptPath);
 }

@@ -12,17 +12,18 @@ const failurePrefix = "CMS publication build failed: ";
 /** Keep Astro, Vite and the native search runtime out of the idle serializer. */
 export async function runCmsPublicationBuild(
   environment: Record<string, string | undefined>,
+  forwardOutput = true,
 ): Promise<void> {
   await new Promise<void>((resolve, reject) => {
     const child = spawn(process.execPath, ["--require", signalPreload, "--import", tsxLoader, thisFile], {
       cwd: siteRoot,
       env: { ...process.env, ...environment },
-      stdio: ["ignore", "inherit", "pipe"],
+      stdio: ["ignore", forwardOutput ? "inherit" : "ignore", "pipe"],
     });
     let failure = new Error("The CMS publication build child failed");
     let pendingLine: string | null = "";
     child.stderr?.on("data", (chunk: Buffer) => {
-      process.stderr.write(chunk);
+      if (forwardOutput) process.stderr.write(chunk);
       const parts = chunk.toString("utf8").split("\n");
       for (let index = 0; index < parts.length; index += 1) {
         if (pendingLine !== null) {
