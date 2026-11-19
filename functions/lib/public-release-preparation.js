@@ -190,7 +190,7 @@ async function checkPublicReleasePreparation({ firestore, preparationId, commitS
     firestore, transaction, preparationId, commitSha, phase })).reservation, { readOnly: true });
 }
 
-async function readFreshPublicReleasePreparationInTransaction({ firestore, transaction, preparationId, commitSha,
+async function readPublicReleasePreparationStateInTransaction({ firestore, transaction, preparationId, commitSha,
   phase }) {
   const [prepared, deployment, runtime, context] = await transaction.getAll(preparationRef(firestore, preparationId),
     firestore.doc("system/publicDeployment"), firestore.doc("system/cmsPublicationRuntime"), firestore.doc(PUBLIC_CONTEXT_PATH));
@@ -205,15 +205,25 @@ async function readFreshPublicReleasePreparationInTransaction({ firestore, trans
       control.commitSha !== publisher || control.cloud?.commitSha !== publisher ||
       control.cloud?.serializerId !== "cloudflare-publisher") refuse("The preparation check requires both exact publisher pins");
   const freshnessDigest = await publicReleaseFreshnessDigest(transaction, firestore);
-  if (!value.freshnessDigest || value.freshnessDigest !== freshnessDigest ||
-      !isDeepStrictEqual(value.predecessor, { ...predecessor, buildBatchId: pointer.newestEligibleBuildBatchId,
-        contextRevision: context.data()?.revision })) {
+  const contextRevision = context.data()?.revision;
+  const { contextRevision: preparedRevision, ...preparedPredecessor } = value.predecessor;
+  return {
+    reservation, preparation: value, pointer, runtimeUpdateTime: runtime.updateTime, contextRevision,
+    predecessorCurrent: isDeepStrictEqual(preparedPredecessor, { ...predecessor, buildBatchId: pointer.newestEligibleBuildBatchId }),
+    contentCurrent: value.freshnessDigest === freshnessDigest && contextRevision === preparedRevision,
+  };
+}
+
+async function readFreshPublicReleasePreparationInTransaction(input) {
+  const { reservation, preparation, pointer, runtimeUpdateTime, predecessorCurrent, contentCurrent } =
+    await readPublicReleasePreparationStateInTransaction(input);
+  if (!predecessorCurrent || !contentCurrent) {
     refuse("The public release preparation is stale; resume OLD and prepare a new operation outside the pause");
   }
-  return { reservation, preparation: value, pointer, runtimeUpdateTime: runtime.updateTime };
+  return { reservation, preparation, pointer, runtimeUpdateTime };
 }
 
 module.exports = { preparePublicRelease, readPublicReleasePreparation, projectPublicReleasePreparationReservation,
   preparedPublicWorkerCandidateRef, recordPreparedPublicWorkerCandidate, recordPreparedPublicReleaseCheckpoint,
   assertPreparedPublicReleaseCheckpoint, checkPublicReleasePreparation,
-  readFreshPublicReleasePreparationInTransaction, projectPreparedPublicReleaseCheckpoint };
+  readFreshPublicReleasePreparationInTransaction, readPublicReleasePreparationStateInTransaction, projectPreparedPublicReleaseCheckpoint };

@@ -8,6 +8,7 @@ import coordinator from "../../functions/lib/public-deployment-coordinator.js";
 import promotion from "../../functions/lib/public-release-promotion.js";
 import candidateModule from "../../functions/lib/public-worker-candidate.js";
 import mediaModule from "../../functions/lib/public-media-manifest.js";
+import mediaDiscovery from "../../functions/lib/media-discovery.js";
 import mediaStore from "../../functions/lib/public-media-manifest-store.js";
 import candidateStore from "../../functions/lib/public-worker-candidate-store.js";
 import { createHash } from "node:crypto";
@@ -204,6 +205,38 @@ const pauseForHandover = async () => {
   await db.doc("system/cmsPublicationRuntime").update({ phase: "paused", "cloud.phase": "paused" });
   await promotion.handoverPreparedPublicRelease({ firestore: db, preparationId, commitSha });
 };
+
+const readStaleForRecovery = () => db.runTransaction(transaction =>
+  promotion.readStalePublicReleaseBeforeHandover({ firestore: db, transaction, preparationId, commitSha }), { readOnly: true });
+
+const uploadMedia = () => db.runTransaction(async transaction => {
+  transaction.create(db.doc("media_assets_public/22222222-2222-4222-8222-222222222222"), { url: "https://images.example.org/upload.png" });
+  mediaDiscovery.bumpMediaDiscoveryRevision(transaction, db);
+});
+
+it("proves stale upload content before handover without changing the paused owner", async () => {
+  await seal();
+  const runtime = db.doc("system/cmsPublicationRuntime");
+  await runtime.update({ phase: "paused", "cloud.phase": "paused" });
+  await db.doc("cmsPages/staff-draft").set({ status: "draft", draft: { title: "Draft only" } });
+  await expect(readStaleForRecovery()).rejects.toThrow("requires stale preparation content");
+  await uploadMedia();
+  await expect(promotion.handoverPreparedPublicRelease({ firestore: db, preparationId, commitSha })).rejects.toThrow("stale");
+  const paused = await runtime.get();
+  expect(await readStaleForRecovery()).toEqual({ proofDigest: expect.stringMatching(/^[a-f0-9]{64}$/), runtimeUpdateTime: paused.updateTime });
+  expect((await runtime.get()).updateTime).toEqual(paused.updateTime);
+  expect((await db.doc(`${path}/proofs/handover`).get()).exists).toBe(false);
+  await db.doc("system/publicDeployment").update({ newestEligibleBuildBatchId: "another-batch" });
+  await expect(readStaleForRecovery()).rejects.toThrow("original paused predecessor");
+});
+
+it("refuses stale recovery after native handover and still permits promotion after an upload", async () => {
+  await seal();
+  await pauseForHandover();
+  await uploadMedia();
+  await expect(readStaleForRecovery()).rejects.toThrow("requires no handover or promotion work");
+  expect((await promote()).receipt).toMatchObject({ preparationId, commitSha, generation: 8 });
+});
 
 it("seals complete detached evidence while both OLD pins and the generation remain ready", async () => {
   const before = (await db.doc("system/publicDeployment").get()).data();
