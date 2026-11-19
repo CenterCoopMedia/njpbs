@@ -6,7 +6,8 @@ const { assertPublicWorkerCandidateDatabase, projectPublicWorkerCandidate } = re
 const { projectPublicBuildReservation, assertMediaLifecycleDeploymentFence } = require("./public-deployment");
 const { parseCmsPublicationRuntimeControl } = require("./cms-publication-runtime-control");
 const { preparedPublicWorkerCandidateRef, readFreshPublicReleasePreparationInTransaction,
-  projectPublicReleasePreparationReservation, projectPreparedPublicReleaseCheckpoint } = require("./public-release-preparation");
+  readPublicReleasePreparationStateInTransaction, projectPublicReleasePreparationReservation,
+  projectPreparedPublicReleaseCheckpoint } = require("./public-release-preparation");
 const { assertNoBuildCandidateInTransaction } = require("./no-build-post-publication");
 const { assertNoBuildPageCandidateInTransaction } = require("./no-build-page-candidate");
 const { assertPublicMediaManifest } = require("./public-media-manifest");
@@ -78,6 +79,24 @@ async function handoverPreparedPublicRelease({ firestore, preparationId, commitS
       predecessor: preparation.predecessor, runtimeUpdateTime });
     return { preparationId, commitSha, status: "handed-over" };
   });
+}
+
+// The operator keeps its paused-owner, drain and provider checks in the same
+// transaction. This read establishes that only preparation content is stale.
+async function readStalePublicReleaseBeforeHandover({ firestore, transaction, preparationId, commitSha, target }) {
+  assertPublicWorkerCandidateDatabase(firestore, target);
+  const state = await readPublicReleasePreparationStateInTransaction({ firestore, transaction, preparationId, commitSha, phase: "paused" });
+  if (!state.preparation.freshnessDigest || !state.predecessorCurrent || state.contentCurrent ||
+      !Number.isSafeInteger(state.contextRevision) || state.contextRevision < state.preparation.predecessor.contextRevision) {
+    refuse("OLD recovery requires stale preparation content and the original paused predecessor");
+  }
+  const ref = refs(firestore, preparationId), batchId = state.reservation.buildBatchId;
+  const work = await transaction.getAll(ref.handover, ref.promotion, firestore.doc(`system/publicDeployment/buildBatches/${batchId}`),
+    firestore.doc(`cmsPublicationSerializerJournals/cloudflare-publisher/releases/${preparationId}`));
+  if (work.some(row => row.exists)) refuse("OLD recovery requires no handover or promotion work");
+  const { proof, candidate } = await readPreparedReleaseProof(transaction, firestore, preparationId, commitSha);
+  if (candidate.generation !== state.reservation.generation) refuse("The prepared release candidate differs from its reservation");
+  return { proofDigest: digest(proof), runtimeUpdateTime: state.runtimeUpdateTime };
 }
 
 /** Only the trusted operator calls this after checkpoint/restore, provider
@@ -193,4 +212,4 @@ async function promotePreparedPublicRelease({ firestore, preparationId, commitSh
 }
 
 module.exports = { sealPreparedPublicRelease, checkSealedPublicRelease, promotePreparedPublicRelease,
-  preparedArtifactFromCandidate, readPreparedReleaseProof, handoverPreparedPublicRelease };
+  preparedArtifactFromCandidate, readPreparedReleaseProof, handoverPreparedPublicRelease, readStalePublicReleaseBeforeHandover };
