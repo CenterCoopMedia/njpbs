@@ -19,6 +19,7 @@ import { getFirestore as clientFirestore, connectFirestoreEmulator, updateDoc, d
 import { CONTRACT_SETTINGS, contractDigest, contractTarget, contractIdentity, decodeContractValue, captureNativeContract, compareContractInputs, discoverAdminWrites,
   contractSummary, recheckContractSummary } from "../../scripts/lib/cms-public-contract.mjs";
 import { prepareContractRuntime, replay } from "../../scripts/check-cms-public-contract.mjs";
+import { writeFunctionsContracts } from "../../scripts/lib/functions-contracts.mjs";
 import postFixture from "../../site/tests/fixtures/shadow-posts/post.json";
 import { chromeSettings } from "../../site/tests/fixtures/shadow-posts/chrome";
 import { DEFAULT_SITE_NAVIGATION, DEFAULT_PUBLIC_SITE_CHROME_SETTINGS, DEFAULT_PUBLIC_HOMEPAGE_BANNER_SETTINGS,
@@ -58,6 +59,7 @@ async function localClone(destination: string, revision: string) {
       await symlink(workspace ? join(destination, workspace) : join(root, relative, name), join(destination, relative, name));
     }
   }
+  await writeFunctionsContracts(destination);
 }
 
 async function clientApiOrigin(source: string) {

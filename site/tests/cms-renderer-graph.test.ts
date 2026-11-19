@@ -96,12 +96,11 @@ describe("committed renderer inputs", () => {
       { cwd, parserRequire, onUnknown: (code: string, file: string) => reasons.push({ code, file }) })).toBeNull();
     expect(reasons).toEqual([{ code: "build_launch_contract", file: launcher }]);
   });
-  it("rejects regenerated opaque require wrappers", async () => {
-    const bundle = "functions/lib/home-retained-sources.js";
-    const reasons: unknown[] = [];
-    expect(await fingerprintRendererGraph(commit(bundle, content(bundle) + "\n// regenerated bundle\n"),
-      { cwd, parserRequire, onUnknown: (code: string, file: string) => reasons.push({ code, file }) })).toBeNull();
-    expect(reasons).toEqual([{ code: "functions_loader_contract", file: bundle }]);
+  it("fingerprints retained-reader source changes and rejects an opaque require", async () => {
+    const source = "site/scripts/cms-current-code-context.ts";
+    const changed = content(source).replace("Qualified current CODE bytes differ", "Changed fixture diagnostic");
+    expect((await graph(commit(source, changed)))?.fingerprint).not.toBe(original!.fingerprint);
+    expect(await graph(commit(source, `${changed}\nrequire(process.argv[2]);\n`))).toBeNull();
   });
   it("includes a new static Functions edge discovered from an Astro frontmatter", async () => {
     const sha = commit("site/src/components/GraphProbe.astro", '---\nimport "../../../functions/lib/video-transcript-elevenlabs.js";\n---\n<p>Graph probe</p>');

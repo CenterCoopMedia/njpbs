@@ -4,6 +4,7 @@ import { readFile, writeFile, lstat, readdir } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import { isDeepStrictEqual } from "node:util";
 import { fingerprintInputs, fingerprintFunctionGraph, fingerprintPaths } from "./cms-component-receipt.mjs";
+import { contractInputs } from "./functions-contracts.mjs";
 
 const require = createRequire(import.meta.url);
 const targets = require("../../functions/lib/publication-target.js");
@@ -14,7 +15,7 @@ export const CONTRACT_BUDGET_MS = 240_000;
 export const CONTRACT_ATTEMPTS = 2;
 export const CONTRACT_SETTINGS = Object.freeze(["site-navigation", "public-site-chrome", "nj-decides-brand", "public-homepage-banner", "coverage-labels"]);
 export const CONTRACT_FEATURES = Object.freeze(["settings", "postChrome", "capabilities", "previewRequest", "adminSession"]);
-const PROOF_PATHS = ["scripts/lib/cms-public-contract.mjs", "scripts/check-cms-public-contract.mjs", "scripts/cms-public-contract-runtime.Dockerfile", "tests/functions/cms-public-contract.test.ts",
+const PROOF_PATHS = [...contractInputs, "scripts/lib/cms-public-contract.mjs", "scripts/check-cms-public-contract.mjs", "scripts/cms-public-contract-runtime.Dockerfile", "tests/functions/cms-public-contract.test.ts",
   ".github/workflows/cms-staging-deploy.yml", ".github/workflows/cms-dev-deploy.yml", "firebase.dev.json", "cms-api/wrangler.dev.jsonc", "preview-renderer/wrangler.dev.jsonc"];
 const PRIVATE_LIMIT = 16 * 1024 * 1024;
 const CREDENTIAL_KEYS = new Set(["authorization", "cookie", "password", "private_key", "secretAccessKey", "accessKeyId", "refreshToken", "idToken", "accessToken", "client_secret"]);

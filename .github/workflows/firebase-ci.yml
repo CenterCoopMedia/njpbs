@@ -62,7 +62,8 @@ jobs:
           status=0
           wait "$workspace_pid" || { status=$?; echo "::error::Workspace install failed (exit $status)"; }
           wait "$components_pid" || { status=$?; echo "::error::Component installs failed (exit $status)"; }
-          exit "$status"
+          test "$status" -eq 0 || exit "$status"
+          npm run functions:build
       - name: Dev configuration contracts
         # The supplier test reads packages from the workspace install; the Policy job has none.
         run: >-
@@ -305,6 +306,7 @@ jobs:
         run: |
           npm ci --ignore-scripts
           npm ci --prefix site --ignore-scripts
+          npm run functions:build
       - name: Prepare hosted offline preview sandbox
         run: |
           set -euo pipefail
@@ -329,4 +331,4 @@ jobs:
           CMS_PUBLIC_CONTRACT_SEALED: "1"
         run: node scripts/run-firebase-emulators.mjs exec auth,firestore,functions "node scripts/run-functions-tests.mjs tests/functions/cms-public-contract.test.ts"
       - name: Singleton contract script acceptance
-        run: npx --no-install vitest run tests/scripts/cms-public-contract.test.js
+        run: npx --no-install vitest run tests/scripts/cms-public-contract.test.js tests/scripts/cms-function-graph.test.js

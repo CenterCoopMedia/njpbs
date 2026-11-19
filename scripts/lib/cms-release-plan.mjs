@@ -1,5 +1,6 @@
 import { repositoryMatches } from "./repository-identity.mjs";
 import { ComponentReceiptError, assertLegacyPreviewProtocol, configurationFingerprint, fingerprintPaths, FUNCTION_GRAPH_VERSION } from "./cms-component-receipt.mjs";
+import { contractInputs } from "./functions-contracts.mjs";
 
 export async function assertLegacyCmsWorkflow(firestore) {
   const row = await firestore.doc("system/cmsPreviewRuntime").get();
@@ -120,6 +121,7 @@ export const TRUSTED_RELEASE_PATHS = Object.freeze([
 ]);
 
 export const RELEASE_CHECK_PATHS = Object.freeze([
+  ...contractInputs,
   "scripts/configure-cms-functions.mjs",
   "scripts/lib/functions-configuration.mjs",
   "config/functions-configuration.json",

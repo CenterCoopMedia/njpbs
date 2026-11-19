@@ -16,6 +16,7 @@ import { FUNCTION_RUNTIME_VARIABLES } from "./lib/cms-release-plan.mjs";
 import { repositoryMatches } from "./lib/repository-identity.mjs";
 import { readDeploymentManifest, renderCommittedDeploymentSource } from "./render-development-config.mjs";
 import { devPublicationIdentity } from "./assert-dev-cms-targets.mjs";
+import { contractRecipe, writeFunctionsContracts } from "./lib/functions-contracts.mjs";
 
 const execute = promisify(execFile);
 const trustedRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
@@ -112,6 +113,7 @@ export async function prepareDependencies({ directory, cwd, environment, candida
         const source = join(directory, `dependencies-${sha}`);
         await snapshotSource(sha, source, cwd);
         await install(source);
+        await prepareSnapshotContracts(source, source);
         roots[name] = source;
       }
     }
@@ -419,6 +421,12 @@ async function snapshotSource(sha, destination, cwd) {
   }
 }
 
+async function prepareSnapshotContracts(directory, dependencyRoot) {
+  if (existsSync(join(directory, contractRecipe))) {
+    await writeFunctionsContracts(directory, createRequire(join(dependencyRoot, "package.json")));
+  }
+}
+
 async function sealFiles(directory) {
   const entries = await readdir(directory, { withFileTypes: true });
   for (const entry of entries) {
@@ -491,8 +499,12 @@ export async function replay({ capsule, candidateSha, baselineSha, rendererSha, 
   const inputs = await privateDirectory(directory, "sealed-");
   const capsuleDigest = contractDigest(capsule);
   try {
-    for (const [name, sha] of [["C0", baselineSha], ["C1", candidateSha], ["R-source", rendererSha]]) await snapshotSource(sha, join(inputs, name), cwd);
-    await snapshotSource(process.env.CMS_TRUSTED_WORKFLOW_SHA ?? process.env.GITHUB_SHA, join(inputs, "trusted"), cwd);
+    for (const [name, sha] of [["C0", baselineSha], ["C1", candidateSha], ["R-source", rendererSha],
+      ["trusted", process.env.CMS_TRUSTED_WORKFLOW_SHA ?? process.env.GITHUB_SHA]]) {
+      const source = join(inputs, name);
+      await snapshotSource(sha, source, cwd);
+      await prepareSnapshotContracts(source, dependencyRoots[name]);
+    }
     for (const source of ["trusted", "C0", "C1", "R-source"]) {
       for (const relative of ["node_modules", "site/node_modules", ...["functions", "admin", "cms-api"].filter(workspace =>
         existsSync(join(dependencyRoots[source], workspace, "node_modules"))).map(workspace => `${workspace}/node_modules`)]) {
@@ -716,6 +728,7 @@ export async function main(argv = process.argv.slice(2)) {
       originalIdentity ??= state.identity;
       const source = join(attemptDirectory, "baseline");
       await snapshotSource(state.identity.backend.baseline.sourceSha, source, cwd);
+      await prepareSnapshotContracts(source, cwd);
       await symlink(join(cwd, "node_modules"), join(source, "node_modules"));
       const postOwners = await firestore.collection("system/publicDeployment/noBuildPostOwners").limit(2).get();
       // Exact-only heads have no readyQueueId; filter in the query so they cannot crowd out a retained head.

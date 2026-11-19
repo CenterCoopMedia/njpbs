@@ -1,10 +1,11 @@
-import { deploymentInputFingerprint, readDeploymentManifest } from "../render-development-config.mjs";
+import { deploymentInputFingerprint, readDeploymentManifest, renderCommittedDeploymentSource } from "../render-development-config.mjs";
 import { createHash } from "node:crypto";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import { builtinModules, createRequire } from "node:module";
 import { posix, resolve as absolute } from "node:path";
 import { functionGraphSource, readCommittedBlobs } from "./cms-component-receipt.mjs";
+import { addCommittedFunctionsContracts, contractInputs } from "./functions-contracts.mjs";
 
 const exec = promisify(execFile);
 const ROOTS = ["site/scripts/build-compiled-renderer.ts", "site/scripts/run-cms-preview-cloud.ts",
@@ -17,10 +18,10 @@ const LAUNCH_CONTRACTS = {
   "scripts/lib/deployment-settings.mjs": "e2438b3a0bc4087fc62c363f2eb056fd99f024be",
   ".dockerignore": null,
   "preview-renderer/Dockerfile.dockerignore": null,
-  "preview-renderer/Dockerfile": "42a38a31586875ca036c505f0c95409ae87cc10f",
+  "preview-renderer/Dockerfile": "cf8881d0bab1d4f032e6372b6335b3a3b5cd5931",
   "preview-renderer/worker.ts": "8afb604441bc62f95acdace555b5de75c297afec",
   "preview-renderer/wrangler.jsonc": "de29eeb62adaa32ddd720e48ca3a6f6032beeab5",
-  "scripts/prepare-preview-renderer.mjs": "c71f50fa21d7942c033b60daf14f9eb46398ca9d",
+  "scripts/prepare-preview-renderer.mjs": "d2fbae8afe64e506cc92125b274d7a988fd54834",
   "site/scripts/deploy-cms-preview-cloud.ts": "9b2ebf2d2a3d464e0f8050dcaa151d18ea863a08",
   "site/astro.renderer.config.mjs": "7357d79b8e0f57d78689d8f8871e9d359cf1471c",
   "site/src/lib/public-content-links.ts": "526e8f43707ce45118ec827c74f67b00f83bf60b",
@@ -37,6 +38,7 @@ const LAUNCH_CONTRACTS = {
   "site/src/lib/data-hub-embed-pages.ts": "8df9dd2bd108207a2482fccd6f94844ec8654737",
 };
 const GUARDS = ["site", "preview-renderer", "packages", ".npmrc", "package.json", "package-lock.json",
+  ...contractInputs,
   "functions/package.json", "admin/package.json", "cms-api/package.json", "scripts/prepare-preview-renderer.mjs",
   "scripts/lib/cms-renderer-graph.mjs", "scripts/lib/cms-component-receipt.mjs"];
 const MODULE = /\.(?:[cm]?js|[cm]?ts|jsx|tsx|astro)$/;
@@ -72,7 +74,7 @@ export async function fingerprintRendererGraph(sourceSha, deps = {}) {
       || (MODULE.test(file) && /^(?:functions\/|packages\/|preview-renderer\/|scripts\/|site\/(?:src\/|scripts\/|[^/]+$))/.test(file))));
     const prefetched = await readCommittedBlobs(sourceCandidates.map(([, metadata]) => metadata.split(" ").at(-1)), { cwd: deps.cwd });
     const cache = new Map();
-    const read = file => {
+    const readBlob = file => {
       if (!files.get(file)?.startsWith("100")) unknown("non_regular_input");
       if (!cache.has(file)) {
         const id = files.get(file).split(" ").at(-1);
@@ -80,6 +82,11 @@ export async function fingerprintRendererGraph(sourceSha, deps = {}) {
       }
       return cache.get(file);
     };
+    const env = deps.env ?? process.env;
+    const manifest = readDeploymentManifest(deps.cwd ?? process.cwd(), sourceSha);
+    const generated = await addCommittedFunctionsContracts(files, async file =>
+      renderCommittedDeploymentSource(file, await readBlob(file), env, manifest));
+    const read = file => generated.get(file) ?? readBlob(file);
     const resolve = (specifier, importer) => {
       const base = posix.normalize(posix.join(posix.dirname(importer), specifier.split("?")[0]));
       if (base.startsWith("../") || posix.isAbsolute(base)) unknown("outside_repository");
@@ -371,7 +378,8 @@ export async function fingerprintRendererGraph(sourceSha, deps = {}) {
         builder.onResolve({ filter: /.*/ }, args => atModule(args.kind === "entry-point" ? posix.normalize(args.path) : args.importer, () => {
           if (args.kind === "entry-point") return { path: posix.normalize(args.path), namespace: "git" };
           if (!args.path.startsWith(".")) {
-            if (["module", "node:module"].includes(args.path) && args.importer !== "functions/lib/home-retained-sources.js") unknown("module_loader_alias");
+            if (["module", "node:module"].includes(args.path)
+              && (args.importer !== "functions/lib/home-retained-sources.js" || generated.has(args.importer))) unknown("module_loader_alias");
             external(args.path); return { path: args.path, external: true };
           }
           return { path: resolve(args.path, args.importer), namespace: "git" };
@@ -397,8 +405,7 @@ export async function fingerprintRendererGraph(sourceSha, deps = {}) {
     const inputs = [...new Set([...files.keys()].filter(guard).concat([...visited], [...extra], dependencyPaths))].sort();
     const nonRegular = inputs.find(file => !files.get(file)?.startsWith("100"));
     if (nonRegular) { activeFile = nonRegular; unknown("non_regular_input"); }
-    const manifest = readDeploymentManifest(deps.cwd ?? process.cwd(), sourceSha);
-    const configured = deploymentInputFingerprint(inputs, deps.env ?? process.env, manifest);
+    const configured = deploymentInputFingerprint(inputs, env, manifest);
     const fingerprint = createHash("sha256").update("njpbs-renderer-require-graph-v1\n")
       .update(inputs.map(file => `${files.get(file)}\t${file}`).join("\n"))
       .update(configured ? `\nrender-inputs:${configured}` : "").digest("hex");
