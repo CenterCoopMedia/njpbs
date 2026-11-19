@@ -1113,13 +1113,11 @@ jobs:
           node-version: "22.23.5"
           package-manager-cache: false
       - name: Install workspace deps
-        run: |
-          npm ci --ignore-scripts
-          npm run functions:build --if-present
+        run: npm ci --ignore-scripts
       - name: Install Site release dependencies before mutation
         if: vars.CMS_PREVIEW_CLOUD_ENABLED == 'true' && needs.firebase-preflight.outputs.preview_paused == 'true'
         run: npm --prefix site ci --ignore-scripts --no-audit --no-fund
-      - name: Require preview deploy flags
+      - name: Prepare Functions contracts and verify preview deploy flags
         env:
           CMS_PREVIEW_ACCESS_VERIFIED: ${{ vars.CMS_PREVIEW_ACCESS_VERIFIED || 'false' }}
           CMS_PREVIEW_TRANSPORT: ${{ vars.CMS_PREVIEW_TRANSPORT || 'serializer' }}
@@ -1142,6 +1140,7 @@ jobs:
               exit 1
               ;;
           esac
+          npm run functions:build --if-present
       - name: Configure Firebase credentials
         env:
           SA: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
