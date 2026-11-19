@@ -305,8 +305,6 @@ function formatDateLabel(value) {
 
 function decodeXml(value = "") {
   return value
-    .replace(/&#038;/g, "&")
-    .replace(/&amp;/g, "&")
     .replace(/&lt;/g, "<")
     .replace(/&gt;/g, ">")
     .replace(/&quot;/g, '"')
@@ -317,7 +315,8 @@ function decodeXml(value = "") {
     .replace(/&#8220;/g, "\u201c")
     .replace(/&#8221;/g, "\u201d")
     .replace(/&#8212;/g, "\u2014")
-    .replace(/&#8211;/g, "\u2013");
+    .replace(/&#8211;/g, "\u2013")
+    .replace(/&(?:amp|#038);/g, "&");
 }
 
 function optionalEnv(value) {
