@@ -1,5 +1,4 @@
 import { cloudflarePublicWorkerTag } from "./cloudflare-account.mjs";
-import { assertProviderDeploymentPathsSerialized } from "./activate-public-worker-candidate";
 import { createServer } from "node:http";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -93,7 +92,6 @@ async function runCloudPublicationStages(
   progress.stage = "routing";
   assertProductionFirestoreRouting(environment);
   progress.stage = "arguments";
-  assertProviderDeploymentPathsSerialized();
   const { commitSha, serializerId } = parseCmsPublicationSerializerArguments([
     "--serve",
     environment.CMS_PUBLICATION_COMMIT_SHA ?? "",

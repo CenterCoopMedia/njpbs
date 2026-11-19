@@ -15,7 +15,6 @@ const boundary = vi.hoisted(() => {
 vi.mock("node:http", () => ({ createServer: vi.fn(() => ({
   once: vi.fn(), listen: vi.fn((_port, _host, ready) => ready()), close: vi.fn(done => done()),
 })) }));
-vi.mock("../scripts/activate-public-worker-candidate", () => ({ assertProviderDeploymentPathsSerialized: vi.fn() }));
 vi.mock("../scripts/cms-publication-runtime-guard", () => ({ assertCmsPreviewSourceCheckout: vi.fn(async () => {}) }));
 vi.mock("../scripts/run-cms-preview-serializer", () => ({ assertPreviewSandboxAvailable: vi.fn(async () => {}) }));
 vi.mock("../scripts/cms-publication-inputs", () => ({
