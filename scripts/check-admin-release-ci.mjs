@@ -1,5 +1,5 @@
 import { execFileSync } from "node:child_process";
-import { requireMainCi } from "../.github/scripts/require-main-ci.mjs";
+import { MERGE_GROUP_NOT_ON_MAIN, requireMainCi } from "../.github/scripts/require-main-ci.mjs";
 import { repositoryIdentity } from "./lib/repository-identity.mjs";
 
 // This read-only Node gate and gh inherit any ambient GH_TOKEN/GITHUB_TOKEN.
@@ -16,8 +16,12 @@ try {
   });
   console.log(`Admin release ${sha} passed main CI run ${run}.`);
 } catch (error) {
-  const noProof = error?.message === `No successful main CI/ci proof for deploy SHA ${process.argv[2]}`;
-  console.error(noProof ? "Standalone Admin release has no matching main CI proof." :
-    "Standalone Admin release CI lookup failed.");
+  if (error?.message === MERGE_GROUP_NOT_ON_MAIN) {
+    console.error(MERGE_GROUP_NOT_ON_MAIN);
+  } else {
+    const noProof = error?.message === `No successful main CI/ci proof for deploy SHA ${process.argv[2]}`;
+    console.error(noProof ? "Standalone Admin release has no matching main CI proof." :
+      "Standalone Admin release CI lookup failed.");
+  }
   process.exitCode = 1;
 }

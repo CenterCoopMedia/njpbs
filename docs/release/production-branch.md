@@ -9,10 +9,10 @@ The `production` branch selects a release by fast-forwarding to a green commit
 already on `main`. The only trigger for `promote.yml` is `workflow_dispatch`,
 with a required `sha` input of 40 lowercase hexadecimal characters. The dispatch
 ref stays `main`; the input selects an immutable commit already on main. It
-keeps policy scripts at the immutable main workflow revision, verifies the
-selected SHA's main
-ancestry and successful main-push `CI / ci` through the existing release checks,
-and pushes without force. It refuses to bootstrap a missing production branch.
+keeps policy scripts at the immutable main workflow revision and verifies the
+selected SHA is on main. It requires a successful `CI / ci` job for that exact
+SHA from a main push or its landed main merge group. It pushes without force and
+refuses to bootstrap a missing production branch.
 Later main commits cannot change the selected SHA. The run title is
 `Promote production <sha>`, so API readback can verify the selected input.
 The workflow run's `head_sha` identifies the main workflow revision, which can
@@ -132,8 +132,8 @@ requests change no repository, environment, ruleset, variable or secret.
 
 It prints every configuration check even
 when another fails, and exits 1 for any failed or unreadable condition. It checks
-exact-SHA main-push `CI / ci`, main ancestry and inclusion of both reviewed merge
-commits, the slug variable, exact environment
+exact-SHA `CI / ci` from a main push or its landed main merge group, main ancestry
+and inclusion of both reviewed merge commits, the slug variable, exact environment
 policy and public App client ID, both documented rulesets, key metadata and
 absence of repository/accessible organization key suppliers, exact App and
 installation permissions, selected repository scope, and the production
@@ -169,7 +169,7 @@ the next step. The public switch remains Joe's decision.
 | --- | --- |
 | Scope precheck, before bootstrap selection and first promotion | Coordinator's named authorization to read the approved App key and mint an unfiltered, metadata-only installation token. No provisioning or production write. |
 | 2, 3a, 3c | Coordinator's named technical setup authorization: environment policy, client ID and rulesets. |
-| 1 | Read-only exact main SHA and green main-push CI proof. |
+| 1 | Read-only exact main SHA and successful `CI / ci` from a main push or its landed main merge group. |
 | 3b | Joe: production bootstrap, which can trigger deployment. |
 | 4 | Joe: key provisioning, the credential activation point. |
 | 5–7 | Joe: first promotion/public switch, live probes and deployment verification. Destructive probes need a separately authorized lab. |
@@ -190,10 +190,10 @@ and approved target in #57. Require selected repositories, count one and exactly
 the verified target. Activation stops if the scope readback fails. Check canonical
 repository name/ID and `CMS_DEPLOY_OWNER` as above.
 
-1. Read-only: record the selected bootstrap SHA and its successful main-push
-   CI run. Replace `BOOTSTRAP_SHA` below with that reviewed 40-character SHA;
-   never select a PR head. Run the precheck at that SHA and keep failures from
-   still-unconfigured later steps in the record. Before bootstrap, the main
+1. Record the selected bootstrap SHA and its successful `CI / ci` run from the
+   main push or the landed main merge group. Replace `BOOTSTRAP_SHA` below with
+   that reviewed 40-character main SHA. Run the precheck at that SHA and record
+   failures from still-unconfigured later steps. Before bootstrap, the main
    ref readback must still equal the selected SHA; if it moved, stop and select
    a newly approved green main SHA.
 
@@ -383,7 +383,7 @@ CI proof, weaken a ruleset or clear a credential to manufacture a probe.
 | Dispatch promote.yml on an existing non-main branch | The promote job skips before entering production or requesting a token. If that ref lacks the dispatch workflow, GitHub rejects dispatch earlier; record which boundary was tested. |
 | Dispatch on an existing tag | Same refusal before token creation; environment policy must also admit no tags. |
 | Ordinary writer dispatch on main | The configured owner condition skips the job; no App token or production change. |
-| Owner dispatch selecting an existing main SHA with missing/failed main-push CI | The exact-SHA CI check fails before push. Choose a forward candidate so an earlier ancestry refusal does not substitute for CI evidence. If none exists, defer this probe to the lab. |
+| Owner dispatch selecting an existing main SHA with no successful `CI / ci` from a main push or its landed main merge group | The exact-SHA CI check fails before push. Choose a forward candidate so an earlier ancestry refusal does not substitute for CI evidence. If none exists, defer this probe to the lab. |
 | Owner dispatch selecting an existing older main SHA | The production ancestry check fails before push; production stays unchanged. This proves workflow refusal, not the server's App-token force-push protection. |
 | Ordinary writer update using Git push --dry-run | Safe as a local preview, but **insufficient evidence**: it does not ask the server to accept a ref update or evaluate every rule. Actual ordinary-writer update refusal belongs in the lab unless Joe separately authorizes the production attempt. |
 

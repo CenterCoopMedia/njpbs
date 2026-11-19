@@ -40,6 +40,39 @@ test("accepts the deploy SHA's own green main run after main moves", async () =>
   assert.ok(!requests.some((path) => path.includes(main)));
 });
 
+test("accepts the exact main merge-group proof when its push run was cancelled", async () => {
+  const queueRun = { ...run, id: 456, event: "merge_group", head_branch: `gh-readonly-queue/main/pr-137-${main}` };
+  const queueJob = { ...job, run_id: queueRun.id };
+  const landed = { status: "ahead", base_commit: { sha }, merge_base_commit: { sha } };
+  const request = ({ candidate = queueRun, jobs = [queueJob], comparison = landed } = {}) => async (path) => {
+    if (path.includes("/jobs?")) {
+      assert.match(path, /\/runs\/456\/jobs\?/);
+      return { jobs, total_count: jobs.length };
+    }
+    if (path.includes("/compare/")) {
+      assert.equal(path, `/repos/${repository}/compare/${sha}...main?per_page=1`);
+      return comparison;
+    }
+    if (path.includes("event=push&")) {
+      assert.equal(path, `/repos/${repository}/actions/workflows/ci.yml/runs?branch=main&event=push&status=success&head_sha=${sha}&per_page=100`);
+      return { workflow_runs: [{ ...run, conclusion: "cancelled" }] };
+    }
+    assert.equal(path, `/repos/${repository}/actions/workflows/ci.yml/runs?event=merge_group&status=success&head_sha=${sha}&per_page=100`);
+    return { workflow_runs: [candidate] };
+  };
+  const checkQueue = (options) => requireMainCi({ env: repositoryFixture, repository, sha, request: request(options) });
+  assert.equal(await checkQueue(), queueRun.id);
+  for (const failure of [
+    { candidate: { ...queueRun, head_branch: `gh-readonly-queue/other/pr-137-${main}` } },
+    { candidate: { ...queueRun, head_sha: main } },
+    { jobs: [{ ...queueJob, head_sha: main }] },
+    { jobs: [{ ...queueJob, conclusion: "skipped" }] },
+  ]) await assert.rejects(checkQueue(failure), /No successful main CI/);
+  for (const comparison of [{ ...landed, status: "behind" }, { ...landed, merge_base_commit: { sha: main } }]) {
+    await assert.rejects(checkQueue({ comparison }), /exact deploy SHA to be reachable from main/);
+  }
+});
+
 test("rejects a green newer SHA, PR/manual run, wrong workflow or repository", async () => {
   for (const changed of [
     { head_sha: main }, { event: "pull_request" }, { event: "workflow_dispatch" },
@@ -128,6 +161,7 @@ test("emergency CI requires successful exact-head CI and native ci; normal mode 
     assert.ok(!queries[0].includes("branch=main"));
     for (const change of [{ head_sha: main }, { conclusion: "failure" }, { status: "queued" },
       { path: ".github/workflows/other.yml" }, { event: "pull_request_target" }, { event: "pull_request" },
+      { event: "merge_group", head_branch: `gh-readonly-queue/main/pr-137-${main}` },
       { head_repository: { full_name: "fork/repo" } }, { repository: { full_name: "fork/repo" } }]) {
       await assert.rejects(requireReleaseCi({ env: repositoryFixture, repository, sha, ...emergency,
         request: request([{ ...ciRun, ...change }]) }), /No successful emergency CI/);
