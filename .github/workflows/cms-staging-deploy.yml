@@ -194,8 +194,7 @@ jobs:
       - uses: actions/setup-node@v7
         with:
           node-version: "22.23.5"
-          cache: npm
-          cache-dependency-path: package-lock.json
+          package-manager-cache: false
       - name: Install workspace deps
         run: npm ci --ignore-scripts
       - name: Preflight admin env
@@ -401,11 +400,7 @@ jobs:
       - uses: actions/setup-node@v7
         with:
           node-version: "22.23.5"
-          cache: npm
-          cache-dependency-path: |
-            package-lock.json
-            site/package-lock.json
-            preview-renderer/package-lock.json
+          package-manager-cache: false
       - name: Install workspace deps
         run: npm ci --ignore-scripts
       - name: Install Site deps
@@ -541,8 +536,7 @@ jobs:
       - uses: actions/setup-node@v7
         with:
           node-version: "22.23.5"
-          cache: npm
-          cache-dependency-path: package-lock.json
+          package-manager-cache: false
       - name: Install workspace deps
         run: |
           npm ci --ignore-scripts
@@ -883,10 +877,7 @@ jobs:
       - uses: actions/setup-node@v7
         with:
           node-version: "22.23.5"
-          cache: npm
-          cache-dependency-path: |
-            package-lock.json
-            site/package-lock.json
+          package-manager-cache: false
       # Firebase CI verifies the Worker with both trees installed. The cms-api
       # tests import site/scripts modules, whose tsconfig extends astro, so the
       # Site tree must exist here too (run 40807128961, tests/preflight parity).
@@ -1117,8 +1108,7 @@ jobs:
       - uses: actions/setup-node@v7
         with:
           node-version: "22.23.5"
-          cache: npm
-          cache-dependency-path: package-lock.json
+          package-manager-cache: false
       - name: Install workspace deps
         run: npm ci --ignore-scripts
       - name: Install Site release dependencies before mutation
@@ -1603,10 +1593,7 @@ jobs:
         if: vars.CMS_PREVIEW_CLOUD_ENABLED == 'true'
         with:
           node-version: "22.23.5"
-          cache: npm
-          cache-dependency-path: |
-            package-lock.json
-            site/package-lock.json
+          package-manager-cache: false
       - name: Install release dependencies
         if: vars.CMS_PREVIEW_CLOUD_ENABLED == 'true'
         run: |
@@ -1716,6 +1703,7 @@ jobs:
       - uses: actions/setup-node@v7
         with:
           node-version: "22.23.5"
+          package-manager-cache: false
       - name: Install workspace deps
         run: |
           npm ci --ignore-scripts
@@ -1787,8 +1775,7 @@ jobs:
       - uses: actions/setup-node@v7
         with:
           node-version: "22.23.5"
-          cache: npm
-          cache-dependency-path: package-lock.json
+          package-manager-cache: false
       - name: Install workspace deps
         run: npm ci --ignore-scripts
       - name: Recheck live Functions identity before Admin upload
@@ -1941,8 +1928,7 @@ jobs:
       - uses: actions/setup-node@v7
         with:
           node-version: "22.23.5"
-          cache: npm
-          cache-dependency-path: package-lock.json
+          package-manager-cache: false
       - name: Install workspace deps
         run: |
           npm ci --ignore-scripts
@@ -2079,8 +2065,7 @@ jobs:
       - uses: actions/setup-node@v7
         with:
           node-version: "22.23.5"
-          cache: npm
-          cache-dependency-path: package-lock.json
+          package-manager-cache: false
       - name: Install workspace deps
         run: |
           npm ci --ignore-scripts
