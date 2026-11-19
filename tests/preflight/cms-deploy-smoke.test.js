@@ -1013,7 +1013,7 @@ if(process.env.CMS_BUG_REPORT_TELEGRAM_ADMIN_MAP)process.exit(8); require("node:
     );
     const identityGate = firebaseJob.indexOf("Require pinned release and trusted workflow identities");
     const sourceScan = firebaseJob.indexOf(
-      "node \"$RUNNER_TEMP/metered-api-gate\"/.github/scripts/metered-api-scan.mjs --target-root \"$GITHUB_WORKSPACE\"",
+      "node \"$RUNNER_TEMP/release-gate\"/.github/scripts/metered-api-scan.mjs --target-root \"$GITHUB_WORKSPACE\"",
     );
     expect(identityGate).toBeGreaterThan(-1);
     expect(sourceScan).toBeGreaterThan(identityGate);
