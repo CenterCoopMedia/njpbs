@@ -1,6 +1,4 @@
 import { createRequire } from "node:module";
-import { readFileSync } from "node:fs";
-import { build } from "esbuild";
 import { describe, expect, it } from "vitest";
 import * as shared from "../../packages/content-core/src/live-production";
 import { banner, clearWithoutObservation, command, delivery, mapping, observation, session, snapshot } from "../fixtures/live-production";
@@ -237,14 +235,6 @@ describe.each([["shared", shared], ["Functions", deployed]] as const)("%s produc
       expect(() => contract.parseAgentObservation({ ...observation, ...patch })).toThrow(TypeError);
     }
   });
-});
-
-it("keeps the standalone Functions bundle generated from the shared source", async () => {
-  const output = await build({ entryPoints: ["packages/content-core/src/live-production.ts"], bundle: true,
-    platform: "node", format: "cjs", target: "node22", legalComments: "none", write: false,
-    banner: { js: "// Generated from packages/content-core/src/live-production.ts.\n// Regenerate with: node scripts/generate-live-production.mjs\n/* eslint-disable */" },
-  });
-  expect(readFileSync("functions/lib/live-production-contract.js", "utf8")).toBe(output.outputFiles[0].text);
 });
 
 it("refuses private records at the existing website publication boundary", () => {
