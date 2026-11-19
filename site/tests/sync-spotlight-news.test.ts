@@ -71,6 +71,13 @@ describe("fetchSpotlightFeed", () => {
 });
 
 describe("parseSpotlightFeed", () => {
+  it("decodes ampersand entities without decoding the text they expose", () => {
+    const [card] = parseSpotlightFeed(
+      `<rss><channel>${rssItem({ title: "A &amp;lt; B" })}</channel></rss>`,
+    );
+    expect(card?.title).toBe("A &lt; B");
+  });
+
   it("preserves source categories separately from inferred homepage topics", () => {
     const xml = `<rss><channel>${rssItem({ title: "Budget debate", category: "Politics" })
       .replace("</item>", "<category><![CDATA[Energy & Environment]]></category></item>")}</channel></rss>`;
