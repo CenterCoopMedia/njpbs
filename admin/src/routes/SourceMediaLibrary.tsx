@@ -86,6 +86,7 @@ import {
   type VideoContextBounds,
 } from "../lib/video-viewer-layout";
 import { samePosterObject, sharePosterRead, VideoPoster } from "./SourceMediaPoster";
+import { useSourceVideoPreviewRead } from "../lib/use-source-video-preview-read";
 
 export { sharePosterRead, VideoPoster };
 
@@ -258,8 +259,6 @@ export function VideoViewerBody({
   const [error, setError] = useState("");
   const [timeMessage, setTimeMessage] = useState("");
   const [canRefreshPreview, setCanRefreshPreview] = useState(false);
-  const [attempt, setAttempt] = useState(0);
-  const [renewing, setRenewing] = useState(false);
   const player = useRef<HTMLVideoElement>(null);
   const [naturalRatio, setNaturalRatio] = useState<number>();
   const feedback = useMediaFeedback({ backend: "s3", sourceId: asset.sourceId, id: asset.id }, getIdToken, asset.fileVersion);
@@ -309,7 +308,6 @@ export function VideoViewerBody({
   useEffect(() => { setDownloading(undefined); }, [asset.sourceId, asset.id, asset.fileVersion]);
   const requestedIdentity = useRef(fileReadContext.current);
   const accessIdentity = useRef("");
-  const renewalStarted = useRef(false);
   const mounted = useRef(true);
   useEffect(() => { mounted.current = true; return () => { mounted.current = false; }; }, []);
   useLayoutEffect(() => {
@@ -438,17 +436,6 @@ export function VideoViewerBody({
     resumePlayback.current = !element.paused && !element.ended;
   }
 
-  function refreshPreview(showProgress = false) {
-    if (renewalStarted.current) return;
-    renewalStarted.current = true;
-    rememberPlayback();
-    setError("");
-    setCanRefreshPreview(false);
-    // Healthy expiry renewal stays silent; an explicit retry needs visible progress.
-    setRenewing(showProgress);
-    setAttempt(value => value + 1);
-  }
-
   function applyPreviewAccess(result: SourceMediaRead) {
     const identity = `${asset.sourceId}/${asset.id}/${asset.fileVersion ?? ""}`;
     if (accessIdentity.current === identity) {
@@ -461,44 +448,33 @@ export function VideoViewerBody({
     setAccess(result);
   }
 
-  useEffect(() => {
-    if (!canPlayInBrowser(asset)) return;
-    let current = true;
-    rememberPlayback();
-    setError("");
-    setCanRefreshPreview(false);
-    const identity = `${asset.sourceId}/${asset.id}/${asset.fileVersion ?? ""}`;
-    if (accessIdentity.current !== identity) {
-      setAccess(undefined);
-      setPendingAccess(undefined);
-      if (requestedIdentity.current !== identity) {
-        position.current = 0;
-        pendingInitialSeek.current = 0;
-        resumePlayback.current = false;
-        setTimeMessage("");
-        setDurationMs((asset.viewingCopy?.durationSeconds ?? 0) * 1000);
+  const { refreshPreview, renewing } = useSourceVideoPreviewRead({
+    asset,
+    getIdToken,
+    rememberPlayback,
+    setError,
+    setCanRefreshPreview,
+    onRequestIdentity: identity => {
+      if (accessIdentity.current !== identity) {
+        setAccess(undefined);
+        setPendingAccess(undefined);
+        if (requestedIdentity.current !== identity) {
+          position.current = 0;
+          pendingInitialSeek.current = 0;
+          resumePlayback.current = false;
+          setTimeMessage("");
+          setDurationMs((asset.viewingCopy?.durationSeconds ?? 0) * 1000);
+        }
       }
-    }
-    requestedIdentity.current = identity;
-    getIdToken().then(token => current ? createVersionedSourceMediaRead(token, asset, "preview") : undefined)
-      .then(result => {
-        if (!current || !result) return;
-        renewalStarted.current = false;
-        const video = player.current;
-        // Authorize ahead, but keep the active source and buffer while it plays.
-        if (accessIdentity.current === identity && video && !video.paused && !video.ended && !video.error) setPendingAccess(result);
-        else applyPreviewAccess(result);
-        setRenewing(false);
-      })
-      .catch(cause => { if (current) {
-        renewalStarted.current = false;
-        setRenewing(false);
-        const originalMessage = cause instanceof SourceMediaFileChangedError ? cause.message : originalAccessMessage(cause);
-        setCanRefreshPreview(!originalMessage);
-        setError(originalMessage ?? "The preview could not be opened. Try again or download the original file.");
-      } });
-    return () => { current = false; };
-  }, [asset.id, asset.sourceId, asset.fileVersion, asset.preview, asset.viewingCopy?.state, attempt, getIdToken]);
+      requestedIdentity.current = identity;
+    },
+    onRead: (result, identity) => {
+      const video = player.current;
+      // Authorize ahead, but keep the active source and buffer while it plays.
+      if (accessIdentity.current === identity && video && !video.paused && !video.ended && !video.error) setPendingAccess(result);
+      else applyPreviewAccess(result);
+    },
+  });
 
   useEffect(() => {
     const identity = `${asset.sourceId}/${asset.id}/${asset.fileVersion ?? ""}`;
