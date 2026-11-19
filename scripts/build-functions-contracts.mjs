@@ -26,7 +26,7 @@ await Promise.all(generators.map(({ name }) => import(new URL(name, scripts))));
 
 // Local preflight exercises edits immediately. Hosted preflight also checks
 // the committed bytes because the deploy path still consumes them.
-if (mode === "--preflight" && process.env.GITHUB_ACTIONS === "true") {
+if (mode === "--preflight" && process.env.GITHUB_RUN_ID) {
   const paths = new Set(generators.flatMap(({ outputs }) => outputs));
   const git = (...args) => execFileSync("git", args, { encoding: "utf8" }).split("\0").filter(Boolean);
   const committed = new Set(git("grep", "-zl", "^// Generated from ", "HEAD", "--", "functions/lib")
