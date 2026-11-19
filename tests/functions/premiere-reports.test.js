@@ -1,4 +1,4 @@
-import { clearEmulatorFirestore } from "../helpers/emulator-firestore.js";
+import { clearEmulatorFirestore, isolatedFirestore } from "../helpers/emulator-firestore.js";
 import { afterEach, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { randomUUID } from "node:crypto";
 import firebase from "../../functions/lib/firebase.js";
@@ -8,7 +8,7 @@ import triage from "../../functions/bug-report-triage.js";
 import github from "../../functions/bug-report-github.js";
 import contract from "../../functions/lib/bug-report-contract.js";
 
-const { admin, db } = firebase;
+const { admin } = firebase;
 const PROJECT = process.env.GCLOUD_PROJECT;
 const quiet = { info() {}, error() {} };
 const VERSION_CONTEXT = {
@@ -16,6 +16,7 @@ const VERSION_CONTEXT = {
   pluginRevision: "c".repeat(40), platform: "win32", view: "library",
 };
 let clock;
+let db;
 let handlers;
 let users;
 let editor;
@@ -104,13 +105,15 @@ beforeAll(() => {
       !PROJECT?.startsWith("demo-")) {
     throw new Error("Run report tests with a demo project and Auth and Firestore emulators");
   }
+  // The shared project still receives background triggers between test files.
+  db = isolatedFirestore("premiere-reports.test.js");
 });
 
 beforeEach(async () => {
   process.env.FUNCTIONS_EMULATOR = "true";
   clock = Date.now();
   users = [];
-  const reset = await clearEmulatorFirestore(`http://${process.env.FIRESTORE_EMULATOR_HOST}/emulator/v1/projects/${PROJECT}/databases/(default)/documents`, { method: "DELETE" });
+  const reset = await clearEmulatorFirestore(`http://${process.env.FIRESTORE_EMULATOR_HOST}/emulator/v1/projects/${PROJECT}/databases/(default)/documents`, { method: "DELETE" }, db);
   expect(reset.ok).toBe(true);
   handlers = desktop.createPremiereHandlers({
     firestore: db, now: () => clock, log: quiet, enabled: () => true,

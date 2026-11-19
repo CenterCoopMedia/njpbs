@@ -202,25 +202,25 @@ async function requireAuth(req, options = {}) {
 // the caller's job: this returns the principal rather than a yes/no, because a
 // real decision also needs the record being written.
 async function requirePrincipal(req, options = {}) {
-  const { includeAccountStatus = false, previewStaff = false, ...authOptions } = options;
+  const { firestore = db, includeAccountStatus = false, previewStaff = false, ...authOptions } = options;
   if (previewStaff) {
     authOptions.cacheRevocation = false;
     authOptions.checkRevoked = true;
   }
   const user = await requireAuth(req, authOptions);
-  const snapshot = await db.collection("users").doc(user.uid).get();
+  const snapshot = await firestore.collection("users").doc(user.uid).get();
   const profile = snapshot.exists ? snapshot.data() : null;
   if (sessionPredatesWatermark(user.authTime, profile)) {
     markSessionRefused(req);
     throw new AuthError("This session was revoked. Sign in again");
   }
-  const tiersActive = await userDocUsesAccessTier(db, profile);
+  const tiersActive = await userDocUsesAccessTier(firestore, profile);
   if (tiersActive &&
       (user.emailVerified !== true || !isAccessTier(profile.accessTier) ||
         (profile.active !== undefined && profile.active !== true))) {
     throw new ForbiddenError("An active, verified staff access level is required");
   }
-  const actor = { ...user, principal: await registeredPrincipalFromUserDoc(db, user.uid, profile, undefined, tiersActive) };
+  const actor = { ...user, principal: await registeredPrincipalFromUserDoc(firestore, user.uid, profile, undefined, tiersActive) };
   if (previewStaff && !isApprovedPreviewStaff(user, profile, actor.principal)) {
     throw new ForbiddenError("An active, verified staff account is required");
   }

@@ -119,7 +119,7 @@ function createPremiereHandlers(deps = {}) {
     const body = fields(req.body, ["action", "userCode"]);
     if (!["lookup", "approve", "deny"].includes(body.action)) throw problem(400, "Choose lookup, approve, or deny");
     await verifyAppCheckToken(req.headers?.["x-firebase-appcheck"]);
-    const actor = await requirePrincipal(req, { includeAccountStatus: true });
+    const actor = await requirePrincipal(req, { firestore: deps.firestore, includeAccountStatus: true });
     if (!actor.approvedActive || !Number.isFinite(actor.authTime)) throw problem(403, "An active Boardwalk staff account is required");
     await sessions.consume(actor.uid, "approval", 20, 60000);
     const pairing = await sessions.approval(body.action, body.userCode, actor);
