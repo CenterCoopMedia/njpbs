@@ -209,7 +209,7 @@ const pauseForHandover = async () => {
 const readStaleForRecovery = () => db.runTransaction(transaction =>
   promotion.readStalePublicReleaseBeforeHandover({ firestore: db, transaction, preparationId, commitSha }), { readOnly: true });
 
-const uploadMedia = () => db.runTransaction(transaction => {
+const uploadMedia = () => db.runTransaction(async transaction => {
   transaction.create(db.doc("media_assets_public/22222222-2222-4222-8222-222222222222"), { url: "https://images.example.org/upload.png" });
   mediaDiscovery.bumpMediaDiscoveryRevision(transaction, db);
 });
