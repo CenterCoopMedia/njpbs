@@ -49,7 +49,6 @@
   "tests/functions/first-install-preparation-refusals.test.ts",
   "tests/functions/frozen-library-publication.test.js",
   "tests/functions/functions-startup.test.js",
-  "tests/functions/generated-bundles.test.js",
   "tests/functions/get-content.test.js",
   "tests/functions/home-editor-boundary.test.js",
   "tests/functions/joined-records.test.ts",

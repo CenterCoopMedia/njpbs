@@ -38,6 +38,12 @@ npm ci --ignore-scripts
 npm --prefix site ci --ignore-scripts
 ```
 
+After installing dependencies, run `npm run functions:build` to generate the
+deployable CommonJS contracts in `functions/lib/` from their shared sources.
+The Functions test and emulator commands build the contracts automatically.
+Commit generated changes alongside their sources. Hosted preflight checks that
+the committed bundles match the build.
+
 `.env.example` lists the settings that some commands need. Export the ones your
 work needs in your shell; nothing loads a root `.env` file. Workspace packages
 can have their own example files. Use emulators
