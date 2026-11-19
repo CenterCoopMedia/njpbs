@@ -106,6 +106,16 @@ describe("workflow policy", () => {
       }
     }
   });
+
+  it("disables npm caching for CMS deployment source", () => {
+    const setups = readRepo(".github/workflows/cms-staging-deploy.yml").split(/\n      - /)
+      .filter(step => /(?:^|\n        )uses: actions\/setup-node@/.test(step));
+    assert.ok(setups.length > 0);
+    for (const step of setups) {
+      assert.match(step, /^          package-manager-cache: false$/m);
+      assert.doesNotMatch(step, /^          cache(?:-dependency-path)?:/m);
+    }
+  });
 });
 
 describe("Admin visual shard completeness", () => {
