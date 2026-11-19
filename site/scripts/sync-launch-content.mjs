@@ -65,24 +65,23 @@ export async function fetchMediaManagerShows(config, fetchImpl = fetch) {
       Authorization: config.authorization,
     },
   });
-  const text = await response.text();
   if (!response.ok) {
-    const error = new Error(
-      `Media Manager sync failed with HTTP ${response.status}: ${text.slice(0, 300)}`,
-    );
+    await response.body?.cancel().catch(() => {});
+    const error = new Error(`Media Manager sync failed with HTTP ${response.status}`);
     error.status = response.status;
     throw error;
   }
+  const text = await response.text();
   let payload;
   try {
     payload = JSON.parse(text);
-  } catch (cause) {
+  } catch {
     // A 200 with an unparseable body (HTML error page, truncated response) is a
     // contract failure, not a transient outage. Tag it with the response status
     // so fetchShowsWithFallback rethrows it instead of masking a real bug as the
     // manual fallback.
     const error = new Error(
-      `Media Manager sync returned an unparseable body (HTTP ${response.status}): ${cause.message}`,
+      `Media Manager sync returned an unparseable body (HTTP ${response.status})`,
     );
     error.status = response.status;
     throw error;
@@ -158,6 +157,7 @@ export async function fetchShowsWithFallback(
   config,
   fetchImpl = fetch,
   sleepImpl = defaultSleep,
+  requireFresh = false,
 ) {
   for (let attempt = 0; ; attempt += 1) {
     try {
@@ -169,20 +169,22 @@ export async function fetchShowsWithFallback(
       // HTTP status) or a 5xx server outage retries and then falls back, so a
       // blip can't block the deploy. A half-set credential already threw
       // earlier, in buildSyncConfig.
-      const status = typeof error.status === "number" ? error.status : undefined;
+      const status = Number.isInteger(error?.status) && error.status >= 100 && error.status <= 599 ? error.status : undefined;
       if (status !== undefined && status < 500) {
         throw error;
       }
+      const reason = status === undefined ? "network error" : `HTTP ${status}`;
       if (attempt < TRANSIENT_RETRY_DELAYS_MS.length) {
         const wait = TRANSIENT_RETRY_DELAYS_MS[attempt];
         console.warn(
-          `Media Manager sync attempt ${attempt + 1} failed (${error.message}); retrying in ${wait / 1000}s.`,
+          `Media Manager sync attempt ${attempt + 1} failed (${reason}); retrying in ${wait / 1000}s.`,
         );
         await sleepImpl(wait);
         continue;
       }
+      if (requireFresh) throw Object.assign(new Error("scheduled refresh requires fresh Media Manager data"), { status });
       console.warn(
-        `Launch content sync hit a persistent Media Manager outage (${error.message}); falling back to the committed or manual launch cards so the deploy proceeds.`,
+        `Launch content sync hit a persistent Media Manager outage (${reason}); falling back to the committed or manual launch cards so the deploy proceeds.`,
       );
       return { payload: { data: [] }, outage: true };
     }
@@ -242,10 +244,7 @@ export async function main(env = process.env, fetchImpl = fetch, sleepImpl = def
   if (env.REQUIRE_FRESH_CONTENT === "1" && !config.hasCredentials) {
     throw new Error("scheduled refresh requires Media Manager credentials");
   }
-  const { payload, outage } = await fetchShowsWithFallback(config, fetchImpl, sleepImpl);
-  if (outage && env.REQUIRE_FRESH_CONTENT === "1") {
-    throw new Error("scheduled refresh requires fresh Media Manager data");
-  }
+  const { payload, outage } = await fetchShowsWithFallback(config, fetchImpl, sleepImpl, env.REQUIRE_FRESH_CONTENT === "1");
   if (env.REQUIRE_FRESH_CONTENT === "1" && selectLaunchCards(normalizeShowsToCards(payload)).length === 0) {
     throw new Error("scheduled refresh requires usable Media Manager data");
   }

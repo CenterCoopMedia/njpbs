@@ -59,7 +59,7 @@ const SAFE_FIREBASE_GRPC_CODES = new Set(
   GRPC_STATUS_NAMES.slice(1).map((code) => code.toLowerCase().replaceAll("_", "-")),
 );
 
-function safeGrpcErrorCode(code: unknown): string | null {
+export function safeGrpcErrorCode(code: unknown): string | null {
   if (
     typeof code === "number" &&
     Number.isInteger(code) &&

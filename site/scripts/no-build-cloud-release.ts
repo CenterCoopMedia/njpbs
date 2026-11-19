@@ -44,9 +44,8 @@ const activationExhaustionReason = "activation: Automatic retry attempts exhaust
 const interruptedExhaustionReason = "release: Automatic retry attempts exhausted without a terminal result. Inspect the original request, batch and journal before recovery.";
 const terminalExhaustionReason = "release: Automatic retry attempts exhausted; the release has a failed terminal batch. Inspect that receipt before recovery.";
 
-/** Only operator-owned text and a bounded HTTP status leave this boundary.
- * Provider bodies, arbitrary messages, headers and URLs are never copied. */
-export function cloudReleaseFailureReason(stage: CloudReleaseFailureStage, error?: unknown, exhausted = false): string {
+/** Read only bounded status metadata from a provider error. */
+export function cloudReleaseHttpStatus(error: unknown): number | undefined {
   let status: number | undefined;
   try {
     if (error && typeof error === "object") {
@@ -66,6 +65,13 @@ export function cloudReleaseFailureReason(stage: CloudReleaseFailureStage, error
       }
     }
   } catch { /* A malformed error must not compromise failure recording. */ }
+  return status;
+}
+
+/** Only operator-owned text and a bounded HTTP status leave this boundary.
+ * Provider bodies, arbitrary messages, headers and URLs are never copied. */
+export function cloudReleaseFailureReason(stage: CloudReleaseFailureStage, error?: unknown, exhausted = false): string {
+  const status = cloudReleaseHttpStatus(error);
   const message = Object.hasOwn(failureMessages, stage) ? `${stage}: ${failureMessages[stage]}` : "release: The attempt did not complete";
   return `${message}${status === undefined ? "" : ` (HTTP ${status})`}.${exhausted
     ? " Automatic retry attempts exhausted; original release ownership is retained." : ""}`.slice(0, 300);
@@ -84,14 +90,15 @@ async function verifyRelease(directory: string, identity: CloudPublicationIdenti
 
 /** Checkpoint exact bytes without creating executable work or making a public
  * candidate eligible. Preparation and staging share this storage boundary. */
-export async function checkpointNoBuildCloudRelease({ storage, identity, directory }: {
-  storage: Storage; identity: CloudPublicationIdentity; directory: string;
+export async function checkpointNoBuildCloudRelease({ storage, identity, directory, onRestore }: {
+  storage: Storage; identity: CloudPublicationIdentity; directory: string; onRestore?: () => void;
 }) {
   if (!storage.includesRenderer) throw new Error("Cloud release storage must retain the complete renderer");
   const input = await storage.readInput(identity.queueId);
   if (!input || hash(input) !== identity.inputSha256) throw new Error("Cloud release input differs");
   const prepared = await verifyRelease(directory, identity);
-  const artifactCheckpointDigest = await storage.checkpointArtifact(identity, directory);
+  const artifactCheckpointDigest = await storage.checkpointArtifact(identity, directory, onRestore);
+  onRestore?.();
   if (!await storage.restoreArtifact(identity, directory, artifactCheckpointDigest)) throw new Error("Cloud release checkpoint is missing");
   const restored = await verifyRelease(directory, identity);
   if (restored.artifactDigest !== prepared.artifactDigest) throw new Error("Cloud release checkpoint conflicts");

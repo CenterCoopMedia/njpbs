@@ -7,7 +7,11 @@ import { copyFile, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promi
 import { createRequire } from "node:module";
 import { tmpdir } from "node:os";
 import path from "node:path";
+import { Readable } from "node:stream";
+import { GetObjectCommand, HeadBucketCommand, PutObjectCommand } from "@aws-sdk/client-s3";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
+import { createCmsPublicationCloudStorage } from "../scripts/cms-publication-cloud-storage";
+import { createPublicArtifactInventoryReceipt } from "../src/lib/public-artifact-inventory";
 import {
   assertProductionReleaseTarget,
   assertProductionRendererSeals,
@@ -160,6 +164,86 @@ it("reuses the retained detached build and never stages it on a retry", async ()
   expect(fakes.reserveBatch).not.toHaveBeenCalled();
   expect(fakes.stage).not.toHaveBeenCalled();
   expect(fakes.recordCheckpoint).toHaveBeenCalledWith(expect.objectContaining({ publicBuildSettings }));
+});
+
+it.each([
+  ["input freeze", "Request failed (HTTP 403)"],
+  ["build", "Error"],
+  ["checkpoint upload", "Request failed (HTTP 503)"],
+  ["checkpoint restore", "Request failed (HTTP 502)"],
+  ["checkpoint record RPC", "PERMISSION_DENIED"],
+  ["checkpoint record", "The detached release checkpoint cannot change"],
+])("reports a controlled prepare failure at %s", async (failure, detail) => {
+  const providerError = (fields: object) => Object.assign(new Error("private body https://objects.example.org/?token=fixture"), {
+    name: "PrivateProviderError", headers: { Authorization: "Bearer fixture" }, ...fields,
+  });
+  const digest = (bytes: Buffer) => createHash("sha256").update(bytes).digest("hex");
+  const objects = new Map<string, { input: PutObjectCommand["input"]; bytes: Buffer }>();
+  const prefix = `publication/${queueId}`;
+  let storedManifestReads = 0;
+  const send = async (command: GetObjectCommand | HeadBucketCommand | PutObjectCommand) => {
+    if (command instanceof HeadBucketCommand) return {};
+    const key = command.input.Key!;
+    if (command instanceof PutObjectCommand) {
+      if (failure === "input freeze" && key === `${prefix}/input.json`) throw providerError({ statusCode: 403 });
+      if (failure === "checkpoint upload" && key.startsWith(`${prefix}/files/`)) {
+        throw providerError({ $metadata: { httpStatusCode: 503 } });
+      }
+      if (objects.has(key)) throw { $metadata: { httpStatusCode: 412 } };
+      objects.set(key, { input: command.input, bytes: Buffer.from(command.input.Body as Buffer) });
+      return {};
+    }
+    const stored = objects.get(key);
+    if (!stored) throw { $metadata: { httpStatusCode: 404 } };
+    if (key === `${prefix}/manifest.json` && ++storedManifestReads === 2 && failure === "checkpoint restore") {
+      throw providerError({ $metadata: { httpStatusCode: 502 } });
+    }
+    return { ...stored.input, Body: { transformToWebStream: () => Readable.toWeb(Readable.from([stored.bytes])) } };
+  };
+  const store = createCmsPublicationCloudStorage({ includeRenderer: true, client: { send } as never });
+  const cutoffAt = { seconds: cutoff / 1_000, nanoseconds: 0, toMillis: () => cutoff };
+  const predecessor = { generation: 297, deploymentId: "deployment-297", commitSha: active,
+    buildBatchId: "predecessor-batch", contextRevision: 1 };
+  const reservation = { schemaVersion: 1, buildBatchId, generation: 298, status: "reserved", commitSha: release,
+    cutoffAt, reservedAt: cutoffAt, reservedAgainstGeneration: predecessor.generation,
+    reservedAgainstDeploymentId: predecessor.deploymentId, reservedAgainstCommitSha: active };
+  const preparedDirectory = path.join(stateDirectory, "releases", queueId);
+  const create = vi.fn();
+  const db = database({ cloudCommit: active });
+  const firestore = {
+    doc: (name: string) => ({ ...db.doc(name), collection: () => ({ doc: () => ({}) }) }),
+    runTransaction: async (transaction: (rpc: object) => Promise<unknown>) => {
+      if (failure === "checkpoint record RPC") throw providerError({ code: 7, status: 800 });
+      const preparedArtifact = JSON.parse(await readFile(path.join(preparedDirectory, "prepared-worker.json"), "utf8"));
+      const prepared = { schemaVersion: 1, preparationId: queueId, commitSha: release, proposedGeneration: 298, cutoffAt, predecessor };
+      const existing = { schemaVersion: 1, preparationId: queueId, inputSha256: "f".repeat(64),
+        artifactCheckpointDigest: digest(objects.get(`${prefix}/manifest.json`)!.bytes), preparedArtifact, publicBuildSettings };
+      return transaction({ getAll: async () => [{ data: () => prepared }, { exists: true, data: () => existing }], create });
+    },
+  };
+  const fakes = dependencies();
+  const build = async ({ artifactReceiptPath }: { artifactReceiptPath: string }) => {
+    if (failure === "build") throw providerError({ code: "private-code", status: "503" });
+    const inventory = createPublicArtifactInventoryReceipt({ reservation, pages: [], posts: [], programs: [], authors: [], settings: [] });
+    await writeSeals(rendererDirectory, distDirectory);
+    await mkdir(path.join(rendererDirectory, "server"));
+    await writeFile(path.join(rendererDirectory, "server/entry.mjs"), "export {};");
+    await writeFile(artifactReceiptPath, JSON.stringify(inventory));
+    await writeFile(path.join(preparedDirectory, "public-context.json"), "{}");
+    return inventory;
+  };
+
+  const stage = failure === "checkpoint record RPC" ? "checkpoint record" : failure;
+  const result = run({ firestore, storage: store, prepareAgainstCommitSha: active, dependencies: {
+    assertSourceCheckout: fakes.assertSourceCheckout, prepareDetached: fakes.prepareDetached, readContent: fakes.readContent,
+    freezeExternalInputs: fakes.freezeExternalInputs, build,
+  } });
+  await expect(result).rejects.toMatchObject({
+    message: `${stage}: ${detail}`,
+    diagnostic: `${stage}: ${failure === "checkpoint record" ? "PreparedPublicReleaseError" : detail}`,
+    refusalMessage: failure === "checkpoint record" ? detail : undefined,
+  });
+  expect(create).not.toHaveBeenCalled();
 });
 
 it.each([null, { ...publicBuildSettings, values: { ...publicBuildValues, PUBLIC_GA4_MEASUREMENT_ID: "G-OTHER123" } }])(

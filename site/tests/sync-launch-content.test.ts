@@ -215,6 +215,8 @@ describe("fetchShowsWithFallback", () => {
       outage: true,
     });
     expect(fetchImpl).toHaveBeenCalledTimes(3);
+    expect(warn).toHaveBeenCalledWith(expect.stringContaining("HTTP 503"));
+    expect(warn.mock.calls.flat().join("\n")).not.toContain("upstream down");
     warn.mockRestore();
   });
 

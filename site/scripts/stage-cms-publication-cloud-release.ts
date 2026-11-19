@@ -8,13 +8,15 @@ import { fileURLToPath } from "node:url";
 import { isDeepStrictEqual } from "node:util";
 import type { App } from "firebase-admin/app";
 import type { Firestore } from "firebase-admin/firestore";
+import { safeGrpcErrorCode } from "./cms-publication-error-identity";
 import { parsePreviewStorageCredential } from "./cms-preview-storage-credential";
 import { createCmsPublicationCloudStorage, type CloudPublicationIdentity } from "./cms-publication-cloud-storage";
 import { assertCmsPublicationSourceCheckout, CmsPublicationRuntimeGuardError } from "./cms-publication-runtime-guard";
 import { firebaseAdminRuntime } from "./firebase-admin-runtime";
-import { CLOUD_RELEASE_ATTEMPT_LIMIT, cloudReleaseCollection, checkpointNoBuildCloudRelease, stageNoBuildCloudRelease } from "./no-build-cloud-release";
-import { buildFrozenPublication, freezeBackgroundPublicationInputs } from "./process-cms-publication";
+import { CLOUD_RELEASE_ATTEMPT_LIMIT, cloudReleaseCollection, cloudReleaseHttpStatus, checkpointNoBuildCloudRelease, stageNoBuildCloudRelease } from "./no-build-cloud-release";
+import { CmsPublicationProcessorError, buildFrozenPublication, freezeBackgroundPublicationInputs } from "./process-cms-publication";
 import { installInterruptGuard } from "./release-interrupt-guard";
+import { UpstreamError as ScheduleUpstreamError } from "./sync-schedule.mjs";
 import {
   assertProductionFirestoreRouting,
   parseCmsPublicationFirebaseServiceAccount,
@@ -32,6 +34,7 @@ const { assertPublicDeploymentReservedBatch, assertPublicDeploymentRetiredCloudR
   requireModule("../../functions/lib/public-deployment.js");
 const { cloudCmsPublicationRuntimeControl } = requireModule("../../functions/lib/cms-publication-runtime-control.js");
 const { preparePublicRelease, recordPreparedPublicReleaseCheckpoint } = requireModule("../../functions/lib/public-release-preparation.js");
+const { PreparedPublicReleaseError } = requireModule("../../functions/lib/public-release-error.js");
 
 const site = fileURLToPath(new URL("..", import.meta.url));
 const FIREBASE_PROJECT_ID = "njpbs-site";
@@ -269,13 +272,7 @@ const defaultDependencies: StageDependencies = {
   recordCheckpoint: recordPreparedPublicReleaseCheckpoint,
 };
 
-/** Trusted release producer. Detached preparation builds NEW while OLD stays
- * ready; ordinary staging still requires the exact NEW publisher pin.
- * Neither mode uploads a Worker version or changes public traffic. */
-export async function stageCmsPublicationCloudRelease({ firestore, storage, queueId, commitSha, stateDirectory,
-  distDirectory = path.join(site, "dist"), rendererDirectory = path.join(site, ".public-post-renderer"),
-  buildEnvironment, mediaManagerCredential, prepareAgainstCommitSha,
-  now = Date.now, interrupted = () => false, dependencies: overrides }: {
+type StageReleaseInput = {
   firestore: Firestore; storage: Storage; queueId: string; commitSha: string; stateDirectory: string;
   distDirectory?: string; rendererDirectory?: string;
   buildEnvironment: Record<string, string | undefined>;
@@ -284,7 +281,69 @@ export async function stageCmsPublicationCloudRelease({ firestore, storage, queu
   interrupted?: () => boolean;
   dependencies?: Partial<StageDependencies>;
   prepareAgainstCommitSha?: string;
-}) {
+};
+
+type PrepareStage = "preflight" | "input freeze" | "build" | "checkpoint upload" | "checkpoint restore" | "checkpoint record";
+
+class PrepareStageError extends CmsPublicationCloudReleaseOperatorError {
+  readonly diagnostic: string;
+
+  constructor(stage: PrepareStage, detail: string, readonly refusalMessage?: string) {
+    super(`${stage}: ${refusalMessage ?? detail}`);
+    this.diagnostic = `${stage}: ${detail}`;
+  }
+}
+
+function operatorErrorMessage(error: unknown): string | undefined {
+  try {
+    if (error instanceof CmsPublicationCloudReleaseOperatorError || error instanceof CmsPublicationRuntimeGuardError) return error.message;
+    if (error instanceof PreparedPublicReleaseError) return (error as Error).message;
+  } catch { /* Provider error objects may be malformed. */ }
+}
+
+function prepareFailureDetail(error: unknown): string {
+  const status = cloudReleaseHttpStatus(error);
+  if (status !== undefined) return `Request failed (HTTP ${status})`;
+  try {
+    // Schedule's upstream error carries its status in an operator-owned sentence.
+    if (error instanceof ScheduleUpstreamError) {
+      const match = /^TVSS (?:broadcast|kids) \d{4}-\d{2}-\d{2} failed with HTTP ([1-5]\d{2})$/.exec(error.message);
+      return match ? `Request failed (HTTP ${match[1]})` : "UpstreamError";
+    }
+    if (error && typeof error === "object") {
+      const code = safeGrpcErrorCode(Object.getOwnPropertyDescriptor(error, "code")?.value);
+      if (code) return code;
+      const name = Object.getOwnPropertyDescriptor(error, "name")?.value;
+      if (name === "AbortError" || name === "TimeoutError") return name;
+    }
+    if (error instanceof CmsPublicationProcessorError) return "CmsPublicationProcessorError";
+    if (error instanceof PreparedPublicReleaseError) return "PreparedPublicReleaseError";
+    if (error instanceof CmsPublicationCloudReleaseOperatorError || error instanceof CmsPublicationRuntimeGuardError) return "OperatorError";
+    if (error instanceof SyntaxError) return "SyntaxError";
+    if (error instanceof TypeError) return "TypeError";
+  } catch { /* Provider error objects may be malformed. */ }
+  return "Error";
+}
+
+/** Trusted release producer. Detached preparation builds NEW while OLD stays
+ * ready; ordinary staging still requires the exact NEW publisher pin.
+ * Neither mode uploads a Worker version or changes public traffic. */
+export async function stageCmsPublicationCloudRelease(input: StageReleaseInput) {
+  let stage: PrepareStage = "preflight";
+  try {
+    return await produceCloudRelease(input, next => { stage = next; });
+  } catch (error) {
+    if (input.prepareAgainstCommitSha === undefined) throw error;
+    const refusal = operatorErrorMessage(error);
+    throw new PrepareStageError(stage, prepareFailureDetail(error), refusal);
+  }
+}
+
+async function produceCloudRelease({ firestore, storage, queueId, commitSha, stateDirectory,
+  distDirectory = path.join(site, "dist"), rendererDirectory = path.join(site, ".public-post-renderer"),
+  buildEnvironment, mediaManagerCredential, prepareAgainstCommitSha,
+  now = Date.now, interrupted = () => false, dependencies: overrides }: StageReleaseInput,
+  setStage: (stage: PrepareStage) => void) {
   if (!QUEUE_ID.test(queueId ?? "") || !COMMIT_SHA.test(commitSha ?? "") || !path.isAbsolute(stateDirectory) ||
       !path.relative(path.resolve(site, ".."), path.resolve(stateDirectory)).startsWith("..")) {
     operatorError("The cloud release input is invalid");
@@ -323,6 +382,7 @@ export async function stageCmsPublicationCloudRelease({ firestore, storage, queu
   };
   stopIfInterrupted();
 
+  setStage("input freeze");
   const batch = prepareAgainstCommitSha
     ? await dependencies.prepareDetached({ firestore, preparationId: queueId, commitSha, oldCommitSha: prepareAgainstCommitSha })
     : (await dependencies.reserveBatch({ firestore, buildBatchId, commitSha, runtime })).batch;
@@ -346,10 +406,12 @@ export async function stageCmsPublicationCloudRelease({ firestore, storage, queu
 
   // The first complete build of this input wins. A retry stages those stored
   // bytes; a second build can differ, because external feeds change.
+  setStage("checkpoint restore");
   let prepared: PreparedArtifact;
   if (await storage.restoreArtifact(identity, directory)) {
     prepared = await dependencies.readPreparedArtifact(directory);
   } else {
+    setStage("input freeze");
     const retained = path.join(stateDirectory, "inputs", queueId);
     await rm(retained, { recursive: true, force: true });
     await mkdir(retained, { recursive: true, mode: 0o700 });
@@ -357,12 +419,15 @@ export async function stageCmsPublicationCloudRelease({ firestore, storage, queu
     await dependencies.freezeExternalInputs({ buildBatchId, commitSha, buildEnvironment, mediaManagerCredential,
       artifactReceiptPath: path.join(retained, "artifact-inventory.json"), retainedInputDirectory: retained });
     stopIfInterrupted();
+    setStage("build");
     // A stale compiled graph from another source must never be staged.
     await rm(rendererDirectory, { recursive: true, force: true });
     // The build script names its offline retained-input mode "background". The
     // reservation and the identity stay those of this release.
+    // Detached preparation reports a controlled error instead of child logs.
     const artifactReceipt = await dependencies.build({ buildBatchId, commitSha, retainedInputDirectory: retained,
       artifactReceiptPath: path.join(directory, "artifact-inventory.json"),
+      ...(prepareAgainstCommitSha ? { forwardBuildOutput: false } : {}),
       buildEnvironment: { ...buildEnvironment, PUBLIC_ARTIFACT_BATCH_MODE: "background",
         CMS_DEPLOYMENT_ENVIRONMENT: "production" } });
     // The build child has ended here, so the checkout is quiet again.
@@ -382,9 +447,13 @@ export async function stageCmsPublicationCloudRelease({ firestore, storage, queu
   stopIfInterrupted();
   if (prepareAgainstCommitSha) {
     await readPreparedPublicBuildSettings(directory, commitSha, expectedValues!);
-    const { artifactCheckpointDigest } = await dependencies.checkpoint({ storage, identity, directory });
+    setStage("checkpoint upload");
+    const { artifactCheckpointDigest } = await dependencies.checkpoint({ storage, identity, directory,
+      onRestore: () => setStage("checkpoint restore") });
     // Check the restored checkpoint, including the first-complete-build winner.
+    setStage("checkpoint restore");
     const publicBuildSettings = await readPreparedPublicBuildSettings(directory, commitSha, expectedValues!);
+    setStage("checkpoint record");
     await dependencies.recordCheckpoint({ firestore, preparationId: queueId, commitSha,
       inputSha256: identity.inputSha256, artifactCheckpointDigest, preparedArtifact: prepared, publicBuildSettings });
     return { queueId, buildBatchId, commitSha, generation: batch.generation, artifactDigest: prepared.artifactDigest,
@@ -435,8 +504,7 @@ export async function retireCmsPublicationCloudReleaseReservation({ firestore, q
 }
 
 function controlledErrorMessage(error: unknown): string {
-  return error instanceof CmsPublicationCloudReleaseOperatorError || error instanceof CmsPublicationRuntimeGuardError
-    ? error.message : "The cloud release command did not complete; read the reservation and release request before a retry";
+  return operatorErrorMessage(error) ?? "The cloud release command did not complete; read the reservation and release request before a retry";
 }
 
 export async function main(args = process.argv.slice(2), environment: NodeJS.ProcessEnv = process.env): Promise<void> {
@@ -482,7 +550,13 @@ export async function main(args = process.argv.slice(2), environment: NodeJS.Pro
     });
     process.stdout.write(`${JSON.stringify(result)}\n`);
   } catch (error) {
-    process.stderr.write(`Cloud release refused: ${controlledErrorMessage(error)}\n`);
+    if (error instanceof PrepareStageError) {
+      process.stderr.write(`Cloud release refused: ${error.diagnostic}\n`);
+      // The release driver matches existing operator refusals by their full text.
+      if (error.refusalMessage !== undefined) process.stderr.write(`Cloud release refused: ${error.refusalMessage}\n`);
+    } else {
+      process.stderr.write(`Cloud release refused: ${controlledErrorMessage(error)}\n`);
+    }
     process.exitCode = 1;
   } finally {
     storage?.close();

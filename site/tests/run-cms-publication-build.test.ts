@@ -90,6 +90,17 @@ describe("publication build process boundary", () => {
     });
   });
 
+  it("keeps detached build output private while retaining the controlled child error code", async () => {
+    const write = vi.spyOn(process.stderr, "write").mockImplementation(() => true);
+    const child = buildChild();
+    const pending = runCmsPublicationBuild({}, false);
+    expect(vi.mocked(spawn).mock.calls.at(-1)?.[2]?.stdio).toEqual(["ignore", "ignore", "pipe"]);
+    child.stderr.emit("data", Buffer.from("private output https://objects.example.org/?token=fixture\nCMS publication build failed: code ENOENT\n"));
+    child.emit("close", 1, null);
+    await expect(pending).rejects.toMatchObject({ code: "ENOENT" });
+    expect(write).not.toHaveBeenCalled();
+  });
+
   it.each([
     "name FirebaseError, code private-code",
     "name PrivateError, code ENOENT",

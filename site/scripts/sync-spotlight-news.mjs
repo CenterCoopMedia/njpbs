@@ -179,11 +179,13 @@ export async function main(env = process.env, fetchImpl = fetch, options = {}) {
   try {
     xml = await fetchSpotlightFeed(config, fetchImpl);
   } catch (error) {
+    const status = Number.isInteger(error?.status) && error.status >= 100 && error.status <= 599 ? error.status : undefined;
+    const reason = status === undefined ? "upstream error" : `HTTP ${status}`;
     console.warn(
-      `NJ Spotlight News sync skipped; using committed data (${error.message})`,
+      `NJ Spotlight News sync skipped; using committed data (${reason})`,
     );
     if (env.REQUIRE_FRESH_CONTENT === "1") {
-      throw new Error("scheduled refresh requires fresh Spotlight data");
+      throw Object.assign(new Error("scheduled refresh requires fresh Spotlight data"), { status });
     }
     return { cards: [], reusedCommittedData: true };
   }

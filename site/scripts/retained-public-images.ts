@@ -92,7 +92,9 @@ export async function freezeRetainedPublicImages(directory: string, identity: Id
       target = new URL(location, target).href;
       if (!admittedImageUrl(target)) throw new Error("Public image redirect is outside the allowlist");
     }
-    if (!response || !response.ok) throw new Error("Public image freeze request failed");
+    if (!response || !response.ok) {
+      throw Object.assign(new Error("Public image freeze request failed"), { status: response?.status });
+    }
     const contentType = response.headers.get("content-type")?.split(";")[0].trim().toLowerCase() ?? "";
     if (!IMAGE_TYPES.has(contentType)) { await response.body?.cancel(); throw new Error("Public image MIME type differs"); }
     const bytes = await imageBytes(response);
