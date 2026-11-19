@@ -264,6 +264,8 @@ for (const width of [1280, 1920, 390]) {
     await expect(message).toHaveValue("Preview width keeps this draft");
     await expectPreviewWidth(frame, 1280);
     await mobile.click();
+    // The mobile reflow moves the full-size action below the taller preview.
+    await expectPreviewWidth(frame, 390);
     await page.getByRole("button", { name: "Open full-size preview", exact: true }).click();
     const dialog = page.getByRole("dialog", { name: "Full-size banner preview", exact: true });
     await expectPreviewWidth(dialog.locator("iframe"), 390);
