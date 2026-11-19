@@ -38,6 +38,7 @@ import { SavedPreview, type SavedPreviewProps } from "./SavedPreview";
 import { useSaveFlight } from "../hooks/useSaveFlight";
 import { editorSaveReceipt, type SavedEditorReceipt } from "../lib/editor-save-receipt";
 import { useDraftAutosave } from "../hooks/useDraftAutosave";
+import { useEditorWorkspaceLoads } from "../hooks/useEditorWorkspaceLoads";
 import { RevisionHistory } from "./RevisionHistory";
 import { PublishedVersionStatus } from "./PublishedVersionStatus";
 import { LivePostAction } from "./LivePostAction";
@@ -2123,199 +2124,160 @@ function EditorWorkspaceContent({
     setRecordReloadCount((count) => count + 1);
   }
 
-  // Hydrate the selected page from its stored blocks, or restore the draft if this session has
-  // already edited it. Runs on every page selection and on an explicit reload. A save changes
-  // neither, so it never re-runs mid-edit. A stale resolution from a page the user already
-  // switched away from is dropped.
-  //
-  // This is also the only place the echoed version is written, which is deliberate: it is a
-  // claim about what the person can see, so it has to be set from the same read that seeds the
-  // editor. Clearing it before the read means a load that fails or resolves late can never
-  // leave a version from the previous page attached to this one's blocks.
-  useEffect(() => {
-    if (surface.kind !== "page" || !loadPage) return;
-    let cancelled = false;
-    const { pageId, section } = surface;
-    // A page this session has already edited comes back from the draft rather than the store
-    // (#579). Re-reading would replace the person's unsaved blocks with the stored ones, which
-    // is the same loss the read is meant to prevent, only through the front door. The draft
-    // carries the version it was composed against, so the restored blocks still echo the base
-    // the person actually saw and the conflict guard still holds (#530). An untouched page has
-    // no draft and reads normally, so someone else's change is still visible on return.
-    const restoredPageLoad = restoredPageLoadFor(surface);
-    if (restoredPageLoad) {
+  useEditorWorkspaceLoads({
+    surface,
+    loadPage,
+    reloadCount,
+    loadRecord,
+    recordReloadCount,
+    restorePageDraft: surface => {
+      // A page this session has already edited comes back from the draft rather than the store
+      // (#579). Re-reading would replace the person's unsaved blocks with the stored ones, which
+      // is the same loss the read is meant to prevent, only through the front door. The draft
+      // carries the version it was composed against, so the restored blocks still echo the base
+      // the person actually saw and the conflict guard still holds (#530). An untouched page has
+      // no draft and reads normally, so someone else's change is still visible on return.
+      const restoredPageLoad = restoredPageLoadFor(surface);
+      if (!restoredPageLoad) return false;
       setPageLoad(restoredPageLoad);
-      return;
-    }
-    previewReceipts.current.delete(surfaceKey(surface));
-    blockBaseVersion.current = undefined;
-    metadataBaseVersion.current = undefined;
-    pageCreatedBy.current = undefined;
-    pageEditingSection.current = undefined;
-    pageStatus.current = undefined;
-    homeCompositionVersion.current = undefined;
-    pagePublication.current = {};
-    expectedAbsent.current = false;
-    seedFromLegacyPage.current = undefined;
-    setPageLoad({ status: "loading" });
-    loadPage(pageId, section)
-      .then(
-        ({
-          blocks,
-          homeCompositionVersion: loadedHomeCompositionVersion,
-          publishedElectionBlocks: loadedPublishedElectionBlocks,
-          electionResultsApprovals: loadedElectionResultsApprovals,
-          metadata: loadedMetadata,
-          createdBy: loadedCreatedBy,
-          editingSection: loadedEditingSection,
-          status: loadedStatus,
-          publishAt: loadedPublishAt,
-          version,
-          scheduledPublishFailure: loadedScheduledPublishFailure,
-          contentVersion: loadedContentVersion,
-          publiclyVisible: loadedPubliclyVisible,
-          publicSourceVersion: loadedPublicSourceVersion,
-          publishedSourceVersion: loadedPublishedSourceVersion,
-          publishBuildPending: loadedPublishBuildPending,
-          publishBuildQueueId: loadedPublishBuildQueueId,
-          expectedAbsent: loadedExpectedAbsent,
-          seedFromLegacyPage: loadedLegacySeed,
-        }) => {
-          if (!cancelled) {
-            blockBaseVersion.current = version;
-            metadataBaseVersion.current = version;
-            pageCreatedBy.current = loadedCreatedBy;
-            pageEditingSection.current = loadedEditingSection;
-            pageStatus.current = loadedStatus;
-            homeCompositionVersion.current = loadedHomeCompositionVersion;
-            pagePublication.current = {
-              publishedElectionBlocks: loadedPublishedElectionBlocks,
-              contentVersion: loadedContentVersion ?? version,
-              publiclyVisible: loadedPubliclyVisible,
-              publicSourceVersion: loadedPublicSourceVersion,
-              publishedSourceVersion: loadedPublishedSourceVersion,
-              publishBuildPending: loadedPublishBuildPending,
-              publishBuildQueueId: loadedPublishBuildQueueId,
-            };
-            expectedAbsent.current = loadedExpectedAbsent === true;
-            seedFromLegacyPage.current = loadedLegacySeed;
-            // The store read is a clean point: record it so a later reverted edit compares against
-            // what was loaded and is recognized as clean (#595).
-            const addressedSurface: Extract<Surface, { kind: "page" }> = {
-              kind: "page",
-              pageId,
-              section,
-            };
-            rememberPreviewReceipt(addressedSurface, loadedExpectedAbsent ? undefined : version);
-            pageBaseVersions.current.set(surfaceKey(addressedSurface), {
-              blocks: version,
-              metadata: version,
-            });
-            const metadata = loadedMetadata ?? {
-              title: publicPage(pageId)?.title ?? pageId,
-            };
-            // Store and mount the same canonical seed. The block editor normalizes finite
-            // headline levels to the shared renderer's displayed value, so keeping the raw
-            // stored list here would make a later fully reverted edit compare permanently
-            // dirty and restore a stale draft instead of re-reading (#525/#595).
-            const editorBlocks = normalizeLoadedEditorBlocks(pageId === "data-hub" &&
-              loadedMetadata?.dataHubCompositionVersion !== 1
-              ? seedDataHubPageBlocks(blocks) : blocks);
-            pageBaselines.current.set(
-              surfaceKey(addressedSurface),
-              editorBlocks,
-            );
-            pageMetadataBaselines.current.set(
-              pageMetadataKey(addressedSurface),
-              metadata,
-            );
-            setPageLoad({
-              status: "ready",
-              publishedElectionBlocks: loadedPublishedElectionBlocks,
-              electionResultsApprovals: loadedElectionResultsApprovals,
-              blocks: editorBlocks,
-              homeCompositionVersion: loadedHomeCompositionVersion,
-              metadata:
-                pageMetadataDraftFor(addressedSurface)?.metadata ?? metadata,
-              createdBy: loadedCreatedBy,
-              editingSection: loadedEditingSection,
-              pageStatus: loadedStatus,
-              scheduledPublishFailure: loadedScheduledPublishFailure,
-              publishAt: loadedPublishAt,
-              contentVersion: loadedContentVersion ?? version,
-              publiclyVisible: loadedPubliclyVisible,
-              publicSourceVersion: loadedPublicSourceVersion,
-              publishedSourceVersion: loadedPublishedSourceVersion,
-              publishBuildPending: loadedPublishBuildPending,
-              publishBuildQueueId: loadedPublishBuildQueueId,
-              expectedAbsent: loadedExpectedAbsent === true,
-            });
-          }
-        },
-      )
-      .catch((error: unknown) => {
-        if (!cancelled) {
-          setPageLoad({
-            status: "error",
-            message:
-              error instanceof Error
-                ? error.message
-                : "The page could not be loaded.",
-          });
-        }
+      return true;
+    },
+    onPageReadStarted: surface => {
+      previewReceipts.current.delete(surfaceKey(surface));
+      blockBaseVersion.current = undefined;
+      metadataBaseVersion.current = undefined;
+      pageCreatedBy.current = undefined;
+      pageEditingSection.current = undefined;
+      pageStatus.current = undefined;
+      homeCompositionVersion.current = undefined;
+      pagePublication.current = {};
+      expectedAbsent.current = false;
+      seedFromLegacyPage.current = undefined;
+      setPageLoad({ status: "loading" });
+    },
+    // This is also the only place the echoed version is written, which is deliberate: it is a
+    // claim about what the person can see, so it has to be set from the same read that seeds the
+    // editor. Clearing it before the read means a load that fails or resolves late can never
+    // leave a version from the previous page attached to this one's blocks.
+    onPageRead: ({ pageId, section }, {
+      blocks,
+      homeCompositionVersion: loadedHomeCompositionVersion,
+      publishedElectionBlocks: loadedPublishedElectionBlocks,
+      electionResultsApprovals: loadedElectionResultsApprovals,
+      metadata: loadedMetadata,
+      createdBy: loadedCreatedBy,
+      editingSection: loadedEditingSection,
+      status: loadedStatus,
+      publishAt: loadedPublishAt,
+      version,
+      scheduledPublishFailure: loadedScheduledPublishFailure,
+      contentVersion: loadedContentVersion,
+      publiclyVisible: loadedPubliclyVisible,
+      publicSourceVersion: loadedPublicSourceVersion,
+      publishedSourceVersion: loadedPublishedSourceVersion,
+      publishBuildPending: loadedPublishBuildPending,
+      publishBuildQueueId: loadedPublishBuildQueueId,
+      expectedAbsent: loadedExpectedAbsent,
+      seedFromLegacyPage: loadedLegacySeed,
+    }) => {
+      blockBaseVersion.current = version;
+      metadataBaseVersion.current = version;
+      pageCreatedBy.current = loadedCreatedBy;
+      pageEditingSection.current = loadedEditingSection;
+      pageStatus.current = loadedStatus;
+      homeCompositionVersion.current = loadedHomeCompositionVersion;
+      pagePublication.current = {
+        publishedElectionBlocks: loadedPublishedElectionBlocks,
+        contentVersion: loadedContentVersion ?? version,
+        publiclyVisible: loadedPubliclyVisible,
+        publicSourceVersion: loadedPublicSourceVersion,
+        publishedSourceVersion: loadedPublishedSourceVersion,
+        publishBuildPending: loadedPublishBuildPending,
+        publishBuildQueueId: loadedPublishBuildQueueId,
+      };
+      expectedAbsent.current = loadedExpectedAbsent === true;
+      seedFromLegacyPage.current = loadedLegacySeed;
+      // The store read is a clean point: record it so a later reverted edit compares against
+      // what was loaded and is recognized as clean (#595).
+      const addressedSurface: Extract<Surface, { kind: "page" }> = {
+        kind: "page",
+        pageId,
+        section,
+      };
+      rememberPreviewReceipt(addressedSurface, loadedExpectedAbsent ? undefined : version);
+      pageBaseVersions.current.set(surfaceKey(addressedSurface), {
+        blocks: version,
+        metadata: version,
       });
-    return () => {
-      cancelled = true;
-    };
-  }, [surface, loadPage, reloadCount]);
-
-  // Hydrate an addressed record before mounting its form. Absence, soft deletion, a mismatched
-  // type discriminator, and read failure are distinct terminal states; none falls through to a
-  // blank form, because saving that form would mint or overwrite the wrong document (#566).
-  useEffect(() => {
-    if (surface.kind !== "record" || surface.id === null || !loadRecord) return;
-    let cancelled = false;
-    const addressedSurface = surface;
-    const draft = recordDraftFor(addressedSurface);
-    if (draft) {
+      const metadata = loadedMetadata ?? {
+        title: publicPage(pageId)?.title ?? pageId,
+      };
+      // Store and mount the same canonical seed. The block editor normalizes finite
+      // headline levels to the shared renderer's displayed value, so keeping the raw
+      // stored list here would make a later fully reverted edit compare permanently
+      // dirty and restore a stale draft instead of re-reading (#525/#595).
+      const editorBlocks = normalizeLoadedEditorBlocks(pageId === "data-hub" &&
+        loadedMetadata?.dataHubCompositionVersion !== 1
+        ? seedDataHubPageBlocks(blocks) : blocks);
+      pageBaselines.current.set(
+        surfaceKey(addressedSurface),
+        editorBlocks,
+      );
+      pageMetadataBaselines.current.set(
+        pageMetadataKey(addressedSurface),
+        metadata,
+      );
+      setPageLoad({
+        status: "ready",
+        publishedElectionBlocks: loadedPublishedElectionBlocks,
+        electionResultsApprovals: loadedElectionResultsApprovals,
+        blocks: editorBlocks,
+        homeCompositionVersion: loadedHomeCompositionVersion,
+        metadata:
+          pageMetadataDraftFor(addressedSurface)?.metadata ?? metadata,
+        createdBy: loadedCreatedBy,
+        editingSection: loadedEditingSection,
+        pageStatus: loadedStatus,
+        scheduledPublishFailure: loadedScheduledPublishFailure,
+        publishAt: loadedPublishAt,
+        contentVersion: loadedContentVersion ?? version,
+        publiclyVisible: loadedPubliclyVisible,
+        publicSourceVersion: loadedPublicSourceVersion,
+        publishedSourceVersion: loadedPublishedSourceVersion,
+        publishBuildPending: loadedPublishBuildPending,
+        publishBuildQueueId: loadedPublishBuildQueueId,
+        expectedAbsent: loadedExpectedAbsent === true,
+      });
+    },
+    onPageReadError: message => setPageLoad({ status: "error", message }),
+    restoreRecordDraft: surface => {
+      const draft = recordDraftFor(surface);
+      if (!draft) return false;
       setRecordLoad({ status: "ready", record: draft, initialIsClean: false });
-      return;
-    }
-    previewReceipts.current.delete(surfaceKey(addressedSurface));
-    setRecordLoad({ status: "loading" });
-    loadRecord(surface.record, surface.id)
-      .then((result) => {
-        if (cancelled) return;
-        if (result.status === "ready") {
-          rememberPreviewReceipt(addressedSurface, result.record.version);
-          recordBaselines.current.set(
-            surfaceKey(addressedSurface),
-            result.record,
-          );
-          setRecordLoad({
-            status: "ready",
-            record: result.record,
-            initialIsClean: true,
-          });
-        } else {
-          setRecordLoad(result);
-        }
-      })
-      .catch((error: unknown) => {
-        if (!cancelled) {
-          setRecordLoad({
-            status: "error",
-            message:
-              error instanceof Error
-                ? error.message
-                : "The record could not be loaded.",
-          });
-        }
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [surface, loadRecord, recordReloadCount]);
+      return true;
+    },
+    onRecordReadStarted: surface => {
+      previewReceipts.current.delete(surfaceKey(surface));
+      setRecordLoad({ status: "loading" });
+    },
+    onRecordRead: (addressedSurface, result) => {
+      if (result.status === "ready") {
+        rememberPreviewReceipt(addressedSurface, result.record.version);
+        recordBaselines.current.set(
+          surfaceKey(addressedSurface),
+          result.record,
+        );
+        setRecordLoad({
+          status: "ready",
+          record: result.record,
+          initialIsClean: true,
+        });
+      } else {
+        setRecordLoad(result);
+      }
+    },
+    onRecordReadError: message => setRecordLoad({ status: "error", message }),
+  });
 
   // Raise the aggregate in-flight save signal to the shell so it can hold primary navigation too.
   // The same aggregate blocks this component's isolated picker; routed destinations live in an
