@@ -276,9 +276,6 @@ describe("Admin E2E fail-closed guard", () => {
     expect(receipt.removed).toBe(false);
     expect(() => assertFunctionsSecretOverride(receipt)).not.toThrow();
     expect(readFileSync(receipt.path, "utf8")).toContain(
-      "CMS_PUBLISH_GITHUB_TOKEN=local-emulator-publish-token-value\n",
-    );
-    expect(readFileSync(receipt.path, "utf8")).toContain(
       "CMS_STAFF_EMAIL_API_TOKEN=local-emulator-staff-email-api-token-value\n",
     );
     cleanupFunctionsSecretOverride(receipt);

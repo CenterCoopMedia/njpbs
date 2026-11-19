@@ -221,7 +221,6 @@
     "CMS_PRIVATE_VIDEO_R2_READ_SECRET_ACCESS_KEY": {"deployAdmin": true},
     "CMS_PRIVATE_VIDEO_R2_WRITE_ACCESS_KEY_ID": {"deployAdmin": true},
     "CMS_PRIVATE_VIDEO_R2_WRITE_SECRET_ACCESS_KEY": {"deployAdmin": true},
-    "CMS_PUBLISH_GITHUB_TOKEN": {"environment": "CMS_PUBLISH_GITHUB_TOKEN_PROVISIONING"},
     "CMS_PUBLICATION_WAKE_TOKEN": {"pattern": "^[A-Za-z0-9_-]{32,128}$"},
     "CMS_STAFF_EMAIL_API_TOKEN": {"compare": true, "minLength": 20, "deployAdmin": true},
     "CMS_TRANSCRIPTION_CREDENTIAL_KEY": {},

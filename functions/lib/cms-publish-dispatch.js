@@ -2,20 +2,15 @@
 
 // Dispatch admission is shared by Functions and the trusted workflow bootstrap.
 function buildDispatchPayload({ queueId, triggeredBy }, env = process.env) {
-  if (env.CMS_DEPLOYMENT_ENVIRONMENT === "development") {
-    if ((env.GCLOUD_PROJECT || env.GOOGLE_CLOUD_PROJECT) !== "njpbs-site-dev" ||
-        env.CMS_PUBLISH_TRANSPORT !== "github" ||
-        [env.GCLOUD_PROJECT, env.GOOGLE_CLOUD_PROJECT].some(project => project && project !== "njpbs-site-dev")) {
-      throw new Error("Development publication requires the dev project and GitHub transport");
-    }
-    return { event_type: "cms_dev_publish", client_payload: {
-      queueId, triggeredBy, environment: "development", projectId: "njpbs-site-dev", transport: "github",
-    } };
+  if (env.CMS_DEPLOYMENT_ENVIRONMENT !== "development" ||
+      (env.GCLOUD_PROJECT || env.GOOGLE_CLOUD_PROJECT) !== "njpbs-site-dev" ||
+      env.CMS_PUBLISH_TRANSPORT !== "github" ||
+      [env.GCLOUD_PROJECT, env.GOOGLE_CLOUD_PROJECT].some(project => project && project !== "njpbs-site-dev")) {
+    throw new Error("Development publication requires the dev project and GitHub transport");
   }
-  if ([env.GCLOUD_PROJECT, env.GOOGLE_CLOUD_PROJECT].includes("njpbs-site-dev")) {
-    throw new Error("The dev project cannot dispatch a production publication");
-  }
-  return { event_type: "cms_publish", client_payload: { queueId, triggeredBy } };
+  return { event_type: "cms_dev_publish", client_payload: {
+    queueId, triggeredBy, environment: "development", projectId: "njpbs-site-dev", transport: "github",
+  } };
 }
 
 function trustedPublishActors(env = process.env) {
@@ -34,16 +29,10 @@ function assertPublishDispatch({ eventName, action, ref, sender, actor, payload 
       !/^[A-Za-z0-9]{20}$/.test(payload?.queueId ?? "")) {
     throw new Error("Invalid publication dispatch");
   }
-  if (environment === "development") {
-    if (!devActor || trusted.includes(devActor) || sender !== devActor || actor !== devActor ||
-        action !== "cms_dev_publish" || payload.environment !== "development" ||
-        payload.projectId !== "njpbs-site-dev" || payload.transport !== "github") {
-      throw new Error("Invalid development publication dispatch");
-    }
-  } else if (environment !== "production" || action !== "cms_publish" || sender !== actor ||
-      !trusted.includes(actor) || sender === devActor || payload.environment === "development" ||
-      payload.projectId === "njpbs-site-dev") {
-    throw new Error("Invalid production publication dispatch");
+  if (environment !== "development" || !devActor || trusted.includes(devActor) || sender !== devActor || actor !== devActor ||
+      action !== "cms_dev_publish" || payload.environment !== "development" ||
+      payload.projectId !== "njpbs-site-dev" || payload.transport !== "github") {
+    throw new Error("Invalid development publication dispatch");
   }
 }
 

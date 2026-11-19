@@ -8,6 +8,9 @@ work recovery. A CMS save, accepted queue, uploaded candidate or process health
 The production CMS workflow pins `CMS_PUBLISH_TRANSPORT=serializer`. The Nov. 18
 rollout used the serializer. [Hosted deployment evidence](https://github.com/CenterCoopMedia/njpbs/actions/runs/44337773774/job/134922602302)
 
+Development sends GitHub dispatches through the development App. Production
+Functions enqueue publication work for the serializer.
+
 ## Source and session
 
 Choose one reviewed full 40-character NEW SHA for publisher, public renderer

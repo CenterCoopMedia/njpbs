@@ -578,7 +578,6 @@ jobs:
           CMS_BUG_REPORT_TELEGRAM_WEBHOOK_SECRET: ${{ secrets.CMS_BUG_REPORT_TELEGRAM_WEBHOOK_SECRET }}
           CMS_BUG_REPORT_GITHUB_TOKEN: ${{ secrets.CMS_BUG_REPORT_GITHUB_TOKEN }}
           CMS_BUG_REPORT_GITHUB_WEBHOOK_SECRET: ${{ secrets.CMS_BUG_REPORT_GITHUB_WEBHOOK_SECRET }}
-          CMS_PUBLISH_GITHUB_TOKEN_PROVISIONING: ${{ secrets.CMS_PUBLISH_GITHUB_TOKEN_PROVISIONING }}
           FORCE_FIREBASE: ${{ inputs.force_firebase }}
           CMS_DEPLOY_MIGRATIONS: ${{ inputs.migrations }}
           CMS_EDGE_ORIGIN_SECRET: ${{ secrets.CMS_EDGE_ORIGIN_SECRET }}
@@ -653,7 +652,6 @@ jobs:
           CMS_STAFF_EMAIL_API_TOKEN: ${{ secrets.CMS_STAFF_EMAIL_API_TOKEN }}
           CMS_VOICEOVER_R2_ACCESS_KEY_ID: ${{ secrets.CMS_VOICEOVER_R2_ACCESS_KEY_ID }}
           CMS_VOICEOVER_R2_SECRET_ACCESS_KEY: ${{ secrets.CMS_VOICEOVER_R2_SECRET_ACCESS_KEY }}
-          CMS_PUBLISH_GITHUB_TOKEN_PROVISIONING: ${{ secrets.CMS_PUBLISH_GITHUB_TOKEN_PROVISIONING }}
         run: node scripts/component-runner.mjs functions verify-config
       - name: Verify selected event trigger IAM before mutation
         env:
@@ -725,7 +723,6 @@ jobs:
           CMS_BUG_REPORT_TELEGRAM_WEBHOOK_SECRET: ${{ secrets.CMS_BUG_REPORT_TELEGRAM_WEBHOOK_SECRET }}
           CMS_BUG_REPORT_GITHUB_TOKEN: ${{ secrets.CMS_BUG_REPORT_GITHUB_TOKEN }}
           CMS_BUG_REPORT_GITHUB_WEBHOOK_SECRET: ${{ secrets.CMS_BUG_REPORT_GITHUB_WEBHOOK_SECRET }}
-          CMS_PUBLISH_GITHUB_TOKEN_PROVISIONING: ${{ secrets.CMS_PUBLISH_GITHUB_TOKEN_PROVISIONING }}
           FORCE_FIREBASE: ${{ inputs.force_firebase }}
           CMS_DEPLOY_MIGRATIONS: ${{ inputs.migrations }}
           CMS_EDGE_ORIGIN_SECRET: ${{ secrets.CMS_EDGE_ORIGIN_SECRET }}
@@ -1127,15 +1124,6 @@ jobs:
       - name: Install Site release dependencies before mutation
         if: vars.CMS_PREVIEW_CLOUD_ENABLED == 'true' && needs.firebase-preflight.outputs.preview_paused == 'true'
         run: npm --prefix site ci --ignore-scripts --no-audit --no-fund
-      - name: Require publish deploy flags
-        env:
-          CMS_WRITEBACK_CONFIGURED: ${{ vars.CMS_WRITEBACK_CONFIGURED }}
-        run: |
-          set -euo pipefail
-          if [ "$CMS_WRITEBACK_CONFIGURED" != "true" ]; then
-            echo "CMS_WRITEBACK_CONFIGURED must be true before staging deploy" >&2
-            exit 1
-          fi
       - name: Require preview deploy flags
         env:
           CMS_PREVIEW_ACCESS_VERIFIED: ${{ vars.CMS_PREVIEW_ACCESS_VERIFIED || 'false' }}
@@ -1479,7 +1467,6 @@ jobs:
           CMS_STAFF_EMAIL_API_TOKEN: ${{ secrets.CMS_STAFF_EMAIL_API_TOKEN }}
           CMS_VOICEOVER_R2_ACCESS_KEY_ID: ${{ secrets.CMS_VOICEOVER_R2_ACCESS_KEY_ID }}
           CMS_VOICEOVER_R2_SECRET_ACCESS_KEY: ${{ secrets.CMS_VOICEOVER_R2_SECRET_ACCESS_KEY }}
-          CMS_PUBLISH_GITHUB_TOKEN_PROVISIONING: ${{ secrets.CMS_PUBLISH_GITHUB_TOKEN_PROVISIONING }}
         run: node scripts/component-runner.mjs functions verify-deployed-config
       - name: Record the completed Functions receipt
         if: needs.firebase-preflight.outputs.functions_mutated == 'true' && !inputs.install_reader_bridge
@@ -2008,7 +1995,6 @@ jobs:
           CMS_BUG_REPORT_TELEGRAM_WEBHOOK_SECRET: ${{ secrets.CMS_BUG_REPORT_TELEGRAM_WEBHOOK_SECRET }}
           CMS_BUG_REPORT_GITHUB_TOKEN: ${{ secrets.CMS_BUG_REPORT_GITHUB_TOKEN }}
           CMS_BUG_REPORT_GITHUB_WEBHOOK_SECRET: ${{ secrets.CMS_BUG_REPORT_GITHUB_WEBHOOK_SECRET }}
-          CMS_PUBLISH_GITHUB_TOKEN_PROVISIONING: ${{ secrets.CMS_PUBLISH_GITHUB_TOKEN_PROVISIONING }}
           FORCE_FIREBASE: ${{ inputs.force_firebase }}
           CMS_DEPLOY_MIGRATIONS: ${{ inputs.migrations }}
           CMS_EDGE_ORIGIN_SECRET: ${{ secrets.CMS_EDGE_ORIGIN_SECRET }}
@@ -2133,7 +2119,6 @@ jobs:
           CMS_BUG_REPORT_TELEGRAM_WEBHOOK_SECRET: ${{ secrets.CMS_BUG_REPORT_TELEGRAM_WEBHOOK_SECRET }}
           CMS_BUG_REPORT_GITHUB_TOKEN: ${{ secrets.CMS_BUG_REPORT_GITHUB_TOKEN }}
           CMS_BUG_REPORT_GITHUB_WEBHOOK_SECRET: ${{ secrets.CMS_BUG_REPORT_GITHUB_WEBHOOK_SECRET }}
-          CMS_PUBLISH_GITHUB_TOKEN_PROVISIONING: ${{ secrets.CMS_PUBLISH_GITHUB_TOKEN_PROVISIONING }}
           FORCE_FIREBASE: ${{ inputs.force_firebase }}
           CMS_DEPLOY_MIGRATIONS: ${{ inputs.migrations }}
           CMS_EDGE_ORIGIN_SECRET: ${{ secrets.CMS_EDGE_ORIGIN_SECRET }}

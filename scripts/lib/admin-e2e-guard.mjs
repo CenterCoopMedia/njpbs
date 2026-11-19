@@ -71,7 +71,7 @@ export const PRODUCTION_BUILD_MARKERS = Object.freeze([
 ]);
 
 const APPROVED_FUNCTIONS_ENV_LOCAL_SHA256 =
-  "15515c3673b38b77998d59cca54fe1598f02fc8bcf3743fbdec06a6047d89804";
+  "2bf05564c0af5a3762be568d6070f3bbf845a579e1c3deb69cfb5a946d530b3e";
 const APPROVED_FUNCTIONS_DOTENV_FILES = Object.freeze([
   ".env.example",
   ".env.local",
@@ -99,7 +99,6 @@ const ADMIN_E2E_SECRET_FILE_CONTENT = [
   "CMS_PRIVATE_VIDEO_R2_READ_SECRET_ACCESS_KEY=local-emulator-private-video-read-value",
   "CMS_PRIVATE_VIDEO_R2_WRITE_ACCESS_KEY_ID=local-emulator-private-video-write-id",
   "CMS_PRIVATE_VIDEO_R2_WRITE_SECRET_ACCESS_KEY=local-emulator-private-video-write-value",
-  "CMS_PUBLISH_GITHUB_TOKEN=local-emulator-publish-token-value",
   "CMS_STAFF_EMAIL_API_TOKEN=local-emulator-staff-email-api-token-value",
   "CMS_BUG_REPORT_TELEGRAM_BOT_TOKEN=1000000000:local-emulator-telegram-bot-token-value",
   "CMS_BUG_REPORT_TELEGRAM_WEBHOOK_SECRET=local_emulator_webhook_secret_value_1234",

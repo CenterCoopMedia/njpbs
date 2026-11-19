@@ -606,7 +606,8 @@ describe("cms staging deploy surface", () => {
     expect(stagingDeployWorkflow).toContain(
       "FUNCTION_TARGETS: ${{ needs.verify.outputs.function_targets }}",
     );
-    expect(stagingDeployWorkflow).toContain("CMS_WRITEBACK_CONFIGURED");
+    expect(stagingDeployWorkflow).toContain("CMS_PUBLISH_TRANSPORT: serializer");
+    expect(stagingDeployWorkflow).not.toContain("CMS_WRITEBACK_CONFIGURED");
     expect(stagingDeployWorkflow).toContain(
       "Configure functions runtime params",
     );

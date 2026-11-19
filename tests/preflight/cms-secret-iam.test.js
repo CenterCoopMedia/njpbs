@@ -18,7 +18,7 @@ const expected = [
   "CMS_BUG_REPORT_TELEGRAM_WEBHOOK_SECRET", "CMS_EDGE_ORIGIN_SECRET", "CMS_MEDIA_CACHE_PURGE_TOKEN",
   "CMS_MEDIA_R2_ACCESS_KEY_ID", "CMS_MEDIA_R2_SECRET_ACCESS_KEY", "CMS_PRIVATE_VIDEO_R2_READ_ACCESS_KEY_ID",
   "CMS_PRIVATE_VIDEO_R2_READ_SECRET_ACCESS_KEY", "CMS_PRIVATE_VIDEO_R2_WRITE_ACCESS_KEY_ID",
-  "CMS_PRIVATE_VIDEO_R2_WRITE_SECRET_ACCESS_KEY", "CMS_PUBLISH_GITHUB_TOKEN", "CMS_STAFF_EMAIL_API_TOKEN",
+  "CMS_PRIVATE_VIDEO_R2_WRITE_SECRET_ACCESS_KEY", "CMS_STAFF_EMAIL_API_TOKEN",
   "CMS_TRANSCRIPTION_CREDENTIAL_KEY", "CMS_VOICEOVER_R2_ACCESS_KEY_ID", "CMS_VOICEOVER_R2_SECRET_ACCESS_KEY",
   "CUEZ_STORYDESK_API_KEY", "PUBLISHED_POST_READER_HMAC_KEY", "UGC_R2_ACCESS_KEY_ID", "UGC_R2_SECRET_ACCESS_KEY",
 ];
@@ -32,12 +32,10 @@ for (const path of ["functions", "firebase.json", "scripts/check-cms-secret-iam.
 }
 symlinkSync(join(root, "node_modules"), join(fixture, "node_modules"), "dir");
 const policies = Object.fromEntries([...requirements].map(([name, accounts]) => [name, { bindings: [
-  // Exercise least-privilege deploy access: two secrets are viewer-only;
-  // the publish token additionally permits adding a version.
-  { role: ["CMS_PUBLISH_GITHUB_TOKEN", "CMS_TRANSCRIPTION_CREDENTIAL_KEY"].includes(name)
+  // Exercise viewer-only access for the transcription secret.
+  { role: name === "CMS_TRANSCRIPTION_CREDENTIAL_KEY"
     ? "roles/secretmanager.viewer" : "roles/secretmanager.admin", members: [`serviceAccount:${deploy}`] },
   { role: "roles/secretmanager.secretAccessor", members: [...accounts].map(account => `serviceAccount:${account}`) },
-  ...(name === "CMS_PUBLISH_GITHUB_TOKEN" ? [{ role: "roles/secretmanager.secretVersionAdder", members: [`serviceAccount:${deploy}`] }] : []),
 ] }]));
 writeFileSync(join(fixture, "policies.json"), JSON.stringify(policies));
 writeFileSync(join(fixture, "gcloud"), `#!/usr/bin/env node
@@ -339,12 +337,12 @@ describe("deployed Functions secret IAM", () => {
 
   it("accepts viewer-only deploy metadata access with runtime accessors, including Cuez", () => {
     expect(policies.CMS_TRANSCRIPTION_CREDENTIAL_KEY.bindings[0].role).toBe("roles/secretmanager.viewer");
-    expect(policies.CMS_PUBLISH_GITHUB_TOKEN.bindings.map(binding => binding.role)).toContain("roles/secretmanager.secretVersionAdder");
     const result = run("viewer");
     expect(result.status, result.stderr).toBe(0);
   });
 
-  it.each(["CMS_TRANSCRIPTION_CREDENTIAL_KEY", "CMS_PUBLISH_GITHUB_TOKEN"])("rejects conditional viewer or missing runtime access on %s", secret => {
+  it("rejects conditional viewer or missing runtime access on the transcription secret", () => {
+    const secret = "CMS_TRANSCRIPTION_CREDENTIAL_KEY";
     expect(run("conditional", secret).status).toBe(1);
     expect(run("missing", secret, "runtime").status).toBe(1);
   });

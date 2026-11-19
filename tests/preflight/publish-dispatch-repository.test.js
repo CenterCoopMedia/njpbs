@@ -21,13 +21,14 @@ it.each([undefined, "", "../repository", "owner/..", "owner/.", "REPLACE_ME/repo
 });
 
 it.each(["", "owner/.."])("refuses GitHub publication before queue, audit or App-token mutation: %s", async repository => {
+  vi.stubEnv("CMS_DEPLOYMENT_ENVIRONMENT", "development");
   vi.stubEnv("CMS_PUBLISH_GITHUB_REPOSITORY", repository);
   const collection = vi.fn();
   const audit = vi.fn();
   const token = vi.fn();
   const request = vi.fn();
   await expect(publish.enqueuePublishBuild({ actor: { uid: "fixture-user" }, changes: [],
-    readiness: { transport: "github", devApp: true } }, {
+    readiness: { transport: "github" } }, {
     firestore: { collection }, logAdminActionFn: audit, getDevAppTokenFn: token,
     fetchImpl: request, assertPublishedMediaSafeFn: async () => {},
   })).rejects.toThrow("repository is not approved");
@@ -35,13 +36,13 @@ it.each(["", "owner/.."])("refuses GitHub publication before queue, audit or App
 });
 
 it("refuses missing GitHub identity before readiness reconciliation or credential reads", async () => {
+  vi.stubEnv("CMS_DEPLOYMENT_ENVIRONMENT", "development");
   vi.stubEnv("CMS_PUBLISH_GITHUB_REPOSITORY", "");
   const billing = vi.fn();
-  const getToken = vi.fn();
   const getDevCredentials = vi.fn();
   const collection = vi.fn();
   await expect(publish.assertPublishReady({ firestore: { collection } }, {
-    getTransport: () => "github", assertBillingEnabledFn: billing, getToken, getDevCredentials,
+    getTransport: () => "github", assertBillingEnabledFn: billing, getDevCredentials,
   })).rejects.toThrow("repository is not approved");
-  for (const action of [billing, getToken, getDevCredentials, collection]) expect(action).not.toHaveBeenCalled();
+  for (const action of [billing, getDevCredentials, collection]) expect(action).not.toHaveBeenCalled();
 });

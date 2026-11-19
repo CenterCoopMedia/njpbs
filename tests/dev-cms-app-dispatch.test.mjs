@@ -45,7 +45,7 @@ test("dev exchange signs bounded RS256 claims and scopes its token to the config
   assert.equal(token, "installation-token");
   const payload = { event_type: "cms_dev_publish", client_payload: { queueId: "q" } };
   assert.equal(defaultDispatchUrl(), dispatchUrl);
-  const dispatch = await dispatchPublish({ token, payload, redactError: true,
+  const dispatch = await dispatchPublish({ token, payload,
     fetchImpl: async (url, options) => {
       assert.equal(url, dispatchUrl);
       assert.equal(options.headers.Authorization, "Bearer installation-token");
@@ -126,39 +126,21 @@ test("dev exchange and dispatch failures reveal no credentials or response body"
   await assert.rejects(createInstallationTokenProvider({ installationId, fetchImpl: async () => {
     throw new Error(secret);
   } })(credentials), /Development publication App token unavailable/);
-  const rejected = await dispatchPublish({ token: secret, payload: {}, redactError: true,
+  const rejected = await dispatchPublish({ token: secret, payload: {},
     fetchImpl: async () => ({ ok: false, status: 403, text: async () => secret }) });
-  assert.deepEqual(rejected, { dispatched: false, skipped: false, status: 403,
+  assert.deepEqual(rejected, { dispatched: false, status: 403,
     error: "Development GitHub dispatch rejected" });
-  await assert.rejects(dispatchPublish({ token: secret, payload: {}, redactError: true,
+  await assert.rejects(dispatchPublish({ token: secret, payload: {},
     fetchImpl: async () => { throw new Error(secret); } }), /Development GitHub dispatch unavailable/);
 });
 
-test("production dispatch keeps its static bearer request and GitHub error body", async () => {
-  const payload = { event_type: "cms_publish", client_payload: { queueId: "q", triggeredBy: "u" } };
-  const result = await dispatchPublish({ token: "static-token", payload,
-    fetchImpl: async (url, options) => {
-      assert.equal(url, defaultDispatchUrl());
-      assert.deepEqual(options.headers, {
-        Authorization: "Bearer static-token", Accept: "application/vnd.github+json",
-        "Content-Type": "application/json", "User-Agent": "njpbs-cms-publish",
-      });
-      assert.deepEqual(JSON.parse(options.body), payload);
-      return { ok: false, status: 422, text: async () => "production response" };
-    } });
-  assert.deepEqual(result, { dispatched: false, skipped: false, status: 422, error: "production response" });
-});
-
-test("dev credential reader refuses a mixed static-token or installation configuration", () => {
+test("dev credential reader refuses a mismatched App identity", () => {
   const script = 'require("./functions/lib/cms-publish-credentials").readDevAppCredentials()';
   const base = { ...process.env, CMS_DEPLOYMENT_ENVIRONMENT: "development", GCLOUD_PROJECT: "njpbs-site-dev",
     CMS_PUBLISH_GITHUB_APP_ID: "1234567", CMS_DEV_PUBLISH_APP_ID: "1234567", CMS_DEV_PUBLISH_APP_PRIVATE_KEY: key };
-  for (const extra of [{ CMS_PUBLISH_GITHUB_TOKEN: "mixed-static-token" },
-    { CMS_DEV_PUBLISH_APP_ID: "999" }]) {
-    const run = spawnSync(process.execPath, ["-e", script], { cwd: new URL("../", import.meta.url),
-      env: { ...base, ...extra }, encoding: "utf8" });
-    assert.notEqual(run.status, 0);
-    assert.match(run.stderr, /configuration is mixed or invalid|credentials are not configured/);
-    assert.doesNotMatch(run.stderr, /mixed-static-token|BEGIN PRIVATE KEY/);
-  }
+  const run = spawnSync(process.execPath, ["-e", script], { cwd: new URL("../", import.meta.url),
+    env: { ...base, CMS_DEV_PUBLISH_APP_ID: "999" }, encoding: "utf8" });
+  assert.notEqual(run.status, 0);
+  assert.match(run.stderr, /credentials are not configured/);
+  assert.doesNotMatch(run.stderr, /BEGIN PRIVATE KEY/);
 });

@@ -25,8 +25,7 @@ import { describe, expect, it } from "vitest";
 // discovery line -- the stall in #428.
 //
 // Secret params are exempt: params.js skips them entirely when isEmulator is
-// true, which is why CMS_PUBLISH_GITHUB_TOKEN and
-// BILLING_ALERT_TOKEN are unset locally without breaking anything.
+// true, so local runs can leave unneeded secrets such as BILLING_ALERT_TOKEN unset.
 //
 // The check covers every .js file under functions/ rather than only the modules
 // index.js currently exports. Discovery loads the exported set, so an unexported

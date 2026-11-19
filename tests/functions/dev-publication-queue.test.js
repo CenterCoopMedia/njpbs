@@ -10,6 +10,8 @@ import ownership from "../../functions/lib/no-build-post-ownership.js";
 import buildState from "../../functions/lib/publish-build-state.js";
 import audit from "../../functions/lib/audit.js";
 
+vi.hoisted(() => vi.stubEnv("CMS_PUBLISH_GITHUB_APP_ID", "12345"));
+
 const project = process.env.GCLOUD_PROJECT ?? "demo-njpbs";
 const sha = "a".repeat(40);
 const now = "2026-10-11T14:00:00.000Z";
@@ -19,14 +21,19 @@ const control = { schemaVersion: 1, phase: "ready", commitSha: sha, serializerId
   cloud: { phase: "ready", commitSha: sha, serializerId: "cloudflare-dev-publisher" } };
 let db;
 const writeAudit = fields => db.collection(audit.AUDIT_COLLECTIONS.adminLogs).add(audit.adminLogEntry(fields));
-const enqueue = (extra = {}) => enqueuePublishBuild({ actor, changes: [], readiness: { transport: "github" }, ...extra }, { firestore: db, logAdminActionFn: writeAudit });
+const appDispatch = {
+  getDevAppTokenFn: async () => "development-fixture-installation-token",
+  fetchImpl: async () => new Response(null, { status: 204 }),
+};
+const enqueue = (extra = {}, deps = {}) => enqueuePublishBuild({ actor, changes: [], ...extra },
+  { firestore: db, logAdminActionFn: writeAudit, ...appDispatch, ...deps });
 
 async function expectPublishAudit(queueId, actorUid = actor.uid) {
   const rows = await db.collection("admin_logs").where("action", "==", "cms.publish")
     .where("target", "==", queueId).get();
   expect(rows.docs.map(row => row.data())).toEqual([expect.objectContaining({
     actorUid, action: "cms.publish", target: queueId,
-    after: { status: "pending", dispatchRequested: false },
+    after: expect.objectContaining({ status: "pending", dispatchRequested: true }),
   })]);
 }
 
@@ -50,8 +57,7 @@ function runScheduler(accepted = []) {
     // Observe the persisted acceptance contract, then use the real queue opener.
     async enqueuePublishFn(fields) {
       accepted.push((await db.doc(`cmsPublishQueue/${fields.queueId}`).get()).data());
-      return enqueuePublishBuild(fields, { firestore: db, logAdminActionFn: writeAudit,
-        async fetchImpl() { throw new Error("The emulator proof must not dispatch to GitHub"); } });
+      return enqueuePublishBuild(fields, { firestore: db, logAdminActionFn: writeAudit, ...appDispatch });
     },
   });
 }
@@ -68,9 +74,11 @@ beforeEach(async () => {
   vi.stubEnv("GCLOUD_PROJECT", "njpbs-site-dev");
   vi.stubEnv("GOOGLE_CLOUD_PROJECT", "njpbs-site-dev");
   vi.stubEnv("FUNCTIONS_EMULATOR", "true");
-  vi.stubEnv("CMS_PUBLISH_GITHUB_TOKEN", "");
-  vi.stubEnv("CMS_DEV_PUBLISH_APP_ID", "");
-  vi.stubEnv("CMS_DEV_PUBLISH_APP_PRIVATE_KEY", "");
+  vi.stubEnv("CMS_WRITEBACK_CONFIGURED", "true");
+  vi.stubEnv("CMS_PUBLISH_GITHUB_REPOSITORY", "fixture-org/fixture-repo");
+  vi.stubEnv("CMS_PUBLISH_GITHUB_APP_ID", "12345");
+  vi.stubEnv("CMS_DEV_PUBLISH_APP_ID", "12345");
+  vi.stubEnv("CMS_DEV_PUBLISH_APP_PRIVATE_KEY", "development-fixture-app-key");
   await db.doc("system/cmsPublicationRuntime").set(control);
   await db.doc("system/publicDeployment").set({ ...deployment.initialPublicDeploymentPointer(),
     activeGeneration: 1, activeDeploymentId: "active-dev", activeCommitSha: sha,
@@ -86,7 +94,41 @@ it("stamps new direct dev jobs with the ready renderer's exact cloud owner", asy
   await expectPublishAudit(result.queueId);
   expect((await db.doc(`cmsPublishQueue/${result.queueId}`).get()).data()).toMatchObject({
     environment: "development", projectId: "njpbs-site-dev", transport: "github",
-    runtime: { owner: "cloudflare", release: sha }, status: "pending" });
+    runtime: { owner: "cloudflare", release: sha }, status: "publishing" });
+});
+
+it("settles the development queue without dispatch when the audit write fails", async () => {
+  const logAdminActionFn = vi.fn().mockRejectedValue(new Error("audit unavailable"));
+  const getDevAppTokenFn = vi.fn(appDispatch.getDevAppTokenFn);
+  const fetchImpl = vi.fn(appDispatch.fetchImpl);
+
+  await expect(enqueue({}, { logAdminActionFn, getDevAppTokenFn, fetchImpl })).rejects.toThrow("audit unavailable");
+
+  expect(logAdminActionFn).toHaveBeenCalledOnce();
+  expect(getDevAppTokenFn).not.toHaveBeenCalled();
+  expect(fetchImpl).not.toHaveBeenCalled();
+  const rows = await db.collection("cmsPublishQueue").get();
+  expect(rows.docs.map(row => row.data())).toEqual([expect.objectContaining({
+    transport: "github", status: "failed", error: "audit unavailable",
+    completedAt: expect.any(admin.firestore.Timestamp),
+  })]);
+});
+
+it.each(["writeback", "credentials", "admission"])("refuses development publication before dispatch when %s is missing", async mode => {
+  if (mode === "writeback") vi.stubEnv("CMS_WRITEBACK_CONFIGURED", "false");
+  if (mode === "credentials") vi.stubEnv("CMS_DEV_PUBLISH_APP_PRIVATE_KEY", "");
+  if (mode === "admission") await db.doc("system/cmsPublicationRuntime").update({ phase: "paused" });
+  const getDevAppTokenFn = vi.fn(appDispatch.getDevAppTokenFn);
+  const fetchImpl = vi.fn(appDispatch.fetchImpl);
+  const error = {
+    writeback: "writeback credential not confirmed",
+    credentials: "publish token not configured",
+    admission: "paused for a serializer handoff",
+  }[mode];
+  await expect(enqueue({}, { fetchImpl, getDevAppTokenFn })).rejects.toThrow(error);
+  expect(getDevAppTokenFn).not.toHaveBeenCalled();
+  expect(fetchImpl).not.toHaveBeenCalled();
+  expect((await db.collection("cmsPublishQueue").get()).empty).toBe(true);
 });
 
 it.each(["missing cloud", "starting cloud", "different source", "production owner", "different active renderer"])(
@@ -129,6 +171,22 @@ it("keeps a retained dev reservation's original runtime through enqueue", async 
   await expectPublishAudit(queueId);
 });
 
+it("dispatches an accepted dev reservation once and preserves early completion", async () => {
+  const queueId = "A1a2B3b4C5c6D7d8E9e0";
+  const queue = db.doc(`cmsPublishQueue/${queueId}`);
+  await queue.set({ status: "reserved", transport: "github", changes: [], triggeredBy: actor.uid,
+    environment: "development", projectId: "njpbs-site-dev", runtime: { owner: "cloudflare", release: sha } });
+  const request = vi.fn(async (_url, init) => {
+    expect(JSON.parse(init.body)).toMatchObject({ event_type: "cms_dev_publish", client_payload: { queueId } });
+    await expectPublishAudit(queueId);
+    await queue.update({ status: "success" });
+    return new Response(null, { status: 204 });
+  });
+  await Promise.all([1, 2].map(() => enqueue({ queueId, queueReserved: true }, { fetchImpl: request })));
+  expect(request).toHaveBeenCalledOnce();
+  expect((await queue.get()).data().status).toBe("success");
+});
+
 it("accepts a due ordinary dev Page with the exact cloud runtime before actual enqueue", async () => {
   await db.doc("cmsPages/about").set(scheduledPage());
   const accepted = [];
@@ -141,7 +199,7 @@ it("accepts a due ordinary dev Page with the exact cloud runtime before actual e
     environment: "development", projectId: "njpbs-site-dev", runtime: { owner: "cloudflare", release: sha },
     changes: [{ collection: "cmsPages", id: "about", sourceVersion: 8 }] });
   const queue = (await db.doc(`cmsPublishQueue/${result.queueId}`).get()).data();
-  expect(queue).toMatchObject({ status: "pending", transport: "github", triggeredBy: "system:scheduler",
+  expect(queue).toMatchObject({ status: "publishing", transport: "github", triggeredBy: "system:scheduler",
     environment: "development", projectId: "njpbs-site-dev", runtime: { owner: "cloudflare", release: sha },
     changes: [{ collection: "cmsPages", id: "about", sourceVersion: 8 }] });
   const page = (await db.doc("cmsPages/about").get()).data();
@@ -170,7 +228,7 @@ it("accepts a new dev scheduler retry without changing the frozen published snap
     environment: "development", projectId: "njpbs-site-dev", runtime: { owner: "cloudflare", release: sha },
     changes: [{ collection: "cmsPages", id: "about", sourceVersion: 8 }] });
   const queue = (await db.doc(`cmsPublishQueue/${result.queueId}`).get()).data();
-  expect(queue).toMatchObject({ status: "pending", environment: "development", projectId: "njpbs-site-dev",
+  expect(queue).toMatchObject({ status: "publishing", environment: "development", projectId: "njpbs-site-dev",
     runtime: { owner: "cloudflare", release: sha }, changes: [{ collection: "cmsPages", id: "about", sourceVersion: 8 }] });
   expect((await db.doc("cmsPages/about").get()).data()).toEqual({ ...before, publishBuildQueueId: result.queueId });
   expect((await db.collection("cmsVersionHistory").get()).empty).toBe(true);
@@ -222,26 +280,27 @@ async function reserveWithdrawal() {
 
 it("keeps every Post withdrawal safety reservation and retry on the exact dev GitHub owner", async () => {
   const { originalRef, change, runtime, postRef, fullQueueId } = await reserveWithdrawal();
-  const request = vi.fn(async () => { throw new Error("The emulator must not dispatch to GitHub"); });
-  const receipt = await fallback.enqueuePostWithdrawalBuild({ firestore: db, operationId: originalRef.id }, { fetchImpl: request, logAdminActionFn: writeAudit });
+  const request = vi.fn(appDispatch.fetchImpl);
+  const deps = { ...appDispatch, fetchImpl: request, logAdminActionFn: writeAudit };
+  const receipt = await fallback.enqueuePostWithdrawalBuild({ firestore: db, operationId: originalRef.id }, deps);
   expect(receipt.queueId).toBe(fullQueueId);
   await expectPublishAudit(fullQueueId);
   expect((await db.doc(`cmsPublishQueue/${fullQueueId}`).get()).data()).toMatchObject({
-    status: "pending", transport: "github", environment: "development", projectId: "njpbs-site-dev", runtime,
+    status: "publishing", transport: "github", environment: "development", projectId: "njpbs-site-dev", runtime,
     homeFullBuild: { status: "queued", reason: "post_withdrawal_safety" }, changes: [change],
   });
   await buildState.settleBuildQueue(db, { queueId: fullQueueId, status: "failed", queueUpdate: { status: "failed" } });
   const retries = await Promise.all([1, 2].map(() => fallback.retryPostWithdrawalBuild({ firestore: db,
-    operationId: originalRef.id, actor, changes: [change], baseVersion: 9 }, { fetchImpl: request, logAdminActionFn: writeAudit })));
+    operationId: originalRef.id, actor, changes: [change], baseVersion: 9 }, deps)));
   expect(retries[0].queueId).not.toBe(fullQueueId);
   expect(retries[1].queueId).toBe(retries[0].queueId);
   expect(retries[0].transport).toBe("github");
   await expectPublishAudit(retries[0].queueId);
   expect((await db.doc(`cmsPublishQueue/${retries[0].queueId}`).get()).data()).toMatchObject({
-    status: "pending", transport: "github", environment: "development", projectId: "njpbs-site-dev", runtime,
+    status: "publishing", transport: "github", environment: "development", projectId: "njpbs-site-dev", runtime,
   });
   expect((await postRef.get()).data().publishBuildQueueId).toBe(retries[0].queueId);
-  expect(request).not.toHaveBeenCalled();
+  expect(request).toHaveBeenCalledTimes(2);
 });
 
 it.each(["rejected", "unavailable"])("reports a %s dev withdrawal dispatch and retains exact retry", async mode => {
@@ -250,8 +309,7 @@ it.each(["rejected", "unavailable"])("reports a %s dev withdrawal dispatch and r
     if (mode === "unavailable") throw new Error("Dispatch fixture unavailable");
     return new Response("Dispatch fixture rejected", { status: 503 });
   });
-  const deps = { fetchImpl: request, logAdminActionFn: writeAudit,
-    assertPublishReadyFn: async () => ({ transport: "github", token: "dispatch-fixture" }),
+  const deps = { ...appDispatch, fetchImpl: request, logAdminActionFn: writeAudit,
     log: { info() {}, error() {} } };
   const expected = { status: 502, queueId: fullQueueId, message: "Post removal could not start. Retry removal." };
   await expect(fallback.enqueuePostWithdrawalBuild({ firestore: db, operationId: originalRef.id }, deps))

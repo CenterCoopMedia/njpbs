@@ -23,14 +23,9 @@ import runtimePublication from "../../functions/lib/public-runtime-publication.j
 
 const {
   createCmsPublishHandler,
-  buildDispatchPayload,
-  dispatchPublish,
   enqueuePublishBuild,
-  defaultDispatchUrl,
-  EVENT_TYPE,
   INVALID_PUBLISH_TRANSPORT_ERROR,
   PUBLISH_TRANSPORT,
-  PUBLISH_TOKEN_NOT_CONFIGURED_ERROR,
 } = publish;
 const { tryRuntimePublication } = runtimePublication;
 
@@ -106,8 +101,6 @@ async function withPublishEnv(env, callback) {
   const keys = [
     "CMS_PUBLISH_GITHUB_REPOSITORY",
     "CMS_PUBLISH_TRANSPORT",
-    "CMS_WRITEBACK_CONFIGURED",
-    "FUNCTIONS_EMULATOR",
   ];
   const previous = new Map(keys.map((key) => [key, process.env[key]]));
   const modulePath = nodeRequire.resolve("../../functions/publish.js");
@@ -201,17 +194,17 @@ describe("cms publish deploy parameters", () => {
     ).toContainEqual({
       name: "CMS_PUBLISH_TRANSPORT",
       type: "string",
-      default: "github",
+      default: "serializer",
     });
     expect(PUBLISH_TRANSPORT.toSpec()).toMatchObject({
       name: "CMS_PUBLISH_TRANSPORT",
-      default: "github",
+      default: "serializer",
     });
   });
 
-  it("uses GitHub when the parameter API returns an empty absent value", async () => {
+  it("uses the serializer when the production transport parameter is absent", async () => {
     await withPublishEnv({ CMS_PUBLISH_TRANSPORT: "" }, (isolatedPublish) => {
-      expect(isolatedPublish.defaultPublishTransport()).toBe("github");
+      expect(isolatedPublish.defaultPublishTransport()).toBe("serializer");
     });
   });
 
@@ -251,49 +244,6 @@ describe("cms publish function", () => {
   afterAll(async () => {
     await Promise.all(admin.apps.map((app) => app.delete()));
     await deleteApp(clientApp);
-  });
-
-  it("buildDispatchPayload shapes the repository_dispatch body", () => {
-    expect(
-      buildDispatchPayload({ queueId: "q1", triggeredBy: "a@x" }),
-    ).toEqual({
-      event_type: "cms_publish",
-      client_payload: { queueId: "q1", triggeredBy: "a@x" },
-    });
-    expect(EVENT_TYPE).toBe("cms_publish");
-  });
-
-  it("dispatchPublish skips without a token", async () => {
-    const result = await dispatchPublish({ token: "", payload: {} });
-
-    expect(result).toMatchObject({ dispatched: false, skipped: true });
-  });
-
-  it("dispatchPublish posts the payload with a bearer token", async () => {
-    const fetchMock = vi.fn().mockResolvedValue({ ok: true, status: 204 });
-    const payload = buildDispatchPayload({ queueId: "q9", triggeredBy: "e@x" });
-
-    const result = await dispatchPublish({
-      token: "tok",
-      url: defaultDispatchUrl(),
-      payload,
-      fetchImpl: fetchMock,
-    });
-
-    expect(result).toMatchObject({ dispatched: true });
-    expect(fetchMock).toHaveBeenCalledOnce();
-    const [url, options] = fetchMock.mock.calls[0];
-    expect(url).toBe(defaultDispatchUrl());
-    expect(options).toMatchObject({
-      method: "POST",
-      headers: expect.objectContaining({
-        Authorization: "Bearer tok",
-        Accept: "application/vnd.github+json",
-        "Content-Type": "application/json",
-        "User-Agent": "njpbs-cms-publish",
-      }),
-    });
-    expect(JSON.parse(options.body)).toEqual(payload);
   });
 
   it("rejects an unauthenticated caller", async () => {
@@ -336,7 +286,7 @@ describe("cms publish function", () => {
     expect(await queueDocs()).toHaveLength(1);
   });
 
-  it("admin enqueues a pending doc and skips dispatch when no token is configured", async () => {
+  it("allows an admin to enqueue serializer work without GitHub credentials", async () => {
     const adminUser = await signInAs("admin@example.com");
     await seedUser(adminUser.uid, { email: adminUser.email, role: "admin" });
 
@@ -346,7 +296,7 @@ describe("cms publish function", () => {
     const body = await res.json();
 
     expect(res.status).toBe(200);
-    expect(body).toMatchObject({ dispatched: false, status: "pending" });
+    expect(body).toMatchObject({ dispatched: false, status: "pending", transport: "serializer" });
     const docs = await queueDocs();
     expect(docs).toHaveLength(1);
     expect(docs[0]).toMatchObject({
@@ -357,55 +307,6 @@ describe("cms publish function", () => {
     const logs = await adminLogs();
     expect(logs).toHaveLength(1);
     expect(logs[0].action).toBe("cms.publish");
-  });
-
-  it("advances to publishing on a successful dispatch", async () => {
-    const fetchMock = vi.fn().mockResolvedValue({ ok: true, status: 204 });
-    const handler = createCmsPublishHandler({
-      firestore: db,
-      requireAdminFn: async () => ({ uid: "u1", email: "u1@x" }),
-      getToken: () => "tok",
-      isWritebackConfigured: true,
-      fetchImpl: fetchMock,
-    });
-    const res = makeRes();
-
-    await handler(makeReq({ body: { changes: [] } }), res);
-
-    expect(res.statusCode).toBe(200);
-    expect(res.body).toMatchObject({ dispatched: true, status: "publishing" });
-    const docs = await queueDocs();
-    expect(docs).toHaveLength(1);
-    expect(docs[0]).toMatchObject({
-      status: "publishing",
-      transport: "github",
-    });
-    expect(fetchMock).toHaveBeenCalledOnce();
-    const payload = JSON.parse(fetchMock.mock.calls[0][1].body);
-    expect(payload).toMatchObject({
-      event_type: "cms_publish",
-      client_payload: { queueId: docs[0].id },
-    });
-    const logs = await adminLogs();
-    expect(logs).toHaveLength(1);
-  });
-
-  it("dispatches a reserved retry once and preserves completion before a late acknowledgement", async () => {
-    const actor = { uid: "retry-editor", email: null };
-    const changes = [{ collection: "cmsPosts", id: "post-one", sourceVersion: 4 }];
-    const queueRef = db.collection("cmsPublishQueue").doc("reserved-retry");
-    await queueRef.set({ status: "reserved", transport: "github", triggeredBy: actor.uid,
-      triggeredByEmail: null, changes });
-    const fetchImpl = vi.fn(async () => {
-      await queueRef.update({ status: "success", completedAt: "2026-09-04T21:00:00.000Z" });
-      return { ok: true, status: 204 };
-    });
-    const fields = { actor, changes, queueId: queueRef.id, queueReserved: true,
-      readiness: { transport: "github", token: "test-token" } };
-    const deps = { firestore: db, fetchImpl, assertPublishedMediaSafeFn: async () => {} };
-    await Promise.all([enqueuePublishBuild(fields, deps), enqueuePublishBuild(fields, deps)]);
-    expect(fetchImpl).toHaveBeenCalledOnce();
-    expect((await queueRef.get()).data().status).toBe("success");
   });
 
   it("retries a working draft through the endpoint without saving it", async () => {
@@ -442,7 +343,7 @@ describe("cms publish function", () => {
     ];
     await db.collection("cmsPublishQueue").doc(queueId).set({
       status: "reserved",
-      transport: "github",
+      transport: "serializer",
       triggeredBy: "system:scheduler",
       triggeredByEmail: null,
       triggeredAt: admin.firestore.FieldValue.serverTimestamp(),
@@ -457,7 +358,7 @@ describe("cms publish function", () => {
           actor: { uid: "system:scheduler", email: null },
           changes,
           source: "scheduler",
-          readiness: { transport: "github", token: null },
+          readiness: { transport: "serializer" },
           queueId,
           queueReserved: true,
         },
@@ -760,10 +661,10 @@ describe("cms publish function", () => {
     const enqueuePublishBuildFn = vi.fn(async () => ({
       success: true,
       queueId: "fallback-1",
-      dispatched: true,
-      status: "publishing",
-      transport: "github",
-      message: "Publish triggered.",
+      dispatched: false,
+      status: "pending",
+      transport: "serializer",
+      message: "Publish queued.",
     }));
     const handler = createCmsPublishHandler({
       firestore: db,
@@ -797,7 +698,7 @@ describe("cms publish function", () => {
     expect(res.statusCode).toBe(200);
     expect(res.body).toMatchObject({
       queueId: "fallback-1",
-      status: "publishing",
+      status: "pending",
       publicReceipt: { status: "unconfirmed", sourceVersion: 7 },
     });
     expect(enqueuePublishBuildFn).toHaveBeenCalledOnce();
@@ -811,15 +712,15 @@ describe("cms publish function", () => {
       publishBuildQueueId: null,
       published: { sourceVersion: 4 },
     });
-    const getToken = vi.fn(() => {
-      throw new Error("the serializer transport must not read the GitHub token");
+    const getDevCredentials = vi.fn(() => {
+      throw new Error("The serializer must not read development credentials");
     });
     const fetchImpl = vi.fn();
     const handler = createCmsPublishHandler({
       firestore: db,
       requireAdminFn: async () => ({ uid: "u1", email: "u1@x" }),
       getTransport: () => "serializer",
-      getToken,
+      getDevCredentials,
       isWritebackConfigured: false,
       fetchImpl,
     });
@@ -842,7 +743,7 @@ describe("cms publish function", () => {
       status: "pending",
       transport: "serializer",
     });
-    expect(getToken).not.toHaveBeenCalled();
+    expect(getDevCredentials).not.toHaveBeenCalled();
     expect(fetchImpl).not.toHaveBeenCalled();
     const docs = await queueDocs();
     expect(docs).toHaveLength(1);
@@ -869,9 +770,7 @@ describe("cms publish function", () => {
     });
   });
 
-  it.each(["serializer", "github"])(
-    "refuses a new %s queue while publication admission is paused",
-    async (transport) => {
+  it("refuses a new serializer queue while publication admission is paused", async () => {
       await db.collection("system").doc("cmsPublicationRuntime").set({
         schemaVersion: 1,
         phase: "paused",
@@ -882,18 +781,14 @@ describe("cms publish function", () => {
       await expect(enqueuePublishBuild({
         actor: { uid: "u1", email: "u1@x" },
         changes: [],
-        readiness: {
-          transport,
-          token: transport === "github" ? "token" : null,
-        },
+        readiness: { transport: "serializer" },
       }, {
         firestore: db,
         assertPublishedMediaSafeFn: vi.fn(async () => {}),
       })).rejects.toThrow("paused for a serializer handoff");
       expect(await queueDocs()).toHaveLength(0);
       expect(await adminLogs()).toHaveLength(0);
-    },
-  );
+  });
 
   it("opens an admitted reserved serializer queue after a later pause without GitHub configuration", async () => {
     const queueId = "11111111111111111111";
@@ -941,14 +836,14 @@ describe("cms publish function", () => {
       .toMatchObject({ status: "pending", changes });
   });
 
-  it("refuses an unknown transport before token access or queue mutation", async () => {
-    const getToken = vi.fn();
+  it.each(["unknown", "github"])("refuses production transport %s before credential access or queue mutation", async transport => {
+    const getDevCredentials = vi.fn();
     const fetchImpl = vi.fn();
     const handler = createCmsPublishHandler({
       firestore: db,
       requireAdminFn: async () => ({ uid: "u1", email: "u1@x" }),
-      getTransport: () => "unknown",
-      getToken,
+      getTransport: () => transport,
+      getDevCredentials,
       fetchImpl,
     });
     const res = makeRes();
@@ -957,7 +852,7 @@ describe("cms publish function", () => {
 
     expect(res.statusCode).toBe(503);
     expect(res.body.error).toBe(INVALID_PUBLISH_TRANSPORT_ERROR);
-    expect(getToken).not.toHaveBeenCalled();
+    expect(getDevCredentials).not.toHaveBeenCalled();
     expect(fetchImpl).not.toHaveBeenCalled();
     expect(await queueDocs()).toHaveLength(0);
     expect(await adminLogs()).toHaveLength(0);
@@ -1002,7 +897,7 @@ describe("cms publish function", () => {
     });
   });
 
-  it("marks only the exact published revision in flight after GitHub accepts its build", async () => {
+  it("marks only the exact published revision in flight when the serializer accepts it", async () => {
     const currentRef = db.collection("cmsPages").doc("home");
     const newerRef = db.collection("cmsPages").doc("contact");
     await Promise.all([
@@ -1020,8 +915,6 @@ describe("cms publish function", () => {
     const handler = createCmsPublishHandler({
       firestore: db,
       requireAdminFn: async () => ({ uid: "u1", email: "u1@x" }),
-      getToken: () => "tok",
-      isWritebackConfigured: true,
       fetchImpl: vi.fn().mockResolvedValue({ ok: true, status: 204 }),
     });
     const res = makeRes();
@@ -1047,28 +940,6 @@ describe("cms publish function", () => {
     const newer = (await newerRef.get()).data();
     expect(newer.publishBuildPending).toBe(true);
     expect(newer.publishBuildQueueId).toBeUndefined();
-  });
-
-  it("refuses before creating a queue doc when writeback is not confirmed", async () => {
-    const fetchMock = vi.fn();
-    const handler = createCmsPublishHandler({
-      firestore: db,
-      requireAdminFn: async () => ({ uid: "u1", email: "u1@x" }),
-      getToken: () => "tok",
-      isWritebackConfigured: false,
-      fetchImpl: fetchMock,
-    });
-    const res = makeRes();
-
-    await handler(makeReq({ body: { changes: [{ id: "home" }] } }), res);
-
-    expect(res.statusCode).toBe(503);
-    expect(res.body.error).toBe(
-      "publish pipeline is not fully configured: writeback credential not confirmed",
-    );
-    expect(fetchMock).not.toHaveBeenCalled();
-    expect(await queueDocs()).toHaveLength(0);
-    expect(await adminLogs()).toHaveLength(0);
   });
 
   it("keeps inline reconciliation until the scheduled replacement is enabled", async () => {
@@ -1098,21 +969,8 @@ describe("cms publish function", () => {
       }),
     ]);
 
-    const fetchMock = vi.fn();
-    const handler = createCmsPublishHandler({
-      firestore: db,
-      requireAdminFn: async () => ({ uid: "u1", email: "u1@x" }),
-      getToken: () => "tok",
-      isWritebackConfigured: false,
-      fetchImpl: fetchMock,
-      now: () => now,
-    });
-    const res = makeRes();
-
-    await handler(makeReq({ body: { changes: [] } }), res);
-
-    expect(res.statusCode).toBe(503);
-    expect(fetchMock).not.toHaveBeenCalled();
+    await expect(publish.assertPublishReady({ firestore: db }, { now: () => now }))
+      .resolves.toMatchObject({ transport: "serializer", reconciledCount: 1 });
     expect((await stalePublishingRef.get()).data()).toMatchObject({
       status: "failed",
       error:
@@ -1123,30 +981,6 @@ describe("cms publish function", () => {
       publishBuildPending: true,
       publishBuildQueueId: null,
       published: { sourceVersion: 3 },
-    });
-  });
-
-  it("dispatches when writeback is confirmed", async () => {
-    const fetchMock = vi.fn().mockResolvedValue({ ok: true, status: 204 });
-    const handler = createCmsPublishHandler({
-      firestore: db,
-      requireAdminFn: async () => ({ uid: "u1", email: "u1@x" }),
-      getToken: () => "tok",
-      isWritebackConfigured: true,
-      fetchImpl: fetchMock,
-    });
-    const res = makeRes();
-
-    await handler(makeReq({ body: { changes: [{ id: "home" }] } }), res);
-
-    expect(res.statusCode).toBe(200);
-    expect(res.body).toMatchObject({ dispatched: true, status: "publishing" });
-    expect(fetchMock).toHaveBeenCalledOnce();
-    const docs = await queueDocs();
-    expect(docs).toHaveLength(1);
-    expect(docs[0]).toMatchObject({
-      status: "publishing",
-      triggeredBy: "u1",
     });
   });
 
@@ -1166,8 +1000,6 @@ describe("cms publish function", () => {
     const handler = createCmsPublishHandler({
       firestore: db,
       requireAdminFn: async () => ({ uid: "u1", email: "u1@x" }),
-      getToken: () => "tok",
-      isWritebackConfigured: true,
       fetchImpl: fetchMock,
       now: () => Date.parse("2026-08-14T20:00:00.000Z"),
     });
@@ -1204,8 +1036,6 @@ describe("cms publish function", () => {
     const handler = createCmsPublishHandler({
       firestore: db,
       requireAdminFn: async () => ({ uid: "u1", email: "u1@x" }),
-      getToken: () => "tok",
-      isWritebackConfigured: true,
       fetchImpl: fetchMock,
       now: () => Date.parse("2026-08-14T20:00:00.000Z"),
     });
@@ -1238,8 +1068,6 @@ describe("cms publish function", () => {
     const handler = createCmsPublishHandler({
       firestore: db,
       requireAdminFn: async () => ({ uid: "u1", email: "u1@x" }),
-      getToken: () => "tok",
-      isWritebackConfigured: true,
       fetchImpl: fetchMock,
       now: () => Date.parse("2026-08-14T20:00:00.000Z"),
     });
@@ -1267,8 +1095,6 @@ describe("cms publish function", () => {
     const handler = createCmsPublishHandler({
       firestore: db,
       requireAdminFn: async () => ({ uid: "u1", email: "u1@x" }),
-      getToken: () => "tok",
-      isWritebackConfigured: true,
       fetchImpl: fetchMock,
       now: () => Date.parse("2026-08-14T20:00:00.000Z"),
     });
@@ -1304,8 +1130,6 @@ describe("cms publish function", () => {
     const handler = createCmsPublishHandler({
       firestore: db,
       requireAdminFn: async () => ({ uid: "u1", email: "u1@x" }),
-      getToken: () => "tok",
-      isWritebackConfigured: true,
       fetchImpl: fetchMock,
       now: () => Date.parse("2026-08-14T20:00:00.000Z"),
     });
@@ -1319,7 +1143,7 @@ describe("cms publish function", () => {
     expect(await queueDocs()).toHaveLength(0);
   });
 
-  it("dispatches when every admitted snapshot uses site seed media", async () => {
+  it("queues serializer work when every admitted snapshot uses site seed media", async () => {
     await Promise.all([
       db
         .collection("cmsPages")
@@ -1338,8 +1162,6 @@ describe("cms publish function", () => {
     const handler = createCmsPublishHandler({
       firestore: db,
       requireAdminFn: async () => ({ uid: "u1", email: "u1@x" }),
-      getToken: () => "tok",
-      isWritebackConfigured: true,
       fetchImpl: fetchMock,
       now: () => Date.parse("2026-08-14T20:00:00.000Z"),
     });
@@ -1348,205 +1170,9 @@ describe("cms publish function", () => {
     await handler(makeReq({ body: { changes: [] } }), res);
 
     expect(res.statusCode).toBe(200);
-    expect(res.body).toMatchObject({ dispatched: true, status: "publishing" });
-    expect(fetchMock).toHaveBeenCalledOnce();
+    expect(res.body).toMatchObject({ dispatched: false, status: "pending", transport: "serializer" });
+    expect(fetchMock).not.toHaveBeenCalled();
     expect(await queueDocs()).toHaveLength(1);
-  });
-
-  it("uses the emulator default when the writeback flag is unset", async () => {
-    await withPublishEnv(
-      { CMS_WRITEBACK_CONFIGURED: undefined, FUNCTIONS_EMULATOR: "true" },
-      async ({ createCmsPublishHandler: createIsolatedHandler }) => {
-        const fetchMock = vi.fn().mockResolvedValue({ ok: true, status: 204 });
-        const handler = createIsolatedHandler({
-          firestore: db,
-          requireAdminFn: async () => ({ uid: "u1", email: "u1@x" }),
-          getToken: () => "tok",
-          fetchImpl: fetchMock,
-        });
-        const res = makeRes();
-
-        await handler(makeReq({ body: { changes: [] } }), res);
-
-        expect(res.statusCode).toBe(200);
-        expect(res.body).toMatchObject({
-          dispatched: true,
-          status: "publishing",
-        });
-        expect(fetchMock).toHaveBeenCalledOnce();
-      },
-    );
-  });
-
-  it("does not dispatch when the audit write fails", async () => {
-    const fetchMock = vi.fn().mockResolvedValue({ ok: true, status: 204 });
-    const handler = createCmsPublishHandler({
-      firestore: db,
-      requireAdminFn: async () => ({ uid: "u1", email: "u1@x" }),
-      getToken: () => "tok",
-      isWritebackConfigured: true,
-      fetchImpl: fetchMock,
-      logAdminActionFn: vi.fn().mockRejectedValue(new Error("audit unavailable")),
-    });
-    const res = makeRes();
-
-    await handler(makeReq({ body: { changes: [] } }), res);
-
-    expect(res.statusCode).toBe(500);
-    expect(res.body.error).toBe("audit unavailable");
-    expect(fetchMock).not.toHaveBeenCalled();
-    const docs = await queueDocs();
-    expect(docs).toHaveLength(1);
-    expect(docs[0].status).toBe("failed");
-    expect(docs[0].error).toBe("audit unavailable");
-    expect(docs[0].completedAt).toBeTruthy();
-  });
-
-  it("writes the audit row before dispatching", async () => {
-    const events = [];
-    const fetchMock = vi.fn().mockImplementation(async () => {
-      events.push("dispatch");
-      return { ok: true, status: 204 };
-    });
-    const logAdminActionFn = vi.fn().mockImplementation(async () => {
-      events.push("audit:start");
-      await Promise.resolve();
-      events.push("audit:resolved");
-    });
-    const handler = createCmsPublishHandler({
-      firestore: db,
-      requireAdminFn: async () => ({ uid: "u1", email: "u1@x" }),
-      getToken: () => "tok",
-      isWritebackConfigured: true,
-      fetchImpl: fetchMock,
-      logAdminActionFn,
-    });
-    const res = makeRes();
-
-    await handler(makeReq({ body: { changes: [{ id: "home" }] } }), res);
-
-    expect(res.statusCode).toBe(200);
-    expect(events).toEqual(["audit:start", "audit:resolved", "dispatch"]);
-    expect(logAdminActionFn).toHaveBeenCalledWith(
-      expect.objectContaining({
-        action: "cms.publish",
-        target: expect.any(String),
-        after: {
-          status: "pending",
-          dispatchRequested: true,
-          changesCount: 1,
-        },
-      }),
-    );
-  });
-
-  it("marks the queue doc failed when the dispatch request fails", async () => {
-    const fetchMock = vi.fn().mockResolvedValue({
-      ok: false,
-      status: 500,
-      text: async () => "boom",
-    });
-    const handler = createCmsPublishHandler({
-      firestore: db,
-      requireAdminFn: async () => ({ uid: "u1", email: "u1@x" }),
-      getToken: () => "tok",
-      isWritebackConfigured: true,
-      fetchImpl: fetchMock,
-    });
-    const res = makeRes();
-
-    await handler(makeReq({ body: { changes: [] } }), res);
-
-    expect(res.statusCode).toBe(502);
-    const docs = await queueDocs();
-    expect(docs).toHaveLength(1);
-    expect(docs[0].status).toBe("failed");
-    expect(docs[0].error).toContain("500");
-  });
-
-  it("refuses before creating a queue doc when the publish token lookup fails in production", async () => {
-    const handler = createCmsPublishHandler({
-      firestore: db,
-      requireAdminFn: async () => ({ uid: "u1", email: "u1@x" }),
-      getToken: () => {
-        throw new Error("secret unavailable");
-      },
-      allowMissingToken: false,
-      fetchImpl: vi.fn(),
-    });
-    const res = makeRes();
-
-    await handler(makeReq({ body: { changes: [] } }), res);
-
-    expect(res.statusCode).toBe(500);
-    expect(res.body.error).toBe("secret unavailable");
-    expect(await queueDocs()).toHaveLength(0);
-  });
-
-  it("refuses before creating a queue doc when the publish token is blank in production", async () => {
-    const fetchMock = vi.fn();
-    const handler = createCmsPublishHandler({
-      firestore: db,
-      requireAdminFn: async () => ({ uid: "u1", email: "u1@x" }),
-      getToken: () => "",
-      allowMissingToken: false,
-      fetchImpl: fetchMock,
-    });
-    const res = makeRes();
-
-    await handler(makeReq({ body: { changes: [] } }), res);
-
-    expect(res.statusCode).toBe(503);
-    expect(res.body.error).toBe(PUBLISH_TOKEN_NOT_CONFIGURED_ERROR);
-    expect(fetchMock).not.toHaveBeenCalled();
-    expect(await queueDocs()).toHaveLength(0);
-    expect(await adminLogs()).toHaveLength(0);
-  });
-
-  it("keeps the queue pending when the publish token lookup fails and missing tokens are allowed", async () => {
-    const fetchMock = vi.fn();
-    const handler = createCmsPublishHandler({
-      firestore: db,
-      requireAdminFn: async () => ({ uid: "u1", email: "u1@x" }),
-      getToken: () => {
-        throw new Error("secret unavailable");
-      },
-      allowMissingToken: true,
-      fetchImpl: fetchMock,
-    });
-    const res = makeRes();
-
-    await handler(makeReq({ body: { changes: [] } }), res);
-
-    expect(res.statusCode).toBe(200);
-    expect(res.body).toMatchObject({ dispatched: false, status: "pending" });
-    expect(fetchMock).not.toHaveBeenCalled();
-    const docs = await queueDocs();
-    expect(docs).toHaveLength(1);
-    expect(docs[0].status).toBe("pending");
-    expect(docs[0].error).toBeNull();
-  });
-
-  it("marks the queue doc failed when the dispatch request throws", async () => {
-    const fetchMock = vi.fn().mockRejectedValue(new Error("network down"));
-    const handler = createCmsPublishHandler({
-      firestore: db,
-      requireAdminFn: async () => ({ uid: "u1", email: "u1@x" }),
-      getToken: () => "tok",
-      isWritebackConfigured: true,
-      fetchImpl: fetchMock,
-    });
-    const res = makeRes();
-
-    await handler(makeReq({ body: { changes: [] } }), res);
-
-    expect(res.statusCode).toBe(500);
-    expect(res.body.error).toBe("network down");
-    const docs = await queueDocs();
-    expect(docs).toHaveLength(1);
-    expect(docs[0].status).toBe("failed");
-    expect(docs[0].error).toBe("network down");
-    expect(docs[0].completedAt).toBeTruthy();
   });
 
   it("refuses to publish when the billing kill switch is engaged", async () => {
@@ -1559,8 +1185,6 @@ describe("cms publish function", () => {
           code: "failed-precondition",
         });
       },
-      getToken: () => "tok",
-      isWritebackConfigured: true,
       fetchImpl: fetchMock,
     });
     const res = makeRes();
@@ -1651,8 +1275,7 @@ describe("section-scoped publish", () => {
     const user = await scopedEditor("watch-editor@example.com", ["watch"]);
     await seedApprovedRecord("watch", "somebody-else");
 
-    // Exactly what the Content tab does: commit the published snapshot, then ask the
-    // transport for the build that makes it public.
+    // The Content tab uses the publication receipt when the save queues the build.
     const saved = await callFn("cmsSaveContent", user.token, {
       collection: "cmsPosts",
       id: POST,
@@ -1662,16 +1285,30 @@ describe("section-scoped publish", () => {
     });
     expect(saved.status).toBe(200);
     const savedBody = await saved.json();
-    const sourceVersion = savedBody.document.version;
-
-    const build = await callFn("cmsPublish", user.token, {
-      changes: [{ collection: "cmsPosts", id: POST, sourceVersion }],
+    expect(savedBody.publication).toMatchObject({
+      queueId: expect.any(String),
+      dispatched: false,
+      status: "pending",
+      transport: "serializer",
     });
-
-    expect(build.status).toBe(200);
-    const queue = await queueDocs();
-    expect(queue).toHaveLength(1);
-    expect(queue[0].triggeredBy).toBe(user.uid);
+    const { queueId } = savedBody.publication;
+    const stored = (await db.collection("cmsPosts").doc(POST).get()).data();
+    expect(stored).toMatchObject({
+      status: "published",
+      version: 2,
+      published: { sourceVersion: 2 },
+      publishBuildPending: true,
+      publishBuildQueueId: queueId,
+    });
+    expect(await queueDocs()).toEqual([
+      expect.objectContaining({
+        id: queueId,
+        status: "pending",
+        transport: "serializer",
+        triggeredBy: user.uid,
+        changes: [{ collection: "cmsPosts", id: POST, sourceVersion: 2 }],
+      }),
+    ]);
   });
 
   it("refuses an out-of-scope publish before the save commits anything", async () => {
