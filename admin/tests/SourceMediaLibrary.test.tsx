@@ -267,6 +267,37 @@ afterEach(() => {
 });
 
 describe("private video library", () => {
+  it.each([
+    ["returns no video", "This video is no longer available."],
+    ["fails", "This video could not be opened. Try again."],
+  ])("keeps browsing when the original notice lookup %s", async (outcome, message) => {
+    const retiredId = "notice-video";
+    const mediaFeedbackFetch = globalThis.fetch;
+    vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      if (!String(input).endsWith("/cmsSourceMediaOriginal")) return mediaFeedbackFetch(input, init);
+      return new Response(JSON.stringify({
+        success: true,
+        notices: [{ id: "a".repeat(64), assetId: retiredId, sourceId: source.id, name: "Archived master", outcome: "restored" }],
+      }), { headers: { "Content-Type": "application/json" } });
+    }));
+    const list = vi.mocked(listSourceMedia).mockImplementation(async (_token, query) => {
+      if (query.assetId === retiredId) {
+        if (outcome === "fails") throw new Error("Lookup interrupted");
+        return { success: true, records: [], nextCursor: null, hasMore: false, total: 0 };
+      }
+      return { success: true, records: [asset], nextCursor: null, hasMore: false, total: 1 };
+    });
+    const router = renderLibrary();
+    await screen.findByRole("button", { name: card("News update") });
+    fireEvent.click(await screen.findByRole("button", { name: "Open video" }));
+
+    expect(await screen.findByText(message)).toBeVisible();
+    expect(list).toHaveBeenCalledWith("staff-token", { sourceId: source.id, assetId: retiredId });
+    expect(screen.getByRole("button", { name: card("News update") })).toBeVisible();
+    expect(screen.queryByRole("dialog")).toBeNull();
+    expect(router.state.location.search).toBe("");
+  });
+
   it("uses a list-signed poster in Quick Look without another read", async () => {
     const ready = { ...asset, viewingCopy: { state: "ready" as const } };
     vi.mocked(listSourceMedia).mockResolvedValue({ success: true, records: [ready], nextCursor: null, hasMore: false, total: 1,
