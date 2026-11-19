@@ -2,6 +2,8 @@ import { repositoryMatches } from "../../scripts/lib/repository-identity.mjs";
 import { pathToFileURL } from "node:url";
 import { releaseAuthorization, releaseInputs } from "./require-release-source.mjs";
 
+export const MERGE_GROUP_NOT_ON_MAIN = "Merge-group CI requires the exact deploy SHA to be reachable from main";
+
 // An ancestor deploy uses its own main CI, regardless of later main commits.
 export async function requireMainCi({ repository, sha, request, env = process.env }) {
   return requireReleaseCi({ repository, sha, request, env });
@@ -38,7 +40,7 @@ export async function requireReleaseCi({ repository, sha, request, emergency = f
           const comparison = await request(`/repos/${repository}/compare/${sha}...main?per_page=1`);
           if (comparison.base_commit?.sha === sha && comparison.merge_base_commit?.sha === sha &&
               ["ahead", "identical"].includes(comparison.status)) return run.id;
-          throw new Error("Merge-group CI requires the exact deploy SHA to be reachable from main");
+          throw new Error(MERGE_GROUP_NOT_ON_MAIN);
         }
         count += jobs.length;
         if (count >= total) break;
