@@ -247,9 +247,6 @@ describe("public deployment reservation", () => {
       'const UPLOAD_ONLY_DEPLOY_COMMAND = "npx wrangler versions upload --config workers/wrangler.jsonc"',
     );
     expect(workerActivationOperator).toContain(
-      "const PROVIDER_DEPLOYMENT_PATHS_SERIALIZED = true",
-    );
-    expect(workerActivationOperator).toContain(
       "assertProductionFirestoreRouting(process.env)",
     );
     expect(workerActivationOperator).toContain("readFileSync(3");

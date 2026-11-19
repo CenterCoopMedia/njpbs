@@ -75,9 +75,6 @@ const { settlePublicDeploymentOutcome, PublicDeploymentTerminalEvidenceError } =
 
 const FIREBASE_PROJECT_ID = "njpbs-site";
 const UPLOAD_ONLY_DEPLOY_COMMAND = "npx wrangler versions upload --config workers/wrangler.jsonc";
-// The repository-connected Worker trigger uploads immutable versions only.
-// This lease-backed operator is the sole reviewed path that can change traffic.
-const PROVIDER_DEPLOYMENT_PATHS_SERIALIZED = true;
 export const PUBLICATION_PROBE_ORIGIN = "https://njpbs.org";
 // The probe must attest the real public root served by the exact active Worker.
 export const PUBLICATION_PROBE_PATH = "/_publication.json";
@@ -647,17 +644,10 @@ export function assertProductionFirestoreRouting(
   }
 }
 
-export function assertProviderDeploymentPathsSerialized(): void {
-  if (!PROVIDER_DEPLOYMENT_PATHS_SERIALIZED) {
-    operatorError("Cloudflare deployment paths are not serialized");
-  }
-}
-
 export async function main(args = process.argv.slice(2)): Promise<void> {
   let app: App | undefined;
   try {
     assertProductionFirestoreRouting(process.env);
-    assertProviderDeploymentPathsSerialized();
     const input = parseApplyArguments(args);
     const cloudflareApiToken = parseCloudflareToken(readFileSync(3, "utf8"));
     const serviceAccount = parseFirebaseServiceAccount(

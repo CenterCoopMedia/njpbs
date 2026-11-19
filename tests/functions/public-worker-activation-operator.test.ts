@@ -5,7 +5,6 @@ import {
   PublicWorkerActivationOperatorError,
   assertProductionFirestoreRouting,
   assertProductionWorkerSubdomainDisabled,
-  assertProviderDeploymentPathsSerialized,
   assertUploadOnlyProductionTrigger,
   projectActivationOperatorResult,
   parseApplyArguments,
@@ -523,11 +522,6 @@ describe("public Worker activation operator", () => {
 });
 
 describe("activation operator output and credential boundary", () => {
-  it("opens the production command after every provider path is serialized", () => {
-    expect(() => assertProviderDeploymentPathsSerialized())
-      .not.toThrow();
-  });
-
   it("refuses Firestore emulator routing at the production command boundary", () => {
     expect(() => assertProductionFirestoreRouting({
       FIRESTORE_EMULATOR_HOST: "127.0.0.1:8180",
@@ -583,8 +577,6 @@ describe("activation operator output and credential boundary", () => {
     );
     expect(source).toContain("assertProductionFirestoreRouting(process.env)");
     expect(source.indexOf("assertProductionFirestoreRouting(process.env)"))
-      .toBeLessThan(source.indexOf('readFileSync(3, "utf8")'));
-    expect(source.indexOf("assertProviderDeploymentPathsSerialized()"))
       .toBeLessThan(source.indexOf('readFileSync(3, "utf8")'));
     expect(source).not.toContain("process.env.CLOUDFLARE");
     expect(source).not.toContain("process.env.GOOGLE");
