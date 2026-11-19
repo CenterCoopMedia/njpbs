@@ -21,14 +21,14 @@ import { Icon } from "../components/ui/Icon";
 import { Button, EmptyState, InlineMessage } from "../components/ui/Primitives";
 import { useMediaQuery } from "../components/ui/floating";
 import { LoadingIndicator } from "../components/ui/LoadingIndicator";
-import { createSourceMediaRead, listSourceMedia, updateSourceMediaMetadata, type MediaSourceSummary, type SourceMediaAssetSummary, type SourceMediaPage, type SourceMediaRead, type SourceMediaQuery, type SourceMediaStatusPage } from "../lib/source-media";
+import { listSourceMedia, updateSourceMediaMetadata, type MediaSourceSummary, type SourceMediaAssetSummary, type SourceMediaPage, type SourceMediaRead, type SourceMediaQuery, type SourceMediaStatusPage } from "../lib/source-media";
 import { useMediaProcessingPoll } from "../lib/use-media-processing-poll";
 import { boundedMediaTime, mediaPermalink, parseMediaPermalink, unavailableMediaMessage } from "../lib/media-permalink";
 import { mediaVideosPath } from "../lib/routes";
 import { HttpError, type MediaSortDirection, type MediaSortField } from "../lib/functions";
 import { getVideoTranscript, type TranscriptSettings } from "../lib/video-production";
 import { invalidateVideoSearchCorpus, updateCachedVideoSearchAsset } from "../lib/video-search-session-cache";
-import { cachedPoster, cachePoster, invalidatePoster, mediaListRevision, setMediaCachePrincipal, setMediaCacheUser, setMediaSourceCount } from "../lib/media-session-cache";
+import { cachedPoster, cachePoster, invalidatePoster, setMediaCachePrincipal, setMediaCacheUser, setMediaSourceCount } from "../lib/media-session-cache";
 import { useRegisterExitGuard } from "./ExitGuard";
 import { parseMediaWorkspacePath } from "../lib/routes";
 import { LeaveGuardDialog } from "./LeaveGuardDialog";
@@ -72,80 +72,26 @@ import { useSuccessNotice } from "../components/ui/SuccessNoticeRegion";
 import { useFavoriteUndo } from "../lib/use-favorite-undo";
 import { useClearFilterUndo } from "../lib/use-clear-filter-undo";
 import "./SourceMediaLibrary.css";
+import { canPlayInBrowser, createVersionedSourceMediaRead, SourceMediaFileChangedError } from "../lib/source-media-read";
+import {
+  clampVideoContextWidth,
+  readVideoContextWidth,
+  stepVideoContextWidth,
+  storeVideoContextWidth,
+  tabbableIn,
+  videoContextBounds,
+  videoPaneMinimumPixels,
+  VIDEO_CONTEXT_MAX_PERCENT,
+  VIDEO_CONTEXT_MIN_PERCENT,
+  VIDEO_RESIZE_TRACK_PX,
+  VIDEO_SIDE_BY_SIDE_QUERY,
+  type VideoContextBounds,
+} from "../lib/video-viewer-layout";
+import { samePosterObject, sharePosterRead, VideoPoster } from "./SourceMediaPoster";
 
-const MAX_POSTER_READS = 4;
+export { sharePosterRead, VideoPoster };
+
 const ACCESS_RENEWAL_LEAD_MS = 30_000;
-const VIDEO_CONTEXT_MIN_PERCENT = 30;
-const VIDEO_CONTEXT_MAX_PERCENT = 70;
-const VIDEO_CONTEXT_STEP_PERCENT = 2;
-const VIDEO_CONTEXT_WIDTH_KEY = "cms.video-viewer.context-width";
-const VIDEO_PANE_MIN_REM = 18;
-const VIDEO_RESIZE_TRACK_PX = 44;
-const VIDEO_SIDE_BY_SIDE_QUERY = "(min-width: 48.8125rem)";
-
-interface VideoContextBounds { min: number; max: number }
-
-function clampVideoContextWidth(value: number, bounds: VideoContextBounds = {
-  min: VIDEO_CONTEXT_MIN_PERCENT,
-  max: VIDEO_CONTEXT_MAX_PERCENT,
-}): number {
-  if (!Number.isFinite(value)) return 35;
-  return Math.round(Math.min(bounds.max, Math.max(bounds.min, value)) * 4) / 4;
-}
-
-function videoPaneMinimumPixels(): number {
-  if (typeof document === "undefined") return VIDEO_PANE_MIN_REM * 16;
-  const rootSize = Number.parseFloat(getComputedStyle(document.documentElement).fontSize);
-  return VIDEO_PANE_MIN_REM * (Number.isFinite(rootSize) ? rootSize : 16);
-}
-
-function videoContextBounds(workspaceWidth: number, paneMinimum = videoPaneMinimumPixels()): VideoContextBounds {
-  if (workspaceWidth <= 0) return { min: VIDEO_CONTEXT_MIN_PERCENT, max: VIDEO_CONTEXT_MAX_PERCENT };
-  const min = Math.max(VIDEO_CONTEXT_MIN_PERCENT, paneMinimum / workspaceWidth * 100);
-  const max = Math.min(VIDEO_CONTEXT_MAX_PERCENT,
-    (workspaceWidth - VIDEO_RESIZE_TRACK_PX - paneMinimum) / workspaceWidth * 100);
-  if (max < min) return { min: 50, max: 50 };
-  const roundedMin = Math.ceil(min * 4) / 4;
-  const roundedMax = Math.floor(max * 4) / 4;
-  if (roundedMax >= roundedMin) return { min: roundedMin, max: roundedMax };
-  // Rounding can cross bounds that only just fit; keep one consistent separator value.
-  const only = Math.round((min + max) / 2 * 4) / 4;
-  return { min: only, max: only };
-}
-
-function readVideoContextWidth(): number | undefined {
-  try {
-    const raw = globalThis.localStorage?.getItem(VIDEO_CONTEXT_WIDTH_KEY);
-    if (raw === null || raw === undefined || raw.trim() === "") return undefined;
-    return clampVideoContextWidth(Number(raw));
-  } catch {
-    return undefined;
-  }
-}
-
-function storeVideoContextWidth(value: number) {
-  try {
-    globalThis.localStorage?.setItem(VIDEO_CONTEXT_WIDTH_KEY, String(value));
-  } catch {
-    // Blocked storage keeps the resized panes for this open viewer only.
-  }
-}
-
-const TABBABLE_SELECTOR = 'a[href], button:not([disabled]), input:not([disabled]):not([type="hidden"]), select:not([disabled]), textarea:not([disabled]), summary, [contenteditable="true"], [tabindex]:not([tabindex="-1"])';
-
-function tabbableIn(root: HTMLElement | null): HTMLElement[] {
-  if (!root) return [];
-  return [...root.querySelectorAll<HTMLElement>(TABBABLE_SELECTOR)]
-    .filter(element => element.tabIndex >= 0 && !element.closest("[hidden], [inert]"));
-}
-
-function stepVideoContextWidth(value: number, key: string, bounds: VideoContextBounds): number | null {
-  if (key === "ArrowLeft") return clampVideoContextWidth(value - VIDEO_CONTEXT_STEP_PERCENT, bounds);
-  if (key === "ArrowRight") return clampVideoContextWidth(value + VIDEO_CONTEXT_STEP_PERCENT, bounds);
-  if (key === "Home") return bounds.min;
-  if (key === "End") return bounds.max;
-  return null;
-}
 
 function videoListSort(sort: VideoMediaSort): { sort: MediaSortField; direction: MediaSortDirection } {
   if (sort === "name_asc") return { sort: "name", direction: "asc" };
@@ -160,137 +106,8 @@ function videoSortFromList(sort: MediaSortField, direction: MediaSortDirection):
   return direction === "asc" ? "updated_asc" : "updated_desc";
 }
 
-function posterObjectIdentity(value: string) {
-  try {
-    const url = new URL(value);
-    const versionId = url.searchParams.get("versionId");
-    return versionId ? JSON.stringify([url.origin, url.pathname, versionId]) : undefined;
-  } catch {
-    return undefined;
-  }
-}
-
-function samePosterObject(left: string, right: string) {
-  if (left === right) return true;
-  const leftIdentity = posterObjectIdentity(left);
-  return leftIdentity !== undefined && leftIdentity === posterObjectIdentity(right);
-}
-
 function sameTranscriptSelection(left: TranscriptSettings, right: TranscriptSettings) {
   return left.languageCode === right.languageCode && left.maxSpeakers === right.maxSpeakers && left.transcriptId === right.transcriptId;
-}
-
-interface PosterReadTask {
-  cancelled: boolean;
-  run: () => Promise<void>;
-}
-
-const posterReadQueue: PosterReadTask[] = [];
-let activePosterReads = 0;
-
-function drainPosterReadQueue() {
-  while (activePosterReads < MAX_POSTER_READS && posterReadQueue.length > 0) {
-    const task = posterReadQueue.shift();
-    if (!task || task.cancelled) continue;
-    activePosterReads += 1;
-    void task.run().finally(() => {
-      activePosterReads -= 1;
-      drainPosterReadQueue();
-    });
-  }
-}
-
-function schedulePosterRead(run: () => Promise<void>) {
-  const task = { cancelled: false, run };
-  posterReadQueue.push(task);
-  drainPosterReadQueue();
-  return () => { task.cancelled = true; };
-}
-
-type PosterReadResult = { url: string } | { failed: true } | null;
-
-interface SharedPosterRead {
-  promise: Promise<PosterReadResult>;
-  users: number;
-  started: boolean;
-  revision: number;
-  /** Set when the viewing copy stops being ready: the late result is not cached. */
-  stale: boolean;
-  cancel: () => void;
-}
-
-// One current read per poster at a time. Switching View remounts every poster, so a read from
-// the same source and list revision is shared instead of being sent again. A queued read that
-// nothing waits for any longer is dropped before it is sent.
-const posterReads = new Map<string, SharedPosterRead>();
-
-function posterReadKey(asset: Pick<SourceMediaAssetSummary, "sourceId" | "id" | "fileVersion">) {
-  return `${asset.sourceId}:${asset.id}:${asset.fileVersion ?? ""}`;
-}
-
-export function sharePosterRead(asset: SourceMediaAssetSummary, getIdToken: () => Promise<string>) {
-  const requestRevision = mediaListRevision();
-  const key = posterReadKey(asset);
-  let entry = posterReads.get(key);
-  if (entry && entry.revision !== requestRevision) {
-    entry.stale = true;
-    posterReads.delete(key);
-    entry = undefined;
-  }
-  if (!entry) {
-    let settle!: (result: PosterReadResult) => void;
-    const created: SharedPosterRead = {
-      promise: new Promise(resolve => { settle = resolve; }),
-      users: 0,
-      started: false,
-      revision: requestRevision,
-      stale: false,
-      cancel: () => undefined,
-    };
-    created.cancel = schedulePosterRead(async () => {
-      created.started = true;
-      try {
-        const requestedAt = Date.now();
-        const access = await createVersionedSourceMediaRead(await getIdToken(), asset, "poster");
-        if (created.stale || mediaListRevision() !== created.revision) { settle(null); return; }
-        cachePoster(asset.sourceId, asset.id, access.url, access.expiresAt, requestedAt, asset.fileVersion);
-        settle({ url: access.url });
-      } catch {
-        settle({ failed: true });
-      } finally {
-        if (posterReads.get(key) === created) posterReads.delete(key);
-      }
-    });
-    posterReads.set(key, created);
-    entry = created;
-  }
-  const shared = entry;
-  shared.users += 1;
-  let released = false;
-  return {
-    promise: shared.promise,
-    release: () => {
-      if (released) return;
-      released = true;
-      shared.users -= 1;
-      if (shared.users === 0 && !shared.started) {
-        shared.cancel();
-        if (posterReads.get(key) === shared) posterReads.delete(key);
-      }
-    },
-  };
-}
-
-function forgetPosterRead(asset: Pick<SourceMediaAssetSummary, "sourceId" | "id" | "fileVersion">) {
-  const key = posterReadKey(asset);
-  const entry = posterReads.get(key);
-  if (!entry) return;
-  entry.stale = true;
-  posterReads.delete(key);
-}
-
-function canPlayInBrowser(asset: SourceMediaAssetSummary) {
-  return asset.viewingCopy?.state === "ready" || asset.preview === "browser";
 }
 
 type QuickLookVideoSession = { order: readonly SourceMediaAssetSummary[]; id: string };
@@ -312,76 +129,6 @@ function refreshQuickLookViewingCopy(previous: QuickLookVideoSession | null, rec
     return { ...item, viewingCopy: record.viewingCopy };
   });
   return changed ? { ...previous, order } : previous;
-}
-
-class SourceMediaFileChangedError extends Error {
-  constructor() {
-    super("This video's file changed. Its details are being refreshed. Save or discard any unsaved edits before trying again.");
-  }
-}
-
-async function createVersionedSourceMediaRead(token: string, asset: SourceMediaAssetSummary, action: SourceMediaRead["action"]) {
-  const access = await createSourceMediaRead(token, asset.sourceId, asset.id, action);
-  if (asset.fileVersion && access.fileVersion && access.fileVersion !== asset.fileVersion) {
-    window.dispatchEvent(new CustomEvent(SOURCE_MEDIA_FILE_CHANGED_EVENT, { detail: { sourceId: asset.sourceId, assetId: asset.id } }));
-    throw new SourceMediaFileChangedError();
-  }
-  return access;
-}
-
-export function VideoPoster({ asset, getIdToken }: { asset: SourceMediaAssetSummary; getIdToken: () => Promise<string> }) {
-  const frame = useRef<HTMLSpanElement>(null);
-  const [visible, setVisible] = useState(false);
-  const [posterUrl, setPosterUrl] = useState<{ identity: string; url: string }>();
-  const posterIdentity = `${asset.sourceId}/${asset.id}/${asset.fileVersion ?? ""}`;
-  const [posterFailed, setPosterFailed] = useState(false);
-  const ready = asset.viewingCopy?.state === "ready";
-
-  useEffect(() => {
-    setPosterUrl(undefined);
-    setPosterFailed(false);
-    if (ready) return;
-    invalidatePoster(asset.sourceId, asset.id, asset.fileVersion);
-    forgetPosterRead(asset);
-    setVisible(false);
-  }, [asset.id, asset.sourceId, asset.fileVersion, ready]);
-
-  useEffect(() => {
-    if (!ready || !frame.current) return;
-    if (typeof IntersectionObserver === "undefined") {
-      setVisible(true);
-      return;
-    }
-    const observer = new IntersectionObserver(entries => {
-      if (!entries.some(entry => entry.isIntersecting)) return;
-      setVisible(true);
-      observer.disconnect();
-    }, { rootMargin: "160px" });
-    observer.observe(frame.current);
-    return () => observer.disconnect();
-  }, [ready]);
-
-  useEffect(() => {
-    if (!ready || !visible) return;
-    const cached = cachedPoster(asset.sourceId, asset.id, asset.fileVersion);
-    if (cached) {
-      setPosterUrl({ identity: posterIdentity, url: cached });
-      return;
-    }
-    let current = true;
-    const read = sharePosterRead(asset, getIdToken);
-    void read.promise.then(result => {
-      if (!current || !result) return;
-      if ("url" in result) setPosterUrl({ identity: posterIdentity, url: result.url });
-      else setPosterFailed(true);
-    });
-    return () => { current = false; read.release(); };
-  }, [asset.id, asset.sourceId, asset.fileVersion, getIdToken, ready, visible]);
-
-  return <span ref={frame} className="source-video-card-preview">
-    {posterUrl?.identity === posterIdentity && !posterFailed ? <img src={posterUrl.url} alt="" loading="lazy" decoding="async" onError={() => { invalidatePoster(asset.sourceId, asset.id, asset.fileVersion); setPosterFailed(true); }} /> : <Icon name="video" />}
-    {canPlayInBrowser(asset) ? <span className="source-video-play" aria-hidden="true"><Icon name="play" /></span> : null}
-  </span>;
 }
 
 export interface VideoPreviewProps {
