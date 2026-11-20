@@ -138,6 +138,16 @@ export function checkPrivateWorkerDeployment(row, versionId, tag, expectedDeploy
   return { deploymentId: row.id, versionId };
 }
 
+// The ledger still calls observe without arguments. Capture only this
+// invocation's confirmed response for its own readback.
+export function workerReadbackAfterWrite(effect, collect, readbackClock) {
+  let response;
+  return {
+    effect: async () => { response = await effect(); },
+    observe: () => waitForWorkerReadback(() => collect(response), readbackClock),
+  };
+}
+
 /** One durable claim precedes each non-idempotent effect. A later caller may
  * only reconcile the original claim; it never retries an ambiguous POST. */
 export async function installPrivateWorker({ ledger, provider, attemptId, config, source, dryRun = true, signal, readbackClock }) {
@@ -150,7 +160,7 @@ export async function installPrivateWorker({ ledger, provider, attemptId, config
   if (dryRun) return { dryRun, attemptId, worker: config.name, planDigest, sourceDigest, metadata };
   const step = (action, effect, observe) => {
     signal?.throwIfAborted(); // Known pre-cancellation must not reserve a send.
-    return ledger.once({ attemptId, worker: config.name, planDigest, action, effect, observe });
+    return ledger.once({ attemptId, worker: config.name, planDigest, action, ...workerReadbackAfterWrite(effect, observe, readbackClock) });
   };
   const checkWorker = async (response) => {
     const row = await provider.worker(config.name, signal);
@@ -161,19 +171,18 @@ export async function installPrivateWorker({ ledger, provider, attemptId, config
     return { workerId: row.id, name: row.name, tag };
   };
   if (await provider.worker(config.name, signal)) await checkWorker();
-  await step("create", () => provider.create(config.name, tag, signal),
-    response => waitForWorkerReadback(() => checkWorker(response), readbackClock));
+  await step("create", () => provider.create(config.name, tag, signal), checkWorker);
   const versions = await provider.versions(config.name, signal);
   if (versions.some(row => row.annotations?.["workers/message"] !== `private-pair:${tag}`)) refuse();
   const { versionId } = await step("upload", () => provider.upload(config.name, metadata, source, signal),
-    expectedVersionId => waitForWorkerReadback(async () => {
+    async expectedVersionId => {
       const matches = (await provider.versions(config.name, signal)).filter(row => row.annotations?.["workers/message"] === `private-pair:${tag}`);
       requireWorkerReadback(matches.length === 1 && uuid(matches[0].id) &&
         (expectedVersionId === undefined || expectedVersionId === matches[0].id), "Worker versionId");
       const versionId = matches[0].id;
       checkPrivateWorkerVersion(await provider.version(config.name, versionId, signal, true), metadata, versionId);
       return { versionId };
-    }, readbackClock));
+    });
   await provider.assertNoPublicRoutes(config.name, signal);
   const checkSubdomain = async () => {
     const observed = await provider.subdomain(config.name, signal);
@@ -181,12 +190,11 @@ export async function installPrivateWorker({ ledger, provider, attemptId, config
     requireWorkerReadback(observed.previews_enabled === false, "Worker subdomain previews_enabled");
     return { private: true };
   };
-  await step("private-subdomain", () => provider.disableSubdomain(config.name, signal),
-    () => waitForWorkerReadback(checkSubdomain, readbackClock));
+  await step("private-subdomain", () => provider.disableSubdomain(config.name, signal), checkSubdomain);
   const checkDeployment = async expectedDeploymentId => checkPrivateWorkerDeployment(
     await provider.deployment(config.name, signal), versionId, tag, expectedDeploymentId);
   const { deploymentId } = await step("deploy", () => provider.deploy(config.name, versionId, tag, signal),
-    response => waitForWorkerReadback(() => checkDeployment(response?.id), readbackClock));
+    response => checkDeployment(response?.id));
   await checkDeployment(deploymentId);
   if (await provider.sourceDigest(config.name, signal) !== sourceDigest) refuse();
   await checkDeployment(deploymentId);

@@ -7,8 +7,8 @@ import { configurePublicReleaseIngress } from "../configure-public-release-ingre
 import { compilePrivateWorker } from "../install-private-public-release.mjs";
 import { privatePublicReleaseSlotTarget, readPrivatePublicReleaseSlotProvider } from "./private-public-release-slot-target.mjs";
 import { privateInstallLedger } from "./public-release-private-install-ledger.mjs";
-import { checkPrivateWorkerDeployment, checkPrivateWorkerVersion, cloudflarePrivatePairProvider, privateWorkerMetadata } from "./public-release-private-provider.mjs";
-import { requireWorkerReadback, waitForWorkerReadback } from "./cloudflare-worker-readback.mjs";
+import { checkPrivateWorkerDeployment, checkPrivateWorkerVersion, cloudflarePrivatePairProvider, privateWorkerMetadata, workerReadbackAfterWrite } from "./public-release-private-provider.mjs";
+import { requireWorkerReadback } from "./cloudflare-worker-readback.mjs";
 import { operatorCloudflareApi } from "./public-release-private-bridge-operator.mjs";
 import { oldIngressRateControlTarget, readReviewedIngressRateControls, assertReviewedCmsRpcRateControl } from "./public-release-old-ingress-rate-control.mjs";
 import { readClosedInitialIngressAuthority } from "./public-release-bootstrap-ingress-authority.mjs";
@@ -143,10 +143,10 @@ export async function enableOldPublicReleaseIngress({ firestore, packet: raw, re
     if (!Array.isArray(rows) || rows[0]?.id !== packet.route.legacyDeploymentId || !same(rows[0]?.versions, [{ version_id: packet.route.legacyVersionId, percentage: 100 }])) refuse();
   }
   await guard(); await ledger.bindAttempt(packet.operationId, id.planDigest);
-  const step = (action, effect, observe) => ledger.once({ attemptId: packet.operationId, worker: id.worker, planDigest: id.planDigest, action, effect, observe });
+  const step = (action, callbacks) => ledger.once({ attemptId: packet.operationId, worker: id.worker, planDigest: id.planDigest, action, ...callbacks });
+  const workerStep = (action, effect, observe) => step(action, workerReadbackAfterWrite(effect, observe, readbackClock));
   await guard();
-  const version = await step("enable-upload", () => provider.upload(name, privateWorkerMetadata(config, id.tag), source, signal),
-    expectedVersionId => waitForWorkerReadback(() => uploaded(expectedVersionId), readbackClock));
+  const version = await workerStep("enable-upload", () => provider.upload(name, privateWorkerMetadata(config, id.tag), source, signal), uploaded);
   await guard();
   const deployed = async expectedDeploymentId => {
     const row = await provider.deployment(name, signal);
@@ -155,17 +155,17 @@ export async function enableOldPublicReleaseIngress({ firestore, packet: raw, re
     requireWorkerReadback(await provider.sourceDigest(name, signal) === packet.installPlan.ingressBundleDigest, "Ingress deployment source digest");
     return deployment;
   };
-  const deployment = await step("enable-deploy", () => provider.deploy(name, version.versionId, id.tag, signal),
-    response => waitForWorkerReadback(() => deployed(response?.id), readbackClock));
+  const deployment = await workerStep("enable-deploy", () => provider.deploy(name, version.versionId, id.tag, signal),
+    response => deployed(response?.id));
   await guard();
   const beforeRoute = await routeRead(), routeKey = hash({ worker: id.worker });
   const routeClaim = (await firestore.doc(`${base}/attempts/${packet.operationId}/steps/${routeKey}-enable-route`).get()).exists;
   if (!routeClaim && beforeRoute.script !== packet.route.legacyWorker) refuse();
   await oldSlot(); await guard();
-  const selected = await step("enable-route", () => api(`/zones/${packet.route.zoneId}/workers/routes/${packet.route.routeId}`, {
-    method: "PUT", body: { pattern: packet.route.pattern, script: name } }), async () => {
+  const selected = await step("enable-route", { effect: () => api(`/zones/${packet.route.zoneId}/workers/routes/${packet.route.routeId}`, {
+    method: "PUT", body: { pattern: packet.route.pattern, script: name } }), observe: async () => {
     const row = await routeRead(); if (row.script !== name) refuse(); return row;
-  });
+  } });
   await guard(); await oldSlot(); await deployed(deployment.deploymentId);
   return { operationId: packet.operationId, complete: true, oldPairId: attempt.currentPair.pairId, ...deployment, route: selected, authority: first,
     admissionResumed: false, terminalPublicationProof: false };
