@@ -715,11 +715,16 @@ it("keeps dev record readers and Data Hub composition in the same version receip
     DATA_HUB_COMPOSITION_VERSION: "1",
   })) value.resources.bindings.push({ name, type: "plain_text", text });
   value.resources.bindings.push({ name: "DURABLE_POST_WITHDRAWALS", type: "r2_bucket", bucket_name: "njpbs-dev-cms-publication" });
+  const versionMetadata = { name: "CF_VERSION_METADATA", type: "version_metadata" };
+  value.resources.bindings.push(versionMetadata);
   expect(projectCloudflareWorkerVersion(value, { ...expected, target })).toMatchObject({
     noBuildRecord: { rendererSha: input.commitSha, families: ["programs", "events"] },
     noBuildPage: { rendererSha: input.commitSha, dataFigureVersion: 1, dataHubReportingVersion: 1, dataHubCompositionVersion: 1 },
     noBuildPost: { rendererSha: input.commitSha, dataFigureVersion: 1 },
   });
+  versionMetadata.type = "plain_text";
+  expect(() => projectCloudflareWorkerVersion(value, { ...expected, target })).toThrow("The dev candidate reader bindings are invalid");
+  versionMetadata.type = "version_metadata";
   value.resources.bindings.find(binding => binding.name === "DATA_HUB_PUBLIC").text = "0";
   expect(() => projectCloudflareWorkerVersion(value, { ...expected, target })).toThrow("Invalid Data Hub composition metadata");
 });
