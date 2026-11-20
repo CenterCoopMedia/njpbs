@@ -325,6 +325,16 @@ function createPublicVideoWithdrawalRecoveryHandler(deps) {
   };
 }
 
+async function readSnapshotOwner(firestore, transaction, ref, snapshot) {
+  if (ref.parent.id === "cmsPages") {
+    return require("./no-build-page-ownership").readNoBuildPageOwner({ firestore, transaction, pageId: ref.id });
+  }
+  if (["program", "event"].includes(snapshot?.metadata?.type)) {
+    return require("./no-build-record-ownership").readNoBuildRecordOwner({ firestore, transaction, documentId: ref.id });
+  }
+  return require("./no-build-post-ownership").readNoBuildPostOwner({ firestore, transaction, postId: ref.id });
+}
+
 /** Firestore event boundary: Only lost public references can revoke version keys. */
 function createPublicVideoWithdrawalHandler(deps) {
   const { firestore, now = Date.now, log = console } = deps;
@@ -359,7 +369,7 @@ function createPublicVideoWithdrawalHandler(deps) {
       log,
     });
     for (const request of requests) await attempt(request);
-    // Release completed private history so later edits cannot enqueue it again.
+    // Release completed private history when the snapshot has no serving seal.
     const contentRef = event.data?.after?.ref;
     if (removed.size && contentRef) {
       const released = new Set(
@@ -372,6 +382,8 @@ function createPublicVideoWithdrawalHandler(deps) {
         const previous = previousVideoCopies(record.published);
         const remaining = previous.filter((copy) => !released.has(copy.url));
         if (remaining.length !== previous.length) {
+          const { state } = await readSnapshotOwner(firestore, tx, contentRef, record.published);
+          if (state?.snapshotDigest || state?.mode === "static") return;
           tx.update(contentRef, { "published.previousVideoCopies": remaining });
         }
       });

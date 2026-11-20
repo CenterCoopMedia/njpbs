@@ -782,12 +782,13 @@ export class StaffSiteEntrypoint extends WorkerEntrypoint<CmsApiEnv> {
 }
 
 export interface NoBuildPostReply {
-  kind: "pass" | "post" | "alias" | "gone" | "receipts" | "background" | "baseline-probe" | "static";
+  kind: "pass" | "post" | "alias" | "gone" | "receipts" | "partial-receipts" | "background" | "baseline-probe" | "static";
   receipt?: { schemaVersion: 1; postId: string; operationId: string; rendererSha: string;
     sourceVersion: number; slug: string; ownedSlugs: string[]; generation: number; visible: boolean; contextDigest: string;
     admissionRevision?: number | null; snapshotDigest?: string; datasetFiguresDigest?: string; contentRedirectUrl?: string; mode?: "static" };
   catalog?: { schemaVersion: 1; rendererSha: string; generation: number; contextDigest: string;
-    admissionRevision: number; posts: NonNullable<NoBuildPostReply["receipt"]>[] };
+    admissionRevision: number; posts: NonNullable<NoBuildPostReply["receipt"]>[];
+    refusedPosts?: { postId: string; ownedSlugs: string[] }[] };
   staticFile?: { path: string; bytes: number; digest: string } | null;
   published?: unknown;
   location?: string;
@@ -985,16 +986,18 @@ export class PublicContentEntrypoint extends WorkerEntrypoint<CmsApiEnv> {
     });
     if (!response.ok) throw new PublicContentRpcError("Public content service is unavailable");
     const value = await boundedJson(response, 24 * 1024 * 1024) as NoBuildPostReply;
-    if (!value || !["pass", "post", "alias", "gone", "receipts", "background", "baseline-probe", "static"].includes(value.kind)) {
+    if (!value || !["pass", "post", "alias", "gone", "receipts", "partial-receipts", "background", "baseline-probe", "static"].includes(value.kind)) {
       throw new PublicContentRpcError("Invalid projection");
     }
-    if (["post", "alias", "gone", "receipts"].includes(value.kind) && value.receipt?.mode !== "static") {
-      const catalogReceipt = value.kind === "receipts" && value.receipt === undefined;
+    if (["post", "alias", "gone", "receipts", "partial-receipts"].includes(value.kind) && value.receipt?.mode !== "static") {
+      const catalogReceipt = value.kind === "partial-receipts" || value.kind === "receipts" && value.receipt === undefined;
       const catalog = value.catalog;
       const identity = catalogReceipt ? catalog : value.receipt;
       if (catalogReceipt && (!catalog || catalog.schemaVersion !== 1 ||
           !Number.isSafeInteger(catalog.generation) || catalog.generation < 1 ||
-          !/^[a-f0-9]{64}$/.test(catalog.contextDigest) || !Array.isArray(catalog.posts))) {
+          !/^[a-f0-9]{64}$/.test(catalog.contextDigest) || !Array.isArray(catalog.posts) ||
+          (value.kind === "partial-receipts" ? !Array.isArray(catalog.refusedPosts) || !catalog.refusedPosts.length
+            : catalog.refusedPosts !== undefined))) {
         throw new PublicContentRpcError("Invalid admission receipt");
       }
       const revision = identity?.admissionRevision;

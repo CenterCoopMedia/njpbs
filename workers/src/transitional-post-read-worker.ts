@@ -99,17 +99,22 @@ function object(value: unknown): value is Record<string, unknown> {
   return value !== null && typeof value === "object" && !Array.isArray(value);
 }
 function validReply(value: unknown): value is NoBuildPostReply {
-  return object(value) && ["pass", "post", "alias", "gone", "receipts", "background", "static"].includes(String(value.kind));
+  return object(value) && ["pass", "post", "alias", "gone", "receipts", "partial-receipts", "background", "static"].includes(String(value.kind));
 }
 function catalogPosts(reply: NoBuildPostReply) {
   if (reply.kind === "pass") return [];
-  if (!["receipts", "static"].includes(reply.kind)) throw new Error("Invalid public catalog");
+  if (!["receipts", "partial-receipts", "static"].includes(reply.kind)) throw new Error("Invalid public catalog");
   const posts = reply.catalog?.posts ?? (reply.receipt ? [reply.receipt] : null);
-  if (!Array.isArray(posts) || !posts.length || posts.some(post => !post || !isPublicContentSlug(post.slug) ||
-      !Array.isArray(post.ownedSlugs) || post.ownedSlugs.some(slug => !isPublicContentSlug(slug)))) {
+  const refused = reply.catalog?.refusedPosts;
+  if (!Array.isArray(posts) || posts.some(post => !post || !isPublicContentSlug(post.slug) ||
+      !Array.isArray(post.ownedSlugs) || post.ownedSlugs.some(slug => !isPublicContentSlug(slug))) ||
+      (reply.kind === "partial-receipts" ? !Array.isArray(refused) || !refused.length || refused.some(owner =>
+        typeof owner?.postId !== "string" || !/^[A-Za-z0-9_-]{1,128}$/.test(owner.postId) || !Array.isArray(owner.ownedSlugs) ||
+        !owner.ownedSlugs.length || owner.ownedSlugs.some(slug => !isPublicContentSlug(slug)))
+        : !posts.length || refused !== undefined)) {
     throw new Error("Invalid public catalog");
   }
-  return posts;
+  return [...posts, ...(refused ?? [])];
 }
 
 /** The single full-build transition seam. Remove with #2793.
@@ -559,6 +564,9 @@ export function createTransitionalPostReadWorker(dependencies: Dependencies) {
         catalog = await refresh(catalogKey, "/_publication.json", "GET");
       }
       if (catalog.state === "unavailable") return copy(true);
+      if (slug && catalog.reply.catalog?.refusedPosts?.some(post => post.ownedSlugs.includes(slug))) {
+        return unavailable(request);
+      }
       const posts = independent ? [] : catalogPosts(catalog.reply);
       if (!independent && !posts.length) return copy(refreshes.has(catalogKey.url), slug && catalog.expiresAt > now() ? workerRequest : undefined);
       if (slug && !posts.some(post => post.ownedSlugs.includes(slug))) {

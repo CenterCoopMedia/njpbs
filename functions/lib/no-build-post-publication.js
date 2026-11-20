@@ -327,10 +327,10 @@ async function prepareNoBuildPostPublication({ firestore, transaction, collectio
 
 /** Version and visibility are checked in the same read transaction as ownership.
  * Nothing here selects an older static baseline for an owned path. */
-async function readNoBuildPostDecision({ firestore, path, rendererSha, probe }) {
-  return firestore.runTransaction(transaction => readNoBuildPostDecisionInTransaction({ firestore, transaction, path, rendererSha, probe }), { readOnly: true });
+async function readNoBuildPostDecision({ firestore, path, rendererSha, probe, log }) {
+  return firestore.runTransaction(transaction => readNoBuildPostDecisionInTransaction({ firestore, transaction, path, rendererSha, probe, log }), { readOnly: true });
 }
-async function readNoBuildPostDecisionInTransaction({ firestore, transaction, path, rendererSha, probe }) {
+async function readNoBuildPostDecisionInTransaction({ firestore, transaction, path, rendererSha, probe, log = console }) {
   const match = /^\/posts\/([^/]+)\/$/.exec(path);
   const receipts = ["/_publication.json", "/_content-status.json"].includes(path);
   const { backgroundOutputForPath: outputForPath, isBackgroundAssetPath, lastGood } = require("./post-background-outputs");
@@ -342,11 +342,13 @@ async function readNoBuildPostDecisionInTransaction({ firestore, transaction, pa
   const contextBackground = background && await require("./public-context-background-reader")
     .readPublicContextBackgroundInTransaction({ firestore, transaction, path, rendererSha });
   if (contextBackground) return contextBackground;
+  const malformedOwners = [];
   const owners = (match ? await findNoBuildPostOwnersForSlug({ firestore, transaction, slug: match[1] })
-    : await listNoBuildPostOwners({ firestore, transaction })).filter(owner => owner.state.operationId);
+    : await listNoBuildPostOwners({ firestore, transaction,
+      onMalformedOwner: probe ? undefined : owner => malformedOwners.push(owner) })).filter(owner => owner.state.operationId);
   // A first renderer activation has no Post owners yet. Its artifact probe
   // still requires the exact candidate lease before Assets can answer it.
-  if (!owners.length && !(receipts && probe)) return { kind: "pass" };
+  if (!owners.length && !malformedOwners.length && !(receipts && probe)) return { kind: "pass" };
   if (match && owners.length !== 1) refuse("Two Posts claim the same public route.");
   const readPointer = require("./public-deployment-pointer").readPublicDeploymentPointer;
   const pointer = readPointer((await transaction.get(firestore.doc("system/publicDeployment"))).data());
@@ -359,9 +361,9 @@ async function readNoBuildPostDecisionInTransaction({ firestore, transaction, pa
     await assertNoBuildCandidateInTransaction({ firestore, transaction, candidate });
     return { kind: "baseline-probe" };
   }
-  if (!owners.length) return { kind: "pass" };
+  if (!owners.length && !malformedOwners.length) return { kind: "pass" };
   if (background === "home") {
-    if (owners.every(owner => owner.state.mode === "static")) return { kind: "pass" };
+    if (!malformedOwners.length && owners.every(owner => owner.state.mode === "static")) return { kind: "pass" };
     const homeState = (await transaction.get(firestore.doc("cmsBackgroundOutputs/home"))).data();
     // Without a verified Home manifest, keep the existing static copy.
     if (!lastGood(homeState)) return { kind: "pass" };
@@ -370,27 +372,46 @@ async function readNoBuildPostDecisionInTransaction({ firestore, transaction, pa
   const contextDigest = await readPublicContextInTransaction(transaction, firestore);
   const context = { firestore, transaction, pointer, capability, candidate, rendererSha, admission, contextDigest };
   if (match) return readOwnedPostDecision({ ...context, owner: owners[0], path, slug: match[1] });
-  if (owners.length === 1) {
-    return readOwnedPostDecision({ ...context, owner: owners[0], path });
-  }
+  const canSkipUnverifiedSnapshot = pointer.state === "idle" && pointer.activeCommitSha === rendererSha && admission.valid;
+  if (!canSkipUnverifiedSnapshot && malformedOwners.length) refuse("Instant Post ownership is unavailable.");
   const posts = [];
-  // Catalogs must qualify every owner even while the release pointer disables
-  // reply caching. Overlap independent reads in this same read-only transaction
-  // without issuing an unbounded burst as the owner set grows.
+  const refusedPosts = [];
+  let generation = pointer.activeGeneration;
+  const single = owners.length === 1 && !malformedOwners.length;
+  const refuseOwner = ({ postId, ownedSlugs, generation: ownerGeneration = 0 }, reason) => {
+    refusedPosts.push({ postId, ownedSlugs });
+    if (Number.isSafeInteger(ownerGeneration)) generation = Math.max(generation, ownerGeneration);
+    log.warn?.("Public Post catalog owner refused", { postId, reason });
+  };
+  for (const owner of malformedOwners) refuseOwner(owner, "malformed_owner");
+  // Reconcile every owner within the same bounded read transaction. Ordinary
+  // catalogs can omit a bad snapshot while preserving its existing route claims.
   for (let offset = 0; offset < owners.length; offset += 8) {
     const replies = await Promise.all(owners.slice(offset, offset + 8).map(owner =>
-      readOwnedPostDecision({ ...context, owner, path: `/posts/${owner.state.slug}/`, catalog: true })));
-    posts.push(...replies.map(reply => reply.receipt));
+      readOwnedPostDecision({ ...context, owner, path: single ? path : `/posts/${owner.state.slug}/`,
+        catalog: !single, canSkipUnverifiedSnapshot })));
+    for (const reply of replies) {
+      if (reply.kind === "unverified-snapshot") {
+        refuseOwner(reply, "snapshot_mismatch");
+      } else {
+        if (single) return reply;
+        posts.push(reply.receipt);
+        generation = Math.max(generation, reply.receipt.generation);
+      }
+    }
   }
   if (!admission.valid) refuse("Instant publication admission is unavailable.");
-  const catalog = { schemaVersion: 1, rendererSha, admissionRevision: admission.admissionRevision, contextDigest,
-    generation: posts.reduce((generation, post) => Math.max(generation, post.generation), pointer.activeGeneration), posts };
+  refusedPosts.sort((left, right) => left.postId.localeCompare(right.postId));
+  const catalog = { schemaVersion: 1, rendererSha, admissionRevision: admission.admissionRevision, contextDigest, generation, posts,
+    ...(refusedPosts.length ? { refusedPosts } : {}) };
   if (background) return { kind: "background", catalog, backgroundBucket: admission.backgroundBucket };
-  return { kind: "receipts", catalog };
+  // A distinct reply kind keeps deployed clients that do not understand the
+  // omitted owners from mistaking their retained routes for unowned Assets.
+  return { kind: refusedPosts.length ? "partial-receipts" : "receipts", catalog };
 }
 
 async function readOwnedPostDecision({ firestore, transaction, owner, pointer, capability, candidate, rendererSha,
-  admission, contextDigest, path, slug, catalog = false }) {
+  admission, contextDigest, path, slug, catalog = false, canSkipUnverifiedSnapshot = false }) {
   const state = effectiveNoBuildPostState(owner.state, capability);
   const staticCandidate = candidate?.noBuildStatic?.postId === state.postId ? candidate : null;
   if (state.mode === "static" || staticCandidate) {
@@ -422,7 +443,12 @@ async function readOwnedPostDecision({ firestore, transaction, owner, pointer, c
   if (document?.published?.sourceVersion !== state.sourceVersion || publiclyVisible(document) !== state.visible ||
       document?.published?.metadata?.slug !== state.slug ||
       state.snapshotDigest && canonicalDigest(document?.published) !== state.snapshotDigest ||
-      state.datasetFiguresDigest && canonicalDigest(document?.published?.datasetFigures) !== state.datasetFiguresDigest) refuse();
+      state.datasetFiguresDigest && canonicalDigest(document?.published?.datasetFigures) !== state.datasetFiguresDigest) {
+    if (canSkipUnverifiedSnapshot && state.ownedSlugs.includes(state.slug)) {
+      return { kind: "unverified-snapshot", postId: state.postId, ownedSlugs: state.ownedSlugs, generation: state.generation };
+    }
+    refuse();
+  }
   const receipt = { schemaVersion: 1, postId: state.postId, operationId: state.operationId,
     rendererSha, sourceVersion: state.sourceVersion, slug: state.slug, ownedSlugs: state.ownedSlugs,
     visible: state.visible, admissionRevision: admission.admissionRevision, contextDigest,

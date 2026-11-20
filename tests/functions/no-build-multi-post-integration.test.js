@@ -429,22 +429,32 @@ describe("independent public routes, catalog and confirmation", () => {
     await settle();
     const queue = (await db.doc(`cmsPublishQueue/${next.body.publication.queueId}`).get()).data();
     expect.soft(queue.publicReceipt?.operationId).toBe(next.body.publication.queueId);
+    const republish = await publish("first", after.data().version, { title: "No video history" });
+    expect(republish.code, JSON.stringify(republish.body)).toBe(200);
+    expect((await postRef.get()).data().published.previousVideoCopies).toBeUndefined();
   });
 
-  it("omits a Post whose sealed snapshot cannot be verified while keeping its baseline route reserved", async () => {
+  it.each(["snapshot_mismatch", "malformed_owner"])("omits a refused Post with %s while keeping its baseline route reserved", async reason => {
     await db.doc(registry.CAPABILITY_PATH).update({ dataFigureVersion: 1 });
     for (const id of ["first", "second"]) expect((await publish(id)).code).toBe(200);
-    await db.doc("cmsPosts/first").update({ "published.previousVideoCopies": [] });
+    if (reason === "snapshot_mismatch") {
+      await db.doc("cmsPosts/first").update({ "published.previousVideoCopies": [] });
+    } else {
+      await db.doc(`${registry.OWNER_COLLECTION}/first`).update({ snapshotDigest: "invalid" });
+    }
+    const log = { warn: vi.fn() };
+    const catalog = await publication.readNoBuildPostDecision({ firestore: db, path: "/_publication.json", rendererSha: sha, log });
+    expect(catalog.kind).toBe("partial-receipts");
+    expect(catalog.catalog.posts.map(post => post.postId)).toEqual(["second"]);
+    expect(log.warn).toHaveBeenCalledWith("Public Post catalog owner refused", { postId: "first", reason });
     const site = worker();
     const get = path => site.fetch(new Request(`https://njpbs.org${path}`));
     const receipt = await get("/_publication.json");
     const status = await get("/_content-status.json");
-    expect.soft(receipt.status).toBe(200);
-    expect.soft(status.status).toBe(200);
-    if (receipt.ok && status.ok) {
-      const routes = readPublicContentStatus(await status.json(), await receipt.json());
-      expect(routes.map(route => route.path)).toEqual(["/about/", "/posts/second-story/"]);
-    }
+    expect(receipt.status).toBe(200);
+    expect(status.status).toBe(200);
+    const routes = readPublicContentStatus(await status.json(), await receipt.json());
+    expect(routes.map(route => route.path)).toEqual(["/about/", "/posts/second-story/"]);
     expect((await get("/posts/first-story/")).status).toBe(503);
     expect((await get("/posts/second-story/")).status).toBe(200);
   });

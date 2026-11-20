@@ -257,21 +257,27 @@ async function servePostReceipts(path: string, reply: NoBuildPostReply, headers:
       baseline.commitSha !== dependencies.rendererSha) throw new Error("Public receipt baseline changed");
   const catalog = reply.catalog;
   const posts = catalog?.posts ?? [reply.receipt!];
+  const refused = catalog?.refusedPosts ?? [];
   const receipt = catalog ?? reply.receipt!;
   const slugs = new Set<string>();
   const postIds = new Set<string>();
   for (const post of posts) {
     receiptHeaders({ kind: post.mode === "static" ? "static" : "receipts", receipt: post }, dependencies.target);
-    if (!/^[A-Za-z0-9_-]{1,128}$/.test(post.postId) || !isPublicContentSlug(post.slug) ||
-        !post.ownedSlugs.includes(post.slug) || postIds.has(post.postId) ||
-        post.ownedSlugs.some(slug => !isPublicContentSlug(slug) || slugs.has(slug))) throw new Error("Invalid Post catalog");
-    postIds.add(post.postId);
-    for (const slug of post.ownedSlugs) slugs.add(slug);
+    if (!isPublicContentSlug(post.slug) || !Array.isArray(post.ownedSlugs) || !post.ownedSlugs.includes(post.slug)) {
+      throw new Error("Invalid Post catalog");
+    }
+  }
+  for (const owner of [...posts, ...refused]) {
+    if (typeof owner?.postId !== "string" || !/^[A-Za-z0-9_-]{1,128}$/.test(owner.postId) || postIds.has(owner.postId) ||
+        !Array.isArray(owner.ownedSlugs) || !owner.ownedSlugs.length ||
+        owner.ownedSlugs.some(slug => !isPublicContentSlug(slug) || slugs.has(slug))) throw new Error("Invalid Post catalog");
+    postIds.add(owner.postId);
+    for (const slug of owner.ownedSlugs) slugs.add(slug);
   }
   const orderedPosts = [...posts].sort((left, right) => left.postId.localeCompare(right.postId));
   // An ordinary same-source release can change carried routes. Include its
   // baseline identity as well as the complete current public context.
-  const identity = await publicPostReceiptIdentity({ posts: orderedPosts,
+  const identity = await publicPostReceiptIdentity({ posts: [...orderedPosts, ...refused],
     workerName: dependencies.target.workerName, rendererSha: dependencies.rendererSha,
     contextDigest: receipt.contextDigest, admissionRevision: receipt.admissionRevision, generation: receipt.generation,
     baseline: { buildBatchId: baseline.buildBatchId, generation: baseline.generation } });
@@ -280,9 +286,11 @@ async function servePostReceipts(path: string, reply: NoBuildPostReply, headers:
     if (!Array.isArray(baseline.routes) || baseline.routes.length > 10_000) throw new Error("Invalid public inventory");
     const owned = await Promise.all(orderedPosts.map(async post => ({ post,
       contentKey: await sha256(`cmsPosts/${post.postId}`) })));
-    const keys = new Set(owned.map(value => value.contentKey));
+    const refusedKeys = await Promise.all(refused.map(post => sha256(`cmsPosts/${post.postId}`)));
+    const keys = new Set([...owned.map(value => value.contentKey), ...refusedKeys]);
+    const ownedPaths = new Set([...slugs].map(postPublicPath));
     const routes = baseline.routes.filter((route: { path?: string; contentKey?: string }) =>
-      !keys.has(route.contentKey ?? "") && ![...slugs].some(slug => route.path === postPublicPath(slug)));
+      !keys.has(route.contentKey ?? "") && !ownedPaths.has(route.path ?? ""));
     for (const { post, contentKey } of owned) {
       if (post.visible) routes.push({ path: postPublicPath(post.slug), source: "cms", contentKey, sourceVersion: post.sourceVersion });
     }
@@ -290,7 +298,7 @@ async function servePostReceipts(path: string, reply: NoBuildPostReply, headers:
     body = { ...identity, collections: ["cmsPages", "cmsPosts"], routes };
   }
   const current = await dependencies.getDecision(path, head ? "HEAD" : "GET");
-  if (current.kind !== "receipts" || JSON.stringify([current.catalog, current.receipt]) !== JSON.stringify([reply.catalog, reply.receipt])) throw new Error("Public context changed");
+  if (current.kind !== reply.kind || JSON.stringify([current.catalog, current.receipt]) !== JSON.stringify([reply.catalog, reply.receipt])) throw new Error("Public context changed");
   headers.set("Content-Type", "application/json; charset=utf-8");
   headers.set("x-njpbs-publication-origin", dependencies.target.workerName);
   return new Response(head ? null : JSON.stringify(body), { headers });
@@ -301,7 +309,9 @@ function catalogHeaders(reply: NoBuildPostReply, dependencies: AuthoritativeDepe
   if (!catalog || catalog.schemaVersion !== 1 || catalog.rendererSha !== dependencies.rendererSha ||
       !Number.isSafeInteger(catalog.generation) || catalog.generation < 1 ||
       !/^[a-f0-9]{64}$/.test(catalog.contextDigest) || !Number.isSafeInteger(catalog.admissionRevision) ||
-      catalog.admissionRevision < 1 || !Array.isArray(catalog.posts) || !catalog.posts.length) throw new Error("Invalid Post catalog receipt");
+      catalog.admissionRevision < 1 || !Array.isArray(catalog.posts) ||
+      (reply.kind === "partial-receipts" ? !Array.isArray(catalog.refusedPosts) || !catalog.refusedPosts.length
+        : !catalog.posts.length || catalog.refusedPosts !== undefined)) throw new Error("Invalid Post catalog receipt");
   return new Headers({ ...SECURITY_HEADER_BASELINE, "Cache-Control": "no-store",
     "X-Njpbs-Content-Source": "cms-no-build", "X-Njpbs-Renderer-Sha": catalog.rendererSha,
     "X-Njpbs-Context-Sha256": catalog.contextDigest, "X-Njpbs-Admission-Revision": String(catalog.admissionRevision),
@@ -440,7 +450,7 @@ async function serveAuthoritativePost(request: Request, dependencies: Authoritat
     const reply = await dependencies.getDecision(path, head ? "HEAD" : "GET", probe);
     if (reply.kind === "pass" || reply.kind === "baseline-probe") return null;
     if (reply.kind === "static") return await serveStaticPost(path, reply, dependencies, head);
-    if (reply.kind === "receipts" && reply.catalog) {
+    if (["receipts", "partial-receipts"].includes(reply.kind) && reply.catalog) {
       return await servePostReceipts(path, reply, catalogHeaders(reply, dependencies), dependencies, head);
     }
     const headers = receiptHeaders(reply, dependencies.target);

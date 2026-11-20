@@ -40,7 +40,7 @@ async function readNoBuildPostOwner({ firestore, transaction, postId }) {
 
 /** Enumeration is read only. Code activation changes the shared capability,
  * never an unbounded set of retained Post or queue documents. */
-async function listNoBuildPostOwners({ firestore, transaction, slug }) {
+async function listNoBuildPostOwners({ firestore, transaction, slug, onMalformedOwner }) {
   let query = firestore.collection(OWNER_COLLECTION);
   if (slug !== undefined) {
     if (!isServerMintableSlugShape(slug)) refuse();
@@ -48,14 +48,29 @@ async function listNoBuildPostOwners({ firestore, transaction, slug }) {
   }
   const legacyRef = firestore.doc(LEGACY_STATE_PATH);
   const [rows, legacyRow] = await Promise.all([readSnapshot(query, transaction), readSnapshot(legacyRef, transaction)]);
-  const owners = rows.docs.map(row => {
-    const state = validateState(row.data());
-    if (!state || state.postId !== row.id) refuse();
-    return { ref: row.ref, state };
+  const malformed = [];
+  const owners = rows.docs.flatMap(row => {
+    const value = row.data();
+    try {
+      const state = validateState(value);
+      if (!state || state.postId !== row.id) refuse();
+      return [{ ref: row.ref, state }];
+    } catch (error) {
+      // Ordinary aggregate readers can withhold this owner only if its route
+      // scope still has a bounded, unambiguous identity.
+      if (!onMalformedOwner || value?.postId !== row.id || !validId(value.postId) || value.mode === "static" ||
+          !isServerMintableSlugShape(value.slug) || !Array.isArray(value.ownedSlugs) || value.ownedSlugs.length > 100 ||
+          !value.ownedSlugs.includes(value.slug) || value.ownedSlugs.some(path => !isServerMintableSlugShape(path)) ||
+          new Set(value.ownedSlugs).size !== value.ownedSlugs.length) throw error;
+      malformed.push({ postId: value.postId, ownedSlugs: value.ownedSlugs });
+      return [];
+    }
   });
   const legacy = validateState(legacyRow.data());
   if (legacy && (slug === undefined || legacy.ownedSlugs.includes(slug))) owners.push({ ref: legacyRef, state: legacy });
-  if (new Set(owners.map(owner => owner.state.postId)).size !== owners.length) refuse("Two documents claim the same instant Post.");
+  const ids = [...owners.map(owner => owner.state.postId), ...malformed.map(owner => owner.postId)];
+  if (new Set(ids).size !== ids.length) refuse("Two documents claim the same instant Post.");
+  if (onMalformedOwner) malformed.forEach(onMalformedOwner);
   return owners.sort((left, right) => left.state.postId.localeCompare(right.state.postId));
 }
 
