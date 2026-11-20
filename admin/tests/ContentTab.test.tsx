@@ -13,6 +13,7 @@ import { MemoryRouter } from "react-router";
 import type { ComponentProps } from "react";
 import { ContentTab as ProductionContentTab } from "../src/components/ContentTab";
 import { HttpError } from "../src/lib/functions";
+import type { PreviewSessionResult } from "../src/lib/staff-site";
 import { createBlock, type AdminBlock } from "../src/lib/block-factory";
 import { homeCompositionDefaults } from "../../packages/content-core/src/home-composition";
 import { createHomeNewsletterBlock } from "../../packages/content-core/src/home-newsletter-section";
@@ -103,7 +104,7 @@ const authMocks = vi.hoisted(() => ({
 }));
 
 const staffSiteMocks = vi.hoisted(() => ({
-  preparePrivatePreviewSession: vi.fn<(token: Promise<string>) => Promise<void>>().mockResolvedValue(undefined),
+  preparePrivatePreviewSession: vi.fn<typeof import("../src/lib/staff-site").preparePrivatePreviewSession>().mockResolvedValue("ready"),
 }));
 vi.mock("../src/lib/staff-site", async (importOriginal) => ({
   ...(await importOriginal<typeof import("../src/lib/staff-site")>()),
@@ -1228,7 +1229,9 @@ describe("ContentTab", () => {
 
   it("accepts the exact preview while session setup runs and waits before ready navigation", async () => {
     let finishSession!: () => void;
-    staffSiteMocks.preparePrivatePreviewSession.mockImplementationOnce(() => new Promise<void>(resolve => { finishSession = resolve; }));
+    staffSiteMocks.preparePrivatePreviewSession.mockImplementationOnce(() => new Promise<PreviewSessionResult>(resolve => {
+      finishSession = () => resolve("ready");
+    }));
     mockFoundContent({ id: "home", blocks: [storedHeadline], title: "Home", status: "draft", version: 7 });
     const queueId = "abcdefghijklmnopqrst";
     const ready = { success: true, queueId, collection: "cmsPages", pageId: "home", pagePath: "/", status: "ready", sourceVersion: 7,
@@ -1244,7 +1247,7 @@ describe("ContentTab", () => {
     if (toggle.getAttribute("aria-expanded") !== "true") fireEvent.click(toggle);
     fireEvent.click(screen.getAllByRole("button", { name: "Preview" }).find(button => !button.hasAttribute("aria-expanded"))!);
     await waitFor(() => expect(functionsMocks.cmsRequestSavedPreview).toHaveBeenCalledWith("id-token", "cmsPages", "home", 7));
-    expect(staffSiteMocks.preparePrivatePreviewSession).toHaveBeenCalledWith(expect.any(Promise));
+    expect(staffSiteMocks.preparePrivatePreviewSession).toHaveBeenCalledWith(expect.any(Promise), expect.any(AbortSignal));
     await expect(staffSiteMocks.preparePrivatePreviewSession.mock.calls[0][0]).resolves.toBe("id-token");
     expect(replace).not.toHaveBeenCalled();
     await act(async () => finishSession());
@@ -1253,13 +1256,13 @@ describe("ContentTab", () => {
     open.mockRestore();
   });
 
-  it.each(["denied", "network failure"])("navigates the existing valid preview after session %s", async (failure) => {
+  it.each(["denied", "network failure"])("handles session %s after accepting the exact preview", async (failure) => {
     const actual = await vi.importActual<typeof import("../src/lib/staff-site")>("../src/lib/staff-site");
     const fetch = vi.fn();
     if (failure === "denied") fetch.mockResolvedValue({ ok: false, status: 403 });
     else fetch.mockRejectedValue(new Error("Session network failure"));
     vi.stubGlobal("fetch", fetch);
-    staffSiteMocks.preparePrivatePreviewSession.mockImplementationOnce(token => actual.preparePrivatePreviewSession(token));
+    staffSiteMocks.preparePrivatePreviewSession.mockImplementationOnce(actual.preparePrivatePreviewSession);
     mockFoundContent({ id: "home", blocks: [storedHeadline], title: "Home", status: "draft", version: 7 });
     const queueId = "abcdefghijklmnopqrst";
     const previewUrl = `https://preview.njpbs.org/p/${queueId}/`;
@@ -1275,7 +1278,14 @@ describe("ContentTab", () => {
       const toggle = screen.getAllByRole("button", { name: "Preview" }).find(button => button.hasAttribute("aria-expanded"))!;
       if (toggle.getAttribute("aria-expanded") !== "true") fireEvent.click(toggle);
       fireEvent.click(screen.getAllByRole("button", { name: "Preview" }).find(button => !button.hasAttribute("aria-expanded"))!);
-      await waitFor(() => expect(replace).toHaveBeenCalledWith(previewUrl));
+      if (failure === "denied") {
+        await screen.findByText("Boardwalk could not confirm your staff session. Check the preview tab to sign in again.");
+        const handoff = new URL("/", window.location.origin);
+        handoff.searchParams.set("staffSite", previewUrl);
+        expect(replace).toHaveBeenCalledExactlyOnceWith(handoff.href);
+      } else {
+        await waitFor(() => expect(replace).toHaveBeenCalledExactlyOnceWith(previewUrl));
+      }
       expect(fetch).toHaveBeenCalledWith("https://preview.njpbs.org/__cms-session", expect.objectContaining({ method: "POST" }));
       expect(functionsMocks.cmsRequestSavedPreview).toHaveBeenCalledWith("id-token", "cmsPages", "home", 7);
     } finally { open.mockRestore(); vi.unstubAllGlobals(); }

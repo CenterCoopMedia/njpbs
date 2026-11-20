@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { SavedPreview, type SavedPreviewProps } from "../src/components/SavedPreview";
+import { preparePrivatePreviewSession, type PreviewSessionResult } from "../src/lib/staff-site";
 
 const queueId = "abcdefghijklmnopqrst";
 const target = { collection: "cmsPages" as const, documentId: "contact", sourceVersion: 7 };
@@ -19,7 +20,7 @@ beforeEach(() => {
   popup = { closed:false, document:document.implementation.createHTMLDocument(), opener:window, focus:vi.fn(), close:vi.fn(), location: { replace:vi.fn() } };
   vi.spyOn(window,"open").mockImplementation(() => popup as unknown as Window);
 });
-afterEach(() => { cleanup(); vi.restoreAllMocks(); vi.useRealTimers(); });
+afterEach(() => { cleanup(); vi.restoreAllMocks(); vi.unstubAllGlobals(); vi.useRealTimers(); });
 
 describe("one Preview action", () => {
   it("does no background exports or polling and renders no refresh action", async () => {
@@ -85,25 +86,42 @@ describe("one Preview action", () => {
     expect((popup.document.querySelector(".preview-steps") as HTMLElement).hidden).toBe(true);
     expect(popup.location.replace).not.toHaveBeenCalled();
   });
-  it("accepts and polls a pending preview while session setup runs, then waits before navigation", async () => {
+  it("keeps preparing private access until the session arrives after eight seconds", async () => {
     vi.useFakeTimers();
-    const session = deferred<void>();
-    const input = props({ prepareSession: vi.fn(() => session.promise),
+    // Use the same clock for native fetch deadlines and the delayed response.
+    vi.spyOn(AbortSignal, "timeout").mockImplementation(ms => {
+      const controller = new AbortController();
+      setTimeout(() => controller.abort(new DOMException("Timed out", "TimeoutError")), ms);
+      return controller.signal;
+    });
+    let hasSession = false;
+    const fetch = vi.fn((_url: string, { signal }: RequestInit) => new Promise<Response>((resolve, reject) => {
+      const reply = setTimeout(() => {
+        hasSession = true;
+        resolve(new Response(null, { status: 204 }));
+      }, 8_000);
+      signal!.addEventListener("abort", () => { clearTimeout(reply); reject(signal!.reason); }, { once: true });
+    }));
+    vi.stubGlobal("fetch", fetch);
+    popup.location.replace.mockImplementation(() => { expect(hasSession).toBe(true); });
+    const input = props({ prepareSession: (signal: AbortSignal) => preparePrivatePreviewSession(Promise.resolve("fixture-token"), signal),
       requestPreview: vi.fn(async () => result({ status: "pending", previewUrl: null })) });
     render(<SavedPreview {...input} />);
     fireEvent.click(screen.getByRole("button", { name: "Preview" }));
-    await act(async () => { await vi.advanceTimersByTimeAsync(2000); });
-    expect(input.prepareSession).toHaveBeenCalledTimes(1);
+    expect(popup.document.title).toBe("Preparing preview | Boardwalk");
+    await act(async () => { await vi.advanceTimersByTimeAsync(7_999); });
+    expect(fetch).toHaveBeenCalledTimes(1);
     expect(input.requestPreview).toHaveBeenCalledWith(target);
     expect(input.loadPreviewStatus).toHaveBeenCalledWith(queueId, { signal: expect.any(AbortSignal), waitMs: 5000, observedStatus: "pending" });
+    expect(popup.document.querySelector('[role="status"]')?.textContent).toContain("Preparing private access");
     expect(popup.location.replace).not.toHaveBeenCalled();
-    await act(async () => { session.resolve(undefined); });
+    await act(async () => { await vi.advanceTimersByTimeAsync(1); });
     expect(popup.location.replace).toHaveBeenCalledExactlyOnceWith(result().previewUrl + "contact/");
   });
 
   it.each(["unmount", "popup closure"])("does not navigate after %s while the ready result waits for session setup", async (ending) => {
     vi.useFakeTimers();
-    const session = deferred<void>();
+    const session = deferred<PreviewSessionResult>();
     const input = props({ prepareSession: vi.fn(() => session.promise),
       requestPreview: vi.fn(async () => result({ status: "pending", previewUrl: null })) });
     const view = render(<SavedPreview {...input} />);
@@ -112,21 +130,45 @@ describe("one Preview action", () => {
     expect(input.loadPreviewStatus).toHaveBeenCalledWith(queueId, { signal: expect.any(AbortSignal), waitMs: 5000, observedStatus: "pending" });
     expect(popup.location.replace).not.toHaveBeenCalled();
     if (ending === "unmount") view.unmount();
-    else popup.closed = true;
-    await act(async () => { session.resolve(undefined); });
+    else {
+      popup.closed = true;
+      await act(async () => { await vi.advanceTimersByTimeAsync(250); });
+    }
+    expect(vi.mocked(input.prepareSession!).mock.calls[0][0].aborted).toBe(true);
+    await act(async () => { session.resolve("ready"); });
     expect(popup.location.replace).not.toHaveBeenCalled();
   });
 
-  it("retains the normal navigation fallback when session setup rejects", async () => {
+  it.each([401, 403])("opens the staff sign-in handoff immediately after a %s session refusal", async status => {
     vi.useFakeTimers();
-    const input = props({ prepareSession: vi.fn(async () => { throw new Error("Session unavailable"); }),
-      requestPreview: vi.fn(async () => result({ status: "pending", previewUrl: null })) });
+    const reply = deferred<Response>();
+    vi.stubGlobal("fetch", vi.fn(() => reply.promise));
+    const input = props({ prepareSession: (signal: AbortSignal) => preparePrivatePreviewSession(Promise.resolve("fixture-token"), signal) });
     render(<SavedPreview {...input} />);
     fireEvent.click(screen.getByRole("button", { name: "Preview" }));
-    await act(async () => { await vi.advanceTimersByTimeAsync(2000); });
-    expect(input.loadPreviewStatus).toHaveBeenCalledWith(queueId, { signal: expect.any(AbortSignal), waitMs: 5000, observedStatus: "pending" });
-    expect(popup.location.replace).toHaveBeenCalledExactlyOnceWith(result().previewUrl + "contact/");
-    expect(screen.queryByRole("alert")).toBeNull();
+    await act(async () => { await vi.advanceTimersByTimeAsync(0); });
+    expect(popup.location.replace).not.toHaveBeenCalled();
+    await act(async () => { reply.resolve(new Response(null, { status })); });
+    const handoff = new URL("/", window.location.origin);
+    handoff.searchParams.set("staffSite", result().previewUrl + "contact/");
+    expect(popup.location.replace).toHaveBeenCalledExactlyOnceWith(handoff.href);
+    expect(screen.getByRole("alert")).toHaveTextContent("Check the preview tab to sign in again.");
+  });
+
+  it("reports a slow session separately and keeps the preview unsigned until retry", async () => {
+    vi.useFakeTimers();
+    const reply = deferred<Response>();
+    const fetch = vi.fn((_url: string, _options: RequestInit) => reply.promise);
+    vi.stubGlobal("fetch", fetch);
+    render(<SavedPreview {...props({ prepareSession: (signal: AbortSignal) => preparePrivatePreviewSession(Promise.resolve("fixture-token"), signal) })} />);
+    fireEvent.click(screen.getByRole("button", { name: "Preview" }));
+    await act(async () => { await vi.advanceTimersByTimeAsync(30_000); });
+    expect(fetch.mock.calls[0][1].signal?.aborted).toBe(true);
+    expect(popup.document.title).toBe("Private access is taking longer than expected | Boardwalk");
+    expect(screen.getByRole("alert")).toHaveTextContent("Private preview access is taking longer than expected.");
+    expect(screen.getByRole("button", { name: "Preview" })).toBeEnabled();
+    await act(async () => { reply.resolve(new Response(null, { status: 204 })); });
+    expect(popup.location.replace).not.toHaveBeenCalled();
   });
 
   it("does not save or build when the browser blocks the new tab", async()=>{

@@ -32,21 +32,39 @@ export async function clearStaffSiteSessions({ signedOutStartup = false } = {}):
   ));
 }
 
-// The admitted editor can establish the same private-site cookie while a preview
-// is prepared. Failure leaves the serving Worker's normal sign-in redirect intact.
-export async function preparePrivatePreviewSession(token: Promise<string>): Promise<void> {
+export type PreviewSessionResult = "ready" | "refused" | "slow" | "unavailable" | "cancelled";
+
+// Bound token retrieval and the gateway request with the same deadline.
+export async function preparePrivatePreviewSession(token: Promise<string>, signal?: AbortSignal): Promise<PreviewSessionResult> {
   const controller = new AbortController();
+  const sessionSignal = signal ? AbortSignal.any([controller.signal, signal]) : controller.signal;
+  const timeout = setTimeout(() => controller.abort(new DOMException("Preview session timed out", "TimeoutError")), 30_000);
   pendingPreviewSessions.add(controller);
   try {
-    const idToken = await token;
-    if (controller.signal.aborted) return;
-    await fetch(`${privatePreviewOrigin}/__cms-session`, {
-      method: "POST", credentials: "include", redirect: "error",
-      headers: { Authorization: `Bearer ${idToken}` },
-      signal: AbortSignal.any([controller.signal, AbortSignal.timeout(5000)]),
+    const interrupted = new Promise<never>((_, reject) => {
+      if (sessionSignal.aborted) reject(sessionSignal.reason);
+      else sessionSignal.addEventListener("abort", () => reject(sessionSignal.reason), { once: true });
     });
-  } catch { /* Navigation retains the existing authenticated handoff fallback. */ }
-  finally { pendingPreviewSessions.delete(controller); }
+    const request = async () => {
+      const idToken = await token;
+      sessionSignal.throwIfAborted();
+      return fetch(`${privatePreviewOrigin}/__cms-session`, {
+        method: "POST", credentials: "include", redirect: "error",
+        headers: { Authorization: `Bearer ${idToken}` }, signal: sessionSignal,
+      });
+    };
+    const { status } = await Promise.race([interrupted, request()]);
+    sessionSignal.throwIfAborted();
+    if (status === 204) return "ready";
+    if (status === 401 || status === 403) return "refused";
+    return "unavailable";
+  } catch {
+    if (!sessionSignal.aborted) return "unavailable";
+    return sessionSignal.reason?.name === "TimeoutError" ? "slow" : "cancelled";
+  } finally {
+    clearTimeout(timeout);
+    pendingPreviewSessions.delete(controller);
+  }
 }
 
 // Receipt renewal shares logout cancellation with preview session preparation.

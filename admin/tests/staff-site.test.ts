@@ -21,7 +21,7 @@ describe("staff site handoff destination", () => {
 
 
 describe("private preview session preparation", () => {
-  afterEach(() => { vi.unstubAllGlobals(); vi.restoreAllMocks(); });
+  afterEach(() => { vi.unstubAllGlobals(); vi.restoreAllMocks(); vi.useRealTimers(); });
 
   it.each(["http://localhost:5173", "http://127.0.0.1:5173", "https://admin.njpbs.org.example.test",
     "http://admin.njpbs.org", "https://admin.njpbs.org:444",
@@ -75,17 +75,15 @@ describe("private preview session preparation", () => {
     expect(fetch.mock.calls.map(([, options]) => options.method)).toEqual(["POST"]);
   });
 
-  it("posts credentials only to the fixed HTTPS endpoint with redirect and timeout controls", async () => {
+  it("posts credentials only to the fixed HTTPS endpoint and refuses redirects", async () => {
     const fetch = vi.fn().mockResolvedValue({ ok: true, status: 204 });
     vi.stubGlobal("fetch", fetch);
-    const timeout = vi.spyOn(AbortSignal, "timeout");
-    await preparePrivatePreviewSession(Promise.resolve("private-test-token"));
+    await expect(preparePrivatePreviewSession(Promise.resolve("private-test-token"))).resolves.toBe("ready");
     expect(fetch).toHaveBeenCalledExactlyOnceWith("https://preview.njpbs.org/__cms-session", {
       method: "POST", credentials: "include", redirect: "error",
       headers: { Authorization: "Bearer private-test-token" },
       signal: expect.any(AbortSignal),
     });
-    expect(timeout).toHaveBeenCalledExactlyOnceWith(5000);
   });
 
   it("does not establish a session when sign-out happens during token retrieval", async () => {
@@ -118,18 +116,31 @@ describe("private preview session preparation", () => {
     await Promise.resolve();
     expect(postSignal?.aborted).toBe(false);
     await clearStaffSiteSessions();
-    await expect(pending).resolves.toBeUndefined();
+    await expect(pending).resolves.toBe("cancelled");
     expect(postSignal?.aborted).toBe(true);
     expect(fetch.mock.calls.map(([, options]) => options.method)).toEqual(["POST", "DELETE"]);
   });
 
-  it.each(["denied", "network", "timeout"])("retains navigation fallback after %s", async (failure) => {
+  it.each(["server", "network"])("reports unavailable after a %s failure", async (failure) => {
     const fetch = vi.fn();
-    if (failure === "denied") fetch.mockResolvedValue({ ok: false, status: 403 });
-    else fetch.mockRejectedValue(new DOMException("Request failed", failure === "timeout" ? "TimeoutError" : "NetworkError"));
+    if (failure === "server") fetch.mockResolvedValue({ ok: false, status: 503 });
+    else fetch.mockRejectedValue(new DOMException("Request failed", "NetworkError"));
     vi.stubGlobal("fetch", fetch);
-    await expect(preparePrivatePreviewSession(Promise.resolve("private-test-token"))).resolves.toBeUndefined();
+    await expect(preparePrivatePreviewSession(Promise.resolve("private-test-token"))).resolves.toBe("unavailable");
     expect(fetch).toHaveBeenCalledTimes(1);
+  });
+
+  it("includes token retrieval in the deadline and never sends a late token", async () => {
+    vi.useFakeTimers();
+    const fetch = vi.fn();
+    vi.stubGlobal("fetch", fetch);
+    let resolveToken!: (token: string) => void;
+    const pending = preparePrivatePreviewSession(new Promise<string>(resolve => { resolveToken = resolve; }));
+    await vi.advanceTimersByTimeAsync(30_000);
+    await expect(pending).resolves.toBe("slow");
+    resolveToken("private-test-token");
+    await Promise.resolve();
+    expect(fetch).not.toHaveBeenCalled();
   });
 });
 
