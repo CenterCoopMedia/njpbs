@@ -161,7 +161,7 @@ export async function seedMediaCategories({
   return result;
 }
 
-export async function verifyMediaCategoriesRegistered({ firestore } = {}) {
+async function readMediaCategoryRegistry(firestore) {
   if (!firestore || typeof firestore.collection !== "function") {
     throw new Error("A Firestore Admin client is required");
   }
@@ -181,10 +181,25 @@ export async function verifyMediaCategoriesRegistered({ firestore } = {}) {
     ...referenced,
   ]);
   const missing = [...required].filter((id) => !registered.has(id)).sort();
+  return { registered: registered.size, missing };
+}
+
+export async function verifyMediaCategoriesRegistered({ firestore } = {}) {
+  const { registered, missing } = await readMediaCategoryRegistry(firestore);
   if (missing.length > 0) {
     throw new Error(`The media category registry is missing ${missing.join(", ")}`);
   }
-  return { registered: registered.size };
+  return { registered };
+}
+
+export async function prepareMediaCategoryRegistry({ firestore, onlyIfNeeded = false }) {
+  if (onlyIfNeeded) {
+    const { registered, missing } = await readMediaCategoryRegistry(firestore);
+    if (!missing.length) return { registered };
+  }
+  const seed = await seedMediaCategories({ firestore });
+  const { registered } = await verifyMediaCategoriesRegistered({ firestore });
+  return { seed, registered };
 }
 
 async function main() {
@@ -194,12 +209,11 @@ async function main() {
   const app = getApps()[0] || initializeApp({ projectId: "njpbs-site" });
   try {
     const firestore = getFirestore(app);
-    const result = await seedMediaCategories({ firestore });
-    console.log(
-      `Media categories ready: ${result.created} created, ${result.verified} verified.`,
-    );
-    const verified = await verifyMediaCategoriesRegistered({ firestore });
-    console.log(`Registry verified: ${verified.registered} categories readable.`);
+    const { seed, registered } = await prepareMediaCategoryRegistry({ firestore, onlyIfNeeded: process.argv[2] === "--if-needed" });
+    console.log(seed
+      ? `Media categories ready: ${seed.created} created, ${seed.verified} verified.`
+      : "Media category seeding skipped after live verification.");
+    console.log(`Registry verified: ${registered} categories readable.`);
   } finally {
     await deleteApp(app);
   }

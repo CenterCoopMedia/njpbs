@@ -9,8 +9,14 @@ import { releasePlanOutputLines } from "../../scripts/cms-release-plan.mjs";
 
 const workflow = parse(readFileSync(new URL("../../.github/workflows/cms-staging-deploy.yml", import.meta.url), "utf8"));
 const steps = workflow.jobs.firebase.steps;
-function selected(condition, functionsMutated, names) {
+function selected(condition, functionsMutated, names, { cancelled = false, success = true, iamVerified = true } = {}) {
   if (!condition) return true;
+  const byline = "${{ !cancelled() && (needs.firebase-preflight.outputs.functions_mutated == 'true' && "
+    + "steps.functions_readbacks.outputs.iam_verified == 'true' || success() && "
+    + "contains(format(',{0},', needs.firebase-preflight.outputs.selected_migrations), ',byline-projections,')) }}";
+  if (condition.replace(/\s+/g, " ") === byline) {
+    return !cancelled && (functionsMutated && iamVerified || success && `,${names},`.includes(",byline-projections,"));
+  }
   const expression = condition.match(/^needs\.firebase-preflight\.outputs\.functions_mutated == 'true' \|\| contains\(format\(',\{0\},', needs\.firebase-preflight\.outputs\.selected_migrations\), '([^']+)'\)$/);
   if (!expression) throw new Error("Unexpected migration selection expression");
   return functionsMutated || `,${names},`.includes(expression[1]);
@@ -36,6 +42,11 @@ describe("independent migration selection", () => {
       if (["byline-projections", "media-discovery"].includes(key)) expect(index).toBeGreaterThan(deploy);
       else expect(index).toBeLessThan(deploy);
     }
+    const byline = steps.find(step => step.run?.includes(MIGRATION_INPUTS["byline-projections"]));
+    expect(selected(byline.if, true, "", { iamVerified: false })).toBe(false);
+    expect(selected(byline.if, true, "", { success: false })).toBe(true);
+    expect(selected(byline.if, false, "byline-projections", { success: false })).toBe(false);
+    expect(selected(byline.if, true, "byline-projections", { cancelled: true })).toBe(false);
     const plan = workflow.jobs["firebase-preflight"].steps.find(step => step.id === "release_plan");
     expect(plan.env.CMS_DEPLOY_MIGRATIONS).toBe("${{ inputs.migrations }}");
     expect(workflow.jobs["firebase-preflight"].outputs.selected_migrations).toBe("${{ steps.release_plan.outputs.selected_migrations }}");
@@ -72,6 +83,21 @@ describe("independent migration selection", () => {
       expect(await selectMigrations(source, source, [], { cwd })).toEqual([]);
       await expect(selectMigrations("a".repeat(40), source, [], { cwd })).rejects.toThrow();
     } finally { rmSync(cwd, { recursive: true, force: true }); }
+  });
+
+  it("selects an explicit or changed registry repair and runs it when source proof is unavailable", async () => {
+    const baseline = "a".repeat(40), source = "b".repeat(40);
+    const listTree = async (sha, paths) => paths.map(path => `${path}:${path === "functions/lib/public-page-contract.js" ? sha : "same"}`).join("\n");
+    const deps = { functionsMutated: true, listTree };
+    expect(await selectMigrations(baseline, source, ["media-categories"], deps))
+      .toEqual(["media-categories", "content-sections"]);
+    expect(await selectMigrations(baseline, source, [], deps)).toEqual(["content-sections"]);
+    expect(await selectMigrations(source, source, [], deps)).toEqual([]);
+    expect(await selectMigrations(undefined, source, [], deps)).toEqual(["media-categories", "content-sections"]);
+    for (const migration of ["media-categories", "content-sections"]) {
+      const command = steps.find(step => step.run?.includes(MIGRATION_INPUTS[migration])).run;
+      expect(command).toContain(`',${migration},') && '--repair' || '--if-needed'`);
+    }
   });
 
   it("rejects an unknown repair before credentials or provider inspection", () => {

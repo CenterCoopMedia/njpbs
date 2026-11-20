@@ -23,6 +23,7 @@ import publicPageContract from "../functions/lib/public-page-contract.js";
 const SYSTEM_ACTOR = "system:content-section-seed";
 const { CONTENT_SECTIONS_COLLECTION, SEEDED_CONTENT_SECTIONS } = contentSections;
 const { PAGE_SECTIONS } = publicPageContract;
+const canonicalPageSections = Object.entries(PAGE_SECTIONS);
 
 function plainObject(value) {
   return Boolean(value && typeof value === "object" && !Array.isArray(value));
@@ -76,7 +77,7 @@ export async function seedContentSections({
     record: sectionRecord(section, nowIso),
     ref: firestore.collection(CONTENT_SECTIONS_COLLECTION).doc(section.id),
   }));
-  const plannedPages = Object.entries(PAGE_SECTIONS).map(([pageId, section]) => ({
+  const plannedPages = canonicalPageSections.map(([pageId, section]) => ({
     pageId,
     section,
     ref: firestore.collection("cmsPages").doc(pageId),
@@ -202,6 +203,24 @@ export async function verifyContentSectionsRegistered({ firestore } = {}) {
   return { registered: registered.size };
 }
 
+export async function prepareContentSectionRegistry({ firestore, onlyIfNeeded = false }) {
+  if (onlyIfNeeded) {
+    const sections = SEEDED_CONTENT_SECTIONS.map(({ id }) => firestore.collection(CONTENT_SECTIONS_COLLECTION).doc(id));
+    const pages = canonicalPageSections.map(([pageId]) => firestore.collection("cmsPages").doc(pageId));
+    const snapshots = await firestore.getAll(...sections, ...pages, { fieldMask: ["id", "section"] });
+    const ready = snapshots.length === sections.length + pages.length
+      && sections.every((ref, index) => snapshots[index].exists && sameSection(snapshots[index].data(), ref))
+      && canonicalPageSections.every(([, section], index) => {
+        const snapshot = snapshots[sections.length + index];
+        return !snapshot.exists || snapshot.data().section === section;
+      });
+    if (ready) return { registered: sections.length };
+  }
+  const seed = await seedContentSections({ firestore });
+  const { registered } = await verifyContentSectionsRegistered({ firestore });
+  return { seed, registered };
+}
+
 async function main() {
   if (!process.env.GOOGLE_APPLICATION_CREDENTIALS) {
     throw new Error("GOOGLE_APPLICATION_CREDENTIALS is required");
@@ -209,14 +228,12 @@ async function main() {
   const app = getApps()[0] || initializeApp({ projectId: "njpbs-site" });
   try {
     const firestore = getFirestore(app);
-    const result = await seedContentSections({ firestore });
-    console.log(
-      `Sections ready: ${result.sectionsCreated} created, ${result.sectionsVerified} verified. ` +
-        `Pages: ${result.pagesStamped} stamped, ${result.pagesVerified} verified, ` +
-        `${result.pagesAbsent} not yet saved.`,
-    );
-    const verified = await verifyContentSectionsRegistered({ firestore });
-    console.log(`Registry verified: ${verified.registered} desks readable.`);
+    const { seed, registered } = await prepareContentSectionRegistry({ firestore, onlyIfNeeded: process.argv[2] === "--if-needed" });
+    console.log(seed
+      ? `Sections ready: ${seed.sectionsCreated} created, ${seed.sectionsVerified} verified. ` +
+        `Pages: ${seed.pagesStamped} stamped, ${seed.pagesVerified} verified, ${seed.pagesAbsent} not yet saved.`
+      : "Content section seeding skipped after live verification.");
+    console.log(`Registry verified: ${registered} desks readable.`);
   } finally {
     await deleteApp(app);
   }
