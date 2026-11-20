@@ -18,7 +18,7 @@ const LAUNCH_CONTRACTS = {
   "scripts/lib/deployment-settings.mjs": "e2438b3a0bc4087fc62c363f2eb056fd99f024be",
   ".dockerignore": null,
   "preview-renderer/Dockerfile.dockerignore": null,
-  "preview-renderer/Dockerfile": "cf8881d0bab1d4f032e6372b6335b3a3b5cd5931",
+  "preview-renderer/Dockerfile": "42a38a31586875ca036c505f0c95409ae87cc10f",
   "preview-renderer/worker.ts": "8afb604441bc62f95acdace555b5de75c297afec",
   "preview-renderer/wrangler.jsonc": "de29eeb62adaa32ddd720e48ca3a6f6032beeab5",
   "scripts/prepare-preview-renderer.mjs": "d2fbae8afe64e506cc92125b274d7a988fd54834",

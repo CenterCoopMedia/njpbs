@@ -40,7 +40,7 @@
     "media:perf:seed": "node scripts/seed-media-perf-fixtures.mjs",
     "cms:migrate:media-category-assignments": "node scripts/backfill-media-category-assignments.mjs",
     "cms:import:s3-source": "node scripts/import-s3-source-media.mjs",
-    "functions:build": "node scripts/lib/functions-contracts.mjs",
+    "functions:build": "node scripts/build-functions-contracts.mjs",
     "preemulators:start": "npm run functions:build",
     "emulators:start": "node scripts/run-firebase-emulators.mjs start",
     "test:rules": "node scripts/run-firebase-emulators.mjs exec firestore \"vitest run tests/rules\"",

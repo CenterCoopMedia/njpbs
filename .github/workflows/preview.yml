@@ -25,7 +25,9 @@ on:
       # core-only change has to rebuild the preview artifact.
       - "packages/**"
       - "scripts/lib/functions-contracts.mjs"
+      - "scripts/build-functions-contracts.mjs"
       - "scripts/functions-contract-sources.json"
+      - "package.json"
       - "package-lock.json"
       - ".github/workflows/preview.yml"
   workflow_dispatch:

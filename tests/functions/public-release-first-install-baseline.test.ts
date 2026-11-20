@@ -41,6 +41,7 @@ beforeAll(async () => {
   execFileSync('git', ['worktree', 'add', '--detach', sourceDirectory, sourceSha], { stdio: 'pipe' });
   await symlink(path.resolve('node_modules'), path.join(sourceDirectory, 'node_modules'), 'dir');
   await symlink(path.resolve('site/node_modules'), path.join(sourceDirectory, 'site/node_modules'), 'dir');
+  execFileSync(process.execPath, ['scripts/build-functions-contracts.mjs'], { cwd: sourceDirectory, stdio: 'pipe' });
 });
 afterAll(async () => {
   if (sourceDirectory) execFileSync('git', ['worktree', 'remove', '--force', sourceDirectory], { stdio: 'pipe' });

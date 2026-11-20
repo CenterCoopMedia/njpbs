@@ -1,12 +1,11 @@
 import { createHash } from "node:crypto";
 import { lstatSync } from "node:fs";
-import { readFile, writeFile } from "node:fs/promises";
+import { mkdtemp, readFile, rename, rm, writeFile } from "node:fs/promises";
 import { builtinModules, createRequire } from "node:module";
 import { join, posix } from "node:path";
-import { fileURLToPath, pathToFileURL } from "node:url";
 
 export const contractRecipe = "scripts/functions-contract-sources.json";
-export const contractInputs = [contractRecipe, "scripts/lib/functions-contracts.mjs"];
+export const contractInputs = [contractRecipe, "scripts/lib/functions-contracts.mjs", "scripts/build-functions-contracts.mjs"];
 const requireRoot = createRequire(import.meta.url);
 const requireSite = createRequire(new URL("../../site/package.json", import.meta.url));
 const builtins = new Set(builtinModules.flatMap(name => [name, `node:${name}`]));
@@ -107,7 +106,14 @@ async function compile({ has, read, requireCompiler }) {
 export async function writeFunctionsContracts(directory, requireCompiler) {
   const has = file => lstatSync(join(directory, file), { throwIfNoEntry: false })?.isFile() ?? false;
   const outputs = await compile({ has, read: file => readFile(join(directory, file), "utf8"), requireCompiler });
-  await Promise.all([...outputs].map(([file, text]) => writeFile(join(directory, file), text)));
+  // Replace ignored outputs without following existing symlinks or exposing partial files.
+  const staging = await mkdtemp(join(directory, "functions/lib/.contracts-"));
+  try {
+    for (const [file, text] of outputs) await writeFile(join(staging, posix.basename(file)), text);
+    for (const file of outputs.keys()) await rename(join(staging, posix.basename(file)), join(directory, file));
+  } finally {
+    await rm(staging, { recursive: true, force: true });
+  }
   return outputs.size;
 }
 
@@ -125,9 +131,4 @@ export async function addCommittedFunctionsContracts(files, read) {
     files.set(file, `100644 generated ${createHash("sha256").update(source).digest("hex")}`);
   }
   return outputs;
-}
-
-if (process.argv[1] && pathToFileURL(process.argv[1]).href === import.meta.url) {
-  const count = await writeFunctionsContracts(fileURLToPath(new URL("../../", import.meta.url)));
-  console.log(`Built ${count} Functions contracts.`);
 }

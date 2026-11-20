@@ -31,7 +31,7 @@ it("keeps staged legacy rollback helpers independent of deploy-source pair code"
   try {
     mkdirSync(join(root, "scripts/lib"), { recursive: true });
     for (const name of ["cms-component-receipt.mjs", "cms-release-plan.mjs", "repository-identity.mjs",
-      "functions-configuration.mjs", "studio-title-files.mjs"]) {
+      "functions-configuration.mjs", "studio-title-files.mjs", "functions-contracts.mjs"]) {
       copyFileSync(join(fileURLToPath(new URL("../../", import.meta.url)), "scripts/lib", name), join(root, "scripts/lib", name));
     }
     copyFileSync(new URL("../../scripts/render-development-config.mjs", import.meta.url), join(root, "scripts/render-development-config.mjs"));

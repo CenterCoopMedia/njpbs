@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 import { assertDevelopmentSource } from "./render-development-config.mjs";
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { createHash } from 'node:crypto';
 import { execFileSync } from 'node:child_process';
 import { createRequire } from 'node:module';
@@ -94,6 +94,16 @@ export async function runFirstInstallPreparation(args, environment) {
     stage = 'target'; firstInstallPublicationTarget(packet.environment);
     stage = 'import';
     ({ FirstInstallPreparationStageError: StageError } = await import('./lib/first-install-preparation-stage.mjs'));
+    const { contractRecipe, writeFunctionsContracts } = await import('./lib/functions-contracts.mjs');
+    const prepareContracts = async directory => {
+      if (existsSync(path.join(directory, contractRecipe))) {
+        await writeFunctionsContracts(directory, createRequire(path.join(directory, 'package.json')));
+      }
+    };
+    await prepareContracts(root);
+    if (['freeze', 'build'].includes(mode) && packet.sourceDirectory !== path.resolve(root)) {
+      await prepareContracts(packet.sourceDirectory);
+    }
     const require = createRequire(new URL('../site/package.json', import.meta.url));
     unregisterCommonJS = require('tsx/cjs/api').register();
     unregister = require('tsx/esm/api').register();

@@ -17,8 +17,7 @@ RUN export ONNXRUNTIME_NODE_INSTALL=skip \
     && npm --prefix site ci --ignore-scripts --omit=dev --no-audit --no-fund \
     && npm cache clean --force
 COPY --chown=node:node source/ /app/
-RUN npm run functions:build \
-    && node /app/site/scripts/prepare-public-fonts.mjs \
+RUN node /app/site/scripts/prepare-public-fonts.mjs \
     && node --import /app/site/node_modules/tsx/dist/loader.mjs /app/site/scripts/prepare-search-model.ts
 ARG CMS_DEPLOYMENT_ENVIRONMENT=development
 ARG PUBLIC_GA4_MEASUREMENT_ID

@@ -14,6 +14,7 @@ functions/cloud-publication-wake.generated.json
 
 # Functions contract bundles
 /functions/lib/bio-profiles.js
+/functions/lib/.contracts-*/
 /functions/lib/block-content-validation.js
 /functions/lib/cms-image-variants.js
 /functions/lib/content-link.js
