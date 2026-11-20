@@ -84,6 +84,7 @@ it("serves a newer reachable republish, retains its tombstone during outage, and
   }
   const current = await runtime.dispatchFetch("https://njpbs.org/posts/removed-story/?mode=live-withdrawal");
   expect(current.status).toBe(410);
+  expect(current.headers.get("x-njpbs-gone-branch")).toBe("post-current-withdrawal");
   expect(current.headers.get("x-njpbs-content-source")).toBe("cms-no-build");
   expect(current.headers.get("x-njpbs-publication-operation")).toBe("B".repeat(20));
   expect(JSON.parse(await (await (await runtime.getR2Bucket("WITHDRAWALS")).get(key))!.text()).withdrawals[0].revision).toBe(5);
@@ -98,6 +99,8 @@ it("keeps canonical and retained alias tombstones during an outage through the a
     expect(response.status).toBe(410);
     expect(response.headers.get("cache-control")).toBe("no-store");
     expect(response.headers.get("x-njpbs-content-source")).toBe("durable-post-withdrawal");
+    expect(response.headers.get("x-njpbs-gone-branch")).toBe(
+      mode === "renderer-cold" ? "post-tombstone-renderer" : "post-tombstone-authority");
     expect(await response.text()).toBe("");
   }
 });

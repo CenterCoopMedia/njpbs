@@ -1,5 +1,6 @@
 import { liveBlogFeed, manifestFromLiveBlogHtml } from "../../packages/content-core/src/live-blog-manifest";
 import { SECURITY_HEADER_BASELINE } from "../../packages/content-core/src/public-security-headers";
+import { PUBLIC_GONE_BRANCH_HEADER } from "./public-gone";
 import { publicationPostCacheTag, type PublicationTarget } from "../../functions/lib/publication-target.js";
 
 const FEED_CACHE_CONTROL = "public, max-age=0, s-maxage=20, stale-while-revalidate=30";
@@ -20,17 +21,19 @@ export function createLiveBlogFeedReader({ target, rendererSha, cache, readPage,
     if (url.origin !== target.origin || !slug || !["GET", "HEAD"].includes(request.method) ||
         url.searchParams.size !== 1 || url.searchParams.get("live-blog") !== "updates") return null;
     const headers = { ...SECURITY_HEADER_BASELINE, "Content-Type": "application/json; charset=utf-8", "X-Robots-Tag": "noindex" };
-    const failure = (status: number) => new Response(null, { status, headers: { ...headers, "Cache-Control": "no-store" } });
+    const failure = (status: number, branch?: string) => new Response(null, { status, headers: {
+      ...headers, "Cache-Control": "no-store", ...(branch ? { [PUBLIC_GONE_BRANCH_HEADER]: branch } : {}) } });
     const key = new Request(`${target.origin}${url.pathname}?__live_blog_manifest=${rendererSha}`);
     const read = async () => {
       const cached = await cache.match(key).catch(() => undefined);
       if (cached && Number(cached.headers.get("x-njpbs-live-blog-expires")) > now()) {
         const revision = cached.headers.get("x-njpbs-live-blog-revision");
         const snapshot = revision && await cache.match(new Request(`${key.url}&revision=${revision}`)).catch(() => undefined);
-        if (snapshot) return snapshot;
+        if (snapshot?.status === 200) return snapshot;
       }
       const source = await readPage(new Request(`${target.origin}${url.pathname}`, { headers: { Accept: "text/html" } }));
-      if (!source || source.status !== 200) return failure(source?.status === 410 ? 410 : source?.status === 404 ? 404 : 503);
+      if (source?.status === 410) return failure(410, source.headers.get(PUBLIC_GONE_BRANCH_HEADER) ?? "post-feed-withdrawal");
+      if (!source || source.status !== 200) return failure(source?.status === 404 ? 404 : 503);
       if (!source.headers.get("content-type")?.includes("text/html")) return failure(503);
       const reader = source.body?.getReader();
       if (!reader) return failure(503);

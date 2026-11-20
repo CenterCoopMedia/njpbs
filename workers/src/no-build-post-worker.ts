@@ -4,6 +4,7 @@ import { publicRecordFamily } from "./durable-record-withdrawals";
 import type { NoBuildPostReply } from "../../cms-api/src/index";
 import { assertPublicationTarget, publicationTarget, publicationPostCacheTag, type PublicationTarget } from "../../functions/lib/publication-target.js";
 import { SECURITY_HEADER_BASELINE } from "../../packages/content-core/src/public-security-headers";
+import { PUBLIC_GONE_BRANCH_HEADER } from "./public-gone";
 import { isPublicContentSlug, postPublicPath } from "../../site/src/lib/public-content-routes";
 import { projectPublishedPostRead, type PublishedPostContent, type PublishedPostReader } from "../../site/src/lib/published-post-shadow";
 
@@ -23,6 +24,7 @@ function unavailable(status: number, head: boolean): Response {
     ...SECURITY_HEADER_BASELINE, "Content-Type": "text/plain; charset=utf-8",
     "Cache-Control": "no-store", "X-Robots-Tag": "noindex, nofollow",
     ...(status === 405 ? { Allow: "GET, HEAD" } : {}),
+    ...(status === 410 ? { [PUBLIC_GONE_BRANCH_HEADER]: "post-reader-deleted" } : {}),
   } });
 }
 
@@ -242,7 +244,14 @@ async function serveStaticPost(path: string, reply: NoBuildPostReply,
     if (["/_publication.json", "/_content-status.json"].includes(path)) headers.set("x-njpbs-publication-origin", dependencies.target.workerName);
   }
   const current = await dependencies.getDecision(path, head ? "HEAD" : "GET");
-  if (current.kind === "gone") return new Response(null, { status: 410, headers: receiptHeaders(current, dependencies.target) });
+  if (current.kind === "gone") {
+    if (current.receipt?.visible !== false || current.receipt.rendererSha !== dependencies.rendererSha) {
+      throw new Error("Invalid static withdrawal");
+    }
+    const withdrawn = receiptHeaders(current, dependencies.target);
+    withdrawn.set(PUBLIC_GONE_BRANCH_HEADER, "post-static-withdrawal");
+    return new Response(null, { status: 410, headers: withdrawn });
+  }
   if (current.kind !== "static" || JSON.stringify(current) !== JSON.stringify(reply)) throw new Error("Static Post context changed");
   return new Response(head ? null : bytes, { status: file ? 200 : 404, headers });
 }
@@ -455,7 +464,12 @@ async function serveAuthoritativePost(request: Request, dependencies: Authoritat
     }
     const headers = receiptHeaders(reply, dependencies.target);
     if (reply.receipt!.rendererSha !== dependencies.rendererSha) throw new Error("Renderer changed");
-    if (reply.kind === "gone") { headers.set("X-Robots-Tag", "noindex, nofollow"); return new Response(null, { status: 410, headers }); }
+    if (reply.kind === "gone") {
+      if (reply.receipt!.visible !== false) throw new Error("Invalid Post withdrawal");
+      headers.set("X-Robots-Tag", "noindex, nofollow");
+      headers.set(PUBLIC_GONE_BRANCH_HEADER, reply.receipt!.mode === "static" ? "post-static-withdrawal" : "post-current-withdrawal");
+      return new Response(null, { status: 410, headers });
+    }
     if (reply.kind === "alias") {
       if (reply.location !== postPublicPath(reply.receipt!.slug)) throw new Error("Invalid Post alias");
       headers.set("Location", reply.location);

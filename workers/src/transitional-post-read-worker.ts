@@ -4,6 +4,7 @@ import type { NoBuildPostReply } from "../../cms-api/src/index";
 import { createNoBuildPostWorker, isIndependentPostBackgroundPath } from "./no-build-post-worker";
 import { assertPublicationTarget, publicationTarget, publicationPostCacheTag, type PublicationTarget } from "../../functions/lib/publication-target.js";
 import { SECURITY_HEADER_BASELINE } from "../../packages/content-core/src/public-security-headers";
+import { PUBLIC_GONE_BRANCH_HEADER } from "./public-gone";
 import { useAssetsForUnavailablePost } from "../../functions/lib/transitional-post-fallback.js";
 import { isPublicContentSlug } from "../../site/src/lib/public-content-routes";
 import type { PublishedPostContent } from "../../site/src/lib/published-post-shadow";
@@ -23,7 +24,6 @@ const WITHDRAWAL_AUTHORITY_TTL_MS = 60_000;
 type WithdrawalAuthority = { schemaVersion: 1; expiresAt: number; purgeFence?: string; reply?: NoBuildPostReply };
 const sharedAuthority = {
   refreshes: new Map<string, Refresh>(),
-  withdrawalRefreshes: new Map<string, Promise<WithdrawalAuthority>>(),
 };
 const scopedAuthority = new WeakMap<object, typeof sharedAuthority>();
 
@@ -127,11 +127,10 @@ export function createTransitionalPostReadWorker(dependencies: Dependencies) {
     const scope = dependencies.authorityScope;
     authority = scopedAuthority.get(scope) ?? {
       refreshes: new Map<string, Refresh>(),
-      withdrawalRefreshes: new Map<string, Promise<WithdrawalAuthority>>(),
     };
     scopedAuthority.set(scope, authority);
   }
-  const { refreshes, withdrawalRefreshes } = authority;
+  const { refreshes } = authority;
   const target = assertPublicationTarget(dependencies.target ?? publicationTarget("production"));
   const purgeTag = publicationPostCacheTag(target, "background");
   const now = dependencies.now ?? Date.now;
@@ -158,7 +157,7 @@ export function createTransitionalPostReadWorker(dependencies: Dependencies) {
       let marker: Withdrawal | null;
       try { marker = await timed(dependencies.readWithdrawal(slug), 500); }
       catch { return unavailable(request); }
-      return marker ? durableGone(marker) : null;
+      return marker ? resolvePostTombstone(request, path, slug, marker, "post-last-good-tombstone") : null;
     }
     if (!dependencies.readRecordAuthority) throw new Error("Record withdrawal authority unavailable");
     let authority: RecordRouteAuthority | null;
@@ -269,13 +268,16 @@ export function createTransitionalPostReadWorker(dependencies: Dependencies) {
         }
       }
       const entry = await existing.task;
-      if (!entry.purgeFence) return refresh(key, path, method, catalogId, false);
+      if (!entry.purgeFence || entry.state === "ready" && entry.reply.kind === "gone") {
+        return refresh(key, path, method, catalogId, false);
+      }
       return catalogId && entry.catalogId !== catalogId ? refresh(key, path, method, catalogId) : entry;
     })();
     const running = {} as Refresh;
     const task = (async () => {
       let cached = await read(key);
-      if (cached && (cached.expiresAt > now() || cached.state === "ready" && (cached.retryAt ?? 0) > now()) &&
+      if (cached && !(cached.state === "ready" && cached.reply.kind === "gone") &&
+          (cached.expiresAt > now() || cached.state === "ready" && (cached.retryAt ?? 0) > now()) &&
           (!catalogId || cached.catalogId === catalogId)) return cached;
       try {
         // Store a unique tagged witness BEFORE reading authority. A purge
@@ -327,6 +329,11 @@ export function createTransitionalPostReadWorker(dependencies: Dependencies) {
   async function decision(key: Request, path: string, method: string, catalogId = ""): Promise<Entry> {
     const cached = await read(key);
     if (cached && (!catalogId || cached.catalogId === catalogId)) {
+      // Cached withdrawals still fence static copies during an outage.
+      // They cannot decide a 410 after the origin accepts a republish.
+      if (cached.state === "ready" && cached.reply.kind === "gone") {
+        return refresh(key, path, method, catalogId);
+      }
       // An old unowned answer cannot authorize Assets after a later removal.
       if (cached.state === "ready" && cached.reply.kind === "pass" && cached.expiresAt <= now()) {
         return refresh(key, path, method, catalogId);
@@ -355,69 +362,111 @@ export function createTransitionalPostReadWorker(dependencies: Dependencies) {
     } });
   }
 
-  function durableGone(withdrawal: Withdrawal): Response {
+  function unavailableWithoutCopy(request: Request): Response {
+    const response = unavailable(request);
+    response.headers.set(WITHDRAWAL_UNKNOWN_HEADER, "unknown");
+    return response;
+  }
+
+  function durableGone(withdrawal: Withdrawal, branch: string): Response {
     return new Response(null, { status: 410, headers: {
         ...SECURITY_HEADER_BASELINE, "cache-control": "no-store", "x-njpbs-content-source": "durable-post-withdrawal",
+      [PUBLIC_GONE_BRANCH_HEADER]: branch,
         "x-njpbs-publication-operation": withdrawal.operationId, "x-njpbs-source-version": String(withdrawal.sourceVersion),
         "x-njpbs-withdrawal-revision": String(withdrawal.revision), "x-njpbs-durable-withdrawal-operation": withdrawal.operationId, "x-robots-tag": "noindex, nofollow",
       } });
   }
 
-  async function withdrawalAuthority(path: string): Promise<WithdrawalAuthority> {
+  function visibleAfterWithdrawal(reply: NoBuildPostReply | undefined, withdrawal: Withdrawal, slug: string): boolean {
+    if (!reply?.receipt) return false;
+    const { receipt } = reply;
+    return ["post", "alias", "static"].includes(reply.kind) && receipt.visible === true &&
+      receipt.rendererSha === dependencies.rendererSha && receipt.postId === withdrawal.postId &&
+      Array.isArray(receipt.ownedSlugs) && receipt.ownedSlugs.includes(slug) &&
+      Number.isSafeInteger(receipt.generation) && receipt.generation > withdrawal.revision;
+  }
+
+  async function withdrawalAuthority(path: string, withdrawal: Withdrawal, slug: string): Promise<WithdrawalAuthority> {
     const key = withdrawalKeyFor(path);
     try {
       const cached = await timed(dependencies.cache.match(key), 100);
       if (cached) {
         const entry = await timed(boundedJson(cached, DTO_BYTES_MAX), 100) as WithdrawalAuthority;
         if (entry.schemaVersion === 1 && Number.isSafeInteger(entry.expiresAt) && entry.expiresAt > now() &&
-            entry.expiresAt <= now() + (entry.reply ? WITHDRAWAL_AUTHORITY_TTL_MS : FAILURE_TTL_MS) &&
+            entry.expiresAt <= now() + WITHDRAWAL_AUTHORITY_TTL_MS &&
             entry.expiresAt === Number(cached.headers.get("x-njpbs-authority-expires-at")) &&
-            (!entry.reply || validReply(entry.reply)) && typeof entry.purgeFence === "string" &&
+            validReply(entry.reply) && visibleAfterWithdrawal(entry.reply, withdrawal, slug) && typeof entry.purgeFence === "string" &&
             /^[a-f0-9-]{36}$/.test(entry.purgeFence) && await fencePresent(key, entry.purgeFence) === true) return entry;
       }
     } catch { /* Live authority can still answer when Cache API is unavailable. */ }
-    const running = withdrawalRefreshes.get(key.url);
-    if (running) return running;
-    const task = (async (): Promise<WithdrawalAuthority> => {
-      const started = now(), purgeFence = crypto.randomUUID();
-      let witnessed = false;
-      try {
-        await timed(dependencies.cache.put(fenceKey(key, purgeFence), new Response("1", { headers: {
-          "Cache-Tag": purgeTag, "cache-control": `public, max-age=${WITHDRAWAL_AUTHORITY_TTL_MS / 1000 + 3}`,
+    const started = now(), purgeFence = crypto.randomUUID();
+    let witnessed = false;
+    try {
+      await timed(dependencies.cache.put(fenceKey(key, purgeFence), new Response("1", { headers: {
+        "Cache-Tag": purgeTag, "cache-control": `public, max-age=${WITHDRAWAL_AUTHORITY_TTL_MS / 1000 + 3}`,
+      } })), 100);
+      witnessed = true;
+    } catch { /* A fresh read is usable without caching it. */ }
+    let entry: WithdrawalAuthority;
+    try {
+      const reply = await timed(Promise.resolve().then(() => dependencies.getDecision(path, "GET")));
+      if (!validReply(reply) || !["post", "alias", "static", "gone"].includes(reply.kind) ||
+          !reply.receipt || !Number.isSafeInteger(reply.receipt.generation) || reply.receipt.generation < 1 ||
+          reply.receipt.rendererSha !== dependencies.rendererSha) throw new Error("Withdrawal authority unavailable");
+      const text = JSON.stringify(reply);
+      if (new TextEncoder().encode(text).byteLength + 256 > DTO_BYTES_MAX) throw new Error("Withdrawal authority exceeds its bound");
+      entry = { schemaVersion: 1, expiresAt: started + WITHDRAWAL_AUTHORITY_TTL_MS, reply: JSON.parse(text) };
+    } catch { entry = { schemaVersion: 1, expiresAt: now() + FAILURE_TTL_MS }; }
+    if (witnessed) {
+      if (await fencePresent(key, purgeFence) !== true) return { schemaVersion: 1, expiresAt: now() };
+      entry.purgeFence = purgeFence;
+      if (visibleAfterWithdrawal(entry.reply, withdrawal, slug)) try {
+        await timed(dependencies.cache.put(key, new Response(JSON.stringify(entry), { headers: {
+          "Cache-Tag": purgeTag, "cache-control": `public, max-age=${Math.max(1, Math.ceil((entry.expiresAt - now()) / 1000))}`,
+          "x-njpbs-authority-expires-at": String(entry.expiresAt),
         } })), 100);
-        witnessed = true;
-      } catch { /* A fresh read is usable without caching it. */ }
-      let entry: WithdrawalAuthority;
-      try {
-        const reply = await timed(Promise.resolve().then(() => dependencies.getDecision(path, "GET")));
-        if (!validReply(reply) || !["post", "alias", "static", "gone"].includes(reply.kind) ||
-            !reply.receipt || !Number.isSafeInteger(reply.receipt.generation) || reply.receipt.generation < 1 ||
-            reply.receipt.rendererSha !== dependencies.rendererSha) throw new Error("Withdrawal authority unavailable");
-        const text = JSON.stringify(reply);
-        if (new TextEncoder().encode(text).byteLength + 256 > DTO_BYTES_MAX) throw new Error("Withdrawal authority exceeds its bound");
-        entry = { schemaVersion: 1, expiresAt: started + WITHDRAWAL_AUTHORITY_TTL_MS, reply: JSON.parse(text) };
-      } catch { entry = { schemaVersion: 1, expiresAt: now() + FAILURE_TTL_MS }; }
-      if (witnessed) {
-        if (await fencePresent(key, purgeFence) !== true) return { schemaVersion: 1, expiresAt: now() };
-        entry.purgeFence = purgeFence;
-        try {
-          await timed(dependencies.cache.put(key, new Response(JSON.stringify(entry), { headers: {
-            "Cache-Tag": purgeTag, "cache-control": `public, max-age=${Math.max(1, Math.ceil((entry.expiresAt - now()) / 1000))}`,
-            "x-njpbs-authority-expires-at": String(entry.expiresAt),
-          } })), 100);
-        } catch { /* Cache writes do not extend this request's authority horizon. */ }
+      } catch { /* Cache writes do not extend this request's authority horizon. */ }
+    }
+    return entry;
+  }
+
+  async function resolvePostTombstone(request: Request, path: string, slug: string, withdrawal: Withdrawal,
+    branch: string): Promise<Response> {
+    if (dependencies.rendererReady === false) return durableGone(withdrawal, "post-tombstone-renderer");
+    let visible = false;
+    try {
+      const authority = await withdrawalAuthority(path, withdrawal, slug);
+      const reply = authority.reply, receipt = reply?.receipt;
+      if (!reply || !receipt || authority.expiresAt <= now()) return durableGone(withdrawal, branch);
+      const currentAbsence = reply.kind === "gone" && receipt.visible === false &&
+        Number.isSafeInteger(receipt.generation) && receipt.generation >= withdrawal.revision &&
+        receipt.postId === withdrawal.postId && Array.isArray(receipt.ownedSlugs) && receipt.ownedSlugs.includes(slug);
+      visible = visibleAfterWithdrawal(reply, withdrawal, slug);
+      if (!visible && !currentAbsence) return durableGone(withdrawal, "post-tombstone-conflict");
+      const worker = createNoBuildPostWorker({ ...dependencies, target, now: () => new Date(now()),
+        getDecision: async () => {
+          if (authority.expiresAt <= now()) throw new Error("Withdrawal authority expired");
+          return structuredClone(reply);
+        } });
+      const response = await worker.fetch(request);
+      const latest = await timed(dependencies.readWithdrawal!(slug), 500);
+      if (latest && (latest.postId !== receipt.postId || latest.revision > receipt.generation ||
+          latest.revision === receipt.generation && visible)) return durableGone(latest, "post-tombstone-race");
+      if (!latest || authority.expiresAt <= now() || authority.purgeFence &&
+          await fencePresent(withdrawalKeyFor(path), authority.purgeFence) !== true) {
+        return visible ? unavailableWithoutCopy(request) : durableGone(withdrawal, "post-tombstone-recheck");
       }
-      return entry;
-    })().finally(() => { if (withdrawalRefreshes.get(key.url) === task) withdrawalRefreshes.delete(key.url); });
-    withdrawalRefreshes.set(key.url, task);
-    return task;
+      if (response && (visible ? [200, 302, 308].includes(response.status) : response.status === 410)) return response;
+    } catch { /* An accepted visible revision never falls back to an older 410. */ }
+    return visible ? unavailableWithoutCopy(request) : durableGone(withdrawal, branch);
   }
 
   async function codeContext(request: Request): Promise<Response | null> {
     // Candidate/static-return readbacks must verify their original sealed bytes.
     if (!dependencies.readCodePost || new URL(request.url).searchParams.has("cms-code")) return null;
+    let codeWithdrawal = false;
     try {
-      return await timed((async () => {
+      const response = await timed((async () => {
         // Released Assets are only a bounded route hint. Private CODE authority
         // still qualifies the body and current joins before any replacement.
         const inventory = await dependencies.fetchAsset(new Request(`${target.origin}/_content-status.json`));
@@ -435,19 +484,19 @@ export function createTransitionalPostReadWorker(dependencies: Dependencies) {
             Number.isSafeInteger(route.sourceVersion) && Number(route.sourceVersion) > 0)) return null;
         return dependencies.readCodePost!(request);
       })(), AUTHORITY_TIMEOUT_MS);
+      if (response?.status !== 410 || !dependencies.readWithdrawal) return response;
+      codeWithdrawal = true;
+    } catch { /* A failed context may have seen a newer withdrawal. */ }
+    // The current no-build reader can confirm a publication that the code
+    // context could not qualify. Check before allowing a static copy.
+    const path = new URL(request.url).pathname, slug = /^\/posts\/([^/]+)\/$/.exec(path)?.[1];
+    if (!slug || !dependencies.readWithdrawal) return unavailable(request);
+    try {
+      const marker = await timed(dependencies.readWithdrawal(slug), 500);
+      if (marker) return resolvePostTombstone(request, path, slug, marker, "post-code-context-tombstone");
+      return codeWithdrawal ? unavailableWithoutCopy(request) : unavailable(request);
     } catch {
-      // A failed context may have seen a newer withdrawal. Read it again
-      // before the caller can fall back to the Assets copy.
-      const slug = /^\/posts\/([^/]+)\/$/.exec(new URL(request.url).pathname)?.[1];
-      if (!slug || !dependencies.readWithdrawal) return unavailable(request);
-      try {
-        const marker = await timed(dependencies.readWithdrawal(slug), 500);
-        return marker ? durableGone(marker) : unavailable(request);
-      } catch {
-        const response = unavailable(request);
-        response.headers.set(WITHDRAWAL_UNKNOWN_HEADER, "unknown");
-        return response;
-      }
+      return unavailableWithoutCopy(request);
     }
   }
 
@@ -466,6 +515,10 @@ export function createTransitionalPostReadWorker(dependencies: Dependencies) {
       if (retained) return retained;
     }
     const response = await dependencies.fetchAsset(request);
+    if (response.status === 410 && /^\/posts\/[^/]+\/$/.test(publicPath(new URL(request.url).pathname) ?? "")) {
+      void response.body?.cancel().catch(() => {});
+      return unavailable(request);
+    }
     const headers = new Headers(response.headers);
     headers.set("cache-control", "no-store");
     if (pending) {
@@ -517,35 +570,9 @@ export function createTransitionalPostReadWorker(dependencies: Dependencies) {
         catch { withdrawalKnown = false; }
       }
       if (withdrawal) {
-        // A republish never deletes the tombstone. Only a bounded successful
-        // authority read can outrank it; every request reads R2 afresh.
-        if (dependencies.rendererReady === false) return durableGone(withdrawal);
-        try {
-          const authority = await withdrawalAuthority(path);
-          const reply = authority.reply;
-          if (!reply || authority.expiresAt <= now()) return durableGone(withdrawal);
-          const receipt = reply.receipt;
-          const currentAbsence = reply.kind === "gone" && receipt?.visible === false &&
-            receipt.generation >= withdrawal.revision;
-          const newerPublication = ["post", "alias", "static"].includes(reply.kind) && receipt?.visible === true &&
-            receipt.generation > withdrawal.revision;
-          if ((!currentAbsence && !newerPublication) || receipt?.postId !== withdrawal.postId ||
-              !receipt.ownedSlugs.includes(slug!) || !Number.isSafeInteger(receipt.generation)) {
-            return durableGone(withdrawal);
-          }
-          const worker = createNoBuildPostWorker({ ...dependencies, target, now: () => new Date(now()),
-            getDecision: async () => {
-              if (authority.expiresAt <= now()) throw new Error("Withdrawal authority expired");
-              return structuredClone(reply);
-            } });
-          const response = await worker.fetch(workerRequest);
-          if (authority.expiresAt <= now() || authority.purgeFence &&
-              await fencePresent(withdrawalKeyFor(path), authority.purgeFence) !== true) return durableGone(withdrawal);
-          const latest = await timed(dependencies.readWithdrawal!(slug!), 500);
-          if (!latest || latest.revision > receipt.generation ||
-              latest.revision === receipt.generation && receipt.visible) return durableGone(latest ?? withdrawal);
-          return response && [200, 302, 308, 410].includes(response.status) ? response : durableGone(withdrawal);
-        } catch { return durableGone(withdrawal); }
+        // A republish retains the tombstone. Qualify the current owner
+        // before allowing it to decide this response.
+        return resolvePostTombstone(workerRequest, path, slug!, withdrawal, "post-tombstone-authority");
       }
       if (path.startsWith("/_astro/")) {
         const asset = await dependencies.fetchAsset(request);
@@ -578,6 +605,8 @@ export function createTransitionalPostReadWorker(dependencies: Dependencies) {
       const routeKey = independent ? authorityKey : path === "/_publication.json" ? catalogKey : keyFor(path, "GET");
       const route = routeKey.url === authorityKey.url ? catalog : await decision(routeKey, path, "GET", catalog.catalogId);
       if (route.state === "unavailable" || slug && route.reply.kind === "pass") return copy(true);
+      const withdrawn = route.reply.kind === "gone";
+      if (withdrawn && route.retryAt !== undefined) return unavailableWithoutCopy(request);
       // Unknown withdrawal state needs fresh authority; the stale window is not fresh.
       const expiresAt = withdrawalKnown ? Math.min(catalog.staleUntil, route.staleUntil)
         : Math.min(catalog.expiresAt, route.expiresAt);
@@ -612,7 +641,7 @@ export function createTransitionalPostReadWorker(dependencies: Dependencies) {
       }
       if (await current(authorityKey, catalog) !== true || await current(routeKey, route) !== true) {
         if (retryExpired) return publicReader.fetch(request, false);
-        return copy(true);
+        return withdrawn ? unavailableWithoutCopy(request) : copy(true);
       }
       if (expiresAt <= now()) {
         // A route read or render can outlive a nearly expired last-good
@@ -620,7 +649,9 @@ export function createTransitionalPostReadWorker(dependencies: Dependencies) {
         if (retryExpired) return publicReader.fetch(request, false);
         return unavailable(request);
       }
-      if (!response || useAssetsForUnavailablePost(response.status)) return copy(false);
+      if (!response || useAssetsForUnavailablePost(response.status)) {
+        return withdrawn ? unavailableWithoutCopy(request) : copy(false);
+      }
       return response;
     },
   };

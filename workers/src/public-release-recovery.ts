@@ -1,4 +1,5 @@
 import mirrors from "../../functions/lib/public-release-routing-mirror-codec.js";
+import { PUBLIC_GONE_BRANCH_HEADER } from "./public-gone";
 import protocol from "../../functions/lib/public-release-pair.js";
 import { readPublicReleasePairOutput } from "./public-release-view-reader";
 import type { PublicReleasePair } from "../../packages/content-core/src/public-release";
@@ -146,7 +147,8 @@ async function serveRecoveryInPair({ store, pair, request, selection, now, minim
   let response: Response;
   if (route.state === "gone" || route.state === "redirect") {
     response = new Response(null, { status: route.state === "gone" ? 410 : 308,
-      headers: { ...(route.state === "redirect" ? { location: route.canonicalPath } : {}), "cache-control": "no-store" } });
+      headers: { ...(route.state === "redirect" ? { location: route.canonicalPath }
+        : { [PUBLIC_GONE_BRANCH_HEADER]: "pair-recovery-withdrawal" }), "cache-control": "no-store" } });
   } else if (authority.schemaVersion === 2) {
     const body = route.body;
     if (!body || body.validUntil <= now() || body.verifiedSequence < minimumBodySequence) return null;

@@ -54,7 +54,9 @@ it("never tries OLD after selected authority refuses or changes during the OLD b
 it("never lets a previous verified body override current tombstones, expired leases or the root receipt",async()=>{
  const input=await fixture();const key=`${codec.prefix(pairs[0])}namespace-v1.json`,prior=await codec.existingJson(input.store,key);
  await codec.writeJson(input.store,key,{...prior!.value,routes:[{path:"/contact/",state:"gone",canonicalPath:"/contact/",body:null}]},prior);
- expect((await servePreviousVerifiedPairRecovery(input))?.status).toBe(410);
+ const withdrawn=await servePreviousVerifiedPairRecovery(input);
+ expect(withdrawn?.status).toBe(410);
+ expect(withdrawn?.headers.get("x-njpbs-gone-branch")).toBe("pair-recovery-withdrawal");
  expect(await servePreviousVerifiedPairRecovery({...input,request:new Request(`https://dev-public.example.org${ROOT_RECEIPT_PATH}`)})).toBeNull();
  expect(await servePreviousVerifiedPairRecovery({...input,now:()=>at+300_001})).toBeNull();
 });

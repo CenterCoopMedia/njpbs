@@ -1,5 +1,6 @@
 import { contentLinkRedirect } from "../../packages/content-core/src/content-link.ts";
 import { SECURITY_HEADER_BASELINE } from "../../packages/content-core/src/public-security-headers";
+import { PUBLIC_GONE_BRANCH_HEADER } from "./public-gone";
 import { assertPublicationTarget, publicationTarget, type PublicationTarget } from "../../functions/lib/publication-target";
 import { projectPublishedPostRead, type PublishedPostContent } from "../../site/src/lib/published-post-shadow";
 import { WITHDRAWAL_UNKNOWN_HEADER, type Withdrawal } from "./durable-post-withdrawals";
@@ -17,11 +18,16 @@ async function shaText(value: string) {
   return Array.from(new Uint8Array(bytes), byte => byte.toString(16).padStart(2, "0")).join("");
 }
 const digest = (value: unknown) => shaText(JSON.stringify(canonical(value)));
-function failure(status = 503, withdrawalUnknown = false) {
+function failure(status = 503, withdrawalUnknown = false, goneBranch?: string) {
   return new Response(null, { status, headers: { ...SECURITY_HEADER_BASELINE,
     "cache-control": "no-store", "x-robots-tag": "noindex, nofollow",
     ...(status === 405 ? { Allow: "GET, HEAD" } : {}),
+    ...(goneBranch ? { [PUBLIC_GONE_BRANCH_HEADER]: goneBranch } : {}),
     ...(withdrawalUnknown ? { [WITHDRAWAL_UNKNOWN_HEADER]: "unknown" } : {}) } });
+}
+function newerThan(marker: Withdrawal | null, receipt: CodePostReceipt) {
+  return !marker || marker.postId === receipt.postId &&
+    receipt.sourceVersion > marker.sourceVersion && receipt.code.generation > marker.revision;
 }
 async function receiptHeaders(receipt: CodePostReceipt, path: string, rendererSha: string) {
   const code = receipt?.code;
@@ -57,16 +63,18 @@ export function createNoBuildCodePostWorker({ rendererSha, target = publicationT
     const url = new URL(request.url), path = url.pathname, head = request.method === "HEAD";
     if (url.origin !== target.origin || !/^\/posts\/[a-z0-9]+(?:-[a-z0-9]+)*\/$/.test(path)) return null;
     let known: Withdrawal | null = null;
+    let visible: CodePostReceipt | undefined;
     try {
       known = await readWithdrawal(path.slice(7, -1));
       const reply = await getDecision(path, head ? "HEAD" : "GET");
-      if (reply.kind === "pass") return known ? failure(410) : null;
-      if (reply.kind === "code-post-unavailable" || !rendererReady) return failure(known ? 410 : 503);
+      if (reply.kind === "pass") return known ? failure(410, false, "code-post-tombstone-unowned") : null;
+      if (reply.kind === "code-post-unavailable" || !rendererReady) {
+        return known ? failure(410, false, "code-post-tombstone-authority") : failure();
+      }
       if (!["GET", "HEAD"].includes(request.method)) return failure(405);
       const headers = await receiptHeaders(reply.receipt, path, rendererSha);
-      const newerThan = (marker: Withdrawal | null) => !marker || marker.postId === reply.receipt.postId &&
-        reply.receipt.sourceVersion > marker.sourceVersion && reply.receipt.code.generation > marker.revision;
-      if (!newerThan(known)) return failure(410);
+      if (!newerThan(known, reply.receipt)) return failure(410, false, "code-post-tombstone-conflict");
+      visible = reply.receipt;
       known = null;
       let body: string | null = null;
       let status = reply.kind === "code-post-alias" ? 308 : 200;
@@ -95,12 +103,18 @@ export function createNoBuildCodePostWorker({ rendererSha, target = publicationT
       }
       const current = await getDecision(path, head ? "HEAD" : "GET");
       const finalWithdrawal = await readWithdrawal(path.slice(7, -1));
-      if (!newerThan(finalWithdrawal)) return failure(410);
+      if (!newerThan(finalWithdrawal, reply.receipt)) return failure(410, false, "code-post-tombstone-race");
       if (await digest(current) !== await digest(reply)) throw new Error("Code Post authority changed");
       return new Response(head ? null : body, { status, headers });
     } catch {
-      if (known) return failure(410);
-      try { if (await readWithdrawal(path.slice(7, -1))) return failure(410); }
+      if (known) return failure(410, false, "code-post-tombstone-reader");
+      try {
+        const latest = await readWithdrawal(path.slice(7, -1));
+        if (latest && (!visible || !newerThan(latest, visible))) return failure(410, false, "code-post-tombstone-reader");
+        // A retained body still predates this marker even when live authority
+        // verified a republish. Refuse the static fallback if rendering failed.
+        if (latest) return failure(503, true);
+      }
       catch { return failure(503, true); }
       return failure();
     }
