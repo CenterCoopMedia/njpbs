@@ -327,12 +327,19 @@ function createPublicVideoWithdrawalRecoveryHandler(deps) {
 
 async function readSnapshotOwner(firestore, transaction, ref, snapshot) {
   if (ref.parent.id === "cmsPages") {
-    return require("./no-build-page-ownership").readNoBuildPageOwner({ firestore, transaction, pageId: ref.id });
+    if (!require("./public-page-contract").publicPageDefinition(ref.id)) return null;
+    const { state } = await require("./no-build-page-ownership").readNoBuildPageOwner({ firestore, transaction, pageId: ref.id });
+    return state;
   }
   if (["program", "event"].includes(snapshot?.metadata?.type)) {
-    return require("./no-build-record-ownership").readNoBuildRecordOwner({ firestore, transaction, documentId: ref.id });
+    if (!require("./no-build-record-contract").validRecordId(ref.id)) return null;
+    const { state } = await require("./no-build-record-ownership").readNoBuildRecordOwner({ firestore, transaction, documentId: ref.id });
+    return state;
   }
-  return require("./no-build-post-ownership").readNoBuildPostOwner({ firestore, transaction, postId: ref.id });
+  const { isNoBuildPostId, readNoBuildPostOwner } = require("./no-build-post-ownership");
+  if (!isNoBuildPostId(ref.id)) return null;
+  const { state } = await readNoBuildPostOwner({ firestore, transaction, postId: ref.id });
+  return state;
 }
 
 /** Firestore event boundary: Only lost public references can revoke version keys. */
@@ -382,8 +389,8 @@ function createPublicVideoWithdrawalHandler(deps) {
         const previous = previousVideoCopies(record.published);
         const remaining = previous.filter((copy) => !released.has(copy.url));
         if (remaining.length !== previous.length) {
-          const { state } = await readSnapshotOwner(firestore, tx, contentRef, record.published);
-          if (state?.snapshotDigest || state?.mode === "static") return;
+          const owner = await readSnapshotOwner(firestore, tx, contentRef, record.published);
+          if (owner?.snapshotDigest || owner?.mode === "static") return;
           tx.update(contentRef, { "published.previousVideoCopies": remaining });
         }
       });
