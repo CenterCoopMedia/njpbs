@@ -1,6 +1,6 @@
 import { execFileSync } from 'node:child_process';
 import { existsSync } from 'node:fs';
-import { mkdir, writeFile } from 'node:fs/promises';
+import { mkdir, readFile, symlink, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { createHash } from 'node:crypto';
 import protocol from '../../functions/lib/public-release-pair.js';
@@ -15,6 +15,27 @@ import { firstInstallInventory, writeFirstInstallFile } from '../../site/scripts
 import { publicReleaseCodePackFixture } from './public-release-code-pack';
 import { sealPublicReleasePairRenderer } from '../../site/scripts/public-release-pair-renderer-release.mjs';
 import { publicBuildSettings } from './first-install-build-settings';
+import { importClosure } from './isolated-checkout.mjs';
+import { contractRecipe } from '../../scripts/lib/functions-contracts.mjs';
+
+export async function firstInstallOperatorCheckout(destination: string, environment: 'development' | 'production') {
+  const repository = process.cwd();
+  const { entries } = JSON.parse(await readFile(path.join(repository, contractRecipe), 'utf8')) as { entries: Record<string, string> };
+  const files = await importClosure(repository, [`scripts/prepare-${environment}-pair-code-pack.mjs`,
+    'functions/lib/r2-media.js', // Loaded through the bootstrap reader's createRequire.
+    ...Object.values(entries)]);
+  // The real compiler reads the recipe and lockfile. Git ignores its outputs
+  // and the dependency links when the launcher rechecks the pinned source.
+  const paths = [...files, contractRecipe, '.gitignore', 'package.json', 'package-lock.json',
+    'functions/package.json', 'site/package.json', 'publisher/Dockerfile.pair'].map(file => `/${file}`);
+  const git = (...args: string[]) => execFileSync('git', args, { stdio: 'pipe' });
+  git('clone', '--shared', '--no-checkout', '--quiet', repository, destination);
+  git('-C', destination, 'sparse-checkout', 'set', '--no-cone', ...paths);
+  git('-C', destination, 'checkout', '--detach', 'HEAD');
+  for (const directory of ['node_modules', 'site/node_modules']) {
+    await symlink(path.join(repository, directory), path.join(destination, directory), 'dir');
+  }
+}
 
 const hash = (value: string | Uint8Array) => createHash('sha256').update(value).digest('hex');
 /** Serialized first-install protocol example with real Git/files, native

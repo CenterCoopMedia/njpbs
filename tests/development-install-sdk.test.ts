@@ -1,5 +1,5 @@
 import { afterAll, beforeAll, expect, it, vi } from 'vitest';
-import { cpSync, mkdtempSync, mkdirSync, readFileSync, readdirSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, readFileSync, readdirSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { execFileSync, spawnSync } from 'node:child_process';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
@@ -9,6 +9,7 @@ import { developmentInstallCredential } from '../scripts/lib/development-install
 import { operatorAccount } from '../scripts/lib/public-release-operator-io.mjs';
 import { sealedPair } from './helpers/sealed-public-release-pair';
 import { releasePair } from './helpers/private-public-release-pair.js';
+import { copyImportClosure } from './helpers/isolated-checkout.mjs';
 import context from '../functions/lib/public-context-revision.js';
 import protocol from '../functions/lib/public-release-pair.js';
 
@@ -20,9 +21,11 @@ const account = { type: 'service_account', project_id: identity.projectId, clien
   private_key_id: identity.privateKeyId, private_key: 'synthetic-private-key-never-written-or-sent-to-a-provider' };
 let dir: string, source: string, sha: string, hook: string, counter = 0;
 const git = (...args: string[]) => execFileSync('git', args, { cwd: source, encoding: 'utf8' }).trim();
-beforeAll(() => {
-  dir = mkdtempSync(join(tmpdir(), 'dev-sdk-contract-')); source = join(dir, 'source'); mkdirSync(source);
-  for (const name of ['scripts', 'functions/lib', 'packages', 'config']) cpSync(resolve(name), join(source, name), { recursive: true });
+beforeAll(async () => {
+  dir = mkdtempSync(join(tmpdir(), 'dev-sdk-contract-')); source = join(dir, 'source');
+  await copyImportClosure(resolve('.'), source, ['scripts/install-private-public-release.mjs', 'scripts/enroll-public-release-change-log.mjs',
+    // The native launcher and loader fixture use createRequire at runtime.
+    'functions/lib/public-release-change-enrollment.js', 'functions/lib/current-public-code-source.js']);
   writeFileSync(join(source, 'package.json'), '{"type":"module"}');
   writeFileSync(join(source, 'functions/package.json'), '{"type":"commonjs"}');
   writeFileSync(join(source, '.gitignore'), 'node_modules/\n');

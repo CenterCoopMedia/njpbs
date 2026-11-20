@@ -2,10 +2,12 @@ import { execFileSync, spawnSync } from "node:child_process";
 import { cpSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { fileURLToPath } from "node:url";
 import { afterEach, beforeEach, expect, it } from "vitest";
 import { parse } from "yaml";
 import { requireDevDeploySource } from "../../.github/scripts/require-dev-deploy-source.mjs";
 import { assertDevDeployCheckout } from "../../scripts/lib/dev-deploy-source.mjs";
+import { copyImportClosure } from "../helpers/isolated-checkout.mjs";
 
 const workflow = parse(readFileSync(new URL("../../.github/workflows/cms-dev-deploy.yml", import.meta.url), "utf8"));
 let root, releaseRoot, trustedRoot, sourceSha, trustedSha, env;
@@ -145,13 +147,15 @@ it("executes the trusted scanner in a complete repository layout", () => {
 });
 
 
-it.each(["current", "below floor", "changed rules"])("checks %s rules with the trusted compatibility gate before mutation", kind => {
+it.each(["current", "below floor", "changed rules"])("checks %s rules with the trusted compatibility gate before mutation", async kind => {
   const action = parse(readFileSync(new URL("../../.github/actions/dev-deploy-source-gates/action.yml", import.meta.url), "utf8"));
   const step = action.runs.steps.find(step => step.name === "Require compatible dev Firestore rules");
   expect(step).toBeDefined();
   const checker = ".github/scripts/cms-deploy-compatibility.mjs";
-  mkdirSync(join(releaseRoot, ".dev-deploy-gate/.github/scripts"), { recursive: true });
-  cpSync(new URL(`../../${checker}`, import.meta.url), join(releaseRoot, ".dev-deploy-gate", checker));
+  await copyImportClosure(fileURLToPath(new URL("../../", import.meta.url)), join(releaseRoot, ".dev-deploy-gate"), [checker], { boundary: {
+    rule: "the trusted compatibility checker's independence from the selected checkout",
+    files: [checker],
+  } });
   mkdirSync(join(releaseRoot, ".github/scripts"), { recursive: true });
   writeFileSync(join(releaseRoot, checker), 'throw new Error("selected checker must not run");');
   const manifest = JSON.parse(readFileSync(new URL("../../.github/cms-deploy-compatibility.json", import.meta.url), "utf8"));

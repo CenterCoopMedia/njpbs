@@ -1,10 +1,11 @@
 import { afterAll, beforeAll, expect, it } from 'vitest';
-import { cpSync, mkdtempSync, mkdirSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { execFileSync, spawnSync } from 'node:child_process';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { createHash } from 'node:crypto';
 import { isolatedFirestore } from '../helpers/emulator-firestore.js';
+import { copyImportClosure } from '../helpers/isolated-checkout.mjs';
 import { publicReleaseBaselineCodeFixture } from '../helpers/public-release-baseline-code';
 import enrollment from '../../functions/lib/public-release-change-enrollment.js';
 import deployment from '../../functions/lib/public-deployment.js';
@@ -22,8 +23,10 @@ const hash = (value: string) => createHash('sha256').update(value).digest('hex')
 let directory: string, source: string, sha: string, hook: string, request: any, sequence = 0;
 const git = (...args: string[]) => execFileSync('git', ['-C', source, ...args], { encoding: 'utf8', stdio: 'pipe' }).trim();
 beforeAll(async () => {
-  directory = mkdtempSync(join(tmpdir(), 'production-enrollment-')); source = join(directory, 'source'); mkdirSync(source);
-  for (const name of ['scripts', 'functions/lib', 'packages', 'config']) cpSync(resolve(name), join(source, name), { recursive: true });
+  directory = mkdtempSync(join(tmpdir(), 'production-enrollment-')); source = join(directory, 'source');
+  await copyImportClosure(resolve('.'), source, ['scripts/enroll-public-release-change-log.mjs',
+    // The enrollment launcher opens this module with createRequire.
+    'functions/lib/public-release-change-enrollment.js']);
   writeFileSync(join(source, 'package.json'), '{"type":"module"}');
   writeFileSync(join(source, 'functions/package.json'), '{"type":"commonjs"}');
   writeFileSync(join(source, '.gitignore'), 'node_modules/\n'); symlinkSync(resolve('node_modules'), join(source, 'node_modules'));

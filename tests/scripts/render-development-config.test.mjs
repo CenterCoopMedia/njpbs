@@ -12,21 +12,21 @@ import { developmentInputs, developmentValues, renderDevelopmentText, renderDeve
   assertDevelopmentSource, restoreDevelopmentTemplates, renderCommittedDeploymentSource,
   deploymentInputFingerprint, developmentDerivations, productionDeploymentInputs } from "../../scripts/render-development-config.mjs";
 import { developmentInputFixture as inputs } from "../helpers/development-inputs.mjs";
+import { copyImportClosure } from "../helpers/isolated-checkout.mjs";
 
 const root = fileURLToPath(new URL("../../", import.meta.url));
 const script = join(root, "scripts/render-development-config.mjs");
 const files = [...new Set([...Object.values(developmentInputs).flatMap(input => input.files), ...developmentDerivations.flatMap(item => item.consumers)])];
 const git = (cwd, ...args) => execFileSync("/usr/bin/git", ["-c", "core.hooksPath=/dev/null", ...args], { cwd, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] });
-function fixture(run) {
+async function fixture(run) {
   const directory = mkdtempSync(join(tmpdir(), "development-render-"));
   try {
-    for (const name of [...files, ".gitignore", "config/development-inputs.json", "scripts/render-development-config.mjs", "scripts/lib/functions-contracts.mjs", "site/scripts/cms-publication-runtime-guard.ts", "site/package.json", "functions/lib/public-deployment-pointer.js"]) {
-      mkdirSync(dirname(join(directory, name)), { recursive: true });
-      copyFileSync(join(root, name), join(directory, name));
-    }
+    await copyImportClosure(root, directory, ["scripts/render-development-config.mjs", "site/scripts/cms-publication-runtime-guard.ts"], {
+      assets: [...files, ".gitignore", "site/package.json", "functions/lib/public-deployment-pointer.js"],
+    });
     git(directory, "init", "-q"); git(directory, "add", ".");
     git(directory, "-c", "user.name=Fixture", "-c", "user.email=fixture@example.org", "commit", "-qm", "Templates");
-    return run(directory);
+    return await run(directory);
   } finally { rmSync(directory, { recursive: true, force: true }); }
 }
 
@@ -107,12 +107,12 @@ test("dry renders every runtime/config consumer, preserving target comparisons a
   for (const [filename, source] of before) assert.equal(readFileSync(join(directory, filename), "utf8"), source);
 }));
 
-test("keeps worker output hosts outside development render inputs", () => {
+test("keeps worker output hosts outside development render inputs", async () => {
   const render = environment => fixture(directory => {
     renderDevelopmentConfig(directory, environment);
     return new Map(files.map(name => [name, readFileSync(join(directory, name), "utf8")]));
   });
-  assert.deepEqual(render({ ...inputs, BOARDWALK_OUTPUT_HOST: "objects.worker.test" }), render(inputs));
+  assert.deepEqual(await render({ ...inputs, BOARDWALK_OUTPUT_HOST: "objects.worker.test" }), await render(inputs));
 });
 
 test("uses the selected source manifest and explicitly preserves older untemplated sources", () => {
@@ -161,7 +161,7 @@ test("production workflow isolates trusted gates and keeps disabled preview a no
   }
 });
 
-test("runs the actual production render block after real gate moves without credentials", () => fixture(directory => {
+test("runs the actual production render block after real gate moves without credentials", () => fixture(async directory => {
   const runtime = mkdtempSync(join(tmpdir(), "production-render-gates-"));
   try {
     const workflow = parse(readFileSync(join(root, ".github/workflows/cms-staging-deploy.yml"), "utf8"));
@@ -173,9 +173,11 @@ test("runs the actual production render block after real gate moves without cred
         const gate = join(directory, step.with.path);
         mkdirSync(gate);
         if (step.name === "Check out trusted configuration renderer") {
-          for (const name of ["scripts/render-development-config.mjs", "config/development-inputs.json"]) {
-            mkdirSync(dirname(join(gate, name)), { recursive: true }); copyFileSync(join(root, name), join(gate, name));
-          }
+          const renderer = "scripts/render-development-config.mjs";
+          await copyImportClosure(root, gate, [renderer], { boundary: {
+            rule: "the trusted configuration renderer's independence from the selected checkout",
+            files: [renderer, "config/development-inputs.json"],
+          } });
         }
       }
       if (step.name?.startsWith("Isolate trusted") || step.name === "Render deployment resource configuration") {
@@ -291,13 +293,13 @@ test("runs the documented Bash dry-render block in a disposable worktree", () =>
 });
 
 for (const job of ["firebase-preflight", "live-smoke"]) {
-test(`trusted gates resolve workspace dependencies from a separate temporary directory (${job})`, () => fixture(directory => {
+test(`trusted gates resolve workspace dependencies from a separate temporary directory (${job})`, () => fixture(async directory => {
   const runtime = mkdtempSync(join(tmpdir(), "external-trusted-gate-"));
   try {
-    const gate = join(directory, ".cms-smoke-gate"); mkdirSync(gate);
-    for (const name of ["scripts", "config", "agents/vmix", ".github/scripts"]) {
-      cpSync(join(root, name), join(gate, name), { recursive: true });
-    }
+    const gate = join(directory, ".cms-smoke-gate");
+    await copyImportClosure(root, gate, ["scripts/cms-component-receipt.mjs", ".github/scripts/ensure-panel-browser-deps.mjs"], {
+      assets: ["config/functions-configuration.json"],
+    });
     symlinkSync(join(root, "node_modules"), join(directory, "node_modules"));
     const workflow = parse(readFileSync(join(root, ".github/workflows/cms-staging-deploy.yml"), "utf8"));
     const step = workflow.jobs[job].steps.find(step => step.name === "Isolate trusted cms-smoke-gate checkout");
@@ -361,14 +363,18 @@ test("admits only an exact committed helper copy while retaining untracked-file 
   assert.throws(() => assertDevelopmentSource(directory, inputs, options));
 }));
 
-test("preserves placeholder sentinels and configures an unrendered trusted smoke copy", () => {
+test("preserves placeholder sentinels and configures an unrendered trusted smoke copy", async () => {
   assert.ok(!developmentInputs.CMS_PRODUCTION_API_ORIGIN.files.includes("agents/vmix/configuration.mjs"));
   const directory = mkdtempSync(join(tmpdir(), "unrendered-smoke-"));
   try {
-    copyFileSync(join(root, "scripts/smoke-cms-functions.mjs"), join(directory, "smoke.mjs"));
+    const smoke = "scripts/smoke-cms-functions.mjs";
+    await copyImportClosure(root, directory, [smoke], { boundary: {
+      rule: "the unrendered trusted smoke probe's independence at startup",
+      files: [smoke],
+    } });
     const program = `import assert from "node:assert/strict";
       import {parseApiOrigin} from ${JSON.stringify(pathToFileURL(join(root, "agents/vmix/configuration.mjs")).href)};
-      import {runCmsFunctionSmoke} from ${JSON.stringify(pathToFileURL(join(directory, "smoke.mjs")).href)};
+      import {runCmsFunctionSmoke} from ${JSON.stringify(pathToFileURL(join(directory, smoke)).href)};
       assert.equal(parseApiOrigin(process.env.CMS_PRODUCTION_API_ORIGIN), process.env.CMS_PRODUCTION_API_ORIGIN);
       const requests = [];
       await assert.rejects(runCmsFunctionSmoke({ request: async url => {

@@ -6,7 +6,8 @@ import path from 'node:path';
 import { createHash } from 'node:crypto';
 import { promisify } from 'node:util';
 import { execFile, execFileSync } from 'node:child_process';
-import { firstInstallCodePackFixture } from './helpers/first-install-code-pack';
+import { firstInstallCodePackFixture, firstInstallOperatorCheckout } from './helpers/first-install-code-pack';
+import { copyImportClosure } from './helpers/isolated-checkout.mjs';
 import { sealFirstInstallPairCodePack } from '../site/scripts/public-release-first-install-seal';
 import { openFirstInstallInput } from '../site/scripts/public-release-first-install-input';
 import { extractFirstInstallPairImage, prepareFirstInstallPairImage } from '../site/scripts/public-release-first-install-image';
@@ -161,13 +162,7 @@ it.each(['development', 'production'] as const)('runs the actual successful %s C
   }
   const operator = path.join(directory, 'operator'), image = path.join(directory, 'cli-image'), bin = path.join(directory, 'bin');
   const git = (...args: string[]) => execFileSync('git', args, { encoding: 'utf8', stdio: 'pipe' }).trim();
-  // A clean local snapshot is the command's real operator boundary. Sparse
-  // checkout keeps the modules unchanged without copying unrelated assets.
-  git('clone', '--shared', '--no-checkout', '--quiet', process.cwd(), operator);
-  git('-C', operator, 'sparse-checkout', 'set', 'config', 'functions/lib', 'packages', 'scripts', 'site/scripts', 'site/src/lib', 'site/src/data');
-  git('-C', operator, 'checkout', '--detach', 'HEAD');
-  await symlink(path.resolve('node_modules'), path.join(operator, 'node_modules'), 'dir');
-  await symlink(path.resolve('site/node_modules'), path.join(operator, 'site/node_modules'), 'dir');
+  await firstInstallOperatorCheckout(operator, environment);
   await mkdir(bin);
   const docker = path.join(bin, 'docker');
   // Only the external Docker process is a fixture. Native imports, inventory,
@@ -202,15 +197,13 @@ else if (args[0] === 'cp') {
 
 it.each(['dirty-operator', 'wrong-operator', 'dirty-target'])('rejects %s before evaluating repository code or a loader', async kind => {
   const operator = path.join(directory, 'operator'), marker = path.join(directory, 'evaluated');
-  await mkdir(path.join(operator, 'scripts'), { recursive: true });
+  const launcher = 'scripts/prepare-development-pair-code-pack.mjs';
+  await copyImportClosure(path.resolve('.'), operator, [launcher], { boundary: {
+    rule: 'first-install source admission before loading deployment code or the TypeScript loader',
+    files: [launcher, 'scripts/prepare-first-install-pair-code-pack.mjs', 'scripts/render-development-config.mjs', 'config/development-inputs.json'],
+  } });
+  const entry = path.join(operator, launcher);
   await mkdir(path.join(operator, 'functions/lib'), { recursive: true });
-  const entry = path.join(operator, 'scripts/prepare-development-pair-code-pack.mjs');
-  await writeFile(entry, await readFile('scripts/prepare-development-pair-code-pack.mjs'));
-  await writeFile(path.join(operator, 'scripts/prepare-first-install-pair-code-pack.mjs'),
-    await readFile('scripts/prepare-first-install-pair-code-pack.mjs'));
-  await mkdir(path.join(operator, 'config'), { recursive: true });
-  await writeFile(path.join(operator, 'config/development-inputs.json'), await readFile('config/development-inputs.json'));
-  await writeFile(path.join(operator, 'scripts/render-development-config.mjs'), await readFile('scripts/render-development-config.mjs'));
   // Deliberately untrusted source sentinel: it must never evaluate before the
   // real built-in source gate. This tests the Git/process trust boundary.
   const business = path.join(operator, 'functions/lib/public-release-first-install-target.js');

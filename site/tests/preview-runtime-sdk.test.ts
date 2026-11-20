@@ -7,6 +7,7 @@ import { fileURLToPath } from "node:url";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import { buildPreviewRuntime } from "../scripts/build-preview-runtime.mjs";
+import { copyImportClosure } from "../../tests/helpers/isolated-checkout.mjs";
 
 const directories: string[] = [];
 afterEach(async () => { await Promise.all(directories.splice(0).map(directory => rm(directory, { recursive: true, force: true }))); });
@@ -15,13 +16,11 @@ it("loads one Functions Firestore SDK in the actual compiled preview runtime wit
   const repository = fileURLToPath(new URL("../..", import.meta.url));
   const root = await mkdtemp(path.join(tmpdir(), "preview-runtime-sdk-"));
   directories.push(root);
-  for (const name of ["site/scripts", "site/src/lib", "functions/lib", "scripts", "config", "packages/content-core/src"]) {
-    await mkdir(path.dirname(path.join(root, name)), { recursive: true });
-    await cp(path.join(repository, name), path.join(root, name), { recursive: true });
-  }
-  for (const name of ["package.json", "site/package.json", "functions/package.json"]) {
-    await cp(path.join(repository, name), path.join(root, name));
-  }
+  // The compiled runtime uses createRequire for the bootstrap and Functions.
+  await copyImportClosure(repository, root, ["site/scripts/cms-preview-cloud-runtime.ts", "scripts/bootstrap-public-deployment.cjs"], {
+    assets: ["package.json", "site/package.json", "functions/package.json"],
+  });
+  await cp(path.join(repository, "functions/lib"), path.join(root, "functions/lib"), { recursive: true });
   // Site CI installs only site dependencies. Give Functions its own real SDK
   // copy while sharing its transitive packages from that declared install.
   // Keeping distinct SDK entrypoints makes the original duplicate import fail.

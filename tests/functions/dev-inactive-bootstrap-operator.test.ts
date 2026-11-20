@@ -1,10 +1,11 @@
 import { afterAll, afterEach, beforeAll, beforeEach, expect, it, vi } from "vitest";
-import { mkdtempSync, mkdirSync, readFileSync, writeFileSync, rmSync, openSync, closeSync, existsSync } from "node:fs";
+import { mkdtempSync, writeFileSync, rmSync, openSync, closeSync, existsSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { execFileSync, spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import { repositoryFixture } from "../helpers/repository-identity.mjs";
+import { copyImportClosure } from "../helpers/isolated-checkout.mjs";
 
 const mocks = vi.hoisted(() => ({
   args: vi.fn(), packet: vi.fn(), source: vi.fn(), environment: vi.fn(), credential: vi.fn(),
@@ -89,14 +90,13 @@ it("preserves an owner inspect substage and original error through both cleanup 
 });
 
 let fixture: string, sha: string;
-beforeAll(() => {
+beforeAll(async () => {
   fixture = mkdtempSync(join(tmpdir(), "retire-stage-cli-"));
-  mkdirSync(join(fixture, "scripts"));
-  mkdirSync(join(fixture, "config"));
-  for (const name of ["scripts/retire-dev-inactive-bootstrap.mjs", "scripts/render-development-config.mjs",
-    "config/development-inputs.json"]) {
-    writeFileSync(join(fixture, name), readFileSync(resolve(name)));
-  }
+  const entry = "scripts/retire-dev-inactive-bootstrap.mjs";
+  await copyImportClosure(resolve("."), fixture, [entry], { boundary: {
+    rule: "the inactive-bootstrap CLI's refusal before loading operator code",
+    files: [entry, "scripts/render-development-config.mjs", "config/development-inputs.json"],
+  } });
   const git = (...args: string[]) => execFileSync("git", args, { cwd: fixture, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] });
   git("init", "--quiet"); git("add", "scripts", "config");
   git("-c", "user.name=Fixture", "-c", "user.email=fixture@example.org", "commit", "--quiet", "-m", "CLI fixture");

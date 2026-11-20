@@ -1,5 +1,5 @@
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
-import { mkdtemp, rm, chmod, readFile, writeFile, mkdir, cp } from "node:fs/promises";
+import { mkdtemp, rm, chmod, readFile, writeFile, mkdir } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { execFile } from "node:child_process";
@@ -12,6 +12,7 @@ import { CONTRACT_SETTINGS, CmsPublicContractError, assertUnchangedPlan, devMuta
 import { assertActiveRendererCheckpoint, devCompletedBaseline, prepareDependencies, prepareContractRuntime, refusalLine, replayDockerArguments, replayRefusal, restoreRendererArchive, retainRendererArchive } from "../../scripts/check-cms-public-contract.mjs";
 import { createCmsPublicationCloudStorage } from "../../site/scripts/cms-publication-cloud-storage.ts";
 import { repositoryFixture } from "../helpers/repository-identity.mjs";
+import { copyImportClosure } from "../helpers/isolated-checkout.mjs";
 
 const execute = promisify(execFile);
 const sha = "a".repeat(40), digest = "b".repeat(64);
@@ -359,16 +360,12 @@ describe("Docker isolation at the process boundary", () => {
   beforeAll(async () => {
     image = await prepareContractRuntime(join(directory, "runtime"));
     inputs = join(directory, "inputs");
-    await mkdir(join(inputs, "trusted/scripts/lib"), { recursive: true });
-    await cp(resolve("scripts"), join(inputs, "trusted/scripts"), { recursive: true });
-    await cp(resolve("functions/lib"), join(inputs, "trusted/functions/lib"), { recursive: true });
-    await cp(resolve("config"), join(inputs, "trusted/config"), { recursive: true });
-    await mkdir(join(inputs, "trusted/agents/vmix"), { recursive: true });
-    await cp(resolve("agents/vmix/configuration.mjs"), join(inputs, "trusted/agents/vmix/configuration.mjs"));
+    await copyImportClosure(resolve("."), join(inputs, "trusted"), ["scripts/check-cms-public-contract.mjs",
+      "functions/lib/publication-target.js"], { // Loaded by the contract owner's createRequire.
+      assets: ["config/functions-configuration.json", "package.json"],
+    });
     await mkdir(join(inputs, "trusted/node_modules"), { recursive: true });
     await mkdir(join(inputs, "trusted/site/node_modules"), { recursive: true });
-    await mkdir(join(inputs, "trusted"), { recursive: true });
-    await cp(resolve("package.json"), join(inputs, "trusted/package.json"));
     for (const source of ["C0", "C1", "R-source"]) {
       await mkdir(join(inputs, source, "site/node_modules"), { recursive: true });
       await mkdir(join(inputs, source, "node_modules"), { recursive: true });

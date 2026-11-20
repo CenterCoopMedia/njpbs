@@ -1,10 +1,11 @@
 import { execFileSync, spawnSync } from "node:child_process";
-import { copyFileSync, mkdtempSync, mkdirSync, readFileSync, readdirSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import { mkdtempSync, mkdirSync, readFileSync, readdirSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { afterEach, describe, expect, it } from "vitest";
 import { parse } from "yaml";
+import { copyImportClosure } from "../helpers/isolated-checkout.mjs";
 
 const ADMIN_SRC = fileURLToPath(new URL("../../admin/src/", import.meta.url));
 const ADMIN_DEPLOY = fileURLToPath(
@@ -144,17 +145,14 @@ const newer = "b".repeat(40);
 const directories = [];
 afterEach(() => directories.splice(0).forEach(dir => rmSync(dir, { recursive: true, force: true })));
 
-function probe({ env = {}, ci = "success" } = {}) {
+async function probe({ env = {}, ci = "success" } = {}) {
   const directory = mkdtempSync(join(tmpdir(), "admin-pin-"));
   directories.push(directory);
   const bin = join(directory, "bin"), requests = join(directory, "requests");
   mkdirSync(bin);
   const checkout = join(directory, "source");
   mkdirSync(join(checkout, "admin"), { recursive: true });
-  mkdirSync(join(checkout, "scripts"));
-  mkdirSync(join(checkout, "config"));
-  copyFileSync(join(root, "scripts/render-development-config.mjs"), join(checkout, "scripts/render-development-config.mjs"));
-  copyFileSync(join(root, "config/development-inputs.json"), join(checkout, "config/development-inputs.json"));
+  await copyImportClosure(root, checkout, ["scripts/render-development-config.mjs"]);
   symlinkSync(join(root, "scripts/check-admin-release-ci.mjs"), join(checkout, "scripts/check-admin-release-ci.mjs"));
   writeFileSync(join(checkout, "admin/index.html"), "Reviewed Admin fixture\n");
   const git = args => execFileSync("/usr/bin/git", args, { cwd: checkout, stdio: "ignore" });
@@ -214,8 +212,8 @@ gate_reviewed_code`, "_", join(root, "scripts/lib/canonical-repo.sh"), checkout]
   return { ...result, requests: (() => { try { return readFileSync(requests, "utf8"); } catch { return ""; } })() };
 }
 
-it("accepts an explicit reviewed ancestor with that pin's successful main CI after main advances", () => {
-  const result = probe({ env: { ADMIN_DEPLOY_RELEASE_SHA: sha } });
+it("accepts an explicit reviewed ancestor with that pin's successful main CI after main advances", async () => {
+  const result = await probe({ env: { ADMIN_DEPLOY_RELEASE_SHA: sha } });
   expect(result.status, result.stderr).toBe(0);
   expect(result.stdout).toContain(`Admin release ${sha} passed main CI run 123.`);
   expect(result.requests).toContain(`branch=main&event=push&status=success&head_sha=${sha}`);
@@ -223,8 +221,8 @@ it("accepts an explicit reviewed ancestor with that pin's successful main CI aft
 });
 
 it.each(["newer-sha", "pr-run", "failed-ci-job", "missing-ci-job", "api-error"])(
-  "refuses a pin when exact main CI proof is unavailable: %s", ci => {
-    const result = probe({ env: { ADMIN_DEPLOY_RELEASE_SHA: sha }, ci });
+  "refuses a pin when exact main CI proof is unavailable: %s", async ci => {
+    const result = await probe({ env: { ADMIN_DEPLOY_RELEASE_SHA: sha }, ci });
     expect(result.status).toBe(1);
     expect(result.stderr).toContain("selected Admin release requires its own successful main CI");
     expect(result.stderr).toContain(ci === "api-error" ? "CI lookup failed" : "no matching main CI proof");
@@ -242,21 +240,21 @@ it.each([
   [{ FIXTURE_ANCESTOR_STATUS: "1" }, "not part of origin/main"],
   [{ ADMIN_DEPLOY_ALLOW_UNREVIEWED: "1" }, "cannot use unreviewed or rollback overrides"],
   [{ ADMIN_DEPLOY_ROLLBACK: "1" }, "cannot use unreviewed or rollback overrides"],
-])("keeps source refusals ahead of the pin CI lookup: %j", (env, message) => {
-  const result = probe({ env: { ADMIN_DEPLOY_RELEASE_SHA: sha, ...env } });
+])("keeps source refusals ahead of the pin CI lookup: %j", async (env, message) => {
+  const result = await probe({ env: { ADMIN_DEPLOY_RELEASE_SHA: sha, ...env } });
   expect(result.status).toBe(1);
   expect(result.stderr).toContain(message);
   expect(result.requests).toBe("");
 });
 
-it("keeps ordinary tip deployment available without an explicit pin or extra CI lookup", () => {
-  const result = probe({ env: { FIXTURE_MAIN: sha } });
+it("keeps ordinary tip deployment available without an explicit pin or extra CI lookup", async () => {
+  const result = await probe({ env: { FIXTURE_MAIN: sha } });
   expect(result.status, result.stderr).toBe(0);
   expect(result.requests).toBe("");
 });
 
-it("still refuses an unselected older checkout", () => {
-  const result = probe();
+it("still refuses an unselected older checkout", async () => {
+  const result = await probe();
   expect(result.status).toBe(1);
   expect(result.stderr).toContain("HEAD is behind origin/main");
   expect(result.requests).toBe("");

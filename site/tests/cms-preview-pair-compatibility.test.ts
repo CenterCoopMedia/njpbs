@@ -1,12 +1,13 @@
 // @vitest-environment node
 import { createRequire } from "node:module";
-import { copyFileSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { execFileSync } from "node:child_process";
 import { expect, it, vi } from "vitest";
 import { verifyVersionedCmsReaders } from "../../.github/scripts/cms-deploy-compatibility.mjs";
+import { copyImportClosure } from "../../tests/helpers/isolated-checkout.mjs";
 const api = createRequire(import.meta.url)("../../functions/lib/cms-preview-pair.js");
 const contractKeys = ["previewRequest", "postChrome", "settings", "capabilities", "adminSession"] as const;
 const pair = (id: string, source = "a") => ({ schemaVersion: 2, pairId: `preview-${id}`, rendererSha: source.repeat(40),
@@ -26,25 +27,46 @@ const replay = vi.fn(async (input: unknown) => {
   const { reader, state } = input as { reader: unknown; state: unknown };
   return { digest: "d".repeat(64), readerDigest: api.digest(reader), stateDigest: api.digest(state) };
 });
-it("keeps staged legacy rollback helpers independent of deploy-source pair code", () => {
+it("keeps staged legacy rollback helpers independent of deploy-source pair code", async () => {
   const root = mkdtempSync(join(tmpdir(), "cms-rollback-helpers-"));
   try {
-    mkdirSync(join(root, "scripts/lib"), { recursive: true });
-    for (const name of ["cms-component-receipt.mjs", "cms-release-plan.mjs", "repository-identity.mjs",
-      "functions-configuration.mjs", "studio-title-files.mjs", "functions-contracts.mjs"]) {
-      copyFileSync(join(fileURLToPath(new URL("../../", import.meta.url)), "scripts/lib", name), join(root, "scripts/lib", name));
-    }
-    copyFileSync(new URL("../../scripts/render-development-config.mjs", import.meta.url), join(root, "scripts/render-development-config.mjs"));
-    mkdirSync(join(root, "config"));
-    copyFileSync(new URL("../../config/development-inputs.json", import.meta.url), join(root, "config/development-inputs.json"));
-    copyFileSync(new URL("../../config/functions-configuration.json", import.meta.url), join(root, "config/functions-configuration.json"));
-    mkdirSync(join(root, "agents/vmix"), { recursive: true });
-    copyFileSync(new URL("../../agents/vmix/configuration.mjs", import.meta.url), join(root, "agents/vmix/configuration.mjs"));
-    const entry = pathToFileURL(join(root, "scripts/lib/cms-release-plan.mjs")).href;
+    const plan = "scripts/lib/cms-release-plan.mjs";
+    await copyImportClosure(fileURLToPath(new URL("../../", import.meta.url)), root, [plan], {
+      boundary: {
+        rule: "the staged legacy rollback helpers' independence from deploy-source code",
+        files: [plan, "scripts/lib/cms-component-receipt.mjs", "scripts/lib/repository-identity.mjs",
+          "scripts/lib/functions-configuration.mjs", "scripts/lib/studio-title-files.mjs", "scripts/lib/functions-contracts.mjs",
+          "scripts/render-development-config.mjs", "config/development-inputs.json", "config/functions-configuration.json",
+          "agents/vmix/configuration.mjs"],
+      },
+    });
+    const entry = pathToFileURL(join(root, plan)).href;
     execFileSync(process.execPath, ["--input-type=module", "-e", `const m = await import(${JSON.stringify(entry)}); if (m.baselineMutation(null).blocked !== 'missing_receipt') process.exit(1);`], { stdio: "pipe" });
     mkdirSync(join(root, "functions/lib"), { recursive: true });
     writeFileSync(join(root, "functions/lib/cms-preview-pair.js"), 'throw new Error("Deploy-source code executed");');
     execFileSync(process.execPath, ["--input-type=module", "-e", `await import(${JSON.stringify(entry)});`], { stdio: "pipe" });
+  } finally { rmSync(root, { recursive: true, force: true }); }
+});
+it("follows a new shared import in an operator checkout and reports it at the rollback boundary", async () => {
+  const root = mkdtempSync(join(tmpdir(), "checkout-import-proof-"));
+  try {
+    const source = join(root, "source"), operator = join(root, "operator"), rollback = join(root, "rollback");
+    mkdirSync(source);
+    execFileSync("git", ["init", "--quiet", source]);
+    writeFileSync(join(source, "entry.mjs"), 'import { value } from "./shared.mjs"; console.log(value);');
+    writeFileSync(join(source, "shared.mjs"), 'export const value = "before";');
+    const entries = ["entry.mjs"], boundary = { files: ["entry.mjs", "shared.mjs"], rule: "rollback startup independence" };
+    const run = (checkout: string) => execFileSync(process.execPath, [join(checkout, "entry.mjs")], { encoding: "utf8" }).trim();
+    await copyImportClosure(source, rollback, entries, { boundary });
+    expect(run(rollback)).toBe("before");
+
+    writeFileSync(join(source, "added.mjs"), 'export const value = "after";');
+    writeFileSync(join(source, "shared.mjs"), 'export { value } from "./added.mjs";');
+    await copyImportClosure(source, operator, entries);
+    expect(run(operator)).toBe("after");
+    await expect(copyImportClosure(source, rollback, entries, { boundary })).rejects.toThrow(
+      'shared.mjs imports "./added.mjs", which breaks rollback startup independence',
+    );
   } finally { rmSync(root, { recursive: true, force: true }); }
 });
 it("proves both deployed readers against retained public and preview contracts without ancestry", async () => {
