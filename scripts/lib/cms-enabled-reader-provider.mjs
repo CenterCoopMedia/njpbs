@@ -5,9 +5,9 @@ const readerNames = ["cmsReaderV1", "cmsReaderV2", "cmsReadPairCurrentCodeV2",
 
 // Fixed native project/Worker targets; raw provider variables never leave here.
 export async function readEnabledCmsReaderProviders({ projectId, accountId, sourceSha, binding, apiVars,
-  readGoogleToken, readCloudflareToken, fetchImpl = fetch }) {
+  readGoogleToken, readCloudflareToken, expectedWorkerVersion, fetchImpl = fetch }) {
   const identities = await readCmsReaderProviderIdentities({ projectId, accountId,
-    readCloudflareToken, readGoogleToken, fetchImpl, inspectFunctions(functions) {
+    readCloudflareToken, readGoogleToken, expectedWorkerVersion, fetchImpl, inspectFunctions(functions) {
       for (const name of readerNames) {
         const fn = functions.find(row => row.name === `projects/${projectId}/locations/us-central1/functions/${name}`);
         const vars = fn?.serviceConfig?.environmentVariables;

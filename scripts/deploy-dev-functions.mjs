@@ -3,10 +3,73 @@ import { readFileSync } from "node:fs";
 import { assertDevDeployCheckout } from "./lib/dev-deploy-source.mjs";
 import { createRequire } from "node:module";
 import { pathToFileURL } from "node:url";
+import { isDeepStrictEqual, parseEnv } from "node:util";
 import { assertDevTargets, assertDevConfigs, devPublicationIdentity } from "./assert-dev-cms-targets.mjs";
 import { assertNoFunctionDeletions, loadFunctionDeployManifest, readFunctionsDeployInventory } from "./lib/functions-deploy-inventory.mjs";
+import { functionsInventoryIdentity } from "./lib/cms-component-receipt.mjs";
+import { runtimeParametersMatch, selectFunctionTargets } from "./lib/cms-release-plan.mjs";
 
-export async function deployDevFunctions({ env = process.env, root = new URL("../", import.meta.url), request, runCommand = execFileSync } = {}) {
+const projectId = "njpbs-site-dev";
+const codebase = "dev";
+const devInventory = inventory => inventory.filter(fn => fn.labels?.["firebase-functions-codebase"] === codebase);
+const functionName = fn => fn.name.split("/").at(-1);
+
+async function readDevFunctions(root, request) {
+  if (!request) {
+    try {
+      const { GoogleAuth } = createRequire(new URL("package.json", root))("google-auth-library");
+      const client = await new GoogleAuth({ scopes: ["https://www.googleapis.com/auth/cloud-platform"] }).getClient();
+      request = options => client.request(options);
+    } catch { throw new Error("Could not authenticate the dev Functions inventory read"); }
+  }
+  return readFunctionsDeployInventory(projectId, async (url, pageToken) => {
+    try {
+      const fields = url.includes("/v1/") ? "functions(name,labels,eventTrigger),nextPageToken,unreachable" :
+        "functions(name,labels,environment,eventTrigger,state,updateTime,buildConfig,serviceConfig),nextPageToken,unreachable";
+      return (await request({ url, params: { pageSize: 100, fields, ...(pageToken ? { pageToken } : {}) },
+        timeout: 15000, retry: false })).data;
+    } catch { throw new Error("Could not read live Functions deployment inventory"); }
+  }, { includeMetadata: true });
+}
+
+function sameDevSourceInputs(root, sourceSha, baseline, inputFingerprint, live) {
+  if (!/^[a-f0-9]{40}$/.test(baseline?.sourceSha ?? "") || baseline.inputFingerprint !== inputFingerprint ||
+      !isDeepStrictEqual(baseline.providerIdentities, functionsInventoryIdentity(live))) return false;
+  try {
+    execFileSync("git", ["diff", "--quiet", baseline.sourceSha, sourceSha, "--", "firebase.dev.json"],
+      { cwd: root, stdio: "ignore" });
+    return true;
+  } catch { return false; }
+}
+
+export function planDevFunctions(names, live, expected, sameSourceInputs) {
+  const active = new Map(live.filter(fn => fn.state === "ACTIVE").map(fn => [functionName(fn), fn]));
+  const runtimeChanges = Object.fromEntries(names.map(name => {
+    const fn = active.get(name);
+    const changes = sameSourceInputs ? [] : ["dev_source_or_inventory_unproven"];
+    if (!fn) changes.push("dev_function_not_active");
+    else for (const key of Object.keys(expected)) {
+      if (fn.serviceConfig?.environmentVariables?.[key] !== expected[key]) changes.push(`runtime_parameter:${key}`);
+    }
+    return [name, changes];
+  }));
+  return selectFunctionTargets(names, { runtimeChanges });
+}
+
+export async function verifyDeployedDevFunctions(names, root, request) {
+  const live = devInventory(await readDevFunctions(root, request));
+  const expected = parseEnv(readFileSync(new URL("functions/.env.njpbs-site-dev", root), "utf8"));
+  if (!isDeepStrictEqual(live.map(functionName).sort(), [...names].sort()) ||
+      live.some(fn => fn.state !== "ACTIVE" || fn.buildConfig?.entryPoint !== functionName(fn)) ||
+      !runtimeParametersMatch(live, expected)) {
+    throw new Error("Deployed dev Functions do not match the exact manifest and runtime configuration");
+  }
+  console.log(`Verified runtime configuration for ${live.length} dev Functions`);
+}
+
+export async function deployDevFunctions({ env = process.env, root = new URL("../", import.meta.url), request,
+  runCommand = execFileSync, baseline, inputFingerprint, verifyOnly = false,
+  beforeDeploy = async () => {}, afterDeploy = async () => {} } = {}) {
   const sourceSha = assertDevDeployCheckout(env, root);
   assertDevTargets(env);
   assertDevConfigs(root, env);
@@ -23,31 +86,38 @@ export async function deployDevFunctions({ env = process.env, root = new URL("..
   const require = createRequire(new URL("package.json", root));
   const { devFunctionManifest } = require("./functions/dev-manifest.js");
   const { readCloudPublicationWakeDeployment } = require("./functions/lib/cloud-publication-wake-deployment.js");
-  const projectId = "njpbs-site-dev";
   const names = Object.keys(devFunctionManifest(readCloudPublicationWakeDeployment({ env: { GCLOUD_PROJECT: projectId } })));
+  if (verifyOnly) return verifyDeployedDevFunctions(names, root, request);
   const manifest = loadFunctionDeployManifest(names, projectId, root);
-  if (!request) {
-    try {
-      const { GoogleAuth } = require("google-auth-library");
-      const client = await new GoogleAuth({ scopes: ["https://www.googleapis.com/auth/cloud-platform"] }).getClient();
-      request = options => client.request(options);
-    } catch { throw new Error("Could not authenticate the dev Functions inventory read"); }
-  }
-  const readInventory = async (url, pageToken) => {
-    try {
-      const fields = url.includes("/v1/") ? "functions(name,labels,eventTrigger),nextPageToken,unreachable" :
-        "functions(name,labels,environment,eventTrigger),nextPageToken,unreachable";
-      return (await request({ url, params: { pageSize: 100, fields, ...(pageToken ? { pageToken } : {}) } })).data;
-    } catch { throw new Error("Could not read live Functions deployment inventory"); }
-  };
-  assertNoFunctionDeletions(manifest, await readFunctionsDeployInventory(projectId, readInventory), { projectId, codebase: "dev" });
+  const planStarted = performance.now();
+  const inventory = await readDevFunctions(root, request);
+  assertNoFunctionDeletions(manifest, inventory, { projectId, codebase });
   console.log(`Verified no deletions against the ${names.length}-function dev manifest`);
+  const live = devInventory(inventory);
+  const { targets, reasons } = planDevFunctions(names, live, parseEnv(dotenv),
+    sameDevSourceInputs(root, sourceSha, baseline, inputFingerprint, live));
+  console.log(`Dev Functions plan: ${JSON.stringify({ targets, reasons, durationMs: Math.round(performance.now() - planStarted) })}`);
+  await beforeDeploy();
+  if (!targets.length) {
+    console.log("Dev Functions deploy: 0 ms (no targets)");
+    return;
+  }
+  const filter = targets.length === names.length ? "functions:dev" : targets.map(name => `functions:dev:${name}`).join(",");
+  const started = performance.now();
   try {
     runCommand("npx", ["--no-install", "firebase", "deploy", "--project", projectId,
-      "--config", "firebase.dev.json", "--only", "functions:dev", "--force", "--non-interactive"], { stdio: "inherit" });
+      "--config", "firebase.dev.json", "--only", filter, "--force", "--non-interactive"], { stdio: "inherit" });
   } catch { throw new Error("Dev Functions deployment did not complete"); }
+  console.log(`Dev Functions deploy: ${Math.round(performance.now() - started)} ms`);
+  await afterDeploy(names);
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
-  deployDevFunctions().catch(error => { console.error(error.message); process.exitCode = 1; });
+  const args = process.argv.slice(2);
+  if (args.length && (args.length !== 1 || args[0] !== "--verify-deployed")) {
+    console.error("Expected no arguments or --verify-deployed");
+    process.exitCode = 1;
+  } else {
+    deployDevFunctions({ verifyOnly: args.length === 1 }).catch(error => { console.error(error.message); process.exitCode = 1; });
+  }
 }

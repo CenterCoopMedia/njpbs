@@ -136,7 +136,9 @@ test("production post-deploy readbacks overlap with scoped inputs and publish on
   const step = release.match(/- name: Verify event trigger IAM and deployed Functions configuration\n([\s\S]+?)\n      - name: Backfill byline projections/);
   assert.ok(step);
   const [envBlock, run] = step[1].split("        run: |\n");
-  const command = run.replace(/^          /gm, "");
+  const helperPath = new URL("../../scripts/lib/functions-readbacks.sh", import.meta.url);
+  const command = run.replace(/^          /gm, "")
+    .replace('source "$RUNNER_TEMP/cms-iam-gate/scripts/lib/functions-readbacks.sh"', `source "${helperPath.pathname}"`);
   const shared = new Set(["DEPLOY_SHA", "FIREBASE_DEPLOY_SERVICE_ACCOUNT"]);
   const configInputs = [...envBlock.matchAll(/^          ([A-Z_]+):/gm)].map(match => match[1]).filter(name => !shared.has(name));
   assert.ok(configInputs.length > 0);
@@ -157,6 +159,9 @@ test("production post-deploy readbacks overlap with scoped inputs and publish on
     }
     assert.equal(stdout.includes("Event trigger IAM verification failed"), fail === iam);
     assert.equal(stdout.includes("Deployed Functions configuration verification failed"), fail === config);
+    const intervals = [...stdout.matchAll(/Functions (configuration|IAM) readback: start=(\d+) end=(\d+) duration=(\d+) ms status=(\d+)/g)];
+    assert.equal(intervals.length, 2);
+    assert.ok(Math.max(...intervals.map(row => Number(row[2]))) <= Math.min(...intervals.map(row => Number(row[3]))));
   }
   assert.match(release, /- name: Backfill byline projections\n        if: >-\n[^]*?steps\.functions_readbacks\.outputs\.iam_verified == 'true'/);
   assert.match(release, /- name: Backfill byline projections[^]*?node scripts\/backfill-byline-projections\.mjs\n      - name: Record the completed Functions receipt\n        if: needs\.firebase-preflight\.outputs\.functions_mutated == 'true' && !inputs\.install_reader_bridge/);

@@ -90,14 +90,14 @@ function eventRole(policy, account, role) {
     Array.isArray(binding.members) && binding.members.includes(`serviceAccount:${account}`));
 }
 
-export function checkEventTriggerIam(requirements, readProjectPolicy, readServicePolicy, { allowFirstDeploy = false } = {}) {
+export function checkEventTriggerIam(requirements, readProjectPolicy, readServicePolicy, { allowFirstDeploy = false, project = PROJECT } = {}) {
   const pending = [];
   if (!requirements.length) return pending;
   const projectPolicy = eventPolicy(readProjectPolicy());
   // Check every receiver before looking up invocation grants or reading secrets.
   for (const { name, account } of requirements) {
     if (!eventRole(projectPolicy, account, "roles/eventarc.eventReceiver")) {
-      throw new FunctionsDeployInventoryError(`Event trigger ${name} needs an unconditional roles/eventarc.eventReceiver binding on ${PROJECT} for serviceAccount:${account}`);
+      throw new FunctionsDeployInventoryError(`Event trigger ${name} needs an unconditional roles/eventarc.eventReceiver binding on ${project} for serviceAccount:${account}`);
     }
   }
   for (const requirement of requirements) {
@@ -150,7 +150,23 @@ async function firstDeployFunctionNames() {
   } catch { throw new FunctionsDeployInventoryError("Complete nonempty Functions inventory required for first deployment"); }
 }
 
-export async function main(sourceRoot = new URL("../", import.meta.url), { preDeploy = false, postDeploy = false } = {}) {
+function requirePostDeployCredential(project, development) {
+  let valid = false;
+  try {
+    const credential = JSON.parse(readFileSync(process.env.GOOGLE_APPLICATION_CREDENTIALS, "utf8"));
+    valid = development
+      ? DEPLOY_ACCOUNT.endsWith(`@${project}.iam.gserviceaccount.com`) && credential.type === "external_account" &&
+        credential.service_account_impersonation_url ===
+          `https://iamcredentials.googleapis.com/v1/projects/-/serviceAccounts/${DEPLOY_ACCOUNT}:generateAccessToken`
+      : credential.type === "service_account" && credential.project_id === project && credential.client_email === DEPLOY_ACCOUNT;
+  } catch { /* Keep credential file contents and parser diagnostics private. */ }
+  if (!valid) throw new FunctionsDeployInventoryError("Invalid Firebase IAM read credential");
+  process.env.CLOUDSDK_AUTH_CREDENTIAL_FILE_OVERRIDE = process.env.GOOGLE_APPLICATION_CREDENTIALS;
+}
+
+export async function main(sourceRoot = new URL("../", import.meta.url), { preDeploy = false, postDeploy = false, development = false } = {}) {
+  if (development && (!postDeploy || preDeploy)) throw new FunctionsDeployInventoryError("Development supports post-deploy IAM verification only");
+  const project = development ? "njpbs-site-dev" : PROJECT;
   if (!EMAIL.test(DEPLOY_ACCOUNT)) throw new FunctionsDeployInventoryError("Configure FIREBASE_DEPLOY_SERVICE_ACCOUNT as a Google service account");
   if (preDeploy || postDeploy) {
     const head = execFileSync("git", ["rev-parse", "HEAD"], { cwd: sourceRoot, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] }).trim();
@@ -175,40 +191,36 @@ export async function main(sourceRoot = new URL("../", import.meta.url), { preDe
   if (postDeploy) {
     // Reuse the key already validated and installed for Firebase, without a
     // second authentication step or persistent gcloud configuration.
-    const credential = JSON.parse(readFileSync(process.env.GOOGLE_APPLICATION_CREDENTIALS, "utf8"));
-    if (credential.type !== "service_account" || credential.project_id !== PROJECT || credential.client_email !== DEPLOY_ACCOUNT) {
-      throw new FunctionsDeployInventoryError("Invalid Firebase IAM read credential");
-    }
-    process.env.CLOUDSDK_AUTH_CREDENTIAL_FILE_OVERRIDE = process.env.GOOGLE_APPLICATION_CREDENTIALS;
+    requirePostDeployCredential(project, development);
   } else if (gcloud(["auth", "list", "--filter=status:ACTIVE", "--format=value(account)"]) !== DEPLOY_ACCOUNT) {
     throw new FunctionsDeployInventoryError(`FIREBASE_SERVICE_ACCOUNT must authenticate ${DEPLOY_ACCOUNT}`);
   }
   const read = postDeploy
     ? args => requestDeploymentInventory({ request: async () => ({ data: gcloud(args) }) }, "gcloud-read")
     : async args => gcloud(args);
-  const number = await read(["projects", "describe", PROJECT, "--format=value(projectNumber)"]);
-  const source = loadFunctionSource(PROJECT, sourceRoot);
+  const number = await read(["projects", "describe", project, "--format=value(projectNumber)"]);
+  const source = loadFunctionSource(project, sourceRoot);
   const events = eventTriggerRequirements(source, number);
   if (postDeploy) {
-    const projectPolicy = await read(["projects", "get-iam-policy", PROJECT, "--format=json"]);
+    const projectPolicy = await read(["projects", "get-iam-policy", project, "--format=json"]);
     const policies = new Map();
     for (const { name, region, account } of events) {
       const actual = await read(["functions", "describe", name, "--gen2", `--region=${region}`,
-        `--project=${PROJECT}`, "--format=value(eventTrigger.serviceAccountEmail)"]) || `${number}-compute@developer.gserviceaccount.com`;
+        `--project=${project}`, "--format=value(eventTrigger.serviceAccountEmail)"]) || `${number}-compute@developer.gserviceaccount.com`;
       if (actual !== account) throw new FunctionsDeployInventoryError(`Event trigger ${name} differs from its selected source identity`);
       if (eventRole(eventPolicy(projectPolicy), account, "roles/run.invoker")) continue;
       const service = await read(["functions", "describe", name, "--gen2", `--region=${region}`,
-        `--project=${PROJECT}`, "--format=value(serviceConfig.service)"]);
-      const prefix = `projects/${PROJECT}/locations/${region}/services/`;
+        `--project=${project}`, "--format=value(serviceConfig.service)"]);
+      const prefix = `projects/${project}/locations/${region}/services/`;
       const serviceName = service.startsWith(prefix) ? service.slice(prefix.length) : "";
       if (!/^[a-z][a-z0-9-]{0,62}$/.test(serviceName)) throw new FunctionsDeployInventoryError(`Could not identify the Cloud Run service for event trigger ${name}`);
-      const policy = await read(["run", "services", "get-iam-policy", serviceName, `--region=${region}`, `--project=${PROJECT}`, "--format=json"]);
+      const policy = await read(["run", "services", "get-iam-policy", serviceName, `--region=${region}`, `--project=${project}`, "--format=json"]);
       if (!eventRole(eventPolicy(policy), account, "roles/run.invoker")) {
-        throw new FunctionsDeployInventoryError(`Event trigger ${name} needs an authorized grant: gcloud run services add-iam-policy-binding ${serviceName} --member=serviceAccount:${account} --role=roles/run.invoker --condition=None --region=${region} --project=${PROJECT}`);
+        throw new FunctionsDeployInventoryError(`Event trigger ${name} needs an authorized grant: gcloud run services add-iam-policy-binding ${serviceName} --member=serviceAccount:${account} --role=roles/run.invoker --condition=None --region=${region} --project=${project}`);
       }
       policies.set(`${name}:${region}`, policy);
     }
-    checkEventTriggerIam(events, () => projectPolicy, ({ name, region }) => policies.get(`${name}:${region}`));
+    checkEventTriggerIam(events, () => projectPolicy, ({ name, region }) => policies.get(`${name}:${region}`), { project });
     console.log(`Verified receiver and invocation IAM after deployment for ${events.length} Functions event triggers`);
     return;
   }
@@ -227,10 +239,10 @@ export async function main(sourceRoot = new URL("../", import.meta.url), { preDe
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
   try {
     const [source, mode, ...extra] = process.argv.slice(2);
-    if (extra.length || mode && !["--pre-deploy", "--post-deploy"].includes(mode)) {
-      throw new FunctionsDeployInventoryError("Expected a source root and optional --pre-deploy or --post-deploy");
+    if (extra.length || mode && !["--pre-deploy", "--post-deploy", "--post-deploy-development"].includes(mode)) {
+      throw new FunctionsDeployInventoryError("Expected a source root and a supported IAM verification mode");
     }
     await main(source ? pathToFileURL(`${resolve(source)}/`) : undefined,
-      { preDeploy: mode === "--pre-deploy", postDeploy: mode === "--post-deploy" });
+      { preDeploy: mode === "--pre-deploy", postDeploy: mode?.startsWith("--post-deploy"), development: mode === "--post-deploy-development" });
   } catch (error) { console.error(error.message); process.exitCode = 1; }
 }

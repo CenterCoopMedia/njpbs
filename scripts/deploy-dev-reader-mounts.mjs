@@ -11,10 +11,15 @@ import { applicationDefault, initializeApp, deleteApp } from "firebase-admin/app
 import { getFirestore } from "firebase-admin/firestore";
 import { assertDevTargets, assertDevConfigs, devPublicationIdentity } from "./assert-dev-cms-targets.mjs";
 import { deployDevFunctions } from "./deploy-dev-functions.mjs";
+import { deployCmsApiWorker } from "./deploy-cms-api-worker.mjs";
+import { requireWorkerReadback } from "./lib/cloudflare-worker-readback.mjs";
+import { selectMigrations } from "./lib/deployment-components.mjs";
+import { prepareContentSectionRegistry } from "./seed-content-sections.mjs";
+import { prepareMediaCategoryRegistry } from "./seed-media-categories.mjs";
 import deployment from "../functions/lib/dev-reader-deployment.js";
 import mount from "../functions/lib/cms-reader-mount-descriptor.js";
 import cms from "../functions/lib/cms-preview-pair.js";
-import { RECEIPT_INPUT_PATHS, fingerprintPaths, fingerprintInputs, configurationFingerprint, startReceipt, startCandidateReceipt,
+import { RECEIPT_INPUT_PATHS, fingerprintPaths, fingerprintInputs, configurationFingerprint, readReceipt, startReceipt, startCandidateReceipt,
   verifyCandidateReceipt, completeReceipt, commitLiveReaderReceipt, candidateReceiptRef } from "./lib/cms-component-receipt.mjs";
 import { readEnabledCmsReaderProviders } from "./lib/cms-enabled-reader-provider.mjs";
 
@@ -40,12 +45,42 @@ export function readDevReaderDeploymentProviders({ env, ...options }) {
     accountId: env.CLOUDFLARE_ACCOUNT_ID, sourceSha: devDeploySourceSha(env) });
 }
 
+async function prepareDevRegistries(firestore, baseline, sourceSha, root) {
+  // Use the release planner's registry-input comparison. Other migrations
+  // have their own owners and are outside this dev reader deployment.
+  const selected = await selectMigrations(baseline?.sourceSha, sourceSha, [], { cwd: fileURLToPath(root), functionsMutated: true });
+  for (const [name, prepare] of [
+    ["media-categories", prepareMediaCategoryRegistry],
+    ["content-sections", prepareContentSectionRegistry],
+  ]) {
+    const repair = selected.includes(name);
+    const started = performance.now();
+    const { seed } = await prepare({ firestore, onlyIfNeeded: !repair });
+    const reason = repair ? "ran (registry inputs changed or baseline unavailable)"
+      : seed ? "ran (live registry incomplete)" : "skipped (live registry complete)";
+    console.log(`Dev registry ${name}: ${reason}, ${Math.round(performance.now() - started)} ms`);
+  }
+}
+
+function verifyDevFunctionsReadbacks(root, env) {
+  const { CLOUDFLARE_API_TOKEN, ...googleEnv } = env;
+  execFileSync("bash", ["-euo", "pipefail", "-c", `
+    source "$RUNNER_TEMP/cms-contract-source/scripts/lib/functions-readbacks.sh"
+    verify_configuration() { node scripts/deploy-dev-functions.mjs --verify-deployed; }
+    verify_iam() (
+      unset CMS_DEV_READER_INSTALL_AUTHORIZATION
+      node "$RUNNER_TEMP/cms-contract-source/scripts/check-cms-secret-iam.mjs" "$GITHUB_WORKSPACE" --post-deploy-development
+    )
+    verify_functions_readbacks verify_configuration verify_iam
+  `], { cwd: root, env: googleEnv, stdio: "inherit" });
+}
+
 /** Update the dev readers through their native deployment owners. The separate
  * first installation remains explicit. Neither mode writes a selector or proof. */
 export async function deployDevReaders({ env = process.env, root = new URL("../", import.meta.url), firestore,
   readProviders, consumerProvider, onPhase = () => {}, deployFunctions = options => deployDevFunctions(options),
-  deployApi = () => execFileSync("npx", ["--no-install", "wrangler", "deploy", "--config", "wrangler.dev.jsonc", "--tag", env.DEPLOY_SHA],
-    { cwd: new URL("cms-api/", root), stdio: "inherit" }), fingerprint = fingerprintPaths } = {}) {
+  deployApi = () => deployCmsApiWorker(undefined, undefined, { cwd: fileURLToPath(new URL("cms-api/", root)), devSourceSha: env.DEPLOY_SHA }),
+  fingerprint = fingerprintPaths } = {}) {
   onPhase("configuration");
   const binding = assertDevReaderContext(env);
   const sourceSha = devDeploySourceSha(env);
@@ -56,6 +91,7 @@ export async function deployDevReaders({ env = process.env, root = new URL("../"
       cms.currentReader((await firestore.doc(`${cms.READER_RECEIPTS}/${component}`).get()).data(), component);
     }
   }
+  const baseline = (await readReceipt(firestore, "functions"))?.lastComplete;
   // Every deployment starts from the reviewed inert defaults.
   assertDevConfigs(root, { ...env, CMS_DEV_INSTALL_READER_BRIDGE: "false", CMS_DEV_READER_OPERATION_ID: "", CMS_DEV_READER_INSTALL_AUTHORIZATION: "" });
   const dotenvPath = new URL("functions/.env.njpbs-site-dev", root), apiPath = new URL("cms-api/wrangler.dev.jsonc", root);
@@ -79,6 +115,8 @@ export async function deployDevReaders({ env = process.env, root = new URL("../"
     deploymentInputs[component] = await fingerprint(sourceSha, [...RECEIPT_INPUT_PATHS[component], "firebase.dev.json",
       "scripts/lib/repository-identity.mjs",
       "scripts/deploy-dev-reader-mounts.mjs", "scripts/deploy-dev-functions.mjs", "scripts/assert-dev-cms-targets.mjs",
+      "scripts/lib/cms-release-plan.mjs", "scripts/lib/functions-readbacks.sh", "scripts/check-cms-secret-iam.mjs",
+      "scripts/deploy-cms-api-worker.mjs", "scripts/lib/cloudflare-worker-readback.mjs",
       "scripts/lib/cms-enabled-reader-provider.mjs", "scripts/lib/cms-reader-provider-readback.mjs",
       ".github/workflows/cms-dev-deploy.yml", "site/scripts/public-release-installed-consumer-owner.ts",
       "site/scripts/public-release-installed-consumer-provider.ts", "site/scripts/public-release-installed-consumer-contract.ts"], { cwd: fileURLToPath(root) });
@@ -94,10 +132,19 @@ export async function deployDevReaders({ env = process.env, root = new URL("../"
       await startCandidateReceipt(firestore, input);
     }
     onPhase("functions-deploy");
-    await deployFunctions({ env: { ...env, ...binding }, root });
+    await deployFunctions({ env: { ...env, ...binding }, root, baseline, inputFingerprint: inputs.functions.inputFingerprint,
+      beforeDeploy: async () => {
+        onPhase("registry-preparation");
+        await prepareDevRegistries(firestore, baseline, sourceSha, root);
+        onPhase("functions-deploy");
+      } });
     onPhase("api-deploy");
-    await deployApi();
-    const collect = async component => (await readProviders({ binding, apiVars: api.vars }))[component];
+    const expectedWorkerVersion = await deployApi();
+    const collect = async component => {
+      const identities = await readProviders({ binding, apiVars: api.vars, expectedWorkerVersion });
+      requireWorkerReadback(identities.cmsApi.versionId === expectedWorkerVersion, "dev CMS API active version");
+      return identities[component];
+    };
     for (const input of Object.values(inputs)) {
       onPhase(`verify-complete-${input.component}`);
       const candidate = await verifyCandidateReceipt(firestore, input, { collect });
@@ -162,7 +209,12 @@ async function main() {
     const readProviders = options => readDevReaderDeploymentProviders({ ...options, env,
       readGoogleToken: async () => (await auth.getClient()).getAccessToken().then(result => result.token),
       readCloudflareToken: async () => env.CLOUDFLARE_API_TOKEN });
-    const result = await deployDevReaders({ env, firestore, readProviders, onPhase: value => { phase = value; } });
+    const result = await deployDevReaders({ env, firestore, readProviders,
+      deployFunctions: options => deployDevFunctions({ ...options, afterDeploy: () => {
+        phase = "functions-readbacks";
+        verifyDevFunctionsReadbacks(options.root, options.env);
+      } }),
+      onPhase: value => { phase = value; } });
     phase = "write-artifact";
     writeFileSync(process.argv[2], `${JSON.stringify(result, null, 2)}\n`, { flag: "wx", mode: 0o600 });
     console.log("Dev reader deployments verified; original install proofs and selectors unchanged");

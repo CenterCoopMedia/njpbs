@@ -32,6 +32,28 @@ dependencies. Noninteractive deployment needs all declared nonsecret parameters
 in generated dotenv. Unknown keys, absent required values or secret-agreement
 failure stop. Provisioning and release remain distinct authorizations.
 
+## Development rehearsal
+
+Run the normal development deploy at a green exact main SHA with publishing
+held and no active dev producer. Keep the current renderer pin for a routine
+deploy. The dev job uses its own OIDC identity, Worker token and dev codebase.
+
+The dev and production jobs use the same per-export target selector. Dev
+compares the rendered parameters and a complete live inventory to the prior
+receipt. Changed or unproven source inputs select the entire dev manifest.
+The job logs each export's reasons and the Functions deploy duration. It
+reads the exact active Wrangler version before completing the CMS API receipt.
+
+The same post-deploy runner overlaps Eventarc IAM and Functions configuration
+readback. Dev verifies its rendered settings on every export. Production
+also verifies its pinned R2 credential versions, native TTL and Auth policies,
+and integration configuration. Those checks need production resources.
+
+Registry input changes select the shared repair path. With stable inputs,
+each registry runs the shared live readiness check and seeds only when that
+check finds a gap. A second run at the same source can prove a skip after a
+repair. The dev job records each decision and still runs its full smoke suite.
+
 ## Configuration and provisioning
 
 For the GitHub report token and webhook secret, follow the

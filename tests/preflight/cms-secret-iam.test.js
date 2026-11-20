@@ -235,6 +235,39 @@ describe("deployed Functions secret IAM", () => {
     } finally { rmSync(directory, { recursive: true, force: true }); }
   });
 
+  it("uses only dev IAM endpoints with the dev impersonated account", () => {
+    const directory = mkdtempSync(join(tmpdir(), "cms-iam-dev-"));
+    try {
+      mkdirSync(join(directory, "functions"));
+      writeFileSync(join(directory, "functions/package.json"), JSON.stringify({ main: "dev-index.js" }));
+      writeFileSync(join(directory, "firebase.dev.json"), JSON.stringify({ functions: { source: "functions", codebase: "dev" } }));
+      writeFileSync(join(directory, "functions/dev-index.js"), `exports.onDatasetRefresh = { __endpoint: {
+        platform: "gcfv2", eventTrigger: { eventType: "google.cloud.firestore.document.v1.written" }
+      } };`);
+      const git = (...args) => execFileSync("git", args, { cwd: directory, encoding: "utf8" }).trim();
+      git("init", "-q");
+      git("add", ".");
+      git("-c", "user.name=Fixture", "-c", "user.email=fixture@example.test", "commit", "-qm", "Reviewed dev source");
+      const credential = join(directory, "dev-oidc.json");
+      const devAccount = "fixture-deployer@njpbs-site-dev.iam.gserviceaccount.com";
+      writeFileSync(credential, JSON.stringify({ type: "external_account",
+        service_account_impersonation_url: `https://iamcredentials.googleapis.com/v1/projects/-/serviceAccounts/${devAccount}:generateAccessToken` }));
+      const args = [directory, "--post-deploy-development"];
+      const devEnv = { DEPLOY_SHA: git("rev-parse", "HEAD"), FIREBASE_DEPLOY_SERVICE_ACCOUNT: devAccount };
+      const wrong = run("valid", undefined, undefined, args, devEnv);
+      expect(wrong.status).toBe(1);
+      expect(wrong.calls).toEqual([]);
+      const result = run("valid", undefined, undefined, args, { ...devEnv, GOOGLE_APPLICATION_CREDENTIALS: credential });
+      expect(result.status, result.stderr).toBe(0);
+      expect(result.calls).toEqual([
+        ["projects", "describe", "njpbs-site-dev", "--format=value(projectNumber)"],
+        ["projects", "get-iam-policy", "njpbs-site-dev", "--format=json"],
+        ["functions", "describe", "onDatasetRefresh", "--gen2", "--region=us-central1",
+          "--project=njpbs-site-dev", "--format=value(eventTrigger.serviceAccountEmail)"],
+      ]);
+    } finally { rmSync(directory, { recursive: true, force: true }); }
+  });
+
   it.each(["service-read-transient", "service-read-exhausted"])("bounds unavailable post-deploy policy reads: %s", mode => {
     const result = run(mode, undefined, undefined, [fixture, "--post-deploy"]);
     const policies = result.calls.filter(args => args[0] === "run");
@@ -391,7 +424,7 @@ describe("deployed Functions secret IAM", () => {
     expect(checker.with["persist-credentials"]).toBe(false);
     expect(checker.with["sparse-checkout-cone-mode"]).toBe(false);
     expect(checker.with["sparse-checkout"].trim().split("\n")).toEqual([
-      "scripts/check-cms-secret-iam.mjs", "scripts/lib/functions-deploy-inventory.mjs",
+      "scripts/check-cms-secret-iam.mjs", "scripts/lib/functions-deploy-inventory.mjs", "scripts/lib/functions-readbacks.sh",
     ]);
     const setup = steps.findIndex(step => step.name === "Set up Google Cloud CLI for Functions IAM");
     const deploy = steps.findIndex(step => step.id === "deploy_functions");

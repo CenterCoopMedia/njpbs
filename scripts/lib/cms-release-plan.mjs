@@ -130,6 +130,20 @@ export function runtimeParametersMatch(functions, expected) {
       fn?.serviceConfig?.environmentVariables?.[key] === value));
 }
 
+export function selectFunctionTargets(names, { sourceChanged = [], runtimeChanges = {}, rendererAffected = [] } = {}) {
+  const targets = [], reasons = {};
+  for (const name of [...names].sort()) {
+    const changes = [
+      ...(sourceChanged.includes(name) ? ["source_closure_changed"] : []),
+      ...(runtimeChanges?.[name] ?? []),
+      ...(rendererAffected.includes(name) ? ["renderer_inputs_changed"] : []),
+    ];
+    if (changes.length) targets.push(name);
+    reasons[name] = changes.length ? changes : ["unchanged"];
+  }
+  return { targets, reasons };
+}
+
 export function cloudWakeConfigurationFingerprint(edgeFingerprint, decision, variablesFingerprint = null) {
   if (!/^[a-f0-9]{64}$/.test(edgeFingerprint ?? "")) {
     throw new ComponentReceiptError("Functions configuration fingerprint is required");
@@ -159,6 +173,7 @@ export const TRUSTED_RELEASE_PATHS = Object.freeze([
   "scripts/lib/production-reader-authorization.mjs",
   "scripts/check-cms-secret-iam.mjs",
   "scripts/lib/functions-deploy-inventory.mjs",
+  "scripts/lib/functions-readbacks.sh",
   "scripts/assert-r2-lifecycle.mjs",
 ]);
 
@@ -490,12 +505,10 @@ export function decideRelease({
   if (!rendererGraphAvailable) return full("renderer_graph_unavailable", functionsBase.mutation.sourceSha);
   const rendererChanged = rendererFingerprint !== rendererBase.mutation.inputFingerprint;
   const sourceChanged = names.filter(name => functionGraph.exports[name].fingerprint !== priorGraph.exports[name].fingerprint);
-  const functionReasons = Object.fromEntries(names.map(name => [name, [
-    ...(sourceChanged.includes(name) ? ["source_closure_changed"] : []),
-    ...(runtimeChanges?.[name] ?? []),
-    ...(rendererChanged && functionGraph.exports[name].preview ? ["renderer_inputs_changed"] : []),
-  ]]));
-  const targets = names.filter(name => functionReasons[name].length > 0);
+  const { targets, reasons: functionReasons } = selectFunctionTargets(names, {
+    sourceChanged, runtimeChanges,
+    rendererAffected: rendererChanged ? names.filter(name => functionGraph.exports[name].preview) : [],
+  });
   // A runtime or renderer target cannot account for a change to Functions source.
   if ((functionsFingerprint !== functionsBase.mutation.inputFingerprint
       && ((!sourceChanged.length && !sourceProof?.sourceWithoutConfigurationTableMatches)
@@ -513,7 +526,7 @@ export function decideRelease({
     configurationRequiresRelease: false,
     releaseReason: rendererChanged ? "renderer_inputs_changed" : sourceChanged.length ? "functions_modules_changed"
       : targets.length ? "functions_runtime_inputs_changed" : "unchanged",
-    functionReasons: Object.fromEntries(names.map(name => [name, functionReasons[name].length ? functionReasons[name] : ["unchanged"]])),
+    functionReasons,
     functionDeployTargets: targets.map(name => `functions:${name}`).join(","),
     previewPauseLate: rendererChanged,
     functionsBeforePreview: rendererChanged ? targets.filter(name => !functionGraph.exports[name].preview).map(name => `functions:${name}`).join(",") : "",

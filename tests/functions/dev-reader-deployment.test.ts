@@ -96,7 +96,7 @@ function providerFetch(url: any, init?: RequestInit) {
   if (target === `${base}/versions/${fixture.apiDeployment.versions[0].version_id}`) return Promise.resolve(Response.json({ success: true, result: apiVersion }));
   throw new Error("Unexpected provider fixture URL");
 }
-const providers = () => readDevReaderDeploymentProviders({ env, binding, apiVars,
+const providers = ({ expectedWorkerVersion }: { expectedWorkerVersion?: string } = {}) => readDevReaderDeploymentProviders({ env, binding, apiVars, expectedWorkerVersion,
   readGoogleToken: async () => "fixture-google", readCloudflareToken: async () => "fixture-cloudflare", fetchImpl: providerFetch });
 const consumerProvider = () => createInstalledConsumerProvider({ environment: "development", request: providerFetch, readGoogleToken: async () => "fixture-google" });
 async function deploy(deploymentEnv = env) {
@@ -118,6 +118,7 @@ async function deploy(deploymentEnv = env) {
       deployed.push("cmsApi"); apiVars = JSON.parse(readFileSync(new URL("cms-api/wrangler.dev.jsonc", root), "utf8")).vars;
       apiVersion = { id: fixture.apiDeployment.versions[0].version_id, resources: { bindings:
         Object.entries(apiVars).map(([name, text]) => ({ name, type: "plain_text", text })) } };
+      return apiVersion.id;
     }, readProviders: providers, consumerProvider: consumerProvider() });
 }
 it("deploys native evidence accepted by the original public controls guard", async () => {

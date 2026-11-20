@@ -5,9 +5,10 @@ import { wranglerVersion } from "./lib/cloudflare-worker-readback.mjs";
 
 class CmsApiDeployError extends Error {}
 
-export function deployCmsApiWorker(secretsFile, spawn = spawnSync) {
-  const args = ["deploy", "--cwd", "cms-api"];
-  if (existsSync(secretsFile)) args.push("--secrets-file", secretsFile);
+export function deployCmsApiWorker(secretsFile, spawn = spawnSync, { cwd = "cms-api", devSourceSha } = {}) {
+  const args = ["deploy", "--cwd", cwd];
+  if (devSourceSha) args.push("--config", "wrangler.dev.jsonc", "--tag", devSourceSha);
+  if (secretsFile && existsSync(secretsFile)) args.push("--secrets-file", secretsFile);
   const result = spawn(fileURLToPath(new URL("../node_modules/.bin/wrangler", import.meta.url)), args, {
     encoding: "utf8",
     stdio: ["ignore", "pipe", "ignore"],
