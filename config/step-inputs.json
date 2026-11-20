@@ -44,6 +44,7 @@
   "scripts/render-development-config.mjs": ["CMS_GPU_WORKER_ID", "CMS_LOCAL_PUBLICATION_OWNER", "CMS_PRODUCTION_API_ORIGIN"],
   "scripts/seed-content-sections.mjs": ["GOOGLE_APPLICATION_CREDENTIALS"],
   "scripts/seed-media-categories.mjs": ["GOOGLE_APPLICATION_CREDENTIALS"],
+  "scripts/smoke-signed-in-preview.mjs": ["CMS_PREVIEW_SMOKE_CREDENTIAL", "CMS_PREVIEW_SMOKE_TARGET"],
   "scripts/upload-studio-connector.mjs": [
     "CMS_MEDIA_MASTER_R2_BUCKET",
     "CMS_MEDIA_R2_ACCESS_KEY_ID",

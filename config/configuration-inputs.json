@@ -69,7 +69,7 @@
   "inputs": [
     {
       "suppliers": ["github-secret"],
-      "names": ["CLOUDFLARE_PUBLISHER_IMAGE_TOKEN"]
+      "names": ["CLOUDFLARE_PUBLISHER_IMAGE_TOKEN", "CMS_PREVIEW_SMOKE_CREDENTIAL"]
     },
     {
       "suppliers": ["github-variable", "process-environment"],
@@ -396,6 +396,7 @@
         "CMS_DEV_PUBLISH_SERVICE_ACCOUNT",
         "CMS_PREVIEW_ACCESS_VERIFIED",
         "CMS_PREVIEW_CLOUD_ENABLED",
+        "CMS_PREVIEW_SMOKE_TARGET",
         "CMS_STUDIO_API_ORIGIN",
         "FIREBASE_DEV_APPCHECK_SITE_KEY",
         "FIREBASE_DEV_AUTH_DOMAIN",
