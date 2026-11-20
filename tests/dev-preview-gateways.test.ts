@@ -2,7 +2,7 @@ import { existsSync, readFileSync } from 'node:fs';
 import { spawnSync } from 'node:child_process';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { deployDevPreviewGateways, formatDevPreviewGatewayFailure, verifyDevPreviewAccessReady } from '../scripts/deploy-dev-preview-gateways.mjs';
 
 // Synthetic targets exercise independent preview gateways. Network envelopes
@@ -255,11 +255,16 @@ describe('isolated dev exact-preview gateway release', () => {
   });
   it('waits for the deployed private version without repeating either deployment', async () => {
     const boundary = provider('', 3);
-    const receipt = await deployDevPreviewGateways({ ...boundary, env: environment(), log: () => undefined });
-    expect(boundary.elapsed()).toBe(1500);
-    expect(boundary.staged()).toBe(2);
-    expect(receipt.gateways[0].versionId).toBe(version);
-    expect(boundary.writes).toHaveLength(1);
+    const timeout = vi.spyOn(AbortSignal, 'timeout');
+    try {
+      const receipt = await deployDevPreviewGateways({ ...boundary, env: environment(), log: () => undefined });
+      expect(boundary.elapsed()).toBe(1500);
+      expect(boundary.staged()).toBe(2);
+      expect(receipt.gateways[0].versionId).toBe(version);
+      expect(boundary.writes).toHaveLength(1);
+      expect(timeout).toHaveBeenCalledWith(15_000);
+      expect(timeout.mock.calls.every(([ms]) => ms === 15_000 || ms === 30_000)).toBe(true);
+    } finally { timeout.mockRestore(); }
   });
   it.each([
     { drift: '', staleReads: Infinity, check: 'deployment tuple' },

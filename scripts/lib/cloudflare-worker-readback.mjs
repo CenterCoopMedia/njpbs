@@ -19,21 +19,13 @@ export class WorkerReadbackMismatch extends Error {
 
 export async function waitForWorkerReadback(collect, { now = () => performance.now(), wait = sleep } = {}) {
   const deadline = now() + propagationMs;
-  let mismatch;
   for (;;) {
-    const remaining = Math.ceil(deadline - now());
-    if (mismatch && remaining <= 0) throw mismatch;
-    const signal = AbortSignal.timeout(Math.max(1, remaining));
     try {
-      return await collect(signal);
+      return await collect();
     } catch (error) {
-      if (!(error instanceof WorkerReadbackMismatch)) {
-        if (signal.aborted && mismatch) throw mismatch;
-        throw error;
-      }
-      mismatch = error;
+      if (!(error instanceof WorkerReadbackMismatch) || deadline - now() <= sampleMs) throw error;
+      await wait(sampleMs);
+      if (now() >= deadline) throw error;
     }
-    if (deadline - now() <= sampleMs) throw mismatch;
-    await wait(sampleMs);
   }
 }

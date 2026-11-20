@@ -144,12 +144,12 @@ async function releaseDevPreviewGateways({ env = process.env, fetchImpl = fetch,
     (!releasing || env.CMS_DEV_PUBLISH_ENABLED === 'false') && ID.test(ACCOUNT) && env.CLOUDFLARE_ACCOUNT_ID === ACCOUNT &&
     /^[a-f0-9]{64}$/.test(env.DEV_PREVIEW_ACCESS_AUDIENCE ?? '') && env.CLOUDFLARE_API_TOKEN);
   const audience = env.DEV_PREVIEW_ACCESS_AUDIENCE;
-  async function api(suffix, method = 'GET', body, missing = false, signal = AbortSignal.timeout(15_000)) {
+  async function api(suffix, method = 'GET', body, missing = false) {
     diagnostic.status = undefined;
     diagnostic.codes = [];
     try {
       const response = await fetchImpl(`https://api.cloudflare.com/client/v4${suffix}`, {
-        method, redirect: 'error', signal,
+        method, redirect: 'error', signal: AbortSignal.timeout(15_000),
         headers: { Authorization: `Bearer ${env.CLOUDFLARE_API_TOKEN}`, 'Content-Type': 'application/json' },
         ...(body ? { body: JSON.stringify(body) } : {}),
       });
@@ -236,9 +236,9 @@ async function releaseDevPreviewGateways({ env = process.env, fetchImpl = fetch,
       { binding: 'DEV_STAFF_ACCESS', service: 'template-dev-cms-api', entrypoint: 'StaffSiteEntrypoint' },
       { binding: 'DEV_PREVIEW', service: PRIVATE },
     ]));
-  async function collect(worker, expectedVersionId, phase = 'collect', signal) {
+  async function collect(worker, expectedVersionId, phase = 'collect') {
     setPhase(`${phase}:${worker}`);
-    const read = endpoint => api(`${base}/scripts/${worker}/${endpoint}`, 'GET', undefined, false, signal);
+    const read = endpoint => api(`${base}/scripts/${worker}/${endpoint}`);
     const deployments = await read('deployments');
     const active = deployments.deployments?.[0];
     const activeVersion = active?.versions?.[0];
@@ -298,7 +298,7 @@ async function releaseDevPreviewGateways({ env = process.env, fetchImpl = fetch,
       requireState(result.status === 0);
       const versionId = wranglerVersion(result.stdout);
       requireState(versionId);
-      identities.push(await waitForWorkerReadback(signal => collect(config.name, versionId, 'collect', signal), readbackClock));
+      identities.push(await waitForWorkerReadback(() => collect(config.name, versionId), readbackClock));
     }
     const staged = await inventory('staged-inventory');
     requireState(isDeepStrictEqual(staged, initial));

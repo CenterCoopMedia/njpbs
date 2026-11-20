@@ -229,13 +229,13 @@ export async function run({ env = process.env, fetchImpl = fetch, spawn = spawnS
       { pattern: 'https://dev-public.example.org/posts/*', zone_name: 'njpbs.org' },
     ]), 'Unexpected shadow route config; review before deploying');
 
-  async function api(path, method = 'GET', data, signal = AbortSignal.timeout(30_000)) {
+  async function api(path, method = 'GET', data) {
     let response, body;
     try {
       response = await fetchImpl(`https://api.cloudflare.com/client/v4${path}`, {
         method, headers: { Authorization: `Bearer ${env.CLOUDFLARE_API_TOKEN}`, 'Content-Type': 'application/json' },
         ...(data ? { body: JSON.stringify(data) } : {}),
-        redirect: 'error', signal,
+        redirect: 'error', signal: AbortSignal.timeout(30_000),
       });
       body = await response.json();
     } catch { throw new Error('Cloudflare request failed; reconcile before retrying'); }
@@ -313,8 +313,8 @@ export async function run({ env = process.env, fetchImpl = fetch, spawn = spawnS
       if (env.GITHUB_STEP_SUMMARY) appendFileSync(env.GITHUB_STEP_SUMMARY, staged);
     } finally { rmSync(temp, { force: true }); }
   }
-  async function verifyVersion(signal) {
-    const read = endpoint => api(`${workerPath}/${endpoint}`, 'GET', undefined, signal);
+  async function verifyVersion() {
+    const read = endpoint => api(`${workerPath}/${endpoint}`);
     const deployments = await read('deployments');
     const versions = deployments.deployments?.[0]?.versions;
     if (!Array.isArray(versions) || versions.length !== 1 || versions[0]?.version_id !== versionId || versions[0].percentage !== 100) {
