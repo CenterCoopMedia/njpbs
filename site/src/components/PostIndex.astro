@@ -1,6 +1,7 @@
 ---
 import { postCardImage } from "../../../packages/content-core/src/post-card-image.ts";
 import { contentLink } from "../../../packages/content-core/src/content-link.ts";
+import { DEFAULT_POST_ARCHIVE_LAYOUT } from "../../../packages/content-core/src/posts-browse";
 import { getCollection } from "astro:content";
 import BrowseGroup from "./BrowseGroup.astro";
 import PostsBrowse from "./PostsBrowse.astro";
@@ -60,6 +61,8 @@ const browseBylines = browseItems(
   ),
   "by",
 );
+const browseConfig = navigation.find(item => item.id === "site-navigation")?.data.postsBrowse;
+const archiveLayout = browseConfig?.archiveLayout ?? DEFAULT_POST_ARCHIVE_LAYOUT;
 ---
 
 <PublicSiteLayout
@@ -68,7 +71,7 @@ const browseBylines = browseItems(
   preview={false}
   canonicalPath="/posts/"
 >
-  <section class="post-index" data-post-index>
+  <section class="post-index" data-post-index data-archive-layout={JSON.stringify(archiveLayout)}>
     <header class="post-index__head">
       <p class="post-index__kicker">Latest from NJ PBS</p>
       <h1 data-post-index-title>Posts</h1>
@@ -81,13 +84,15 @@ const browseBylines = browseItems(
     </header>
 
     {posts.length > 0 ? (
-      <Fragment>
-      <PostsBrowse posts={posts.map(({ entry }) => ({
-        categories: publicPostCategories(entry.data.categories), tags: publicPostTopics(entry.data.tags),
-        image: postCardImage(entry.data)?.image,
-      }))} configured={navigation.find(item => item.id === "site-navigation")?.data.postsBrowse} />
-      {browseBylines.length > 0 && <details class="post-index__bylines"><summary>Browse by byline</summary><BrowseGroup title="Byline" items={browseBylines} /></details>}
-      <div class="post-index__layout">
+      <div data-post-index-sections>
+      <div data-post-index-section="browse">
+        <PostsBrowse posts={posts.map(({ entry }) => ({
+          categories: publicPostCategories(entry.data.categories), tags: publicPostTopics(entry.data.tags),
+          image: postCardImage(entry.data)?.image,
+        }))} configured={browseConfig} />
+      </div>
+      {browseBylines.length > 0 && <details class="post-index__bylines" data-post-index-section="bylines"><summary>Browse by byline</summary><BrowseGroup title="Byline" items={browseBylines} /></details>}
+      <div class="post-index__layout" data-post-index-section="posts">
         <div class="post-index__results">
           <p class="post-index__count" role="status" aria-live="polite" data-post-index-count>
             {posts.length} {posts.length === 1 ? "Post" : "Posts"}
@@ -185,10 +190,8 @@ const browseBylines = browseItems(
             No published Posts match this filter.
           </p>
         </div>
-
-
       </div>
-      </Fragment>
+      </div>
     ) : (
       <p class="post-index__empty">No Posts have been published yet.</p>
     )}
@@ -196,6 +199,8 @@ const browseBylines = browseItems(
 </PublicSiteLayout>
 
 <script>
+  import type { PostArchiveLayout } from "../../../packages/content-core/src/posts-browse";
+
   const root = document.querySelector<HTMLElement>("[data-post-index]");
   if (root) {
     const params = new URLSearchParams(window.location.search);
@@ -208,6 +213,21 @@ const browseBylines = browseItems(
           : null;
     const rawValue = filter ? params.get(filter)?.trim() ?? "" : "";
     if (filter && rawValue) {
+      const sections = root.querySelector<HTMLElement>("[data-post-index-sections]");
+      if ((filter === "category" || filter === "tag") && sections && root.dataset.archiveLayout) {
+        const archive = JSON.parse(root.dataset.archiveLayout) as PostArchiveLayout;
+        root.dataset.archiveColumns = String(archive.columns);
+        const rendered = new Map(Array.from(sections.querySelectorAll<HTMLElement>("[data-post-index-section]"),
+          section => [section.dataset.postIndexSection, section] as const));
+        for (const section of rendered.values()) section.hidden = true;
+        for (const name of archive.sections) {
+          const section = rendered.get(name);
+          if (section) {
+            section.hidden = false;
+            sections.append(section);
+          }
+        }
+      }
       const expected = rawValue.toLocaleLowerCase("en-US");
       const attribute =
         filter === "category"
@@ -323,6 +343,9 @@ const browseBylines = browseItems(
   .post-index__list > li[hidden] {
     display: none;
   }
+
+  [data-post-index-section][hidden] { display: none; }
+  [data-archive-columns="1"] .post-index__list { grid-template-columns: minmax(0, 1fr); }
 
   .post-index-card {
     display: grid;
@@ -491,6 +514,11 @@ const browseBylines = browseItems(
 
     .post-index-card__media {
       max-height: 16rem;
+    }
+  }
+  @media (min-width: 641px) {
+    [data-archive-columns="1"] .post-index-card {
+      grid-template-columns: minmax(0, min(38%, 22rem)) minmax(0, 1fr);
     }
   }
   @media (max-width: 900px) { .post-index__list { grid-template-columns: minmax(0, 1fr); } }

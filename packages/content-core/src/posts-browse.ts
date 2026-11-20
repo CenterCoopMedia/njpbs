@@ -10,7 +10,17 @@ export interface PostsBrowseGroup {
   /** Use the latest matching published Post's image; no new media publication. */
   readonly cover?: PostsBrowseTerm;
 }
-export interface PostsBrowseConfig { readonly groups: readonly PostsBrowseGroup[] }
+export const POST_ARCHIVE_SECTIONS = ["browse", "bylines", "posts"] as const;
+export type PostArchiveSection = (typeof POST_ARCHIVE_SECTIONS)[number];
+export interface PostArchiveLayout {
+  readonly sections: readonly PostArchiveSection[];
+  readonly columns: 1 | 2;
+}
+export const DEFAULT_POST_ARCHIVE_LAYOUT: PostArchiveLayout = { sections: ["bylines", "posts"], columns: 1 };
+export interface PostsBrowseConfig {
+  readonly groups: readonly PostsBrowseGroup[];
+  readonly archiveLayout?: PostArchiveLayout;
+}
 export const postsBrowseTermKey = (term: PostsBrowseTerm): string => JSON.stringify([term.filter, term.value]);
 const object = (value: unknown): value is Record<string, unknown> => typeof value === "object" && value !== null && !Array.isArray(value);
 const text = (value: unknown, max: number): value is string => typeof value === "string" && value.trim() === value && value.length > 0 && new TextEncoder().encode(value).length <= max && !/[\u0000-\u001f\u007f]/.test(value);
@@ -19,8 +29,17 @@ export function validPostsBrowseTerm(value: unknown): value is PostsBrowseTerm {
     text(value.value, 200) && !/^format:/i.test(value.value);
 }
 export function validatePostsBrowse(value: unknown): string | null {
-  if (!object(value) || Object.keys(value).length !== 1 || !Array.isArray(value.groups) || value.groups.length > 8)
+  if (!object(value) || Object.keys(value).some(key => key !== "groups" && key !== "archiveLayout") ||
+    !Array.isArray(value.groups) || value.groups.length > 8)
     return "Posts browsing needs at most eight groups.";
+  const layout = value.archiveLayout;
+  if (layout !== undefined && (!object(layout) || Object.keys(layout).length !== 2 ||
+    (layout.columns !== 1 && layout.columns !== 2) || !Array.isArray(layout.sections) ||
+    layout.sections.length > POST_ARCHIVE_SECTIONS.length || !layout.sections.includes("posts") ||
+    layout.sections.some(section => !POST_ARCHIVE_SECTIONS.includes(section)) ||
+    new Set(layout.sections).size !== layout.sections.length)) {
+    return "Choose one or two columns and include matching Posts once in the archive sections.";
+  }
   const ids = new Set<string>(), terms = new Set<string>();
   let total = 0;
   for (const group of value.groups) {

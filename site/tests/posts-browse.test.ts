@@ -28,6 +28,10 @@ describe("Posts browsing", () => {
     { groups: [{ ...config.groups[0], cover: { filter: "tag", value: "missing" } }] },
     { groups: [{ ...config.groups[0], terms: [{ filter: "tag", value: "" }] }] },
     { groups: [{ ...config.groups[0], href: "javascript:alert(1)" }] },
+    { groups: [], archiveLayout: { sections: ["browse"], columns: 1 } },
+    { groups: [], archiveLayout: { sections: ["posts", "posts"], columns: 1 } },
+    { groups: [], archiveLayout: { sections: ["posts", "unknown"], columns: 1 } },
+    { groups: [], archiveLayout: { sections: ["posts"], columns: 3 } },
   ])("rejects invalid arrangements in both contracts", postsBrowse => {
     const schema = currentCmsSettingsSchemaFor("site-navigation")!, values = { ...DEFAULT_SITE_NAVIGATION, postsBrowse };
     const error = validateCmsSettingsValues(schema, values);
@@ -57,10 +61,11 @@ describe("Posts browsing", () => {
     expect(postsBrowseCollections([{ categories: ["Education"], tags: [], image: { url: "/unrelated.webp" } }], config).collections[0].image).toBeUndefined();
   });
   it("uses the published arrangement while working values differ and reads historical v1", () => {
-    const published = { schemaVersion: 2, values: { ...DEFAULT_SITE_NAVIGATION, postsBrowse: config }, sourceVersion: 3, publishedAt: "2026-11-04T16:00:00.000Z" };
+    const publishedBrowse: PostsBrowseConfig = { ...config, archiveLayout: { sections: ["posts", "browse"], columns: 2 } };
+    const published = { schemaVersion: 2, values: { ...DEFAULT_SITE_NAVIGATION, postsBrowse: publishedBrowse }, sourceVersion: 3, publishedAt: "2026-11-04T16:00:00.000Z" };
     const result = projectSiteNavigationArtifact({ id: "site-navigation", schemaVersion: 2, version: 4, values: { ...DEFAULT_SITE_NAVIGATION, postsBrowse: { groups: [] } }, published });
     expect(result.status).toBe("published");
-    if (result.status === "published") expect(result.data.postsBrowse).toEqual(config);
+    if (result.status === "published") expect(result.data.postsBrowse).toEqual(publishedBrowse);
     expect(projectSiteNavigationArtifact({ id: "site-navigation", schemaVersion: 1, version: 3, values: DEFAULT_SITE_NAVIGATION, published: { ...published, schemaVersion: 1, values: DEFAULT_SITE_NAVIGATION } }).status).toBe("published");
   });
 });

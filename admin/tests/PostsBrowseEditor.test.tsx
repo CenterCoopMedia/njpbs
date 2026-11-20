@@ -65,6 +65,21 @@ describe("Posts browsing in Boardwalk", () => {
     fireEvent.focus(name); fireEvent.blur(name);
     expect(onChange).not.toHaveBeenCalled();
   });
+  it("edits and preserves the archive layout independently of its browse groups", async () => {
+    render(<Harness />);
+    open("Posts browsing · 2 groups");
+    const archive = within(await screen.findByRole("group", { name: "Category and tag pages" }));
+    expect(archive.getByRole("combobox", { name: "Post columns" })).toHaveValue("1");
+    fireEvent.click(archive.getByRole("button", { name: "Add Browse posts" }));
+    fireEvent.click(archive.getByRole("button", { name: "Move up, Browse posts" }));
+    fireEvent.click(archive.getByRole("button", { name: "Remove section, Browse by byline" }));
+    fireEvent.change(archive.getByRole("combobox", { name: "Post columns" }), { target: { value: "2" } });
+    open("Schools · 1 subject");
+    fireEvent.change(await screen.findByRole("textbox", { name: "Group name" }), { target: { value: "Education" } });
+    const next = JSON.parse(screen.getByTestId("draft").textContent!);
+    expect(next.archiveLayout).toEqual({ sections: ["browse", "posts"], columns: 2 });
+    expect(next.groups[0].label).toBe("Education");
+  });
   it("keeps the cover attached to its subject when staff edit its text or type", async () => {
     render(<Harness />); open("Posts browsing · 2 groups");
     fireEvent.click(await screen.findByText("Schools · 1 subject", { selector: "summary" }));
