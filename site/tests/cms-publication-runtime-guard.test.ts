@@ -6,7 +6,9 @@ import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import { tmpdir } from "node:os";
 import path from "node:path";
+import { fileURLToPath } from "node:url";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { writeFunctionsContracts } from "../../scripts/lib/functions-contracts.mjs";
 import {
   assertCmsPublicationDirectoriesSeparated,
   assertCmsPublicationSourceAncestor,
@@ -23,6 +25,23 @@ afterEach(async () => {
 });
 
 describe("CMS publication runtime guard", () => {
+  it("admits a prepared checkout at startup and refuses a changed generated contract", async () => {
+    const root = await mkdtemp(path.join(tmpdir(), "preview-contract-source-"));
+    temporaryDirectories.push(root);
+    const exec = promisify(execFile);
+    const repository = fileURLToPath(new URL("../../", import.meta.url));
+    const git = async (args: string[]) => (await exec("/usr/bin/git", ["-c", "core.hooksPath=/dev/null", "-C", root, ...args])).stdout;
+    await git(["clone", "--quiet", "--shared", "--no-checkout", repository, root]);
+    await git(["checkout", "--quiet", "--detach", "HEAD"]);
+    const sha = (await git(["rev-parse", "HEAD"])).trim();
+    await writeFunctionsContracts(root);
+    await expect(assertCmsPreviewSourceCheckout(sha, git)).resolves.toBeUndefined();
+
+    const contract = path.join(root, "functions/lib/published-resource-check.js");
+    await writeFile(contract, `${await readFile(contract, "utf8")}\n// Unexpected contract byte\n`);
+    await expect(assertCmsPreviewSourceCheckout(sha, git)).rejects.toThrow("invalid prepared Functions contracts");
+  });
+
   it("admits only exact manifest-pinned regular font files in a real clean checkout", async () => {
     const root = await mkdtemp(path.join(tmpdir(), "preview-font-source-"));
     temporaryDirectories.push(root);

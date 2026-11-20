@@ -90,7 +90,8 @@ describe("committed renderer inputs", () => {
     expect(await graph(commit(path, source))).toBeNull();
   });
   it.each(["site/scripts/compiled-renderer-adapter.mjs", "preview-renderer/worker.ts",
-    "scripts/prepare-preview-renderer.mjs", "site/scripts/deploy-cms-preview-cloud.ts", "site/src/lib/data-hub-embed-pages.ts"])("rejects changed launch contracts (%s)", async launcher => {
+    "scripts/prepare-preview-renderer.mjs", "site/scripts/deploy-cms-preview-cloud.ts", "site/src/lib/data-hub-embed-pages.ts",
+    "site/scripts/cms-publication-runtime-guard.ts", "scripts/lib/functions-contracts.mjs"])("rejects changed launch contracts (%s)", async launcher => {
     const reasons: unknown[] = [];
     expect(await fingerprintRendererGraph(commit(launcher, content(launcher) + "\n// changed launcher\n"),
       { cwd, parserRequire, onUnknown: (code: string, file: string) => reasons.push({ code, file }) })).toBeNull();

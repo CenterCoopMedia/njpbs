@@ -20,7 +20,7 @@ const git = (cwd, ...args) => execFileSync("/usr/bin/git", ["-c", "core.hooksPat
 function fixture(run) {
   const directory = mkdtempSync(join(tmpdir(), "development-render-"));
   try {
-    for (const name of [...files, ".gitignore", "config/development-inputs.json", "scripts/render-development-config.mjs", "site/scripts/cms-publication-runtime-guard.ts", "site/package.json", "functions/lib/public-deployment-pointer.js"]) {
+    for (const name of [...files, ".gitignore", "config/development-inputs.json", "scripts/render-development-config.mjs", "scripts/lib/functions-contracts.mjs", "site/scripts/cms-publication-runtime-guard.ts", "site/package.json", "functions/lib/public-deployment-pointer.js"]) {
       mkdirSync(dirname(join(directory, name)), { recursive: true });
       copyFileSync(join(root, name), join(directory, name));
     }
