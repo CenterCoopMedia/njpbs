@@ -1,5 +1,8 @@
 import { readFileSync } from "node:fs";
+import { createRequire } from "node:module";
 import { studioTitleFilesParameter } from "./studio-title-files.mjs";
+
+const require = createRequire(import.meta.url);
 
 export class FunctionsConfigurationError extends Error { name = "FunctionsConfigurationError"; }
 export const configurationFailure = message => { throw new FunctionsConfigurationError(message); };
@@ -14,7 +17,7 @@ export function validateConfigurationTable(table) {
   knownKeys(table, ["inputs", "parameters", "secrets", "provider"]);
   for (const [section, allowed] of Object.entries({
     inputs: ["variable", "environment", "default", "type", "pattern", "required"],
-    parameters: ["input", "value", "format", "group", "binding"],
+    parameters: ["input", "value", "format", "group", "binding", "encoding"],
     secrets: ["compare", "minLength", "deployAdmin", "mediaPin", "pattern", "environment", "discoveryFlag"],
   })) {
     if (!table[section] || typeof table[section] !== "object" || Array.isArray(table[section])) configurationFailure("Invalid Functions configuration table section");
@@ -24,6 +27,7 @@ export function validateConfigurationTable(table) {
       if (section === "inputs" && (typeof row.default !== "string" || !["string", "boolean", "json"].includes(row.type))) configurationFailure("Invalid input type/default in Functions table");
       if (section === "parameters" && (!["parameter", "environment"].includes(row.binding) ||
           (row.format && !["r2", "studio", "admin-map", "discovery"].includes(row.format)) ||
+          (row.encoding !== undefined && (row.encoding !== "firebase-list" || row.binding !== "parameter")) ||
           (row.input && !Object.hasOwn(table.inputs, row.input)))) configurationFailure("Invalid runtime parameter binding in Functions table");
       if (section === "secrets" && row.discoveryFlag !== undefined &&
           (table.inputs[row.discoveryFlag]?.type !== "boolean" || table.parameters[row.discoveryFlag]?.format !== "discovery")) {
@@ -124,6 +128,20 @@ export function runtimeParameters(input, discovery = {}) {
     if (typeof value !== "string") configurationFailure(`Missing discovery parameter: ${key}`);
     return [key, value];
   }));
+}
+
+// Firebase writes SDK list parameters as JSON in its serving environment.
+// Other parameters, including JSON-formatted strings, retain their text.
+export function servingRuntimeParameters(parameters) {
+  const serving = { ...parameters };
+  for (const name of Object.keys(serving)) {
+    if (RUNTIME_PARAMETERS[name]?.encoding !== "firebase-list") continue;
+    try {
+      const { ParamValue } = require("firebase-tools/lib/deploy/functions/params.js");
+      serving[name] = new ParamValue(serving[name], false, { list: true }).toSDK();
+    } catch { configurationFailure(`Invalid Firebase list parameter: ${name}`); }
+  }
+  return serving;
 }
 
 export function runtimeDotenv(parameters) {

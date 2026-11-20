@@ -1,4 +1,4 @@
-import { CONFIGURATION_INPUTS, RUNTIME_PARAMETERS, configurationInputs } from "../../scripts/lib/functions-configuration.mjs";
+import { CONFIGURATION_INPUTS, RUNTIME_PARAMETERS, configurationInputs, servingRuntimeParameters } from "../../scripts/lib/functions-configuration.mjs";
 import { describe, expect, it } from "vitest";
 import { readFileSync } from "node:fs";
 import { parse } from "yaml";
@@ -108,6 +108,8 @@ describe("selective Functions releases", () => {
       return resolverOutput(script);
     });
     expect(expected.CMS_BUG_REPORT_TELEGRAM_ADMIN_MAP).toBe('{"456":"test-admin"}');
+    expect(expected.BOOTSTRAP_SUPER_ADMINS).toBe('[""]');
+    expect(expected.CMS_BUG_REPORT_EMAIL_BCC).toBe('[""]');
     expect(JSON.parse(expected.CMS_STUDIO_TITLE_FILES)).toEqual({ headline: "Synthetic headline.gtzip", name_title: "Synthetic name.gtzip" });
     const live = () => [{ serviceConfig: { environmentVariables: { ...expected } } }];
     expect(runtimeParametersMatch(live(), expected)).toBe(true);
@@ -135,6 +137,24 @@ describe("selective Functions releases", () => {
     expect(optionalConfigured.CMS_STUDIO_TITLE_FILES).toBe(expected.CMS_STUDIO_TITLE_FILES);
     await expect(desiredRuntimeParameters({ ...env, VITE_LIVE_PRODUCTION_ENABLED: "invalid" }))
       .rejects.toThrow("Studio feature configuration is unavailable");
+  });
+  it.each([
+    ["blank list input", "BOOTSTRAP_SUPER_ADMINS", "", '[""]'],
+    ["explicit empty list", "BOOTSTRAP_SUPER_ADMINS", "[]", "[]"],
+    ["one list item", "BOOTSTRAP_SUPER_ADMINS", "first@example.test", '["first@example.test"]'],
+    ["several list items", "CMS_BUG_REPORT_EMAIL_BCC", "first@example.test,second@example.test", '["first@example.test","second@example.test"]'],
+    ["JSON text", "CMS_PUBLISH_GITHUB_TRUSTED_ACTORS", '[ "fixture-bot" ]', '[ "fixture-bot" ]'],
+    ["boolean text", "CMS_PREVIEW_SERIALIZER_READY", "true", "true"],
+    ["numeric text", "CMS_MEDIA_MAX_UPLOAD_BYTES", "26214400", "26214400"],
+  ])("compares %s using the serving parameter encoding", (_label, key, input, served) => {
+    const name = "fixtureExport";
+    const reads = { [name]: { keys: [key], unknown: false } };
+    const expected = servingRuntimeParameters({ [key]: input });
+    const live = value => [{ name, serviceConfig: { environmentVariables: { [key]: value } } }];
+    expect(expected).toEqual({ [key]: served });
+    expect(runtimeParametersMatch(live(served), expected)).toBe(true);
+    expect(runtimeParametersMatch(live("different"), expected)).toBe(false);
+    expect(runtimeParameterChanges(live(served), expected, reads, [key])).toEqual({ [name]: [] });
   });
   it("forces the full path for changed variables or desired/bound secret versions", async () => {
     const a = deploymentVariablesFingerprint('{"CMS_MEDIA_PURGE_SWEEP_ENABLED":"true","TVSS_CALLSIGN":"value"}');

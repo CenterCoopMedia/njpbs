@@ -57,6 +57,14 @@ each registry runs the shared live readiness check and seeds only when that
 check finds a gap. A second run at the same source can prove a skip after a
 repair. The dev job records each decision and still runs its full smoke suite.
 
+For a failed dev deploy that reached a provider mutation, preserve its
+receipt identities. Verify the original run and attempt are terminal, read
+back the live Functions and Worker revisions, and confirm the idle publisher,
+held publishing flag and ready renderer. Run the corrected green main source
+as a new routine dev deployment. Its new run identity takes the component
+reservations and retains the preceding complete receipts and original
+candidate records.
+
 ## Configuration and provisioning
 
 For the GitHub report token and webhook secret, follow the
@@ -86,6 +94,10 @@ supplies the GitHub variable map; only the table's declared keys enter runtime
 configuration. Private preset/admin-map JSON is validated in memory and safely
 serialized. The nine release-comparison secrets retain their value-agreement
 checks, including optional publish-token agreement when supplied.
+
+The production planner and dev verifier use the same serving parameter
+encoding. Firebase stores SDK list parameters as JSON. JSON text parameters
+and other settings retain the value supplied to the Functions runtime.
 
 Routine release calls verification only. Missing resources name the exact
 required secret, binding or TTL policy rather than creating it. Explicit

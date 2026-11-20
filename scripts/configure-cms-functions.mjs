@@ -51,6 +51,9 @@ export function configurationRequirements(source, number, parameters) {
   const declared = new Map(declaredParams.map(param => [param.name, param.toSpec()]));
   for (const name of Object.keys(parameters)) {
     if ((RUNTIME_PARAMETERS[name]?.binding === "parameter" && !declared.has(name)) || declared.get(name)?.type === "secret") fail(`Unmapped runtime parameter: ${name}`);
+    if ((declared.get(name)?.type === "list") !== (RUNTIME_PARAMETERS[name]?.encoding === "firebase-list")) {
+      fail(`Unmapped runtime parameter encoding: ${name}`);
+    }
   }
   return requirements;
 }

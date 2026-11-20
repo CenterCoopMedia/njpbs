@@ -8,6 +8,7 @@ import { assertDevTargets, assertDevConfigs, devPublicationIdentity } from "./as
 import { assertNoFunctionDeletions, loadFunctionDeployManifest, readFunctionsDeployInventory } from "./lib/functions-deploy-inventory.mjs";
 import { functionsInventoryIdentity } from "./lib/cms-component-receipt.mjs";
 import { runtimeParametersMatch, selectFunctionTargets } from "./lib/cms-release-plan.mjs";
+import { servingRuntimeParameters } from "./lib/functions-configuration.mjs";
 
 const projectId = "njpbs-site-dev";
 const codebase = "dev";
@@ -56,13 +57,16 @@ export function planDevFunctions(names, live, expected, sameSourceInputs) {
   return selectFunctionTargets(names, { runtimeChanges });
 }
 
-export async function verifyDeployedDevFunctions(names, root, request) {
+async function verifyDeployedDevFunctions(names, expected, root, request) {
   const live = devInventory(await readDevFunctions(root, request));
-  const expected = parseEnv(readFileSync(new URL("functions/.env.njpbs-site-dev", root), "utf8"));
   if (!isDeepStrictEqual(live.map(functionName).sort(), [...names].sort()) ||
-      live.some(fn => fn.state !== "ACTIVE" || fn.buildConfig?.entryPoint !== functionName(fn)) ||
-      !runtimeParametersMatch(live, expected)) {
-    throw new Error("Deployed dev Functions do not match the exact manifest and runtime configuration");
+      live.some(fn => fn.state !== "ACTIVE" || fn.buildConfig?.entryPoint !== functionName(fn))) {
+    throw new Error("Deployed dev Functions do not match the exact active manifest");
+  }
+  if (!runtimeParametersMatch(live, expected)) {
+    const differences = Object.keys(expected).filter(key =>
+      live.some(fn => fn.serviceConfig?.environmentVariables?.[key] !== expected[key]));
+    throw new Error(`Deployed dev Functions runtime parameters differ: ${differences.join(", ")}`);
   }
   console.log(`Verified runtime configuration for ${live.length} dev Functions`);
 }
@@ -87,16 +91,21 @@ export async function deployDevFunctions({ env = process.env, root = new URL("..
   const { devFunctionManifest } = require("./functions/dev-manifest.js");
   const { readCloudPublicationWakeDeployment } = require("./functions/lib/cloud-publication-wake-deployment.js");
   const names = Object.keys(devFunctionManifest(readCloudPublicationWakeDeployment({ env: { GCLOUD_PROJECT: projectId } })));
-  if (verifyOnly) return verifyDeployedDevFunctions(names, root, request);
+  const expected = servingRuntimeParameters(parseEnv(dotenv));
+  if (verifyOnly) return verifyDeployedDevFunctions(names, expected, root, request);
   const manifest = loadFunctionDeployManifest(names, projectId, root);
   const planStarted = performance.now();
   const inventory = await readDevFunctions(root, request);
   assertNoFunctionDeletions(manifest, inventory, { projectId, codebase });
   console.log(`Verified no deletions against the ${names.length}-function dev manifest`);
   const live = devInventory(inventory);
-  const { targets, reasons } = planDevFunctions(names, live, parseEnv(dotenv),
+  const { targets, reasons } = planDevFunctions(names, live, expected,
     sameDevSourceInputs(root, sourceSha, baseline, inputFingerprint, live));
-  console.log(`Dev Functions plan: ${JSON.stringify({ targets, reasons, durationMs: Math.round(performance.now() - planStarted) })}`);
+  console.log(`Dev Functions plan: ${JSON.stringify({ targetCount: targets.length, manifestCount: names.length,
+    durationMs: Math.round(performance.now() - planStarted) })}`);
+  for (const [name, reasonsForExport] of Object.entries(reasons)) {
+    console.log(`Dev Functions target: ${JSON.stringify({ name, reasons: reasonsForExport })}`);
+  }
   await beforeDeploy();
   if (!targets.length) {
     console.log("Dev Functions deploy: 0 ms (no targets)");
