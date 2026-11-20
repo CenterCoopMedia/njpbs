@@ -467,6 +467,12 @@
       "station": "WNJT",
       "timeZone": "America/New_York"
     },
+    "episodeAmendment": {
+      "source": "NJ PBS Programming episode amendment",
+      "revision": "2026-11-20",
+      "date": "2026-11-28",
+      "cells": ["AI40:AI42", "AI124:AI126", "AI127:AI129"]
+    },
     "verifiedPbsBoundaries": {},
     "unresolved": [
       {
@@ -9105,7 +9111,7 @@
             "cells": "AI40:AI42",
             "startTime": "06:00",
             "title": "Ask This Old House",
-            "episodeCode": "2509",
+            "episodeCode": "2503",
             "isKids": false,
             "endTime": "06:30"
           },
@@ -9268,7 +9274,7 @@
             "cells": "AI124:AI126",
             "startTime": "20:00",
             "title": "This Old House",
-            "episodeCode": "4809",
+            "episodeCode": "4803",
             "isKids": false,
             "endTime": "20:30"
           },
@@ -9276,7 +9282,7 @@
             "cells": "AI127:AI129",
             "startTime": "20:30",
             "title": "Ask This Old House",
-            "episodeCode": "2509",
+            "episodeCode": "2503",
             "isKids": false,
             "endTime": "21:00"
           },

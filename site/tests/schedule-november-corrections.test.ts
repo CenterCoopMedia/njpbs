@@ -3,6 +3,7 @@ import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import november from "../src/data/schedule-corrections-2026-11.json";
 import { applyScheduleCorrections, uncorrectedScheduleDates } from "../src/lib/schedule-corrections";
 import { loadScheduleData } from "../src/lib/schedule-data";
 import type { BakedScheduleData, ScheduleListing } from "../src/lib/schedule-feed";
@@ -41,6 +42,19 @@ function oneOnOne(data: BakedScheduleData, date: string) {
   return data.days.broadcast.find((day) => day.date === date)!.entries
     .filter((entry) => entry.title === "One on One With Steve Adubato");
 }
+
+it("records the three approved Nov. 28 episode codes at their existing airtimes", () => {
+  const day = november.workbook.days.find((item) => item.date === "2026-11-28")!;
+  const slots = day.entries.filter((entry) =>
+    entry.title === "Ask This Old House" || entry.title === "This Old House",
+  );
+  expect(slots.map(({ title, startTime, endTime, episodeCode }) => [title, startTime, endTime, episodeCode])).toEqual([
+    ["Ask This Old House", "06:00", "06:30", "2503"],
+    ["This Old House", "20:00", "20:30", "4803"],
+    ["Ask This Old House", "20:30", "21:00", "2503"],
+  ]);
+  expect(slots.every((entry) => !entry.episodeTitle)).toBe(true);
+});
 
 describe("November One-on-One episode corrections", () => {
   it("keeps approved episode details on the workbook airings in both views", async () => {
