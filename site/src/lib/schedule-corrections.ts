@@ -19,14 +19,54 @@ interface WorkbookEntry {
   endTime: string | null;
 }
 
+interface WorkbookDay {
+  date: string;
+  entries: readonly WorkbookEntry[];
+  sourceRevision?: string;
+}
+
 interface WorkbookSource {
   source: { revision: string };
   unresolved: { date: string; cells: string[] }[];
-  days: { date: string; entries: WorkbookEntry[] }[];
+  days: readonly WorkbookDay[];
 }
 
-const workbooks: readonly WorkbookSource[] = [october, november.workbook, december];
+const workbooks: readonly WorkbookSource[] = [october, november.workbook, {
+  ...december,
+  days: applyDecemberProgrammingChanges(),
+}];
 const workbookOnlyDates = new Set(october.days.map((day) => day.date));
+
+function workbookSlot(day: WorkbookDay, startTime: string, endTime: string) {
+  const first = day.entries.findIndex((entry) => entry.startTime === startTime);
+  const last = day.entries.findIndex((entry) => entry.endTime === endTime);
+  if (first < 0 || last < first) throw new Error(`The programming change does not match a workbook slot on ${day.date}.`);
+  return { first, end: last + 1 };
+}
+
+/** Move whole workbook airings and retain the original workbook's provenance. */
+function applyDecemberProgrammingChanges(): WorkbookDay[] {
+  const days = new Map(december.days.map((day) => [day.date, day]));
+  const changes = new Map(Object.entries(december.programmingChanges.slots));
+  return december.days.map((day) => {
+    const change = changes.get(day.date);
+    if (!change) return day;
+    const { fromDate, startTime, endTime } = change;
+    const source = days.get(fromDate);
+    if (!source) throw new Error(`The programming change has no workbook source for ${fromDate}.`);
+    const target = workbookSlot(day, startTime, endTime);
+    const replacement = workbookSlot(source, startTime, endTime);
+    return {
+      ...day,
+      entries: [
+        ...day.entries.slice(0, target.first),
+        ...source.entries.slice(replacement.first, replacement.end),
+        ...day.entries.slice(target.end),
+      ],
+      sourceRevision: december.programmingChanges.revision,
+    };
+  });
+}
 
 /** Filter loaded workbook dates; October replaces feed entries while later months retain matching PBS details. */
 export function uncorrectedScheduleDates(dates: readonly string[]): string[] {
@@ -160,7 +200,7 @@ function listing(
 }
 
 function correctedDay(
-  day: { date: string; entries: readonly WorkbookEntry[] },
+  day: WorkbookDay,
   metadata: readonly ScheduleListing[],
   seriesDescriptions: ReadonlyMap<string, string>,
   source: WorkbookSource,
@@ -197,7 +237,7 @@ function correctedDay(
   }
   return {
     date: day.date, callsign: "wnjt", kind: "broadcast", feedCid: TVSS_WNJT_FEED_CID,
-    timeZone: TVSS_TIME_ZONE, sourceRevision: source.source.revision, entries,
+    timeZone: TVSS_TIME_ZONE, sourceRevision: day.sourceRevision ?? source.source.revision, entries,
   };
 }
 
