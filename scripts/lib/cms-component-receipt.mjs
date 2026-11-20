@@ -7,7 +7,6 @@ import runtimeProcess from "node:process";
 import { deploymentInputFingerprint, readDeploymentManifest, renderCommittedDeploymentSource } from "../render-development-config.mjs";
 import { fileURLToPath } from "node:url";
 import { addCommittedFunctionsContracts, contractInputs } from "./functions-contracts.mjs";
-import { waitForWorkerReadback, WorkerReadbackMismatch } from "./cloudflare-worker-readback.mjs";
 
 const previewPair = () => createRequire(import.meta.url)("../../functions/lib/cms-preview-pair.js");
 const pageReader = () => createRequire(import.meta.url)("../../functions/lib/page-reader-compatibility.js");
@@ -1232,6 +1231,7 @@ export async function collectLiveIdentities(component, deps = {}) {
   const uuid = /^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/;
   const expected = deps.expectedWorkerVersion;
   if (expected !== undefined && !uuid.test(expected)) fail("Expected CMS API versionId is invalid");
+  const readback = expected ? await import("./cloudflare-worker-readback.mjs") : null;
   const collect = async () => {
     const response = await fetchFn(
       `https://api.cloudflare.com/client/v4/accounts/${account}/workers/scripts/njpbs-cms-api/deployments`,
@@ -1248,23 +1248,24 @@ export async function collectLiveIdentities(component, deps = {}) {
     const id = deployment?.id;
     const versions = deployment?.versions;
     if (typeof id !== "string" || id.length === 0 || id.length > 80) {
-      if (expected) throw new WorkerReadbackMismatch("CMS API deploymentId", "valid deployment identity", "missing or invalid");
+      if (readback) throw new readback.WorkerReadbackMismatch("CMS API deploymentId", "valid deployment identity", "missing or invalid");
       fail("CMS API deployment identity is invalid");
     }
     const active = Array.isArray(versions) && versions.length === 1 ? versions[0] : null;
-    if (expected && active?.version_id !== expected) {
-      throw new WorkerReadbackMismatch("CMS API versionId", expected, uuid.test(active?.version_id ?? "") ? active.version_id : null);
+    if (readback && active?.version_id !== expected) {
+      throw new readback.WorkerReadbackMismatch("CMS API versionId", expected, uuid.test(active?.version_id ?? "") ? active.version_id : null);
     }
     if (active?.percentage !== 100 || !uuid.test(active.version_id ?? "")) {
-      if (expected) throw new WorkerReadbackMismatch("CMS API traffic percentage", 100, Number.isFinite(active?.percentage) ? active.percentage : null);
+      if (readback) throw new readback.WorkerReadbackMismatch("CMS API traffic percentage", 100, Number.isFinite(active?.percentage) ? active.percentage : null);
       fail("CMS API version identity is invalid");
     }
     return { script: "njpbs-cms-api", deploymentId: id, versionId: active.version_id };
   };
+  if (!readback) return collect();
   try {
-    return await (expected ? waitForWorkerReadback(collect, deps.readbackClock) : collect());
+    return await readback.waitForWorkerReadback(collect, deps.readbackClock);
   } catch (error) {
-    if (error instanceof WorkerReadbackMismatch) fail(error.message);
+    if (error instanceof readback.WorkerReadbackMismatch) fail(error.message);
     throw error;
   }
 }
