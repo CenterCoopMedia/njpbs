@@ -9,6 +9,7 @@
   },
   "verifiedPbsBoundaries": {},
   "programmingChanges": {
+    "source": "NJ PBS Programming lineup amendment",
     "revision": "2026-11-16",
     "slots": {
       "2026-12-03": { "fromDate": "2026-12-10", "startTime": "21:30", "endTime": "23:00" },
