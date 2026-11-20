@@ -20,6 +20,7 @@ import deployment from "../../functions/lib/public-deployment.js";
 import targets from "../../functions/lib/publication-target.js";
 import publicContent from "../../functions/public-content.js";
 import publisher from "../../functions/publish.js";
+import videoWithdrawal from "../../functions/lib/public-video-withdrawal.js";
 import { createNoBuildPostWorker } from "../../workers/src/no-build-post-worker";
 import { readPublicContentStatus } from "../../admin/src/lib/public-content-status";
 const db = isolatedFirestore("no-build-multi-post-integration.test.js");
@@ -369,6 +370,85 @@ describe("multi-Post admission and retained ownership", () => {
 });
 
 describe("independent public routes, catalog and confirmation", () => {
+  it("keeps the published Post sealed through video withdrawal and the next independent publication", async () => {
+    await db.doc(registry.CAPABILITY_PATH).update({ dataFigureVersion: 1 });
+    const assetId = "fixture-video";
+    const media = {
+      url: `https://media.njpbs.org/cms-media/video/${assetId}/${"a".repeat(64)}.mp4`,
+      posterUrl: `https://media.njpbs.org/cms-media/video/${assetId}/${"b".repeat(64)}.jpg`,
+      width: 1280, height: 720, mimeType: "video/mp4",
+    };
+    const videoRef = db.doc(`cmsPublicVideos/${assetId}`);
+    await videoRef.set({ schemaVersion: 1, sourceId: "video-library", assetId, media });
+    const postRef = db.doc("cmsPosts/first");
+    await postRef.update({ blocks: [{ id: "fixture-video", type: "video", visible: true, order: 0,
+      data: { sourceId: "video-library", assetId, title: "Fixture video" } }] });
+    const first = await publish("first");
+    expect(first.code, JSON.stringify(first.body)).toBe(200);
+    const site = worker();
+    const get = path => site.fetch(new Request(`https://njpbs.org${path}`));
+    const settle = () => recovery.recoverNoBuildPostDetail({ firestore: db,
+      purgeConfig: { zoneId: "f".repeat(32), token: "fixture-token" },
+      fetchPurge: async () => Response.json({ success: true }), fetchPublic: request => site.fetch(new Request(request)) });
+    await settle();
+    const before = await postRef.get();
+    expect(before.data().published.blocks[0].data.public).toEqual(media);
+    const removal = await publish("first", before.data().version, { blocks: [] });
+    expect(removal.code, JSON.stringify(removal.body)).toBe(200);
+    await settle();
+    const after = await postRef.get();
+    const accepted = await owner("first");
+    expect(after.data()).toMatchObject({ publishBuildPending: false, publicSourceVersion: accepted.sourceVersion });
+    expect(accepted.snapshotDigest).toMatch(/^[a-f0-9]{64}$/);
+    expect(after.data().published.previousVideoCopies).toEqual(
+      [media.url, media.posterUrl].map(url => ({ assetId, url })));
+
+    const deleted = vi.fn(async () => ({}));
+    const purge = vi.fn(async () => Response.json({ success: true }));
+    await videoWithdrawal.createPublicVideoWithdrawalHandler({ firestore: db,
+      r2Fn: () => ({ client: { send: deleted }, bucket: "fixture" }),
+      purgeConfigFn: () => ({ zoneId: "f".repeat(32), token: "fixture-token" }),
+      fetchImpl: purge, log: quiet,
+    })({ data: { before, after }, params: { id: "first" } });
+    expect(deleted.mock.calls.map(([command]) => command.input.Key)).toEqual(
+      [media.url, media.posterUrl].map(url => new URL(url).pathname.slice(1)));
+    expect(purge).toHaveBeenCalledOnce();
+    expect((await videoRef.get()).data().revoked).toBe(true);
+    expect.soft((await postRef.get()).data().published).toEqual(after.data().published);
+    expect.soft((await get("/_publication.json")).status).toBe(200);
+    const aggregates = await Promise.allSettled(["/posts/", "/search/meaning-index.json"].map(path =>
+      publication.readNoBuildPostDecision({ firestore: db, path, rendererSha: sha })));
+    for (const result of aggregates) {
+      expect.soft(result).toMatchObject({ status: "fulfilled", value: { kind: "background" } });
+    }
+
+    const next = await publish("second");
+    expect(next.code, JSON.stringify(next.body)).toBe(200);
+    expect.soft((await get("/_content-status.json")).status).toBe(200);
+    expect.soft((await get("/posts/second-story/")).status).toBe(200);
+    await settle();
+    const queue = (await db.doc(`cmsPublishQueue/${next.body.publication.queueId}`).get()).data();
+    expect.soft(queue.publicReceipt?.operationId).toBe(next.body.publication.queueId);
+  });
+
+  it("omits a Post whose sealed snapshot cannot be verified while keeping its baseline route reserved", async () => {
+    await db.doc(registry.CAPABILITY_PATH).update({ dataFigureVersion: 1 });
+    for (const id of ["first", "second"]) expect((await publish(id)).code).toBe(200);
+    await db.doc("cmsPosts/first").update({ "published.previousVideoCopies": [] });
+    const site = worker();
+    const get = path => site.fetch(new Request(`https://njpbs.org${path}`));
+    const receipt = await get("/_publication.json");
+    const status = await get("/_content-status.json");
+    expect.soft(receipt.status).toBe(200);
+    expect.soft(status.status).toBe(200);
+    if (receipt.ok && status.ok) {
+      const routes = readPublicContentStatus(await status.json(), await receipt.json());
+      expect(routes.map(route => route.path)).toEqual(["/about/", "/posts/second-story/"]);
+    }
+    expect((await get("/posts/first-story/")).status).toBe(503);
+    expect((await get("/posts/second-story/")).status).toBe(200);
+  });
+
   it.each(["paused", "narrowed"])("serves and settles both accepted operations when valid admission is %s", async mode => {
     await publish("first"); await publish("second");
     const accepted = await Promise.all([owner("first"), owner("second")]);
