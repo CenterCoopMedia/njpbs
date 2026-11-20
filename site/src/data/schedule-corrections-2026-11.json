@@ -467,6 +467,12 @@
       "station": "WNJT",
       "timeZone": "America/New_York"
     },
+    "revisedWorkbook": {
+      "file": "NOV26NJPBS.xlsx",
+      "sha256": "3567beb6f8c6120e61e476686c4658d8457a10e4d8a331d830c3a1e7c2b6cd84",
+      "revision": "2026-11-20",
+      "sheet": "Sheet1"
+    },
     "episodeAmendment": {
       "source": "NJ PBS Programming episode amendment",
       "revision": "2026-11-20",
@@ -8678,7 +8684,7 @@
             "cells": "AG124:AG126",
             "startTime": "20:00",
             "title": "Que Pasa NJ",
-            "episodeCode": null,
+            "episodeCode": "701",
             "isKids": false,
             "endTime": "20:30"
           },
