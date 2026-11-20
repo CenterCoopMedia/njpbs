@@ -326,6 +326,9 @@ describe("Route D Cut A boundary placement", () => {
     }
   });
   it("retains the current held full dev method without an Admin-only admission branch", () => {
+    const preflight = read("scripts/check-cms-public-contract.mjs");
+    const owner = preflight.slice(preflight.indexOf("async function nativeDevelopmentPlan"), preflight.indexOf("export async function devCompletedBaseline"));
+    expect(owner).toContain('if (!runtimeParametersMatch(state.providerFunctions, servingRuntimeParameters(parameters))) refuse("dev-configuration");');
     const steps = development.jobs.deploy.steps;
     const hold = steps.findIndex(row => row.name === "Require the dev publication hold before mutation");
     expect(steps[hold].run).toBe('test "$CMS_DEV_PUBLISH_ENABLED" = false');
