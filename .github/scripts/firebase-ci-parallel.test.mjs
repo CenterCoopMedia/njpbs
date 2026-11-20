@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
@@ -18,7 +18,12 @@ const path = require("node:path");
 const args = process.argv.slice(2);
 const command = path.basename(process.argv[1]) + " " + args.join(" ");
 const directory = process.env.PROBE_DIRECTORY;
-const record = (event) => fs.appendFileSync(path.join(directory, "events"), JSON.stringify({ command, event }) + "\\n");
+const configInputs = process.env.PROBE_CONFIG_INPUTS?.split(",") ?? [];
+const record = (event) => fs.appendFileSync(path.join(directory, "events"), JSON.stringify({
+  command, event, configInputs: configInputs.filter(key => Object.hasOwn(process.env, key)).length,
+  pinnedSource: process.env.DEPLOY_SHA === "a".repeat(40),
+  scopedCredential: process.env.GOOGLE_APPLICATION_CREDENTIALS === "/fixture/firebase-key.json",
+}) + "\\n");
 const first = command === process.env.FIRST_COMMAND;
 const second = command === process.env.SECOND_COMMAND;
 (async () => {
@@ -40,14 +45,15 @@ const second = command === process.env.SECOND_COMMAND;
 })();
 `;
 
-async function probe(command, first, second, fail = "") {
+async function probe(command, first, second, fail = "", env = {}) {
   const directory = mkdtempSync(join(tmpdir(), "firebase-parallel-"));
+  const githubOutput = join(directory, "github-output");
   for (const name of ["npm", "node", "git"]) {
     writeFileSync(join(directory, name), processStub, { mode: 0o700 });
   }
   const child = spawn("bash", ["-euo", "pipefail", "-c", command], {
     detached: true,
-    stdio: "ignore",
+    stdio: ["ignore", "pipe", "ignore"],
     env: {
       ...process.env,
       PATH: `${directory}:${process.env.PATH}`,
@@ -55,8 +61,12 @@ async function probe(command, first, second, fail = "") {
       FIRST_COMMAND: first,
       SECOND_COMMAND: second,
       FAIL_COMMAND: fail,
+      GITHUB_OUTPUT: githubOutput,
+      ...env,
     },
   });
+  let stdout = "";
+  child.stdout.on("data", chunk => { stdout += chunk; });
   let timer;
   try {
     const status = await new Promise((resolve, reject) => {
@@ -65,10 +75,11 @@ async function probe(command, first, second, fail = "") {
         reject(new Error("Parallel commands did not both start or finish"));
       }, 10_000);
       child.on("error", reject);
-      child.on("exit", resolve);
+      child.on("close", resolve);
     });
     const events = readFileSync(join(directory, "events"), "utf8").trim().split("\n").map(JSON.parse);
-    return { status, events };
+    const output = existsSync(githubOutput) ? readFileSync(githubOutput, "utf8") : "";
+    return { status, events, stdout, output };
   } finally {
     clearTimeout(timer);
     // Also clean up a child if a regression makes the shell exit before wait.
@@ -118,4 +129,35 @@ test("every parallel CI group starts both branches, waits, and propagates either
       if (next) assert.ok(!events.some((event) => event.command === next), `${name}: stops the failed branch`);
     }
   }
+});
+
+test("production post-deploy readbacks overlap with scoped inputs and publish only the IAM prerequisite", async () => {
+  const release = readFileSync(new URL("../workflows/cms-staging-deploy.yml", import.meta.url), "utf8");
+  const step = release.match(/- name: Verify event trigger IAM and deployed Functions configuration\n([\s\S]+?)\n      - name: Backfill byline projections/);
+  assert.ok(step);
+  const [envBlock, run] = step[1].split("        run: |\n");
+  const command = run.replace(/^          /gm, "");
+  const shared = new Set(["DEPLOY_SHA", "FIREBASE_DEPLOY_SERVICE_ACCOUNT"]);
+  const configInputs = [...envBlock.matchAll(/^          ([A-Z_]+):/gm)].map(match => match[1]).filter(name => !shared.has(name));
+  assert.ok(configInputs.length > 0);
+  const iam = "node /fixture/run/cms-iam-gate/scripts/check-cms-secret-iam.mjs /fixture/source --post-deploy";
+  const config = "node scripts/component-runner.mjs functions verify-deployed-config";
+  const env = { ...Object.fromEntries(configInputs.map(key => [key, "fixture-config-input"])),
+    PROBE_CONFIG_INPUTS: configInputs.join(","), RUNNER_TEMP: "/fixture/run", GITHUB_WORKSPACE: "/fixture/source",
+    DEPLOY_SHA: "a".repeat(40), GOOGLE_APPLICATION_CREDENTIALS: "/fixture/firebase-key.json" };
+  for (const fail of ["", iam, config]) {
+    const { status, events, stdout, output } = await probe(command, iam, config, fail, env);
+    assert.equal(status, fail ? 1 : 0);
+    assert.equal(output, fail === iam ? "" : "iam_verified=true\n");
+    assert.equal(events.length, 4);
+    assert.deepEqual(events.map(row => row.event), ["start", "start", "end", "end"]);
+    for (const [branch, count] of [[iam, 0], [config, configInputs.length]]) {
+      assert.deepEqual(events.filter(row => row.command === branch).map(row => [row.event, row.configInputs, row.pinnedSource, row.scopedCredential]),
+        [["start", count, true, true], ["end", count, true, true]]);
+    }
+    assert.equal(stdout.includes("Event trigger IAM verification failed"), fail === iam);
+    assert.equal(stdout.includes("Deployed Functions configuration verification failed"), fail === config);
+  }
+  assert.match(release, /- name: Backfill byline projections\n        if: >-\n[^]*?steps\.functions_readbacks\.outputs\.iam_verified == 'true'/);
+  assert.match(release, /- name: Backfill byline projections[^]*?node scripts\/backfill-byline-projections\.mjs\n      - name: Record the completed Functions receipt\n        if: needs\.firebase-preflight\.outputs\.functions_mutated == 'true' && !inputs\.install_reader_bridge/);
 });

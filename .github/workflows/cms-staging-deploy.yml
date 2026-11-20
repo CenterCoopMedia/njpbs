@@ -1423,21 +1423,8 @@ jobs:
       - name: Isolate trusted event IAM gate
         if: needs.firebase-preflight.outputs.functions_mutated == 'true'
         run: mv .cms-iam-gate "$RUNNER_TEMP/cms-iam-gate"
-      - name: Verify event trigger IAM after deployment
-        if: needs.firebase-preflight.outputs.functions_mutated == 'true'
-        env:
-          FIREBASE_DEPLOY_SERVICE_ACCOUNT: ${{ vars.FIREBASE_DEPLOY_SERVICE_ACCOUNT }}
-          DEPLOY_SHA: ${{ needs.admin-build.outputs.deploy_sha }}
-        run: node "$RUNNER_TEMP/cms-iam-gate/scripts/check-cms-secret-iam.mjs" "$GITHUB_WORKSPACE" --post-deploy
-
-      - name: Backfill byline projections
-        if: needs.firebase-preflight.outputs.functions_mutated == 'true' || contains(format(',{0},', needs.firebase-preflight.outputs.selected_migrations), ',byline-projections,')
-        # Functions now maintain new writes; this pass fills every older source
-        # profile, including redacted ineligible cursor rows.
-        run: |
-          set -euo pipefail
-          node scripts/backfill-byline-projections.mjs
-      - name: Verify deployed Functions configuration before completion
+      - name: Verify event trigger IAM and deployed Functions configuration
+        id: functions_readbacks
         if: needs.firebase-preflight.outputs.functions_mutated == 'true'
         env:
           DEPLOY_SHA: ${{ needs.admin-build.outputs.deploy_sha }}
@@ -1460,7 +1447,42 @@ jobs:
           CMS_STAFF_EMAIL_API_TOKEN: ${{ secrets.CMS_STAFF_EMAIL_API_TOKEN }}
           CMS_VOICEOVER_R2_ACCESS_KEY_ID: ${{ secrets.CMS_VOICEOVER_R2_ACCESS_KEY_ID }}
           CMS_VOICEOVER_R2_SECRET_ACCESS_KEY: ${{ secrets.CMS_VOICEOVER_R2_SECRET_ACCESS_KEY }}
-        run: node scripts/component-runner.mjs functions verify-deployed-config
+        run: |
+          set -euo pipefail
+          node scripts/component-runner.mjs functions verify-deployed-config &
+          config_pid=$!
+          iam_status=0
+          (
+            # Only configuration verification receives these step inputs.
+            unset CMS_DEPLOYMENT_VARIABLES_JSON VITE_CMS_STUDIO_CONFIGURATION VITE_LIVE_PRODUCTION_ENABLED \
+              CMS_ADMIN_BUILD_REVISION CMS_PREVIEW_RENDERER_SHA CLOUDFLARE_ACCOUNT_ID CLOUDFLARE_API_TOKEN \
+              CMS_BUG_REPORT_TELEGRAM_CHAT_ID CMS_BUG_REPORT_TELEGRAM_ADMIN_MAP CMS_BUG_REPORT_GITHUB_TOKEN \
+              CMS_BUG_REPORT_GITHUB_WEBHOOK_SECRET CMS_BUG_REPORT_TELEGRAM_BOT_TOKEN CMS_BUG_REPORT_TELEGRAM_WEBHOOK_SECRET \
+              CMS_EDGE_ORIGIN_SECRET CMS_MEDIA_CACHE_PURGE_TOKEN CMS_STAFF_EMAIL_API_TOKEN \
+              CMS_VOICEOVER_R2_ACCESS_KEY_ID CMS_VOICEOVER_R2_SECRET_ACCESS_KEY
+            node "$RUNNER_TEMP/cms-iam-gate/scripts/check-cms-secret-iam.mjs" "$GITHUB_WORKSPACE" --post-deploy
+          ) || iam_status=$?
+          config_status=0
+          wait "$config_pid" || config_status=$?
+          if (( iam_status == 0 )); then
+            printf 'iam_verified=true\n' >> "$GITHUB_OUTPUT"
+          else
+            echo "::error::Event trigger IAM verification failed after deployment"
+          fi
+          if (( config_status != 0 )); then
+            echo "::error::Deployed Functions configuration verification failed"
+          fi
+          (( iam_status == 0 && config_status == 0 ))
+      - name: Backfill byline projections
+        if: >-
+          ${{ !cancelled() &&
+            (needs.firebase-preflight.outputs.functions_mutated == 'true' && steps.functions_readbacks.outputs.iam_verified == 'true' ||
+             success() && contains(format(',{0},', needs.firebase-preflight.outputs.selected_migrations), ',byline-projections,')) }}
+        # Functions now maintain new writes; this pass fills every older source
+        # profile, including redacted ineligible cursor rows.
+        run: |
+          set -euo pipefail
+          node scripts/backfill-byline-projections.mjs
       - name: Record the completed Functions receipt
         if: needs.firebase-preflight.outputs.functions_mutated == 'true' && !inputs.install_reader_bridge
         env:

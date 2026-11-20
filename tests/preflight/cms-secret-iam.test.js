@@ -395,7 +395,8 @@ describe("deployed Functions secret IAM", () => {
     ]);
     const setup = steps.findIndex(step => step.name === "Set up Google Cloud CLI for Functions IAM");
     const deploy = steps.findIndex(step => step.id === "deploy_functions");
-    const check = steps.findIndex(step => step.name === "Verify event trigger IAM after deployment");
+    const check = steps.findIndex(step => step.id === "functions_readbacks");
+    const byline = steps.findIndex(step => step.name === "Backfill byline projections");
     const receipt = steps.findIndex(step => step.name === "Record the completed Functions receipt");
     expect(steps.some(step => step.uses?.startsWith("google-github-actions/auth@"))).toBe(false);
     expect(steps.some(step => step.with?.name === "cms-event-trigger-first-deploy")).toBe(false);
@@ -404,9 +405,10 @@ describe("deployed Functions secret IAM", () => {
     expect(steps[isolate].run).toBe('mv .cms-iam-gate "$RUNNER_TEMP/cms-iam-gate"');
     expect(isolate).toBeGreaterThan(steps.indexOf(checker));
     expect(check).toBeGreaterThan(isolate);
-    expect(steps[check].run).toBe('node "$RUNNER_TEMP/cms-iam-gate/scripts/check-cms-secret-iam.mjs" "$GITHUB_WORKSPACE" --post-deploy');
+    expect(steps[check].run).toContain('node "$RUNNER_TEMP/cms-iam-gate/scripts/check-cms-secret-iam.mjs" "$GITHUB_WORKSPACE" --post-deploy');
+    expect(steps[byline].if).toContain("steps.functions_readbacks.outputs.iam_verified == 'true'");
     expect(setup).toBeGreaterThan(-1); expect(deploy).toBeGreaterThan(setup);
-    expect(check).toBeGreaterThan(deploy); expect(receipt).toBeGreaterThan(check);
+    expect(check).toBeGreaterThan(deploy); expect(byline).toBeGreaterThan(check); expect(receipt).toBeGreaterThan(byline);
   });
 
 });
