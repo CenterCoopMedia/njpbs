@@ -106,9 +106,10 @@ export async function main() {
     fail("DEPLOY_SHA and GITHUB_SHA must be full revisions");
   }
   const decision = explicitCloudWakeDecision(process.env);
-  const manifest = process.env.FUNCTION_TARGETS ?? "";
-  const manifestNames = /^functions:[A-Za-z][A-Za-z0-9]*(,functions:[A-Za-z][A-Za-z0-9]*)*$/.test(manifest)
-    ? manifest.split(",").map(name => name.slice("functions:".length)) : null;
+  const manifest = process.env.FUNCTION_TARGETS;
+  const manifestNames = manifest === undefined ? null
+    : /^functions:[A-Za-z][A-Za-z0-9]*(,functions:[A-Za-z][A-Za-z0-9]*)*$/.test(manifest)
+      ? manifest.split(",").map(name => name.slice("functions:".length)) : [];
   const edgeFingerprint = edgeOriginSecretFingerprint(process.env);
   const variablesFingerprint = deploymentVariablesFingerprint(process.env.CMS_DEPLOYMENT_VARIABLES_JSON);
   const configurationFingerprint = cloudWakeConfigurationFingerprint(edgeFingerprint, decision, variablesFingerprint);
@@ -152,7 +153,8 @@ export async function main() {
       fingerprintFunctionsRenderSource(baseline?.trustedWorkflowSha, { cwd: process.env.GITHUB_WORKSPACE }),
       fingerprintFunctionGraph(baseline?.sourceSha, { cwd: process.env.GITHUB_WORKSPACE, includeRuntimeInputs: true }),
     ]);
-    const sourceProof = manifestNames && functionSourceProof(priorRuntime, runtime, baseline?.functionGraph);
+    // Contract capture uses the committed graphs without the deploy job's manifest.
+    const sourceProof = functionSourceProof(priorRuntime, runtime, baseline?.functionGraph);
     const desiredParameters = await desiredRuntimeParameters({
       ...process.env,
       CMS_ADMIN_BUILD_REVISION: deploySha,

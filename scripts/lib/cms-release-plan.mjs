@@ -180,7 +180,6 @@ export const RELEASE_CHECK_PATHS = Object.freeze([
   "scripts/lib/cms-component-receipt.mjs",
   "scripts/lib/cms-renderer-graph.mjs",
   "scripts/lib/cms-release-plan.mjs",
-  "scripts/lib/functions-runtime-reads.mjs",
   "scripts/lib/repository-identity.mjs",
   "scripts/lib/studio-title-files.mjs",
   "agents/vmix/configuration.mjs",
@@ -388,7 +387,7 @@ export function decideRelease({
     configurationRequiresRelease: true,
     releaseReason: reason,
     functionDeployTargets: "all",
-    functionReasons: Object.fromEntries([...(manifestNames ?? Object.keys(functionGraph?.exports ?? {}))].sort()
+    functionReasons: Object.fromEntries([...(manifestNames?.length ? manifestNames : Object.keys(functionGraph?.exports ?? {}))].sort()
       .map(name => [name, [reason]])),
   });
   const recoveringFunctions = functionsRunCompleted === true && functionsReceipt?.state === "in_progress";

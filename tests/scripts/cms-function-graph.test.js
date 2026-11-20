@@ -56,7 +56,7 @@ async function releaseInputs(before, after, cwd) {
 
 describe("committed Functions module graph", () => {
   it("replays the November 19 rollout from both committed sources", async () => {
-    const { before, after, removedVariable, count, batches, seconds } =
+    const { before, after, removedVariable, count, batches } =
       JSON.parse(readFileSync(new URL("../fixtures/cms-functions-nov-19.json", import.meta.url), "utf8"));
     const { plan, target } = await releaseInputs(before, after);
     const table = JSON.parse(execFileSync("git", ["show", `${before}:config/functions-configuration.json`], { encoding: "utf8" }));
@@ -84,7 +84,6 @@ describe("committed Functions module graph", () => {
     expect(result.functionReasons).toEqual(Object.fromEntries(manifest.map(name => [name, ["functions_configuration_changed"]])));
     const selectedBatches = selectedFunctionBatches(manifest, result.functionDeployTargets);
     expect(selectedBatches).toHaveLength(batches);
-    expect(Math.round(selectedBatches.length * (seconds / batches))).toBe(seconds);
   });
 
   it("skips a variable-list edit when the committed closures and deployed values agree", async () => {
@@ -97,8 +96,12 @@ describe("committed Functions module graph", () => {
     const live = Object.keys(target.graph.exports).map(name => ({ name, serviceConfig: { environmentVariables } }));
     const runtimeChanges = runtimeParameterChanges(live, environmentVariables, target.reads, ["TVSS_CALLSIGN"]);
     expect(plan.functionsFingerprint).not.toBe(plan.functionsReceipt.mutation.inputFingerprint);
-    expect(decideRelease({ ...plan, variablesFingerprint: "e".repeat(64), runtimeChanges }))
-      .toMatchObject({ functionDeployTargets: "", releaseReason: "unchanged" });
+    const inputs = { ...plan, variablesFingerprint: "e".repeat(64), runtimeChanges };
+    expect(decideRelease({ ...inputs, manifestNames: null }))
+      .toMatchObject({ functionDeployTargets: "", releaseReason: "unchanged",
+        functionsMutated: false, configurationRequiresRelease: false, previewPaused: false });
+    expect(decideRelease({ ...inputs, manifestNames: ["health"] }))
+      .toMatchObject({ functionDeployTargets: "all", releaseReason: "function_manifest_mismatch" });
   });
 
   it("deploys every transitive reader of a changed module and proves literal parameter reads", async () => {
