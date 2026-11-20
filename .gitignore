@@ -11,6 +11,37 @@ logs/
 # Node
 node_modules
 functions/cloud-publication-wake.generated.json
+
+# Functions contract bundles
+/functions/lib/bio-profiles.js
+/functions/lib/.contracts-*/
+/functions/lib/block-content-validation.js
+/functions/lib/cms-image-variants.js
+/functions/lib/content-link.js
+/functions/lib/cost-hardware.js
+/functions/lib/county-comparison.js
+/functions/lib/data-figure.js
+/functions/lib/data-hub-composition.js
+/functions/lib/data-hub-reporting-sources.js
+/functions/lib/data-hub-reporting.js
+/functions/lib/data-table.js
+/functions/lib/dataset-figures.js
+/functions/lib/datasets.js
+/functions/lib/election-result-sources.js
+/functions/lib/election-results.js
+/functions/lib/home-hero.js
+/functions/lib/home-newscast-data.js
+/functions/lib/home-retained-sources.js
+/functions/lib/home-source-catalog.js
+/functions/lib/live-blog.js
+/functions/lib/live-production-contract.js
+/functions/lib/post-formats.js
+/functions/lib/post-lead-media.js
+/functions/lib/posts-browse-contract.js
+/functions/lib/published-resource-check.js
+/functions/lib/published-vocabulary.js
+/functions/lib/town-lookup.js
+/functions/lib/video-block.js
 dist/
 dist-ssr/
 *.local

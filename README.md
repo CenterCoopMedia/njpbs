@@ -38,11 +38,11 @@ npm ci --ignore-scripts
 npm --prefix site ci --ignore-scripts
 ```
 
-After installing dependencies, run `npm run functions:build` to generate the
-deployable CommonJS contracts in `functions/lib/` from their shared sources.
-The Functions test and emulator commands build the contracts automatically.
-Commit generated changes alongside their sources. Hosted preflight checks that
-the committed bundles match the build.
+After installing dependencies, run `npm run functions:build` to compile the
+TypeScript entries in `scripts/functions-contract-sources.json` into CommonJS
+in `functions/lib/`. Edit the listed sources. Site CI type-checks the contracts
+and Functions CI exercises the generated modules. The Functions test, emulator
+and Firebase deploy commands also build the contracts automatically.
 
 `.env.example` lists the settings that some commands need. Export the ones your
 work needs in your shell; nothing loads a root `.env` file. Workspace packages

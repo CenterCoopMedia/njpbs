@@ -227,14 +227,7 @@
       "files": [
         "cms-api/test/public-content-rpc.test.ts",
         "functions/.env.njpbs-site-dev",
-        "functions/lib/block-content-validation.js",
-        "functions/lib/home-retained-sources.js",
-        "functions/lib/home-source-catalog.js",
-        "functions/lib/live-blog.js",
-        "functions/lib/post-formats.js",
-        "functions/lib/post-lead-media.js",
         "functions/lib/public-asset-hosts.json",
-        "functions/lib/video-block.js",
         "packages/content-core/src/media-origin.ts",
         "scripts/assert-dev-cms-targets.mjs",
         "scripts/fixtures/dev-targets.json",
@@ -247,10 +240,7 @@
         "tests/functions/dev-public-content.test.js",
         "tests/functions/dev-reader-deployment.test.ts",
         "tests/functions/seed-dev-published.test.mjs",
-        "tests/preflight/home-editorial-catalog-contract.test.ts",
-        "functions/lib/cms-image-variants.js",
-        "functions/lib/home-hero.js",
-        "functions/lib/published-resource-check.js"
+        "tests/preflight/home-editorial-catalog-contract.test.ts"
       ]
     },
     "CMS_DEV_PREVIEW_BUCKET": {

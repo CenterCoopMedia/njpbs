@@ -6,7 +6,7 @@ import { fileURLToPath } from "node:url";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { parse } from "yaml";
 import { readCmsDeployWorkflow } from "../helpers/cms-deploy-workflow.mjs";
-import { CMS_RELEASE_CHECK_FILES, requireCmsReleaseSources } from "../../.github/scripts/require-cms-release-sources.mjs";
+import { CMS_FUNCTION_CONTRACT_FILES, CMS_RELEASE_CHECK_FILES, requireCmsReleaseSources } from "../../.github/scripts/require-cms-release-sources.mjs";
 import { requireReleaseSource } from "../../.github/scripts/require-release-source.mjs";
 import { fingerprintExecutionSource, fingerprintFunctionsRenderSource, fingerprintReceiptExecutionSource } from "../../scripts/lib/cms-release-plan.mjs";
 
@@ -33,7 +33,7 @@ beforeEach(() => {
     mkdirSync(join(releaseRoot, path, ".."), { recursive: true });
     writeFileSync(join(releaseRoot, path), "export {};\n");
   }
-  for (const path of ["scripts/component-runner.mjs", "scripts/lib/deployment-components.mjs", "scripts/lib/cms-component-receipt.mjs", "scripts/render-development-config.mjs", "config/development-inputs.json"]) {
+  for (const path of [...CMS_FUNCTION_CONTRACT_FILES, "scripts/component-runner.mjs", "scripts/lib/deployment-components.mjs", "scripts/lib/cms-component-receipt.mjs", "scripts/render-development-config.mjs", "config/development-inputs.json"]) {
     mkdirSync(join(releaseRoot, path, ".."), { recursive: true });
     cpSync(join(repoRoot, path), join(releaseRoot, path));
   }
@@ -135,7 +135,8 @@ describe("CMS release source contract", () => {
   it.each(["", "main", "a".repeat(7)])("refuses an omitted or moving release ref %j", releaseSha => {
     expect(() => requireCmsReleaseSources({ releaseSha, trustedWorkflowSha, releaseRoot, trustedRoot })).toThrow("explicit full SHA");
   });
-  it.each(["scripts/component-runner.mjs", "scripts/lib/deployment-components.mjs", "scripts/lib/functions-retirement.mjs", "scripts/retire-cms-functions.mjs"])("refuses an untracked replacement for %s", file => {
+  it.each(["scripts/component-runner.mjs", "scripts/lib/deployment-components.mjs", "scripts/lib/functions-retirement.mjs", "scripts/retire-cms-functions.mjs",
+    "scripts/lib/functions-contracts.mjs", "scripts/compile-functions-contracts.mjs"])("refuses an untracked replacement for %s", file => {
     rmSync(join(releaseRoot, file));
     releaseSha = commit(releaseRoot, "Source without component dispatcher input");
     writeFileSync(join(releaseRoot, file), "throw new Error('untracked replacement');\n");

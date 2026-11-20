@@ -29,6 +29,9 @@ export const CMS_RELEASE_CHECK_FILES = Object.freeze([
   "scripts/lib/functions-deploy-inventory.mjs", "scripts/confirm-admin-revision.mjs",
   "scripts/check-admin-pages-security.mjs",
 ]);
+export const CMS_FUNCTION_CONTRACT_FILES = Object.freeze([
+  "scripts/functions-contract-sources.json", "scripts/lib/functions-contracts.mjs", "scripts/compile-functions-contracts.mjs",
+]);
 
 // This gate runs from the trusted workflow checkout, before selected code runs.
 export function requireCmsReleaseSources({ releaseSha, trustedWorkflowSha, releaseRoot, trustedRoot }) {
@@ -44,7 +47,11 @@ export function requireCmsReleaseSources({ releaseSha, trustedWorkflowSha, relea
       throw new Error(`${label} checkout must be clean and equal its pinned SHA`);
     }
   }
-  execFileSync("git", ["ls-files", "--error-unmatch", "--", ".github/cms-deploy-compatibility.json", "admin/package.json", ...CMS_RELEASE_CHECK_FILES], {
+  const hasContractRecipe = execFileSync("git", ["ls-tree", "--name-only", releaseSha, "--", CMS_FUNCTION_CONTRACT_FILES[0]], {
+    cwd: releaseRoot, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"],
+  }).trim();
+  const releaseFiles = hasContractRecipe ? [...CMS_RELEASE_CHECK_FILES, ...CMS_FUNCTION_CONTRACT_FILES] : CMS_RELEASE_CHECK_FILES;
+  execFileSync("git", ["ls-files", "--error-unmatch", "--", ".github/cms-deploy-compatibility.json", "admin/package.json", ...releaseFiles], {
     cwd: releaseRoot, stdio: ["ignore", "pipe", "pipe"],
   });
   const manifest = JSON.parse(readFileSync(resolve(releaseRoot, ".github/cms-deploy-compatibility.json"), "utf8"));
@@ -52,7 +59,7 @@ export function requireCmsReleaseSources({ releaseSha, trustedWorkflowSha, relea
   if (version !== 1) {
     throw new Error("Release checks require a supported cmsReleaseChecks contract");
   }
-  for (const path of CMS_RELEASE_CHECK_FILES) {
+  for (const path of releaseFiles) {
     if (!lstatSync(resolve(releaseRoot, path)).isFile()) throw new Error(`Release operator must be a committed file: ${path}`);
   }
   // These native safety policies formerly ran from trusted main. Fix forward:

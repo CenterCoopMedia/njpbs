@@ -4,8 +4,9 @@ import { promisify } from "node:util";
 import { posix } from "node:path";
 import { builtinModules, createRequire } from "node:module";
 import runtimeProcess from "node:process";
-import { deploymentInputFingerprint, readDeploymentManifest } from "../render-development-config.mjs";
+import { deploymentInputFingerprint, readDeploymentManifest, renderCommittedDeploymentSource } from "../render-development-config.mjs";
 import { fileURLToPath } from "node:url";
+import { addCommittedFunctionsContracts, contractInputs } from "./functions-contracts.mjs";
 
 const previewPair = () => createRequire(import.meta.url)("../../functions/lib/cms-preview-pair.js");
 const pageReader = () => createRequire(import.meta.url)("../../functions/lib/page-reader-compatibility.js");
@@ -19,6 +20,7 @@ export const FUNCTION_GRAPH_VERSION = 2;
 export const RECEIPT_COMPONENTS = Object.freeze(["functions", "renderer", "cmsApi"]);
 export const RECEIPT_INPUT_PATHS = Object.freeze({
   functions: Object.freeze([
+    ...contractInputs,
     "config/functions-configuration.json", "config/functions-deployment.json",
     "scripts/configure-cms-functions.mjs", "scripts/lib/functions-configuration.mjs",
     "scripts/lib/functions-secret-versions.mjs",
@@ -41,6 +43,7 @@ export const RECEIPT_INPUT_PATHS = Object.freeze({
     "package-lock.json",
   ]),
   renderer: Object.freeze([
+    ...contractInputs,
     "scripts/render-development-config.mjs",
     "config/development-inputs.json",
     "preview-renderer",
@@ -296,7 +299,7 @@ export async function readCommittedBlobs(blobIds, deps = {}) {
 // bundle versions; an unknown loader chooses a full deploy rather than omitting
 // a dependency. Rewriting is for discovery only, never executable output.
 export function functionGraphSource(source, file, metadata, parser) {
-  if (file === "functions/lib/home-retained-sources.js") {
+  if (file === "functions/lib/home-retained-sources.js" && !metadata?.startsWith("100644 generated ")) {
     if (!["4b62e777dcf9b591597bb5556563e93c593cb929", "9267498eef3de38758ec23fc8459922dd1e4b7d5",
       "45042d7b450d98bb1dd19bec543872d1b4d4cc41",
       "efb5589b8d110ee0c1d078c24ab903c4f4df1ed4",
@@ -362,11 +365,14 @@ export async function fingerprintFunctionGraph(sourceSha, deps = {}) {
       { cwd: deps.cwd, maxBuffer: 16 * 1024 });
     const identity = stdout.trim().split("\n");
     if (identity.length !== 2 || !identity[0] || !SHA.test(identity[1])) return null;
-    key = JSON.stringify([graphModule.href, ...identity, sourceSha, deploymentInputFingerprint(RECEIPT_INPUT_PATHS.functions, process.env, readDeploymentManifest(deps.cwd ?? process.cwd(), sourceSha))]);
+    const env = deps.env ?? process.env;
+    const manifest = readDeploymentManifest(deps.cwd ?? process.cwd(), sourceSha);
+    const renderedPaths = Object.values(manifest?.inputs ?? {}).flatMap(input => input.files);
+    key = JSON.stringify([graphModule.href, ...identity, sourceSha, deploymentInputFingerprint(renderedPaths, env, manifest)]);
     cache = runtimeProcess[GRAPH_CACHE] ??= new Map();
     pending = cache.get(key);
     if (!pending) {
-      pending = buildFunctionGraph(sourceSha, deps);
+      pending = buildFunctionGraph(sourceSha, deps, env, manifest);
       cache.set(key, pending);
       while (cache.size > 8) cache.delete(cache.keys().next().value);
     }
@@ -378,7 +384,7 @@ export async function fingerprintFunctionGraph(sourceSha, deps = {}) {
     return null;
   }
 }
-async function buildFunctionGraph(sourceSha, deps = {}) {
+async function buildFunctionGraph(sourceSha, deps, env, manifest) {
   try {
     requireSha(sourceSha);
     const git = async (...args) => (await execFileAsync("git", args, {
@@ -396,18 +402,21 @@ async function buildFunctionGraph(sourceSha, deps = {}) {
     let blobs = new Map();
     try {
       const ids = [...files].filter(([path, metadata]) => metadata.startsWith("100") &&
-        /^(functions|packages)\//.test(path) && /\.(js|mjs|json)$/.test(path))
+        /^(?:functions\/|packages\/|site\/(?:src\/lib\/|scripts\/))/.test(path) && /\.(js|mjs|json|ts)$/.test(path))
         .map(([, metadata]) => metadata.split(" ").at(-1));
       blobs = await readCommittedBlobs(ids, { cwd: deps.cwd });
     } catch { /* A bounded batch refusal falls back to original source reads. */ }
     const cache = new Map();
-    const read = path => {
+    const readBlob = path => {
       if (!cache.has(path)) {
         const id = files.get(path)?.split(" ").at(-1);
         cache.set(path, blobs.has(id) ? Promise.resolve(blobs.get(id)) : git("show", `${sourceSha}:${path}`));
       }
       return cache.get(path);
     };
+    const generated = await addCommittedFunctionsContracts(files, async file =>
+      renderCommittedDeploymentSource(file, await readBlob(file), env, manifest));
+    const read = path => generated.get(path) ?? readBlob(path);
     const index = await read("functions/index.js");
     if (/^exports\./m.test(index)) return null;
     const entries = [...index.matchAll(/^lazyExport\("([A-Za-z][A-Za-z0-9]*)", "(\.\/[^"\n]+)"[^\n]*\);$/gm)];
@@ -432,7 +441,8 @@ async function buildFunctionGraph(sourceSha, deps = {}) {
         builder.onResolve({ filter: /.*/ }, args => {
           if (args.kind === "entry-point") return { path: posix.normalize(args.path), namespace: "git" };
           if (!args.path.startsWith(".")) {
-            if (["module", "node:module"].includes(args.path) && args.importer !== "functions/lib/home-retained-sources.js") {
+            if (["module", "node:module"].includes(args.path)
+              && (args.importer !== "functions/lib/home-retained-sources.js" || generated.has(args.importer))) {
               throw new Error("Unknown dynamic module loader");
             }
             const packageName = args.path.startsWith("@") ? args.path.split("/").slice(0, 2).join("/") : args.path.split("/")[0];
@@ -457,9 +467,8 @@ async function buildFunctionGraph(sourceSha, deps = {}) {
     });
     if (result.warnings.length) return null;
     const inputs = result.metafile.inputs;
-    const manifest = readDeploymentManifest(deps.cwd ?? process.cwd(), sourceSha);
     const digest = paths => {
-      const configured = deploymentInputFingerprint(paths, process.env, manifest);
+      const configured = deploymentInputFingerprint(paths, env, manifest);
       return createHash("sha256").update(paths.sort().map(path => `${files.get(path)}\t${path}`).join("\n") +
         (configured ? `\nrender-inputs:${configured}` : "")).digest("hex");
     };

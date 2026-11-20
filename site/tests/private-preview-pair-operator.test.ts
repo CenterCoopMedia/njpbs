@@ -16,7 +16,7 @@ afterEach(async () => { await Promise.all(directories.splice(0).map(p => rm(p, {
 async function fixture() {
   const root = await mkdtemp(path.join(tmpdir(), "private-preview-cli-")); directories.push(root);
   await mkdir(path.join(root, "scripts/lib"), { recursive: true }); await mkdir(path.join(root, "functions"));
-  for (const name of ["private-preview-pair-provider", "install-private-preview-pair", "public-release-private-install-ledger", "public-release-private-provider", "cms-component-receipt", "private-pair-preflight-caller", "private-preview-packet", "deployment-settings"]) {
+  for (const name of ["private-preview-pair-provider", "install-private-preview-pair", "public-release-private-install-ledger", "public-release-private-provider", "cms-component-receipt", "functions-contracts", "private-pair-preflight-caller", "private-preview-packet", "deployment-settings"]) {
     await cp(path.join(repository, `scripts/lib/${name}.mjs`), path.join(root, `scripts/lib/${name}.mjs`));
   }
   for (const file of ["install-private-preview-pair.mjs", "bind-private-preview-packets.mjs"]) await cp(path.join(repository, "scripts", file), path.join(root, "scripts", file));

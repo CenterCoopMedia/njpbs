@@ -404,7 +404,9 @@ jobs:
       - name: Install workspace deps
         run: npm ci --ignore-scripts
       - name: Install Site deps
-        run: npm --prefix site ci --ignore-scripts --no-audit --no-fund
+        run: |
+          npm --prefix site ci --ignore-scripts --no-audit --no-fund
+          npm run functions:build --if-present
       - name: Install preview renderer deps
         run: npm --prefix preview-renderer ci --ignore-scripts --no-audit --no-fund
       - name: Verify CMS API Worker
@@ -541,6 +543,7 @@ jobs:
         run: |
           npm ci --ignore-scripts
           npm --prefix site ci --ignore-scripts --no-audit --no-fund
+          npm run functions:build --if-present
       - name: Prepare the singleton contract runtime before credentials
         env:
           DEPLOY_SHA: ${{ needs.admin-build.outputs.deploy_sha }}
@@ -1114,7 +1117,7 @@ jobs:
       - name: Install Site release dependencies before mutation
         if: vars.CMS_PREVIEW_CLOUD_ENABLED == 'true' && needs.firebase-preflight.outputs.preview_paused == 'true'
         run: npm --prefix site ci --ignore-scripts --no-audit --no-fund
-      - name: Require preview deploy flags
+      - name: Prepare Functions contracts and verify preview deploy flags
         env:
           CMS_PREVIEW_ACCESS_VERIFIED: ${{ vars.CMS_PREVIEW_ACCESS_VERIFIED || 'false' }}
           CMS_PREVIEW_TRANSPORT: ${{ vars.CMS_PREVIEW_TRANSPORT || 'serializer' }}
@@ -1137,6 +1140,7 @@ jobs:
               exit 1
               ;;
           esac
+          npm run functions:build --if-present
       - name: Configure Firebase credentials
         env:
           SA: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
@@ -1599,6 +1603,7 @@ jobs:
         run: |
           npm ci --ignore-scripts --no-audit --no-fund
           npm --prefix site ci --ignore-scripts --no-audit --no-fund
+          npm run functions:build --if-present
       - name: Mark the renderer receipt in progress
         if: vars.CMS_PREVIEW_CLOUD_ENABLED == 'true' && needs.firebase-preflight.outputs.preview_paused == 'true'
         env:
@@ -1708,6 +1713,7 @@ jobs:
         run: |
           npm ci --ignore-scripts
           npm --prefix site ci --ignore-scripts --no-audit --no-fund
+          npm run functions:build --if-present
       - name: Smoke-test deployed CMS boundaries
         env:
           DEPLOY_SHA: ${{ needs.admin-build.outputs.deploy_sha }}

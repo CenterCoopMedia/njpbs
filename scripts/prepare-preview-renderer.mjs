@@ -1,6 +1,9 @@
 import { previewRendererBindings } from "./lib/deployment-settings.mjs";
 import { developmentValues, readDeploymentManifest, renderDevelopmentConfig, productionDeploymentInputs } from "./render-development-config.mjs";
 import { execFileSync } from "node:child_process";
+import { existsSync } from "node:fs";
+import { createRequire } from "node:module";
+import { contractRecipe, writeFunctionsContracts } from "./lib/functions-contracts.mjs";
 import { mkdtemp, readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
@@ -40,6 +43,9 @@ async function prepareRenderer(rendererSha, configName, { sourceRepository = rep
   // Verify the exact retained source first, then resolve its build inputs. The
   // image receives the same configured pins as the calling deployment tools.
   renderDevelopmentConfig(source, process.env, development ? undefined : { only: productionDeploymentInputs });
+  if (existsSync(path.join(source, contractRecipe))) {
+    await writeFunctionsContracts(source, createRequire(path.join(sourceRepository, "package.json")));
+  }
   const manifest = readDeploymentManifest(source);
   const targets = development && manifest ? developmentValues(process.env, { manifest }) : null;
   const rendererDirectory = path.join(source, "preview-renderer");

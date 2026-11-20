@@ -51,6 +51,7 @@ jobs:
           fi
           npm --prefix candidate ci --ignore-scripts
           npm --prefix candidate/site ci --ignore-scripts
+          npm --prefix candidate run functions:build --if-present
       - name: Measure lint, Functions types and size
         run: |
           baseline=()

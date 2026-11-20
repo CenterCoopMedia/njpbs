@@ -7,6 +7,7 @@
     "source": "functions",
     "codebase": "dev",
     "runtime": "nodejs22",
+    "predeploy": "npm run functions:build",
     "ignore": ["node_modules", ".git", "firebase-debug.log", "firebase-debug.*.log", "*.local"]
   }
 }

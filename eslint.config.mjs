@@ -1,5 +1,7 @@
 import { createRequire } from "node:module";
 import { fileURLToPath } from "node:url";
+import { readFileSync } from "node:fs";
+import { contractRecipe } from "./scripts/lib/functions-contracts.mjs";
 
 const fromFunctions = createRequire(new URL("./functions/package.json", import.meta.url));
 const fromSite = createRequire(new URL("./site/package.json", import.meta.url));
@@ -7,18 +9,10 @@ const typescriptFiles = ["**/*.{ts,tsx,mts,cts}"];
 
 function functionsConfig() {
   const globals = fromFunctions("globals");
-  // These committed outputs are regenerated from TypeScript.
-  const generated = [
-    "cms-image-variants", "data-hub-composition", "data-hub-reporting", "data-hub-reporting-sources",
-    "datasets", "data-figure", "live-blog", "election-results", "election-result-sources",
-    "county-comparison", "town-lookup", "dataset-figures", "cost-hardware", "post-lead-media",
-    "post-formats", "data-table", "block-content-validation", "published-resource-check",
-    "bio-profiles", "video-block", "home-source-catalog", "home-retained-sources", "home-newscast-data",
-    "home-hero", "published-vocabulary", "content-link", "posts-browse-contract",
-  ];
+  const { entries } = JSON.parse(readFileSync(new URL(contractRecipe, import.meta.url), "utf8"));
 
   return [
-    { ignores: generated.map((name) => `lib/${name}.js`) },
+    { ignores: Object.keys(entries).map(name => `lib/${name}.js`) },
     fromFunctions("@eslint/js").configs.recommended,
     { languageOptions: { ecmaVersion: 2023, sourceType: "commonjs", globals: globals.node } },
     { files: ["**/*.mjs"], languageOptions: { sourceType: "module" } },

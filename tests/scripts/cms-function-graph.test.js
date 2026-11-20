@@ -1,11 +1,12 @@
 import { execFileSync } from "node:child_process";
-import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from "node:fs";
+import { mkdtempSync, mkdirSync, writeFileSync, rmSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { fingerprintFunctionGraph, fingerprintInputs, fingerprintPaths, functionGraphSource, readCommittedBlobs, startReceipt, completeReceipt } from "../../scripts/lib/cms-component-receipt.mjs";
 import { INDEPENDENT_INPUTS } from "../../scripts/lib/deployment-components.mjs";
 import { functionDeploymentPhase, selectedFunctionBatches } from "../../scripts/deploy-cms-function-batches.mjs";
+import { contractRecipe } from "../../scripts/lib/functions-contracts.mjs";
 
 const directories = [];
 afterEach(() => directories.splice(0).forEach(path => rmSync(path, { recursive: true, force: true })));
@@ -83,6 +84,42 @@ describe("committed Functions module graph", () => {
     first.exports.health.fingerprint = "0".repeat(64);
     delete first.exports.cmsPreview;
     expect(await repo.graph(sha)).toEqual(original);
+  });
+
+  it("keeps the pre-recipe build wrapper outside retained release fingerprints", async () => {
+    const repo = repository();
+    const fingerprints = async sha => Promise.all([
+      fingerprintInputs(sha, "functions", { cwd: repo.cwd }),
+      fingerprintInputs(sha, "renderer", { cwd: repo.cwd }),
+    ]);
+    const before = await fingerprints(repo.commit());
+    // PR #201 shipped this wrapper before receipts included any contract build inputs.
+    repo.write("scripts/build-functions-contracts.mjs", 'throw new Error("Retained local build wrapper");');
+    expect(await fingerprints(repo.commit())).toEqual(before);
+  });
+
+  it("fingerprints a committed contract change only for the functions that use it", async () => {
+    const repo = repository();
+    const file = "packages/content-core/src/example.ts";
+    repo.write(contractRecipe, JSON.stringify({ entries: { example: file } }));
+    repo.write("package-lock.json", readFileSync(new URL("../../package-lock.json", import.meta.url), "utf8"));
+    repo.write("functions/health.js", 'exports.health = require("./lib/example");');
+    repo.write("config/development-inputs.json", JSON.stringify({ schemaVersion: 1, inputs: {
+      CMS_DEV_MEDIA_ORIGIN: { kind: "origin", placeholder: "https://dev-media.example.org", files: [file] },
+    } }));
+    repo.write(file, 'export const value = "https://dev-media.example.org";');
+    const before = repo.commit(), first = await repo.graph(before);
+    expect(first).not.toBeNull();
+    repo.write(file, 'export const value = "https://committed.fixture.test";');
+    expect(await repo.graph(before)).toEqual(first);
+    const second = await repo.graph(repo.commit());
+    expect(second.exports.health.fingerprint).not.toBe(first.exports.health.fingerprint);
+    expect(second.exports.cmsPreview).toEqual(first.exports.cmsPreview);
+    const configured = await fingerprintFunctionGraph(before, {
+      cwd: repo.cwd, env: { CMS_DEV_MEDIA_ORIGIN: "https://configured.fixture.test" },
+    });
+    expect(configured.exports.health.fingerprint).not.toBe(first.exports.health.fingerprint);
+    expect(configured.exports.cmsPreview).toEqual(first.exports.cmsPreview);
   });
 
   it("requires the source object in the requested repository even after another repository proved it", async () => {
@@ -207,13 +244,12 @@ describe("committed Functions module graph", () => {
       expect(() => selectedFunctionBatches(names, selection)).toThrow();
     }
   });
-  it("discovers all five retained-reader edges hidden behind generated createRequire aliases", async () => {
-    const source = execFileSync("git", ["show", "HEAD:functions/lib/home-retained-sources.js"], { encoding: "utf8" });
-    const blob = execFileSync("git", ["rev-parse", "HEAD:functions/lib/home-retained-sources.js"], { encoding: "utf8" }).trim();
+  it("discovers all five retained-reader edges in the generated modules", async () => {
+    const source = readFileSync(new URL("../../functions/lib/home-retained-sources.js", import.meta.url), "utf8");
     const { build } = await import("esbuild");
     const edges = [];
     await build({ stdin: { contents: functionGraphSource(source, "functions/lib/home-retained-sources.js",
-      `100644 blob ${blob}`), resolveDir: "/" }, bundle: true, write: false,
+      "100644 generated fixture"), resolveDir: "/" }, bundle: true, write: false,
       platform: "node", logLevel: "silent", plugins: [{ name: "collect-only", setup(builder) {
         builder.onResolve({ filter: /.*/ }, args => { edges.push(args.path); return { path: args.path, external: true }; });
       } }] });
@@ -222,6 +258,17 @@ describe("committed Functions module graph", () => {
     }
     expect(() => functionGraphSource(source, "functions/lib/home-retained-sources.js", "100644 blob " + "a".repeat(40))).toThrow();
     expect(() => functionGraphSource('const load = require("node:module").createRequire(__filename); load("./hidden");', "functions/new-loader.js", "100644 blob " + "a".repeat(40))).toThrow();
+  });
+
+  it("discovers static aliases only in a recognized retained reader blob", () => {
+    const file = "functions/lib/home-retained-sources.js";
+    const source = 'requireModule("./public-media-manifest.js");\nrequire2("./publication-target.js");';
+    // The Functions reader retained by the release before generated outputs left Git.
+    const retainedBlob = "100644 blob 64d39a0ef7658e8ecd5ba64f9be9e9bc578147d8";
+    expect(functionGraphSource(source, file, retainedBlob))
+      .toBe('require("./public-media-manifest.js");\nrequire("./publication-target.js");');
+    expect(() => functionGraphSource(source, file, "100644 blob " + "a".repeat(40)))
+      .toThrow("Unknown retained-reader module loader");
   });
 
   it("keeps preview readers out of the pre-pause phase and verifies the full inventory after it", () => {
