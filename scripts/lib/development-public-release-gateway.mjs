@@ -9,6 +9,7 @@ import { cloudflarePrivatePairProvider, privateWorkerMetadata, PrivateProviderNo
 import { privateInstallLedger } from './public-release-private-install-ledger.mjs';
 import { readClosedInitialIngressAuthority } from './public-release-bootstrap-ingress-authority.mjs';
 import { parseOperatorCredentialIdentity, operatorRefused as refuse } from './public-release-operator-io.mjs';
+import { activeWorkerDeploymentQuery, isActiveWorkerDeploymentPage } from './cloudflare-active-worker-deployment.mjs';
 const account = (process.env.CLOUDFLARE_ACCOUNT_ID ?? ""), worker = 'njpbs-dev-staff-sites';
 const hash = protocol.publicReleaseDigest, same = (a, b) => hash(a) === hash(b);
 const sha = bytes => createHash('sha256').update(bytes).digest('hex');
@@ -82,6 +83,7 @@ export async function readDevelopmentIngressInstall({ firestore, packet, ingress
  * domain, Access, secret, Worker create or subdomain writer is exposed. */
 export function developmentGatewayProvider({ readToken, fetchImpl = fetch, signal }) {
   const root = `/accounts/${account}/workers/scripts/${worker}`;
+  const activeDeployment = `${root}/${activeWorkerDeploymentQuery}`;
   async function api(path, { method = 'GET', body, raw = false } = {}) {
     let token;
     try {
@@ -103,7 +105,10 @@ export function developmentGatewayProvider({ readToken, fetchImpl = fetch, signa
     const bytes = Buffer.concat(chunks);
     if (raw) return { bytes, type: response.headers.get('content-type') ?? '' };
     let value; try { value = JSON.parse(new TextDecoder().decode(bytes)); } catch { refuse(); }
-    if (value.success !== true || !Object.hasOwn(value, 'result') || value.result_info?.total_pages > 1 ||
+    if (value.success !== true || !Object.hasOwn(value, 'result')) refuse();
+    if (method === 'GET' && path === activeDeployment) {
+      if (!isActiveWorkerDeploymentPage(value)) refuse();
+    } else if (value.result_info?.total_pages > 1 ||
         Array.isArray(value.result) && (value.result.length >= 100 || value.result_info?.total_count > value.result.length)) refuse();
     return value.result;
   }
@@ -119,8 +124,10 @@ export function developmentGatewayProvider({ readToken, fetchImpl = fetch, signa
     version: id => { if (!uuid(id)) refuse(); return api(`${root}/versions/${id}`); },
     async versions() { const value = await api(`${root}/versions?page=1&per_page=100`), rows = value.items ?? value;
       if (!Array.isArray(rows) || rows.length >= 100) refuse(); return rows; },
-    async deployment() { const value = await api(`${root}/deployments`), rows = value.deployments ?? value;
-      if (!Array.isArray(rows)) refuse(); return rows[0]; },
+    async deployment() {
+      const value = await api(activeDeployment);
+      return value.deployments[0];
+    },
     exposure: () => api(`${root}/subdomain`),
     async sourceDigest() {
       const { bytes, type } = await api(`${root}/content/v2`, { raw: true });

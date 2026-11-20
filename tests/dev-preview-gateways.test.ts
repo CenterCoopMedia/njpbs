@@ -4,6 +4,7 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { describe, expect, it, vi } from 'vitest';
 import { deployDevPreviewGateways, formatDevPreviewGatewayFailure, verifyDevPreviewAccessReady } from '../scripts/deploy-dev-preview-gateways.mjs';
+import { developmentGatewayProvider } from '../scripts/lib/development-public-release-gateway.mjs';
 
 // Synthetic targets exercise independent preview gateways. Network envelopes
 // follow Cloudflare's Worker versions/domain API.
@@ -25,7 +26,7 @@ const environment = () => ({ CANONICAL_GITHUB_REPOSITORY: "CenterCoopMedia/njpbs
   CMS_DEV_RELEASE_PREVIEW_RENDERER: 'true', CMS_DEPLOY_OWNER: 'fixture-owner',
   CLOUDFLARE_API_TOKEN: 'fixture-token', PATH: process.env.PATH, HOME: process.env.HOME });
 
-function provider(drift = '', stalePrivateReads = 0) {
+function provider(drift = '', stalePrivateReads = 0, deploymentHistory = 11) {
   let staged = 0;
   let privateReads = 0;
   let elapsed = 0;
@@ -69,9 +70,11 @@ function provider(drift = '', stalePrivateReads = 0) {
     expect(init.redirect).toBe('error');
     const pathname = url.pathname.replace('/client/v4', '');
     let result: unknown;
+    let resultInfo;
     if (pathname === '/zones') result = [{ id: zone, name: 'njpbs.org', account: { id: account } }];
     else if (pathname === `/zones/${zone}/workers/routes`) {
       result = drift === 'route-race' && staged === 2 ? [...routes, { id: 'e'.repeat(32), pattern: 'example.test/*', script: 'other' }] : routes;
+      if (drift === 'paginated-routes') resultInfo = { page: 1, total_pages: 2 };
     } else if (pathname === `/zones/${zone}/dns_records`) result = dns;
     else if (pathname === `/accounts/${account}/workers/domains`) {
       if (init.method === 'PUT') {
@@ -94,15 +97,17 @@ function provider(drift = '', stalePrivateReads = 0) {
         result = { bindings: bindings(worker) };
       } else if (suffix === 'subdomain') result = { enabled: drift === 'public-subdomain', previews_enabled: false };
       else if (suffix === 'deployments') {
+        expect(Object.fromEntries(url.searchParams)).toEqual({ page: '1', per_page: '1' });
         const stale = worker === privateWorker && ++privateReads <= stalePrivateReads;
         result = { deployments: [{ id: deployment, versions: [{ version_id: stale ? previousVersion : version, percentage: 100 }] }] };
+        resultInfo = { page: drift === 'wrong-deployment-page' ? 2 : 1, per_page: 1, total_pages: deploymentHistory };
       }
       else if (suffix === `versions/${version}`) result = { id: version, metadata: { source: 'wrangler' },
         annotations: { 'workers/tag': drift === 'wrong-source' ? 'c'.repeat(40) : sha },
         resources: { bindings: bindings(worker) } };
       else throw new Error('Unexpected fixture endpoint');
     }
-    return Response.json({ success: true, result });
+    return Response.json({ success: true, result, result_info: resultInfo });
   };
   const spawn = (_command: string, args: string[], options: { env: Record<string, string> }) => {
     const filename = args[args.indexOf('--config') + 1];
@@ -229,9 +234,10 @@ describe('safe dev gateway release failure diagnostics', () => {
 });
 
 describe('isolated dev exact-preview gateway release', () => {
-  it('stages private Workers and attaches only the new reviewed hostname with safe identity readback', async () => {
-    const boundary = provider();
-    const receipt = await deployDevPreviewGateways({ ...boundary, env: environment(), log: () => undefined });
+  it.each([11, 150])('stages private Workers and attaches only the reviewed hostname with %i deployments in history', async history => {
+    const boundary = provider('', 0, history);
+    const logs: string[] = [];
+    const receipt = await deployDevPreviewGateways({ ...boundary, env: environment(), log: line => logs.push(line) });
     expect(boundary.writes).toEqual([{ pathname: `/accounts/${account}/workers/domains`, body: {
       hostname: host, service: staffWorker, zone_id: zone, zone_name: 'njpbs.org', environment: 'production',
       enabled: true, previews_enabled: false,
@@ -239,6 +245,7 @@ describe('isolated dev exact-preview gateway release', () => {
     expect(receipt).toMatchObject({ environment: 'development', host, sourceSha: sha,
       signedOutRefusalVerified: true, unrelatedRoutesAndDomainsUnchanged: true });
     expect(receipt.gateways.map((entry: { worker: string }) => entry.worker)).toEqual([privateWorker, staffWorker]);
+    expect(logs[1]).toMatch(/^Dev preview gateway readback milliseconds: private=\d+ staff=\d+$/);
     expect(boundary.domains[0].hostname).toBe('example.test');
     expect(JSON.stringify(receipt)).not.toContain('fixture-token');
   });
@@ -246,6 +253,15 @@ describe('isolated dev exact-preview gateway release', () => {
     const boundary = provider(drift);
     await expect(deployDevPreviewGateways({ ...boundary, env: environment(), log: () => undefined })).rejects.toThrow();
     expect(boundary.staged()).toBe(0);
+    expect(boundary.writes).toEqual([]);
+  });
+  it.each([
+    { drift: 'paginated-routes', expectedWrites: 0, error: /pagination: expected a complete provider inventory.*total_pages=2/ },
+    { drift: 'wrong-deployment-page', expectedWrites: 1, error: /pagination: expected page one.*page=2 per_page=1 total_pages=11/ },
+  ])('refuses $drift without attaching a hostname', async ({ drift, expectedWrites, error }) => {
+    const boundary = provider(drift);
+    await expect(deployDevPreviewGateways({ ...boundary, env: environment(), log: () => undefined })).rejects.toThrow(error);
+    expect(boundary.staged()).toBe(expectedWrites);
     expect(boundary.writes).toEqual([]);
   });
   it('refuses a route race before hostname attachment', async () => {
@@ -308,6 +324,25 @@ describe('isolated dev exact-preview gateway release', () => {
     expect(boundary.staged()).toBe(0);
     expect(boundary.writes).toEqual([]);
   });
+});
+
+it.each([11, 150])('reads only the active staff-site deployment from a history of %i', async history => {
+  const active = { id: deployment, versions: [{ version_id: version, percentage: 100 }] };
+  const fetchImpl = vi.fn(async (_input: string, init: RequestInit) => {
+    expect(init.method).toBe('GET');
+    return Response.json({ success: true, result: { deployments: [active] },
+      result_info: { page: 1, per_page: 1, total_count: history, total_pages: history } });
+  });
+  const boundary = developmentGatewayProvider({ readToken: async () => 'fixture-token', fetchImpl });
+  await expect(boundary.deployment()).resolves.toEqual(active);
+  expect(fetchImpl).toHaveBeenCalledTimes(1);
+  expect(fetchImpl.mock.calls[0][0]).toBe(`https://api.cloudflare.com/client/v4/accounts/${account}/workers/scripts/njpbs-dev-staff-sites/deployments?page=1&per_page=1`);
+});
+
+it('requires a complete route inventory for the staff-site release operator', async () => {
+  const fetchImpl = async () => Response.json({ success: true, result: [], result_info: { page: 1, total_pages: 2 } });
+  const boundary = developmentGatewayProvider({ readToken: async () => 'fixture-token', fetchImpl });
+  await expect(boundary.api(`/zones/${zone}/workers/routes`)).rejects.toThrow('Public release operator refused');
 });
 
 describe('bounded custom-domain provisioning readiness (#2957)', () => {
