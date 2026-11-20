@@ -1,0 +1,7 @@
+{
+  "date": "2026-11-20",
+  "kind": "fixed",
+  "title": "Private previews wait for staff access",
+  "body": "A private preview stays on its progress screen while Boardwalk confirms your staff session. If access takes too long, Boardwalk asks you to try Preview again. If it cannot confirm your session, the preview tab opens the staff sign-in path.",
+  "prs": []
+}

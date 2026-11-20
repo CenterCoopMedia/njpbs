@@ -694,7 +694,7 @@ export function ContentTab({
   );
 
   const preparePreviewSession = useCallback(
-    () => preparePrivatePreviewSession(getIdToken()),
+    (signal: AbortSignal) => preparePrivatePreviewSession(getIdToken(), signal),
     [getIdToken],
   );
 

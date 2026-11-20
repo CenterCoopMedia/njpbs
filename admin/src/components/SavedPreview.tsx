@@ -2,7 +2,8 @@ import { EditorActionSlot } from "./EditorActions";
 import { useEffect, useId, useRef, useState } from "react";
 import type { PreviewStatusResponse, PreviewStatusWaitOptions, SavedPreviewRequestResponse } from "../lib/functions";
 import { createSavedPreviewOperation, PreviewOperationError, type PreviewJob, type PreviewTarget } from "../lib/saved-preview-operation";
-import { createPreviewProgressDocument, previewRendererUpdatingMessage, previewContextRefreshingMessage } from "./SavedPreviewProgress";
+import { createPreviewProgressDocument, previewRendererUpdatingMessage, previewContextRefreshingMessage, previewSessionSlowMessage } from "./SavedPreviewProgress";
+import type { PreviewSessionResult } from "../lib/staff-site";
 import { WorkspaceFeedback } from "./WorkspaceActions";
 import { AsyncActionButton, InlineMessage } from "./ui/Primitives";
 
@@ -12,7 +13,7 @@ export interface SavedPreviewProps {
   enabled: boolean;
   disabledReason?: string;
   preparePreview(signal: AbortSignal): Promise<PreviewTarget>;
-  prepareSession?(): Promise<void>;
+  prepareSession?(signal: AbortSignal): Promise<PreviewSessionResult>;
   requestPreview(target: PreviewTarget): Promise<SavedPreviewRequestResponse>;
   loadPreviewStatus(queueId: string, options?: PreviewStatusWaitOptions): Promise<PreviewStatusResponse>;
 }
@@ -67,7 +68,7 @@ export function SavedPreview(props: SavedPreviewProps) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const active = useRef<{
-    operation: ReturnType<typeof createSavedPreviewOperation>;
+    cancel(): void;
     popup: Window;
     ownsTab(): boolean;
     timer: ReturnType<typeof setInterval>;
@@ -80,7 +81,7 @@ export function SavedPreview(props: SavedPreviewProps) {
       active.current = null;
       if (!running) return;
       clearInterval(running.timer);
-      running.operation.dispose();
+      running.cancel();
       // A completed preview is detached from this owner and is never closed here.
       try { if (running.ownsTab()) running.popup.close(); } catch { /* The tab has left our origin. */ }
     };
@@ -129,24 +130,37 @@ export function SavedPreview(props: SavedPreviewProps) {
         stillOwnsOperation(); return current.current.loadPreviewStatus(queueId, { signal, waitMs: 5000, observedStatus });
       })),
     });
-    const timer = setInterval(() => { if (!ownsTab()) operation.dispose(); }, 250);
-    const running = { operation, popup, timer, ownsTab };
+    const cancel = () => { operation.dispose(); preparation.abort(); };
+    const timer = setInterval(() => { if (!ownsTab()) cancel(); }, 250);
+    const running = { cancel, popup, timer, ownsTab };
     active.current = running;
     // Capture the draft inside this click, after popup admission and ownership.
     try { prepared = Promise.resolve(current.current.preparePreview(preparation.signal)); }
     catch (reason) { prepared = Promise.reject(reason); }
     void prepared.catch(() => {});
     const prepareSession = current.current.prepareSession;
-    const session = Promise.resolve().then(() => prepareSession?.()).catch(() => {});
+    const session = Promise.resolve().then(() => prepareSession?.(preparation.signal)).catch(() => "unavailable" as const);
     setBusy(true); setError(null);
     void operation.run().then(async outcome => {
       if (active.current !== running || !ownsTab() || outcome.status === "cancelled") return;
       // Both ready reuse and polled completion need the private cookie before
       // navigation. Keep save, acceptance and polling running alongside it.
       progress.update("opening");
-      await session;
-      if (active.current !== running || !ownsTab()) return;
-      popup.location.replace(outcome.url);
+      const access = await session;
+      if (active.current !== running || !ownsTab() || access === "cancelled") return;
+      if (access === "slow") {
+        setError(previewSessionSlowMessage.editor);
+        progress.update("session-slow");
+      } else if (access === "unavailable") {
+        throw new Error("Preview session unavailable");
+      } else if (access === "refused") {
+        const signIn = new URL("/", window.location.origin);
+        signIn.searchParams.set("staffSite", outcome.url);
+        setError("Boardwalk could not confirm your staff session. Check the preview tab to sign in again.");
+        popup.location.replace(signIn.href);
+      } else {
+        popup.location.replace(outcome.url);
+      }
     }).catch(reason => {
       if (active.current !== running || !ownsTab()) return;
       const rendererUpdating = isPreviewRendererUpdating(reason);
@@ -160,8 +174,7 @@ export function SavedPreview(props: SavedPreviewProps) {
       catch { /* Do not write to a tab that navigated away while the request ran. */ }
     }).finally(() => {
       clearInterval(timer);
-      operation.dispose();
-      preparation.abort();
+      cancel();
       if (active.current === running) { active.current = null; setBusy(false); }
     });
   }

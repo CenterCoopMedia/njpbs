@@ -2,7 +2,7 @@ import type { PreviewProgress } from "../lib/saved-preview-operation";
 import designTokens from "../design-system/tokens.css?inline";
 import progressStyles from "./SavedPreviewProgress.css?inline";
 
-type ProgressState = PreviewProgress | "preparing" | "opening" | "error" | "updating" | "refresh-failed";
+type ProgressState = PreviewProgress | "preparing" | "opening" | "error" | "updating" | "refresh-failed" | "session-slow";
 
 export const previewContextRefreshingMessage = {
   heading: "Previews are refreshing",
@@ -16,6 +16,12 @@ export const previewRendererUpdatingMessage = {
   editor: "The preview service is updating. Try Preview again in a few minutes. Your edits remain in the editor.",
 } as const;
 
+export const previewSessionSlowMessage = {
+  heading: "Private access is taking longer than expected",
+  detail: "Return to the CMS and select Preview to try again.",
+  editor: "Private preview access is taking longer than expected. Select Preview to try again.",
+} as const;
+
 const messages: Record<ProgressState, { heading: string; detail: string; step: number }> = {
   preparing: { heading: "Preparing preview", detail: "Checking your current draft and saving any changes for this preview.", step: 0 },
   requesting: { heading: "Requesting your preview", detail: "Your draft is saved. Checking for a preview of this exact version.", step: 1 },
@@ -26,6 +32,7 @@ const messages: Record<ProgressState, { heading: string; detail: string; step: n
   "refresh-failed": { heading: previewContextRefreshingMessage.heading, detail: previewContextRefreshingMessage.error, step: -1 },
   opening: { heading: "Opening your preview", detail: "Your preview is ready. Preparing private access before opening it here.", step: 3 },
   error: { heading: "Preview unavailable", detail: "Preview is temporarily unavailable. Your edits remain in the editor. Return to the CMS and select Preview to try again.", step: -1 },
+  "session-slow": { ...previewSessionSlowMessage, step: -1 },
   updating: { heading: previewRendererUpdatingMessage.heading, detail: previewRendererUpdatingMessage.detail, step: -1 },
 };
 
@@ -99,7 +106,7 @@ export function createPreviewProgressDocument(popup: Window) {
     if (state === current) return;
     current = state;
     const message = messages[state];
-    const failed = state === "error" || state === "updating" || state === "refresh-failed";
+    const failed = message.step < 0;
     main.dataset.state = failed ? "error" : state;
     document.title = `${message.heading} | Boardwalk`;
     heading.textContent = message.heading;
