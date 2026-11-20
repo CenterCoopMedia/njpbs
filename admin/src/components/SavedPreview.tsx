@@ -151,14 +151,14 @@ export function SavedPreview(props: SavedPreviewProps) {
       if (access === "slow") {
         setError(previewSessionSlowMessage.editor);
         progress.update("session-slow");
-      } else if (access === "unavailable") {
-        throw new Error("Preview session unavailable");
       } else if (access === "refused") {
         const signIn = new URL("/", window.location.origin);
         signIn.searchParams.set("staffSite", outcome.url);
         setError("Boardwalk could not confirm your staff session. Check the preview tab to sign in again.");
         popup.location.replace(signIn.href);
       } else {
+        // On a transport failure the gateway can still use an existing cookie
+        // or redirect through its normal sign-in handoff.
         popup.location.replace(outcome.url);
       }
     }).catch(reason => {

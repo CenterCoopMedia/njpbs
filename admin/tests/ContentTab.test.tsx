@@ -1284,8 +1284,7 @@ describe("ContentTab", () => {
         handoff.searchParams.set("staffSite", previewUrl);
         expect(replace).toHaveBeenCalledExactlyOnceWith(handoff.href);
       } else {
-        await screen.findByText("Preview is temporarily unavailable. Your edits remain in the editor.");
-        expect(replace).not.toHaveBeenCalled();
+        await waitFor(() => expect(replace).toHaveBeenCalledExactlyOnceWith(previewUrl));
       }
       expect(fetch).toHaveBeenCalledWith("https://preview.njpbs.org/__cms-session", expect.objectContaining({ method: "POST" }));
       expect(functionsMocks.cmsRequestSavedPreview).toHaveBeenCalledWith("id-token", "cmsPages", "home", 7);
