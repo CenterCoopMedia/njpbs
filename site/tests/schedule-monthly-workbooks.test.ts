@@ -140,6 +140,34 @@ describe("approved November and December lineups", () => {
     expect(applyScheduleCorrections(january)).toBe(january);
   });
 
+  it("applies the four approved December changes at their Eastern times", () => {
+    const output = applyScheduleCorrections(windowAt("2026-12-01"));
+    const lifeline = "Lifeline: Pearl Harbor's Unknown Hero";
+    const hanukkah = "A Celebration of Hanukkah";
+    const london = "Destination London: Preparing for the Parade";
+    const expected = [
+      { date: "2026-12-03", start: "21:30", end: "23:00", slots: [[lifeline, "21:30", "23:00"]] },
+      { date: "2026-12-04", start: "01:00", end: "02:30", slots: [[lifeline, "01:00", "02:30"]] },
+      { date: "2026-12-10", start: "21:30", end: "23:00", slots: [
+        [hanukkah, "21:30", "22:30"], [london, "22:30", "23:00"],
+      ] },
+      { date: "2026-12-11", start: "01:00", end: "02:30", slots: [
+        [hanukkah, "01:00", "02:00"], [london, "02:00", "02:30"],
+      ] },
+    ];
+    for (const { date, start, end, slots } of expected) {
+      const from = `${date}T${start}:00-05:00`;
+      const until = `${date}T${end}:00-05:00`;
+      const day = output.days.broadcast.find((item) => item.date === date)!;
+      expect(day.sourceRevision).toBe("2026-11-16");
+      expect(day.entries.filter((entry) => entry.startsAt < until && entry.endsAt > from)
+        .map((entry) => [entry.title, entry.startsAt, entry.endsAt, entry.isKids]))
+        .toEqual(slots.map(([title, startsAt, endsAt]) => [
+          title, `${date}T${startsAt}:00-05:00`, `${date}T${endsAt}:00-05:00`, false,
+        ]));
+    }
+  });
+
   it.each(["2026-11-15", "2026-12-18"])("keeps the workbook lineup in a later bake for %s", async (date) => {
     const rawFeed = `cb(${JSON.stringify({ headends: [{ name: "Broadcast", feeds: [{
       cid: "4211290e-ce30-49e5-9be1-2c412c5b3278", listings: [{

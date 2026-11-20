@@ -8,6 +8,15 @@
     "timeZone": "America/New_York"
   },
   "verifiedPbsBoundaries": {},
+  "programmingChanges": {
+    "revision": "2026-11-16",
+    "slots": {
+      "2026-12-03": { "fromDate": "2026-12-10", "startTime": "21:30", "endTime": "23:00" },
+      "2026-12-04": { "fromDate": "2026-12-11", "startTime": "01:00", "endTime": "02:30" },
+      "2026-12-10": { "fromDate": "2026-12-03", "startTime": "21:30", "endTime": "23:00" },
+      "2026-12-11": { "fromDate": "2026-12-04", "startTime": "01:00", "endTime": "02:30" }
+    }
+  },
   "unresolved": [
     {
       "date": "2026-12-04",
