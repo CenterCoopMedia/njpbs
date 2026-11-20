@@ -1,6 +1,7 @@
 import { repositoryMatches } from "./lib/repository-identity.mjs";
 import { devAccessOrigin, deploymentOwner } from "./lib/deployment-settings.mjs";
 import { devDeploySourceSha } from "./lib/dev-deploy-source.mjs";
+import { waitForWorkerReadback, WorkerReadbackMismatch, wranglerVersion } from './lib/cloudflare-worker-readback.mjs';
 import { spawnSync } from 'node:child_process';
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -15,16 +16,17 @@ const HOST = 'dev-preview.example.org';
 const PRIVATE = 'template-dev-cms-preview';
 const STAFF = 'template-dev-preview-staff-sites';
 const ID = /^[a-f0-9]{32}$/;
+const SHA = /^[a-f0-9]{40}$/;
 // Accept only the supported 32- and 40-character lowercase hex domain IDs.
 const DOMAIN_ID = /^(?:[a-f0-9]{32}|[a-f0-9]{40})$/;
 const UUID = /^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/;
 const ROOT = new URL('../', import.meta.url);
 
 class DevPreviewGatewayReleaseError extends Error {
-  constructor({ phase, status, codes = [] }) {
+  constructor({ phase, status, codes = [], mismatch }) {
     const http = Number.isInteger(status) && status >= 100 && status <= 599 ? status : 'unknown';
     const numericCodes = codes.filter(code => Number.isSafeInteger(code) && code >= 0).join(',') || 'none';
-    super(`Dev preview gateway release failed at ${phase} (${http}/${numericCodes}); raw details withheld`);
+    super(`Dev preview gateway release failed at ${phase} (${http}/${numericCodes}); ${mismatch ? `${mismatch}; ` : ''}raw details withheld`);
   }
 }
 
@@ -117,11 +119,14 @@ export async function deployDevPreviewGateways(options = {}) {
   // Keep diagnostics local to this release; never retain raw error details.
   const diagnostic = { phase: 'inputs', status: undefined, codes: [] };
   try { return await releaseDevPreviewGateways(options, diagnostic); }
-  catch { throw new DevPreviewGatewayReleaseError(diagnostic); }
+  catch (error) {
+    const mismatch = error instanceof WorkerReadbackMismatch ? error.message : undefined;
+    throw new DevPreviewGatewayReleaseError({ ...diagnostic, mismatch });
+  }
 }
 
 async function releaseDevPreviewGateways({ env = process.env, fetchImpl = fetch,
-  spawn = spawnSync, log = console.log, hasPublicOrigin = publicHostnameHasRecords } = {}, diagnostic) {
+  spawn = spawnSync, log = console.log, hasPublicOrigin = publicHostnameHasRecords, readbackClock } = {}, diagnostic) {
   function setPhase(phase) {
     diagnostic.phase = phase;
     diagnostic.status = undefined;
@@ -139,12 +144,12 @@ async function releaseDevPreviewGateways({ env = process.env, fetchImpl = fetch,
     (!releasing || env.CMS_DEV_PUBLISH_ENABLED === 'false') && ID.test(ACCOUNT) && env.CLOUDFLARE_ACCOUNT_ID === ACCOUNT &&
     /^[a-f0-9]{64}$/.test(env.DEV_PREVIEW_ACCESS_AUDIENCE ?? '') && env.CLOUDFLARE_API_TOKEN);
   const audience = env.DEV_PREVIEW_ACCESS_AUDIENCE;
-  async function api(suffix, method = 'GET', body, missing = false) {
+  async function api(suffix, method = 'GET', body, missing = false, signal = AbortSignal.timeout(15_000)) {
     diagnostic.status = undefined;
     diagnostic.codes = [];
     try {
       const response = await fetchImpl(`https://api.cloudflare.com/client/v4${suffix}`, {
-        method, redirect: 'error', signal: AbortSignal.timeout(15_000),
+        method, redirect: 'error', signal,
         headers: { Authorization: `Bearer ${env.CLOUDFLARE_API_TOKEN}`, 'Content-Type': 'application/json' },
         ...(body ? { body: JSON.stringify(body) } : {}),
       });
@@ -231,17 +236,43 @@ async function releaseDevPreviewGateways({ env = process.env, fetchImpl = fetch,
       { binding: 'DEV_STAFF_ACCESS', service: 'template-dev-cms-api', entrypoint: 'StaffSiteEntrypoint' },
       { binding: 'DEV_PREVIEW', service: PRIVATE },
     ]));
-  async function collect(worker, phase = 'collect') {
+  async function collect(worker, expectedVersionId, phase = 'collect', signal) {
     setPhase(`${phase}:${worker}`);
-    const deployments = await api(`${base}/scripts/${worker}/deployments`);
+    const read = endpoint => api(`${base}/scripts/${worker}/${endpoint}`, 'GET', undefined, false, signal);
+    const deployments = await read('deployments');
     const active = deployments.deployments?.[0];
-    requireState(UUID.test(active?.id ?? '') && active.versions?.length === 1 &&
-      active.versions[0].percentage === 100 && UUID.test(active.versions[0].version_id));
-    const version = await api(`${base}/scripts/${worker}/versions/${active.versions[0].version_id}`);
-    requireState(version.id === active.versions[0].version_id && version.annotations?.['workers/tag'] === sourceSha);
-    verifyBindings(version.resources?.bindings, worker, audience);
-    const subdomain = await api(`${base}/scripts/${worker}/subdomain`);
-    requireState(subdomain.enabled === false && subdomain.previews_enabled === false);
+    const activeVersion = active?.versions?.[0];
+    if (!UUID.test(active?.id ?? '') || !Array.isArray(active.versions) || active.versions.length !== 1 ||
+        activeVersion?.percentage !== 100 || activeVersion?.version_id !== expectedVersionId) {
+      throw new WorkerReadbackMismatch('deployment tuple',
+        { deploymentId: 'UUID', versions: 1, versionId: expectedVersionId, percentage: 100 },
+        { deploymentId: UUID.test(active?.id ?? '') ? active.id : null,
+          versions: Array.isArray(active?.versions) ? active.versions.length : null,
+          versionId: UUID.test(activeVersion?.version_id ?? '') ? activeVersion.version_id : null,
+          percentage: Number.isFinite(activeVersion?.percentage) ? activeVersion.percentage : null });
+    }
+    const version = await read(`versions/${expectedVersionId}`);
+    if (version?.id !== expectedVersionId) {
+      throw new WorkerReadbackMismatch('deployment tuple', { versionId: expectedVersionId },
+        { versionId: UUID.test(version?.id ?? '') ? version.id : null });
+    }
+    const tag = version.annotations?.['workers/tag'];
+    if (tag !== sourceSha) throw new WorkerReadbackMismatch('source tag', sourceSha, SHA.test(tag ?? '') ? tag : null);
+    const bindings = version.resources?.bindings;
+    try { verifyBindings(bindings, worker, audience); }
+    catch {
+      if (worker !== PRIVATE) throw new WorkerReadbackMismatch('staff bindings', 'exact configured tuple', 'different tuple');
+      const binding = Array.isArray(bindings) ? bindings[0] : null;
+      throw new WorkerReadbackMismatch('R2 binding', { count: 1, name: 'PREVIEWS', type: 'r2_bucket', expectedBucket: true },
+        { count: Array.isArray(bindings) ? bindings.length : null, name: binding?.name === 'PREVIEWS' ? 'PREVIEWS' : null,
+          type: binding?.type === 'r2_bucket' ? 'r2_bucket' : null, expectedBucket: binding?.bucket_name === 'template-dev-cms-previews' });
+    }
+    const subdomain = await read('subdomain');
+    if (subdomain?.enabled !== false || subdomain?.previews_enabled !== false) {
+      throw new WorkerReadbackMismatch('subdomain', { enabled: false, previewsEnabled: false },
+        { enabled: typeof subdomain?.enabled === 'boolean' ? subdomain.enabled : null,
+          previewsEnabled: typeof subdomain?.previews_enabled === 'boolean' ? subdomain.previews_enabled : null });
+    }
     return { worker, deploymentId: active.id, versionId: version.id, sourceSha };
   }
   const directory = mkdtempSync(path.join(tmpdir(), 'njpbs-dev-preview-gateways-'));
@@ -260,12 +291,14 @@ async function releaseDevPreviewGateways({ env = process.env, fetchImpl = fetch,
       setPhase(`wrangler-deploy:${config.name}`);
       const result = spawn(new URL('node_modules/.bin/wrangler', ROOT).pathname,
         ['deploy', '--config', filename, '--tag', sourceSha], {
-          stdio: 'ignore', timeout: 300_000,
+          stdio: ['ignore', 'pipe', 'ignore'], encoding: 'utf8', maxBuffer: 4 * 1024 * 1024, timeout: 300_000,
           env: { PATH: env.PATH, HOME: env.HOME, CI: 'true', CLOUDFLARE_API_TOKEN: env.CLOUDFLARE_API_TOKEN,
             CLOUDFLARE_ACCOUNT_ID: ACCOUNT, WRANGLER_SEND_METRICS: 'false', WRANGLER_WRITE_LOGS: 'false' },
         });
       requireState(result.status === 0);
-      identities.push(await collect(config.name));
+      const versionId = wranglerVersion(result.stdout);
+      requireState(versionId);
+      identities.push(await waitForWorkerReadback(signal => collect(config.name, versionId, 'collect', signal), readbackClock));
     }
     const staged = await inventory('staged-inventory');
     requireState(isDeepStrictEqual(staged, initial));
@@ -287,7 +320,7 @@ async function releaseDevPreviewGateways({ env = process.env, fetchImpl = fetch,
     const final = await inventory('final-inventory');
     requireState(final.owned?.id === after.owned.id && isDeepStrictEqual(final.routes, initial.routes) &&
       isDeepStrictEqual(final.domains.filter(d => d.hostname !== HOST), initial.domains.filter(d => d.hostname !== HOST)));
-    for (const identity of identities) requireState(isDeepStrictEqual(await collect(identity.worker, 'final-identity'), identity));
+    for (const identity of identities) requireState(isDeepStrictEqual(await collect(identity.worker, identity.versionId, 'final-identity'), identity));
     const receipt = { schemaVersion: 1, environment: 'development', host: HOST,
       sourceSha, trustedWorkflowSha: env.GITHUB_SHA, gateways: identities, customDomainId: final.owned.id,
       signedOutRefusalVerified: true, unrelatedRoutesAndDomainsUnchanged: true, verifiedAt: new Date().toISOString() };

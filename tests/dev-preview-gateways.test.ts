@@ -17,6 +17,7 @@ const privateWorker = 'template-dev-cms-preview';
 const staffWorker = 'template-dev-preview-staff-sites';
 const deployment = '11111111-1111-4111-8111-111111111111';
 const version = '22222222-2222-4222-8222-222222222222';
+const previousVersion = '33333333-3333-4333-8333-333333333333';
 const environment = () => ({ CANONICAL_GITHUB_REPOSITORY: "CenterCoopMedia/njpbs", CANONICAL_GITHUB_REPOSITORY_ID: "1442374012", GITHUB_REF: 'refs/heads/main', GITHUB_REPOSITORY: 'CenterCoopMedia/njpbs', GITHUB_REPOSITORY_ID: '1442374012',
   GITHUB_WORKFLOW_REF: 'CenterCoopMedia/njpbs/.github/workflows/cms-dev-deploy.yml@refs/heads/main',
   DEPLOY_SHA: sha, GITHUB_WORKFLOW_SHA: sha, GITHUB_SHA: sha, GITHUB_ACTOR: 'fixture-owner', GITHUB_TRIGGERING_ACTOR: 'fixture-owner', RUNNER_ENVIRONMENT: 'github-hosted',
@@ -24,8 +25,10 @@ const environment = () => ({ CANONICAL_GITHUB_REPOSITORY: "CenterCoopMedia/njpbs
   CMS_DEV_RELEASE_PREVIEW_RENDERER: 'true', CMS_DEPLOY_OWNER: 'fixture-owner',
   CLOUDFLARE_API_TOKEN: 'fixture-token', PATH: process.env.PATH, HOME: process.env.HOME });
 
-function provider(drift = '') {
+function provider(drift = '', stalePrivateReads = 0) {
   let staged = 0;
+  let privateReads = 0;
+  let elapsed = 0;
   const writes: Array<{ pathname: string; body: unknown }> = [];
   const workers = new Map<string, Record<string, unknown>>();
   const domains: Array<Record<string, unknown>> = [];
@@ -47,7 +50,8 @@ function provider(drift = '') {
     ADMIN_ORIGIN: 'https://dev-admin.example.org', FUNCTIONS_ORIGIN: 'https://us-central1-njpbs-site-dev.cloudfunctions.net' })
     .map(([name, text]) => ({ type: 'plain_text', name, text }));
   function bindings(worker: string) {
-    return worker === privateWorker ? [{ name: 'PREVIEWS', type: 'r2_bucket', bucket_name: 'template-dev-cms-previews' }] : [
+    return worker === privateWorker ? [{ name: 'PREVIEWS', type: 'r2_bucket',
+      bucket_name: drift === 'wrong-r2' && staged ? 'fixture-private-bucket' : 'template-dev-cms-previews' }] : [
       { name: 'DEV_ACCESS_AUDIENCE', type: 'plain_text', text: audience },
       { name: 'CMS_DEV_ACCESS_ORIGIN', type: 'plain_text', text: 'https://fixture.cloudflareaccess.com' },
       { name: 'DEV_STAFF_ACCESS', type: 'service', service: 'template-dev-cms-api', entrypoint: 'StaffSiteEntrypoint' },
@@ -89,7 +93,10 @@ function provider(drift = '') {
         if (!workers.has(worker)) return new Response(null, { status: 404 });
         result = { bindings: bindings(worker) };
       } else if (suffix === 'subdomain') result = { enabled: drift === 'public-subdomain', previews_enabled: false };
-      else if (suffix === 'deployments') result = { deployments: [{ id: deployment, versions: [{ version_id: version, percentage: 100 }] }] };
+      else if (suffix === 'deployments') {
+        const stale = worker === privateWorker && ++privateReads <= stalePrivateReads;
+        result = { deployments: [{ id: deployment, versions: [{ version_id: stale ? previousVersion : version, percentage: 100 }] }] };
+      }
       else if (suffix === `versions/${version}`) result = { id: version, metadata: { source: 'wrangler' },
         annotations: { 'workers/tag': drift === 'wrong-source' ? 'c'.repeat(40) : sha },
         resources: { bindings: bindings(worker) } };
@@ -107,9 +114,10 @@ function provider(drift = '') {
     expect(options.env).not.toHaveProperty('CMS_DEV_ACCESS_CLIENT_SECRET');
     workers.set(config.name, config);
     staged++;
-    return { status: 0 };
+    return { status: 0, stdout: `Current Version ID: ${version}\n` };
   };
-  return { fetchImpl, spawn, writes, domains, dns, hasPublicOrigin: async () => dns.length > 0, staged: () => staged };
+  return { fetchImpl, spawn, writes, domains, dns, hasPublicOrigin: async () => dns.length > 0, staged: () => staged,
+    readbackClock: { now: () => elapsed, wait: async (ms: number) => { elapsed += ms; } }, elapsed: () => elapsed };
 }
 
 it('tags and verifies the selected gateway pin after trusted main advances', async () => {
@@ -240,9 +248,33 @@ describe('isolated dev exact-preview gateway release', () => {
     expect(boundary.staged()).toBe(0);
     expect(boundary.writes).toEqual([]);
   });
-  it.each(['route-race', 'public-subdomain', 'wrong-source'])('refuses staged provider drift %s before hostname attachment', async drift => {
-    const boundary = provider(drift);
+  it('refuses a route race before hostname attachment', async () => {
+    const boundary = provider('route-race');
     await expect(deployDevPreviewGateways({ ...boundary, env: environment(), log: () => undefined })).rejects.toThrow();
+    expect(boundary.writes).toEqual([]);
+  });
+  it('waits for the deployed private version without repeating either deployment', async () => {
+    const boundary = provider('', 3);
+    const receipt = await deployDevPreviewGateways({ ...boundary, env: environment(), log: () => undefined });
+    expect(boundary.elapsed()).toBe(1500);
+    expect(boundary.staged()).toBe(2);
+    expect(receipt.gateways[0].versionId).toBe(version);
+    expect(boundary.writes).toHaveLength(1);
+  });
+  it.each([
+    { drift: '', staleReads: Infinity, check: 'deployment tuple' },
+    { drift: 'wrong-source', staleReads: 0, check: 'source tag' },
+    { drift: 'wrong-r2', staleReads: 0, check: 'R2 binding' },
+    { drift: 'public-subdomain', staleReads: 0, check: 'subdomain' },
+  ])('refuses a persistent $check mismatch before hostname attachment', async ({ drift, staleReads, check }) => {
+    const boundary = provider(drift, staleReads);
+    const error = await deployDevPreviewGateways({ ...boundary, env: environment(), log: () => undefined }).catch(error => error);
+    const message = formatDevPreviewGatewayFailure(error);
+    expect(message).toContain(`${check}: expected `);
+    expect(message).toContain(', actual ');
+    expect(message).not.toContain('fixture-private-bucket');
+    expect(boundary.elapsed()).toBe(4500);
+    expect(boundary.staged()).toBe(1);
     expect(boundary.writes).toEqual([]);
   });
   it('does not attest success when signed-out reads expose content', async () => {

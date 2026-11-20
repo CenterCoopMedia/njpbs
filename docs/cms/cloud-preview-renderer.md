@@ -188,6 +188,12 @@ an overwrite. Distinct container and ordinary Worker tokens stay scoped.
 Changing component source-pin settings or resuming publication is a separate
 private operator step after full success, never implicit on failure.
 
+After Wrangler returns, the dev gateway jobs allow up to five seconds for
+[Workers deployment propagation](https://developers.cloudflare.com/workers/versions-and-deployments/version-skew/).
+They repeat only the provider reads. The version Wrangler reported must reach
+100 percent traffic with the expected source and private configuration before
+the jobs proceed. The later route and identity checks still verify live state.
+
 Verify saved content/version/output identity with ordinary development staff,
 anonymous/wrong-project refusal, cross-owner access, disabled/revoked/deleted
 accounts, record lifecycle, ordinary/retained 24-hour expiry and HEAD/assets.
