@@ -457,6 +457,7 @@ function createCmsGetPublishedPostHandler(deps = {}) {
       code = "published_snapshot_unavailable";
       const result = await readPublishedPost({ firestore, slug, now: time });
       if (!require("./lib/content-link").contentLinkReadFits(result, 2 * 1024 * 1024)) throw new Error("Published read too large");
+      if (result.kind === "gone") res.set("x-njpbs-gone-branch", "post-reader-deleted");
       return res.status(result.kind === "gone" ? 410 : result.kind === "not-found" ? 404 : 200).json(result);
     } catch (error) {
       // Never log arbitrary SDK errors, content, headers or secret values.

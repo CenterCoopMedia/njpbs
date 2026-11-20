@@ -61,7 +61,9 @@ function harness(formattedBody = false, contentLinkMode?: "custom") {
     } });
   return { published, worker, reply, request: (method = "GET", requested = path) => worker.fetch(new Request(origin + requested, { method })),
     override: (fn: typeof replyOverride) => { replyOverride = fn; }, onRender: (fn: typeof duringRender) => { duringRender = fn; },
-    withdraw: () => { marker = { postId: "shadow-fixture", sourceVersion: 7, revision: 3, operationId: "A".repeat(20), ownedSlugs: ["shadow-fixture"], verifiedAt: 1234 }; },
+    withdraw: (sourceVersion = 7, revision = 3) => {
+      marker = { postId: "shadow-fixture", sourceVersion, revision, operationId: "A".repeat(20), ownedSlugs: ["shadow-fixture"], verifiedAt: 1234 };
+    },
     advanceContext: () => { contextRevision++; } };
 }
 
@@ -115,7 +117,9 @@ it("refuses a context change during render and lets a concurrent durable withdra
   h.onRender(h.advanceContext);
   expect((await h.request())!.status).toBe(503);
   h.onRender(h.withdraw);
-  expect((await h.request())!.status).toBe(410);
+  const withdrawn = (await h.request())!;
+  expect(withdrawn.status).toBe(410);
+  expect(withdrawn.headers.get("x-njpbs-gone-branch")).toBe("code-post-tombstone-race");
 });
 
 it("keeps durable withdrawals absent through private authority failures", async () => {
@@ -124,6 +128,17 @@ it("keeps durable withdrawals absent through private authority failures", async 
   h.override(() => { throw new Error("Private failure detail"); });
   const response = (await h.request())!;
   expect(response.status).toBe(410);
+  expect(response.headers.get("x-njpbs-gone-branch")).toBe("code-post-tombstone-reader");
+  expect(await response.text()).toBe("");
+});
+
+it("keeps a verified current code Post from falling back to an older tombstone after render failure", async () => {
+  const h = harness();
+  h.withdraw(6, 2);
+  h.onRender(() => { throw new Error("Renderer unavailable"); });
+  const response = (await h.request())!;
+  expect(response.status).toBe(503);
+  expect(response.headers.get("x-njpbs-withdrawal-state")).toBe("unknown");
   expect(await response.text()).toBe("");
 });
 

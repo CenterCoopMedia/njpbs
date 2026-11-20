@@ -162,6 +162,23 @@ describe("private pair routing", () => {
     recover.mockResolvedValue(null as never);
     expect((await router.fetch(new Request("https://dev-public.example.org/a/"))).status).toBe(503);
   });
+  it.each([
+    ["pair-current-withdrawal", "pair-current-withdrawal"],
+    ["pair-frozen-withdrawal", "pair-frozen-withdrawal"],
+    ["unrecognized-slot-value", "pair-slot-withdrawal"],
+  ])("exposes only public 410 branch labels from the selected slot", async (source, expected) => {
+    const bindings = [pair, other].map(identity => ({ identity, serve: async () => ({
+      kind: "response" as const,
+      response: new Response(null, { status: 410, headers: {
+        "x-njpbs-gone-branch": source, "x-njpbs-publication-operation": "private-proof",
+      } }),
+    }) }));
+    const router = createPublicReleaseRouter({ environment: "development", slots: bindings, readSelector: async () => receipt() });
+    const response = await router.fetch(new Request("https://dev-public.example.org/posts/story/"));
+    expect(response.status).toBe(410);
+    expect(response.headers.get("x-njpbs-gone-branch")).toBe(expected);
+    expect(response.headers.get("x-njpbs-publication-operation")).toBeNull();
+  });
 });
 
 it("removes every adjacent internal header without changing representation headers", () => {

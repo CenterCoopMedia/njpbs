@@ -1,4 +1,5 @@
 import type { PublicReleasePair } from "../../packages/content-core/src/public-release";
+import { PUBLIC_GONE_BRANCH_HEADER } from "./public-gone";
 import { AUTHORITY_BUDGET_MS, ROUTING_FRESH_MS, ROOT_RECEIPT_PATH, bytesDigest, canonicalReleaseValue,
   matchesSelectedPair, originFor, parseSelectorReceipt, releaseDigest, stripInternalHeaders,
   type SelectorReceipt } from "../../packages/content-core/src/public-release-routing";
@@ -97,6 +98,11 @@ function publicResponse(request: Request, response: Response, pending = false): 
   const headers = stripInternalHeaders(response.headers);
   headers.set("cache-control", "no-store");
   if (pending) headers.set("publication-refresh", "pending");
+  if (response.status === 410) {
+    const branch = response.headers.get(PUBLIC_GONE_BRANCH_HEADER);
+    headers.set(PUBLIC_GONE_BRANCH_HEADER, pending ? "pair-recovery-withdrawal"
+      : branch === "pair-frozen-withdrawal" || branch === "pair-current-withdrawal" ? branch : "pair-slot-withdrawal");
+  }
   return new Response(request.method === "HEAD" ? null : response.body, { status: response.status, statusText: response.statusText, headers });
 }
 const errorResponse = (status = 503) => new Response(null, { status, headers: { "cache-control": "no-store" } });

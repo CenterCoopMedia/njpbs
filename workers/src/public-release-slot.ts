@@ -3,6 +3,7 @@ import type { PairServingDecision } from "../../functions/lib/public-release-ser
 import type { PairProofEvidence, PublicSlot, SlotReply } from "./public-release-router";
 import { bytesDigest, canonicalReleaseValue, matchesSelectedPair, originFor, responseCacheKey, stripInternalHeaders, type SelectorReceipt } from "../../packages/content-core/src/public-release-routing";
 import { SECURITY_HEADER_BASELINE } from "../../packages/content-core/src/public-security-headers";
+import { PUBLIC_GONE_BRANCH_HEADER } from "./public-gone";
 import { readBoundedPairObject, readPublicReleasePairOutput, verifyPairRouteTarget, isPublicPairRequestPath, type PairReadStore } from "./public-release-view-reader";
 import protocol from "../../functions/lib/public-release-pair.js";
 import inputs from "../../functions/lib/public-release-pair-input.js";
@@ -58,6 +59,7 @@ function httpResponse(request: Request, bytes: Uint8Array, status: number, rawHe
   const headers = stripInternalHeaders(new Headers(rawHeaders));
   for (const [name, value] of Object.entries(SECURITY_HEADER_BASELINE)) if (!headers.has(name)) headers.set(name, value);
   headers.set("cache-control", "no-store");
+  if (status === 410) headers.set(PUBLIC_GONE_BRANCH_HEADER, "pair-frozen-withdrawal");
   if (status !== 200) return new Response(request.method === "HEAD" ? null : new Uint8Array(bytes), { status, headers });
   const etag = `"${rawHeaders["x-njpbs-html-sha256"]}"`;
   headers.set("etag", etag); headers.set("accept-ranges", "bytes");
@@ -115,7 +117,8 @@ export function createPublicReleaseSlot({ pair, workerVersionId, store, getDecis
         const after = await decide();
         if (after.kind !== "decision" || before.authorityDigest !== after.authorityDigest) return miss();
         return { kind: "response", response: none(before.route.kind === "gone" ? 410 : 308, {
-          ...(before.route.kind === "redirect" ? { location: before.route.canonicalPath } : {}), "cache-control": "no-store" }),
+          ...(before.route.kind === "redirect" ? { location: before.route.canonicalPath }
+            : { [PUBLIC_GONE_BRANCH_HEADER]: "pair-current-withdrawal" }), "cache-control": "no-store" }),
           evidence: evidenceFor(await bytesDigest(new Uint8Array())) };
       }
       const output = before.composition?.absent ? null : await readPublicReleasePairOutput({ store, pair, locator: before.locator,

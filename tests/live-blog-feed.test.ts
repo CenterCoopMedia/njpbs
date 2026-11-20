@@ -85,11 +85,13 @@ describe("cached public live blog revision feed", () => {
   });
   it("rechecks withdrawal when its twenty-second local cache expires", async () => {
     const h = harness(); await h.read(h.request());
-    h.readPage.mockResolvedValue(new Response(null, { status: 410 }));
+    h.readPage.mockResolvedValue(new Response(null, { status: 410, headers: { "x-njpbs-gone-branch": "post-current-withdrawal" } }));
     expect((await h.create()(h.request()))!.status).toBe(200);
     expect(h.readPage).toHaveBeenCalledTimes(1);
     h.advance(20_001);
-    expect((await h.create()(h.request()))!.status).toBe(410);
+    const response = (await h.create()(h.request()))!;
+    expect(response.status).toBe(410);
+    expect(response.headers.get("x-njpbs-gone-branch")).toBe("post-current-withdrawal");
   });
   it("returns 404 for an ordinary Post and refuses malformed manifests", async () => {
     const h = harness();

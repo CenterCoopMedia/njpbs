@@ -1,4 +1,5 @@
 import { CONTENT_LINK_DIRECTORY_MAX_BYTES } from "../../packages/content-core/src/content-link.ts";
+import { PUBLIC_GONE_BRANCH_HEADER } from "./public-gone";
 import { publicationTarget, publicationPostCacheTag } from "../../functions/lib/publication-target.js";
 import { SECURITY_HEADER_BASELINE } from "../../packages/content-core/src/public-security-headers";
 import { isPublicContentSlug, postPublicPath } from "../../site/src/lib/public-content-routes";
@@ -47,10 +48,11 @@ export function postCacheTag(slug: string): string {
 export async function purgePublishedPostRoutes(slugs: readonly string[], purger: PostRoutePurger): Promise<void> {
   await purger.purge([...new Set(slugs)].map(postCacheTag));
 }
-function errorPage(status: number): Response {
+function errorPage(status: number, branch?: string): Response {
   return new Response("<!doctype html><html lang=\"en\"><title>Post unavailable</title><h1>Post unavailable</h1><p>Please try again later.</p></html>", {
     status, headers: { ...SECURITY_HEADER_BASELINE, "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store",
-      "X-Robots-Tag": "noindex, nofollow", "X-Content-Type-Options": "nosniff" },
+      "X-Robots-Tag": "noindex, nofollow", "X-Content-Type-Options": "nosniff",
+      ...(branch ? { [PUBLIC_GONE_BRANCH_HEADER]: branch } : {}) },
   });
 }
 async function digest(text: string): Promise<string> {
@@ -80,13 +82,14 @@ export function createShadowPostWorker(dependencies: {
       if (request.method !== "GET" && request.method !== "HEAD") return errorPage(405);
       const time = (dependencies.now ?? (() => new Date()))();
       const record = await currentRevision(dependencies.revisions, slug);
-      if (record?.kind === "withdrawn") return errorPage(410);
+      if (record?.kind === "withdrawn") return errorPage(410, "shadow-post-revision-withdrawal");
       const revision = record?.revision;
       const expectedSource = record?.sourceRevision;
       const cacheKey = (hash: string) => new Request(`${url.origin}${postPublicPath(slug)}?__shadow_revision=${dependencies.rendererSha}-${hash}`);
       const visitorResponse = (response: Response) => {
         const headers = new Headers(response.headers);
         headers.set("Cache-Control", "no-store");
+        if (response.status === 410) headers.set(PUBLIC_GONE_BRANCH_HEADER, "shadow-post-cached-withdrawal");
         return new Response(request.method === "HEAD" ? null : response.body, { status: response.status, headers });
       };
       try {
@@ -108,7 +111,7 @@ export function createShadowPostWorker(dependencies: {
         const gone = input !== null && typeof input === "object" && "kind" in input && input.kind === "gone";
         const content = gone ? null : projectPublishedPostRead(input, slug, dependencies.rendererSha, time);
         if (!content) {
-          const absent = errorPage(gone ? 410 : 404);
+          const absent = gone ? errorPage(410, "shadow-post-reader-deleted") : errorPage(404);
           if (key) {
             const marker = new Response(absent.clone().body, { status: absent.status, headers: absent.headers });
             marker.headers.set("Cache-Control", "public, max-age=86400");

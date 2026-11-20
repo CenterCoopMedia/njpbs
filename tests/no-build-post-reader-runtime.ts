@@ -118,13 +118,18 @@ export default {
       assert(response.status === (admissionRevision === "8" ? 200 : 503), "Background response requires admission revision");
     }
 
+    const { admissionRevision: _revision, ...legacy } = receipt;
     for (const kind of ["gone", "alias"] as const) {
-      const { admissionRevision: _revision, ...legacy } = receipt;
-      await env.CONTROL.setReply({ kind, receipt: { ...legacy, mode: "static" }, location: "/posts/shadow-fixture/" });
+      await env.CONTROL.setReply({ kind, receipt: { ...legacy, mode: "static", visible: kind === "alias" },
+        location: "/posts/shadow-fixture/" });
       response = await request();
       assert(response.status === (kind === "gone" ? 410 : 308), "Retained static rollback remains compatible");
       assert(!response.headers.has("x-njpbs-admission-revision"), "Legacy static has no invented revision");
+      assert(response.headers.get("x-njpbs-gone-branch") === (kind === "gone" ? "post-static-withdrawal" : null),
+        "Only the withdrawn static Post has a withdrawal branch");
     }
+    await env.CONTROL.setReply({ kind: "gone", receipt: { ...legacy, mode: "static", visible: true } });
+    assert((await request()).status === 503, "A visible legacy Post receipt cannot assert withdrawal");
 
     await env.CONTROL.setReply(published, 302);
     const beforeRedirect = await env.CONTROL.count();

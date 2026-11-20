@@ -453,6 +453,7 @@ describe("published Post reader with the real Firestore emulator", () => {
     await put("cmsPosts/reader-fixture", document({ deleted: true, publiclyVisible: false }));
     const response = await call(request);
     expect(response.status).toBe(410);
+    expect(response.headers.get("x-njpbs-gone-branch")).toBe("post-reader-deleted");
     expect(await response.json()).toEqual({ kind: "gone" });
     const reader = servicePublishedPostReader(service(), { secret: key, now: () => now });
     const worker = createShadowPostWorker({ reader, rendererSha: "a".repeat(40), now: () => now,
@@ -461,6 +462,7 @@ describe("published Post reader with the real Firestore emulator", () => {
     const gone = await worker.fetch(new Request("https://dev-public.example.org/posts/shadow-fixture/"),
       { SHADOW_POSTS_ENABLED: "true", SHADOW_POST_SLUGS: "shadow-fixture" });
     expect(gone.status).toBe(410);
+    expect(gone.headers.get("x-njpbs-gone-branch")).toBe("shadow-post-reader-deleted");
     expect(gone.headers.get("Cache-Control")).toBe("no-store");
   });
   it("requires explicit public visibility even for a legacy published record", async () => {

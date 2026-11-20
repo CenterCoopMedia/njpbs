@@ -182,6 +182,21 @@ it.each(["withdrawn", "unknown"])("refuses static code Assets after a card conte
   expect(h.assetPaths.filter(asset => asset !== "/_content-status.json")).toEqual([]);
 });
 
+it("reads current Post authority when the code context encounters a retained older tombstone", async () => {
+  const h = harness();
+  let reads = 0;
+  h.withdrawals(async () => ++reads === 1 ? null : { ...receipt, revision: receipt.generation, verifiedAt: 1234 });
+  h.codePosts(async () => new Response(null, { status: 410 }));
+  const next = nextVersion().post;
+  next.receipt!.generation = receipt.generation + 1;
+  h.route(next);
+  const response = await h.request();
+  expect(response!.status).toBe(200);
+  expect(response!.headers.get("x-njpbs-source-version")).toBe("8");
+  expect(h.assetPaths).toEqual(["/_content-status.json", "/_publication.json"]);
+  await h.drain();
+});
+
 it.each(["known", "unknown"])("answers a stale-window Post during a CMS outage with %s withdrawal state", async state => {
   const h = harness();
   h.catalog(catalog);
@@ -319,6 +334,130 @@ function nextVersion() {
 }
 
 describe("transitional public Post authority", () => {
+  it.each([false, true])("reads a republished Post on the first request after a 410 with a retained marker: %s", async durable => {
+    const h = harness();
+    const gone = { ...receipt, visible: false };
+    if (durable) h.withdrawals(async () => ({ ...receipt, revision: receipt.generation, verifiedAt: 1234 }));
+    h.catalog({ ...catalog, catalog: { ...catalog.catalog!, posts: [gone] } });
+    h.route({ kind: "gone", receipt: gone });
+    h.assets(404);
+    const withdrawn = await h.request();
+    expect(withdrawn!.status).toBe(410);
+    expect(withdrawn!.headers.get("x-njpbs-gone-branch")).toBe("post-current-withdrawal");
+    await h.drain();
+
+    const next = nextVersion().post;
+    next.receipt!.generation = receipt.generation + 1;
+    // Model a colo that has not seen the publication purge yet.
+    h.route(next);
+    const live = await h.request();
+    expect(live!.status).toBe(200);
+    expect(live!.headers.get("x-njpbs-source-version")).toBe("8");
+    expect(await live!.text()).toContain("New published version");
+    await h.drain();
+  });
+
+  it.each([false, true])("coalesces later requests onto a read newer than an in-flight withdrawal: %s", async durable => {
+    const h = harness();
+    const gone = { ...receipt, visible: false };
+    const withdrawnCatalog = { ...catalog, catalog: { ...catalog.catalog!, posts: [gone] } };
+    const initial = deferred<NoBuildPostReply>(), current = deferred<NoBuildPostReply>();
+    const initialStarted = deferred<void>(), currentStarted = deferred<void>();
+    let reads = 0;
+    if (durable) h.withdrawals(async () => ({ ...receipt, revision: receipt.generation, verifiedAt: 1234 }));
+    h.authority(async pathname => {
+      if (pathname === "/_publication.json") return withdrawnCatalog;
+      if (++reads === 1) {
+        initialStarted.resolve();
+        return initial.promise;
+      }
+      currentStarted.resolve();
+      return current.promise;
+    });
+
+    const withdrawn = h.request();
+    await initialStarted.promise;
+    const later = Promise.all(Array.from({ length: 4 }, () => h.request()));
+    await vi.advanceTimersByTimeAsync(0);
+    initial.resolve({ kind: "gone", receipt: gone });
+    expect((await withdrawn)!.status).toBe(410);
+    await currentStarted.promise;
+    await vi.advanceTimersByTimeAsync(0);
+
+    const next = nextVersion().post;
+    next.receipt!.generation = receipt.generation + 1;
+    current.resolve(next);
+    const responses = await later;
+    expect(responses.map(response => response!.status)).toEqual([200, 200, 200, 200]);
+    expect(reads).toBe(2);
+    await h.drain();
+  });
+
+  it("keeps an older tombstone from asserting absence when a verified republish cannot render", async () => {
+    const h = harness();
+    h.withdrawals(async () => ({ ...receipt, revision: receipt.generation, verifiedAt: 1234 }));
+    const next = nextVersion().post;
+    next.receipt!.generation = receipt.generation + 1;
+    h.route(next);
+    h.render(async () => { throw new Error("Renderer unavailable"); });
+    const response = await h.request();
+    expect(response!.status).toBe(503);
+    expect(response!.headers.get("cache-control")).toBe("no-store");
+    expect(h.assetPaths).toEqual([]);
+    await h.drain();
+  });
+
+  it("refuses old asset bytes when a cached withdrawal cannot be requalified", async () => {
+    const h = harness();
+    const gone = { ...receipt, visible: false };
+    h.catalog({ ...catalog, catalog: { ...catalog.catalog!, posts: [gone] } });
+    h.route({ kind: "gone", receipt: gone });
+    expect((await h.request())!.status).toBe(410);
+    await h.drain();
+
+    h.authority(async () => { throw new Error("Authority unavailable"); });
+    const pending = await h.request();
+    expect(pending!.status).toBe(503);
+    expect(h.assetPaths).toEqual([]);
+    await h.drain();
+
+    h.authority(undefined);
+    h.route(nextVersion().post);
+    const calls = h.calls.length;
+    expect((await h.request())!.status).toBe(503);
+    expect(h.calls).toHaveLength(calls);
+    h.advance(1_000);
+    expect((await h.request())!.status).toBe(200);
+    await h.drain();
+  });
+
+  it("retries an unavailable tombstone check without serving another 410 or old Assets during backoff", async () => {
+    const h = harness();
+    h.withdrawals(async () => ({ ...receipt, revision: receipt.generation, verifiedAt: 1234 }));
+    h.authority(async () => { throw new Error("Authority unavailable"); });
+    expect((await h.request())!.status).toBe(410);
+    const calls = h.calls.length;
+    h.authority(undefined);
+    const next = nextVersion().post;
+    next.receipt!.generation = receipt.generation + 1;
+    h.route(next);
+    expect((await h.request())!.status).toBe(503);
+    expect(h.calls).toHaveLength(calls);
+    expect(h.assetPaths).toEqual([]);
+    h.advance(1_000);
+    expect((await h.request())!.status).toBe(200);
+    await h.drain();
+  });
+
+  it("treats an asset fallback 410 without current Post authority as unavailable", async () => {
+    const h = harness();
+    h.assets(410);
+    const response = await h.request();
+    expect(response!.status).toBe(503);
+    expect(response!.headers.get("cache-control")).toBe("no-store");
+    await h.drain();
+  });
+
   it("serves a cached live blog feed through the existing published authority without another snapshot read", async () => {
     const h = harness();
     const stamp = fixture.document.published.publishedAt;
