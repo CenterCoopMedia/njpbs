@@ -18,7 +18,7 @@ const { registeredAuthorIds, resolveStoryCredits } = require("./story-credits");
 const { parsePublishInstant } = require("./publish-instant");
 const { serviceCompositionError } = require("./service-composition");
 const { isPostLeadMedia, leadVideoBlocks } = require("./post-lead-media");
-const { videoCopies, previousVideoCopies } = require("./public-video-references");
+const { videoCopies, previousVideoCopies, pendingPublicRevision } = require("./public-video-references");
 const { pageThemeError } = require("./content-metadata");
 
 const PAGE_HERO_FIELDS = ["homeHeroTitle", "homeHeroSubtitle"];
@@ -337,8 +337,11 @@ function createPublishedSnapshot({
     if (!parsedBios.ok) throw new PublishSnapshotError(parsedBios.error);
   }
 
+  // The confirmation write delivers withdrawal intent for the superseded
+  // history. Carry that history forward only while its publication can still serve.
+  const settled = document.publicSourceVersion === document.published?.sourceVersion && !pendingPublicRevision(document);
   const previousCopies = [...new Map([
-    ...previousVideoCopies(document.published),
+    ...(settled ? [] : previousVideoCopies(document.published)),
     ...videoCopies([...(document.published?.blocks ?? []), ...leadVideoBlocks(document.published?.metadata?.leadMedia),
       ...liveBlogVideoBlocks(document.published?.metadata?.type === "post" ? document.published.metadata.liveBlog : undefined)]),
   ].map(copy => [copy.url, copy])).values()];

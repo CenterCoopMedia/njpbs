@@ -218,14 +218,14 @@ function createCmsGetPublicPageHandler(deps = {}) {
         if (!probe && (/^\/posts\/[^/]+\/$/.test(path) || ["/_publication.json", "/_content-status.json"].includes(path)) &&
             !outputForPath(path) && !isBackgroundAssetPath(path)) {
           return await cachedDecision(req, res, JSON.stringify(["post", path, rendererSha, method]), async () => {
-            const result = await (deps.readNoBuildPostFn ?? readNoBuildPostDecision)({ firestore, path, rendererSha, probe });
+            const result = await (deps.readNoBuildPostFn ?? readNoBuildPostDecision)({ firestore, path, rendererSha, probe, log });
             if (result.kind === "background") throw new Error("Background output is outside the decision cache");
             delete result.backgroundBucket;
             if (!contentLinkReadFits(result, 2 * 1024 * 1024, "published")) throw new Error("Published read too large");
             return result;
           }, result => ["pass", "post", "alias", "gone", "receipts"].includes(result.kind));
         }
-        const result = await (deps.readNoBuildPostFn ?? readNoBuildPostDecision)({ firestore, path, rendererSha, probe });
+        const result = await (deps.readNoBuildPostFn ?? readNoBuildPostDecision)({ firestore, path, rendererSha, probe, log });
         if (result.kind === "background") {
           const identity = result.context ?? result.catalog ?? result.receipt;
           const owner = createPostBackgroundOutputs({ firestore, enabled: true, accepting: false,
@@ -247,7 +247,7 @@ function createCmsGetPublicPageHandler(deps = {}) {
           }
           const bytes = Buffer.from(await response.arrayBuffer());
           if (bytes.length > 16 * 1024 * 1024) throw new Error("Background output is too large");
-          const current = await (deps.readNoBuildPostFn ?? readNoBuildPostDecision)({ firestore, path, rendererSha, probe });
+          const current = await (deps.readNoBuildPostFn ?? readNoBuildPostDecision)({ firestore, path, rendererSha, probe, log });
           const currentIdentity = current.context ?? current.catalog ?? current.receipt;
           const identityField = result.context ? "contextDigest" : "admissionRevision";
           // Sealed bytes have their own receipt/freshness check in owner.serve.

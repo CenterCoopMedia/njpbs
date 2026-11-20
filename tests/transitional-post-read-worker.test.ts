@@ -109,6 +109,18 @@ function harness(cache = cacheBoundary()) {
 beforeEach(() => { vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] }); });
 afterEach(() => { vi.useRealTimers(); });
 
+it("keeps a refused catalog owner's routes away from static Assets while serving a verified Post", async () => {
+  const h = harness();
+  h.catalog({ kind: "partial-receipts", catalog: { ...catalog.catalog!,
+    refusedPosts: [{ postId: "refused-post", ownedSlugs: ["refused-post", "refused-alias"] }] } });
+  const site = h.worker();
+  for (const slug of ["refused-post", "refused-alias"]) {
+    expect((await h.request(site, `/posts/${slug}/`))?.status).toBe(503);
+  }
+  expect(h.assetPaths).toEqual([]);
+  expect((await h.request(site))?.headers.get("x-njpbs-content-source")).toBe("cms-no-build");
+});
+
 it.each(["empty", "other-owned"])("serves current code Post cards after fresh %s catalog absence", async kind => {
   const h = harness();
   if (kind === "other-owned") h.catalog({ ...catalog, catalog: { ...catalog.catalog!, posts: [{ ...receipt,

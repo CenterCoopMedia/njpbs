@@ -6,7 +6,7 @@ const { validateState: validatePostState, validateCapability, effectiveNoBuildPo
 const LEGACY_STATE_PATH = "system/publicDeployment/noBuildPosts/current";
 const OWNER_COLLECTION = "system/publicDeployment/noBuildPostOwners";
 const CAPABILITY_PATH = "system/publicDeployment/noBuildPosts/capability";
-const validId = value => typeof value === "string" && /^[A-Za-z0-9_-]{1,128}$/.test(value);
+const isNoBuildPostId = value => typeof value === "string" && /^[A-Za-z0-9_-]{1,128}$/.test(value);
 
 function refuse(message = "Instant Post ownership is unavailable.") {
   throw Object.assign(new Error(message), { status: 409 });
@@ -25,7 +25,7 @@ async function readSnapshot(ref, transaction) {
 /** Legacy ownership remains at its original path. New ownership has one document
  * per Post, so a second admission cannot overwrite the first operation. */
 async function readNoBuildPostOwner({ firestore, transaction, postId }) {
-  if (!validId(postId)) refuse();
+  if (!isNoBuildPostId(postId)) refuse();
   const ref = firestore.doc(`${OWNER_COLLECTION}/${postId}`);
   const legacyRef = firestore.doc(LEGACY_STATE_PATH);
   const [row, legacyRow] = await Promise.all([readSnapshot(ref, transaction), readSnapshot(legacyRef, transaction)]);
@@ -40,7 +40,7 @@ async function readNoBuildPostOwner({ firestore, transaction, postId }) {
 
 /** Enumeration is read only. Code activation changes the shared capability,
  * never an unbounded set of retained Post or queue documents. */
-async function listNoBuildPostOwners({ firestore, transaction, slug }) {
+async function listNoBuildPostOwners({ firestore, transaction, slug, onMalformedOwner }) {
   let query = firestore.collection(OWNER_COLLECTION);
   if (slug !== undefined) {
     if (!isServerMintableSlugShape(slug)) refuse();
@@ -48,14 +48,29 @@ async function listNoBuildPostOwners({ firestore, transaction, slug }) {
   }
   const legacyRef = firestore.doc(LEGACY_STATE_PATH);
   const [rows, legacyRow] = await Promise.all([readSnapshot(query, transaction), readSnapshot(legacyRef, transaction)]);
-  const owners = rows.docs.map(row => {
-    const state = validateState(row.data());
-    if (!state || state.postId !== row.id) refuse();
-    return { ref: row.ref, state };
+  const malformed = [];
+  const owners = rows.docs.flatMap(row => {
+    const value = row.data();
+    try {
+      const state = validateState(value);
+      if (!state || state.postId !== row.id) refuse();
+      return [{ ref: row.ref, state }];
+    } catch (error) {
+      // Ordinary aggregate readers can withhold this owner only if its route
+      // scope still has a bounded, unambiguous identity.
+      if (!onMalformedOwner || value?.postId !== row.id || !isNoBuildPostId(value.postId) || value.mode === "static" ||
+          !isServerMintableSlugShape(value.slug) || !Array.isArray(value.ownedSlugs) || value.ownedSlugs.length > 100 ||
+          !value.ownedSlugs.includes(value.slug) || value.ownedSlugs.some(path => !isServerMintableSlugShape(path)) ||
+          new Set(value.ownedSlugs).size !== value.ownedSlugs.length) throw error;
+      malformed.push({ postId: value.postId, ownedSlugs: value.ownedSlugs });
+      return [];
+    }
   });
   const legacy = validateState(legacyRow.data());
   if (legacy && (slug === undefined || legacy.ownedSlugs.includes(slug))) owners.push({ ref: legacyRef, state: legacy });
-  if (new Set(owners.map(owner => owner.state.postId)).size !== owners.length) refuse("Two documents claim the same instant Post.");
+  const ids = [...owners.map(owner => owner.state.postId), ...malformed.map(owner => owner.postId)];
+  if (new Set(ids).size !== ids.length) refuse("Two documents claim the same instant Post.");
+  if (onMalformedOwner) malformed.forEach(onMalformedOwner);
   return owners.sort((left, right) => left.state.postId.localeCompare(right.state.postId));
 }
 
@@ -89,7 +104,7 @@ async function listNoBuildPostStatesInTransaction(input) {
   return (await listNoBuildPostOwners(input)).map(owner => owner.state);
 }
 
-module.exports = { LEGACY_STATE_PATH, OWNER_COLLECTION, CAPABILITY_PATH, validateState, validateCapability,
+module.exports = { LEGACY_STATE_PATH, OWNER_COLLECTION, CAPABILITY_PATH, isNoBuildPostId, validateState, validateCapability,
   readNoBuildPostOwner, listNoBuildPostOwners, readNoBuildPostCapability,
   readNoBuildPostStateInTransaction, listNoBuildPostStatesInTransaction, effectiveNoBuildPostState,
   candidateNoBuildContract, candidateSupportsPost, findNoBuildPostOwnersForSlug };

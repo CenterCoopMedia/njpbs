@@ -91,8 +91,8 @@ async function migrateVideoReferences({ firestore, assetId, media, maxOwners = 5
       const binding = { assetId, media };
       const published = refreshSnapshot(current.published, binding);
       if (isDeepStrictEqual(published, current.published)) return;
-      published.previousVideoCopies = [...new Map([...publicCopies(current, true), ...(published.previousVideoCopies ?? [])]
-        .map(copy => [copy.url, copy])).values()];
+      const unconfirmed = current.publicSourceVersion !== current.published.sourceVersion;
+      published.previousVideoCopies = [...new Map(publicCopies(current, unconfirmed).map(copy => [copy.url, copy])).values()];
       const queueRef = firestore.collection("cmsPublishQueue").doc();
       const nextDocument = { ...current, published, publishBuildPending: true, publishBuildQueueId: queueRef.id };
       assertVideoReplacementRefresh(current, nextDocument, binding);
