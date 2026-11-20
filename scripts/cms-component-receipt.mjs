@@ -229,10 +229,11 @@ async function main(argv = process.argv.slice(2)) {
       fail("Functions configuration fingerprint is required");
     }
     const live = argv.includes("--live");
+    const expectedWorkerVersion = live && component === "cmsApi" ? arg("--expected-worker-version", argv) : undefined;
     const identities = optionalArg("--provider-identities", argv) ?? optionalArg("--provider-identities-file", argv);
     const result = await withFirestore(async (firestore) => {
       const providerIdentities = live
-        ? await collectLiveIdentities(component, { firestore })
+        ? await collectLiveIdentities(component, { firestore, expectedWorkerVersion })
         : (identities && !identities.trim().startsWith("{")
           ? readFileSync(resolve(identities), "utf8")
           : identities);

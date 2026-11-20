@@ -1,9 +1,10 @@
 import { createRequire } from "node:module";
 import { expect, it } from "vitest";
 import { isolatedFirestore } from "../helpers/emulator-firestore.js";
-import { previewProviderFixture, versionId } from "../helpers/private-preview-provider-fixture.js";
+import { deploymentId, previewProviderFixture, versionId } from "../helpers/private-preview-provider-fixture.js";
 import { releasePair, pairReference } from "../helpers/private-public-release-pair.js";
 import { installPrivatePreviewPair, qualifyPrivatePreviewPair } from "../../scripts/lib/install-private-preview-pair.mjs";
+import { workerReadbackClock } from "../helpers/worker-readback-clock.mjs";
 const require = createRequire(import.meta.url), preview = require("../../functions/lib/cms-preview-pair.js"), p = require("../../functions/lib/public-release-pair.js");
 let sequence = 0;
 async function fixture(overrides) {
@@ -15,7 +16,8 @@ async function fixture(overrides) {
   const request = { operationId: `preview-install-${sequence}`, expectedRuntimeDigest: preview.digest(root), expectedCandidatePointerDigest: null,
     bootstrapPublicPair: pairReference(releasePair()), candidate: { sourceSha: f.descriptor.rendererSha, trustedWorkflowSha: "e".repeat(40),
       runId: String(100 + sequence), runAttempt: 1, inputFingerprint: f.prepared.bundleDigest, configurationFingerprint: f.prepared.configurationDigest } };
-  const input = { firestore: db, prepared: f.prepared, request, readToken: () => "synthetic-api", readSecret: () => "synthetic-binding", fetchImpl: f.request, dryRun: false };
+  const input = { firestore: db, prepared: f.prepared, request, readToken: () => "synthetic-api", readSecret: () => "synthetic-binding",
+    fetchImpl: f.request, dryRun: false, readbackClock: workerReadbackClock() };
   const key = p.publicReleaseDigest({ worker: f.prepared.applicationName });
   f.state.beforeWrite = async action => {
     const value = (await db.doc(`system/publicReleasePrivateInstalls/attempts/${request.operationId}/steps/${key}-${action}`).get()).data();
@@ -42,6 +44,21 @@ it("reserves each actual provider effect, registers only the assigned UUID, and 
 it("plan mode validates the opaque seal but makes no network, credential or database write", async () => {
   const f = await fixture(); const result = await installPrivatePreviewPair({ ...f.input, dryRun: true });
   expect(result.dryRun).toBe(true); expect(f.state.requests).toHaveLength(0); await f.unchanged();
+});
+it.each([2, Infinity])("waits for native preview metadata after %s stale reads", async staleReads => {
+  const f = await fixture();
+  f.state.staleVersionReads = 2;
+  f.state.staleDeploymentReads = staleReads;
+  const resource = f.db.doc(`cmsPreviewPrivateInstalls/${f.request.operationId}`);
+  if (Number.isFinite(staleReads)) {
+    await installPrivatePreviewPair(f.input);
+    expect((await resource.get()).data().providerEvidence.deployment).toEqual({ deploymentId, versionId });
+    expect(f.state.writes).toEqual(["identity", "version", "deployment", "container", "schedule"]);
+  } else {
+    await expect(installPrivatePreviewPair(f.input)).rejects.toThrow("deploymentId");
+    expect((await resource.get()).exists).toBe(false);
+    expect(f.state.writes).toEqual(["identity", "version", "deployment"]);
+  }
 });
 it.each(["identity", "version", "deployment", "container", "schedule"])("failure at %s consumes its send and leaves OLD rows and receipts intact", async action => {
   const f = await fixture(); f.state.failAction = action;

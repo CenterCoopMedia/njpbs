@@ -1,5 +1,7 @@
 import { privateInstallLedger } from "./public-release-private-install-ledger.mjs";
 import { startCandidateReceipt, verifyCandidateReceipt } from "./cms-component-receipt.mjs";
+import { requireWorkerReadback } from "./cloudflare-worker-readback.mjs";
+import { workerReadbackAfterWrite } from "./public-release-private-provider.mjs";
 import { createPrivatePreviewPairProvider, previewProviderDigest, PreviewProviderError } from "./private-preview-pair-provider.mjs";
 import preview from "../../functions/lib/cms-preview-pair.js";
 import candidateAuthority from "../../functions/lib/cms-preview-pair-candidate.js";
@@ -41,7 +43,7 @@ export async function inspectPrivatePreviewPair({ provider, prepared, versionId 
  * effect is journaled before dispatch, and ambiguous retries observe only the
  * original attempt. This operator never selects NEW or pauses/stops OLD. */
 export async function installPrivatePreviewPair({ firestore, prepared, request: raw, readToken, readSecret,
-  fetchImpl = fetch, signal, clock = Date.now, dryRun = true }) {
+  fetchImpl = fetch, signal, clock = Date.now, dryRun = true, readbackClock }) {
   const request = parseRequest(raw, prepared);
   // Resource ownership survives unrelated live releases. Runtime, candidate
   // and bootstrap authority are renewable requests, never provider identity.
@@ -66,10 +68,11 @@ export async function installPrivatePreviewPair({ firestore, prepared, request: 
   }, { readOnly: true });
   await current();
   await ledger.bindAttempt(request.operationId, planDigest);
-  const step = async (action, effect, observe) => {
+  const step = async (action, callbacks) => {
     await current(); signal?.throwIfAborted();
-    return ledger.once({ attemptId: request.operationId, worker: prepared.applicationName, planDigest, action, effect, observe });
+    return ledger.once({ attemptId: request.operationId, worker: prepared.applicationName, planDigest, action, ...callbacks });
   };
+  const workerStep = (action, effect, observe) => step(action, workerReadbackAfterWrite(effect, observe, readbackClock));
   // Do not adopt an existing Worker, Container or namespace merely by name.
   // A prior immutable ownership claim is required before recovery is possible.
   const ownerKey = publicPairs.publicReleaseDigest({ worker: prepared.applicationName });
@@ -77,12 +80,18 @@ export async function installPrivatePreviewPair({ firestore, prepared, request: 
   const inventory = await provider.inventory();
   if (!priorOwner && (inventory.worker || inventory.applications.length || inventory.namespaces.length)) refuse();
   if (priorOwner) same(priorOwner, { schemaVersion: 1, attemptId: request.operationId, worker: prepared.applicationName, planDigest });
-  const identity = await step("identity", () => provider.createIdentity(), async () => { const value = await provider.worker(); if (!value) refuse(); return value; });
-  const uploaded = await step("version", () => provider.upload(), () => provider.recoverVersion());
-  const deployed = await step("deployment", () => provider.deploy(uploaded.versionId), () => provider.deployment(uploaded.versionId));
+  const identity = await workerStep("identity", () => provider.createIdentity(),
+    async response => {
+      const value = await provider.worker();
+      requireWorkerReadback(value && (response?.id === undefined || response.id === value.workerId), "Preview workerId");
+      return value;
+    });
+  const uploaded = await workerStep("version", () => provider.upload(), response => provider.recoverVersion(response?.versionId));
+  const deployed = await workerStep("deployment", () => provider.deploy(uploaded.versionId),
+    response => provider.deployment(uploaded.versionId, response?.id));
   const namespace = await provider.namespace(uploaded.versionId);
-  await step("container", () => provider.createContainer(namespace.namespaceId), () => provider.container(namespace.namespaceId));
-  await step("schedule", () => provider.createSchedules(), () => provider.schedules());
+  await step("container", { effect: () => provider.createContainer(namespace.namespaceId), observe: () => provider.container(namespace.namespaceId) });
+  await step("schedule", { effect: () => provider.createSchedules(), observe: () => provider.schedules() });
   const observed = await inspectPrivatePreviewPair({ provider, prepared, versionId: uploaded.versionId });
   same(observed.evidence.worker, identity); same(observed.evidence.deployment, deployed);
   await current();

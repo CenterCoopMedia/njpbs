@@ -20,6 +20,7 @@ import adoption from "../../functions/lib/public-release-bootstrap-adoption.js";
 import p from "../../functions/lib/public-release-pair.js";
 import work from "../../functions/lib/public-release-pair-work.js";
 import admissions from "../../functions/lib/public-release-admission.js";
+import { workerReadbackClock } from "../helpers/worker-readback-clock.mjs";
 const rawDb = isolatedFirestore("public-release-old-ingress-operator.test.ts"), emulator = process.env.FIRESTORE_EMULATOR_HOST!;
 const authEmulator = process.env.FIREBASE_AUTH_EMULATOR_HOST;
 const restoreAuthEmulator = () => {
@@ -60,6 +61,7 @@ async function scenario(oldSlotEnabled = true) {
   let worker: any = null, active: any = null, loseRouteBefore = false, loseRouteAfter = false, changeAuthority = false, changeSlot = false, changeRateControls = false;
   let ratePaths: { viewer: string; cmsRpc: string };
   let lost: string | null = null, afterLoss = false;
+  let staleDeploymentReads = 0, previousDeployment: any;
   let onUpload: (() => Promise<unknown>) | undefined;
   const cmsConfig = { bindings: [{ name: "fixtureRatePolicy", type: "plain_text", text: "reviewed-fixture" }],
     compatibility_date: "2026-07-09", compatibility_flags: ["nodejs_compat"] };
@@ -133,11 +135,16 @@ async function scenario(oldSlotEnabled = true) {
     if (path.endsWith("/deployments")) {
       if (method === "POST") {
         writes.push("deploy"); if (lost === "deploy" && !afterLoss) throw new Error("synthetic-uncertain-deploy");
+        previousDeployment = active;
         active = { ...JSON.parse(String(init.body)), id: uid(40 + versions.size - 1) };
         if (changeRateControls && versions.size > 1) await db.doc(ratePaths.cmsRpc).update({ policyDigest: "f".repeat(64) });
         if (changeSlot && versions.size > 1) slot.active.versions[0].version_id = uid(99);
         if (changeAuthority && versions.size > 1) await db.doc("system/publicReleaseAdmissions/controls/bootstrapFence").update({ status: "open", resumeReceiptDigest: "f".repeat(64) });
         if (lost === "deploy" && afterLoss) throw new Error("synthetic-lost-deploy-reply"); return envelope(active);
+      }
+      if (previousDeployment && staleDeploymentReads > 0) {
+        staleDeploymentReads--;
+        return envelope([previousDeployment]);
       }
       return envelope(active ? [active] : []);
     }
@@ -199,8 +206,10 @@ async function scenario(oldSlotEnabled = true) {
   return { packet, selector, route, writes, versions, slot, nextSlot, cms, ratePaths, rateTarget,
     lose: (action: string, after: boolean) => { lost = action; afterLoss = after; },
     onUpload: (effect: () => Promise<unknown>) => { onUpload = effect; },
-    changeRateControls: () => { changeRateControls = true; }, changeSlot: () => { changeSlot = true; }, input: { firestore: db, packet, readToken, fetchImpl }, loseBefore: () => { loseRouteBefore = true; },
-    loseAfter: () => { loseRouteAfter = true; }, changeAuthority: () => { changeAuthority = true; } };
+    changeRateControls: () => { changeRateControls = true; }, changeSlot: () => { changeSlot = true; },
+    input: { firestore: db, packet, readToken, fetchImpl, readbackClock: workerReadbackClock() }, loseBefore: () => { loseRouteBefore = true; },
+    loseAfter: () => { loseRouteAfter = true; }, changeAuthority: () => { changeAuthority = true; },
+    delayDeployment: (reads: number) => { staleDeploymentReads = reads; } };
 }
 it("uses the actual original private installer and one OLD-only upload/deploy/route, keeping admission closed", async () => {
   const f = await scenario(), first = await enableOldPublicReleaseIngress(f.input);
@@ -210,6 +219,21 @@ it("uses the actual original private installer and one OLD-only upload/deploy/ro
   expect((await db.doc("system/publicDeployment").get()).data()).toEqual(f.selector);
   expect((await db.doc("system/publicReleaseAdmissions/controls/bootstrapFence").get()).data()?.status).toBe("closed");
   expect((await db.doc("system/publicReleaseChangeLog").get()).data()?.enabled).toBe(false);
+});
+it.each([2, Infinity])("requires the retained ingress deployment after %s stale reads", async staleReads => {
+  const f = await scenario();
+  f.delayDeployment(staleReads);
+  const run = () => enableOldPublicReleaseIngress(f.input);
+  if (Number.isFinite(staleReads)) {
+    expect(await run()).toMatchObject({ deploymentId: uid(41), versionId: uid(31), complete: true });
+    expect(f.writes).toEqual(["upload", "deploy", "route"]);
+  } else {
+    await expect(run()).rejects.toThrow("deployment");
+    const key = p.publicReleaseDigest({ worker: `bootstrap-ingress:${f.packet.installPlan.ingressName}` });
+    expect((await db.doc(`system/publicReleasePrivateInstalls/attempts/${f.packet.operationId}/readbacks/${key}-enable-deploy`).get()).exists).toBe(false);
+    expect(f.writes).toEqual(["upload", "deploy"]);
+    expect(f.route.script).toBe("njpbs-production");
+  }
 });
 it("keeps false/absent mode offline in the real pinned default process", async () => {
   const f = await scenario(); delete f.packet.enableOldIngress;

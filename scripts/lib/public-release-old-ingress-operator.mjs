@@ -7,7 +7,8 @@ import { configurePublicReleaseIngress } from "../configure-public-release-ingre
 import { compilePrivateWorker } from "../install-private-public-release.mjs";
 import { privatePublicReleaseSlotTarget, readPrivatePublicReleaseSlotProvider } from "./private-public-release-slot-target.mjs";
 import { privateInstallLedger } from "./public-release-private-install-ledger.mjs";
-import { cloudflarePrivatePairProvider, privateWorkerMetadata } from "./public-release-private-provider.mjs";
+import { checkPrivateWorkerDeployment, checkPrivateWorkerVersion, cloudflarePrivatePairProvider, privateWorkerMetadata, workerReadbackAfterWrite } from "./public-release-private-provider.mjs";
+import { requireWorkerReadback } from "./cloudflare-worker-readback.mjs";
 import { operatorCloudflareApi } from "./public-release-private-bridge-operator.mjs";
 import { oldIngressRateControlTarget, readReviewedIngressRateControls, assertReviewedCmsRpcRateControl } from "./public-release-old-ingress-rate-control.mjs";
 import { readClosedInitialIngressAuthority } from "./public-release-bootstrap-ingress-authority.mjs";
@@ -46,13 +47,7 @@ export function identity(packet, original, rateControlDigest) {
   return { planDigest, tag, originalDigest, originalTag: hash({ attemptId: packet.installPlan.operationId, planDigest: originalDigest }), worker: `bootstrap-ingress:${original.name}` };
 }
 export function checkVersion(version, config, tag, expectedVersionId) {
-  const metadata = privateWorkerMetadata(config, tag);
-  const bindings = version.resources?.bindings?.map(binding => {
-    const row = { ...binding }; if (row.type === "service" && row.environment === "production") delete row.environment; return row;
-  }).sort((a, b) => a.name.localeCompare(b.name, "en"));
-  if (version.id !== expectedVersionId || version.annotations?.["workers/message"] !== `private-pair:${tag}` || !same(bindings, metadata.bindings) ||
-      version.resources?.script_runtime?.compatibility_date !== metadata.compatibility_date ||
-      !same(version.resources?.script_runtime?.compatibility_flags, metadata.compatibility_flags)) refuse();
+  checkPrivateWorkerVersion(version, privateWorkerMetadata(config, tag), expectedVersionId);
 }
 export async function originalInstall(firestore, packet, original, id, provider, signal) {
   const base = "system/publicReleasePrivateInstalls", workerKey = hash({ worker: original.name }), actions = ["create", "upload", "private-subdomain", "deploy"];
@@ -76,7 +71,7 @@ export async function originalInstall(firestore, packet, original, id, provider,
   const exposure = await provider.subdomain(original.name, signal);
   if (exposure.enabled !== false || exposure.previews_enabled !== false) refuse();
 }
-export async function enableOldPublicReleaseIngress({ firestore, packet: raw, readToken, fetchImpl, signal, readback = false }) {
+export async function enableOldPublicReleaseIngress({ firestore, packet: raw, readToken, fetchImpl, signal, readback = false, readbackClock }) {
   const { packet, attempt, original, config } = oldIngressConfiguration(raw);
   work.assertPublicReleasePairDatabase(firestore, attempt.currentPair);
   const source = await compilePrivateWorker(config.main);
@@ -108,12 +103,13 @@ export async function enableOldPublicReleaseIngress({ firestore, packet: raw, re
         routes.some(row => row.script === name && (row.id !== packet.route.routeId || row.pattern !== packet.route.pattern))) refuse();
     return { id: route.id, pattern: route.pattern, script: route.script };
   };
-  const uploaded = async () => {
+  const uploaded = async expectedVersionId => {
     const versions = await provider.versions(name, signal);
     if (!versions.some(row => row.id === packet.originalIngressVersionId) || versions.some(row => row.id !== packet.originalIngressVersionId && row.annotations?.["workers/message"] !== `private-pair:${id.tag}`)) refuse();
     const matches = versions.filter(row => row.annotations?.["workers/message"] === `private-pair:${id.tag}`);
-    if (matches.length !== 1 || !uuid(matches[0].id)) refuse();
-    checkVersion(await provider.version(name, matches[0].id, signal), config, id.tag, matches[0].id);
+    requireWorkerReadback(matches.length === 1 && uuid(matches[0].id) &&
+      (expectedVersionId === undefined || matches[0].id === expectedVersionId), "Ingress upload versionId");
+    checkVersion(await provider.version(name, matches[0].id, signal, true), config, id.tag, matches[0].id);
     return { versionId: matches[0].id };
   };
   if (readback) {
@@ -147,27 +143,30 @@ export async function enableOldPublicReleaseIngress({ firestore, packet: raw, re
     if (!Array.isArray(rows) || rows[0]?.id !== packet.route.legacyDeploymentId || !same(rows[0]?.versions, [{ version_id: packet.route.legacyVersionId, percentage: 100 }])) refuse();
   }
   await guard(); await ledger.bindAttempt(packet.operationId, id.planDigest);
-  const step = (action, effect, observe) => ledger.once({ attemptId: packet.operationId, worker: id.worker, planDigest: id.planDigest, action, effect, observe });
+  const step = (action, callbacks) => ledger.once({ attemptId: packet.operationId, worker: id.worker, planDigest: id.planDigest, action, ...callbacks });
+  const workerStep = (action, effect, observe) => step(action, workerReadbackAfterWrite(effect, observe, readbackClock));
   await guard();
-  const version = await step("enable-upload", () => provider.upload(name, privateWorkerMetadata(config, id.tag), source, signal), uploaded);
+  const version = await workerStep("enable-upload", () => provider.upload(name, privateWorkerMetadata(config, id.tag), source, signal), uploaded);
   await guard();
-  const deployed = async () => {
+  const deployed = async expectedDeploymentId => {
     const row = await provider.deployment(name, signal);
-    if (!uuid(row?.id) || row.annotations?.["workers/message"] !== `private-pair:${id.tag}` || !same(row.versions, [{ version_id: version.versionId, percentage: 100 }]) ||
-        await provider.sourceDigest(name, signal) !== packet.installPlan.ingressBundleDigest) refuse();
-    return { deploymentId: row.id, versionId: version.versionId };
+    const deployment = checkPrivateWorkerDeployment(row, version.versionId, id.tag, expectedDeploymentId);
+    requireWorkerReadback(same(row.versions, [{ version_id: version.versionId, percentage: 100 }]), "Ingress deployment traffic");
+    requireWorkerReadback(await provider.sourceDigest(name, signal) === packet.installPlan.ingressBundleDigest, "Ingress deployment source digest");
+    return deployment;
   };
-  const deployment = await step("enable-deploy", () => provider.deploy(name, version.versionId, id.tag, signal), deployed);
+  const deployment = await workerStep("enable-deploy", () => provider.deploy(name, version.versionId, id.tag, signal),
+    response => deployed(response?.id));
   await guard();
   const beforeRoute = await routeRead(), routeKey = hash({ worker: id.worker });
   const routeClaim = (await firestore.doc(`${base}/attempts/${packet.operationId}/steps/${routeKey}-enable-route`).get()).exists;
   if (!routeClaim && beforeRoute.script !== packet.route.legacyWorker) refuse();
   await oldSlot(); await guard();
-  const selected = await step("enable-route", () => api(`/zones/${packet.route.zoneId}/workers/routes/${packet.route.routeId}`, {
-    method: "PUT", body: { pattern: packet.route.pattern, script: name } }), async () => {
+  const selected = await step("enable-route", { effect: () => api(`/zones/${packet.route.zoneId}/workers/routes/${packet.route.routeId}`, {
+    method: "PUT", body: { pattern: packet.route.pattern, script: name } }), observe: async () => {
     const row = await routeRead(); if (row.script !== name) refuse(); return row;
-  });
-  await guard(); await oldSlot(); if (!same(await deployed(), deployment)) refuse();
+  } });
+  await guard(); await oldSlot(); await deployed(deployment.deploymentId);
   return { operationId: packet.operationId, complete: true, oldPairId: attempt.currentPair.pairId, ...deployment, route: selected, authority: first,
     admissionResumed: false, terminalPublicationProof: false };
 }

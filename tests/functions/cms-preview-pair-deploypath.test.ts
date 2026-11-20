@@ -7,6 +7,7 @@ import { startCandidateReceipt, verifyCandidateReceipt, commitLiveReaderReceipt,
 import { assertLegacyCmsWorkflow } from "../../scripts/lib/cms-release-plan.mjs";
 import { planPairedCmsRelease, assertPairedAdminManifest, publishPairedAdminManifest } from "../../scripts/lib/cms-preview-pair-release.mjs";
 import { deployPreviewPairRuntime, previewPairConfiguration } from "../../site/scripts/deploy-cms-preview-pair.js";
+import { workerReadbackClock } from "../helpers/worker-readback-clock.mjs";
 
 const api = createRequire(import.meta.url)("../../functions/lib/cms-preview-pair.js");
 const db = isolatedFirestore("cms-preview-pair-deploypath");
@@ -351,6 +352,22 @@ it("qualifies NEW without selecting or pausing; retries return the durable origi
   expect(await deployPreviewPairRuntime(privateRequest(adapter))).toEqual(first);
   expect(adapter.deployPrivate).toHaveBeenCalledTimes(1); expect(adapter.provePrivate).toHaveBeenCalledTimes(1);
   await expect(deployPreviewPairRuntime(privateRequest(adapter, { candidate: { ...attempt(), runId: "101" } }))).rejects.toThrow("conflicts");
+});
+it.each([2, Infinity])("requires the paired preview Worker version after %s stale reads", async staleReads => {
+  const adapter = privateAdapter();
+  let reads = 0;
+  adapter.readback.mockImplementation(async () => candidate(reads++ < staleReads ? old : next, now).mutation.providerIdentities);
+  const request = privateRequest(adapter, { readbackClock: workerReadbackClock() });
+  if (Number.isFinite(staleReads)) {
+    expect((await deployPreviewPairRuntime(request)).proofDigest).toMatch(/^[a-f0-9]{64}$/);
+    expect(reads).toBe(3);
+    expect((await current("cmsDeploymentCandidates/renderer-100-1")).mutation.providerIdentities.workerVersion).toBe(next.workerVersion);
+  } else {
+    await expect(deployPreviewPairRuntime(request)).rejects.toThrow("workerVersion");
+    expect((await current("cmsDeploymentCandidates/renderer-100-1")).state).toBe("candidate");
+    expect(adapter.provePrivate).not.toHaveBeenCalled();
+  }
+  expect(adapter.deployPrivate).toHaveBeenCalledTimes(1);
 });
 it("the real qualifier records a third-incarnation proof after closed recovery drains, across compatible reader SHAs", async () => {
   const third = pair("third", "c"), adapter = privateAdapter();

@@ -2,6 +2,7 @@ import { previewRendererBindings } from "./deployment-settings.mjs";
 import { createHash } from "node:crypto";
 import path from "node:path";
 import { PrivateProviderNotSent } from "./public-release-private-provider.mjs";
+import { requireWorkerReadback } from "./cloudflare-worker-readback.mjs";
 
 const ACCOUNT = (process.env.CLOUDFLARE_ACCOUNT_ID ?? "");
 const API = "https://api.cloudflare.com/client/v4";
@@ -210,11 +211,12 @@ export function createPrivatePreviewPairProvider({ prepared, operationDigest, re
         renderer.state !== undefined && renderer.state !== "created" || renderer.container !== undefined && renderer.container !== prepared.applicationName) reject("exports");
     if (value.default !== undefined && (value.default.type !== "worker" || value.default.state !== undefined && value.default.state !== "created")) reject("exports");
   }
-  async function version(versionId, requireNamespace = false) {
+  async function version(versionId, requireNamespace = false, missing = false) {
     if (!UUID.test(versionId)) reject();
-    const detail = (await http(`${script}/versions/${versionId}`)).result;
-    const code = (await http(`${resource}/versions/${versionId}?include=modules`)).result;
-    if (detail?.id !== versionId || code?.id !== versionId || code.main_module !== metadata.main_module || !Array.isArray(code.urls) || code.urls.length) reject("version-identity");
+    const detail = (await http(`${script}/versions/${versionId}`, { missing }))?.result;
+    const code = (await http(`${resource}/versions/${versionId}?include=modules`, { missing }))?.result;
+    requireWorkerReadback(detail?.id === versionId && code?.id === versionId, "Preview versionId");
+    if (code.main_module !== metadata.main_module || !Array.isArray(code.urls) || code.urls.length) reject("version-identity");
     for (const runtime of [detail.resources?.script_runtime, code]) {
       same(runtime?.compatibility_date, metadata.compatibility_date); same(runtime?.compatibility_flags, metadata.compatibility_flags); exports(runtime?.exports);
     }
@@ -243,10 +245,14 @@ export function createPrivatePreviewPairProvider({ prepared, operationDigest, re
     if (matching.length !== 1 || matching[0].id !== observed.namespaceId || matching[0].use_sqlite !== true || matching[0].preview !== undefined || matching[0].dispatch_namespace !== undefined) reject("namespace-identity");
     return { namespaceId: observed.namespaceId, versionId };
   }
-  async function deployment(versionId) {
+  async function deployment(versionId, expectedDeploymentId) {
     const rows = (await http(`${script}/deployments`)).result?.deployments, current = rows?.[0];
-    if (!Array.isArray(rows) || !UUID.test(current?.id) || current.strategy !== "percentage") reject("deployment");
-    same(current.versions, [{ version_id: versionId, percentage: 100 }]); return { deploymentId: current.id, versionId };
+    requireWorkerReadback(Array.isArray(rows) && UUID.test(current?.id) &&
+      (expectedDeploymentId === undefined || current.id === expectedDeploymentId), "Preview deploymentId");
+    requireWorkerReadback(current.strategy === "percentage", "Preview deployment strategy");
+    requireWorkerReadback(Array.isArray(current.versions) && previewProviderDigest(current.versions) === previewProviderDigest([{ version_id: versionId, percentage: 100 }]),
+      "Preview deployment version and traffic");
+    return { deploymentId: current.id, versionId };
   }
   async function container(namespaceId) {
     const matching = (await applications()).filter(a => a.name === prepared.applicationName);
@@ -272,8 +278,8 @@ export function createPrivatePreviewPairProvider({ prepared, operationDigest, re
       namespaces: (await namespaces()).filter(n => n.script === prepared.applicationName).map(n => ({ id: n.id, className: n.class })) , privacy: await privacy() }; },
     async privateInventory() { const value = (await http(`${script}/subdomain`)).result;
       if (value?.enabled !== false || value.previews_enabled !== false) reject("public-subdomain"); return { ...await privacy(), subdomain: { enabled: false, previews_enabled: false } }; },
-    async createIdentity() { await http(`${prefix}/workers/workers`, { method: "POST", body: { name: prepared.applicationName,
-      tags: [`private-preview:${operationDigest}`], subdomain: { enabled: false, previews_enabled: false } } }); },
+    async createIdentity() { return (await http(`${prefix}/workers/workers`, { method: "POST", body: { name: prepared.applicationName,
+      tags: [`private-preview:${operationDigest}`], subdomain: { enabled: false, previews_enabled: false } } })).result; },
     async upload() {
       const upload = structuredClone(metadata);
       try {
@@ -287,14 +293,15 @@ export function createPrivatePreviewPairProvider({ prepared, operationDigest, re
       const result = (await http(`${script}/versions?bindings_inherit=strict`, { method: "POST", body: form })).result;
       if (!UUID.test(result?.id)) reject("upload-result", true); return { versionId: result.id };
     },
-    async recoverVersion() {
+    async recoverVersion(expectedVersionId) {
       const rows = (await http(`${script}/versions?deployable=true`)).result?.items;
       if (!Array.isArray(rows) || rows.length > 1000 || new Set(rows.map(r => r.id)).size !== rows.length) reject("version-inventory");
-      const matching = [];
-      for (const row of rows) { if (!UUID.test(row.id)) reject(); matching.push(await version(row.id)); }
-      if (matching.length !== 1) reject("version-reconciliation-required"); return matching[0];
+      requireWorkerReadback(rows.length === 1 && UUID.test(rows[0]?.id) &&
+        (expectedVersionId === undefined || rows[0].id === expectedVersionId), "Preview upload versionId");
+      return version(rows[0].id, false, true);
     },
-    async deploy(versionId) { if (!UUID.test(versionId)) reject(); await http(`${script}/deployments`, { method: "POST", body: { strategy: "percentage", versions: [{ version_id: versionId, percentage: 100 }] } }); },
+    async deploy(versionId) { if (!UUID.test(versionId)) reject(); return (await http(`${script}/deployments`, { method: "POST",
+      body: { strategy: "percentage", versions: [{ version_id: versionId, percentage: 100 }] } })).result; },
     async createContainer(namespaceId) { if (!RESOURCE.test(namespaceId)) reject(); await http(`${prefix}/containers/applications`, { method: "POST", body: {
       name: prepared.applicationName, scheduling_policy: "default", configuration: { image: prepared.image, instance_type: "standard-2" },
       instances: 0, max_instances: 1, durable_objects: { namespace_id: namespaceId }, rollout_active_grace_period: 0,

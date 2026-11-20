@@ -4,6 +4,8 @@ import { join } from "node:path";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import { describe, expect, it } from "vitest";
+import { workerReadbackClock } from "../helpers/worker-readback-clock.mjs";
+import { deployCmsApiWorker } from "../../scripts/deploy-cms-api-worker.mjs";
 import {
   collectLiveIdentities,
   fingerprintInputs,
@@ -787,12 +789,12 @@ describe("CMS API Worker receipt", () => {
     mutation: { sourceSha: SOURCE, runId: "7", runAttempt: 1, inputFingerprint: "c".repeat(64) },
     lastComplete: null,
   };
-  const complete = (firestore, configurationFingerprint) => completeReceipt(firestore, {
+  const complete = (firestore, configurationFingerprint, providerIdentities = { script: "njpbs-cms-api", deploymentId: "d1" }) => completeReceipt(firestore, {
     component: "cmsApi",
     sourceSha: SOURCE,
     runId: "7",
     runAttempt: 1,
-    providerIdentities: { script: "njpbs-cms-api", deploymentId: "d1" },
+    providerIdentities,
     configurationFingerprint,
   }, { readPageReaderSource: async () => null }); // This fixture represents a retained API source without the v1 descriptor.
 
@@ -800,6 +802,55 @@ describe("CMS API Worker receipt", () => {
     const firestore = memoryFirestore(inProgress);
     await complete(firestore, "e".repeat(64));
     expect(firestore.read().mutation.configurationFingerprint).toBe("e".repeat(64));
+  });
+
+  it("reports only the version from one successful Wrangler deployment", () => {
+    const expected = "55555555-5555-4555-8555-555555555555";
+    let writes = 0;
+    const version = deployCmsApiWorker(import.meta.filename, (_cmd, args, options) => {
+      writes++;
+      expect(args).toEqual(["deploy", "--cwd", "cms-api", "--secrets-file", import.meta.filename]);
+      expect(options.stdio).toEqual(["ignore", "pipe", "ignore"]);
+      return { status: 0, stdout: `synthetic-sensitive-config\nCurrent Version ID: ${expected}\n` };
+    });
+    expect(version).toBe(expected);
+    expect(writes).toBe(1);
+    expect(() => deployCmsApiWorker(import.meta.filename, () => ({ status: 1, stdout: `Current Version ID: ${expected}\n` })))
+      .toThrow("did not report success");
+    expect(() => deployCmsApiWorker(import.meta.filename, () => ({ status: 0, stdout: "synthetic-sensitive-config" })))
+      .toThrow("did not report a valid versionId");
+  });
+
+  it("requires a Wrangler version before completing a live CMS API receipt", async () => {
+    await expect(receiptCli(["complete", "--component", "cmsApi", "--source-sha", SOURCE, "--run-id", "7", "--run-attempt", "1", "--live"]))
+      .rejects.toThrow("--expected-worker-version is required");
+  });
+
+  it.each([2, Infinity])("records only the deployed CMS API version after %s stale reads", async staleReads => {
+    const firestore = memoryFirestore(inProgress);
+    const expectedWorkerVersion = "55555555-5555-4555-8555-555555555555";
+    const previous = "66666666-6666-4666-8666-666666666666";
+    let reads = 0;
+    const finish = async () => complete(firestore, "e".repeat(64), await collectLiveIdentities("cmsApi", {
+      expectedWorkerVersion, readbackClock: workerReadbackClock(), cloudflareToken: "fixture-token", cloudflareAccount: "fixture-account",
+      fetchFn: async (_url, init) => {
+        expect(init.method ?? "GET").toBe("GET");
+        const stale = reads++ < staleReads;
+        return Response.json({ success: true, result: { deployments: [{
+          id: stale ? "previous-deployment" : "new-deployment",
+          versions: [{ version_id: stale ? previous : expectedWorkerVersion, percentage: 100 }],
+        }] } });
+      },
+    }));
+    if (Number.isFinite(staleReads)) {
+      await finish();
+      expect(reads).toBe(3);
+      expect(firestore.read().mutation.providerIdentities).toMatchObject({ versionId: expectedWorkerVersion, deploymentId: "new-deployment" });
+    } else {
+      await expect(finish()).rejects.toThrow("versionId");
+      expect(reads).toBeGreaterThan(1);
+      expect(firestore.read()).toEqual(inProgress);
+    }
   });
 
   it("records no digest when none is supplied and rejects a malformed one", async () => {
