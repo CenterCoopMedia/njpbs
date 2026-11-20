@@ -1,5 +1,6 @@
 import { functionsInventoryIdentity } from "./cms-component-receipt.mjs";
 import { DEV_TARGETS } from "../assert-dev-cms-targets.mjs";
+import { readCmsApiDeployment } from "./cloudflare-worker-readback.mjs";
 
 const refuse = () => { throw new Error("CMS reader provider readback unavailable"); };
 async function bytes(response) {
@@ -13,7 +14,7 @@ async function bytes(response) {
 
 /** The deploy owner's inventory identity, over bounded native provider GETs.
  * No ADC fallback, provider mutation, HTTP retry or caller-selected endpoint. */
-export async function readCmsReaderProviderIdentities({ projectId, accountId, readCloudflareToken, readGoogleToken, signal, fetchImpl = fetch, inspectFunctions }) {
+export async function readCmsReaderProviderIdentities({ projectId, accountId, readCloudflareToken, readGoogleToken, signal, fetchImpl = fetch, inspectFunctions, expectedWorkerVersion, readbackClock }) {
   const development = projectId === "njpbs-site-dev";
   if (!development && projectId !== "njpbs-site" || !/^[a-f0-9]{32}$/.test(accountId ?? "") ||
       development && accountId !== DEV_TARGETS.CLOUDFLARE_ACCOUNT_ID) refuse();
@@ -43,10 +44,11 @@ export async function readCmsReaderProviderIdentities({ projectId, accountId, re
   }
   if (pageToken || !functions.length) refuse();
   inspectFunctions?.(functions);
-  const value = (await json(`https://api.cloudflare.com/client/v4/accounts/${accountId}/workers/scripts/${script}/deployments`, readCloudflareToken)).result;
-  const deployed = (value?.deployments ?? value)?.[0];
-  const version = deployed?.versions?.[0];
-  if (typeof deployed?.id !== "string" || !/^[A-Za-z0-9._:-]{1,80}$/.test(deployed.id) || deployed.versions?.length !== 1 ||
-      version.percentage !== 100 || !/^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/.test(version.version_id ?? "")) refuse();
-  return { functions: functionsInventoryIdentity(functions), cmsApi: { script, deploymentId: deployed.id, versionId: version.version_id } };
+  const started = performance.now();
+  const cmsApi = await readCmsApiDeployment(script, () => json(
+    `https://api.cloudflare.com/client/v4/accounts/${accountId}/workers/scripts/${script}/deployments`, readCloudflareToken),
+    expectedWorkerVersion, readbackClock).catch(refuse);
+  if (!/^[A-Za-z0-9._:-]{1,80}$/.test(cmsApi.deploymentId)) refuse();
+  if (expectedWorkerVersion) console.log(`CMS API expected version readback: ${Math.round(performance.now() - started)} ms`);
+  return { functions: functionsInventoryIdentity(functions), cmsApi };
 }

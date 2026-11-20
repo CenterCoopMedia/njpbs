@@ -8,7 +8,7 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 import { execFileSync } from "node:child_process";
 import { parse } from "yaml";
 import { describe, expect, it } from "vitest";
-import { deployDevFunctions } from "../../scripts/deploy-dev-functions.mjs";
+import { deployDevFunctions, planDevFunctions } from "../../scripts/deploy-dev-functions.mjs";
 
 const repo = fileURLToPath(new URL("../../", import.meta.url));
 const workflow = parse(readFileSync(join(repo, ".github/workflows/cms-dev-deploy.yml"), "utf8"));
@@ -113,6 +113,21 @@ describe("dev Functions deployment boundary", () => {
     expect(deploys[0][0]).toBe("npx");
     expect(deploys[0][1]).toEqual(["--no-install", "firebase", "deploy", "--project", "njpbs-site-dev", "--config", "firebase.dev.json", "--only", "functions:dev", "--force", "--non-interactive"]);
   }));
+
+  it("selects just the exports with a differing runtime value when the source and inventory are proved", () => {
+    const expected = { CMS_ADMIN_BUILD_REVISION: "a".repeat(40) };
+    const live = ["health", "cmsGetPublicPage"].map(name => ({
+      name: `projects/njpbs-site-dev/locations/us-central1/functions/${name}`, state: "ACTIVE",
+      serviceConfig: { environmentVariables: name === "health" ? expected : {} },
+    }));
+    expect(planDevFunctions(["health", "cmsGetPublicPage"], live, expected, true)).toEqual({
+      targets: ["cmsGetPublicPage"], reasons: {
+        health: ["unchanged"], cmsGetPublicPage: ["runtime_parameter:CMS_ADMIN_BUILD_REVISION"],
+      },
+    });
+    expect(planDevFunctions(["health", "cmsGetPublicPage"], live, expected, false).targets)
+      .toEqual(["cmsGetPublicPage", "health"]);
+  });
 
   it("refuses a missing live Function and hides network/process error contents", async () => fixture(async options => {
     let launched = false;

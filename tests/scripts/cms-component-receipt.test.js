@@ -815,6 +815,10 @@ describe("CMS API Worker receipt", () => {
     });
     expect(version).toBe(expected);
     expect(writes).toBe(1);
+    expect(deployCmsApiWorker(undefined, (_cmd, args) => {
+      expect(args).toEqual(["deploy", "--cwd", "/fixture/cms-api", "--config", "wrangler.dev.jsonc", "--tag", SOURCE]);
+      return { status: 0, stdout: `Current Version ID: ${expected}\n` };
+    }, { cwd: "/fixture/cms-api", devSourceSha: SOURCE })).toBe(expected);
     expect(() => deployCmsApiWorker(import.meta.filename, () => ({ status: 1, stdout: `Current Version ID: ${expected}\n` })))
       .toThrow("did not report success");
     expect(() => deployCmsApiWorker(import.meta.filename, () => ({ status: 0, stdout: "synthetic-sensitive-config" })))

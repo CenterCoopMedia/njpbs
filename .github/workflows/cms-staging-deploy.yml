@@ -1424,6 +1424,7 @@ jobs:
           sparse-checkout: |
             scripts/check-cms-secret-iam.mjs
             scripts/lib/functions-deploy-inventory.mjs
+            scripts/lib/functions-readbacks.sh
           persist-credentials: false
       - name: Isolate trusted event IAM gate
         if: needs.firebase-preflight.outputs.functions_mutated == 'true'
@@ -1454,10 +1455,11 @@ jobs:
           CMS_VOICEOVER_R2_SECRET_ACCESS_KEY: ${{ secrets.CMS_VOICEOVER_R2_SECRET_ACCESS_KEY }}
         run: |
           set -euo pipefail
-          node scripts/component-runner.mjs functions verify-deployed-config &
-          config_pid=$!
-          iam_status=0
-          (
+          source "$RUNNER_TEMP/cms-iam-gate/scripts/lib/functions-readbacks.sh"
+          verify_configuration() {
+            node scripts/component-runner.mjs functions verify-deployed-config
+          }
+          verify_iam() (
             # Only configuration verification receives these step inputs.
             unset CMS_DEPLOYMENT_VARIABLES_JSON VITE_CMS_STUDIO_CONFIGURATION VITE_LIVE_PRODUCTION_ENABLED \
               CMS_ADMIN_BUILD_REVISION CMS_PREVIEW_RENDERER_SHA CLOUDFLARE_ACCOUNT_ID CLOUDFLARE_API_TOKEN \
@@ -1466,18 +1468,8 @@ jobs:
               CMS_EDGE_ORIGIN_SECRET CMS_MEDIA_CACHE_PURGE_TOKEN CMS_STAFF_EMAIL_API_TOKEN \
               CMS_VOICEOVER_R2_ACCESS_KEY_ID CMS_VOICEOVER_R2_SECRET_ACCESS_KEY
             node "$RUNNER_TEMP/cms-iam-gate/scripts/check-cms-secret-iam.mjs" "$GITHUB_WORKSPACE" --post-deploy
-          ) || iam_status=$?
-          config_status=0
-          wait "$config_pid" || config_status=$?
-          if (( iam_status == 0 )); then
-            printf 'iam_verified=true\n' >> "$GITHUB_OUTPUT"
-          else
-            echo "::error::Event trigger IAM verification failed after deployment"
-          fi
-          if (( config_status != 0 )); then
-            echo "::error::Deployed Functions configuration verification failed"
-          fi
-          (( iam_status == 0 && config_status == 0 ))
+          )
+          verify_functions_readbacks verify_configuration verify_iam
       - name: Backfill byline projections
         if: >-
           ${{ !cancelled() &&

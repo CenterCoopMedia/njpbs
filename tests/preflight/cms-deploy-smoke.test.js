@@ -1286,7 +1286,8 @@ if(process.env.CMS_BUG_REPORT_TELEGRAM_ADMIN_MAP)process.exit(8); require("node:
     expect(cmsApi).toContain("umask 077");
     expect(cmsApi).toContain('node scripts/deploy-cms-api-worker.mjs "$RUNNER_TEMP/cms-api-secrets.json"');
     const deploy = readFileSync(join(REPO_ROOT, "scripts/deploy-cms-api-worker.mjs"), "utf8");
-    expect(deploy).toContain('["deploy", "--cwd", "cms-api"]');
+    expect(deploy).toContain('cwd = "cms-api"');
+    expect(deploy).toContain('["deploy", "--cwd", cwd]');
     expect(deploy).toContain('args.push("--secrets-file", secretsFile)');
     expect(deploy).not.toContain("secret put");
     expect(cmsApi).not.toContain("wrangler secret put");

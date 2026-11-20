@@ -367,6 +367,10 @@ jobs:
           workload_identity_provider: ${{ vars.FIREBASE_DEV_WORKLOAD_IDENTITY_PROVIDER }}
           service_account: ${{ vars.FIREBASE_DEV_DEPLOY_SERVICE_ACCOUNT }}
           project_id: njpbs-site-dev
+      - name: Set up Google Cloud CLI for dev Functions IAM
+        uses: google-github-actions/setup-gcloud@aa5489c8933f4cc7a4f7d45035b3b1440c9c10db # v3
+        with:
+          project_id: njpbs-site-dev
       - name: Verify the singleton public contract at preflight
         env:
           CMS_DEV_PUBLISH_ENABLED: ${{ vars.CMS_DEV_PUBLISH_ENABLED }}
@@ -402,6 +406,7 @@ jobs:
           CMS_DEV_READER_INSTALL_AUTHORIZATION: ${{ inputs.reader_install_authorization }}
           CMS_DEV_PUBLISH_ENABLED: ${{ vars.CMS_DEV_PUBLISH_ENABLED }}
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_DEV_WORKER_TOKEN }}
+          FIREBASE_DEPLOY_SERVICE_ACCOUNT: ${{ vars.FIREBASE_DEV_DEPLOY_SERVICE_ACCOUNT }}
         run: node scripts/deploy-dev-reader-mounts.mjs "$RUNNER_TEMP/dev-reader-deployment-receipt.json"
       - name: Retain original dev reader deployment identities
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
