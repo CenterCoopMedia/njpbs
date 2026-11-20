@@ -1,5 +1,6 @@
 import { repositoryMatches } from "./lib/repository-identity.mjs";
 import { devAccessOrigin } from "./lib/deployment-settings.mjs";
+import { waitForWorkerReadback, WorkerReadbackMismatch, wranglerVersion } from './lib/cloudflare-worker-readback.mjs';
 import { spawnSync } from 'node:child_process';
 import { appendFileSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { pathToFileURL } from 'node:url';
@@ -188,7 +189,7 @@ export async function verifyGuardedRouteTarget({ api, routePath, routeId, owner,
   return routes;
 }
 
-export async function run({ env = process.env, fetchImpl = fetch, spawn = spawnSync } = {}) {
+export async function run({ env = process.env, fetchImpl = fetch, spawn = spawnSync, readbackClock } = {}) {
   devAccessOrigin(env);
   requireState(env.GITHUB_REF === 'refs/heads/main' && env.GITHUB_EVENT_NAME === 'workflow_dispatch' &&
     repositoryMatches(env.GITHUB_REPOSITORY, env) && /^[a-f0-9]{40}$/.test(env.GITHUB_SHA ?? ''),
@@ -234,7 +235,7 @@ export async function run({ env = process.env, fetchImpl = fetch, spawn = spawnS
       response = await fetchImpl(`https://api.cloudflare.com/client/v4${path}`, {
         method, headers: { Authorization: `Bearer ${env.CLOUDFLARE_API_TOKEN}`, 'Content-Type': 'application/json' },
         ...(data ? { body: JSON.stringify(data) } : {}),
-        redirect: 'error', signal: AbortSignal.timeout(30000),
+        redirect: 'error', signal: AbortSignal.timeout(30_000),
       });
       body = await response.json();
     } catch { throw new Error('Cloudflare request failed; reconcile before retrying'); }
@@ -290,7 +291,7 @@ export async function run({ env = process.env, fetchImpl = fetch, spawn = spawnS
           CLOUDFLARE_API_TOKEN: env.CLOUDFLARE_API_TOKEN, CLOUDFLARE_ACCOUNT_ID: ACCOUNT,
           WRANGLER_SEND_METRICS: 'false', WRANGLER_WRITE_LOGS: 'false' } });
       // Wrangler output may contain bindings; only emit the validated version ID.
-      versionId = /Current Version ID:\s*([a-f0-9-]{36})(?:\s|$)/.exec(result.stdout)?.[1];
+      versionId = wranglerVersion(result.stdout);
       if (result.status !== 0) {
         let evidence = UUID.test(versionId ?? '') ? `Wrangler reported version: ${versionId}. ` : '';
         // A later trigger failure can follow a successful upload/deployment.
@@ -313,21 +314,34 @@ export async function run({ env = process.env, fetchImpl = fetch, spawn = spawnS
     } finally { rmSync(temp, { force: true }); }
   }
   async function verifyVersion() {
-    const deployments = await api(`${workerPath}/deployments`);
+    const read = endpoint => api(`${workerPath}/${endpoint}`);
+    const deployments = await read('deployments');
     const versions = deployments.deployments?.[0]?.versions;
-    requireState(versions?.length === 1 && versions[0].version_id === versionId && versions[0].percentage === 100,
-      'Expected the staged version at 100 percent traffic');
-    const version = await api(`${workerPath}/versions/${versionId}`);
-    requireState(version.id === versionId &&
-      version.annotations?.['workers/message'] === `dev-staff-gateway:${env.GITHUB_SHA}`,
-    'Staged gateway version does not match this reviewed source');
-    verifyBindings(version.resources?.bindings, audience);
-    verifyBindings((await api(`${workerPath}/settings`)).bindings, audience);
-    const subdomain = await api(`${workerPath}/subdomain`);
-    requireState(subdomain.enabled === false && subdomain.previews_enabled === false,
-      'workers.dev and version preview URLs must remain disabled');
+    if (!Array.isArray(versions) || versions.length !== 1 || versions[0]?.version_id !== versionId || versions[0].percentage !== 100) {
+      throw new WorkerReadbackMismatch('Expected the staged version at 100 percent traffic', versionId,
+        { count: Array.isArray(versions) ? versions.length : null,
+          versionId: UUID.test(versions?.[0]?.version_id ?? '') ? versions[0].version_id : null,
+          percentage: Number.isFinite(versions?.[0]?.percentage) ? versions[0].percentage : null });
+    }
+    const version = await read(`versions/${versionId}`);
+    if (version?.id !== versionId || version.annotations?.['workers/message'] !== `dev-staff-gateway:${env.GITHUB_SHA}`) {
+      throw new WorkerReadbackMismatch('Staged gateway version does not match this reviewed source', env.GITHUB_SHA, 'different identity');
+    }
+    const settings = await read('settings');
+    try {
+      verifyBindings(version.resources?.bindings, audience);
+      verifyBindings(settings?.bindings, audience);
+    } catch {
+      throw new WorkerReadbackMismatch('Gateway bindings must be exact dev-only bindings', 'configured tuple', 'different tuple');
+    }
+    const subdomain = await read('subdomain');
+    if (subdomain?.enabled !== false || subdomain?.previews_enabled !== false) {
+      throw new WorkerReadbackMismatch('workers.dev and version preview URLs must remain disabled',
+        { enabled: false, previewsEnabled: false }, { enabled: typeof subdomain?.enabled === 'boolean' ? subdomain.enabled : null,
+          previewsEnabled: typeof subdomain?.previews_enabled === 'boolean' ? subdomain.previews_enabled : null });
+    }
   }
-  await verifyVersion();
+  await waitForWorkerReadback(verifyVersion, readbackClock);
   const before = await api(routePath);
   requireState(routeSnapshot(before) === initialSnapshot, 'Routes changed during verification; stop and reconcile');
   const route = devRoute(before, initialOwner, shadowConfig);

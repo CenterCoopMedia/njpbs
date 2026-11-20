@@ -57,6 +57,8 @@ function fixture(options = {}) {
     ...(options.extraRoutes ?? []),
   ];
   let routeReads = 0;
+  let deploymentReads = 0;
+  let elapsed = 0;
   let temp;
   let deployed = false;
   const bindings = options.bindings ?? [
@@ -110,7 +112,9 @@ function fixture(options = {}) {
     else if (path === `${publicPath}/subdomain`) result = { enabled: options.originPublicUrl ?? false, previews_enabled: options.originPreviewUrl ?? false };
     else if (path === `/accounts/${account}/workers/domains?service=template-dev-public`) result = options.domains ?? [];
     else if (path === `${workerPath}/deployments`) {
-      result = { deployments: [{ id: '22222222-3333-4444-5555-666666666666', versions: [{ version_id: options.activeVersion ?? versionId, percentage: options.percentage ?? 100 }] }] };
+      const stale = ++deploymentReads <= (options.staleReads ?? 0);
+      const active = stale ? '33333333-4444-4555-8666-777777777777' : options.activeVersion ?? versionId;
+      result = { deployments: [{ id: '22222222-3333-4444-5555-666666666666', versions: [{ version_id: active, percentage: options.percentage ?? 100 }] }] };
     } else if (path === `${workerPath}/versions/${versionId}`) {
       result = { id: versionId, annotations: { 'workers/message': `dev-staff-gateway:${options.source ?? sha}` }, resources: { bindings } };
     } else if (path === `${workerPath}/settings`) result = { bindings: (!deployed && options.initialBindings) || options.settingsBindings || bindings };
@@ -142,7 +146,8 @@ function fixture(options = {}) {
       stdout: `${options.noVersionOutput ? '' : `Current Version ID: ${versionId}\n`}fixture-private-output`,
       stderr: 'fixture-private-error' };
   };
-  return { calls, execute: () => run({ env, fetchImpl, spawn }), routes: () => routes,
+  const readbackClock = { now: () => elapsed, wait: async ms => { elapsed += ms; } };
+  return { calls, execute: () => run({ env, fetchImpl, spawn, readbackClock }), routes: () => routes, elapsed: () => elapsed,
     mutations: () => calls.filter(c => c.command || c.method && c.method !== 'GET'),
     tempExists: () => temp && existsSync(temp) };
 }
@@ -172,10 +177,11 @@ describe('isolated dev gateway deployment boundary', () => {
     expect(f.mutations()).toEqual([]);
   });
   it('updates an isolated owner with private service bindings while preserving every route', async () => {
-    const f = fixture({ owner: worker, env: { GATEWAY_MODE: 'update', GATEWAY_VERSION_ID: '' } });
+    const f = fixture({ owner: worker, staleReads: 3, env: { GATEWAY_MODE: 'update', GATEWAY_VERSION_ID: '' } });
     const before = structuredClone(f.routes());
     await f.execute();
     expect(f.routes()).toEqual(before);
+    expect(f.elapsed()).toBe(1500);
     expect(f.mutations()).toHaveLength(1);
     expect(f.mutations()[0].command).toBe('node_modules/.bin/wrangler');
     expect(f.mutations()[0].config.routes).toEqual([]);
