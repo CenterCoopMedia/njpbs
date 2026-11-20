@@ -11,7 +11,7 @@ import { createRequire } from "node:module";
 import { currentVersionMatches } from "./lib/functions-secret-versions.mjs";
 import { studioTitleFilesParameter } from "./lib/studio-title-files.mjs";
 import { resolveDiscovery } from "./configure-cms-functions.mjs";
-import { configurationInputs, RUNTIME_PARAMETERS, runtimeParameters } from "./lib/functions-configuration.mjs";
+import { configurationInputs, RUNTIME_PARAMETERS, runtimeParameters, servingRuntimeParameters } from "./lib/functions-configuration.mjs";
 import {
   ADMIN_REVISION_INTAKE_FLOOR,
   assertLegacyCmsWorkflow,
@@ -37,7 +37,7 @@ export async function desiredRuntimeParameters(env, execute) {
   studioTitleFilesParameter(env.VITE_CMS_STUDIO_CONFIGURATION, env.VITE_LIVE_PRODUCTION_ENABLED);
   try {
     const input = configurationInputs(env);
-    return runtimeParameters(input, resolveDiscovery({ ...env, ...input }, execute));
+    return servingRuntimeParameters(runtimeParameters(input, resolveDiscovery({ ...env, ...input }, execute)));
   } catch {
     // Errors may contain secret-derived parameter input or child env details.
     return null;

@@ -12,7 +12,8 @@ import { CONTRACT_SETTINGS, contractDigest, contractTarget, contractIdentity,
   compareContractInputs, captureNativeContract, boundedContractProof, writePrivateCapsule, readPrivateCapsule,
   assertUnchangedPlan, contractSummary, recheckContractSummary, refuse, CmsPublicContractError } from "./lib/cms-public-contract.mjs";
 import { readReceipt, collectLiveIdentities, functionsInventoryIdentity, fingerprintInputs, fingerprintFunctionGraph } from "./lib/cms-component-receipt.mjs";
-import { FUNCTION_RUNTIME_VARIABLES } from "./lib/cms-release-plan.mjs";
+import { FUNCTION_RUNTIME_VARIABLES, runtimeParametersMatch } from "./lib/cms-release-plan.mjs";
+import { servingRuntimeParameters } from "./lib/functions-configuration.mjs";
 import { repositoryMatches } from "./lib/repository-identity.mjs";
 import { readDeploymentManifest, renderCommittedDeploymentSource } from "./render-development-config.mjs";
 import { devPublicationIdentity } from "./assert-dev-cms-targets.mjs";
@@ -279,9 +280,7 @@ async function nativeDevelopmentPlan({ state, target, candidateSha, cwd, signal 
   }));
   Object.assign(parameters, devPublicationIdentity(process.env), { CMS_ADMIN_BUILD_REVISION: state.identity.priorAdminSha, CMS_PREVIEW_SERIALIZER_READY: "true",
     CMS_PREVIEW_RENDERER_SHA: state.identity.backend.previewRendererSha });
-  for (const fn of state.providerFunctions) {
-    if (Object.entries(parameters).some(([key, value]) => fn.serviceConfig?.environmentVariables?.[key] !== value)) refuse("dev-configuration");
-  }
+  if (!runtimeParametersMatch(state.providerFunctions, servingRuntimeParameters(parameters))) refuse("dev-configuration");
   const require = createRequire(join(trustedRoot, "package.json"));
   const { GoogleAuth } = require("google-auth-library");
   const client = await new GoogleAuth({ scopes: ["https://www.googleapis.com/auth/cloud-platform"] }).getClient();
