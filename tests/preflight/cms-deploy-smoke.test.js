@@ -1445,6 +1445,7 @@ describe("Functions receipt inventory", () => {
     const root = mkdtempSync(join(tmpdir(), "cms-release-receipt-"));
     try {
       for (const path of ["scripts/lib/cms-component-receipt.mjs", "scripts/lib/cms-release-plan.mjs",
+        "scripts/lib/cloudflare-worker-readback.mjs",
         "scripts/lib/functions-contracts.mjs",
         "scripts/lib/functions-configuration.mjs", "config/functions-configuration.json",
         "scripts/lib/studio-title-files.mjs", "agents/vmix/configuration.mjs",
