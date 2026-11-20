@@ -223,7 +223,7 @@ function createCmsGetPublicPageHandler(deps = {}) {
             delete result.backgroundBucket;
             if (!contentLinkReadFits(result, 2 * 1024 * 1024, "published")) throw new Error("Published read too large");
             return result;
-          }, result => ["pass", "post", "alias", "receipts"].includes(result.kind));
+          }, result => ["pass", "post", "alias", "gone", "receipts"].includes(result.kind));
         }
         const result = await (deps.readNoBuildPostFn ?? readNoBuildPostDecision)({ firestore, path, rendererSha, probe, log });
         if (result.kind === "background") {

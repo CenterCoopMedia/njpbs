@@ -1,7 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 
 import publicContent from "../../functions/public-content.js";
-import publicDecisionCache from "../../functions/lib/public-decision-cache.js";
 import publicProjection from "../../functions/lib/public-content-projection.js";
 
 const {
@@ -508,27 +507,6 @@ describe("cmsGetPublicPage", () => {
   });
 });
 
-
-it("rechecks a withdrawn Post instead of leasing its origin decision to the edge", async () => {
-  const firestore = {
-    doc: path => path,
-    async getAll(...paths) {
-      return paths.map(() => ({ exists: true, updateTime: { seconds: 1, nanoseconds: 0 }, data: () => ({ state: "idle" }) }));
-    },
-  };
-  const readNoBuildPostFn = vi.fn(async () => ({ kind: "gone", receipt: { visible: false } }));
-  const handler = createCmsGetPublicPageHandler({ firestore, readNoBuildPostFn,
-    decisionCache: publicDecisionCache.createPublicDecisionCache(), log: { error: vi.fn() } });
-  const request = makeReq({ mode: "no-build-post-v1", path: "/posts/recalled-story/", rendererSha: "a".repeat(40) });
-  for (const method of ["GET", "HEAD", "GET"]) {
-    const response = makeRes();
-    await handler({ ...request, body: { ...request.body, method } }, response);
-    expect(response.statusCode).toBe(200);
-    expect(response.body.kind).toBe("gone");
-    expect(response.headers["x-njpbs-public-decision-valid-until"]).toBeUndefined();
-  }
-  expect(readNoBuildPostFn).toHaveBeenCalledTimes(3);
-});
 
 describe("public PDF notice boundary", () => {
   const notice = { itemId: "notice", assetId: "notice-pdf", title: "Board meeting",

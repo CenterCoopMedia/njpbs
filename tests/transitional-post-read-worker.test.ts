@@ -357,6 +357,42 @@ describe("transitional public Post authority", () => {
     await h.drain();
   });
 
+  it.each([false, true])("coalesces later requests onto a read newer than an in-flight withdrawal: %s", async durable => {
+    const h = harness();
+    const gone = { ...receipt, visible: false };
+    const withdrawnCatalog = { ...catalog, catalog: { ...catalog.catalog!, posts: [gone] } };
+    const initial = deferred<NoBuildPostReply>(), current = deferred<NoBuildPostReply>();
+    const initialStarted = deferred<void>(), currentStarted = deferred<void>();
+    let reads = 0;
+    if (durable) h.withdrawals(async () => ({ ...receipt, revision: receipt.generation, verifiedAt: 1234 }));
+    h.authority(async pathname => {
+      if (pathname === "/_publication.json") return withdrawnCatalog;
+      if (++reads === 1) {
+        initialStarted.resolve();
+        return initial.promise;
+      }
+      currentStarted.resolve();
+      return current.promise;
+    });
+
+    const withdrawn = h.request();
+    await initialStarted.promise;
+    const later = Promise.all(Array.from({ length: 4 }, () => h.request()));
+    await vi.advanceTimersByTimeAsync(0);
+    initial.resolve({ kind: "gone", receipt: gone });
+    expect((await withdrawn)!.status).toBe(410);
+    await currentStarted.promise;
+    await vi.advanceTimersByTimeAsync(0);
+
+    const next = nextVersion().post;
+    next.receipt!.generation = receipt.generation + 1;
+    current.resolve(next);
+    const responses = await later;
+    expect(responses.map(response => response!.status)).toEqual([200, 200, 200, 200]);
+    expect(reads).toBe(2);
+    await h.drain();
+  });
+
   it("keeps an older tombstone from asserting absence when a verified republish cannot render", async () => {
     const h = harness();
     h.withdrawals(async () => ({ ...receipt, revision: receipt.generation, verifiedAt: 1234 }));
@@ -387,6 +423,28 @@ describe("transitional public Post authority", () => {
 
     h.authority(undefined);
     h.route(nextVersion().post);
+    const calls = h.calls.length;
+    expect((await h.request())!.status).toBe(503);
+    expect(h.calls).toHaveLength(calls);
+    h.advance(1_000);
+    expect((await h.request())!.status).toBe(200);
+    await h.drain();
+  });
+
+  it("retries an unavailable tombstone check without serving another 410 or old Assets during backoff", async () => {
+    const h = harness();
+    h.withdrawals(async () => ({ ...receipt, revision: receipt.generation, verifiedAt: 1234 }));
+    h.authority(async () => { throw new Error("Authority unavailable"); });
+    expect((await h.request())!.status).toBe(410);
+    const calls = h.calls.length;
+    h.authority(undefined);
+    const next = nextVersion().post;
+    next.receipt!.generation = receipt.generation + 1;
+    h.route(next);
+    expect((await h.request())!.status).toBe(503);
+    expect(h.calls).toHaveLength(calls);
+    expect(h.assetPaths).toEqual([]);
+    h.advance(1_000);
     expect((await h.request())!.status).toBe(200);
     await h.drain();
   });
