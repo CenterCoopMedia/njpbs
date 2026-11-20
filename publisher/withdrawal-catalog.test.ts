@@ -106,7 +106,7 @@ it("caches successful republish authority for 60 seconds while fresh newer R2 wi
   const published = structuredClone(fixture);
   published.document.id = postId;
   published.document.published.metadata.slug = "story";
-  const owner = observation(true, 4).owners[0];
+  let owner = observation(true, 4).owners[0];
   const worker = createTransitionalPostReadWorker({ rendererSha: sha, now: () => clock,
     cache: { async match(key) { return entries.get((key as Request).url)?.clone(); },
       async put(key, value) { entries.set((key as Request).url, value.clone()); } }, waitUntil() {},
@@ -133,18 +133,27 @@ it("caches successful republish authority for 60 seconds while fresh newer R2 wi
   expect(reads).toBe(1);
   clock += 1;
   expect((await request())?.status).toBe(410);
-  expect((await request("HEAD"))?.status).toBe(410);
+  const backoff = await request("HEAD");
+  expect(backoff?.status).toBe(503);
+  expect(backoff?.headers.get("cache-control")).toBe("no-store");
+  expect(backoff?.headers.get("retry-after")).toBe("1");
   expect(reads).toBe(2); // Failure throttling is separate from successful authority.
   down = false;
   clock += 1_001;
   expect((await request())?.status).toBe(200);
   expect(reads).toBe(3);
   await publishWithdrawalCatalog(options(), async () => observation(false, 5));
-  expect((await request())?.status).toBe(410);
-  expect((await request("HEAD"))?.status).toBe(410);
-  expect(reads).toBe(3);
+  for (const method of ["GET", "HEAD"]) {
+    const withdrawn = await request(method);
+    expect(withdrawn?.status).toBe(410);
+    expect(withdrawn?.headers.get("x-njpbs-gone-branch")).toBe("post-tombstone-conflict");
+  }
+  expect(reads).toBe(5); // Each read still sees the older visible receipt.
+  owner = observation(true, 6).owners[0];
+  expect((await request())?.status).toBe(200);
+  expect(reads).toBe(6);
   expect(assets).toBe(0);
-  expect(identities).toBe(3); // Three successful GETs; HEAD and withdrawals read no artifact.
+  expect(identities).toBe(4); // Successful GETs read the artifact identity.
 });
 
 it.each(["production", "development"])("invalidates republish authority with the %s background purge tag", async environment => {
