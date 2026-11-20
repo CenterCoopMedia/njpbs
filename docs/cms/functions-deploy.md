@@ -95,9 +95,9 @@ configuration. Private preset/admin-map JSON is validated in memory and safely
 serialized. The nine release-comparison secrets retain their value-agreement
 checks, including optional publish-token agreement when supplied.
 
-The production planner and dev verifier use the same serving parameter
-encoding. Firebase stores SDK list parameters as JSON. JSON text parameters
-and other settings retain the value supplied to the Functions runtime.
+The production planner, dev preflight and dev verifier use the same serving
+parameter encoding. Firebase stores SDK list parameters as JSON. JSON text
+parameters and other settings retain the supplied runtime value.
 
 Routine release calls verification only. Missing resources name the exact
 required secret, binding or TTL policy rather than creating it. Explicit
