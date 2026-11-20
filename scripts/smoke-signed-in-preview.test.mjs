@@ -5,7 +5,7 @@ import { checkSignedInPreview, previewSmokeSettings, routePreviewSmokeAccess } f
 
 const credential = { email: "preview@example.org", password: "fixture-password" };
 const access = { "CF-Access-Client-Id": "preview.access", "CF-Access-Client-Secret": "fixture-secret" };
-const target = { editor: "/content/posts/smoke-fixture/edit", heading: "Private preview fixture" };
+const target = { editor: "/content/post/smoke-fixture/edit", heading: "Private preview fixture" };
 const env = {
   CMS_DEV_ADMIN_ORIGIN: "https://dev-admin.example.test",
   CMS_DEV_PREVIEW_ORIGIN: "https://dev-preview.example.test",
@@ -23,7 +23,10 @@ test("sets distinct dev Access targets and keeps production on its fixed origins
   assert.throws(() => previewSmokeSettings("development", { ...env, CMS_DEV_PREVIEW_ORIGIN: production.preview }));
   assert.throws(() => previewSmokeSettings("development", { ...env, CMS_PREVIEW_SMOKE_CREDENTIAL: JSON.stringify(credential) }));
   assert.throws(() => previewSmokeSettings("production", {
-    ...env, CMS_PREVIEW_SMOKE_TARGET: JSON.stringify({ ...target, editor: "//another.example.org/content/posts/fixture/edit" }),
+    ...env, CMS_PREVIEW_SMOKE_TARGET: JSON.stringify({ ...target, editor: "/content/posts/smoke-fixture/edit" }),
+  }));
+  assert.throws(() => previewSmokeSettings("production", {
+    ...env, CMS_PREVIEW_SMOKE_TARGET: JSON.stringify({ ...target, editor: "//another.example.org/content/post/fixture/edit" }),
   }));
 });
 

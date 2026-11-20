@@ -5,7 +5,7 @@ import { developmentInstallAccess } from "./lib/development-install-credentials.
 import { developmentValues } from "./render-development-config.mjs";
 
 const production = { admin: "https://admin.njpbs.org", preview: "https://preview.njpbs.org" };
-const editorPath = /^\/content\/(?:pages|posts)\/[A-Za-z0-9][A-Za-z0-9_-]{0,127}\/edit$/;
+const editorPath = /^\/content\/(?:pages|post)\/[A-Za-z0-9][A-Za-z0-9_-]{0,127}\/edit$/;
 const previewPath = /^\/p\/[A-Za-z0-9]{20}\//;
 
 export function previewSmokeSettings(environment, env) {

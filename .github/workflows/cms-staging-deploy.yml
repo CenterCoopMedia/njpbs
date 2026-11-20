@@ -206,7 +206,7 @@ jobs:
         env:
           CMS_PREVIEW_SMOKE_CREDENTIAL: ${{ secrets.CMS_PREVIEW_SMOKE_CREDENTIAL }}
           CMS_PREVIEW_SMOKE_TARGET: ${{ vars.CMS_PREVIEW_SMOKE_TARGET }}
-        run: node scripts/smoke-signed-in-preview.mjs production --check-config
+        run: node "$RUNNER_TEMP/admin-status-gate"/scripts/smoke-signed-in-preview.mjs production --check-config
       - name: Install workspace deps
         run: npm ci --ignore-scripts
       - name: Preflight admin env
@@ -1754,7 +1754,7 @@ jobs:
         env:
           CMS_PREVIEW_SMOKE_CREDENTIAL: ${{ secrets.CMS_PREVIEW_SMOKE_CREDENTIAL }}
           CMS_PREVIEW_SMOKE_TARGET: ${{ vars.CMS_PREVIEW_SMOKE_TARGET }}
-        run: node scripts/smoke-signed-in-preview.mjs production
+        run: node "$RUNNER_TEMP/cms-smoke-gate"/scripts/smoke-signed-in-preview.mjs production
 
   admin-deploy:
     env:

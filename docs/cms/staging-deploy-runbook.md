@@ -31,8 +31,10 @@ finishes and verifies at NEW before CMS dispatch at that same SHA. Later main
 merges go in the next release. Keep the separate trusted workflow `main` ref:
 GitHub pins its `github.sha`, while `deploy_ref` selects application source.
 Authorization, exact-main CI, compatibility and scans use trusted source.
-Release planner, receipts, deployment helpers, retirement plan, smoke and
-Admin boot checks use NEW. Never copy newer helpers over selected source.
+Release planner, receipts, deployment helpers, retirement plan, Functions smoke
+and Admin boot checks use NEW. The signed-in preview probe comes from the
+trusted workflow checkout and runs against the deployed target. Never copy
+newer helpers over selected source.
 
 Configure `CMS_LOCAL_PUBLICATION_OWNER` and `CMS_GPU_WORKER_ID` from the live
 deployment before the first public-source release. The existing source renderer

@@ -167,6 +167,9 @@ jobs:
           persist-credentials: false
           sparse-checkout: |
             scripts/render-development-config.mjs
+            scripts/cms-debug-browser.mjs
+            scripts/lib/development-install-credentials.mjs
+            scripts/smoke-signed-in-preview.mjs
             config/development-inputs.json
           sparse-checkout-cone-mode: false
       - name: Render deployment resource configuration
@@ -182,7 +185,7 @@ jobs:
         env:
           CMS_PREVIEW_SMOKE_CREDENTIAL: ${{ secrets.CMS_PREVIEW_SMOKE_CREDENTIAL }}
           CMS_PREVIEW_SMOKE_TARGET: ${{ vars.CMS_PREVIEW_SMOKE_TARGET }}
-        run: node scripts/smoke-signed-in-preview.mjs development --check-config
+        run: node "$RUNNER_TEMP/configuration-render-gate"/scripts/smoke-signed-in-preview.mjs development --check-config
       - name: Validate the separate dev reader installation authorization
         env:
           CMS_DEV_INSTALL_READER_BRIDGE: ${{ inputs.install_reader_bridge }}
@@ -302,6 +305,9 @@ jobs:
           persist-credentials: false
           sparse-checkout: |
             scripts/render-development-config.mjs
+            scripts/cms-debug-browser.mjs
+            scripts/lib/development-install-credentials.mjs
+            scripts/smoke-signed-in-preview.mjs
             config/development-inputs.json
           sparse-checkout-cone-mode: false
       - name: Render deployment resource configuration
@@ -328,7 +334,7 @@ jobs:
         env:
           CMS_PREVIEW_SMOKE_CREDENTIAL: ${{ secrets.CMS_PREVIEW_SMOKE_CREDENTIAL }}
           CMS_PREVIEW_SMOKE_TARGET: ${{ vars.CMS_PREVIEW_SMOKE_TARGET }}
-        run: node scripts/smoke-signed-in-preview.mjs development --check-config
+        run: node "$RUNNER_TEMP/configuration-render-gate"/scripts/smoke-signed-in-preview.mjs development --check-config
       - name: Install reviewed dependencies
         run: |
           npm ci --ignore-scripts
@@ -344,6 +350,7 @@ jobs:
         run: |
           set -euo pipefail
           mv .cms-contract-source "$RUNNER_TEMP/cms-contract-source"
+          ln -s "$GITHUB_WORKSPACE/node_modules" "$RUNNER_TEMP/cms-contract-source/node_modules"
       - name: Prepare the singleton contract runtime before credentials
         env:
           CMS_DEV_PUBLISH_ENABLED: ${{ vars.CMS_DEV_PUBLISH_ENABLED }}
@@ -492,14 +499,14 @@ jobs:
       - name: Ensure supported sandboxed Chrome for the signed-in preview check
         if: ${{ !inputs.preserve_preview_pause && !inputs.restore_preview_bootstrap }}
         timeout-minutes: 5
-        run: node .github/scripts/ensure-panel-browser-deps.mjs
+        run: node "$RUNNER_TEMP/cms-contract-source"/.github/scripts/ensure-panel-browser-deps.mjs
       - name: Smoke-test one signed-in private preview
         if: ${{ !inputs.preserve_preview_pause && !inputs.restore_preview_bootstrap }}
         timeout-minutes: 4
         env:
           CMS_PREVIEW_SMOKE_CREDENTIAL: ${{ secrets.CMS_PREVIEW_SMOKE_CREDENTIAL }}
           CMS_PREVIEW_SMOKE_TARGET: ${{ vars.CMS_PREVIEW_SMOKE_TARGET }}
-        run: node scripts/smoke-signed-in-preview.mjs development
+        run: node "$RUNNER_TEMP/cms-contract-source"/scripts/smoke-signed-in-preview.mjs development
       - name: Verify the singleton public contract at settlement
         env:
           CMS_DEV_PUBLISH_ENABLED: ${{ vars.CMS_DEV_PUBLISH_ENABLED }}
