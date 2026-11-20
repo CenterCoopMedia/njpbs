@@ -1293,7 +1293,11 @@ if(process.env.CMS_BUG_REPORT_TELEGRAM_ADMIN_MAP)process.exit(8); require("node:
     expect(secretPreparation).toContain("FIREBASE_WEB_API_KEY: firebaseWebApiKey");
     expect(secretPreparation).toContain("CMS_EDGE_ORIGIN_SECRET: process.env.CMS_EDGE_ORIGIN_SECRET");
     expect(cmsApi).toContain("umask 077");
-    expect(cmsApi).toContain('--secrets-file "$secrets_path"');
+    expect(cmsApi).toContain('node scripts/deploy-cms-api-worker.mjs "$RUNNER_TEMP/cms-api-secrets.json"');
+    const deploy = readFileSync(join(REPO_ROOT, "scripts/deploy-cms-api-worker.mjs"), "utf8");
+    expect(deploy).toContain('["deploy", "--cwd", "cms-api"]');
+    expect(deploy).toContain('args.push("--secrets-file", secretsFile)');
+    expect(deploy).not.toContain("secret put");
     expect(cmsApi).not.toContain("wrangler secret put");
     expect(cmsApi).toContain("Clean up CMS API Worker secrets file");
     expect(cmsApi).toContain("if: always()");

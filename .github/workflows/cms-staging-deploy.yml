@@ -955,8 +955,8 @@ jobs:
             --run-id "$GITHUB_RUN_ID" \
             --run-attempt "$GITHUB_RUN_ATTEMPT"
       - name: Deploy CMS API Worker
-        id: deploy_cms_api
         if: steps.cms_api_plan.outputs.mutated != 'false'
+        id: deploy_cms_api
         env:
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
