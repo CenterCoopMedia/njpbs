@@ -1,8 +1,9 @@
 import { readCmsDeployWorkflow } from "../helpers/cms-deploy-workflow.mjs";
+import { copyImportClosure } from "../helpers/isolated-checkout.mjs";
 import { execFileSync, spawnSync } from "node:child_process";
 import { chmodSync, copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { dirname, join } from "node:path";
+import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { parse } from "yaml";
 import { describe, expect, it, vi } from "vitest";
@@ -227,11 +228,6 @@ describe("CMS deployment smoke gate", () => {
         join(REPO_ROOT, "scripts/resolve-cost-ledger-pulls.sh"),
         join(root, "scripts/resolve-cost-ledger-pulls.sh"),
       );
-      // The parameter block invokes the production title-file serializer.
-      for (const filename of ["scripts/lib/studio-title-files.mjs", "agents/vmix/configuration.mjs"]) {
-        mkdirSync(dirname(join(root, filename)), { recursive: true });
-        copyFileSync(join(REPO_ROOT, filename), join(root, filename));
-      }
       const result = spawnSync(process.execPath, [join(REPO_ROOT, "scripts/component-runner.mjs"), "functions", "configure"], { cwd: root, encoding: "utf8", env: { PATH: process.env.PATH, ...env } });
       expect(result.error).toBeUndefined();
       expect(result.status, result.stderr).toBe(expectedStatus);
@@ -316,11 +312,6 @@ describe("CMS deployment smoke gate", () => {
         join(REPO_ROOT, "scripts/resolve-cost-ledger-pulls.sh"),
         join(root, "scripts/resolve-cost-ledger-pulls.sh"),
       );
-      // The parameter block invokes the production title-file serializer.
-      for (const filename of ["scripts/lib/studio-title-files.mjs", "agents/vmix/configuration.mjs"]) {
-        mkdirSync(dirname(join(root, filename)), { recursive: true });
-        copyFileSync(join(REPO_ROOT, filename), join(root, filename));
-      }
       writeFileSync(
         join(bin, "gcloud"),
         `#!${process.execPath}
@@ -1445,20 +1436,12 @@ if(process.env.CMS_BUG_REPORT_TELEGRAM_ADMIN_MAP)process.exit(8); require("node:
 });
 
 describe("Functions receipt inventory", () => {
-  it("collects all live inventory pages with the selected release helper", () => {
+  it("collects all live inventory pages with the selected release helper", async () => {
     const root = mkdtempSync(join(tmpdir(), "cms-release-receipt-"));
     try {
-      for (const path of ["scripts/lib/cms-component-receipt.mjs", "scripts/lib/cms-release-plan.mjs",
-        "scripts/lib/functions-contracts.mjs",
-        "scripts/lib/functions-configuration.mjs", "config/functions-configuration.json",
-        "scripts/lib/studio-title-files.mjs", "agents/vmix/configuration.mjs",
-        "scripts/lib/functions-deploy-inventory.mjs", "scripts/lib/repository-identity.mjs",
-        "scripts/deploy-cms-function-batches.mjs",
-        "scripts/render-development-config.mjs", "config/development-inputs.json"]) {
-        const target = join(root, path);
-        mkdirSync(join(target, ".."), { recursive: true });
-        copyFileSync(join(REPO_ROOT, path), target);
-      }
+      await copyImportClosure(REPO_ROOT, root, ["scripts/lib/cms-component-receipt.mjs"], {
+        assets: ["config/functions-configuration.json"],
+      });
       const auth = join(root, "node_modules/google-auth-library");
       mkdirSync(auth, { recursive: true });
       writeFileSync(join(auth, "index.js"), `

@@ -1,6 +1,7 @@
 import { beforeEach, expect, it } from "vitest";
 import { createHash } from "node:crypto";
 import { isolatedFirestore } from "../helpers/emulator-firestore.js";
+import { copyImportClosure } from "../helpers/isolated-checkout.mjs";
 import { BOOTSTRAP_PREFLIGHTS, runBootstrapPreflights, readOnlyBootstrapFirestore } from "../../scripts/lib/public-release-bootstrap-preflight.mjs";
 const db = isolatedFirestore("public-release-bootstrap-preflight");
 const hash = value => createHash("sha256").update(JSON.stringify(value)).digest("hex");
@@ -39,7 +40,7 @@ it("reports every missing adapter as failure without inventing a layer proof", a
   expect(report.results.every(row => row.code === "bootstrap-adapter-unbound")).toBe(true);
 });
 it("the CLI binds clean tracked source, runs seven reads and rejects invalid packets before import", async () => {
-  const { mkdtemp, writeFile, readFile, rm, stat, mkdir, symlink } = await import("node:fs/promises");
+  const { mkdtemp, writeFile, readFile, rm, stat, symlink } = await import("node:fs/promises");
   const { tmpdir } = await import("node:os");
   const path = await import("node:path");
   const { promisify } = await import("node:util");
@@ -50,11 +51,7 @@ it("the CLI binds clean tracked source, runs seven reads and rejects invalid pac
     // Dedicated tiny source checkout: dirty-source refusal can be tested without
     // modifying the author's shared worktree or weakening the CLI's guard.
     const checkout=path.join(root,"source"), scripts=path.join(checkout,"scripts");
-    await mkdir(path.join(scripts,"lib"),{recursive:true});
-    await mkdir(path.join(checkout,"config"));
-    for(const relative of ["scripts/preflight-release-no-pause-bootstrap.mjs","scripts/lib/public-release-bootstrap-preflight.mjs",
-      "scripts/render-development-config.mjs","config/development-inputs.json"])
-      await writeFile(path.join(checkout,relative),await readFile(path.resolve(relative)));
+    await copyImportClosure(path.resolve("."), checkout, ["scripts/preflight-release-no-pause-bootstrap.mjs"]);
     await symlink(path.resolve("node_modules"),path.join(checkout,"node_modules"));
     await writeFile(path.join(checkout,".gitignore"),"node_modules\nignored-adapter.mjs\n");
     const marker=path.join(root,"adapter-imported"), packet=path.join(root,"packet.json"), adapter=path.join(scripts,"adapter.mjs");

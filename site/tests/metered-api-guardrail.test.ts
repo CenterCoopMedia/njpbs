@@ -1,6 +1,6 @@
+// @vitest-environment node
 import { describe, it, expect, vi } from "vitest";
 import {
-  copyFileSync,
   mkdirSync,
   mkdtempSync,
   rmSync,
@@ -9,6 +9,7 @@ import {
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { spawnSync } from "node:child_process";
+import { copyImportClosure } from "../../tests/helpers/isolated-checkout.mjs";
 import {
   findMarkdownlintConfigViolations,
   findPackageScriptViolations,
@@ -501,7 +502,7 @@ describe("historical target-root scan mode", () => {
     }
   });
 
-  it("excludes the nested trusted bootstrap checkout from the selected tree", () => {
+  it("excludes the nested trusted bootstrap checkout from the selected tree", async () => {
     const root = mkdtempSync(join(tmpdir(), "metered-api-nested-gate-"));
     try {
       const nestedScanner = join(
@@ -512,12 +513,13 @@ describe("historical target-root scan mode", () => {
         "metered-api-scan.mjs",
       );
       mkdirSync(join(root, "legacy"), { recursive: true });
-      mkdirSync(join(root, ".trusted-gate", ".github", "scripts"), {
-        recursive: true,
-      });
       writeFileSync(join(root, "package.json"), "{}\n");
       writeFileSync(join(root, "legacy", "app.js"), "console.log('safe');\n");
-      copyFileSync(scannerPath, nestedScanner);
+      const scanner = ".github/scripts/metered-api-scan.mjs";
+      await copyImportClosure(join(process.cwd(), ".."), join(root, ".trusted-gate"), [scanner], { boundary: {
+        rule: "the trusted scanner's independence from the tree it scans",
+        files: [scanner],
+      } });
 
       const result = spawnSync(
         process.execPath,

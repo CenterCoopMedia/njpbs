@@ -6,6 +6,7 @@ import { fileURLToPath } from "node:url";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { parse } from "yaml";
 import { readCmsDeployWorkflow } from "../helpers/cms-deploy-workflow.mjs";
+import { copyImportClosure } from "../helpers/isolated-checkout.mjs";
 import { CMS_FUNCTION_CONTRACT_FILES, CMS_RELEASE_CHECK_FILES, requireCmsReleaseSources } from "../../.github/scripts/require-cms-release-sources.mjs";
 import { requireReleaseSource } from "../../.github/scripts/require-release-source.mjs";
 import { fingerprintExecutionSource, fingerprintFunctionsRenderSource, fingerprintReceiptExecutionSource } from "../../scripts/lib/cms-release-plan.mjs";
@@ -22,7 +23,7 @@ function commit(cwd, message) {
   return git(cwd, "rev-parse", "HEAD");
 }
 
-beforeEach(() => {
+beforeEach(async () => {
   root = mkdtempSync(join(tmpdir(), "cms-release-sources-"));
   releaseRoot = join(root, "release");
   trustedRoot = join(root, "trusted");
@@ -33,16 +34,17 @@ beforeEach(() => {
     mkdirSync(join(releaseRoot, path, ".."), { recursive: true });
     writeFileSync(join(releaseRoot, path), "export {};\n");
   }
-  for (const path of [...CMS_FUNCTION_CONTRACT_FILES, "scripts/component-runner.mjs", "scripts/lib/deployment-components.mjs", "scripts/lib/cms-component-receipt.mjs", "scripts/render-development-config.mjs", "config/development-inputs.json"]) {
-    mkdirSync(join(releaseRoot, path, ".."), { recursive: true });
-    cpSync(join(repoRoot, path), join(releaseRoot, path));
-  }
-  cpSync(join(repoRoot, "scripts/smoke-cms-functions.mjs"), join(releaseRoot, "scripts/smoke-cms-functions.mjs"));
+  await copyImportClosure(repoRoot, releaseRoot, ["scripts/component-runner.mjs"], { assets: CMS_FUNCTION_CONTRACT_FILES });
+  const smoke = "scripts/smoke-cms-functions.mjs";
+  const gate = ".github/scripts/require-cms-release-sources.mjs";
+  await copyImportClosure(repoRoot, releaseRoot, [smoke, gate], { boundary: {
+    rule: "the staged smoke and source gates' independence from release-tree modules at startup",
+    files: [smoke, gate],
+  } });
   cpSync(join(repoRoot, "functions/index.js"), join(releaseRoot, "functions/index.js"));
   mkdirSync(join(releaseRoot, "admin"));
   writeFileSync(join(releaseRoot, "admin/package.json"), JSON.stringify({ scripts: { "test:boot": "vitest run tests/boot.test.ts" } }));
   mkdirSync(join(releaseRoot, ".github/scripts"), { recursive: true });
-  cpSync(join(repoRoot, ".github/scripts/require-cms-release-sources.mjs"), join(releaseRoot, ".github/scripts/require-cms-release-sources.mjs"));
   cpSync(join(repoRoot, ".github/cms-deploy-compatibility.json"), join(releaseRoot, ".github/cms-deploy-compatibility.json"));
   git(releaseRoot, "init", "-b", "main");
   releaseSha = commit(releaseRoot, "Reviewed release");

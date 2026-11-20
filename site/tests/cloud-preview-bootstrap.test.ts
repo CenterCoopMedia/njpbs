@@ -1,12 +1,13 @@
 // @vitest-environment node
 import { afterEach, expect, it } from "vitest";
-import { mkdtemp, mkdir, copyFile, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, mkdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import { fileURLToPath } from "node:url";
 import { sealCompiledRenderer } from "../scripts/compiled-renderer-release.mjs";
+import { copyImportClosure } from "../../tests/helpers/isolated-checkout.mjs";
 
 const directories: string[] = [];
 const sha = "a".repeat(40);
@@ -16,13 +17,12 @@ async function fixture() {
   directories.push(root);
   const scripts = path.join(root, "site/scripts");
   const release = path.join(root, "site/.compiled-renderer");
-  for (const directory of [scripts, ...["server", "client", "runtime"].map(child => path.join(release, child))]) {
+  for (const directory of ["server", "client", "runtime"].map(child => path.join(release, child))) {
     await mkdir(directory, { recursive: true });
   }
-  for (const file of ["run-cms-preview-cloud.ts", "compiled-renderer-release.mjs", "cms-publication-credentials.ts",
-    "cms-preview-pair-code-transport.ts"]) {
-    await copyFile(fileURLToPath(new URL(`../scripts/${file}`, import.meta.url)), path.join(scripts, file));
-  }
+  await copyImportClosure(fileURLToPath(new URL("../../", import.meta.url)), root, ["site/scripts/run-cms-preview-cloud.ts"], {
+    replacements: ["site/scripts/preview-diagnostics.ts", "site/scripts/cms-publication-runtime-guard.ts", "site/scripts/cms-preview-operator-checks.ts"],
+  });
   await writeFile(path.join(scripts, "preview-diagnostics.ts"), `export function previewDiagnostics() {
     return Object.assign(async (stage, fn) => { globalThis.events.push(stage); return fn(); }, {timings:()=>({})});
   }`);

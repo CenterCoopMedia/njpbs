@@ -1,17 +1,20 @@
 import { afterAll, beforeAll, expect, it } from 'vitest';
-import { cpSync, mkdtempSync, mkdirSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { execFileSync, spawnSync } from 'node:child_process';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { createHash } from 'node:crypto';
+import { copyImportClosure } from '../helpers/isolated-checkout.mjs';
 
 let directory: string, source: string, sha: string;
 const developmentSdkClientEmail = 'fixture-sdk-client@njpbs-site-dev.iam.gserviceaccount.com';
 const git = (...args: string[]) => execFileSync('/usr/bin/git', ['-C', source, ...args], { encoding: 'utf8', stdio: 'pipe' }).trim();
 const hash = (bytes: string | Buffer) => createHash('sha256').update(bytes).digest('hex');
-beforeAll(() => {
-  directory = mkdtempSync(join(tmpdir(), 'native-sdk-refusals-')); source = join(directory, 'source'); mkdirSync(source);
-  for (const name of ['config', 'scripts', 'functions/lib', 'packages']) cpSync(resolve(name), join(source, name), { recursive: true });
+beforeAll(async () => {
+  directory = mkdtempSync(join(tmpdir(), 'native-sdk-refusals-')); source = join(directory, 'source');
+  await copyImportClosure(resolve('.'), source, [...new Set(commands.map(([command]) => `scripts/${command}`)),
+    // The enrollment launcher opens this module with createRequire.
+    'functions/lib/public-release-change-enrollment.js']);
   writeFileSync(join(source, 'package.json'), '{"type":"module"}');
   writeFileSync(join(source, 'functions/package.json'), '{"type":"commonjs"}');
   writeFileSync(join(source, '.gitignore'), 'node_modules/\n');

@@ -1,11 +1,11 @@
 import { afterEach, beforeEach, expect, it } from 'vitest';
-import { access, mkdir, mkdtemp, readFile, rm, symlink, writeFile } from 'node:fs/promises';
+import { access, mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { cpSync, writeFileSync } from 'node:fs';
 import { execFileSync, spawnSync } from 'node:child_process';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { createHash } from 'node:crypto';
-import { firstInstallCodePackFixture } from '../helpers/first-install-code-pack';
+import { firstInstallCodePackFixture, firstInstallOperatorCheckout } from '../helpers/first-install-code-pack';
 import { extractFirstInstallPairImage } from '../../site/scripts/public-release-first-install-image';
 import { openFirstInstallInput } from '../../site/scripts/public-release-first-install-input';
 import { repositoryFixture } from '../helpers/repository-identity.mjs';
@@ -18,11 +18,7 @@ beforeEach(async () => {
   directory = await mkdtemp(path.join(tmpdir(), 'preparation-refusals-'));
   fixture = await firstInstallCodePackFixture(directory);
   operator = path.join(directory, 'operator');
-  git('clone', '--shared', '--no-checkout', '--quiet', process.cwd(), operator);
-  git('-C', operator, 'sparse-checkout', 'set', 'config', 'functions/lib', 'packages', 'scripts', 'site/scripts', 'site/src/lib', 'site/src/data', 'publisher');
-  git('-C', operator, 'checkout', '--detach', 'HEAD');
-  await symlink(path.resolve('node_modules'), path.join(operator, 'node_modules'), 'dir');
-  await symlink(path.resolve('site/node_modules'), path.join(operator, 'site/node_modules'), 'dir');
+  await firstInstallOperatorCheckout(operator, 'development');
 });
 afterEach(async () => rm(directory, { recursive: true, force: true }));
 function packet(mode: string) {

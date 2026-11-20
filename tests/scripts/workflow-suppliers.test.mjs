@@ -1,8 +1,10 @@
 import { readCmsDeployWorkflow } from "../helpers/cms-deploy-workflow.mjs";
+import { copyImportClosure } from "../helpers/isolated-checkout.mjs";
 import assert from "node:assert/strict";
-import { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { dirname, join } from "node:path";
+import { join } from "node:path";
+import { fileURLToPath } from "node:url";
 import { spawnSync } from "node:child_process";
 import { test } from "node:test";
 import { parse as parseYaml } from "yaml";
@@ -106,7 +108,7 @@ test("the Functions writer and planner derive Studio titles from the same privat
   assert.equal(run(JSON.stringify(preset), "invalid").status, 1);
 });
 
-test("the reviewed release supplies both Studio modules after its pinned source gate", () => {
+test("the reviewed release supplies both Studio modules after its pinned source gate", async () => {
   const workflow = parseYaml(readCmsDeployWorkflow());
   const steps = workflow.jobs.firebase.steps;
   const gate = steps.find(step => step.name === "Require pinned release and trusted workflow identities");
@@ -117,10 +119,9 @@ test("the reviewed release supplies both Studio modules after its pinned source 
   assert.ok(!steps.some(step => step.name === "Stage current function deployment helper for scanning"));
   const directory = mkdtempSync(join(tmpdir(), "studio-reviewed-source-"));
   try {
-    for (const path of ["scripts/lib/studio-title-files.mjs", "agents/vmix/configuration.mjs", "scripts/lib/functions-configuration.mjs", "config/functions-configuration.json"]) {
-      mkdirSync(dirname(join(directory, path)), { recursive: true });
-      cpSync(new URL(`../../${path}`, import.meta.url), join(directory, path));
-    }
+    await copyImportClosure(fileURLToPath(new URL("../../", import.meta.url)), directory,
+      ["scripts/lib/studio-title-files.mjs", "scripts/lib/functions-configuration.mjs"],
+      { assets: ["config/functions-configuration.json"] });
     assert.equal(writer.run, "node scripts/component-runner.mjs functions configure");
     const result = spawnSync(process.execPath, ["--input-type=module", "-e", "\nimport {readFileSync} from \"node:fs\";\nimport {studioTitleFilesParameter} from \"./scripts/lib/studio-title-files.mjs\";\nimport {runtimeDotenv} from \"./scripts/lib/functions-configuration.mjs\";\ntry { process.stdout.write(runtimeDotenv({CMS_STUDIO_TITLE_FILES:studioTitleFilesParameter(readFileSync(0,\"utf8\"),process.argv[1])})); }\ncatch { process.stderr.write(\"Studio preset configuration is missing or invalid\\n\"); process.exitCode=1; }\n", "false"], { cwd: directory, encoding: "utf8", input: "", env: { PATH: process.env.PATH } });
     assert.equal(result.status, 0, result.stderr);
