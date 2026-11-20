@@ -195,6 +195,11 @@ reported must reach 100 percent traffic with the expected source and private
 configuration before the jobs proceed. The later route and identity checks
 still verify live state.
 
+The preview gateway requests page one with one deployment. Cloudflare lists
+the deployment actively serving traffic first. Route and domain inventories
+still require a complete response. The successful gateway log records elapsed
+readback time for each deployed Worker. [Cloudflare deployment list](https://developers.cloudflare.com/api/resources/workers/subresources/scripts/subresources/deployments/methods/list/)
+
 Verify saved content/version/output identity with ordinary development staff,
 anonymous/wrong-project refusal, cross-owner access, disabled/revoked/deleted
 accounts, record lifecycle, ordinary/retained 24-hour expiry and HEAD/assets.

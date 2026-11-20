@@ -1,6 +1,7 @@
 import { repositoryMatches } from "./lib/repository-identity.mjs";
 import { devAccessOrigin, deploymentOwner } from "./lib/deployment-settings.mjs";
 import { devDeploySourceSha } from "./lib/dev-deploy-source.mjs";
+import { activeWorkerDeploymentQuery, isActiveWorkerDeploymentPage } from './lib/cloudflare-active-worker-deployment.mjs';
 import { waitForWorkerReadback, WorkerReadbackMismatch, wranglerVersion } from './lib/cloudflare-worker-readback.mjs';
 import { spawnSync } from 'node:child_process';
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
@@ -120,7 +121,7 @@ export async function deployDevPreviewGateways(options = {}) {
   const diagnostic = { phase: 'inputs', status: undefined, codes: [] };
   try { return await releaseDevPreviewGateways(options, diagnostic); }
   catch (error) {
-    const mismatch = error instanceof WorkerReadbackMismatch ? error.message : undefined;
+    const mismatch = error instanceof WorkerReadbackMismatch ? error.message : diagnostic.mismatch;
     throw new DevPreviewGatewayReleaseError({ ...diagnostic, mismatch });
   }
 }
@@ -131,6 +132,7 @@ async function releaseDevPreviewGateways({ env = process.env, fetchImpl = fetch,
     diagnostic.phase = phase;
     diagnostic.status = undefined;
     diagnostic.codes = [];
+    diagnostic.mismatch = undefined;
   }
   devAccessOrigin(env);
   const owner = deploymentOwner(env);
@@ -144,9 +146,10 @@ async function releaseDevPreviewGateways({ env = process.env, fetchImpl = fetch,
     (!releasing || env.CMS_DEV_PUBLISH_ENABLED === 'false') && ID.test(ACCOUNT) && env.CLOUDFLARE_ACCOUNT_ID === ACCOUNT &&
     /^[a-f0-9]{64}$/.test(env.DEV_PREVIEW_ACCESS_AUDIENCE ?? '') && env.CLOUDFLARE_API_TOKEN);
   const audience = env.DEV_PREVIEW_ACCESS_AUDIENCE;
-  async function api(suffix, method = 'GET', body, missing = false) {
+  async function api(suffix, { method = 'GET', body, missing = false, newestDeployment = false } = {}) {
     diagnostic.status = undefined;
     diagnostic.codes = [];
+    diagnostic.mismatch = undefined;
     try {
       const response = await fetchImpl(`https://api.cloudflare.com/client/v4${suffix}`, {
         method, redirect: 'error', signal: AbortSignal.timeout(15_000),
@@ -158,8 +161,19 @@ async function releaseDevPreviewGateways({ env = process.env, fetchImpl = fetch,
       const data = await response.json();
       diagnostic.codes = Array.isArray(data?.errors) ? data.errors.map(error => error?.code)
         .filter(code => Number.isSafeInteger(code) && code >= 0) : [];
-      requireState(response.ok && data.success === true &&
-        (!data.result_info || !data.result_info.total_pages || data.result_info.total_pages <= 1));
+      requireState(response.ok && data.success === true);
+      const page = data.result_info;
+      const validPage = newestDeployment
+        ? isActiveWorkerDeploymentPage(data)
+        : !page?.total_pages || page.total_pages <= 1;
+      if (!validPage) {
+        const metric = value => Number.isSafeInteger(value) && value >= 0 ? value : 'unavailable';
+        const details = `page=${metric(page?.page)} per_page=${metric(page?.per_page)} total_pages=${metric(page?.total_pages)}`;
+        diagnostic.mismatch = newestDeployment
+          ? `pagination: expected page one with at most one deployment, actual ${details} rows=${metric(data.result?.deployments?.length)}`
+          : `pagination: expected a complete provider inventory, actual ${details}`;
+        throw new Error('Dev preview provider pagination refused');
+      }
       return data.result;
     } catch { throw new Error('Dev preview provider request refused; raw details withheld'); }
   }
@@ -196,7 +210,7 @@ async function releaseDevPreviewGateways({ env = process.env, fetchImpl = fetch,
   }
   for (const worker of [PRIVATE, STAFF]) {
     setPhase(`worker-settings:${worker}`);
-    const settings = await api(`${base}/scripts/${worker}/settings`, 'GET', undefined, true);
+    const settings = await api(`${base}/scripts/${worker}/settings`, { missing: true });
     if (settings) {
       verifyBindings(settings.bindings, worker, audience, true);
       setPhase(`worker-subdomain:${worker}`);
@@ -239,7 +253,7 @@ async function releaseDevPreviewGateways({ env = process.env, fetchImpl = fetch,
   async function collect(worker, expectedVersionId, phase = 'collect') {
     setPhase(`${phase}:${worker}`);
     const read = endpoint => api(`${base}/scripts/${worker}/${endpoint}`);
-    const deployments = await read('deployments');
+    const deployments = await api(`${base}/scripts/${worker}/${activeWorkerDeploymentQuery}`, { newestDeployment: true });
     const active = deployments.deployments?.[0];
     const activeVersion = active?.versions?.[0];
     if (!UUID.test(active?.id ?? '') || !Array.isArray(active.versions) || active.versions.length !== 1 ||
@@ -278,6 +292,7 @@ async function releaseDevPreviewGateways({ env = process.env, fetchImpl = fetch,
   const directory = mkdtempSync(path.join(tmpdir(), 'njpbs-dev-preview-gateways-'));
   try {
     const identities = [];
+    const readbackMs = [];
     for (const config of [privateConfig, staffConfig]) {
       setPhase(`config:${config.name}`);
       const filename = path.join(directory, `${config.name}.json`);
@@ -298,7 +313,9 @@ async function releaseDevPreviewGateways({ env = process.env, fetchImpl = fetch,
       requireState(result.status === 0);
       const versionId = wranglerVersion(result.stdout);
       requireState(versionId);
+      const startedAt = performance.now();
       identities.push(await waitForWorkerReadback(() => collect(config.name, versionId), readbackClock));
+      readbackMs.push(Math.round(performance.now() - startedAt));
     }
     const staged = await inventory('staged-inventory');
     requireState(isDeepStrictEqual(staged, initial));
@@ -306,8 +323,8 @@ async function releaseDevPreviewGateways({ env = process.env, fetchImpl = fetch,
       setPhase('public-origin');
       requireState(!await hasPublicOrigin());
       setPhase('attach-domain');
-      const attached = await api(`${base}/domains`, 'PUT', { hostname: HOST, service: STAFF,
-        zone_id: zone, zone_name: 'njpbs.org', environment: 'production', enabled: true, previews_enabled: false });
+      const attached = await api(`${base}/domains`, { method: 'PUT', body: { hostname: HOST, service: STAFF,
+        zone_id: zone, zone_name: 'njpbs.org', environment: 'production', enabled: true, previews_enabled: false } });
       verifyDomain(attached, zone);
     }
     const after = await inventory('attached-inventory');
@@ -325,6 +342,7 @@ async function releaseDevPreviewGateways({ env = process.env, fetchImpl = fetch,
       sourceSha, trustedWorkflowSha: env.GITHUB_SHA, gateways: identities, customDomainId: final.owned.id,
       signedOutRefusalVerified: true, unrelatedRoutesAndDomainsUnchanged: true, verifiedAt: new Date().toISOString() };
     log('Dev exact-preview gateways verified; signed-out reads refused');
+    log(`Dev preview gateway readback milliseconds: private=${readbackMs[0]} staff=${readbackMs[1]}`);
     return receipt;
   } finally { rmSync(directory, { recursive: true, force: true }); }
 }
