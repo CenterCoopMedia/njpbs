@@ -89,7 +89,7 @@ export async function compilePrivateWorker(main) {
  * readerReceiptDigest; both are computed from the actual uploaded version.
  * The resulting full pairs are output for separate guarded registration; this
  * operator never writes pair registry, capability, selector, pin or apex route. */
-export async function installPrivatePublicRelease({ plan, ledger, provider, compile = compilePrivateWorker, dryRun = true, signal, onStage = () => {} }) {
+export async function installPrivatePublicRelease({ plan, ledger, provider, compile = compilePrivateWorker, dryRun = true, signal, onStage = () => {}, readbackClock }) {
   const { default: protocol } = await import("../functions/lib/public-release-pair.js");
   const { configurePublicReleaseSlot, configurePublicReleaseIngress } = await import("./configure-public-release-ingress.mjs");
   const { installPrivateWorker } = await import("./lib/public-release-private-provider.mjs");
@@ -128,7 +128,7 @@ export async function installPrivatePublicRelease({ plan, ledger, provider, comp
   onStage("provider");
   const pairs = [], readbacks = [];
   for (const [index, config] of slots.entries()) {
-    const result = await installPrivateWorker({ ledger, provider, attemptId: plan.operationId, config, source: slotSource, dryRun, signal });
+    const result = await installPrivateWorker({ ledger, provider, attemptId: plan.operationId, config, source: slotSource, dryRun, signal, readbackClock });
     const template = [oldPair, newPair][index];
     const readerReceiptDigest = dryRun ? template.readerReceiptDigest : protocol.publicReleaseDigest({ schemaVersion: 1,
       environment: template.environment, service: template.publicWorker.service, versionId: result.versionId,
@@ -138,7 +138,7 @@ export async function installPrivatePublicRelease({ plan, ledger, provider, comp
     readbacks.push(result);
   }
   const ingress = configurePublicReleaseIngress({ oldPair: pairs[0], newPair: pairs[1], accountId: plan.accountId, ingressName: plan.ingressName, ...ingressOptions });
-  readbacks.push(await installPrivateWorker({ ledger, provider, attemptId: plan.operationId, config: ingress, source: ingressSource, dryRun, signal }));
+  readbacks.push(await installPrivateWorker({ ledger, provider, attemptId: plan.operationId, config: ingress, source: ingressSource, dryRun, signal, readbackClock }));
   return { schemaVersion: 1, dryRun, operationId: plan.operationId, bootstrapPairId: pairs[0].pairId, pairs, readbacks };
 }
 export function privateInstallCredential(stream) {
@@ -150,13 +150,13 @@ export function privateInstallCredential(stream) {
   })();
 }
 class PrivateInstallOperatorError extends Error {
-  constructor(stage) {
-    super(`Private public-release installation was refused at ${stage}${stage === "provider" ? "; reconcile the original attempt" : "; no provider step was invoked"}`);
+  constructor(stage, detail = "") {
+    super(`Private public-release installation was refused at ${stage}${detail ? `: ${detail}` : ""}${stage === "provider" ? "; reconcile the original attempt" : "; no provider step was invoked"}`);
     this.name = "PrivateInstallOperatorError";
   }
 }
 export async function main(args) {
-  let stage = "plan", app, connection;
+  let stage = "plan", app, connection, mismatch;
   try {
     const development = developmentSdkOptions(args); args = development.args;
     const apply = args.length === 3 && args[2] === "--apply";
@@ -164,6 +164,7 @@ export async function main(args) {
     const { default: targets } = await import("../functions/lib/publication-target.js");
     const { privateInstallLedger } = await import("./lib/public-release-private-install-ledger.mjs");
     const { cloudflarePrivatePairProvider } = await import("./lib/public-release-private-provider.mjs");
+    ({ WorkerReadbackMismatch: mismatch } = await import("./lib/cloudflare-worker-readback.mjs"));
     const { privatePublicReleasePlanPairs } = await import("./lib/private-public-release-install-plan.mjs");
     const bytes = await readFile(args[1]); if (bytes.length > 64 * 1024) refuse();
     const plan = JSON.parse(bytes.toString("utf8"));
@@ -203,7 +204,10 @@ export async function main(args) {
     const result = await installPrivatePublicRelease({ plan, provider, ledger: privateInstallLedger(firestore), dryRun: false,
       signal: AbortSignal.timeout(120_000), onStage: value => { stage = value; } });
     process.stdout.write(`${JSON.stringify(result, null, 2)}\n`);
-  } catch (error) { if (safeOperatorCode(error)) throw error; throw new PrivateInstallOperatorError(stage); }
+  } catch (error) {
+    if (safeOperatorCode(error)) throw error;
+    throw new PrivateInstallOperatorError(stage, mismatch && error instanceof mismatch ? error.message : "");
+  }
   finally { if (connection) await connection.close(); if (app) { const { deleteApp } = await import("firebase-admin/app"); await deleteApp(app); } }
 }
 if (isMain) main(process.argv.slice(2)).catch(error => {

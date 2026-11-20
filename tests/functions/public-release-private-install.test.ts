@@ -10,6 +10,7 @@ import { releasePair } from "../helpers/private-public-release-pair.js";
 import { sealedPair } from "../helpers/sealed-public-release-pair";
 import protocol from "../../functions/lib/public-release-pair.js";
 import { PAIR_READER_CONTRACT } from "../../packages/content-core/src/private-pair-http";
+import { workerReadbackClock } from "../helpers/worker-readback-clock.mjs";
 const hash = (bytes: Uint8Array) => createHash("sha256").update(bytes).digest("hex");
 const slotSource = new TextEncoder().encode("export default {fetch(){return new Response(null,{status:404})}}"), ingressSource = new TextEncoder().encode("export default {fetch(){return new Response(null,{status:404})}} // ingress");
 const compile = async (main: string) => main.includes("-slot-") ? slotSource : ingressSource;
@@ -43,11 +44,13 @@ beforeEach(async () => {
     subdomain: vi.fn(async (name: string) => records.get(name).subdomain),
     deployment: vi.fn(async (name: string) => records.get(name).deployment),
     deploy: vi.fn(async (name: string, version: string, tag: string) => { records.get(name).deployment = { id: id(),
-      annotations: { "workers/message": `private-pair:${tag}` }, versions: [{ version_id: version, percentage: 100 }] }; }),
+      annotations: { "workers/message": `private-pair:${tag}` }, versions: [{ version_id: version, percentage: 100 }] };
+      return records.get(name).deployment; }),
     sourceDigest: vi.fn(async (name: string) => records.get(name).sourceDigest),
   };
 });
-const run = (dryRun = false, signal?: AbortSignal) => installPrivatePublicRelease({ plan, provider, ledger: privateInstallLedger(db), compile, dryRun, signal });
+const run = (dryRun = false, signal?: AbortSignal) => installPrivatePublicRelease({ plan, provider, ledger: privateInstallLedger(db), compile,
+  dryRun, signal, readbackClock: workerReadbackClock() });
 it("dry-runs both private slots and fixed OLD/NEW ingress without any SDK/provider effect", async () => {
   const result = await run(true); expect(result.readbacks).toHaveLength(3); expect(provider.upload).not.toHaveBeenCalled();
   expect((await db.doc(`system/publicReleasePrivateInstalls/plans/${plan.operationId}`).get()).exists).toBe(false);
@@ -68,6 +71,36 @@ it("installs distinct immutable private versions and reconciles the same origina
   }
   expect((await db.doc("system/publicDeployment").get()).exists).toBe(false);
   expect((await db.doc("system/cmsPublicationRuntime").get()).exists).toBe(false);
+});
+it.each([2, Infinity])("checks exact private Worker metadata after %s stale reads", async staleReads => {
+  const worker = plan.oldPair.publicWorker.service;
+  const previous = "00000000-0000-4000-8000-999999999999";
+  const counters = { versions: 0, version: 0, subdomain: 0, deployment: 0 };
+  const stale = (method: keyof typeof counters, name: string) => name === worker && records.has(name) && counters[method]++ < staleReads;
+  const versions = provider.versions.getMockImplementation();
+  provider.versions.mockImplementation(async (name: string) => stale("versions", name) ? [] : versions(name));
+  const version = provider.version.getMockImplementation();
+  provider.version.mockImplementation(async (name: string) => stale("version", name) ? { id: previous } : version(name));
+  const subdomain = provider.subdomain.getMockImplementation();
+  provider.subdomain.mockImplementation(async (name: string) => stale("subdomain", name) ? { enabled: true, previews_enabled: false } : subdomain(name));
+  const deployment = provider.deployment.getMockImplementation();
+  provider.deployment.mockImplementation(async (name: string) => stale("deployment", name)
+    ? { ...records.get(name).deployment, id: previous } : deployment(name));
+  const key = protocol.publicReleaseDigest({ worker });
+  const readback = (action: string) => db.doc(`system/publicReleasePrivateInstalls/attempts/${plan.operationId}/readbacks/${key}-${action}`).get();
+  if (Number.isFinite(staleReads)) {
+    await run();
+    expect((await readback("upload")).data()?.result).toEqual({ versionId: records.get(worker).version.id });
+    expect((await readback("deploy")).data()?.result).toEqual({ deploymentId: records.get(worker).deployment.id, versionId: records.get(worker).version.id });
+    for (const effect of ["create", "upload", "disableSubdomain", "deploy"]) {
+      expect(provider[effect].mock.calls.filter(([name]: [string]) => name === worker)).toHaveLength(1);
+    }
+  } else {
+    await expect(run()).rejects.toThrow("version");
+    expect((await readback("upload")).exists).toBe(false);
+    expect(provider.upload).toHaveBeenCalledTimes(1);
+    expect(provider.deploy).not.toHaveBeenCalled();
+  }
 });
 it.each(["version", "binding", "asset-bucket", "source", "public-route"])("refuses mismatched provider readback: %s", async kind => {
   if (kind === "version") provider.version.mockImplementation(async (name: string) => ({ ...records.get(name).version, id: "00000000-0000-4000-8000-999999999999" }));

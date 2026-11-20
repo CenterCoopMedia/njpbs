@@ -31,8 +31,9 @@ export function privateInstallLedger(firestore) {
     });
     // Never repeat an effect for a prior durable claim, even when observation
     // currently finds no result. Operators must investigate that same attempt.
+    let response;
     if (fresh) {
-      try { await effect(); }
+      try { response = await effect(); }
       catch (error) {
         if (error instanceof PrivateProviderNotSent) {
           // Only transport-confirmed pre-send failures can release a claim for
@@ -46,7 +47,7 @@ export function privateInstallLedger(firestore) {
         // Network/provider failures retain the immutable claim; observe only.
       }
     }
-    const result = await observe();
+    const result = await observe(response);
     const receiptRef = firestore.doc(`${namespace}/attempts/${attemptId}/readbacks/${workerKey}-${action}`);
     await firestore.runTransaction(async tx => {
       const prior = await tx.get(receiptRef), receipt = { ...seal, action, result };

@@ -17,6 +17,10 @@ export class WorkerReadbackMismatch extends Error {
   }
 }
 
+export function requireWorkerReadback(condition, field) {
+  if (!condition) throw new WorkerReadbackMismatch(field, 'confirmed write', 'different or missing');
+}
+
 export async function waitForWorkerReadback(collect, { now = () => performance.now(), wait = sleep } = {}) {
   const deadline = now() + propagationMs;
   for (;;) {

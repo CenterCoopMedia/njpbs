@@ -25,13 +25,16 @@ function checkPacket(args) {
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
+  let mismatch;
   (async () => {
     const args = process.argv.slice(2);
     checkPacket(args);
+    ({ WorkerReadbackMismatch: mismatch } = await import("./lib/cloudflare-worker-readback.mjs"));
     const { runOldIngressOperator } = await import("./lib/public-release-old-ingress-operator.mjs");
     const result = await runOldIngressOperator(args);
     process.stdout.write(`${JSON.stringify(result)}\n`);
-  })().catch(() => {
-    process.stderr.write("OLD ingress enablement was not confirmed; preserve the packet and inspect its original --readback\n"); process.exitCode = 1;
+  })().catch(error => {
+    const detail = mismatch && error instanceof mismatch ? `: ${error.message}` : "";
+    process.stderr.write(`OLD ingress enablement was not confirmed${detail}; preserve the packet and inspect its original --readback\n`); process.exitCode = 1;
   });
 }

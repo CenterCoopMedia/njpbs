@@ -33,7 +33,7 @@ beforeEach(() => {
     mkdirSync(join(releaseRoot, path, ".."), { recursive: true });
     writeFileSync(join(releaseRoot, path), "export {};\n");
   }
-  for (const path of [...CMS_FUNCTION_CONTRACT_FILES, "scripts/component-runner.mjs", "scripts/lib/deployment-components.mjs", "scripts/lib/cms-component-receipt.mjs", "scripts/render-development-config.mjs", "config/development-inputs.json"]) {
+  for (const path of [...CMS_FUNCTION_CONTRACT_FILES, "scripts/component-runner.mjs", "scripts/lib/deployment-components.mjs", "scripts/lib/cms-component-receipt.mjs", "scripts/lib/cloudflare-worker-readback.mjs", "scripts/render-development-config.mjs", "config/development-inputs.json"]) {
     mkdirSync(join(releaseRoot, path, ".."), { recursive: true });
     cpSync(join(repoRoot, path), join(releaseRoot, path));
   }

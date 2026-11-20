@@ -4,6 +4,7 @@ import { createRequire } from "node:module";
 import type { Firestore } from "firebase-admin/firestore";
 import { startCandidateReceipt, verifyCandidateReceipt } from "../../scripts/lib/cms-component-receipt.mjs";
 import { verifyVersionedCmsReaders } from "../../.github/scripts/cms-deploy-compatibility.mjs";
+import { requireWorkerReadback, waitForWorkerReadback, WorkerReadbackMismatch } from "../../scripts/lib/cloudflare-worker-readback.mjs";
 
 const api = createRequire(import.meta.url)("../../functions/lib/cms-preview-pair.js");
 export type PreviewPairIdentity = {
@@ -58,9 +59,10 @@ export function previewPairConfiguration(pair: PreviewPairIdentity, { main, imag
 
 /** Inert operator boundary: no default adapter, credentials, shared pause or
  * legacy-container stop. An uncertain provider attempt permits readback only. */
-export async function deployPreviewPairRuntime({ firestore, pair, operationId, expectedSelectorDigest, candidate, adapter, signal, qualificationRequestDigest }: {
+export async function deployPreviewPairRuntime({ firestore, pair, operationId, expectedSelectorDigest, candidate, adapter, signal, qualificationRequestDigest, readbackClock }: {
   firestore: Firestore; pair: PreviewPairIdentity; operationId: string; expectedSelectorDigest: string;
   candidate: Candidate; adapter: PreviewPairDeploymentAdapter; signal?: AbortSignal; qualificationRequestDigest?: string;
+  readbackClock?: Parameters<typeof waitForWorkerReadback>[1];
 }) {
   api.parsePair(pair);
   if (!/^preview-[a-z0-9][a-z0-9-]{0,31}$/.test(operationId) || candidate.sourceSha !== pair.rendererSha
@@ -112,7 +114,14 @@ export async function deployPreviewPairRuntime({ firestore, pair, operationId, e
         throw new Error("Private preview candidate readback changed");
       }
     } else {
-      verified = await verifyCandidateReceipt(firestore, component, { collect: () => adapter.readback(pair, context) });
+      verified = await verifyCandidateReceipt(firestore, component, { collect: () => waitForWorkerReadback(async () => {
+        signal?.throwIfAborted();
+        const identities = await adapter.readback(pair, context);
+        for (const field of ["workerVersion", "workerName", "pairId", "rendererSha", "serializerId", "applicationName", "imageDigest"] as const) {
+          requireWorkerReadback(identities?.[field] === pair[field], `Private preview ${field}`);
+        }
+        return identities;
+      }, readbackClock) });
     }
     stage = "private_replay";
     const privateProof = await adapter.provePrivate(pair, context);
@@ -143,7 +152,8 @@ export async function deployPreviewPairRuntime({ firestore, pair, operationId, e
       tx.set(attemptRef, { schemaVersion: 2, identity, state: "verified", proofDigest });
       return result(proofDigest);
     });
-  } catch {
-    throw new Error(`Private preview qualification was not confirmed (${stage}); reconcile this exact attempt without another provider write`);
+  } catch (error) {
+    const detail = error instanceof WorkerReadbackMismatch ? `: ${error.message}` : "";
+    throw new Error(`Private preview qualification was not confirmed (${stage})${detail}; reconcile this exact attempt without another provider write`);
   }
 }

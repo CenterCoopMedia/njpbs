@@ -24,6 +24,7 @@ export const CMS_RELEASE_CHECK_FILES = Object.freeze([
   "scripts/component-runner.mjs", "scripts/lib/deployment-components.mjs",
   "scripts/smoke-cms-functions.mjs", "scripts/lib/functions-secret-versions.mjs",
   "scripts/cms-component-receipt.mjs", "scripts/lib/cms-component-receipt.mjs",
+  "scripts/deploy-cms-api-worker.mjs", "scripts/lib/cloudflare-worker-readback.mjs",
   "scripts/cms-release-plan.mjs", "scripts/lib/cms-release-plan.mjs",
   "scripts/lib/cms-renderer-graph.mjs", "scripts/deploy-cms-function-batches.mjs",
   "scripts/lib/functions-deploy-inventory.mjs", "scripts/confirm-admin-revision.mjs",

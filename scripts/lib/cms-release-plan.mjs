@@ -136,6 +136,8 @@ export const RELEASE_CHECK_PATHS = Object.freeze([
   "scripts/smoke-cms-functions.mjs",
   "scripts/cms-component-receipt.mjs",
   "scripts/lib/cms-component-receipt.mjs",
+  "scripts/deploy-cms-api-worker.mjs",
+  "scripts/lib/cloudflare-worker-readback.mjs",
   "scripts/lib/cms-renderer-graph.mjs",
   "scripts/lib/cms-release-plan.mjs",
   "scripts/lib/repository-identity.mjs",

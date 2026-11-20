@@ -1,5 +1,6 @@
 import { createHash } from "node:crypto";
 import protocol from "../../functions/lib/public-release-pair.js";
+import { requireWorkerReadback, waitForWorkerReadback } from "./cloudflare-worker-readback.mjs";
 const hash = bytes => createHash("sha256").update(bytes).digest("hex");
 const refuse = () => { throw new Error("Private pair provider operation was refused"); };
 export class PrivateProviderNotSent extends Error {
@@ -68,7 +69,7 @@ export function cloudflarePrivatePairProvider({ accountId, credential, fetcher =
       const value = await request(`${script(name)}/versions`, { method: "POST", body: form, signal });
       if (!uuid(value?.id)) refuse(); return value.id;
     },
-    version: (name, id, signal) => { if (!uuid(id)) refuse(); return request(`${script(name)}/versions/${id}`, { signal }); },
+    version: (name, id, signal, missing = false) => { if (!uuid(id)) refuse(); return request(`${script(name)}/versions/${id}`, { signal, missing }); },
     async deployment(name, signal) {
       const value = await request(`${script(name)}/deployments`, { signal, missing: true });
       if (value === null) return null;
@@ -111,9 +112,35 @@ export function cloudflarePrivatePairProvider({ accountId, credential, fetcher =
     },
   };
 }
+
+export function checkPrivateWorkerVersion(version, metadata, versionId) {
+  requireWorkerReadback(version?.id === versionId, "Worker versionId");
+  requireWorkerReadback(version.annotations?.["workers/message"] === metadata.annotations["workers/message"], "Worker version annotation");
+  const bindings = version.resources?.bindings;
+  requireWorkerReadback(Array.isArray(bindings) && bindings.every(binding => typeof binding?.name === "string"), "Worker version bindings");
+  const normalized = bindings.map(binding => {
+    const value = { ...binding };
+    if (value.type === "service" && value.environment === "production") delete value.environment;
+    return value;
+  }).sort((a, b) => a.name.localeCompare(b.name, "en"));
+  requireWorkerReadback(protocol.publicReleaseDigest(normalized) === protocol.publicReleaseDigest(metadata.bindings), "Worker version bindings");
+  requireWorkerReadback(version.resources?.script_runtime?.compatibility_date === metadata.compatibility_date, "Worker compatibility_date");
+  const flags = version.resources?.script_runtime?.compatibility_flags;
+  requireWorkerReadback(Array.isArray(flags) && protocol.publicReleaseDigest(flags) ===
+    protocol.publicReleaseDigest(metadata.compatibility_flags), "Worker compatibility_flags");
+}
+
+export function checkPrivateWorkerDeployment(row, versionId, tag, expectedDeploymentId) {
+  requireWorkerReadback(uuid(row?.id) && (expectedDeploymentId === undefined || row.id === expectedDeploymentId), "Worker deploymentId");
+  requireWorkerReadback(Array.isArray(row.versions) && row.versions.length === 1 && row.versions[0]?.version_id === versionId, "Worker deployment versionId");
+  requireWorkerReadback(row.versions[0].percentage === 100, "Worker deployment traffic percentage");
+  requireWorkerReadback(row.annotations?.["workers/message"] === `private-pair:${tag}`, "Worker deployment annotation");
+  return { deploymentId: row.id, versionId };
+}
+
 /** One durable claim precedes each non-idempotent effect. A later caller may
  * only reconcile the original claim; it never retries an ambiguous POST. */
-export async function installPrivateWorker({ ledger, provider, attemptId, config, source, dryRun = true, signal }) {
+export async function installPrivateWorker({ ledger, provider, attemptId, config, source, dryRun = true, signal, readbackClock }) {
   signal?.throwIfAborted();
   if (!/^[A-Za-z0-9_-]{1,128}$/.test(attemptId ?? "") || !(source instanceof Uint8Array) || source.length < 1 || source.length > 1024 * 1024) refuse();
   const sourceDigest = hash(source), { main, ...portableConfig } = config;
@@ -125,52 +152,45 @@ export async function installPrivateWorker({ ledger, provider, attemptId, config
     signal?.throwIfAborted(); // Known pre-cancellation must not reserve a send.
     return ledger.once({ attemptId, worker: config.name, planDigest, action, effect, observe });
   };
-  const checkWorker = async () => {
+  const checkWorker = async (response) => {
     const row = await provider.worker(config.name, signal);
-    if (!row || row.name !== config.name || !/^[a-f0-9]{32}$/.test(row.id ?? "") ||
-        row.tags?.length !== 1 || row.tags[0] !== `private-pair:${tag}` ||
-        row.subdomain?.enabled !== false || row.subdomain.previews_enabled !== false) refuse();
+    requireWorkerReadback(row?.name === config.name && /^[a-f0-9]{32}$/.test(row.id ?? "") &&
+      (response?.id === undefined || response.id === row.id), "Worker identity");
+    requireWorkerReadback(row.tags?.length === 1 && row.tags[0] === `private-pair:${tag}`, "Worker tags");
+    requireWorkerReadback(row.subdomain?.enabled === false && row.subdomain.previews_enabled === false, "Worker subdomain");
     return { workerId: row.id, name: row.name, tag };
   };
   if (await provider.worker(config.name, signal)) await checkWorker();
-  await step("create", () => provider.create(config.name, tag, signal), checkWorker);
+  await step("create", () => provider.create(config.name, tag, signal),
+    response => waitForWorkerReadback(() => checkWorker(response), readbackClock));
   const versions = await provider.versions(config.name, signal);
   if (versions.some(row => row.annotations?.["workers/message"] !== `private-pair:${tag}`)) refuse();
-  let versionId;
-  await step("upload", () => provider.upload(config.name, metadata, source, signal), async () => {
-    const matches = (await provider.versions(config.name, signal)).filter(row => row.annotations?.["workers/message"] === `private-pair:${tag}`);
-    if (matches.length !== 1 || !uuid(matches[0].id)) refuse(); versionId = matches[0].id;
-    const version = await provider.version(config.name, versionId, signal);
-    const bindings = version.resources?.bindings;
-    if (!Array.isArray(bindings)) refuse();
-    const normalized = bindings.map(binding => {
-      const value = { ...binding };
-      if (value.type === "service" && value.environment === "production") delete value.environment;
-      return value;
-    }).sort((a, b) => a.name.localeCompare(b.name, "en"));
-    if (version.resources?.script_runtime?.compatibility_date !== metadata.compatibility_date ||
-        protocol.publicReleaseDigest(version.resources?.script_runtime?.compatibility_flags) !== protocol.publicReleaseDigest(metadata.compatibility_flags)) refuse();
-    if (version.id !== versionId || version.annotations?.["workers/message"] !== `private-pair:${tag}` ||
-        protocol.publicReleaseDigest(normalized) !== protocol.publicReleaseDigest(metadata.bindings)) refuse();
-    return { versionId };
-  });
+  const { versionId } = await step("upload", () => provider.upload(config.name, metadata, source, signal),
+    expectedVersionId => waitForWorkerReadback(async () => {
+      const matches = (await provider.versions(config.name, signal)).filter(row => row.annotations?.["workers/message"] === `private-pair:${tag}`);
+      requireWorkerReadback(matches.length === 1 && uuid(matches[0].id) &&
+        (expectedVersionId === undefined || expectedVersionId === matches[0].id), "Worker versionId");
+      const versionId = matches[0].id;
+      checkPrivateWorkerVersion(await provider.version(config.name, versionId, signal, true), metadata, versionId);
+      return { versionId };
+    }, readbackClock));
   await provider.assertNoPublicRoutes(config.name, signal);
-  await step("private-subdomain", () => provider.disableSubdomain(config.name, signal), async () => {
+  const checkSubdomain = async () => {
     const observed = await provider.subdomain(config.name, signal);
-    if (observed.enabled !== false || observed.previews_enabled !== false) refuse(); return { private: true };
-  });
-  const checkDeployment = async () => {
-    const observed = await provider.deployment(config.name, signal);
-    if (observed?.annotations?.["workers/message"] !== `private-pair:${tag}` || observed.versions?.length !== 1 ||
-        observed.versions[0].version_id !== versionId || observed.versions[0].percentage !== 100 || !uuid(observed.id)) refuse();
-    return { deploymentId: observed.id, versionId };
+    requireWorkerReadback(observed?.enabled === false, "Worker subdomain enabled");
+    requireWorkerReadback(observed.previews_enabled === false, "Worker subdomain previews_enabled");
+    return { private: true };
   };
-  await step("deploy", () => provider.deploy(config.name, versionId, tag, signal), checkDeployment);
-  await checkDeployment();
+  await step("private-subdomain", () => provider.disableSubdomain(config.name, signal),
+    () => waitForWorkerReadback(checkSubdomain, readbackClock));
+  const checkDeployment = async expectedDeploymentId => checkPrivateWorkerDeployment(
+    await provider.deployment(config.name, signal), versionId, tag, expectedDeploymentId);
+  const { deploymentId } = await step("deploy", () => provider.deploy(config.name, versionId, tag, signal),
+    response => waitForWorkerReadback(() => checkDeployment(response?.id), readbackClock));
+  await checkDeployment(deploymentId);
   if (await provider.sourceDigest(config.name, signal) !== sourceDigest) refuse();
-  await checkDeployment();
+  await checkDeployment(deploymentId);
   await provider.assertNoPublicRoutes(config.name, signal);
-  const exposure = await provider.subdomain(config.name, signal);
-  if (exposure.enabled !== false || exposure.previews_enabled !== false) refuse();
+  await checkSubdomain();
   return { dryRun: false, attemptId, worker: config.name, planDigest, sourceDigest, versionId };
 }

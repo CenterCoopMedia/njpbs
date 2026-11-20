@@ -955,19 +955,15 @@ jobs:
             --run-id "$GITHUB_RUN_ID" \
             --run-attempt "$GITHUB_RUN_ATTEMPT"
       - name: Deploy CMS API Worker
+        id: deploy_cms_api
         if: steps.cms_api_plan.outputs.mutated != 'false'
         env:
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
         run: |
           set -euo pipefail
-          secrets_path="$RUNNER_TEMP/cms-api-secrets.json"
-          if [ -f "$secrets_path" ]; then
-            npx --no-install wrangler deploy --cwd cms-api \
-              --secrets-file "$secrets_path"
-          else
-            npx --no-install wrangler deploy --cwd cms-api
-          fi
+          version_id="$(node scripts/deploy-cms-api-worker.mjs "$RUNNER_TEMP/cms-api-secrets.json")"
+          printf 'version_id=%s\n' "$version_id" >> "$GITHUB_OUTPUT"
       - name: Clean up CMS API Worker secrets file
         if: always()
         run: rm -f "$RUNNER_TEMP/cms-api-secrets.json"
@@ -1021,12 +1017,14 @@ jobs:
           DEPLOY_SHA: ${{ needs.admin-build.outputs.deploy_sha }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          DEPLOYED_WORKER_VERSION: ${{ steps.deploy_cms_api.outputs.version_id }}
         run: |
           node scripts/component-runner.mjs cmsApi complete \
             --source-sha "$DEPLOY_SHA" \
             --run-id "$GITHUB_RUN_ID" \
             --run-attempt "$GITHUB_RUN_ATTEMPT" \
             --configuration-fingerprint-file "$RUNNER_TEMP/cms-api-configuration.sha256" \
+            --expected-worker-version "$DEPLOYED_WORKER_VERSION" \
             --live
       - name: Verify and record the original production API reader and complete mount
         if: inputs.install_reader_bridge

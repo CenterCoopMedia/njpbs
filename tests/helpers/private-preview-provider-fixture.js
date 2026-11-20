@@ -24,7 +24,8 @@ export async function previewProviderFixture(overrides = {}) {
   const state = { identity: false, version: false, deployed: false, container: false, schedules: false,
     writes: /** @type {string[]} */ ([]), requests: /** @type {{path: string, method: string}[]} */ ([]),
     beforeWrite: async () => {}, failAction: /** @type {string|null} */ (null), lostAction: /** @type {string|null} */ (null),
-    healthLost: false, healthReady: true, corrupt: /** @type {string|null} */ (null), tags: /** @type {string[]} */ ([]), domains: [] };
+    healthLost: false, healthReady: true, corrupt: /** @type {string|null} */ (null), tags: /** @type {string[]} */ ([]), domains: [],
+    staleVersionReads: 0, staleDeploymentReads: 0 };
   const ok = (result, info) => Response.json({ success: true, result, ...(info === undefined ? {} : { result_info: info }) });
   const withNamespace = () => metadata.bindings.map(b => b.type === "inherit" ? { name: b.name, type: "secret_text" }
     : b.name === "RENDERER" && state.deployed ? { ...b, namespace_id: namespaceId, script_name: config.name } : b);
@@ -59,13 +60,25 @@ export async function previewProviderFixture(overrides = {}) {
       if (uploaded.bindings.filter(b => b.type === "secret_text").length !== config.secrets.required.length) throw new Error("missing actual secret bindings");
       await effect("version", () => { state.version = true; }); return ok({ id: versionId });
     }
-    if (method === "POST" && p.endsWith("/deployments")) return effect("deployment", () => { state.deployed = true; });
+    if (method === "POST" && p.endsWith("/deployments")) {
+      await effect("deployment", () => { state.deployed = true; }); return ok({ id: deploymentId });
+    }
     if (method === "POST" && p.endsWith("/containers/applications")) return effect("container", () => { state.container = true; });
     if (method === "PUT" && p.endsWith("/schedules")) return effect("schedule", () => { state.schedules = true; });
     if (p.endsWith(`/workers/workers/${config.name}`)) return state.identity ? ok({ id: workerId, name: config.name, tags: state.tags, subdomain: { enabled: false, previews_enabled: false } }) : new Response(null, { status: 404 });
-    if (p.endsWith(`/versions/${versionId}`)) return ok(p.includes("/workers/workers/") ? code() : detail());
+    if (p.endsWith(`/versions/${versionId}`)) {
+      if (state.staleVersionReads > 0) { state.staleVersionReads--; return new Response(null, { status: 404 }); }
+      return ok(p.includes("/workers/workers/") ? code() : detail());
+    }
     if (p.endsWith("/versions")) return ok({ items: state.version ? [{ id: versionId }] : [] });
-    if (p.endsWith("/deployments")) return ok({ deployments: state.deployed ? [{ id: deploymentId, strategy: "percentage", versions: [{ version_id: versionId, percentage: 100 }] }] : [] });
+    if (p.endsWith("/deployments")) {
+      const active = { id: deploymentId, strategy: "percentage", versions: [{ version_id: versionId, percentage: 100 }] };
+      if (state.deployed && state.staleDeploymentReads > 0) {
+        state.staleDeploymentReads--;
+        return ok({ deployments: [{ ...active, id: versionId }] });
+      }
+      return ok({ deployments: state.deployed ? [active] : [] });
+    }
     if (p.endsWith("/subdomain")) return ok({ enabled: false, previews_enabled: false });
     if (p.endsWith("/workers/domains")) return ok(state.domains);
     if (p.endsWith("/zones")) return ok([], { page: 1, count: 0, total_count: 0 });
