@@ -1099,6 +1099,16 @@ describe("site navigation settings", () => {
     expect(omitted.statusCode).toBe(409);
     expect(omitted.body.error).toMatch(/Posts browsing/);
     expect((await ref.get()).data()).toEqual(upgraded.body.settings);
+
+    const archiveLayout = { sections: ["posts", "browse"], columns: 2 };
+    const withLayout = { ...arranged, postsBrowse: { ...arranged.postsBrowse, archiveLayout } };
+    const savedLayout = await call(save, { id: "site-navigation", values: withLayout, baseVersion: 5 });
+    expect(savedLayout.statusCode).toBe(200);
+    expect(savedLayout.body.settings.values.postsBrowse.archiveLayout).toEqual(archiveLayout);
+    const oldClient = await call(save, { id: "site-navigation", values: arranged, baseVersion: 6 });
+    expect(oldClient.statusCode).toBe(409);
+    expect(oldClient.body.error).toMatch(/Posts browsing/);
+    expect((await ref.get()).data()).toEqual(savedLayout.body.settings);
   });
 
   it("saves a draft, publishes it through the production path, and audits each change", async () => {
