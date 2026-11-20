@@ -1,6 +1,7 @@
 import { useId, useState, useRef, useEffect, type ComponentProps } from "react";
-import { DEFAULT_POSTS_BROWSE, POSTS_BROWSE_ICONS, postsBrowseTermKey, validatePostsBrowse,
-  type PostsBrowseConfig, type PostsBrowseGroup, type PostsBrowseTerm } from "../../../packages/content-core/src/posts-browse";
+import { DEFAULT_POST_ARCHIVE_LAYOUT, DEFAULT_POSTS_BROWSE, POST_ARCHIVE_SECTIONS, POSTS_BROWSE_ICONS,
+  postsBrowseTermKey, validatePostsBrowse, type PostArchiveSection, type PostsBrowseConfig,
+  type PostsBrowseGroup, type PostsBrowseTerm } from "../../../packages/content-core/src/posts-browse";
 import type { PublishedVocabulary } from "../../../packages/content-core/src/published-vocabulary";
 import { canonicalPostsBrowse } from "../lib/posts-browse-draft";
 import { ActionControl } from "./ui/ActionControl";
@@ -23,8 +24,12 @@ interface Props {
   loadVocabulary?: () => Promise<PublishedVocabulary>;
 }
 const iconNames = { ballot: "Ballot", heart: "Heart", train: "Train", leaf: "Leaf", play: "Play", pin: "Map pin" };
+const archiveSectionNames: Record<PostArchiveSection, string> = {
+  browse: "Browse posts", bylines: "Browse by byline", posts: "Matching posts",
+};
 export function PostsBrowseEditor({ value, disabled, onChange, loadVocabulary }: Props) {
   const config = value ?? DEFAULT_POSTS_BROWSE;
+  const archive = config.archiveLayout ?? DEFAULT_POST_ARCHIVE_LAYOUT;
   const rootRef = useRef<HTMLDetailsElement>(null);
   const ids = useRef(new WeakMap<object, string>());
   const nextId = useRef(0);
@@ -58,7 +63,18 @@ export function PostsBrowseEditor({ value, disabled, onChange, loadVocabulary }:
     catch { setFailed(true); }
     finally { setLoading(false); }
   }
-  function change(groups: readonly PostsBrowseGroup[]) { onChange({ groups }); }
+  function change(groups: readonly PostsBrowseGroup[]) { onChange({ ...config, groups }); }
+  function changeArchiveSections(sections: readonly PostArchiveSection[]) {
+    onChange({ ...config, archiveLayout: { ...archive, sections } });
+  }
+  function moveArchiveSection(index: number, delta: number) {
+    const sections = [...archive.sections];
+    const target = index + delta;
+    [sections[index], sections[target]] = [sections[target], sections[index]];
+    focusAfter(`[data-archive-section="${sections[target]}"]`);
+    changeArchiveSections(sections);
+    setMessage(`${archiveSectionNames[sections[target]]} moved to position ${target + 1}.`);
+  }
   function update(index: number, group: PostsBrowseGroup) { change(config.groups.map((item, at) => at === index ? group : item)); }
   function move(index: number, delta: number) {
     const groups = [...config.groups], target = index + delta;
@@ -93,6 +109,37 @@ export function PostsBrowseEditor({ value, disabled, onChange, loadVocabulary }:
     <p>Arrange the groups on the public Posts page. Subjects not assigned to a group stay in All topics &amp; categories. Removing a subject here keeps its Posts and links.</p>
     <p className="muted">Cover art follows the newest published Post with an image for the chosen cover subject. Save draft and Publish below apply to this arrangement and the navigation together.</p>
     <p role="status" aria-live="polite" className="sr-only">{message}</p>
+    <fieldset>
+      <legend>Category and tag pages</legend>
+      <Select label="Post columns" value={archive.columns} disabled={disabled} onChange={event => {
+        const columns = event.target.value === "1" ? 1 : 2;
+        onChange({ ...config, archiveLayout: { ...archive, columns } });
+      }}>
+        <option value="1">One column</option>
+        <option value="2">Two columns on wide screens</option>
+      </Select>
+      <ol className="posts-browse-editor__archive-sections">
+        {archive.sections.map((section, index) => <li key={section} tabIndex={-1} data-archive-section={section}>
+          <span>{archiveSectionNames[section]}</span>
+          <div className="posts-browse-editor__actions">
+            <ActionControl action="move-up" accessibleName={`Move up, ${archiveSectionNames[section]}`} disabled={disabled || index === 0} onClick={() => moveArchiveSection(index, -1)} />
+            <ActionControl action="move-down" accessibleName={`Move down, ${archiveSectionNames[section]}`} disabled={disabled || index === archive.sections.length - 1} onClick={() => moveArchiveSection(index, 1)} />
+            {section !== "posts" && <ActionControl action="remove-item" accessibleName={`Remove section, ${archiveSectionNames[section]}`} disabled={disabled} onClick={() => {
+              focusAfter(`[data-add-archive-section="${section}"]`);
+              changeArchiveSections(archive.sections.filter(item => item !== section));
+            }} />}
+          </div>
+        </li>)}
+      </ol>
+      <div className="posts-browse-editor__actions">
+        {POST_ARCHIVE_SECTIONS.filter(section => !archive.sections.includes(section)).map(section => <ActionControl
+          key={section} action="add-item" label={`Add ${archiveSectionNames[section]}`} disabled={disabled}
+          data-add-archive-section={section} onClick={() => {
+            focusAfter(`[data-archive-section="${section}"]`);
+            changeArchiveSections([...archive.sections, section]);
+          }} />)}
+      </div>
+    </fieldset>
     {loading && <p role="status">Loading published subjects…</p>}
     {failed && <InlineMessage tone="warning">Published subjects could not be loaded. Saved subjects remain available. <Button onClick={() => void load()} disabled={loading}>Retry subjects</Button></InlineMessage>}
     {error && <InlineMessage tone="error">{error}</InlineMessage>}

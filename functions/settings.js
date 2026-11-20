@@ -687,7 +687,8 @@ function createCmsSaveSettingsHandler(deps = {}) {
             (!Object.hasOwn(req.body.values, "secondLinkLabel") || !Object.hasOwn(req.body.values, "secondLinkHref"))) {
             throw new SettingsRejection(409, "This banner has a second link. Reload the latest Boardwalk before saving.");
           }
-          if (id === "site-navigation" && before.values.postsBrowse && !Object.hasOwn(req.body.values, "postsBrowse")) {
+          if (id === "site-navigation" && before.values.postsBrowse &&
+            (!values.postsBrowse || (before.values.postsBrowse.archiveLayout && !values.postsBrowse.archiveLayout))) {
             throw new SettingsRejection(409, "Posts browsing has been arranged. Reload the latest Boardwalk before saving navigation.");
           }
           const upgrading = isPublicHomepageBannerUpgrade(id, before, currentSchema) || isSiteNavigationUpgrade(id, before, currentSchema) || isStoryCtasUpgrade(id, before, currentSchema);
