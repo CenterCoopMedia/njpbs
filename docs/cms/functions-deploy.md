@@ -41,8 +41,11 @@ deploy. The dev job uses its own OIDC identity, Worker token and dev codebase.
 The dev and production jobs use the same per-export target selector. Dev
 compares the rendered parameters and a complete live inventory to the prior
 receipt. Changed or unproven source inputs select the entire dev manifest.
-The job logs each export's reasons and the Functions deploy duration. It
-reads the exact active Wrangler version before completing the CMS API receipt.
+Every dev reader update also assigns new candidate IDs to the shared Functions
+configuration. That selects every dev export even when the source is unchanged.
+The dev job logs each export's reasons and the Functions deploy duration.
+It reads the exact active Wrangler version before completing the CMS API
+receipt.
 
 The same post-deploy runner overlaps Eventarc IAM and Functions configuration
 readback. Dev verifies its rendered settings on every export. Production
