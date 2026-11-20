@@ -1,5 +1,5 @@
 import { repositoryMatches } from "./repository-identity.mjs";
-import { ComponentReceiptError, assertLegacyPreviewProtocol, configurationFingerprint, fingerprintPaths, FUNCTION_GRAPH_VERSION } from "./cms-component-receipt.mjs";
+import { ComponentReceiptError, assertLegacyPreviewProtocol, configurationFingerprint, fingerprintPaths, functionGraphsMatch, FUNCTION_GRAPH_VERSION } from "./cms-component-receipt.mjs";
 import { contractInputs } from "./functions-contracts.mjs";
 
 export async function assertLegacyCmsWorkflow(firestore) {
@@ -17,7 +17,7 @@ export function explicitCloudWakeDecision(env) {
 }
 
 export { FUNCTION_RUNTIME_VARIABLES, CMS_RELEASE_SECRET_NAMES } from "./functions-configuration.mjs";
-import { FUNCTION_RUNTIME_VARIABLES, CMS_RELEASE_SECRET_NAMES } from "./functions-configuration.mjs";
+import { FUNCTION_RUNTIME_VARIABLES, CMS_RELEASE_SECRET_NAMES, RUNTIME_PARAMETERS } from "./functions-configuration.mjs";
 
 export function deploymentVariablesFingerprint(raw) {
   let values;
@@ -59,26 +59,68 @@ export function functionsForRuntimeComparison(functions, graph) {
 }
 
 export async function boundSecretVersionsCurrent(functions, describe, comparedVersions = new Map()) {
-  if (!Array.isArray(functions) || !functions.length) return false;
+  const changes = await boundSecretVersionChanges(functions, describe, comparedVersions);
+  return changes !== null && Object.values(changes).every(reasons => reasons.length === 0);
+}
+
+export async function boundSecretVersionChanges(functions, describe, comparedVersions = new Map()) {
+  if (!Array.isArray(functions) || !functions.length) return null;
   const versions = new Map();
   try {
+    const changes = {};
     for (const fn of functions) {
+      const name = fn.name.split("/").at(-1);
+      if (Object.hasOwn(changes, name) || fn.serviceConfig?.secretVolumes?.length) return null;
+      changes[name] = [];
       for (const binding of fn?.serviceConfig?.secretEnvironmentVariables ?? []) {
         const { projectId, secret, version } = binding;
         if (!/^(?:njpbs-site|[0-9]+)$/.test(projectId ?? "") || !/^[A-Za-z0-9_-]+$/.test(secret ?? "")
-          || !/^[1-9][0-9]*$/.test(version ?? "")) return false;
+          || !/^[1-9][0-9]*$/.test(version ?? "")) return null;
         const key = `${projectId}/${secret}`;
         if (!versions.has(key)) versions.set(key, Promise.resolve(describe(projectId, secret)));
         const latest = await versions.get(key);
-        const match = latest?.name?.match(/^projects\/(?:njpbs-site|[0-9]+)\/secrets\/([A-Za-z0-9_-]+)\/versions\/([1-9][0-9]*)$/);
-        if (latest?.state !== "ENABLED" || !match || match[1] !== secret || match[2] !== version
-          || (comparedVersions.has(secret) && comparedVersions.get(secret) !== version)) return false;
+        const match = latest?.name?.match(/^projects\/(njpbs-site|[0-9]+)\/secrets\/([A-Za-z0-9_-]+)\/versions\/([1-9][0-9]*)$/);
+        if (latest?.state !== "ENABLED" || !match || (projectId !== "njpbs-site" && match[1] !== projectId)
+          || match[2] !== secret || (comparedVersions.has(secret) && comparedVersions.get(secret) !== match[3])) return null;
+        if (match[3] !== version) changes[name].push(`secret_version:${secret}`);
       }
     }
-    return true;
+    return changes;
   } catch {
-    return false;
+    return null;
   }
+}
+
+export function runtimeParameterChanges(functions, expected, reads, keys = Object.keys(RUNTIME_PARAMETERS)) {
+  if (!expected || !reads || !Array.isArray(functions) || !functions.length
+    || functions.some(fn => !fn.serviceConfig?.environmentVariables)) return null;
+  const changes = Object.fromEntries(functions.map(fn => [fn.name.split("/").at(-1), []]));
+  for (const key of keys) {
+    const mismatches = functions.filter(fn => fn.serviceConfig.environmentVariables[key] !== expected[key]);
+    if (!mismatches.length) continue;
+    // Preview readiness and transport have a coupled full-release path.
+    if (key === "CMS_PREVIEW_TRANSPORT" || key === "CMS_PREVIEW_SERIALIZER_READY") return null;
+    const owners = Object.keys(changes).filter(name => reads[name]?.keys.includes(key));
+    if (!owners.length) return null;
+    for (const fn of mismatches) {
+      const name = fn.name.split("/").at(-1);
+      if (owners.includes(name)) changes[name].push(`runtime_parameter:${key}`);
+      else if (reads[name]?.unknown !== false) return null;
+    }
+  }
+  return changes;
+}
+
+export function functionSourceProof(prior, target, receiptGraph) {
+  if (!target || !functionGraphsMatch(prior?.graph, receiptGraph)) return null;
+  const sharedInputsMatch = prior.sharedFingerprint === target.sharedFingerprint
+    && prior.configurationContract === target.configurationContract;
+  return {
+    sharedInputsMatch,
+    unattributedInputsMatch: prior.unattributedFingerprint === target.unattributedFingerprint,
+    sourceWithoutConfigurationTableMatches: sharedInputsMatch
+      && prior.sourceWithoutConfigurationTable === target.sourceWithoutConfigurationTable,
+  };
 }
 
 export function runtimeParametersMatch(functions, expected) {
@@ -138,6 +180,7 @@ export const RELEASE_CHECK_PATHS = Object.freeze([
   "scripts/lib/cms-component-receipt.mjs",
   "scripts/lib/cms-renderer-graph.mjs",
   "scripts/lib/cms-release-plan.mjs",
+  "scripts/lib/functions-runtime-reads.mjs",
   "scripts/lib/repository-identity.mjs",
   "scripts/lib/studio-title-files.mjs",
   "agents/vmix/configuration.mjs",
@@ -315,11 +358,15 @@ export function decideRelease({
   variablesFingerprint = null,
   deploySha = null,
   functionGraph = null,
+  manifestNames = null,
   forceFirebase = false,
   functionsReceipt = null,
   rendererReceipt = null,
   functionsFingerprint,
   configurationFingerprint = null,
+  baselineConfigurationFingerprint = configurationFingerprint,
+  runtimeChanges = null,
+  sourceProof,
   rendererFingerprint,
   rendererGraphAvailable = false,
   renderFingerprint,
@@ -341,6 +388,8 @@ export function decideRelease({
     configurationRequiresRelease: true,
     releaseReason: reason,
     functionDeployTargets: "all",
+    functionReasons: Object.fromEntries([...(manifestNames ?? Object.keys(functionGraph?.exports ?? {}))].sort()
+      .map(name => [name, [reason]])),
   });
   const recoveringFunctions = functionsRunCompleted === true && functionsReceipt?.state === "in_progress";
   const functionsBase = recoveringFunctions ? { mutation: functionsReceipt.lastComplete } : baselineMutation(functionsReceipt, currentRun);
@@ -385,16 +434,12 @@ export function decideRelease({
     );
   }
   if (configurationRequiresRelease) return full("runtime_configuration_changed", functionsBase.mutation.sourceSha);
-  if (variablesFingerprint !== null && (!FINGERPRINT_PATTERN.test(variablesFingerprint)
-    || variablesFingerprint !== functionsBase.mutation.variablesFingerprint)) {
-    return full("runtime_variables_changed", functionsBase.mutation.sourceSha);
-  }
   if (!FINGERPRINT_PATTERN.test(renderFingerprint ?? "") || renderFingerprint !== receiptRenderFingerprint) {
     return full("functions_render_inputs_changed", functionsBase.mutation.sourceSha);
   }
   if (
-    !FINGERPRINT_PATTERN.test(configurationFingerprint ?? "") ||
-    configurationFingerprint !== functionsBase.mutation.configurationFingerprint
+    !FINGERPRINT_PATTERN.test(baselineConfigurationFingerprint ?? "") ||
+    baselineConfigurationFingerprint !== functionsBase.mutation.configurationFingerprint
   ) {
     return full("functions_configuration_changed", functionsBase.mutation.sourceSha);
   }
@@ -423,16 +468,37 @@ export function decideRelease({
     return full("function_graph_unavailable", functionsBase.mutation.sourceSha);
   }
   const names = Object.keys(functionGraph.exports).sort();
-  if (functionGraph.globalFingerprint !== priorGraph.globalFingerprint
-    || names.join(",") !== Object.keys(priorGraph.exports).sort().join(",")) {
+  if (manifestNames && names.join(",") !== [...manifestNames].sort().join(",")) {
+    return full("function_manifest_mismatch", functionsBase.mutation.sourceSha);
+  }
+  if (names.join(",") !== Object.keys(priorGraph.exports).sort().join(",")) {
+    const plan = full("function_exports_changed", functionsBase.mutation.sourceSha);
+    for (const name of Object.keys(priorGraph.exports)) {
+      if (!Object.hasOwn(functionGraph.exports, name)) plan.functionReasons[name] = ["retirement_plan"];
+    }
+    return plan;
+  }
+  if (functionGraph.globalFingerprint !== priorGraph.globalFingerprint && !sourceProof?.sharedInputsMatch) {
     return full("functions_configuration_changed", functionsBase.mutation.sourceSha);
+  }
+  if (sourceProof === null) return full("function_source_proof_unavailable", functionsBase.mutation.sourceSha);
+  if (variablesFingerprint !== null && (!FINGERPRINT_PATTERN.test(variablesFingerprint)
+    || (variablesFingerprint !== functionsBase.mutation.variablesFingerprint && runtimeChanges === null))) {
+    return full("runtime_variables_changed", functionsBase.mutation.sourceSha);
   }
   if (!rendererGraphAvailable) return full("renderer_graph_unavailable", functionsBase.mutation.sourceSha);
   const rendererChanged = rendererFingerprint !== rendererBase.mutation.inputFingerprint;
-  const targets = names.filter(name => functionGraph.exports[name].fingerprint !== priorGraph.exports[name].fingerprint
-    || (rendererChanged && functionGraph.exports[name].preview));
-  // A changed aggregate with no accounted module change is an incomplete graph.
-  if ((functionsFingerprint !== functionsBase.mutation.inputFingerprint && !targets.length)
+  const sourceChanged = names.filter(name => functionGraph.exports[name].fingerprint !== priorGraph.exports[name].fingerprint);
+  const functionReasons = Object.fromEntries(names.map(name => [name, [
+    ...(sourceChanged.includes(name) ? ["source_closure_changed"] : []),
+    ...(runtimeChanges?.[name] ?? []),
+    ...(rendererChanged && functionGraph.exports[name].preview ? ["renderer_inputs_changed"] : []),
+  ]]));
+  const targets = names.filter(name => functionReasons[name].length > 0);
+  // A runtime or renderer target cannot account for a change to Functions source.
+  if ((functionsFingerprint !== functionsBase.mutation.inputFingerprint
+      && ((!sourceChanged.length && !sourceProof?.sourceWithoutConfigurationTableMatches)
+        || (sourceProof && !sourceProof.unattributedInputsMatch)))
     || (rendererChanged && !names.some(name => functionGraph.exports[name].preview))
     || ((targets.length || rendererChanged) && !SHA_PATTERN.test(deploySha ?? ""))) {
     return full("function_graph_unavailable", functionsBase.mutation.sourceSha);
@@ -444,7 +510,9 @@ export function decideRelease({
     liveFunctionsSha: functionsBase.mutation.sourceSha,
     rendererTargetSha: rendererChanged ? deploySha : rendererBase.mutation.sourceSha,
     configurationRequiresRelease: false,
-    releaseReason: rendererChanged ? "renderer_inputs_changed" : targets.length ? "functions_modules_changed" : "unchanged",
+    releaseReason: rendererChanged ? "renderer_inputs_changed" : sourceChanged.length ? "functions_modules_changed"
+      : targets.length ? "functions_runtime_inputs_changed" : "unchanged",
+    functionReasons: Object.fromEntries(names.map(name => [name, functionReasons[name].length ? functionReasons[name] : ["unchanged"]])),
     functionDeployTargets: targets.map(name => `functions:${name}`).join(","),
     previewPauseLate: rendererChanged,
     functionsBeforePreview: rendererChanged ? targets.filter(name => !functionGraph.exports[name].preview).map(name => `functions:${name}`).join(",") : "",

@@ -286,6 +286,8 @@ jobs:
     timeout-minutes: 20 # Runaway guard: setup plus one 120 s sealed case (26.5 s measured).
     steps:
       - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
       - uses: actions/setup-node@v7
         with:
           node-version: "22.23.5"
@@ -331,4 +333,6 @@ jobs:
           CMS_PUBLIC_CONTRACT_SEALED: "1"
         run: node scripts/run-firebase-emulators.mjs exec auth,firestore,functions "node scripts/run-functions-tests.mjs tests/functions/cms-public-contract.test.ts"
       - name: Singleton contract script acceptance
-        run: npx --no-install vitest run tests/scripts/cms-public-contract.test.js tests/scripts/cms-function-graph.test.js
+        run: >-
+          npx --no-install vitest run tests/scripts/cms-public-contract.test.js
+          tests/scripts/cms-function-graph.test.js tests/scripts/cms-release-plan.test.js

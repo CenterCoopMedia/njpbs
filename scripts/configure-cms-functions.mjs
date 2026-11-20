@@ -22,12 +22,15 @@ function scopedGcloud(args, env, execute) {
 }
 
 export function resolveDiscovery(env, execute = execFileSync) {
+  const { PATH, HOME, GOOGLE_APPLICATION_CREDENTIALS, CLOUDSDK_CONFIG } = env;
+  const ambient = Object.fromEntries(Object.entries({ PATH, HOME, GOOGLE_APPLICATION_CREDENTIALS, CLOUDSDK_CONFIG })
+    .filter(([, value]) => value !== undefined));
   const output = {};
   for (const script of ["resolve-media-purge.sh", "resolve-cost-ledger-pulls.sh"]) {
     let text;
-    try { text = execute("bash", [`scripts/${script}`], { env: { ...Object.fromEntries(Object.entries(env).filter(([key]) =>
-      ["PATH", "HOME", "GOOGLE_APPLICATION_CREDENTIALS", "CLOUDSDK_CONFIG"].includes(key) || /^(?:COST_LEDGER_|CMS_MEDIA_PURGE_)/.test(key))),
-      ...(env.GOOGLE_APPLICATION_CREDENTIALS ? { CLOUDSDK_AUTH_CREDENTIAL_FILE_OVERRIDE: env.GOOGLE_APPLICATION_CREDENTIALS } : {}) },
+    try { text = execute("bash", [`scripts/${script}`], { env: { ...ambient,
+      ...Object.fromEntries(Object.entries(env).filter(([key]) => /^(?:COST_LEDGER_|CMS_MEDIA_PURGE_)/.test(key))),
+      ...(GOOGLE_APPLICATION_CREDENTIALS ? { CLOUDSDK_AUTH_CREDENTIAL_FILE_OVERRIDE: GOOGLE_APPLICATION_CREDENTIALS } : {}) },
       encoding: "utf8", stdio: ["ignore", "pipe", "pipe"], timeout: 120000, maxBuffer: 64 * 1024 }); }
     catch { fail(`Could not resolve discovery configuration: ${script}`); }
     for (const line of text.trim().split("\n")) {
