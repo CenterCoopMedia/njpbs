@@ -1,4 +1,5 @@
 import { assertDevelopmentSource, hasRenderedDevelopmentInputs } from "../../scripts/render-development-config.mjs";
+import { verifyFunctionsContracts } from "../../scripts/lib/functions-contracts.mjs";
 import { execFile } from "node:child_process";
 import { createHash } from "node:crypto";
 import { constants } from "node:fs";
@@ -92,6 +93,12 @@ export async function assertCmsPublicationSourceCheckout(
   }
 }
 
+async function inspectSourceRoot(git: RunGit): Promise<string> {
+  const root = (await git(["rev-parse", "--show-toplevel"])).trim();
+  if (!path.isAbsolute(root)) runtimeError("Invalid source root");
+  return root;
+}
+
 /** A preview mounts its installed source read-only. Refuse ignored credentials
  * and scratch files too; ordinary git status deliberately omits those files.
  */
@@ -111,11 +118,17 @@ export async function assertCmsPreviewSourceCheckout(expectedCommitSha: string, 
   // The compiled directory has a separate exact-source/file-digest check at
   // startup and inside each sandbox job; it is never an arbitrary source root.
   const allowed = new Set([".rendered-deployment-inputs.json", "node_modules/", "site/node_modules/", "admin/node_modules/", "functions/node_modules/", "cms-api/node_modules/", "site/.astro/", "site/.compiled-renderer/", "site/.public-post-renderer/"]);
+  const files = ignored.value.split("\0").filter(Boolean);
+  const contractFiles = files.filter(file => file.startsWith("functions/lib/"));
+  if (contractFiles.length) {
+    try { await verifyFunctionsContracts(await inspectSourceRoot(git), contractFiles); }
+    catch { runtimeError("The private preview source contains invalid prepared Functions contracts"); }
+    for (const file of contractFiles) allowed.add(file);
+  }
   const fontPath = "site/public/brand/fonts/";
-  if (ignored.value.split("\0").includes(fontPath)) {
+  if (files.includes(fontPath)) {
     try {
-      const root = (await git(["rev-parse", "--show-toplevel"])).trim();
-      if (!path.isAbsolute(root)) throw new Error("Invalid source root");
+      const root = await inspectSourceRoot(git);
       const directory = path.join(root, fontPath);
       if (!(await lstat(directory)).isDirectory()) throw new Error("Invalid font directory");
       const manifest = JSON.parse(await readFile(path.join(root, "site/scripts/public-fonts.json"), "utf8"));
@@ -134,7 +147,7 @@ export async function assertCmsPreviewSourceCheckout(expectedCommitSha: string, 
       allowed.add(fontPath);
     } catch { runtimeError("The private preview source contains invalid prepared public fonts"); }
   }
-  if (ignored.value.split("\0").filter(Boolean).some(file => !allowed.has(file))) {
+  if (files.some(file => !allowed.has(file))) {
     runtimeError("The private preview source contains unexpected ignored files");
   }
 }

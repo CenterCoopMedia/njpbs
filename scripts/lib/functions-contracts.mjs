@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
-import { lstatSync } from "node:fs";
-import { mkdtemp, readFile, rename, rm, writeFile } from "node:fs/promises";
+import { constants, lstatSync } from "node:fs";
+import { mkdtemp, open, readFile, rename, rm, writeFile } from "node:fs/promises";
 import { builtinModules, createRequire } from "node:module";
 import { join, posix } from "node:path";
 
@@ -103,9 +103,13 @@ async function compile({ has, read, requireCompiler }) {
   })));
 }
 
-export async function writeFunctionsContracts(directory, requireCompiler) {
+function compileFunctionsContracts(directory, requireCompiler) {
   const has = file => lstatSync(join(directory, file), { throwIfNoEntry: false })?.isFile() ?? false;
-  const outputs = await compile({ has, read: file => readFile(join(directory, file), "utf8"), requireCompiler });
+  return compile({ has, read: file => readFile(join(directory, file), "utf8"), requireCompiler });
+}
+
+export async function writeFunctionsContracts(directory, requireCompiler) {
+  const outputs = await compileFunctionsContracts(directory, requireCompiler);
   // Replace ignored outputs without following existing symlinks or exposing partial files.
   const staging = await mkdtemp(join(directory, "functions/lib/.contracts-"));
   try {
@@ -115,6 +119,23 @@ export async function writeFunctionsContracts(directory, requireCompiler) {
     await rm(staging, { recursive: true, force: true });
   }
   return outputs.size;
+}
+
+export async function verifyFunctionsContracts(directory, files) {
+  const outputs = await compileFunctionsContracts(directory);
+  if (files.length !== outputs.size || files.some(file => !outputs.has(file))) {
+    throw new Error("Unexpected Functions contract inventory");
+  }
+  for (const [file, text] of outputs) {
+    const expected = Buffer.from(text);
+    const handle = await open(join(directory, file), constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK);
+    try {
+      const stat = await handle.stat();
+      if (!stat.isFile() || stat.nlink !== 1 || stat.size !== expected.length || !(await handle.readFile()).equals(expected)) {
+        throw new Error("Unexpected Functions contract bytes");
+      }
+    } finally { await handle.close(); }
+  }
 }
 
 // Earlier deployed revisions carry their own committed bundles. For current

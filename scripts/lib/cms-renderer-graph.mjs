@@ -8,6 +8,7 @@ import { functionGraphSource, readCommittedBlobs } from "./cms-component-receipt
 import { addCommittedFunctionsContracts, contractInputs } from "./functions-contracts.mjs";
 
 const exec = promisify(execFile);
+const CONTRACT_COMPILER = "scripts/lib/functions-contracts.mjs";
 const ROOTS = ["site/scripts/build-compiled-renderer.ts", "site/scripts/run-cms-preview-cloud.ts",
   "site/scripts/render-compiled-preview.ts", "site/scripts/cms-preview-cloud-runtime.ts",
   "site/astro.renderer.config.mjs", "preview-renderer/worker.ts"];
@@ -31,7 +32,8 @@ const LAUNCH_CONTRACTS = {
   "site/scripts/process-cms-preview.ts": "99833050f6abb21b74abb33e0e584392664bef5d",
   "site/scripts/run-cms-preview-cloud.ts": "aa8a210eeb0de195bb1ca71e5ae6f6c6c405eb3a",
   "site/scripts/render-compiled-preview.ts": "4f8bc132ec4a460149734b0b2c5e6a43f3481ab2",
-  "site/scripts/cms-publication-runtime-guard.ts": "4d4022a20284beb50ca042dda859c87b9b061442",
+  "site/scripts/cms-publication-runtime-guard.ts": "d55da64ab2d0cd037afe3b6cead1c42a9116cafa",
+  [CONTRACT_COMPILER]: "9f6b4eba3bc8e0e432b5b6eaee854d4febd5e623",
   "site/scripts/cms-preview-operator-checks.ts": "d6c68503575b378001082a83a9556eb95a578c71",
   // This build-only DOM evaluates the committed raw reader, whose bytes and
   // snapshots are covered by the Site guard. Any helper edit needs a new contract.
@@ -130,7 +132,9 @@ export async function fingerprintRendererGraph(sourceSha, deps = {}) {
     const queue = [...ROOTS, ...[...files.keys()].filter(file => file.startsWith("site/src/") && MODULE.test(file) && !file.endsWith(".d.ts"))];
     const enqueue = file => {
       if (/\.(?:mdx|svelte|vue)$/.test(file)) unknown("unsupported_module_language");
-      if (file.startsWith("functions/")) roots.add(file);
+      // The pinned compiler resolves esbuild from the build or container install.
+      if (file === CONTRACT_COMPILER) extra.add(file);
+      else if (file.startsWith("functions/")) roots.add(file);
       else if (MODULE.test(file) && !file.endsWith(".d.ts")) queue.push(file);
       else extra.add(file);
     };
