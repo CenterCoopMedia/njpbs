@@ -233,7 +233,10 @@ test("every CMS consumer pins clean release helpers separately from trusted work
     const steps = workflow.jobs[name].steps;
     const gate = steps.find(step => step.name === "Require pinned release and trusted workflow identities");
     assert.ok(gate, name);
-    assert.deepEqual(gate.env, { CMS_RELEASE_CHECKS_SHA: "${{ inputs.deploy_ref }}", CMS_TRUSTED_WORKFLOW_SHA: "${{ github.sha }}" });
+    assert.deepEqual(gate.env, {
+      CMS_RELEASE_CHECKS_SHA: "${{ inputs.deploy_ref }}", CMS_TRUSTED_WORKFLOW_SHA: "${{ github.sha }}",
+      ...(name === "admin-build" && { CMS_CORRELATED_DISPATCH_INPUTS: "${{ inputs.release_dispatch_id && toJSON(inputs) || '' }}" }),
+    });
     const directory = gate.run.match(/\$RUNNER_TEMP\/([a-z-]+)"\/\.github\/scripts\/require-cms-release-sources\.mjs$/)?.[1];
     assert.ok(directory, name);
     const checkout = steps.find(step => step.with?.path === `.${directory}`);
