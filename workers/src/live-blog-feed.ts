@@ -28,7 +28,9 @@ export function createLiveBlogFeedReader({ target, rendererSha, cache, readPage,
       const cached = await cache.match(key).catch(() => undefined);
       if (cached && Number(cached.headers.get("x-njpbs-live-blog-expires")) > now()) {
         const revision = cached.headers.get("x-njpbs-live-blog-revision");
-        const snapshot = revision && await cache.match(new Request(`${key.url}&revision=${revision}`)).catch(() => undefined);
+        const snapshot = revision
+          ? await cache.match(new Request(`${key.url}&revision=${revision}`)).catch(() => undefined)
+          : undefined;
         if (snapshot?.status === 200) return snapshot;
       }
       const source = await readPage(new Request(`${target.origin}${url.pathname}`, { headers: { Accept: "text/html" } }));
