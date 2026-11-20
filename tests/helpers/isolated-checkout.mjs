@@ -5,6 +5,13 @@ import { dirname, isAbsolute, join, relative, sep } from "node:path";
 // Both the Site-only and root test installs declare esbuild.
 const { build } = createRequire(new URL("../../site/package.json", import.meta.url))("esbuild");
 
+/** @typedef {{ replacements?: string[], boundary?: { files: string[], rule: string } }} ImportClosureOptions */
+
+/**
+ * @param {string} source
+ * @param {string[]} entries
+ * @param {ImportClosureOptions} [options]
+ */
 export async function importClosure(source, entries, { replacements = [], boundary } = {}) {
   const allowed = new Set(boundary?.files);
   const relativePath = file => relative(source, file).split(sep).join("/");
@@ -37,6 +44,12 @@ export async function importClosure(source, entries, { replacements = [], bounda
   return (boundary ? [...allowed] : Object.keys(metafile.inputs)).sort();
 }
 
+/**
+ * @param {string} source
+ * @param {string} destination
+ * @param {string[]} entries
+ * @param {ImportClosureOptions & { assets?: string[] }} [options]
+ */
 export async function copyImportClosure(source, destination, entries, { assets = [], ...options } = {}) {
   const files = await importClosure(source, entries, options);
   await Promise.all([...new Set([...files, ...assets])].map(async file => {
