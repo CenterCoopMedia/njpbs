@@ -1,4 +1,5 @@
 import { serveDevStaffSite } from "./staff-site-worker";
+import { publicationTarget } from "../../functions/lib/publication-target";
 
 const siteOrigin = "https://dev-public.example.org";
 
@@ -38,6 +39,7 @@ async function fetchDevPublic(request: Request, env: DevStaffSiteBindings): Prom
 // This deployment has no production bindings or production admission mode.
 export default {
   fetch(request: Request, env: DevStaffSiteBindings) {
-    return serveDevStaffSite(request, env, cleanRequest => fetchDevPublic(cleanRequest, env));
+    return serveDevStaffSite(request, env, cleanRequest => fetchDevPublic(cleanRequest, env),
+      siteOrigin, publicationTarget("development").workerName);
   },
 } satisfies ExportedHandler<DevStaffSiteBindings>;

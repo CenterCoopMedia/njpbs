@@ -162,19 +162,37 @@ it("refuses a Schedule row that becomes valid after skipped source capture inste
   } finally { changeBeforeSnapshot.mockRestore(); }
 });
 
-async function exportWorker() {
+async function exportWorker({ readerSha = sha, scheduleProof = false, schemaVersion = 1 } = {}) {
   const handler = require("../../functions/public-content.js").createCmsGetPublicPageHandler({ firestore,
     currentCodeRequest: fixture.request, log: { error() {} } });
-  return createNoBuildPageWorker({ rendererSha: sha, rendererReady: true,
+  return createNoBuildPageWorker({ rendererSha: readerSha, rendererReady: true, scheduleProof,
     getDecision: async (path, method) => {
       const res = { code: 200, body: undefined as any, set() { return this; }, status(code: number) { this.code = code; return this; },
         json(body: unknown) { this.body = body; return this; } };
-      await handler({ method: "POST", body: { mode: "no-build-page-v1", path, rendererSha: sha, method } }, res);
+      await handler({ method: "POST", body: { mode: "no-build-page-v1", path, rendererSha: readerSha, method, scheduleProof } }, res);
       if (res.code !== 200) throw new Error("Private Page authority unavailable");
+      if (schemaVersion !== 1 && res.body.scheduleReceipt) res.body.scheduleReceipt.schemaVersion = schemaVersion;
       return res.body;
     }, fetchAsset: async () => { throw new Error("Cloud export cannot use Assets"); }, render: async () => "",
     cache: { async match() {}, async put() {} } });
 }
+it("proves a different Worker release can read both current Schedule exports and refuses an incompatible receipt", async () => {
+  const readerSha = "b".repeat(40);
+  const worker = await exportWorker({ readerSha, scheduleProof: true });
+  const prefix = "https://dev-public.example.org";
+  const json = new Request(`${prefix}/_schedule-sources.json`);
+  const pdf = new Request(`${prefix}/schedule/downloads/nj-pbs-schedule.pdf`);
+  const [projection, download] = await Promise.all([worker.fetch(json), worker.fetch(pdf)]);
+  expect(projection?.headers.get("x-njpbs-content-source")).toBe("cms-page-schedule");
+  expect(projection?.headers.get("x-njpbs-renderer-sha")).toBe(readerSha);
+  expect((await projection!.json()).publication.commitSha).toBe(sha);
+  expect(download?.headers.get("cache-control")).toBe("no-store");
+  expect(Buffer.from(await download!.arrayBuffer())).toEqual(fixture.pdf);
+  expect(await (await exportWorker({ readerSha })).fetch(json)).toBeNull();
+  const incompatible = await exportWorker({ readerSha, scheduleProof: true, schemaVersion: 2 });
+  expect((await incompatible.fetch(json))?.status).toBe(503);
+  expect(boundary.writes).toEqual([]);
+});
 it("reuses verified immutable bytes across HTTP decisions and concurrent requests with fresh metadata fences", async () => {
   const worker = await exportWorker();
   const url = "https://dev-public.example.org/_schedule-sources.json";

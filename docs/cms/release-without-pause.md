@@ -860,6 +860,16 @@ timeout/retry or replace real-owner tests with document-text assertions.
 
 ## Retirement and proof limits
 
+The private development gateway can select a retained Worker version for the
+fixed rollback proof reads using a verified machine identity. The versioned
+reader checks the current dynamic Schedule JSON and PDF against their sealed
+bytes and refuses an incompatible receipt. A drill needs two probe-capable
+versions in the deployment and current development Schedule artifacts. Keep
+production at a single serving version until provider admission can restrict
+version selection before the Worker runs. Production rollback also requires
+cross-release compatibility proof for the other writer and reader contracts.
+[Emergency Worker runbook](https://github.com/jamditis/jawn-ops/blob/master/docs/release-worker-rollback.md).
+
 Before deleting any old path/resource, prove accepted work terminal, original
 outboxes/journals drained, reader/session expiries reached, retained requests,
 assets/media and rollback obligations resolved, all imports/callers removed

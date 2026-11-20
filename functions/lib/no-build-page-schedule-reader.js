@@ -202,15 +202,16 @@ async function readPageScheduleInputsInTransaction({ firestore, transaction, tar
 async function readNoBuildPageScheduleExport({ firestore, path, target, rendererSha, currentCodeRequest, scheduleCapture }) {
   target = pagePublicationTarget({ firestore, target });
   if (!isPageScheduleExportPath(path)) refuse("The Page schedule route is invalid.");
-  const enabled = async transaction => {
+  const enabled = async (transaction, sha) => {
     const capability = await require("./no-build-page-ownership").readNoBuildPageCapability({ firestore, transaction });
-    return capability?.servingEnabled === true && capability.rendererSha === rendererSha;
+    return capability?.servingEnabled === true && capability.rendererSha === sha;
   };
-  if (!await firestore.runTransaction(enabled, { readOnly: true })) return { kind: "pass", path };
+  if (rendererSha !== undefined &&
+      !await firestore.runTransaction(transaction => enabled(transaction, rendererSha), { readOnly: true })) return { kind: "pass", path };
   const capture = scheduleCapture ?? await capturePageSchedule({ firestore, target, rendererSha, request: currentCodeRequest });
   const data = captureData(capture, target, rendererSha);
   const schedule = await firestore.runTransaction(async transaction => {
-    if (!await enabled(transaction)) return null;
+    if (!await enabled(transaction, data.rendererSha)) return null;
     return readCapturedPageScheduleInTransaction({ firestore, transaction, target, rendererSha, capture });
   }, { readOnly: true });
   if (!schedule) return { kind: "pass", path };
