@@ -10,11 +10,13 @@ import { promisify } from "node:util";
 import { createRequire } from "node:module";
 import { currentVersionMatches } from "./lib/functions-secret-versions.mjs";
 import { studioTitleFilesParameter } from "./lib/studio-title-files.mjs";
+import { resolveDiscovery } from "./configure-cms-functions.mjs";
+import { configurationInputs, RUNTIME_PARAMETERS, runtimeParameters } from "./lib/functions-configuration.mjs";
 import {
   ADMIN_REVISION_INTAKE_FLOOR,
   assertLegacyCmsWorkflow,
   baselineMutation,
-  boundSecretVersionsCurrent,
+  boundSecretVersionChanges,
   cloudWakeConfigurationFingerprint,
   decideRelease,
   deploymentVariablesFingerprint,
@@ -22,49 +24,20 @@ import {
   explicitCloudWakeDecision,
   fingerprintFunctionsRenderSource,
   functionsForRuntimeComparison,
+  functionSourceProof,
   componentReceiptRunCompleted,
-  runtimeParametersMatch,
+  runtimeParameterChanges,
 } from "./lib/cms-release-plan.mjs";
 
 const execFileAsync = promisify(execFile);
 
-export async function desiredRuntimeParameters(env, execute = execFileAsync) {
+export async function desiredRuntimeParameters(env, execute) {
   // Invalid enabled Studio configuration must abort preflight, rather than
   // selecting a full release that fails after preview mutation begins.
-  const studioTitles = studioTitleFilesParameter(env.VITE_CMS_STUDIO_CONFIGURATION, env.VITE_LIVE_PRODUCTION_ENABLED);
+  studioTitleFilesParameter(env.VITE_CMS_STUDIO_CONFIGURATION, env.VITE_LIVE_PRODUCTION_ENABLED);
   try {
-    const variables = JSON.parse(env.CMS_DEPLOYMENT_VARIABLES_JSON);
-    const account = env.CLOUDFLARE_ACCOUNT_ID;
-    if (!/^[a-f0-9]{32}$/.test(account ?? "")) return null;
-    const map = JSON.parse(env.CMS_BUG_REPORT_TELEGRAM_ADMIN_MAP);
-    const expected = {
-      CMS_STUDIO_TITLE_FILES: studioTitles,
-      CMS_BUG_REPORT_TELEGRAM_CHAT_ID: env.CMS_BUG_REPORT_TELEGRAM_CHAT_ID,
-      CMS_BUG_REPORT_TELEGRAM_ADMIN_MAP: JSON.stringify(map).replaceAll("'", "\\u0027"),
-      CMS_STAFF_EMAIL_ACCOUNT_ID: account,
-      ...Object.fromEntries(["CMS_MEDIA_R2_ENDPOINT", "CMS_PRIVATE_VIDEO_R2_ENDPOINT", "CMS_VOICEOVER_R2_ENDPOINT"]
-        .map(key => [key, `https://${account}.r2.cloudflarestorage.com`])),
-    };
-    // The existing metadata-only resolvers write local, gitignored discovery
-    // flags. Compare their effective output, including provider readiness, with
-    // every serving function in memory. Never persist secret-derived params.
-    for (const script of ["resolve-media-purge.sh", "resolve-cost-ledger-pulls.sh"]) {
-      const { stdout } = await execute("bash", [`scripts/${script}`], {
-        cwd: env.GITHUB_WORKSPACE,
-        env: { ...Object.fromEntries(["PATH", "HOME", "GOOGLE_APPLICATION_CREDENTIALS", "CLOUDSDK_CONFIG"]
-          // config-input: CLOUDSDK_CONFIG, GOOGLE_APPLICATION_CREDENTIALS, HOME, PATH
-          .filter(key => typeof env[key] === "string").map(key => [key, env[key]])),
-        ...Object.fromEntries(Object.entries(variables).filter(([key]) => /^(?:COST_LEDGER_|CMS_MEDIA_PURGE_)/.test(key))),
-        ...(env.GOOGLE_APPLICATION_CREDENTIALS ? { CLOUDSDK_AUTH_CREDENTIAL_FILE_OVERRIDE: env.GOOGLE_APPLICATION_CREDENTIALS } : {}) },
-        timeout: 120_000, maxBuffer: 64 * 1024,
-      });
-      for (const line of stdout.trim().split("\n")) {
-        const match = line.match(/^([A-Z][A-Z0-9_]*)=(.*)$/);
-        if (!match) return null;
-        expected[match[1]] = match[2];
-      }
-    }
-    return expected;
+    const input = configurationInputs(env);
+    return runtimeParameters(input, resolveDiscovery({ ...env, ...input }, execute));
   } catch {
     // Errors may contain secret-derived parameter input or child env details.
     return null;
@@ -103,6 +76,7 @@ export function releasePlanOutputLines(plan, { deploySha, edgeFingerprint, confi
     `requested_migrations=${requestedMigrations.join(",")}`,
     `functions_mutated=${plan.functionsMutated}`,
     `function_deploy_targets=${plan.functionDeployTargets}`,
+    `function_reasons=${JSON.stringify(plan.functionReasons ?? {})}`,
     `preview_pause_late=${plan.previewPauseLate === true}`,
     `functions_before_preview=${plan.functionsBeforePreview ?? ""}`,
     `functions_during_preview=${plan.functionsDuringPreview ?? ""}`,
@@ -132,6 +106,10 @@ export async function main() {
     fail("DEPLOY_SHA and GITHUB_SHA must be full revisions");
   }
   const decision = explicitCloudWakeDecision(process.env);
+  const manifest = process.env.FUNCTION_TARGETS;
+  const manifestNames = manifest === undefined ? null
+    : /^functions:[A-Za-z][A-Za-z0-9]*(,functions:[A-Za-z][A-Za-z0-9]*)*$/.test(manifest)
+      ? manifest.split(",").map(name => name.slice("functions:".length)) : [];
   const edgeFingerprint = edgeOriginSecretFingerprint(process.env);
   const variablesFingerprint = deploymentVariablesFingerprint(process.env.CMS_DEPLOYMENT_VARIABLES_JSON);
   const configurationFingerprint = cloudWakeConfigurationFingerprint(edgeFingerprint, decision, variablesFingerprint);
@@ -154,7 +132,7 @@ export async function main() {
     } };
     const secretsUnchanged = await deploymentSecretsUnchanged(process.env,
       (name, desired) => currentVersionMatches(name, desired, readClient));
-    const [functionsReceipt, rendererReceipt, functionsFingerprint, rendererGraph, renderFingerprint, functionGraph] =
+    const [functionsReceipt, rendererReceipt, functionsFingerprint, rendererGraph, renderFingerprint, runtime] =
       await Promise.all([
         readReceipt(firestore, "functions"),
         readReceipt(firestore, "renderer"),
@@ -165,31 +143,44 @@ export async function main() {
           process.stderr.write(`Renderer graph fallback: ${reason}${path}; full paired release required\n`);
         } }),
         fingerprintFunctionsRenderSource(trustedSha, { cwd: process.env.GITHUB_WORKSPACE }),
-        fingerprintFunctionGraph(deploySha, { cwd: process.env.GITHUB_WORKSPACE }),
+        fingerprintFunctionGraph(deploySha, { cwd: process.env.GITHUB_WORKSPACE, includeRuntimeInputs: true }),
       ]);
     const rendererFingerprint = rendererGraph?.fingerprint ?? await fingerprintInputs(deploySha, "renderer", { cwd: process.env.GITHUB_WORKSPACE });
     const baseline = baselineMutation(functionsReceipt, {
       runId: process.env.GITHUB_RUN_ID, runAttempt: process.env.GITHUB_RUN_ATTEMPT,
     }).mutation;
-    const receiptRenderFingerprint = await fingerprintFunctionsRenderSource(baseline?.trustedWorkflowSha, { cwd: process.env.GITHUB_WORKSPACE });
-    const desiredParameters = await desiredRuntimeParameters(process.env);
-    let parametersMatch = false;
+    const [receiptRenderFingerprint, priorRuntime] = await Promise.all([
+      fingerprintFunctionsRenderSource(baseline?.trustedWorkflowSha, { cwd: process.env.GITHUB_WORKSPACE }),
+      fingerprintFunctionGraph(baseline?.sourceSha, { cwd: process.env.GITHUB_WORKSPACE, includeRuntimeInputs: true }),
+    ]);
+    // Contract capture uses the committed graphs without the deploy job's manifest.
+    const sourceProof = functionSourceProof(priorRuntime, runtime, baseline?.functionGraph);
+    const desiredParameters = await desiredRuntimeParameters({
+      ...process.env,
+      CMS_ADMIN_BUILD_REVISION: deploySha,
+      CMS_PREVIEW_RENDERER_SHA: baseline?.previewRendererSha ?? baseline?.sourceSha ?? deploySha,
+    });
+    const functionGraph = runtime?.graph;
     let liveFunctions = null;
     const liveFunctionsIdentities = await collectLiveIdentities("functions", {
       firestore, inspectFunctions: functions => {
         liveFunctions = functionsForRuntimeComparison(functions, functionGraph);
-        parametersMatch = runtimeParametersMatch(liveFunctions, desiredParameters);
       },
     }).catch(() => null);
-    const bindingsCurrent = await boundSecretVersionsCurrent(liveFunctions, async (project, secret) =>
+    // Production intake resolves the Admin revision from live status after the
+    // revision floor. The renderer pin follows the independent preview plan.
+    const comparedParameterKeys = Object.keys(RUNTIME_PARAMETERS).filter(key =>
+      key !== "CMS_ADMIN_BUILD_REVISION" && key !== "CMS_PREVIEW_RENDERER_SHA");
+    const parameterChanges = runtimeParameterChanges(liveFunctions, desiredParameters, runtime?.reads, comparedParameterKeys);
+    const secretChanges = await boundSecretVersionChanges(liveFunctions, async (project, secret) =>
       (await client.request({ url: `https://secretmanager.googleapis.com/v1/projects/${project}/secrets/${secret}/versions/latest`,
         timeout: 15_000 })).data, desiredVersions);
     // Fixed booleans only: identify every false predicate without exposing
     // desired parameters, secret values, provider responses or exceptions.
     process.stdout.write([
       `configuration_secrets_unchanged=${secretsUnchanged === true}`,
-      `configuration_parameters_match=${parametersMatch === true}`,
-      `configuration_bindings_current=${bindingsCurrent === true}`,
+      `configuration_parameters_match=${parameterChanges !== null && Object.values(parameterChanges).every(reasons => !reasons.length)}`,
+      `configuration_bindings_current=${secretChanges !== null && Object.values(secretChanges).every(reasons => !reasons.length)}`,
     ].join("\n") + "\n");
     const liveRendererIdentities = await collectLiveIdentities("renderer", { firestore }).catch(() => null);
     const liveFunctionsSha = functionsReceipt?.state === "complete"
@@ -201,16 +192,23 @@ export async function main() {
     const plan = decideRelease({
       variablesFingerprint,
       configurationRequiresRelease: !secretsUnchanged
-        || !parametersMatch
-        || !bindingsCurrent,
+        || parameterChanges === null
+        || secretChanges === null,
+      runtimeChanges: parameterChanges && secretChanges && Object.fromEntries(Object.keys(parameterChanges).map(name =>
+        [name, [...parameterChanges[name], ...secretChanges[name]]])),
+      sourceProof,
       deploySha,
       functionGraph,
+      manifestNames,
       forceFirebase: process.env.FORCE_FIREBASE,
       functionsReceipt,
       rendererReceipt,
       functionsRunCompleted, rendererRunCompleted,
       functionsFingerprint,
       configurationFingerprint,
+      baselineConfigurationFingerprint: /^[a-f0-9]{64}$/.test(baseline?.variablesFingerprint ?? "")
+        ? cloudWakeConfigurationFingerprint(edgeFingerprint, decision, baseline.variablesFingerprint)
+        : null,
       rendererFingerprint,
       rendererGraphAvailable: rendererGraph !== null,
       renderFingerprint,

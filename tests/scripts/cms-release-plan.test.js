@@ -1,8 +1,8 @@
-import { CONFIGURATION_INPUTS, configurationInputs } from "../../scripts/lib/functions-configuration.mjs";
+import { CONFIGURATION_INPUTS, RUNTIME_PARAMETERS, configurationInputs } from "../../scripts/lib/functions-configuration.mjs";
 import { describe, expect, it } from "vitest";
 import { readFileSync } from "node:fs";
 import { parse } from "yaml";
-import { FUNCTION_RUNTIME_VARIABLES, functionsForRuntimeComparison, runtimeParametersMatch, boundSecretVersionsCurrent, CMS_RELEASE_SECRET_NAMES, deploymentSecretsUnchanged, deploymentVariablesFingerprint, cloudWakeConfigurationFingerprint, decideRelease, explicitCloudWakeDecision, fingerprintExecutionSource, fingerprintFunctionsRenderSource, identitiesMatch, planCmsApiRelease, componentReceiptRunCompleted } from "../../scripts/lib/cms-release-plan.mjs";
+import { FUNCTION_RUNTIME_VARIABLES, functionsForRuntimeComparison, runtimeParametersMatch, boundSecretVersionsCurrent, boundSecretVersionChanges, runtimeParameterChanges, CMS_RELEASE_SECRET_NAMES, deploymentSecretsUnchanged, deploymentVariablesFingerprint, cloudWakeConfigurationFingerprint, decideRelease, explicitCloudWakeDecision, fingerprintExecutionSource, fingerprintFunctionsRenderSource, identitiesMatch, planCmsApiRelease, componentReceiptRunCompleted } from "../../scripts/lib/cms-release-plan.mjs";
 import { releasePlanOutputLines, desiredRuntimeParameters } from "../../scripts/cms-release-plan.mjs";
 
 const SHA = "a".repeat(40);
@@ -93,13 +93,19 @@ describe("selective Functions releases", () => {
       CMS_BUG_REPORT_TELEGRAM_CHAT_ID: "123", CMS_BUG_REPORT_TELEGRAM_ADMIN_MAP: '{ "456": "test-admin" }',
       GITHUB_TOKEN: "synthetic-must-not-inherit", CMS_STAFF_EMAIL_API_TOKEN: "synthetic-must-not-inherit",
       CLOUDFLARE_ACCOUNT_ID: "a".repeat(32), GOOGLE_APPLICATION_CREDENTIALS: "/synthetic/adc.json" };
-    const expected = await desiredRuntimeParameters(env, async (_program, [script], options) => {
+    Object.assign(env, { CMS_ANALYTICS_CF_ZONE_ID: "a".repeat(32), CMS_ANALYTICS_MAILCHIMP_AUDIENCE_ID: "a".repeat(10),
+      CMS_MEDIA_CLOUDFLARE_ZONE_ID: "a".repeat(32), CMS_MEDIA_R2_BUCKET: "example-bucket",
+      CMS_ADMIN_BUILD_REVISION: SHA, CMS_PREVIEW_RENDERER_SHA: SHA });
+    const resolverOutput = script => Object.entries(RUNTIME_PARAMETERS)
+      .filter(([key, row]) => row.format === "discovery" && key.startsWith(script.includes("media-purge") ? "CMS_MEDIA_PURGE_" : "COST_LEDGER_"))
+      .map(([key]) => `${key}=false`).join("\n");
+    const expected = await desiredRuntimeParameters(env, (_program, [script], options) => {
       expect(options.env.CLOUDSDK_AUTH_CREDENTIAL_FILE_OVERRIDE).toBe(env.GOOGLE_APPLICATION_CREDENTIALS);
       expect(options.env.COST_LEDGER_GCP_PULL).toBe("true");
       expect(options.env).not.toHaveProperty("GITHUB_TOKEN");
       expect(options.env).not.toHaveProperty("CMS_STAFF_EMAIL_API_TOKEN");
       expect(options.env).not.toHaveProperty("VITE_CMS_STUDIO_CONFIGURATION");
-      return { stdout: script.includes("media-purge") ? "CMS_MEDIA_PURGE_SWEEP_ENABLED=false\n" : "COST_LEDGER_GCP_PULL=false\n" };
+      return resolverOutput(script);
     });
     expect(expected.CMS_BUG_REPORT_TELEGRAM_ADMIN_MAP).toBe('{"456":"test-admin"}');
     expect(JSON.parse(expected.CMS_STUDIO_TITLE_FILES)).toEqual({ headline: "Synthetic headline.gtzip", name_title: "Synthetic name.gtzip" });
@@ -112,7 +118,7 @@ describe("selective Functions releases", () => {
     }
     expect(runtimeParametersMatch([], expected)).toBe(false);
     expect(runtimeParametersMatch(live(), null)).toBeFalsy();
-    expect(await desiredRuntimeParameters(env, async () => { throw new Error("synthetic private child error"); })).toBeNull();
+    expect(await desiredRuntimeParameters(env, () => { throw new Error("synthetic private child error"); })).toBeNull();
     for (const preset of [undefined, "", "{}", "not-json"]) {
       let calls = 0;
       await expect(desiredRuntimeParameters({ ...env, VITE_CMS_STUDIO_CONFIGURATION: preset }, async () => {
@@ -120,12 +126,12 @@ describe("selective Functions releases", () => {
       })).rejects.toThrow("Studio preset configuration is unavailable");
       expect(calls).toBe(0);
       const optional = await desiredRuntimeParameters({ ...env, VITE_LIVE_PRODUCTION_ENABLED: "false",
-        VITE_CMS_STUDIO_CONFIGURATION: preset }, async () => ({ stdout: "COST_LEDGER_GCP_PULL=false\n" }));
+        VITE_CMS_STUDIO_CONFIGURATION: preset }, (_program, [script]) => resolverOutput(script));
       expect(optional.CMS_STUDIO_TITLE_FILES).toBe("");
       expect(runtimeParametersMatch([{ serviceConfig: { environmentVariables: { ...optional } } }], optional)).toBe(true);
     }
     const optionalConfigured = await desiredRuntimeParameters({ ...env, VITE_LIVE_PRODUCTION_ENABLED: "false" },
-      async () => ({ stdout: "COST_LEDGER_GCP_PULL=false\n" }));
+      (_program, [script]) => resolverOutput(script));
     expect(optionalConfigured.CMS_STUDIO_TITLE_FILES).toBe(expected.CMS_STUDIO_TITLE_FILES);
     await expect(desiredRuntimeParameters({ ...env, VITE_LIVE_PRODUCTION_ENABLED: "invalid" }))
       .rejects.toThrow("Studio feature configuration is unavailable");
@@ -143,15 +149,39 @@ describe("selective Functions releases", () => {
     expect(await deploymentSecretsUnchanged(env, async () => true)).toBe(true);
     expect(await deploymentSecretsUnchanged(env, async () => { throw Error("synthetic private failure"); })).toBe(false);
     expect(await deploymentSecretsUnchanged(env, async name => name !== "CMS_STAFF_EMAIL_API_TOKEN")).toBe(false);
-    const fn = version => ({ serviceConfig: { secretEnvironmentVariables: [{ projectId: "njpbs-site", secret: "PBS_TVSS_AUTH", version }] } });
+    const fn = (version, name = "health") => ({ name, serviceConfig: {
+      secretEnvironmentVariables: [{ projectId: "njpbs-site", secret: "PBS_TVSS_AUTH", version }],
+    } });
     const latest = async () => ({ name: "projects/123/secrets/PBS_TVSS_AUTH/versions/3", state: "ENABLED" });
-    expect(await boundSecretVersionsCurrent([fn("3"), fn("3")], latest)).toBe(true);
-    expect(await boundSecretVersionsCurrent([fn("2"), fn("3")], latest)).toBe(false);
+    expect(await boundSecretVersionsCurrent([fn("3"), fn("3", "preview")], latest)).toBe(true);
+    expect(await boundSecretVersionsCurrent([fn("2"), fn("3", "preview")], latest)).toBe(false);
+    expect(await boundSecretVersionChanges([fn("2"), fn("3", "preview")], latest)).toEqual({
+      health: ["secret_version:PBS_TVSS_AUTH"], preview: [],
+    });
     expect(await boundSecretVersionsCurrent([fn("latest")], latest)).toBe(false);
     expect(await boundSecretVersionsCurrent([fn("3")], async () => { throw Error("metadata unavailable"); })).toBe(false);
     expect(await boundSecretVersionsCurrent([fn("3")], latest, new Map([["PBS_TVSS_AUTH", "2"]]))).toBe(false);
     expect(decideRelease({ ...eligible(), configurationRequiresRelease: true }))
       .toMatchObject({ functionDeployTargets: "all", previewPaused: true, releaseReason: "runtime_configuration_changed" });
+  });
+  it("selects only the reader of a changed effective variable", () => {
+    const key = "TVSS_CALLSIGN";
+    const live = Object.keys(GRAPH.exports).map(name => ({ name, serviceConfig: { environmentVariables: { [key]: "old" } } }));
+    const reads = { health: { keys: [key], unknown: false }, cmsPreview: { keys: [], unknown: false },
+      cmsPreviewStatus: { keys: [], unknown: false } };
+    const changes = runtimeParameterChanges(live, { [key]: "new" }, reads, [key]);
+    expect(decideRelease({ ...eligible(), variablesFingerprint: "9".repeat(64), runtimeChanges: changes }))
+      .toMatchObject({ functionDeployTargets: "functions:health", previewPaused: false,
+        functionReasons: { health: ["runtime_parameter:TVSS_CALLSIGN"], cmsPreview: ["unchanged"] } });
+    reads.cmsPreview.unknown = true;
+    expect(runtimeParameterChanges(live, { [key]: "new" }, reads, [key])).toBeNull();
+    expect(decideRelease({ ...eligible(), configurationRequiresRelease: true }).functionDeployTargets).toBe("all");
+  });
+  it("takes a removed export through the full retirement path", () => {
+    const input = eligible();
+    delete input.functionGraph.exports.health;
+    expect(decideRelease(input)).toMatchObject({ functionDeployTargets: "all", releaseReason: "function_exports_changed",
+      functionReasons: { health: ["retirement_plan"], cmsPreview: ["function_exports_changed"] } });
   });
   it.each(["unchanged", "parameter", "secret value", "secret version", "binding"])("plans %s configuration against the exact managed exports", async change => {
     const expected = { CMS_STAFF_EMAIL_ACCOUNT_ID: "synthetic-account" };

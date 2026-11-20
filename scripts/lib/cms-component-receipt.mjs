@@ -17,11 +17,12 @@ const execFileAsync = promisify(execFile);
 export const RECEIPT_COLLECTION = "cmsDeploymentReceipts";
 export const RECEIPT_SCHEMA_VERSION = 1;
 export const FUNCTION_GRAPH_VERSION = 2;
+const FUNCTIONS_CONFIGURATION_TABLE = "config/functions-configuration.json";
 export const RECEIPT_COMPONENTS = Object.freeze(["functions", "renderer", "cmsApi"]);
 export const RECEIPT_INPUT_PATHS = Object.freeze({
   functions: Object.freeze([
     ...contractInputs,
-    "config/functions-configuration.json", "config/functions-deployment.json",
+    FUNCTIONS_CONFIGURATION_TABLE, "config/functions-deployment.json",
     "scripts/configure-cms-functions.mjs", "scripts/lib/functions-configuration.mjs",
     "scripts/lib/functions-secret-versions.mjs",
     "scripts/render-development-config.mjs",
@@ -348,6 +349,70 @@ export function functionGraphSource(source, file, metadata, parser) {
   return source;
 }
 
+// Record possible readers, including Firebase parameter declarations. An
+// opaque reference to the environment prevents proving the absence of readers.
+function functionRuntimeReads(tree, ts) {
+  const keys = new Set();
+  const aliases = new Set();
+  const sdkParameter = /^define(?:Boolean|Float|Int|JsonSecret|List|Secret|String)$/;
+  let unknown = false;
+  const literal = node => node && (ts.isStringLiteral(node) || ts.isNoSubstitutionTemplateLiteral(node)) ? node.text : undefined;
+  const member = (node, base) => node?.expression === base
+    ? ts.isPropertyAccessExpression(node) ? node.name.text
+      : ts.isElementAccessExpression(node) ? literal(node.argumentExpression) : undefined
+    : undefined;
+  const record = key => {
+    if (/^[A-Z][A-Z0-9_]+$/.test(key ?? "")) keys.add(key);
+  };
+  const visit = node => {
+    if (ts.isIdentifier(node) && sdkParameter.test(node.text)) {
+      const use = node.parent;
+      const call = ts.isPropertyAccessExpression(use) && use.name === node ? use.parent : use;
+      if (ts.isCallExpression(call) && (call.expression === node || call.expression === use)) {
+        if (literal(call.arguments[0]) === undefined) unknown = true;
+      } else if (!(use.name === node && (ts.isBindingElement(use) || ts.isImportSpecifier(use)) && !use.propertyName)) {
+        unknown = true;
+      }
+    }
+    if (ts.isIdentifier(node) && node.text === "process") {
+      const access = node.parent;
+      const property = member(access, node);
+      if (property === "env") {
+        const use = access.parent;
+        const key = member(use, access);
+        if (key !== undefined) record(key);
+        else if ((ts.isParameter(use) || ts.isBindingElement(use)) && use.initializer === access && ts.isIdentifier(use.name)) {
+          aliases.add(use.name.text);
+        } else unknown = true;
+      } else if (!["argv", "cwd", "exit", "exitCode", "pid", "stderr", "stdout", "versions"].includes(property)) {
+        unknown = true;
+      }
+    }
+    if (ts.isIdentifier(node) && ["global", "globalThis"].includes(node.text)) {
+      // Current callers use only these properties of the global object.
+      if (!["fetch", "crypto"].includes(member(node.parent, node))) unknown = true;
+    }
+    if (literal(node) === "process" || literal(node) === "node:process") unknown = true;
+    record(literal(node));
+    ts.forEachChild(node, visit);
+  };
+  visit(tree);
+  if (aliases.size) {
+    const visitAlias = node => {
+      if (ts.isIdentifier(node) && aliases.has(node.text)) {
+        const use = node.parent;
+        const key = member(use, node);
+        if (key !== undefined) record(key);
+        else if (!(use.name === node && ((ts.isParameter(use) || ts.isBindingElement(use)) ||
+            ts.isPropertyAccessExpression(use) || ts.isPropertyAssignment(use)))) unknown = true;
+      }
+      ts.forEachChild(node, visitAlias);
+    };
+    visitAlias(tree);
+  }
+  return { keys: [...keys], unknown };
+}
+
 // Read only committed blobs. Never execute application code to discover its
 // graph, and never let the deploy checkout's generated files enter a receipt.
 // A module fingerprint covers its complete local closure, including lazy imports.
@@ -368,7 +433,8 @@ export async function fingerprintFunctionGraph(sourceSha, deps = {}) {
     const env = deps.env ?? process.env;
     const manifest = readDeploymentManifest(deps.cwd ?? process.cwd(), sourceSha);
     const renderedPaths = Object.values(manifest?.inputs ?? {}).flatMap(input => input.files);
-    key = JSON.stringify([graphModule.href, ...identity, sourceSha, deploymentInputFingerprint(renderedPaths, env, manifest)]);
+    key = JSON.stringify([graphModule.href, ...identity, sourceSha, deps.includeRuntimeInputs === true,
+      deploymentInputFingerprint(renderedPaths, env, manifest)]);
     cache = runtimeProcess[GRAPH_CACHE] ??= new Map();
     pending = cache.get(key);
     if (!pending) {
@@ -432,6 +498,8 @@ async function buildFunctionGraph(sourceSha, deps, env, manifest) {
     const pkg = JSON.parse(await read("functions/package.json"));
     const external = new Set([...builtinModules, ...builtinModules.map(name => `node:${name}`), ...Object.keys(pkg.dependencies)]);
     const { build } = await import("esbuild");
+    const runtimeReads = new Map();
+    const parser = createRequire(new URL("../../site/package.json", import.meta.url))("typescript");
     const result = await build({
       entryPoints: [...new Set(["functions/index.js", ...Object.values(roots)])], bundle: true, write: false,
       outdir: "/cms-graph-unused", platform: "node", format: "cjs", metafile: true,
@@ -453,13 +521,17 @@ async function buildFunctionGraph(sourceSha, deps, env, manifest) {
         });
         builder.onLoad({ filter: /.*/, namespace: "git" }, async args => {
           const source = await read(args.path);
+          if (deps.includeRuntimeInputs && !args.path.endsWith(".json")) {
+            const tree = parser.createSourceFile(args.path, source, parser.ScriptTarget.Latest, true, parser.ScriptKind.JS);
+            runtimeReads.set(args.path, functionRuntimeReads(tree, parser));
+          }
           return {
             // The exact lazy shim's variable edge is represented by roots above.
             // Bundle its other edges normally: top-level startup code executes
             // in every function, including closures not reached by its handler.
             contents: args.path.endsWith(".json") ? source : functionGraphSource(args.path === "functions/index.js"
               ? source.replace(/require\(modulePath\)\[moduleExportName\]/g, "({})[moduleExportName]") : source,
-            args.path, files.get(args.path)),
+            args.path, files.get(args.path), parser),
             loader: args.path.endsWith(".json") ? "json" : "js",
           };
         });
@@ -485,18 +557,36 @@ async function buildFunctionGraph(sourceSha, deps, env, manifest) {
       return paths;
     };
     const startup = closure("functions/index.js");
+    const reachable = new Set(startup);
     const exports = {};
+    const reads = {};
     for (const [name, root] of Object.entries(roots)) {
       const paths = new Set([...startup, ...closure(root)]);
+      if (deps.includeRuntimeInputs) for (const path of paths) reachable.add(path);
       const sources = await Promise.all([...paths].map(read));
       exports[name] = {
         fingerprint: digest([...paths]),
         preview: sources.some(source => /CMS_PREVIEW_RENDERER_SHA|cmsPreviewRuntime/.test(source)),
       };
+      if (deps.includeRuntimeInputs) {
+        const inputs = [...paths].map(path => runtimeReads.get(path)).filter(Boolean);
+        reads[name] = { keys: [...new Set(inputs.flatMap(input => input.keys))].sort(),
+          unknown: inputs.some(input => input.unknown) };
+      }
     }
-    const globalPaths = [...files.keys()].filter(path => RECEIPT_INPUT_PATHS.functions.some(prefix => path === prefix || path.startsWith(`${prefix}/`)))
-      .filter(path => !path.startsWith("functions/") || !/\.(?:js|mjs|cjs)$/.test(path) || path === "functions/index.js");
-    return { version: FUNCTION_GRAPH_VERSION, globalFingerprint: digest([...new Set([...globalPaths, ...startup])]), exports };
+    const receiptPaths = [...files.keys()].filter(path => RECEIPT_INPUT_PATHS.functions
+      .some(prefix => path === prefix || path.startsWith(`${prefix}/`)));
+    const globalPaths = receiptPaths.filter(path =>
+      !path.startsWith("functions/") || !/\.(?:js|mjs|cjs)$/.test(path) || path === "functions/index.js");
+    const shared = [...new Set([...globalPaths, ...startup])];
+    const graph = { version: FUNCTION_GRAPH_VERSION, globalFingerprint: digest([...shared]), exports };
+    if (!deps.includeRuntimeInputs) return graph;
+    const { parameters, secrets, provider } = JSON.parse(await read(FUNCTIONS_CONFIGURATION_TABLE));
+    return { graph, reads, sharedFingerprint: digest(shared.filter(path =>
+      path !== FUNCTIONS_CONFIGURATION_TABLE || startup.has(path))),
+      configurationContract: stableObjectFingerprint({ parameters, secrets, provider }),
+      unattributedFingerprint: digest(receiptPaths.filter(path => path !== FUNCTIONS_CONFIGURATION_TABLE && !reachable.has(path))),
+      sourceWithoutConfigurationTable: digest(receiptPaths.filter(path => path !== FUNCTIONS_CONFIGURATION_TABLE)) };
   } catch {
     // Discovery uncertainty chooses a full deploy, including at receipt write.
     return null;
@@ -915,6 +1005,10 @@ function stableObjectFingerprint(value) {
     );
   };
   return createHash("sha256").update(JSON.stringify(normalize(value))).digest("hex");
+}
+
+export function functionGraphsMatch(left, right) {
+  return Boolean(left && right && stableObjectFingerprint(left) === stableObjectFingerprint(right));
 }
 
 function rolloutToken(value) {

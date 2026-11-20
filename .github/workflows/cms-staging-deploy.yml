@@ -707,6 +707,7 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ github.token }}
           DEPLOY_SHA: ${{ needs.admin-build.outputs.deploy_sha }}
+          FUNCTION_TARGETS: ${{ needs.verify.outputs.function_targets }}
           CMS_BUG_REPORT_TELEGRAM_CHAT_ID: ${{ secrets.CMS_BUG_REPORT_TELEGRAM_CHAT_ID }}
           CMS_BUG_REPORT_TELEGRAM_ADMIN_MAP: ${{ secrets.CMS_BUG_REPORT_TELEGRAM_ADMIN_MAP }}
           CMS_DEPLOYMENT_VARIABLES_JSON: ${{ toJSON(vars) }}

@@ -3,10 +3,12 @@ import { mkdtempSync, mkdirSync, writeFileSync, rmSync, readFileSync } from "nod
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
-import { fingerprintFunctionGraph, fingerprintInputs, fingerprintPaths, functionGraphSource, readCommittedBlobs, startReceipt, completeReceipt } from "../../scripts/lib/cms-component-receipt.mjs";
+import { configurationFingerprint, fingerprintFunctionGraph, fingerprintInputs, fingerprintPaths, functionGraphSource, readCommittedBlobs, startReceipt, completeReceipt } from "../../scripts/lib/cms-component-receipt.mjs";
 import { INDEPENDENT_INPUTS } from "../../scripts/lib/deployment-components.mjs";
 import { functionDeploymentPhase, selectedFunctionBatches } from "../../scripts/deploy-cms-function-batches.mjs";
 import { contractRecipe } from "../../scripts/lib/functions-contracts.mjs";
+import { cloudWakeConfigurationFingerprint, decideRelease, deploymentVariablesFingerprint, functionSourceProof,
+  runtimeParameterChanges } from "../../scripts/lib/cms-release-plan.mjs";
 
 const directories = [];
 afterEach(() => directories.splice(0).forEach(path => rmSync(path, { recursive: true, force: true })));
@@ -21,11 +23,102 @@ function repository() {
   write("functions/health.js", 'exports.health = require("./lib/shared");');
   write("functions/preview.js", 'exports.cmsPreview = require("./lib/shared"); exports.cmsPreviewStatus = "CMS_PREVIEW_RENDERER_SHA";');
   write("functions/lib/shared.js", 'module.exports = 1;');
+  write("config/functions-configuration.json", '{"inputs":{},"parameters":{},"secrets":{},"provider":{}}');
   const commit = () => { git("add", "."); git("-c", "user.name=Test", "-c", "user.email=test@example.invalid", "commit", "-qm", "fixture"); return git("rev-parse", "HEAD"); };
   return { cwd, write, commit, graph: sha => fingerprintFunctionGraph(sha, { cwd }) };
 }
 
+async function releaseInputs(before, after, cwd) {
+  const deps = { cwd, includeRuntimeInputs: true };
+  const [prior, target, oldFingerprint, functionsFingerprint] = await Promise.all([
+    fingerprintFunctionGraph(before, deps), fingerprintFunctionGraph(after, deps),
+    fingerprintInputs(before, "functions", deps), fingerprintInputs(after, "functions", deps),
+  ]);
+  const configurationFingerprint = "b".repeat(64);
+  const rendererFingerprint = "c".repeat(64);
+  const funcs = { inventoryFingerprint: "d".repeat(64) };
+  const renderer = { rendererSha: before };
+  const receipt = mutation => ({ schemaVersion: 1, state: "complete", mutation });
+  return {
+    prior, target,
+    plan: {
+      deploySha: after, functionGraph: target.graph, sourceProof: functionSourceProof(prior, target, prior.graph),
+      functionsFingerprint, configurationFingerprint, rendererFingerprint, rendererGraphAvailable: true,
+      renderFingerprint: configurationFingerprint, receiptRenderFingerprint: configurationFingerprint,
+      liveFunctionsIdentities: funcs, liveRendererIdentities: renderer,
+      targetHasAdminRevisionIntake: true, liveHasAdminRevisionIntake: true,
+      functionsReceipt: receipt({ sourceSha: before, inputFingerprint: oldFingerprint, configurationFingerprint,
+        functionGraph: prior.graph, providerIdentities: funcs }),
+      rendererReceipt: receipt({ sourceSha: before, inputFingerprint: rendererFingerprint, providerIdentities: renderer }),
+    },
+  };
+}
+
 describe("committed Functions module graph", () => {
+  it("replays the November 19 rollout from both committed sources", async () => {
+    const { before, after, removedVariable, count, batches } =
+      JSON.parse(readFileSync(new URL("../fixtures/cms-functions-nov-19.json", import.meta.url), "utf8"));
+    const { plan, target } = await releaseInputs(before, after);
+    const table = JSON.parse(execFileSync("git", ["show", `${before}:config/functions-configuration.json`], { encoding: "utf8" }));
+    const nextTable = JSON.parse(execFileSync("git", ["show", `${after}:config/functions-configuration.json`], { encoding: "utf8" }));
+    expect(table.inputs[removedVariable].variable).toBe(removedVariable);
+    expect(nextTable.inputs[removedVariable].variable).toBeUndefined();
+    const manifest = Object.keys(target.graph.exports).sort();
+    expect(manifest).toHaveLength(count);
+    // The run log records equality outcomes. The GitHub Variables values and
+    // provider payloads are not part of the replay data.
+    const edge = "e".repeat(64);
+    const wake = { environment: "production", enabled: true };
+    const variables = { [removedVariable]: nextTable.inputs[removedVariable].default };
+    const oldVariableNames = [...new Set(Object.values(table.inputs).map(row => row.variable).filter(Boolean))].sort();
+    const oldVariablesFingerprint = configurationFingerprint({ variables: JSON.stringify(Object.fromEntries(
+      oldVariableNames.map(key => [key, variables[key] ?? ""]))) });
+    plan.functionsReceipt.mutation.variablesFingerprint = oldVariablesFingerprint;
+    plan.functionsReceipt.mutation.configurationFingerprint = cloudWakeConfigurationFingerprint(edge, wake, oldVariablesFingerprint);
+    const variablesFingerprint = deploymentVariablesFingerprint(JSON.stringify(variables));
+    expect(variablesFingerprint).not.toBe(oldVariablesFingerprint);
+    const result = decideRelease({ ...plan, variablesFingerprint, manifestNames: manifest, runtimeChanges: {},
+      configurationFingerprint: cloudWakeConfigurationFingerprint(edge, wake, variablesFingerprint),
+      baselineConfigurationFingerprint: plan.functionsReceipt.mutation.configurationFingerprint });
+    expect(result).toMatchObject({ functionDeployTargets: "all", releaseReason: "functions_configuration_changed" });
+    expect(result.functionReasons).toEqual(Object.fromEntries(manifest.map(name => [name, ["functions_configuration_changed"]])));
+    const selectedBatches = selectedFunctionBatches(manifest, result.functionDeployTargets);
+    expect(selectedBatches).toHaveLength(batches);
+  });
+
+  it("skips a variable-list edit when the committed closures and deployed values agree", async () => {
+    const repo = repository();
+    repo.write("config/functions-configuration.json", '{"inputs":{"TVSS_CALLSIGN":{"variable":"TVSS_CALLSIGN"}},"parameters":{},"secrets":{},"provider":{}}');
+    const before = repo.commit();
+    repo.write("config/functions-configuration.json", '{"inputs":{"TVSS_CALLSIGN":{"default":"new"}},"parameters":{},"secrets":{},"provider":{}}');
+    const { plan, target } = await releaseInputs(before, repo.commit(), repo.cwd);
+    const environmentVariables = { TVSS_CALLSIGN: "new" };
+    const live = Object.keys(target.graph.exports).map(name => ({ name, serviceConfig: { environmentVariables } }));
+    const runtimeChanges = runtimeParameterChanges(live, environmentVariables, target.reads, ["TVSS_CALLSIGN"]);
+    expect(plan.functionsFingerprint).not.toBe(plan.functionsReceipt.mutation.inputFingerprint);
+    const inputs = { ...plan, variablesFingerprint: "e".repeat(64), runtimeChanges };
+    expect(decideRelease({ ...inputs, manifestNames: null }))
+      .toMatchObject({ functionDeployTargets: "", releaseReason: "unchanged",
+        functionsMutated: false, configurationRequiresRelease: false, previewPaused: false });
+    expect(decideRelease({ ...inputs, manifestNames: ["health"] }))
+      .toMatchObject({ functionDeployTargets: "all", releaseReason: "function_manifest_mismatch" });
+  });
+
+  it("deploys every transitive reader of a changed module and proves literal parameter reads", async () => {
+    const repo = repository();
+    repo.write("functions/health.js", "exports.health = 42;");
+    repo.write("functions/lib/shared.js", "module.exports = () => process.env.TVSS_CALLSIGN;");
+    const before = repo.commit();
+    repo.write("functions/lib/shared.js", "module.exports = () => process.env.TVSS_CALLSIGN.trim();");
+    const { plan, target } = await releaseInputs(before, repo.commit(), repo.cwd);
+    expect(target.reads.cmsPreview).toEqual({ keys: ["CMS_PREVIEW_RENDERER_SHA", "TVSS_CALLSIGN"], unknown: false });
+    expect(target.reads.health).toEqual({ keys: [], unknown: false });
+    expect(decideRelease(plan)).toMatchObject({ functionDeployTargets: "functions:cmsPreview,functions:cmsPreviewStatus",
+      functionReasons: { cmsPreview: ["source_closure_changed"], cmsPreviewStatus: ["source_closure_changed"], health: ["unchanged"] } });
+    repo.write("functions/health.js", "exports.health = key => process.env[key];");
+    const opaque = await fingerprintFunctionGraph(repo.commit(), { cwd: repo.cwd, includeRuntimeInputs: true });
+    expect(opaque.reads.health).toEqual({ keys: [], unknown: true });
+  });
   it.each([
     ["firestoreRules", "firestore.rules"], ["firestoreIndexes", "firestore.indexes.json"], ["storageRules", "storage.rules"],
     ["migrations", "scripts/backfill-page-seed-media.mjs"], ["migrations", "scripts/backfill-media-thumbnails.mjs"],

@@ -15,11 +15,14 @@ parameters, provisioned secret versions and the versions bound by each export.
 Secret values never enter diagnostics. Missing/unreadable metadata, partial
 receipts, configuration/secret drift or unknown graph edges cannot become no-op.
 
-The committed module graph may select changed exports and the complete set of
-preview-pin/control readers. Keep conservative fallback for configuration,
-package/assets/export inventory, trusted execution, loader/generated wrappers,
-unresolved or dynamic edges. New graph formats need their first complete release;
-do not manufacture baseline metadata. Rules/indexes and Storage rules retain
+The planner selects changed committed closures, readers with a different
+effective parameter, exports bound to an older enabled secret version, and
+the required preview readers. It emits the sorted decision for each export
+without parameter values or secret payloads. Variable-list edits can skip a
+rollout when the deployed settings, source closures and shared inputs agree.
+Shared startup, package, provider configuration, or export inventory changes
+take the full path. So do unreadable live inputs and ownership that the module
+graph cannot prove. Rules/indexes and Storage rules retain
 their own readiness checks. Repairs retain consumer order, scans and postconditions
 while their selection stays independent of a Functions upload.
 

@@ -188,7 +188,10 @@ describe("Route D Cut A boundary placement", () => {
       const captureAt = proof(steps, boundary);
       const capture = steps[captureAt];
       const planner = production.jobs["firebase-preflight"].steps.find(row => row.name === "Plan Functions and renderer release");
-      expect(capture.env).toMatchObject({ ...planner.env,
+      // Read-only contract capture proves its own graph from the pinned checkout.
+      const { FUNCTION_TARGETS: functionTargets, ...providerEnvironment } = planner.env;
+      expect(functionTargets).toBe("${{ needs.verify.outputs.function_targets }}");
+      expect(capture.env).toMatchObject({ ...providerEnvironment,
         FIREBASE_WEB_API_KEY: "${{ vars.VITE_FIREBASE_API_KEY || secrets.VITE_FIREBASE_API_KEY }}",
         CMS_PREVIEW_R2_CREDENTIAL: "${{ secrets.CMS_PREVIEW_R2_CREDENTIAL }}",
         CMS_TRUSTED_WORKFLOW_SHA: "${{ github.sha }}" });
