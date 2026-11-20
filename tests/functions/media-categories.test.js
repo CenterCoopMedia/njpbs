@@ -4,6 +4,7 @@ import adminPkg from "../helpers/firebase-admin.js";
 import mediaCategories from "../../functions/media-categories.js";
 import categoryContract from "../../functions/lib/media-categories.js";
 import {
+  prepareMediaCategoryRegistry,
   seedMediaCategories,
   verifyMediaCategoriesRegistered,
 } from "../../scripts/seed-media-categories.mjs";
@@ -167,6 +168,18 @@ describe("media category registry seed", () => {
     await expect(
       verifyMediaCategoriesRegistered({ firestore: db }),
     ).resolves.toEqual({ registered: 2 });
+  });
+
+  it("skips registry seeding only when every live reference has a valid definition", async () => {
+    await seedMediaCategories({ firestore: db, nowIso: NOW });
+    await expect(prepareMediaCategoryRegistry({ firestore: db, onlyIfNeeded: true }))
+      .resolves.toEqual({ registered: 2 });
+    await db.doc("media_assets/legacy-item").set({ category: "history" });
+    await expect(prepareMediaCategoryRegistry({ firestore: db, onlyIfNeeded: true }))
+      .resolves.toMatchObject({ seed: { created: 1 }, registered: 3 });
+    await db.doc("mediaCategories/history").update({ id: "incorrect" });
+    await expect(prepareMediaCategoryRegistry({ firestore: db, onlyIfNeeded: true }))
+      .rejects.toThrow("Media category history is invalid");
   });
 
   it("seeds more categories than one Firestore commit can contain", async () => {

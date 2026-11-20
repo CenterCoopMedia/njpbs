@@ -236,8 +236,9 @@ export async function main() {
       }
       fail(`An in-progress CMS receipt is still active (${plan.releaseReason})`);
     }
-    const selectedMigrations = plan.functionsMutated ? requestedMigrations
-      : await selectMigrations(baseline.sourceSha, deploySha, requestedMigrations, { cwd: process.env.GITHUB_WORKSPACE });
+    const selectedMigrations = await selectMigrations(baseline?.sourceSha, deploySha, requestedMigrations, {
+      cwd: process.env.GITHUB_WORKSPACE, functionsMutated: plan.functionsMutated,
+    });
     const output = process.env.GITHUB_OUTPUT;
     const lines = releasePlanOutputLines(plan, { deploySha, edgeFingerprint, configurationFingerprint, variablesFingerprint, rendererFingerprint, selectedMigrations, requestedMigrations });
     process.stdout.write(`${lines.join("\n")}\n`);

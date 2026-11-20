@@ -74,6 +74,21 @@ describe("independent migration selection", () => {
     } finally { rmSync(cwd, { recursive: true, force: true }); }
   });
 
+  it("selects an explicit or changed registry repair and runs it when source proof is unavailable", async () => {
+    const baseline = "a".repeat(40), source = "b".repeat(40);
+    const listTree = async (sha, paths) => paths.map(path => `${path}:${path === "functions/lib/public-page-contract.js" ? sha : "same"}`).join("\n");
+    const deps = { functionsMutated: true, listTree };
+    expect(await selectMigrations(baseline, source, ["media-categories"], deps))
+      .toEqual(["media-categories", "content-sections"]);
+    expect(await selectMigrations(baseline, source, [], deps)).toEqual(["content-sections"]);
+    expect(await selectMigrations(source, source, [], deps)).toEqual([]);
+    expect(await selectMigrations(undefined, source, [], deps)).toEqual(["media-categories", "content-sections"]);
+    for (const migration of ["media-categories", "content-sections"]) {
+      const command = steps.find(step => step.run?.includes(MIGRATION_INPUTS[migration])).run;
+      expect(command).toContain(`',${migration},') && '--repair' || '--if-needed'`);
+    }
+  });
+
   it("rejects an unknown repair before credentials or provider inspection", () => {
     try {
       execFileSync(process.execPath, [new URL("../../scripts/component-runner.mjs", import.meta.url).pathname, "functions", "plan"], {

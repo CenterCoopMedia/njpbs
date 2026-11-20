@@ -14,6 +14,12 @@ export const MIGRATION_INPUTS = Object.freeze({
   "byline-projections": "scripts/backfill-byline-projections.mjs",
   "media-discovery": "scripts/backfill-media-discovery.mjs",
 });
+// The registry scripts read these CommonJS tables and the locked SDK. An
+// ordinary Functions rollout can skip seeding only after proving live readiness.
+const REGISTRY_DEPENDENCIES = {
+  "media-categories": ["functions/lib/media-categories.js", "functions/lib/media-contract.js", "functions/lib/rbac.js"],
+  "content-sections": ["functions/lib/content-sections.js", "functions/lib/public-page-contract.js"],
+};
 export function parseMigrationSelection(value = "") {
   if (value === "") return [];
   if (typeof value !== "string") throw new ComponentReceiptError("Migration selection is invalid");
@@ -30,10 +36,21 @@ export async function selectMigrations(baselineSha, sourceSha, requested = [], d
   const selected = new Set(parseMigrationSelection(requested.join(",")));
   if (baselineSha !== sourceSha) {
     for (const [name, path] of Object.entries(MIGRATION_INPUTS)) {
-      const [before, after] = await Promise.all([
-        fingerprintPaths(baselineSha, [path], deps), fingerprintPaths(sourceSha, [path], deps),
-      ]);
-      if (before !== after) selected.add(name);
+      const registry = REGISTRY_DEPENDENCIES[name];
+      // The other migrations still run on every Functions rollout.
+      if (selected.has(name) || (deps.functionsMutated && !registry)) continue;
+      const paths = registry ? [path, ...registry, "package.json", "package-lock.json", "functions/package.json"] : [path];
+      try {
+        const [before, after] = await Promise.all([
+          fingerprintPaths(baselineSha, paths, deps), fingerprintPaths(sourceSha, paths, deps),
+        ]);
+        if (before !== after) selected.add(name);
+      } catch (error) {
+        // A Functions rollout already runs the registry seed when the source
+        // comparison is unknown. Repair-only runs keep their source requirement.
+        if (!deps.functionsMutated) throw error;
+        selected.add(name);
+      }
     }
   }
   return Object.keys(MIGRATION_INPUTS).filter(name => selected.has(name));

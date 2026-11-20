@@ -1293,9 +1293,7 @@ jobs:
         # referenced by an asset or recovery receipt before deploying that
         # enforcement, then read the registry back. The script creates only
         # missing rows and leaves staff-managed labels and lifecycle untouched.
-        run: |
-          set -euo pipefail
-          node scripts/seed-media-categories.mjs
+        run: node scripts/seed-media-categories.mjs ${{ contains(format(',{0},', needs.firebase-preflight.outputs.selected_migrations), ',media-categories,') && '--repair' || '--if-needed' }}
       - name: Backfill and verify media category assignments
         if: needs.firebase-preflight.outputs.functions_mutated == 'true' || contains(format(',{0},', needs.firebase-preflight.outputs.selected_migrations), ',media-category-assignments,')
         # Materialize the descriptive assignment list before the Admin begins
@@ -1327,7 +1325,7 @@ jobs:
         # be in place before the deploy below, not after it. The script is idempotent: an
         # existing row that matches is verified and left alone, one that disagrees stops the
         # run, and it reads the registry back before it exits.
-        run: node scripts/seed-content-sections.mjs
+        run: node scripts/seed-content-sections.mjs ${{ contains(format(',{0},', needs.firebase-preflight.outputs.selected_migrations), ',content-sections,') && '--repair' || '--if-needed' }}
       - name: Configure functions artifact cleanup
         if: needs.firebase-preflight.outputs.functions_mutated == 'true'
         # Firebase treats a missing Artifact Registry cleanup policy as a failed

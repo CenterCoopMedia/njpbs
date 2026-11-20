@@ -2,6 +2,7 @@ import { clearEmulatorFirestore, isolatedFirestore } from "../helpers/emulator-f
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import adminPkg from "../helpers/firebase-admin.js";
 import {
+  prepareContentSectionRegistry,
   seedContentSections,
   verifyContentSectionsRegistered,
 } from "../../scripts/seed-content-sections.mjs";
@@ -82,6 +83,20 @@ describe("content section registry seed", () => {
       seedContentSections({ firestore: db, nowIso: NOW }),
     ).resolves.toMatchObject({ sectionsCreated: 0, sectionsVerified: 5 });
     expect(await auditActions()).toHaveLength(5);
+  });
+
+  it("skips the seed only after reading complete sections and canonical page stamps", async () => {
+    await db.doc("cmsPages/give").set({ id: "give" });
+    await expect(prepareContentSectionRegistry({ firestore: db, onlyIfNeeded: true }))
+      .resolves.toMatchObject({ seed: { sectionsCreated: 5, pagesStamped: 1 }, registered: 5 });
+    await expect(prepareContentSectionRegistry({ firestore: db, onlyIfNeeded: true }))
+      .resolves.toEqual({ registered: 5 });
+    await expect(prepareContentSectionRegistry({ firestore: db }))
+      .resolves.toMatchObject({ seed: { sectionsCreated: 0, pagesStamped: 0 }, registered: 5 });
+    expect(await auditActions()).toHaveLength(6);
+    await db.doc("sections/watch").update({ id: "incorrect" });
+    await expect(prepareContentSectionRegistry({ firestore: db, onlyIfNeeded: true }))
+      .rejects.toThrow("Existing section watch does not match the repository registry");
   });
 
   it("stamps a stored canonical page with its public-page area, not its template", async () => {
