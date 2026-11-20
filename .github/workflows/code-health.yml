@@ -48,6 +48,7 @@ jobs:
             git -C candidate worktree add --detach ../baseline HEAD^1
             npm --prefix baseline ci --ignore-scripts
             npm --prefix baseline/site ci --ignore-scripts
+            npm --prefix baseline run functions:build --if-present
           fi
           npm --prefix candidate ci --ignore-scripts
           npm --prefix candidate/site ci --ignore-scripts
