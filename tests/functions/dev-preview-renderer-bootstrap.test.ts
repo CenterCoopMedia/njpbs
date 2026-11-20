@@ -38,6 +38,7 @@ beforeAll(async () => {
   renderDevelopmentConfig(configuredSource, process.env);
   await symlink(path.join(repository, "node_modules"), path.join(configuredSource, "node_modules"));
   await symlink(path.join(repository, "site/node_modules"), path.join(configuredSource, "site/node_modules"));
+  execFileSync("npm", ["run", "functions:build"], { cwd: configuredSource, stdio: "pipe" });
   owner = createRequire(import.meta.url)(path.join(configuredSource, "functions/lib/dev-preview-renderer-bootstrap.js"));
   ({ bootstrapDevPreview, restoreDevPreviewBootstrap, immutableDevRendererImage } = await import(pathToFileURL(path.join(configuredSource, "preview-renderer/bootstrap-dev.mjs")).href));
 });
