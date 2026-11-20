@@ -7,6 +7,12 @@
     "station": "WNJT",
     "timeZone": "America/New_York"
   },
+  "revisedWorkbook": {
+    "file": "DEC26NJPBS.xlsx",
+    "sha256": "c6203915bb495f07220145406f30287d549affa64121a619125705b3e8e7f090",
+    "revision": "2026-11-20",
+    "sheet": "Sheet1"
+  },
   "verifiedPbsBoundaries": {},
   "programmingChanges": {
     "source": "NJ PBS Programming lineup amendment",
@@ -532,7 +538,7 @@
           "cells": "E40:E42",
           "startTime": "06:00",
           "title": "Que Pasa NJ",
-          "episodeCode": null,
+          "episodeCode": "701",
           "isKids": false,
           "endTime": "06:30"
         },
@@ -1013,7 +1019,7 @@
           "cells": "F124:F126",
           "startTime": "20:00",
           "title": "Que Pasa NJ",
-          "episodeCode": null,
+          "episodeCode": "709",
           "isKids": false,
           "endTime": "20:30"
         },
@@ -2649,7 +2655,7 @@
           "cells": "N40:N42",
           "startTime": "06:00",
           "title": "Que Pasa NJ",
-          "episodeCode": null,
+          "episodeCode": "709",
           "isKids": false,
           "endTime": "06:30"
         },
@@ -3129,7 +3135,7 @@
           "cells": "O124:O126",
           "startTime": "20:00",
           "title": "Que Pasa NJ",
-          "episodeCode": null,
+          "episodeCode": "702",
           "isKids": false,
           "endTime": "20:30"
         },
@@ -4801,7 +4807,7 @@
           "cells": "W40:W42",
           "startTime": "06:00",
           "title": "Que Pasa NJ",
-          "episodeCode": null,
+          "episodeCode": "702",
           "isKids": false,
           "endTime": "06:30"
         },
@@ -5298,7 +5304,7 @@
           "cells": "X124:X126",
           "startTime": "20:00",
           "title": "Que Pasa NJ",
-          "episodeCode": null,
+          "episodeCode": "710",
           "isKids": false,
           "endTime": "20:30"
         },
@@ -6966,7 +6972,7 @@
           "cells": "AF40:AF42",
           "startTime": "06:00",
           "title": "Que Pasa NJ",
-          "episodeCode": null,
+          "episodeCode": "710",
           "isKids": false,
           "endTime": "06:30"
         },
@@ -7439,7 +7445,7 @@
           "cells": "AG124:AG126",
           "startTime": "20:00",
           "title": "Que Pasa NJ",
-          "episodeCode": null,
+          "episodeCode": "705",
           "isKids": false,
           "endTime": "20:30"
         },
@@ -8397,6 +8403,7 @@
     },
     {
       "date": "2026-12-28",
+      "sourceRevision": "2026-11-20",
       "entries": [
         {
           "cells": "AM4:AM9",
@@ -8684,26 +8691,32 @@
         {
           "cells": "AM127:AM132",
           "startTime": "20:30",
-          "title": "Ancient Roads From Christ to Constantine",
-          "episodeCode": "101",
-          "episodeTitle": "BIRTH OF A FAITH",
+          "title": "Grandma Stand",
+          "episodeCode": null,
           "isKids": false,
           "endTime": "21:30"
         },
         {
-          "cells": "AM133:AM138",
+          "cells": "AM133:AM135",
           "startTime": "21:30",
-          "title": "Ancient Roads From Christ to Constantine",
+          "title": "How We Grieve",
+          "episodeCode": "101",
+          "isKids": false,
+          "endTime": "22:00"
+        },
+        {
+          "cells": "AM136:AM138",
+          "startTime": "22:00",
+          "title": "How We Grieve",
           "episodeCode": "102",
-          "episodeTitle": "THE GREAT MISSIONARY",
           "isKids": false,
           "endTime": "22:30"
         },
         {
           "cells": "AM139:AM141",
           "startTime": "22:30",
-          "title": "Live From the LBJ Library With Mark Updegrove",
-          "episodeCode": "311",
+          "title": "How We Grieve",
+          "episodeCode": "103",
           "isKids": false,
           "endTime": "23:00"
         },
@@ -8727,30 +8740,37 @@
     },
     {
       "date": "2026-12-29",
+      "sourceRevision": "2026-11-20",
       "entries": [
         {
           "cells": "AN4:AN9",
           "startTime": "00:00",
-          "title": "Ancient Roads From Christ to Constantine",
-          "episodeCode": "101",
-          "episodeTitle": "BIRTH OF A FAITH",
+          "title": "Grandma Stand",
+          "episodeCode": null,
           "isKids": false,
           "endTime": "01:00"
         },
         {
-          "cells": "AN10:AN15",
+          "cells": "AN10:AN12",
           "startTime": "01:00",
-          "title": "Ancient Roads From Christ to Constantine",
+          "title": "How We Grieve",
+          "episodeCode": "101",
+          "isKids": false,
+          "endTime": "01:30"
+        },
+        {
+          "cells": "AN13:AN15",
+          "startTime": "01:30",
+          "title": "How We Grieve",
           "episodeCode": "102",
-          "episodeTitle": "THE GREAT MISSIONARY",
           "isKids": false,
           "endTime": "02:00"
         },
         {
           "cells": "AN16:AN18",
           "startTime": "02:00",
-          "title": "Live From the LBJ Library With Mark Updegrove",
-          "episodeCode": "311",
+          "title": "How We Grieve",
+          "episodeCode": "103",
           "isKids": false,
           "endTime": "02:30"
         },
@@ -9111,7 +9131,7 @@
           "cells": "AO40:AO42",
           "startTime": "06:00",
           "title": "Que Pasa NJ",
-          "episodeCode": null,
+          "episodeCode": "705",
           "isKids": false,
           "endTime": "06:30"
         },
@@ -9609,7 +9629,7 @@
           "cells": "AP124:AP126",
           "startTime": "20:00",
           "title": "Que Pasa NJ",
-          "episodeCode": null,
+          "episodeCode": "704",
           "isKids": false,
           "endTime": "20:30"
         },

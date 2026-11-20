@@ -15,6 +15,51 @@ function windowAt(date: string): BakedScheduleData {
 }
 
 describe("approved November and December lineups", () => {
+  it("records the revised Que Pasa NJ episode codes at the approved Eastern slots", () => {
+    const dates = [...november.workbook.days, ...december.days];
+    for (const [date, start, code] of [
+      ["2026-11-26", "20:00", "701"],
+      ["2026-12-02", "06:00", "701"],
+      ["2026-12-03", "20:00", "709"],
+      ["2026-12-09", "06:00", "709"],
+      ["2026-12-10", "20:00", "702"],
+      ["2026-12-16", "06:00", "702"],
+      ["2026-12-17", "20:00", "710"],
+      ["2026-12-23", "06:00", "710"],
+      ["2026-12-24", "20:00", "705"],
+      ["2026-12-30", "06:00", "705"],
+      ["2026-12-31", "20:00", "704"],
+    ]) {
+      const entry = dates.find((day) => day.date === date)?.entries.find((item) => item.startTime === start);
+      expect(entry, date).toMatchObject({
+        title: "Que Pasa NJ", episodeCode: code, endTime: start === "06:00" ? "06:30" : "20:30",
+      });
+    }
+  });
+
+  it("publishes the four replacement airings in the December 28 and 29 blocks", () => {
+    const corrected = applyScheduleCorrections(windowAt("2026-12-28"));
+    for (const [date, times] of [
+      ["2026-12-28", ["20:30", "21:30", "22:00", "22:30", "23:00"]],
+      ["2026-12-29", ["00:00", "01:00", "01:30", "02:00", "02:30"]],
+    ] as const) {
+      const instant = (time: string) => `${date}T${time}:00-05:00`;
+      const day = corrected.days.broadcast.find((item) => item.date === date)!;
+      const actual = day.entries.filter((entry) =>
+        entry.startsAt >= instant(times[0]) && entry.startsAt < instant(times[4]));
+      expect(day.sourceRevision).toBe("2026-11-20");
+      expect(actual.map(({ title, startsAt, endsAt, isKids }) => ({ title, startsAt, endsAt, isKids })))
+        .toEqual(times.slice(0, -1).map((time, i) => ({
+          title: i === 0 ? "Grandma Stand" : "How We Grieve",
+          startsAt: instant(time), endsAt: instant(times[i + 1]), isKids: false,
+        })));
+      expect(actual.every((entry) => entry.episodeTitle === undefined)).toBe(true);
+      expect(december.days.find((item) => item.date === date)?.entries
+        .filter((entry) => entry.title === "How We Grieve")
+        .map((entry) => entry.episodeCode)).toEqual(["101", "102", "103"]);
+    }
+  });
+
   it("replaces the confirmed November 15 error and retains matching PBS details", () => {
     const original = input.days.broadcast[0];
     const corrected = applyScheduleCorrections(input).days.broadcast.find((day) => day.date === "2026-11-15")!;
