@@ -1,6 +1,6 @@
 // @vitest-environment node
 import { afterEach, expect, it } from "vitest";
-import { cp, mkdir, mkdtemp, readFile, rm, symlink, writeFile } from "node:fs/promises";
+import { mkdtemp, readFile, rm, symlink, writeFile } from "node:fs/promises";
 import { existsSync } from "node:fs";
 import { execFileSync, spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
@@ -10,29 +10,17 @@ import path from "node:path";
 import { previewProviderFixture } from "../../tests/helpers/private-preview-provider-fixture.js";
 import { pair } from "../../tests/helpers/cms-preview-pairs.js";
 import { releasePair, pairReference } from "../../tests/helpers/private-public-release-pair.js";
+import { copyImportClosure } from "../../tests/helpers/isolated-checkout.mjs";
 const repository = fileURLToPath(new URL("../../", import.meta.url));
 const directories: string[] = [];
 afterEach(async () => { await Promise.all(directories.splice(0).map(p => rm(p, { recursive: true, force: true }))); });
 async function fixture() {
   const root = await mkdtemp(path.join(tmpdir(), "private-preview-cli-")); directories.push(root);
-  await mkdir(path.join(root, "scripts/lib"), { recursive: true }); await mkdir(path.join(root, "functions"));
-  for (const name of ["private-preview-pair-provider", "install-private-preview-pair", "public-release-private-install-ledger",
-    "public-release-private-provider", "cloudflare-worker-readback", "cms-component-receipt", "functions-contracts",
-    "private-pair-preflight-caller", "private-preview-packet", "deployment-settings"]) {
-    await cp(path.join(repository, `scripts/lib/${name}.mjs`), path.join(root, `scripts/lib/${name}.mjs`));
-  }
-  for (const file of ["install-private-preview-pair.mjs", "bind-private-preview-packets.mjs"]) await cp(path.join(repository, "scripts", file), path.join(root, "scripts", file));
-  await cp(path.join(repository, "scripts/render-development-config.mjs"), path.join(root, "scripts/render-development-config.mjs"));
-  await mkdir(path.join(root, "config"));
-  await cp(path.join(repository, "config/development-inputs.json"), path.join(root, "config/development-inputs.json"));
-  await cp(path.join(repository, "functions/lib"), path.join(root, "functions/lib"), { recursive: true });
-  await cp(path.join(repository, "functions/package.json"), path.join(root, "functions/package.json"));
+  await copyImportClosure(repository, root, ["scripts/install-private-preview-pair.mjs", "scripts/bind-private-preview-packets.mjs"], {
+    assets: ["config/functions-configuration.json", "functions/package.json"],
+  });
   await symlink(path.join(repository, "node_modules"), path.join(root, "node_modules"));
-  await mkdir(path.join(root, "site")); await symlink(path.join(repository, "site/node_modules"), path.join(root, "site/node_modules"));
-  await mkdir(path.join(root, "site/scripts"));
-  for (const file of ["cms-preview-pair-install-credentials.ts", "cms-publication-credentials.ts", "cms-preview-storage-credential.ts"]) {
-    await cp(path.join(repository, "site/scripts", file), path.join(root, "site/scripts", file));
-  }
+  await symlink(path.join(repository, "site/node_modules"), path.join(root, "site/node_modules"));
   await writeFile(path.join(root, ".gitignore"), "node_modules\n");
   const git = (args: string[]) => execFileSync("git", args, { cwd: root, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] }).trim();
   git(["init", "-q"]); git(["config", "user.name", "Fixture Author"]); git(["config", "user.email", "fixture-author@example.org"]); git(["add", "."]); git(["commit", "-qm", "Operator fixture"]);
