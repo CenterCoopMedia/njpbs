@@ -28,6 +28,7 @@
   "scripts/component-runner.mjs": [],
   "scripts/configure-admin-public-shell.mjs": ["CLOUDFLARE_ACCOUNT_ID", "CLOUDFLARE_API_TOKEN"],
   "scripts/confirm-admin-revision.mjs": ["DEPLOY_SHA"],
+  "scripts/deploy-cms-api-worker.mjs": [],
   "scripts/production-reader-deployment.mjs": [
     "CANONICAL_GITHUB_REPOSITORY",
     "CANONICAL_GITHUB_REPOSITORY_ID",
