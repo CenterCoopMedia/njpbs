@@ -67,6 +67,24 @@ scoped IAM, storage dependencies and native Environment/ref admission. Missing,
 unreadable, unknown or mismatched input refuses before mutation. Values remain
 in memory or the existing scoped deployment environment; never in receipts/logs.
 
+The ordinary dev deploy and production live-smoke step each open one private
+preview in a fresh browser. In each GitHub Environment, supply
+`CMS_PREVIEW_SMOKE_TARGET` with `editor` (the dedicated fixture's edit route)
+and `heading` (the exact heading it renders). Supply
+`CMS_PREVIEW_SMOKE_CREDENTIAL` with the fixture account's `email` and `password`.
+Development also needs `adminAccess` and `previewAccess` objects containing the
+`CF-Access-Client-Id` and `CF-Access-Client-Secret` for their respective origins.
+Use a fixture nobody edits during the check and grant its account only the
+access needed to open it in the editor and request a preview.
+
+Before using the production probe, retain an authorized ordinary dev run that
+passes both the existing CMS boundary checks and `signed_in_private_preview`.
+That result requires a successful session POST from the Admin tab and a first
+preview document response of 200 on the immutable preview route with the
+expected heading. The receipt contains only the result and a fixed stage code.
+Dev operations that intentionally preserve or restore paused preview admission
+skip this check.
+
 Functions configuration is table-driven; the routine workflow performs read-only
 `verify-config` before mutation and `verify-deployed-config` before receipt
 completion. Provider setup belongs solely to explicit `provision-config` with
