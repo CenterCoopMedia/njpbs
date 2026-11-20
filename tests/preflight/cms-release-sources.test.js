@@ -136,7 +136,7 @@ describe("CMS release source contract", () => {
     expect(() => requireCmsReleaseSources({ releaseSha, trustedWorkflowSha, releaseRoot, trustedRoot })).toThrow("explicit full SHA");
   });
   it.each(["scripts/component-runner.mjs", "scripts/lib/deployment-components.mjs", "scripts/lib/functions-retirement.mjs", "scripts/retire-cms-functions.mjs",
-    "scripts/lib/functions-contracts.mjs", "scripts/build-functions-contracts.mjs"])("refuses an untracked replacement for %s", file => {
+    "scripts/lib/functions-contracts.mjs", "scripts/compile-functions-contracts.mjs"])("refuses an untracked replacement for %s", file => {
     rmSync(join(releaseRoot, file));
     releaseSha = commit(releaseRoot, "Source without component dispatcher input");
     writeFileSync(join(releaseRoot, file), "throw new Error('untracked replacement');\n");

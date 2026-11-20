@@ -30,7 +30,7 @@ export const CMS_RELEASE_CHECK_FILES = Object.freeze([
   "scripts/check-admin-pages-security.mjs",
 ]);
 export const CMS_FUNCTION_CONTRACT_FILES = Object.freeze([
-  "scripts/functions-contract-sources.json", "scripts/lib/functions-contracts.mjs", "scripts/build-functions-contracts.mjs",
+  "scripts/functions-contract-sources.json", "scripts/lib/functions-contracts.mjs", "scripts/compile-functions-contracts.mjs",
 ]);
 
 // This gate runs from the trusted workflow checkout, before selected code runs.

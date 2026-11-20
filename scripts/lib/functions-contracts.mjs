@@ -5,7 +5,7 @@ import { builtinModules, createRequire } from "node:module";
 import { join, posix } from "node:path";
 
 export const contractRecipe = "scripts/functions-contract-sources.json";
-export const contractInputs = [contractRecipe, "scripts/lib/functions-contracts.mjs", "scripts/build-functions-contracts.mjs"];
+export const contractInputs = [contractRecipe, "scripts/lib/functions-contracts.mjs", "scripts/compile-functions-contracts.mjs"];
 const requireRoot = createRequire(import.meta.url);
 const requireSite = createRequire(new URL("../../site/package.json", import.meta.url));
 const builtins = new Set(builtinModules.flatMap(name => [name, `node:${name}`]));

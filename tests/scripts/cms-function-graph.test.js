@@ -248,6 +248,17 @@ describe("committed Functions module graph", () => {
     expect(() => functionGraphSource('const load = require("node:module").createRequire(__filename); load("./hidden");', "functions/new-loader.js", "100644 blob " + "a".repeat(40))).toThrow();
   });
 
+  it("discovers static aliases only in a recognized retained reader blob", () => {
+    const file = "functions/lib/home-retained-sources.js";
+    const source = 'requireModule("./public-media-manifest.js");\nrequire2("./publication-target.js");';
+    // The Functions reader retained by the release before generated outputs left Git.
+    const retainedBlob = "100644 blob 64d39a0ef7658e8ecd5ba64f9be9e9bc578147d8";
+    expect(functionGraphSource(source, file, retainedBlob))
+      .toBe('require("./public-media-manifest.js");\nrequire("./publication-target.js");');
+    expect(() => functionGraphSource(source, file, "100644 blob " + "a".repeat(40)))
+      .toThrow("Unknown retained-reader module loader");
+  });
+
   it("keeps preview readers out of the pre-pause phase and verifies the full inventory after it", () => {
     const names = ["health", "cmsPreview", "cmsPreviewStatus"];
     expect(functionDeploymentPhase(names, "functions:health", "before-preview", "functions:cmsPreview,functions:cmsPreviewStatus"))

@@ -5,9 +5,11 @@ import { promisify } from "node:util";
 import { builtinModules, createRequire } from "node:module";
 import { posix, resolve as absolute } from "node:path";
 import { functionGraphSource, readCommittedBlobs } from "./cms-component-receipt.mjs";
-import { addCommittedFunctionsContracts, contractInputs } from "./functions-contracts.mjs";
+import { addCommittedFunctionsContracts, contractInputs, contractRecipe } from "./functions-contracts.mjs";
 
 const exec = promisify(execFile);
+const PREPARE_RENDERER = "scripts/prepare-preview-renderer.mjs";
+const RETAINED_PREPARE_RENDERER_BLOB = "c71f50fa21d7942c033b60daf14f9eb46398ca9d";
 const ROOTS = ["site/scripts/build-compiled-renderer.ts", "site/scripts/run-cms-preview-cloud.ts",
   "site/scripts/render-compiled-preview.ts", "site/scripts/cms-preview-cloud-runtime.ts",
   "site/astro.renderer.config.mjs", "preview-renderer/worker.ts"];
@@ -21,7 +23,7 @@ const LAUNCH_CONTRACTS = {
   "preview-renderer/Dockerfile": "42a38a31586875ca036c505f0c95409ae87cc10f",
   "preview-renderer/worker.ts": "8afb604441bc62f95acdace555b5de75c297afec",
   "preview-renderer/wrangler.jsonc": "de29eeb62adaa32ddd720e48ca3a6f6032beeab5",
-  "scripts/prepare-preview-renderer.mjs": "d2fbae8afe64e506cc92125b274d7a988fd54834",
+  [PREPARE_RENDERER]: "d2fbae8afe64e506cc92125b274d7a988fd54834",
   "site/scripts/deploy-cms-preview-cloud.ts": "9b2ebf2d2a3d464e0f8050dcaa151d18ea863a08",
   "site/astro.renderer.config.mjs": "7357d79b8e0f57d78689d8f8871e9d359cf1471c",
   "site/src/lib/public-content-links.ts": "526e8f43707ce45118ec827c74f67b00f83bf60b",
@@ -39,7 +41,7 @@ const LAUNCH_CONTRACTS = {
 };
 const GUARDS = ["site", "preview-renderer", "packages", ".npmrc", "package.json", "package-lock.json",
   ...contractInputs,
-  "functions/package.json", "admin/package.json", "cms-api/package.json", "scripts/prepare-preview-renderer.mjs",
+  "functions/package.json", "admin/package.json", "cms-api/package.json", PREPARE_RENDERER,
   "scripts/lib/cms-renderer-graph.mjs", "scripts/lib/cms-component-receipt.mjs"];
 const MODULE = /\.(?:[cm]?js|[cm]?ts|jsx|tsx|astro)$/;
 class UnknownGraph extends Error {}
@@ -62,7 +64,9 @@ export async function fingerprintRendererGraph(sourceSha, deps = {}) {
       return [file, metadata];
     }));
     if (ROOTS.some(file => !files.has(file))) unknown("entrypoint");
-    for (const [file, blob] of Object.entries(LAUNCH_CONTRACTS)) {
+    const hasContractRecipe = files.has(contractRecipe);
+    for (const [file, currentBlob] of Object.entries(LAUNCH_CONTRACTS)) {
+      const blob = file === PREPARE_RENDERER && !hasContractRecipe ? RETAINED_PREPARE_RENDERER_BLOB : currentBlob;
       if ((files.get(file)?.split(" ").at(-1) ?? null) !== blob) {
         activeFile = file;
         unknown("build_launch_contract");
