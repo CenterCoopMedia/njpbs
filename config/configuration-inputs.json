@@ -1071,6 +1071,7 @@
       "names": [
         "ADMIN_RESULT",
         "ADMIN_SELECTED",
+        "CMS_CORRELATED_DISPATCH_INPUTS",
         "CMS_RELEASE_CHECKS_SHA",
         "CMS_TRUSTED_WORKFLOW_SHA",
         "DOCS_RESULT",
