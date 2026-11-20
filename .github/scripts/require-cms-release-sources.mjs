@@ -2,6 +2,7 @@ import { execFileSync } from "node:child_process";
 import { lstatSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
+import { isDeepStrictEqual } from "node:util";
 
 export const CMS_RELEASE_CHECK_FILES = Object.freeze([
   "scripts/configure-cms-functions.mjs",
@@ -35,7 +36,7 @@ export const CMS_FUNCTION_CONTRACT_FILES = Object.freeze([
 ]);
 
 // This gate runs from the trusted workflow checkout, before selected code runs.
-export function requireCmsReleaseSources({ releaseSha, trustedWorkflowSha, releaseRoot, trustedRoot }) {
+export function requireCmsReleaseSources({ releaseSha, trustedWorkflowSha, releaseRoot, trustedRoot, dispatchInputs }) {
   for (const [label, sha, cwd] of [
     ["Release checks", releaseSha, releaseRoot],
     ["Trusted workflow", trustedWorkflowSha, trustedRoot],
@@ -77,13 +78,23 @@ export function requireCmsReleaseSources({ releaseSha, trustedWorkflowSha, relea
   if (typeof admin.scripts?.["test:boot"] !== "string" || !admin.scripts["test:boot"].trim()) {
     throw new Error("Release checks require the Admin test:boot contract");
   }
-  return { schemaVersion: 1, deploySha: releaseSha, releaseChecksSha: releaseSha, trustedWorkflowSha, releaseChecksContractVersion: version };
+  const receipt = { schemaVersion: 1, deploySha: releaseSha, releaseChecksSha: releaseSha, trustedWorkflowSha, releaseChecksContractVersion: version };
+  if (!dispatchInputs) return receipt;
+  const inputs = JSON.parse(dispatchInputs);
+  const releaseDispatchId = inputs?.release_dispatch_id;
+  if (typeof releaseDispatchId !== "string" || !/^[a-f0-9]{32}$/.test(releaseDispatchId) || !isDeepStrictEqual(inputs, {
+    deploy_ref: releaseSha, release_dispatch_id: releaseDispatchId, cloudflare_pages_branch: "main",
+    emergency_release: false, emergency_authorization: "", force_firebase: false, migrations: "",
+    install_reader_bridge: false, reader_operation_id: "", reader_install_authorization: "",
+  })) throw new Error("Correlated CMS dispatch requires the reviewed deploy ref and default settings");
+  return { ...receipt, releaseDispatchId };
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
   const receipt = requireCmsReleaseSources({
     releaseSha: process.env.CMS_RELEASE_CHECKS_SHA,
     trustedWorkflowSha: process.env.CMS_TRUSTED_WORKFLOW_SHA,
+    dispatchInputs: process.env.CMS_CORRELATED_DISPATCH_INPUTS,
     releaseRoot: process.cwd(),
     trustedRoot: resolve(dirname(fileURLToPath(import.meta.url)), "../.."),
   });

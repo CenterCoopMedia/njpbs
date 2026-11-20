@@ -1,4 +1,5 @@
 name: CMS staging deploy
+run-name: ${{ inputs.release_dispatch_id && format('CMS staging deploy [{0}]', inputs.release_dispatch_id) || 'CMS staging deploy' }}
 
 # Manual deploy wiring for the CMS staging package. This workflow can deploy the
 # Firebase backend and the admin front. Every job refuses a run whose workflow
@@ -19,6 +20,11 @@ on:
       deploy_ref:
         description: "Explicit full reviewed NEW commit SHA to deploy"
         required: true
+        type: string
+      release_dispatch_id:
+        description: "Optional release CLI correlation ID for a deploy with default settings"
+        required: false
+        default: ""
         type: string
       cloudflare_pages_branch:
         description: "Cloudflare Pages branch label"
@@ -131,6 +137,7 @@ jobs:
         env:
           CMS_RELEASE_CHECKS_SHA: ${{ inputs.deploy_ref }}
           CMS_TRUSTED_WORKFLOW_SHA: ${{ github.sha }}
+          CMS_CORRELATED_DISPATCH_INPUTS: ${{ inputs.release_dispatch_id && toJSON(inputs) || '' }}
         run: node "$RUNNER_TEMP/release-gate"/.github/scripts/require-cms-release-sources.mjs
       - name: Retain separate release and trusted workflow identities
         uses: actions/upload-artifact@v7
