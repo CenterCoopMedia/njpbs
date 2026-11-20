@@ -86,6 +86,18 @@ describe("committed Functions module graph", () => {
     expect(await repo.graph(sha)).toEqual(original);
   });
 
+  it("keeps the pre-recipe build wrapper outside retained release fingerprints", async () => {
+    const repo = repository();
+    const fingerprints = async sha => Promise.all([
+      fingerprintInputs(sha, "functions", { cwd: repo.cwd }),
+      fingerprintInputs(sha, "renderer", { cwd: repo.cwd }),
+    ]);
+    const before = await fingerprints(repo.commit());
+    // PR #201 shipped this wrapper before receipts included any contract build inputs.
+    repo.write("scripts/build-functions-contracts.mjs", 'throw new Error("Retained local build wrapper");');
+    expect(await fingerprints(repo.commit())).toEqual(before);
+  });
+
   it("fingerprints a committed contract change only for the functions that use it", async () => {
     const repo = repository();
     const file = "packages/content-core/src/example.ts";
