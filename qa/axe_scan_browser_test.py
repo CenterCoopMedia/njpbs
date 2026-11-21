@@ -156,6 +156,52 @@ class PublicInteractions(BrowserChecks):
                     expect(card).to_have_attribute("href", re.compile(r"^https://watch\.njpbs\.org/"))
                     expect(card).to_have_accessible_name(re.compile(r"\w"))
 
+    def test_budget_treemap_keeps_department_labels_inside_the_tiles(self):
+        # The full CI build keeps the Data Hub publication flag off. Serve the
+        # shipped reader fragment and CSS with the fonts from the full build.
+        source = Path(__file__).resolve().parents[1] / "site" / "src"
+        reader = (source / "data" / "njpbs-data-hub-v16.html").read_text(encoding="utf-8")
+        styles = (source / "styles" / "data-hub.css").read_text(encoding="utf-8")
+        html = f"""<!doctype html><html lang="en">
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <style>
+            @font-face {{ font-family: "PBS Sans"; font-weight: 700;
+                          src: url("/brand/fonts/PBSSans-Bold.woff2"); }}
+            @font-face {{ font-family: "PBS Sans"; font-weight: 900;
+                          src: url("/brand/fonts/PBSSans-Black.woff2"); }}
+            body {{ margin: 0; --gutter: 16px; --wrap: 72rem; --bg-0: #000; }}
+            {styles}
+        </style><main class="data-hub">{reader}</main></html>"""
+        with self.browser.new_context(viewport={"width": 320, "height": 568}) as context:
+            page = context.new_page()
+            page.route(BASE + "/data-hub/", lambda route: route.fulfill(
+                content_type="text/html; charset=utf-8", body=html,
+            ))
+            page.goto(BASE + "/data-hub/", wait_until="domcontentloaded")
+            budget = page.locator("#metric-statebudget")
+            budget.get_by_role("button", name="Departments & accounts").click()
+            plot = budget.get_by_role("region", name="Departments and accounts treemap")
+            expect(plot).to_contain_text("Interdepartmental")
+            expect(plot).to_contain_text("$5.68B")
+            page.evaluate("document.fonts.ready")
+
+            for width in (320, 390):
+                with self.subTest(width=width):
+                    page.set_viewport_size({"width": width, "height": 568})
+                    clipped = plot.evaluate("""plot => {
+                        return [...plot.querySelectorAll(".budget-tile > *")].filter(label => {
+                            const tile = label.parentElement.getBoundingClientRect();
+                            const range = document.createRange();
+                            range.selectNodeContents(label);
+                            return [...range.getClientRects()].some(line =>
+                                line.left < tile.left || line.right > tile.right ||
+                                line.top < tile.top || line.bottom > tile.bottom
+                            );
+                        }).map(label => label.textContent);
+                    }""")
+                    self.assertEqual(clipped, [])
+                    self.assertEqual(page.evaluate("document.documentElement.scrollWidth"), width)
+
 
 class ComingSoonInteractions(BrowserChecks):
     def open_scene(self, context):
