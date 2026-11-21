@@ -87,6 +87,25 @@ class SearchReadiness(BrowserChecks):
 
 
 class PublicInteractions(BrowserChecks):
+    def test_live_player_fallback_offers_the_schedule_when_the_embed_fails(self):
+        with self.browser.new_context(java_script_enabled=False) as context:
+            player = "https://player.pbs.org/**"
+            context.route(player, lambda route: route.fulfill(status=503, body=""))
+            page = context.new_page()
+            with page.expect_response(player, timeout=10000) as response:
+                page.goto(BASE + "/live/", wait_until="domcontentloaded")
+                page.get_by_title("PBS livestream", exact=True).scroll_into_view_if_needed(timeout=5000)
+            self.assertEqual(response.value.status, 503)
+
+            fallback = page.locator("[data-player-fallback]")
+            expect(fallback).to_contain_text("If the player does not load")
+            livestream = fallback.get_by_role("link", name=re.compile(r"^NJ PBS livestream"))
+            expect(livestream).to_be_visible()
+            expect(livestream).to_have_attribute("href", "https://watch.njpbs.org/livestream/")
+            schedule = fallback.get_by_role("link", name="NJ PBS TV schedule", exact=True)
+            expect(schedule).to_be_visible()
+            expect(schedule).to_have_attribute("href", "/schedule/")
+
     def test_mobile_navigation_closes_with_escape_and_restores_focus(self):
         with self.browser.new_context(viewport={"width": 375, "height": 720}) as context:
             page = context.new_page()

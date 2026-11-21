@@ -20,6 +20,7 @@ export function renderLivePlayerFrame(mode: "public" | "editor" = "public"): str
       </div>
       <p class="public-page__player-fallback" id="pbs-player-alternatives" data-player-fallback>
         If the player does not load, watch the live broadcast on the <a id="pbs-player-alternative-app" href="${escapeHtml(pbsAppUrl)}" rel="noopener" target="_blank">PBS app<span class="sr-only"> (opens in new tab)</span></a> or open the <a href="${escapeHtml(pbsLivestreamWatchUrl)}" rel="noopener" target="_blank">NJ PBS livestream<span class="sr-only"> (opens in new tab)</span></a>.
+        See what is airing on the <a href="/schedule/">NJ PBS TV schedule</a>.
       </p>
       <figcaption id="pbs-player-description">The player is hosted by PBS and may use location rules, account services, and device settings managed by PBS.</figcaption>
     </figure>
