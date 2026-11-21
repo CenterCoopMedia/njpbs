@@ -424,8 +424,17 @@ for (const width of [390, 1440]) {
   }) => {
     await page.setViewportSize({ width, height: 1000 });
     await page.goto("/costs-fixture.html?state=hardware-conflict");
-    await page.getByRole("tab", { name: "Hardware", exact: true }).click();
+    const hardwareTab = page.getByRole("tab", {
+      name: "Hardware",
+      exact: true,
+    });
+    // The fixture mounts after navigation and its fonts can still shift the tab strip.
+    await expect(hardwareTab).toBeVisible();
+    await page.evaluate(() => document.fonts.ready);
+    await hardwareTab.click();
+    await expect(hardwareTab).toHaveAttribute("aria-selected", "true");
     await page
+      .getByRole("tabpanel", { name: "Hardware", exact: true })
       .getByRole("button", {
         name: "Edit node-services assumptions",
         exact: true,
