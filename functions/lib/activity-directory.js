@@ -212,6 +212,7 @@ const ACTIVITY_ACTION_LABELS = Object.freeze({
   "public-release.production-pause-failed": "Production public publishing drain failed",
   "public-release.production-runtime-restored": "Production public publishing restored before enrollment",
   "public-release.pre-enrollment-history-retired": "Old public publishing preparation cancelled",
+  "public-release.superseded-publication-history-retired": "Superseded publishing tasks retired",
   "public-release.publication-settle": "Public publication confirmed",
   "cms-publication-baseline.cancel-claimed": "Claimed publication baseline cancelled",
   "cms-publication-baseline.cancel-unclaimed": "Unclaimed publication baseline cancelled",

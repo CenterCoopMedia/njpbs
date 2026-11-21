@@ -847,6 +847,33 @@ for the original list, then a separately reviewed apply packet with `--apply`.
 Both use exact private SDK fd 3 in protected Bash, fresh no-clobber outputs and
 unchanged original source/authority. List success never grants apply by itself.
 
+Use `scripts/retire-superseded-publication-history.mjs` for superseded work
+under current publication owners. This command requires an idle deployment
+pointer and leaves publishing admission controls alone. Start with up to 100
+exact document paths from a read-only census. A bare `cmsPublishQueue/<id>`
+addresses only its `postProof` field. Other paths address a background
+preparation, background output, Home refresh or Page consumer proof.
+
+Run in the clean, reviewed checkout in protected Bash. Build the Functions
+contracts before opening the SDK stream. The private listing packet contains
+`schemaVersion: 1`, `credentialIdentity`, `approved: null`, and a `request`
+with `schemaVersion: 1`, a unique `operationId`, `operatorCommitSha`, the full
+publication `target`, and `paths`. Pass the listing packet and its SHA-256 to
+`node scripts/retire-superseded-publication-history.mjs --packet "$PACKET" --packet-digest "$PACKET_SHA256"`
+with the read-only SDK credential on inherited fd 3 and a fresh private output
+file. Keep the returned listing and digest intact. The listing contains only
+eligible paths and document versions. Keep the input paths and listing private.
+
+A separately authorized operator can create an apply packet with the same
+request and source, the unchanged listing as `approved`, and the authorized
+write identity. Run the same command with the apply packet, its own digest,
+`--apply`, and the matching SDK credential on fd 3. A changed row or change in
+eligibility refuses the whole batch. Obtain a fresh listing before approving
+another application. Repeating the same successful apply returns the original
+retirement receipt without writing again. The receipt and matching admin log
+commit with the task changes. Keep the existing pre-enrollment command for
+bootstrap, where the paused-state and enrollment checks establish authority.
+
 Existing proof entrypoints remain `node scripts/test-cms-reader-bridge.mjs`
 with explicit named test files and assigned emulator ports, and the root/site
 Vitest commands for the changed owner. Preserve default-off/refusal, source,
