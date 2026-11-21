@@ -1329,7 +1329,7 @@ if(process.env.CMS_BUG_REPORT_TELEGRAM_ADMIN_MAP)process.exit(8); require("node:
     expect(cmsApi).toContain("if: always()");
   });
 
-  it("checks the newly activated settings publish boundary before a current Admin deploy", () => {
+  it("checks the settings publish boundary before Admin for every admitted release", () => {
     const workflow = readCmsDeployWorkflow();
     const transitionProbe = workflow.indexOf(
       "Verify legacy settings transition boundaries before Admin",
@@ -1341,9 +1341,7 @@ if(process.env.CMS_BUG_REPORT_TELEGRAM_ADMIN_MAP)process.exit(8); require("node:
     const transitionEnd = workflow.indexOf("\n      - name:", transitionProbe);
     expect(transitionEnd).toBeGreaterThan(transitionProbe);
     const transitionCommand = workflow.slice(transitionProbe, transitionEnd);
-    expect(transitionCommand).toContain(
-      "if: needs.admin-build.outputs.deploy_sha == github.sha",
-    );
+    expect(transitionCommand).not.toMatch(/^\s*if:/m);
     expect(transitionCommand).toContain("cmsPublishSettings");
     expect(transitionCommand).not.toContain("cmsGetPublishedSettings");
     expect(transitionCommand).toContain(
