@@ -115,6 +115,28 @@ class PublicInteractions(BrowserChecks):
             page.wait_for_timeout(250)
             self.assertGreaterEqual(page.evaluate("window.scrollY"), 500)
 
+    def test_homepage_program_shelves_use_local_art_when_pbs_images_fail(self):
+        with self.browser.new_context() as context:
+            context.route("https://image.pbs.org/**", lambda route: route.fulfill(status=503))
+            page = context.new_page()
+            page.goto(BASE + "/", wait_until="domcontentloaded")
+
+            for shelf in ("featured-rail", "more-rail"):
+                with self.subTest(shelf=shelf):
+                    card = page.locator(f"#{shelf} a").filter(has=page.locator("img")).first
+                    image = card.locator("img")
+                    image.scroll_into_view_if_needed(timeout=5000)
+                    expect(image).to_have_attribute("src", "/brand/home/new-jersey-blue.webp")
+                    page.wait_for_function(
+                        "image => image.complete && image.naturalWidth > 0",
+                        arg=image.element_handle(), timeout=5000,
+                    )
+                    expect(image).to_have_attribute("alt", "")
+                    box = image.bounding_box()
+                    self.assertAlmostEqual(box["width"] / box["height"], 16 / 9, places=2)
+                    expect(card).to_have_attribute("href", re.compile(r"^https://watch\.njpbs\.org/"))
+                    expect(card).to_have_accessible_name(re.compile(r"\w"))
+
 
 class ComingSoonInteractions(BrowserChecks):
     def open_scene(self, context):

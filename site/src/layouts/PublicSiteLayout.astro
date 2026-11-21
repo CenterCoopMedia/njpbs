@@ -1205,6 +1205,20 @@ const legalLinks: LayoutLink[] = [
 <script>
   import { mountSpotlightImages } from "../../../packages/content-core/src/spotlight-image-dom";
   mountSpotlightImages(document);
+  // The homepage shelf IDs are shared by the rail, grid, and curated layouts.
+  document.querySelectorAll<HTMLImageElement>(
+    ":is(#featured-rail, #more-rail) img[data-fallback-src]",
+  ).forEach(image => {
+    const fallback = image.dataset.fallbackSrc;
+    if (!fallback) return;
+    const showFallback = () => {
+      image.removeAttribute("srcset");
+      image.removeAttribute("sizes");
+      image.src = fallback;
+    };
+    if (image.complete && image.naturalWidth === 0) showFallback();
+    else image.addEventListener("error", showFallback, { once: true });
+  });
   import { installCustomShelfControls } from "../../../packages/content-core/src/custom-shelf-controls";
   installCustomShelfControls(document);
   import { installElectionResults } from "../../../packages/content-core/src/election-results-dom";
