@@ -547,7 +547,8 @@ const expectedCmsAnchorEmitters: Readonly<Record<string, number>> = {
   "live-blog-render.ts": 2,
   // Published author routes only: card link and no-script portrait fallback.
   "live-blog-reporters-render.ts": 2,
-  "live-player-render.ts": 3,
+  // Fixed links for the player skip target, PBS app, livestream and TV schedule.
+  "live-player-render.ts": 4,
   "nj-decides-render.ts": 1,
   "post-media-player.ts": 2,
   "schedule-now-next-render.ts": 4,
