@@ -1,5 +1,6 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
+import { Window } from "happy-dom";
 import { describe, expect, it } from "vitest";
 import {
   pageCompositionSeed,
@@ -127,6 +128,24 @@ describe("CMS service public-page projection", () => {
     expect(cmsCards).not.toMatch(/<a\s+class="public-page__card"/);
     expect(cmsCards).toContain("public-page__card-title-link");
     expect(cmsCards).toContain('</a></strong><div class="public-page__card-description">');
+  });
+
+  it("styles the rendered Live card links as standalone 24-pixel targets", async () => {
+    const window = new Window();
+    try {
+      const css = readFileSync(new URL("../src/styles/service-page.css", import.meta.url), "utf8");
+      window.document.head.innerHTML = `<style>${css}</style>`;
+      window.document.body.innerHTML = renderServiceCards(projectCmsServicePage(serviceInput("live")));
+      const links = [...window.document.querySelectorAll(".public-page__card strong a")];
+      expect(links).toHaveLength(3);
+      for (const link of links) {
+        const style = window.getComputedStyle(link);
+        expect(style.display).toBe("inline-flex");
+        expect(style.getPropertyValue("min-block-size")).toBe("24px");
+      }
+    } finally {
+      await window.happyDOM.close();
+    }
   });
 
   it("fills the real Watch frame from the four editable regions without a duplicate block tail", () => {
