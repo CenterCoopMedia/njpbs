@@ -124,6 +124,31 @@ class PublicInteractions(BrowserChecks):
             expect(nav).to_be_hidden()
             expect(menu).to_be_focused()
 
+    def test_privacy_notice_fits_a_short_mobile_viewport(self):
+        for width, height in [(320, 480), (390, 600)]:
+            with self.subTest(width=width, height=height):
+                with self.browser.new_context(viewport={"width": width, "height": height},
+                                              has_touch=True) as context:
+                    page = context.new_page()
+                    page.goto(BASE + "/about/", wait_until="domcontentloaded")
+                    notice = page.get_by_role("complementary", name="Help us improve njpbs.org")
+                    heading = notice.get_by_role("heading", name="Help us improve njpbs.org")
+                    policy = notice.get_by_role("link", name="Read the privacy policy")
+                    expect(heading).to_be_in_viewport(ratio=1)
+                    self.assertGreaterEqual(policy.bounding_box()["height"], 24)
+                    page.add_style_tag(content="html { font-size: 200% !important; }")
+                    expect(heading).to_be_in_viewport(ratio=1)
+                    geometry = notice.bounding_box()
+                    self.assertGreaterEqual(geometry["y"], 0)
+                    self.assertLessEqual(geometry["y"] + geometry["height"], height)
+
+                    choices = [policy, notice.get_by_role("button", name="Do not allow"),
+                               notice.get_by_role("button", name="Allow analytics and newsletter tools")]
+                    for choice in choices:
+                        choice.focus()
+                        choice.scroll_into_view_if_needed()
+                        expect(choice).to_be_in_viewport(ratio=1)
+
     def test_homepage_honors_native_scroll(self):
         with self.browser.new_context(viewport={"width": 1280, "height": 720}) as context:
             page = context.new_page()
