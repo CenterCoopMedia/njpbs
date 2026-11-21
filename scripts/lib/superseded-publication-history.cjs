@@ -60,7 +60,7 @@ async function retiredPostProof({ queue, id, get, owner, now }) {
   if (!current?.operationId || current.operationId === id || current.sourceVersion <= post.sourceVersion ||
       data?.published?.sourceVersion !== current.sourceVersion || data.publicPostProof?.operationId === id ||
       data.publishBuildQueueId === id || data.publishBuildSettlement?.queueId === id) return null;
-  return { ...proof, status: "failed", claim: null, nextAttemptAt: null };
+  return { ...proof, status: "superseded", claim: null, nextAttemptAt: null };
 }
 
 async function retiredPreparation({ queue, row, value, id, owner, get, selected, now, context }) {

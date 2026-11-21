@@ -7,6 +7,7 @@ const { publicContextDigest } = require("../../functions/lib/public-context-revi
 const { publicationTarget } = require("../../functions/lib/publication-target.js");
 const { proofKey } = require("../../functions/lib/page-consumer-proof.js");
 const { initialPublicDeploymentPointer } = require("../../functions/lib/public-deployment-pointer.js");
+const { exhaustedPostProof, postProofDue } = require("../../functions/lib/no-build-post-proof-state.js");
 
 const now = 100_000;
 const runtime = { owner: "cloudflare", release: "a".repeat(40) };
@@ -90,7 +91,7 @@ function fixture() {
       servingEnabled: true, slug: "sample-post", ownedSlugs: ["sample-post"], visible: true, postId: "post", operationId: id(7), sourceVersion: 2 },
     "cmsPosts/post": { published: { sourceVersion: 2 }, publicPostProof: { operationId: id(7) } },
     [postProof]: { ...record, transport: "post-no-build-v1", noBuildPost: { postId: "post", operationId: id(1), sourceVersion: 1 },
-      postProof: { ...schedule, status: "failed" }, publicReceipt: { digest: "keep" } },
+      postProof: { ...schedule, status: "pending", attempts: 4 }, publicReceipt: { digest: "keep" } },
     [queue(2)]: aggregateQueue(2, 10),
     [preparation]: preparationTask,
     [currentPreparation]: { ...preparationTask, contextDigest: publicContextDigest(20) },
@@ -134,7 +135,9 @@ describe("publication history retirement", () => {
     const result = await history.retireSupersededPublicationHistory({ ...db, approved });
     expect(result.idempotent).toBe(false);
     expect(db.data(postProof)).toMatchObject({ status: "success", publicReceipt: { digest: "keep" },
-      postProof: { status: "failed", nextAttemptAt: null, attempts: 2 } });
+      postProof: { status: "superseded", nextAttemptAt: null, attempts: 4 } });
+    expect(exhaustedPostProof(db.data(postProof))).toBe(false);
+    expect(postProofDue(db.data(postProof), now)).toBe(false);
     expect(db.data(preparation)?.status).toBe("cancelled");
     expect(db.data(output)?.status).toBe("superseded");
     expect(db.data(home)?.status).toBe("superseded");
