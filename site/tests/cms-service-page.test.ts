@@ -133,7 +133,7 @@ describe("CMS service public-page projection", () => {
   it("styles the rendered Live card links as standalone 24-pixel targets", async () => {
     const window = new Window();
     try {
-      const css = readFileSync(new URL("../src/styles/service-page.css", import.meta.url), "utf8");
+      const css = readFileSync(join(process.cwd(), "src/styles/service-page.css"), "utf8");
       window.document.head.innerHTML = `<style>${css}</style>`;
       window.document.body.innerHTML = renderServiceCards(projectCmsServicePage(serviceInput("live")));
       const links = [...window.document.querySelectorAll(".public-page__card strong a")];
