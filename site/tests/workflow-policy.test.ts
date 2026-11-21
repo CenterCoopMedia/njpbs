@@ -382,17 +382,7 @@ describe("workflow gate", () => {
       "needs.policy.outputs.classifier_result != 'success' || needs.policy.outputs.firebase != 'false'",
     );
     expect(ciWorkflow).toContain("needs: [policy, docs, site, admin, firebase]");
-    // Code events retain the required check; metadata uses a distinct name.
-    const finalName = parse(ciWorkflow).jobs.ci.name.replace(/^\$\{\{\s*|\s*\}\}$/g, "");
-    for (const eventName of ["pull_request", "merge_group", "push", "workflow_dispatch"]) {
-      for (const action of ["opened", "reopened", "synchronize", "edited"]) {
-        expect(runInNewContext(finalName, {
-          github: { event_name: eventName, event: {
-            action, changes: { base: { ref: { from: "old-target" } } },
-          } },
-        })).toBe("ci");
-      }
-    }
+    expect(parse(ciWorkflow).jobs.ci.name).toBe("ci");
   });
 
   it("keeps the docs pointer guardrail wired and ordered", () => {
