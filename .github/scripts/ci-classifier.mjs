@@ -345,7 +345,6 @@ export function classifyPath(value) {
     path === "scripts/backfill-media-thumbnails.mjs" ||
     path === "scripts/backfill-byline-projections.mjs" ||
     path === "scripts/inventory-article-posts-read-only.mjs" ||
-    path === "scripts/convert-retired-article-to-post.mjs" ||
     path === "scripts/update-publish-status.cjs" ||
     path.startsWith("tests/preflight/") ||
     path.startsWith("tests/functions/") ||
