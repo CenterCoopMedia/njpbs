@@ -30,7 +30,8 @@ function unavailablePageConsumers(failures, log) {
     failures: failures.filter(failure => typeof failure.pageId === "string" && publicPageDefinition(failure.pageId))
       .slice(0, 8).map(({ pageId, error }) => ({ pageId, causes: confirmationErrorCauses(error) })),
   });
-  return { confirmed: false, missingPages };
+  return { confirmed: false, missingPages, failureReason: { code: "page_readback_failed",
+    causes: confirmationErrorCauses(failures[0].error, { includeSource: false }) } };
 }
 function requiredPages(rows, capability) {
   const required = new Set(Object.keys(PUBLIC_PAGE_DEFINITIONS));
@@ -232,19 +233,25 @@ async function confirmNoBuildPageSettings({ firestore, operationId, target, head
   if (now() >= deadline) return { confirmed: false };
   const proof = await claimPageConsumerProof({ firestore, operationId, identity, now, deadline, log });
   if (!proof) return { confirmed: false };
-  let result, waitingForInputs = false;
+  let result, failureReason, waitingForInputs = false;
   try {
     const outcome = await provePageConsumers({ firestore, operationId, queue, identity, target, headers, fetchPublic,
       now, deadline, currentCodeRequest, log, proof, fetchPurge, purgeConfig });
-    ({ waitingForInputs = false, ...result } = outcome);
-    if (!result.confirmed) log.warn("Page consumer confirmation incomplete", { operationId,
-      missingPageCount: result.missingPages?.length ?? 0, missingPostCount: result.missingPosts?.length ?? 0 });
+    ({ waitingForInputs = false, failureReason, ...result } = outcome);
+    if (!result.confirmed) {
+      const missingPageCount = result.missingPages?.length ?? 0;
+      const missingPostCount = result.missingPosts?.length ?? 0;
+      if (!failureReason && missingPageCount) failureReason = { code: "page_coverage_incomplete" };
+      if (!failureReason && missingPostCount) failureReason = { code: "post_coverage_incomplete" };
+      log.warn("Page consumer confirmation incomplete", { operationId, missingPageCount, missingPostCount });
+    }
     return result;
   } catch (error) {
     log.warn("Page consumer confirmation refused", { operationId, causes: confirmationErrorCauses(error) });
+    failureReason = { code: "confirmation_error", causes: confirmationErrorCauses(error, { includeSource: false }) };
     throw error;
   } finally {
-    await proof.finish(result?.confirmed === true, { waitingForInputs });
+    await proof.finish(result?.confirmed === true, { waitingForInputs, failureReason });
   }
 }
 

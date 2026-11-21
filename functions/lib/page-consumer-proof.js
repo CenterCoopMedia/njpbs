@@ -37,7 +37,8 @@ async function claimPageConsumerProof({ firestore, operationId, identity, now, d
     if (deadline - time < MIN_PROOF_BUDGET_MS || prior?.leaseUntil > time) return null;
     if (prior?.attempts >= MAX_ATTEMPTS) {
       if (prior.status !== "running") return null;
-      transaction.update(ref, { status: "failed", claim: null, leaseUntil: null, nextAttemptAt: null });
+      transaction.update(ref, { status: "failed", claim: null, leaseUntil: null, nextAttemptAt: null,
+        failureReason: { code: "lease_expired" } });
       return { exhausted: true };
     }
     if (prior?.nextAttemptAt > time) return null;
@@ -61,7 +62,7 @@ async function claimPageConsumerProof({ firestore, operationId, identity, now, d
     if (prior?.claim !== claim || prior.key !== acquired.key || proofKey(queue) !== acquired.key || now() >= prior.leaseUntil) {
       throw Object.assign(new Error("Page consumer confirmation lease expired"), { status: 409 });
     }
-  }, async finish(confirmed, { waitingForInputs = false } = {}) {
+  }, async finish(confirmed, { waitingForInputs = false, failureReason = { code: "confirmation_incomplete" } } = {}) {
     const exhausted = await firestore.runTransaction(async transaction => {
       const prior = (await transaction.get(ref)).data();
       if (prior?.claim !== claim || prior.key !== acquired.key) return false;
@@ -72,6 +73,7 @@ async function claimPageConsumerProof({ firestore, operationId, identity, now, d
       }
       const exhausted = !confirmed && acquired.attempts >= MAX_ATTEMPTS;
       transaction.update(ref, { status: confirmed ? "verified" : "failed", claim: null, leaseUntil: null,
+        ...(confirmed ? {} : { failureReason }),
         nextAttemptAt: confirmed || exhausted ? null : now() + 60_000 * 2 ** (acquired.attempts - 1) });
       return exhausted;
     });
