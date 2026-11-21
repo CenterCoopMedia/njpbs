@@ -620,7 +620,8 @@ describe("Data Hub reader and downloads", () => {
     const metric=seed.metrics.find((m:{id:string})=>m.id==="minimumwage");
     expect(metric.history).toHaveLength(7);
     expect(metric.history.map((r:{value:number})=>r.value)).toEqual([11,12,13,14.13,15.13,15.49,15.92]);
-    const text="Announced for Jan. 1, 2027: $16.48/hr · not yet effective";
+    const announcement="Announced for Jan. 1, 2027: $16.48/hr";
+    const text=`${announcement} · not yet effective`;
     const caption="Each zero-based bar is an effective historical January 1 rate";
     for(const surface of ["#featured-plot","#metric-minimumwage"]){
       const chart=doc.querySelector(surface)!;
@@ -628,7 +629,19 @@ describe("Data Hub reader and downloads", () => {
       for(const svg of chart.querySelectorAll(".v7-viz")){
         const bars=[...svg.querySelectorAll("g title")].filter(t=>t.textContent?.includes("hourly minimum wage effective January 1"));
         expect(bars).toHaveLength(7);
-        expect(svg.textContent).toContain(text);
+        if(svg.classList.contains("history-svg--mobile")){
+          const labels=[...svg.querySelectorAll("text")];
+          const amount=labels.find(label=>label.textContent===announcement);
+          const qualifier=labels.find(label=>label.textContent==="Not yet effective");
+          expect(amount).toBeDefined();
+          expect(qualifier).toBeDefined();
+          const amountBaseline=Number(amount!.getAttribute("y"));
+          const qualifierBaseline=Number(qualifier!.getAttribute("y"));
+          expect(qualifierBaseline-amountBaseline).toBeGreaterThanOrEqual(Number(qualifier!.getAttribute("font-size")));
+          expect(qualifierBaseline).toBeLessThan(Number(svg.getAttribute("height")));
+        }else{
+          expect(svg.textContent).toContain(text);
+        }
         expect(svg.querySelector("desc")!.textContent).toContain(caption);
         expect(svg.querySelector("path[stroke-dasharray]")).toBeNull();
         expect(svg.querySelector('circle[r="6"]')).toBeNull();
