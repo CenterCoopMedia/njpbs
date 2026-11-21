@@ -146,7 +146,8 @@ class PublicInteractions(BrowserChecks):
                                notice.get_by_role("button", name="Allow analytics and newsletter tools")]
                     for choice in choices:
                         choice.focus()
-                        choice.scroll_into_view_if_needed()
+                        choice.evaluate("el => el.scrollIntoView({ block: 'center', behavior: 'instant' })")
+                        expect(choice).to_be_focused()
                         expect(choice).to_be_in_viewport(ratio=1)
 
     def test_homepage_honors_native_scroll(self):
