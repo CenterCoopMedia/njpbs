@@ -926,23 +926,27 @@ export class PublicContentEntrypoint extends WorkerEntrypoint<CmsApiEnv> {
     return value;
   }
 
-  async getNoBuildPage(path: string, rendererSha: string, method = "GET", includeCacheLease = false): Promise<NoBuildPageReply> {
-    if (!pageReaderEnvironment(this.env) || !this.env.CMS_EDGE_ORIGIN_SECRET?.trim() ||
+  async getNoBuildPage(path: string, rendererSha: string, method = "GET", includeCacheLease = false,
+    scheduleProof = false): Promise<NoBuildPageReply> {
+    const environment = pageReaderEnvironment(this.env);
+    const schedulePath = ["/_schedule-sources.json", "/schedule/downloads/nj-pbs-schedule.pdf"].includes(path);
+    if (!environment || !this.env.CMS_EDGE_ORIGIN_SECRET?.trim() ||
         typeof path !== "string" || !path.startsWith("/") || path.length > 512 || /[%?#\\]/.test(path) ||
-        !/^[a-f0-9]{40}$/.test(rendererSha) || !["GET", "HEAD"].includes(method)) {
+        !/^[a-f0-9]{40}$/.test(rendererSha) || !["GET", "HEAD"].includes(method) ||
+        typeof scheduleProof !== "boolean" || (scheduleProof && (environment !== "development" || !schedulePath || method !== "GET"))) {
       throw new PublicContentRpcError("Dev Page request was refused");
     }
     const response = await fetch(`${this.env.FUNCTIONS_ORIGIN}/${PUBLIC_CONTENT_FUNCTION}`, {
       method: "POST", headers: publicDecisionHeaders(this.env.CMS_EDGE_ORIGIN_SECRET),
-      body: JSON.stringify({ mode: "no-build-page-v1", path, rendererSha, method }),
+      body: JSON.stringify({ mode: "no-build-page-v1", path, rendererSha, method, ...(scheduleProof ? { scheduleProof } : {}) }),
       redirect: "manual", signal: AbortSignal.timeout(10_000),
     });
     if (!response.ok) throw new PublicContentRpcError("Public Page service is unavailable");
-    const schedulePath = ["/_schedule-sources.json", "/schedule/downloads/nj-pbs-schedule.pdf"].includes(path);
     const value = await boundedJson(response, (schedulePath ? 24 : 8) * 1024 * 1024 + CONTENT_LINK_DIRECTORY_MAX_BYTES) as NoBuildPageReply;
     if (schedulePath) {
       if (value?.kind !== "schedule-export" || value.path !== path ||
-          value.scheduleReceipt?.code.commitSha !== rendererSha || typeof value.bytes !== "string") {
+          !/^[a-f0-9]{40}$/.test(value.scheduleReceipt?.code?.commitSha ?? "") ||
+          (!scheduleProof && value.scheduleReceipt?.code.commitSha !== rendererSha) || typeof value.bytes !== "string") {
         throw new PublicContentRpcError("Invalid Page schedule projection");
       }
     } else if (value?.kind === "schedule-unavailable") {

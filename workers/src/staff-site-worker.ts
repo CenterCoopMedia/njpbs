@@ -1,6 +1,7 @@
 import { jwtVerify } from "jose";
 import { previewObjectRequest } from "./preview-artifact-request";
 import { accessTeamKeys } from "./access-team-keys";
+import { overrideVersion, rollbackCacheControl, rollbackProbe, rollbackRead, versionOverride, workerVersion } from "./rollback-proof";
 
 const ADMIN = "https://admin.njpbs.org";
 const DEV_ADMIN = "https://dev-admin.example.org";
@@ -14,6 +15,7 @@ interface Dependencies {
   validateAccess(token: string): Promise<number>;
   validatePreviewAccess?(token: string, target: { schemaVersion: 1; queueId: string; persistent: boolean }): Promise<number>;
   serve(request: Request): Promise<Response>;
+  rollbackWorker?: string;
   dev?: { audience: string; accessOrigin?: string; origin?: "https://dev-public.example.org" | "https://dev-preview.example.org" };
 }
 
@@ -98,12 +100,25 @@ export async function serveStaffSite(request: Request, dependencies: Dependencie
     }
     if (preview && status === 404) return response(request.method === "HEAD" ? null : "Preview not found", 404);
     if (status !== 204) return response(request.method === "HEAD" ? null : "Site access unavailable", status, dev ? receiptCors(request) : {});
+    const proof = machine && dependencies.rollbackWorker ? rollbackRead(url, request.method) : null;
+    const override = request.headers.get(versionOverride);
+    const selected = proof && proof !== "edge" && override !== null
+      ? overrideVersion(override, dependencies.rollbackWorker!)
+      : undefined;
+    if (override !== null && proof && !selected) return response(null, 400);
+    const probe = selected ?? (proof === "edge" && request.headers.get("cache-control") === rollbackCacheControl ? "current" : undefined);
     // Never send the CMS bearer token, cookies, or user-controlled credentials
     // to the static origin. Content cannot set a replacement session cookie.
     const originHeaders = new Headers();
-    for (const name of ["accept", "range", "if-range", "if-none-match", "if-modified-since"]) {
-      const value = request.headers.get(name);
-      if (value) originHeaders.set(name, value);
+    if (probe) {
+      originHeaders.set("cache-control", rollbackCacheControl);
+      originHeaders.set(rollbackProbe, probe);
+      if (selected) originHeaders.set(versionOverride, `${dependencies.rollbackWorker}="${selected}"`);
+    } else {
+      for (const name of ["accept", "range", "if-range", "if-none-match", "if-modified-since"]) {
+        const value = request.headers.get(name);
+        if (value) originHeaders.set(name, value);
+      }
     }
     const upstream = await dependencies.serve(new Request(url, {
       method: request.method,
@@ -116,6 +131,7 @@ export async function serveStaffSite(request: Request, dependencies: Dependencie
     }
     const headers = new Headers(upstream.headers);
     headers.delete("set-cookie");
+    if (!probe) headers.delete(workerVersion);
     if (dev) {
       headers.append("server-timing", [
         `staff-access;dur=${admissionStarted - accessStarted}`,
@@ -169,6 +185,7 @@ export async function serveDevStaffSite(
   request: Request, env: DevStaffSiteEnv,
   serve: Dependencies["serve"] = (cleanRequest) => fetch(cleanRequest),
   origin: "https://dev-public.example.org" | "https://dev-preview.example.org" = "https://dev-public.example.org",
+  rollbackWorker?: string,
 ): Promise<Response> {
   if (!["https://dev-public.example.org", "https://dev-preview.example.org"].includes(origin) ||
       new URL(request.url).origin !== origin) return response("Not found", 404);
@@ -190,6 +207,7 @@ export async function serveDevStaffSite(
       token, request.headers.get("cf-connecting-ip")?.trim() || "missing", target,
     ),
     serve,
+    rollbackWorker,
   });
 }
 

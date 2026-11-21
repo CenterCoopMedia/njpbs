@@ -260,6 +260,40 @@ describe("dev cutover at the Worker boundary", () => {
     }
     expect(network.mock.calls.filter(([url]) => url === certs)).toHaveLength(1);
   });
+  it("forwards a single native override through the isolated dev binding on authenticated proof reads", async () => {
+    const dev = (await import("../workers/src/staff-site-dev-worker")).default;
+    const version = "12ab34cd-1234-4234-8234-123456789abc";
+    const override = "cloudflare-workers-version-overrides";
+    const versionHeader = "x-njpbs-worker-version";
+    const upstream = vi.fn(async (_request: Request) => new Response(null, { headers: { [versionHeader]: version } }));
+    const bindings = { DEV_STAFF_ACCESS: env.DEV_STAFF_ACCESS, DEV_ACCESS_AUDIENCE: audience,
+      CMS_DEV_ACCESS_ORIGIN: team, DEV_PUBLIC: { fetch: upstream } } as Parameters<typeof dev.fetch>[1];
+    const assertion = await jwt();
+    const read = (path: string, selected: string, headers: Record<string, string>, method = "GET") =>
+      dev.fetch(request(path, { ...headers, [override]: selected, "x-njpbs-rollback-probe": "forged",
+        "cache-control": "max-age=3600", "if-none-match": '"stale"' }, method), bindings);
+    const selected = `template-dev-public="${version}"`;
+    const machine = { "cf-access-jwt-assertion": assertion, authorization: "Bearer fixture" };
+    const result = await read("/_schedule-sources.json", selected, machine);
+    expect(result.status).toBe(200);
+    expect(result.headers.get(versionHeader)).toBe(version);
+    expect(Object.fromEntries(upstream.mock.calls[0][0].headers)).toEqual({
+      [override]: selected, "cache-control": "no-cache, no-store", "x-njpbs-rollback-probe": version,
+    });
+    expect((await read("/_publication.json?cms-context=code", selected, machine, "HEAD")).status).toBe(200);
+    expect((await read("/_schedule-sources.json", `foreign-worker="${version}"`, machine)).status).toBe(400);
+    expect((await read("/_schedule-sources.json", `${selected}, ${selected}`, machine)).status).toBe(400);
+    expect((await read("/_schedule-sources.json", selected, {})).status).toBe(401);
+    expect(upstream).toHaveBeenCalledTimes(2);
+    for (const [path, headers] of [
+      ["/_schedule-sources.json", { cookie: "__Host-njpbs-staff=dev-token" }],
+      ["/_schedule-sources.json?cms-schedule=editor", machine],
+    ] as const) {
+      expect((await read(path, selected, headers)).headers.get(versionHeader)).toBeNull();
+      expect(upstream.mock.calls.at(-1)![0].headers.has(override)).toBe(false);
+      expect(upstream.mock.calls.at(-1)![0].headers.has("x-njpbs-rollback-probe")).toBe(false);
+    }
+  });
   it.each([
     { aud: ["wrong-app"] }, { iss: "https://other.cloudflareaccess.com" },
     { exp: now.getTime() / 1000 }, { exp: undefined }, { iat: now.getTime() / 1000 + 60 },

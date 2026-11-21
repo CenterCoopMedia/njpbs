@@ -19,6 +19,13 @@ const publicBindings = [
   { type: 'service', name: 'CMS_API', service: 'template-dev-cms-api', entrypoint: 'PublicContentEntrypoint', environment: 'production' },
   { type: 'plain_text', name: 'NO_BUILD_POST_RENDERER_SHA', text: sha },
 ];
+it('qualifies the native version binding on development candidates and gateway readbacks', () => {
+  const metadata = { type: 'version_metadata', name: 'CF_VERSION_METADATA' };
+  expect(() => assertDevPublicWorkerBindings([...publicBindings, metadata], sha)).not.toThrow();
+  expect(() => assertDevPublicWorkerBindings([...publicBindings, metadata])).not.toThrow();
+  expect(() => assertDevPublicWorkerBindings([...publicBindings, { ...metadata, type: 'plain_text' }], sha))
+    .toThrow('exact reader bindings');
+});
 it('accepts only an optional Page renderer sealed to the same dev source', () => {
   const page = { type: 'plain_text', name: 'NO_BUILD_PAGE_RENDERER_SHA', text: sha };
   const dataFigures = { type: 'plain_text', name: 'DATA_FIGURE_VERSION', text: '1' };

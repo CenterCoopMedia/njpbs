@@ -29,9 +29,9 @@ function requireState(condition, message) {
 // Publication checks the exact sealed SHA. Gateway maintenance validates the
 // same dev-only shape without requiring its source to equal the public source.
 export function assertDevPublicWorkerBindings(bindings, rendererSha) {
-  requireState(Array.isArray(bindings) && [3, 4, 5, 6, 7, 8, 9, 10].includes(bindings.length) &&
+  requireState(Array.isArray(bindings) && [3, 4, 5, 6, 7, 8, 9, 10, 11].includes(bindings.length) &&
     new Set(bindings.map(binding => binding?.name)).size === bindings.length &&
-    bindings.every(binding => ['ASSETS', 'CMS_API', 'NO_BUILD_POST_RENDERER_SHA', 'NO_BUILD_PAGE_RENDERER_SHA', 'NO_BUILD_CODE_POST_RENDERER_SHA', 'NO_BUILD_RECORD_RENDERER_SHA', 'DATA_HUB_PUBLIC', 'DATA_FIGURE_VERSION', 'ELECTION_RESULTS_VERSION', 'DURABLE_POST_WITHDRAWALS'].includes(binding?.name)),
+    bindings.every(binding => ['ASSETS', 'CMS_API', 'NO_BUILD_POST_RENDERER_SHA', 'NO_BUILD_PAGE_RENDERER_SHA', 'NO_BUILD_CODE_POST_RENDERER_SHA', 'NO_BUILD_RECORD_RENDERER_SHA', 'DATA_HUB_PUBLIC', 'DATA_FIGURE_VERSION', 'ELECTION_RESULTS_VERSION', 'DURABLE_POST_WITHDRAWALS', 'CF_VERSION_METADATA'].includes(binding?.name)),
   'Dev public Worker must have the exact reader bindings');
   const assets = bindings.find(binding => binding?.name === 'ASSETS');
   const api = bindings.find(binding => binding?.name === 'CMS_API');
@@ -42,6 +42,7 @@ export function assertDevPublicWorkerBindings(bindings, rendererSha) {
   const dataHub = bindings.find(binding => binding?.name === 'DATA_HUB_PUBLIC');
   const electionResultsVersion = bindings.find(binding => binding?.name === 'ELECTION_RESULTS_VERSION');
   const dataFigureVersion = bindings.find(binding => binding?.name === 'DATA_FIGURE_VERSION');
+  const versionMetadata = bindings.find(binding => binding?.name === 'CF_VERSION_METADATA');
   requireState(assets?.type === 'assets' && api?.type === 'service' &&
     api.service === 'template-dev-cms-api' && api.entrypoint === 'PublicContentEntrypoint' &&
     (api.environment === undefined || api.environment === 'production') &&
@@ -52,7 +53,8 @@ export function assertDevPublicWorkerBindings(bindings, rendererSha) {
     (!dataHub || dataHub.type === 'plain_text' && ['0', '1'].includes(dataHub.text)) &&
     (!pageRenderer || pageRenderer.type === 'plain_text' && pageRenderer.text === renderer.text) &&
     (!electionResultsVersion || electionResultsVersion.type === 'plain_text' && ['0', '1', '2'].includes(electionResultsVersion.text)) &&
-    (!dataFigureVersion || dataFigureVersion.type === 'plain_text' && dataFigureVersion.text === '1'),
+    (!dataFigureVersion || dataFigureVersion.type === 'plain_text' && dataFigureVersion.text === '1') &&
+    (!versionMetadata || versionMetadata.type === 'version_metadata'),
   'Dev public Worker must have the exact reader bindings');
 }
 

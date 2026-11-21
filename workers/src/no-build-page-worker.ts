@@ -131,10 +131,12 @@ export function createNoBuildPageWorker(deps: {
   fetchAsset(request: Request): Promise<Response>;
   readWithdrawal?(path: string): Promise<PageWithdrawal | null>;
   withdrawalsOnly?: boolean;
+  scheduleProof?: boolean;
   lastGood?: PublicContentLastGood;
   waitUntil?(task: Promise<unknown>): void;
 }) {
   const target = assertPublicationTarget(deps.target ?? publicationTarget("development"));
+  const scheduleProof = target.environment === "development" && deps.scheduleProof === true;
   const nowMs = () => deps.now?.().getTime() ?? Date.now();
   const responseCache = createPublicPageResponseCache({ cache: deps.cache, target, rendererSha: deps.rendererSha, now: nowMs });
   const adminOrigin = target.environment === "development" ? "https://dev-admin.example.org" : "https://admin.njpbs.org";
@@ -196,12 +198,13 @@ export function createNoBuildPageWorker(deps: {
       const validQuery = query.length === 0 || adminRefresh || refreshQuery;
       if (url.pathname !== path || !validQuery) return unavailable(head, 404);
       if (!["GET", "HEAD"].includes(request.method)) return unavailable(false, 405);
-      if (!deps.rendererReady || deps.withdrawalsOnly) return null;
+      if (!scheduleProof && (!deps.rendererReady || deps.withdrawalsOnly)) return null;
       try {
         const reply = await bounded(deps.getDecision(path, head ? "HEAD" : "GET"));
         const receipt = reply.scheduleReceipt;
         if (reply.kind !== "schedule-export" || reply.path !== path || reply.receipt || reply.contextReceipt ||
-            !receipt || receipt.schemaVersion !== 1 || receipt.code.commitSha !== deps.rendererSha ||
+            !receipt || receipt.schemaVersion !== 1 || !/^[a-f0-9]{40}$/.test(receipt.code.commitSha) ||
+            (!scheduleProof && receipt.code.commitSha !== deps.rendererSha) ||
             !Number.isSafeInteger(receipt.code.generation) || receipt.code.generation < 1 ||
             receipt.code.schemaVersion !== 1 || receipt.code.digestAlgorithm !== "sha256" ||
             [receipt.code.artifactDigest, receipt.code.artifactReceiptDigest, receipt.code.mediaManifestDigest,
@@ -246,7 +249,7 @@ export function createNoBuildPageWorker(deps: {
           "x-njpbs-schedule-projection-sha256": receipt.projectionJson.digest,
           "x-njpbs-schedule-pdf-sha256": receipt.retainedPdf.digest, "x-njpbs-schedule-exported-at": receipt.exportedAt,
         } });
-      } catch { return null; }
+      } catch { return scheduleProof ? unavailable(head, 503) : null; }
     }
     const publicPageRequest = ["GET", "HEAD"].includes(request.method) && path !== "/_home-sources.json";
     const phases = ["decision", "render", "recheck", "withdrawal", "fallback"] as const;

@@ -187,11 +187,17 @@ function createCmsGetPublicPageHandler(deps = {}) {
           result => result.kind !== "code-post-unavailable");
       }
       if (req.body?.mode === "no-build-page-v1") {
-        const { path, rendererSha, method = "GET" } = req.body;
+        const { path, rendererSha, method = "GET", scheduleProof = false } = req.body;
         if (!["GET", "HEAD"].includes(method)) throw new Error("Invalid public Page method");
         const target = require("./lib/no-build-page-target").pagePublicationTarget({ firestore, target: deps.target });
+        const scheduleExport = require("./lib/no-build-page-schedule-reader").isPageScheduleExportPath(path);
+        if (typeof scheduleProof !== "boolean" || (scheduleProof && (target.environment !== "development" || !scheduleExport ||
+            method !== "GET")) || (scheduleExport && !/^[a-f0-9]{40}$/.test(rendererSha ?? ""))) {
+          throw new Error("Invalid Schedule proof request");
+        }
         const read = async () => {
-          const result = await readNoBuildPageDecision({ firestore, path, rendererSha, target, legacyStaffServing: true,
+          const result = await readNoBuildPageDecision({ firestore, path, rendererSha: scheduleProof ? undefined : rendererSha,
+            target, legacyStaffServing: true,
             currentCodeRequest: deps.currentCodeRequest,
             ...(decisionCache ? { readScheduledDecision: ({ capture, read }) =>
               readScheduledDecision({ capture, read, path, rendererSha, method, target }) } : {}) });
@@ -201,8 +207,7 @@ function createCmsGetPublicPageHandler(deps = {}) {
         };
         // These routes qualify their schedule capture before any projection
         // cache hit. They never supply a lease for the Worker HTML cache.
-        if (require("./lib/no-build-page-schedule-reader").isPageScheduleExportPath(path) ||
-            ["/schedule/", "/live/"].includes(path)) return reply(req, res, await read());
+        if (scheduleExport || ["/schedule/", "/live/"].includes(path)) return reply(req, res, await read());
         return await cachedDecision(req, res, JSON.stringify(["page", path, rendererSha, method]), read,
           result => !["schedule-export", "schedule-unavailable"].includes(result.kind) &&
             !["schedule", "live"].includes(result.receipt?.pageId ?? result.renderContext?.pageId));

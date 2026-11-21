@@ -9,6 +9,7 @@ import type { PublicContentEntrypoint } from "../../cms-api/src/index";
 import { readDurablePostWithdrawal } from "./durable-post-withdrawals";
 import { readDurablePageWithdrawal } from "./durable-page-withdrawals";
 import { createNoBuildCodePostWorker } from "./no-build-code-post-worker";
+import { rollbackCacheControl, rollbackProbe, rollbackRead, versionedProof } from "./rollback-proof";
 
 const target = publicationTarget("development");
 // Runtime Page capability binds the exact compiled graph; older candidates
@@ -24,8 +25,8 @@ type DevPublicEnv = Omit<DevPublicBindings, "CMS_API"> & {
 
 // The staff gateway owns access. The private reader owns Post admission and
 // retained routes; unrelated paths keep the frozen dev Assets contract.
-export default {
-  async fetch(request: Request, env: DevPublicEnv, ctx: ExecutionContext): Promise<Response> {
+const devPublic = {
+  async fetch(request: Request, env: DevPublicEnv, ctx: ExecutionContext, scheduleProof = false): Promise<Response> {
     if (new URL(request.url).origin !== target.origin) {
       return new Response(null, { status: 404, headers: { "cache-control": "no-store" } });
     }
@@ -44,7 +45,8 @@ export default {
         fetchAsset: assetRequest => env.ASSETS.fetch(assetRequest),
         readWithdrawal: path => readDurablePageWithdrawal(env.DURABLE_POST_WITHDRAWALS, target.workerName, path),
         withdrawalsOnly: !env.NO_BUILD_PAGE_RENDERER_SHA,
-        getDecision: (path, method) => env.CMS_API.getNoBuildPage(path, rendererSha, method) });
+        scheduleProof,
+        getDecision: (path, method) => env.CMS_API.getNoBuildPage(path, rendererSha, method, false, scheduleProof) });
       const pageResponse = await pages.fetch(request);
       if (pageResponse) return pageResponse;
     }
@@ -80,5 +82,25 @@ export default {
     headers.set("x-njpbs-publication-origin", target.workerName);
     headers.set("cache-control", "no-store");
     return new Response(asset.body, { status: asset.status, statusText: asset.statusText, headers });
+  },
+};
+
+export default {
+  async fetch(request: Request, env: DevPublicEnv, ctx: ExecutionContext): Promise<Response> {
+    const url = new URL(request.url);
+    const read = url.origin === target.origin ? rollbackRead(url, request.method) : null;
+    const probe = request.headers.get(rollbackProbe);
+    if (!read || !probe || request.headers.get("cache-control") !== rollbackCacheControl) {
+      return devPublic.fetch(request, env, ctx);
+    }
+    const version = env.CF_VERSION_METADATA?.id;
+    if (!version || probe !== (read === "edge" ? "current" : version)) {
+      return versionedProof(new Response(null, { status: 503 }), version);
+    }
+    try {
+      return versionedProof(await devPublic.fetch(request, env, ctx, read === "schedule"), version);
+    } catch {
+      return versionedProof(new Response(null, { status: 503 }), version);
+    }
   },
 } satisfies ExportedHandler<DevPublicEnv>;
