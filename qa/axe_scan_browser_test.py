@@ -162,20 +162,23 @@ class PublicInteractions(BrowserChecks):
             page.add_style_tag(content="html, body { -webkit-text-size-adjust: 200% !important; }")
             self.assertAlmostEqual(donate.evaluate("link => parseFloat(getComputedStyle(link).fontSize)"),
                                    2 * original_size, places=1)
-            self.assertLessEqual(donate.evaluate("link => link.getBoundingClientRect().right"), 320)
-
             label = page.get_by_text("FCC public inspection file:", exact=True)
-            self.assertLessEqual(label.evaluate("""el => {
-                const range = document.createRange();
-                range.selectNodeContents(el);
-                return range.getBoundingClientRect().right;
-            }"""), 320)
 
-            page.get_by_role("button", name="Menu", exact=True).press("Enter")
-            nav = page.get_by_role("navigation", name="Primary", exact=True)
-            expect(nav).to_be_visible()
-            self.assertLessEqual(nav.evaluate("el => el.getBoundingClientRect().bottom"), 569)
-            page.keyboard.press("Escape")
+            for width in (320, 375):
+                with self.subTest(width=width):
+                    page.set_viewport_size({"width": width, "height": 568})
+                    self.assertLessEqual(donate.evaluate("link => link.getBoundingClientRect().right"), width)
+                    self.assertLessEqual(label.evaluate("""el => {
+                        const range = document.createRange();
+                        range.selectNodeContents(el);
+                        return range.getBoundingClientRect().right;
+                    }"""), width)
+
+                    page.get_by_role("button", name="Menu", exact=True).press("Enter")
+                    nav = page.get_by_role("navigation", name="Primary", exact=True)
+                    expect(nav).to_be_visible()
+                    self.assertLessEqual(nav.evaluate("el => el.getBoundingClientRect().bottom"), 569)
+                    page.keyboard.press("Escape")
 
             page.set_viewport_size({"width": 768, "height": 568})
             fcc = page.locator(".foot-fcc")
