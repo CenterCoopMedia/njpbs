@@ -150,6 +150,32 @@ class PublicInteractions(BrowserChecks):
                         expect(choice).to_be_focused()
                         expect(choice).to_be_in_viewport(ratio=1)
 
+    def test_mobile_chrome_fits_at_double_text_size(self):
+        with self.browser.new_context(
+            viewport={"width": 320, "height": 568}, is_mobile=True, reduced_motion="reduce",
+        ) as context:
+            page = context.new_page()
+            page.goto(BASE + "/", wait_until="domcontentloaded")
+            page.evaluate("document.fonts.ready")
+            donate = page.locator(".site-head .donate")
+            original_size = donate.evaluate("link => parseFloat(getComputedStyle(link).fontSize)")
+            page.add_style_tag(content="html, body { -webkit-text-size-adjust: 200% !important; }")
+            self.assertAlmostEqual(donate.evaluate("link => parseFloat(getComputedStyle(link).fontSize)"),
+                                   2 * original_size, places=1)
+            self.assertLessEqual(donate.evaluate("link => link.getBoundingClientRect().right"), 320)
+
+            label = page.get_by_text("FCC public inspection file:", exact=True)
+            self.assertLessEqual(label.evaluate("""el => {
+                const range = document.createRange();
+                range.selectNodeContents(el);
+                return range.getBoundingClientRect().right;
+            }"""), 320)
+
+            page.get_by_role("button", name="Menu", exact=True).press("Enter")
+            nav = page.get_by_role("navigation", name="Primary", exact=True)
+            expect(nav).to_be_visible()
+            self.assertLessEqual(nav.evaluate("el => el.getBoundingClientRect().bottom"), 569)
+
     def test_homepage_honors_native_scroll(self):
         with self.browser.new_context(viewport={"width": 1280, "height": 720}) as context:
             page = context.new_page()
