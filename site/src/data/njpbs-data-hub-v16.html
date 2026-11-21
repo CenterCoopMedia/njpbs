@@ -1327,7 +1327,15 @@
         if(i===0||i===rows.length-1)marks+=v7Text(center,yy-11,'$'+r.value.toFixed(2),compact?15:19,730,'middle',C.ink);
       });
       const future=m.comparisons?.find(a=>a.future&&a.referenceValue!==undefined);
-      if(future)marks+=v7Text(left,bottom+77,'Announced for Jan. 1, 2027: $'+Number(future.referenceValue).toFixed(2)+'/hr · not yet effective',compact?14:19,600,'start',C.secondary);
+      if(future){
+        const announcement='Announced for Jan. 1, 2027: $'+Number(future.referenceValue).toFixed(2)+'/hr';
+        if(compact){
+          marks+=v7Text(left,bottom+62,announcement,14,600,'start',C.secondary);
+          marks+=v7Text(left,bottom+85,'Not yet effective',14,600,'start',C.secondary);
+        }else{
+          marks+=v7Text(left,bottom+77,announcement+' · not yet effective',19,600,'start',C.secondary);
+        }
+      }
     }
     else if(m.id==='electricity'){
       return electricSVG(m,compact,instance);
