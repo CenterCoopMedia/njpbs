@@ -59,11 +59,16 @@ function gridColumns(value: ContentShelfData["columns"]): 2 | 3 | 4 {
   return value === 2 || value === 4 ? value : 3;
 }
 
+export function pbsShelfImageFallback(image: string): string {
+  // Private previews already package and rewrite this image attribute.
+  return image.startsWith("https://image.pbs.org/") ? ' data-fallback-src="/brand/home/new-jersey-blue.webp"' : "";
+}
+
 function programGridCard(card: HomeProgramRailCard): string {
   const image = homeSourceImage({ url: card.image, alt: "" })?.url;
   const index = Number.isSafeInteger(card.index) ? ((card.index % 8) + 8) % 8 : 0;
   const artwork = image
-    ? `<span class="home-shelf__media" aria-hidden="true"><img src="${escapeHtml(image)}" alt="" loading="lazy" referrerpolicy="no-referrer" width="640" height="360" draggable="false" /></span>`
+    ? `<span class="home-shelf__media" aria-hidden="true"><img src="${escapeHtml(image)}" alt="" loading="lazy" referrerpolicy="no-referrer" width="640" height="360" draggable="false"${pbsShelfImageFallback(image)} /></span>`
     : `<span class="home-shelf__media" aria-hidden="true" style="background:var(--tile-gradient-${index})"></span>`;
   return `<li><a class="home-shelf__card" draggable="false"${homeLinkAttributes(card.href, card.external)}>${artwork}<span class="home-shelf__title">${escapeHtml(card.title)}</span>${card.external ? externalNotice : ""}</a></li>`;
 }
@@ -107,7 +112,7 @@ function programCard(card: HomeProgramRailCard): string {
   const index = Number.isSafeInteger(card.index) ? ((card.index % 8) + 8) % 8 : 0;
   const title = escapeHtml(card.title);
   const artwork = image
-    ? `<img class="card__image" src="${escapeHtml(image)}" alt="" loading="lazy" referrerpolicy="no-referrer" width="640" height="360" draggable="false" /><span class="card__title card__title--below">${title}</span>`
+    ? `<img class="card__image" src="${escapeHtml(image)}" alt="" loading="lazy" referrerpolicy="no-referrer" width="640" height="360" draggable="false"${pbsShelfImageFallback(image)} /><span class="card__title card__title--below">${title}</span>`
     : `<span class="card__art" style="background:var(--tile-gradient-${index})"><span class="card__title">${title}</span></span>`;
   // Native dragging cancels card clicks on a small pointer slip. Keep both the
   // anchor and image non-draggable while the rail itself scrolls normally.

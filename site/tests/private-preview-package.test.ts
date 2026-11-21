@@ -6,6 +6,7 @@ import path from "node:path";
 import { createHash } from "node:crypto";
 import { preparePrivatePreview } from "../scripts/prepare-private-preview.mjs";
 import { renderBlock } from "../../packages/content-core/src/content-render";
+import { renderHomeProgramRail } from "../../packages/content-core/src/home-rail-render";
 
 const directories: string[] = [];
 const queueId = "11111111111111111111";
@@ -25,7 +26,7 @@ async function fixture(
 ) {
   const directory = await mkdtemp(path.join(tmpdir(), "njpbs-private-preview-"));
   directories.push(directory);
-  for (const [file, body] of Object.entries({ [`${route}/index.html`]: html,
+  for (const [file, body] of Object.entries({ [path.join(route, "index.html")]: html,
     "_preview-assets.json": JSON.stringify(manifest), ...assets })) {
     const target = path.join(directory, file);
     await mkdir(path.dirname(target), { recursive: true });
@@ -185,6 +186,22 @@ it("packages only the Home hero's deferred and fallback image attributes", async
   expect([...result.files.keys()].sort()).toEqual([
     "brand/home/new-jersey-blue.webp", "brand/spotlight/budget.jpg", "contact/index.html",
   ]);
+});
+
+it("packs program shelf fallback artwork inside the private Home preview", async () => {
+  const image = "https://image.pbs.org/program.jpg";
+  const href = "https://watch.njpbs.org/show/program/";
+  const shelf = renderHomeProgramRail("featured", [{
+    title: "Program", description: "A program synopsis", href, image, index: 0,
+  }], "https://watch.njpbs.org/");
+  const fallback = "brand/home/new-jersey-blue.webp";
+  const directory = await fixture(shelf, { [fallback]: "fallback image bytes" }, {}, "");
+  const result = await pack(directory, { pageId: "home" });
+  const output = result.files.get("index.html")!.body.toString();
+  expect(output).toContain(`src="${image}"`);
+  expect(output).toContain(`data-fallback-src="${base}${fallback}"`);
+  expect(output).toContain(`href="${href}"`);
+  expect(result.files.get(fallback)!.body.toString()).toBe("fallback image bytes");
 });
 
 it.each([
