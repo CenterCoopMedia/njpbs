@@ -311,6 +311,7 @@ async function expectStatus({
   init,
   expected,
   expectedHeaders = {},
+  allowIpRateLimit = false,
   label,
 }) {
   let response;
@@ -320,9 +321,15 @@ async function expectStatus({
     throw new CmsSmokeError(`${label} request failed`);
   }
 
-  if (response.status !== expected) {
+  const ipRateLimited = allowIpRateLimit && response.status === 429 &&
+    response.headers?.get("x-rate-limit-scope") === "ip" &&
+    /^[1-9]\d*$/.test(response.headers.get("retry-after") ?? "");
+  if (response.status !== expected && !ipRateLimited) {
+    const expectedStatus = allowIpRateLimit
+      ? `${expected} or an IP rate-limit 429 with positive Retry-After`
+      : expected;
     throw new CmsSmokeError(
-      `${label} returned ${response.status}; expected ${expected}`,
+      `${label} returned ${response.status}; expected ${expectedStatus}`,
     );
   }
 
@@ -390,6 +397,8 @@ async function runFunctionSmoke({ baseUrl, functionsOrigin, adminOrigin, deploye
         body: uploadBody ?? "{}",
       },
       expected: 401,
+      // These small account buckets can run out across repeated smoke runs.
+      allowIpRateLimit: endpoint === "submitStaffAccessRequest" || endpoint === "requestStaffPasswordReset",
       label: `${endpoint} unauthenticated POST`,
     });
   }
