@@ -1052,6 +1052,7 @@
 }
 .passport__identity {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: 1rem;
   min-width: 0;

@@ -183,6 +183,24 @@ class PublicInteractions(BrowserChecks):
                     expect(card).to_have_accessible_name(re.compile(r"\w"))
 
 
+    def test_homepage_passport_label_fits_at_double_text_size(self):
+        with self.browser.new_context(viewport={"width": 320, "height": 720}, is_mobile=True) as context:
+            page = context.new_page()
+            page.goto(BASE + "/", wait_until="domcontentloaded")
+            page.evaluate("document.fonts.ready")
+            label = page.locator(".passport__mark-name")
+            original_size = label.evaluate("el => parseFloat(getComputedStyle(el).fontSize)")
+            page.add_style_tag(content="html, body { -webkit-text-size-adjust: 200% !important; }")
+            self.assertAlmostEqual(label.evaluate("el => parseFloat(getComputedStyle(el).fontSize)"),
+                                   2 * original_size, places=1)
+            self.assertTrue(label.evaluate("""el => {
+                const band = el.closest(".passport__inner").getBoundingClientRect();
+                const range = document.createRange();
+                range.selectNodeContents(el);
+                return [...range.getClientRects()].every(rect => rect.left >= band.left && rect.right <= band.right);
+            }"""))
+
+
 class ComingSoonInteractions(BrowserChecks):
     def open_scene(self, context):
         page = context.new_page()
