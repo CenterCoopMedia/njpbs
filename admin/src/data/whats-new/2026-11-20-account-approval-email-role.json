@@ -1,0 +1,7 @@
+{
+  "date": "2026-11-20",
+  "kind": "fixed",
+  "title": "Account approval emails name the approved role",
+  "body": "When someone is approved for Boardwalk access, the account-ready email names their role as Viewer, Writer, or Editor.",
+  "prs": []
+}

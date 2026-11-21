@@ -9,6 +9,7 @@
 const { defineSecret, defineString } = require("firebase-functions/params");
 const { onSchedule } = require("firebase-functions/v2/scheduler");
 const { db } = require("./lib/firebase");
+const approvalRoleNames = require("./lib/staff-approval-role-names.json");
 const {
   njpbsEmailLogoAttachment,
   renderNjpbsEmailHeader,
@@ -232,14 +233,19 @@ function renderStaffAccessEmail(message, { adminOrigin } = {}) {
         closing: "Keep this reference for any questions about your request.",
       };
       break;
-    case "approved":
+    case "approved": {
+      const roleName = Object.hasOwn(approvalRoleNames, message.role)
+        ? approvalRoleNames[message.role]
+        : null;
       subject = "Your NJ PBS Admin account is ready";
       content = {
         preheader: "Your NJ PBS Admin access request was approved.",
         heading: "Your NJ PBS Admin account is ready",
         paragraphs: [
           hello,
-          `An administrator approved your account with ${plainText(message.role)} access.`,
+          roleName
+            ? `An administrator approved your account with ${roleName} access.`
+            : "An administrator approved your account.",
           "Sign in with the same email address that you used for your request.",
         ],
         details: [
@@ -250,6 +256,7 @@ function renderStaffAccessEmail(message, { adminOrigin } = {}) {
         closing: "Reply to this email if you need help with your account.",
       };
       break;
+    }
     case "denied":
       subject = "NJ PBS Admin access request update";
       content = {
@@ -415,6 +422,7 @@ function queueStaffAccessEmail(transaction, firestore, message, nowValue) {
       verificationLink: message.verificationLink ?? null,
       passwordResetLink: message.passwordResetLink ?? null,
       reference: message.reference ?? null,
+      role: message.role ?? null,
       state: "pending",
       attemptCount: 0,
       nextAttemptAt: nowValue,

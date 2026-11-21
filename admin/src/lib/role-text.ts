@@ -1,4 +1,5 @@
 import type { Role } from "../../../packages/content-core/src/rbac";
+import approvalRoleNames from "../../../functions/lib/staff-approval-role-names.json";
 
 // Staff words only. The role ids and capability checks stay in the shared RBAC model.
 export const ROLE_TEXT: Record<Role, {
@@ -8,19 +9,19 @@ export const ROLE_TEXT: Record<Role, {
   cannot: readonly string[];
 }> = {
   staff: {
-    name: "Viewer",
+    name: approvalRoleNames.staff,
     summary: "Can read the guide and browse authorized audio. Cannot change content.",
     can: ["Read the private Boardwalk guide.", "Browse audio in authorized categories.", "File problem reports and read their own reports."],
     cannot: ["Create, edit or publish content.", "Upload or manage media.", "Manage the schedule, settings, staff accounts or access."],
   },
   contributor: {
-    name: "Writer",
+    name: approvalRoleNames.contributor,
     summary: "Can draft and edit their own work. An Editor publishes it.",
     can: ["Read the guide and browse authorized audio.", "Draft and edit their own work in their areas.", "Manage their own profile and profile photo."],
     cannot: ["Edit other people's work or publish pages and posts.", "Delete content or manage media.", "Upload media beyond their own profile photo.", "Manage the schedule, settings, staff accounts or access."],
   },
   editor: {
-    name: "Editor",
+    name: approvalRoleNames.editor,
     summary: "Can edit and publish any work in their areas, and manage media in authorized categories. Cannot manage staff access.",
     can: ["Read the guide and browse authorized audio.", "Draft, edit, publish and unpublish work in their areas.", "Upload and manage media in authorized categories."],
     cannot: ["Delete content.", "Manage the schedule, settings, staff accounts or access."],
