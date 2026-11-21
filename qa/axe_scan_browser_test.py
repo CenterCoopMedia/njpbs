@@ -125,7 +125,7 @@ class PublicInteractions(BrowserChecks):
             expect(menu).to_be_focused()
 
     def test_privacy_notice_fits_a_short_mobile_viewport(self):
-        for width, height in [(320, 480), (390, 600)]:
+        for width, height in [(320, 480), (390, 600), (844, 390)]:
             with self.subTest(width=width, height=height):
                 with self.browser.new_context(viewport={"width": width, "height": height},
                                               has_touch=True) as context:

@@ -68,7 +68,7 @@ const { measurementId, activeCampaign = false } = Astro.props;
     bottom: var(--gutter);
     left: var(--gutter);
     display: flex;
-    align-items: flex-end;
+    align-items: safe flex-end;
     justify-content: space-between;
     gap: var(--space-6);
     box-sizing: border-box;
@@ -137,7 +137,7 @@ const { measurementId, activeCampaign = false } = Astro.props;
     border-color: var(--color-border-strong);
   }
 
-  @media (max-width: 48rem) {
+  @media (max-width: 48rem), (max-height: 30rem) {
     .analytics-consent {
       align-items: stretch;
       flex-direction: column;
