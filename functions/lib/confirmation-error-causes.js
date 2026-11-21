@@ -2,7 +2,7 @@
 
 // Scheduler logging otherwise drops AggregateError.errors. Emit bounded error
 // categories and local source locations, never messages, content or URLs.
-function confirmationErrorCauses(error) {
+function confirmationErrorCauses(error, { includeSource = true } = {}) {
   const pending = [error], causes = [];
   let scanned = 0;
   while (pending.length && causes.length < 8 && scanned++ < 16) {
@@ -16,7 +16,7 @@ function confirmationErrorCauses(error) {
       "record_publication_unavailable", "record_publication_replaced", "settings_publication_unavailable",
       "storage/unauthorized", "storage/object-not-found", "ETIMEDOUT", "ECONNRESET", "ENOTFOUND", "EACCES"];
     // A multiline message can contain text shaped like a local stack frame.
-    const header = `${current?.name}: ${current?.message}`, stack = current?.stack;
+    const header = `${current?.name}: ${current?.message}`, stack = includeSource ? current?.stack : null;
     const frames = typeof stack === "string" && stack.startsWith(`${header}\n`) ? stack.slice(header.length + 1) : "";
     const source = frames.match(/\/(lib\/[a-z0-9-]+\.js|no-build-post-confirmation\.js):(\d+):(\d+)/);
     causes.push({ name: names.includes(current?.name) ? current.name : "Error",

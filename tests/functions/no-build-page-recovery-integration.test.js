@@ -954,19 +954,22 @@ it("shares a durable Page proof lease, backs off four failures and stops until s
   offset = 0;
   expect(await settingsConfirmation.confirmNoBuildPageSettings({ ...options, fetchPublic: settingsPublicFetch(home) }))
     .toEqual({ confirmed: true });
-  expect((await proofRef.get()).data()).toMatchObject({ attempts: 1, status: "verified" });
+  const verified = (await proofRef.get()).data();
+  expect(verified).toMatchObject({ attempts: 1, status: "verified" });
+  expect(verified.failureReason).toBeUndefined();
 }, 45_000);
 
 it("retains the delay after a crashed Page proof and fences its late receipt", async () => {
   const { settingsOperationId } = await seedFullPageCoverage();
   const ref = firestore.doc(`cmsPublishQueue/${settingsOperationId}`);
+  const proofRef = ref.collection("confirmation").doc("page-consumers");
   const queue = (await ref.get()).data(), identity = queue.settingsPublication;
   let time = Date.now();
   const log = { warn: vi.fn(), error: vi.fn() };
   const claim = () => pageProof.claimPageConsumerProof({ firestore, operationId: settingsOperationId,
     identity, now: () => time, deadline: time + 45_000, log });
   const first = await claim();
-  const stored = (await ref.collection("confirmation").doc("page-consumers").get()).data();
+  const stored = (await proofRef.get()).data();
   time = stored.leaseUntil + 1;
   expect(await claim()).toBeNull();
   time = stored.nextAttemptAt;
@@ -977,19 +980,26 @@ it("retains the delay after a crashed Page proof and fences its late receipt", a
   await first.finish(false);
   await firestore.runTransaction(transaction => successor.assertCurrent(transaction, { settingsPublication: identity }), { readOnly: true });
   await successor.finish(false);
-  expect((await ref.collection("confirmation").doc("page-consumers").get()).data()).toMatchObject({ attempts: 2, status: "failed" });
+  expect((await proofRef.get()).data()).toMatchObject({ attempts: 2, status: "failed" });
   for (let attempt = 3; attempt <= 4; attempt++) {
-    const prior = (await ref.collection("confirmation").doc("page-consumers").get()).data();
+    const prior = (await proofRef.get()).data();
     time = prior.nextAttemptAt;
     const crashed = await claim();
     expect(crashed).not.toBeNull();
     if (attempt === 3) await crashed.finish(false);
   }
-  time = (await ref.collection("confirmation").doc("page-consumers").get()).data().leaseUntil;
+  time = (await proofRef.get()).data().leaseUntil;
   expect(await claim()).toBeNull();
   expect(await claim()).toBeNull();
   expect(log.error).toHaveBeenCalledTimes(1);
-  expect((await ref.collection("confirmation").doc("page-consumers").get()).data()).toMatchObject({ attempts: 4, status: "failed", nextAttemptAt: null });
+  expect((await proofRef.get()).data()).toMatchObject({ attempts: 4, status: "failed", nextAttemptAt: null,
+    failureReason: { code: "lease_expired" } });
+
+  await firestore.doc(context.PUBLIC_CONTEXT_PATH).update({ revision: identity.contextRevision + 1 });
+  expect(await claim()).toBeNull();
+  const stale = (await proofRef.get()).data();
+  expect(stale).toMatchObject({ attempts: 4, status: "stale" });
+  expect(stale.failureReason).toBeUndefined();
 });
 
 it("does not spend the Page proof budget on wakes with too little shared deadline left", async () => {
@@ -1613,6 +1623,7 @@ function contextIdentity() {
 
 it("reports the refusing Schedule owner and continues later Page proofs in a production-shaped sweep", async () => {
   const { home, settingsOperationId } = await seedProductionSweep();
+  const proofRef = firestore.doc(`cmsPublishQueue/${settingsOperationId}/confirmation/page-consumers`);
   const publicFetch = settingsPublicFetch(home), visited = [], warnings = [];
   const fetchObserved = async (url, options) => {
     const path = new URL(url).pathname; visited.push(path);
@@ -1636,6 +1647,7 @@ it("reports the refusing Schedule owner and continues later Page proofs in a pro
   expect(warnings).toEqual([{ message: "Page consumer confirmation is unavailable", missingPages: ["schedule"], missingPageCount: 1,
     failures: [{ pageId: "schedule", causes: [{ name: "Error", source: expect.stringMatching(/^lib\/no-build-page-recovery\.js:\d+:\d+$/) }] }] },
     { message: "Page consumer confirmation incomplete", operationId: settingsOperationId, missingPageCount: 1, missingPostCount: 0 }]);
+  expect((await proofRef.get()).data().failureReason).toEqual({ code: "page_readback_failed", causes: [{ name: "Error" }] });
   expect(visited).toContain("/watch/");
   await expect(confirmation.recoverNoBuildPublications({ firestore, readback: () => ({ target, headers }),
     config: () => ({ zoneId: "f".repeat(32), token: "fixture-token" }), currentCodeRequest: scheduleFixture.request,
@@ -1648,12 +1660,16 @@ it("reports the refusing Schedule owner and continues later Page proofs in a pro
     target, headers, currentCodeRequest: scheduleFixture.request, now: () => Date.now() + 60_001,
     log: { warn(message, fields) { warnings.push({ message, ...fields }); } },
     fetchPublic: (url, options) => {
-      if (new URL(url).pathname.startsWith("/posts/")) throw new Error("Unreported private network detail");
+      if (new URL(url).pathname.startsWith("/posts/")) throw Object.assign(new Error("Unreported private network detail"), {
+        code: "unavailable", status: 503,
+      });
       return fetchObserved(url, options);
     } })).rejects.toThrow("Unreported private network detail");
   expect(warnings).toHaveLength(2);
   expect(warnings[0]).toMatchObject({ missingPages: ["schedule"], failures: [{ pageId: "schedule", causes: [{ name: "Error" }] }] });
   expect(JSON.stringify(warnings)).not.toContain("Unreported private network detail");
+  expect((await proofRef.get()).data().failureReason).toEqual({ code: "confirmation_error",
+    causes: [{ name: "Error", code: "unavailable", status: 503 }] });
   expect((await firestore.doc(`cmsPublishQueue/${settingsOperationId}`).get()).data().consumerReceipts).toBeUndefined();
 });
 
