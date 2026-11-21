@@ -130,11 +130,11 @@ describe("staff access email", () => {
       reference: "NJPBS-BLAKE-1",
     });
     expect(approved.text).toContain(
-      "An administrator approved your account with editor access",
+      "An administrator approved your account with Editor access",
     );
     expect(approved.text).toContain("https://admin.njpbs.org");
     expect(approved.html).toContain(
-      "An administrator approved your account with editor access",
+      "An administrator approved your account with Editor access",
     );
 
     const denied = renderStaffAccessEmail({
@@ -159,6 +159,34 @@ describe("staff access email", () => {
     expect(reset.html).toContain(
       'href="https://example.firebaseapp.com/reset?oobCode=safe"',
     );
+  });
+
+  it.each([
+    ["staff", "Viewer"],
+    ["contributor", "Writer"],
+    ["editor", "Editor"],
+  ])("renders the queued %s approval as %s in both email formats", (role, name) => {
+    const set = vi.fn();
+    const firestore = { collection: () => ({ doc: (id) => ({ id }) }) };
+    queueStaffAccessEmail({ set }, firestore, {
+      uid: "approval-fixture",
+      requestVersion: 1,
+      eventType: "approved",
+      to: "person@example.org",
+      role,
+    }, new Date("2026-11-20T18:00:00Z"));
+
+    const [, row] = set.mock.calls[0];
+    const { text, html } = renderStaffAccessEmail(row);
+    const sentence = `An administrator approved your account with ${name} access.`;
+    expect(text).toContain(sentence);
+    expect(html).toContain(sentence);
+  });
+
+  it("renders a queued approval without a recorded role", () => {
+    const { text, html } = renderStaffAccessEmail({ eventType: "approved" });
+    expect(text).toContain("An administrator approved your account.");
+    expect(html).toContain("An administrator approved your account.");
   });
 
   it("sends through Cloudflare Email Service from the named mail subdomain", async () => {

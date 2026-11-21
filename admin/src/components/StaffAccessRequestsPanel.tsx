@@ -203,13 +203,13 @@ export function StaffAccessRequestsPanel({ tiersActive = false }: { tiersActive?
                     value={role}
                   >
                     <option value="staff">
-                      Viewer — guide and audio
+                      {ROLE_TEXT.staff.name} — guide and audio
                     </option>
                     <option value="contributor">
-                      Writer — create own drafts
+                      {ROLE_TEXT.contributor.name} — create own drafts
                     </option>
                     <option value="editor">
-                      Editor — edit and publish site content
+                      {ROLE_TEXT.editor.name} — edit and publish site content
                     </option>
                   </Select>
                   <small id={`request-role-help-${request.uid}`}>
