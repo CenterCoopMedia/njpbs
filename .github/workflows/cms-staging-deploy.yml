@@ -991,7 +991,6 @@ jobs:
             --request POST --header 'Content-Type: application/json' --data '{}' \
             "${CMS_PRODUCTION_API_ORIGIN}/cmsListContent")" = "401"
       - name: Verify legacy settings transition boundaries before Admin
-        if: needs.admin-build.outputs.deploy_sha == github.sha
         run: |
           set -euo pipefail
           expect_transition_status() {

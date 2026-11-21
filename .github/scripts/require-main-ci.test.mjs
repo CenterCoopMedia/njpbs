@@ -176,7 +176,7 @@ test("emergency CI requires successful exact-head CI and native ci; normal mode 
     request: () => { throw new Error("must not query before authorization"); } }), /requires coordinator authorization/);
 });
 
-test("source gate enforces first-parent descent, exact clean source, and normal main ancestry", () => {
+test("source gate enforces first-parent descent, exact clean source, and normal main ancestry", async t => {
   const cwd = mkdtempSync(join(tmpdir(), "emergency-release-"));
   const env = { ...process.env, GIT_AUTHOR_NAME: "Test", GIT_AUTHOR_EMAIL: "test@example.com",
     GIT_COMMITTER_NAME: "Test", GIT_COMMITTER_EMAIL: "test@example.com" };
@@ -184,10 +184,12 @@ test("source gate enforces first-parent descent, exact clean source, and normal 
   try {
     git("init", "--quiet");
     const tree = git("mktree");
-    const commit = (parents, message) => git("commit-tree", tree, ...parents.flatMap(p => ["-p", p]), "-m", message);
+    const commit = (parents, message, sourceTree = tree) => git("commit-tree", sourceTree, ...parents.flatMap(p => ["-p", p]), "-m", message);
     const root = commit([], "root");
     const live = commit([root], "live");
-    const normal = commit([live], "normal main");
+    const docsBlob = execFileSync("git", ["hash-object", "-w", "--stdin"], { cwd, input: "# Unrelated documentation\n", encoding: "utf8" }).trim();
+    const docsTree = execFileSync("git", ["mktree"], { cwd, input: `100644 blob ${docsBlob}\tREADME.md\n`, encoding: "utf8" }).trim();
+    const normal = commit([live], "main adds documentation", docsTree);
     const fix = commit([live], "emergency fix");
     const wrong = commit([root], "wrong base");
     const secondParentOnly = commit([wrong, live], "live only through second parent");
@@ -201,6 +203,25 @@ test("source gate enforces first-parent descent, exact clean source, and normal 
     }
     git("checkout", "--quiet", "--detach", live);
     assert.equal(requireReleaseSource({ sha: live, cwd }), live); // older normal pin, not main tip
+    await t.test("a first-parent pin behind main still verifies settings before Admin", async () => {
+      assert.notEqual(live, normal);
+      assert.equal(git("rev-parse", `${normal}^1`), live);
+      const pinRun = { ...run, head_sha: live };
+      const pinJob = { ...job, head_sha: live };
+      assert.equal(await requireMainCi({ env: repositoryFixture, repository, sha: live, request: async path => {
+        if (path.includes("/jobs?")) return { jobs: [pinJob], total_count: 1 };
+        assert.ok(path.includes(`head_sha=${live}`));
+        return { workflow_runs: [pinRun] };
+      } }), pinRun.id);
+
+      const { jobs } = parse(readCmsDeployWorkflow());
+      const steps = jobs["cms-api"].steps;
+      const edgeSmoke = steps.findIndex(step => step.name === "Smoke-test CMS API edge");
+      const settings = steps.findIndex(step => step.name === "Verify legacy settings transition boundaries before Admin");
+      assert.ok(edgeSmoke >= 0 && edgeSmoke < settings);
+      assert.equal(steps[settings].if, undefined);
+      assert.ok(jobs["admin-deploy"].needs.includes("cms-api"));
+    });
     assert.throws(() => requireReleaseSource({ sha: fix, cwd, emergency: true, authorization: authorization(fix, live) }), /exact deploy SHA/);
     git("config", "user.name", "Test"); git("config", "user.email", "test@example.com");
     git("config", "--local", "core.filemode", "false");
