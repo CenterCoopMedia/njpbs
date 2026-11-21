@@ -72,15 +72,15 @@ async function verifiedInput(id: string) {
 async function readWork(now = Date.now()) {
   return work.readNoBuildCloudWork({ runtime, now, read: async document => (await db.doc(document).get()).data() ?? null });
 }
-function reader() {
-  return background.createPostBackgroundOutputs({ firestore: db, enabled: true, runtime,
+function reader(writer = runtime, writerContextDigest = contextDigest, recoveryOutputs?: string[]) {
+  return background.createPostBackgroundOutputs({ firestore: db, enabled: true, runtime: writer, recoveryOutputs,
     readContextInTransaction: transaction => context.readPublicBackgroundContextInTransaction(transaction, db),
     artifacts: { get: key => readFile(path.join(directory, key)), async put(key, bytes) {
       await mkdir(path.dirname(path.join(directory, key)), { recursive: true });
       await writeFile(path.join(directory, key), bytes);
     } },
-    build: async task => ({ input: { kind: "public-background", rendererSha: runtime.release, contextDigest, routes: [] },
-      assets: [], files: paths[task.output].map(publicPath => ({ path: publicPath, bytes: `Exact context: ${contextDigest}`,
+    build: async task => ({ input: { kind: "public-background", rendererSha: writer.release, contextDigest: writerContextDigest, routes: [] },
+      assets: [], files: paths[task.output].map(publicPath => ({ path: publicPath, bytes: `Exact context: ${writerContextDigest}`,
         contentType: "text/plain" })) }),
   });
 }
@@ -554,6 +554,61 @@ it("serves every context-only aggregate through the real public decision and RPC
   await db.doc("cmsBackgroundOutputs/search").delete();
   expect(await postPublication.readNoBuildPostDecision({ firestore: db, path: "/pagefind/pagefind.js", rendererSha: runtime.release })).toMatchObject({ kind: "background" });
   expect(await postPublication.readNoBuildPostDecision({ firestore: db, path: "/", rendererSha: runtime.release })).toEqual({ kind: "pass" });
+});
+
+it("requires the selected reader and a compatible artifact during release and return", async () => {
+  const successor = { ...runtime, release: "b".repeat(40) };
+  const successorDigest = context.publicContextDigest(2);
+  const selectReader = (release: string, generation: number) => db.doc("system/publicDeployment").set({
+    ...deployment.initialPublicDeploymentPointer(), activeCommitSha: release, activeGeneration: generation,
+    activeDeploymentId: `fixture-deployment-${generation}`, lastReservedGeneration: generation,
+    newestEligibleGeneration: generation, newestEligibleBuildBatchId: `fixture-batch-${generation}`,
+  });
+  const handler = publicContent.createCmsGetPublicPageHandler({ firestore: db,
+    backgroundArtifacts: { get: key => readFile(path.join(directory, key)) }, log: { error() {} } });
+  const fetchListing = (rendererSha: string) => createNoBuildPostWorker({ rendererSha,
+    target: targets.publicationTarget(), cache: { async match() { return undefined; }, async put() {} },
+    fetchAsset: async () => { throw new Error("Owned listings cannot use Assets"); },
+    render: async () => { throw new Error("Listings cannot render a detail Post"); },
+    async getDecision(path, method) {
+      let status = 200;
+      let body: unknown;
+      const response = {
+        headersSent: false, set() { return this; },
+        status(code: number) { status = code; return this; },
+        json(value: unknown) { body = value; return this; },
+      };
+      await handler({ method: "POST", body: { mode: "no-build-post-v1", path, rendererSha, method } }, response);
+      if (status !== 200) throw new Error("Aggregate read refused");
+      return Response.json(body).json();
+    },
+  }).fetch(new Request("https://njpbs.org/posts/"));
+
+  await selectReader(runtime.release, 1);
+  await enqueue();
+  await reader(runtime, contextDigest, ["listings"]).recover();
+  await selectReader(successor.release, 2);
+  const duringRelease = await fetchListing(successor.release);
+  expect(duringRelease?.status).toBe(200);
+  expect(duringRelease?.headers.get("x-njpbs-background-renderer-sha")).toBe(runtime.release);
+  expect(await duringRelease?.text()).toBe(`Exact context: ${contextDigest}`);
+
+  await db.doc(context.PUBLIC_CONTEXT_PATH).update({ revision: 2 });
+  await enqueue("B".repeat(20), { runtime: successor, contextRevision: 2 });
+  await reader(successor, successorDigest, ["listings"]).recover();
+  expect(await (await fetchListing(successor.release))?.text()).toBe(`Exact context: ${successorDigest}`);
+  const workerOnlyReturn = await fetchListing(runtime.release);
+  expect(workerOnlyReturn?.status).toBe(503);
+  expect(workerOnlyReturn?.headers.get("cache-control")).toBe("no-store");
+
+  await selectReader(runtime.release, 3);
+  const afterReturn = await fetchListing(runtime.release);
+  expect(afterReturn?.status).toBe(200);
+  expect(afterReturn?.headers.get("x-njpbs-background-renderer-sha")).toBe(successor.release);
+  expect(await afterReturn?.text()).toBe(`Exact context: ${successorDigest}`);
+
+  await db.doc("cmsBackgroundOutputs/listings").update({ "receipt.assets": firebaseAdminRuntime.FieldValue.delete() });
+  expect((await fetchListing(runtime.release))?.status).toBe(503);
 });
 
 
