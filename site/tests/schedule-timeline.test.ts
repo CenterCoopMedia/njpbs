@@ -1,5 +1,5 @@
 // @vitest-environment node
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import type { ScheduleListing } from "../src/lib/schedule-feed.ts";
 import * as scheduleTimeline from "../src/lib/schedule-timeline.ts";
 import {
@@ -118,6 +118,25 @@ describe("schedule timeline math", () => {
       { listing: firstOneThirty, startMinute: 90, durationMinutes: 15 },
       { listing: secondOneTen, startMinute: 130, durationMinutes: 15 },
     ]);
+  });
+
+  it("resolves Eastern midnight once per date when building timeline rows", () => {
+    const first = listing("First 1:30", "2026-11-01T05:30:00Z", "2026-11-01T05:45:00Z");
+    const repeated = listing("Second 1:30", "2026-11-01T06:30:00Z", "2026-11-01T06:45:00Z");
+    const nextDay = listing("Next midnight", "2026-11-02T05:00:00Z", "2026-11-02T05:30:00Z");
+    const formatParts = vi.spyOn(Intl.DateTimeFormat.prototype, "formatToParts");
+    try {
+      buildScheduleRows([first, nextDay]);
+      const distinctDatesCalls = formatParts.mock.calls.length;
+      formatParts.mockClear();
+
+      const rows = buildScheduleRows([first, repeated, nextDay]);
+
+      expect(rows.map((row) => row.startMinute)).toEqual([90, 150, 0]);
+      expect(formatParts).toHaveBeenCalledTimes(distinctDatesCalls + 1);
+    } finally {
+      formatParts.mockRestore();
+    }
   });
 
   it("keeps rows, marks, and total height on fall-back elapsed minutes", () => {

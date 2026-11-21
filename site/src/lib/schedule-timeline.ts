@@ -52,14 +52,17 @@ const zonedPartsFormatter = new Intl.DateTimeFormat("en-CA", {
 });
 
 export function easternStartMinute(timestamp: string): number {
+  return elapsedEasternMinute(timestamp);
+}
+
+function elapsedEasternMinute(timestamp: string, midnights?: Map<string, number>): number {
   const instant = new Date(timestamp);
   if (Number.isNaN(instant.getTime())) return Number.NaN;
 
   const parts = zonedParts(instant.getTime());
-  const dayStart = zonedLocalHourInstant(
-    `${parts.year}-${parts.month}-${parts.day}`,
-    0,
-  );
+  const date = `${parts.year}-${parts.month}-${parts.day}`;
+  const dayStart = midnights?.get(date) ?? zonedLocalHourInstant(date, 0);
+  midnights?.set(date, dayStart);
   return Number.isFinite(dayStart)
     ? (instant.getTime() - dayStart) / MINUTE_MS
     : Number.NaN;
@@ -165,8 +168,9 @@ export function scheduleRowHeightPx(
 export function buildScheduleRows(
   listings: readonly ScheduleListing[],
 ): readonly ScheduleTimelineRow[] {
+  const midnights = new Map<string, number>();
   return listings.flatMap((listing) => {
-    const startMinute = easternStartMinute(listing.startsAt);
+    const startMinute = elapsedEasternMinute(listing.startsAt, midnights);
     const durationMinutes = scheduleDurationMinutes(
       listing.startsAt,
       listing.endsAt,
