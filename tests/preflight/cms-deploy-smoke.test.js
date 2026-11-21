@@ -918,6 +918,40 @@ if(process.env.CMS_BUG_REPORT_TELEGRAM_ADMIN_MAP)process.exit(8); require("node:
     expect(peak.get(FUNCTIONS_ORIGIN)).toBe(4);
   });
 
+  it("passes three consecutive smoke runs with both account IP buckets exhausted", async () => {
+    const exhausted = new Map([
+      [`${BASE_URL}/submitStaffAccessRequest`, "17500"],
+      [`${BASE_URL}/requestStaffPasswordReset`, "120"],
+    ]);
+    const request = async (url, init) => {
+      const retryAfter = exhausted.get(url);
+      if (init?.method === "POST" && retryAfter) {
+        return new Response(null, { status: 429, headers: {
+          "retry-after": retryAfter, "x-rate-limit-scope": "ip",
+        } });
+      }
+      return expectedResponseFor(url, init);
+    };
+
+    for (let run = 0; run < 3; run += 1) {
+      await expect(runCmsFunctionSmoke({ request })).resolves.toEqual({ checked: 296 });
+    }
+  });
+
+  it.each([
+    ["submitStaffAccessRequest", 429, { "x-rate-limit-scope": "ip" }],
+    ["submitStaffAccessRequest", 429, { "x-rate-limit-scope": "ip", "retry-after": "0" }],
+    ["requestStaffPasswordReset", 429, { "retry-after": "120" }],
+    ["requestStaffPasswordReset", 200, {}],
+    ["cmsCuezStatus", 429, { "x-rate-limit-scope": "ip", "retry-after": "120" }],
+  ])("rejects an unexpected account or ordinary edge response (%s, %i, %j)", async (endpoint, status, headers) => {
+    const request = async (url, init) => url === `${BASE_URL}/${endpoint}` && init?.method === "POST"
+      ? new Response(null, { status, headers })
+      : expectedResponseFor(url, init);
+    await expect(runCmsFunctionSmoke({ request }))
+      .rejects.toThrow(`${endpoint} unauthenticated POST returned ${status}; expected 401`);
+  });
+
   it("fails a direct-origin batch when one authorization refusal is missing", async () => {
     const originPaths = [];
     const request = async (url, init = {}) => {
