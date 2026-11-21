@@ -13,6 +13,15 @@ const image = `registry.cloudflare.com/${account}/njpbs-cms-publisher@${digest}`
 const inputFingerprint = "d".repeat(64);
 const env = { CANONICAL_GITHUB_REPOSITORY: "example/source", CANONICAL_GITHUB_REPOSITORY_ID: "123", GITHUB_REPOSITORY: "example/source", GITHUB_REPOSITORY_ID: "123", GITHUB_WORKFLOW_REF: "example/source/.github/workflows/publisher-image.yml@refs/heads/main" };
 
+test("the publisher image workflow pins external actions to full commits", () => {
+  const workflow = readFileSync(new URL("../workflows/publisher-image.yml", import.meta.url), "utf8");
+  const actions = [...workflow.matchAll(/^ +(?:- )?uses: +([^\s#]+)/gm)]
+    .map(([, action]) => action)
+    .filter(action => !action.startsWith("./"));
+  assert.ok(actions.length > 0, "Expected external publisher image actions");
+  for (const action of actions) assert.match(action, /@[0-9a-f]{40}$/);
+});
+
 function sourceFixture(t) {
   const cwd = mkdtempSync(path.join(tmpdir(), "publisher-image-test-"));
   t.after(() => rmSync(cwd, { recursive: true }));
