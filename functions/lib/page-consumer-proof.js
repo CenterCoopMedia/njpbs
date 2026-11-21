@@ -10,6 +10,8 @@ const MIN_PROOF_BUDGET_MS = 30_000;
 const publicationIdentity = queue => queue?.settingsPublication ?? queue?.libraryCardPublication ?? queue?.recordPublication;
 const proofKey = queue => digest([publicationIdentity(queue),
   ...["settingsRetryAt", "cardRetryAt", "recordRetryAt"].map(field => queue[field]?.toMillis?.() ?? null)]);
+const staleProof = (key, attempts) => ({ key, status: "stale", attempts,
+  claim: null, leaseUntil: null, nextAttemptAt: null });
 
 /** The queue subdocument does not wake the queue's onDocumentWritten trigger.
  * Every event and scheduled caller shares this lease and attempt budget. */
@@ -29,8 +31,7 @@ async function claimPageConsumerProof({ firestore, operationId, identity, now, d
     if (pointer.activeCommitSha !== identity.rendererSha || current?.schemaVersion !== 1 ||
         current.revision !== identity.contextRevision || publicContextDigest(current.revision) !== identity.contextDigest) {
       if (prior?.status === "stale") return null;
-      transaction.set(ref, { key, status: "stale", attempts: prior?.attempts ?? 0,
-        claim: null, leaseUntil: null, nextAttemptAt: null });
+      transaction.set(ref, staleProof(key, prior?.attempts ?? 0));
       return { stale: true };
     }
     const time = now();
@@ -81,4 +82,4 @@ async function claimPageConsumerProof({ firestore, operationId, identity, now, d
   } };
 }
 
-module.exports = { claimPageConsumerProof };
+module.exports = { claimPageConsumerProof, publicationIdentity, proofKey, staleProof };

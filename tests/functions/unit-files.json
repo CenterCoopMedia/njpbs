@@ -211,6 +211,7 @@
   "tests/functions/studio-connector-install.test.ts",
   "tests/functions/studio-connector-upload.test.js",
   "tests/functions/studio-title-files-unit.test.js",
+  "tests/functions/superseded-publication-history.test.ts",
   "tests/functions/transcript-audio-canary.test.js",
   "tests/functions/tvss-schedule-transform.test.js",
   "tests/functions/ugc-contract.test.js",
