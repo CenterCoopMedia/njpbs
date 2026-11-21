@@ -9,12 +9,11 @@ name: CI
 # Classification and the policy gate share one runner so Policy does not wait
 # in the hosted-runner queue after Classify. The policy gate still finishes
 # before any consumer can run package code. The final `ci` job is the one
-# required main-branch result. Metadata edits must not start another code run
-# in this concurrency group.
+# required main-branch result. An edit-only run can hide that check on a PR.
 
 on:
   pull_request:
-    types: [opened, synchronize, reopened, edited]
+    types: [opened, synchronize, reopened]
   merge_group:
     types: [checks_requested]
   push:
@@ -25,7 +24,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: ci${{ github.event_name == 'pull_request' && github.event.action == 'edited' && !github.event.changes.base && '-metadata' || '' }}-${{ github.event_name == 'workflow_dispatch' && github.run_id || github.ref }}
+  group: ci-${{ github.event_name == 'workflow_dispatch' && github.run_id || github.ref }}
   # Finish active main proof for pinned deploys; keep only the newest pending run.
   # PR and queue runs still cancel superseded work. Manual runs are isolated.
   cancel-in-progress: ${{ github.event_name != 'push' || github.ref != 'refs/heads/main' }}
@@ -38,8 +37,6 @@ env:
 jobs:
   policy:
     name: Policy
-    # Base edits validate automatically; title/body edits use no code runners.
-    if: github.event_name != 'pull_request' || github.event.action != 'edited' || github.event.changes.base
     runs-on: ubuntu-24.04
     timeout-minutes: 10 # Runaway guard: 3x max 3m13s (14d, 2026-10-26; #2657).
     permissions:
@@ -445,9 +442,8 @@ jobs:
     uses: ./.github/workflows/firebase-ci.yml
 
   ci:
-    # A skipped metadata job must not replace the required code result.
-    name: ${{ github.event_name == 'pull_request' && github.event.action == 'edited' && !github.event.changes.base && 'PR metadata' || 'ci' }}
-    if: always() && (github.event_name != 'pull_request' || github.event.action != 'edited' || github.event.changes.base)
+    name: ci
+    if: always()
     needs: [policy, docs, site, admin, firebase]
     runs-on: ubuntu-24.04
     # Allow checkout/network overhead on busy runners; aggregation is Node-only.

@@ -75,6 +75,9 @@ checks all four areas unless the same tree has valid full-CI proof. Independent
 review uses a different model provider from the author, with verified findings
 fixed before submission.
 
+After changing a pull request's base branch, push an updated head or reopen
+the pull request to run CI for the new base.
+
 The hosted **Code health** workflow records lint, Functions JavaScript type
 errors, and source size. Download the `code-health` artifact for the tested
 merge tree, its base, the base's ESLint bulk suppressions and the new findings.

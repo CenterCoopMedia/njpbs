@@ -582,7 +582,7 @@ describe("CI path classifier", () => {
       return JSON.parse(result.stdout);
     };
     const expected = { gates: gates(true, false, false, false), classification: "exact", reason: null };
-    for (const action of ["opened", "reopened", "synchronize", "edited"]) {
+    for (const action of ["opened", "reopened", "synchronize"]) {
       // Exercise the workflow's PR head binding for each event type.
       const workflow = readFileSync(new URL("workflows/ci.yml", githubDirectory), "utf8");
       const expression = workflow.match(/PR_HEAD_SHA: \$\{\{ (.+) \}\}/)?.[1];
@@ -930,16 +930,8 @@ describe("Final CI aggregation", () => {
 
     const finalJob = ci.split("\n  ci:\n", 2)[1];
     assert.ok(finalJob, "Final ci job is missing");
-    const finalName = finalJob.match(/^    name: \$\{\{ (.+) \}\}$/m)?.[1];
-    assert.ok(finalName, "Final check name expression is missing");
-    for (const action of ["opened", "reopened", "synchronize", "edited"]) {
-      assert.equal(runInNewContext(finalName, {
-        github: { event_name: "pull_request", event: {
-          action, changes: { base: { ref: { from: "old-target" } } },
-        } },
-      }), "ci", `${action} code validation must retain the required ci name`);
-    }
-    assert.match(finalJob, /if: always\(\)/);
+    assert.match(finalJob, /^    name: ci$/m);
+    assert.match(finalJob, /^    if: always\(\)$/m);
     assert.match(
       finalJob,
       /needs: \[policy, docs, site, admin, firebase\]/,

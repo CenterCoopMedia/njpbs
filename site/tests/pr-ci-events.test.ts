@@ -20,13 +20,9 @@ const ci = parse(
   ),
 );
 
-// Replay GitHub's event and job admission contract from the actual workflow.
-// Missing changes.base is false, as with absent GitHub context properties.
+// Replay GitHub's event admission contract from the actual workflow.
 // https://docs.github.com/en/webhooks/webhook-events-and-payloads#pull_request
-function eventContext(
-  action: string,
-  changes: object = { body: { from: "Summary" } },
-) {
+function eventContext(action: string) {
   return {
     ref: "refs/pull/2743/merge",
     sha: "merge-sha",
@@ -39,7 +35,6 @@ function eventContext(
         head: { sha: "654f88d7" },
         base: { sha: "new-base", ref: "main" },
       },
-      changes,
     },
   };
 }
@@ -61,22 +56,15 @@ function group(github: object, workflow = ci) {
   );
 }
 
-function codeAdmitted(github: ReturnType<typeof eventContext>) {
-  return (
-    ci.on.pull_request.types.includes(github.event.action) &&
-    (!ci.jobs.policy.if || Boolean(expression(ci.jobs.policy.if, github)))
-  );
-}
-
 function admittedRuns(actions: string[]) {
   return actions
+    .filter((action) => ci.on.pull_request.types.includes(action))
     .map((action) => eventContext(action))
-    .filter(codeAdmitted)
     .map((github) => ({ action: github.event.action, group: group(github) }));
 }
 
 describe("PR events at the Actions workflow boundary", () => {
-  it("keeps a push followed by body edits to one code run on the same head", () => {
+  it("keeps a push followed by description edits to one workflow run on the same head", () => {
     expect(admittedRuns(["synchronize", "edited", "edited"])).toEqual([
       { action: "synchronize", group: "ci-refs/pull/2743/merge" },
     ]);
@@ -151,10 +139,10 @@ describe("Merge queue events at the Actions workflow boundary", () => {
   });
 
   it("reports required Policy and ci for the combined queue head without PR metadata", () => {
-    expect(Boolean(expression(ci.jobs.policy.if, queue()))).toBe(true);
+    expect(ci.jobs.policy.if).toBeUndefined();
     expect(ci.jobs.policy.name).toBe("Policy");
     expect(Boolean(expression(ci.jobs.ci.if, queue()))).toBe(true);
-    expect(expression(ci.jobs.ci.name, queue())).toBe("ci");
+    expect(ci.jobs.ci.name).toBe("ci");
   });
 
   it("selects every consumer even when the classifier would skip it", () => {
@@ -200,52 +188,22 @@ describe("Merge queue events at the Actions workflow boundary", () => {
   });
 });
 
-describe("Edited PR event contracts", () => {
-  it.each([
-    { title: { from: "Old title" } },
-    { body: { from: "Old body" } },
-    { title: { from: "Old title" }, body: { from: "Old body" } },
-  ])(
-    "isolates metadata edits without publishing the required ci check: %j",
-    (changes) => {
-      const github = eventContext("edited", changes);
-      expect(ci.on.pull_request.types).toContain("edited");
-      expect(codeAdmitted(github)).toBe(false);
-      expect(group(github)).not.toBe(group(eventContext("synchronize")));
-      expect(Boolean(expression(ci.jobs.ci.if, github))).toBe(false);
-      expect(expression(ci.jobs.ci.name, github)).not.toBe("ci");
-    },
-  );
-
-  it.each([
-    { base: { ref: { from: "old-target" }, sha: { from: "old-base" } } },
-    { base: { ref: { from: "old-target" } }, body: { from: "Old body" } },
-  ])(
-    "automatically admits base edits to code concurrency and the required gate: %j",
-    (changes) => {
-      const github = eventContext("edited", changes);
-      expect(codeAdmitted(github)).toBe(true);
-      expect(group(github)).toBe("ci-refs/pull/2743/merge");
-      expect(Boolean(expression(ci.jobs.ci.if, github))).toBe(true);
-      expect(expression(ci.jobs.ci.name, github)).toBe("ci");
-    },
-  );
-
+describe("CI on main, manual runs and updated PR bases", () => {
   it.each(["push", "workflow_dispatch"])(
     "retains code admission and the ci name for %s",
     (eventName) => {
       const github = eventContext("");
       github.event_name = eventName;
       github.ref = "refs/heads/main";
-      expect(Boolean(expression(ci.jobs.policy.if, github))).toBe(true);
+      expect(ci.jobs.policy.if).toBeUndefined();
       expect(Boolean(expression(ci.jobs.ci.if, github))).toBe(true);
-      expect(expression(ci.jobs.ci.name, github)).toBe("ci");
+      expect(ci.jobs.ci.name).toBe("ci");
       expect(group(github)).toBe(eventName === "workflow_dispatch" ? "ci-run-2743" : "ci-refs/heads/main");
     },
   );
 
-  it("classifies the new event base with its trusted script in a real process", () => {
-    const directory = mkdtempSync(join(tmpdir(), "njpbs-ci-base-edit-"));
+  it("classifies against the new base after an updated PR head triggers CI", () => {
+    const directory = mkdtempSync(join(tmpdir(), "njpbs-ci-base-change-"));
     const git = (...args: string[]) =>
       execFileSync("git", args, { cwd: directory, encoding: "utf8" }).trim();
     try {
@@ -262,7 +220,6 @@ describe("Edited PR event contracts", () => {
       );
       git("add", ".");
       git("commit", "-qm", "Old base");
-      const oldBase = git("rev-parse", "HEAD");
       mkdirSync(join(directory, "admin"));
       writeFileSync(join(directory, "admin/app.ts"), "export {};\n");
       git("add", ".");
@@ -272,16 +229,14 @@ describe("Edited PR event contracts", () => {
       writeFileSync(join(directory, "README.md"), "Docs change\n");
       git("add", ".");
       git("commit", "-qm", "PR docs change");
-      const github = eventContext("edited", {
-        base: { ref: { from: "old-target" }, sha: { from: oldBase } },
-      });
+      const github = eventContext("synchronize");
       github.event.pull_request.base.sha = newBase;
       const prHead = git("rev-parse", "HEAD");
       github.event.pull_request.head = { sha: prHead };
       git("checkout", "-q", "--detach", newBase);
       git("merge", "-q", "--no-ff", prHead, "-m", "Tested merge");
       github.sha = git("rev-parse", "HEAD");
-      expect(codeAdmitted(github)).toBe(true);
+      expect(ci.on.pull_request.types).toContain(github.event.action);
       // The checkout cannot replace the trusted classifier read from the new base.
       writeFileSync(
         script,
@@ -364,7 +319,7 @@ describe("Main cancellation and identical-tree admission", () => {
         expect(Boolean(expression(ci.jobs[name].if, main, { needs }))).toBe(reused !== "true");
       }
       expect(Boolean(expression(ci.jobs.ci.if, main, { needs }))).toBe(true);
-      expect(expression(ci.jobs.ci.name, main)).toBe("ci");
+      expect(ci.jobs.ci.name).toBe("ci");
       const aggregate = ci.jobs.ci.steps.find((step: { name?: string }) => step.name === "Require every selected CI gate");
       expect(Boolean(expression(aggregate.if, main, { needs }))).toBe(reused !== "true");
     }
