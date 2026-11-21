@@ -25,6 +25,9 @@
   cursor: default;
 }
 .public-page__card-title-link {
+  display: inline-flex;
+  align-items: center;
+  min-block-size: 24px;
   color: inherit;
   text-decoration: none;
 }
