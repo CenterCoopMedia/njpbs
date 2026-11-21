@@ -68,12 +68,15 @@ const { measurementId, activeCampaign = false } = Astro.props;
     bottom: var(--gutter);
     left: var(--gutter);
     display: flex;
-    align-items: flex-end;
+    align-items: safe flex-end;
     justify-content: space-between;
     gap: var(--space-6);
+    box-sizing: border-box;
+    max-block-size: calc(100dvh - 2 * var(--gutter));
     max-width: 72rem;
     margin-inline: auto;
     padding: var(--space-6);
+    overflow-y: auto;
     color: var(--color-text-on-surface);
     background: var(--color-surface-elevated);
     border: 1px solid var(--color-border-strong);
@@ -110,6 +113,9 @@ const { measurementId, activeCampaign = false } = Astro.props;
   }
 
   .analytics-consent a {
+    display: inline-flex;
+    align-items: center;
+    min-block-size: 24px;
     color: var(--color-link);
     text-underline-offset: 3px;
   }
@@ -131,7 +137,7 @@ const { measurementId, activeCampaign = false } = Astro.props;
     border-color: var(--color-border-strong);
   }
 
-  @media (max-width: 48rem) {
+  @media (max-width: 48rem), (max-height: 30rem) {
     .analytics-consent {
       align-items: stretch;
       flex-direction: column;
