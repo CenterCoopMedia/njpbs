@@ -175,6 +175,12 @@ class PublicInteractions(BrowserChecks):
             nav = page.get_by_role("navigation", name="Primary", exact=True)
             expect(nav).to_be_visible()
             self.assertLessEqual(nav.evaluate("el => el.getBoundingClientRect().bottom"), 569)
+            page.keyboard.press("Escape")
+
+            page.set_viewport_size({"width": 768, "height": 568})
+            fcc = page.locator(".foot-fcc")
+            self.assertTrue(fcc.evaluate("row => row.scrollWidth > row.clientWidth"))
+            self.assertEqual(page.evaluate("document.documentElement.scrollWidth"), 768)
 
     def test_homepage_honors_native_scroll(self):
         with self.browser.new_context(viewport={"width": 1280, "height": 720}) as context:
