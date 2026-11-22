@@ -513,9 +513,12 @@ describe("main", () => {
     const outputPath = path.join(directory, "launch.json");
     try {
       await main({ MEDIA_MANAGER_API_KEY: "fixture-key", MEDIA_MANAGER_API_SECRET: "fixture-secret",
-        REQUIRE_FRESH_CONTENT: "1", LAUNCH_CONTENT_OUTPUT: outputPath }, async input =>
-        new URL(String(input)).pathname.includes("/assets/") ? new Response("Unavailable", { status: 503 })
-          : new Response(JSON.stringify(fixture), { status: 200 }), immediateSleep);
+        REQUIRE_FRESH_CONTENT: "1", LAUNCH_CONTENT_OUTPUT: outputPath }, async input => {
+        const url = new URL(String(input));
+        if (url.pathname.endsWith("/assets/")) return url.searchParams.get("platform-slug") === "partnerplayer"
+          ? Response.json({ data: [], links: { next: null } }) : new Response("Unavailable", { status: 503 });
+        return Response.json({ data: fixture.data.map(row => ({ ...row, type: "show" })), links: { next: null } });
+      }, immediateSleep);
       const saved = JSON.parse(await readFile(outputPath, "utf8"));
       expect(saved.source).toBe("media-manager");
       expect(saved.cards.map((card: { title: string }) => card.title)).toEqual(["Painting Community"]);

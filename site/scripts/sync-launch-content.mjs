@@ -1,8 +1,11 @@
-import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
+import { randomUUID } from "node:crypto";
 import path from "node:path";
 import { Buffer } from "node:buffer";
 import { fileURLToPath } from "node:url";
 import { homeNewscastForSync } from "./sync-home-newscast.mjs";
+import { fetchPublicVideoCatalog, PublicVideoCatalogError } from "./fetch-public-video-catalog.ts";
+import { readPublicVideoCatalog } from "../src/lib/public-video-catalog.ts";
 
 const DEFAULT_BASE_URL = "https://media.services.pbs.org/api/v1/";
 const DEFAULT_OUTPUT_PATH = "src/data/launch-media-manager.json";
@@ -214,7 +217,7 @@ export async function readCommittedLaunchContent(config, readImpl = readFile) {
   }
 }
 
-export async function writeLaunchContent(config, payload, outage = false, newscast) {
+export async function writeLaunchContent(config, payload, outage = false, newscast, videoCatalog) {
   const output = {
     // An outage write never carries Media Manager data, so labeling it
     // "media-manager" would let the next outage run mistake an empty synthetic
@@ -228,6 +231,7 @@ export async function writeLaunchContent(config, payload, outage = false, newsca
     },
     cards: selectLaunchCards(normalizeShowsToCards(payload)),
     ...(newscast ? { newscast } : {}),
+    ...(videoCatalog ? { videoCatalog } : {}),
   };
   await writeLaunchContentFile(config, output);
   return output;
@@ -236,10 +240,35 @@ export async function writeLaunchContent(config, payload, outage = false, newsca
 async function writeLaunchContentFile(config, output) {
   const outputPath = path.resolve(config.outputPath);
   await mkdir(path.dirname(outputPath), { recursive: true });
-  await writeFile(outputPath, `${JSON.stringify(output, null, 2)}\n`, "utf8");
+  const pending = `${outputPath}.${randomUUID()}.tmp`;
+  try {
+    await writeFile(pending, `${JSON.stringify(output, null, 2)}\n`, { encoding: "utf8", flag: "wx" });
+    await rename(pending, outputPath);
+  } finally {
+    await rm(pending, { force: true });
+  }
 }
 
-export async function main(env = process.env, fetchImpl = fetch, sleepImpl = defaultSleep) {
+async function videoCatalogForSync(config, fetchImpl, { now, readRetainedVideoCatalog }, outage) {
+  if (config.authorization && !outage) {
+    try {
+      return await fetchPublicVideoCatalog(config, fetchImpl, now);
+    } catch (error) {
+      const reason = error instanceof PublicVideoCatalogError ? error.message : "provider transport or response error";
+      console.warn(`Media Manager video catalog refresh failed (${reason}). Retaining the last valid catalog when available.`);
+    }
+  }
+  if (readRetainedVideoCatalog) return readPublicVideoCatalog(await readRetainedVideoCatalog(), now);
+  try {
+    const previous = JSON.parse(await readFile(path.resolve(config.outputPath), "utf8"));
+    return readPublicVideoCatalog(previous?.videoCatalog, now);
+  } catch {
+    return undefined;
+  }
+}
+
+/** @param {{ now?: Date, readRetainedVideoCatalog?: () => Promise<unknown> }} options */
+export async function main(env = process.env, fetchImpl = fetch, sleepImpl = defaultSleep, options = {}) {
   const config = buildSyncConfig(env);
   if (env.REQUIRE_FRESH_CONTENT === "1" && !config.hasCredentials) {
     throw new Error("scheduled refresh requires Media Manager credentials");
@@ -248,14 +277,18 @@ export async function main(env = process.env, fetchImpl = fetch, sleepImpl = def
   if (env.REQUIRE_FRESH_CONTENT === "1" && selectLaunchCards(normalizeShowsToCards(payload)).length === 0) {
     throw new Error("scheduled refresh requires usable Media Manager data");
   }
-  const newscast = await homeNewscastForSync(config, fetchImpl);
+  const [newscast, videoCatalog] = await Promise.all([
+    homeNewscastForSync(config, fetchImpl),
+    videoCatalogForSync(config, fetchImpl, { ...options, now: options.now ?? new Date() }, outage),
+  ]);
   if (outage) {
     const committed = await readCommittedLaunchContent(config);
     if (committed) {
       // Write the re-filtered list back rather than leaving the file untouched:
       // the build reads the file raw, so a committed card that today's selection
       // rules exclude must not survive on disk just because the keep path ran.
-      await writeLaunchContentFile(config, { ...committed, newscast });
+      const { videoCatalog: _previous, ...retained } = committed;
+      await writeLaunchContentFile(config, { ...retained, newscast, ...(videoCatalog ? { videoCatalog } : {}) });
       const noun = committed.cards.length === 1 ? "card" : "cards";
       console.log(
         `Launch content sync kept ${committed.cards.length} committed ${noun} (checked ${committed.checkedAt}) through the Media Manager outage`,
@@ -263,7 +296,7 @@ export async function main(env = process.env, fetchImpl = fetch, sleepImpl = def
       return;
     }
   }
-  const output = await writeLaunchContent(config, payload, outage, newscast);
+  const output = await writeLaunchContent(config, payload, outage, newscast, videoCatalog);
   console.log(
     `Launch content sync wrote ${output.cards.length} cards from ${output.source}`,
   );

@@ -20,6 +20,7 @@ import { SCHEDULE_CORRECTIONS_PATH } from "../../site/scripts/schedule-correctio
 import storageModule from "../../functions/lib/post-background-storage.js";
 import context from "../../functions/lib/public-context-revision.js";
 import state from "../../functions/lib/cloud-external-refresh-state.js";
+import { catalogAsset, riverShow } from "../../site/tests/fixtures/public-video-catalog";
 
 const db = isolatedFirestore("cloud-external-refresh.test.ts");
 let app: ReturnType<typeof firebaseAdminRuntime.initializeApp>;
@@ -29,6 +30,7 @@ let release: string;
 let now: number;
 let title: string;
 let outage: boolean;
+let catalogOutage: boolean;
 let requests: number;
 let tvssRequests: number;
 beforeAll(async () => {
@@ -57,6 +59,7 @@ beforeEach(async () => {
   now = Date.parse("2026-10-12T14:00:00Z");
   title = "Public provider story";
   outage = false;
+  catalogOutage = false;
   requests = 0;
   tvssRequests = 0;
   await db.doc("system/publicDeployment").set({ state: "idle", activeCommitSha: release, activeGeneration: 1, activeDeploymentId: "fixture" });
@@ -67,16 +70,25 @@ afterEach(() => vi.restoreAllMocks());
 const fetchProvider = (async url => {
   requests++;
   if (outage) return new Response("private upstream error body must not enter a receipt", { status: 401 });
-  if (String(url).includes("/wp-json/wp/v2/posts")) {
+  const request = new URL(String(url));
+  const spotlight = request.origin === "https://www.njspotlightnews.org";
+  if (spotlight && request.pathname.startsWith("/wp-json/wp/v2/posts")) {
     reportingRequests++;
     if (reportingOutage) return new Response("PRIVATE upstream failure",{status:503});
     return Response.json([{id:42,link:"https://www.njspotlightnews.org/2026/10/wage-story/",date_gmt:"2026-10-11T12:00:00",title:{rendered:"Published wages"},tags:[25890],categories:[]}]);
   }
-  if (String(url).includes("media.services.pbs.org")) return Response.json({ data: [{ id: "fixture-show", attributes: {
-    title: "Painting Community", slug: "painting-community", description: "Public program", image: "https://image.pbs.org/fixture.jpg",
-  } }] });
-  if (String(url).includes("njspotlightnews.org")) return new Response(`<rss><channel><item><title>${title}</title><link>https://www.njspotlightnews.org/2026/10/public-story/</link><pubDate>Sun, 11 Oct 2026 12:00:00 GMT</pubDate></item></channel></rss>`);
-  if (String(url).startsWith("https://jaws.pbs.org/tvss/")) {
+  if (request.origin === "https://media.services.pbs.org") {
+    if (request.pathname.endsWith("/assets/")) {
+      if (request.searchParams.get("platform-slug") === "partnerplayer") return catalogOutage ? Response.json({ data: [] })
+        : Response.json({ data: [catalogAsset("river-episode")], links: { next: null } });
+      return Response.json({ data: [], links: { next: null } });
+    }
+    return Response.json({ data: [{ ...riverShow, attributes: {
+      ...riverShow.attributes, description: "Public program", image: "https://image.pbs.org/fixture.jpg",
+    } }], links: { next: null } });
+  }
+  if (spotlight) return new Response(`<rss><channel><item><title>${title}</title><link>https://www.njspotlightnews.org/2026/10/public-story/</link><pubDate>Sun, 11 Oct 2026 12:00:00 GMT</pubDate></item></channel></rss>`);
+  if (request.origin === "https://jaws.pbs.org" && request.pathname.startsWith("/tvss/")) {
     tvssRequests++;
     return new Response(await readFile(new URL("../../site/tests/fixtures/tvss-wnjt-20260710.jsonp", import.meta.url), "utf8"));
   }
@@ -116,6 +128,26 @@ it("freezes provider bytes with readback and atomically advances context without
   now = (await db.doc(state.EXTERNAL_REFRESH_PATH).get()).data().nextAttemptAt;
   await owner()();
   expect((await db.doc(context.PUBLIC_CONTEXT_PATH).get()).data().revision).toBe(3);
+});
+
+it("keeps the accepted video catalog and advances the other inputs when video pagination is incomplete", async () => {
+  const storage = storageModule.createPostBackgroundStorage("fixture-bucket", app);
+  await owner()();
+  const before = (await db.doc(context.PUBLIC_CONTEXT_PATH).get()).data();
+  const first = path.join(directory, "before-video-outage");
+  await restoreCloudExternalInputs({ inputs: before.externalInputs, storage, directory: first });
+  const snapshot = JSON.parse(await readFile(path.join(first, "launch-media-manager.json"), "utf8")).videoCatalog;
+  expect(snapshot.programs[0].episodes[0].slug).toBe("river-episode");
+  now = (await db.doc(state.EXTERNAL_REFRESH_PATH).get()).data().nextAttemptAt;
+  catalogOutage = true;
+  title = "New provider story";
+  await owner()();
+  const after = (await db.doc(context.PUBLIC_CONTEXT_PATH).get()).data();
+  expect(after.revision).toBe(before.revision + 1);
+  const second = path.join(directory, "after-video-outage");
+  await restoreCloudExternalInputs({ inputs: after.externalInputs, storage, directory: second });
+  expect(JSON.parse(await readFile(path.join(second, "launch-media-manager.json"), "utf8")).videoCatalog).toEqual(snapshot);
+  expect(JSON.parse(await readFile(path.join(second, "spotlight-news.json"), "utf8")).cards[0].title).toBe(title);
 });
 
 it.each(["verified", "failed", "fetching"])("preserves a legacy %s row until due when no mapping is published", async status => {

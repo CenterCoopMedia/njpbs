@@ -15,6 +15,7 @@ import { assertCmsPublicationSourceCheckout } from "./cms-publication-runtime-gu
 import type { MediaManagerCredential } from "./frozen-publication";
 import { createCloudSchedulePacket, type CloudSchedulePacket } from "./cloud-schedule-packet";
 import { assertScheduleInput } from "../src/lib/schedule-input";
+import { readPublicVideoCatalog } from "../src/lib/public-video-catalog";
 
 const require = createRequire(import.meta.url);
 const { EXTERNAL_REFRESH_PATH, EXTERNAL_INPUT_FILES, externalRefreshHold, externalRefreshHeld, externalRefreshDue, nextExternalRefreshAt } = require("../../functions/lib/cloud-external-refresh-state");
@@ -69,10 +70,21 @@ function assertExternalInputs(value: CloudExternalInputs) {
   return value;
 }
 
-async function readAcceptedScheduleCorrections(inputs: CloudExternalInputs, storage: Storage) {
-  const receipt = assertExternalInputs(inputs).files["schedule.json"];
+async function readExternalInputFile(inputs: CloudExternalInputs, storage: Storage, name: string) {
+  const receipt = inputs.files[name];
   const bytes = Buffer.from(await storage.get(receipt.key, { signal: AbortSignal.timeout(30_000) }));
-  if (bytes.length !== receipt.size || hash(bytes) !== receipt.digest) throw new Error("Frozen schedule digest changed");
+  if (bytes.length !== receipt.size || hash(bytes) !== receipt.digest) throw new Error("Frozen external input digest changed");
+  return bytes;
+}
+
+export async function readRetainedVideoCatalog(inputs: CloudExternalInputs | undefined, storage: Storage) {
+  if (!inputs) return undefined;
+  const bytes = await readExternalInputFile(assertExternalInputs(inputs), storage, "launch-media-manager.json");
+  return readPublicVideoCatalog(JSON.parse(bytes.toString("utf8")).videoCatalog);
+}
+
+async function readAcceptedScheduleCorrections(inputs: CloudExternalInputs, storage: Storage) {
+  const bytes = await readExternalInputFile(assertExternalInputs(inputs), storage, "schedule.json");
   const schedule: unknown = JSON.parse(bytes.toString("utf8"));
   assertScheduleInput(schedule);
   return new Map(schedule.days.broadcast.filter(day => day.publishedCorrection === true).map(day => [day.date, day]));
@@ -86,10 +98,7 @@ export async function restoreCloudExternalInputs({ inputs, storage, directory }:
   assertExternalInputs(inputs);
   const files: Record<string, Buffer> = {};
   for (const name of EXTERNAL_INPUT_FILES) {
-    const receipt = inputs.files[name];
-    const bytes = Buffer.from(await storage.get(receipt.key, { signal: AbortSignal.timeout(30_000) }));
-    if (bytes.length !== receipt.size || hash(bytes) !== receipt.digest) throw new Error("Frozen external input digest changed");
-    files[name] = bytes;
+    files[name] = await readExternalInputFile(inputs, storage, name);
   }
   if (externalInputContentDigest(files) !== inputs.contentDigest) throw new Error("Frozen external content identity changed");
   await mkdir(directory, { recursive: true, mode: 0o700 });
@@ -192,7 +201,9 @@ export function cloudExternalRefresh({ firestore, firebaseApp, runtime, backgrou
         read: (key: string) => storage.get(key,{signal:AbortSignal.timeout(15_000)}) }); } catch { /* Optional source; native Posts remain independent. */ }
       const reporting = claim.config ? refreshSpotlightReporting(reportingMappings(claim.config),previousReporting,{fetchImpl,clock}) : Promise.resolve(undefined);
       const results = await Promise.allSettled([
-        syncLaunchContent(environment, boundedFetch(fetchImpl, "media-manager")),
+        syncLaunchContent(environment, boundedFetch(fetchImpl, "media-manager"), undefined, {
+          now: new Date(clock()), readRetainedVideoCatalog: () => readRetainedVideoCatalog(claim.previousInputs, storage),
+        }),
         syncSpotlightNews(environment, request, { storageFactory: spotlightImageStorageFactory }),
         syncSchedule(environment, request, new Date(clock()), (config, data) =>
           writeScheduleData(config, applyPublishedScheduleCorrections(data, corrections))),

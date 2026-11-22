@@ -8,7 +8,7 @@
  * episodes. A show may contain only specials, so both source paths are retained.
  */
 
-import { extractPartnerPlayerSrc } from "../../../packages/content-core/src/partner-player";
+import { extractPartnerPlayerSrc } from "../../../packages/content-core/src/partner-player.ts";
 
 // --- Raw Media Manager input (JSON:API) --------------------------------------
 
@@ -186,7 +186,7 @@ export interface CatalogProgram {
  * host and ID. Retain approved numeric playback times and boolean flags.
  * Return null when the code does not contain a supported player URL.
  */
-export { extractPartnerPlayerSrc } from "../../../packages/content-core/src/partner-player";
+export { extractPartnerPlayerSrc } from "../../../packages/content-core/src/partner-player.ts";
 
 // --- Asset selection ---------------------------------------------------------
 
@@ -275,7 +275,8 @@ export function episodePlayback(
   // that ordering when it wires buildProgram to live payloads.
   const captions = captionRefs(asset);
   return {
-    partnerPlayerSrc: extractPartnerPlayerSrc(asset.attributes.player_code),
+    partnerPlayerSrc: typeof asset.attributes.player_code === "string"
+      ? extractPartnerPlayerSrc(asset.attributes.player_code) : null,
     hasCaptions: captions.length > 0,
     captions,
     transcripts: transcriptRefs(asset),

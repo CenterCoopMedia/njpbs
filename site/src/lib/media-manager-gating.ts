@@ -298,9 +298,24 @@ function parseWindowBound(bound: string | null | undefined): WindowBound {
   if (trimmed === "") return { kind: "bad" };
   const dateOnly = validCalendarDate(trimmed);
   if (dateOnly !== null) return { kind: "day", day: dateOnly };
+  if (!/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:\d{2})$/i.test(trimmed) ||
+      validCalendarDate(trimmed.slice(0, 10)) === null) return { kind: "bad" };
   const t = Date.parse(trimmed);
   if (Number.isFinite(t)) return { kind: "instant", ms: t };
   return { kind: "bad" };
+}
+
+export function mediaManagerWindowAt(value: unknown, now: Date): "open" | "before" | "after" | "invalid" {
+  const window = mapWindow(value);
+  const nowMs = now.getTime();
+  if (!window || !Number.isFinite(nowMs)) return "invalid";
+  const start = parseWindowBound(window.start);
+  const end = parseWindowBound(window.end);
+  if (start.kind === "bad" || end.kind === "bad") return "invalid";
+  const today = easternDate(nowMs);
+  if ((start.kind === "day" && today < start.day) || (start.kind === "instant" && nowMs < start.ms)) return "before";
+  if ((end.kind === "day" && today > end.day) || (end.kind === "instant" && nowMs > end.ms)) return "after";
+  return "open";
 }
 
 /**
@@ -455,27 +470,12 @@ export function evaluateMediaManagerGate(
     return gate("unavailable", GATE_REASON.noWindow);
   }
 
-  const start = parseWindowBound(window.start);
-  const end = parseWindowBound(window.end);
-  if (start.kind === "bad" || end.kind === "bad") {
-    return gate("unavailable", GATE_REASON.unreadableWindow);
-  }
-
   // Both bounds are inclusive. A date-only bound admits its whole New Jersey day;
   // a time-bearing bound admits up to and including its own instant.
-  const today = easternDate(nowMs);
-  if (start.kind === "day" && today < start.day) {
-    return gate("unavailable", GATE_REASON.beforeWindow);
-  }
-  if (start.kind === "instant" && nowMs < start.ms) {
-    return gate("unavailable", GATE_REASON.beforeWindow);
-  }
-  if (end.kind === "day" && today > end.day) {
-    return gate("unavailable", GATE_REASON.afterWindow);
-  }
-  if (end.kind === "instant" && nowMs > end.ms) {
-    return gate("unavailable", GATE_REASON.afterWindow);
-  }
+  const state = mediaManagerWindowAt(window, now);
+  if (state === "invalid") return gate("unavailable", GATE_REASON.unreadableWindow);
+  if (state === "before") return gate("unavailable", GATE_REASON.beforeWindow);
+  if (state === "after") return gate("unavailable", GATE_REASON.afterWindow);
 
   // Inside the window. A public window is open to everyone; a member-tier window
   // is decided from the entitlement state, not the trusted `entitled` boolean, and
