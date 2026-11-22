@@ -21,6 +21,7 @@ const additionalFieldLabels: Record<string, string> = {
   childDirected: "Children's content classification",
   homeCompositionVersion: "Home layout",
   serviceCompositionVersion: "Service page layout",
+  scheduleCopy: "Schedule heading and introduction",
   dataHubCompositionVersion: "Data Hub layout",
   status: "Editorial status",
   publishAt: "Publication time",
