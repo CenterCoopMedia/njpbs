@@ -62,7 +62,8 @@ async function readNoBuildPageDecisionInTransaction({ firestore, transaction, pa
   if (!route) {
     if ((await listNoBuildPageOwners({ firestore, transaction, path })).length) refuse();
     const decision = await require("./no-build-page-context-decision").readNoBuildPageContextDecision({
-      firestore, transaction, path: path === "/_home-sources.json" ? "/" : path, rendererSha, target, scheduleCapture, requestScheduleCapture: true, legacyStaffServing });
+      firestore, transaction, path: path === "/_home-sources.json" ? "/" : path, unownedPath: path,
+      rendererSha, target, scheduleCapture, requestScheduleCapture: true, legacyStaffServing });
     if (decision.kind === "pass") return decision;
     const { receipt, ...context } = decision;
     return { ...context, contextReceipt: receipt,

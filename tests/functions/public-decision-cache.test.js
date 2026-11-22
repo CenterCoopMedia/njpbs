@@ -90,14 +90,15 @@ describe("public Page decisions", () => {
     context.bumpPublicContextRevision(transaction, firestore, options);
   });
 
-  it.each([["context Home", "/", false], ["context Page", "/contact/", false], ["owned Home", "/", true]])(
-    "serves the same %s reply from %s with only the validator reads", async (_name, path, owned) => {
+  it.each([["context Home", "/", false, 152], ["context Page", "/contact/", false, 39], ["owned Home", "/", true, 160]])(
+    "serves the same %s reply from %s with only the validator reads", async (_name, path, owned, freshReadBudget) => {
       if (owned) await seedOwnedHomeDecisionFixture(firestore);
       const { fresh, cached } = handlers();
       const before = await measured(fresh, page(path));
       const miss = await measured(cached, page(path));
       const hit = await measured(cached, page(path));
       expect(before.statusCode).toBe(200);
+      expect(before.reads).toBeLessThanOrEqual(freshReadBudget);
       expect(miss.text).toBe(before.text);
       expect(hit.text).toBe(before.text);
       expect(hit.headers["cache-control"]).toBe("private, no-store");

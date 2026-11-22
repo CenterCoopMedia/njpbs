@@ -4,7 +4,7 @@ const { Filter } = require("firebase-admin/firestore");
 
 const { readNoBuildPageProjectionInTransaction } = require("./no-build-page-source");
 const { validateNoBuildPageSnapshot, noBuildPageOwnerPath } = require("./no-build-page-contract");
-const { readPublicContextRevisionInTransaction, publicContextDigest, PUBLIC_CONTEXT_PATH } = require("./public-context-revision");
+const { publicContextRevision, publicContextDigest, PUBLIC_CONTEXT_PATH } = require("./public-context-revision");
 const { pagePublicationTarget } = require("./no-build-page-target");
 const { assertMediaLifecycleDeploymentFence, assertPublicDeploymentPointer, PublicDeploymentFenceError } = require("./public-deployment");
 const { readPublishedHomePostCards, readPublishedChrome, publicAuthorSnapshot, publicRichText } = require("../published-post-reader");
@@ -55,12 +55,13 @@ async function assertNoBuildPageContextInTransaction({ firestore, transaction, p
   noBuildPageOwnerPath(pageId);
   if (["schedule", "live"].includes(pageId) && !scheduleCapture) refuse("Schedule and Live require qualified sealed schedule authority.");
   if (!/^[a-f0-9]{40}$/.test(rendererSha ?? "")) refuse("renderer identity is invalid");
-  const [pointerSnapshot, contextRevision, contextSnapshot, documentSnapshot] = await Promise.all([
+  const [pointerSnapshot, contextSnapshot, documentSnapshot] = await Promise.all([
     transaction.get(firestore.doc("system/publicDeployment")),
-    readPublicContextRevisionInTransaction(transaction, firestore),
-    ["home", "data-hub"].includes(pageId) ? transaction.get(firestore.doc(PUBLIC_CONTEXT_PATH)) : null,
+    transaction.get(firestore.doc(PUBLIC_CONTEXT_PATH)),
     nextDocument === undefined || nextDocument === null ? transaction.get(firestore.doc(`cmsPages/${pageId}`)) : null,
   ]);
+  const contextState = contextSnapshot.data();
+  const contextRevision = publicContextRevision(contextState);
   const pair = require("./public-release-pair");
   const pointer = pointerSnapshot.data()?.schemaVersion === 2
     ? require("./public-release-media-fence").parseStoredSelector(pointerSnapshot.data())
@@ -68,7 +69,7 @@ async function assertNoBuildPageContextInTransaction({ firestore, transaction, p
   if (releaseSelector !== undefined && pair.publicReleaseDigest(pair.parsePublicReleaseSelector(releaseSelector)) !== pair.publicReleaseDigest(pointer)) refuse("selected pair changed");
   if (pointer?.activeCommitSha !== rendererSha || pointer.state !== "idle") refuse("code release is in progress");
   const contextDigest = publicContextDigest(contextRevision);
-  const changedAt = contextSnapshot?.data()?.changedAt?.toMillis?.() ?? null;
+  const changedAt = ["home", "data-hub"].includes(pageId) ? contextState.changedAt?.toMillis?.() ?? null : null;
   const document = nextDocument ?? documentSnapshot.data();
   const plan = validateNoBuildPageSnapshot({ pageId, snapshot: document?.published });
   if (!Number.isSafeInteger(document.version) || document.published.sourceVersion > document.version ||
