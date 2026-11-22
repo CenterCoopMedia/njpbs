@@ -365,8 +365,6 @@ jobs:
       - name: Accessibility scan over full build
         id: axe_scan
         working-directory: site
-        env:
-          VIDEO_CATALOG_SCREENSHOTS: ${{ runner.temp }}/video-catalog-screenshots
         run: |
           set -euo pipefail
           node node_modules/astro/bin/astro.mjs preview --host 127.0.0.1 --port 4321 >"$RUNNER_TEMP/axe-preview.log" 2>&1 &
@@ -384,7 +382,8 @@ jobs:
             cat "$RUNNER_TEMP/axe-preview.log"
             exit 1
           fi
-          python3 ../qa/axe_scan_browser_test.py --base http://127.0.0.1:4321 --mode full --dist dist
+          python3 ../qa/axe_scan_browser_test.py --base http://127.0.0.1:4321 --mode full --dist dist \
+            --video-catalog-screenshots "$RUNNER_TEMP/video-catalog-screenshots"
           python3 ../qa/axe_scan.py \
             --base http://127.0.0.1:4321 \
             --mode full \

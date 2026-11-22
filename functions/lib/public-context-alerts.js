@@ -4,7 +4,7 @@ const { createHash, randomUUID } = require("node:crypto");
 const logger = require("firebase-functions/logger");
 const { FAILURE_CLASSES } = require("./background-output-attempt");
 const { OUTPUTS } = require("./post-background-paths");
-const { RECORD_FAMILIES } = require("./no-build-record-namespace");
+const { CHECKPOINT_FAMILIES } = require("./no-build-record-namespace");
 const { ownsPublication } = require("./publication-runtime-owner");
 const ALERT_PATH = "system/cmsContextJobAlerts";
 const LEASE_MS = 60_000;
@@ -31,7 +31,7 @@ async function checkPublicContextAlerts({ firestore, send, now = Date.now, log =
     const time = now();
     const [priorRow, deployment, anchorRow, ...states] = await transaction.getAll(ref,
       firestore.doc("system/publicDeployment"), firestore.doc("system/publicDeployment/aggregateContexts/current"),
-      ...[...OUTPUTS, ...RECORD_FAMILIES].map(output => firestore.doc(`cmsBackgroundOutputs/${output}`)));
+      ...[...OUTPUTS, ...CHECKPOINT_FAMILIES].map(output => firestore.doc(`cmsBackgroundOutputs/${output}`)));
     const runtime = { owner: "cloudflare", release: deployment.data()?.activeCommitSha };
     if (!/^[a-f0-9]{40}$/.test(runtime.release ?? "")) return null;
     const prior = priorRow.data() ?? {};

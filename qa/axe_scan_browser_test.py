@@ -7,7 +7,6 @@ The existing Site CI consumer runs both targets before replacing their artifacts
 from __future__ import annotations
 
 import argparse
-import os
 from pathlib import Path
 import re
 import unittest
@@ -88,9 +87,10 @@ class SearchReadiness(BrowserChecks):
 
 
 class PublicInteractions(BrowserChecks):
-    @unittest.skipUnless(os.environ.get("VIDEO_CATALOG_SCREENSHOTS"), "requires the synthetic video catalog build")
     def test_public_video_catalog_navigation_and_search(self):
-        screenshots = Path(os.environ["VIDEO_CATALOG_SCREENSHOTS"])
+        if VIDEO_CATALOG_SCREENSHOTS is None:
+            self.skipTest("requires the synthetic video catalog build")
+        screenshots = VIDEO_CATALOG_SCREENSHOTS
         screenshots.mkdir(parents=True, exist_ok=True)
         for width, height in [(390, 844), (1280, 900)]:
             with self.subTest(width=width), self.browser.new_context(viewport={"width": width, "height": height}) as context:
@@ -114,6 +114,10 @@ class PublicInteractions(BrowserChecks):
                 player = page.get_by_title("Watch The river crossing", exact=True)
                 expect(player).to_have_attribute("src", "https://player.pbs.org/partnerplayer/EXAMPLE==/?autoplay=false")
                 self.assertLessEqual(player.bounding_box()["width"], width)
+                fallback = page.get_by_role("link", name="Watch on PBS", exact=True)
+                fallback.focus()
+                expect(fallback).to_be_focused()
+                expect(fallback).to_have_attribute("href", "https://watch.njpbs.org/video/river-crossing/")
                 page.screenshot(path=str(screenshots / f"episode-{width}.png"))
                 if width == 1280:
                     hits = page.evaluate("""async () => {
@@ -367,9 +371,11 @@ if __name__ == "__main__":
     parser.add_argument("--base", required=True)
     parser.add_argument("--mode", choices=["full", "coming-soon"], default="full")
     parser.add_argument("--dist", default="site/dist")
+    parser.add_argument("--video-catalog-screenshots", type=Path)
     args = parser.parse_args()
     BASE = args.base.rstrip("/")
     MODE, DIST = args.mode, args.dist
+    VIDEO_CATALOG_SCREENSHOTS = args.video_catalog_screenshots
     classes = (
         [EmittedRoutes, SearchReadiness, PublicInteractions]
         if MODE == "full" else [EmittedRoutes, ComingSoonInteractions]

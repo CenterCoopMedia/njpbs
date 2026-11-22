@@ -61,6 +61,7 @@ player?.searchParams.set("autoplay", "false");
     {episode && player && <section aria-label="Video">
       <iframe class="video-page__player" src={player.href} title={`Watch ${episode.title}`}
         loading="lazy" allow={pbsPlayerPermissions("on-demand")} allowfullscreen></iframe>
+      <p data-pagefind-ignore><a href={`https://watch.njpbs.org/video/${episode.slug}/`}>Watch on PBS</a></p>
       {episode.hasCaptions && <p class="video-page__captions" data-pagefind-meta="captions">Closed captions available
         {episode.captionLanguages.length > 0 && ` (${episode.captionLanguages.join(", ")})`}.</p>}
     </section>}
