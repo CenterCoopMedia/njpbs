@@ -26,7 +26,7 @@
 
 /** The decision for one path. null means "pass through to the origin". */
 export type LegacyDecision =
-  | { action: "gone" }
+  | { action: "gone"; cacheControl?: "no-store" }
   | { action: "redirect"; location: string }
   | null;
 
@@ -319,7 +319,8 @@ export function classify(pathname: string, opts: ClassifyOptions = {}): LegacyDe
 
   // 6. WordPress oEmbed endpoints (any *.../embed) are Gone.
   if (segs.length >= 2 && segs[segs.length - 1] === "embed") {
-    return { action: "gone" };
+    // This rule infers retirement from the suffix. A new embed route can reuse it.
+    return { action: "gone", cacheControl: "no-store" };
   }
 
   // 7. Pagination stubs /page/<n> are Gone.
