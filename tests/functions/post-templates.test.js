@@ -356,6 +356,51 @@ describe("Post template trusted persistence", () => {
     expect((await db.doc(`cmsPosts/${created.body.document.id}`).get()).data().credits).toEqual([credit]);
   });
 
+  it("creates one private Spanish draft from an authorized original and preserves its edition identity", async () => {
+    const request = {
+      collection: "cmsPosts", document: { type: "post" },
+      postSource: { id: "source", version: 7, editionLocale: "es" },
+    };
+    expect((await invoke(save.createCmsSaveHandler, request, scoped("other", "support"))).statusCode).toBe(403);
+    const staleRequest = { ...request, postSource: { ...request.postSource, version: 6 } };
+    expect((await invoke(save.createCmsSaveHandler, staleRequest)).statusCode).toBe(409);
+    const [first, second] = await Promise.all([
+      invoke(save.createCmsSaveHandler, request),
+      invoke(save.createCmsSaveHandler, request, scoped("editor", "watch")),
+    ]);
+    for (const response of [first, second]) expect(response.statusCode, JSON.stringify(response.body)).toBe(200);
+    expect([first.body.created, second.body.created].sort()).toEqual([false, true]);
+    const draft = first.body.document;
+    expect(second.body.document.id).toBe(draft.id);
+    expect(draft).toMatchObject({ editionOf: "source", locale: "es", status: "draft", section: "watch", blocks: [] });
+    expect(draft).not.toHaveProperty("published");
+
+    const update = { collection: "cmsPosts", id: draft.id, baseVersion: draft.version };
+    const edit = await invoke(save.createCmsSaveHandler, {
+      ...update, document: { title: "Noticias de Nueva Jersey", editionOf: "other", locale: "en" },
+    });
+    expect(edit.statusCode, JSON.stringify(edit.body)).toBe(200);
+    expect(edit.body.document).toMatchObject({ editionOf: "source", locale: "es", title: "Noticias de Nueva Jersey" });
+    expect(edit.body.document).not.toHaveProperty("slug");
+    const preview = previewSnapshot.createPostPreviewSnapshot(draft.id, edit.body.document);
+    expect(preview.published.metadata).toMatchObject({ locale: "es", title: "Noticias de Nueva Jersey" });
+    const retry = await invoke(save.createCmsSaveHandler, request);
+    expect(retry.body.document.version).toBe(edit.body.document.version);
+    expect((await db.doc("cmsPosts/source").get()).data()).toEqual(fixture());
+    expect((await db.collection("cmsPosts").get()).size).toBe(2);
+
+    const publication = { ...update, baseVersion: edit.body.document.version, document: {} };
+    for (const action of [{ publish: true }, { scheduleAt: "2027-01-01T12:00:00.000Z" }]) {
+      const blocked = await invoke(save.createCmsSaveHandler, { ...publication, ...action });
+      expect(blocked.statusCode, JSON.stringify(blocked.body)).toBe(409);
+      expect(blocked.body.error).toMatch(/Spanish editions/);
+    }
+    const droppedIdentity = { ...request, postSource: { id: draft.id, version: edit.body.document.version }, idempotencyKey: randomUUID() };
+    expect((await invoke(save.createCmsSaveHandler, droppedIdentity)).statusCode).toBe(409);
+    expect((await api(captureRequest({ sourceId: draft.id, sourceVersion: edit.body.document.version }))).statusCode).toBe(409);
+    expect((await db.doc(`cmsPosts/${draft.id}`).get()).data().published).toBeUndefined();
+  });
+
   it.each([
     ["inactive", /no longer active/],
     ["archived", /no longer active/],

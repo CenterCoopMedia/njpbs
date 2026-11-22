@@ -255,7 +255,8 @@ interface RecordFormProps {
   /** Whether the Post body may add or change custom HTML (content.publish). */
   canEditCustomHtml?: boolean;
   canManageSettings?: boolean;
-  duplicatePost?: (sourceId: string, sourceVersion: number) => Promise<void>;
+  duplicatePost?: (sourceId: string, sourceVersion: number, editionLocale?: "es") => Promise<void>;
+  canCreateSpanishEdition?: boolean;
   duplicateDisabledReason?: string;
   kind: EditorDocumentKind;
   pageId?: string;
@@ -463,6 +464,7 @@ export const RecordForm = forwardRef<RecordFormHandle, RecordFormProps>(function
   capturePostTemplate,
   canEditCustomHtml = true,
   duplicatePost,
+  canCreateSpanishEdition,
   duplicateDisabledReason,
   homeHeroTarget,
   dataHubReportingTarget,
@@ -523,9 +525,13 @@ export const RecordForm = forwardRef<RecordFormHandle, RecordFormProps>(function
     request: number;
     fieldId?: string;
   }>();
+  const spanishEdition = kind === "post" && typeof initial?.editionOf === "string";
   const groups = useMemo(() => {
-    const source = editorFieldGroupsFor(kind, pageId)
+    const groupDefinitions = editorFieldGroupsFor(kind, pageId)
       .filter(group => group.id !== "schedule-copy" || initial?.scheduleCopy !== undefined);
+    const source = spanishEdition ? groupDefinitions.map(group => ({
+      ...group, fields: group.fields.filter(field => field.key !== "slug"),
+    })) : groupDefinitions;
     if (kind === "page" && pageId === "data-hub") return source.filter(group => group.id !== "hero-image")
       .map(group => ({...group,fields:group.fields.filter(field => field.key !== "slug")}));
     if (kind !== "post" || !editorView?.kind) return source;
@@ -538,9 +544,14 @@ export const RecordForm = forwardRef<RecordFormHandle, RecordFormProps>(function
       { ...source.find(group => group.id === "hero-image")!, label: "Images", help: "The decorative heading background and lead image are separate from images in the story." },
       { ...organization, label: "Organization", help: "Public categories and tags.", fields: organization.fields.filter(field => !isIdentity(field) && !isSlug(field)) },
       ...source.filter(group => !["basics", "organization", "hero-image"].includes(group.id)),
-      { id: "details", label: "Advanced", help: "The independent public URL for this story.", fields: [...basic.fields, ...organization.fields].filter(isSlug) },
+      {
+        id: "details",
+        label: "Advanced",
+        help: spanishEdition ? "Use Excerpt only when this Post has no summary." : "The independent public URL for this story.",
+        fields: [...basic.fields, ...organization.fields].filter(isSlug),
+      },
     ] as typeof source;
-  }, [kind, pageId, editorView?.kind, initial?.scheduleCopy]);
+  }, [kind, pageId, editorView?.kind, initial?.scheduleCopy, spanishEdition]);
   const contentFields = useMemo(
     () => groups.flatMap((group) => group.fields),
     [groups],
@@ -703,7 +714,8 @@ export const RecordForm = forwardRef<RecordFormHandle, RecordFormProps>(function
   const [templateOpen, setTemplateOpen] = useState(false);
   const [capturingTemplate, setCapturingTemplate] = useState(false);
   const captureInFlight = useRef(false);
-  const [duplicatingPost, setDuplicatingPost] = useState(false);
+  const [postSourceAction, setPostSourceAction] = useState<"duplicate" | "es" | null>(null);
+  const duplicatingPost = postSourceAction !== null;
   const [publishingLiveBlog, setPublishingLiveBlog] = useState(false);
   // Set synchronously so a draft save started in the same tick sees the publication.
   const liveBlogPublishInFlight = useRef(false);
@@ -1574,22 +1586,23 @@ export const RecordForm = forwardRef<RecordFormHandle, RecordFormProps>(function
     }
   }
 
-  async function duplicateSavedPost() {
+  async function duplicateSavedPost(editionLocale?: "es") {
     if (!duplicatePost || duplicateInFlight.current || captureInFlight.current || liveBlogPublishInFlight.current) return;
     const source = recordRef.current;
     if (templateNeedsSave || typeof source.id !== "string" || typeof source.version !== "number") return;
     duplicateInFlight.current = true;
-    setDuplicatingPost(true);
+    setPostSourceAction(editionLocale ?? "duplicate");
     setSaveError(null);
     setDuplicateError(null);
     onSavingChange?.(true);
     try {
-      await duplicatePost(source.id, source.version);
+      if (editionLocale === undefined) await duplicatePost(source.id, source.version);
+      else await duplicatePost(source.id, source.version, editionLocale);
     } catch (error) {
       setDuplicateError(error instanceof Error ? error.message : "Try again. The saved Post was not changed.");
     } finally {
       duplicateInFlight.current = false;
-      setDuplicatingPost(false);
+      setPostSourceAction(null);
       onSavingChange?.(captureInFlight.current);
     }
   }
@@ -1714,6 +1727,8 @@ export const RecordForm = forwardRef<RecordFormHandle, RecordFormProps>(function
 
   const editorActionsAvailable = useEditorActionsAvailable();
   const PostActions = editorActionsAvailable ? EditorPostActions : PostTemplateActions;
+  const postSourceActionDisabled = saving || capturingTemplate || publishingLiveBlog || duplicatingPost ||
+    templateNeedsSave || duplicateDisabledReason !== undefined || typeof record.id !== "string" || typeof record.version !== "number";
   const saveActions = showSaveAction ? (
     <EditorActionSlot group="save">
       <Toolbar className="record-form-actions">
@@ -1735,11 +1750,21 @@ export const RecordForm = forwardRef<RecordFormHandle, RecordFormProps>(function
               label="Duplicate post"
               variant="menu"
               icon="stack"
-              pending={duplicatingPost}
+              pending={postSourceAction === "duplicate"}
               pendingLabel="Duplicating…"
               pendingAnnouncement="Duplicating the saved Post as a new draft."
-              disabled={saving || capturingTemplate || publishingLiveBlog || templateNeedsSave || duplicateDisabledReason !== undefined || typeof record.id !== "string" || typeof record.version !== "number"}
+              disabled={postSourceActionDisabled}
               onClick={() => void duplicateSavedPost()}
+            /> : null}
+            {duplicatePost && canCreateSpanishEdition ? <AsyncActionButton
+              label="Create or open Spanish draft"
+              variant="menu"
+              icon="file"
+              pending={postSourceAction === "es"}
+              pendingLabel="Opening Spanish draft…"
+              pendingAnnouncement="Opening the linked Spanish draft."
+              disabled={postSourceActionDisabled}
+              onClick={() => void duplicateSavedPost("es")}
             /> : null}
             {capturePostTemplate ? <Button variant="menu" aria-haspopup="dialog" onClick={() => setTemplateOpen(true)} disabled={saving || capturingTemplate || duplicatingPost || publishingLiveBlog || typeof record.id !== "string" || typeof record.version !== "number"}><Icon name="file" /><span>Save as template</span></Button> : null}
             {typeof record.id !== "string" ? <p className="muted">Save this Post first.</p> : null}

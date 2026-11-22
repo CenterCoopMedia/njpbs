@@ -1279,8 +1279,8 @@ export function cmsTransitionContent(
 export interface SaveContentRequest {
   /** Creates an independent draft from this exact template version. Retry the same request key. */
   postTemplate?: { id: string; version: number };
-  /** Duplicates this exact saved Post as an independent draft. Retry the same request key. */
-  postSource?: { id: string; version: number };
+  /** Duplicates a saved Post or opens its single linked Spanish edition. */
+  postSource?: { id: string; version: number; editionLocale?: "es" };
   /** Requested local URL slug; the server reserves it and retains old redirects. */
   slug?: string;
   collection: SaveCollection;

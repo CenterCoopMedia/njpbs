@@ -1,5 +1,7 @@
 "use strict";
 
+const { SPANISH_EDITION_PUBLICATION_UNAVAILABLE, isSpanishEdition } = require("./lib/spanish-edition");
+
 const { publishedBlockResourceError } = require("./lib/published-resource-check");
 
 const { preparePublicReleaseProducerInTransaction, publicContentChange, publicReleaseProducerOperation } = require("./lib/public-release-producer");
@@ -553,6 +555,11 @@ function createScheduledPublishRunner(deps = {}) {
         // through an audited failure so later due content is never starved.
         const disposition = (reason, detail = reason) =>
           recordFailure(reason, detail);
+
+        if (isSpanishEdition(before)) {
+          return malformedSchedule || isDue(before, nowMilliseconds)
+            ? disposition(SPANISH_EDITION_PUBLICATION_UNAVAILABLE) : null;
+        }
 
         // A frozen row whose enqueue failed gets no second history or audit
         // row. Verify its immutable snapshot still has active assets and exact
