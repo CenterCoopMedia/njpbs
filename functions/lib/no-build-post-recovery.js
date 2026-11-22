@@ -13,6 +13,7 @@ const { publicationAttempt, publicationClaim, publicationFailure, publicationRet
 const { readNoBuildFamilyAdmission } = require("./no-build-family-admission");
 const { publicationTarget, assertPublicationTarget, assertPublicationDatabase, publicationPostCacheTag } = require("./publication-target");
 const { readPublicContextInTransaction } = require("./public-context-revision");
+const DUE_QUEUE_LIMIT = 32;
 
 function assertReadbackTarget(firestore, target) {
   const expected = assertPublicationTarget(target);
@@ -245,25 +246,42 @@ async function recoverNoBuildPostDetail({ firestore, fetchPublic = fetch, fetchP
   const readHeaders = publicReadbackHeaders(target, headers);
   if (!operationId) {
     // Reserve time for the last bounded purge/readback before the scheduler's
-    // sixty-second limit. Old completed owners do not consume retry positions.
-    const deadline = now() + 45_000;
-    const owners = (await listNoBuildPostOwners({ firestore })).filter(owner => owner.state.operationId && owner.state.mode !== "static");
-    const due = [];
-    for (let offset = 0; offset < owners.length && now() < deadline; offset += 100) {
-      const rows = await firestore.getAll(...owners.slice(offset, offset + 100).map(owner => firestore.doc(`cmsPublishQueue/${owner.state.operationId}`)));
-      for (const row of rows) {
-        const queue = row.data();
-        if (queue?.transport === TRANSPORT && (publicationAttempt(queue, "post", now()) || postProofDue(queue, now()))) {
-          due.push({ operationId: row.id, nextAttemptAt: queue.status === "success" ? queue.postProof.nextAttemptAt : queue.nextAttemptAt });
-        }
+    // sixty-second limit. A retry is discoverable through its existing due time.
+    const startedAt = now();
+    const deadline = startedAt + 45_000;
+    const queues = firestore.collection("cmsPublishQueue");
+    const [details, proofs, owners] = await Promise.all([
+      queues.where("nextAttemptAt", "<=", startedAt).limit(DUE_QUEUE_LIMIT).get(),
+      queues.where("postProof.nextAttemptAt", "<=", startedAt).limit(DUE_QUEUE_LIMIT).get(),
+      listNoBuildPostOwners({ firestore }),
+    ]);
+    const activeOwners = owners.filter(owner => owner.state.operationId && owner.state.mode !== "static");
+    const activeIds = new Set(activeOwners.map(owner => owner.state.operationId));
+    const due = new Map();
+    const addDue = row => {
+      if (!activeIds.has(row.id)) return;
+      const queue = row.data();
+      if (queue?.transport !== TRANSPORT || (!publicationAttempt(queue, "post", now()) && !postProofDue(queue, now()))) return;
+      due.set(row.id, queue.status === "success" ? queue.postProof.nextAttemptAt : queue.nextAttemptAt);
+    };
+    if (details.size < DUE_QUEUE_LIMIT && proofs.size < DUE_QUEUE_LIMIT) {
+      details.docs.forEach(addDue);
+      proofs.docs.forEach(addDue);
+    } else {
+      // Superseded proofs retain their retry time in history. If either query
+      // fills, read the current owners' queues so old rows cannot hide due work.
+      const ids = [...activeIds];
+      for (let offset = 0; offset < ids.length && now() < deadline; offset += 100) {
+        const rows = await firestore.getAll(...ids.slice(offset, offset + 100).map(id => queues.doc(id)));
+        rows.forEach(addDue);
       }
     }
-    due.sort((left, right) => left.nextAttemptAt - right.nextAttemptAt || left.operationId.localeCompare(right.operationId));
-    for (let offset = 0; offset < due.length && now() < deadline; offset += 4) {
-      await Promise.all(due.slice(offset, offset + 4).map(work => recoverNoBuildPostDetail({ firestore, fetchPublic, fetchPurge, purgeConfig,
-        operationId: work.operationId, now, target, headers: readHeaders })));
+    const ordered = [...due].sort(([leftId, leftTime], [rightId, rightTime]) => leftTime - rightTime || leftId.localeCompare(rightId));
+    for (let offset = 0; offset < ordered.length && now() < deadline; offset += 4) {
+      await Promise.all(ordered.slice(offset, offset + 4).map(([operationId]) => recoverNoBuildPostDetail({ firestore, fetchPublic, fetchPurge, purgeConfig,
+        operationId, now, target, headers: readHeaders })));
     }
-    for (const { state } of owners) {
+    for (const { state } of activeOwners) {
       if (now() >= deadline) break;
       if (state.visible !== false) continue;
       try { await require("./no-build-post-withdrawal").settlePostWithdrawalOutputs({ firestore, operationId: state.operationId }); }
