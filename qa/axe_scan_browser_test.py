@@ -110,6 +110,7 @@ class PublicInteractions(BrowserChecks):
                 page.get_by_role("link", name="The river crossing", exact=True).press("Enter")
                 episode_path = "/watch/programs/river-stories/river-crossing/"
                 expect(page).to_have_url(BASE + episode_path)
+                expect(page).to_have_title("The river crossing — NJ PBS")
                 player = page.get_by_title("Watch The river crossing", exact=True)
                 expect(player).to_have_attribute("src", "https://player.pbs.org/partnerplayer/EXAMPLE==/?autoplay=false")
                 self.assertLessEqual(player.bounding_box()["width"], width)

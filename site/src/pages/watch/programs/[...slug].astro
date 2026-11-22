@@ -41,7 +41,7 @@ const player = episode ? new URL(episode.playerSrc) : null;
 player?.searchParams.set("autoplay", "false");
 ---
 
-<PublicSiteLayout {title} {description} {canonicalPath} noindex={programs?.length === 0} searchable={programs?.length !== 0}>
+<PublicSiteLayout {title} {description} {canonicalPath} preview={false} noindex={programs?.length === 0} searchable={programs?.length !== 0}>
   <article class="video-page">
     {program && <nav aria-label="Breadcrumb" class="video-page__breadcrumb" data-pagefind-ignore>
       <a href={videoCatalogPath}>Watch programs</a>

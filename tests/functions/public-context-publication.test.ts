@@ -308,6 +308,9 @@ it("serves the video catalog from the release until verified background bytes ta
   const accepted = await enqueue(operationId, { reason: "provider-refresh", videoCatalog: true });
   expect(accepted.outputs).toEqual([...publication.OUTPUTS, "videoCatalog"]);
   expect(await decision()).toEqual({ kind: "pass" });
+  await enqueue("V".repeat(20));
+  expect((await db.doc("cmsBackgroundOutputs/videoCatalog").get()).data()).toMatchObject({ revision: 2, status: "pending" });
+  expect(await decision()).toEqual({ kind: "pass" });
   const worker = reader(runtime, contextDigest, ["videoCatalog"]);
   await worker.recover();
   expect(await decision()).toMatchObject({ kind: "background" });

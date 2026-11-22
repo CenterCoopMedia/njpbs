@@ -54,7 +54,7 @@ async function readPublicContextBackgroundInTransaction({ firestore, transaction
     const state = (await transaction.get(firestore.doc(`cmsBackgroundOutputs/${output}`))).data();
     // The release's static catalog can answer while its first refresh is being
     // prepared. Subsequent refreshes have a verified predecessor to retain.
-    if (videoCatalog && state?.revision === 1 && !lastGood(state)) return null;
+    if (videoCatalog && !lastGood(state)) return null;
     const job = current.servingEstablished === true ? null : (await transaction.get(firestore.doc(`cmsPublishQueue/${current.operationId}`))).data();
     const established = current.servingEstablished === true || job?.status === "success";
     const withdrawalRevision = context.data()?.withdrawalRevision ?? 0;
