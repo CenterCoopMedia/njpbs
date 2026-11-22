@@ -555,6 +555,12 @@ describe("independent public routes, catalog and confirmation", () => {
     await recovery.recoverNoBuildPostDetail(input);
     expect(await snapshot()).toEqual(beforeDue);
     expect([purges, reads]).toEqual([2, 2]);
+    // Older superseded proofs can fill the indexed lookup ahead of current work.
+    const oldProofs = Array.from({ length: 32 }, () => db.collection("cmsPublishQueue").doc());
+    const historical = db.batch();
+    for (const ref of oldProofs) historical.set(ref, { transport: "post-no-build-v1", status: "success",
+      postProof: { status: "failed", attempts: 1, claim: null, nextAttemptAt: time - 1 } });
+    await historical.commit();
     time++;
     await recovery.recoverNoBuildPostDetail(input);
     for (const state of accepted) {
@@ -569,9 +575,19 @@ describe("independent public routes, catalog and confirmation", () => {
         publishBuildPending: false, publicSourceVersion: state.sourceVersion,
         publicPostProof: { operationId: state.operationId, status: "verified", retryPending: false } });
     }
+    const cleanup = db.batch();
+    for (const ref of oldProofs) cleanup.delete(ref);
+    await cleanup.commit();
     expect((await db.collection("cmsPublishQueue").get()).size).toBe(2);
     time += 10 * 60_000;
-    await recovery.recoverNoBuildPostDetail(input);
+    const batchReads = vi.spyOn(db, "getAll");
+    try {
+      await recovery.recoverNoBuildPostDetail(input);
+      const queueReads = batchReads.mock.calls.flat().filter(ref => ref.path?.startsWith("cmsPublishQueue/"));
+      expect(queueReads).toEqual([]);
+    } finally {
+      batchReads.mockRestore();
+    }
     expect([purges, reads]).toEqual([2, 4]);
   });
   it("confirms a dev Post through the Access gateway without losing the accepted operation", async () => {
@@ -620,7 +636,7 @@ describe("independent public routes, catalog and confirmation", () => {
     expect((await db.collection("cmsPublishQueue").get()).size).toBe(1);
   });
   it("ends a recovery pass before its scheduler limit and serves remaining due operations on the next pass", async () => {
-    const ids = ["first", "second", "third", "fourth", "fifth", "sixth", "seventh", "eighth"];
+    const ids = ["first", "second", "third", "fourth", "fifth"];
     for (const id of ids) {
       if (!["first", "second"].includes(id)) await db.doc(`cmsPosts/${id}`).set(document(id));
       expect((await publish(id)).code).toBe(200);
@@ -637,7 +653,7 @@ describe("independent public routes, catalog and confirmation", () => {
     await recovery.recoverNoBuildPostDetail(input);
     const after = (await db.collection("cmsPublishQueue").get()).docs.map(row => row.data());
     expect(after.filter(queue => queue.status === "success")).toHaveLength(4);
-    expect(after.filter(queue => queue.status === "pending" && queue.attempts === 0)).toHaveLength(4);
+    expect(after.filter(queue => queue.status === "pending" && queue.attempts === 0)).toHaveLength(1);
     await recovery.recoverNoBuildPostDetail(input);
     expect((await db.collection("cmsPublishQueue").get()).docs.every(row => row.data().status === "success")).toBe(true);
   });
