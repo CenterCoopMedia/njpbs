@@ -146,12 +146,8 @@ function assertStoredAsset(stored, assetId, principal, baseVersion) {
     );
   }
   if (stored.lifecycle !== "active" && stored.lifecycle !== "tombstoned") {
-    throw new MediaLifecycleRejection(
-      409,
-      ["purging", "purged"].includes(stored.lifecycle)
-        ? "This image is being removed or has already been removed."
-        : "This media asset has an invalid lifecycle state.",
-    );
+    assertMediaNotRemoved(stored.kind, stored.lifecycle);
+    throw new MediaLifecycleRejection(409, "This media asset has an invalid lifecycle state.");
   }
 }
 
@@ -645,14 +641,19 @@ const cmsSetMediaLifecycle = cmsOnRequest(
   createCmsSetMediaLifecycleHandler(),
 );
 
+function assertMediaNotRemoved(kind, state) {
+  if (["purging", "purged"].includes(state)) {
+    const item = kind === "audio" ? "audio file" : "image";
+    throw new MediaLifecycleRejection(409, `This ${item} is being removed or has already been removed.`);
+  }
+}
+
 function assertRestorableMedia(stored, queue, restoreOnly) {
   if (restoreOnly && stored.kind !== "image" && !(stored.kind === "audio" && stored.source === "upload")) {
     throw new MediaLifecycleRejection(404, NOT_FOUND_MESSAGE);
   }
-  if ((restoreOnly || stored.kind === "image") && queue.exists &&
-      ["purging", "purged"].includes(queue.data().state)) {
-    const item = stored.kind === "image" ? "image" : "audio file";
-    throw new MediaLifecycleRejection(409, `This ${item} is being removed or has already been removed.`);
+  if ((restoreOnly || stored.kind === "image") && queue.exists) {
+    assertMediaNotRemoved(stored.kind, queue.data().state);
   }
 }
 
