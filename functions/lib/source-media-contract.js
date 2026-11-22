@@ -11,6 +11,7 @@ const MAX_PAGE_SIZE = 100;
 const DEFAULT_PAGE_SIZE = 30;
 const MAX_NAME_SORT_LENGTH = 512;
 const MAX_NAME_SORT_BYTES = 1500;
+const MAX_STEWARD_LENGTH = 120;
 const ID_PATTERN = /^[A-Za-z0-9_-]{1,128}$/;
 
 class SourceMediaValidationError extends Error {
@@ -319,6 +320,7 @@ function parseSourceMediaAsset(id, value) {
     name: value.name.trim(),
     originalName: value.originalName.trim(),
     description: nullableText(value.description, 2_000),
+    steward: nullableText(value.steward, MAX_STEWARD_LENGTH),
     metadataUpdateRequested: value.metadataUpdateRequested === true,
     nameSort: value.nameSort,
     updatedAtSort: value.updatedAtSort,
@@ -367,6 +369,7 @@ function sourceMediaAssetSummary(asset) {
     name: asset.name,
     originalName: asset.originalName,
     description: asset.description,
+    steward: asset.steward ?? null,
     metadataUpdateRequested: asset.metadataUpdateRequested === true,
     mimeType: asset.mimeType,
     kind: asset.kind,
@@ -400,6 +403,7 @@ module.exports = {
   MAX_QUERY_LENGTH,
   MAX_NAME_SORT_LENGTH,
   MAX_NAME_SORT_BYTES,
+  MAX_STEWARD_LENGTH,
   SourceMediaValidationError,
   encodeCursor,
   normalizeSearchPrefix,

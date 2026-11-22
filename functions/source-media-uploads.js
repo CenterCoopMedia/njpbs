@@ -287,6 +287,7 @@ function auditMetadata(asset) {
     name: asset.name,
     originalName: asset.originalName,
     description: asset.description,
+    steward: asset.steward ?? null,
     metadataUpdateRequested: asset.metadataUpdateRequested === true,
     mimeType: asset.mimeType,
     sizeBytes: asset.sizeBytes,

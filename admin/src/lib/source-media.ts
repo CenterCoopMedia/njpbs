@@ -45,6 +45,7 @@ export interface SourceMediaAssetSummary {
   sourceId: string;
   name: string;
   description: string | null;
+  steward?: string | null;
   originalName: string;
   mimeType: string;
   kind: "video";
@@ -196,7 +197,7 @@ export async function updateSourceMediaMetadata(
   sourceId: string,
   assetId: string,
   expectedVersion: number,
-  changes: { name?: string; description?: string; credit?: string; license?: string; tags?: string[]; rightsStatus?: "complete" | "pending"; markers?: SourceMediaMarker[] },
+  changes: { name?: string; description?: string; steward?: string | null; credit?: string; license?: string; tags?: string[]; rightsStatus?: "complete" | "pending"; markers?: SourceMediaMarker[] },
   options: { preserveVideoSearchCache?: boolean } = {},
 ): Promise<{ success: true; asset: SourceMediaAssetSummary; videoSearchRevision?: number }> {
   const videoSearchRevision = videoSearchCacheRevision();
