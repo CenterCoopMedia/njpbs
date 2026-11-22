@@ -18,6 +18,7 @@ const { registeredAuthorIds, resolveStoryCredits } = require("./story-credits");
 const { parsePublishInstant } = require("./publish-instant");
 const { serviceCompositionError } = require("./service-composition");
 const { isPostLeadMedia, leadVideoBlocks } = require("./post-lead-media");
+const { isPostSidebar } = require("./post-sidebar");
 const { videoCopies, previousVideoCopies, pendingPublicRevision } = require("./public-video-references");
 const { pageThemeError } = require("./content-metadata");
 
@@ -67,6 +68,7 @@ const EVENT_METADATA_FIELDS = [
 ];
 const POST_METADATA_FIELDS = [
   "disableStoryCtas",
+  "postSidebar",
   "type",
   "spotlightNews",
   "coverageLabelId",
@@ -264,6 +266,9 @@ function createPublishedSnapshot({
   if (kind === "post") {
     if (document.disableStoryCtas !== undefined && typeof document.disableStoryCtas !== "boolean") {
       throw new PublishSnapshotError("disableStoryCtas must be a boolean");
+    }
+    if (document.postSidebar !== undefined && !isPostSidebar(document.postSidebar)) {
+      throw new PublishSnapshotError("Check the Post sidebar settings.");
     }
     if (document.liveBlog !== undefined) {
       try {

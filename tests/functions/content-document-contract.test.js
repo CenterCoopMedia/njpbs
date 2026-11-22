@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest";
 import contractPkg from "../../functions/lib/content-document-contract.js";
+import previewSnapshotPkg from "../../functions/lib/preview-snapshot.js";
+import publishSnapshotPkg from "../../functions/lib/publish-snapshot.js";
 import {
   editorFieldGroupsFor,
 } from "../../packages/content-core/src/editor-admin";
@@ -30,7 +32,7 @@ const STRUCTURAL_FIELDS = {
   sponsor: { type: "type", status: "string", publishAt: "publishAt" },
   newsletter: { type: "type", status: "string", publishAt: "publishAt" },
   // Coverage assignment ships in the server layer before the companion Admin choice.
-  post: { type: "type", status: "string", publishAt: "publishAt", blocks: "blocks", leadMedia: "leadMedia", liveBlog: "liveBlog", coverageLabelId: "coverageLabelId" },
+  post: { type: "type", status: "string", publishAt: "publishAt", blocks: "blocks", leadMedia: "leadMedia", liveBlog: "liveBlog", coverageLabelId: "coverageLabelId", postSidebar: "postSidebar" },
 };
 
 function ruleFor(field) {
@@ -68,6 +70,44 @@ function editorRulesFor(kind, pageId) {
 }
 
 describe("server content document contract", () => {
+  it("accepts a bounded Post sidebar and rejects invalid section lists", () => {
+    const sections = [
+      { id: "topics", visible: true },
+      { id: "overview", visible: false },
+      { id: "contents", visible: true },
+    ];
+    const validate = postSidebar => validateContentFieldValues("cmsPosts", "post", { postSidebar });
+    expect(validate({ enabled: false, sections })).toBeNull();
+    for (const invalid of [
+      null,
+      { enabled: "yes" },
+      { enabled: true, sections: sections.slice(1) },
+      { enabled: true, sections: [sections[0], sections[0], sections[1]] },
+      { enabled: true, sections: [...sections.slice(0, 2), { id: "unknown", visible: true }] },
+      { enabled: true, sections: [...sections.slice(0, 2), { id: "contents", visible: true, extra: "private" }] },
+    ]) {
+      expect(validate(invalid)).toBe("Check the Post sidebar settings.");
+    }
+  });
+
+  it("freezes the same Post sidebar in a private preview and a published revision", () => {
+    const postSidebar = { enabled: false, sections: [
+      { id: "topics", visible: true },
+      { id: "contents", visible: true },
+      { id: "overview", visible: false },
+    ] };
+    const now = "2026-11-22T12:00:00.000Z";
+    const document = { type: "post", title: "Transit changes", slug: "transit-changes",
+      version: 7, date: "2026-11-22", tags: [], blocks: [], locale: "en", previousSlugs: [], postSidebar };
+    const published = publishSnapshotPkg.createPublishedSnapshot({
+      collection: "cmsPosts", document, publishedAt: now, publishedBy: "editor",
+    });
+    const preview = previewSnapshotPkg.createPostPreviewSnapshot("post-one", document, Date.parse(now));
+    expect(published.metadata.postSidebar).toEqual(postSidebar);
+    expect(preview.published.metadata.postSidebar).toEqual(published.metadata.postSidebar);
+    expect(published.metadata.postSidebar).not.toBe(postSidebar);
+  });
+
   it("keeps child-directed classification as a typed, Page-only structural field", () => {
     expect(Object.keys(editorRulesFor("page"))).not.toContain("childDirected");
     for (const childDirected of [true, false]) {

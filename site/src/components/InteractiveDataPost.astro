@@ -1,6 +1,7 @@
 ---
 import ReaderTextSize from "./ReaderTextSize.astro";
 import { createPageImageLoading } from "../../../packages/content-core/src/image-loading";
+import { postSidebarSections } from "../../../packages/content-core/src/post-sidebar";
 import type { CollectionEntry } from "astro:content";
 import PostPublication from "./PostPublication.astro";
 import PostBlockList from "./PostBlockList.astro";
@@ -32,6 +33,9 @@ const topics = publicPostTopics(post.tags);
 const categories = publicPostCategories(post.categories);
 const chapters = postChapters(post.blocks);
 const showContents = chapters.length >= 2;
+const availableSidebarSections = { overview: true, contents: showContents, topics: categories.length > 0 || topics.length > 0 };
+const sidebarSections = post.postSidebar?.enabled === false ? [] : postSidebarSections(post.postSidebar)
+  .filter(section => section.visible && availableSidebarSections[section.id]);
 const inventory = interactivePostInventory(post.blocks);
 assertInteractiveInventory(inventory);
 const inventoryText = interactiveInventoryText(inventory, chapters.length);
@@ -91,14 +95,14 @@ const heroAlt = post.heroImageDecorative ? "" : post.heroImageAlt;
 
   <ReaderTextSize />
 
-  <div class="interactive-data__layout">
-    <aside class="interactive-data__rail" aria-label="Interactive page guide">
-      <div class="interactive-data__rail-section">
-        <h2>On this page</h2>
-        <p>{inventoryText}</p>
-      </div>
-
-      {showContents && (
+  <div class:list={["interactive-data__layout", { "interactive-data__layout--with-rail": sidebarSections.length > 0 }]}>
+    {sidebarSections.length > 0 && <aside class="interactive-data__rail" aria-label="Interactive page guide">
+      {sidebarSections.map(({ id }) => id === "overview" ? (
+        <div class="interactive-data__rail-section">
+          <h2>On this page</h2>
+          <p>{inventoryText}</p>
+        </div>
+      ) : id === "contents" ? (
         <nav class="interactive-data__contents" aria-label="Reporting sections">
           <ul>
             {chapters.map((chapter) => (
@@ -106,9 +110,7 @@ const heroAlt = post.heroImageDecorative ? "" : post.heroImageAlt;
             ))}
           </ul>
         </nav>
-      )}
-
-      {(categories.length > 0 || topics.length > 0) && (
+      ) : (
         <div class="interactive-data__rail-section">
           {categories.length > 0 && (
             <><h2>Categories</h2><ul class="interactive-data__topics">{categories.map((category) => (
@@ -121,8 +123,8 @@ const heroAlt = post.heroImageDecorative ? "" : post.heroImageAlt;
             ))}</ul></>
           )}
         </div>
-      )}
-    </aside>
+      ))}
+    </aside>}
 
     <div class="interactive-data__story">
       <PostBlockList
@@ -226,11 +228,15 @@ const heroAlt = post.heroImageDecorative ? "" : post.heroImageAlt;
 
   .interactive-data__layout {
     display: grid;
-    grid-template-columns: minmax(0, 1fr) minmax(13rem, 17rem);
+    grid-template-columns: minmax(0, 1fr);
     gap: clamp(2rem, 5vw, 5rem);
     max-width: var(--wrap);
     margin: 0 auto;
     padding: clamp(3rem, 7vw, 6rem) var(--gutter) clamp(4rem, 9vw, 8rem);
+  }
+
+  .interactive-data__layout--with-rail {
+    grid-template-columns: minmax(0, 1fr) minmax(13rem, 17rem);
   }
 
   .interactive-data__rail {
@@ -265,7 +271,7 @@ const heroAlt = post.heroImageDecorative ? "" : post.heroImageAlt;
     line-height: 1.55;
   }
 
-  .interactive-data__contents {
+  .interactive-data__contents:not(:first-child) {
     border-top: 1px solid var(--color-border);
   }
 
@@ -481,7 +487,7 @@ const heroAlt = post.heroImageDecorative ? "" : post.heroImageAlt;
       grid-row: 1;
     }
 
-    .interactive-data__story {
+    .interactive-data__layout--with-rail .interactive-data__story {
       grid-row: 2;
     }
 

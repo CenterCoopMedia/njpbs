@@ -1,5 +1,6 @@
 import { validatePostsBrowse, type PostsBrowseConfig } from "../../packages/content-core/src/posts-browse.ts";
 import type { PostLeadMedia } from "../../packages/content-core/src/post-lead-media.ts";
+import { isPostSidebar, type PostSidebar } from "../../packages/content-core/src/post-sidebar.ts";
 import type { LiveBlogData } from "../../packages/content-core/src/live-blog.ts";
 import type { HomeHeroConfig } from "../../packages/content-core/src/home-hero";
 import { defineCollection } from "astro:content";
@@ -191,6 +192,7 @@ const cmsPosts = defineCollection({
     coverageLabelId: z.string().regex(/^[a-z0-9][a-z0-9-]{0,63}$/).optional(),
     showInHomeHero: z.boolean().optional(),
     disableStoryCtas: z.boolean().optional(),
+    postSidebar: z.custom<PostSidebar>(isPostSidebar).optional(),
     summary: z.string(),
     excerpt: z.string(),
     categories: z.array(z.string()),

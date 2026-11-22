@@ -3,6 +3,7 @@ import { parseBlocks } from "../../../packages/content-core/src/content-model";
 import type { LiveBlogData } from "../../../packages/content-core/src/live-blog";
 import type { LiveBlogDraft } from "../../../packages/content-core/src/live-blog-draft";
 import { POST_PRESENTATIONS, postPresentationError, publicPostTopics, resolvePostPresentation, tagsWithPostPresentation, type PostPresentation } from "../../../packages/content-core/src/post-formats";
+import { isPostSidebar } from "../../../packages/content-core/src/post-sidebar";
 import type { StoryCredit } from "../../../packages/content-core/src/story-credits";
 import { Fragment, type ComponentProps, type FormEventHandler, type ReactNode, type Ref } from "react";
 import { createPortal } from "react-dom";
@@ -31,6 +32,7 @@ import { InfoTooltip } from "./ui/InfoTooltip";
 import { FieldRenderer } from "./FieldRenderer";
 import { PostLeadMediaEditor } from "./PostLeadMediaEditor";
 import { PostLeadMediaInspector } from "./PostLeadMediaInspector";
+import { PostSidebarEditor } from "./PostSidebarEditor";
 import { BlockEditor, type BlockEditorHandle } from "./BlockEditor";
 import { EditorBento, type BentoPanel } from "./EditorBento";
 import { LifecycleFeedbackRevealProvider } from "./LifecycleActionsPanel";
@@ -501,6 +503,18 @@ export function RecordFormFields({
                 liveBlog={record.liveBlog as LiveBlogDraft} authors={bylineAuthors} authorsLoading={bylineAuthorsLoading} selfAuthorId={selfAuthorId} canManageAuthorProfiles={canManageAuthorProfiles} /> : null}</>
               : <Button ref={startLiveBlogRef} disabled={interactionLocked || !canSave} onClick={startLiveBlog}>Start live blog draft</Button>,
           },
+          ...(record.liveBlog != null || presentation === "interactive" ? [{
+            id: "post-sidebar",
+            title: "Public sidebar",
+            defaultZone: "side" as const,
+            body: <PostSidebarEditor
+              id={`${formId}-post-sidebar`}
+              value={isPostSidebar(record.postSidebar) ? record.postSidebar : undefined}
+              liveBlog={record.liveBlog != null}
+              disabled={interactionLocked || !canSave}
+              onChange={value => changeField({ key: "postSidebar", label: "Public sidebar", help: "", kind: "text", required: false }, value)}
+            />,
+          }] : []),
           ...postMetadataPanels,
           ...(postInspector
             ? [{

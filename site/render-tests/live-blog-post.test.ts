@@ -69,6 +69,17 @@ describe("live blog in the actual Post shell", () => {
     expect(html).not.toContain('data-block-id="missing-card"');
   });
 
+  it("keeps authored sidebar blocks out of both columns when the sidebar is off", async () => {
+    const read = liveBlogPostFixture({ sidebar: true });
+    read.document.published.metadata.postSidebar = { enabled: false };
+    const content = projectPublishedPostRead(read, "live-blog-local", compiled.rendererSha, new Date(LIVE_BLOG_POST_AS_OF))!;
+    const html = await compiled.renderPublishedPost(content);
+    expect(html).toContain('class="live-blog"');
+    expect(html).toContain('data-block-id="introduction"');
+    expect(html).not.toContain('aria-label="More from this coverage"');
+    expect(html).not.toContain('data-block-id="sidebar-copy"');
+  });
+
   it("keeps a resolved Astro card in the sidebar even though its leaf HTML is empty", async () => {
     const content = projectPublishedPostRead(liveBlogPostFixture(), "live-blog-local", compiled.rendererSha, new Date(LIVE_BLOG_POST_AS_OF))!;
     const blocks = [...content.posts[0].blocks, { id: "program-card", type: "record_card" as const, visible: true, order: 1,

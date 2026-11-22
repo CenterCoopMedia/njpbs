@@ -4,7 +4,9 @@ import CmsPage from "../src/components/CmsPage.astro";
 import PostPresentation from "../src/components/PostPresentation.astro";
 import { projectCmsPreviewContent } from "../src/lib/cms-preview-content";
 import { projectCmsPage } from "../src/lib/cms-loader";
-import { now, blocks, input, fixture } from "../tests/fixtures/cms-preview-content";
+import { projectPublishedPostRead } from "../src/lib/published-post-shadow";
+import { now, blocks, input, fixture, rendererSha } from "../tests/fixtures/cms-preview-content";
+import { postLeadFixture } from "../tests/fixtures/post-lead-media";
 import CmsBlocks from "../src/components/CmsBlocks.astro";
 import { defaultDataHubBlocks } from "../../packages/content-core/src/data-hub-composition";
 import type { CmsRenderContext } from "../src/lib/cms-render-context";
@@ -50,6 +52,43 @@ describe("existing templates with request-scoped content", () => {
     expect(second).toContain("Post Beta"); expect(second).not.toContain("Post Alpha");
     expect(first).toContain("Only this draft");
     expect(second).toContain("Only this draft");
+  });
+
+  it("renders the same ordered Post sidebar for the saved draft and published snapshot", async () => {
+    const read = postLeadFixture("interactive", "image");
+    const { document } = read;
+    const snapshot = {
+      ...document.published,
+      publishedAt: now.toISOString(),
+      sourceVersion: 7,
+      blocks: document.published.blocks.filter(block => block.type === "prose" || block.type === "embed"),
+      metadata: { ...document.published.metadata, categories: ["Local reporting"], leadMedia: null,
+        postSidebar: { enabled: true, sections: [
+          { id: "topics", visible: true },
+          { id: "contents", visible: true },
+          { id: "overview", visible: false },
+        ] } },
+    };
+    const value = input("cmsPosts");
+    Object.assign(value.snapshot, { published: snapshot });
+    const sealed = fixture(value);
+    const draft = projectCmsPreviewContent(sealed.bytes, sealed.request, now);
+    const published = projectPublishedPostRead({ ...read,
+      document: { ...document, published: snapshot, publishAt: now.toISOString() },
+    }, String(snapshot.metadata.slug), rendererSha, now)!;
+    const guide = async (content: typeof draft | typeof published) => {
+      const post = content.posts[0];
+      const html = await container.renderToString(PostPresentation, {
+        props: { entry: { id: post.postId, collection: "cmsPosts", data: post },
+          credits: post.credits, canonicalUrl: `https://njpbs.org${post.path}` },
+        locals: { cmsRender: { content, homeSources: {} } as CmsRenderContext },
+      });
+      return html.match(/<aside[^>]+aria-label="Interactive page guide"[^>]*>([\s\S]*?)<\/aside>/)?.[1];
+    };
+    const previewGuide = await guide(draft);
+    expect(previewGuide).toMatch(/Categories[\s\S]*Reporting sections/);
+    expect(previewGuide).not.toContain("On this page");
+    expect(previewGuide).toBe(await guide(published));
   });
 
   it("keeps Page body markup identical for the equivalent existing published projection", async () => {

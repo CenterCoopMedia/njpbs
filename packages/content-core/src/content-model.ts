@@ -633,6 +633,7 @@ export interface PostPublishedMetadata
   showInHomeHero?: boolean;
   /** Suppress automatic CTA rules for this published story only. */
   disableStoryCtas?: boolean;
+  postSidebar?: import("./post-sidebar").PostSidebar;
   title: string;
   /** Ordered editorial sections. The first non-empty value is the main category. */
   categories?: string[];
@@ -697,6 +698,7 @@ export interface PostRecord
   showInHomeHero?: boolean;
   /** Save and publish to suppress automatic CTAs; authored blocks stay. */
   disableStoryCtas?: boolean;
+  postSidebar?: import("./post-sidebar").PostSidebar;
   title: string;
   /** Ordered editorial sections. The first non-empty value is the main category. */
   categories?: string[];
