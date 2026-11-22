@@ -51,6 +51,7 @@ export interface HomeSourceSnapshot {
   };
 }
 
+export const pbsArtworkFallback = "/brand/home/new-jersey-blue.webp";
 const externalNotice = '<span class="sr-only"> (opens in new tab)</span>';
 export { externalNotice as homeExternalLinkNotice };
 
@@ -64,8 +65,6 @@ export function spotlightGridImageSizes(columns: ContentShelfData["columns"]): s
   const count = gridColumns(columns);
   return `auto, (max-width: 63.99rem) 50vw, min(${100 / count}vw, ${84 / count}rem)`;
 }
-
-export const pbsArtworkFallback = "/brand/home/new-jersey-blue.webp";
 
 export function pbsShelfImageFallback(image: string): string {
   // Private previews already package and rewrite this image attribute.
