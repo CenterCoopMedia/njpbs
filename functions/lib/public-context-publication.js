@@ -113,7 +113,8 @@ async function retainedPublicContextQueueIdsInTransaction({ transaction, firesto
 
 /** Read first, return writes for the caller's atomic settings/content transaction.
  * Admission selects new Posts; it does not grant ownership of public aggregates. */
-async function enqueuePublicContextInTransaction({ transaction, firestore, operationId, runtime, reason, contextRevision, preparationRecoveryOfQueueId, recordFamily, activateQueued = false, pagePublication = false }) {
+async function enqueuePublicContextInTransaction({ transaction, firestore, operationId, runtime, reason,
+  contextRevision, preparationRecoveryOfQueueId, recordFamily, videoCatalog = false, activateQueued = false, pagePublication = false }) {
   publicationRuntime(runtime);
   requireValue(runtime.owner === "cloudflare" && /^[A-Za-z0-9]{20}$/.test(operationId ?? "") &&
     ["settings", "context", "provider-refresh"].includes(reason));
@@ -123,9 +124,11 @@ async function enqueuePublicContextInTransaction({ transaction, firestore, opera
   const currentRef = firestore.doc(CURRENT_PATH);
   const [queue, current, deployment, context] = await transaction.getAll(queueRef, currentRef, firestore.doc("system/publicDeployment"), firestore.doc(PUBLIC_CONTEXT_PATH));
   const namespace = await prepareRecordNamespace({ firestore, transaction, family: recordFamily });
-  const outputs = namespace.outputs;
+  const previous = current.data();
   const identity = activateQueued ? queue.data()?.publicContext : { schemaVersion: 1, operationId, contextRevision, contextDigest, reason, runtime, acceptedAt: Date.now(),
-    ...(namespace.families.length ? { recordFamilies: namespace.families } : {}) };
+    ...(namespace.families.length ? { recordFamilies: namespace.families } : {}),
+    ...(videoCatalog || previous?.videoCatalog === true || previous?.followUp?.videoCatalog === true ? { videoCatalog: true } : {}) };
+  const outputs = contextOutputs({ recordFamilies: namespace.families, videoCatalog: identity?.videoCatalog });
   const result = { queueId: operationId, contextRevision, contextDigest, outputs: [...outputs] };
   const activityTime = pagePublication ? { triggeredAt: FieldValue.serverTimestamp() } : {};
   if (queue.exists) {
@@ -149,7 +152,6 @@ async function enqueuePublicContextInTransaction({ transaction, firestore, opera
     /^cmsPublishQueue\/[A-Za-z0-9_-]{1,200}\/backgroundOutputs\/[A-Za-z0-9_-]+$/.test(row.data().taskPath ?? "")));
   const priorRefs = states.filter(row => row.exists).map(row => firestore.doc(row.data().taskPath));
   const prior = priorRefs.length ? await transaction.getAll(...priorRefs) : [];
-  const previous = current.data();
   const sameContext = previous && ownsPublication(previous, runtime) && previous.contextDigest === contextDigest &&
     JSON.stringify(contextOutputs(previous)) === JSON.stringify(outputs);
   const previousIds = previous ? previous.operationIds ?? [previous.operationId] : [];

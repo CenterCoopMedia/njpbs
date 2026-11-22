@@ -14,7 +14,7 @@ const { readPublicationPrerequisites, PUBLICATION_BUDGET_MS } = require("./setti
 const { assertPublicDeploymentPointer } = require("./public-deployment");
 const { readCmsPublicationRuntimeControlInTransaction, cloudCmsPublicationRuntimeControl } = require("./cms-publication-runtime-control");
 const { publicationTarget } = require("./publication-target");
-const { enqueuePublicContextInTransaction, missingPublicContextConsumers, TRANSPORT } = require("./public-context-publication");
+const { CURRENT_PATH, enqueuePublicContextInTransaction, missingPublicContextConsumers, TRANSPORT } = require("./public-context-publication");
 const { bumpPublicContextRevision, publicContextDigest, readPublicContextRevisionInTransaction } = require("./public-context-revision");
 const { contextOutputs, readRecordNamespace } = require("./no-build-record-namespace");
 
@@ -127,12 +127,14 @@ async function prepareNoBuildRecordPublication({ firestore, transaction, collect
 async function prepareDeferredRecordRemoval({ firestore, transaction, operation, runtime }) {
   const { families } = await readRecordNamespace({ firestore, transaction });
   const ref = firestore.doc(`cmsPublishQueue/${operation.operationId}`);
-  const queue = await transaction.get(ref);
+  const [queue, current] = await transaction.getAll(ref, firestore.doc(CURRENT_PATH));
+  const context = current.data();
   if (operation.visible || !families.includes(operation.family) || queue.exists) refuse("The deferred record removal is invalid.");
   return { write() {
     transaction.create(ref, { schemaVersion: 1, transport: TRANSPORT, runtime, backgroundRuntime: runtime,
       publicContext: { schemaVersion: 1, operationId: operation.operationId, contextRevision: operation.contextRevision,
-        contextDigest: operation.contextDigest, reason: "context", runtime, recordFamilies: families, acceptedAt: Date.now() },
+        contextDigest: operation.contextDigest, reason: "context", runtime, recordFamilies: families, acceptedAt: Date.now(),
+        ...(context?.videoCatalog === true || context?.followUp?.videoCatalog === true ? { videoCatalog: true } : {}) },
       status: "pending", changes: [], recordRegeneration: "deferred", createdAt: FieldValue.serverTimestamp(), aggregateReceipt: null });
   } };
 }

@@ -5,7 +5,7 @@ const { publicationRuntime } = require("./publication-runtime-owner");
 const { CURRENT_PATH, OUTPUTS } = require("./public-context-publication");
 const { PUBLIC_CONTEXT_PATH, publicContextDigest } = require("./public-context-revision");
 const { backgroundOutputForPath: outputForPath, isBackgroundAssetPath, lastGood } = require("./post-background-outputs");
-const { contextOutputs, recordOutputForPath, recordFamilyRegistered } = require("./no-build-record-namespace");
+const { CHECKPOINT_FAMILIES, VIDEO_CATALOG_OUTPUT, contextOutputs, recordOutputForPath, recordFamilyRegistered } = require("./no-build-record-namespace");
 const { recordManifestOwnsAsset } = require("./post-background-record-manifest");
 const { publicationTarget } = require("./publication-target");
 
@@ -13,9 +13,10 @@ const { publicationTarget } = require("./publication-target");
  * ownership and new-operation admission do not govern their public readers. */
 async function readPublicContextBackgroundInTransaction({ firestore, transaction, path, rendererSha }) {
   const output = outputForPath(path);
+  const videoCatalog = output === VIDEO_CATALOG_OUTPUT;
   const asset = isBackgroundAssetPath(path);
   const recordFamily = recordOutputForPath(path);
-  if (!OUTPUTS.includes(output) && !recordFamily && !asset) return null;
+  if (!OUTPUTS.includes(output) && !recordFamily && !videoCatalog && !asset) return null;
   if (recordFamily && !await recordFamilyRegistered({ firestore, transaction, family: recordFamily })) return null;
   const current = (await transaction.get(firestore.doc(CURRENT_PATH))).data();
   if (!current) {
@@ -24,6 +25,7 @@ async function readPublicContextBackgroundInTransaction({ firestore, transaction
   }
   const outputs = contextOutputs(current);
   if (recordFamily && !outputs.includes(recordFamily)) throw new Error("Record namespace context is unavailable");
+  if (videoCatalog && !outputs.includes(output)) return null;
   publicationRuntime(current.runtime);
   if (current.schemaVersion !== 1 || current.runtime.owner !== "cloudflare" ||
       !/^[A-Za-z0-9]{20}$/.test(current.operationId) || !/^[a-f0-9]{64}$/.test(current.contextDigest)) {
@@ -44,12 +46,15 @@ async function readPublicContextBackgroundInTransaction({ firestore, transaction
     const states = await transaction.getAll(...outputs.map(family => firestore.doc(`cmsBackgroundOutputs/${family}`)));
     const owned = states.some(row => [row.data()?.receipt, row.data()?.lastGood?.receipt, row.data()?.previousAssets?.good?.receipt]
       .some(receipt => receipt?.assets?.some(file => file.path === path) ||
-        ["programs", "events", "search"].includes(row.id) && receipt?.fileManifest && recordManifestOwnsAsset(receipt, path)));
+        [...CHECKPOINT_FAMILIES, "search"].includes(row.id) && receipt?.fileManifest && recordManifestOwnsAsset(receipt, path)));
     // Bounded path hashes keep unrelated asset misses out of artifact IO.
     if (!owned) return null;
   }
   if (output) {
     const state = (await transaction.get(firestore.doc(`cmsBackgroundOutputs/${output}`))).data();
+    // The release's static catalog can answer while its first refresh is being
+    // prepared. Subsequent refreshes have a verified predecessor to retain.
+    if (videoCatalog && state?.revision === 1 && !lastGood(state)) return null;
     const job = current.servingEstablished === true ? null : (await transaction.get(firestore.doc(`cmsPublishQueue/${current.operationId}`))).data();
     const established = current.servingEstablished === true || job?.status === "success";
     const withdrawalRevision = context.data()?.withdrawalRevision ?? 0;

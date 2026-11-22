@@ -35,7 +35,7 @@ const { readPublicContextInTransaction, readPublicBackgroundContextInTransaction
 const { createPostBackgroundStorage } = require("../../functions/lib/post-background-storage");
 const { verifiedPreviewProjection } = require("../../functions/lib/editorial-preview-projection");
 const { enqueuePostWithdrawalBuild, warnFirstHomeFailure } = require("../../functions/lib/transitional-post-withdrawal");
-const { contextOutputs, outputLimits, CHECKPOINT_FILES_MAX, CHECKPOINT_MANIFEST_BYTES_MAX } = require("../../functions/lib/no-build-record-namespace");
+const { contextOutputs, outputLimits, CHECKPOINT_FAMILIES, CHECKPOINT_FILES_MAX, CHECKPOINT_MANIFEST_BYTES_MAX } = require("../../functions/lib/no-build-record-namespace");
 const { enqueuePublicContextInTransaction, settlePublicContext, failPublicContextPreparation, verifiedPreparation, frozenContextMatches, canSupersedeFrozenContext,
   readSelectedPublicContextInTransaction, publicContextFollowUpQueuesInTransaction, CURRENT_PATH } = require("../../functions/lib/public-context-publication");
 const sha256 = (bytes: Buffer) => createHash("sha256").update(bytes).digest("hex");
@@ -169,6 +169,7 @@ export function noBuildPostMaintenance({ firestore, firebaseApp, commitSha, stat
         ...(publicContext ? { frozenContext: before?.frozenContext ?? { revision: publicContext.revision,
           withdrawalRevision: publicContext.withdrawalRevision ?? 0, homeRevision: publicContext.homeRevision ?? 0 } } : {}),
         ...(contextOnly && admitted.publicContext?.recordFamilies?.length ? { recordFamilies: admitted.publicContext.recordFamilies } : {}),
+        ...(contextOnly && admitted.publicContext?.videoCatalog === true ? { videoCatalog: true } : {}),
         admissionRevision: before?.admissionRevision ?? admission.admissionRevision, backgroundBucket: before?.backgroundBucket ?? admission.backgroundBucket,
         attempts: (before?.attempts ?? 0) + 1, nextAttemptAt: Date.now() + 10 * 60_000,
         reservation: before?.reservation ?? { schemaVersion: 1, buildBatchId, generation: Math.max(liveState?.generation ?? pointer.activeGeneration, pointer.activeGeneration) + 1, commitSha, status: "reserved",
@@ -335,7 +336,7 @@ export function noBuildPostMaintenance({ firestore, firebaseApp, commitSha, stat
         build: async (task: { output: string; contextDigest: string }, { signal }: { signal: AbortSignal }) => {
           if (task.contextDigest !== prepared.contextDigest) throw new Error("Background input changed");
           const input = { kind: "public-background", rendererSha: commitSha, contextDigest: prepared.contextDigest, routes: prepared.routes };
-          if (["programs", "events"].includes(task.output)) {
+          if (CHECKPOINT_FAMILIES.includes(task.output)) {
             return { input, prepared: { operationId: queueId, checkpointDigest: preparedDigest } };
           }
           const selected = prepared.files.filter(file => file.outputs.includes(task.output));

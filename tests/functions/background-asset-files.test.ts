@@ -76,8 +76,10 @@ it("retains registered record routes and shared assets without claiming other fa
     "shows/index.html": '<meta http-equiv="refresh" content="0;url=/programs/">',
     "shows/example/index.html": '<meta http-equiv="refresh" content="0;url=/programs/example/">',
     "events/index.html": '<h1>Events</h1><link href="/_astro/events.css" rel="stylesheet">',
+    "watch/programs/index.html": '<link href="/_astro/video.css" rel="stylesheet">',
+    "watch/programs/example/edition/index.html": '<h1>Edition</h1>',
     "posts/index.html": '<h1>Posts</h1>', "_astro/records.css": 'body{color:navy}',
-    "_astro/events.css": 'body{color:blue}',
+    "_astro/events.css": 'body{color:blue}', "_astro/video.css": 'body{color:black}',
   };
   try {
     for (const [file, bytes] of Object.entries(fixtures)) {
@@ -94,6 +96,9 @@ it("retains registered record routes and shared assets without claiming other fa
     }
     const legacy = await familyFiles(directory);
     expect(legacy.map(file => file.path)).toEqual(["/posts/"]);
+    const catalog = await familyFiles(directory, ["videoCatalog"]);
+    expect(catalog.map(file => file.path).sort()).toEqual(["/_astro/video.css", "/watch/programs/", "/watch/programs/example/edition/"]);
+    expect(catalog.every(file => file.outputs.length === 1 && file.outputs[0] === "videoCatalog")).toBe(true);
   } finally { await rm(directory, { recursive: true, force: true }); }
 });
 

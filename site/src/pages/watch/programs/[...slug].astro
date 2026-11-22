@@ -1,0 +1,93 @@
+---
+import type { GetStaticPaths } from "astro";
+import PublicSiteLayout from "../../../layouts/PublicSiteLayout.astro";
+import launchContent from "../../../data/launch-media-manager.json";
+import { loadLaunchContentData } from "../../../lib/launch-content-data";
+import { publicRootRoutesEnabled } from "../../../lib/build-target";
+import { publishedVideoPrograms, videoCatalogPath, videoEpisodePath, videoGroups, videoProgramPath, videoSeason } from "../../../lib/public-video-routes";
+import type { PublicVideo, PublicVideoProgram } from "../../../lib/public-video-catalog";
+import { pbsPlayerPermissions } from "../../../../../packages/content-core/src/player-permissions";
+
+type Props = { programs: PublicVideoProgram[] } | { program: PublicVideoProgram; episode?: PublicVideo };
+
+export const getStaticPaths = (async () => {
+  if (!publicRootRoutesEnabled(process.env)) return [];
+  const source = await loadLaunchContentData(launchContent);
+  const programs = publishedVideoPrograms("videoCatalog" in source ? source.videoCatalog : undefined, new Date());
+  return [
+    { params: { slug: undefined }, props: { programs } satisfies Props },
+    ...programs.flatMap(program => [
+      { params: { slug: program.slug }, props: { program } satisfies Props },
+      ...program.episodes.map(episode => ({
+        params: { slug: `${program.slug}/${episode.slug}` }, props: { program, episode } satisfies Props,
+      })),
+    ]),
+  ];
+}) satisfies GetStaticPaths;
+
+const props = Astro.props as Props;
+const programs = "programs" in props ? props.programs : undefined;
+const program = "program" in props ? props.program : undefined;
+const episode = "episode" in props ? props.episode : undefined;
+const title = episode?.title ?? program?.title ?? "Watch programs";
+const description = episode?.description ?? program?.description ?? "Find full episodes and specials from NJ PBS.";
+const canonicalPath = episode && program ? videoEpisodePath(program.slug, episode.slug)
+  : program ? videoProgramPath(program.slug) : videoCatalogPath;
+const season = episode ? videoSeason(episode) : null;
+const episodeInfo = episode?.kind === "special" ? "Special" : episode?.episodeNumber ? `Episode ${episode.episodeNumber}` : null;
+const premiere = episode?.premieredOn ? new Intl.DateTimeFormat("en-US", { dateStyle: "long", timeZone: "UTC" })
+  .format(new Date(episode.premieredOn)) : null;
+const player = episode ? new URL(episode.playerSrc) : null;
+player?.searchParams.set("autoplay", "false");
+---
+
+<PublicSiteLayout {title} {description} {canonicalPath} noindex={programs?.length === 0} searchable={programs?.length !== 0}>
+  <article class="video-page">
+    {program && <nav aria-label="Breadcrumb" class="video-page__breadcrumb" data-pagefind-ignore>
+      <a href={videoCatalogPath}>Watch programs</a>
+      {episode && <a href={videoProgramPath(program.slug)}>{program.title}</a>}
+    </nav>}
+    <header>
+      <h1 data-pagefind-meta={episode ? "title, episode" : program ? "title, program" : "title"}
+        data-pagefind-filter={program && !episode ? "show" : undefined}>{title}</h1>
+      {program && (episode || program.genre) && <p class="video-page__meta">
+        {episode ? <span data-pagefind-meta="program" data-pagefind-filter="show">{program.title}</span> : program.genre}
+        {season && <span data-pagefind-meta="season">{season}</span>}
+        {episodeInfo && <span data-pagefind-meta="episode_number">{episodeInfo}</span>}
+        {episode?.premieredOn && premiere && <time datetime={episode.premieredOn}>{premiere}</time>}
+      </p>}
+      <p>{description}</p>
+    </header>
+    {episode && player && <section aria-label="Video">
+      <iframe class="video-page__player" src={player.href} title={`Watch ${episode.title}`}
+        loading="lazy" allow={pbsPlayerPermissions("on-demand")} allowfullscreen></iframe>
+      {episode.hasCaptions && <p class="video-page__captions" data-pagefind-meta="captions">Closed captions available
+        {episode.captionLanguages.length > 0 && ` (${episode.captionLanguages.join(", ")})`}.</p>}
+    </section>}
+    {program && !episode && videoGroups(program.episodes).map(group => <section class="video-page__group">
+      <h2>{group.label}</h2>
+      <ul role="list">
+        {group.episodes.map(video => <li><a href={videoEpisodePath(program.slug, video.slug)}>{video.title}</a></li>)}
+      </ul>
+    </section>)}
+    {programs && (programs.length > 0 ? <ul class="video-page__programs" role="list">
+      {programs.map(item => <li><a href={videoProgramPath(item.slug)}>{item.title}</a><p>{item.description}</p></li>)}
+    </ul> : <p><a href="https://watch.njpbs.org/">Browse videos on the NJ PBS video portal</a>.</p>)}
+  </article>
+</PublicSiteLayout>
+
+<style>
+  .video-page { max-width: 64rem; margin: auto; padding: clamp(2rem, 6vw, 4.5rem) var(--gutter); }
+  .video-page__breadcrumb, .video-page__meta { display: flex; flex-wrap: wrap; gap: .25rem 1rem; }
+  .video-page__breadcrumb { margin-bottom: 1.5rem; }
+  .video-page h1 { margin: 0; font-size: clamp(2rem, 5vw, 3.5rem); line-height: 1.12; text-wrap: balance; }
+  .video-page header > p { max-width: 65ch; }
+  .video-page__meta { color: var(--text-dim); }
+  .video-page__player { display: block; width: 100%; aspect-ratio: 16 / 9; border: 0; background: #000; }
+  .video-page__group, .video-page__programs { margin-top: 2rem; }
+  .video-page__group h2 { margin-bottom: .5rem; }
+  .video-page__group ul, .video-page__programs { list-style: none; padding: 0; }
+  .video-page__group li, .video-page__programs li { border-top: 1px solid var(--line); padding-block: .75rem; }
+  .video-page__group li:last-child, .video-page__programs li:last-child { border-bottom: 1px solid var(--line); }
+  .video-page__programs p { margin: .25rem 0 0; }
+</style>

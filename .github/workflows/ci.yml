@@ -345,10 +345,14 @@ jobs:
             exit 1
           fi
           python3 ../qa/axe_scan_browser_test.py --base http://127.0.0.1:4321 --mode coming-soon --dist dist
+      - name: Prepare synthetic video catalog for the full build
+        working-directory: site
+        run: node --import tsx tests/fixtures/write-video-catalog-launch.ts "$RUNNER_TEMP/video-catalog-launch.json"
       - name: Full build
         working-directory: site
         env:
           PUBLIC_SHARE_PAGE: ${{ vars.PUBLIC_SHARE_PAGE || '' }}
+          LAUNCH_CONTENT_DATA_PATH: ${{ runner.temp }}/video-catalog-launch.json
         run: npm run build
       - name: Public homepage contract over full build
         working-directory: site
@@ -361,6 +365,8 @@ jobs:
       - name: Accessibility scan over full build
         id: axe_scan
         working-directory: site
+        env:
+          VIDEO_CATALOG_SCREENSHOTS: ${{ runner.temp }}/video-catalog-screenshots
         run: |
           set -euo pipefail
           node node_modules/astro/bin/astro.mjs preview --host 127.0.0.1 --port 4321 >"$RUNNER_TEMP/axe-preview.log" 2>&1 &
@@ -383,6 +389,13 @@ jobs:
             --base http://127.0.0.1:4321 \
             --mode full \
             --dist dist
+      - name: Upload video catalog browser evidence
+        if: github.event_name == 'pull_request' && always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: video-catalog-screenshots-${{ github.sha }}
+          path: ${{ runner.temp }}/video-catalog-screenshots
+          if-no-files-found: ignore
       # axe_scan.py exits nonzero for any finding or scan error, so a failed
       # step is the only run with findings worth keeping.
       - name: Upload accessibility scan result

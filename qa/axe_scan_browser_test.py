@@ -7,6 +7,7 @@ The existing Site CI consumer runs both targets before replacing their artifacts
 from __future__ import annotations
 
 import argparse
+import os
 from pathlib import Path
 import re
 import unittest
@@ -87,6 +88,49 @@ class SearchReadiness(BrowserChecks):
 
 
 class PublicInteractions(BrowserChecks):
+    @unittest.skipUnless(os.environ.get("VIDEO_CATALOG_SCREENSHOTS"), "requires the synthetic video catalog build")
+    def test_public_video_catalog_navigation_and_search(self):
+        screenshots = Path(os.environ["VIDEO_CATALOG_SCREENSHOTS"])
+        screenshots.mkdir(parents=True, exist_ok=True)
+        for width, height in [(390, 844), (1280, 900)]:
+            with self.subTest(width=width), self.browser.new_context(viewport={"width": width, "height": height}) as context:
+                context.route(is_blocked_embed, lambda route: route.fulfill(status=200, body=""))
+                page = context.new_page()
+                page.goto(BASE + "/programs/", wait_until="domcontentloaded")
+                notice = page.get_by_role("button", name="Do not allow", exact=True)
+                if notice.is_visible():
+                    notice.click()
+                page.get_by_role("link", name="Watch full episodes and specials").click()
+                expect(page).to_have_url(BASE + "/watch/programs/")
+                page.screenshot(path=str(screenshots / f"directory-{width}.png"))
+                page.get_by_role("link", name="River stories", exact=True).click()
+                expect(page).to_have_url(BASE + "/watch/programs/river-stories/")
+                expect(page.get_by_role("link", name="River voices", exact=True)).to_be_visible()
+                page.screenshot(path=str(screenshots / f"program-{width}.png"))
+                page.get_by_role("link", name="The river crossing", exact=True).press("Enter")
+                episode_path = "/watch/programs/river-stories/river-crossing/"
+                expect(page).to_have_url(BASE + episode_path)
+                player = page.get_by_title("Watch The river crossing", exact=True)
+                expect(player).to_have_attribute("src", "https://player.pbs.org/partnerplayer/EXAMPLE==/?autoplay=false")
+                self.assertLessEqual(player.bounding_box()["width"], width)
+                page.screenshot(path=str(screenshots / f"episode-{width}.png"))
+                if width == 1280:
+                    hits = page.evaluate("""async () => {
+                        const pagefind = await import('/pagefind/pagefind.js');
+                        const search = await pagefind.search('river stories');
+                        const hits = await Promise.all(search.results.map(result => result.data()));
+                        return Object.fromEntries(hits.filter(hit => hit.url.startsWith('/watch/programs/'))
+                          .map(hit => [hit.url, hit.meta]));
+                    }""")
+                    self.assertEqual(hits[episode_path]["program"], "River stories")
+                    self.assertEqual(hits[episode_path]["season"], "Season 2 — Waterways")
+                    self.assertEqual(hits[episode_path]["episode"], "The river crossing")
+                    self.assertIn("/watch/programs/river-stories/", hits)
+                    for slug in ["expired", "member-only"]:
+                        excluded = f"/watch/programs/river-stories/{slug}/"
+                        self.assertNotIn(excluded, hits)
+                        self.assertEqual(page.request.get(BASE + excluded).status, 404)
+
     def test_live_player_fallback_offers_the_schedule_when_the_embed_fails(self):
         with self.browser.new_context(java_script_enabled=False) as context:
             player = "https://player.pbs.org/**"

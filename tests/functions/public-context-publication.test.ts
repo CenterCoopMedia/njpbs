@@ -25,7 +25,8 @@ const operationId = "A".repeat(20);
 const contextDigest = "6d0fea235ddd2bea4b171dc6ff77ba0f9e9abf2e23e687edb39d49a8847bfffc";
 const paths = { listings: ["/posts/"], authors: ["/authors/public-author/"], feed: ["/feeds/news.xml"],
   contentApi: ["/api/v1/content.json"], sitemap: ["/sitemap-index.xml"],
-  search: ["/pagefind/pagefind.js", "/search/meaning-index.json"] };
+  search: ["/pagefind/pagefind.js", "/search/meaning-index.json"],
+  videoCatalog: ["/watch/programs/", "/watch/programs/example/edition/"] };
 let directory: string;
 let boundary: Awaited<ReturnType<typeof backgroundStorageFixture>>;
 let app: ReturnType<typeof firebaseAdminRuntime.initializeApp>;
@@ -298,6 +299,22 @@ it("serves verified exact bytes and settles only the six named outputs, preservi
   await db.doc(context.PUBLIC_CONTEXT_PATH).update({ revision: 2 });
   expect(await publication.settlePublicContext({ firestore: db, operationId, runtime })).toBe(false);
   expect(await readWork()).toEqual({ maintenance: true, reconcile: false });
+});
+
+it("serves the video catalog from the release until verified background bytes take ownership", async () => {
+  const path = paths.videoCatalog[1];
+  const decision = () => postPublication.readNoBuildPostDecision({ firestore: db, path, rendererSha: runtime.release });
+  expect(await decision()).toEqual({ kind: "pass" });
+  const accepted = await enqueue(operationId, { reason: "provider-refresh", videoCatalog: true });
+  expect(accepted.outputs).toEqual([...publication.OUTPUTS, "videoCatalog"]);
+  expect(await decision()).toEqual({ kind: "pass" });
+  const worker = reader(runtime, contextDigest, ["videoCatalog"]);
+  await worker.recover();
+  expect(await decision()).toMatchObject({ kind: "background" });
+  const response = await worker.serve(new Request(`https://example.org${path.slice(0, -1)}`));
+  expect(response.status).toBe(200);
+  expect(await response.text()).toBe(`Exact context: ${contextDigest}`);
+  expect((await worker.serve(new Request("https://example.org/watch/programs/example/not-published/"))).status).toBe(404);
 });
 
 it("keeps preparation backoff and exhaustion asleep and retries under the original immutable reservation", async () => {

@@ -1,5 +1,6 @@
 import { contentLinkRedirect } from "../../packages/content-core/src/content-link.ts";
 import { publicPostReceiptIdentity } from "../../packages/content-core/src/public-post-receipt-identity";
+import { isVideoCatalogPath } from "../../packages/content-core/src/video-catalog-path";
 import { publicRecordFamily } from "./durable-record-withdrawals";
 import type { NoBuildPostReply } from "../../cms-api/src/index";
 import { assertPublicationTarget, publicationTarget, publicationPostCacheTag, type PublicationTarget } from "../../functions/lib/publication-target.js";
@@ -332,7 +333,7 @@ function isBackgroundPath(path: string): boolean {
     /^\/authors(?:\/|$)/.test(path) || path === "/feeds/news.xml" ||
     path === "/api/v1/content.json" || /^\/api\/v1\/content(?:\/|$)/.test(path) ||
     /^\/sitemap(?:-index|-\d+)?\.xml$/.test(path) || /^\/pagefind(?:\/|$)/.test(path) ||
-    path === "/search/meaning-index.json" || publicRecordFamily(path) !== null;
+    path === "/search/meaning-index.json" || isVideoCatalogPath(path) || publicRecordFamily(path) !== null;
 }
 
 function backgroundReleaseAccepted(headers: Headers, rendererSha: string): boolean {
@@ -439,13 +440,14 @@ async function serveAuthoritativePost(request: Request, dependencies: Authoritat
     for (let i = 0; i < 32 && /%[a-f0-9]{2}/i.test(path); i++) path = decodeURIComponent(path);
     // Remaining encoded layers make ownership unknown; never try older Assets.
     if (/%[a-f0-9]{2}/i.test(path)) throw new Error("Public path encoding exceeds its bound");
-    if (!/^\/(?:$|index\.html\/?$|posts(?:\/|$)|authors(?:\/|$)|programs(?:\/|$)|shows(?:\/|$)|events(?:\/|$)|feeds\/|api\/v1\/|sitemap|pagefind\/|search\/|_astro\/|_home-sources\.json$|_publication\.json$|_content-status\.json$)/.test(path)) return null;
+    if (!isVideoCatalogPath(path) && !/^\/(?:$|index\.html\/?$|posts(?:\/|$)|authors(?:\/|$)|programs(?:\/|$)|shows(?:\/|$)|events(?:\/|$)|feeds\/|api\/v1\/|sitemap|pagefind\/|search\/|_astro\/|_home-sources\.json$|_publication\.json$|_content-status\.json$)/.test(path)) return null;
     if (/%|\\|\/\//.test(path)) throw new Error("Invalid public path");
     if (path.startsWith("/posts/_no-build-assets/")) return null;
     if (!head && request.method !== "GET") return unavailable(405, false);
     if (path === "/_publication.json" && url.searchParams.get("cms-context") === "code") return null;
     path = path.replace(/\/index\.html\/?$/, "/");
-    if (/^\/posts\/[^/]+$/.test(path) || /^\/(programs|shows|events)(?:\/[^/]+)?$/.test(path)) path += "/";
+    if (/^\/posts\/[^/]+$/.test(path) || /^\/(programs|shows|events)(?:\/[^/]+)?$/.test(path) ||
+        isVideoCatalogPath(path) && !path.endsWith("/")) path += "/";
     const probe = url.pathname === "/_publication.json" && (url.searchParams.has("candidate") || url.searchParams.has("version"))
       ? { buildBatchId: url.searchParams.get("candidate") ?? "", versionId: url.searchParams.get("version") ?? "" } : undefined;
     if (path.startsWith("/_astro/")) {
