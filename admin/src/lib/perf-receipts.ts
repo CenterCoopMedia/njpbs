@@ -223,6 +223,7 @@ export function operationCategoryForEndpoint(
     endpoint === "cmsListMediaCollections" ||
     endpoint === "cmsListMediaCollectionItems" ||
     endpoint === "cmsListBinnedMedia" ||
+    endpoint === "cmsListMediaUsage" ||
     endpoint === "cmsCreateMediaDownload"
   )
     return "media-read";
