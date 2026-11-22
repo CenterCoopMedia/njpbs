@@ -194,7 +194,7 @@ describe.skipIf(process.env.SESSION_ENDED_EMULATORS !== "true")("ended session e
     expect((await clients.firestore.collection("bug_reports").where("reporter.uid", "==", uid).get()).size).toBe(1);
   });
 
-  it("keeps browser work if the Auth emulator rejects a forced refresh of a revoked session", async () => {
+  it("probes forced refresh after emulator revocation and checks session state for either result", async () => {
     const uid = "report-refresh-revoked";
     await signedInWorkspace(uid);
     const user = auth.currentUser!;
