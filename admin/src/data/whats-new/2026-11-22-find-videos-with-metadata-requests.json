@@ -1,0 +1,7 @@
+{
+  "date": "2026-11-22",
+  "kind": "new",
+  "title": "Find videos with metadata update requests",
+  "body": "In a video library, open Filter, choose Metadata review, and select Metadata update requested. Save the view to return to that list later.",
+  "prs": []
+}

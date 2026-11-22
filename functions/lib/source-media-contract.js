@@ -141,6 +141,7 @@ function parseCursor(value, request) {
       (decoded.tag ?? "") !== request.tag ||
       (decoded.createdBy ?? "") !== request.createdBy ||
       (decoded.rightsStatus ?? "") !== request.rightsStatus ||
+      decoded.metadataUpdateRequested !== request.metadataUpdateRequested ||
       (decoded.order ?? (request.q ? "name_asc" : "updated_desc")) !== request.sort ||
       typeof decoded.id !== "string" ||
       !ID_PATTERN.test(decoded.id) ||
@@ -154,9 +155,9 @@ function parseCursor(value, request) {
   }
 }
 
-function encodeCursor({ sourceId, q, tag = "", createdBy = "", rightsStatus = "",
+function encodeCursor({ sourceId, q, tag = "", createdBy = "", rightsStatus = "", metadataUpdateRequested,
   order = q ? "name_asc" : "updated_desc", id, sort }) {
-  return Buffer.from(JSON.stringify({ sourceId, q, tag, createdBy, rightsStatus, order, id, sort }), "utf8")
+  return Buffer.from(JSON.stringify({ sourceId, q, tag, createdBy, rightsStatus, metadataUpdateRequested, order, id, sort }), "utf8")
     .toString("base64url");
 }
 
@@ -174,6 +175,7 @@ function parseListFilter(value, label, maxLength) {
 function parseSourceMediaListRequest(value) {
   rejectUnknownFields(value, new Set([
     "sourceId", "assetId", "pendingIds", "cursor", "limit", "q", "tag", "createdBy", "rightsStatus", "sort", "posters", "tagsOnly",
+    "metadataUpdateRequested",
   ]), "Request");
   const sourceId = requiredId(value.sourceId, "Source id");
   if (Object.hasOwn(value, "tagsOnly")) {
@@ -206,9 +208,13 @@ function parseSourceMediaListRequest(value) {
   if (rightsStatus && !["pending", "complete"].includes(rightsStatus)) {
     throw new SourceMediaValidationError("Rights status must be pending or complete");
   }
+  const { metadataUpdateRequested } = value;
+  if (metadataUpdateRequested !== undefined && metadataUpdateRequested !== true) {
+    throw new SourceMediaValidationError("Metadata update requested must be true when present");
+  }
   // A single indexed filter keeps every supported query bounded without a filter cross-product.
-  if ([tag, createdBy, rightsStatus].filter(Boolean).length > 1) {
-    throw new SourceMediaValidationError("Choose one tag, uploader, or rights filter at a time");
+  if ([tag, createdBy, rightsStatus, metadataUpdateRequested].filter(Boolean).length > 1) {
+    throw new SourceMediaValidationError("Choose one tag, uploader, rights, or metadata review filter at a time");
   }
   const requestedSort = value.sort ?? "updated_desc";
   if (!["updated_desc", "updated_asc", "name_asc", "size_desc", "size_asc"].includes(requestedSort)) {
@@ -224,7 +230,7 @@ function parseSourceMediaListRequest(value) {
       `Limit must be a whole number from 1 through ${MAX_PAGE_SIZE}`,
     );
   }
-  const request = { sourceId, q, tag, createdBy, rightsStatus, sort, limit };
+  const request = { sourceId, q, tag, createdBy, rightsStatus, metadataUpdateRequested, sort, limit };
   return { ...request, cursor: parseCursor(value.cursor, request), ...posters };
 }
 
