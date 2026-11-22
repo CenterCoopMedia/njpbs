@@ -193,6 +193,7 @@ export function MediaDisplayPopover({
     <Popover
       anchorRef={anchorRef}
       className="media-display-popover"
+      dismissibleSheet
       initialFocusRef={initialFocusRef}
       label="Display"
       onOpenChange={onOpenChange}

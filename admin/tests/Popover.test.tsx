@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from "@testing-library/react";
+import { act, fireEvent, render, screen } from "@testing-library/react";
 import { useRef, useState } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { Popover } from "../src/components/ui/Popover";
@@ -15,7 +15,11 @@ function setViewport(width: number) {
   });
 }
 
-function Harness({ label = "Display", onClose }: { label?: string; onClose?: () => void }) {
+function Harness({ dismissibleSheet, label = "Display", onClose }: {
+  dismissibleSheet?: boolean;
+  label?: string;
+  onClose?: () => void;
+}) {
   const anchorRef = useRef<HTMLButtonElement>(null);
   const [open, setOpen] = useState(false);
   return (
@@ -26,6 +30,7 @@ function Harness({ label = "Display", onClose }: { label?: string; onClose?: () 
       <button type="button">Outside</button>
       <Popover
         anchorRef={anchorRef}
+        dismissibleSheet={dismissibleSheet}
         label={label}
         onOpenChange={(next) => {
           setOpen(next);
@@ -45,6 +50,7 @@ function Harness({ label = "Display", onClose }: { label?: string; onClose?: () 
 afterEach(() => {
   setViewport(1280);
   vi.restoreAllMocks();
+  vi.unstubAllGlobals();
 });
 
 describe("Popover", () => {
@@ -103,6 +109,28 @@ describe("Popover", () => {
     expect(scrim).not.toBeNull();
     fireEvent.pointerDown(scrim!);
     expect(screen.queryByRole("dialog")).toBeNull();
+  });
+
+  it.each(["button", "Escape", "platform close request"])("closes the phone sheet with %s and restores focus", (method) => {
+    setViewport(390);
+    const closeRequests = new EventTarget();
+    const destroy = vi.fn();
+    vi.stubGlobal("CloseWatcher", function () {
+      return Object.assign(closeRequests, { destroy });
+    });
+    render(<Harness dismissibleSheet />);
+    const trigger = screen.getByRole("button", { name: "Display" });
+    fireEvent.click(trigger);
+    const firstControl = screen.getByRole("combobox", { name: "Sort by" });
+    expect(firstControl).toHaveFocus();
+
+    if (method === "button") fireEvent.click(screen.getByRole("button", { name: "Close Display" }));
+    else if (method === "Escape") fireEvent.keyDown(firstControl, { key: "Escape" });
+    else act(() => { closeRequests.dispatchEvent(new Event("close")); });
+
+    expect(screen.queryByRole("dialog")).toBeNull();
+    expect(trigger).toHaveFocus();
+    expect(destroy).toHaveBeenCalledTimes(1);
   });
 
   it("focuses initialFocusRef on open when it is inside the panel, else the first control", () => {

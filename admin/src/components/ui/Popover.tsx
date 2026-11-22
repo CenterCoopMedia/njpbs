@@ -1,8 +1,12 @@
 import { useCallback, useEffect, useRef, type ReactNode, type RefObject } from "react";
 import { createPortal } from "react-dom";
 import type { FloatingPlacement } from "../../lib/floating-position";
+import { Icon } from "./Icon";
+import { Button } from "./Primitives";
 import { FOCUSABLE, useFloatingPosition, useMediaQuery, useOverlayRoot } from "./floating";
 import "./Popover.css";
+
+declare const CloseWatcher: (new () => EventTarget & { destroy(): void }) | undefined;
 
 export interface PopoverProps {
   anchorRef: RefObject<HTMLElement | null>;
@@ -13,6 +17,8 @@ export interface PopoverProps {
   children: ReactNode;
   placement?: FloatingPlacement;
   className?: string;
+  /** Show a close button and accept platform close requests in the phone sheet. */
+  dismissibleSheet?: boolean;
   /** The control to focus on open, such as a checked radio. Without it, or outside the panel, the first control. */
   initialFocusRef?: RefObject<HTMLElement | null>;
 }
@@ -27,6 +33,7 @@ export function Popover({
   anchorRef,
   children,
   className,
+  dismissibleSheet = false,
   initialFocusRef,
   label,
   onOpenChange,
@@ -34,7 +41,9 @@ export function Popover({
   placement = "bottom-start",
 }: PopoverProps) {
   const panelRef = useRef<HTMLDivElement>(null);
+  const closeButtonRef = useRef<HTMLButtonElement>(null);
   const compact = useMediaQuery("(max-width: 47.99rem)");
+  const showSheetClose = compact && dismissibleSheet;
   const root = useOverlayRoot();
   const position = useFloatingPosition(
     open && !compact,
@@ -61,6 +70,14 @@ export function Popover({
     };
   }, [open]);
 
+  useEffect(() => {
+    if (!open || !showSheetClose || typeof CloseWatcher === "undefined") return;
+    // Android Back sends a close request to the active watcher before navigating.
+    const watcher = new CloseWatcher();
+    watcher.addEventListener("close", () => close(true));
+    return () => watcher.destroy();
+  }, [close, open, showSheetClose]);
+
   // Focus moves in once the panel is placed: until then it is hidden, and a hidden control
   // cannot take focus, so focus would stay on the trigger.
   const placed = open && (compact || position !== null);
@@ -68,7 +85,13 @@ export function Popover({
     if (!placed) return;
     const panel = panelRef.current;
     const initial = initialFocusRef?.current;
-    (initial && panel?.contains(initial) ? initial : panel?.querySelector<HTMLElement>(FOCUSABLE) ?? panel)?.focus();
+    if (initial && panel?.contains(initial)) {
+      initial.focus();
+      return;
+    }
+    const controls = Array.from(panel?.querySelectorAll<HTMLElement>(FOCUSABLE) ?? []);
+    const first = controls.find((control) => control !== closeButtonRef.current);
+    (first ?? closeButtonRef.current ?? panel)?.focus();
   }, [initialFocusRef, placed]);
 
   useEffect(() => {
@@ -113,6 +136,20 @@ export function Popover({
         tabIndex={-1}
       >
         {compact ? <div aria-hidden="true" className="ui-popover-grabber" /> : null}
+        {showSheetClose ? (
+          <div className="ui-popover-sheet-actions">
+            <Button
+              aria-label={`Close ${label}`}
+              className="action-control-icon"
+              onClick={() => close(true)}
+              ref={closeButtonRef}
+              size="comfortable"
+              variant="ghost"
+            >
+              <Icon name="close" />
+            </Button>
+          </div>
+        ) : null}
         {children}
       </div>
     </>,

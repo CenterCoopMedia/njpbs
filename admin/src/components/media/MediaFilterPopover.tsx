@@ -243,6 +243,7 @@ export function MediaFilterPopover({
     <Popover
       anchorRef={anchorRef}
       className="media-filter-popover"
+      dismissibleSheet
       initialFocusRef={initialFocusRef}
       label="Filter"
       onOpenChange={onOpenChange}
