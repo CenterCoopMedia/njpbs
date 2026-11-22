@@ -649,6 +649,10 @@
           "module": "functions/video-transcript-alignment.js"
         },
         {
+          "name": "cmsResolveBugReport",
+          "module": "functions/bug-report-triage.js"
+        },
+        {
           "name": "cmsRestoreMedia",
           "module": "functions/set-media-lifecycle.js"
         },

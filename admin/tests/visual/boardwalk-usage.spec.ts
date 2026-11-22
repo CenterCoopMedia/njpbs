@@ -23,6 +23,7 @@ for (const width of [390, 1280]) {
       export async function cmsListGithubIssues(){return {issues:[],truncated:false};}
       export async function cmsGetGithubIssue(){throw new Error('Not selected');}
       export async function cmsNudgeBugReport(){throw new Error('Not selected');}
+      export async function cmsResolveBugReport(){throw new Error('Not selected');}
       export async function postFunction(endpoint,token,{days}){
         if(endpoint!=='cmsGetBoardwalkUsage')throw new Error('Unexpected endpoint');
         if(window.__usageFail)throw new Error('Private service detail');

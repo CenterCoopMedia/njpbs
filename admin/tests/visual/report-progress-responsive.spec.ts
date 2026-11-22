@@ -49,6 +49,7 @@ for (const width of [390, 1280]) {
         export async function cmsListGithubIssues(){return {issues:[],truncated:false};}
         export async function cmsGetGithubIssue(){throw new Error('No issue in fixture');}
         export async function cmsNudgeBugReport(){throw new Error('No nudge in this fixture');}
+        export async function cmsResolveBugReport(){throw new Error('No resolution in this fixture');}
       `,
     }));
     await page.goto("/report-progress-fixture.html");

@@ -424,7 +424,9 @@ function renderBugReportEmail(record, eventType, origin = ADMIN_ORIGIN) {
     work_impaired: "Work impaired",
     minor: "Minor",
   };
-  const resolutionLines = resolutionEmailLines(record.actionableResolution);
+  const resolutionLines = record.resolutionNote
+    ? record.resolutionNote.split("\n")
+    : resolutionEmailLines(record.actionableResolution);
   const resolutionInstruction = resolutionLines.length
     ? "Read the resolution below"
     : "Check the report for details";
@@ -1066,6 +1068,7 @@ async function deliverOutboxRow(id, deps = {}) {
         actionableResolution: Object.hasOwn(row, "eventResolution")
           ? row.eventResolution
           : undefined,
+        resolutionNote: row.eventResolutionNote,
       };
       const rendered = renderBugReportEmail(emailRecord, row.eventType, origin);
       const sendEmail = deps.sendEmail ?? createCloudflareEmailSender({

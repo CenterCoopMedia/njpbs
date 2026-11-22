@@ -179,7 +179,7 @@ export function operationCategoryForEndpoint(
     endpoint === "cmsGetGithubIssue"
   )
     return "report-read";
-  if (endpoint === "cmsSubmitBugReport" || endpoint === "cmsNudgeBugReport")
+  if (endpoint === "cmsSubmitBugReport" || endpoint === "cmsNudgeBugReport" || endpoint === "cmsResolveBugReport")
     return "report-write";
   if (endpoint === "registerStaffProfile") return "admission";
   if (

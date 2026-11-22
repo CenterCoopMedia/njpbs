@@ -1,0 +1,8 @@
+{
+  "date": "2026-11-22",
+  "kind": "new",
+  "title": "Resolve staff reports in Boardwalk",
+  "body": "Administrators can confirm a fix in Reports, then write a resolution note and mark the report resolved. The reporter can read the note in Boardwalk and in the resolution email.",
+  "prs": [],
+  "order": 1795370400000
+}

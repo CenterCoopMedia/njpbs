@@ -8,6 +8,7 @@ import {
   cmsListBugReports,
   cmsListGithubIssues,
   cmsNudgeBugReport,
+  cmsResolveBugReport,
   type BugReportProgress,
   type BugReportNudge,
   type BugReportRecord,
@@ -34,6 +35,7 @@ import {
 import { LoadingIndicator } from "../components/ui/LoadingIndicator";
 import { ReportProgressSteps } from "../components/ReportProgressSteps";
 import { ReportNudge, type ReportNudgeActionState } from "../components/ReportNudge";
+import { ResolveReportForm } from "../components/ResolveReportForm";
 const BoardwalkUsageRoute = lazy(() => import("./BoardwalkUsageRoute")
   .then(module => ({ default: module.BoardwalkUsageRoute })));
 
@@ -321,14 +323,14 @@ function WorkProgress({ progress, status }: { progress: BugReportProgress; statu
       {progress.issues.length || progress.pullRequests.length ? (
         <ul aria-label="Linked engineering work">
           {progress.issues.map((item) => <li key={`issue-${item.number}`}>Issue #{item.number}: {item.state === "unavailable" ? "Status unavailable" : item.state === "closed" ? "Closed" : "Open"}</li>)}
-          {progress.pullRequests.map((item) => <li key={`pull-${item.number}`}>Proposed fix #{item.number}: {item.state === "unavailable" ? "Status unavailable" : item.merged ? "Merged; live verification pending" : item.state === "closed" ? "Closed without merging" : item.draft ? "Draft in review" : "In review"}</li>)}
+          {progress.pullRequests.map((item) => <li key={`pull-${item.number}`}>Proposed fix #{item.number}: {item.state === "unavailable" ? "Status unavailable" : item.merged ? "Merged" : item.state === "closed" ? "Closed without merging" : item.draft ? "Draft in review" : "In review"}</li>)}
         </ul>
       ) : null}
     </section>
   );
 }
 
-function ReportDetail({ report, error, screenshot, screenshotPending, onLoadScreenshot, onNudge, nudgeAction }: {
+function ReportDetail({ report, error, screenshot, screenshotPending, onLoadScreenshot, onNudge, nudgeAction, onResolve }: {
   report: BugReportRecord | SharedBugReport;
   error: string | null;
   screenshot: string | null;
@@ -336,8 +338,17 @@ function ReportDetail({ report, error, screenshot, screenshotPending, onLoadScre
   onLoadScreenshot: () => void;
   onNudge?: (reportId: string) => Promise<void>;
   nudgeAction?: ReportNudgeActionState;
+  onResolve?: (baseVersion: number, mutationId: string, note: string) => Promise<void>;
 }) {
   const returnPath = report.shared ? null : safeReturnPath(report);
+  const noteHeading = useRef<HTMLHeadingElement>(null);
+  const focusSavedNote = useRef(false);
+  useEffect(() => {
+    if (focusSavedNote.current && noteHeading.current) {
+      focusSavedNote.current = false;
+      noteHeading.current.focus();
+    }
+  }, [report]);
   return (
     <article className="report-detail" aria-labelledby="report-detail-title">
       <header className="report-detail-head">
@@ -347,8 +358,25 @@ function ReportDetail({ report, error, screenshot, screenshotPending, onLoadScre
       {report.severity === "blocker" ? <InlineMessage tone="error" title="Blocker">This report says work cannot continue.</InlineMessage> : null}
       {error ? <InlineMessage tone="error">{error}</InlineMessage> : null}
       {report.progress ? <WorkProgress progress={report.progress} status={report.status} /> : null}
+      {!report.shared && onResolve && !["resolved", "dismissed"].includes(report.status)
+        ? <ResolveReportForm version={report.version} onResolve={async (...request) => {
+          focusSavedNote.current = true;
+          try {
+            await onResolve(...request);
+          } catch (failure) {
+            focusSavedNote.current = false;
+            throw failure;
+          }
+        }} />
+        : null}
       {!report.shared && report.nudge && onNudge ? <ReportNudge state={report.nudge} label={report.tryingToDo || report.id} action={nudgeAction} onNudge={() => onNudge(report.id)} /> : null}
       {report.shared ? <p>Shared work progress. The reporter's original text, account details and private evidence are visible only to the reporter and administrators.</p> : <>
+      {report.resolutionNote ? (
+        <section aria-labelledby="report-resolution-note-title">
+          <h3 id="report-resolution-note-title" ref={noteHeading} tabIndex={-1}>Resolution note</h3>
+          <div className="report-provided-text"><p className="report-resolution-note-text">{report.resolutionNote}</p></div>
+        </section>
+      ) : null}
       {returnPath ? <p><Link to={returnPath}>Return to the affected CMS page</Link></p> : null}
       <section aria-labelledby="reported-facts-title"><h3 id="reported-facts-title">Observed facts</h3><Facts report={report} /></section>
       <section aria-labelledby="reporter-text-title"><h3 id="reporter-text-title">Reporter text</h3><ReportText report={report} /></section>
@@ -433,6 +461,7 @@ function ConnectedReports() {
   const [reports, setReports] = useState<BugReportSummary[]>([]);
   const [listTruncated, setListTruncated] = useState(false);
   const [report, setReport] = useState<BugReportRecord | SharedBugReport | null>(null);
+  const [canAdministerReport, setCanAdministerReport] = useState(false);
   const [listLoading, setListLoading] = useState(true);
   const [detailLoading, setDetailLoading] = useState(false);
   const loading = listLoading || detailLoading;
@@ -470,6 +499,7 @@ function ConnectedReports() {
     setReports([]);
     setIssues([]);
     setReport(null);
+    setCanAdministerReport(false);
     setIssue(null);
     setScreenshot(null);
     setScreenshotPending(false);
@@ -539,6 +569,7 @@ function ConnectedReports() {
     setDetailError(null);
     if (viewedReportIdRef.current !== requestedReportId) {
       viewedReportIdRef.current = requestedReportId;
+      setCanAdministerReport(false);
       ++screenshotRequestRef.current;
       setScreenshotPending(false);
       setScreenshot(null);
@@ -557,6 +588,7 @@ function ConnectedReports() {
         const response = await cmsGetBugReport(token, requestedReportId);
         if (requestNumber !== detailRequestRef.current || selectedReportIdRef.current !== requestedReportId) return;
         setReport(acceptNudge(response.report, nudgeSnapshotsRef.current));
+        setCanAdministerReport(response.canAdminister === true);
         setIssue(null);
       }
     } catch (loadError) {
@@ -584,6 +616,34 @@ function ConnectedReports() {
 
   useEffect(() => { void loadList(); }, [loadList]);
   useEffect(() => { void loadDetail(); }, [loadDetail]);
+
+  async function resolveReport(reportId: string, baseVersion: number, mutationId: string, resolutionNote: string) {
+    if (!getIdToken) throw new Error("Sign in again before saving.");
+    try {
+      const token = await getIdToken();
+      if (selectedReportIdRef.current !== reportId) return;
+      const { report: updated } = await cmsResolveBugReport(token, {
+        reportId, baseVersion, mutationId, resolutionNote, fixDeliveryConfirmed: true,
+      });
+      setReports((previous) => previous.map((entry) => entry.id === reportId
+        ? { ...entry, status: updated.status, progress: updated.progress }
+        : entry));
+      if (selectedReportIdRef.current === reportId) {
+        setReport(acceptNudge(updated, nudgeSnapshotsRef.current));
+        void Promise.all([loadList(), loadDetail()]);
+      }
+    } catch (failure) {
+      if (selectedReportIdRef.current === reportId && failure instanceof HttpError) {
+        if ([401, 403].includes(failure.status)) {
+          clearPrivateView();
+          setDetailError(failure.message);
+        } else if (failure.status === 409) {
+          void Promise.all([loadList(), loadDetail()]);
+        }
+      }
+      throw failure;
+    }
+  }
 
   async function loadScreenshot() {
     if (!getIdToken || !report || report.shared) return;
@@ -763,8 +823,9 @@ function ConnectedReports() {
             : <ReportRows reports={reports} selectedId={selectedReportId} nudgeActions={nudgeActions} onNudge={sharedReportsActive ? nudgeReport : undefined} />}
         </section>
         {selectedIssueNumber && issue ? <IssueDetail issue={issue} error={error} /> : null}
-        {selectedReportId && report ? (
+        {selectedReportId && report?.id === selectedReportId ? (
           <ReportDetail
+            key={report.id}
             report={report}
             error={error}
             screenshot={screenshot}
@@ -772,6 +833,9 @@ function ConnectedReports() {
             onLoadScreenshot={() => void loadScreenshot()}
             onNudge={sharedReportsActive ? nudgeReport : undefined}
             nudgeAction={nudgeActions[report.id]}
+            onResolve={admin && canAdministerReport
+              ? (version, mutationId, note) => resolveReport(report.id, version, mutationId, note)
+              : undefined}
           />
         ) : null}
       </div>

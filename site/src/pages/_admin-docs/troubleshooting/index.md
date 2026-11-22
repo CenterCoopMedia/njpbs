@@ -206,6 +206,12 @@ and actual result. The form attaches browser diagnostics and recent CMS request
 IDs automatically. Keep the returned report ID for follow-up. Reporting does
 not close the editor or discard unsaved work.
 
+Administrators can open **Reports**, select **All reports**, and open the
+report. Check that the fix is available where the problem occurred. Confirm
+**Fix delivery**, write a note that explains what changed and how you checked
+it, and select **Resolve report**. The reporter can read the note in Boardwalk
+and in the resolution email.
+
 If you cannot use the form, use this format:
 
 ```text

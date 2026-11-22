@@ -391,7 +391,7 @@ if(process.env.CMS_BUG_REPORT_TELEGRAM_ADMIN_MAP)process.exit(8); require("node:
       requests.push({ url: target, init });
       return target === url ? { status } : expectedResponseFor(target, init);
     } });
-    await expect(run(403)).resolves.toEqual({ checked: 296 });
+    await expect(run(403)).resolves.toEqual({ checked: 298 });
     expect(requests.filter(({ url: target }) => target.includes("cmsGetPublishedPost"))).toEqual([
       { url, init: { method: "GET", redirect: "manual" } },
     ]);
@@ -528,7 +528,7 @@ if(process.env.CMS_BUG_REPORT_TELEGRAM_ADMIN_MAP)process.exit(8); require("node:
         adminOrigin: ADMIN_ORIGIN,
         request,
       }),
-    ).resolves.toEqual({ checked: 296 });
+    ).resolves.toEqual({ checked: 298 });
 
     expect(requests.map(({ url }) => new URL(url).pathname.slice(1))).toEqual([
       "health",
@@ -640,6 +640,7 @@ if(process.env.CMS_BUG_REPORT_TELEGRAM_ADMIN_MAP)process.exit(8); require("node:
       "cmsSubmitBugReport",
       "cmsListBugReports",
       "cmsNudgeBugReport",
+      "cmsResolveBugReport",
       "cmsGetBugReport",
       "cmsGetBugReportEvidence",
       "cmsListGithubIssues",
@@ -770,6 +771,7 @@ if(process.env.CMS_BUG_REPORT_TELEGRAM_ADMIN_MAP)process.exit(8); require("node:
       "cmsSubmitBugReport",
       "cmsListBugReports",
       "cmsNudgeBugReport",
+      "cmsResolveBugReport",
       "cmsGetBugReport",
       "cmsGetBugReportEvidence",
       "cmsListGithubIssues",
@@ -818,7 +820,7 @@ if(process.env.CMS_BUG_REPORT_TELEGRAM_ADMIN_MAP)process.exit(8); require("node:
     }
 
     const posts = requests.filter(({ init }) => init.method === "POST");
-    expect(posts).toHaveLength(282);
+    expect(posts).toHaveLength(284);
     const multipartPosts = posts.filter(
       ({ url }) =>
         new URL(url).origin === BASE_URL &&
@@ -835,7 +837,7 @@ if(process.env.CMS_BUG_REPORT_TELEGRAM_ADMIN_MAP)process.exit(8); require("node:
     }
 
     const jsonPosts = posts.filter((post) => !multipartPosts.includes(post));
-    expect(jsonPosts).toHaveLength(279);
+    expect(jsonPosts).toHaveLength(281);
     const privatePosts = jsonPosts.filter(
       ({ url }) =>
         (new URL(url).origin === FUNCTIONS_ORIGIN &&
@@ -913,7 +915,7 @@ if(process.env.CMS_BUG_REPORT_TELEGRAM_ADMIN_MAP)process.exit(8); require("node:
       active.set(origin, active.get(origin) - 1);
       return expectedResponseFor(url, init);
     };
-    await expect(runCmsFunctionSmoke({ baseUrl: BASE_URL, request })).resolves.toEqual({ checked: 296 });
+    await expect(runCmsFunctionSmoke({ baseUrl: BASE_URL, request })).resolves.toEqual({ checked: 298 });
     expect(peak.get(BASE_URL)).toBe(1);
     expect(peak.get(FUNCTIONS_ORIGIN)).toBe(4);
   });
@@ -934,7 +936,7 @@ if(process.env.CMS_BUG_REPORT_TELEGRAM_ADMIN_MAP)process.exit(8); require("node:
     };
 
     for (let run = 0; run < 3; run += 1) {
-      await expect(runCmsFunctionSmoke({ request })).resolves.toEqual({ checked: 296 });
+      await expect(runCmsFunctionSmoke({ request })).resolves.toEqual({ checked: 298 });
     }
   });
 
