@@ -91,31 +91,35 @@ function memoryStore() {
     exists: rows.has(reference.path),
     data: () => structuredClone(rows.get(reference.path)),
   });
-  const query = (name, filters = [], after = null, count = Infinity) => ({
+  function compareTuple(left, right) {
+    const index = left.findIndex((value, index) => value !== right[index]);
+    return index === -1 ? 0 : left[index] < right[index] ? -1 : 1;
+  }
+  const query = (name, filters = [], after = null, count = Infinity, order = []) => ({
     doc: (id) => ref(name, id),
     where: (field, operator, value) =>
-      query(name, [...filters, [field, operator, value]], after, count),
-    orderBy: (field) => {
-      expect(field).toBe("__name__");
-      return query(name, filters, after, count);
-    },
-    startAfter: (id) => query(name, filters, id, count),
-    limit: (value) => query(name, filters, after, value),
-    get: async () => ({
-      docs: [...rows]
+      query(name, [...filters, [field, operator, value]], after, count, order),
+    orderBy: (field) => query(name, filters, after, count, [...order, field]),
+    startAfter: (...values) => query(name, filters, values, count, order),
+    limit: (value) => query(name, filters, after, value, order),
+    get: async () => {
+      const fields = order.length ? order : ["__name__"];
+      const tuple = ([key, value]) => fields.map((field) => field === "__name__" ? key.split("/").at(-1) : value[field]);
+      const docs = [...rows]
         .filter(
           ([key, value]) =>
             key.startsWith(name + "/") &&
             filters.every(
               ([field, operator, expected]) =>
-                operator === "==" && value[field] === expected,
-            ) &&
-            (!after || key.split("/").at(-1) > after),
+                operator === "==" ? value[field] === expected : operator === "<=" && value[field] <= expected,
+            ),
         )
-        .sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))
+        .filter((row) => !after || compareTuple(tuple(row), after) > 0)
+        .sort((left, right) => compareTuple(tuple(left), tuple(right)))
         .slice(0, count)
-        .map(([key]) => snap({ path: key, id: key.split("/").at(-1) })),
-    }),
+        .map(([key]) => snap({ path: key, id: key.split("/").at(-1) }));
+      return { docs };
+    },
   });
   const firestore = {
     doc: (path) => {
@@ -127,7 +131,7 @@ function memoryStore() {
       const run = tail.then(async () => {
         const writes = [];
         const result = await fn({
-          get: async (reference) => snap(reference),
+          get: async (reference) => reference.path ? snap(reference) : reference.get(),
           create: (reference, value) =>
             writes.push(["create", reference, structuredClone(value)]),
           update: (reference, value) =>
@@ -251,6 +255,33 @@ async function prepared(overrides={}){
  return {...args,job,counts,secret,storage,deps,run:runner.createByokRunner(deps),advance:ms=>{time+=ms;},spool:()=>spool};
 }
 describe('injected BYOK runner',()=>{
+ it('leaves the runner lease untouched while every job has a future deadline', async () => {
+  const s = await prepared();
+  const path = `${jobs.COLLECTION}/${s.job.id}`;
+  s.rows.get(path).leaseUntil = now + 60000;
+  for (let index = 0; index < 20; index++) {
+   s.rows.set(`${jobs.COLLECTION}/000-${index}`, { provider: jobs.PROVIDER, active: true, leaseUntil: now + 120000 });
+  }
+  expect(await s.run()).toEqual({ outcome: 'idle' });
+  expect(s.rows.has(runner.RUNNER_PATH)).toBe(false);
+
+  s.advance(60000);
+  expect(await s.run()).toEqual({ outcome: 'ready' });
+  expect(s.counts.posts).toBe(1);
+ });
+
+ it('advances past a full page of deferred jobs without taking the runner lease', async () => {
+  const s = await prepared();
+  for (let index = 0; index < 20; index++) {
+   s.rows.set(`${jobs.COLLECTION}/000-${index}`, { provider: jobs.PROVIDER, active: true,
+    leaseUntil: 0, nextAttemptAt: now + 60000 });
+  }
+  expect(await s.run()).toEqual({ outcome: 'idle' });
+  expect(s.rows.get(runner.RUNNER_PATH)).toMatchObject({ after: '000-9', afterLeaseUntil: 0, leaseUntil: 0 });
+  expect(await s.run()).toEqual({ outcome: 'ready' });
+  expect(s.counts.posts).toBe(1);
+ });
+
  it('holds operator canaries from the scheduler and steps only the named job',async()=>{
   const s=await prepared();
   s.rows.get(`mediaSourceTranscriptJobs/${s.job.id}`).operatorCanaryId='a'.repeat(64);
