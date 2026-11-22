@@ -424,6 +424,19 @@ test "$(curl --silent --show-error --output /dev/null --write-out '%{http_code}'
   'https://njpbs.org/images/glogo.jpg')" != 410
 test "$(curl --silent --show-error --output /dev/null --write-out '%{http_code}' \
   'https://njpbs.org/issue-260-future-route-proof')" != 410
+
+figure='https://njpbs.org/data/figures/unemployment/embed/'
+test "$(curl --silent --show-error --dump-header "$DEPLOY_DIR/embed-chart.headers" \
+  --output /dev/null --write-out '%{http_code}' "$figure?view=chart&revision=2026-11-09")" = 200
+test "$(curl --silent --show-error --dump-header "$DEPLOY_DIR/embed-number.headers" \
+  --output /dev/null --write-out '%{http_code}' "$figure?view=number")" = 200
+for view in chart number; do
+  grep -qi '^content-security-policy:.*frame-ancestors \*;' "$DEPLOY_DIR/embed-$view.headers"
+  ! grep -qi '^x-frame-options:' "$DEPLOY_DIR/embed-$view.headers" || exit 1
+done
+test "$(curl --silent --show-error --dump-header "$DEPLOY_DIR/embed-missing.headers" \
+  --output /dev/null --write-out '%{http_code}' \
+  'https://njpbs.org/data/figures/missing-figure-smoke/embed/?view=chart')" = 404
 SMOKE
 ```
 

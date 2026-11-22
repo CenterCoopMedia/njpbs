@@ -232,7 +232,7 @@ describe("classify", () => {
     // /schedule children are legacy, not served: the static build emits only the bare
     // /schedule/ route, so a dated child and /schedule/embed both 410.
     expect(classify("/schedule/2026-08-13")).toEqual({ action: "gone" });
-    expect(classify("/schedule/embed")).toEqual({ action: "gone" });
+    expect(classify("/schedule/embed")).toEqual({ action: "gone", cacheControl: "no-store" });
     // The 14-day schedule PDF is a served file, so it passes through.
     expect(classify("/schedule/downloads/nj-pbs-schedule.pdf")).toBeNull();
     expect(classify("/schedule/downloads/other.pdf")).toEqual({ action: "gone" });
@@ -298,7 +298,7 @@ describe("classify", () => {
 
   it("returns Gone for oEmbed endpoints and pagination stubs", () => {
     expect(classify("/programs/x/embed")).toBeNull();
-    expect(classify("/some-post/embed")).toEqual({ action: "gone" });
+    expect(classify("/some-post/embed")).toEqual({ action: "gone", cacheControl: "no-store" });
     expect(classify("/page/2")).toEqual({ action: "gone" });
     expect(classify("/page/not-a-number")).toBeNull(); // only /page/<n> is a stub
   });

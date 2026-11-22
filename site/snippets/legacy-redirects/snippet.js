@@ -95,8 +95,7 @@ export default {
       headers: {
         ...SECURITY_HEADERS,
         "content-type": "text/html; charset=utf-8",
-        // A retired path will not come back; let caches and crawlers keep the 410.
-        "cache-control": "public, max-age=86400",
+        "cache-control": decision.cacheControl ?? "public, max-age=86400",
       },
     });
   },

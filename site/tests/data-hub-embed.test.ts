@@ -24,7 +24,7 @@ describe("public Data Hub figure embeds (#5093)", () => {
     expect(await dataHubEmbedPages({ DATA_HUB_PUBLIC: "1", PUBLIC_ONLY: "1" })).toEqual([]);
   });
 
-  it("serves every published figure, both views, and its fixed dated snapshot", async () => {
+  it("serves both views of every published figure with and without a pinned date", async () => {
     expect(snapshot.metrics).toHaveLength(18);
     for (const metric of snapshot.metrics) {
       for (const view of ["chart", "number"]) {
@@ -48,6 +48,12 @@ describe("public Data Hub figure embeds (#5093)", () => {
         expect(response.headers.get("content-security-policy")).toContain("frame-ancestors *");
         expect(html).not.toMatch(/google-analytics|googletagmanager|wisepops|document\.cookie/);
       }
+    }
+    for (const page of pages.filter(page => page.snapshot === undefined || page.snapshot === "number")) {
+      const view = page.snapshot ?? "chart";
+      const response = (await request(`/data/figures/${page.id}/embed/?view=${view}`))!;
+      expect(response.status, page.id).toBe(200);
+      expect(await response.text(), page.id).toBe(page.html);
     }
   });
 
@@ -82,6 +88,6 @@ describe("public Data Hub figure embeds (#5093)", () => {
     expect(classify("/data/figures/unemployment/embed/")).toBeNull();
     expect(classify("/data/figures/missing/embed/")).toBeNull();
     expect(classify("/data/figures/unknown_figure/embed/")).toBeNull();
-    expect(classify("/old-wordpress-post/embed/")).toEqual({ action: "gone" });
+    expect(classify("/old-wordpress-post/embed/")).toEqual({ action: "gone", cacheControl: "no-store" });
   });
 });
