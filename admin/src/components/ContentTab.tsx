@@ -344,7 +344,9 @@ export function ContentTab({
     );
   // The desks a new record can be created into (#845). Same live registry the Staff access
   // grant picker reads, so a grant can never name a section the record form does not offer.
-  const { sections: contentSections, ready: sectionsReady, loading: sectionsLoading } = useContentSectionRegistry();
+  const {
+    sections: contentSections, ready: sectionsReady, loading: sectionsLoading, registeredSections,
+  } = useContentSectionRegistry();
   // Reader identity owns private rows; registry labels do not change its authority.
   const loadDirectoryPages = useCallback(
     async () => (await cmsListPages(await getIdToken())).pages,
@@ -1191,7 +1193,7 @@ export function ContentTab({
         newPostSections={sectionsReady ? pageDirectoryApi.sections : null}
         newRecordRecoveryAreas={{
           status: sectionsLoading ? "loading" : sectionsReady ? "ready" : "unavailable",
-          options: pageDirectoryApi.sections,
+          options: registeredSections.filter(section => canCreateEditableRecord(principal, section.id)),
         }}
       />
     </Suspense>

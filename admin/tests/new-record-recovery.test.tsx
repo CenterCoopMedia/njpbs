@@ -38,7 +38,7 @@ function mountStudio(path: string, principal = editor, pendingCreateNonce?: stri
         contentSections={areas}
         newRecordRecoveryAreas={{
           status: areasUnavailable ? "unavailable" : "ready",
-          options: areasUnavailable ? [] : areas.filter(area => canCreateEditableRecord(principal, area.id)),
+          options: areas.filter(area => canCreateEditableRecord(principal, area.id)),
         }}
         autoSaveEnabled
       />
@@ -57,7 +57,7 @@ afterEach(() => {
 it("holds a new Post away from its create route and restores it through the banner with autosave paused", async () => {
   const original = mountStudio(createRecordPath("post"), editor, "fixture-create-nonce");
   fireEvent.change(screen.getByRole("textbox", { name: "Post title" }), { target: { value: "Notes for a new Post" } });
-  fireEvent.click(screen.getByRole("link", { name: "Library", exact: true }));
+  fireEvent.click(screen.getByRole("link", { name: /^Library$/ }));
   act(() => markSessionEnded());
   original.unmount();
   clearSessionEnded();
@@ -70,8 +70,9 @@ it("holds a new Post away from its create route and restores it through the bann
   const { saveRecord } = mountStudio(contentLibraryPath());
   fireEvent.click(screen.getByRole("link", { name: "Review new post" }));
   expect(await screen.findByRole("textbox", { name: "Post title" })).toHaveValue("Notes for a new Post");
-  const autosaveTick = intervals.mock.calls.findLast(([, delay]) => delay === 60_000)?.[0] as () => void;
-  await act(async () => autosaveTick());
+  const autosaveTick = [...intervals.mock.calls].reverse().find(([, delay]) => delay === 60_000)?.[0];
+  if (!autosaveTick) throw new Error("Missing draft autosave interval");
+  await act(async () => autosaveTick(undefined));
   expect(saveRecord).not.toHaveBeenCalled();
 
   fireEvent.click(screen.getByRole("button", { name: "Save draft" }));
@@ -128,11 +129,12 @@ it("lets the editor recover distinct drafts of the same type without overwriting
   expect([first, second].sort()).toEqual(["First held Post", "Second held Post"]);
 });
 
-it("keeps the draft when editorial areas cannot be read", () => {
-  holdNewRecord(editor.id, "sponsor", { name: "Held sponsor", section: "news" });
-  mountStudio(createRecordPath("sponsor"), editor, undefined, true);
+it.each(["sponsor", "post"] as const)("keeps the %s draft hidden when editorial areas cannot be read", kind => {
+  holdNewRecord(editor.id, kind, { name: "Held record", title: "Held record",
+    ...(kind === "sponsor" ? { section: "news" } : {}) });
+  mountStudio(createRecordPath(kind), editor, undefined, true);
   expect(screen.getByText("Editorial areas could not load")).toBeVisible();
-  expect(screen.queryByDisplayValue("Held sponsor")).toBeNull();
+  expect(screen.queryByDisplayValue("Held record")).toBeNull();
   expect(screen.queryByRole("button", { name: "Discard draft" })).toBeNull();
-  expect(heldNewRecords(editor.id, "sponsor")).toHaveLength(1);
+  expect(heldNewRecords(editor.id, kind)).toHaveLength(1);
 });

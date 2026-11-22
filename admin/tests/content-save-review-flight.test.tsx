@@ -6,7 +6,10 @@ import { createBlock } from "../src/lib/block-factory";
 const fixture = vi.hoisted(() => ({ get: vi.fn(), save: vi.fn(), callbacks: null as any }));
 vi.mock("../src/context/AuthContext", () => ({ useAuth: () => ({ getIdToken: async () => "fixture-token", state: { status: "signed-out" } }) }));
 vi.mock("../src/lib/firebase", () => ({ db: {}, firebaseConfig: { projectId: "demo-njpbs" } }));
-vi.mock("../src/lib/use-content-sections", () => ({ useContentSections: () => [], useContentSectionRegistry: () => ({ sections: [], ready: true }) }));
+vi.mock("../src/lib/use-content-sections", () => ({
+  useContentSections: () => [],
+  useContentSectionRegistry: () => ({ sections: [], ready: true, loading: false, registeredSections: [] }),
+}));
 vi.mock("../src/lib/use-media-categories", () => ({ useMediaCategories: () => ({ state: { status: "ready", categories: [] } }) }));
 vi.mock("../src/lib/editor-lock-store", () => ({ editorLockClient: {} }));
 vi.mock("../src/lib/functions", async importOriginal => ({

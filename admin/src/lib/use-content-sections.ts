@@ -73,6 +73,7 @@ export function useContentSectionRegistry() {
 
   const [ready, setReady] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [registeredSections, setRegisteredSections] = useState<ContentSectionDefinition[]>([]);
 
   useEffect(() => {
     return onSnapshot(
@@ -86,10 +87,12 @@ export function useContentSectionRegistry() {
         const docs = Array.isArray(snapshot?.docs) ? snapshot.docs : [];
         if (!Array.isArray(snapshot?.docs) || docs.length > SECTION_LISTENER_LIMIT) {
           setSections(seededContentSections());
+          setRegisteredSections([]);
           setReady(false);
           return;
         }
         const parsed = parseContentSectionSnapshot(docs);
+        setRegisteredSections(parsed);
         // An empty or entirely malformed registry keeps the seeded desks rather than
         // leaving a required picker with nothing to choose.
         if (parsed.length > 0) setSections(parsed);
@@ -98,10 +101,11 @@ export function useContentSectionRegistry() {
       () => {
         setLoading(false);
         setSections(seededContentSections());
+        setRegisteredSections([]);
         setReady(false);
       },
     );
   }, []);
 
-  return { sections, ready, loading };
+  return { sections, ready, loading, registeredSections };
 }

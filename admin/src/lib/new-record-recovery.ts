@@ -54,7 +54,7 @@ export function holdNewRecord(
   kind: RecordKind,
   record: Record<string, unknown>,
   createNonce?: string,
-  id = crypto.randomUUID(),
+  id: string = crypto.randomUUID(),
 ) {
   const storage = browserEditorWorkStorage();
   if (!storage) return;
