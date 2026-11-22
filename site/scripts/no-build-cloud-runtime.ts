@@ -35,7 +35,8 @@ export function startNoBuildCloudRuntime({ firestore, firebaseApp, commitSha, se
   const distDirectory = path.join(stateDirectory, "background", "dist");
   const maintain = noBuildPostMaintenance({ firestore, firebaseApp, commitSha, stateDirectory, distDirectory,
     buildEnvironment, runtime, serializerId, mediaManagerCredential, backgroundBucket: storage.target.backgroundBucket,
-    onPreviewProjection: () => kickPreview(), buildPublication: input => buildNoBuildCloudBackground(input, distDirectory) });
+    onPreviewProjection: () => kickPreview(),
+    buildPublication: (input, recordTimings) => buildNoBuildCloudBackground(input, distDirectory, recordTimings) });
   const refresh = cloudExternalRefresh({ firestore, firebaseApp, runtime, serializerId, backgroundBucket: storage.target.backgroundBucket,
     stateDirectory, buildEnvironment, mediaManagerCredential, spotlightImageStorageFactory });
   const retainPreview = cloudEditorialPreviewRetention({ firestore, firebaseApp, runtime, serializerId,
