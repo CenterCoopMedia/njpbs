@@ -63,21 +63,23 @@ it('continues to the next job after a provider failure', async () => {
   expect((await db.collection('mediaSourceAssets').doc(finished.asset.id).get()).data().rendition.state).toBe('ready');
 });
 
-it('keeps the five-job query bound and skips an existing lease', async () => {
-  const entries = await seed(6);
-  await db.collection(jobs.PREVIEW_JOBS).doc(entries[0].job.id).update({ leaseUntil: Date.now() + 300_000 });
+it('uses all five batch slots for eligible jobs, including a lease expiring now', async () => {
+  const entries = await seed(7);
+  const now = Date.now();
+  await Promise.all(entries.map(({ job }, index) => db.collection(jobs.PREVIEW_JOBS).doc(job.id)
+    .update({ leaseUntil: index === 0 ? now + 300_000 : now })));
   const checked = [];
-  await previews.processPreviewTick({ firestore: db, config, processor: async job => { checked.push(job.id); } });
-  expect(checked).toEqual(entries.slice(1, 5).map(({ job }) => job.id));
+  await previews.processPreviewTick({ firestore: db, config, now: () => now, processor: async job => { checked.push(job.id); } });
+  expect(checked).toEqual(entries.slice(1, 6).map(({ job }) => job.id));
 });
 
 it('leaves upload admission holds untouched while checking active jobs', async () => {
   const entries = await seed();
   const hold = { active: true, phase: 'reserved', actorUid: 'uploading-editor' };
-  const holdRef = db.collection(jobs.PREVIEW_JOBS).doc('hold-upload-session');
-  await holdRef.set(hold);
+  const holds = Array.from({ length: 5 }, (_, index) => db.collection(jobs.PREVIEW_JOBS).doc(`00-upload-hold-${index}`));
+  await Promise.all(holds.map(ref => ref.set(hold)));
   const processor = processors.createVideoPreviewProcessor(config, { client: { send: async () => ({ status: 'RUNNING' }) } });
   const result = await previews.processPreviewTick({ firestore: db, config, processor });
   expect(result.jobs.map(job => job.jobId)).toEqual(entries.map(({ job }) => job.id));
-  expect((await holdRef.get()).data()).toEqual(hold);
+  expect((await Promise.all(holds.map(ref => ref.get()))).map(snapshot => snapshot.data())).toEqual(holds.map(() => hold));
 });

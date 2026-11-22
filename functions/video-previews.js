@@ -31,7 +31,10 @@ function previewProcessorConfig() {
 async function processPreviewTick({ firestore = db, config = previewProcessorConfig(),
   processor, now = Date.now } = {}) {
   if (!config) return { enabled: false };
-  const snapshots = await firestore.collection(PREVIEW_JOBS).where("active", "==", true).limit(5).get();
+  // Admission holds have no deadline and are handled by the upload lifecycle.
+  const snapshots = await firestore.collection(PREVIEW_JOBS).where("active", "==", true)
+    .where("leaseUntil", "<=", now()).limit(5).get();
+  if (snapshots.empty) return { enabled: true, idle: true };
   const run = processor ?? createVideoPreviewProcessor(config);
   const jobs = [];
   for (const snapshot of snapshots.docs) {

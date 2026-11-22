@@ -113,6 +113,14 @@
       ]
     },
     {
+      "collectionGroup": "mediaSourcePreviewJobs",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "active", "order": "ASCENDING" },
+        { "fieldPath": "leaseUntil", "order": "ASCENDING" }
+      ]
+    },
+    {
       "collectionGroup": "mediaSourceTranscriptJobs",
       "queryScope": "COLLECTION",
       "fields": [

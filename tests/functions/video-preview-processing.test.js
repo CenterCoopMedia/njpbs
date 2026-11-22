@@ -51,7 +51,27 @@ function memoryStore(initialJob) {
  const rows=new Map([[`mediaSourcePreviewJobs/${initialJob.id}`,structuredClone(initialJob)],['mediaSourceAssets/asset',structuredClone(asset)]]);
  const reference=(path)=>({path,id:path.split('/').at(-1)});
  const snapshot=ref=>({id:ref.id,ref,exists:rows.has(ref.path),data:()=>structuredClone(rows.get(ref.path))});
- const db={collection:name=>({doc:id=>reference(`${name}/${id}`),where:()=>({limit:()=>({get:async()=>({docs:[...rows].filter(([key,value])=>key.startsWith(name+'/')&&value.active).map(([key])=>snapshot(reference(key)))})})})}),runTransaction:async fn=>fn({get:async ref=>snapshot(ref),set:(ref,value)=>rows.set(ref.path,structuredClone(value)),update:(ref,changes)=>rows.set(ref.path,{...rows.get(ref.path),...structuredClone(changes)})})};
+ const db = {
+  collection: name => ({
+   doc: id => reference(`${name}/${id}`),
+   where: (_field, _operator, active) => ({
+    where: (_lease, _comparison, cutoff) => ({
+     limit: count => ({
+      async get() {
+       const docs = [...rows].filter(([key, value]) => key.startsWith(`${name}/`) &&
+        value.active === active && value.leaseUntil <= cutoff).slice(0, count).map(([key]) => snapshot(reference(key)));
+       return { docs, empty: docs.length === 0 };
+      },
+     }),
+    }),
+   }),
+  }),
+  runTransaction: async fn => fn({
+   get: async ref => snapshot(ref),
+   set: (ref, value) => rows.set(ref.path, structuredClone(value)),
+   update: (ref, changes) => rows.set(ref.path, { ...rows.get(ref.path), ...structuredClone(changes) }),
+  }),
+ };
  return {db,rows};
 }
 const tickConfig={source:{prefix:''}};
