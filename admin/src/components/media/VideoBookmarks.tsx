@@ -1,4 +1,5 @@
-import { useRef, useState } from "react";
+import { useContext, useRef, useState } from "react";
+import { MediaDialogContext } from "../../context/MediaDialogContext";
 import { formatMediaDuration } from "../../lib/media-format";
 import { ActionControl } from "../ui/ActionControl";
 import { Popover } from "../ui/Popover";
@@ -53,6 +54,7 @@ export function VideoBookmarks({ scope, getPlayer, onSeek }: {
   getPlayer: () => HTMLVideoElement | null;
   onSeek: (seconds: number) => void;
 }) {
+  const { compactActions } = useContext(MediaDialogContext);
   const key = `njpbs.admin.video-moments:${scope}`;
   const anchor = useRef<HTMLButtonElement>(null);
   const form = useRef<HTMLFormElement>(null);
@@ -109,7 +111,8 @@ export function VideoBookmarks({ scope, getPlayer, onSeek }: {
   }
 
   return <>
-    <ActionControl action="media-bookmarks" ref={anchor} aria-haspopup="dialog" aria-expanded={open} onClick={toggle} />
+    <ActionControl action="media-bookmarks" presentation={compactActions ? "icons" : undefined}
+      ref={anchor} aria-haspopup="dialog" aria-expanded={open} onClick={toggle} />
     <Popover anchorRef={anchor} label="Video bookmarks" open={open} onOpenChange={setOpen}
       placement="bottom-end" dismissibleSheet>
       <div className="video-bookmarks" data-viewer-keys="off">

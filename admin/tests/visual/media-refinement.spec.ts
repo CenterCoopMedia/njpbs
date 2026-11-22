@@ -200,6 +200,7 @@ test.describe('coarse enlarged Text frame', () => {
       .every(element => { const box = element.getBoundingClientRect(); return box.left >= 0 && box.right <= innerWidth && box.width >= 44 && box.height >= 44; }))).toBe(true);
     expect(await header.evaluate(element => element.scrollWidth <= element.clientWidth)).toBe(true);
     await expect(header.getByRole('button', { name: 'Save details', exact: true })).toContainText('Save');
+    await expect(header.getByRole('button', { name: 'Bookmarks', exact: true })).toBeVisible();
     const more = header.getByRole('button', { name: 'More preview actions', exact: true });
     await more.click();
     await expect(page.getByRole('menu')).toContainText('Current results · 2 of 3');
