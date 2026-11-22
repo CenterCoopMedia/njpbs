@@ -605,7 +605,10 @@ interface EditorWorkspaceProps {
   // never wired the registry can honestly offer.
   contentSections?: readonly { id: string; label: string }[];
   newPostSections?: readonly { id: string; label: string }[] | null;
-  newRecordRecoveryAreas?: readonly { id: string; label: string }[] | null;
+  newRecordRecoveryAreas?: {
+    status: "loading" | "ready" | "unavailable";
+    options: readonly { id: string; label: string }[];
+  };
 }
 
 // The content editor: pick a record or a page, edit it, and save. Both surfaces persist
@@ -1437,7 +1440,8 @@ function EditorWorkspaceContent({
     : heldCreates.length === 1 ? heldCreates[0] : undefined;
   const heldSection = restoredCreate?.section ??
     (typeof heldCreate?.record.section === "string" ? heldCreate.record.section || undefined : undefined);
-  const recoveryAreas = newRecordRecoveryAreas ?? [];
+  const recoveryAreas = newRecordRecoveryAreas?.options ?? [];
+  const recoveryAreasLoading = newRecordRecoveryAreas?.status === "loading";
   const recoveryAllowed = newRecordKind !== null && (heldSection
     ? recoveryAreas.some(area => area.id === heldSection)
     : newRecordKind === "post" && canCreateEditableRecord(principal, undefined, true));
@@ -1445,7 +1449,7 @@ function EditorWorkspaceContent({
   const restoredCreateNotice = useRef<HTMLElement>(null);
 
   function restoreNewRecord(section?: string) {
-    if (!heldCreate || !newRecordKind || newRecordRecoveryAreas === null) return;
+    if (!heldCreate || !newRecordKind || recoveryAreasLoading) return;
     if (section ? !recoveryAreas.some(area => area.id === section) : !recoveryAllowed) return;
     const { id, record, savedAtMs, createNonce } = heldCreate;
     const key = newRecordDraftKey(newRecordKind);
@@ -1512,8 +1516,13 @@ function EditorWorkspaceContent({
       </InlineMessage>;
     }
     if (!heldCreate && !restoredCreate) return null;
-    if (newRecordRecoveryAreas === null) return <LoadingIndicator label="Checking your editorial access" />;
+    if (recoveryAreasLoading) return <LoadingIndicator label="Checking your editorial access" />;
     if (recoveryUnavailable) {
+      if (newRecordRecoveryAreas?.status === "unavailable") {
+        return <InlineMessage tone="warning" title="Editorial areas could not load">
+          Your draft is still held in this browser. Reload Boardwalk to check your areas again.
+        </InlineMessage>;
+      }
       return <InlineMessage tone="warning" title="This draft is outside your current access">
         <p>{heldSection ? "You no longer have access to the draft’s editorial area." :
           "You do not have an editorial area where you can create this record."}</p>
@@ -3631,7 +3640,7 @@ function EditorWorkspaceContent({
                   surface.id === null ? (
                     <>
                       {newRecordRecoveryNotice()}
-                      {heldCreates.length === 0 && (!restoredCreate || !recoveryUnavailable && newRecordRecoveryAreas !== null)
+                      {heldCreates.length === 0 && (!restoredCreate || !recoveryUnavailable && !recoveryAreasLoading)
                         ? recordFormFor(surface, recordDraftFor(surface))
                         : null}
                     </>

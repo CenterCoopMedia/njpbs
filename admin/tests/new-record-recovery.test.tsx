@@ -17,7 +17,7 @@ const areas = [
   { id: "other", label: "Other" },
 ];
 
-function mountStudio(path: string, principal = editor, pendingCreateNonce?: string) {
+function mountStudio(path: string, principal = editor, pendingCreateNonce?: string, areasUnavailable = false) {
   const saveRecord = vi.fn(async (_kind: RecordKind, record: Record<string, unknown>, _options?: { createNonce?: string }) =>
     ({ ...record, id: "saved-record", version: 1, status: "draft" }));
   function Studio() {
@@ -36,7 +36,10 @@ function mountStudio(path: string, principal = editor, pendingCreateNonce?: stri
         saveRecord={saveRecord}
         pendingRecordCreateNonce={() => pendingCreateNonce}
         contentSections={areas}
-        newRecordRecoveryAreas={areas.filter(area => canCreateEditableRecord(principal, area.id))}
+        newRecordRecoveryAreas={{
+          status: areasUnavailable ? "unavailable" : "ready",
+          options: areasUnavailable ? [] : areas.filter(area => canCreateEditableRecord(principal, area.id)),
+        }}
         autoSaveEnabled
       />
     </>;
@@ -123,4 +126,13 @@ it("lets the editor recover distinct drafts of the same type without overwriting
   fireEvent.click(screen.getByRole("button", { name: /draft 1/ }));
   const second = (screen.getByRole("textbox", { name: "Post title" }) as HTMLInputElement).value;
   expect([first, second].sort()).toEqual(["First held Post", "Second held Post"]);
+});
+
+it("keeps the draft when editorial areas cannot be read", () => {
+  holdNewRecord(editor.id, "sponsor", { name: "Held sponsor", section: "news" });
+  mountStudio(createRecordPath("sponsor"), editor, undefined, true);
+  expect(screen.getByText("Editorial areas could not load")).toBeVisible();
+  expect(screen.queryByDisplayValue("Held sponsor")).toBeNull();
+  expect(screen.queryByRole("button", { name: "Discard draft" })).toBeNull();
+  expect(heldNewRecords(editor.id, "sponsor")).toHaveLength(1);
 });
