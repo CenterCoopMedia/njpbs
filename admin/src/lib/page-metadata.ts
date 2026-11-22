@@ -1,5 +1,6 @@
 import { isPageTheme } from "../../../packages/content-core/src/content-model";
 import { publicPage, type PublicPageId } from "../../../packages/content-core/src/public-pages";
+import { parseScheduleCopy } from "../../../packages/content-core/src/schedule-copy";
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
@@ -25,6 +26,8 @@ export function pageMetadataFromDocument(
   // Composition ownership travels with the loaded page; ordinary metadata saves
   // omit it so staff cannot accidentally restore the fixed template.
   if (document.serviceCompositionVersion === 1) metadata.serviceCompositionVersion = 1;
+  const scheduleCopy = parseScheduleCopy(pageId, document.scheduleCopy);
+  if (scheduleCopy) metadata.scheduleCopy = scheduleCopy;
   if (pageId !== "home") {
     metadata.slug = typeof document.slug === "string" ? document.slug : publicPage(pageId)?.path.slice(1, -1) ?? "";
   }
@@ -58,6 +61,7 @@ export function pageMetadataSaveDocument(
   if (typeof values.heroBackgroundImage === "string") document.heroBackgroundImage = values.heroBackgroundImage;
   if (typeof values.heroBackgroundPosition === "string") document.heroBackgroundPosition = values.heroBackgroundPosition;
   if (typeof values.description === "string") document.description = values.description;
+  if (values.scheduleCopy !== undefined) document.scheduleCopy = values.scheduleCopy;
   if (values.dataHubCompositionVersion === 1) document.dataHubCompositionVersion = 1;
   if (values.dataHubReporting !== undefined) document.dataHubReporting = structuredClone(values.dataHubReporting);
   if (values.homeHero !== undefined) document.homeHero = structuredClone(values.homeHero);

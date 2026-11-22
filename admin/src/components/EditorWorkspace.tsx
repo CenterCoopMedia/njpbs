@@ -181,6 +181,7 @@ type SavingSource =
   | "page-blocks"
   | "page-update"
   | "home-conversion"
+  | "schedule-copy"
   | "revision-restore"
   | "lifecycle-transition"
   | "library-mutation";
@@ -480,6 +481,7 @@ interface EditorWorkspaceProps {
   loadPage?: (pageId: PublicPageId, section: SectionId) => Promise<PageContent>;
   convertHome?: (baseVersion: number, requestKey: string) => Promise<PageContent>;
   convertHomeV2?: (baseVersion: number, requestKey: string) => Promise<PageContent>;
+  enableScheduleCopy?: (baseVersion: number) => Promise<PageContent>;
   reportingTransport?: import("./DataHubReportingEditor").ReportingEditorTransport;
   loadHomeSources?: (signal: AbortSignal) => Promise<HomeSourceSnapshot>;
   // ContentTab supplies the authenticated station-image browser. Keeping it injectable
@@ -650,6 +652,7 @@ function EditorWorkspaceContent({
   loadPage,
   convertHome,
   convertHomeV2,
+  enableScheduleCopy,
   loadHomeSources,
   reportingTransport,
   loadMedia,
@@ -791,6 +794,8 @@ function EditorWorkspaceContent({
   const [pageSaveRevision, setPageSaveRevision] = useState(0);
   const homeConversionAttempt = useRef<{ version: number; key: string } | null>(null);
   const homeConversionBusy = useRef(false);
+  const scheduleCopyBusy = useRef(false);
+  const [scheduleCopyError, setScheduleCopyError] = useState<string>();
   const [homeConversionError, setHomeConversionError] = useState<string>();
   const [homeV2Confirmation, setHomeV2Confirmation] = useState(false);
   const homeV2Trigger = useRef<HTMLButtonElement>(null);
@@ -3182,7 +3187,40 @@ function EditorWorkspaceContent({
     async function updatePage() {
       await savePageSurface(pageSurface);
     }
-    const pageEditorReadOnly = convertingHome || restoring || changingLifecycle ||
+    const enablingScheduleCopy = savingSources.has("schedule-copy");
+    const scheduleCopyDisabledReason = !canSavePage
+      ? pageSaveDisabledReason ?? "Editing is unavailable."
+      : !["draft", "published"].includes(content.pageStatus ?? "") || content.expectedAbsent || !pageCurrentVersion
+        ? "Open a saved Schedule draft or published page."
+        : content.publishBuildPending
+          ? "Wait for publication to finish."
+          : activeSurfaceDirty || mediaPickerDirty
+            ? "Save or revert your changes before enabling editing."
+            : saving ? "Wait for the current change to finish." : undefined;
+    async function enableScheduleHeadingAndIntroduction() {
+      if (!enableScheduleCopy || !pageCurrentVersion || scheduleCopyDisabledReason || scheduleCopyBusy.current) return;
+      scheduleCopyBusy.current = true;
+      setScheduleCopyError(undefined);
+      setSavingSource("schedule-copy", true);
+      try {
+        await reserveEditorForSave();
+        if (!isSameSurface(activeSurfaceRef.current, pageSurface) || mediaPickerDirtyRef.current ||
+            unsavedDraftKeys().some(key => key === pageKey || key === pageMetadataKey(pageSurface))) {
+          throw new Error("Save or revert your changes before enabling editing.");
+        }
+        const saved = await enableScheduleCopy(pageCurrentVersion);
+        if (!saved.metadata?.scheduleCopy) throw new Error("Reload Schedule to check its saved draft.");
+        if (!isSameSurface(activeSurfaceRef.current, pageSurface)) return;
+        pageMetadataBaselines.current.set(pageMetadataKey(pageSurface), saved.metadata);
+        advancePageAfterSave(pageSurface, saved, "metadata", false);
+      } catch (error) {
+        setScheduleCopyError(error instanceof Error ? error.message : "Reload Schedule to check its saved draft.");
+      } finally {
+        scheduleCopyBusy.current = false;
+        setSavingSource("schedule-copy", false);
+      }
+    }
+    const pageEditorReadOnly = convertingHome || enablingScheduleCopy || restoring || changingLifecycle ||
       (content.pageStatus === "in_review" && !content.expectedAbsent) ||
       content.pageStatus === "approved" || content.pageStatus === "scheduled";
     const sharedEditorControls: PageEditorSharedControls = {
@@ -3409,7 +3447,13 @@ function EditorWorkspaceContent({
         visiblePageBlocks={blockDraft?.blocks ?? savedPageBlocks}
         blocksEditor={blocksEditor}
         metadataEditor={metadataEditor}
-        metadataKey={pageMetadataKey(pageSurface)}
+        metadataKey={`${pageMetadataKey(pageSurface)}${initialMetadata.scheduleCopy ? ":schedule-copy" : ""}`}
+        scheduleCopyAction={pageSurface.pageId === "schedule" && enableScheduleCopy && !initialMetadata.scheduleCopy
+          ? {
+              enable: enableScheduleHeadingAndIntroduction, pending: enablingScheduleCopy,
+              disabledReason: scheduleCopyDisabledReason, error: scheduleCopyError,
+            }
+          : undefined}
         sharedEditorControls={sharedEditorControls}
         inWorkspace={Boolean(editorView?.kind)}
         workspaceActionsAvailable={workspaceActionsAvailable}

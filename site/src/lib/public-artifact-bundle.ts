@@ -2,6 +2,7 @@ import { isCoverageLabelsBuildData, type CoverageLabelsBuildData } from "../../.
 import { isStoryCtasBuildData, type StoryCtasBuildData } from "../../../packages/content-core/src/story-ctas.ts";
 import { STORY_CTAS_SETTINGS_ID } from "../../../packages/content-core/src/cms-settings.ts";
 import { serviceCompositionError } from "../../../packages/content-core/src/service-composition.ts";
+import { parseScheduleCopy } from "../../../packages/content-core/src/schedule-copy.ts";
 import { assertHomeSourcePublication } from "./home-editorial-catalog.ts";
 import { createHash, randomUUID } from "node:crypto";
 import { assertProgramImageCatalog, programImageBytes, ProgramImagePreparationError, type ProgramImageCatalog } from "./published-record-images.ts";
@@ -285,6 +286,7 @@ export function assertPublicArtifactBundle(value: unknown): PublicArtifactBundle
   for (const page of value.pages) {
     const serviceError = serviceCompositionError(String(page.pageId), page.serviceCompositionVersion);
     if (serviceError) throw new Error(serviceError);
+    parseScheduleCopy(String(page.pageId), page.scheduleCopy);
     if (page.homeCompositionVersion === undefined) continue;
     const parsed = parseBlocks(page.blocks);
     if (!parsed.ok) throw new Error(`The public Home composition blocks are invalid: ${parsed.error}`);

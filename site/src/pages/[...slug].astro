@@ -6,7 +6,7 @@ import PublicSubpage from "../components/PublicSubpage.astro";
 import PublicArticle from "../components/PublicArticle.astro";
 import CmsPage from "../components/CmsPage.astro";
 import CmsBlocks from "../components/CmsBlocks.astro";
-import NativeSchedule from "../components/NativeSchedule.astro";
+import SchedulePageContent from "../components/SchedulePageContent.astro";
 import StaffDirectory from "../components/StaffDirectory.astro";
 import scheduleData from "../data/schedule.json";
 import type { BakedScheduleData } from "../lib/schedule-feed";
@@ -196,7 +196,7 @@ if (cmsEntry?.data.family === "service" && !usesServiceComposition(cmsEntry.data
   childDirected={cmsEntry?.data.childDirected ?? entry?.data.childDirected ?? article?.frontmatter.childDirected === true}
 >
   {redirectTo ? <main><h1>Page moved</h1><p><a href={redirectTo}>Continue to {title}</a></p></main> : <>
-  {cmsEntry?.data.family === "schedule" && <><NativeSchedule data={bakedSchedule} heroBackgroundImage={heroBackgroundImage} heroBackgroundPosition={cmsEntry.data.heroBackgroundPosition} /><CmsBlocks entry={cmsEntry} readerControls /></>}
+  {cmsEntry?.data.family === "schedule" && <SchedulePageContent entry={cmsEntry} data={bakedSchedule} heroBackgroundImage={heroBackgroundImage} />}
   {cmsEntry?.data.family === "staff" && <><StaffDirectory staff={staff} title={title} description={description} heroBackgroundImage={heroBackgroundImage} heroBackgroundPosition={cmsEntry.data.heroBackgroundPosition} /><CmsBlocks entry={cmsEntry} readerControls /></>}
   {cmsEntry && (cmsEntry.data.family === "article" || usesServiceComposition(cmsEntry.data)) && <CmsPage entry={cmsEntry} />}
   {cmsServicePage && cmsEntry && (

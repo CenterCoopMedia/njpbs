@@ -1,5 +1,6 @@
 "use strict";
 const { serviceCompositionError } = require("./service-composition");
+const { parseScheduleCopy } = require("./schedule-copy");
 
 const { parseHomeHero } = require("./home-hero");
 
@@ -560,6 +561,9 @@ function preparePublicPage({ pageId, document, now }) {
   const metadata = selectedMetadata(snapshot.metadata);
   const serviceError = serviceCompositionError(pageId, snapshot.metadata.serviceCompositionVersion);
   if (serviceError) fail(serviceError);
+  let scheduleCopy;
+  try { scheduleCopy = parseScheduleCopy(pageId, snapshot.metadata.scheduleCopy); }
+  catch (error) { fail(error.message); }
   const homeVersion = snapshot.metadata.homeCompositionVersion;
   const blocks = visibleBlocks(snapshot.blocks, definition.template, pageId, homeVersion);
   let usage;
@@ -589,6 +593,7 @@ function preparePublicPage({ pageId, document, now }) {
         pageId,
         ...([1, 2].includes(homeVersion) ? { homeCompositionVersion: homeVersion } : {}),
         ...(snapshot.metadata.serviceCompositionVersion === 1 ? { serviceCompositionVersion: 1 } : {}),
+        ...(scheduleCopy ? { scheduleCopy } : {}),
         path: publicPagePath(pageId, snapshot.metadata) ?? fail("Published page has an invalid URL"),
         family: definition.family,
         template: definition.template,

@@ -1,0 +1,21 @@
+---
+import type { CollectionEntry } from "astro:content";
+import type { ComponentProps } from "astro/types";
+import CmsBlocks from "./CmsBlocks.astro";
+import NativeSchedule from "./NativeSchedule.astro";
+
+interface Props {
+  entry?: CollectionEntry<"cmsPages">;
+  data: ComponentProps<typeof NativeSchedule>["data"];
+  heroBackgroundImage?: ComponentProps<typeof NativeSchedule>["heroBackgroundImage"];
+}
+
+const { entry, data, heroBackgroundImage } = Astro.props;
+---
+<NativeSchedule
+  data={data}
+  copy={entry?.data.scheduleCopy}
+  heroBackgroundImage={heroBackgroundImage}
+  heroBackgroundPosition={entry?.data.heroBackgroundPosition}
+/>
+{entry && <CmsBlocks entry={entry} readerControls />}

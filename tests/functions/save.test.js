@@ -557,6 +557,57 @@ describe("cmsSaveContent function", () => {
     );
   }
 
+  describe("Schedule copy ownership", () => {
+    const page = { id: "schedule", template: "programLanding", title: "Schedule search title",
+      description: "Schedule search summary", blocks: [], version: 4, status: "draft" };
+    const copy = { version: 1, heading: "This week on NJ PBS", introduction: "Find the programs coming up next." };
+    const saveSchedule = body => saveThroughProductionBoundary({ collection: "cmsPages", id: "schedule", ...body });
+
+    it("installs the displayed copy in a draft while retaining the exact public snapshot", async () => {
+      const publishedAt = "2026-09-01T20:00:00.000Z";
+      const published = { blocks: [], metadata: { title: "Published search title" }, publishedAt, sourceVersion: 3 };
+      const ref = db.collection("cmsPages").doc("schedule");
+      await ref.set({ ...page, status: "published", publiclyVisible: true, publishAt: publishedAt, published });
+      const migrate = baseVersion => saveSchedule({ baseVersion, enableScheduleCopy: true, document: {} });
+
+      expect(await migrate(3)).toMatchObject({ statusCode: 409, body: { versionConflict: true } });
+      const migrated = await migrate(4);
+      expect(migrated.statusCode, JSON.stringify(migrated.body)).toBe(200);
+      const stored = (await ref.get()).data();
+      expect(stored).toMatchObject({
+        status: "draft", version: 5, title: page.title, description: page.description, publiclyVisible: true,
+        scheduleCopy: { version: 1, heading: "TV schedule", introduction: "Now, next, and upcoming NJ PBS listings." },
+      });
+      expect(stored.published).toEqual(published);
+      expect(await migrate(5)).toMatchObject({ statusCode: 200, body: { replayed: true } });
+      expect(await migrate(4)).toMatchObject({ statusCode: 409, body: { versionConflict: true } });
+      expect((await ref.get()).data()).toEqual(stored);
+      expect(await docsIn("cmsVersionHistory")).toHaveLength(1);
+      expect(await docsIn("cmsPublishQueue")).toHaveLength(0);
+    });
+
+    it("refuses ordinary ownership changes and blank copy while accepting edits on the owned draft", async () => {
+      const ref = db.collection("cmsPages").doc("schedule");
+      await ref.set(page);
+      const saveCopy = (scheduleCopy, baseVersion = 4) => saveSchedule({ baseVersion, document: { scheduleCopy } });
+      expect((await saveCopy(copy)).statusCode).toBe(400);
+      expect((await ref.get()).data()).toEqual(page);
+
+      const owned = { ...page, scheduleCopy: copy };
+      await ref.set(owned);
+      for (const proposal of [null, { ...copy, version: 2 }, { ...copy, heading: " " }, { ...copy, introduction: "" }]) {
+        expect((await saveCopy(proposal)).statusCode).toBe(400);
+      }
+      expect((await saveSchedule({ document: { title: "Blind edit" } })).statusCode).toBe(400);
+      expect((await ref.get()).data()).toEqual(owned);
+      expect((await saveSchedule({ baseVersion: 4, document: { title: "New search title" } })).statusCode).toBe(200);
+      expect((await ref.get()).data().scheduleCopy).toEqual(copy);
+      const update = { ...copy, heading: "Upcoming programs" };
+      expect((await saveCopy(update, 5)).statusCode).toBe(200);
+      expect((await ref.get()).data().scheduleCopy).toEqual(update);
+    });
+  });
+
   describe("service composition saves", () => {
     const composedSupport = () => ({ id: "support", template: "programLanding", title: "Support NJ PBS",
       version: 4, contentVersion: 4, status: "draft", serviceCompositionVersion: 1, blocks: [], publiclyVisible: true,

@@ -26,6 +26,29 @@ function deferred<T>() {
 afterEach(() => vi.unstubAllEnvs());
 
 describe("request-scoped preview content", () => {
+  it.each([["schedule", "/schedule/"], ["tv-listings", "/tv-listings/"]])(
+    "projects the exact saved Schedule copy at %s",
+    (slug, route) => {
+      const value = input();
+      const scheduleCopy = { version: 1, heading: "Upcoming broadcasts", introduction: "Browse the week ahead." };
+      const draft = { id: "schedule", version: 7, title: "Search title", description: "Search summary",
+        slug, template: "programLanding", blocks: [], scheduleCopy };
+      const sealed = fixture({ ...value, pageId: "schedule", snapshot: draft });
+      const content = projectCmsPreviewContent(sealed.bytes, sealed.request, now);
+      expect(content.target).toMatchObject({ pagePath: route, sourceVersion: 7 });
+      expect(content.pages[0]).toMatchObject({ path: route, scheduleCopy, title: "Search title", contentMode: "draft" });
+      const published = { sourceVersion: 6, publishedAt: now.toISOString(), blocks: [],
+        metadata: { title: "Legacy search title", description: "Legacy search summary", slug } };
+      const working = { ...draft, published, publiclyVisible: true, status: "draft" };
+      const options = { mode: "published" as const, now, assets: new Map() };
+      expect(projectCmsPage(working, options)).toMatchObject({ path: route, title: "Legacy search title" });
+      expect(projectCmsPage(working, options)).not.toHaveProperty("scheduleCopy");
+      expect(projectCmsPage({ ...working, published: { ...published, metadata: {
+        ...published.metadata, scheduleCopy,
+      } } }, options)).toMatchObject({ path: route, scheduleCopy });
+    },
+  );
+
   it.each([[true, "contact", false], [false, "contact", false], [true, `page-${"2".repeat(32)}`, false], [false, `page-${"2".repeat(32)}`, false], [true, "contact", true]] as const)("uses fresh Page pin dependencies instead of the retained bundle (available=%s, Page=%s)", (available, pageId, clearedImage) => {
     const config = { mode: "tag", source: "cms_posts", value: "home", pins: [{ source: "cms_pages", sourceId: pageId }] };
     const page = (title: string) => projectCmsPage({ id: pageId, status: "published", publishAt: now.toISOString(),

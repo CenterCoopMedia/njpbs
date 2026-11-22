@@ -59,6 +59,7 @@ interface EditorWorkspacePagePanelsProps {
   blocksEditor: PageBlockEditorControls;
   metadataEditor: PageMetadataEditorControls;
   metadataKey: string;
+  scheduleCopyAction?: { enable: () => Promise<void>; pending: boolean; disabledReason?: string; error?: string };
   inWorkspace: boolean;
   workspaceActionsAvailable: boolean;
   bentoReveal: ComponentProps<typeof EditorBento>["revealPanel"];
@@ -123,6 +124,7 @@ export function EditorWorkspacePagePanels({
   blocksEditor,
   metadataEditor,
   metadataKey,
+  scheduleCopyAction,
   inWorkspace,
   workspaceActionsAvailable,
   bentoReveal,
@@ -314,15 +316,25 @@ export function EditorWorkspacePagePanels({
     ) : undefined,
     defaultZone: "side",
     body: (
-      <RecordForm
-        {...sharedEditorControls}
-        {...metadataEditor}
-        key={metadataKey}
-        kind="page"
-        pageId={pageSurface.pageId}
-        initial={initialMetadata}
-        saveLabel="Save metadata"
-      />
+      <>
+        {scheduleCopyAction && <section className="record-field-group" aria-label="Schedule heading and introduction">
+          <p>Enable editing to save the current heading and introduction to a draft.</p>
+          <AsyncActionButton label="Enable Schedule copy editing" pending={scheduleCopyAction.pending}
+            pendingLabel="Enabling editing…" pendingAnnouncement="Preparing the Schedule draft."
+            disabled={Boolean(scheduleCopyAction.disabledReason)} onClick={() => void scheduleCopyAction.enable()} />
+          {scheduleCopyAction.disabledReason && !scheduleCopyAction.pending && <p>{scheduleCopyAction.disabledReason}</p>}
+          {scheduleCopyAction.error && <p role="alert">{scheduleCopyAction.error}</p>}
+        </section>}
+        <RecordForm
+          {...sharedEditorControls}
+          {...metadataEditor}
+          key={metadataKey}
+          kind="page"
+          pageId={pageSurface.pageId}
+          initial={initialMetadata}
+          saveLabel="Save metadata"
+        />
+      </>
     ),
   };
 

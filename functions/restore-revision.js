@@ -2,6 +2,7 @@
 const { parseLiveBlogDraft, assertLiveBlogRetainsPublished } = require("./lib/live-blog");
 
 const { contentVersion, hasContentChanges } = require("./lib/content-version");
+const { parseScheduleCopy } = require("./lib/schedule-copy");
 const { changesPublicLibraryFields } = require("./lib/library-card-publication");
 
 // Restore one historical CMS working snapshot without rewriting history or
@@ -414,6 +415,18 @@ function createCmsRestoreRevisionHandler(deps = {}) {
             400,
             "That revision was saved before this page's layout was migrated. Restore a revision saved after the layout migration.",
           );
+        }
+        if (collection === "cmsPages") {
+          let savedCopy, historicalCopy;
+          try {
+            savedCopy = parseScheduleCopy(id, current.scheduleCopy);
+            historicalCopy = parseScheduleCopy(id, revision.after.scheduleCopy);
+          } catch (error) {
+            throw new RestoreRevisionRejection(400, error.message);
+          }
+          if (savedCopy?.version !== historicalCopy?.version) {
+            throw new RestoreRevisionRejection(400, "That revision has different Schedule copy ownership. Restore a revision saved after copy editing was enabled.");
+          }
         }
 
         const normalizedCurrent = normalizeServerReadDates(kind, current);

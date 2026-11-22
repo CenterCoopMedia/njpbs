@@ -1,0 +1,7 @@
+{
+  "date": "2026-11-22",
+  "kind": "improved",
+  "title": "Edit the Schedule page heading and introduction",
+  "body": "Open the Schedule page in Boardwalk. In Page metadata, select Enable Schedule copy editing to start with the current text. Edit the heading and introduction, then save and build a preview before publishing.",
+  "prs": []
+}
