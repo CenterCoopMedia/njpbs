@@ -35,6 +35,7 @@ const {
 const { isApprovedActiveAccount } = require("./lib/active-account");
 const { computeMediaTabCounts } = require("./lib/media-tab-counts");
 const { MEDIA_TAG_SAMPLE_SIZE, savedMediaTagSample } = require("./lib/media-tag-sample");
+const { sourceMediaQuery } = require("./lib/source-media-query");
 
 const { createOriginalStorage, refreshListedOriginals } = require("./lib/source-originals");
 
@@ -197,26 +198,7 @@ async function readSourceMediaPage(firestore, source, request, documentIdField) 
       ? [asset] : [];
     return { records: assets.map(sourceMediaAssetDetail), assets, nextCursor: null, hasMore: false };
   }
-  let query = firestore
-    .collection("mediaSourceAssets")
-    .where("sourceId", "==", source.id)
-    .where("lifecycle", "==", "active");
-  if (request.tag) query = query.where("tags", "array-contains", request.tag);
-  if (request.createdBy) query = query.where("createdBy", "==", request.createdBy);
-  if (request.rightsStatus) query = query.where("rightsStatus", "==", request.rightsStatus);
-  if (request.metadataUpdateRequested) query = query.where("metadataUpdateRequested", "==", true);
-  const order = request.q ? "name_asc" : (request.sort ?? "updated_desc");
-  let sortField = "updatedAtSort";
-  if (order === "name_asc") sortField = "nameSort";
-  if (order === "size_desc" || order === "size_asc") sortField = "sizeBytes";
-  const direction = order.endsWith("_desc") ? "desc" : "asc";
-  if (request.q) {
-    query = query
-      .where("nameSort", ">=", request.q)
-      .where("nameSort", "<", `${request.q}\uf8ff`);
-  }
-  query = query.orderBy(sortField, direction).orderBy(documentIdField, direction);
-  if (request.cursor) query = query.startAfter(request.cursor.sort, request.cursor.id);
+  const { query, order, sortField } = sourceMediaQuery(firestore, source.id, request, documentIdField);
   let snapshot;
   try {
     snapshot = await query.limit(request.limit + (request.tagsOnly ? 0 : 1)).get();

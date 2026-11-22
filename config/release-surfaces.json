@@ -709,6 +709,10 @@
           "module": "functions/scan-media-usage.js"
         },
         {
+          "name": "cmsSearchMedia",
+          "module": "functions/search-media.js"
+        },
+        {
           "name": "cmsSetAuthorProfileVisibility",
           "module": "functions/author-profiles.js"
         },

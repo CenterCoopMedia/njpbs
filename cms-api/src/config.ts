@@ -106,6 +106,7 @@ export const ENDPOINTS = Object.freeze({
   cmsRestoreMedia: { contentType: "json", maxBytes: 4 * KIB, rateClass: "metadata" },
   cmsListMediaSources: { contentType: "json", maxBytes: 8 * KIB, rateClass: "read" },
   cmsListSourceMedia: { contentType: "json", maxBytes: 8 * KIB, rateClass: "read" },
+  cmsSearchMedia: { contentType: "json", maxBytes: 2 * KIB, rateClass: "read" },
   cmsListMediaFavorites: { contentType: "json", maxBytes: 32 * KIB, rateClass: "read" },
   cmsSetMediaFavorite: { contentType: "json", maxBytes: 4 * KIB, rateClass: "mutation" },
   cmsSetMediaFavorites: { contentType: "json", maxBytes: 32 * KIB, rateClass: "mutation" },
