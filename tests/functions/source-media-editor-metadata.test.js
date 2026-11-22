@@ -100,7 +100,7 @@ describe("bounded source-relative editor metadata", () => {
     const read = (rightsStatus, options = {}) => sourceMedia.readSourceMediaPage(db, source,
       contract.parseSourceMediaListRequest({ sourceId: source.id, q: "Parent", limit: 1, rightsStatus, ...options }),
       FieldPath.documentId());
-    const first = await read("RECORDED");
+    const first = await read("Rights recorded");
     expect(first.records.map(record => record.id)).toEqual([parentId]);
     expect(first.hasMore).toBe(true);
     const next = await read("complete", { cursor: first.nextCursor });

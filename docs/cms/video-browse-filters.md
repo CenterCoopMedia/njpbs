@@ -8,7 +8,7 @@ of these filters.
 | --- | --- |
 | Tag | One exact tag, including letter case |
 | Uploader | Your uploads or, with staff-directory access, a selected staff uploader |
-| Rights review | Needs review or recorded |
+| Rights review | Needs review or rights recorded |
 | Metadata review | Videos with an open metadata update request |
 
 To find open requests, open **Filter**, choose **Metadata review**, then select

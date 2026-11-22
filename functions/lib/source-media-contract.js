@@ -16,6 +16,7 @@ const RIGHTS_STATUSES = new Set(["pending", "complete"]);
 const RIGHTS_STATUS_ALIASES = new Map([
   ["needs review", "pending"],
   ["recorded", "complete"],
+  ["rights recorded", "complete"],
 ]);
 
 class SourceMediaValidationError extends Error {

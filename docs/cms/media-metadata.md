@@ -27,14 +27,14 @@ tag in the selected source. A suggestion from saved tags is a freeform value.
 
 ## Controlled terms and aliases
 
-The video upload and metadata APIs accept the same labels used in the editor.
-Single and bulk edits send patches to the same metadata API. The video browse
-filter accepts the same values.
+The upload, metadata and browse APIs accept the rights review labels used in
+the editor and the video library. Single and bulk edits send patches to the
+same metadata API.
 
-| Stored value | Accepted label |
+| Stored value | Accepted labels |
 | --- | --- |
 | `pending` | Needs review |
-| `complete` | Recorded |
+| `complete` | Recorded, Rights recorded |
 
 Requests can use either the stored value or the label, with any letter case.
 The API trims surrounding spaces. Writes and queries use the stored value, so
