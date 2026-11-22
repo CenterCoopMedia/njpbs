@@ -19,6 +19,7 @@ import {
 import { findExactRecentWorkerVersion } from
   "../src/lib/public-worker-version-recovery";
 import { assertCmsPublicationSourceCheckout } from "./cms-publication-runtime-guard";
+import pageReaderContract from "../../functions/lib/page-reader-contract.js";
 
 const requireModule = createRequire(import.meta.url);
 const { readNoBuildFamilyAdmission } = requireModule("../../functions/lib/no-build-family-admission.js");
@@ -425,7 +426,7 @@ export async function uploadPublicWorkerCandidate({
     "liveBlogVersion" in rendererRelease && rendererRelease.liveBlogVersion === 1;
   const pageReaderVersion = rendererRelease !== null && typeof rendererRelease === "object" &&
     "pageReaderVersion" in rendererRelease ? rendererRelease.pageReaderVersion : undefined;
-  if (pageReaderVersion !== undefined && ![1, 2].includes(pageReaderVersion as number)) throw new Error("Unsupported Page reader contract");
+  if (pageReaderVersion !== undefined && !pageReaderContract.isPageReaderVersion(pageReaderVersion)) throw new Error("Unsupported Page reader contract");
   if (!isDeepStrictEqual(rendererRelease, { schemaVersion: 1, rendererSha: prepared.commitSha,
     ...(dataHubPublic ? { dataHubReportingVersion: 1 } : {}),
     ...(dataHubComposition ? { dataHubCompositionVersion: 1 } : {}),

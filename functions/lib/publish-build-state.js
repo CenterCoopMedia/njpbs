@@ -131,7 +131,8 @@ async function markBuildEnqueuedInTransaction(
     if (item.change.collection === "cmsPages" && item.change.operation !== "withdraw" &&
         item.snapshot.exists && isPendingPublishChange(item.snapshot.data(), item.change)) {
       await require("./page-reader-compatibility").assertInstalledPageReaders({ firestore, transaction,
-        pageId: item.change.id, blocks: item.snapshot.data().published?.blocks });
+        pageId: item.change.id, blocks: item.snapshot.data().published?.blocks,
+        scheduleCopy: item.snapshot.data().published?.metadata?.scheduleCopy });
     }
   }
   for (const item of current) {

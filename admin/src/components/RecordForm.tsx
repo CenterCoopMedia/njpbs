@@ -524,7 +524,8 @@ export const RecordForm = forwardRef<RecordFormHandle, RecordFormProps>(function
     fieldId?: string;
   }>();
   const groups = useMemo(() => {
-    const source = editorFieldGroupsFor(kind, pageId);
+    const source = editorFieldGroupsFor(kind, pageId)
+      .filter(group => group.id !== "schedule-copy" || initial?.scheduleCopy !== undefined);
     if (kind === "page" && pageId === "data-hub") return source.filter(group => group.id !== "hero-image")
       .map(group => ({...group,fields:group.fields.filter(field => field.key !== "slug")}));
     if (kind !== "post" || !editorView?.kind) return source;
@@ -539,7 +540,7 @@ export const RecordForm = forwardRef<RecordFormHandle, RecordFormProps>(function
       ...source.filter(group => !["basics", "organization", "hero-image"].includes(group.id)),
       { id: "details", label: "Advanced", help: "The independent public URL for this story.", fields: [...basic.fields, ...organization.fields].filter(isSlug) },
     ] as typeof source;
-  }, [kind, pageId, editorView?.kind]);
+  }, [kind, pageId, editorView?.kind, initial?.scheduleCopy]);
   const contentFields = useMemo(
     () => groups.flatMap((group) => group.fields),
     [groups],
@@ -1062,6 +1063,9 @@ export const RecordForm = forwardRef<RecordFormHandle, RecordFormProps>(function
     const validationFields = kind === "post" && record.leadMedia !== undefined
       ? fields.filter(field => !["heroImage", "heroImageAlt", "heroImageDecorative", "heroImageCaption"].includes(field.key)) : fields;
     const invalid = invalidEditorFields(validationFields, record, { allowIncomplete: !complete });
+    if (!complete && pageId === "schedule") {
+      invalid.push(...invalidEditorFields(fields.filter(field => field.path?.[0] === "scheduleCopy"), record));
+    }
     const marked: Record<string, string> = {};
     let entryIssue: LiveBlogPublicationIssue | null = null;
     if (kind === "post" && record.liveBlog != null) {

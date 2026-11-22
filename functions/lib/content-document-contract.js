@@ -118,6 +118,7 @@ const CONTENT_DOCUMENT_CONTRACTS = Object.freeze({
       blocks: "blocks",
       homeCompositionVersion: "homeCompositionVersion",
       serviceCompositionVersion: "serviceCompositionVersion",
+      scheduleCopy: "object",
     },
     ["title"],
     ["blocks"],

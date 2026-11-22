@@ -3,6 +3,7 @@ import { cmsImageThumbnails } from "../../../packages/content-core/src/cms-image
 import { dataHubPageError, parseDataHubCompositionVersion } from "../../../packages/content-core/src/data-hub-composition.ts";
 import { parseDataHubReporting } from "../../../packages/content-core/src/data-hub-reporting.ts";
 import { parseHomeHero, homeHeroAssetIds } from "../../../packages/content-core/src/home-hero.ts";
+import { parseScheduleCopy } from "../../../packages/content-core/src/schedule-copy.ts";
 import { heroBackgroundMetadata } from "../../../packages/content-core/src/hero-background.ts";
 import { isCmsImageUrl, isCmsMediaUrl } from "../../../packages/content-core/src/media-origin.ts";
 import { serviceCompositionError } from "../../../packages/content-core/src/service-composition.ts";
@@ -311,6 +312,7 @@ export function projectCmsPage(
   let publishedAt: string | null;
   let homeCompositionVersion: unknown;
   let serviceCompositionVersion: unknown;
+  let scheduleCopy: unknown;
 
   if (options.mode === "published") {
     // The first CMS save foundation wrote block-only snapshots. It never rendered
@@ -341,6 +343,7 @@ export function projectCmsPage(
       return null;
     }
     serviceCompositionVersion = isPlainObject(doc.published.metadata) ? doc.published.metadata.serviceCompositionVersion : undefined;
+    scheduleCopy = isPlainObject(doc.published.metadata) ? doc.published.metadata.scheduleCopy : undefined;
     homeCompositionVersion = isPlainObject(doc.published.metadata) ? doc.published.metadata.homeCompositionVersion : undefined;
     blocks = projectedBlocks(doc.published.blocks, definition.editorTemplate, doc.id, homeCompositionVersion);
     datasetFigures = projectDatasetFigures(
@@ -365,6 +368,7 @@ export function projectCmsPage(
     metadata = workingPageMetadata(doc);
     homeCompositionVersion = doc.homeCompositionVersion;
     serviceCompositionVersion = doc.serviceCompositionVersion;
+    scheduleCopy = doc.scheduleCopy;
     blocks = projectedBlocks(
       doc.blocks,
       definition.editorTemplate,
@@ -389,6 +393,7 @@ export function projectCmsPage(
   if (hubError) throw new Error(hubError);
   const serviceError = serviceCompositionError(doc.id, serviceCompositionVersion);
   if (serviceError) throw new Error(serviceError);
+  const savedScheduleCopy = parseScheduleCopy(doc.id, scheduleCopy);
   const pagePath = publicPagePath(doc.id, metadata);
   if (!pagePath || metadata.previousSlugs?.some(slug => !isAvailablePageSlug(doc.id, slug))) {
     throw new Error(`page ${doc.id} has an invalid public URL`);
@@ -397,6 +402,7 @@ export function projectCmsPage(
     pageId: definition.id,
     ...(homeCompositionVersion === 1 || homeCompositionVersion === 2 ? { homeCompositionVersion } : {}),
     ...(serviceCompositionVersion === 1 ? { serviceCompositionVersion } : {}),
+    ...(savedScheduleCopy ? { scheduleCopy: savedScheduleCopy } : {}),
     path: pagePath,
     ...(metadata.previousSlugs ? { previousSlugs: metadata.previousSlugs } : {}),
     family: definition.family,

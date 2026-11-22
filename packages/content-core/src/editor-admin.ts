@@ -703,7 +703,7 @@ export interface EditorField {
 // analytics, and deep-linking later; label/help are the editor-facing copy. Groups are returned
 // as fresh copies by the public accessor, like every descriptor catalog in this module.
 export interface EditorFieldGroup {
-  id: "content-link" | "home-hero" | "details" | "basics" | "excerpt" | "dates" | "organization" | "hero-image" | "search" | "social";
+  id: "content-link" | "home-hero" | "schedule-copy" | "details" | "basics" | "excerpt" | "dates" | "organization" | "hero-image" | "search" | "social";
   label: string;
   help: string;
   fields: readonly EditorField[];
@@ -1608,6 +1608,14 @@ export function editorFieldGroupsFor(kind: EditorDocumentKind, pageId?: string):
       fields: [
         { key: "homeHeroTitle", label: "Hero heading", help: "The large heading above the watch buttons.", kind: "text" as const, required: true },
         { key: "homeHeroSubtitle", label: "Hero subtitle", help: "The introduction below the hero heading.", kind: "text" as const, multiline: true, required: true },
+      ],
+    }] : []),
+    ...(pageId === "schedule" ? [{
+      id: "schedule-copy" as const, label: "Schedule heading and introduction",
+      help: "Edit the text above the listings. The page adds the Eastern-time notice.",
+      fields: [
+        { key: "heading", path: ["scheduleCopy"], label: "Schedule heading", help: "The heading readers see above the listings.", kind: "text" as const, required: true },
+        { key: "introduction", path: ["scheduleCopy"], label: "Schedule introduction", help: "The text below the heading.", kind: "text" as const, multiline: true, required: true },
       ],
     }] : []),
     ...PAGE_FIELD_GROUPS.map(group => {

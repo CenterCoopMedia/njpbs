@@ -57,6 +57,19 @@ function env(): CmsApiEnv {
 }
 
 describe("private public-content RPC core", () => {
+  it("preserves owned Schedule copy and refuses it on a different page", async () => {
+    const scheduleCopy = { version: 1, heading: "Upcoming broadcasts", introduction: "Browse the week ahead." };
+    const schedule = { ...LIVE, pageId: "schedule", page: { ...LIVE.page, pageId: "schedule", path: "/tv-listings/",
+      family: "schedule", template: "programLanding", blocks: [], assets: {}, scheduleCopy } };
+    const fetchOrigin = vi.fn<typeof fetch>(async () => Response.json(schedule));
+    await expect(fetchPublicPageProjection(env(), "schedule", { fetchOrigin })).resolves.toMatchObject({
+      state: "live", page: { path: "/tv-listings/", scheduleCopy },
+    });
+    await expect(fetchPublicPageProjection(env(), "contact", {
+      fetchOrigin: vi.fn<typeof fetch>(async () => Response.json({ ...LIVE, page: { ...LIVE.page, scheduleCopy } })),
+    })).rejects.toThrow("Invalid projection");
+  });
+
   it.each([true, false])("preserves childDirected=%s through the private API projection", async childDirected => {
     const result = await fetchPublicPageProjection(env(), "contact", {
       fetchOrigin: vi.fn<typeof fetch>(async () => Response.json({ ...LIVE, page: { ...LIVE.page, childDirected } })),

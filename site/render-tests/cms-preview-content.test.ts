@@ -8,6 +8,8 @@ import { projectPublishedPostRead } from "../src/lib/published-post-shadow";
 import { now, blocks, input, fixture, rendererSha } from "../tests/fixtures/cms-preview-content";
 import { postLeadFixture } from "../tests/fixtures/post-lead-media";
 import CmsBlocks from "../src/components/CmsBlocks.astro";
+import SchedulePageContent from "../src/components/SchedulePageContent.astro";
+import type { BakedScheduleData } from "../src/lib/schedule-feed";
 import { defaultDataHubBlocks } from "../../packages/content-core/src/data-hub-composition";
 import type { CmsRenderContext } from "../src/lib/cms-render-context";
 import { readFileSync } from "node:fs";
@@ -17,6 +19,47 @@ let container: Awaited<ReturnType<typeof AstroContainer.create>>;
 beforeAll(async () => { container = await AstroContainer.create(); });
 
 describe("existing templates with request-scoped content", () => {
+  it.each([["schedule", "/schedule/"], ["tv-listings", "/tv-listings/"]])(
+    "renders the exact saved Schedule copy at %s without reading it from the working copy of a legacy publication",
+    async (slug, route) => {
+      const scheduleCopy = { version: 1, heading: "Upcoming broadcasts", introduction: "Browse the week ahead." };
+      const draft = { id: "schedule", version: 7, title: "Search title", description: "Search summary",
+        slug, template: "programLanding", blocks: [], scheduleCopy };
+      const sealed = fixture({ ...input(), pageId: "schedule", snapshot: draft });
+      const content = projectCmsPreviewContent(sealed.bytes, sealed.request, now);
+      expect(content.target).toMatchObject({ pagePath: route, sourceVersion: 7 });
+      const day = "2026-09-11";
+      const data: BakedScheduleData = {
+        source: "pbs-tvss", generatedAt: now.toISOString(), timeZone: "America/New_York",
+        request: { station: "WNJT", dates: [day] },
+        days: { broadcast: [{ date: day, callsign: "wnjt", kind: "broadcast", feedCid: "fixture",
+          timeZone: "America/New_York", entries: [] }], kids: [] },
+      };
+      const render = (page: NonNullable<ReturnType<typeof projectCmsPage>>) => container.renderToString(SchedulePageContent, {
+        props: { entry: { id: "schedule", collection: "cmsPages", data: page }, data },
+        request: new Request(`https://njpbs.org${route}`),
+        locals: { cmsRender: { content, homeSources: {} } as CmsRenderContext },
+      });
+      const published = { sourceVersion: 6, publishedAt: now.toISOString(), blocks: [],
+        metadata: { title: "Legacy search title", description: "Legacy search summary", slug } };
+      const working = { ...draft, published, publiclyVisible: true, status: "draft" };
+      const options = { mode: "published" as const, now, assets: new Map() };
+      const legacyHtml = await render(projectCmsPage(working, options)!);
+      expect(legacyHtml).toMatch(/id="schedule-page-title"[^>]*>TV schedule<\/h1>/);
+      expect(legacyHtml).toContain("Now, next, and upcoming NJ PBS listings. All times are Eastern.");
+      expect(legacyHtml).not.toContain("Upcoming broadcasts");
+      const publicPage = projectCmsPage({ ...working, published: { ...published, metadata: {
+        ...published.metadata, scheduleCopy,
+      } } }, options)!;
+      for (const page of [content.pages[0], publicPage]) {
+        expect(page.path).toBe(route);
+        const html = await render(page);
+        expect(html).toMatch(/id="schedule-page-title"[^>]*>Upcoming broadcasts<\/h1>/);
+        expect(html).toContain("Browse the week ahead. All times are Eastern.");
+      }
+    },
+  );
+
   it("renders different Page inputs through the same imported component without a content-store update", async () => {
     const a = fixture(input("cmsPages", "Page Alpha", "A".repeat(20)));
     const b = fixture(input("cmsPages", "Page Beta", "B".repeat(20)));

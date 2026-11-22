@@ -7,6 +7,7 @@ const { parseBlocks, isRichTextDoc } = require("./content-blocks");
 const { visibleLayoutBlocks } = require("./content-layout");
 const { homeCompositionError } = require("./home-composition-contract");
 const { serviceCompositionError } = require("./service-composition");
+const { parseScheduleCopy } = require("./schedule-copy");
 const { validateSection } = require("./editor-section-contract");
 const { isPageTheme, validateKnownMetadata } = require("./content-metadata");
 const { editorTemplateForPage } = require("./public-page-contract");
@@ -145,6 +146,7 @@ function createPreviewSnapshot(pageId, document) {
     : { ...document, pageTheme: undefined };
   const metadataError = validateKnownMetadata(metadataForRender);
   const serviceError = serviceCompositionError(pageId, document.serviceCompositionVersion);
+  const scheduleCopy = parseScheduleCopy(pageId, document.scheduleCopy);
   if (serviceError) throw new Error(serviceError);
   if (metadataError) {
     throw new Error(`Page ${pageId} metadata is invalid: ${metadataError}`);
@@ -169,6 +171,7 @@ function createPreviewSnapshot(pageId, document) {
     ...(document.childDirected !== undefined ? { childDirected: document.childDirected } : {}),
     ...([1, 2].includes(document.homeCompositionVersion) ? { homeCompositionVersion: document.homeCompositionVersion } : {}),
     ...(document.serviceCompositionVersion === 1 ? { serviceCompositionVersion: 1 } : {}),
+    ...(scheduleCopy ? { scheduleCopy } : {}),
     title,
     ...(pageTheme !== undefined ? { pageTheme } : {}),
     ...(document.dataHubCompositionVersion === 1 ? { dataHubCompositionVersion: 1 } : {}),

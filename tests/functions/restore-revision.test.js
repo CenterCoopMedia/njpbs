@@ -352,6 +352,27 @@ describe("cmsRestoreRevision", () => {
     expect(await rows(db, "admin_logs")).toHaveLength(1);
   });
 
+  it.each([undefined, 2, 1])("checks Schedule copy ownership on restore (historical version %s)", async version => {
+    const scheduleCopy = { version: 1, heading: "This week", introduction: "Explore what is on." };
+    const historicalCopy = { version, heading: "Next on NJ PBS", introduction: "Browse upcoming listings." };
+    const current = currentPage({ id: "schedule", template: "programLanding", blocks: [], scheduleCopy });
+    const after = historicalPage({ id: "schedule", template: "programLanding", blocks: [],
+      ...(version === undefined ? {} : { scheduleCopy: historicalCopy }) });
+    await seedTarget(db, { id: "schedule", current, after });
+    const response = await restore(db, { id: "schedule" });
+    const stored = (await db.collection("cmsPages").doc("schedule").get()).data();
+    if (version !== 1) {
+      expect(response.statusCode).toBe(400);
+      expect(response.body.error).toMatch(/Schedule copy ownership/);
+      expect(stored).toEqual(current);
+      expect(await rows(db, "cmsVersionHistory")).toHaveLength(1);
+    } else {
+      expect(response.statusCode, JSON.stringify(response.body)).toBe(200);
+      expect(stored).toMatchObject({ version: 9, scheduleCopy: historicalCopy });
+      expect(stored.published).toEqual(current.published);
+    }
+  });
+
   it("retains the Home composition marker from a valid converted revision", async () => {
     const historicalBlocks = homeCompositionDefaults();
     historicalBlocks.find(({ section }) => section === "home-featured").data.title =

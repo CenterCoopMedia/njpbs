@@ -11,6 +11,8 @@ const { prepareDatasetUsageWrites } = require("./lib/dataset-usage");
 const { prepareNoBuildContentPublication, assertNoBuildContentScheduleInTransaction } = require("./lib/no-build-content-publication");
 const { bumpPublicContextRevision } = require("./lib/public-context-revision");
 const { contentVersion, hasContentChanges } = require("./lib/content-version");
+const { DEFAULT_SCHEDULE_COPY, parseScheduleCopy } = require("./lib/schedule-copy");
+const { parsePublishInstant } = require("./lib/publish-instant");
 const { changesPublicLibraryFields } = require("./lib/library-card-publication");
 const { stampDocumentLists } = require("./lib/document-list");
 const { recordCardSaveWarnings } = require("./lib/record-card-warnings");
@@ -861,6 +863,7 @@ function createCmsSaveHandler(deps = {}) {
         idempotencyKey,
         convertHome,
         convertHomeV2,
+        enableScheduleCopy,
         section: requestedSection,
         slug: requestedSlug,
         postTemplate,
@@ -909,6 +912,20 @@ function createCmsSaveHandler(deps = {}) {
       }
       if (!isPlainObject(document)) {
         res.status(400).json({ error: "Document must be an object" });
+        return;
+      }
+      if (enableScheduleCopy !== undefined && (enableScheduleCopy !== true ||
+          collection !== "cmsPages" || providedId !== "schedule" ||
+          !Number.isSafeInteger(baseVersion) || baseVersion < 1 || Object.keys(document).length !== 0 ||
+          Object.keys(body).some(key => !["collection", "id", "document", "baseVersion", "enableScheduleCopy"].includes(key)))) {
+        res.status(400).json({ error: "Enable Schedule copy editing on one saved draft at its exact version." });
+        return;
+      }
+      let requestedScheduleCopy;
+      try {
+        requestedScheduleCopy = parseScheduleCopy(collection === "cmsPages" ? providedId : "", document.scheduleCopy);
+      } catch (error) {
+        res.status(400).json({ error: error.message });
         return;
       }
       const conversionError = homeConversionRequestError(body);
@@ -1795,6 +1812,28 @@ function createCmsSaveHandler(deps = {}) {
           // Lets an editor tell a stale version apart from other 409 refusals.
           throw new SaveRejection(409, STALE_VERSION_MESSAGE, { versionConflict: true });
         }
+        if (collection === "cmsPages" && docId === "schedule") {
+          let currentCopy;
+          try { currentCopy = parseScheduleCopy(docId, stored?.scheduleCopy); }
+          catch (error) { throw new SaveRejection(400, error.message); }
+          if (requestedScheduleCopy && !currentCopy) {
+            throw new SaveRejection(400, "Enable Schedule copy editing before changing the heading and introduction.");
+          }
+          if (currentCopy && !echoesVersion) {
+            throw new SaveRejection(400, "Saving Schedule copy requires the exact saved baseVersion.");
+          }
+          if (enableScheduleCopy) {
+            const snapshotTime = parsePublishInstant(stored?.published?.publishedAt);
+            const publishTime = parsePublishInstant(stored?.publishAt);
+            const retainedPublicPage = revisingPublished && isPlainObject(stored.published?.metadata) &&
+              Number.isSafeInteger(stored.published.sourceVersion) && stored.published.sourceVersion > 0 &&
+              snapshotTime !== null && publishTime !== null && Math.max(snapshotTime, publishTime) <= Date.parse(now());
+            if ((stored?.status !== "draft" && !retainedPublicPage) || stored[PUBLISH_BUILD_PENDING_FIELD] === true) {
+              throw new SaveRejection(409, "Open a saved Schedule draft or a published Schedule page with no publication in progress before enabling copy editing.");
+            }
+            if (currentCopy) return { persisted: stored, isCreate: false, mintedIds: {}, replayed: true };
+          }
+        }
         if (collection === "cmsPosts" && stored &&
             (stored.liveBlog !== undefined || stored.published?.metadata?.liveBlog !== undefined || document.liveBlog !== undefined) && !echoesVersion) {
           throw new SaveRejection(400, "Saving a live blog requires the exact saved baseVersion.");
@@ -2354,6 +2393,7 @@ function createCmsSaveHandler(deps = {}) {
           // document stored before this field existed reads as 0 and so gets 1 on its
           // first save here, exactly like a create.
           version: nextVersion,
+          ...(enableScheduleCopy ? { scheduleCopy: DEFAULT_SCHEDULE_COPY, blocks: stored.blocks ?? [] } : {}),
           ...(conversionFingerprint === null ? {} : {
             homeCompositionVersion: conversionTarget,
             ...(conversionTarget === 2 ? { homeHero: {
@@ -2659,6 +2699,7 @@ function createCmsSaveHandler(deps = {}) {
           try {
             await require("./lib/page-reader-compatibility").assertInstalledPageReaders({
               firestore, transaction: tx, pageId: docId, blocks: composed.blocks, preview: true,
+              scheduleCopy: publishesSnapshot || schedulesPublication ? composed.scheduleCopy : undefined,
               requireIdle: publishesSnapshot || schedulesPublication });
           } catch (error) {
             if (error.status) throw new SaveRejection(error.status, error.message, error.code ? { code: error.code } : {});

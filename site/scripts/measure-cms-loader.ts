@@ -125,6 +125,7 @@ const cmsPagesSchema = z.object({
   previousSlugs: z.array(z.string()).optional(),
   homeCompositionVersion: z.union([z.literal(1), z.literal(2)]).optional(),
   serviceCompositionVersion: z.literal(1).optional(),
+  scheduleCopy: z.custom<import("../../packages/content-core/src/schedule-copy").ScheduleCopy>().optional(),
   path: z.string(),
   family: z.enum(["home", "service", "schedule", "article", "staff", "dataHub"]),
   template: z.enum(["home", "programLanding", "genericPage"]),

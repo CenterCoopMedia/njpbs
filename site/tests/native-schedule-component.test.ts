@@ -16,6 +16,7 @@ const readOptionalSource = (relativePath: string) => {
 describe("native schedule source wiring", () => {
   const page = readOptionalSource("../src/pages/schedule/[...schedule].astro");
   const catchAllPage = readSource("../src/pages/[...slug].astro");
+  const pageContent = readSource("../src/components/SchedulePageContent.astro");
   const schedule = readSource("../src/components/NativeSchedule.astro");
   const panel = readSource("../src/components/ScheduleDayPanel.astro");
   const client = readSource("../src/lib/native-schedule-dom.ts");
@@ -26,7 +27,7 @@ describe("native schedule source wiring", () => {
       'import PublicSiteLayout from "../../layouts/PublicSiteLayout.astro"',
     );
     expect(page).toContain(
-      'import NativeSchedule from "../../components/NativeSchedule.astro"',
+      'import SchedulePageContent from "../../components/SchedulePageContent.astro"',
     );
     expect(page).toContain(
       'import scheduleData from "../../data/schedule.json"',
@@ -47,11 +48,9 @@ describe("native schedule source wiring", () => {
     expect(page).toContain(
       'noindex={Boolean(cmsSchedule && cmsSchedule.data.path !== "/schedule/") || (cmsSchedule?.data.noindex ?? false)}',
     );
-    expect(page).toContain("heroBackgroundImage={heroBackgroundImage}");
-    expect(page).toContain(
-      "heroBackgroundPosition={cmsSchedule?.data.heroBackgroundPosition}",
-    );
-    expect(page).toContain("<CmsBlocks entry={cmsSchedule} readerControls />");
+    expect(page).toMatch(/<SchedulePageContent entry=\{cmsSchedule\}[^>]*heroBackgroundImage=\{heroBackgroundImage\}/);
+    expect(pageContent).toContain("heroBackgroundPosition={entry?.data.heroBackgroundPosition}");
+    expect(pageContent).toContain("<CmsBlocks entry={entry} readerControls />");
   });
 
   it("gates the native schedule route out of PUBLIC_ONLY builds", () => {
@@ -72,12 +71,13 @@ describe("native schedule source wiring", () => {
       '(definition.family === "schedule" && path === "/schedule/")',
     );
     expect(catchAllPage).toContain('cmsEntry?.data.family === "schedule"');
+    expect(catchAllPage).toMatch(/<SchedulePageContent entry=\{cmsEntry\}[^>]*heroBackgroundImage=\{heroBackgroundImage\}/);
+    expect(pageContent).toContain("copy={entry?.data.scheduleCopy}");
     expect(page).toContain("params: { schedule: undefined }");
   });
 
   it("renders the approved schedule landmarks and shared full summary", () => {
     expect(schedule).toContain("data-native-schedule");
-    expect(schedule).toContain("TV schedule");
     expect(schedule).toContain("WNJTDT");
     expect(schedule).toContain("Listings supplied by PBS");
     expect(schedule).toMatch(/<ScheduleNowNext[^>]*variant="full"/s);

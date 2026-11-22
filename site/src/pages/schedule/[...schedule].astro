@@ -1,8 +1,7 @@
 ---
 import { getEntry } from "astro:content";
 import { renderPage, renderSchedule } from "../../lib/cms-render-context";
-import NativeSchedule from "../../components/NativeSchedule.astro";
-import CmsBlocks from "../../components/CmsBlocks.astro";
+import SchedulePageContent from "../../components/SchedulePageContent.astro";
 import { cmsImageAsset } from "../../lib/cms-responsive-image";
 import scheduleData from "../../data/schedule.json";
 import PublicSiteLayout from "../../layouts/PublicSiteLayout.astro";
@@ -45,12 +44,7 @@ const heroBackgroundImage = cmsSchedule?.data.heroBackgroundImage
   childDirected={cmsSchedule?.data.childDirected}
 >
   {cmsSchedule && cmsSchedule.data.path !== "/schedule/" ? <main><h1>Page moved</h1><p><a href={cmsSchedule.data.path}>Continue to the page</a></p></main> : <>
-  <NativeSchedule
-    data={bakedSchedule}
-    heroBackgroundImage={heroBackgroundImage}
-    heroBackgroundPosition={cmsSchedule?.data.heroBackgroundPosition}
-  />
-  {cmsSchedule && <CmsBlocks entry={cmsSchedule} readerControls />}
+  <SchedulePageContent entry={cmsSchedule} data={bakedSchedule} heroBackgroundImage={heroBackgroundImage} />
   </>}
 </PublicSiteLayout>
 

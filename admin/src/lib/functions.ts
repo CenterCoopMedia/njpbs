@@ -1316,6 +1316,8 @@ export interface SaveContentRequest {
   // document, exact baseVersion and one
   // stable request key. No content replacement or publication flags.
   convertHomeV2?: string;
+  // Enable heading and introduction editing on the exact saved Schedule draft.
+  enableScheduleCopy?: true;
   // The editorial desk this record belongs to, for section-scoped grants (#619). Sent on
   // a record create only, and only from the section registry: the server validates it
   // against that registry inside the save transaction and fixes it on the document, so an

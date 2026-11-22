@@ -17,6 +17,7 @@ const { recordKindHasPublicRoute } = require("./public-record-kinds");
 const { registeredAuthorIds, resolveStoryCredits } = require("./story-credits");
 const { parsePublishInstant } = require("./publish-instant");
 const { serviceCompositionError } = require("./service-composition");
+const { parseScheduleCopy } = require("./schedule-copy");
 const { isPostLeadMedia, leadVideoBlocks } = require("./post-lead-media");
 const { isPostSidebar } = require("./post-sidebar");
 const { videoCopies, previousVideoCopies, pendingPublicRevision } = require("./public-video-references");
@@ -41,6 +42,7 @@ const PAGE_METADATA_FIELDS = [
   "social",
   "homeCompositionVersion",
   "serviceCompositionVersion",
+  "scheduleCopy",
 ];
 // A Program has one synopsis and no block layout. Its station media-library
 // key art is frozen by asset id; the old Media Manager id is retained only so
@@ -183,6 +185,8 @@ function createPublishedSnapshot({
     if (hubError) throw new PublishSnapshotError(hubError);
     const error = serviceCompositionError(document.id, document.serviceCompositionVersion);
     if (error) throw new PublishSnapshotError(error);
+    try { parseScheduleCopy(document.id, document.scheduleCopy); }
+    catch (error) { throw new PublishSnapshotError(error.message); }
   }
   if (collection === "cmsPages" && document?.homeCompositionVersion !== undefined) {
     const parsed = parseBlocks(document.blocks, { pageId: document.id });

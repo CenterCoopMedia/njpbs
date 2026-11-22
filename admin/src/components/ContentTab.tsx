@@ -557,6 +557,33 @@ export function ContentTab({
     throw new Error("Home changed before its editorial draft could be loaded. Reload to review its current version.");
   }, [getIdToken, loadPage, principal]);
 
+  const adoptSavedPage = useCallback((pageId: PublicPageId, response: Awaited<ReturnType<typeof cmsSaveContent>>): PageContent => {
+    const saved = response.document;
+    const persisted = storedPageContentFromDocument(pageId, saved);
+    storedPageBlocks.current.set(pageId, persisted);
+    return {
+      blocks: enforcePublicPageOwnership
+        ? editableBlocksForPublicPage(pageId, persisted.blocks, persisted.homeCompositionVersion)
+        : persisted.blocks,
+      homeCompositionVersion: persisted.homeCompositionVersion,
+      mintedIds: response.mintedIds,
+      warnings: response.warnings,
+      metadata: pageMetadataFromDocument(pageId, saved),
+      createdBy: readNonEmptyString(saved.createdBy),
+      editingSection: readNonEmptyString(saved.section),
+      status: readNonEmptyString(saved.status),
+      version: readSaveBaseVersion(saved.version),
+      ...pagePublicationState(saved),
+    };
+  }, [enforcePublicPageOwnership]);
+
+  const enableScheduleCopy = useCallback(async (baseVersion: number): Promise<PageContent> => {
+    const response = await cmsSaveContent(await getIdToken(), {
+      collection: "cmsPages", id: "schedule", baseVersion, enableScheduleCopy: true, document: {},
+    });
+    return adoptSavedPage("schedule", response);
+  }, [adoptSavedPage, getIdToken]);
+
   // `baseVersion` is the version the edit was composed against, echoed so the server can
   // refuse a save that would overwrite a change the editor never saw (#530). Every
   // existing Page needs this claim. Never-created Pages carry `createOnly` instead (#567).
@@ -594,32 +621,9 @@ export function ContentTab({
       });
       const idToken = await getIdToken();
       assertReviewActive?.();
-      const response = await cmsSaveContent(idToken, request);
-      const persistedPage = storedPageContentFromDocument(
-        pageId,
-        response.document,
-      );
-      storedPageBlocks.current.set(pageId, persistedPage);
-      return {
-        blocks: enforcePublicPageOwnership
-          ? editableBlocksForPublicPage(
-              pageId,
-              persistedPage.blocks,
-              persistedPage.homeCompositionVersion,
-            )
-          : persistedPage.blocks,
-        homeCompositionVersion: persistedPage.homeCompositionVersion,
-        mintedIds: response.mintedIds,
-        warnings: response.warnings,
-        metadata: pageMetadataFromDocument(pageId, response.document),
-        createdBy: readNonEmptyString(response.document.createdBy),
-        editingSection: readNonEmptyString(response.document.section),
-        status: readNonEmptyString(response.document.status),
-        version: readSaveBaseVersion(response.document.version),
-        ...pagePublicationState(response.document),
-      };
+      return adoptSavedPage(pageId, await cmsSaveContent(idToken, request));
     },
-    [enforcePublicPageOwnership, getIdToken, reviewCurrentSaveVersion],
+    [adoptSavedPage, enforcePublicPageOwnership, getIdToken, reviewCurrentSaveVersion],
   );
 
   const savePageMetadata = useCallback(
@@ -661,29 +665,9 @@ export function ContentTab({
         seedFromLegacyPage,
         saveGroupId,
       });
-      const persistedPage = storedPageContentFromDocument(
-        pageId,
-        response.document,
-      );
-      storedPageBlocks.current.set(pageId, persistedPage);
-      return {
-        blocks: enforcePublicPageOwnership
-          ? editableBlocksForPublicPage(
-              pageId,
-              persistedPage.blocks,
-              persistedPage.homeCompositionVersion,
-            )
-          : persistedPage.blocks,
-        homeCompositionVersion: persistedPage.homeCompositionVersion,
-        metadata: pageMetadataFromDocument(pageId, response.document),
-        createdBy: readNonEmptyString(response.document.createdBy),
-        editingSection: readNonEmptyString(response.document.section),
-        status: readNonEmptyString(response.document.status),
-        version: readSaveBaseVersion(response.document.version),
-        ...pagePublicationState(response.document),
-      };
+      return adoptSavedPage(pageId, response);
     },
-    [enforcePublicPageOwnership, getIdToken, reviewCurrentSaveVersion],
+    [adoptSavedPage, getIdToken, reviewCurrentSaveVersion],
   );
 
   const requestSavedPreview = useCallback(
@@ -1137,6 +1121,7 @@ export function ContentTab({
         savePageMetadata={savePageMetadata}
         convertHome={convertHome}
         convertHomeV2={convertHomeV2}
+        enableScheduleCopy={enableScheduleCopy}
         saveRecord={saveRecord}
         capturePostTemplate={capturePostTemplate}
         duplicatePost={duplicatePost}

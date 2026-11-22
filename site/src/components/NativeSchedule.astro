@@ -10,6 +10,7 @@ import ScheduleNowNext from "./ScheduleNowNext.astro";
 import CmsHeroBackground from "./CmsHeroBackground.astro";
 import ScheduleDownload from "./ScheduleDownload.astro";
 import { renderSchedule } from "../lib/cms-render-context";
+import { DEFAULT_SCHEDULE_COPY, type ScheduleCopy } from "../../../packages/content-core/src/schedule-copy";
 import {
   buildScheduleExport,
   scheduleExportTime,
@@ -17,6 +18,7 @@ import {
 
 interface Props {
   data: BakedScheduleData;
+  copy?: ScheduleCopy;
   heroBackgroundImage?: {
     url: string;
     width: number;
@@ -27,9 +29,11 @@ interface Props {
 
 const {
   data,
+  copy,
   heroBackgroundImage,
   heroBackgroundPosition,
 } = Astro.props as Props;
+const { heading, introduction } = copy ?? DEFAULT_SCHEDULE_COPY;
 const sealedSchedule = renderSchedule(Astro.locals.cmsRender);
 const scheduleExport = sealedSchedule?.exported ?? buildScheduleExport(data, scheduleExportTime());
 const { broadcast: broadcastDays, kids: kidsDays } = data.days;
@@ -86,8 +90,8 @@ const download = Astro.locals.cmsRender && !sealedSchedule ? null : scheduleExpo
     />
     <div class="schedule-intro__heading">
       <div>
-        <h1 id="schedule-page-title" tabindex="-1">TV schedule</h1>
-        <p>Now, next, and upcoming NJ PBS listings. All times are Eastern.</p>
+        <h1 id="schedule-page-title" tabindex="-1">{heading}</h1>
+        <p class={copy ? "schedule-intro__authored" : undefined}>{introduction} All times are Eastern.</p>
       </div>
       <p class="schedule-station-fact">
         <strong>NJ PBS broadcast</strong>{" "}
@@ -1371,7 +1375,7 @@ const download = Astro.locals.cmsRender && !sealedSchedule ? null : scheduleExpo
       font-size: 1.8rem;
     }
 
-    .schedule-intro__heading > div > p,
+    .schedule-intro__heading > div > p:not(.schedule-intro__authored),
     .schedule-station-fact {
       display: none;
     }

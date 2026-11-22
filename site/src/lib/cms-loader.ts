@@ -134,6 +134,7 @@ export interface CmsPageBuildData extends ContentLinkMetadata {
   pageTheme?: PageTheme;
   homeCompositionVersion?: 1 | 2;
   serviceCompositionVersion?: 1;
+  scheduleCopy?: PageMetadata["scheduleCopy"];
   path: string;
   previousSlugs?: string[];
   family: PublicPageFamily;

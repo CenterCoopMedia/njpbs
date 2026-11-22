@@ -606,6 +606,7 @@ export interface PageMetadata extends DiscoverabilityMetadata, HeroBackgroundMet
   homeCompositionVersion?: 1 | 2;
   /** Render service-page blocks in CMS order instead of named template slots. */
   serviceCompositionVersion?: 1;
+  scheduleCopy?: import("./schedule-copy").ScheduleCopy;
 }
 
 /**
@@ -775,6 +776,7 @@ export interface PageSingleton extends EditorialBase, ContentLinkMetadata {
   blocks: PageBlock[];
   homeCompositionVersion?: 1 | 2;
   serviceCompositionVersion?: 1;
+  scheduleCopy?: import("./schedule-copy").ScheduleCopy;
   published?: PublishedSnapshot<PageMetadata>;
 }
 

@@ -36,7 +36,7 @@ const STRUCTURAL_FIELDS = {
 };
 
 function ruleFor(field) {
-  if (field.path?.[0] === "seo" || field.path?.[0] === "social") return "object";
+  if (["seo", "social", "scheduleCopy"].includes(field.path?.[0])) return "object";
   switch (field.kind) {
     case "richText": return "richText";
     case "toggle": return "boolean";
@@ -194,6 +194,7 @@ describe("server content document contract", () => {
       const expectedFields = {
         ...editorRulesFor(kind),
         ...(kind === "page" ? editorRulesFor(kind, "home") : {}),
+        ...(kind === "page" ? editorRulesFor(kind, "schedule") : {}),
         ...STRUCTURAL_FIELDS[kind],
         ...(kind === "program" ? { keyArt: "string" } : {}),
       };

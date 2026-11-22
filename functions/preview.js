@@ -504,7 +504,7 @@ async function enqueuePreview(fields, deps = {}) {
     if (collection === "cmsPages") {
       try {
         await require("./lib/page-reader-compatibility").assertPreviewPageReader({
-          firestore, transaction, pageId, blocks: snapshotDocument.blocks, rendererSha });
+          firestore, transaction, pageId, blocks: snapshotDocument.blocks, scheduleCopy: snapshotDocument.scheduleCopy, rendererSha });
       } catch (error) {
         if (error.code === "page_reader_contract_unavailable") throw new PreviewRequestError(
           "Preview is updating; try again shortly", 503, { code: "preview-renderer-updating" });
