@@ -94,7 +94,7 @@ function normalizeSearchPrefix(value) {
   if (typeof value !== "string") {
     throw new SourceMediaValidationError("Search text must be a string");
   }
-  const normalized = value.normalize("NFKC").trim().toLocaleLowerCase("en-US");
+  const normalized = value.toWellFormed().normalize("NFKC").trim().toLocaleLowerCase("en-US");
   if (normalized.length > MAX_QUERY_LENGTH) {
     throw new SourceMediaValidationError(
       `Search text must be ${MAX_QUERY_LENGTH} characters or fewer`,

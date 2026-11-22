@@ -63,6 +63,7 @@ lazyExport("cmsListBinnedMedia", "./list-binned-media");
 lazyExport("cmsRestoreMedia", "./set-media-lifecycle");
 lazyExport("cmsListMediaSources", "./source-media");
 lazyExport("cmsListSourceMedia", "./source-media");
+lazyExport("cmsSearchMedia", "./search-media");
 lazyExport("cmsCreateSourceMediaRead", "./source-media");
 lazyExport("cmsSourceMediaOriginal", "./source-media-originals");
 lazyExport("cmsPublishSourceVideo", "./source-video-publication");

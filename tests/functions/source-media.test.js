@@ -430,7 +430,7 @@ describe("source media indexed reads", () => {
       "__name__",
     );
     expect(calls).toContainEqual(["where", "nameSort", ">=", "county"]);
-    expect(calls).toContainEqual(["where", "nameSort", "<", "county\uf8ff"]);
+    expect(calls).toContainEqual(["where", "nameSort", "<", "countz"]);
     expect(calls).toContainEqual(["limit", 2]);
     expect(page.records).toHaveLength(1);
     expect(page.hasMore).toBe(true);

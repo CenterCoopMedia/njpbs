@@ -124,7 +124,7 @@ describe("source video navigation", () => {
     const { calls, firestore } = queryRecorder();
     await sourceMedia.readSourceMediaPage(firestore, { id: sourceId }, parse({ sourceId, ...filter, q: "County", sort: "updated_desc" }), "__name__");
     expect(calls).toContainEqual(["where", "nameSort", ">=", "county"]);
-    expect(calls).toContainEqual(["where", "nameSort", "<", "county\uf8ff"]);
+    expect(calls).toContainEqual(["where", "nameSort", "<", "countz"]);
     expect(calls).toContainEqual(["orderBy", "nameSort", "asc"]);
     expect(calls).toContainEqual(["limit", 31]);
   });

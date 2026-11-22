@@ -1,8 +1,7 @@
 "use strict";
 
-const { createHash, randomBytes } = require("node:crypto");
 const { isDeepStrictEqual } = require("node:util");
-const { FieldPath, Timestamp } = require("firebase-admin/firestore");
+const { FieldPath } = require("firebase-admin/firestore");
 const { hasCapability } = require("./rbac");
 const { isAudioReadAdmitted, mayUseMedia } = require("./media-access");
 const {
@@ -15,26 +14,16 @@ const {
   MEDIA_DISCOVERY_SCHEMA, MEDIA_DISCOVERY_STATE, BROWSE_TERM, OVERFLOW_TERM,
   discoveryTerm, deriveMediaDiscovery,
 } = require("./media-discovery");
+const {
+  CURSOR_COLLECTION, CURSOR_LIFETIME_MS, MediaDiscoveryError, discoveryDigest, readCursor, writeCursor,
+} = require("./media-discovery-cursor");
 
 const MAX_DISCOVERY_CANDIDATES = 120;
 const MAX_DISCOVERY_PAGE_SIZE = 30;
 const OWNER_CHUNK_SIZE = 6;
-const CURSOR_COLLECTION = "mediaDiscoveryCursors";
-const CURSOR_LIFETIME_MS = 30 * 60 * 1000;
 const SORT_KEYS = Object.freeze({
   name: "nameKey", createdAt: "createdAtKey", updatedAt: "updatedAtKey", sizeBytes: "sizeBytesKey",
 });
-
-class MediaDiscoveryError extends Error {
-  constructor(status, message) {
-    super(message);
-    this.status = status;
-  }
-}
-
-function digest(value) {
-  return createHash("sha256").update(JSON.stringify(value)).digest("hex");
-}
 
 function authorizedOwners(principal, kind, audioReadAdmitted = false) {
   const capabilities = kind === "audio" && audioReadAdmitted === true
@@ -124,30 +113,6 @@ function emptyLibrary(query, records, nextCursor, matched) {
   };
 }
 
-async function readCursor(firestore, token, binding) {
-  if (typeof token !== "string" || !/^[A-Za-z0-9_-]{32}$/.test(token)) {
-    throw new MediaDiscoveryError(400, "Invalid media continuation.");
-  }
-  const ref = firestore.collection(CURSOR_COLLECTION).doc(digest(token));
-  const document = await ref.get();
-  const data = document.data();
-  if (!data || data.expireAt.toMillis() <= Date.now()) {
-    throw new MediaDiscoveryError(410, "Media continuation expired. Return to the first page.");
-  }
-  if (data.binding !== binding) {
-    throw new MediaDiscoveryError(409, "The media library or access changed. Return to the first page.");
-  }
-  return data;
-}
-
-async function writeCursor(firestore, binding, after, matched) {
-  const token = randomBytes(24).toString("base64url");
-  await firestore.collection(CURSOR_COLLECTION).doc(digest(token)).create({
-    binding, after, matched, expireAt: Timestamp.fromMillis(Date.now() + CURSOR_LIFETIME_MS),
-  });
-  return token;
-}
-
 async function readIndexedMedia(firestore, user, query, categoryLabels, summaryFields, { includeContinuation = true } = {}) {
   if (user.approvedActive !== true) throw new MediaDiscoveryError(403, "You do not have permission to list media.");
   const stateRef = firestore.doc(MEDIA_DISCOVERY_STATE);
@@ -159,7 +124,7 @@ async function readIndexedMedia(firestore, user, query, categoryLabels, summaryF
   const audioReadAdmitted = isAudioReadAdmitted(user);
   const owners = authorizedOwners(user.principal, requestedKind, audioReadAdmitted);
   const term = searchCandidateTerm(query.q, categoryLabels);
-  const binding = digest({ uid: user.uid, principal: user.principal, owners, labels: categoryLabels,
+  const binding = discoveryDigest({ uid: user.uid, principal: user.principal, owners, labels: categoryLabels,
     schema: MEDIA_DISCOVERY_SCHEMA, revision: state.revision ?? 0,
     query: { ...query, page: 1, cursor: undefined } });
   const cursor = query.cursor ? await readCursor(firestore, query.cursor, binding) : null;
