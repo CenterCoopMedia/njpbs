@@ -2,7 +2,7 @@ import { buildProgram, type AssetAttributes, type EpisodeAttributes, type MediaM
   type RawShow, type SeasonAttributes, type ShowAttributes } from "../src/lib/media-manager-catalog.ts";
 import { mediaManagerWindowAt } from "../src/lib/media-manager-gating.ts";
 import { reportMediaCoverage } from "../src/lib/media-manager-coverage.ts";
-import { catalogCaptionLanguage, catalogDate, catalogRecord, catalogSlug, MAX_CATALOG_BYTES, MAX_CATALOG_VIDEOS,
+import { catalogCaptionLanguage, catalogDate, catalogRecord, catalogSlug, isCatalogImage, MAX_CATALOG_BYTES, MAX_CATALOG_VIDEOS,
   readPublicVideoCatalog, type PublicVideo, type PublicVideoCatalog } from "../src/lib/public-video-catalog.ts";
 
 const MAX_RESPONSE_BYTES = 4 * 1024 * 1024;
@@ -14,9 +14,9 @@ const PAGE_SIZE = 50;
 export class PublicVideoCatalogError extends Error {}
 
 type Resource = MediaManagerRecord<Record<string, unknown>>;
-type Show = RawShow["show"];
+type Show = RawShow["show"] & { image?: string };
 type Season = RawShow["seasons"][number];
-type CatalogSource = { raw: RawShow; seasons: Map<string, Season>; videos: Map<string, Omit<PublicVideo,
+type CatalogSource = { raw: RawShow & { show: Show }; seasons: Map<string, Season>; videos: Map<string, Omit<PublicVideo,
   "slug" | "title" | "description" | "episodeNumber" | "premieredOn" | "playerSrc" | "hasCaptions" | "captionLanguages">> };
 
 function text(value: unknown): string | undefined {
@@ -105,11 +105,20 @@ function uniqueSlugs<T extends { slug: string }>(rows: T[]): T[] {
   return rows.filter(({ slug }) => slugs.get(slug) === 1).sort((a, b) => a.slug.localeCompare(b.slug, "en"));
 }
 
+function catalogImage(attributes: Record<string, unknown>, profile: RegExp): string | undefined {
+  const images: unknown[] = Array.isArray(attributes.images) ? attributes.images : [];
+  for (const value of images) {
+    const image = catalogRecord(value);
+    if (typeof image?.profile === "string" && profile.test(image.profile) && isCatalogImage(image.image)) return image.image;
+  }
+  return [attributes.mezzanine_image, attributes.image, attributes.thumbnail].find(isCatalogImage);
+}
+
 function catalogShow(row: Resource): Show | null {
   const attrs = row.attributes;
   const title = text(attrs.title);
   if (!title || !catalogSlug(attrs.slug) || /\bnjtv\b|\btest$|nj spotlight news/i.test(title)) return null;
-  return { ...row, attributes: { title, slug: attrs.slug, description_short: text(attrs.description_short),
+  return { ...row, image: catalogImage(attrs, /^show-mezzanine-?16x9$/), attributes: { title, slug: attrs.slug, description_short: text(attrs.description_short),
     description_long: text(attrs.description_long), genre: { title: text(catalogRecord(attrs.genre)?.title) } } };
 }
 
@@ -140,6 +149,7 @@ function addPublicAsset(sources: Map<string, CatalogSource>, asset: Resource, no
   const seasonTitle = text(season?.attributes.title) ?? null;
   const seasonNumber = Number(season?.attributes.ordinal) || null;
   source.videos.set(parent.id, { kind: parent.type, seasonTitle, seasonNumber: positiveOrdinal(seasonNumber),
+    image: catalogImage(attributes, /^asset-mezzanine-16x9$/),
     window: { start: (window.start ?? null) as string | null, end: (window.end ?? null) as string | null } });
   if (!episode) {
     source.raw.specials!.push({ special: edition, assets: [assetRecord] });
@@ -195,7 +205,8 @@ export async function fetchPublicVideoCatalog(config: { url: URL; authorization:
     const episodes = uniqueSlugs(program.episodes.filter(({ playback }) => playback.partnerPlayerSrc !== null));
     if (!episodes.length) continue;
     coverage.push({ ...program, episodes });
-    programs.push({ slug: program.slug, title: program.title, description: program.description, genre: program.genre,
+    programs.push({ slug: program.slug, title: program.title, description: program.description,
+      image: raw.show.image, genre: program.genre,
       episodes: episodes.map(({ id, slug, title, description, episodeNumber, premieredOn, playback }) => ({
         ...videos.get(id)!, slug, title, description, episodeNumber: positiveOrdinal(episodeNumber),
         premieredOn: catalogDate(premieredOn) ? premieredOn : null, playerSrc: playback.partnerPlayerSrc!, hasCaptions: playback.hasCaptions,

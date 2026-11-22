@@ -7,6 +7,7 @@ import { publicRootRoutesEnabled } from "../../../lib/build-target";
 import { videoCatalogPath, videoEpisodePath, videoGroups, videoProgramPath, videoSeason } from "../../../lib/public-video-routes";
 import { readPublicVideoCatalog, type PublicVideo, type PublicVideoProgram } from "../../../lib/public-video-catalog";
 import { pbsPlayerPermissions } from "../../../../../packages/content-core/src/player-permissions";
+import { pbsArtworkFallback, pbsImageAtWidth, renderHomeProgramCard } from "../../../../../packages/content-core/src/home-rail-render";
 
 type Props = { programs: PublicVideoProgram[] } | { program: PublicVideoProgram; episode?: PublicVideo };
 
@@ -34,9 +35,13 @@ const description = episode?.description ?? program?.description ?? "Find full e
 const canonicalPath = episode && program ? videoEpisodePath(program.slug, episode.slug)
   : program ? videoProgramPath(program.slug) : videoCatalogPath;
 const season = episode ? videoSeason(episode) : null;
-const episodeInfo = episode?.kind === "special" ? "Special" : episode?.episodeNumber ? `Episode ${episode.episodeNumber}` : null;
-const premiere = episode?.premieredOn ? new Intl.DateTimeFormat("en-US", { dateStyle: "long", timeZone: "UTC" })
-  .format(new Date(episode.premieredOn)) : null;
+const episodeNumber = (video: PublicVideo) =>
+  video.kind === "special" ? "Special" : video.episodeNumber ? `Episode ${video.episodeNumber}` : null;
+const dateFormat = new Intl.DateTimeFormat("en-US", { dateStyle: "long", timeZone: "UTC" });
+const airDate = (video: PublicVideo) => video.premieredOn ? dateFormat.format(new Date(video.premieredOn)) : null;
+const episodeInfo = episode && episodeNumber(episode);
+const premiere = episode && airDate(episode);
+const watchHref = episode && `https://watch.njpbs.org/video/${episode.slug}/`;
 const player = episode ? new URL(episode.playerSrc) : null;
 player?.searchParams.set("autoplay", "false");
 ---
@@ -47,48 +52,103 @@ player?.searchParams.set("autoplay", "false");
       <a href={videoCatalogPath}>Watch programs</a>
       {episode && <a href={videoProgramPath(program.slug)}>{program.title}</a>}
     </nav>}
-    <header>
-      <h1 data-pagefind-meta={episode ? "title, episode" : program ? "title, program" : "title"}
-        data-pagefind-filter={program && !episode ? "show" : undefined}>{title}</h1>
-      {program && (episode || program.genre) && <p class="video-page__meta">
-        {episode ? <span data-pagefind-meta="program" data-pagefind-filter="show">{program.title}</span> : program.genre}
-        {season && <span data-pagefind-meta="season">{season}</span>}
-        {episodeInfo && <span data-pagefind-meta="episode_number">{episodeInfo}</span>}
-        {episode?.premieredOn && premiere && <time datetime={episode.premieredOn}>{premiere}</time>}
-      </p>}
-      <p>{description}</p>
+    <header class:list={[{ "video-page__program-header": program && !episode }]}>
+      {program && !episode && <img class="card__image" src={program.image ? pbsImageAtWidth(program.image, 960) : pbsArtworkFallback}
+        data-fallback-src={program.image ? pbsArtworkFallback : undefined} width="960" height="540" alt=""
+        decoding="async" referrerpolicy="no-referrer" />}
+      <div>
+        <h1 data-pagefind-meta={episode ? "title, episode" : program ? "title, program" : "title"}
+          data-pagefind-filter={program && !episode ? "show" : undefined}>{title}</h1>
+        {program && (episode || program.genre) && <p class="video-page__meta">
+          {episode ? <span data-pagefind-meta="program" data-pagefind-filter="show">{program.title}</span> : program.genre}
+          {season && <span data-pagefind-meta="season">{season}</span>}
+          {episodeInfo && <span data-pagefind-meta="episode_number">{episodeInfo}</span>}
+          {episode?.premieredOn && premiere && <time datetime={episode.premieredOn}>{premiere}</time>}
+        </p>}
+        <p>{description}</p>
+      </div>
     </header>
-    {episode && player && <section aria-label="Video">
-      <iframe class="video-page__player" src={player.href} title={`Watch ${episode.title}`}
-        loading="lazy" allow={pbsPlayerPermissions("on-demand")} allowfullscreen></iframe>
-      <p data-pagefind-ignore><a href={`https://watch.njpbs.org/video/${episode.slug}/`}>Watch on PBS</a></p>
+    {episode && player && watchHref && <section aria-label="Video">
+      <a class="video-page__poster" href={watchHref} data-video-poster data-pagefind-ignore>
+        <img class="card__image" src={episode.image ? pbsImageAtWidth(episode.image, 960) : pbsArtworkFallback}
+          srcset={episode.image ? `${pbsImageAtWidth(episode.image, 640)} 640w, ${pbsImageAtWidth(episode.image, 960)} 960w` : undefined}
+          sizes="(max-width: 64rem) calc(100vw - 3rem), 61rem"
+          data-fallback-src={episode.image ? pbsArtworkFallback : undefined} width="960" height="540" alt=""
+          decoding="async" referrerpolicy="no-referrer" />
+        <span class="btn btn--primary"><span aria-hidden="true">▶</span> Open PBS player</span>
+      </a>
+      <template data-video-player>
+        <iframe class="video-page__player" src={player.href} title={`Watch ${episode.title}`}
+          width="960" height="540" allow={pbsPlayerPermissions("on-demand")} allowfullscreen></iframe>
+      </template>
+      <p data-pagefind-ignore><a href={watchHref}>Watch on PBS</a></p>
       {episode.hasCaptions && <p class="video-page__captions" data-pagefind-meta="captions">Closed captions available
         {episode.captionLanguages.length > 0 && ` (${episode.captionLanguages.join(", ")})`}.</p>}
     </section>}
     {program && !episode && videoGroups(program.episodes).map(group => <section class="video-page__group">
       <h2>{group.label}</h2>
-      <ul>
-        {group.episodes.map(video => <li><a href={videoEpisodePath(program.slug, video.slug)}>{video.title}</a></li>)}
+      <ul class="grid video-page__grid">
+        {group.episodes.map((video, index) => <li><Fragment set:html={renderHomeProgramCard({
+          index, title: video.title, href: videoEpisodePath(program.slug, video.slug),
+          image: video.image ?? pbsArtworkFallback,
+          description: [videoSeason(video), episodeNumber(video), airDate(video)].filter(Boolean).join(" · "),
+        }, { resizePbsArtwork: true })} /></li>)}
       </ul>
     </section>)}
-    {programs && (programs.length > 0 ? <ul class="video-page__programs">
-      {programs.map(item => <li><a href={videoProgramPath(item.slug)}>{item.title}</a><p>{item.description}</p></li>)}
+    {programs && (programs.length > 0 ? <ul class="grid video-page__grid">
+      {programs.map((item, index) => <li><Fragment set:html={renderHomeProgramCard({
+        index, title: item.title, description: item.description, href: videoProgramPath(item.slug),
+        image: item.image ?? pbsArtworkFallback,
+      }, { resizePbsArtwork: true })} /></li>)}
     </ul> : <p><a href="https://watch.njpbs.org/">Browse videos on the NJ PBS video portal</a>.</p>)}
   </article>
 </PublicSiteLayout>
 
+<script>
+  const poster = document.querySelector<HTMLAnchorElement>("[data-video-poster]");
+  const player = document.querySelector<HTMLTemplateElement>("[data-video-player]");
+  const iframe = player?.content.querySelector("iframe");
+  if (poster && iframe) {
+    poster.setAttribute("role", "button");
+    poster.addEventListener("keydown", event => {
+      if (event.key === " ") {
+        event.preventDefault();
+        poster.click();
+      }
+    });
+    poster.addEventListener("click", event => {
+      if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+      event.preventDefault();
+      poster.replaceWith(iframe);
+      iframe.focus({ preventScroll: true });
+    });
+  }
+</script>
+
 <style>
-  .video-page { max-width: 64rem; margin: auto; padding: clamp(2rem, 6vw, 4.5rem) var(--gutter); }
+  .video-page { max-width: 64rem; margin: auto; padding: clamp(2rem, 6vw, 4.5rem) var(--gutter); overflow-wrap: anywhere; }
   .video-page__breadcrumb, .video-page__meta { display: flex; flex-wrap: wrap; gap: .25rem 1rem; }
   .video-page__breadcrumb { margin-bottom: 1.5rem; }
   .video-page h1 { margin: 0; font-size: clamp(2rem, 5vw, 3.5rem); line-height: 1.12; text-wrap: balance; }
-  .video-page header > p { max-width: 65ch; }
+  .video-page header p { max-width: 65ch; }
   .video-page__meta { color: var(--text-dim); }
-  .video-page__player { display: block; width: 100%; aspect-ratio: 16 / 9; border: 0; background: #000; }
-  .video-page__group, .video-page__programs { margin-top: 2rem; }
-  .video-page__group h2 { margin-bottom: .5rem; }
-  .video-page__group ul, .video-page__programs { padding-inline-start: 1.25rem; }
-  .video-page__group li, .video-page__programs li { border-top: 1px solid var(--line); padding-block: .75rem; }
-  .video-page__group li:last-child, .video-page__programs li:last-child { border-bottom: 1px solid var(--line); }
-  .video-page__programs p { margin: .25rem 0 0; }
+  .video-page__program-header { display: grid; gap: 1.5rem; align-items: center; }
+  .video-page__player { display: block; width: 100%; height: auto; aspect-ratio: 16 / 9; border: 0; background: #000; border-radius: 12px; }
+  .video-page__poster { display: grid; place-items: center; border-radius: 12px; }
+  .video-page__poster > * { grid-area: 1 / 1; }
+  .video-page__poster:focus-visible, .video-page__player:focus-visible { outline: var(--focus-outline); outline-offset: var(--focus-offset); }
+  .video-page__group { margin-top: 2.5rem; }
+  .video-page__grid {
+    grid-template-columns: repeat(auto-fill, minmax(min(100%, 16rem), 1fr));
+    margin: 1rem 0 0;
+    padding: 0;
+    list-style: "";
+  }
+  .video-page__grid :global(.card) { display: block; width: auto; }
+  .video-page__grid :global(.card__title--below), .video-page__grid :global(.card__meta) {
+    display: block; min-height: 0; max-height: none;
+  }
+  @media (min-width: 48rem) {
+    .video-page__program-header { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  }
 </style>

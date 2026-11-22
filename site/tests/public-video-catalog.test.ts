@@ -83,6 +83,34 @@ describe("public video catalog", () => {
     await expect(fetchPublicVideoCatalog(config, fetch, now)).rejects.toThrow("No routable public Media Manager videos");
   });
 
+  it("retains public PBS artwork and drops invalid or signed image URLs", async () => {
+    const showImage = "https://image.pbs.org/contentchannels/show-mezzanine16x9.jpg";
+    const episodeImage = "https://image.pbs.org/video-assets/asset-mezzanine-16x9.jpg";
+    const invalidImages = [
+      "https://image.pbs.org.example.org/video-assets/episode.jpg",
+      `${episodeImage}?signature=example`,
+      `${episodeImage}\n`,
+    ];
+    const show = { ...riverShow, attributes: { ...riverShow.attributes,
+      images: [{ profile: "show-poster2x3", image: "https://image.pbs.org/contentchannels/poster.png" },
+        { profile: "show-mezzanine16x9", image: showImage }],
+    } };
+    const episode = catalogAsset("river-crossing", { attributes: { images: [
+      ...invalidImages.map(image => ({ profile: "asset-mezzanine-16x9", image })),
+      { profile: "asset-mezzanine-16x9", image: episodeImage },
+    ] } });
+    const special = catalogAsset("river-special", { special: true, attributes: { thumbnail: invalidImages[0] } });
+    const fetch = async (input: URL | string | Request) => new URL(input.toString()).pathname.endsWith("/shows/")
+      ? result([show]) : result([episode, special]);
+    const snapshot = await fetchPublicVideoCatalog(config, fetch, now);
+    const [program] = snapshot.programs;
+    expect(program.image).toBe(showImage);
+    expect(program.episodes.map(video => video.image)).toEqual([episodeImage, undefined]);
+    for (const image of invalidImages) {
+      expect(() => readPublicVideoCatalog({ ...snapshot, programs: [{ ...program, image }] })).toThrow(/Invalid public video catalog/);
+    }
+  });
+
   it("preserves the last valid catalog when a later asset page fails", async () => {
     const directory = await mkdtemp(path.join(tmpdir(), "video-catalog-"));
     const output = path.join(directory, "launch.json");

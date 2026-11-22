@@ -88,12 +88,40 @@ class SearchReadiness(BrowserChecks):
 
 
 class VideoCatalogInteractions(BrowserChecks):
+    @staticmethod
+    def catalog_artwork(route):
+        name = urlsplit(route.request.url).path.rsplit("/", 1)[-1]
+        artwork = {
+            "catalog-fixture-show.jpg": "energy-environment.jpg",
+            "catalog-fixture-episode.jpg": "energy-environment-02.jpg",
+        }.get(name)
+        if artwork:
+            route.fulfill(path=Path(__file__).resolve().parents[1] / "site/public/brand/spotlight" / artwork)
+        else:
+            route.fulfill(status=404, body="")
+
+    def assert_artwork(self, image, source, width, height):
+        expect(image).to_have_attribute("src", source)
+        expect(image).to_have_attribute("width", str(width))
+        expect(image).to_have_attribute("height", str(height))
+        image.scroll_into_view_if_needed()
+        expect(image).to_have_js_property("complete", True)
+        self.assertGreater(image.evaluate("image => image.naturalWidth"), 0)
+
+    def assert_fits_viewport(self, page):
+        self.assertTrue(page.evaluate("document.documentElement.scrollWidth <= window.innerWidth"))
+
     def test_public_video_catalog_navigation_and_search(self):
         screenshots = VIDEO_CATALOG_SCREENSHOTS
         screenshots.mkdir(parents=True, exist_ok=True)
+        show_image = "https://image.pbs.org/contentchannels/catalog-fixture-show.jpg"
+        episode_image = "https://image.pbs.org/video-assets/catalog-fixture-episode.jpg"
+        fallback_image = "/brand/home/new-jersey-blue.webp"
         for width, height in [(390, 844), (1280, 900)]:
             with self.subTest(width=width), self.browser.new_context(viewport={"width": width, "height": height}) as context:
                 context.route(is_blocked_embed, lambda route: route.fulfill(status=200, body=""))
+                context.route(re.compile(r"^https://image\.pbs\.org/(contentchannels|video-assets)/catalog-fixture-"),
+                              self.catalog_artwork)
                 page = context.new_page()
                 page.goto(BASE + "/programs/", wait_until="domcontentloaded")
                 notice = page.get_by_role("button", name="Do not allow", exact=True)
@@ -101,24 +129,57 @@ class VideoCatalogInteractions(BrowserChecks):
                     notice.click()
                 page.get_by_role("link", name="Watch full episodes and specials").click()
                 expect(page).to_have_url(BASE + "/watch/programs/")
-                page.screenshot(path=str(screenshots / f"directory-{width}.png"))
-                page.get_by_role("link", name="River stories", exact=True).click()
+                program = page.get_by_role("link", name=re.compile(r"^River stories"))
+                program_image = program.locator("img")
+                self.assert_artwork(program_image, f"{show_image}?format=webp&resize=640x360", 640, 360)
+                shore_image = page.get_by_role("link", name=re.compile(r"^Shore stories")).locator("img")
+                self.assert_artwork(shore_image, fallback_image, 640, 360)
+                self.assert_fits_viewport(page)
+                program.press("Tab")
+                expect(page.get_by_role("link", name=re.compile(r"^Shore stories"))).to_be_focused()
+                page.keyboard.press("Shift+Tab")
+                expect(program).to_be_focused()
+                expect(program_image).to_have_css("outline-style", "solid")
+                page.screenshot(path=str(screenshots / f"directory-{width}.png"), full_page=True)
+                page.keyboard.press("Enter")
                 expect(page).to_have_url(BASE + "/watch/programs/river-stories/")
-                expect(page.get_by_role("link", name="River voices", exact=True)).to_be_visible()
-                page.screenshot(path=str(screenshots / f"program-{width}.png"))
-                page.get_by_role("link", name="The river crossing", exact=True).press("Enter")
+                self.assert_artwork(page.locator("article header img"), f"{show_image}?format=webp&resize=960x540", 960, 540)
+                crossing = page.get_by_role("link", name=re.compile(r"^The river crossing"))
+                expect(crossing).to_contain_text("Season 2 — Waterways · Episode 3 · January 1, 2020")
+                self.assert_artwork(crossing.locator("img"), f"{episode_image}?format=webp&resize=640x360", 640, 360)
+                voices = page.get_by_role("link", name=re.compile(r"^River voices"))
+                self.assert_artwork(voices.locator("img"), fallback_image, 640, 360)
+                self.assert_fits_viewport(page)
+                page.get_by_role("navigation", name="Breadcrumb").get_by_role("link").press("Tab")
+                expect(crossing).to_be_focused()
+                expect(crossing.locator("img")).to_have_css("outline-style", "solid")
+                page.screenshot(path=str(screenshots / f"program-{width}.png"), full_page=True)
+                page.keyboard.press("Enter")
                 episode_path = "/watch/programs/river-stories/river-crossing/"
                 expect(page).to_have_url(BASE + episode_path)
                 expect(page).to_have_title("The river crossing — NJ PBS")
+                poster = page.get_by_role("button", name="Open PBS player", exact=True)
+                self.assert_artwork(poster.locator("img"), f"{episode_image}?format=webp&resize=960x540", 960, 540)
+                actual_width = 640 if width == 390 else 960
+                self.assertTrue(poster.locator("img").evaluate("image => image.currentSrc").endswith(
+                    f"resize={actual_width}x{actual_width * 9 // 16}"))
+                self.assert_fits_viewport(page)
                 player = page.get_by_title("Watch The river crossing", exact=True)
+                expect(player).to_have_count(0)
+                page.get_by_role("navigation", name="Breadcrumb").get_by_role("link", name="River stories").press("Tab")
+                expect(poster).to_be_focused()
+                expect(poster).to_have_css("outline-style", "solid")
+                poster_box = poster.bounding_box()
+                page.screenshot(path=str(screenshots / f"episode-{width}.png"), full_page=True)
+                page.keyboard.press("Space")
                 expect(player).to_have_attribute("src", "https://player.pbs.org/partnerplayer/EXAMPLE==/?autoplay=false")
-                self.assertLessEqual(player.bounding_box()["width"], width)
+                expect(player).to_be_focused()
+                self.assertEqual(player.bounding_box()["height"], poster_box["height"])
+                self.assert_fits_viewport(page)
                 fallback = page.get_by_role("link", name="Watch on PBS", exact=True)
                 fallback.focus()
                 expect(fallback).to_be_focused()
                 expect(fallback).to_have_attribute("href", "https://watch.njpbs.org/video/river-crossing/")
-                page.get_by_role("heading", name="The river crossing", exact=True).scroll_into_view_if_needed()
-                page.screenshot(path=str(screenshots / f"episode-{width}.png"), full_page=True)
                 if width == 1280:
                     hits = page.evaluate("""async () => {
                         const pagefind = await import('/pagefind/pagefind.js');

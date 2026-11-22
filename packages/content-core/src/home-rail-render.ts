@@ -65,9 +65,17 @@ export function spotlightGridImageSizes(columns: ContentShelfData["columns"]): s
   return `auto, (max-width: 63.99rem) 50vw, min(${100 / count}vw, ${84 / count}rem)`;
 }
 
+export const pbsArtworkFallback = "/brand/home/new-jersey-blue.webp";
+
 export function pbsShelfImageFallback(image: string): string {
   // Private previews already package and rewrite this image attribute.
-  return image.startsWith("https://image.pbs.org/") ? ' data-fallback-src="/brand/home/new-jersey-blue.webp"' : "";
+  return image.startsWith("https://image.pbs.org/") ? ` data-fallback-src="${pbsArtworkFallback}"` : "";
+}
+
+export function pbsImageAtWidth(image: string, width: number): string {
+  const url = new URL(image);
+  url.search = `?format=webp&resize=${width}x${width * 9 / 16}`;
+  return url.href;
 }
 
 function programGridCard(card: HomeProgramRailCard): string {
@@ -111,14 +119,15 @@ export function renderHomeRailArrow(direction: "prev" | "next", id: string, labe
   return `<button class="rail__arrow rail__arrow--${direction}" type="button" data-rail-${direction}="${escapeHtml(id)}" aria-label="Scroll ${escapeHtml(label)} ${side}"><span aria-hidden="true">${renderRailArrowIcon(direction)}</span></button>`;
 }
 
-function programCard(card: HomeProgramRailCard): string {
+export function renderHomeProgramCard(card: HomeProgramRailCard, { resizePbsArtwork = false } = {}): string {
   const image = homeSourceImage({ url: card.image, alt: "" })?.url;
   // Only a bounded integer enters CSS; the eight existing brand tiles remain
   // the fallback when the selected card has no artwork.
   const index = Number.isSafeInteger(card.index) ? ((card.index % 8) + 8) % 8 : 0;
   const title = escapeHtml(card.title);
-  const artwork = image
-    ? `<img class="card__image" src="${escapeHtml(image)}" alt="" loading="lazy" referrerpolicy="no-referrer" width="640" height="360" draggable="false"${pbsShelfImageFallback(image)} /><span class="card__title card__title--below">${title}</span>`
+  const src = image && resizePbsArtwork && image.startsWith("https://image.pbs.org/") ? pbsImageAtWidth(image, 640) : image;
+  const artwork = src
+    ? `<img class="card__image" src="${escapeHtml(src)}" alt="" loading="lazy" referrerpolicy="no-referrer" width="640" height="360" draggable="false"${pbsShelfImageFallback(src)} /><span class="card__title card__title--below">${title}</span>`
     : `<span class="card__art" style="background:var(--tile-gradient-${index})"><span class="card__title">${title}</span></span>`;
   // Native dragging cancels card clicks on a small pointer slip. Keep both the
   // anchor and image non-draggable while the rail itself scrolls normally.
@@ -149,7 +158,7 @@ export function renderHomeProgramRail(
     <div class="rail__frame">
       ${renderHomeRailArrow("prev", id, `${kind} programs`)}
       <div class="rail__track${featured ? " rail__track--lg" : ""}" id="${id}" role="group" aria-label="${groupLabel}" tabindex="0">
-        ${cards.map(programCard).join("")}
+        ${cards.map(card => renderHomeProgramCard(card)).join("")}
         <a class="card card--cta" draggable="false"${link}><span class="card__cta-art" aria-hidden="true"></span><span class="card__title card__title--below">${moreLabel}</span>${notice}</a>
       </div>
       ${renderHomeRailArrow("next", id, `${kind} programs`)}
