@@ -221,6 +221,21 @@ describe('private video search with an older Function', () => {
     mount({ tag: 'other', createdBy: 'someone-else', rightsStatus: 'pending' }); await flush();
     expect(screen.queryByRole('button', { name: /at 12s$/ })).not.toBeInTheDocument();
   });
+  it('filters related transcript matches and rechecks the metadata request before opening', async () => {
+    const requestedAsset = { ...asset, id: 'requested', name: 'Review meeting', metadataUpdateRequested: true };
+    vi.mocked(legacyPostFunction).mockResolvedValue(batch([
+      item(),
+      item({ asset: requestedAsset, chunks: [{ ...chunk, id: 'requested/transcript/2/0', assetId: 'requested' }] }),
+    ]));
+    vi.mocked(listSourceMedia).mockResolvedValue({
+      records: [{ ...requestedAsset, metadataUpdateRequested: false }],
+    } as never);
+    mount({ metadataUpdateRequested: true }); await flush();
+    expect(screen.queryByRole('button', { name: 'Meeting at 12s' })).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Review meeting at 12s' })); await flush();
+    expect(onOpen).not.toHaveBeenCalled();
+    expect(screen.getByText(/This result changed or is no longer available/)).toBeInTheDocument();
+  });
   it('validates current transcript and media access before opening at its timestamp', async () => {
     mount(); await flush();
     fireEvent.click(screen.getByRole('button', { name: 'Meeting at 12s' })); await flush();

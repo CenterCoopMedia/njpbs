@@ -202,7 +202,7 @@ export function parseVideoMediaLocation(search: string): VideoMediaLocationState
   const rightsCandidate = oneParam(params, "rights");
   const rights = rightsCandidate === "pending" || rightsCandidate === "complete" ? rightsCandidate : null;
   const metadata = oneParam(params, "metadata") === "requested" && { metadata: "requested" as const };
-  const structured = [tag && { tag }, by && { by }, rights && { rights }, metadata].filter(Boolean);
+  const structured = [tag && { tag }, by && { by }, rights && ({ rights } as const), metadata].filter(Boolean);
   const sortCandidate = oneParam(params, "sort") as VideoMediaSort | null;
   const limitCandidate = Number(oneParam(params, "limit"));
   const query: VideoMediaLocationQuery = {
