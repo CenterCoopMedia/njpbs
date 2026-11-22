@@ -1,9 +1,17 @@
 import { describe, expect, it } from "vitest";
-import { mixedTagTokens, tagMatchFor, tagSuggestions, tagTokenEdit, tagsToTokens, tokensToTags } from "../src/lib/media-tags";
+import { mediaTagSuggestionPool, mixedTagTokens, tagMatchFor, tagSuggestions, tagTokenEdit, tagsToTokens, tokensToTags } from "../src/lib/media-tags";
 
 const items = (...lists: string[][]) => lists.map((tags) => ({ tags }));
 
 describe("media tag tokens", () => {
+  it("offers the same normalized saved tags where each field can accept them", () => {
+    const local = [" Studio ", "Arts"];
+    const shared = ["studio", "Concert", "", "x".repeat(41), "a,b", "a\nb", "x".repeat(81)];
+    expect(mediaTagSuggestionPool("images", local, shared)).toEqual(["Studio", "Arts", "Concert"]);
+    expect(mediaTagSuggestionPool("video", shared, local)).toEqual(["studio", "Concert", "x".repeat(41), "Arts"]);
+    expect(mediaTagSuggestionPool("images", [])).toEqual([]);
+  });
+
   it("converts stored tags to tokens and back without changing spelling", () => {
     expect(tagsToTokens(["Interview", "interview"])).toEqual([{ value: "Interview" }, { value: "interview" }]);
     expect(tokensToTags([{ value: "Newark" }, { value: "B-roll", mixed: true }])).toEqual(["Newark", "B-roll"]);

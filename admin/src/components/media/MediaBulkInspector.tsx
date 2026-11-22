@@ -13,10 +13,10 @@ import { Inspector, InspectorSection } from "../ui/Inspector";
 import { Icon } from "../ui/Icon";
 import { Menu } from "../ui/Menu";
 import { Button, InlineMessage, Select, Textarea, TextInput } from "../ui/Primitives";
-import { TokenInput, type Token } from "../ui/TokenInput";
+import type { Token } from "../ui/TokenInput";
+import { MediaTagInput } from "./MediaTagInput";
 import "./MediaBulkInspector.css";
 
-const SUGGESTIONS_NOTE = "From the selected items, this page and your recent tags.";
 const TEXT_FIELDS = ["description", "credit", "license"] as const;
 const FIELD_LABELS: Record<TextField, string> = {
   description: "Description",
@@ -48,19 +48,6 @@ export type MediaBulkInspectorProps = CommonProps & (
   | { surface: "images"; assets: readonly MediaAssetSummary[] }
   | { surface: "video"; assets: readonly SourceMediaAssetSummary[] }
 );
-
-function uniqueSuggestions(sources: readonly (readonly string[])[]) {
-  const seen = new Set<string>();
-  const result: string[] = [];
-  for (const tag of sources.flat()) {
-    const value = tag.trim();
-    const key = value.normalize("NFKC").toLocaleLowerCase("en-US");
-    if (!value || seen.has(key)) continue;
-    seen.add(key);
-    result.push(value);
-  }
-  return result;
-}
 
 function commonText(assets: readonly { description: string | null; credit: string | null; license: string | null }[], field: TextField) {
   const first = assets[0]?.[field] ?? "";
@@ -189,8 +176,8 @@ export function MediaBulkInspector(props: MediaBulkInspectorProps) {
   const keepEditing = useRef<HTMLButtonElement>(null);
   const firstControl = useRef<HTMLDivElement>(null);
   const textAssets = assets as readonly { description: string | null; credit: string | null; license: string | null }[];
-  const suggestions = useMemo(
-    () => uniqueSuggestions([assets.flatMap(asset => asset.tags), pageTags, recentTags]),
+  const localTags = useMemo(
+    () => [...assets.flatMap(asset => asset.tags), ...pageTags, ...recentTags],
     [assets, pageTags, recentTags],
   );
   const dirty = hasBulkMetadataIntent(draft) || Boolean(tagDraft.trim());
@@ -313,9 +300,9 @@ export function MediaBulkInspector(props: MediaBulkInspectorProps) {
         { key: "replace", label: "Replace all tags", onSelect: () => chooseTagMode("replace") },
         { key: "clear", label: "Clear all tags", onSelect: () => chooseTagMode("clear") },
       ]}><span aria-hidden="true">Replace or clear</span><span className="sr-only">Replace all tags or clear all tags</span></Menu>}>
-      <TokenInput draft={tagDraft} label="Tags" maxLength={surface === "video" ? 80 : 40}
+      <MediaTagInput surface={surface} draft={tagDraft}
         onChange={editTokens} onDraftChange={setTagDraft} placeholder="Add tag…" promoteMixed
-        suggestions={suggestions} suggestionsNote={SUGGESTIONS_NOTE} tokens={tokens} />
+        localTags={localTags} tokens={tokens} />
       <p className="media-bulk-help">Dashed tags are on some of the {assets.length} {surface === "video" ? "videos" : "items"}. Removing one removes it only where it is.</p>
       {tagWarning ? <InlineMessage tone="warning" title={tagMode === "clear" ? "Clear all tags" : "Replace all tags"}>{tagWarning}</InlineMessage> : null}
     </InspectorSection>

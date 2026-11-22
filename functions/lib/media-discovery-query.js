@@ -148,7 +148,7 @@ async function writeCursor(firestore, binding, after, matched) {
   return token;
 }
 
-async function readIndexedMedia(firestore, user, query, categoryLabels, summaryFields) {
+async function readIndexedMedia(firestore, user, query, categoryLabels, summaryFields, { includeContinuation = true } = {}) {
   if (user.approvedActive !== true) throw new MediaDiscoveryError(403, "You do not have permission to list media.");
   const stateRef = firestore.doc(MEDIA_DISCOVERY_STATE);
   const state = (await stateRef.get()).data();
@@ -191,7 +191,7 @@ async function readIndexedMedia(firestore, user, query, categoryLabels, summaryF
     Math.floor(candidateBudget / Math.max(branches, 1)));
   const snapshots = await Promise.all(discoveryQueries(firestore, {
     owners, kinds: indexedKinds, term, sort: query.sort, direction: query.direction, after,
-    limit: branchLimit + 1, fields: summaryFields,
+    limit: branchLimit + Number(includeContinuation), fields: summaryFields,
   }).map((candidateQuery) => candidateQuery.get()));
   const offsets = snapshots.map(() => 0);
   let hasMore = false;
@@ -228,7 +228,7 @@ async function readIndexedMedia(firestore, user, query, categoryLabels, summaryF
   if (freshState?.state !== "ready" || freshState.revision !== state.revision) {
     throw new MediaDiscoveryError(409, "The media library changed. Return to the first page.");
   }
-  const nextCursor = hasMore ? await writeCursor(firestore, binding, after, matched) : null;
+  const nextCursor = hasMore && includeContinuation ? await writeCursor(firestore, binding, after, matched) : null;
   return emptyLibrary(query, records, nextCursor, matched);
 }
 

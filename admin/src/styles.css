@@ -6596,7 +6596,8 @@
 }
 
 .media-upload-panel form,
-.media-upload-panel label {
+.media-upload-panel label,
+.media-upload-panel .media-upload-tag-field {
   display: grid;
   grid-template-columns: minmax(0, 1fr);
   min-width: 0;

@@ -9,7 +9,6 @@ import {
   useLayoutEffect,
   useContext,
   useId,
-  useMemo,
   useRef,
   useState,
   type FormEvent,
@@ -19,7 +18,8 @@ import { createPortal } from "react-dom";
 import { AssetImage } from "../ui/AssetImage";
 import { InfoTooltip } from "../ui/InfoTooltip";
 import { Inspector, InspectorSection } from "../ui/Inspector";
-import { TokenInput, type Token } from "../ui/TokenInput";
+import type { Token } from "../ui/TokenInput";
+import { MediaTagInput } from "./MediaTagInput";
 import { Icon } from "../ui/Icon";
 import {
   AsyncActionButton,
@@ -61,7 +61,6 @@ const DATE_FORMATTER = new Intl.DateTimeFormat("en-US", {
   timeZone: "America/New_York",
 });
 
-const SUGGESTIONS_NOTE = "From this page and your recent tags.";
 const CATEGORY_HELP = "The primary category is required and cannot be removed. Other categories improve search and filtering.";
 
 function validateMediaFilename(value: string, mimeType: string): string | null {
@@ -86,19 +85,6 @@ function displayDate(value: string | null): string {
   if (!value) return "Not recorded";
   const date = new Date(value);
   return Number.isNaN(date.getTime()) ? "Not recorded" : DATE_FORMATTER.format(date);
-}
-
-function imageTagSuggestionPool(...sources: readonly (readonly string[])[]): string[] {
-  const seen = new Set<string>();
-  const result: string[] = [];
-  for (const tag of sources.flat()) {
-    const value = tag.trim();
-    const key = tagMatchKey(value, "case-insensitive");
-    if (!value || seen.has(key)) continue;
-    seen.add(key);
-    result.push(value);
-  }
-  return result;
 }
 
 function MediaCategoryChips({
@@ -261,11 +247,6 @@ function MediaInspectorContent({
   const deleteConfirmRef = useRef<HTMLDivElement | null>(null);
   const deleteTriggerRef = useRef<HTMLButtonElement | null>(null);
   const returnDeleteFocus = useRef(false);
-  const tagSuggestions = useMemo(
-    () => imageTagSuggestionPool(asset.tags, pageTags, recentTags),
-    [asset.tags, pageTags, recentTags],
-  );
-
   useEffect(() => {
     setName(asset.name);
     setOriginalName(asset.originalName);
@@ -770,18 +751,15 @@ function MediaInspectorContent({
 
         <InspectorSection count={tags.length} id="tags" title="Tags">
           {canEdit ? (
-            <TokenInput
+            <MediaTagInput
+              surface="images"
               disabled={fieldsLocked}
-              label="Tags"
-              maxCount={20}
-              maxLength={40}
               draft={tagDraft}
               onChange={setTags}
               onCommit={(values) => { committedTags.current.push(...values); }}
               onDraftChange={setTagDraft}
               placeholder="Add tag…"
-              suggestions={tagSuggestions}
-              suggestionsNote={SUGGESTIONS_NOTE}
+              localTags={[...asset.tags, ...pageTags, ...recentTags]}
               tokens={tags}
             />
           ) : <ReadOnlyField label="Tags" value={currentTags.join(", ")} />}

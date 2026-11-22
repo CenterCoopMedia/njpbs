@@ -230,7 +230,7 @@ describe("video upload panel", () => {
     fireEvent.change(screen.getByRole("textbox", { name: "License" }), {
       target: { value: "Station owned" },
     });
-    fireEvent.change(screen.getByRole("textbox", { name: "Tags" }), {
+    fireEvent.change(screen.getByRole("combobox", { name: "Tags" }), {
       target: { value: "interview, politics" },
     });
     fireEvent.click(screen.getByRole("button", { name: "Start upload NELLIE_POU.mp4" }));
@@ -260,12 +260,12 @@ describe("video upload panel", () => {
     fireEvent.drop(screen.getByRole("region", { name: "Video transfers" }), {
       dataTransfer: { files: [new File(["data"], "tagged.mp4", { type: "video/mp4", lastModified: 42 })] },
     });
-    fireEvent.change(screen.getByRole("textbox", { name: "Tags" }), { target: { value: tags } });
+    fireEvent.change(screen.getByRole("combobox", { name: "Tags" }), { target: { value: tags } });
 
     fireEvent.click(screen.getByRole("button", { name: "Start upload tagged.mp4" }));
 
     expect(await screen.findByText(message)).toBeVisible();
-    expect(screen.getByRole("textbox", { name: "Tags" })).toBeEnabled();
+    expect(screen.getByRole("combobox", { name: "Tags" })).toBeEnabled();
     expect(startVideoUpload).not.toHaveBeenCalled();
     expect(onTransferStarted).not.toHaveBeenCalled();
   });

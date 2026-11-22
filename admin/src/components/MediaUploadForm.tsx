@@ -1,4 +1,5 @@
 import { InfoTooltip } from "./ui/InfoTooltip";
+import { MediaUploadTagInput } from "./media/MediaTagInput";
 import { Link } from "react-router";
 import { mediaImagesPath } from "../lib/routes";
 import {
@@ -425,10 +426,10 @@ export function MediaUploadForm({
     return () => URL.revokeObjectURL(url);
   }, [current?.file]);
 
-  function updateCurrent(patch: Partial<MediaUploadQueueItem>) {
+  function updateCurrent(patch: Partial<MediaUploadQueueItem> | ((item: MediaUploadQueueItem) => Partial<MediaUploadQueueItem>)) {
     setItems((existing) =>
       existing.map((item, index) =>
-        index === currentIndex ? { ...item, ...patch } : item,
+        index === currentIndex ? { ...item, ...(typeof patch === "function" ? patch(item) : patch) } : item,
       ),
     );
   }
@@ -1141,7 +1142,7 @@ export function MediaUploadForm({
               }
             />
           </label>
-          <label>
+          {currentIsAudio || currentIsDocument ? <label>
             Tags
             <TextInput
               value={current?.tags ?? ""}
@@ -1151,7 +1152,13 @@ export function MediaUploadForm({
                 updateCurrent({ tags: event.target.value, error: null })
               }
             />
-          </label>
+          </label> : <MediaUploadTagInput
+            key={current?.id}
+            surface="images"
+            value={current?.tags ?? ""}
+            disabled={!canEditCurrent}
+            onUpdate={update => updateCurrent(item => ({ tags: update(item.tags), error: null }))}
+          />}
           {currentIsAudio || currentIsDocument ? null : <label>
             Alt-text suggestion
             <TextInput

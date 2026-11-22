@@ -2,6 +2,7 @@ import { boardwalkHintCookie } from "../../../packages/content-core/src/boardwal
 import { canAccessAdmin } from "../lib/access";
 import { clearStaffSiteSessions } from "../lib/staff-site";
 import { clearMediaSessionCache, setMediaCachePrincipal, setMediaCacheUser } from "../lib/media-session-cache";
+import { MediaTagTokenContext } from "../lib/shared-media-tags";
 import { clearOwnAvatarPhoto } from "../lib/own-author-photo-cache";
 import { resetUploadRouter } from "../lib/upload-router";
 import {
@@ -711,7 +712,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     ],
   );
 
-  return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
+  return <AuthContext.Provider value={value}>
+    <MediaTagTokenContext.Provider value={state.status === "signed-in" ? getIdToken : null}>
+      {children}
+    </MediaTagTokenContext.Provider>
+  </AuthContext.Provider>;
 }
 
 export function useAuth(): AuthContextValue {

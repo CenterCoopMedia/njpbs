@@ -3,6 +3,7 @@ import { createPortal } from "react-dom";
 import { Button, InlineMessage, Textarea, TextInput } from "./ui/Primitives";
 import { Icon } from "./ui/Icon";
 import { VideoRightsFields } from "./media/VideoRightsFields";
+import { MediaUploadTagInput } from "./media/MediaTagInput";
 import { UploadTray, type UploadTrayRow } from "./media/UploadTray";
 import { startVideoUpload, cancelVideoUpload, transferVideo, UploadFileMismatchError, VideoUploadValidationError, type VideoUploadMetadata, type VideoUploadSession } from "../lib/source-media-upload";
 import { clearRejectedUploads, registerVideoUpload, routeChosenFiles, uploadRouterSnapshot } from "../lib/upload-router";
@@ -60,7 +61,7 @@ function restoredDraft(value: unknown, fileName: string): TransferDraft {
     description: typeof candidate.description === "string" && candidate.description.length <= 2_000 ? candidate.description : "",
     credit: typeof candidate.credit === "string" && candidate.credit.length <= 500 ? candidate.credit : "",
     license: typeof candidate.license === "string" && candidate.license.length <= 500 ? candidate.license : "",
-    tags: typeof candidate.tags === "string" && candidate.tags.length <= 2_429 ? candidate.tags : "",
+    tags: typeof candidate.tags === "string" && candidate.tags.length <= 2_430 ? candidate.tags : "",
     metadataUpdateRequested: candidate.metadataUpdateRequested === true,
     metadataRequestOverridden: candidate.metadataRequestOverridden === true,
     nameOverridden: candidate.nameOverridden !== false,
@@ -279,10 +280,12 @@ export function VideoUploadPanel({ sourceId, userId, getIdToken, onUploaded, onA
       return next;
     });
   }
-  function updateDraft(id: string, patch: Partial<TransferDraft>) {
-    store(rows.current.map(item => item.id === id
-      ? { ...item, draft: { ...draftFor(item), ...patch } }
-      : item));
+  function updateDraft(id: string, patch: Partial<TransferDraft> | ((draft: TransferDraft) => Partial<TransferDraft>)) {
+    store(rows.current.map(item => {
+      if (item.id !== id) return item;
+      const draft = draftFor(item);
+      return { ...item, draft: { ...draft, ...(typeof patch === "function" ? patch(draft) : patch) } };
+    }));
     clearStates(new Set([id]));
   }
   function updateAssignment(next: typeof assignment) {
@@ -745,8 +748,8 @@ export function VideoUploadPanel({ sourceId, userId, getIdToken, onUploaded, onA
             onChange={event => updateDraft(row.id, { description: event.target.value, descriptionOverridden: Boolean(event.target.value.trim()) })} /></label>
           <label><input type="checkbox" checked={draft.metadataUpdateRequested} onChange={event => updateDraft(row.id, { metadataUpdateRequested: event.target.checked, metadataRequestOverridden: true })} /> Request metadata update</label>
           <VideoRightsFields values={draft} disabled={metadataDisabled} onChange={values => updateDraft(row.id, values)} />
-          <label>Tags<TextInput maxLength={2_429} placeholder="interview, politics" value={draft.tags}
-            onChange={event => updateDraft(row.id, { tags: event.target.value })} /></label>
+          <MediaUploadTagInput surface="video" value={draft.tags} disabled={metadataDisabled}
+            onUpdate={update => updateDraft(row.id, current => ({ tags: update(current.tags) }))} />
           {prepared ? <p>Review these details, then start the upload. You can keep using the video library while the transfer runs.</p>
             : queued ? <p>These details are approved. The upload will start when a transfer slot is available.</p>
               : <p>These details were set when the upload started. Edit them from the video library after processing.</p>}

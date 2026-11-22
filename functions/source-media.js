@@ -34,6 +34,7 @@ const {
 } = require("./lib/media-source-runtime");
 const { isApprovedActiveAccount } = require("./lib/active-account");
 const { computeMediaTabCounts } = require("./lib/media-tab-counts");
+const { MEDIA_TAG_SAMPLE_SIZE, savedMediaTagSample } = require("./lib/media-tag-sample");
 
 const { createOriginalStorage, refreshListedOriginals } = require("./lib/source-originals");
 
@@ -217,7 +218,7 @@ async function readSourceMediaPage(firestore, source, request, documentIdField) 
   if (request.cursor) query = query.startAfter(request.cursor.sort, request.cursor.id);
   let snapshot;
   try {
-    snapshot = await query.limit(request.limit + 1).get();
+    snapshot = await query.limit(request.limit + (request.tagsOnly ? 0 : 1)).get();
   } catch (error) {
     const indexUnavailable = [9, "FAILED_PRECONDITION", "failed-precondition"].includes(error?.code) &&
       /index/i.test(error?.message ?? "");
@@ -328,6 +329,11 @@ function createCmsListSourceMediaHandler(deps = {}) {
       const actor = await requirePrincipalFn(req);
       const source = registryFn().get(request.sourceId);
       await authorizeFn({ firestore, actor, source, operation: "browse" });
+      if (request.tagsOnly) {
+        const { records } = await readPageFn(firestore, source, { ...request, limit: MEDIA_TAG_SAMPLE_SIZE }, documentIdField);
+        res.status(200).json({ success: true, tags: savedMediaTagSample(records) });
+        return;
+      }
       if (request.pendingIds) {
         const snapshots = await firestore.getAll(...request.pendingIds.map(id =>
           firestore.collection("mediaSourceAssets").doc(id)));

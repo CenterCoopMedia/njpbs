@@ -217,7 +217,7 @@ describe("MediaUploadForm batch queue", () => {
     pointer.focus();
     expect(pointer).toHaveFocus();
     expect(screen.getByRole("alert")).toHaveTextContent("may be in the Recycle bin");
-    fireEvent.change(screen.getByRole("textbox", { name: "Tags" }), { target: { value: "x".repeat(41) } });
+    fireEvent.change(screen.getByRole("combobox", { name: "Tags" }), { target: { value: "x".repeat(41) } });
     fireEvent.click(screen.getByRole("button", { name: "Retry upload" }));
     expect(await screen.findByText("Keep each tag under 41 characters.")).toBeVisible();
     expect(screen.queryByRole("link", { name: "Find it in the Recycle bin" })).not.toBeInTheDocument();
@@ -445,7 +445,7 @@ describe("MediaUploadForm batch queue", () => {
     fireEvent.change(screen.getByRole("textbox", { name: "License" }), {
       target: { value: "First license" },
     });
-    fireEvent.change(screen.getByRole("textbox", { name: "Tags" }), {
+    fireEvent.change(screen.getByRole("combobox", { name: "Tags" }), {
       target: { value: "first, desk" },
     });
     fireEvent.click(screen.getByRole("button", { name: /2\. second\.png/ }));
@@ -457,9 +457,8 @@ describe("MediaUploadForm batch queue", () => {
     expect(screen.getByRole("textbox", { name: "License" })).toHaveValue(
       "First license",
     );
-    expect(screen.getByRole("textbox", { name: "Tags" })).toHaveValue(
-      "first, desk",
-    );
+    expect(screen.getByRole("button", { name: "Remove tag first" })).toBeInTheDocument();
+    expect(screen.getByRole("combobox", { name: "Tags" })).toHaveValue(" desk");
   });
 
   it("lists an existing asset once when two files reuse it", async () => {
@@ -959,7 +958,7 @@ describe("MediaUploadForm batch queue", () => {
     fireEvent.change(screen.getByRole("textbox", { name: "License" }), {
       target: { value: "Third license" },
     });
-    fireEvent.change(screen.getByRole("textbox", { name: "Tags" }), {
+    fireEvent.change(screen.getByRole("combobox", { name: "Tags" }), {
       target: { value: "preserved" },
     });
     fireEvent.click(screen.getByRole("button", { name: /1\. first\.png/ }));
@@ -976,7 +975,7 @@ describe("MediaUploadForm batch queue", () => {
     expect(screen.getByRole("textbox", { name: "License" })).toHaveValue(
       "Third license",
     );
-    expect(screen.getByRole("textbox", { name: "Tags" })).toHaveValue(
+    expect(screen.getByRole("combobox", { name: "Tags" })).toHaveValue(
       "preserved",
     );
   });

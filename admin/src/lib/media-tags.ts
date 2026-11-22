@@ -11,6 +11,25 @@ import type { MediaTileSurface } from "./media-tile-actions";
 
 export type TagMatch = "case-insensitive" | "exact";
 
+export const MEDIA_TAG_LIMITS = {
+  images: { maxCount: 20, maxLength: 40 },
+  video: { maxCount: 30, maxLength: 80 },
+} as const;
+
+export function mediaTagSuggestionPool(surface: MediaTileSurface, ...sources: readonly (readonly string[])[]): string[] {
+  const maxLength = MEDIA_TAG_LIMITS[surface].maxLength;
+  const seen = new Set<string>();
+  const tags: string[] = [];
+  for (const tag of sources.flat()) {
+    const value = tag.trim();
+    const key = tagKey(value);
+    if (!value || value.length > maxLength || /[,\r\n]/.test(value) || seen.has(key)) continue;
+    seen.add(key);
+    tags.push(value);
+  }
+  return tags;
+}
+
 export function tagMatchFor(surface: MediaTileSurface): TagMatch {
   return surface === "images" ? "case-insensitive" : "exact";
 }
