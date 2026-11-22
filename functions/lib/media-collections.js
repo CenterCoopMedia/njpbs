@@ -18,6 +18,7 @@ const STAFF_UID_PATTERN = /^[A-Za-z0-9_-]{1,128}$/;
 const COLLECTION_LIFECYCLES = Object.freeze(["active", "archived"]);
 const COLLECTION_COLORS = Object.freeze(["slate", "blue", "green", "gold", "red", "purple"]);
 const MAX_COLLECTION_PAGE_SIZE = 30;
+const MAX_PINNED_COLLECTIONS = 20;
 const MAX_COLLECTION_ITEM_BATCH = 30;
 const MAX_COLLECTION_ITEM_SCAN = 100;
 const MAX_TIMESTAMP_SECONDS = 253_402_300_799;
@@ -202,17 +203,22 @@ function pageLimit(value) {
 }
 
 function parseListCollectionsRequest(value, uid) {
-  rejectUnknownFields(value, new Set(["scope", "lifecycle", "cursor", "limit"]));
+  rejectUnknownFields(value, new Set(["scope", "lifecycle", "cursor", "limit", "pinnedIds"]));
   const scope = requiredChoice(value.scope, COLLECTION_SCOPES, "Collection scope");
   const lifecycle = requiredChoice(
     value.lifecycle,
     COLLECTION_LIFECYCLES,
     "Collection lifecycle",
   );
+  const pinnedIds = value.pinnedIds === undefined ? [] : value.pinnedIds;
+  if (!Array.isArray(pinnedIds) || pinnedIds.length > MAX_PINNED_COLLECTIONS) {
+    throw new MediaCollectionValidationError(`Choose up to ${MAX_PINNED_COLLECTIONS} pinned collections`);
+  }
   return {
     scope,
     lifecycle,
     limit: pageLimit(value.limit),
+    pinnedIds: [...new Set(pinnedIds.map((id) => requiredDocumentId(id, "Pinned collection id")))],
     cursor: value.cursor === undefined
       ? null
       : parseCursor(value.cursor, { uid, scope, lifecycle, kind: "collections" }),

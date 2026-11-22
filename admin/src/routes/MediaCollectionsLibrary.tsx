@@ -1,6 +1,6 @@
 import { CopyMediaLink } from "../components/media/CopyMediaLink";
 import { mediaPermalink, unavailableMediaMessage } from "../lib/media-permalink";
-import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from "react";
+import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
 import { useBeforeUnload, useBlocker, useLocation, useNavigate, useSearchParams } from "react-router";
 import { parseMediaWorkspacePath } from "../lib/routes";
 import { CollectionColorField } from "../components/CollectionColorField";
@@ -37,8 +37,8 @@ import {
   type MediaCollectionScope,
   type MediaCollectionSummary,
 } from "../lib/media-collections";
-import { readMediaCollectionPins } from "../lib/media-collection-pins";
-import { saveMediaCollectionPin } from "../lib/media-collection-pins-store";
+import type { MediaCollectionPins } from "../lib/media-collection-pins";
+import { loadMediaCollectionPins, saveMediaCollectionPin } from "../lib/media-collection-pins-store";
 import type { CmsUserDoc } from "../lib/principal";
 import { mediaCollectionsPath, mediaImagesPath, mediaVideosPath } from "../lib/routes";
 import { encodeCollectionsMediaLocation, parseCollectionsMediaLocation } from "../lib/media-query";
@@ -58,6 +58,8 @@ type DetailState =
   | { status: "loading" }
   | { status: "error"; message: string }
   | { status: "ready"; page: MediaCollectionItemPage; pages: number };
+
+const collectionPinStore = { load: loadMediaCollectionPins, save: saveMediaCollectionPin };
 
 function newRequestId(): string {
   return globalThis.crypto.randomUUID().replaceAll("-", "");
@@ -94,6 +96,7 @@ export function MediaCollectionsLibrary({
   collectionId,
   userId,
   userDoc,
+  pinStore = collectionPinStore,
   canBrowseImages,
   principal,
   categories,
@@ -106,6 +109,7 @@ export function MediaCollectionsLibrary({
   collectionId: string | null;
   userId: string;
   userDoc: CmsUserDoc | null;
+  pinStore?: typeof collectionPinStore;
   canBrowseImages: boolean;
   principal: Principal;
   categories: readonly MediaCategoryDefinition[];
@@ -169,8 +173,14 @@ export function MediaCollectionsLibrary({
   const [viewerSaving, setViewerSaving] = useState(false);
   const removeOperation = useRef<{ key: string; version: number; requestId: string }>();
   const itemsHeadingRef = useRef<HTMLHeadingElement>(null);
-  const storedPins = useMemo(() => readMediaCollectionPins(userDoc), [userDoc]);
-  const [pins, setPins] = useState(storedPins);
+  const [pinState, setPinState] = useState<{ userId: string; pins: MediaCollectionPins | null }>();
+  const pinsReady = pinState?.userId === userId;
+  const pins = pinsReady ? pinState.pins : null;
+  const pinIds = pins?.ids ?? [];
+  const currentPinIds = useRef(pinIds);
+  currentPinIds.current = pinIds;
+  const currentProfile = useRef(userDoc);
+  currentProfile.current = userDoc;
   const [pinPending, setPinPending] = useState("");
   const [pinError, setPinError] = useState("");
   const generation = useRef(0);
@@ -236,7 +246,15 @@ export function MediaCollectionsLibrary({
   const hasExitRisk = useCallback(() => exitRiskRef.current || videoActiveRef.current, []);
   useRegisterExitGuard(exitRisk || videoTransferActive ? { saving: mutationPending, hasUnsavedWork: hasExitRisk } : null);
 
-  useEffect(() => setPins(storedPins), [storedPins]);
+  useEffect(() => {
+    let current = true;
+    void pinStore.load(userId, currentProfile.current).then(pins => {
+      if (current) setPinState({ userId, pins });
+    }).catch(() => {
+      if (current) setPinState({ userId, pins: null });
+    });
+    return () => { current = false; };
+  }, [pinStore, userId]);
 
   useEffect(() => {
     listMoreGeneration.current++;
@@ -280,18 +298,23 @@ export function MediaCollectionsLibrary({
   }, [collectionId, userId]);
 
   useEffect(() => {
-    if (collectionId) return;
+    if (collectionId || !pinsReady) return;
     const current = ++generation.current;
     setListLoadingScope("");
     setListState({ status: "loading" });
+    const pinnedIds = currentPinIds.current;
     void Promise.all(((["private", "all_staff"] as const).map(async scope => {
-      const result = await listMediaCollections(await getIdToken(), { scope, lifecycle, limit: 30 });
+      const result = await listMediaCollections(await getIdToken(), {
+        scope, lifecycle, limit: 30,
+        // One request can resolve personal pins across both scopes.
+        ...(scope === "private" && pinnedIds.length > 0 && { pinnedIds }),
+      });
       return [scope, result] as const;
     }))).then(results => {
       if (generation.current !== current) return;
       setListState({
         status: "ready",
-        records: results.flatMap(([, result]) => result.collections),
+        records: [...(results[0][1].pinnedCollections ?? []), ...results.flatMap(([, result]) => result.collections)],
         cursors: Object.fromEntries(results.map(([scope, result]) => [scope, result.nextCursor])) as Record<MediaCollectionScope, string | null>,
       });
     }).catch(error => {
@@ -301,7 +324,7 @@ export function MediaCollectionsLibrary({
       });
     });
     return () => { generation.current++; };
-  }, [collectionId, getIdToken, lifecycle, listAttempt, userId]);
+  }, [collectionId, getIdToken, lifecycle, listAttempt, pinsReady, userId]);
 
   useEffect(() => {
     if (!collectionId) return;
@@ -671,15 +694,15 @@ export function MediaCollectionsLibrary({
   }
 
   async function togglePin(target: MediaCollectionSummary) {
-    if (pinPending) return;
-    const pinned = !pins.ids.includes(target.id);
+    if (!pins || pinPending) return;
+    const pinned = !pinIds.includes(target.id);
     const account = accountGeneration.current;
     setPinPending(target.id);
     setPinError("");
     try {
-      const next = await saveMediaCollectionPin(userId, target.id, pinned);
+      const next = await pinStore.save(userId, target.id, pinned);
       if (accountGeneration.current !== account) return;
-      setPins(next);
+      setPinState({ userId, pins: next });
     } catch (error) {
       if (accountGeneration.current === account) {
         setPinError(collectionFailureMessage(error, "Your collection pin could not be saved. Try again."));
@@ -721,6 +744,11 @@ export function MediaCollectionsLibrary({
     }
   }
 
+  const pinMessage = pinError ? <InlineMessage tone="error" title="Pin was not saved">{pinError}</InlineMessage>
+    : pinsReady && !pins ? <InlineMessage tone="error" title="Collection pins could not be loaded">
+      Reload the page to try again.
+    </InlineMessage> : null;
+
   if (collectionId) {
     const canOrganize = Boolean(collection?.canEdit && collection.lifecycle === "active");
     const ownerOnly = collection?.scope === "private" && !collection.shared;
@@ -750,12 +778,12 @@ export function MediaCollectionsLibrary({
               <div className="media-collection-heading-actions">
                 <CopyMediaLink key={collection.id} path={mediaPermalink(mediaCollectionsPath(collection.id))} />
                 <StatusBadge tone="neutral">{ownerOnly ? "Private" : collection.shared ? "Shared" : "All staff"}</StatusBadge>
-                <Button variant="ghost" disabled={Boolean(pinPending)} aria-pressed={pins.ids.includes(collection.id)}
-                  aria-label={`${pins.ids.includes(collection.id) ? "Unpin" : "Pin"} ${collection.name}`}
-                  onClick={() => void togglePin(collection)}><Icon name="pin" />{pins.ids.includes(collection.id) ? "Unpin" : "Pin"}</Button>
+                <Button variant="ghost" disabled={!pins || Boolean(pinPending)} aria-pressed={pinIds.includes(collection.id)}
+                  aria-label={`${pinIds.includes(collection.id) ? "Unpin" : "Pin"} ${collection.name}`}
+                  onClick={() => void togglePin(collection)}><Icon name="pin" />{pinIds.includes(collection.id) ? "Unpin" : "Pin"}</Button>
               </div>
             </header>
-            {pinError ? <InlineMessage tone="error" title="Pin was not saved">{pinError}</InlineMessage> : null}
+            {pinMessage}
             {collection.canEdit ? <form className="media-collection-details-form" onSubmit={saveDetails}>
               <label>Name<TextInput required maxLength={120} disabled={editPending || collection.lifecycle === "archived"}
                 value={editName} onChange={event => { setEditName(event.target.value); editOperation.current = undefined; setEditError(""); }} /></label>
@@ -817,12 +845,15 @@ export function MediaCollectionsLibrary({
     </section>;
   }
 
-  const records = listState.status === "ready" ? listState.records.filter(item => !scopeFilter || item.scope === scopeFilter) : [];
-  const orderedRecords = [...records].sort((left, right) => {
-    const pinOrder = pins.ids.indexOf(left.id) - pins.ids.indexOf(right.id);
-    if (pins.ids.includes(left.id) && pins.ids.includes(right.id)) return pinOrder;
-    if (pins.ids.includes(left.id)) return -1;
-    if (pins.ids.includes(right.id)) return 1;
+  const loadedRecords = listState.status === "ready"
+    ? [...new Map(listState.records.map(item => [item.id, item])).values()]
+    : [];
+  const orderedRecords = loadedRecords.filter(item => !scopeFilter || item.scope === scopeFilter).sort((left, right) => {
+    const leftPin = pinIds.indexOf(left.id);
+    const rightPin = pinIds.indexOf(right.id);
+    if (leftPin >= 0 && rightPin >= 0) return leftPin - rightPin;
+    if (leftPin >= 0) return -1;
+    if (rightPin >= 0) return 1;
     return left.name.localeCompare(right.name);
   });
   function applySavedView(view: SavedMediaView) {
@@ -902,7 +933,7 @@ export function MediaCollectionsLibrary({
       <div className="button-row"><AsyncActionButton type="submit" variant="primary" label="Create collection" pending={createPending} pendingLabel="Creating" disabled={!createName.trim()} />
         <Button disabled={createPending} onClick={() => { setCreateOpen(false); setCreateError(""); createOperation.current = undefined; }}>Cancel</Button></div>
     </form> : null}
-    {pinError ? <InlineMessage tone="error" title="Pin was not saved">{pinError}</InlineMessage> : null}
+    {pinMessage}
     <MediaToolbar configuration={listToolbar} savedViews={{
       userId,
       surface: "collections",
@@ -916,7 +947,7 @@ export function MediaCollectionsLibrary({
     {listState.status === "loading" ? <LoadingIndicator label={`Loading ${lifecycle} collections`} />
       : listState.status === "error" ? <InlineMessage tone="error" title="Collections unavailable"><span>{listState.message}</span>
         <Button onClick={() => setListAttempt(value => value + 1)}>Try again</Button></InlineMessage>
-        : orderedRecords.length === 0 && scopeFilter && listState.records.length > 0
+        : orderedRecords.length === 0 && scopeFilter && loadedRecords.length > 0
           ? <EmptyState title="No collections in this scope"
               action={<Button onClick={() => writeLocation(lifecycle, null, null)}>Clear scope</Button>} />
         : orderedRecords.length === 0 ? <EmptyState title={lifecycle === "active" ? "No active collections" : "No archived collections"}
@@ -933,7 +964,7 @@ export function MediaCollectionsLibrary({
               <span className="media-collection-card-description">{item.description || "No description"}</span>
               {item.itemCount !== undefined ? <span>{item.itemCount} {item.itemCount === 1 ? "item" : "items"}</span> : null}
             </button>
-            <CollectionPin name={item.name} pinned={pins.ids.includes(item.id)} disabled={Boolean(pinPending)}
+            <CollectionPin name={item.name} pinned={pinIds.includes(item.id)} disabled={!pins || Boolean(pinPending)}
               onClick={() => void togglePin(item)} />
           </li>)}</ul>{listState.status === "ready" && (listState.cursors.private || listState.cursors.all_staff) ? <div className="button-row">
             {listState.cursors.private && (!scopeFilter || scopeFilter === "private") ? <Button disabled={Boolean(listLoadingScope)} onClick={() => void loadMoreCollections("private")}>{listLoadingScope === "private" ? "Loading private collections" : "Load more private collections"}</Button> : null}

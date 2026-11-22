@@ -536,7 +536,7 @@ it("executes discovered direct SDK preference writers through unchanged real rul
   for (const client of [c1Client, c0Client]) {
     await client.saveControlPresentation(actorId, "text");
     await client.saveHomeShortcuts(actorId, null);
-    await client.saveMediaCollectionPin(actorId, "contract-collection", true);
+    await client.saveMediaCollectionPin(actorId, "a".repeat(64), true);
     await client.mutateContentLibraryViews(actorId, { type: "delete", id: "contract-view" });
     await client.mutateMediaLibraryViews(actorId, { type: "delete", id: "contract-view" });
     const session = "contract-session-0123456789";

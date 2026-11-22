@@ -275,6 +275,7 @@ import { clearMediaSessionCache } from "../lib/media-session-cache";
 import { MediaFavoritesLibrary } from "../routes/MediaFavoritesLibrary";
 import type { MediaFavoritePage } from "../lib/media-favorites";
 import { MediaCollectionsLibrary } from "../routes/MediaCollectionsLibrary";
+import { parseMediaCollectionPins, setMediaCollectionPinned } from "../lib/media-collection-pins";
 import { GALLERY_MEDIA, GALLERY_MEDIA_CATEGORIES, guideCapture } from "./gallery-media-fixtures";
 import {
   GALLERY_COLLECTION_DOCUMENT,
@@ -2456,10 +2457,21 @@ function MediaCollectionsGallery({ initialEntry = "/media/collections" }: { init
 function MediaCollectionsGalleryRoute({ getIdToken }: { getIdToken: () => Promise<string> }) {
   const location = useLocation();
   const route = parseMediaWorkspacePath(location.pathname);
+  const [pinStore] = useState(() => {
+    let pins = parseMediaCollectionPins(null);
+    return {
+      load: async () => pins,
+      save: async (_userId: string, collectionId: string, pinned: boolean) => {
+        pins = setMediaCollectionPinned(pins, collectionId, pinned);
+        return pins;
+      },
+    };
+  });
   return <SuccessNoticeProvider routeKey={location.key}><MediaCollectionsLibrary
     collectionId={route.kind === "collections" ? route.collectionId : null}
     userId="gallery"
     userDoc={null}
+    pinStore={pinStore}
     principal={{ id: "gallery", grants: [{ role: "super_admin" }] }}
     categories={GALLERY_MEDIA_CATEGORIES}
     canBrowseImages

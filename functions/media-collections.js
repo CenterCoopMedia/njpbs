@@ -315,6 +315,19 @@ async function readCollectionPage(
   };
 }
 
+async function readPinnedCollections(firestore, actor, request, documents) {
+  const listed = new Set(documents.map((document) => document.id));
+  const snapshots = await readSnapshots(firestore, request.pinnedIds
+    .filter((id) => !listed.has(id))
+    .map((id) => collectionReference(firestore, id)));
+  return snapshots.flatMap((document) => {
+    const collection = document.exists ? storedCollection(document.data()) : null;
+    return collectionPermission(actor.uid, collection) && collection.lifecycle === request.lifecycle
+      ? [{ document, collection }]
+      : [];
+  });
+}
+
 async function readCollectionItemCandidates(
   firestore,
   actor,
@@ -989,14 +1002,16 @@ function createCmsListMediaCollectionsHandler(deps = {}) {
         document,
         collection: assertCollectionAccess(actor, storedCollectionOrThrow(document)),
       }));
+      const pinned = await readPinnedCollections(runtime.firestore, actor, request, page.documents);
       const collections = await presentCollections({
         ...runtime,
         actor,
-        records,
+        records: [...records, ...pinned],
       });
       res.status(200).json({
         success: true,
-        collections,
+        collections: collections.slice(0, records.length),
+        ...(request.pinnedIds.length > 0 && { pinnedCollections: collections.slice(records.length) }),
         nextCursor: page.nextCursor,
         hasMore: page.nextCursor !== null,
       });
