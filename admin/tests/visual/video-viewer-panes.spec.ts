@@ -495,6 +495,8 @@ for (const [item, message] of [["Original video", "The original file could not b
     await page.getByRole("menuitem", { name: new RegExp(`^${item}`) }).click();
     await expect(page.locator(".media-dialog-notices").getByText(message, { exact: true })).toBeInViewport();
     await expect(page.getByRole("tab", { name: "Transcript", exact: true })).toHaveAttribute("aria-selected", "true");
+    await page.getByRole("button", { name: "Bookmarks", exact: true }).click();
+    await expect(page.getByRole("textbox", { name: "Bookmark name", exact: true })).toBeEnabled();
   });
 }
 

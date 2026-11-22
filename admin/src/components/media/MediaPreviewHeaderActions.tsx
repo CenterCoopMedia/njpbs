@@ -12,6 +12,7 @@ import "./MediaPreviewHeaderActions.css";
 
 export interface MediaPreviewHeaderActionsProps {
   downloads: ReactNode;
+  bookmarks?: ReactNode;
   transcript?: { onSelect: () => void; expanded: boolean; controls: string };
   clip?: { onSelect: () => void; expanded: boolean; controls: string };
   favorite?: Pick<ComponentProps<typeof MediaFavoriteButton>, "favorite" | "pending" | "disabled" | "onToggle" | "name">;
@@ -22,7 +23,7 @@ export function MediaPreviewHeaderActions(props: MediaPreviewHeaderActionsProps)
   return <ControlSizingProvider size="standard"><MediaPreviewHeaderActionsContent {...props} /></ControlSizingProvider>;
 }
 
-function MediaPreviewHeaderActionsContent({ downloads, transcript, clip, favorite, copyLink }: MediaPreviewHeaderActionsProps) {
+function MediaPreviewHeaderActionsContent({ downloads, bookmarks, transcript, clip, favorite, copyLink }: MediaPreviewHeaderActionsProps) {
   const root = useRef<HTMLDivElement>(null);
   const copyButton = useRef<HTMLButtonElement>(null);
   const frame = useContext(MediaDialogContext);
@@ -87,6 +88,7 @@ function MediaPreviewHeaderActionsContent({ downloads, transcript, clip, favorit
       </div>, frame.contextActionsTarget) : null}
       {frame.commandsTarget ? createPortal(<div ref={setCommandToolbar} className="media-frame-command-controls" role="toolbar" aria-label="Preview actions">
         {downloads}
+        {bookmarks}
         {frame.compactActions ? <Menu label="More preview actions" tooltip="More preview actions" variant="ghost" showGroupLabels fitBelow
           items={[...navigationItems, ...items.map(item => ({ ...item.menuItem, group: "Asset" }))]} /> : null}
       </div>, frame.commandsTarget) : null}
@@ -94,7 +96,7 @@ function MediaPreviewHeaderActionsContent({ downloads, transcript, clip, favorit
     </div>;
   }
   return <div ref={root} className="media-preview-header-actions">
-    <OverflowToolbar label="Preview actions" items={items} collapseTogether search={downloads} moreLabel="More preview actions" moreVariant="ghost" />
+    <OverflowToolbar label="Preview actions" items={items} collapseTogether search={downloads} trailing={bookmarks} moreLabel="More preview actions" moreVariant="ghost" />
     <CopyMediaLinkPanel path={copyLink} open={copyOpen} onOpenChange={setCopyOpen} anchorRef={copyAnchor} />
   </div>;
 }

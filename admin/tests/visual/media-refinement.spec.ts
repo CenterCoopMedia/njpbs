@@ -36,8 +36,9 @@ for (const coarse of [false, true]) {
         expect(identity).toBe(12);
         const download = header.getByRole("button", { name: "Download", exact: true });
         if (width < 781) {
+          const bookmarks = header.getByRole("button", { name: "Bookmarks", exact: true });
           const more = header.getByRole("button", { name: "More preview actions", exact: true });
-          const controls = await Promise.all([save, download, more, close].map(control => control.boundingBox()));
+          const controls = await Promise.all([save, download, bookmarks, more, close].map(control => control.boundingBox()));
           for (let index = 1; index < controls.length; index++) {
             expect(controls[index]!.x).toBeGreaterThanOrEqual(controls[index - 1]!.x + controls[index - 1]!.width);
             expect(Math.abs(controls[index]!.y - controls[0]!.y)).toBeLessThan(1);
@@ -125,8 +126,11 @@ for (const presentation of ["icons", "text"] as const) {
     await expect(title).toHaveValue("Unchanged asset with a local draft");
     await expect(page.getByRole("button", { name: "Keep editing", exact: true })).toHaveCount(0);
     const download = header.getByRole("button", { name: "Download", exact: true });
+    const bookmarks = header.getByRole("button", { name: "Bookmarks", exact: true });
     await download.focus();
     await download.press("ArrowLeft");
+    await expect(bookmarks).toBeFocused();
+    await bookmarks.press("ArrowLeft");
     await expect(download).toBeFocused();
     await expect(title).toHaveValue("Unchanged asset with a local draft");
   });
@@ -138,12 +142,15 @@ test("phone toolbar keys and actual result stepping retain the visible focus own
   await openMediaRefinement(page, 320);
   const header = page.locator(".component-editor-dialog-header");
   const download = header.getByRole("button", { name: "Download", exact: true });
+  const bookmarks = header.getByRole("button", { name: "Bookmarks", exact: true });
   const more = header.getByRole("button", { name: "More preview actions", exact: true });
   const positionStatus = header.getByRole("status").filter({ hasText: /^\d+ of \d+$/ });
   await expect(positionStatus).toHaveCount(1);
   await expect(positionStatus).toHaveText("2 of 3");
   await download.focus();
   await download.press("ArrowRight");
+  await expect(bookmarks).toBeFocused();
+  await bookmarks.press("ArrowRight");
   await expect(more).toBeFocused();
   await more.press("Home");
   await expect(download).toBeFocused();
