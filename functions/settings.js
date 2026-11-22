@@ -955,7 +955,7 @@ const cmsGetPublishedSettings = cmsOnRequest(
   createCmsGetPublishedSettingsHandler(),
 );
 const cmsSaveSettings = cmsOnRequest(
-  { cors: true, minInstances: 1 },
+  { cors: true, minInstances: 0 },
   createCmsSaveSettingsHandler(),
 );
 const cmsPublishSettings = cmsOnRequest(

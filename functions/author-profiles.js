@@ -636,7 +636,7 @@ const cmsSetAuthorProfileVisibility = cmsOnRequest(
   createSetAuthorProfileVisibilityHandler(),
 );
 const cmsListBylineAuthors = cmsOnRequest(
-  { cors: true, minInstances: 1, cpu: 1, concurrency: 80 },
+  { cors: true, minInstances: 0, cpu: 1, concurrency: 80 },
   createListBylineAuthorsHandler(),
 );
 const cmsListAuthorPagePosts = cmsOnRequest(

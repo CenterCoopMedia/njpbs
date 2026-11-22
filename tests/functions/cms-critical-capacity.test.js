@@ -25,7 +25,10 @@ const { cmsGetMediaReview, cmsListMediaComments } = mediaFeedbackPkg;
 const { cmsCreateSourceMediaRead, cmsListMediaSources, cmsListSourceMedia } = sourceMediaPkg;
 
 it("keeps the approved deployed Function capacity plan", () => {
-  for (const fn of [cmsSaveSettings, cmsListBylineAuthors, cmsListMedia, cmsListSourceMedia, cmsGetPublishedPost]) {
+  for (const fn of [cmsSaveSettings, cmsListBylineAuthors]) {
+    expect(fn.__endpoint.minInstances).toBe(0);
+  }
+  for (const fn of [cmsListMedia, cmsListSourceMedia, cmsGetPublishedPost]) {
     expect(fn.__endpoint.minInstances).toBe(1);
   }
   expect(cmsListBylineAuthors.__endpoint.cpu).toBe(1);
