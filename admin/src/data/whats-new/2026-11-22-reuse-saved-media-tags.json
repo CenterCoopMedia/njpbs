@@ -3,5 +3,6 @@
   "kind": "improved",
   "title": "Reuse tags from saved media",
   "body": "Start typing in the Tags field when uploading, editing or bulk editing media. Boardwalk suggests tags from recent images and videos you can access. Choose a suggestion or enter a new tag.",
-  "prs": []
+  "prs": [],
+  "order": 1795380001000
 }
