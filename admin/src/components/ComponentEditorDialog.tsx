@@ -1,7 +1,7 @@
 import { ControlSizingProvider, useControlSize } from "../context/ControlSizingContext";
 import { MediaDialogContext, type MediaDialogNavigation } from "../context/MediaDialogContext";
 import { MediaViewerNavigation } from "./media/MediaViewerNavigation";
-import { useEffect, useId, useRef, useState, type KeyboardEventHandler, type ReactNode } from "react";
+import { useCallback, useEffect, useId, useRef, useState, type KeyboardEventHandler, type ReactNode } from "react";
 import { Button } from "./ui/Primitives";
 import { Icon } from "./ui/Icon";
 import { ActionControl } from "./ui/ActionControl";
@@ -104,7 +104,7 @@ export function ComponentEditorDialog(props: Parameters<typeof ComponentEditorDi
 }
 
 function ComponentEditorDialogContent({
-  open, onClose, title, description, children, body, settings, sections, layout, preview, disabled = false, focusTargetId, footerNote = "Changes stay in this draft. Save when ready.", closeLabel = "Done", closeActionLabel, className, closeVariant, settingsLabel, closeDisabled = false, footerActions, headerActions, headerFacts, headerSteps, headerNavigation, onFrameKeyDown, variant,
+  open, onClose, title, description, children, body, settings, sections, layout, preview, disabled = false, focusTargetId, focusOpener, onFocusFallback, footerNote = "Changes stay in this draft. Save when ready.", closeLabel = "Done", closeActionLabel, className, closeVariant, settingsLabel, closeDisabled = false, footerActions, headerActions, headerFacts, headerSteps, headerNavigation, onFrameKeyDown, variant,
 }: {
   open: boolean;
   onClose: () => void;
@@ -119,6 +119,9 @@ function ComponentEditorDialogContent({
   preview?: ReactNode;
   disabled?: boolean;
   focusTargetId?: string;
+  /** The opener when opening can disable or remove the focused control before showModal. */
+  focusOpener?: Element | null;
+  onFocusFallback?: () => void;
   footerNote?: string | null;
   closeLabel?: string;
   closeActionLabel?: string;
@@ -148,14 +151,29 @@ function ComponentEditorDialogContent({
   const [previewVisible, setPreviewVisible] = useState(true);
   const previewToggle = useRef<HTMLButtonElement>(null);
   const opener = useRef<HTMLElement | null>(null);
+  const focusFallback = useRef(onFocusFallback);
+  focusFallback.current = onFocusFallback;
   const titleId = useId();
   const descriptionId = useId();
+
+  const restoreFocus = useCallback(() => {
+    const previous = opener.current;
+    if (!previous) return;
+    opener.current = null;
+    // Icon actions can remount when their disabled state changes.
+    const target = previous.isConnected ? previous : document.getElementById(previous.id);
+    if (target && target !== document.body) {
+      target.focus();
+      if (focusedElement() === target) return;
+    }
+    focusFallback.current?.();
+  }, []);
 
   useEffect(() => {
     if (!dialog) return;
     if (open && !disabled && !dialog.closest("[inert]")) {
       if (!dialog.open) {
-        opener.current = focusedElement();
+        opener.current = focusOpener instanceof HTMLElement ? focusOpener : focusedElement();
         const target = document.getElementById(focusTargetId ?? (variant === "media" ? titleId : ""));
         if (variant === "media" && target && dialog.contains(target)) target.setAttribute("autofocus", "");
         dialog.showModal();
@@ -170,13 +188,11 @@ function ComponentEditorDialogContent({
       }
     } else if (dialog.open) {
       dialog.close();
-      if (opener.current?.isConnected) opener.current.focus();
+      restoreFocus();
     }
   });
 
-  useEffect(() => () => {
-    if (opener.current?.isConnected) opener.current.focus();
-  }, []);
+  useEffect(() => restoreFocus, [restoreFocus]);
 
   return (
     <dialog

@@ -46,6 +46,8 @@ export function MediaCollectionPicker({
   refs,
   getIdToken,
   onClose,
+  focusOpener,
+  onFocusFallback,
   onAdded,
   onOpenCollections,
 }: {
@@ -54,6 +56,8 @@ export function MediaCollectionPicker({
   refs: readonly MediaAssetRef[];
   getIdToken: () => Promise<string>;
   onClose: () => void;
+  focusOpener?: Element | null;
+  onFocusFallback?: () => void;
   onAdded: (collection: MediaCollectionSummary) => void;
   onOpenCollections: () => void;
 }) {
@@ -221,6 +225,8 @@ export function MediaCollectionPicker({
   return <ComponentEditorDialog
     open={open}
     onClose={onClose}
+    focusOpener={focusOpener}
+    onFocusFallback={onFocusFallback}
     closeDisabled={pending}
     closeLabel="Cancel"
     title="Add selected to collection"

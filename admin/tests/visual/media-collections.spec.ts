@@ -1,4 +1,6 @@
 import { expect, test, type Page } from "./fixtures";
+import type { MediaCollectionSummary } from "../../src/lib/media-collections";
+import type { MediaAssetRef } from "../../src/lib/media-identity";
 
 async function openCollectionSpecimen(page: Page, id: string, width: number): Promise<void> {
   await page.setViewportSize({ width, height: 900 });
@@ -11,7 +13,79 @@ async function expectNoPageOverflow(page: Page): Promise<void> {
   )).toBe(true);
 }
 
+const privateDestination: MediaCollectionSummary = {
+  id: "a".repeat(64), name: "Personal selects", scope: "private", description: "", color: "slate",
+  lifecycle: "active", version: 1, membershipVersion: 1, cover: null, canEdit: true, itemCount: 0,
+  createdAt: "2026-11-20T12:00:00.000Z", updatedAt: "2026-11-20T12:00:00.000Z",
+};
+const sharedDestination: MediaCollectionSummary = {
+  ...privateDestination, id: "b".repeat(64), name: "Team selects", scope: "all_staff", itemCount: undefined,
+};
+
+async function servePickerCollections(page: Page) {
+  const writes: { collectionId: string; present: boolean; refs: MediaAssetRef[] }[] = [];
+  await page.route("**/cmsListMediaCollections", async route => {
+    const { scope } = route.request().postDataJSON();
+    await route.fulfill({ json: {
+      success: true, nextCursor: null, hasMore: false,
+      collections: [scope === "private" ? privateDestination : sharedDestination],
+    } });
+  });
+  await page.route("**/cmsSetMediaCollectionItems", async route => {
+    const { collectionId, present, refs } = route.request().postDataJSON();
+    writes.push({ collectionId, present, refs });
+    await route.fulfill({ json: {
+      success: true, changed: true, replayed: false, collectionId, version: 2, membershipVersion: 2,
+      changedRefs: refs, hiddenChangedCount: 0,
+    } });
+  });
+  return writes;
+}
+
 for (const width of [1280, 390]) {
+  test(`Keyboard adds an image and video to one collection at ${width}px`, async ({ page }) => {
+    const writes = await servePickerCollections(page);
+    await openCollectionSpecimen(page, "media-favorites-grid", width);
+    const grid = page.getByRole("grid", { name: "Favorite media" });
+    await grid.getByRole("button", { name: /^Station image, image/ }).press("Space");
+    await grid.getByRole("button", { name: /^Archive interview, video/ }).press("Space");
+    const trigger = page.getByRole("group", { name: "Favorite selection" })
+      .getByRole("button", { name: "Add to collection", exact: true });
+    await trigger.press("Enter");
+
+    const picker = page.getByRole("dialog", { name: "Add selected to collection" });
+    const close = picker.getByRole("button", { name: "Close Add selected to collection", exact: true });
+    await expect(close).toBeFocused();
+    const personal = picker.getByRole("radio", { name: /Personal selects/ });
+    const team = picker.getByRole("radio", { name: /Team selects/ });
+    await expect(personal).toBeVisible();
+    await page.keyboard.press("Tab");
+    await expect(personal).toBeFocused();
+    await page.keyboard.press("Escape");
+    await expect(picker).toBeHidden();
+    await expect(trigger).toBeFocused();
+    expect(writes).toEqual([]);
+
+    await trigger.press("Enter");
+    await expect(personal).toBeVisible();
+    await expect(team).toBeVisible();
+    await page.keyboard.press("Tab");
+    await expect(personal).toBeFocused();
+    await page.keyboard.press("ArrowDown");
+    await expect(team).toBeChecked();
+    await page.keyboard.press("Tab");
+    const add = picker.getByRole("button", { name: "Add to collection", exact: true });
+    await expect(add).toBeFocused();
+    await expectNoPageOverflow(page);
+    await page.keyboard.press("Enter");
+    await expect(picker).toBeHidden();
+    await expect(trigger).toBeFocused();
+    expect(writes).toEqual([{
+      collectionId: sharedDestination.id, present: true,
+      refs: [{ backend: "r2", id: "gallery-image" }, { backend: "s3", sourceId: "archive", id: "gallery-video" }],
+    }]);
+  });
+
   test(`Collections list exposes Status and Scope at ${width}px`, async ({ page }) => {
     await openCollectionSpecimen(page, "media-collections-list", width);
     await expect(page.getByRole("heading", { level: 2, name: "Collections" })).toBeVisible();
@@ -118,6 +192,59 @@ for (const width of [1280, 390]) {
     await expectNoPageOverflow(page);
   });
 }
+
+test("Image picker restores the card action or falls back to the card after adding", async ({ page }) => {
+  await servePickerCollections(page);
+  await openCollectionSpecimen(page, "media-browsing", 1280);
+  const grid = page.getByRole("grid");
+  const image = grid.getByRole("button", { name: /^NJ Spotlight News, image/ });
+  const directAction = grid.getByRole("button", { name: "Add to collection: NJ Spotlight News", exact: true });
+  const picker = page.getByRole("dialog", { name: "Add selected to collection" });
+  await image.hover();
+  await directAction.click();
+  await picker.getByRole("button", { name: "Cancel", exact: true }).click();
+  await expect(picker).toBeHidden();
+  await expect(directAction).toBeFocused();
+
+  await image.press("Space");
+  const trigger = page.getByRole("group", { name: "Collection selection" })
+    .getByRole("button", { name: "Add to collection", exact: true });
+  await trigger.press("Enter");
+  const personal = picker.getByRole("radio", { name: /Personal selects/ });
+  await expect(personal).toBeVisible();
+  await page.keyboard.press("Tab");
+  await expect(personal).toBeFocused();
+  await page.keyboard.press("Space");
+  await page.keyboard.press("Tab");
+  await expect(picker.getByRole("button", { name: "Add to collection", exact: true })).toBeFocused();
+  await page.keyboard.press("Enter");
+  await expect(picker).toBeHidden();
+  await expect(trigger).toHaveCount(0);
+  await expect(image).toBeFocused();
+});
+
+test("Empty collections offer browse actions only when the collection can be organized", async ({ page }) => {
+  await openCollectionSpecimen(page, "media-collections", 390);
+  const browseImages = page.getByRole("button", { name: "Browse images", exact: true });
+  const browseVideos = page.getByRole("button", { name: "Browse videos", exact: true });
+  await page.getByRole("button", { name: /^New reporting package/ }).press("Enter");
+  await expect(page.getByText("This collection is empty", { exact: true })).toBeVisible();
+  await expect(browseImages).toBeEnabled();
+  await expect(browseVideos).toBeEnabled();
+  await browseImages.press("Enter");
+  await expect(page.getByRole("heading", { name: "New reporting package", exact: true })).toHaveCount(0);
+
+  await page.getByRole("button", { name: /^Reporting team selects/ }).press("Enter");
+  await expect(page.getByText("No accessible items to show", { exact: true })).toBeVisible();
+  await expect(browseImages).toBeEnabled();
+  await expect(browseVideos).toBeEnabled();
+
+  await openCollectionSpecimen(page, "media-collections-list", 390);
+  await page.getByRole("button", { name: /^Archived pledge drive/ }).press("Enter");
+  await expect(page.getByRole("button", { name: "Restore collection", exact: true })).toBeVisible();
+  await expect(browseImages).toHaveCount(0);
+  await expect(browseVideos).toHaveCount(0);
+});
 
 test("Collections controls stay usable when the list scrolls on narrow and short screens", async ({ page }) => {
   await page.setViewportSize({ width: 320, height: 501 });

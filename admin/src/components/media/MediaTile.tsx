@@ -164,7 +164,8 @@ export function MediaTile(props: MediaTileProps) {
     ...rest
   } = props;
   const tabIndex = tabbable ? undefined : -1;
-  const factsId = `${useId()}-facts`;
+  const tileId = useId();
+  const factsId = `${tileId}-facts`;
   const name = asset.name;
   const actions = actionOverride ?? mediaTileActions({
     surface,
@@ -390,9 +391,13 @@ export function MediaTile(props: MediaTileProps) {
               className="media-tile-action media-tile-collect"
               contextLabel={name}
               disabled={actionsDisabled}
+              id={`${tileId}-collect`}
               key={action.id}
               label={action.label}
-              onClick={() => onAction(action.id)}
+              onClick={event => {
+                event.currentTarget.focus();
+                onAction(action.id);
+              }}
               tabIndex={tabIndex}
               variant="ghost"
             />

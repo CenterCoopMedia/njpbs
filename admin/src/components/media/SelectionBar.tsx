@@ -142,7 +142,11 @@ export function SelectionBar({
             aria-describedby={action.disabledReason ? reasonId : undefined}
             className="media-selection-bar-action"
             disabled={(actionsDisabled && action.id !== allowActionWhileDisabled) || Boolean(action.disabledReason)}
-            onClick={() => onAction(action.id)}
+            onClick={event => {
+              // Some browsers leave mouse-activated buttons unfocused. The picker needs its opener.
+              if (action.id === "collect") event.currentTarget.focus();
+              onAction(action.id);
+            }}
             variant="ghost"
             size="standard"
           >

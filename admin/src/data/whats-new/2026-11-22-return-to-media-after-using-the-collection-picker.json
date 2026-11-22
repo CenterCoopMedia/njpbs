@@ -1,0 +1,7 @@
+{
+  "date": "2026-11-22",
+  "kind": "fixed",
+  "title": "Return to media after using the collection picker",
+  "body": "Closing Add to collection returns keyboard focus to the control that opened it. If adding items clears the selection, focus returns to the media list or search.",
+  "prs": []
+}

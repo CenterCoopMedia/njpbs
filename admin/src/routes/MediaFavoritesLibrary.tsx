@@ -55,7 +55,7 @@ import { readRecentTags, recordRecentTags } from "../lib/recent-media-tags";
 import { parseFavoritesMediaLocation, encodeFavoritesMediaLocation, type FavoriteMediaKind } from "../lib/media-query";
 import { useMediaDisplay } from "../lib/use-media-display";
 import { MediaToolbar, type MediaToolbarSurfaceConfiguration } from "../components/media/MediaToolbar";
-import { MediaGrid, type MediaGridHandle } from "../components/media/MediaGrid";
+import { MediaGrid, restoreMediaFocus, type MediaGridHandle } from "../components/media/MediaGrid";
 import { MediaTile } from "../components/media/MediaTile";
 import { MediaRow, MediaRowHeader, mediaRowColumnStyle } from "../components/media/MediaRow";
 import { MediaPaging } from "../components/media/MediaPaging";
@@ -198,7 +198,7 @@ export function MediaFavoritesLibrary({
   const [quickLookRead, setQuickLookRead] = useState<{ key: string; fileVersion?: string | null; url: string | null }>();
   const [selection, setSelection] = useState<MediaSelection<FavoriteItem>>(emptySelection);
   const [batchSaving, setBatchSaving] = useState(false);
-  const [collectionRefs, setCollectionRefs] = useState<MediaFavoriteRef[] | null>(null);
+  const [collectionTarget, setCollectionTarget] = useState<{ refs: MediaFavoriteRef[]; opener: Element | null } | null>(null);
   const internalNavigation = useRef<string>();
   function writeLocation(kind: FavoriteMediaKind | null, ref: MediaFavoriteRef | null, replace = false) {
     const params = encodeFavoritesMediaLocation(kind, ref);
@@ -272,7 +272,7 @@ export function MediaFavoritesLibrary({
     setRemoveDecision(undefined);
     setSelectionDecision(undefined);
     setSelection(emptySelection());
-    setCollectionRefs(null);
+    setCollectionTarget(null);
     setBatchSaving(false);
     cursorOwner.current = userId;
   }, [userId]);
@@ -768,11 +768,17 @@ export function MediaFavoritesLibrary({
     + (offPageCount ? `, ${offPageCount} from other pages or filters` : "")
     + (selection.items.length === 100 ? ". Limit of 100 reached" : "");
 
+  function returnFocus() {
+    restoreMediaFocus(gridRef.current, () => document.getElementById("favorite-media-title")?.focus());
+  }
+
   function clearSelection() {
     setSelection(emptySelection());
-    requestAnimationFrame(() => {
-      if (!gridRef.current?.focusLastCard()) document.getElementById("favorite-media-title")?.focus();
-    });
+    requestAnimationFrame(returnFocus);
+  }
+
+  function openCollectionPicker(refs: MediaFavoriteRef[]) {
+    setCollectionTarget({ refs, opener: document.activeElement });
   }
 
   function onSelectionAction(id: string) {
@@ -780,7 +786,7 @@ export function MediaFavoritesLibrary({
     if (id === "collect") {
       const available = selection.items.filter(item => item.record.available);
       if (available.length > 0 && available.length <= 30 && available.length === selection.items.length) {
-        setCollectionRefs(available.map(item => item.record.ref));
+        openCollectionPicker(available.map(item => item.record.ref));
       }
     }
     if (id === "clear-selection") clearSelection();
@@ -800,7 +806,7 @@ export function MediaFavoritesLibrary({
       else if (record.available) {
         if (id === "open" || id === "open-full-size") requestSelection(record);
         else if (id === "quick-look") openQuickLook(record);
-        else if (id === "collect") setCollectionRefs([record.ref]);
+        else if (id === "collect") openCollectionPicker([record.ref]);
       }
     }
     const selectedActions = availableSelectionActions(selectionActions,
@@ -938,9 +944,11 @@ export function MediaFavoritesLibrary({
       actions={mediaBarActions(selectionActions)} actionsDisabled={batchSaving || metadataDirty || metadataSaving}
       onAction={onSelectionAction} onClear={clearSelection} error={selection.error} />
 
-    {collectionRefs ? <MediaCollectionPicker open userId={userId} refs={collectionRefs} getIdToken={getIdToken}
-      onClose={() => setCollectionRefs(null)} onAdded={collection => { setCollectionRefs(null);
+    {collectionTarget ? <MediaCollectionPicker open userId={userId} refs={collectionTarget.refs} getIdToken={getIdToken}
+      onClose={() => setCollectionTarget(null)} onAdded={collection => { setCollectionTarget(null);
         if (!notice.available) setSuccessNotice({ title: "Added to collection", message: `Added to ${collection.name}.` }); }}
+      focusOpener={collectionTarget.opener}
+      onFocusFallback={returnFocus}
       onOpenCollections={() => navigate(mediaCollectionsPath())} /> : null}
 
     {quickLook && quickLookRecord && quickLookItem ? <QuickLook getIdToken={getIdToken} item={quickLookItem}

@@ -690,6 +690,8 @@ describe("media collection service", () => {
   it("removes one bounded group of refs and rejects a stale membership version", async () => {
     const collection = await create("private");
     const refs = ["asset-1", "asset-2"].map((id) => ({ backend: "r2", id }));
+    const assets = refs.map(({ id }) => db.doc(`media_assets/${id}`));
+    const originalAssets = (await db.getAll(...assets)).map(snapshot => snapshot.data());
     const added = await setItems({
       collectionId: collection.id,
       requestId: randomUUID(),
@@ -708,6 +710,7 @@ describe("media collection service", () => {
     expect(removed.statusCode, JSON.stringify(removed.body)).toBe(200);
     expect(removed.body).toMatchObject({ changed: true, membershipVersion: 3 });
     expect((await db.collection(`mediaCollections/${collection.id}/items`).get()).size).toBe(0);
+    expect((await db.getAll(...assets)).map(snapshot => snapshot.data())).toEqual(originalAssets);
     const stale = await setItems({
       collectionId: collection.id,
       requestId: randomUUID(),
