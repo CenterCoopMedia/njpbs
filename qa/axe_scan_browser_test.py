@@ -86,10 +86,8 @@ class SearchReadiness(BrowserChecks):
         self.assertEqual(gate_exit_code({"/search/": result}), 1)
 
 
-class PublicInteractions(BrowserChecks):
+class VideoCatalogInteractions(BrowserChecks):
     def test_public_video_catalog_navigation_and_search(self):
-        if VIDEO_CATALOG_SCREENSHOTS is None:
-            self.skipTest("requires the synthetic video catalog build")
         screenshots = VIDEO_CATALOG_SCREENSHOTS
         screenshots.mkdir(parents=True, exist_ok=True)
         for width, height in [(390, 844), (1280, 900)]:
@@ -136,6 +134,8 @@ class PublicInteractions(BrowserChecks):
                         self.assertNotIn(excluded, hits)
                         self.assertEqual(page.request.get(BASE + excluded).status, 404)
 
+
+class PublicInteractions(BrowserChecks):
     def test_live_player_fallback_offers_the_schedule_when_the_embed_fails(self):
         with self.browser.new_context(java_script_enabled=False) as context:
             player = "https://player.pbs.org/**"
@@ -369,17 +369,21 @@ class EmittedRoutes(BrowserChecks):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--base", required=True)
-    parser.add_argument("--mode", choices=["full", "coming-soon"], default="full")
+    parser.add_argument("--mode", choices=["full", "coming-soon", "video-catalog"], default="full")
     parser.add_argument("--dist", default="site/dist")
     parser.add_argument("--video-catalog-screenshots", type=Path)
     args = parser.parse_args()
     BASE = args.base.rstrip("/")
     MODE, DIST = args.mode, args.dist
     VIDEO_CATALOG_SCREENSHOTS = args.video_catalog_screenshots
-    classes = (
-        [EmittedRoutes, SearchReadiness, PublicInteractions]
-        if MODE == "full" else [EmittedRoutes, ComingSoonInteractions]
-    )
+    if MODE == "video-catalog":
+        if VIDEO_CATALOG_SCREENSHOTS is None:
+            parser.error("--video-catalog-screenshots is required in video-catalog mode")
+        classes = [VideoCatalogInteractions]
+    elif MODE == "full":
+        classes = [EmittedRoutes, SearchReadiness, PublicInteractions]
+    else:
+        classes = [EmittedRoutes, ComingSoonInteractions]
     suite = unittest.TestSuite(unittest.defaultTestLoader.loadTestsFromTestCase(cls) for cls in classes)
     result = unittest.TextTestRunner(verbosity=2).run(suite)
     raise SystemExit(not result.wasSuccessful())
