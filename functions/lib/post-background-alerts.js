@@ -4,7 +4,7 @@ const { createHash, randomUUID } = require("node:crypto");
 const logger = require("firebase-functions/logger");
 const { SUPPORTED_OUTPUTS: OUTPUTS, dependency, backgroundHealth, pageOwnsHomeInTransaction } = require("./post-background-outputs");
 const { readPublicBackgroundContextInTransaction } = require("./public-context-revision");
-const { listNoBuildPostOwners, readNoBuildPostOwner } = require("./no-build-post-ownership");
+const { isNoBuildPostId, readNoBuildPostOwner } = require("./no-build-post-ownership");
 const { POST_PROOF_EXHAUSTED_WARNING } = require("./no-build-post-proof-state");
 const { outputLimits } = require("./no-build-record-namespace");
 const { publicContextProgressAt } = require("./no-build-cloud-work");
@@ -209,30 +209,36 @@ async function checkFamilyAlerts({ firestore, send, now = Date.now, log = logger
 }
 
 async function checkPostProofAlerts({ firestore, send, now = Date.now, log = logger }) {
-  const owners = (await listNoBuildPostOwners({ firestore })).filter(owner => owner.state.operationId && owner.state.mode !== "static");
-  for (const { state } of owners) {
-    const queueRef = firestore.doc(`cmsPublishQueue/${state.operationId}`);
+  // A failed check with a retry due usually passes on its own. Discover only
+  // terminal failures, then recheck the operation and ownership before alerting.
+  const candidates = await firestore.collection("cmsPublishQueue")
+    .where("postProof.status", "==", "failed")
+    .where("postProof.nextAttemptAt", "==", null)
+    .get();
+  for (const candidate of candidates.docs) {
+    const queueRef = candidate.ref;
     const ref = queueRef.collection("alerts").doc("public-proof");
     const claim = randomUUID();
     const acquired = await firestore.runTransaction(async transaction => {
       const queue = (await transaction.get(queueRef)).data();
+      const postId = queue?.noBuildPost?.postId;
+      if (queue?.transport !== "post-no-build-v1" || queue.status !== "success" ||
+          queue.postProof?.status !== "failed" || queue.postProof.nextAttemptAt !== null || !isNoBuildPostId(postId)) return null;
+      const { state } = await readNoBuildPostOwner({ firestore, transaction, postId });
+      if (state?.operationId !== queueRef.id || state.mode === "static") return null;
       const prior = (await transaction.get(ref)).data();
-      const current = (await readNoBuildPostOwner({ firestore, transaction, postId: state.postId })).state;
-      if (current?.operationId !== state.operationId || queue?.transport !== "post-no-build-v1" ||
-          queue.status !== "success" || queue.postProof?.status !== "failed" || queue.postProof.nextAttemptAt !== null ||
-          prior?.sentAt || prior?.nextAttemptAt > now()) return null;
-      // Alert only after the last retry fails; a failed check with a retry due usually passes on its own.
-      transaction.set(ref, { reason: "public_proof_failed", claim, nextAttemptAt: now() + 5 * 60_000, sentAt: null });
-      return POST_PROOF_EXHAUSTED_WARNING;
+      if (prior?.sentAt || prior?.nextAttemptAt > now()) return null;
+      transaction.set(ref, { reason: "public_proof_failed", claim, nextAttemptAt: now() + ALERT_LEASE_MS, sentAt: null });
+      return { postId, slug: state.slug };
     });
     if (!acquired) continue;
     try {
-      await send(`NJ PBS Post ${state.slug}: ${acquired}`);
+      await send(`NJ PBS Post ${acquired.slug}: ${POST_PROOF_EXHAUSTED_WARNING}`);
       await firestore.runTransaction(async transaction => {
         if ((await transaction.get(ref)).data()?.claim === claim) transaction.update(ref, { sentAt: now(), claim: null });
       });
     } catch {
-      log.error("Post public check alert delivery failed", { postId: state.postId });
+      log.error("Post public check alert delivery failed", { postId: acquired.postId });
     }
   }
 }
