@@ -995,5 +995,4 @@ module.exports = {
   resolveFeedbackTarget,
   reviewReference,
   saveMediaReview,
-  verifiedCommentAuthorName,
 };

@@ -14,7 +14,8 @@ export function refreshedSourceMediaAsset(previous: SourceMediaAssetSummary, fre
   if (fresh.version < previous.version || previous.fileVersion && !fresh.fileVersion) return previous;
   if (!blocked) return fresh;
   return sourceMediaStatusMatches(previous, fresh)
-    ? { ...previous, viewingCopy: fresh.viewingCopy, uploadedBy: fresh.uploadedBy ?? previous.uploadedBy }
+    ? { ...previous, viewingCopy: fresh.viewingCopy, approvalVersions: fresh.approvalVersions,
+        uploadedBy: fresh.uploadedBy ?? previous.uploadedBy }
     : previous;
 }
 
