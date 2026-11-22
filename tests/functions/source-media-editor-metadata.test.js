@@ -78,6 +78,39 @@ afterEach(async () => {
 });
 
 describe("bounded source-relative editor metadata", () => {
+  it("saves rights aliases as canonical values and pages older records with either spelling", async () => {
+    const legacy = { credit: "Example archive", license: "Permission letter on file", tags: ["County", "county"] };
+    await refs[1].update(legacy);
+    const second = db.collection("mediaSourceAssets").doc(`${parentId}-second`);
+    const pending = db.collection("mediaSourceAssets").doc(`${parentId}-pending`);
+    refs.push(second, pending);
+    await Promise.all([
+      second.set(fixture({ rightsStatus: "complete" })),
+      pending.set(fixture()),
+    ]);
+
+    const edit = { sourceId: source.id, assetId: parentId, expectedVersion: 1 };
+    const invalid = await call("update", { ...edit, changes: { rightsStatus: "cleared" } });
+    expect(invalid.statusCode).toBe(400);
+    const saved = await call("update", { ...edit, changes: { rightsStatus: " Recorded " } });
+    expect(saved.statusCode).toBe(200);
+    expect(saved.body.asset).toMatchObject({ ...legacy, rightsStatus: "complete", version: 2 });
+    expect((await refs[1].get()).data()).toMatchObject({ ...legacy, rightsStatus: "complete" });
+
+    const read = (rightsStatus, options = {}) => sourceMedia.readSourceMediaPage(db, source,
+      contract.parseSourceMediaListRequest({ sourceId: source.id, q: "Parent", limit: 1, rightsStatus, ...options }),
+      FieldPath.documentId());
+    const first = await read("RECORDED");
+    expect(first.records.map(record => record.id)).toEqual([parentId]);
+    expect(first.hasMore).toBe(true);
+    const next = await read("complete", { cursor: first.nextCursor });
+    expect(next.records.map(record => record.id)).toEqual([second.id]);
+    expect(next.hasMore).toBe(false);
+    expect(() => read("Needs review", { cursor: first.nextCursor })).toThrow("Cursor is invalid");
+    expect(() => read("cleared")).toThrow("Rights status must be pending or complete");
+    expect((await read("Needs review")).records.map(record => record.id)).toEqual([pending.id]);
+  });
+
   it("pages metadata requests within the selected source and returns no matches for an empty search", async () => {
     const selectedSource = { ...source, id: `source-${randomUUID()}` };
     const otherSource = `source-${randomUUID()}`;
@@ -217,7 +250,7 @@ describe("bounded source-relative editor metadata", () => {
         ChecksumSHA256: `${createHash("sha256").update(Buffer.from(checksum, "base64")).digest("base64")}-1`,
         Metadata: { "boardwalk-session": session.id, "boardwalk-asset": session.assetId } }; },
     };
-    const body = startBody({ requestId: randomUUID(), metadata: { name: "Staff title", description: "Staff description", markers: [marker], metadataUpdateRequested: true } });
+    const body = startBody({ requestId: randomUUID(), metadata: { name: "Staff title", description: "Staff description", markers: [marker], metadataUpdateRequested: true, rightsStatus: "Needs review" } });
     const started = await call("start", body, { uploader });
     expect(started.statusCode).toBe(200);
     expect((await call("start", { ...body, parentSource: { ...body.parentSource, outMs: 6000 } }, { uploader })).statusCode).toBe(409);
@@ -229,7 +262,7 @@ describe("bounded source-relative editor metadata", () => {
     expect(completed.statusCode).toBe(200);
     expect(completed.body.asset).toMatchObject({ markers: [marker], parentSource: body.parentSource, version: 1 });
     const stored = (await db.collection("mediaSourceAssets").doc(completed.body.asset.id).get()).data();
-    expect(stored).toMatchObject({ markers: [marker], parentSource: body.parentSource, metadataUpdateRequested: true });
+    expect(stored).toMatchObject({ markers: [marker], parentSource: body.parentSource, metadataUpdateRequested: true, rightsStatus: "pending" });
     expect(completed.body.asset.metadataUpdateRequested).toBe(true);
     const assetId = completed.body.asset.id;
     expect((await call("update", { sourceId: source.id, assetId, expectedVersion: 2, changes: { metadataUpdateRequested: false } })).statusCode).toBe(409);
