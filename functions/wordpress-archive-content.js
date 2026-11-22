@@ -1,0 +1,320 @@
+"use strict";
+
+const { createHash } = require("node:crypto");
+const { parseFragment } = require("parse5");
+const { isDataTableData } = require("./lib/data-table");
+const { validateSection } = require("./lib/editor-section-contract");
+const { embedPlayer, xVideoLink } = require("./lib/embed-player");
+const { safeHref } = require("./lib/safe-href");
+
+const MAX_HTML = 512_000;
+const GROUPS = new Set(["article", "div", "section", "main", "aside", "header", "footer"]);
+const INLINE = new Set(["a", "span", "cite", "strong", "b", "em", "i", "code"]);
+const INTERACTIVE = new Set(["script", "style", "object", "embed", "svg", "math", "template",
+  "form", "input", "button", "select", "textarea", "noscript"]);
+const STATIC_BLOCKS = new Set(["paragraph", "heading", "group", "columns", "column", "quote", "pullquote",
+  "list", "list-item", "separator", "code", "preformatted", "image", "gallery", "table", "embed", "freeform"]);
+const DYNAMIC_BLOCKS = new Set(["query", "latest-posts", "latest-comments", "archives", "categories", "rss",
+  "search", "tag-cloud", "calendar", "social-links", "navigation", "block", "pattern", "template-part"]);
+const CORE_SHORTCODES = new Set(["audio", "caption", "embed", "gallery", "playlist", "video", "wp_caption"]);
+const MARKS = new Map([["strong", "bold"], ["b", "bold"], ["em", "italic"], ["i", "italic"], ["code", "code"]]);
+const children = node => node.childNodes ?? [];
+const attr = (node, name) => node.attrs?.find(item => item.name === name)?.value;
+const hasClass = (node, name) => attr(node, "class")?.split(/\s+/).includes(name);
+const textNode = (text, marks = []) => ({ type: "text", text, ...(marks.length ? { marks } : {}) });
+const isInline = node => node.type === "text" || node.type === "hardBreak";
+
+function paragraphs(pieces) {
+  const result = [];
+  let inline = [];
+  function flush() {
+    if (inline.some(node => node.type === "hardBreak" || node.text.trim())) {
+      result.push({ type: "paragraph", content: inline });
+    }
+    inline = [];
+  }
+  for (const piece of pieces) {
+    if (isInline(piece)) inline.push(piece);
+    else {
+      flush();
+      if (piece.type !== "paragraphBoundary") result.push(piece);
+    }
+  }
+  flush();
+  return result;
+}
+
+function plainText(pieces) {
+  return pieces.map(node => {
+    if (node.type === "text") return node.text;
+    if (node.type === "hardBreak") return "\n";
+    return plainText(node.content ?? []);
+  }).join(pieces.some(piece => !isInline(piece)) ? "\n" : "");
+}
+
+function enforceTreeLimit(fragment) {
+  let count = 0;
+  function visit(node, depth) {
+    return ++count <= 10_000 && depth <= 50 && children(node).every(child => visit(child, depth + 1));
+  }
+  return visit(fragment, 0);
+}
+
+/** Convert one WXR story body. Report fields are identifiers, fixed codes and offsets. */
+function convertWordPressStory({ html, sourceRef, permalink, mediaByUrl = new Map() }) {
+  const { source, postId } = sourceRef ?? {};
+  if (typeof source !== "string" || !/^[a-z0-9][a-z0-9._-]{0,63}$/i.test(source)
+    || typeof postId !== "string" || !/^\d{1,20}$/.test(postId)) {
+    throw new TypeError("A WordPress archive source key and decimal post ID are required.");
+  }
+  const issues = new Map();
+  function flag(code, location) {
+    if (issues.size >= 200) {
+      issues.set("report_limit", { code: "report_limit", start: 0, end: 0 });
+      return;
+    }
+    const start = location?.startOffset ?? 0;
+    const end = location?.endOffset ?? start;
+    issues.set(`${start}:${end}:${code}`, { code, start, end });
+  }
+  function finish(blocks) {
+    const items = [...issues.values()].sort((a, b) => a.start - b.start || a.end - b.end);
+    return { blocks, report: { sourceRef: { source, postId },
+      status: items.length ? "manual_review" : blocks.length ? "complete" : "skipped", issues: items } };
+  }
+  if (typeof html !== "string" || !html.isWellFormed()) {
+    flag("invalid_body");
+    return finish([]);
+  }
+  if (html.length > MAX_HTML) {
+    flag("body_limit");
+    return finish([]);
+  }
+  const fragment = parseFragment(html, {
+    sourceCodeLocationInfo: true,
+    onParseError: error => flag("malformed_html", error),
+  });
+  if (!enforceTreeLimit(fragment)) {
+    flag("body_limit");
+    return finish([]);
+  }
+  const closingShortcodes = new Set();
+  for (const match of html.matchAll(/\[\/([a-z][\w:-]*)\]/gi)) closingShortcodes.add(match[1].toLowerCase());
+
+  function resolveHref(raw) {
+    const href = safeHref(raw);
+    if (!href) return null;
+    try { return safeHref(new URL(href, permalink).href); }
+    catch { return null; }
+  }
+  function link(node) {
+    const raw = attr(node, "href");
+    const href = resolveHref(raw);
+    if (raw !== undefined && !href) flag("unsafe_link", node.sourceCodeLocation);
+    return href;
+  }
+  function block(blockType, data, node) {
+    return { blockType, data, location: node.sourceCodeLocation };
+  }
+  function richOnly(pieces) {
+    return pieces.filter(piece => {
+      if (!piece.blockType) return true;
+      flag("nested_structured_content", piece.location);
+      return false;
+    });
+  }
+  function textWithShortcodes(node, marks) {
+    const value = node.value;
+    const parts = [];
+    const parent = node.parentNode;
+    const classicFlow = parent.nodeName === "#document-fragment" || GROUPS.has(parent.tagName);
+    function addText(text) {
+      const chunks = classicFlow ? text.split(/\n[\t ]*\n+/) : [text];
+      for (const [index, value] of chunks.entries()) {
+        if (index) parts.push({ type: "paragraphBoundary" });
+        if (value) parts.push(textNode(value, marks));
+      }
+    }
+    let start = 0;
+    // Preserve ordinary bracketed prose and escaped shortcode literals.
+    for (const match of value.matchAll(/\[\[[^\[\]]*\]\]|\[(\/?)([a-z][\w:-]*)([^\[\]]*)\]/gi)) {
+      const [, closing, name, args] = match;
+      if (!name || (args && !/^[\s/]/.test(args))) continue;
+      if (!closing && !CORE_SHORTCODES.has(name.toLowerCase()) && !args.includes("=")
+        && !args.endsWith("/") && !closingShortcodes.has(name.toLowerCase())) continue;
+      flag("shortcode", node.sourceCodeLocation);
+      addText(value.slice(start, match.index));
+      start = match.index + match[0].length;
+    }
+    addText(value.slice(start));
+    return parts;
+  }
+  function project(nodes) {
+    return plainText(richOnly(nodes.flatMap(node => convert(node)))).trim();
+  }
+  function image(node, marks) {
+    const src = resolveHref(attr(node, "src"));
+    const assetId = src && /^https?:\/\//.test(src) ? mediaByUrl.get(src) : undefined;
+    if (typeof assetId !== "string" || !/^[A-Za-z0-9_-]{1,128}$/.test(assetId)) {
+      flag("missing_media", node.sourceCodeLocation);
+      return [];
+    }
+    const alt = attr(node, "alt") ?? "";
+    const href = marks.find(mark => mark.type === "link")?.attrs.href;
+    if (!alt.trim()) flag("missing_alt", node.sourceCodeLocation);
+    return [block("image", { assetId, alt, ...(href ? { href } : {}) }, node)];
+  }
+  function embed(node, raw) {
+    const url = resolveHref(raw);
+    const playerUrl = url && (embedPlayer(url, false)?.src ?? xVideoLink(url));
+    if (!playerUrl || attr(node, "srcdoc") !== undefined) {
+      flag("unsupported_embed", node.sourceCodeLocation);
+      return [];
+    }
+    return [block("embed", { url: playerUrl }, node)];
+  }
+  function table(node) {
+    const direct = children(node);
+    const rows = direct.flatMap(child => ["thead", "tbody", "tfoot"].includes(child.tagName) ? children(child) : [child])
+      .filter(child => child.tagName === "tr");
+    const cells = rows.map(row => children(row).filter(cell => ["th", "td"].includes(cell.tagName)));
+    const simple = cells[0]?.length && cells[0].every(cell => cell.tagName === "th")
+      && cells.every((row, index) => row.every(cell => (index === 0 || cell.tagName === "td")
+        && attr(cell, "rowspan") === undefined && attr(cell, "colspan") === undefined));
+    const caption = direct.find(child => child.tagName === "caption");
+    const data = {
+      title: caption ? project(children(caption)) : "Table",
+      csv: simple ? cells.map(row => row.map(cell => {
+        if (children(cell).some(child => child.nodeName !== "#text")) flag("table_formatting", cell.sourceCodeLocation);
+        return `"${project(children(cell)).replaceAll('"', '""')}"`;
+      }).join(",")).join("\n") : "",
+      source: "",
+      sourceHref: "",
+    };
+    if (!simple || !isDataTableData(data, true)) {
+      flag("unsupported_table", node.sourceCodeLocation);
+      return [];
+    }
+    return [{ ...block("data_table", data, node), hasCaption: Boolean(caption) }];
+  }
+  function figure(node, marks) {
+    const parts = children(node).map(child => ({
+      caption: child.tagName === "figcaption" || hasClass(child, "wp-caption-text") ? child : null,
+      pieces: convert(child, marks),
+    }));
+    const content = paragraphs(parts.filter(part => !part.caption).flatMap(part => part.pieces));
+    const captions = parts.filter(part => part.caption);
+    if (!captions.length) return content;
+    const [only] = content;
+    const [{ caption, pieces }] = captions;
+    if (captions.length === 1 && content.length === 1 && ["image", "embed", "data_table"].includes(only.blockType)
+      && children(caption).every(child => child.nodeName === "#text")
+      && parts.indexOf(captions[0]) > parts.findIndex(part => part.pieces.includes(only))
+      && !only.hasCaption) {
+      const value = plainText(pieces).trim();
+      if (value && (only.blockType !== "data_table" || isDataTableData({ ...only.data, title: value }, true))) {
+        only.data[only.blockType === "data_table" ? "title" : "caption"] = value;
+        return content;
+      }
+    }
+    // Retain rich captions as editable prose, including the credit's links.
+    return paragraphs(parts.flatMap(part => part.pieces));
+  }
+  function comment(node) {
+    const marker = /^\s*wp:([a-z][a-z\d-]*(?:\/[a-z][a-z\d-]*)?)(?=\s|\/|$)/i.exec(node.data);
+    if (!marker) return;
+    const name = marker[1].replace(/^core\//, "");
+    if (STATIC_BLOCKS.has(name) && !node.data.trimEnd().endsWith("/")) return;
+    const code = name === "shortcode" ? "shortcode" : name === "html" ? "interactive_markup"
+      : DYNAMIC_BLOCKS.has(name) || name.startsWith("post-") ? "dynamic_block" : "unsupported_block";
+    flag(code, node.sourceCodeLocation);
+  }
+  function convert(node, marks = [], literal = false) {
+    const location = node.sourceCodeLocation;
+    const tag = node.tagName;
+    if (node.nodeName === "#text") return literal ? [textNode(node.value, marks)] : textWithShortcodes(node, marks);
+    if (node.nodeName === "#comment") {
+      comment(node);
+      return [];
+    }
+    if (INTERACTIVE.has(tag)) {
+      flag("interactive_markup", location);
+      return [];
+    }
+    if (tag === "br") return [{ type: "hardBreak" }];
+    if (tag === "hr") return [block("divider", {}, node)];
+    if (tag === "img") return image(node, marks);
+    if (tag === "iframe") return embed(node, attr(node, "src"));
+    if (tag === "audio" || tag === "video" || tag === "source") {
+      flag("unsupported_media", location);
+      return [];
+    }
+    if (tag === "table") return table(node);
+    if (tag === "figure" || hasClass(node, "wp-caption")) return figure(node, marks);
+    if (hasClass(node, "wp-block-embed__wrapper") && children(node).every(child => child.nodeName === "#text")) {
+      return embed(node, children(node).map(child => child.value).join("").trim());
+    }
+    if (tag === "a") {
+      const href = link(node);
+      if (href) marks = [...marks.filter(mark => mark.type !== "link"), { type: "link", attrs: { href } }];
+    }
+    const mark = MARKS.get(tag);
+    if (mark && !marks.some(item => item.type === mark)) marks = [...marks, { type: mark }];
+    const pieces = children(node).flatMap(child => convert(child, marks, literal || tag === "pre"));
+    if (GROUPS.has(tag) || tag === "p" || tag === "figcaption") return paragraphs(pieces);
+    if (/^h[1-6]$/.test(tag)) {
+      const level = tag === "h1" || tag === "h2" ? 2 : 3;
+      if (tag !== "h2" && tag !== "h3") flag("heading_level", location);
+      return [{ type: "heading", attrs: { level }, content: richOnly(pieces).filter(isInline) }];
+    }
+    if (tag === "pre") {
+      const value = plainText(richOnly(pieces));
+      return [{ type: "codeBlock", content: value ? [textNode(value)] : [] }];
+    }
+    if (tag === "blockquote" || tag === "li") {
+      const content = paragraphs(richOnly(pieces));
+      if (tag === "li" && !["ul", "ol"].includes(node.parentNode.tagName)) {
+        flag("list_layout", location);
+        return content;
+      }
+      if (!content.length || (tag === "li" && content[0].type !== "paragraph")) content.unshift({ type: "paragraph" });
+      return [{ type: tag === "li" ? "listItem" : "blockquote", content }];
+    }
+    if (tag === "ul" || tag === "ol") {
+      const items = richOnly(pieces).filter(piece => piece.type === "listItem");
+      if (pieces.some(piece => piece.type !== "listItem" && (!isInline(piece) || piece.text?.trim()))
+        || (tag === "ol" && (attr(node, "start") ?? "1") !== "1")) flag("list_layout", location);
+      return items.length ? [{ type: tag === "ul" ? "bulletList" : "orderedList", content: items }] : [];
+    }
+    if (!INLINE.has(tag)) flag("unsupported_markup", location);
+    return pieces;
+  }
+
+  const blocks = [];
+  const prefix = createHash("sha256").update(JSON.stringify([source, postId])).digest("hex").slice(0, 24);
+  function add(type, data) {
+    const order = blocks.length;
+    blocks.push({ id: `wp-${prefix}-${order}`, type, order, visible: true, data });
+  }
+  let prose = [];
+  function flush() {
+    if (prose.length) add("prose", { content: { type: "doc", content: prose } });
+    prose = [];
+  }
+  for (const piece of paragraphs(children(fragment).flatMap(node => convert(node)))) {
+    if (piece.blockType) {
+      flush();
+      add(piece.blockType, piece.data);
+    } else {
+      prose.push(piece);
+    }
+  }
+  flush();
+  if (validateSection("post", blocks)) {
+    flag("post_block_limit");
+    return finish([]);
+  }
+  return finish(blocks);
+}
+
+module.exports = { convertWordPressStory };

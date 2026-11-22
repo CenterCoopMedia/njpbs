@@ -15,6 +15,7 @@
     "datasets": "packages/content-core/src/datasets.ts",
     "election-result-sources": "packages/content-core/src/election-result-sources.ts",
     "election-results": "packages/content-core/src/election-results.ts",
+    "embed-player": "packages/content-core/src/embed-player.ts",
     "home-hero": "packages/content-core/src/home-hero.ts",
     "home-newscast-data": "packages/content-core/src/home-newscast-data.ts",
     "home-retained-sources": "site/src/lib/home-retained-sources-entry.ts",
