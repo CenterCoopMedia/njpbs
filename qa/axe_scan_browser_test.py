@@ -117,7 +117,8 @@ class VideoCatalogInteractions(BrowserChecks):
                 fallback.focus()
                 expect(fallback).to_be_focused()
                 expect(fallback).to_have_attribute("href", "https://watch.njpbs.org/video/river-crossing/")
-                page.screenshot(path=str(screenshots / f"episode-{width}.png"))
+                page.get_by_role("heading", name="The river crossing", exact=True).scroll_into_view_if_needed()
+                page.screenshot(path=str(screenshots / f"episode-{width}.png"), full_page=True)
                 if width == 1280:
                     hits = page.evaluate("""async () => {
                         const pagefind = await import('/pagefind/pagefind.js');

@@ -302,6 +302,9 @@ it("serves verified exact bytes and settles only the six named outputs, preservi
 });
 
 it("serves the video catalog from the release until verified background bytes take ownership", async () => {
+  await db.doc("system/publicDeployment").set({ ...deployment.initialPublicDeploymentPointer(),
+    activeGeneration: 1, activeCommitSha: runtime.release, activeDeploymentId: "11111111-1111-4111-8111-111111111111",
+    lastReservedGeneration: 1, newestEligibleGeneration: 1, newestEligibleBuildBatchId: "context-baseline" });
   const path = paths.videoCatalog[1];
   const decision = () => postPublication.readNoBuildPostDecision({ firestore: db, path, rendererSha: runtime.release });
   expect(await decision()).toEqual({ kind: "pass" });
