@@ -592,6 +592,43 @@ describe('saved transcript corrections',()=>{
     const res=await call(handler,{...request,format:'tsv'});
     expect(writes).toBe(1);expect(res.statusCode).toBe(404);expect(res.body).not.toHaveProperty('url');
   });
+  it.each([false, true])('stores a separate draft from the selected revision (concurrent edit: %s)', async concurrentEdit => {
+    const store = await ready();
+    Object.assign(store.job, { provider: 'local', editRevision: 3, editedOutputs: { 'segments.json': 'selected-version' } });
+    const commands = [];
+    const processor = processorModule.createVideoTranscriptProcessor(config, {
+      firestore: store.firestore, credentials: async () => ({}), transcribe: {},
+      s3: { send: async ({ input }) => {
+        commands.push(input);
+        if (input.VersionId) return { Body: Readable.from([JSON.stringify([segment('Selected words')])]) };
+        if (concurrentEdit) store.job.editRevision++;
+        return { VersionId: 'draft-version' };
+      } },
+      sign: async (_client, { input }, options) => {
+        commands.push({ ...input, ...options });
+        return 'https://example.org/private-draft';
+      },
+    });
+    const handler = handlers.createTranscriptHandler('download', handlerDependencies(store, { processor }));
+    const result = await call(handler, { sourceId: source.id, assetId: 'asset', transcriptId: store.job.id, format: 'vtt-draft' });
+    const key = processorModule.resultKey(store.job, 'r3.caption-draft.vtt');
+    expect(commands).toEqual([
+      expect.objectContaining({ Key: processorModule.editedResultKey(store.job, 'segments.json'), VersionId: 'selected-version' }),
+      expect.objectContaining({ Key: key, CacheControl: 'private, no-store', ContentType: 'text/vtt; charset=utf-8', Body: expect.stringContaining('Selected words') }),
+      expect.objectContaining({ Key: key, VersionId: 'draft-version', expiresIn: 300, ResponseContentDisposition: 'attachment; filename="caption-draft.vtt"' }),
+    ]);
+    expect(result.statusCode).toBe(concurrentEdit ? 409 : 200);
+    expect(result.body.url).toBe(concurrentEdit ? undefined : 'https://example.org/private-draft');
+  });
+  it('rejects caption drafts for paid transcripts and for clip requests', async () => {
+    const store = await ready();
+    let reads = 0;
+    const handler = handlers.createTranscriptHandler('download', handlerDependencies(store, { processor: { download: async () => { reads++; } } }));
+    const body = { ...request, format: 'vtt-draft' };
+    expect((await call(handler, body)).body).toEqual({ error: 'Caption drafts require a local transcript' });
+    expect((await call(handler, { ...body, clipId: 'a'.repeat(64) })).statusCode).toBe(400);
+    expect(reads).toBe(0);
+  });
   it('refuses a stale TSV revision before any export write',async()=>{
     const store=await ready();const collection=store.firestore.collection;let writes=0;
     store.firestore.collection=(name)=>{const result=collection(name);if(name!=='mediaSourceAssets')return result;const doc=result.doc;result.doc=(id)=>{const reference=doc(id);const get=reference.get;reference.get=async()=>{store.rows.get(store.path).editRevision=1;return get();};return reference;};return result;};

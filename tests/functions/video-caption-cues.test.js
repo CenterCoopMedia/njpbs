@@ -50,6 +50,29 @@ describe('distribution caption cues', () => {
     expect(srt).not.toContain('Editor');
   });
 
+  it('marks the applicable draft cues while preserving timed text and speaker annotations', () => {
+    const segments = [
+      { speaker: 'spk_0', startSeconds: 0, endSeconds: 5, text: 'First second', words: [
+        { text: 'First', startSeconds: 0.25, endSeconds: 1, confidence: 0.74 },
+        { text: 'second', startSeconds: 4, endSeconds: 4.75, confidence: 0.75 },
+      ] },
+      { speaker: 'unknown', startSeconds: 2, endSeconds: 3, text: '<Door closes>', overlappingSpeech: true },
+    ];
+    const names = { spk_0: 'Host & guest' };
+    const draft = contract.transcriptVtt(segments, names, { draft: true });
+    expect(draft).toBe([
+      'WEBVTT',
+      'NOTE Draft captions. Review before publishing.',
+      'NOTE Review cue 1: low-confidence wording.',
+      '1\n00:00:00.250 --> 00:00:01.000\n<v Host &amp; guest>First</v>',
+      'NOTE Review cue 2: speaker uncertain, overlapping speech, estimated timing.',
+      '2\n00:00:02.000 --> 00:00:03.000\n<v Unknown speaker>&lt;Door closes&gt;</v>',
+      '3\n00:00:04.000 --> 00:00:04.750\n<v Host &amp; guest>second</v>',
+    ].join('\n\n') + '\n');
+    expect(draft.replace(/^NOTE .+\n\n/gm, '')).toBe(contract.transcriptExports(segments, names).vtt);
+    expect(() => contract.transcriptVtt([], names, { draft: true })).toThrow(/no timed text/);
+  });
+
   it('keeps corrected words with estimated cue times when alignment is missing or stale', () => {
     const corrected = { ...passage, text: paragraph.replace('criminal justice', 'local government') };
     const stale = captions.captionCues([corrected]);

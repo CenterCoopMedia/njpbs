@@ -1,0 +1,7 @@
+{
+  "date": "2026-11-22",
+  "kind": "new",
+  "title": "Download draft WebVTT captions",
+  "body": "Open a saved local transcript and choose Draft WebVTT captions from Download. The editable file flags uncertain wording, speakers, overlapping speech and estimated timing. Review the draft before publishing.",
+  "prs": []
+}

@@ -145,7 +145,7 @@ export function listVideoOrientationExports(token: string, identity: VideoIdenti
   return postFunction<{ success: true; exports: VideoOrientationExport[]; workerReady: boolean }>("cmsListVideoOrientationExports", token,
     identity, {}, { appCheck: true });
 }
-export type TranscriptDownloadFormat = "txt" | "vtt" | "srt" | "tsv" | "avid" | "premiere";
+export type TranscriptDownloadFormat = "txt" | "vtt" | "vtt-draft" | "srt" | "tsv" | "avid" | "premiere";
 export const avidFrameRates = ["24000/1001", "24/1", "25/1", "30000/1001", "30/1", "50/1", "60000/1001", "60/1"] as const;
 export type AvidFrameRate = typeof avidFrameRates[number];
 export interface AvidTranscriptOptions { frameRate: AvidFrameRate; frameOffset: number }

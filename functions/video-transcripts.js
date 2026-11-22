@@ -64,8 +64,11 @@ function requestPolicy(config) {
 }
 
 async function readCachedTranscript(args) {
-  const { operation, request } = args;
-  if (operation === "download" && !request.clipId && ["srt", "vtt", "tsv", "avid", "premiere"].includes(request.format)) {
+  const { operation, request, job } = args;
+  if (operation === "download" && request.format === "vtt-draft" && job.provider !== "local") {
+    throw Object.assign(new Error("Caption drafts require a local transcript"), { status: 409 });
+  }
+  if (operation === "download" && !request.clipId && ["srt", "vtt", "vtt-draft", "tsv", "avid", "premiere"].includes(request.format)) {
     return withTranscriptWriteLease(args, () => readCachedTranscriptContent(args));
   }
   return readCachedTranscriptContent(args);

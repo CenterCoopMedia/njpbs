@@ -8,7 +8,7 @@ const { db } = require("./firebase");
 const { assertBillingEnabled } = require("./billing-state");
 const { getSignedUrl } = require("@aws-sdk/s3-request-presigner");
 const { createAwsRoleCredentialProvider } = require("./aws-workload-credentials");
-const { MAX_RESULT_BYTES, normalizeTranscript, transcriptExports, transcriptLog, transcriptSrt } = require("./video-transcript-contract");
+const { MAX_RESULT_BYTES, normalizeTranscript, transcriptExports, transcriptVtt, transcriptLog, transcriptSrt } = require("./video-transcript-contract");
 const { createTranscriptAudioRuntime } = require("./video-transcript-audio-runtime");
 const { processingChanges } = require("./video-processing-status");
 const { releaseLocalQueue } = require("./video-transcript-local-queue");
@@ -281,12 +281,15 @@ function createVideoTranscriptProcessor(config, dependencies = {}) {
 
   async function download(job, format) {
     // Rebuild captions from the selected revision so old paragraph caches are never released.
-    if (format === "vtt") return storeExport({ key: resultKey(job, `r${job.editRevision ?? 0}.vtt`),
-      body: transcriptExports(await read(job), job.speakerNames).vtt,
-      contentType: "text/vtt; charset=utf-8", filename: "transcript.vtt" });
+    if (format === "vtt" || format === "vtt-draft") {
+      const draft = format === "vtt-draft";
+      return storeExport({ key: resultKey(job, `r${job.editRevision ?? 0}.${draft ? "caption-draft.vtt" : "vtt"}`),
+        body: transcriptVtt(await read(job), job.speakerNames, { draft }),
+        contentType: "text/vtt; charset=utf-8", filename: draft ? "caption-draft.vtt" : "transcript.vtt" });
+    }
     const selected = selectedTranscriptOutputs(job);
     const VersionId = selected.outputs[format];
-    if (!["txt", "vtt"].includes(format) || !VersionId) throw new Error("transcript_cache_missing");
+    if (format !== "txt" || !VersionId) throw new Error("transcript_cache_missing");
     const url = await sign(s3, new GetObjectCommand({ ...location(selected.key(format)), VersionId,
       ResponseContentDisposition: `attachment; filename="transcript.${format}"` }), { expiresIn: 300 });
     return { url, expiresAt: new Date(Date.now() + 300_000).toISOString() };

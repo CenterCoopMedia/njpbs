@@ -6,6 +6,7 @@ const { SourceMediaValidationError } = require("./source-media-contract");
 const LINE_LENGTH = 42;
 const MAX_DURATION_MS = 7000;
 const PAUSE_MS = 1000;
+const LOW_WORD_CONFIDENCE = 0.75;
 const normalize = (text) => text.trim().replace(/\s+/g, " ");
 
 // Wrap on word boundaries. Keep an unusually long name or URL intact on its own line.
@@ -26,28 +27,30 @@ function captionLines(words) {
 
 // Text edits and older providers may have no matching word alignment. Estimate only
 // the caption times within that saved passage; never change its text or stored timing.
-function estimatedWords(text, startMs, endMs) {
+function estimatedWords(text, startMs, endMs, confidence = undefined) {
   const tokens = normalize(text).split(" ");
   const total = tokens.reduce((sum, token) => sum + token.length + 1, 0);
   let used = 0;
   return tokens.map((token) => {
     const start = startMs + Math.round((endMs - startMs) * used / total);
     used += token.length + 1;
-    return { text: token, startMs: start, endMs: startMs + Math.round((endMs - startMs) * used / total) };
+    return { text: token, startMs: start, endMs: startMs + Math.round((endMs - startMs) * used / total), confidence };
   });
 }
 
 function captionWords(segment, startMs, endMs) {
   if (alignedWords(segment)) {
     const words = segment.words.flatMap((word) => estimatedWords(word.text,
-      Math.max(startMs, Math.round(word.startSeconds * 1000)), Math.min(endMs, Math.round(word.endSeconds * 1000))));
+      Math.max(startMs, Math.round(word.startSeconds * 1000)), Math.min(endMs, Math.round(word.endSeconds * 1000)), word.confidence));
     // Identical/rounded word starts cannot support separate non-overlapping cues.
-    if (words.every((word, index) => word.endMs > word.startMs && (index === 0 || word.startMs > words[index - 1].startMs))) return words;
+    if (words.every((word, index) => word.endMs > word.startMs && (index === 0 || word.startMs > words[index - 1].startMs))) {
+      return { words, estimatedTiming: false };
+    }
   }
-  return estimatedWords(segment.text, startMs, endMs);
+  return { words: estimatedWords(segment.text, startMs, endMs), estimatedTiming: true };
 }
 
-function passageCues(segment) {
+function passageCues(segment, draft) {
   if (typeof segment.text !== "string" || !Number.isFinite(segment.startSeconds) ||
       !Number.isFinite(segment.endSeconds) || segment.startSeconds < 0 || segment.endSeconds < segment.startSeconds) {
     throw new SourceMediaValidationError("Transcript has invalid caption timing", 409);
@@ -60,7 +63,12 @@ function passageCues(segment) {
     startMs = Math.floor(segment.startSeconds * 1000);
     endMs = Math.ceil(segment.endSeconds * 1000);
   }
-  const words = captionWords(segment, startMs, endMs);
+  const { words, estimatedTiming } = captionWords(segment, startMs, endMs);
+  const reviewNotes = draft ? [
+    ...(segment.speakerUncertain || segment.speaker === "unknown" ? ["speaker uncertain"] : []),
+    ...(segment.overlappingSpeech ? ["overlapping speech"] : []),
+    ...(estimatedTiming ? ["estimated timing"] : []),
+  ] : [];
   const cues = [];
   let first = 0;
   while (first < words.length) {
@@ -80,16 +88,18 @@ function passageCues(segment) {
     // Tiny provider passages can have more cues than milliseconds. Share the
     // collapsed interval rather than lose words or prevent saving the transcript.
     const cueStart = Math.min(words[first].startMs, endMs - 1);
+    const uncertainWords = draft && words.slice(first, last + 1).some((word) => word.confidence < LOW_WORD_CONFIDENCE);
     cues.push({ speaker: segment.speaker, startSeconds: cueStart / 1000,
-      endSeconds: Math.max(cueStart + 1, cueEnd) / 1000, text });
+      endSeconds: Math.max(cueStart + 1, cueEnd) / 1000, text,
+      ...(draft ? { reviewNotes: uncertainWords ? [...reviewNotes, "low-confidence wording"] : reviewNotes } : {}) });
     first = last + 1;
   }
   return cues;
 }
 
-function captionCues(segments) {
+function captionCues(segments, { draft = false } = {}) {
   // Overlapping speaker passages must still serialize in chronological order.
-  return segments.flatMap(passageCues).sort((first, second) => first.startSeconds - second.startSeconds);
+  return segments.flatMap((segment) => passageCues(segment, draft)).sort((first, second) => first.startSeconds - second.startSeconds);
 }
 
 module.exports = { captionCues };
