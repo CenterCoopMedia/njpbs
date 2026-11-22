@@ -2894,7 +2894,7 @@ describe("editor Back action and the primary rail", () => {
       collection: "cmsPosts", document: { type: "post" },
       postSource: { id: source.id, version: source.version, editionLocale: "es" },
     });
-    expect(screen.queryByRole("button", { name: "Publish", exact: true })).toBeNull();
+    expect(screen.queryByRole("button", { name: /^(Review & publish|Publish)$/ })).toBeNull();
     fireEvent.click(original);
     await waitFor(() => expect(router.state.location.pathname).toBe("/content/post/post-1/edit"));
   });
