@@ -327,6 +327,24 @@ it("does no copy work in disabled mode and keeps the cleanup query bounded", asy
   expect(queries.at(-1).cap).toBe(20);
 });
 
+it("reaches a due video copy behind a full batch of leased copies", async () => {
+  const { firestore, rows, ref, binding } = fixture();
+  for (let index = 0; index < 20; index++) {
+    rows.set(`${copies.COPIES}/000-${index}`, { active: true, leaseUntil: 1001 });
+  }
+  const job = { ...copies.newCopy(binding, 1), leaseUntil: 1000 };
+  rows.set(ref.path, job);
+  const step = vi.fn();
+  const tick = (time) => worker.processPrivateVideoTick({ firestore, source, copyEnabled: true,
+    now: () => time, maxSteps: 1, transfer: { step } });
+
+  const claim = vi.spyOn(firestore, "runTransaction");
+  expect(await tick(999)).toEqual({ idle: true });
+  expect(claim).not.toHaveBeenCalled();
+  expect(await tick(1000)).toEqual({ copyId: job.id, phase: "copying" });
+  expect(step).toHaveBeenCalledTimes(1);
+});
+
 it("keeps a read-only R2 body alive across provider upload backpressure", async () => {
   const { privateVideoStreamStorage } = await import("../../functions/lib/private-video-runtime.js");
   const { createRequire } = await import("node:module");

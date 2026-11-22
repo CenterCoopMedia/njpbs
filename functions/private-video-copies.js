@@ -8,7 +8,7 @@ const { db } = require("./lib/firebase");
 const { runtimeRegistry, runtimeAwsConfig } = require("./lib/media-source-runtime");
 const { createAwsRoleCredentialProvider } = require("./lib/aws-workload-credentials");
 const { ENABLED, WRITE_SECRETS, privateVideoStorage } = require("./lib/private-video-runtime");
-const { COPIES, currentIdentity, newCopy, enqueueCopy, revokeCopies, claimCopy, saveCopy } = require("./lib/private-video-copy");
+const { COPIES, currentIdentity, newCopy, dueCopies, enqueueCopy, revokeCopies, claimCopy, saveCopy } = require("./lib/private-video-copy");
 const { createPrivateVideoTransfer } = require("./lib/private-video-transfer");
 
 const SERVICE_ACCOUNT = "boardwalk-s3-media@njpbs-site.iam.gserviceaccount.com";
@@ -43,9 +43,7 @@ async function reconcilePrivateVideo({ firestore = db, source = runtimeRegistry(
 
 async function processPrivateVideoTick({ firestore = db, source = runtimeRegistry().get("video-library"),
   transfer, now = Date.now, maxSteps = 12, copyEnabled = ENABLED.value() === "true" } = {}) {
-  const query = copyEnabled ? firestore.collection(COPIES).where("active", "==", true)
-    : firestore.collection(COPIES).where("phase", "==", "revoking");
-  const snapshots = await query.limit(20).get();
+  const snapshots = await dueCopies(firestore, COPIES, copyEnabled, now());
   for (const snapshot of snapshots.docs) {
     const job = await claimCopy({ firestore, ref: snapshot.ref, source, now: now() });
     if (!job) continue;

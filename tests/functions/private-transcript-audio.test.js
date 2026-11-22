@@ -6,7 +6,7 @@ import delivery from "../../functions/lib/private-transcript-audio.js";
 
 const bytes = Buffer.from("Exact shared audio fixture bytes");
 const hash = createHash("sha256").update(bytes).digest("hex");
-function fixture() {
+function fixture(clock = () => 1000) {
   const store = fakeFirestore();
   const objects = new Map(), uploads = new Map();
   const receipt = { preparationId: "a".repeat(64), invocationId: "11111111-1111-4111-8111-111111111111",
@@ -43,7 +43,7 @@ function fixture() {
   } };
   const run = delivery.createPrivateTranscriptAudio({ firestore: store.firestore, s3,
     storage: () => ({ client: r2, bucket: "private" }), config: { bucket: "renditions", accountId: "123456789012" },
-    clock: () => 1000, sign: async () => "https://private.invalid/input" });
+    clock, sign: async () => "https://private.invalid/input" });
   return { ...store, run, receipt, uses, objects };
 }
 
@@ -89,14 +89,22 @@ it("never releases private audio whose full SHA-256 differs from its canonical r
 
 
 it("finishes revocation while admission is disabled and leaves pending audio copies alone", async () => {
-  const { run, receipt, rows, objects } = fixture();
+  let now = 1000;
+  const { run, receipt, rows, objects } = fixture(() => now);
   await run.enqueue(receipt);
   expect(await run.tick({ copyEnabled: false })).toEqual({ idle: true });
   expect(objects.size).toBe(0);
   await run.tick();
   await run.revoke({ receipt });
   expect(objects.size).toBe(0);
+  const path = `${delivery.AUDIO_COPIES}/${delivery.idFor(receipt)}`;
+  rows.set(path, { ...rows.get(path), leaseUntil: 1001 });
+  for (let index = 0; index < 20; index++) {
+    rows.set(`${delivery.AUDIO_COPIES}/000-${index}`, { active: true, phase: "revoking", leaseUntil: 1002 });
+  }
+  expect(await run.tick({ copyEnabled: false })).toEqual({ idle: true });
+  expect(rows.get(path).phase).toBe("revoking");
+  now = 1001;
   await run.tick({ copyEnabled: false });
-  const copy = [...rows.entries()].find(([path]) => path.startsWith("mediaPrivateAudioCopies/"))[1];
-  expect(copy).toMatchObject({ phase: "deleted", active: false });
+  expect(rows.get(path)).toMatchObject({ phase: "deleted", active: false });
 });
