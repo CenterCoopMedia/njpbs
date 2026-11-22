@@ -927,6 +927,7 @@ describe("source media metadata", () => {
       tags: [],
       rightsStatus: "pending",
       version: 1,
+      createdBy: "staff-2",
       createdAt: "2026-09-14T15:00:00.000Z",
       updatedAt: "2026-09-14T16:00:00.000Z",
       objectKey: "shared/objects/asset-1.mp4",
@@ -937,16 +938,18 @@ describe("source media metadata", () => {
       actor: actor(), firestore,
       adminLogEntryFn: (fields) => ({ ...fields, at: "test" }),
       nowFn: () => "2026-09-14T17:00:00.000Z",
-      request: {
+      request: uploadContract.parseMetadataUpdateRequest({
         sourceId: "video-library",
         assetId,
         expectedVersion: 1,
-        changes: { name: "New", description: "New description" },
-      },
+        changes: { name: "New", description: "New description", steward: "  Archive team  " },
+      }),
       source: source(),
     });
     const stored = firestore.records.get(`mediaSourceAssets/${assetId}`);
-    expect(result.asset).toMatchObject({ name: "New", description: "New description", version: 2 });
+    expect(result.asset).toMatchObject({ name: "New", description: "New description", version: 2,
+      steward: "Archive team", uploadedBy: { uid: original.createdBy } });
+    expect(stored).toMatchObject({ steward: "Archive team", createdBy: original.createdBy, createdAt: original.createdAt });
     expect(stored.objectKey).toBe(original.objectKey);
     expect(stored.objectVersionId).toBe(original.objectVersionId);
     expect([...firestore.records.values()]).toContainEqual(expect.objectContaining({
@@ -954,14 +957,23 @@ describe("source media metadata", () => {
       actorUid: "staff-1",
       actorEmail: "staff-1@example.org",
       target: `mediaSourceAssets/${assetId}`,
-      before: expect.objectContaining({ name: "Old", version: 1 }),
-      after: expect.objectContaining({ name: "New", version: 2 }),
+      before: expect.objectContaining({ name: "Old", version: 1, steward: null }),
+      after: expect.objectContaining({ name: "New", version: 2, steward: "Archive team" }),
     }));
+  });
+
+  it("bounds the maintainer label and keeps upload attribution outside the metadata patch", () => {
+    const request = { sourceId: "video-library", assetId: "asset-1", expectedVersion: 1 };
+    for (const steward of [42, "x".repeat(121), "Archive\nteam"]) {
+      expect(() => uploadContract.parseMetadataUpdateRequest({ ...request, changes: { steward } })).toThrow("Maintainer");
+    }
+    expect(() => uploadContract.parseMetadataUpdateRequest({ ...request, changes: { createdBy: "other" } })).toThrow("createdBy");
+    expect(uploadContract.parseMetadataUpdateRequest({ ...request, changes: { steward: "x".repeat(120) } }).changes.steward).toHaveLength(120);
   });
 
   it.each([false, true])("withholds uploader ids from metadata responses even on profile failure %s", async (profileFailure) => {
     const firestore = fakeFirestore({
-      "mediaSourceAssets/asset-1": existingVideo({ createdBy: "staff-2" }),
+      "mediaSourceAssets/asset-1": existingVideo({ createdBy: "staff-2", steward: "Archive team" }),
       "users/staff-2": { displayName: "Alex Rivera", email: "private@example.org" },
     });
     if (profileFailure) firestore.getAll = async () => { throw new Error("Directory unavailable"); };
@@ -998,22 +1010,24 @@ describe("source media metadata", () => {
       sourceId: "video-library",
       assetId: "asset-1",
       expectedVersion: 1,
-      changes: { name: "New" },
+      changes: { name: "New", steward: null },
     }), success);
     expect(success.status).toHaveBeenCalledWith(200);
+    expect(success.json.mock.calls[0][0].asset.steward).toBeNull();
     expect(success.json.mock.calls[0][0].asset.uploadedBy).toEqual({
       name: profileFailure ? "Staff uploader" : "Alex Rivera",
     });
 
-    expect(firestore.records.get("mediaSourceAssets/asset-1")).toMatchObject({ name: "New", version: 2 });
+    expect(firestore.records.get("mediaSourceAssets/asset-1")).toMatchObject({ name: "New", steward: null, version: 2 });
     const conflict = res();
     await handler(req({
       sourceId: "video-library",
       assetId: "asset-1",
       expectedVersion: 1,
-      changes: { name: "Stale" },
+      changes: { name: "Stale", steward: "Former team" },
     }), conflict);
     expect(conflict.status).toHaveBeenCalledWith(409);
+    expect(conflict.json.mock.calls[0][0].current.steward).toBeNull();
     expect(conflict.json.mock.calls[0][0].current.uploadedBy).toEqual({
       name: profileFailure ? "Staff uploader" : "Alex Rivera",
     });

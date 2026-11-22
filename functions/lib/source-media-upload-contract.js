@@ -1,6 +1,7 @@
 "use strict";
 
 const {
+  MAX_STEWARD_LENGTH,
   SourceMediaValidationError,
   normalizeSourceMediaNameSort,
   parseSourceMediaMarkers,
@@ -84,7 +85,8 @@ function normalizeMetadata(value, originalName, { partial = false } = {}) {
   if (value === undefined && !partial) value = {};
   rejectUnknown(
     value,
-    new Set(["name", "description", "credit", "license", "tags", "rightsStatus", "markers", "metadataUpdateRequested"]),
+    new Set(["name", "description", "credit", "license", "tags", "rightsStatus", "markers", "metadataUpdateRequested",
+      ...(partial ? ["steward"] : [])]),
     "Metadata",
   );
   const output = {};
@@ -104,6 +106,13 @@ function normalizeMetadata(value, originalName, { partial = false } = {}) {
         nullable: true,
       });
     }
+  }
+  if (value.steward !== undefined) {
+    const steward = boundedText(value.steward, "Maintainer", MAX_STEWARD_LENGTH, { nullable: true });
+    if (steward && /[\r\n\u2028\u2029]/u.test(steward)) {
+      throw new SourceMediaValidationError("Maintainer must fit on one line");
+    }
+    output.steward = steward;
   }
   if (!partial || value.tags !== undefined) output.tags = normalizeTags(value.tags);
   if (value.markers !== undefined) output.markers = parseSourceMediaMarkers(value.markers);

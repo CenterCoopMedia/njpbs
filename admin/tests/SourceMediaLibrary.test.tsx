@@ -418,6 +418,9 @@ describe("private video library", () => {
   });
 
   it("keeps production tools available without upload or metadata access", async () => {
+    vi.mocked(listSourceMedia).mockResolvedValueOnce({
+      success: true, records: [{ ...asset, steward: "Archive team" }], nextCursor: null, hasMore: false, total: 1,
+    });
     renderLibrary();
     fireEvent.click(await screen.findByRole("button", { name: card("News update") }));
     const dialog = screen.getByRole("dialog", { name: "News update" });
@@ -433,6 +436,8 @@ describe("private video library", () => {
     const notice = within(videoInspector()).getByText("Read-only media access").closest(".inline-message");
     expect(notice).toBeInTheDocument();
     expect(screen.queryByRole("textbox", { name: "Title" })).not.toBeInTheDocument();
+    expect(within(videoInspector()).getByText("Archive team")).toBeVisible();
+    expect(within(videoInspector()).queryByRole("textbox", { name: "Maintained by" })).not.toBeInTheDocument();
     expect(within(videoInspector()).queryByRole("button", { name: "Save details" })).toBeNull();
     expect(within(videoInspector()).queryByRole("button", { name: "Delete from library" })).toBeNull();
     expect(screen.queryByRole("button", { name: "Upload media" })).not.toBeInTheDocument();
@@ -1545,7 +1550,7 @@ describe("private video library", () => {
   });
 
   it("undoes one confirmed video details save with its post-save version", async () => {
-    const saved = { ...asset, name: "Saved newsroom title", rightsStatus: "complete" as const, version: 2 };
+    const saved = { ...asset, name: "Saved newsroom title", steward: "Archive team", rightsStatus: "complete" as const, version: 2 };
     const restored = { ...asset, version: 3 };
     vi.mocked(updateSourceMediaMetadata)
       .mockResolvedValueOnce({ success: true, asset: saved })
@@ -1553,10 +1558,15 @@ describe("private video library", () => {
     renderLibraryWithNotices({ ...source, canEditMetadata: true });
     fireEvent.click(await screen.findByRole("button", { name: card("News update") }));
     fireEvent.change(await screen.findByRole("textbox", { name: "Title" }), { target: { value: saved.name } });
+    const maintainer = screen.getByRole("textbox", { name: "Maintained by" });
+    expect(maintainer).toHaveValue("");
+    fireEvent.change(maintainer, { target: { value: "  Archive team  " } });
     fireEvent.change(screen.getByRole("combobox", { name: "Rights review" }), { target: { value: "complete" } });
     fireEvent.click(screen.getByRole("button", { name: "Save details" }));
     const notice = screen.getByRole("region", { name: "Notifications" });
     const undo = await within(notice).findByRole("button", { name: "Undo" });
+    expect(updateSourceMediaMetadata).toHaveBeenNthCalledWith(1, "staff-token", "video-library", "video-1", 1,
+      expect.objectContaining({ steward: saved.steward }), { preserveVideoSearchCache: true });
     await waitFor(() => expect(screen.getByRole("button", { name: "Save details" })).toBeDisabled());
     await act(async () => { await new Promise(resolve => window.setTimeout(resolve, 0)); });
 
@@ -1567,12 +1577,14 @@ describe("private video library", () => {
       "staff-token", "video-library", "video-1", 2, {
         name: "News update",
         description: "",
+        steward: null,
         credit: "",
         license: "",
         tags: [],
         rightsStatus: "pending",
       }, { preserveVideoSearchCache: true });
     await waitFor(() => expect(screen.getByRole("textbox", { name: "Title" })).toHaveValue("News update"));
+    expect(maintainer).toHaveValue("");
     expect(screen.getByRole("combobox", { name: "Rights review" })).toHaveValue("pending");
     expect(within(notice).queryByRole("button", { name: "Undo" })).toBeNull();
     expect(listSourceMedia).toHaveBeenCalledOnce();

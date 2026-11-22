@@ -34,6 +34,7 @@ import "./VideoDetailsInspector.css";
 export interface VideoDetailsEditableValues {
   name: string;
   description: string;
+  steward?: string | null;
   credit: string;
   license: string;
   tags: string[];
@@ -47,10 +48,11 @@ export interface VideoDetailsSaveReceipt {
 
 export type VideoContextView = "details" | "comments" | "review";
 
-function editableValues(asset: SourceMediaAssetSummary): VideoDetailsEditableValues {
+function editableValues(asset: SourceMediaAssetSummary, includeSteward: boolean): VideoDetailsEditableValues {
   return {
     name: asset.name,
     description: asset.description ?? "",
+    ...(includeSteward ? { steward: asset.steward ?? null } : {}),
     credit: asset.credit ?? "",
     license: asset.license ?? "",
     tags: [...asset.tags],
@@ -169,6 +171,7 @@ export function VideoDetailsInspector({
   const [detailsOpenRequest, setDetailsOpenRequest] = useState(0);
   const [name, setName] = useState(asset.name);
   const [description, setDescription] = useState(asset.description ?? "");
+  const [steward, setSteward] = useState(asset.steward ?? "");
   const [credit, setCredit] = useState(asset.credit ?? "");
   const [license, setLicense] = useState(asset.license ?? "");
   const [tags, setTags] = useState<Token[]>(() => tagsToTokens(asset.tags));
@@ -186,8 +189,10 @@ export function VideoDetailsInspector({
   const committedTags = useRef<string[]>([]);
   const previousAsset = useRef(asset);
   const currentTags = tokensToTags(tags);
+  const stewardshipChanged = steward.trim() !== (asset.steward ?? "");
   const detailsDirty = name !== asset.name ||
     description !== (asset.description ?? "") ||
+    stewardshipChanged ||
     credit !== (asset.credit ?? "") ||
     license !== (asset.license ?? "") ||
     JSON.stringify(currentTags) !== JSON.stringify(asset.tags) ||
@@ -213,6 +218,7 @@ export function VideoDetailsInspector({
   function loadDetails(next: SourceMediaAssetSummary) {
     setName(next.name);
     setDescription(next.description ?? "");
+    setSteward(next.steward ?? "");
     setCredit(next.credit ?? "");
     setLicense(next.license ?? "");
     setTags(tagsToTokens(next.tags));
@@ -226,6 +232,7 @@ export function VideoDetailsInspector({
     previousAsset.current = asset;
     if (prior.id === asset.id && prior.sourceId === asset.sourceId && prior.version === asset.version) return;
     const cleanBeforeUpdate = name === prior.name && description === (prior.description ?? "") &&
+      steward.trim() === (prior.steward ?? "") &&
       credit === (prior.credit ?? "") && license === (prior.license ?? "") &&
       JSON.stringify(currentTags) === JSON.stringify(prior.tags) && !tagDraft.trim() &&
       rightsStatus === prior.rightsStatus;
@@ -244,10 +251,11 @@ export function VideoDetailsInspector({
     setSaving(true);
     setSaveMessage("");
     setConflict(undefined);
-    const previous = editableValues(asset);
+    const previous = editableValues(asset, stewardshipChanged);
     try {
       const token = await getIdToken();
-      const changes = { name, description, credit, license, tags: currentTags, rightsStatus };
+      const changes = { name, description, credit, license, tags: currentTags, rightsStatus,
+        ...(stewardshipChanged ? { steward: steward.trim() || null } : {}) };
       const response = preserveVideoSearchCache
         ? await updateSourceMediaMetadata(token, asset.sourceId, asset.id, asset.version, changes,
           { preserveVideoSearchCache: true })
@@ -325,9 +333,12 @@ export function VideoDetailsInspector({
           <label className="video-inspector-field">Title<TextInput id={titleInputId} required maxLength={500} value={name} disabled={busy}
             onInvalid={() => { onDetailsRequested?.(); changeContextView("details"); setDetailsOpenRequest(request => request + 1); }} onChange={event => setName(event.target.value)} /></label>
           <label className="video-inspector-field">Description<Textarea maxLength={2000} rows={3} value={description} disabled={busy} onChange={event => setDescription(event.target.value)} /></label>
+          <label className="video-inspector-field">Maintained by<TextInput maxLength={120} value={steward} disabled={busy}
+            placeholder="Person or team" onChange={event => setSteward(event.target.value)} /></label>
         </> : <>
           <ReadOnlyField label="Title" value={name} />
           <ReadOnlyField label="Description" value={description} />
+          <ReadOnlyField label="Maintained by" value={asset.steward ?? "Unassigned"} />
         </>}
         {asset.metadataUpdateRequested ? <InlineMessage tone="info" title="Metadata update requested">Request recorded for the metadata pass.</InlineMessage> : null}
       </InspectorSection>
