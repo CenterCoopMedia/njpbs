@@ -728,6 +728,10 @@ To correct words or speaker assignments:
 
 Search and speaker filters cover loaded passages. While correcting text, they
 use the saved words and speaker assignments so an edited passage stays in view.
+If paging or filtering hides your correction, select **Return to correction**
+to focus that passage again. If a filter excludes the passage, the action clears
+the filters. Editing pauses playback following. Select **Follow playback** to
+resume it after editing.
 Names and corrections appear when you reopen the video and in new transcript
 downloads.
 

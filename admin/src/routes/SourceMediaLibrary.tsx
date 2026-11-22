@@ -239,7 +239,8 @@ export function VideoViewerBody({
   const originalControls = useVideoOriginalStatus(asset, getIdToken, Boolean(principal && hasCapability(principal, "media.video.manage")));
   const showOriginalNotice = originalControls.noticeShown || ["archived", "restoring"].includes(originalControls.original?.state ?? "") || Boolean(originalControls.error);
   const [downloading, setDownloading] = useState<"download" | "download_web">();
-  const busy = detailsSaving || transcriptSaving || credentialsBusy || replacementBusy;
+  const otherMediaBusy = detailsSaving || credentialsBusy || replacementBusy;
+  const busy = otherMediaBusy || transcriptSaving;
   const dirty = detailsDirty || transcriptDirty || credentialsDirty;
   useSourceMediaAssetRefresh({ asset, getIdToken, onUpdated, blocked: busy || dirty || productionBusy || Boolean(downloading) });
   useEffect(() => {
@@ -298,7 +299,7 @@ export function VideoViewerBody({
     onWorkspacePaneChange: view => {
     setWorkspaceView(view);
     if (sideBySide && contextView === "comments") setContextView("details");
-  }, principal, onCredentialsDirtyChange: setCredentialsDirty, onCredentialsBusyChange: setCredentialsBusy, asset, getIdToken, player, canRequest: canRequestProduction, disabled: busy || Boolean(downloading), onDownloadOriginal: () => void download("download"), onTranscriptDirtyChange: setTranscriptDirty, onTranscriptSavingChange: setTranscriptSaving, onBusyChange: setProductionBusy, onSearchContentChanged, onTranscriptRequested, onTranscriptObserved, onTranscriptReady });
+  }, principal, onCredentialsDirtyChange: setCredentialsDirty, onCredentialsBusyChange: setCredentialsBusy, asset, getIdToken, player, canRequest: canRequestProduction, disabled: otherMediaBusy || Boolean(downloading), onDownloadOriginal: () => void download("download"), onTranscriptDirtyChange: setTranscriptDirty, onTranscriptSavingChange: setTranscriptSaving, onBusyChange: setProductionBusy, onSearchContentChanged, onTranscriptRequested, onTranscriptObserved, onTranscriptReady });
   const position = useRef(initialSeek);
   const pendingInitialSeek = useRef<number | null>(initialSeek > 0 ? initialSeek : null);
   const resumePlayback = useRef(false);
