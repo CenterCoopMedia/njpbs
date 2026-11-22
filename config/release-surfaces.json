@@ -553,6 +553,10 @@
           "module": "functions/live-production-enrollment.js"
         },
         {
+          "name": "cmsManageVideoSubclips",
+          "module": "functions/video-subclips.js"
+        },
+        {
           "name": "cmsMutateMediaCategory",
           "module": "functions/media-categories.js"
         },

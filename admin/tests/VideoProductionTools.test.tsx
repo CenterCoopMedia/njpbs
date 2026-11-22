@@ -17,11 +17,12 @@ vi.mock("../src/lib/transcription-options", () => ({
 vi.mock("../src/lib/functions", () => ({ postFunction: vi.fn(), HttpError: class extends Error {} }));
 const getIdToken = vi.fn().mockResolvedValue("staff-token");
 const asset = { id: "video-1", sourceId: "video-library", name: "Test video", viewingCopy: { state: "ready", durationSeconds: 60, sizeBytes: 1024 } } as SourceMediaAssetSummary;
-function Harness({ video = asset, frame = false, workspace = false, seek = false, onBusyChange, onSearchContentChanged, onTranscriptRequested, onTranscriptObserved, onTranscriptReady }: {
+function Harness({ video = asset, frame = false, workspace = false, seek = false, staff = false, onBusyChange, onSearchContentChanged, onTranscriptRequested, onTranscriptObserved, onTranscriptReady }: {
   video?: SourceMediaAssetSummary;
   frame?: boolean;
   workspace?: boolean;
   seek?: boolean;
+  staff?: boolean;
   onBusyChange?: (busy: boolean) => void;
   onSearchContentChanged?: () => void;
   onTranscriptRequested?: (assetId: string, settings: TranscriptSettings, ready: boolean) => void;
@@ -29,7 +30,7 @@ function Harness({ video = asset, frame = false, workspace = false, seek = false
   onTranscriptReady?: (assetId: string, settings: TranscriptSettings) => void;
 }) {
   const player = useRef<HTMLVideoElement>(null);
-  const { actions, content, transcriptPane, downloadItems, editorExportsItem, playbackSeconds, seekPlayback, onTimeUpdate } = useVideoProductionTools({ asset: video, getIdToken, player, canRequest: true, disabled: false, headerControls: frame, workspace, onBusyChange, onSearchContentChanged, onTranscriptRequested, onTranscriptObserved, onTranscriptReady });
+  const { actions, content, transcriptPane, downloadItems, editorExportsItem, playbackSeconds, seekPlayback, onTimeUpdate } = useVideoProductionTools({ asset: video, getIdToken, player, principal: staff ? { id: "editor", grants: [{ tier: "viewer" }] } : undefined, canRequest: true, disabled: false, headerControls: frame, workspace, onBusyChange, onSearchContentChanged, onTranscriptRequested, onTranscriptObserved, onTranscriptReady });
   return <>{seek ? <><video ref={player} onTimeUpdate={onTimeUpdate} /><VideoReviewSeek currentSeconds={playbackSeconds} durationMs={60000} disabled={false} onSeek={seekPlayback}>{null}</VideoReviewSeek></> : null}{frame ? <Menu label="Download" items={[editorExportsItem, ...downloadItems]} /> : null}{actions}{content}{transcriptPane}</>;
 }
 async function openTranscript() {
@@ -47,6 +48,36 @@ const response = (state: string) => ({ success: true, cached: true, transcript: 
 
 beforeEach(() => { vi.useFakeTimers(); vi.setSystemTime(new Date("2026-09-15T16:00:00Z")); vi.mocked(postFunction).mockReset(); });
 afterEach(() => { cleanup(); vi.useRealTimers(); });
+
+it("saves and reopens exact subclip times without requesting a video export", async () => {
+  const fileVersion = "a".repeat(32);
+  const clip = { id: "b".repeat(64), name: "Interview", inMs: 1251, outMs: 2702, fileVersion, state: "current" };
+  let saved = false;
+  vi.mocked(postFunction).mockImplementation(async (endpoint, _token, body) => {
+    if (endpoint !== "cmsManageVideoSubclips") return { success: true, clips: [] };
+    if ((body as { action: string }).action === "save") saved = true;
+    return { success: true, subclips: saved ? [clip] : [] };
+  });
+  render(<Harness staff video={{ ...asset, fileVersion }} />);
+  await openClip();
+  const inTime = screen.getByRole("textbox", { name: "In time" });
+  const outTime = screen.getByRole("textbox", { name: "Out time" });
+  fireEvent.change(inTime, { target: { value: "1.251" } });
+  fireEvent.change(outTime, { target: { value: "2.702" } });
+  fireEvent.change(screen.getByRole("textbox", { name: "Subclip name" }), { target: { value: clip.name } });
+  await act(async () => fireEvent.click(screen.getByRole("button", { name: "Save subclip" })));
+  fireEvent.change(inTime, { target: { value: "4" } });
+  await act(async () => fireEvent.click(screen.getByRole("button", { name: "Open range for Interview" })));
+  expect(inTime).toHaveValue("00:00:01.251");
+  expect(outTime).toHaveValue("00:00:02.702");
+  const calls = vi.mocked(postFunction).mock.calls;
+  expect(calls.filter(([endpoint]) => endpoint === "cmsManageVideoSubclips").map(([, , body]) => body)).toEqual([
+    { sourceId: asset.sourceId, assetId: asset.id, action: "list" },
+    { sourceId: asset.sourceId, assetId: asset.id, action: "save", name: clip.name, fileVersion, inMs: 1251, outMs: 2702 },
+    { sourceId: asset.sourceId, assetId: asset.id, action: "open", id: clip.id, fileVersion },
+  ]);
+  expect(calls.some(([endpoint]) => endpoint === "cmsRequestVideoClip")).toBe(false);
+});
 
 describe("review seek position", () => {
   it("keeps consecutive requested positions before the media clock reports its seek", () => {

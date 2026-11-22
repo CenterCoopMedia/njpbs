@@ -117,11 +117,15 @@ function parseClipRequest(value, action) {
     }
     return { ...value, ...settings, retry: value.retry ?? false };
   }
-  if (!Number.isSafeInteger(value.inMs) || !Number.isSafeInteger(value.outMs) || value.inMs < 0 ||
-      value.outMs - value.inMs < 250 || value.outMs - value.inMs > 1800000) {
+  validateClipRange(value.inMs, value.outMs);
+  return { ...value, ...settings, retry: value.retry ?? false };
+}
+
+function validateClipRange(inMs, outMs) {
+  if (!Number.isSafeInteger(inMs) || !Number.isSafeInteger(outMs) || inMs < 0 ||
+      outMs - inMs < 250 || outMs - inMs > 1800000) {
     throw problem(400, "Choose a clip between 0.25 seconds and 30 minutes");
   }
-  return { ...value, ...settings, retry: value.retry ?? false };
 }
 
 function validateClipResolution(settings, web) {
@@ -436,6 +440,6 @@ function validateOriginalOutput(job, result) {
 module.exports = {
   OUTPUT_FRAME_RATES, CLIP_JOBS, CLIP_TTL_MS, EXPORT_FORMATS, EXPORT_SCOPES, EDITOR_FORMATS, SOURCE_EXPORT_MAX_DURATION_SECONDS,
   problem, parseClipRequest, parseClipHistoryCursor, encodeClipHistoryCursor,
-  clipSettings, exportSettings, jobScope, jobFormat, validateClipResolution,
+  clipSettings, exportSettings, jobScope, jobFormat, validateClipResolution, validateClipRange,
   clipIdentity, sameClipSource, clipSummary, validateClipOutput,
 };

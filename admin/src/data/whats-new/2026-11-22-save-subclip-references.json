@@ -1,0 +1,7 @@
+{
+  "date": "2026-11-22",
+  "kind": "new",
+  "title": "Save a video range for reuse",
+  "body": "In a video's Clip settings, choose your in and out times, name the range, and select Save subclip. Open the saved range to use those same times again. Saving uses the original video as a reference and creates no new media file.",
+  "prs": []
+}
