@@ -1,5 +1,6 @@
 import { escapeHtml } from "./safe-href.ts";
 import { isCmsMediaUrl } from "./media-origin.ts";
+import { spotlightCardThumbnail, spotlightCopyImageUrl } from "./spotlight-image.mjs";
 
 export interface CmsImageThumbnail { url: string; width: number; height: number }
 interface ImageInput { url?: unknown; width?: unknown; height?: unknown; mimeType?: unknown; animated?: unknown; thumbnails?: unknown }
@@ -9,6 +10,10 @@ export function cmsImageThumbnails(image: ImageInput): CmsImageThumbnail[] {
   if (typeof image.url !== "string" || image.mimeType === "image/gif" || image.animated === true || !Array.isArray(image.thumbnails) ||
       !Number.isSafeInteger(image.width) || Number(image.width) < 1 ||
       !Number.isSafeInteger(image.height) || Number(image.height) < 1) return [];
+  if (spotlightCopyImageUrl(image.url)) {
+    const thumbnail = spotlightCardThumbnail(image.url, image.width, image.height, image.thumbnails[0]);
+    return thumbnail ? [thumbnail] : [];
+  }
   let original: URL;
   try { original = new URL(image.url); } catch { return []; }
   const match = /^(\/cms-media\/[a-z0-9]+(?:-[a-z0-9]+)*\/[A-Za-z0-9_-]+\/)([a-f0-9]{64})\.(?:jpg|png|webp|avif)$/.exec(original.pathname);

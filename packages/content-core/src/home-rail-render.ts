@@ -1,10 +1,11 @@
 // Pure Home rail markup for the public page and the editor. Feed selection and
 // publication identity belong to the caller, not to the rendering layer.
 import { escapeHtml, type ContentShelfData } from "./content-model";
+import { cmsImageSourceAttributes } from "./cms-image-variants.ts";
 import { renderShelfFullText } from "./shelf-full-text";
 import { homeLinkAttributes } from "./home-section-render";
-import { spotlightStoryImage, spotlightImageAttributes } from "./spotlight-image.mjs";
-import { homeSourceImage } from "./home-source-curation.ts";
+import { spotlightCardImage, spotlightImageAttributes } from "./spotlight-image.mjs";
+import { homeSourceImage, type HomeSourceImage } from "./home-source-curation.ts";
 
 export interface HomeProgramRailCard {
   title: string;
@@ -15,7 +16,7 @@ export interface HomeProgramRailCard {
   index: number;
 }
 
-export interface HomeNewsCard {
+export interface HomeNewsCard extends Pick<HomeSourceImage, "width" | "height" | "thumbnails"> {
   title: string;
   href: string;
   category: string;
@@ -57,6 +58,11 @@ type HomeShelfSettings = Pick<ContentShelfData, "title" | "moreLabel" | "present
 
 function gridColumns(value: ContentShelfData["columns"]): 2 | 3 | 4 {
   return value === 2 || value === 4 ? value : 3;
+}
+
+export function spotlightGridImageSizes(columns: ContentShelfData["columns"]): string {
+  const count = gridColumns(columns);
+  return `auto, (max-width: 63.99rem) 50vw, min(${100 / count}vw, ${84 / count}rem)`;
 }
 
 export function pbsShelfImageFallback(image: string): string {
@@ -153,9 +159,9 @@ export function renderHomeProgramRail(
 }
 
 function newsCard(card: HomeNewsCard): string {
-  const image = spotlightStoryImage(card);
+  const image = spotlightCardImage(card);
   return `<a class="spotlight-card" draggable="false"${homeLinkAttributes(card.href, true)}>
-    <span class="spotlight-card__media" aria-hidden="true"><img class="spotlight-card__image" src="${escapeHtml(image.url)}" alt="" loading="lazy" referrerpolicy="no-referrer" width="640" height="360" draggable="false"${spotlightImageAttributes(image.url, image.fallbackUrl)} /></span>
+    <span class="spotlight-card__media" aria-hidden="true"><img class="spotlight-card__image" src="${escapeHtml(image.url)}"${cmsImageSourceAttributes(image, "auto, 230px")} alt="" loading="lazy" referrerpolicy="no-referrer" width="640" height="360" draggable="false"${spotlightImageAttributes(image.url, image.fallbackUrl)} /></span>
     <span class="spotlight-card__kicker">${escapeHtml(card.category)}</span>
     <span class="spotlight-card__title">${escapeHtml(card.title)}</span>
     <span class="spotlight-card__meta">${escapeHtml(card.dateLabel ?? "Latest coverage")}</span>${externalNotice}
@@ -164,9 +170,10 @@ function newsCard(card: HomeNewsCard): string {
 
 export function renderHomeNewsRail(cards: readonly HomeNewsCard[], settings?: HomeShelfSettings): string {
   if (settings?.presentation === "grid") {
+    const sizes = spotlightGridImageSizes(settings.columns);
     const items = cards.map(card => {
-      const image = spotlightStoryImage(card);
-      const artwork = `<span class="home-shelf__media" aria-hidden="true"><img src="${escapeHtml(image.url)}" alt="" loading="lazy" referrerpolicy="no-referrer" width="640" height="360" draggable="false"${spotlightImageAttributes(image.url, image.fallbackUrl)} /></span>`;
+      const image = spotlightCardImage(card);
+      const artwork = `<span class="home-shelf__media" aria-hidden="true"><img src="${escapeHtml(image.url)}"${cmsImageSourceAttributes(image, sizes)} alt="" loading="lazy" referrerpolicy="no-referrer" width="640" height="360" draggable="false"${spotlightImageAttributes(image.url, image.fallbackUrl)} /></span>`;
       return `<li><a class="home-shelf__card" draggable="false"${homeLinkAttributes(card.href, true)}>${artwork}<span class="home-shelf__meta">${escapeHtml(card.category)}</span><span class="home-shelf__title">${escapeHtml(card.title)}</span>${card.dateLabel ? `<span class="home-shelf__meta">${escapeHtml(card.dateLabel)}</span>` : ""}${externalNotice}</a></li>`;
     }).join("");
     return gridSection("spotlight-rail", "spot-h", settings.title, settings.moreLabel,

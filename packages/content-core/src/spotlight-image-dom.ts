@@ -11,7 +11,12 @@ export function mountSpotlightImages(root: ParentNode = document): void {
     if (!fallback) return;
     const showFallback = () => {
       if (image.getAttribute("src") !== fallback) {
-        image.removeAttribute("srcset");
+        if (image.hasAttribute("srcset")) {
+          const failedSource = image.currentSrc;
+          image.removeAttribute("srcset");
+          image.removeAttribute("sizes");
+          if (failedSource && failedSource !== image.src) return;
+        }
         image.setAttribute("src", fallback);
       } else image.style.visibility = "hidden";
     };

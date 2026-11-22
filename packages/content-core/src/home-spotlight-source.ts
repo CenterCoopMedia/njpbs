@@ -1,7 +1,7 @@
 import { stationCalendarDay } from "./editorial-dates.ts";
 import { curateHomeSource, homeSourceInstant, homeSourceObject, homeSourceText,
   type HomeSourceCard, type HomeCuratedSource, type HomeSourceSelection } from "./home-source-curation.ts";
-import { spotlightStoryImage } from "./spotlight-image.mjs";
+import { spotlightCardImage } from "./spotlight-image.mjs";
 import { spotlightCardByline } from "./spotlight-byline.mjs";
 
 type SpotlightSnapshot = { status: "ready"; source: string; checkedAt: string; cards: readonly unknown[] } | { status: "error" };
@@ -28,7 +28,7 @@ export function adaptHomeSpotlight(snapshot: SpotlightSnapshot, selection: HomeS
     if (!publishedAt) return [];
     const categories = Array.isArray(value.sourceCategories) ? value.sourceCategories : [];
     const opinion = categories.some(category => typeof category === "string" && /^(Opinion|Op-Ed)$/i.test(category.trim()));
-    const image = spotlightStoryImage(value);
+    const image = spotlightCardImage(value);
     const byline = spotlightCardByline(value);
     return [{ id: value.href, source: "spotlight_news", title: value.title, href: value.href,
       sourceLabel: "NJ Spotlight News", publishedAt, displayDate: stationCalendarDay(publishedAt)!,

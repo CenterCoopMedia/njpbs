@@ -2,7 +2,7 @@ const mounted = new WeakSet<HTMLImageElement>();
 
 /** The actual viewport decides which decorative story images need eager loading. */
 export function mountHomeStoryImages(root: ParentNode = document): void {
-  root.querySelectorAll<HTMLImageElement>("img[srcset]:not([data-home-hero-image]):not([data-home-story-image])").forEach(image => {
+  root.querySelectorAll<HTMLImageElement>("img[srcset]:not([data-home-hero-image], [data-home-story-image], [data-spotlight-fallback])").forEach(image => {
     if (mounted.has(image)) return;
     mounted.add(image);
     const retry = () => {

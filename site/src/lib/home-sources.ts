@@ -7,7 +7,7 @@ import { manualLaunchCards, selectLaunchCards, type LaunchCard } from "../data/l
 import { safeHref } from "../../../packages/content-core/src/safe-href";
 import type { HomeNewsCard, HomeProgramCard, HomeSourceSnapshot } from "../../../packages/content-core/src/home-rail-render";
 import { spotlightTopicImageForStory } from "./spotlight-topic-image.mjs";
-import { spotlightCopyImageUrl, spotlightStoryImage } from "../../../packages/content-core/src/spotlight-image.mjs";
+import { spotlightCardImage, spotlightCopyImageUrl, spotlightStoryImage } from "../../../packages/content-core/src/spotlight-image.mjs";
 import { spotlightCardByline } from "../../../packages/content-core/src/spotlight-byline.mjs";
 import { spotlightFeedInstant } from "../../../packages/content-core/src/home-spotlight-source";
 import { formatEditorialDate } from "../../../packages/content-core/src/editorial-date-format";
@@ -49,11 +49,12 @@ function programCard(value: unknown): HomeProgramCard {
 
 function newsCard(value: unknown): HomeNewsCard {
   const card = sourceCard(value);
-  const image = spotlightStoryImage(card);
+  const { url, fallbackUrl, thumbnails, width, height } = spotlightCardImage(card);
   const dateLabel = formatEditorialDate(stationCalendarDay(spotlightFeedInstant(card.publishedAt)));
   return {
     title: text(card.title), href: link(card.href), category: text(card.category),
-    image: image.url, fallbackImage: image.fallbackUrl ?? image.url,
+    image: url, fallbackImage: fallbackUrl ?? url,
+    ...(thumbnails ? { thumbnails, width, height } : {}),
     ...(dateLabel ? { dateLabel } : card.dateLabel === undefined ? {} : { dateLabel: text(card.dateLabel) }),
   };
 }
