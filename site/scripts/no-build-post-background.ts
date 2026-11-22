@@ -351,7 +351,7 @@ export function noBuildPostMaintenance({ firestore, firebaseApp, commitSha, stat
           return { input, files: files.filter(file => !isBackgroundAssetPath(file.path)),
             assets: files.filter(file => isBackgroundAssetPath(file.path)) };
         } });
-      await owner.recover();
+      await owner.recover({ contextOnly });
       if (contextOnly) await settlePublicContext({ firestore, operationId: queueId, runtime });
       else await attemptHomeFallback(queueId);
       return true;

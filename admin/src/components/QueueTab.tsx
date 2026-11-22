@@ -44,6 +44,9 @@ function valueToDate(value: unknown): Date | null {
 }
 
 function queueItemFromDoc(id: string, data: DocumentData): QueueItem {
+  const automaticContext = data.transport === "public-context-no-build-v1" &&
+    !data.settingsPublication && !data.libraryCardPublication && !data.recordPublication &&
+    Array.isArray(data.changes) && data.changes.length === 0;
   const requesterId =
     typeof data.triggeredBy === "string" && data.triggeredBy.trim()
       ? data.triggeredBy
@@ -55,13 +58,16 @@ function queueItemFromDoc(id: string, data: DocumentData): QueueItem {
   return {
     id,
     status: typeof data.status === "string" ? data.status : "unknown",
+    automaticSiteUpdate: automaticContext,
     triggeredBy:
-      requesterEmail ?? requesterId,
+      requesterEmail ?? requesterId ?? (automaticContext ? "Automatic site update" : null),
     triggeredById: requesterId,
-    changes: data.changes,
+    changes: automaticContext ? ["Site-wide update"] : data.changes,
     timestamp: valueToDate(data.triggeredAt ?? (data.transport === "public-context-no-build-v1" ? data.createdAt : undefined)),
     completedAt: valueToDate(data.completedAt),
-    error: typeof data.error === "string" ? data.error : null,
+    error: automaticContext && data.status === "failed" ? "The accepted site update did not complete."
+      : automaticContext && data.error === "public_context_superseded" ? "A newer site update took its place."
+      : typeof data.error === "string" ? data.error : null,
     transport: typeof data.transport === "string" ? data.transport : null,
     proofExhausted: data.transport === "post-no-build-v1" && data.status === "success" &&
       data.postProof?.status === "failed" && data.postProof.nextAttemptAt === null &&
@@ -201,7 +207,7 @@ export function QueueTab() {
           items.push(...rows.docs.map(row => ({ ...queueItemFromDoc(row.id, row.data()), proofRecovery: true })));
         }
         if (summary.contextRetry) items.push({ id: summary.contextRetry.queueId, status: "failed",
-          transport: "public-context-no-build-v1", contextRetry: true, timestamp: valueToDate(summary.contextRetry.createdAt),
+          transport: "public-context-no-build-v1", automaticSiteUpdate: true, contextRetry: true, timestamp: valueToDate(summary.contextRetry.createdAt),
           triggeredBy: "Automatic site update", changes: ["Site-wide update"], error: "The accepted site update did not complete." });
         proofRecoveryItems.current = items;
         proofTruncated = summary.postProofRecoveryTruncated === true;

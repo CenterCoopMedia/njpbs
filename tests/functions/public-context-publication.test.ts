@@ -1,4 +1,4 @@
-import { afterAll, beforeAll, beforeEach, expect, it } from "vitest";
+import { afterAll, beforeAll, beforeEach, expect, it, vi } from "vitest";
 import { createHash } from "node:crypto";
 import { Agent, get } from "node:http";
 import { mkdtemp, mkdir, readFile, realpath, rm, writeFile } from "node:fs/promises";
@@ -72,16 +72,20 @@ async function verifiedInput(id: string) {
 async function readWork(now = Date.now()) {
   return work.readNoBuildCloudWork({ runtime, now, read: async document => (await db.doc(document).get()).data() ?? null });
 }
-function reader(writer = runtime, writerContextDigest = contextDigest, recoveryOutputs?: string[]) {
+function reader(writer = runtime, writerContextDigest = contextDigest, recoveryOutputs?: string[],
+  beforeBuild?: (output: string) => Promise<void>) {
   return background.createPostBackgroundOutputs({ firestore: db, enabled: true, runtime: writer, recoveryOutputs,
     readContextInTransaction: transaction => context.readPublicBackgroundContextInTransaction(transaction, db),
     artifacts: { get: key => readFile(path.join(directory, key)), async put(key, bytes) {
       await mkdir(path.dirname(path.join(directory, key)), { recursive: true });
       await writeFile(path.join(directory, key), bytes);
     } },
-    build: async task => ({ input: { kind: "public-background", rendererSha: writer.release, contextDigest: writerContextDigest, routes: [] },
-      assets: [], files: paths[task.output].map(publicPath => ({ path: publicPath, bytes: `Exact context: ${writerContextDigest}`,
-        contentType: "text/plain" })) }),
+    build: async task => {
+      await beforeBuild?.(task.output);
+      return { input: { kind: "public-background", rendererSha: writer.release, contextDigest: writerContextDigest, routes: [] },
+        assets: [], files: paths[task.output].map(publicPath => ({ path: publicPath, bytes: `Exact context: ${writerContextDigest}`,
+          contentType: "text/plain" })) };
+    },
   });
 }
 
@@ -90,6 +94,7 @@ it("atomically accepts six families without any Post owner or admission, dedupli
   expect(accepted).toMatchObject({ queueId: operationId, contextRevision: 1, contextDigest,
     outputs: ["listings", "authors", "feed", "contentApi", "sitemap", "search"] });
   const queue = (await db.doc(`cmsPublishQueue/${operationId}`).get()).data();
+  expect(queue?.triggeredAt).toBeUndefined();
   await enqueue();
   expect((await db.doc(`cmsPublishQueue/${operationId}`).get()).data()).toEqual(queue);
   expect((await db.doc("cmsBackgroundOutputs/home").get()).exists).toBe(false);
@@ -255,8 +260,23 @@ it("serves verified exact bytes and settles only the six named outputs, preservi
   await enqueue();
   await db.doc(`cmsPublishQueue/${operationId}`).update({ settingsPublication: { id: "siteNavigation", sourceVersion: 2 } });
   expect(await publication.settlePublicContext({ firestore: db, operationId, runtime })).toBe(false);
-  const worker = reader();
-  await worker.recover();
+  const authors = Promise.withResolvers<void>();
+  const started = new Set<string>();
+  const worker = reader(runtime, contextDigest, undefined, async output => {
+    started.add(output);
+    if (output === "authors") await authors.promise;
+  });
+  const recovery = worker.recover({ contextOnly: true });
+  try {
+    await vi.waitFor(() => expect(started.has("authors") && started.has("search")).toBe(true), { timeout: 4_000 });
+    const listing = await worker.serve(new Request("https://example.test/posts/"));
+    expect(listing.status).toBe(200);
+    expect(listing.headers.get("x-njpbs-background-context-sha256")).toBe(contextDigest);
+    expect(await publication.settlePublicContext({ firestore: db, operationId, runtime })).toBe(false);
+  } finally {
+    authors.resolve();
+    await recovery;
+  }
   for (const family of publication.OUTPUTS) for (const publicPath of paths[family]) {
     const response = await worker.serve(new Request(`https://example.test${publicPath}`));
     expect(response.status).toBe(200);
@@ -267,6 +287,12 @@ it("serves verified exact bytes and settles only the six named outputs, preservi
   expect(queue).toMatchObject({ status: "success", settingsPublication: { id: "siteNavigation", sourceVersion: 2 },
     aggregateReceipt: { runtime, contextRevision: 1, contextDigest } });
   expect(Object.keys(queue.aggregateReceipt.outputs)).toEqual(publication.OUTPUTS);
+  for (const output of publication.OUTPUTS) {
+    const task = (await db.doc(`cmsPublishQueue/${operationId}/backgroundOutputs/${output}`).get()).data();
+    expect(task?.receipt.verifiedAt).toBeGreaterThan(0);
+    expect(queue.aggregateReceipt.outputs[output]).toMatchObject({ verifiedAt: task?.receipt.verifiedAt,
+      digest: task?.receipt.digest, contextDigest, rendererSha: runtime.release });
+  }
   expect(queue.consumerReceipts).toBeUndefined();
   expect(await readWork()).toEqual({ maintenance: false, reconcile: false, previewContext: true });
   await db.doc(context.PUBLIC_CONTEXT_PATH).update({ revision: 2 });
@@ -320,13 +346,13 @@ it("does not starve retained Post Home maintenance while context preparation is 
 });
 
 it("marks exhausted exact-context family work failed without claiming a successful receipt", async () => {
-  await enqueue();
+  await enqueue(operationId, { reason: "context", pagePublication: true });
   const task = db.doc(`cmsPublishQueue/${operationId}/backgroundOutputs/search`);
   await task.update({ status: "failed", attempts: 4, nextAttemptAt: null });
   await db.doc("cmsBackgroundOutputs/search").update({ status: "failed" });
   expect(await publication.settlePublicContext({ firestore: db, operationId, runtime })).toBe(false);
   expect((await db.doc(`cmsPublishQueue/${operationId}`).get()).data()).toMatchObject({
-    status: "failed", error: "background_generation_failed", aggregateReceipt: null,
+    status: "failed", error: "background_generation_failed", aggregateReceipt: null, triggeredAt: expect.anything(),
   });
   await db.doc(`cmsPublishQueue/${operationId}`).update({ status: "pending" });
   await db.doc(context.PUBLIC_CONTEXT_PATH).update({ revision: 2 });

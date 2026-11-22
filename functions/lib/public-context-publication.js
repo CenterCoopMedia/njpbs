@@ -113,7 +113,7 @@ async function retainedPublicContextQueueIdsInTransaction({ transaction, firesto
 
 /** Read first, return writes for the caller's atomic settings/content transaction.
  * Admission selects new Posts; it does not grant ownership of public aggregates. */
-async function enqueuePublicContextInTransaction({ transaction, firestore, operationId, runtime, reason, contextRevision, preparationRecoveryOfQueueId, recordFamily, activateQueued = false }) {
+async function enqueuePublicContextInTransaction({ transaction, firestore, operationId, runtime, reason, contextRevision, preparationRecoveryOfQueueId, recordFamily, activateQueued = false, pagePublication = false }) {
   publicationRuntime(runtime);
   requireValue(runtime.owner === "cloudflare" && /^[A-Za-z0-9]{20}$/.test(operationId ?? "") &&
     ["settings", "context", "provider-refresh"].includes(reason));
@@ -127,6 +127,7 @@ async function enqueuePublicContextInTransaction({ transaction, firestore, opera
   const identity = activateQueued ? queue.data()?.publicContext : { schemaVersion: 1, operationId, contextRevision, contextDigest, reason, runtime, acceptedAt: Date.now(),
     ...(namespace.families.length ? { recordFamilies: namespace.families } : {}) };
   const result = { queueId: operationId, contextRevision, contextDigest, outputs: [...outputs] };
+  const activityTime = pagePublication ? { triggeredAt: FieldValue.serverTimestamp() } : {};
   if (queue.exists) {
     const retained = queue.data();
     requireValue(retained.transport === TRANSPORT && ownsPublication(retained, runtime) &&
@@ -172,7 +173,7 @@ async function enqueuePublicContextInTransaction({ transaction, firestore, opera
       if (!sameFollowUp) for (const row of waiting) transaction.update(row.ref,
         { status: "cancelled", error: "public_context_superseded", completedAt: FieldValue.serverTimestamp() });
       transaction.create(queueRef, { schemaVersion: 1, transport: TRANSPORT, runtime, backgroundRuntime: runtime,
-        publicContext: identity, status: "pending", changes: [], createdAt: FieldValue.serverTimestamp(), aggregateReceipt: null });
+        publicContext: identity, status: "pending", changes: [], ...activityTime, createdAt: FieldValue.serverTimestamp(), aggregateReceipt: null });
       transaction.update(currentRef, { followUp: { ...(sameFollowUp ? waiting[0].data().publicContext : identity),
         operationIds: [...(sameFollowUp ? waiting.map(row => row.id) : []), operationId],
         pendingSince: previous.followUp?.pendingSince ?? identity.acceptedAt } });
@@ -208,7 +209,7 @@ async function enqueuePublicContextInTransaction({ transaction, firestore, opera
         ownsPublication(row.data(), runtime) && row.data().status !== "verified") transaction.update(row.ref,
       { status: "superseded", claim: null, nextAttemptAt: null });
     const queueValue = { schemaVersion: 1, transport: TRANSPORT, runtime, backgroundRuntime: runtime,
-      publicContext: identity, status: "pending", changes: [], createdAt: FieldValue.serverTimestamp(), aggregateReceipt: null,
+      publicContext: identity, status: "pending", changes: [], ...activityTime, createdAt: FieldValue.serverTimestamp(), aggregateReceipt: null,
       ...(preparationRecoveryOfQueueId ? { preparationRecoveryOfQueueId } : {}) };
     if (activateQueued) transaction.update(queueRef, { status: "pending" });
     else transaction.create(queueRef, queueValue);

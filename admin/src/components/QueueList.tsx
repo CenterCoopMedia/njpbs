@@ -24,6 +24,7 @@ export interface QueueItem {
   error?: string | null;
   transport?: string | null;
   proofRecovery?: boolean;
+  automaticSiteUpdate?: boolean;
   contextRetry?: boolean;
   proofExhausted?: boolean;
   recheckMessage?: string;
@@ -41,14 +42,16 @@ function normalizedStatus(status: string | null | undefined): string {
   return status?.trim().toLowerCase() || "unknown";
 }
 
-function publicationStatusLabel(status: string): string {
+function publicationStatusLabel(status: string, automaticSiteUpdate = false): string {
   switch (status) {
     case "success":
       return "Completed";
     case "public_unconfirmed":
       return "Needs confirmation";
     case "pending":
-      return "Queued";
+      return automaticSiteUpdate ? "Site update queued" : "Queued";
+    case "failed":
+      return automaticSiteUpdate ? "Site update failed" : displayContentStatus(status);
     default:
       return displayContentStatus(status);
   }
@@ -179,7 +182,7 @@ function QueueJobDetails({ item, status }: { item: QueueItem; status: string }) 
       </dl>
       {item.error ? (
         <p className="publication-job-error">
-          <strong>Recorded error</strong>
+          <strong>{item.automaticSiteUpdate ? "Update outcome" : "Recorded error"}</strong>
           <span>{item.error}</span>
         </p>
       ) : null}
@@ -251,7 +254,7 @@ export function QueueList({ items, onCheckAgain, onRetrySiteUpdate }: { items: Q
                     className={publicationStatusClass(status)}
                     tone={item.proofRecovery ? "failed" : publicationStatusTone(status)}
                   >
-                    {item.proofRecovery ? "Public check failed" : publicationStatusLabel(status)}
+                    {item.proofRecovery ? "Public check failed" : publicationStatusLabel(status, item.automaticSiteUpdate)}
                   </StatusBadge>
                   {onCheckAgain && supported && (recoverable || item.recheckMessage) ? (
                     <PublicationRecheckAction onCheck={() => onCheckAgain(item.id)} available={recoverable}
@@ -260,7 +263,8 @@ export function QueueList({ items, onCheckAgain, onRetrySiteUpdate }: { items: Q
                   {onCheckAgain && recoverable && recordPath ? <a className="publication-recheck-record" href={recordPath}>Open record</a> : null}
                   {["failed", "public_unconfirmed"].includes(status) &&
                     !["page-no-build-v1", "post-no-build-v1"].includes(item.transport ?? "") && !item.contextRetry ? (
-                    <span className="published-version-note">This publication cannot be checked here. Open the record to retry publication.</span>
+                    <span className="published-version-note">{item.automaticSiteUpdate ? item.error :
+                      "This publication cannot be checked here. Open the record to retry publication."}</span>
                   ) : null}
                   {item.contextRetry && onRetrySiteUpdate ?
                     <SiteUpdateRetryAction available={status === "failed"} onRetry={control => onRetrySiteUpdate(item.id, control)} /> : null}
