@@ -225,7 +225,8 @@ function createTranscriptAudioRuntime(config, { firestore, s3, credentials, lamb
         try { await cleanupReceipt(snapshot.data().receipt); }
         catch { failed = true; }
       }
-      await cursorRef.set({ after: page.docs.at(-1)?.id ?? null });
+      const next = page.docs.at(-1)?.id ?? null;
+      if (next !== (after ?? null)) await cursorRef.set({ after: next });
     }
     if (failed) throw problem("audio_cleanup_failed");
   }

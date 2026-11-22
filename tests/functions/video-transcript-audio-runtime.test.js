@@ -135,6 +135,22 @@ async function ready() {
   return { ...s, source, receipt, bound };
 }
 
+it("leaves empty cleanup cursors alone after clearing a stale position", async () => {
+  const { rows, runtime } = setup();
+  const activeCursor = "system/transcriptAudioCleanup-active";
+  const deletingCursor = "system/transcriptAudioCleanup-deleting";
+  rows.set(activeCursor, { after: "old-use" });
+
+  await runtime.cleanup();
+  const cleared = rows.get(activeCursor);
+  expect(cleared).toEqual({ after: null });
+  expect(rows.has(deletingCursor)).toBe(false);
+
+  await runtime.cleanup();
+  expect(rows.get(activeCursor)).toBe(cleared);
+  expect(rows.has(deletingCursor)).toBe(false);
+});
+
 function localProcessor(s) {
   const source = { id: "video-library", bucket: "originals", prefix: "" };
   const base = job();

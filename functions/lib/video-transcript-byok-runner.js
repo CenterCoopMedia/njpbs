@@ -36,19 +36,46 @@ function createByokRunner({
     throw Error("byok_runner_configuration_invalid");
   if (onlyJobId !== undefined && !/^[a-f0-9]{64}$/.test(onlyJobId)) throw Error("byok_runner_configuration_invalid");
   const runnerRef = firestore.doc(RUNNER_PATH);
-  async function lease() {
+  const queue = firestore.collection(jobs.COLLECTION);
+  async function claimWork() {
     const owner = randomUUID();
     return firestore.runTransaction(async (tx) => {
       const record = (await tx.get(runnerRef)).data();
-      if (record?.leaseUntil > clock()) return null;
-      tx.set(runnerRef, { ...record, owner, leaseUntil: clock() + GLOBAL_LEASE_MS });
-      return owner;
+      const now = clock();
+      if (record?.leaseUntil > now) return null;
+      let cursor = { after: record?.after ?? null, afterLeaseUntil: record?.afterLeaseUntil ?? null };
+      let candidate;
+      if (onlyJobId) {
+        const row = (await tx.get(queue.doc(onlyJobId))).data();
+        if (row?.operatorCanaryId && row.provider === jobs.PROVIDER && row.active &&
+          !(row.leaseUntil > now) && !(row.nextAttemptAt > now)) candidate = row;
+      } else {
+        const query = queue.where("provider", "==", jobs.PROVIDER).where("active", "==", true)
+          .where("leaseUntil", "<=", now).orderBy("leaseUntil").orderBy("__name__").limit(20);
+        const hasCursor = cursor.after && cursor.afterLeaseUntil !== null;
+        let page = await tx.get(hasCursor ? query.startAfter(cursor.afterLeaseUntil, cursor.after) : query);
+        if (hasCursor && !page.docs.length) page = await tx.get(query);
+        // A retry deadline may be absent from a newly admitted job.
+        const selected = page.docs.find((doc) => {
+          const job = doc.data();
+          return !job.operatorCanaryId && !(job.nextAttemptAt > now);
+        });
+        candidate = selected?.data();
+        const last = selected ?? page.docs.at(-1);
+        cursor = { after: last?.id ?? null, afterLeaseUntil: last?.data().leaseUntil ?? null };
+      }
+      if (candidate) {
+        tx.set(runnerRef, { ...record, owner, leaseUntil: clock() + GLOBAL_LEASE_MS });
+      } else if (cursor.after !== (record?.after ?? null) || cursor.afterLeaseUntil !== (record?.afterLeaseUntil ?? null)) {
+        tx.set(runnerRef, { owner: null, leaseUntil: 0, ...cursor });
+      }
+      return { owner, candidate, cursor };
     });
   }
-  async function release(owner, after) {
+  async function release(owner, cursor) {
     await firestore.runTransaction(async (tx) => {
       if ((await tx.get(runnerRef)).data()?.owner === owner)
-        tx.set(runnerRef, { owner: null, leaseUntil: 0, after });
+        tx.set(runnerRef, { owner: null, leaseUntil: 0, ...cursor });
     });
   }
   async function authCurrent(job) {
@@ -272,22 +299,12 @@ function createByokRunner({
     }
   }
   return async function runOne() {
-    const owner = await lease();
-    if (!owner) return { outcome: "busy" };
-    let cursor = (await runnerRef.get()).data()?.after ?? null;
+    const work = await claimWork();
+    if (!work) return { outcome: "busy" };
+    const { owner, candidate, cursor } = work;
+    if (!candidate) return { outcome: "idle" };
     try {
-      if (onlyJobId) {
-        const candidate = (await firestore.collection(jobs.COLLECTION).doc(onlyJobId).get()).data();
-        if (!candidate?.operatorCanaryId || candidate.provider !== jobs.PROVIDER || !candidate.active ||
-          candidate.leaseUntil > clock() || candidate.nextAttemptAt > clock()) return { outcome: "idle" };
-        return await execute(owner, candidate);
-      }
-      let query = firestore.collection(jobs.COLLECTION).where("provider", "==", jobs.PROVIDER).where("active", "==", true).orderBy("__name__");
-      let page = await (cursor ? query.startAfter(cursor) : query).limit(20).get();
-      if (cursor && !page.docs.length) page = await query.limit(20).get();
-      const candidate = page.docs.map((doc) => doc.data()).find((job) => !job.operatorCanaryId && !(job.leaseUntil > clock()) && !(job.nextAttemptAt > clock()));
-      cursor = candidate?.id ?? page.docs.at(-1)?.id ?? null;
-      return candidate ? await execute(owner, candidate) : { outcome: "idle" };
+      return await execute(owner, candidate);
     } finally { await release(owner, cursor); }
 
   };
