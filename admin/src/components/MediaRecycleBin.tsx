@@ -138,7 +138,7 @@ export function MediaRecycleBin({ getIdToken, categories, targetId = null }: {
       const response = await cmsPurgeBinnedImage(await getIdToken(), asset);
       setSuccess(response.outcome === "purged"
         ? `Permanently deleted “${asset.name}”.`
-        : `Permanent deletion of “${asset.name}” is in progress. Removal will retry if needed.`);
+        : `Permanent deletion of “${asset.name}” is in progress. Check the bin for its current status.`);
       setConfirming(null);
       setPage(result?.page ?? 1);
       setRevision(value => value + 1);

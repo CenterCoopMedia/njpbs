@@ -84,7 +84,7 @@ async function masterSkipReason(transaction, firestore, entryId, entry) {
   return null;
 }
 
-async function inspectEntry({ firestore, entryRef, nowMs, config, prepare, confirm }) {
+async function inspectEntry({ firestore, entryRef, nowMs, config, prepare, confirm = null }) {
   return firestore.runTransaction(async (transaction) => {
     const snapshot = await transaction.get(entryRef);
     const entry = snapshot.data() || {};
