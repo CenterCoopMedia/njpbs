@@ -42,6 +42,8 @@ import { ViewerTabs } from "../components/media/ViewerTabs";
 import { VideoDetailsInspector, type VideoContextView, type VideoDetailsSaveReceipt } from "../components/media/VideoDetailsInspector";
 import { MediaCommentTimeline, placedComments } from "../components/media/MediaCommentTimeline";
 import { VideoReviewSeek } from "../components/media/VideoReviewSeek";
+import { VideoBookmarks } from "../components/media/VideoBookmarks";
+import { videoMomentsKey } from "../lib/video-moments";
 import type { CommentTiming } from "../components/media/MediaFeedbackSections";
 import { useMediaFeedback } from "../lib/use-media-feedback";
 import { commentThreads, filteredTimelineComments } from "../lib/media-comment-threads";
@@ -257,7 +259,8 @@ export function VideoViewerBody({
   }, [onBusyChange, busy, productionBusy, downloading]);
   const [access, setAccess] = useState<SourceMediaRead>();
   const [pendingAccess, setPendingAccess] = useState<SourceMediaRead>();
-  const [error, setError] = useState("");
+  const [previewError, setPreviewError] = useState("");
+  const [downloadError, setDownloadError] = useState("");
   const [timeMessage, setTimeMessage] = useState("");
   const [canRefreshPreview, setCanRefreshPreview] = useState(false);
   const player = useRef<HTMLVideoElement>(null);
@@ -306,7 +309,7 @@ export function VideoViewerBody({
   const playbackRate = useRef(1);
   const fileReadContext = useRef("");
   fileReadContext.current = `${asset.sourceId}/${asset.id}/${asset.fileVersion ?? ""}`;
-  useEffect(() => { setDownloading(undefined); }, [asset.sourceId, asset.id, asset.fileVersion]);
+  useEffect(() => { setDownloading(undefined); setDownloadError(""); }, [asset.sourceId, asset.id, asset.fileVersion]);
   const requestedIdentity = useRef(fileReadContext.current);
   const accessIdentity = useRef("");
   const mounted = useRef(true);
@@ -453,7 +456,7 @@ export function VideoViewerBody({
     asset,
     getIdToken,
     rememberPlayback,
-    setError,
+    setError: setPreviewError,
     setCanRefreshPreview,
     onRequestIdentity: identity => {
       if (accessIdentity.current !== identity) {
@@ -626,8 +629,7 @@ export function VideoViewerBody({
       "This video requires an on-screen credit. Check the Credit field for details.\n\nContinue with the download?",
     )) return;
     setDownloading(action);
-    setError("");
-    setCanRefreshPreview(false);
+    setDownloadError("");
     try {
       for (let attempt = 0; attempt < 2; attempt++) {
         const requestedAt = Date.now();
@@ -651,12 +653,13 @@ export function VideoViewerBody({
         link.remove();
         return;
       }
-      setError("The download link expired. Try again.");
+      setDownloadError("The download link expired. Try again.");
     } catch (cause) {
-      const originalMessage = cause instanceof SourceMediaFileChangedError ? cause.message : originalAccessMessage(cause);
-      if (current() && originalMessage) {
-        setError(originalMessage);
-      } else if (current()) setError(`${action === "download_web" ? "The web copy" : "The original file"} could not be downloaded. Try again.`);
+      if (!current()) return;
+      if (cause instanceof SourceMediaFileChangedError) {
+        setPreviewError(cause.message);
+        setCanRefreshPreview(false);
+      } else setDownloadError(originalAccessMessage(cause) ?? `${action === "download_web" ? "The web copy" : "The original file"} could not be downloaded. Try again.`);
     } finally {
       if (current()) setDownloading(undefined);
     }
@@ -691,6 +694,15 @@ export function VideoViewerBody({
     { key: "original", group: "Video", label: "Original video", description: formatVideoBytes(asset.sizeBytes), onSelect: () => void download("download") },
     ...(asset.sourceId === "video-library" ? [production.editorExportsItem, ...production.downloadItems] : []),
   ]}>{downloadLabel}</Menu>;
+  const bookmarksKey = principal?.id && asset.fileVersion && access?.fileVersion === asset.fileVersion
+    && accessIdentity.current === fileReadContext.current && canPlayInBrowser(asset) && !previewError
+    ? videoMomentsKey(principal.id, asset.sourceId, asset.id, asset.fileVersion) : undefined;
+  const bookmarks = bookmarksKey ? <VideoBookmarks key={bookmarksKey} storageKey={bookmarksKey} getPlayer={() => player.current}
+    onSeek={seconds => {
+      setWorkspaceView("watch");
+      production.seekPlayback(seconds);
+      requestAnimationFrame(() => player.current?.focus());
+    }} /> : null;
   const preview = <>
       {closePrompt}
       {canPlayInBrowser(asset) ? <>
@@ -699,7 +711,7 @@ export function VideoViewerBody({
           aria-label={`Preview ${asset.name}`} onTimeUpdate={() => { position.current = player.current?.currentTime ?? 0; production.onTimeUpdate(); }}
           onLoadedMetadata={() => {
             if (!player.current) return;
-            setError("");
+            setPreviewError("");
             setCanRefreshPreview(false);
             if (player.current.videoWidth && player.current.videoHeight) setNaturalRatio(player.current.videoWidth / player.current.videoHeight);
             if (Number.isFinite(player.current.duration)) setDurationMs(player.current.duration * 1000);
@@ -716,14 +728,14 @@ export function VideoViewerBody({
             if (resumePlayback.current) void player.current.play().catch(() => undefined);
             resumePlayback.current = false;
           }}
-          onError={() => { setCanRefreshPreview(true); setError("Playback stopped. Refresh the preview to renew access, or download the original file."); }} />
+          onError={() => { setCanRefreshPreview(true); setPreviewError("Playback stopped. Refresh the preview to renew access, or download the original file."); }} />
           {commentTiming ? <VideoReviewSeek currentSeconds={production.playbackSeconds} durationMs={durationMs} disabled={!access}
             onSeek={production.seekPlayback}>
             <MediaCommentTimeline comments={timelineComments} durationMs={durationMs}
               activeId={activeCommentId} onOpen={openComment} />
           </VideoReviewSeek> : null}
           </div>
-          : !error && !renewing ? <div className="source-video-loading"><LoadingIndicator label="Opening private preview" /></div> : null}
+          : !previewError && !renewing ? <div className="source-video-loading"><LoadingIndicator label="Opening private preview" /></div> : null}
         {commentTiming ? <>
           <p className="source-video-shortcuts">With the player or comment markers focused: C comments at this {commentRate ? "frame" : "time"}, I and O set a range, [ and ] go to the previous or next comment.</p>
         </> : null}
@@ -762,12 +774,13 @@ export function VideoViewerBody({
       recentTags={recentTags}
     />;
   return <>
-    {headerTarget ? createPortal(<MediaPreviewHeaderActions downloads={downloads}
+    {headerTarget ? createPortal(<MediaPreviewHeaderActions downloads={downloads} bookmarks={bookmarks}
       favorite={favorite} copyLink={() => mediaPermalink(mediaVideosPath(asset.sourceId), asset.id, player.current?.currentTime ?? initialSeek)} />, headerTarget) : null}
     {factsTarget ? createPortal(facts, factsTarget) : null}
-    <MediaDialogNotice>{error ? <InlineMessage tone="error" title="Video access needs attention">{error}
+    <MediaDialogNotice>{previewError ? <InlineMessage tone="error" title="Video access needs attention">{previewError}
       {canRefreshPreview ? <Button onClick={() => refreshPreview(true)}>Refresh preview</Button> : null}
     </InlineMessage> : null}</MediaDialogNotice>
+    <MediaDialogNotice>{downloadError ? <InlineMessage tone="error" title="Video download needs attention">{downloadError}</InlineMessage> : null}</MediaDialogNotice>
     <MediaDialogNotice>{showOriginalNotice ? <VideoOriginalStatus controls={originalControls} /> : null}</MediaDialogNotice>
     <MediaDialogNotice>{renewing ? <LoadingIndicator label="Renewing private preview" layout="inline" className="source-video-renewing" /> : null}</MediaDialogNotice>
     <MediaDialogNotice>{timeMessage ? <p role="status">{timeMessage}</p> : null}</MediaDialogNotice>

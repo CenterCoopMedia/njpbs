@@ -24,12 +24,14 @@ const token = async () => "local-media-frame-fixture";
 
 function Body({ context }: { context: MediaFullViewerBodyContext }) {
   const initial = assets.find(asset => asset.id === context.item.ref.id)!;
-  const linked = parseMediaPermalink(new URLSearchParams(window.location.search));
-  const [asset, setAsset] = useState(initial);
+  const location = new URLSearchParams(window.location.search);
+  const linked = parseMediaPermalink(location);
+  const [asset, setAsset] = useState(() => initial.fileVersion && location.has("replacement")
+    ? { ...initial, fileVersion: "synthetic-replacement-version" } : initial);
   const [favorite, setFavorite] = useState(false);
   return <VideoViewerBody asset={asset} getIdToken={token}
     initialSeek={linked.assetId === asset.id ? linked.seconds : 0}
-    principal={{ id: "local-frame-editor", grants: [{ role: "editor" }] }}
+    principal={{ id: location.has("other-editor") ? "local-frame-editor-2" : "local-frame-editor", grants: [{ role: "editor" }] }}
     canEditMetadata canRequestProduction canDelete={false}
     onDeleted={() => undefined} onUpdated={setAsset}
     onDirtyChange={context.onDirtyChange} onSavingChange={context.onSavingChange} onBusyChange={context.onBusyChange}

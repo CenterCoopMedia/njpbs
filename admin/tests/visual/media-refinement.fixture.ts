@@ -35,7 +35,9 @@ export async function openMediaRefinement(page: Page, width: number, presentatio
     const transcript = { ...fixture.transcript, languageCode: "en-US", maxSpeakers: 10,
       segments: fixture.segments, nextCursor: fixture.nextCursor };
     if (endpoint === "cmsCreateSourceMediaRead") return route.fulfill({ json: { success: true,
-      access: { url: `${new URL(route.request().url()).origin}/local-media-frame-preview.mp4`, expiresAt: "2026-08-20T20:00:00.000Z" } } });
+      access: { url: `${new URL(route.request().url()).origin}/local-media-frame-preview.mp4`, expiresAt: "2026-08-20T20:00:00.000Z",
+        fileVersion: new URL(route.request().frame().url()).searchParams.has("replacement")
+          ? "synthetic-replacement-version" : "synthetic-media-frame-version" } } });
     if (endpoint === "cmsGetMediaReview") return route.fulfill({ json: { success: true, review: null } });
     if (endpoint === "cmsListMediaComments") return route.fulfill({ json: { success: true, comments: [], nextCursor: null } });
     if (endpoint === "cmsListVideoClips") return route.fulfill({ json: { success: true, clips: [], nextCursor: null } });

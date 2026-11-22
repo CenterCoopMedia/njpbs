@@ -1,0 +1,10 @@
+.video-bookmarks { display: grid; gap: var(--cms-space-3); }
+.video-bookmarks form, .video-bookmarks label { display: grid; gap: var(--cms-space-2); }
+.video-bookmarks .field-control { min-width: 0; width: 100%; }
+.video-bookmarks p { margin: 0; }
+.video-bookmarks ul { list-style: none; padding: 0; margin: 0; }
+.video-bookmarks li { display: flex; justify-content: space-between; gap: var(--cms-space-2); }
+.video-bookmarks li .button:first-child { min-width: 0; overflow-wrap: anywhere; white-space: normal; text-align: start; }
+.video-bookmarks-resume { display: flex; flex-wrap: wrap; gap: var(--cms-space-2); }
+.video-bookmarks-storage { color: var(--cms-ink-muted); font-size: var(--cms-font-sm); }
+.video-bookmarks [role="status"]:empty { position: absolute; }

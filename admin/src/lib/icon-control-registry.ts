@@ -64,6 +64,7 @@ export type IconControlId =
   | "media-transcript"
   | "media-clip"
   | "media-copy-link"
+  | "media-bookmarks"
   | "media-favorite"
   | "media-collect"
   | "media-select";
@@ -419,6 +420,7 @@ export const ICON_CONTROL_REGISTRY: Record<IconControlId, IconControlSpec> = {
   "media-transcript": { iconEligible: true, label: "Transcript", icon: "content", risk: "low", state: "disclosure" },
   "media-clip": { iconEligible: true, label: "Create clip", icon: "video", risk: "low", state: "disclosure" },
   "media-copy-link": { iconEligible: true, label: "Copy link", icon: "link", risk: "low", state: "action" },
+  "media-bookmarks": { iconEligible: true, label: "Bookmarks", icon: "flag", risk: "low", state: "disclosure" },
   "media-favorite": {
     alwaysIcon: true,
     iconEligible: true,

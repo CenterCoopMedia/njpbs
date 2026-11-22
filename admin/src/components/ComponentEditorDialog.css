@@ -329,6 +329,7 @@
   color: var(--cms-ink);
 }
 .component-editor-dialog-header[data-media-preview] > div:first-child { flex: 1; min-width: 0; }
+.component-editor-dialog-header[data-media-preview]:has([data-action="media-bookmarks"]) { flex-wrap: wrap; }
 .component-editor-dialog-header[data-media-preview] h2 {
   color: var(--cms-ink);
   font-size: var(--cms-media-title-size);

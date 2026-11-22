@@ -44,6 +44,7 @@ import { withRegisteredMediaSections } from "../../../packages/content-core/src/
 import { CONTENT_SECTIONS_COLLECTION } from "../../../packages/content-core/src/content-sections";
 import { clearConsoleLogs } from "../lib/console-capture";
 import { pruneBrowserRecoveredWork } from "../lib/editor-work-recovery";
+import { pruneBrowserVideoMoments } from "../lib/video-moments";
 import {
   beginSessionScope,
   bindSessionToken,
@@ -152,6 +153,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const cookie = boardwalkHintCookie(window.location.hostname, false);
     if (cookie) document.cookie = cookie;
     clearMediaSessionCache();
+    pruneBrowserVideoMoments(null);
     clearOwnAvatarPhoto();
     deniedSession.current = null;
     clearConsoleLogs();
@@ -224,6 +226,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         if (!user && consoleIdentity && !deliberateSignOut()) markSessionEnded();
         const keepRecoveredWork = !user && sessionEnded();
         if (!keepRecoveredWork) pruneBrowserRecoveredWork(user?.uid ?? null);
+        pruneBrowserVideoMoments(user?.uid ?? null);
         if (user) clearSessionEnded();
         const signedOutStartup = !consoleIdentity;
         const nextConsoleIdentity = user?.uid ?? null;
@@ -269,6 +272,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           deniedSession.current = { email };
           markDeliberateSignOut();
           pruneBrowserRecoveredWork(null);
+          pruneBrowserVideoMoments(null);
           forgetDestination(adminDestinationStorage());
           dispatch({ type: "access-denied", email });
           // Fire-and-forget, like the admission chain below: report a sign-out failure only

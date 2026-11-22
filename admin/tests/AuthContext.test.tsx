@@ -3,6 +3,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { AuthProvider, useAuth } from "../src/context/AuthContext";
 import { clearStaffSiteSessions } from "../src/lib/staff-site";
 import { readControlPresentation } from "../src/lib/control-presentation";
+import { videoMomentsKey, writeVideoMoments } from "../src/lib/video-moments";
 import { hasCapability } from "../../packages/content-core/src/rbac";
 
 interface MockAuthUser {
@@ -463,7 +464,7 @@ describe("AuthProvider server admission", () => {
     functionsMocks.reset();
   });
 
-  it.each(["account menu", "another tab"])("removes stored recent tags when signing out through %s", async (route) => {
+  it.each(["account menu", "another tab"])("removes stored media data when signing out through %s", async (route) => {
     renderAuthProvider();
     act(() => authMocks.emitUser({ uid: "staff-1", email: "staff@example.test", emailVerified: false }));
     const tagKeys = [
@@ -473,6 +474,8 @@ describe("AuthProvider server admission", () => {
       "njpbs-admin:media-recent-tags:video:staff-2",
     ];
     for (const key of tagKeys) localStorage.setItem(key, JSON.stringify(["Private staff tag"]));
+    const momentsKey = videoMomentsKey("staff-1", "video-library", "interview", "version-one");
+    writeVideoMoments(momentsKey, { bookmarks: [{ id: "opening", name: "Opening remark", seconds: 12 }], resume: 48 });
     localStorage.setItem("unrelated-preference", "keep");
 
     if (route === "account menu") fireEvent.click(screen.getByRole("button", { name: "Sign out" }));
@@ -480,6 +483,7 @@ describe("AuthProvider server admission", () => {
 
     await waitFor(() => {
       for (const key of tagKeys) expect(localStorage.getItem(key)).toBeNull();
+      expect(localStorage.getItem(momentsKey)).toBeNull();
     });
     expect(localStorage.getItem("unrelated-preference")).toBe("keep");
     localStorage.clear();
