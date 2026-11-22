@@ -719,6 +719,7 @@ export function MediaCollectionsLibrary({
   }
 
   if (collectionId) {
+    const canOrganize = Boolean(collection?.canEdit && collection.lifecycle === "active");
     return <section className="media-collections-library" aria-labelledby="media-collection-title">
       {blocker.state === "blocked" && !mutationPending && !viewerOpen ? <LeaveGuardDialog
         onCancel={() => blocker.reset()}
@@ -765,9 +766,12 @@ export function MediaCollectionsLibrary({
               {detail.items.length === 0 ? <EmptyState
                 title={collection.scope === "private" ? "This collection is empty" : "No accessible items to show"}
                 description={collection.scope === "private"
-                  ? "Browse a media source, select items, then choose Add to collection."
-                  : "This shared collection may contain files your account cannot open. Browse a media source to add files you can access."}
-                action={<div className="button-row">{canBrowseImages ? <Button variant="primary" onClick={() => navigate(mediaImagesPath())}>Browse images</Button> : null}<Button variant={canBrowseImages ? undefined : "primary"} onClick={() => navigate(mediaVideosPath())}>Browse videos</Button></div>} /> : null}
+                  ? (canOrganize ? "Browse a media source, select items, then choose Add to collection." : undefined)
+                  : `This shared collection may contain files your account cannot open.${canOrganize ? " Browse a media source to add files you can access." : ""}`}
+                action={canOrganize ? <div className="button-row">
+                  {canBrowseImages ? <Button variant="primary" onClick={() => navigate(mediaImagesPath())}>Browse images</Button> : null}
+                  <Button variant={canBrowseImages ? undefined : "primary"} onClick={() => navigate(mediaVideosPath())}>Browse videos</Button>
+                </div> : undefined} /> : null}
               {detail.items.length > 0 || detail.nextCursor ? <MediaCollectionItems
                   collection={collection} items={detail.items} principal={principal} categories={categories}
                   getIdToken={getIdToken} userId={userId} removalPending={Boolean(removePending)}

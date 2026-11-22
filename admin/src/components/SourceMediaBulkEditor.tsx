@@ -311,7 +311,9 @@ export function useSourceMediaBulkEditing({ source, userId, records, favorites, 
   const [saving, setSaving] = useState(false);
   // A card's Add to collection names its one video and keeps the selection; the bar's names
   // the selection and clears it once the videos are added.
-  const [pickerTarget, setPickerTarget] = useState<{ assets: SourceMediaAssetSummary[]; bulk: boolean }>();
+  const [pickerTarget, setPickerTarget] = useState<{
+    assets: SourceMediaAssetSummary[]; bulk: boolean; opener: Element | null;
+  }>();
   const [collectionSuccess, setCollectionSuccess] = useState("");
   const selection = scoped.scope === scope ? scoped.selection : emptySelection<SourceMediaAssetSummary>();
   const assets = selection.items;
@@ -361,8 +363,9 @@ export function useSourceMediaBulkEditing({ source, userId, records, favorites, 
   }
   function collect(target?: SourceMediaAssetSummary) {
     if (locked) return;
-    if (target) setPickerTarget({ assets: [target], bulk: false });
-    else if (assets.length && !collectionCapError(assets.length, "videos")) setPickerTarget({ assets: [...assets], bulk: true });
+    const opener = document.activeElement;
+    if (target) setPickerTarget({ assets: [target], bulk: false, opener });
+    else if (assets.length && !collectionCapError(assets.length, "videos")) setPickerTarget({ assets: [...assets], bulk: true, opener });
   }
   function edit() {
     if (locked || !assets.length || !source.canEditMetadata) return;
@@ -468,13 +471,14 @@ export function useSourceMediaBulkEditing({ source, userId, records, favorites, 
         refs={pickerTarget.assets.map(asset => ({ backend: "s3" as const, sourceId: asset.sourceId, id: asset.id }))}
         getIdToken={getIdToken}
         onClose={() => setPickerTarget(undefined)}
+        focusOpener={pickerTarget.opener}
+        onFocusFallback={returnFocus ?? focusVideoSearch}
         onOpenCollections={() => navigate(mediaCollectionsPath())}
         onAdded={collection => {
           const count = pickerTarget.assets.length;
           setPickerTarget(undefined);
           if (pickerTarget.bulk) setScoped({ scope, selection: emptySelection() });
           if (!notice.available) setCollectionSuccess(`${count} ${count === 1 ? "video was" : "videos were"} added to ${collection.name}.`);
-          focusAfter();
         }} /> : null}</>,
     bar: <SelectionBar
       actions={mediaBarActions(selectionActions)}

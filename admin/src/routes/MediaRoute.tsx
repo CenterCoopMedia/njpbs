@@ -338,7 +338,9 @@ export function MediaLibrarySurface({
   const [viewerAnnouncement, setViewerAnnouncement] = useState("");
   const [bulkSaving, setBulkSaving] = useState(false);
   // What the collection picker adds: the selection from the bar, or one card's image.
-  const [pickerTarget, setPickerTarget] = useState<{ assets: readonly MediaAssetSummary[]; bulk: boolean } | null>(null);
+  const [pickerTarget, setPickerTarget] = useState<{
+    assets: readonly MediaAssetSummary[]; bulk: boolean; opener: Element | null;
+  } | null>(null);
   const collectionPickerOpen = pickerTarget !== null;
   const [collectionSuccess, setCollectionSuccess] = useState("");
   const [favoritesSaving, setFavoritesSaving] = useState(false);
@@ -1134,7 +1136,7 @@ export function MediaLibrarySurface({
     if (cardsLocked) return;
     if (id === "open-full-size") { openFullSize(asset); return; }
     if (id === "favorite") void favoriteUndo.toggle({ backend: "r2", id: asset.id }, asset.name);
-    if (id === "collect") setPickerTarget({ assets: [asset], bulk: false });
+    if (id === "collect") setPickerTarget({ assets: [asset], bulk: false, opener: document.activeElement });
     if (id === "select") changeCollectionSelection(toggleSelection(collectionSelection, asset));
     if (id === "delete") {
       setDeleteRequest(previous => ({ id: asset.id, count: (previous?.count ?? 0) + 1 }));
@@ -1196,7 +1198,7 @@ export function MediaLibrarySurface({
     }
     if (id === "clear-selection" && !selectionBusy) clearCollectionSelection();
     if (id === "collect" && !dirty && !metadataSaving && !showUpload) {
-      setPickerTarget({ assets: collectionAssets, bulk: true });
+      setPickerTarget({ assets: collectionAssets, bulk: true, opener: document.activeElement });
     }
     if (id === "edit-tags" && canEditSelection && collectionAssets.length > 0 && collectionAssets.length <= MAX_BULK_IMAGES && !bulkSession && !metadataSaving && !showUpload && !collectionPickerOpen) {
       const assets = [...collectionAssets];
@@ -1800,13 +1802,14 @@ export function MediaLibrarySurface({
         refs={pickerRefs}
         getIdToken={getIdToken}
         onClose={() => setPickerTarget(null)}
+        focusOpener={pickerTarget.opener}
+        onFocusFallback={returnFocus}
         onOpenCollections={() => navigate(mediaCollectionsPath())}
         onAdded={collection => {
           const count = pickerTarget.assets.length;
           setPickerTarget(null);
           if (pickerTarget.bulk) setCollectionSelection(emptySelection());
           if (!notice.available) setCollectionSuccess(`${count} ${count === 1 ? "item was" : "items were"} added to ${collection.name}.`);
-          requestAnimationFrame(returnFocus);
         }} /> : null}
     </section>
   );

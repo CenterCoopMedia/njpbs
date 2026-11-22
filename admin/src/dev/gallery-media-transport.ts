@@ -74,6 +74,7 @@ const GALLERY_COLLECTIONS: readonly MediaCollectionSummary[] = [
   { ...GALLERY_COLLECTION, id: "2".repeat(64), scope: "all_staff", lifecycle: "archived", name: "Archived pledge drive", description: "Shared stills and clips from the spring drive.", color: "gold", itemCount: undefined },
   { ...GALLERY_COLLECTION, id: "3".repeat(64), scope: "all_staff", lifecycle: "archived", name: "Retired station IDs", description: "Older station identity files kept for reference.", color: "slate", itemCount: undefined },
   { ...GALLERY_COLLECTION, id: "4".repeat(64), scope: "private", lifecycle: "archived", name: "Old draft package", description: "A private archived package.", color: "red", itemCount: 2 },
+  { ...GALLERY_COLLECTION, id: "5".repeat(64), name: "New reporting package", description: "", cover: null, itemCount: 0 },
 ];
 const GALLERY_COLLECTION_ITEMS_PAGE: MediaCollectionItemPage = {
   success: true,
@@ -343,7 +344,13 @@ export function useGalleryMediaTransport(): () => Promise<string> {
         };
         return galleryJsonResponse(page);
       }
-      if (endpoint === "cmsListMediaCollectionItems") return galleryJsonResponse(GALLERY_COLLECTION_ITEMS_PAGE);
+      if (endpoint === "cmsListMediaCollectionItems") {
+        if (request.collectionId === GALLERY_COLLECTION_ID) return galleryJsonResponse(GALLERY_COLLECTION_ITEMS_PAGE);
+        const collection = GALLERY_COLLECTIONS.find(item => item.id === request.collectionId);
+        return collection
+          ? galleryJsonResponse({ ...GALLERY_COLLECTION_ITEMS_PAGE, collection, items: [] })
+          : galleryJsonResponse({ error: "Media collection unavailable" }, 404);
+      }
       if (endpoint === "cmsListMediaSources") return galleryJsonResponse({
         success: true,
         sources: [{ id: "archive", label: "Archive", description: "Local gallery fixture", mediaKind: "video",
