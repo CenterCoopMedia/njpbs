@@ -75,7 +75,7 @@ describe("clip scheduler rotation", () => {
     expect(polled.slice(5)).toEqual(jobs.slice(0, 2).map(job => job.executionArn));
   });
 
-  it("continues past a full scan page of leased jobs", async () => {
+  it("reaches due jobs in the same tick when a full page has unexpired leases", async () => {
     const { jobs, jobRefs } = await seed(123);
     const batch = db.batch();
     for (const ref of jobRefs.slice(0, 120)) batch.update(ref, { leaseUntil: now + 300000, leaseOwner: "other-worker" });
@@ -83,8 +83,6 @@ describe("clip scheduler rotation", () => {
     const polled = [];
     const client = { send: async command => { polled.push(command.input.executionArn); return { status: "RUNNING" }; } };
     const tick = () => clips.processClipTick({ originalClient: { send: async () => ({ VersionId: "original-v1", ContentLength: 1000 }) }, firestore: db, config, client, now: () => now });
-    await tick();
-    expect(polled).toEqual([]);
     await tick();
     expect(polled).toEqual(jobs.slice(120).map(job => job.executionArn));
   });
@@ -118,8 +116,10 @@ describe("clip scheduler rotation", () => {
     await tick();
     expect(polled).toEqual(jobs.slice(1).map(job => job.executionArn));
     expect((await jobRefs[0].get()).data()).toMatchObject({ leaseUntil: now + 300000, leaseOwner: "other-worker" });
-    clock += 300001;
+    clock += 300000;
     await tick();
-    expect(polled.slice(2)).toEqual(jobs.map(job => job.executionArn));
+    expect(polled.slice(2)).toEqual([jobs[0].executionArn]);
+    await tick();
+    expect(polled.slice(3)).toEqual(jobs.map(job => job.executionArn));
   });
 });

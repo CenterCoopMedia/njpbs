@@ -350,14 +350,16 @@ function providerInput(job) {
 }
 async function processClipTick({ firestore = db, config = clipConfig(), client, originalClient, now = Date.now, assertBillingEnabledFn = assertBillingEnabled } = {}) {
   if (!config) return;
+  const cursorRef = firestore.collection("system").doc("videoClipScheduler");
+  const { after, afterLeaseUntil } = (await cursorRef.get()).data() ?? {};
+  const query = firestore.collection(CLIP_JOBS).where("active", "==", true).where("leaseUntil", "<=", now())
+    .orderBy("leaseUntil").orderBy("__name__").limit(GLOBAL_CLIP_EXPORTS_PER_DAY);
+  const hasCursor = after && Number.isFinite(afterLeaseUntil);
+  let snapshots = await (hasCursor ? query.startAfter(afterLeaseUntil, after) : query).get();
+  if (hasCursor && snapshots.docs.length === 0) snapshots = await query.get();
+  if (snapshots.docs.length === 0) return;
   const aws = client ?? new SFNClient({ region: config.region, credentials: createAwsRoleCredentialProvider({ roleArn: config.controlRoleArn, audience: config.audience, region: config.region }) });
   const originalStorage = createOriginalStorage(config, { client: originalClient });
-  const cursorRef = firestore.collection("system").doc("videoClipScheduler");
-  const after = (await cursorRef.get()).data()?.after;
-  // Document IDs include legacy jobs and remain usable after a cursor job is deleted.
-  const query = firestore.collection(CLIP_JOBS).where("active", "==", true).orderBy("__name__").limit(GLOBAL_CLIP_EXPORTS_PER_DAY);
-  let snapshots = await (after ? query.startAfter(after) : query).get();
-  if (after && snapshots.docs.length === 0) snapshots = await query.get();
   // Stop leasing well inside the 240-second timeout; the next tick resumes after the last visited job.
   const deadline = now() + 180000;
   for (const snapshot of snapshots.docs) {
@@ -365,8 +367,8 @@ async function processClipTick({ firestore = db, config = clipConfig(), client, 
     const owner = randomUUID();
     const job = await firestore.runTransaction(async (tx) => {
       const current = (await tx.get(snapshot.ref)).data();
-      // Save before provider work, so a timeout or a full page of leases cannot pin the scan.
-      tx.set(cursorRef, { after: snapshot.id });
+      // Save the query position before provider work so a timeout does not pin the scan.
+      tx.set(cursorRef, { after: snapshot.id, afterLeaseUntil: snapshot.data().leaseUntil });
       if (!current?.active || current.leaseUntil > now()) return null;
       tx.update(snapshot.ref, { leaseUntil: now() + 300000, leaseOwner: owner }); return current;
     });
