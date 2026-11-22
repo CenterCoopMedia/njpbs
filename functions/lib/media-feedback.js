@@ -29,6 +29,8 @@ const COMMENT_HAS_REPLIES_CODE = "media_comment_has_replies";
 const MAX_COMMENT_MENTIONS = 10;
 const STAFF_UID_PATTERN = /^[A-Za-z0-9_-]{1,128}$/;
 const COMMENT_ACTIONS = ["create", "edit", "delete", "resolve", "reopen"];
+const MEDIA_APPROVAL_PURPOSES = ["editorial", "technical"];
+const MEDIA_APPROVAL_RENDITIONS = ["original", "viewingCopy"];
 
 class MediaFeedbackValidationError extends Error {
   constructor(message, status = 400, code = null) {
@@ -96,15 +98,45 @@ function normalizeText(value, label, { empty = true } = {}) {
 }
 
 function parseGetMediaReviewRequest(value) {
-  rejectUnknownFields(value, new Set(["schemaVersion", "ref"]));
+  rejectUnknownFields(value, new Set(["schemaVersion", "ref", "approvalHistory"]));
   requireSchemaVersion(value.schemaVersion);
+  const ref = parseFeedbackRef(value.ref);
+  if (Object.hasOwn(value, "approvalHistory")) {
+    requireVideoApprovalRef(ref);
+    rejectUnknownFields(value.approvalHistory, new Set(["cursor"]), "Approval history");
+    const cursor = value.approvalHistory.cursor;
+    if (cursor !== undefined &&
+        (typeof cursor !== "string" || !/^(editorial|technical)-[0-9a-f]{64}$/.test(cursor))) {
+      throw new MediaFeedbackValidationError("Approval history cursor is invalid");
+    }
+    return { schemaVersion: MEDIA_FEEDBACK_SCHEMA_VERSION, ref, approvalHistory: { cursor } };
+  }
   return {
     schemaVersion: MEDIA_FEEDBACK_SCHEMA_VERSION,
-    ref: parseFeedbackRef(value.ref),
+    ref,
   };
 }
 
+function requireVideoApprovalRef(ref) {
+  if (ref.backend !== "s3") {
+    throw new MediaFeedbackValidationError("Version approvals are available for source videos");
+  }
+}
+
 function parseSaveMediaReviewRequest(value) {
+  if (plainObject(value) && Object.hasOwn(value, "approval")) {
+    rejectUnknownFields(value, new Set(["schemaVersion", "ref", "approval"]));
+    requireSchemaVersion(value.schemaVersion);
+    const ref = parseFeedbackRef(value.ref);
+    requireVideoApprovalRef(ref);
+    rejectUnknownFields(value.approval, new Set(["rendition", "purpose", "version"]), "Approval");
+    const { rendition, purpose, version } = value.approval;
+    if (!MEDIA_APPROVAL_RENDITIONS.includes(rendition) || !MEDIA_APPROVAL_PURPOSES.includes(purpose) ||
+        typeof version !== "string" || !DOCUMENT_ID_PATTERN.test(version)) {
+      throw new MediaFeedbackValidationError("Choose a valid file version and review purpose");
+    }
+    return { schemaVersion: MEDIA_FEEDBACK_SCHEMA_VERSION, ref, approval: { rendition, purpose, version } };
+  }
   rejectUnknownFields(
     value,
     new Set(["schemaVersion", "ref", "baseVersion", "moreLikeThis", "notes"]),
@@ -646,6 +678,7 @@ module.exports = {
   ITEMS_COLLECTION,
   MAX_COMMENT_PAGE_SIZE,
   MAX_FEEDBACK_TEXT_CHARACTERS,
+  MEDIA_APPROVAL_PURPOSES,
   MEDIA_COMMENTS_COLLECTION,
   MEDIA_FEEDBACK_SCHEMA_VERSION,
   MEDIA_REVIEWS_COLLECTION,

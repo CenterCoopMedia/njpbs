@@ -1,6 +1,7 @@
 import { postFunction } from "./functions";
 import type { MediaAssetRef } from "./media-identity";
 import type { CommentFilter } from "./media-comment-threads";
+import type { MediaApprovalRendition, MediaApprovalVersions } from "./source-media";
 
 export const MEDIA_FEEDBACK_SCHEMA_VERSION = 1;
 
@@ -9,6 +10,36 @@ export interface MediaReview {
   notes: string;
   version: number;
   updatedAt: string | null;
+}
+
+export type MediaApprovalPurpose = "editorial" | "technical";
+type MediaApprovalSelection = { rendition: MediaApprovalRendition; purpose: MediaApprovalPurpose; version: string };
+
+export interface MediaApproval extends MediaApprovalSelection {
+  id: string;
+  originalName: string;
+  approvedByName: string;
+  approvedAt: string;
+}
+
+export interface MediaApprovalPage {
+  success: true;
+  versions: MediaApprovalVersions;
+  current: MediaApproval[];
+  history: MediaApproval[];
+  nextCursor: string | null;
+}
+
+export function listMediaApprovals(token: string, ref: MediaAssetRef, cursor?: string, signal?: AbortSignal) {
+  return postFunction<MediaApprovalPage>("cmsGetMediaReview", token,
+    { schemaVersion: MEDIA_FEEDBACK_SCHEMA_VERSION, ref, approvalHistory: { cursor } }, {},
+    { signal, operation: "media-read" });
+}
+
+export function saveMediaApproval(token: string, ref: MediaAssetRef, approval: MediaApprovalSelection, signal: AbortSignal) {
+  return postFunction<{ success: true; approval: MediaApproval }>("cmsSaveMediaReview", token,
+    { schemaVersion: MEDIA_FEEDBACK_SCHEMA_VERSION, ref, approval }, {},
+    { appCheck: true, signal, operation: "media-write" });
 }
 
 /** Frames are null when the video had no usable frame rate; endMs ends the last frame. */

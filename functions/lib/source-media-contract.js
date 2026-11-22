@@ -375,6 +375,21 @@ function sourceMediaFileVersion(objectVersionId) {
   return createHash("sha256").update(`source-media-file-version:${objectVersionId}`).digest("hex").slice(0, 32);
 }
 
+function sourceMediaApprovalVersions(asset) {
+  if (!asset.objectVersionId || asset.objectVersionId === "null") {
+    return { original: null, viewingCopy: null };
+  }
+  const original = [asset.objectKey, asset.objectVersionId];
+  const version = (rendition, output = []) => createHash("sha256")
+    .update(JSON.stringify([rendition, original, output])).digest("hex");
+  const web = asset.rendition?.state === "ready" ? asset.rendition.web : null;
+  return {
+    original: version("original"),
+    viewingCopy: web && web.objectVersionId !== "null"
+      ? version("viewingCopy", [web.objectKey, web.objectVersionId]) : null,
+  };
+}
+
 function sourceMediaAssetSummary(asset) {
   return {
     id: asset.id,
@@ -395,6 +410,7 @@ function sourceMediaAssetSummary(asset) {
     rightsStatus: asset.rightsStatus,
     version: asset.version,
     fileVersion: sourceMediaFileVersion(asset.objectVersionId),
+    approvalVersions: sourceMediaApprovalVersions(asset),
     createdAt: asset.createdAt,
     updatedAt: asset.updatedAt,
     uploadedBy: asset.createdBy && !asset.createdBy.startsWith("system:")
@@ -430,4 +446,5 @@ module.exports = {
   sourceMediaAssetSummary,
   sourceMediaAssetDetail,
   sourceMediaFileVersion,
+  sourceMediaApprovalVersions,
 };

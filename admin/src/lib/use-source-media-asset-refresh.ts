@@ -14,12 +14,15 @@ export function refreshedSourceMediaAsset(previous: SourceMediaAssetSummary, fre
   if (fresh.version < previous.version || previous.fileVersion && !fresh.fileVersion) return previous;
   if (!blocked) return fresh;
   return sourceMediaStatusMatches(previous, fresh)
-    ? { ...previous, viewingCopy: fresh.viewingCopy, uploadedBy: fresh.uploadedBy ?? previous.uploadedBy }
+    ? { ...previous, viewingCopy: fresh.viewingCopy, approvalVersions: fresh.approvalVersions,
+        uploadedBy: fresh.uploadedBy ?? previous.uploadedBy }
     : previous;
 }
 
 function changed(previous: SourceMediaAssetSummary, fresh: SourceMediaAssetSummary) {
   return previous.fileVersion !== fresh.fileVersion || previous.version !== fresh.version ||
+    previous.approvalVersions?.original !== fresh.approvalVersions?.original ||
+    previous.approvalVersions?.viewingCopy !== fresh.approvalVersions?.viewingCopy ||
     JSON.stringify(previous.viewingCopy) !== JSON.stringify(fresh.viewingCopy) ||
     JSON.stringify(previous.replacement) !== JSON.stringify(fresh.replacement);
 }

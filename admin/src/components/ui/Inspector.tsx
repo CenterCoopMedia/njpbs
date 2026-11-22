@@ -383,6 +383,7 @@ export interface InspectorSectionProps {
   /** A control beside the heading, such as a Menu; it never sits inside the disclosure button. */
   actions?: ReactNode;
   defaultOpen?: boolean;
+  mountWhenOpen?: boolean;
   /** A changed nonzero request opens the section, such as a menu action targeting it. */
   openRequest?: number;
   /** Runs after a requested section is open, so its newly visible target can receive focus. */
@@ -391,7 +392,7 @@ export interface InspectorSectionProps {
 }
 
 // A collapsible inspector section (disclosure pattern) that remembers its state.
-export function InspectorSection({ actions, children, count, defaultOpen = true, id, onOpenRequestHandled, openRequest = 0, title }: InspectorSectionProps) {
+export function InspectorSection({ actions, children, count, defaultOpen = true, id, mountWhenOpen, onOpenRequestHandled, openRequest = 0, title }: InspectorSectionProps) {
   const scope = useContext(StorageScope);
   const key = `cms.inspector.${scope}.section.${id}`;
   const parse = useMemo(() => parseSection(defaultOpen), [defaultOpen]);
@@ -437,7 +438,7 @@ export function InspectorSection({ actions, children, count, defaultOpen = true,
         </h3>
         {actions ? <div className="ui-inspector-section-actions">{actions}</div> : null}
       </div>
-      <div className="ui-inspector-section-body" hidden={!expanded} id={panelId}>{children}</div>
+      <div className="ui-inspector-section-body" hidden={!expanded} id={panelId}>{!mountWhenOpen || expanded ? children : null}</div>
     </section>
   );
 }

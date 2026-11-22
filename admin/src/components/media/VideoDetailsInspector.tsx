@@ -26,6 +26,7 @@ import { sourceFrameRateLabel, isBroadcastFrameRate, sourceFramesPerSecond } fro
 import { formatMediaDuration, formatVideoBytes } from "../../lib/media-format";
 import { useMediaFeedback, type MediaFeedback } from "../../lib/use-media-feedback";
 import { tagsToTokens, tokensToTags } from "../../lib/media-tags";
+import { MediaApprovals } from "./MediaApprovals";
 import { MediaFeedbackSections, type CommentTiming } from "./MediaFeedbackSections";
 import { ViewerTabs } from "./ViewerTabs";
 import { VideoRightsFields } from "./VideoRightsFields";
@@ -325,6 +326,7 @@ export function VideoDetailsInspector({
   </div>;
   const noticeFooter = contextual && headerSave && Boolean(saveMessage || conflict);
   const viewingCopy = asset.viewingCopy;
+  const approvalVersions = asset.approvalVersions;
 
   const detailsFields = <>
       <InspectorSection id="details" title="Details" openRequest={detailsOpenRequest}
@@ -363,6 +365,10 @@ export function VideoDetailsInspector({
         /> : <ReadOnlyField label="Tags" value={currentTags.join(", ")} />}
       </InspectorSection>
 
+      {approvalVersions && <InspectorSection id="media-approvals" title="Approvals" defaultOpen={false} mountWhenOpen>
+        <MediaApprovals key={JSON.stringify([asset.sourceId, asset.id, approvalVersions.original, approvalVersions.viewingCopy])}
+          sourceId={asset.sourceId} assetId={asset.id} versions={approvalVersions} getIdToken={getIdToken} locked={busy} />
+      </InspectorSection>}
   </>;
   const fileFields = <>
       <InspectorSection defaultOpen={false} id="file" title="File information">

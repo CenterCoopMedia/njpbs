@@ -14,6 +14,7 @@ const {
 } = require("./lib/media-asset-ref");
 const { resolveMediaAssets } = require("./lib/media-asset-resolver");
 const { isAudioReadAdmitted, mayUseMedia } = require("./lib/media-access");
+const { readMediaApprovals, recordMediaApproval } = require("./lib/media-approvals");
 const { mediaAssetSummary } = require("./lib/media-library");
 const {
   ARCHIVE_CATEGORY_ID,
@@ -479,7 +480,7 @@ function commentAudit({ auditFn, actor, target, commentId, action, before, after
   });
 }
 
-async function verifiedCommentAuthorName(firestore, uid) {
+async function verifiedStaffName(firestore, uid) {
   const snapshot = await firestore.collection("users").doc(uid).get();
   return requesterName(snapshot.exists ? snapshot.data()?.displayName : null) ??
     DEFAULT_STAFF_NAME;
@@ -863,8 +864,10 @@ function createCmsGetMediaReviewHandler(deps = {}) {
       if (!requirePost(req, res)) return;
       const request = parseGetMediaReviewRequest(req.body);
       const { actor, target } = await actorAndTarget(runtime, req, request.ref);
-      const review = await getMediaReview({ ...runtime, actor, target });
-      res.status(200).json({ success: true, review });
+      const result = request.approvalHistory
+        ? await readMediaApprovals({ firestore: runtime.firestore, target, cursor: request.approvalHistory.cursor })
+        : { review: await getMediaReview({ ...runtime, actor, target }) };
+      res.status(200).json({ success: true, ...result });
     } catch (error) {
       respondWithError(res, runtime.log, "get media review", error);
     }
@@ -880,13 +883,11 @@ function createCmsSaveMediaReviewHandler(deps = {}) {
       const request = parseSaveMediaReviewRequest(req.body);
       await verifyAppCheckFn(req.headers?.["x-firebase-appcheck"]);
       const { actor, target } = await actorAndTarget(runtime, req, request.ref);
-      const review = await saveMediaReview({
-        ...runtime,
-        actor,
-        target,
-        request,
-      });
-      res.status(200).json({ success: true, review });
+      const result = request.approval
+        ? { approval: await recordMediaApproval({ ...runtime, target, actor, approval: request.approval,
+            authorName: await verifiedStaffName(runtime.firestore, actor.uid) }) }
+        : { review: await saveMediaReview({ ...runtime, actor, target, request }) };
+      res.status(200).json({ success: true, ...result });
     } catch (error) {
       respondWithError(res, runtime.log, "save media review", error);
     }
@@ -930,7 +931,7 @@ function createCmsMutateMediaCommentHandler(deps = {}) {
       await verifyAppCheckFn(req.headers?.["x-firebase-appcheck"]);
       const { actor, target } = await actorAndTarget(runtime, req, request.ref);
       const authorName = request.action === "create"
-        ? await verifiedCommentAuthorName(runtime.firestore, actor.uid)
+        ? await verifiedStaffName(runtime.firestore, actor.uid)
         : null;
       const comment = await mutateMediaComment({
         ...runtime,
@@ -994,5 +995,4 @@ module.exports = {
   resolveFeedbackTarget,
   reviewReference,
   saveMediaReview,
-  verifiedCommentAuthorName,
 };
