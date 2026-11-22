@@ -45,7 +45,8 @@
     "test:public-record-runtime": "tsx scripts/check-public-record-renderer.ts && tsx scripts/check-published-record-images.ts",
     "build:shadow": "tsx scripts/build-shadow-post-renderer.ts",
     "test:shadow": "tsx scripts/build-shadow-post-renderer.ts --fixtures && vitest run --config vitest.shadow-posts.config.ts",
-    "compare:shadow": "tsx scripts/compare-shadow-posts.ts"
+    "compare:shadow": "tsx scripts/compare-shadow-posts.ts",
+    "compare:archive": "tsx scripts/compare-archive-routes.ts"
   },
   "dependencies": {
     "@astrojs/markdown-remark": "^7.2.2",
