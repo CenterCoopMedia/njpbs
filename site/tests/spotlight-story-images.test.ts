@@ -5,7 +5,8 @@ import { join } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { main, parseSpotlightFeed } from "../scripts/sync-spotlight-news.mjs";
 import { copySpotlightImages, spotlightCopyIndexKey, spotlightCardSizeUrl } from "../scripts/spotlight-image-cache.mjs";
-import { spotlightImageUrl, spotlightCopyImageUrl, spotlightStoryImage } from "../../packages/content-core/src/spotlight-image.mjs";
+import { spotlightImageUrl, spotlightCopyImageUrl, spotlightCardImage, spotlightStoryImage } from "../../packages/content-core/src/spotlight-image.mjs";
+import { renderHomeNewsRail } from "../../packages/content-core/src/home-rail-render";
 import { createHomeSourceSnapshot } from "../src/lib/home-sources";
 import { readHomeSourceSnapshot } from "../../packages/content-core/src/home-published-sources";
 import { adaptHomeSpotlight } from "../../packages/content-core/src/home-spotlight-source";
@@ -166,7 +167,7 @@ describe("Spotlight story images without hotlinks", () => {
       { cutoffAt: "2026-10-14T17:00:00Z" }).cards[0].image?.url).toBe(first.fallbackImage);
   });
 
-  it("copies the synthetic crop once and reuses its content-addressed NJ PBS copy", async () => {
+  it("copies the original and a bounded compact source once and preserves them through publication", async () => {
     expect(createHash("sha256").update(body).digest("hex")).toBe(contentHash);
     const storage = memoryStorage();
     const fetchImpl = vi.fn<typeof fetch>(async (url, options) => {
@@ -174,16 +175,69 @@ describe("Spotlight story images without hotlinks", () => {
       expect(options).toMatchObject({ redirect: "error", headers: { "User-Agent": "NJ PBS Spotlight image cache/1.0" } });
       return new Response(body, { headers: { "content-type": "image/jpeg" } });
     });
-    const [copied] = await copySpotlightImages([first, first], fetchImpl, () => storage);
+    const [copied, duplicate] = await copySpotlightImages([first, first], fetchImpl, () => storage);
+    const thumbnailKey = `cms-media/spotlight/${sourceHash}/thumbs/${contentHash}-w768.webp`;
+    const thumbnail = { url: `https://media.njpbs.org/${thumbnailKey}`, width: 768, height: 432 };
     expect(copied).toMatchObject({ image: cardImage, imageCopy: { sourceUrl: feedImage, fetchedUrl: fetchedImage,
-      key, sha256: contentHash, bytes: 8558, mimeType: "image/jpeg", width: 1536, height: 864 } });
+      key, sha256: contentHash, bytes: 8558, mimeType: "image/jpeg", width: 1536, height: 864, thumbnail },
+      width: 1536, height: 864, thumbnails: [thumbnail] });
+    expect(duplicate).toEqual(copied);
+    const compact = storage.objects.get(thumbnailKey)!;
+    expect(compact.body.length).toBeLessThan(body.length);
+    expect(await require("sharp")(compact.body).metadata()).toMatchObject({ format: "webp", width: 768, height: 432 });
     expect(fetchImpl).toHaveBeenCalledOnce();
-    expect(storage.putFinal).toHaveBeenCalledTimes(2);
+    expect(storage.putFinal).toHaveBeenCalledTimes(3);
     fetchImpl.mockClear(); storage.putFinal.mockClear();
-    expect((await copySpotlightImages([first], fetchImpl, () => storage))[0].image).toBe(cardImage);
+    expect((await copySpotlightImages([first], fetchImpl, () => storage))[0]).toEqual(copied);
     expect(fetchImpl).not.toHaveBeenCalled();
     expect(storage.putFinal).not.toHaveBeenCalled();
+
+    const publication = { buildBatchId: "spotlight-variant", generation: 1, commitSha: "a".repeat(40) };
+    const snapshot = createHomeSourceSnapshot({}, { cards: [copied] }, publication);
+    const published = readHomeSourceSnapshot(snapshot, { schemaVersion: 1, ...publication });
+    expect(renderHomeNewsRail(published.spotlight.cards)).toContain(`srcset="${thumbnail.url} 768w, ${cardImage} 1536w"`);
+    expect(published.heroCatalog?.find(card => card.href === first.href)?.image).toEqual(spotlightStoryImage(copied));
+
+    const cutoffAt = "2026-10-14T17:00:00Z";
+    const curated = adaptHomeSpotlight({ status: "ready", source: "nj-spotlight-news-rss", checkedAt: cutoffAt,
+      cards: [copied] }, { cutoffAt });
+    expect(curated.cards[0].image).toMatchObject({ url: cardImage, thumbnails: [thumbnail] });
+    const receipt = structuredClone(selections.editorial);
+    receipt.catalog.cutoffAt = cutoffAt;
+    receipt.catalog.sources["home-spotlight"] = { status: "ready", checkedAt: cutoffAt, cards: curated.cards };
+    expect(serverCatalog.readHomeEditorialSourceReceipt(receipt)).toEqual(readHomeEditorialSourceReceipt(receipt));
+
+    expect(spotlightCardImage({ ...copied, thumbnails: [{ ...thumbnail, url: thumbnail.url.replace(contentHash, "a".repeat(64)) }] }))
+      .toEqual(spotlightStoryImage(copied));
   }, 40_000); // Includes the copy pass's 30s budget and a second cached pass; native startup is cold.
+
+  it("keeps the original available when the compact copy cannot be written", async () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const storage = memoryStorage();
+    const putFinal = storage.putFinal.getMockImplementation()!;
+    storage.putFinal.mockImplementation(async value => {
+      if (value.mimeType === "image/webp") throw new Error("Compact copy unavailable");
+      return putFinal(value);
+    });
+    const fetchImage = async () => new Response(body, { headers: { "content-type": "image/jpeg" } });
+    const [copied] = await copySpotlightImages([first], fetchImage, () => storage);
+    expect(copied.image).toBe(cardImage);
+    expect(copied.thumbnails).toBeUndefined();
+    expect((await copySpotlightImages([first], vi.fn(), () => storage))[0]).toEqual(copied);
+    expect(warn.mock.calls).toEqual([["Spotlight image cache: 1 compact copy failure(s); used original copies when available."]]);
+  });
+
+  it("matches the original's display orientation in the compact image", async () => {
+    const sharp = require("sharp");
+    const rotated = await sharp(body).withMetadata({ orientation: 6 }).jpeg().toBuffer();
+    const storage = memoryStorage();
+    const [copied] = await copySpotlightImages([first], async () => new Response(rotated, {
+      headers: { "content-type": "image/jpeg" },
+    }), () => storage);
+    expect(copied).toMatchObject({ width: 864, height: 1536, thumbnails: [{ width: 768, height: 1365 }] });
+    const key = new URL(copied.thumbnails[0].url).pathname.slice(1);
+    expect(await sharp(storage.objects.get(key)!.body).metadata()).toMatchObject({ width: 768, height: 1365 });
+  });
 
   // Byte counts recorded in #4719 on Nov. 3. A decodable PNG is padded to
   // those exact counts at the network boundary; sharp and receipt verification

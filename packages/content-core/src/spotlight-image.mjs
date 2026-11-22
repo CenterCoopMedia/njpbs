@@ -1,4 +1,5 @@
 const MILLISECONDS_PER_DAY = 86_400_000;
+export const SPOTLIGHT_CARD_IMAGE_WIDTH = 768;
 const TOPIC_IMAGE_SUFFIXES = ["", "-02"];
 const TOPIC_IMAGE_SLUGS = new Set([
   "budget",
@@ -82,6 +83,27 @@ export function spotlightCopyImageUrl(value) {
     return url.origin === "https://media.njpbs.org" && !url.username && !url.password && !url.search && !url.hash &&
       /^\/cms-media\/spotlight\/[a-f0-9]{64}\/[a-f0-9]{64}\.(?:jpg|png|webp|avif|gif)$/.test(url.pathname) ? value : undefined;
   } catch { return undefined; }
+}
+
+export function spotlightCardThumbnailUrl(original) {
+  return spotlightCopyImageUrl(original)?.replace(/\/([a-f0-9]{64})\.[a-z]+$/, `/thumbs/$1-w${SPOTLIGHT_CARD_IMAGE_WIDTH}.webp`);
+}
+
+export function spotlightCardThumbnail(original, width, height, value) {
+  const url = spotlightCardThumbnailUrl(original);
+  if (!url || !value || value.url !== url || value.width !== SPOTLIGHT_CARD_IMAGE_WIDTH ||
+      !Number.isSafeInteger(width) || width <= value.width || !Number.isSafeInteger(height) || height < 1 ||
+      width * height > 12_000_000 || !Number.isSafeInteger(value.height) || value.height < 1 ||
+      Math.abs(value.height - height * value.width / width) > 1) return undefined;
+  return { url, width: value.width, height: value.height };
+}
+
+/** The shelf can use a smaller source while the hero keeps the original copy. */
+export function spotlightCardImage(story) {
+  const image = spotlightStoryImage(story);
+  const { width, height, thumbnails } = story;
+  const thumbnail = spotlightCardThumbnail(image.url, width, height, Array.isArray(thumbnails) ? thumbnails[0] : undefined);
+  return thumbnail ? { ...image, width, height, thumbnails: [thumbnail] } : image;
 }
 
 /** Only fixed bundled topic paths may enter the client fallback marker. */

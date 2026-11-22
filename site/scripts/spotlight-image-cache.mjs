@@ -1,11 +1,13 @@
 import { cloudflareR2Endpoint } from "./cloudflare-account.mjs";
 import { createHash } from "node:crypto";
 import { createRequire } from "node:module";
-import { spotlightCopyImageUrl, spotlightImageUrl } from "../../packages/content-core/src/spotlight-image.mjs";
+import { SPOTLIGHT_CARD_IMAGE_WIDTH, spotlightCardThumbnail, spotlightCardThumbnailUrl,
+  spotlightCopyImageUrl, spotlightImageUrl } from "../../packages/content-core/src/spotlight-image.mjs";
 
 const require = createRequire(import.meta.url);
 const ORIGIN = "https://media.njpbs.org";
 const MAX_BYTES = 2 * 1024 * 1024;
+const MAX_THUMBNAIL_BYTES = 128 * 1024;
 const BUDGET_MS = 30_000;
 const TYPES = { "image/jpeg": "jpg", "image/png": "png", "image/webp": "webp", "image/gif": "gif" };
 const hash = value => createHash("sha256").update(value).digest("hex");
@@ -45,6 +47,36 @@ function admittedCopy(value, sourceUrl) {
       !spotlightImageUrl(value.fetchedUrl) || value.fetchedUrl.replace(/-\d+x\d+(?=\.[a-z]+$)/i, "") !==
         sourceUrl.replace(/-\d+x\d+(?=\.[a-z]+$)/i, "")) return undefined;
   return spotlightCopyImageUrl(`${ORIGIN}/${value.key}`) ? value : undefined;
+}
+
+function withCopy(card, copy) {
+  if (!copy) return card;
+  const image = `${ORIGIN}/${copy.key}`;
+  const thumbnail = spotlightCardThumbnail(image, copy.width, copy.height, copy.thumbnail);
+  return { ...card, image, imageCopy: copy,
+    ...(thumbnail ? { width: copy.width, height: copy.height, thumbnails: [thumbnail] } : {}) };
+}
+
+async function copyThumbnail(copy, raster, storage, signal) {
+  if (copy.width <= SPOTLIGHT_CARD_IMAGE_WIDTH || copy.mimeType === "image/gif") return undefined;
+  const { data, info } = await raster.autoOrient().resize({ width: SPOTLIGHT_CARD_IMAGE_WIDTH, withoutEnlargement: true })
+    .webp({ quality: 75 }).toBuffer({ resolveWithObject: true });
+  if (data.length >= copy.bytes || data.length > MAX_THUMBNAIL_BYTES) return undefined;
+  const original = `${ORIGIN}/${copy.key}`;
+  const thumbnail = spotlightCardThumbnail(original, copy.width, copy.height,
+    { url: spotlightCardThumbnailUrl(original), width: info.width, height: info.height });
+  if (!thumbnail) return undefined;
+  const key = new URL(thumbnail.url).pathname.slice(1);
+  signal.throwIfAborted();
+  const result = await storage.putFinal({ key, body: data, mimeType: "image/webp", metadata: { contenthash: copy.sha256 } });
+  if (result.created === false) {
+    const head = await storage.headIfExists(key);
+    if (head?.contentType !== "image/webp" || head.metadata?.contenthash !== copy.sha256 ||
+        head.contentLength < 1 || head.contentLength > MAX_THUMBNAIL_BYTES || head.contentLength >= copy.bytes) {
+      throw new Error("Spotlight compact image verification failed");
+    }
+  }
+  return thumbnail;
 }
 
 async function boundedBody(response, maximum) {
@@ -93,6 +125,7 @@ export async function copySpotlightImages(cards, fetchImpl = fetch, storageFacto
   const timer = setTimeout(() => controller.abort(), BUDGET_MS);
   let storage;
   let unavailable = 0;
+  let thumbnailFailures = 0;
   try {
     try { storage = storageFactory?.(controller.signal); }
     catch { console.warn("Spotlight image cache: configured storage unavailable; using public copies or topic art."); }
@@ -102,8 +135,7 @@ export async function copySpotlightImages(cards, fetchImpl = fetch, storageFacto
       const sourceUrl = spotlightImageUrl(card.sourceImage?.url);
       if (!sourceUrl || controller.signal.aborted) { selected.push(card); continue; }
       if (copies.has(sourceUrl)) {
-        const copy = copies.get(sourceUrl);
-        selected.push(copy ? { ...card, image: `${ORIGIN}/${copy.key}`, imageCopy: copy } : card);
+        selected.push(withCopy(card, copies.get(sourceUrl)));
         continue;
       }
       let copy;
@@ -144,18 +176,27 @@ export async function copySpotlightImages(cards, fetchImpl = fetch, storageFacto
           }
           if (!body || !fetchedUrl) throw new Error("No bounded Spotlight image size available");
           const sharp = require("sharp");
-          const metadata = await sharp(body, { animated: false, failOn: "error", limitInputPixels: 12_000_000 }).metadata();
-          if ((metadata.format === "jpeg" ? "image/jpeg" : `image/${metadata.format}`) !== mimeType || !metadata.width || !metadata.height) throw new Error("Invalid Spotlight raster image");
+          const raster = sharp(body, { animated: false, failOn: "error", limitInputPixels: 12_000_000 });
+          const metadata = await raster.metadata();
+          const { width, height } = metadata.autoOrient;
+          if ((metadata.format === "jpeg" ? "image/jpeg" : `image/${metadata.format}`) !== mimeType || !width || !height) throw new Error("Invalid Spotlight raster image");
           // Header metadata alone can admit a truncated file. Decode the first
           // frame before publishing, with bounded pixels and a tiny output.
-          await sharp(body, { animated: false, failOn: "error", limitInputPixels: 12_000_000 }).resize(1, 1).raw().toBuffer();
+          await raster.clone().resize(1, 1).raw().toBuffer();
           const sha256 = hash(body);
           const key = `cms-media/spotlight/${hash(sourceUrl)}/${sha256}.${TYPES[mimeType]}`;
           controller.signal.throwIfAborted();
           await storage.putFinal({ key, body, mimeType, metadata: { sourcehash: hash(sourceUrl), contenthash: sha256 } });
           const head = await storage.headIfExists(key);
           if (head?.contentLength !== body.length || head.contentType !== mimeType || head.metadata?.contenthash !== sha256) throw new Error("Spotlight media copy verification failed");
-          copy = { schemaVersion: 1, sourceUrl, fetchedUrl, key, sha256, bytes: body.length, mimeType, width: metadata.width, height: metadata.height };
+          copy = { schemaVersion: 1, sourceUrl, fetchedUrl, key, sha256, bytes: body.length, mimeType, width, height };
+          // A derivative failure leaves the verified original available.
+          if ((metadata.pages ?? 1) === 1) {
+            try {
+              const thumbnail = await copyThumbnail(copy, raster, storage, controller.signal);
+              if (thumbnail) copy.thumbnail = thumbnail;
+            } catch { thumbnailFailures++; }
+          }
           controller.signal.throwIfAborted();
           await storage.putFinal({ key: indexKey, body: Buffer.from(JSON.stringify(copy)), mimeType: "application/json", metadata: { sourcehash: hash(sourceUrl) } });
           // Concurrent syncs may have recorded an earlier content hash. Follow
@@ -169,11 +210,12 @@ export async function copySpotlightImages(cards, fetchImpl = fetch, storageFacto
       } catch { copy = undefined; }
       if (storage && !copy) unavailable++;
       copies.set(sourceUrl, copy);
-      selected.push(copy ? { ...card, image: `${ORIGIN}/${copy.key}`, imageCopy: copy } : card);
+      selected.push(withCopy(card, copy));
     }
     return selected;
   } finally {
     if (unavailable) console.warn(`Spotlight image cache: ${unavailable} unavailable source(s); used topic art.`);
+    if (thumbnailFailures) console.warn(`Spotlight image cache: ${thumbnailFailures} compact copy failure(s); used original copies when available.`);
     clearTimeout(timer); controller.abort(); storage?.close?.();
   }
 }

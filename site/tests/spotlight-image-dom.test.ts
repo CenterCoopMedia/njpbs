@@ -36,6 +36,21 @@ describe("Spotlight image load fallback", () => {
     image.dispatchEvent(new Event("error"));
     expect(image.style.visibility).toBe("hidden");
   });
+  it("retries the original once when the selected compact source fails", () => {
+    const root = document.createElement("div");
+    root.innerHTML = '<img src="/original.jpg" srcset="/compact.webp 768w, /original.jpg 1536w" sizes="230px" width="640" height="360" data-spotlight-fallback="/brand/spotlight/budget.jpg">';
+    const image = root.querySelector("img")!;
+    vi.spyOn(image, "currentSrc", "get").mockReturnValue(new URL("/compact.webp", image.baseURI).href);
+    mountHomeHeroes(root);
+    mountSpotlightImages(root);
+    image.dispatchEvent(new Event("error"));
+    expect(image.getAttribute("src")).toBe("/original.jpg");
+    expect(image.hasAttribute("srcset")).toBe(false);
+    expect(image.hasAttribute("sizes")).toBe(false);
+    image.dispatchEvent(new Event("error"));
+    expect(image.getAttribute("src")).toBe("/brand/spotlight/budget.jpg");
+    expect([image.width, image.height]).toEqual([640, 360]);
+  });
   it("ignores untrusted fallback markers and handles an already failed image", () => {
     const root = document.createElement("div");
     root.innerHTML = '<img src="/missing.jpg" data-spotlight-fallback="https://evil.test/image.jpg"><img src="/missing.jpg" data-spotlight-fallback="/brand/spotlight/budget.jpg">';

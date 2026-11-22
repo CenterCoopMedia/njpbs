@@ -6,7 +6,7 @@ import { CONTENT_SHELF_PRESENTATIONS, escapeHtml, type ContentShelfBlock } from 
 import { homeLinkAttributes } from "./home-section-render.ts";
 import { renderShelfFullText } from "./shelf-full-text";
 import { resolveHomeShelf, type HomeEditorialCatalog } from "./home-source-catalog.ts";
-import { homeExternalLinkNotice, pbsShelfImageFallback, renderHomeRailArrow } from "./home-rail-render.ts";
+import { homeExternalLinkNotice, pbsShelfImageFallback, renderHomeRailArrow, spotlightGridImageSizes } from "./home-rail-render.ts";
 import { spotlightImageAttributes } from "./spotlight-image.mjs";
 import { formatEditorialDate } from "./editorial-date-format";
 import { spotlightCardByline } from "./spotlight-byline.mjs";
@@ -32,14 +32,18 @@ export function renderHomeCuratedShelf(block: ContentShelfBlock, catalog: HomeEd
   }));
   const items = resolved.cards.map(card => {
     const image = textList ? undefined : card.image;
-    const fallback = image && (card.source === "spotlight_news"
+    const spotlight = card.source === "spotlight_news";
+    const sizes = spotlight
+      ? rail ? "auto, min(75vw, 20rem)" : spotlightGridImageSizes(columns)
+      : rail ? "(max-width: 480px) 75vw, 320px" : `(max-width: 1023px) 50vw, ${Math.ceil(100 / columns)}vw`;
+    const fallback = image && (spotlight
       ? spotlightImageAttributes(image.url, image.fallbackUrl)
       : programShelf ? pbsShelfImageFallback(image.url) : "");
     const metadata = [card.sourceLabel, card.opinion ? "Opinion" : undefined,
       card.source === "spotlight_news" ? spotlightCardByline(card) : card.byline,
       formatEditorialDate(card.displayDate)].filter(Boolean).join(" · ");
     return `<li data-home-card-id="${escapeHtml(card.id)}"><a class="home-shelf__card" draggable="false"${homeLinkAttributes(contentLink(card, card.href).href, contentLink(card, card.href).external ? contentLink(card, card.href).newTab : !card.href.startsWith("/"), contentLink(card, card.href).rel)}>
-      ${image ? `<span class="home-shelf__media"><img src="${escapeHtml(image.url)}"${cmsImageSourceAttributes(image, rail ? "(max-width: 480px) 75vw, 320px" : `(max-width: 1023px) 50vw, ${Math.ceil(100 / columns)}vw`)} alt="${escapeHtml(image.alt)}" width="640" height="360" loading="lazy" draggable="false"${fallback} /></span>` : ""}
+      ${image ? `<span class="home-shelf__media"><img src="${escapeHtml(image.url)}"${cmsImageSourceAttributes(image, sizes)} alt="${escapeHtml(image.alt)}" width="640" height="360" loading="lazy" draggable="false"${fallback} /></span>` : ""}
       ${renderPostBranding(false, "card", resolveCoverageLabel(card.coverageLabelId, coverageLabels), false)}
       <span class="home-shelf__title">${escapeHtml(card.title)}</span>
       ${card.summary ? `<span class="home-curated__summary">${escapeHtml(card.summary)}</span>` : ""}

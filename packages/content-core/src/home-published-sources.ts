@@ -7,7 +7,7 @@ import type {
   HomeSourceSnapshot,
 } from "./home-rail-render";
 import { safeHref } from "./safe-href.ts";
-import { spotlightStoryImage } from "./spotlight-image.mjs";
+import { spotlightCardImage } from "./spotlight-image.mjs";
 import { homeSourceImage } from "./home-source-curation.ts";
 
 function object(value: unknown): value is Record<string, unknown> {
@@ -62,13 +62,14 @@ function program(card: Record<string, unknown>): HomeProgramCard {
 }
 
 function news(card: Record<string, unknown>): HomeNewsCard {
-  const image = spotlightStoryImage(card);
+  const { url, fallbackUrl, thumbnails, width, height } = spotlightCardImage(card);
   return {
     title: text(card.title),
     category: text(card.category),
     href: link(card.href),
-    image: image.url, ...(image.fallbackUrl || card.fallbackImage !== undefined
-      ? { fallbackImage: image.fallbackUrl ?? image.url } : {}),
+    image: url, ...(fallbackUrl || card.fallbackImage !== undefined
+      ? { fallbackImage: fallbackUrl ?? url } : {}),
+    ...(thumbnails ? { thumbnails, width, height } : {}),
     ...(card.dateLabel === undefined
       ? {}
       : { dateLabel: text(card.dateLabel) }),

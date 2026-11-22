@@ -5,7 +5,7 @@ import { isCalendarDay } from "./editorial-dates.ts";
 import { isExactHttpsUrl } from "./exact-https-url.ts";
 import { isCmsImageUrl } from "./media-origin.ts";
 import { parsePublishInstant } from "./publish-instant.ts";
-import { spotlightCopyImageUrl, spotlightFallbackImage, spotlightStoryImage } from "./spotlight-image.mjs";
+import { spotlightCardImage, spotlightCopyImageUrl, spotlightFallbackImage } from "./spotlight-image.mjs";
 
 export const HOME_SOURCE_LOCKS = {
   "home-featured": { source: "pbs_featured", cap: 8, browseHref: "https://watch.njpbs.org/" },
@@ -85,9 +85,11 @@ function publicCard(value: unknown, source: HomeCardSource, cutoff: number): Hom
     !homeSourceText(value.title, 300) || !(sourceHref(source, value.href) || source === "station_posts" && value.contentLinkMode === "custom" && !contentLinkError(value) && value.href === new URL(value.contentLinkUrl as string).href)) return null;
   if (value.publishedAt !== undefined && (homeSourceInstant(value.publishedAt) === null ||
     homeSourceInstant(value.publishedAt)! > cutoff)) return null;
+  const rawImage = homeSourceObject(value.image) ? value.image : undefined;
   const image = source === "spotlight_news"
-    ? spotlightStoryImage({ image: homeSourceObject(value.image) ? value.image.url : undefined,
-      fallbackImage: homeSourceObject(value.image) ? value.image.fallbackUrl : undefined }) : homeSourceImage(value.image);
+    ? spotlightCardImage({ image: rawImage?.url, fallbackImage: rawImage?.fallbackUrl,
+      width: rawImage?.width, height: rawImage?.height, thumbnails: rawImage?.thumbnails })
+    : homeSourceImage(value.image);
   return { id: value.id, source, title: value.title, href: value.href as string,
     ...(source === "station_posts" ? contentLinkMetadata(value) : {}),
     ...(homeSourceText(value.summary, 10000) ? { summary: value.summary } : {}),
