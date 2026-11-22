@@ -387,6 +387,41 @@ function db(uid, tokenOptions = {}) {
     : testEnv.unauthenticatedContext().firestore();
 }
 
+describe("media collection pins", () => {
+  const path = "mediaCollectionPins/regular";
+  const pins = { version: 1, ids: ["a".repeat(64)] };
+
+  it("keeps private pin reads and writes with the owner and refuses revoked sessions", async () => {
+    const ownerRef = doc(db("regular"), path);
+    await assertSucceeds(setDoc(ownerRef, pins));
+    expect((await assertSucceeds(getDoc(ownerRef))).data()).toEqual(pins);
+    for (const account of ["admin", "super", null]) {
+      const ref = doc(db(account), path);
+      await assertFails(getDoc(ref));
+      await assertFails(setDoc(ref, { version: 1, ids: [] }));
+    }
+    await assertFails(getDocs(collection(db("regular"), "mediaCollectionPins")));
+    await assertFails(setDoc(ownerRef, { ...pins, ids: ["not-a-collection"] }));
+    await assertFails(setDoc(ownerRef, { ...pins, ids: [pins.ids[0], pins.ids[0]] }));
+    await assertFails(setDoc(ownerRef, { ...pins, ids: [`${pins.ids[0]},${"b".repeat(64)}`] }));
+    const tooManyIds = Array.from({ length: 21 }, (_, index) => index.toString(16).padStart(64, "0"));
+    await assertFails(setDoc(ownerRef, { ...pins, ids: tooManyIds }));
+    await assertSucceeds(setDoc(ownerRef, { version: 1, ids: [] }));
+    await testEnv.withSecurityRulesDisabled(ctx =>
+      updateDoc(doc(ctx.firestore(), "users/regular"), { active: false }));
+    await assertFails(getDoc(ownerRef));
+    await assertFails(setDoc(ownerRef, pins));
+  });
+
+  it("still accepts the current Admin's profile pin write", async () => {
+    const profile = doc(db("regular"), "users/regular");
+    await assertSucceeds(setDoc(profile, { preferences: { mediaCollectionPins: pins } }, {
+      mergeFields: ["preferences.mediaCollectionPins"],
+    }));
+    expect((await getDoc(profile)).get("preferences.mediaCollectionPins")).toEqual(pins);
+  });
+});
+
 describe("maximum session age", () => {
   it("accepts a session 59 days after sign-in", async () => {
     const database = db("regular", { auth_time: nowSeconds - 59 * DAY_SECONDS });
