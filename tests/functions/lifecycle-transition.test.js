@@ -274,6 +274,7 @@ describe("cmsTransitionContent", () => {
     expect(approved.statusCode).toBe(200);
     expect(approved.body.document).toMatchObject({ status: "approved", version: 6 });
     expect(approved.body.document.reviewRequest).toBeUndefined();
+    expect(approved.body.document).not.toHaveProperty("translationApproval");
     await db.collection("cmsPages").doc("watch").update({
       scheduledPublishFailure: {
         failedAt: "2026-08-13T18:30:00.000Z",
@@ -684,6 +685,51 @@ describe("cmsTransitionContent", () => {
     expect((await db.collection("cmsPosts").doc("record-1").get()).data())
       .toMatchObject({ status: "in_review", version: 4 });
     expect(await rows(db, "cmsVersionHistory")).toHaveLength(1);
+  });
+
+  it("records Spanish translation approval for the exact saved revision and clears it on reopening", async () => {
+    const ref = db.doc("cmsPosts/spanish-post");
+    await ref.set({
+      type: "post", title: "Noticias locales", locale: "es", editionOf: "original-post",
+      section: "watch", createdBy: "translator-1", blocks: [], tags: [],
+      status: "draft", version: 7, contentVersion: 3,
+    });
+    const target = { collection: "cmsPosts", id: "spanish-post" };
+    const submitter = () => editor({
+      uid: "translator-1",
+      principal: { id: "translator-1", grants: [{ role: "contributor", sections: ["watch"] }] },
+    });
+    const submitted = await transition(db, { ...target, action: "submit", baseVersion: 7 }, { requirePrincipalFn: submitter });
+    expect(submitted.statusCode).toBe(200);
+    expect(submitted.body.document).toMatchObject({ status: "in_review", version: 8, contentVersion: 3 });
+    expect(submitted.body.document).not.toHaveProperty("translationApproval");
+
+    const request = { ...target, action: "approve", baseVersion: 8 };
+    const scopedEditor = (section) => () => editor({
+      principal: { id: "editor-1", grants: [{ role: "editor", sections: [section] }] },
+    });
+    const reviewer = { requirePrincipalFn: scopedEditor("watch") };
+    expect((await transition(db, request, { requirePrincipalFn: submitter })).statusCode).toBe(403);
+    expect((await transition(db, request, { requirePrincipalFn: scopedEditor("support") })).statusCode).toBe(403);
+    expect((await transition(db, request, { ...reviewer, readAutomationAccountFn: async () => true })).statusCode).toBe(403);
+    expect((await transition(db, { ...request, baseVersion: 7 }, reviewer)).statusCode).toBe(409);
+    expect((await ref.get()).data()).toEqual(submitted.body.document);
+
+    const receipt = {
+      reviewedVersion: 8, contentVersion: 3, approvedBy: "editor-1", approvedAt: "2026-08-13T04:00:00.000Z",
+    };
+    const approved = await transition(db, request, reviewer);
+    expect(approved.statusCode).toBe(200);
+    const stored = (await ref.get()).data();
+    expect(stored).toMatchObject({ status: "approved", version: 9, contentVersion: 3, translationApproval: receipt });
+    expect(stored).not.toHaveProperty("published");
+    expect(await rows(db, "cmsVersionHistory")).toEqual(expect.arrayContaining([
+      expect.objectContaining({ action: "approve", after: expect.objectContaining({ translationApproval: receipt }) }),
+    ]));
+
+    const reopened = await transition(db, { ...target, action: "edit", baseVersion: 9 }, { requirePrincipalFn: submitter });
+    expect(reopened.statusCode).toBe(200);
+    expect((await ref.get()).data()).not.toHaveProperty("translationApproval");
   });
 
   it.each([

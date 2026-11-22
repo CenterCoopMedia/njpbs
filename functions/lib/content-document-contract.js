@@ -33,6 +33,7 @@ const SERVER_MANAGED_CONTENT_FIELDS = Object.freeze([
   "previousSlugs",
   "locale",
   "editionOf",
+  "translationApproval",
   "createdAt",
   "createdBy",
   "updatedAt",

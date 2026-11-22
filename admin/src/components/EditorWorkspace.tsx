@@ -2534,6 +2534,10 @@ function EditorWorkspaceContent({
       ownerId: principal.id,
     };
     const editionOf = typeof initial?.editionOf === "string" ? initial.editionOf : null;
+    const approval = initial?.translationApproval as { contentVersion?: number } | undefined;
+    const translationApproved = recordStatus === "approved" &&
+      Number.isSafeInteger(approval?.contentVersion) &&
+      approval?.contentVersion === (initial?.contentVersion ?? recordVersion);
     const canDuplicatePost =
       recordSurface.record === "post" &&
       recordSurface.id !== null &&
@@ -2593,6 +2597,7 @@ function EditorWorkspaceContent({
           canSchedule={recordKindHasPublicRoute(recordSurface.record)}
           publicationSupported={editionOf === null && recordKindHasPublicRoute(recordSurface.record)}
           cardPublication={["sponsor", "newsletter"].includes(recordSurface.record)}
+          translationReview={editionOf !== null}
           canRestore={can(
             principal,
             "content.delete",
@@ -2767,7 +2772,12 @@ function EditorWorkspaceContent({
         />
         {editionOf !== null ? <InlineMessage title="Spanish edition" tone="info">
           <div>
-            <p>Save and preview this edition privately. Publication is unavailable.</p>
+            <p>{translationApproved
+              ? "Translation approved for this saved version."
+              : recordStatus === "approved"
+                ? "Reopen this draft and submit it for translation review."
+                : "Use Preview to check the saved Spanish version privately."}</p>
+            <p>Publication is unavailable.</p>
             <Button type="button" variant="secondary" onClick={() => {
               const original: Surface = { kind: "record", record: "post", id: editionOf };
               if (onNavigateSurface) onNavigateSurface(original);

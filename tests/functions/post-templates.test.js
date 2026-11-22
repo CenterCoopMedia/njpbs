@@ -377,11 +377,15 @@ describe("Post template trusted persistence", () => {
 
     const update = { collection: "cmsPosts", id: draft.id, baseVersion: draft.version };
     const edit = await invoke(save.createCmsSaveHandler, {
-      ...update, document: { title: "Noticias de Nueva Jersey", editionOf: "other", locale: "en" },
+      ...update, document: {
+        title: "Noticias de Nueva Jersey", editionOf: "other", locale: "en",
+        translationApproval: { reviewedVersion: draft.version, contentVersion: draft.contentVersion, approvedBy: "author" },
+      },
     });
     expect(edit.statusCode, JSON.stringify(edit.body)).toBe(200);
     expect(edit.body.document).toMatchObject({ editionOf: "source", locale: "es", title: "Noticias de Nueva Jersey" });
     expect(edit.body.document).not.toHaveProperty("slug");
+    expect(edit.body.document).not.toHaveProperty("translationApproval");
     const preview = previewSnapshot.createPostPreviewSnapshot(draft.id, edit.body.document);
     expect(preview.published.metadata).toMatchObject({ locale: "es", title: "Noticias de Nueva Jersey" });
     const retry = await invoke(save.createCmsSaveHandler, request);

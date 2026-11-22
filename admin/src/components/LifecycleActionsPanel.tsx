@@ -68,6 +68,7 @@ interface LifecycleActionsPanelProps {
   canSchedule?: boolean;
   publicationSupported: boolean;
   cardPublication?: boolean;
+  translationReview?: boolean;
   publicationDisabledReason?: string;
   canArchive: boolean;
   canUnpublish: boolean;
@@ -240,6 +241,22 @@ const ACTIONS: Record<PanelAction, ActionDefinition> = {
   },
 };
 
+const TRANSLATION_REVIEW_ACTIONS = {
+  ...ACTIONS,
+  submit: {
+    ...ACTIONS.submit,
+    label: "Submit translation for review",
+    description: "Send this saved Spanish version to the review queue. An editor can preview it privately, then approve it or send it back with a note.",
+    successTitle: "Translation submitted for review",
+  },
+  approve: {
+    ...ACTIONS.approve,
+    label: "Approve translation",
+    description: "Compare this saved Spanish version in Preview with the original Post before approving it.",
+    successTitle: "Translation approved",
+  },
+};
+
 function availableActions(
   status: string | undefined,
   canSchedule: boolean,
@@ -285,6 +302,7 @@ export function LifecycleActionsPanel({
   canSchedule = true,
   publicationSupported,
   cardPublication = false,
+  translationReview = false,
   publicationDisabledReason,
   canArchive,
   canUnpublish,
@@ -308,7 +326,7 @@ export function LifecycleActionsPanel({
   const cardReceipt = publication?.data?.libraryCardPublication;
   const definitions = cardPublication ? { ...ACTIONS, approve: { ...ACTIONS.approve,
     description: "Approve this saved version and update its public cards. Later draft edits stay private.",
-  } } : ACTIONS;
+  } } : translationReview ? TRANSLATION_REVIEW_ACTIONS : ACTIONS;
   const workspaceFeedbackAvailable = useWorkspaceFeedbackAvailable();
   const editorView = useEditorWorkspaceView();
   const successNotice = useSuccessNotice();
@@ -992,7 +1010,7 @@ export function LifecycleActionsPanel({
         <div className="lifecycle-actions-buttons">{actionButtons}</div>
       )}
 
-      {status === "approved" && !publicationSupported && !cardPublication ? (
+      {status === "approved" && !publicationSupported && !cardPublication && !translationReview ? (
         <p className="lifecycle-actions-disabled">
           This record remains available under All content. Publishing is unavailable until it has a public route.
         </p>
