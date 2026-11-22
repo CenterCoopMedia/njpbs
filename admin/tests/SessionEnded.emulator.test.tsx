@@ -1,5 +1,6 @@
 import { randomBytes, randomUUID } from "node:crypto";
 import { createRequire } from "node:module";
+import { heldNewRecords, holdNewRecord } from "../src/lib/new-record-recovery";
 import type { App as AdminApp } from "firebase-admin/app";
 import type { Auth as AdminAuth } from "firebase-admin/auth";
 import type { Firestore } from "firebase-admin/firestore";
@@ -187,11 +188,7 @@ describe.skipIf(process.env.SESSION_ENDED_EMULATORS !== "true")("ended session e
     await signedInWorkspace(uid);
     const user = auth.currentUser!;
     const issuedToken = await user.getIdToken();
-    const work = `njpbs-admin:displaced-work:${uid}:record:sponsor:+`;
-    localStorage.setItem(work, JSON.stringify({
-      actorId: uid, surfaceKey: "record:sponsor:+", savedAtMs: Date.now(), label: "",
-      payload: { record: { name: "Held sponsor" } },
-    }));
+    holdNewRecord(uid, "sponsor", { name: "Held sponsor" });
     await clients.auth.revokeRefreshTokens(uid);
     await expect(clients.auth.verifyIdToken(issuedToken, true)).rejects.toMatchObject({ code: "auth/id-token-revoked" });
 
@@ -210,7 +207,7 @@ describe.skipIf(process.env.SESSION_ENDED_EMULATORS !== "true")("ended session e
       expect(screen.getByTestId("session-ended")).toHaveTextContent("true");
       expect(auth.currentUser).toBeNull();
     }
-    expect(localStorage.getItem(work)).not.toBeNull();
+    expect(heldNewRecords(uid, "sponsor")).toHaveLength(1);
   });
 
   it("keeps browser work when the real SDK signs out a disabled account during refresh", async () => {

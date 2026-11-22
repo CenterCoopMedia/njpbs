@@ -44,9 +44,9 @@ import { HOLD_NEW_RECORDS_EVENT } from "../lib/session-ended";
 import {
   canCreateEditableRecord,
   clearHeldNewRecord,
+  heldNewRecords,
   holdNewRecord,
   newRecordDraftKey,
-  readHeldNewRecord,
 } from "../lib/new-record-recovery";
 import { useEditorWorkspaceLoads } from "../hooks/useEditorWorkspaceLoads";
 import { RevisionHistory } from "./RevisionHistory";
@@ -352,7 +352,7 @@ export function editorLockSurfaceKey(surface: Surface): string | null {
 // A page draft carries the version its blocks were composed against, because the two are one
 // claim and must travel together: restoring blocks while re-reading the version would echo a
 // base the person never saw and defeat the conflict guard (#530).
-type RestoredCreate = { savedAtMs: number; createNonce?: string; section?: string };
+type RestoredCreate = { id: string; savedAtMs: number; createNonce?: string; section?: string };
 
 type Draft =
   | { kind: "record"; record: Record<string, unknown>; restoredCreate?: RestoredCreate }
@@ -1429,8 +1429,12 @@ function EditorWorkspaceContent({
   const recoveryActorId = newRecordRecoveryAreas === undefined ? undefined : principal.id;
   const activeDraft = newRecordKind ? drafts.current.get(newRecordDraftKey(newRecordKind)) : undefined;
   const restoredCreate = activeDraft?.kind === "record" ? activeDraft.restoredCreate : undefined;
-  const heldCreate = recoveryActorId && newRecordKind && !activeDraft
-    ? readHeldNewRecord(recoveryActorId, newRecordKind) : null;
+  const [pickedCreate, setPickedCreate] = useState<{ kind: RecordKind; id: string }>();
+  const heldCreates = recoveryActorId && newRecordKind && !activeDraft
+    ? heldNewRecords(recoveryActorId, newRecordKind) : [];
+  const heldCreate = pickedCreate?.kind === newRecordKind
+    ? heldCreates.find(draft => draft.id === pickedCreate?.id)
+    : heldCreates.length === 1 ? heldCreates[0] : undefined;
   const heldSection = restoredCreate?.section ??
     (typeof heldCreate?.record.section === "string" ? heldCreate.record.section || undefined : undefined);
   const recoveryAreas = newRecordRecoveryAreas ?? [];
@@ -1443,13 +1447,13 @@ function EditorWorkspaceContent({
   function restoreNewRecord(section?: string) {
     if (!heldCreate || !newRecordKind || newRecordRecoveryAreas === null) return;
     if (section ? !recoveryAreas.some(area => area.id === section) : !recoveryAllowed) return;
-    const { record, savedAtMs, createNonce } = heldCreate;
+    const { id, record, savedAtMs, createNonce } = heldCreate;
     const key = newRecordDraftKey(newRecordKind);
     if (drafts.current.has(key)) return;
     drafts.current.set(key, {
       kind: "record",
       record: section ? { ...record, section } : record,
-      restoredCreate: { savedAtMs, createNonce, section },
+      restoredCreate: { id, savedAtMs, createNonce, section },
     });
     draftLabels.current.set(key, labelForSurface(surface));
     refreshDirty();
@@ -1474,7 +1478,7 @@ function EditorWorkspaceContent({
         if (draft?.kind !== "record" || draft.record.id) continue;
         const section = draft.record.section || draft.restoredCreate?.section;
         holdNewRecord(actorId, kind, { ...draft.record, section },
-          pendingRecordCreateNonce?.(kind) ?? draft.restoredCreate?.createNonce);
+          pendingRecordCreateNonce?.(kind) ?? draft.restoredCreate?.createNonce, draft.restoredCreate?.id);
       }
     }
     window.addEventListener(HOLD_NEW_RECORDS_EVENT, holdDrafts);
@@ -1484,7 +1488,8 @@ function EditorWorkspaceContent({
   function discardNewRecord() {
     const recovery = restoredCreate ?? heldCreate;
     if (saving || !recoveryActorId || !newRecordKind || !recovery) return;
-    clearHeldNewRecord(recoveryActorId, newRecordKind, recovery.savedAtMs);
+    clearHeldNewRecord(recoveryActorId, newRecordKind, recovery.id, recovery.savedAtMs);
+    setPickedCreate({ kind: newRecordKind, id: recovery.id });
     const key = newRecordDraftKey(newRecordKind);
     drafts.current.delete(key);
     draftLabels.current.delete(key);
@@ -1495,6 +1500,17 @@ function EditorWorkspaceContent({
   }
 
   function newRecordRecoveryNotice() {
+    if (newRecordKind && heldCreates.length > 0 && !heldCreate) {
+      const kind = newRecordKind;
+      const formatTime = new Intl.DateTimeFormat(undefined, { dateStyle: "medium", timeStyle: "short" });
+      return <InlineMessage tone="info" title="Choose a held draft">
+        <div className="button-row">
+          {heldCreates.map((draft, index) => <Button key={draft.id} onClick={() => setPickedCreate({ kind, id: draft.id })}>
+            {formatTime.format(draft.savedAtMs)} (draft {index + 1})
+          </Button>)}
+        </div>
+      </InlineMessage>;
+    }
     if (!heldCreate && !restoredCreate) return null;
     if (newRecordRecoveryAreas === null) return <LoadingIndicator label="Checking your editorial access" />;
     if (recoveryUnavailable) {
@@ -2148,7 +2164,7 @@ function EditorWorkspaceContent({
   const autosave = useDraftAutosave({
     identity: surfaceKey(surface),
     enabled: autoSaveEnabled && autosaveDraft && canSaveInActiveEditor && !restoring && !changingLifecycle &&
-      !heldCreate && !restoredCreate,
+      heldCreates.length === 0 && !restoredCreate,
     savedVersion: surface.kind === "page"
       ? Math.max(blockBaseVersion.current ?? 0, metadataBaseVersion.current ?? 0)
       : recordLoad.status === "ready" && typeof recordLoad.record.version === "number"
@@ -2788,7 +2804,7 @@ function EditorWorkspaceContent({
           canUploadCategory={canUploadCategory}
           onMediaPickerDirtyChange={onMediaPickerDirtyChange}
           newId={newId}
-          sections={restoredCreate ? recoveryAreas : contentSections}
+          sections={restoredCreate ? recoveryAreas.length ? recoveryAreas : undefined : contentSections}
           newPostSections={restoredCreate ? null : newPostSections}
           postInspector={
             recordSurface.record === "post" &&
@@ -2830,7 +2846,7 @@ function EditorWorkspaceContent({
                     ? receipt.document
                     : (saved as Record<string, unknown>);
                   if (restoredCreate && recoveryActorId && typeof savedDocument.id === "string") {
-                    clearHeldNewRecord(recoveryActorId, recordSurface.record, restoredCreate.savedAtMs);
+                    clearHeldNewRecord(recoveryActorId, recordSurface.record, restoredCreate.id, restoredCreate.savedAtMs);
                     const draft = drafts.current.get(key);
                     if (draft?.kind === "record") delete draft.restoredCreate;
                   }
@@ -2879,7 +2895,9 @@ function EditorWorkspaceContent({
           onOpenConflictRecord={
             recordSurface.id === null
               ? (id) => {
-                  if (restoredCreate && recoveryActorId) clearHeldNewRecord(recoveryActorId, recordSurface.record, restoredCreate.savedAtMs);
+                  if (restoredCreate && recoveryActorId) {
+                    clearHeldNewRecord(recoveryActorId, recordSurface.record, restoredCreate.id, restoredCreate.savedAtMs);
+                  }
                   drafts.current.delete(key);
                   recordBaselines.current.delete(key);
                   refreshDirty();
@@ -3613,7 +3631,7 @@ function EditorWorkspaceContent({
                   surface.id === null ? (
                     <>
                       {newRecordRecoveryNotice()}
-                      {!heldCreate && (!restoredCreate || !recoveryUnavailable && newRecordRecoveryAreas !== null)
+                      {heldCreates.length === 0 && (!restoredCreate || !recoveryUnavailable && newRecordRecoveryAreas !== null)
                         ? recordFormFor(surface, recordDraftFor(surface))
                         : null}
                     </>

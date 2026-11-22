@@ -1189,7 +1189,7 @@ export function ContentTab({
         editorLockActor={editorLockActor}
         contentSections={contentSections}
         newPostSections={sectionsReady ? pageDirectoryApi.sections : null}
-        newRecordRecoveryAreas={sectionsLoading ? null : pageDirectoryApi.sections}
+        newRecordRecoveryAreas={sectionsLoading ? null : sectionsReady ? pageDirectoryApi.sections : []}
       />
     </Suspense>
   );

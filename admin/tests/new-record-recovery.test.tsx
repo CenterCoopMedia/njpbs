@@ -6,7 +6,7 @@ import type { RecordKind } from "../../packages/content-core/src/editor-admin";
 import type { Principal } from "../../packages/content-core/src/rbac";
 import { EditorWorkspace } from "../src/components/EditorWorkspace";
 import { NewRecordRecoveryNotice } from "../src/components/NewRecordRecoveryNotice";
-import { canCreateEditableRecord, holdNewRecord, readHeldNewRecord } from "../src/lib/new-record-recovery";
+import { canCreateEditableRecord, heldNewRecords, holdNewRecord } from "../src/lib/new-record-recovery";
 import { clearSessionEnded, markSessionEnded } from "../src/lib/session-ended";
 import { contentLibraryPath, createRecordPath, editRecordPath, mountedSurfaceForRoute, parseContentPath } from "../src/lib/routes";
 
@@ -75,7 +75,7 @@ it("holds a new Post away from its create route and restores it through the bann
   await waitFor(() => expect(saveRecord).toHaveBeenCalledWith(
     "post", expect.objectContaining({ title: "Notes for a new Post" }), { createNonce: "fixture-create-nonce" },
   ));
-  await waitFor(() => expect(readHeldNewRecord(editor.id, "post")).toBeNull());
+  await waitFor(() => expect(heldNewRecords(editor.id, "post")).toEqual([]));
 });
 
 it("lets a scoped editor choose among permitted areas before revealing and saving a non-Post draft", async () => {
@@ -96,9 +96,10 @@ it("lets a scoped editor choose among permitted areas before revealing and savin
   expect(screen.getByLabelText(/^Name/)).toHaveValue("Sample sponsor");
   fireEvent.click(screen.getByRole("button", { name: "Save draft" }));
   await waitFor(() => expect(saveRecord).toHaveBeenCalledWith(
-    "sponsor", expect.objectContaining({ name: "Sample sponsor", section: "station" }), undefined,
+    "sponsor", expect.objectContaining({ name: "Sample sponsor", section: "station" }),
+    { createNonce: expect.any(String) },
   ));
-  await waitFor(() => expect(readHeldNewRecord(editor.id, "sponsor")).toBeNull());
+  await waitFor(() => expect(heldNewRecords(editor.id, "sponsor")).toEqual([]));
 });
 
 it("withholds a draft whose original area is no longer allowed and honors discard", () => {
@@ -108,6 +109,18 @@ it("withholds a draft whose original area is no longer allowed and honors discar
   expect(screen.queryByDisplayValue("Held sponsor")).toBeNull();
   fireEvent.click(screen.getByRole("button", { name: "Discard draft" }));
   expect(screen.getByLabelText(/^Name/)).toHaveValue("");
-  expect(readHeldNewRecord(editor.id, "sponsor")).toBeNull();
+  expect(heldNewRecords(editor.id, "sponsor")).toEqual([]);
   expect(saveRecord).not.toHaveBeenCalled();
+});
+
+it("lets the editor recover distinct drafts of the same type without overwriting either", () => {
+  holdNewRecord(editor.id, "post", { title: "First held Post" });
+  holdNewRecord(editor.id, "post", { title: "Second held Post" });
+  mountStudio(createRecordPath("post"));
+  fireEvent.click(screen.getByRole("button", { name: /draft 1/ }));
+  const first = (screen.getByRole("textbox", { name: "Post title" }) as HTMLInputElement).value;
+  fireEvent.click(screen.getByRole("button", { name: "Discard draft" }));
+  fireEvent.click(screen.getByRole("button", { name: /draft 1/ }));
+  const second = (screen.getByRole("textbox", { name: "Post title" }) as HTMLInputElement).value;
+  expect([first, second].sort()).toEqual(["First held Post", "Second held Post"]);
 });
