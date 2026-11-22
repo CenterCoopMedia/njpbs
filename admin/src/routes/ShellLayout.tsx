@@ -94,7 +94,7 @@ import { forgetAdminDestination, useDestinationMemory } from "./destination-memo
 import { ExitGuardProvider, useExitGuard } from "./ExitGuard";
 import { useRouteAnnouncer, useRouteFocus } from "./route-focus";
 import { useShell } from "./ShellContext";
-import { canSubmitProblemReport, canViewReports, isGuideOnly } from "../lib/access";
+import { canSubmitProblemReport, canUseContentStudio, canViewReports, isGuideOnly } from "../lib/access";
 import { PublicContentStatusProvider } from "../context/PublicContentStatusContext";
 
 // A visually hidden but screen-reader-audible live region. Inline so the announcer does not
@@ -1179,7 +1179,7 @@ function ShellLayoutContents() {
                 {notice}
               </InlineMessage>
             ) : null}
-            <NewRecordRecoveryNotice actorId={user.uid} />
+            {!guideOnly && canUseContentStudio(principal) && <NewRecordRecoveryNotice actorId={user.uid} />}
             <Outlet />
           </main>
           <EditorWorkspacePane pane="details" />
