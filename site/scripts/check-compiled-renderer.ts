@@ -200,9 +200,10 @@ for (const page of PUBLIC_PAGES) {
   assert.match(html, /name="robots"[^>]*noindex/);
   assert.ok(html.includes(`Compiled ${page.id}`), `Missing title for ${page.id}`);
   if (givingPage) {
-    assertGivingPageOrder(html, ["giving-cards", "giving-notice", "giving-actions"]);
-    // Restoring a prior revision reuses its saved block positions.
-    const priorOrder = [givingPageBlocks[2], givingPageBlocks[1], givingPageBlocks[0]];
+    // The saved donation block is last in the fixture.
+    assertGivingPageOrder(html, ["giving-actions", "giving-cards", "giving-notice"]);
+    // A prior revision restores the order of the blocks below the donation actions.
+    const priorOrder = [givingPageBlocks[1], givingPageBlocks[2], givingPageBlocks[0]];
     Object.assign(value.snapshot, { blocks: priorOrder.map((block, order) => ({ ...block, order })) });
     assertGivingPageOrder(await render(value), ["giving-actions", "giving-notice", "giving-cards"]);
   }

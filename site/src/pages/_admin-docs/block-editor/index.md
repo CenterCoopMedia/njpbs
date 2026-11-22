@@ -247,9 +247,9 @@ consideration.
 
 ### Arrange giving pages
 
-On **Give to NJ PBS**, **NJ PBS Passport** and the **Support NJ PBS** layout,
-buttons, notices, text and destination cards are blocks in **Page content**.
-Their order is the public page order after publication.
+On **Give to NJ PBS** and **NJ PBS Passport**, the donation actions stay first.
+The remaining blocks publish in the order shown in **Page content**. On the
+**Support NJ PBS** layout, all content blocks follow that order.
 
 1. Open **Pages**, select the giving page to edit, then open **Page content**.
 2. Open **Outline** and select the block you want to move. If its component

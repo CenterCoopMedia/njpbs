@@ -1452,7 +1452,7 @@ const PAGE_COMPOSITION_REGION_LABELS: Readonly<
     "service-destinations": "Support destinations",
   },
   give: {
-    "hero-actions": "Hero actions",
+    "hero-actions": "Donation actions",
     "transition-notice": "Giving and Passport transition notice",
     "transition-actions": "Transition FAQ action",
     "body-copy": "Giving introduction",
@@ -1460,7 +1460,7 @@ const PAGE_COMPOSITION_REGION_LABELS: Readonly<
     "service-destinations": "Giving destinations",
   },
   passport: {
-    "hero-actions": "Hero actions",
+    "hero-actions": "Donation actions",
     "transition-notice": "Giving and Passport transition notice",
     "transition-actions": "Transition FAQ action",
     "body-copy": "Passport introduction",

@@ -68,6 +68,7 @@ import {
 } from "../../../packages/content-core/src/editor-admin";
 import { createBlock, type AdminBlock } from "../lib/block-factory";
 import type { PublicPageId } from "../../../packages/content-core/src/public-pages";
+import { givingDonationBlock } from "../../../packages/content-core/src/service-composition";
 import {
   pageCompositionRegionLabel,
   pageHasCompositionSeed,
@@ -372,6 +373,7 @@ export const BlockEditor = forwardRef<BlockEditorHandle, BlockEditorProps>(
     const successNotice = useSuccessNotice();
     const mintBlockId = useMemo(() => newId ?? (() => crypto.randomUUID()), [newId]);
     const editor = useBlockEditor(section, initialBlocks, { newId: mintBlockId });
+    const fixedFirstBlockId = givingDonationBlock(pageId, editor.blocks)?.id;
     useEffect(() => {
       if (editor.error) successNotice.show(editor.error, { tone: "error" });
     }, [editor.error, successNotice]);
@@ -796,15 +798,19 @@ export const BlockEditor = forwardRef<BlockEditorHandle, BlockEditorProps>(
     );
 
     const canMoveOutlineBlock = useCallback(
-      (block: AdminBlock) => homeCompositionVersion === undefined || block.section === undefined || (homeCompositionVersion === 2 && !isHomeLockedAuthoringSection(block.section) && block.section !== "home-passport-action"),
-      [homeCompositionVersion],
+      (block: AdminBlock) => block.id !== fixedFirstBlockId && (
+        homeCompositionVersion === undefined || block.section === undefined ||
+        (homeCompositionVersion === 2 && !isHomeLockedAuthoringSection(block.section) && block.section !== "home-passport-action")
+      ),
+      [fixedFirstBlockId, homeCompositionVersion],
     );
     const fixedOutlinePositionReason = useCallback((block: AdminBlock) => {
+      if (block.id === fixedFirstBlockId) return "The donation actions stay first on this page.";
       if (canMoveOutlineBlock(block)) return undefined;
       if (isHomeLockedAuthoringSection(block.section)) return "The Newsletter band stays in its assigned position in this Home layout.";
       if (homeCompositionVersion === 1) return "Home sections stay in their assigned positions in the original layout. Use the editorial layout to arrange them.";
       return "Passport buttons move together with the Passport section.";
-    }, [canMoveOutlineBlock, homeCompositionVersion]);
+    }, [canMoveOutlineBlock, fixedFirstBlockId, homeCompositionVersion]);
 
     const moveOutlineBlock = useCallback(
       (id: string, toIndex: number) => {
@@ -1327,7 +1333,7 @@ export const BlockEditor = forwardRef<BlockEditorHandle, BlockEditorProps>(
     const renderRowCanvas = (frame?: ReactNode, frameBlockIds?: ReadonlySet<string>, sectionFrames?: ReadonlyMap<string, ContentSectionFrame>) => (
       <ContentRowCanvas homeV2={homeCompositionVersion === 2} loadMedia={loadMedia} showPageSeedAssets={pageId ? pageHasCompositionSeed(pageId) : false} editRequest={editRequest} blocks={authoringBlocks} palette={palette} readOnly={readOnly}
         hideInsertionControls={Boolean(view?.kind) || homeCompositionVersion === 2} allowRows={allowedBlockTypes === undefined || allowedBlockTypes.includes("row")}
-        frame={frame} frameBlockIds={frameBlockIds} sectionFrames={sectionFrames} selectedBlockId={activeBlockId} selectedColumn={activeColumn} onSelect={activateBlock}
+        frame={frame} frameBlockIds={frameBlockIds} sectionFrames={sectionFrames} fixedFirstBlockId={fixedFirstBlockId} selectedBlockId={activeBlockId} selectedColumn={activeColumn} onSelect={activateBlock}
         rowNotice={pendingRemovalId ? { id: pendingRemovalId, content: (
           <InlineMessage tone="warning" title="Remove this row and its content?">
             <span>This removes {pendingRowChildCount} content {pendingRowChildCount === 1 ? "block" : "blocks"}. You can undo the removal.</span>
@@ -1391,7 +1397,7 @@ export const BlockEditor = forwardRef<BlockEditorHandle, BlockEditorProps>(
       {homeCompositionVersion === 2 ? homeAdd : <AddContent toolbar blocks={editor.blocks} palette={palette} destination={addDestination}
         allowRows={allowedBlockTypes === undefined || allowedBlockTypes.includes("row")} readOnly={readOnly} onInsert={insertRowContent} triggerLabel="Add" />}
       <ActionControl action="arrange" graphic={view?.phone ? <Icon name="list-ordered" /> : undefined} size="compact" label={arranging ? "Done arranging" : "Arrange"} aria-pressed={arranging} onClick={() => setArranging(value => !value)} />
-      {arranging && !view?.specialSelection && movableSelection && !readOnly && canMoveOutlineBlock(movableSelection) ? <MoveContentDialog key={blockRenderKey(movableSelection.id)} block={movableSelection} blocks={editor.blocks} pageLevelIds={(homeCompositionVersion === 2 ? homeStructuralMoveNeighbors(editor.blocks) : editor.blocks.filter(block => !block.layout)).map(block => block.id)} onMove={placeContent} /> : null}
+      {arranging && !view?.specialSelection && movableSelection && !readOnly && canMoveOutlineBlock(movableSelection) ? <MoveContentDialog key={blockRenderKey(movableSelection.id)} block={movableSelection} blocks={editor.blocks} pageLevelIds={(homeCompositionVersion === 2 ? homeStructuralMoveNeighbors(editor.blocks) : editor.blocks.filter(block => !block.layout && block.id !== fixedFirstBlockId)).map(block => block.id)} onMove={placeContent} /> : null}
       {view?.phone ? <WorkspaceSecondaryActions>{videoChecks}</WorkspaceSecondaryActions> : videoChecks}
       <span className="editor-selection-path">{view?.specialSelection ? "Page › Home hero" : selected ? view?.kind === "page" ? `Page › ${outlineSummary(selected, pageId)}` : blockLocation(selected) : view?.kind === "post" ? "Post › Article" : "Nothing selected"}</span>
     </>;
@@ -1496,7 +1502,7 @@ export const BlockEditor = forwardRef<BlockEditorHandle, BlockEditorProps>(
               {outlineVisited || outlineVisible ? <PageOutline supplementalSections={supplementalOutlineSections} navigationOnly={Boolean(view?.kind && !arranging)} docked={Boolean(view?.kind)} onClose={closeOutline} triggerRef={outlineTriggerRef} palette={palette} onInsert={insertRowContent} readOnly={readOnly} renderKey={blockRenderKey} activeColumn={activeColumn}
                 blocks={outlineBlocks} blockErrors={blockErrors} activeBlockId={activeBlockId}
                 collapsed={view?.kind ? false : outlineCollapsed} contentId={outlineId} pageId={pageId} canMoveBlock={canMoveOutlineBlock} fixedPositionReason={fixedOutlinePositionReason} allowInsertion={homeCompositionVersion !== 2}
-                includeSectionBoundariesInMoves={homeCompositionVersion !== undefined}
+                includeSectionBoundariesInMoves={homeCompositionVersion !== undefined} fixedFirstBlockId={fixedFirstBlockId}
                 onNavigateWriting={() => { setActiveBlockId(null); setActiveColumn(null); view?.setDetailsTab("document"); }} onNavigate={navigateOutline} onMove={moveOutlineBlock} onPlace={placeContent} /> : null}
               </Suspense>
               </RetainedEditorHost>

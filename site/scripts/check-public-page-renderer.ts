@@ -210,7 +210,7 @@ try {
       read.page.pageId === "home" ? sources : undefined);
     assert.deepEqual(comparePostHtml(html, await compiled.renderPublishedPage(content)), []);
     if (read.page.pageId === "give" || read.page.pageId === "passport") {
-      assertGivingPageOrder(html, ["giving-cards", "giving-notice", "giving-actions"]);
+      assertGivingPageOrder(html, ["giving-actions", "giving-cards", "giving-notice"]);
     }
     if (read.page.path === "/newsletters/") {
       const moved = structuredClone(read);

@@ -88,12 +88,15 @@ describe("public page block ownership", () => {
   it.each(["give", "passport"] as const)("moves an existing %s section in the page outline's row model", (pageId) => {
     const notice: AdminBlock = { ...legacyHeading, section: "transition-notice", visible: false };
     const row: AdminBlock = { id: "row", type: "row", order: 1, visible: true, data: { columns: [6, 6] } };
-    const input = [notice, row, { ...legacyDivider, layout: { rowId: row.id, column: 0 } }];
+    const donation: AdminBlock = { id: "donation", type: "cta_row", order: 3, visible: true, section: "hero-actions", data: { ctas: [{ label: "Donate through PBS", href: "https://example.org/give", variant: "primary" }] } };
+    const input = [notice, row, { ...legacyDivider, layout: { rowId: row.id, column: 0 } }, donation];
     const editable = editableBlocksForPublicPage(pageId, input);
+    expect(editable[0]).toEqual({ ...donation, order: 0 });
     const { blocks } = editContentRows("programLanding", editable, { kind: "move", id: notice.id, destination: {} });
     const saved = blocksForPublicPageSave(pageId, input, blocks);
-    expect(saved.map(block => block.id)).toEqual([row.id, legacyDivider.id, notice.id]);
-    expect(saved[2]).toEqual({ ...legacyHeading, order: 2, visible: false });
+    expect(saved.map(block => block.id)).toEqual([donation.id, row.id, legacyDivider.id, notice.id]);
+    expect(saved[3]).toEqual({ ...legacyHeading, order: 3, visible: false });
+    expect(saved[0]).toEqual({ ...donation, order: 0 });
     expect(input[0]).toBe(notice);
   });
 

@@ -21,7 +21,7 @@ import CmsBlockGroup from "./CmsBlockGroup.astro";
 import ReaderTextSize from "./ReaderTextSize.astro";
 import { sponsorCardsFromRecordCards } from "../lib/record-card-resolution";
 import { newsletterSignupResolution } from "../lib/newsletter-signup";
-import { usesServiceComposition } from "../../../packages/content-core/src/service-composition";
+import { givingBlocksInDisplayOrder, usesServiceComposition } from "../../../packages/content-core/src/service-composition";
 import { renderDatasetFigures, renderRecordCards } from "../lib/cms-render-context";
 
 interface Props {
@@ -33,7 +33,10 @@ interface Props {
 }
 
 const { entry, excludeTypes = [], contained = true, readerControls = false, resolveDataHubSection } = Astro.props as Props;
-const blocks = entry.data.blocks.filter((block) => !excludeTypes.includes(block.type));
+const blocks = givingBlocksInDisplayOrder(
+  entry.data.pageId,
+  entry.data.blocks.filter((block) => !excludeTypes.includes(block.type)),
+);
 const collectedCards = Astro.locals.cmsRender ? [] : (await getCollection("cmsRecordCards")).map(item => item.data);
 const recordCards = renderRecordCards(Astro.locals.cmsRender, collectedCards).filter(card =>
   entry.data.pageId !== "kids" || card.kind !== "newsletter");

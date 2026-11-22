@@ -3,7 +3,7 @@ import type { PageBlock } from "../../../packages/content-core/src/content-model
 
 export const givingPageIds = ["give", "passport"] as const;
 
-// Older Page records have named slots. A saved card set can precede those slots.
+// Older Page records retain the donation region even when it is saved last.
 export const givingPageBlocks = [
   {
     id: "giving-cards", type: "card_grid", order: 0, visible: true, section: "service-destinations",
@@ -23,7 +23,7 @@ export const givingPageBlocks = [
 
 export function assertGivingPageOrder(html: string, order: readonly string[]): void {
   const position = order.map(id => html.indexOf(`data-block-id="${id}"`));
-  assert(position.every((index, i) => index >= 0 && (i === 0 || position[i - 1] < index)), "Giving blocks follow the saved order");
+  assert(position.every((index, i) => index >= 0 && (i === 0 || position[i - 1] < index)), "Donation actions come first, followed by blocks in saved order");
   assert.match(html, /href="\/contact\/"[^>]*>Contact the station<\/a>/);
   assert.match(html, /href="https:\/\/example\.org\/give"[^>]*target="_blank"[^>]*rel="noopener"[^>]*>Donate through PBS/);
 }
