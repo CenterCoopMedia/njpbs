@@ -508,12 +508,16 @@ it("shows live requests while the additional proof summary never resolves", asyn
   publishMocks.loadPublishActivitySummary.mockImplementation(() => new Promise(() => {}));
   firestoreMocks.onSnapshot.mockImplementation((_request, next) => {
     next({ docs: [{ id: "failed-page", data: () => ({ status: "failed", transport: "page-no-build-v1",
-      changes: [{ collection: "cmsPages", id: "contact", title: "Failed page request" }] }) }] });
+      changes: [{ collection: "cmsPages", id: "contact", title: "Failed page request" }] }) },
+    { id: "failed-update", data: () => ({ status: "failed", transport: "public-context-no-build-v1", changes: [] }) }] });
     return firestoreMocks.unsubscribe;
   });
   renderQueue();
   expect(await screen.findByRole("table", { name: "Publish activity" })).toBeVisible();
   expect(screen.getByRole("cell", { name: "Failed page request" })).toBeVisible();
+  const siteUpdate = screen.getByRole("cell", { name: "Site-wide update" });
+  expect(siteUpdate).toBeVisible();
+  expect(siteUpdate.closest("tr")).toHaveTextContent("The accepted site update did not complete.");
   expect(screen.getByRole("button", { name: "Check again" })).toBeEnabled();
   expect(screen.getByRole("button", { name: "Refresh publish activity" })).toBeEnabled();
   expect(screen.getByText("Checking public confirmations and site updates…")).toBeVisible();
@@ -539,14 +543,14 @@ it("retries the current generic update without extra reads and clears accepted f
   await waitFor(() => expect(result.closest("div[tabindex='-1']")).toHaveFocus());
   expect(screen.queryByRole("button", { name: "Retry site update" })).not.toBeInTheDocument();
   act(() => callbacks.forEach(next => next({ docs: [] })));
-  expect(screen.queryByText("Failed")).not.toBeInTheDocument();
+  expect(screen.queryByText("Site update failed")).not.toBeInTheDocument();
   expect(screen.getByText(message)).toBeVisible();
   expect(publishMocks.loadPublishActivitySummary).toHaveBeenCalledTimes(1);
   expect(publishMocks.getDocs).not.toHaveBeenCalled();
   expect(firestoreMocks.onSnapshot).toHaveBeenCalledTimes(3);
   fireEvent.click(screen.getByRole("button", { name: "Refresh publish activity" }));
   expect(await screen.findByRole("button", { name: "Retry site update" })).toBeEnabled();
-  expect(screen.getByText("Failed")).toBeVisible();
+  expect(screen.getByText("Site update failed")).toBeVisible();
   expect(screen.queryByText(message)).not.toBeInTheDocument();
   expect(publishMocks.loadPublishActivitySummary).toHaveBeenCalledTimes(2);
   expect(publishMocks.getDocs).not.toHaveBeenCalled();
@@ -568,11 +572,12 @@ it.each(["success", "failed"])("preserves newer live %s and moved focus when the
   button.focus(); fireEvent.click(button);
   await waitFor(() => expect(publishMocks.retrySiteUpdate).toHaveBeenCalledTimes(1));
   act(() => callbacks[0]({ docs: [{ id, data: () => ({ status, transport: "public-context-no-build-v1",
-    triggeredAt: new Date(), changes: [{ title: "Live outcome" }] }) }] }));
+    triggeredAt: new Date(), changes: [] }) }] }));
   const refresh = screen.getByRole("button", { name: "Refresh review requests" });
   refresh.focus();
   await act(async () => resolve({ success: true, queueId: id, status: "pending", message: "Retrying the accepted site update." }));
-  expect(await screen.findByText(status === "success" ? "Completed" : "Failed")).toBeVisible();
-  expect(screen.queryByText("Queued")).not.toBeInTheDocument();
+  expect(await screen.findByText(status === "success" ? "Completed" : "Site update failed")).toBeVisible();
+  expect(screen.getByRole("cell", { name: "Site-wide update" })).toBeVisible();
+  expect(screen.queryByText("Site update queued")).not.toBeInTheDocument();
   expect(refresh).toHaveFocus();
 });

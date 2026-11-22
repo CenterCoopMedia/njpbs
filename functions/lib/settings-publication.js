@@ -51,7 +51,8 @@ function settingsPublicationReceipt(queue, now = Date.now()) {
     sourceVersion: identity.sourceVersion, rendererSha: identity.rendererSha,
     contextRevision: identity.contextRevision, contextDigest: identity.contextDigest,
     status: failed ? "failed" : missingConsumers.length ? "pending" : "success", missingConsumers,
-    ...(failed || overdue ? { warning: "The site update is taking longer than expected. Retry publication." } : {}),
+    ...(failed ? { warning: "The site update did not complete. Retry publication." } :
+      overdue ? { warning: "The site update is taking longer than expected. Retry publication." } : {}),
   };
 }
 

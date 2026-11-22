@@ -4367,17 +4367,24 @@ export const SHOTS: Shot[] = [
   {
     id: "settings-publication-recovery",
     title: "Settings — site update recovery",
-    note: "Shared publication status for all three public settings forms. Synthetic overdue, changed-publication and completion receipts; no CMS requests.",
+    note: "Pending, failed, changed and completed public settings updates.",
     render: () => <Panel>
       <h2>Public settings site update</h2>
-      <SettingsPublicationStatus publication={{ ...gallerySettingsReceipt(4),
-        warning: "The site update is taking longer than expected. Retry publication." }}
+      <SettingsPublicationStatus publication={{ ...gallerySettingsReceipt(4), missingConsumers: ["listings", "search"] }}
+        retry={async () => {}} retrying={false} disabled={false} refresh={async () => {}} needsRefresh={false} />
+      <SettingsPublicationStatus publication={{ ...gallerySettingsReceipt(4), status: "failed", missingConsumers: ["search"] }}
         retry={async () => {}} retrying={false} disabled={false} refresh={async () => {}} needsRefresh={false} />
       <SettingsPublicationStatus publication={{ ...gallerySettingsReceipt(4),
         warning: "This publication changed. Refresh the site update to check its status. Your draft will stay as it is." }}
         retry={async () => {}} retrying={false} disabled={false} refresh={async () => {}} needsRefresh />
       <SettingsPublicationStatus publication={{ ...gallerySettingsReceipt(4), status: "success", missingConsumers: [] }}
         retry={async () => {}} retrying={false} disabled={false} refresh={async () => {}} needsRefresh={false} />
+      <h2>Publish activity</h2>
+      <QueueList items={[
+        { id: "site-update-pending", status: "pending", changes: ["Site-wide update"], triggeredBy: "Automatic site update", automaticSiteUpdate: true },
+        { id: "site-update-failed", status: "failed", changes: ["Site-wide update"], triggeredBy: "Automatic site update", automaticSiteUpdate: true,
+          error: "The accepted site update did not complete." },
+      ]} />
     </Panel>,
   },
   {

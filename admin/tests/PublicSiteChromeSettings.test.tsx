@@ -211,6 +211,7 @@ describe("addressed settings receipt status", () => {
     fireEvent.change(screen.getByRole("textbox", { name: "Label" }), { target: { value: "Local unsaved label" } });
     await act(async () => { await vi.advanceTimersByTimeAsync(2_000); });
     expect(screen.queryByText("The site update is complete.")).not.toBeInTheDocument();
+    expect(screen.getByText(/Updating the site/)).toHaveTextContent("Public checks remain for pages.");
     expect(screen.getByRole("textbox", { name: "Label" })).toHaveValue("Local unsaved label");
     await act(async () => { await vi.advanceTimersByTimeAsync(2_000); });
     expect(screen.getByText("The site update is complete.")).toBeVisible();

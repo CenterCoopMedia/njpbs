@@ -488,16 +488,24 @@ function createPostBackgroundOutputs({ firestore, enabled = false, accepting = e
     });
   }
 
-  async function recover() {
+  async function recover({ contextOnly = false } = {}) {
     if (!enabled) return;
     requireValue(typeof build === "function" && typeof artifacts?.put === "function" && typeof artifacts?.get === "function");
     const started = now();
     // This is the only recovery owner. Fixed family reads avoid queue scans or
     // competition with serializer claims; one failed family cannot stop another.
-    for (const output of recoveryOutputs) {
-      if (now() - started >= 45_000) break;
-      try { await attempt(output); } catch { /* Durable task/lease remains recoverable. */ }
+    async function recoverFamilies(outputs) {
+      for (const output of outputs) {
+        if (now() - started >= 45_000) break;
+        try { await attempt(output); } catch { /* Durable task/lease remains recoverable. */ }
+      }
     }
+    if (!contextOnly) return recoverFamilies(recoveryOutputs);
+    // Start both reader-facing HTML families first. Keep the wide storage
+    // batches for search and record catalogs in one lane.
+    const homeLane = recoveryOutputs.filter(output => ["home", "authors", "contentApi", "sitemap"].includes(output));
+    const listingLane = recoveryOutputs.filter(output => !homeLane.includes(output));
+    await Promise.all([recoverFamilies(homeLane), recoverFamilies(listingLane)]);
   }
 
   async function authorizedState(output, assetPath) {

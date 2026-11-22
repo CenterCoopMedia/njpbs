@@ -1,0 +1,7 @@
+{
+  "date": "2026-11-22",
+  "kind": "improved",
+  "title": "Follow site-wide publication progress",
+  "body": "Publish activity shows automatic site-wide updates separately from Page publication. Public settings show which checks still need to finish, including listings and search.",
+  "prs": []
+}

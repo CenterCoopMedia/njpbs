@@ -158,7 +158,7 @@ async function prepareNoBuildPagePublication({ firestore, transaction, collectio
     contextRevision: contextRevision + 1, contextDigest: publicContextDigest(contextRevision + 1) };
   const contextWork = await require("./public-context-publication").enqueuePublicContextInTransaction({
     firestore, transaction, operationId: pageAggregateOperationId(queueRef.id), runtime,
-    reason: "context", contextRevision: operation.contextRevision });
+    reason: "context", contextRevision: operation.contextRevision, pagePublication: true });
   operation.contextQueueId = contextWork.queueId;
   const homePlan = documentId === "home" ? await require("./no-build-home-ownership").prepareHomePlanInTransaction({
     firestore, transaction, nextDocument, operation, runtime }) : null;
