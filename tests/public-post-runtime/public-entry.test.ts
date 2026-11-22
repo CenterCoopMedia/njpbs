@@ -30,7 +30,7 @@ it("serves copied Data Hub embeds through the legacy Snippet and public Worker",
     } },
     env: {
       DURABLE_POST_WITHDRAWALS: { type: "r2", name: "figure-embed" },
-      ASSETS: { type: "fetcher", handler: request => {
+      ASSETS: { type: "fetcher", handler: (request: { url: string }) => {
         const { pathname, search } = new URL(request.url);
         if (search || !assets.has(pathname)) return new WorkerResponse(null, { status: 404 });
         return new WorkerResponse(pathname, { headers: {
