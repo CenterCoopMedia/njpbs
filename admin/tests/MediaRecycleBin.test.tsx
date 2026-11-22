@@ -128,7 +128,7 @@ describe("image recycle bin", () => {
     mocks.list.mockResolvedValue({ ...page([neighbor]), canDeletePermanently: true });
     fireEvent.click(deleteFirst);
     fireEvent.click(await screen.findByRole("button", { name: "Confirm permanent deletion" }));
-    expect(await screen.findByRole("status")).toHaveTextContent("Permanently deleted");
+    await waitFor(() => expect(screen.getByRole("status")).toHaveTextContent("Permanently deleted"));
     expect(mocks.purge).toHaveBeenCalledExactlyOnceWith("token", selected);
     expect(await screen.findByRole("button", { name: "Restore second" })).toBeEnabled();
     expect(screen.queryByRole("listitem", { name: "first" })).not.toBeInTheDocument();
