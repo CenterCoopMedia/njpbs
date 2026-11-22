@@ -280,7 +280,7 @@ describe("development renderer, version and baseline boundaries", () => {
     ["wrong source", { ...release, rendererSha: "b".repeat(40) }],
     ["unknown key", { ...release, unknownVersion: 1 }],
     ["wrong schema", { ...release, schemaVersion: 2 }],
-    ...[0, 3, "2", true, null].map(value => [`pageReaderVersion=${JSON.stringify(value)}`, { ...release, pageReaderVersion: value }]),
+    ...[0, 4, "2", true, null].map(value => [`pageReaderVersion=${JSON.stringify(value)}`, { ...release, pageReaderVersion: value }]),
     ...Object.keys(release).map(key => [`missing ${key}`, Object.fromEntries(Object.entries(release).filter(([name]) => name !== key))]),
     ...["liveBlogVersion", "electionResultsVersion"].flatMap(key =>
       [0, key === "electionResultsVersion" ? 3 : 2, "1", "2", null, true].map(value =>

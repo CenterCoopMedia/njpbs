@@ -2393,7 +2393,7 @@ function createCmsSaveHandler(deps = {}) {
           // document stored before this field existed reads as 0 and so gets 1 on its
           // first save here, exactly like a create.
           version: nextVersion,
-          ...(enableScheduleCopy ? { scheduleCopy: DEFAULT_SCHEDULE_COPY, blocks: stored.blocks === undefined ? [] : stored.blocks } : {}),
+          ...(enableScheduleCopy ? { scheduleCopy: DEFAULT_SCHEDULE_COPY, blocks: stored.blocks ?? [] } : {}),
           ...(conversionFingerprint === null ? {} : {
             homeCompositionVersion: conversionTarget,
             ...(conversionTarget === 2 ? { homeHero: {

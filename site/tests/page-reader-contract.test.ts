@@ -20,7 +20,7 @@ it.each(cases)("requires contract 1 for $type, including its hidden saved form",
 it("pins every supported plank type and refuses unknown contract versions and future types", () => {
   expect([...contract.PAGE_BLOCK_TYPES].sort()).toEqual([...BLOCK_TYPES].sort());
   expect(contract.pageReaderSupports([{ type: "headline" }], "contact", 0)).toBe(true);
-  expect(contract.pageReaderSupports([{ type: "headline" }], "contact", 3)).toBe(false);
+  expect(contract.pageReaderSupports([{ type: "headline" }], "contact", 4)).toBe(false);
   expect(contract.pageReaderSupports([{ type: "future" }], "contact", 1)).toBe(false);
   for (const pageId of ["contact", "data-hub", `page-${"a".repeat(32)}`]) {
     expect(contract.pageReaderSupports([{ type: "embed", visible: false, data: { url: "https://www.youtube.com/watch?v=abcdef12345" } }], pageId, 0)).toBe(false);

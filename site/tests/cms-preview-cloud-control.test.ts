@@ -36,7 +36,7 @@ it("turns the exact starting runtime ready in its transaction", async () => {
   await confirmPreviewRuntimeReady(db.firestore, rendererSha, serializerId);
   expect(db.set).toHaveBeenCalledTimes(2);
   expect(db.set).toHaveBeenCalledWith(db.liveBlogRef, { schemaVersion: 1, rendererSha, liveBlogContractVersion: 3 });
-  expect(db.create).toHaveBeenCalledExactlyOnceWith(db.readerRef, { schemaVersion: 1, rendererSha, pageReaderVersion: 2 });
+  expect(db.create).toHaveBeenCalledExactlyOnceWith(db.readerRef, { schemaVersion: 1, rendererSha, pageReaderVersion: 3 });
   expect(db.set).toHaveBeenCalledWith(db.ref, { ...control, phase: "ready", dataHubCompositionVersion: 1, liveBlogVersion: 1, electionResultsVersion: 2,
     checkedAt: expect.any(String), startupTimingsMs: {} });
 });
