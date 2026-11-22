@@ -16,6 +16,7 @@ import {
   type PublicHomepageBannerSettingsValues,
 } from "../../../packages/content-core/src/cms-settings";
 import { renderNjDecidesBand } from "../../../packages/content-core/src/nj-decides-render";
+import { renderHomepageAnnouncement } from "../../../packages/content-core/src/homepage-announcement-render";
 import "../../../packages/content-core/src/nj-decides.css";
 import { PUBLIC_SITE_ORIGIN } from "../../../packages/content-core/src/public-pages";
 import { STATION_TIME_ZONE } from "../../../packages/content-core/src/station-time";
@@ -23,6 +24,7 @@ import type { EditorField } from "../../../packages/content-core/src/editor-admi
 import {
   AsyncActionButton,
   Button,
+  buttonClassName,
   InlineMessage,
   Panel,
 } from "./ui/Primitives";
@@ -266,15 +268,6 @@ function valuesEqual(
     (left.endsAt ?? "") === (right.endsAt ?? "") &&
     JSON.stringify(left.excludedPaths ?? []) === JSON.stringify(right.excludedPaths ?? [])
   );
-}
-
-function publicPreviewHref(href: string | undefined): string | undefined {
-  if (!href || /^[a-z][a-z0-9+.-]*:/i.test(href)) return href;
-  try {
-    return new URL(href, `${PUBLIC_SITE_ORIGIN}/`).href;
-  } catch {
-    return href;
-  }
 }
 
 function validationErrors(draft: BannerDraft): ValidationErrors {
@@ -653,24 +646,19 @@ export function PublicHomepageBannerSettings({
     !dirty &&
     loadState.version !== null &&
     (!publishedMatchesSaved || !publication);
-  const previewHref = publicPreviewHref(values.linkHref);
-  const previewOpensNewTab = previewHref
-    ? !/^(?:mailto|tel):/i.test(previewHref)
-    : false;
-  const secondPreviewHref = publicPreviewHref(values.secondLinkHref);
-  const secondPreviewOpensNewTab = Boolean(secondPreviewHref && !/^(?:mailto|tel):/i.test(secondPreviewHref));
-  const electionPreviewHtml = values.njDecides
+  const link = valid && values.linkLabel && values.linkHref
+    ? { label: values.linkLabel, href: values.linkHref } : undefined;
+  const secondLink = link && values.secondLinkLabel && values.secondLinkHref
+    ? { label: values.secondLinkLabel, href: values.secondLinkHref } : undefined;
+  const links = link ? [link, ...(secondLink ? [secondLink] : [])] : [];
+  const previewHtml = values.njDecides
     ? renderNjDecidesBand({
         copy: values.message,
         branding: appearance,
         liveLabel: values.liveLabel,
-        links: valid && values.linkLabel && values.linkHref
-          ? [{ label: values.linkLabel, href: values.linkHref },
-              ...(values.secondLinkLabel && values.secondLinkHref
-                ? [{ label: values.secondLinkLabel, href: values.secondLinkHref }] : [])]
-          : [],
+        links,
       })
-    : "";
+    : renderHomepageAnnouncement({ message: values.message || "Banner message", link, secondLink });
 
   const standard = loadState.published && !loadState.published.values.njDecides
     ? loadState.published.values : standardSnapshot.current;
@@ -885,31 +873,19 @@ export function PublicHomepageBannerSettings({
             : "The band can appear here when enabled and within its schedule."}</p>}
           {values.njDecides && appearanceError && <p role="status">Published appearance could not be loaded. This preview uses the approved defaults. Reload settings to try again.</p>}
           {values.enabled && !(values.njDecides && draft.excludedPaths.includes("/")) ? (
-            values.njDecides ? (
-              <SettingsBannerPreview html={electionPreviewHtml} />
-            ) : (
-              <div className="public-banner-preview-row">
-                <strong>{values.message || "Banner message"}</strong>
-                {valid && values.linkLabel && values.linkHref ? (
-                  <a
-                    href={previewHref}
-                    rel={previewOpensNewTab ? "noopener" : undefined}
-                    target={previewOpensNewTab ? "_blank" : undefined}
-                  >
-                    {values.linkLabel} <span aria-hidden="true">→</span>
-                    {previewOpensNewTab ? <span className="sr-only"> (opens in new tab)</span> : null}
-                  </a>
-                ) : null}
-                {valid && values.secondLinkLabel && values.secondLinkHref && (
-                  <a href={secondPreviewHref}
-                    target={secondPreviewOpensNewTab ? "_blank" : undefined}
-                    rel={secondPreviewOpensNewTab ? "noopener" : undefined}>
-                    {values.secondLinkLabel} <span aria-hidden="true">→</span>
-                    {secondPreviewOpensNewTab ? <span className="sr-only"> (opens in new tab)</span> : null}
-                  </a>
-                )}
-              </div>
-            )
+            <>
+              <SettingsBannerPreview html={previewHtml} variant={values.njDecides ? "election" : "homepage"} />
+              {!values.njDecides && links.map(({ label, href }, index) => {
+                const destination = new URL(href, `${PUBLIC_SITE_ORIGIN}/`);
+                const opensNewTab = destination.protocol === "https:" || destination.protocol === "http:";
+                const actionLabel = `Check link: ${label}`;
+                return <a key={index} className={buttonClassName()} href={destination.href}
+                  target={opensNewTab ? "_blank" : undefined} rel={opensNewTab ? "noopener" : undefined}
+                  aria-label={opensNewTab ? `${actionLabel} (opens in new tab)` : undefined}>
+                  <span>{actionLabel}</span>
+                </a>;
+              })}
+            </>
           ) : (
             <div>
               <strong>{values.enabled && values.njDecides && draft.excludedPaths.includes("/")

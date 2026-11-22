@@ -37,6 +37,7 @@ import { donateUrl, launchFallbackPages } from "../src/data/launch-fallback";
 import { figureProjection } from "./fixtures/shadow-posts/block-catalog";
 import { electionRace } from "../../tests/fixtures/election-results";
 import { renderNjDecidesBand } from "../../packages/content-core/src/nj-decides-render";
+import { renderHomepageAnnouncement } from "../../packages/content-core/src/homepage-announcement-render";
 import { COUNTY_COMPARISON_DEFAULTS } from "../../packages/content-core/src/county-comparison";
 import { resolveDonateCta } from "../src/lib/donate-degradation";
 import { SURFACES_WITH_FALLBACK } from "../src/lib/pbs-outage-survivability";
@@ -493,6 +494,7 @@ const expectedCmsSafeHrefReferences: Readonly<Record<string, number>> = {
   // Feed artwork uses homeSourceImage/spotlightStoryImage. Rail destinations
   // still pass through the home-section-render link boundary below.
   "home-section-render.ts": 2,
+  "homepage-announcement-render.ts": 1,
   // Brand artwork checks image URLs; the band renderer owns its clickable CTA.
   "nj-decides-brand.ts": 1,
   "nj-decides-render.ts": 1,
@@ -541,6 +543,7 @@ const expectedCmsAnchorEmitters: Readonly<Record<string, number>> = {
   "home-newscast-section.ts": 5,
   "home-rail-render.ts": 6,
   "home-section-render.ts": 2,
+  "homepage-announcement-render.ts": 1,
   // Follow-up permalinks also target validated local fragment ids.
   "live-blog-follow-ups-render.ts": 1,
   // Key-update and permalink links target the entry's own fragment id; never a stored destination.
@@ -587,6 +590,21 @@ const ordinaryHeroCard = { id: "story", title: "A story", summary: "", href: "/a
 const donationGridSettings = { title: "Support", moreLabel: "Donate", presentation: "grid", columns: 3 } as const;
 
 const cmsDonationFixtures = [
+  {
+    name: "Homepage announcement first link",
+    render: () => renderHomepageAnnouncement({
+      message: "Support public media",
+      link: { label: "Donate", href: donateUrl },
+    }),
+  },
+  {
+    name: "Homepage announcement second link",
+    render: () => renderHomepageAnnouncement({
+      message: "Support public media",
+      link: { label: "About", href: "/about/" },
+      secondLink: { label: "Donate", href: donateUrl },
+    }),
+  },
   {
     name: "NJ Decides band call to action",
     render: () => renderNjDecidesBand({ links: [{ label: "Donate", href: donateUrl }] }),

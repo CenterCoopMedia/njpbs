@@ -253,6 +253,7 @@ describe("Public homepage banner settings", () => {
     expect(
       within(screen.getByLabelText("Proposed homepage banner preview")).getByText(
         DEFAULT_PUBLIC_HOMEPAGE_BANNER_SETTINGS.message,
+        { exact: false },
       ),
     ).toBeVisible();
     fireEvent.click(screen.getByRole("button", { name: "Save draft" }));
@@ -505,18 +506,21 @@ describe("Public homepage banner settings", () => {
     expect(await screen.findByText(/Updating the site/)).toBeVisible();
   });
 
-  it("opens relative preview links on the public site without leaving the form", async () => {
+  it("checks the homepage link without navigating away from the draft", async () => {
     render(<PublicHomepageBannerSettings {...transport()} />);
 
     const preview = await screen.findByLabelText("Proposed homepage banner preview");
-    expect(within(preview).getByRole("link", { name: /View schedule/ })).toHaveAttribute(
-      "href",
-      "https://njpbs.org/schedule/",
-    );
-    expect(within(preview).getByRole("link", { name: /View schedule/ })).toHaveAttribute(
-      "target",
-      "_blank",
-    );
+    const settingsPreview = within(preview);
+    const link = settingsPreview.getByRole("link", { name: "Check link: View schedule (opens in new tab)" });
+    expect(link).toHaveAttribute("href", "https://njpbs.org/schedule/");
+    expect(link).toHaveAttribute("target", "_blank");
+    expect(link).toHaveAttribute("rel", "noopener");
+    expect(settingsPreview.getAllByRole("link")).toEqual([link]);
+
+    const mobile = settingsPreview.getByRole("button", { name: "Mobile preview" });
+    fireEvent.click(mobile);
+    expect(mobile).toHaveAttribute("aria-pressed", "true");
+    expect(settingsPreview.getByTitle("Homepage announcement mobile preview")).toBeInTheDocument();
   });
 
   it("repeats the original saved version after a lost acceptance response", async () => {
@@ -687,12 +691,14 @@ describe("two-link standard banner safeguards", () => {
     fireEvent.change(screen.getByLabelText("Second link URL"), { target: { value: "/live/" } });
     expect(screen.queryByText(/Review Message and both links/)).not.toBeInTheDocument();
   });
-  it("announces the new tab for each standard preview action", async () => {
+  it("opens the second link check next to the draft", async () => {
     render(<PublicHomepageBannerSettings {...transport({ load: async () => documentResponse(values({
       secondLinkLabel: "Watch live", secondLinkHref: "https://live.njpbs.org/",
     }), 4, undefined, 4) })} />);
     const preview = await screen.findByLabelText("Proposed homepage banner preview");
-    expect(within(preview).getByRole("link", { name: /View schedule.*opens in new tab/ })).toHaveAttribute("target", "_blank");
-    expect(within(preview).getByRole("link", { name: /Watch live.*opens in new tab/ })).toHaveAttribute("target", "_blank");
+    const external = within(preview).getByRole("link", { name: "Check link: Watch live (opens in new tab)" });
+    expect(external).toHaveAttribute("href", "https://live.njpbs.org/");
+    expect(external).toHaveAttribute("target", "_blank");
+    expect(external).toHaveAttribute("rel", "noopener");
   });
 });
