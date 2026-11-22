@@ -27,6 +27,7 @@ import { projectPublicArtifactContent, readPublicArtifactContentFromDatabase } f
 import { writePublicArtifactBundle } from "../src/lib/public-artifact-bundle";
 import { MAX_PUBLIC_ARTIFACT_CUTOFF_AGE_MILLIS } from "../src/lib/public-artifact-inventory";
 import { assertPreparedPublicWorkerArtifact, preparePublicWorkerArtifact } from "../src/lib/public-worker-artifact";
+import pageReaderContract from "../../functions/lib/page-reader-contract.js";
 
 const requireModule = createRequire(import.meta.url);
 const { reservePublicBuildBatch } = requireModule("../../functions/lib/public-deployment-coordinator.js");
@@ -211,7 +212,7 @@ export async function assertProductionRendererSeals(directory: string, commitSha
       publicSeal?.dataHubCompositionVersion !== undefined && publicSeal?.dataHubReportingVersion !== 1 ||
       publicSeal?.electionResultsVersion !== undefined && ![1, 2].includes(publicSeal?.electionResultsVersion) ||
       publicSeal?.liveBlogVersion !== undefined && publicSeal?.liveBlogVersion !== 1 ||
-      publicSeal?.pageReaderVersion !== undefined && ![1, 2].includes(publicSeal?.pageReaderVersion) ||
+      publicSeal?.pageReaderVersion !== undefined && !pageReaderContract.isPageReaderVersion(publicSeal.pageReaderVersion) ||
       !isDeepStrictEqual(publicSeal, { schemaVersion: 1, rendererSha: commitSha,
         ...(publicSeal?.dataHubReportingVersion === 1 ? {dataHubReportingVersion:1} : {}),
         ...(publicSeal?.dataHubCompositionVersion === 1 ? {dataHubCompositionVersion:1} : {}),

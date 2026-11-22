@@ -23,6 +23,7 @@ import { publicRouteBaseForRecordKind } from "../../packages/content-core/src/pu
 const { initializeApp, applicationDefault, getFirestore, FieldValue } = firebaseAdminRuntime;
 const require = createRequire(import.meta.url);
 const state = require("../../scripts/lib/dev-publication.cjs");
+const { isPageReaderVersion } = require("../../functions/lib/page-reader-contract.js");
 const publicationTarget = targetContract.publicationTarget("development");
 const { publicWorkerCandidateTag, publicWorkerCandidateMessage, workerVersionIdFromWranglerOutput, projectCloudflareWorkerVersion } =
   require("../../functions/lib/public-worker-candidate.js");
@@ -205,7 +206,7 @@ export async function restoreDevPostRenderer(sourceSha, artifactDirectory = dire
   const clientSeal = await json(path.join(artifactDirectory, "dist/posts/_no-build-assets/renderer-release.json"));
   if (![1, 2].includes(seal?.electionResultsVersion) ||
       !isDeepStrictEqual(seal, { schemaVersion: 1, rendererSha: sourceSha, liveBlogVersion: 1,
-      ...([1, 2].includes(seal.pageReaderVersion) ? { pageReaderVersion: seal.pageReaderVersion } : {}),
+      ...(isPageReaderVersion(seal.pageReaderVersion) ? { pageReaderVersion: seal.pageReaderVersion } : {}),
       electionResultsVersion: seal.electionResultsVersion, environment: "development" }) ||
       !isDeepStrictEqual(clientSeal, seal) ||
       !(await lstat(path.join(retained, "server/entry.mjs"))).isFile()) {

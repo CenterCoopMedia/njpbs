@@ -803,7 +803,8 @@ function createScheduledPublishRunner(deps = {}) {
           }
           let noBuildPublication = null;
           if (candidate.collection === "cmsPages") await require("./lib/page-reader-compatibility").assertInstalledPageReaders({
-            firestore, transaction, pageId: candidate.ref.id, blocks: after.published?.blocks });
+            firestore, transaction, pageId: candidate.ref.id, blocks: after.published?.blocks,
+            scheduleCopy: after.published?.metadata?.scheduleCopy });
           if (fastRequested) {
             if (!pairSelector && (!admission.valid || !admission.enabled)) {
               throw Object.assign(new Error("Instant publication admission is unavailable. Scheduled publication will retry."), {

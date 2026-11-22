@@ -251,7 +251,7 @@ describe("development renderer, version and baseline boundaries", () => {
     expect(JSON.parse(readFileSync(join(site, ".public-post-renderer/renderer-release.json"), "utf8"))).toEqual(accepted);
     expect(processBoundary).not.toHaveBeenCalled();
   });
-  it.each([1, 2])("retains Page reader contract %s in the restored dev renderer", async pageReaderVersion => {
+  it.each([1, 2, 3])("retains Page reader contract %s in the restored dev renderer", async pageReaderVersion => {
     const accepted = { ...release, pageReaderVersion };
     for (const file of ["renderer/renderer-release.json", "dist/posts/_no-build-assets/renderer-release.json"]) {
       writeFileSync(join(directory, file), JSON.stringify(accepted) + "\n");

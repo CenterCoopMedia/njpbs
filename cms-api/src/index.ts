@@ -9,6 +9,7 @@ import type { CodePostReply } from "../../packages/content-core/src/code-post-co
 import { handlePrivateRecordCode, type RecordCodeBinding } from "./record-code";
 import publicAssetHosts from "../../functions/lib/public-asset-hosts.json";
 import pageReaderContract from "../../functions/lib/page-reader-contract.js";
+import { parseScheduleCopy, type ScheduleCopy } from "../../packages/content-core/src/schedule-copy";
 import installedPageReader from "./page-reader-contract.json";
 import { heroBackgroundMetadata } from "../../packages/content-core/src/hero-background";
 import { WorkerEntrypoint } from "cloudflare:workers";
@@ -106,6 +107,7 @@ interface PublicPageDocumentAsset {
 type PublicPageAsset = PublicPageImageAsset | PublicPageDocumentAsset;
 
 interface PublicPageProjectionData {
+  scheduleCopy?: ScheduleCopy;
   pageId: PublicPageId;
   childDirected?: boolean;
   path: string;
@@ -570,8 +572,11 @@ function validatePublicPageProjection(
     throw new PublicContentRpcError("Invalid projection");
   }
   const parsed = parseBlocks(pageValue.blocks);
+  let scheduleCopy;
+  try { scheduleCopy = parseScheduleCopy(requestedPageId, pageValue.scheduleCopy); }
+  catch { throw new PublicContentRpcError("Invalid projection"); }
   if (!parsed.ok || validateSection(definition.editorTemplate, parsed.blocks) ||
-      !pageReaderContract.pageReaderSupports(parsed.blocks, requestedPageId, installedPageReader.pageReaderVersion)) {
+      !pageReaderContract.pageReaderSupports(parsed.blocks, requestedPageId, installedPageReader.pageReaderVersion, scheduleCopy)) {
     throw new PublicContentRpcError("Invalid projection");
   }
   const assets = Object.fromEntries(
@@ -603,6 +608,7 @@ function validatePublicPageProjection(
       family: definition.family,
       template: definition.editorTemplate,
       title: pageValue.title,
+      ...(scheduleCopy ? { scheduleCopy } : {}),
       ...(pageTheme !== undefined ? { pageTheme } : {}),
       ...heroBackgroundMetadata(pageValue),
       description: pageValue.description,

@@ -84,7 +84,7 @@ it.each(["public", "preview", "api", "api-releasing", "api-changed", "preview-sh
   if (kind === "api-changed") await db.doc("cmsDeploymentReceipts/cmsApi").update({ "mutation.providerIdentities.workerVersionId": "another-version" });
   if (kind === "preview-sha") await db.doc("system/cmsPreviewRuntime").update({ rendererSha: old });
   if (kind === "public-sha") await db.doc("system/publicDeployment").update({ activeCommitSha: old });
-  if (kind === "unknown") await db.doc(`${compatibility.ROOT}/public/${sha}`).update({ pageReaderVersion: 3 });
+  if (kind === "unknown") await db.doc(`${compatibility.ROOT}/public/${sha}`).update({ pageReaderVersion: 4 });
   const before = (await db.doc("cmsPages/contact").get()).data();
   expect((await invoke([ap], { title: "Changed" })).code).toBe(409);
   expect((await db.doc("cmsPages/contact").get()).data()).toEqual(before);
@@ -221,7 +221,7 @@ it.each(["missing", "releasing", "changed"])("preserves compatible candidates du
 it("binds API support to its actual completed source descriptor and rejects future descriptors", async () => {
   await api(0);
   expect((await db.doc(`${compatibility.ROOT}/components/cmsApi`).get()).exists).toBe(false);
-  await expect(api(3)).rejects.toThrow("Unsupported CMS API Page reader contract");
+  await expect(api(4)).rejects.toThrow("Unsupported CMS API Page reader contract");
   expect((await db.doc("cmsDeploymentReceipts/cmsApi").get()).data()?.state).toBe("in_progress");
   await api(1);
   expect((await db.doc(`${compatibility.ROOT}/components/cmsApi`).get()).data()).toMatchObject({ sourceSha: sha, pageReaderVersion: 1 });
@@ -243,4 +243,38 @@ it("admits a signup anchor only when the public, preview and API readers all sup
   const saved = await invoke(blocks);
   expect(saved.code, JSON.stringify(saved.body)).toBe(200);
   expect((await db.doc("cmsPages/contact").get()).data()?.blocks[0]).toMatchObject({ type: "embed_anchor", data: { anchorId: "njpbssignup" } });
+});
+
+it("requires version 3 to preview, publish or replace a renderer for owned Schedule copy", async () => {
+  const scheduleCopy = { version: 1, heading: "Upcoming broadcasts", introduction: "Browse the week ahead." };
+  const page = { pageId: "schedule", blocks: [], scheduleCopy };
+  await marker("public", sha, 2);
+  await marker("public", old, 2);
+  await marker("preview", sha, 2);
+  await api(2);
+  const preview = () => db.runTransaction(transaction => compatibility.assertPreviewPageReader({
+    firestore: db, transaction, ...page, rendererSha: sha,
+  }));
+  const publish = () => db.runTransaction(transaction => compatibility.assertInstalledPageReaders({
+    firestore: db, transaction, ...page,
+  }));
+  const candidate = (commitSha: string) => db.runTransaction(transaction => compatibility.assertCandidatePageReaders({
+    firestore: db, transaction, candidate: { commitSha },
+  }));
+  const refusal = { code: "page_reader_contract_unavailable" };
+  await expect(preview()).rejects.toMatchObject(refusal);
+  await expect(publish()).rejects.toMatchObject(refusal);
+  const ref = db.doc("cmsPages/schedule");
+  await ref.set({ status: "draft", publiclyVisible: true, scheduleCopy, published: { blocks: [], metadata: {} } });
+  await expect(candidate(old)).resolves.toBeUndefined();
+
+  await db.doc(`${compatibility.ROOT}/public/${sha}`).update({ pageReaderVersion: 3 });
+  await db.doc(`${compatibility.ROOT}/preview/${sha}`).update({ pageReaderVersion: 3 });
+  await expect(preview()).resolves.toBeUndefined();
+  await expect(publish()).rejects.toMatchObject(refusal);
+  await api(3);
+  await expect(publish()).resolves.toBeUndefined();
+  await ref.update({ "published.metadata.scheduleCopy": scheduleCopy });
+  await expect(candidate(old)).rejects.toMatchObject(refusal);
+  await expect(candidate(sha)).resolves.toBeUndefined();
 });

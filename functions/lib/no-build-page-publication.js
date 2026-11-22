@@ -90,7 +90,8 @@ async function prepareNoBuildPagePublication({ firestore, transaction, collectio
   nextDocument, queueRef, actor, config: admissionOverride, target, pageScheduleCapture, dependencyRefresh = false, electionResultsRefresh, videoReplacementRefresh, validationOnly = false }) {
   if (collection !== "cmsPages" || typeof documentId !== "string" || !publicPageDefinition(documentId)) return null;
   if (publiclyVisible(nextDocument)) await require("./page-reader-compatibility").assertInstalledPageReaders({
-    firestore, transaction, pageId: documentId, blocks: nextDocument.published?.blocks });
+    firestore, transaction, pageId: documentId, blocks: nextDocument.published?.blocks,
+    scheduleCopy: nextDocument.published?.metadata?.scheduleCopy });
   const authority = await readPagePublicationAuthority({ firestore, transaction, documentId, nextDocument,
     config: admissionOverride, target });
   if (!authority) return null;

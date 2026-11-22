@@ -86,7 +86,7 @@ async function preparePairContentPublication({ firestore, transaction, collectio
     plan = { slug: snapshot.metadata.slug, ownedSlugs: slugs };
   } else if (kind === "page") {
     if (visible) await require("./page-reader-compatibility").assertInstalledPageReaders({
-      firestore, transaction, pageId: documentId, blocks: snapshot?.blocks });
+      firestore, transaction, pageId: documentId, blocks: snapshot?.blocks, scheduleCopy: snapshot?.metadata?.scheduleCopy });
     const page = require("./no-build-page-ownership");
     owner = await page.readNoBuildPageOwner({ firestore, transaction, pageId: documentId });
     capability = await page.readNoBuildPageCapability({ firestore, transaction });

@@ -567,8 +567,13 @@ describe("cmsSaveContent function", () => {
       const publishedAt = "2026-09-01T20:00:00.000Z";
       const published = { blocks: [], metadata: { title: "Published search title" }, publishedAt, sourceVersion: 3 };
       const ref = db.collection("cmsPages").doc("schedule");
-      await ref.set({ ...page, status: "published", publiclyVisible: true, publishAt: publishedAt, published });
       const migrate = baseVersion => saveSchedule({ baseVersion, enableScheduleCopy: true, document: {} });
+      const live = { ...page, status: "published", publiclyVisible: true, publishAt: publishedAt, published };
+      const inconsistent = { ...live, published: { ...published, publishedAt: "2026-09-06T20:00:00.000Z" } };
+      await ref.set(inconsistent);
+      expect((await migrate(4)).statusCode).toBe(409);
+      expect((await ref.get()).data()).toEqual(inconsistent);
+      await ref.set(live);
 
       expect(await migrate(3)).toMatchObject({ statusCode: 409, body: { versionConflict: true } });
       const migrated = await migrate(4);

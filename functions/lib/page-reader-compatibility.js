@@ -4,7 +4,7 @@ const p = require("./public-release-pair");
 const contract = require("./page-reader-contract");
 const ROOT = "system/pageReaderContracts";
 const SHA = /^[a-f0-9]{40}$/;
-const knownVersion = version => Number.isInteger(version) && version >= 1 && version <= contract.PAGE_READER_VERSION;
+const knownVersion = contract.isPageReaderVersion;
 function refuse() {
   throw Object.assign(new Error("These Page planks are temporarily unavailable. Keep your draft and try again after the site update."),
     { status: 409, code: "page_reader_contract_unavailable", scheduleDeferred: true });
@@ -46,20 +46,22 @@ async function assertApiReader({ firestore, transaction, requiredVersion }) {
       value?.schemaVersion !== 1 || value.sourceSha !== receipt.mutation.sourceSha ||
       value.receiptDigest !== p.publicReleaseDigest(receipt) || !knownVersion(value.pageReaderVersion) || value.pageReaderVersion < requiredVersion) refuse();
 }
-async function assertPreviewPageReader({ firestore, transaction, pageId, blocks, rendererSha }) {
-  if (!contract.requiredPageReaderVersion(blocks, pageId)) return;
-  if (!contract.pageReaderSupports(blocks, pageId, await readPageReaderVersion({ firestore, transaction, role: "preview", rendererSha }))) refuse();
+async function assertPreviewPageReader({ firestore, transaction, pageId, blocks, scheduleCopy, rendererSha }) {
+  const requiredVersion = contract.requiredPageReaderVersion(blocks, pageId, scheduleCopy);
+  if (!requiredVersion) return;
+  if (await readPageReaderVersion({ firestore, transaction, role: "preview", rendererSha }) < requiredVersion) refuse();
 }
-async function assertInstalledPageReaders({ firestore, transaction, pageId, blocks, preview = false, requireIdle = true }) {
-  if (!contract.requiredPageReaderVersion(blocks, pageId)) return;
+async function assertInstalledPageReaders({ firestore, transaction, pageId, blocks, scheduleCopy, preview = false, requireIdle = true }) {
+  const requiredVersion = contract.requiredPageReaderVersion(blocks, pageId, scheduleCopy);
+  if (!requiredVersion) return;
   const root = (await transaction.get(firestore.doc("system/publicDeployment"))).data();
   const pointer = root?.schemaVersion === 2 ? require("./public-release-media-fence").parseStoredSelector(root)
     : require("./public-deployment-pointer").assertPublicDeploymentPointer(root);
   if (typeof requireIdle !== "boolean" || requireIdle && pointer.state !== "idle") refuse();
   const capability = await require("./no-build-page-ownership").readNoBuildPageCapability({ firestore, transaction });
   if (!capability?.servingEnabled || capability.rendererSha !== pointer.activeCommitSha ||
-      !contract.pageReaderSupports(blocks, pageId, await readPageReaderVersion({ firestore, transaction, role: "public", rendererSha: pointer.activeCommitSha }))) refuse();
-  await assertApiReader({ firestore, transaction, requiredVersion: contract.requiredPageReaderVersion(blocks, pageId) });
+      await readPageReaderVersion({ firestore, transaction, role: "public", rendererSha: pointer.activeCommitSha }) < requiredVersion) refuse();
+  await assertApiReader({ firestore, transaction, requiredVersion });
   if (preview) {
     const runtime = (await transaction.get(firestore.doc("system/cmsPreviewRuntime"))).data();
     if (!runtime || runtime.phase !== "ready" || ![1, 2].includes(runtime.schemaVersion)) refuse();
@@ -67,7 +69,7 @@ async function assertInstalledPageReaders({ firestore, transaction, pageId, bloc
       const pair = require("./cms-preview-pair"), selector = pair.parseSelector(runtime);
       pair.assertProjection(selector, pair.parsePair((await transaction.get(firestore.doc(`${pair.PAIRS}/${selector.selectedPairId}`))).data()));
     }
-    await assertPreviewPageReader({ firestore, transaction, pageId, blocks, rendererSha: runtime.rendererSha });
+    await assertPreviewPageReader({ firestore, transaction, pageId, blocks, scheduleCopy, rendererSha: runtime.rendererSha });
   }
 }
 async function assertCandidatePageReaders({ firestore, transaction, candidate, candidates = [candidate] }) {
@@ -77,17 +79,18 @@ async function assertCandidatePageReaders({ firestore, transaction, candidate, c
   const pages = await transaction.get(firestore.collection("cmsPages")
     .where(Filter.or(Filter.where("publiclyVisible", "==", true), Filter.where("status", "==", "published"))).limit(1001));
   if (pages.size > 1000) refuse();
-  const required = pages.docs.filter(row => {
+  const required = pages.docs.reduce((maximum, row) => {
     const value = row.data();
-    return require("./public-video-references").publiclyVisible(value) && contract.requiredPageReaderVersion(value.published?.blocks, row.id);
-  });
-  if (!required.length) return;
+    if (!require("./public-video-references").publiclyVisible(value)) return maximum;
+    return Math.max(maximum, contract.requiredPageReaderVersion(value.published?.blocks, row.id, value.published?.metadata?.scheduleCopy));
+  }, 0);
+  if (!required) return;
   if (!Array.isArray(candidates) || candidates.length < 1 || candidates.length > 2) refuse();
   // Preservation does not change the API. Its mutable release receipt gates
   // new content admission, not settlement or recovery of a compatible reader.
   for (const selected of candidates) {
     const version = await readPageReaderVersion({ firestore, transaction, role: "public", rendererSha: selected?.commitSha });
-    if (required.some(row => !contract.pageReaderSupports(row.data().published.blocks, row.id, version))) refuse();
+    if (version < required) refuse();
   }
 }
 module.exports = { ROOT, preparePageReaderMarker, writeApiReaderMarker, readPageReaderVersion,

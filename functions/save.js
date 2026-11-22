@@ -12,6 +12,7 @@ const { prepareNoBuildContentPublication, assertNoBuildContentScheduleInTransact
 const { bumpPublicContextRevision } = require("./lib/public-context-revision");
 const { contentVersion, hasContentChanges } = require("./lib/content-version");
 const { DEFAULT_SCHEDULE_COPY, parseScheduleCopy } = require("./lib/schedule-copy");
+const { parsePublishInstant } = require("./lib/publish-instant");
 const { changesPublicLibraryFields } = require("./lib/library-card-publication");
 const { stampDocumentLists } = require("./lib/document-list");
 const { recordCardSaveWarnings } = require("./lib/record-card-warnings");
@@ -1822,10 +1823,11 @@ function createCmsSaveHandler(deps = {}) {
             throw new SaveRejection(400, "Saving Schedule copy requires the exact saved baseVersion.");
           }
           if (enableScheduleCopy) {
+            const snapshotTime = parsePublishInstant(stored?.published?.publishedAt);
+            const publishTime = parsePublishInstant(stored?.publishAt);
             const retainedPublicPage = revisingPublished && isPlainObject(stored.published?.metadata) &&
               Number.isSafeInteger(stored.published.sourceVersion) && stored.published.sourceVersion > 0 &&
-              Number.isFinite(Date.parse(stored.published.publishedAt)) &&
-              Date.parse(stored.publishAt) <= Date.parse(now());
+              snapshotTime !== null && publishTime !== null && Math.max(snapshotTime, publishTime) <= Date.parse(now());
             if ((stored?.status !== "draft" && !retainedPublicPage) || stored[PUBLISH_BUILD_PENDING_FIELD] === true) {
               throw new SaveRejection(409, "Open a saved Schedule draft or a published Schedule page with no publication in progress before enabling copy editing.");
             }
@@ -2391,7 +2393,7 @@ function createCmsSaveHandler(deps = {}) {
           // document stored before this field existed reads as 0 and so gets 1 on its
           // first save here, exactly like a create.
           version: nextVersion,
-          ...(enableScheduleCopy ? { scheduleCopy: DEFAULT_SCHEDULE_COPY, blocks: stored.blocks ?? [] } : {}),
+          ...(enableScheduleCopy ? { scheduleCopy: DEFAULT_SCHEDULE_COPY, blocks: stored.blocks === undefined ? [] : stored.blocks } : {}),
           ...(conversionFingerprint === null ? {} : {
             homeCompositionVersion: conversionTarget,
             ...(conversionTarget === 2 ? { homeHero: {
@@ -2697,6 +2699,7 @@ function createCmsSaveHandler(deps = {}) {
           try {
             await require("./lib/page-reader-compatibility").assertInstalledPageReaders({
               firestore, transaction: tx, pageId: docId, blocks: composed.blocks, preview: true,
+              scheduleCopy: publishesSnapshot || schedulesPublication ? composed.scheduleCopy : undefined,
               requireIdle: publishesSnapshot || schedulesPublication });
           } catch (error) {
             if (error.status) throw new SaveRejection(error.status, error.message, error.code ? { code: error.code } : {});
