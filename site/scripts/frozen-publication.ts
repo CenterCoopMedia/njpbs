@@ -118,15 +118,17 @@ function publicationBuildEnvironment({
 }
 
 export async function freezeBackgroundPublicationInputs({ buildBatchId, commitSha, artifactReceiptPath,
-  buildEnvironment = {}, mediaManagerCredential, retainedInputDirectory }: {
+  buildEnvironment = {}, mediaManagerCredential, retainedInputDirectory, readRetainedVideoCatalog }: {
   buildBatchId: string; commitSha: string; artifactReceiptPath: string;
   buildEnvironment?: Record<string, string | undefined>; mediaManagerCredential?: MediaManagerCredential;
   retainedInputDirectory?: string;
+  readRetainedVideoCatalog?: () => Promise<unknown>;
 }): Promise<string[]> {
   await assertCmsPublicationSourceCheckout(commitSha);
   const environment = publicationBuildEnvironment({ buildBatchId, commitSha, artifactReceiptPath, buildEnvironment });
   await syncLaunchContent(mediaManagerCredential ? { ...environment,
-    MEDIA_MANAGER_API_KEY: mediaManagerCredential.key, MEDIA_MANAGER_API_SECRET: mediaManagerCredential.secret } : environment);
+    MEDIA_MANAGER_API_KEY: mediaManagerCredential.key, MEDIA_MANAGER_API_SECRET: mediaManagerCredential.secret } : environment,
+  undefined, undefined, { readRetainedVideoCatalog });
   await syncSpotlightNews(environment);
   await syncSchedule(environment);
   return retainedInputDirectory ? freezeRetainedPublicImages(retainedInputDirectory, { buildBatchId, commitSha }) : [];

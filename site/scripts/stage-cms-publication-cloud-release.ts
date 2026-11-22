@@ -28,6 +28,8 @@ import { writePublicArtifactBundle } from "../src/lib/public-artifact-bundle";
 import { MAX_PUBLIC_ARTIFACT_CUTOFF_AGE_MILLIS } from "../src/lib/public-artifact-inventory";
 import { assertPreparedPublicWorkerArtifact, preparePublicWorkerArtifact } from "../src/lib/public-worker-artifact";
 import pageReaderContract from "../../functions/lib/page-reader-contract.js";
+import { readRetainedVideoCatalog } from "./cloud-external-refresh";
+import { publicationTarget } from "../../functions/lib/publication-target.js";
 
 const requireModule = createRequire(import.meta.url);
 const { reservePublicBuildBatch } = requireModule("../../functions/lib/public-deployment-coordinator.js");
@@ -36,6 +38,8 @@ const { assertPublicDeploymentReservedBatch, assertPublicDeploymentRetiredCloudR
 const { cloudCmsPublicationRuntimeControl } = requireModule("../../functions/lib/cms-publication-runtime-control.js");
 const { preparePublicRelease, recordPreparedPublicReleaseCheckpoint } = requireModule("../../functions/lib/public-release-preparation.js");
 const { PreparedPublicReleaseError } = requireModule("../../functions/lib/public-release-error.js");
+const { PUBLIC_CONTEXT_PATH } = requireModule("../../functions/lib/public-context-revision.js");
+const { createPostBackgroundStorage } = requireModule("../../functions/lib/post-background-storage.js");
 
 const site = fileURLToPath(new URL("..", import.meta.url));
 const FIREBASE_PROJECT_ID = "njpbs-site";
@@ -278,6 +282,7 @@ type StageReleaseInput = {
   distDirectory?: string; rendererDirectory?: string;
   buildEnvironment: Record<string, string | undefined>;
   mediaManagerCredential?: { key: string; secret: string };
+  readRetainedVideoCatalog?: () => Promise<unknown>;
   now?: () => number;
   interrupted?: () => boolean;
   dependencies?: Partial<StageDependencies>;
@@ -342,7 +347,7 @@ export async function stageCmsPublicationCloudRelease(input: StageReleaseInput) 
 
 async function produceCloudRelease({ firestore, storage, queueId, commitSha, stateDirectory,
   distDirectory = path.join(site, "dist"), rendererDirectory = path.join(site, ".public-post-renderer"),
-  buildEnvironment, mediaManagerCredential, prepareAgainstCommitSha,
+  buildEnvironment, mediaManagerCredential, prepareAgainstCommitSha, readRetainedVideoCatalog: readCatalog,
   now = Date.now, interrupted = () => false, dependencies: overrides }: StageReleaseInput,
   setStage: (stage: PrepareStage) => void) {
   if (!QUEUE_ID.test(queueId ?? "") || !COMMIT_SHA.test(commitSha ?? "") || !path.isAbsolute(stateDirectory) ||
@@ -418,7 +423,7 @@ async function produceCloudRelease({ firestore, storage, queueId, commitSha, sta
     await mkdir(retained, { recursive: true, mode: 0o700 });
     await writeFile(path.join(retained, "input.json"), input, { mode: 0o600 });
     await dependencies.freezeExternalInputs({ buildBatchId, commitSha, buildEnvironment, mediaManagerCredential,
-      artifactReceiptPath: path.join(retained, "artifact-inventory.json"), retainedInputDirectory: retained });
+      artifactReceiptPath: path.join(retained, "artifact-inventory.json"), retainedInputDirectory: retained, readRetainedVideoCatalog: readCatalog });
     stopIfInterrupted();
     setStage("build");
     // A stale compiled graph from another source must never be staged.
@@ -544,8 +549,13 @@ export async function main(args = process.argv.slice(2), environment: NodeJS.Pro
     const storageCredential = parsePreviewStorageCredential(readFileSync(STORAGE_CREDENTIAL_FD, "utf8"));
     const mediaManagerCredential = parseCmsPublicationMediaManagerCredential(readFileSync(MEDIA_MANAGER_CREDENTIAL_FD, "utf8"));
     storage = createCmsPublicationCloudStorage({ ...storageCredential, includeRenderer: true });
+    const firestore = initialize();
     const result = await stageCmsPublicationCloudRelease({
-      firestore: initialize(), storage, queueId, commitSha, stateDirectory, mediaManagerCredential, buildEnvironment,
+      firestore, storage, queueId, commitSha, stateDirectory, mediaManagerCredential, buildEnvironment,
+      readRetainedVideoCatalog: async () => {
+        const input = (await firestore.doc(PUBLIC_CONTEXT_PATH).get()).data()?.externalInputs;
+        return readRetainedVideoCatalog(input, createPostBackgroundStorage(publicationTarget("production").backgroundBucket, app));
+      },
       ...(parsed.action === "prepare" ? { prepareAgainstCommitSha: parsed.oldCommitSha } : {}),
       interrupted: installInterruptGuard(),
     });
