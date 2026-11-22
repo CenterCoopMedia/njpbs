@@ -4,21 +4,25 @@ const { pageContextCodeGeneration } = require("./public-release-page-context-cod
 const { PUBLIC_PAGE_DEFINITIONS, publicPageDefinition, publicPagePath } = require("./public-page-contract");
 const { pagePublicationTarget } = require("./no-build-page-target");
 const { readPublicDeploymentPointer } = require("./public-deployment-pointer");
-const { readPublicContextRevisionInTransaction, publicContextDigest, PUBLIC_CONTEXT_PATH } = require("./public-context-revision");
+const { publicContextRevision, publicContextDigest, PUBLIC_CONTEXT_PATH } = require("./public-context-revision");
 const { pageRouteRef, listNoBuildPageOwners, readNoBuildPageOwner, readNoBuildPageCapability, refuse } = require("./no-build-page-ownership");
 const { readNoBuildPageProjectionInTransaction } = require("./no-build-page-source");
 const { assertNoBuildPageContextInTransaction, readPageRenderDependenciesInTransaction } = require("./no-build-page-render-context");
 
 /** Called only after the exclusive Page owner decision. Never turns a claim,
  * alias, owned withdrawal, or unreadable snapshot into an ASSETS fallback. */
-async function readNoBuildPageContextDecision({ firestore, transaction, path, rendererSha, now = new Date(), target, scheduleCapture, requestScheduleCapture = false, readProviderInput, strictPublicReleaseInputs = false, legacyStaffServing = false }) {
+async function readNoBuildPageContextDecision({ firestore, transaction, path, unownedPath, rendererSha, now = new Date(), target, scheduleCapture, requestScheduleCapture = false, readProviderInput, strictPublicReleaseInputs = false, legacyStaffServing = false }) {
   target = pagePublicationTarget({ firestore, target });
   if (typeof path !== "string" || !(path === "/" || /^\/[a-z0-9]+(?:-[a-z0-9]+)*\/$/.test(path))) return { kind: "pass", path };
-  const [claim, owners] = await Promise.all([
-    transaction.get(pageRouteRef(firestore, path)),
-    listNoBuildPageOwners({ firestore, transaction, path }),
-  ]);
-  if (claim.exists || owners.length) refuse("An exclusive Page owner must decide this route.");
+  // A caller may have already checked this exact path in this transaction.
+  // Home source requests still check the Home route separately.
+  if (unownedPath !== path) {
+    const [claim, owners] = await Promise.all([
+      transaction.get(pageRouteRef(firestore, path)),
+      listNoBuildPageOwners({ firestore, transaction, path }),
+    ]);
+    if (claim.exists || owners.length) refuse("An exclusive Page owner must decide this route.");
+  }
   const builtIn = Object.entries(PUBLIC_PAGE_DEFINITIONS).find(([, page]) => page.path === path || page.aliases?.includes(path));
   const slug = path.slice(1, -1);
   const [candidates, aliases] = path === "/" ? [[], []] : (await Promise.all([
@@ -45,16 +49,17 @@ async function readNoBuildPageContextDecision({ firestore, transaction, path, re
     if (requestScheduleCapture) throw new (require("./no-build-page-schedule-reader").PageScheduleCaptureRequired)(pageId);
     refuse("Schedule and Live require qualified sealed schedule authority.");
   }
-  const [pointerSnapshot, contextRevision, contextSnapshot, documentSnapshot] = await Promise.all([
+  const [pointerSnapshot, contextSnapshot, documentSnapshot] = await Promise.all([
     transaction.get(firestore.doc("system/publicDeployment")),
-    readPublicContextRevisionInTransaction(transaction, firestore),
-    ["home", "data-hub"].includes(pageId) ? transaction.get(firestore.doc(PUBLIC_CONTEXT_PATH)) : null,
+    transaction.get(firestore.doc(PUBLIC_CONTEXT_PATH)),
     transaction.get(firestore.doc(`cmsPages/${pageId}`)),
   ]);
+  const contextState = contextSnapshot.data();
+  const contextRevision = publicContextRevision(contextState);
   const pointer = readPublicDeploymentPointer(pointerSnapshot.data());
   if (!/^[a-f0-9]{40}$/.test(rendererSha ?? "") || pointer?.activeCommitSha !== rendererSha || pointer.state !== "idle" ||
       !Number.isSafeInteger(pointer.activeGeneration) || pointer.activeGeneration < 1) refuse("The Page context code release is unavailable.");
-  const changedAt = contextSnapshot?.data()?.changedAt?.toMillis?.() ?? null;
+  const changedAt = ["home", "data-hub"].includes(pageId) ? contextState.changedAt?.toMillis?.() ?? null : null;
   const document = documentSnapshot.data();
   if (document?.published?.metadata?.dataHubCompositionVersion === 1 && capability?.dataHubCompositionVersion !== 1) {
     refuse("The installed Page renderer does not support Data Hub composition.");
@@ -76,7 +81,7 @@ async function readNoBuildPageContextDecision({ firestore, transaction, path, re
   }
   const staffServing = legacyStaffServing && !strictPublicReleaseInputs && pointerSnapshot.data()?.schemaVersion !== 2;
   const context = result.state === "live"
-    ? await assertNoBuildPageContextInTransaction({ firestore, transaction, pageId, rendererSha, now, target, scheduleCapture, readProviderInput, strictPublicReleaseInputs, legacyStaffServing: staffServing })
+    ? await assertNoBuildPageContextInTransaction({ firestore, transaction, pageId, nextDocument: document, rendererSha, now, target, scheduleCapture, readProviderInput, strictPublicReleaseInputs, legacyStaffServing: staffServing })
     : { page: null, ...await readPageRenderDependenciesInTransaction({ firestore, transaction, pageId, pointer, rendererSha, now, target, scheduleCapture, readProviderInput, strictPublicReleaseInputs, legacyStaffServing: staffServing }) };
   const codeGeneration = await pageContextCodeGeneration({ firestore, transaction, pointer: pointerSnapshot.data(), context });
   const decision = { kind: "context-page", path, receipt: { ...receipt, codeGeneration }, renderContext: { ...context, kind: "published-page-context", pageId, path,

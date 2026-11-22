@@ -13,13 +13,14 @@ function bumpPublicContextRevision(transaction, firestore, { withdrawal = false,
     ...(withdrawal ? { withdrawalRevision: FieldValue.increment(1) } : {}),
   }, { merge: true });
 }
-async function readPublicContextRevisionInTransaction(transaction, firestore) {
-  const snapshot = await transaction.get(firestore.doc(PUBLIC_CONTEXT_PATH));
-  const state = snapshot.data();
+function publicContextRevision(state) {
   if (state?.schemaVersion !== 1 || !Number.isSafeInteger(state.revision) || state.revision < 1) {
     throw new Error("Public context identity is unavailable");
   }
   return state.revision;
+}
+async function readPublicContextRevisionInTransaction(transaction, firestore) {
+  return publicContextRevision((await transaction.get(firestore.doc(PUBLIC_CONTEXT_PATH))).data());
 }
 function publicContextDigest(revision) {
   if (!Number.isSafeInteger(revision) || revision < 1) throw new Error("Public context identity is unavailable");
@@ -38,4 +39,4 @@ async function readPublicBackgroundContextInTransaction(transaction, firestore) 
     changedAt: state.changedAt?.toMillis() ?? null };
 }
 module.exports = { readPublicBackgroundContextInTransaction, PUBLIC_CONTEXT_PATH, bumpPublicContextRevision, readPublicContextInTransaction,
-  readPublicContextRevisionInTransaction, publicContextDigest };
+  readPublicContextRevisionInTransaction, publicContextRevision, publicContextDigest };
