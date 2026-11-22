@@ -390,6 +390,31 @@ describe("atomic administrator triage", () => {
     }));
   });
 
+  it("logs bounded diagnostics for a resolution precondition failure", async () => {
+    const stored = report(1);
+    const log = { error: vi.fn() };
+    const response = res();
+    await triage.createCmsResolveBugReportHandler({
+      firestore: {
+        async runTransaction() {
+          throw Object.assign(new Error("Synthetic provider detail"), { code: "failed-precondition" });
+        },
+      },
+      requirePrincipalFn: async () => principal("admin-1", "admin"),
+      isAdminFn: async () => true,
+      log,
+    })(req({
+      reportId: stored.id, baseVersion: 1, mutationId: MUTATION_ID,
+      action: "resolve", fixDeliveryConfirmed: true, resolutionNote: "Verified the fix.",
+    }), response);
+
+    expect(response.statusCode).toBe(503);
+    expect(response.body).toEqual({ error: "The report could not be saved. Try again." });
+    expect(log.error).toHaveBeenCalledExactlyOnceWith("Bug report update failed", {
+      reportId: stored.id, code: "failed-precondition",
+    });
+  });
+
   it("commits acknowledgement, audit, mutation receipt, and delivery work together", async () => {
     const stored = report(1);
     await seed(stored);
