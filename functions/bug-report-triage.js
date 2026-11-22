@@ -342,8 +342,11 @@ async function applyAdminAction({
       if (body.fixDeliveryConfirmed !== true) {
         throw new BugReportTriageError(400, "Confirm that the fix is available before resolving the report");
       }
+      if (typeof body.resolutionNote !== "string" || body.resolutionNote.length > 1_000) {
+        throw new BugReportTriageError(400, "Enter a resolution note of 1,000 characters or fewer");
+      }
       next.resolutionNote = redactReportText(body.resolutionNote, {
-        label: "Resolution note", maxBytes: 1_000, required: true,
+        label: "Resolution note", maxBytes: 4_000, required: true,
       });
     } else {
       delete next.resolutionNote;
@@ -572,6 +575,13 @@ function sendError(res, error, log, operation) {
   });
 }
 
+function reportFailureCode(error) {
+  const code = error?.code;
+  if (Number.isInteger(code) && code >= 0 && code <= 16) return code;
+  if (["aborted", "already-exists", "failed-precondition", "unavailable", "deadline-exceeded", "permission-denied", "auth/internal-error"].includes(code)) return code;
+  return "unknown";
+}
+
 function createCmsListBugReportsHandler(deps = {}) {
   const {
     firestore = db,
@@ -768,8 +778,13 @@ function createCmsUpdateBugReportHandler(deps = {}, requiredAction) {
       if (error instanceof BugReportTriageError || error instanceof AuthError || error instanceof ForbiddenError) {
         res.status(error.status).json({ error: error.message, ...error.data });
       } else {
-        log.error("Bug report update failed");
-        res.status(500).json({ error: "The report could not be saved. Try again." });
+        const code = reportFailureCode(error);
+        log.error("Bug report update failed", {
+          reportId: isBugReportId(req.body?.reportId) ? req.body.reportId : null,
+          code,
+        });
+        const status = code === "failed-precondition" || code === 9 ? 503 : 500;
+        res.status(status).json({ error: "The report could not be saved. Try again." });
       }
     }
   };
@@ -798,8 +813,7 @@ function createCmsNudgeBugReportHandler(deps = {}) {
         : trusted && [400, 403, 404, 405, 409].includes(error.status) ? error.status : 500;
       if (status === 500) (deps.log ?? logger).error("cmsNudgeBugReport failed", {
         reportId: isBugReportId(req.body?.reportId) ? req.body.reportId : null,
-        code: Number.isInteger(error?.code) && error.code >= 0 && error.code <= 16 ? error.code
-          : ["aborted", "already-exists", "failed-precondition", "unavailable", "deadline-exceeded", "permission-denied"].includes(error?.code) ? error.code : "unknown",
+        code: reportFailureCode(error),
       });
       res.status(status).json({ error: status === 500 ? "The nudge could not be queued. Try again." : error.message });
     }

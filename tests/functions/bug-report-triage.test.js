@@ -324,15 +324,16 @@ describe("atomic administrator triage", () => {
   it("resolves only with administrator confirmation and delivers one saved resolution notice", async () => {
     const stored = report(1);
     await seed(stored);
+    const verification = `Verified that the draft saves excerpts such as ${"é".repeat(520)}.`;
     const request = {
       reportId: stored.id,
       baseVersion: stored.version,
       mutationId: MUTATION_ID,
       action: "resolve",
       fixDeliveryConfirmed: true,
-      resolutionNote: "Verified that the draft saves. Contact staff@example.org for help.",
+      resolutionNote: `${verification} Contact staff@example.org for help.`,
     };
-    const note = "Verified that the draft saves. Contact [redacted email] for help.";
+    const note = `${verification} Contact [redacted email] for help.`;
     async function resolve(body, user = principal("admin-1", "admin")) {
       const response = res();
       await triage.createCmsResolveBugReportHandler({
@@ -347,6 +348,7 @@ describe("atomic administrator triage", () => {
     expect((await resolve(request, principal())).statusCode).toBe(403);
     expect((await resolve({ ...request, fixDeliveryConfirmed: false })).statusCode).toBe(400);
     expect((await resolve({ ...request, resolutionNote: "   " })).statusCode).toBe(400);
+    expect((await resolve({ ...request, resolutionNote: "x".repeat(1_001) })).statusCode).toBe(400);
     expect((await resolve({ ...request, baseVersion: 2 })).statusCode).toBe(409);
     expect((await resolve({
       reportId: stored.id, baseVersion: 1, mutationId: MUTATION_ID, action: "set_status", status: "resolved",
