@@ -4,8 +4,8 @@ import PublicSiteLayout from "../../../layouts/PublicSiteLayout.astro";
 import launchContent from "../../../data/launch-media-manager.json";
 import { loadLaunchContentData } from "../../../lib/launch-content-data";
 import { publicRootRoutesEnabled } from "../../../lib/build-target";
-import { publishedVideoPrograms, videoCatalogPath, videoEpisodePath, videoGroups, videoProgramPath, videoSeason } from "../../../lib/public-video-routes";
-import type { PublicVideo, PublicVideoProgram } from "../../../lib/public-video-catalog";
+import { videoCatalogPath, videoEpisodePath, videoGroups, videoProgramPath, videoSeason } from "../../../lib/public-video-routes";
+import { readPublicVideoCatalog, type PublicVideo, type PublicVideoProgram } from "../../../lib/public-video-catalog";
 import { pbsPlayerPermissions } from "../../../../../packages/content-core/src/player-permissions";
 
 type Props = { programs: PublicVideoProgram[] } | { program: PublicVideoProgram; episode?: PublicVideo };
@@ -13,7 +13,7 @@ type Props = { programs: PublicVideoProgram[] } | { program: PublicVideoProgram;
 export const getStaticPaths = (async () => {
   if (!publicRootRoutesEnabled(process.env)) return [];
   const source = await loadLaunchContentData(launchContent);
-  const programs = publishedVideoPrograms("videoCatalog" in source ? source.videoCatalog : undefined, new Date());
+  const programs = readPublicVideoCatalog("videoCatalog" in source ? source.videoCatalog : undefined, new Date())?.programs ?? [];
   return [
     { params: { slug: undefined }, props: { programs } satisfies Props },
     ...programs.flatMap(program => [

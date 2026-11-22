@@ -1,5 +1,4 @@
-import { readPublicVideoCatalog, type PublicVideo, type PublicVideoProgram } from "./public-video-catalog";
-import { mediaManagerWindowAt } from "./media-manager-gating";
+import type { PublicVideo } from "./public-video-catalog";
 import { videoCatalogPath } from "../../../packages/content-core/src/video-catalog-path";
 export { videoCatalogPath } from "../../../packages/content-core/src/video-catalog-path";
 
@@ -9,14 +8,6 @@ export function videoProgramPath(slug: string): string {
 
 export function videoEpisodePath(program: string, episode: string): string {
   return `${videoProgramPath(program)}${episode}/`;
-}
-
-export function publishedVideoPrograms(snapshot: unknown, now: Date): PublicVideoProgram[] {
-  const catalog = readPublicVideoCatalog(snapshot);
-  return (catalog?.programs ?? []).flatMap(program => {
-    const episodes = program.episodes.filter(episode => mediaManagerWindowAt(episode.window, now) === "open");
-    return episodes.length ? [{ ...program, episodes }] : [];
-  });
 }
 
 export function videoSeason({ kind, seasonTitle, seasonNumber }: PublicVideo): string | null {
