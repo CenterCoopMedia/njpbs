@@ -202,9 +202,17 @@ describe("Spotlight story images without hotlinks", () => {
     const curated = adaptHomeSpotlight({ status: "ready", source: "nj-spotlight-news-rss", checkedAt: cutoffAt,
       cards: [copied] }, { cutoffAt });
     expect(curated.cards[0].image).toMatchObject({ url: cardImage, thumbnails: [thumbnail] });
-    const receipt = structuredClone(selections.editorial);
-    receipt.catalog.cutoffAt = cutoffAt;
-    receipt.catalog.sources["home-spotlight"] = { status: "ready", checkedAt: cutoffAt, cards: curated.cards };
+    const receipt = {
+      ...selections.editorial,
+      catalog: {
+        ...selections.editorial.catalog,
+        cutoffAt,
+        sources: {
+          ...selections.editorial.catalog.sources,
+          "home-spotlight": { status: "ready", checkedAt: cutoffAt, cards: curated.cards },
+        },
+      },
+    };
     expect(serverCatalog.readHomeEditorialSourceReceipt(receipt)).toEqual(readHomeEditorialSourceReceipt(receipt));
 
     expect(spotlightCardImage({ ...copied, thumbnails: [{ ...thumbnail, url: thumbnail.url.replace(contentHash, "a".repeat(64)) }] }))
