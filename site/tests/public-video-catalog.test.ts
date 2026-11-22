@@ -95,7 +95,7 @@ describe("public video catalog", () => {
       const url = new URL(input.toString());
       if (url.pathname.endsWith("/shows/")) return result([{ ...riverShow, attributes: { ...riverShow.attributes,
         description: "A documentary about waterways.", image: "https://example.org/river.jpg" } }]);
-      if (!url.searchParams.has("platform-slug")) return result([]);
+      if (url.searchParams.get("platform-slug") !== "partnerplayer") return result([]);
       return url.searchParams.has("page") ? new Response(null, { status: 503 }) : result([catalogAsset("replacement")], nextPage(url));
     };
     try {

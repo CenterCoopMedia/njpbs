@@ -515,7 +515,7 @@ describe("main", () => {
       await main({ MEDIA_MANAGER_API_KEY: "fixture-key", MEDIA_MANAGER_API_SECRET: "fixture-secret",
         REQUIRE_FRESH_CONTENT: "1", LAUNCH_CONTENT_OUTPUT: outputPath }, async input => {
         const url = new URL(String(input));
-        if (url.pathname.endsWith("/assets/")) return url.searchParams.has("show-id") && url.searchParams.has("platform-slug")
+        if (url.pathname.endsWith("/assets/")) return url.searchParams.get("platform-slug") === "partnerplayer"
           ? Response.json({ data: [], links: { next: null } }) : new Response("Unavailable", { status: 503 });
         return Response.json({ data: fixture.data.map(row => ({ ...row, type: "show" })), links: { next: null } });
       }, immediateSleep);

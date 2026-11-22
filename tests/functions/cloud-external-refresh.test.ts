@@ -78,7 +78,7 @@ const fetchProvider = (async url => {
   if (String(url).includes("media.services.pbs.org")) {
     const request = new URL(String(url));
     if (request.pathname.endsWith("/assets/")) {
-      if (request.searchParams.has("platform-slug")) return catalogOutage ? Response.json({ data: [] })
+      if (request.searchParams.get("platform-slug") === "partnerplayer") return catalogOutage ? Response.json({ data: [] })
         : Response.json({ data: [catalogAsset("river-episode")], links: { next: null } });
       return Response.json({ data: [], links: { next: null } });
     }
