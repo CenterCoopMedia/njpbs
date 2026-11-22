@@ -33,6 +33,7 @@ import { BrandLockup } from "../components/BrandLockup";
 import { ReportProblemDialog } from "../components/ReportProblemDialog";
 import { WhatsNewDialog } from "../components/WhatsNewDialog";
 import { AdminUpdateNotice } from "../components/AdminUpdateNotice";
+import { NewRecordRecoveryNotice } from "../components/NewRecordRecoveryNotice";
 import { SidebarDestination } from "../components/SidebarDestination";
 import { Icon, type IconName } from "../components/ui/Icon";
 import { LoadingIndicator } from "../components/ui/LoadingIndicator";
@@ -93,7 +94,7 @@ import { forgetAdminDestination, useDestinationMemory } from "./destination-memo
 import { ExitGuardProvider, useExitGuard } from "./ExitGuard";
 import { useRouteAnnouncer, useRouteFocus } from "./route-focus";
 import { useShell } from "./ShellContext";
-import { canSubmitProblemReport, canViewReports, isGuideOnly } from "../lib/access";
+import { canSubmitProblemReport, canUseContentStudio, canViewReports, isGuideOnly } from "../lib/access";
 import { PublicContentStatusProvider } from "../context/PublicContentStatusContext";
 
 // A visually hidden but screen-reader-audible live region. Inline so the announcer does not
@@ -1178,6 +1179,7 @@ function ShellLayoutContents() {
                 {notice}
               </InlineMessage>
             ) : null}
+            {!guideOnly && canUseContentStudio(principal) && <NewRecordRecoveryNotice actorId={user.uid} />}
             <Outlet />
           </main>
           <EditorWorkspacePane pane="details" />

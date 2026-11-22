@@ -3,8 +3,8 @@
 // does not survive a reload, a crash, or the person closing the tab to get out of the way. This
 // module writes one displaced-work snapshot per person per record so the draft is still there to
 // recover afterwards.
-// Recovery lasts only while the same account stays signed in. Auth resolution sweeps stale
-// entries across every record, and ending the session removes all displaced work in this browser.
+// Auth resolution sweeps stale entries across every record. An involuntary session end keeps
+// work for the same account. Deliberate sign-out removes it from this browser.
 //
 // It is deliberately per-browser and per-person: the displaced draft is unreviewed work that was
 // never accepted by the version guard, so it must not be published to anyone else through a
@@ -21,8 +21,8 @@ export interface RecoveredEditorWork {
   // The record's human title at the moment of displacement, so the recovery prompt can name what
   // the draft belongs to without re-reading the document.
   label: string;
-  // Who took the lease. Named in the prompt so the person knows why their editor went read-only.
-  displacedBy: string;
+  // Set when work was held after another editor took the lease.
+  displacedBy?: string;
   savedAtMs: number;
   payload: unknown;
 }
@@ -46,7 +46,7 @@ function isRecoveredEditorWork(value: unknown): value is RecoveredEditorWork {
     typeof work.surfaceKey === "string" &&
     work.surfaceKey.length > 0 &&
     typeof work.label === "string" &&
-    typeof work.displacedBy === "string" &&
+    (work.displacedBy === undefined || typeof work.displacedBy === "string") &&
     typeof work.savedAtMs === "number" &&
     Number.isFinite(work.savedAtMs) &&
     "payload" in work &&

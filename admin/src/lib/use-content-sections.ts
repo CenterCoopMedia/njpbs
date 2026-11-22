@@ -72,11 +72,14 @@ export function useContentSectionRegistry() {
     useState<ContentSectionDefinition[]>(seededContentSections);
 
   const [ready, setReady] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [registeredSections, setRegisteredSections] = useState<ContentSectionDefinition[]>([]);
 
   useEffect(() => {
     return onSnapshot(
       query(collection(db, CONTENT_SECTIONS_COLLECTION), limit(SECTION_LISTENER_LIMIT + 1)),
       (snapshot) => {
+        setLoading(false);
         // Read the snapshot defensively. This callback runs inside a React effect, so a
         // snapshot that is not the collection shape this expects would throw where nothing
         // can catch it and take the editor down with it. Falling through to the seeded
@@ -84,21 +87,25 @@ export function useContentSectionRegistry() {
         const docs = Array.isArray(snapshot?.docs) ? snapshot.docs : [];
         if (!Array.isArray(snapshot?.docs) || docs.length > SECTION_LISTENER_LIMIT) {
           setSections(seededContentSections());
+          setRegisteredSections([]);
           setReady(false);
           return;
         }
         const parsed = parseContentSectionSnapshot(docs);
+        setRegisteredSections(parsed);
         // An empty or entirely malformed registry keeps the seeded desks rather than
         // leaving a required picker with nothing to choose.
         if (parsed.length > 0) setSections(parsed);
         setReady(true);
       },
       () => {
+        setLoading(false);
         setSections(seededContentSections());
+        setRegisteredSections([]);
         setReady(false);
       },
     );
   }, []);
 
-  return { sections, ready };
+  return { sections, ready, loading, registeredSections };
 }

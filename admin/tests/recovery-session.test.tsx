@@ -2,6 +2,7 @@ import { act, cleanup, fireEvent, render, screen } from "@testing-library/react"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { User } from "firebase/auth";
 import { AuthProvider, useAuth } from "../src/context/AuthContext";
+import { holdNewRecord } from "../src/lib/new-record-recovery";
 
 // Replace only external SDK and HTTP boundaries. Recovery, admission transport and
 // the auth provider run together against jsdom's actual localStorage.
@@ -163,6 +164,7 @@ describe("displaced draft retention at the auth boundary", () => {
     seed("ana", "cmsPages:home");
     seed("ana", "cmsPosts:story");
     seed("bo", "cmsSettings:home");
+    holdNewRecord("ana", "post", { title: "Held Post" });
     localStorage.setItem("njpbs-admin:displaced-work:broken", "not json");
     localStorage.setItem("njpbs-admin:appearance", "dark");
 
@@ -176,6 +178,7 @@ describe("displaced draft retention at the auth boundary", () => {
     mount();
     await authenticate("ana");
     seed("ana", "cmsPosts:story");
+    holdNewRecord("ana", "sponsor", { name: "Held sponsor" });
     localStorage.setItem("njpbs-admin:appearance", "dark");
     session.end.mockRejectedValue(new Error("Offline"));
 

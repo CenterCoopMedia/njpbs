@@ -13,7 +13,9 @@ const mocks = vi.hoisted(() => ({
 }));
 vi.mock("../src/context/AuthContext", () => ({ useAuth: () => ({ getIdToken: mocks.token, state: { status: "signed-out" } }) }));
 vi.mock("../src/lib/firebase", () => ({ db: {}, firebaseConfig: { projectId: "test" } }));
-vi.mock("../src/lib/use-content-sections", () => ({ useContentSectionRegistry: () => ({ sections: mocks.sections, ready: true }) }));
+vi.mock("../src/lib/use-content-sections", () => ({
+  useContentSectionRegistry: () => ({ sections: mocks.sections, ready: true, loading: false, registeredSections: mocks.sections }),
+}));
 vi.mock("../src/lib/functions", async (original) => ({
   ...await original<typeof import("../src/lib/functions")>(),
   cmsListPages: mocks.pages, cmsListMediaCategories: mocks.categories,

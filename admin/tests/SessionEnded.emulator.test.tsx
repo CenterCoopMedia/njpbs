@@ -1,11 +1,12 @@
 import { randomBytes, randomUUID } from "node:crypto";
 import { createRequire } from "node:module";
+import { heldNewRecords, holdNewRecord } from "../src/lib/new-record-recovery";
 import type { App as AdminApp } from "firebase-admin/app";
 import type { Auth as AdminAuth } from "firebase-admin/auth";
 import type { Firestore } from "firebase-admin/firestore";
 import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "vitest";
-import { signInWithEmailAndPassword, signOut } from "firebase/auth";
+import { signInWithEmailAndPassword, signOut, type User } from "firebase/auth";
 import { MemoryRouter } from "react-router";
 import { ReportProblemDialog } from "../src/components/ReportProblemDialog";
 import { AuthProvider, useAuth } from "../src/context/AuthContext";
@@ -83,6 +84,17 @@ function Workspace() {
 }
 
 const status = () => screen.getByTestId("auth-status").textContent;
+
+async function forceRefresh(user: User) {
+  try {
+    await user.getIdToken(true);
+    return "refreshed";
+  } catch (error) {
+    const code = (error as { code?: unknown } | null)?.code;
+    return code === "auth/user-token-expired" || code === "auth/user-disabled"
+      ? code : "unexpected refresh error";
+  }
+}
 
 describe.skipIf(process.env.SESSION_ENDED_EMULATORS !== "true")("ended session emulator contract", () => {
   let clients: ReturnType<typeof createFixtureClients>;
@@ -167,7 +179,7 @@ describe.skipIf(process.env.SESSION_ENDED_EMULATORS !== "true")("ended session e
     });
     await waitFor(() => expect(status()).toBe("signed-out"));
     expect(screen.getByTestId("session-ended")).toHaveTextContent("true");
-    expect(auth.currentUser).toBeNull();
+    expect(auth.currentUser === null).toBe(true);
     expect(localStorage.getItem(work)).not.toBeNull();
     await expect(startVideoUpload(token, "s3-video", { name: "test.mp4", size: 10, lastModified: 1 }, { name: "Test" }))
       .rejects.toMatchObject({ status: 401, message: ended });
@@ -182,8 +194,30 @@ describe.skipIf(process.env.SESSION_ENDED_EMULATORS !== "true")("ended session e
     expect((await clients.firestore.collection("bug_reports").where("reporter.uid", "==", uid).get()).size).toBe(1);
   });
 
-  // The Auth emulator still refreshes a revoked session, so a disabled account drives the same
-  // SDK invalidation path, which covers auth/user-disabled and auth/user-token-expired alike.
+  it("probes forced refresh after emulator revocation and checks session state for either result", async () => {
+    const uid = "report-refresh-revoked";
+    await signedInWorkspace(uid);
+    const user = auth.currentUser!;
+    const issuedToken = await user.getIdToken();
+    holdNewRecord(uid, "sponsor", { name: "Held sponsor" });
+    await clients.auth.revokeRefreshTokens(uid);
+    await expect(clients.auth.verifyIdToken(issuedToken, true)).rejects.toMatchObject({ code: "auth/id-token-revoked" });
+
+    let result = "unexpected refresh error";
+    await act(async () => { result = await forceRefresh(user); });
+    if (result === "refreshed") {
+      // The emulator can honor server-side revocation while still issuing a refreshed token.
+      // The disabled-account case below exercises actual SDK invalidation on that emulator.
+      await waitFor(() => expect(status()).toBe("signed-in"));
+    } else {
+      expect(result).toBe("auth/user-token-expired");
+      await waitFor(() => expect(status()).toBe("signed-out"));
+      expect(screen.getByTestId("session-ended")).toHaveTextContent("true");
+      expect(auth.currentUser === null).toBe(true);
+    }
+    expect(heldNewRecords(uid, "sponsor")).toHaveLength(1);
+  });
+
   it("keeps browser work when the real SDK signs out a disabled account during refresh", async () => {
     const uid = "report-refresh-disabled";
     profileRead.fixture = { email: `${uid}@report-roles.invalid`, active: true, role: "super_admin", grants: [] };
@@ -196,10 +230,10 @@ describe.skipIf(process.env.SESSION_ENDED_EMULATORS !== "true")("ended session e
     const user = auth.currentUser!;
 
     await clients.auth.updateUser(uid, { disabled: true });
-    await act(async () => { await expect(user.getIdToken(true)).rejects.toMatchObject({ code: "auth/user-disabled" }); });
+    await act(async () => { expect(await forceRefresh(user)).toBe("auth/user-disabled"); });
 
     await waitFor(() => expect(status()).toBe("signed-out"));
-    expect(auth.currentUser).toBeNull();
+    expect(auth.currentUser === null).toBe(true);
     expect(screen.getByTestId("session-ended")).toHaveTextContent("true");
     expect(localStorage.getItem(work)).not.toBeNull();
   });
@@ -212,6 +246,6 @@ describe.skipIf(process.env.SESSION_ENDED_EMULATORS !== "true")("ended session e
 
     await waitFor(() => expect(status()).toBe("signed-out"), { timeout: 5_000 });
     expect(screen.getByTestId("session-ended")).toHaveTextContent("true");
-    expect(auth.currentUser).toBeNull();
+    expect(auth.currentUser === null).toBe(true);
   });
 });

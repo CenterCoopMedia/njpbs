@@ -1,6 +1,7 @@
 export const SESSION_ENDED_MESSAGE = "Your session ended. Sign in again.";
 
 export const SESSION_ENDED_EVENT = "boardwalk-session-ended";
+export const HOLD_NEW_RECORDS_EVENT = "boardwalk-hold-new-records";
 
 const SESSION_ENDED_KEY = "njpbs-admin:session-ended";
 const DELIBERATE_SIGN_OUT_KEY = "njpbs-admin:deliberate-sign-out";
@@ -75,12 +76,14 @@ export function reportRefusedToken(idToken: string | null, data?: unknown): "obs
 // Browser-wide, because a sign-out reaches every tab. Another tab must also keep the
 // recovered work and show the same notice.
 export function markSessionEnded(): void {
+  const shouldHold = !endedInThisTab;
   endedInThisTab = true;
   try {
     localStorage.setItem(SESSION_ENDED_KEY, "1");
   } catch {
     // Blocked site storage holds no recovered work to keep.
   }
+  if (shouldHold) window.dispatchEvent(new Event(HOLD_NEW_RECORDS_EVENT));
 }
 
 export function sessionEnded(): boolean {

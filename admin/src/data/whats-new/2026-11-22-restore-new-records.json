@@ -1,0 +1,7 @@
+{
+  "date": "2026-11-22",
+  "kind": "fixed",
+  "title": "Restore new drafts after a session ends",
+  "body": "If Boardwalk ends your session while you are writing a new record, sign back in to the same account and review the draft held in that browser. You can save or discard it. If it needs an editorial area, Boardwalk offers the areas where you can create it.",
+  "prs": []
+}
