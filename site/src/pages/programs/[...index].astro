@@ -5,6 +5,7 @@ import { resolveCmsResponsiveImage } from "../../lib/cms-responsive-image";
 import { getImage } from "astro:assets";
 import { publicRootRoutesEnabled } from "../../lib/build-target";
 import { isIncorrectProgramArtwork } from "../../lib/program-artwork";
+import { videoCatalogPath } from "../../../../packages/content-core/src/video-catalog-path";
 export function getStaticPaths() {
   return publicRootRoutesEnabled(process.env) ? [{ params: { index: undefined } }] : [];
 }
@@ -21,6 +22,7 @@ const cards = await Promise.all(programs.map(async (entry) => ({
 <PublicSiteLayout preview={false} title="Programs" description="Explore NJ PBS programs." canonicalPath="/programs/">
   <div class="program-index">
     <h1>Programs</h1>
+    <p><a href={videoCatalogPath}>Watch full episodes and specials</a></p>
     {cards.length ? <ul class="program-index__list">{cards.map(({ program, image }) => <li>
       <a href={program.path}>
         {image && <picture>

@@ -1,12 +1,12 @@
 "use strict";
 
 const { createHash } = require("node:crypto");
-const { outputLimits, SEARCH_FILES_MAX, RECORD_FAMILIES } = require("./no-build-record-namespace");
+const { outputLimits, SEARCH_FILES_MAX, CHECKPOINT_FAMILIES } = require("./no-build-record-namespace");
 const { backgroundOutputForPath, isBackgroundAssetPath } = require("./post-background-paths");
 const MAX_MANIFEST_BYTES = 4 * 1024 * 1024;
 const cache = new Map();
 // One current and one retained manifest for each reference-backed family.
-const MAX_CACHED_MANIFESTS = 2 * (RECORD_FAMILIES.length + 1);
+const MAX_CACHED_MANIFESTS = 2 * (CHECKPOINT_FAMILIES.length + 1);
 const hash = bytes => createHash("sha256").update(bytes).digest("hex");
 function requireValue(value) { if (!value) throw new Error("Record output manifest is unavailable"); }
 const assetPathHashes = files => files.filter(file => file.path.startsWith("/_astro/")).map(file => hash(file.path)).sort();
@@ -28,7 +28,7 @@ async function storeRecordManifest({ manifest, task, artifacts, signal, checkpoi
 }
 async function readRecordManifest({ receipt, output, artifacts, signal, scope }) {
   const ref = receipt.fileManifest;
-  const claim = /^post-background-v1\/(programs|events|search)\/([a-f0-9-]{36})\/manifest\.json$/.exec(ref?.key ?? "");
+  const claim = /^post-background-v1\/(programs|events|videoCatalog|search)\/([a-f0-9-]{36})\/manifest\.json$/.exec(ref?.key ?? "");
   requireValue(ref && (Object.keys(ref).length === 5 && ref.checkpoint === undefined || Object.keys(ref).length === 6 && ref.checkpoint &&
       Object.keys(ref.checkpoint).length === 2 && /^[A-Za-z0-9]{20}$/.test(ref.checkpoint.operationId ?? "") && /^[a-f0-9]{64}$/.test(ref.checkpoint.checkpointDigest ?? "")) && claim?.[1] === output && /^[a-f0-9]{64}$/.test(ref.digest ?? "") &&
     Number.isSafeInteger(ref.size) && ref.size > 0 && ref.size <= MAX_MANIFEST_BYTES &&

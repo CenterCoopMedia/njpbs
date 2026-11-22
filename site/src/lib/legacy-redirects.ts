@@ -24,6 +24,8 @@
 // then passes it through before the held-back rule can 410 it. That keeps the escape
 // hatch explicit and testable rather than silently masking a new page.
 
+import { isVideoCatalogPath } from "../../../packages/content-core/src/video-catalog-path";
+
 /** The decision for one path. null means "pass through to the origin". */
 export type LegacyDecision =
   | { action: "gone"; cacheControl?: "no-store" }
@@ -292,6 +294,7 @@ export function classify(pathname: string, opts: ClassifyOptions = {}): LegacyDe
   //    namespace (the PMSSO callback under the dead /pbsoauth namespace).
   if (live.has(p) || live.has(p + "/")) return null;
   if (RESERVED_EXACT.has(p)) return null;
+  if (isVideoCatalogPath(p)) return null;
 
   // Public Data Hub figure embeds are unrelated to retired WordPress oEmbed URLs.
   if (/^\/data\/figures\/[^/]+\/embed(?:\/|$)/.test(p)) return null;

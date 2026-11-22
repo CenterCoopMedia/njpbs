@@ -1,6 +1,6 @@
 "use strict";
 
-const { recordOutputForPath } = require("./no-build-record-namespace");
+const { recordOutputForPath, VIDEO_CATALOG_OUTPUT } = require("./no-build-record-namespace");
 const OUTPUTS = ["home", "listings", "authors", "feed", "contentApi", "sitemap", "search"];
 function outputForPath(path) {
   if (path === "/" || path === "/index.html" || path === "/_home-sources.json") return "home";
@@ -12,7 +12,10 @@ function outputForPath(path) {
   if (/^\/pagefind(?:\/|$)/.test(path) || path === "/search/meaning-index.json") return "search";
   return null;
 }
-function backgroundOutputForPath(path) { return outputForPath(path) ?? recordOutputForPath(path); }
+function backgroundOutputForPath(path) {
+  if (/^\/watch\/programs(?:\/|$)/.test(path)) return VIDEO_CATALOG_OUTPUT;
+  return outputForPath(path) ?? recordOutputForPath(path);
+}
 function canonicalPath(path) {
   if (typeof path !== "string" || path.length > 512 || !path.startsWith("/") || /[%?#\\]/.test(path) ||
       [...path].some(character => character.charCodeAt(0) <= 32)) return false;

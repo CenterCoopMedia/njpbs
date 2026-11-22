@@ -10,9 +10,9 @@ const { cloudBillingPaused } = require("./no-build-cloud-work");
 const { SLOW_RETRY_MS, backgroundFailure, publicationAttempt, publicationClaim, publicationFailure } = require("./background-output-attempt");
 
 const { OUTPUTS, outputForPath, backgroundOutputForPath, canonicalPath, isBackgroundAssetPath } = require("./post-background-paths");
-const { RECORD_FAMILIES, outputLimits } = require("./no-build-record-namespace");
+const { RECORD_FAMILIES, CHECKPOINT_FAMILIES, VIDEO_CATALOG_OUTPUT, outputLimits } = require("./no-build-record-namespace");
 const { readPublicContextRevisionInTransaction, publicContextDigest } = require("./public-context-revision");
-const SUPPORTED_OUTPUTS = [...OUTPUTS, ...RECORD_FAMILIES];
+const SUPPORTED_OUTPUTS = [...OUTPUTS, ...CHECKPOINT_FAMILIES];
 const { storeRecordManifest, readRecordManifest } = require("./post-background-record-manifest");
 const OWNER = "post-background-v1";
 const LEASE_MS = 60_000;
@@ -123,7 +123,7 @@ function validateGeneration(generation, task) {
     digest: file.digest, size: file.size, contentType: file.contentType }));
   // Search and record lists live in the immutable artifact store. Other
   // families retain their original inline representation.
-  if (task.output !== "search" && !RECORD_FAMILIES.includes(task.output)) requireValue(Buffer.byteLength(JSON.stringify(manifest)) <= 800 * 1024);
+  if (task.output !== "search" && !CHECKPOINT_FAMILIES.includes(task.output)) requireValue(Buffer.byteLength(JSON.stringify(manifest)) <= 800 * 1024);
   const required = { home: ["/", "/_home-sources.json"], listings: ["/posts/"], feed: ["/feeds/news.xml"], contentApi: ["/api/v1/content.json"],
     search: ["/pagefind/pagefind.js", "/search/meaning-index.json"], programs: ["/programs/", "/shows/"], events: ["/events/"] }[task.output] ?? [];
   requireValue(required.every(path => paths.has(path)));
@@ -423,11 +423,12 @@ function createPostBackgroundOutputs({ firestore, enabled = false, accepting = e
         }
         // Search and record catalogs have many independent files. Keep one bounded I/O
         // batch; retain source order and the existing deadline/readback fence.
-        const width = output === "search" || RECORD_FAMILIES.includes(output) ? 8 : 1;
+        const referenceBacked = output === "search" || CHECKPOINT_FAMILIES.includes(output);
+        const width = referenceBacked ? 8 : 1;
         for (let offset = 0; offset < generated.files.length; offset += width) {
           manifest.push(...await Promise.all(generated.files.slice(offset, offset + width).map(storeFile)));
         }
-        const fileManifest = output === "search" || RECORD_FAMILIES.includes(output) ? await storeRecordManifest({ manifest, task: claimed, artifacts, signal, checkpoint: generation.prepared }) : null;
+        const fileManifest = referenceBacked ? await storeRecordManifest({ manifest, task: claimed, artifacts, signal, checkpoint: generation.prepared }) : null;
         return { ...runtimeFields(claimed.runtime), revision: claimed.revision, rendererSha: generated.rendererSha, contextDigest: generated.contextDigest, routeSetDigest: generated.routeSetDigest,
           ...(RECORD_FAMILIES.includes(output) ? { recordContextRevision: claimed.recordContextRevision } : {}),
           ...(output === "search" ? { totalBytes: manifest.reduce((sum, file) => sum + file.size, 0) } : {}),
@@ -576,7 +577,8 @@ function createPostBackgroundOutputs({ firestore, enabled = false, accepting = e
       let state = await authorizedState(output, isBackgroundAssetPath(path) ? path : null);
       // Disabling admission never discards an existing fence or tombstone.
       if (!state) return null;
-      const lookupPath = path.endsWith("/index.html") ? path.slice(0, -10) : /^\/(posts|programs|shows|events)$/.test(path) ? `${path}/` : path;
+      const lookupPath = path.endsWith("/index.html") ? path.slice(0, -10)
+        : /^\/(posts|programs|shows|events)$/.test(path) || output === VIDEO_CATALOG_OUTPUT && !path.endsWith("/") ? `${path}/` : path;
       const signal = AbortSignal.timeout(ATTEMPT_MS);
       for (let attempt = 0; attempt < 2; attempt++) {
         const files = await receiptFiles(state.receipt, output, signal);

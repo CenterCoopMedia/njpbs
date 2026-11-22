@@ -5,8 +5,8 @@ import path from "node:path";
 
 const require = createRequire(import.meta.url);
 const { OUTPUTS, backgroundOutputForPath: outputForPath, isBackgroundAssetPath } = require("../../functions/lib/post-background-paths");
-const { RECORD_FAMILIES, outputLimits } = require("../../functions/lib/no-build-record-namespace");
-export const backgroundFamilies: string[] = [...OUTPUTS, ...RECORD_FAMILIES];
+const { CHECKPOINT_FAMILIES, outputLimits } = require("../../functions/lib/no-build-record-namespace");
+export const backgroundFamilies: string[] = [...OUTPUTS, ...CHECKPOINT_FAMILIES];
 const sha256 = (bytes: Buffer) => createHash("sha256").update(bytes).digest("hex");
 export interface FileRecord { path: string; file: string; outputs: string[]; digest: string; size: number; contentType: string }
 const types: Record<string, string> = { ".html": "text/html; charset=utf-8", ".xml": "application/xml; charset=utf-8",
@@ -15,7 +15,7 @@ const types: Record<string, string> = { ".html": "text/html; charset=utf-8", ".x
   ".png": "image/png", ".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".svg": "image/svg+xml",
   ".webp": "image/webp", ".avif": "image/avif", ".wasm": "application/wasm", ".pf_fragment": "application/octet-stream", ".pf_index": "application/octet-stream", ".pf_meta": "application/octet-stream" };
 export async function familyFiles(directory: string,
-  selectedOutputs: readonly string[] = backgroundFamilies.filter(output => !["programs", "events"].includes(output)),
+  selectedOutputs: readonly string[] = OUTPUTS,
   contextDigest?: string): Promise<FileRecord[]> {
   if (new Set(selectedOutputs).size !== selectedOutputs.length || selectedOutputs.some(output => !backgroundFamilies.includes(output))) {
     throw new Error("Background output selection is invalid");

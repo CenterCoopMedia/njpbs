@@ -3,7 +3,6 @@ import cloudWork from "../functions/lib/no-build-cloud-work.js";
 import ownership from "../functions/lib/publication-runtime-owner.js";
 import projection from "../functions/lib/editorial-preview-projection.js";
 
-const FAMILIES = ["listings", "authors", "feed", "contentApi", "sitemap", "search", "home", "programs", "events"];
 export const OVERDUE_MS = 5 * 60_000;
 type Read = (path: string) => Promise<Record<string, any> | null>;
 type Runtime = { owner: "cloudflare"; release: string };
@@ -135,7 +134,7 @@ export async function readPublicationHealth({ read, listOwners, runtime, now, cl
       due(preparation.nextAttemptAt);
     }
   }
-  for (const family of FAMILIES) {
+  for (const family of cloudWork.PUBLICATION_BACKGROUND_FAMILIES) {
     const output = await read(`cmsBackgroundOutputs/${family}`);
     if (!output) continue;
     if (family === "home" && output.owner === "page-no-build-v1") {

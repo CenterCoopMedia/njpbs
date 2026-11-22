@@ -4,6 +4,7 @@ import type { NoBuildPostReply } from "../../cms-api/src/index";
 import { createNoBuildPostWorker, isIndependentPostBackgroundPath } from "./no-build-post-worker";
 import { assertPublicationTarget, publicationTarget, publicationPostCacheTag, type PublicationTarget } from "../../functions/lib/publication-target.js";
 import { SECURITY_HEADER_BASELINE } from "../../packages/content-core/src/public-security-headers";
+import { isVideoCatalogPath } from "../../packages/content-core/src/video-catalog-path";
 import { PUBLIC_GONE_BRANCH_HEADER } from "./public-gone";
 import { useAssetsForUnavailablePost } from "../../functions/lib/transitional-post-fallback.js";
 import { isPublicContentSlug } from "../../site/src/lib/public-content-routes";
@@ -57,7 +58,8 @@ function publicPath(path: string): string | null {
   if (/%|\\|\/\//.test(path) || path.length > 512) throw new Error("Invalid public path");
   if (path.startsWith("/posts/_no-build-assets/")) return null;
   path = path.replace(/\/index\.html\/?$/, "/");
-  if (/^\/posts\/[^/]+$/.test(path) || /^\/(programs|shows|events)(?:\/[^/]+)?$/.test(path)) path += "/";
+  if (/^\/posts\/[^/]+$/.test(path) || /^\/(programs|shows|events)(?:\/[^/]+)?$/.test(path) ||
+      isVideoCatalogPath(path) && !path.endsWith("/")) path += "/";
   if (!isIndependentPostBackgroundPath(path) && !["/", "/_home-sources.json", "/_publication.json", "/_content-status.json"].includes(path) &&
       !/^\/posts\/[^/]+\/$/.test(path)) return null;
   return path;

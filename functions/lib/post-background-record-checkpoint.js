@@ -2,11 +2,13 @@
 
 const { createHash } = require("node:crypto");
 const { isDeepStrictEqual } = require("node:util");
-const { CHECKPOINT_MANIFEST_BYTES_MAX, CHECKPOINT_FILES_MAX, outputLimits, recordOutputForPath } = require("./no-build-record-namespace");
+const { CHECKPOINT_MANIFEST_BYTES_MAX, CHECKPOINT_FILES_MAX, CHECKPOINT_FAMILIES, outputLimits } = require("./no-build-record-namespace");
+const { backgroundOutputForPath } = require("./post-background-paths");
+const INDEX_PATHS = { programs: ["/programs/", "/shows/"], events: ["/events/"], videoCatalog: ["/watch/programs/"] };
 const hash = bytes => createHash("sha256").update(bytes).digest("hex");
 function requireValue(value) { if (!value) throw new Error("Prepared record checkpoint is unavailable"); }
 async function readPreparedRecordManifest({ firestore, artifacts, task, reference, signal }) {
-  requireValue(task.contextOnly === true && ["programs", "events"].includes(task.output) && reference &&
+  requireValue(task.contextOnly === true && CHECKPOINT_FAMILIES.includes(task.output) && reference &&
     Object.keys(reference).length === 2 && /^[A-Za-z0-9]{20}$/.test(reference.operationId ?? "") &&
     /^[a-f0-9]{64}$/.test(reference.checkpointDigest ?? ""));
   const preparation = await firestore.runTransaction(async transaction => {
@@ -44,14 +46,14 @@ async function readPreparedRecordManifest({ firestore, artifacts, task, referenc
     const stored = byPath.get(`files/${file.file}`);
     requireValue(typeof file.path === "string" && file.path.length <= 512 && !/[%?#\\\s]/.test(file.path) &&
       file.path.startsWith("/") && !file.path.includes("//") && new URL(file.path, "https://background.invalid").pathname === file.path &&
-      (recordOutputForPath(file.path) === task.output || /^\/_astro\/[A-Za-z0-9_./-]+$/.test(file.path)) && !paths.has(file.path) &&
+      (backgroundOutputForPath(file.path) === task.output || /^\/_astro\/[A-Za-z0-9_./-]+$/.test(file.path)) && !paths.has(file.path) &&
       stored?.digest === file.digest && stored.size === file.size && /^[a-f0-9]{64}$/.test(file.digest ?? "") &&
       Number.isSafeInteger(file.size) && file.size >= 0 && file.size <= 16 * 1024 * 1024 &&
       typeof file.contentType === "string" && file.contentType.length <= 128 && /^[a-z]+\/[a-z0-9.+-]+(?:; charset=utf-8)?$/.test(file.contentType));
     paths.add(file.path); size += file.size; requireValue(size <= outputLimits(task.output).bytes);
     return { path: file.path, key: `${prefix}/bytes/${file.digest}`, digest: file.digest, size: file.size, contentType: file.contentType };
   });
-  requireValue((task.output === "programs" ? ["/programs/", "/shows/"] : ["/events/"]).every(path => paths.has(path)));
+  requireValue(INDEX_PATHS[task.output].every(path => paths.has(path)));
   return { manifest, routes: receipt.routes };
 }
 module.exports = { readPreparedRecordManifest };

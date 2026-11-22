@@ -22,7 +22,7 @@ const { EXTERNAL_REFRESH_PATH, EXTERNAL_INPUT_FILES, externalRefreshHold, extern
 const { ownsPublication, publicationRuntime } = require("../../functions/lib/publication-runtime-owner");
 const { cloudCmsPublicationRuntimeControl } = require("../../functions/lib/cms-publication-runtime-control");
 const { PUBLIC_CONTEXT_PATH, bumpPublicContextRevision } = require("../../functions/lib/public-context-revision");
-const { enqueuePublicContextInTransaction } = require("../../functions/lib/public-context-publication");
+const { CURRENT_PATH, enqueuePublicContextInTransaction } = require("../../functions/lib/public-context-publication");
 const { createPostBackgroundStorage } = require("../../functions/lib/post-background-storage");
 const { parseDataHubReporting } = require("../../functions/lib/data-hub-reporting");
 const { reportingMappings } = require("../../functions/lib/data-hub-reporting-sources");
@@ -167,6 +167,8 @@ export function cloudExternalRefresh({ firestore, firebaseApp, runtime, backgrou
       const fetching = previous?.status === "fetching" && previous.nextAttemptAt > clock();
       if (!externalRefreshDue(previous, runtime, clock()) && (!mappingChanged || fetching)) return null;
       const correctionRow = await transaction.get(correctionsRef);
+      const selectedContext = (await transaction.get(firestore.doc(CURRENT_PATH))).data();
+      const catalogOwned = selectedContext?.videoCatalog === true || selectedContext?.followUp?.videoCatalog === true;
       const startedAt = clock();
       const continuing = !mappingChanged && previous && ownsPublication(previous, runtime) && previous.nextCheckAt > startedAt && previous.status !== "verified";
       const hold = externalRefreshHold(previous, clock());
@@ -176,7 +178,7 @@ export function cloudExternalRefresh({ firestore, firebaseApp, runtime, backgrou
         checkedAt: previous?.checkedAt ?? null, error: null, diagnostic: null };
       transaction.set(ref, next);
       const previousInputs: CloudExternalInputs | undefined = context.data()?.externalInputs;
-      return { ...next, config, correctionRow, previousInputs };
+      return { ...next, config, correctionRow, previousInputs, catalogOwned };
     });
     if (!claim) return;
     const directory = path.join(stateDirectory, "external-refresh", operationId);
@@ -237,7 +239,8 @@ export function cloudExternalRefresh({ firestore, firebaseApp, runtime, backgrou
       // its original provider identity and clock. Existing pairs stay exact.
       const unchanged = previousInputs?.contentDigest === inputs.contentDigest;
       const acceptedInputs = unchanged ? structuredClone(assertExternalInputs(previousInputs)) : inputs;
-      const needsAcceptance = !unchanged || !acceptedInputs.schedulePacket;
+      const videoCatalog = JSON.parse(files["launch-media-manager.json"].toString("utf8")).videoCatalog !== undefined;
+      const needsAcceptance = !unchanged || !acceptedInputs.schedulePacket || videoCatalog && !claim.catalogOwned;
       if (needsAcceptance) {
         acceptedInputs.schedulePacket = await createCloudSchedulePacket({ inputs: acceptedInputs, storage });
       }
@@ -254,7 +257,7 @@ export function cloudExternalRefresh({ firestore, firebaseApp, runtime, backgrou
         if (!isDeepStrictEqual(context.data()?.externalInputs, previousInputs)) throw new Error("External refresh context changed");
         const changed = needsAcceptance;
         const accepted = changed ? await enqueuePublicContextInTransaction({ transaction, firestore, operationId, runtime,
-          reason: "provider-refresh", contextRevision: context.data()!.revision + 1 }) : null;
+          reason: "provider-refresh", contextRevision: context.data()!.revision + 1, videoCatalog }) : null;
         const writeReleaseChange = accepted ? await producer.preparePublicReleaseProducerInTransaction({ firestore, transaction,
           operationId, contextRevision: context.data()!.revision + 1, changes: [
             { kind: "provider", id: "external-inputs", action: "dependency", sourceVersion: context.data()!.revision + 1, snapshot: acceptedInputs },

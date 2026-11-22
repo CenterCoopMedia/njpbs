@@ -8,6 +8,7 @@ export interface PublicVideo {
   slug: string;
   title: string;
   description: string;
+  image?: string;
   kind: "episode" | "special";
   seasonTitle: string | null;
   seasonNumber: number | null;
@@ -23,6 +24,7 @@ export interface PublicVideoProgram {
   slug: string;
   title: string;
   description: string;
+  image?: string;
   genre: string | null;
   episodes: PublicVideo[];
 }
@@ -59,6 +61,12 @@ export function catalogDate(value: unknown): value is string {
   return Number.isFinite(date.getTime()) && date.toISOString().slice(0, 10) === value;
 }
 
+export function isCatalogImage(value: unknown): value is string {
+  return typeof value === "string" && value.length <= 512 &&
+    /^https:\/\/image\.pbs\.org\/(?:contentchannels|video-assets)\/[A-Za-z0-9_-]+\.(?:jpe?g|png|webp)$/.test(value) &&
+    !/\s/.test(value);
+}
+
 /** Validate the observation and, when publishing, keep only currently open windows. */
 export function readPublicVideoCatalog(value: unknown, now?: Date): PublicVideoCatalog | undefined {
   if (value === undefined) return undefined;
@@ -74,7 +82,8 @@ export function readPublicVideoCatalog(value: unknown, now?: Date): PublicVideoC
   for (const rawProgram of catalog.programs as unknown[]) {
     const program = catalogRecord(rawProgram);
     if (!program || !catalogSlug(program.slug) || programSlugs.has(program.slug) || !text(program.title) ||
-        !text(program.description) || (program.genre !== null && !text(program.genre)) ||
+        !text(program.description) || (program.image !== undefined && !isCatalogImage(program.image)) ||
+        (program.genre !== null && !text(program.genre)) ||
         !Array.isArray(program.episodes) || program.episodes.length === 0) throw invalid();
     programSlugs.add(program.slug);
     count += program.episodes.length;
@@ -83,7 +92,8 @@ export function readPublicVideoCatalog(value: unknown, now?: Date): PublicVideoC
     for (const rawEpisode of program.episodes as unknown[]) {
       const episode = catalogRecord(rawEpisode);
       if (!episode || !catalogSlug(episode.slug) || episodeSlugs.has(episode.slug) || !text(episode.title) ||
-          !text(episode.description) || (episode.kind !== "episode" && episode.kind !== "special") ||
+          !text(episode.description) || (episode.image !== undefined && !isCatalogImage(episode.image)) ||
+          (episode.kind !== "episode" && episode.kind !== "special") ||
           (episode.seasonTitle !== null && !text(episode.seasonTitle)) || !ordinal(episode.seasonNumber) ||
           !ordinal(episode.episodeNumber) || (episode.premieredOn !== null && !catalogDate(episode.premieredOn)) ||
           typeof episode.playerSrc !== "string" || extractPartnerPlayerSrc(episode.playerSrc) !== episode.playerSrc ||

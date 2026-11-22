@@ -393,18 +393,43 @@ jobs:
           path: qa/axe-findings.json
           if-no-files-found: warn
           retention-days: 7
+      - name: Prepare synthetic video catalog for the PR preview
+        working-directory: site
+        run: node --import tsx tests/fixtures/write-video-catalog-launch.ts "$RUNNER_TEMP/video-catalog-launch.json"
       - name: Build PR preview artifact
         working-directory: site
         env:
           INTERNAL_SURFACES: "1"
           POLITICS_PREVIEW_FIXTURE_MODE: "1"
           PUBLIC_SHARE_PAGE: ${{ vars.PUBLIC_SHARE_PAGE || '' }}
+          LAUNCH_CONTENT_DATA_PATH: ${{ runner.temp }}/video-catalog-launch.json
         run: npm run build
       - name: Guardrail scan over PR preview artifact
         working-directory: site
         run: npm run guardrails -- --reporter=default --reporter=github-actions --reporter=../.github/scripts/site-resource-reporter.mjs
         env:
           INTERNAL_SURFACES: "1"
+      - name: Verify video catalog routes and search in the PR preview
+        working-directory: site
+        run: |
+          set -euo pipefail
+          node node_modules/astro/bin/astro.mjs preview --host 127.0.0.1 --port 4321 >"$RUNNER_TEMP/video-preview.log" 2>&1 &
+          preview_pid=$!
+          trap 'kill "$preview_pid" >/dev/null 2>&1 || true; wait "$preview_pid" 2>/dev/null || true' EXIT
+          if ! curl --fail --silent --retry 10 --retry-connrefused --retry-max-time 20 --max-time 3 \
+            --output /dev/null http://127.0.0.1:4321/; then
+            cat "$RUNNER_TEMP/video-preview.log"
+            exit 1
+          fi
+          python3 ../qa/axe_scan_browser_test.py --base http://127.0.0.1:4321 --mode video-catalog \
+            --video-catalog-screenshots "$RUNNER_TEMP/video-catalog-screenshots"
+      - name: Upload video catalog browser evidence
+        if: github.event_name == 'pull_request' && always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: video-catalog-screenshots-${{ github.sha }}
+          path: ${{ runner.temp }}/video-catalog-screenshots
+          if-no-files-found: ignore
       # Only pull-request reviewers download this artifact. Merge groups and
       # main pushes still build and scan it, because that scan is the only
       # internal-surfaces guardrail over the combined tree.

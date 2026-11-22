@@ -334,7 +334,7 @@ async function readNoBuildPostDecisionInTransaction({ firestore, transaction, pa
   const match = /^\/posts\/([^/]+)\/$/.exec(path);
   const receipts = ["/_publication.json", "/_content-status.json"].includes(path);
   const { backgroundOutputForPath: outputForPath, isBackgroundAssetPath, lastGood } = require("./post-background-outputs");
-  const { recordOutputForPath, recordFamilyRegistered } = require("./no-build-record-namespace");
+  const { VIDEO_CATALOG_OUTPUT, recordOutputForPath, recordFamilyRegistered } = require("./no-build-record-namespace");
   const recordFamily = recordOutputForPath(path);
   if (recordFamily && !await recordFamilyRegistered({ firestore, transaction, family: recordFamily })) return { kind: "pass" };
   const background = outputForPath(path) || isBackgroundAssetPath(path);
@@ -342,6 +342,7 @@ async function readNoBuildPostDecisionInTransaction({ firestore, transaction, pa
   const contextBackground = background && await require("./public-context-background-reader")
     .readPublicContextBackgroundInTransaction({ firestore, transaction, path, rendererSha });
   if (contextBackground) return contextBackground;
+  if (background === VIDEO_CATALOG_OUTPUT) return { kind: "pass" };
   const malformedOwners = [];
   const owners = (match ? await findNoBuildPostOwnersForSlug({ firestore, transaction, slug: match[1] })
     : await listNoBuildPostOwners({ firestore, transaction,

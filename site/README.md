@@ -113,4 +113,6 @@ console/page errors, native homepage scrolling and mobile Menu/Escape behavior
 in the full target; the coming-soon target checks scene selection, rotation,
 pause/resume and reduced motion with a controlled browser clock. The full target
 also verifies search readiness and runs `qa/axe_scan.py` over every emitted route.
-Both use installed, sandboxed Chrome. See `qa/README.md` for commands.
+The PR preview build also uses a synthetic launch catalog to verify the program
+and episode pages and their Pagefind entries at phone and desktop widths. The
+browser checks use installed, sandboxed Chrome. See `qa/README.md` for commands.

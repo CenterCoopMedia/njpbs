@@ -77,6 +77,27 @@ function owner(firestore = db) {
 }
 const readWork = () => work.readNoBuildCloudWork({ runtime, now: time, read: async path => (await db.doc(path).get()).data() ?? null });
 const check = send => alerts.checkPublicContextAlerts({ firestore: db, now: () => time, send, log: { error() {}, info: (_message, data) => observations.push(...data.observations) } });
+
+it("alerts when only the video catalog exhausts its retries", async () => {
+  const catalog = "V".repeat(20);
+  await db.runTransaction(async transaction => {
+    const accepted = await publication.enqueuePublicContextInTransaction({ transaction, firestore: db, operationId: catalog,
+      runtime, reason: "provider-refresh", contextRevision: 1, videoCatalog: true });
+    accepted.write();
+  });
+  const queue = db.doc(`cmsPublishQueue/${catalog}`);
+  const batch = db.batch();
+  for (const output of publication.OUTPUTS) batch.update(queue.collection("backgroundOutputs").doc(output), { status: "verified" });
+  batch.update(queue.collection("backgroundOutputs").doc("videoCatalog"), { status: "failed", attempts: 4, nextAttemptAt: null });
+  batch.update(queue, { status: "failed" });
+  await batch.commit();
+  const sent = [];
+  await check(message => sent.push(message));
+  expect(sent).toHaveLength(1);
+  expect(sent[0]).toContain("background output videoCatalog: failed");
+  expect(sent[0]).toContain("background output aggregate: failed");
+});
+
 async function exhaust() {
   const worker = owner();
   for (let attempt = 1; attempt <= 4; attempt++) {

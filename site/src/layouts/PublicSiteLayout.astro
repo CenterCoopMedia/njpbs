@@ -1210,7 +1210,7 @@ const legalLinks: LayoutLink[] = [
   mountSpotlightImages(document);
   // The homepage shelf IDs are shared by the rail, grid, and curated layouts.
   document.querySelectorAll<HTMLImageElement>(
-    ":is(#featured-rail, #more-rail) img[data-fallback-src]",
+    ":is(#featured-rail, #more-rail, .video-page) img[data-fallback-src]",
   ).forEach(image => {
     const fallback = image.dataset.fallbackSrc;
     if (!fallback) return;
