@@ -601,7 +601,7 @@ describe('saved transcript corrections',()=>{
       s3: { send: async ({ input }) => {
         commands.push(input);
         if (input.VersionId) return { Body: Readable.from([JSON.stringify([segment('Selected words')])]) };
-        if (concurrentEdit) store.job.editRevision++;
+        if (concurrentEdit) store.rows.get(store.path).editRevision++;
         return { VersionId: 'draft-version' };
       } },
       sign: async (_client, { input }, options) => {
