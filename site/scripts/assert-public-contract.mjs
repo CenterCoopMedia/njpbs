@@ -288,15 +288,19 @@ requireText(
 );
 requireText(
   scheduleSource,
-  'import NativeSchedule from "../../components/NativeSchedule.astro"',
+  'import SchedulePageContent from "../../components/SchedulePageContent.astro"',
   scheduleRoute,
 );
 requireText(scheduleSource, "publicRootRoutesEnabled(process.env)", scheduleRoute);
 requireText(scheduleSource, "params: { schedule: undefined }", scheduleRoute);
 requireText(scheduleSource, "<PublicSiteLayout", scheduleRoute);
-requireText(scheduleSource, "<NativeSchedule", scheduleRoute);
+requireText(scheduleSource, "<SchedulePageContent", scheduleRoute);
 forbidText(scheduleSource, "PublicSubpage", scheduleRoute);
 forbidText(scheduleSource, "schedule-widget", scheduleRoute);
+const scheduleContentPath = "src/components/SchedulePageContent.astro";
+const scheduleContentSource = read(path.join(siteRoot, scheduleContentPath));
+requireText(scheduleContentSource, 'import NativeSchedule from "./NativeSchedule.astro"', scheduleContentPath);
+requireText(scheduleContentSource, "<NativeSchedule", scheduleContentPath);
 
 const publicFavicon = path.join(siteRoot, "public/favicon.png");
 const brandingFavicon = path.join(repoRoot, "branding/njpbs-favicon.png");
