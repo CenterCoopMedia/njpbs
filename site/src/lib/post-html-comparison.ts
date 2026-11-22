@@ -36,7 +36,14 @@ export function archiveHtmlMetadata(html: string) {
     .map(node => attr(node, "href").trim());
   const structuredData: unknown[] = document
     .filter(node => node.tagName === "script" && attr(node, "type") === "application/ld+json")
-    .map(node => JSON.parse(children(node).map(child => "value" in child ? child.value : "").join("")));
+    .map((node, index) => {
+      const json = children(node).map(child => "value" in child ? child.value : "").join("");
+      try {
+        return JSON.parse(json);
+      } catch {
+        throw new SyntaxError(`Invalid JSON-LD in script ${index + 1}`);
+      }
+    });
   const article = document.find(node => node.tagName === "article") ?? document.find(node => node.tagName === "main");
   const articleTimes = article ? walk(article)
     .filter(node => node.tagName === "time")

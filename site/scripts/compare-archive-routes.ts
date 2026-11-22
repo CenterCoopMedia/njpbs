@@ -38,11 +38,13 @@ async function probe(base: string, path: string): Promise<Observation> {
     const html = await response.text();
     try {
       observation.metadata = archiveHtmlMetadata(html);
-    } catch {
-      observation.error = "Could not read HTML metadata and structured data";
+    } catch (error) {
+      observation.error = error instanceof SyntaxError ? error.message : "Could not read HTML metadata";
     }
-  } catch {
-    observation.error = "Could not read the HTTP response";
+  } catch (error) {
+    const cause = error instanceof Error ? error.cause as NodeJS.ErrnoException | undefined : undefined;
+    const reason = cause?.code ?? (error instanceof Error ? error.name : "unknown error");
+    observation.error = `Could not read the HTTP response (${reason})`;
   }
   return observation;
 }
