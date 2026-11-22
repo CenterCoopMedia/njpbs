@@ -1,0 +1,32 @@
+{
+  "before": {
+    "title": "Staff directory",
+    "description": "Meet the station team.",
+    "blocks": []
+  },
+  "edited": {
+    "title": "Meet the station staff",
+    "description": "Find the people behind our programs.",
+    "blocks": [
+      {
+        "id": "staff-contact",
+        "type": "prose",
+        "order": 0,
+        "visible": true,
+        "data": {
+          "content": {
+            "type": "doc",
+            "content": [
+              {
+                "type": "paragraph",
+                "content": [
+                  { "type": "text", "text": "Use the contact page for viewer questions." }
+                ]
+              }
+            ]
+          }
+        }
+      }
+    ]
+  }
+}

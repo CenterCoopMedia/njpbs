@@ -31,6 +31,7 @@ import { projectAuthorSnapshot } from "../src/lib/cms-authors-loader";
 import { projectCmsPreviewContent } from "../src/lib/cms-preview-content";
 import { checkPostLeadPreviews } from "./check-post-lead-previews";
 import { assertGivingPageOrder, givingPageBlocks } from "../tests/fixtures/giving-page";
+import staffPage from "../../tests/fixtures/staff-page-editorial.json";
 import previewSnapshots from "../../functions/lib/preview-snapshot.js";
 import { loadHomeSourceSnapshot } from "../src/lib/home-sources-loader";
 import {
@@ -187,18 +188,21 @@ const render = async (value: PreviewInput) => {
 };
 
 for (const page of PUBLIC_PAGES) {
-  const value = pageInput(page, `Compiled ${page.id}`);
+  const staffPageTarget = page.id === "staff";
+  const title = staffPageTarget ? staffPage.edited.title : `Compiled ${page.id}`;
+  const value = pageInput(page, title);
+  if (staffPageTarget) Object.assign(value.snapshot, staffPage.edited);
   const givingPage = page.id === "give" || page.id === "passport";
   if (givingPage) Object.assign(value.snapshot, { blocks: givingPageBlocks });
   setExactPublicContext(value, {
-    author: page.id === "staff",
+    author: staffPageTarget,
     banner: page.id === "home",
     chrome: true,
   });
   const html = await render(value);
   assert.match(html, /<!DOCTYPE html>/i);
   assert.match(html, /name="robots"[^>]*noindex/);
-  assert.ok(html.includes(`Compiled ${page.id}`), `Missing title for ${page.id}`);
+  assert.ok(html.includes(title), `Missing title for ${page.id}`);
   if (givingPage) {
     // The saved donation block is last in the fixture.
     assertGivingPageOrder(html, ["giving-actions", "giving-cards", "giving-notice"]);
@@ -210,9 +214,14 @@ for (const page of PUBLIC_PAGES) {
   if (page.id === "home") {
     assert.ok(html.includes(bannerSnapshot.values.message), "Home omitted its published banner");
   }
-  if (page.id === "staff") {
+  if (staffPageTarget) {
     assert.ok(html.includes(publishedAuthor.displayName), "Staff omitted its published author");
-    assert.ok(html.includes(publishedAuthor.path), "Staff omitted the author's public route");
+    const authorLink = `href="${publishedAuthor.path}"`;
+    assert.equal(html.split(authorLink).length - 1, 1, "One generated author link in Staff preview");
+    assert.ok(html.includes(staffPage.edited.description), "Staff preview omitted the saved introduction");
+    const authoredBlock = html.indexOf('data-block-id="staff-contact"');
+    assert.ok(authoredBlock > html.indexOf(authorLink), "Staff preview puts the saved block below the roster");
+    assert.ok(html.includes(staffPage.edited.blocks[0].data.content.content[0].content[0].text));
   }
   // Both header renderings use the published action, except on Kids pages.
   const { newsletterLabel, newsletterHref } = chromeSnapshot.values;

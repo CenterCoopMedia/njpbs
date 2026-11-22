@@ -180,10 +180,22 @@ to open the full page editor.
 A page can share a visual template with another page without sharing its content
 record. Always use the row whose public path matches the assignment.
 
-The Staff page is a normal Page. Edit its hero title, summary, background image
-and crop, search and social fields, and any authored blocks through the usual
-save, preview, and publication flow. The published roster is generated from
-public author profiles and stays read-only on this Page.
+### Staff page
+
+Open **Staff** in **Pages**. Edit the hero title and summary in **Title and
+summary**. Use **Page metadata** for the hero background image and crop,
+search fields, and social fields. Add blocks in **Page content** to place
+them below the roster.
+
+The public site generates the roster, profile count, and author links from
+published public author profiles. Update a person's entry through their author
+profile. The label above the hero title, the empty-roster message, and the
+roster layout come from the site.
+
+Save the draft, then open the saved version in **Preview**. Check the hero,
+content below the roster, and a profile link before publishing. To undo a
+published change, start a revision, restore the earlier Page version, and
+preview the restored draft before publishing it.
 
 ### Home hero selections
 

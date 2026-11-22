@@ -6,6 +6,7 @@ import { cmsImageAsset } from "../../lib/cms-responsive-image";
 import StaffDirectory from "../../components/StaffDirectory.astro";
 import PublicSiteLayout from "../../layouts/PublicSiteLayout.astro";
 import { containsVideo } from "../../../../packages/content-core/src/video-block";
+import { STAFF_PAGE_HERO_DEFAULTS } from "../../../../packages/content-core/src/launch-fallback";
 import { cmsRoutedContentEnabled } from "../../lib/build-target";
 import { staffDirectoryEntries } from "../../lib/staff-directory";
 import { resolveNjDecidesSocialImage } from "../../lib/nj-decides-social-images";
@@ -25,10 +26,8 @@ const cmsEntry = Astro.locals.cmsRender ? renderPage(Astro.locals.cmsRender, "st
 const staff = staffDirectoryEntries(
   (Astro.locals.cmsRender ? renderAuthors(Astro.locals.cmsRender) : await getCollection("cmsAuthorsPublic")).map((entry) => entry.data),
 );
-const title = cmsEntry?.data.title ?? "Staff";
-const description =
-  cmsEntry?.data.description ??
-  "Meet the people who make NJ PBS.";
+const title = cmsEntry?.data.title ?? STAFF_PAGE_HERO_DEFAULTS.title;
+const description = cmsEntry?.data.description ?? STAFF_PAGE_HERO_DEFAULTS.description;
 const socialImage = resolveNjDecidesSocialImage(cmsEntry ? { kind: "page", ...cmsEntry.data } : undefined);
 const heroBackgroundImage = cmsEntry?.data.heroBackgroundImage
   ? cmsImageAsset(cmsEntry.data.assets[cmsEntry.data.heroBackgroundImage])

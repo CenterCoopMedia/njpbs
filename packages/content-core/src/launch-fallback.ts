@@ -1,5 +1,10 @@
 import { PUBLIC_PAGES } from "./public-pages.ts";
 
+export const STAFF_PAGE_HERO_DEFAULTS = Object.freeze({
+  title: "Staff",
+  description: "Meet the people who make NJ PBS.",
+});
+
 export interface LaunchLink {
   label: string;
   href: string;

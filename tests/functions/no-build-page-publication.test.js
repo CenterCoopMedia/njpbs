@@ -7,9 +7,11 @@ import previewService from "../../functions/preview.js";
 import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import "../../functions/lib/firebase.js";
 import homeFixture from "../../site/tests/fixtures/home-composition-v1.json";
+import staffPage from "../fixtures/staff-page-editorial.json";
 import scheduler from "../../functions/scheduled-publish.js";
 import save from "../../functions/save.js";
 import lifecycle from "../../functions/lifecycle-transition.js";
+import restoreRevision from "../../functions/restore-revision.js";
 import snapshots from "../../functions/lib/publish-snapshot.js";
 import deployment from "../../functions/lib/public-deployment.js";
 import pagePublication from "../../functions/lib/no-build-page-publication.js";
@@ -316,6 +318,57 @@ it("publishes the exact Page draft and owner atomically with the full-build owne
   expect(queue.noBuildPage.contextDigest).toBe(owner.contextDigest);
   expect(saved.publishBuildQueueId).toBe(owner.operationId);
   expect(offlineBuild).not.toHaveBeenCalled();
+});
+
+it("previews, publishes, and restores the Staff Page's saved editorial state", async () => {
+  await db.doc("system/noBuildPostAdmission").update({ "families.pages.ids": ["contact", "staff"] });
+  const editor = { ...pageActor, principal: { id: actor.uid, grants: [{ role: "editor", sections: ["station"] }] } };
+  const target = { collection: "cmsPages", id: "staff" };
+  const requirePrincipalFn = async () => editor;
+  const edit = body => invoke(saveHandler(editor), { ...target, ...body });
+  const read = async () => (await db.doc("cmsPages/staff").get()).data();
+
+  const prior = await edit({ document: staffPage.before });
+  expect(prior.code, JSON.stringify(prior.body)).toBe(200);
+  const history = await db.collection("cmsVersionHistory").where("documentId", "==", "staff").get();
+  expect(history.docs).toHaveLength(1);
+
+  const saved = await edit({ baseVersion: 1, document: staffPage.edited });
+  expect(saved.code, JSON.stringify(saved.body)).toBe(200);
+  const draft = await read();
+  expect(draft).toMatchObject({
+    version: 2, title: staffPage.edited.title, description: staffPage.edited.description,
+    blocks: [expect.objectContaining({ data: staffPage.edited.blocks[0].data })],
+  });
+  const preview = await previewService.enqueuePreview({ actor: editor, pageId: "staff", sourceVersion: draft.version }, {
+    firestore, now: () => Date.parse(instant), getTransport: () => "serializer",
+    serializerReady: true, getRendererSha: () => sha,
+  });
+  expect(preview).toMatchObject({ sourceVersion: 2, pagePath: "/staff/" });
+  const { snapshot } = (await db.doc(`cmsPreviewQueue/${preview.queueId}`).get()).data();
+  expect(snapshot).toMatchObject({ title: draft.title, description: draft.description });
+  expect(snapshot.blocks).toEqual(draft.blocks);
+
+  const publication = await edit({ baseVersion: preview.sourceVersion, publish: true, document: {} });
+  expect(publication.code, JSON.stringify(publication.body)).toBe(200);
+  expect(publication.body.publication.transport).toBe("page-no-build-v1");
+  const { published } = await read();
+  expect(published).toMatchObject({ sourceVersion: 3,
+    metadata: { title: snapshot.title, description: snapshot.description } });
+  expect(published.blocks).toEqual(snapshot.blocks);
+
+  const revise = lifecycle.createCmsTransitionContentHandler({ firestore, requirePrincipalFn, now: () => instant, log: quiet });
+  const revised = await invoke(revise, { ...target, baseVersion: 3, action: "revise" });
+  expect(revised.code, JSON.stringify(revised.body)).toBe(200);
+  const restore = restoreRevision.createCmsRestoreRevisionHandler({ firestore, requirePrincipalFn, now: () => instant, log: quiet });
+  const restored = await invoke(restore, { ...target, baseVersion: 4, revisionId: history.docs[0].id });
+  expect(restored.code, JSON.stringify(restored.body)).toBe(200);
+  expect(await read()).toMatchObject({ ...staffPage.before, version: 5, published });
+
+  const republished = await edit({ baseVersion: 5, publish: true, document: {} });
+  expect(republished.code, JSON.stringify(republished.body)).toBe(200);
+  expect((await read()).published).toMatchObject({ sourceVersion: 6, blocks: [],
+    metadata: { title: staffPage.before.title, description: staffPage.before.description } });
 });
 
 it("replaces a later-release figure seal when republishing a nonfigure Page", async () => {

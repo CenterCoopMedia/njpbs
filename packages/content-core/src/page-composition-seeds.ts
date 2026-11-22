@@ -6,6 +6,7 @@ import type {
   RichTextDoc,
 } from "./content-model";
 import { contactPageFallback } from "./contact-page-fallback";
+import { STAFF_PAGE_HERO_DEFAULTS } from "./launch-fallback";
 import { publicPage, type PublicPageId } from "./public-pages";
 
 export interface PageSeedAsset {
@@ -766,9 +767,9 @@ const SCHEDULE_SEED = seed(
 
 const STAFF_SEED = seed(
   "staff",
-  "Staff",
-  "Meet the people who make NJ PBS.",
-  "Meet the people who make NJ PBS.",
+  STAFF_PAGE_HERO_DEFAULTS.title,
+  STAFF_PAGE_HERO_DEFAULTS.description,
+  STAFF_PAGE_HERO_DEFAULTS.description,
   [],
 );
 
@@ -1378,6 +1379,10 @@ const PAGE_COMPOSITION_FIXED_REGIONS: Readonly<
     Object.freeze({
       label: "Published staff roster",
       detail: "The roster is generated from published public author profiles. It is read-only on this Page and cannot be replaced with authored blocks.",
+    }),
+    Object.freeze({
+      label: "Staff page labels",
+      detail: "The site supplies the label above the hero title and the message for an empty roster. Add authored blocks below the roster.",
     }),
   ]),
   live: Object.freeze([

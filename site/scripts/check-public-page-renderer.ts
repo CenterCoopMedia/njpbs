@@ -19,6 +19,7 @@ import { buildScheduleExport } from "../src/lib/schedule-export";
 import type { BakedScheduleData } from "../src/lib/schedule-feed";
 import { checkNewslettersSignup } from "./check-newsletters-signup";
 import { assertGivingPageOrder } from "../tests/fixtures/giving-page";
+import staffPage from "../../tests/fixtures/staff-page-editorial.json";
 
 const require = createRequire(new URL("../../tests/public-post-runtime/package.json", import.meta.url));
 const { Miniflare, Response: WorkerResponse } = require("miniflare");
@@ -169,10 +170,23 @@ try {
   staffProfile.role = "PRIVATE working role";
   const staffContent = await projectPublishedPageRead(staffRead, "staff", rendererSha, now);
   const staffHtml = await compiled.renderPublishedPage(staffContent);
+  const staffAuthorLink = 'href="/authors/ada-reporter/"';
   for (const value of ["Ada Reporter", "Statehouse reporter", "Covers the Legislature for NJ PBS.",
-    'href="/authors/ada-reporter/"', 'href="https://x.com/adareporter"',
+    staffAuthorLink, 'href="https://x.com/adareporter"',
     'src="https://media.njpbs.org/cms-media/staff/portrait.webp"', "Public portrait credit"]) assert(staffHtml.includes(value), value);
   assert.doesNotMatch(staffHtml, /PRIVATE/);
+  assert.equal(staffHtml.split(staffAuthorLink).length - 1, 1);
+  assert.ok(staffHtml.includes(staffPage.edited.title));
+  assert.ok(staffHtml.includes(staffPage.edited.description));
+  assert.ok(staffHtml.indexOf('data-block-id="staff-contact"') > staffHtml.indexOf(staffAuthorLink));
+  assert.ok(staffHtml.includes(staffPage.edited.blocks[0].data.content.content[0].content[0].text));
+  const restoredStaff = { ...staffRead, page: { ...staffRead.page, ...staffPage.before } };
+  const restoredStaffContent = await projectPublishedPageRead(restoredStaff, "staff", rendererSha, now);
+  const restoredStaffHtml = await compiled.renderPublishedPage(restoredStaffContent);
+  assert.ok(restoredStaffHtml.includes(staffPage.before.title));
+  assert.ok(restoredStaffHtml.includes(staffPage.before.description));
+  assert.doesNotMatch(restoredStaffHtml, /data-block-id="staff-contact"/);
+  assert.equal(restoredStaffHtml.split(staffAuthorLink).length - 1, 1);
   const emptyResponse = await runtime.dispatchFetch("https://dev-public.example.org/?empty-newsletter");
   assert.equal(emptyResponse.status, 200);
   const emptyNewsletterHtml = await emptyResponse.text();
@@ -245,6 +259,10 @@ try {
     const baseline = await readFile(new URL(`../.public-page-static-fixtures${frame.path}index.html`, import.meta.url), "utf8");
     assert.deepEqual(comparePostHtml(baseline, html), [], `Full-build/workerd frame parity for ${frame.pageId}`);
     assert(!html.includes("PRIVATE"));
+    if (frame.pageId === "staff") {
+      assert.equal(html.split(staffAuthorLink).length - 1, 1);
+      assert.doesNotMatch(html, /data-block-id="staff-contact"/);
+    }
     const content = await projectPublicPageContextRead(frame, rendererSha, now, frame.pageId === "home" ? { homeSources: sources } : {});
     assert.deepEqual(comparePostHtml(html, await compiled.renderPublicPageContext(content)), []);
     await assert.rejects(() => compiled.renderPublicPageContext({ ...content, target: { ...content.target, sourceVersion: 1 } }));
