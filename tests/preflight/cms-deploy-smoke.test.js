@@ -13,6 +13,7 @@ import {
   AUTHENTICATED_POST_FUNCTION_NAMES,
   WORKER_FUNCTION_NAMES,
   PREMIERE_FUNCTION_NAMES,
+  PRIVATE_RPC_FUNCTION_NAMES,
   DEVICE_PAIRING_FUNCTION_NAMES,
   DEPLOYED_FUNCTION_NAMES,
   extractProductionExports,
@@ -41,6 +42,38 @@ const VOICEOVER_FUNCTION_NAMES = Object.freeze([
   "cmsVoiceoverReview",
   "cmsGetVoiceoverAudio",
 ]);
+
+const UNSIGNED_READER_PATH = "cmsGetPublishedPost/posts/nj-pbs-announces-six-staff-appointments/";
+const PRIVATE_RPC_POST_NAMES = PRIVATE_RPC_FUNCTION_NAMES.filter(
+  name => name !== "cmsGetPublishedPost",
+);
+
+function probeTargets(origin, method, names) {
+  return names.map(name => `${method} ${origin}/${name}`);
+}
+
+// These groups form the production manifest checked against functions/index.js.
+const EXPECTED_PROBES = [
+  `GET ${BASE_URL}/health`,
+  ...probeTargets(BASE_URL, "POST", AUTHENTICATED_POST_FUNCTION_NAMES),
+  ...probeTargets(FUNCTIONS_ORIGIN, "POST", AUTHENTICATED_POST_FUNCTION_NAMES),
+  ...WORKER_FUNCTION_NAMES.flatMap(name => [
+    `POST ${BASE_URL}/${name}`,
+    `POST ${FUNCTIONS_ORIGIN}/${name}`,
+  ]),
+  ...[...PREMIERE_FUNCTION_NAMES, ...DEVICE_PAIRING_FUNCTION_NAMES].flatMap(name => [
+    `GET ${BASE_URL}/${name}`,
+    `POST ${FUNCTIONS_ORIGIN}/${name}`,
+  ]),
+  ...PRIVATE_RPC_FUNCTION_NAMES.map(name => name === "cmsGetPublishedPost"
+    ? `GET ${FUNCTIONS_ORIGIN}/${UNSIGNED_READER_PATH}`
+    : `POST ${FUNCTIONS_ORIGIN}/${name}`),
+  `GET ${BASE_URL}/deactivateStaff`,
+  ...probeTargets(BASE_URL, "OPTIONS", [
+    "deactivateStaff", "submitStaffAccessRequest", "cmsUploadMedia", "cmsSubmitBugReport",
+  ]),
+  `GET ${ADMIN_ORIGIN}`,
+];
 
 function expectedResponseFor(url, init = {}) {
   const parsedUrl = new URL(url);
@@ -386,12 +419,12 @@ if(process.env.CMS_BUG_REPORT_TELEGRAM_ADMIN_MAP)process.exit(8); require("node:
 
   it("probes the pilot reader only with an unsigned GET that must return 403", async () => {
     const requests = [];
-    const url = `${FUNCTIONS_ORIGIN}/cmsGetPublishedPost/posts/nj-pbs-announces-six-staff-appointments/`;
+    const url = `${FUNCTIONS_ORIGIN}/${UNSIGNED_READER_PATH}`;
     const run = (status) => runCmsFunctionSmoke({ request: async (target, init = {}) => {
       requests.push({ url: target, init });
       return target === url ? { status } : expectedResponseFor(target, init);
     } });
-    await expect(run(403)).resolves.toEqual({ checked: 300 });
+    await expect(run(403)).resolves.toEqual({ checked: EXPECTED_PROBES.length });
     expect(requests.filter(({ url: target }) => target.includes("cmsGetPublishedPost"))).toEqual([
       { url, init: { method: "GET", redirect: "manual" } },
     ]);
@@ -528,295 +561,11 @@ if(process.env.CMS_BUG_REPORT_TELEGRAM_ADMIN_MAP)process.exit(8); require("node:
         adminOrigin: ADMIN_ORIGIN,
         request,
       }),
-    ).resolves.toEqual({ checked: 300 });
+    ).resolves.toEqual({ checked: EXPECTED_PROBES.length });
 
-    expect(requests.map(({ url }) => new URL(url).pathname.slice(1))).toEqual([
-      "health",
-      "cmsCuezStatus",
-      "cmsCuezListDestinations",
-      "cmsCuezPrepareExport",
-      "cmsCuezSendExport",
-      "cmsCuezOperationStatus",
-      "cmsCuezListImportCandidates",
-      "cmsCuezPreviewImport",
-      "cmsCuezConfirmImport",
-      "cmsCuezRetry",
-      "cmsCuezReconcile",
-      "grantRole",
-      "revokeRole",
-      "setStaffAccessLevel",
-      "deactivateStaff",
-      "reactivateStaff",
-      "registerStaffProfile",
-      "cmsSetNavigationPreferences",
-      "submitStaffAccessRequest",
-      "requestStaffPasswordReset",
-      "getStaffAccessStatus",
-      "listStaffAccessRequests",
-      "decideStaffAccessRequest",
-      "cmsSaveContent",
-      "cmsGetContent",
-      "cmsPostTemplates",
-      "cmsDatasets",
-      "cmsElectionResultsSources",
-      "cmsLiveProduction",
-      "cmsRundownSource",
-      "cmsRundownParser",
-      "cmsRundownReview",
-      "cmsLiveProductionAgent",
-      "cmsLiveProductionDevices",
-      "cmsGetBroadcastSchedule",
-      "cmsGetNewsroomBanner",
-      "cmsVoiceoverReview",
-      "cmsGetVoiceoverAudio",
-      "cmsGetSettings",
-      "cmsGetCoverageLabels",
-      "cmsPublishSettings",
-      "cmsSaveSettings",
-      "cmsCostLedger",
-      "cmsListRevisions",
-      "cmsGetRevision",
-      "cmsRestoreRevision",
-      "cmsTransitionContent",
-      "cmsListContent",
-      "cmsListMedia",
-      "cmsListBinnedMedia",
-      "cmsPurgeBinnedImage",
-      "cmsRestoreMedia",
-      "cmsReplaceMediaBinary",
-      "cmsListMediaSources",
-      "cmsListSourceMedia",
-      "cmsSearchMedia",
-      "cmsListMediaFavorites",
-      "cmsSetMediaFavorite",
-      "cmsSetMediaFavorites",
-      "cmsListMediaCollections",
-      "cmsListMediaCollectionItems",
-      "cmsMutateMediaCollection",
-      "cmsSetMediaCollectionItems",
-      "cmsGetMediaReview",
-      "cmsSaveMediaReview",
-      "cmsListMediaComments",
-      "cmsMutateMediaComment",
-      "cmsCreateSourceMediaRead",
-      "cmsSourceMediaOriginal",
-      "cmsPublishSourceVideo",
-      "cmsRequestVideoClip",
-      "cmsGetVideoClip",
-      "cmsCreateVideoClipRead",
-      "cmsCancelVideoClip",
-      "cmsRequestVideoTranscript",
-      "cmsGetVideoTranscript",
-      "cmsGetVideoSearchCorpus",
-      "cmsCreateVideoTranscriptRead",
-      "cmsSaveVideoTranscript",
-      "cmsRequestVideoTranscriptAlignment",
-      "cmsCancelVideoTranscriptAlignment",
-      "cmsRequestVideoOrientationExport",
-      "cmsListVideoOrientationExports",
-      "cmsListTranscriptionCredentials",
-      "cmsSaveTranscriptionCredential",
-      "cmsDisconnectTranscriptionCredential",
-      "cmsGetTranscriptionOptions",
-      "cmsRequestByokVideoTranscript",
-      "cmsListVideoTranscripts",
-      "cmsStartSourceMediaUpload",
-      "cmsSignSourceMediaUploadParts",
-      "cmsResumeSourceMediaUpload",
-      "cmsCompleteSourceMediaUpload",
-      "cmsCancelSourceMediaUpload",
-      "cmsGetSourceVideoReplacement",
-      "cmsRollbackSourceVideoReplacement",
-      "cmsDeleteSourceMedia",
-      "cmsUpdateSourceMediaMetadata",
-      "cmsListMediaUsage",
-      "cmsListMediaCategories",
-      "cmsMutateMediaCategory",
-      "cmsUpdateMediaMetadata",
-      "cmsCreateMediaDownload",
-      "cmsUploadMedia",
-      "cmsListUgcSubmissions",
-      "cmsGetUgcSubmissionPreview",
-      "cmsRejectUgcSubmission",
-      "cmsImportUgcSubmission",
-      "cmsSubmitBugReport",
-      "cmsListBugReports",
-      "cmsNudgeBugReport",
-      "cmsResolveBugReport",
-      "cmsGetBugReport",
-      "cmsGetBugReportEvidence",
-      "cmsListGithubIssues",
-      "cmsGetGithubIssue",
-      "cmsScanMediaUsage",
-      "cmsBulkArchiveContent",
-      "cmsAssignContent",
-      "cmsListAudit",
-      "cmsGetAnalytics",
-      "cmsCollectBoardwalkUsage",
-      "cmsGetBoardwalkUsage",
-      "cmsPreview",
-      "cmsPreviewStatus",
-      "cmsPublish",
-      "cmsRecheckPublication",
-      "cmsGetAuthorProfile",
-      "cmsUpdateAuthorProfile",
-      "cmsSetAuthorProfileVisibility",
-      "cmsListBylineAuthors",
-      "cmsListAuthorPagePosts",
-      "cmsListAuthorProfiles",
-      "cmsAdminUpdateAuthorProfile",
-      "cmsCuezStatus",
-      "cmsCuezListDestinations",
-      "cmsCuezPrepareExport",
-      "cmsCuezSendExport",
-      "cmsCuezOperationStatus",
-      "cmsCuezListImportCandidates",
-      "cmsCuezPreviewImport",
-      "cmsCuezConfirmImport",
-      "cmsCuezRetry",
-      "cmsCuezReconcile",
-      "grantRole",
-      "revokeRole",
-      "setStaffAccessLevel",
-      "deactivateStaff",
-      "reactivateStaff",
-      "registerStaffProfile",
-      "cmsSetNavigationPreferences",
-      "submitStaffAccessRequest",
-      "requestStaffPasswordReset",
-      "getStaffAccessStatus",
-      "listStaffAccessRequests",
-      "decideStaffAccessRequest",
-      "cmsSaveContent",
-      "cmsGetContent",
-      "cmsPostTemplates",
-      "cmsDatasets",
-      "cmsElectionResultsSources",
-      "cmsLiveProduction",
-      "cmsRundownSource",
-      "cmsRundownParser",
-      "cmsRundownReview",
-      "cmsLiveProductionAgent",
-      "cmsLiveProductionDevices",
-      "cmsGetBroadcastSchedule",
-      "cmsGetNewsroomBanner",
-      "cmsVoiceoverReview",
-      "cmsGetVoiceoverAudio",
-      "cmsGetSettings",
-      "cmsGetCoverageLabels",
-      "cmsPublishSettings",
-      "cmsSaveSettings",
-      "cmsCostLedger",
-      "cmsListRevisions",
-      "cmsGetRevision",
-      "cmsRestoreRevision",
-      "cmsTransitionContent",
-      "cmsListContent",
-      "cmsListMedia",
-      "cmsListBinnedMedia",
-      "cmsPurgeBinnedImage",
-      "cmsRestoreMedia",
-      "cmsReplaceMediaBinary",
-      "cmsListMediaSources",
-      "cmsListSourceMedia",
-      "cmsSearchMedia",
-      "cmsListMediaFavorites",
-      "cmsSetMediaFavorite",
-      "cmsSetMediaFavorites",
-      "cmsListMediaCollections",
-      "cmsListMediaCollectionItems",
-      "cmsMutateMediaCollection",
-      "cmsSetMediaCollectionItems",
-      "cmsGetMediaReview",
-      "cmsSaveMediaReview",
-      "cmsListMediaComments",
-      "cmsMutateMediaComment",
-      "cmsCreateSourceMediaRead",
-      "cmsSourceMediaOriginal",
-      "cmsPublishSourceVideo",
-      "cmsRequestVideoClip",
-      "cmsGetVideoClip",
-      "cmsCreateVideoClipRead",
-      "cmsCancelVideoClip",
-      "cmsRequestVideoTranscript",
-      "cmsGetVideoTranscript",
-      "cmsGetVideoSearchCorpus",
-      "cmsCreateVideoTranscriptRead",
-      "cmsSaveVideoTranscript",
-      "cmsRequestVideoTranscriptAlignment",
-      "cmsCancelVideoTranscriptAlignment",
-      "cmsRequestVideoOrientationExport",
-      "cmsListVideoOrientationExports",
-      "cmsListTranscriptionCredentials",
-      "cmsSaveTranscriptionCredential",
-      "cmsDisconnectTranscriptionCredential",
-      "cmsGetTranscriptionOptions",
-      "cmsRequestByokVideoTranscript",
-      "cmsListVideoTranscripts",
-      "cmsStartSourceMediaUpload",
-      "cmsSignSourceMediaUploadParts",
-      "cmsResumeSourceMediaUpload",
-      "cmsCompleteSourceMediaUpload",
-      "cmsCancelSourceMediaUpload",
-      "cmsGetSourceVideoReplacement",
-      "cmsRollbackSourceVideoReplacement",
-      "cmsDeleteSourceMedia",
-      "cmsUpdateSourceMediaMetadata",
-      "cmsListMediaUsage",
-      "cmsListMediaCategories",
-      "cmsMutateMediaCategory",
-      "cmsUpdateMediaMetadata",
-      "cmsCreateMediaDownload",
-      "cmsUploadMedia",
-      "cmsListUgcSubmissions",
-      "cmsGetUgcSubmissionPreview",
-      "cmsRejectUgcSubmission",
-      "cmsImportUgcSubmission",
-      "cmsSubmitBugReport",
-      "cmsListBugReports",
-      "cmsNudgeBugReport",
-      "cmsResolveBugReport",
-      "cmsGetBugReport",
-      "cmsGetBugReportEvidence",
-      "cmsListGithubIssues",
-      "cmsGetGithubIssue",
-      "cmsScanMediaUsage",
-      "cmsBulkArchiveContent",
-      "cmsAssignContent",
-      "cmsListAudit",
-      "cmsGetAnalytics",
-      "cmsCollectBoardwalkUsage",
-      "cmsGetBoardwalkUsage",
-      "cmsPreview",
-      "cmsPreviewStatus",
-      "cmsPublish",
-      "cmsRecheckPublication",
-      "cmsGetAuthorProfile",
-      "cmsUpdateAuthorProfile",
-      "cmsSetAuthorProfileVisibility",
-      "cmsListBylineAuthors",
-      "cmsListAuthorPagePosts",
-      "cmsListAuthorProfiles",
-      "cmsAdminUpdateAuthorProfile",
-      ...WORKER_FUNCTION_NAMES.flatMap((name) => [name, name]),
-      ...PREMIERE_FUNCTION_NAMES.flatMap((name) => [name, name]),
-      ...DEVICE_PAIRING_FUNCTION_NAMES.flatMap((name) => [name, name]),
-      "cmsReaderV1",
-      "cmsReaderV2",
-      "cmsReadPairCurrentCodeV2",
-      "cmsGetPublicPage",
-      "cmsValidateSiteAccess",
-      "ugcGetConfig",
-      "ugcStartSubmission",
-      "ugcCompleteSubmission",
-      "cmsGetPublishedPost/posts/nj-pbs-announces-six-staff-appointments/",
-      "deactivateStaff",
-      "deactivateStaff",
-      "submitStaffAccessRequest",
-      "cmsUploadMedia",
-      "cmsSubmitBugReport",
-      "",
-    ]);
+    expect(
+      requests.map(({ url, init }) => `${init.method ?? "GET"} ${url}`),
+    ).toEqual(EXPECTED_PROBES);
 
     for (const { init } of requests) {
       const headers = new Headers(init.headers);
@@ -824,7 +573,6 @@ if(process.env.CMS_BUG_REPORT_TELEGRAM_ADMIN_MAP)process.exit(8); require("node:
     }
 
     const posts = requests.filter(({ init }) => init.method === "POST");
-    expect(posts).toHaveLength(286);
     const multipartPosts = posts.filter(
       ({ url }) =>
         new URL(url).origin === BASE_URL &&
@@ -841,15 +589,13 @@ if(process.env.CMS_BUG_REPORT_TELEGRAM_ADMIN_MAP)process.exit(8); require("node:
     }
 
     const jsonPosts = posts.filter((post) => !multipartPosts.includes(post));
-    expect(jsonPosts).toHaveLength(283);
-    const privatePosts = jsonPosts.filter(
-      ({ url }) =>
-        (new URL(url).origin === FUNCTIONS_ORIGIN &&
-          ["/cmsReaderV1", "/cmsReaderV2", "/cmsReadPairCurrentCodeV2", "/cmsGetPublicPage", "/cmsValidateSiteAccess", "/ugcGetConfig",
-            "/ugcStartSubmission", "/ugcCompleteSubmission"].includes(new URL(url).pathname)) ||
-        WORKER_FUNCTION_NAMES.includes(new URL(url).pathname.slice(1)),
-    );
-    expect(privatePosts).toHaveLength(16);
+    const privatePosts = jsonPosts.filter(({ url }) => {
+      const { origin, pathname } = new URL(url);
+      const name = pathname.slice(1);
+      return (origin === FUNCTIONS_ORIGIN && PRIVATE_RPC_POST_NAMES.includes(name)) ||
+        WORKER_FUNCTION_NAMES.includes(name);
+    });
+    expect(privatePosts).toHaveLength(PRIVATE_RPC_POST_NAMES.length + 2 * WORKER_FUNCTION_NAMES.length);
     for (const post of privatePosts) expect(new Headers(post.init.headers).has("origin")).toBe(false);
     for (const { init } of jsonPosts.filter((post) => !privatePosts.includes(post))) {
       expect(init.body).toBe("{}");
@@ -919,7 +665,7 @@ if(process.env.CMS_BUG_REPORT_TELEGRAM_ADMIN_MAP)process.exit(8); require("node:
       active.set(origin, active.get(origin) - 1);
       return expectedResponseFor(url, init);
     };
-    await expect(runCmsFunctionSmoke({ baseUrl: BASE_URL, request })).resolves.toEqual({ checked: 300 });
+    await expect(runCmsFunctionSmoke({ baseUrl: BASE_URL, request })).resolves.toEqual({ checked: EXPECTED_PROBES.length });
     expect(peak.get(BASE_URL)).toBe(1);
     expect(peak.get(FUNCTIONS_ORIGIN)).toBe(4);
   });
@@ -940,7 +686,7 @@ if(process.env.CMS_BUG_REPORT_TELEGRAM_ADMIN_MAP)process.exit(8); require("node:
     };
 
     for (let run = 0; run < 3; run += 1) {
-      await expect(runCmsFunctionSmoke({ request })).resolves.toEqual({ checked: 300 });
+      await expect(runCmsFunctionSmoke({ request })).resolves.toEqual({ checked: EXPECTED_PROBES.length });
     }
   });
 
