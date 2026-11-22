@@ -1802,7 +1802,7 @@ describe("ContentTab", () => {
       );
 
       render(
-        <ContentTab
+        <ProductionContentTab
           principal={editor}
           surface={{ kind: "page", pageId, section: "programLanding" }}
         />,
