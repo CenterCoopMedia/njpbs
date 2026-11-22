@@ -25,3 +25,7 @@ For API clients, pass `metadataUpdateRequested: true` to `cmsListSourceMedia`.
 Omit the field to browse without it. The API rejects other values, combinations
 with another filter property, and its use on exact-asset or status lookups.
 Filtered responses omit an exact total by returning `total: null`.
+
+For `rightsStatus`, use `pending` or `complete`. The API also accepts the
+corresponding labels and uses the same cursor for either spelling. See the
+[media metadata contract](media-metadata.md#controlled-terms-and-aliases).

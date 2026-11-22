@@ -13,6 +13,12 @@ const MAX_NAME_SORT_LENGTH = 512;
 const MAX_NAME_SORT_BYTES = 1500;
 const MAX_STEWARD_LENGTH = 120;
 const ID_PATTERN = /^[A-Za-z0-9_-]{1,128}$/;
+const RIGHTS_STATUSES = new Set(["pending", "complete"]);
+const RIGHTS_STATUS_ALIASES = new Map([
+  ["needs review", "pending"],
+  ["recorded", "complete"],
+  ["rights recorded", "complete"],
+]);
 
 class SourceMediaValidationError extends Error {
   constructor(message, status = 400) {
@@ -173,6 +179,16 @@ function parseListFilter(value, label, maxLength) {
   return value.trim();
 }
 
+function normalizeSourceMediaRightsStatus(value, { optional = false } = {}) {
+  const term = parseListFilter(value, "Rights status", 20).toLowerCase();
+  if (optional && !term) return "";
+  const status = RIGHTS_STATUS_ALIASES.get(term) ?? term;
+  if (!RIGHTS_STATUSES.has(status)) {
+    throw new SourceMediaValidationError("Rights status must be pending or complete");
+  }
+  return status;
+}
+
 function parseSourceMediaListRequest(value) {
   rejectUnknownFields(value, new Set([
     "sourceId", "assetId", "pendingIds", "cursor", "limit", "q", "tag", "createdBy", "rightsStatus", "sort", "posters", "tagsOnly",
@@ -205,10 +221,7 @@ function parseSourceMediaListRequest(value) {
   const q = normalizeSearchPrefix(value.q);
   const tag = parseListFilter(value.tag, "Tag", 80);
   const createdBy = parseListFilter(value.createdBy, "Uploader", 128);
-  const rightsStatus = parseListFilter(value.rightsStatus, "Rights status", 20);
-  if (rightsStatus && !["pending", "complete"].includes(rightsStatus)) {
-    throw new SourceMediaValidationError("Rights status must be pending or complete");
-  }
+  const rightsStatus = normalizeSourceMediaRightsStatus(value.rightsStatus, { optional: true });
   const { metadataUpdateRequested } = value;
   if (metadataUpdateRequested !== undefined && metadataUpdateRequested !== true) {
     throw new SourceMediaValidationError("Metadata update requested must be true when present");
@@ -295,7 +308,7 @@ function parseSourceMediaAsset(id, value) {
     !Number.isSafeInteger(value.version) ||
     value.version < 1 ||
     (value.preview !== "browser" && value.preview !== "download_only") ||
-    (value.rightsStatus !== "complete" && value.rightsStatus !== "pending") ||
+    !RIGHTS_STATUSES.has(value.rightsStatus) ||
     typeof value.objectKey !== "string" ||
     !value.objectKey ||
     value.objectKey.length > 1024 ||
@@ -408,6 +421,7 @@ module.exports = {
   encodeCursor,
   normalizeSearchPrefix,
   normalizeSourceMediaNameSort,
+  normalizeSourceMediaRightsStatus,
   parseSourceMediaAsset,
   parseSourceMediaMarkers,
   parseSourceMediaParent,

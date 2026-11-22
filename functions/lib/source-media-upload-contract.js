@@ -4,6 +4,7 @@ const {
   MAX_STEWARD_LENGTH,
   SourceMediaValidationError,
   normalizeSourceMediaNameSort,
+  normalizeSourceMediaRightsStatus,
   parseSourceMediaMarkers,
   parseSourceMediaParent,
 } = require("./source-media-contract");
@@ -118,11 +119,7 @@ function normalizeMetadata(value, originalName, { partial = false } = {}) {
   if (!partial || value.tags !== undefined) output.tags = normalizeTags(value.tags);
   if (value.markers !== undefined) output.markers = parseSourceMediaMarkers(value.markers);
   if (!partial || value.rightsStatus !== undefined) {
-    const status = value.rightsStatus ?? "pending";
-    if (status !== "complete" && status !== "pending") {
-      throw new SourceMediaValidationError("Rights status is invalid");
-    }
-    output.rightsStatus = status;
+    output.rightsStatus = normalizeSourceMediaRightsStatus(value.rightsStatus ?? "pending");
   }
   return output;
 }
