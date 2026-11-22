@@ -2870,7 +2870,7 @@ describe("editor Back action and the primary rail", () => {
     expect(retryRequest.idempotencyKey).toBe(firstRequest.idempotencyKey);
   }, 30_000);
 
-  it("opens a linked Spanish draft from a saved Post and returns to the original", async () => {
+  it("opens a linked Spanish draft from a saved Post and returns to the original", async ({ onTestFinished }) => {
     const source = {
       id: "post-1", type: "post", title: "Garden State update", tags: [], blocks: [],
       status: "draft", section: "watch", version: 2, createdBy: "user",
@@ -2879,15 +2879,18 @@ describe("editor Back action and the primary rail", () => {
     functionMocks.cmsGetContent.mockImplementation(async (_token, request) => ({
       success: true, found: true, document: request.id === edition.id ? edition : source,
     }));
+    const router = createMemoryRouter(buildRoutes(), { initialEntries: ["/content/post/post-1/edit"] });
+    render(<ShellProvider value={shellFor(adminPrincipal)}><RouterProvider router={router} /></ShellProvider>);
+
+    expect(await screen.findByRole("textbox", { name: "Headline" })).toHaveValue(source.title);
+    fireEvent.click(await screen.findByRole("button", { name: "More document actions" }));
+    const createEdition = await screen.findByRole("button", { name: "Create or open Spanish draft" });
+    onTestFinished(() => { functionMocks.cmsSaveContent.mockReset(); });
     functionMocks.cmsSaveContent.mockResolvedValueOnce({
       success: true, collection: "cmsPosts", id: edition.id, created: true,
       replayed: false, mintedIds: {}, document: edition,
     });
-    const router = createMemoryRouter(buildRoutes(), { initialEntries: ["/content/post/post-1/edit"] });
-    render(<ShellProvider value={shellFor(adminPrincipal)}><RouterProvider router={router} /></ShellProvider>);
-
-    fireEvent.click(await screen.findByRole("button", { name: "More document actions" }));
-    fireEvent.click(screen.getByRole("button", { name: "Create or open Spanish draft" }));
+    fireEvent.click(createEdition);
     const original = await screen.findByRole("button", { name: "Open original Post" });
     expect(router.state.location.pathname).toBe("/content/post/edition-es/edit");
     expect(functionMocks.cmsSaveContent.mock.calls[0]?.[1]).toMatchObject({
