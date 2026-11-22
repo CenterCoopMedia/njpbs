@@ -878,9 +878,11 @@ export function PublicHomepageBannerSettings({
               {!values.njDecides && links.map(({ label, href }, index) => {
                 const destination = new URL(href, `${PUBLIC_SITE_ORIGIN}/`);
                 const opensNewTab = destination.protocol === "https:" || destination.protocol === "http:";
+                const actionLabel = `Check link: ${label}`;
                 return <a key={index} className={buttonClassName()} href={destination.href}
-                  target={opensNewTab ? "_blank" : undefined} rel={opensNewTab ? "noopener" : undefined}>
-                  <span>Check link: {label}{opensNewTab && <span className="sr-only"> (opens in new tab)</span>}</span>
+                  target={opensNewTab ? "_blank" : undefined} rel={opensNewTab ? "noopener" : undefined}
+                  aria-label={opensNewTab ? `${actionLabel} (opens in new tab)` : undefined}>
+                  <span>{actionLabel}</span>
                 </a>;
               })}
             </>
