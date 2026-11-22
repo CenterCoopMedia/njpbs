@@ -59,8 +59,8 @@ export function catalogDate(value: unknown): value is string {
   return Number.isFinite(date.getTime()) && date.toISOString().slice(0, 10) === value;
 }
 
-/** Validate the retained public projection before it can supply routes or iframe sources. */
-export function readPublicVideoCatalog(value: unknown): PublicVideoCatalog | undefined {
+/** Validate the observation and, when publishing, keep only currently open windows. */
+export function readPublicVideoCatalog(value: unknown, now?: Date): PublicVideoCatalog | undefined {
   if (value === undefined) return undefined;
   const invalid = () => new Error("Invalid public video catalog snapshot");
   const catalog = catalogRecord(value);
@@ -94,5 +94,13 @@ export function readPublicVideoCatalog(value: unknown): PublicVideoCatalog | und
       episodeSlugs.add(episode.slug);
     }
   }
-  return value as PublicVideoCatalog;
+  const snapshot = value as PublicVideoCatalog;
+  if (!now) return snapshot;
+  return {
+    checkedAt: snapshot.checkedAt,
+    programs: snapshot.programs.flatMap(program => {
+      const episodes = program.episodes.filter(episode => mediaManagerWindowAt(episode.window, now) === "open");
+      return episodes.length ? [{ ...program, episodes }] : [];
+    }),
+  };
 }

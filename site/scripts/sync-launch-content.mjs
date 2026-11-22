@@ -258,10 +258,10 @@ async function videoCatalogForSync(config, fetchImpl, { now, readRetainedVideoCa
       console.warn(`Media Manager video catalog refresh failed (${reason}). Retaining the last valid catalog when available.`);
     }
   }
-  if (readRetainedVideoCatalog) return readPublicVideoCatalog(await readRetainedVideoCatalog());
+  if (readRetainedVideoCatalog) return readPublicVideoCatalog(await readRetainedVideoCatalog(), now);
   try {
     const previous = JSON.parse(await readFile(path.resolve(config.outputPath), "utf8"));
-    return readPublicVideoCatalog(previous?.videoCatalog);
+    return readPublicVideoCatalog(previous?.videoCatalog, now);
   } catch {
     return undefined;
   }

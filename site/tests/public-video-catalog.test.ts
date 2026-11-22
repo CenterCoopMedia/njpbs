@@ -87,7 +87,9 @@ describe("public video catalog", () => {
     const directory = await mkdtemp(path.join(tmpdir(), "video-catalog-"));
     const output = path.join(directory, "launch.json");
     const initial = await fetchPublicVideoCatalog(config, async input => new URL(input.toString()).pathname.endsWith("/shows/")
-      ? result([riverShow]) : result([catalogAsset("river-episode")]), now);
+      ? result([riverShow]) : result([catalogAsset("river-episode"), catalogAsset("short-window", {
+        attributes: { availabilities: { public: { end: "2026-11-20" } } },
+      })]), now);
     const original = JSON.stringify({ videoCatalog: initial });
     const env = { MEDIA_MANAGER_BASE_URL: baseUrl, MEDIA_MANAGER_API_KEY: "fixture", MEDIA_MANAGER_API_SECRET: "fixture",
       LAUNCH_CONTENT_OUTPUT: output };
@@ -100,8 +102,12 @@ describe("public video catalog", () => {
     };
     try {
       await writeFile(output, original);
-      await main({ ...env, REQUIRE_FRESH_CONTENT: "1" }, fetch);
+      await main({ ...env, REQUIRE_FRESH_CONTENT: "1" }, fetch, undefined, { now });
       expect(JSON.parse(await readFile(output, "utf8")).videoCatalog).toEqual(initial);
+      await main(env, fetch, undefined, { now: new Date("2026-11-21T12:00:00.000Z") });
+      const retained = JSON.parse(await readFile(output, "utf8")).videoCatalog;
+      expect(retained.checkedAt).toBe(initial.checkedAt);
+      expect(retained.programs[0].episodes.map((video: { slug: string }) => video.slug)).toEqual(["river-episode"]);
     } finally {
       await rm(directory, { recursive: true, force: true });
     }
