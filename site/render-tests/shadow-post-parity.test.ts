@@ -5,6 +5,7 @@ import { pathToFileURL } from "node:url";
 import { resolve } from "node:path";
 import { prose as fixture, video as videoFixture, videoUrl, spotlight, registeredAuthor, withdrawnAuthor, uploadedImages, uploadedAuthors, uploadedImageUrl } from "../tests/fixtures/shadow-posts/fixtures";
 import { catalogFixtures, catalogReads } from "../tests/fixtures/shadow-posts/block-catalog";
+import { postLeadFixture } from "../tests/fixtures/post-lead-media";
 import { projectPublishedPostRead } from "../src/lib/published-post-shadow";
 import { comparePostHtml, postHtmlSemantics } from "../src/lib/post-html-comparison";
 import { createFakePublishedPostReader } from "../src/lib/published-post-shadow";
@@ -23,6 +24,32 @@ function renderFixture(read: any) {
 }
 
 describe("compiled shadow uses the static Post output", () => {
+  it("keeps the legacy guide and renders ordered, visible sections from the snapshot", async () => {
+    const read = postLeadFixture("interactive", "image");
+    const metadata = read.document.published.metadata as Record<string, unknown>;
+    metadata.categories = ["Local reporting"];
+    const guide = async () => (await compiled.renderPublishedPost(renderFixture(read)))
+      .match(/<aside[^>]+aria-label="Interactive page guide"[^>]*>([\s\S]*?)<\/aside>/)?.[1];
+    const legacy = await guide();
+    expect(legacy).toMatch(/On this page[\s\S]*Reporting sections[\s\S]*Categories/);
+
+    const sections = [
+      { id: "topics", visible: true },
+      { id: "overview", visible: false },
+      { id: "contents", visible: true },
+    ];
+    metadata.postSidebar = { enabled: true, sections };
+    const custom = await guide();
+    expect(custom).toMatch(/Categories[\s\S]*Reporting sections/);
+    expect(custom).not.toContain("On this page");
+    expect(custom).toContain('href="#report-first-chapter"');
+
+    metadata.postSidebar = { enabled: false, sections };
+    expect(await guide()).toBeUndefined();
+    metadata.postSidebar = { enabled: true, sections: sections.map(section => ({ ...section, visible: false })) };
+    expect(await guide()).toBeUndefined();
+  });
+
   it.each([fixture, videoFixture, ...spotlight, registeredAuthor, withdrawnAuthor, ...uploadedImages, ...uploadedAuthors, ...catalogFixtures])("preserves full HTML semantics for $document.published.metadata.slug", async read => {
     const slug = read.document.published.metadata.slug;
     const staticHtml = readFileSync(resolve(`.shadow-static-fixtures/posts/${slug}/index.html`), "utf8");

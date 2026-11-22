@@ -11,6 +11,7 @@ const additionalFieldLabels: Record<string, string> = {
   blocks: "Content planks, text and media",
   liveBlog: "Live updates and coverage state",
   leadMedia: "Lead media",
+  postSidebar: "Public sidebar",
   dataHubReporting: "Data Hub reporting settings",
   keyArt: "Program artwork URL",
   pageTheme: "Page theme",

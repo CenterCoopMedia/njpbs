@@ -79,7 +79,9 @@ const recordCards = renderRecordCards(Astro.locals.cmsRender, Astro.locals.cmsRe
   : (await getCollection("cmsRecordCards")).map(item => item.data));
 const sponsors = sponsorCardsFromRecordCards(recordCards);
 const resolveDataFigure = renderDatasetFigures(post.datasetFigures);
-const { body: authoredBody, sidebar: sidebarBlocks } = splitLiveBlogBlocks(post.blocks, Boolean(post.liveBlog));
+const { body: authoredBody, sidebar: authoredSidebar } = splitLiveBlogBlocks(post.blocks, Boolean(post.liveBlog));
+const hideSidebar = post.postSidebar?.enabled === false;
+const sidebarBlocks = hideSidebar ? [] : authoredSidebar;
 const composition = storyCtaComposition(authoredBody, settings, { liveBlog: Boolean(post.liveBlog), optOut: post.disableStoryCtas });
 const bodyBlocks = composition.body;
 const newsletters = await newsletterSignupResolution([...bodyBlocks, ...sidebarBlocks, ...composition.afterUpdates], getImage, recordCards);
@@ -168,7 +170,7 @@ const sidebarGroups = groupLinkCardDirectories(renderGroups(sidebarBlocks).filte
 
   <ReaderTextSize />
 
-  <div class="post-content">
+  <div class:list={["post-content", { "post-content--full-width-updates": post.liveBlog && hideSidebar }]}>
     <div class="post-body">
       {publicGroups.map((item) => item.kind === "link-card-directory" ? (
         <LinkCardDirectory groups={item.groups} />
@@ -359,6 +361,11 @@ const sidebarGroups = groupLinkCardDirectories(renderGroups(sidebarBlocks).filte
     margin: 0 auto;
     padding: clamp(2rem, 3vw, 3.5rem) var(--gutter)
       clamp(4rem, 9vw, 8rem);
+  }
+
+  .post-content--full-width-updates > :global(.live-blog) {
+    max-inline-size: none;
+    margin-inline: 0;
   }
 
   .post-body {

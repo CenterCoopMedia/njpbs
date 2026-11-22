@@ -81,11 +81,12 @@ describe("admission", () => {
 
   it("never reads the working document over the published snapshot", () => {
     const projected = projectCmsPost(
-      post({ title: "A draft retitle nobody approved", slug: "draft-slug" }),
+      post({ title: "A draft retitle nobody approved", slug: "draft-slug", postSidebar: { enabled: false } }),
       { now: NOW },
     );
     expect(projected?.title).toBe("Trenton budget hearing draws a crowd");
     expect(projected?.slug).toBe("trenton-budget-hearing");
+    expect(projected).not.toHaveProperty("postSidebar");
   });
 
   it("marks a pre-contract post with no first-publication receipt", () => {

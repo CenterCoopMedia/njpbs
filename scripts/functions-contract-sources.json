@@ -23,6 +23,7 @@
     "live-production-contract": "packages/content-core/src/live-production.ts",
     "post-formats": "packages/content-core/src/post-formats.ts",
     "post-lead-media": "packages/content-core/src/post-lead-media.ts",
+    "post-sidebar": "packages/content-core/src/post-sidebar.ts",
     "posts-browse-contract": "packages/content-core/src/posts-browse.ts",
     "published-resource-check": "site/src/lib/published-resource-check.ts",
     "published-vocabulary": "packages/content-core/src/published-vocabulary.ts",

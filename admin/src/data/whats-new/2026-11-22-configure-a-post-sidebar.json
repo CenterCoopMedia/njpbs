@@ -1,0 +1,8 @@
+{
+  "date": "2026-11-22",
+  "kind": "new",
+  "title": "Choose what appears in a Post sidebar",
+  "body": "Open Public sidebar in Post settings to hide or show the sidebar on an Interactive/Data Lab Post or live blog. In Interactive/Data Lab, choose which sections appear and move them into the order you want. In a live blog, arrange sidebar blocks in the Post body. Turning the sidebar off keeps your choices for next time.",
+  "order": 1795377466648,
+  "prs": []
+}

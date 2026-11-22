@@ -5,6 +5,7 @@ import { isCoverageLabelId } from "../../../packages/content-core/src/cms-settin
 import { postCoverageLabelId } from "../../../packages/content-core/src/coverage-labels.ts";
 import { liveBlogMediaAssetIds } from "../../../packages/content-core/src/live-blog.ts";
 import { readPostLeadMedia, leadMediaAssetIds, leadMediaTitle, type PostLeadMedia } from "../../../packages/content-core/src/post-lead-media.ts";
+import { isPostSidebar, type PostSidebar } from "../../../packages/content-core/src/post-sidebar.ts";
 import { heroBackgroundMetadata } from "../../../packages/content-core/src/hero-background.ts";
 import { publicLiveBlogData, previewLiveBlogData, type LiveBlogData } from "../../../packages/content-core/src/live-blog.ts";
 import { isCmsImageUrl } from "../../../packages/content-core/src/media-origin.ts";
@@ -103,6 +104,7 @@ export interface CmsPostBuildData extends ContentLinkMetadata {
   coverageLabelId?: string;
   showInHomeHero?: boolean;
   disableStoryCtas?: boolean;
+  postSidebar?: PostSidebar;
   summary: string;
   excerpt: string;
   categories: string[];
@@ -490,6 +492,9 @@ export function projectCmsPost(
   if (metadata.disableStoryCtas !== undefined && typeof metadata.disableStoryCtas !== "boolean") {
     throw new Error(`post ${doc.id} disableStoryCtas must be a boolean`);
   }
+  if (metadata.postSidebar !== undefined && !isPostSidebar(metadata.postSidebar)) {
+    throw new Error(`post ${doc.id} postSidebar is invalid`);
+  }
   const credits = publicCredits(publishedCredits(metadata));
   const seo = metadataGroup<SearchMetadata>(metadata.seo, "seo");
   const social = metadataGroup<SocialMetadata>(metadata.social, "social");
@@ -508,6 +513,7 @@ export function projectCmsPost(
     ...(postCoverageLabelId(metadata) ? { coverageLabelId: postCoverageLabelId(metadata) } : {}),
     ...(metadata.showInHomeHero === undefined ? {} : { showInHomeHero: metadata.showInHomeHero }),
     ...(metadata.disableStoryCtas === undefined ? {} : { disableStoryCtas: metadata.disableStoryCtas }),
+    ...(metadata.postSidebar === undefined ? {} : { postSidebar: metadata.postSidebar }),
     summary: optionalString(metadata.summary, "summary") ?? "",
     excerpt: optionalString(metadata.excerpt, "excerpt") ?? "",
     categories,

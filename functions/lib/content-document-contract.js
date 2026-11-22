@@ -23,6 +23,7 @@ const { normalizeStoryCredits } = require("./story-credits");
 const { parseLiveBlogDraft, assertLiveBlogReady } = require("./live-blog");
 const { postPresentationTagError } = require("./post-formats");
 const { isPostLeadMedia } = require("./post-lead-media");
+const { isPostSidebar } = require("./post-sidebar");
 const { parsePublishInstant } = require("./publish-instant");
 const { pageThemeError } = require("./content-metadata");
 
@@ -206,6 +207,7 @@ const CONTENT_DOCUMENT_CONTRACTS = Object.freeze({
       coverageLabelId: "coverageLabelId",
       showInHomeHero: "boolean",
       disableStoryCtas: "boolean",
+      postSidebar: "postSidebar",
       title: "text",
       summary: "string",
       excerpt: "string",
@@ -309,6 +311,8 @@ function fieldTypeError(field, rule, value, kind) {
       catch (error) { return error.message; }
     case "leadMedia":
       return value === null || isPostLeadMedia(value, false) ? null : "Check the lead media kind, URL, image or video details.";
+    case "postSidebar":
+      return isPostSidebar(value) ? null : "Check the Post sidebar settings.";
     case "homeCompositionVersion":
       return value === 1 || value === 2 ? null : "The Home composition version is invalid.";
     case "dataHubCompositionVersion":

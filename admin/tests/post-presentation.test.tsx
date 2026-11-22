@@ -27,6 +27,36 @@ function visibleTags(): string[] {
 }
 
 describe("Post presentation control", () => {
+  it("retains the chosen sidebar order and visibility through an off save and reopen", async () => {
+    const onSave = vi.fn();
+    const view = render(<RecordForm kind="post" initial={post(["format:interactive"])} onSave={onSave} canSave />);
+    const sidebar = () => screen.getByRole("checkbox", { name: "Show sidebar on the public Post" });
+    fireEvent.click(screen.getByRole("button", { name: "Move Categories and tags up" }));
+    expect(screen.getByRole("checkbox", { name: "Categories and tags" })).toHaveFocus();
+    fireEvent.click(screen.getByRole("checkbox", { name: "On this page" }));
+    fireEvent.click(sidebar());
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+    await waitFor(() => expect(onSave).toHaveBeenCalledTimes(1));
+    const saved = onSave.mock.calls[0][0];
+    expect(saved.postSidebar).toEqual({
+      enabled: false,
+      sections: [
+        { id: "overview", visible: false },
+        { id: "topics", visible: true },
+        { id: "contents", visible: true },
+      ],
+    });
+    view.unmount();
+    render(<RecordForm kind="post" initial={saved} onSave={() => {}} canSave />);
+    const sections = screen.getByRole("group", { name: "Sidebar sections" });
+    expect(sidebar()).not.toBeChecked();
+    expect(within(sections).getByRole("checkbox", { name: "On this page" })).toBeDisabled();
+    fireEvent.click(sidebar());
+    expect(within(sections).getAllByRole("checkbox").map(input => input.closest("label")?.textContent))
+      .toEqual(["On this page", "Categories and tags", "Reporting sections"]);
+    expect(within(sections).getByRole("checkbox", { name: "On this page" })).not.toBeChecked();
+  });
+
   it("saves the Home hero checkbox separately from public tags", async () => {
     const onSave = vi.fn();
     const view = render(<RecordForm kind="post" initial={post(["Transit"])} onSave={onSave} canSave />);
