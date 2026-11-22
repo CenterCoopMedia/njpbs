@@ -22,6 +22,38 @@ function url(value: string): string {
   } catch { return value; }
 }
 const sorted = (values: string[]) => [...new Set(values)].sort();
+
+/** Metadata from a public archive document, including WordPress pages without an article wrapper. */
+export function archiveHtmlMetadata(html: string) {
+  const document = walk(parse(html));
+  const head = document.find(node => node.tagName === "head")!;
+  const nodes = walk(head);
+  const meta = (key: string, value: string) => nodes
+    .filter(node => node.tagName === "meta" && attr(node, key).toLowerCase() === value)
+    .map(node => attr(node, "content").trim());
+  const canonical = nodes
+    .filter(node => node.tagName === "link" && attr(node, "rel").toLowerCase().split(/\s+/).includes("canonical"))
+    .map(node => attr(node, "href").trim());
+  const structuredData: unknown[] = document
+    .filter(node => node.tagName === "script" && attr(node, "type") === "application/ld+json")
+    .map(node => JSON.parse(children(node).map(child => "value" in child ? child.value : "").join("")));
+  const article = document.find(node => node.tagName === "article") ?? document.find(node => node.tagName === "main");
+  const articleTimes = article ? walk(article)
+    .filter(node => node.tagName === "time")
+    .map(node => attr(node, "datetime"))
+    .filter(Boolean) : [];
+  return {
+    title: normalized(text(nodes.find(node => node.tagName === "title") ?? head)),
+    canonical,
+    description: meta("name", "description").map(normalized),
+    publishedTime: meta("property", "article:published_time"),
+    articleTimes,
+    robots: meta("name", "robots"),
+    refresh: meta("http-equiv", "refresh"),
+    structuredData,
+  };
+}
+
 export interface PostHtmlSemantics {
   title: string;
   bodyText: string;

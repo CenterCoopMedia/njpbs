@@ -79,6 +79,26 @@ Release the publisher, renderer and CMS from the same pinned source commit.
 The route needs no separate variable or secret change. Deployment requires
 separate authorization.
 
+### Archive route comparison
+
+Use `compare:archive` from `site/` with two anonymously readable origins and
+the paths to check on both. Include original permalinks, aliases and their
+direct canonical destinations, plus representative unavailable paths.
+
+```sh
+npm run --silent compare:archive -- https://before.example.org https://after.example.org /blog-post/story/ /posts/story/
+```
+
+Save the JSON lines from stdout with the migration evidence. Each has both
+HTTP statuses, literal Location and X-Robots-Tag headers, and metadata from
+200 HTML responses. Metadata includes the title, canonical links, description,
+publication-time tags, article timestamps, robots and refresh directives, and
+parsed JSON-LD.
+The command records redirects without following them. Compare the alias's
+Location with the direct destination row to verify one hop. Exit status 1
+indicates a difference or a read error. Review each difference against the
+expected migration, including intentional redirects.
+
 ## Data Hub figure embeds
 
 Open a figure in `/data-hub/` and select **Copy embed**. The iframe shows the
