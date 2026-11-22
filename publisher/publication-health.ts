@@ -2,8 +2,10 @@ import externalRefresh from "../functions/lib/cloud-external-refresh-state.js";
 import cloudWork from "../functions/lib/no-build-cloud-work.js";
 import ownership from "../functions/lib/publication-runtime-owner.js";
 import projection from "../functions/lib/editorial-preview-projection.js";
+import backgroundPaths from "../functions/lib/post-background-paths.js";
+import recordNamespace from "../functions/lib/no-build-record-namespace.js";
 
-const FAMILIES = ["listings", "authors", "feed", "contentApi", "sitemap", "search", "home", "programs", "events"];
+const FAMILIES = [...backgroundPaths.OUTPUTS, ...recordNamespace.CHECKPOINT_FAMILIES];
 export const OVERDUE_MS = 5 * 60_000;
 type Read = (path: string) => Promise<Record<string, any> | null>;
 type Runtime = { owner: "cloudflare"; release: string };

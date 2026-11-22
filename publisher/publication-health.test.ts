@@ -53,14 +53,17 @@ it("anchors historical generation re-verification at the later acceptance when C
   expect(await f.health(1_000_000)).toEqual({ healthy: true, reasons: [], oldestDueAt: 1_000_000 });
 });
 
-it.each(["programs", "events"])("reports overdue and exhausted %s namespace work", async family => {
+it.each(["programs", "events", "videoCatalog"])("reports overdue and exhausted %s namespace work", async family => {
   const docs = documents(), path = `cmsPublishQueue/${"A".repeat(20)}/backgroundOutputs/${family}`;
   docs[`cmsBackgroundOutputs/${family}`] = { ...docs["cmsBackgroundOutputs/listings"], contextOnly: true, taskPath: path };
+  delete docs["cmsBackgroundOutputs/listings"];
+  const observe = () => readPublicationHealth({ runtime, now: 1_000_000, read: async name => docs[name] ?? null });
+  docs[path] = { runtime, status: "pending", attempts: 0, nextAttemptAt: 1000 };
+  expect((await observe()).reasons).toEqual(["work_overdue"]);
   docs[path] = { runtime, status: "failed", attempts: 4, nextAttemptAt: null };
-  const observed = await readPublicationHealth({ runtime, now: 1_000_000, read: async name => docs[name] ?? null });
+  const observed = await observe();
   expect(observed.healthy).toBe(false);
-  expect(observed.reasons).toContain("family_exhausted");
-  expect(observed.reasons).toContain("work_overdue");
+  expect(observed.reasons).toEqual(["family_exhausted", "work_overdue"]);
 });
 
 it("keeps the oldest unpublished change and allows only real selected replacement progress to postpone overdue", async () => {
