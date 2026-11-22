@@ -142,6 +142,7 @@ const ACTIVITY_ACTION_LABELS = Object.freeze({
   "media.library.restore": "Media file restored from the bin",
   "media.purge.dry_run": "Media purge dry run completed",
   "media.purge": "Image version permanently removed",
+  "media.purge.request": "Permanent image removal requested",
   "media.purge.run": "Image purge report recorded",
   "media.bin.backfill": "Deleted media file given a bin deadline",
   "media.source.preview.retry": "Video viewing copy retried",

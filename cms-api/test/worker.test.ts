@@ -593,6 +593,7 @@ describe("CMS API edge", () => {
 
   it.each([
     ["cmsListBinnedMedia", "read"],
+    ["cmsPurgeBinnedImage", "lifecycle"],
     ["cmsRestoreMedia", "metadata"],
   ] as const)("routes protected image bin endpoint %s", async (endpoint, rateClass) => {
     const fetchOrigin = vi.fn<typeof fetch>(async () => new Response('{"success":true}'));

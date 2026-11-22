@@ -4,11 +4,12 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { MediaRecycleBin, removalCountdown } from "../src/components/MediaRecycleBin";
 import { HttpError, type BinnedMediaAsset } from "../src/lib/functions";
 
-const mocks = vi.hoisted(() => ({ list: vi.fn(), restore: vi.fn(), token: vi.fn() }));
+const mocks = vi.hoisted(() => ({ list: vi.fn(), restore: vi.fn(), purge: vi.fn(), token: vi.fn() }));
 vi.mock("../src/lib/functions", async original => ({
   ...await original<typeof import("../src/lib/functions")>(),
   cmsListBinnedMedia: mocks.list,
   cmsRestoreMedia: mocks.restore,
+  cmsPurgeBinnedImage: mocks.purge,
 }));
 
 const now = Date.parse("2026-09-25T12:00:00Z");
@@ -100,11 +101,38 @@ describe("image recycle bin", () => {
     expect(screen.queryByRole("status")).not.toBeInTheDocument();
   });
   it("shows no action for an image being removed", async () => {
-    mocks.list.mockResolvedValue(page([{ ...asset(), lifecycle: "purging" }]));
+    mocks.list.mockResolvedValue({ ...page([{ ...asset(), lifecycle: "purging" }]), canDeletePermanently: true });
     open();
     expect(await screen.findByText("Being removed")).toBeVisible();
     expect(screen.queryByRole("button", { name: /^Restore / })).not.toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: /Delete now/ })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /Delete.*permanently/ })).not.toBeInTheDocument();
+  });
+  it("offers permanent deletion only with delegation and confirms the selected version", async () => {
+    const selected = asset("first");
+    const neighbor = asset("second");
+    mocks.list.mockResolvedValue(page([selected, neighbor]));
+    open();
+    await screen.findByRole("button", { name: "Restore first" });
+    expect(screen.queryByRole("button", { name: "Delete first permanently" })).not.toBeInTheDocument();
+    mocks.list.mockResolvedValue({ ...page([selected, neighbor]), canDeletePermanently: true });
+    fireEvent.click(screen.getByRole("button", { name: "Refresh bin" }));
+    const deleteFirst = await screen.findByRole("button", { name: "Delete first permanently" });
+    fireEvent.click(deleteFirst);
+    const confirm = await screen.findByRole("group", { name: "Confirm permanent deletion of first" });
+    expect(confirm).toHaveFocus();
+    fireEvent.click(within(confirm).getByRole("button", { name: "Keep image" }));
+    await waitFor(() => expect(deleteFirst).toHaveFocus());
+    expect(mocks.purge).not.toHaveBeenCalled();
+
+    mocks.purge.mockResolvedValue({ success: true, outcome: "purged" });
+    mocks.list.mockResolvedValue({ ...page([neighbor]), canDeletePermanently: true });
+    fireEvent.click(deleteFirst);
+    fireEvent.click(await screen.findByRole("button", { name: "Confirm permanent deletion" }));
+    expect(await screen.findByRole("status")).toHaveTextContent("Permanently deleted");
+    expect(mocks.purge).toHaveBeenCalledExactlyOnceWith("token", selected);
+    expect(await screen.findByRole("button", { name: "Restore second" })).toBeEnabled();
+    expect(screen.queryByRole("listitem", { name: "first" })).not.toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Recycle bin" })).toHaveFocus();
   });
   it("restores using the listed asset and announces success with stable focus", async () => {
     const row = asset();

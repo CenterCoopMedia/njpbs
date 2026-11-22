@@ -237,7 +237,8 @@ export function operationCategoryForEndpoint(
     endpoint === "cmsSetMediaFavorites" ||
     endpoint === "cmsMutateMediaCollection" ||
     endpoint === "cmsSetMediaCollectionItems" ||
-    endpoint === "cmsRestoreMedia"
+    endpoint === "cmsRestoreMedia" ||
+    endpoint === "cmsPurgeBinnedImage"
   )
     return "media-write";
   if (endpoint === "cmsSaveContent" || endpoint === "cmsBulkArchiveContent" || endpoint === "cmsPostTemplates")

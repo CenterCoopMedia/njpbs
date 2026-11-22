@@ -156,14 +156,15 @@ function validatePurgeConfig(config) {
   }
 }
 
-async function purgeCopies({ urls, config, fetchImpl }) {
+async function purgeCopies({ urls, config, fetchImpl, signal = undefined }) {
   for (let offset = 0; offset < urls.length; offset += 100) {
+    const timeout = AbortSignal.timeout(10_000);
     const response = await fetchImpl(
       `https://api.cloudflare.com/client/v4/zones/${config.zoneId}/purge_cache`,
       {
         method: "POST",
         redirect: "error",
-        signal: AbortSignal.timeout(10_000),
+        signal: signal ? AbortSignal.any([signal, timeout]) : timeout,
         headers: {
           Authorization: `Bearer ${config.token}`,
           "Content-Type": "application/json",

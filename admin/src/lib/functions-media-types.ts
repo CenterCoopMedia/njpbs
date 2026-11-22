@@ -92,6 +92,7 @@ export interface BinnedMediaAsset extends Omit<MediaAssetSummary, "lifecycle"> {
 
 export interface ListBinnedMediaResponse {
   success: true;
+  canDeletePermanently?: boolean;
   records: BinnedMediaAsset[];
   total: number;
   page: number;

@@ -40,3 +40,15 @@
 
 .media-bin-details dt { font-weight: 600; }
 .media-bin-details dd { margin: 0; }
+
+.media-bin-row-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.media-bin-confirm {
+  flex-basis: 100%;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
