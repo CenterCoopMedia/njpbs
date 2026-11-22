@@ -4,10 +4,12 @@ const { ownsPublication, samePublicationOwner, publicationRuntime } = require(".
 const { validateState, validateCapability, effectiveNoBuildPostState } = require("./no-build-post-state");
 const { assertCmsPublicationCloudAdmission, CmsPublicationRuntimeControlError } = require("./cms-publication-runtime-control");
 
-const { contextOutputs } = require("./no-build-record-namespace");
+const { CHECKPOINT_FAMILIES, RECORD_FAMILIES, contextOutputs } = require("./no-build-record-namespace");
+const { OUTPUTS } = require("./post-background-paths");
 const { slowBackgroundRetryDue, expiredBackgroundClaim } = require("./background-output-attempt");
 const { verifiedPreviewProjection } = require("./editorial-preview-projection");
-const FAMILIES = ["home", "listings", "authors", "feed", "contentApi", "sitemap", "search", "programs", "events"];
+const FAMILIES = [...OUTPUTS, ...RECORD_FAMILIES];
+const PUBLICATION_BACKGROUND_FAMILIES = [...OUTPUTS, ...CHECKPOINT_FAMILIES];
 const STATE = "system/publicDeployment/noBuildPosts/current";
 const CONTEXT = "system/publicDeployment/contexts/public";
 const CAPABILITY = "system/publicDeployment/noBuildPosts/capability";
@@ -258,4 +260,4 @@ async function readNoBuildCloudWork({ read, listOwners, runtime, now = Date.now(
   return result(!contextJob && Boolean(await read(CONTEXT)));
 }
 
-module.exports = { cloudBillingPaused, readNoBuildCloudWork, currentCloudPostStates, activeCloudPostStates, retryDue, retryExhausted, previewContextDue, publicContextProgressAt };
+module.exports = { PUBLICATION_BACKGROUND_FAMILIES, cloudBillingPaused, readNoBuildCloudWork, currentCloudPostStates, activeCloudPostStates, retryDue, retryExhausted, previewContextDue, publicContextProgressAt };

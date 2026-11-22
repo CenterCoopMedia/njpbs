@@ -2,10 +2,7 @@ import externalRefresh from "../functions/lib/cloud-external-refresh-state.js";
 import cloudWork from "../functions/lib/no-build-cloud-work.js";
 import ownership from "../functions/lib/publication-runtime-owner.js";
 import projection from "../functions/lib/editorial-preview-projection.js";
-import backgroundPaths from "../functions/lib/post-background-paths.js";
-import recordNamespace from "../functions/lib/no-build-record-namespace.js";
 
-const FAMILIES = [...backgroundPaths.OUTPUTS, ...recordNamespace.CHECKPOINT_FAMILIES];
 export const OVERDUE_MS = 5 * 60_000;
 type Read = (path: string) => Promise<Record<string, any> | null>;
 type Runtime = { owner: "cloudflare"; release: string };
@@ -137,7 +134,7 @@ export async function readPublicationHealth({ read, listOwners, runtime, now, cl
       due(preparation.nextAttemptAt);
     }
   }
-  for (const family of FAMILIES) {
+  for (const family of cloudWork.PUBLICATION_BACKGROUND_FAMILIES) {
     const output = await read(`cmsBackgroundOutputs/${family}`);
     if (!output) continue;
     if (family === "home" && output.owner === "page-no-build-v1") {
