@@ -4,7 +4,7 @@ const { randomUUID } = require("node:crypto");
 const { isDeepStrictEqual: same } = require("node:util");
 const { HeadObjectCommand, GetObjectCommand } = require("@aws-sdk/client-s3");
 const { getSignedUrl } = require("@aws-sdk/s3-request-presigner");
-const { LEASE_MS, identityDigest, newCopy, verifiedFile } = require("./private-video-copy");
+const { LEASE_MS, identityDigest, newCopy, dueCopies, verifiedFile } = require("./private-video-copy");
 const { createPrivateVideoTransfer } = require("./private-video-transfer");
 const logger = require("firebase-functions/logger");
 
@@ -109,9 +109,7 @@ function createPrivateTranscriptAudio({ firestore, storage, streamStorage = stor
   }
 
   async function tick({ copyEnabled = true } = {}) {
-    const query = copyEnabled ? firestore.collection(AUDIO_COPIES).where("active", "==", true)
-      : firestore.collection(AUDIO_COPIES).where("phase", "==", "revoking");
-    const snapshots = await query.limit(20).get();
+    const snapshots = await dueCopies(firestore, AUDIO_COPIES, copyEnabled, clock());
     if (!snapshots.docs.length) return { idle: true };
     const r2 = storage(true);
     if (!r2) throw Error("private_audio_cleanup_configuration_missing");

@@ -18,7 +18,7 @@ export function fakeFirestore() {
     path, filters, cap, cursor, group,
     doc: (id = `auto-${++nextId}`) => doc(`${path}/${id}`),
     where: (key, op, value) => {
-      if (!["==", "array-contains"].includes(op)) throw new Error(`Unsupported fake operator ${op}`);
+      if (!["==", "<=", "array-contains"].includes(op)) throw new Error(`Unsupported fake operator ${op}`);
       return collection(path, [...filters, [key, op, value]], cap, cursor, group);
     },
     orderBy: () => collection(path, filters, cap, cursor, group),
@@ -33,8 +33,12 @@ export function fakeFirestore() {
       (ref.group ? path.split("/").at(-2) === ref.path :
         path.startsWith(`${ref.path}/`) && path.split("/").length === ref.path.split("/").length + 1) &&
       (!ref.cursor || path.split("/").at(-1) > ref.cursor) &&
-      ref.filters.every(([key, op, value]) => op === "array-contains"
-        ? field(rows.get(path), key)?.includes(value) : field(rows.get(path), key) === value))
+      ref.filters.every(([key, op, value]) => {
+        const current = field(rows.get(path), key);
+        if (op === "array-contains") return current?.includes(value);
+        if (op === "<=") return typeof current === typeof value && current <= value;
+        return current === value;
+      }))
       .slice(0, ref.cap).map((path) => snapshot(doc(path)));
     return { docs, empty: !docs.length, size: docs.length };
   }

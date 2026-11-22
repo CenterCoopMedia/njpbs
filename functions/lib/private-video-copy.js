@@ -45,6 +45,12 @@ function newCopy(binding, now = Date.now()) {
     }])), failures: 0, leaseUntil: 0, createdAt: now, updatedAt: now };
 }
 
+function dueCopies(firestore, collection, copyEnabled, now) {
+  const copies = firestore.collection(collection);
+  const eligible = copyEnabled ? copies.where("active", "==", true) : copies.where("phase", "==", "revoking");
+  return eligible.where("leaseUntil", "<=", now).limit(20).get();
+}
+
 async function enqueueCopy({ firestore, source, assetId, repair = false, now = Date.now() }) {
   return firestore.runTransaction(async (tx) => {
     const binding = currentIdentity(source, await tx.get(firestore.collection("mediaSourceAssets").doc(assetId)));
@@ -115,5 +121,5 @@ function verifiedFile(job, kind) {
   return checksum === file.checksum ? { ...output, ...file } : null;
 }
 
-module.exports = { COPIES, LEASE_MS, PART_BYTES, sha256, identityDigest, copyIdentity, currentIdentity, newCopy,
+module.exports = { COPIES, LEASE_MS, PART_BYTES, sha256, identityDigest, copyIdentity, currentIdentity, newCopy, dueCopies,
   enqueueCopy, revokeCopies, claimCopy, saveCopy, verifiedFile };
