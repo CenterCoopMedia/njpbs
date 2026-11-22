@@ -1,67 +1,29 @@
 import { useContext, useRef, useState } from "react";
 import { MediaDialogContext } from "../../context/MediaDialogContext";
 import { formatMediaDuration } from "../../lib/media-format";
+import { emptyVideoMoments, maxBookmarkNameLength, readVideoMoments, validVideoMoment, writeVideoMoments, type VideoMoments } from "../../lib/video-moments";
 import { ActionControl } from "../ui/ActionControl";
 import { Popover } from "../ui/Popover";
 import { Button, TextInput } from "../ui/Primitives";
 import "./VideoBookmarks.css";
 
-interface Bookmark {
-  id: string;
-  name: string;
-  seconds: number;
-}
-
-interface VideoMoments {
-  bookmarks: Bookmark[];
-  resume: number | null;
-}
-
-const maxNameLength = 80;
-const emptyMoments: VideoMoments = { bookmarks: [], resume: null };
-
-function validTime(seconds: unknown): seconds is number {
-  return typeof seconds === "number" && Number.isFinite(seconds) && seconds >= 0;
-}
-
-function validBookmark(value: unknown): value is Bookmark {
-  return typeof value === "object" && value !== null && "id" in value && typeof value.id === "string"
-    && "name" in value && typeof value.name === "string" && Boolean(value.name.trim()) && value.name.length <= maxNameLength
-    && "seconds" in value && validTime(value.seconds);
-}
-
-function readMoments(key: string): VideoMoments {
-  const raw = localStorage.getItem(key);
-  if (!raw) return emptyMoments;
-  try {
-    const saved = JSON.parse(raw);
-    return {
-      bookmarks: Array.isArray(saved?.bookmarks) ? saved.bookmarks.filter(validBookmark) : [],
-      resume: validTime(saved?.resume) ? saved.resume : null,
-    };
-  } catch {
-    return emptyMoments;
-  }
-}
-
 function withinVideo(video: HTMLVideoElement | null, seconds: unknown): seconds is number {
   return !!video && video.readyState >= 1 && !video.error && Number.isFinite(video.duration)
-    && validTime(seconds) && seconds < video.duration;
+    && validVideoMoment(seconds) && seconds < video.duration;
 }
 
-export function VideoBookmarks({ scope, getPlayer, onSeek }: {
-  scope: string;
+export function VideoBookmarks({ storageKey, getPlayer, onSeek }: {
+  storageKey: string;
   getPlayer: () => HTMLVideoElement | null;
   onSeek: (seconds: number) => void;
 }) {
   const { compactActions } = useContext(MediaDialogContext);
-  const key = `njpbs.admin.video-moments:${scope}`;
   const anchor = useRef<HTMLButtonElement>(null);
   const form = useRef<HTMLFormElement>(null);
   const [open, setOpen] = useState(false);
   const [marked, setMarked] = useState<number | null>(null);
   const [name, setName] = useState("");
-  const [moments, setMoments] = useState(emptyMoments);
+  const [moments, setMoments] = useState(emptyVideoMoments);
   const [message, setMessage] = useState("");
 
   function toggle() {
@@ -72,9 +34,9 @@ export function VideoBookmarks({ scope, getPlayer, onSeek }: {
     setName("");
     setMessage("");
     try {
-      setMoments(readMoments(key));
+      setMoments(readVideoMoments(storageKey));
     } catch {
-      setMoments(emptyMoments);
+      setMoments(emptyVideoMoments);
       setMessage("Bookmarks could not be loaded in this browser.");
     }
     setOpen(true);
@@ -82,9 +44,8 @@ export function VideoBookmarks({ scope, getPlayer, onSeek }: {
 
   function save(update: (current: VideoMoments) => VideoMoments, success: string) {
     try {
-      const next = update(readMoments(key));
-      if (next.bookmarks.length || next.resume !== null) localStorage.setItem(key, JSON.stringify(next));
-      else localStorage.removeItem(key);
+      const next = update(readVideoMoments(storageKey));
+      writeVideoMoments(storageKey, next);
       setMoments(next);
       setMessage(success);
       return true;
@@ -126,7 +87,7 @@ export function VideoBookmarks({ scope, getPlayer, onSeek }: {
             focusName();
           }
         }}>
-          <label>Bookmark name<TextInput value={name} maxLength={maxNameLength} disabled={marked === null}
+          <label>Bookmark name<TextInput value={name} maxLength={maxBookmarkNameLength} disabled={marked === null}
             onChange={event => setName(event.target.value)} /></label>
           <Button type="submit" disabled={marked === null || !name.trim()}>
             {marked === null ? "Add bookmark" : `Bookmark ${formatMediaDuration(marked)}`}
@@ -155,7 +116,7 @@ export function VideoBookmarks({ scope, getPlayer, onSeek }: {
             }}>Clear resume position</Button>
           </> : null}
         </div>
-        <p className="video-bookmarks-storage">Saved for you in this browser.</p>
+        <p className="video-bookmarks-storage">Saved in this browser for up to 30 days. Signing out clears saved moments.</p>
         <p role="status">{message}</p>
       </div>
     </Popover>

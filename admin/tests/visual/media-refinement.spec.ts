@@ -195,9 +195,10 @@ test.describe('coarse enlarged Text frame', () => {
     await expect(page.locator('html')).toHaveCSS('font-size', '32px');
     await page.evaluate(async () => { await document.fonts.ready; });
     const header = page.locator('.component-editor-dialog-header');
-    await expect.poll(async () => header.locator('button').evaluateAll(elements => elements
+    const controlsFit = () => header.locator('button').evaluateAll(elements => elements
       .filter(element => element.getClientRects().length)
-      .every(element => { const box = element.getBoundingClientRect(); return box.left >= 0 && box.right <= innerWidth && box.width >= 44 && box.height >= 44; }))).toBe(true);
+      .every(element => { const box = element.getBoundingClientRect(); return box.left >= 0 && box.right <= innerWidth && box.width >= 44 && box.height >= 44; }));
+    await expect.poll(controlsFit).toBe(true);
     expect(await header.evaluate(element => element.scrollWidth <= element.clientWidth)).toBe(true);
     await expect(header.getByRole('button', { name: 'Save details', exact: true })).toContainText('Save');
     await expect(header.getByRole('button', { name: 'Bookmarks', exact: true })).toBeVisible();
@@ -207,6 +208,9 @@ test.describe('coarse enlarged Text frame', () => {
     await page.keyboard.press('Escape');
     await expect(more).toBeFocused();
     await expect(page.getByRole('button', { name: 'Close', exact: true })).toHaveCount(1);
+    await page.setViewportSize({ width: 800, height: 900 });
+    await expect.poll(controlsFit).toBe(true);
+    await expect(header.getByRole('button', { name: 'Bookmarks', exact: true })).toBeInViewport();
   });
 });
 

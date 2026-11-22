@@ -43,6 +43,7 @@ import { VideoDetailsInspector, type VideoContextView, type VideoDetailsSaveRece
 import { MediaCommentTimeline, placedComments } from "../components/media/MediaCommentTimeline";
 import { VideoReviewSeek } from "../components/media/VideoReviewSeek";
 import { VideoBookmarks } from "../components/media/VideoBookmarks";
+import { videoMomentsKey } from "../lib/video-moments";
 import type { CommentTiming } from "../components/media/MediaFeedbackSections";
 import { useMediaFeedback } from "../lib/use-media-feedback";
 import { commentThreads, filteredTimelineComments } from "../lib/media-comment-threads";
@@ -692,10 +693,10 @@ export function VideoViewerBody({
     { key: "original", group: "Video", label: "Original video", description: formatVideoBytes(asset.sizeBytes), onSelect: () => void download("download") },
     ...(asset.sourceId === "video-library" ? [production.editorExportsItem, ...production.downloadItems] : []),
   ]}>{downloadLabel}</Menu>;
-  const bookmarkScope = principal?.id && asset.fileVersion && access?.fileVersion === asset.fileVersion
+  const bookmarksKey = principal?.id && asset.fileVersion && access?.fileVersion === asset.fileVersion
     && accessIdentity.current === fileReadContext.current && canPlayInBrowser(asset) && !previewError
-    ? JSON.stringify([principal.id, asset.sourceId, asset.id, asset.fileVersion]) : undefined;
-  const bookmarks = bookmarkScope ? <VideoBookmarks key={bookmarkScope} scope={bookmarkScope} getPlayer={() => player.current}
+    ? videoMomentsKey(principal.id, asset.sourceId, asset.id, asset.fileVersion) : undefined;
+  const bookmarks = bookmarksKey ? <VideoBookmarks key={bookmarksKey} storageKey={bookmarksKey} getPlayer={() => player.current}
     onSeek={seconds => {
       setWorkspaceView("watch");
       production.seekPlayback(seconds);
