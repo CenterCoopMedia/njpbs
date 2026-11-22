@@ -148,6 +148,27 @@ describe("scheduled publish snapshot", () => {
     });
   });
 
+  it("returns a due Spanish edition to draft without queuing a public snapshot", async () => {
+    const edition = db.doc("cmsPosts/spanish-edition");
+    await edition.set({
+      editionOf: "english-original", locale: "es", type: "post", title: "Noticias",
+      status: "scheduled", publishAt: NOW, date: "2026-07-15", slug: "noticias",
+      previousSlugs: [], tags: [], blocks: [], version: 2,
+    });
+    const enqueuePublishFn = vi.fn();
+    const run = createScheduledPublishRunner({
+      firestore: db, assertPublishReadyFn: vi.fn(), enqueuePublishFn, now: () => NOW,
+    });
+    await expect(run()).resolves.toMatchObject({ publishedCount: 0, changes: [] });
+    expect(enqueuePublishFn).not.toHaveBeenCalled();
+    const saved = (await edition.get()).data();
+    expect(saved).toMatchObject({ status: "draft", editionOf: "english-original", scheduledPublishFailure: {
+      reason: expect.stringContaining("Spanish editions"),
+    } });
+    expect(saved).not.toHaveProperty("published");
+    expect(saved).not.toHaveProperty("publishAt");
+  });
+
   it("does not publish a fractional instant later in the current second", async () => {
     await db.collection("cmsPages").doc("home").set({
       id: "home",

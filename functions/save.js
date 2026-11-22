@@ -98,7 +98,8 @@ const { db } = require("./lib/firebase");
 const { routePurgeConfig, routePurgeSecretNames, prepareRoutePurgeInTransaction,
   attemptPostRoutePurge } = require("./lib/post-route-purge");
 const { requirePrincipal } = require("./lib/auth");
-const { can, hasCapability } = require("./lib/rbac");
+const { can, canEditContent, hasCapability } = require("./lib/rbac");
+const { SPANISH_EDITION_PUBLICATION_UNAVAILABLE, isSpanishEdition, spanishPostEditionId } = require("./lib/spanish-edition");
 const {
   authorizeContentRead,
   authorizeContentWrite,
@@ -872,6 +873,7 @@ function createCmsSaveHandler(deps = {}) {
         dryRun,
         automation,
       } = body;
+      const spanishEditionRequest = postSource?.editionLocale === "es";
 
       if (postTemplate !== undefined && (
         !isPlainObject(postTemplate) || Object.keys(postTemplate).some(key => !["id", "version"].includes(key)) ||
@@ -886,17 +888,21 @@ function createCmsSaveHandler(deps = {}) {
         return;
       }
       if (postSource !== undefined && (
-        !isPlainObject(postSource) || Object.keys(postSource).some(key => !["id", "version"].includes(key)) ||
+        !isPlainObject(postSource) || Object.keys(postSource).some(key => !["id", "version", "editionLocale"].includes(key)) ||
+        (postSource.editionLocale !== undefined && !spanishEditionRequest) ||
         !isBoundedDocumentId(postSource.id) ||
         !Number.isSafeInteger(postSource.version) || postSource.version < 1 ||
-        collection !== "cmsPosts" || providedId !== undefined || idempotencyKey === undefined ||
+        collection !== "cmsPosts" || providedId !== undefined || (!spanishEditionRequest && idempotencyKey === undefined) ||
         postTemplate !== undefined || publish !== undefined || scheduleAt !== undefined ||
         seedFromLegacyPage !== undefined || baseVersion !== undefined || createOnly !== undefined ||
         convertHome !== undefined || convertHomeV2 !== undefined || saveGroupId !== undefined || requestedSection !== undefined ||
-        requestedSlug !== undefined || !isPlainObject(document) || document.type !== "post" ||
+        requestedSlug !== undefined || (spanishEditionRequest && (dryRun !== undefined || automation !== undefined)) ||
+        !isPlainObject(document) || document.type !== "post" ||
         Object.keys(document).some(key => key !== "type")
       )) {
-        res.status(400).json({ error: "Duplicate one current saved Post as a draft with a unique save key." });
+        res.status(400).json({ error: postSource?.editionLocale === undefined
+          ? "Duplicate one current saved Post as a draft with a unique save key."
+          : "Use one current saved English Post to open its Spanish draft." });
         return;
       }
       const requestedDocument = document;
@@ -1243,6 +1249,8 @@ function createCmsSaveHandler(deps = {}) {
       } else if (providedId === undefined) {
         if (postTemplate !== undefined) {
           docId = recordIdForCreateAttempt(idempotencyKey, { templateCreate: user.uid }, undefined);
+        } else if (spanishEditionRequest) {
+          docId = spanishPostEditionId(postSource.id);
         } else if (postSource !== undefined) {
           docId = recordIdForCreateAttempt(
             idempotencyKey,
@@ -1301,9 +1309,10 @@ function createCmsSaveHandler(deps = {}) {
         const snap = await tx.get(ref);
         const stored = snap.exists ? snap.data() : null;
         const creating = stored === null;
+        const spanishEdition = spanishEditionRequest || isSpanishEdition(stored);
         const templateCreateReceipt = templateCreateRef === null ? null : (await tx.get(templateCreateRef)).data();
         let duplicateSource = null;
-        if (creating && postSource !== undefined) {
+        if ((creating || spanishEditionRequest) && postSource !== undefined) {
           const sourceRef = firestore.collection("cmsPosts").doc(postSource.id);
           const sourceSnap = await tx.get(sourceRef);
           duplicateSource = sourceSnap.exists ? sourceSnap.data() : null;
@@ -1334,10 +1343,36 @@ function createCmsSaveHandler(deps = {}) {
             throw new SaveRejection(404, "The Post to duplicate is no longer available.");
           }
           if (duplicateSource.type !== "post") {
-            throw new SaveRejection(400, "Only a saved Post can be duplicated.");
+            throw new SaveRejection(400, spanishEditionRequest
+              ? "Only a saved Post can have a Spanish edition."
+              : "Only a saved Post can be duplicated.");
+          }
+          if (isSpanishEdition(duplicateSource)) {
+            throw new SaveRejection(409, "A Spanish edition cannot be used to create another Post.");
+          }
+          if (spanishEditionRequest) {
+            if (automationAccount || !can(user.principal, "content.create", { ownerId: user.uid, section: sourceSection })) {
+              throw new SaveRejection(403, FORBIDDEN_MESSAGE);
+            }
+            if (duplicateSource.status === "archived" || !isSectionId(sourceSection) ||
+                (duplicateSource.locale !== undefined && duplicateSource.locale !== "en")) {
+              throw new SaveRejection(409, "Choose an active English Post with an editorial area.");
+            }
+            if (stored) {
+              const editionResource = contentResource({ collection, documentId: docId, stored });
+              if (!canEditContent(user.principal, editionResource)) {
+                throw new SaveRejection(403, FORBIDDEN_MESSAGE);
+              }
+              if (stored.editionOf !== postSource.id || stored.locale !== "es" || stored.deleted === true) {
+                throw new SaveRejection(409, "The Spanish edition is unavailable.");
+              }
+              return { persisted: stored, isCreate: false, mintedIds: {}, replayed: true };
+            }
           }
           if (duplicateSource.version !== postSource.version) {
-            throw new SaveRejection(409, "This Post changed since you opened it. Reload before duplicating it.");
+            throw new SaveRejection(409, spanishEditionRequest
+              ? "The original Post changed. Reload it before creating the Spanish edition."
+              : "This Post changed since you opened it. Reload before duplicating it.");
           }
           if (duplicateSource.section !== undefined && !isSectionId(duplicateSource.section)) {
             throw new SaveRejection(409, "This Post's editing group is no longer available. Reload before duplicating it.");
@@ -1345,7 +1380,9 @@ function createCmsSaveHandler(deps = {}) {
         }
         // Read the versioned snapshot in this same transaction. A lost-response
         // retry returns its existing draft even if the template was later retired.
-        const document = creating && postTemplate !== undefined
+        const document = spanishEditionRequest
+          ? { type: "post", title: "", blocks: [], tags: [] }
+          : creating && postTemplate !== undefined
           ? { ...await readTemplateDraft({ firestore, transaction: tx, principal: user.principal, selection: postTemplate }), ...requestedDocument }
           : duplicateSource === null
             ? requestedDocument
@@ -1567,6 +1604,13 @@ function createCmsSaveHandler(deps = {}) {
             reason: decision.reason,
           });
           throw new SaveRejection(403, FORBIDDEN_MESSAGE);
+        }
+        if (spanishEdition && (publishesSnapshot || schedulesPublication || ["published", "scheduled"].includes(status))) {
+          throw new SaveRejection(409, SPANISH_EDITION_PUBLICATION_UNAVAILABLE);
+        }
+        // A draft edition has no address in the English route namespace.
+        if (spanishEdition && requestedSlug) {
+          throw new SaveRejection(400, "Spanish editions do not have public URLs yet.");
         }
         // An automation account must hold its own live editing lock and echo the exact
         // version it read (#4717). Staff leases remain courtesy presence indicators.
@@ -2015,7 +2059,7 @@ function createCmsSaveHandler(deps = {}) {
             !(typeof document.title === "string"
               ? document.title.trim()
               : typeof compositionBase?.title === "string" && compositionBase.title.trim());
-          const needsSlug = !isUntitledPostDraft && (
+          const needsSlug = !spanishEdition && !isUntitledPostDraft && (
             creating ||
             typeof compositionBase?.slug !== "string" ||
             compositionBase.slug.trim() === ""
@@ -2045,7 +2089,7 @@ function createCmsSaveHandler(deps = {}) {
             ...(creating ||
             typeof compositionBase?.locale !== "string" ||
             compositionBase.locale.trim() === ""
-              ? { locale: "en" }
+              ? { locale: spanishEdition ? "es" : "en" }
               : {}),
             ...(creating && !schedulesPublication
               ? { publishAt: normalizePublishAt(document.publishAt, timestamp) }
@@ -2372,6 +2416,7 @@ function createCmsSaveHandler(deps = {}) {
           ...editorialDateFields,
           ...creditFields,
           ...persistenceDefaults,
+          ...(spanishEditionRequest ? { editionOf: postSource.id } : {}),
           ...routeFields,
           ...(hasBlocks ? { blocks: outBlocks } : {}),
           ...(expectedPageTemplate === null

@@ -444,7 +444,7 @@ interface EditorWorkspaceProps {
     options?: { force?: boolean; createNonce?: string },
   ) => Promise<Record<string, unknown> | RecordSaveReceipt>;
   capturePostTemplate?: (request: CapturePostTemplateRequest) => Promise<PostTemplateReceipt>;
-  duplicatePost?: (sourceId: string, sourceVersion: number) => Promise<Record<string, unknown>>;
+  duplicatePost?: (sourceId: string, sourceVersion: number, editionLocale?: "es") => Promise<Record<string, unknown>>;
   // Clear host state that belongs to an abandoned create after the server identifies the
   // already-created record. This is separate from an ordinary failed save: only the person's
   // explicit decision to discard the draft may release its idempotency nonce.
@@ -2533,9 +2533,11 @@ function EditorWorkspaceContent({
       ...recordLifecycleResourceValue,
       ownerId: principal.id,
     };
+    const editionOf = typeof initial?.editionOf === "string" ? initial.editionOf : null;
     const canDuplicatePost =
       recordSurface.record === "post" &&
       recordSurface.id !== null &&
+      editionOf === null &&
       duplicatePost !== undefined &&
       can(principal, "content.create", duplicateResource) &&
       (can(principal, "content.edit.any", duplicateResource) ||
@@ -2582,14 +2584,14 @@ function EditorWorkspaceContent({
             can(principal, "content.edit.any", recordLifecycleResourceValue) ||
             can(principal, "content.edit.own", recordLifecycleResourceValue)
           }
-          canPublish={can(principal, "content.publish", recordLifecycleResourceValue)}
+          canPublish={editionOf === null && can(principal, "content.publish", recordLifecycleResourceValue)}
           // Publication is offered for exactly the kinds whose server action can
           // complete. That is the shared routed-kind contract's answer (#923),
           // not a list restated here: Program joined Post when its public route
           // landed. Sponsor and Newsletter publish cards through approval and
           // retain their own feedback without a routed Publish or Schedule.
           canSchedule={recordKindHasPublicRoute(recordSurface.record)}
-          publicationSupported={recordKindHasPublicRoute(recordSurface.record)}
+          publicationSupported={editionOf === null && recordKindHasPublicRoute(recordSurface.record)}
           cardPublication={["sponsor", "newsletter"].includes(recordSurface.record)}
           canRestore={can(
             principal,
@@ -2763,6 +2765,16 @@ function EditorWorkspaceContent({
           surface={{ kind: "record", record: recordSurface.record }}
           listLabel={labelForSurface(recordSurface)}
         />
+        {editionOf !== null ? <InlineMessage title="Spanish edition" tone="info">
+          <div>
+            <p>Save and preview this edition privately. Publication is unavailable.</p>
+            <Button type="button" variant="secondary" onClick={() => {
+              const original: Surface = { kind: "record", record: "post", id: editionOf };
+              if (onNavigateSurface) onNavigateSurface(original);
+              else selectIsolatedSurface(original);
+            }}>Open original Post</Button>
+          </div>
+        </InlineMessage> : null}
         {recordSurface.record === "program" ? (
           <details className="editor-metadata" open={Boolean(recordScheduledPublishFailure)}>
             <summary role="button">Workflow and assignment</summary>
@@ -2775,15 +2787,21 @@ function EditorWorkspaceContent({
           ref={recordEditorRef}
           key={`${key}:${recordMutationRevision}`}
           kind={recordSurface.record}
-          capturePostTemplate={recordSurface.record === "post" ? capturePostTemplate : undefined}
+          capturePostTemplate={recordSurface.record === "post" && editionOf === null ? capturePostTemplate : undefined}
           electionSourceHost={electionSources && recordSurface.record === "post" ? { api: electionSources, collection: "cmsPosts", canPublish: can(principal, "content.publish", recordLifecycleResourceValue), locked: saving || !canSaveInActiveEditor, pauseLocked: saving, hasUnsavedWork: hasElectionSourceUnsavedWork, onBusyChange: onElectionSourceBusyChange } : undefined}
           canEditCustomHtml={can(principal, "content.publish", recordLifecycleResourceValue)}
-          duplicatePost={canDuplicatePost ? async (sourceId, sourceVersion) => {
-            const duplicated = await duplicatePost(sourceId, sourceVersion);
+          canCreateSpanishEdition={canDuplicatePost && recordStatus !== "archived" &&
+            typeof initial?.section === "string" && (initial.locale === undefined || initial.locale === "en")}
+          duplicatePost={canDuplicatePost ? async (sourceId, sourceVersion, editionLocale) => {
+            const duplicated = editionLocale === undefined
+              ? await duplicatePost(sourceId, sourceVersion)
+              : await duplicatePost(sourceId, sourceVersion, editionLocale);
             if (typeof duplicated.id !== "string") {
-              throw new Error("The duplicate receipt is missing its record ID.");
+              throw new Error(editionLocale === "es"
+                ? "The Spanish draft receipt is missing its record ID."
+                : "The duplicate receipt is missing its record ID.");
             }
-            successNotice.show("Post duplicated as a draft.");
+            if (editionLocale === undefined) successNotice.show("Post duplicated as a draft.");
             const nextSurface: Surface = {
               kind: "record",
               record: "post",

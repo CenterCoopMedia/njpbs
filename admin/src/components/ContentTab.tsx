@@ -1008,7 +1008,15 @@ export function ContentTab({
   const capturePostTemplate = useCallback(async (request: CapturePostTemplateRequest) =>
     cmsCapturePostTemplate(await getIdToken(), request), [getIdToken]);
 
-  const duplicatePost = useCallback(async (sourceId: string, sourceVersion: number) => {
+  const duplicatePost = useCallback(async (sourceId: string, sourceVersion: number, editionLocale?: "es") => {
+    if (editionLocale === "es") {
+      const response = await cmsSaveContent(await getIdToken(), {
+        collection: "cmsPosts",
+        document: { type: "post" },
+        postSource: { id: sourceId, version: sourceVersion, editionLocale },
+      });
+      return response.document;
+    }
     const sourceKey = `${sourceId}:${sourceVersion}`;
     let idempotencyKey = pendingPostDuplicateNonces.current.get(sourceKey);
     if (!idempotencyKey) {

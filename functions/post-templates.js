@@ -1,5 +1,7 @@
 "use strict";
 
+const { isSpanishEdition } = require("./lib/spanish-edition");
+
 const { createHash } = require("node:crypto");
 const { FieldPath } = require("firebase-admin/firestore");
 const logger = require("firebase-functions/logger");
@@ -79,6 +81,7 @@ async function captureSource(firestore, transaction, user, request) {
     throw new TemplateError(403, "You do not have permission to capture this Post.");
   }
   if (!snap.exists || source.deleted || source.type !== "post") throw new TemplateError(404, "This source Post is unavailable.");
+  if (isSpanishEdition(source)) throw new TemplateError(409, "A Spanish edition cannot be saved as a Post template.");
   if (source.version !== request.sourceVersion) throw new TemplateError(409, "The source Post changed. Reload it, then save the template again.", "post_template_conflict");
   return {
     ...capturePost(source, request.mode), mode: request.mode,
