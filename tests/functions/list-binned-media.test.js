@@ -25,7 +25,7 @@ async function seed(id, uid, category = "news", overrides = {}) {
   });
 }
 
-it("lists only uploaded, deleted audio even when it has no removal deadline", async () => {
+it("pages only deleted uploaded audio, including older files beyond the image scan limit", async () => {
   const audio = { kind: "audio", mimeType: "audio/wav", source: "upload",
     width: null, height: null, purgeAfter: null };
   await seed("photo", "editor");
@@ -34,18 +34,29 @@ it("lists only uploaded, deleted audio even when it has no removal deadline", as
   await db.doc("media_assets/recent-audio").update({ purgeAfter: admin.firestore.FieldValue.delete() });
   await seed("live-audio", "editor", "news", { ...audio, lifecycle: "active" });
   await seed("voiceover", "editor", "news", { ...audio, source: "voiceover" });
+  const batch = db.batch();
+  for (let index = 0; index < 499; index += 1) {
+    const id = `sample-${index}`;
+    batch.set(db.doc(`media_assets/${id}`), { ...audio, name: id, originalName: `${id}.wav`,
+      category: "news", lifecycle: "tombstoned", sizeBytes: 20, version: 2,
+      url: `https://media.example.org/${id}.wav`, tombstonedAt: "2026-09-01T12:00:00Z" });
+  }
+  await batch.commit();
 
   const { result } = await list("editor", { kind: "audio", pageSize: 1 });
+  const last = await list("editor", { kind: "audio", pageSize: 1, page: 501 });
 
-  expect(result).toMatchObject({ total: 2, pageCount: 2,
+  expect(result).toMatchObject({ total: 501, pageCount: 501,
     records: [{ id: "recent-audio", kind: "audio", lifecycle: "tombstoned", purgeAfter: null }] });
+  expect(last.result).toMatchObject({ page: 501, records: [{ id: "old-audio" }] });
 });
 
 async function list(role = "admin", body = {}, failedUid = null) {
   const userRead = vi.fn(uid => uid === failedUid
     ? Promise.reject(new Error("User read unavailable")) : db.collection("users").doc(uid).get());
   const firestore = { collection: name => name === "users"
-    ? { doc: uid => ({ get: () => userRead(uid) }) } : db.collection(name) };
+    ? { doc: uid => ({ get: () => userRead(uid) }) } : db.collection(name),
+  runTransaction: db.runTransaction.bind(db) };
   const res = { set: vi.fn(), status: vi.fn(), json: vi.fn() };
   res.status.mockReturnValue(res);
   const handler = bin.createCmsListBinnedMediaHandler({ firestore,

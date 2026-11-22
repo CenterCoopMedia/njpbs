@@ -11,6 +11,22 @@ const logger = require("firebase-functions/logger");
 const { MEDIA_PURGE_CONTROL_PATH, isImmediatePurgeDelegate } = require("./lib/media-bin");
 const { readPurgeDeployment } = require("./lib/media-purge-deployment");
 
+const BIN_FIELDS = [...SUMMARY_FIELDS, "purgeAfter", "tombstonedAt", "tombstonedBy"];
+
+function readAudioBinPage(firestore, assets, page, pageSize) {
+  // Audio stays available until restored. Read one page from the deletion-date index.
+  const query = assets.where("lifecycle", "==", "tombstoned")
+    .where("kind", "==", "audio").where("source", "==", "upload").orderBy("tombstonedAt", "desc");
+  return firestore.runTransaction(async transaction => {
+    const { count: total } = (await transaction.get(query.count())).data();
+    const pageCount = Math.max(1, Math.ceil(total / pageSize));
+    const currentPage = Math.min(page, pageCount);
+    const snapshot = await transaction.get(query.offset((currentPage - 1) * pageSize)
+      .limit(pageSize).select(...BIN_FIELDS));
+    return { snapshot, total, pageCount, currentPage };
+  }, { readOnly: true });
+}
+
 function createCmsListBinnedMediaHandler(deps = {}) {
   const { firestore = db, requirePrincipalFn = requirePrincipal, log = logger,
     realDeletesEnabled = readPurgeDeployment().realDeletesEnabled } = deps;
@@ -38,18 +54,14 @@ function createCmsListBinnedMediaHandler(deps = {}) {
           !Number.isSafeInteger(pageSize) || pageSize < 1 || pageSize > 100) {
         return res.status(400).json({ error: "Use a positive page and pageSize from 1 to 100." });
       }
-      // Like the active library, fail explicitly beyond the bounded server scan.
       // Authorization precedes every response count and page selection.
       const assets = firestore.collection("media_assets");
-      // Uploaded audio has no scheduled purge or purgeAfter field.
-      const query = kind === "audio"
-        ? assets.where("lifecycle", "==", "tombstoned").where("kind", "==", "audio").where("source", "==", "upload")
-        : assets.where("lifecycle", "in", ["tombstoned", "purging"]).orderBy("purgeAfter", "asc");
-      const snapshot = await query
-        .select(...SUMMARY_FIELDS, "purgeAfter", "tombstonedAt", "tombstonedBy")
+      const audioPage = kind === "audio" ? await readAudioBinPage(firestore, assets, page, pageSize) : null;
+      const snapshot = audioPage?.snapshot ?? await assets.where("lifecycle", "in", ["tombstoned", "purging"])
+        .orderBy("purgeAfter", "asc").select(...BIN_FIELDS)
         .limit(MAX_MEDIA_SCAN + 1).get();
-      if (snapshot.size > MAX_MEDIA_SCAN) {
-        return res.status(503).json({ error: "The recycle bin needs indexed paging before it can list more assets." });
+      if (!audioPage && snapshot.size > MAX_MEDIA_SCAN) {
+        return res.status(503).json({ error: "The image bin needs indexed paging before it can list more assets." });
       }
       const records = snapshot.docs.flatMap((document) => {
         const stored = document.data();
@@ -59,12 +71,13 @@ function createCmsListBinnedMediaHandler(deps = {}) {
         return [{ ...summary, lifecycle: stored.lifecycle,
           purgeAfter: kind === "image" ? stored.purgeAfter : null, tombstonedAt: stored.tombstonedAt ?? null,
           tombstonedBy: stored.tombstonedBy ?? null }];
-      }).sort((left, right) => (kind === "audio"
-        ? (right.tombstonedAt ?? "").localeCompare(left.tombstonedAt ?? "")
-        : (left.purgeAfter ?? "").localeCompare(right.purgeAfter ?? "")) || left.id.localeCompare(right.id));
-      const pageCount = Math.max(1, Math.ceil(records.length / pageSize));
-      const currentPage = Math.min(page, pageCount);
-      const pageRecords = records.slice((currentPage - 1) * pageSize, currentPage * pageSize);
+      });
+      const total = audioPage?.total ?? records.length;
+      const pageCount = audioPage?.pageCount ?? Math.max(1, Math.ceil(total / pageSize));
+      const currentPage = audioPage?.currentPage ?? Math.min(page, pageCount);
+      const pageRecords = audioPage ? records : records
+        .sort((left, right) => (left.purgeAfter ?? "").localeCompare(right.purgeAfter ?? "") || left.id.localeCompare(right.id))
+        .slice((currentPage - 1) * pageSize, currentPage * pageSize);
       const canViewUsers = hasCapability(user.principal, "users.view");
       // Match source-media-uploader's permission, deduplication and name limits.
       const uids = canViewUsers ? [...new Set(pageRecords.map(record => record.tombstonedBy)
@@ -89,7 +102,7 @@ function createCmsListBinnedMediaHandler(deps = {}) {
           log.warn("Immediate media purge availability could not be read");
         }
       }
-      return res.status(200).json({ success: true, total: records.length, canDeletePermanently,
+      return res.status(200).json({ success: true, total, canDeletePermanently,
         page: currentPage, pageCount,
         records: pageRecords.map((record) => {
           const presented = { ...record,
