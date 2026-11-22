@@ -1802,28 +1802,32 @@ describe("ContentTab", () => {
       );
 
       render(
-        <ContentTab
+        <ProductionContentTab
           principal={editor}
           surface={{ kind: "page", pageId, section: "programLanding" }}
         />,
       );
 
+      const givingPage = pageId === "give" || pageId === "passport";
+      const actionLabel = givingPage ? "Edit Donation actions" : "Edit Hero actions";
+      const destinationsLabel = givingPage ? "Edit card set 6" : /^Edit .* destinations$/;
       // These controls have explicit accessible labels; avoid scanning the full preview tree.
-      expect(await screen.findByLabelText("Edit Hero actions", { selector: "button" }, { timeout: 10_000 })).toBeVisible();
+      const editActions = await screen.findByLabelText(actionLabel, { selector: "button" }, { timeout: 10_000 });
+      expect(editActions).toBeVisible();
       expect(screen.getByDisplayValue(title)).toBeTruthy();
       // About's ten-plank preview has a separate editing-control case below;
       // keep this journey focused on its complete seeded save.
       if (pageId !== "about") {
-        fireEvent.click(screen.getByLabelText("Edit Hero actions", { selector: "button" }));
+        fireEvent.click(editActions);
         expect(openComponentEditor().getByRole("button", { name: primaryAction })).toBeTruthy();
         fireEvent.click(textButton("Done", document.querySelector<HTMLDialogElement>(".component-editor-dialog[open]")!));
       }
       if (distinctiveCard) {
-        fireEvent.click(screen.getByLabelText(/^Edit .* destinations$/, { selector: "button" }));
+        fireEvent.click(screen.getByLabelText(destinationsLabel, { selector: "button" }));
         expect(screen.getByDisplayValue(distinctiveCard)).toBeTruthy();
         fireEvent.click(textButton("Done", document.querySelector<HTMLDialogElement>(".component-editor-dialog[open]")!));
       } else {
-        expect(screen.queryByLabelText(/^Edit .* destinations$/, { selector: "button" })).not.toBeInTheDocument();
+        expect(screen.queryByLabelText(destinationsLabel, { selector: "button" })).not.toBeInTheDocument();
       }
       fireEvent.click(textButton("Outline"));
       expect(await screen.findByText(`${blockCount} blocks in outline`)).toHaveClass("sr-only");

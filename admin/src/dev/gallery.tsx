@@ -20,6 +20,7 @@ import { homeCatalogJson, readHomeEditorialSourceReceipt } from "../../../packag
 import { HomeShortcuts } from "../components/HomeShortcuts";
 import { EditorStructureSpecimen } from "./EditorStructureSpecimen";
 import supportLayoutFixture from "../../tests/fixtures/support-page.json";
+import { editableBlocksForPublicPage } from "../lib/public-page-block-ownership";
 import { MediaPreviewHeaderSpecimen } from "./MediaPreviewHeaderSpecimen";
 import { SiteNavigationSettings } from "../components/SiteNavigationSettings";
 import {
@@ -789,7 +790,7 @@ const loadServiceComposition = async (
   const seed = pageCompositionSeed(pageId);
   if (!seed) throw new Error(`Missing ${pageId} composition seed`);
   return {
-    blocks: seed.blocks as AdminBlock[],
+    blocks: editableBlocksForPublicPage(pageId, seed.blocks as AdminBlock[]),
     metadata: seed.metadata,
     expectedAbsent: true,
   };

@@ -32,4 +32,6 @@ it("allows staff to add or remove every composed link while checking the fixed s
     expect(serviceDonationLinks(link.repeat(2) + content(body), href, "support")).toEqual({ composed: true, actual: 2, expected: 2 });
   }
   expect(serviceDonationLinks(link + content(""), href, "support")).toEqual({ composed: true, actual: 1, expected: 2 });
+  const give = `<div class="cms-page cms-page--service-composition" data-cms-page="give">${link}</div>`;
+  expect(serviceDonationLinks(link.repeat(2) + give, href, "give")).toEqual({ composed: true, actual: 2, expected: 2 });
 });

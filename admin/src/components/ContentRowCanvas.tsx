@@ -49,6 +49,7 @@ interface ContentRowCanvasProps {
   hideInsertionControls?: boolean;
   frame?: ReactNode;
   frameBlockIds?: ReadonlySet<string>;
+  fixedFirstBlockId?: string;
   sectionFrames?: ReadonlyMap<string, ContentSectionFrame>;
   selectedBlockId?: string | null;
   selectedColumn?: number | null;
@@ -87,7 +88,7 @@ function HeaderPlacementControls({ id }: { id: string }) {
 /** Keep each content editor in one stable portal while its column container moves.
  * Changing the portal target would remount TipTap and lose its private history.
  */
-export function ContentRowCanvas({ homeV2 = false, blocks, palette, readOnly = false, loadMedia, showPageSeedAssets = false, allowRows = true, hideInsertionControls = false, frame, frameBlockIds, sectionFrames, selectedBlockId, selectedColumn, editRequest, onSelect, rowNotice, renderBlock, renderKey, onInsert, onMove, onSplit, onRemove, onDuplicate, onToggleVisible }: ContentRowCanvasProps) {
+export function ContentRowCanvas({ homeV2 = false, blocks, palette, readOnly = false, loadMedia, showPageSeedAssets = false, allowRows = true, hideInsertionControls = false, frame, frameBlockIds, sectionFrames, fixedFirstBlockId, selectedBlockId, selectedColumn, editRequest, onSelect, rowNotice, renderBlock, renderKey, onInsert, onMove, onSplit, onRemove, onDuplicate, onToggleVisible }: ContentRowCanvasProps) {
   const view = useEditorWorkspaceView();
   const canEditCustomHtml = useContext(CustomHtmlEditing);
   const [selectedRow, setSelectedRow] = useState<string | null>(null);
@@ -129,8 +130,8 @@ export function ContentRowCanvas({ homeV2 = false, blocks, palette, readOnly = f
   const editableGroups = groups.filter(group => !fixedGroups.includes(group) || (!group.row && sectionFrames?.has(group.columns[0][0].id)));
   const rowGroups = groups.filter(group => group.row);
   const movableGroups = editableGroups.filter(group => {
-    const section = group.row ? undefined : group.columns[0][0].section;
-    return !isHomeSectionAction(section);
+    const block = group.row ?? group.columns[0][0];
+    return block.id !== fixedFirstBlockId && !isHomeSectionAction(block.section);
   });
   const topIds = movableGroups.map(group => group.row?.id ?? group.columns[0][0].id);
   const reorderBlocks = blocks.filter(block => block.layout || topIds.includes(block.id));

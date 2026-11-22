@@ -37,6 +37,7 @@ interface PageOutlineProps {
   renderKey: (id: string) => string;
   canMoveBlock?: (block: AdminBlock) => boolean;
   fixedPositionReason?: (block: AdminBlock) => string | undefined;
+  fixedFirstBlockId?: string;
   includeSectionBoundariesInMoves?: boolean;
   onNavigate: (id: string, column?: number) => void;
   onMove: (id: string, toIndex: number) => void;
@@ -44,7 +45,7 @@ interface PageOutlineProps {
   onInsert: (type: BlockType, destination: ContentDestination) => string | null;
 }
 
-export function PageOutline({ supplementalSections = [], docked = false, navigationOnly = false, onNavigateWriting, onClose, triggerRef, blocks, blockErrors, activeBlockId, activeColumn, collapsed, contentId, pageId, allowInsertion = true, palette, readOnly, renderKey, canMoveBlock = block => block.section === undefined || block.section === LIVE_BLOG_SIDEBAR, fixedPositionReason, includeSectionBoundariesInMoves = false, onNavigate, onMove, onPlace, onInsert }: PageOutlineProps) {
+export function PageOutline({ supplementalSections = [], docked = false, navigationOnly = false, onNavigateWriting, onClose, triggerRef, blocks, blockErrors, activeBlockId, activeColumn, collapsed, contentId, pageId, allowInsertion = true, palette, readOnly, renderKey, canMoveBlock = block => block.section === undefined || block.section === LIVE_BLOG_SIDEBAR, fixedPositionReason, fixedFirstBlockId, includeSectionBoundariesInMoves = false, onNavigate, onMove, onPlace, onInsert }: PageOutlineProps) {
   const view = useEditorWorkspaceView();
   const tokenAvailable = Boolean(useOptionalShell()?.getIdToken);
   const videoIds = useMemo(() => blocks.flatMap(block => block.type === "video" && typeof block.data.assetId === "string" ? [block.data.assetId] : []), [blocks]);
@@ -93,8 +94,8 @@ export function PageOutline({ supplementalSections = [], docked = false, navigat
   const topLevelBlocks = useMemo(
     () => includeSectionBoundariesInMoves
       ? homeStructuralMoveNeighbors(blocks)
-      : blocks.filter((block) => block.layout === undefined),
-    [blocks, includeSectionBoundariesInMoves],
+      : blocks.filter(block => block.layout === undefined && block.id !== fixedFirstBlockId),
+    [blocks, fixedFirstBlockId, includeSectionBoundariesInMoves],
   );
   const reorderBlocks = blocks.filter(block => block.layout || topLevelBlocks.includes(block));
   const rowNumbers = new Map(outline.nodes.flatMap(node => node.kind === "row" ? [[node.block.id, node.rowNumber] as const] : []));
@@ -142,7 +143,7 @@ export function PageOutline({ supplementalSections = [], docked = false, navigat
       ? contentSiblings(blocks, block)
       : includeSectionBoundariesInMoves
         ? topLevelBlocks
-        : outline.rowCount ? contentSiblings(blocks, block) : blocks;
+        : outline.rowCount ? contentSiblings(blocks, block) : topLevelBlocks;
     const position = siblings.indexOf(block);
     const canMove = !readOnly && canMoveBlock(block);
     const active = !view?.specialSelection && (block.id === activeBlockId || sharedHome && block.section === "home-passport-copy" && blocks.find(candidate => candidate.id === activeBlockId)?.section === "home-passport-action");

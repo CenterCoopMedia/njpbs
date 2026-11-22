@@ -18,6 +18,7 @@ import { loadScheduleData } from "../src/lib/schedule-data";
 import { buildScheduleExport } from "../src/lib/schedule-export";
 import type { BakedScheduleData } from "../src/lib/schedule-feed";
 import { checkNewslettersSignup } from "./check-newsletters-signup";
+import { assertGivingPageOrder } from "../tests/fixtures/giving-page";
 
 const require = createRequire(new URL("../../tests/public-post-runtime/package.json", import.meta.url));
 const { Miniflare, Response: WorkerResponse } = require("miniflare");
@@ -208,6 +209,9 @@ try {
     const content = await projectPublishedPageRead(read, read.page.pageId, rendererSha, now,
       read.page.pageId === "home" ? sources : undefined);
     assert.deepEqual(comparePostHtml(html, await compiled.renderPublishedPage(content)), []);
+    if (read.page.pageId === "give" || read.page.pageId === "passport") {
+      assertGivingPageOrder(html, ["giving-actions", "giving-cards", "giving-notice"]);
+    }
     if (read.page.path === "/newsletters/") {
       const moved = structuredClone(read);
       const pageBlocks: PageBlock[] = moved.page.blocks;
@@ -224,6 +228,9 @@ try {
     await assert.rejects(() => compiled.renderPublishedPage({ ...content, kind: "private-preview" }));
     await assert.rejects(() => compiled.renderPublishedPage({ ...content, target: { ...content.target, rendererSha: "f".repeat(40) } }));
   }
+  const donateAlias = await readFile(new URL("../.public-page-static-fixtures/donate/index.html", import.meta.url), "utf8");
+  assert.match(donateAlias, /rel="canonical" href="https:\/\/njpbs\.org\/give\/"/);
+  assert.match(donateAlias, /href="\/give\/">Continue to/);
   execFileSync(process.execPath, [fileURLToPath(new URL("../node_modules/astro/bin/astro.mjs", import.meta.url)),
     "build", "--config", "astro.public-page-fixtures.config.mjs"], { cwd: site, stdio: "inherit",
     env: { PATH: "/usr/local/bin:/usr/bin:/bin", NODE_ENV: "production", CMS_CONTENT_MODE: "published",

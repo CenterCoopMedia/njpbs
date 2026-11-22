@@ -11,6 +11,7 @@ import { createHomeEditorialCatalog, rebuildHomeSourcesForPosts } from "../../..
 import { chromeSettings } from "../shadow-posts/chrome";
 import { registeredAuthor } from "../shadow-posts/fixtures";
 import type { CmsPageDoc } from "../../../src/lib/cms-loader";
+import { givingPageBlocks, givingPageIds } from "../giving-page";
 const require = createRequire(import.meta.url);
 const { createPublishedSnapshot } = require("../../../../functions/lib/publish-snapshot.js");
 const { projectPublicPageDocument } = require("../../../../functions/lib/public-content-projection.js");
@@ -18,7 +19,7 @@ const { projectPublicPageDocument } = require("../../../../functions/lib/public-
 export const now = new Date("2026-10-12T12:00:00.000Z");
 export const customId = `page-${"2".repeat(32)}`;
 export const newslettersId = `page-${"3".repeat(32)}`;
-export const pageIds = ["home", "contact", "about", "staff", customId, newslettersId];
+export const pageIds = ["home", "contact", "about", "staff", ...givingPageIds, customId, newslettersId];
 export const fallbackPageIds = PUBLIC_PAGES.filter(page => !["schedule", "live", "data-hub"].includes(page.id)).map(page => page.id);
 export const mediaAsset = { id: "page-image", url: "https://media.njpbs.org/cms-media/page-image/fixture.webp",
   mimeType: "image/webp", width: 640, height: 360 };
@@ -53,6 +54,7 @@ export function pageDocument(pageId: string): CmsPageDoc {
       ] : []),
     ],
   };
+  if (pageId === "give" || pageId === "passport") Object.assign(working, { blocks: givingPageBlocks });
   const published = createPublishedSnapshot({ collection: "cmsPages", document: working,
     publishedAt: "2026-10-12T11:00:00.000Z", publishedBy: "PRIVATE actor" });
   return { ...working, id: pageId, version: 8, template: publicPage(pageId)!.editorTemplate,

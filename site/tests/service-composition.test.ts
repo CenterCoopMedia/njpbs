@@ -15,11 +15,11 @@ const document = {
 
 describe("service composition ownership", () => {
   it("keeps the template for unmarked pages, including an empty block list", () => {
-    expect(usesServiceComposition({ family: "service", blocks: [] })).toBe(false);
+    expect(usesServiceComposition({ pageId: "support", family: "service" })).toBe(false);
     expect(serviceCompositionError("support", undefined)).toBeNull();
   });
   it("retains CMS ownership when staff removes every block", () => {
-    expect(usesServiceComposition({ family: "service", serviceCompositionVersion: 1 })).toBe(true);
+    expect(usesServiceComposition({ pageId: "support", family: "service", serviceCompositionVersion: 1 })).toBe(true);
     expect(serviceCompositionError("support", 1)).toBeNull();
   });
   it.each(["support", "give", "passport", "about", "watch", "live", "kids"])("allows %s to opt in", id => {
