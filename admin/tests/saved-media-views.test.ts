@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { DEFAULT_MEDIA_DISPLAY, DEFAULT_VIDEO_MEDIA_DISPLAY } from "../src/lib/media-display";
+import { parseVideoMediaLocation } from "../src/lib/media-query";
 import {
   MAX_SAVED_MEDIA_VIEWS,
   SavedMediaViewValidationError,
@@ -43,6 +44,18 @@ describe("saved media views", () => {
     const images = createSavedMediaView("images-one", "Station reads", "images", "q=station&category=news", DEFAULT_MEDIA_DISPLAY);
     const stored = applySavedMediaViewMutation([images], {type:"add",view:audio});
     expect(parseSavedMediaViews(stored).map(view => view.surface)).toEqual(["images", "audio"]);
+  });
+
+  it("restores the source-specific metadata review filter from a saved view without its previous cursor", () => {
+    const view = createSavedMediaView("review", "Review queue", "video:archive",
+      "q=news&metadata=requested&sort=updated_asc&limit=48&cursor=opaque&asset=asset-one");
+    const [restored] = parseSavedMediaViews([view]);
+    expect(restored.surface).toBe("video:archive");
+    expect(parseVideoMediaLocation(restored.query)).toEqual({
+      query: { q: "news", metadata: "requested", sort: "updated_asc", limit: 48 },
+      selectedId: null,
+    });
+    expect(parseVideoMediaLocation("metadata=requested&tag=Interview").query).not.toHaveProperty("metadata");
   });
 
   it("accepts only bounded ids, names, and known source-isolated surfaces", () => {

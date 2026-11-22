@@ -181,11 +181,12 @@ export function selectionAnnouncement(count: number, previousCount: number): str
 export type VideoStructuredFilter =
   | { field: "tag"; value: string }
   | { field: "by"; value: string }
-  | { field: "rights"; value: VideoRightsFilter };
+  | { field: "rights"; value: VideoRightsFilter }
+  | { field: "metadata"; value: "requested" };
 
 export interface SurfaceFilterChip {
   key: string;
-  field: "tag" | "by" | "rights" | "kind" | "show" | "scope";
+  field: "tag" | "by" | "rights" | "metadata" | "kind" | "show" | "scope";
   value: string;
   label: string;
   /** Client-only filters use this visible qualifier beside the chip row. */
@@ -197,7 +198,7 @@ export function setVideoStructuredFilter(
   state: VideoMediaLocationState,
   filter: VideoStructuredFilter | null,
 ): VideoMediaLocationState {
-  const { tag: _tag, by: _by, rights: _rights, cursor: _cursor, ...query } = state.query;
+  const { tag: _tag, by: _by, rights: _rights, metadata: _metadata, cursor: _cursor, ...query } = state.query;
   return {
     ...state,
     query: filter ? { ...query, [filter.field]: filter.value } : query,
@@ -217,6 +218,9 @@ export function videoFilterChips(
   if (state.query.rights) {
     const label = state.query.rights === "pending" ? "Needs review" : "Recorded";
     return [{ key: `rights:${state.query.rights}`, field: "rights", value: state.query.rights, label: `Rights: ${label}` }];
+  }
+  if (state.query.metadata) {
+    return [{ key: "metadata:requested", field: "metadata", value: "requested", label: "Metadata update requested" }];
   }
   return [];
 }

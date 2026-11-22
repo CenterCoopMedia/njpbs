@@ -132,6 +132,7 @@ export interface SourceMediaQuery {
   tag?: string;
   createdBy?: string;
   rightsStatus?: "pending" | "complete";
+  metadataUpdateRequested?: true;
   sort?: "updated_desc" | "updated_asc" | "name_asc" | "size_desc" | "size_asc";
   posters?: true;
 }

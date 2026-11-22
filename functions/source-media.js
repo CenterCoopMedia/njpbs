@@ -204,6 +204,7 @@ async function readSourceMediaPage(firestore, source, request, documentIdField) 
   if (request.tag) query = query.where("tags", "array-contains", request.tag);
   if (request.createdBy) query = query.where("createdBy", "==", request.createdBy);
   if (request.rightsStatus) query = query.where("rightsStatus", "==", request.rightsStatus);
+  if (request.metadataUpdateRequested) query = query.where("metadataUpdateRequested", "==", true);
   const order = request.q ? "name_asc" : (request.sort ?? "updated_desc");
   let sortField = "updatedAtSort";
   if (order === "name_asc") sortField = "nameSort";
@@ -253,6 +254,7 @@ async function readSourceMediaPage(firestore, source, request, documentIdField) 
         tag: request.tag,
         createdBy: request.createdBy,
         rightsStatus: request.rightsStatus,
+        metadataUpdateRequested: request.metadataUpdateRequested,
         order,
         id: last.id,
         sort: sortValue,
@@ -353,7 +355,7 @@ function createCmsListSourceMediaHandler(deps = {}) {
       }
       const [{ assets = [], ...page }, total] = await Promise.all([
         readPageFn(firestore, source, request, documentIdField),
-        request.assetId || request.q || request.tag || request.createdBy || request.rightsStatus
+        request.assetId || request.q || request.tag || request.createdBy || request.rightsStatus || request.metadataUpdateRequested
           ? Promise.resolve(null)
           : readTotalFn(firestore, source.id),
       ]);

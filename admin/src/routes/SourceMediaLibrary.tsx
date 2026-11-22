@@ -997,7 +997,8 @@ export function SourceMediaLibrary({ principal, source, getIdToken, userId, onEx
   const allowedUploader = canFilterUploader || videoQuery.by === userId ? videoQuery.by : undefined;
   const activeFilter = videoQuery.tag ? { tag: videoQuery.tag }
     : allowedUploader ? { createdBy: allowedUploader }
-      : videoQuery.rights ? { rightsStatus: videoQuery.rights } : {};
+      : videoQuery.rights ? { rightsStatus: videoQuery.rights }
+        : videoQuery.metadata ? { metadataUpdateRequested: true as const } : {};
   const requestQuery: SourceMediaQuery = { sourceId: source.id, q: search, cursor, limit: videoQuery.limit, ...activeFilter };
   if (search) requestQuery.sort = "name_asc";
   else if (videoQuery.sort !== "updated_desc") requestQuery.sort = videoQuery.sort;
@@ -1675,7 +1676,7 @@ export function SourceMediaLibrary({ principal, source, getIdToken, userId, onEx
   const filterState = { query: videoQuery, selectedId: videoLocation.selectedId };
   const chips = videoFilterChips(filterState, (id) => id === userId ? "Me" : uploaderNames.get(id) ?? "Staff uploader");
   function changeStructuredFilter(property: string, value: string) {
-    if (property !== "tag" && property !== "by" && property !== "rights") return;
+    if (property !== "tag" && property !== "by" && property !== "rights" && property !== "metadata") return;
     if (property === "tag" && !value.trim()) { setTagError("Enter a tag or choose another filter."); return; }
     setTagError("");
     const current = videoQuery[property];
@@ -1715,6 +1716,8 @@ export function SourceMediaLibrary({ principal, source, getIdToken, userId, onEx
         { id: "rights", label: "Rights review", picker: "options", appliedCount: videoQuery.rights ? 1 : 0,
           options: [{ value: "pending", label: "Needs review" }, { value: "complete", label: "Rights recorded" }]
             .map(option => ({ ...option, selected: videoQuery.rights === option.value })) },
+        { id: "metadata", label: "Metadata review", picker: "options", appliedCount: videoQuery.metadata ? 1 : 0,
+          options: [{ value: "requested", label: "Metadata update requested", selected: videoQuery.metadata === "requested" }] },
         { id: "by", label: "Uploader", picker: "options", appliedCount: videoQuery.by ? 1 : 0,
           options: [{ value: userId, label: "Me" },
             ...[...uploaderNames].filter(([id]) => id !== userId).map(([value, label]) => ({ value, label }))]

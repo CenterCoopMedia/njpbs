@@ -78,6 +78,39 @@ afterEach(async () => {
 });
 
 describe("bounded source-relative editor metadata", () => {
+  it("pages metadata requests within the selected source and returns no matches for an empty search", async () => {
+    const selectedSource = { ...source, id: `source-${randomUUID()}` };
+    const otherSource = `source-${randomUUID()}`;
+    const rows = [
+      ["a", { metadataUpdateRequested: true }],
+      ["b", { metadataUpdateRequested: true }],
+      ["c", { metadataUpdateRequested: false }],
+      ["d", {}],
+      ["e", { metadataUpdateRequested: true, sourceId: otherSource }],
+      ["f", { metadataUpdateRequested: true, lifecycle: "deleted" }],
+    ];
+    const docs = rows.map(([suffix]) => db.collection("mediaSourceAssets").doc(`${parentId}-${suffix}`));
+    refs.push(...docs);
+    await Promise.all(docs.map((doc, index) => doc.set(fixture({
+      sourceId: selectedSource.id, ...rows[index][1],
+    }))));
+    const filters = { sourceId: selectedSource.id, metadataUpdateRequested: true, q: "Par", limit: 1 };
+    const read = (options) => sourceMedia.readSourceMediaPage(db, selectedSource,
+      contract.parseSourceMediaListRequest(options), FieldPath.documentId());
+    const first = await read(filters);
+    expect(first.records.map(record => record.id)).toEqual([docs[0].id]);
+    expect(first.hasMore).toBe(true);
+    expect(() => contract.parseSourceMediaListRequest({
+      ...filters, metadataUpdateRequested: undefined, cursor: first.nextCursor,
+    })).toThrow("Cursor is invalid");
+    const next = await read({ ...filters, cursor: first.nextCursor });
+    expect(next.records.map(record => record.id)).toEqual([docs[1].id]);
+    expect(next).toMatchObject({ hasMore: false, nextCursor: null });
+    expect(await read({ ...filters, q: "Missing" })).toMatchObject({
+      records: [], hasMore: false, nextCursor: null,
+    });
+  });
+
   it("preserves exact marker values and supplies defaults for older assets", () => {
     expect(contract.parseSourceMediaMarkers([marker])).toEqual([marker]);
     const summary = contract.sourceMediaAssetDetail(contract.parseSourceMediaAsset(parentId, fixture()));

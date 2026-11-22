@@ -125,6 +125,7 @@ export interface VideoMediaLocationQuery {
   tag?: string;
   by?: string;
   rights?: VideoRightsFilter;
+  metadata?: "requested";
   sort: VideoMediaSort;
   limit: VideoPageSize;
   /** Cursor paging stays in route memory and is intentionally never encoded. */
@@ -200,20 +201,16 @@ export function parseVideoMediaLocation(search: string): VideoMediaLocationState
   const by = boundedFilter(oneParam(params, "by"), 128);
   const rightsCandidate = oneParam(params, "rights");
   const rights = rightsCandidate === "pending" || rightsCandidate === "complete" ? rightsCandidate : null;
-  const structured = [tag ? ["tag", tag] : null, by ? ["by", by] : null, rights ? ["rights", rights] : null]
-    .filter((entry): entry is ["tag" | "by" | "rights", string] => entry !== null);
+  const metadata = oneParam(params, "metadata") === "requested" && { metadata: "requested" as const };
+  const structured = [tag && { tag }, by && { by }, rights && ({ rights } as const), metadata].filter(Boolean);
   const sortCandidate = oneParam(params, "sort") as VideoMediaSort | null;
   const limitCandidate = Number(oneParam(params, "limit"));
   const query: VideoMediaLocationQuery = {
     q,
+    ...(structured.length === 1 ? structured[0] : {}),
     sort: sortCandidate && VIDEO_SORTS.has(sortCandidate) ? sortCandidate : DEFAULT_VIDEO_MEDIA_QUERY.sort,
     limit: VIDEO_LIMITS.has(limitCandidate as VideoPageSize) ? limitCandidate as VideoPageSize : DEFAULT_VIDEO_MEDIA_QUERY.limit,
   };
-  if (structured.length === 1) {
-    const [field, value] = structured[0];
-    if (field === "rights") query.rights = value as VideoRightsFilter;
-    else query[field] = value;
-  }
   return {
     query,
     selectedId: boundedAssetId(oneParam(params, "asset")),
@@ -231,6 +228,7 @@ export function encodeVideoMediaLocation(
   if (query.tag) params.set("tag", query.tag);
   else if (query.by) params.set("by", query.by);
   else if (query.rights) params.set("rights", query.rights);
+  else if (query.metadata) params.set("metadata", query.metadata);
   if (query.sort !== DEFAULT_VIDEO_MEDIA_QUERY.sort) params.set("sort", query.sort);
   if (query.limit !== DEFAULT_VIDEO_MEDIA_QUERY.limit) params.set("limit", String(query.limit));
   if (selectedId && isBoundedId(selectedId)) params.set("asset", selectedId);

@@ -19,7 +19,9 @@ function queryRecorder(docs = []) {
   return { calls, firestore: { collection: () => query } };
 }
 
-const filters = [{}, { tag: "County" }, { createdBy: "staff-1" }, { rightsStatus: "pending" }];
+const filters = [
+  {}, { tag: "County" }, { createdBy: "staff-1" }, { rightsStatus: "pending" }, { metadataUpdateRequested: true },
+];
 const sorts = ["updated_desc", "updated_asc", "name_asc", "size_desc", "size_asc"];
 
 describe("source video navigation", () => {
@@ -71,6 +73,8 @@ describe("source video navigation", () => {
     { tag: "bad\nvalue" }, { rightsStatus: "unknown" }, { sort: "upload_date" },
     { tag: "county", createdBy: "staff-1" }, { tag: "county", rightsStatus: "pending" },
     { createdBy: "staff-1", rightsStatus: "pending" },
+    { metadataUpdateRequested: false }, { metadataUpdateRequested: "true" }, { metadataUpdateRequested: null },
+    { metadataUpdateRequested: true, tag: "county" }, { metadataUpdateRequested: true, rightsStatus: "pending" },
   ])("rejects invalid or combined filters: %j", (fields) => {
     expect(() => parse({ sourceId, ...fields })).toThrow();
   });
@@ -130,6 +134,7 @@ describe("source video navigation", () => {
     expect(parse({ sourceId, cursor }).cursor.id).toBe("asset-1");
     expect(() => parse({ sourceId, cursor, sort: "updated_asc" })).toThrow();
     expect(() => parse({ sourceId, cursor, tag: "county" })).toThrow();
+    expect(() => parse({ sourceId, cursor, metadataUpdateRequested: true })).toThrow("Cursor is invalid");
   });
 
   for (const filter of filters) {
@@ -137,7 +142,7 @@ describe("source video navigation", () => {
       it(`uses a bounded indexed query for ${JSON.stringify(filter)} / ${sort}`, async () => {
         const { calls, firestore } = queryRecorder();
         await sourceMedia.readSourceMediaPage(firestore, { id: sourceId }, parse({ sourceId, ...filter, sort, limit: 24 }), "__name__");
-        const filterField = filter.tag ? "tags" : filter.createdBy ? "createdBy" : filter.rightsStatus ? "rightsStatus" : null;
+        const filterField = filter.tag ? "tags" : Object.keys(filter)[0];
         if (filterField) {
           expect(calls).toContainEqual(["where", filterField, filter.tag ? "array-contains" : "==", Object.values(filter)[0]]);
         }
@@ -198,11 +203,13 @@ describe("source video navigation", () => {
           sourceId, lifecycle: "active", kind: "video", name: id, nameSort: id, originalName: `${id}.mp4`,
           mimeType: "video/mp4", sizeBytes: 42, version: 1, preview: "browser", rightsStatus: "pending",
           objectKey: `shared/${id}.mp4`, objectVersionId: "version-1", tags: ["County"],
+          metadataUpdateRequested: true,
           updatedAtSort: date, createdAt: date, updatedAt: date, createdBy: "staff-1",
         }) }));
         if (Object.keys(filter).length) documents.splice(1, 0, {
           id: "asset-other", data: () => ({ ...documents[0].data(), name: "Other video",
-            nameSort: "other video", tags: ["Other"], createdBy: "other-staff", rightsStatus: "complete" }),
+            nameSort: "other video", tags: ["Other"], createdBy: "other-staff", rightsStatus: "complete",
+            metadataUpdateRequested: false }),
         });
         const firestore = { collection: () => {
           const criteria = [];

@@ -124,11 +124,13 @@ inspector and opening review make no additional request.
    Boardwalk applies the search 300 milliseconds after you stop typing. Press
    Enter to apply it at once. Name searches always use alphabetical order.
    When the search is empty, Boardwalk does not scan the transcript corpus.
-2. Select **Filter**, then choose Tag, Rights review, or Uploader. Enter an exact
-   tag, choose **Needs review** or **Rights recorded**, or choose **Me**. One
-   filter property applies at a time. Choosing another replaces the first.
+2. Select **Filter**, then choose Tag, Rights review, Metadata review, or
+   Uploader. Under **Metadata review**, select **Metadata update requested**
+   to find open requests in this video library. One filter property applies
+   at a time. Choosing another replaces the first.
    You can combine the one filter with search. Applied filters appear as chips.
-   **Clear all** removes the chips and search.
+   **Clear all** removes the chips and search. Save the current filters in
+   **Display** to reopen them on the first page from **Filter → Personal views**.
 3. Staff with access to the staff directory can choose another named uploader
    under **Filter → Uploader**, open the card's **More** menu, or
    right-click the card or row, and choose **Show videos uploaded by** their

@@ -2,7 +2,7 @@ import { useEffect, useId, useRef, useState, type ReactNode } from "react";
 import { fuseRanks, type createMeaningSearch, type MeaningDocument } from "../../../packages/browser-search";
 import { disposeSessionMeaningSearch, sessionMeaningSearch } from "../lib/meaning-search-session";
 import { HttpError, postFunction } from "../lib/functions";
-import { listSourceMedia, type SourceMediaAssetSummary } from "../lib/source-media";
+import { listSourceMedia, type SourceMediaAssetSummary, type SourceMediaQuery } from "../lib/source-media";
 import { getVideoTranscript, videoTime } from "../lib/video-production";
 import { cacheVideoSearchCorpus, cachedVideoSearchCorpus, invalidateVideoSearchCorpus, videoSearchCacheRevision, type VideoSearchChunk as Chunk, type VideoSearchCoverage as Coverage, type VideoSearchEntry as Entry } from "../lib/video-search-session-cache";
 import { loadVideoSearchShards, checkVideoSearchLease, SEARCH_FRESHNESS_MS, type SearchLease } from "../lib/video-search-shards";
@@ -27,7 +27,7 @@ const wait = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 
 export function VideoMeaningSearch({ userId, sourceId, query, getIdToken, filters, disabled, onOpen, renderPoster }: {
   userId: string; sourceId: string; query: string; getIdToken: () => Promise<string>;
-  filters: { tag?: string; createdBy?: string; rightsStatus?: string }; disabled: boolean;
+  filters: Pick<SourceMediaQuery, "tag" | "createdBy" | "rightsStatus" | "metadataUpdateRequested">; disabled: boolean;
   renderPoster?: (asset: SourceMediaAssetSummary) => ReactNode;
   onOpen: (asset: SourceMediaAssetSummary, seconds: number) => void;
 }) {
@@ -345,7 +345,8 @@ export function VideoMeaningSearch({ userId, sourceId, query, getIdToken, filter
   const needle = query.trim().toLocaleLowerCase("en-US");
   const allowed = (entry: Entry) => (!filters.tag || entry.asset.tags.includes(filters.tag)) &&
     (!filters.createdBy || entry.asset.uploadedBy?.uid === filters.createdBy) &&
-    (!filters.rightsStatus || entry.asset.rightsStatus === filters.rightsStatus);
+    (!filters.rightsStatus || entry.asset.rightsStatus === filters.rightsStatus) &&
+    (!filters.metadataUpdateRequested || entry.asset.metadataUpdateRequested === true);
   const showLocal = hasLocalCorpus.current && localIdentity.current === `${userId}:${sourceId}`;
   const visibleEntries = showLocal ? entries.current : new Map<string, Entry>();
   const visibleCoverage = coverage;
