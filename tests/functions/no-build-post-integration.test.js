@@ -1800,9 +1800,17 @@ describe("one-Post acceptance, ownership and public receipt contracts", () => {
     const messages = [];
     const check = () => postAlerts.checkPostProofAlerts({ firestore: db, now: () => time, log: quiet,
       send: async message => { sends += 1; if (sends === 1) throw new Error("Synthetic delivery failure"); messages.push(message); } });
-    await check();
+    const transactions = vi.spyOn(db, "runTransaction");
+    try {
+      await check();
+      expect(transactions).not.toHaveBeenCalled();
+    } finally {
+      transactions.mockRestore();
+    }
     expect(sends).toBe(0);
     await db.doc(`cmsPublishQueue/${owned.operationId}`).update({ "postProof.attempts": 4, "postProof.nextAttemptAt": null });
+    const superseded = db.collection("cmsPublishQueue").doc();
+    await superseded.set((await db.doc(`cmsPublishQueue/${owned.operationId}`).get()).data());
     await check();
     await check();
     expect(sends).toBe(1);
@@ -1811,6 +1819,7 @@ describe("one-Post acceptance, ownership and public receipt contracts", () => {
     await check();
     expect(messages).toEqual(["NJ PBS Post pilot-story: The public check failed after publication. The publisher needs attention."]);
     expect((await db.doc(`cmsPublishQueue/${owned.operationId}/alerts/public-proof`).get()).data().sentAt).toBe(time);
+    expect((await superseded.collection("alerts").doc("public-proof").get()).exists).toBe(false);
   });
   it.each(["production", "development"])("awaits only %s tags before event-driven ordinary-path confirmation", async environment => {
     const target = publicationTarget(environment);
