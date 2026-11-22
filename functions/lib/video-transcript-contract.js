@@ -117,7 +117,7 @@ function parseTranscriptRequest(value, { read = false, download = false, variant
   if (value.cursor !== undefined && (typeof value.cursor !== "string" || value.cursor.length > 256)) {
     throw new SourceMediaValidationError("Transcript cursor is invalid");
   }
-  if (download && !["txt", "vtt", "srt", "tsv", "avid", "premiere"].includes(value.format)) {
+  if (download && !["txt", "vtt", "vtt-draft", "srt", "tsv", "avid", "premiere"].includes(value.format)) {
     throw new SourceMediaValidationError("Choose a supported transcript download");
   }
   if (value.clipId !== undefined && (!download || typeof value.clipId !== "string" || !/^[a-f0-9]{64}$/.test(value.clipId) || !["txt", "vtt", "srt", "tsv"].includes(value.format))) {
@@ -139,12 +139,27 @@ function timestamp(seconds, separator = ".") {
   return `${String(Math.floor(milliseconds / 3600000)).padStart(2, "0")}:${String(Math.floor(milliseconds / 60000) % 60).padStart(2, "0")}:${String(Math.floor(milliseconds / 1000) % 60).padStart(2, "0")}${separator}${String(milliseconds % 1000).padStart(3, "0")}`;
 }
 
-function transcriptExports(segments, speakerNames = {}) {
-  const label = (segment) => speakerNames[segment.speaker] || (segment.speaker === "unknown" ? "Unknown speaker" : `Speaker ${Number(segment.speaker.slice(4)) + 1}`);
+function transcriptSpeakerLabel(speakerNames, speaker) {
+  return speakerNames[speaker] || (speaker === "unknown" ? "Unknown speaker" : `Speaker ${Number(speaker.slice(4)) + 1}`);
+}
+
+function transcriptVtt(segments, speakerNames = {}, { draft = false } = {}) {
   const safeVtt = (value) => value.replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;");
+  const cues = captionCues(segments, { draft });
+  if (draft && !cues.length) throw new SourceMediaValidationError("The transcript has no timed text for a caption draft", 409);
+  const header = draft ? "WEBVTT\n\nNOTE Draft captions. Review before publishing.\n\n" : "WEBVTT\n\n";
+  return header + cues.map((cue, index) => {
+    const number = index + 1;
+    const notes = cue.reviewNotes?.length ? `NOTE Review cue ${number}: ${cue.reviewNotes.join(", ")}.\n\n` : "";
+    const label = safeVtt(transcriptSpeakerLabel(speakerNames, cue.speaker)).replace(/[\r\n]+/g, " ");
+    return `${notes}${number}\n${timestamp(cue.startSeconds)} --> ${timestamp(cue.endSeconds)}\n<v ${label}>${safeVtt(cue.text)}</v>\n`;
+  }).join("\n");
+}
+
+function transcriptExports(segments, speakerNames = {}) {
   return {
-    txt: segments.map((segment) => `[${timestamp(segment.startSeconds)}] ${label(segment)}: ${segment.text}`).join("\n\n") + "\n",
-    vtt: "WEBVTT\n\n" + captionCues(segments).map((cue, index) => `${index + 1}\n${timestamp(cue.startSeconds)} --> ${timestamp(cue.endSeconds)}\n<v ${safeVtt(label(cue)).replace(/[\r\n]+/g, " ")}>${safeVtt(cue.text)}</v>\n`).join("\n"),
+    txt: segments.map((segment) => `[${timestamp(segment.startSeconds)}] ${transcriptSpeakerLabel(speakerNames, segment.speaker)}: ${segment.text}`).join("\n\n") + "\n",
+    vtt: transcriptVtt(segments, speakerNames),
   };
 }
 
@@ -302,4 +317,4 @@ function normalizeTranscript(document, expectedName) {
 }
 
 module.exports = { transcriptLog, MAX_EDIT_REQUEST_BYTES, parseTranscriptEdit, applyTranscriptEdit, ENGINE_REVISION, MAX_DURATION_SECONDS, MAX_INPUT_BYTES, MAX_RESULT_BYTES,
-  parseTranscriptRequest, transcriptId, transcriptInput, transcriptSummary, transcriptPage, normalizeTranscript, transcriptExports, transcriptSrt };
+  parseTranscriptRequest, transcriptId, transcriptInput, transcriptSummary, transcriptPage, normalizeTranscript, transcriptExports, transcriptVtt, transcriptSrt };

@@ -25,7 +25,7 @@ function downloadFile(url: string, name: string) {
   link.click();
   link.remove();
 }
-export function videoProductionMessage(error: unknown, fallback: string, operation?: "request_transcript" | "request_clip" | "download_premiere" | "download_avid" | "download_clip_transcript") {
+export function videoProductionMessage(error: unknown, fallback: string, operation?: "request_transcript" | "request_clip" | "download_premiere" | "download_avid" | "download_clip_transcript" | "download_caption_draft") {
   const status = error && typeof error === "object" && "status" in error ? error.status : undefined;
   const detail = error instanceof Error ? error.message : "";
   const originalMessage = originalAccessMessage(error);
@@ -40,6 +40,10 @@ export function videoProductionMessage(error: unknown, fallback: string, operati
     if (detail === "Transcript has invalid passage timing") return "This transcript has invalid passage timing. Correct or resync its timing before exporting this section.";
     if (detail === "Clip exceeds transcript audio duration" || detail === "Clip timing is invalid") return "The clip range does not fit this transcript’s audio. Export a new clip within the recording’s duration.";
     return "The saved clip or transcript changed or is no longer ready. Reopen both before downloading the matching transcript.";
+  }
+  if (operation === "download_caption_draft" && status === 409) {
+    if (detail === "The transcript has no timed text for a caption draft") return "This transcript has no timed text for a caption draft.";
+    return "Reopen a saved local transcript before downloading a caption draft.";
   }
   if (operation === "download_premiere" && status === 409 && detail === "Premiere export requires unchanged word timings for every passage. Use the text or TSV log for corrected transcripts") return "Premiere needs unchanged word timings for every passage. This saved transcript does not have them. Download text or the soundbite log instead.";
   if ((operation === "download_premiere" || operation === "download_avid") && status === 409 && detail === "Transcript has no valid timed passages to export") return "This saved transcript has no valid timed passages for this export. Download text or check the saved transcript.";
@@ -150,6 +154,7 @@ export function useVideoProductionTools({ headerControls = false, workspace = fa
   const [settings, setSettings] = useState<TranscriptSettings>({ languageCode: "en-US", maxSpeakers: 10 });
   const [transcript, setTranscript] = useState<TranscriptResponse>();
   const loadedTranscriptSettings = { ...settings, transcriptId: transcript?.transcript.id ?? settings.transcriptId };
+  const captionDraftAvailable = transcript?.transcript.state === "ready" && transcript.transcript.processing?.provider === "local-whisper";
   const [transcriptError, setTranscriptError] = useState("");
   const [transcriptBusy, setTranscriptBusy] = useState(false);
   const [transcriptPageLoading, setTranscriptPageLoading] = useState(false);
@@ -419,7 +424,9 @@ export function useVideoProductionTools({ headerControls = false, workspace = fa
     void moreTranscript(true);
   }, [workspace, transcript, playbackSeconds, disabled, transcriptPageLoading, transcriptBusy, transcriptLocked]);
   async function downloadTranscript(format: TranscriptDownloadFormat) {
-    if (disabled || transcript?.transcript.state !== "ready" || transcriptBusy || transcriptLocked || (format === "avid" && !validAvidOptions)) return;
+    const draft = format === "vtt-draft";
+    if (disabled || transcript?.transcript.state !== "ready" || transcriptBusy || transcriptLocked ||
+        (format === "avid" && !validAvidOptions) || (draft && !captionDraftAvailable)) return;
     const context = fileReadContext.current;
     const current = () => mounted.current && fileReadContext.current === context;
     setTranscriptBusy(true);
@@ -428,8 +435,13 @@ export function useVideoProductionTools({ headerControls = false, workspace = fa
       const token = await getIdToken();
       if (!current()) return;
       const response = await readVideoTranscript(token, identity, loadedTranscriptSettings, format, format === "avid" && avidFrameRate ? { frameRate: avidFrameRate, frameOffset: Number(avidFrameOffset) } : undefined);
-      if (current()) downloadFile(response.url, `${asset.name}${format === "avid" ? "-avid-markers.txt" : format === "premiere" ? "-premiere-transcript.json" : `.${format}`}`);
-    } catch (error) { if (current()) setTranscriptError(videoProductionMessage(error, "The saved transcript could not be downloaded.", format === "premiere" ? "download_premiere" : format === "avid" ? "download_avid" : undefined)); }
+      const suffix = draft ? "-caption-draft.vtt" : format === "avid" ? "-avid-markers.txt" : format === "premiere" ? "-premiere-transcript.json" : `.${format}`;
+      if (current()) downloadFile(response.url, `${asset.name}${suffix}`);
+    } catch (error) {
+      if (current()) setTranscriptError(videoProductionMessage(error,
+        draft ? "The caption draft could not be downloaded." : "The saved transcript could not be downloaded.",
+        draft ? "download_caption_draft" : format === "premiere" ? "download_premiere" : format === "avid" ? "download_avid" : undefined));
+    }
     finally { if (current()) setTranscriptBusy(false); }
   }
   async function exportClip(retry = false) {
@@ -748,6 +760,7 @@ export function useVideoProductionTools({ headerControls = false, workspace = fa
     {transcriptOpen && transcriptEligible ? <>
       {settingsVisible && ["not_requested", "queued"].includes(transcriptState ?? "") && !settings.transcriptId && canRequest ? <Button disabled={transcriptState === "queued" || disabled || transcriptBusy || transcriptChecking || !requestEnabled} onClick={() => void transcribe()}>{transcriptState === "queued" ? "Queued" : transcriptBusy ? "Sending transcription request" : "Transcribe video"}</Button> : null}
       {transcriptState === "ready" && !headerControls ? <><div className="video-production-buttons"><Button disabled={transcriptBusy || transcriptLocked} onClick={() => void downloadTranscript("txt")}>Download text</Button><Button disabled={transcriptBusy || transcriptLocked} onClick={() => void downloadTranscript("vtt")}>Download captions</Button><Button disabled={transcriptBusy || transcriptLocked} onClick={() => void downloadTranscript("srt")}>Download SRT captions</Button><Button disabled={transcriptBusy || transcriptLocked} onClick={() => void downloadTranscript("tsv")}>Download soundbite log</Button></div>
+        {captionDraftAvailable ? <Button disabled={disabled || transcriptBusy || transcriptLocked} onClick={() => void downloadTranscript("vtt-draft")}>Download draft WebVTT captions</Button> : null}
         <Button disabled={!validAvidOptions || transcriptBusy || transcriptLocked} onClick={() => void downloadTranscript("avid")}>Download Avid markers</Button><Button disabled={transcriptBusy || transcriptLocked} onClick={() => void downloadTranscript("premiere")}>Download Premiere transcript</Button>
       </> : null}
     </> : null}
@@ -778,6 +791,9 @@ export function useVideoProductionTools({ headerControls = false, workspace = fa
       key: `transcript-${format}`, label, description, group: "Transcript", icon: "file" as const,
       disabledReason: downloadReason, onSelect: () => void downloadTranscript(format),
     })),
+    { key: "transcript-vtt-draft", label: "Draft WebVTT captions", group: "Transcript", icon: "file",
+      description: "Includes review notes. Review before publishing.", hidden: !captionDraftAvailable,
+      disabledReason: downloadReason, onSelect: () => void downloadTranscript("vtt-draft") },
     { key: "transcript-avid", label: "Avid markers", group: "Editor interchange", icon: "file",
       disabledReason: downloadReason ?? (!validAvidOptions ? "Choose a frame rate and whole-frame offset in transcript export settings." : undefined),
       onSelect: () => void downloadTranscript("avid") },

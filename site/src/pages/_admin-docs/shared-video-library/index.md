@@ -785,6 +785,12 @@ downloads rebuild from the selected saved transcript, including older results,
 without another transcription job. Full caption downloads require billing to
 be enabled for the private export.
 
+For a saved local transcript, open **Download** and choose **Draft WebVTT
+captions**. Open the editable `.vtt` file in a text editor to read its review
+notes. They mark cues with low-confidence words, an uncertain speaker,
+overlapping speech or estimated timing. Check these cues against the recording
+and review the draft before publishing.
+
 Matching word alignment supplies cue times. After you edit words, or when word
 times are unavailable, cue times are estimated within the passage. Check them
 against the video and change timing by hand where needed. Saved clip captions
