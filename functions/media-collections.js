@@ -7,7 +7,7 @@ const { db } = require("./lib/firebase");
 const { requirePrincipal, verifyAppCheckToken } = require("./lib/auth");
 const { isApprovedActiveAccount } = require("./lib/active-account");
 const { registeredPrincipalFromUserDoc } = require("./lib/principal");
-const { hasCapability } = require("./lib/rbac");
+const { can, hasCapability } = require("./lib/rbac");
 const { JsonRequestError, validateBoundedJsonRequest } = require("./lib/http-json");
 const { adminLogEntry, AUDIT_COLLECTIONS } = require("./lib/audit");
 const {
@@ -124,6 +124,7 @@ async function assertActiveCollectionActor(transaction, firestore, actor) {
   )) {
     throw new MediaCollectionRejection(403, ACCESS_DENIED_MESSAGE);
   }
+  return principal;
 }
 
 function assertCollectionAccess(actor, collection) {
@@ -171,6 +172,17 @@ function storedCollectionOrThrow(snapshot) {
 async function readAuthorizedCollection(firestore, actor, collectionId) {
   const snapshot = await collectionReference(firestore, collectionId).get();
   return assertCollectionAccess(actor, storedCollectionOrThrow(snapshot));
+}
+
+function assertActiveCollection(collection) {
+  if (collection.lifecycle !== "active") {
+    throw new MediaCollectionRejection(409, "Archived collections cannot change items");
+  }
+  return collection;
+}
+
+async function requireActiveUploadCollection(firestore, actor, collectionId) {
+  return assertActiveCollection(await readAuthorizedCollection(firestore, actor, collectionId));
 }
 
 function sameRef(left, right) {
@@ -691,6 +703,39 @@ function writeMembershipChanges(transaction, actor, changes, present, timestamp)
   }
 }
 
+function applyCollectionMembership({ transaction, firestore, actor, collectionRef, collection, changes, present, timestamp }) {
+  if (!changes.length) return collection.membershipVersion;
+  const itemCount = collection.itemCount + (present ? changes.length : -changes.length);
+  if (!Number.isSafeInteger(itemCount) || itemCount < 0) {
+    throw new Error(`Media collection ${collectionRef.id} has an invalid item count`);
+  }
+  const membershipVersion = collection.membershipVersion + 1;
+  writeMembershipChanges(transaction, actor, changes, present, timestamp);
+  transaction.update(collectionRef, { membershipVersion, itemCount, updatedAt: timestamp, updatedBy: actor.uid });
+  if (collection.scope === "all_staff") {
+    createAudit(transaction, firestore, actor, collectionRef.id,
+      `media_collection_items_${present ? "add" : "remove"}`,
+      { membershipVersion: collection.membershipVersion }, { membershipVersion });
+  }
+  return membershipVersion;
+}
+
+async function placeUploadedVideo(transaction, firestore, actor, collectionId, ref) {
+  const principal = await assertActiveCollectionActor(transaction, firestore, actor);
+  if (!hasCapability(principal, "media.video.read") || !can(principal, "media.upload", {})) {
+    throw new MediaCollectionRejection(403, ACCESS_DENIED_MESSAGE);
+  }
+  const collectionRef = collectionReference(firestore, collectionId);
+  const itemRef = itemReference(collectionRef, ref);
+  const [collectionSnapshot, itemSnapshot] = await Promise.all([
+    transaction.get(collectionRef), transaction.get(itemRef),
+  ]);
+  const collection = assertActiveCollection(assertCollectionAccess(actor, storedCollectionOrThrow(collectionSnapshot)));
+  const changes = membershipChanges({ refs: [ref], present: true }, [itemRef], [itemSnapshot]);
+  applyCollectionMembership({ transaction, firestore, actor, collectionRef, collection,
+    changes, present: true, timestamp: FieldValue.serverTimestamp() });
+}
+
 async function mutateCollectionItems({
   firestore,
   actor,
@@ -716,9 +761,7 @@ async function mutateCollectionItems({
         ...receiptResult(receipt, collection, request.collectionId, "membership"),
       };
     }
-    if (collection.lifecycle !== "active") {
-      throw new MediaCollectionRejection(409, "Archived collections cannot change items");
-    }
+    assertActiveCollection(collection);
     if (collection.membershipVersion !== request.baseMembershipVersion) {
       throw conflict(request.collectionId, collection, "membership");
     }
@@ -726,25 +769,10 @@ async function mutateCollectionItems({
     const snapshots = await transactionSnapshots(transaction, itemRefs);
     const changes = membershipChanges(request, itemRefs, snapshots);
     const changedRefs = changes.map((change) => change.ref);
-    const countDelta = request.present ? changes.length : -changes.length;
-    const itemCount = collection.itemCount + countDelta;
-    if (!Number.isSafeInteger(itemCount) || itemCount < 0) {
-      throw new Error(`Media collection ${request.collectionId} has an invalid item count`);
-    }
     const changed = changes.length > 0;
-    const resultingRevision = changed
-      ? collection.membershipVersion + 1
-      : collection.membershipVersion;
     const timestamp = serverTimestampFn();
-    writeMembershipChanges(transaction, actor, changes, request.present, timestamp);
-    if (changed) {
-      transaction.update(collectionRef, {
-        membershipVersion: resultingRevision,
-        itemCount,
-        updatedAt: timestamp,
-        updatedBy: actor.uid,
-      });
-    }
+    const resultingRevision = applyCollectionMembership({ transaction, firestore, actor, collectionRef,
+      collection, changes, present: request.present, timestamp });
     const action = request.present ? "add" : "remove";
     createReceipt(transaction, receiptRef, {
       action,
@@ -755,17 +783,6 @@ async function mutateCollectionItems({
       createdAt: timestamp,
       changedRefs,
     });
-    if (changed && collection.scope === "all_staff") {
-      createAudit(
-        transaction,
-        firestore,
-        actor,
-        request.collectionId,
-        `media_collection_items_${action}`,
-        { membershipVersion: collection.membershipVersion },
-        { membershipVersion: resultingRevision },
-      );
-    }
     return {
       collectionId: request.collectionId,
       changed,
@@ -1071,8 +1088,10 @@ module.exports = {
   createCmsSetMediaCollectionItemsHandler,
   mutateCollection,
   mutateCollectionItems,
+  placeUploadedVideo,
   presentCollections,
   readCollectionItemCandidates,
   readCollectionPage,
   resolveCollectionItems,
+  requireActiveUploadCollection,
 };

@@ -3,6 +3,7 @@ import uploads from "../../functions/source-media-uploads.js";
 import uploadContract from "../../functions/lib/source-media-upload-contract.js";
 import previewJob from "../../functions/lib/video-preview-job.js";
 import s3Upload from "../../functions/lib/s3-media-upload.js";
+import collectionContract from "../../functions/lib/media-collections.js";
 
 const {
   SourceUploadError,
@@ -48,7 +49,7 @@ function fakeFirestore(initial = {}, { createErrorAfterCommit = false } = {}) {
     id ??= `auto-${nextId++}`;
     const key = `${collection}/${id}`;
     return {
-      collection,
+      collection: (child) => ({ doc: (childId) => ref(`${key}/${child}`, childId) }),
       id,
       key,
       async get() {
@@ -303,6 +304,80 @@ describe("source media multipart sessions", () => {
     expect(first.upload.sessionId).toBe("client-request-1");
     expect(uploader.start).toHaveBeenCalledOnce();
     expect(uploader.cancel).not.toHaveBeenCalled();
+  });
+
+  const collectionId = "a".repeat(64);
+  const collectionKey = `mediaCollections/${collectionId}`;
+  const collection = {
+    schemaVersion: 1, scope: "private", ownerUid: "staff-1", createdBy: "staff-1",
+    name: "Field reports", description: "", lifecycle: "active", version: 1,
+    membershipVersion: 1, itemCount: 0,
+  };
+
+  it("binds the authorized collection to the original session and commits membership once on resume", async () => {
+    const firestore = fakeFirestore({
+      [collectionKey]: collection,
+      "users/staff-1": { active: true, grants: [{ role: "editor" }] },
+    });
+    const checksum = "A".repeat(43) + "=";
+    const request = parseStartUploadRequest({ ...startRequest(12, "client-request-1"), collectionId });
+    const uploader = {
+      start: vi.fn(async () => ({ uploadId: "s3-first" })),
+      head: vi.fn(async () => ({
+        VersionId: "object-version",
+        ContentLength: 12,
+        ChecksumSHA256: compositeSha256([{ checksumSha256: checksum }]),
+        Metadata: { "boardwalk-session": request.requestId, "boardwalk-asset": "asset-1" },
+      })),
+    };
+    const editor = { ...actor(), principal: { id: "staff-1", grants: [{ role: "editor" }] } };
+    const args = { actor: editor, firestore, nowFn: () => "2026-09-14T16:00:00.000Z",
+      request, source: source(), uploader, uuidFn: () => "asset-1" };
+    const first = await startUpload(args);
+    await expect(startUpload(args)).resolves.toEqual(first);
+    await expect(startUpload({ ...args, request: { ...request, collectionId: "b".repeat(64) } }))
+      .rejects.toMatchObject({ status: 409 });
+    expect(uploader.start).toHaveBeenCalledOnce();
+    const stored = firestore.records.get(`mediaSourceUploads/${request.requestId}`);
+    expect(stored.collectionId).toBe(collectionId);
+    stored.status = "completing";
+    stored.signedParts = { 1: { partNumber: 1, sizeBytes: 12, checksumSha256: checksum } };
+    const resume = { ...args, request: { sourceId: "video-library", sessionId: request.requestId } };
+
+    await expect(resumeUpload(resume)).resolves.toMatchObject({ asset: {
+      id: "asset-1", collectionPlacement: "added", viewingCopy: { state: "processing" },
+    } });
+    await expect(resumeUpload(resume)).resolves.toMatchObject({ asset: { collectionPlacement: "added" } });
+    const ref = { backend: "s3", sourceId: "video-library", id: "asset-1" };
+    const membershipKey = `${collectionKey}/items/${collectionContract.mediaAssetRefDocumentId(ref)}`;
+    expect(firestore.records.get(membershipKey)).toMatchObject({ ref, addedBy: "staff-1" });
+    expect(firestore.records.get(collectionKey)).toMatchObject({ membershipVersion: 2, itemCount: 1 });
+    expect(uploader.head).toHaveBeenCalledOnce();
+  });
+
+  it("rejects another editor's private destination before S3 and saves a finished upload if its destination is archived", async () => {
+    const firestore = fakeFirestore({
+      [collectionKey]: collection,
+      "users/staff-1": { active: true, grants: [{ role: "editor" }] },
+    });
+    const uploader = { start: vi.fn(async () => ({ uploadId: "s3-first" })) };
+    const request = parseStartUploadRequest({ ...startRequest(12, "client-request-1"), collectionId });
+    const editor = { ...actor(), principal: { id: "staff-1", grants: [{ role: "editor" }] } };
+    const args = { actor: editor, firestore, nowFn: () => "2026-09-14T16:00:00.000Z",
+      request, source: source(), uploader, uuidFn: () => "asset-1" };
+    await expect(startUpload({ ...args, actor: actor("staff-2") })).rejects.toMatchObject({ status: 404 });
+    expect(uploader.start).not.toHaveBeenCalled();
+    await startUpload(args);
+    firestore.records.set(collectionKey, { ...collection, lifecycle: "archived" });
+    const session = firestore.records.get(`mediaSourceUploads/${request.requestId}`);
+    const asset = completedAsset(session, {
+      VersionId: "object-version", ContentLength: 12,
+      Metadata: { "boardwalk-session": session.id, "boardwalk-asset": session.assetId },
+    }, args.nowFn());
+    await expect(storeCompletedAsset(firestore, session, asset, args.actor))
+      .resolves.toMatchObject({ id: "asset-1", collectionPlacement: "unavailable" });
+    expect(firestore.records.get(collectionKey)).toMatchObject({ membershipVersion: 1, itemCount: 0 });
+    expect([...firestore.records.keys()].filter(key => key.startsWith(`${collectionKey}/items/`))).toEqual([]);
   });
 
   it("rejects a reused request id for another actor or changed file and metadata", async () => {

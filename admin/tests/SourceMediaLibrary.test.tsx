@@ -16,6 +16,10 @@ import type { MediaFavoriteRef } from "../src/lib/media-favorites";
 import type { Principal } from "../../packages/content-core/src/rbac";
 import { useSourceMediaAssetRefresh } from "../src/lib/use-source-media-asset-refresh";
 
+vi.mock("../src/lib/media-collections", async importOriginal => ({
+  ...await importOriginal<typeof import("../src/lib/media-collections")>(),
+  listMediaCollections: async () => ({ success: true, collections: [], nextCursor: null, hasMore: false }),
+}));
 const { getIdToken, listFavoriteStates, setFavorite, productionTranscriptReads, productionClipReads, loadSavedViews, mutateSavedViews } = vi.hoisted(() => ({
   getIdToken: vi.fn().mockResolvedValue("staff-token"),
   listFavoriteStates: vi.fn(),
@@ -2213,10 +2217,12 @@ describe("private video library", () => {
     startPreparedVideo("final.mp4");
     await waitFor(() => expect(transferVideo).toHaveBeenCalledOnce());
 
-    await act(async () => completeTransfer({ id: "final", sourceId: source.id, name: "final.mp4" } as SourceMediaAssetSummary));
+    await act(async () => completeTransfer({
+      id: "final", sourceId: source.id, name: "final.mp4", viewingCopy: { state: "processing" },
+    } as SourceMediaAssetSummary));
 
     await waitFor(() => expect(screen.queryByRole("region", { name: "Upload progress" })).not.toBeInTheDocument());
-    expect(screen.getByRole("region", { name: "Notifications" })).toHaveTextContent("final.mp4 is ready in the video library.");
+    expect(screen.getByRole("region", { name: "Notifications" })).toHaveTextContent("final.mp4 uploaded. Its viewing copy is processing.");
   });
 
   it.each([1280, 390])("adds no local mocked library request for video sheet open or intake at %ipx", async (width) => {

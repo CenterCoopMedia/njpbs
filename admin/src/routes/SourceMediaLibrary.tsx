@@ -66,7 +66,7 @@ import type { SavedMediaView } from "../lib/saved-media-views";
 import { DEFAULT_VIDEO_MEDIA_DISPLAY, VIDEO_MEDIA_CARD_FIELD_ORDER, type VideoMediaCardField, type VideoMediaDisplayPreferences } from "../lib/media-display";
 import { hasCapability } from "../../../packages/content-core/src/rbac";
 import { mediaShortcutBlocked } from "../lib/media-search";
-import { splitUploadFiles } from "../lib/upload-destination";
+import { splitUploadFiles, videoUploadCompletionMessage } from "../lib/upload-destination";
 import { routeChosenFiles } from "../lib/upload-router";
 import { useSuccessNotice } from "../components/ui/SuccessNoticeRegion";
 import { useFavoriteUndo } from "../lib/use-favorite-undo";
@@ -1896,7 +1896,7 @@ export function SourceMediaLibrary({ principal, source, getIdToken, userId, onEx
           onCanceled={message => notice.show(message)} onIntakeChange={setUploadCanIntake} onOpenSheet={showVideoUpload}
           onTrayEmptyFocus={() => setUploadFocusRequest(value => value + 1)} onTransferStarted={() => setUploadOpen(false)}
           openSheetBlockedReason={uploadOpenBlockedReason} presentation="sheet" rejectedFiles={routedRejectedFiles} trayTarget={uploadTrayTarget}
-          onUploaded={asset => { notice.show(`${asset.name} is ready in the video library.`, { preserveOnNextRoute: true }); setMediaSourceCount(source.id, null); resetFilters(); setAttempt(value => value + 1); }} />,
+          onUploaded={asset => { notice.show(videoUploadCompletionMessage(asset), { preserveOnNextRoute: true }); setMediaSourceCount(source.id, null); resetFilters(); setAttempt(value => value + 1); }} />,
       } : null}
     />
 

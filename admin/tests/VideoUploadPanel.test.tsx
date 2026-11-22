@@ -5,6 +5,8 @@ import { VideoUploadPanel } from "../src/components/VideoUploadPanel";
 import { startVideoUpload, transferVideo, cancelVideoUpload } from "../src/lib/source-media-upload";
 import { installTestLockManager } from "./helpers/web-locks";
 import { finishVideoUpload, resetUploadRouter, routeChosenFiles, uploadRouterSnapshot } from "../src/lib/upload-router";
+import { listMediaCollections, type MediaCollectionSummary } from "../src/lib/media-collections";
+vi.mock("../src/lib/media-collections", () => ({ listMediaCollections: vi.fn() }));
 vi.mock("../src/lib/source-media-upload", () => ({
   UploadFileMismatchError: class extends Error {}, VideoUploadValidationError: class extends Error {},
   startVideoUpload: vi.fn(), transferVideo: vi.fn(), cancelVideoUpload: vi.fn(),
@@ -14,6 +16,7 @@ const props = { sourceId: "video-library", userId: "staff", getIdToken: async ()
 beforeEach(() => {
   resetUploadRouter();
   vi.resetAllMocks(); localStorage.clear();
+  vi.mocked(listMediaCollections).mockResolvedValue({ success: true, collections: [], nextCursor: null, hasMore: false });
   installTestLockManager();
   vi.mocked(startVideoUpload).mockImplementation(async (_token, _source, file) => ({ success: true, upload: { ...session, sessionId: file.name } }));
   vi.mocked(transferVideo).mockImplementation(({ signal, onPhase }) => {
@@ -24,6 +27,58 @@ beforeEach(() => {
 });
 afterEach(cleanup);
 describe("video upload panel", () => {
+  it("retains a failed file's collection through reopening while its batch peer finishes in a different collection", async () => {
+    const privateId = "a".repeat(64);
+    const sharedId = "b".repeat(64);
+    vi.mocked(listMediaCollections).mockImplementation(async (_token, query) => ({
+      success: true,
+      collections: [{ scope: query.scope, id: query.scope === "private" ? privateId : sharedId,
+        name: query.scope === "private" ? "My clips" : "Field reports" } as MediaCollectionSummary],
+      nextCursor: null, hasMore: false,
+    }));
+    vi.mocked(startVideoUpload).mockImplementation(async (_token, _source, file) => {
+      if (file.name === "second.mp4") throw new Error("Connection lost");
+      return { success: true, upload: session };
+    });
+    const asset = { id: "asset", sourceId: props.sourceId, name: "First video",
+      collectionPlacement: "added", viewingCopy: { state: "processing" },
+    } as Awaited<ReturnType<typeof transferVideo>>;
+    vi.mocked(transferVideo).mockResolvedValueOnce(asset);
+
+    const firstPanel = render(<VideoUploadPanel {...props} />);
+    await waitFor(() => expect(screen.getByRole("button", { name: "Upload media" })).toBeEnabled());
+    const originals = ["first.mp4", "second.mp4"].map(name => new File(["data"], name, { type: "video/mp4", lastModified: 42 }));
+    act(() => routeChosenFiles(originals));
+    const first = within(screen.getByRole("group", { name: "Details before upload: first.mp4" }));
+    const second = within(screen.getByRole("group", { name: "Details before upload: second.mp4" }));
+    await first.findByRole("option", { name: "My clips" });
+    fireEvent.change(first.getByRole("combobox", { name: "Collection" }), { target: { value: privateId } });
+    fireEvent.change(second.getByRole("combobox", { name: "Collection" }), { target: { value: sharedId } });
+    fireEvent.click(screen.getByRole("button", { name: "Start all uploads" }));
+
+    expect(await screen.findByText("First video uploaded. Its viewing copy is processing. Added to the selected collection."))
+      .toBeInTheDocument();
+    expect(await screen.findByText("Connection lost")).toBeInTheDocument();
+    expect(vi.mocked(startVideoUpload).mock.calls.map(call => [call[2].name, call[4]?.collectionId]))
+      .toEqual([["first.mp4", privateId], ["second.mp4", sharedId]]);
+    const failed = vi.mocked(startVideoUpload).mock.calls[1][4];
+    firstPanel.unmount();
+
+    const reopened = render(<VideoUploadPanel {...props} />);
+    const resume = await screen.findByRole("button", { name: "Resume second.mp4" });
+    await waitFor(() => expect(resume).toBeEnabled());
+    expect(screen.getByRole("combobox", { name: "Collection" })).toHaveValue(sharedId);
+    const input = reopened.container.querySelector<HTMLInputElement>('input[type="file"]')!;
+    fireEvent.click(resume);
+    fireEvent.change(input, { target: { files: [originals[0]] } });
+    expect(startVideoUpload).toHaveBeenCalledTimes(2);
+    fireEvent.click(resume);
+    fireEvent.change(input, { target: { files: [originals[1]] } });
+    await waitFor(() => expect(startVideoUpload).toHaveBeenCalledTimes(3));
+    expect(vi.mocked(startVideoUpload).mock.calls[2][4])
+      .toMatchObject({ requestId: failed?.requestId, collectionId: sharedId });
+  });
+
   it("keeps defaults guarded without reporting an active transfer after a batch finishes", async () => {
     const onActiveChange = vi.fn();
     const onDefaultsDirtyChange = vi.fn();
