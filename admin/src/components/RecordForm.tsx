@@ -544,7 +544,12 @@ export const RecordForm = forwardRef<RecordFormHandle, RecordFormProps>(function
       { ...source.find(group => group.id === "hero-image")!, label: "Images", help: "The decorative heading background and lead image are separate from images in the story." },
       { ...organization, label: "Organization", help: "Public categories and tags.", fields: organization.fields.filter(field => !isIdentity(field) && !isSlug(field)) },
       ...source.filter(group => !["basics", "organization", "hero-image"].includes(group.id)),
-      ...(!spanishEdition ? [{ id: "details", label: "Advanced", help: "The independent public URL for this story.", fields: [...basic.fields, ...organization.fields].filter(isSlug) }] : []),
+      {
+        id: "details",
+        label: "Advanced",
+        help: spanishEdition ? "Use Excerpt only when this Post has no summary." : "The independent public URL for this story.",
+        fields: [...basic.fields, ...organization.fields].filter(isSlug),
+      },
     ] as typeof source;
   }, [kind, pageId, editorView?.kind, initial?.scheduleCopy, spanishEdition]);
   const contentFields = useMemo(
