@@ -30,6 +30,7 @@ import {
 import { projectAuthorSnapshot } from "../src/lib/cms-authors-loader";
 import { projectCmsPreviewContent } from "../src/lib/cms-preview-content";
 import { checkPostLeadPreviews } from "./check-post-lead-previews";
+import { assertGivingPageOrder, givingPageBlocks } from "../tests/fixtures/giving-page";
 import previewSnapshots from "../../functions/lib/preview-snapshot.js";
 import { loadHomeSourceSnapshot } from "../src/lib/home-sources-loader";
 import {
@@ -187,6 +188,8 @@ const render = async (value: PreviewInput) => {
 
 for (const page of PUBLIC_PAGES) {
   const value = pageInput(page, `Compiled ${page.id}`);
+  const givingPage = page.id === "give" || page.id === "passport";
+  if (givingPage) Object.assign(value.snapshot, { blocks: givingPageBlocks });
   setExactPublicContext(value, {
     author: page.id === "staff",
     banner: page.id === "home",
@@ -196,6 +199,13 @@ for (const page of PUBLIC_PAGES) {
   assert.match(html, /<!DOCTYPE html>/i);
   assert.match(html, /name="robots"[^>]*noindex/);
   assert.ok(html.includes(`Compiled ${page.id}`), `Missing title for ${page.id}`);
+  if (givingPage) {
+    assertGivingPageOrder(html, ["giving-cards", "giving-notice", "giving-actions"]);
+    // Restoring a prior revision reuses its saved block positions.
+    const priorOrder = [givingPageBlocks[2], givingPageBlocks[1], givingPageBlocks[0]];
+    Object.assign(value.snapshot, { blocks: priorOrder.map((block, order) => ({ ...block, order })) });
+    assertGivingPageOrder(await render(value), ["giving-actions", "giving-notice", "giving-cards"]);
+  }
   if (page.id === "home") {
     assert.ok(html.includes(bannerSnapshot.values.message), "Home omitted its published banner");
   }

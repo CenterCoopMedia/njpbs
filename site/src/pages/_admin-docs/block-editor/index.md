@@ -245,14 +245,13 @@ Moving a block changes public reading order after publication. It can also
 change keyboard and screen-reader order. Visual placement is not the only
 consideration.
 
-### Arrange the Support page
+### Arrange giving pages
 
-On a Support draft enabled for complete section arrangement, the transition
-notice, check instructions, donor advised fund (DAF) content and destination
-cards are ordinary blocks in **Page content**. Their order is the public page
-order after publication.
+On **Give to NJ PBS**, **NJ PBS Passport** and the **Support NJ PBS** layout,
+buttons, notices, text and destination cards are blocks in **Page content**.
+Their order is the public page order after publication.
 
-1. Open **Pages**, then **Support NJ PBS** and **Page content**.
+1. Open **Pages**, select the giving page to edit, then open **Page content**.
 2. Open **Outline** and select the block you want to move. If its component
    dialog opens, choose **Done** to return to the outline.
 3. Drag the selected plank's header grip, or focus it and press Up or Down.
@@ -270,7 +269,10 @@ order after publication.
    and phone sizes. Saving keeps the change in the draft; publication follows
    your usual review and role permissions.
 
-The existing DAF text contains its FAQ in the same text block, so moving that
+To recover an earlier order, restore the previous revision as a draft, check
+its preview, then publish it through the usual workflow.
+
+The existing DAF text on Support contains its FAQ in the same text block, so moving that
 block moves both together. To move questions independently, put each question
 and answer in an **FAQ item**, then remove the duplicated question and answer
 from the DAF text. Save the draft, then review the complete saved Preview before

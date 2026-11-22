@@ -8,10 +8,15 @@ export function serviceCompositionError(pageId: string, version: unknown): strin
   return null;
 }
 
+export function usesOrderedGivingBlocks(pageId: string): boolean {
+  return pageId === "give" || pageId === "passport";
+}
+
 export function usesServiceComposition(page: {
+  pageId: string;
   family: string;
   serviceCompositionVersion?: unknown;
-  blocks?: unknown;
 }): boolean {
-  return page.family === "service" && page.serviceCompositionVersion === 1;
+  return page.family === "service" &&
+    (page.serviceCompositionVersion === 1 || usesOrderedGivingBlocks(page.pageId));
 }

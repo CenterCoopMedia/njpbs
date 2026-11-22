@@ -5,6 +5,7 @@ import {
 } from "../../../packages/content-core/src/content-model";
 import { homeCompositionError } from "../../../packages/content-core/src/home-composition-contract";
 import type { PublicPageId } from "../../../packages/content-core/src/public-pages";
+import { usesOrderedGivingBlocks } from "../../../packages/content-core/src/service-composition";
 
 // Legacy Home documents expose only the optional manual shelf and preserve every other stored
 // block. A marked Home document exposes its complete composition while the versioned contract
@@ -43,6 +44,13 @@ export function editableBlocksForPublicPage(
 ): AdminBlock[] {
   if (homeCompositionVersion !== undefined) {
     return completeHomeComposition(pageId, blocks, homeCompositionVersion);
+  }
+  if (usesOrderedGivingBlocks(pageId)) {
+    // Existing giving planks use plain page positions, including in row layouts.
+    return blocks.map(block => {
+      const { section, ...plank } = block;
+      return section === undefined ? block : plank;
+    });
   }
   if (pageId !== "home") return blocks.slice();
 

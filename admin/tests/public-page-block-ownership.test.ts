@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { AdminBlock } from "../src/lib/block-factory";
 import { homeCompositionDefaults } from "../../packages/content-core/src/home-composition";
+import { editContentRows } from "../src/lib/content-row-editing";
 import {
   blocksForPublicPageSave,
   editableBlocksForPublicPage,
@@ -82,6 +83,18 @@ describe("public page block ownership", () => {
     expect(blocksForPublicPageSave("about", [], [legacyHeading])).toEqual([
       legacyHeading,
     ]);
+  });
+
+  it.each(["give", "passport"] as const)("moves an existing %s section in the page outline's row model", (pageId) => {
+    const notice: AdminBlock = { ...legacyHeading, section: "transition-notice", visible: false };
+    const row: AdminBlock = { id: "row", type: "row", order: 1, visible: true, data: { columns: [6, 6] } };
+    const input = [notice, row, { ...legacyDivider, layout: { rowId: row.id, column: 0 } }];
+    const editable = editableBlocksForPublicPage(pageId, input);
+    const { blocks } = editContentRows("programLanding", editable, { kind: "move", id: notice.id, destination: {} });
+    const saved = blocksForPublicPageSave(pageId, input, blocks);
+    expect(saved.map(block => block.id)).toEqual([row.id, legacyDivider.id, notice.id]);
+    expect(saved[2]).toEqual({ ...legacyHeading, order: 2, visible: false });
+    expect(input[0]).toBe(notice);
   });
 
   it("round-trips the complete marked Home composition", () => {

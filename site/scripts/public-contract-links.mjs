@@ -21,7 +21,6 @@ export function serviceDonationLinks(html, href, pageId) {
   for (const node of nodes) {
     const attrs = Object.fromEntries((node.attrs ?? []).map(({ name, value }) => [name, value]));
     if (node.tagName === "div" && attrs["data-cms-page"] === pageId &&
-      attrs["data-service-composition-version"] === "1" &&
       (attrs.class ?? "").split(/\s+/).includes("cms-page--service-composition")) {
       composed = true;
       continue;
