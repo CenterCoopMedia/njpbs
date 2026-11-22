@@ -7,10 +7,32 @@ import { HOMEPAGE_ANNOUNCEMENT as A, announcementTextStrings } from "../src/lib/
 import { findGuardrailViolations } from "../src/lib/guardrails";
 import { contrastRatio, meetsAA } from "../src/lib/contrast";
 import { resolveTokenColor } from "./color-token-test-utils";
+import { renderHomepageAnnouncement } from "../../packages/content-core/src/homepage-announcement-render";
 
 const read = (rel: string) =>
   readFileSync(fileURLToPath(new URL(rel, import.meta.url)), "utf8");
 const PUBLIC_SUBPAGE = read("../src/components/PublicSubpage.astro");
+
+describe("shared homepage announcement renderer", () => {
+  it("escapes draft text and link attributes before emitting HTML", () => {
+    const html = renderHomepageAnnouncement({
+      message: "<strong>Update</strong>",
+      link: { label: "Watch & listen", href: '/watch/?show="news"&day=next' },
+    });
+    expect(html).toContain("&lt;strong&gt;Update&lt;/strong&gt;");
+    expect(html).toContain("Watch &amp; listen");
+    expect(html).toContain('href="/watch/?show=&quot;news&quot;&amp;day=next"');
+  });
+
+  it("omits unsafe links and requires a safe first link before the second", () => {
+    const safe = { label: "Schedule", href: "/schedule/" };
+    const unsafe = { label: "Unsafe", href: "//example.org/" };
+    expect(renderHomepageAnnouncement({ message: "Update", link: unsafe, secondLink: safe })).not.toContain("<a ");
+    const html = renderHomepageAnnouncement({ message: "Update", link: safe, secondLink: unsafe });
+    expect(html).toContain('href="/schedule/"');
+    expect(html).not.toContain("example.org");
+  });
+});
 
 describe("homepage announcement copy", () => {
   it("states the acquisition in accurate future tense", () => {

@@ -2079,6 +2079,10 @@
   text-transform: uppercase;
 }
 
+.public-banner-preview > a {
+  overflow-wrap: anywhere;
+}
+
 .public-banner-preview-row {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;

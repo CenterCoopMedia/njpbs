@@ -6,9 +6,10 @@ import { Icon } from "./ui/Icon";
 import { useSettingsPreviewWidth, useSettingsSectionActive } from "./SettingsWorkspace";
 import { HomePreviewFrame } from "./HomePreviewFrame";
 import bandStyles from "../../../packages/content-core/src/nj-decides.css?inline";
+import announcementStyles from "../../../packages/content-core/src/homepage-announcement.css?inline";
 
 const layoutWidths = { desktop: 1280, mobile: 390 };
-const styles = `${bandStyles}\nhtml, body { background: transparent; color-scheme: light; }`;
+const electionStyles = `${bandStyles}\nhtml, body { background: transparent; color-scheme: light; }`;
 
 /** Compose at the selected public breakpoint, then fit the result uniformly. */
 export function FittedSettingsPreview({ html, mode, styles: previewStyles = "", title }: {
@@ -67,6 +68,7 @@ export function SettingsPreviewSummary({ html, textOnly = false }: { html: strin
   }, [html]);
   if (textOnly) {
     const document = typeof DOMParser === "undefined" ? null : new DOMParser().parseFromString(html, "text/html");
+    document?.querySelectorAll('[aria-hidden="true"]').forEach(node => node.remove());
     const text = document ? Array.from(document.querySelectorAll("h1, h2, h3, h4, h5, h6, p, li, a"), node => node.textContent).join(" ") : "";
     return <p className="sr-only">{text}</p>;
   }
@@ -75,21 +77,28 @@ export function SettingsPreviewSummary({ html, textOnly = false }: { html: strin
   }} />;
 }
 
-export function SettingsBannerPreview({ html }: { html: string }) {
+export function SettingsBannerPreview({ html, variant = "election" }: {
+  html: string;
+  variant?: "election" | "homepage";
+}) {
   const [open, setOpen] = useState(false);
   const [mode, setMode] = useSettingsPreviewWidth();
   const active = useSettingsSectionActive();
   useLayoutEffect(() => { if (!active) setOpen(false); }, [active]);
   const widthControls = <SettingsPreviewWidthControls mode={mode} onChange={setMode} />;
+  const homepage = variant === "homepage";
+  const styles = homepage ? announcementStyles : electionStyles;
+  const title = homepage ? `Homepage announcement ${mode} preview` : `NJ Decides ${mode} banner preview`;
+  const summary = <SettingsPreviewSummary html={html} textOnly={homepage} />;
   return <>
     {widthControls}
-    <FittedSettingsPreview html={html} mode={mode} styles={styles} title={`NJ Decides ${mode} banner preview`} />
-    <SettingsPreviewSummary html={html} />
+    <FittedSettingsPreview key={variant} html={html} mode={mode} styles={styles} title={title} />
+    {summary}
     <Button aria-haspopup="dialog" onClick={() => setOpen(true)}>Open full-size preview</Button>
     {open && <ComponentEditorDialog open={active} onClose={() => setOpen(false)} title="Full-size banner preview"
       description="See the complete banner at a larger size." className="settings-banner-dialog"
       footerNote={null} closeLabel="Close preview" closeActionLabel="Close full-size banner preview">
-      {widthControls}<FittedSettingsPreview html={html} mode={mode} styles={styles} title={`NJ Decides ${mode} banner preview`} /><SettingsPreviewSummary html={html} />
+      {widthControls}<FittedSettingsPreview key={variant} html={html} mode={mode} styles={styles} title={title} />{summary}
     </ComponentEditorDialog>}
   </>;
 }
