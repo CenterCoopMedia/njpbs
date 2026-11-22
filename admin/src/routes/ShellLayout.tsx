@@ -33,6 +33,7 @@ import { BrandLockup } from "../components/BrandLockup";
 import { ReportProblemDialog } from "../components/ReportProblemDialog";
 import { WhatsNewDialog } from "../components/WhatsNewDialog";
 import { AdminUpdateNotice } from "../components/AdminUpdateNotice";
+import { NewRecordRecoveryNotice } from "../components/NewRecordRecoveryNotice";
 import { SidebarDestination } from "../components/SidebarDestination";
 import { Icon, type IconName } from "../components/ui/Icon";
 import { LoadingIndicator } from "../components/ui/LoadingIndicator";
@@ -1178,6 +1179,7 @@ function ShellLayoutContents() {
                 {notice}
               </InlineMessage>
             ) : null}
+            <NewRecordRecoveryNotice actorId={user.uid} />
             <Outlet />
           </main>
           <EditorWorkspacePane pane="details" />

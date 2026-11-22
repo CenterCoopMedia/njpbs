@@ -113,6 +113,7 @@ import type { SavedContentViewMutation } from "../lib/saved-content-views";
 import { ContentStudioSkeleton } from "./EditorSkeleton";
 import { SaveConflictReviewDialog } from "./SaveConflictReviewDialog";
 import { editableBlocksForPublicPage } from "../lib/public-page-block-ownership";
+import { canCreateEditableRecord } from "../lib/new-record-recovery";
 
 const EditorWorkspace = lazy(async () => ({
   default: (await import("./EditorWorkspace")).EditorWorkspace,
@@ -343,18 +344,14 @@ export function ContentTab({
     );
   // The desks a new record can be created into (#845). Same live registry the Staff access
   // grant picker reads, so a grant can never name a section the record form does not offer.
-  const { sections: contentSections, ready: sectionsReady } = useContentSectionRegistry();
+  const { sections: contentSections, ready: sectionsReady, loading: sectionsLoading } = useContentSectionRegistry();
   // Reader identity owns private rows; registry labels do not change its authority.
   const loadDirectoryPages = useCallback(
     async () => (await cmsListPages(await getIdToken())).pages,
     [getIdToken, principal],
   );
   const pageDirectoryApi = useMemo<PageDirectoryApi>(() => {
-    const sections = contentSections.filter(section => {
-      const resource = { section: section.id, ownerId: principal.id };
-      return can(principal, "content.create", resource) &&
-        (can(principal, "content.edit.any", resource) || can(principal, "content.edit.own", resource));
-    });
+    const sections = contentSections.filter(section => canCreateEditableRecord(principal, section.id));
     return {
       sections, canCreate: sections.length > 0,
       canOpenBuiltIn: id => can(principal, "content.edit.any", { section: contentSectionForPublicPage(id) ?? undefined }),
@@ -982,7 +979,7 @@ export function ContentTab({
     async (
       kind: RecordKind,
       record: Record<string, unknown>,
-      options?: { force?: boolean },
+      options?: { force?: boolean; createNonce?: string },
     ): Promise<RecordSaveReceipt> => {
       const creating = typeof record.id !== "string";
       let assertReviewActive: (() => void) | undefined;
@@ -1000,7 +997,7 @@ export function ContentTab({
       // Sponsor request can therefore survive a successful Post create and still
       // address its original server attempt when the editor returns to it.
       if (creating && !pendingCreateNonces.current.has(kind)) {
-        pendingCreateNonces.current.set(kind, globalThis.crypto.randomUUID());
+        pendingCreateNonces.current.set(kind, options?.createNonce ?? globalThis.crypto.randomUUID());
       }
       const response = await cmsSaveContent(idToken, recordSaveRequest(kind, record, {
         force: options?.force,
@@ -1020,6 +1017,7 @@ export function ContentTab({
   const abandonRecordCreate = useCallback((kind: RecordKind) => {
     pendingCreateNonces.current.delete(kind);
   }, []);
+  const pendingRecordCreateNonce = useCallback((kind: RecordKind) => pendingCreateNonces.current.get(kind), []);
 
   const capturePostTemplate = useCallback(async (request: CapturePostTemplateRequest) =>
     cmsCapturePostTemplate(await getIdToken(), request), [getIdToken]);
@@ -1141,6 +1139,7 @@ export function ContentTab({
         capturePostTemplate={capturePostTemplate}
         duplicatePost={duplicatePost}
         abandonRecordCreate={abandonRecordCreate}
+        pendingRecordCreateNonce={pendingRecordCreateNonce}
         canAssignRecords={canArchiveLibrary && hasCapability(principal, "users.manage")}
         loadAssignableUsers={loadAssignableUsers}
         assignRecord={assignRecord}
@@ -1190,6 +1189,7 @@ export function ContentTab({
         editorLockActor={editorLockActor}
         contentSections={contentSections}
         newPostSections={sectionsReady ? pageDirectoryApi.sections : null}
+        newRecordRecoveryAreas={sectionsLoading ? null : pageDirectoryApi.sections}
       />
     </Suspense>
   );

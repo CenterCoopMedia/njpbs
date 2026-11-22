@@ -72,11 +72,13 @@ export function useContentSectionRegistry() {
     useState<ContentSectionDefinition[]>(seededContentSections);
 
   const [ready, setReady] = useState(false);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     return onSnapshot(
       query(collection(db, CONTENT_SECTIONS_COLLECTION), limit(SECTION_LISTENER_LIMIT + 1)),
       (snapshot) => {
+        setLoading(false);
         // Read the snapshot defensively. This callback runs inside a React effect, so a
         // snapshot that is not the collection shape this expects would throw where nothing
         // can catch it and take the editor down with it. Falling through to the seeded
@@ -94,11 +96,12 @@ export function useContentSectionRegistry() {
         setReady(true);
       },
       () => {
+        setLoading(false);
         setSections(seededContentSections());
         setReady(false);
       },
     );
   }, []);
 
-  return { sections, ready };
+  return { sections, ready, loading };
 }

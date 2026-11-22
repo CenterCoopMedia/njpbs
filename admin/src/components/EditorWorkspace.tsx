@@ -38,6 +38,16 @@ import { SavedPreview, type SavedPreviewProps } from "./SavedPreview";
 import { useSaveFlight } from "../hooks/useSaveFlight";
 import { editorSaveReceipt, type SavedEditorReceipt } from "../lib/editor-save-receipt";
 import { useDraftAutosave } from "../hooks/useDraftAutosave";
+import { HeldNewRecordArea } from "./HeldNewRecordArea";
+import { isRecordKind, RECORD_KINDS } from "../lib/content-vocab";
+import { HOLD_NEW_RECORDS_EVENT } from "../lib/session-ended";
+import {
+  canCreateEditableRecord,
+  clearHeldNewRecord,
+  holdNewRecord,
+  newRecordDraftKey,
+  readHeldNewRecord,
+} from "../lib/new-record-recovery";
 import { useEditorWorkspaceLoads } from "../hooks/useEditorWorkspaceLoads";
 import { RevisionHistory } from "./RevisionHistory";
 import { PublishedVersionStatus } from "./PublishedVersionStatus";
@@ -321,7 +331,7 @@ function surfaceKey(surface: Surface): string {
       : surface.kind === "record-list"
         ? `record-list:${surface.record}`
         : surface.kind === "record"
-          ? `record:${surface.record}:${surface.id ?? "+"}`
+          ? surface.id === null ? newRecordDraftKey(surface.record) : `record:${surface.record}:${surface.id}`
           : `page:${surface.pageId}`;
 }
 
@@ -342,8 +352,10 @@ export function editorLockSurfaceKey(surface: Surface): string | null {
 // A page draft carries the version its blocks were composed against, because the two are one
 // claim and must travel together: restoring blocks while re-reading the version would echo a
 // base the person never saw and defeat the conflict guard (#530).
+type RestoredCreate = { savedAtMs: number; createNonce?: string; section?: string };
+
 type Draft =
-  | { kind: "record"; record: Record<string, unknown> }
+  | { kind: "record"; record: Record<string, unknown>; restoredCreate?: RestoredCreate }
   | {
       kind: "page";
       blocks: AdminBlock[];
@@ -428,7 +440,7 @@ interface EditorWorkspaceProps {
   saveRecord?: (
     kind: RecordKind,
     record: Record<string, unknown>,
-    options?: { force?: boolean },
+    options?: { force?: boolean; createNonce?: string },
   ) => Promise<Record<string, unknown> | RecordSaveReceipt>;
   capturePostTemplate?: (request: CapturePostTemplateRequest) => Promise<PostTemplateReceipt>;
   duplicatePost?: (sourceId: string, sourceVersion: number) => Promise<Record<string, unknown>>;
@@ -436,6 +448,7 @@ interface EditorWorkspaceProps {
   // already-created record. This is separate from an ordinary failed save: only the person's
   // explicit decision to discard the draft may release its idempotency nonce.
   abandonRecordCreate?: (kind: RecordKind) => void;
+  pendingRecordCreateNonce?: (kind: RecordKind) => string | undefined;
   // Record assignment is a separate admin-only workflow mutation. The dedicated callback keeps
   // assignee out of the editable save payload and its staff loader keeps this component free of
   // Firestore/auth dependencies.
@@ -592,6 +605,7 @@ interface EditorWorkspaceProps {
   // never wired the registry can honestly offer.
   contentSections?: readonly { id: string; label: string }[];
   newPostSections?: readonly { id: string; label: string }[] | null;
+  newRecordRecoveryAreas?: readonly { id: string; label: string }[] | null;
 }
 
 // The content editor: pick a record or a page, edit it, and save. Both surfaces persist
@@ -619,6 +633,7 @@ function EditorWorkspaceContent({
   capturePostTemplate,
   duplicatePost,
   abandonRecordCreate,
+  pendingRecordCreateNonce,
   canAssignRecords = false,
   loadAssignableUsers,
   assignRecord,
@@ -665,6 +680,7 @@ function EditorWorkspaceContent({
   editorLockActor,
   contentSections,
   newPostSections,
+  newRecordRecoveryAreas,
 }: EditorWorkspaceProps) {
   const editorView = useEditorWorkspaceView();
   // The home page, so page composition is what a person arrives at. This opened on the
@@ -1408,6 +1424,99 @@ function EditorWorkspaceContent({
     return draft.record;
   }
 
+  const newRecordKind = surface.kind === "record" && surface.id === null && isRecordKind(surface.record)
+    ? surface.record : null;
+  const recoveryActorId = newRecordRecoveryAreas === undefined ? undefined : principal.id;
+  const activeDraft = newRecordKind ? drafts.current.get(newRecordDraftKey(newRecordKind)) : undefined;
+  const restoredCreate = activeDraft?.kind === "record" ? activeDraft.restoredCreate : undefined;
+  const heldCreate = recoveryActorId && newRecordKind && !activeDraft
+    ? readHeldNewRecord(recoveryActorId, newRecordKind) : null;
+  const heldSection = restoredCreate?.section ??
+    (typeof heldCreate?.record.section === "string" ? heldCreate.record.section || undefined : undefined);
+  const recoveryAreas = newRecordRecoveryAreas ?? [];
+  const recoveryAllowed = newRecordKind !== null && (heldSection
+    ? recoveryAreas.some(area => area.id === heldSection)
+    : newRecordKind === "post" && canCreateEditableRecord(principal, undefined, true));
+  const recoveryUnavailable = !recoveryAllowed && (Boolean(heldSection) || recoveryAreas.length === 0);
+  const restoredCreateNotice = useRef<HTMLElement>(null);
+
+  function restoreNewRecord(section?: string) {
+    if (!heldCreate || !newRecordKind || newRecordRecoveryAreas === null) return;
+    if (section ? !recoveryAreas.some(area => area.id === section) : !recoveryAllowed) return;
+    const { record, savedAtMs, createNonce } = heldCreate;
+    const key = newRecordDraftKey(newRecordKind);
+    if (drafts.current.has(key)) return;
+    drafts.current.set(key, {
+      kind: "record",
+      record: section ? { ...record, section } : record,
+      restoredCreate: { savedAtMs, createNonce, section },
+    });
+    draftLabels.current.set(key, labelForSurface(surface));
+    refreshDirty();
+    setRecordMutationRevision(revision => revision + 1);
+  }
+
+  useLayoutEffect(() => {
+    if (recoveryAllowed) restoreNewRecord(heldSection);
+    else if (!heldSection && recoveryAreas.length === 1) restoreNewRecord(recoveryAreas[0].id);
+  });
+
+  useEffect(() => {
+    if (restoredCreate) restoredCreateNotice.current?.focus();
+  }, [restoredCreate]);
+
+  useLayoutEffect(() => {
+    if (!recoveryActorId) return;
+    const actorId = recoveryActorId;
+    function holdDrafts() {
+      for (const kind of RECORD_KINDS) {
+        const draft = drafts.current.get(newRecordDraftKey(kind));
+        if (draft?.kind !== "record" || draft.record.id) continue;
+        const section = draft.record.section || draft.restoredCreate?.section;
+        holdNewRecord(actorId, kind, { ...draft.record, section },
+          pendingRecordCreateNonce?.(kind) ?? draft.restoredCreate?.createNonce);
+      }
+    }
+    window.addEventListener(HOLD_NEW_RECORDS_EVENT, holdDrafts);
+    return () => window.removeEventListener(HOLD_NEW_RECORDS_EVENT, holdDrafts);
+  }, [recoveryActorId, pendingRecordCreateNonce]);
+
+  function discardNewRecord() {
+    const recovery = restoredCreate ?? heldCreate;
+    if (saving || !recoveryActorId || !newRecordKind || !recovery) return;
+    clearHeldNewRecord(recoveryActorId, newRecordKind, recovery.savedAtMs);
+    const key = newRecordDraftKey(newRecordKind);
+    drafts.current.delete(key);
+    draftLabels.current.delete(key);
+    recordBaselines.current.delete(key);
+    abandonRecordCreate?.(newRecordKind);
+    refreshDirty();
+    setRecordMutationRevision(revision => revision + 1);
+  }
+
+  function newRecordRecoveryNotice() {
+    if (!heldCreate && !restoredCreate) return null;
+    if (newRecordRecoveryAreas === null) return <LoadingIndicator label="Checking your editorial access" />;
+    if (recoveryUnavailable) {
+      return <InlineMessage tone="warning" title="This draft is outside your current access">
+        <p>{heldSection ? "You no longer have access to the draft’s editorial area." :
+          "You do not have an editorial area where you can create this record."}</p>
+        <Button variant="secondary" onClick={discardNewRecord}>Discard draft</Button>
+      </InlineMessage>;
+    }
+    if (restoredCreate) {
+      return <section ref={restoredCreateNotice} tabIndex={-1} aria-label="Unsaved draft restored">
+        <InlineMessage tone="info" title="Unsaved draft restored">
+          <p>Review your draft and save it when you’re ready.</p>
+          <Button variant="secondary" disabled={saving} onClick={discardNewRecord}>Discard draft</Button>
+        </InlineMessage>
+      </section>;
+    }
+    return !recoveryAllowed && recoveryAreas.length > 1
+      ? <HeldNewRecordArea key={newRecordKind} areas={recoveryAreas} onChoose={restoreNewRecord} />
+      : null;
+  }
+
   // The page draft held for a surface, if this session has edited it (#579). Two places ask this
   // same question and have to agree, so they ask it here rather than each testing the map: the
   // surface-change render restores the draft without a loading frame, and the hydration effect
@@ -1742,7 +1851,11 @@ function EditorWorkspaceContent({
       draftLabels.current.delete(key);
     } else {
       draftLabels.current.set(key, labelForSurface(value));
-      drafts.current.set(key, { kind: "record", record: next });
+      const previous = drafts.current.get(key);
+      drafts.current.set(key, {
+        kind: "record", record: next,
+        restoredCreate: previous?.kind === "record" ? previous.restoredCreate : undefined,
+      });
     }
     refreshDirty();
   }
@@ -2034,7 +2147,8 @@ function EditorWorkspaceContent({
       (surface.id === null || (recordLoad.status === "ready" && recordLoad.record.status === "draft"));
   const autosave = useDraftAutosave({
     identity: surfaceKey(surface),
-    enabled: autoSaveEnabled && autosaveDraft && canSaveInActiveEditor && !restoring && !changingLifecycle,
+    enabled: autoSaveEnabled && autosaveDraft && canSaveInActiveEditor && !restoring && !changingLifecycle &&
+      !heldCreate && !restoredCreate,
     savedVersion: surface.kind === "page"
       ? Math.max(blockBaseVersion.current ?? 0, metadataBaseVersion.current ?? 0)
       : recordLoad.status === "ready" && typeof recordLoad.record.version === "number"
@@ -2674,8 +2788,8 @@ function EditorWorkspaceContent({
           canUploadCategory={canUploadCategory}
           onMediaPickerDirtyChange={onMediaPickerDirtyChange}
           newId={newId}
-          sections={contentSections}
-          newPostSections={newPostSections}
+          sections={restoredCreate ? recoveryAreas : contentSections}
+          newPostSections={restoredCreate ? null : newPostSections}
           postInspector={
             recordSurface.record === "post" &&
             (assignmentPanel || lifecyclePanel || requestSavedPreview) ? (
@@ -2699,11 +2813,15 @@ function EditorWorkspaceContent({
           onSave={
             saveRecord
               ? async (record, options) => {
+                  if (restoredCreate && !canCreateEditableRecord(principal,
+                    typeof record.section === "string" ? record.section : undefined, recordSurface.record === "post")) {
+                    throw new Error("Choose an editorial area where you can create this record.");
+                  }
                   await reserveEditorForSave();
                   const saved = await saveRecord(
                     recordSurface.record,
                     record,
-                    options,
+                    restoredCreate?.createNonce ? { ...options, createNonce: restoredCreate.createNonce } : options,
                   );
                   const receipt = isRecordSaveReceipt(saved)
                     ? saved
@@ -2711,6 +2829,11 @@ function EditorWorkspaceContent({
                   const savedDocument: Record<string, unknown> = receipt
                     ? receipt.document
                     : (saved as Record<string, unknown>);
+                  if (restoredCreate && recoveryActorId && typeof savedDocument.id === "string") {
+                    clearHeldNewRecord(recoveryActorId, recordSurface.record, restoredCreate.savedAtMs);
+                    const draft = drafts.current.get(key);
+                    if (draft?.kind === "record") delete draft.restoredCreate;
+                  }
                   rememberPreviewReceipt(recordSurface, savedDocument.version);
                   // RecordForm adopts server identity/version fields and reconciles canonical
                   // block ids. Keep the workspace clean point in that same form shape rather
@@ -2756,6 +2879,7 @@ function EditorWorkspaceContent({
           onOpenConflictRecord={
             recordSurface.id === null
               ? (id) => {
+                  if (restoredCreate && recoveryActorId) clearHeldNewRecord(recoveryActorId, recordSurface.record, restoredCreate.savedAtMs);
                   drafts.current.delete(key);
                   recordBaselines.current.delete(key);
                   refreshDirty();
@@ -3487,7 +3611,12 @@ function EditorWorkspaceContent({
                   />
                 ) : surface.kind === "record" ? (
                   surface.id === null ? (
-                    recordFormFor(surface, recordDraftFor(surface))
+                    <>
+                      {newRecordRecoveryNotice()}
+                      {!heldCreate && (!restoredCreate || !recoveryUnavailable && newRecordRecoveryAreas !== null)
+                        ? recordFormFor(surface, recordDraftFor(surface))
+                        : null}
+                    </>
                   ) : !loadRecord ? (
                     unavailableRecord(
                       surface,

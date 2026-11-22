@@ -182,8 +182,37 @@ describe.skipIf(process.env.SESSION_ENDED_EMULATORS !== "true")("ended session e
     expect((await clients.firestore.collection("bug_reports").where("reporter.uid", "==", uid).get()).size).toBe(1);
   });
 
-  // The Auth emulator still refreshes a revoked session, so a disabled account drives the same
-  // SDK invalidation path, which covers auth/user-disabled and auth/user-token-expired alike.
+  it("keeps browser work if the Auth emulator rejects a forced refresh of a revoked session", async () => {
+    const uid = "report-refresh-revoked";
+    await signedInWorkspace(uid);
+    const user = auth.currentUser!;
+    const issuedToken = await user.getIdToken();
+    const work = `njpbs-admin:displaced-work:${uid}:record:sponsor:+`;
+    localStorage.setItem(work, JSON.stringify({
+      actorId: uid, surfaceKey: "record:sponsor:+", savedAtMs: Date.now(), label: "",
+      payload: { record: { name: "Held sponsor" } },
+    }));
+    await clients.auth.revokeRefreshTokens(uid);
+    await expect(clients.auth.verifyIdToken(issuedToken, true)).rejects.toMatchObject({ code: "auth/id-token-revoked" });
+
+    let refreshError: unknown;
+    await act(async () => {
+      try { await user.getIdToken(true); }
+      catch (error) { refreshError = error; }
+    });
+    if (refreshError === undefined) {
+      // The emulator can honor server-side revocation while still issuing a refreshed token.
+      // The disabled-account case below exercises actual SDK invalidation on that emulator.
+      await waitFor(() => expect(status()).toBe("signed-in"));
+    } else {
+      expect((refreshError as { code?: unknown }).code).toBe("auth/user-token-expired");
+      await waitFor(() => expect(status()).toBe("signed-out"));
+      expect(screen.getByTestId("session-ended")).toHaveTextContent("true");
+      expect(auth.currentUser).toBeNull();
+    }
+    expect(localStorage.getItem(work)).not.toBeNull();
+  });
+
   it("keeps browser work when the real SDK signs out a disabled account during refresh", async () => {
     const uid = "report-refresh-disabled";
     profileRead.fixture = { email: `${uid}@report-roles.invalid`, active: true, role: "super_admin", grants: [] };
