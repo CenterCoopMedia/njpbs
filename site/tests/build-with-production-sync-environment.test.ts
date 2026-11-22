@@ -10,6 +10,7 @@ import { existsSync } from "node:fs";
 import { mkdir, mkdtemp, readFile, rename, rm, writeFile } from "node:fs/promises";
 import { pathToFileURL } from "node:url";
 import { createHash } from "node:crypto";
+import { DIMENSIONS } from "../../packages/browser-search/contracts";
 
 vi.mock("node:child_process", () => ({ execFileSync: vi.fn() }));
 
@@ -49,9 +50,8 @@ vi.mock("pagefind", () => ({
   createIndex: vi.fn(async () => ({ index: { addDirectory: async () => ({}), addCustomRecord: vi.fn(async () => ({ errors: [] })), writeFiles: async () => ({}) } })),
   close: vi.fn(),
 }));
-vi.mock("../src/search/model", () => ({
-  loadSearchEncoder: async () => Object.assign(async () => ({ data: [0.25, 0.75] }), { dispose: async () => {} }),
-}));
+const encode = vi.hoisted(() => vi.fn(async (_input: string) => ({ data: [0.25, 0.75] })));
+vi.mock("../src/search/model", () => ({ loadSearchEncoder: async () => Object.assign(encode, { dispose: async () => {} }) }));
 
 import { runBuild } from "../scripts/build-with-production-sync.mjs";
 import { meaningSearchIndex } from "../src/search/build-corpus";
@@ -67,6 +67,7 @@ const originalEnvironment = {
 };
 
 afterEach(() => {
+  vi.unstubAllEnvs();
   for (const [field, value] of Object.entries(originalEnvironment)) {
     if (value === undefined) delete process.env[field];
     else process.env[field] = value;
@@ -121,6 +122,61 @@ describe("production-sync build environment", () => {
       await rm(directory, { recursive: true, force: true });
       if (hadDist) await rename(path.join(backup, "dist"), directory);
       await rm(backup, { recursive: true, force: true });
+    }
+  });
+
+  it("re-encodes only changed search input and regenerates the full roster for a retained background build", async () => {
+    const directory = await mkdtemp(path.join(tmpdir(), "background-search-"));
+    const directoryUrl = pathToFileURL(`${directory}/`);
+    const inventoryPath = path.join(directory, "artifact-inventory.json");
+    const indexPath = path.join(directory, "search/meaning-index.json");
+    const commit = "a".repeat(40);
+    const previous = { stable: "Still searchable", edit: "Previous text", remove: "Withdrawn text" };
+    const current = { moved: "Still searchable", edit: "Replacement text" };
+    const writePages = async (pages: Record<string, string>) => {
+      for (const [slug, text] of Object.entries(pages)) {
+        const route = path.join(directory, slug);
+        await mkdir(route, { recursive: true });
+        await writeFile(path.join(route, "index.html"), `<main data-pagefind-body><h1>Title</h1><p>${text}</p></main>`);
+      }
+    };
+    const render = async (integration = meaningSearchIndex()) => {
+      await (integration.hooks["astro:build:done"] as (options: { dir: URL }) => Promise<void>)({ dir: directoryUrl });
+      return readFile(indexPath, "utf8");
+    };
+    const configure = async (renderer: string) => {
+      vi.stubEnv("PUBLIC_BUILD_COMMIT_SHA", renderer);
+      const integration = meaningSearchIndex();
+      const setup = integration.hooks["astro:config:done"] as (value: { config: { outDir: URL } }) => Promise<void>;
+      await setup({ config: { outDir: directoryUrl } });
+      return integration;
+    };
+    encode.mockImplementation(async input => ({ data: Array(DIMENSIONS).fill(input.length / 100) }));
+    vi.stubEnv("CMS_OFFLINE_BUILD", "1");
+    vi.stubEnv("PUBLIC_ARTIFACT_BATCH_MODE", "background");
+    vi.stubEnv("PUBLIC_ARTIFACT_RETAINED_BUNDLE_PATH", path.join(directory, "input.json"));
+    vi.stubEnv("PUBLIC_ARTIFACT_INVENTORY_PATH", inventoryPath);
+    vi.stubEnv("CMS_PREVIEW_INPUT_PATH", undefined);
+    vi.stubEnv("PUBLIC_ONLY", undefined);
+    try {
+      await writePages(previous);
+      await render();
+      await writeFile(inventoryPath, JSON.stringify({ commitSha: commit }));
+      const matched = await configure(commit);
+      const mismatched = await configure("b".repeat(40));
+      await rm(directory, { recursive: true });
+      await writePages(current);
+      encode.mockClear();
+      const warm = await render(matched);
+      expect(encode.mock.calls.map(([input]) => input)).toEqual(["Title\nReplacement text"]);
+      expect(JSON.parse(warm).passages.map((passage: { url: string }) => passage.url)).toEqual(["/edit/", "/moved/"]);
+      encode.mockClear();
+      const cold = await render(mismatched);
+      expect(encode.mock.calls.map(([input]) => input)).toEqual(["Title\nReplacement text", "Title\nStill searchable"]);
+      expect(warm).toEqual(cold);
+    } finally {
+      encode.mockImplementation(async () => ({ data: [0.25, 0.75] }));
+      await rm(directory, { recursive: true, force: true });
     }
   });
 

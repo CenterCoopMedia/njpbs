@@ -14,15 +14,41 @@ const childStages: Record<string, string> = {
   artifact_inventory_complete: "artifact_inventory",
 };
 
-export function backgroundRendererStage(stdout: string): string {
-  let stage = "renderer_start";
+function* buildTimingRows(stdout: string) {
   for (const line of stdout.split("\n")) {
+    if (!line.startsWith("{")) continue;
     try {
       const row = JSON.parse(line);
-      if (row?.event === "cms_public_build_timing" && Object.hasOwn(childStages, row.stage)) stage = childStages[row.stage];
+      if (row?.event === "cms_public_build_timing" && typeof row.stage === "string") yield row;
     } catch { /* Ordinary build output is not a stage marker. */ }
   }
+}
+
+export function backgroundRendererStage(stdout: string): string {
+  let stage = "renderer_start";
+  for (const row of buildTimingRows(stdout)) {
+    if (Object.hasOwn(childStages, row.stage)) stage = childStages[row.stage];
+  }
   return stage;
+}
+
+export function backgroundRendererTimings(stdout: string): Record<string, number> {
+  const marks = new Map<string, number>();
+  const timings: Record<string, number> = {};
+  for (const row of buildTimingRows(stdout)) {
+    if (Object.hasOwn(childStages, row.stage) && typeof row.at === "string") {
+      const at = Date.parse(row.at);
+      if (Number.isFinite(at)) marks.set(row.stage, at);
+    }
+    if (row.stage === "meaning_search_complete" && Number.isSafeInteger(row.elapsedMs) && row.elapsedMs >= 0) {
+      timings.render_meaning_search = row.elapsedMs;
+    }
+  }
+  for (const stage of ["astro_build", "pagefind"]) {
+    const start = marks.get(`${stage}_started`), end = marks.get(`${stage}_complete`);
+    if (start !== undefined && end !== undefined && end >= start) timings[`render_${stage}`] = end - start;
+  }
+  return timings;
 }
 
 function sanitizedText(text: string, environment: Record<string, string | undefined>): string {

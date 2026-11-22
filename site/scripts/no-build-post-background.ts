@@ -87,11 +87,14 @@ async function retainFiles(dist: string, directory: string, prepared: PreparedBa
   await rename(temporary, path.join(directory, "receipt.json"));
 }
 
+type BackgroundBuild = (input: Parameters<typeof buildFrozenPublication>[0], recordTimings: (timings: Record<string, number>) => void) =>
+  ReturnType<typeof buildFrozenPublication>;
+
 export function noBuildPostMaintenance({ firestore, firebaseApp, commitSha, stateDirectory, distDirectory, buildEnvironment,
   mediaManagerCredential, backgroundBucket, serializerId, buildPublication = buildFrozenPublication,
   buildPreviewProjection = buildNoBuildCloudPreviewProjection, onPreviewProjection, runtime = { owner: "node-compute", release: commitSha } }: { runtime?: { owner: "node-compute" | "cloudflare"; release: string }; firestore: Firestore; firebaseApp?: App; commitSha: string; stateDirectory: string; distDirectory: string;
     buildPreviewProjection?: typeof buildNoBuildCloudPreviewProjection; onPreviewProjection?: () => void;
-    backgroundBucket?: string; serializerId?: string; buildEnvironment: Record<string, string | undefined>; mediaManagerCredential?: MediaManagerCredential; buildPublication?: typeof buildFrozenPublication }) {
+    backgroundBucket?: string; serializerId?: string; buildEnvironment: Record<string, string | undefined>; mediaManagerCredential?: MediaManagerCredential; buildPublication?: BackgroundBuild }) {
   assertRuntimeSource(runtime, commitSha);
   const paused = (transaction?: Transaction) => cloudBillingPaused({ runtime,
     read: async (document: string) => (await (transaction ? transaction.get(firestore.doc(document)) : firestore.doc(document).get())).data() ?? null });
@@ -284,7 +287,8 @@ export function noBuildPostMaintenance({ firestore, firebaseApp, commitSha, stat
         await advanceStage("renderer");
         await buildPublication({ buildBatchId, commitSha, artifactReceiptPath: path.join(retained, "artifact-inventory.json"),
           retainedInputDirectory: retained,
-          buildEnvironment: { ...buildEnvironment, PUBLIC_POST_RENDERER_COMPILE: "0", PUBLIC_ARTIFACT_BATCH_MODE: "background" } });
+          buildEnvironment: { ...buildEnvironment, PUBLIC_POST_RENDERER_COMPILE: "0", PUBLIC_ARTIFACT_BATCH_MODE: "background" } },
+        rendererTimings => Object.assign(timings, rendererTimings));
         await advanceStage("collect_family_files");
         prepared = { schemaVersion: 2, contextDigest, routes: JSON.parse(await readFile(path.join(retained, "routes.json"), "utf8")),
           files: await familyFiles(distDirectory, ["home", ...(contextOutputs(stored) as string[])], contextDigest) };

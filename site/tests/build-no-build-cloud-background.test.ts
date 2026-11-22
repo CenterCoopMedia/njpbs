@@ -28,8 +28,10 @@ beforeEach(async () => {
   boundary.sandbox.mockImplementation(async (env: Record<string, string>) => ({ args: ["--unshare-all", "--"], environment: env }));
 });
 afterEach(async () => { vi.unstubAllEnvs(); await rm(directory, { recursive: true, force: true }); });
-const run = () => buildNoBuildCloudBackground({ buildBatchId, commitSha, retainedInputDirectory: directory,
-  artifactReceiptPath: path.join(directory, "artifact-inventory.json"), buildEnvironment: publicEnvironment }, path.join(directory, "dist"));
+const run = (recordTimings?: (timings: Record<string, number>) => void) => buildNoBuildCloudBackground({
+  buildBatchId, commitSha, retainedInputDirectory: directory,
+  artifactReceiptPath: path.join(directory, "artifact-inventory.json"), buildEnvironment: publicEnvironment },
+path.join(directory, "dist"), recordTimings);
 
 it("retains the child exit and failing stage while removing credentials and every supplied environment value", async () => {
   vi.stubEnv("BOUNDARY_PASSWORD", "synthetic-private-value");
@@ -103,8 +105,20 @@ it("copies the verified receipt and public context after a successful child buil
   });
   await writeFile(path.join(dist, "artifact-inventory.json"), JSON.stringify(receipt));
   await writeFile(path.join(dist, "public-context.json"), "{}");
-  boundary.execFile.mockImplementation((_command, _args, _options, done) => done(null, "", ""));
-  expect(await run()).toEqual(receipt);
+  const timing = (stage: string, values: object) => JSON.stringify({ event: "cms_public_build_timing", stage, ...values });
+  const stdout = [
+    timing("astro_build_started", { at: "2026-11-01T00:00:00.000Z" }),
+    timing("meaning_search_complete", { elapsedMs: 321 }),
+    timing("astro_build_complete", { at: "2026-11-01T00:00:02.000Z" }),
+    timing("pagefind_started", { at: "2026-11-01T00:00:02.000Z" }),
+    timing("pagefind_complete", { at: "2026-11-01T00:00:02.030Z" }),
+    timing("ignored", { at: "2026-11-01T00:00:03.000Z", elapsedMs: 9000 }),
+    "arbitrary child text",
+  ].join("\n");
+  const recordTimings = vi.fn();
+  boundary.execFile.mockImplementation((_command, _args, _options, done) => done(null, stdout, ""));
+  expect(await run(recordTimings)).toEqual(receipt);
+  expect(recordTimings).toHaveBeenCalledExactlyOnceWith({ render_astro_build: 2000, render_meaning_search: 321, render_pagefind: 30 });
   expect(await readFile(path.join(directory, "public-context.json"), "utf8")).toBe("{}");
   const env = boundary.execFile.mock.calls[0][2].env;
   expect(env).not.toHaveProperty("CMS_PREVIEW_INPUT_PATH");

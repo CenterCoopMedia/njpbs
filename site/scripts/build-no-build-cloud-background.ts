@@ -7,7 +7,7 @@ import { publicPostRenderEnvironment } from "./public-post-render-environment";
 import { assertCmsPublicationSourceCheckout } from "./cms-publication-runtime-guard";
 import { assertPublicArtifactInventoryReceipt } from "../src/lib/public-artifact-inventory";
 import type { buildFrozenPublication } from "./frozen-publication";
-import { BackgroundPreparationError, backgroundPreparationDiagnostic, backgroundRendererStage } from "./background-preparation-diagnostic";
+import { BackgroundPreparationError, backgroundPreparationDiagnostic, backgroundRendererStage, backgroundRendererTimings } from "./background-preparation-diagnostic";
 
 const site = fileURLToPath(new URL("..", import.meta.url));
 
@@ -39,6 +39,7 @@ export async function buildNoBuildCloudPreviewProjection(input: Parameters<typeo
  * Activation, Firebase, storage and metadata-service access stay in the parent. */
 export async function buildNoBuildCloudBackground(
   input: Parameters<typeof buildFrozenPublication>[0], distDirectory: string,
+  recordTimings?: (timings: Record<string, number>) => void,
 ) {
   let stage = "source_checkout";
   try {
@@ -76,12 +77,12 @@ export async function buildNoBuildCloudBackground(
       "--", "/usr/bin/node", "--import", "tsx", path.join(site, "scripts/build-with-production-sync.mjs"));
     const childEnvironment: Record<string, string> = { ...sandbox.environment };
     delete childEnvironment.CMS_PREVIEW_INPUT_PATH;
-    await new Promise<void>((resolve, reject) => {
+    const stdout = await new Promise<string>((resolve, reject) => {
       execFile("/usr/bin/bwrap", args, { cwd: site, env: childEnvironment,
         timeout: 300_000, killSignal: "SIGKILL", maxBuffer: 2 * 1024 * 1024 },
       (error, stdout, stderr) => error ? reject(new BackgroundPreparationError(
         backgroundPreparationDiagnostic(error, backgroundRendererStage(stdout),
-          { ...input.buildEnvironment, ...environment, ...childEnvironment }, stderr))) : resolve());
+          { ...input.buildEnvironment, ...environment, ...childEnvironment }, stderr))) : resolve(stdout));
     });
     stage = "artifact_receipt";
     for (const file of ["artifact-inventory.json", "public-context.json"]) {
@@ -89,6 +90,7 @@ export async function buildNoBuildCloudBackground(
     }
     const receipt = assertPublicArtifactInventoryReceipt(JSON.parse(await readFile(input.artifactReceiptPath, "utf8")));
     if (receipt.commitSha !== input.commitSha || receipt.buildBatchId !== input.buildBatchId) throw new Error("Cloud background source differs");
+    recordTimings?.(backgroundRendererTimings(stdout));
     return receipt;
   } catch (error) {
     throw new BackgroundPreparationError(backgroundPreparationDiagnostic(error, stage, input.buildEnvironment ?? {}));
