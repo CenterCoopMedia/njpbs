@@ -1,8 +1,8 @@
 "use strict";
 
 // Server-owned read and triage boundary for #457. Reporters can read only their own
-// filed reports. Telegram is the mutation path for CMS-filed reports. Administrators
-// can list all reports and read private evidence and audit history for a filed report.
+// filed reports. Administrators can resolve reports in Boardwalk and can list all
+// reports and read private evidence and audit history for a filed report.
 
 const { cmsOnRequest } = require("./lib/cms-edge");
 const { createHash } = require("node:crypto");
@@ -27,6 +27,7 @@ const {
   canTransitionBugReportStatus,
   isBugReportId,
   normalizeActionableResolution,
+  redactReportText,
   reportForAdmin,
   reportForList,
   reportForReporter,
@@ -44,6 +45,7 @@ const ADMIN_ACTIONS = new Set([
   "take_over",
   "assign",
   "set_status",
+  "resolve",
   "set_related_reports",
   "update_resolution",
   "retry_notification",
@@ -60,6 +62,7 @@ const ACTION_FIELDS = Object.freeze({
   take_over: [],
   assign: ["ownerUid"],
   set_status: ["status"],
+  resolve: ["fixDeliveryConfirmed", "resolutionNote"],
   set_related_reports: ["relatedReportIds"],
   update_resolution: ["actionableResolution"],
   retry_notification: [],
@@ -230,6 +233,7 @@ function actionAuditSummary(record) {
     relatedReportIds: record.links?.relatedReportIds ?? [],
     acknowledgedAt: record.acknowledgedAt,
     actionableResolution: record.actionableResolution,
+    resolutionNote: record.resolutionNote ?? null,
     githubIssueNumbers: record.links?.githubIssueNumbers ?? [],
     pullRequestNumbers: record.links?.pullRequestNumbers ?? [],
     githubDelivery: record.githubDelivery ?? null,
@@ -320,24 +324,38 @@ async function applyAdminAction({
     next.ownerUid = body.ownerUid;
     next.assignedAt = body.ownerUid === null ? null : nowIso;
     auditAction = "bug_report.assign";
-  } else if (action === "set_status") {
-    if (!BUG_REPORT_STATUSES.includes(body.status)) {
+  } else if (action === "set_status" || action === "resolve") {
+    const status = action === "resolve" ? "resolved" : body.status;
+    if (!BUG_REPORT_STATUSES.includes(status)) {
       throw new BugReportTriageError(400, "Report status is invalid");
     }
-    if (next.status === body.status) {
-      throw new BugReportTriageError(409, `This report is already ${body.status}`);
+    if (next.status === status) {
+      throw new BugReportTriageError(409, `This report is already ${status}`);
     }
-    if (!canTransitionBugReportStatus(next.status, body.status)) {
+    if (!canTransitionBugReportStatus(next.status, status)) {
       throw new BugReportTriageError(
         409,
-        `A report cannot move from ${next.status} to ${body.status}`,
+        `A report cannot move from ${next.status} to ${status}`,
       );
     }
-    next.status = body.status;
-    next.resolvedAt = body.status === "resolved" ? nowIso : null;
-    next.resolvedBy = body.status === "resolved" ? actor.uid : null;
-    next.dismissedAt = body.status === "dismissed" ? nowIso : null;
-    next.dismissedBy = body.status === "dismissed" ? actor.uid : null;
+    if (action === "resolve") {
+      if (body.fixDeliveryConfirmed !== true) {
+        throw new BugReportTriageError(400, "Confirm that the fix is available before resolving the report");
+      }
+      if (typeof body.resolutionNote !== "string" || body.resolutionNote.length > 1_000) {
+        throw new BugReportTriageError(400, "Enter a resolution note of 1,000 characters or fewer");
+      }
+      next.resolutionNote = redactReportText(body.resolutionNote, {
+        label: "Resolution note", maxBytes: 4_000, required: true,
+      });
+    } else {
+      delete next.resolutionNote;
+    }
+    next.status = status;
+    next.resolvedAt = status === "resolved" ? nowIso : null;
+    next.resolvedBy = status === "resolved" ? actor.uid : null;
+    next.dismissedAt = status === "dismissed" ? nowIso : null;
+    next.dismissedBy = status === "dismissed" ? actor.uid : null;
     auditAction = "bug_report.status";
   } else if (action === "set_related_reports") {
     const relatedReportIds = canonicalRelatedReportIds(
@@ -514,7 +532,7 @@ async function commitAdminAction({
     );
     const statusChanged =
       validated.action === "acknowledge" ||
-      (validated.action === "set_status" && stored.status !== next.status);
+      stored.status !== next.status;
     const resolutionChanged = validated.action === "update_resolution" &&
       canonicalJson(resolutionEmailLines(stored.actionableResolution)) !==
         canonicalJson(resolutionEmailLines(next.actionableResolution));
@@ -526,11 +544,12 @@ async function commitAdminAction({
           reportId: validated.reportId,
           eventType: validated.action === "acknowledge"
             ? "report_acknowledged"
-            : validated.action === "set_status"
+            : statusChanged
               ? "report_status_changed"
               : "report_resolution_updated",
           eventStatus: next.status,
           eventResolution: next.actionableResolution,
+          ...(validated.action === "resolve" ? { eventResolutionNote: next.resolutionNote } : {}),
           reportVersion: next.version,
           channel: "email",
           state: "pending",
@@ -554,6 +573,13 @@ function sendError(res, error, log, operation) {
     error: error?.message || "The bug report request failed",
     ...(error?.data ?? {}),
   });
+}
+
+function reportFailureCode(error) {
+  const code = error?.code;
+  if (Number.isInteger(code) && code >= 0 && code <= 16) return code;
+  if (["aborted", "already-exists", "failed-precondition", "unavailable", "deadline-exceeded", "permission-denied", "auth/internal-error"].includes(code)) return code;
+  return "unknown";
 }
 
 function createCmsListBugReportsHandler(deps = {}) {
@@ -705,7 +731,7 @@ function createCmsGetBugReportEvidenceHandler(deps = {}) {
   };
 }
 
-function createCmsUpdateBugReportHandler(deps = {}) {
+function createCmsUpdateBugReportHandler(deps = {}, requiredAction) {
   const {
     firestore = db,
     requirePrincipalFn = requirePrincipal,
@@ -715,11 +741,15 @@ function createCmsUpdateBugReportHandler(deps = {}) {
     log = logger,
   } = deps;
   return async (req, res) => {
+    res.set("Cache-Control", "private, no-store");
     try {
       requireJsonPost(req);
       const user = requireApprovedPrincipal(await requirePrincipalFn(req));
       if (!(await isAdminFn(user.uid, user.emailVerified, user.authTime))) {
         throw new BugReportTriageError(403, "Admin access required");
+      }
+      if (requiredAction && req.body.action !== requiredAction) {
+        throw new BugReportTriageError(400, "Report action is invalid");
       }
       const source = clientSource(req);
       const result = await commitAdminAction({
@@ -745,9 +775,23 @@ function createCmsUpdateBugReportHandler(deps = {}) {
         replayed: result.replayed,
       });
     } catch (error) {
-      sendError(res, error, log, "cmsUpdateBugReport");
+      if (error instanceof BugReportTriageError || error instanceof AuthError || error instanceof ForbiddenError) {
+        res.status(error.status).json({ error: error.message, ...error.data });
+      } else {
+        const code = reportFailureCode(error);
+        log.error("Bug report update failed", {
+          reportId: isBugReportId(req.body?.reportId) ? req.body.reportId : null,
+          code,
+        });
+        const status = code === "failed-precondition" || code === 9 ? 503 : 500;
+        res.status(status).json({ error: "The report could not be saved. Try again." });
+      }
     }
   };
+}
+
+function createCmsResolveBugReportHandler(deps) {
+  return createCmsUpdateBugReportHandler(deps, "resolve");
 }
 
 const cmsListBugReports = cmsOnRequest({ cors: true }, createCmsListBugReportsHandler());
@@ -769,14 +813,14 @@ function createCmsNudgeBugReportHandler(deps = {}) {
         : trusted && [400, 403, 404, 405, 409].includes(error.status) ? error.status : 500;
       if (status === 500) (deps.log ?? logger).error("cmsNudgeBugReport failed", {
         reportId: isBugReportId(req.body?.reportId) ? req.body.reportId : null,
-        code: Number.isInteger(error?.code) && error.code >= 0 && error.code <= 16 ? error.code
-          : ["aborted", "already-exists", "failed-precondition", "unavailable", "deadline-exceeded", "permission-denied"].includes(error?.code) ? error.code : "unknown",
+        code: reportFailureCode(error),
       });
       res.status(status).json({ error: status === 500 ? "The nudge could not be queued. Try again." : error.message });
     }
   };
 }
 const cmsNudgeBugReport = cmsOnRequest({ cors: true }, createCmsNudgeBugReportHandler());
+const cmsResolveBugReport = cmsOnRequest({ cors: true }, createCmsResolveBugReportHandler());
 const cmsGetBugReport = cmsOnRequest({ cors: true }, createCmsGetBugReportHandler());
 const cmsGetBugReportEvidence = cmsOnRequest(
   { cors: true },
@@ -795,10 +839,12 @@ module.exports = {
   cmsGetBugReportEvidence,
   cmsListBugReports,
   cmsNudgeBugReport,
+  cmsResolveBugReport,
   createCmsNudgeBugReportHandler,
   createCmsGetBugReportEvidenceHandler,
   createCmsGetBugReportHandler,
   createCmsListBugReportsHandler,
+  createCmsResolveBugReportHandler,
   createCmsUpdateBugReportHandler,
   isActiveStaffRecord,
   requireApprovedPrincipal,

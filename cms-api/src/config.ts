@@ -170,6 +170,7 @@ export const ENDPOINTS = Object.freeze({
   },
   cmsListBugReports: { contentType: "json", maxBytes: 2 * KIB, rateClass: "read" },
   cmsNudgeBugReport: { contentType: "json", maxBytes: 2 * KIB, rateClass: "mutation" },
+  cmsResolveBugReport: { contentType: "json", maxBytes: 8 * KIB, rateClass: "mutation" },
   cmsGetBugReport: { contentType: "json", maxBytes: 2 * KIB, rateClass: "read" },
   cmsGetBugReportEvidence: {
     contentType: "json",

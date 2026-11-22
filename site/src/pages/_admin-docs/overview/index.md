@@ -144,7 +144,7 @@ Your rail contains only the destinations your account may use.
 | Staff access | Review roles and area grants; high-risk role changes remain restricted. |
 | Resources | Open the New Jersey politics guide. |
 | Analytics | Read audience, newsletter, and website delivery reports. Managers and Site owners only. |
-| Reports | File problem reports and read your own reports. Available to every staff role, including Viewer. |
+| Reports | File problem reports and read your own reports. Available to every staff role, including Viewer. Administrators can record a resolution after they verify the fix. |
 | Admin settings | Maintain global newsroom settings available to Managers. |
 | Around NJ | Open the Around NJ guide in a new tab. |
 | Account menu | Open your profile, personal display settings, and sign-out action. |

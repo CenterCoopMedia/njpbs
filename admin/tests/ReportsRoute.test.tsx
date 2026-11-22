@@ -12,6 +12,7 @@ const mocks = vi.hoisted(() => ({
   cmsListGithubIssues: vi.fn(),
   cmsGetGithubIssue: vi.fn(),
   cmsNudgeBugReport: vi.fn(),
+  cmsResolveBugReport: vi.fn(),
 }));
 vi.mock("../src/lib/functions", async (importOriginal) => ({
   ...(await importOriginal<typeof import("../src/lib/functions")>()),
@@ -111,6 +112,42 @@ beforeEach(() => {
 });
 
 describe("ReportsRoute", () => {
+  it("asks for the resolution note after live confirmation and reuses the mutation ID on retry", async () => {
+    const editable = { ...report, progress: safeProgress };
+    const resolved = { ...report, status: "resolved" as const, version: 2, resolutionNote: "Verified the draft saves." };
+    mocks.cmsGetBugReport.mockResolvedValue({ report: editable, canAdminister: true });
+    mocks.cmsResolveBugReport.mockRejectedValueOnce(new Error("Temporary failure")).mockImplementationOnce(async () => {
+      mocks.cmsGetBugReport.mockResolvedValue({ report: resolved, canAdminister: true });
+      mocks.cmsListBugReports.mockResolvedValue({ reports: [resolved] });
+      return { report: resolved };
+    });
+    renderRoute("admin", `/reports/${ID}`);
+    const confirmation = await screen.findByRole("checkbox", { name: /verified that the fix is available/i });
+    expect(screen.queryByRole("textbox", { name: /resolution note/i })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Resolve report" })).toBeNull();
+    fireEvent.click(confirmation);
+    const submit = screen.getByRole("button", { name: "Resolve report" });
+    expect(submit).toBeDisabled();
+    fireEvent.change(screen.getByRole("textbox", { name: "Resolution note" }), { target: { value: resolved.resolutionNote } });
+    fireEvent.click(submit);
+    await screen.findByText("Temporary failure");
+    fireEvent.click(submit);
+    await screen.findByText(resolved.resolutionNote);
+    const [first, retry] = mocks.cmsResolveBugReport.mock.calls;
+    expect(first[1]).toEqual({
+      reportId: ID, baseVersion: report.version, mutationId: expect.any(String),
+      fixDeliveryConfirmed: true, resolutionNote: resolved.resolutionNote,
+    });
+    expect(retry).toEqual(first);
+    expect(screen.queryByRole("checkbox", { name: /verified that the fix is available/i })).toBeNull();
+  });
+
+  it("keeps resolution controls out of the reporter's detail", async () => {
+    renderRoute("editor", `/reports/${ID}`);
+    await screen.findByRole("heading", { name: report.tryingToDo });
+    expect(screen.queryByRole("checkbox", { name: /verified that the fix is available/i })).toBeNull();
+  });
+
   it("shares pending, retry identity and success across row and detail nudge controls", async () => {
     const initial = { version: 1, eligible: true, eligibleAt: report.createdAt, progressAt: report.createdAt, requestedAt: null, history: [], historyTruncated: false };
     const queued = { ...initial, version: 2, eligible: false, requestedAt: "2026-10-05T00:00:00Z", history: [{ requestedAt: "2026-10-05T00:00:00Z", delivery: "pending", decision: null, decidedAt: null }] };

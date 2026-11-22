@@ -158,6 +158,7 @@ export const AUTHENTICATED_POST_FUNCTION_NAMES = Object.freeze([
   "cmsSubmitBugReport",
   "cmsListBugReports",
   "cmsNudgeBugReport",
+  "cmsResolveBugReport",
   "cmsGetBugReport",
   "cmsGetBugReportEvidence",
   "cmsListGithubIssues",

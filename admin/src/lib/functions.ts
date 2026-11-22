@@ -649,6 +649,13 @@ export function cmsNudgeBugReport(idToken: string, reportId: string, mutationId:
   return postFunction("cmsNudgeBugReport", idToken, { reportId, mutationId });
 }
 
+export function cmsResolveBugReport(
+  idToken: string,
+  request: { reportId: string; baseVersion: number; mutationId: string; resolutionNote: string; fixDeliveryConfirmed: true },
+): Promise<{ success: true; report: BugReportRecord; changed: boolean; replayed: boolean }> {
+  return postFunction("cmsResolveBugReport", idToken, { ...request, action: "resolve" });
+}
+
 export function cmsListBugReports(
   idToken: string,
   view: "mine" | "all" = "mine",

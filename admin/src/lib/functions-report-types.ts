@@ -121,6 +121,7 @@ export interface BugReportRecord {
   status: BugReportStatus;
   progress?: BugReportProgress;
   actionableResolution: BugReportResolution;
+  resolutionNote?: string;
   acknowledgedAt: string | null;
   assignedAt: string | null;
   resolvedAt: string | null;

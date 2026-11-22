@@ -881,6 +881,7 @@ function reportForReporter(record, reporterUid) {
     uid: record.reporter.uid,
     role: record.reporter.role,
   };
+  if (typeof record.resolutionNote === "string") projection.resolutionNote = record.resolutionNote;
   projection.progress = reportProgress(record);
   projection.nudge = nudgeForReporter(record);
   return projection;
@@ -895,6 +896,7 @@ function reportForAdmin(record) {
     ...(record.fixPullRequestRepository !== undefined || record.fixPullRequestRepositoryId !== undefined
       ? { links: pullLinksForRepository(record.links, record.fixPullRequestRepository) } : {}),
     ...(record.automatic ? { automatic: clone(record.automatic) } : {}),
+    ...(typeof record.resolutionNote === "string" ? { resolutionNote: record.resolutionNote } : {}),
     progress: reportProgress(record),
   };
 }

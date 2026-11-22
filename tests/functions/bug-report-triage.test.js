@@ -3,6 +3,7 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vites
 import adminPkg from "../helpers/firebase-admin.js";
 import triage from "../../functions/bug-report-triage.js";
 import contract from "../../functions/lib/bug-report-contract.js";
+import delivery from "../../functions/bug-report-delivery.js";
 
 const admin = adminPkg;
 const PROJECT = process.env.GCLOUD_PROJECT || "demo-njpbs";
@@ -319,6 +320,100 @@ describe("atomic administrator triage", () => {
       now: () => NOW,
     });
   }
+
+  it("resolves only with administrator confirmation and delivers one saved resolution notice", async () => {
+    const stored = report(1);
+    await seed(stored);
+    const verification = `Verified that the draft saves excerpts such as ${"é".repeat(520)}.`;
+    const request = {
+      reportId: stored.id,
+      baseVersion: stored.version,
+      mutationId: MUTATION_ID,
+      action: "resolve",
+      fixDeliveryConfirmed: true,
+      resolutionNote: `${verification} Contact staff@example.org for help.`,
+    };
+    const note = `${verification} Contact [redacted email] for help.`;
+    async function resolve(body, user = principal("admin-1", "admin")) {
+      const response = res();
+      await triage.createCmsResolveBugReportHandler({
+        firestore: db,
+        requirePrincipalFn: async () => user,
+        isAdminFn: async (uid) => uid === "admin-1",
+        now: () => NOW,
+      })(req(body), response);
+      return response;
+    }
+
+    expect((await resolve(request, principal())).statusCode).toBe(403);
+    expect((await resolve({ ...request, fixDeliveryConfirmed: false })).statusCode).toBe(400);
+    expect((await resolve({ ...request, resolutionNote: "   " })).statusCode).toBe(400);
+    expect((await resolve({ ...request, resolutionNote: "x".repeat(1_001) })).statusCode).toBe(400);
+    expect((await resolve({ ...request, baseVersion: 2 })).statusCode).toBe(409);
+    expect((await resolve({
+      reportId: stored.id, baseVersion: 1, mutationId: MUTATION_ID, action: "set_status", status: "resolved",
+    })).statusCode).toBe(400);
+    expect(await rows("admin_logs")).toEqual([]);
+    expect(await rows("bugReportDeliveryOutbox")).toEqual([]);
+
+    const saved = await resolve(request);
+    expect(saved.headers["cache-control"]).toBe("private, no-store");
+    expect(saved.body).toMatchObject({
+      changed: true, replayed: false,
+      report: { status: "resolved", resolvedBy: "admin-1", resolvedAt: NOW, version: 2, resolutionNote: note },
+    });
+    expect((await resolve(request)).body).toMatchObject({ changed: false, replayed: true });
+    expect((await resolve({ ...request, mutationId: "44444444-4444-4444-8444-444444444444", baseVersion: 2 })).statusCode).toBe(409);
+    expect(await rows("admin_logs")).toEqual([
+      expect.objectContaining({
+        action: "bug_report.status", actorUid: "admin-1",
+        before: expect.objectContaining({ status: "open" }),
+        after: expect.objectContaining({ status: "resolved", resolutionNote: note }),
+      }),
+    ]);
+    expect(await rows("bugReportMutationReceipts")).toHaveLength(1);
+    const current = (await db.collection("bug_reports").doc(stored.id).get()).data();
+    expect(contract.reportForReporter(current, stored.reporter.uid).resolutionNote).toBe(note);
+    expect(contract.reportForStaff(current)).not.toHaveProperty("resolutionNote");
+    expect((await rows("bugReportDeliveryOutbox")).filter((row) => row.channel === "email")).toEqual([
+      expect.objectContaining({ eventType: "report_status_changed", eventStatus: "resolved", eventResolutionNote: note }),
+    ]);
+
+    const sendEmail = vi.fn(async () => ({ delivered: true }));
+    const deps = { firestore: db, now: () => new Date(NOW), sendEmail, adminOrigin: "https://admin.njpbs.org" };
+    await delivery.deliverOutboxRow(`${stored.id}--email--2`, deps);
+    await delivery.deliverOutboxRow(`${stored.id}--email--2`, deps);
+    expect(sendEmail).toHaveBeenCalledOnce();
+    expect(sendEmail).toHaveBeenCalledWith(expect.objectContaining({
+      to: stored.reporter.email,
+      text: expect.stringContaining(`Resolution:\n${note}`),
+    }));
+  });
+
+  it("logs bounded diagnostics for a resolution precondition failure", async () => {
+    const stored = report(1);
+    const log = { error: vi.fn() };
+    const response = res();
+    await triage.createCmsResolveBugReportHandler({
+      firestore: {
+        async runTransaction() {
+          throw Object.assign(new Error("Synthetic provider detail"), { code: "failed-precondition" });
+        },
+      },
+      requirePrincipalFn: async () => principal("admin-1", "admin"),
+      isAdminFn: async () => true,
+      log,
+    })(req({
+      reportId: stored.id, baseVersion: 1, mutationId: MUTATION_ID,
+      action: "resolve", fixDeliveryConfirmed: true, resolutionNote: "Verified the fix.",
+    }), response);
+
+    expect(response.statusCode).toBe(503);
+    expect(response.body).toEqual({ error: "The report could not be saved. Try again." });
+    expect(log.error).toHaveBeenCalledExactlyOnceWith("Bug report update failed", {
+      reportId: stored.id, code: "failed-precondition",
+    });
+  });
 
   it("commits acknowledgement, audit, mutation receipt, and delivery work together", async () => {
     const stored = report(1);

@@ -22,17 +22,18 @@ const COLLECTIONS = [
 ];
 let db;
 
-async function update(firestore = db) {
+async function update(firestore = db, createHandler = triage.createCmsUpdateBugReportHandler, body = BODY) {
   const response = {
     statusCode: null,
     body: null,
     status(code) { this.statusCode = code; return this; },
     json(body) { this.body = body; return this; },
+    set() { return this; },
   };
-  await triage.createCmsUpdateBugReportHandler({ firestore, now: () => NOW })({
+  await createHandler({ firestore, now: () => NOW })({
     method: "POST",
     headers: { authorization: `Bearer ${ACTOR_UID}` },
-    body: BODY,
+    body,
   }, response);
   return response;
 }
@@ -94,6 +95,22 @@ afterAll(async () => {
 });
 
 describe("bug report triage authorization at the request and storage boundaries", () => {
+  it("refuses resolution if the stored administrator loses access after the request precheck", async () => {
+    const before = await storedState();
+    const firestore = {
+      collection: db.collection.bind(db),
+      runTransaction: async (callback) => {
+        await changeAccount({ role: "editor", active: true });
+        return db.runTransaction(callback);
+      },
+    };
+    const result = await update(firestore, triage.createCmsResolveBugReportHandler, {
+      ...BODY, action: "resolve", fixDeliveryConfirmed: true, resolutionNote: "Verified the fix.",
+    });
+    expect(result.statusCode).toBe(403);
+    expect(await storedState()).toEqual(before);
+  });
+
   const accounts = [
     { account: "demoted", profile: { role: null, active: true, grants: [{ role: "editor" }] } },
     { account: "inactive", profile: { role: "admin", active: false } },

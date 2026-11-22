@@ -134,6 +134,7 @@ lazyExport("onStaffAccessNotificationCreated", "./staff-access-notification");
 lazyExport("cmsSubmitBugReport", "./bug-report");
 lazyExport("cmsListBugReports", "./bug-report-triage");
 lazyExport("cmsNudgeBugReport", "./bug-report-triage");
+lazyExport("cmsResolveBugReport", "./bug-report-triage");
 lazyExport("cmsGetBugReport", "./bug-report-triage");
 lazyExport("cmsGetBugReportEvidence", "./bug-report-triage");
 lazyExport("cmsListGithubIssues", "./bug-report-github");
