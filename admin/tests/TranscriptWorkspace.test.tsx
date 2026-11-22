@@ -363,6 +363,36 @@ describe("long transcript workspace", () => {
 });
 
 describe("playback transcript sidebar", () => {
+  it("returns to a hidden late correction and resumes following only when requested", () => {
+    const { props, rerender } = setup(fixture(180), { pane: true, playbackSeconds: 3001 });
+    const correction = () => screen.getByRole("textbox", { name: "Passage 101" });
+    fireEvent.click(screen.getByRole("button", { name: "Edit transcript" }));
+    fireEvent.change(correction(), { target: { value: "Unsaved correction at fifty minutes" } });
+    fireEvent.click(screen.getByRole("button", { name: "Next page" }));
+    fireEvent.click(screen.getByRole("button", { name: "Return to correction" }));
+    expect(correction()).toHaveValue("Unsaved correction at fifty minutes");
+    expect(correction()).toHaveFocus();
+
+    const search = screen.getByRole("searchbox", { name: "Search loaded transcript" });
+    fireEvent.change(search, { target: { value: "Passage text 1" } });
+    const speaker = screen.getByRole("combobox", { name: "Filter by speaker" });
+    fireEvent.change(speaker, { target: { value: "spk_1" } });
+    rerender(<TranscriptEditor {...props} playbackSeconds={1} />);
+    expect(screen.queryByRole("textbox", { name: "Passage 101" })).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Return to correction" }));
+    expect(search).toHaveValue("");
+    expect(speaker).toHaveValue("");
+    expect(correction()).toHaveValue("Unsaved correction at fifty minutes");
+    expect(correction()).toHaveFocus();
+    expect(props.onSeek).not.toHaveBeenCalled();
+
+    fireEvent.click(within(row("Passage 101")).getByRole("button", { name: "Seek to 00:50:00.000" }));
+    fireEvent.click(screen.getByRole("button", { name: "Cancel edits" }));
+    expect(row("Passage 101")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Follow playback" }));
+    expect(row("Passage 1")).toHaveAttribute("aria-current", "true");
+  });
+
   it("follows playback across loaded pages without moving focus and lets manual reading pause it", () => {
     const { props, rerender } = setup(fixture(120), { pane: true, playbackSeconds: 31 });
     const search = screen.getByRole("searchbox", { name: "Search loaded transcript" });

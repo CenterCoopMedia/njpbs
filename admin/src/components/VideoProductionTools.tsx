@@ -84,7 +84,7 @@ function clipSettingsLabel(clip: VideoClip) {
 const activeTranscript = (state?: string) => state === "queued" || state === "processing";
 const activeClip = (state?: string) => state === "queued" || state === "processing";
 
-export function useVideoProductionTools({ headerControls = false, workspace = false, commentThreads, commentsIncomplete, onOpenComment, commentsAction, onWorkspacePaneChange, principal, onCredentialsDirtyChange, onCredentialsBusyChange, asset, getIdToken, player, canRequest, disabled, onDownloadOriginal, onTranscriptDirtyChange, onTranscriptSavingChange, onBusyChange, onSearchContentChanged, onTranscriptRequested, onTranscriptObserved, onTranscriptReady }: {
+export function useVideoProductionTools({ headerControls = false, workspace = false, commentThreads, commentsIncomplete, onOpenComment, commentsAction, onWorkspacePaneChange, principal, onCredentialsDirtyChange, onCredentialsBusyChange, asset, getIdToken, player, canRequest, disabled: mediaDisabled, onDownloadOriginal, onTranscriptDirtyChange, onTranscriptSavingChange, onBusyChange, onSearchContentChanged, onTranscriptRequested, onTranscriptObserved, onTranscriptReady }: {
   principal?: Principal;
   headerControls?: boolean;
   workspace?: boolean;
@@ -119,6 +119,8 @@ export function useVideoProductionTools({ headerControls = false, workspace = fa
   const [transcriptDirty, setTranscriptDirty] = useState(false);
   const [transcriptSaving, setTranscriptSaving] = useState(false);
   const [byokBusy, setByokBusy] = useState(false);
+  // Other production controls wait for a transcript save. The editor owns its own save lock.
+  const disabled = mediaDisabled || transcriptSaving || byokBusy;
   const editingRef = useRef(false);
   const transcriptLocked = transcriptEditing || transcriptSaving || byokBusy;
   editingRef.current = transcriptLocked;
@@ -579,7 +581,7 @@ export function useVideoProductionTools({ headerControls = false, workspace = fa
     requestAnimationFrame(() => { if (mounted.current) clipInInput.current?.querySelector("input")?.focus(); });
   }
   const transcriptContent = transcriptOpen && transcriptState === "ready" && transcript ? <>
-    <TranscriptEditor playbackSeconds={workspace ? playbackSeconds : undefined} commentThreads={commentThreads} commentsIncomplete={commentsIncomplete} onOpenComment={onOpenComment} commentsAction={commentsAction} loadMoreAction={workspace && transcript.nextCursor ? <Button disabled={transcriptPageLoading || transcriptBusy || transcriptLocked} onClick={() => void moreTranscript()}>{transcriptPageLoading ? "Loading more transcript" : "Load more transcript"}</Button> : null} pane={workspace} key={transcript.transcript.id} response={transcript} canEdit={canRequest} disabled={disabled || transcriptBusy || transcriptChecking || byokBusy}
+    <TranscriptEditor playbackSeconds={workspace ? playbackSeconds : undefined} commentThreads={commentThreads} commentsIncomplete={commentsIncomplete} onOpenComment={onOpenComment} commentsAction={commentsAction} loadMoreAction={workspace && transcript.nextCursor ? <Button disabled={transcriptPageLoading || transcriptBusy || transcriptLocked} onClick={() => void moreTranscript()}>{transcriptPageLoading ? "Loading more transcript" : "Load more transcript"}</Button> : null} pane={workspace} key={transcript.transcript.id} response={transcript} canEdit={canRequest} disabled={mediaDisabled || transcriptBusy || transcriptChecking || byokBusy}
       onSelectPassage={selectPassage} canSelectPassage={canSelectPassage} onSeek={seek} onDirtyChange={setTranscriptDirty} onSavingChange={setTranscriptSaving} onEditingChange={setTranscriptEditing}
       onSave={async edits => {
         const transcriptId = transcript.transcript.id;

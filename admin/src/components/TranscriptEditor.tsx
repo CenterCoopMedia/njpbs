@@ -123,17 +123,6 @@ export function TranscriptEditor({ pane = false, playbackSeconds, commentThreads
   const focusSpeaker = useRef<string>();
   const lastMode = useRef<EditMode>("text");
   const wasEditing = useRef(false);
-  useEffect(() => {
-    if (editing) {
-      const fields = Array.from(editorForm.current?.querySelectorAll<HTMLElement>("[data-speaker-id]") ?? []);
-      const target = fields.find(field => field.dataset.speakerId === focusSpeaker.current);
-      const field = lastMode.current === "speakers"
-        ? (target ?? fields[0])?.querySelector("input")
-        : editorForm.current?.querySelector("textarea");
-      (field ?? cancelButton.current)?.focus();
-    } else if (wasEditing.current) (lastMode.current === "speakers" ? speakersButton : editButton).current?.focus();
-    wasEditing.current = editing;
-  }, [editMode, editorFocusRequest]);
   const mounted = useRef(true);
   useEffect(() => { mounted.current = true; return () => { mounted.current = false; }; }, []);
   const originals = response.segments ?? [];
@@ -177,6 +166,7 @@ export function TranscriptEditor({ pane = false, playbackSeconds, commentThreads
   const pageCount = Math.max(1, Math.ceil(matches.length / TRANSCRIPT_PAGE_SIZE));
   const currentPage = Math.min(page, pageCount - 1);
   const visible = matches.slice(currentPage * TRANSCRIPT_PAGE_SIZE, (currentPage + 1) * TRANSCRIPT_PAGE_SIZE);
+  const correctionHidden = editMode === "text" && activePassage !== null && !visible.some(entry => entry.id === activePassage);
   const selectedCount = originals.filter((segment, position) => selected.has(passageId(segment, position))).length;
   const hiddenSelectedCount = selectedCount - visible.filter(entry => selected.has(entry.id)).length;
   const range = selectedPassageRange(originals, selected);
@@ -191,6 +181,17 @@ export function TranscriptEditor({ pane = false, playbackSeconds, commentThreads
     setQuery(""); setSpeakerFilter(""); setFollowing(true); setFollowRequest(value => value + 1);
   }
   useEffect(() => { if (list.current) list.current.scrollTop = 0; }, [currentPage, query, speakerFilter]);
+  useEffect(() => {
+    if (editing) {
+      const fields = Array.from(editorForm.current?.querySelectorAll<HTMLElement>("[data-speaker-id]") ?? []);
+      const target = fields.find(field => field.dataset.speakerId === focusSpeaker.current);
+      const field = lastMode.current === "speakers"
+        ? (target ?? fields[0])?.querySelector("input")
+        : editorForm.current?.querySelector("textarea");
+      (field ?? cancelButton.current)?.focus();
+    } else if (wasEditing.current) (lastMode.current === "speakers" ? speakersButton : editButton).current?.focus();
+    wasEditing.current = editing;
+  }, [editMode, editorFocusRequest]);
   useEffect(() => {
     if (!canFollow || playingId === null) return;
     // Keep a focused passage mounted while staff read or expand its comments.
@@ -221,6 +222,7 @@ export function TranscriptEditor({ pane = false, playbackSeconds, commentThreads
 
   function begin(mode: EditMode = "text", speaker?: string, passage?: number) {
     if (blocked || !canEdit) return;
+    pauseFollowing();
     lastMode.current = mode; focusSpeaker.current = speaker;
     setEditorFocusRequest(value => value + 1);
     if (!editing) {
@@ -237,6 +239,17 @@ export function TranscriptEditor({ pane = false, playbackSeconds, commentThreads
       setActivePassage(passage ?? remembered ?? textVisible[0]?.id ?? null);
     }
     setSelecting(false); setSelected(new Set()); setEditMode(mode);
+  }
+  function returnToCorrection() {
+    const match = matches.findIndex(entry => entry.id === activePassage);
+    if (match >= 0) {
+      setPage(Math.floor(match / TRANSCRIPT_PAGE_SIZE));
+    } else {
+      const position = originals.findIndex((segment, index) => passageId(segment, index) === activePassage);
+      if (position < 0) return;
+      setQuery(""); setSpeakerFilter(""); setPage(Math.floor(position / TRANSCRIPT_PAGE_SIZE));
+    }
+    setEditorFocusRequest(value => value + 1);
   }
   function cancel(reload = false) {
     if (blocked) return;
@@ -358,6 +371,7 @@ export function TranscriptEditor({ pane = false, playbackSeconds, commentThreads
       }} /></label> : null}
       <Button className="transcript-timestamp" variant="ghost" onClick={() => {
         onSeek(segment.startSeconds);
+        if (editing || selecting) return;
         // The phone player takes seek focus before following resumes.
         requestAnimationFrame(() => {
           if (!mounted.current || query || speakerFilter) return;
@@ -429,6 +443,7 @@ export function TranscriptEditor({ pane = false, playbackSeconds, commentThreads
   const resultsBar = <div className="transcript-results-bar">
       <p role="status" aria-live={canFollow && playbackSeconds !== undefined ? "off" : "polite"}>{matches.length ? pane ? `${currentPage * TRANSCRIPT_PAGE_SIZE + 1}–${Math.min((currentPage + 1) * TRANSCRIPT_PAGE_SIZE, matches.length)} of ${matches.length} matches` : `Showing ${currentPage * TRANSCRIPT_PAGE_SIZE + 1}–${Math.min((currentPage + 1) * TRANSCRIPT_PAGE_SIZE, matches.length)} of ${matches.length} matching passages.` : "No matching loaded passages."}{pane ? ` · ${allLoaded ? "Entire transcript" : `${originals.length}${response.transcript.totalSegments !== undefined ? `/${response.transcript.totalSegments}` : ""} loaded passages only`}` : ""}</p>
       {query || speakerFilter ? <Button variant="ghost" onClick={() => { setQuery(""); setSpeakerFilter(""); setPage(0); }}>Clear filters</Button> : null}
+      {correctionHidden ? <Button disabled={blocked} onClick={returnToCorrection}>Return to correction</Button> : null}
       {pageCount > 1 ? <nav aria-label="Transcript pages"><Button disabled={currentPage === 0} onClick={() => top(currentPage - 1)}>Previous page</Button><span>Page {currentPage + 1} of {pageCount}</span><Button disabled={currentPage === pageCount - 1} onClick={() => top(currentPage + 1)}>Next page</Button></nav> : null}
       {loadMoreAction}
       {commentsAction}
@@ -482,7 +497,7 @@ export function TranscriptEditor({ pane = false, playbackSeconds, commentThreads
       {tooMany ? <p role="alert">Save at most 100 changed passages at a time. Undo some passage changes before saving.</p> : null}
       {error ? <InlineMessage tone="error" title="Transcript corrections need attention">{error}</InlineMessage> : null}
       <p role="status">{saving ? "Saving transcript corrections." : dirty ? `Unsaved changes${changedSegments.length ? ` · ${changedSegments.length} changed passages` : ""}.` : "No unsaved changes."}</p>
-      <div className="video-production-buttons"><Button form={formId} type="submit" variant="primary" disabled={blocked || !canEdit || !dirty || tooMany || conflict}>{saving ? "Saving transcript" : editMode === "speakers" && !changedSegments.length ? "Save speaker names" : "Save transcript"}</Button>
+      <div className="video-production-buttons"><Button form={formId} type="submit" variant="primary" aria-busy={saving || undefined} aria-disabled={saving || undefined} disabled={disabled || alignmentBusy || !canEdit || !dirty || tooMany || conflict}>{saving ? "Saving transcript" : editMode === "speakers" && !changedSegments.length ? "Save speaker names" : "Save transcript"}</Button>
         <Button ref={cancelButton} disabled={blocked} onClick={() => cancel()}>Cancel edits</Button>
         {conflict ? <Button disabled={blocked} onClick={() => cancel(true)}>Discard edits and reload</Button> : null}</div>
     </div> : null}
