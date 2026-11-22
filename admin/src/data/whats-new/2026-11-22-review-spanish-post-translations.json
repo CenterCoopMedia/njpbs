@@ -1,0 +1,7 @@
+{
+  "date": "2026-11-22",
+  "kind": "new",
+  "title": "Review Spanish Post translations",
+  "body": "Submit a saved Spanish Post draft for translation review. Editors can use Preview and Open original Post to compare the two versions, then approve the translation or send it back with a note. A draft reopened for edits needs a new approval.",
+  "prs": []
+}

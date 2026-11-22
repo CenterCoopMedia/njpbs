@@ -17,6 +17,7 @@ const { readSerializerPublicationControlInTransaction } = require("./lib/seriali
 const { buildFreeRefusalInTransaction } = require("./lib/build-free-refusal");
 
 const { contentVersion } = require("./lib/content-version");
+const { isSpanishEdition } = require("./lib/spanish-edition");
 const { approveElectionResults } = require("./lib/election-results-approval");
 const { visibleLayoutBlocks } = require("./lib/content-layout");
 const { registeredPrincipalFromUserDoc } = require("./lib/principal");
@@ -421,6 +422,10 @@ function createCmsTransitionContentHandler(deps = {}) {
           });
           throw new LifecycleTransitionRejection(403, FORBIDDEN_MESSAGE);
         }
+        const translationReview = collection === "cmsPosts" && current.type === "post" && isSpanishEdition(current);
+        if (translationReview && automationAccount && (action === "approve" || action === "sendBack")) {
+          throw new LifecycleTransitionRejection(403, "A staff editor must review the Spanish translation.");
+        }
         const automationRefusal = await automationWriteRefusal(tx, firestore, {
           automationAccount, uid: user.uid, collection, documentId: id, echoesVersion: true,
         });
@@ -540,6 +545,18 @@ function createCmsTransitionContentHandler(deps = {}) {
           contentVersion: contentVersion(current),
           ...(electionResultsApprovals ? { electionResultsApprovals } : {}),
         };
+        if (translationReview) {
+          if (action === "approve") {
+            changed.translationApproval = {
+              reviewedVersion: current.version,
+              contentVersion: changed.contentVersion,
+              approvedBy: user.uid,
+              approvedAt: timestamp,
+            };
+          } else if (changed.status !== "approved") {
+            delete changed.translationApproval;
+          }
+        }
         if (action === "submit") {
           // The review request lands in the same transaction and on the same
           // authoritative document as the lifecycle change. There is no
