@@ -28,7 +28,8 @@ import { availableSelectionActions, mediaBarActions, mediaSelectionActions, type
 import { cachedMediaList, favoritesChangeRevisionValue, invalidateMediaLists, markMediaTabCountsStale, mediaTabCounts, publishFavoritesChange, setMediaCachePrincipal, setMediaImagesCount, setMediaSourceCount, subscribeFavoritesChange, subscribeMediaTabCounts } from "../lib/media-session-cache";
 import { withMediaTabCounts } from "../lib/media-tab-counts";
 import { mediaShortcutBlocked } from "../lib/media-search";
-import { routedBatchNotice, UNSUPPORTED_UPLOAD_MESSAGE } from "../lib/upload-destination";
+import { routedBatchNotice, UNSUPPORTED_UPLOAD_MESSAGE, videoUploadCompletionMessage } from "../lib/upload-destination";
+import type { VideoUploadResult } from "../lib/source-media-upload";
 import { clearRejectedUploads, currentLibraryEpoch, finishLibraryUpload, finishVideoUpload, registerLibraryUpload, routeChosenFiles, subscribeUploadRouter, uploadRouterSnapshot } from "../lib/upload-router";
 import { MediaTabs } from "../components/media/MediaTabs";
 import { WorkspaceUploadButton } from "../components/media/WorkspaceUploadButton";
@@ -2283,7 +2284,13 @@ function RoutedVideoUpload({ onActiveChange, onAdmissionFailed, onDestinationUpd
   const [error, setError] = useState("");
   const [discoveryAttempt, setDiscoveryAttempt] = useState(0);
   const moreWork = useRef(false);
-  const readyNames = useRef<string[]>([]);
+  const completed = useRef<VideoUploadResult[]>([]);
+  function completedBatchMessage(assets: VideoUploadResult[], label: string) {
+    if (assets.length === 1) return videoUploadCompletionMessage(assets[0]);
+    const summary = `${assets.length} videos uploaded to ${label}. Open Videos to check each viewing copy.`;
+    return assets.some(asset => asset.collectionPlacement === "unavailable")
+      ? `${summary} Some selected collections became unavailable. Choose new collections from Videos.` : summary;
+  }
   useEffect(() => () => onActiveChange(false), [onActiveChange]);
   useEffect(() => {
     let alive = true;
@@ -2312,16 +2319,14 @@ function RoutedVideoUpload({ onActiveChange, onAdmissionFailed, onDestinationUpd
     onMoreWork={(more) => { moreWork.current = more; }}
     onTransferStopped={(note) => {
       if (moreWork.current) return;
-      const names = readyNames.current;
-      readyNames.current = [];
-      if (names.length === 0) {
+      const assets = completed.current;
+      completed.current = [];
+      if (assets.length === 0) {
         if (note) notice.show(note, { tone: "error" });
         finishVideoUpload();
         return;
       }
-      const summary = names.length === 1
-        ? `${names[0]} is in ${destination.label}.`
-        : `${names.length} videos are in ${destination.label}.`;
+      const summary = completedBatchMessage(assets, destination.label);
       const message = note ? `${summary} ${note}` : summary;
       notice.show(message, {
         action: {
@@ -2334,16 +2339,13 @@ function RoutedVideoUpload({ onActiveChange, onAdmissionFailed, onDestinationUpd
     onUploaded={(asset) => {
       setMediaSourceCount(destination.id, null);
       onDestinationUpdated(destination.id);
-      readyNames.current = [...readyNames.current, asset.name];
-      const names = readyNames.current;
-      const message = names.length === 1
-        ? `${asset.name} is in ${destination.label}.`
-        : `${names.length} videos are in ${destination.label}.`;
+      completed.current.push(asset);
       if (moreWork.current) {
-        notice.show(`${asset.name} is in ${destination.label}.`);
+        notice.show(videoUploadCompletionMessage(asset));
         return;
       }
-      readyNames.current = [];
+      const message = completedBatchMessage(completed.current, destination.label);
+      completed.current = [];
       notice.show(message, {
         action: {
           label: `Open ${destination.label}`,

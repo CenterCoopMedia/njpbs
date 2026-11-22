@@ -58,10 +58,13 @@ export interface VideoUploadSession {
   expiresAt: string;
   version: number;
 }
+export type VideoUploadResult = SourceMediaAssetSummary & {
+  collectionPlacement?: "added" | "unavailable";
+};
 interface CompletedPart { partNumber: number; etag: string; checksumSha256: string }
 interface SignedPart { partNumber: number; url: string; expiresAt: string; requiredHeaders: Record<string, string> }
 interface PreparedPartBatch { numbers: number[]; slices: Blob[]; checksums: string[] }
-type ResumeResponse = { success: true; asset: SourceMediaAssetSummary } | {
+type ResumeResponse = { success: true; asset: VideoUploadResult } | {
   success: true;
   upload: VideoUploadSession & { completedParts: CompletedPart[]; originalName: string; sizeBytes: number; lastModified: number };
 };
@@ -156,14 +159,15 @@ function videoMimeType(file: Pick<File, "name">): string {
 }
 
 export function startVideoUpload(token: string | null | (() => Promise<string>), sourceId: string, file: Pick<File, "name" | "size" | "lastModified">, metadata: VideoUploadMetadata,
-  options: { requestId?: string; signal?: AbortSignal; replacement?: { assetId: string; expectedVersion: number; confirmed: true } } = {}) {
+  options: { requestId?: string; signal?: AbortSignal; collectionId?: string; replacement?: { assetId: string; expectedVersion: number; confirmed: true } } = {}) {
   if (file.size > MAX_VIDEO_FILE_BYTES) throw new VideoUploadValidationError("Browser uploads support videos up to 250 GiB. Ask an administrator to import larger files.");
   return controlRequest(async signal => {
     const idToken = typeof token === "function" ? await token() : token;
     signal.throwIfAborted();
     return postFunction<{ success: true; upload: VideoUploadSession }>("cmsStartSourceMediaUpload", idToken,
       { sourceId, ...(options.requestId === undefined ? {} : { requestId: options.requestId }), originalName: file.name, mimeType: videoMimeType(file), sizeBytes: file.size, lastModified: file.lastModified,
-        ...(options.replacement ? { replacement: options.replacement } : { metadata }) }, {}, { appCheck: true, signal });
+        ...(options.replacement ? { replacement: options.replacement } : { metadata }),
+        ...(options.collectionId ? { collectionId: options.collectionId } : {}) }, {}, { appCheck: true, signal });
   }, options.signal);
 }
 
@@ -186,7 +190,7 @@ export async function transferVideo({ file, sourceId, session, getIdToken, signa
   onSession: (session: VideoUploadSession) => void;
   onPhase: (phase: "checking" | "uploading" | "finishing") => void;
   requireActiveSession?: boolean;
-}): Promise<SourceMediaAssetSummary> {
+}): Promise<VideoUploadResult> {
   onPhase("checking");
   const resumed = await controlRequest(async requestSignal => {
     const token = await getIdToken();
@@ -288,7 +292,7 @@ export async function transferVideo({ file, sourceId, session, getIdToken, signa
   const result = await controlRequest(async requestSignal => {
     const token = await getIdToken();
     requestSignal.throwIfAborted();
-    return postFunction<{ success: true; asset: SourceMediaAssetSummary }>("cmsCompleteSourceMediaUpload", token,
+    return postFunction<{ success: true; asset: VideoUploadResult }>("cmsCompleteSourceMediaUpload", token,
       { sourceId, sessionId: session.sessionId, version }, {}, { appCheck: true, signal: requestSignal });
   }, signal);
   return result.asset;

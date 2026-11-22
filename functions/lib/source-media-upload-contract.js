@@ -6,6 +6,7 @@ const {
   parseSourceMediaMarkers,
   parseSourceMediaParent,
 } = require("./source-media-contract");
+const { DOCUMENT_ID_PATTERN } = require("./media-collections");
 
 const MIB = 1024 * 1024;
 const DEFAULT_PART_SIZE = 16 * MIB;
@@ -132,7 +133,7 @@ function normalizeVideoMimeType(value, originalName) {
 function parseStartUploadRequest(value) {
   rejectUnknown(
     value,
-    new Set(["sourceId", "requestId", "originalName", "mimeType", "sizeBytes", "lastModified", "metadata", "parentSource", "replacement"]),
+    new Set(["sourceId", "requestId", "originalName", "mimeType", "sizeBytes", "lastModified", "metadata", "parentSource", "replacement", "collectionId"]),
   );
   const originalName = boundedText(value.originalName, "File name", 500);
   const mimeType = normalizeVideoMimeType(value.mimeType, originalName);
@@ -143,10 +144,15 @@ function parseStartUploadRequest(value) {
     throw new SourceMediaValidationError("File modification time is invalid");
   }
   const parentSource = parseSourceMediaParent(value.parentSource);
+  const collectionId = value.collectionId;
+  if (collectionId !== undefined && (value.sourceId !== "video-library" ||
+      typeof collectionId !== "string" || !DOCUMENT_ID_PATTERN.test(collectionId))) {
+    throw new SourceMediaValidationError("Upload collection is invalid");
+  }
   let replacement;
   if (value.replacement !== undefined) {
     rejectUnknown(value.replacement, new Set(["assetId", "expectedVersion", "confirmed"]), "Replacement");
-    if (value.sourceId !== "video-library" || value.replacement.confirmed !== true || parentSource || value.metadata !== undefined) {
+    if (value.sourceId !== "video-library" || value.replacement.confirmed !== true || parentSource || value.metadata !== undefined || collectionId !== undefined) {
       throw new SourceMediaValidationError("Confirm video replacement without changing metadata or placements");
     }
     replacement = { assetId: requiredId(value.replacement.assetId, "Asset id"),
@@ -160,6 +166,7 @@ function parseStartUploadRequest(value) {
     ...(value.requestId === undefined ? {} : { requestId: requiredId(value.requestId, "Request id") }),
     ...(parentSource ? { parentSource } : {}),
     ...(replacement ? { replacement } : {}),
+    ...(collectionId ? { collectionId } : {}),
     originalName,
     mimeType,
     sizeBytes: value.sizeBytes,

@@ -33,6 +33,11 @@ const {
 } = require("./lib/source-media-upload-contract");
 const { compositeSha256, createS3MediaUploader } = require("./lib/s3-media-upload");
 const {
+  MediaCollectionRejection,
+  placeUploadedVideo,
+  requireActiveUploadCollection,
+} = require("./media-collections");
+const {
   FUNCTION_SERVICE_ACCOUNT,
   runtimeAwsConfig,
   runtimeRegistry,
@@ -373,6 +378,7 @@ async function storeCompletedAsset(
     if (!current || current.actorUid !== session.actorUid) {
       throw new SourceUploadError(409, "Upload session changed");
     }
+    let collectionPlacement = current.assetSummary?.collectionPlacement;
     if (existingAssetSnapshot.exists) {
       const existing = parseSourceMediaAsset(asset.id, existingAssetSnapshot.data());
       if (!existing || existing.objectKey !== asset.objectKey ||
@@ -380,6 +386,18 @@ async function storeCompletedAsset(
         throw new SourceUploadError(409, "Asset id is already in use");
       }
     } else {
+      if (current.collectionId) {
+        try {
+          await placeUploadedVideo(transaction, firestore, actor, current.collectionId, {
+            backend: "s3", sourceId: asset.sourceId, id: asset.id,
+          });
+          collectionPlacement = "added";
+        } catch (error) {
+          if (!(error instanceof MediaCollectionRejection)) throw error;
+          // An archived or inaccessible destination must not strand verified video bytes.
+          collectionPlacement = "unavailable";
+        }
+      }
       if (asset.sourceId === "video-library") {
         const holdActive = holdSnapshot.exists && holdSnapshot.data()?.active === true;
         if (!holdActive) {
@@ -414,9 +432,10 @@ async function storeCompletedAsset(
     if (holdSnapshot.exists && holdSnapshot.data()?.active === true) {
       transaction.update(holdRef, { active: false, phase: "consumed" });
     }
-    const summary = sourceMediaAssetDetail(existingAssetSnapshot.exists
+    const detail = sourceMediaAssetDetail(existingAssetSnapshot.exists
       ? parseSourceMediaAsset(asset.id, existingAssetSnapshot.data())
       : parseSourceMediaAsset(asset.id, asset));
+    const summary = { ...detail, ...(collectionPlacement ? { collectionPlacement } : {}) };
     transaction.set(sessionRef, {
       status: "completed",
       version: current.status === "completed" ? current.version : current.version + 1,
@@ -510,6 +529,7 @@ function replayStartedUpload(session, actor, request) {
   if (session.originalName !== request.originalName || session.mimeType !== request.mimeType ||
       session.sizeBytes !== request.sizeBytes || session.lastModified !== request.lastModified ||
       !isDeepStrictEqual(session.metadata, request.metadata) ||
+      session.collectionId !== request.collectionId ||
       !isDeepStrictEqual(session.replacement ?? null, request.replacement ?? null) ||
       !isDeepStrictEqual(session.parentSource ?? null, request.parentSource ?? null)) {
     throw new SourceUploadError(409, "Upload request changed; use the original file and details");
@@ -538,6 +558,14 @@ async function startUpload({ actor, firestore, nowFn, request, source, uploader,
       return replayStartedUpload(session, actor, request);
     }
   }
+  if (request.collectionId) {
+    try {
+      await requireActiveUploadCollection(firestore, actor, request.collectionId);
+    } catch (error) {
+      if (!(error instanceof MediaCollectionRejection)) throw error;
+      throw new SourceUploadError(404, "This upload destination is unavailable. Choose another collection or upload without one.");
+    }
+  }
   const assetId = request.replacement?.assetId ?? uuidFn();
   const { now } = currentTime(nowFn);
   const partSize = choosePartSize(request.sizeBytes);
@@ -556,6 +584,7 @@ async function startUpload({ actor, firestore, nowFn, request, source, uploader,
     metadata: request.metadata,
     ...(request.replacement ? { replacement: request.replacement } : {}),
     ...(request.parentSource ? { parentSource: request.parentSource } : {}),
+    ...(request.collectionId ? { collectionId: request.collectionId } : {}),
     partSize,
     totalParts: Math.ceil(request.sizeBytes / partSize),
     status: "active",
@@ -631,7 +660,8 @@ async function readCompletedUploadAsset(firestore, session) {
   if (!asset || asset.sourceId !== session.sourceId || (!session.replacement && asset.objectKey !== session.objectKey)) {
     throw new SourceUploadError(410, "Uploaded video is no longer in the library");
   }
-  return sourceMediaAssetDetail(asset);
+  const collectionPlacement = session.assetSummary?.collectionPlacement;
+  return { ...sourceMediaAssetDetail(asset), ...(collectionPlacement ? { collectionPlacement } : {}) };
 }
 
 async function resumeUpload({
