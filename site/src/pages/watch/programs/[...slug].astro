@@ -67,11 +67,11 @@ player?.searchParams.set("autoplay", "false");
     </section>}
     {program && !episode && videoGroups(program.episodes).map(group => <section class="video-page__group">
       <h2>{group.label}</h2>
-      <ul role="list">
+      <ul>
         {group.episodes.map(video => <li><a href={videoEpisodePath(program.slug, video.slug)}>{video.title}</a></li>)}
       </ul>
     </section>)}
-    {programs && (programs.length > 0 ? <ul class="video-page__programs" role="list">
+    {programs && (programs.length > 0 ? <ul class="video-page__programs">
       {programs.map(item => <li><a href={videoProgramPath(item.slug)}>{item.title}</a><p>{item.description}</p></li>)}
     </ul> : <p><a href="https://watch.njpbs.org/">Browse videos on the NJ PBS video portal</a>.</p>)}
   </article>
@@ -87,7 +87,7 @@ player?.searchParams.set("autoplay", "false");
   .video-page__player { display: block; width: 100%; aspect-ratio: 16 / 9; border: 0; background: #000; }
   .video-page__group, .video-page__programs { margin-top: 2rem; }
   .video-page__group h2 { margin-bottom: .5rem; }
-  .video-page__group ul, .video-page__programs { list-style: none; padding: 0; }
+  .video-page__group ul, .video-page__programs { padding-inline-start: 1.25rem; }
   .video-page__group li, .video-page__programs li { border-top: 1px solid var(--line); padding-block: .75rem; }
   .video-page__group li:last-child, .video-page__programs li:last-child { border-bottom: 1px solid var(--line); }
   .video-page__programs p { margin: .25rem 0 0; }

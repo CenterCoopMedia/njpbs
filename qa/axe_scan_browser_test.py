@@ -2,7 +2,8 @@
 """Required browser interactions, emitted-route errors and search-readiness checks.
 
 Run against each served build: --base URL --mode full|coming-soon --dist site/dist.
-The existing Site CI consumer runs both targets before replacing their artifacts.
+Run --mode video-catalog --video-catalog-screenshots DIRECTORY against the
+served PR preview with the synthetic catalog installed as launch content.
 """
 from __future__ import annotations
 
