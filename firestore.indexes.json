@@ -153,6 +153,14 @@
       ]
     },
     {
+      "collectionGroup": "mediaSourceClipJobs",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "active", "order": "ASCENDING" },
+        { "fieldPath": "leaseUntil", "order": "ASCENDING" }
+      ]
+    },
+    {
       "collectionGroup": "mediaSourceAssets",
       "queryScope": "COLLECTION",
       "fields": [

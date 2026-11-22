@@ -24,20 +24,30 @@ function firestore() {
     return { id, exists: records.has(this.key), data: () => records.get(this.key), ref: this };
   } });
   return { records, doc(path) { const [collection, id] = path.split("/"); return ref(collection, id); }, collection(name) {
-    const query = (filters = [], maximum = Infinity, order, after = null) => ({
+    const compare = (left, right) => left < right ? -1 : left > right ? 1 : 0;
+    const query = (filters = [], maximum = Infinity, order = [], after = []) => ({
       doc(id = `auto-${++auto}`) { return ref(name, id); },
-      where(field, operation, value) { return query([...filters, [field, value]], maximum, order, after); },
-      orderBy(field, direction) { return query(filters, maximum, [field, direction], after); },
-      startAfter(cursor) { return query(filters, maximum, order, cursor); },
+      where(field, operation, value) { return query([...filters, [field, operation, value]], maximum, order, after); },
+      orderBy(field, direction) { return query(filters, maximum, [...order, [field, direction]], after); },
+      startAfter(...cursor) { return query(filters, maximum, order, cursor); },
       limit(value) { return query(filters, value, order, after); }, async get() {
-        let rows = [...records].filter(([key, value]) => key.startsWith(`${name}/`) && filters.every(([field, expected]) => value[field] === expected));
-        if (order) rows.sort((a, b) => {
-          const direction = order[1] === "desc" ? -1 : 1;
-          if (order[0] === "__name__") return a[0].localeCompare(b[0]) * direction;
-          return (a[1][order[0]].localeCompare(b[1][order[0]]) || a[0].localeCompare(b[0])) * direction;
-        });
-        if (typeof after === "string") rows = rows.filter(([key]) => key > `${name}/${after}`);
-        else if (after) rows = rows.slice(rows.findIndex(([key]) => key === `${name}/${after.id}`) + 1);
+        let rows = [...records].filter(([key, value]) => key.startsWith(`${name}/`) && filters.every(([field, op, expected]) =>
+          op === "==" ? value[field] === expected : op === "<=" && value[field] <= expected));
+        const keys = ([key, value]) => order.map(([field]) => field === "__name__" ? key.slice(name.length + 1) : value[field]);
+        function compareOrder(left, right) {
+          for (const [index, [, direction]] of order.entries()) {
+            const comparison = compare(left[index], right[index]);
+            if (comparison) return direction === "desc" ? -comparison : comparison;
+          }
+          return 0;
+        }
+        if (order.length) {
+          const keyDirection = order.at(-1)[1] === "desc" ? -1 : 1;
+          rows.sort((left, right) => compareOrder(keys(left), keys(right)) || compare(left[0], right[0]) * keyDirection);
+        }
+        if (after.length && typeof after[0] === "object") {
+          rows = rows.slice(rows.findIndex(([key]) => key === `${name}/${after[0].id}`) + 1);
+        } else if (after.length) rows = rows.filter((row) => compareOrder(keys(row), after) > 0);
         return { docs: await Promise.all(rows.slice(0, maximum).map(([key]) => ref(name, key.slice(name.length + 1)).get())) };
       },
     });
