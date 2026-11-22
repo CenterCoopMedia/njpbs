@@ -16,6 +16,17 @@ export const MEDIA_TAG_LIMITS = {
   video: { maxCount: 30, maxLength: 80 },
 } as const;
 
+export interface UploadMediaTagDraft {
+  committed: string;
+  draft: string;
+}
+
+export const EMPTY_UPLOAD_MEDIA_TAGS: UploadMediaTagDraft = { committed: "", draft: "" };
+
+export function uploadMediaTagsText({ committed, draft }: UploadMediaTagDraft): string {
+  return [committed, draft].filter(Boolean).join(",");
+}
+
 export function mediaTagSuggestionPool(surface: MediaTileSurface, ...sources: readonly (readonly string[])[]): string[] {
   const maxLength = MEDIA_TAG_LIMITS[surface].maxLength;
   const seen = new Set<string>();

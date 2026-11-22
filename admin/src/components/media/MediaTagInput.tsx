@@ -1,10 +1,9 @@
 import { useContext, useId, useState, useSyncExternalStore } from "react";
 import { mediaCacheIdentityRevision, subscribeMediaCacheIdentity } from "../../lib/media-session-cache";
-import { MEDIA_TAG_LIMITS, mediaTagSuggestionPool, tagsToTokens } from "../../lib/media-tags";
+import { EMPTY_UPLOAD_MEDIA_TAGS, MEDIA_TAG_LIMITS, mediaTagSuggestionPool, tagsToTokens, tokensToTags, type UploadMediaTagDraft } from "../../lib/media-tags";
 import type { MediaTileSurface } from "../../lib/media-tile-actions";
 import { loadSharedMediaTags, MediaTagTokenContext } from "../../lib/shared-media-tags";
 import { TokenInput, type TokenInputProps } from "../ui/TokenInput";
-import { splitEntry } from "../ui/tokenInputModel";
 
 type MediaTagInputProps = Omit<TokenInputProps, "label" | "maxLength" | "maxCount" | "suggestions" | "suggestionsNote" | "onFocus"> & {
   surface: MediaTileSurface;
@@ -42,26 +41,24 @@ export function MediaTagInput({ surface, localTags = [], ...props }: MediaTagInp
   />;
 }
 
-// Upload queues store a comma-separated draft. Keep the unfinished entry in it so
-// upload still saves a manually typed tag even if the editor skips Enter.
-export function MediaUploadTagInput({ surface, value, disabled, onUpdate }: {
+// Only committed values become chips. Refused or unfinished text remains editable.
+export function MediaUploadTagInput({ surface, value = EMPTY_UPLOAD_MEDIA_TAGS, disabled, onUpdate }: {
   surface: MediaTileSurface;
-  value: string;
+  value?: UploadMediaTagDraft;
   disabled: boolean;
-  onUpdate: (update: (value: string) => string) => void;
+  onUpdate: (patch: Partial<UploadMediaTagDraft>) => void;
 }) {
   const id = useId();
-  const { complete, rest } = splitEntry(value);
   return <div className="media-upload-tag-field">
     <label htmlFor={id}>Tags</label>
     <MediaTagInput
       inputId={id}
       surface={surface}
       disabled={disabled}
-      tokens={tagsToTokens(complete.map(tag => tag.trim()).filter(Boolean))}
-      draft={rest}
-      onChange={tokens => onUpdate(previous => [...tokens.map(token => token.value), splitEntry(previous).rest].join(","))}
-      onDraftChange={draft => onUpdate(previous => [...splitEntry(previous).complete, draft].join(","))}
+      tokens={tagsToTokens(value.committed ? value.committed.split(",") : [])}
+      draft={value.draft}
+      onChange={tokens => onUpdate({ committed: tokensToTags(tokens).join(",") })}
+      onDraftChange={draft => onUpdate({ draft })}
     />
   </div>;
 }

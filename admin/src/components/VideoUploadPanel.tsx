@@ -4,6 +4,7 @@ import { Button, InlineMessage, Textarea, TextInput } from "./ui/Primitives";
 import { Icon } from "./ui/Icon";
 import { VideoRightsFields } from "./media/VideoRightsFields";
 import { MediaUploadTagInput } from "./media/MediaTagInput";
+import { EMPTY_UPLOAD_MEDIA_TAGS, uploadMediaTagsText, type UploadMediaTagDraft } from "../lib/media-tags";
 import { UploadTray, type UploadTrayRow } from "./media/UploadTray";
 import { startVideoUpload, cancelVideoUpload, transferVideo, UploadFileMismatchError, VideoUploadValidationError, type VideoUploadMetadata, type VideoUploadSession } from "../lib/source-media-upload";
 import { clearRejectedUploads, registerVideoUpload, routeChosenFiles, uploadRouterSnapshot } from "../lib/upload-router";
@@ -19,7 +20,7 @@ interface TransferDraft {
   description: string;
   credit: string;
   license: string;
-  tags: string;
+  tags: UploadMediaTagDraft;
   metadataUpdateRequested: boolean;
   metadataRequestOverridden?: boolean;
   nameOverridden?: boolean;
@@ -45,23 +46,30 @@ function defaultDraft(fileName: string): TransferDraft {
     description: "",
     credit: "",
     license: "",
-    tags: "",
+    tags: EMPTY_UPLOAD_MEDIA_TAGS,
     metadataUpdateRequested: false,
     nameOverridden: false,
     descriptionOverridden: false,
     rightsStatus: "pending",
   };
 }
+function restoredTagText(value: unknown): string {
+  return typeof value === "string" && value.length <= 2_429 ? value : "";
+}
+
 function restoredDraft(value: unknown, fileName: string): TransferDraft {
   const fallback = defaultDraft(fileName);
   if (!value || typeof value !== "object" || Array.isArray(value)) return fallback;
   const candidate = value as Partial<Record<keyof TransferDraft, unknown>>;
+  const tags = typeof candidate.tags === "string"
+    ? { draft: candidate.tags }
+    : candidate.tags as Partial<UploadMediaTagDraft> | undefined;
   return {
     name: typeof candidate.name === "string" && candidate.name.length <= 500 ? candidate.name : fallback.name,
     description: typeof candidate.description === "string" && candidate.description.length <= 2_000 ? candidate.description : "",
     credit: typeof candidate.credit === "string" && candidate.credit.length <= 500 ? candidate.credit : "",
     license: typeof candidate.license === "string" && candidate.license.length <= 500 ? candidate.license : "",
-    tags: typeof candidate.tags === "string" && candidate.tags.length <= 2_430 ? candidate.tags : "",
+    tags: { committed: restoredTagText(tags?.committed), draft: restoredTagText(tags?.draft) },
     metadataUpdateRequested: candidate.metadataUpdateRequested === true,
     metadataRequestOverridden: candidate.metadataRequestOverridden === true,
     nameOverridden: candidate.nameOverridden !== false,
@@ -76,7 +84,7 @@ function metadataFor(transfer: Transfer): VideoUploadMetadata {
   const draft = draftFor(transfer);
   const tags: string[] = [];
   const seen = new Set<string>();
-  for (const part of draft.tags.split(",")) {
+  for (const part of uploadMediaTagsText(draft.tags).split(",")) {
     const tag = part.trim();
     const key = tag.toLocaleLowerCase("en-US");
     if (!tag || seen.has(key)) continue;
@@ -749,7 +757,7 @@ export function VideoUploadPanel({ sourceId, userId, getIdToken, onUploaded, onA
           <label><input type="checkbox" checked={draft.metadataUpdateRequested} onChange={event => updateDraft(row.id, { metadataUpdateRequested: event.target.checked, metadataRequestOverridden: true })} /> Request metadata update</label>
           <VideoRightsFields values={draft} disabled={metadataDisabled} onChange={values => updateDraft(row.id, values)} />
           <MediaUploadTagInput surface="video" value={draft.tags} disabled={metadataDisabled}
-            onUpdate={update => updateDraft(row.id, current => ({ tags: update(current.tags) }))} />
+            onUpdate={patch => updateDraft(row.id, current => ({ tags: { ...current.tags, ...patch } }))} />
           {prepared ? <p>Review these details, then start the upload. You can keep using the video library while the transfer runs.</p>
             : queued ? <p>These details are approved. The upload will start when a transfer slot is available.</p>
               : <p>These details were set when the upload started. Edit them from the video library after processing.</p>}

@@ -234,6 +234,16 @@ describe("MediaUploadForm batch queue", () => {
       : "The matching image may be in the Recycle bin. Ask a media manager to restore it.")).toBeVisible();
     expect(screen.queryByRole("link", { name: "Find it in the Recycle bin" })).not.toBeInTheDocument();
   });
+  it("keeps a refused tag in the draft when another entry follows it", () => {
+    renderUploader();
+    const field = screen.getByRole("combobox", { name: "Tags" });
+    const longTag = "x".repeat(41);
+    fireEvent.change(field, { target: { value: `${longTag}, studio` } });
+    expect(field).toHaveValue(`${longTag}, studio`);
+    expect(screen.queryByRole("button", { name: `Remove tag ${longTag}` })).toBeNull();
+    expect(screen.getByText("Keep each tag to 40 characters or fewer.")).toBeVisible();
+  });
+
   it("adds files dropped on the upload area", () => {
     renderUploader();
     const dropArea = document.querySelector(".media-upload-file");
