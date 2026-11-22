@@ -70,13 +70,14 @@ afterEach(() => vi.restoreAllMocks());
 const fetchProvider = (async url => {
   requests++;
   if (outage) return new Response("private upstream error body must not enter a receipt", { status: 401 });
-  if (String(url).includes("/wp-json/wp/v2/posts")) {
+  const request = new URL(String(url));
+  const spotlight = request.origin === "https://www.njspotlightnews.org";
+  if (spotlight && request.pathname.startsWith("/wp-json/wp/v2/posts")) {
     reportingRequests++;
     if (reportingOutage) return new Response("PRIVATE upstream failure",{status:503});
     return Response.json([{id:42,link:"https://www.njspotlightnews.org/2026/10/wage-story/",date_gmt:"2026-10-11T12:00:00",title:{rendered:"Published wages"},tags:[25890],categories:[]}]);
   }
-  if (String(url).includes("media.services.pbs.org")) {
-    const request = new URL(String(url));
+  if (request.origin === "https://media.services.pbs.org") {
     if (request.pathname.endsWith("/assets/")) {
       if (request.searchParams.get("platform-slug") === "partnerplayer") return catalogOutage ? Response.json({ data: [] })
         : Response.json({ data: [catalogAsset("river-episode")], links: { next: null } });
@@ -86,8 +87,8 @@ const fetchProvider = (async url => {
       ...riverShow.attributes, description: "Public program", image: "https://image.pbs.org/fixture.jpg",
     } }], links: { next: null } });
   }
-  if (String(url).includes("njspotlightnews.org")) return new Response(`<rss><channel><item><title>${title}</title><link>https://www.njspotlightnews.org/2026/10/public-story/</link><pubDate>Sun, 11 Oct 2026 12:00:00 GMT</pubDate></item></channel></rss>`);
-  if (String(url).startsWith("https://jaws.pbs.org/tvss/")) {
+  if (spotlight) return new Response(`<rss><channel><item><title>${title}</title><link>https://www.njspotlightnews.org/2026/10/public-story/</link><pubDate>Sun, 11 Oct 2026 12:00:00 GMT</pubDate></item></channel></rss>`);
+  if (request.origin === "https://jaws.pbs.org" && request.pathname.startsWith("/tvss/")) {
     tvssRequests++;
     return new Response(await readFile(new URL("../../site/tests/fixtures/tvss-wnjt-20260710.jsonp", import.meta.url), "utf8"));
   }
