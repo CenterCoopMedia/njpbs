@@ -60,6 +60,12 @@
   background: var(--cms-line-strong);
 }
 
+.ui-popover-sheet-actions {
+  display: flex;
+  justify-content: flex-end;
+  margin-block-end: var(--cms-space-2);
+}
+
 @media (prefers-reduced-motion: no-preference) {
   .ui-popover-sheet {
     animation: ui-popover-rise var(--cms-motion-normal) var(--cms-ease);
