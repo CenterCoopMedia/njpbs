@@ -85,9 +85,23 @@ export interface ListMediaRequest {
 
 export interface BinnedMediaAsset extends Omit<MediaAssetSummary, "lifecycle"> {
   lifecycle: "tombstoned" | "purging";
-  purgeAfter: string;
+  purgeAfter: string | null;
   tombstonedAt: string | null;
   tombstonedByName: string | null;
+}
+
+export type MediaUsageState = "working" | "published" | "deployed";
+
+export interface MediaUsageItem {
+  collection: "cmsPages" | "cmsPosts" | "cmsSettings" | "cmsPostTemplates" | "cmsAuthorProfiles" | "cmsAuthorProfilesPublic";
+  documentId: string;
+  title: string;
+}
+
+export interface MediaUsagePage {
+  items: MediaUsageItem[];
+  page: number;
+  pageCount: number;
 }
 
 export interface ListBinnedMediaResponse {

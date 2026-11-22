@@ -845,7 +845,8 @@ function MediaInspectorContent({
         {canEdit && asset.source === "upload" ? (
           <InspectorSection defaultOpen={false} id="delete" openRequest={confirmDeleteRequest} title="Delete from library">
             <p className="media-inspector-field-help">
-              Only unused uploaded media can be deleted. The original file stays retained for audit and recovery, but staff cannot select it for new content.
+              {asset.kind === "audio" ? "Only unused uploaded audio can be deleted. You can restore it from the Audio recycle bin."
+                : "Only unused uploaded media can be deleted. The original file stays retained for audit and recovery, but staff cannot select it for new content."}
             </p>
             {deleteError ? (
               <InlineMessage tone="error" title="Media was not deleted">

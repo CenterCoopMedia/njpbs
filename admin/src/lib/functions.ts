@@ -43,6 +43,8 @@ import type {
   MediaCategoryDefinition,
   MediaCorpusRequest,
   MediaCorpusResponse,
+  MediaUsagePage,
+  MediaUsageState,
   SelfProfilePhotoListMediaRequest,
 } from "./functions-media-types";
 
@@ -1661,10 +1663,20 @@ export interface MutateMediaCategoryResponse {
 
 export function cmsListBinnedMedia(
   idToken: string,
-  body: { page?: number; pageSize?: number } = {},
+  body: { kind?: "image" | "audio"; page?: number; pageSize?: number } = {},
   signal?: AbortSignal,
 ): Promise<ListBinnedMediaResponse> {
   return postFunction("cmsListBinnedMedia", idToken, body, {}, { signal });
+}
+
+export function cmsListBinnedAudioUsage(
+  idToken: string,
+  assetId: string,
+  state: MediaUsageState,
+  page: number,
+  signal: AbortSignal,
+): Promise<MediaUsagePage> {
+  return postFunction("cmsListMediaUsage", idToken, { scope: "audio-bin", assetId, state, page }, {}, { signal });
 }
 
 export async function cmsRestoreMedia(idToken: string, asset: BinnedMediaAsset) {

@@ -422,7 +422,7 @@ export function MediaLibrarySurface({
         if (current.toString() === next.toString()) return false;
       }
       if (replaceBusy || (inspectorDirty && !viewerInternalNavigation.current)) return true;
-      const opensRecycleBin = kind === "images"
+      const opensRecycleBin = (kind === "images" || kind === "voiceovers")
         && new URLSearchParams(nextLocation.search).get("bin") === "1";
       if (uploadDirty && (kind !== (audioLibrary ? "voiceovers" : "images") || opensRecycleBin)) return true;
       if (!videoActiveRef.current) return false;
@@ -1349,7 +1349,7 @@ export function MediaLibrarySurface({
           ? () => changeCollectionSelection(setPageSelection(collectionSelection, pageAssets, true))
           : undefined}
         onStateChange={(next) => writeLocation({ ...next, view: undefined })}
-        onOpenRecycleBin={!audioLibrary && hasCapability(principal, "media.manage") && !cardsLocked ? () => {
+        onOpenRecycleBin={hasCapability(principal, "media.manage") && !cardsLocked ? () => {
           const params = new URLSearchParams(searchParams);
           params.set("bin", "1");
           navigate(`${libraryPath}?${params}`);
@@ -1880,9 +1880,10 @@ function ImageMediaRoute({ audioLibrary = false, videoTransferActive = false, on
           Labels will use category ids until the registry is available.
         </InlineMessage>
       ) : null}
-      {!audioLibrary && searchParams.get("bin") === "1" ? <RequireCapability allowed={principal => hasCapability(principal, "media.manage")} notice="The recycle bin is not available for your account.">
+      {searchParams.get("bin") === "1" ? <RequireCapability allowed={principal => hasCapability(principal, "media.manage")} notice="The recycle bin is not available for your account.">
         <Suspense fallback={<LoadingIndicator label="Loading the recycle bin" />}>
-          <MediaRecycleBin key={`${user.uid}:${JSON.stringify(principal)}`} getIdToken={getIdToken} categories={categoryRegistry.categories} targetId={searchParams.get("binAsset")} />
+          <MediaRecycleBin key={`${audioLibrary}:${user.uid}:${JSON.stringify(principal)}`} getIdToken={getIdToken} categories={categoryRegistry.categories}
+            kind={audioLibrary ? "audio" : "image"} targetId={audioLibrary ? null : searchParams.get("binAsset")} />
         </Suspense>
       </RequireCapability> : <MediaLibrarySurface
         key={`${audioLibrary}:${user.uid}:${JSON.stringify(principal)}`}

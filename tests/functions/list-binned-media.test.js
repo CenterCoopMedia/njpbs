@@ -15,14 +15,31 @@ beforeEach(async () => {
 });
 afterAll(async () => { await Promise.all(admin.apps.map(app => app.delete())); });
 
-async function seed(id, uid, category = "news") {
+async function seed(id, uid, category = "news", overrides = {}) {
   await db.collection("media_assets").doc(id).set({
     name: id, originalName: `${id}.png`, category, kind: "image", mimeType: "image/png",
     sizeBytes: 20, width: 100, height: 100, url: `https://media.example/${id}.png`,
     lifecycle: "tombstoned", version: 1, tombstonedBy: uid,
     purgeAfter: "2026-10-01T00:00:00Z", tombstonedAt: "2026-09-01T00:00:00Z",
+    ...overrides,
   });
 }
+
+it("lists only uploaded, deleted audio even when it has no removal deadline", async () => {
+  const audio = { kind: "audio", mimeType: "audio/wav", source: "upload",
+    width: null, height: null, purgeAfter: null };
+  await seed("photo", "editor");
+  await seed("old-audio", "editor", "news", audio);
+  await seed("recent-audio", "editor", "news", { ...audio, tombstonedAt: "2026-09-02T00:00:00Z" });
+  await db.doc("media_assets/recent-audio").update({ purgeAfter: admin.firestore.FieldValue.delete() });
+  await seed("live-audio", "editor", "news", { ...audio, lifecycle: "active" });
+  await seed("voiceover", "editor", "news", { ...audio, source: "voiceover" });
+
+  const { result } = await list("editor", { kind: "audio", pageSize: 1 });
+
+  expect(result).toMatchObject({ total: 2, pageCount: 2,
+    records: [{ id: "recent-audio", kind: "audio", lifecycle: "tombstoned", purgeAfter: null }] });
+});
 
 async function list(role = "admin", body = {}, failedUid = null) {
   const userRead = vi.fn(uid => uid === failedUid

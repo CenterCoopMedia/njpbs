@@ -1,0 +1,8 @@
+{
+  "date": "2026-11-22",
+  "kind": "new",
+  "title": "Restore deleted audio",
+  "body": "In Media, open Audio and choose Recycle bin from More actions. Find an uploaded audio file and choose View usage to see its indexed references or Restore to return it to the library.",
+  "prs": [],
+  "order": 1795380002000
+}
