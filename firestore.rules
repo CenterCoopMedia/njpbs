@@ -879,6 +879,11 @@ service cloud.firestore {
       allow read, write: if false;
     }
 
+    // The CMS API verifies asset access before reading or recording an approval.
+    match /mediaApprovals/{document=**} {
+      allow read, write: if false;
+    }
+
     // Personal and all-staff collections stay behind the CMS API. The server
     // derives private ownership and rechecks each member asset's current access.
     match /mediaCollections/{collectionId} {

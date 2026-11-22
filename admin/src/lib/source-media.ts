@@ -39,6 +39,9 @@ export interface SourceMediaParent {
   outMs?: number;
 }
 
+export type MediaApprovalRendition = "original" | "viewingCopy";
+export type MediaApprovalVersions = Record<MediaApprovalRendition, string | null>;
+
 export interface SourceMediaAssetSummary {
   metadataUpdateRequested?: boolean;
   id: string;
@@ -75,6 +78,7 @@ export interface SourceMediaAssetSummary {
   version: number;
   /** Opaque name of the stored file; it changes when the file is replaced. */
   fileVersion?: string | null;
+  approvalVersions?: MediaApprovalVersions;
   uploadedBy?: { uid?: string; name: string } | null;
   createdAt: string | null;
   updatedAt: string | null;

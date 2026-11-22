@@ -20,6 +20,8 @@ export function refreshedSourceMediaAsset(previous: SourceMediaAssetSummary, fre
 
 function changed(previous: SourceMediaAssetSummary, fresh: SourceMediaAssetSummary) {
   return previous.fileVersion !== fresh.fileVersion || previous.version !== fresh.version ||
+    previous.approvalVersions?.original !== fresh.approvalVersions?.original ||
+    previous.approvalVersions?.viewingCopy !== fresh.approvalVersions?.viewingCopy ||
     JSON.stringify(previous.viewingCopy) !== JSON.stringify(fresh.viewingCopy) ||
     JSON.stringify(previous.replacement) !== JSON.stringify(fresh.replacement);
 }

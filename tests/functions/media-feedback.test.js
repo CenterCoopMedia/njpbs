@@ -6,6 +6,7 @@ import feedback from "../../functions/media-feedback.js";
 import contract from "../../functions/lib/media-feedback.js";
 import rendition from "../../functions/lib/source-media-rendition.js";
 import sourceMedia from "../../functions/lib/source-media-contract.js";
+import mediaSources from "../../functions/lib/media-sources.js";
 import { mediaCommentsCsv } from "../../admin/src/lib/media-comment-csv";
 
 // The opaque file tokens a reviewer's client would hold for these originals.
@@ -583,6 +584,70 @@ describe("media feedback API", () => {
     currentActor,
     overrides,
   );
+
+  describe("version approvals", () => {
+    const list = (currentActor, overrides, cursor) => invoke(createCmsGetMediaReviewHandler, {
+      schemaVersion: 1, ref: SOURCE_REF, approvalHistory: cursor ? { cursor } : {},
+    }, currentActor, overrides);
+    const approve = (approval, currentActor, overrides) => saveReview({ ref: SOURCE_REF, approval }, currentActor, overrides);
+
+    it("records an older original once per purpose and keeps its attribution after replacement", async () => {
+      const initial = await list();
+      expect(initial.statusCode, JSON.stringify(initial.body)).toBe(200);
+      const version = initial.body.versions.original;
+      expect(initial.body).toMatchObject({ versions: { viewingCopy: null }, current: [], history: [] });
+      const editorial = { rendition: "original", version, purpose: "editorial" };
+      const first = await approve(editorial);
+      expect(first.statusCode, JSON.stringify(first.body)).toBe(200);
+      expect(first.body.approval).toMatchObject({ ...editorial, approvedByName: "Sam Staff",
+        approvedAt: "2026-10-05T12:00:00.000Z", originalName: "feedback.mp4" });
+      expect((await approve(editorial, actor("staff-2"))).body).toEqual(first.body);
+      expect((await list()).body.current).toEqual([first.body.approval]);
+      expect((await approve({ ...editorial, purpose: "technical" }, actor("staff-2"))).body.approval)
+        .toMatchObject({ purpose: "technical", approvedByName: "Taylor Staff" });
+
+      await db.doc("mediaSourceAssets/video-1").update({ version: 3, description: "Metadata edit" });
+      expect((await list()).body.current).toHaveLength(2);
+      await db.doc("mediaSourceAssets/video-1").update({ objectVersionId: "replacement-version", originalName: "replacement.mp4" });
+      await db.doc("users/staff-1").update({ displayName: "Changed name" });
+      const after = await list();
+      expect(after.body.versions.original).not.toBe(version);
+      expect(after.body.current).toEqual([]);
+      expect(after.body.history).toMatchObject([{ purpose: "technical" }, first.body.approval]);
+      const stale = await approve(editorial);
+      expect(stale.statusCode).toBe(409);
+      expect(stale.body.code).toBe("media_approval_version_changed");
+      expect((await list()).body.history).toEqual(after.body.history);
+    });
+
+    it("rejects a replaced viewing copy independently of the original and requires access", async () => {
+      const asset = storedSourceAsset();
+      const copy = readyRendition(asset, [25, 1]);
+      const reference = db.doc("mediaSourceAssets/video-1");
+      await reference.update({ rendition: copy });
+      const versions = (await list()).body.versions;
+      expect(versions.viewingCopy).toMatch(/^[0-9a-f]{64}$/);
+      const approval = { rendition: "viewingCopy", version: versions.viewingCopy, purpose: "editorial" };
+      expect((await approve({ ...approval, rendition: "original" })).statusCode).toBe(409);
+      expect((await approve({ ...approval, purpose: "other" })).statusCode).toBe(400);
+      expect((await approve(approval, actor("staff-2", [], false))).statusCode).toBe(403);
+      expect((await approve(approval, actor(), { verifyAppCheckFn: async () => {
+        throw Object.assign(new Error("Missing App Check"), { status: 403 });
+      } })).statusCode).toBe(403);
+      const denied = { authorizeFn: async () => { throw new mediaSources.MediaSourceAccessError(403, "Denied"); } };
+      expect((await list(actor(), denied)).statusCode).toBe(404);
+      expect((await approve(approval, actor(), denied)).statusCode).toBe(404);
+      expect((await approve(approval)).statusCode).toBe(200);
+
+      await reference.update({ "rendition.web.objectVersionId": "second-web-version" });
+      const fresh = await list();
+      expect(fresh.body.versions.original).toBe(versions.original);
+      expect(fresh.body.versions.viewingCopy).not.toBe(versions.viewingCopy);
+      expect(fresh.body.current).toEqual([]);
+      expect(fresh.body.history).toMatchObject([approval]);
+      expect((await approve(approval)).statusCode).toBe(409);
+    });
+  });
 
   describe("comment CSV export", () => {
     const id = (n) => n.toString(16).padStart(64, "0");

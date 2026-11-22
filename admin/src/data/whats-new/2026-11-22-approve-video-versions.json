@@ -1,0 +1,7 @@
+{
+  "date": "2026-11-22",
+  "kind": "new",
+  "title": "Approve exact video versions",
+  "body": "Open Approvals in the video details. Choose the original video or web copy and select editorial or technical review. Approval history shows who approved each file. A replacement needs its own approval.",
+  "prs": []
+}
