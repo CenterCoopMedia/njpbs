@@ -40,6 +40,7 @@ const {
 } = require("./lib/media-corpus");
 const { MAX_FAVORITE_PROJECTION_REFS, readFavoriteProjection } = require("./lib/media-favorites");
 const { readIndexedMedia } = require("./lib/media-discovery-query");
+const { MEDIA_TAG_SAMPLE_SIZE, savedMediaTagSample } = require("./lib/media-tag-sample");
 const {
   MEDIA_CATEGORIES_COLLECTION,
   parseMediaCategoryDefinition,
@@ -312,6 +313,21 @@ function createCmsListMediaHandler(deps = {}) {
       const favoritesRequested = Boolean(req.body) && typeof req.body === "object" &&
         Object.hasOwn(req.body, "favorites");
       const user = await requirePrincipalFn(req, { includeAccountStatus: true });
+      if (req.body && Object.hasOwn(req.body, "tagsOnly")) {
+        if (req.body.tagsOnly !== true || Object.keys(req.body).length !== 1) {
+          throw new ListMediaRejection(400, "Request must be { tagsOnly: true }.");
+        }
+        if (user.approvedActive !== true || !hasMediaLibraryCapability(user.principal)) {
+          throw new ListMediaRejection(403, FORBIDDEN_MESSAGE);
+        }
+        const query = parseMediaListRequest({
+          paging: "cursor", kinds: ["image"], pageSize: MEDIA_TAG_SAMPLE_SIZE,
+        });
+        const { records } = await readIndexedMediaFn(firestore, user, query, {}, SUMMARY_FIELDS,
+          { includeContinuation: false });
+        res.status(200).json({ success: true, tags: savedMediaTagSample(records) });
+        return;
+      }
       if (corpusRequested) {
         const request = parseMediaCorpusRequest(req.body, user.uid);
         if (user.approvedActive !== true ||

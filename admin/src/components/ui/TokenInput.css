@@ -110,7 +110,7 @@
 
 .ui-token-text {
   flex: 1 1 6rem;
-  min-width: 6rem;
+  min-width: min(6rem, 100%);
   min-height: 1.75rem;
   padding: 0 var(--cms-space-1);
   border: 0;
@@ -127,12 +127,13 @@
 /* The suggestion list sits on the fixed layer beside the field (floating.ts), so a scrolling
    panel cannot clip it. It stays hidden until placed. */
 .ui-token-popup {
+  --ui-token-popup-max-width: calc(100vw - (2 * var(--cms-space-2)));
   position: fixed;
   z-index: var(--cms-z-popover);
   display: grid;
   width: max-content;
-  min-width: 12rem;
-  max-width: calc(100vw - (2 * var(--cms-space-2)));
+  min-width: min(12rem, var(--ui-token-popup-max-width));
+  max-width: var(--ui-token-popup-max-width);
   border: var(--cms-border-width) solid var(--cms-line);
   border-radius: var(--cms-radius-panel);
   background: var(--cms-surface);

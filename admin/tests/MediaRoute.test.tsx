@@ -1637,7 +1637,7 @@ describe("MediaRoute", () => {
     fireEvent.change(screen.getByRole("textbox", { name: "License" }), {
       target: { value: "NJ PBS owned" },
     });
-    fireEvent.change(screen.getByRole("textbox", { name: "Tags" }), {
+    fireEvent.change(screen.getByRole("combobox", { name: "Tags" }), {
       target: { value: "news, studio, News" },
     });
     fireEvent.click(screen.getByRole("checkbox", { name: "Arts" }));

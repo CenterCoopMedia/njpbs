@@ -3,7 +3,6 @@ import {
   useContext,
   useEffect,
   useId,
-  useMemo,
   useRef,
   useState,
   type FormEvent,
@@ -11,7 +10,8 @@ import {
 } from "react";
 import { createPortal } from "react-dom";
 import { Inspector, InspectorSection } from "../ui/Inspector";
-import { TokenInput, type Token } from "../ui/TokenInput";
+import type { Token } from "../ui/TokenInput";
+import { MediaTagInput } from "./MediaTagInput";
 import { AsyncActionButton, Button, InlineMessage, TextInput, Textarea } from "../ui/Primitives";
 import { MediaDialogContext, MediaDialogNotice } from "../../context/MediaDialogContext";
 import { useControlPresentation } from "../../context/ControlPresentationContext";
@@ -26,13 +26,10 @@ import { sourceFrameRateLabel, isBroadcastFrameRate, sourceFramesPerSecond } fro
 import { formatMediaDuration, formatVideoBytes } from "../../lib/media-format";
 import { useMediaFeedback, type MediaFeedback } from "../../lib/use-media-feedback";
 import { tagsToTokens, tokensToTags } from "../../lib/media-tags";
-import { tagKey } from "../ui/tokenInputModel";
 import { MediaFeedbackSections, type CommentTiming } from "./MediaFeedbackSections";
 import { ViewerTabs } from "./ViewerTabs";
 import { VideoRightsFields } from "./VideoRightsFields";
 import "./VideoDetailsInspector.css";
-
-const SUGGESTIONS_NOTE = "From this page and your recent tags.";
 
 export interface VideoDetailsEditableValues {
   name: string;
@@ -72,19 +69,6 @@ function currentConflictAsset(error: unknown, asset: SourceMediaAssetSummary): S
     Array.isArray((current as Partial<SourceMediaAssetSummary>).tags)
     ? current as SourceMediaAssetSummary
     : null;
-}
-
-function tagSuggestionPool(...sources: readonly (readonly string[])[]): string[] {
-  const seen = new Set<string>();
-  const result: string[] = [];
-  for (const tag of sources.flat()) {
-    const value = tag.trim();
-    const key = tagKey(value);
-    if (!value || seen.has(key)) continue;
-    seen.add(key);
-    result.push(value);
-  }
-  return result;
 }
 
 function displayDate(value: string | null): string {
@@ -212,10 +196,6 @@ export function VideoDetailsInspector({
   const feedbackDirty = feedback.reviewDirty || commentDirty;
   const dirty = detailsDirty || feedbackDirty || hasOtherDirty;
   const busy = disabled || saving || deleting || feedback.pending;
-  const suggestions = useMemo(
-    () => tagSuggestionPool(asset.tags, pageTags, recentTags),
-    [asset.tags, pageTags, recentTags],
-  );
 
   useEffect(() => {
     onDirtyChange(detailsDirty || feedbackDirty);
@@ -359,18 +339,15 @@ export function VideoDetailsInspector({
       </InspectorSection>
 
       <InspectorSection count={tags.length} id="tags" title="Tags">
-        {canEditMetadata ? <TokenInput
+        {canEditMetadata ? <MediaTagInput
+          surface="video"
           disabled={busy}
           draft={tagDraft}
-          label="Tags"
-          maxCount={30}
-          maxLength={80}
           onChange={setTags}
           onCommit={(values) => { committedTags.current.push(...values); }}
           onDraftChange={setTagDraft}
           placeholder="Add tag…"
-          suggestions={suggestions}
-          suggestionsNote={SUGGESTIONS_NOTE}
+          localTags={[...asset.tags, ...pageTags, ...recentTags]}
           tokens={tags}
         /> : <ReadOnlyField label="Tags" value={currentTags.join(", ")} />}
       </InspectorSection>

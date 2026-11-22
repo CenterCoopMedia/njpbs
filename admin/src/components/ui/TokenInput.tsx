@@ -52,6 +52,7 @@ export interface TokenInputProps {
   /** Makes unfinished text observable, such as for an unsaved-changes guard. */
   draft?: string;
   onDraftChange?: (value: string) => void;
+  onFocus?: () => void;
   placeholder?: string;
   disabled?: boolean;
 }
@@ -77,6 +78,7 @@ export function TokenInput({
   onChange,
   onCommit,
   onDraftChange,
+  onFocus,
   placeholder = "Add tag…",
   promoteMixed = false,
   suggestions = [],
@@ -225,7 +227,7 @@ export function TokenInput({
         onSubmitEntry(text);
         return;
       }
-      const chosen = expanded && active >= 0 ? matches[active] : text;
+      const chosen = (expanded && active >= 0 ? matches[active] : undefined) ?? text;
       if (!chosen.trim()) return;
       event.preventDefault();
       if (commit([chosen]).accepted > 0) setText("");
@@ -327,6 +329,7 @@ export function TokenInput({
             onCompositionStart={() => {
               composing.current = true;
             }}
+            onFocus={onFocus}
             onKeyDown={onKeyDown}
             onPaste={onPaste}
             placeholder={placeholder}

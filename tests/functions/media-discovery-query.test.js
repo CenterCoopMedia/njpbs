@@ -91,6 +91,38 @@ beforeEach(async () => {
 afterAll(async () => { await db?.terminate(); if (app) await deleteApp(app); });
 
 describe("private indexed discovery", () => {
+  it("shares the newest 30 active image tags across authorized callers without creating a cursor", async () => {
+    async function request(user, body = { tagsOnly: true }) {
+      const res = { set() { return this; }, status(code) { this.statusCode = code; return this; }, json(value) { this.body = value; } };
+      await listApi.createCmsListMediaHandler({ firestore: db, requirePrincipalFn: async () => user })(
+        { method: "POST", body, headers: { "content-type": "application/json" } }, res,
+      );
+      return res;
+    }
+
+    expect((await request(editor)).body).toEqual({ success: true, tags: [] });
+    const batch = db.batch();
+    for (let index = 0; index < 31; index++) {
+      const id = `photo-${index}`;
+      batch.set(db.collection("media_assets").doc(id), withMediaDiscovery(id, asset(index, { tags: [`Tag ${index}`, "Common"] })));
+    }
+    await batch.commit();
+    await put("binned-image", 32, { tags: ["Binned"], lifecycle: "binned" });
+    await put("audio-asset", 33, { kind: "audio", mimeType: "audio/wav", width: null, height: null, tags: ["Audio"] });
+    const first = await request(editor);
+    const other = await request({ ...editor, uid: "editor-2", principal: { ...editor.principal, id: "editor-2" } });
+    expect(first.statusCode).toBe(200);
+    expect(first.body).toEqual({ success: true, tags: [
+      "Tag 30", "Common", ...Array.from({ length: 29 }, (_, index) => `Tag ${29 - index}`),
+    ] });
+    expect(other.body).toEqual(first.body);
+    const denied = await request({ ...editor, principal: { id: editor.uid, grants: [] } });
+    expect(denied).toMatchObject({ statusCode: 403, body: { error: expect.any(String) } });
+    expect(denied.body.tags).toBeUndefined();
+    expect((await request(editor, { tagsOnly: true, pageSize: 999 })).statusCode).toBe(400);
+    expect((await db.collection("mediaDiscoveryCursors").get()).empty).toBe(true);
+  });
+
   it("pages uploaded audio separately from Images with the existing discovery schema", async () => {
     await put("image-one", 1);
     for (const [id, index] of [["audio-one", 2], ["audio-two", 3]]) {

@@ -1,4 +1,6 @@
 import { InfoTooltip } from "./ui/InfoTooltip";
+import { MediaUploadTagInput } from "./media/MediaTagInput";
+import { EMPTY_UPLOAD_MEDIA_TAGS, uploadMediaTagsText, type UploadMediaTagDraft } from "../lib/media-tags";
 import { Link } from "react-router";
 import { mediaImagesPath } from "../lib/routes";
 import {
@@ -103,7 +105,7 @@ interface MediaUploadQueueItem {
   license: string;
   licenseOverridden: boolean;
   credit: string;
-  tags: string;
+  tags: UploadMediaTagDraft;
   metadataUpdateRequested: boolean;
   metadataRequestOverridden: boolean;
   optimizeToWebp: boolean;
@@ -207,7 +209,8 @@ function itemMatchesInitialState(
     item.altText === initial.altText &&
     item.license === initial.license &&
     item.credit === initial.credit &&
-    item.tags === initial.tags &&
+    item.tags.committed === initial.tags.committed &&
+    item.tags.draft === initial.tags.draft &&
     item.metadataUpdateRequested === initial.metadataUpdateRequested &&
     item.optimizeToWebp === initial.optimizeToWebp
   );
@@ -229,7 +232,7 @@ function itemIsBlankPlaceholder(
     item.license === batchLicense &&
     !item.licenseOverridden &&
     item.credit === "" &&
-    item.tags === "" &&
+    !uploadMediaTagsText(item.tags) &&
     !item.metadataUpdateRequested &&
     item.optimizeToWebp &&
     item.status === "pending" &&
@@ -325,7 +328,7 @@ export function MediaUploadForm({
     license: seed?.license ?? batchLicense,
     licenseOverridden: seed?.licenseOverridden ?? false,
     credit: seed?.credit ?? "",
-    tags: seed?.tags ?? "",
+    tags: seed?.tags ?? EMPTY_UPLOAD_MEDIA_TAGS,
     metadataUpdateRequested: seed?.metadataUpdateRequested ?? batchMetadataRequested,
     metadataRequestOverridden: seed?.metadataRequestOverridden ?? false,
     optimizeToWebp: seed?.optimizeToWebp ?? true,
@@ -346,7 +349,7 @@ export function MediaUploadForm({
       license: initialState?.license ?? "",
       licenseOverridden: false,
       credit: initialState?.credit ?? "",
-      tags: initialState?.tags ?? "",
+      tags: { committed: "", draft: initialState?.tags ?? "" },
       metadataUpdateRequested: initialState?.metadataUpdateRequested ?? false,
       optimizeToWebp: initialState?.optimizeToWebp ?? true,
       status: initialState?.uploading ? "uploading" : "pending",
@@ -425,10 +428,10 @@ export function MediaUploadForm({
     return () => URL.revokeObjectURL(url);
   }, [current?.file]);
 
-  function updateCurrent(patch: Partial<MediaUploadQueueItem>) {
+  function updateCurrent(patch: Partial<MediaUploadQueueItem> | ((item: MediaUploadQueueItem) => Partial<MediaUploadQueueItem>)) {
     setItems((existing) =>
       existing.map((item, index) =>
-        index === currentIndex ? { ...item, ...patch } : item,
+        index === currentIndex ? { ...item, ...(typeof patch === "function" ? patch(item) : patch) } : item,
       ),
     );
   }
@@ -637,7 +640,7 @@ export function MediaUploadForm({
       .trim()
       .toLocaleLowerCase("en-US");
     const normalizedLicense = item.license.trim();
-    const tagResult = normalizeMediaTags(item.tags);
+    const tagResult = normalizeMediaTags(uploadMediaTagsText(item.tags));
     const selectedCategory = categories.find(
       (candidate) => candidate.id === normalizedCategory,
     );
@@ -1141,17 +1144,23 @@ export function MediaUploadForm({
               }
             />
           </label>
-          <label>
+          {currentIsAudio || currentIsDocument ? <label>
             Tags
             <TextInput
-              value={current?.tags ?? ""}
+              value={current ? uploadMediaTagsText(current.tags) : ""}
               placeholder="studio, control room"
               disabled={!canEditCurrent}
               onChange={(event) =>
-                updateCurrent({ tags: event.target.value, error: null })
+                updateCurrent({ tags: { committed: "", draft: event.target.value }, error: null })
               }
             />
-          </label>
+          </label> : <MediaUploadTagInput
+            key={current?.id}
+            surface="images"
+            value={current?.tags}
+            disabled={!canEditCurrent}
+            onUpdate={patch => updateCurrent(item => ({ tags: { ...item.tags, ...patch }, error: null }))}
+          />}
           {currentIsAudio || currentIsDocument ? null : <label>
             Alt-text suggestion
             <TextInput

@@ -173,9 +173,15 @@ function parseListFilter(value, label, maxLength) {
 
 function parseSourceMediaListRequest(value) {
   rejectUnknownFields(value, new Set([
-    "sourceId", "assetId", "pendingIds", "cursor", "limit", "q", "tag", "createdBy", "rightsStatus", "sort", "posters",
+    "sourceId", "assetId", "pendingIds", "cursor", "limit", "q", "tag", "createdBy", "rightsStatus", "sort", "posters", "tagsOnly",
   ]), "Request");
   const sourceId = requiredId(value.sourceId, "Source id");
+  if (Object.hasOwn(value, "tagsOnly")) {
+    if (value.tagsOnly !== true || Object.keys(value).length !== 2) {
+      throw new SourceMediaValidationError("Tags-only requests require a source id and no list options");
+    }
+    return { sourceId, tagsOnly: true };
+  }
   if (value.pendingIds !== undefined) {
     if (Object.keys(value).some(key => !["sourceId", "pendingIds"].includes(key)) ||
         !Array.isArray(value.pendingIds) || value.pendingIds.length < 1 || value.pendingIds.length > MAX_PAGE_SIZE) {

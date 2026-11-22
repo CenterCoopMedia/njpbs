@@ -23,6 +23,49 @@ const filters = [{}, { tag: "County" }, { createdBy: "staff-1" }, { rightsStatus
 const sorts = ["updated_desc", "updated_asc", "name_asc", "size_desc", "size_asc"];
 
 describe("source video navigation", () => {
+  it("returns only tags from a bounded, authorized video sample", async () => {
+    const date = "2026-09-15T12:00:00.000Z";
+    const document = (id, tags, objectKey) => ({ id, data: () => ({
+      sourceId, lifecycle: "active", kind: "video", name: id, nameSort: id, originalName: `${id}.mp4`,
+      mimeType: "video/mp4", sizeBytes: 42, version: 1, preview: "browser", rightsStatus: "pending",
+      objectKey, objectVersionId: "version-1", tags, updatedAtSort: date, createdAt: date, updatedAt: date,
+    }) });
+    const { calls, firestore } = queryRecorder([
+      document("asset-1", ["Video tag", "Same tag"], "library/one.mp4"),
+      document("asset-2", ["Same tag"], "library/two.mp4"),
+      document("asset-3", ["Private tag"], "different/three.mp4"),
+    ]);
+    let actor = { uid: "editor-1", principal: { id: "editor-1", grants: [{ tier: "contributor" }] } };
+    const readTotalFn = vi.fn();
+    const handler = sourceMedia.createCmsListSourceMediaHandler({
+      firestore: { collection: name => name === "users"
+        ? { doc: () => ({ get: async () => ({ exists: true, data: () => ({ active: true }) }) }) }
+        : firestore.collection() },
+      requirePrincipalFn: async () => actor,
+      registryFn: () => new Map([[sourceId, { id: sourceId, access: "active_staff", prefix: "library/" }]]),
+      readTotalFn, documentIdField: "__name__",
+    });
+    async function request(body = { sourceId, tagsOnly: true }) {
+      const res = { set() { return this; }, status(code) { this.statusCode = code; return this; }, json(value) { this.body = value; } };
+      await handler({ method: "POST", body, headers: { "content-type": "application/json" } }, res);
+      return res;
+    }
+
+    const authorized = await request();
+    expect(authorized.statusCode).toBe(200);
+    expect(authorized.body).toEqual({ success: true, tags: ["Video tag", "Same tag"] });
+    expect(calls).toContainEqual(["where", "lifecycle", "==", "active"]);
+    expect(calls).toContainEqual(["limit", 30]);
+    expect(readTotalFn).not.toHaveBeenCalled();
+    const reads = calls.length;
+    actor = { uid: "other-user", principal: { id: "other-user", grants: [] } };
+    const denied = await request();
+    expect(denied.statusCode).toBe(403);
+    expect(denied.body.tags).toBeUndefined();
+    expect((await request({ sourceId, tagsOnly: true, cursor: "other" })).statusCode).toBe(400);
+    expect(calls).toHaveLength(reads);
+  });
+
   it.each([
     { tag: 1 }, { tag: "a".repeat(81) }, { createdBy: "a".repeat(129) },
     { tag: "bad\nvalue" }, { rightsStatus: "unknown" }, { sort: "upload_date" },
