@@ -37,6 +37,8 @@ describe("public video catalog", () => {
     const duplicate = catalogAsset("river-crossing", { special: true });
     duplicate.id = "other-crossing-asset";
     duplicate.attributes.parent_tree.id = "other-crossing-edition";
+    const abbreviated = catalogAsset("river-episode", { attributes: { slug: "river-episode" } });
+    abbreviated.attributes.parent_tree.attributes.slug = "";
     const fetch = vi.fn(async (input: URL | string | Request, options?: RequestInit) => {
       expect(options?.redirect).toBe("error");
       const url = new URL(input.toString());
@@ -48,7 +50,7 @@ describe("public video catalog", () => {
       expect(url.searchParams.getAll("show-id")).toEqual([riverShow.id]);
       expect(url.searchParams.get("available")).toBe("public");
       expect(url.searchParams.get("type")).toBe("full_length");
-      return second ? result([noCaptions, duplicate, catalogAsset("river-episode")]) : result([publicEpisode, ...denied], nextPage(url));
+      return second ? result([noCaptions, duplicate, abbreviated]) : result([publicEpisode, ...denied], nextPage(url));
     });
 
     const snapshot = await fetchPublicVideoCatalog(config, fetch, now);
@@ -72,6 +74,14 @@ describe("public video catalog", () => {
       await expect(fetchPublicVideoCatalog(config, fetch, now)).rejects.toThrow(/pagination/);
       expect(fetch).toHaveBeenCalledOnce();
     });
+
+  it("refuses an empty snapshot when public assets lack routable slugs", async () => {
+    const missingSlug = catalogAsset("river-episode");
+    missingSlug.attributes.parent_tree.attributes.slug = "";
+    const fetch = async (input: URL | string | Request) => new URL(input.toString()).pathname.endsWith("/shows/")
+      ? result([riverShow]) : result([missingSlug]);
+    await expect(fetchPublicVideoCatalog(config, fetch, now)).rejects.toThrow("No routable public Media Manager videos");
+  });
 
   it("preserves the last valid catalog when a later asset page fails", async () => {
     const directory = await mkdtemp(path.join(tmpdir(), "video-catalog-"));

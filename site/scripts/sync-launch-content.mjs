@@ -4,7 +4,7 @@ import path from "node:path";
 import { Buffer } from "node:buffer";
 import { fileURLToPath } from "node:url";
 import { homeNewscastForSync } from "./sync-home-newscast.mjs";
-import { fetchPublicVideoCatalog } from "./fetch-public-video-catalog.ts";
+import { fetchPublicVideoCatalog, PublicVideoCatalogError } from "./fetch-public-video-catalog.ts";
 import { readPublicVideoCatalog } from "../src/lib/public-video-catalog.ts";
 
 const DEFAULT_BASE_URL = "https://media.services.pbs.org/api/v1/";
@@ -253,8 +253,9 @@ async function videoCatalogForSync(config, fetchImpl, { now, readRetainedVideoCa
   if (config.authorization && !outage) {
     try {
       return await fetchPublicVideoCatalog(config, fetchImpl, now);
-    } catch {
-      console.warn("Media Manager video catalog refresh failed; using the retained catalog when available.");
+    } catch (error) {
+      const reason = error instanceof PublicVideoCatalogError ? error.message : "provider transport or response error";
+      console.warn(`Media Manager video catalog refresh failed (${reason}). Retaining the last valid catalog when available.`);
     }
   }
   if (readRetainedVideoCatalog) return readPublicVideoCatalog(await readRetainedVideoCatalog());

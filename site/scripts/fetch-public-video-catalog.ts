@@ -11,6 +11,8 @@ const MAX_REQUESTS = 100;
 const SHOWS_PER_REQUEST = 20;
 const PAGE_SIZE = 50;
 
+export class PublicVideoCatalogError extends Error {}
+
 type Resource = MediaManagerRecord<Record<string, unknown>>;
 type Show = RawShow["show"];
 type Season = RawShow["seasons"][number];
@@ -26,7 +28,7 @@ function resource(value: unknown, type?: string): Resource {
   const attributes = catalogRecord(row?.attributes);
   if (!row || !attributes || typeof row.type !== "string" || (type && row.type !== type) ||
       typeof row.id !== "string" || !/^[a-zA-Z0-9-]{1,128}$/.test(row.id)) {
-    throw new Error("Invalid Media Manager resource");
+    throw new PublicVideoCatalogError("Invalid Media Manager resource");
   }
   return { id: row.id, type: row.type, attributes };
 }
@@ -34,18 +36,18 @@ function resource(value: unknown, type?: string): Resource {
 /** Keep credentials on the exact collection and query selected by the adapter. */
 function nextPage(value: unknown, first: URL, page: number): URL | null {
   if (value === null) return null;
-  if (typeof value !== "string" || /[\\\u0000-\u0020\u007f]/.test(value)) throw new Error("Incomplete Media Manager pagination");
+  if (typeof value !== "string" || /[\\\u0000-\u0020\u007f]/.test(value)) throw new PublicVideoCatalogError("Incomplete Media Manager pagination");
   const next = new URL(value, first);
   if (next.origin !== first.origin || next.pathname !== first.pathname || next.username || next.password || next.hash ||
       next.searchParams.getAll("page").length !== 1 || next.searchParams.get("page") !== `${page + 1}`) {
-    throw new Error("Invalid Media Manager pagination target");
+    throw new PublicVideoCatalogError("Invalid Media Manager pagination target");
   }
   const filters = new URLSearchParams(next.search);
   filters.delete("page");
   filters.sort();
   const expected = new URLSearchParams(first.search);
   expected.sort();
-  if (filters.toString() !== expected.toString()) throw new Error("Media Manager pagination changed filters");
+  if (filters.toString() !== expected.toString()) throw new PublicVideoCatalogError("Media Manager pagination changed filters");
   return next;
 }
 
@@ -58,12 +60,12 @@ function createCollectionReader(authorization: string, fetchImpl: typeof fetch) 
     let url: URL | null = first;
     for (let page = 1; url; page += 1) {
       deadline.throwIfAborted();
-      if (++requests > MAX_REQUESTS) throw new Error("Media Manager request limit exceeded");
+      if (++requests > MAX_REQUESTS) throw new PublicVideoCatalogError("Media Manager request limit exceeded");
       const response = await fetchImpl(url, { redirect: "error", headers: { Accept: "application/json", Authorization: authorization },
         signal: AbortSignal.any([deadline, AbortSignal.timeout(20_000)]) });
       if (!response.ok || response.redirected || !response.body) {
         await response.body?.cancel().catch(() => {});
-        throw new Error("Media Manager collection unavailable");
+        throw new PublicVideoCatalogError("Media Manager collection unavailable");
       }
       const reader = response.body.getReader();
       const chunks: Uint8Array[] = [];
@@ -74,7 +76,7 @@ function createCollectionReader(authorization: string, fetchImpl: typeof fetch) 
           if (done) break;
           bytes += value.byteLength;
           totalBytes += value.byteLength;
-          if (bytes > MAX_RESPONSE_BYTES || totalBytes > MAX_FETCH_BYTES) throw new Error("Media Manager response limit exceeded");
+          if (bytes > MAX_RESPONSE_BYTES || totalBytes > MAX_FETCH_BYTES) throw new PublicVideoCatalogError("Media Manager response limit exceeded");
           chunks.push(value);
         }
       } finally {
@@ -85,11 +87,11 @@ function createCollectionReader(authorization: string, fetchImpl: typeof fetch) 
       const data: unknown = payload?.data;
       url = nextPage(catalogRecord(payload?.links)?.next, first, page);
       if (!Array.isArray(data) || data.length > PAGE_SIZE || (url && data.length === 0) || (page > 1 && data.length === 0)) {
-        throw new Error("Incomplete Media Manager collection");
+        throw new PublicVideoCatalogError("Incomplete Media Manager collection");
       }
       for (const value of data as unknown[]) {
         const row = resource(value, type);
-        if (ids.has(row.id)) throw new Error("Duplicate Media Manager resource in collection");
+        if (ids.has(row.id)) throw new PublicVideoCatalogError("Duplicate Media Manager resource in collection");
         ids.add(row.id);
         yield row;
       }
@@ -115,20 +117,21 @@ function addPublicAsset(sources: Map<string, CatalogSource>, asset: Resource, no
   const attributes = asset.attributes;
   const window = catalogRecord(catalogRecord(attributes.availabilities)?.public);
   if (attributes.object_type !== "full_length" || !window || mediaManagerWindowAt(window, now) !== "open" ||
-      [attributes.availability_window, attributes.playable_window].some(value => value !== undefined && value !== "public")) return;
+      [attributes.availability_window, attributes.playable_window].some(value => value !== undefined && value !== "public")) return false;
 
   const parent = resource(attributes.parent_tree);
-  if (parent.type !== "episode" && parent.type !== "special") throw new Error("Invalid Media Manager video parent");
+  if (parent.type !== "episode" && parent.type !== "special") throw new PublicVideoCatalogError("Invalid Media Manager video parent");
   const episode = parent.type === "episode";
   const season = episode || parent.attributes.season ? resource(parent.attributes.season, "season") : null;
   const show = resource(season?.attributes.show ?? parent.attributes.show, "show");
   const source = sources.get(show.id);
-  if (!source) throw new Error("Media Manager video is outside the requested programs");
+  if (!source) throw new PublicVideoCatalogError("Media Manager video is outside the requested programs");
 
   const title = text(parent.attributes.title) ?? text(attributes.title);
-  const slug = parent.attributes.slug;
-  if (!title || !catalogSlug(slug)) return;
-  if (source.videos.has(parent.id)) throw new Error("Duplicate Media Manager full-length video");
+  // The public asset has the stable video slug even when the parent tree is abbreviated.
+  const slug = catalogSlug(attributes.slug) ? attributes.slug : parent.attributes.slug;
+  if (!title || !catalogSlug(slug)) return true;
+  if (source.videos.has(parent.id)) throw new PublicVideoCatalogError("Duplicate Media Manager full-length video");
   const edition = { ...parent, attributes: { title, slug,
     description_short: text(parent.attributes.description_short) ?? text(attributes.description_short),
     description_long: text(parent.attributes.description_long) ?? text(attributes.description_long),
@@ -140,7 +143,7 @@ function addPublicAsset(sources: Map<string, CatalogSource>, asset: Resource, no
     window: { start: (window.start ?? null) as string | null, end: (window.end ?? null) as string | null } });
   if (!episode) {
     source.raw.specials!.push({ special: edition, assets: [assetRecord] });
-    return;
+    return true;
   }
   let target = source.seasons.get(season!.id);
   if (!target) {
@@ -149,6 +152,7 @@ function addPublicAsset(sources: Map<string, CatalogSource>, asset: Resource, no
     source.raw.seasons.push(target);
   }
   target.episodes.push({ episode: edition, assets: [assetRecord] });
+  return true;
 }
 
 function positiveOrdinal(value: number | null): number | null {
@@ -168,18 +172,19 @@ export async function fetchPublicVideoCatalog(config: { url: URL; authorization:
     if (show) showsBySlug.push({ slug: show.attributes.slug!, show });
   }
   const shows = uniqueSlugs(showsBySlug).map(({ show }) => show);
-  if (shows.length === 0) throw new Error("No routable Media Manager programs");
+  if (shows.length === 0) throw new PublicVideoCatalogError("No routable Media Manager programs");
   const sources = new Map<string, CatalogSource>(shows.map(show => [show.id,
     { raw: { show, seasons: [], specials: [] }, seasons: new Map(), videos: new Map() }]));
   let videoCount = 0;
+  let hasPublicAsset = false;
   for (let offset = 0; offset < shows.length; offset += SHOWS_PER_REQUEST) {
     const batch = new Map(shows.slice(offset, offset + SHOWS_PER_REQUEST).map(({ id }) => [id, sources.get(id)!]));
     const url = new URL("../assets/", showUrl);
     url.search = new URLSearchParams({ available: "public", type: "full_length", "platform-slug": "partnerplayer", "page-size": `${PAGE_SIZE}` }).toString();
     for (const id of batch.keys()) url.searchParams.append("show-id", id);
     for await (const asset of read(url, "asset")) {
-      if (++videoCount > MAX_CATALOG_VIDEOS) throw new Error("Media Manager video limit exceeded");
-      addPublicAsset(batch, asset, now);
+      if (++videoCount > MAX_CATALOG_VIDEOS) throw new PublicVideoCatalogError("Media Manager video limit exceeded");
+      if (addPublicAsset(batch, asset, now)) hasPublicAsset = true;
     }
   }
 
@@ -198,7 +203,8 @@ export async function fetchPublicVideoCatalog(config: { url: URL; authorization:
       })) });
   }
   const result = { checkedAt: now.toISOString(), programs };
-  if (Buffer.byteLength(JSON.stringify(result)) > MAX_CATALOG_BYTES) throw new Error("Media Manager snapshot limit exceeded");
+  if (hasPublicAsset && programs.length === 0) throw new PublicVideoCatalogError("No routable public Media Manager videos");
+  if (Buffer.byteLength(JSON.stringify(result)) > MAX_CATALOG_BYTES) throw new PublicVideoCatalogError("Media Manager snapshot limit exceeded");
   readPublicVideoCatalog(result);
   reportMediaCoverage(coverage);
   return result;
