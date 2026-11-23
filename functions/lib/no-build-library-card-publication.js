@@ -129,7 +129,7 @@ async function prepareLibraryCardRetry({ firestore, transaction, accepted }) {
   } };
 }
 
-async function latestLibraryCardPublication({ firestore, transaction, stored }) {
+async function latestLibraryCardPublication({ firestore, transaction = undefined, stored }) {
   const query = firestore.collection("cmsVersionHistory").where("collection", "==", "cmsPosts").where("documentId", "==", stored.id);
   const history = await (transaction ? transaction.get(query) : query.get());
   const events = history.docs.map(row => row.data());

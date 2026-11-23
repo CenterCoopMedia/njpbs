@@ -83,7 +83,7 @@ async function readRoute({ path, file, identity, target, headers, fetchPublic, s
   } finally { await response.body?.cancel().catch(() => {}); }
 }
 
-async function prepareRecordPublicProof({ firestore, accepted, target, headers, fetchPublic = fetch, artifacts,
+async function prepareRecordPublicProof({ firestore, accepted, target = undefined, headers = {}, fetchPublic = fetch, artifacts = undefined,
   now = Date.now, deadline = now() + 45_000 }) {
   target = pagePublicationTarget({ firestore, target: assertReadbackTarget(firestore, target) });
   headers = publicReadbackHeaders(target, headers);

@@ -14,7 +14,7 @@ const { projectPublishedCmsSettings } = require("./cms-settings-contract");
 const { readNoBuildRecordOwner } = require("./no-build-record-ownership");
 const { readRecordPublication, recordPublicationReceipt } = require("./no-build-record-publication");
 const { libraryCardReceipt, latestLibraryCardPublication } = require("./no-build-library-card-publication");
-const paired = require("./public-release-admission-contract");
+const paired = require("./public-release-admission");
 const { publicReleaseDigest } = require("./public-release-pair");
 const { assertPairPublicationTerminalReceiptInTransaction } = require("./public-release-terminal");
 const { currentContextCheck } = require("./context-publication-check-state");
@@ -203,8 +203,9 @@ async function completeContextRecheck({ firestore, queueId, actor, source, initi
     if (!isDeepStrictEqual(queue, initial.queue)) refuse(409, "Publication changed during the check. Reload its status.");
     const current = await readContextRecheck({ firestore, transaction, actor, queueId, queue });
     if (!isDeepStrictEqual(current.proof, initial.proof)) refuse(409, "Publication changed during the check. Reload its status.");
-    if (publicProof) await publicProof.assertCurrent(transaction, current.proof.record);
-    const proof = current.proof?.record ? publicProof?.receipt : current.proof?.receipt;
+    const record = current.proof && "record" in current.proof ? current.proof.record : null;
+    if (publicProof && record) await publicProof.assertCurrent(transaction, record);
+    const proof = record ? publicProof?.receipt : current.proof?.receipt;
     const outcome = !proof ? "failed" : current.proof.superseded ? "superseded" : "confirmed_late";
     const message = outcome === "confirmed_late" ? "Publication confirmed on the public site." :
       outcome === "superseded" ? "A newer publication is live. This request no longer needs recovery." :

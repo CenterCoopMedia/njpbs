@@ -15,7 +15,7 @@ import { canManageSettings, canPublishContent, canViewPublishActivity } from "..
 import { retrySiteUpdate } from "../lib/site-update-retry";
 import type { SiteUpdateRetryResult } from "../lib/site-update-retry";
 import { cmsRecheckPublication } from "../lib/functions";
-import { loadPublishActivitySummary } from "../lib/publish-activity";
+import { loadPublishActivitySummary, type PublishActivitySummary } from "../lib/publish-activity";
 import { db } from "../lib/firebase";
 import {
   cmsListReviewQueue,
@@ -110,6 +110,26 @@ function queueItemFromDoc(id: string, data: DocumentData, settingsAccess: boolea
       recheckOutcome: check.outcome,
     } : {}),
   };
+}
+
+async function readRecoveryQueueItems(summary: PublishActivitySummary, settingsAccess: boolean, isCurrent: () => boolean) {
+  const ids = [...new Set(summary.postProofRecoveryIds)];
+  const items: QueueItem[] = [];
+  for (let offset = 0; offset < ids.length; offset += 30) {
+    const batch = new Set(ids.slice(offset, offset + 30));
+    const rows = await getDocs(query(collection(db, "cmsPublishQueue"), where(documentId(), "in", [...batch])));
+    if (!isCurrent()) return [];
+    items.push(...rows.docs.map(row => ({ ...queueItemFromDoc(row.id, row.data(), settingsAccess), proofRecovery: batch.has(row.id) })));
+  }
+  if (summary.contextRetry) {
+    const { queueId, createdAt, lastPublicCheck } = summary.contextRetry;
+    const status = lastPublicCheck?.outcome === "confirmed_late" ? "success" : lastPublicCheck?.outcome === "superseded" ? "superseded" : "failed";
+    items.push({ id: queueId, status, contextRecheck: settingsAccess, transport: "public-context-no-build-v1",
+      automaticSiteUpdate: true, contextRetry: status === "failed", timestamp: valueToDate(createdAt),
+      triggeredBy: "Automatic site update", changes: ["Site-wide update"], error: "The accepted site update did not complete.",
+      ...(lastPublicCheck ? { recheckMessage: lastPublicCheck.message, recheckOutcome: lastPublicCheck.outcome } : {}) });
+  }
+  return items;
 }
 
 export function QueueTab() {
@@ -241,23 +261,8 @@ export function QueueTab() {
       try {
         const summary = await loadPublishActivitySummary(await getIdToken(), true);
         if (!current) return;
-        const postProofIds = new Set(summary.postProofRecoveryIds);
-        const ids = [...postProofIds];
-        const items: QueueItem[] = [];
-        for (let offset = 0; offset < ids.length; offset += 30) {
-          const rows = await getDocs(query(collection(db, "cmsPublishQueue"),
-            where(documentId(), "in", ids.slice(offset, offset + 30))));
-          if (!current) return;
-          items.push(...rows.docs.map(row => ({ ...queueItemFromDoc(row.id, row.data(), settingsAccess), proofRecovery: postProofIds.has(row.id) })));
-        }
-        if (summary.contextRetry) {
-          const { queueId, createdAt, lastPublicCheck } = summary.contextRetry;
-          const status = lastPublicCheck?.outcome === "confirmed_late" ? "success" : lastPublicCheck?.outcome === "superseded" ? "superseded" : "failed";
-          items.push({ id: queueId, status, contextRecheck: settingsAccess, transport: "public-context-no-build-v1",
-            automaticSiteUpdate: true, contextRetry: status === "failed", timestamp: valueToDate(createdAt),
-            triggeredBy: "Automatic site update", changes: ["Site-wide update"], error: "The accepted site update did not complete.",
-            ...(lastPublicCheck ? { recheckMessage: lastPublicCheck.message, recheckOutcome: lastPublicCheck.outcome } : {}) });
-        }
+        const items = await readRecoveryQueueItems(summary, settingsAccess, () => current);
+        if (!current) return;
         proofRecoveryItems.current = items;
         const contextIds = summary.contextRecheckIds ?? [];
         for (let offset = 0; offset < contextIds.length; offset += 30) {
