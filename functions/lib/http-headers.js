@@ -55,6 +55,7 @@ function resolveAllowedOrigin(requestOrigin, allowlist = DEFAULT_ALLOWED_ORIGINS
  * echoes it and advertises the read-only method set; when it is not, it returns
  * only `Vary` (no allow-origin), which is how a browser is told the call is not
  * permitted. `allowed` lets the handler answer a disallowed preflight distinctly.
+ * @param {{ requestOrigin?: string, allowlist?: readonly string[], methods?: string }} [options]
  */
 function corsHeaders({
   requestOrigin,
