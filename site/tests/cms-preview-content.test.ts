@@ -145,11 +145,9 @@ describe("request-scoped preview content", () => {
   });
 
   it("projects a scheduled Spanish Post into its private render path", () => {
-    const template = input("cmsPosts");
-    const published = template.snapshot.published!;
-    const value = { ...template, snapshot: { ...template.snapshot, published: { ...published,
-      metadata: { ...published.metadata, locale: "es", slug: "es/noticias", editionOf: "source-post" },
-    } } };
+    const value = input("cmsPosts");
+    const metadata = value.snapshot.published!.metadata;
+    Object.assign(metadata, { locale: "es", slug: "es/noticias", editionOf: "source-post" });
     const { bytes, request } = fixture(value);
     const result = projectCmsPreviewContent(bytes, request, now);
     expect(result.target.pagePath).toBe("/es/posts/noticias/");
