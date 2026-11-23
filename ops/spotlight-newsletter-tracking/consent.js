@@ -1,3 +1,4 @@
+/* global window */
 const COOKIE = "spotlight-newsletter-consent";
 const GRANT = "v1:granted";
 const DENY = "v1:denied";

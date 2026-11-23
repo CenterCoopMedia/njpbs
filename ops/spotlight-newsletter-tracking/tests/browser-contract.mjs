@@ -1,3 +1,4 @@
+/* global Document, document, window, navigator, innerWidth, location */
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
 import { readFileSync, mkdirSync } from "node:fs";
