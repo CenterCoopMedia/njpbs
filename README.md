@@ -79,7 +79,7 @@ After changing a pull request's base branch, push an updated head or reopen
 the pull request to run CI for the new base.
 
 Required CI compares lint, Functions JavaScript types and source size on pull
-requests and merge groups. It fails for new errors, new files over 1,000 lines,
+requests and merge groups. It fails for new errors, files crossing 1,000 lines,
 and growth in files already over 1,000 lines. Download the `code-health`
 artifact for the tested tree, its base, the base's ESLint bulk suppressions and
 the new findings. The check compares diagnostic counts by file, rule and
