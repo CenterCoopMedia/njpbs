@@ -466,6 +466,8 @@ jobs:
     env:
       CMS_DEPLOY_OWNER: ${{ vars.CMS_DEPLOY_OWNER }}
     name: Verify deploy sources before any mutation
+    # Reads no secret; the release runner requires every job of a development run in the development environment.
+    environment: ${{ inputs.target == 'development' && 'development' || 'production' }}
     if: >-
       (vars.CANONICAL_GITHUB_REPOSITORY != '' && vars.CANONICAL_GITHUB_REPOSITORY_ID != '' && github.repository == vars.CANONICAL_GITHUB_REPOSITORY && github.repository_id == vars.CANONICAL_GITHUB_REPOSITORY_ID) &&
       (vars.CMS_DEPLOY_OWNER != '' && github.triggering_actor == vars.CMS_DEPLOY_OWNER) && github.ref == 'refs/heads/main'

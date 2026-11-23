@@ -71,7 +71,8 @@ describe("credential-free deploy verification", () => {
   const verify = job(deploy, "verify");
   it("blocks every mutating job until verify succeeds, without credentials", () => {
     expect(workflow.jobs.verify.needs).toBeUndefined();
-    expect(workflow.jobs.verify.environment).toBeUndefined();
+    // The target environment holds no secret this job reads; the release runner requires it on a dev run.
+    expect(workflow.jobs.verify.environment).toBe("${{ inputs.target == 'development' && 'development' || 'production' }}");
     expect(verify).not.toContain("secrets.");
     expect(workflow.jobs.verify.permissions).toEqual({ contents: "read" });
     expect(workflow.jobs.verify.steps.find(row => row.name === "Verify preview renderer sources").env)
@@ -367,7 +368,7 @@ describe("CMS deploy target", () => {
     expect(workflow.on.workflow_dispatch.inputs.target).toEqual({ description: expect.any(String), required: false,
       default: "production", type: "choice", options: ["production", "development"] });
     const environments = Object.entries(workflow.jobs).filter(([, job]) => job.environment).map(([name]) => name);
-    expect(environments).toHaveLength(9);
+    expect(environments).toHaveLength(10);
     for (const name of environments) expect(workflow.jobs[name].environment).toBe("${{ inputs.target == 'development' && 'development' || 'production' }}");
     expect(Object.fromEntries(["CMS_TARGET", "CMS_TARGET_FIREBASE_PROJECT", "CMS_TARGET_ADMIN_ORIGIN", "CMS_TARGET_API_ORIGIN",
       "CMS_TARGET_PUBLIC_ORIGIN", "CMS_TARGET_MEDIA_ORIGIN", "CMS_TARGET_MEDIA_BUCKET", "CMS_TARGET_ADMIN_PAGES", "CMS_TARGET_RENDER_SCOPE"]
