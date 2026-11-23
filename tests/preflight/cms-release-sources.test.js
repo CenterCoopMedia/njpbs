@@ -61,14 +61,22 @@ describe("CMS release source contract", () => {
     const definitions = workflow.on.workflow_dispatch.inputs;
     expect(definitions.release_dispatch_id).toMatchObject({ type: "string", required: false, default: "" });
     expect(workflow["run-name"]).toContain("format('CMS staging deploy [{0}]', inputs.release_dispatch_id)");
-    const inputs = Object.fromEntries(Object.entries(definitions).map(([key, value]) => [key, value.default]));
     const releaseDispatchId = "a".repeat(32);
+    const inputs = {
+      emergency_release: false, deploy_ref: releaseSha, release_dispatch_id: releaseDispatchId,
+      cloudflare_pages_branch: "main", force_firebase: false, install_reader_bridge: false,
+    };
     const check = overrides => requireCmsReleaseSources({
       releaseSha, trustedWorkflowSha, releaseRoot, trustedRoot,
-      dispatchInputs: JSON.stringify({ ...inputs, deploy_ref: releaseSha, release_dispatch_id: releaseDispatchId, ...overrides }),
+      dispatchInputs: JSON.stringify({ ...inputs, ...overrides }),
     });
     expect(check()).toMatchObject({ deploySha: releaseSha, trustedWorkflowSha, releaseDispatchId });
-    for (const overrides of [{ force_firebase: true }, { release_dispatch_id: "malformed" }, { deploy_ref: trustedWorkflowSha }, { unknown_input: "" }]) {
+    expect(check({ emergency_authorization: "", migrations: "", reader_operation_id: "", reader_install_authorization: "" }))
+      .toMatchObject({ deploySha: releaseSha, trustedWorkflowSha, releaseDispatchId });
+    for (const overrides of [
+      { force_firebase: true }, { migrations: "repair" }, { migrations: null }, { force_firebase: "false" },
+      { force_firebase: undefined }, { release_dispatch_id: "malformed" }, { deploy_ref: trustedWorkflowSha }, { unknown_input: "" },
+    ]) {
       expect(() => check(overrides)).toThrow("Correlated CMS dispatch requires");
     }
   });
