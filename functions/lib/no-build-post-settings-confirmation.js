@@ -13,6 +13,8 @@ const { withinDeadline, verifyPublicHtml, readPublicPostAfterRefresh } = require
 const { readSettingsInputs } = require("./settings-proof-transaction");
 
 const MAX_POSTS = 500;
+const PROOF_BATCH_SIZE = 8;
+const PROOF_READ_TIMEOUT_MS = 10_000;
 const digest = value => createHash("sha256").update(JSON.stringify(value)).digest("hex");
 function refuse(postId, reason) {
   throw Object.assign(new Error(`The settings Post proof for ${postId} ${reason}.`), { status: 409 });
@@ -27,7 +29,8 @@ async function postSettingsCoverage({ firestore, transaction, identity, target, 
     readPublicContextRevisionInTransaction(transaction, firestore),
   ]);
   if (rows.size > MAX_POSTS) refuse("the published roster", "exceeds its bound");
-  if (pointer.data()?.state !== "idle" || pointer.data()?.activeCommitSha !== identity.rendererSha ||
+  const deployment = pointer.data();
+  if (deployment?.state !== "idle" || deployment.activeCommitSha !== identity.rendererSha ||
       revision !== identity.contextRevision || publicContextDigest(revision) !== identity.contextDigest) {
     refuse("the published roster", "has a changed renderer or public context");
   }
@@ -78,7 +81,8 @@ async function postSettingsCoverage({ firestore, transaction, identity, target, 
   // must invalidate the captured roster, even when it removes a required detail.
   const rosterDigest = digest(rows.docs.map(row => ({ id: row.id, published: row.data().published,
     visible: publiclyVisible(row.data()) })).sort((a, b) => a.id.localeCompare(b.id)));
-  return { entries, missingPosts, rosterDigest };
+  return { entries, missingPosts, rosterDigest, deploymentGeneration: deployment.activeGeneration,
+    deploymentId: deployment.activeDeploymentId };
 }
 
 async function readPostSettingsReceipt({ entry, target, headers, fetchPublic, signal }) {
@@ -118,10 +122,10 @@ async function readPostSettingsReceipt({ entry, target, headers, fetchPublic, si
  * must finish; a rejected or timed-out detail cannot acknowledge a subset. */
 async function readSettingsProofs(values, read, { deadline, now, onFailure }) {
   const results = [];
-  for (let offset = 0; offset < values.length; offset += 8) {
+  for (let offset = 0; offset < values.length; offset += PROOF_BATCH_SIZE) {
     if (now() >= deadline) throw new Error("Settings consumer confirmation timed out");
-    const batch = await Promise.allSettled(values.slice(offset, offset + 8).map(async value => {
-      try { return await withinDeadline(Math.min(10_000, deadline - now()), signal => read(value, signal)); }
+    const batch = await Promise.allSettled(values.slice(offset, offset + PROOF_BATCH_SIZE).map(async value => {
+      try { return await withinDeadline(Math.min(PROOF_READ_TIMEOUT_MS, deadline - now()), signal => read(value, signal)); }
       catch (error) {
         if (!onFailure) throw error;
         return onFailure(value, error);
@@ -134,4 +138,25 @@ async function readSettingsProofs(values, read, { deadline, now, onFailure }) {
   return results;
 }
 
-module.exports = { postSettingsCoverage, readPostSettingsReceipt, readSettingsProofs };
+/** Cover an ordered prefix of one exact roster. A wake can lose its unfinished
+ * batch, but settlement of its lease saves each complete batch from that wake. */
+async function readPostSettingsProof({ coverage, target, headers, fetchPublic, now, deadline, proof }) {
+  const { entries } = coverage;
+  const coverageDigest = digest([target.origin, coverage]);
+  const prior = proof.postCheckpoint;
+  const start = prior?.coverageDigest === coverageDigest && Number.isSafeInteger(prior.verified) &&
+    prior.verified > 0 && prior.verified <= entries.length ? prior.verified : 0;
+  if (prior && !start) proof.recordPostCheckpoint(null);
+  let verified = start;
+  while (verified < entries.length && deadline - now() > PROOF_READ_TIMEOUT_MS) {
+    const batch = entries.slice(verified, verified + PROOF_BATCH_SIZE);
+    await readSettingsProofs(batch, (entry, signal) => readPostSettingsReceipt({ entry, target, headers, fetchPublic, signal }), { deadline, now });
+    verified += batch.length;
+    proof.recordPostCheckpoint({ coverageDigest, verified });
+  }
+  const advanced = verified > start;
+  const ready = verified === entries.length && (!advanced || deadline - now() > PROOF_READ_TIMEOUT_MS);
+  return { ready, advanced };
+}
+
+module.exports = { postSettingsCoverage, readPostSettingsReceipt, readSettingsProofs, readPostSettingsProof };

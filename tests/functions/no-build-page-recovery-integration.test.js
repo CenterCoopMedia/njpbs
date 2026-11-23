@@ -1061,6 +1061,46 @@ it("proves all 62 canonical Post details with Page/Home in one settings receipt,
   expect((await firestore.doc("cmsPosts/settings-post-0").get()).data()).toEqual(before);
 }, 45_000);
 
+it.each(["unchanged", "new Post", "staff retry"])("resumes a bounded settings proof with %s inputs", async change => {
+  const { home, settingsOperationId } = await seedFullPageCoverage();
+  await seedSettingsPosts(10);
+  const queueRef = firestore.doc(`cmsPublishQueue/${settingsOperationId}`);
+  const proofRef = queueRef.collection("confirmation").doc("page-consumers");
+  const publicFetch = settingsPublicFetch(home);
+  const visited = new Set();
+  let time = Date.now(), firstWake = true;
+  const options = { firestore, operationId: settingsOperationId, target, headers, now: () => time,
+    currentCodeRequest: scheduleFixture.request, fetchPublic: async (url, options) => {
+      const path = new URL(url).pathname;
+      if (path.startsWith("/posts/")) {
+        if (!visited.size && firstWake) time += 36_000;
+        visited.add(path);
+      }
+      return publicFetch(url, options);
+    } };
+  expect(await settingsConfirmation.confirmNoBuildPageSettings(options)).toEqual({ confirmed: false });
+  const firstBatch = [...visited];
+  expect(firstBatch).toHaveLength(8);
+  expect((await proofRef.get()).data()).toMatchObject({ attempts: 0, status: "waiting", postCheckpoint: { verified: 8 } });
+  expect((await queueRef.get()).data().consumerReceipts).toBeUndefined();
+
+  if (change === "new Post") await seedSettingsPosts(11);
+  if (change === "staff retry") await queueRef.update({ settingsRetryAt: Timestamp.now() });
+  firstWake = false;
+  time += 9_000;
+  visited.clear();
+  expect(await settingsConfirmation.confirmNoBuildPageSettings(options)).toEqual({ confirmed: true });
+  expect(visited.size).toBe(change === "new Post" ? 11 : change === "staff retry" ? 10 : 2);
+  for (const path of firstBatch) expect(visited.has(path)).toBe(change !== "unchanged");
+  const { consumerReceipts } = (await queueRef.get()).data();
+  expect(consumerReceipts.posts).toEqual(consumerReceipts.pages);
+  expect(consumerReceipts.posts).toEqual(consumerReceipts.home);
+
+  visited.clear();
+  expect(await settingsConfirmation.confirmNoBuildPageSettings(options)).toEqual({ confirmed: true });
+  expect(visited.size).toBe(0);
+}, 45_000);
+
 it("confirms settings with a published custom-link Post while ignoring its later private link draft", async () => {
   const { home, settingsOperationId } = await seedFullPageCoverage();
   await seedSettingsPosts(1);
