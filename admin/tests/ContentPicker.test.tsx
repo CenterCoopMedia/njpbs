@@ -37,9 +37,10 @@ describe("contextual content picker", () => {
     const picker = screen.getByRole("dialog", { name: "Add content" });
     expect(within(picker).getByText("Row 1 › Column 2 · At end")).toBeVisible();
     const types = within(picker).getByRole("radiogroup", { name: "Content types" });
-    expect(within(types).getAllByRole("radio")).toHaveLength(19);
+    expect(within(types).getAllByRole("radio")).toHaveLength(20);
     expect(within(types).getByRole("radio", { name: "support appeal" })).toBeEnabled();
     expect(within(types).getByRole("radio", { name: "uploaded video" })).toBeEnabled();
+    expect(within(types).getByRole("radio", { name: "scroll story" })).toBeEnabled();
     expect(within(types).getByRole("radio", { name: "bio card" })).toBeEnabled();
     expect(within(types).getByRole("radio", { name: "data figure" })).toBeEnabled();
     expect(within(types).getByRole("radio", { name: "election results" })).toBeEnabled();
@@ -51,7 +52,7 @@ describe("contextual content picker", () => {
       "Programs or pages you pick by hand and order yourself.",
     );
     expect(picker).toHaveTextContent("Dividers are only available outside rows or inside a one-column row.");
-    expect(within(picker).getByRole("status")).toHaveTextContent("19 types match");
+    expect(within(picker).getByRole("status")).toHaveTextContent("20 types match");
   });
 
   it("clears a choice when search hides it", () => {
