@@ -34,6 +34,9 @@ async function context({ gpc = false, blockedCookies = false, blockedWrites = fa
   const vendors = [];
   await ctx.route("**/*", async route => {
     const url = new URL(route.request().url());
+    if (url.hostname === "player.pbs.org" && url.pathname === "/viralplayer/123456/") {
+      return route.fulfill({ contentType: "text/html", body: "<p>Synthetic video player</p>" });
+    }
     if (url.hostname !== "news.example.org") {
       vendors.push(url.href);
       const body = url.hostname === "diffuser-cdn.app-us1.com"
