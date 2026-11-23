@@ -8,7 +8,7 @@ const MAX_REUSE_AGE_MS = 6 * 60 * 60 * 1000;
 
 // Keep this fail-closed when a consumer is renamed or sharded differently.
 export const fullJobs = [
-  "Policy", "Docs", "Site", "ci",
+  "Policy", "Docs", "Site", "ci", "Code health / Code health report",
   "Admin / admin (1)", "Admin / admin (2)",
   ...[1, 2, 3, 4].map((shard) => `Admin / admin-visual (${shard})`),
   "Admin / admin-visual-complete",

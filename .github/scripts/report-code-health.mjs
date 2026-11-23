@@ -155,8 +155,11 @@ async function main(output, candidate, base) {
 
   const findings = compare(baseline, current, base ? renamedPaths(candidate, baseline.sha) : new Map());
   save("new-findings", findings);
-  console.log("New problems (report only):", Object.fromEntries(
+  console.log("New problems:", Object.fromEntries(
     Object.entries(findings).map(([check, entries]) => [check, entries.length])));
+  if (base && Object.values(findings).some((entries) => entries.length > 0)) {
+    process.exitCode = 1;
+  }
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {

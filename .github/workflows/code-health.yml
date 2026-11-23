@@ -1,7 +1,7 @@
 name: Code health
 
 on:
-  pull_request:
+  workflow_call:
   push:
     branches: [main]
 
@@ -15,7 +15,7 @@ concurrency:
 jobs:
   code-health:
     name: Code health report
-    continue-on-error: true
+    continue-on-error: ${{ github.event_name == 'push' }}
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     steps:
@@ -38,14 +38,26 @@ jobs:
       - name: Install report dependencies
         env:
           PR_HEAD: ${{ github.event.pull_request.head.sha }}
+          QUEUE_BASE: ${{ github.event.merge_group.base_sha }}
         run: |
-          if [ -n "$PR_HEAD" ]; then
-            # The event's base SHA can lag the base of the tested merge commit.
-            if [ "$(git -C candidate rev-parse HEAD^2)" != "$PR_HEAD" ]; then
-              echo "The tested merge does not contain the event PR head."
-              exit 1
-            fi
-            git -C candidate worktree add --detach ../baseline HEAD^1
+          base=
+          case "$GITHUB_EVENT_NAME" in
+            pull_request)
+              # The event's base SHA can lag the base of the tested merge commit.
+              if [ "$(git -C candidate rev-parse HEAD^2)" != "$PR_HEAD" ]; then
+                echo "The tested merge does not contain the event PR head."
+                exit 1
+              fi
+              base=HEAD^1
+              ;;
+            merge_group)
+              test -n "$QUEUE_BASE"
+              git -C candidate fetch --no-tags --depth=1 origin "$QUEUE_BASE"
+              base=$QUEUE_BASE
+              ;;
+          esac
+          if [ -n "$base" ]; then
+            git -C candidate worktree add --detach ../baseline "$base"
             npm --prefix baseline ci --ignore-scripts
             npm --prefix baseline/site ci --ignore-scripts
             npm --prefix baseline run functions:build --if-present
