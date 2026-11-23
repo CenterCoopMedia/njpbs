@@ -29,7 +29,7 @@ export function VideoSubclips({ assetId, fileVersion, durationMs, range, getIdTo
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
-  const active = useRef<AbortController>(null);
+  const active = useRef<AbortController | null>(null);
   const heading = useRef<HTMLHeadingElement>(null);
 
   const update = useCallback(async (action: Action, signal: AbortSignal) => {

@@ -30,7 +30,7 @@ function Harness({ video = asset, frame = false, workspace = false, seek = false
   onTranscriptReady?: (assetId: string, settings: TranscriptSettings) => void;
 }) {
   const player = useRef<HTMLVideoElement>(null);
-  const { actions, content, transcriptPane, downloadItems, editorExportsItem, playbackSeconds, seekPlayback, onTimeUpdate } = useVideoProductionTools({ asset: video, getIdToken, player, principal: staff ? { id: "editor", grants: [{ tier: "viewer" }] } : undefined, canRequest: true, disabled: false, headerControls: frame, workspace, onBusyChange, onSearchContentChanged, onTranscriptRequested, onTranscriptObserved, onTranscriptReady });
+  const { actions, content, transcriptPane, downloadItems, editorExportsItem, playbackSeconds, seekPlayback, onTimeUpdate } = useVideoProductionTools({ asset: video, getIdToken, player, principal: staff ? { id: "editor", grants: [{ role: "staff", tier: "viewer" }] } : undefined, canRequest: true, disabled: false, headerControls: frame, workspace, onBusyChange, onSearchContentChanged, onTranscriptRequested, onTranscriptObserved, onTranscriptReady });
   return <>{seek ? <><video ref={player} onTimeUpdate={onTimeUpdate} /><VideoReviewSeek currentSeconds={playbackSeconds} durationMs={60000} disabled={false} onSeek={seekPlayback}>{null}</VideoReviewSeek></> : null}{frame ? <Menu label="Download" items={[editorExportsItem, ...downloadItems]} /> : null}{actions}{content}{transcriptPane}</>;
 }
 async function openTranscript() {

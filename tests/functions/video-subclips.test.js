@@ -28,7 +28,7 @@ async function call(assetId, action, fields = {}, uid = "editor") {
   const res = { set() {}, status(code) { this.code = code; return this; }, json(body) { this.body = body; } };
   const handler = subclips.createVideoSubclipsHandler({
     firestore: db, registry: () => new Map([[source.id, source]]), verifyAppCheck: async () => {},
-    requirePrincipal: async () => ({ uid, principal: { id: uid, grants: [{ tier: "viewer" }] } }),
+    requirePrincipal: async () => ({ uid, principal: { id: uid, grants: [{ role: "staff", tier: "viewer" }] } }),
   });
   await handler({ method: "POST", headers: { "content-type": "application/json" },
     body: { sourceId: source.id, assetId, action, ...fields } }, res);
