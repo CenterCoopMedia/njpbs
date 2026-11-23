@@ -179,7 +179,9 @@ async function main(mode, env = process.env) {
     } });
   } else if (mode === "prepare") {
     const variables = JSON.parse(env.PUBLISHER_PUBLIC_VARS_JSON);
-    const prepared = JSON.parse(command(process.execPath, ["scripts/prepare-cloud-publisher.mjs", sha, target.environment], {
+    const prepared = JSON.parse(command(process.execPath, ["scripts/prepare-cloud-publisher.mjs", sha,
+      // Older source commits accept only the SHA; production keeps that call.
+      ...(target.environment === "production" ? [] : [target.environment])], {
       env: { ...env, CLOUDFLARE_ACCOUNT_ID: variables.CLOUDFLARE_ACCOUNT_ID, CLOUDFLARE_PUBLIC_WORKER_TAG: variables.CLOUDFLARE_PUBLIC_WORKER_TAG, PUBLIC_SHARE_UPLOAD_ORIGIN: variables.PUBLIC_SHARE_UPLOAD_ORIGIN },
     }));
     if (prepared.commitSha !== sha) throw new ImageRefusal("Prepared source SHA differs");

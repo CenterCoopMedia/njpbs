@@ -85,3 +85,16 @@ The development job reads `PUBLISHER_DEVELOPMENT_PUBLIC_VARS_JSON` from the same
 `development` and `PUBLICATION_SERIALIZER_ID` `cloudflare-dev-publisher`. Both
 targets refuse a variables map whose environment or serializer names the other
 target.
+
+A production run calls the source's preparation script with only the SHA, as
+older source commits require; only a development run adds `development`, so a
+source commit without development preparation refuses.
+
+The Worker entry in `publisher.json` is the unrendered `source_checkout`. A
+production publisher bundles no development template, so the release deploys
+from its production-rendered checkout. A development publisher bundles
+`functions/lib/publication-target.js`, whose development Worker name, origin
+and preview bucket are templates, and the withdrawal catalog keys derive from
+that Worker name. The development release must therefore render its checkout
+with every development input, require the same `deployment_input_sha256` as the
+receipt, and rebind only `main` to that rendered checkout before deploying.
