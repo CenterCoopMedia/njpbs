@@ -52,7 +52,7 @@ import {
   pageSeedAssetIds,
 } from "../../packages/content-core/src/page-composition-seeds";
 import { PUBLIC_PAGE_IDS } from "../../packages/content-core/src/public-pages";
-import type { PageBlock } from "../../packages/content-core/src/content-model";
+import { PUBLISHED_LAYOUTS, type PageBlock } from "../../packages/content-core/src/content-model";
 import { isDatasetFigures, type DatasetFigures } from "../../packages/content-core/src/dataset-figures";
 
 const BUILD_NOW = new Date("2026-08-22T12:00:00.000Z");
@@ -131,6 +131,7 @@ const cmsPagesSchema = z.object({
   template: z.enum(["home", "programLanding", "genericPage"]),
   title: z.string(),
   pageTheme: z.enum(["default", "nj-decides"]).optional(),
+  publishedLayout: z.enum(PUBLISHED_LAYOUTS).optional(),
   description: z.string(),
   heroBackgroundImage: z.string().optional(),
   heroBackgroundPosition: z.enum(["center", "top", "bottom"]).optional(),
