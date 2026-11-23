@@ -4,7 +4,7 @@ import pageReaderContract from "../../functions/lib/page-reader-contract.js";
 import { dataHubPageEnabled } from "../src/lib/build-target.ts";
 
 // The deployed CMS must accept version 3 before public candidates advertise it.
-export const PUBLIC_PAGE_READER_SEAL_VERSION = 2;
+const PUBLIC_PAGE_READER_SEAL_VERSION = 2;
 
 export function publicPostRendererRelease(rendererSha: string, environment: "production" | "development", env: NodeJS.ProcessEnv) {
   return { schemaVersion: 1, rendererSha, liveBlogVersion: 1, electionResultsVersion: 2,
