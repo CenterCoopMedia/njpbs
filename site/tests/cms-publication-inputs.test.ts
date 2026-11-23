@@ -149,6 +149,15 @@ describe("shared publication inputs", () => {
     })).toThrow(/Turnstile site key is missing/i);
   });
 
+  it("asks a development build for no production analytics, report or share settings", () => {
+    // The development compiler ignores those values, so a development run never needs production ones.
+    expect(parseCmsPublicationPublicBuildEnvironment({}, "development")).toEqual({});
+    expect(parseCmsPublicationPublicBuildEnvironment(publicBuildEnvironment, "development"))
+      .not.toHaveProperty("PUBLIC_GA4_MEASUREMENT_ID");
+    expect(() => parseCmsPublicationPublicBuildEnvironment({}))
+      .toThrow(/GA4 measurement ID is missing or invalid/i);
+  });
+
   it("leaves removed legacy admission settings absent for runtime record updates", () => {
     const environment: Record<string, string> = { ...publicBuildEnvironment };
     delete environment.NO_BUILD_POST_ENABLED;

@@ -565,7 +565,7 @@ export async function main(args = process.argv.slice(2), environment: NodeJS.Pro
     }
     const stateDirectory = environment.CMS_PUBLICATION_RELEASE_STATE_DIRECTORY ?? "";
     if (!path.isAbsolute(stateDirectory)) operatorError("The cloud release state directory is required");
-    const buildEnvironment = parseCmsPublicationPublicBuildEnvironment(environment);
+    const buildEnvironment = parseCmsPublicationPublicBuildEnvironment(environment, target.environment);
     const storageCredential = parsePreviewStorageCredential(readFileSync(STORAGE_CREDENTIAL_FD, "utf8"));
     const mediaManagerCredential = parseCmsPublicationMediaManagerCredential(readFileSync(MEDIA_MANAGER_CREDENTIAL_FD, "utf8"));
     storage = createCmsPublicationCloudStorage({ ...storageCredential, includeRenderer: true, target });
