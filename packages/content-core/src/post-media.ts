@@ -35,6 +35,9 @@ export function postMediaInventory(post: PostMediaSource): PostMediaInventory {
       galleries += 1;
       images += block.data.images.filter(image => image.assetId.trim()).length;
     }
+    if (block.type === "scroll_story") {
+      images += block.data.steps.filter(step => step.text.trim() && step.assetId).length;
+    }
     if (block.type === "video" && block.data.assetId.trim()) videos += 1;
     if (block.type === "embed" && safeHref(block.data.url) !== null) {
       mediaLinks += 1;
@@ -68,7 +71,7 @@ export function postMediaInventoryText(inventory: PostMediaInventory): string {
 export function assertMultimediaInventory(inventory: PostMediaInventory): void {
   if (inventory.totalModules < 1) {
     throw new Error(
-      "A Multimedia Feature must include a lead image, image block, gallery image, uploaded video, or media link.",
+      "A Multimedia Feature must include a lead image, image block, gallery image, scroll story image, uploaded video, or media link.",
     );
   }
 }

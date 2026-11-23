@@ -25,6 +25,7 @@ import { containsBio } from "./bio-profiles.ts";
 import {
   BLOCK_TYPES,
   NESTED_MEDIA_COLLECTION_MAX,
+  SCROLL_STORY_LIMITS,
   type BlockType,
   type ProgramRecord,
   type StaffRecord,
@@ -182,6 +183,7 @@ export const SECTION_BLOCK_CATALOG: Readonly<Record<SectionId, readonly BlockTyp
       "image",
       "video",
       "image_gallery",
+      "scroll_story",
       "embed",
       "html",
       "cta_row",
@@ -295,6 +297,7 @@ export const BLOCK_LABELS: Readonly<Record<BlockType, string>> = Object.freeze({
   image: "image",
   video: "uploaded video",
   image_gallery: "image gallery",
+  scroll_story: "scroll story",
   cta_row: "buttons",
   support_appeal: "support appeal",
   card_grid: "card set",
@@ -1165,6 +1168,14 @@ const BLOCK_FIELDS: { readonly [T in BlockType]: readonly BlockFieldFor<T>[] } =
   ],
   image_gallery: [
     { key: "images", label: "Images", help: "Add images to the gallery, each with its own alt text.", kind: "list", required: true, maxItems: NESTED_MEDIA_COLLECTION_MAX, itemFields: IMAGE_ITEM_FIELDS },
+  ],
+  scroll_story: [
+    { key: "steps", label: "Steps", help: "Add short passages in reading order. Each step can have an image.", kind: "list", required: true, maxItems: SCROLL_STORY_LIMITS.steps, itemFields: [
+      { key: "text", label: "Step text", help: "Tell this part of the story.", kind: "text", multiline: true, required: true, maxLength: SCROLL_STORY_LIMITS.text },
+      { key: "assetId", label: "Image", help: "Optional. Choose an existing image from the media library.", kind: "asset", required: false },
+      { key: "alt", label: "Alt text", help: "Describe the selected image for readers who cannot see it.", kind: "text", required: true, requiredWhen: "assetId", maxLength: SCROLL_STORY_LIMITS.alt },
+      { key: "caption", label: "Caption", help: "Optional text to appear with the image.", kind: "text", required: false, maxLength: SCROLL_STORY_LIMITS.caption },
+    ] },
   ],
   cta_row: [
     { key: "ctas", label: "Buttons", help: "Add one or more buttons, each with a label and a link.", kind: "list", required: true, itemFields: CTA_ITEM_FIELDS },

@@ -50,6 +50,9 @@ function assetIds(block: AdminBlock): string[] {
   const add = (value: unknown) => { if (typeof value === "string" && value.trim()) ids.push(value); };
   if (block.type === "support_appeal") add(block.data.backgroundImageAssetId);
   if (block.type === "image") add(block.data.assetId);
+  if (block.type === "scroll_story" && Array.isArray(block.data.steps)) {
+    for (const step of block.data.steps) add(step?.assetId);
+  }
   if (block.type === "bio_card" && block.data.image && typeof block.data.image === "object") add((block.data.image as Record<string, unknown>).assetId);
   if (block.type === "election_results" && Array.isArray(block.data.races)) {
     for (const race of block.data.races) {

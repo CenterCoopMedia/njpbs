@@ -56,6 +56,7 @@ import {
   ctaVariantClass,
   renderBlock,
 } from "../../../packages/content-core/src/content-render";
+import { outlineTypeLabel } from "../lib/content-outline";
 import {
   apResultsEditorFields,
   editorFieldsForBlock,
@@ -137,6 +138,7 @@ const INLINE_TYPES: readonly BlockType[] = [
   "cta_row",
   "support_appeal",
   "image_gallery",
+  "scroll_story",
   "card_grid",
   "link_card",
   "faq_item",
@@ -375,11 +377,12 @@ export function InlineBlockSurface({
         />
       );
 
-    case "support_appeal": {
-      const fields = editorFieldsForBlock("support_appeal");
+    case "support_appeal":
+    case "scroll_story": {
+      const fields = editorFieldsForBlock(block.type);
       return <fieldset className="inline-block-surface" disabled={readOnly}
         aria-invalid={hasError || undefined} aria-describedby={hasError ? errorId : undefined}>
-        <legend className="sr-only">Support appeal</legend>{fields.map(field => (
+        <legend className="sr-only">{outlineTypeLabel(block)}</legend>{fields.map(field => (
         <FieldRenderer key={field.key} field={field} fieldId={`block-${block.id}-field-${field.key}`}
           error={hasError ? editorFieldValidationMessage(field, block.data[field.key], { siblings: block.data, fields }) ?? undefined : undefined}
           loadMedia={loadMedia} mediaPickerUnavailable={mediaPickerUnavailable} uploadMedia={uploadMedia}

@@ -118,6 +118,19 @@ describe("postMediaInventory", () => {
       assertMultimediaInventory(postMediaInventory({ heroImage: null, blocks: [video("only", true)] })),
     ).not.toThrow();
   });
+
+  it("admits a Multimedia Feature whose only media is an image in a visible scroll story step", () => {
+    const image = { text: "The first train arrives.", assetId: "platform", alt: "A train at the station", caption: "" };
+    const story: PageBlock = {
+      id: "story", type: "scroll_story", order: 0, visible: true,
+      data: { steps: [image, { text: "The train departs.", assetId: "", alt: "", caption: "" }] },
+    };
+    const inventory = postMediaInventory({
+      heroImage: null, blocks: [story, { ...story, id: "hidden", order: 1, visible: false }],
+    });
+    expect(inventory).toMatchObject({ images: 1, galleries: 0, totalModules: 1 });
+    expect(() => assertMultimediaInventory(inventory)).not.toThrow();
+  });
 });
 
 describe("multimedia inventory copy", () => {

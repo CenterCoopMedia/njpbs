@@ -225,6 +225,9 @@ export function postAssetIds(metadata: unknown, blocks: readonly PageBlock[]): s
     if (block.type === "image_gallery") {
       for (const image of block.data.images) ids.add(image.assetId);
     }
+    if (block.type === "scroll_story") {
+      for (const step of block.data.steps) if (step.assetId) ids.add(step.assetId);
+    }
     if (block.type === "card_grid") {
       for (const card of block.data.cards) {
         if (card.imageAssetId) ids.add(card.imageAssetId);

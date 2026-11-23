@@ -21,6 +21,7 @@ export interface PostEyebrow {
 const MIXED_LAYOUT_BLOCKS = new Set([
   "image",
   "image_gallery",
+  "scroll_story",
   "embed",
   "html",
   "data_table",

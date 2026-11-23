@@ -102,6 +102,9 @@ function addBlockAssets(occurrences, blocks, { visibleOnly, documentOccurrences 
       for (const image of block.data.images) {
         addAsset(occurrences, image?.assetId);
       }
+    } else if (block.type === "scroll_story") {
+      if (!Array.isArray(block.data?.steps)) throw new MediaUsageError("A scroll story must contain a step list");
+      for (const step of block.data.steps) addAsset(occurrences, step?.assetId, "Scroll story image");
     } else if (block.type === "card_grid") {
       if (!Array.isArray(block.data?.cards)) {
         throw new MediaUsageError("A card set must contain a card list");

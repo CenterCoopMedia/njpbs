@@ -1,0 +1,8 @@
+{
+  "date": "2026-11-22",
+  "kind": "new",
+  "title": "Tell a story in scroll steps",
+  "body": "In a Post, add a Scroll story block. Write each step, optionally select an image and describe it in the alt text field, then use the move buttons to set the reading order. Save and preview the draft to see how readers will scroll through it.",
+  "prs": [],
+  "order": 1795392000000
+}

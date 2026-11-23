@@ -100,6 +100,13 @@ export const catalogReads: Readonly<Record<string, ReturnType<typeof read>>> = {
       { itemId: "slide-two", assetId: "upload", alt: "Platform two", caption: "Evening" },
     ] } },
   ]),
+  scroll_story: read("catalog-scroll-story", [
+    { id: "scroll-story", type: "scroll_story", visible: true, data: { steps: [
+      { text: "Commuters arrive on the platform.", assetId: "upload", alt: "Commuters waiting for a train", caption: "Morning rush" },
+      { text: "The train departs on schedule.", assetId: "", alt: "", caption: "" },
+      { text: "The station quiets down.", assetId: "portrait", alt: "A passenger at the station", caption: "" },
+    ] } },
+  ]),
   embed: read("catalog-embed", [
     { id: "intro", type: "prose", visible: true, data: { content: paragraph("Watch the newscast.") } },
     { id: "youtube", type: "embed", visible: true, data: { url: "https://www.youtube.com/watch?v=dQw4w9WgXcQ", caption: "NJ Spotlight News, full episode", width: 640, height: 360 } },

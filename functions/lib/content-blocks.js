@@ -46,6 +46,7 @@ const BLOCK_TYPES = [
   "image",
   "video",
   "image_gallery",
+  "scroll_story",
   "cta_row",
   "support_appeal",
   "card_grid",
@@ -392,6 +393,18 @@ function hasValidBlockData(type, data, publishable, homeNewsletter = false) {
           (typeof data.presentation === "string" &&
             GALLERY_PRESENTATION_SET.has(data.presentation)))
       );
+    case "scroll_story":
+      return Reflect.ownKeys(data).every(key => key === "steps")
+        && Array.isArray(data.steps)
+        && data.steps.length >= (publishable ? 1 : 0)
+        && data.steps.length <= 12
+        && data.steps.every(step => isRecord(step)
+          && Reflect.ownKeys(step).every(key => key === "text" || key === "assetId" || key === "alt" || key === "caption")
+          && typeof step.text === "string" && step.text.length <= 1200
+          && typeof step.assetId === "string" && /^[A-Za-z0-9_-]{0,128}$/.test(step.assetId)
+          && typeof step.alt === "string" && step.alt.length <= 300
+          && typeof step.caption === "string" && step.caption.length <= 600
+          && (!publishable || (step.text.trim().length > 0 && (!step.assetId || step.alt.trim().length > 0))));
     case "support_appeal":
       return Object.keys(data).every(key => ["heading", "copy", "buttonLabel", "href", "style", "backgroundImageAssetId"].includes(key))
         && [["heading", 120], ["copy", 2000], ["buttonLabel", 60]].every(([key, max]) => {

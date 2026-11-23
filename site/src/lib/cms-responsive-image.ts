@@ -159,6 +159,10 @@ export function cmsResponsiveImageRequests(
       for (const image of block.data.images) add(image.assetId, "grid");
       continue;
     }
+    if (block.type === "scroll_story") {
+      for (const step of block.data.steps) add(step.assetId, "grid");
+      continue;
+    }
     if (block.type === "card_grid") {
       for (const card of block.data.cards) {
         if (card.imageAssetId) add(card.imageAssetId, "grid");

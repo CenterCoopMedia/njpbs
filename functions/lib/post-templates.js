@@ -29,6 +29,7 @@ const DATA_FIELDS = Object.freeze({
   prose: ["content"],
   image: ["itemId", "assetId", "alt", "altDecorative", "caption", "href", "newTab"],
   image_gallery: ["images", "presentation"],
+  scroll_story: ["steps"],
   embed: ["url", "host", "caption", "width", "height", "heading", "mapSize", "mobileHeight", "mapWidth"],
   html: ["html", "title"],
   cta_row: ["ctas"],
@@ -66,6 +67,7 @@ function captureData(block, mode) {
     case "prose": return { content: emptyRichText(data.content) };
     case "image": return emptyImage(data);
     case "image_gallery": return { ...pick(data, ["presentation"]), images: data.images.map(emptyImage) };
+    case "scroll_story": return { steps: data.steps.map(() => ({ text: "", assetId: "", alt: "", caption: "" })) };
     case "embed": return { ...pick(data, ["width", "height", "mapSize", "mobileHeight", "mapWidth"]), url: "", caption: "" };
     case "html": return { html: "", title: "" };
     case "cta_row": return { ctas: data.ctas.map(cta => ({ ...pick(cta, ["variant"]), label: "", href: "" })) };

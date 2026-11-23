@@ -720,9 +720,15 @@ const postPresentations = [
     name: "standard",
     queueId: "S".repeat(20),
     tags: ["New Jersey"],
-    blocks: [{ id: "body", type: "prose", order: 0, visible: true,
-      data: { content: richText("Compiled standard story") } }],
-    assertions: ["Compiled standard story"],
+    blocks: [
+      { id: "body", type: "prose", order: 0, visible: true, data: { content: richText("Compiled standard story") } },
+      { id: "steps", type: "scroll_story", order: 1, visible: true, data: { steps: [
+        { text: "Morning commuters arrive.", assetId: "asset-image", alt: "Commuters at the station", caption: "" },
+        { text: "The train departs.", assetId: "", alt: "", caption: "" },
+      ] } },
+    ],
+    assets: [mediaAssets[0]],
+    assertions: ["Compiled standard story", 'alt="Commuters at the station"'],
   },
   {
     name: "special-report",
@@ -791,6 +797,9 @@ for (const postCase of postPresentations) {
   }
   if (postCase.name === "multimedia") {
     assert.ok(!html.includes("/_image?"), "Compiled media used a runtime image proxy");
+  }
+  if (postCase.name === "standard") {
+    assert.match(html, /<ol class="scroll-story">.*Morning commuters arrive.*The train departs/s);
   }
 }
 

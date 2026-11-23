@@ -15,6 +15,7 @@ export const BLOCK_DESCRIPTIONS: Readonly<Record<BlockType, string>> = Object.fr
   image: "One picture from the media library with its alt text.",
   video: "One uploaded video from the media library, played on the page.",
   image_gallery: "Several pictures shown together in a grid.",
+  scroll_story: "Short passages with optional images that change as readers scroll.",
   cta_row: "A row of buttons that send people somewhere.",
   support_appeal: "A short support message and Donate button to place at the end of a story.",
   card_grid: "Cards you write yourself, each with a title, summary, and link.",
