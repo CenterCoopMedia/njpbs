@@ -332,7 +332,8 @@ function visibleVideoSelections(blocks, visibleBlocks) {
 function stampBlockVideos(block, visible, records) {
   const renderable = new Set(visible ? blockVideoSelections(block) : []);
   return mapBlockVideoData(block, data => {
-    const { public: _server, ...authored } = data;
+    const authored = { ...data };
+    delete authored.public;
     const copy = renderable.has(data) ? records.get(data.assetId) : undefined;
     return copy ? { ...authored, public: copy } : authored;
   });
