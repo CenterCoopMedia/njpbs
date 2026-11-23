@@ -404,7 +404,11 @@ export async function exportPublished({ firestore, source = SOURCE, destination 
         omissions.push({ collection, id, reason: 'No admitted target; renderer uses its fallback or hides this link' });
       }
     }
-    const manifest = finishManifest({ ...manifestBody, omissions: omissions.sort((a, b) => canonical(a).localeCompare(canonical(b), 'en')) });
+    // Every published public profile at this read time, referenced or not, so a
+    // refresh removes a seeded profile only when production withdrew it.
+    const publicAuthorIds = (await transaction.get(firestore.collection('cmsAuthorProfilesPublic').select())).docs.map(doc => doc.id)
+      .sort((a, b) => a.localeCompare(b, 'en'));
+    const manifest = finishManifest({ ...manifestBody, publicAuthorIds, omissions: omissions.sort((a, b) => canonical(a).localeCompare(canonical(b), 'en')) });
     validateManifest(manifest);
     return manifest;
   }, { readOnly: true, ...(readTime ? { readTime } : {}) });
@@ -415,7 +419,10 @@ export function validateManifest(manifest) {
   const { hash, ...body } = manifest;
   if (manifest.schemaVersion !== 1 || !SHA.test(hash) || digest(body) !== hash || !/^[a-f0-9]{40}$/.test(manifest.sourceSha)) fail('Invalid manifest hash or schema');
   if (manifest.configurationOnly !== undefined && manifest.configurationOnly !== true) fail('Invalid configuration-only scope');
-  if (canonical(Object.keys(body).sort()) !== canonical(['schemaVersion', 'source', 'destination', 'sourceSha', 'readTime', 'exportedAt', 'publication', 'records', 'omissions', 'excluded', 'counts', 'mediaUrls', ...(manifest.configurationOnly ? ['configurationOnly'] : [])].sort())) fail('Unexpected manifest field');
+  if (canonical(Object.keys(body).sort()) !== canonical(['schemaVersion', 'source', 'destination', 'sourceSha', 'readTime', 'exportedAt', 'publication', 'records', 'omissions', 'excluded', 'counts', 'mediaUrls', ...(manifest.configurationOnly ? ['configurationOnly'] : ['publicAuthorIds'])].sort())) fail('Unexpected manifest field');
+  if (!manifest.configurationOnly && (!Array.isArray(manifest.publicAuthorIds) || manifest.publicAuthorIds.some(id => typeof id !== 'string' || !ID.test(id)) ||
+      canonical(manifest.publicAuthorIds) !== canonical([...new Set(manifest.publicAuthorIds)].sort((a, b) => a.localeCompare(b, 'en'))) ||
+      manifest.records.some(record => record.collection === 'cmsAuthorProfilesPublic' && !manifest.publicAuthorIds.includes(record.id)))) fail('Invalid public author inventory');
   const time = new Timestamp(manifest.readTime.seconds, manifest.readTime.nanoseconds);
   if (time.toDate().toISOString() !== instant(manifest.exportedAt)) fail('Invalid export read time');
   projectAt('publication', 'receipt', () => canonicalPublicationReceipt(manifest.publication));
@@ -590,7 +597,9 @@ async function trackedRemovals(transaction, firestore, manifest, records) {
   const paths = new Set(records.map(record => record.path));
   const tracked = await transaction.get(firestore.collection('devSeedRecords'));
   const candidates = tracked.docs.map(doc => doc.data().path)
-    .filter(path => typeof path === 'string' && !paths.has(path) && REMOVABLE.test(path));
+    .filter(path => typeof path === 'string' && !paths.has(path) && REMOVABLE.test(path))
+    // An unreferenced profile is still published; only a withdrawn one leaves dev.
+    .filter(path => !path.startsWith('cmsAuthorProfilesPublic/') || !manifest.publicAuthorIds.includes(path.split('/')[1]));
   // Cards are stored with Posts; keep a seeded card whatever the source references.
   const posts = candidates.filter(path => path.startsWith('cmsPosts/'));
   const cards = new Set();

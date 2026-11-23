@@ -506,14 +506,22 @@ describe('isolated published-content seed', () => {
     expect((await dev.doc(`cmsAuthorProfilesPublic/${authorId}`).get()).data().photo.url).toBe(mediaUrl);
     expect((await dev.doc(`cmsAuthorProfiles/${authorId}`).get()).data().photo).toBeNull();
     expect((await dev.doc('cmsPosts/post-one').get()).data().published.metadata.credits[0].displayName).toBe('Public author');
+    // A profile no source content references is still published, so it stays on dev.
+    await source.doc('cmsPosts/post-one').update({ publiclyVisible: false });
+    const unreferenced = await exportSeed();
+    expect(unreferenced.publicAuthorIds).toEqual([authorId]);
+    expect(await refresh({ firestore: dev, manifest: unreferenced })).toMatchObject({ removed: at('cmsPosts/post-one') });
+    expect((await dev.doc(`cmsAuthorProfilesPublic/${authorId}`).get()).exists).toBe(true);
+    expect((await verifyPublished({ firestore: dev, manifest: unreferenced })).verified).toBe(true);
     // A withdrawn public profile leaves dev, as on production; the working profile stays.
     await source.doc(`cmsAuthorProfilesPublic/${authorId}`).delete();
     const withdrawn = await exportSeed();
+    expect(withdrawn.publicAuthorIds).toEqual([]);
     expect(await refresh({ firestore: dev, manifest: withdrawn })).toMatchObject({ removed: at(`cmsAuthorProfilesPublic/${authorId}`) });
     expect((await dev.doc(`cmsAuthorProfilesPublic/${authorId}`).get()).exists).toBe(false);
     expect((await dev.doc(`cmsAuthorProfiles/${authorId}`).get()).exists).toBe(true);
-    expect((await dev.doc('cmsPosts/post-one').get()).data().published.metadata.credits[0]).toEqual({ kind: 'custom', name: 'Public author' });
     expect((await verifyPublished({ firestore: dev, manifest: withdrawn })).verified).toBe(true);
+    await source.doc('cmsPosts/post-one').update({ publiclyVisible: true });
     await source.doc(`cmsAuthorProfilesPublic/${authorId}`).set({ authorId, slug: 'public-author', displayName: 'Public author',
       jobTitle: 'Reporter', bio: 'Public biography', previousSlugs: [], photo: null, links: {}, publishedAt: when, snapshotVersion: 2 });
     const author = manifest.records.find(record => record.collection === 'cmsAuthorProfilesPublic').projection;
