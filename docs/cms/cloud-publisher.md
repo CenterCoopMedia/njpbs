@@ -230,12 +230,12 @@ three immutable JSON objects, verifies size/digest readback, then advances
 context and enqueues aggregates transactionally. Observation timestamps alone
 do not advance context. The owner compares the effective content digest before
 uploading, so unchanged checks reuse the original input objects and provenance.
-Before the first upload, it records the attempt's private input prefix and
-lease. Acceptance clears the staging marker in the same transaction that
-publishes the input receipts. On a later wake, the owner fences an expired
-attempt and deletes up to three staged JSON objects before starting another
-refresh. A failed deletion leaves the marker for retry. Input objects already
-accepted into a context remain available for historical replay and recovery.
+Before the first upload, it records the staged prefix and lease. Acceptance
+removes the staging entry in the same transaction that publishes the input
+receipts. A later refresh claim fences the previous attempt and sweeps up to
+four expired staging entries, each with three exact JSON object keys. Cleanup
+failures keep entries for a later pass while provider refresh continues.
+Accepted input objects remain available for historical replay and recovery.
 The publisher storage identity needs `storage.objects.delete` on the
 `post-background-v1/external-inputs/` namespace for that cleanup.
 Consumers restore accepted bytes; they never refetch under an accepted revision.

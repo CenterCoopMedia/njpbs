@@ -5,7 +5,7 @@ import path from "node:path";
 import { createRequire } from "node:module";
 import { isDeepStrictEqual } from "node:util";
 import type { App } from "firebase-admin/app";
-import type { Firestore, Timestamp } from "firebase-admin/firestore";
+import type { CollectionReference, Firestore, Timestamp } from "firebase-admin/firestore";
 import { main as syncLaunchContent } from "./sync-launch-content.mjs";
 import { main as syncSpotlightNews } from "./sync-spotlight-news.mjs";
 import { createSpotlightImageStorage } from "./spotlight-image-cache.mjs";
@@ -38,6 +38,7 @@ const hash = (bytes: Buffer | string) => createHash("sha256").update(bytes).dige
 const NO_MAPPING_DIGEST = hash(JSON.stringify(null));
 const INPUT_IO_MS = 30_000;
 const INPUT_WRITE_WINDOW_MS = 2 * INPUT_IO_MS;
+const INPUT_CLEANUP_BATCH = 4;
 const documentVersion = (stamp: Timestamp | undefined) => stamp ? `${stamp.seconds}:${stamp.nanoseconds}` : null;
 type Runtime = { owner: "cloudflare"; release: string };
 type Storage = ReturnType<typeof createPostBackgroundStorage>;
@@ -136,6 +137,20 @@ export function boundedFetch(fetchImpl: typeof fetch, provider: "media-manager" 
   };
 }
 
+async function cleanAbandonedExternalInputs(staging: CollectionReference, storage: Storage, now: number) {
+  const expired = await staging.where("cleanupAfter", "<=", now).orderBy("cleanupAfter").limit(INPUT_CLEANUP_BATCH).get();
+  for (const row of expired.docs) {
+    try {
+      await storage.deleteExternalInputs(row.id);
+      await row.ref.delete();
+    } catch {
+      console.error("Abandoned external input cleanup failed");
+      // Let later prefixes make progress even when one prefix can't be deleted.
+      await row.ref.update({ cleanupAfter: now + 60_000 }).catch(() => {});
+    }
+  }
+}
+
 export function cloudExternalRefresh({ firestore, firebaseApp, runtime, backgroundBucket, stateDirectory,
   buildEnvironment, mediaManagerCredential, serializerId, spotlightImageStorageFactory, fetchImpl = fetch, clock = Date.now }: {
   firestore: Firestore; firebaseApp: App; runtime: Runtime; backgroundBucket: string; stateDirectory: string; serializerId: string;
@@ -152,8 +167,10 @@ export function cloudExternalRefresh({ firestore, firebaseApp, runtime, backgrou
     if (control.phase !== "ready" || control.commitSha !== runtime.release || control.serializerId !== serializerId) return;
     const operationId = randomUUID().replaceAll("-", "").slice(0, 20);
     const ref = firestore.doc(EXTERNAL_REFRESH_PATH);
+    const staging = ref.collection("stagedInputs");
+    const stagedInputs = staging.doc(operationId);
     const correctionsRef = firestore.doc(SCHEDULE_CORRECTIONS_PATH);
-    const claimRefresh = () => firestore.runTransaction(async transaction => {
+    const claim = await firestore.runTransaction(async transaction => {
       const [row, pointer, context, controlRow, reportingPage] = await transaction.getAll(ref, firestore.doc("system/publicDeployment"),
         firestore.doc(PUBLIC_CONTEXT_PATH), firestore.doc("system/cmsPublicationRuntime"), firestore.doc("cmsPages/data-hub"));
       const liveControl = cloudCmsPublicationRuntimeControl(controlRow.data());
@@ -164,20 +181,6 @@ export function cloudExternalRefresh({ firestore, firebaseApp, runtime, backgrou
       const startedAt = clock();
       if (externalRefreshHeld(previous, startedAt)) return null;
       const due = externalRefreshDue(previous, runtime, startedAt);
-      if (previous?.stagedInputsUntil != null) {
-        if (!Number.isSafeInteger(previous.stagedInputsUntil) || previous.status === "verified" ||
-            typeof previous.operationId !== "string" || !/^[A-Za-z0-9]{20}$/.test(previous.operationId)) {
-          throw new Error("Invalid staged external inputs");
-        }
-        if (previous.stagedInputsUntil > startedAt) return null;
-        if (context.data()?.externalInputs?.operationId === previous.operationId) throw new Error("External inputs are accepted");
-        // Fence a stopped writer before deleting. An acceptance already in
-        // flight must conflict here or clear the marker in its own commit.
-        if (previous.status === "fetching") {
-          transaction.update(ref, { status: "failed", error: "external_refresh_failed", diagnostic: "seal" });
-        }
-        return { kind: "cleanup" as const, operationId: previous.operationId };
-      }
       const config = publishedReporting(reportingPage.data(),clock());
       const mappingDigest = hash(JSON.stringify(config ?? null));
       // Rows written before mappings existed carry no digest; they mean "no mapping".
@@ -195,28 +198,20 @@ export function cloudExternalRefresh({ firestore, firebaseApp, runtime, backgrou
         checkedAt: previous?.checkedAt ?? null, error: null, diagnostic: null };
       transaction.set(ref, next);
       const previousInputs: CloudExternalInputs | undefined = context.data()?.externalInputs;
-      return { kind: "fetch" as const, ...next, config, correctionRow, previousInputs, catalogOwned };
+      return { ...next, config, correctionRow, previousInputs, catalogOwned, startedAt };
     });
-    let action = await claimRefresh();
-    if (action?.kind === "cleanup") {
-      const abandonedId = action.operationId;
-      await assertCmsPublicationSourceCheckout(runtime.release);
-      await storage.deleteExternalInputs(abandonedId);
-      await firestore.runTransaction(async transaction => {
-        const current = (await transaction.get(ref)).data();
-        if (current?.operationId === abandonedId && current.status === "failed" && current.stagedInputsUntil != null) {
-          transaction.update(ref, { stagedInputsUntil: null });
-        }
-      });
-      action = await claimRefresh();
-    }
-    const claim = action;
-    if (claim?.kind !== "fetch") return;
+    if (!claim) return;
     const { previousInputs, nextAttemptAt } = claim;
     const directory = path.join(stateDirectory, "external-refresh", operationId);
     let stage: "source" | "provider" | "seal" | "accept" = "source";
+    let recordedInputs = false;
+    let cleanup: Promise<void> | undefined;
     try {
       await assertCmsPublicationSourceCheckout(runtime.release);
+      // The new claim fences older attempts. Sweep only entries already due
+      // when it was claimed, independently of the provider refresh result.
+      cleanup = cleanAbandonedExternalInputs(staging, storage, claim.startedAt)
+        .catch(() => { console.error("Abandoned external input cleanup discovery failed"); });
       await mkdir(directory, { recursive: true, mode: 0o700 });
       const environment = { ...buildEnvironment, REQUIRE_FRESH_CONTENT: "1",
         MEDIA_MANAGER_API_KEY: mediaManagerCredential.key, MEDIA_MANAGER_API_SECRET: mediaManagerCredential.secret,
@@ -266,8 +261,9 @@ export function cloudExternalRefresh({ firestore, firebaseApp, runtime, backgrou
           const current = (await transaction.get(ref)).data();
           if (current?.status !== "fetching" || current.operationId !== operationId ||
               !ownsPublication(current, runtime) || clock() + INPUT_WRITE_WINDOW_MS > nextAttemptAt) throw new Error("External refresh owner changed");
-          transaction.update(ref, { stagedInputsUntil: nextAttemptAt });
+          transaction.create(stagedInputs, { cleanupAfter: nextAttemptAt });
         });
+        recordedInputs = true;
         for (const name of EXTERNAL_INPUT_FILES) {
           // Leave time for an ambiguous Storage response to settle before cleanup.
           if (clock() + INPUT_WRITE_WINDOW_MS > nextAttemptAt) throw new Error("External refresh upload window expired");
@@ -318,7 +314,8 @@ export function cloudExternalRefresh({ firestore, firebaseApp, runtime, backgrou
           transaction.set(firestore.doc(PUBLIC_CONTEXT_PATH), { externalInputs: acceptedInputs }, { merge: true });
           accepted.write();
         }
-        transaction.update(ref, { status: "verified", checkedAt, contentDigest, stagedInputsUntil: null,
+        if (recordedInputs) transaction.delete(stagedInputs);
+        transaction.update(ref, { status: "verified", checkedAt, contentDigest,
           nextAttemptAt: nextExternalRefreshAt(clock()), error: null, diagnostic: null });
       });
     } catch {
@@ -326,10 +323,13 @@ export function cloudExternalRefresh({ firestore, firebaseApp, runtime, backgrou
       await firestore.runTransaction(async transaction => {
         const current = (await transaction.get(ref)).data();
         if (current?.status !== "fetching" || !ownsPublication(current, runtime) || current.operationId !== operationId) return;
+        if (recordedInputs) transaction.update(stagedInputs, { cleanupAfter: Math.min(nextAttemptAt, clock() + INPUT_IO_MS) });
         transaction.update(ref, { status: "failed", error: "external_refresh_failed", diagnostic: stage,
-          stagedInputsUntil: current.stagedInputsUntil == null ? null : Math.min(current.stagedInputsUntil, clock() + INPUT_IO_MS),
           nextAttemptAt: current.attempts >= 4 ? nextExternalRefreshAt(clock()) : clock() + 60_000 * 2 ** (current.attempts - 1) });
       });
-    } finally { await rm(directory, { recursive: true, force: true }); }
+    } finally {
+      await cleanup;
+      await rm(directory, { recursive: true, force: true });
+    }
   };
 }

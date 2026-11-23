@@ -107,6 +107,7 @@ it("freezes provider bytes with readback and atomically advances context without
   expect(refresh).toMatchObject({ status: "verified", attempts: 1, checkedAt: now });
   const current = (await db.doc(context.PUBLIC_CONTEXT_PATH).get()).data();
   expect(current.revision).toBe(2);
+  expect((await db.doc(state.EXTERNAL_REFRESH_PATH).collection("stagedInputs").doc(current.externalInputs.operationId).get()).exists).toBe(false);
   expect(Object.keys(current.externalInputs.files).sort()).toEqual(["launch-media-manager.json", "schedule.json", "spotlight-news.json"]);
   expect(current.externalInputs.schedulePacket).toMatchObject({ schemaVersion: 1,
     source: { operationId: current.externalInputs.operationId, runtime: { owner: "cloudflare", release },
@@ -136,19 +137,21 @@ it("freezes provider bytes with readback and atomically advances context without
   expect((await db.doc(context.PUBLIC_CONTEXT_PATH).get()).data().revision).toBe(3);
 });
 
-it("reaps only the interrupted attempt's input files and retries a partial cleanup", async () => {
+it("continues refreshing after an interrupted attempt and retries its partial cleanup", async () => {
   await owner()();
   const ref = db.doc(state.EXTERNAL_REFRESH_PATH);
   const contextRef = db.doc(context.PUBLIC_CONTEXT_PATH);
   const accepted = (await contextRef.get()).data()!;
   const retained = new Map(boundary.objects);
   const operationId = "I".repeat(20);
+  const orphan = ref.collection("stagedInputs").doc(operationId);
   const [first, second] = state.EXTERNAL_INPUT_FILES.map(name => `post-background-v1/external-inputs/${operationId}/${name}`);
   boundary.objects.set(first, Buffer.from("candidate first"));
   boundary.objects.set(second, Buffer.from("candidate second"));
   boundary.rejectDelete(key => key === second);
   const leaseUntil = now + 10 * 60_000;
-  await ref.update({ operationId, status: "fetching", stagedInputsUntil: leaseUntil, nextAttemptAt: leaseUntil });
+  await ref.update({ operationId, status: "fetching", nextAttemptAt: leaseUntil });
+  await orphan.set({ cleanupAfter: leaseUntil });
   const count = requests;
   now = leaseUntil - 1;
   await owner()();
@@ -157,19 +160,28 @@ it("reaps only the interrupted attempt's input files and retries a partial clean
   expect(boundary.objects.has(second)).toBe(true);
 
   now = leaseUntil;
-  await expect(owner()()).rejects.toMatchObject({ code: 403 });
-  expect((await ref.get()).data()).toMatchObject({ operationId, status: "failed", stagedInputsUntil: leaseUntil });
+  title = "Changed provider story";
+  const errorLog = vi.spyOn(console, "error").mockImplementation(() => {});
+  await owner()();
+  expect(errorLog).toHaveBeenCalledWith("Abandoned external input cleanup failed");
+  expect((await ref.get()).data()).toMatchObject({ status: "verified", checkedAt: now });
+  expect((await ref.get()).data()?.operationId).not.toBe(operationId);
+  expect((await orphan.get()).data()?.cleanupAfter).toBeGreaterThan(now);
   expect(boundary.objects.has(first)).toBe(false);
   expect(boundary.objects.has(second)).toBe(true);
-  expect(requests).toBe(count);
+  expect(requests).toBeGreaterThan(count);
+  const updated = (await contextRef.get()).data()!;
+  expect(updated.revision).toBe(accepted.revision + 1);
+  expect(updated.externalInputs.operationId).not.toBe(operationId);
 
   boundary.rejectDelete(null);
+  now += 60_000;
+  await ref.update({ nextAttemptAt: now });
   await owner()();
-  expect((await ref.get()).data()).toMatchObject({ status: "verified", stagedInputsUntil: null });
-  expect((await ref.get()).data()?.operationId).not.toBe(operationId);
-  expect((await contextRef.get()).data()).toEqual(accepted);
-  expect(boundary.objects).toEqual(retained);
-  expect(requests).toBeGreaterThan(count);
+  expect((await orphan.get()).exists).toBe(false);
+  expect(boundary.objects.has(second)).toBe(false);
+  expect((await contextRef.get()).data()).toEqual(updated);
+  for (const [key, bytes] of retained) expect(boundary.objects.get(key)).toEqual(bytes);
 });
 
 it("keeps the accepted video catalog and advances the other inputs when video pagination is incomplete", async () => {
