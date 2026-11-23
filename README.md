@@ -28,6 +28,9 @@ publishing services, and related development tools.
 - `docs/decisions/`: Architecture decisions.
 - `docs/requirements/`: Accessibility requirements.
 
+See the [CMS content operations contract](docs/cms/content-operations.md) for
+request versions, supported edits, and publication receipts.
+
 ## Local setup
 
 Use Node.js 22 and npm. Install dependencies from the root lockfile, then install
