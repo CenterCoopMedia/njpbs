@@ -93,6 +93,7 @@ async function applyDonationFallback(response: Response, signal: DonatePortalSig
   const render = resolveDonateCta(signal).render;
   if (render.mode !== "unavailable" || !response.body ||
       !response.headers.get("content-type")?.startsWith("text/html")) return response;
+  const { notice } = render;
 
   // Rewrite the final document so generated and stored links share the same
   // policy, including Markdown, service pages and other CMS block output.
@@ -102,7 +103,7 @@ async function applyDonationFallback(response: Response, signal: DonatePortalSig
   function noticeHtml(): string {
     if (!donationFound || noticeShown) return "";
     noticeShown = true;
-    const copy = render.notice.replace(DONATE_ALTERNATE_LABEL, `<a href="${CONTACT_PATH}">${DONATE_ALTERNATE_LABEL}</a>`);
+    const copy = notice.replace(DONATE_ALTERNATE_LABEL, `<a href="${CONTACT_PATH}">${DONATE_ALTERNATE_LABEL}</a>`);
     return `<aside class="wrap" aria-label="Online donations"><p id="${NOTICE_ID}">${copy}</p></aside>`;
   }
 

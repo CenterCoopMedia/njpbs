@@ -280,6 +280,9 @@ jobs:
         run: |
           npm ci --ignore-scripts
           npm --prefix .. run functions:build
+      - name: Install public Post runtime test dependencies
+        working-directory: tests/public-post-runtime
+        run: npm ci --ignore-scripts
       - name: Cache pinned public fonts
         uses: actions/cache@v6
         with:
@@ -315,9 +318,6 @@ jobs:
       - name: Compile and verify private renderer
         working-directory: site
         run: npm run verify:renderer
-      - name: Install public Post runtime test dependencies
-        working-directory: tests/public-post-runtime
-        run: npm ci --ignore-scripts
       - name: Compile public Post renderer
         working-directory: site
         env:

@@ -1,12 +1,14 @@
 import { build } from "esbuild";
-import { Miniflare, Response as WorkerResponse } from "miniflare";
 import { createHash } from "node:crypto";
+import { createRequire } from "node:module";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import type { DonatePortalSignal } from "../../src/lib/donate-degradation";
 
 export async function renderDonationDocument(html: string, signal: DonatePortalSignal | null): Promise<string> {
   const root = resolve(dirname(fileURLToPath(import.meta.url)), "../../..");
+  const requireRuntime = createRequire(resolve(root, "tests/public-post-runtime/package.json"));
+  const { Miniflare, Response: WorkerResponse } = requireRuntime("miniflare");
   const bundle = await build({ stdin: { resolveDir: root, contents: `
     import { serveDonationDocument, createDonationHealthReader } from './workers/src/public-donation-fallback.ts';
     const readHealth = createDonationHealthReader("fixture");
@@ -32,7 +34,7 @@ export async function renderDonationDocument(html: string, signal: DonatePortalS
   const worker = new Miniflare({ workers: [{ config: { name: "donation-fallback", type: "worker",
     compatibilityDate: "2026-07-09", manifest: { mainModule: "index.js", modules: {
       "index.js": { type: "esm", contents: bundle.outputFiles[0].text },
-    } } }, dev: { outboundService: { type: "fetcher", handler: request => {
+    } } }, dev: { outboundService: { type: "fetcher", handler: (request: Request) => {
       if (request.url !== "https://us-central1-fixture.cloudfunctions.net/donationHealth" ||
           request.method !== "GET" || request.headers.has("cookie") || request.headers.has("authorization")) {
         throw new Error("Unexpected donation-health request");
