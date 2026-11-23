@@ -468,7 +468,7 @@ describe("public version evidence", () => {
 
   it.each([true, false])("reports an unpublished custom Page as not live (load metadata: %s)", async (loadPublicationMetadata) => {
     vi.stubGlobal("crypto", webcrypto);
-    const fetchMock = vi.fn(async (url: string, _options: RequestInit) =>
+    const fetchMock = vi.fn<(url: string, options: RequestInit) => Promise<Response>>(async (url) =>
       Response.json(url.includes("_content-status") ? receipt() : identity));
     vi.stubGlobal("fetch", fetchMock);
     vi.mocked(cmsGetPublicationStatus).mockResolvedValue({ ...saved("success"), publication: {

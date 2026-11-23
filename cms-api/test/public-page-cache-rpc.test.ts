@@ -34,7 +34,7 @@ it("leaves the reply shape unchanged for an older Worker that does not request a
 });
 
 it("requests Page status data only for an explicit HEAD probe", async () => {
-  const fetch = vi.fn(async (_url: string, _options: RequestInit) => Response.json(reply()));
+  const fetch = vi.fn<(url: string, options: RequestInit) => Promise<Response>>(async () => Response.json(reply()));
   vi.stubGlobal("fetch", fetch);
   const rpc = entrypoint();
   await rpc.getNoBuildPage("/contact/", rendererSha, "HEAD");
