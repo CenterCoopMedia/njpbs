@@ -142,10 +142,13 @@ test("a development image uses the same source with only the development names",
   assert.deepEqual(dev.r2_buckets, [{ binding: "DURABLE_POST_WITHDRAWALS", bucket_name: "njpbs-dev-cms-publication" }]);
   assert.deepEqual(dev.routes, [{ pattern: "dev-publisher-health.njpbs.org", custom_domain: true }]);
   // Everything else, including the container shape and schedule, is the production source.
-  const strip = config => { const copy = structuredClone(config); for (const key of ["name", "r2_buckets", "routes"]) delete copy[key]; delete copy.containers[0].name; return copy; };
+  // Development also declares the account pin its container checks; production never has it.
+  assert.equal(dev.vars.CMS_DEV_CLOUDFLARE_ACCOUNT_ID, "");
+  assert.equal("CMS_DEV_CLOUDFLARE_ACCOUNT_ID" in source.vars, false);
+  const strip = config => { const copy = structuredClone(config); for (const key of ["name", "r2_buckets", "routes"]) delete copy[key]; delete copy.containers[0].name; delete copy.vars.CMS_DEV_CLOUDFLARE_ACCOUNT_ID; return copy; };
   assert.deepEqual(strip(dev), strip(source));
   const variables = { ...source.vars, CLOUDFLARE_ACCOUNT_ID: account, CLOUDFLARE_PUBLIC_WORKER_TAG: "c".repeat(32), PUBLICATION_ENABLED: "true",
-    CMS_DEPLOYMENT_ENVIRONMENT: "development", PUBLICATION_SERIALIZER_ID: "cloudflare-dev-publisher" };
+    CMS_DEPLOYMENT_ENVIRONMENT: "development", PUBLICATION_SERIALIZER_ID: "cloudflare-dev-publisher", CMS_DEV_CLOUDFLARE_ACCOUNT_ID: account };
   const devImage = `registry.cloudflare.com/${account}/njpbs-dev-cms-publisher@${digest}`;
   const prepared = structuredClone(dev);
   prepared.main = "/tmp/prepared/source/publisher/worker.ts";
@@ -153,6 +156,12 @@ test("a development image uses the same source with only the development names",
   const config = productionConfig(dev, prepared, { checkout, sha, image: devImage, variables, target });
   assert.equal(config.name, "njpbs-dev-cms-publisher");
   assert.equal(config.vars.CMS_DEPLOYMENT_ENVIRONMENT, "development");
+  // The Worker variables are the container's source: a development Worker carries the pin.
+  assert.equal(config.vars.CMS_DEV_CLOUDFLARE_ACCOUNT_ID, account);
+  const { CMS_DEV_CLOUDFLARE_ACCOUNT_ID: _pin, ...unpinned } = variables;
+  for (const pinned of [unpinned, { ...variables, CMS_DEV_CLOUDFLARE_ACCOUNT_ID: "" }, { ...variables, CMS_DEV_CLOUDFLARE_ACCOUNT_ID: "e".repeat(32) }]) {
+    assert.throws(() => productionConfig(dev, prepared, { checkout, sha, image: devImage, variables: pinned, target }), /contract refused/);
+  }
   // A development config refuses the production image name and production variables.
   assert.throws(() => productionConfig(dev, prepared, { checkout, sha, image, variables, target }), /contract refused/);
   for (const [name, value] of [["CMS_DEPLOYMENT_ENVIRONMENT", "production"], ["PUBLICATION_SERIALIZER_ID", "cloudflare-publisher"]]) {
@@ -162,6 +171,7 @@ test("a development image uses the same source with only the development names",
   const prodPrepared = structuredClone(source);
   prodPrepared.containers[0].image_build_context = "/tmp/prepared";
   assert.throws(() => productionConfig(source, prodPrepared, { checkout, sha, image, variables: { ...variables, PUBLICATION_SERIALIZER_ID: "cloudflare-publisher" } }), /contract refused/);
+  assert.throws(() => productionConfig(source, prodPrepared, { checkout, sha, image, variables: { ...unpinned, CMS_DEPLOYMENT_ENVIRONMENT: "production", PUBLICATION_SERIALIZER_ID: "cloudflare-publisher", CMS_DEV_CLOUDFLARE_ACCOUNT_ID: account } }), /contract refused/);
   // The development artifact carries no deployable config.
   const files = receiptFiles({ sha, image: devImage, config, checkout, runId: "1", inputFingerprint, target });
   assert.deepEqual(Object.keys(files), ["receipt.json"]);
