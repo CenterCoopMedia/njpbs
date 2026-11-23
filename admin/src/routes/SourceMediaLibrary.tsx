@@ -156,6 +156,7 @@ export interface VideoPreviewProps {
   onTranscriptRequested?: (assetId: string, settings: TranscriptSettings, ready: boolean) => void;
   onTranscriptObserved?: (assetId: string, settings: TranscriptSettings) => void;
   onTranscriptReady?: (assetId: string, settings: TranscriptSettings) => void;
+  onClipRegistered?: () => void;
   onDirtyChange: (dirty: boolean) => void;
   onSavingChange: (saving: boolean) => void;
   navigationBlocked: boolean;
@@ -201,6 +202,7 @@ export function VideoViewerBody({
   onTranscriptRequested,
   onTranscriptObserved,
   onTranscriptReady,
+  onClipRegistered,
   onDirtyChange,
   onSavingChange,
   onBusyChange,
@@ -304,7 +306,7 @@ export function VideoViewerBody({
     onWorkspacePaneChange: view => {
     setWorkspaceView(view);
     if (sideBySide && contextView === "comments") setContextView("details");
-  }, principal, onCredentialsDirtyChange: setCredentialsDirty, onCredentialsBusyChange: setCredentialsBusy, asset, getIdToken, player, canRequest: canRequestProduction, disabled: otherMediaBusy || Boolean(downloading), onDownloadOriginal: () => void download("download"), onTranscriptDirtyChange: setTranscriptDirty, onTranscriptSavingChange: setTranscriptSaving, onBusyChange: setProductionBusy, onSearchContentChanged, onTranscriptRequested, onTranscriptObserved, onTranscriptReady });
+  }, principal, onCredentialsDirtyChange: setCredentialsDirty, onCredentialsBusyChange: setCredentialsBusy, asset, getIdToken, player, canRequest: canRequestProduction, disabled: otherMediaBusy || Boolean(downloading), onDownloadOriginal: () => void download("download"), onTranscriptDirtyChange: setTranscriptDirty, onTranscriptSavingChange: setTranscriptSaving, onBusyChange: setProductionBusy, onSearchContentChanged, onTranscriptRequested, onTranscriptObserved, onTranscriptReady, onClipRegistered });
   const position = useRef(initialSeek);
   const pendingInitialSeek = useRef<number | null>(initialSeek > 0 ? initialSeek : null);
   const resumePlayback = useRef(false);
@@ -1112,16 +1114,17 @@ export function SourceMediaLibrary({ principal, source, getIdToken, userId, onEx
     resetPaging();
   }
   const viewerReturnSearch = useRef<string>();
-  const linkKey = `${userId}:${source.id}:${routeParams.get("asset") ?? ""}:${routeParams.get("t") ?? ""}`;
+  const linkedFileVersion = routeParams.get("file");
+  const linkKey = `${userId}:${source.id}:${routeParams.get("asset") ?? ""}:${routeParams.get("t") ?? ""}:${linkedFileVersion ?? ""}`;
   function writeVideoLocation(asset?: SourceMediaAssetSummary, seconds = 0, replace = false) {
     if (asset && !replace) viewerReturnSearch.current = routeParams.toString() ? `?${routeParams}` : "";
     const next = new URLSearchParams(routeParams);
-    next.delete("asset"); next.delete("t");
+    next.delete("asset"); next.delete("t"); next.delete("file");
     if (asset) {
       next.set("asset", asset.id);
       if (seconds > 0) next.set("t", String(seconds));
     }
-    appliedLink.current = `${userId}:${source.id}:${next.get("asset") ?? ""}:${next.get("t") ?? ""}`;
+    appliedLink.current = `${userId}:${source.id}:${next.get("asset") ?? ""}:${next.get("t") ?? ""}:`;
     internalNavigation.current = next.toString() ? `?${next}` : "";
     setRouteParams(next, { replace });
   }
@@ -1568,6 +1571,10 @@ export function SourceMediaLibrary({ principal, source, getIdToken, userId, onEx
         if (!active) return;
         const asset = result.records.find(item => item.id === permalink.assetId && item.sourceId === source.id);
         if (!asset) { setLinkError(unavailableMediaMessage); return; }
+        if (linkedFileVersion !== null && asset.fileVersion !== linkedFileVersion) {
+          setLinkError("This range belongs to an earlier version of the original video.");
+          return;
+        }
         appliedLink.current = linkKey;
         setViewerOrder([asset]);
         setInitialSeek(permalink.seconds);
@@ -1915,6 +1922,7 @@ export function SourceMediaLibrary({ principal, source, getIdToken, userId, onEx
       pageTags={pageVideoTags} recentTags={recentVideoTags} onTagsSaved={rememberVideoTags}
       onDeleted={() => { if (!pendingRouteNavigation.current) writeVideoLocation(undefined, 0, true); pendingTranscripts.current.delete(selected.id); searchContentChanged.current = false; invalidateVideoSearchCorpus(source.id); setSearchRevision(value => value + 1); setMediaSourceCount(source.id, null); bulk.removeAsset(selected.id); setDeletedName(selected.name); setSelected(undefined); resetPaging(); setAttempt(value => value + 1); requestAnimationFrame(() => document.getElementById("video-search")?.focus()); }}
       onSearchContentChanged={() => { invalidateVideoSearchCorpus(source.id); searchContentChanged.current = true; }}
+      onClipRegistered={() => { viewerNeedsReload.current = true; searchContentChanged.current = true; }}
       onExportStatus={onExportStatus}
       onTranscriptRequested={(assetId, settings, ready) => {
         if (ready) {

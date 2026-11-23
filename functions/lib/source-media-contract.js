@@ -78,9 +78,9 @@ function parseSourceMediaMarkers(value = []) {
   });
 }
 
-function parseSourceMediaParent(value) {
+function parseSourceMediaParent(value, { stored = false } = {}) {
   if (value === undefined || value === null) return null;
-  rejectUnknownFields(value, new Set(["sourceId", "assetId", "inMs", "outMs"]), "Parent source");
+  rejectUnknownFields(value, new Set(["sourceId", "assetId", "inMs", "outMs", ...(stored ? ["fileVersion"] : [])]), "Parent source");
   if (value.sourceId !== "video-library") {
     throw new SourceMediaValidationError("Parent source must be the shared video library");
   }
@@ -92,6 +92,12 @@ function parseSourceMediaParent(value) {
     }
     parent.inMs = value.inMs;
     parent.outMs = value.outMs;
+  }
+  if (value.fileVersion !== undefined) {
+    if (typeof value.fileVersion !== "string" || !/^[a-f0-9]{32}$/.test(value.fileVersion) || parent.inMs === undefined) {
+      throw new SourceMediaValidationError("Parent file version requires a valid range");
+    }
+    parent.fileVersion = value.fileVersion;
   }
   return parent;
 }
@@ -325,7 +331,7 @@ function parseSourceMediaAsset(id, value) {
   let parentSource;
   try {
     markers = parseSourceMediaMarkers(value.markers);
-    parentSource = parseSourceMediaParent(value.parentSource);
+    parentSource = parseSourceMediaParent(value.parentSource, { stored: true });
   } catch { return null; }
   const asset = {
     id,

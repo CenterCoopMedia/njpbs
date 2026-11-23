@@ -37,6 +37,7 @@ export interface SourceMediaParent {
   assetId: string;
   inMs?: number;
   outMs?: number;
+  fileVersion?: string;
 }
 
 export type MediaApprovalRendition = "original" | "viewingCopy";

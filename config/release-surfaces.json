@@ -637,6 +637,10 @@
           "module": "functions/replace-media.js"
         },
         {
+          "name": "cmsRegisterVideoClip",
+          "module": "functions/video-clips.js"
+        },
+        {
           "name": "cmsRequestByokVideoTranscript",
           "module": "functions/video-transcript-byok.js"
         },

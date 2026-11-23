@@ -40,6 +40,48 @@ function actor(uid = "staff-1") {
   };
 }
 
+it("copies a pinned render in bounded S3 parts and recovers the winning conditional write", async () => {
+  const partBytes = 4 * 1024 ** 3;
+  const output = { objectKey: "outputs/clips/clip/attempt/editor.mov", objectVersionId: "version/+", sizeBytes: partBytes + 15 };
+  const request = { id: "attempt", assetId: "saved-clip", mimeType: "video/quicktime", objectKey: "shared/objects/saved-clip.mov" };
+  const renderBucket = "renders.example.org";
+  const saved = { VersionId: "winner", ContentLength: output.sizeBytes,
+    Metadata: { "boardwalk-session": request.id, "boardwalk-asset": request.assetId } };
+  let complete = false;
+  const send = vi.fn(async command => {
+    switch (command.constructor.name) {
+      case "HeadObjectCommand":
+        if (command.input.Bucket === renderBucket) return { VersionId: output.objectVersionId, ContentLength: output.sizeBytes };
+        if (complete) return saved;
+        throw Object.assign(new Error("Missing"), { $metadata: { httpStatusCode: 404 } });
+      case "CreateMultipartUploadCommand": return { UploadId: "loser" };
+      case "UploadPartCopyCommand": return { CopySourceVersionId: output.objectVersionId, CopyPartResult: { ETag: `part-${command.input.PartNumber}` } };
+      case "CompleteMultipartUploadCommand":
+        complete = true;
+        throw Object.assign(new Error("Object is present"), { $metadata: { httpStatusCode: 412 } });
+      case "AbortMultipartUploadCommand": return {};
+      default: throw new Error(`Unexpected ${command.constructor.name}`);
+    }
+  });
+  const uploader = createS3MediaUploader({ region: "us-east-2", renditionBucket: renderBucket }, { S3ClientCtor: class { send = send; } });
+  const mediaSource = source();
+  expect(await uploader.copyClip(mediaSource, request, output)).toEqual(saved);
+  const commands = send.mock.calls.map(([command]) => command);
+  expect(commands[0].input).toMatchObject({ Bucket: renderBucket, Key: output.objectKey, VersionId: output.objectVersionId });
+  expect(commands.filter(command => command.constructor.name === "UploadPartCopyCommand").map(command => command.input)).toMatchObject([
+    { CopySource: `${renderBucket}/${output.objectKey}?versionId=version%2F%2B`, ExpectedSourceBucketOwner: mediaSource.expectedBucketOwner,
+      Bucket: mediaSource.bucket, CopySourceRange: `bytes=0-${partBytes - 1}`, PartNumber: 1 },
+    { CopySourceRange: `bytes=${partBytes}-${partBytes + 14}`, PartNumber: 2 },
+  ]);
+  expect(commands.find(command => command.constructor.name === "CompleteMultipartUploadCommand").input).toMatchObject({
+    IfNoneMatch: "*", MultipartUpload: { Parts: [{ PartNumber: 1, ETag: "part-1" }, { PartNumber: 2, ETag: "part-2" }] },
+  });
+  expect(commands.find(command => command.constructor.name === "AbortMultipartUploadCommand").input).toMatchObject({ UploadId: "loser" });
+  send.mockClear();
+  expect(await uploader.copyClip(mediaSource, request, output)).toEqual(saved);
+  expect(send).toHaveBeenCalledTimes(2);
+});
+
 function fakeFirestore(initial = {}, { createErrorAfterCommit = false } = {}) {
   const records = new Map(Object.entries(initial));
   const versions = new Map([...records.keys()].map((key) => [key, 1]));

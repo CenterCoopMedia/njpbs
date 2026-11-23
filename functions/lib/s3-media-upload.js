@@ -10,9 +10,11 @@ const {
   PutObjectCommand,
   S3Client,
   UploadPartCommand,
+  UploadPartCopyCommand,
 } = require("@aws-sdk/client-s3");
 const { getSignedUrl } = require("@aws-sdk/s3-request-presigner");
 const { createAwsRoleCredentialProvider } = require("./aws-workload-credentials");
+const { SourceObjectError, verifyTarget } = require("./s3-media-source");
 
 const PART_URL_TTL_SECONDS = 15 * 60;
 
@@ -185,6 +187,62 @@ function createS3MediaUploader(config, deps = {}) {
     }));
   }
 
+  async function copyClip(source, session, output) {
+    const client = clientFor(source);
+    const target = address(source, session);
+    const options = { abortSignal: AbortSignal.timeout(100_000) };
+    const from = { ...output, bucket: config.renditionBucket, expectedBucketOwner: source.expectedBucketOwner };
+    if (!from.bucket || from.bucket === source.bucket) throw new SourceObjectError(503, "Clip storage is unavailable");
+    await verifyTarget(client, from, options);
+    async function existingCopy() {
+      try {
+        return await client.send(new HeadObjectCommand(target), options);
+      } catch (error) {
+        if (error?.$metadata?.httpStatusCode === 404) return null;
+        throw error;
+      }
+    }
+    const existing = await existingCopy();
+    if (existing) return existing;
+
+    const { UploadId } = await client.send(new CreateMultipartUploadCommand({ ...target,
+      ContentType: session.mimeType,
+      Metadata: { "boardwalk-session": session.id, "boardwalk-asset": session.assetId },
+    }), options);
+    if (!UploadId) throw new Error("Clip copy did not return an upload id");
+    const upload = { ...target, UploadId };
+    const copySource = `${from.bucket}/${from.objectKey.split("/").map(encodeURIComponent).join("/")}?versionId=${encodeURIComponent(from.objectVersionId)}`;
+    const partBytes = 4 * 1024 ** 3;
+    const count = Math.ceil(output.sizeBytes / partBytes);
+    const parts = [];
+    try {
+      for (let start = 1; start <= count; start += 4) {
+        const batch = await Promise.allSettled(Array.from({ length: Math.min(4, count - start + 1) }, async (_, index) => {
+          const PartNumber = start + index;
+          const result = await client.send(new UploadPartCopyCommand({ ...upload, PartNumber,
+            CopySource: copySource, ExpectedSourceBucketOwner: from.expectedBucketOwner,
+            ...(count > 1 ? { CopySourceRange: `bytes=${(PartNumber - 1) * partBytes}-${Math.min(PartNumber * partBytes, output.sizeBytes) - 1}` } : {}),
+          }), options);
+          if (!result.CopyPartResult?.ETag || result.CopySourceVersionId !== from.objectVersionId) {
+            throw new SourceObjectError(409, "The clip output is no longer available");
+          }
+          return { PartNumber, ETag: result.CopyPartResult.ETag };
+        }));
+        for (const part of batch) {
+          if (part.status === "rejected") throw part.reason;
+          parts.push(part.value);
+        }
+      }
+      await client.send(new CompleteMultipartUploadCommand({ ...upload, IfNoneMatch: "*", MultipartUpload: { Parts: parts } }), options);
+    } catch (error) {
+      await client.send(new AbortMultipartUploadCommand(upload), { abortSignal: AbortSignal.timeout(5000) }).catch(() => {});
+      if (error?.$metadata?.httpStatusCode !== 412) throw error;
+    }
+    const stored = await existingCopy();
+    if (!stored) throw new SourceObjectError(409, "The saved video copy is unavailable. Try saving the clip again.");
+    return stored;
+  }
+
   // Server-side imports stream from quarantine in bounded parts. They do not
   // create a browser upload session or admit a viewing-copy job.
   async function importStream(source, session, body) {
@@ -237,7 +295,7 @@ function createS3MediaUploader(config, deps = {}) {
     }
   }
 
-  return { cancel, complete, head, importStream, listParts, signParts, signPut, start };
+  return { cancel, complete, copyClip, head, importStream, listParts, signParts, signPut, start };
 }
 
 module.exports = {

@@ -85,7 +85,7 @@ function parseClipRequest(value, action) {
   const fields = action === "request"
     ? ["sourceId", "assetId", "inMs", "outMs", "retry", "resolution", "quality", "scope", "format", "frameRateMode"]
     : ["sourceId", "assetId", "clipId", ...(action === "get" ? ["scope", "cursor"] : []),
-      ...(action === "cancel" ? ["attemptId"] : [])];
+      ...(["cancel", "register"].includes(action) ? ["attemptId"] : [])];
   if (!value || typeof value !== "object" || Array.isArray(value) ||
       Object.keys(value).some((key) => !fields.includes(key)) || value.sourceId !== "video-library" ||
       typeof value.assetId !== "string" || !ID_PATTERN.test(value.assetId)) {
@@ -102,7 +102,7 @@ function parseClipRequest(value, action) {
     if (value.cursor !== undefined || typeof value.clipId !== "string" || !/^[a-f0-9]{64}$/.test(value.clipId)) {
       throw problem(400, "Clip id is invalid");
     }
-    if (action === "cancel" && (typeof value.attemptId !== "string" || !ID_PATTERN.test(value.attemptId))) {
+    if (["cancel", "register"].includes(action) && (typeof value.attemptId !== "string" || !ID_PATTERN.test(value.attemptId))) {
       throw problem(400, "Video export attempt is invalid");
     }
     return value;

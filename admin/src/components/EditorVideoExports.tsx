@@ -4,6 +4,7 @@ import { clipExportMessage } from "../lib/clip-export-message";
 import { originalAccessMessage } from "../lib/video-original";
 import { Button, InlineMessage, Select } from "./ui/Primitives";
 import { VideoProcessingStatus } from "./VideoProcessingStatus";
+import { RegisterClipButton } from "./media/RegisterClipButton";
 import {
   cancelEditorExport, editorFormats, getEditorExport, listEditorExports, requestEditorExport,
   estimateEditorConversionCharge, exportFrameRates, exportFramesPerSecond, exportFrameRateLabel, exportRateSupported, type ExportFrameRateMode,
@@ -45,7 +46,7 @@ function savedRequest(clip: EditorVideoExport): EditorExportRequest {
     : { scope: "clip", format: clip.format, inMs: clip.inMs, outMs: clip.outMs, retry: true, ...mode };
 }
 
-export function EditorVideoExports({ identity, name, getIdToken, canRequest, disabled,
+export function EditorVideoExports({ identity, name, getIdToken, canRequest, disabled, canRegisterClip, onClipRegistered,
   onBusyChange,
   sourceRate, sourceDurationSeconds, onDownloadOriginal,
   inMs, outMs, validRange, exportEligible, transcriptSettings, transcriptReady, transcriptLocked, transcriptRevision,
@@ -57,6 +58,8 @@ export function EditorVideoExports({ identity, name, getIdToken, canRequest, dis
   onDownloadOriginal?: () => void;
   getIdToken: () => Promise<string>;
   canRequest: boolean;
+  canRegisterClip?: boolean;
+  onClipRegistered?: () => void;
   disabled: boolean;
   onBusyChange?: (busy: boolean) => void;
   inMs: number | null;
@@ -254,6 +257,9 @@ export function EditorVideoExports({ identity, name, getIdToken, canRequest, dis
             if (mounted.current) download(response.access.url, `${name}-${clip.scope}.${editorFormats[clip.format].extension}`);
           });
         }}>Download video</Button> : null}
+      {canRegisterClip && selected.state === "ready" && selected.scope === "clip" ? <RegisterClipButton
+        key={`${selected.id}/${selected.attemptId}`} identity={identity} clipId={selected.id} attemptId={selected.attemptId}
+        getIdToken={getIdToken} disabled={locked} onRegistered={onClipRegistered} /> : null}
       </div>
       {selected.canCancel ? <p>Cancellation is available before processing starts. It does not restore the daily allowance.</p> : null}
       {selected.state === "ready" ? <>
