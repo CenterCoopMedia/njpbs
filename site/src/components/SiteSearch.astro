@@ -1,17 +1,29 @@
 ---
 import { pbsVideoUrl } from "../data/launch-fallback";
+import { SPOTLIGHT_ARCHIVE_LABEL, SPOTLIGHT_ARCHIVE_SEARCH_PATH } from "../lib/spotlight-archive";
+
+interface Props {
+  archive?: boolean;
+}
+
+const { archive = false } = Astro.props;
+const filters = archive
+  ? [{ key: "archive-topic", label: "Topic", all: "All topics" },
+    { key: "archive-year", label: "Publication year", all: "All years" }]
+  : [{ key: "show", label: "Program", all: "All programs" },
+    { key: "genre", label: "Genre", all: "All genres" }];
 ---
 
 <section class="page-hero">
   <div class="page-hero__inner wrap">
-    <h1>Search NJ PBS</h1>
-    <p class="page-hero__lead">Find pages, stories, and guides on this site.</p>
+    <h1>{archive ? SPOTLIGHT_ARCHIVE_LABEL : "Search NJ PBS"}</h1>
+    <p class="page-hero__lead">{archive ? "Find historical reporting by topic and original publication year." : "Find pages, stories, and guides on this site."}</p>
   </div>
 </section>
-<div class="wrap search-content" data-site-search>
+<div class="wrap search-content" data-site-search data-archive-search={archive ? true : undefined}>
   <p data-search-fallback>Search needs JavaScript. Use the browse links below to find what you need.</p>
-  <form role="search" aria-label="NJ PBS site search" hidden>
-    <label for="site-search-query">Search this site</label>
+  <form role="search" aria-label={archive ? SPOTLIGHT_ARCHIVE_LABEL : "NJ PBS site search"} hidden>
+    <label for="site-search-query">{archive ? "Search archived stories" : "Search this site"}</label>
     <div class="search-controls">
       <input id="site-search-query" name="q" type="search" maxlength="200" aria-describedby="search-hint" autocomplete="off" />
       <div class="search-actions">
@@ -19,36 +31,33 @@ import { pbsVideoUrl } from "../data/launch-fallback";
         <button class="btn btn--ghost" type="reset">Clear</button>
       </div>
     </div>
-    <p id="search-hint">Results appear as you type. Try a topic, page title, or keyword.</p>
+    <p id="search-hint">{archive ? "Results appear as you type. Use filters to narrow the archive." : "Results appear as you type. Try a topic, page title, or keyword."}</p>
     <fieldset class="search-filters" data-search-filters hidden>
-      <legend>Filter programs</legend>
-      <p>Choose a program or genre to search only program pages. You can leave the search box empty.</p>
+      <legend>{archive ? "Filter archived stories" : "Filter programs"}</legend>
+      <p>{archive ? "You can browse by topic or year without entering a search term." : "Choose a program or genre to search only program pages. You can leave the search box empty."}</p>
       <div class="search-filter-controls">
-        <div>
-          <label for="site-search-program">Program</label>
-          <select id="site-search-program" data-search-filter="show" disabled>
-            <option value="">All programs</option>
-          </select>
-        </div>
-        <div>
-          <label for="site-search-genre">Genre</label>
-          <select id="site-search-genre" data-search-filter="genre" disabled>
-            <option value="">All genres</option>
-          </select>
-        </div>
+        {filters.map(({ key, label, all }) => (
+          <div>
+            <label for={`site-search-${key}`}>{label}</label>
+            <select id={`site-search-${key}`} data-search-filter={key} disabled>
+              <option value="">{all}</option>
+            </select>
+          </div>
+        ))}
       </div>
     </fieldset>
     <p data-search-filter-status role="status"></p>
   </form>
-  <p data-meaning-status role="status" aria-live="polite">Preparing meaning search… Keyword search is ready.</p>
+  {!archive && <p data-meaning-status role="status" aria-live="polite">Preparing meaning search… Keyword search is ready.</p>}
   <p class="search-status" role="status" aria-atomic="true"></p>
-  <p data-search-recovery hidden><a href="/search/">Reload search</a> to try again, or use the browse links below.</p>
+  <p data-search-recovery hidden><a href={archive ? SPOTLIGHT_ARCHIVE_SEARCH_PATH : "/search/"}>Reload search</a> to try again, or use the browse links below.</p>
   <ol class="search-results" aria-label="Search results"></ol>
   <button class="btn btn--ghost search-more" type="button" data-search-more hidden>Show more results</button>
   <nav class="search-browse" aria-labelledby="search-browse-title">
     <h2 id="search-browse-title">Browse NJ PBS</h2>
     <p>Looking for a show or episode? <a href={pbsVideoUrl} target="_blank" rel="noopener noreferrer" aria-label="Browse the PBS video library (opens in new tab)">Browse the PBS video library</a>.</p>
     <ul>
+      {archive ? <li><a href="/search/">Search all of NJ PBS</a></li> : <li data-archive-link hidden><a href={SPOTLIGHT_ARCHIVE_SEARCH_PATH}>{SPOTLIGHT_ARCHIVE_LABEL}</a></li>}
       <li><a href="/schedule/">TV schedule</a></li>
       <li><a href="/about/">About NJ PBS</a></li>
       <li><a href="/support/">Viewer support</a></li>

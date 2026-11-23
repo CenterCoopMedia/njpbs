@@ -25,7 +25,8 @@ export function createHomeEditorialCatalog(snapshot: HomeSourceSnapshot,
   const checkedAt = spotlight.checkedAt ?? cutoffAt;
   const sourceCards = (spotlight.cards ?? []).slice(0, 200).flatMap(card => adaptHomeSpotlight({
     status: "ready", source: "nj-spotlight-news-rss", checkedAt, cards: [card] }, { cutoffAt }).cards);
-  const sortedPosts = [...posts].sort((a, b) => (b.sortInstant ?? 0) - (a.sortInstant ?? 0) || a.postId.localeCompare(b.postId));
+  const sortedPosts = posts.filter(post => !post.spotlightArchive)
+    .sort((a, b) => (b.sortInstant ?? 0) - (a.sortInstant ?? 0) || a.postId.localeCompare(b.postId));
   // Retain still-published saved selections outside the recent picker window.
   // Rule-based shelves keep chronological order after this bounded admission.
   const required = new Set(selectedPostIds);

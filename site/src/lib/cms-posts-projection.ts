@@ -43,6 +43,7 @@ import {
 } from "../../../packages/content-core/src/content-model.ts";
 import {
   editorialSortInstant,
+  isCalendarDay,
   resolveDisplayDate,
   resolveUpdateDisplay,
 } from "../../../packages/content-core/src/editorial-dates.ts";
@@ -101,6 +102,7 @@ export interface CmsPostBuildData extends ContentLinkMetadata {
   title: string;
   /** Absent on older artifacts; reader-facing attribution is opt-in. */
   spotlightNews?: boolean;
+  spotlightArchive?: true;
   coverageLabelId?: string;
   showInHomeHero?: boolean;
   disableStoryCtas?: boolean;
@@ -451,6 +453,11 @@ export function projectCmsPost(
   if (displayDate === null) {
     throw new Error(`post ${doc.id} has no resolvable publication date`);
   }
+  if (metadata.spotlightArchive !== undefined && (metadata.spotlightArchive !== true ||
+    !isCalendarDay(metadata.date) || displayDate !== metadata.date)) {
+    throw new Error(`post ${doc.id} archive snapshot requires its original publication day`);
+  }
+  const spotlightArchive = metadata.spotlightArchive === true;
   const update = resolveUpdateDisplay(dates);
 
   const available = options.assets ?? new Map();
@@ -509,7 +516,8 @@ export function projectCmsPost(
     path: postPublicPath(metadata.slug),
     ...contentLinkMetadata(metadata as unknown as Record<string, unknown>),
     title: metadata.title,
-    spotlightNews: metadata.spotlightNews === true,
+    spotlightNews: spotlightArchive || metadata.spotlightNews === true,
+    ...(spotlightArchive ? { spotlightArchive: true } : {}),
     ...(postCoverageLabelId(metadata) ? { coverageLabelId: postCoverageLabelId(metadata) } : {}),
     ...(metadata.showInHomeHero === undefined ? {} : { showInHomeHero: metadata.showInHomeHero }),
     ...(metadata.disableStoryCtas === undefined ? {} : { disableStoryCtas: metadata.disableStoryCtas }),

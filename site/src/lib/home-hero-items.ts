@@ -10,7 +10,7 @@ import { resolvePublicCreditLinks, type PublicAuthorLinkInput } from "./public-a
 /** Callers pass admitted public Posts (or the retained public context in a Home preview). */
 export function homeHeroCatalog(sources: HomeSourceSnapshot | undefined, posts: readonly CmsPostBuildData[], authors: readonly PublicAuthorLinkInput[] = [], pages: readonly CmsPageBuildData[] = []): HomeHeroCatalogItem[] {
   return [
-    ...[...posts].sort((left, right) => (right.sortInstant ?? 0) - (left.sortInstant ?? 0) || left.postId.localeCompare(right.postId)).map(post => {
+    ...posts.filter(post => !post.spotlightArchive).sort((left, right) => (right.sortInstant ?? 0) - (left.sortInstant ?? 0) || left.postId.localeCompare(right.postId)).map(post => {
       const selectedImage = postCardImage(post);
       return {
         id: post.postId, source: "cms_posts" as const, title: post.title,

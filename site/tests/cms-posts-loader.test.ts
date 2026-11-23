@@ -73,6 +73,19 @@ describe("admission", () => {
     ).toBeNull();
   });
 
+  it("admits only a published archive snapshot with its original editorial day", () => {
+    const metadata = { spotlightArchive: true, date: "2012-02-29", editorialDateSource: "backdated" };
+    const archived = post({ spotlightArchive: false, date: "2026-08-21" }, metadata);
+    expect(projectCmsPost(archived, { now: NOW })).toMatchObject({
+      spotlightArchive: true, spotlightNews: true, displayDate: "2012-02-29", path: "/posts/trenton-budget-hearing/",
+    });
+    expect(projectCmsPost({ ...archived, status: "draft" }, { now: NOW })).toBeNull();
+    expect(projectCmsPost({ ...archived, publiclyVisible: false }, { now: NOW })).toBeNull();
+    expect(projectCmsPost(post({ spotlightArchive: true }), { now: NOW })).not.toHaveProperty("spotlightArchive");
+    expect(() => projectCmsPost(post({}, { ...metadata, date: "2012-02-30" }), { now: NOW }))
+      .toThrow(/original publication day/);
+  });
+
   it("ignores the other record kinds that share the cmsPosts collection", () => {
     expect(
       projectCmsPost(post({}, { type: "program" }), { now: NOW }),

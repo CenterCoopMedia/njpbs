@@ -7,7 +7,7 @@ const { approvedElectionBlocks } = require("./election-results-approval");
 // blocks and every viewer-visible metadata field are copied here together so a
 // later draft edit cannot partially leak into the live page.
 
-const { resolveDisplayDate } = require("./editorial-dates");
+const { isCalendarDay, resolveDisplayDate } = require("./editorial-dates");
 const { parseHomeHero } = require("./home-hero");
 const { isRichTextDoc, parseBlocks } = require("./content-blocks");
 const { bioPlacementError, containsBio } = require("./bio-profiles");
@@ -73,6 +73,7 @@ const POST_METADATA_FIELDS = [
   "postSidebar",
   "type",
   "spotlightNews",
+  "spotlightArchive",
   "coverageLabelId",
   "showInHomeHero",
   "title",
@@ -345,6 +346,19 @@ function createPublishedSnapshot({
     const parsedBios = parseBlocks(document.blocks, { complete: !allowIncompletePresentation });
     if (!parsedBios.ok) throw new PublishSnapshotError(parsedBios.error);
   }
+  const metadata = selectFields(document, metadataFieldsFor(collection, kind));
+  if (kind === "post") {
+    // Archive admission is server-managed. A later working edit cannot turn an
+    // approved historical story into current news or change its original date.
+    const prior = document.published?.metadata;
+    delete metadata.spotlightArchive;
+    if (prior?.spotlightArchive === true) {
+      if (!isCalendarDay(prior.date)) throw new PublishSnapshotError("Archive Post needs its original publication day");
+      metadata.spotlightArchive = true;
+      metadata.date = prior.date;
+      metadata.editorialDateSource = "backdated";
+    }
+  }
 
   // The confirmation write delivers withdrawal intent for the superseded
   // history. Carry that history forward only while its publication can still serve.
@@ -370,7 +384,7 @@ function createPublishedSnapshot({
     // Retained in the same publish transaction: a pending static deployment can
     // still serve these earlier URLs, even if the new body has no video block.
     ...(previousCopies.length ? { previousVideoCopies: previousCopies } : {}),
-    metadata: selectFields(document, metadataFieldsFor(collection, kind)),
+    metadata,
     ...(kind === "post"
       ? { authorIds: registeredAuthorIds(resolveStoryCredits(document)) }
       : {}),

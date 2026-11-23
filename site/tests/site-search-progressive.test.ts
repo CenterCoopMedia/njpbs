@@ -24,6 +24,7 @@ vi.mock("../src/lib/meaning-search", () => ({
   },
 }));
 import { mountSiteSearch } from "../src/lib/site-search";
+import { SPOTLIGHT_ARCHIVE_LABEL } from "../src/lib/spotlight-archive";
 const settle = () => new Promise((resolve) => setTimeout(resolve, 30));
 function mount() {
   document.body.innerHTML =
@@ -247,6 +248,40 @@ describe("progressive public search", () => {
     form.dispatchEvent(new Event("submit", { cancelable: true }));
     await settle();
     expect(mocks.analytics).not.toHaveBeenCalled();
+  });
+
+  it("keeps archive browsing, search and keyboard pagination within the filtered corpus", async () => {
+    mocks.filters.mockResolvedValue({
+      archive: { [SPOTLIGHT_ARCHIVE_LABEL]: 11 },
+      "archive-topic": { Transit: 11 }, "archive-year": { 2012: 11 },
+    });
+    mocks.keyword.mockResolvedValue({ results: Array.from({ length: 11 }, (_item, index) => ({
+      data: async () => ({ url: `/posts/archive-fixture-${index + 1}/`, excerpt: "Archive reporting",
+        meta: { title: `Archive fixture ${index + 1}`, archive: SPOTLIGHT_ARCHIVE_LABEL, archiveDate: "2012-02-29" } }),
+    })) });
+    document.body.innerHTML = `
+      <section data-archive-search><form><input><fieldset data-search-filters hidden>
+      <select data-search-filter="archive-topic" disabled><option value="">All topics</option></select>
+      <select data-search-filter="archive-year" disabled><option value="">All years</option></select>
+      </fieldset><p data-search-filter-status></p></form><p class="search-status"></p><ol></ol>
+      <button data-search-more></button><p data-search-recovery hidden></p><div data-search-fallback></div></section>`;
+    const root = document.querySelector("section")!;
+    mountSiteSearch(root);
+    await vi.waitFor(() => expect(root.querySelectorAll("ol li")).toHaveLength(10));
+    expect(mocks.keyword).toHaveBeenCalledWith(null, { filters: { archive: SPOTLIGHT_ARCHIVE_LABEL } });
+    const [topic, year] = root.querySelectorAll("select");
+    topic.value = "Transit";
+    year.value = "2012";
+    root.querySelector("input")!.value = "rail";
+    root.querySelector("form")!.dispatchEvent(new Event("submit", { cancelable: true }));
+    await vi.waitFor(() => expect(root.querySelector("ol time")?.getAttribute("datetime")).toBe("2012-02-29"));
+    expect(mocks.keyword).toHaveBeenLastCalledWith("rail", {
+      filters: { archive: SPOTLIGHT_ARCHIVE_LABEL, "archive-topic": "Transit", "archive-year": "2012" },
+    });
+    root.querySelector<HTMLButtonElement>("[data-search-more]")!.click();
+    await vi.waitFor(() => expect(document.activeElement?.textContent).toBe("Archive fixture 11"));
+    expect(root.querySelectorAll("ol li")).toHaveLength(11);
+    expect(mocks.meaning).not.toHaveBeenCalled();
   });
 
   it("keeps keyword search available when filter options fail to load", async () => {

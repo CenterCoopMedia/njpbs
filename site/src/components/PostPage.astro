@@ -45,6 +45,7 @@ import { cmsBlockGroupHasContent } from "../lib/cms-block-visibility";
 import { sponsorCardsFromRecordCards } from "../lib/record-card-resolution";
 import { newsletterSignupResolution } from "../lib/newsletter-signup";
 import { isPrivatePreviewRender, renderDatasetFigures, renderRecordCards } from "../lib/cms-render-context";
+import { SPOTLIGHT_ARCHIVE_LABEL, SPOTLIGHT_ARCHIVE_SEARCH_PATH } from "../lib/spotlight-archive";
 
 type PublicCredit = CollectionEntry<"cmsPosts">["data"]["credits"][number];
 
@@ -62,6 +63,8 @@ const layout = choosePostLayout(post);
 const eyebrow = postEyebrow(post.categories, post.tags);
 const categories = publicPostCategories(post.categories);
 const tags = publicPostTopics(post.tags);
+const archive = post.spotlightArchive === true;
+const archiveTopicHref = (topic: string) => `${SPOTLIGHT_ARCHIVE_SEARCH_PATH}?${new URLSearchParams({ topic })}`;
 const responsiveAssets = await resolveCmsPostAssets(
   post.blocks,
   post.assets,
@@ -82,7 +85,7 @@ const resolveDataFigure = renderDatasetFigures(post.datasetFigures);
 const { body: authoredBody, sidebar: authoredSidebar } = splitLiveBlogBlocks(post.blocks, Boolean(post.liveBlog));
 const hideSidebar = post.postSidebar?.enabled === false;
 const sidebarBlocks = hideSidebar ? [] : authoredSidebar;
-const composition = storyCtaComposition(authoredBody, settings, { liveBlog: Boolean(post.liveBlog), optOut: post.disableStoryCtas });
+const composition = storyCtaComposition(authoredBody, settings, { liveBlog: Boolean(post.liveBlog), optOut: archive || post.disableStoryCtas });
 const bodyBlocks = composition.body;
 const newsletters = await newsletterSignupResolution([...bodyBlocks, ...sidebarBlocks, ...composition.afterUpdates], getImage, recordCards);
 const renderGroups = (blocks: typeof post.blocks) => renderContentGroups(blocks, (block, index) => ({
@@ -129,7 +132,8 @@ const sidebarGroups = groupLinkCardDirectories(renderGroups(sidebarBlocks).filte
             </>
           )}
         </p>
-        <PostPublication spotlightNews={post.spotlightNews} coverageLabelId={post.coverageLabelId} />
+        {archive ? <p><a href={SPOTLIGHT_ARCHIVE_SEARCH_PATH} data-pagefind-filter="archive" data-pagefind-meta="archive">{SPOTLIGHT_ARCHIVE_LABEL}</a></p>
+          : <PostPublication spotlightNews={post.spotlightNews} coverageLabelId={post.coverageLabelId} />}
         <h1>{post.title}</h1>
         {post.summary && <p class="post-head__summary">{post.summary}</p>}
         <PostByline
@@ -138,6 +142,7 @@ const sidebarGroups = groupLinkCardDirectories(renderGroups(sidebarBlocks).filte
           updateShown={post.updateShown}
           updatedAt={post.updatedAt}
           updatedDate={post.updatedDate}
+          archive={archive}
         />
         <PostShareControls title={post.title} url={canonicalUrl} placement="top" />
       </div>
@@ -202,7 +207,7 @@ const sidebarGroups = groupLinkCardDirectories(renderGroups(sidebarBlocks).filte
             <h2>Categories</h2>
             <ul>
               {categories.map((category) => (
-                <li><a href={postIndexFilterHref("category", category)}>{category}</a></li>
+                <li data-pagefind-filter={archive ? "archive-topic" : undefined}><a href={archive ? archiveTopicHref(category) : postIndexFilterHref("category", category)}>{category}</a></li>
               ))}
             </ul>
           </>
@@ -212,7 +217,7 @@ const sidebarGroups = groupLinkCardDirectories(renderGroups(sidebarBlocks).filte
             <h2>Tags</h2>
             <ul>
               {tags.map((tag) => (
-                <li><a href={postIndexFilterHref("tag", tag)}>{tag}</a></li>
+                <li data-pagefind-filter={archive ? "archive-topic" : undefined}><a href={archive ? archiveTopicHref(tag) : postIndexFilterHref("tag", tag)}>{tag}</a></li>
               ))}
             </ul>
           </>

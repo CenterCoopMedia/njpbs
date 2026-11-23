@@ -73,7 +73,8 @@ export async function refreshPublishedPageHomeSources(sources: HomeSourceSnapsho
       now.getTime() < Date.parse(editorial.catalog.cutoffAt)) throw new Error("Home retained source seal is invalid");
   const cutoffAt = now.toISOString();
   const selected = new Set(page ? homeSelectedPostIds(page) : []);
-  const sorted = [...posts].sort((a, b) => (b.sortInstant ?? 0) - (a.sortInstant ?? 0) || a.postId.localeCompare(b.postId));
+  const sorted = posts.filter(post => !post.spotlightArchive)
+    .sort((a, b) => (b.sortInstant ?? 0) - (a.sortInstant ?? 0) || a.postId.localeCompare(b.postId));
   const chosen = new Set([...sorted.filter(post => selected.has(post.postId)), ...sorted].slice(0, 200).map(post => post.postId));
   const cards = sorted.filter(post => chosen.has(post.postId)).flatMap(post => adaptHomeStationPosts({
     status: "ready", checkedAt: cutoffAt, posts: [post],

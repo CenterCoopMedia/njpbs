@@ -24,9 +24,10 @@ interface Props {
   updateShown: boolean;
   updatedAt: string | null;
   updatedDate: string | null;
+  archive?: boolean;
 }
 
-const { credits, displayDate, updateShown, updatedAt, updatedDate } =
+const { credits, displayDate, updateShown, updatedAt, updatedDate, archive } =
   Astro.props as Props;
 
 // The separator that precedes each credit, so the joined line reads as prose
@@ -48,7 +49,7 @@ const hasCredits = credits.length > 0;
     <span class="post-byline__credits">
       <span class="post-byline__label">By</span>{" "}
       {credits.map((credit, index) => {
-        const href = postCreditHref(credit);
+        const href = archive && !credit.slug ? null : postCreditHref(credit);
         return (
           <>
             {separatorBefore(index)}
@@ -67,7 +68,11 @@ const hasCredits = credits.length > 0;
       {hasCredits && (
         <span class="post-byline__sep" aria-hidden="true">{" · "}</span>
       )}
-      <time datetime={displayDate}>{published}</time>
+      {archive && "Originally published "}<time
+        datetime={displayDate}
+        data-pagefind-filter={archive && displayDate ? `archive-year:${displayDate.slice(0, 4)}` : undefined}
+        data-pagefind-meta={archive ? "archiveDate[datetime]" : undefined}
+      >{published}</time>
     </span>
   )}
   {updated && updatedAt && (

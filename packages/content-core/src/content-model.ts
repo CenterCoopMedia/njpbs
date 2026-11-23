@@ -625,6 +625,8 @@ export interface PostPublishedMetadata
     HeroBackgroundMetadata,
     EditorialDateFields {
   type: "post";
+  /** Set by the archive publication workflow on approved historical stories. */
+  spotlightArchive?: true;
   liveBlog?: import("./live-blog").LiveBlogData;
   /** Explicit publication attribution, frozen with this revision; absent means off. */
   spotlightNews?: boolean;
