@@ -3,17 +3,23 @@ import { SettingsBannerPreview } from "./SettingsBannerPreview";
 import { EditorFrameHeader } from "./EditorFrameHeader";
 import { useSettingsPublication } from "../hooks/useSettingsPublication";
 import { SettingsPublicationStatus } from "./SettingsPublicationStatus";
-import { type ContextType, type FormEvent, useEffect, useRef, useState } from "react";
+import { type ContextType, type FormEvent, useEffect, useState } from "react";
 import { ContentShelfSources } from "./ContentShelfPicker";
 import { BannerPageExclusions } from "./BannerPageExclusions";
 import {
   DEFAULT_PUBLIC_HOMEPAGE_BANNER_SETTINGS,
   PUBLIC_HOMEPAGE_BANNER_SETTINGS_ID,
+  activeHomepageBannerContent,
   cmsSettingsSchemaFor,
-  currentCmsSettingsSchemaFor,
+  legacyBannerNeedsSave,
+  separateHomepageBannerContent,
   validateCmsSettingsValues,
+  validateHomepageBannerContent,
   type CmsSettingsSchema,
+  type ElectionHomepageBannerContent,
+  type LegacyHomepageBannerSettingsValues,
   type PublicHomepageBannerSettingsValues,
+  type StandardHomepageBannerContent,
 } from "../../../packages/content-core/src/cms-settings";
 import { renderNjDecidesBand } from "../../../packages/content-core/src/nj-decides-render";
 import { renderHomepageAnnouncement } from "../../../packages/content-core/src/homepage-announcement-render";
@@ -43,7 +49,7 @@ import {
 import { useSuccessNotice } from "./ui/SuccessNoticeRegion";
 
 export { PUBLIC_HOMEPAGE_BANNER_SETTINGS_ID };
-export type PublicHomepageBannerValues = PublicHomepageBannerSettingsValues;
+export type PublicHomepageBannerValues = PublicHomepageBannerSettingsValues | LegacyHomepageBannerSettingsValues;
 
 function scheduleInstantLabel(value: string): string {
   const instant = new Date(value);
@@ -53,20 +59,10 @@ function scheduleInstantLabel(value: string): string {
   }).format(instant);
 }
 
-function publicHomepageBannerSchema() {
-  const schema = currentCmsSettingsSchemaFor(PUBLIC_HOMEPAGE_BANNER_SETTINGS_ID);
-  if (!schema) {
-    throw new Error("The public homepage banner schema is unavailable.");
-  }
-  return schema;
-}
-
-const PUBLIC_HOMEPAGE_BANNER_SCHEMA = publicHomepageBannerSchema();
-
 function stringFieldMaxBytes(
   field: "message" | "linkLabel" | "linkHref" | "liveLabel",
 ): number {
-  const definition = PUBLIC_HOMEPAGE_BANNER_SCHEMA.fields[field];
+  const definition = cmsSettingsSchemaFor(PUBLIC_HOMEPAGE_BANNER_SETTINGS_ID, 4)?.fields[field];
   if (!definition || (definition.kind !== "string" && definition.kind !== "safeHref")) {
     throw new Error(`The public homepage banner ${field} schema is invalid.`);
   }
@@ -90,24 +86,33 @@ export interface PublicHomepageBannerSettingsTransport {
   ) => Promise<MutateSettingsResponse<PublicHomepageBannerValues>>;
 }
 
-interface BannerDraft {
-  excludedPaths: string[];
+interface ContentDraft {
   enabled: boolean;
   message: string;
   linkLabel: string;
   linkHref: string;
   secondLinkLabel: string;
   secondLinkHref: string;
-  njDecides: boolean;
+}
+
+interface ElectionDraft extends ContentDraft {
   liveLabel: string;
   startsAt: string;
   endsAt: string;
+  excludedPaths: string[];
+}
+
+interface BannerDraft {
+  njDecides: boolean;
+  standard: ContentDraft;
+  election: ElectionDraft;
 }
 
 interface ReadySettings {
   status: "ready";
-  values: PublicHomepageBannerValues;
+  values: PublicHomepageBannerSettingsValues;
   version: number | null;
+  needsMigrationSave: boolean;
   published: CmsSettingsPublishedSnapshot<PublicHomepageBannerValues> | null;
 }
 
@@ -139,12 +144,12 @@ interface ValidationErrors {
 
 type DateDraftErrors = Partial<Record<"startsAt" | "endsAt", string>>;
 
-const DEFAULT_VALUES = DEFAULT_PUBLIC_HOMEPAGE_BANNER_SETTINGS;
+const DEFAULT_VALUES = separateHomepageBannerContent(DEFAULT_PUBLIC_HOMEPAGE_BANNER_SETTINGS);
 
 const MODE_FIELD: EditorField = {
   key: "njDecides",
   label: "Use NJ Decides sitewide mode",
-  help: "Use the branded election band across the public site, except the URLs selected below.",
+  help: "Choose which banner to publish. Each mode keeps its own message, links and visibility setting.",
   kind: "toggle",
   required: false,
 };
@@ -211,11 +216,10 @@ function utf8Bytes(value: string): number {
   return new TextEncoder().encode(value).length;
 }
 
-function candidateValues(draft: BannerDraft): PublicHomepageBannerValues {
+function contentValues(draft: ContentDraft): StandardHomepageBannerContent {
   const message = draft.message.trim();
   const linkLabel = draft.linkLabel.trim();
   const linkHref = draft.linkHref.trim();
-  const liveLabel = draft.liveLabel.trim();
   return {
     enabled: draft.enabled,
     message,
@@ -223,19 +227,25 @@ function candidateValues(draft: BannerDraft): PublicHomepageBannerValues {
     ...(linkHref ? { linkHref } : {}),
     ...(draft.secondLinkLabel.trim() ? { secondLinkLabel: draft.secondLinkLabel.trim() } : {}),
     ...(draft.secondLinkHref.trim() ? { secondLinkHref: draft.secondLinkHref.trim() } : {}),
-    njDecides: draft.njDecides,
-    ...(liveLabel ? { liveLabel } : {}),
-    ...(draft.startsAt ? { startsAt: draft.startsAt } : {}),
-    ...(draft.endsAt ? { endsAt: draft.endsAt } : {}),
-    ...(draft.excludedPaths.length ? { excludedPaths: [...draft.excludedPaths] } : {}),
   };
 }
 
-function canonicalValues(draft: BannerDraft): PublicHomepageBannerValues {
-  return candidateValues(draft);
+function canonicalValues({ njDecides, standard, election }: BannerDraft): PublicHomepageBannerSettingsValues {
+  const liveLabel = election.liveLabel.trim();
+  return {
+    njDecides,
+    standard: contentValues(standard),
+    election: {
+      ...contentValues(election),
+      ...(liveLabel ? { liveLabel } : {}),
+      ...(election.startsAt ? { startsAt: election.startsAt } : {}),
+      ...(election.endsAt ? { endsAt: election.endsAt } : {}),
+      ...(election.excludedPaths.length ? { excludedPaths: [...election.excludedPaths] } : {}),
+    },
+  };
 }
 
-function draftFromValues(values: PublicHomepageBannerValues): BannerDraft {
+function contentDraft(values: StandardHomepageBannerContent): ContentDraft {
   return {
     enabled: values.enabled,
     message: values.message,
@@ -243,38 +253,32 @@ function draftFromValues(values: PublicHomepageBannerValues): BannerDraft {
     linkHref: values.linkHref ?? "",
     secondLinkLabel: values.secondLinkLabel ?? "",
     secondLinkHref: values.secondLinkHref ?? "",
-    njDecides: values.njDecides === true,
-    liveLabel: values.liveLabel ?? "",
-    startsAt: values.startsAt ?? "",
-    endsAt: values.endsAt ?? "",
-    excludedPaths: [...(values.excludedPaths ?? [])],
+  };
+}
+
+function draftFromValues({ njDecides, standard, election }: PublicHomepageBannerSettingsValues): BannerDraft {
+  return {
+    njDecides,
+    standard: contentDraft(standard),
+    election: {
+      ...contentDraft(election),
+      liveLabel: election.liveLabel ?? "",
+      startsAt: election.startsAt ?? "",
+      endsAt: election.endsAt ?? "",
+      excludedPaths: [...(election.excludedPaths ?? [])],
+    },
   };
 }
 
 function valuesEqual(
-  left: PublicHomepageBannerValues,
-  right: PublicHomepageBannerValues,
+  left: PublicHomepageBannerSettingsValues,
+  right: PublicHomepageBannerSettingsValues,
 ): boolean {
-  return (
-    left.enabled === right.enabled &&
-    left.message === right.message &&
-    (left.linkLabel ?? "") === (right.linkLabel ?? "") &&
-    (left.linkHref ?? "") === (right.linkHref ?? "") &&
-    (left.secondLinkLabel ?? "") === (right.secondLinkLabel ?? "") &&
-    (left.secondLinkHref ?? "") === (right.secondLinkHref ?? "") &&
-    (left.njDecides ?? false) === (right.njDecides ?? false) &&
-    (left.liveLabel ?? "") === (right.liveLabel ?? "") &&
-    (left.startsAt ?? "") === (right.startsAt ?? "") &&
-    (left.endsAt ?? "") === (right.endsAt ?? "") &&
-    JSON.stringify(left.excludedPaths ?? []) === JSON.stringify(right.excludedPaths ?? [])
-  );
+  return JSON.stringify(canonicalValues(draftFromValues(left))) === JSON.stringify(canonicalValues(draftFromValues(right)));
 }
 
-function validationErrors(draft: BannerDraft): ValidationErrors {
-  const error = validateCmsSettingsValues(
-    PUBLIC_HOMEPAGE_BANNER_SCHEMA,
-    candidateValues(draft),
-  );
+function validationErrors(mode: "standard" | "election", values: ElectionHomepageBannerContent): ValidationErrors {
+  const error = validateHomepageBannerContent(mode, values);
   const errors: ValidationErrors = {};
   if (!error) return errors;
   if (error.startsWith("message")) {
@@ -325,39 +329,10 @@ function valuesFromUnknown(
   value: unknown,
   schema: CmsSettingsSchema,
 ): PublicHomepageBannerValues {
-  if (!value || typeof value !== "object" || Array.isArray(value)) {
+  if (validateCmsSettingsValues(schema, value)) {
     throw new Error("The homepage banner setting is invalid.");
   }
-  const record = value as Record<string, unknown>;
-  if (typeof record.enabled !== "boolean" || typeof record.message !== "string") {
-    throw new Error("The homepage banner setting is invalid.");
-  }
-  if (
-    (record.linkLabel !== undefined && typeof record.linkLabel !== "string") ||
-    (record.linkHref !== undefined && typeof record.linkHref !== "string") ||
-    (record.njDecides !== undefined && typeof record.njDecides !== "boolean") ||
-    (record.liveLabel !== undefined && typeof record.liveLabel !== "string") ||
-    (record.startsAt !== undefined && typeof record.startsAt !== "string") ||
-    (record.endsAt !== undefined && typeof record.endsAt !== "string")
-  ) {
-    throw new Error("The homepage banner setting is invalid.");
-  }
-  if (validateCmsSettingsValues(schema, record)) {
-    throw new Error("The homepage banner setting is invalid.");
-  }
-  return {
-    enabled: record.enabled,
-    message: record.message,
-    ...(typeof record.linkLabel === "string" ? { linkLabel: record.linkLabel } : {}),
-    ...(typeof record.linkHref === "string" ? { linkHref: record.linkHref } : {}),
-    ...(typeof record.secondLinkLabel === "string" ? { secondLinkLabel: record.secondLinkLabel } : {}),
-    ...(typeof record.secondLinkHref === "string" ? { secondLinkHref: record.secondLinkHref } : {}),
-    ...(typeof record.njDecides === "boolean" ? { njDecides: record.njDecides } : {}),
-    ...(typeof record.liveLabel === "string" ? { liveLabel: record.liveLabel } : {}),
-    ...(typeof record.startsAt === "string" ? { startsAt: record.startsAt } : {}),
-    ...(typeof record.endsAt === "string" ? { endsAt: record.endsAt } : {}),
-    ...(Array.isArray(record.excludedPaths) ? { excludedPaths: [...record.excludedPaths] as string[] } : {}),
-  };
+  return value as PublicHomepageBannerValues;
 }
 
 function schemaForVersion(schemaVersion: unknown): CmsSettingsSchema {
@@ -408,6 +383,7 @@ function readyFromResponse(
       status: "ready",
       values: DEFAULT_VALUES,
       version: null,
+      needsMigrationSave: false,
       published: null,
     };
   }
@@ -421,13 +397,12 @@ function readyFromResponse(
   if (published && published.sourceVersion > response.settings.version) {
     throw new Error("The published homepage banner version is invalid.");
   }
+  const values = valuesFromUnknown(response.settings.values, schemaForVersion(response.settings.schemaVersion));
   return {
     status: "ready",
-    values: valuesFromUnknown(
-      response.settings.values,
-      schemaForVersion(response.settings.schemaVersion),
-    ),
+    values: separateHomepageBannerContent(values, published?.values),
     version: response.settings.version,
+    needsMigrationSave: legacyBannerNeedsSave(values, published?.values),
     published,
   };
 }
@@ -469,7 +444,6 @@ export function PublicHomepageBannerSettings({
   loadAppearance,
   contentSources,
 }: PublicHomepageBannerSettingsTransport) {
-  const standardSnapshot = useRef<PublicHomepageBannerValues | null>(null);
   const [scheduleOpen, setScheduleOpen] = useState(false);
   const successNotice = useSuccessNotice();
   const [attempt, setAttempt] = useState(0);
@@ -516,11 +490,29 @@ export function PublicHomepageBannerSettings({
     };
   }, [attempt, load, observe]);
 
-  function edit(update: Partial<BannerDraft>) {
-    setDraft((current) => ({ ...current, ...update }));
+  function edit(update: (current: BannerDraft) => BannerDraft) {
+    setDraft(update);
     setActionState((current) =>
       current.type === "conflict" ? current : { type: "idle" },
     );
+  }
+
+  const mode = draft.njDecides ? "election" : "standard";
+  const content = draft[mode];
+  const election = draft.election;
+  const draftValues = canonicalValues(draft);
+  const standardErrors = validationErrors("standard", draftValues.standard);
+  const electionErrors = { ...validationErrors("election", draftValues.election), ...dateDraftErrors };
+  const errors = draft.njDecides ? electionErrors : standardErrors;
+  const otherModeErrors = draft.njDecides ? standardErrors : electionErrors;
+  const valid = isValid(standardErrors) && isValid(electionErrors);
+
+  function editContent(update: Partial<ContentDraft>) {
+    edit(current => ({ ...current, [mode]: { ...current[mode], ...update } }));
+  }
+
+  function editElection(update: Partial<ElectionDraft>) {
+    edit(current => ({ ...current, election: { ...current.election, ...update } }));
   }
 
   function adopt(ready: ReadySettings) {
@@ -544,16 +536,7 @@ export function PublicHomepageBannerSettings({
 
   async function saveDraft(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (loadState.status !== "ready" || pending) return;
-    const errors = { ...validationErrors(draft), ...dateDraftErrors };
-    if (!isValid(errors)) return;
-    const values = {
-      ...canonicalValues(draft),
-      // Explicit clearing distinguishes this client from an older Admin that
-      // cannot display or preserve the saved second link.
-      ...(loadState.values.secondLinkLabel && !draft.secondLinkLabel.trim() && !draft.secondLinkHref.trim()
-        ? { secondLinkLabel: "", secondLinkHref: "" } : {}),
-    };
+    if (loadState.status !== "ready" || pending || !valid) return;
     setPending("save");
     setActionState({ type: "idle" });
     try {
@@ -561,12 +544,12 @@ export function PublicHomepageBannerSettings({
         loadState.version === null
           ? {
               id: PUBLIC_HOMEPAGE_BANNER_SETTINGS_ID,
-              values,
+              values: draftValues,
               createOnly: true,
             }
           : {
               id: PUBLIC_HOMEPAGE_BANNER_SETTINGS_ID,
-              values,
+              values: draftValues,
               baseVersion: loadState.version,
             },
       );
@@ -584,9 +567,7 @@ export function PublicHomepageBannerSettings({
 
   async function publishDraft() {
     if (loadState.status !== "ready" || pending || retrying || loadState.version === null) return;
-    const errors = { ...validationErrors(draft), ...dateDraftErrors };
-    const values = canonicalValues(draft);
-    if (!isValid(errors) || !valuesEqual(values, loadState.values)) return;
+    if (!valid || loadState.needsMigrationSave || !valuesEqual(draftValues, loadState.values)) return;
 
     setPending("publish");
     setActionState({ type: "idle" });
@@ -606,13 +587,7 @@ export function PublicHomepageBannerSettings({
     }
   }
 
-  useEffect(() => {
-    if (loadState.status === "ready" && loadState.published && !loadState.published.values.njDecides) {
-      standardSnapshot.current = loadState.published.values;
-    }
-  }, [loadState]);
-
-  useSettingsDirty(loadState.status === "ready" && (!valuesEqual(canonicalValues(draft), loadState.values) || Object.keys(dateDraftErrors).length > 0), pending !== null || retrying);
+  useSettingsDirty(loadState.status === "ready" && (!valuesEqual(draftValues, loadState.values) || !isValid(dateDraftErrors)), pending !== null || retrying);
 
   if (loadState.status === "loading") {
     return (
@@ -634,24 +609,24 @@ export function PublicHomepageBannerSettings({
     );
   }
 
-  const errors = { ...validationErrors(draft), ...dateDraftErrors };
-  const values = canonicalValues(draft);
-  const valid = isValid(errors);
-  const dirty = !valuesEqual(values, loadState.values);
+  const values = activeHomepageBannerContent(draftValues);
+  const { njDecides } = values;
+  const dirty = !valuesEqual(draftValues, loadState.values);
   const publishedMatchesSaved = Boolean(
-    loadState.published && valuesEqual(loadState.values, loadState.published.values),
+    loadState.published && valuesEqual(loadState.values, separateHomepageBannerContent(loadState.published.values)),
   );
   const canPublish =
     valid &&
     !dirty &&
+    !loadState.needsMigrationSave &&
     loadState.version !== null &&
     (!publishedMatchesSaved || !publication);
-  const link = valid && values.linkLabel && values.linkHref
+  const link = isValid(errors) && values.linkLabel && values.linkHref
     ? { label: values.linkLabel, href: values.linkHref } : undefined;
   const secondLink = link && values.secondLinkLabel && values.secondLinkHref
     ? { label: values.secondLinkLabel, href: values.secondLinkHref } : undefined;
   const links = link ? [link, ...(secondLink ? [secondLink] : [])] : [];
-  const previewHtml = values.njDecides
+  const previewHtml = njDecides
     ? renderNjDecidesBand({
         copy: values.message,
         branding: appearance,
@@ -660,13 +635,8 @@ export function PublicHomepageBannerSettings({
       })
     : renderHomepageAnnouncement({ message: values.message || "Banner message", link, secondLink });
 
-  const standard = loadState.published && !loadState.published.values.njDecides
-    ? loadState.published.values : standardSnapshot.current;
-  const standardTextRemains = values.njDecides && standard &&
-    (["message", "linkLabel", "linkHref", "secondLinkLabel", "secondLinkHref"] as const).some(key =>
-      Boolean(values[key]) && values[key] === standard[key]);
-  const scheduleHasError = Boolean(errors.startsAt || errors.endsAt || errors.schedule);
-  const scheduleSummary = [draft.startsAt && `Starts ${scheduleInstantLabel(draft.startsAt)}`, draft.endsAt && `Ends ${scheduleInstantLabel(draft.endsAt)}`].filter(Boolean).join(" · ") || "No schedule set";
+  const scheduleHasError = Boolean(electionErrors.startsAt || electionErrors.endsAt || electionErrors.schedule);
+  const scheduleSummary = [election.startsAt && `Starts ${scheduleInstantLabel(election.startsAt)}`, election.endsAt && `Ends ${scheduleInstantLabel(election.endsAt)}`].filter(Boolean).join(" · ") || "No schedule set";
 
   return (
     <Panel className="admin-settings-panel settings-public-panel" aria-labelledby="public-homepage-banner-heading">
@@ -695,7 +665,7 @@ export function PublicHomepageBannerSettings({
             <FieldRenderer
               field={MODE_FIELD}
               fieldId="public-banner-nj-decides"
-              onChange={(value) => edit({ njDecides: Boolean(value) })}
+              onChange={(value) => edit(current => ({ ...current, njDecides: Boolean(value) }))}
               togglePresentation="inline"
               value={draft.njDecides}
             />
@@ -712,9 +682,9 @@ export function PublicHomepageBannerSettings({
                 required: false,
               }}
               fieldId="public-banner-enabled"
-              onChange={(value) => edit({ enabled: Boolean(value) })}
+              onChange={(value) => editContent({ enabled: Boolean(value) })}
               togglePresentation="inline"
-              value={draft.enabled}
+              value={content.enabled}
             />
           </div>
         </fieldset>
@@ -733,19 +703,19 @@ export function PublicHomepageBannerSettings({
           </legend>
           <div className="record-field-group-fields">
             {draft.njDecides && <div className="settings-banner-guidance">
-              <p>The band shows the NJ Decides logo, then this message and up to two links. Replace the standard banner text with election text, or leave Message empty to show only the logo and links.</p>
-              <Button type="button" disabled={pending !== null} onClick={() => edit({
+              <p>Leave Message empty to show the NJ Decides logo and any links you add.</p>
+              <Button type="button" disabled={pending !== null} onClick={() => editContent({
                 message: "Find voting information for New Jersey.",
                 linkLabel: "NJ Decides 2026", linkHref: "/nj-decides-2026/",
               })}>Use suggested election text</Button>
             </div>}
             <FieldRenderer
               error={errors.message}
-              field={{ ...MESSAGE_FIELD, required: !draft.njDecides }}
+              field={{ ...MESSAGE_FIELD, required: !draft.njDecides && content.enabled }}
               fieldId="public-banner-message"
-              onChange={(value) => edit({ message: String(value) })}
-              value={draft.message}
-              valueStatus={`${utf8Bytes(draft.message.trim())} of ${PUBLIC_HOMEPAGE_BANNER_MESSAGE_BYTES} bytes used.`}
+              onChange={(value) => editContent({ message: String(value) })}
+              value={content.message}
+              valueStatus={`${utf8Bytes(content.message.trim())} of ${PUBLIC_HOMEPAGE_BANNER_MESSAGE_BYTES} bytes used.`}
             />
             <FieldRenderer
               additionalDescriptionId={errors.linkPair ? "public-banner-link-pair-error" : undefined}
@@ -753,8 +723,8 @@ export function PublicHomepageBannerSettings({
               field={LINK_LABEL_FIELD}
               fieldId="public-banner-link-label"
               invalid={Boolean(errors.linkPair)}
-              onChange={(value) => edit({ linkLabel: String(value) })}
-              value={draft.linkLabel}
+              onChange={(value) => editContent({ linkLabel: String(value) })}
+              value={content.linkLabel}
             />
             <FieldRenderer
               additionalDescriptionId={errors.linkPair ? "public-banner-link-pair-error" : undefined}
@@ -762,8 +732,8 @@ export function PublicHomepageBannerSettings({
               field={LINK_HREF_FIELD}
               fieldId="public-banner-link-href"
               invalid={Boolean(errors.linkPair)}
-              onChange={(value) => edit({ linkHref: String(value) })}
-              value={draft.linkHref}
+              onChange={(value) => editContent({ linkHref: String(value) })}
+              value={content.linkHref}
             />
             <FieldRenderer
               additionalDescriptionId={errors.secondLinkPair ? "public-banner-second-link-pair-error" : undefined}
@@ -771,8 +741,8 @@ export function PublicHomepageBannerSettings({
               field={SECOND_LINK_LABEL_FIELD}
               fieldId="public-banner-second-link-label"
               invalid={Boolean(errors.secondLinkPair)}
-              onChange={(value) => edit({ secondLinkLabel: String(value) })}
-              value={draft.secondLinkLabel}
+              onChange={(value) => editContent({ secondLinkLabel: String(value) })}
+              value={content.secondLinkLabel}
             />
             <FieldRenderer
               additionalDescriptionId={errors.secondLinkPair ? "public-banner-second-link-pair-error" : undefined}
@@ -780,8 +750,8 @@ export function PublicHomepageBannerSettings({
               field={SECOND_LINK_HREF_FIELD}
               fieldId="public-banner-second-link-href"
               invalid={Boolean(errors.secondLinkPair)}
-              onChange={(value) => edit({ secondLinkHref: String(value) })}
-              value={draft.secondLinkHref}
+              onChange={(value) => editContent({ secondLinkHref: String(value) })}
+              value={content.secondLinkHref}
             />
           </div>
           {errors.secondLinkPair && <p className="error-text" id="public-banner-second-link-pair-error" role="alert">{errors.secondLinkPair}</p>}
@@ -806,12 +776,12 @@ export function PublicHomepageBannerSettings({
           </legend>
           <div className="record-field-group-fields">
             <FieldRenderer
-              error={errors.liveLabel}
+              error={electionErrors.liveLabel}
               field={LIVE_LABEL_FIELD}
               fieldId="public-banner-live-label"
-              onChange={(value) => edit({ liveLabel: String(value) })}
-              value={draft.liveLabel}
-              valueStatus={`${utf8Bytes(draft.liveLabel.trim())} of ${PUBLIC_HOMEPAGE_BANNER_LIVE_LABEL_BYTES} bytes used.`}
+              onChange={(value) => editElection({ liveLabel: String(value) })}
+              value={election.liveLabel}
+              valueStatus={`${utf8Bytes(election.liveLabel.trim())} of ${PUBLIC_HOMEPAGE_BANNER_LIVE_LABEL_BYTES} bytes used.`}
             />
           </div>
         </fieldset>
@@ -825,57 +795,58 @@ export function PublicHomepageBannerSettings({
             <legend className="sr-only">Optional schedule</legend>
             <div className="record-field-group-fields">
             <FieldRenderer
-              additionalDescriptionId={errors.schedule ? "public-banner-schedule-error" : undefined}
-              error={errors.startsAt}
+              additionalDescriptionId={electionErrors.schedule ? "public-banner-schedule-error" : undefined}
+              error={electionErrors.startsAt}
               field={STARTS_AT_FIELD}
               fieldId="public-banner-starts-at"
-              invalid={Boolean(errors.schedule)}
-              onChange={(value) => edit({ startsAt: String(value) })}
+              invalid={Boolean(electionErrors.schedule)}
+              onChange={(value) => editElection({ startsAt: String(value) })}
               onDraftError={(message) => reportDateDraftError("startsAt", message)}
-              value={draft.startsAt}
+              value={election.startsAt}
             />
             <FieldRenderer
-              additionalDescriptionId={errors.schedule ? "public-banner-schedule-error" : undefined}
-              error={errors.endsAt}
+              additionalDescriptionId={electionErrors.schedule ? "public-banner-schedule-error" : undefined}
+              error={electionErrors.endsAt}
               field={ENDS_AT_FIELD}
               fieldId="public-banner-ends-at"
-              invalid={Boolean(errors.schedule)}
-              onChange={(value) => edit({ endsAt: String(value) })}
+              invalid={Boolean(electionErrors.schedule)}
+              onChange={(value) => editElection({ endsAt: String(value) })}
               onDraftError={(message) => reportDateDraftError("endsAt", message)}
-              value={draft.endsAt}
+              value={election.endsAt}
             />
           </div>
-          {errors.schedule ? (
+          {electionErrors.schedule ? (
             <p className="error-text" id="public-banner-schedule-error" role="alert">
-              {errors.schedule}
+              {electionErrors.schedule}
             </p>
           ) : null}
         </fieldset>
         </details>
 
-        {draft.njDecides && <div className="settings-card"><BannerPageExclusions paths={draft.excludedPaths} sources={contentSources}
-          disabled={pending !== null} onChange={excludedPaths => edit({ excludedPaths })} /></div>}
+        {draft.njDecides && <div className="settings-card"><BannerPageExclusions paths={election.excludedPaths} sources={contentSources}
+          disabled={pending !== null} onChange={excludedPaths => editElection({ excludedPaths })} /></div>}
 
       </div>
       <SettingsInspector>
         <EditorFrameHeader scope="panel" title="Draft preview" />
-        {standardTextRemains && <InlineMessage tone="warning">This is still the standard banner text. Review Message and both links before publishing the NJ Decides band.</InlineMessage>}
+        {loadState.needsMigrationSave && <InlineMessage tone="info">Save the draft before publishing to keep the saved content for both modes.</InlineMessage>}
+        {!isValid(otherModeErrors) && <InlineMessage tone="error">Review the {draft.njDecides ? "standard banner" : "NJ Decides band"} fields before saving.</InlineMessage>}
         <div
           className="public-banner-preview"
           data-enabled={String(values.enabled)}
-          aria-label={values.njDecides
+          aria-label={njDecides
             ? "Proposed NJ Decides sitewide banner preview"
             : "Proposed homepage banner preview"}
         >
-          <span>{values.njDecides ? "NJ Decides sitewide preview" : "Homepage preview"}</span>
-          {values.njDecides && <p className="muted">Sample page: Home. {draft.excludedPaths.includes("/")
+          <span>{njDecides ? "NJ Decides sitewide preview" : "Homepage preview"}</span>
+          {njDecides && <p className="muted">Sample page: Home. {election.excludedPaths.includes("/")
             ? "The band is hidden on Home."
             : "The band can appear here when enabled and within its schedule."}</p>}
-          {values.njDecides && appearanceError && <p role="status">Published appearance could not be loaded. This preview uses the approved defaults. Reload settings to try again.</p>}
-          {values.enabled && !(values.njDecides && draft.excludedPaths.includes("/")) ? (
+          {njDecides && appearanceError && <p role="status">Published appearance could not be loaded. This preview uses the approved defaults. Reload settings to try again.</p>}
+          {values.enabled && !(njDecides && election.excludedPaths.includes("/")) ? (
             <>
-              <SettingsBannerPreview html={previewHtml} variant={values.njDecides ? "election" : "homepage"} />
-              {!values.njDecides && links.map(({ label, href }, index) => {
+              <SettingsBannerPreview html={previewHtml} variant={njDecides ? "election" : "homepage"} />
+              {!njDecides && links.map(({ label, href }, index) => {
                 const destination = new URL(href, `${PUBLIC_SITE_ORIGIN}/`);
                 const opensNewTab = destination.protocol === "https:" || destination.protocol === "http:";
                 const actionLabel = `Check link: ${label}`;
@@ -888,11 +859,11 @@ export function PublicHomepageBannerSettings({
             </>
           ) : (
             <div>
-              <strong>{values.enabled && values.njDecides && draft.excludedPaths.includes("/")
-                ? "Hidden on Home" : values.njDecides ? "Hidden from the public site" : "Hidden from the homepage"}</strong>
-              <p>{values.enabled && values.njDecides && draft.excludedPaths.includes("/")
+              <strong>{values.enabled && njDecides && election.excludedPaths.includes("/")
+                ? "Hidden on Home" : njDecides ? "Hidden from the public site" : "Hidden from the homepage"}</strong>
+              <p>{values.enabled && njDecides && election.excludedPaths.includes("/")
                 ? "The band can still appear on other pages. Save and publish to apply your choices."
-                : values.njDecides
+                : njDecides
                 ? "Enable the band to include it in the next publication."
                 : "Enable the banner to include this message in the next publication."}</p>
             </div>
@@ -940,7 +911,7 @@ export function PublicHomepageBannerSettings({
         </p>
         <div className="admin-settings-actions">
           <AsyncActionButton
-            disabled={pending !== null || !valid || !dirty}
+            disabled={pending !== null || !valid || (!dirty && !loadState.needsMigrationSave)}
             label="Save draft"
             pending={pending === "save"}
             pendingAnnouncement="Saving homepage banner draft."

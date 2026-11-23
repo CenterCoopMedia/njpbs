@@ -18,6 +18,7 @@ import {
   createCmsSettingsPublishedSnapshot,
   currentCmsSettingsSchemaFor,
   projectPublishedCmsSettings,
+  separateHomepageBannerContent,
   validateCmsSettingsValues,
   type CmsSettingsSchema,
   type CmsSettingsSchemaCatalog,
@@ -330,12 +331,16 @@ describe("CMS settings TypeScript and CommonJS parity", () => {
 // Bounds and URL semantics from the approved #4362 contract.
 describe("NJ Decides banner exclusions", () => {
   const schema = currentCmsSettingsSchemaFor(PUBLIC_HOMEPAGE_BANNER_SETTINGS_ID)!;
-  const base = { enabled: true, message: "", njDecides: true };
+  const withElection = (fields: Record<string, unknown>) => ({
+    njDecides: true,
+    standard: { enabled: false, message: "" },
+    election: { enabled: true, message: "", ...fields },
+  });
   it.each([undefined, [], ["/", "/election/", "/posts/election-guide/"],
     Array.from({ length: 50 }, (_, i) => `/page-${i}/`), ["/" + "a".repeat(510) + "/"]].map(excludedPaths => ({ excludedPaths })))(
 
     "admits an absent or bounded canonical selection", ({ excludedPaths }) => {
-      const values = { ...base, ...(excludedPaths ? { excludedPaths } : {}) };
+      const values = withElection(excludedPaths ? { excludedPaths } : {});
       expect(validateCmsSettingsValues(schema, values)).toBeNull();
       expect(serverContract.validateCmsSettingsValues(serverContract.currentCmsSettingsSchemaFor(PUBLIC_HOMEPAGE_BANNER_SETTINGS_ID), values)).toBeNull();
     });
@@ -344,12 +349,14 @@ describe("NJ Decides banner exclusions", () => {
     ["/page/?q=1"], ["/page/#heading"], ["/posts/*/"], ["/../"], ["/page%2fother/"], ["/Page/"], ["/missing-slash"], [null]].map(paths => ({ paths })))(
 
     "rejects unsafe, duplicate or excessive selections", ({ paths }) => {
-      expect(validateCmsSettingsValues(schema, { ...base, excludedPaths: paths })).toMatch(/excludedPaths/);
-      expect(serverContract.validateCmsSettingsValues(serverContract.currentCmsSettingsSchemaFor(PUBLIC_HOMEPAGE_BANNER_SETTINGS_ID), { ...base, excludedPaths: paths })).toMatch(/excludedPaths/);
+      const values = withElection({ excludedPaths: paths });
+      expect(validateCmsSettingsValues(schema, values)).toMatch(/excludedPaths/);
+      expect(serverContract.validateCmsSettingsValues(serverContract.currentCmsSettingsSchemaFor(PUBLIC_HOMEPAGE_BANNER_SETTINGS_ID), values)).toMatch(/excludedPaths/);
     });
   it.each([null, "/", 1, {}].map(excludedPaths => ({ excludedPaths })))("rejects a non-list exclusion value", ({ excludedPaths }) => {
-    expect(validateCmsSettingsValues(schema, { ...base, excludedPaths })).toMatch(/excludedPaths/);
-    expect(serverContract.validateCmsSettingsValues(serverContract.currentCmsSettingsSchemaFor(PUBLIC_HOMEPAGE_BANNER_SETTINGS_ID), { ...base, excludedPaths })).toMatch(/excludedPaths/);
+    const values = withElection({ excludedPaths });
+    expect(validateCmsSettingsValues(schema, values)).toMatch(/excludedPaths/);
+    expect(serverContract.validateCmsSettingsValues(serverContract.currentCmsSettingsSchemaFor(PUBLIC_HOMEPAGE_BANNER_SETTINGS_ID), values)).toMatch(/excludedPaths/);
   });
   it("keeps the old published banner readable while a newer draft is saved", () => {
     const values = { enabled: true, message: "Vote", njDecides: true };
@@ -360,5 +367,32 @@ describe("NJ Decides banner exclusions", () => {
     expect(projectPublishedCmsSettings({ documentId: PUBLIC_HOMEPAGE_BANNER_SETTINGS_ID, schemas: oldCatalog, document })).toEqual(published);
     expect(() => projectPublishedCmsSettings({ documentId: PUBLIC_HOMEPAGE_BANNER_SETTINGS_ID, schemas: oldCatalog,
       document: { ...document, published: { ...published, schemaVersion: 3, sourceVersion: 2, values: document.values } } })).toThrow(/schema is not available/);
+  });
+});
+
+it("keeps unpublished election details from a legacy standard draft when restoring election copy", () => {
+  const published = {
+    njDecides: true,
+    enabled: true,
+    message: "Election coverage",
+    linkLabel: "Results",
+    linkHref: "/results/",
+    liveLabel: "Live",
+    startsAt: "2026-11-03T23:00:00.000Z",
+    endsAt: "2026-11-04T04:00:00.000Z",
+    excludedPaths: ["/results/"],
+  };
+  const draft = { enabled: true, message: "Homepage update", endsAt: "2026-11-04T06:00:00.000Z", excludedPaths: [] };
+  expect(separateHomepageBannerContent(draft, published)).toEqual({
+    njDecides: false,
+    standard: { enabled: true, message: "Homepage update" },
+    election: {
+      enabled: true,
+      message: "Election coverage",
+      linkLabel: "Results",
+      linkHref: "/results/",
+      endsAt: draft.endsAt,
+      excludedPaths: [],
+    },
   });
 });

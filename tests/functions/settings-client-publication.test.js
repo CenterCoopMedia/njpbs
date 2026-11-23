@@ -5,7 +5,8 @@ import "../../functions/lib/firebase.js";
 import settings from "../../functions/settings.js";
 import deployment from "../../functions/lib/public-deployment.js";
 import context from "../../functions/lib/public-context-revision.js";
-import { DEFAULT_SITE_NAVIGATION, DEFAULT_PUBLIC_SITE_CHROME_SETTINGS, DEFAULT_PUBLIC_HOMEPAGE_BANNER_SETTINGS } from "../../packages/content-core/src/cms-settings";
+import { DEFAULT_SITE_NAVIGATION, DEFAULT_PUBLIC_SITE_CHROME_SETTINGS, DEFAULT_PUBLIC_HOMEPAGE_BANNER_SETTINGS,
+  separateHomepageBannerContent } from "../../packages/content-core/src/cms-settings";
 
 // Keep browser identity initialization out of this local transport/transaction
 // proof. The server still rechecks the fixture's stored settings.manage role.
@@ -70,10 +71,10 @@ beforeEach(async () => {
 it.each(Object.keys(fixtures))("keeps the actual marked %s client publish and retry on one atomic operation", async id => {
   const accepted = await cmsPublishSettings(null, { id, baseVersion: 1 });
   expect(accepted.publication).toMatchObject({ status: "pending", sourceVersion: 1, contextRevision: 2 });
-  const values = structuredClone(fixtures[id]);
+  const values = id === "public-homepage-banner" ? separateHomepageBannerContent(fixtures[id]) : structuredClone(fixtures[id]);
   if (id === "site-navigation") values.header[0].label = "Private navigation";
   if (id === "public-site-chrome") values.newsletterLabel = "Private header";
-  if (id === "public-homepage-banner") values.message = "Private banner";
+  if (id === "public-homepage-banner") values.standard.message = "Private banner";
   const saved = await cmsSaveSettings(null, { id, baseVersion: 2, values });
   const ref = db.doc(`cmsPublishQueue/${accepted.publication.queueId}`);
   await ref.update({ status: "failed" });

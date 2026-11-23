@@ -155,7 +155,7 @@ describe("CMS settings contract", () => {
         },
       },
       "public-homepage-banner": {
-        currentVersion: 4,
+        currentVersion: 5,
         versions: {
           1: {
             schemaVersion: 1,
@@ -281,6 +281,14 @@ describe("CMS settings contract", () => {
                 format: "canonicalUtcInstant",
               },
               excludedPaths: { kind: "canonicalPathList", maxItems: 50, maxBytes: 512 },
+            },
+          },
+          5: {
+            schemaVersion: 5,
+            fields: {
+              njDecides: { kind: "boolean", required: true },
+              standard: { kind: "homepageBannerContent", required: true, mode: "standard" },
+              election: { kind: "homepageBannerContent", required: true, mode: "election" },
             },
           },
         },
@@ -523,9 +531,7 @@ describe("CMS settings contract", () => {
   });
 
   it("enforces the public homepage banner byte and reciprocal-link limits", () => {
-    const schema = currentCmsSettingsSchemaFor(
-      PUBLIC_HOMEPAGE_BANNER_SETTINGS_ID,
-    );
+    const schema = cmsSettingsSchemaFor(PUBLIC_HOMEPAGE_BANNER_SETTINGS_ID, 4);
     expect(validateCmsSettingsValues(schema, {
       enabled: true,
       message: "x".repeat(240),
@@ -549,7 +555,7 @@ describe("CMS settings contract", () => {
 
   it("keeps banner v1 immutable and accepts the optional v2 election fields", () => {
     const schemaV1 = cmsSettingsSchemaFor(PUBLIC_HOMEPAGE_BANNER_SETTINGS_ID, 1);
-    const schemaV2 = currentCmsSettingsSchemaFor(PUBLIC_HOMEPAGE_BANNER_SETTINGS_ID);
+    const schemaV2 = cmsSettingsSchemaFor(PUBLIC_HOMEPAGE_BANNER_SETTINGS_ID, 2);
     expect(schemaV1).toEqual({
       schemaVersion: 1,
       fields: {
@@ -612,7 +618,7 @@ describe("CMS settings contract", () => {
       njDecides: "yes",
     }, /njDecides must be a boolean/i],
   ])("rejects invalid banner v2 values", (values, expected) => {
-    const schema = currentCmsSettingsSchemaFor(PUBLIC_HOMEPAGE_BANNER_SETTINGS_ID);
+    const schema = cmsSettingsSchemaFor(PUBLIC_HOMEPAGE_BANNER_SETTINGS_ID, 2);
     expect(validateCmsSettingsValues(schema, values)).toMatch(expected);
   });
 
@@ -630,7 +636,7 @@ describe("CMS settings contract", () => {
     })).toEqual(published);
   });
 
-  it("limits save upgrade and historical publication to banner v1/v2/v3-to-v4", () => {
+  it("limits save upgrade and historical publication to earlier banner schemas", () => {
     const current = currentCmsSettingsSchemaFor(PUBLIC_HOMEPAGE_BANNER_SETTINGS_ID);
     const stored = { schemaVersion: 1, values: DEFAULT_PUBLIC_HOMEPAGE_BANNER_SETTINGS };
     expect(isPublicHomepageBannerUpgrade(
@@ -641,7 +647,7 @@ describe("CMS settings contract", () => {
     expect(isPublicHomepageBannerUpgrade("other", stored, current)).toBe(false);
     expect(isPublicHomepageBannerUpgrade(
       PUBLIC_HOMEPAGE_BANNER_SETTINGS_ID,
-      { ...stored, schemaVersion: 4 },
+      { ...stored, schemaVersion: 5 },
       current,
     )).toBe(false);
     expect(settingsSchemaForPublication(
@@ -650,6 +656,16 @@ describe("CMS settings contract", () => {
       current,
       CMS_SETTINGS_SCHEMAS,
     )).toBe(cmsSettingsSchemaFor(PUBLIC_HOMEPAGE_BANNER_SETTINGS_ID, 1));
+    const standard = { enabled: true, message: "Standard announcement" };
+    const election = { enabled: true, njDecides: true, message: "Election coverage" };
+    for (const [values, published] of [[standard, election], [election, standard]]) {
+      expect(() => settingsSchemaForPublication(
+        PUBLIC_HOMEPAGE_BANNER_SETTINGS_ID,
+        { schemaVersion: 4, values, published: { values: published } },
+        current,
+        CMS_SETTINGS_SCHEMAS,
+      )).toThrow(/Save the homepage banner draft before publishing/);
+    }
     expect(() => settingsSchemaForPublication(
       "other",
       stored,
@@ -658,7 +674,7 @@ describe("CMS settings contract", () => {
     )).toThrow(/migration/i);
   });
 
-  it.each([1, 2, 3])("upgrades a saved banner v%s draft to v4 and preserves its v1 snapshot", async (schemaVersion) => {
+  it.each([1, 2, 3, 4])("upgrades a saved banner v%s draft to v5 and preserves its v1 snapshot", async (schemaVersion) => {
     const published = {
       schemaVersion: 1,
       values: DEFAULT_PUBLIC_HOMEPAGE_BANNER_SETTINGS,
@@ -715,9 +731,9 @@ describe("CMS settings contract", () => {
       id: PUBLIC_HOMEPAGE_BANNER_SETTINGS_ID,
       baseVersion: 5,
       values: {
-        ...DEFAULT_PUBLIC_HOMEPAGE_BANNER_SETTINGS,
         njDecides: true,
-        liveLabel: "Live",
+        standard: DEFAULT_PUBLIC_HOMEPAGE_BANNER_SETTINGS,
+        election: { enabled: true, message: "", liveLabel: "Live" },
       },
     };
     const req = {
@@ -738,7 +754,7 @@ describe("CMS settings contract", () => {
 
     expect(res.statusCode).toBe(200);
     expect(res.body.settings).toEqual({
-      schemaVersion: 4,
+      schemaVersion: 5,
       values: body.values,
       version: 6,
       published,

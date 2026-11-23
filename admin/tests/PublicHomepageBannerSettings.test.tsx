@@ -14,11 +14,14 @@ import type {
 import {
   DEFAULT_PUBLIC_HOMEPAGE_BANNER_SETTINGS,
   DEFAULT_NJ_DECIDES_SETTINGS,
+  activeHomepageBannerContent,
+  projectPublishedCmsSettings,
+  type LegacyHomepageBannerSettingsValues,
 } from "../../packages/content-core/src/cms-settings";
 
 function values(
-  overrides: Partial<PublicHomepageBannerValues> = {},
-): PublicHomepageBannerValues {
+  overrides: Partial<LegacyHomepageBannerSettingsValues> = {},
+): LegacyHomepageBannerSettingsValues {
   return {
     enabled: true,
     message: "Weather may affect tonight's schedule.",
@@ -36,7 +39,7 @@ function documentResponse(
     sourceVersion: number;
     publishedAt: string;
   },
-  schemaVersion = 2,
+  schemaVersion = "standard" in bannerValues ? 5 : 2,
 ): GetSettingsResponse<PublicHomepageBannerValues> {
   return {
     success: true,
@@ -61,7 +64,7 @@ function mutationResponse(
     sourceVersion: number;
     publishedAt: string;
   },
-  schemaVersion = 2,
+  schemaVersion = "standard" in bannerValues ? 5 : 2,
 ): MutateSettingsResponse<PublicHomepageBannerValues> {
   const loaded = documentResponse(bannerValues, version, published, schemaVersion);
   if (!loaded.found) throw new Error("Expected a settings document");
@@ -115,7 +118,7 @@ describe("Public homepage banner settings", () => {
   });
   it("selects published destinations and saves exclusions with the banner", async () => {
     const save = vi.fn<PublicHomepageBannerSettingsTransport["save"]>(async request =>
-      mutationResponse(request.values as PublicHomepageBannerValues, 5, undefined, 3));
+      mutationResponse(request.values as PublicHomepageBannerValues, 5));
     render(<PublicHomepageBannerSettings {...transport({
       load: async () => documentResponse(values({ njDecides: true }), 4, undefined, 3),
       save,
@@ -155,7 +158,7 @@ describe("Public homepage banner settings", () => {
     expect(screen.getByRole("button", { name: "Show the NJ Decides band on /voting-guide/" })).toHaveFocus();
     fireEvent.click(screen.getByRole("button", { name: "Save draft" }));
     await waitFor(() => expect(save).toHaveBeenCalledWith(expect.objectContaining({
-      values: expect.objectContaining({ excludedPaths: ["/voting-guide/", "/posts/election-story/"] }),
+      values: expect.objectContaining({ election: expect.objectContaining({ excludedPaths: ["/voting-guide/", "/posts/election-story/"] }) }),
     })));
     await waitFor(() => expect(screen.getByRole("button", { name: "Save draft" })).toBeDisabled());
     fireEvent.click(screen.getByRole("button", { name: "Show the NJ Decides band on /voting-guide/" }));
@@ -263,11 +266,9 @@ describe("Public homepage banner settings", () => {
         id: PUBLIC_HOMEPAGE_BANNER_SETTINGS_ID,
         createOnly: true,
         values: {
-          enabled: true,
-          message: DEFAULT_PUBLIC_HOMEPAGE_BANNER_SETTINGS.message,
-          linkLabel: DEFAULT_PUBLIC_HOMEPAGE_BANNER_SETTINGS.linkLabel,
-          linkHref: DEFAULT_PUBLIC_HOMEPAGE_BANNER_SETTINGS.linkHref,
           njDecides: false,
+          standard: { ...DEFAULT_PUBLIC_HOMEPAGE_BANNER_SETTINGS, enabled: true },
+          election: { enabled: false, message: "" },
         },
       }),
     );
@@ -331,12 +332,10 @@ describe("Public homepage banner settings", () => {
       id: PUBLIC_HOMEPAGE_BANNER_SETTINGS_ID,
       baseVersion: 4,
       values: {
-        enabled: true,
-        message: "",
         njDecides: true,
-        liveLabel: "Results live",
-        startsAt: "2026-11-03T23:00:00.000Z",
-        endsAt: "2026-11-04T06:00:00.000Z",
+        standard: { enabled: false, message: "" },
+        election: { enabled: true, message: "", liveLabel: "Results live",
+          startsAt: "2026-11-03T23:00:00.000Z", endsAt: "2026-11-04T06:00:00.000Z" },
       },
     }));
   });
@@ -373,12 +372,10 @@ describe("Public homepage banner settings", () => {
       id: PUBLIC_HOMEPAGE_BANNER_SETTINGS_ID,
       baseVersion: 4,
       values: {
-        enabled: true,
-        message: "",
         njDecides: true,
-        liveLabel: "Live",
-        startsAt: "2026-11-01T06:30:00.000Z",
-        endsAt: "2026-11-01T08:45:30.000Z",
+        standard: { enabled: false, message: "" },
+        election: { enabled: true, message: "", liveLabel: "Live",
+          startsAt: "2026-11-01T06:30:00.000Z", endsAt: "2026-11-01T08:45:30.000Z" },
       },
     }));
   });
@@ -571,19 +568,69 @@ describe("Public homepage banner settings", () => {
     );
     expect(screen.getByRole("button", { name: "Reload saved banner" })).toBeVisible();
   });
-  it("warns for an unchanged standard link and keeps that reference after saving election copy", async () => {
+  it("keeps a published standard banner while migrating an election draft, then publishes either saved mode", async () => {
     const standard = values();
-    const saved = values({ njDecides: true, message: "Election information" });
-    render(<PublicHomepageBannerSettings {...transport({
-      load: async () => documentResponse(saved, 4, { values: standard, sourceVersion: 3, publishedAt: "2026-10-28T12:00:00.000Z" }),
-    })} />);
-    expect(await screen.findByText(/This is still the standard banner text/)).toBeVisible();
-    fireEvent.click(screen.getByRole("button", { name: "Use suggested election text" }));
-    expect(screen.queryByText(/This is still the standard banner text/)).toBeNull();
+    const election = values({ njDecides: true, message: "Election information", linkLabel: "Results", linkHref: "/results/" });
+    const publishedAt = "2026-10-28T12:00:00.000Z";
+    let stored = documentResponse(election, 4, { values: standard, sourceVersion: 3, publishedAt });
+    const props = transport({
+      load: async () => stored,
+      save: async request => {
+        if (!stored.found) throw new Error("Missing fixture");
+        const result = mutationResponse(request.values as PublicHomepageBannerValues, stored.settings.version + 1);
+        result.settings.published = stored.settings.published;
+        stored = { success: true, found: true, id: result.id, settings: result.settings };
+        return result;
+      },
+      publish: async request => {
+        if (!stored.found) throw new Error("Missing fixture");
+        const result = mutationResponse(stored.settings.values, request.baseVersion + 1, {
+          values: stored.settings.values, sourceVersion: request.baseVersion, publishedAt,
+        });
+        stored = { success: true, found: true, id: result.id, settings: result.settings };
+        return result;
+      },
+    });
+    const { unmount } = render(<PublicHomepageBannerSettings {...props} />);
+    const mode = await screen.findByRole("checkbox", { name: "Use NJ Decides sitewide mode" });
+    expect(screen.getByRole("button", { name: "Publish" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Save draft" })).toBeEnabled();
+    fireEvent.click(mode);
+    expect(screen.getByRole("textbox", { name: "Message" })).toHaveValue(standard.message);
+    fireEvent.click(mode);
+    expect(screen.getByRole("textbox", { name: "Message" })).toHaveValue(election.message);
+    fireEvent.change(screen.getByRole("textbox", { name: "Message" }), { target: { value: "Election night coverage" } });
     fireEvent.click(screen.getByRole("button", { name: "Save draft" }));
     await screen.findByText("Saved draft version 5");
-    fireEvent.change(screen.getByRole("textbox", { name: "Message" }), { target: { value: standard.message } });
-    expect(screen.getByText(/This is still the standard banner text/)).toBeVisible();
+    const currentPublicBanner = () => {
+      if (!stored.found) throw new Error("Missing fixture");
+      const published = projectPublishedCmsSettings({ documentId: stored.id, document: stored.settings });
+      if (!published) throw new Error("Missing publication");
+      return activeHomepageBannerContent(published.values as unknown as PublicHomepageBannerValues);
+    };
+    expect(currentPublicBanner().message).toBe(standard.message);
+    fireEvent.click(screen.getByRole("button", { name: "Publish" }));
+    await screen.findByText("Saved draft version 6");
+    const publishedElection = currentPublicBanner();
+    expect(publishedElection).toMatchObject({ njDecides: true, message: "Election night coverage" });
+    const electionPreview = within(screen.getByLabelText("Proposed NJ Decides sitewide banner preview"));
+    expect(electionPreview.getByText(publishedElection.message)).toBeVisible();
+    expect(electionPreview.getByRole("link", { name: "Results" })).toHaveAttribute("href", publishedElection.linkHref);
+
+    unmount();
+    render(<PublicHomepageBannerSettings {...props} />);
+    fireEvent.click(await screen.findByRole("checkbox", { name: "Use NJ Decides sitewide mode" }));
+    expect(screen.getByRole("checkbox", { name: "Show banner on the homepage" })).toBeChecked();
+    expect(screen.getByRole("textbox", { name: "Message" })).toHaveValue(standard.message);
+    fireEvent.click(screen.getByRole("button", { name: "Save draft" }));
+    await screen.findByText("Saved draft version 7");
+    fireEvent.click(screen.getByRole("button", { name: "Publish" }));
+    await screen.findByText("Saved draft version 8");
+    const publishedStandard = currentPublicBanner();
+    expect(publishedStandard).toMatchObject({ njDecides: false, message: standard.message, linkHref: standard.linkHref });
+    const standardPreview = within(screen.getByLabelText("Proposed homepage banner preview"));
+    expect(standardPreview.getByText(publishedStandard.message, { exact: false })).toBeVisible();
+    expect(standardPreview.getByRole("link", { name: "Check link: View schedule (opens in new tab)" })).toHaveAttribute("href", `https://njpbs.org${publishedStandard.linkHref}`);
   });
 
   it("does not invent standard text history when only an election publication is available", async () => {
@@ -591,8 +638,9 @@ describe("Public homepage banner settings", () => {
     render(<PublicHomepageBannerSettings {...transport({
       load: async () => documentResponse(election, 5, { values: election, sourceVersion: 4, publishedAt: "2026-10-28T12:00:00.000Z" }),
     })} />);
-    await screen.findByRole("textbox", { name: "Message" });
-    expect(screen.queryByText(/This is still the standard banner text/)).toBeNull();
+    fireEvent.click(await screen.findByRole("checkbox", { name: "Use NJ Decides sitewide mode" }));
+    expect(screen.getByRole("textbox", { name: "Message" })).toHaveValue("");
+    expect(screen.getByRole("checkbox", { name: "Show banner on the homepage" })).not.toBeChecked();
   });
 
   it("summarizes configured schedule values and exposes schedule errors automatically", async () => {
@@ -625,7 +673,6 @@ describe("two-link banner editing", () => {
   const twoLinks = () => values({ njDecides: true, secondLinkLabel: "Watch live", secondLinkHref: "/live/" });
   const newTransport = (initial = twoLinks()) => transport({
     load: async () => documentResponse(initial, 4, undefined, 4),
-    save: vi.fn(async request => mutationResponse(request.values as PublicHomepageBannerValues, 5, undefined, 4)),
   });
   it("loads both links, previews them and preserves the second on a message edit", async () => {
     const props = newTransport();
@@ -636,20 +683,21 @@ describe("two-link banner editing", () => {
     expect(within(preview).getAllByRole("link").map(link => [link.textContent, link.getAttribute("href")])).toEqual([["View schedule", "/schedule/"], ["Watch live", "/live/"]]);
     fireEvent.change(screen.getByLabelText("Message"), { target: { value: "Election night coverage" } });
     fireEvent.click(screen.getByRole("button", { name: "Save draft" }));
-    await waitFor(() => expect(props.save).toHaveBeenCalledWith(expect.objectContaining({ values: expect.objectContaining({ secondLinkLabel: "Watch live", secondLinkHref: "/live/", message: "Election night coverage" }) })));
+    await screen.findByText("Saved draft version 5");
+    expect(vi.mocked(props.save).mock.calls[0][0].values).toMatchObject({ election: { secondLinkLabel: "Watch live", secondLinkHref: "/live/", message: "Election night coverage" } });
   });
   it("adds a second pair to a legacy one-link record and trims both values", async () => {
-    const props = transport({ load: async () => documentResponse(values({ njDecides: true })),
-      save: vi.fn(async request => mutationResponse(request.values as PublicHomepageBannerValues, 5, undefined, 4)) });
+    const props = transport({ load: async () => documentResponse(values({ njDecides: true })) });
     render(<PublicHomepageBannerSettings {...props} />);
     fireEvent.change(await screen.findByLabelText("Second link label"), { target: { value: " Watch live " } });
     expect(screen.getByRole("button", { name: "Save draft" })).toBeDisabled();
     expect(screen.getByText("Enter both second link fields or leave both blank.")).toBeVisible();
     fireEvent.change(screen.getByLabelText("Second link URL"), { target: { value: " /live/ " } });
     fireEvent.click(screen.getByRole("button", { name: "Save draft" }));
-    await waitFor(() => expect(props.save).toHaveBeenCalledWith(expect.objectContaining({ values: expect.objectContaining({ secondLinkLabel: "Watch live", secondLinkHref: "/live/" }) })));
+    await screen.findByText("Saved draft version 5");
+    expect(vi.mocked(props.save).mock.calls[0][0].values).toMatchObject({ election: { secondLinkLabel: "Watch live", secondLinkHref: "/live/" } });
   });
-  it("blocks a second link without the first and uses explicit empty fields for removal", async () => {
+  it("blocks a second link without the first and saves a cleared pair", async () => {
     const props = newTransport();
     render(<PublicHomepageBannerSettings {...props} />);
     fireEvent.change(await screen.findByLabelText("Link label"), { target: { value: "" } });
@@ -662,7 +710,11 @@ describe("two-link banner editing", () => {
     expect(screen.getByRole("button", { name: "Save draft" })).toBeDisabled();
     fireEvent.change(screen.getByLabelText("Second link URL"), { target: { value: "" } });
     fireEvent.click(screen.getByRole("button", { name: "Save draft" }));
-    await waitFor(() => expect(props.save).toHaveBeenCalledWith(expect.objectContaining({ values: expect.objectContaining({ secondLinkLabel: "", secondLinkHref: "", linkLabel: "Results" }) })));
+    await screen.findByText("Saved draft version 5");
+    const sent = vi.mocked(props.save).mock.calls[0][0].values;
+    expect(sent).toMatchObject({ election: { linkLabel: "Results", linkHref: "/results/" } });
+    expect(sent).not.toHaveProperty("election.secondLinkLabel");
+    expect(sent).not.toHaveProperty("election.secondLinkHref");
   });
   it.each([
     ["Second link URL", "javascript:alert(1)", "Enter a safe second link URL."],
@@ -679,17 +731,19 @@ describe("two-link banner editing", () => {
 });
 
 describe("two-link standard banner safeguards", () => {
-  it("keeps the warning for a standard second link after applying suggested election copy", async () => {
+  it("preserves the standard second link when applying suggested election copy", async () => {
     const standard = values({ njDecides: false, secondLinkLabel: "Old announcement", secondLinkHref: "/about/" });
     render(<PublicHomepageBannerSettings {...transport({ load: async () => documentResponse(standard, 5,
       { values: standard, sourceVersion: 4, publishedAt: "2026-11-03T19:00:00.000Z" }, 4) })} />);
-    fireEvent.click(await screen.findByRole("checkbox", { name: "Use NJ Decides sitewide mode" }));
+    const mode = await screen.findByRole("checkbox", { name: "Use NJ Decides sitewide mode" });
+    fireEvent.click(mode);
     fireEvent.click(screen.getByRole("button", { name: "Use suggested election text" }));
-    expect(screen.getByText(/Review Message and both links/)).toBeVisible();
+    expect(screen.getByLabelText("Second link label")).toHaveValue("");
+    fireEvent.click(mode);
     expect(screen.getByLabelText("Second link label")).toHaveValue("Old announcement");
-    fireEvent.change(screen.getByLabelText("Second link label"), { target: { value: "Watch live" } });
-    fireEvent.change(screen.getByLabelText("Second link URL"), { target: { value: "/live/" } });
-    expect(screen.queryByText(/Review Message and both links/)).not.toBeInTheDocument();
+    expect(screen.getByLabelText("Second link URL")).toHaveValue("/about/");
+    fireEvent.click(mode);
+    expect(screen.getByLabelText("Link label")).toHaveValue("NJ Decides 2026");
   });
   it("opens the second link check next to the draft", async () => {
     render(<PublicHomepageBannerSettings {...transport({ load: async () => documentResponse(values({

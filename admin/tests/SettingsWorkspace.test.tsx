@@ -8,12 +8,15 @@ import { NjDecidesSettings, type NjDecidesSettingsTransport } from "../src/compo
 import { DEFAULT_NJ_DECIDES_SETTINGS, DEFAULT_PUBLIC_SITE_CHROME_SETTINGS } from "../../packages/content-core/src/cms-settings";
 import type { MutateSettingsResponse } from "../src/lib/functions";
 
-const standard: PublicHomepageBannerValues = { enabled: true, message: "Support public television.", linkLabel: "Make a gift", linkHref: "/support/", njDecides: false };
-function bannerDocument(values = standard) {
-  return { success: true as const, found: true as const, id: "public-homepage-banner", settings: { schemaVersion: 2, version: 4, values,
-    published: { schemaVersion: 2, sourceVersion: 3, publishedAt: "2026-10-28T12:00:00.000Z", values: standard } } };
+const standard = { enabled: true, message: "Support public television.", linkLabel: "Make a gift", linkHref: "/support/" };
+const banner = { njDecides: false, standard, election: { enabled: true, message: "Election coverage" } };
+function bannerDocument(values = banner) {
+  return { success: true as const, found: true as const, id: "public-homepage-banner", settings: { schemaVersion: 5, version: 4, values,
+    published: { schemaVersion: 5, sourceVersion: 3, publishedAt: "2026-10-28T12:00:00.000Z", values } } };
 }
-function setup({ save = vi.fn(async request => ({ success: true as const, changed: true, id: request.id, settings: { schemaVersion: 2, version: 5, values: request.values } })), initial = "/admin/settings", values = standard, brandProps = {} as Partial<NjDecidesSettingsTransport> } = {}) {
+function setup({ save = vi.fn(async request => ({ success: true as const, changed: true, id: request.id,
+  settings: { schemaVersion: request.id === "public-homepage-banner" ? 5 : 1, version: 5, values: request.values } })),
+  initial = "/admin/settings", values = banner, brandProps = {} as Partial<NjDecidesSettingsTransport> } = {}) {
   const loadBanner = vi.fn(async () => bannerDocument(values));
   const loadBrand = vi.fn(async () => ({ success: true as const, found: true as const, id: "nj-decides-brand", settings: { schemaVersion: 1, version: 6, values: DEFAULT_NJ_DECIDES_SETTINGS } }));
   const loadChrome = vi.fn(async () => ({ success: true as const, found: true as const, id: "public-site-chrome", settings: { schemaVersion: 1, version: 2, values: DEFAULT_PUBLIC_SITE_CHROME_SETTINGS } }));
@@ -34,7 +37,7 @@ function choose(name: string | RegExp) { fireEvent.click(within(screen.getByRole
 
 describe("Settings workspace state release gate", () => {
   it("shares the preview width across sections without saving or marking a draft dirty", async () => {
-    const api = setup({ values: { ...standard, njDecides: true } });
+    const api = setup({ values: { ...banner, njDecides: true } });
     const desktop = await screen.findByRole("button", { name: "Desktop preview" });
     expect(desktop).toHaveAttribute("aria-pressed", "true");
     fireEvent.click(screen.getByRole("button", { name: "Mobile preview" }));
@@ -83,7 +86,9 @@ describe("Settings workspace state release gate", () => {
     fireEvent.click(screen.getByRole("button", { name: "Save draft" }));
     choose("Header newsletter");
     await screen.findByRole("heading", { name: "Public header newsletter action" });
-    await act(async () => { complete({ success: true, changed: true, id: "public-homepage-banner", settings: { schemaVersion: 2, version: 5, values: { ...standard, message: "Pending draft" } } }); });
+    await act(async () => { complete({ success: true, changed: true, id: "public-homepage-banner", settings: {
+      schemaVersion: 5, version: 5, values: { ...banner, standard: { ...standard, message: "Pending draft" } },
+    } }); });
     choose(/Homepage banner/);
     expect(screen.getByRole("textbox", { name: "Message" })).toHaveValue("Pending draft");
     expect(screen.getByText("Saved draft version 5")).toBeVisible();
@@ -161,19 +166,24 @@ describe("Settings workspace state release gate", () => {
     expect(screen.getByRole("textbox", { name: "Message" })).toHaveValue("Do not discard");
   });
 
-  it("explains mode fields and fills only the suggested local draft", async () => {
-    const api = setup({ values: { ...standard, njDecides: true } });
+  it("fills the suggested election text locally and keeps the standard draft through a section switch", async () => {
+    const api = setup({ values: { ...banner, njDecides: true } });
     await screen.findByRole("textbox", { name: "Message" });
-    expect(screen.getByText(/The band shows the NJ Decides logo/)).toBeVisible();
-    expect(screen.getByText(/This is still the standard banner text/)).toBeVisible();
     fireEvent.click(screen.getByRole("button", { name: "Use suggested election text" }));
     expect(screen.getByRole("textbox", { name: "Message" })).toHaveValue("Find voting information for New Jersey.");
     expect(screen.getByRole("textbox", { name: "Link label" })).toHaveValue("NJ Decides 2026");
     expect(screen.getByRole("textbox", { name: "Link URL" })).toHaveValue("/nj-decides-2026/");
-    expect(screen.queryByText(/This is still the standard banner text/)).not.toBeInTheDocument();
-    expect(api.save).not.toHaveBeenCalled(); expect(api.publish).not.toHaveBeenCalled();
     choose("NJ Decides brand");
     expect(await screen.findByText("Sample text")).toBeVisible();
+    choose(/Homepage banner/);
+    const mode = screen.getByRole("checkbox", { name: "Use NJ Decides sitewide mode" });
+    fireEvent.click(mode);
+    expect(screen.getByRole("textbox", { name: "Message" })).toHaveValue(standard.message);
+    expect(screen.getByRole("textbox", { name: "Link URL" })).toHaveValue(standard.linkHref);
+    fireEvent.click(mode);
+    expect(screen.getByRole("textbox", { name: "Message" })).toHaveValue("Find voting information for New Jersey.");
+    expect(api.save).not.toHaveBeenCalled();
+    expect(api.publish).not.toHaveBeenCalled();
   });
   it.each([true, false])("holds route departure for a pending save, then handles success=%s", async success => {
     let finish!: (value: MutateSettingsResponse<PublicHomepageBannerValues>) => void;
@@ -186,7 +196,9 @@ describe("Settings workspace state release gate", () => {
     expect(await screen.findByText(/Finishing the settings action/)).toBeVisible();
     expect(screen.queryByRole("dialog")).toBeNull();
     await act(async () => {
-      if (success) finish({ success: true, changed: true, id: "public-homepage-banner", settings: { schemaVersion: 2, version: 5, values: { ...standard, message: "Finish before leaving" } } });
+      if (success) finish({ success: true, changed: true, id: "public-homepage-banner", settings: {
+        schemaVersion: 5, version: 5, values: { ...banner, standard: { ...standard, message: "Finish before leaving" } },
+      } });
       else fail(new Error("Network unavailable"));
     });
     if (success) expect(await screen.findByText("Costs destination")).toBeVisible();

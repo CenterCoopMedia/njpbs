@@ -15,7 +15,7 @@ import { cmsRecordCardsLoader } from "./lib/cms-record-cards-loader";
 import type { RecordCardPayload } from "./lib/record-card-resolution";
 import { cmsEventsLoader } from "./lib/cms-events-loader";
 import { cmsAuthorsLoader } from "./lib/cms-authors-loader";
-import { publicHomepageBannerLoader } from "./lib/public-homepage-banner";
+import { publicHomepageBannerLoader, publicHomepageBannerEntry } from "./lib/public-homepage-banner";
 import { siteNavigationLoader } from "./lib/site-navigation";
 import { publicSiteChromeLoader } from "./lib/public-site-chrome";
 import { isCoverageLabelsBuildData, type CoverageLabelsBuildData } from "../../packages/content-core/src/coverage-labels.ts";
@@ -321,31 +321,7 @@ const cmsAuthorsPublic = defineCollection({
 // cutoff bundle. The loader does not read mutable Firestore or draft values.
 const cmsPublicSettings = defineCollection({
   loader: cmsPreviewExportLoader("cmsPublicSettings") ?? publicHomepageBannerLoader(previewContent),
-  schema: z.object({
-    settingId: z.literal("public-homepage-banner"),
-    enabled: z.boolean(),
-    message: z.string(),
-    link: z.object({
-      label: z.string().min(1),
-      href: z.string().min(1),
-    }).optional(),
-    secondLink: z.object({ label: z.string().min(1), href: z.string().min(1) }).optional(),
-    njDecides: z.boolean().optional(),
-    liveLabel: z.string().optional(),
-    startsAt: z.iso.datetime().optional(),
-    endsAt: z.iso.datetime().optional(),
-    excludedPaths: z.array(z.string()).max(50).optional(),
-    sourceVersion: z.number().int().positive(),
-    publishedAt: z.iso.datetime(),
-  }).superRefine((value, context) => {
-    if (value.njDecides !== true && value.message.trim() === "") {
-      context.addIssue({
-        code: "custom",
-        message: "A standard homepage banner requires a message.",
-        path: ["message"],
-      });
-    }
-  }),
+  schema: publicHomepageBannerEntry,
 });
 
 // Published site navigation, present only when the cutoff bundle carries a

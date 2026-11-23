@@ -1,4 +1,5 @@
 import type { Loader } from "astro/loaders";
+import { z } from "astro/zod";
 import { createCmsPreviewContentSource, type CmsPreviewContentSource } from "./cms-preview-content.ts";
 import { PUBLIC_HOMEPAGE_BANNER_SETTINGS_ID, type PublicHomepageBannerBuildData } from "./public-homepage-banner-data.ts";
 export * from "./public-homepage-banner-data.ts";
@@ -6,6 +7,26 @@ import {
   readPublicArtifactBundle,
   resolvePublicArtifactBundlePath,
 } from "./public-artifact-bundle.ts";
+
+const bannerLink = z.object({ label: z.string().min(1), href: z.string().min(1) });
+
+export const publicHomepageBannerEntry = z.object({
+  settingId: z.literal(PUBLIC_HOMEPAGE_BANNER_SETTINGS_ID),
+  enabled: z.boolean(),
+  message: z.string(),
+  link: bannerLink.optional(),
+  secondLink: bannerLink.optional(),
+  njDecides: z.boolean().optional(),
+  liveLabel: z.string().optional(),
+  startsAt: z.iso.datetime().optional(),
+  endsAt: z.iso.datetime().optional(),
+  excludedPaths: z.array(z.string()).max(50).optional(),
+  sourceVersion: z.number().int().positive(),
+  publishedAt: z.iso.datetime(),
+}).refine(value => !value.enabled || value.njDecides === true || value.message.trim() !== "", {
+  message: "An enabled standard homepage banner requires a message.",
+  path: ["message"],
+});
 
 /** Read only the immutable, cutoff-bound public bundle. */
 export function publicHomepageBannerLoader(previewContent: CmsPreviewContentSource | null = createCmsPreviewContentSource()): Loader {

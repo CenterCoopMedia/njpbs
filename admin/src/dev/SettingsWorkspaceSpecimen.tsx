@@ -91,7 +91,11 @@ const storyCtas: StoryCtasSettingsValues = { rules: [
 
 export function SettingsWorkspaceSpecimen() {
   const api = useMemo(() => ({
-    banner: transport<PublicHomepageBannerValues>("public-homepage-banner", { ...DEFAULT_PUBLIC_HOMEPAGE_BANNER_SETTINGS, enabled: true, njDecides: true, message: "Find voting information for New Jersey.", linkLabel: "NJ Decides 2026", linkHref: "/nj-decides-2026/" }, 2, new URLSearchParams(location.search).has("pending-save") ? 1_000 : 0),
+    banner: transport<PublicHomepageBannerValues>("public-homepage-banner", {
+      njDecides: true,
+      standard: DEFAULT_PUBLIC_HOMEPAGE_BANNER_SETTINGS,
+      election: { enabled: true, message: "Find voting information for New Jersey.", linkLabel: "NJ Decides 2026", linkHref: "/nj-decides-2026/" },
+    }, 5, new URLSearchParams(location.search).has("pending-save") ? 1_000 : 0),
     brand: transport<NjDecidesValues>("nj-decides-brand", DEFAULT_NJ_DECIDES_SETTINGS),
     coverage: transport("coverage-labels", DEFAULT_COVERAGE_LABELS),
     storyCtas: transport("story-ctas", storyCtas, 2),

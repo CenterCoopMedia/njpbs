@@ -1,7 +1,10 @@
 import {
   PUBLIC_HOMEPAGE_BANNER_SETTINGS_ID,
+  activeHomepageBannerContent,
   projectPublishedCmsSettings,
   type CmsSettingsPublishedSnapshot,
+  type LegacyHomepageBannerSettingsValues,
+  type PublicHomepageBannerSettingsValues,
 } from "../../../packages/content-core/src/cms-settings.ts";
 
 export { PUBLIC_HOMEPAGE_BANNER_SETTINGS_ID };
@@ -59,19 +62,8 @@ export function projectPublicHomepageBannerArtifact(
     );
   }
   if (!snapshot) return null;
-  const values = snapshot.values as {
-    enabled: boolean;
-    message: string;
-    linkLabel?: string;
-    linkHref?: string;
-    secondLinkLabel?: string;
-    secondLinkHref?: string;
-    njDecides?: boolean;
-    liveLabel?: string;
-    startsAt?: string;
-    endsAt?: string;
-    excludedPaths?: readonly string[];
-  };
+  const values = activeHomepageBannerContent(snapshot.values as unknown as PublicHomepageBannerSettingsValues | LegacyHomepageBannerSettingsValues);
+  const { njDecides } = values;
   const hasLink =
     typeof values.linkLabel === "string" &&
     values.linkLabel.trim() !== "" &&
@@ -88,8 +80,8 @@ export function projectPublicHomepageBannerArtifact(
       ...(hasLink && values.secondLinkLabel?.trim() && values.secondLinkHref?.trim()
         ? { secondLink: { label: values.secondLinkLabel, href: values.secondLinkHref } }
         : {}),
-      ...(typeof values.njDecides === "boolean"
-        ? { njDecides: values.njDecides }
+      ...(typeof njDecides === "boolean"
+        ? { njDecides }
         : {}),
       ...(typeof values.liveLabel === "string"
         ? { liveLabel: values.liveLabel }

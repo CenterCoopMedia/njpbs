@@ -2133,7 +2133,7 @@ function publicBannerTransport(
       },
     }),
     save: async (request) => {
-      schemaVersion = 4;
+      schemaVersion = 5;
       stored = request.values as PublicHomepageBannerValues;
       version += 1;
       return {
@@ -4347,7 +4347,7 @@ export const SHOTS: Shot[] = [
   {
     id: "admin-settings-public-banner-shell",
     title: "Admin settings — NJ Decides banner in the admin shell",
-    note: "The production public banner panel in the real Admin settings shell. The synthetic schema-v2 transport keeps save and publish local to this fixture.",
+    note: "The production public banner panel in the real Admin settings shell. The synthetic transport keeps save and publish local to this fixture.",
     render: () => (
       <ShellSpecimen
         adminSettingsPanel={

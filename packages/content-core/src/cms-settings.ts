@@ -83,18 +83,38 @@ export const DEFAULT_NJ_DECIDES_SETTINGS = Object.freeze({
   flagEnabled: true,
 }) satisfies Readonly<NjDecidesSettingsValues>;
 
-export interface PublicHomepageBannerSettingsValues {
+export interface StandardHomepageBannerContent {
   readonly enabled: boolean;
   readonly message: string;
   readonly linkLabel?: string;
   readonly linkHref?: string;
   readonly secondLinkLabel?: string;
   readonly secondLinkHref?: string;
-  readonly njDecides?: boolean;
+}
+
+export interface ElectionHomepageBannerContent extends StandardHomepageBannerContent {
   readonly liveLabel?: string;
   readonly startsAt?: string;
   readonly endsAt?: string;
   readonly excludedPaths?: readonly string[];
+}
+
+export interface LegacyHomepageBannerSettingsValues extends ElectionHomepageBannerContent {
+  readonly njDecides?: boolean;
+}
+
+export interface PublicHomepageBannerSettingsValues {
+  readonly njDecides: boolean;
+  readonly standard: StandardHomepageBannerContent;
+  readonly election: ElectionHomepageBannerContent;
+}
+
+export function activeHomepageBannerContent(
+  values: PublicHomepageBannerSettingsValues | LegacyHomepageBannerSettingsValues,
+): LegacyHomepageBannerSettingsValues {
+  if (!("standard" in values)) return values;
+  const { njDecides, standard, election } = values;
+  return { ...(njDecides ? election : standard), njDecides };
 }
 
 // Admin uses this only when it seeds the settings document. The public build
@@ -105,7 +125,53 @@ export const DEFAULT_PUBLIC_HOMEPAGE_BANNER_SETTINGS = Object.freeze({
   linkLabel: "Read the announcement",
   linkHref:
     "https://inside.montclair.edu/news/montclair-state-university-acquire-nj-spotlight-commits-continuing-its-watchdog-journalism-through",
-}) satisfies Readonly<PublicHomepageBannerSettingsValues>;
+}) satisfies Readonly<LegacyHomepageBannerSettingsValues>;
+
+const EMPTY_HOMEPAGE_BANNER = Object.freeze({ enabled: false, message: "" });
+
+export function legacyBannerNeedsSave(
+  values: LegacyHomepageBannerSettingsValues | PublicHomepageBannerSettingsValues,
+  published?: LegacyHomepageBannerSettingsValues | PublicHomepageBannerSettingsValues,
+): boolean {
+  return published !== undefined && !("standard" in values) &&
+    ("standard" in published || (values.njDecides === true) !== (published.njDecides === true));
+}
+
+function splitElectionDetails({ liveLabel, startsAt, endsAt, excludedPaths, ...content }: ElectionHomepageBannerContent) {
+  return {
+    content,
+    details: {
+      ...(liveLabel != null ? { liveLabel } : {}),
+      ...(startsAt != null ? { startsAt } : {}),
+      ...(endsAt != null ? { endsAt } : {}),
+      ...(excludedPaths != null ? { excludedPaths } : {}),
+    },
+  };
+}
+
+// Only the current draft and detached publication carry legacy content. Import
+// each into its own mode and leave any mode without a saved message off.
+export function separateHomepageBannerContent(
+  values: LegacyHomepageBannerSettingsValues | PublicHomepageBannerSettingsValues,
+  published?: LegacyHomepageBannerSettingsValues | PublicHomepageBannerSettingsValues,
+): PublicHomepageBannerSettingsValues {
+  if ("standard" in values) return values;
+  const { njDecides, ...legacyContent } = values;
+  const { content, details } = splitElectionDetails(legacyContent);
+  const prior = published ? separateHomepageBannerContent(published) : undefined;
+  if (njDecides) {
+    return { njDecides: true, standard: prior?.standard ?? EMPTY_HOMEPAGE_BANNER, election: { ...content, ...details } };
+  }
+  // The shared copy came from the active mode, but the election-only fields
+  // were editable in either mode. The draft owns those fields, including clears.
+  const electionContent = prior && (prior.njDecides || (published && "standard" in published))
+    ? splitElectionDetails(prior.election).content : EMPTY_HOMEPAGE_BANNER;
+  return {
+    njDecides: false,
+    standard: content,
+    election: { ...electionContent, ...details },
+  };
+}
 
 export interface PublicSiteChromeSettingsValues {
   readonly newsletterEnabled: boolean;
@@ -266,6 +332,7 @@ export type CmsSettingsField =
       readonly unique?: boolean;
     }
   | { readonly kind: "canonicalPathList"; readonly required?: boolean; readonly maxItems: number; readonly maxBytes: number }
+  | { readonly kind: "homepageBannerContent"; readonly required: true; readonly mode: "standard" | "election" }
   | { readonly kind: "assetId"; readonly required?: boolean }
   | { readonly kind: "assetIdList"; readonly required?: boolean; readonly maxItems: number }
   | {
@@ -290,7 +357,7 @@ export type CmsSettingsField =
 export interface CmsSettingsSchema {
   readonly schemaVersion: number;
   readonly fields: Readonly<Record<string, CmsSettingsField>>;
-  readonly valueContract?: "njDecidesBrandV1" | "publicHomepageBannerV2" | "publicHomepageBannerV4";
+  readonly valueContract?: "njDecidesBrandV1" | "publicHomepageBannerV2" | "publicHomepageBannerV4" | "publicHomepageBannerContentV5";
 }
 
 export interface CmsSettingsSchemaHistory {
@@ -406,7 +473,7 @@ export const CMS_SETTINGS_SCHEMAS: CmsSettingsSchemaCatalog = Object.freeze({
     }),
   }),
   [PUBLIC_HOMEPAGE_BANNER_SETTINGS_ID]: Object.freeze({
-    currentVersion: 4,
+    currentVersion: 5,
     versions: Object.freeze({
       1: Object.freeze({
         schemaVersion: 1,
@@ -548,6 +615,14 @@ export const CMS_SETTINGS_SCHEMAS: CmsSettingsSchemaCatalog = Object.freeze({
             format: "canonicalUtcInstant",
           }),
           excludedPaths: Object.freeze({ kind: "canonicalPathList", maxItems: 50, maxBytes: 512 }),
+        }),
+      }),
+      5: Object.freeze({
+        schemaVersion: 5,
+        fields: Object.freeze({
+          njDecides: Object.freeze({ kind: "boolean", required: true }),
+          standard: Object.freeze({ kind: "homepageBannerContent", required: true, mode: "standard" }),
+          election: Object.freeze({ kind: "homepageBannerContent", required: true, mode: "election" }),
         }),
       }),
     }),
@@ -993,6 +1068,7 @@ function cloneNavigationLink(link: SiteNavigationLink): SiteNavigationLink {
 }
 
 function cloneSettingsValue(definition: CmsSettingsField, value: unknown): unknown {
+  if (definition.kind === "homepageBannerContent" && plainObject(value)) return cloneSettingsValues(activeBannerSchema, value);
   if (definition.kind === "storyCtaRules") return structuredClone(value);
   if (definition.kind === "postsBrowse") return JSON.parse(JSON.stringify(value));
   if (definition.kind === "coverageLabels" && Array.isArray(value)) return value.map(label => ({ ...label }));
@@ -1023,6 +1099,10 @@ function isCmsSettingsFieldDefinition(
   const keys = new Set(Object.keys(definition));
   keys.delete("kind");
   keys.delete("required");
+  if (definition.kind === "homepageBannerContent") {
+    keys.delete("mode");
+    return keys.size === 0 && definition.required === true && (definition.mode === "standard" || definition.mode === "election");
+  }
   if (definition.kind === "storyCtaRules") {
     keys.delete("version");
     return keys.size === 0 && (definition.version === undefined || definition.version === 2);
@@ -1161,7 +1241,8 @@ function schemaError(schema: unknown): string | null {
     (schema.valueContract !== undefined &&
       schema.valueContract !== "njDecidesBrandV1" &&
       schema.valueContract !== "publicHomepageBannerV2" &&
-      schema.valueContract !== "publicHomepageBannerV4") ||
+      schema.valueContract !== "publicHomepageBannerV4" &&
+      schema.valueContract !== "publicHomepageBannerContentV5") ||
     Object.keys(schema.fields).length > MAX_CMS_SETTINGS_FIELDS
   ) {
     return "The CMS settings schema is invalid";
@@ -1293,6 +1374,11 @@ export function validateCmsSettingsValues(
       continue;
     }
     switch (definition.kind) {
+      case "homepageBannerContent": {
+        const error = validateHomepageBannerContent(definition.mode, value);
+        if (error) return `${field}.${error}`;
+        break;
+      }
       case "postsBrowse": {
         const error = validatePostsBrowse(value);
         if (error) return error;
@@ -1445,11 +1531,29 @@ function contrastRatio(foreground: string, background: string): number {
   return (lighter + 0.05) / (darker + 0.05);
 }
 
+const legacyBannerSchema = CMS_SETTINGS_SCHEMAS[PUBLIC_HOMEPAGE_BANNER_SETTINGS_ID].versions[4];
+const activeBannerSchema: CmsSettingsSchema = {
+  ...legacyBannerSchema,
+  valueContract: "publicHomepageBannerContentV5",
+};
+
+export function validateActiveHomepageBanner(values: unknown): string | null {
+  return validateCmsSettingsValues(activeBannerSchema, values);
+}
+
+export function validateHomepageBannerContent(mode: "standard" | "election", value: unknown): string | null {
+  if (!plainObject(value)) return "Banner content must be an object";
+  for (const key of mode === "standard" ? ["njDecides", "liveLabel", "startsAt", "endsAt", "excludedPaths"] : ["njDecides"]) {
+    if (Object.hasOwn(value, key)) return `Unknown settings field ${key}`;
+  }
+  return validateActiveHomepageBanner({ ...value, njDecides: mode === "election" });
+}
+
 function validateValueContract(
   contract: CmsSettingsSchema["valueContract"],
   values: Record<string, unknown>,
 ): string | null {
-  if (contract === "publicHomepageBannerV2" || contract === "publicHomepageBannerV4") {
+  if (contract === "publicHomepageBannerV2" || contract === "publicHomepageBannerV4" || contract === "publicHomepageBannerContentV5") {
     const startsAt = values.startsAt;
     const endsAt = values.endsAt;
     if (
@@ -1461,20 +1565,21 @@ function validateValueContract(
     }
     if (
       values.njDecides !== true &&
+      (contract !== "publicHomepageBannerContentV5" || values.enabled === true) &&
       typeof values.message === "string" &&
       values.message.trim() === ""
     ) {
       return "message is required unless NJ Decides mode is enabled";
     }
     if (values.njDecides === true) {
-      for (const field of contract === "publicHomepageBannerV4" ? ["linkHref", "secondLinkHref"] : ["linkHref"]) {
+      for (const field of contract === "publicHomepageBannerV2" ? ["linkHref"] : ["linkHref", "secondLinkHref"]) {
         const href = values[field];
         if (typeof href === "string" && href.trim() !== "" && safeNavigationHref(href) !== href) {
           return `${field} must be an absolute address or a path that starts with / for NJ Decides`;
         }
       }
     }
-    if (contract === "publicHomepageBannerV4" &&
+    if (contract !== "publicHomepageBannerV2" &&
       typeof values.secondLinkLabel === "string" && values.secondLinkLabel.trim() !== "" &&
       !(typeof values.linkLabel === "string" && values.linkLabel.trim() !== "")) {
       return "secondLinkLabel requires the first link";

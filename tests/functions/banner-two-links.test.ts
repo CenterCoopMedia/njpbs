@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import contract from "../../functions/lib/cms-settings-contract.js";
 import handlers from "../../functions/settings.js";
-import { currentCmsSettingsSchemaFor, validateCmsSettingsValues } from "../../packages/content-core/src/cms-settings";
+import { currentCmsSettingsSchemaFor, separateHomepageBannerContent, validateCmsSettingsValues } from "../../packages/content-core/src/cms-settings";
 
 const id = "public-homepage-banner";
 const first = { enabled: true, njDecides: true, message: "", linkLabel: "Results", linkHref: "/results/" };
@@ -25,9 +25,13 @@ describe("two-link banner contract at Admin and Functions boundaries", () => {
     [{ ...first, ...second, secondLinkHref: "relative/path" }, /absolute address/],
     [{ ...first, ...second, secondLinkHref: "data:text/html,evil" }, /safe link/],
   ])("checks spec values identically in both runtimes: %j", (values, error) => {
-    for (const actual of [validateCmsSettingsValues(schema, values), contract.validateCmsSettingsValues(contract.currentCmsSettingsSchemaFor(id), values)]) {
-      if (error) expect(actual).toMatch(error);
-      else expect(actual).toBeNull();
+    const split = separateHomepageBannerContent(values);
+    for (const njDecides of [true, false]) {
+      const draft = { ...split, njDecides };
+      for (const actual of [validateCmsSettingsValues(schema, draft), contract.validateCmsSettingsValues(contract.currentCmsSettingsSchemaFor(id), draft)]) {
+        if (error) expect(actual).toMatch(error);
+        else expect(actual).toBeNull();
+      }
     }
   });
   it("preserves all old schemas and rejects new fields on old servers", () => {
@@ -64,25 +68,25 @@ async function save(values: Record<string, unknown>, baseVersion = 7) {
 describe("deployment-window save protection", () => {
   it("refuses an older client's omission of the saved second link even at the current version", async () => {
     const { res, transaction } = await save({ ...first, message: "Changed in old Admin" });
-    expect(res.statusCode).toBe(409);
-    expect(res.body.error).toMatch(/second link.*Reload/i);
+    expect(res.statusCode).toBe(400);
+    expect(res.body.error).toMatch(/Unknown settings field/);
     expect(transaction.set).not.toHaveBeenCalled();
   });
   it("rejects a stale browser tab without altering either link", async () => {
-    const { res, transaction } = await save(first, 6);
+    const { res, transaction } = await save(separateHomepageBannerContent(first), 6);
     expect(res.statusCode).toBe(409);
     expect(transaction.set).not.toHaveBeenCalled();
   });
-  it("allows an explicit removal from the new Admin", async () => {
-    const { res } = await save({ ...first, secondLinkLabel: "", secondLinkHref: "" });
+  it("allows the new Admin to remove a pair", async () => {
+    const { res } = await save(separateHomepageBannerContent(first));
     expect(res.statusCode).toBe(200);
-    expect(res.body.settings.values.secondLinkLabel ?? "").toBe("");
-    expect(res.body.settings.values.secondLinkHref ?? "").toBe("");
-    expect(res.body.settings.values.linkLabel).toBe("Results");
+    expect(res.body.settings.values.election).not.toHaveProperty("secondLinkLabel");
+    expect(res.body.settings.values.election).not.toHaveProperty("secondLinkHref");
+    expect(res.body.settings.values.election.linkLabel).toBe("Results");
   });
   it("preserves the saved second link on an ordinary edit", async () => {
-    const { res } = await save({ ...first, ...second, message: "New election coverage" });
+    const { res } = await save(separateHomepageBannerContent({ ...first, ...second, message: "New election coverage" }));
     expect(res.statusCode).toBe(200);
-    expect(res.body.settings.values).toMatchObject(second);
+    expect(res.body.settings.values.election).toMatchObject(second);
   });
 });
