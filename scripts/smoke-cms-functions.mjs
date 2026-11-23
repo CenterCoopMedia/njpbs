@@ -8,18 +8,20 @@ export class CmsSmokeError extends Error { name = "CmsSmokeError"; }
 // Scheduler metadata is verified after deployment by assertSchedulesReady in
 // deploy-cms-function-batches.mjs; HTTP existence alone cannot prove a schedule.
 const DEFAULT_CMS_API_BASE_URL = process.env.CMS_PRODUCTION_API_ORIGIN || "https://api.example.org";
-const { publicationTarget } = createRequire(import.meta.url)("../functions/lib/publication-target.js");
-// The publication target record names the project. The API and Admin origins
-// are rendered per checkout (config/development-inputs.json).
-const SMOKE_ORIGINS = Object.freeze({
-  production: { baseUrl: DEFAULT_CMS_API_BASE_URL, adminOrigin: "https://admin.njpbs.org" },
-  development: { baseUrl: "https://dev-api.example.org", adminOrigin: "https://dev-admin.example.org" },
+// One tuple per environment; the API and Admin origins are rendered per
+// checkout (config/development-inputs.json). The workflow runs a staged copy of
+// this script against the release tree, so it must not load release-tree
+// modules such as functions/lib/publication-target.js at startup.
+const SMOKE_TARGETS = Object.freeze({
+  production: Object.freeze({ baseUrl: DEFAULT_CMS_API_BASE_URL,
+    functionsOrigin: "https://us-central1-njpbs-site.cloudfunctions.net", adminOrigin: "https://admin.njpbs.org" }),
+  development: Object.freeze({ baseUrl: "https://dev-api.example.org",
+    functionsOrigin: "https://us-central1-njpbs-site-dev.cloudfunctions.net", adminOrigin: "https://dev-admin.example.org" }),
 });
 
 export function cmsSmokeTarget(environment = "production") {
-  const { projectId } = publicationTarget(environment);
-  return Object.freeze({ ...SMOKE_ORIGINS[environment],
-    functionsOrigin: `https://us-central1-${projectId}.cloudfunctions.net` });
+  if (!Object.hasOwn(SMOKE_TARGETS, environment)) throw new Error("Invalid CMS smoke environment");
+  return SMOKE_TARGETS[environment];
 }
 
 function declaredDevFunctionNames(root = new URL("../", import.meta.url)) {
