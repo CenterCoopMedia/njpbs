@@ -732,6 +732,8 @@ describe("Data Hub reader and downloads", () => {
     expect(doc.querySelector(".latest-findings [data-latest-metric='industryjobs']")!.textContent).toContain("October payrolls declined by 900 jobs");
     const [header,...rows]=await csv("industryjobs");
     expect(rows.filter((row:string[])=>row[0]==="industry_monthly_change")).toHaveLength(10);
+    expect(rows.filter((row:string[])=>row[0]==="industry_monthly_change").every((row:string[])=>row.includes("October 2026 seasonally adjusted"))).toBe(true);
+    expect((await exportText("industryjobs","svg")).replace(/<[^>]+>/g," ").replace(/\s+/g," ")).toContain("sum to −900 jobs");
     expect(rows.every((row:string[])=>row.length===header.length)).toBe(true);
     const jobJson=JSON.parse(await exportText("industryjobs","json"));
     expect(jobJson.asOf).toBe("2026-11-19");

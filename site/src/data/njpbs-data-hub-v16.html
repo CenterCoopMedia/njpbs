@@ -2420,7 +2420,7 @@
       records.push(['methodology',note,'','',m.period,m.methodologySource||m.source,m.methodologyUrl||m.sourceUrl,'methodology_caveat']);
     }
     if(m.id==='industryjobs'&&Array.isArray(m.industryBreakdown))for(const row of m.industryBreakdown){
-      records.push(['industry_monthly_change',row.sector,row.change,m.unit||'','September 2026 seasonally adjusted',m.source,m.sourceUrl,'verified_preliminary']);
+      records.push(['industry_monthly_change',row.sector,row.change,m.unit||'',m.period.split(' · ')[0]+' seasonally adjusted',m.source,m.sourceUrl,'verified_preliminary']);
     }
     for(const row of m.id==='temperature'?m.monthlyReference||[]:[]){
       records.push(['month',row.date,row.value,'°F',row.date,m.source,m.sourceUrl,'monthly_statewide']);
@@ -2456,7 +2456,7 @@
     const base=(m.comparisonsPublic||[]).map(x=>`${x.label}: ${x.value}${x.period?' ('+x.period+')':''}`);
     if(m.id==='voterregistration')base.push('21-county totals and official source reports are provided in CSV / HTML; no municipality values');
     if(m.id==='temperature')base.push('Monthly departures from matching 1991–2020 normals, Jan–Oct 2026; not annual');
-    if(m.id==='industryjobs')base.push('10 industry sector changes sum to +14,900 jobs; NOT job gains by occupation. See CSV/HTML for full signed series.');
+    if(m.id==='industryjobs'&&Array.isArray(m.industryBreakdown)){const total=m.industryBreakdown.reduce((sum,r)=>sum+r.change,0);base.push(`10 industry sector changes sum to ${total<0?'−':'+'}${Math.abs(total).toLocaleString('en-US')} jobs; NOT job gains by occupation. See CSV/HTML for full signed series.`);}
     return base;
   }
   function v10NumSVG(m,view){
