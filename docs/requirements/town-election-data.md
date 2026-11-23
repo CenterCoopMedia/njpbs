@@ -35,7 +35,7 @@ The state reports below have turnout totals that differ between the printed rows
 | 2016 Middlesex | County total is 88 below the sum of the printed rows, including its countywide row. |
 | 2017 Monmouth | County total is 239 below the sum of the printed rows, including its countywide row. |
 | 2018 Sussex, 2023 Passaic and Sussex, 2024 Camden | Printed county count is 33, 74, 11 and 482 above the municipality rows respectively. |
-| 2019 Monmouth | The statewide summary lists 133,646 ballots; the county table totals 132,869. |
-| 2022 Somerset | The statewide summary lists 118,909 ballots; the county table totals 119,329. |
+| 2019 Monmouth | The statewide summary lists 133,646 ballots and the county table totals 132,869. |
+| 2022 Somerset | The statewide summary lists 118,909 ballots and the county table totals 119,329. |
 
 Source spellings sometimes differ from the lookup. For example, the 2016–2019 Ocean County turnout reports label Stafford Township “Stratford Twp.” Stafford is the only roster entry missing from those tables, and the reported row falls between South Toms River and Surf City. The named Stratford Borough is in Camden County. [2016 Ocean County turnout](https://www.nj.gov/state/elections/assets/pdf/election-results/2016/2016-gen-elect-ballotscast-results-ocean.pdf) · [New Jersey municipality codes](https://www.nj.gov/treasury/omb/pdf/forms/municodes.pdf)
