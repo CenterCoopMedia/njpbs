@@ -27,7 +27,7 @@ type Command =
 
 type Activity = "checking" | "saving" | "canceling";
 type BatchView = { scope: string; batch?: VideoMetadataBatch | null; activity?: Activity; error?: string; pausing?: boolean };
-type Session = { scope: string; controller: AbortController; busy?: boolean; stop?: () => void };
+type Session = { scope: string; controller: AbortController; busy?: boolean; stop?: () => void; refreshNeeded?: boolean };
 
 export function useVideoMetadataBatch(userId: string, sourceId: string, canEdit: boolean, getIdToken: () => Promise<string>) {
   const scope = JSON.stringify([userId, sourceId, canEdit]);
@@ -80,7 +80,10 @@ export function useVideoMetadataBatch(userId: string, sourceId: string, canEdit:
         update({ error: "The latest video batch changed. Check its results before continuing." });
         return;
       }
-      if (command.action === "start") command.onStarted(batch);
+      if (command.action === "start") {
+        if (batch.items.some(item => item.status === "stale" || item.status === "unavailable")) owner.refreshNeeded = true;
+        command.onStarted(batch);
+      }
       for (const { assetId } of batch.items) {
         if (paused || batch.status !== "active") break;
         if (!batch.items.some(item => item.assetId === assetId && item.status === "pending")) continue;
@@ -92,6 +95,7 @@ export function useVideoMetadataBatch(userId: string, sourceId: string, canEdit:
         }
         if (paused) break;
         advanced = true;
+        owner.refreshNeeded = true;
         batch = await send({ action: "advance", operationKey, assetId });
         if (!batch || batch.operationKey !== operationKey) {
           throw new Error("Video batch advance returned a different operation");
@@ -125,6 +129,12 @@ export function useVideoMetadataBatch(userId: string, sourceId: string, canEdit:
   return {
     ...current,
     run,
+    takeRefresh() {
+      const owner = session.current;
+      if (owner?.scope !== scope || !owner.refreshNeeded) return false;
+      owner.refreshNeeded = false;
+      return true;
+    },
     pause() {
       session.current?.stop?.();
       setView(previous => previous?.scope === scope ? { ...previous, pausing: true } : previous);

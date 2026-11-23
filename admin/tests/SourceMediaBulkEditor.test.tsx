@@ -475,6 +475,10 @@ describe("bulk video selection", () => {
     await act(async () => { await vi.advanceTimersByTimeAsync(50); });
     // Decision 3: the batch was a bulk action, so focus returns to the card that last had it.
     expect(cardName("Interview")).toHaveFocus();
+    fireEvent.click(screen.getByRole("button", { name: "Latest video batch" }));
+    await settle();
+    fireEvent.click(screen.getByRole("button", { name: "Back to library" }));
+    expect(onRefresh).toHaveBeenCalledTimes(1);
   });
   it("integrates into the real library without opening a player or requesting more records", async () => {
     const router = createMemoryRouter([{ path: "/media", element: <SourceMediaLibrary source={source} userId="staff" getIdToken={getIdToken} /> }], { initialEntries: ["/media"] });

@@ -493,8 +493,8 @@ export function useSourceMediaBulkEditing({ source, userId, records, favorites, 
         }));
         if (tags.length) onTagsSaved?.(tags);
       }
-      if (batch.items.some(item => item.status === "saved" || item.status === "stale" || item.status === "unavailable")) onRefresh();
     }
+    if (recovery.takeRefresh()) onRefresh();
     setBatchOpenScope(undefined);
     focusAfter();
   }
