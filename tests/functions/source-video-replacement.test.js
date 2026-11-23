@@ -22,6 +22,7 @@ import transcriptHandlers from "../../functions/video-transcripts.js";
 import transcriptProcessor from "../../functions/lib/video-transcript-processor.js";
 import transcriptWorker from "../../functions/lib/video-transcript-worker.js";
 import transcriptContract from "../../functions/lib/video-transcript-contract.js";
+import byok from "../../functions/lib/video-transcript-byok-job.js";
 import paidBudget from "../../functions/lib/video-transcript-paid-budget.js";
 import clipContract from "../../functions/lib/video-clip-contract.js";
 import { S3Client } from "@aws-sdk/client-s3";
@@ -1631,6 +1632,107 @@ it.each(["stale", "cancelled"].flatMap(phase => ["startIntentAt", "submissionInt
     expect(objects.has(original.objectKey)).toBe(false);
     expect((await jobRef.get()).exists).toBe(false);
   });
+
+it.each([["stale", "QUEUED", "COMPLETED"], ["cancelled", "IN_PROGRESS", "FAILED"]])(
+  "settles a %s Amazon job only after exact terminal provider evidence", async (phase, nonterminal, terminal) => {
+    const request = transcriptContract.parseTranscriptRequest({ sourceId: source.id, assetId });
+    const { job } = await transcriptJobs.requestTranscript({ firestore: db, source, request, actor, now: clock });
+    const jobRef = db.doc(`${transcriptJobs.TRANSCRIPT_JOBS}/${job.id}`);
+    await jobRef.update({ phase: "running", startIntentAt: new Date(clock).toISOString() });
+    const original = (await assetRef().get()).data();
+    await replace();
+    expect(await transcriptJobs.claimTranscript(db, jobRef, source, clock)).toBeNull();
+    if (phase === "cancelled") await jobRef.update({ phase });
+    clock += versions.RETENTION_MS;
+    const previousId = (await replacementRef().get()).data().previousId;
+    const queueRef = db.doc(`${versions.PURGE_QUEUE}/${assetId}-${previousId}`);
+    const provider = {
+      TranscriptionJobName: `njpbs-boardwalk-transcript-${job.id}`,
+      LanguageCode: job.languageCode,
+      Media: { MediaFileUri: `s3://fixture-renditions/transcripts/inputs/${job.id}/input.mp4` },
+      Settings: { ShowSpeakerLabels: true, MaxSpeakerLabels: job.maxSpeakers },
+      TranscriptionJobStatus: nonterminal,
+    };
+    const send = vi.fn(async () => ({ TranscriptionJob: { ...provider } }));
+    const readProvider = transcriptProcessor.createAmazonTranscriptReader({ bucket: "fixture-renditions" }, { send });
+    const remove = vi.fn(async version => { objects.delete(version.binary.objectKey); });
+    const run = (dryRun = false) => cleanup.cleanupVideoVersion({ firestore: db, queueRef, now: clock, dryRun, remove,
+      readAmazonStatus: async value => (await readProvider(value))?.TranscriptionJobStatus });
+    const nextAttempt = async () => { clock = (await queueRef.get()).data().nextAttemptAt; };
+
+    await expect(run(true)).resolves.toMatchObject({ blocked: "writer_reconciliation_required" });
+    expect(send).not.toHaveBeenCalled();
+    await expect(run()).resolves.toMatchObject({ blocked: "writer_reconciliation_required" });
+    expect(send.mock.calls.map(([command]) => [command.constructor.name, command.input.TranscriptionJobName]))
+      .toEqual([["GetTranscriptionJobCommand", provider.TranscriptionJobName]]);
+    expect((await jobRef.get()).data().audioProviderTerminal).toBeUndefined();
+
+    await nextAttempt();
+    const exactMedia = provider.Media;
+    provider.TranscriptionJobStatus = terminal;
+    provider.Media = { MediaFileUri: "s3://fixture-renditions/other-input.mp4" };
+    await expect(run()).resolves.toMatchObject({ blocked: "writer_reconciliation_required" });
+    expect((await jobRef.get()).data().audioProviderTerminal).toBeUndefined();
+    expect(remove).not.toHaveBeenCalled();
+    expect(objects.has(original.objectKey)).toBe(true);
+
+    await nextAttempt();
+    provider.Media = exactMedia;
+    send.mockImplementationOnce(async () => {
+      await jobRef.update({ errorCode: "fixture_job_changed_during_provider_read" });
+      return { TranscriptionJob: { ...provider } };
+    });
+    await expect(run()).resolves.toMatchObject({ blocked: "writer_reconciliation_required" });
+    expect((await jobRef.get()).data().audioProviderTerminal).toBeUndefined();
+
+    await nextAttempt();
+    await expect(run()).resolves.toMatchObject({ blocked: "writer_reconciliation_required" });
+    expect((await jobRef.get()).data().audioProviderTerminal).toBe(true);
+    expect(remove).not.toHaveBeenCalled();
+    await nextAttempt();
+    await expect(run()).resolves.toMatchObject({ deleted: true });
+    expect(send).toHaveBeenCalledTimes(4);
+    expect(remove).toHaveBeenCalledTimes(1);
+    expect(objects.has(original.objectKey)).toBe(false);
+  });
+
+it("uses the exact recorded ElevenLabs completion without a provider read", async () => {
+  const original = (await assetRef().get()).data();
+  const input = original.rendition.web;
+  const credentialId = createHash("sha256").update(JSON.stringify(["credential-v1", "organization", null, "elevenlabs"])).digest("hex");
+  const job = byok.createJob({
+    sourceId: source.id, assetId, originalBucket: source.bucket, originalKey: original.objectKey,
+    originalVersion: original.objectVersionId, originalSize: original.sizeBytes,
+    renditionBucket: "fixture-renditions", renditionKey: input.objectKey, renditionVersion: input.objectVersionId,
+    renditionSize: input.sizeBytes, durationSeconds: input.durationSeconds, credentialScope: "organization",
+    credentialId, credentialRevision: 1, languageCode: "en-US", maxSpeakers: 2,
+  }, actor, clock);
+  Object.assign(job, { phase: "running", leaseOwner: randomUUID(), attemptId: randomUUID(), leaseUntil: clock + 300_000,
+    submissionIntentAt: new Date(clock).toISOString(), budgetReservation: { state: "consumed" } });
+  const jobRef = db.doc(`${byok.COLLECTION}/${job.id}`);
+  await jobRef.set(job);
+  await expect(byok.recordCompletedResponse({ firestore: db, claim: job, now: clock, response: {
+    transcriptionId: "fixture-completed", inputSha256: "a".repeat(64),
+  } })).resolves.toBe(true);
+  const { completedResponse } = (await jobRef.get()).data();
+  await replace();
+  await jobRef.update({ phase: "stale", active: false, leaseUntil: 0, audioProviderTerminal: true,
+    "completedResponse.attemptId": randomUUID() });
+  clock += versions.RETENTION_MS;
+  const previousId = (await replacementRef().get()).data().previousId;
+  const queueRef = db.doc(`${versions.PURGE_QUEUE}/${assetId}-${previousId}`);
+  const readAmazonStatus = vi.fn();
+  const remove = vi.fn(async version => { objects.delete(version.binary.objectKey); });
+  const run = () => cleanup.cleanupVideoVersion({ firestore: db, queueRef, now: clock, remove, readAmazonStatus });
+  await expect(run()).resolves.toMatchObject({ blocked: "writer_reconciliation_required" });
+  expect(remove).not.toHaveBeenCalled();
+  await jobRef.update({ completedResponse });
+  clock = (await queueRef.get()).data().nextAttemptAt;
+  await expect(run()).resolves.toMatchObject({ deleted: true });
+  expect(readAmazonStatus).not.toHaveBeenCalled();
+  expect(remove).toHaveBeenCalledTimes(1);
+  expect(objects.has(original.objectKey)).toBe(false);
+});
 
 describe("local transcript failure at retained version cleanup", () => {
   // The job and receipt come from the real worker writer. Only the fail-safe
