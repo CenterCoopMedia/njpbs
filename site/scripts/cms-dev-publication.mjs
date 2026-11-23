@@ -211,6 +211,9 @@ export async function restoreDevPostRenderer(sourceSha, artifactDirectory = dire
       !isDeepStrictEqual(seal, { schemaVersion: 1, rendererSha: sourceSha, liveBlogVersion: 1,
       ...(seal.spanishPostVersion === 1 ? { spanishPostVersion: 1 } : {}),
       ...(isPageReaderVersion(seal.pageReaderVersion) ? { pageReaderVersion: seal.pageReaderVersion } : {}),
+      // The Data Hub gate seals reporting, and composition only alongside it.
+      ...(seal.dataHubReportingVersion === 1 ? { dataHubReportingVersion: 1 } : {}),
+      ...(seal.dataHubReportingVersion === 1 && seal.dataHubCompositionVersion === 1 ? { dataHubCompositionVersion: 1 } : {}),
       electionResultsVersion: seal.electionResultsVersion, environment: "development" }) ||
       !isDeepStrictEqual(clientSeal, seal) ||
       !(await lstat(path.join(retained, "server/entry.mjs"))).isFile()) {
