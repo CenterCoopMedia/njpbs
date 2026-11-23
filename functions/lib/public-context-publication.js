@@ -114,7 +114,7 @@ async function retainedPublicContextQueueIdsInTransaction({ transaction, firesto
 /** Read first, return writes for the caller's atomic settings/content transaction.
  * Admission selects new Posts; it does not grant ownership of public aggregates. */
 async function enqueuePublicContextInTransaction({ transaction, firestore, operationId, runtime, reason,
-  contextRevision, preparationRecoveryOfQueueId, recordFamily, videoCatalog = false, activateQueued = false, pagePublication = false }) {
+  contextRevision, preparationRecoveryOfQueueId = undefined, recordFamily = undefined, videoCatalog = false, activateQueued = false, pagePublication = false }) {
   publicationRuntime(runtime);
   requireValue(runtime.owner === "cloudflare" && /^[A-Za-z0-9]{20}$/.test(operationId ?? "") &&
     ["settings", "context", "provider-refresh"].includes(reason));
