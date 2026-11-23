@@ -21,6 +21,13 @@ export const publicHomepageBannerEntry = z.object({
   startsAt: z.iso.datetime().optional(),
   endsAt: z.iso.datetime().optional(),
   excludedPaths: z.array(z.string()).max(50).optional(),
+  standardPresentation: z.strictObject({
+    startsAt: z.iso.datetime().optional(),
+    endsAt: z.iso.datetime().optional(),
+    backgroundColor: z.string().optional(),
+    textColor: z.string().optional(),
+    linkColor: z.string().optional(),
+  }).optional(),
   sourceVersion: z.number().int().positive(),
   publishedAt: z.iso.datetime(),
 }).refine(value => !value.enabled || value.njDecides === true || value.message.trim() !== "", {

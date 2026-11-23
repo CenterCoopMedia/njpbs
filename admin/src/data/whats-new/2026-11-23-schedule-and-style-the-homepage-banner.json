@@ -1,0 +1,8 @@
+{
+  "date": "2026-11-23",
+  "kind": "improved",
+  "title": "Schedule and style the homepage banner",
+  "body": "In Settings → Homepage banner, turn off NJ Decides sitewide mode to edit the homepage announcement. Set optional start and end times in Eastern Time, or choose background, text and link colors. Check the preview, save the draft and publish. Each mode keeps its own schedule.",
+  "prs": [],
+  "order": 1795395600000
+}

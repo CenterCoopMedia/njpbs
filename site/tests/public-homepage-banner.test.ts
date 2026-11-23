@@ -1,4 +1,6 @@
 import { describe, expect, it } from "vitest";
+import { homepageBannerWindow } from "../../packages/content-core/src/homepage-banner-window";
+import { renderHomepageAnnouncement } from "../../packages/content-core/src/homepage-announcement-render";
 import {
   PUBLIC_HOMEPAGE_BANNER_SETTINGS_ID,
   projectPublicHomepageBanner,
@@ -93,10 +95,11 @@ describe("public homepage banner projection", () => {
       version: 7,
       published: {
         ...published,
-        schemaVersion: 5,
+        schemaVersion: 6,
         values: {
           njDecides: true,
-          standard: { enabled: true, message: "Homepage update", linkLabel: "Read more", linkHref: "/about/" },
+          standard: { enabled: true, message: "Homepage update", linkLabel: "Read more", linkHref: "/about/",
+            startsAt: "2026-11-06T23:00:00.000Z", backgroundColor: "#151d40" },
           election: { enabled: true, message: "Election coverage", linkLabel: "Results", linkHref: "/results/",
             endsAt: "2026-11-04T06:00:00.000Z" },
         },
@@ -111,6 +114,36 @@ describe("public homepage banner projection", () => {
       sourceVersion: 7,
       publishedAt: "2026-08-31T14:00:00.000Z",
     });
+  });
+
+  it("uses the standard schedule and colors only from the published standard mode", () => {
+    const startsAt = "2026-11-03T23:00:00.000Z";
+    const endsAt = "2026-11-04T06:00:00.000Z";
+    const colors = { backgroundColor: "#151d40", textColor: "#fff0cc", linkColor: "#b5cbff" };
+    const standardPresentation = { startsAt, endsAt, ...colors };
+    const values = { njDecides: false, standard: { ...published.values, ...standardPresentation },
+      election: { enabled: true, message: "Election only", endsAt: "2026-11-06T06:00:00.000Z" } };
+    const data = projectPublicHomepageBanner({
+      id: PUBLIC_HOMEPAGE_BANNER_SETTINGS_ID,
+      version: 8,
+      values: { ...values, standard: { ...values.standard, backgroundColor: "#212144" } },
+      published: { ...published, schemaVersion: 6, values },
+    });
+    expect(data?.standardPresentation).toEqual(standardPresentation);
+    expect(data?.endsAt).toBeUndefined();
+    const schedule = { enabled: data?.enabled, ...data?.standardPresentation };
+    expect(homepageBannerWindow(schedule, Date.parse(startsAt) - 1).visible).toBe(false);
+    expect(homepageBannerWindow(schedule, Date.parse(startsAt)).visible).toBe(true);
+    expect(homepageBannerWindow(schedule, Date.parse(endsAt)).visible).toBe(false);
+    const markup = renderHomepageAnnouncement({ message: data!.message, link: data!.link, colors: data!.standardPresentation });
+    expect(markup).toContain("--announcement-background:#151d40;--announcement-text:#fff0cc;--announcement-link:#b5cbff");
+
+    const legacy = projectPublicHomepageBanner({
+      id: PUBLIC_HOMEPAGE_BANNER_SETTINGS_ID,
+      version: 7,
+      published: { ...published, schemaVersion: 4, values: { ...published.values, startsAt, endsAt } },
+    });
+    expect(legacy?.standardPresentation).toBeUndefined();
   });
 
   it("projects an empty NJ Decides band and its optional schedule fields", () => {

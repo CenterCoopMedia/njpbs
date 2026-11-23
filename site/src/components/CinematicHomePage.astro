@@ -114,7 +114,9 @@ const spotlightCards = homeSources.spotlight.cards;
 {newsTopics.length > 0 && <HomepageNewsTopicBar topics={newsTopics} />}
 
 {announcement?.enabled && !announcement.njDecides && (
-  <HomepageAnnouncement message={announcement.message} link={announcement.link} secondLink={announcement.secondLink} />
+  <HomepageAnnouncement message={announcement.message} link={announcement.link} secondLink={announcement.secondLink}
+    colors={announcement.standardPresentation} startsAt={announcement.standardPresentation?.startsAt}
+    endsAt={announcement.standardPresentation?.endsAt} />
 )}
 
 <HomeHero items={heroItems} config={heroConfig} title={heroTitle} subtitle={heroSubtitle}

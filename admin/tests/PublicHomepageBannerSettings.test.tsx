@@ -39,7 +39,7 @@ function documentResponse(
     sourceVersion: number;
     publishedAt: string;
   },
-  schemaVersion = "standard" in bannerValues ? 5 : 2,
+  schemaVersion = "standard" in bannerValues ? 6 : 2,
 ): GetSettingsResponse<PublicHomepageBannerValues> {
   return {
     success: true,
@@ -64,7 +64,7 @@ function mutationResponse(
     sourceVersion: number;
     publishedAt: string;
   },
-  schemaVersion = "standard" in bannerValues ? 5 : 2,
+  schemaVersion = "standard" in bannerValues ? 6 : 2,
 ): MutateSettingsResponse<PublicHomepageBannerValues> {
   const loaded = documentResponse(bannerValues, version, published, schemaVersion);
   if (!loaded.found) throw new Error("Expected a settings document");
@@ -221,9 +221,7 @@ describe("Public homepage banner settings", () => {
     expect(screen.getByRole("group", { name: /^Content/ })).toHaveClass(
       "record-field-group",
     );
-    expect(screen.getByRole("group", { name: /^NJ Decides details/ })).toHaveClass(
-      "record-field-group",
-    );
+    expect(screen.queryByRole("group", { name: /^NJ Decides details/ })).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: "About Presentation" })).toBeVisible();
     expect(screen.getByLabelText("Proposed homepage banner preview")).toBeVisible();
     expect(screen.getByRole("textbox", { name: "Message" })).toBeRequired();
@@ -570,7 +568,8 @@ describe("Public homepage banner settings", () => {
   });
   it("keeps a published standard banner while migrating an election draft, then publishes either saved mode", async () => {
     const standard = values();
-    const election = values({ njDecides: true, message: "Election information", linkLabel: "Results", linkHref: "/results/" });
+    const election = values({ njDecides: true, message: "Election information", linkLabel: "Results", linkHref: "/results/",
+      startsAt: "2026-11-03T23:00:00.000Z" });
     const publishedAt = "2026-10-28T12:00:00.000Z";
     let stored = documentResponse(election, 4, { values: standard, sourceVersion: 3, publishedAt });
     const props = transport({
@@ -597,8 +596,17 @@ describe("Public homepage banner settings", () => {
     expect(screen.getByRole("button", { name: "Save draft" })).toBeEnabled();
     fireEvent.click(mode);
     expect(screen.getByRole("textbox", { name: "Message" })).toHaveValue(standard.message);
+    const textColor = screen.getByRole("textbox", { name: "Text color" });
+    fireEvent.change(textColor, { target: { value: "#14193a" } });
+    expect(textColor).toHaveAttribute("aria-invalid", "true");
+    expect(screen.getByRole("button", { name: "Save draft" })).toBeDisabled();
+    fireEvent.change(textColor, { target: { value: "#fff0cc" } });
+    fireEvent.change(screen.getByLabelText("Start date and time"), { target: { value: "2026-11-06T18:00" } });
+    fireEvent.change(screen.getByLabelText("End date and time"), { target: { value: "2026-11-07T18:00" } });
     fireEvent.click(mode);
     expect(screen.getByRole("textbox", { name: "Message" })).toHaveValue(election.message);
+    expect(screen.getByLabelText("Start date and time")).toHaveValue("2026-11-03T18:00");
+    expect(screen.getByLabelText("End date and time")).toHaveValue("");
     fireEvent.change(screen.getByRole("textbox", { name: "Message" }), { target: { value: "Election night coverage" } });
     fireEvent.click(screen.getByRole("button", { name: "Save draft" }));
     await screen.findByText("Saved draft version 5");
@@ -622,12 +630,16 @@ describe("Public homepage banner settings", () => {
     fireEvent.click(await screen.findByRole("checkbox", { name: "Use NJ Decides sitewide mode" }));
     expect(screen.getByRole("checkbox", { name: "Show banner on the homepage" })).toBeChecked();
     expect(screen.getByRole("textbox", { name: "Message" })).toHaveValue(standard.message);
+    expect(screen.getByRole("textbox", { name: "Text color" })).toHaveValue("#fff0cc");
+    expect(screen.getByLabelText("Start date and time")).toHaveValue("2026-11-06T18:00");
+    expect(screen.getByLabelText("End date and time")).toHaveValue("2026-11-07T18:00");
     fireEvent.click(screen.getByRole("button", { name: "Save draft" }));
     await screen.findByText("Saved draft version 7");
     fireEvent.click(screen.getByRole("button", { name: "Publish" }));
     await screen.findByText("Saved draft version 8");
     const publishedStandard = currentPublicBanner();
-    expect(publishedStandard).toMatchObject({ njDecides: false, message: standard.message, linkHref: standard.linkHref });
+    expect(publishedStandard).toMatchObject({ njDecides: false, message: standard.message, linkHref: standard.linkHref,
+      startsAt: "2026-11-06T23:00:00.000Z", endsAt: "2026-11-07T23:00:00.000Z", textColor: "#fff0cc" });
     const standardPreview = within(screen.getByLabelText("Proposed homepage banner preview"));
     expect(standardPreview.getByText(publishedStandard.message, { exact: false })).toBeVisible();
     expect(standardPreview.getByRole("link", { name: "Check link: View schedule (opens in new tab)" })).toHaveAttribute("href", `https://njpbs.org${publishedStandard.linkHref}`);
@@ -659,12 +671,6 @@ describe("Public homepage banner settings", () => {
     fireEvent.change(screen.getByLabelText("End date and time"), { target: { value: "2026-11-04T18:00" } });
     fireEvent.click(schedule.querySelector("summary")!);
     await waitFor(() => expect(schedule).not.toHaveAttribute("open"));
-  });
-
-  it("identifies the schedule as NJ Decides-only while standard banner mode is active", async () => {
-    render(<PublicHomepageBannerSettings {...transport({ load: async () => documentResponse(values({ njDecides: false })) })} />);
-    await screen.findByRole("textbox", { name: "Message" });
-    expect(screen.getByText(/Schedule · No schedule set · NJ Decides band only/)).toBeVisible();
   });
 
 });

@@ -83,7 +83,7 @@ export const DEFAULT_NJ_DECIDES_SETTINGS = Object.freeze({
   flagEnabled: true,
 }) satisfies Readonly<NjDecidesSettingsValues>;
 
-export interface StandardHomepageBannerContent {
+interface HomepageBannerContent {
   readonly enabled: boolean;
   readonly message: string;
   readonly linkLabel?: string;
@@ -92,10 +92,24 @@ export interface StandardHomepageBannerContent {
   readonly secondLinkHref?: string;
 }
 
-export interface ElectionHomepageBannerContent extends StandardHomepageBannerContent {
-  readonly liveLabel?: string;
+export interface HomepageBannerSchedule {
   readonly startsAt?: string;
   readonly endsAt?: string;
+}
+
+export const DEFAULT_STANDARD_HOMEPAGE_BANNER_COLORS = Object.freeze({
+  backgroundColor: "#14193a",
+  textColor: "#f3f4fb",
+  linkColor: "#8a97ff",
+});
+
+export type StandardHomepageBannerColors = Record<keyof typeof DEFAULT_STANDARD_HOMEPAGE_BANNER_COLORS, string>;
+export type StandardHomepageBannerPresentation = HomepageBannerSchedule & Partial<StandardHomepageBannerColors>;
+
+export interface StandardHomepageBannerContent extends HomepageBannerContent, StandardHomepageBannerPresentation {}
+
+export interface ElectionHomepageBannerContent extends HomepageBannerContent, HomepageBannerSchedule {
+  readonly liveLabel?: string;
   readonly excludedPaths?: readonly string[];
 }
 
@@ -116,6 +130,8 @@ export function activeHomepageBannerContent(
   const { njDecides, standard, election } = values;
   return { ...(njDecides ? election : standard), njDecides };
 }
+
+type HomepageBannerMode = "standard" | "election" | "standardWithPresentation";
 
 // Admin uses this only when it seeds the settings document. The public build
 // reads the detached published snapshot and does not fall back to this value.
@@ -332,7 +348,7 @@ export type CmsSettingsField =
       readonly unique?: boolean;
     }
   | { readonly kind: "canonicalPathList"; readonly required?: boolean; readonly maxItems: number; readonly maxBytes: number }
-  | { readonly kind: "homepageBannerContent"; readonly required: true; readonly mode: "standard" | "election" }
+  | { readonly kind: "homepageBannerContent"; readonly required: true; readonly mode: HomepageBannerMode }
   | { readonly kind: "assetId"; readonly required?: boolean }
   | { readonly kind: "assetIdList"; readonly required?: boolean; readonly maxItems: number }
   | {
@@ -473,7 +489,7 @@ export const CMS_SETTINGS_SCHEMAS: CmsSettingsSchemaCatalog = Object.freeze({
     }),
   }),
   [PUBLIC_HOMEPAGE_BANNER_SETTINGS_ID]: Object.freeze({
-    currentVersion: 5,
+    currentVersion: 6,
     versions: Object.freeze({
       1: Object.freeze({
         schemaVersion: 1,
@@ -622,6 +638,14 @@ export const CMS_SETTINGS_SCHEMAS: CmsSettingsSchemaCatalog = Object.freeze({
         fields: Object.freeze({
           njDecides: Object.freeze({ kind: "boolean", required: true }),
           standard: Object.freeze({ kind: "homepageBannerContent", required: true, mode: "standard" }),
+          election: Object.freeze({ kind: "homepageBannerContent", required: true, mode: "election" }),
+        }),
+      }),
+      6: Object.freeze({
+        schemaVersion: 6,
+        fields: Object.freeze({
+          njDecides: Object.freeze({ kind: "boolean", required: true }),
+          standard: Object.freeze({ kind: "homepageBannerContent", required: true, mode: "standardWithPresentation" }),
           election: Object.freeze({ kind: "homepageBannerContent", required: true, mode: "election" }),
         }),
       }),
@@ -1068,7 +1092,7 @@ function cloneNavigationLink(link: SiteNavigationLink): SiteNavigationLink {
 }
 
 function cloneSettingsValue(definition: CmsSettingsField, value: unknown): unknown {
-  if (definition.kind === "homepageBannerContent" && plainObject(value)) return cloneSettingsValues(activeBannerSchema, value);
+  if (definition.kind === "homepageBannerContent" && plainObject(value)) return cloneSettingsValues(homepageBannerContentSchema(definition.mode), value);
   if (definition.kind === "storyCtaRules") return structuredClone(value);
   if (definition.kind === "postsBrowse") return JSON.parse(JSON.stringify(value));
   if (definition.kind === "coverageLabels" && Array.isArray(value)) return value.map(label => ({ ...label }));
@@ -1101,7 +1125,8 @@ function isCmsSettingsFieldDefinition(
   keys.delete("required");
   if (definition.kind === "homepageBannerContent") {
     keys.delete("mode");
-    return keys.size === 0 && definition.required === true && (definition.mode === "standard" || definition.mode === "election");
+    return keys.size === 0 && definition.required === true &&
+      (definition.mode === "standard" || definition.mode === "election" || definition.mode === "standardWithPresentation");
   }
   if (definition.kind === "storyCtaRules") {
     keys.delete("version");
@@ -1537,16 +1562,68 @@ const activeBannerSchema: CmsSettingsSchema = {
   valueContract: "publicHomepageBannerContentV5",
 };
 
+const standardBannerColorFields = {
+  backgroundColor: { kind: "string", format: "hexColor", maxBytes: 7 },
+  textColor: { kind: "string", format: "hexColor", maxBytes: 7 },
+  linkColor: { kind: "string", format: "hexColor", maxBytes: 7 },
+} as const;
+
+const standardBannerPresentationSchema: CmsSettingsSchema = {
+  schemaVersion: 6,
+  fields: {
+    startsAt: legacyBannerSchema.fields.startsAt,
+    endsAt: legacyBannerSchema.fields.endsAt,
+    ...standardBannerColorFields,
+  },
+};
+
+const standardBannerContentSchema: CmsSettingsSchema = {
+  ...activeBannerSchema,
+  fields: { ...activeBannerSchema.fields, ...standardBannerColorFields },
+};
+
+function homepageBannerContentSchema(mode: HomepageBannerMode): CmsSettingsSchema {
+  return mode === "standardWithPresentation" ? standardBannerContentSchema : activeBannerSchema;
+}
+
+export function validateStandardHomepageBannerPresentation(values: unknown): string | null {
+  if (!plainObject(values) || Object.values(values).some(value => typeof value !== "string")) {
+    return "The standard homepage banner presentation must contain only strings";
+  }
+  return validateCmsSettingsValues(standardBannerPresentationSchema, values)
+    ?? bannerScheduleError(values)
+    ?? standardBannerContrastError(values);
+}
+
 export function validateActiveHomepageBanner(values: unknown): string | null {
   return validateCmsSettingsValues(activeBannerSchema, values);
 }
 
-export function validateHomepageBannerContent(mode: "standard" | "election", value: unknown): string | null {
+export function validateHomepageBannerContent(mode: HomepageBannerMode, value: unknown): string | null {
   if (!plainObject(value)) return "Banner content must be an object";
-  for (const key of mode === "standard" ? ["njDecides", "liveLabel", "startsAt", "endsAt", "excludedPaths"] : ["njDecides"]) {
+  const electionOnly = mode === "election" ? [] : ["liveLabel", "excludedPaths"];
+  const schedule = mode === "standard" ? ["startsAt", "endsAt"] : [];
+  for (const key of ["njDecides", ...electionOnly, ...schedule]) {
     if (Object.hasOwn(value, key)) return `Unknown settings field ${key}`;
   }
-  return validateActiveHomepageBanner({ ...value, njDecides: mode === "election" });
+  return validateCmsSettingsValues(homepageBannerContentSchema(mode), { ...value, njDecides: mode === "election" })
+    ?? (mode === "standardWithPresentation" ? standardBannerContrastError(value) : null);
+}
+
+function bannerScheduleError({ startsAt, endsAt }: Record<string, unknown>): string | null {
+  return typeof startsAt === "string" && typeof endsAt === "string" && Date.parse(startsAt) >= Date.parse(endsAt)
+    ? "startsAt must be before endsAt" : null;
+}
+
+function standardBannerContrastError(values: Record<string, unknown>): string | null {
+  const colors = DEFAULT_STANDARD_HOMEPAGE_BANNER_COLORS;
+  const background = (values.backgroundColor ?? colors.backgroundColor) as string;
+  for (const field of ["textColor", "linkColor"] as const) {
+    if (contrastRatio((values[field] ?? colors[field]) as string, background) < 4.5) {
+      return `${field} must have at least 4.5:1 contrast against the background color.`;
+    }
+  }
+  return null;
 }
 
 function validateValueContract(
@@ -1554,15 +1631,8 @@ function validateValueContract(
   values: Record<string, unknown>,
 ): string | null {
   if (contract === "publicHomepageBannerV2" || contract === "publicHomepageBannerV4" || contract === "publicHomepageBannerContentV5") {
-    const startsAt = values.startsAt;
-    const endsAt = values.endsAt;
-    if (
-      typeof startsAt === "string" &&
-      typeof endsAt === "string" &&
-      new Date(startsAt).getTime() >= new Date(endsAt).getTime()
-    ) {
-      return "startsAt must be before endsAt";
-    }
+    const scheduleError = bannerScheduleError(values);
+    if (scheduleError) return scheduleError;
     if (
       values.njDecides !== true &&
       (contract !== "publicHomepageBannerContentV5" || values.enabled === true) &&

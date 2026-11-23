@@ -155,7 +155,7 @@ describe("CMS settings contract", () => {
         },
       },
       "public-homepage-banner": {
-        currentVersion: 5,
+        currentVersion: 6,
         versions: {
           1: {
             schemaVersion: 1,
@@ -288,6 +288,14 @@ describe("CMS settings contract", () => {
             fields: {
               njDecides: { kind: "boolean", required: true },
               standard: { kind: "homepageBannerContent", required: true, mode: "standard" },
+              election: { kind: "homepageBannerContent", required: true, mode: "election" },
+            },
+          },
+          6: {
+            schemaVersion: 6,
+            fields: {
+              njDecides: { kind: "boolean", required: true },
+              standard: { kind: "homepageBannerContent", required: true, mode: "standardWithPresentation" },
               election: { kind: "homepageBannerContent", required: true, mode: "election" },
             },
           },
@@ -647,7 +655,7 @@ describe("CMS settings contract", () => {
     expect(isPublicHomepageBannerUpgrade("other", stored, current)).toBe(false);
     expect(isPublicHomepageBannerUpgrade(
       PUBLIC_HOMEPAGE_BANNER_SETTINGS_ID,
-      { ...stored, schemaVersion: 5 },
+      { ...stored, schemaVersion: 6 },
       current,
     )).toBe(false);
     expect(settingsSchemaForPublication(
@@ -656,6 +664,13 @@ describe("CMS settings contract", () => {
       current,
       CMS_SETTINGS_SCHEMAS,
     )).toBe(cmsSettingsSchemaFor(PUBLIC_HOMEPAGE_BANNER_SETTINGS_ID, 1));
+    const split = { schemaVersion: 5, values: {
+      njDecides: false, standard: DEFAULT_PUBLIC_HOMEPAGE_BANNER_SETTINGS,
+      election: { enabled: false, message: "" },
+    } };
+    expect(isPublicHomepageBannerUpgrade(PUBLIC_HOMEPAGE_BANNER_SETTINGS_ID, split, current)).toBe(true);
+    expect(settingsSchemaForPublication(PUBLIC_HOMEPAGE_BANNER_SETTINGS_ID, split, current, CMS_SETTINGS_SCHEMAS))
+      .toBe(cmsSettingsSchemaFor(PUBLIC_HOMEPAGE_BANNER_SETTINGS_ID, 5));
     const standard = { enabled: true, message: "Standard announcement" };
     const election = { enabled: true, njDecides: true, message: "Election coverage" };
     for (const [values, published] of [[standard, election], [election, standard]]) {
@@ -732,7 +747,12 @@ describe("CMS settings contract", () => {
       baseVersion: 5,
       values: {
         njDecides: true,
-        standard: DEFAULT_PUBLIC_HOMEPAGE_BANNER_SETTINGS,
+        standard: {
+          ...DEFAULT_PUBLIC_HOMEPAGE_BANNER_SETTINGS,
+          startsAt: "2026-11-03T23:00:00.000Z",
+          endsAt: "2026-11-04T06:00:00.000Z",
+          backgroundColor: "#151d40", textColor: "#fff0cc", linkColor: "#b5cbff",
+        },
         election: { enabled: true, message: "", liveLabel: "Live" },
       },
     };
@@ -754,7 +774,7 @@ describe("CMS settings contract", () => {
 
     expect(res.statusCode).toBe(200);
     expect(res.body.settings).toEqual({
-      schemaVersion: 5,
+      schemaVersion: 6,
       values: body.values,
       version: 6,
       published,
@@ -765,6 +785,27 @@ describe("CMS settings contract", () => {
   it("accepts complete values for their exact schema version", () => {
     expect(validateCmsSettingsValues(SCHEMA_V1, valuesV1())).toBeNull();
     expect(validateCmsSettingsValues(SCHEMA_V2, valuesV2())).toBeNull();
+  });
+
+  it("checks both standard banner color pairs and the schedule before admitting settings", () => {
+    const schema = currentCmsSettingsSchemaFor(PUBLIC_HOMEPAGE_BANNER_SETTINGS_ID);
+    const startsAt = "2026-11-03T23:00:00.000Z";
+    const values = { njDecides: false, standard: { enabled: true, message: "Tune in", startsAt },
+      election: { enabled: false, message: "" } };
+    for (const [fields, error] of [
+      [{ backgroundColor: "#ffffff", textColor: "#767676", linkColor: "#0000ff" }, null],
+      [{ backgroundColor: "#ffffff", textColor: "#777777", linkColor: "#0000ff" }, /textColor.*4.5:1/],
+      [{ backgroundColor: "#ffffff", textColor: "#000000", linkColor: "#777777" }, /linkColor.*4.5:1/],
+      [{ endsAt: startsAt }, /startsAt must be before endsAt/],
+    ]) {
+      const result = validateCmsSettingsValues(schema, { ...values, standard: { ...values.standard, ...fields } });
+      if (error) expect(result).toMatch(error);
+      else expect(result).toBeNull();
+    }
+    expect(validateCmsSettingsValues(cmsSettingsSchemaFor(PUBLIC_HOMEPAGE_BANNER_SETTINGS_ID, 5), values))
+      .toMatch(/Unknown settings field startsAt/);
+    expect(validateCmsSettingsValues(schema, { ...values, election: { ...values.election, linkColor: "#123456" } }))
+      .toMatch(/election.Unknown settings field linkColor/);
   });
 
   it.each([

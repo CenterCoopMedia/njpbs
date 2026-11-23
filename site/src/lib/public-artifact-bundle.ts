@@ -30,6 +30,7 @@ import {
   SITE_NAVIGATION_SETTINGS_ID,
   cmsSettingsSchemaFor,
   validateActiveHomepageBanner,
+  validateStandardHomepageBannerPresentation,
   validateCmsSettingsValues,
 } from "../../../packages/content-core/src/cms-settings.ts";
 import type { PublicHomepageBannerBuildData } from "./public-homepage-banner";
@@ -333,6 +334,7 @@ export function assertPublicArtifactBundle(value: unknown): PublicArtifactBundle
       "startsAt",
       "endsAt",
       "excludedPaths",
+      "standardPresentation",
       "sourceVersion",
       "publishedAt",
     ]);
@@ -380,6 +382,12 @@ export function assertPublicArtifactBundle(value: unknown): PublicArtifactBundle
     });
     if (settingsError) {
       throw new Error(`The public artifact bundle settings list is invalid: ${settingsError}`);
+    }
+    if (setting.standardPresentation !== undefined && (
+      setting.njDecides !== false ||
+      validateStandardHomepageBannerPresentation(setting.standardPresentation)
+    )) {
+      throw new Error("The standard homepage banner presentation is invalid");
     }
   }
   const receipt = assertPublicArtifactInventoryReceipt(value.receipt);
