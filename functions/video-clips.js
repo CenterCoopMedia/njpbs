@@ -381,7 +381,8 @@ async function registerClip(firestore, source, request, actor, uploader, now = D
     const preview = { ...pendingPreview(asset, now), actorUid: actor.uid };
     tx.create(previewJobs.doc(preview.id), preview);
     createIndexedVideo(tx, firestore, { ...asset, rendition: renditionState(preview, "processing") },
-      stats.data(), actor, "media.clip.register");
+      stats.data(), adminLogEntry({ actorUid: actor.uid, actorEmail: actor.email ?? null, action: "media.clip.register",
+        target: `mediaSourceAssets/${asset.id}`, before: null, after: { name: asset.name, parentSource: asset.parentSource } }));
     return { id: asset.id, name: asset.name };
   });
 }

@@ -349,14 +349,11 @@ function completedAsset(session, head, now) {
   };
 }
 
-function createIndexedVideo(transaction, firestore, asset, stats, actor, action, audit = adminLogEntry) {
+function createIndexedVideo(transaction, firestore, asset, stats, auditEntry) {
   const assetRef = firestore.collection("mediaSourceAssets").doc(asset.id);
   transaction.create(assetRef, asset);
   enqueueVideoSearchShard(transaction, firestore, asset.id, asset.sourceId);
-  transaction.create(firestore.collection(AUDIT_COLLECTIONS.adminLogs).doc(), audit({
-    actorUid: actor.uid, actorEmail: actor.email ?? null, action,
-    target: `mediaSourceAssets/${asset.id}`, before: null, after: auditMetadata(asset),
-  }));
+  transaction.create(firestore.collection(AUDIT_COLLECTIONS.adminLogs).doc(), auditEntry);
   if (stats?.exact === true && Number.isSafeInteger(stats.activeCount)) {
     transaction.update(firestore.collection("mediaSourceStats").doc(asset.sourceId),
       { activeCount: stats.activeCount + 1, updatedAt: asset.updatedAt });
@@ -422,7 +419,10 @@ async function storeCompletedAsset(
         asset = { ...asset, rendition: renditionState(job, "processing") };
         transaction.create(firestore.collection(PREVIEW_JOBS).doc(job.id), job);
       }
-      createIndexedVideo(transaction, firestore, asset, statsSnapshot.data(), actor, "media.upload", adminLogEntryFn);
+      createIndexedVideo(transaction, firestore, asset, statsSnapshot.data(), adminLogEntryFn({
+        actorUid: actor.uid, actorEmail: actor.email ?? null, action: "media.upload",
+        target: `mediaSourceAssets/${asset.id}`, before: null, after: auditMetadata(asset),
+      }));
     }
     if (holdSnapshot.exists && holdSnapshot.data()?.active === true) {
       transaction.update(holdRef, { active: false, phase: "consumed" });

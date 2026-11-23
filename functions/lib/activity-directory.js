@@ -156,6 +156,7 @@ const ACTIVITY_ACTION_LABELS = Object.freeze({
   media_comment_reopen: "Comment thread reopened",
   media_comment_export: "Staff comments exported",
   "media.clip.cancel": "Video export cancelled",
+  "media.clip.register": "Video clip saved to library",
   "media.clip.request": "Video clip requested",
   "media.transcription.credential.save": "Transcription key configured",
   "media.transcription.credential.disconnect": "Transcription key disconnected",
