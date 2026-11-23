@@ -120,7 +120,7 @@ async function readPostSettingsReceipt({ entry, target, headers, fetchPublic, si
 
 /** Bound concurrent public reads and header/body time together. Every batch
  * must finish; a rejected or timed-out detail cannot acknowledge a subset. */
-async function readSettingsProofs(values, read, { deadline, now, onFailure }) {
+async function readSettingsProofs(values, read, { deadline, now, onFailure = undefined }) {
   const results = [];
   for (let offset = 0; offset < values.length; offset += PROOF_BATCH_SIZE) {
     if (now() >= deadline) throw new Error("Settings consumer confirmation timed out");
