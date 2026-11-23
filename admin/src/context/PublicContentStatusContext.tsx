@@ -23,7 +23,7 @@ const PublicContentStatusControlContext = createContext<{
 type MetadataResult = { data: ContentPublicationMetadata | null; unavailable: boolean;
   publicPage?: PublicPageStatus; publicPageChecking?: boolean;
   lastRecheck?: PublicationRecheckResult; lastRecheckSourceVersion?: number | null };
-interface WatchedRecord { collection: SaveCollection; id: string; count: number; loading: boolean; poll: boolean }
+interface WatchedRecord { collection: SaveCollection; id: string; count: number; loading: boolean; poll: boolean; pageRetried?: boolean }
 const PublicationMetadataContext = createContext<{
   records: Record<string, MetadataResult>;
   watch: (collection: SaveCollection, id: string) => () => void;
@@ -88,6 +88,11 @@ export function PublicContentStatusProvider({ children, getIdToken }: {
       if (pagePath && watched.current.get(identity) === record) {
         timeout = window.setTimeout(() => controller.abort(), PUBLIC_PAGE_STATUS_TIMEOUT_MS);
         const publicPage = await loadPublicPageStatus(pagePath, record.id, controller.signal);
+        if (publicPage) record.pageRetried = false;
+        else if (!record.poll && !record.pageRetried) {
+          record.pageRetried = true;
+          record.poll = true;
+        }
         if (watched.current.get(identity) === record) {
           setRecords(previous => ({ ...previous, [identity]: { ...previous[identity], publicPage, publicPageChecking: false } }));
         }
@@ -130,6 +135,7 @@ export function PublicContentStatusProvider({ children, getIdToken }: {
     const refresh = (pendingOnly = false) => {
       if (document.visibilityState === "hidden") return;
       for (const record of watched.current.values()) {
+        if (!pendingOnly) record.pageRetried = false;
         if (!pendingOnly || record.poll) void readMetadata(record);
       }
     };
@@ -145,10 +151,12 @@ export function PublicContentStatusProvider({ children, getIdToken }: {
       if (!interval) interval = startInterval(() => refresh(true));
     };
     window.addEventListener("focus", onFocus);
+    window.addEventListener("online", onFocus);
     document.addEventListener("visibilitychange", onVisibility);
     return () => {
       window.clearInterval(interval);
       window.removeEventListener("focus", onFocus);
+      window.removeEventListener("online", onFocus);
       document.removeEventListener("visibilitychange", onVisibility);
       watched.current.clear();
     };
@@ -225,12 +233,14 @@ export function PublicContentStatusProvider({ children, getIdToken }: {
     };
     void refresh();
     window.addEventListener("focus", onFocus);
+    window.addEventListener("online", onFocus);
     document.addEventListener("visibilitychange", onVisibility);
     return () => {
       stopped = true;
       active?.abort();
       window.clearInterval(interval);
       window.removeEventListener("focus", onFocus);
+      window.removeEventListener("online", onFocus);
       document.removeEventListener("visibilitychange", onVisibility);
     };
   }, [watchingPublicReceipts, readMetadata]);

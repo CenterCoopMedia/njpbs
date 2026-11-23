@@ -130,8 +130,10 @@ export function PublishedVersionStatus({
     let active: AbortController | undefined;
     let visible = typeof IntersectionObserver !== "function";
     let timer = 0;
-    const read = async () => {
+    let retryTimer = 0;
+    const read = async (allowRetry = true) => {
       if (!visible || active || document.visibilityState === "hidden") return;
+      window.clearTimeout(retryTimer);
       const controller = new AbortController();
       active = controller;
       setListedPage(previous => previous?.path === listedPath && previous.id === documentId && previous.current
@@ -142,6 +144,7 @@ export function PublishedVersionStatus({
       if (active === controller) {
         active = undefined;
         setListedPage({ id: documentId, path: listedPath, current });
+        if (!current && allowRetry) retryTimer = window.setTimeout(() => { void read(false); }, 5_000);
       }
     };
     const observer = visible ? null : new IntersectionObserver(entries => {
@@ -151,11 +154,15 @@ export function PublishedVersionStatus({
     });
     if (observer) observer.observe(badge.current);
     else void read();
-    window.addEventListener("focus", read);
+    const refresh = () => { void read(); };
+    window.addEventListener("focus", refresh);
+    window.addEventListener("online", refresh);
     return () => {
       observer?.disconnect();
-      window.removeEventListener("focus", read);
+      window.removeEventListener("focus", refresh);
+      window.removeEventListener("online", refresh);
       window.clearTimeout(timer);
+      window.clearTimeout(retryTimer);
       active?.abort();
       active = undefined;
     };

@@ -481,6 +481,44 @@ describe("public version evidence", () => {
     expect(fetchMock.mock.calls.some(([, options]) => options.method === "HEAD")).toBe(false);
   });
 
+  it.each([true, false])("retries a failed Page check once and refreshes on reconnect (load metadata: %s)", async (loadPublicationMetadata) => {
+    vi.stubGlobal("crypto", webcrypto);
+    let retry: (() => void) | undefined;
+    const start = loadPublicationMetadata ? "setInterval" : "setTimeout";
+    const timer = window[start].bind(window);
+    vi.spyOn(window, start).mockImplementation((callback, delay) => {
+      if (delay === 5_000 && typeof callback === "function") {
+        retry = () => callback();
+        return timer(() => {}, 60_000);
+      }
+      return timer(callback, delay);
+    });
+    let checks = 0;
+    vi.stubGlobal("fetch", vi.fn(async (url: string, options: RequestInit) => {
+      if (options.method !== "HEAD") return Response.json(url.includes("_content-status") ? receipt() : identity);
+      return ++checks < 3 ? new Response(null) : pageHead("/contact/", "contact", 7);
+    }));
+    vi.mocked(cmsGetPublicationStatus).mockResolvedValue({ ...saved("success"), publication: {
+      ...saved("success").publication, publishedSourceVersion: 7, pagePublicPath: "/contact/",
+    } });
+    render(<PublicContentStatusProvider getIdToken={async () => "test-token"}>
+      <PublishedVersionStatus collection="cmsPages" documentId="contact" loadPublicationMetadata={loadPublicationMetadata} />
+    </PublicContentStatusProvider>);
+    const settled = (label: string) => waitFor(() => expect(screen.getByText(label)).toBeVisible(), { timeout: 1_000 });
+    await settled("Public status unavailable");
+    await waitFor(() => expect(retry).toBeDefined(), { timeout: 1_000 });
+    const retryOnce = retry;
+    retry = undefined;
+    await act(async () => { retryOnce?.(); });
+    await waitFor(() => expect(checks).toBe(2), { timeout: 1_000 });
+    await settled("Public status unavailable");
+    if (loadPublicationMetadata) await act(async () => { retryOnce?.(); });
+    else expect(retry).toBeUndefined();
+    expect(checks).toBe(2);
+    await act(async () => { window.dispatchEvent(new Event("online")); });
+    await settled(loadPublicationMetadata ? "Version 2 live" : "Published copy live");
+  });
+
   it.each([
     { pageConfirmation: { checking: false, attempts: 0, nextAttemptAt: 0 }, stage: "Publication accepted" },
     { pageConfirmation: { checking: true, attempts: 1, nextAttemptAt: Date.now() + 60_000 }, stage: "Checking the public page" },
