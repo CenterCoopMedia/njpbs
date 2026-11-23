@@ -27,7 +27,7 @@ function version(overrides: Record<string, unknown> = {}) {
   };
 }
 
-it("emits a Post candidate accepted by the deployed CMS reader", () => {
+it("projects the renderer seal into the Post candidate and private pair capability", () => {
   const sha = "a".repeat(40);
   const seal = publicPostRendererRelease(sha, "production", {});
   const { variables, pageReaderVersion } = publicWorkerCandidateRendererContract(seal, sha);
@@ -45,15 +45,15 @@ it("emits a Post candidate accepted by the deployed CMS reader", () => {
     },
   }), { tag: TAG, message: MESSAGE });
 
-  // Exact family contract accepted by candidateNoBuildContract at bce824c.
+  const spanishPost = seal.spanishPostVersion === 1 ? { spanishPostVersion: 1 } : {};
   expect(candidate.noBuildPost).toEqual({
     schemaVersion: 2, families: ["posts"], rendererSha: sha, enabled: true, authoritative: true,
-    dataFigureVersion: 1, electionResultsVersion: 2, liveBlogVersion: 1,
+    dataFigureVersion: 1, electionResultsVersion: 2, liveBlogVersion: 1, ...spanishPost,
   });
-  expect(variables.SPANISH_POST_VERSION).toBe("0");
+  expect(variables.SPANISH_POST_VERSION).toBe(seal.spanishPostVersion === 1 ? "1" : "0");
   expect(pageReaderVersion).toBe(seal.pageReaderVersion);
   expect(privatePairReaderCapabilities(sha).post).toEqual({
-    dataFigureVersion: 1, electionResultsVersion: 2, liveBlogVersion: 1,
+    dataFigureVersion: 1, electionResultsVersion: 2, liveBlogVersion: 1, ...spanishPost,
   });
 });
 
