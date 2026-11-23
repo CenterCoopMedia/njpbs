@@ -151,8 +151,8 @@ export function receiptFiles({ sha, image, config, runId, checkout, inputFingerp
     "receipt.json": bytes({ schema: 1, source_sha: sha, image, config: "publisher.json", config_sha256: sha256(configBytes), workflow_run_id: runId, source_checkout: checkout, deployment_input_sha256: inputFingerprint }),
   };
   // A development Worker bundles development templates, so a config pointing at
-  // this unrendered checkout is not deployable. The development release builds
-  // its config from its own checkout rendered with the same inputs.
+  // this unrendered checkout is not deployable. A future development deployer
+  // must render its checkout with the inputs this fingerprint records.
   return {
     "receipt.json": bytes({ schema: 1, target: target.environment, source_sha: sha, image, workflow_run_id: runId, deployment_input_sha256: inputFingerprint }),
   };
