@@ -7,8 +7,8 @@ export interface TownLookupData {
 
 export const TOWN_LOOKUP_DEFAULTS: TownLookupData = {
   heading: "How your town voted",
-  introduction: "Find your municipality to compare past presidential, U.S. Senate and U.S. House results, plus 2024 voter turnout.",
-  sourceLine: "Historical results compiled by NJ Spotlight News from election records.",
+  introduction: "Find your municipality to compare presidential and governor vote shares and general election turnout from 2016 through 2025. The lookup also includes 2024 U.S. Senate and U.S. House results.",
+  sourceLine: "",
 };
 
 export function isTownLookupData(value: unknown, complete = true): value is TownLookupData {

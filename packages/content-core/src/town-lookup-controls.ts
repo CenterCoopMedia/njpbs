@@ -1,19 +1,23 @@
+import { renderTownElectionTrends, type TrendCounts, type TrendSources } from "./town-election-trends.ts";
+
 /** Enhance the complete HTML tables; no data requests or third-party scripts. */
 export function installTownLookupControls(root: ParentNode): void {
   for (const lookup of root.querySelectorAll<HTMLElement>(".town-lookup")) {
     if (lookup.dataset.townLookupReady) continue;
     const search = lookup.querySelector<HTMLFormElement>(".town-lookup__search");
     const input = search?.querySelector<HTMLInputElement>("input");
+    const submit = search?.querySelector<HTMLButtonElement>('button[type="submit"]');
     const list = search?.querySelector<HTMLDataListElement>("datalist");
     const status = lookup.querySelector<HTMLElement>(".town-lookup__status");
     const selected = lookup.querySelector<HTMLElement>(".town-lookup__selected");
     const results = lookup.querySelector<HTMLElement>(".town-lookup__results");
+    const trends = lookup.querySelector<HTMLElement>(".town-trends__content");
     const all = lookup.querySelector<HTMLTableElement>(".town-lookup__all table");
     const map = lookup.querySelector<SVGElement>("svg");
     const path = map?.querySelector<SVGPathElement>(".town-lookup__highlight");
     const marker = map?.querySelector<SVGCircleElement>("circle");
     const caption = lookup.querySelector<HTMLElement>("figcaption");
-    if (!search || !input || !list || !status || !selected || !results || !all || !map || !path || !marker || !caption) continue;
+    if (!search || !input || !submit || !list || !status || !selected || !results || !all || !map || !path || !marker || !caption) continue;
     const rows = Array.from(all.querySelectorAll<HTMLTableRowElement>("tbody tr"));
     const headings = Array.from(all.querySelectorAll<HTMLTableCellElement>("thead th")).slice(1);
     const normalize = (text: string) => text.trim().toLocaleLowerCase("en-US");
@@ -26,9 +30,10 @@ export function installTownLookupControls(root: ParentNode): void {
     function clearSelection(): void {
       selected!.hidden = true;
       results!.replaceChildren();
+      trends?.replaceChildren();
       status!.textContent = "Choose a municipality and county, then select Show results.";
     }
-    search.addEventListener("submit", event => {
+    const showResults = (event: Event) => {
       event.preventDefault();
       const query = normalize(input.value);
       // Match the complete county-qualified identity; a partial or duplicate name
@@ -58,6 +63,12 @@ export function installTownLookupControls(root: ParentNode): void {
         tr.append(th, cell.cloneNode(true));
       });
       results.replaceChildren(table);
+      const id = town.row.dataset.townId;
+      const counts = town.row.dataset.townTrends;
+      if (trends && id && counts && lookup.dataset.trendSources) {
+        const sources = JSON.parse(lookup.dataset.trendSources) as Record<string, TrendSources>;
+        trends.innerHTML = renderTownElectionTrends(town.label, id, JSON.parse(counts) as TrendCounts, sources[id.slice(0, 2)]);
+      }
       path.setAttribute("d", town.row.dataset.townPath ?? "");
       const [x, y] = (town.row.dataset.townMarker ?? "").split(" ");
       marker.setAttribute("cx", x);
@@ -66,7 +77,11 @@ export function installTownLookupControls(root: ParentNode): void {
       caption.textContent = town.label;
       selected.hidden = false;
       status.textContent = `Showing past results for ${town.label}.`;
-    });
+    };
+    // The staff preview sandbox blocks native form submission. The button also
+    // handles implicit keyboard activation while leaving the sandbox in place.
+    submit.addEventListener("click", showResults);
+    search.addEventListener("submit", showResults);
     input.addEventListener("input", clearSelection);
     lookup.dataset.townLookupReady = "true";
     search.hidden = false;

@@ -555,6 +555,8 @@ const expectedCmsAnchorEmitters: Readonly<Record<string, number>> = {
   "nj-decides-render.ts": 1,
   "post-media-player.ts": 2,
   "schedule-now-next-render.ts": 4,
+  // Fixed state PDF paths and reviewed county reports in the election snapshot.
+  "town-election-trends.ts": 1,
   // Reviewed election/GIS source links only; editable copy cannot set an href.
   "town-lookup-render.ts": 3,
 };
@@ -1104,10 +1106,21 @@ describe("donate degradation wiring worklist (#189)", () => {
     expect(parsed.ok).toBe(true);
     const html = renderBlock(block);
     const links = [...html.matchAll(/<a href="([^"]+)"/g)].map(match => match[1]);
-    // Six election/turnout headings, one map source and one analysis source.
-    expect(links).toHaveLength(8);
+    // Six election/turnout headings, one map link, three links in the footer and
+    // eleven county corrections in the script-free table.
+    expect(links).toHaveLength(21);
+    expect(links.filter(href => new URL(href).hostname === "www.nj.gov")).toEqual(
+      [...[2016, 2020, 2024].map(year => `https://www.nj.gov/state/elections/election-information-${year}.shtml#general`),
+        "https://www.nj.gov/state/elections/election-information-results.shtml",
+        "https://www.nj.gov/state/elections/election-information-ballots-cast.shtml"],
+    );
     for (const href of links) {
-      expect(["datawrapper.dwcdn.net", "maps.nj.gov", "www.njspotlightnews.org"]).toContain(new URL(href).hostname);
+      const url = new URL(href);
+      expect(url.protocol).toBe("https:");
+      expect([
+        "datawrapper.dwcdn.net", "maps.nj.gov", "www.njspotlightnews.org", "www.nj.gov",
+        "www.atlanticcountyclerk.org", "www.burlingtoncountynj.gov", "www.camdencounty.com", "www.morriscountyclerk.org",
+      ]).toContain(url.hostname);
     }
     expect(links).not.toContain(donateUrl);
     expect(parseBlocks([{ ...block, data: { ...data, sourceHref: donateUrl } }]).ok).toBe(false);
