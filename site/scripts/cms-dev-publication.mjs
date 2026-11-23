@@ -17,6 +17,7 @@ import { preparePublicWorkerArtifact } from "../src/lib/public-worker-artifact.t
 import { retainCloudPreviewPublicContext } from "./cms-preview-cloud-storage.ts";
 
 import { retryWorkerVersionReceipt, prepareStaticPostProof } from "./upload-public-worker-candidate.ts";
+import { publicWorkerCandidateRendererContract } from "./public-post-renderer-release.ts";
 import { findExactRecentWorkerVersion } from "../src/lib/public-worker-version-recovery.ts";
 import { publicRouteBaseForRecordKind } from "../../packages/content-core/src/public-record-kinds.ts";
 import { isPostRouteSlug, isServerMintableSlugShape, postRoutePath, postSlugForPath } from "../../packages/content-core/src/post-slugs.ts";
@@ -287,31 +288,34 @@ async function activeDeployment(versionId) {
   return active;
 }
 
-async function assertDevWorkerConfig() {
+// Dev runs the production Worker program from the production config. Only
+// the Worker name, data bindings and routes change; nothing else is dev-only.
+async function writeDevWorkerConfig() {
   target();
-  const config = await json(path.join(root, "workers/wrangler.public.dev.jsonc"));
-  if (config.name !== state.TARGET.workerName || config.main !== "src/dev-public-worker.ts" ||
-      config.workers_dev !== false || config.preview_urls !== false ||
-      !isDeepStrictEqual(config.routes, []) ||
-      !isDeepStrictEqual(config.services, [{ binding: "CMS_API", service: "template-dev-cms-api", entrypoint: "PublicContentEntrypoint" }]) ||
-      !isDeepStrictEqual(config.vars, { NO_BUILD_POST_RENDERER_SHA: "", NO_BUILD_PAGE_RENDERER_SHA: "", DATA_FIGURE_VERSION: "", ELECTION_RESULTS_VERSION: "" }) ||
-      !isDeepStrictEqual(config.assets, { directory: "../dev-publication/dist", binding: "ASSETS",
-        run_worker_first: true, html_handling: "force-trailing-slash", not_found_handling: "404-page" })) {
-    throw new Error("Development public Worker config differs");
-  }
+  const { experimental_readRawConfig } = await import("wrangler");
+  const config = experimental_readRawConfig({ config: path.join(root, "workers/wrangler.jsonc") }).rawConfig;
+  const file = path.join(directory, "wrangler.development.json");
+  await save(file, { ...config, name: state.TARGET.workerName, main: path.join(root, "workers", config.main),
+    routes: [], workers_dev: false, preview_urls: false,
+    assets: { ...config.assets, directory: path.join(directory, "dist") },
+    r2_buckets: [{ binding: "DURABLE_POST_WITHDRAWALS", bucket_name: publicationTarget.publicationBucket }],
+    services: [{ binding: "CMS_API", service: "template-dev-cms-api", entrypoint: "PublicContentEntrypoint" }],
+    vars: { ...config.vars, PUBLICATION_ENVIRONMENT: "development" } });
+  return file;
 }
 
 async function uploadCandidate(publication, rendererSeal) {
+  // The dev seal names its environment; the variable contract is production's.
+  const rendererRelease = { ...rendererSeal };
+  delete rendererRelease.environment;
+  const { variables } = publicWorkerCandidateRendererContract(rendererRelease, publication.commitSha);
+  const config = await writeDevWorkerConfig();
   // Keep provider diagnostics private: child errors can contain environment details.
   let output;
   try {
     output = execFileSync(path.join(root, "node_modules/.bin/wrangler"), ["versions", "upload",
-      "--config", path.join(root, "workers/wrangler.public.dev.jsonc"), "--assets", path.join(directory, "dist"),
-      "--var", `NO_BUILD_POST_RENDERER_SHA:${publication.commitSha}`,
-      "--var", `NO_BUILD_PAGE_RENDERER_SHA:${publication.commitSha}`,
-      "--var", `NO_BUILD_RECORD_RENDERER_SHA:${publication.commitSha}`,
-      "--var", "DATA_FIGURE_VERSION:1", "--var", "ELECTION_RESULTS_VERSION:2",
-      ...(rendererSeal.spanishPostVersion === 1 ? ["--var", "SPANISH_POST_VERSION:1"] : []),
+      "--config", config, "--assets", path.join(directory, "dist"),
+      ...Object.entries(variables).flatMap(([name, value]) => ["--var", `${name}:${value}`]),
       "--tag", publicWorkerCandidateTag(publication), "--message", publicWorkerCandidateMessage(publication), "--strict"], {
       cwd: root, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"], maxBuffer: 1024 * 1024,
       env: { PATH: process.env.PATH, HOME: process.env.HOME, CLOUDFLARE_ACCOUNT_ID: cloudflareAccount(),
@@ -595,7 +599,6 @@ export async function upload(db, id, reconcileOnly = false, recovery = null) {
     const rebuilt = await preparePublicWorkerArtifact({ artifactReceipt: inventory, distDirectory: path.join(directory, "dist"),
       outputPath: path.join(directory, "checked-publication.json") });
     if (!isDeepStrictEqual(rebuilt, publication)) throw new Error("Development artifact bytes changed");
-    await assertDevWorkerConfig();
     await verifyPrivateWorker();
     if (!timedOutRecovery) await retainContext(db, JSON.parse(await readFile(path.join(directory, "dist/_publication.json"), "utf8")));
 

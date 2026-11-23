@@ -19,11 +19,13 @@ type PublicEnv = Omit<Env, "CMS_API"> & IsolateStartEnvironment & {
   NO_BUILD_PAGE_RENDERER_SHA?: string;
   NO_BUILD_CODE_POST_RENDERER_SHA?: string;
   NO_BUILD_RECORD_RENDERER_SHA?: string;
+  /** Set only by the development upload; production leaves it unset. */
+  PUBLICATION_ENVIRONMENT?: string;
 };
 export default {
   async fetch(request: Request, env: PublicEnv, ctx: ExecutionContext): Promise<Response> {
     observePublicIsolateStart(env);
-    const target = publicationTarget("production");
+    const target = publicationTarget(env.PUBLICATION_ENVIRONMENT === "development" ? "development" : "production");
     if (new URL(request.url).origin !== target.origin) return new Response(null, { status: 404, headers: { "cache-control": "no-store" } });
     const assets = (assetRequest: Request) => env.ASSETS.fetch(assetRequest);
     const fetchAsset = env.DURABLE_POST_WITHDRAWALS ? createContentBaselineAssetReader({
@@ -47,7 +49,7 @@ export default {
       readWithdrawal: slug => readDurablePostWithdrawal(env.DURABLE_POST_WITHDRAWALS, target.workerName, slug),
       getDecision: (path, method) => env.CMS_API.getNoBuildCodePost(path, rendererSha, method) });
     const noBuildPosts = createTransitionalPostReadWorker({
-      rendererSha, render: renderPublishedPost, cache: caches.default,
+      target, rendererSha, render: renderPublishedPost, cache: caches.default,
       rendererReady: !env.NO_BUILD_POST_RENDERER_SHA || env.NO_BUILD_POST_RENDERER_SHA === rendererSha,
       recordRendererReady: env.NO_BUILD_RECORD_RENDERER_SHA === rendererSha,
       readRecordAuthority: path => readDurableRecordAuthority(env.DURABLE_POST_WITHDRAWALS, target.workerName, path),
@@ -68,7 +70,7 @@ export default {
     const response = await servePublicRequest(request, {
       fetchAsset,
       getPublishedPage: pageId => env.CMS_API.getPublishedPage(pageId),
-      noBuildPosts,
+      noBuildPosts, publicationOrigin: target.workerName,
       projectionCache: caches.default, waitUntil: task => ctx.waitUntil(task),
     });
     return pendingAuthorResponse(request, response, { rendererSha, fetchAsset,

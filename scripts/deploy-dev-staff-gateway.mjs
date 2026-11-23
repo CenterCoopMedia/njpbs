@@ -30,7 +30,8 @@ function requireState(condition, message) {
 export function assertDevPublicWorkerBindings(bindings, rendererSha) {
   requireState(Array.isArray(bindings) && bindings.length >= 3 &&
     new Set(bindings.map(binding => binding?.name)).size === bindings.length &&
-    bindings.every(binding => ['ASSETS', 'CMS_API', 'NO_BUILD_POST_RENDERER_SHA', 'NO_BUILD_PAGE_RENDERER_SHA', 'NO_BUILD_CODE_POST_RENDERER_SHA', 'NO_BUILD_RECORD_RENDERER_SHA', 'DATA_HUB_PUBLIC', 'DATA_FIGURE_VERSION', 'ELECTION_RESULTS_VERSION', 'SPANISH_POST_VERSION', 'DURABLE_POST_WITHDRAWALS', 'CF_VERSION_METADATA'].includes(binding?.name)),
+    bindings.every(binding => ['ASSETS', 'CMS_API', 'NO_BUILD_POST_RENDERER_SHA', 'NO_BUILD_PAGE_RENDERER_SHA', 'NO_BUILD_CODE_POST_RENDERER_SHA', 'NO_BUILD_RECORD_RENDERER_SHA', 'DATA_HUB_PUBLIC', 'DATA_FIGURE_VERSION', 'ELECTION_RESULTS_VERSION', 'SPANISH_POST_VERSION', 'DURABLE_POST_WITHDRAWALS', 'CF_VERSION_METADATA',
+      'NO_BUILD_POST_FAMILIES', 'LIVE_BLOG_VERSION', 'DATA_HUB_COMPOSITION_VERSION', 'PUBLIC_PAIR_INGRESS_ENABLED', 'PUBLIC_PAIR_ROUTING_MEASUREMENT_ENABLED', 'NO_BUILD_POST_ENABLED', 'NO_BUILD_POST_ID', 'PUBLICATION_ENVIRONMENT'].includes(binding?.name)),
   'Dev public Worker must have the exact reader bindings');
   const assets = bindings.find(binding => binding?.name === 'ASSETS');
   const api = bindings.find(binding => binding?.name === 'CMS_API');
@@ -54,7 +55,7 @@ export function assertDevPublicWorkerBindings(bindings, rendererSha) {
     (!pageRenderer || pageRenderer.type === 'plain_text' && pageRenderer.text === renderer.text) &&
     (!electionResultsVersion || electionResultsVersion.type === 'plain_text' && ['0', '1', '2'].includes(electionResultsVersion.text)) &&
     (!dataFigureVersion || dataFigureVersion.type === 'plain_text' && dataFigureVersion.text === '1') &&
-    (!spanishPostVersion || spanishPostVersion.type === 'plain_text' && spanishPostVersion.text === '1') &&
+    (!spanishPostVersion || spanishPostVersion.type === 'plain_text' && ['0', '1'].includes(spanishPostVersion.text)) &&
     (!versionMetadata || versionMetadata.type === 'version_metadata'),
   'Dev public Worker must have the exact reader bindings');
 }

@@ -85,7 +85,6 @@ async function disposableUploader() {
   const checkout = path.join(directory, "checkout");
   await mkdir(path.join(checkout, "site/scripts"), { recursive: true });
   await mkdir(path.join(checkout, "cms-api"), { recursive: true });
-  await mkdir(path.join(checkout, "workers"), { recursive: true });
   await mkdir(path.join(checkout, "node_modules/.bin"), { recursive: true });
   for (const name of ["functions", "packages", "scripts", ".github"]) await symlink(path.join(root, name), path.join(checkout, name));
   for (const name of ["src", "node_modules"]) await symlink(path.join(root, "site", name), path.join(checkout, "site", name));
@@ -95,7 +94,6 @@ async function disposableUploader() {
     if (name === "cms-dev-publication.mjs") await copyFile(source, destination);
     else await symlink(source, destination);
   }
-  await copyFile(path.join(root, "workers/wrangler.public.dev.jsonc"), path.join(checkout, "workers/wrangler.public.dev.jsonc"));
   await copyFile(path.join(root, "cms-api/wrangler.dev.jsonc"), path.join(checkout, "cms-api/wrangler.dev.jsonc"));
   await writeJson(path.join(checkout, "package.json"), { type: "module" });
   const commands = path.join(directory, "provider-commands.jsonl");

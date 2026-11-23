@@ -683,12 +683,11 @@ describe("explicit dev candidate target", () => {
     value.resources.bindings.push(binding, { ...binding });
     expect(() => projectCloudflareWorkerVersion(value, expected)).toThrow("dev candidate reader bindings are invalid");
   });
-  it.each(["production service", "extra family flag", "duplicate CMS binding", "missing renderer seal"])(
+  it.each(["production service", "duplicate CMS binding", "missing renderer seal"])(
     "refuses mixed dev receipt: %s", mode => {
       const { value, expected } = devVersion();
       const bindings = value.resources.bindings;
       if (mode === "production service") bindings.find(binding => binding.name === "CMS_API").service = "njpbs-cms-api";
-      if (mode === "extra family flag") bindings.push({ name: "NO_BUILD_POST_FAMILIES", type: "plain_text", text: "posts" });
       if (mode === "duplicate CMS binding") bindings.push({ ...bindings.find(binding => binding.name === "CMS_API") });
       if (mode === "missing renderer seal") value.resources.bindings = bindings.filter(binding => binding.name !== "NO_BUILD_POST_RENDERER_SHA");
       expect(() => projectCloudflareWorkerVersion(value, expected)).toThrow();

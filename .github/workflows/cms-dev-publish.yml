@@ -38,8 +38,8 @@ on:
       - ".github/scripts/dev-publication-source-checkout.mjs"
       - ".github/scripts/dev-publication-input-artifact.mjs"
       - ".github/scripts/dev-code-refresh-input.mjs"
-      - "workers/src/dev-public-worker.ts"
-      - "workers/src/dev-public-worker-configuration.d.ts"
+      - "workers/src/public-no-build-entry.ts"
+      - "workers/src/public-worker.ts"
       - "workers/src/no-build-post-worker.ts"
       - "workers/src/transitional-post-read-worker.ts"
       - "workers/src/durable-post-withdrawals.ts"
@@ -47,7 +47,7 @@ on:
       - "functions/lib/transitional-post-fallback.d.ts"
       - "functions/lib/publication-target.js"
       - "functions/lib/publication-target.d.ts"
-      - "workers/wrangler.public.dev.jsonc"
+      - "workers/wrangler.jsonc"
       - ".github/workflows/cms-dev-publish.yml"
 
 permissions:

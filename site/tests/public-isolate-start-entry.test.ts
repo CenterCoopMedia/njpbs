@@ -68,3 +68,16 @@ it("the real entry attempts at most one start without awaiting telemetry or alte
   }
   expect(write).toHaveBeenCalledTimes(1); expect(then).not.toHaveBeenCalled();
 });
+it("serves the development origin only when the upload selects the development target", async () => {
+  vi.stubGlobal("caches", { default: {} });
+  const probe = (origin: string) => new Request(`${origin}/_publication.json`);
+  const serve = (origin: string, environment?: string) => load().default.fetch(probe(origin),
+    { ASSETS: { fetch: asset }, CMS_API: {}, ...(environment ? { PUBLICATION_ENVIRONMENT: environment } : {}) }, { waitUntil: vi.fn() });
+  expect((await serve("https://dev-public.example.org")).status).toBe(404);
+  expect((await serve("https://njpbs.org", "development")).status).toBe(404);
+  const production = await serve("https://njpbs.org");
+  expect(production.headers.get("x-njpbs-publication-origin")).toBe("njpbs-production");
+  const development = await serve("https://dev-public.example.org", "development");
+  expect(development.status).toBe(200);
+  expect(development.headers.get("x-njpbs-publication-origin")).toBe("template-dev-public");
+});
