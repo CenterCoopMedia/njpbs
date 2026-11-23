@@ -89,11 +89,13 @@ env:
   # literal: repository variables hold production values, so a dev run must never
   # fall back to one.
   # A development-environment job falls back to the repository (production) value of a
-  # secret or variable the environment lacks (CenterCoopMedia/njpbs#562). The jawn-ops
-  # release input check refuses a development dispatch when a secret this workflow
-  # references is absent from the development environment itself. Development reads drop
-  # production-only fallbacks; tests/preflight/cms-deploy-workflow-parity.test.js names
-  # every secret and variable a development run reads and why each variable may be shared.
+  # secret or variable the environment lacks (CenterCoopMedia/njpbs#562). These are the
+  # names a development run needs from the development environment itself; the jawn-ops
+  # release runner reads this JSON before a development dispatch and refuses any name the
+  # environment lacks. tests/preflight/cms-deploy-workflow-parity.test.js keeps it equal
+  # to the workflow's reads and names the variables shared on purpose.
+  CMS_DEVELOPMENT_ENVIRONMENT_NAMES: >-
+    {"secrets": ["CLOUDFLARE_ACCOUNT_ID", "CLOUDFLARE_API_TOKEN", "CMS_BUG_REPORT_GITHUB_TOKEN", "CMS_BUG_REPORT_GITHUB_WEBHOOK_SECRET", "CMS_BUG_REPORT_TELEGRAM_ADMIN_MAP", "CMS_BUG_REPORT_TELEGRAM_BOT_TOKEN", "CMS_BUG_REPORT_TELEGRAM_CHAT_ID", "CMS_BUG_REPORT_TELEGRAM_WEBHOOK_SECRET", "CMS_DEV_ACCESS_CLIENT_ID", "CMS_DEV_ACCESS_CLIENT_SECRET", "CMS_EDGE_ORIGIN_SECRET", "CMS_MEDIA_CACHE_PURGE_TOKEN", "CMS_PREVIEW_R2_CREDENTIAL", "CMS_PREVIEW_SMOKE_CREDENTIAL", "CMS_STAFF_EMAIL_API_TOKEN", "CMS_VOICEOVER_R2_ACCESS_KEY_ID", "CMS_VOICEOVER_R2_SECRET_ACCESS_KEY", "FIREBASE_SERVICE_ACCOUNT"], "variables": ["CMS_DEV_RENDERER_SOURCE_SHA", "CMS_PREVIEW_SMOKE_TARGET", "FIREBASE_DEPLOY_SERVICE_ACCOUNT", "VITE_FIREBASE_API_KEY", "VITE_FIREBASE_APPCHECK_SITE_KEY", "VITE_FIREBASE_APP_ID", "VITE_FIREBASE_AUTH_DOMAIN", "VITE_FIREBASE_PROJECT_ID", "VITE_FUNCTIONS_BASE_URL"]}
   CMS_TARGET: ${{ inputs.target == 'development' && 'development' || 'production' }}
   CMS_TARGET_FIREBASE_PROJECT: ${{ inputs.target == 'development' && 'njpbs-site-dev' || 'njpbs-site' }}
   CMS_TARGET_ADMIN_ORIGIN: ${{ inputs.target == 'development' && 'https://dev-admin.njpbs.org' || 'https://admin.njpbs.org' }}
