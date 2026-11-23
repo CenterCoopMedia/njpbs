@@ -195,11 +195,10 @@ const images = [...newsletters.images.values()].map(image => renderResolvedImage
       writeFileSync(
         join(fixtureRoot, "astro.config.mjs"),
         `import { defineConfig } from "astro/config";\n` +
+          `import { buildImageBudget } from "../astro.config.mjs";\n` +
           `export default defineConfig({\n` +
-          `  image: {\n` +
-          `    remotePatterns: [{ protocol: "http", hostname: "127.0.0.1", port: "${address.port}", pathname: "/cms-media/**" }],\n` +
-          `    service: { entrypoint: "../src/lib/build-image-service.ts", config: { maxRemoteVariants: 12 } },\n` +
-          `  },\n` +
+          `  image: { remotePatterns: [{ protocol: "http", hostname: "127.0.0.1", port: "${address.port}", pathname: "/cms-media/**" }] },\n` +
+          `  integrations: [buildImageBudget("../src/lib/build-image-service.ts", 24)],\n` +
           `});\n`,
         "utf8",
       );
@@ -233,15 +232,17 @@ const images = [...newsletters.images.values()].map(image => renderResolvedImage
       expect(duplicate).toEqual(html);
 
       requests.length = 0;
-      writeFileSync(join(pages, "duplicate.astro"), page.replace(
+      // Each route fits alone. The three originals share a 24-variant build budget.
+      const overBudgetPage = page.replace("/cms-media/watch.jpg", "/cms-media/other.jpg").replace(
         "const markup",
-        `await Promise.all(Array.from({ length: 16 }, (_, i) => resolveCmsResponsiveImage(
-          { url: "http://127.0.0.1:${address.port}/cms-media/" + i + ".jpg", mimeType: "image/jpeg", width: 640, height: 360 },
+        `await resolveCmsResponsiveImage(
+          { url: "http://127.0.0.1:${address.port}/cms-media/third.jpg", mimeType: "image/jpeg", width: 640, height: 360 },
           "grid", getImage,
-        )));\nconst markup`,
-      ));
+        );\nconst markup`,
+      );
+      writeFileSync(join(pages, "duplicate.astro"), overBudgetPage);
       await expect(build({ root: fixtureRoot, logLevel: "silent" })).rejects.toThrow(
-        "Build image budget reached (12 distinct remote variants)",
+        "Build image budget reached (24 distinct remote variants)",
       );
       expect(requests).toEqual([]);
     } finally {
