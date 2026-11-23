@@ -79,6 +79,15 @@ Release the publisher, renderer and CMS from the same pinned source commit.
 The route needs no separate variable or secret change. Deployment requires
 separate authorization.
 
+### NJ Spotlight News archive
+
+An approved archive Post has `spotlightArchive: true` in its published metadata,
+with the original station-local day in `date` and `editorialDateSource` set to
+`backdated`. It uses the ordinary canonical Post URL, published credits and CMS
+blocks. The Pagefind index drives keyword, topic and publication-year searches
+at `/search/spotlight-archive/`. The archive stays out of the latest Posts,
+homepage selections and released-content feeds.
+
 ### Archive route comparison
 
 Use `compare:archive` from `site/` with two anonymously readable origins and

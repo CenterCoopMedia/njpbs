@@ -20,7 +20,7 @@ const { entry, credits, canonicalUrl } = Astro.props as Props;
 const requestedPresentation = resolvePostPresentation(entry.data.tags);
 // Older immutable snapshots may predate the publication requirements. Keep them readable.
 // Multimedia keeps its layout if a now-unavailable optional lead was its only media.
-const presentation = entry.data.liveBlog ? "standard"
+const presentation = entry.data.liveBlog || entry.data.spotlightArchive ? "standard"
   : requestedPresentation === "multimedia" || !postPresentationError(entry.data)
     ? requestedPresentation : "standard";
 ---

@@ -15,7 +15,7 @@ export function adaptHomeStationPosts(snapshot: StationPostSnapshot, selection: 
   const cutoff = homeSourceInstant(selection.cutoffAt);
   if (cutoff === null) throw new Error("Station Post cutoff is invalid.");
   const entries = snapshot.posts.flatMap(value => {
-    if (!homeSourceObject(value) || value.noindex !== false || !homeSourceText(value.postId, 128) || !homeSourceText(value.title, 300) ||
+    if (!homeSourceObject(value) || value.noindex !== false || value.spotlightArchive === true || !homeSourceText(value.postId, 128) || !homeSourceText(value.title, 300) ||
       !homeSourceText(value.path, 2048) || !/^\/posts\/[a-z0-9]+(?:-[a-z0-9]+)*\/$/.test(value.path) || !Number.isSafeInteger(value.sourceVersion) || Number(value.sourceVersion) < 1 ||
       !Array.isArray(value.credits) || value.credits.length > STORY_CREDITS_MAX ||
       value.credits.some(credit => !homeSourceObject(credit) || !homeSourceText(credit.name, STORY_CREDIT_NAME_MAX))) return [];

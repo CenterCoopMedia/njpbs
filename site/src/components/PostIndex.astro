@@ -24,7 +24,7 @@ const publicAuthors = authors.map((author) => ({
   slug: author.data.slug,
 }));
 const posts = entries
-  .filter((entry) => !entry.data.noindex)
+  .filter((entry) => !entry.data.noindex && !entry.data.spotlightArchive)
   .map((entry) => ({
     entry,
     credits: resolvePublicCreditLinks(entry.data.credits, publicAuthors),

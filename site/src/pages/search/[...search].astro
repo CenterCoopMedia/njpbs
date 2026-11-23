@@ -2,20 +2,30 @@
 import PublicSiteLayout from "../../layouts/PublicSiteLayout.astro";
 import SiteSearch from "../../components/SiteSearch.astro";
 import { publicRootRoutesEnabled } from "../../lib/build-target";
+import { SPOTLIGHT_ARCHIVE_LABEL, SPOTLIGHT_ARCHIVE_SEARCH_PATH } from "../../lib/spotlight-archive";
 
 export function getStaticPaths() {
   if (!publicRootRoutesEnabled(process.env)) return [];
-  return [{ params: { search: undefined } }];
+  return [
+    { params: { search: undefined }, props: { archive: false } },
+    { params: { search: "spotlight-archive" }, props: { archive: true } },
+  ];
 }
+
+const { archive } = Astro.props;
+const title = archive ? SPOTLIGHT_ARCHIVE_LABEL : "Search NJ PBS";
+const description = archive
+  ? "Find historical reporting by topic and original publication year."
+  : "Find pages, stories, and guides on NJ PBS.";
 ---
 
 <PublicSiteLayout
-  title="Search NJ PBS"
-  description="Find pages, stories, and guides on NJ PBS."
+  title={title}
+  description={description}
   preview={false}
-  canonicalPath="/search/"
+  canonicalPath={archive ? SPOTLIGHT_ARCHIVE_SEARCH_PATH : "/search/"}
   noindex={true}
   searchable={false}
 >
-  <SiteSearch />
+  <SiteSearch archive={archive} />
 </PublicSiteLayout>

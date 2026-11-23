@@ -59,6 +59,20 @@ describe("Spotlight publication metadata", () => {
     expect(createPostPreviewSnapshot("draft", post(false)).published.metadata.spotlightNews).toBe(false);
   });
 
+  it("carries an approved archive identity and original day across a later publish", () => {
+    const document = { ...post(), date: "2026-10-06", spotlightArchive: true };
+    const ordinary = freeze(document);
+    expect(ordinary.metadata).not.toHaveProperty("spotlightArchive");
+    const published = {
+      ...ordinary,
+      metadata: { ...ordinary.metadata, spotlightArchive: true, date: "2012-02-29", editorialDateSource: "backdated" },
+    };
+    const revised = { ...document, version: 4, published, spotlightArchive: false };
+    expect(freeze(revised).metadata).toMatchObject({
+      spotlightArchive: true, date: "2012-02-29", editorialDateSource: "backdated",
+    });
+  });
+
   it("does not carry publication attribution into reusable templates", () => {
     for (const mode of ["layout", "content"]) {
       expect(capturePost(post(true), mode).spotlightNews).toBeUndefined();

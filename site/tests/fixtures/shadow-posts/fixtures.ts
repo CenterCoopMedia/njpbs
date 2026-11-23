@@ -9,6 +9,24 @@ export const spotlight = [false, true].map(spotlightNews => ({
     },
   },
 }));
+export const spotlightArchivePost = {
+  ...prose,
+  document: { ...prose.document, id: "archived-transit",
+    published: { ...prose.document.published, metadata: { ...prose.document.published.metadata,
+      title: "Historical transit reporting", slug: "archived-transit", spotlightArchive: true as const,
+      date: "2012-02-29", editorialDateSource: "backdated", categories: ["Transportation"], tags: ["Rail"],
+      credits: [{ kind: "custom", name: "Archive Reporter" }],
+    } },
+  },
+};
+export const unlistedArchivePost = {
+  ...spotlightArchivePost,
+  document: { ...spotlightArchivePost.document, id: "unlisted-transit",
+    published: { ...spotlightArchivePost.document.published, metadata: { ...spotlightArchivePost.document.published.metadata,
+      slug: "unlisted-transit", seo: { noindex: true },
+    } },
+  },
+};
 export const videoUrl = `https://media.njpbs.org/cms-media/video/fixture-video/${"a".repeat(64)}.mp4`;
 export const video = { ...prose, document: { ...prose.document, published: { ...prose.document.published,
   metadata: { ...prose.document.published.metadata, slug: "shadow-video" },

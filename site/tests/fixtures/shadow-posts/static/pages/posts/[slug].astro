@@ -4,10 +4,10 @@ import PostRoute from "../../../../../../src/pages/posts/[...slug].astro";
 import { projectCmsPost } from "../../../../../../src/lib/cms-posts-projection";
 import { projectAuthorSnapshot } from "../../../../../../src/lib/cms-authors-projection";
 import { resolvePublicCreditLinks } from "../../../../../../src/lib/public-author-links";
-import { prose, video, spotlight, registeredAuthor, withdrawnAuthor, uploadedImages, uploadedAuthors } from "../../../fixtures";
+import { prose, video, spotlight, spotlightArchivePost, unlistedArchivePost, registeredAuthor, withdrawnAuthor, uploadedImages, uploadedAuthors } from "../../../fixtures";
 import { catalogFixtures } from "../../../block-catalog";
 export function getStaticPaths() {
-  return [prose, video, ...spotlight, registeredAuthor, withdrawnAuthor, ...uploadedImages, ...uploadedAuthors, ...catalogFixtures].map(read => {
+  return [prose, video, ...spotlight, spotlightArchivePost, unlistedArchivePost, registeredAuthor, withdrawnAuthor, ...uploadedImages, ...uploadedAuthors, ...catalogFixtures].map(read => {
     const post = projectCmsPost(read.document, { now: new Date("2026-10-07T13:00:00Z"), assets: new Map(read.assets.map(asset => [asset.id, asset])) })!;
     const authors = "authors" in read && Array.isArray(read.authors) ? read.authors.flatMap((snapshot: (typeof registeredAuthor.authors)[number]) => {
       const author = projectAuthorSnapshot(snapshot.id, snapshot);

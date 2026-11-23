@@ -2,12 +2,14 @@ import { contentLink } from "../../../packages/content-core/src/content-link.ts"
 import { pagefindExcerpt, plainExcerpt } from "./search-excerpt";
 import { createPageMeaningSearch } from "./meaning-search";
 import { recordSiteSearch } from "./analytics-consent";
+import { formatEditorialDate } from "./editorial-date-format";
+import { SPOTLIGHT_ARCHIVE_LABEL } from "./spotlight-archive";
 // Pagefind's browser bundle is emitted after Astro builds, not imported by Vite.
 interface SearchResult {
   url: string;
   excerpt: string;
   content?: string;
-  meta: { title?: string; contentLinkUrl?: string; contentLinkNewTab?: string };
+  meta: { title?: string; contentLinkUrl?: string; contentLinkNewTab?: string; archive?: string; archiveDate?: string };
 }
 interface SearchIndex {
   filters(): Promise<Record<string, Record<string, number>>>;
@@ -54,12 +56,27 @@ function resultItem(result: SearchResult): HTMLLIElement {
   heading.append(link);
   const excerpt = document.createElement("p");
   excerpt.append(pagefindExcerpt(result.excerpt, result.content));
-  item.append(heading, excerpt);
+  item.append(heading);
+  if (result.meta.archive === SPOTLIGHT_ARCHIVE_LABEL) {
+    const label = document.createElement("small");
+    label.textContent = SPOTLIGHT_ARCHIVE_LABEL;
+    const date = formatEditorialDate(result.meta.archiveDate);
+    if (date && result.meta.archiveDate) {
+      const time = document.createElement("time");
+      time.dateTime = result.meta.archiveDate;
+      time.textContent = date;
+      label.append(" · ", time);
+    }
+    item.append(label);
+  }
+  item.append(excerpt);
   if (destination.external) { const domain = document.createElement("small"); domain.textContent = new URL(destination.href).hostname; item.append(domain); }
   return item;
 }
 
 export function mountSiteSearch(root: HTMLElement): void {
+  const archive = root.hasAttribute("data-archive-search");
+  const archiveLink = root.querySelector<HTMLElement>("[data-archive-link]");
   const form = root.querySelector<HTMLFormElement>("form")!;
   const input = form.querySelector<HTMLInputElement>("input")!;
   const status = root.querySelector<HTMLElement>(".search-status")!;
@@ -81,8 +98,8 @@ export function mountSiteSearch(root: HTMLElement): void {
   let composing = false;
   const meaningStatus = root.querySelector<HTMLElement>(
     "[data-meaning-status]",
-  )!;
-  const meaning = createPageMeaningSearch(
+  );
+  const meaning = meaningStatus && createPageMeaningSearch(
     "public",
     (message) => {
       meaningStatus.textContent = message;
@@ -92,7 +109,7 @@ export function mountSiteSearch(root: HTMLElement): void {
     },
   );
   window.addEventListener("pagehide", (event) => {
-    if (!event.persisted) meaning.dispose();
+    if (!event.persisted) meaning?.dispose();
   });
 
   async function search(limit = pageSize, record = false) {
@@ -100,6 +117,7 @@ export function mountSiteSearch(root: HTMLElement): void {
     const request = ++revision;
     const term = input.value.trim();
     const filters = selectedFilters();
+    if (archive) filters.archive = SPOTLIGHT_ARCHIVE_LABEL;
     const filtered = Object.keys(filters).length > 0;
     if (!term && !filtered) return;
     const previousCount = list.children.length;
@@ -128,13 +146,14 @@ export function mountSiteSearch(root: HTMLElement): void {
             ?.focus();
         more.hidden = results.length >= total;
         more.disabled = false;
-        const queryLabel = term ? `“${term}”` : "the selected filters";
+        const queryLabel = term ? `for “${term}”` : archive && Object.keys(filters).length === 1
+          ? "in the archive" : "for the selected filters";
         const emptyHint = filtered
-          ? "Change or clear the program filters."
+          ? archive ? "Try a different search term or filter." : "Change or clear the program filters."
           : "Try fewer words or a different spelling.";
         status.textContent = total
-          ? `${total} ${total === 1 ? "result" : "results"} for ${queryLabel}. Showing ${results.length}.`
-          : `No results for ${queryLabel}. ${emptyHint}`;
+          ? `${total} ${total === 1 ? "result" : "results"} ${queryLabel}. Showing ${results.length}.`
+          : `No results ${queryLabel}. ${emptyHint}`;
         if (keywordUnavailable)
           status.textContent += " Keyword search is unavailable.";
         if (loadingMore && !movedFocus) {
@@ -153,7 +172,7 @@ export function mountSiteSearch(root: HTMLElement): void {
           );
         }),
       ]).catch((error) => {
-        if (filtered || !meaning.ready) throw error;
+        if (filtered || !meaning?.ready) throw error;
         keywordUnavailable = true;
         return { results: [] as SearchResult[], total: 0 };
       });
@@ -165,7 +184,7 @@ export function mountSiteSearch(root: HTMLElement): void {
       render(keyword.results, keyword.total);
       let results = keyword.results;
       let total = keyword.total;
-      if (meaning.ready && !filtered) {
+      if (meaning?.ready && !filtered) {
         const matches = await meaning.search(term).catch(() => []);
         if (request !== revision) return;
         const merged = new Map<
@@ -220,12 +239,12 @@ export function mountSiteSearch(root: HTMLElement): void {
     more.hidden = true;
     recovery.hidden = !filtersUnavailable;
     const filtered = Object.keys(selectedFilters()).length > 0;
-    meaningStatus.hidden = filtered;
-    const hasQuery = Boolean(input.value.trim()) || filtered;
-    status.textContent = hasQuery
+    if (meaningStatus) meaningStatus.hidden = filtered;
+    const shouldSearch = archive || Boolean(input.value.trim()) || filtered;
+    status.textContent = shouldSearch
       ? "Searching…"
       : "Enter a word or phrase to search.";
-    if (!hasQuery || composing) return;
+    if (!shouldSearch || composing) return;
     if (immediate) void search(pageSize, record);
     else debounce = setTimeout(() => void search(), 200);
   }
@@ -258,9 +277,13 @@ export function mountSiteSearch(root: HTMLElement): void {
   form.hidden = false;
   if (filterGroup) {
     void loadIndex().then(index => index.filters()).then(filters => {
+      if (archiveLink) archiveLink.hidden = !filters.archive?.[SPOTLIGHT_ARCHIVE_LABEL];
       for (const select of filterSelects) {
-        const restored = select.value;
-        const values = Object.keys(filters[select.dataset.searchFilter!] ?? {}).sort((a, b) => a.localeCompare(b));
+        const filter = select.dataset.searchFilter!;
+        const restored = select.value || (filter === "archive-topic" && revision === 0
+          ? new URLSearchParams(location.search).get("topic") ?? "" : "");
+        const values = Object.keys(filters[filter] ?? {}).sort((a, b) =>
+          filter === "archive-year" ? b.localeCompare(a) : a.localeCompare(b));
         values.forEach(value => {
           const option = document.createElement("option");
           option.value = value;
@@ -273,10 +296,12 @@ export function mountSiteSearch(root: HTMLElement): void {
       filterGroup.hidden = filterSelects.every(select => select.disabled);
     }).catch(() => {
       filtersUnavailable = true;
-      if (filterStatus) filterStatus.textContent = "Program filters could not load. Reload search to try again.";
+      if (filterStatus) filterStatus.textContent = `${archive ? "Archive" : "Program"} filters could not load. Reload search to try again.`;
       recovery.hidden = false;
+    }).finally(() => {
+      if (archive && revision === 0) updateQuery();
     });
   }
   // Browser form restoration (back/forward) can supply an existing query.
-  updateQuery();
+  if (!archive || !filterGroup) updateQuery();
 }

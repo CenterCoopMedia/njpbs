@@ -82,6 +82,8 @@ describe("frozen station Post collection", () => {
   it("excludes unlisted Posts and keeps legacy or unknown dates stable after a republish", () => {
     const hidden = { ...posts[0], noindex: true };
     expect(adaptHomeStationPosts({ ...snapshot, posts: [hidden] }, { cutoffAt, selectedIds: [posts[0].postId] }).cards).toEqual([]);
+    const archived = { ...posts[0], spotlightArchive: true };
+    expect(adaptHomeStationPosts({ ...snapshot, posts: [archived] }, { cutoffAt, selectedIds: [archived.postId] }).cards).toEqual([]);
     const legacy = { ...posts[1], firstPublishedAt: null, sortInstant: Date.parse("2026-09-01T04:00:00.000Z"), publishedAt: "2026-10-11T14:59:59Z" };
     expect(adaptHomeStationPosts({ ...snapshot, posts: [legacy, posts[0]] }, { cutoffAt }).cards.map(card => card.id))
       .toEqual(["1208e81a5470be941e3fb392eac674ae", "57298ff3b0d0917f9e653f80bada063d"]);

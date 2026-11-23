@@ -1,9 +1,11 @@
 import { chromeSettings, newsPageId } from "../tests/fixtures/shadow-posts/chrome";
 import { beforeAll, describe, expect, it } from "vitest";
 import { readFileSync } from "node:fs";
+import { gunzipSync } from "node:zlib";
+import * as pagefind from "pagefind";
 import { pathToFileURL } from "node:url";
 import { resolve } from "node:path";
-import { prose as fixture, video as videoFixture, videoUrl, spotlight, registeredAuthor, withdrawnAuthor, uploadedImages, uploadedAuthors, uploadedImageUrl } from "../tests/fixtures/shadow-posts/fixtures";
+import { prose as fixture, video as videoFixture, videoUrl, spotlight, spotlightArchivePost, unlistedArchivePost, registeredAuthor, withdrawnAuthor, uploadedImages, uploadedAuthors, uploadedImageUrl } from "../tests/fixtures/shadow-posts/fixtures";
 import { catalogFixtures, catalogReads } from "../tests/fixtures/shadow-posts/block-catalog";
 import { postLeadFixture } from "../tests/fixtures/post-lead-media";
 import { projectPublishedPostRead } from "../src/lib/published-post-shadow";
@@ -24,6 +26,37 @@ function renderFixture(read: any) {
 }
 
 describe("compiled shadow uses the static Post output", () => {
+  it("indexes only the public archive story with its original date and topics", async () => {
+    const { index } = await pagefind.createIndex();
+    if (!index) throw new Error("Pagefind index was not created");
+    try {
+      for (const read of [spotlightArchivePost, unlistedArchivePost]) {
+        const slug = read.document.published.metadata.slug;
+        const path = `/posts/${slug}/`;
+        const html = readFileSync(resolve(`.shadow-static-fixtures${path}index.html`), "utf8");
+        const shadowHtml = await compiled.renderPublishedPost(renderFixture(read));
+        expect(comparePostHtml(html, shadowHtml)).toEqual([]);
+        await index.addHTMLFile({ url: path, content: html });
+      }
+      const output = await index.getFiles();
+      expect(output.errors).toEqual([]);
+      const fragments = output.files?.filter(file => file.path.includes("fragment/")).map(file => {
+        const raw = gunzipSync(file.content).toString("utf8");
+        return JSON.parse(raw.slice(raw.indexOf("{")));
+      });
+      expect(fragments).toHaveLength(1);
+      expect(fragments?.[0]).toMatchObject({
+        url: "/posts/archived-transit/", content: expect.stringContaining("Published body with a link"),
+        meta: { archive: "NJ Spotlight News archive", archiveDate: "2012-02-29" },
+        filters: { archive: ["NJ Spotlight News archive"], "archive-year": ["2012"],
+          "archive-topic": expect.arrayContaining(["Transportation", "Rail"]) },
+      });
+    } finally {
+      await index.deleteIndex();
+      await pagefind.close();
+    }
+  });
+
   it("keeps the legacy guide and renders ordered, visible sections from the snapshot", async () => {
     const read = postLeadFixture("interactive", "image");
     const metadata = read.document.published.metadata as Record<string, unknown>;

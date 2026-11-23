@@ -277,7 +277,7 @@ export function createExternalContentManifest(
   const site = siteRoot(input.site);
   const items = [
     ...input.posts
-      .filter((post) => !post.noindex)
+      .filter((post) => !post.noindex && !post.spotlightArchive)
       .map((post) => postItem(post, site, input.authors, input.recordCards ?? [], [...input.posts, ...(input.contentLinks ?? [])])),
     ...input.programs.map((program) => programItem(program, site)),
   ].sort((left, right) => {
