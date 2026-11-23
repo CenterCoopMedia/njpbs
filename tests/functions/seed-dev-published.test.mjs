@@ -196,7 +196,7 @@ describe('isolated published-content seed', () => {
     expect((await dev.doc('sections/news').get()).data().label).toBe('News');
     expect(await verifyPublished({ firestore: dev, manifest: newer })).toMatchObject({ verified: true, manifestHash: newer.hash, documents: 7 });
   });
-  it('updates untouched registry hashes and removes seeded configuration the source removed only with a plan', async () => {
+  it('updates untouched registry hashes and retains seeded configuration the source removed', async () => {
     await source.doc('sections/sports').set({ id: 'sports', label: 'Sports', description: '', order: 8 });
     const manifest = await exportSeed({ configurationOnly: true });
     await importPublished({ firestore: dev, manifest, apply: true });
@@ -204,16 +204,11 @@ describe('isolated published-content seed', () => {
     await source.doc('sections/news').update({ label: 'News desk' });
     await source.doc('sections/sports').delete();
     const newer = await exportSeed({ configurationOnly: true });
-    expect(await importPublished({ firestore: dev, manifest: newer })).toMatchObject({ applied: false, deleted: 1, removed: at('sections/sports') });
-    expect((await dev.doc('sections/sports').get()).exists).toBe(true);
-    // Without a plan the withdrawn row is retained, as before.
-    expect(await importPublished({ firestore: dev, manifest: newer, apply: true })).toMatchObject({ changed: 1, unchanged: 6, deleted: 0, retained: ['sections/sports'],
-      plan: { matched: false } });
-    expect((await dev.doc('sections/sports').get()).exists).toBe(true);
-    expect(await refresh({ firestore: dev, manifest: newer })).toMatchObject({ changed: 0, deleted: 1, removed: at('sections/sports'), plan: { matched: true } });
+    // Dev-authored uploads may use a section or category, so the refresh never removes one.
+    expect(await importPublished({ firestore: dev, manifest: newer })).toMatchObject({ applied: false, deleted: 0, removed: [] });
+    expect(await refresh({ firestore: dev, manifest: newer })).toMatchObject({ changed: 1, unchanged: 6, deleted: 0, retained: [], plan: { matched: true } });
     expect((await dev.doc('sections/news').get()).data().label).toBe('News desk');
-    expect((await dev.doc('sections/sports').get()).exists).toBe(false);
-    expect((await dev.doc(`devSeedRecords/${digest('sections/sports')}`).get()).exists).toBe(false);
+    expect((await dev.doc('sections/sports').get()).exists).toBe(true);
     expect((await dev.doc('sections/local').get()).data().label).toBe('Dev-only section');
     expect(await importPublished({ firestore: dev, manifest: newer, apply: true })).toMatchObject({ changed: 0, unchanged: 7, deleted: 0 });
   });
@@ -630,8 +625,11 @@ describe('isolated published-content seed', () => {
     const manifest = await exportSeed(); const copy = await copied(manifest);
     const before = await importPublished({ firestore: dev, manifest });
     expect(before.applied).toBe(false); expect((await dev.doc('cmsPages/contact').get()).exists).toBe(false);
+    await dev.doc('system/mediaDiscovery').set({ revision: 3, admission: { schema: 1, activeCount: 0, revision: 3 } });
     const first = await importPublished({ firestore: dev, manifest, copy, apply: true });
     expect(first.changed).toBe(11);
+    // Like the media owners, the import advances the media cursor revision and clears the cached count.
+    expect((await dev.doc('system/mediaDiscovery').get()).data()).toEqual({ revision: 4 });
     const record = (await dev.doc('cmsPages/contact').get()).data();
     const publicPage = publicProjection.projectPublicPageDocument({ pageId: 'contact', document: record,
       assets: new Map([['image-1', (await dev.doc('media_assets_public/image-1').get()).data()]]), now: new Date() });
@@ -725,19 +723,21 @@ describe('isolated published-content seed', () => {
     await dev.doc('cmsPages/contact').update({ title: 'Dev rehearsal edit' });
     await source.doc('cmsPages/contact').update({ publiclyVisible: false });
     const next = await exportSeed();
-    await expect(verifyPublished({ firestore: dev, manifest: next })).rejects.toThrow('0 differ, 4 extra (first: cmsPages/contact)');
+    await expect(verifyPublished({ firestore: dev, manifest: next })).rejects.toThrow('0 differ, 1 extra (first: cmsPages/contact)');
     const plan = await importPublished({ firestore: dev, manifest: next });
     await dev.doc('cmsPages/contact').update({ title: 'Edited after the dry run' });
     await expect(importPublished({ firestore: dev, manifest: next, plan, apply: true })).rejects.toThrow('Seed record changed after the dry run: cmsPages/contact');
     expect((await dev.doc('cmsPages/contact').get()).data().title).toBe('Edited after the dry run');
-    await dev.doc('system/mediaDiscovery').set({ revision: 3, admission: { schema: 1, activeCount: 1, revision: 3 } });
-    // The withdrawn page was the only reference to its image, so both leave dev.
-    expect(await refresh({ firestore: dev, manifest: next })).toMatchObject({ deleted: 4,
-      removed: at('cmsPages/contact', 'media_assets_public/image-1', 'media_assets/image-1', 'mediaCategories/dev-seed') });
+    const context = dev.doc('system/publicDeployment/contexts/public');
+    const before = (await context.get()).data();
+    // Only the withdrawn page leaves dev. Its image stays: a dev-authored record may use it.
+    expect(await refresh({ firestore: dev, manifest: next })).toMatchObject({ deleted: 1, removed: at('cmsPages/contact') });
     expect((await dev.doc('cmsPages/contact').get()).exists).toBe(false);
-    // The removed media leave the cached active count stale, so readers must recount.
-    // Like the media owners, the refresh advances the revision that binds media cursors.
-    expect((await dev.doc('system/mediaDiscovery').get()).data()).toEqual({ revision: 4 });
+    expect((await dev.doc('media_assets/image-1').get()).exists).toBe(true);
+    // Like a staff withdrawal, the removal advances the public context and its withdrawal fence.
+    const after = (await context.get()).data();
+    expect(after.revision).toBe(before.revision + 1);
+    expect(after.withdrawalRevision).toBe((before.withdrawalRevision ?? 0) + 1);
     expect((await dev.doc('cmsPages/local-page').get()).data().title).toBe('Dev-only work');
     expect(await verifyPublished({ firestore: dev, manifest: next })).toMatchObject({ verified: true, manifestHash: next.hash });
     await source.doc('cmsPages/contact').update({ publiclyVisible: true });

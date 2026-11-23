@@ -17,6 +17,7 @@ import mediaUsage from '../functions/lib/media-usage.js';
 import electionApproval from '../functions/lib/election-results-approval.js';
 import mediaContract from '../functions/lib/media-contract.js';
 import mediaDiscovery from '../functions/lib/media-discovery.js';
+import publicContext from '../functions/lib/public-context-revision.js';
 import mediaCategories from '../functions/lib/media-categories.js';
 import { parseContentSectionDefinition, SEEDED_CONTENT_SECTIONS } from '../packages/content-core/src/content-sections.ts';
 import publicAssetHosts from '../functions/lib/public-asset-hosts.json' with { type: 'json' };
@@ -579,14 +580,16 @@ function seedHashOf(data) {
   if (seedData.mediaDiscovery) seedData.mediaDiscovery = Object.fromEntries(Object.entries(seedData.mediaDiscovery).filter(([key]) => !['createdAtKey', 'updatedAtKey'].includes(key)));
   return digest(seedData);
 }
-// A configuration-only manifest reconciles only the registries it carries.
-const inScope = (manifest, path) => !manifest.configurationOnly ||
-  (/^(sections|mediaCategories)\//.test(path) && path !== 'mediaCategories/dev-seed');
+// A refresh removes only withdrawn content: production withdrew it, so dev does
+// too. Shared rows (media, categories, sections, author rows) stay, because
+// dev-authored records may use them. A configuration-only manifest removes nothing.
+const REMOVABLE = /^(cmsPages|cmsPosts|cmsSettings)\//;
 async function trackedRemovals(transaction, firestore, manifest, records) {
+  if (manifest.configurationOnly) return [];
   const paths = new Set(records.map(record => record.path));
   const tracked = await transaction.get(firestore.collection('devSeedRecords'));
   return tracked.docs.map(doc => doc.data().path)
-    .filter(path => typeof path === 'string' && !paths.has(path) && inScope(manifest, path))
+    .filter(path => typeof path === 'string' && !paths.has(path) && REMOVABLE.test(path))
     .sort((a, b) => a.localeCompare(b, 'en'));
 }
 const PUBLIC_RECORD = /^(cmsPosts|cmsPages|cmsSettings|cmsAuthorProfilesPublic|media_assets_public)\//;
@@ -685,10 +688,17 @@ export async function importPublished({ firestore, manifest, copy, plan, source 
         transaction.set(priorRef, { path: record.path, recordHash: digest(data), seedHash, manifestHash: manifest.hash, refreshId });
       }
       for (const { ref, priorRef } of removed) { transaction.delete(ref); transaction.delete(priorRef); }
-      // Seeded media bypass the media owners. Advance the discovery revision as they
-      // do, so open media cursors restart and the cached active count is recounted.
-      if (touched.some(path => path.startsWith('media_assets/'))) {
-        mediaDiscovery.bumpMediaDiscoveryRevision(transaction, firestore, { withdrawal: removed.some(({ seen }) => seen.path.startsWith('media_assets/')) });
+      // Seeded rows bypass their publication owners. Advance the public context as
+      // they do, so aggregate receipts and the withdrawal fence see the change.
+      const withdrawal = removed.some(({ seen }) => PUBLIC_RECORD.test(seen.path));
+      const media = touched.some(path => path.startsWith('media_assets/'));
+      const home = touched.includes('cmsPages/home');
+      // The media owners' function also restarts open media cursors, clears the
+      // cached active count and advances the public context.
+      if (media) mediaDiscovery.bumpMediaDiscoveryRevision(transaction, firestore, { withdrawal });
+      // A Home change also advances the Home revision, as staff publication does.
+      if (touched.some(path => PUBLIC_RECORD.test(path)) && (!media || home)) {
+        publicContext.bumpPublicContextRevision(transaction, firestore, { withdrawal, homePublication: home });
       }
       if (!manifest.configurationOnly && !marker.exists) {
         transaction.create(pointerRef, deploymentContract.initialPublicDeploymentPointer());
