@@ -1,0 +1,7 @@
+{
+  "date": "2026-11-22",
+  "kind": "improved",
+  "title": "Compare town election trends",
+  "body": "Town election lookup planks now show charts and a source-linked table when a reader chooses a municipality. Readers can compare presidential and governor vote shares and general election turnout from 2016 through 2025.",
+  "prs": []
+}

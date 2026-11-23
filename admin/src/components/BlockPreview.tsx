@@ -166,7 +166,7 @@ export function BlockPreview({ resolvedDataFigureLabel, block, loadMedia, showPa
       break;
     }
     case "county_comparison": content = <><Heading level={generatedHeadingLevel}>{text(data.heading) || "How counties voted in 2020 and 2024"}</Heading><p>21 counties · U.S. Senate, combined House votes and turnout</p><p>{text(data.intro)}</p></>; break;
-    case "town_lookup": content = <><strong>{text(data.heading) || "Town election lookup"}</strong><p>{text(data.introduction)}</p><p>564 municipalities · Historical presidential and 2024 federal results</p></>; break;
+    case "town_lookup": content = <><strong>{text(data.heading) || "Town election lookup"}</strong><p>{text(data.introduction)}</p><p>564 municipalities · Presidential and governor results and turnout, 2016–2025</p></>; break;
     case "election_results": {
       const races = items(data.races);
       content = <><strong>Election results</strong>{races.length

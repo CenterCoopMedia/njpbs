@@ -12,6 +12,6 @@ export function TownLookupEditor({ block, onChange, readOnly = false }: {
     {editorFieldsForBlock("town_lookup").map(field => <FieldRenderer key={field.key}
       field={field} fieldId={`town-lookup-${block.id}-${field.key}`} value={block.data[field.key]}
       onChange={value => { if (!readOnly) onChange({ ...block.data, [field.key]: value }); }} />)}
-    <p>Includes all 564 municipalities, historical presidential and 2024 federal results, and 2024 turnout. The reviewed figures and map stay with the site; the source links appear with every election.</p>
+    <p>Readers can compare presidential and governor vote shares and general election turnout from 2016 through 2025. The lookup includes a map, source links and 2024 U.S. Senate and House results.</p>
   </fieldset>;
 }

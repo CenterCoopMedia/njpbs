@@ -2,6 +2,8 @@ import { beforeEach, describe, expect, it } from "vitest";
 import { createRequire } from "node:module";
 import elections from "../../packages/content-core/data/nj-town-elections-v1.json";
 import boundaries from "../../packages/content-core/data/nj-town-boundaries-v1.json";
+import trends from "../../packages/content-core/data/nj-town-election-trends.json";
+import type { TrendCounts } from "../../packages/content-core/src/town-election-trends";
 import { TOWN_LOOKUP_DEFAULTS } from "../../packages/content-core/src/town-lookup";
 import { parseBlocks } from "../../packages/content-core/src/content-model";
 import { renderBlock } from "../../packages/content-core/src/content-render";
@@ -77,6 +79,44 @@ describe("town lookup save and publish contracts", () => {
 });
 
 describe("reviewed municipal data", () => {
+  it("preserves official counts, the Pine Hill merger and real zero turnout across the decade", () => {
+    expect(Object.keys(trends.towns).sort()).toEqual(elections.towns.map(town => town.id).sort());
+    let votePeriods = 0;
+    let turnoutPeriods = 0;
+    for (const periods of Object.values(trends.towns) as TrendCounts[]) {
+      expect(periods).toHaveLength(10);
+      const registrations = periods.flatMap(([, turnout]) => turnout ? [turnout[0]] : []).sort((a, b) => a - b);
+      const typical = registrations[Math.floor(registrations.length / 2)];
+      for (const [index, [race, turnout]] of periods.entries()) {
+        if (race) {
+          votePeriods++;
+          expect([0, 1, 4, 5, 8, 9]).toContain(index);
+          expect(race[0] + race[1]).toBeLessThanOrEqual(race[2]);
+          expect(race[2]).toBeLessThanOrEqual(turnout?.[1] ?? typical);
+        }
+        if (turnout) {
+          turnoutPeriods++;
+          expect(turnout[1]).toBeLessThanOrEqual(turnout[0]);
+          // Reconciled county aggregates alone cannot catch transposed municipal rows.
+          expect(turnout[0]).toBeGreaterThanOrEqual(typical / 2);
+          expect(turnout[0]).toBeLessThanOrEqual(typical * 2);
+        }
+      }
+    }
+    expect(votePeriods).toBe(564 * 6 - 8);
+    expect(turnoutPeriods).toBe(564 * 10 - 17);
+    expect(trends.towns["0101"][0]).toEqual([[1949, 2163, 4240], [6066, 4343]]);
+    expect(trends.towns["0101"][9]).toEqual([[1942, 1961, 3928], [7413, 3994]]);
+    expect(trends.towns["0428"][5]).toEqual([[1589 + 2, 946 + 6, 2553 + 8], [7830 + 14, 2589 + 8]]);
+    expect(trends.towns["0428"][6]).toEqual([null, [7750, 2431]]);
+    expect(trends.towns["0433"][3]).toEqual([null, [6, 0]]);
+    expect(trends.towns["0112"][5][1]).toEqual([21801, 8255]);
+    expect(trends.towns["0418"][9][0]).toEqual([2797, 1358, 4176]);
+    expect(trends.towns["1425"][7][1]).toEqual([3681, 972]);
+    expect(trends.towns["0822"][5]).toEqual([null, null]);
+    expect(trends.towns["0823"][5]).toEqual([null, null]);
+  });
+
   it("covers 564 unique codes across 21 counties with complete source provenance", () => {
     expect(elections.towns).toHaveLength(564);
     expect(new Set(elections.towns.map(t => t.id)).size).toBe(564);
@@ -118,8 +158,11 @@ describe("HTML fallback and progressive selection", () => {
     const headers = Array.from(document.querySelectorAll("thead th a"));
     expect(headers).toHaveLength(6);
     expect(headers.map(h => h.textContent)).toEqual(["2016 president", "2020 president", "2024 president", "2024 U.S. Senate", "2024 U.S. House", "2024 turnout"]);
-    expect(document.querySelector('tr[data-town-id="0101"]')?.textContent).toContain("5,154 ballots / 7,462 registered voters");
-    expect(html).not.toMatch(/<script|<iframe|governor/i);
+    const absecon = document.querySelector('tr[data-town-id="0101"]')!;
+    expect(absecon.textContent).toContain("5,154 ballots / 7,462 registered voters");
+    expect(absecon.querySelector("td:nth-last-child(2)")?.textContent).toContain("2025: D 49.4% / R 49.9%");
+    expect(absecon.querySelector("td:last-child")?.textContent).toContain("2025: 53.9%");
+    expect(html).not.toMatch(/<script|<iframe/i);
     const escaped = renderBlock({ ...block, data: { ...block.data, heading: '<img src=x onerror="alert(1)">', sourceLine: "<script>bad</script>" } });
     expect(escaped).toContain("&lt;img");
     expect(escaped).not.toContain("<script>");
@@ -174,5 +217,34 @@ describe("HTML fallback and progressive selection", () => {
     expect(document.querySelector(".town-lookup__selected")?.hasAttribute("hidden")).toBe(true);
     set("");
     expect(document.querySelector(".town-lookup__results")?.textContent).toBe("");
+  });
+
+  it("replaces the source-linked trend table when the selected town changes", () => {
+    installTownLookupControls(document);
+    const input = document.querySelector<HTMLInputElement>(".town-lookup input")!;
+    const submit = document.querySelector<HTMLButtonElement>(".town-lookup button")!;
+    const trend = document.querySelector(".town-trends")!;
+    input.value = "Tavistock Borough, Camden County";
+    // The button must handle selection before the default submit action so it
+    // works in the editor's sandboxed preview, where native submits are blocked.
+    expect(submit.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true }))).toBe(false);
+    const rows = trend.querySelectorAll("tbody tr");
+    expect(rows).toHaveLength(10);
+    expect(rows[3].querySelectorAll("td")[1].textContent).toBe("0.0%");
+    expect(rows[9].querySelector("a")?.getAttribute("href")).toMatch(/2025-official-general-results-governor-camden\.pdf$/);
+    input.value = "Hamilton Township, Atlantic County";
+    input.dispatchEvent(new Event("input", { bubbles: true }));
+    expect(trend.querySelector("table")).toBeNull();
+    submit.click();
+    expect(trend.querySelector("caption")?.textContent).toContain("Hamilton Township");
+    const corrected = trend.querySelectorAll("tbody tr")[5];
+    expect(corrected.querySelectorAll("td")[2].textContent).toBe("37.9%");
+    expect(corrected.querySelector('a[aria-label="2021 turnout (PDF)"]')?.getAttribute("href")).toContain("atlanticcountyclerk.org");
+    input.value = "Neptune Township, Monmouth County";
+    submit.click();
+    const gap = trend.querySelectorAll("tbody tr")[1];
+    expect(Array.from(gap.querySelectorAll("td")).slice(0, 2).map(cell => cell.textContent)).toEqual(["Unavailable", "Unavailable"]);
+    expect(gap.querySelector('a[aria-label="2017 results (PDF)"]')).toBeNull();
+    expect(document.querySelector(".town-lookup__results tbody tr")?.textContent).toContain("Clinton (D): 66.8%");
   });
 });

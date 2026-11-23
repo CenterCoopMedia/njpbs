@@ -165,7 +165,15 @@ export default defineConfig(({ mode }) => {
               {
                 name: "town-lookup",
                 includeDependenciesRecursively: false,
-                test: /packages[\\/]content-core[\\/](?:src[\\/]town-lookup-(?:render|controls)\.ts|data[\\/]nj-town-(?:elections|boundaries)-v1\.json)(?:\?.*)?$/,
+                test: /packages[\\/]content-core[\\/](?:src[\\/]town-(?:lookup-(?:render|controls)|election-trends)\.ts|data[\\/]nj-town-(?:elections|boundaries)-v1\.json)(?:\?.*)?$/,
+                priority: 30,
+              },
+              // The decade of counts has its own chunk so adding it does not exceed
+              // the lookup chunk's size limit. Both remain beside the lazy preview.
+              {
+                name: "town-election-data",
+                includeDependenciesRecursively: false,
+                test: /packages[\\/]content-core[\\/]data[\\/]nj-town-election-trends\.json(?:\?.*)?$/,
                 priority: 30,
               },
               // These groups hold lazy modules that are already shared.

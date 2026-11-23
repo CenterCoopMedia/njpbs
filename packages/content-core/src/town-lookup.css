@@ -36,6 +36,45 @@
 .town-lookup__all thead { position: sticky; top: 0; }
 .town-lookup footer { margin-top: 1rem; border-top: 1px solid var(--color-border, #d6deea); overflow-wrap: anywhere; }
 .town-lookup :is(a, button, input, summary, [tabindex]):focus-visible { outline: var(--focus-outline, 3px solid #284bff); outline-offset: 3px; }
+.town-trends {
+  --trend-democratic: var(--color-data-hub-series, #9db1ff);
+  --trend-republican: var(--color-data-hub-negative-text, #ffbfbd);
+  grid-column: 1 / -1;
+  min-width: 0;
+  border-top: 1px solid var(--color-border, #d6deea);
+  padding-top: 1.25rem;
+}
+.town-lookup .town-trends :is(h3, h4, h5, h6) { font-size: clamp(1.35rem, 3cqi, 1.85rem); }
+.town-trends__legend { display: flex; flex-wrap: wrap; gap: .35rem 1.25rem; font-size: .9rem; }
+.town-trends__legend span::before { display: inline-block; margin-inline-end: .35em; }
+.town-trends__legend .town-trends__democratic::before { content: "●"; }
+.town-trends__legend .town-trends__republican::before { content: "■"; }
+.town-trends__charts { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: .75rem; }
+.town-trends__charts figure { margin: 0; padding: .75rem .5rem .15rem; background: var(--color-data-hub-chart-panel, #0e1223); color: var(--color-data-hub-strong-text, #f7f8ff); }
+.town-trends__charts figcaption { text-align: center; font-weight: 700; }
+.town-trends__charts svg { display: block; width: 100%; height: auto; }
+.town-trends__charts line { stroke: var(--color-data-hub-chart-edge, #606579); }
+.town-trends__charts text { fill: currentColor; font-size: 12px; }
+.town-trends__charts path { fill: none; stroke-width: 2.5; stroke: currentColor; }
+.town-trends__charts :is(circle, rect) { fill: currentColor; stroke: var(--color-data-hub-chart-panel, #0e1223); }
+.town-trends__charts .town-trends__democratic { color: var(--trend-democratic); }
+.town-trends__charts .town-trends__republican { color: var(--trend-republican); }
+.town-trends__republican path { stroke-dasharray: 5 4; }
+.town-trends td a { display: inline-block; margin-inline-end: .35em; }
+@container (max-width: 42rem) {
+  .town-trends__charts { grid-template-columns: 1fr; }
+  .town-trends__charts svg { max-width: 24rem; margin-inline: auto; }
+}
+@container (max-width: 30rem) {
+  .town-trends table { font-size: .85rem; }
+  .town-trends :is(th, td) { padding: .6rem .3rem; }
+}
+@media (forced-colors: active) {
+  .town-trends { --trend-democratic: CanvasText; --trend-republican: CanvasText; }
+  .town-trends__charts svg { forced-color-adjust: none; color: CanvasText; background: Canvas; }
+  .town-trends__charts line { stroke: CanvasText; }
+  .town-trends__charts :is(circle, rect) { stroke: Canvas; }
+}
 @container (max-width: 620px) {
   .town-lookup__search-row { flex-wrap: wrap; }
   .town-lookup__search-row input { flex-basis: 100%; }

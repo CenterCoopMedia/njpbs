@@ -19,6 +19,7 @@ import { groupLinkCardDirectories } from "../../../packages/content-core/src/lin
 import LinkCardDirectory from "./LinkCardDirectory.astro";
 import CmsBlockGroup from "./CmsBlockGroup.astro";
 import ReaderTextSize from "./ReaderTextSize.astro";
+import TownLookupControls from "./TownLookupControls.astro";
 import { sponsorCardsFromRecordCards } from "../lib/record-card-resolution";
 import { newsletterSignupResolution } from "../lib/newsletter-signup";
 import { givingBlocksInDisplayOrder, usesServiceComposition } from "../../../packages/content-core/src/service-composition";
@@ -80,10 +81,13 @@ const groups = renderContentGroups(blocks, (block, index) => ({
   }),
 }));
 const publicGroups = groupLinkCardDirectories(groups);
-const hasProse = visibleLayoutBlocks(blocks).some(block => block.type === "prose");
+const visibleBlocks = visibleLayoutBlocks(blocks);
+const hasProse = visibleBlocks.some(block => block.type === "prose");
+const hasTownLookup = visibleBlocks.some(block => block.type === "town_lookup");
 ---
 
 {readerControls && hasProse && <ReaderTextSize />}
+{hasTownLookup && <TownLookupControls />}
 
 <div
   class:list={[
