@@ -1150,7 +1150,7 @@ describe("cmsPages loader against the Firestore emulator", () => {
     expect(cmsHomeHtml).not.toContain('class="page-hero"');
     const giveHtml = readFileSync("dist/give/index.html", "utf8");
     const donateHtml = readFileSync("dist/donate/index.html", "utf8");
-    expect(giveHtml).toContain('data-cms-service-page="give"');
+    expect(giveHtml).toContain('data-cms-page="give"');
     expect(giveHtml).toContain('data-cms-page-blocks="give"');
     expect(giveHtml).toContain("CMS Give editorial region");
     expect(donateHtml).toContain('rel="canonical" href="https://njpbs.org/give/"');
