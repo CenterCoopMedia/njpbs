@@ -5,15 +5,16 @@ const { preparePublicReleaseProducerInTransaction } = require("./public-release-
 const { createHash } = require("node:crypto");
 const { isDeepStrictEqual } = require("node:util");
 const { FieldValue } = require("firebase-admin/firestore");
-const { assertPublicDeploymentPointer } = require("./public-deployment");
+const { assertPublicDeploymentPointer, PUBLIC_DEPLOYMENT_SCHEMA_VERSION } = require("./public-deployment");
 const { readCmsPublicationRuntimeControlInTransaction, assertCmsPublicationCloudAdmission } = require("./cms-publication-runtime-control");
 const { publicationTarget } = require("./publication-target");
 const { PUBLIC_CONTEXT_PATH, readPublicContextRevisionInTransaction, publicContextDigest } = require("./public-context-revision");
-const { missingPublicContextConsumers } = require("./public-context-publication");
-const { PUBLIC_HOMEPAGE_BANNER_SETTINGS_ID, PUBLIC_SITE_CHROME_SETTINGS_ID, SITE_NAVIGATION_SETTINGS_ID, NJ_DECIDES_SETTINGS_ID } = require("./cms-settings-contract");
+const { CURRENT_PATH, OUTPUTS: AGGREGATE_CONSUMERS, TRANSPORT, missingPublicContextConsumers } = require("./public-context-publication");
+const { projectPublishedCmsSettings, PUBLIC_HOMEPAGE_BANNER_SETTINGS_ID, PUBLIC_SITE_CHROME_SETTINGS_ID, SITE_NAVIGATION_SETTINGS_ID, NJ_DECIDES_SETTINGS_ID } = require("./cms-settings-contract");
 
 const PUBLIC_SETTINGS_IDS = new Set([require("./cms-settings-contract").STORY_CTAS_SETTINGS_ID, require("./cms-settings-contract").COVERAGE_LABELS_SETTINGS_ID, PUBLIC_HOMEPAGE_BANNER_SETTINGS_ID, PUBLIC_SITE_CHROME_SETTINGS_ID, SITE_NAVIGATION_SETTINGS_ID, NJ_DECIDES_SETTINGS_ID]);
-const REQUIRED_CONSUMERS = ["pages", "posts", "home", "listings", "authors", "feed", "contentApi", "sitemap", "search"];
+const ROUTE_CONSUMERS = ["pages", "posts", "home"];
+const REQUIRED_CONSUMERS = [...ROUTE_CONSUMERS, ...AGGREGATE_CONSUMERS];
 const PUBLICATION_BUDGET_MS = 5 * 60_000;
 const hash = value => createHash("sha256").update(JSON.stringify(value)).digest("hex");
 const pairProtocol = require("./public-release-pair");
@@ -21,6 +22,7 @@ const pairAdmission = require("./public-release-admission-contract");
 const settingsOperationId = (id, sourceVersion) => hash(["settings-publication-v1", id, sourceVersion]).slice(0, 20);
 const successorOperationId = identity => hash([identity.originalOperationId, identity.contextRevision, identity.rendererSha]).slice(0, 20);
 const queueRef = (firestore, id, version) => firestore.doc(`cmsPublishQueue/${settingsOperationId(id, version)}`);
+const contextSuperseded = queue => queue.status === "cancelled" && queue.error === "public_context_superseded";
 function refuse(message, diagnosticCode) {
   throw Object.assign(new Error(message), { status: 409, code: "settings_publication_unavailable",
     ...(diagnosticCode ? { diagnosticCode } : {}) });
@@ -42,16 +44,20 @@ function settingsPublicationReceipt(queue, now = Date.now()) {
       !["pending", "publishing", "success", "failed", "cancelled"].includes(queue.status)) {
     refuse("This settings publication receipt is invalid.");
   }
-  const missingConsumers = missingPublicContextConsumers(queue, identity, REQUIRED_CONSUMERS, ["pages", "posts", "home"]);
-  const failed = ["failed", "cancelled"].includes(queue.status);
-  const startedAt = queue.settingsRetryAt?.toMillis?.() ?? queue.triggeredAt?.toMillis?.() ?? queue.createdAt?.toMillis?.() ?? now;
-  const overdue = missingConsumers.length > 0 && now - startedAt >= PUBLICATION_BUDGET_MS;
+  const missingConsumers = missingPublicContextConsumers(queue, identity, REQUIRED_CONSUMERS, ROUTE_CONSUMERS);
+  const superseded = contextSuperseded(queue);
+  const failed = queue.status === "failed" || (queue.status === "cancelled" && !superseded);
+  const startedAt = (superseded ? queue.completedAt?.toMillis?.() : undefined) ??
+    queue.settingsRetryAt?.toMillis?.() ?? queue.triggeredAt?.toMillis?.() ?? queue.createdAt?.toMillis?.() ?? now;
+  const overdue = (superseded || missingConsumers.length > 0) && now - startedAt >= PUBLICATION_BUDGET_MS;
   return {
     queueId: identity.operationId, originalOperationId: identity.originalOperationId, transport: queue.transport,
     sourceVersion: identity.sourceVersion, rendererSha: identity.rendererSha,
     contextRevision: identity.contextRevision, contextDigest: identity.contextDigest,
-    status: failed ? "failed" : missingConsumers.length ? "pending" : "success", missingConsumers,
+    status: failed ? "failed" : superseded || missingConsumers.length ? "pending" : "success", missingConsumers,
+    ...(superseded ? { waitingForNewerContext: true } : {}),
     ...(failed ? { warning: "The site update did not complete. Retry publication." } :
+      superseded && overdue ? { warning: "A newer site update interrupted this attempt. Retry publication." } :
       overdue ? { warning: "The site update is taking longer than expected. Retry publication." } : {}),
   };
 }
@@ -156,6 +162,51 @@ async function prepareSettingsPublication({ firestore, transaction, id, publishe
     } };
 }
 
+async function prepareSettingsSuccessor({ firestore, transaction, original, revision, runtime }) {
+  const { enqueuePublicContextInTransaction } = require("./public-context-publication");
+  const identity = { ...original, contextRevision: revision, contextDigest: publicContextDigest(revision), rendererSha: runtime.release };
+  identity.operationId = successorOperationId(identity);
+  const prepared = await enqueuePublicContextInTransaction({ firestore, transaction, operationId: identity.operationId,
+    runtime, reason: "settings", contextRevision: revision });
+  return { publication: settingsPublicationReceipt({ transport: "public-context-no-build-v1", runtime, status: "pending",
+    publicContext: identity, settingsPublication: identity }), write() {
+    prepared.write();
+    transaction.set(firestore.doc(`cmsPublishQueue/${identity.operationId}`), { settingsPublication: identity,
+      settingsRetryAt: FieldValue.serverTimestamp() }, { merge: true });
+    transaction.update(firestore.doc(`cmsPublishQueue/${original.originalOperationId}`), { successorOperationId: identity.operationId });
+  } };
+}
+
+// A settled context wakes recovery for the current published settings only.
+// Each retry uses the existing deterministic successor and its own consumer proof.
+async function resumeSupersededSettingsAfterContext({ firestore, operationId }) {
+  const sourceRefs = [...PUBLIC_SETTINGS_IDS].map(id => firestore.doc(`cmsSettings/${id}`));
+  const sources = await firestore.getAll(...sourceRefs);
+  for (const source of sources) {
+    if (!source.data()?.published) continue;
+    await firestore.runTransaction(async transaction => {
+      const [stored, result, selected, root] = await transaction.getAll(source.ref,
+        firestore.doc(`cmsPublishQueue/${operationId}`), firestore.doc(CURRENT_PATH), firestore.doc("system/publicDeployment"));
+      const newer = result.data();
+      if (root.data()?.schemaVersion !== PUBLIC_DEPLOYMENT_SCHEMA_VERSION || newer?.transport !== TRANSPORT || newer.status !== "success" ||
+          !newer.publicContext || selected.data()?.contextDigest !== newer.publicContext.contextDigest || !stored.data()?.published) return;
+      const published = projectPublishedCmsSettings({ documentId: source.id, document: stored.data() });
+      if (!published) return;
+      const accepted = await readSettingsPublication({ firestore, transaction, id: source.id,
+        sourceVersion: published.sourceVersion, settings: { published } });
+      if (!accepted || !contextSuperseded(accepted.queue)) return;
+      const original = accepted.queue.settingsPublication;
+      if (newer.publicContext.contextRevision <= original.contextRevision) return;
+      const { revision, runtime } = await readPublicationPrerequisites(firestore, transaction, root);
+      const current = { rendererSha: runtime.release, contextRevision: revision, contextDigest: publicContextDigest(revision) };
+      if (newer.publicContext.contextRevision !== revision || newer.publicContext.contextDigest !== current.contextDigest ||
+          missingPublicContextConsumers(newer, current, AGGREGATE_CONSUMERS, []).length) return;
+      const retry = await prepareSettingsSuccessor({ firestore, transaction, original, revision, runtime });
+      retry.write();
+    });
+  }
+}
+
 async function prepareSettingsRetry({ firestore, transaction, accepted }) {
   if (accepted.queue.transport === pairAdmission.TRANSPORT) {
     // The retained pair owns this original work through selection changes.
@@ -175,23 +226,12 @@ async function prepareSettingsRetry({ firestore, transaction, accepted }) {
       transaction.update(accepted.ref, { settingsRetryAt: FieldValue.serverTimestamp() });
     } };
   }
-  if (!accepted.publication.warning) return { write() {}, publication: accepted.publication };
+  if (!accepted.publication.warning && !contextSuperseded(accepted.queue)) return { write() {}, publication: accepted.publication };
   const { retryPublicContextInTransaction } = require("./public-context-publication");
   const { revision, runtime } = await readPublicationPrerequisites(firestore, transaction);
   const original = accepted.queue.settingsPublication;
   if (revision !== original.contextRevision || runtime.release !== original.rendererSha) {
-    const { enqueuePublicContextInTransaction } = require("./public-context-publication");
-    const identity = { ...original, contextRevision: revision, contextDigest: publicContextDigest(revision), rendererSha: runtime.release };
-    identity.operationId = successorOperationId(identity);
-    const prepared = await enqueuePublicContextInTransaction({ firestore, transaction, operationId: identity.operationId,
-      runtime, reason: "settings", contextRevision: revision });
-    return { publication: settingsPublicationReceipt({ transport: "public-context-no-build-v1", runtime, status: "pending",
-      publicContext: identity, settingsPublication: identity }), write() {
-      prepared.write();
-      transaction.set(firestore.doc(`cmsPublishQueue/${identity.operationId}`), { settingsPublication: identity,
-        settingsRetryAt: FieldValue.serverTimestamp() }, { merge: true });
-      transaction.update(firestore.doc(`cmsPublishQueue/${original.originalOperationId}`), { successorOperationId: identity.operationId });
-    } };
+    return prepareSettingsSuccessor({ firestore, transaction, original, revision, runtime });
   }
   const writeRetry = await retryPublicContextInTransaction({ firestore, transaction,
     operationId: accepted.ref.id, runtime: accepted.queue.runtime }).catch(error => {
@@ -213,4 +253,4 @@ async function prepareSettingsRetry({ firestore, transaction, accepted }) {
 module.exports = { preparePairSettingsPublication: options => require("./public-release-family-admission").preparePairSettingsPublication(options),
   PUBLIC_SETTINGS_IDS, PUBLICATION_BUDGET_MS, REQUIRED_CONSUMERS, settingsOperationId,
   settingsPublicationReceipt, readSettingsPublication, prepareSettingsPublication, prepareSettingsRetry, PUBLIC_CONTEXT_PATH,
-  readPublicationPrerequisites };
+  readPublicationPrerequisites, resumeSupersededSettingsAfterContext };

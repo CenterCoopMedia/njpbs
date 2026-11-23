@@ -10,6 +10,7 @@ import publication from "../../functions/lib/settings-publication.js";
 import context from "../../functions/lib/public-context-revision.js";
 import deployment from "../../functions/lib/public-deployment.js";
 import aggregatePublication from "../../functions/lib/public-context-publication.js";
+import confirmation from "../../functions/no-build-post-confirmation.js";
 import { DEFAULT_SITE_NAVIGATION, DEFAULT_PUBLIC_SITE_CHROME_SETTINGS, DEFAULT_PUBLIC_HOMEPAGE_BANNER_SETTINGS } from "../../packages/content-core/src/cms-settings";
 const db = isolatedFirestore("settings-publication.test.js");
 
@@ -34,6 +35,23 @@ const publish = (id, baseVersion) => call(settings.createCmsPublishSettingsHandl
 const get = id => call(settings.createCmsGetSettingsHandler(deps()), { id });
 const queues = () => db.collection("cmsPublishQueue").get();
 const currentRevision = async () => (await db.doc(context.PUBLIC_CONTEXT_PATH).get()).data().revision;
+
+async function verifyAggregate(receipt) {
+  const runtime = { owner: "cloudflare", release: sha };
+  const ref = db.doc(`cmsPublishQueue/${receipt.queueId}`);
+  const batch = db.batch();
+  for (const output of aggregatePublication.OUTPUTS) {
+    const stateRef = db.doc(`cmsBackgroundOutputs/${output}`);
+    const state = (await stateRef.get()).data();
+    batch.update(stateRef, { status: "verified", receipt: { rendererSha: sha, revision: state.revision,
+      contextDigest: receipt.contextDigest, verifiedAt: Date.now(), digest: "d".repeat(64), routeSetDigest: "e".repeat(64) } });
+  }
+  batch.set(ref.collection("backgroundPreparation").doc(receipt.contextDigest), { schemaVersion: 1, runtime,
+    contextDigest: receipt.contextDigest, status: "verified", preparedDigest: "f".repeat(64), admissionRevision: null,
+    reservation: { commitSha: sha, buildBatchId: "fixture", generation: 1, cutoffAt: Timestamp.now() } });
+  await batch.commit();
+  expect(await aggregatePublication.settlePublicContext({ firestore: db, operationId: receipt.queueId, runtime })).toBe(true);
+}
 
 async function retryState(queueId) {
   const collections = ["cmsSettings", "cmsPublishQueue", "cmsBackgroundOutputs", "cmsVersionHistory", "admin_logs",
@@ -285,6 +303,59 @@ describe("atomic public settings acceptance", () => {
     expect((await get("public-site-chrome")).body.publication.queueId).toBe(retried.body.publication.queueId);
     expect((await db.doc(`cmsPublishQueue/${banner.body.publication.queueId}`).get()).data().status).toBe("pending");
     expect((await publish("public-homepage-banner", 1)).code).toBe(200);
+  });
+
+  it("resumes the original settings after exact newer aggregate proof, once and without publishing a draft", async () => {
+    const id = "public-site-chrome";
+    const original = await publish(id, 1);
+    const draft = { ...fixtures[id], newsletterLabel: "Private unsent label" };
+    await call(settings.createCmsSaveSettingsHandler(deps()), { id, baseVersion: 2, values: draft });
+    const newer = (await publish("public-homepage-banner", 1)).body.publication;
+    const resume = () => publication.resumeSupersededSettingsAfterContext({ firestore: db, operationId: newer.queueId });
+
+    const waiting = (await get(id)).body.publication;
+    expect(waiting).toMatchObject({ queueId: original.body.publication.queueId, status: "pending", waitingForNewerContext: true });
+    await resume();
+    expect((await queues()).size).toBe(2);
+    await verifyAggregate(newer);
+    const event = { params: { queueId: newer.queueId }, data: {
+      before: { data: () => ({ status: "pending" }) }, after: await db.doc(`cmsPublishQueue/${newer.queueId}`).get(),
+    } };
+    const handler = confirmation.createNoBuildPostConfirmationHandler({ firestore: db,
+      readback() { throw new Error("This fixture supplies aggregate proof only"); } });
+    await Promise.all([handler(event), handler(event)]);
+
+    const recovered = (await get(id)).body;
+    expect(recovered.settings).toMatchObject({ values: draft, published: original.body.settings.published });
+    expect(recovered.publication).toMatchObject({ status: "pending", sourceVersion: 1, contextRevision: newer.contextRevision,
+      originalOperationId: waiting.queueId });
+    expect(recovered.publication.queueId).not.toBe(waiting.queueId);
+    expect(recovered.publication).not.toHaveProperty("waitingForNewerContext");
+    const successor = db.doc(`cmsPublishQueue/${recovered.publication.queueId}`);
+    expect((await successor.collection("backgroundOutputs").get()).empty).toBe(true);
+    expect(await aggregatePublication.settlePublicContext({ firestore: db, operationId: successor.id,
+      runtime: { owner: "cloudflare", release: sha } })).toBe(true);
+    expect((await get(id)).body.publication).toMatchObject({ status: "pending", missingConsumers: ["pages", "posts", "home"] });
+
+    const route = { rendererSha: sha, contextRevision: newer.contextRevision, contextDigest: newer.contextDigest, verifiedAt: Date.now() };
+    await successor.update({ consumerReceipts: { pages: route, posts: route, home: route } });
+    expect((await get(id)).body.publication).toMatchObject({ status: "success", missingConsumers: [] });
+    expect((await queues()).size).toBe(3);
+    expect(await currentRevision()).toBe(newer.contextRevision);
+  });
+
+  it("does not retry an older snapshot after a new version of the same settings is published", async () => {
+    const id = "public-site-chrome";
+    const original = (await publish(id, 1)).body.publication;
+    await call(settings.createCmsSaveSettingsHandler(deps()), { id, baseVersion: 2,
+      values: { ...fixtures[id], newsletterLabel: "New public label" } });
+    const newer = (await publish(id, 3)).body.publication;
+    await verifyAggregate(newer);
+    await publication.resumeSupersededSettingsAfterContext({ firestore: db, operationId: newer.queueId });
+
+    expect((await queues()).size).toBe(2);
+    expect((await db.doc(`cmsPublishQueue/${original.queueId}`).get()).data()).not.toHaveProperty("successorOperationId");
+    expect((await get(id)).body.publication).toMatchObject({ queueId: newer.queueId, sourceVersion: 3 });
   });
 
   it("keeps a retry's billing refusal specific and leaves its accepted work intact", async () => {

@@ -240,6 +240,28 @@ describe("addressed settings receipt status", () => {
     expect(screen.getByText(/Updating the site/)).toBeVisible();
   });
 
+  it("follows an automatic retry of the same version without replacing the draft", async () => {
+    vi.useFakeTimers();
+    const published = { values: values(), sourceVersion: 4, publishedAt: "2026-09-21T19:00:00.000Z" };
+    const loaded = documentResponse(values(), 5, published);
+    const successor = settingsPublicationFixture(4, { queueId: "settings-successor", contextRevision: 3, missingConsumers: ["posts"] });
+    const load = vi.fn().mockResolvedValueOnce({ ...loaded, publication: settingsPublicationFixture(4, { waitingForNewerContext: true }) })
+      .mockResolvedValueOnce({ ...loaded, publication: successor })
+      .mockResolvedValueOnce({ ...loaded, publication: { ...successor, status: "success", missingConsumers: [] } });
+    const props = transport({ load });
+    await act(async () => { render(<PublicSiteChromeSettings {...props} />); });
+    expect(screen.getByText(/Boardwalk will retry/)).toBeVisible();
+    expect(screen.queryByRole("button", { name: "Retry site update" })).not.toBeInTheDocument();
+    fireEvent.change(screen.getByRole("textbox", { name: "Label" }), { target: { value: "Unsaved label" } });
+    await act(async () => { await vi.advanceTimersByTimeAsync(2_000); });
+    expect(screen.getByText(/Public checks remain for posts/)).toBeVisible();
+    await act(async () => { await vi.advanceTimersByTimeAsync(2_000); });
+    expect(screen.getByText("The site update is complete.")).toBeVisible();
+    expect(screen.getByRole("textbox", { name: "Label" })).toHaveValue("Unsaved label");
+    expect(props.publish).not.toHaveBeenCalled();
+    expect(props.save).not.toHaveBeenCalled();
+  });
+
   it("refreshes a changed publication without replacing the saved or unsaved draft", async () => {
     vi.useFakeTimers();
     const pub = { values: values(), sourceVersion: 4, publishedAt: "2026-09-21T19:00:00.000Z" };

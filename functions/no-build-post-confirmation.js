@@ -64,6 +64,9 @@ function createNoBuildPostConfirmationHandler(deps = {}) {
           catch { /* The same bounded recovery wake retains the accepted source. */ }
         }
       }
+      if (queue.status === "success" && before?.status !== "success" && queue.aggregateReceipt) {
+        await require("./lib/settings-publication").resumeSupersededSettingsAfterContext({ firestore, operationId: event.params.queueId });
+      }
       return;
     }
     if (queue?.transport === PAGE_TRANSPORT) {
