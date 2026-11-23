@@ -7,15 +7,6 @@ import { publishRecordWithdrawalCatalog } from "./record-withdrawal-catalog";
 
 type PublicationEnvironment = Env & { R2_MEDIA_CREDENTIAL?: string };
 
-// A development bundle from an unrendered checkout names the template public
-// Worker. Its catalogs would sit under keys the development public Worker never
-// reads, so withdrawn content could stay visible. Refuse before any work.
-function renderedTarget(environment: string | undefined) {
-  const target = targets.publicationTarget(environment);
-  if (/template/.test(target.workerName)) throw new Error("Publication target is not rendered");
-  return target;
-}
-
 export class PublicationRuntime extends Container<PublicationEnvironment> {
   defaultPort = 8080;
   sleepAfter = "3m";
@@ -53,7 +44,7 @@ export class PublicationRuntime extends Container<PublicationEnvironment> {
         account: this.env.FIREBASE_SERVICE_ACCOUNT,
         commitSha: this.env.PUBLICATION_COMMIT_SHA,
         serializerId: this.env.PUBLICATION_SERIALIZER_ID,
-        target: renderedTarget(this.env.CMS_DEPLOYMENT_ENVIRONMENT),
+        target: targets.publicationTarget(this.env.CMS_DEPLOYMENT_ENVIRONMENT),
       });
       diagnostics = work.diagnostics;
       if (work.needsRuntime) {
@@ -75,7 +66,7 @@ export class PublicationRuntime extends Container<PublicationEnvironment> {
       }
       healthy = work.healthy;
       try {
-        const target = renderedTarget(this.env.CMS_DEPLOYMENT_ENVIRONMENT);
+        const target = targets.publicationTarget(this.env.CMS_DEPLOYMENT_ENVIRONMENT);
         const options = { store: this.env.DURABLE_POST_WITHDRAWALS, target,
           account: this.env.FIREBASE_SERVICE_ACCOUNT, commitSha: this.env.PUBLICATION_COMMIT_SHA };
         const catalogs = await Promise.allSettled([publishWithdrawalCatalog(options),
