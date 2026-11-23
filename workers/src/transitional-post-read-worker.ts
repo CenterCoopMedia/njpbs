@@ -522,7 +522,7 @@ export function createTransitionalPostReadWorker(dependencies: Dependencies) {
     }
   }
 
-  async function assets(request: Request, pending: boolean, codeRequest?: Request): Promise<Response> {
+  async function assets(request: Request, pending: boolean, codeRequest?: Request, staticMiss?: Response): Promise<Response> {
     if (codeRequest && dependencies.readCodePost && new URL(request.url).pathname === new URL(codeRequest.url).pathname) {
       const context = await codeContext(codeRequest);
       if (context && [200, 302, 308, 410].includes(context.status)) return context;
@@ -536,7 +536,7 @@ export function createTransitionalPostReadWorker(dependencies: Dependencies) {
       const retained = await lastGoodFallback(request);
       if (retained) return retained;
     }
-    const response = await dependencies.fetchAsset(request);
+    const response = staticMiss ?? await dependencies.fetchAsset(request);
     if (response.status === 410 && postSlugForPath(publicPath(new URL(request.url).pathname) ?? "")) {
       void response.body?.cancel().catch(() => {});
       return unavailable(request);
@@ -558,10 +558,11 @@ export function createTransitionalPostReadWorker(dependencies: Dependencies) {
   const publicReader = {
     async fetch(request: Request, retryExpired = true): Promise<Response | null> {
       let withdrawalKnown = true;
+      let staticMiss: Response | undefined;
       // Static copies predate later withdrawals. Unknown durable state never
       // authorizes an Assets or last-good copy; fresh authority may still decide.
       const copy = (pending: boolean, codeRequest?: Request) =>
-        withdrawalKnown ? assets(request, pending, codeRequest) : unavailable(request);
+        withdrawalKnown ? assets(request, pending, codeRequest, staticMiss) : unavailable(request);
       const url = new URL(request.url);
       if (url.origin !== target.origin) return null;
       let path: string | null;
@@ -599,6 +600,7 @@ export function createTransitionalPostReadWorker(dependencies: Dependencies) {
       if (path.startsWith("/_astro/")) {
         const asset = await dependencies.fetchAsset(request);
         if (asset.status !== 404) return asset;
+        staticMiss = asset;
       }
       if (dependencies.rendererReady === false) return copy(false);
       // Aggregate/context ownership does not depend on an admitted Post. The
@@ -638,6 +640,12 @@ export function createTransitionalPostReadWorker(dependencies: Dependencies) {
         return new Request(url, key);
       };
       const worker = createNoBuildPostWorker({ ...dependencies, target, now: () => new Date(now()),
+        async fetchAsset(assetRequest) {
+          // Reuse the miss only for this request with the original URL. A
+          // normalized asset spelling can have a separate Assets response.
+          if (staticMiss && assetRequest === workerRequest && workerRequest.url === request.url) return staticMiss;
+          return dependencies.fetchAsset(assetRequest);
+        },
         cache: {
           match: key => dependencies.cache.match(renderKey(key as Request)),
           put: (key, response) => dependencies.cache.put(renderKey(key as Request), response),
