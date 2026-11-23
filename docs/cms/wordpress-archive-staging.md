@@ -223,3 +223,10 @@ objects. The private media record keeps the source revision, original SHA-256,
 and the PDF page count when applicable. Images use the admitted original as the
 full-size asset and separate WebP thumbnails for smaller views. A `retryable`
 thumbnail status can be picked up by the standard media thumbnail backfill.
+
+Apply rechecks source eligibility in the media commit transaction. If eligibility
+has changed, it discards the upload under its ownership lease before reporting
+the attachment for review. If the store refuses that cleanup, the
+`registration-cleanup-required` failure names the attachment. An authorized
+operator must reconcile the pending upload receipt and its exact media object
+before repeating the import.

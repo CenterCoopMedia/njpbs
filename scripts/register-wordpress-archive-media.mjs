@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 
+import { randomUUID } from "node:crypto";
 import { resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { isDeepStrictEqual, parseArgs } from "node:util";
@@ -20,6 +21,7 @@ const ACTOR = { uid: "system:wordpress-archive-media", email: null };
 const review = reason => ({ action: "review", reason });
 
 function applyFailure(error) {
+  if (error instanceof RegistrationCleanupError) return "registration-cleanup-required";
   if (error instanceof media.MediaCapacityError || error?.code === "media-admission-overflow") return "library-capacity";
   if (error instanceof categories.MediaCategoryValidationError) return "general-category-unavailable";
   if (error instanceof media.MediaRequestError) return error.status === 409 ? "immutable-object-conflict" : "media-store-or-reservation";
@@ -53,15 +55,16 @@ function registrationState({ staged, asset, projection, problem }, target, proof
   return { action: "register", version: staged.version };
 }
 
-function registrationClaim(target, proof, nowIso) {
+function registrationClaim(target, proof, nowDate) {
   const { original } = proof;
   const assetId = target.privateRef.id;
   const metadata = contract.normalizeUploadMetadata({ name: proof.title, description: proof.caption,
     altText: proof.altText, credit: proof.credit, license: proof.license }, original.originalName);
   return {
     state: "reserved",
-    attemptId: assetId,
+    attemptId: randomUUID(),
     assetId,
+    contentHash: original.sha256,
     category: metadata.category,
     finalKey: contract.finalObjectKey({ category: metadata.category, assetId, contentHash: original.sha256,
       mimeType: original.mimeType }),
@@ -75,8 +78,9 @@ function registrationClaim(target, proof, nowIso) {
       ...(proof.kind === "image" ? { animated: original.animated } : {}),
       archiveImport: target.archiveImport,
     },
-    createdAt: nowIso,
-    updatedAt: nowIso,
+    createdAt: nowDate.toISOString(),
+    updatedAt: nowDate.toISOString(),
+    leaseExpiresAt: new Date(nowDate.getTime() + media.RESERVATION_LEASE_MS).toISOString(),
   };
 }
 
@@ -87,11 +91,24 @@ class RegistrationChanged extends Error {
   }
 }
 
+class RegistrationCleanupError extends Error {}
+
+async function releaseRegistrationLease(firestore, ref, claim, nowIso) {
+  await firestore.runTransaction(async transaction => {
+    const owner = (await transaction.get(ref)).data();
+    if (owner?.attemptId === claim.attemptId && owner.leaseExpiresAt === claim.leaseExpiresAt &&
+        ["reserved", "object_ready"].includes(owner.state)) {
+      transaction.update(ref, { leaseExpiresAt: nowIso });
+    }
+  });
+}
+
 async function registerOriginal({ firestore, target, verified, expectedVersion, getStorage, publicOrigin, now }) {
   const { bytes, proof } = verified;
   const contentHash = proof.original.sha256;
-  const nowIso = now().toISOString();
-  const proposed = registrationClaim(target, proof, nowIso);
+  const nowDate = now();
+  const nowIso = nowDate.toISOString();
+  const proposed = registrationClaim(target, proof, nowDate);
   const ref = media.ownerRef(firestore, contentHash, proposed.assetId);
   contract.publicMediaUrl(publicOrigin, proposed.finalKey);
   const inspect = async reader => registrationState(await readRegistration(firestore, reader, target),
@@ -103,40 +120,59 @@ async function registerOriginal({ firestore, target, verified, expectedVersion, 
     if (owner) {
       if (!["reserved", "object_ready"].includes(owner.state) ||
           !isDeepStrictEqual(owner.recordSeed, proposed.recordSeed) ||
-          owner.assetId !== proposed.assetId || owner.attemptId !== proposed.attemptId ||
+          owner.assetId !== proposed.assetId || typeof owner.attemptId !== "string" ||
+          owner.contentHash !== contentHash || !Number.isFinite(Date.parse(owner.leaseExpiresAt)) ||
           owner.finalKey !== proposed.finalKey || owner.category !== proposed.category ||
           owner.mimeType !== proposed.mimeType || owner.sizeBytes !== proposed.sizeBytes) {
         return review("media-identity-conflict");
       }
+      if (Date.parse(owner.leaseExpiresAt) > nowDate.getTime()) return review("registration-in-progress");
     }
     await categories.requireActiveMediaCategory(transaction, firestore, proposed.category);
     const admission = await discovery.readMediaAdmission(transaction, firestore);
     if (admission.activeCount >= admission.limit) throw new media.MediaCapacityError();
-    if (!owner) transaction.create(ref, proposed);
-    return { claim: owner ?? proposed };
+    const claim = owner ? { ...owner, leaseExpiresAt: proposed.leaseExpiresAt, updatedAt: nowIso } : proposed;
+    transaction.set(ref, claim);
+    return { claim };
   });
   if (!reservation.claim) return reservation;
 
   const { claim } = reservation;
-  const { attemptId, assetId, finalKey, mimeType, sizeBytes } = claim;
-  await billing.assertBillingEnabled(firestore);
-  const storage = await getStorage();
-  const expected = { contentHash, attemptId, assetId, mimeType, sizeBytes };
-  await media.putOrConfirm({ storage, method: "putFinal", key: finalKey, body: bytes, mimeType,
-    metadata: media.objectMetadata(expected), expected });
-  await media.markObjectReady({ firestore, ref, attemptId, nowIso });
+  const { attemptId, assetId, finalKey, mimeType, sizeBytes, leaseExpiresAt } = claim;
+  let storage;
   const record = media.uploadRecordFromClaim({ contentHash, claim, publicOrigin, nowIso, thumbnailAttempt: true });
   try {
+    await billing.assertBillingEnabled(firestore);
+    storage = await getStorage();
+    const expected = { contentHash, attemptId, assetId, mimeType, sizeBytes };
+    await media.putOrConfirm({ storage, method: "putFinal", key: finalKey, body: bytes, mimeType,
+      metadata: media.objectMetadata(expected), expected });
+    await media.markObjectReady({ firestore, ref, attemptId, nowIso });
     await media.commitUpload({ firestore, ref, attemptId, record, projection: contract.mediaProjection(record),
-      actor: ACTOR, source: "wordpress-archive", nowIso,
+      actor: ACTOR, source: "wordpress-archive", nowIso, expectedLeaseExpiresAt: leaseExpiresAt,
       authorizeInTransaction: async transaction => {
         const state = await inspect(transaction);
         if (state.action !== "register") throw new RegistrationChanged(state);
       },
     });
   } catch (error) {
-    if (error instanceof RegistrationChanged) return error.result;
-    if (!await media.committedUpload(firestore, { contentHash, attemptId, record })) throw error;
+    if (error instanceof RegistrationChanged && error.result.action === "skip") return error.result;
+    const discard = error instanceof RegistrationChanged ? media.discardArchiveRejectedUpload
+      : error instanceof media.MediaCapacityError ? media.discardCapacityRejectedUpload
+        : error instanceof categories.MediaCategoryValidationError ? media.discardCategoryRejectedUpload : null;
+    if (discard) {
+      try {
+        await discard({ firestore, storage, ref, attemptId, finalKey, stagingKeys: [], nowIso, leaseExpiresAt });
+      } catch {
+        throw new RegistrationCleanupError("The rejected archive object needs operator cleanup.");
+      }
+      if (error instanceof RegistrationChanged) return error.result;
+      throw error;
+    }
+    if (!await media.committedUpload(firestore, { contentHash, attemptId, record })) {
+      await releaseRegistrationLease(firestore, ref, claim, nowIso);
+      throw error;
+    }
   }
   // The thumbnail backfill can retry transient failures using the committed original.
   const finalRecord = await thumbnails.addMediaThumbnails({ firestore, storage, record, buffer: bytes, publicOrigin,

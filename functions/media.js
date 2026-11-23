@@ -1160,6 +1160,14 @@ async function discardUgcDecisionUpload(args) {
   });
 }
 
+async function discardArchiveRejectedUpload(args) {
+  return discardUploadAfterCommitRejection({
+    ...args,
+    discardReason: DISCARD_REASONS.archiveEligibility,
+    rejectionLabel: "archive-rejected",
+  });
+}
+
 async function committedUpload(
   firestore,
   { contentHash, attemptId, record, allowTombstoned = false },
@@ -1870,6 +1878,7 @@ module.exports = {
   createDefaultMasterStorage,
   createDefaultStorage,
   createCmsUploadMediaHandler,
+  discardArchiveRejectedUpload,
   discardCapacityRejectedUpload,
   discardCategoryRejectedUpload,
   discardUgcDecisionUpload,

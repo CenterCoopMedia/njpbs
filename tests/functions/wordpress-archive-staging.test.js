@@ -352,6 +352,7 @@ it("registers approved originals independently and delivers only admitted assets
       return { created: true };
     },
     async head(key) { return objects.get(key); },
+    async deleteFinal(key) { objects.delete(key); },
   };
   const rows = [];
   const register = (overrides = {}) => registerWordPressArchiveMedia({ ...options, publicOrigin: "https://media.njpbs.org",
@@ -377,8 +378,20 @@ it("registers approved originals independently and delivers only admitted assets
   await expect(register({ apply: true })).rejects.toThrow("Synthetic interrupted write");
   expect(rows.at(-1)).toMatchObject({ phase: "apply", sourceRef: { source, postId: document.postId },
     action: "failed", reason: "apply-interrupted" });
-  storage.putFinal = write;
   storage.head = head;
+  storage.putFinal = async input => {
+    const result = await write(input);
+    await staged(document).update({ "record.sourceStatus": "private" });
+    return result;
+  };
+  await expect(register({ apply: true })).resolves.toEqual({ register: 0, skip: 2, review: 3 });
+  expect([...objects.keys()].some(key => key.includes(id(document)))).toBe(false);
+  expect((await firestore.doc(`media_assets_public/${id(document)}`).get()).exists).toBe(false);
+  expect((await firestore.collection("admin_logs").where("action", "==", "media.upload.discard").get()).docs[0].data())
+    .toMatchObject({ before: { assetId: id(document), contentHash: digest(pdf), reason: "archive_media_eligibility_changed" } });
+
+  storage.putFinal = write;
+  await staged(document).update({ "record.sourceStatus": "inherit", version: 4 });
   await expect(register({ apply: true })).resolves.toEqual({ register: 1, skip: 2, review: 2 });
   await expect(register({ apply: true })).resolves.toEqual({ register: 0, skip: 3, review: 2 });
 
