@@ -10,7 +10,9 @@ configure({ asyncUtilTimeout: 5_000 });
 
 // Each test opens a fresh browser store. Remounts within a test still share it, including
 // drafts written when the previous editor unmounted.
-beforeEach(() => localStorage.clear());
+beforeEach(() => {
+  if (typeof window !== "undefined") window.localStorage.clear();
+});
 
 // jsdom has no layout and omits Range geometry used by ProseMirror's selection
 // scrolling. Browser tests verify actual geometry; component tests need the API.
