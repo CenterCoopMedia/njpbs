@@ -24,7 +24,7 @@ export function cmsSmokeTarget(environment = "production") {
   return SMOKE_TARGETS[environment];
 }
 
-function declaredDevFunctionNames(root = new URL("../", import.meta.url)) {
+export function declaredDevFunctionNames(root = new URL("../", import.meta.url)) {
   const require = createRequire(new URL("package.json", root));
   const { devFunctionManifest } = require("./functions/dev-manifest.js");
   return Object.keys(devFunctionManifest({ schemaVersion: 1, environment: "development", enabled: false })).sort();
