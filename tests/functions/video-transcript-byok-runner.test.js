@@ -320,7 +320,7 @@ describe('injected BYOK runner',()=>{
  it.each(['revoked','source','credential','billing'])('rejects %s before provider dispatch and releases budget',async(kind)=>{const s=await prepared();if(kind==='revoked')s.deps.getAuthUser=async()=>({uid:'staff',disabled:true});if(kind==='source')s.rows.get('mediaSourceAssets/asset').lifecycle='deleted';if(kind==='credential')for(const [key,value]of s.rows)if(key.startsWith('mediaTranscriptionCredentials/'))value.revision=2;if(kind==='billing')s.rows.set('system/billing',{disabled:true});expect(await runner.createByokRunner(s.deps)()).toEqual({outcome:'rejected_before_submission'});expect(s.counts.posts).toBe(0);const refs=api.budgetRefs(s.firestore,'staff','2026-09-15');expect(s.rows.get(refs.global.path)).toMatchObject({reservedSubmissions:0,consumedSubmissions:0});});
  it('does not discard paid output after credential rotation',async()=>{const s=await prepared();s.deps.transcribe=async()=>{s.counts.posts++;for(const [key,value]of s.rows)if(key.startsWith('mediaTranscriptionCredentials/'))value.revision=2;return {};};expect(await runner.createByokRunner(s.deps)()).toEqual({outcome:'ready'});});
  it('recovers exact spool after lost receipt without a second provider POST',async()=>{const s=await prepared();const persist=s.storage.persistSpool;s.storage.persistSpool=async(...args)=>{await persist(...args);throw Error('connection lost after put');};expect(await s.run()).toEqual({outcome:'recovery_pending'});s.advance(721000);expect(await s.run()).toEqual({outcome:'ready'});expect(s.counts.posts).toBe(1);});
- it.each(['normalization failure', 'lost identity write response'])('recovers the original completed attempt after %s', async reason => {
+ it.each(['normalization failure', 'lost identity write response', 'a denied unpinned spool read'])('recovers the original completed attempt after %s', async reason => {
   const s = await completedProviderFixture();
   if (reason === 'lost identity write response') {
    const transact = s.firestore.runTransaction;
@@ -332,6 +332,13 @@ describe('injected BYOK runner',()=>{
      throw Error('identity commit reply lost');
     }
     return value;
+   };
+  }
+  if (reason === 'a denied unpinned spool read') {
+   const recover = s.storage.recoverSpool;
+   s.storage.recoverSpool = (...args) => {
+    if (!args[2] && !s.spool()) throw Object.assign(Error('storage denied'), { code: 'byok_storage_unavailable', unpinnedReadDenied: true });
+    return recover(...args);
    };
   }
   expect(await s.run()).toEqual({ outcome: 'recovery_pending' });
@@ -346,6 +353,20 @@ describe('injected BYOK runner',()=>{
   expect(s.keys.every(key => key.every(byte => byte === 0))).toBe(true);
   const refs = api.budgetRefs(s.firestore, 'staff', '2026-09-15');
   expect(s.rows.get(refs.global.path)).toMatchObject({ consumedSubmissions: 1, reservedSubmissions: 0 });
+ });
+ it('preserves the uncertainty of a denied unpinned spool if provider lookup cannot recover it', async () => {
+  const s = await completedProviderFixture();
+  s.storage.recoverSpool = async () => {
+   throw Object.assign(Error('storage denied'), { code: 'byok_storage_unavailable', unpinnedReadDenied: true });
+  };
+  s.deps.retrieveTranscript = async () => { throw Object.assign(Error('unknown transcript'), { code: 'elevenlabs_result_invalid' }); };
+  const run = runner.createByokRunner(s.deps);
+  expect(await run()).toEqual({ outcome: 'recovery_pending' });
+  s.advance(721000);
+  await expect(run()).rejects.toThrow('storage denied');
+  expect(s.row()).toMatchObject({ phase: 'running', active: true, recoveryAttempts: 1 });
+  expect(s.row()).not.toHaveProperty('spoolReceipt');
+  expect(s.counts).toEqual({ posts: 1, exports: 0 });
  });
  it.each(['attempt', 'credential', 'requester', 'source', 'billing'])('refuses provider recovery after a changed %s', async changed => {
   const s = await completedProviderFixture();

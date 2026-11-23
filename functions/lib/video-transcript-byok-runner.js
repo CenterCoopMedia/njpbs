@@ -230,22 +230,25 @@ function createByokRunner({
       now: clock(),
     });
     if (!claim) return { outcome: "busy" };
-    let recovered;
+    const response = jobs.completedResponse(claim);
+    const canLookup = response && !claim.spoolReceipt && typeof retrieveTranscript === "function";
+    let recovered, denied;
     let recoveryError = claim.spoolReceipt ? "byok_spool_missing" : undefined;
     try {
       recovered = await storage.recoverSpool(claim, claim, claim.spoolReceipt);
     } catch (error) {
       if (error?.code === "byok_storage_spool_missing") recoveryError = "byok_spool_missing";
+      else if (canLookup && error?.code === "byok_storage_unavailable" && error.unpinnedReadDenied === true) denied = error;
       else {
         if (!["byok_storage_receipt_invalid", "byok_storage_result_invalid", "byok_storage_identity_invalid", "byok_storage_result_too_large"].includes(error?.code)) throw error;
         recoveryError = "byok_spool_invalid";
       }
     }
-    const response = jobs.completedResponse(claim);
-    if (!recovered && !recoveryError && response && typeof retrieveTranscript === "function") {
+    if (!recovered && !recoveryError && canLookup) {
       recovered = await retrieveCompleted(owner, claim, response);
     }
     if (recovered) return publish(owner, claim, recovered);
+    if (denied) throw denied;
     const finished = await jobs.finishJob({
       firestore,
       claim,

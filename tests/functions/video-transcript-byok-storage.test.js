@@ -89,7 +89,9 @@ describe('BYOK private input and durable output recovery', () => {
     s.s3.send.mockRejectedValueOnce(Object.assign(new Error('hidden storage detail'), { name, $metadata: { httpStatusCode: 404 } }));
     await expect(s.store.recoverSpool(job, job, receipt)).rejects.toThrow('byok_storage_spool_missing');
     s.s3.send.mockRejectedValueOnce(Object.assign(new Error('hidden storage detail'), { name: 'AccessDenied', $metadata: { httpStatusCode: 403 } }));
-    await expect(s.store.recoverSpool(job, job, receipt)).rejects.toThrow('byok_storage_unavailable');
+    const denied = s.store.recoverSpool(job, job, receipt);
+    await expect(denied).rejects.toThrow('byok_storage_unavailable');
+    await expect(denied).rejects.not.toHaveProperty('unpinnedReadDenied');
     await expect(s.store.recoverSpool(job, job, receipt)).resolves.toMatchObject({ receipt });
   });
 
@@ -109,7 +111,7 @@ describe('BYOK private input and durable output recovery', () => {
   it('write failure plus denied missing-key recovery stays unresolved after one PUT and GET', async () => {
     const { store, s3 } = setup(); const job = fixture();
     s3.send.mockRejectedValue(Object.assign(Error('Access denied'), { name: 'AccessDenied', $metadata: { httpStatusCode: 403 } }));
-    await expect(store.persistSpool(job, job, result())).rejects.toThrow('byok_storage_unavailable');
+    await expect(store.persistSpool(job, job, result())).rejects.toMatchObject({ code: 'byok_storage_unavailable', unpinnedReadDenied: true });
     expect(s3.send.mock.calls.map(([command]) => command.constructor.name)).toEqual(['PutObjectCommand', 'GetObjectCommand']);
   });
   it('recovers a lost PUT receipt from the exact attempt key without a second write', async () => {
