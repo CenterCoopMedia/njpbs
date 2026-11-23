@@ -10,6 +10,7 @@ import terminal from "../../functions/lib/public-release-terminal.js";
 import serving from "../../functions/lib/public-release-serving.js";
 import targets from "../../functions/lib/publication-target.js";
 import { qualifyPublicReleasePair } from "./public-release-pair-qualification";
+import { PairReaderReadError } from "./public-release-pair-reader-client";
 import { prepareGuardedPublicReleaseSwitch, applyPreparedGuardedPublicReleaseSwitch,
   readGuardedPublicReleaseSwitchAttempt, readGuardedPublicReleaseSwitchReceipt } from "./public-release-switch-operator";
 import { readPublicReleasePairOutput } from "../../workers/src/public-release-view-reader";
@@ -55,10 +56,14 @@ export async function runCurrentPublicReleaseSwitch(input: SwitchInput & { store
     const proof = await prepareGuardedPublicReleaseSwitch({ firestore, store, oldPair: from, newPair: to, operationId,
       oldQualificationId: ids[0], newQualificationId: ids[1], signal });
     await applyPreparedGuardedPublicReleaseSwitch({ firestore, proof });
-  } catch {
+  } catch (error) {
     // The transaction may have committed before its response was lost. Read
     // the original immutable fact; never abandon, swap IDs or repeat apply.
-    return { ...await readPublicReleaseSwitchOutcome(input), recovered: true };
+    const outcome = await readPublicReleaseSwitchOutcome(input);
+    if (!outcome.attempt && error instanceof PairReaderReadError) {
+      return { ...outcome, recovered: true, qualificationReadFailure: error.code };
+    }
+    return { ...outcome, recovered: true };
   }
   return { ...await readPublicReleaseSwitchOutcome(input), recovered: false };
 }

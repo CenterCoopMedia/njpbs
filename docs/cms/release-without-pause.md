@@ -381,6 +381,9 @@ route, original slots and recovery-capture enablement. It freshly qualifies
 both current heads before preparing/applying in one process. Readback reports
 historical committed outcome separately from fresh current selection. Attempt
 without receipt is unconfirmed and exits without requalifying/applying/abandoning.
+When a private qualification read refuses before reservation, the apply result
+includes `qualificationReadFailure` with `reader-timeout`, `reader-rate-limited`,
+`reader-unavailable` or `reader-refused`.
 Only preparation refusal before an attempt exists can use a reviewed fresh
 qualification ID under that same switch operation. Observation proves actual
 original operation/body/current authority but creates no inclusion/terminal

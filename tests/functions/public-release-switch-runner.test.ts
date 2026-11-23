@@ -1,8 +1,9 @@
-import { afterAll, beforeAll, expect, it } from "vitest";
+import { afterAll, beforeAll, expect, it, vi } from "vitest";
 import { publicReleaseR2Fixture } from "../helpers/public-release-r2-fixture";
 import { isolatedFirestore } from "../helpers/emulator-firestore.js";
 import { guardedPublicReleaseSwitchFixture } from "../helpers/guarded-public-release-switch";
 import { runCurrentPublicReleaseSwitch, readPublicReleaseSwitchOutcome, observeCurrentPublicReleaseOperation } from "../../site/scripts/public-release-switch-runner";
+import { PAIR_READER_PATH } from "../../site/scripts/public-release-pair-reader-contract";
 import { advancePublicReleaseSwitchCodeHead } from "../../site/scripts/public-release-switch-code-head";
 import { createPublicReleaseRouter } from "../../workers/src/public-release-router";
 import { createPublicReleaseSlot } from "../../workers/src/public-release-slot";
@@ -36,6 +37,37 @@ it("preserves an uncertain original attempt without requalifying, applying or ab
   expect(result).toMatchObject({ outcome: "unconfirmed", receipt: null, attempt });
   expect((await db.doc("system/publicDeployment").get()).updateTime).toEqual(before.updateTime);
   expect((await ref.get()).data()).toEqual(attempt);
+});
+
+it.each([
+  { failure: "timeout", reason: "reader-timeout" },
+  { failure: "status", reason: "reader-unavailable" },
+  { failure: "unknown", reason: "reader-refused" },
+])("reports a candidate read $failure without retrying or reserving the switch", async ({ failure, reason }) => {
+  const options = { ...input(), operationId: `runner-read-${failure}` };
+  const before = await options.firestore.doc("system/publicDeployment").get();
+  const fetch = globalThis.fetch;
+  const privateText = "synthetic provider detail mentioning ETIMEDOUT";
+  let reads = 0;
+  const transport = vi.spyOn(globalThis, "fetch").mockImplementation(async (url, init) => {
+    if (url !== `${fixture.transport.origin}${PAIR_READER_PATH}`) return fetch(url, init);
+    reads++;
+    if (failure === "timeout") {
+      throw new TypeError(privateText, { cause: Object.assign(new Error(privateText), { code: "UND_ERR_CONNECT_TIMEOUT" }) });
+    }
+    if (failure === "status") return new Response(privateText, { status: 503 });
+    throw new Error(privateText);
+  });
+  try {
+    const result = await runCurrentPublicReleaseSwitch(options);
+    expect(result).toMatchObject({ operationId: options.operationId, outcome: "unconfirmed", recovered: true,
+      qualificationReadFailure: reason, attempt: null, receipt: null });
+    expect(JSON.stringify(result)).not.toContain(privateText);
+    expect(reads).toBe(1);
+    expect((await options.firestore.doc("system/publicDeployment").get()).updateTime).toEqual(before.updateTime);
+  } finally {
+    transport.mockRestore();
+  }
 });
 
 it("reads the original committed receipt after the SDK loses the apply response and never repeats it", async () => {
