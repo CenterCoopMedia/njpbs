@@ -9,6 +9,7 @@ import { renderCoverageList, renderLinkCard } from "./coverage-list";
 import { renderDataTable } from "./data-table-render";
 import { renderBioCard } from "./bio-render.ts";
 import { renderVideoBlock } from "./video-block.ts";
+import { scrollStoryFigureId } from "./scroll-story.ts";
 import { renderRailArrowIcon } from "./home-rail-render";
 // The shared block renderer: a validated `PageBlock` -> its canonical rendered
 // markup. This is the single source of truth for how a block looks, so the CMS
@@ -574,19 +575,26 @@ export function renderBlock(
     case "image":
       return renderImageFigure(block.data, options, "content", block.data);
     case "scroll_story": {
-      const steps = block.data.steps.filter(step => step.text.trim());
-      if (!steps.length) return "";
-      const items = steps.map(step => {
+      const items = block.data.steps.flatMap((step, index) => {
+        if (!step.text.trim()) return [];
         const text = step.text.trim().split(/\n\s*\n/).map(paragraph => `<p>${escapeHtml(paragraph)}</p>`).join("");
-        const media = step.assetId && options.resolveAsset?.(step.assetId, "grid")
-          ? `<div class="scroll-story__media">${renderImageFigure(step, options, "grid")}</div>`
-          : "";
-        const description = step.assetId && !media
-          ? [step.alt, step.caption].filter(value => value.trim()).map(value => `<p>${escapeHtml(value)}</p>`).join("")
-          : "";
-        return `<li><div class="scroll-story__step"><div class="scroll-story__copy">${text}${description}</div>${media}</div></li>`;
+        let media = "";
+        let fallback: string[] = [];
+        if (step.video?.assetId) {
+          media = renderVideoBlock(step.video, { placeholder: options.videoPlaceholder === true });
+          if (!media) fallback = ["Video unavailable", step.video.title, step.video.caption ?? ""];
+        } else if (step.figure) {
+          const id = scrollStoryFigureId(block.id, index);
+          media = renderDataFigure(id, step.figure, options.resolveDataFigure?.(id, step.figure), generatedHeadingLevel);
+        } else if (step.assetId) {
+          if (options.resolveAsset?.(step.assetId, "grid")) media = renderImageFigure(step, options, "grid");
+          else fallback = [step.alt, step.caption];
+        }
+        const description = fallback.filter(value => value.trim()).map(value => `<p>${escapeHtml(value)}</p>`).join("");
+        const panel = media ? `<div class="scroll-story__media">${media}</div>` : "";
+        return `<li><div class="scroll-story__step"><div class="scroll-story__copy">${text}${description}</div>${panel}</div></li>`;
       });
-      return `<ol class="scroll-story">${items.join("")}</ol>`;
+      return items.length ? `<ol class="scroll-story">${items.join("")}</ol>` : "";
     }
     case "video":
       return renderVideoBlock(block.data, { placeholder: options.videoPlaceholder === true });

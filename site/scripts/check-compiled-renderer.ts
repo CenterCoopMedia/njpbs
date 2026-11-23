@@ -31,6 +31,7 @@ import { projectAuthorSnapshot } from "../src/lib/cms-authors-loader";
 import { projectCmsPreviewContent } from "../src/lib/cms-preview-content";
 import { checkPostLeadPreviews } from "./check-post-lead-previews";
 import { assertGivingPageOrder, givingPageBlocks } from "../tests/fixtures/giving-page";
+import { catalogReads } from "../tests/fixtures/shadow-posts/block-catalog";
 import staffPage from "../../tests/fixtures/staff-page-editorial.json";
 import previewSnapshots from "../../functions/lib/preview-snapshot.js";
 import { loadHomeSourceSnapshot } from "../src/lib/home-sources-loader";
@@ -715,6 +716,7 @@ const mediaAssets = [
   { id: "asset-card", url: "https://media.njpbs.org/cms-media/asset-card/image.jpg",
     mimeType: "image/jpeg", width: 640, height: 360 },
 ];
+const scrollStory = catalogReads.scroll_story.document.published;
 const postPresentations = [
   {
     name: "standard",
@@ -722,13 +724,17 @@ const postPresentations = [
     tags: ["New Jersey"],
     blocks: [
       { id: "body", type: "prose", order: 0, visible: true, data: { content: richText("Compiled standard story") } },
-      { id: "steps", type: "scroll_story", order: 1, visible: true, data: { steps: [
-        { text: "Morning commuters arrive.", assetId: "asset-image", alt: "Commuters at the station", caption: "" },
-        { text: "The train departs.", assetId: "", alt: "", caption: "" },
+      ...scrollStory.blocks.map(block => ({ ...block, order: block.order + 1 })),
+      { id: "unavailable-video", type: "scroll_story", order: 2, visible: true, data: { steps: [
+        { text: "The next clip is still being prepared.", assetId: "", alt: "", caption: "", video: {
+          sourceId: "video-library", assetId: "fixture-pending", title: "Evening train", caption: "An evening train arrives.",
+        } },
       ] } },
     ],
-    assets: [mediaAssets[0]],
-    assertions: ["Compiled standard story", 'alt="Commuters at the station"'],
+    assets: catalogReads.scroll_story.assets,
+    datasetFigures: scrollStory.datasetFigures,
+    assertions: ["Compiled standard story", 'alt="Commuters waiting for a train"', "Train departure",
+      "New Jersey employment rate", "Video appears after publishing", "An evening train arrives."],
   },
   {
     name: "special-report",
@@ -785,6 +791,7 @@ for (const postCase of postPresentations) {
   Object.assign(value.snapshot, { id: postId });
   const published = (value.snapshot as { published: Record<string, unknown> }).published;
   Object.assign(published, { blocks: postCase.blocks });
+  if ("datasetFigures" in postCase) published.datasetFigures = postCase.datasetFigures;
   Object.assign(published.metadata as Record<string, unknown>, {
     slug: `compiled-${postCase.name}`,
     tags: postCase.tags,
@@ -799,7 +806,7 @@ for (const postCase of postPresentations) {
     assert.ok(!html.includes("/_image?"), "Compiled media used a runtime image proxy");
   }
   if (postCase.name === "standard") {
-    assert.match(html, /<ol class="scroll-story">.*Morning commuters arrive.*The train departs/s);
+    assert.match(html, /<ol class="scroll-story">.*Commuters arrive.*The train departs.*<video[^>]+controls.*New Jersey employment rate.*The station quiets down/s);
   }
 }
 

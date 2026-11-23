@@ -688,7 +688,8 @@ const sidebarGroups = groupLinkCardDirectories(renderGroups(sidebarBlocks).filte
     .post-hero--video,
     .post :global(.post-share),
     .post-body :global(.cms-block--embed:has(> .embed--video)),
-    .post-body :global(.cms-block--video) {
+    .post-body :global(.cms-block--video),
+    .post-body :global(.scroll-story .cms-video__player) {
       display: none;
     }
 

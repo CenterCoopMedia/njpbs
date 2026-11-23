@@ -43,12 +43,10 @@ const {
 const PREVIEW_ASSET_READ_BATCH_SIZE = 20;
 async function withFrozenDatasetFigures({ firestore, transaction, snapshot, collection }) {
   const owner = collection === "cmsPosts" ? snapshot.published : snapshot;
-  if (!require("./lib/dataset-dependencies").figureBlocks(owner).length) return snapshot;
-  const blocks = owner.blocks.filter(block => block.type !== "data_figure" || require("./lib/data-figure").isDataFigureData(block.data, true));
-  const frozen = await require("./lib/dataset-dependencies").resolveDatasetFiguresInTransaction({ firestore, transaction,
-    snapshot: { ...owner, blocks } });
-  const next = { ...owner, ...(frozen.datasetFigures ? { datasetFigures: frozen.datasetFigures } : {}) };
-  return collection === "cmsPosts" ? { ...snapshot, published: next } : next;
+  const frozen = await require("./lib/dataset-dependencies").resolveDatasetFiguresInTransaction({
+    firestore, transaction, snapshot: owner, complete: false,
+  });
+  return collection === "cmsPosts" ? { ...snapshot, published: frozen } : frozen;
 }
 async function previewDatasetFiguresCurrent({ firestore, transaction, snapshot, collection }) {
   try {

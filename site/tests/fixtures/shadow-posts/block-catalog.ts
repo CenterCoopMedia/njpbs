@@ -5,7 +5,7 @@
 import prose from "./post.json";
 import { electionRace } from "../../../../tests/fixtures/election-results";
 import type { DatasetFigures } from "../../../../packages/content-core/src/dataset-figures";
-import { uploadedImageUrl } from "./fixtures";
+import { uploadedImageUrl, videoUrl } from "./fixtures";
 
 const base = prose.document.published;
 const paragraph = (text: string) => ({ type: "doc", content: [{ type: "paragraph", content: [{ type: "text", text }] }] });
@@ -103,10 +103,18 @@ export const catalogReads: Readonly<Record<string, ReturnType<typeof read>>> = {
   scroll_story: read("catalog-scroll-story", [
     { id: "scroll-story", type: "scroll_story", visible: true, data: { steps: [
       { text: "Commuters arrive on the platform.", assetId: "upload", alt: "Commuters waiting for a train", caption: "Morning rush" },
-      { text: "The train departs on schedule.", assetId: "", alt: "", caption: "" },
+      { text: "The train departs on schedule.", assetId: "", alt: "", caption: "", video: {
+        sourceId: "video-library", assetId: "fixture-video", title: "Train departure", caption: "A morning train leaves the station.",
+        public: { url: videoUrl, posterUrl: `https://media.njpbs.org/cms-media/video/fixture-video/${"b".repeat(64)}.jpg`,
+          width: 640, height: 360, mimeType: "video/mp4" },
+      } },
+      { text: "The latest release puts the trip in economic context.", assetId: "", alt: "", caption: "", figure: {
+        datasetId: "jobs-rate", version: { mode: "pinned", releaseId: "september-2026" }, display: "expanded",
+      } },
       { text: "The station quiets down.", assetId: "portrait", alt: "A passenger at the station", caption: "" },
     ] } },
-  ]),
+  ], { figures: [{ blockId: "scroll-figure-scroll-story-3", datasetId: "jobs-rate", releaseId: "september-2026",
+    revision: figureProjection.revision, digest: figureProjection.digest }], releases: [figureProjection] }),
   embed: read("catalog-embed", [
     { id: "intro", type: "prose", visible: true, data: { content: paragraph("Watch the newscast.") } },
     { id: "youtube", type: "embed", visible: true, data: { url: "https://www.youtube.com/watch?v=dQw4w9WgXcQ", caption: "NJ Spotlight News, full episode", width: 640, height: 360 } },

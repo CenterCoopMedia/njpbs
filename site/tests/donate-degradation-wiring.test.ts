@@ -592,6 +592,13 @@ const renderCmsBlock = (type: string, data: Record<string, unknown>, options: Pa
 const donationHeroCard = { id: "donate", title: "Donate", summary: "", href: donateUrl };
 const ordinaryHeroCard = { id: "story", title: "A story", summary: "", href: "/about/" };
 const donationGridSettings = { title: "Support", moreLabel: "Donate", presentation: "grid", columns: 3 } as const;
+const donationFigure = {
+  datasetId: "jobs-rate", version: { mode: "pinned", releaseId: "september-2026" }, display: "expanded",
+};
+const donationFigureOptions = {
+  resolveDataFigure: () => ({ ...figureProjection, release: { ...figureProjection.release,
+    source: { ...figureProjection.release.source, url: donateUrl } } }),
+};
 
 const cmsDonationFixtures = [
   {
@@ -853,10 +860,14 @@ const cmsDonationFixtures = [
   {
     name: "data figure source and comparison links",
     blockType: "data_figure",
-    render: () => renderCmsBlock("data_figure", {
-      datasetId: "jobs-rate", version: { mode: "pinned", releaseId: "september-2026" }, display: "expanded",
-    }, { resolveDataFigure: () => ({ ...figureProjection, release: { ...figureProjection.release,
-      source: { ...figureProjection.release.source, url: donateUrl } } }) }),
+    render: () => renderCmsBlock("data_figure", donationFigure, donationFigureOptions),
+  },
+  {
+    name: "scroll story figure source link",
+    blockType: "scroll_story",
+    render: () => renderCmsBlock("scroll_story", { steps: [
+      { text: "The source adds context.", assetId: "", alt: "", caption: "", figure: donationFigure },
+    ] }, donationFigureOptions),
   },
   {
     name: "election results source link",

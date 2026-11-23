@@ -1171,7 +1171,7 @@ const BLOCK_FIELDS: { readonly [T in BlockType]: readonly BlockFieldFor<T>[] } =
     { key: "images", label: "Images", help: "Add images to the gallery, each with its own alt text.", kind: "list", required: true, maxItems: NESTED_MEDIA_COLLECTION_MAX, itemFields: IMAGE_ITEM_FIELDS },
   ],
   scroll_story: [
-    { key: "steps", label: "Steps", help: "Add short passages in reading order. Each step can have an image.", kind: "list", required: true, maxItems: SCROLL_STORY_LIMITS.steps, itemFields: [
+    { key: "steps", label: "Steps", help: "Add short passages in reading order, with optional media.", kind: "list", required: true, maxItems: SCROLL_STORY_LIMITS.steps, itemFields: [
       { key: "text", label: "Step text", help: "Tell this part of the story.", kind: "text", multiline: true, required: true, maxLength: SCROLL_STORY_LIMITS.text },
       { key: "assetId", label: "Image", help: "Optional. Choose an existing image from the media library.", kind: "asset", required: false },
       { key: "alt", label: "Alt text", help: "Describe the selected image for readers who cannot see it.", kind: "text", required: true, requiredWhen: "assetId", maxLength: SCROLL_STORY_LIMITS.alt },
