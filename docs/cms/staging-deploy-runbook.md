@@ -258,13 +258,14 @@ The [seed operator](../../scripts/seed-dev-published.mjs) keeps `export`,
 `validate`, `copy-media`, `import` and `verify` separate, with a fixed
 production-read/development-write project pair, the explicit Node type-stripping
 flag and service-account JSON on stdin. Export accepts only the production
-service account that `SEED_EXPORT_IDENTITY` names, and only after its granted
-permissions prove it can get and list Firestore entities, cannot write,
-delete, import or export, and holds no project-level Cloud Storage permission.
-The script never calls Cloud Storage; a bucket-level grant cannot be seen from
-the project and is not used. Import and verify accept only the dedicated dev seed
-writer. No ADC, Auth/database export or production storage authority.
-Never substitute an administrator credential.
+service account that `SEED_EXPORT_IDENTITY` names; give that account Firestore
+viewer access and nothing else. Before any read, export confirms at project
+level that the account can get and list Firestore entities and holds none of
+the probed Firestore write, import, export or Cloud Storage permissions. That
+check cannot see a grant on an individual bucket. The script makes no Cloud
+Storage call. Import and verify accept only the dedicated dev seed writer. The
+procedure uses no ADC and no Auth or database export. Never substitute an
+administrator credential.
 
 ### Refresh dev before a rehearsal
 

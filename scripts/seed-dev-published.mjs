@@ -1,5 +1,5 @@
 #!/usr/bin/env -S node --experimental-strip-types
-// This operator never uses ADC or production storage credentials. See the runbook.
+// This operator never uses ADC and makes no Cloud Storage call. See the runbook.
 import { createHash, randomUUID } from 'node:crypto';
 import { constants } from 'node:fs';
 import { readFile, mkdir, writeFile, open, link, unlink } from 'node:fs/promises';
