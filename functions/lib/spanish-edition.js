@@ -2,7 +2,7 @@
 
 const { createHash } = require("node:crypto");
 const { contentVersion } = require("./content-version");
-const { isPostRouteSlug, isSpanishPostSlug, postRoutePath } = require("./post-slug-contract");
+const { isPostRouteSlug, isServerMintableSlugShape, isSpanishPostSlug, postRoutePath } = require("./post-slug-contract");
 const { parsePublishInstant } = require("./publish-instant");
 const { publiclyVisible } = require("./public-video-references");
 const { contentLink } = require("./content-link");
@@ -53,5 +53,13 @@ function visibleEditionPath(document, id, now) {
   return contentLink(metadata, path).external ? undefined : path;
 }
 
+function visibleAlternatePath(postId, metadata, alternateId, alternate, now) {
+  const alternateMetadata = alternate?.published?.metadata;
+  const linked = isLinkedSpanishPost(postId, metadata)
+    ? metadata.editionOf === alternateId && isServerMintableSlugShape(alternateMetadata?.slug)
+    : isLinkedSpanishPost(alternateId, alternateMetadata) && alternateMetadata.editionOf === postId;
+  return linked ? visibleEditionPath(alternate, alternateId, now) : undefined;
+}
+
 module.exports = { SPANISH_EDITION_REVIEW_REQUIRED, isSpanishEdition, spanishPostEditionId,
-  hasSpanishTranslationApproval, isLinkedSpanishPost, alternatePostId, visibleEditionPath };
+  hasSpanishTranslationApproval, isLinkedSpanishPost, alternatePostId, visibleAlternatePath };

@@ -9,7 +9,7 @@ const { db } = require("./lib/firebase");
 const { requestHeader } = require("./lib/cms-edge");
 const { parsePublishInstant } = require("./lib/publish-instant");
 const { isServerMintableSlugShape, isSpanishPostSlug } = require("./lib/post-slug-contract");
-const { isLinkedSpanishPost, alternatePostId, visibleEditionPath } = require("./lib/spanish-edition");
+const { isLinkedSpanishPost, alternatePostId, visibleAlternatePath } = require("./lib/spanish-edition");
 const { parseBlocks } = require("./lib/content-blocks");
 const { visibleLayoutBlocks } = require("./lib/content-layout");
 const { validateKnownMetadata } = require("./lib/content-metadata");
@@ -289,14 +289,9 @@ async function readPublishedPost({ firestore, slug, now, transaction, includeChr
     const { owner, published } = selected;
     let alternatePath;
     if (!cardsOnly && includeChrome) {
-      const spanish = isSpanishPostSlug(slug);
       const alternateId = alternatePostId(owner.id, published.metadata);
       const alternate = (await tx.get(firestore.doc(`cmsPosts/${alternateId}`))).data();
-      const metadata = alternate?.published?.metadata;
-      if (spanish ? isServerMintableSlugShape(metadata?.slug) :
-          isLinkedSpanishPost(alternateId, metadata) && metadata.editionOf === owner.id) {
-        alternatePath = visibleEditionPath(alternate, alternateId, now);
-      }
+      alternatePath = visibleAlternatePath(owner.id, published.metadata, alternateId, alternate, now);
     }
     const authors = await readPublishedAuthors(firestore, tx, published.metadata);
     const { assetIds } = collectPublishedMediaUsage({ collection: "cmsPosts", snapshot: published });
