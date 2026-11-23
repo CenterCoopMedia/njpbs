@@ -176,7 +176,8 @@ async function build() {
   if (!isDeepStrictEqual(frozen.identity, await identity()) || frozen.inputDigest !== await inputDigest()) throw new Error("Frozen dev inputs changed");
   const env = { PATH: process.env.PATH, NODE_ENV: "production", TZ: "America/New_York", ASTRO_TELEMETRY_DISABLED: "1",
     CMS_DEPLOYMENT_ENVIRONMENT: "development", CMS_DEV_FROZEN_BUILD: "1", CMS_OFFLINE_BUILD: "1", CMS_CONTENT_MODE: "published", CMS_LOADER_STRICT: "1",
-    FIREBASE_PROJECT_ID: publicationTarget.projectId,
+    // Production frozen and background builds seal the Data Hub gate open.
+    DATA_HUB_PUBLIC: "1", FIREBASE_PROJECT_ID: publicationTarget.projectId,
     PUBLIC_GA4_REQUIRED: "0", PUBLIC_REPORT_REQUIRED: "0", PUBLIC_SHARE_REQUIRED: "0", INTERNAL_SURFACES: "0",
     PUBLIC_BUILD_BATCH_ID: frozen.identity.buildBatchId, PUBLIC_BUILD_COMMIT_SHA: frozen.identity.commitSha,
     PUBLIC_ARTIFACT_BUNDLE_PATH: path.join(directory, "bundle.json"), PUBLIC_ARTIFACT_BUNDLE_SCHEMA_VERSION: "3",
