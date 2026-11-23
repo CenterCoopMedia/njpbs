@@ -433,7 +433,7 @@ describe("deployed Functions secret IAM", () => {
     const receipt = steps.findIndex(step => step.name === "Record the completed Functions receipt");
     expect(steps.some(step => step.uses?.startsWith("google-github-actions/auth@"))).toBe(false);
     expect(steps.some(step => step.with?.name === "cms-event-trigger-first-deploy")).toBe(false);
-    expect(steps[setup]).toMatchObject({ uses: "google-github-actions/setup-gcloud@aa5489c8933f4cc7a4f7d45035b3b1440c9c10db", with: { project_id: "njpbs-site" } });
+    expect(steps[setup]).toMatchObject({ uses: "google-github-actions/setup-gcloud@aa5489c8933f4cc7a4f7d45035b3b1440c9c10db", with: { project_id: "${{ env.CMS_TARGET_FIREBASE_PROJECT }}" } });
     const isolate = steps.findIndex(step => step.name === "Isolate trusted event IAM gate");
     expect(steps[isolate].run).toBe('mv .cms-iam-gate "$RUNNER_TEMP/cms-iam-gate"');
     expect(isolate).toBeGreaterThan(steps.indexOf(checker));

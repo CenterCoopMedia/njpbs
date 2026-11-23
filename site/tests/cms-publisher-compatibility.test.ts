@@ -79,7 +79,8 @@ async function workflowGate(deploySha = currentSha): Promise<{ code: number; out
   // Select an immutable commit without checking out files or rebuilding a repository per case.
   git("update-ref", "HEAD", deploySha);
   // Run the actual trusted workflow step against a deploy checkout and a local public receipt.
-  const command = gate.replace("https://njpbs.org/_publication.json", receiptUrl);
+  // The production target record supplies https://njpbs.org as the public origin.
+  const command = gate.replace('"$CMS_TARGET_PUBLIC_ORIGIN/_publication.json"', receiptUrl);
   const child = spawn("bash", ["-euc", command], {
     cwd: root,
     env: { ...process.env, GITHUB_WORKSPACE: root, RUNNER_TEMP: runtime },

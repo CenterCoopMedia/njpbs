@@ -40,12 +40,13 @@ test("development deployment inputs come from named repository variables without
 test("the production origin pin refuses missing or wrong configuration at the shell boundary", () => {
   const workflow = readCmsDeployWorkflow();
   assert.ok(workflow.includes('CMS_PRODUCTION_API_ORIGIN: ${{ vars.CMS_PRODUCTION_API_ORIGIN }}'));
-  const block = workflow.match(/          if \[ "\$VITE_FUNCTIONS_BASE_URL" != "\$\{CMS_PRODUCTION_API_ORIGIN:-\}" \]; then\n[\s\S]*?          fi\n/)?.[0];
+  assert.ok(workflow.includes("CMS_TARGET_API_ORIGIN: ${{ inputs.target == 'development' && 'https://dev-cms-api.njpbs.org' || vars.CMS_PRODUCTION_API_ORIGIN }}"));
+  const block = workflow.match(/          if \[ "\$VITE_FUNCTIONS_BASE_URL" != "\$\{CMS_TARGET_API_ORIGIN:-\}" \]; then\n[\s\S]*?          fi\n/)?.[0];
   assert.ok(block, "the origin comparison uses the configured independent pin");
   for (const [pin, allowed] of [[undefined, false], ["", false], ["https://wrong.fixture.test", false], ["https://api.fixture.test", true]]) {
     const result = spawnSync("bash", ["-e", "-c", block], { encoding: "utf8", env: {
       PATH: process.env.PATH, VITE_FUNCTIONS_BASE_URL: "https://api.fixture.test",
-      ...(pin === undefined ? {} : { CMS_PRODUCTION_API_ORIGIN: pin }),
+      ...(pin === undefined ? {} : { CMS_TARGET_API_ORIGIN: pin }),
     } });
     assert.equal(result.status, allowed ? 0 : 1);
     assert.ok(!result.stdout.includes("fixture.test") && !result.stderr.includes("fixture.test"));

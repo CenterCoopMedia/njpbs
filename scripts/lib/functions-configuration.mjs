@@ -1,6 +1,7 @@
 import { readFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import { studioTitleFilesParameter } from "./studio-title-files.mjs";
+import { cmsTarget } from "./cms-target.mjs";
 
 const require = createRequire(import.meta.url);
 
@@ -155,16 +156,21 @@ export function runtimeDotenv(parameters) {
   }).join("");
 }
 
-export function validateDeploymentConfiguration(value) {
+// Each target pins its own project and secret versions.
+export function functionsDeploymentPath(env = process.env) {
+  return cmsTarget(env).environment === "production" ? "config/functions-deployment.json" : `config/functions-deployment.${cmsTarget(env).environment}.json`;
+}
+
+export function validateDeploymentConfiguration(value, projectId = cmsTarget().projectId) {
   if (!value || typeof value !== "object" || Array.isArray(value) ||
       Object.keys(value).sort().join(",") !== "codebase,mediaCredentialVersions,projectId,region" ||
-      value.projectId !== "njpbs-site" || value.region !== "us-central1" || value.codebase !== "default" ||
+      value.projectId !== projectId || value.region !== "us-central1" || value.codebase !== "default" ||
       !value.mediaCredentialVersions || typeof value.mediaCredentialVersions !== "object" || Array.isArray(value.mediaCredentialVersions) ||
       Object.keys(value.mediaCredentialVersions).sort().join(",") !== Object.keys(FUNCTION_SECRETS).filter(key => FUNCTION_SECRETS[key].mediaPin).sort().join(",")) {
     configurationFailure("Invalid Functions deployment scope or configuration keys");
   }
   for (const [name, reference] of Object.entries(value.mediaCredentialVersions)) {
-    if (reference !== null && (typeof reference !== "string" || !new RegExp(`^projects/njpbs-site/secrets/${name}/versions/[1-9][0-9]*$`).test(reference))) {
+    if (reference !== null && (typeof reference !== "string" || !new RegExp(`^projects/${projectId}/secrets/${name}/versions/[1-9][0-9]*$`).test(reference))) {
       configurationFailure(`Invalid pinned secret version: ${name}`);
     }
   }

@@ -14,6 +14,7 @@ import {
   readReceipt,
   startReceipt,
 } from "./lib/cms-component-receipt.mjs";
+import { cmsTarget } from "./lib/cms-target.mjs";
 import { assertLegacyCmsWorkflow, fingerprintExecutionSource, fingerprintReceiptExecutionSource, identitiesMatch, planCmsApiRelease } from "./lib/cms-release-plan.mjs";
 
 function fail(message) {
@@ -114,12 +115,12 @@ function credential() {
   const parsed = typeof json === "string" && json.trim().startsWith("{")
     ? JSON.parse(json)
     : JSON.parse(readFileSync(json, "utf8"));
-  if (parsed.project_id !== "njpbs-site") fail("Firebase project must be njpbs-site");
+  if (parsed.project_id !== cmsTarget().projectId) fail(`Firebase project must be ${cmsTarget().projectId}`);
   return parsed;
 }
 
 async function withFirestore(work) {
-  const app = getApps()[0] || initializeApp({ credential: cert(credential()), projectId: "njpbs-site" });
+  const app = getApps()[0] || initializeApp({ credential: cert(credential()), projectId: cmsTarget().projectId });
   try {
     return await work(getFirestore(app), app);
   } finally {

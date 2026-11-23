@@ -166,7 +166,7 @@ test("runs the actual production render block after real gate moves without cred
   try {
     const workflow = parse(readFileSync(join(root, ".github/workflows/cms-staging-deploy.yml"), "utf8"));
     const steps = workflow.jobs["admin-build"].steps;
-    const env = { PATH: process.env.PATH, RUNNER_TEMP: runtime, GITHUB_WORKSPACE: directory,
+    const env = { PATH: process.env.PATH, RUNNER_TEMP: runtime, GITHUB_WORKSPACE: directory, CMS_TARGET_RENDER_SCOPE: "--production",
       ...Object.fromEntries(productionDeploymentInputs.map(name => [name, inputs[name]])) };
     for (const step of steps) {
       if (step.uses?.startsWith("actions/checkout") && step.with?.path) {

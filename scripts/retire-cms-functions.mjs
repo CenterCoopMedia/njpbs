@@ -8,6 +8,7 @@ import { ComponentReceiptError, assertLegacyPreviewProtocol, readReceipt, requir
 import { extractProductionExports } from "./smoke-cms-functions.mjs";
 import { FUNCTION_DEPLOY_REGION, cloudWakeFunctionPlan, explicitCloudWakeDecision, functionBatches, main as deployFunctions } from "./deploy-cms-function-batches.mjs";
 import { readFunctionsDeployInventory } from "./lib/functions-deploy-inventory.mjs";
+import { cmsTarget } from "./lib/cms-target.mjs";
 import { applyFunctionRetirements, planFunctionRetirements, requireRetirementScope, validateRetirementPlan } from "./lib/functions-retirement.mjs";
 
 const execute = promisify(execFile);
@@ -22,7 +23,7 @@ export function retirementContext(firestore, env = process.env) {
   if (!isDeepStrictEqual(rawNames, extractProductionExports(source).sort())) refuse();
   const configuration = JSON.parse(readFileSync("firebase.json", "utf8"));
   if (configuration.functions?.source !== "functions" || configuration.functions?.codebase !== "default"
-    || firestore.projectId !== "njpbs-site") refuse();
+    || firestore.projectId !== cmsTarget().projectId) refuse();
   const targetNames = cloudWakeFunctionPlan(env.FUNCTION_TARGETS, explicitCloudWakeDecision(env)).names;
   return { sourceSha, trustedWorkflowSha, runId: requireRunId(env.GITHUB_RUN_ID), runAttempt: requireRunAttempt(env.GITHUB_RUN_ATTEMPT),
     targetNames, scope: { projectId: firestore.projectId, region: FUNCTION_DEPLOY_REGION, codebase: configuration.functions.codebase } };
