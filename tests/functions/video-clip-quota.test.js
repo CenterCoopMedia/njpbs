@@ -66,9 +66,15 @@ it("registers one durable library asset for concurrent saves and keeps the rende
     copyClip.mockRejectedValueOnce(clipContract.problem(409, "The requested rendition is not available"));
     expect((await call(register("editor"), payload)).statusCode).toBe(409);
     expect((await db.collection("mediaSourceAssets").get()).size).toBe(1);
+    copyClip.mockImplementationOnce(async (_source, _session, _output, registration) => {
+      expect(await registration.claimUpload("copy-upload")).toBe("copy-upload");
+      return null;
+    });
+    expect((await call(register("editor"), payload)).body).toEqual({ success: true, pending: true });
     const [left, right] = await Promise.all([call(register("editor"), payload), call(register("editor"), payload)]);
     expect(left.statusCode).toBe(200);
     expect(right.body).toEqual(left.body);
+    expect(copyClip.mock.calls.at(-1)[3].uploadId).toBe("copy-upload");
     const saved = left.body.asset;
     const copies = copyClip.mock.calls.length;
     await jobRef.delete();
@@ -91,6 +97,17 @@ it("registers one durable library asset for concurrent saves and keeps the rende
     await db.doc("users/staff").update({ active: false });
     expect((await read()).statusCode).toBe(403);
     expect(createReadFn).toHaveBeenCalledTimes(1);
+    await db.doc(`mediaSourceAssets/${saved.id}`).update({ lifecycle: "deleted" });
+    expect((await call(register("editor"), payload)).body.error).toMatch(/deleted/);
+    await db.doc("mediaSourceAssets/asset").update({ objectVersionId: "original-v1" });
+    const rerender = await submit({ inMs: 1251, outMs: 2702 });
+    expect(rerender.id).toBe(clip.id);
+    expect(rerender.attemptId).not.toBe(clip.attemptId);
+    await jobRef.update({ phase: "ready", active: false, output: { ...output,
+      objectKey: `outputs/clips/${clip.id}/${rerender.attemptId}/preview.mp4`, objectVersionId: "rendered-v2" } });
+    const resaved = await call(register("editor"), { ...payload, attemptId: rerender.attemptId });
+    expect(resaved.statusCode).toBe(200);
+    expect(resaved.body.asset.id).not.toBe(saved.id);
   } finally {
     clock.mockRestore();
   }

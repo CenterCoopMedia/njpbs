@@ -299,11 +299,15 @@ async function clipRead(config, source, job, now = Date.now(), deps = {}) {
 }
 
 async function registerClip(firestore, source, request, actor, uploader, now = Date.now()) {
-  // The library identity survives export expiry and rerenders of the same selection.
-  const assetId = `clip-${request.clipId}`;
+  // An export attempt has one library identity, even after its job expires.
+  const assetId = `clip-${createHash("sha256").update(JSON.stringify([request.clipId, request.attemptId])).digest("hex")}`;
   const ref = firestore.collection("mediaSourceAssets").doc(assetId);
+  const jobRef = firestore.collection(CLIP_JOBS).doc(request.clipId);
   function registered(snapshot) {
     if (!snapshot.exists) return null;
+    if (snapshot.data()?.lifecycle === "deleted") {
+      throw problem(409, "This saved clip was deleted. Save a new export of the range after this export expires, or change its export settings.");
+    }
     const asset = parseSourceMediaAsset(snapshot.id, snapshot.data());
     if (!asset || asset.sourceId !== source.id || asset.parentSource?.assetId !== request.assetId ||
         !asset.parentSource.fileVersion || !objectKeyWithinSource(source, asset.objectKey)) {
@@ -332,12 +336,32 @@ async function registerClip(firestore, source, request, actor, uploader, now = D
   const fileVersion = sourceMediaFileVersion(job.sourceObjectVersionId);
   const name = `${parent.name.slice(0, 440).toWellFormed()} — Clip ${job.inMs / 1000}–${job.outMs / 1000}s`;
   const session = { id: job.attemptId, assetId, sourceId: source.id, actorUid: actor.uid,
-    objectKey: objectKey(source, `${assetId}-${job.attemptId}`, output.mimeType), mimeType: output.mimeType,
+    objectKey: objectKey(source, assetId, output.mimeType), mimeType: output.mimeType,
     originalName: `${name}${VIDEO_MIME_EXTENSIONS[output.mimeType]}`, sizeBytes: output.sizeBytes,
     parentSource: { sourceId: source.id, assetId: parent.id, fileVersion, inMs: job.inMs, outMs: job.outMs },
     metadata: { name, description: null, license: null, credit: null, tags: [], rightsStatus: "pending" } };
+  const capacity = await readPreviewAdmission({ get: item => item.get() }, firestore, actor.uid);
+  assertPreviewCapacity(capacity.actorPreviews, capacity.globalPreviews);
   // The render bucket expires these objects. Copy the exact output before indexing a library original.
-  const head = await uploader.copyClip(source, session, output);
+  const head = await uploader.copyClip(source, session, output, {
+    uploadId: job.registrationUploadId,
+    claimUpload: uploadId => firestore.runTransaction(async tx => {
+      const current = (await tx.get(jobRef)).data();
+      if (current?.attemptId !== job.attemptId || current.phase !== "ready" || !(Date.parse(current.expiresAt) > now)) {
+        throw problem(409, "The selected clip changed while it was being saved");
+      }
+      if (current.registrationUploadId) return current.registrationUploadId;
+      tx.update(jobRef, { registrationUploadId: uploadId });
+      return uploadId;
+    }),
+    clearUpload: uploadId => firestore.runTransaction(async tx => {
+      const current = (await tx.get(jobRef)).data();
+      if (current?.attemptId === job.attemptId && current.registrationUploadId === uploadId) {
+        tx.update(jobRef, { registrationUploadId: null });
+      }
+    }),
+  });
+  if (!head) return null;
   if (head.VersionId === "null") throw problem(409, "The saved video copy is unavailable");
   const asset = completedAsset(session, head, new Date(now).toISOString());
   return firestore.runTransaction(async tx => {
@@ -379,7 +403,7 @@ function clipHandler(action, deps = {}) {
       if (action === "register") {
         const uploader = deps.uploader ?? (defaultUploader ??= createS3MediaUploader(runtimeAwsConfig()));
         const asset = await registerClip(firestore, source, request, actor, uploader);
-        res.status(200).json({ success: true, asset }); return;
+        res.status(200).json(asset ? { success: true, asset } : { success: true, pending: true }); return;
       }
       const getEditorExportsEnabled = deps.editorExportsEnabled ?? editorExportsEnabled;
       const getOriginalCopiesEnabled = deps.originalCopiesEnabled ?? originalCopiesEnabled;

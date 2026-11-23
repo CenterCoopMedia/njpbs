@@ -172,7 +172,7 @@ export function readVideoClip(token: string, identity: VideoIdentity, clipId: st
 }
 
 export function registerVideoClip(token: string, identity: VideoIdentity, clipId: string, attemptId: string, signal: AbortSignal) {
-  return postFunction<{ success: true; asset: { id: string; name: string } }>("cmsRegisterVideoClip", token,
+  return postFunction<{ success: true } & ({ asset: { id: string; name: string } } | { pending: true })>("cmsRegisterVideoClip", token,
     { ...identity, clipId, attemptId }, {}, { appCheck: true, signal });
 }
 

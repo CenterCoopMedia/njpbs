@@ -40,14 +40,15 @@ function actor(uid = "staff-1") {
   };
 }
 
-it("copies a pinned render in bounded S3 parts and recovers the winning conditional write", async () => {
+it("resumes a pinned render copy across requests and recovers the winning conditional write", async () => {
   const partBytes = 4 * 1024 ** 3;
-  const output = { objectKey: "outputs/clips/clip/attempt/editor.mov", objectVersionId: "version/+", sizeBytes: partBytes + 15 };
+  const output = { objectKey: "outputs/clips/clip/attempt/editor.mov", objectVersionId: "version/+", sizeBytes: 4 * partBytes + 15 };
   const request = { id: "attempt", assetId: "saved-clip", mimeType: "video/quicktime", objectKey: "shared/objects/saved-clip.mov" };
   const renderBucket = "renders.example.org";
   const saved = { VersionId: "winner", ContentLength: output.sizeBytes,
     Metadata: { "boardwalk-session": request.id, "boardwalk-asset": request.assetId } };
   let complete = false;
+  const copiedParts = [];
   const send = vi.fn(async command => {
     switch (command.constructor.name) {
       case "HeadObjectCommand":
@@ -55,7 +56,13 @@ it("copies a pinned render in bounded S3 parts and recovers the winning conditio
         if (complete) return saved;
         throw Object.assign(new Error("Missing"), { $metadata: { httpStatusCode: 404 } });
       case "CreateMultipartUploadCommand": return { UploadId: "loser" };
-      case "UploadPartCopyCommand": return { CopySourceVersionId: output.objectVersionId, CopyPartResult: { ETag: `part-${command.input.PartNumber}` } };
+      case "ListPartsCommand": return { Parts: [...copiedParts] };
+      case "UploadPartCopyCommand": {
+        const { PartNumber } = command.input;
+        const ETag = `part-${PartNumber}`;
+        copiedParts.push({ PartNumber, ETag });
+        return { CopySourceVersionId: output.objectVersionId, CopyPartResult: { ETag } };
+      }
       case "CompleteMultipartUploadCommand":
         complete = true;
         throw Object.assign(new Error("Object is present"), { $metadata: { httpStatusCode: 412 } });
@@ -65,20 +72,30 @@ it("copies a pinned render in bounded S3 parts and recovers the winning conditio
   });
   const uploader = createS3MediaUploader({ region: "us-east-2", renditionBucket: renderBucket }, { S3ClientCtor: class { send = send; } });
   const mediaSource = source();
-  expect(await uploader.copyClip(mediaSource, request, output)).toEqual(saved);
+  const claimUpload = vi.fn(async uploadId => uploadId);
+  const clearUpload = vi.fn(async () => {});
+  expect(await uploader.copyClip(mediaSource, request, output, { claimUpload, clearUpload })).toBeNull();
+  expect(copiedParts).toHaveLength(4);
+  expect(send.mock.calls.some(([command]) => command.constructor.name === "CompleteMultipartUploadCommand")).toBe(false);
+  expect(await uploader.copyClip(mediaSource, request, output, { uploadId: "loser", claimUpload, clearUpload })).toEqual(saved);
+  expect(claimUpload).toHaveBeenCalledExactlyOnceWith("loser");
+  expect(clearUpload).not.toHaveBeenCalled();
   const commands = send.mock.calls.map(([command]) => command);
   expect(commands[0].input).toMatchObject({ Bucket: renderBucket, Key: output.objectKey, VersionId: output.objectVersionId });
   expect(commands.filter(command => command.constructor.name === "UploadPartCopyCommand").map(command => command.input)).toMatchObject([
     { CopySource: `${renderBucket}/${output.objectKey}?versionId=version%2F%2B`, ExpectedSourceBucketOwner: mediaSource.expectedBucketOwner,
       Bucket: mediaSource.bucket, CopySourceRange: `bytes=0-${partBytes - 1}`, PartNumber: 1 },
-    { CopySourceRange: `bytes=${partBytes}-${partBytes + 14}`, PartNumber: 2 },
+    { CopySourceRange: `bytes=${partBytes}-${2 * partBytes - 1}`, PartNumber: 2 },
+    { CopySourceRange: `bytes=${2 * partBytes}-${3 * partBytes - 1}`, PartNumber: 3 },
+    { CopySourceRange: `bytes=${3 * partBytes}-${4 * partBytes - 1}`, PartNumber: 4 },
+    { CopySourceRange: `bytes=${4 * partBytes}-${4 * partBytes + 14}`, PartNumber: 5 },
   ]);
   expect(commands.find(command => command.constructor.name === "CompleteMultipartUploadCommand").input).toMatchObject({
-    IfNoneMatch: "*", MultipartUpload: { Parts: [{ PartNumber: 1, ETag: "part-1" }, { PartNumber: 2, ETag: "part-2" }] },
+    IfNoneMatch: "*", MultipartUpload: { Parts: copiedParts },
   });
   expect(commands.find(command => command.constructor.name === "AbortMultipartUploadCommand").input).toMatchObject({ UploadId: "loser" });
   send.mockClear();
-  expect(await uploader.copyClip(mediaSource, request, output)).toEqual(saved);
+  expect(await uploader.copyClip(mediaSource, request, output, { claimUpload, clearUpload })).toEqual(saved);
   expect(send).toHaveBeenCalledTimes(2);
 });
 

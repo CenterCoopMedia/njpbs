@@ -27,14 +27,19 @@ export function RegisterClipButton({ identity, clipId, attemptId, getIdToken, di
     setPending(true);
     setError("");
     try {
-      const token = await getIdToken();
-      if (controller.signal.aborted) return;
-      const result = await registerVideoClip(token, identity, clipId, attemptId, controller.signal);
-      if (controller.signal.aborted) return;
-      setAsset(result.asset);
-      invalidateVideoSearchCorpus(identity.sourceId);
-      setMediaSourceCount(identity.sourceId, null);
-      onRegistered?.();
+      while (!controller.signal.aborted) {
+        const token = await getIdToken();
+        if (controller.signal.aborted) return;
+        const result = await registerVideoClip(token, identity, clipId, attemptId, controller.signal);
+        if (controller.signal.aborted) return;
+        if ("asset" in result) {
+          setAsset(result.asset);
+          invalidateVideoSearchCorpus(identity.sourceId);
+          setMediaSourceCount(identity.sourceId, null);
+          onRegistered?.();
+          return;
+        }
+      }
     } catch (failure) {
       if (!controller.signal.aborted) setError(failure instanceof Error ? failure.message : "The clip could not be saved. Try again.");
     } finally {
