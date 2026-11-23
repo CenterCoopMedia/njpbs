@@ -198,7 +198,7 @@ function createRetiredTranscriptStatusReader() {
 }
 const cleanupIsDryRun = () => videoReplacementRuntimeConfig().dryRun;
 async function processReplacements({ firestore = db, source = runtimeRegistry().get("video-library"),
-  remove, readAmazonStatus, log = logger, now = Date.now(), dryRun = cleanupIsDryRun(), ...deps } = {}) {
+  remove, readAmazonStatus = null, log = logger, now = Date.now(), dryRun = cleanupIsDryRun(), ...deps } = {}) {
   if (!source) return;
   const collection = firestore.collection(REPLACEMENTS);
   const scan = firestore.doc("mediaSourceReplacementScans/tick");
