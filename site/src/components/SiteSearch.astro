@@ -4,9 +4,14 @@ import { SPOTLIGHT_ARCHIVE_LABEL, SPOTLIGHT_ARCHIVE_SEARCH_PATH } from "../lib/s
 
 interface Props {
   archive?: boolean;
+  spanish?: boolean;
 }
 
-const { archive = false } = Astro.props;
+const { archive = false, spanish = false } = Astro.props;
+const title = archive ? SPOTLIGHT_ARCHIVE_LABEL : spanish ? "Buscar en NJ PBS" : "Search NJ PBS";
+const description = archive ? "Find historical reporting by topic and original publication year."
+  : spanish ? "Encuentra artículos en español." : "Find pages, stories, and guides on this site.";
+const searchPath = archive ? SPOTLIGHT_ARCHIVE_SEARCH_PATH : spanish ? "/es/search/" : "/search/";
 const filters = archive
   ? [{ key: "archive-topic", label: "Topic", all: "All topics" },
     { key: "archive-year", label: "Publication year", all: "All years" }]
@@ -16,23 +21,25 @@ const filters = archive
 
 <section class="page-hero">
   <div class="page-hero__inner wrap">
-    <h1>{archive ? SPOTLIGHT_ARCHIVE_LABEL : "Search NJ PBS"}</h1>
-    <p class="page-hero__lead">{archive ? "Find historical reporting by topic and original publication year." : "Find pages, stories, and guides on this site."}</p>
+    <h1>{title}</h1>
+    <p class="page-hero__lead">{description}</p>
   </div>
 </section>
-<div class="wrap search-content" data-site-search data-archive-search={archive ? true : undefined}>
-  <p data-search-fallback>Search needs JavaScript. Use the browse links below to find what you need.</p>
-  <form role="search" aria-label={archive ? SPOTLIGHT_ARCHIVE_LABEL : "NJ PBS site search"} hidden>
-    <label for="site-search-query">{archive ? "Search archived stories" : "Search this site"}</label>
+<div class="wrap search-content" lang={spanish ? "es" : undefined} data-site-search data-archive-search={archive ? true : undefined}>
+  <p data-search-fallback>{spanish ? "Activa JavaScript para buscar artículos." : "Search needs JavaScript. Use the browse links below to find what you need."}</p>
+  <form role="search" aria-label={archive ? SPOTLIGHT_ARCHIVE_LABEL : spanish ? "Búsqueda de NJ PBS" : "NJ PBS site search"} hidden>
+    {!archive && <p><a href={spanish ? "/search/" : "/es/search/"} lang={spanish ? "en" : "es"}>{spanish ? "Search in English" : "Buscar en español"}</a></p>}
+    <label for="site-search-query">{archive ? "Search archived stories" : spanish ? "Buscar artículos" : "Search this site"}</label>
     <div class="search-controls">
       <input id="site-search-query" name="q" type="search" maxlength="200" aria-describedby="search-hint" autocomplete="off" />
       <div class="search-actions">
-        <button class="btn btn--primary" type="submit">Search</button>
-        <button class="btn btn--ghost" type="reset">Clear</button>
+        <button class="btn btn--primary" type="submit">{spanish ? "Buscar" : "Search"}</button>
+        <button class="btn btn--ghost" type="reset">{spanish ? "Borrar" : "Clear"}</button>
       </div>
     </div>
-    <p id="search-hint">{archive ? "Results appear as you type. Use filters to narrow the archive." : "Results appear as you type. Try a topic, page title, or keyword."}</p>
-    <fieldset class="search-filters" data-search-filters hidden>
+    <p id="search-hint">{archive ? "Results appear as you type. Use filters to narrow the archive."
+      : spanish ? "Escribe un tema, un título o una palabra clave." : "Results appear as you type. Try a topic, page title, or keyword."}</p>
+    {!spanish && <fieldset class="search-filters" data-search-filters hidden>
       <legend>{archive ? "Filter archived stories" : "Filter programs"}</legend>
       <p>{archive ? "You can browse by topic or year without entering a search term." : "Choose a program or genre to search only program pages. You can leave the search box empty."}</p>
       <div class="search-filter-controls">
@@ -45,15 +52,15 @@ const filters = archive
           </div>
         ))}
       </div>
-    </fieldset>
+    </fieldset>}
     <p data-search-filter-status role="status"></p>
   </form>
-  {!archive && <p data-meaning-status role="status" aria-live="polite">Preparing meaning search… Keyword search is ready.</p>}
+  {!archive && !spanish && <p data-meaning-status role="status" aria-live="polite">Preparing meaning search… Keyword search is ready.</p>}
   <p class="search-status" role="status" aria-atomic="true"></p>
-  <p data-search-recovery hidden><a href={archive ? SPOTLIGHT_ARCHIVE_SEARCH_PATH : "/search/"}>Reload search</a> to try again, or use the browse links below.</p>
-  <ol class="search-results" aria-label="Search results"></ol>
-  <button class="btn btn--ghost search-more" type="button" data-search-more hidden>Show more results</button>
-  <nav class="search-browse" aria-labelledby="search-browse-title">
+  <p data-search-recovery hidden><a href={searchPath}>{spanish ? "Volver a cargar la búsqueda" : "Reload search"}</a>{!spanish && " to try again, or use the browse links below."}</p>
+  <ol class="search-results" aria-label={spanish ? "Resultados de búsqueda" : "Search results"}></ol>
+  <button class="btn btn--ghost search-more" type="button" data-search-more hidden>{spanish ? "Mostrar más resultados" : "Show more results"}</button>
+  {!spanish && <nav class="search-browse" aria-labelledby="search-browse-title">
     <h2 id="search-browse-title">Browse NJ PBS</h2>
     <p>Looking for a show or episode? <a href={pbsVideoUrl} target="_blank" rel="noopener noreferrer" aria-label="Browse the PBS video library (opens in new tab)">Browse the PBS video library</a>.</p>
     <ul>
@@ -62,7 +69,7 @@ const filters = archive
       <li><a href="/about/">About NJ PBS</a></li>
       <li><a href="/support/">Viewer support</a></li>
     </ul>
-  </nav>
+  </nav>}
 </div>
 
 <script>

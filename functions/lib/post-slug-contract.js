@@ -53,6 +53,24 @@ function isServerMintableSlugShape(value) {
   return typeof value === "string" && POST_SLUG_SHAPE.test(value);
 }
 
+function isSpanishPostSlug(value) {
+  return typeof value === "string" && value.startsWith("es/") && isServerMintableSlugShape(value.slice(3));
+}
+
+function isPostRouteSlug(value) {
+  return isServerMintableSlugShape(value) || isSpanishPostSlug(value);
+}
+
+function postRoutePath(slug) {
+  if (!isPostRouteSlug(slug)) throw new Error("Invalid Post route slug");
+  return isSpanishPostSlug(slug) ? `/es/posts/${slug.slice(3)}/` : `/posts/${slug}/`;
+}
+
+function postSlugForPath(path) {
+  const match = /^(\/es)?\/posts\/([^/]+)\/$/.exec(path);
+  if (match && isServerMintableSlugShape(match[2])) return match[1] ? `es/${match[2]}` : match[2];
+}
+
 function mintablePostSlugRoot(displayName) {
   const slug = slugifyPostTitle(displayName);
   if (slug === "") return POST_SLUG_FALLBACK_ROOT;
@@ -81,6 +99,10 @@ module.exports = {
   RESERVED_POST_SLUG_TAIL,
   isMintablePostSlug,
   isServerMintableSlugShape,
+  isSpanishPostSlug,
+  isPostRouteSlug,
+  postRoutePath,
+  postSlugForPath,
   mintablePostSlugRoot,
   postSlugCandidate,
   slugifyPostTitle,

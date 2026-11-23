@@ -1,0 +1,123 @@
+---
+import { contentLink } from "../../../packages/content-core/src/content-link.ts";
+import { homeExternalLinkNotice } from "../../../packages/content-core/src/home-rail-render";
+// `/posts/{slug}/` — one published Post, plus a stub at every slug it retired.
+//
+// Everything this route emits comes from published snapshots. Registered
+// bylines use the current public profile's name and link. A withdrawn profile
+// keeps the frozen Post name without linking to its removed route.
+import PublicSiteLayout from "../layouts/PublicSiteLayout.astro";
+import PostIndex from "./PostIndex.astro";
+import PostPresentation from "./PostPresentation.astro";
+import PermanentRedirect from "./PermanentRedirect.astro";
+import { resolvePublicCreditLinks } from "../lib/public-author-links";
+import { jsonLdHtml, newsArticleJsonLd } from "../lib/structured-data";
+import { liveBlogPostingJsonLd } from "../lib/live-blog-structured-data";
+import { containsVideo } from "../../../packages/content-core/src/video-block";
+import { isSpanishPostSlug } from "../lib/public-content-routes";
+import { resolveNjDecidesSocialImage } from "../lib/nj-decides-social-images";
+import type { PublicPostProps } from "../lib/post-static-paths";
+
+type Props = PublicPostProps;
+
+const renderContext = Astro.locals.cmsRender;
+const renderPost = renderContext?.content.posts.find(post => post.postId === renderContext.content.target.documentId);
+if (renderContext && !renderPost) throw new Error("Compiled renderer Post target is missing");
+const props: Props = renderContext && renderPost
+  ? { entry: { id: renderPost.postId, collection: "cmsPosts",
+      data: { ...renderPost, spotlightNews: renderPost.spotlightNews === true,
+        heroImageCaption: renderPost.heroImageCaption ?? "",
+        seo: renderPost.seo ? { ...renderPost.seo } : undefined,
+        social: renderPost.social ? { ...renderPost.social } : undefined } },
+    credits: resolvePublicCreditLinks(renderPost.credits, renderContext.content.authors),
+    ...(renderContext.content.kind === "public-post-shadow" ? { alternatePath: renderContext.content.alternatePath } : {}),
+    ...(renderContext.staticRedirect ? { redirectFrom: renderContext.staticRedirect.from } : {}) }
+  : Astro.props as Props;
+const index = "index" in props;
+const entry = index ? null : props.entry;
+const credits = index ? [] : props.credits;
+const redirectFrom = index ? undefined : props.redirectFrom;
+const post = entry?.data;
+const canonicalPath = post?.path ?? "/posts/";
+const outbound = post && renderContext?.content.kind !== "private-preview" ? contentLink(post, canonicalPath) : null;
+const canonicalUrl = new URL(canonicalPath, Astro.site).toString();
+const socialImage = resolveNjDecidesSocialImage(post ? { kind: "post", ...post } : undefined);
+const language = post && (isSpanishPostSlug(post.slug) ||
+  renderContext?.content.kind === "private-preview" && post.locale === "es") ? "es" : "en";
+const alternatePath = index || redirectFrom || outbound?.external ? undefined : props.alternatePath;
+const alternateLanguage = language === "es" ? "en" : "es";
+const editionPaths = alternatePath
+  ? language === "es" ? { en: alternatePath, es: canonicalPath } : { en: canonicalPath, es: alternatePath }
+  : undefined;
+
+// A stub is noindex, so it carries no structured data (the post-build guardrail
+// requires that, and a stub is not the Post anyway).
+const baseArticleJsonLd =
+  !post || redirectFrom || outbound?.external || post.noindex
+    ? null
+    : newsArticleJsonLd({
+        title: post.title,
+        description: post.seo?.description ?? post.summary,
+        canonicalPath,
+        datePublished: post.displayDate,
+        dateModified: post.updateShown ? post.updatedDate : null,
+        imageUrl: post.heroImage?.url ?? null,
+        credits,
+        site: Astro.site!,
+      });
+const articleJsonLd = baseArticleJsonLd && post?.liveBlog && post.liveBlog.coverageState !== "ended" ? {
+  ...baseArticleJsonLd,
+  ...liveBlogPostingJsonLd({ postId: post.postId, title: post.title, canonicalPath,
+    datePublished: post.displayDate, liveBlog: post.liveBlog, site: Astro.site! }),
+} : baseArticleJsonLd;
+---
+
+{index ? (
+  <PostIndex />
+) : post && entry ? (
+  <PublicSiteLayout
+    editTarget={{ type: "post", id: post.postId }}
+    title={post.title}
+    description={post.summary || post.excerpt || post.title}
+    seoTitle={post.seo?.title?.trim() || undefined}
+    seoDescription={post.seo?.description}
+    socialTitle={post.social?.title?.trim() || post.title}
+    socialDescription={post.social?.description}
+    socialImage={socialImage?.url}
+    socialImageAlt={socialImage?.alt}
+    preview={false}
+    canonicalPath={canonicalPath}
+    language={language}
+    editionPaths={editionPaths}
+    noindex={Boolean(redirectFrom) || Boolean(outbound?.external) || post.noindex}
+    metaRefreshTo={outbound?.external ? outbound.href : redirectFrom ? canonicalPath : undefined}
+    noAnalytics={containsVideo(post.blocks) || Boolean(post.leadMedia && post.leadMedia.kind !== "image")}
+  >
+    {articleJsonLd && (
+      <script
+        type="application/ld+json"
+        is:inline
+        set:html={jsonLdHtml(articleJsonLd)}
+      />
+    )}
+    {outbound?.external ? (
+      <p><a href={outbound.href} target={outbound.target} rel={outbound.rel}>Continue to {post.title}{outbound.newTab && <Fragment set:html={homeExternalLinkNotice} />}</a></p>
+    ) : redirectFrom ? (
+      <PermanentRedirect to={canonicalPath} label={post.title} />
+    ) : (
+      <>
+        {alternatePath && <p class="post-edition-link" data-pagefind-ignore>
+          <a href={alternatePath} lang={alternateLanguage} hreflang={alternateLanguage}>{language === "es" ? "Read in English" : "Leer en español"}</a>
+        </p>}
+        <PostPresentation entry={entry} credits={credits} canonicalUrl={canonicalUrl} />
+      </>
+    )}
+  </PublicSiteLayout>
+) : null}
+
+<style>
+  .post-edition-link {
+    width: min(100% - 2rem, 72rem);
+    margin: 1rem auto;
+  }
+</style>

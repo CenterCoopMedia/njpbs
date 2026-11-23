@@ -11,7 +11,7 @@ export const PAIR_OPERATOR_PROVE_PATH: "/private-pair-operator/v1/prove";
 export const PAIR_OPERATOR_CAPTURE_PATH: "/private-pair-operator/v1/capture-recovery";
 export function privatePairReaderCapabilities(commitSha: string): Readonly<{
   schemaVersion: 1; rendererSha: string;
-  post: Readonly<{ dataFigureVersion: 1; electionResultsVersion: 2; liveBlogVersion: 1 }>;
+  post: Readonly<{ dataFigureVersion: 1; electionResultsVersion: 2; liveBlogVersion: 1; spanishPostVersion: 1 }>;
   page: Readonly<{ dataFigureVersion: 1; electionResultsVersion: 2; dataHubReportingVersion: 1; dataHubCompositionVersion: 1 }>;
   record: Readonly<{ families: readonly ["programs", "events"];
     terminalOwner: Readonly<{ schemaVersion: 1; transport: "public-context-no-build-v1"; rendererSha: string }> }>;

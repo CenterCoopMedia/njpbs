@@ -2534,10 +2534,13 @@ function EditorWorkspaceContent({
       ownerId: principal.id,
     };
     const editionOf = typeof initial?.editionOf === "string" ? initial.editionOf : null;
-    const approval = initial?.translationApproval as { contentVersion?: number } | undefined;
+    const approval = initial?.translationApproval as { contentVersion?: number; reviewedVersion?: number } | undefined;
     const translationApproved = recordStatus === "approved" &&
       Number.isSafeInteger(approval?.contentVersion) &&
-      approval?.contentVersion === (initial?.contentVersion ?? recordVersion);
+      approval?.contentVersion === (initial?.contentVersion ?? recordVersion) &&
+      typeof approval?.reviewedVersion === "number" && approval.reviewedVersion + 1 === recordVersion;
+    const publicationSupported = recordKindHasPublicRoute(recordSurface.record) &&
+      (editionOf === null || translationApproved || recordStatus === "published" || recordStatus === "scheduled");
     const canDuplicatePost =
       recordSurface.record === "post" &&
       recordSurface.id !== null &&
@@ -2588,14 +2591,14 @@ function EditorWorkspaceContent({
             can(principal, "content.edit.any", recordLifecycleResourceValue) ||
             can(principal, "content.edit.own", recordLifecycleResourceValue)
           }
-          canPublish={editionOf === null && can(principal, "content.publish", recordLifecycleResourceValue)}
+          canPublish={(editionOf === null || publicationSupported) && can(principal, "content.publish", recordLifecycleResourceValue)}
           // Publication is offered for exactly the kinds whose server action can
           // complete. That is the shared routed-kind contract's answer (#923),
           // not a list restated here: Program joined Post when its public route
           // landed. Sponsor and Newsletter publish cards through approval and
           // retain their own feedback without a routed Publish or Schedule.
           canSchedule={recordKindHasPublicRoute(recordSurface.record)}
-          publicationSupported={editionOf === null && recordKindHasPublicRoute(recordSurface.record)}
+          publicationSupported={publicationSupported}
           cardPublication={["sponsor", "newsletter"].includes(recordSurface.record)}
           translationReview={editionOf !== null}
           canRestore={can(
@@ -2772,12 +2775,11 @@ function EditorWorkspaceContent({
         />
         {editionOf !== null ? <InlineMessage title="Spanish edition" tone="info">
           <div>
-            <p>{translationApproved
+            {recordStatus !== "published" && recordStatus !== "scheduled" && <p>{translationApproved
               ? "Translation approved for this saved version."
               : recordStatus === "approved"
                 ? "Reopen this draft and submit it for translation review."
-                : "Use Preview to check the saved Spanish version privately."}</p>
-            <p>Publication is unavailable.</p>
+                : "Use Preview to check the saved Spanish version privately."}</p>}
             <Button type="button" variant="secondary" onClick={() => {
               const original: Surface = { kind: "record", record: "post", id: editionOf };
               if (onNavigateSurface) onNavigateSurface(original);

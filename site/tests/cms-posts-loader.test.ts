@@ -51,6 +51,17 @@ function post(overrides: Partial<CmsPostDoc> = {}, metadata: Record<string, unkn
 }
 
 describe("admission", () => {
+  it("keeps an English slug and its linked Spanish slug in separate route namespaces", () => {
+    const original = projectCmsPost(post(), { now: NOW })!;
+    const edition = post({ id: "spanish-edition" }, {
+      slug: `es/${original.slug}`, locale: "es", editionOf: original.postId, previousSlugs: ["es/older-story"],
+    });
+    const projected = projectCmsPost(edition, { now: NOW })!;
+    expect(projected.path).toBe("/es/posts/trenton-budget-hearing/");
+    expect(() => assertPostRouteUniqueness([original, projected])).not.toThrow();
+    expect(() => assertPostRouteUniqueness([projected, { ...projected, postId: "collision" }])).toThrow(/routes collide/);
+    expect(projectCmsPost({ ...edition, publiclyVisible: false }, { now: NOW })).toBeNull();
+  });
   it("projects an admitted published post at /posts/{slug}/", () => {
     const projected = projectCmsPost(post(), { now: NOW });
     expect(projected).not.toBeNull();

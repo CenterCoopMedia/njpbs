@@ -25,6 +25,8 @@ interface Props {
    * empty until the translated page exists.
    */
   translations?: readonly string[];
+  language?: "en" | "es";
+  editionPaths?: Record<"en" | "es", string>;
 }
 
 const {
@@ -37,6 +39,8 @@ const {
   canonicalPath,
   noindex = false,
   translations = [],
+  language = DEFAULT_LOCALE,
+  editionPaths,
 } = Astro.props;
 
 const canonical = new URL(canonicalPath ?? Astro.url.pathname, Astro.site);
@@ -49,7 +53,11 @@ const ogImageUrl = new URL(ogImage, Astro.site);
 // locale it has actually been translated into (see lib/hreflang.ts). Pages pass
 // their own set via `translations`; the default is none, so this is an empty
 // list everywhere until a translated page opts in.
-const alternates = hreflangAlternates(canonical.pathname, Astro.site!, [
+const alternates = editionPaths ? [
+  { hreflang: "en", href: new URL(editionPaths.en, Astro.site).href },
+  { hreflang: "es", href: new URL(editionPaths.es, Astro.site).href },
+  { hreflang: "x-default", href: new URL(editionPaths.en, Astro.site).href },
+] : hreflangAlternates(canonical.pathname, Astro.site!, [
   DEFAULT_LOCALE,
   // Filtered rather than trusted: the default locale is already the first
   // member, and a caller that passed it again would produce a duplicate that
@@ -59,7 +67,7 @@ const alternates = hreflangAlternates(canonical.pathname, Astro.site!, [
 ---
 
 <!doctype html>
-<html lang="en" data-pagefind-ignore={excludeFromSearch ? "all" : undefined}>
+<html lang={language} data-pagefind-ignore={excludeFromSearch ? "all" : undefined}>
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />

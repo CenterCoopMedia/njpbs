@@ -41,6 +41,26 @@ export function isServerMintableSlugShape(value: unknown): value is string {
   return typeof value === "string" && POST_SLUG_SHAPE.test(value);
 }
 
+// The locale prefix is part of the stored route key. The existing canonical
+// and retired-slug indexes can reserve the same bare slug in each language.
+export function isSpanishPostSlug(value: unknown): value is string {
+  return typeof value === "string" && value.startsWith("es/") && isServerMintableSlugShape(value.slice(3));
+}
+
+export function isPostRouteSlug(value: unknown): value is string {
+  return isServerMintableSlugShape(value) || isSpanishPostSlug(value);
+}
+
+export function postRoutePath(slug: string): string {
+  if (!isPostRouteSlug(slug)) throw new Error("Invalid Post route slug");
+  return isSpanishPostSlug(slug) ? `/es/posts/${slug.slice(3)}/` : `/posts/${slug}/`;
+}
+
+export function postSlugForPath(path: string): string | undefined {
+  const match = /^(\/es)?\/posts\/([^/]+)\/$/.exec(path);
+  if (match && isServerMintableSlugShape(match[2])) return match[1] ? `es/${match[2]}` : match[2];
+}
+
 /** Longest slug the writer may MINT, matching the author-slug bound. */
 export const POST_SLUG_MAX = 80;
 

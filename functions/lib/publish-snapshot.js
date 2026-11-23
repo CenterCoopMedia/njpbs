@@ -112,6 +112,7 @@ const POST_METADATA_FIELDS = [
   "slug",
   "previousSlugs",
   "locale",
+  "editionOf",
 ];
 
 class PublishSnapshotError extends Error {

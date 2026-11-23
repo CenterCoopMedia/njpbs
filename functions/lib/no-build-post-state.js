@@ -1,6 +1,6 @@
 "use strict";
 
-const { isServerMintableSlugShape } = require("./post-slug-contract");
+const { isPostRouteSlug, isSpanishPostSlug } = require("./post-slug-contract");
 const { publicationRuntime } = require("./publication-runtime-owner");
 const validId = value => typeof value === "string" && /^[A-Za-z0-9_-]{1,128}$/.test(value);
 const validSha = value => typeof value === "string" && /^[a-f0-9]{40}$/.test(value);
@@ -13,13 +13,13 @@ function validateState(state) {
   if (!state) return null;
   if ((state.mode !== undefined && !["dynamic", "static"].includes(state.mode)) || typeof state.servingEnabled !== "boolean" ||
       (state.operationId !== null && (!Number.isSafeInteger(state.sourceVersion) || state.sourceVersion < 1 ||
-        !isServerMintableSlugShape(state.slug) || typeof state.visible !== "boolean")) ||
+        !isPostRouteSlug(state.slug) || typeof state.visible !== "boolean")) ||
       state.schemaVersion !== 1 || !validId(state.postId) || !validSha(state.rendererSha) ||
       (state.snapshotDigest !== undefined && !validDigest(state.snapshotDigest)) ||
       (state.datasetFiguresDigest !== undefined &&
         (!validDigest(state.datasetFiguresDigest) || !validDigest(state.snapshotDigest))) ||
       !Array.isArray(state.ownedSlugs) || state.ownedSlugs.length > 100 ||
-      state.ownedSlugs.some(slug => !isServerMintableSlugShape(slug)) ||
+      state.ownedSlugs.some(slug => !isPostRouteSlug(slug) || isSpanishPostSlug(slug) !== isSpanishPostSlug(state.slug)) ||
       new Set(state.ownedSlugs).size !== state.ownedSlugs.length ||
       !Number.isSafeInteger(state.generation) || state.generation < 0 ||
       (state.operationId !== null && !/^[A-Za-z0-9]{20}$/.test(state.operationId))) refuse();
@@ -32,7 +32,7 @@ function validateCapability(value) {
   if (!value) return null;
   const common = ["schemaVersion", "rendererSha", "servingEnabled", "generation"];
   const required = value.schemaVersion === 1 ? [...common, "postId"] : common;
-  const fields = [...required, "dataFigureVersion", "electionResultsVersion", "liveBlogVersion"];
+  const fields = [...required, "dataFigureVersion", "electionResultsVersion", "liveBlogVersion", "spanishPostVersion"];
   if (typeof value !== "object" || Array.isArray(value) ||
       Object.keys(value).length < required.length || Object.keys(value).length > fields.length ||
       required.some(key => !Object.hasOwn(value, key)) ||
@@ -42,7 +42,8 @@ function validateCapability(value) {
       !Number.isSafeInteger(value.generation) || value.generation < 1 ||
       (value.dataFigureVersion !== undefined && value.dataFigureVersion !== 1) ||
       (value.electionResultsVersion !== undefined && ![1, 2].includes(value.electionResultsVersion)) ||
-      (value.liveBlogVersion !== undefined && value.liveBlogVersion !== 1)) refuse();
+      (value.liveBlogVersion !== undefined && value.liveBlogVersion !== 1) ||
+      (value.spanishPostVersion !== undefined && value.spanishPostVersion !== 1)) refuse();
   return { ...value };
 }
 
@@ -57,7 +58,7 @@ function candidateNoBuildContract(value) {
   if (value === undefined) return null;
   const common = ["schemaVersion", "rendererSha", "enabled", "authoritative"];
   const required = value?.schemaVersion === 2 ? [...common, "families"] : [...common, "postId"];
-  const fields = [...required, "dataFigureVersion", "electionResultsVersion", "liveBlogVersion"];
+  const fields = [...required, "dataFigureVersion", "electionResultsVersion", "liveBlogVersion", "spanishPostVersion"];
   if (!value || typeof value !== "object" || Array.isArray(value) ||
       Object.keys(value).length < required.length || Object.keys(value).length > fields.length ||
       required.some(key => !Object.hasOwn(value, key)) ||
@@ -65,7 +66,8 @@ function candidateNoBuildContract(value) {
       typeof value.enabled !== "boolean" || value.authoritative !== true ||
       (value.dataFigureVersion !== undefined && value.dataFigureVersion !== 1) ||
       (value.electionResultsVersion !== undefined && ![1, 2].includes(value.electionResultsVersion)) ||
-      (value.liveBlogVersion !== undefined && value.liveBlogVersion !== 1)) refuse();
+      (value.liveBlogVersion !== undefined && value.liveBlogVersion !== 1) ||
+      (value.spanishPostVersion !== undefined && value.spanishPostVersion !== 1)) refuse();
   if (value.schemaVersion === 2) {
     if (!Array.isArray(value.families) || value.families.length !== 1 || value.families[0] !== "posts") refuse();
     return { ...value, families: ["posts"] };

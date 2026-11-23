@@ -42,7 +42,7 @@ describe("video pages turn analytics off", () => {
   it("passes noAnalytics from every block-rendering route to the layout", () => {
     expect(read("../src/layouts/PublicSiteLayout.astro")).toContain("!noAnalytics &&");
     for (const route of [
-      "../src/pages/posts/[...slug].astro",
+      "../src/components/PublicPost.astro",
       "../src/pages/[...slug].astro",
       "../src/pages/schedule/[...schedule].astro",
       "../src/pages/staff/[...index].astro",

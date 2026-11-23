@@ -45,7 +45,7 @@ const MIME: Record<string, string> = { html: "text/html; charset=utf-8", json: "
 
 function sealedFileResponse(request: Request, target: PublicationTarget, file: BaselineFile, stored: BaselineObject): Response {
   const path = new URL(request.url).pathname;
-  const noStore = path.startsWith("/posts/") || path === "/_schedule-sources.json";
+  const noStore = path.startsWith("/posts/") || path.startsWith("/es/posts/") || path === "/_schedule-sources.json";
   const etag = `"${file.digest}"`;
   const headers = new Headers({ ...SECURITY_HEADER_BASELINE,
     "cache-control": noStore ? "no-store" : "public, max-age=0, must-revalidate", etag,

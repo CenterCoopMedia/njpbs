@@ -2,6 +2,7 @@ import { parse } from "parse5";
 import { escapeHtml } from "../../../packages/content-core/src/content-model";
 import { contentLink, type ContentLinkMetadata } from "../../../packages/content-core/src/content-link.ts";
 import { homeExternalLinkNotice } from "../../../packages/content-core/src/home-rail-render";
+import { isPostRouteSlug, postRoutePath, postSlugForPath } from "../../../packages/content-core/src/post-slugs";
 
 export interface ContentLinkEntry extends ContentLinkMetadata { path: string; previousSlugs?: readonly string[] }
 
@@ -12,7 +13,9 @@ export function renderContentLinks(html: string, entries: readonly ContentLinkEn
   for (const entry of entries) {
     if (entry.contentLinkMode !== "custom") continue;
     contentLink(entry, entry.path);
-    for (const path of [entry.path, ...(entry.previousSlugs ?? []).map(slug => entry.path.startsWith("/posts/") ? `/posts/${slug}/` : `/${slug}/`)]) links.set(path, entry);
+    const aliases = entry.previousSlugs ?? [];
+    const paths = postSlugForPath(entry.path) ? aliases.filter(isPostRouteSlug).map(postRoutePath) : aliases.map(slug => `/${slug}/`);
+    for (const path of [entry.path, ...paths]) links.set(path, entry);
   }
   if (publicOwnPath && links.has(publicOwnPath)) return contentLinkFallbackHtml(links.get(publicOwnPath)!);
   if (!links.size) return html;

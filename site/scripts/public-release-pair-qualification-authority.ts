@@ -1,4 +1,5 @@
 import { contentLink } from "../../packages/content-core/src/content-link.ts";
+import { postRoutePath } from "../../packages/content-core/src/post-slugs.ts";
 import { createRequire } from "node:module";
 import type { Firestore, Transaction, DocumentSnapshot } from "firebase-admin/firestore";
 import type { PublicReleasePair } from "../../packages/content-core/src/public-release";
@@ -95,7 +96,7 @@ export async function readPairQualificationAuthority({ firestore, transaction, p
     const snapshotDigest = pages.digest(document.published);
     if (state.snapshotDigest !== undefined && state.snapshotDigest !== snapshotDigest) refuse();
     for (const slug of state.ownedSlugs) {
-      const path = `/posts/${slug}/`, canonical = `/posts/${state.slug}/`;
+      const path = postRoutePath(slug), canonical = postRoutePath(state.slug);
       add({ path, kind: "post", ownerId: state.postId, status: !state.visible ? 410 : path === canonical ? contentLink(document.published.metadata, canonical).external ? 302 : 200 : 308,
         location: state.visible ? path !== canonical ? canonical : contentLink(document.published.metadata, canonical).external ? contentLink(document.published.metadata, canonical).href : null : null, sourceVersion: state.sourceVersion, snapshotDigest });
     }

@@ -14,7 +14,7 @@ export interface HreflangAlternate {
 // The first entry is the default locale: it owns the unprefixed URLs and the
 // x-default entry. Every other locale serves from /<locale>/ + the same path.
 // This is the registry of locales the site knows how to serve, and nothing more.
-export const SITE_LOCALES = ["en"] as const;
+export const SITE_LOCALES = ["en", "es"] as const;
 
 export const DEFAULT_LOCALE = SITE_LOCALES[0];
 

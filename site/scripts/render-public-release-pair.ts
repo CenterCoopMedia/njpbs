@@ -95,8 +95,6 @@ for (let index = 0; index < plan.routes.length; index++) {
   if (replay && !targets.has(route.path)) targets.set(route.path, { receipt: replay.receipt, status: expected.status });
   let html: string | undefined, location: string | undefined;
   if (route.renderer === "post") {
-    const slug = route.path.match(/^\/posts\/([a-z0-9]+(?:-[a-z0-9]+)*)\/$/)?.[1];
-    if (!slug) throw new Error("Post route differs");
     const content = replay!.content;
     if (!content || content.target.pagePath !== route.path) throw new Error("Post input differs");
     const outbound = content.posts[0] && contentLinkRedirect(content.posts[0]);

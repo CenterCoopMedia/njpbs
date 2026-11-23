@@ -1,3 +1,4 @@
+import { postRoutePath } from "../../packages/content-core/src/post-slugs.ts";
 import { createHash } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import path from "node:path";
@@ -20,13 +21,13 @@ export async function prepareStaticPostProof({ input: rawInput, artifact, prepar
   const family = artifact.families.find(family => family.collection === "cmsPosts" && family.complete);
   const identity = family?.artifacts.find(post => post.documentId === input.postId);
   if (!family || (input.visible
-    ? identity?.sourceVersion !== input.sourceVersion || identity.canonicalPath !== `/posts/${input.slug}/` ||
-      identity.aliases.some(alias => !input.ownedSlugs.some(slug => alias === `/posts/${slug}/`))
+    ? identity?.sourceVersion !== input.sourceVersion || identity.canonicalPath !== postRoutePath(input.slug) ||
+      identity.aliases.some(alias => !input.ownedSlugs.some(slug => alias === postRoutePath(slug)))
     : identity !== undefined)) throw new Error("The static artifact does not contain the admitted Post version");
   await verifyPreparedPublicWorkerArtifact({ preparedArtifact: prepared, distDirectory });
   const files = (await artifactFiles(distDirectory)).map(file => ({ ...file,
     path: `/${file.path.replace(/(^|\/)index\.html$/, "$1")}`,
-  })).filter(file => (outputForPath(file.path) && outputForPath(file.path) !== "home") || input.ownedSlugs.some(slug => file.path === `/posts/${slug}/`) ||
+  })).filter(file => (outputForPath(file.path) && outputForPath(file.path) !== "home") || input.ownedSlugs.some(slug => file.path === postRoutePath(slug)) ||
     file.path === "/_content-status.json");
   // _publication.json is excluded from the artifact hash by its existing
   // primitive; its independently sealed publication receipt binds it instead.
@@ -49,8 +50,8 @@ export async function prepareStaticPostProof({ input: rawInput, artifact, prepar
     throw new Error("The static content inventory has no matching publication identity");
   }
   const routes = inventory.routes.filter((route: { contentKey?: string; path?: string }) =>
-    route.contentKey === contentKey || input.ownedSlugs.some(slug => route.path === `/posts/${slug}/`));
-  if (input.visible ? routes.length !== 1 || routes[0].path !== `/posts/${input.slug}/` ||
+    route.contentKey === contentKey || input.ownedSlugs.some(slug => route.path === postRoutePath(slug)));
+  if (input.visible ? routes.length !== 1 || routes[0].path !== postRoutePath(input.slug) ||
       routes[0].contentKey !== contentKey || routes[0].sourceVersion !== input.sourceVersion : routes.length !== 0) {
     throw new Error("The static content inventory does not prove the current Post visibility");
   }

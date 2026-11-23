@@ -221,6 +221,7 @@ export async function assertProductionRendererSeals(directory: string, commitSha
         ...(publicSeal?.dataHubReportingVersion === 1 ? {dataHubReportingVersion:1} : {}),
         ...(publicSeal?.dataHubCompositionVersion === 1 ? {dataHubCompositionVersion:1} : {}),
         ...(publicSeal?.liveBlogVersion === 1 ? {liveBlogVersion:1} : {}),
+        ...(publicSeal?.spanishPostVersion === 1 ? {spanishPostVersion:1} : {}),
         ...(publicSeal?.pageReaderVersion !== undefined ? {pageReaderVersion:publicSeal.pageReaderVersion} : {}),
         ...([1, 2].includes(publicSeal?.electionResultsVersion) ? {electionResultsVersion:publicSeal.electionResultsVersion} : {}) })) {
     operatorError("The built renderer is not a production release of this commit");

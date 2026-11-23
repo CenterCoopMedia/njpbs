@@ -1,6 +1,6 @@
 "use strict";
 
-const { SPANISH_EDITION_PUBLICATION_UNAVAILABLE, isSpanishEdition } = require("./lib/spanish-edition");
+const { SPANISH_EDITION_REVIEW_REQUIRED, isSpanishEdition, hasSpanishTranslationApproval } = require("./lib/spanish-edition");
 
 const { publishedBlockResourceError } = require("./lib/published-resource-check");
 
@@ -556,9 +556,9 @@ function createScheduledPublishRunner(deps = {}) {
         const disposition = (reason, detail = reason) =>
           recordFailure(reason, detail);
 
-        if (isSpanishEdition(before)) {
-          return malformedSchedule || isDue(before, nowMilliseconds)
-            ? disposition(SPANISH_EDITION_PUBLICATION_UNAVAILABLE) : null;
+        if (isSpanishEdition(before) && (malformedSchedule || isDue(before, nowMilliseconds)) &&
+            !hasSpanishTranslationApproval(before, candidate.ref.id, "scheduled")) {
+          return disposition(SPANISH_EDITION_REVIEW_REQUIRED);
         }
 
         // A frozen row whose enqueue failed gets no second history or audit

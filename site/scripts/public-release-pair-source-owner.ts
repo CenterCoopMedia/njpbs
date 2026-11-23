@@ -1,4 +1,5 @@
 import { contentLink } from "../../packages/content-core/src/content-link.ts";
+import { postRoutePath } from "../../packages/content-core/src/post-slugs.ts";
 import { PAIR_SEARCH_INPUTS_FILE, derivePublicReleasePairSearchInputs, parsePublicReleasePairSearchInputs, publicReleasePairSearchInputDescriptor, PairSearchInputsError, type PairSearchInputs } from "./public-release-pair-search-inputs";
 import { createHash } from "node:crypto";
 import { createRequire } from "node:module";
@@ -280,14 +281,14 @@ async function derivePairInput(options: SourceOptions, retained?: HistoricalPubl
       const slugs = [...new Set<string>([...(owner?.ownedSlugs ?? []), document.published.metadata.slug,
         ...(document.published.metadata.previousSlugs ?? [])])];
       if (!publiclyVisible(document)) {
-        if (owner || affected("post", row.id) && !global) for (const slug of slugs) add({ path: `/posts/${slug}/`, renderer: "withdrawal", read: null, homeSources: null, status: 410 });
+        if (owner || affected("post", row.id) && !global) for (const slug of slugs) add({ path: postRoutePath(slug), renderer: "withdrawal", read: null, homeSources: null, status: 410 });
         continue;
       }
       const read = await postReader.readPublishedPost({ firestore, transaction, slug: document.published.metadata.slug, now });
       if (read.kind !== "published-post") refuse();
-      const canonical = `/posts/${document.published.metadata.slug}/`;
+      const canonical = postRoutePath(document.published.metadata.slug);
       for (const slug of slugs) {
-        const path = `/posts/${slug}/`;
+        const path = postRoutePath(slug);
         add(path === canonical ? { path, renderer: "post", read, homeSources: null, status: contentLink(document.published.metadata, canonical).external ? 302 : 200 }
           : { path, renderer: "redirect", read: { kind: "redirect", path, location: canonical }, homeSources: null, status: 308 });
       }
@@ -385,7 +386,7 @@ async function derivePairInput(options: SourceOptions, retained?: HistoricalPubl
           let paths = [...routes.keys()];
           if (change.kind === "post") {
             const owner = postOwners.find(row => row.id === change.id)?.data();
-            const own = new Set([...(owner?.ownedSlugs ?? []), snapshot.metadata.slug, ...(snapshot.metadata.previousSlugs ?? [])].map(slug => `/posts/${slug}/`));
+            const own = new Set([...(owner?.ownedSlugs ?? []), snapshot.metadata.slug, ...(snapshot.metadata.previousSlugs ?? [])].map(postRoutePath));
             paths = paths.filter(path => own.has(path) || dependentHome && ["/", "/_home-sources.json"].includes(path));
           } else if (change.kind === "page") {
             const owner = pageOwners.find(row => row.id === change.id)?.data();

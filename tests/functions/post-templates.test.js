@@ -397,7 +397,7 @@ describe("Post template trusted persistence", () => {
     for (const action of [{ publish: true }, { scheduleAt: "2027-01-01T12:00:00.000Z" }]) {
       const blocked = await invoke(save.createCmsSaveHandler, { ...publication, ...action });
       expect(blocked.statusCode, JSON.stringify(blocked.body)).toBe(409);
-      expect(blocked.body.error).toMatch(/Spanish editions/);
+      expect(blocked.body.error).toMatch(/Approve the translation/);
     }
     const droppedIdentity = { ...request, postSource: { id: draft.id, version: edit.body.document.version }, idempotencyKey: randomUUID() };
     expect((await invoke(save.createCmsSaveHandler, droppedIdentity)).statusCode).toBe(409);

@@ -1,4 +1,6 @@
 "use strict";
+const { postSlugForPath } = require("./post-slug-contract");
+const { alternatePostId } = require("./spanish-edition");
 
 const { isDeepStrictEqual } = require("node:util");
 const { pagePublicationTarget } = require("./no-build-page-target");
@@ -30,22 +32,23 @@ async function codeAuthority({ firestore, transaction, rendererSha, code }) {
 /** Immutable Posts with joined cards or global CTA settings need this adapter. Dynamic
  * Post owners retain their existing publication and withdrawal reader. */
 async function selectCodePost({ firestore, transaction, path }) {
-  const match = typeof path === "string" && /^\/posts\/([a-z0-9]+(?:-[a-z0-9]+)*)\/$/.exec(path);
-  if (!match || path.length > 512) return null;
+  const slug = typeof path === "string" && postSlugForPath(path);
+  if (!slug || path.length > 512) return null;
   const query = firestore.collection("cmsPosts").where("published.metadata.type", "==", "post");
   const [canonical, aliases] = await Promise.all([
-    transaction.get(query.where("published.metadata.slug", "==", match[1]).limit(2)),
-    transaction.get(query.where("published.metadata.previousSlugs", "array-contains", match[1]).limit(2)),
+    transaction.get(query.where("published.metadata.slug", "==", slug).limit(2)),
+    transaction.get(query.where("published.metadata.previousSlugs", "array-contains", slug).limit(2)),
   ]);
   const rows = new Map([...canonical.docs, ...aliases.docs].map(row => [row.id, row]));
   if (rows.size > 1) refuse();
   const row = [...rows.values()][0];
   if (!row) return null;
   if (!joinedRecordIds(row.data().published?.blocks).length) {
-    const ctas = await transaction.get(firestore.doc("cmsSettings/story-ctas"));
+    const alternateId = alternatePostId(row.id, row.data().published?.metadata);
+    const [ctas, alternate] = await transaction.getAll(firestore.doc("cmsSettings/story-ctas"), firestore.doc(`cmsPosts/${alternateId}`));
     // Retain request-time rendering when all rules are disabled, so an appeal
     // from the immutable build cannot reappear after staff turns it off.
-    if (!ctas.exists) return null;
+    if (!ctas.exists && !alternate.data()?.published) return null;
   }
   const owner = await readNoBuildPostOwner({ firestore, transaction, postId: row.id });
   if (owner.state && owner.state.mode !== "static") return null;

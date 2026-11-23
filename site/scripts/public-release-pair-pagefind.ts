@@ -41,7 +41,8 @@ export async function buildPublicReleasePairPagefind(inputs: AsyncIterable<HtmlI
     }
     for (const record of contentLinks) {
       const link = contentLink(record, record.path);
-      const reply = await created.index.addCustomRecord({ url: record.path, content: `${record.title} ${record.text}`, language: "en",
+      const reply = await created.index.addCustomRecord({ url: record.path, content: `${record.title} ${record.text}`,
+        language: record.path.startsWith("/es/posts/") ? "es" : "en",
         meta: { title: record.title, contentLinkUrl: link.href, contentLinkNewTab: String(link.newTab) } });
       if (reply.errors.length) refuse();
       indexedCount++;

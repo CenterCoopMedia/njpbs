@@ -2,6 +2,7 @@
 
 const { parseStoredPublicReleaseSelector, PublicReleaseProtocolError } = require("./public-release-pair");
 const { publicationTarget, assertPublicationDatabase } = require("./publication-target");
+const { postSlugForPath, postRoutePath } = require("./post-slug-contract");
 
 function assertServingDatabase(firestore, environment) {
   const target = publicationTarget(environment);
@@ -40,7 +41,7 @@ async function readCurrentPairRouteInTransaction({ firestore, transaction, path 
     return routeReceipt("page", state.pageId, state, state.path, path);
   }
   if ((await pages.listNoBuildPageOwners({ firestore, transaction, path })).length) refuse();
-  const postSlug = /^\/posts\/([a-z0-9]+(?:-[a-z0-9]+)*)\/$/.exec(path)?.[1];
+  const postSlug = postSlugForPath(path);
   if (postSlug) {
     const owners = await require("./no-build-post-ownership").findNoBuildPostOwnersForSlug({ firestore, transaction, slug: postSlug });
     if (owners.length > 1) refuse();
@@ -56,7 +57,7 @@ async function readCurrentPairRouteInTransaction({ firestore, transaction, path 
       if (!state.ownedSlugs.includes(postSlug) || document?.published?.sourceVersion !== state.sourceVersion ||
           document.published.metadata?.slug !== state.slug || publiclyVisible(document) !== state.visible ||
           state.snapshotDigest && pages.digest(document.published) !== state.snapshotDigest) refuse();
-      return routeReceipt("post", state.postId, state, `/posts/${state.slug}/`, path, owners[0].ref.path, document, owner);
+      return routeReceipt("post", state.postId, state, postRoutePath(state.slug), path, owners[0].ref.path, document, owner);
     }
   }
   const family = require("./no-build-record-contract").recordFamilyForPath(path);

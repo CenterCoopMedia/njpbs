@@ -206,6 +206,7 @@ export async function restoreDevPostRenderer(sourceSha, artifactDirectory = dire
   const clientSeal = await json(path.join(artifactDirectory, "dist/posts/_no-build-assets/renderer-release.json"));
   if (![1, 2].includes(seal?.electionResultsVersion) ||
       !isDeepStrictEqual(seal, { schemaVersion: 1, rendererSha: sourceSha, liveBlogVersion: 1,
+      ...(seal.spanishPostVersion === 1 ? { spanishPostVersion: 1 } : {}),
       ...(isPageReaderVersion(seal.pageReaderVersion) ? { pageReaderVersion: seal.pageReaderVersion } : {}),
       electionResultsVersion: seal.electionResultsVersion, environment: "development" }) ||
       !isDeepStrictEqual(clientSeal, seal) ||
@@ -305,6 +306,7 @@ async function uploadCandidate(publication) {
       "--var", `NO_BUILD_PAGE_RENDERER_SHA:${publication.commitSha}`,
       "--var", `NO_BUILD_RECORD_RENDERER_SHA:${publication.commitSha}`,
       "--var", "DATA_FIGURE_VERSION:1", "--var", "ELECTION_RESULTS_VERSION:2",
+      "--var", "SPANISH_POST_VERSION:1",
       "--tag", publicWorkerCandidateTag(publication), "--message", publicWorkerCandidateMessage(publication), "--strict"], {
       cwd: root, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"], maxBuffer: 1024 * 1024,
       env: { PATH: process.env.PATH, HOME: process.env.HOME, CLOUDFLARE_ACCOUNT_ID: cloudflareAccount(),

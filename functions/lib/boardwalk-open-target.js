@@ -2,6 +2,7 @@
 
 const { PUBLIC_PAGE_DEFINITIONS, publicPageDefinition } = require("./public-page-contract");
 const { PUBLICLY_ROUTED_RECORD_KINDS, publicRouteBaseForRecordKind } = require("./public-record-kinds");
+const { postSlugForPath } = require("./post-slug-contract");
 const { authorizeContentRead, authorizeContentWrite, contentResource, mayReachContentRead } = require("./content-authorization");
 
 const UNAVAILABLE_MESSAGE = "This page is unavailable or you do not have permission to edit it.";
@@ -27,6 +28,8 @@ function explicitTarget(type, id) {
 }
 
 function pathLookup(path) {
+  const postSlug = postSlugForPath(path);
+  if (postSlug) return { collection: "cmsPosts", type: "post", slug: postSlug };
   for (const type of PUBLICLY_ROUTED_RECORD_KINDS) {
     const base = publicRouteBaseForRecordKind(type);
     if (path.startsWith(base) && /^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(path.slice(base.length, -1))) {

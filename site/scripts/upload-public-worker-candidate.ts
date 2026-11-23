@@ -143,7 +143,7 @@ interface PublicWorkerCandidateInput {
   noBuildStatic?: StaticPostProof;
   noBuildRecord?: { schemaVersion: 1; rendererSha: string; enabled: boolean; authoritative: true; families: ("programs" | "events")[] };
   noBuildPage?: { schemaVersion: 1; rendererSha: string; enabled: boolean; authoritative: true; dataFigureVersion?: 1; electionResultsVersion?: 1 | 2; dataHubReportingVersion?: 1; dataHubCompositionVersion?: 1 };
-  noBuildPost?: { rendererSha: string; enabled: boolean; authoritative: true; dataFigureVersion?: 1; electionResultsVersion?: 1 | 2; liveBlogVersion?: 1 } & (
+  noBuildPost?: { rendererSha: string; enabled: boolean; authoritative: true; dataFigureVersion?: 1; electionResultsVersion?: 1 | 2; liveBlogVersion?: 1; spanishPostVersion?: 1 } & (
     { schemaVersion: 1; postId: string } | { schemaVersion: 2; families: ["posts"] }
   );
   schemaVersion: 1;
@@ -424,6 +424,8 @@ export async function uploadPublicWorkerCandidate({
     ? rendererRelease.electionResultsVersion as 1 | 2 : undefined;
   const liveBlog = rendererRelease !== null && typeof rendererRelease === "object" &&
     "liveBlogVersion" in rendererRelease && rendererRelease.liveBlogVersion === 1;
+  const spanishPosts = rendererRelease !== null && typeof rendererRelease === "object" &&
+    "spanishPostVersion" in rendererRelease && rendererRelease.spanishPostVersion === 1;
   const pageReaderVersion = rendererRelease !== null && typeof rendererRelease === "object" &&
     "pageReaderVersion" in rendererRelease ? rendererRelease.pageReaderVersion : undefined;
   if (pageReaderVersion !== undefined && !pageReaderContract.isPageReaderVersion(pageReaderVersion)) throw new Error("Unsupported Page reader contract");
@@ -431,6 +433,7 @@ export async function uploadPublicWorkerCandidate({
     ...(dataHubPublic ? { dataHubReportingVersion: 1 } : {}),
     ...(dataHubComposition ? { dataHubCompositionVersion: 1 } : {}),
     ...(liveBlog ? { liveBlogVersion: 1 } : {}),
+    ...(spanishPosts ? { spanishPostVersion: 1 } : {}),
     ...(pageReaderVersion !== undefined ? { pageReaderVersion } : {}),
     ...(electionResults ? { electionResultsVersion: electionResults } : {}) })) {
     throw new Error("The public Post renderer does not match its prepared production artifact");
@@ -446,6 +449,7 @@ export async function uploadPublicWorkerCandidate({
     ELECTION_RESULTS_VERSION: electionResults ? String(electionResults) : "0",
     // Explicit zero clears a retained feature marker when --keep-vars is used.
     LIVE_BLOG_VERSION: liveBlog ? "1" : "0",
+    SPANISH_POST_VERSION: spanishPosts ? "1" : "0",
     DATA_HUB_PUBLIC: dataHubPublic ? "1" : "0",
     DATA_HUB_COMPOSITION_VERSION: dataHubComposition ? "1" : "0",
   };

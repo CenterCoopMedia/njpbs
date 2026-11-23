@@ -13,7 +13,7 @@ const { visibleLayoutBlocks } = require("./content-layout");
 const { selectPublishedStoryCredits } = require("./published-story-credits");
 const { useFullBuildForPausedPost } = require("./transitional-post-fallback");
 const { collectPublishedMediaUsage } = require("./media-usage");
-const { isServerMintableSlugShape } = require("./post-slug-contract");
+const { isPostRouteSlug, isSpanishPostSlug, postRoutePath, postSlugForPath } = require("./post-slug-contract");
 const { createPostBackgroundOutputs } = require("./post-background-outputs");
 const { bumpPublicContextRevision, readPublicContextInTransaction, readPublicBackgroundContextInTransaction } = require("./public-context-revision");
 
@@ -47,7 +47,7 @@ const MEDIA_LIMIT_REASON = "This Post uses more than 100 media files. Remove som
 function unsupportedSnapshotReason(document) {
   const snapshot = document?.published;
   if (!snapshot || snapshot.metadata?.type !== "post") return "This record is not a Post with a published snapshot.";
-  if (!isServerMintableSlugShape(snapshot.metadata.slug)) {
+  if (!isPostRouteSlug(snapshot.metadata.slug)) {
     return "This Post slug must use only lowercase letters, numbers and single hyphens. Change the slug, then publish again.";
   }
   if (!Number.isSafeInteger(snapshot.sourceVersion) || snapshot.sourceVersion < 1) return "This Post has no valid published version.";
@@ -161,6 +161,9 @@ async function prepareNoBuildPostPublication({ firestore, transaction, collectio
   if (!withdrawal && (!config.enabled || state?.servingEnabled === false || capability?.servingEnabled === false)) {
     refuse("Instant publication is paused. The owned public route stays protected.", true);
   }
+  if (!withdrawal && isSpanishPostSlug(nextDocument.published?.metadata?.slug) && capability?.spanishPostVersion !== 1) {
+    refuse("The installed Post renderer does not support Spanish editions yet.");
+  }
   if (!state) {
     if (capability?.schemaVersion !== 2) refuse("The active public renderer does not support Post family admission.");
     state = { schemaVersion: 1, postId: documentId, rendererSha: capability.rendererSha,
@@ -203,7 +206,7 @@ async function prepareNoBuildPostPublication({ firestore, transaction, collectio
   }
   const slugs = [...new Set([...(state.ownedSlugs ?? []), snapshot.metadata.slug,
     ...(snapshot.metadata.previousSlugs ?? [])])];
-  if (slugs.length > 100 || slugs.some(slug => !isServerMintableSlugShape(slug))) {
+  if (slugs.length > 100 || slugs.some(slug => !isPostRouteSlug(slug))) {
     refuse("This Post has more than 100 previous slugs, or a previous slug with letters, numbers and single hyphens only is missing.");
   }
   const previousDocument = (await transaction.get(firestore.doc(`cmsPosts/${documentId}`))).data();
@@ -331,26 +334,26 @@ async function readNoBuildPostDecision({ firestore, path, rendererSha, probe, lo
   return firestore.runTransaction(transaction => readNoBuildPostDecisionInTransaction({ firestore, transaction, path, rendererSha, probe, log }), { readOnly: true });
 }
 async function readNoBuildPostDecisionInTransaction({ firestore, transaction, path, rendererSha, probe, log = console }) {
-  const match = /^\/posts\/([^/]+)\/$/.exec(path);
+  const slug = postSlugForPath(path);
   const receipts = ["/_publication.json", "/_content-status.json"].includes(path);
   const { backgroundOutputForPath: outputForPath, isBackgroundAssetPath, lastGood } = require("./post-background-outputs");
   const { VIDEO_CATALOG_OUTPUT, recordOutputForPath, recordFamilyRegistered } = require("./no-build-record-namespace");
   const recordFamily = recordOutputForPath(path);
   if (recordFamily && !await recordFamilyRegistered({ firestore, transaction, family: recordFamily })) return { kind: "pass" };
   const background = outputForPath(path) || isBackgroundAssetPath(path);
-  if (!receipts && !background && !match) return { kind: "pass" };
+  if (!receipts && !background && !slug) return { kind: "pass" };
   const contextBackground = background && await require("./public-context-background-reader")
     .readPublicContextBackgroundInTransaction({ firestore, transaction, path, rendererSha });
   if (contextBackground) return contextBackground;
   if (background === VIDEO_CATALOG_OUTPUT) return { kind: "pass" };
   const malformedOwners = [];
-  const owners = (match ? await findNoBuildPostOwnersForSlug({ firestore, transaction, slug: match[1] })
+  const owners = (slug ? await findNoBuildPostOwnersForSlug({ firestore, transaction, slug })
     : await listNoBuildPostOwners({ firestore, transaction,
       onMalformedOwner: probe ? undefined : owner => malformedOwners.push(owner) })).filter(owner => owner.state.operationId);
   // A first renderer activation has no Post owners yet. Its artifact probe
   // still requires the exact candidate lease before Assets can answer it.
   if (!owners.length && !malformedOwners.length && !(receipts && probe)) return { kind: "pass" };
-  if (match && owners.length !== 1) refuse("Two Posts claim the same public route.");
+  if (slug && owners.length !== 1) refuse("Two Posts claim the same public route.");
   const readPointer = require("./public-deployment-pointer").readPublicDeploymentPointer;
   const pointer = readPointer((await transaction.get(firestore.doc("system/publicDeployment"))).data());
   const capability = await readNoBuildPostCapability({ firestore, transaction });
@@ -372,7 +375,7 @@ async function readNoBuildPostDecisionInTransaction({ firestore, transaction, pa
   const admission = await readNoBuildFamilyAdmission({ firestore, transaction });
   const contextDigest = await readPublicContextInTransaction(transaction, firestore);
   const context = { firestore, transaction, pointer, capability, candidate, rendererSha, admission, contextDigest };
-  if (match) return readOwnedPostDecision({ ...context, owner: owners[0], path, slug: match[1] });
+  if (slug) return readOwnedPostDecision({ ...context, owner: owners[0], path, slug });
   const canSkipUnverifiedSnapshot = pointer.state === "idle" && pointer.activeCommitSha === rendererSha && admission.valid;
   if (!canSkipUnverifiedSnapshot && malformedOwners.length) refuse("Instant Post ownership is unavailable.");
   const posts = [];
@@ -389,7 +392,7 @@ async function readNoBuildPostDecisionInTransaction({ firestore, transaction, pa
   // catalogs can omit a bad snapshot while preserving its existing route claims.
   for (let offset = 0; offset < owners.length; offset += 8) {
     const replies = await Promise.all(owners.slice(offset, offset + 8).map(owner =>
-      readOwnedPostDecision({ ...context, owner, path: single ? path : `/posts/${owner.state.slug}/`,
+      readOwnedPostDecision({ ...context, owner, path: single ? path : postRoutePath(owner.state.slug),
         catalog: !single, canSkipUnverifiedSnapshot })));
     for (const reply of replies) {
       if (reply.kind === "unverified-snapshot") {
@@ -466,7 +469,7 @@ async function readOwnedPostDecision({ firestore, transaction, owner, pointer, c
   const { backgroundOutputForPath: outputForPath, isBackgroundAssetPath } = require("./post-background-outputs");
   if (outputForPath(path) || isBackgroundAssetPath(path)) return { kind: "background", receipt, backgroundBucket: admission.backgroundBucket };
   if (!state.visible) return { kind: "gone", receipt };
-  if (slug !== state.slug) return { kind: "alias", location: `/posts/${state.slug}/`, receipt };
+  if (slug !== state.slug) return { kind: "alias", location: postRoutePath(state.slug), receipt };
   return { kind: "post", receipt, published: await require("../published-post-reader").readPublishedPost({
     firestore, transaction, slug: state.slug, now: new Date() }) };
 }
@@ -503,6 +506,9 @@ async function assertNoBuildOwnerPreservedInTransaction({ firestore, transaction
   if (!candidateSupportsPost(contract, state.postId) || contract.rendererSha !== candidate.commitSha) {
     refuse("The public candidate does not preserve owned instant Post routes.");
   }
+  if (isSpanishPostSlug(state.slug) && contract.spanishPostVersion !== 1) {
+    refuse("The public candidate does not preserve Spanish Post routes.");
+  }
   if (!require("./data-figure-compatibility").candidateSupportsOwnedDataFigures(state, contract)) {
     refuse("The public candidate does not preserve published data figures.");
   }
@@ -538,6 +544,7 @@ function writeNoBuildCandidateActivation(transaction, firestore, { owners, state
     ...(contract.dataFigureVersion === 1 ? { dataFigureVersion: 1 } : {}),
     ...([1, 2].includes(contract.electionResultsVersion) ? { electionResultsVersion: contract.electionResultsVersion } : {}),
     ...(contract.liveBlogVersion === 1 ? { liveBlogVersion: 1 } : {}),
+    ...(contract.spanishPostVersion === 1 ? { spanishPostVersion: 1 } : {}),
     ...(contract.schemaVersion === 1 ? { postId: contract.postId } : {}) };
   transaction.set(firestore.doc(CAPABILITY_PATH), capability);
   if (staticReturn) {

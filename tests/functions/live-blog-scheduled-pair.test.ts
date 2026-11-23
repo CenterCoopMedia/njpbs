@@ -7,6 +7,7 @@ import pair from "../../functions/lib/public-release-pair.js";
 import save from "../../functions/save.js";
 import scheduled from "../../functions/scheduled-publish.js";
 import deployment from "../../functions/lib/public-deployment.js";
+import editions from "../../functions/lib/spanish-edition.js";
 
 // Save calls the CommonJS module; observe that same instance without replacing its guard.
 const require = createRequire(import.meta.url);
@@ -68,16 +69,45 @@ async function assertPairPublication(sourceVersion: number) {
   expect(legacy).not.toHaveBeenCalled();
 }
 
-async function requestSchedule() {
+async function requestSchedule(targetId = id, baseVersion = 1, document = {}) {
   const handler = save.createCmsSaveHandler({ firestore, requirePrincipalFn: async () => actor, enablePublishSnapshot: true,
     now: () => savedAt, assertPublishReadyFn: legacy, log: quiet });
   const response = { code: 200, headersSent: false, body: undefined as unknown, status(code: number) { this.code = code; return this; },
     set() { return this; }, json(body: unknown) { this.body = body; this.headersSent = true; return this; } };
   await handler({ method: "POST", headers: {}, ip: "127.0.0.1", body: {
-    collection: "cmsPosts", id, baseVersion: 1, scheduleAt: dueAt, document: {},
+    collection: "cmsPosts", id: targetId, baseVersion, scheduleAt: dueAt, document,
   } }, response);
   return response;
 }
+
+it("schedules the exact approved Spanish edition and uses a separate public route key", async () => {
+  const supportedContract = { ...contract, features: [...contract.features, "spanishPostVersion:1"] };
+  const digest = pair.publicReleaseDigest(supportedContract);
+  await db.doc("system/publicDeployment").update({ admittedContractDigest: digest });
+  await db.doc(`${admission.CONTRACTS}/${digest}`).set(supportedContract);
+  await db.doc("system/publicDeployment/noBuildPosts/capability").update({ spanishPostVersion: 1 });
+  const editionId = editions.spanishPostEditionId(id);
+  const ref = db.doc(`cmsPosts/${editionId}`);
+  await ref.set({ id: editionId, type: "post", locale: "es", editionOf: id, title: "Live election coverage",
+    summary: "Información de la comunidad.", status: "approved", createdBy: actor.uid, section: "news",
+    previousSlugs: [], tags: [], blocks: [], contentVersion: 1, version: 3, updatedAt: savedAt,
+    translationApproval: { reviewedVersion: 2, contentVersion: 1, approvedAt: savedAt, approvedBy: actor.uid } });
+  expect((await requestSchedule(editionId, 3, { title: "Unreviewed edit" })).code).toBe(400);
+  await ref.update({ "translationApproval.reviewedVersion": 1 });
+  expect((await requestSchedule(editionId, 3)).code).toBe(409);
+  await ref.update({ "translationApproval.reviewedVersion": 2 });
+  const response = await requestSchedule(editionId, 3);
+  expect(response.code, JSON.stringify(response.body)).toBe(200);
+  expect((await ref.get()).data()).toMatchObject({ status: "scheduled", slug: "es/live-election-coverage", version: 4 });
+  expect((await ref.get()).data()).not.toHaveProperty("published");
+  const result = await run();
+  expect(result.publishedCount).toBe(1);
+  expect((await ref.get()).data()).toMatchObject({
+    publiclyVisible: true, published: { sourceVersion: 5, contentVersion: 1,
+      metadata: { slug: "es/live-election-coverage", locale: "es", editionOf: id } },
+  });
+  expect((await current()).slug).toBe("live-election-coverage");
+});
 
 it("saves a pair-mode live blog schedule and publishes its due revision through pair admission", async () => {
   const response = await requestSchedule();

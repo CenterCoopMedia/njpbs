@@ -81,7 +81,7 @@ async function preparePairContentPublication({ firestore, transaction, collectio
       if (read.kind !== "published-post") refuse();
     }
     const slugs = [...new Set([...(owner.state?.ownedSlugs ?? []), snapshot.metadata.slug, ...(snapshot.metadata.previousSlugs ?? [])])];
-    if (slugs.length > 100 || slugs.some(slug => !require("./post-slug-contract").isServerMintableSlugShape(slug))) refuse();
+    if (slugs.length > 100 || slugs.some(slug => !require("./post-slug-contract").isPostRouteSlug(slug))) refuse();
     for (const slug of slugs) if ((await post.listNoBuildPostOwners({ firestore, transaction, slug })).some(value => value.state.postId !== documentId)) refuse();
     plan = { slug: snapshot.metadata.slug, ownedSlugs: slugs };
   } else if (kind === "page") {

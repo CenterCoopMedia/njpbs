@@ -1,4 +1,11 @@
 "use strict";
+const { isSpanishPostSlug } = require("./post-slug-contract");
+
+function assertSpanishPostTransport(input, prepared) {
+  if (!prepared && isSpanishPostSlug(input.nextDocument?.published?.metadata?.slug)) {
+    throw Object.assign(new Error("Spanish editions need a public Post renderer that supports their routes."), { status: 409 });
+  }
+}
 
 async function prepareSelectedPairContentPublication(input) {
   const root = (await input.transaction.get(input.firestore.doc("system/publicDeployment"))).data();
@@ -46,6 +53,7 @@ async function prepareNoBuildContentPublication(input) {
   const record = await require("./no-build-record-publication").prepareNoBuildRecordPublication(input);
   if (record) return record;
   const post = await require("./no-build-post-publication").prepareNoBuildPostPublication(input);
+  assertSpanishPostTransport(input, post);
   if (!post && require("./dataset-dependencies").figureBlocks(input.nextDocument?.published).length) {
     throw Object.assign(new Error("Data figures require the compiled Post publication owner."), { status: 409 });
   }
@@ -69,6 +77,8 @@ async function assertNoBuildContentScheduleInTransaction(input) {
         publishAt: input.nextDocument.published?.publishedAt }, queueRef: input.firestore.collection("cmsPublishQueue").doc(), actor: { uid: "system:scheduler" } });
     return record?.transport;
   }
-  return require("./no-build-post-publication").assertNoBuildScheduleInTransaction(input);
+  const transport = await require("./no-build-post-publication").assertNoBuildScheduleInTransaction(input);
+  assertSpanishPostTransport(input, transport);
+  return transport;
 }
 module.exports = { prepareNoBuildContentPublication, assertNoBuildContentScheduleInTransaction };

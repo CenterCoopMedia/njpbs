@@ -6,7 +6,7 @@ import type { NoBuildPostReply } from "../../cms-api/src/index";
 import { assertPublicationTarget, publicationTarget, publicationPostCacheTag, type PublicationTarget } from "../../functions/lib/publication-target.js";
 import { SECURITY_HEADER_BASELINE } from "../../packages/content-core/src/public-security-headers";
 import { PUBLIC_GONE_BRANCH_HEADER } from "./public-gone";
-import { isPublicContentSlug, postPublicPath } from "../../site/src/lib/public-content-routes";
+import { isPostRouteSlug, isPublicContentSlug, postPublicPath } from "../../site/src/lib/public-content-routes";
 import { projectPublishedPostRead, type PublishedPostContent, type PublishedPostReader } from "../../site/src/lib/published-post-shadow";
 
 export interface NoBuildPostConfig {
@@ -273,14 +273,14 @@ async function servePostReceipts(path: string, reply: NoBuildPostReply, headers:
   const postIds = new Set<string>();
   for (const post of posts) {
     receiptHeaders({ kind: post.mode === "static" ? "static" : "receipts", receipt: post }, dependencies.target);
-    if (!isPublicContentSlug(post.slug) || !Array.isArray(post.ownedSlugs) || !post.ownedSlugs.includes(post.slug)) {
+    if (!isPostRouteSlug(post.slug) || !Array.isArray(post.ownedSlugs) || !post.ownedSlugs.includes(post.slug)) {
       throw new Error("Invalid Post catalog");
     }
   }
   for (const owner of [...posts, ...refused]) {
     if (typeof owner?.postId !== "string" || !/^[A-Za-z0-9_-]{1,128}$/.test(owner.postId) || postIds.has(owner.postId) ||
         !Array.isArray(owner.ownedSlugs) || !owner.ownedSlugs.length ||
-        owner.ownedSlugs.some(slug => !isPublicContentSlug(slug) || slugs.has(slug))) throw new Error("Invalid Post catalog");
+        owner.ownedSlugs.some(slug => !isPostRouteSlug(slug) || slugs.has(slug))) throw new Error("Invalid Post catalog");
     postIds.add(owner.postId);
     for (const slug of owner.ownedSlugs) slugs.add(slug);
   }
@@ -440,13 +440,13 @@ async function serveAuthoritativePost(request: Request, dependencies: Authoritat
     for (let i = 0; i < 32 && /%[a-f0-9]{2}/i.test(path); i++) path = decodeURIComponent(path);
     // Remaining encoded layers make ownership unknown; never try older Assets.
     if (/%[a-f0-9]{2}/i.test(path)) throw new Error("Public path encoding exceeds its bound");
-    if (!isVideoCatalogPath(path) && !/^\/(?:$|index\.html\/?$|posts(?:\/|$)|authors(?:\/|$)|programs(?:\/|$)|shows(?:\/|$)|events(?:\/|$)|feeds\/|api\/v1\/|sitemap|pagefind\/|search\/|_astro\/|_home-sources\.json$|_publication\.json$|_content-status\.json$)/.test(path)) return null;
+    if (!isVideoCatalogPath(path) && !/^\/(?:$|index\.html\/?$|(?:es\/)?posts(?:\/|$)|authors(?:\/|$)|programs(?:\/|$)|shows(?:\/|$)|events(?:\/|$)|feeds\/|api\/v1\/|sitemap|pagefind\/|search\/|_astro\/|_home-sources\.json$|_publication\.json$|_content-status\.json$)/.test(path)) return null;
     if (/%|\\|\/\//.test(path)) throw new Error("Invalid public path");
     if (path.startsWith("/posts/_no-build-assets/")) return null;
     if (!head && request.method !== "GET") return unavailable(405, false);
     if (path === "/_publication.json" && url.searchParams.get("cms-context") === "code") return null;
     path = path.replace(/\/index\.html\/?$/, "/");
-    if (/^\/posts\/[^/]+$/.test(path) || /^\/(programs|shows|events)(?:\/[^/]+)?$/.test(path) ||
+    if (/^\/(?:es\/)?posts\/[^/]+$/.test(path) || /^\/(programs|shows|events)(?:\/[^/]+)?$/.test(path) ||
         isVideoCatalogPath(path) && !path.endsWith("/")) path += "/";
     const probe = url.pathname === "/_publication.json" && (url.searchParams.has("candidate") || url.searchParams.has("version"))
       ? { buildBatchId: url.searchParams.get("candidate") ?? "", versionId: url.searchParams.get("version") ?? "" } : undefined;

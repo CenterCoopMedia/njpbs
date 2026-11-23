@@ -1,4 +1,5 @@
 import { contentLinkRedirect } from "../../packages/content-core/src/content-link.ts";
+import { postSlugForPath } from "../../packages/content-core/src/post-slugs";
 import { SECURITY_HEADER_BASELINE } from "../../packages/content-core/src/public-security-headers";
 import { PUBLIC_GONE_BRANCH_HEADER } from "./public-gone";
 import { assertPublicationTarget, publicationTarget, type PublicationTarget } from "../../functions/lib/publication-target";
@@ -33,7 +34,7 @@ async function receiptHeaders(receipt: CodePostReceipt, path: string, rendererSh
   const code = receipt?.code;
   if (!receipt || receipt.schemaVersion !== 1 || receipt.path !== path || receipt.rendererSha !== rendererSha ||
       !/^[A-Za-z0-9_-]{1,128}$/.test(receipt.postId) || !Number.isSafeInteger(receipt.sourceVersion) || receipt.sourceVersion < 1 ||
-      !/^\/posts\/[a-z0-9]+(?:-[a-z0-9]+)*\/$/.test(receipt.canonicalPath) ||
+      !postSlugForPath(receipt.canonicalPath) ||
       !Number.isSafeInteger(receipt.contextRevision) || receipt.contextRevision < 1 ||
       receipt.contextDigest !== await shaText(`njpbs-public-context-v1:${receipt.contextRevision}`) ||
       code?.schemaVersion !== 1 || code.digestAlgorithm !== "sha256" || code.commitSha !== rendererSha ||
@@ -61,11 +62,12 @@ export function createNoBuildCodePostWorker({ rendererSha, target = publicationT
   target = assertPublicationTarget(target);
   return { async fetch(request: Request): Promise<Response | null> {
     const url = new URL(request.url), path = url.pathname, head = request.method === "HEAD";
-    if (url.origin !== target.origin || !/^\/posts\/[a-z0-9]+(?:-[a-z0-9]+)*\/$/.test(path)) return null;
+    const slug = postSlugForPath(path);
+    if (url.origin !== target.origin || !slug) return null;
     let known: Withdrawal | null = null;
     let visible: CodePostReceipt | undefined;
     try {
-      known = await readWithdrawal(path.slice(7, -1));
+      known = await readWithdrawal(slug);
       const reply = await getDecision(path, head ? "HEAD" : "GET");
       if (reply.kind === "pass") return known ? failure(410, false, "code-post-tombstone-unowned") : null;
       if (reply.kind === "code-post-unavailable" || !rendererReady) {
@@ -79,7 +81,7 @@ export function createNoBuildCodePostWorker({ rendererSha, target = publicationT
       let body: string | null = null;
       let status = reply.kind === "code-post-alias" ? 308 : 200;
       if (reply.kind === "code-post") {
-        const content = projectPublishedPostRead(reply.published, reply.receipt.canonicalPath.slice(7, -1), rendererSha, now());
+        const content = projectPublishedPostRead(reply.published, slug, rendererSha, now());
         if (!content || content.target.documentId !== reply.receipt.postId || content.target.sourceVersion !== reply.receipt.sourceVersion ||
             await digest(reply.published) !== reply.receipt.inputSourceDigest ||
             await digest(reply.codeFrame) !== reply.receipt.codeFrameDigest || await digest(content.posts[0]) !== reply.receipt.codeFrameDigest) {
@@ -102,14 +104,14 @@ export function createNoBuildCodePostWorker({ rendererSha, target = publicationT
         headers.set("location", reply.location);
       }
       const current = await getDecision(path, head ? "HEAD" : "GET");
-      const finalWithdrawal = await readWithdrawal(path.slice(7, -1));
+      const finalWithdrawal = await readWithdrawal(slug);
       if (!newerThan(finalWithdrawal, reply.receipt)) return failure(410, false, "code-post-tombstone-race");
       if (await digest(current) !== await digest(reply)) throw new Error("Code Post authority changed");
       return new Response(head ? null : body, { status, headers });
     } catch {
       if (known) return failure(410, false, "code-post-tombstone-reader");
       try {
-        const latest = await readWithdrawal(path.slice(7, -1));
+        const latest = await readWithdrawal(slug);
         if (latest && (!visible || !newerThan(latest, visible))) return failure(410, false, "code-post-tombstone-reader");
         // A retained body still predates this marker even when live authority
         // verified a republish. Refuse the static fallback if rendering failed.

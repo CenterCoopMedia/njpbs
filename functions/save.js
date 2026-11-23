@@ -99,7 +99,7 @@ const { routePurgeConfig, routePurgeSecretNames, prepareRoutePurgeInTransaction,
   attemptPostRoutePurge } = require("./lib/post-route-purge");
 const { requirePrincipal } = require("./lib/auth");
 const { can, canEditContent, hasCapability } = require("./lib/rbac");
-const { SPANISH_EDITION_PUBLICATION_UNAVAILABLE, isSpanishEdition, spanishPostEditionId } = require("./lib/spanish-edition");
+const { SPANISH_EDITION_REVIEW_REQUIRED, isSpanishEdition, spanishPostEditionId, hasSpanishTranslationApproval } = require("./lib/spanish-edition");
 const {
   authorizeContentRead,
   authorizeContentWrite,
@@ -753,10 +753,11 @@ function assignBlockIds(blocks, mintId, knownIds, preserveKnownIds = false) {
 // slug and the rule that routes one cannot drift: the contract bounds the slug and keeps it
 // off the reserved list, which is what stops a post titled "New" being reserved forever and
 // then refused by the build it was published into.
-async function uniqueRecordSlug(tx, firestore, base) {
+async function uniqueRecordSlug(tx, firestore, base, spanishEdition = false) {
   let suffix = 1;
   while (suffix <= 10_000) {
-    const candidate = postSlugCandidate(base, suffix);
+    const slug = postSlugCandidate(base, suffix);
+    const candidate = spanishEdition ? `es/${slug}` : slug;
     const canonicalQuery = firestore
       .collection("cmsPosts")
       .where("slug", "==", candidate)
@@ -1605,12 +1606,8 @@ function createCmsSaveHandler(deps = {}) {
           });
           throw new SaveRejection(403, FORBIDDEN_MESSAGE);
         }
-        if (spanishEdition && (publishesSnapshot || schedulesPublication || ["published", "scheduled"].includes(status))) {
-          throw new SaveRejection(409, SPANISH_EDITION_PUBLICATION_UNAVAILABLE);
-        }
-        // A draft edition has no address in the English route namespace.
-        if (spanishEdition && requestedSlug) {
-          throw new SaveRejection(400, "Spanish editions do not have public URLs yet.");
+        if (spanishEdition && requestedSlug !== undefined) {
+          throw new SaveRejection(400, "Boardwalk assigns the Spanish edition's URL when it is published or scheduled.");
         }
         // An automation account must hold its own live editing lock and echo the exact
         // version it read (#4717). Staff leases remain courtesy presence indicators.
@@ -1642,6 +1639,10 @@ function createCmsSaveHandler(deps = {}) {
             throw new SaveRejection(403, FORBIDDEN_MESSAGE);
           }
           return { persisted: pairRequest.replay.after, ...pairRequest.replay.metadata, replayed: true };
+        }
+        if (spanishEdition && (publishesSnapshot || schedulesPublication) &&
+            (!hasSpanishTranslationApproval(stored, docId) || Object.keys(document).length > 0)) {
+          throw new SaveRejection(409, SPANISH_EDITION_REVIEW_REQUIRED);
         }
         if (liveBlogUpdate === true) {
           // A stale form gets reload or discard recovery before any state refusal.
@@ -2059,7 +2060,7 @@ function createCmsSaveHandler(deps = {}) {
             !(typeof document.title === "string"
               ? document.title.trim()
               : typeof compositionBase?.title === "string" && compositionBase.title.trim());
-          const needsSlug = !spanishEdition && !isUntitledPostDraft && (
+          const needsSlug = (!spanishEdition || publishesSnapshot || schedulesPublication) && !isUntitledPostDraft && (
             creating ||
             typeof compositionBase?.slug !== "string" ||
             compositionBase.slug.trim() === ""
@@ -2080,6 +2081,7 @@ function createCmsSaveHandler(deps = {}) {
                     tx,
                     firestore,
                     mintablePostSlugRoot(displayName),
+                    spanishEdition,
                   ),
                 }
               : {}),

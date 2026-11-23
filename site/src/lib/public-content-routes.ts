@@ -1,4 +1,5 @@
 import { isServerMintableSlugShape } from "../../../packages/content-core/src/post-slugs.ts";
+export { isPostRouteSlug, isSpanishPostSlug, postRoutePath as postPublicPath, postSlugForPath } from "../../../packages/content-core/src/post-slugs.ts";
 import { publicRouteBaseForRecordKind } from "../../../packages/content-core/src/public-record-kinds.ts";
 
 // The public Post route base and the exact slug shape the server can mint.
@@ -42,11 +43,6 @@ function publicPath(base: string, slug: string): string {
     throw new Error(`${base}{slug}/ requires a server-mintable slug`);
   }
   return `${base}${slug}/`;
-}
-
-/** `/posts/{slug}/` for a server-mintable slug. Throws for anything else. */
-export function postPublicPath(slug: string): string {
-  return publicPath(POST_PUBLIC_ROUTE_BASE, slug);
 }
 
 /** `/programs/{slug}/` for a server-mintable slug. Throws for anything else. */

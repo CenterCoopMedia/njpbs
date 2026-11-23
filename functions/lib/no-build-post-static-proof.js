@@ -2,7 +2,7 @@
 // Pure static-proof parsing, shared by live admission and immutable replay.
 const { isDeepStrictEqual } = require("node:util");
 const { outputForPath } = require("./post-background-paths");
-const { isServerMintableSlugShape } = require("./post-slug-contract");
+const { isPostRouteSlug, postRoutePath } = require("./post-slug-contract");
 
 const INPUT_FIELDS = ["schemaVersion", "postId", "operationId", "sourceVersion", "visible", "slug", "ownedSlugs", "snapshotDigest", "contextDigest"];
 const PROOF_FIELDS = [...INPUT_FIELDS, "files"];
@@ -20,8 +20,8 @@ function projectStaticInput(value) {
   if (!exactFields(value, INPUT_FIELDS) || value.schemaVersion !== 1 ||
       !/^[A-Za-z0-9_-]{1,128}$/.test(value.postId ?? "") || !/^[A-Za-z0-9]{20}$/.test(value.operationId ?? "") ||
       !Number.isSafeInteger(value.sourceVersion) || value.sourceVersion < 1 || typeof value.visible !== "boolean" ||
-      !isServerMintableSlugShape(value.slug) || !Array.isArray(value.ownedSlugs) || value.ownedSlugs.length < 1 ||
-      value.ownedSlugs.length > 100 || value.ownedSlugs.some(slug => !isServerMintableSlugShape(slug)) ||
+      !isPostRouteSlug(value.slug) || !Array.isArray(value.ownedSlugs) || value.ownedSlugs.length < 1 ||
+      value.ownedSlugs.length > 100 || value.ownedSlugs.some(slug => !isPostRouteSlug(slug)) ||
       !isDeepStrictEqual(value.ownedSlugs, [...new Set(value.ownedSlugs)].sort()) || !value.ownedSlugs.includes(value.slug) ||
       !/^[a-f0-9]{64}$/.test(value.snapshotDigest ?? "") || !/^[a-f0-9]{64}$/.test(value.contextDigest ?? "")) refuse();
   return { ...value, ownedSlugs: [...value.ownedSlugs] };
@@ -37,7 +37,7 @@ function projectStaticProof(value) {
     if (!exactFields(file, ["path", "bytes", "digest"]) || typeof file.path !== "string" ||
         file.path.length > 256 || !file.path.startsWith("/") || /[%?#\\\s]/.test(file.path) ||
         new URL(file.path, "https://njpbs.org").pathname !== file.path || file.path.startsWith("//") ||
-        !(outputForPath(file.path) || input.ownedSlugs.some(slug => file.path === `/posts/${slug}/`) ||
+        !(outputForPath(file.path) || input.ownedSlugs.some(slug => file.path === postRoutePath(slug)) ||
           ["/_publication.json", "/_content-status.json"].includes(file.path)) ||
         !Number.isSafeInteger(file.bytes) || file.bytes < 1 || file.bytes > MAX_FILE_BYTES ||
         !/^[a-f0-9]{64}$/.test(file.digest ?? "") || paths.has(file.path)) refuse();
@@ -47,8 +47,8 @@ function projectStaticProof(value) {
   if (total > MAX_TOTAL_BYTES || !["/posts/", "/feeds/news.xml", "/api/v1/content.json", "/pagefind/pagefind.js",
     "/search/meaning-index.json", "/_publication.json", "/_content-status.json"].every(path => paths.has(path)) ||
       (!paths.has("/sitemap-index.xml") && !paths.has("/sitemap.xml")) ||
-      (input.visible && !paths.has(`/posts/${input.slug}/`)) ||
-      (!input.visible && input.ownedSlugs.some(slug => paths.has(`/posts/${slug}/`)))) refuse();
+      (input.visible && !paths.has(postRoutePath(input.slug))) ||
+      (!input.visible && input.ownedSlugs.some(slug => paths.has(postRoutePath(slug))))) refuse();
   return { ...input, files: files.map(file => ({ ...file })) };
 }
 

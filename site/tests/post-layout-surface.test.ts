@@ -6,7 +6,7 @@ const readSource = (relative: string) =>
 
 describe("the public Post presentation", () => {
   it("keeps sharing off retired-slug redirect stubs", () => {
-    const route = readSource("../src/pages/posts/[...slug].astro");
+    const route = readSource("../src/components/PublicPost.astro");
 
     expect(route).toMatch(
       /redirectFrom \? \([\s\S]*?<PermanentRedirect[\s\S]*?\) : \([\s\S]*?<PostPresentation/,
@@ -14,7 +14,7 @@ describe("the public Post presentation", () => {
   });
 
   it("treats blank Post metadata titles as Header inheritance", () => {
-    const route = readSource("../src/pages/posts/[...slug].astro");
+    const route = readSource("../src/components/PublicPost.astro");
 
     expect(route).toContain("seoTitle={post.seo?.title?.trim() || undefined}");
     expect(route).toContain("socialTitle={post.social?.title?.trim() || post.title}");

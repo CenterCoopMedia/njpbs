@@ -1,3 +1,4 @@
+import { postRoutePath } from "../../packages/content-core/src/post-slugs.ts";
 import work from "../../functions/lib/public-release-pair-work.js";
 import { createHash } from "node:crypto";
 import { isDeepStrictEqual } from "node:util";
@@ -81,8 +82,8 @@ export async function openFrozenPublicReleasePairStaticSource({ documents, origi
         status.commitSha !== publication.commitSha || !Array.isArray(status.routes) || status.routes.length > 10_000 ||
         !isDeepStrictEqual(status.collections, ["cmsPages", "cmsPosts"])) mismatch();
     const key = createHash("sha256").update(`cmsPosts/${proof.postId}`).digest("hex");
-    const routes = status.routes.filter((row: any) => row?.contentKey === key || proof.ownedSlugs.some(slug => row?.path === `/posts/${slug}/`));
-    if (proof.visible ? routes.length !== 1 || routes[0].path !== `/posts/${proof.slug}/` || routes[0].contentKey !== key || routes[0].sourceVersion !== proof.sourceVersion : routes.length !== 0) mismatch();
+    const routes = status.routes.filter((row: any) => row?.contentKey === key || proof.ownedSlugs.some(slug => row?.path === postRoutePath(slug)));
+    if (proof.visible ? routes.length !== 1 || routes[0].path !== postRoutePath(proof.slug) || routes[0].contentKey !== key || routes[0].sourceVersion !== proof.sourceVersion : routes.length !== 0) mismatch();
     return { owner, proof, publication, baseline, publicationBytes, statusBytes,
       publicationDigest: hash(publicationBytes), statusDigest: hash(statusBytes), proofDigest: hash(new TextEncoder().encode(JSON.stringify(proof))) };
   } catch (error) {

@@ -3,7 +3,7 @@
 const { runtimeFields, ownsPublication, samePublicationOwner, publicationRuntime } = require("./publication-runtime-owner");
 const { createHash, randomUUID } = require("node:crypto");
 const { isDeepStrictEqual } = require("node:util");
-const { isServerMintableSlugShape } = require("./post-slug-contract");
+const { isPostRouteSlug, postRoutePath } = require("./post-slug-contract");
 const { collectPublishedMediaUsage, MediaUsageError } = require("./media-usage");
 const { publiclyVisible } = require("./public-video-references");
 const { cloudBillingPaused } = require("./no-build-cloud-work");
@@ -50,7 +50,7 @@ function dependency(document) {
     (snapshot.authorIds === undefined || Array.isArray(snapshot.authorIds)) &&
     (metadata.credits === undefined || (Array.isArray(metadata.credits) && metadata.credits.every(credit => credit && typeof credit === "object"))));
   const slugs = [metadata.slug, ...(metadata.previousSlugs ?? [])];
-  requireValue(slugs.length <= 100 && slugs.every(slug => typeof slug === "string" && slug.length <= 200 && isServerMintableSlugShape(slug)));
+  requireValue(slugs.length <= 100 && slugs.every(slug => isPostRouteSlug(slug) && slug.length <= 200));
   const credits = [...(metadata.credits ?? []), ...(metadata.liveBlog?.updates ?? []).flatMap(entry =>
     [...entry.credits, ...(entry.withdrawal === undefined ? entry.followUps ?? [] : []).flatMap(reply => reply.credits)])];
   // Keep every hydrated identity in the dependency set, using the reader's
@@ -71,7 +71,7 @@ function dependency(document) {
     dates: { date: metadata.date ?? null, firstPublishedAt: metadata.firstPublishedAt ?? null,
       meaningfulUpdatedAt: metadata.meaningfulUpdatedAt ?? null },
     taxonomyDigest: digest([metadata.categories ?? [], metadata.tags ?? []]),
-    canonicalPath: `/posts/${metadata.slug}/` };
+    canonicalPath: postRoutePath(metadata.slug) };
 }
 
 // Page authority owns the root/catalog pair. Validate the durable pair before
@@ -96,7 +96,7 @@ function validateGenerationInput(generation, task) {
   const current = input.routes.find(route => route.path === after.canonicalPath);
   if (!task.contextOnly && after.visible) requireValue(current?.sourceVersion === after.sourceVersion && current.digest === after.digest);
   for (const slug of task.contextOnly ? [] : task.dependencies.slugs) {
-    const route = input.routes.find(value => value.path === `/posts/${slug}/`);
+    const route = input.routes.find(value => value.path === postRoutePath(slug));
     if (!after.visible || route?.path !== after.canonicalPath) requireValue(!route);
   }
   return input;

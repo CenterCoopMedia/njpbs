@@ -55,7 +55,7 @@ export async function readAssetCodeGeneration(fetchAsset: (request: Request) => 
 
 export function isVerifiedLastGoodResponse(path: string, response: Response, rendererSha: string): boolean {
   const source = response.headers.get("x-njpbs-content-source");
-  if (path.startsWith("/posts/")) return ["cms-no-build", "cms-code-post-context"].includes(source ?? "") &&
+  if (path.startsWith("/posts/") || path.startsWith("/es/posts/")) return ["cms-no-build", "cms-code-post-context"].includes(source ?? "") &&
     response.headers.get("x-njpbs-renderer-sha") === rendererSha;
   const record = /^\/(programs|shows|events)\/[^/]+\/$/.exec(path);
   if (record) {

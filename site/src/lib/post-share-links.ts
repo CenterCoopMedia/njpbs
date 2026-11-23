@@ -1,7 +1,4 @@
-import {
-  isPublicContentSlug,
-  POST_PUBLIC_ROUTE_BASE,
-} from "./public-content-routes";
+import { postSlugForPath } from "./public-content-routes";
 
 export interface PostShareInput {
   title: string;
@@ -33,13 +30,6 @@ function canonicalPostUrl(value: string): URL {
     throw new Error("A canonical NJ PBS Post URL is required");
   }
 
-  const hasPostPath =
-    url.pathname.startsWith(POST_PUBLIC_ROUTE_BASE) &&
-    url.pathname.endsWith("/");
-  const slug = hasPostPath
-    ? url.pathname.slice(POST_PUBLIC_ROUTE_BASE.length, -1)
-    : "";
-
   if (
     url.protocol !== "https:" ||
     url.hostname !== "njpbs.org" ||
@@ -48,7 +38,7 @@ function canonicalPostUrl(value: string): URL {
     url.password !== "" ||
     url.search !== "" ||
     url.hash !== "" ||
-    !isPublicContentSlug(slug)
+    !postSlugForPath(url.pathname)
   ) {
     throw new Error("A canonical NJ PBS Post URL is required");
   }

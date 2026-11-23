@@ -11,7 +11,7 @@ export { PAIR_READER_PATH, PAIR_READER_PATHS_LIMIT, PAIR_READER_DEADLINE_MS, PAI
 export type ReaderDeployment = Readonly<{ schemaVersion: 1; environment: "production" | "development";
   service: string; versionId: string; commitSha: string; contractDigest: string; origin: string }>;
 export type ReaderCapabilities = Readonly<{ schemaVersion: 1; rendererSha: string;
-  post: Readonly<{ dataFigureVersion: 1; electionResultsVersion: 1 | 2; liveBlogVersion: 1 }>;
+  post: Readonly<{ dataFigureVersion: 1; electionResultsVersion: 1 | 2; liveBlogVersion: 1; spanishPostVersion?: 1 }>;
   page: Readonly<{ dataFigureVersion: 1; electionResultsVersion: 1 | 2; dataHubReportingVersion: 1; dataHubCompositionVersion: 1 }>;
   record: Readonly<{ families: readonly ("programs" | "events")[];
     terminalOwner: Readonly<{ schemaVersion: 1; transport: "public-context-no-build-v1"; rendererSha: string }> }> }>;
@@ -49,7 +49,11 @@ export function parseReaderSeals(raw: unknown, pair: PublicReleasePair): ReaderS
   const seals = exact(raw, ["schemaVersion", "status", "deployment", "capabilities"]);
   const deployment = exact(seals.deployment, ["schemaVersion", "environment", "service", "versionId", "commitSha", "contractDigest", "origin"]);
   const capabilities = exact(seals.capabilities, ["schemaVersion", "rendererSha", "post", "page", "record"]);
-  const post = exact(capabilities.post, ["dataFigureVersion", "electionResultsVersion", "liveBlogVersion"]);
+  const postFields = ["dataFigureVersion", "electionResultsVersion", "liveBlogVersion"];
+  if (capabilities.post && typeof capabilities.post === "object" && Object.hasOwn(capabilities.post, "spanishPostVersion")) {
+    postFields.push("spanishPostVersion");
+  }
+  const post = exact(capabilities.post, postFields);
   const page = exact(capabilities.page, ["dataFigureVersion", "electionResultsVersion", "dataHubReportingVersion", "dataHubCompositionVersion"]);
   const record = exact(capabilities.record, ["families", "terminalOwner"]);
   const terminal = exact(record.terminalOwner, ["schemaVersion", "transport", "rendererSha"]);

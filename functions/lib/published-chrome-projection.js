@@ -1,4 +1,5 @@
 "use strict";
+const { isPostRouteSlug, postRoutePath } = require("./post-slug-contract");
 const { projectPublishedCmsSettings, SITE_NAVIGATION_SETTINGS_ID, PUBLIC_SITE_CHROME_SETTINGS_ID,
   NJ_DECIDES_SETTINGS_ID, PUBLIC_HOMEPAGE_BANNER_SETTINGS_ID } = require("./cms-settings-contract");
 const { PUBLIC_PAGE_DEFINITIONS } = require("./public-page-contract");
@@ -35,7 +36,7 @@ function publishedChromePageIds(settings) {
 function contentLinkDirectoryEntry(path, document) {
   const metadata = document.published?.metadata;
   if (metadata?.contentLinkMode !== "custom" || require("./content-link").contentLinkError(metadata)) return [];
-  const normalPath = path.startsWith("cmsPosts/") ? metadata.type === "post" ? `/posts/${metadata.slug}/` : null
+  const normalPath = path.startsWith("cmsPosts/") ? metadata.type === "post" && isPostRouteSlug(metadata.slug) ? postRoutePath(metadata.slug) : null
       : require("./public-page-contract").publicPagePath(path.slice("cmsPages/".length), metadata);
   return normalPath ? [{ path: normalPath, contentLinkMode: "custom", contentLinkUrl: metadata.contentLinkUrl,
       contentLinkNewTab: metadata.contentLinkNewTab !== false, previousSlugs: metadata.previousSlugs ?? [] }] : [];

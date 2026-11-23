@@ -21,6 +21,7 @@ const publicationPendingPath = (pairId, operationId) => `${work.publicReleasePai
 function publicationSource({ kind, id: sourceId, family = FAMILY[kind], action, snapshot, sourceVersion = snapshot?.sourceVersion }) {
   const features = [];
   if (action !== "withdraw") {
+    if (kind === "post" && require("./post-slug-contract").isSpanishPostSlug(snapshot?.metadata?.slug)) features.push("spanishPostVersion:1");
     if (require("./live-blog-compatibility").containsLiveBlog(snapshot)) features.push("liveBlogVersion:1");
     if (require("./election-results-compatibility").containsVisibleElectionResults(snapshot)) features.push(`electionResultsVersion:${require("./election-results-compatibility").requiredElectionResultsVersion(snapshot)}`);
     if (require("./data-figure-compatibility").containsVisibleDataFigure(snapshot)) features.push("dataFigureVersion:1");

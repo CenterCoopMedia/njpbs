@@ -35,9 +35,11 @@ function assertPublicationDatabase(firestore, target) {
 }
 function publicationPostCacheTag(target, slug) {
   const expected = assertPublicationTarget(target);
-  if (typeof slug !== "string" || !/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(slug) || slug.length > 1000) {
+  const { isPostRouteSlug, isSpanishPostSlug } = require("./post-slug-contract");
+  if (!isPostRouteSlug(slug) || slug.length > 1000) {
     throw new Error("Invalid Post cache route");
   }
-  return `${expected.environment === "development" ? "njpbs-dev-post" : "njpbs-post"}-${slug}`;
+  const prefix = expected.environment === "development" ? "njpbs-dev" : "njpbs";
+  return isSpanishPostSlug(slug) ? `${prefix}-es-post-${slug.slice(3)}` : `${prefix}-post-${slug}`;
 }
 module.exports = { publicationTarget, assertPublicationTarget, assertPublicationDatabase, publicationPostCacheTag };

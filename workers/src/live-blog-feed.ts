@@ -1,4 +1,5 @@
 import { liveBlogFeed, manifestFromLiveBlogHtml } from "../../packages/content-core/src/live-blog-manifest";
+import { postSlugForPath } from "../../packages/content-core/src/post-slugs";
 import { SECURITY_HEADER_BASELINE } from "../../packages/content-core/src/public-security-headers";
 import { PUBLIC_GONE_BRANCH_HEADER } from "./public-gone";
 import { publicationPostCacheTag, type PublicationTarget } from "../../functions/lib/publication-target.js";
@@ -17,7 +18,7 @@ export function createLiveBlogFeedReader({ target, rendererSha, cache, readPage,
 }) {
   return async (request: Request): Promise<Response | null> => {
     const url = new URL(request.url);
-    const slug = /^\/posts\/([a-z0-9]+(?:-[a-z0-9]+)*)\/$/.exec(url.pathname)?.[1];
+    const slug = postSlugForPath(url.pathname);
     if (url.origin !== target.origin || !slug || !["GET", "HEAD"].includes(request.method) ||
         url.searchParams.size !== 1 || url.searchParams.get("live-blog") !== "updates") return null;
     const headers = { ...SECURITY_HEADER_BASELINE, "Content-Type": "application/json; charset=utf-8", "X-Robots-Tag": "noindex" };
