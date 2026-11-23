@@ -12,6 +12,7 @@ import { projectPublishedPostRead } from "../src/lib/published-post-shadow";
 import { archiveHtmlMetadata, comparePostHtml, postHtmlSemantics } from "../src/lib/post-html-comparison";
 import { createFakePublishedPostReader } from "../src/lib/published-post-shadow";
 import { createShadowPostWorker } from "../../workers/src/shadow-post-worker";
+import { SPOTLIGHT_ARCHIVE_REDIRECT_ASSETS, spotlightArchiveRedirectShard } from "../../packages/content-core/src/spotlight-archive-paths";
 
 let compiled: { rendererSha: string; renderPublishedPost: (content: NonNullable<ReturnType<typeof projectPublishedPostRead>>) => Promise<string> };
 beforeAll(async () => {
@@ -26,6 +27,14 @@ function renderFixture(read: any) {
 }
 
 describe("compiled shadow uses the static Post output", () => {
+  it("emits the registered archive redirect endpoint as a static release asset", () => {
+    for (const alias of spotlightArchivePost.document.published.metadata.archiveLegacyPaths) {
+      const shard = spotlightArchiveRedirectShard(alias);
+      const asset = resolve(`.shadow-static-fixtures${SPOTLIGHT_ARCHIVE_REDIRECT_ASSETS}${shard}.json`);
+      expect(JSON.parse(readFileSync(asset, "utf8"))).toMatchObject({ [alias]: "/posts/archived-transit/" });
+    }
+  });
+
   it("indexes only the public archive story with its original date and topics", async () => {
     const { index } = await pagefind.createIndex();
     if (!index) throw new Error("Pagefind index was not created");

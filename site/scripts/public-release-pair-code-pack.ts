@@ -4,6 +4,7 @@ import { constants } from "node:fs";
 import { lstat, open, readdir, readFile } from "node:fs/promises";
 import path from "node:path";
 import type { PublicReleasePair } from "../../packages/content-core/src/public-release";
+import { SPOTLIGHT_ARCHIVE_REDIRECT_ASSETS } from "../../packages/content-core/src/spotlight-archive-paths";
 import { verifyPreparedPublicWorkerArtifact, type PreparedPublicWorkerArtifact } from "../src/lib/public-worker-artifact";
 import { assertPublicReleasePairSearchAuthority } from "./public-release-pair-search-authority";
 import { assertPublicReleasePairContentFeedAuthority, assertPublicReleasePairContentFeedIndex, PAIR_CONTENT_FEED_INDEX } from "./public-release-pair-content-feed-authority";
@@ -64,7 +65,8 @@ function classification(file: string) {
   else if (/^\/sitemap(?:-[A-Za-z0-9_-]+)?\.xml$/.test(file)) family = "sitemap";
   else if (file.startsWith("/feeds/") || file.startsWith("/_external-content/") || file === "/api/v1/content.json" ||
       /^\/api\/v1\/content\/[0-9]+\.json$/.test(file) || ["/rss.xml", "/feed.xml", "/atom.xml"].includes(file)) family = "feed";
-  else if (file.startsWith("/api/") || ["/_publication.json", "/_content-status.json", "/_home-sources.json"].includes(file)) family = "aggregate";
+  else if (file.startsWith("/api/") || ["/_publication.json", "/_content-status.json", "/_home-sources.json"].includes(file) ||
+      file.startsWith(SPOTLIGHT_ARCHIVE_REDIRECT_ASSETS) && /^[0-9a-f]{2}\.json$/.test(file.slice(SPOTLIGHT_ARCHIVE_REDIRECT_ASSETS.length))) family = "aggregate";
   else if (extension === "html") family = "fallbackAsset";
   else if (file.startsWith("/_astro/") || file.startsWith("/posts/_no-build-assets/") || ["js", "mjs", "css", "wasm"].includes(extension)) family = "clientAsset";
   else if (file === "/_design-system-tokens.json" || /^(image\/|font\/|video\/|audio\/)/.test(mime) ||

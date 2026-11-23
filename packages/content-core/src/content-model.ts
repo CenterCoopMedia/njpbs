@@ -629,6 +629,8 @@ export interface PostPublishedMetadata
   spotlightArchive?: true;
   /** Original UTC time from the archive export, when available. */
   archivePublishedAt?: string;
+  /** Normalized legacy story paths approved with the archive snapshot. */
+  archiveLegacyPaths?: string[];
   liveBlog?: import("./live-blog").LiveBlogData;
   /** Explicit publication attribution, frozen with this revision; absent means off. */
   spotlightNews?: boolean;

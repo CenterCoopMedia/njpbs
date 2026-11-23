@@ -10,6 +10,8 @@ import { readDurablePostWithdrawal } from "./durable-post-withdrawals";
 import { readDurablePageWithdrawal } from "./durable-page-withdrawals";
 import { createNoBuildCodePostWorker } from "./no-build-code-post-worker";
 import { rollbackCacheControl, rollbackProbe, rollbackRead, versionedProof } from "./rollback-proof";
+import { serveSpotlightArchiveRedirect } from "./spotlight-archive-redirect";
+import { SPOTLIGHT_ARCHIVE_REDIRECT_ASSETS } from "../../packages/content-core/src/spotlight-archive-paths";
 
 const target = publicationTarget("development");
 // Runtime Page capability binds the exact compiled graph; older candidates
@@ -28,6 +30,9 @@ type DevPublicEnv = Omit<DevPublicBindings, "CMS_API"> & {
 const devPublic = {
   async fetch(request: Request, env: DevPublicEnv, ctx: ExecutionContext, scheduleProof = false): Promise<Response> {
     if (new URL(request.url).origin !== target.origin) {
+      return new Response(null, { status: 404, headers: { "cache-control": "no-store" } });
+    }
+    if (new URL(request.url).pathname.startsWith(SPOTLIGHT_ARCHIVE_REDIRECT_ASSETS)) {
       return new Response(null, { status: 404, headers: { "cache-control": "no-store" } });
     }
     const figure = serveDataHubEmbed(request, assetRequest => env.ASSETS.fetch(assetRequest));
@@ -72,7 +77,9 @@ const devPublic = {
     if (postResponse) return pendingAuthorResponse(request, postResponse, { rendererSha,
       fetchAsset: assetRequest => env.ASSETS.fetch(assetRequest),
       readStaff: path => env.CMS_API.getNoBuildPage(path, rendererSha, "HEAD") });
-    const asset = await env.ASSETS.fetch(request);
+    const asset = await serveSpotlightArchiveRedirect(request, await env.ASSETS.fetch(request),
+      input => env.ASSETS.fetch(input),
+      async canonical => await posts.fetch(canonical) ?? env.ASSETS.fetch(canonical));
     if (!["/_publication.json", "/_content-status.json"].includes(new URL(request.url).pathname)) {
       return pendingAuthorResponse(request, asset, { rendererSha,
         fetchAsset: assetRequest => env.ASSETS.fetch(assetRequest),

@@ -61,19 +61,24 @@ describe("Spotlight publication metadata", () => {
 
   it("carries an approved archive identity and original dates across a later publish", () => {
     const archivePublishedAt = "2012-03-01T02:30:00Z";
-    const document = { ...post(), date: "2026-10-06", spotlightArchive: true, archivePublishedAt: publishedAt };
+    const archiveLegacyPaths = ["/2012/02/transit/", "/stories/12/02/29/transit/"];
+    const document = { ...post(), date: "2026-10-06", spotlightArchive: true, archivePublishedAt: publishedAt,
+      archiveLegacyPaths: ["/blog-post/unapproved/"] };
     const ordinary = freeze(document);
     expect(ordinary.metadata).not.toHaveProperty("spotlightArchive");
     expect(ordinary.metadata).not.toHaveProperty("archivePublishedAt");
+    expect(ordinary.metadata).not.toHaveProperty("archiveLegacyPaths");
     const published = {
       ...ordinary,
       metadata: { ...ordinary.metadata, spotlightArchive: true, date: "2012-02-29", editorialDateSource: "backdated",
-        archivePublishedAt },
+        archivePublishedAt, archiveLegacyPaths },
     };
     const revised = { ...document, version: 4, published, spotlightArchive: false };
     expect(freeze(revised).metadata).toMatchObject({
-      spotlightArchive: true, date: "2012-02-29", editorialDateSource: "backdated", archivePublishedAt,
+      spotlightArchive: true, date: "2012-02-29", editorialDateSource: "backdated", archivePublishedAt, archiveLegacyPaths,
     });
+    expect(() => freeze({ ...revised, published: { ...published, metadata: {
+      ...published.metadata, archiveLegacyPaths: ["/posts/current/"] } } })).toThrow(/valid original URL paths/);
   });
 
   it("does not carry publication attribution into reusable templates", () => {

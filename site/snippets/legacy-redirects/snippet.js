@@ -16,6 +16,8 @@
  * remain external to this repository change.
  */
 import { classify } from "../../src/lib/legacy-redirects";
+import { postSlugForPath } from "../../../packages/content-core/src/post-slugs";
+import { spotlightArchivePath } from "../../../packages/content-core/src/spotlight-archive-paths";
 
 // Security-header baseline for edge-generated responses. A synthetic 410 or 301 returns
 // from this wrapper before Workers Assets serves a file, so Cloudflare never applies the
@@ -64,6 +66,8 @@ export default {
   async fetch(request, env) {
     const url = new URL(request.url);
     const decision = classify(url.pathname);
+    const archiveRequest = ["GET", "HEAD"].includes(request.method) && spotlightArchivePath(url.pathname);
+    const fetchOrigin = (request) => env?.ASSETS ? env.ASSETS.fetch(request) : fetch(request);
 
     if (decision === null) {
       // Not a legacy path: hand off unchanged. As a Worker in front of the
@@ -71,7 +75,7 @@ export default {
       // the bundled assets and can recurse into this same route, so serve through the
       // ASSETS binding when it is present. A Cloudflare Snippet (or a binding-less
       // Worker) has no env.ASSETS and falls back to a normal origin fetch.
-      return env && env.ASSETS ? env.ASSETS.fetch(request) : fetch(request);
+      return fetchOrigin(archiveRequest ? new Request(request, { redirect: "manual" }) : request);
     }
 
     if (decision.action === "redirect") {
@@ -90,12 +94,20 @@ export default {
     }
 
     // action === "gone"
+    if (archiveRequest) {
+      // A published archive alias can reclaim an exact retired path. A missing
+      // or unrelated origin route retains the existing retirement response.
+      const origin = await fetchOrigin(new Request(request, { redirect: "manual" }));
+      const location = origin.headers.get("location");
+      if (origin.status >= 500 || (origin.status === 301 && location && postSlugForPath(location.split("?")[0]))) return origin;
+      if (origin.body) void origin.body.cancel().catch(() => {});
+    }
     return new Response(GONE_BODY, {
       status: 410,
       headers: {
         ...SECURITY_HEADERS,
         "content-type": "text/html; charset=utf-8",
-        "cache-control": decision.cacheControl ?? "public, max-age=86400",
+        "cache-control": archiveRequest ? "no-store" : decision.cacheControl ?? "public, max-age=86400",
       },
     });
   },

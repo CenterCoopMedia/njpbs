@@ -15,6 +15,7 @@ export const spotlightArchivePost = {
     published: { ...prose.document.published, metadata: { ...prose.document.published.metadata,
       title: "Historical transit reporting", slug: "archived-transit", spotlightArchive: true as const,
       date: "2012-02-29", archivePublishedAt: "2012-03-01T02:30:00Z", editorialDateSource: "backdated",
+      archiveLegacyPaths: ["/2012/02/old-transit/", "/blog-post/old-transit/"],
       categories: ["Transportation"], tags: ["Rail"],
       seo: { title: "Archive transit coverage", description: "Original reporting on rail service." },
       credits: [{ kind: "custom", name: "Archive Reporter" }],
@@ -25,7 +26,7 @@ export const unlistedArchivePost = {
   ...spotlightArchivePost,
   document: { ...spotlightArchivePost.document, id: "unlisted-transit",
     published: { ...spotlightArchivePost.document.published, metadata: { ...spotlightArchivePost.document.published.metadata,
-      slug: "unlisted-transit", seo: { noindex: true },
+      slug: "unlisted-transit", archiveLegacyPaths: ["/2012/02/unlisted-transit/"], seo: { noindex: true },
     } },
   },
 };

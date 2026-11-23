@@ -29,6 +29,7 @@
     "published-resource-check": "site/src/lib/published-resource-check.ts",
     "published-vocabulary": "packages/content-core/src/published-vocabulary.ts",
     "schedule-copy": "packages/content-core/src/schedule-copy.ts",
+    "spotlight-archive-paths": "packages/content-core/src/spotlight-archive-paths.ts",
     "town-lookup": "packages/content-core/src/town-lookup.ts",
     "video-block": "packages/content-core/src/video-block.ts"
   }

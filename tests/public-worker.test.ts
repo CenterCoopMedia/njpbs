@@ -3,6 +3,8 @@ import { describe, expect, it, vi } from "vitest";
 import headersFile from "../site/public/_headers?raw";
 import previewWorkerSource from "../workers/src/preview-worker.ts?raw";
 import legacyHeadersSource from "../site/snippets/legacy-redirects/snippet.js?raw";
+import legacyWorker from "../site/snippets/legacy-redirects/snippet.js";
+import { SPOTLIGHT_ARCHIVE_REDIRECT_ASSETS, spotlightArchiveRedirectShard } from "../packages/content-core/src/spotlight-archive-paths";
 import adminFrameSource from "../admin/src/components/HomePreviewFrame.tsx?raw";
 import {
   SECURITY_HEADER_BASELINE,
@@ -276,6 +278,78 @@ async function expectCommittedFallback(response: Response): Promise<void> {
   expect(response.headers.has("x-njpbs-source-version")).toBe(false);
   expectContactBoundaryHeaders(response);
 }
+
+describe("archive redirects at the edge and public origin", () => {
+  const canonical = "/posts/archived-story/";
+  const renamed = "/posts/renamed-archive-story/";
+  const aliases = ["/blog-post/old-story/", "/video/old-story/", "/2012/02/old-story/", "/stories/12/02/29/old-story/"];
+  const shardPath = (path: string) => `${SPOTLIGHT_ARCHIVE_REDIRECT_ASSETS}${spotlightArchiveRedirectShard(path)}.json`;
+
+  function origin(canonicalStatus = 200, shardStatus = 200) {
+    const fetchAsset = vi.fn(async (request: Request) => {
+      const path = new URL(request.url).pathname;
+      if (path.startsWith(SPOTLIGHT_ARCHIVE_REDIRECT_ASSETS)) {
+        const paths = aliases.filter(alias => shardPath(alias) === path);
+        if (shardStatus !== 200 || !paths.length) return new Response(null, { status: paths.length ? shardStatus : 404 });
+        return Response.json(Object.fromEntries(paths.map(alias => [alias, canonical])));
+      }
+      if (path === canonical && canonicalStatus === 308) return new Response(null, { status: 308, headers: { location: renamed } });
+      if (path === renamed) return new Response(null, { status: 200 });
+      return new Response(null, { status: path === canonical ? canonicalStatus : path === "/video/current/" ? 200 : 404 });
+    });
+    const getPublishedPage = async () => { throw new Error("Unexpected Page read"); };
+    const assets = { fetch: (request: Request) => servePublicRequest(request, { fetchAsset, getPublishedPage }) };
+    const fetch = (path: string, method = "GET") => legacyWorker.fetch(new Request(`https://example.org${path}`, { method }), { ASSETS: assets });
+    const assetReads = () => fetchAsset.mock.calls.map(([request]) => new URL(request.url).pathname);
+    return { fetch, assetReads };
+  }
+
+  it.each(aliases)("sends an approved %s alias to its live canonical in one hop", async alias => {
+    const edge = origin();
+    const result = await edge.fetch(`${alias.slice(0, -1)}?utm_source=migration`, "HEAD");
+    expect(result.status).toBe(301);
+    expect(result.headers.get("location")).toBe(`${canonical}?utm_source=migration`);
+    expect(result.headers.get("cache-control")).toBe("no-store");
+    expect(edge.assetReads()).toEqual([alias.slice(0, -1), shardPath(alias), canonical]);
+    expect((await edge.fetch(canonical)).status).toBe(200);
+  });
+
+  it("preserves retirement, live assets, unrelated redirects and catch-all misses", async () => {
+    const edge = origin();
+    const missing = await edge.fetch("/blog-post/unknown/");
+    expect(missing.status).toBe(410);
+    expect(missing.headers.get("cache-control")).toBe("no-store");
+    expect((await edge.fetch("/video/current/")).status).toBe(200);
+    const retired = await edge.fetch("/njtv-pressroom/old-show/");
+    expect(retired.status).toBe(410);
+    expect(retired.headers.get("cache-control")).toBe("public, max-age=86400");
+    expect((await edge.fetch("/unrelated/unknown/")).status).toBe(404);
+    expect((await edge.fetch("/all-programs/")).headers.get("location")).toBe("https://example.org/watch/");
+    expect(edge.assetReads()).toEqual(["/blog-post/unknown/", shardPath("/blog-post/unknown/"), "/video/current/", "/unrelated/unknown/"]);
+  });
+
+  it("keeps misses on the original route and hides the archive redirect data", async () => {
+    const edge = origin(200, 503);
+    expect((await edge.fetch("/blog-post/old-story/")).status).toBe(410);
+    expect((await edge.fetch("/video/old-story/")).status).toBe(404);
+    expect((await edge.fetch(shardPath(aliases[0]))).status).toBe(404);
+    expect(edge.assetReads()).toEqual([aliases[0], shardPath(aliases[0]), aliases[1], shardPath(aliases[1])]);
+  });
+
+  it("goes straight to a live renamed canonical Post", async () => {
+    const edge = origin(308);
+    const response = await edge.fetch(aliases[0]);
+    expect(response.status).toBe(301);
+    expect(response.headers.get("location")).toBe(renamed);
+    expect((await edge.fetch(renamed)).status).toBe(200);
+  });
+
+  it.each([404, 410, 503])("withholds the redirect if the canonical route returns %i", async status => {
+    const result = await origin(status).fetch("/video/old-story/");
+    expect(result.status).toBe(status === 503 ? 503 : 404);
+    expect(result.headers.has("location")).toBe(false);
+  });
+});
 
 describe("public Contact runtime projection", () => {
   it.each([true, false])("rechecks childDirected=%s against an older eligible Contact shell", async childDirected => {

@@ -16,6 +16,7 @@ const { postPresentationError } = require("./post-formats");
 const { recordKindHasPublicRoute } = require("./public-record-kinds");
 const { registeredAuthorIds, resolveStoryCredits } = require("./story-credits");
 const { parsePublishInstant } = require("./publish-instant");
+const { isSpotlightArchivePaths } = require("./spotlight-archive-paths");
 const { serviceCompositionError } = require("./service-composition");
 const { parseScheduleCopy } = require("./schedule-copy");
 const { isPostLeadMedia, leadVideoBlocks } = require("./post-lead-media");
@@ -358,6 +359,10 @@ function createPublishedSnapshot({
       metadata.spotlightArchive = true;
       metadata.date = prior.date;
       metadata.editorialDateSource = "backdated";
+      if (prior.archiveLegacyPaths !== undefined) {
+        if (!isSpotlightArchivePaths(prior.archiveLegacyPaths)) throw new PublishSnapshotError("Archive Post needs valid original URL paths");
+        metadata.archiveLegacyPaths = [...prior.archiveLegacyPaths];
+      }
       if (prior.archivePublishedAt !== undefined) {
         if (parsePublishInstant(prior.archivePublishedAt) === null) {
           throw new PublishSnapshotError("Archive Post needs a valid original UTC publication time");
