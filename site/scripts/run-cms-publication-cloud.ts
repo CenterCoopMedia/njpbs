@@ -128,6 +128,10 @@ async function runCloudPublicationStages(
   await assertPreviewSandboxAvailable();
   if (mode === "--preflight") return;
   progress.stage = "inputs";
+  // The development account pin (devCloudflareAccount) is not checked here yet: the dev
+  // publisher container has no CMS_DEV_CLOUDFLARE_ACCOUNT_ID, so the check would fail every
+  // dev publish. Install proves the container's target (#555); the pin lands with the
+  // publisher wiring in #567.
   const buildEnvironment = { ...parseCmsPublicationPublicBuildEnvironment(environment, target.environment),
     CMS_DEPLOYMENT_ENVIRONMENT: target.environment };
   if (!/^[A-Za-z0-9_-]{20,80}$/.test(cloudflareApiToken)) {
