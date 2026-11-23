@@ -77,8 +77,9 @@ describe("Spotlight publication metadata", () => {
     expect(freeze(revised).metadata).toMatchObject({
       spotlightArchive: true, date: "2012-02-29", editorialDateSource: "backdated", archivePublishedAt, archiveLegacyPaths,
     });
-    expect(() => freeze({ ...revised, published: { ...published, metadata: {
-      ...published.metadata, archiveLegacyPaths: ["/posts/current/"] } } })).toThrow(/valid original URL paths/);
+    const malformed = { ...revised, published: { ...published, metadata: {
+      ...published.metadata, archiveLegacyPaths: ["/posts/current/"] } } };
+    expect(() => freeze(malformed)).toThrow(/valid original URL paths/);
   });
 
   it("does not carry publication attribution into reusable templates", () => {
