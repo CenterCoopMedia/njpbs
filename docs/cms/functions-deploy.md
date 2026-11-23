@@ -141,21 +141,12 @@ source, adds the missing `roles/run.invoker` binding on that one service
 trigger that cannot be invoked drops its events silently. The deploy never adds
 receiver grants or project-wide grants.
 
-The deploy identity holds a custom role with only `run.services.getIamPolicy`
-and `run.services.setIamPolicy`. When the release adds a trigger service, the
-pre-deploy check tests these permissions before any mutation, so a missing role
-stops the release at preflight rather than after the Functions deploy. Set it up
-once per project (`njpbs-site`, `njpbs-site-dev`) with an owner login, using that
-project's deploy service account:
-
-```sh
-gcloud iam roles create cmsEventInvokerGranter --project=PROJECT \
-  --title="CMS event trigger invoker granter" --stage=GA \
-  --permissions=run.services.getIamPolicy,run.services.setIamPolicy
-gcloud projects add-iam-policy-binding PROJECT --condition=None \
-  --member="serviceAccount:DEPLOY_SERVICE_ACCOUNT" \
-  --role=projects/PROJECT/roles/cmsEventInvokerGranter
-```
+The grant needs `run.services.getIamPolicy` and `run.services.setIamPolicy`.
+Both deploy identities (`njpbs-site` and `njpbs-site-dev`) hold the project-level
+`roles/run.admin` grant, which includes both, so no extra role is needed. When
+the release adds a trigger service, the pre-deploy check tests these permissions
+before any mutation. If that grant is ever removed, the release stops at
+preflight instead of after the Functions deploy.
 
 ## Video replacement cleanup
 
