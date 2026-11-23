@@ -147,13 +147,13 @@ export async function readVerifiedLastGoodBytes(store: Pick<ContentStore, "get">
 export const lastGoodObjectKey = (target: PublicationTarget, rendererSha: string, generation: number, path: string) =>
   `public-content-last-good/v1/${target.workerName}/${rendererSha}/${generation}/${encodeURIComponent(path)}.html`;
 
-/** Stale display bytes only. Each source has its own namespace until the
- * compatible-renderer contract and retained code assets support cross-release reads. */
 function canRetainPath(path: string): boolean {
   return path === "/" || /^\/[a-z0-9]+(?:-[a-z0-9]+)*\/$/.test(path) ||
     Boolean(postSlugForPath(path)) || /^\/(programs|shows|events)\/[a-z0-9]+(?:-[a-z0-9]+)*\/$/.test(path);
 }
 
+/** Stale display bytes only. Each source has its own namespace until the
+ * compatible-renderer contract and retained code assets support cross-release reads. */
 export function createPublicContentLastGood({ store, target, rendererSha }: {
   store: ContentStore; target: PublicationTarget; rendererSha: string;
 }): PublicContentLastGood {

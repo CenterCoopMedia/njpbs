@@ -93,7 +93,9 @@ it.each(["publish", "withdraw"] as const)("refreshes the English alternate when 
   const englishPath = "/posts/shadow-fixture/";
   const snapshot = { ...source.document.published, metadata: { ...source.document.published.metadata,
     slug: "es/noticias-locales", locale: "es", editionOf: sourceId } };
-  await db.doc(`cmsPosts/${sourceId}`).set({ ...source.document, version: 7 });
+  const original = { ...source.document, version: 7, status: "published" };
+  delete original.publiclyVisible;
+  await db.doc(`cmsPosts/${sourceId}`).set(original);
   await db.runTransaction(async transaction => {
     const write = await producer.preparePublicReleaseProducerInTransaction({ firestore: db, transaction, operationId,
       changes: [{ kind: "post", id: editionId, action, sourceVersion: 7, snapshot }] });

@@ -307,7 +307,8 @@ async function derivePairInput(options: SourceOptions, retained?: HistoricalPubl
         if (owner || directlyAffected && !global) for (const slug of slugs) add({ path: postRoutePath(slug), renderer: "withdrawal", read: null, homeSources: null, status: 410 });
         continue;
       }
-      const read = await postReader.readPublishedPost({ firestore, transaction, slug: document.published.metadata.slug, now });
+      const read = await postReader.readPublishedPost({ firestore, transaction, slug: document.published.metadata.slug, now,
+        allowLegacyVisibility: !directlyAffected });
       if (read.kind !== "published-post") refuse();
       for (const slug of slugs) {
         const path = postRoutePath(slug);
