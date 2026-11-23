@@ -39,7 +39,6 @@
     "workers/wrangler.jsonc",
     "workers/wrangler.preview.dev.jsonc",
     "workers/wrangler.preview.jsonc",
-    "workers/wrangler.public.dev.jsonc",
     "workers/wrangler.routing-measurement.dev.jsonc",
     "workers/wrangler.staff-preview.dev.jsonc",
     "workers/wrangler.staff-sites.dev.jsonc",

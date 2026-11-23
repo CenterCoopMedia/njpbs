@@ -164,7 +164,6 @@ jobs:
         run: |
           npm run check:staff-sites
           npm run test:staff-sites
-          npx --no-install wrangler types --config workers/wrangler.public.dev.jsonc --include-runtime=false --env-interface DevPublicBindings --check workers/src/dev-public-worker-configuration.d.ts
           npx --no-install wrangler types --config workers/wrangler.staff-sites.dev.jsonc --config cms-api/wrangler.dev.jsonc --include-runtime=false --env-interface DevStaffSiteBindings --check workers/src/staff-site-dev-worker-configuration.d.ts
           npx --no-install wrangler types --config workers/wrangler.staff-sites.jsonc --config cms-api/wrangler.jsonc --config cms-api/wrangler.dev.jsonc --include-runtime=false --env-interface StaffSiteEnv --check workers/src/staff-site-worker-configuration.d.ts
       - name: Dev preview release contracts

@@ -29,7 +29,7 @@ const replies = pageIds.map((pageId, index) => {
   ...(pageId === "home" ? { needsBaseline: true, homeRefresh: { schemaVersion: 1, revision: 1, status: "pending" } } : {}) };
 });
 const bundle = await build({ stdin: { resolveDir: repo, contents: `
-  import publicWorker from "./workers/src/dev-public-worker.ts";
+  import publicWorker from "./workers/src/public-no-build-entry.ts";
   export default { async fetch(request, env, ctx) {
     const pending = [];
     const response = await publicWorker.fetch(request, env, { waitUntil(task) {
@@ -89,7 +89,8 @@ const authority = `import { WorkerEntrypoint } from 'cloudflare:workers';
 const runtime = new Miniflare({ workers: [
   { config: { name: "page-serving", type: "worker", compatibilityDate: "2026-07-09",
     manifest: { mainModule: "index.js", modules: { "index.js": { type: "esm", contents: bundle.outputFiles[0].text } } },
-    env: { NO_BUILD_POST_RENDERER_SHA: { type: "text", value: rendererSha }, NO_BUILD_PAGE_RENDERER_SHA: { type: "text", value: rendererSha },
+    env: { PUBLICATION_ENVIRONMENT: { type: "text", value: "development" },
+      NO_BUILD_POST_RENDERER_SHA: { type: "text", value: rendererSha }, NO_BUILD_PAGE_RENDERER_SHA: { type: "text", value: rendererSha },
       DURABLE_POST_WITHDRAWALS: { type: "r2", name: "withdrawals" },
       CMS_API: { type: "worker", worker: "authority", exportName: "PublicContentEntrypoint" },
       ASSETS: { type: "fetcher", handler: (request: Request) => {
@@ -152,7 +153,8 @@ try {
     assert.equal(response.headers.get('x-njpbs-publication-operation'), replies[0].receipt.operationId);
   }
   await service.fetch('https://fixture.invalid/outage');
-  assert.equal((await runtime.dispatchFetch('https://dev-public.example.org/renamed-page/')).headers.get('x-njpbs-content-source'), 'assets');
+  // Only a path served before the outage has a retained last-good copy.
+  assert.equal((await runtime.dispatchFetch('https://dev-public.example.org/renamed-page/')).headers.get('x-njpbs-content-source'), 'r2-last-good');
   assert.equal((await runtime.dispatchFetch('https://dev-public.example.org/earlier-page/')).headers.get('x-njpbs-content-source'), 'assets');
   await service.fetch('https://fixture.invalid/race');
   const rerendered = await runtime.dispatchFetch('https://dev-public.example.org/contact/');
@@ -182,7 +184,8 @@ try {
   assert.equal((await runtime.dispatchFetch('https://dev-public.example.org/schedule/')).headers.get('x-njpbs-content-source'), 'assets');
   assert.equal((await runtime.dispatchFetch('https://dev-public.example.org/live/')).headers.get('x-njpbs-content-source'), 'assets');
   await service.fetch('https://fixture.invalid/context-race');
-  assert.equal(await (await runtime.dispatchFetch('https://dev-public.example.org/contact/')).text(), 'Static unowned Page fixture');
+  // A Page served before the race replays its retained last-good copy.
+  assert.equal((await runtime.dispatchFetch('https://dev-public.example.org/contact/')).headers.get('x-njpbs-content-source'), 'r2-last-good');
   const removed = replies.at(-1)!;
   const withdrawalKey = pageWithdrawalManifestKey('template-dev-public');
   const withdrawalBucket = await runtime.getR2Bucket('DURABLE_POST_WITHDRAWALS');

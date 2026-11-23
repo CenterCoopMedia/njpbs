@@ -78,7 +78,6 @@
         "tests/scripts/dev-access-guards.test.mjs",
         "tests/staff-site-worker.test.ts",
         "tests/transitional-post-read-worker.test.ts",
-        "workers/wrangler.public.dev.jsonc",
         "workers/wrangler.staff-sites.dev.jsonc"
       ]
     },
@@ -181,7 +180,6 @@
       "files": [
         "scripts/lib/cms-public-contract.mjs",
         "cms-api/wrangler.dev.jsonc",
-        "workers/src/dev-public-worker-configuration.d.ts",
         "functions/lib/public-worker-candidate.js",
         "scripts/assert-dev-cms-targets.mjs",
         "scripts/configure-public-release-ingress.mjs",
@@ -201,7 +199,6 @@
         "tests/preflight/dev-staff-gateway-deploy.test.js",
         "tests/scripts/dev-access-guards.test.mjs",
         "tests/staff-site-worker.test.ts",
-        "workers/wrangler.public.dev.jsonc",
         "workers/wrangler.routing-measurement.dev.jsonc",
         "workers/wrangler.staff-preview.dev.jsonc",
         "workers/wrangler.staff-sites.dev.jsonc",

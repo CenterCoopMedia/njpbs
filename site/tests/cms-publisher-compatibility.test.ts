@@ -374,7 +374,6 @@ describe("CMS deploy one commit past the live renderer", () => {
     "public-release-slot-worker.ts",
     "shadow-post-entry.ts",
     "staff-site-worker.ts",
-    "dev-public-worker.ts",
     "wiki/web/public.md",
     ".github/scripts/metered-api-scan.mjs",
     "site/tests/public-chrome.test.ts",
