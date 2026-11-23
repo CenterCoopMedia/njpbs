@@ -903,7 +903,7 @@ function createCmsPublishSettingsHandler(deps = {}) {
           state: "published",
           sourceVersion: published.sourceVersion,
           usage,
-          ...(prepared?.releaseSelector ? { releaseSelector: prepared.releaseSelector } : {}),
+          ...(prepared && "releaseSelector" in prepared && prepared.releaseSelector ? { releaseSelector: prepared.releaseSelector } : {}),
         });
         const writeReleaseChange = !publicSetting && !unchanged
           ? await preparePublicReleaseProducerInTransaction({ firestore, transaction, revisionDelta: 0,
