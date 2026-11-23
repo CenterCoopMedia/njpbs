@@ -125,7 +125,8 @@ it("validates an explicit pin during preflight without starting the runtime", as
 
 const serving = (deployment: string | undefined) => ({ CMS_DEPLOYMENT_ENVIRONMENT: deployment, CLOUDFLARE_PUBLIC_WORKER_TAG: "d".repeat(32),
   CMS_PUBLICATION_ACTIVATION_TOKEN: "fixture".repeat(4), CMS_PUBLICATION_FIREBASE_ACCOUNT: "fixture-account",
-  CMS_PUBLICATION_MEDIA_MANAGER_CREDENTIAL: "fixture-key\nfixture-secret" });
+  CMS_PUBLICATION_MEDIA_MANAGER_CREDENTIAL: "fixture-key\nfixture-secret",
+  ...(deployment === "development" ? { CMS_DEV_ACCESS_CLIENT_ID: "fixture-access-id", CMS_DEV_ACCESS_CLIENT_SECRET: "fixture-access-secret" } : {}) });
 
 it.each(["production", "development"])("selects one %s target for Firebase, storage and the runtime", async deployment => {
   const target = createRequire(import.meta.url)("../../functions/lib/publication-target.js").publicationTarget(deployment);
@@ -156,5 +157,29 @@ it("refuses production Spotlight media storage in a development container", asyn
   const failure = await runCmsPublicationCloud("--serve", environment).catch(error => error);
   expect(failure).toMatchObject({ stage: "target", message: "Development cloud publication refuses Spotlight media storage" });
   expect(environment).not.toHaveProperty("CMS_PUBLICATION_MEDIA_R2_CREDENTIAL");
+  expect(boundary.initializeApp).toHaveBeenCalledTimes(initialized);
+});
+
+it.each(["production", "development"])("gives %s background builds its own deployment environment", async deployment => {
+  vi.mocked(parseCmsPublicationPublicBuildEnvironment).mockReturnValueOnce({ PUBLIC_REPORT_ENDPOINT: "https://report.example.test" });
+  const environment = serving(deployment);
+  await runCmsPublicationCloud("--serve", environment);
+  const input = boundary.start.mock.calls.at(-1)?.[0];
+  expect(input.buildEnvironment).toEqual({ PUBLIC_REPORT_ENDPOINT: "https://report.example.test", CMS_DEPLOYMENT_ENVIRONMENT: deployment });
+  expect(input.publicationAccess).toEqual(deployment === "development"
+    ? { clientId: "fixture-access-id", clientSecret: "fixture-access-secret" } : undefined);
+  expect(environment).not.toHaveProperty("CMS_DEV_ACCESS_CLIENT_ID");
+  expect(environment).not.toHaveProperty("CMS_DEV_ACCESS_CLIENT_SECRET");
+});
+
+it.each([
+  ["development without Access credentials", { ...serving("development"), CMS_DEV_ACCESS_CLIENT_SECRET: undefined }],
+  ["development with a blank Access identifier", { ...serving("development"), CMS_DEV_ACCESS_CLIENT_ID: " " }],
+  ["production with Access credentials", { ...serving("production"), CMS_DEV_ACCESS_CLIENT_ID: "fixture-access-id" }],
+])("refuses %s before Firebase", async (_label, environment) => {
+  const initialized = boundary.initializeApp.mock.calls.length;
+  const failure = await runCmsPublicationCloud("--serve", environment).catch(error => error);
+  expect(failure).toMatchObject({ stage: "target", message: "Cloud publication Access credentials do not match its target" });
+  expect(environment).not.toHaveProperty("CMS_DEV_ACCESS_CLIENT_ID");
   expect(boundary.initializeApp).toHaveBeenCalledTimes(initialized);
 });

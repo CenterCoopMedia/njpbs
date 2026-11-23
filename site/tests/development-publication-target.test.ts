@@ -13,6 +13,8 @@ import {
 import { publicWorkerWranglerConfig } from "../scripts/upload-public-worker-candidate";
 import { requestPublicPublicationReceipt, runPublicWorkerActivationOperator } from "../scripts/activate-public-worker-candidate";
 import { reconcilePublicWorkerDeployment } from "../scripts/reconcile-public-worker-deployment";
+import { publicPostRendererRelease, publicWorkerCandidateRendererContract, publicWorkerCandidateRendererSeal }
+  from "../scripts/public-post-renderer-release";
 
 const { publicationTarget } = createRequire(import.meta.url)("../../functions/lib/publication-target.js");
 const development = publicationTarget("development");
@@ -44,7 +46,6 @@ const deployments = { success: true, result: { deployments: [{ id: DEPLOYMENT_ID
   created_on: "2026-08-27T20:01:00.000Z" }] } };
 const workers = { success: true, result: [{ id: production.workerName, tag: "e".repeat(32) }, { id: development.workerName, tag: TAG }] };
 const noTriggers = { success: true, result: [] };
-const api = (suffix: string) => `https://api.cloudflare.com/client/v4/accounts/${ACCOUNT}${suffix}`;
 
 afterEach(() => { vi.doUnmock("wrangler"); vi.resetModules(); vi.unstubAllGlobals(); });
 
@@ -122,28 +123,97 @@ describe("development Worker configuration", () => {
 });
 
 describe("development activation and reconciliation", () => {
-  it("activates and probes only the development Worker", async () => {
-    const requestJson = vi.fn()
-      .mockResolvedValueOnce(workers).mockResolvedValueOnce(noTriggers).mockResolvedValueOnce(noTriggers)
-      .mockResolvedValueOnce({ success: true, result: { enabled: false, previews_enabled: false } })
-      .mockResolvedValueOnce({ success: true, result: {} }).mockResolvedValueOnce(deployments).mockResolvedValueOnce(noTriggers);
-    const requestPublication = vi.fn(async () => receipt);
-    const acquireLeaseFn = vi.fn<(input: object) => Promise<object>>(async () => ({ outcome: "acquired", idempotent: false, lease, candidate }));
+  const ZONE = "c".repeat(32);
+  const access = { clientId: "fixture-access-id", clientSecret: "fixture-access-secret" };
+  const postCandidate = { ...candidate, noBuildPost: { schemaVersion: 2, families: ["posts"], rendererSha: candidate.commitSha,
+    enabled: true, authoritative: true } };
+  // No owners: Post readback validates its Access headers, then has nothing else to read.
+  const firestore = { projectId: development.projectId, collection: () => ({ get: async () => ({ docs: [] }) }),
+    doc: () => ({ get: async () => ({ exists: false, data: () => undefined }) }) };
+  const log: string[] = [];
+  function cloudflare({ routes = () => [] as unknown[], domains = () => [] as unknown[] } = {}) {
+    return vi.fn(async ({ url, method }: { url: string; method: string }) => {
+      const pathname = url.slice("https://api.cloudflare.com/client/v4".length);
+      log.push(`${method} ${pathname}`);
+      if (pathname === `/accounts/${ACCOUNT}/workers/scripts`) return workers;
+      if (pathname.endsWith("/triggers")) return noTriggers;
+      if (pathname === `/zones?name=njpbs.org&account.id=${ACCOUNT}`) {
+        return { success: true, result: [{ id: ZONE, name: "njpbs.org", account: { id: ACCOUNT } }] };
+      }
+      if (pathname === `/zones/${ZONE}/workers/routes`) return { success: true, result: routes() };
+      if (pathname.endsWith("/subdomain")) return { success: true, result: { enabled: false, previews_enabled: false } };
+      if (pathname === `/accounts/${ACCOUNT}/workers/domains?service=${development.workerName}`) return { success: true, result: domains() };
+      if (pathname.endsWith("/deployments")) return method === "POST" ? { success: true, result: {} } : deployments;
+      throw new Error(`Unexpected Cloudflare request ${pathname}`);
+    });
+  }
+  const operatorInput = (requestJson: ReturnType<typeof cloudflare>, overrides: Record<string, unknown> = {}) => {
+    const acquireLeaseFn = vi.fn<(input: object) => Promise<object>>(async () => {
+      log.push("lease");
+      return { outcome: "acquired", idempotent: false, lease, candidate: postCandidate };
+    });
     const settleOutcomeFn = vi.fn<(input: object) => Promise<object>>(async () => ({ outcome: "reconciling", idempotent: false }));
-    const firestore = { projectId: development.projectId };
-    await runPublicWorkerActivationOperator({ firestore: firestore as never, cloudflareApiToken: TOKEN, preparedArtifact: prepared,
-      target: development, requestJson, requestPublication, acquireLeaseFn: acquireLeaseFn as never, settleOutcomeFn: settleOutcomeFn as never });
-    expect(requestJson.mock.calls.map(([request]) => request.url)).toEqual([
-      api("/workers/scripts"), api(`/builds/workers/${TAG}/triggers`), api(`/builds/workers/${TAG}/triggers`),
-      api(`/workers/scripts/${development.workerName}/subdomain`), api(`/workers/scripts/${development.workerName}/deployments`),
-      api(`/workers/scripts/${development.workerName}/deployments`), api(`/builds/workers/${TAG}/triggers`),
-    ]);
-    expect(requestPublication).toHaveBeenCalledWith(
-      `${development.origin}/_publication.json?candidate=${prepared.buildBatchId}&version=${VERSION_ID}`);
-    expect(acquireLeaseFn.mock.calls[0][0]).toMatchObject({ target: development });
-    expect(settleOutcomeFn.mock.calls[0][0]).toMatchObject({ target: development,
+    const requestPublication = vi.fn<(url: string, access?: object) => Promise<string>>(async () => receipt);
+    return { acquireLeaseFn, settleOutcomeFn, requestPublication, input: { firestore: firestore as never, cloudflareApiToken: TOKEN,
+      preparedArtifact: prepared, target: development, publicationAccess: access, requestJson, requestPublication,
+      acquireLeaseFn: acquireLeaseFn as never, settleOutcomeFn: settleOutcomeFn as never, ...overrides } };
+  };
+  afterEach(() => { log.length = 0; });
+
+  it("checks the private origin, activates only the development Worker and reads back through Access", async () => {
+    const requestJson = cloudflare();
+    const fixture = operatorInput(requestJson);
+    await runPublicWorkerActivationOperator(fixture.input);
+    const privateCheck = [`GET /zones?name=njpbs.org&account.id=${ACCOUNT}`, `GET /zones/${ZONE}/workers/routes`,
+      `GET /accounts/${ACCOUNT}/workers/scripts/${development.workerName}/subdomain`,
+      `GET /accounts/${ACCOUNT}/workers/domains?service=${development.workerName}`];
+    expect(log).toEqual([`GET /accounts/${ACCOUNT}/workers/scripts`, `GET /accounts/${ACCOUNT}/builds/workers/${TAG}/triggers`, ...privateCheck, "lease",
+      `GET /accounts/${ACCOUNT}/builds/workers/${TAG}/triggers`, `POST /accounts/${ACCOUNT}/workers/scripts/${development.workerName}/subdomain`, ...privateCheck,
+      `POST /accounts/${ACCOUNT}/workers/scripts/${development.workerName}/deployments`,
+      `GET /accounts/${ACCOUNT}/workers/scripts/${development.workerName}/deployments`, `GET /accounts/${ACCOUNT}/builds/workers/${TAG}/triggers`, ...privateCheck]);
+    expect(fixture.requestPublication).toHaveBeenCalledWith(
+      `${development.origin}/_publication.json?candidate=${prepared.buildBatchId}&version=${VERSION_ID}`, access);
+    expect(fixture.acquireLeaseFn.mock.calls[0][0]).toMatchObject({ target: development });
+    // "activate" requires the Post readback to accept the development Access headers.
+    expect(fixture.settleOutcomeFn.mock.calls[0][0]).toMatchObject({ target: development,
       evidence: { action: "activate", deploymentId: DEPLOYMENT_ID, versionId: VERSION_ID } });
-    expect(JSON.stringify([requestJson.mock.calls, requestPublication.mock.calls])).not.toMatch(PRODUCTION);
+    expect(JSON.stringify([requestJson.mock.calls, fixture.requestPublication.mock.calls])).not.toMatch(PRODUCTION);
+  });
+
+  it.each([
+    ["a zone route", { routes: () => [{ id: "route", pattern: "dev.njpbs.org/*", script: development.workerName }] }],
+    ["a custom domain", { domains: () => [{ id: "domain", hostname: "dev.njpbs.org", service: development.workerName }] }],
+  ])("refuses a development Worker with %s before the lease or any deployment", async (_label, binding) => {
+    const fixture = operatorInput(cloudflare(binding));
+    await expect(runPublicWorkerActivationOperator(fixture.input)).rejects.toThrow("must have no public route, custom domain");
+    expect(fixture.acquireLeaseFn).not.toHaveBeenCalled();
+    expect(log.some(entry => entry.startsWith("POST"))).toBe(false);
+  });
+
+  it("reconciles instead of deploying when a custom domain appears after the lease", async () => {
+    let reads = 0;
+    const fixture = operatorInput(cloudflare({ domains: () => ++reads > 1 ? [{ id: "domain", service: development.workerName }] : [] }));
+    await runPublicWorkerActivationOperator(fixture.input);
+    expect(log).not.toContain(`POST /accounts/${ACCOUNT}/workers/scripts/${development.workerName}/deployments`);
+    expect(fixture.settleOutcomeFn.mock.calls[0][0]).toMatchObject({ evidence: { action: "reconcile" } });
+  });
+
+  it("requires development Access credentials and refuses them for production before any request", async () => {
+    for (const overrides of [{ publicationAccess: undefined }, { publicationAccess: { clientId: " ", clientSecret: "x" } },
+      { target: production }]) {
+      const fixture = operatorInput(cloudflare(), overrides);
+      await expect(runPublicWorkerActivationOperator(fixture.input)).rejects.toThrow(/Access credentials/);
+      expect(log).toEqual([]);
+    }
+  });
+
+  it("sends the Access credentials with a development receipt request", async () => {
+    const fetchMock = vi.fn<(url: string, init?: RequestInit) => Promise<Response>>(async () => new Response(receipt, {
+      headers: { "content-type": "application/json", "x-njpbs-publication-origin": development.workerName } }));
+    vi.stubGlobal("fetch", fetchMock);
+    await requestPublicPublicationReceipt(`${development.origin}/_publication.json`, access);
+    expect(fetchMock.mock.calls[0][1]?.headers).toEqual({ Accept: "application/json", "Cache-Control": "no-cache",
+      "CF-Access-Client-Id": access.clientId, "CF-Access-Client-Secret": access.clientSecret });
   });
 
   it("accepts a development receipt only from the development Worker", async () => {
@@ -163,30 +233,44 @@ describe("development activation and reconciliation", () => {
     ]) {
       const requestJson = vi.fn();
       for (const response of responses) requestJson.mockResolvedValueOnce(response);
-      const acquireLeaseFn = vi.fn();
-      await expect(runPublicWorkerActivationOperator({ firestore: {} as never, cloudflareApiToken: TOKEN, preparedArtifact: prepared,
-        target: development, requestJson, requestPublication: vi.fn(), acquireLeaseFn, settleOutcomeFn: vi.fn() }))
+      const fixture = operatorInput(requestJson as never);
+      await expect(runPublicWorkerActivationOperator(fixture.input))
         .rejects.toThrow(/Worker identity is invalid|development Worker has a build trigger/);
-      expect(acquireLeaseFn).not.toHaveBeenCalled();
+      expect(fixture.acquireLeaseFn).not.toHaveBeenCalled();
     }
   });
 
-  it("reconciles only the development Worker and development lease", async () => {
-    const requestJson = vi.fn().mockResolvedValueOnce(workers).mockResolvedValueOnce(noTriggers)
-      .mockResolvedValueOnce(deployments).mockResolvedValueOnce(noTriggers);
-    const requestPublication = vi.fn(async () => receipt);
-    const readState = vi.fn(async () => ({ lease, candidate }));
+  it.each([
+    ["a private Worker", {}, "activate"],
+    ["a Worker with a zone route", { routes: () => [{ id: "route", script: development.workerName }] }, "reconcile"],
+  ])("reconciles %s only through the development Worker and Access readback", async (_label, binding, action) => {
+    const requestJson = cloudflare(binding);
+    const requestPublication = vi.fn<(url: string, access?: object) => Promise<string>>(async () => receipt);
+    const readState = vi.fn(async () => ({ lease, candidate: postCandidate }));
     const settleOutcome = vi.fn<(input: object) => Promise<object>>(async () => ({ outcome: "reconciling", idempotent: false }));
-    const firestore = { projectId: development.projectId };
     await reconcilePublicWorkerDeployment({ firestore: firestore as never, cloudflareApiToken: TOKEN, target: development,
-      readState: readState as never, requestJson, requestPublication, settleOutcome: settleOutcome as never });
+      publicationAccess: access, readState: readState as never, requestJson, requestPublication, settleOutcome: settleOutcome as never });
     expect(readState).toHaveBeenCalledWith(firestore, undefined, development);
-    expect(requestJson.mock.calls.map(([request]) => request.url)).toEqual([api("/workers/scripts"),
-      api(`/builds/workers/${TAG}/triggers`), api(`/workers/scripts/${development.workerName}/deployments`),
-      api(`/builds/workers/${TAG}/triggers`)]);
-    expect(requestPublication).toHaveBeenCalledWith(
-      `${development.origin}/_publication.json?candidate=${prepared.buildBatchId}&version=${VERSION_ID}`);
-    expect(settleOutcome.mock.calls[0][0]).toMatchObject({ target: development, evidence: { action: "activate", versionId: VERSION_ID } });
+    expect(log.filter(entry => entry.includes("/deployments"))).toEqual(action === "activate"
+      ? [`GET /accounts/${ACCOUNT}/workers/scripts/${development.workerName}/deployments`] : []);
+    if (action === "activate") expect(requestPublication).toHaveBeenCalledWith(
+      `${development.origin}/_publication.json?candidate=${prepared.buildBatchId}&version=${VERSION_ID}`, access);
+    expect(settleOutcome.mock.calls[0][0]).toMatchObject({ target: development, evidence: { action } });
     expect(JSON.stringify([requestJson.mock.calls, requestPublication.mock.calls])).not.toMatch(PRODUCTION);
+  });
+});
+
+describe("renderer seal", () => {
+  const sha = "a".repeat(40);
+  it("accepts a development seal only for development and keeps production exact", () => {
+    const seal = publicPostRendererRelease(sha, "production", {});
+    const devSeal = publicPostRendererRelease(sha, "development", {});
+    expect(devSeal).toMatchObject({ environment: "development" });
+    expect(publicWorkerCandidateRendererContract(publicWorkerCandidateRendererSeal(devSeal, "development"), sha))
+      .toEqual(publicWorkerCandidateRendererContract(seal, sha));
+    expect(publicWorkerCandidateRendererSeal(seal)).toBe(seal);
+    expect(() => publicWorkerCandidateRendererContract(publicWorkerCandidateRendererSeal(devSeal), sha)).toThrow("production artifact");
+    expect(() => publicWorkerCandidateRendererSeal(seal, "development")).toThrow("development artifact");
+    expect(() => publicWorkerCandidateRendererSeal({ ...seal, environment: "production" }, "development")).toThrow("development artifact");
   });
 });

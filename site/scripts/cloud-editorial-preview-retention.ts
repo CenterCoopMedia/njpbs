@@ -6,7 +6,8 @@ import type { Firestore } from "firebase-admin/firestore";
 import type { App } from "firebase-admin/app";
 import type { S3Client } from "@aws-sdk/client-s3";
 import { canonicalPublicationReceipt } from "../src/lib/public-publication-receipt";
-import { PUBLICATION_PROBE_ORIGIN, PUBLICATION_PROBE_PATH, requestPublicPublicationReceipt } from "./activate-public-worker-candidate";
+import { PUBLICATION_PROBE_ORIGIN, PUBLICATION_PROBE_PATH, publicationReadAccess, requestPublicPublicationReceipt,
+  type PublicationAccess } from "./activate-public-worker-candidate";
 import { editorialPreviewContextId, readEditorialPreviewSelection } from "./cms-preview-editorial-context";
 import { retainCloudEditorialPreviewContext } from "./cms-preview-cloud-storage";
 import { createNoBuildPreparationStorage } from "./no-build-preparation-storage";
@@ -26,9 +27,10 @@ const ready = (value: unknown, release: string, serializerId: string) => {
 
 /** Private retention is separate from public aggregate completion. */
 export function cloudEditorialPreviewRetention({ firestore, firebaseApp, runtime, serializerId, backgroundBucket,
-  stateDirectory, previewStorageCredential, client, requestPublication = requestPublicPublicationReceipt, clock = Date.now, target }: {
+  stateDirectory, previewStorageCredential, client, requestPublication = requestPublicPublicationReceipt, clock = Date.now, target, publicationAccess }: {
   firestore: Firestore; firebaseApp: App; runtime: { owner: "cloudflare"; release: string }; serializerId: string;
   backgroundBucket: string; stateDirectory: string; previewStorageCredential: PreviewStorageCredential; target?: PublicationTarget;
+  publicationAccess?: PublicationAccess;
   client?: S3Client; requestPublication?: typeof requestPublicPublicationReceipt; clock?: () => number;
 }) {
   return async () => {
@@ -74,7 +76,8 @@ export function cloudEditorialPreviewRetention({ firestore, firebaseApp, runtime
       await assertCmsPublicationSourceCheckout(runtime.release);
       stage = "receipt";
       const url = new URL(`${PUBLICATION_PROBE_PATH}?cms-context=code`, target?.origin ?? PUBLICATION_PROBE_ORIGIN).toString();
-      const publication = canonicalPublicationReceipt(JSON.parse(await requestPublication(url)));
+      const access = target ? publicationReadAccess(target, publicationAccess) : undefined;
+      const publication = canonicalPublicationReceipt(JSON.parse(await (access ? requestPublication(url, access) : requestPublication(url))));
       stage = "selector";
       const selection = await firestore.runTransaction(async transaction => {
         const current = await readEditorialPreviewSelection(transaction, firestore, publication, selected.operationId);

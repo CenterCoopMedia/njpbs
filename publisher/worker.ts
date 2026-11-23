@@ -5,7 +5,7 @@ import { publishWithdrawalCatalog } from "./withdrawal-catalog";
 import { publishPageWithdrawalCatalog } from "./page-withdrawal-catalog";
 import { publishRecordWithdrawalCatalog } from "./record-withdrawal-catalog";
 
-type PublicationEnvironment = Env & { R2_MEDIA_CREDENTIAL?: string };
+type PublicationEnvironment = Env & { R2_MEDIA_CREDENTIAL?: string; CMS_DEV_ACCESS_CLIENT_ID?: string; CMS_DEV_ACCESS_CLIENT_SECRET?: string };
 
 export class PublicationRuntime extends Container<PublicationEnvironment> {
   defaultPort = 8080;
@@ -22,6 +22,9 @@ export class PublicationRuntime extends Container<PublicationEnvironment> {
     CMS_PUBLICATION_ACTIVATION_TOKEN: this.env.ACTIVATION_TOKEN,
     CMS_PUBLICATION_MEDIA_MANAGER_CREDENTIAL: this.env.MEDIA_MANAGER_CREDENTIAL,
     ...(this.env.R2_MEDIA_CREDENTIAL ? { CMS_PUBLICATION_MEDIA_R2_CREDENTIAL: this.env.R2_MEDIA_CREDENTIAL } : {}),
+    // Optional dev-only secrets for the Access-protected dev origin; the container refuses them for production.
+    ...(this.env.CMS_DEV_ACCESS_CLIENT_ID ? { CMS_DEV_ACCESS_CLIENT_ID: this.env.CMS_DEV_ACCESS_CLIENT_ID } : {}),
+    ...(this.env.CMS_DEV_ACCESS_CLIENT_SECRET ? { CMS_DEV_ACCESS_CLIENT_SECRET: this.env.CMS_DEV_ACCESS_CLIENT_SECRET } : {}),
     CMS_MEDIA_R2_ENDPOINT: this.env.CMS_MEDIA_R2_ENDPOINT,
     CMS_MEDIA_R2_BUCKET: this.env.CMS_MEDIA_R2_BUCKET,
     PUBLIC_GA4_MEASUREMENT_ID: this.env.PUBLIC_GA4_MEASUREMENT_ID,

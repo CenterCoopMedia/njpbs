@@ -15,13 +15,17 @@ import {
 } from "../src/lib/public-worker-artifact";
 import {
   activeDeployment,
+  assertDevelopmentWorkerPrivate,
   assertPublicWorkerIdentity,
   assertPublicWorkerTriggers,
   assertUploadOnlyProductionTrigger,
   PUBLICATION_PROBE_ORIGIN,
   PUBLICATION_PROBE_PATH,
   PUBLIC_WORKER_NAME,
+  publicationReadAccess,
+  publicationReadHeaders,
   publicWorkerTarget,
+  type PublicationAccess,
   requestCloudflareJson,
   requestPublicPublicationReceipt,
   workerApiPath,
@@ -32,7 +36,8 @@ const requireModule = createRequire(import.meta.url);
 const { ownsPublication, assertPublicationOwner, assertRuntimeSource } = requireModule("../../functions/lib/publication-runtime-owner.js");
 type PublicationRuntime = { owner: "node-compute" | "cloudflare"; release: string };
 const { verifyNoBuildPostPublicRoute } = requireModule("../../functions/lib/no-build-post-recovery.js") as {
-  verifyNoBuildPostPublicRoute(input: { firestore: Firestore; candidate: PublicWorkerCandidate; target?: PublicationTarget }): Promise<void> };
+  verifyNoBuildPostPublicRoute(input: { firestore: Firestore; candidate: PublicWorkerCandidate; target?: PublicationTarget;
+    headers?: Record<string, string> }): Promise<void> };
 const deploymentModule = requireModule(
   "../../functions/lib/public-deployment.js",
 ) as {
@@ -194,7 +199,7 @@ interface CloudflareRequest {
 }
 
 type RequestJson = (request: CloudflareRequest) => Promise<unknown>;
-type RequestPublication = (url: string) => Promise<string>;
+type RequestPublication = (url: string, access?: PublicationAccess) => Promise<string>;
 type ReadState = (firestore: Firestore, runtime?: PublicationRuntime, target?: PublicationTarget) => Promise<ReconciliationState | null>;
 type SettleOutcome = (input: {
   runtime?: PublicationRuntime;
@@ -341,6 +346,7 @@ async function collectActivationEvidence({
   requestJson,
   requestPublication,
   target,
+  access,
 }: {
   state: ReconciliationState;
   firestore: Firestore;
@@ -348,6 +354,7 @@ async function collectActivationEvidence({
   requestJson: RequestJson;
   requestPublication: RequestPublication;
   target?: PublicationTarget;
+  access?: PublicationAccess;
 }): Promise<ActivationEvidence> {
   cloudflarePublicWorkerTag();
   const selected = publicWorkerTarget(target);
@@ -364,6 +371,7 @@ async function collectActivationEvidence({
       token: cloudflareApiToken,
     });
     assertPublicWorkerTriggers(triggerResponse, workerTag, selected);
+    await assertDevelopmentWorkerPrivate(selected, requestJson, cloudflareApiToken);
     const deploymentsResponse = await requestJson({
       url: workerApiPath(`/workers/scripts/${selected.workerName}/deployments`),
       method: "GET",
@@ -382,17 +390,19 @@ async function collectActivationEvidence({
     const probe = new URL(PUBLICATION_PROBE_PATH, selected.origin);
     probe.searchParams.set("candidate", prepared.buildBatchId);
     probe.searchParams.set("version", state.candidate.workerVersionId);
-    const body = await requestPublication(probe.toString());
+    const body = await (access ? requestPublication(probe.toString(), access) : requestPublication(probe.toString()));
     if (!publicPublicationReceiptMatchesPreparedArtifact(body, prepared)) {
       return { action: "reconcile" };
     }
-    await verifyNoBuildPostPublicRoute({ firestore, candidate: state.candidate, ...(target ? { target: selected } : {}) });
+    await verifyNoBuildPostPublicRoute({ firestore, candidate: state.candidate,
+      ...(target ? { target: selected, headers: publicationReadHeaders(access) } : {}) });
     const finalTriggerResponse = await requestJson({
       url: workerApiPath(`/builds/workers/${workerTag}/triggers`),
       method: "GET",
       token: cloudflareApiToken,
     });
     assertPublicWorkerTriggers(finalTriggerResponse, workerTag, selected);
+    await assertDevelopmentWorkerPrivate(selected, requestJson, cloudflareApiToken);
     return evidence;
   } catch {
     return { action: "reconcile" };
@@ -449,11 +459,13 @@ export async function reconcilePublicWorkerDeployment({
   requestPublication = requestPublicPublicationReceipt,
   settleOutcome = settlePublicDeploymentOutcome,
   target,
+  publicationAccess,
 }: {
   firestore: Firestore;
   cloudflareApiToken: string;
   runtime?: PublicationRuntime;
   target?: PublicationTarget;
+  publicationAccess?: PublicationAccess;
   readState?: ReadState;
   requestJson?: RequestJson;
   requestPublication?: RequestPublication;
@@ -470,6 +482,7 @@ export async function reconcilePublicWorkerDeployment({
     reconciliationError("The public deployment reconciler input is invalid");
   }
   const selected = target === undefined ? undefined : publicWorkerTarget(target);
+  const access = selected ? publicationReadAccess(selected, publicationAccess) : undefined;
   const state = await (selected ? readState(firestore, runtime, selected) : readState(firestore, runtime));
   if (state === null) return { outcome: "idle", idempotent: true };
   assertPublicationOwner(state.lease, runtime ?? { owner: "node-compute", release: state.lease.commitSha });
@@ -482,6 +495,7 @@ export async function reconcilePublicWorkerDeployment({
     requestJson,
     requestPublication,
     target: selected,
+    access,
   });
   return settleWithFallback({
     firestore,

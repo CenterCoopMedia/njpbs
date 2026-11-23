@@ -19,7 +19,7 @@ import {
 import { findExactRecentWorkerVersion } from
   "../src/lib/public-worker-version-recovery";
 import { assertCmsPublicationSourceCheckout } from "./cms-publication-runtime-guard";
-import { publicWorkerCandidateRendererContract } from "./public-post-renderer-release.ts";
+import { publicWorkerCandidateRendererContract, publicWorkerCandidateRendererSeal } from "./public-post-renderer-release.ts";
 import { writeDevelopmentPublicWorkerConfig } from "./development-public-worker-config.ts";
 import type { PublicationTarget } from "../../functions/lib/publication-target";
 const requireModule = createRequire(import.meta.url);
@@ -440,7 +440,7 @@ export async function uploadPublicWorkerCandidate({
     throw new Error("The detached upload does not match its preparation");
   }
   const rendererRelease = await readJson(path.join(distDirectory, "posts/_no-build-assets/renderer-release.json"), "The public Post renderer release");
-  const { variables, pageReaderVersion } = publicWorkerCandidateRendererContract(rendererRelease, prepared.commitSha);
+  const { variables, pageReaderVersion } = publicWorkerCandidateRendererContract(publicWorkerCandidateRendererSeal(rendererRelease, selected?.environment), prepared.commitSha);
 
   let batch: { noBuildStaticInput?: unknown; runtime?: PublicationRuntime };
   if (preparationId !== undefined) {

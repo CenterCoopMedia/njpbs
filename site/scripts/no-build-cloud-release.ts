@@ -14,6 +14,7 @@ import { PublicWorkerActivationOperatorError, runPublicWorkerActivationOperator 
 import { assertCmsPublicationSourceCheckout } from "./cms-publication-runtime-guard";
 import { assertPreparedPublicWorkerArtifact, verifyPreparedPublicWorkerArtifact } from "../src/lib/public-worker-artifact";
 import type { PublicationTarget } from "../../functions/lib/publication-target";
+import type { PublicationAccess } from "./activate-public-worker-candidate";
 
 const require = createRequire(import.meta.url);
 const { assertPublicationOwner } = require("../../functions/lib/publication-runtime-owner");
@@ -161,9 +162,9 @@ async function materializePreparedRelease(firestore: Firestore, preparationId: s
 /** One request per pass. The cloud journal retains its original job until a
  * terminal batch; an ambiguous activation remains with the shared lease owner. */
 export async function runNoBuildCloudRelease({ firestore, storage, serializerId, commitSha, stateDirectory, cloudflareApiToken,
-  previewStorageCredential, sourceGit, activationIO, target }: {
+  previewStorageCredential, sourceGit, activationIO, target, publicationAccess }: {
   firestore: Firestore; storage: Storage; serializerId: string; commitSha: string; stateDirectory: string; cloudflareApiToken: string;
-  previewStorageCredential: PreviewStorageCredential; target?: PublicationTarget;
+  previewStorageCredential: PreviewStorageCredential; target?: PublicationTarget; publicationAccess?: PublicationAccess;
   sourceGit?: Parameters<typeof assertCmsPublicationSourceCheckout>[1];
   activationIO?: Pick<Parameters<typeof runPublicWorkerActivationOperator>[0], "requestJson" | "requestPublication">;
 }) {
@@ -279,7 +280,7 @@ export async function runNoBuildCloudRelease({ firestore, storage, serializerId,
     stage = "activation";
     const result = await runPublicWorkerActivationOperator({ firestore: firestore as never, runtime, cloudflareApiToken,
       preparedArtifact: prepared, requestJson: activationIO?.requestJson, requestPublication: activationIO?.requestPublication,
-      ...(target ? { target } : {}) });
+      ...(target ? { target } : {}), ...(publicationAccess ? { publicationAccess } : {}) });
     if (["deployed", "failed", "superseded"].includes(result.outcome)) {
       const failureReason = result.outcome === "failed" ? cloudReleaseFailureReason(stage) : null;
       if (failureReason) console.error(failureReason);

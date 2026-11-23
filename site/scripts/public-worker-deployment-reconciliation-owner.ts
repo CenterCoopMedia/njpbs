@@ -9,6 +9,7 @@ import {
   reconcilePublicWorkerDeployment,
 } from "./reconcile-public-worker-deployment";
 import type { PublicationTarget } from "../../functions/lib/publication-target";
+import type { PublicationAccess } from "./activate-public-worker-candidate";
 
 const requireModule = createRequire(import.meta.url);
 const { ownsPublication, publicationRuntime } = requireModule("../../functions/lib/publication-runtime-owner.js");
@@ -76,6 +77,7 @@ interface ReconciliationOwnerDependencies {
     cloudflareApiToken: string;
     runtime?: { owner: "node-compute" | "cloudflare"; release: string };
     target?: PublicationTarget;
+    publicationAccess?: PublicationAccess;
   }): Promise<ReconciliationResult>;
   scheduleRetry(callback: () => void, delayMs: number): unknown;
   cancelRetry(handle: unknown): void;
@@ -159,12 +161,14 @@ export function startPublicWorkerDeploymentReconciliationOwner({
   cloudflareApiToken,
   runtime,
   target,
+  publicationAccess,
   dependencies: dependencyOverrides,
 }: {
   firestore: Firestore;
   cloudflareApiToken: string;
   runtime?: { owner: "node-compute" | "cloudflare"; release: string };
   target?: PublicationTarget;
+  publicationAccess?: PublicationAccess;
   dependencies?: Partial<ReconciliationOwnerDependencies>;
 }): PublicDeploymentReconciliationOwner {
   if (
@@ -283,6 +287,7 @@ export function startPublicWorkerDeploymentReconciliationOwner({
         cloudflareApiToken,
         ...(runtime ? { runtime } : {}),
         ...(target ? { target } : {}),
+        ...(publicationAccess ? { publicationAccess } : {}),
       });
       assertReconciliationResult(result);
       if (
