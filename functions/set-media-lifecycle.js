@@ -146,12 +146,8 @@ function assertStoredAsset(stored, assetId, principal, baseVersion) {
     );
   }
   if (stored.lifecycle !== "active" && stored.lifecycle !== "tombstoned") {
-    throw new MediaLifecycleRejection(
-      409,
-      ["purging", "purged"].includes(stored.lifecycle)
-        ? "This image is being removed or has already been removed."
-        : "This media asset has an invalid lifecycle state.",
-    );
+    assertMediaNotRemoved(stored.kind, stored.lifecycle);
+    throw new MediaLifecycleRejection(409, "This media asset has an invalid lifecycle state.");
   }
 }
 
@@ -426,7 +422,7 @@ function createCmsSetMediaLifecycleHandler(deps = {}) {
       }
       const stored = assetSnapshot.data();
       assertStoredAsset(stored, assetId, user.principal, baseVersion);
-      if (restoreOnly || stored.kind === "image") assertRestorableImage(stored, initialQueue);
+      assertRestorableMedia(stored, initialQueue, restoreOnly);
       if (stored.lifecycle === "active") {
         const result = lifecycleResult(assetId, stored.lifecycle, stored.version, false);
         res.set("ETag", result.asset.etag);
@@ -489,7 +485,7 @@ function createCmsSetMediaLifecycleHandler(deps = {}) {
         }
         const current = currentAsset.data();
         assertStoredAsset(current, assetId, currentPrincipal, baseVersion);
-        if (restoreOnly || current.kind === "image") assertRestorableImage(current, currentQueue);
+        assertRestorableMedia(current, currentQueue, restoreOnly);
         if (restoreOnly) {
           try {
             await requireManagedMediaCategories(transaction, firestore,
@@ -497,8 +493,9 @@ function createCmsSetMediaLifecycleHandler(deps = {}) {
                 ...normalizeMediaCategoryAssignments(current.categories, current.category)])]);
           } catch (error) {
             if (!Number.isInteger(error.status)) throw error;
+            const item = current.kind === "image" ? "image" : "audio file";
             throw new MediaLifecycleRejection(409,
-              "Restore the image's primary and assigned categories before restoring this image.");
+              `Restore the ${item}'s primary and assigned categories before restoring this ${item}.`);
           }
         }
         if (current.lifecycle !== "tombstoned") {
@@ -601,7 +598,7 @@ function createCmsSetMediaLifecycleHandler(deps = {}) {
               lifecycle: updated.lifecycle,
               version: updated.version,
               ...(receipt ? { deploymentId: receipt.deploymentId, generation: receipt.generation } :
-                { purgeEntryId: `asset:${assetId}` }),
+                current.kind === "image" ? { purgeEntryId: `asset:${assetId}` } : {}),
             },
             req,
           }),
@@ -644,13 +641,19 @@ const cmsSetMediaLifecycle = cmsOnRequest(
   createCmsSetMediaLifecycleHandler(),
 );
 
-function assertRestorableImage(stored, queue) {
-  if (stored.kind !== "image") {
+function assertMediaNotRemoved(kind, state) {
+  if (["purging", "purged"].includes(state)) {
+    const item = kind === "audio" ? "audio file" : "image";
+    throw new MediaLifecycleRejection(409, `This ${item} is being removed or has already been removed.`);
+  }
+}
+
+function assertRestorableMedia(stored, queue, restoreOnly) {
+  if (restoreOnly && stored.kind !== "image" && !(stored.kind === "audio" && stored.source === "upload")) {
     throw new MediaLifecycleRejection(404, NOT_FOUND_MESSAGE);
   }
-  if (["purging", "purged"].includes(stored.lifecycle) ||
-      ["purging", "purged"].includes(queue.exists ? queue.data().state : null)) {
-    throw new MediaLifecycleRejection(409, "This image is being removed or has already been removed.");
+  if ((restoreOnly || stored.kind === "image") && queue.exists) {
+    assertMediaNotRemoved(stored.kind, queue.data().state);
   }
 }
 

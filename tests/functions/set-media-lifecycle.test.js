@@ -4,6 +4,7 @@ import adminPkg from "../helpers/firebase-admin.js";
 import mediaContract from "../../functions/lib/media-contract.js";
 import mediaLibrary from "../../functions/lib/media-library.js";
 import lifecycle from "../../functions/set-media-lifecycle.js";
+import updateMedia from "../../functions/update-media.js";
 import bin from "../../functions/lib/media-bin.js";
 import binnedList from "../../functions/list-binned-media.js";
 import principals from "../../functions/lib/principal.js";
@@ -670,6 +671,42 @@ describe("cmsSetMediaLifecycle", () => {
     expect(log.error.mock.calls).toEqual([
       ["cmsSetMediaLifecycle failed", { errorId: res.body.errorId, status, errorType, errorCode }],
     ]);
+  });
+});
+
+it("restores the uploaded audio version selected after deletion and refuses stale or missing objects", async () => {
+  const storageKey = `cms-media/news/asset-one/${contentHash}.wav`;
+  const stored = await seedAsset({ kind: "audio", mimeType: "audio/wav", originalName: "interview.wav",
+    url: `https://media.example.org/${storageKey}`, storageKey, width: null, height: null });
+  await db.doc("mediaCategories/news").set({
+    id: "news", label: "News", description: "", active: true, order: 1, version: 1,
+  });
+  const deps = { firestore: db, requirePrincipalFn: async () => actor(),
+    now: () => "2026-08-13T20:45:00.000Z" };
+  const deleted = makeRes();
+  await updateMedia.createCmsUpdateMediaMetadataHandler(deps)(request("delete"), deleted);
+  expect(deleted).toMatchObject({ statusCode: 200, body: { deleted: true,
+    asset: { lifecycle: "tombstoned", version: 3 } } });
+  expect((await db.doc("media_assets_public/asset-one").get()).exists).toBe(false);
+  expect((await bin.mediaPurgeRef(db, "asset-one").get()).exists).toBe(false);
+
+  async function restore(version, head) {
+    const req = request("reactivate", version);
+    delete req.body.action;
+    const res = makeRes();
+    await createCmsRestoreMediaHandler({ ...deps, storageFactory: () => ({ head }) })(req, res);
+    return res;
+  }
+  const missing = async () => null;
+  expect((await restore(2, missing)).statusCode).toBe(412);
+  expect(await restore(3, missing)).toMatchObject({ statusCode: 409,
+    body: { error: "The stored media object cannot be verified." } });
+  expect((await db.doc("media_assets/asset-one").get()).data()).toMatchObject({ lifecycle: "tombstoned", version: 3 });
+
+  const restored = await restore(3, async key => key === storageKey ? objectHead({ contentType: "audio/wav" }) : null);
+  expect(restored).toMatchObject({ statusCode: 200, body: { asset: { lifecycle: "active", version: 4 } } });
+  expect((await db.doc("media_assets/asset-one").get()).data()).toMatchObject({
+    lifecycle: "active", version: 4, storageKey: stored.storageKey, contentHash: stored.contentHash,
   });
 });
 

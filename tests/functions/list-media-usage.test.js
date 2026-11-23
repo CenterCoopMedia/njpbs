@@ -246,6 +246,7 @@ describe("cmsListMediaUsage request boundary", () => {
     [{}],
     [{ assetId: ASSET_ID, unknown: true }],
     [{ assetId: ASSET_ID, state: "candidate" }],
+    [{ assetId: ASSET_ID, scope: "all-trash" }],
     [{ assetId: ASSET_ID, page: 0 }],
     [{ assetId: ASSET_ID, page: MAX_USAGE_SCAN + 1 }],
     [{ assetId: ASSET_ID, pageSize: 51 }],
@@ -282,6 +283,27 @@ describe("cmsListMediaUsage request boundary", () => {
 });
 
 describe("cmsListMediaUsage owner authorization", () => {
+  it("keeps deleted audio usage behind media management and filters inaccessible owners", async () => {
+    const seed = {
+      [`media_assets/${ASSET_ID}`]: asset("news", { lifecycle: "tombstoned", kind: "audio", source: "upload" }),
+      "cmsPosts/allowed-row/mediaUsage/working": usage(),
+      "cmsPosts/denied-row/mediaUsage/working": usage(),
+      "cmsPosts/allowed-row": post({ title: "Interview" }),
+      "cmsPosts/denied-row": post({ section: "sports", title: "Private sports story" }),
+    };
+    const request = makeReq({ body: { assetId: ASSET_ID, scope: "audio-bin" } });
+    const scopedEditor = actor("editor", "editor-1", [
+      { role: "editor", sections: ["news"], registeredMediaSections: ["news"] },
+    ]);
+    const { response } = await call({ seed, request, user: scopedEditor });
+    expect(response).toMatchObject({ statusCode: 200, body: { total: 1,
+      items: [{ collection: "cmsPosts", documentId: "allowed-row", title: "Interview" }] } });
+
+    const denied = await call({ seed, request, user: actor("contributor") });
+    expect(denied.response.statusCode).toBe(403);
+    expect(denied.observed.queries).toEqual([]);
+  });
+
   it("filters content owners before totals and paging and projects public fields only", async () => {
     const seed = {
       [`media_assets/${ASSET_ID}`]: asset(),

@@ -27,16 +27,25 @@ class MediaUsageReadError extends Error {
 
 function parseUsageRequest(body) {
   if (!body || typeof body !== "object" || Array.isArray(body) ||
-      Object.keys(body).some(key => !["assetId", "state", "page", "pageSize"].includes(key))) {
+      Object.keys(body).some(key => !["assetId", "scope", "state", "page", "pageSize"].includes(key))) {
     throw new MediaUsageReadError(400, "The media usage request is invalid.");
   }
-  const { assetId, state = "working", page = 1, pageSize = 25 } = body;
+  const { assetId, scope = "active", state = "working", page = 1, pageSize = 25 } = body;
   if (!isMediaAssetId(assetId) || !STATES.has(state) ||
+      (scope !== "active" && scope !== "audio-bin") ||
       !Number.isSafeInteger(page) || page < 1 || page > MAX_USAGE_SCAN ||
       !Number.isSafeInteger(pageSize) || pageSize < 1 || pageSize > 50) {
     throw new MediaUsageReadError(400, "The media usage request is invalid.");
   }
-  return { assetId, state, page, pageSize };
+  return { assetId, scope, state, page, pageSize };
+}
+
+function mayReadUsageAsset(principal, stored, scope) {
+  if (scope === "audio-bin") {
+    return stored?.lifecycle === "tombstoned" && stored.kind === "audio" &&
+      stored.source === "upload" && hasCapability(principal, "media.manage");
+  }
+  return stored?.lifecycle === "active" && mayUseMedia(principal, stored.category);
 }
 
 async function readDeployment(transaction, firestore) {
@@ -117,9 +126,7 @@ async function readMediaUsage(firestore, user, query) {
   // the acknowledged deployed generation consistent without locking writers.
   return firestore.runTransaction(async transaction => {
     const asset = await transaction.get(firestore.doc(`media_assets/${query.assetId}`));
-    const storedAsset = asset.data();
-    if (!asset.exists || storedAsset?.lifecycle !== "active" ||
-        !mayUseMedia(user.principal, storedAsset?.category)) {
+    if (!asset.exists || !mayReadUsageAsset(user.principal, asset.data(), query.scope)) {
       throw new MediaUsageReadError(403, FORBIDDEN_MESSAGE);
     }
     const deployment = query.state === "deployed"

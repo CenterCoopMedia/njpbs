@@ -2,22 +2,27 @@ import { useEffect, useRef, useState } from "react";
 import { Link, useSearchParams } from "react-router";
 import { cmsListBinnedMedia, cmsPurgeBinnedImage, cmsRestoreMedia, HttpError, type BinnedMediaAsset, type ListBinnedMediaResponse, type MediaCategoryDefinition } from "../lib/functions";
 import { mediaDisplayUrl } from "../lib/media-image";
-import { mediaImagesPath } from "../lib/routes";
+import { mediaImagesPath, mediaVoiceoversPath } from "../lib/routes";
+import { BinnedAudioUsage } from "./BinnedAudioUsage";
 import { Button, EmptyState, InlineMessage } from "./ui/Primitives";
 import { LoadingIndicator } from "./ui/LoadingIndicator";
 import "./MediaRecycleBin.css";
 
-export function removalCountdown(purgeAfter: string, now: number): string {
-  const days = Math.max(0, Math.ceil((Date.parse(purgeAfter) - now) / 86_400_000));
+export function removalCountdown(purgeAfter: string | null, now: number): string {
+  const days = Math.max(0, Math.ceil((Date.parse(purgeAfter ?? "") - now) / 86_400_000));
   if (!Number.isFinite(days)) return "Removal date unavailable";
   return days === 0 ? "Due for removal" : `Removed in ${days} ${days === 1 ? "day" : "days"}`;
 }
 
-export function MediaRecycleBin({ getIdToken, categories, targetId = null }: {
+export function MediaRecycleBin({ getIdToken, categories, kind = "image", targetId = null }: {
   getIdToken: () => Promise<string>;
   categories: readonly MediaCategoryDefinition[];
+  kind?: "image" | "audio";
   targetId?: string | null;
 }) {
+  const audio = kind === "audio";
+  const item = audio ? "audio file" : "image";
+  const label = audio ? "Audio" : "Images";
   const [searchParams] = useSearchParams();
   const returnParams = new URLSearchParams(searchParams);
   returnParams.delete("bin");
@@ -48,9 +53,10 @@ export function MediaRecycleBin({ getIdToken, categories, targetId = null }: {
   useEffect(() => { if (confirming) confirmGroup.current?.focus(); }, [confirming]);
 
   useEffect(() => {
+    if (audio) return;
     const timer = window.setInterval(() => setNow(Date.now()), 60_000);
     return () => window.clearInterval(timer);
-  }, []);
+  }, [audio]);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -61,13 +67,15 @@ export function MediaRecycleBin({ getIdToken, categories, targetId = null }: {
         const token = await getIdToken();
         if (controller.signal.aborted) return;
         const findTarget = targetId && searchedTarget.current !== targetId;
-        const firstPage = await cmsListBinnedMedia(token, { page: findTarget ? 1 : page }, controller.signal);
+        const listPage = (pageNumber: number) => cmsListBinnedMedia(token,
+          { page: pageNumber, ...(audio ? { kind: "audio" as const } : {}) }, controller.signal);
+        const firstPage = await listPage(findTarget ? 1 : page);
         let response = firstPage;
         // Upload conflicts disclose an id, but the bin endpoint has no id filter.
         // Search bounded pages only after the user follows that explicit pointer.
         while (findTarget && !response.records.some(asset => asset.id === targetId) && response.page < response.pageCount) {
           if (controller.signal.aborted) return;
-          response = await cmsListBinnedMedia(token, { page: response.page + 1 }, controller.signal);
+          response = await listPage(response.page + 1);
         }
         if (controller.signal.aborted) return;
         if (findTarget) {
@@ -88,7 +96,7 @@ export function MediaRecycleBin({ getIdToken, categories, targetId = null }: {
     }
     void load();
     return () => controller.abort();
-  }, [getIdToken, page, revision, targetId]);
+  }, [audio, getIdToken, page, revision, targetId]);
 
   useEffect(() => {
     if (loading) return;
@@ -114,14 +122,14 @@ export function MediaRecycleBin({ getIdToken, categories, targetId = null }: {
     setSuccess("");
     try {
       await cmsRestoreMedia(await getIdToken(), asset);
-      setSuccess(`Restored “${asset.name}” to the image library.`);
+      setSuccess(`Restored “${asset.name}” to the ${audio ? "audio" : "image"} library.`);
       setPage(result?.page ?? 1);
       setRevision(value => value + 1);
       heading.current?.focus();
     } catch (failure) {
       const message = failure instanceof HttpError && failure.status === 412
-        ? "This image changed since the bin was loaded."
-        : failure instanceof Error ? failure.message : "The image could not be restored. Try again.";
+        ? `This ${item} changed since the bin was loaded.`
+        : failure instanceof Error ? failure.message : `The ${item} could not be restored. Try again.`;
       setRestoreError(`${asset.name}: ${message}`);
     } finally {
       setRestoring(null);
@@ -153,22 +161,25 @@ export function MediaRecycleBin({ getIdToken, categories, targetId = null }: {
     }
   }
 
-  const records = [...(result?.records ?? [])].sort((a, b) => a.purgeAfter.localeCompare(b.purgeAfter) || a.id.localeCompare(b.id));
+  const records = result?.records ?? [];
+  const rows = audio ? records : [...records].sort((a, b) =>
+    (a.purgeAfter ?? "").localeCompare(b.purgeAfter ?? "") || a.id.localeCompare(b.id));
+  const canDeletePermanently = !audio && result?.canDeletePermanently === true;
   return <section aria-labelledby="recycle-bin-heading">
-    <h2 id="recycle-bin-heading" tabIndex={-1} ref={heading}>Recycle bin</h2>
-    <p>Deleted images stay in the bin for 30 days. Restore an image to use it again.</p>
+    <h2 id="recycle-bin-heading" tabIndex={-1} ref={heading}>{audio ? "Audio recycle bin" : "Recycle bin"}</h2>
+    {!audio ? <p>Deleted images stay in the bin for 30 days. Restore an image to use it again.</p> : null}
     <div className="media-bin-actions">
-      <Link to={{ pathname: mediaImagesPath(), search: returnParams.toString() }}>Back to Images</Link>
+      <Link to={{ pathname: audio ? mediaVoiceoversPath() : mediaImagesPath(), search: returnParams.toString() }}>Back to {label}</Link>
       <Button disabled={loading || busy} onClick={() => refresh()}>Refresh bin</Button>
     </div>
     {success ? <InlineMessage tone="success">{success}</InlineMessage> : null}
-    {restoreError ? <InlineMessage tone="error" title="Image was not restored">{restoreError} Use Refresh bin to check the image's current status.</InlineMessage> : null}
+    {restoreError ? <InlineMessage tone="error" title={`${audio ? "Audio" : "Image"} was not restored`}>{restoreError} Use Refresh bin to check the {item}'s current status.</InlineMessage> : null}
     {deleteError ? <InlineMessage tone="error" title="Permanent deletion could not be confirmed">{deleteError} Use Refresh bin to check the image's current status.</InlineMessage> : null}
     {loading ? <LoadingIndicator label="Loading recycle bin" /> : error ? <InlineMessage tone="error" title="Recycle bin could not be loaded">{error}</InlineMessage> : <>
       {missingTarget ? <InlineMessage tone="warning">The matching image is no longer in this bin, or you do not have permission to manage media.</InlineMessage> : null}
-      {records.length === 0 ? <EmptyState title="The recycle bin is empty" description="Deleted images you can manage will appear here." /> : <ul className="media-bin-list" aria-label="Binned images">
-        {records.map(asset => <li key={asset.id} tabIndex={asset.id === targetId ? -1 : undefined} ref={asset.id === targetId ? target : undefined} aria-label={asset.name}>
-          <img src={mediaDisplayUrl(asset, 96)} alt="" width={96} height={72} loading="lazy" />
+      {rows.length === 0 ? <EmptyState title="The recycle bin is empty" description={`Deleted ${audio ? "audio files" : "images"} you can manage will appear here.`} /> : <ul className="media-bin-list" aria-label={audio ? "Binned audio" : "Binned images"}>
+        {rows.map(asset => <li key={asset.id} tabIndex={asset.id === targetId ? -1 : undefined} ref={asset.id === targetId ? target : undefined} aria-label={asset.name}>
+          {!audio ? <img src={mediaDisplayUrl(asset, 96)} alt="" width={96} height={72} loading="lazy" /> : null}
           <div className="media-bin-details">
             <h3>{asset.name}</h3>
             <dl>
@@ -176,18 +187,19 @@ export function MediaRecycleBin({ getIdToken, categories, targetId = null }: {
               <div><dt>Deleted by</dt><dd>{asset.tombstonedByName?.trim() || "A staff member"}</dd></div>
               <div><dt>Deleted on</dt><dd>{asset.tombstonedAt ? <time dateTime={asset.tombstonedAt}>{new Date(asset.tombstonedAt).toLocaleString()}</time> : "Unknown"}</dd></div>
             </dl>
-            <p>{asset.lifecycle === "purging" ? "Being removed" : removalCountdown(asset.purgeAfter, now)}</p>
+            {audio ? <BinnedAudioUsage asset={asset} getIdToken={getIdToken} />
+              : <p>{asset.lifecycle === "purging" ? "Being removed" : removalCountdown(asset.purgeAfter, now)}</p>}
           </div>
           {asset.lifecycle === "tombstoned" ? <div className="media-bin-row-actions">
             <Button disabled={busy || confirming !== null} aria-label={`${restoring === asset.id ? "Restoring" : "Restore"} ${asset.name}`} onClick={() => void restore(asset)}>{restoring === asset.id ? "Restoring…" : "Restore"}</Button>
-            {result?.canDeletePermanently ? <Button variant="danger" disabled={busy || confirming !== null}
+            {canDeletePermanently ? <Button variant="danger" disabled={busy || confirming !== null}
               aria-label={`Delete ${asset.name} permanently`} onClick={event => {
                 deleteTrigger.current = event.currentTarget;
                 setDeleteError("");
                 setConfirming(asset);
               }}>Delete permanently</Button> : null}
           </div> : null}
-          {confirming?.id === asset.id && result?.canDeletePermanently && asset.lifecycle === "tombstoned"
+          {confirming?.id === asset.id && canDeletePermanently && asset.lifecycle === "tombstoned"
             ? <div className="media-bin-confirm" role="group" aria-label={`Confirm permanent deletion of ${confirming.name}`} tabIndex={-1} ref={confirmGroup}>
               <p>Permanently delete “{confirming.name}”? You cannot restore it after this.</p>
               <div className="media-bin-row-actions">
