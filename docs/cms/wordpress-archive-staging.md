@@ -73,3 +73,65 @@ The import writes only to this staging collection and its receipt subcollection.
 Public and editorial publication services read their existing Posts, Pages, and
 publication records. They cannot schedule, promote, or notify from staged data.
 Archive browsing and any release of approved stories are tracked in [#360](https://github.com/CenterCoopMedia/njpbs/issues/360).
+
+## Verify archive media originals
+
+After staging the interchange, prepare a version 1 JSON manifest for one source.
+List only attachments approved for this import. Use the source key, attachment
+`postId`, and `revision.sha256` from the staged interchange. Supply the approved
+title, caption, alt text, credit, and license as plain text. Use `null` for an
+absent caption, alt text, credit, or license.
+
+```json
+{
+  "version": 1,
+  "source": "example-news",
+  "items": [
+    {
+      "postId": "63",
+      "revisionSha256": "a244820b3d10bfd82d98831c861a18cbc47c414b14d1523ae8102c0c5e303b7e",
+      "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "originalName": "train.jpg",
+      "mimeType": "image/jpeg",
+      "title": "Train",
+      "caption": "A train at the station.",
+      "altText": "A train alongside a platform",
+      "credit": "Archive Photography",
+      "license": null
+    }
+  ]
+}
+```
+
+Replace the example hashes with the approved attachment revision and the SHA-256
+of the original file. Keep the manifest and originals in a private working
+directory. Name each original file with its lowercase SHA-256 and no extension.
+The command accepts original JPEG, PNG, WebP, GIF, AVIF, and PDF files up to 25 MiB
+each. The manifest limit is 4 MiB and each attachment ID may appear once.
+
+Use the same operator shell and credential input as story staging. Run the
+preview and review its plan before applying it.
+
+```sh
+node scripts/stage-wordpress-archive-media.mjs approved.json originals --project "$ARCHIVE_PROJECT" 3<&0
+```
+
+```sh
+node scripts/stage-wordpress-archive-media.mjs approved.json originals --project "$ARCHIVE_PROJECT" --apply 3<&0
+```
+
+The report identifies missing originals, unsupported types, checksum or decode
+failures, private source attachments, and staging conflicts by source and
+attachment ID. An attachment that inherits its status needs a staged parent
+story from the same source whose WordPress status is published. An absent or
+unverified parent goes to review. Apply needs update permission on staged
+attachments and read permission on the staging records and their creation
+receipts. It saves the verified checksum, filename,
+MIME type, byte size, image dimensions or PDF page count, and descriptive
+metadata on each matched attachment. The transaction checks the staged revision
+and version again before saving. Exact replays skip and changed metadata goes to
+review. Attachments with identical original bytes retain separate source IDs.
+
+The original files stay in the supplied directory. The command writes only
+server-only attachment metadata. Media library registration, variant generation,
+and delivery approval are tracked in [#370](https://github.com/CenterCoopMedia/njpbs/issues/370).

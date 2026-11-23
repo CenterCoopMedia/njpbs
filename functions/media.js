@@ -325,14 +325,13 @@ async function inspectUpload(buffer, declaredMimeType) {
         throwOnInvalidObject: true,
         updateMetadata: false,
       });
-      document.getPageCount();
+      return { width: null, height: null, animated: false, pageCount: document.getPageCount() };
     } catch {
       throw new MediaValidationError(
         "The file content does not match its PDF type",
         415,
       );
     }
-    return { width: null, height: null, animated: false };
   }
   if (type.kind === "audio") {
     if (buffer.length > MAX_AUDIO_BYTES) throw new MediaValidationError("Choose a WAV file that is 10 MiB or smaller", 413);
