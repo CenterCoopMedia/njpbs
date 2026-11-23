@@ -256,7 +256,7 @@ export function classifyPath(value) {
   }
 
   // These trees are exercised by the Policy job, before all consumers.
-  if (path.startsWith("ops/spotlight-most-read/")) {
+  if (path.startsWith("ops/spotlight-most-read/") || path.startsWith("ops/spotlight-newsletter-tracking/")) {
     return isDocsGatePath(path) ? selected("docs") : selected();
   }
 

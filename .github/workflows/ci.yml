@@ -200,6 +200,20 @@ jobs:
       - name: Spotlight readership ranking contracts
         if: steps.reuse.outputs.reused != 'true'
         run: python3 -m unittest discover -s ops/spotlight-most-read -p 'test_*.py'
+      - name: Spotlight newsletter privacy contracts
+        if: steps.reuse.outputs.reused != 'true'
+        run: |
+          php -l ops/spotlight-newsletter-tracking/spotlight-newsletter-tracking.php
+          php ops/spotlight-newsletter-tracking/tests/wordpress-contract.php
+          node ops/spotlight-newsletter-tracking/tests/browser-contract.mjs "$RUNNER_TEMP/spotlight-newsletter-evidence"
+      - name: Upload Spotlight newsletter evidence
+        if: always() && steps.reuse.outputs.reused != 'true'
+        uses: actions/upload-artifact@v7
+        with:
+          name: spotlight-newsletter-evidence
+          path: ${{ runner.temp }}/spotlight-newsletter-evidence
+          if-no-files-found: ignore
+          retention-days: 7
 
   docs:
     name: Docs
