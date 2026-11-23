@@ -627,6 +627,14 @@ describe("media collection service", () => {
     expect((await setItems({ ...removal, requestId: randomUUID(), refs: [protectedRef] }, delegate)).statusCode).toBe(404);
     expect(await collectionState(collection.id)).toEqual(before);
     expect((await setItems({ ...removal, requestId: randomUUID(), refs: [visibleRef] }, delegate, deps)).statusCode).toBe(200);
+    const renamed = await mutate({ action: "update", ...query, baseVersion: shared.body.collection.version,
+      requestId: randomUUID(), name: "Organized selects" }, delegate);
+    expect(renamed.statusCode).toBe(200);
+    const { audits } = await collectionState(collection.id);
+    expect(audits.map(({ data }) => data)).toEqual(expect.arrayContaining([
+      expect.objectContaining({ actorUid: delegate.uid, action: "media_collection_items_remove" }),
+      expect.objectContaining({ actorUid: delegate.uid, action: "media_collection_update" }),
+    ]));
   });
 
   it("rechecks collection sharing on a retried membership write", async () => {

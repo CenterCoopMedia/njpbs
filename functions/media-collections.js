@@ -671,7 +671,7 @@ async function updateCollectionMutation({
       uid: request.uid,
       permission: collection.sharing.find(grant => grant.uid === request.uid)?.permission ?? null,
     }, { uid: request.uid, permission: request.permission });
-  } else if (changed && collection.scope === "all_staff") {
+  } else if (changed && collection.ownerUid !== actor.uid) {
     createAudit(
       transaction,
       firestore,
@@ -813,7 +813,7 @@ function applyCollectionMembership({ transaction, firestore, actor, collectionRe
   const membershipVersion = collection.membershipVersion + 1;
   writeMembershipChanges(transaction, actor, changes, present, timestamp);
   transaction.update(collectionRef, { membershipVersion, itemCount, updatedAt: timestamp, updatedBy: actor.uid });
-  if (collection.scope === "all_staff") {
+  if (collection.ownerUid !== actor.uid) {
     createAudit(transaction, firestore, actor, collectionRef.id,
       `media_collection_items_${present ? "add" : "remove"}`,
       { membershipVersion: collection.membershipVersion }, { membershipVersion });
