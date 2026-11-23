@@ -26,7 +26,7 @@ vi.mock("./page-withdrawal-catalog", () => ({ publishPageWithdrawalCatalog: mock
 vi.mock("./record-withdrawal-catalog", () => ({ publishRecordWithdrawalCatalog: mocks.publishRecordWithdrawalCatalog }));
 
 import worker, { PublicationRuntime } from "./worker";
-import { publicationTarget } from "../functions/lib/publication-target.js";
+import targets, { publicationTarget } from "../functions/lib/publication-target.js";
 
 const COMMIT_SHA = "a".repeat(40);
 const NOW = Date.parse("2026-09-10T20:00:00.000Z");
@@ -68,6 +68,16 @@ function runtimeFixture(enabled = "true") {
   return { runtime, env, storage, stop, containerFetch };
 }
 
+// Deployed development bundles are rendered; the test checkout is not.
+const renderedDevelopment = { ...publicationTarget("development"), workerName: "njpbs-dev-public", origin: "https://dev.example.test" };
+function developmentFixture() {
+  const fixture = runtimeFixture();
+  fixture.env.CMS_DEPLOYMENT_ENVIRONMENT = "development";
+  const real = targets.publicationTarget;
+  vi.spyOn(targets, "publicationTarget").mockImplementation(environment => environment === "development" ? renderedDevelopment : real(environment));
+  return fixture;
+}
+
 async function fetchWorker(request: Request, env = environment()) {
   return (worker.fetch as Function)(request, env, {});
 }
@@ -86,19 +96,27 @@ afterEach(() => vi.restoreAllMocks());
 
 describe("cloud publisher runtime health", () => {
   it("publishes durable catalogs on the dev check using the existing R2 binding", async () => {
-    const fixture = runtimeFixture();
-    fixture.env.CMS_DEPLOYMENT_ENVIRONMENT = "development";
+    const fixture = developmentFixture();
     fixture.env.PUBLICATION_SERIALIZER_ID = "cloudflare-dev-publisher";
     mocks.readPublicationWork.mockResolvedValue({ needsRuntime: false, healthy: true });
     await fixture.runtime.check();
     expect(mocks.publishWithdrawalCatalog).toHaveBeenCalledOnce();
     expect(mocks.publishPageWithdrawalCatalog).toHaveBeenCalledWith({ store: undefined,
-      target: publicationTarget("development"), account: fixture.env.FIREBASE_SERVICE_ACCOUNT, commitSha: COMMIT_SHA });
+      target: renderedDevelopment, account: fixture.env.FIREBASE_SERVICE_ACCOUNT, commitSha: COMMIT_SHA });
     expect(fixture.storage.put).toHaveBeenCalledWith("health", expect.objectContaining({ healthy: true }));
   });
-  it.each(["Page", "record"] as const)("retains recovery but marks dev health unhealthy when the %s catalog cannot persist", async family => {
+  it("refuses all dev work when the bundle names the template public Worker", async () => {
     const fixture = runtimeFixture();
     fixture.env.CMS_DEPLOYMENT_ENVIRONMENT = "development";
+    await fixture.runtime.check();
+    expect(mocks.readPublicationWork).not.toHaveBeenCalled();
+    expect(mocks.publishWithdrawalCatalog).not.toHaveBeenCalled();
+    expect(mocks.publishPageWithdrawalCatalog).not.toHaveBeenCalled();
+    expect(mocks.publishRecordWithdrawalCatalog).not.toHaveBeenCalled();
+    expect(fixture.storage.put).toHaveBeenCalledWith("health", expect.objectContaining({ healthy: false }));
+  });
+  it.each(["Page", "record"] as const)("retains recovery but marks dev health unhealthy when the %s catalog cannot persist", async family => {
+    const fixture = developmentFixture();
     mocks.readPublicationWork.mockResolvedValue({ needsRuntime: false, healthy: true });
     (family === "Page" ? mocks.publishPageWithdrawalCatalog : mocks.publishRecordWithdrawalCatalog).mockRejectedValue(new Error("Fixture failure"));
     await fixture.runtime.check();
@@ -107,8 +125,7 @@ describe("cloud publisher runtime health", () => {
       diagnostics: { reasons: ["withdrawal_catalog_unavailable"], oldestDueAt: null } }));
   });
   it("still publishes Page markers when the independent Post catalog refuses", async () => {
-    const fixture = runtimeFixture();
-    fixture.env.CMS_DEPLOYMENT_ENVIRONMENT = "development";
+    const fixture = developmentFixture();
     mocks.readPublicationWork.mockResolvedValue({ needsRuntime: false, healthy: true });
     mocks.publishWithdrawalCatalog.mockRejectedValue(new Error("Fixture Post failure"));
     await fixture.runtime.check();
