@@ -1358,7 +1358,7 @@ const CONTENT_LINK_GROUP: EditorFieldGroup = { id: "content-link", label: "Conte
 
 const PUBLISHED_LAYOUT_FIELD = {
   key: "publishedLayout", label: "Published layout", kind: "select", required: false,
-  help: "Reading narrows the text and links to Heading 2 sections. Save and publish to apply.",
+  help: "Reading narrows the text and adds section links when there are at least two Heading 2 sections. Save and publish to apply.",
   options: [{ value: "standard", label: "Standard" }, { value: "reading", label: "Reading" }],
 } satisfies RecordFieldFor<PageMetadata & PostRecord>;
 

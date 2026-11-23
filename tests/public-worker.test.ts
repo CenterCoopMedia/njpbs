@@ -419,11 +419,16 @@ describe("public Contact runtime projection", () => {
       fetchAsset: async () => asset(STATIC_CONTACT),
       getPublishedPage: async () => ({ ...LIVE, page: { ...LIVE_PAGE, publishedLayout: "reading", blocks: [
         { id: "help", type: "headline", order: 0, visible: true, data: { text: "Help with viewing", level: 2 } },
+        { id: "more", type: "prose", order: 1, visible: true, data: { content: { type: "doc", content: [
+          { type: "heading", attrs: { level: 2 }, content: [{ type: "text", text: "More help" }] },
+        ] } } },
       ] } }),
     });
     const html = await response.text();
     expect(html).toContain('href="#reading-section-help-with-viewing"');
     expect(html).toContain('<h2 id="reading-section-help-with-viewing" tabindex="-1">');
+    expect(html).toContain('href="#reading-section-more-help"');
+    expect(html).toContain('<h2 id="reading-section-more-help" tabindex="-1">');
   });
 
   it("coalesces concurrent projection lookups and caches them across query strings", async () => {

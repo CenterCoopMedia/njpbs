@@ -56,6 +56,7 @@ describe("admission", () => {
     expect(projectCmsPost(post({ publishedLayout: "reading" }), { now: NOW })?.publishedLayout).toBeUndefined();
     expect(projectCmsPost(post({ publishedLayout: "standard" }, { publishedLayout: "reading" }), { now: NOW })?.publishedLayout)
       .toBe("reading");
+    expect(projectCmsPost(post({}, { publishedLayout: "sidebar" }), { now: NOW })?.publishedLayout).toBeUndefined();
   });
 
   it("keeps an English slug and its linked Spanish slug in separate route namespaces", () => {

@@ -19,7 +19,7 @@ export function createReadingSections() {
   }
 
   function renderIndex(): string {
-    if (!sections.length) return "";
+    if (sections.length < 2) return "";
     const links = sections.map(({ id, label }) =>
       `<li><a href="#${escapeHtml(id)}">${escapeHtml(label)}</a></li>`).join("");
     return `<nav class="reading-sections" aria-label="On this page" data-pagefind-ignore><strong>On this page</strong><ul>${links}</ul></nav>`;

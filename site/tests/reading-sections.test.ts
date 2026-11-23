@@ -27,9 +27,9 @@ describe("Reading section links", () => {
     expect(sections.renderIndex()).toContain("News &amp; notes");
   });
 
-  it("omits the section box when there are no non-empty H2s", () => {
+  it.each([" ", "One section"])("omits the section box with fewer than two non-empty H2s (%j)", text => {
     const sections = createReadingSections();
-    renderHeadings([[2, " "], [3, "Detail"]], sections.addHeading);
+    renderHeadings([[2, text], [3, "Detail"]], sections.addHeading);
     expect(sections.renderIndex()).toBe("");
   });
 });
