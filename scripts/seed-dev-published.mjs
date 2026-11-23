@@ -602,6 +602,9 @@ export async function importPublished({ firestore, manifest, copy, source = SOUR
   // source no longer publishes are removed. Untracked dev-authored records are
   // never overwritten. Preflight every record before any write; each bounded
   // apply transaction repeats the check. An interrupted refresh resumes by seed hashes.
+  // Every receipt this run writes carries its id, so an older plan detects any
+  // later rewrite of a row, even one with identical hashes.
+  const refreshId = randomUUID();
   const run = (selected, removals, write) => firestore.runTransaction(async transaction => {
     const pointerRef = firestore.doc('system/publicDeployment');
     const pointer = manifest.configurationOnly ? null : await transaction.get(pointerRef);
@@ -651,7 +654,7 @@ export async function importPublished({ firestore, manifest, copy, source = SOUR
     if (write) {
       for (const { ref, priorRef, record, data, seedHash } of changes) {
         transaction.set(ref, data);
-        transaction.set(priorRef, { path: record.path, recordHash: digest(data), seedHash, manifestHash: manifest.hash });
+        transaction.set(priorRef, { path: record.path, recordHash: digest(data), seedHash, manifestHash: manifest.hash, refreshId });
       }
       for (const { ref, priorRef } of removed) { transaction.delete(ref); transaction.delete(priorRef); }
       if (!manifest.configurationOnly && !marker.exists) {

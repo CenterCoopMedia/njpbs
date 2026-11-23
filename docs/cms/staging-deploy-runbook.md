@@ -291,10 +291,9 @@ Read `restored` and `removed` in `plan.json` before you apply. `restored` lists
 seeded records that dev changed or deleted; `removed` lists seeded records the
 source no longer publishes. Apply writes only to the dev project, under the
 [standing approval for rehearsal refreshes](https://github.com/jamditis/jawn-ops/issues/1150#issuecomment-7108233874):
-restore and remove only rows the seed wrote, never a production write. Keep
-`plan.json` with the rehearsal run record; it is the record of what the apply
-changed. Any other dev write needs its own approval. Then apply and verify, in
-the same shell:
+restore and remove only rows the seed wrote, never a production write. Any
+other dev write needs its own approval. Then apply and verify, in the same
+shell:
 
 ```bash
 sh -c "$SEED_WRITER_COMMAND" | $SEED import $PAIR --manifest "$MANIFEST" --apply | tee "$STATE/apply.json"
@@ -304,6 +303,11 @@ sh -c "$SEED_WRITER_COMMAND" | $SEED verify $PAIR --manifest "$MANIFEST" | tee "
 If the snapshot references a Sponsor or Newsletter card, export also needs
 `--context` with the retained public context of that publication and refuses
 without it. Production's Nov. 23, 2026 snapshot references none.
+
+Keep `plan.json`, `apply.json` and `verify.json` with the rehearsal run record.
+Apply plans again inside its own transactions, so `apply.json` (not the dry run)
+lists what it actually restored and removed; a row changed after the dry run
+appears there.
 
 `verify` prints the manifest hash, the source publication receipt, the export
 time and per-collection counts; record that line with the rehearsal. It fails

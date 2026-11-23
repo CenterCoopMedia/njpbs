@@ -673,11 +673,16 @@ describe('isolated published-content seed', () => {
     const next = await exportSeed();
     const receipt = dev.doc(`devSeedRecords/${digest('cmsPages/contact')}`);
     let planned = false;
-    // The first transaction plans the removals; another refresh then rewrites the row.
+    // The first transaction plans the removals. A dev edit and a second refresh
+    // of the older manifest then restore the row with identical hashes.
     const racing = new Proxy(dev, { get(target, key) {
       if (key === 'runTransaction') return async (body, options) => {
         const result = await target.runTransaction(body, options);
-        if (!planned) { planned = true; await receipt.update({ manifestHash: 'concurrent-refresh' }); }
+        if (!planned) {
+          planned = true;
+          await dev.doc('cmsPages/contact').update({ title: 'Dev rehearsal edit' });
+          await importPublished({ firestore: dev, manifest, copy, apply: true });
+        }
         return result;
       };
       const value = target[key];
