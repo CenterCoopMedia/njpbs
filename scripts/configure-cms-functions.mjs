@@ -16,7 +16,6 @@ const target = cmsTarget();
 const project = target.projectId;
 const DEVELOPMENT_ONLY_SECRETS = Object.freeze(["CMS_DEV_ACCESS_CLIENT_ID", "CMS_DEV_ACCESS_CLIENT_SECRET",
   "CMS_DEV_PUBLISH_APP_ID", "CMS_DEV_PUBLISH_APP_PRIVATE_KEY"]);
-const DEVELOPMENT_TEMPLATE_KEYS = Object.freeze(["CMS_PUBLISH_TRANSPORT", "CMS_WRITEBACK_CONFIGURED"]);
 const secretBase = name => `https://secretmanager.googleapis.com/v1/projects/${project}/secrets/${name}`;
 const require = createRequire(import.meta.url);
 function scopedGcloud(args, env, execute) {
@@ -362,15 +361,11 @@ export async function main(argv) {
   let parameters = runtimeParameters(input, resolveDiscovery(env));
   if (operation === "configure") {
     const path = `functions/.env.${config.projectId}`;
-    // Dev keeps its template's dev-only settings, such as stored-only report intake,
-    // and its publication contract: GitHub transport with writeback (docs/cms/cloud-publisher.md).
-    const owned = key => !Object.hasOwn(parameters, key) || DEVELOPMENT_TEMPLATE_KEYS.includes(key);
+    // Dev keeps its template's dev-only settings, such as stored-only report intake.
     const kept = target.environment !== "development" ? "" : readFileSync(path, "utf8").split("\n")
-      .filter(line => /^[A-Z][A-Z0-9_]*=/.test(line) && owned(line.slice(0, line.indexOf("="))))
+      .filter(line => /^[A-Z][A-Z0-9_]*=/.test(line) && !Object.hasOwn(parameters, line.slice(0, line.indexOf("="))))
       .map(line => `${line}\n`).join("");
-    const written = target.environment !== "development" ? parameters
-      : Object.fromEntries(Object.entries(parameters).filter(([key]) => !DEVELOPMENT_TEMPLATE_KEYS.includes(key)));
-    const text = kept + runtimeDotenv(written);
+    const text = kept + runtimeDotenv(parameters);
     writeConfigurationFile(path, text);
     console.log(`Configured ${Object.keys(parameters).length} Functions runtime parameters`);
     return;

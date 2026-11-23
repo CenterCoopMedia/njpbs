@@ -63,7 +63,8 @@ export const FUNCTION_RUNTIME_VARIABLES = Object.freeze([...new Set(Object.value
 // environment, and step settings copy some of them. A dev run therefore takes
 // no variable-backed input from either: it uses this table or the code default.
 // The two zone ids pass through because dev-media.njpbs.org is in the
-// njpbs.org zone; purges name only dev hostnames and dev cache tags.
+// njpbs.org zone; purges name only dev hostnames and dev cache tags. Dev
+// publishes through GitHub with writeback (docs/cms/cloud-publisher.md).
 const DEVELOPMENT_PASS_THROUGH = Object.freeze(["CMS_MEDIA_CLOUDFLARE_ZONE_ID", "CMS_ANALYTICS_CF_ZONE_ID",
   "CMS_PUBLISH_GITHUB_APP_ID", "CMS_PUBLISH_GITHUB_INSTALLATION_ID", "CMS_PUBLISH_GITHUB_TRUSTED_ACTORS"]);
 function developmentInputs(env, variables) {
@@ -74,6 +75,8 @@ function developmentInputs(env, variables) {
     // config-input: CMS_MEDIA_CLOUDFLARE_ZONE_ID, CMS_ANALYTICS_CF_ZONE_ID, CMS_PUBLISH_GITHUB_APP_ID, CMS_PUBLISH_GITHUB_INSTALLATION_ID, CMS_PUBLISH_GITHUB_TRUSTED_ACTORS
     ...Object.fromEntries(DEVELOPMENT_PASS_THROUGH.map(key => [key, variables[CONFIGURATION_INPUTS[key].variable]])),
     CMS_DEPLOYMENT_ENVIRONMENT: "development",
+    CMS_PUBLISH_TRANSPORT: "github",
+    CMS_WRITEBACK_CONFIGURED: "true",
     CMS_MEDIA_R2_BUCKET: bucket,
     CMS_ANALYTICS_MAILCHIMP_AUDIENCE_ID: "0000000000",
     CMS_PREVIEW_SERIALIZER_READY: "true",
@@ -129,6 +132,8 @@ export function runtimeParameters(input, discovery = {}, target = cmsTarget()) {
         (row.type === "boolean" && value !== "" && !["true", "false"].includes(value))) configurationFailure(`Invalid Functions configuration: ${key}`);
     values[key] = value;
   }
+  // Production publishes through the serializer only; dev through GitHub only.
+  if ((values.CMS_PUBLISH_TRANSPORT === "github") !== (target.environment === "development")) configurationFailure("Invalid Functions configuration: CMS_PUBLISH_TRANSPORT");
   const instant = ["NO_BUILD_POST_ENABLED", "NO_BUILD_POST_ID", "NO_BUILD_POST_BACKGROUND_BUCKET"].some(key => values[key]);
   if (instant && (!["true", "false"].includes(values.NO_BUILD_POST_ENABLED) ||
       Boolean(values.NO_BUILD_POST_ID) !== Boolean(values.NO_BUILD_POST_BACKGROUND_BUCKET) ||

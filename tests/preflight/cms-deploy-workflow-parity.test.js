@@ -193,7 +193,7 @@ describe("Route D Cut A boundary placement", () => {
       const { FUNCTION_TARGETS: functionTargets, ...providerEnvironment } = planner.env;
       expect(functionTargets).toBe("${{ needs.verify.outputs.function_targets }}");
       expect(capture.env).toMatchObject({ ...providerEnvironment,
-        FIREBASE_WEB_API_KEY: "${{ vars.VITE_FIREBASE_API_KEY || secrets.VITE_FIREBASE_API_KEY }}",
+        FIREBASE_WEB_API_KEY: "${{ vars.VITE_FIREBASE_API_KEY || inputs.target != 'development' && secrets.VITE_FIREBASE_API_KEY || '' }}",
         CMS_PREVIEW_R2_CREDENTIAL: "${{ secrets.CMS_PREVIEW_R2_CREDENTIAL }}",
         CMS_TRUSTED_WORKFLOW_SHA: "${{ github.sha }}" });
       expect(capture.run).toContain('4<<< "$CMS_PREVIEW_R2_CREDENTIAL"');
