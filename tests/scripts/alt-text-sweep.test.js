@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { claudeModel, createCmsClient, downloadImage, findImageUses, parseModelReply, runSweep } from "../../scripts/alt-text-sweep.mjs";
+import { claudeModel, createCmsClient, downloadImage, findImageUses, parseModelReply, runSweep, writeSweepErrors } from "../../scripts/alt-text-sweep.mjs";
 
 const asset = (id, altText = "") => ({ id, name: id, kind: "image", lifecycle: "active", altText,
   description: "", url: `https://images.example/${id}`, etag: `etag-${id}`, mimeType: "image/jpeg" });
@@ -9,8 +9,10 @@ const reply = { alt: "A studio camera beside a window", description: "A camera i
 
 function harness({ media = [asset("a", "Authored alt"), asset("b", "Authored alt")], doc = document(),
   mediaConflict = false, saveConflict = false, model = vi.fn(async () => reply), pages = [],
-  mediaPageSize = media.length, postIds = ["post-1"], postPageSize = postIds.length, documents = {} } = {}) {
+  mediaPageSize = media.length, postIds = ["post-1"], postPageSize = postIds.length, documents = {},
+  respond = () => undefined } = {}) {
   const endpoints = [];
+  let now = 0;
   const fetchImpl = vi.fn(async (url, options = {}) => {
     if (url.startsWith("https://identitytoolkit.googleapis.com/"))
       return Response.json({ idToken: "token", refreshToken: "refresh", expiresIn: "3600" });
@@ -19,6 +21,8 @@ function harness({ media = [asset("a", "Authored alt"), asset("b", "Authored alt
     const endpoint = new URL(url).pathname.slice(1);
     endpoints.push(endpoint);
     const body = JSON.parse(options.body);
+    const response = respond({ endpoint, body, now });
+    if (response) return response;
     if (endpoint === "cmsListMedia") return Response.json({ records: body.assetIds
       ? media.filter(row => body.assetIds.includes(row.id))
       : media.slice((body.page - 1) * mediaPageSize, body.page * mediaPageSize),
@@ -38,7 +42,8 @@ function harness({ media = [asset("a", "Authored alt"), asset("b", "Authored alt
     throw new Error(`Unexpected endpoint: ${endpoint}`);
   });
   const call = createCmsClient({ fetchImpl, credential: { email: "agent@example.com", password: "private" },
-    apiKey: "public-key", baseUrl: "https://cms.example" });
+    apiKey: "public-key", baseUrl: "https://cms.example", now: () => now,
+    wait: async milliseconds => { now += milliseconds; } });
   return { call, fetchImpl, endpoints, model };
 }
 
@@ -196,6 +201,104 @@ describe("alt-text sweep", () => {
       { kinds: ["image"], sort: "createdAt", direction: "asc", page: 2 },
     ]);
     expect(h.endpoints.filter(endpoint => endpoint === "cmsListContent")).toHaveLength(3);
+  });
+
+  it("paces the shared CMS reads and finishes after 429s with and without Retry-After", async () => {
+    const reads = [];
+    const retryHeaders = [
+      { "Retry-After": "3", "X-Rate-Limit-Scope": "actor" },
+      {},
+      { "Retry-After": new Date(11_000).toUTCString() },
+    ];
+    const h = harness({ media: [asset("a"), asset("b", "Authored")],
+      respond({ endpoint, now }) {
+        if (endpoint.startsWith("cmsList") || endpoint === "cmsGetContent") reads.push([endpoint, now]);
+        if (endpoint === "cmsGetContent" && retryHeaders.length) {
+          return new Response(null, { status: 429, headers: retryHeaders.shift() });
+        }
+      } });
+
+    const report = await runSweep({ apply: true, call: h.call, fetchImpl: h.fetchImpl, model: h.model });
+
+    expect(reads).toEqual([
+      ["cmsListMedia", 0], ["cmsListContent", 500], ["cmsListContent", 1000],
+      ["cmsGetContent", 1500], ["cmsGetContent", 4500], ["cmsGetContent", 6500], ["cmsGetContent", 11_000],
+    ]);
+    expect(report.errors).toEqual([]);
+    expect(report.stopped).toBeNull();
+    expect(report.changes).toHaveLength(4);
+    expect(h.endpoints.filter(endpoint => ["cmsUpdateMediaMetadata", "cmsSaveContent"].includes(endpoint)))
+      .toEqual(["cmsUpdateMediaMetadata", "cmsSaveContent"]);
+  });
+
+  it("reports the exhausted read and resumes from the fields the CMS already saved", async () => {
+    const media = [asset("a")];
+    const documents = {
+      "post-1": document({ blocks: [] }),
+      "post-2": document({ blocks: [] }),
+    };
+    const writes = [];
+    let limitedReads = 0;
+    let throttled = true;
+    const h = harness({ media, documents, postIds: Object.keys(documents),
+      respond({ endpoint, body }) {
+        if (endpoint === "cmsGetContent" && body.id === "post-2" && throttled) {
+          limitedReads++;
+          return new Response("discarded response body", {
+            status: 429, headers: { "Retry-After": "1", "X-Rate-Limit-Scope": "actor" },
+          });
+        }
+        if (endpoint === "cmsUpdateMediaMetadata") {
+          Object.assign(media[0], body.metadata);
+          writes.push(body.assetId);
+        }
+        if (endpoint === "cmsSaveContent") {
+          const stored = documents[body.id];
+          expect(body.baseVersion).toBe(stored.version);
+          Object.assign(stored, body.document, { version: stored.version + 1 });
+          writes.push(body.id);
+        }
+      } });
+    const options = { apply: true, call: h.call, fetchImpl: h.fetchImpl, model: h.model };
+
+    const partial = await runSweep(options);
+    expect(partial.stopped).toBe("cms_rate_limit");
+    expect(limitedReads).toBe(4);
+    expect(writes).toEqual(["a", "post-1"]);
+    expect(partial.errors).toEqual([{
+      target: "cmsPosts/post-2", reason: "cms_429", endpoint: "cmsGetContent",
+      status: 429, scope: "actor", retryAfterSeconds: 1,
+    }]);
+    const stderr = { write: vi.fn() };
+    writeSweepErrors(partial, stderr);
+    expect(stderr.write).toHaveBeenCalledOnce();
+    const [message] = stderr.write.mock.calls[0];
+    expect(message).toContain("cmsGetContent HTTP 429 (actor limit) with Retry-After 1s");
+    expect(message).toContain("1 assets and 1 documents with 3 field changes");
+    expect(message).not.toContain("discarded response body");
+
+    throttled = false;
+    const resumed = await runSweep(options);
+    expect(resumed.errors).toEqual([]);
+    expect(resumed.modelCalls).toBe(1);
+    expect(resumed.changes.map(change => change.id)).toEqual(["post-2"]);
+    expect(writes).toEqual(["a", "post-1", "post-2"]);
+  });
+
+  it.each([true, false])("retries a throttled write only with gateway scope (present: %s)", async gateway => {
+    const attempts = [];
+    const h = harness({ media: [asset("a")], doc: null,
+      respond({ endpoint, now }) {
+        if (endpoint !== "cmsUpdateMediaMetadata") return;
+        attempts.push(now);
+        if (attempts.length === 1) return new Response(null, { status: 429, headers: {
+          "Retry-After": "2", ...(gateway ? { "X-Rate-Limit-Scope": "ip" } : {}),
+        } });
+      } });
+    const report = await runSweep({ apply: true, call: h.call, fetchImpl: h.fetchImpl, model: h.model });
+    expect(attempts).toEqual(gateway ? [0, 2000] : [0]);
+    expect(report.changes).toHaveLength(gateway ? 2 : 0);
+    expect(report.stopped).toBe(gateway ? null : "cms_rate_limit");
   });
 
   it("skips reviewed content before a model call and skips an oversized original", async () => {

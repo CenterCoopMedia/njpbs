@@ -64,6 +64,8 @@ jobs:
           wait "$components_pid" || { status=$?; echo "::error::Component installs failed (exit $status)"; }
           test "$status" -eq 0 || exit "$status"
           npm run functions:build
+      - name: Alt-text sweep HTTP contract
+        run: npx --no-install vitest run tests/scripts/alt-text-sweep.test.js
       - name: Dev configuration contracts
         # The supplier test reads packages from the workspace install; the Policy job has none.
         run: >-
