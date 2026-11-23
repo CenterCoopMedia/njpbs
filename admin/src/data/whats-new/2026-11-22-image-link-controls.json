@@ -1,0 +1,7 @@
+{
+  "date": "2026-11-22",
+  "kind": "improved",
+  "title": "Image link choices follow the image",
+  "body": "Add a valid image link to choose whether it opens in a new tab. To mark a linked image decorative, remove its link first.",
+  "prs": []
+}
