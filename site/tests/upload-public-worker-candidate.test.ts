@@ -1,14 +1,15 @@
 // @vitest-environment node
 
+import { createRequire } from "node:module";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { main, retryWorkerVersionReceipt } from
   "../scripts/upload-public-worker-candidate";
 import { findExactRecentWorkerVersion } from
   "../src/lib/public-worker-version-recovery";
 import { publicPostRendererRelease, publicWorkerCandidateRendererContract } from "../scripts/public-post-renderer-release";
-import candidateModule from "../../functions/lib/public-worker-candidate.js";
 import { privatePairReaderCapabilities } from "../../packages/content-core/src/private-pair-http.mjs";
 
+const { projectCloudflareWorkerVersion } = createRequire(import.meta.url)("../../functions/lib/public-worker-candidate.js");
 const VERSION_ID = "11111111-1111-4111-8111-111111111111";
 const TAG = "cms-g8-aaaaaaaaaaaaaaaa";
 const MESSAGE = "exact candidate";
@@ -30,7 +31,7 @@ it("emits a Post candidate accepted by the deployed CMS reader", () => {
   const sha = "a".repeat(40);
   const seal = publicPostRendererRelease(sha, "production", {});
   const { variables, pageReaderVersion } = publicWorkerCandidateRendererContract(seal, sha);
-  const candidate = candidateModule.projectCloudflareWorkerVersion(version({
+  const candidate = projectCloudflareWorkerVersion(version({
     metadata: { source: "wrangler", created_on: "2026-08-27T20:00:00.000Z" },
     annotations: { "workers/tag": TAG, "workers/message": MESSAGE, "workers/triggered_by": "version_upload" },
     resources: {
