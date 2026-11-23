@@ -3,7 +3,9 @@ import type {
   DataFigureVersion,
   DatasetPublicProjection,
 } from "../../../packages/content-core/src/data-figure";
-import { formatDatasetValue, isDatasetPublicProjection } from "../../../packages/content-core/src/data-figure-render";
+import {
+  formatDatasetCoverage, formatDatasetDate, formatDatasetValue, isDatasetPublicProjection,
+} from "../../../packages/content-core/src/data-figure-render";
 import type { DatasetApi, DatasetSummary } from "../lib/datasets";
 import { Button, StatusBadge, TextInput } from "./ui/Primitives";
 
@@ -136,10 +138,12 @@ export function DatasetPickerDialog({ api, open, selectedId, onClose, onChoose }
     {candidate ? <section className="dataset-picker-dialog__candidate" aria-label="Selected approved dataset">
       <div><h3>{candidate.release.label}</h3><StatusBadge tone="success">Approved revision {candidate.revision}</StatusBadge></div>
       <p className="dataset-picker-dialog__value">{formatDatasetValue(candidate.release.value, candidate.release.unit)}</p>
-      <dl><div><dt>Period</dt><dd>{candidate.release.period.label}</dd></div>
+      <dl><div><dt>Headline coverage</dt><dd>{candidate.release.period.label} ({formatDatasetCoverage(candidate.release.period)})</dd></div>
         <div><dt>Geography</dt><dd>{candidate.release.geography.label}</dd></div>
         <div><dt>Source</dt><dd><a href={candidate.release.source.url} target="_blank" rel="noopener noreferrer">
-          {candidate.release.source.publisher}, {candidate.release.source.title}<span className="sr-only"> (opens in new tab)</span></a></dd></div></dl>
+          {candidate.release.source.publisher}, {candidate.release.source.title}<span className="sr-only"> (opens in new tab)</span></a></dd></div>
+        <div><dt>Source released</dt><dd><time dateTime={candidate.release.releasedOn}>{formatDatasetDate(candidate.release.releasedOn)}</time></dd></div>
+        <div><dt>Source verified</dt><dd><time dateTime={candidate.release.verifiedOn}>{formatDatasetDate(candidate.release.verifiedOn)}</time></dd></div></dl>
       <p>{candidate.release.chartText}</p>
       <Button ref={candidateChoice} variant="primary" onClick={() => { onChoose(candidate); onClose(); }}>Use this approved dataset</Button>
     </section> : candidateBusy ? <p role="status">Loading approved values…</p> : null}
