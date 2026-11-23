@@ -71,7 +71,7 @@ describe("Data Hub reader and downloads", () => {
     const downloaded = await exportText(id, "html");
     const preview = (doc.querySelector("#figure-frame") as unknown as { srcdoc: string }).srcdoc;
     const published = (await dataHubEmbedPages({ DATA_HUB_PUBLIC: "1" }))
-      .find(page => page.id === id && page.snapshot === "2026-11-09/chart")!.html;
+      .find(page => page.id === id && page.snapshot === "2026-11-19/chart")!.html;
     const text = (source: string) => {
       const window = new Window();
       windows.push(window);
@@ -728,6 +728,7 @@ describe("Data Hub reader and downloads", () => {
     expect(j.industryBreakdown.reduce((s:number,p:{change:number})=>s+p.change,0)).toBe(-900);
     expect(j.industryBreakdown.find((p:{sector:string})=>p.sector==="Private education and health services").change).toBe(5900);
     expect(doc.querySelector("#metric-industryjobs")!.textContent).toContain("−900 jobs");
+    expect(doc.querySelector("#metric-industryjobs .nj-industry-table caption")!.textContent).toBe("October jobs gained or lost by major industry (New Jersey)");
     expect(doc.querySelector(".latest-findings [data-latest-metric='industryjobs']")!.textContent).toContain("October payrolls declined by 900 jobs");
     const [header,...rows]=await csv("industryjobs");
     expect(rows.filter((row:string[])=>row[0]==="industry_monthly_change")).toHaveLength(10);

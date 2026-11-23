@@ -2368,9 +2368,9 @@
     if(m.id==='industryjobs'&&Array.isArray(m.industryBreakdown)){
       const breakdown=m.industryBreakdown;
       const total=breakdown.reduce((sum,r)=>sum+r.change,0);
-      content+=`<p class="v10-table-note">September 2026 net change by <strong>industry</strong>, seasonally adjusted. This is an employer payroll survey, not an occupation-by-occupation breakdown.</p>
+      content+=`<p class="v10-table-note">${escape(m.period)} net change by <strong>industry</strong>, seasonally adjusted. This is an employer payroll survey, not an occupation-by-occupation breakdown.</p>
       <div class="v10-table-wrap"><table class="v10-reference-table nj-industry-table">
-      <caption>September jobs gained or lost by major industry (New Jersey)</caption>
+      <caption>${escape(m.period.split(" ")[0])} jobs gained or lost by major industry (New Jersey)</caption>
       <thead><tr><th scope="col">Industry</th><th scope="col">Monthly jobs change</th><th scope="col" class="nj-industry-bar-heading">Direction &amp; relative size</th></tr></thead>
       <tbody>${breakdown.map(r=>{
         const pct=Math.min(100,Math.abs(r.change)/7200*100).toFixed(1);
