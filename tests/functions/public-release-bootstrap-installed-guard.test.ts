@@ -28,7 +28,9 @@ beforeAll(() => {
 });
 afterAll(async () => { if (app) await deleteApp(app); vi.unstubAllEnvs(); });
 beforeEach(async () => {
-  for (const collection of ["system", "cmsDeploymentReceipts", "cmsReaderCompatibilityReceipts", "admin_logs"]) await db.recursiveDelete(db.collection(collection));
+  for (const collection of ["system", "cmsDeploymentReceipts", "cmsReaderCompatibilityReceipts", "cmsPublishQueue", "admin_logs"]) {
+    await db.recursiveDelete(db.collection(collection));
+  }
   f = installedConsumerFixture(); f.data.get("system/publicDeployment").updatedAt = Timestamp.fromMillis(1_800_000_000_000);
   const batch = db.batch();
   for (const [path, value] of f.data) batch.set(db.doc(path), value);
