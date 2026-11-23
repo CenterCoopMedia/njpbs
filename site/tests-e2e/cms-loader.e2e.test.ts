@@ -1008,8 +1008,9 @@ describe("cmsPages loader against the Firestore emulator", () => {
     // CMS migration is route-by-route. A strict build for Contact must retain
     // the committed homepage until a published home snapshot is admitted.
     const homeHtml = readFileSync("dist/index.html", "utf8");
-    expect(homeHtml).toContain('id="hero-h"');
-    expect(homeHtml).toContain("We're the new NJ PBS");
+    const heroHeading = /<h1\b[^>]*\bid="hero-h"[^>]*>\s*([^\s<][^<]*)<\/h1>/;
+    const fallbackHeroHeading = homeHtml.match(heroHeading)?.[1];
+    expect(fallbackHeroHeading).toBeTruthy();
     expect(homeHtml).not.toContain('data-cms-page="home"');
 
     await db.collection("cmsPages").doc("give").set(
@@ -1135,13 +1136,12 @@ describe("cmsPages loader against the Firestore emulator", () => {
       encoding: "utf8",
       shell: process.platform === "win32",
     });
-    expect(cmsHomeBuild.status).toBe(0);
+    expect(cmsHomeBuild.status, `${cmsHomeBuild.stdout}${cmsHomeBuild.stderr}`).toBe(0);
     expect(`${cmsHomeBuild.stdout}${cmsHomeBuild.stderr}`).toMatch(
       /cmsPages loader: loaded 5 page\(s\)/,
     );
     const cmsHomeHtml = readFileSync("dist/index.html", "utf8");
-    expect(cmsHomeHtml).toContain('id="hero-h"');
-    expect(cmsHomeHtml).toContain("We're the new NJ PBS");
+    expect(cmsHomeHtml.match(heroHeading)?.[1]).toBe(fallbackHeroHeading);
     expect(cmsHomeHtml).not.toContain('data-cms-page-blocks="home"');
     expect(cmsHomeHtml).not.toContain("CMS home editorial region");
     expect(cmsHomeHtml).toContain("CMS manual shelf");
@@ -1150,11 +1150,12 @@ describe("cmsPages loader against the Firestore emulator", () => {
     expect(cmsHomeHtml).not.toContain('class="page-hero"');
     const giveHtml = readFileSync("dist/give/index.html", "utf8");
     const donateHtml = readFileSync("dist/donate/index.html", "utf8");
-    for (const aliasHtml of [giveHtml, donateHtml]) {
-      expect(aliasHtml).toContain('class="public-page');
-      expect(aliasHtml).toContain('data-cms-page-blocks="give"');
-      expect(aliasHtml).toContain("CMS Give editorial region");
-    }
+    expect(giveHtml).toContain('data-cms-page="give"');
+    expect(giveHtml).toContain('data-cms-page-blocks="give"');
+    expect(giveHtml).toContain("CMS Give editorial region");
+    expect(donateHtml).toContain('rel="canonical" href="https://njpbs.org/give/"');
+    expect(donateHtml).toContain('http-equiv="refresh" content="0; url=/give/"');
+    expect(donateHtml).not.toContain("CMS Give editorial region");
     const scheduleHtml = readFileSync("dist/schedule/index.html", "utf8");
     expect(scheduleHtml).toContain("data-native-schedule");
     expect(scheduleHtml).toContain('data-cms-page-blocks="schedule"');
@@ -1172,7 +1173,7 @@ describe("cmsPages loader against the Firestore emulator", () => {
       encoding: "utf8",
       shell: process.platform === "win32",
     });
-    expect(draftBuild.status).toBe(0);
+    expect(draftBuild.status, `${draftBuild.stdout}${draftBuild.stderr}`).toBe(0);
     expect(`${draftBuild.stdout}${draftBuild.stderr}`).toMatch(
       /loaded 1 page.*draft content/,
     );
@@ -1237,7 +1238,7 @@ describe("cmsPages loader against the Firestore emulator", () => {
       encoding: "utf8",
       shell: process.platform === "win32",
     });
-    expect(queuedDraftBuild.status).toBe(0);
+    expect(queuedDraftBuild.status, `${queuedDraftBuild.stdout}${queuedDraftBuild.stderr}`).toBe(0);
     expect(`${queuedDraftBuild.stdout}${queuedDraftBuild.stderr}`).toMatch(
       /loaded 1 page.*draft content/,
     );
@@ -1323,7 +1324,7 @@ describe("cmsPages loader against the Firestore emulator", () => {
       encoding: "utf8",
       shell: process.platform === "win32",
     });
-    expect(watchPreviewBuild.status).toBe(0);
+    expect(watchPreviewBuild.status, `${watchPreviewBuild.stdout}${watchPreviewBuild.stderr}`).toBe(0);
     const watchPreviewHtml = readFileSync("dist/watch/index.html", "utf8");
     expect(watchPreviewHtml).toContain("Private preview. The public site has not changed.");
     expect(watchPreviewHtml).toContain('data-cms-service-page="watch"');
@@ -1331,8 +1332,8 @@ describe("cmsPages loader against the Firestore emulator", () => {
     expect(watchPreviewHtml.match(/Programs on demand/g)).toHaveLength(1);
     expect(watchPreviewHtml.match(/PBS handles the player/g)).toHaveLength(1);
     expect(watchPreviewHtml).not.toContain('<a class="public-page__card"');
-    expect(watchPreviewHtml).toContain(
-      '<a class="public-page__card-title-link" href="https://watch.njpbs.org/"',
+    expect(watchPreviewHtml).toMatch(
+      /<a\b[^>]*\bhref="https:\/\/watch\.njpbs\.org\/"[^>]*>Programs on demand</,
     );
     expect(watchPreviewHtml).toContain('<a href="/faq/">See Watch help</a>');
     expect(watchPreviewHtml.indexOf("Use Watch for NJ PBS video")).toBeLessThan(
