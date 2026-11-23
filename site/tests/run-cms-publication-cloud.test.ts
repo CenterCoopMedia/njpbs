@@ -179,6 +179,7 @@ it.each(["production", "development"])("gives %s background builds its own deplo
   await runCmsPublicationCloud("--serve", environment);
   const input = boundary.start.mock.calls.at(-1)?.[0];
   expect(input.buildEnvironment).toEqual({ PUBLIC_REPORT_ENDPOINT: "https://report.example.test", CMS_DEPLOYMENT_ENVIRONMENT: deployment });
+  expect(vi.mocked(parseCmsPublicationPublicBuildEnvironment).mock.calls.at(-1)?.[1]).toBe(deployment);
   expect(input.publicationAccess).toEqual(deployment === "development"
     ? { clientId: "fixture-access-id", clientSecret: "fixture-access-secret" } : undefined);
   expect(environment).not.toHaveProperty("CMS_DEV_ACCESS_CLIENT_ID");
