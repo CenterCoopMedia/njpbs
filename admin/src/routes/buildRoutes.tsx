@@ -272,6 +272,15 @@ export function buildRoutes(): RouteObject[] {
               } satisfies RouteHandle,
             },
             {
+              path: segment(ROUTE_PATHS.whatsNew),
+              lazy: async () => ({ Component: (await adminRouteModules.whatsNew()).WhatsNewRoute }),
+              hydrateFallbackElement: <RouteLoading />,
+              handle: {
+                title: "What's new changelog",
+                description: "Browse the complete history of Boardwalk release notes, newest first.",
+              } satisfies RouteHandle,
+            },
+            {
               path: segment(ROUTE_PATHS.politicsResource),
               lazy: lazyResourcesRoute,
               hydrateFallbackElement: <RouteLoading />,

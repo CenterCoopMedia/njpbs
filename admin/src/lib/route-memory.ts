@@ -90,6 +90,7 @@ export function canOpenAdminPath(principal: Principal, pathname: string): boolea
   if (path === ROUTE_PATHS.accountProfile) return true;
   if (path === ROUTE_PATHS.schedule) return true;
   if (path === ROUTE_PATHS.open) return canAccessAdmin(principal);
+  if (path === ROUTE_PATHS.whatsNew) return canAccessAdmin(principal);
   if (path === ROUTE_PATHS.politicsResource) return canAccessAdmin(principal);
   if (path === ROUTE_PATHS.guide || /^\/guide\/[a-z0-9]+(?:-[a-z0-9]+)*$/.test(path)) return true;
 

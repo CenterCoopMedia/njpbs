@@ -1,0 +1,13 @@
+.whats-new-archive {
+  max-width: var(--layout-reading);
+  margin-inline: auto;
+  overflow-wrap: anywhere;
+}
+
+.whats-new-archive .whats-new-month {
+  font-size: var(--font-size-lg);
+}
+
+.whats-new-archive .whats-new-note-body {
+  font-size: var(--font-size-base);
+}

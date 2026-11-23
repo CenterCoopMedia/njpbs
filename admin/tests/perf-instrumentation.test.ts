@@ -60,6 +60,7 @@ describe("Admin performance instrumentation", () => {
       queue: async () => undefined,
       reports: async () => undefined,
       guide: async () => undefined,
+      whatsNew: async () => undefined,
       resources: async () => undefined,
       schedule: async () => undefined,
     liveProduction: async () => undefined,

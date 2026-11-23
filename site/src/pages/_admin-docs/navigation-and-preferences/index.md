@@ -234,7 +234,9 @@ person using the CMS. Stop and sign out if they do not.
 
 The gift icon in the header opens **What's new**. It lists recent changes to
 Boardwalk in plain language, newest first, grouped by month. Each note says
-whether something is new, improved or fixed.
+whether something is new, improved or fixed. Select **View full changelog** to
+browse older notes in a new tab. Select a month to jump to its notes. Your
+current workspace stays open.
 
 A small dot on the gift icon means there are notes you have not seen. The dot
 clears after the notes load while the dialog is open. A failed load keeps the dot.

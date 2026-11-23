@@ -1,0 +1,66 @@
+.whats-new-notes { display: grid; gap: var(--space-6); }
+
+.whats-new-month {
+  margin: 0 0 var(--space-2);
+  padding-bottom: var(--space-2);
+  border-bottom: var(--border-width) solid var(--color-border);
+  font-size: var(--font-size-md);
+  scroll-margin-block-start: calc(var(--cms-header-height) + var(--space-4));
+}
+
+.whats-new-notes ul {
+  display: grid;
+  gap: var(--space-4);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.whats-new-notes li { display: grid; gap: var(--space-1); }
+
+.whats-new-month-links ul {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2) var(--space-4);
+}
+
+.whats-new-month-links a {
+  display: flex;
+  align-items: center;
+  min-height: var(--target-comfortable);
+  text-decoration: underline;
+}
+
+.whats-new-note-title {
+  margin: 0;
+  font-size: var(--font-size-base, 1rem);
+  line-height: var(--line-height-tight);
+}
+
+.whats-new-note-body {
+  margin: 0;
+  max-width: 65ch;
+  color: var(--color-text-muted);
+  font-size: var(--font-size-sm);
+  line-height: var(--line-height-copy);
+}
+
+.whats-new-meta {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  margin: 0;
+  color: var(--color-text-muted);
+  font-size: var(--font-size-xs);
+}
+
+/* Compact kind labels reuse the status badge tone pairs. */
+.whats-new-kind {
+  border-radius: var(--cms-radius-small);
+  padding: 1px var(--space-2);
+  font-weight: 700;
+}
+
+.whats-new-kind-new { background: var(--cms-brand-soft); color: var(--cms-brand-ink); }
+.whats-new-kind-improved { background: var(--cms-scheduled-soft); color: var(--cms-scheduled); }
+.whats-new-kind-fixed { background: var(--cms-positive-soft); color: var(--cms-positive); }

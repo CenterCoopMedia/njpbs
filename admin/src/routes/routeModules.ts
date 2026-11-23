@@ -46,6 +46,7 @@ export const adminRouteModules = {
   queue: loadQueueRoute,
   reports: loadReportsRoute,
   guide: loadGuideRoute,
+  whatsNew: () => import("./WhatsNewRoute"),
   resources: loadResourcesRoute,
   schedule: loadScheduleRoute,
   liveProduction: () => liveProductionEnabled() ? import("./LiveProductionRoute") : loadNotFoundRoute(),
@@ -72,6 +73,7 @@ export interface InitialRoutePreloaders {
   queue: () => Promise<unknown>;
   reports: () => Promise<unknown>;
   guide: () => Promise<unknown>;
+  whatsNew: () => Promise<unknown>;
   resources: () => Promise<unknown>;
   schedule: () => Promise<unknown>;
   liveProduction: () => Promise<unknown>;
@@ -107,6 +109,7 @@ const MODULE_KEY_FOR_ROUTE_CATEGORY: Record<RouteCategory, RouteModuleKey> = {
   queue: "queue",
   reports: "reports",
   guide: "guide",
+  "whats-new": "whatsNew",
   resources: "resources",
   schedule: "schedule",
   "live-production": "liveProduction",
