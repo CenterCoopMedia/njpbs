@@ -29,6 +29,7 @@ functions/cloud-publication-wake.generated.json
 /functions/lib/datasets.js
 /functions/lib/election-result-sources.js
 /functions/lib/election-results.js
+/functions/lib/embed-player.js
 /functions/lib/home-hero.js
 /functions/lib/home-newscast-data.js
 /functions/lib/home-retained-sources.js

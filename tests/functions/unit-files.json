@@ -251,5 +251,6 @@
   "tests/functions/vmix-enrollment-unit.test.ts",
   "tests/functions/vmix-install-guard-unit.test.ts",
   "tests/functions/vmix-update-live.test.ts",
-  "tests/functions/wave-audio.test.js"
+  "tests/functions/wave-audio.test.js",
+  "tests/functions/wordpress-archive-content.test.ts"
 ]
