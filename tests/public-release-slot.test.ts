@@ -173,12 +173,13 @@ it("rechecks an absent route after storage I/O and reselects when ownership chan
 const archiveAlias = "/blog-post/caf%C3%A9/";
 const archiveTarget = "/posts/old-story/";
 const canonicalArchivePost = "/posts/current-story/";
+const archiveMap = JSON.stringify({ [archiveAlias]: archiveTarget });
 const archiveRequest = (path: string, method = "GET") => new Request(`https://dev-public.example.org${path}`, { method });
 async function archiveFixture() {
   const shard = `${SPOTLIGHT_ARCHIVE_REDIRECT_ASSETS}${spotlightArchiveRedirectShard(archiveAlias)}.json`;
   const view = await writePublicReleasePairView({ store, pair, identity, claimDigest, cursor,
     outputs: (async function* () {
-      yield { path: shard, status: 200 as const, bytes: new TextEncoder().encode(JSON.stringify({ [archiveAlias]: archiveTarget })),
+      yield { path: shard, status: 200 as const, bytes: new TextEncoder().encode(archiveMap),
         headers: { "cache-control": "no-store", "content-type": "application/json" } };
       yield { path: `${canonicalArchivePost}index.html`, status: 200 as const, bytes: body,
         headers: { "cache-control": "no-store", "content-type": "text/html" } };
@@ -222,6 +223,16 @@ it("keeps a retired archive URL gone when its Post is withdrawn or missing", asy
     expect(response.status).toBe(410);
     expect(response.headers.get("location")).toBeNull();
   }
+});
+
+it("returns a retryable response through retirement when a selected archive shard fails integrity checks", async () => {
+  const { ingress } = await archiveFixture();
+  const shardDigest = createHash("sha256").update(archiveMap).digest("hex");
+  const shard = [...objects].find(([key]) => key.endsWith(`/objects/${shardDigest}`))![1];
+  shard.bytes[0] ^= 1;
+  const response = await legacyRedirects.fetch(archiveRequest(archiveAlias), { ASSETS: { fetch: ingress } });
+  expect(response.status).toBe(503);
+  expect(response.headers.get("cache-control")).toBe("no-store");
 });
 
 it("reselects if the current archive destination cannot be confirmed", async () => {

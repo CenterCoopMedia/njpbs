@@ -6,7 +6,7 @@ import { SECURITY_HEADER_BASELINE } from "../../packages/content-core/src/public
 import { SPOTLIGHT_ARCHIVE_REDIRECT_ASSETS, spotlightArchivePath } from "../../packages/content-core/src/spotlight-archive-paths";
 import { PUBLIC_GONE_BRANCH_HEADER } from "./public-gone";
 import { readBoundedPairObject, readPublicReleasePairOutput, verifyPairRouteTarget, isPublicPairRequestPath, type PairReadStore } from "./public-release-view-reader";
-import { serveSpotlightArchiveRedirect } from "./spotlight-archive-redirect";
+import { serveSpotlightArchiveRedirect, spotlightArchiveRedirectAssetPath } from "./spotlight-archive-redirect";
 import protocol from "../../functions/lib/public-release-pair.js";
 import inputs from "../../functions/lib/public-release-pair-input.js";
 import views from "../../functions/lib/public-release-pair-view.js";
@@ -137,16 +137,20 @@ export function createPublicReleaseSlot({ pair, workerVersionId, store, getDecis
         let response = none(404);
         let reselect = false;
         if (before.route.kind === "unowned" && archivePath) {
-          response = await serveSpotlightArchiveRedirect(request, response, async (shard) => {
-            // An unowned composed miss resolves against this pair's sealed code pack.
-            const asset = await readPublicReleasePairOutput({ store, pair, locator: before.locator, path: new URL(shard.url).pathname });
-            return asset?.status === 200 ? new Response(new Uint8Array(asset.body)) : none(404);
-          }, async (canonical) => {
-            const reply = await slot.serve(canonical, selection, false, remainingBudget());
-            if (reply.kind === "response") return reply.response;
-            reselect = true;
-            return none(503);
+          // An unowned composed miss resolves against this pair's sealed code pack.
+          // Storage failures must reach the router before retirement can turn a miss into 410.
+          const shard = await readPublicReleasePairOutput({
+            store, pair, locator: before.locator, path: spotlightArchiveRedirectAssetPath(archivePath),
           });
+          if (shard) {
+            if (shard.status !== 200) fail();
+            response = await serveSpotlightArchiveRedirect(request, response, async () => new Response(new Uint8Array(shard.body)), async (canonical) => {
+              const reply = await slot.serve(canonical, selection, false, remainingBudget());
+              if (reply.kind === "response") return reply.response;
+              reselect = true;
+              return none(503);
+            });
+          }
         }
         const after = await decide();
         if (reselect || after.kind !== "decision" || before.authorityDigest !== after.authorityDigest) return miss();
