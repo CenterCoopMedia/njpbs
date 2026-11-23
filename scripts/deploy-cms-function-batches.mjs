@@ -158,7 +158,10 @@ export async function listPages(request, url, field) {
 function expiredFunctionFailures(output, names, project = PROJECT) {
   const summaries = [...output.matchAll(/^Functions deploy had errors with the following functions:\n((?:\t[^\n]+\n)+)/gm)];
   if (summaries.length !== 1) return [];
-  const failed = summaries[0][1].trimEnd().split("\n").map(line => line.match(/^\t([A-Za-z][A-Za-z0-9]*)\(us-central1\)$/)?.[1]);
+  // Firebase labels a non-default codebase's functions <codebase>:<name>(<region>).
+  const { codebase } = cmsTarget();
+  const label = new RegExp(`^\\t${codebase === "default" ? "" : `${codebase}:`}([A-Za-z][A-Za-z0-9]*)\\(us-central1\\)$`);
+  const failed = summaries[0][1].trimEnd().split("\n").map(line => line.match(label)?.[1]);
   if (failed.some(name => !names.includes(name)) || new Set(failed).size !== failed.length) return [];
 
   // Firebase prints unlabelled build errors, then a separate failed-name list.
