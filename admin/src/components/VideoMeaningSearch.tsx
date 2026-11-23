@@ -3,6 +3,7 @@ import { fuseRanks, type createMeaningSearch, type MeaningDocument } from "../..
 import { disposeSessionMeaningSearch, sessionMeaningSearch } from "../lib/meaning-search-session";
 import { HttpError, postFunction } from "../lib/functions";
 import { listSourceMedia, type SourceMediaAssetSummary, type SourceMediaQuery } from "../lib/source-media";
+import { matchesMediaBounds, type MediaMetadataBounds } from "../lib/media-browse-metadata";
 import { getVideoTranscript, videoTime } from "../lib/video-production";
 import { cacheVideoSearchCorpus, cachedVideoSearchCorpus, invalidateVideoSearchCorpus, videoSearchCacheRevision, type VideoSearchChunk as Chunk, type VideoSearchCoverage as Coverage, type VideoSearchEntry as Entry } from "../lib/video-search-session-cache";
 import { loadVideoSearchShards, checkVideoSearchLease, SEARCH_FRESHNESS_MS, type SearchLease } from "../lib/video-search-shards";
@@ -25,9 +26,20 @@ const MAX_ENTRIES = 10000;
 const MAX_TEXT = 10 * 1024 * 1024;
 const wait = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 
+type VideoFilters = Pick<SourceMediaQuery, "tag" | "createdBy" | "rightsStatus" | "metadataUpdateRequested"> & MediaMetadataBounds;
+
+function allowed(asset: SourceMediaAssetSummary, filters: VideoFilters) {
+  const { durationSeconds, width, height } = asset.viewingCopy?.state === "ready" ? asset.viewingCopy : {};
+  return (!filters.tag || asset.tags.includes(filters.tag)) &&
+    (!filters.createdBy || asset.uploadedBy?.uid === filters.createdBy) &&
+    (!filters.rightsStatus || asset.rightsStatus === filters.rightsStatus) &&
+    (!filters.metadataUpdateRequested || asset.metadataUpdateRequested === true) &&
+    matchesMediaBounds(filters, { updatedAt: asset.updatedAt, duration: durationSeconds, width, height });
+}
+
 export function VideoMeaningSearch({ userId, sourceId, query, getIdToken, filters, disabled, onOpen, renderPoster }: {
   userId: string; sourceId: string; query: string; getIdToken: () => Promise<string>;
-  filters: Pick<SourceMediaQuery, "tag" | "createdBy" | "rightsStatus" | "metadataUpdateRequested">; disabled: boolean;
+  filters: VideoFilters; disabled: boolean;
   renderPoster?: (asset: SourceMediaAssetSummary) => ReactNode;
   onOpen: (asset: SourceMediaAssetSummary, seconds: number) => void;
 }) {
@@ -52,6 +64,8 @@ export function VideoMeaningSearch({ userId, sourceId, query, getIdToken, filter
   const hasQuery = query.trim().length > 0;
   const latestQuery = useRef(query);
   latestQuery.current = query;
+  const latestFilters = useRef(filters);
+  latestFilters.current = filters;
   const pausedSearch = useRef<{ query: string; controller: AbortController }>();
 
   useEffect(() => {
@@ -343,16 +357,12 @@ export function VideoMeaningSearch({ userId, sourceId, query, getIdToken, filter
   }, [query, version, semanticReady]);
 
   const needle = query.trim().toLocaleLowerCase("en-US");
-  const allowed = (entry: Entry) => (!filters.tag || entry.asset.tags.includes(filters.tag)) &&
-    (!filters.createdBy || entry.asset.uploadedBy?.uid === filters.createdBy) &&
-    (!filters.rightsStatus || entry.asset.rightsStatus === filters.rightsStatus) &&
-    (!filters.metadataUpdateRequested || entry.asset.metadataUpdateRequested === true);
   const showLocal = hasLocalCorpus.current && localIdentity.current === `${userId}:${sourceId}`;
   const visibleEntries = showLocal ? entries.current : new Map<string, Entry>();
   const visibleCoverage = coverage;
   const visibleStatus = status;
-  const literal = needle ? [...visibleEntries.values()].filter(entry => allowed(entry) && entry.text.toLocaleLowerCase("en-US").includes(needle)).map(entry => entry.id) : [];
-  const meaning = matches.filter(id => { const entry = visibleEntries.get(id); return entry && allowed(entry); });
+  const literal = needle ? [...visibleEntries.values()].filter(entry => allowed(entry.asset, filters) && entry.text.toLocaleLowerCase("en-US").includes(needle)).map(entry => entry.id) : [];
+  const meaning = matches.filter(id => { const entry = visibleEntries.get(id); return entry && allowed(entry.asset, filters); });
   const results = fuseRanks(literal, meaning, visibleEntries.size).map(id => visibleEntries.get(id)!).filter(Boolean);
 
   const groups = groupVideoSearchResults(results);
@@ -371,9 +381,9 @@ export function VideoMeaningSearch({ userId, sourceId, query, getIdToken, filter
       ]);
       if (entry.chunk && (current?.transcript.state !== "ready" || current.transcript.editRevision !== entry.chunk.editRevision)) throw new Error("stale");
       const asset = refreshed.records.find(item => item.id === entry.asset.id && item.sourceId === sourceId);
-      if (!asset || !allowed({ ...entry, asset })) throw new Error("stale");
+      if (!asset || !allowed(asset, filters)) throw new Error("stale");
       // The player signs once after mounting; a discarded preflight URL delayed every open.
-      if (mounted.current) onOpen(asset, entry.chunk?.startSeconds ?? 0);
+      if (mounted.current && allowed(asset, latestFilters.current)) onOpen(asset, entry.chunk?.startSeconds ?? 0);
     } catch (error) {
       if (!mounted.current) return;
       if (error instanceof HttpError && [401, 403].includes(error.status)) void forgetVideoSearchShards(userId);

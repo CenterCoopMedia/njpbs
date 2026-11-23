@@ -62,7 +62,7 @@ function parseSurface(value: string): SavedMediaViewSurface {
 
 function canonicalQuery(surface: SavedMediaViewSurface, value: string): string {
   if (surface === "images" || surface === "audio") {
-    const { query } = parseMediaLocation(value);
+    const { query } = parseMediaLocation(value, surface === "audio");
     return encodeMediaLocation({ ...query, page: 1 }, null).toString();
   }
   if (surface === "favorites") {

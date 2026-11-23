@@ -7,6 +7,7 @@ import type {
 import type { MediaCollectionLifecycle, MediaCollectionScope } from "./media-collections";
 import type { MediaAssetRef } from "./media-identity";
 import type { SourceMediaQuery } from "./source-media";
+import { MEDIA_METADATA_BOUND_FIELDS, mediaAspect, parseMediaRange, type MediaMetadataBounds } from "./media-browse-metadata";
 
 export interface MediaLocationState {
   query: MediaListQuery;
@@ -23,6 +24,10 @@ export const DEFAULT_MEDIA_QUERY: MediaListQuery = Object.freeze({
   direction: "desc",
   page: 1,
 });
+
+export function mediaAssetLookupQuery(id: string, { categories, kinds, sort, direction }: MediaListQuery): MediaListQuery {
+  return { q: "", categories, kinds, sort, direction, page: 1, assetIds: [id] };
+}
 
 const KINDS = new Set<MediaKind>(["image", "document", "audio"]);
 const SORT_FIELDS = new Set<MediaSortField>([
@@ -49,7 +54,7 @@ function uniqueBounded(values: string[], max: number): string[] {
   return [...new Set(values)].slice(0, max);
 }
 
-export function parseMediaLocation(search: string): MediaLocationState {
+export function parseMediaLocation(search: string, audio = false): MediaLocationState {
   const params = new URLSearchParams(search);
   const q = (params.get("q") ?? "").slice(0, 200).trim();
   const categories = uniqueBounded(
@@ -72,6 +77,10 @@ export function parseMediaLocation(search: string): MediaLocationState {
       q,
       categories,
       kinds,
+      ...metadataRange(params, "updated"),
+      ...(audio ? metadataRange(params, "duration")
+        : !kinds.length || kinds.includes("image") ? aspectFilter(params) : undefined),
+      ...(oneParam(params, "metadata") === "requested" ? { metadataUpdateRequested: true } : {}),
       sort:
         sortCandidate && SORT_FIELDS.has(sortCandidate)
           ? sortCandidate
@@ -106,6 +115,8 @@ export function encodeMediaLocation(
   if (query.q) params.set("q", query.q);
   for (const category of query.categories) params.append("category", category);
   for (const kind of query.kinds) params.append("kind", kind);
+  encodeMetadataBounds(params, query);
+  if (query.metadataUpdateRequested) params.set("metadata", "requested");
   if (query.sort !== DEFAULT_MEDIA_QUERY.sort) params.set("sort", query.sort);
   if (query.direction !== DEFAULT_MEDIA_QUERY.direction) {
     params.set("direction", query.direction);
@@ -120,7 +131,7 @@ export type VideoPageSize = 24 | 48 | 96;
 export type VideoMediaSort = NonNullable<SourceMediaQuery["sort"]>;
 export type VideoRightsFilter = "pending" | "complete";
 
-export interface VideoMediaLocationQuery {
+export interface VideoMediaLocationQuery extends MediaMetadataBounds {
   q: string;
   tag?: string;
   by?: string;
@@ -175,6 +186,25 @@ function oneParam(params: URLSearchParams, name: string): string | null {
   return values.length === 1 ? values[0] : null;
 }
 
+function metadataRange(params: URLSearchParams, kind: "updated" | "duration") {
+  const [start, end] = kind === "updated" ? ["updatedFrom", "updatedTo"] : ["minDuration", "maxDuration"];
+  const from = oneParam(params, start) ?? "";
+  const to = oneParam(params, end) ?? "";
+  return (from || to) && parseMediaRange(kind, from, to) || undefined;
+}
+
+function aspectFilter(params: URLSearchParams) {
+  const aspect = mediaAspect(oneParam(params, "aspect"));
+  return aspect ? { aspect } : undefined;
+}
+
+function encodeMetadataBounds(params: URLSearchParams, query: MediaMetadataBounds) {
+  for (const field of MEDIA_METADATA_BOUND_FIELDS) {
+    const value = query[field];
+    if (value !== undefined) params.set(field, String(value));
+  }
+}
+
 function boundedFilter(value: string | null, maxLength: number): string | null {
   if (value === null || value.length > maxLength || [...value].some((character) => character.charCodeAt(0) < 32)) {
     return null;
@@ -202,7 +232,8 @@ export function parseVideoMediaLocation(search: string): VideoMediaLocationState
   const rightsCandidate = oneParam(params, "rights");
   const rights = rightsCandidate === "pending" || rightsCandidate === "complete" ? rightsCandidate : null;
   const metadata = oneParam(params, "metadata") === "requested" && { metadata: "requested" as const };
-  const structured = [tag && { tag }, by && { by }, rights && ({ rights } as const), metadata].filter(Boolean);
+  const structured = [tag && { tag }, by && { by }, rights && ({ rights } as const), metadata,
+    metadataRange(params, "updated"), metadataRange(params, "duration"), aspectFilter(params)].filter(Boolean);
   const sortCandidate = oneParam(params, "sort") as VideoMediaSort | null;
   const limitCandidate = Number(oneParam(params, "limit"));
   const query: VideoMediaLocationQuery = {
@@ -229,6 +260,7 @@ export function encodeVideoMediaLocation(
   else if (query.by) params.set("by", query.by);
   else if (query.rights) params.set("rights", query.rights);
   else if (query.metadata) params.set("metadata", query.metadata);
+  else encodeMetadataBounds(params, query);
   if (query.sort !== DEFAULT_VIDEO_MEDIA_QUERY.sort) params.set("sort", query.sort);
   if (query.limit !== DEFAULT_VIDEO_MEDIA_QUERY.limit) params.set("limit", String(query.limit));
   if (selectedId && isBoundedId(selectedId)) params.set("asset", selectedId);

@@ -36,6 +36,7 @@ const { isApprovedActiveAccount } = require("./lib/active-account");
 const { computeMediaTabCounts } = require("./lib/media-tab-counts");
 const { MEDIA_TAG_SAMPLE_SIZE, savedMediaTagSample } = require("./lib/media-tag-sample");
 const { sourceMediaQuery } = require("./lib/source-media-query");
+const { hasMetadataBounds, matchesMediaMetadata } = require("./lib/media-browse-metadata");
 
 const { createOriginalStorage, refreshListedOriginals } = require("./lib/source-originals");
 
@@ -190,6 +191,8 @@ function createCmsListMediaSourcesHandler(deps = {}) {
   };
 }
 
+const MAX_FILTERED_VIDEO_CANDIDATES = 120;
+
 async function readSourceMediaPage(firestore, source, request, documentIdField) {
   if (request.assetId) {
     const snapshot = await firestore.collection("mediaSourceAssets").doc(request.assetId).get();
@@ -199,9 +202,11 @@ async function readSourceMediaPage(firestore, source, request, documentIdField) 
     return { records: assets.map(sourceMediaAssetDetail), assets, nextCursor: null, hasMore: false };
   }
   const { query, order, sortField } = sourceMediaQuery(firestore, source.id, request, documentIdField);
+  const filterMetadata = hasMetadataBounds(request);
+  const candidateLimit = filterMetadata ? MAX_FILTERED_VIDEO_CANDIDATES : request.limit;
   let snapshot;
   try {
-    snapshot = await query.limit(request.limit + (request.tagsOnly ? 0 : 1)).get();
+    snapshot = await query.limit(candidateLimit + (request.tagsOnly ? 0 : 1)).get();
   } catch (error) {
     const indexUnavailable = [9, "FAILED_PRECONDITION", "failed-precondition"].includes(error?.code) &&
       /index/i.test(error?.message ?? "");
@@ -211,16 +216,23 @@ async function readSourceMediaPage(firestore, source, request, documentIdField) 
     const page = await readSourceMediaPage(firestore, source, { ...request, sort: "updated_desc", cursor: null }, documentIdField);
     return { ...page, sortFallback: "updated_desc" };
   }
-  const documents = snapshot.docs.slice(0, request.limit);
-  const assets = documents.flatMap((document) => {
+  const assets = [];
+  let consumed = 0;
+  for (const document of snapshot.docs.slice(0, candidateLimit)) {
+    consumed++;
     const asset = parseSourceMediaAsset(document.id, document.data());
-    return asset && asset.sourceId === source.id && objectKeyWithinSource(source, asset.objectKey)
-      ? [asset]
-      : [];
-  });
+    if (!asset || asset.sourceId !== source.id || !objectKeyWithinSource(source, asset.objectKey)) continue;
+    if (filterMetadata) {
+      const { durationSeconds, width, height } = asset.rendition?.state === "ready" ? asset.rendition.web : {};
+      if (!matchesMediaMetadata(request, { updatedAt: asset.updatedAt, duration: durationSeconds, width, height })) continue;
+    }
+    assets.push(asset);
+    if (assets.length === request.limit) break;
+  }
   const records = assets.map(sourceMediaAssetSummary);
-  const hasMore = snapshot.docs.length > request.limit;
-  const last = hasMore ? documents.at(-1) : null;
+  // Advance over rejected rows even when this bounded slice produced an empty page.
+  const hasMore = snapshot.docs.length > consumed;
+  const last = hasMore ? snapshot.docs[consumed - 1] : null;
   const lastData = last?.data();
   const sortValue = lastData?.[sortField];
   const validSortValue = sortField === "sizeBytes"
@@ -231,12 +243,8 @@ async function readSourceMediaPage(firestore, source, request, documentIdField) 
   }
   const nextCursor = last
     ? encodeCursor({
+        ...request,
         sourceId: source.id,
-        q: request.q,
-        tag: request.tag,
-        createdBy: request.createdBy,
-        rightsStatus: request.rightsStatus,
-        metadataUpdateRequested: request.metadataUpdateRequested,
         order,
         id: last.id,
         sort: sortValue,
@@ -337,7 +345,8 @@ function createCmsListSourceMediaHandler(deps = {}) {
       }
       const [{ assets = [], ...page }, total] = await Promise.all([
         readPageFn(firestore, source, request, documentIdField),
-        request.assetId || request.q || request.tag || request.createdBy || request.rightsStatus || request.metadataUpdateRequested
+        request.assetId || request.q || request.tag || request.createdBy || request.rightsStatus ||
+          request.metadataUpdateRequested || hasMetadataBounds(request)
           ? Promise.resolve(null)
           : readTotalFn(firestore, source.id),
       ]);

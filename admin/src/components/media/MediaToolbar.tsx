@@ -4,6 +4,7 @@ import { useCallback, useEffect, useId, useImperativeHandle, useLayoutEffect, us
 import { useControlPresentation } from "../../context/ControlPresentationContext";
 import type { ListMediaResponse, MediaKind } from "../../lib/functions";
 import type { MediaDisplayPreferences } from "../../lib/media-display";
+import { mediaAspect } from "../../lib/media-browse-metadata";
 import {
   applyFilterDraft,
   categoryOptions,
@@ -35,6 +36,7 @@ import { MediaDisplayPopover, type MediaDisplayConfiguration } from "./MediaDisp
 import { MediaFilterChips, type MediaFilterChipModel, type MediaFilterEdit } from "./MediaFilterChips";
 import {
   MediaFilterPopover,
+  metadataFilterProperties,
   type MediaFilterProperty,
   type MediaFilterPropertyModel,
   type MediaFilterStart,
@@ -377,6 +379,16 @@ function ImagesMediaToolbar(props: MediaToolbarProps) {
       emptyLabel: "No tags on this page",
       options: pageTags(result?.records ?? []).map((value) => ({ value, label: value })),
     },
+    ...metadataFilterProperties(state.query, {
+      duration: Boolean(props.audioLibrary),
+      aspect: !props.audioLibrary && (!draft.value.kinds.length || draft.value.kinds.includes("image")),
+      requested: state.query.metadataUpdateRequested === true,
+      applyRange: bounds => {
+        draft.flush();
+        const current = stateRef.current;
+        change({ ...current, query: { ...current.query, ...bounds, page: 1 } });
+      },
+    }),
   ];
   const chips = filterChips(state.query, categoryLabel);
   const uploadDraftLabel = uploadDraftCount === undefined ? undefined : `Continue upload (${uploadDraftCount})`;
@@ -395,6 +407,14 @@ function ImagesMediaToolbar(props: MediaToolbarProps) {
         if (property === "kind") draft.toggleKind(value as MediaKind);
         else if (property === "category") draft.toggleCategory(value);
         else if (property === "tag") pickTag(value);
+        else if (property === "metadata" || property === "aspect") {
+          draft.flush();
+          const current = stateRef.current;
+          const query = property === "metadata"
+            ? { metadataUpdateRequested: current.query.metadataUpdateRequested ? undefined : true as const }
+            : { aspect: current.query.aspect === value ? undefined : mediaAspect(value) };
+          change({ ...current, query: { ...current.query, ...query, page: 1 } });
+        }
       },
       onRemove: (chip) => {
         draft.reset();

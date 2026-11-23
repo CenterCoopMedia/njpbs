@@ -2,6 +2,8 @@ import { useEffect, useId, useRef, useState } from "react";
 import type { createMeaningSearch, MeaningDocument } from "../../../packages/browser-search";
 import { disposeSessionMeaningSearch, sessionMeaningSearch } from "../lib/meaning-search-session";
 import { HttpError, type MediaAssetSummary, type MediaListQuery, type ListMediaResponse, type MediaCorpusRequest, type MediaCorpusResponse } from "../lib/functions";
+import { matchesMediaBounds } from "../lib/media-browse-metadata";
+import { mediaAssetLookupQuery } from "../lib/media-query";
 import { Icon } from "./ui/Icon";
 import { Button } from "./ui/Primitives";
 import { InfoTooltip } from "./ui/InfoTooltip";
@@ -14,7 +16,11 @@ const TEXT_LIMIT = 5800;
 const MEANING_SCAN_PAGE_SIZE = 500;
 const IDLE_STATUS = "Type a search to find related media. Keyword search still works.";
 
-type ScanFilters = Pick<MediaListQuery, "categories" | "kinds">;
+type ScanFilters = Pick<MediaListQuery, "categories" | "kinds" | "updatedFrom" | "updatedTo" | "aspect" | "metadataUpdateRequested">;
+
+function scanFilters({ categories, kinds, updatedFrom, updatedTo, aspect, metadataUpdateRequested }: MediaListQuery): ScanFilters {
+  return { categories, kinds, updatedFrom, updatedTo, aspect, metadataUpdateRequested };
+}
 
 type MediaMeaningScan = {
   records: Map<string, MediaAssetSummary>;
@@ -45,6 +51,9 @@ function assetMatchesMediaFilters(asset: MediaAssetSummary, filters: ScanFilters
   // Audio lists only on the Audio tab, as in selectMediaLibrary.
   if (asset.kind === "audio") return false;
   if (filters.kinds.length > 0 && !filters.kinds.includes(asset.kind)) return false;
+  if (filters.metadataUpdateRequested && !asset.metadataUpdateRequested) return false;
+  const { width, height } = asset.kind === "image" ? asset : {};
+  if (!matchesMediaBounds(filters, { updatedAt: asset.updatedAt, width, height })) return false;
   if (filters.categories.length === 0) return true;
   return assignedCategories(asset).some(category => filters.categories.includes(category));
 }
@@ -146,7 +155,7 @@ export function MediaMeaningResults({ identity, query, loadMedia, loadCorpus, on
   loadCorpus: (request: MediaCorpusRequest) => Promise<MediaCorpusResponse>;
   onSelect: (asset: MediaAssetSummary) => void; disabled?: boolean; refreshRevision?: number;
 }) {
-  const filters = JSON.stringify({ categories: query.categories, kinds: query.kinds });
+  const filters = JSON.stringify(scanFilters(query));
   const hasQuery = query.q.trim().length > 0;
   const context = `${identity}:${filters}:${refreshRevision}`;
   const sessionKey = `${identity}:${refreshRevision}`;
@@ -300,10 +309,10 @@ export function MediaMeaningResults({ identity, query, loadMedia, loadCorpus, on
     const selectionContext = context;
     setOpening(asset.id); setError("");
     try {
-      const fresh = await loadMedia({ ...query, q: "", page: 1, assetIds: [asset.id] });
+      const fresh = await loadMedia(mediaAssetLookupQuery(asset.id, query));
       if (!mounted.current || current.current.context !== selectionContext || current.current.disabled) return;
       const verified = fresh.records.find(record => record.id === asset.id);
-      if (!verified) throw new Error("Media unavailable");
+      if (!verified || !assetMatchesMediaFilters(verified, scanFilters(query))) throw new Error("Media unavailable");
       current.current.onSelect(verified);
     } catch (error) {
       if (!mounted.current || current.current.context !== selectionContext) return;

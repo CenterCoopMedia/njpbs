@@ -58,6 +58,8 @@ import { availableSelectionActions, type MediaTileActionId } from "../lib/media-
 import { readRecentTags, recordRecentTags } from "../lib/recent-media-tags";
 import { stepPosition, stepTarget, viewerKeyAction, type StepDirection } from "../lib/media-step";
 import type { MediaToolbarSurfaceConfiguration } from "../components/media/MediaToolbar";
+import { metadataFilterProperties } from "../components/media/MediaFilterPopover";
+import { mediaAspect } from "../lib/media-browse-metadata";
 import { SourceMediaLibraryBrowse } from "./SourceMediaLibraryBrowse";
 import { DEFAULT_VIDEO_MEDIA_QUERY, parseVideoMediaLocation, encodeVideoMediaLocation, type VideoMediaLocationQuery, type VideoMediaSort } from "../lib/media-query";
 import { clearVideoFilterChips, setVideoStructuredFilter, videoFilterChips, type VideoStructuredFilter } from "../lib/media-filters";
@@ -1020,7 +1022,9 @@ export function SourceMediaLibrary({ principal, source, getIdToken, userId, onEx
   const activeFilter = videoQuery.tag ? { tag: videoQuery.tag }
     : allowedUploader ? { createdBy: allowedUploader }
       : videoQuery.rights ? { rightsStatus: videoQuery.rights }
-        : videoQuery.metadata ? { metadataUpdateRequested: true as const } : {};
+        : videoQuery.metadata ? { metadataUpdateRequested: true as const }
+          : { updatedFrom: videoQuery.updatedFrom, updatedTo: videoQuery.updatedTo, minDuration: videoQuery.minDuration,
+              maxDuration: videoQuery.maxDuration, aspect: videoQuery.aspect };
   const requestQuery: SourceMediaQuery = { sourceId: source.id, q: search, cursor, limit: videoQuery.limit, ...activeFilter };
   if (search) requestQuery.sort = "name_asc";
   else if (videoQuery.sort !== "updated_desc") requestQuery.sort = videoQuery.sort;
@@ -1703,6 +1707,12 @@ export function SourceMediaLibrary({ principal, source, getIdToken, userId, onEx
   const filterState = { query: videoQuery, selectedId: videoLocation.selectedId };
   const chips = videoFilterChips(filterState, (id) => id === userId ? "Me" : uploaderNames.get(id) ?? "Staff uploader");
   function changeStructuredFilter(property: string, value: string) {
+    if (property === "aspect") {
+      const aspect = videoQuery.aspect === value ? undefined : mediaAspect(value);
+      const next = setVideoStructuredFilter(filterState, { bounds: { aspect } });
+      writeVideoQuery({ ...next.query, q: searchDraft.current });
+      return;
+    }
     if (property !== "tag" && property !== "by" && property !== "rights" && property !== "metadata") return;
     if (property === "tag" && !value.trim()) { setTagError("Enter a tag or choose another filter."); return; }
     setTagError("");
@@ -1743,12 +1753,17 @@ export function SourceMediaLibrary({ principal, source, getIdToken, userId, onEx
         { id: "rights", label: "Rights review", picker: "options", appliedCount: videoQuery.rights ? 1 : 0,
           options: [{ value: "pending", label: "Needs review" }, { value: "complete", label: "Rights recorded" }]
             .map(option => ({ ...option, selected: videoQuery.rights === option.value })) },
-        { id: "metadata", label: "Metadata review", picker: "options", appliedCount: videoQuery.metadata ? 1 : 0,
-          options: [{ value: "requested", label: "Metadata update requested", selected: videoQuery.metadata === "requested" }] },
         { id: "by", label: "Uploader", picker: "options", appliedCount: videoQuery.by ? 1 : 0,
           options: [{ value: userId, label: "Me" },
             ...[...uploaderNames].filter(([id]) => id !== userId).map(([value, label]) => ({ value, label }))]
             .map(option => ({ ...option, selected: videoQuery.by === option.value })) },
+        ...metadataFilterProperties(videoQuery, {
+          duration: true, aspect: true, requested: videoQuery.metadata === "requested",
+          applyRange: bounds => {
+            const next = setVideoStructuredFilter(filterState, { bounds });
+            writeVideoQuery({ ...next.query, q: searchDraft.current });
+          },
+        }),
       ],
       chips, note: "Videos filter by one property at a time.",
       onSelect: changeStructuredFilter,

@@ -9,7 +9,9 @@ const {
   isMediaAssetId,
   mediaAssetSummary,
   mediaSearchText,
+  matchesLibraryMetadata,
 } = require("./media-library");
+const { hasMetadataBounds } = require("./media-browse-metadata");
 const {
   MEDIA_DISCOVERY_SCHEMA, MEDIA_DISCOVERY_STATE, BROWSE_TERM, OVERFLOW_TERM,
   discoveryTerm, deriveMediaDiscovery,
@@ -101,14 +103,16 @@ function comparePositions(left, right, direction) {
 function matches(summary, query, labels) {
   if (query.q && !mediaSearchText(summary, labels).includes(query.q.toLocaleLowerCase("en-US"))) return false;
   if (!(query.kinds.length ? query.kinds : DEFAULT_MEDIA_KINDS).includes(summary.kind)) return false;
-  return !query.categories.length || summary.categories.some((id) => query.categories.includes(id));
+  return matchesLibraryMetadata(summary, query) &&
+    (!query.categories.length || summary.categories.some((id) => query.categories.includes(id)));
 }
 
 function emptyLibrary(query, records, nextCursor, matched) {
   return {
     records, paging: "cursor", nextCursor,
     total: nextCursor === null ? matched : null,
-    allCount: !query.q && !query.categories.length && !query.kinds.length && nextCursor === null ? matched : null,
+    allCount: !query.q && !query.categories.length && !query.kinds.length && !query.metadataUpdateRequested &&
+      !hasMetadataBounds(query) && nextCursor === null ? matched : null,
     page: query.page, pageCount: null, categoryCounts: null, kindCounts: null,
   };
 }
@@ -150,7 +154,7 @@ async function readIndexedMedia(firestore, user, query, categoryLabels, summaryF
   const branches = owners === null ? 1 : Math.ceil(owners.length / ownerChunkSize(indexedKinds));
   // Plain browse already constrains kind and authorized primary owners in Firestore.
   // Search, descriptive filters and merging owner branches need a larger bounded slice.
-  const candidateBudget = query.q || query.categories.length || branches > 1
+  const candidateBudget = query.q || query.categories.length || query.metadataUpdateRequested || hasMetadataBounds(query) || branches > 1
     ? MAX_DISCOVERY_CANDIDATES : pageSize;
   const branchLimit = Math.max(1,
     Math.floor(candidateBudget / Math.max(branches, 1)));

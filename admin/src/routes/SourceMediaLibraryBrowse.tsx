@@ -105,7 +105,9 @@ export function SourceMediaLibraryBrowse({
           <div className="source-video-results" data-bulk-open={bulkOpen || undefined}>
             {loading ? <LoadingIndicator label="Loading videos" /> : error ? <InlineMessage tone="error" title="Video library unavailable">{error}<Button onClick={onRetry}>Try again</Button></InlineMessage>
               : page && <>
-                {page.records.length === 0 ? <EmptyState title="No videos found" description={filtered ? "Try a different name or clear the filters." : "Videos will appear here after they are added to this library."} />
+                {page.records.length === 0 ? (page.hasMore
+                  ? <EmptyState title="Search continues" description="Choose Next to check more videos." />
+                  : <EmptyState title="No videos found" description={filtered ? "Try a different name or clear the filters." : "Videos will appear here after they are added to this library."} />)
                   : <MediaGrid {...grid} items={page.records} header={<MediaRowHeader {...rowHeader} />} />}
               </>}
             {paging ? <MediaPaging {...paging} /> : null}
