@@ -11,10 +11,15 @@ COPY --chown=node:node source/admin/package.json /app/admin/
 COPY --chown=node:node source/cms-api/package.json /app/cms-api/
 COPY --chown=node:node source/site/package.json source/site/package-lock.json /app/site/
 USER node
-# Containers use CPU inference; optional GPU downloads are not runtime inputs.
+# Retain the CPU binaries for this Linux image's architecture.
 RUN export ONNXRUNTIME_NODE_INSTALL=skip \
     && npm ci --ignore-scripts --workspace=functions --include-workspace-root --omit=dev --no-audit --no-fund \
     && npm --prefix site ci --ignore-scripts --omit=dev --no-audit --no-fund \
+    && onnx_native=/app/site/node_modules/onnxruntime-node/bin/napi-v6 \
+    && onnx_arch="$(node -p 'process.arch')" \
+    && test -f "$onnx_native/linux/$onnx_arch/onnxruntime_binding.node" \
+    && find "$onnx_native" -mindepth 1 -maxdepth 1 -type d ! -name linux -exec rm -r -- {} + \
+    && find "$onnx_native/linux" -mindepth 1 -maxdepth 1 -type d ! -name "$onnx_arch" -exec rm -r -- {} + \
     && npm cache clean --force
 COPY --chown=node:node source/ /app/
 RUN node /app/site/scripts/prepare-public-fonts.mjs \
