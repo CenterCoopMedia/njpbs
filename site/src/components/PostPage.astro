@@ -32,6 +32,7 @@ import {
 } from "../lib/cms-responsive-image";
 import { choosePostLayout, postEyebrow } from "../lib/post-layout";
 import { publicPostCategories, publicPostTopics } from "../lib/post-formats";
+import { postPrintVideoUrls } from "../lib/post-print-videos";
 import { postIndexFilterHref } from "../lib/post-index-links";
 import { groupLinkCardDirectories } from "../../../packages/content-core/src/link-card-directory-groups";
 import PostByline from "./PostByline.astro";
@@ -87,6 +88,7 @@ const hideSidebar = post.postSidebar?.enabled === false;
 const sidebarBlocks = hideSidebar ? [] : authoredSidebar;
 const composition = storyCtaComposition(authoredBody, settings, { liveBlog: Boolean(post.liveBlog), optOut: archive || post.disableStoryCtas });
 const bodyBlocks = composition.body;
+const printVideoUrls = postPrintVideoUrls(post.leadMedia, [...bodyBlocks, ...sidebarBlocks, ...composition.afterUpdates]);
 const newsletters = await newsletterSignupResolution([...bodyBlocks, ...sidebarBlocks, ...composition.afterUpdates], getImage, recordCards);
 const renderGroups = (blocks: typeof post.blocks) => renderContentGroups(blocks, (block, index) => ({
   generatedHeadingLevel: generatedHeadingLevelAt(blocks, index),
@@ -162,7 +164,7 @@ const sidebarGroups = groupLinkCardDirectories(renderGroups(sidebarBlocks).filte
           <PostImageCaption caption={post.heroImageCaption} credit={hero.credit} />
         </figure>
       ) : videoLead ? (
-        <div class="post-hero"><PostLeadPlayer post={post} /></div>
+        <div class="post-hero post-hero--video"><PostLeadPlayer post={post} /></div>
       ) : (
         <div class="post-masthead__signal branded-signal" aria-hidden="true">
           <span></span>
@@ -199,6 +201,12 @@ const sidebarGroups = groupLinkCardDirectories(renderGroups(sidebarBlocks).filte
 
     <PostShareControls title={post.title} url={canonicalUrl} placement="bottom" />
 
+    {printVideoUrls.length > 0 && (
+      <ul class="post-print-videos" data-pagefind-ignore>
+        {printVideoUrls.map(url => <li>Video: <a href={url}>{url}</a></li>)}
+      </ul>
+    )}
+
     {(categories.length > 0 || tags.length > 0) && (
       <footer class="post-topics">
         <p class="post-topics__kicker">Filed under</p>
@@ -230,6 +238,10 @@ const sidebarGroups = groupLinkCardDirectories(renderGroups(sidebarBlocks).filte
 <style>
   .post {
     min-height: 70vh;
+  }
+
+  .post-print-videos {
+    display: none;
   }
 
   .post-masthead__inner {
@@ -645,5 +657,105 @@ const sidebarGroups = groupLinkCardDirectories(renderGroups(sidebarBlocks).filte
       padding-left: 1rem;
     }
 
+  }
+
+  @media print {
+    .post,
+    .post-masthead__inner,
+    .post-content,
+    .post-body {
+      display: block;
+      min-height: 0;
+      padding: 0;
+    }
+
+    .post-masthead {
+      margin-bottom: 12pt;
+      border: 0;
+    }
+
+    .post-masthead::after,
+    .post-masthead :global(.cms-hero-background),
+    .post-masthead__signal,
+    .post-head__eyebrow,
+    .post-hero--video,
+    .post :global(.post-share),
+    .post-body :global(.cms-block--embed:has(> .embed--video)),
+    .post-body :global(.cms-block--video) {
+      display: none;
+    }
+
+    .post-head h1,
+    .post--text .post-head h1 {
+      margin: 0;
+      font-size: 24pt;
+      line-height: 1.12;
+      text-wrap: wrap;
+    }
+
+    .post-head__summary,
+    .post-head :global(.post-byline),
+    .post-hero {
+      margin: 6pt 0 0;
+    }
+
+    .post-hero {
+      break-inside: avoid;
+    }
+
+    .post-hero__frame {
+      border: 0;
+    }
+
+    .post-hero img {
+      width: auto;
+      max-width: 100%;
+      max-height: 1.75in;
+    }
+
+    .post-head__summary,
+    .post-body {
+      font-size: 11pt;
+      line-height: 1.45;
+    }
+
+    .post-body > :global(.cms-block + .cms-block) {
+      margin-block-start: 8pt;
+    }
+
+    .post-print-videos {
+      display: block;
+      margin: 12pt 0 0;
+      padding: 0;
+      list-style: none;
+      overflow-wrap: anywhere;
+    }
+
+    .post-print-videos,
+    .post-topics {
+      font-size: 9pt;
+    }
+
+    .post-topics {
+      margin-top: 10pt;
+      padding-top: 5pt;
+    }
+
+    .post-topics h2 {
+      font-size: inherit;
+      break-after: avoid;
+    }
+
+    .post-topics ul {
+      margin-top: 3pt;
+      gap: 2pt 8pt;
+    }
+
+    .post-topics a {
+      display: inline;
+      padding: 0;
+      border: 0;
+      font-size: inherit;
+    }
   }
 </style>
