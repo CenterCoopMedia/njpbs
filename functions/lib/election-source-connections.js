@@ -4,8 +4,8 @@ const { contentResource, authorizeContentRead } = require("./content-authorizati
 const { registeredPrincipalFromUserDoc } = require("./principal");
 const { sessionPredatesWatermark } = require("./auth");
 const { adminLogEntry, AUDIT_COLLECTIONS } = require("./audit");
-const { ElectionSourceError, ELECTION_SOURCE_MODES, ELECTION_SHEET_COLUMNS, parseElectionApMapping,
-  electionStatusKey, parseElectionApRehearsal } = require("./election-result-sources");
+const { DEFAULT_ELECTION, ElectionSourceError, ELECTION_SOURCE_MODES, ELECTION_SHEET_COLUMNS, parseElectionApMapping,
+  electionStatusKey, parseElectionApRehearsal, parseElectionSelection } = require("./election-result-sources");
 const { connectionId, publicBlock, digest } = require("./election-source-refresh");
 const { publiclyVisible } = require("./public-video-references");
 const { assertRehearsalTarget } = require("./election-source-rehearsal");
@@ -18,8 +18,23 @@ function object(value) { return value && typeof value === "object" && !Array.isA
 function fields(value, required, optional = []) {
   if (!object(value) || required.some(key => !Object.hasOwn(value, key)) || Object.keys(value).some(key => ![...required, ...optional].includes(key))) fail("Unknown or missing connection fields.");
 }
+function configuredElection(config) {
+  if (config?.election === undefined) return undefined;
+  if (config.rehearsal || config.apRehearsal) fail("Rehearsals use their own election roster.");
+  fields(config.election, ["date", "dataset", "rosterDigest"]);
+  const { rosterDigest, ...selection } = config.election;
+  if (typeof rosterDigest !== "string" || !/^[a-f0-9]{64}$/.test(rosterDigest)) fail("Load and review the selected election roster.");
+  return parseElectionSelection(selection);
+}
+function assertRosterReview(config, roster) {
+  if (config.election && (config.election.date !== roster.electionDate || config.election.rosterDigest !== digest(roster))) {
+    throw new ElectionSourceError("roster-review", "The election roster changed. Open the connection settings and review the current roster. The previous public values are retained.");
+  }
+}
 function parseConfig(config, roster, now) {
-  fields(config, ["source", "raceIds", "mode", "maxAgeSeconds"], ["photos", "rehearsal", "apRehearsal"]);
+  fields(config, ["source", "raceIds", "mode", "maxAgeSeconds"], ["photos", "rehearsal", "apRehearsal", "election"]);
+  configuredElection(config);
+  assertRosterReview(config, roster);
   if (config.rehearsal !== undefined && config.rehearsal !== true) fail("Omit rehearsal for live sources.");
   if (config.rehearsal === true && !["repo", "sheet"].includes(config.source?.kind)) fail("Rehearsal supports only Sheet and repo sources.");
   if (config.apRehearsal !== undefined) {
@@ -59,12 +74,16 @@ function parseRequest(body) {
   const actions = { get: [], connect: ["baseVersion", "contentVersion", "config"],
     approve: ["baseVersion"], status: ["baseVersion", "pendingDigest"], pause: ["baseVersion"], resume: ["baseVersion"] };
   if (!object(body) || !Object.hasOwn(actions, body.action)) fail("Choose a connection action.");
-  fields(body, [...common, ...actions[body.action]], body.action === "get" ? ["includeRoster"] : []);
+  fields(body, [...common, ...actions[body.action]], body.action === "get" ? ["includeRoster", "election"] : []);
   if (!["cmsPages", "cmsPosts"].includes(body.collection) || !validId(body.documentId) || !validId(body.blockId)) fail("Choose a Page/Post results section.");
   if (body.action !== "get" && (!Number.isSafeInteger(body.baseVersion) || body.baseVersion < 0)) fail("Reload the connection before changing it.");
   if (body.action === "connect" && (!Number.isSafeInteger(body.contentVersion) || body.contentVersion < 1)) fail("Save and publish the section before connecting it.");
   if (body.action === "status" && !/^[a-f0-9]{64}$/.test(body.pendingDigest)) fail("Review the current pending status changes.");
   if (body.includeRoster !== undefined && typeof body.includeRoster !== "boolean") fail("Choose whether to load the roster.");
+  if (body.election !== undefined) {
+    if (!body.includeRoster) fail("Request the roster for the selected election.");
+    parseElectionSelection(body.election);
+  }
   return body;
 }
 async function contentPrincipal({ firestore, transaction, actor, collection, documentId, document, publishing = true }) {
@@ -98,6 +117,13 @@ async function mutateConnection({ firestore, actor, request, roster, now }) {
       if (document.version !== request.contentVersion) fail("This Page/Post changed. Reload it before connecting.", 409);
       const config = parseConfig(request.config, roster, now);
       if (before?.config.apRehearsal && !config.apRehearsal) fail("An AP rehearsal connection cannot become a live source. Pause and retire this test Page instead.");
+      if (before && Boolean(before.config.rehearsal) !== Boolean(config.rehearsal)) fail("Use a separate results section for a historical rehearsal.");
+      if (before && !before.config.rehearsal && !before.config.apRehearsal) {
+        const previous = before.config.election ?? DEFAULT_ELECTION;
+        const selected = config.election ?? DEFAULT_ELECTION;
+        if (config.apRehearsal || previous.date !== selected.date || previous.dataset !== selected.dataset ||
+            before.config.election && !config.election) fail("Use a separate results section for a different election.");
+      }
       await assertRehearsalTarget({ firestore, transaction, connection: { ...request, config }, document });
       if (!before || before.paused) {
         const enabled = await transaction.get(firestore.collection(COLLECTION).where("paused", "==", false).limit(21));
@@ -119,7 +145,7 @@ async function mutateConnection({ firestore, actor, request, roster, now }) {
       if (!before) fail("Connect a source first.", 409);
       if (request.action !== "pause") {
         await assertRehearsalTarget({ firestore, transaction, connection: before, document });
-        if (before.config.apRehearsal) parseElectionApRehearsal(before.config.apRehearsal, now, "2026-11-03");
+        if (before.config.apRehearsal) parseElectionApRehearsal(before.config.apRehearsal, now);
       }
       after = { ...before, version: before.version + 1, lease: null, updatedAt: now, updatedBy: actor.uid };
       if (request.action === "pause") { after.paused = true; after.nextPollAt = null; }
@@ -158,4 +184,4 @@ async function mutateConnection({ firestore, actor, request, roster, now }) {
     return { connection: view(after), canManage: true };
   });
 }
-module.exports = { COLLECTION, MUTATION_ACTIONS, validId, parseConfig, parseRequest, contentPrincipal, mutateConnection, view };
+module.exports = { COLLECTION, MUTATION_ACTIONS, validId, parseConfig, parseRequest, configuredElection, assertRosterReview, contentPrincipal, mutateConnection, view };

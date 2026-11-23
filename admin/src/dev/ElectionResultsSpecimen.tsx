@@ -10,6 +10,7 @@ import type { ElectionSourceApi, ElectionSourceConnection } from "../lib/electio
 import type { ElectionRoster } from "../../../packages/content-core/src/election-result-sources";
 import type { ElectionResultsData } from "../../../packages/content-core/src/election-results";
 import sourceRoster from "../../../tests/fixtures/election-sources/roster.json";
+import nextRoster from "../../../tests/fixtures/election-sources/next-roster.json";
 import sourceGolden from "../../../tests/fixtures/election-sources/golden.json";
 import type { AdminBlock } from "../lib/block-factory";
 import "../styles.css";
@@ -55,7 +56,12 @@ function Specimen() {
     };
     if (connection && sourceState === "ap-disabled") connection.config.source = { kind: "ap", mapping: {} };
     return {
-      get: async (_target, includeRoster) => ({ connection, canManage: sourceState !== "reader", canConnect: true, ...(includeRoster ? { roster: sourceRoster as ElectionRoster } : {}) }),
+      get: async (_target, includeRoster, _signal, election) => {
+        const future = (election ?? connection?.config.election)?.dataset === "2027-general";
+        return { connection, canManage: sourceState !== "reader", canConnect: true, ...(includeRoster ? {
+          roster: (future ? nextRoster : sourceRoster) as ElectionRoster, rosterDigest: (future ? "b" : "a").repeat(64),
+        } : {}) };
+      },
       mutate: async (_target, request) => {
         await new Promise(resolve => setTimeout(resolve, 250));
         connection = { ...(connection ?? { version: 0, configRevision: 0, authorizedConfigRevision: null, paused: false, lastCheckAt: null, lastSourceSuccessAt: null, lastGoodAt: null, lastGoodData: null, lastGoodDigest: null, lastHoldReason: null, pendingStatuses: [], pendingDigest: null, pendingData: null }), config: request.action === "connect" ? request.config : connection!.config, version: (connection?.version ?? 0) + 1 };

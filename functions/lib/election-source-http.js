@@ -1,10 +1,11 @@
 "use strict";
 
 const { GoogleAuth } = require("google-auth-library");
-const { ElectionSourceError, parseElectionRoster, electionApInitialUrl } = require("./election-result-sources");
+const { DEFAULT_ELECTION, ElectionSourceError, parseElectionRoster, electionApInitialUrl } = require("./election-result-sources");
 const rehearsal = require("./election-source-rehearsal");
-const ROSTER_URL = "https://centercoopmedia.github.io/nj-decides/data/2026-general-candidates.json";
-const RESULTS_URL = "https://centercoopmedia.github.io/nj-decides/data/2026-general-results.json";
+const dataUrl = (dataset, kind) => `https://centercoopmedia.github.io/nj-decides/data/${encodeURIComponent(dataset)}-${kind}.json`;
+const ROSTER_URL = dataUrl(DEFAULT_ELECTION.dataset, "candidates");
+const RESULTS_URL = dataUrl(DEFAULT_ELECTION.dataset, "results");
 const fail = (code, message, fetchCause, httpStatus) => { throw Object.assign(new ElectionSourceError(code, message),
   fetchCause ? { fetchCause, ...(httpStatus === undefined ? {} : { httpStatus }) } : {}); };
 const MAX_BYTES = 512 * 1024;
@@ -67,8 +68,8 @@ async function jsonGet(url, { fetchImpl = fetch, headers = {}, limit = MAX_BYTES
     fail("source-shape", "The source did not return complete valid JSON.", error instanceof SyntaxError ? "parse" : transportCause(error), response.status);
   } finally { reader.releaseLock(); }
 }
-async function readRoster({ fetchImpl = fetch } = {}) {
-  return parseElectionRoster((await jsonGet(ROSTER_URL, { fetchImpl })).data);
+async function readRoster({ fetchImpl = fetch, election = DEFAULT_ELECTION } = {}) {
+  return parseElectionRoster((await jsonGet(dataUrl(election.dataset, "candidates"), { fetchImpl })).data, election.date);
 }
 /** ADC uses the attached Functions runtime account, with read-only Sheets scope. */
 async function readSheetGrid(source, { fetchImpl = fetch } = {}) {
@@ -85,13 +86,13 @@ async function readSheetGrid(source, { fetchImpl = fetch } = {}) {
     fail("sheet-access", "The Functions runtime account could not read the Sheet. Check Viewer sharing and Sheets API access.");
   }
 }
-function apCursor(value, { apRehearsal, mapping } = {}) {
+function apCursor(value, { apRehearsal, mapping, electionDate = DEFAULT_ELECTION.date } = {}) {
   if (typeof value !== "string" || value.length > 4000 || /\s|\p{Cc}/u.test(value)) fail("ap-cursor", "AP returned an invalid update cursor.");
   let url;
   try { url = new URL(value); } catch { fail("ap-cursor", "AP returned an invalid update cursor."); }
   const allowed = new Set(["statepostal", "raceid", "level", "resultstype", "candidateinfo", "format", "mindatetime",
     "officeid", "racetypeid", "votetypes", "avotes", "winner", "national", "uncontested", "setzerocounts", "omitresults"]);
-  if (url.origin !== "https://api.ap.org" || url.pathname !== "/v3/elections/2026-11-03" || url.username || url.password || url.hash ||
+  if (url.origin !== "https://api.ap.org" || url.pathname !== `/v3/elections/${electionDate}` || url.username || url.password || url.hash ||
       [...url.searchParams.keys()].some(key => !allowed.has(key.toLowerCase()))) fail("ap-cursor", "AP returned an unsafe update cursor.");
   if (url.searchParams.get("statePostal")?.toUpperCase() !== "NJ" && url.searchParams.get("statepostal")?.toUpperCase() !== "NJ") fail("ap-cursor", "AP returned a cursor for a different state.");
   if (apRehearsal) {
@@ -126,7 +127,9 @@ async function readSource({ connection, roster, now, fetchImpl = fetch, sheetsAp
   if (source.kind === "sheet") return { data: await sheetsApi(source, { fetchImpl }) };
   if (source.kind === "repo") {
     const cache = connection.pendingData;
-    const result = await jsonGet(connection.config.rehearsal === true ? rehearsal.RESULTS_URL : RESULTS_URL, { fetchImpl, allowNotModified: Boolean(cache && connection.sourceEtag),
+    const election = connection.config.election ?? DEFAULT_ELECTION;
+    const url = connection.config.rehearsal === true ? rehearsal.RESULTS_URL : dataUrl(election.dataset, "results");
+    const result = await jsonGet(url, { fetchImpl, allowNotModified: Boolean(cache && connection.sourceEtag),
       headers: cache && connection.sourceEtag ? { "If-None-Match": connection.sourceEtag } : {} });
     if (!result.notModified) return result;
     // Rebuild only validated selected values, then run the full normalizer
@@ -142,7 +145,7 @@ async function readSource({ connection, roster, now, fetchImpl = fetch, sheetsAp
   }
   const key = await readApSecret({ fetchImpl, projectId });
   const context = { roster, raceIds: connection.config.raceIds, now, apRehearsal: connection.config.apRehearsal };
-  const cursorOptions = { apRehearsal: connection.config.apRehearsal, mapping: source.mapping };
+  const cursorOptions = { electionDate: roster.electionDate, apRehearsal: connection.config.apRehearsal, mapping: source.mapping };
   // One periodic full query replaces a delta poll, using the same request slot.
   // It detects a race removed from the provider rather than treating it as quiet.
   const full = !connection.apCursor || !connection.apStaging &&

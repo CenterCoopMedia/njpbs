@@ -1,0 +1,11 @@
+{
+  "schemaVersion": 1,
+  "electionDate": "2027-11-02",
+  "races": [
+    { "id": "state-senate-09", "office": "State Senate", "district": "District 9", "candidateIds": ["alex-river", "jordan-lee"] }
+  ],
+  "candidates": [
+    { "id": "alex-river", "raceId": "state-senate-09", "name": "Alex River", "firstName": "Alex", "lastName": "River", "ballotLabel": "Democratic", "party": "Democratic", "incumbent": false, "campaignWebsite": "", "ballotStatus": "On ballot", "aliases": [] },
+    { "id": "jordan-lee", "raceId": "state-senate-09", "name": "Jordan Lee", "firstName": "Jordan", "lastName": "Lee", "ballotLabel": "Republican", "party": "Republican", "incumbent": false, "campaignWebsite": "", "ballotStatus": "On ballot", "aliases": [] }
+  ]
+}

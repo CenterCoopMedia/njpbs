@@ -1,10 +1,10 @@
 "use strict";
 const { randomUUID } = require("node:crypto");
-const { COLLECTION, contentPrincipal } = require("./election-source-connections");
+const { COLLECTION, contentPrincipal, assertRosterReview } = require("./election-source-connections");
 const { digest, publicBlock, assertElectionSourceRefresh } = require("./election-source-refresh");
 const { publiclyVisible } = require("./public-video-references");
 const { normalizeRepoResults, normalizeSheetGridResults, normalizeApResults, selectElectionSourceMode,
-  electionStatusKey, electionApCache, ElectionSourceError, parseElectionApRehearsal } = require("./election-result-sources");
+  DEFAULT_ELECTION, electionStatusKey, electionApCache, ElectionSourceError, parseElectionApRehearsal } = require("./election-result-sources");
 const { readRoster, readSource, fetchFailure } = require("./election-source-http");
 const { prepareNoBuildContentPublication } = require("./no-build-content-publication");
 const { prepareMediaUsageWrite, collectPublishedMediaUsage } = require("./media-usage");
@@ -206,13 +206,13 @@ async function accept({ firestore, ref, captured, roster, source, now }) {
     return { published: true, operationId: prepared.operation.operationId };
   });
 }
-async function pollConnection({ firestore, id, now = () => new Date().toISOString(), fetchImpl = fetch, sheetsApi, roster: suppliedRoster }) {
+async function pollConnection({ firestore, id, now = () => new Date().toISOString(), fetchImpl = fetch, sheetsApi, loadRoster = readRoster }) {
   if (!/^[a-f0-9]{64}$/.test(id)) throw new Error("Invalid election connection identity");
   const ref = firestore.doc(`${COLLECTION}/${id}`);
   const at = now();
   const captured = await leaseConnection({ firestore, ref, now: at });
   if (!captured) return { skipped: true };
-  let apReserved = false;
+  let apReservedAt;
   try {
     await firestore.runTransaction(async transaction => {
       const current = (await transaction.get(ref)).data();
@@ -222,16 +222,21 @@ async function pollConnection({ firestore, id, now = () => new Date().toISOStrin
       await contentPrincipal({ firestore, transaction, actor: current.authorizedBy, collection: current.collection,
         documentId: current.documentId, document });
       await assertRehearsalTarget({ firestore, transaction, connection: current, document });
-      if (current.config.apRehearsal) parseElectionApRehearsal(current.config.apRehearsal, at, "2026-11-03");
+      if (current.config.apRehearsal) parseElectionApRehearsal(current.config.apRehearsal, at);
     });
-    if (captured.config.source.kind === "ap") { await reserveApRequest({ firestore, now: at, connectionRef: ref }); apReserved = true; }
-    const roster = captured.config.rehearsal === true ? rehearsalRoster() : suppliedRoster ?? await readRoster({ fetchImpl });
+    const roster = captured.config.rehearsal === true ? rehearsalRoster() : await loadRoster({ fetchImpl, election: captured.config.election });
+    assertRosterReview(captured.config, roster);
+    if (captured.config.source.kind === "ap") {
+      const requestedAt = now();
+      await reserveApRequest({ firestore, now: requestedAt, connectionRef: ref });
+      apReservedAt = Date.parse(requestedAt);
+    }
     const source = await readSource({ connection: captured, roster, now: at, fetchImpl, sheetsApi, projectId: firestore.projectId });
-    return { ...await accept({ firestore, ref, captured, roster, source, now: now() }), ...(apReserved ? { apReserved: true } : {}) };
+    return { ...await accept({ firestore, ref, captured, roster, source, now: now() }), ...(apReservedAt === undefined ? {} : { apReservedAt }) };
   } catch (error) {
     if (!(error instanceof ElectionSourceError)) logUnexpected(error, "poll");
     await hold({ firestore, ref, captured, now: now(), error, pause: error.code === "binding" || error.code === "rehearsal" && Boolean(captured.config.apRehearsal) || error.status === 403 });
-    return { held: true, code: error instanceof ElectionSourceError ? error.code : "publication-unavailable", ...(apReserved ? { apReserved: true } : {}) };
+    return { held: true, code: error instanceof ElectionSourceError ? error.code : "publication-unavailable", ...(apReservedAt === undefined ? {} : { apReservedAt }) };
   }
 }
 async function pollConnections({ firestore, now = () => new Date().toISOString(), fetchImpl = fetch, sheetsApi,
@@ -240,13 +245,17 @@ async function pollConnections({ firestore, now = () => new Date().toISOString()
   // Connect/resume admission caps enabled connections; refuse a corrupted set.
   if (rows.size > 20) throw new Error("Election connection limit exceeded");
   if (rows.empty) return [];
-  let roster;
-  try { roster = await readRoster({ fetchImpl }); } catch { /* Each connection records its own safe hold. */ }
+  const rosters = new Map();
+  function loadRoster({ election = DEFAULT_ELECTION }) {
+    const key = `${election.date}/${election.dataset}`;
+    if (!rosters.has(key)) rosters.set(key, readRoster({ fetchImpl, election }));
+    return rosters.get(key);
+  }
   const outcomes = [];
   const ordinary = rows.docs.filter(row => row.data().config.source.kind !== "ap");
   for (let offset = 0; offset < ordinary.length; offset += 4) {
     outcomes.push(...await Promise.allSettled(ordinary.slice(offset, offset + 4).map(row =>
-      pollConnection({ firestore, id: row.id, now, fetchImpl, sheetsApi, roster }))));
+      pollConnection({ firestore, id: row.id, now, fetchImpl, sheetsApi, loadRoster }))));
   }
   // Pace AP separately, after other sources, and rotate the oldest actual
   // attempt first so a low key quota cannot starve one fixed connection.
@@ -262,9 +271,11 @@ async function pollConnections({ firestore, now = () => new Date().toISOString()
       const delay = Math.max(0, 5000 - (Date.parse(now()) - previousAttemptAt));
       if (delay) await wait(delay);
     }
-    const attemptedAt = Date.parse(now());
-    const settled = await Promise.allSettled([pollConnection({ firestore, id: row.id, now, fetchImpl, sheetsApi, roster })]);
-    if (settled[0].status === "fulfilled" && settled[0].value.apReserved) { previousAttemptAt = attemptedAt; reservedThisRun++; }
+    const settled = await Promise.allSettled([pollConnection({ firestore, id: row.id, now, fetchImpl, sheetsApi, loadRoster })]);
+    if (settled[0].status === "fulfilled" && settled[0].value.apReservedAt !== undefined) {
+      previousAttemptAt = settled[0].value.apReservedAt;
+      reservedThisRun++;
+    }
     outcomes.push(...settled);
   }
   for (const outcome of outcomes) if (outcome.status === "rejected") logUnexpected(outcome.reason, "poll-settlement");

@@ -15,6 +15,9 @@ export interface ElectionRoster {
 }
 export const ELECTION_SOURCE_MODES = ["approve-once", "counts-auto", "automatic"] as const;
 export type ElectionSourceMode = typeof ELECTION_SOURCE_MODES[number];
+export interface ElectionSelection { date: string; dataset: string }
+export const DEFAULT_ELECTION: Readonly<ElectionSelection> = Object.freeze({ date: "2026-11-03", dataset: "2026-general" });
+export const ELECTION_DATASET_PATTERN = "[0-9]{4}-[a-z0-9]+(-[a-z0-9]+)*";
 export const AP_PUBLIC_RESULTS_URL = "https://apnews.com/hub/election-2026";
 export const ELECTION_SHEET_COLUMNS = ["race_id", "candidate_id", "votes", "share", "status", "as_of",
   "reporting_share", "source_kind", "source_label", "source_url", "called_candidate_id", "ap_call_url"] as const;
@@ -55,7 +58,15 @@ function array(value: unknown, max: number): asserts value is unknown[] {
 function unique(values: string[], code = "identity") {
   if (new Set(values).size !== values.length) fail(code, "The source contains duplicate identities.");
 }
-export function parseElectionRoster(input: unknown, electionDate = "2026-11-03"): ElectionRoster {
+export function parseElectionSelection(input: unknown): ElectionSelection {
+  object(input); fields(input, ["date", "dataset"]);
+  const { date, dataset } = input;
+  if (typeof date !== "string" || !isElectionInstant(`${date}T00:00:00Z`) ||
+      typeof dataset !== "string" || dataset.length > 64 || !new RegExp(`^${ELECTION_DATASET_PATTERN}$`).test(dataset) ||
+      !dataset.startsWith(`${date.slice(0, 4)}-`)) fail("election", "Use an election date and a public roster filename stem starting with the same year.");
+  return { date, dataset };
+}
+export function parseElectionRoster(input: unknown, electionDate = DEFAULT_ELECTION.date): ElectionRoster {
   object(input); fields(input, ["schemaVersion", "electionDate", "races", "candidates"]);
   if (input.schemaVersion !== 1 || input.electionDate !== electionDate) fail("roster", "Use the selected election roster.");
   array(input.races, 20); array(input.candidates, 480);
@@ -103,6 +114,7 @@ function checked(data: ElectionResultsData, context: ElectionSourceContext, fres
   for (const rid of context.raceIds) {
     const race = data.races.find(item => item.id === rid);
     if (!race) fail("missing-race", "A selected race disappeared from the source.");
+    if (!context.rehearsal && !context.apRehearsal && race.sourceLabel.startsWith("REHEARSAL:")) fail("rehearsal", "Use a live source for this election.");
     const time = Date.parse(race.asOf);
     if (time > Date.parse(context.now)) fail("future", "The source time is in the future.");
     if (freshness === "race" && Date.parse(context.now) - time > age * 1000) fail("stale", "The source is older than the connection allows.");
@@ -130,7 +142,7 @@ function rosterRace(input: unknown, context: ElectionSourceContext, directAttrib
   const { candidates: _candidates, ...race } = input;
   return { ...race, office: roster.office, district: roster.district,
     candidates: roster.candidateIds.map(cid => candidates.find(candidate => candidate.id === cid)!),
-    ...(input.status === "called" && directAttribution && !input.apCallUrl ? { apCallUrl: AP_PUBLIC_RESULTS_URL } : {}) } as unknown as ElectionRace;
+    ...(input.status === "called" && directAttribution && !input.apCallUrl ? { apCallUrl: apAttribution(context) } : {}) } as unknown as ElectionRace;
 }
 export function normalizeRepoResults(input: unknown, context: ElectionSourceContext): ElectionResultsData {
   contextCheck(context); object(input);
@@ -259,7 +271,7 @@ export function parseElectionApMapping(input: unknown, context: ElectionSourceCo
   unique(mapped.map(([, value]) => value.raceId), "mapping");
   return Object.fromEntries(mapped) as Record<string, ElectionApMapping>;
 }
-export function parseElectionApRehearsal(input: unknown, now: string, electionDate = "2026-11-03"): ElectionApRehearsalClock {
+export function parseElectionApRehearsal(input: unknown, now: string, electionDate = DEFAULT_ELECTION.date): ElectionApRehearsalClock {
   object(input); fields(input, ["sourceTimeOrigin", "replayTimeOrigin"]);
   if (!isElectionInstant(now) || !isElectionInstant(input.sourceTimeOrigin) || !isElectionInstant(input.replayTimeOrigin)) {
     fail("rehearsal", "AP rehearsal requires explicit valid simulation and replay origins.");
@@ -278,6 +290,9 @@ export function electionApInitialUrl(mapping: Record<string, ElectionApMapping>,
   url.search = new URLSearchParams({ statePostal: "NJ", raceID: Object.keys(checked).sort().join(","),
     level: "state", resultsType: context.apRehearsal ? "t" : "b", candidateInfo: "brief", format: "json" }).toString();
   return url.href;
+}
+function apAttribution(context: ElectionSourceContext): string {
+  return context.rehearsal || context.roster.electionDate === DEFAULT_ELECTION.date ? AP_PUBLIC_RESULTS_URL : "https://apnews.com/";
 }
 /** A full initial AP response and subsequent deltas share this boundary. */
 export function normalizeApResults(input: unknown, mapping: Record<string, ElectionApMapping>,
@@ -340,11 +355,11 @@ export function normalizeApResults(input: unknown, mapping: Record<string, Elect
     const race = rosterRace({ id: bind.raceId, status, asOf,
       sourceKind: certified ? "official" : "ap",
       sourceLabel: replay ? "REHEARSAL: AP 2026 test data; replay time" : "The Associated Press",
-      sourceUrl: AP_PUBLIC_RESULTS_URL, reportingShare: context.expectedVoteShareEnabled ? null : unit.precinctsReportingPct ?? null,
+      sourceUrl: apAttribution(context), reportingShare: context.expectedVoteShareEnabled ? null : unit.precinctsReportingPct ?? null,
       ...(context.expectedVoteShareEnabled && typeof eevp === "number" ? { expectedVoteShare: eevp / 100 } : {}),
       candidates: reported.map(candidate => ({ id: candidate.id, votes: awaiting ? null : candidate.votes,
         share: awaiting ? null : sum ? Math.round(candidate.votes / sum * 1000000) / 10000 : 0 })),
-      ...(winners.length && !certified ? { calledCandidateId: winners[0].id, apCallUrl: AP_PUBLIC_RESULTS_URL } : {}) }, context, true);
+      ...(winners.length && !certified ? { calledCandidateId: winners[0].id, apCallUrl: apAttribution(context) } : {}) }, context, true);
     const before = current.get(race.id);
     const previous = context.previous?.races.find(item => item.id === race.id);
     const newest = previous && (!before || Date.parse(previous.asOf) > Date.parse(before.asOf)) ? previous : before;
