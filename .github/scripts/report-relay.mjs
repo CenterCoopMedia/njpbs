@@ -31,7 +31,8 @@ export async function verifyReportRelay(env, { fetch = globalThis.fetch, sleep =
           body: JSON.stringify(body),
           signal: AbortSignal.timeout(15_000),
         });
-        payload = await response.json().catch(() => null);
+        // A body that is not JSON is an answer; a dropped or timed-out read is not.
+        payload = await response.json().catch(error => { if (error instanceof SyntaxError) return null; throw error; });
       } catch (error) {
         // Connection failures carry no answer from Telegram. Never print the
         // error message: it can include the request URL and so the token.

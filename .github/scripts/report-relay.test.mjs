@@ -33,6 +33,21 @@ function telegram(options = {}, script = []) {
   return { calls, sleeps, deps: { fetch, sleep: async ms => { sleeps.push(ms); } } };
 }
 
+test("report relay retries a response body that fails to arrive", async () => {
+  const relay = telegram();
+  const fetch = relay.deps.fetch;
+  let dropped = false;
+  relay.deps.fetch = async (input, init) => {
+    const response = await fetch(input, init);
+    if (dropped) return response;
+    dropped = true;
+    return { ok: true, status: 200, headers: response.headers, json: async () => { throw new DOMException("timed out", "TimeoutError"); } };
+  };
+  await verifyReportRelay(env(), relay.deps);
+  assert.deepEqual(relay.calls, ["getMe", "getMe", "getWebhookInfo", "getChat"]);
+  assert.deepEqual(relay.sleeps, [2_000]);
+});
+
 const timeout = () => Object.assign(new TypeError("fetch failed"), { cause: { code: "ETIMEDOUT" } });
 
 test("report relay verifies configured identity, polling, and private recipient without sending", async () => {
