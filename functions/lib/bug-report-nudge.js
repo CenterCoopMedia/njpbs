@@ -5,6 +5,7 @@ const { accessTierReadsActive } = require("./access-tier-activation");
 const { administrativeRoleFromUserDoc, principalFromUserDoc } = require("./principal");
 const { hasCapability } = require("./rbac");
 const { lastProgressAt, reportProgress } = require("./bug-report-progress");
+const { ADMIN_ACCESS_REQUIRED } = require("./staff-access-messages");
 
 const THREE_DAYS = 3 * 24 * 60 * 60 * 1000;
 const NUDGE_DECISIONS = Object.freeze(["approved", "ignored"]);
@@ -86,7 +87,7 @@ async function decideNudge({ firestore, actor, reportId, nudgeId, decision, chat
     const profile = (await transaction.get(firestore.doc(`users/${actor.uid}`))).data();
     if (!active || !profile || (profile.active !== undefined && profile.active !== true) ||
         !["admin", "super_admin"].includes(administrativeRoleFromUserDoc(profile, true))) {
-      throw new NudgeError(403, "Admin access required.");
+      throw new NudgeError(403, ADMIN_ACCESS_REQUIRED);
     }
     const reportRef = firestore.doc(`bug_reports/${reportId}`);
     const outboxRef = firestore.doc(`bugReportDeliveryOutbox/${reportId}--nudge--${nudgeId}`);
