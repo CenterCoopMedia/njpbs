@@ -72,7 +72,7 @@ test("the Functions writer and planner derive Studio titles from the same privat
   for (const step of [writer, planner]) {
     // A development run reads no production Studio preset.
     assert.equal(step.env.VITE_CMS_STUDIO_CONFIGURATION, "${{ inputs.target != 'development' && secrets.VITE_CMS_STUDIO_CONFIGURATION || '' }}");
-    assert.equal(step.env.VITE_LIVE_PRODUCTION_ENABLED, "${{ vars.LIVE_PRODUCTION_ENABLED || 'false' }}");
+    assert.equal(step.env.VITE_LIVE_PRODUCTION_ENABLED, "${{ inputs.target != 'development' && vars.LIVE_PRODUCTION_ENABLED || 'false' }}");
     assert.equal(step.env.VITE_LIVE_PRODUCTION_ENABLED, admin.env.VITE_LIVE_PRODUCTION_ENABLED);
   }
   assert.equal(writer.run, "node scripts/component-runner.mjs functions configure");

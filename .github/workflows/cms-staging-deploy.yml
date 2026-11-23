@@ -88,13 +88,6 @@ env:
   # Production evaluates to the values this workflow has always used. Names stay
   # literal: repository variables hold production values, so a dev run must never
   # fall back to one.
-  # A job in the development environment falls back to the repository (production)
-  # value of any name the environment lacks. The jawn-ops release runner lists the
-  # development environment before a development dispatch and refuses any name
-  # below that it lacks. JSON; tests/preflight/cms-deploy-workflow-parity.test.js
-  # keeps it equal to what a development run reads.
-  CMS_DEVELOPMENT_ENVIRONMENT_NAMES: >-
-    {"secrets": ["CLOUDFLARE_ACCOUNT_ID", "CLOUDFLARE_API_TOKEN", "CMS_BUG_REPORT_GITHUB_TOKEN", "CMS_BUG_REPORT_GITHUB_WEBHOOK_SECRET", "CMS_BUG_REPORT_TELEGRAM_ADMIN_MAP", "CMS_BUG_REPORT_TELEGRAM_BOT_TOKEN", "CMS_BUG_REPORT_TELEGRAM_CHAT_ID", "CMS_BUG_REPORT_TELEGRAM_WEBHOOK_SECRET", "CMS_DEV_ACCESS_CLIENT_ID", "CMS_DEV_ACCESS_CLIENT_SECRET", "CMS_EDGE_ORIGIN_SECRET", "CMS_MEDIA_CACHE_PURGE_TOKEN", "CMS_PREVIEW_R2_CREDENTIAL", "CMS_PREVIEW_SMOKE_CREDENTIAL", "CMS_STAFF_EMAIL_API_TOKEN", "CMS_VOICEOVER_R2_ACCESS_KEY_ID", "CMS_VOICEOVER_R2_SECRET_ACCESS_KEY", "FIREBASE_SERVICE_ACCOUNT"], "variables": ["CMS_DEV_RENDERER_SOURCE_SHA", "CMS_PREVIEW_SMOKE_TARGET", "FIREBASE_DEPLOY_SERVICE_ACCOUNT", "VITE_FIREBASE_API_KEY", "VITE_FIREBASE_APPCHECK_SITE_KEY", "VITE_FIREBASE_APP_ID", "VITE_FIREBASE_AUTH_DOMAIN", "VITE_FIREBASE_PROJECT_ID", "VITE_FUNCTIONS_BASE_URL"]}
   CMS_TARGET: ${{ inputs.target == 'development' && 'development' || 'production' }}
   CMS_TARGET_FIREBASE_PROJECT: ${{ inputs.target == 'development' && 'njpbs-site-dev' || 'njpbs-site' }}
   CMS_TARGET_ADMIN_ORIGIN: ${{ inputs.target == 'development' && 'https://dev-admin.njpbs.org' || 'https://admin.njpbs.org' }}
@@ -439,7 +432,7 @@ jobs:
           VITE_AUTHOR_PAGES_LIVE: ${{ vars.AUTHOR_PAGES_LIVE || 'false' }}
           VITE_VIDEO_REPLACEMENT_ENABLED: ${{ vars.VITE_VIDEO_REPLACEMENT_ENABLED || 'false' }}
           # Private studio pilot route; staff with global content.edit.any only.
-          VITE_LIVE_PRODUCTION_ENABLED: ${{ vars.LIVE_PRODUCTION_ENABLED || 'false' }}
+          VITE_LIVE_PRODUCTION_ENABLED: ${{ inputs.target != 'development' && vars.LIVE_PRODUCTION_ENABLED || 'false' }}
           GH_TOKEN: ""
           GITHUB_TOKEN: ""
       - name: Require Pages file size limit
@@ -680,7 +673,7 @@ jobs:
           CMS_BUG_REPORT_TELEGRAM_ADMIN_MAP: ${{ secrets.CMS_BUG_REPORT_TELEGRAM_ADMIN_MAP }}
           CMS_DEPLOYMENT_VARIABLES_JSON: ${{ toJSON(vars) }}
           VITE_CMS_STUDIO_CONFIGURATION: ${{ inputs.target != 'development' && secrets.VITE_CMS_STUDIO_CONFIGURATION || '' }}
-          VITE_LIVE_PRODUCTION_ENABLED: ${{ vars.LIVE_PRODUCTION_ENABLED || 'false' }}
+          VITE_LIVE_PRODUCTION_ENABLED: ${{ inputs.target != 'development' && vars.LIVE_PRODUCTION_ENABLED || 'false' }}
           CMS_MEDIA_CACHE_PURGE_TOKEN: ${{ secrets.CMS_MEDIA_CACHE_PURGE_TOKEN }}
           CMS_VOICEOVER_R2_ACCESS_KEY_ID: ${{ secrets.CMS_VOICEOVER_R2_ACCESS_KEY_ID }}
           CMS_VOICEOVER_R2_SECRET_ACCESS_KEY: ${{ secrets.CMS_VOICEOVER_R2_SECRET_ACCESS_KEY }}
@@ -746,7 +739,7 @@ jobs:
           DEPLOY_SHA: ${{ needs.admin-build.outputs.deploy_sha }}
           CMS_DEPLOYMENT_VARIABLES_JSON: ${{ toJSON(vars) }}
           VITE_CMS_STUDIO_CONFIGURATION: ${{ inputs.target != 'development' && secrets.VITE_CMS_STUDIO_CONFIGURATION || '' }}
-          VITE_LIVE_PRODUCTION_ENABLED: ${{ vars.LIVE_PRODUCTION_ENABLED || 'false' }}
+          VITE_LIVE_PRODUCTION_ENABLED: ${{ inputs.target != 'development' && vars.LIVE_PRODUCTION_ENABLED || 'false' }}
           CMS_ADMIN_BUILD_REVISION: ${{ needs.admin-build.outputs.deploy_sha }}
           CMS_PREVIEW_RENDERER_SHA: ${{ env.CMS_TARGET_RENDERER_SHA || needs.admin-build.outputs.deploy_sha }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
@@ -826,7 +819,7 @@ jobs:
           CMS_BUG_REPORT_TELEGRAM_ADMIN_MAP: ${{ secrets.CMS_BUG_REPORT_TELEGRAM_ADMIN_MAP }}
           CMS_DEPLOYMENT_VARIABLES_JSON: ${{ toJSON(vars) }}
           VITE_CMS_STUDIO_CONFIGURATION: ${{ inputs.target != 'development' && secrets.VITE_CMS_STUDIO_CONFIGURATION || '' }}
-          VITE_LIVE_PRODUCTION_ENABLED: ${{ vars.LIVE_PRODUCTION_ENABLED || 'false' }}
+          VITE_LIVE_PRODUCTION_ENABLED: ${{ inputs.target != 'development' && vars.LIVE_PRODUCTION_ENABLED || 'false' }}
           CMS_MEDIA_CACHE_PURGE_TOKEN: ${{ secrets.CMS_MEDIA_CACHE_PURGE_TOKEN }}
           CMS_VOICEOVER_R2_ACCESS_KEY_ID: ${{ secrets.CMS_VOICEOVER_R2_ACCESS_KEY_ID }}
           CMS_VOICEOVER_R2_SECRET_ACCESS_KEY: ${{ secrets.CMS_VOICEOVER_R2_SECRET_ACCESS_KEY }}
@@ -1018,6 +1011,26 @@ jobs:
             --trusted-workflow-sha "$GITHUB_SHA" \
             --run-id "$GITHUB_RUN_ID" \
             --run-attempt "$GITHUB_RUN_ATTEMPT"
+      - name: Report the live reader binding this deploy turns off
+        # An ordinary deploy does not carry the reader bridge binding (CenterCoopMedia/njpbs#561).
+        if: steps.cms_api_plan.outputs.mutated != 'false' && !inputs.install_reader_bridge
+        env:
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+        run: |
+          node --input-type=module -e '
+            const { appendFile } = await import("node:fs/promises");
+            const { cmsTarget } = await import("./scripts/lib/cms-target.mjs");
+            const base = `https://api.cloudflare.com/client/v4/accounts/${process.env.CLOUDFLARE_ACCOUNT_ID}/workers/scripts/${cmsTarget().cmsApiWorker}`;
+            const read = async path => (await (await fetch(`${base}/${path}`, { redirect: "error",
+              headers: { authorization: `Bearer ${process.env.CLOUDFLARE_API_TOKEN}` } })).json()).result;
+            try {
+              const version = (await read("deployments"))?.deployments?.[0]?.versions?.[0]?.version_id;
+              const live = Object.fromEntries(((await read(`versions/${version}`))?.resources?.bindings ?? [])
+                .filter(row => row.type === "plain_text" && row.name.startsWith("CMS_READER_BRIDGE_")).map(row => [row.name, row.text]));
+              if (live.CMS_READER_BRIDGE_ENABLED === "true") await appendFile(process.env.GITHUB_STEP_SUMMARY,
+                `This deploy turns the CMS readers off for operation ${live.CMS_READER_BRIDGE_OPERATION_ID}: an ordinary deploy does not carry the reader binding (CenterCoopMedia/njpbs#561). A reader install restores them.\n`);
+            } catch { console.log("::warning::The live CMS API reader binding could not be read"); }'
       - name: Deploy CMS API Worker
         if: steps.cms_api_plan.outputs.mutated != 'false'
         id: deploy_cms_api
@@ -1295,7 +1308,7 @@ jobs:
           DEPLOY_SHA: ${{ needs.admin-build.outputs.deploy_sha }}
           CMS_DEPLOYMENT_VARIABLES_JSON: ${{ toJSON(vars) }}
           VITE_CMS_STUDIO_CONFIGURATION: ${{ inputs.target != 'development' && secrets.VITE_CMS_STUDIO_CONFIGURATION || '' }}
-          VITE_LIVE_PRODUCTION_ENABLED: ${{ vars.LIVE_PRODUCTION_ENABLED || 'false' }}
+          VITE_LIVE_PRODUCTION_ENABLED: ${{ inputs.target != 'development' && vars.LIVE_PRODUCTION_ENABLED || 'false' }}
           CMS_ADMIN_BUILD_REVISION: ${{ needs.admin-build.outputs.deploy_sha }}
           CMS_PREVIEW_RENDERER_SHA: ${{ env.CMS_TARGET_RENDERER_SHA || needs.firebase-preflight.outputs.renderer_target_sha }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
@@ -1494,7 +1507,7 @@ jobs:
           DEPLOY_SHA: ${{ needs.admin-build.outputs.deploy_sha }}
           CMS_DEPLOYMENT_VARIABLES_JSON: ${{ toJSON(vars) }}
           VITE_CMS_STUDIO_CONFIGURATION: ${{ inputs.target != 'development' && secrets.VITE_CMS_STUDIO_CONFIGURATION || '' }}
-          VITE_LIVE_PRODUCTION_ENABLED: ${{ vars.LIVE_PRODUCTION_ENABLED || 'false' }}
+          VITE_LIVE_PRODUCTION_ENABLED: ${{ inputs.target != 'development' && vars.LIVE_PRODUCTION_ENABLED || 'false' }}
           CMS_ADMIN_BUILD_REVISION: ${{ needs.admin-build.outputs.deploy_sha }}
           CMS_PREVIEW_RENDERER_SHA: ${{ env.CMS_TARGET_RENDERER_SHA || needs.admin-build.outputs.deploy_sha }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
@@ -2074,7 +2087,7 @@ jobs:
           CMS_BUG_REPORT_TELEGRAM_ADMIN_MAP: ${{ secrets.CMS_BUG_REPORT_TELEGRAM_ADMIN_MAP }}
           CMS_DEPLOYMENT_VARIABLES_JSON: ${{ toJSON(vars) }}
           VITE_CMS_STUDIO_CONFIGURATION: ${{ inputs.target != 'development' && secrets.VITE_CMS_STUDIO_CONFIGURATION || '' }}
-          VITE_LIVE_PRODUCTION_ENABLED: ${{ vars.LIVE_PRODUCTION_ENABLED || 'false' }}
+          VITE_LIVE_PRODUCTION_ENABLED: ${{ inputs.target != 'development' && vars.LIVE_PRODUCTION_ENABLED || 'false' }}
           CMS_MEDIA_CACHE_PURGE_TOKEN: ${{ secrets.CMS_MEDIA_CACHE_PURGE_TOKEN }}
           CMS_VOICEOVER_R2_ACCESS_KEY_ID: ${{ secrets.CMS_VOICEOVER_R2_ACCESS_KEY_ID }}
           CMS_VOICEOVER_R2_SECRET_ACCESS_KEY: ${{ secrets.CMS_VOICEOVER_R2_SECRET_ACCESS_KEY }}
@@ -2199,7 +2212,7 @@ jobs:
           CMS_BUG_REPORT_TELEGRAM_ADMIN_MAP: ${{ secrets.CMS_BUG_REPORT_TELEGRAM_ADMIN_MAP }}
           CMS_DEPLOYMENT_VARIABLES_JSON: ${{ toJSON(vars) }}
           VITE_CMS_STUDIO_CONFIGURATION: ${{ inputs.target != 'development' && secrets.VITE_CMS_STUDIO_CONFIGURATION || '' }}
-          VITE_LIVE_PRODUCTION_ENABLED: ${{ vars.LIVE_PRODUCTION_ENABLED || 'false' }}
+          VITE_LIVE_PRODUCTION_ENABLED: ${{ inputs.target != 'development' && vars.LIVE_PRODUCTION_ENABLED || 'false' }}
           CMS_MEDIA_CACHE_PURGE_TOKEN: ${{ secrets.CMS_MEDIA_CACHE_PURGE_TOKEN }}
           CMS_VOICEOVER_R2_ACCESS_KEY_ID: ${{ secrets.CMS_VOICEOVER_R2_ACCESS_KEY_ID }}
           CMS_VOICEOVER_R2_SECRET_ACCESS_KEY: ${{ secrets.CMS_VOICEOVER_R2_SECRET_ACCESS_KEY }}

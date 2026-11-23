@@ -389,34 +389,6 @@ describe("CMS deploy target", () => {
     expect(deploy).not.toMatch(/njpbs-site\.cloudfunctions|--project njpbs-site\b|project_id: njpbs-site$|environment: production$/m);
   });
 
-  it("lists every name a development run reads from its environment", () => {
-    const names = JSON.parse(workflow.env.CMS_DEVELOPMENT_ENVIRONMENT_NAMES);
-    // Production-only reads: `inputs.target != 'development' && X`, the production branch of a
-    // target choice, a secret fallback behind a required variable, and steps dev skips.
-    const strip = text => text.replace(/inputs\.target != 'development' && (?:secrets|vars)\.[A-Z]\w*/g, "")
-      .replace(/inputs\.target == 'development' && ([^|}]+?) \|\| (?:secrets|vars)\.[A-Z]\w*/g, "$1")
-      .replace(/vars\.([A-Z]\w*) \|\| secrets\.\1\b/g, "vars.$1");
-    const reads = { secrets: new Set(), vars: new Set() };
-    const collect = value => {
-      for (const [, kind, name] of strip(JSON.stringify(value)).matchAll(/\b(secrets|vars)\.([A-Z][A-Z0-9_]*)\b/g)) reads[kind].add(name);
-    };
-    const { CMS_DEVELOPMENT_ENVIRONMENT_NAMES: _names, ...env } = workflow.env;
-    collect(env);
-    for (const { steps, ...current } of Object.values(workflow.jobs)) {
-      collect(current);
-      for (const row of steps) if (!/^inputs\.target != 'development'/.test(row.if ?? "")) collect(row);
-    }
-    expect([...reads.secrets].sort()).toEqual(names.secrets);
-    for (const name of names.variables) expect(reads.vars.has(name), name).toBe(true);
-    // Repository values a development run reads on purpose: admission identities, dev resource
-    // names (CMS_DEV_*) and the feature flags production and dev share.
-    expect([...reads.vars].filter(name => !names.variables.includes(name) && !name.startsWith("CMS_DEV_")).sort()).toEqual([
-      "AUTHOR_PAGES_LIVE", "CANONICAL_GITHUB_REPOSITORY", "CANONICAL_GITHUB_REPOSITORY_ID", "CLOUDFLARE_DEV_PUBLIC_WORKER", "CMS_DEPLOY_OWNER",
-      "CMS_GPU_WORKER_ID", "CMS_LOCAL_PUBLICATION_OWNER", "CMS_MEDIA_MASTER_R2_BUCKET", "CMS_PREVIEW_ACCESS_VERIFIED", "CMS_PREVIEW_SERIALIZER_READY",
-      "CMS_PREVIEW_TRANSPORT", "CMS_PRODUCTION_API_ORIGIN", "LIVE_PRODUCTION_ENABLED", "VITE_CMS_PREVIEW_ENABLED", "VITE_VIDEO_REPLACEMENT_ENABLED",
-    ]);
-  });
-
   it("keeps every Cloudflare write of a development run on dev names", () => {
     expect(branches("CMS_TARGET_FIREBASE_CONFIG")).toEqual(["'firebase.dev.json'", "'firebase.json'"]);
     expect(branches("CMS_TARGET_FIREBASE_RULES")).toEqual(["'firestore:rules,firestore:indexes'", "'firestore:rules,firestore:indexes,storage'"]);

@@ -372,14 +372,15 @@ export async function runCmsFunctionSmoke({
 }
 
 // A cms-staging-deploy development run deploys the production entry into the
-// dev project. Its live-smoke job proves the dev Admin's anonymous refusal in
+// dev project, but the dev API gateway serves only the dev manifest's
+// endpoints. Its live-smoke job proves the dev Admin's anonymous refusal in
 // place of the production authentication shell.
 export async function runTargetDevCmsFunctionSmoke({ baseUrl, target, request = fetch } = {}) {
   if (target?.environment !== "development" || baseUrl !== target.apiOrigin) {
     throw new CmsSmokeError("Development smoke requires the dev API origin");
   }
   return runFunctionSmoke({ baseUrl, functionsOrigin: target.functionsOrigin,
-    adminOrigin: target.adminOrigin, deployedFunctionNames: DEPLOYED_FUNCTION_NAMES, request });
+    adminOrigin: target.adminOrigin, deployedFunctionNames: declaredDevFunctionNames(), request });
 }
 
 async function runFunctionSmoke({ baseUrl, functionsOrigin, adminOrigin, deployedFunctionNames, request }) {
