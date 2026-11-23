@@ -59,6 +59,8 @@ beforeEach(async () => {
 });
 const exportSeed = options => exportPublished({ firestore: source, sourceSha, publication,
   fetchImpl: async () => new Response(null, { headers: { 'content-type': 'image/png', 'content-length': String(mediaBytes.length) } }), ...options });
+// Plan entries name a path with the document and receipt hashes the dry run saw.
+const at = (...paths) => paths.map(path => expect.objectContaining({ path }));
 // The dry run is the plan; apply restores or removes only what it lists.
 async function refresh(options) {
   const plan = await importPublished(options);
@@ -185,7 +187,7 @@ describe('isolated published-content seed', () => {
     const newer = await exportSeed({ configurationOnly: true });
     await expect(importPublished({ firestore: dev, manifest: newer, apply: true })).rejects.toThrow(/Dev (edit|deletion) conflict: sections\/news/);
     expect((await dev.doc('mediaCategories/general').get()).data().label).toBe('General');
-    expect(await refresh({ firestore: dev, manifest: newer })).toMatchObject({ changed: 2, unchanged: 5, restored: ['sections/news'],
+    expect(await refresh({ firestore: dev, manifest: newer })).toMatchObject({ changed: 2, unchanged: 5, restored: at('sections/news'),
       plan: { matched: true, notApplied: [] } });
     await expect(importPublished({ firestore: dev, manifest, plan: { applied: false, manifestHash: newer.hash, restored: [], removed: [] }, apply: true }))
       .rejects.toThrow('The plan must be a dry run of this manifest');
@@ -202,13 +204,13 @@ describe('isolated published-content seed', () => {
     await source.doc('sections/news').update({ label: 'News desk' });
     await source.doc('sections/sports').delete();
     const newer = await exportSeed({ configurationOnly: true });
-    expect(await importPublished({ firestore: dev, manifest: newer })).toMatchObject({ applied: false, deleted: 1, removed: ['sections/sports'] });
+    expect(await importPublished({ firestore: dev, manifest: newer })).toMatchObject({ applied: false, deleted: 1, removed: at('sections/sports') });
     expect((await dev.doc('sections/sports').get()).exists).toBe(true);
     // Without a plan the withdrawn row is retained, as before.
     expect(await importPublished({ firestore: dev, manifest: newer, apply: true })).toMatchObject({ changed: 1, unchanged: 6, deleted: 0, retained: ['sections/sports'],
       plan: { matched: false } });
     expect((await dev.doc('sections/sports').get()).exists).toBe(true);
-    expect(await refresh({ firestore: dev, manifest: newer })).toMatchObject({ changed: 0, deleted: 1, removed: ['sections/sports'], plan: { matched: true } });
+    expect(await refresh({ firestore: dev, manifest: newer })).toMatchObject({ changed: 0, deleted: 1, removed: at('sections/sports'), plan: { matched: true } });
     expect((await dev.doc('sections/news').get()).data().label).toBe('News desk');
     expect((await dev.doc('sections/sports').get()).exists).toBe(false);
     expect((await dev.doc(`devSeedRecords/${digest('sections/sports')}`).get()).exists).toBe(false);
@@ -669,16 +671,19 @@ describe('isolated published-content seed', () => {
     await expect(verifyPublished({ firestore: dev, manifest })).rejects.toThrow(`Dev does not match source snapshot ${manifest.hash}: 2 differ, 0 extra`);
     await expect(importPublished({ firestore: dev, manifest, copy, apply: true })).rejects.toThrow('Dev deletion conflict: cmsPages/contact');
     const plan = await importPublished({ firestore: dev, manifest, copy });
-    expect(plan).toMatchObject({ applied: false, restored: ['cmsPages/contact', 'media_assets_public/image-1'] });
+    expect(plan).toMatchObject({ applied: false, restored: at('cmsPages/contact', 'media_assets_public/image-1') });
     // A seeded row changed after the dry run is not in the plan and is refused.
+    await dev.doc('cmsPages/contact').set({ title: 'Re-created after the plan' });
+    await expect(importPublished({ firestore: dev, manifest, copy, plan, apply: true })).rejects.toThrow('Dev edit conflict: cmsPages/contact; it is not in the plan or changed after the dry run');
+    await dev.doc('cmsPages/contact').delete();
     await dev.doc('media_assets/image-1').update({ altText: 'Edited after the plan' });
     await expect(importPublished({ firestore: dev, manifest, copy, plan, apply: true })).rejects.toThrow('Dev edit conflict: media_assets/image-1');
     expect((await dev.doc('media_assets_public/image-1').get()).data().altText).toBe('Dev rehearsal edit');
     await dev.doc('media_assets/image-1').update({ altText: 'Public alt' });
     const groups = [];
     expect(await importPublished({ firestore: dev, manifest, copy, plan, apply: true, onGroup: group => groups.push(group) })).toMatchObject({ changed: 2,
-      restored: ['cmsPages/contact', 'media_assets_public/image-1'], plan: { matched: true } });
-    expect(groups).toEqual([expect.objectContaining({ group: 0, applied: true, changed: 2, restored: ['cmsPages/contact', 'media_assets_public/image-1'] })]);
+      restored: at('cmsPages/contact', 'media_assets_public/image-1'), plan: { matched: true } });
+    expect(groups).toEqual([expect.objectContaining({ group: 0, applied: true, changed: 2, restored: at('cmsPages/contact', 'media_assets_public/image-1') })]);
     expect((await dev.doc('media_assets_public/image-1').get()).data().altText).toBe('Public alt');
     expect((await dev.doc('cmsPages/contact').get()).data().title).toBe('Public title');
     expect((await verifyPublished({ firestore: dev, manifest })).verified).toBe(true);
@@ -691,10 +696,17 @@ describe('isolated published-content seed', () => {
     await source.doc('cmsPages/contact').update({ publiclyVisible: false });
     const next = await exportSeed();
     await expect(verifyPublished({ firestore: dev, manifest: next })).rejects.toThrow(/0 differ, 4 extra/);
+    const plan = await importPublished({ firestore: dev, manifest: next });
+    await dev.doc('cmsPages/contact').update({ title: 'Edited after the dry run' });
+    await expect(importPublished({ firestore: dev, manifest: next, plan, apply: true })).rejects.toThrow('Seed record changed after the dry run: cmsPages/contact');
+    expect((await dev.doc('cmsPages/contact').get()).data().title).toBe('Edited after the dry run');
+    await dev.doc('system/mediaDiscovery').set({ revision: 3, admission: { schema: 1, activeCount: 1, revision: 3 } });
     // The withdrawn page was the only reference to its image, so both leave dev.
     expect(await refresh({ firestore: dev, manifest: next })).toMatchObject({ deleted: 4,
-      removed: ['cmsPages/contact', 'media_assets_public/image-1', 'media_assets/image-1', 'mediaCategories/dev-seed'] });
+      removed: at('cmsPages/contact', 'media_assets_public/image-1', 'media_assets/image-1', 'mediaCategories/dev-seed') });
     expect((await dev.doc('cmsPages/contact').get()).exists).toBe(false);
+    // The removed media leave the cached active count stale, so readers must recount.
+    expect((await dev.doc('system/mediaDiscovery').get()).data()).toEqual({ revision: 3 });
     expect((await dev.doc('cmsPages/local-page').get()).data().title).toBe('Dev-only work');
     expect(await verifyPublished({ firestore: dev, manifest: next })).toMatchObject({ verified: true, manifestHash: next.hash });
     await source.doc('cmsPages/contact').update({ publiclyVisible: true });
@@ -725,7 +737,7 @@ describe('isolated published-content seed', () => {
       return typeof value === 'function' ? value.bind(target) : value;
     } });
     const plan = await importPublished({ firestore: dev, manifest: next });
-    await expect(importPublished({ firestore: racing, manifest: next, plan, apply: true })).rejects.toThrow('Seed record changed during the refresh: cmsPages/contact');
+    await expect(importPublished({ firestore: racing, manifest: next, plan, apply: true })).rejects.toThrow('Seed record changed after the dry run: cmsPages/contact');
     expect((await dev.doc('cmsPages/contact').get()).exists).toBe(true);
     expect((await receipt.get()).exists).toBe(true);
   });

@@ -257,11 +257,11 @@ reloading cannot repair a server response contract.
 The [seed operator](../../scripts/seed-dev-published.mjs) keeps `export`,
 `validate`, `copy-media`, `import` and `verify` separate, with a fixed
 production-read/development-write project pair, the explicit Node type-stripping
-flag and service-account JSON on stdin. Export accepts only the read-only
-`agent-cms-reader@njpbs-site` identity (Firestore viewer; the script confirms it
-holds only entity get/list). Import and verify accept only
-`dev-seed-writer@njpbs-site-dev`. No ADC, Auth/database export or production
-storage authority. Never substitute an administrator credential.
+flag and service-account JSON on stdin. Export accepts a production service
+account only after its granted permissions prove it can get and list Firestore
+entities and do nothing else. Import and verify accept only the dedicated dev
+seed writer. No ADC, Auth/database export or production storage authority.
+Never substitute an administrator credential.
 
 ### Refresh dev before a rehearsal
 
@@ -288,9 +288,10 @@ sh -c "$SEED_WRITER_COMMAND" | $SEED import $PAIR --manifest "$MANIFEST" | tee "
 ```
 
 The dry run is the plan. `restored` lists seeded records that dev changed or
-deleted; `removed` lists seeded records the source no longer publishes. Apply
-takes the plan from the same run and restores or removes only the paths it
-lists, then verifies:
+deleted; `removed` lists seeded records the source no longer publishes. Each
+entry records the document and receipt hashes the dry run saw. Apply takes the
+plan from the same run and restores or removes a listed row only while both
+hashes still match, then verifies:
 
 ```bash
 sh -c "$SEED_WRITER_COMMAND" | $SEED import $PAIR --manifest "$MANIFEST" --plan "$STATE/plan.json" --apply | tee "$STATE/apply.json"
@@ -334,8 +335,10 @@ empty queues; it then creates generation zero and a paused, unconfigured
 preview. Later imports never reset controls. Apply writes in transactional
 groups of at most 100. Without a plan it refuses a seeded record that dev edited
 or deleted and retains a seeded record the source withdrew. With a plan it
-restores or removes only the listed seed-written paths; a seeded record changed
-after the dry run is refused. An untracked dev record at a source path is always
+restores or removes only the listed seed-written rows whose document and receipt
+still match the dry run; a seeded record changed after the dry run is refused.
+Apply that writes or removes seeded media clears the cached media admission
+count, so the next upload recounts active media. An untracked dev record at a source path is always
 refused, so dev-authored fixtures are never overwritten.
 Configuration-only manifests reconcile only the section and media-category
 registries and leave content, runtime controls and the `dev-seed` category alone.
