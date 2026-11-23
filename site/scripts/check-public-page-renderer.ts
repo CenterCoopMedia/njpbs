@@ -83,7 +83,9 @@ const bundle = await build({ stdin: { resolveDir: repo, contents: `
         render: renderPublishedPage, readWithdrawal: async () => null,
         fetchAsset: async () => new Response(null, {status: 503}),
         now: () => new Date(${JSON.stringify(schedule.generatedAt)}) });
-      return await worker.fetch(request) ?? new Response(null, {status: 404});
+      const response = await worker.fetch(request);
+      if (decisions !== 2) throw new Error('Schedule must read authority before and after rendering');
+      return response ?? new Response(null, {status: 404});
     }
     if (url.searchParams.has('fallback')) {
       const frame = frames.find(frame => frame.path === url.pathname);
@@ -113,8 +115,10 @@ try {
     const response = await runtime.dispatchFetch("https://dev-public.example.org/schedule/");
     const html = await response.text();
     const elapsedMs = performance.now() - started;
-    assert.equal(response.status, 200, `Schedule ${sample}: ${response.headers.get("server-timing")}`);
+    const serverTiming = response.headers.get("server-timing");
+    assert.equal(response.status, 200, `Schedule ${sample}: ${serverTiming}`);
     assert.equal(response.headers.get("x-njpbs-content-source"), "cms-page-no-build");
+    assert(serverTiming, `Schedule ${sample} returns phase timings`);
     assert(elapsedMs < 2_000, `Schedule ${sample} including ${recheckMs} ms recheck: ${elapsedMs} ms`);
     assert(Buffer.byteLength(html) < 1_800_000, "Schedule HTML payload includes only display data");
     const embedded = html.match(/<script[^>]*data-now-next-data[^>]*>([\s\S]*?)<\/script>/);
@@ -127,7 +131,7 @@ try {
     })));
     assert.equal((html.match(/data-schedule-day-template(?=[\s>])/g) ?? []).length, schedule.days.broadcast.length);
     console.log(JSON.stringify({ event: "schedule-render-budget", sample, days: schedule.days.broadcast.length,
-      bytes: Buffer.byteLength(html), elapsedMs, recheckMs }));
+      bytes: Buffer.byteLength(html), elapsedMs, recheckMs, serverTiming }));
   }
   const compiled = await import(new URL("../.public-page-renderer/server/entry.mjs", import.meta.url).href);
   const homeBannerRead = publishedPageRead("home", rendererSha);
