@@ -40,14 +40,19 @@ The optional `target` input selects `production` (the default) or
 GitHub environment of the job and the concurrency group. The run title is
 `Promote <target> <sha>`, so a production dispatch keeps its title and API
 readback binds both the target and the selected input. `jawn-ops njpbs release
-run --target development` dispatches this input so the release command
-promotes the dev website with the same workflow and rules as production
-(jawn-ops #1147).
+run --target development` dispatches this input, so the release command moves
+the `development` branch with the same workflow and rules as production
+(jawn-ops #1147). Moving the branch does not deploy the dev website. Building
+and activating dev from that branch is later work (jawn-ops #1148, #1156); until
+then the release command stops after promotion and reports the later steps as
+not rehearsed.
 
-A development promotion needs a `development` branch, both rulesets below
-covering `refs/heads/development`, and the App client ID variable and private
-key secret in the `development` environment. Without them it fails closed at
-the fetch, the push or token creation.
+A development promotion needs a `development` branch and the App client ID
+variable and private key secret in the `development` environment. Without them
+it fails closed at the fetch or at token creation. The workflow does not check
+rulesets: apply both rulesets below to `refs/heads/development` before the first
+development promotion. The read-only precheck compares the live rulesets with
+these files, so it fails until the live rulesets cover both branches.
 
 ## Production rulesets
 
