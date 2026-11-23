@@ -11,7 +11,7 @@ const environmentPolicy = () => JSON.parse(readFileSync(new URL("../../.github/d
 const secretExceptions: Record<string, string[]> = {};
 // cms-staging-deploy selects its environment from the target input.
 const TARGET_ENVIRONMENT = "${{ inputs.target == 'development' && 'development' || 'production' }}";
-const environmentsOf = (job: any): (string | undefined)[] => job.environment === TARGET_ENVIRONMENT ? ["production", "development"]
+const environmentsOf = (job: { environment?: string | { name?: string } }): (string | undefined)[] => job.environment === TARGET_ENVIRONMENT ? ["production", "development"]
   : [typeof job.environment === "string" ? job.environment : job.environment?.name];
 
 function secretNames(value: unknown): string[] {
