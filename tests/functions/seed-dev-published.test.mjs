@@ -59,6 +59,11 @@ beforeEach(async () => {
 });
 const exportSeed = options => exportPublished({ firestore: source, sourceSha, publication,
   fetchImpl: async () => new Response(null, { headers: { 'content-type': 'image/png', 'content-length': String(mediaBytes.length) } }), ...options });
+// The dry run is the plan; apply restores or removes only what it lists.
+async function refresh(options) {
+  const plan = await importPublished(options);
+  return importPublished({ ...options, plan: JSON.parse(JSON.stringify(plan)), apply: true });
+}
 async function copied(manifest) {
   // A real PNG fixture; the fake is only the public HTTP network boundary.
   const bytes = mediaBytes;
@@ -171,16 +176,25 @@ describe('isolated published-content seed', () => {
     expect((await dev.doc('mediaCategories/general').get()).exists).toBe(false);
     expect((await dev.doc('sections/news').get()).data().label).toBe('Existing dev news');
   });
-  it.each(['edited', 'deleted'])('restores a %s seeded configuration row to the source', async kind => {
+  it.each(['edited', 'deleted'])('refuses a %s seeded configuration row without a plan and restores it with one', async kind => {
     const manifest = await exportSeed({ configurationOnly: true });
     await importPublished({ firestore: dev, manifest, apply: true });
     if (kind === 'edited') await dev.doc('sections/news').update({ label: 'Dev rehearsal edit' });
     else await dev.doc('sections/news').delete();
-    expect(await importPublished({ firestore: dev, manifest, apply: true })).toMatchObject({ changed: 1, unchanged: 6, restored: ['sections/news'] });
+    await source.doc('mediaCategories/general').update({ label: 'Changed source label', version: 2 });
+    const newer = await exportSeed({ configurationOnly: true });
+    await expect(importPublished({ firestore: dev, manifest: newer, apply: true })).rejects.toThrow(/Dev (edit|deletion) conflict: sections\/news/);
+    expect((await dev.doc('mediaCategories/general').get()).data().label).toBe('General');
+    expect(await refresh({ firestore: dev, manifest: newer })).toMatchObject({ changed: 2, unchanged: 5, restored: ['sections/news'],
+      plan: { matched: true, notApplied: [] } });
+    await expect(importPublished({ firestore: dev, manifest, plan: { applied: false, manifestHash: newer.hash, restored: [], removed: [] }, apply: true }))
+      .rejects.toThrow('The plan must be a dry run of this manifest');
+    await importPublished({ firestore: dev, manifest: newer, apply: true });
+    expect((await dev.doc('mediaCategories/general').get()).data().label).toBe('Changed source label');
     expect((await dev.doc('sections/news').get()).data().label).toBe('News');
-    expect(await verifyPublished({ firestore: dev, manifest })).toMatchObject({ verified: true, manifestHash: manifest.hash, documents: 7 });
+    expect(await verifyPublished({ firestore: dev, manifest: newer })).toMatchObject({ verified: true, manifestHash: newer.hash, documents: 7 });
   });
-  it('updates untouched registry hashes and removes seeded configuration the source removed', async () => {
+  it('updates untouched registry hashes and removes seeded configuration the source removed only with a plan', async () => {
     await source.doc('sections/sports').set({ id: 'sports', label: 'Sports', description: '', order: 8 });
     const manifest = await exportSeed({ configurationOnly: true });
     await importPublished({ firestore: dev, manifest, apply: true });
@@ -190,7 +204,11 @@ describe('isolated published-content seed', () => {
     const newer = await exportSeed({ configurationOnly: true });
     expect(await importPublished({ firestore: dev, manifest: newer })).toMatchObject({ applied: false, deleted: 1, removed: ['sections/sports'] });
     expect((await dev.doc('sections/sports').get()).exists).toBe(true);
-    expect(await importPublished({ firestore: dev, manifest: newer, apply: true })).toMatchObject({ changed: 1, unchanged: 6, deleted: 1 });
+    // Without a plan the withdrawn row is retained, as before.
+    expect(await importPublished({ firestore: dev, manifest: newer, apply: true })).toMatchObject({ changed: 1, unchanged: 6, deleted: 0, retained: ['sections/sports'],
+      plan: { matched: false } });
+    expect((await dev.doc('sections/sports').get()).exists).toBe(true);
+    expect(await refresh({ firestore: dev, manifest: newer })).toMatchObject({ changed: 0, deleted: 1, removed: ['sections/sports'], plan: { matched: true } });
     expect((await dev.doc('sections/news').get()).data().label).toBe('News desk');
     expect((await dev.doc('sections/sports').get()).exists).toBe(false);
     expect((await dev.doc(`devSeedRecords/${digest('sections/sports')}`).get()).exists).toBe(false);
@@ -236,10 +254,15 @@ describe('isolated published-content seed', () => {
     const { path } = JSON.parse(exported.stdout);
     const validated = cli(['validate', '--manifest', path]);
     expect(validated.status, validated.stderr).toBe(0);
+    const planFile = join(directory, 'plan.json');
     for (const apply of [false, true]) {
-      const result = cli(['import', '--emulator', '--configuration-only', '--manifest', path, ...(apply ? ['--apply'] : [])]);
+      const result = cli(['import', '--emulator', '--configuration-only', '--manifest', path, ...(apply ? ['--apply', '--plan', planFile] : [])]);
       expect(result.status, result.stderr).toBe(0);
-      expect(JSON.parse(result.stdout)).toMatchObject({ applied: apply, changed: 7, deleted: 0 });
+      const lines = result.stdout.trim().split('\n').map(line => JSON.parse(line));
+      expect(lines.at(-1)).toMatchObject({ applied: apply, changed: 7, deleted: 0 });
+      // Apply prints each committed group before its summary.
+      expect(lines.slice(0, -1)).toEqual(apply ? [expect.objectContaining({ group: 0, changed: 7 })] : []);
+      if (!apply) await writeFile(planFile, result.stdout);
       expect((await dev.doc('sections/news').get()).exists).toBe(apply);
     }
     expect((await dev.collection('system').get()).empty).toBe(true);
@@ -626,8 +649,11 @@ describe('isolated published-content seed', () => {
     await batch.commit();
     const manifest = await exportSeed();
     const copy = await copied(manifest);
-    const first = await importPublished({ firestore: dev, manifest, copy, apply: true });
+    const groups = [];
+    const first = await importPublished({ firestore: dev, manifest, copy, apply: true, onGroup: group => groups.push(group) });
     expect(first.changed).toBe(112);
+    // Each committed group is reported as it commits.
+    expect(groups.map(group => [group.group, group.changed])).toEqual([[0, 100], [1, 12]]);
     expect((await importPublished({ firestore: dev, manifest, copy, apply: true })).unchanged).toBe(112);
     await source.doc('cmsPages/contact').update({ 'published.metadata.title': 'Updated public title', 'published.sourceVersion': 5 });
     const newer = await exportSeed();
@@ -641,8 +667,18 @@ describe('isolated published-content seed', () => {
     await dev.doc('media_assets_public/image-1').update({ altText: 'Dev rehearsal edit' });
     await dev.doc('cmsPages/contact').delete();
     await expect(verifyPublished({ firestore: dev, manifest })).rejects.toThrow(`Dev does not match source snapshot ${manifest.hash}: 2 differ, 0 extra`);
-    expect(await importPublished({ firestore: dev, manifest, copy, apply: true })).toMatchObject({ changed: 2,
-      restored: ['cmsPages/contact', 'media_assets_public/image-1'] });
+    await expect(importPublished({ firestore: dev, manifest, copy, apply: true })).rejects.toThrow('Dev deletion conflict: cmsPages/contact');
+    const plan = await importPublished({ firestore: dev, manifest, copy });
+    expect(plan).toMatchObject({ applied: false, restored: ['cmsPages/contact', 'media_assets_public/image-1'] });
+    // A seeded row changed after the dry run is not in the plan and is refused.
+    await dev.doc('media_assets/image-1').update({ altText: 'Edited after the plan' });
+    await expect(importPublished({ firestore: dev, manifest, copy, plan, apply: true })).rejects.toThrow('Dev edit conflict: media_assets/image-1');
+    expect((await dev.doc('media_assets_public/image-1').get()).data().altText).toBe('Dev rehearsal edit');
+    await dev.doc('media_assets/image-1').update({ altText: 'Public alt' });
+    const groups = [];
+    expect(await importPublished({ firestore: dev, manifest, copy, plan, apply: true, onGroup: group => groups.push(group) })).toMatchObject({ changed: 2,
+      restored: ['cmsPages/contact', 'media_assets_public/image-1'], plan: { matched: true } });
+    expect(groups).toEqual([expect.objectContaining({ group: 0, applied: true, changed: 2, restored: ['cmsPages/contact', 'media_assets_public/image-1'] })]);
     expect((await dev.doc('media_assets_public/image-1').get()).data().altText).toBe('Public alt');
     expect((await dev.doc('cmsPages/contact').get()).data().title).toBe('Public title');
     expect((await verifyPublished({ firestore: dev, manifest })).verified).toBe(true);
@@ -656,7 +692,7 @@ describe('isolated published-content seed', () => {
     const next = await exportSeed();
     await expect(verifyPublished({ firestore: dev, manifest: next })).rejects.toThrow(/0 differ, 4 extra/);
     // The withdrawn page was the only reference to its image, so both leave dev.
-    expect(await importPublished({ firestore: dev, manifest: next, apply: true })).toMatchObject({ deleted: 4,
+    expect(await refresh({ firestore: dev, manifest: next })).toMatchObject({ deleted: 4,
       removed: ['cmsPages/contact', 'media_assets_public/image-1', 'media_assets/image-1', 'mediaCategories/dev-seed'] });
     expect((await dev.doc('cmsPages/contact').get()).exists).toBe(false);
     expect((await dev.doc('cmsPages/local-page').get()).data().title).toBe('Dev-only work');
@@ -681,14 +717,15 @@ describe('isolated published-content seed', () => {
         if (!planned) {
           planned = true;
           await dev.doc('cmsPages/contact').update({ title: 'Dev rehearsal edit' });
-          await importPublished({ firestore: dev, manifest, copy, apply: true });
+          await refresh({ firestore: dev, manifest, copy });
         }
         return result;
       };
       const value = target[key];
       return typeof value === 'function' ? value.bind(target) : value;
     } });
-    await expect(importPublished({ firestore: racing, manifest: next, apply: true })).rejects.toThrow('Seed record changed during the refresh: cmsPages/contact');
+    const plan = await importPublished({ firestore: dev, manifest: next });
+    await expect(importPublished({ firestore: racing, manifest: next, plan, apply: true })).rejects.toThrow('Seed record changed during the refresh: cmsPages/contact');
     expect((await dev.doc('cmsPages/contact').get()).exists).toBe(true);
     expect((await receipt.get()).exists).toBe(true);
   });

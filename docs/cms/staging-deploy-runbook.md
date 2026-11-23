@@ -287,16 +287,13 @@ $SEED validate $PAIR --manifest "$MANIFEST"
 sh -c "$SEED_WRITER_COMMAND" | $SEED import $PAIR --manifest "$MANIFEST" | tee "$STATE/plan.json"
 ```
 
-Read `restored` and `removed` in `plan.json` before you apply. `restored` lists
-seeded records that dev changed or deleted; `removed` lists seeded records the
-source no longer publishes. Apply writes only to the dev project, under the
-[standing approval for rehearsal refreshes](https://github.com/jamditis/jawn-ops/issues/1150#issuecomment-7108233874):
-restore and remove only rows the seed wrote, never a production write. Any
-other dev write needs its own approval. Then apply and verify, in the same
-shell:
+The dry run is the plan. `restored` lists seeded records that dev changed or
+deleted; `removed` lists seeded records the source no longer publishes. Apply
+takes the plan from the same run and restores or removes only the paths it
+lists, then verifies:
 
 ```bash
-sh -c "$SEED_WRITER_COMMAND" | $SEED import $PAIR --manifest "$MANIFEST" --apply | tee "$STATE/apply.json"
+sh -c "$SEED_WRITER_COMMAND" | $SEED import $PAIR --manifest "$MANIFEST" --plan "$STATE/plan.json" --apply | tee "$STATE/apply.json"
 sh -c "$SEED_WRITER_COMMAND" | $SEED verify $PAIR --manifest "$MANIFEST" | tee "$STATE/verify.json"
 ```
 
@@ -305,15 +302,16 @@ If the snapshot references a Sponsor or Newsletter card, export also needs
 without it. Production's Nov. 23, 2026 snapshot references none.
 
 Keep `plan.json`, `apply.json` and `verify.json` with the rehearsal run record.
-Apply plans again inside its own transactions, so `apply.json` (not the dry run)
-lists what it actually restored and removed; a row changed after the dry run
-appears there.
+Apply prints one JSON line per committed group, then a summary, so a partial
+apply still records what it wrote. The summary's `plan` field compares the apply
+with its plan: `matched` is false when a planned path was not applied or a
+withdrawn row was `retained` because the plan did not list it.
 
 `verify` prints the manifest hash, the source publication receipt, the export
 time and per-collection counts; record that line with the rehearsal. It fails
 when any seeded dev document differs from the manifest or dev still tracks a
-record the snapshot no longer has. Rerun `import --apply` with the same manifest
-to resume an interrupted refresh; finished groups report `unchanged`.
+record the snapshot no longer has. Rerun the apply with the same manifest and
+plan to resume an interrupted refresh; finished groups report `unchanged`.
 
 ### What the refresh copies and reconciles
 
@@ -333,11 +331,12 @@ URLs.
 
 The first full import requires absent deployment and preview pointers and
 empty queues; it then creates generation zero and a paused, unconfigured
-preview. Later imports never reset controls. Each import reconciles dev with the
-snapshot in transactional groups of at most 100: seeded records that dev edited
-or deleted are restored (listed as `restored`), seeded records the source no
-longer publishes are deleted (listed as `removed`), and an untracked dev record
-at a source path is refused, so dev-authored fixtures are never overwritten.
+preview. Later imports never reset controls. Apply writes in transactional
+groups of at most 100. Without a plan it refuses a seeded record that dev edited
+or deleted and retains a seeded record the source withdrew. With a plan it
+restores or removes only the listed seed-written paths; a seeded record changed
+after the dry run is refused. An untracked dev record at a source path is always
+refused, so dev-authored fixtures are never overwritten.
 Configuration-only manifests reconcile only the section and media-category
 registries and leave content, runtime controls and the `dev-seed` category alone.
 
