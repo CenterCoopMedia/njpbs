@@ -40,4 +40,8 @@ const cmsSubmitBugReport = cmsOnRequest({
   cors: true, memory: "1GiB", concurrency: 1, maxInstances: 2, timeoutSeconds: 30,
 }, createDevCmsSubmitBugReportHandler());
 
-module.exports = { cmsSubmitBugReport, createDevCmsSubmitBugReportHandler };
+// functions/index.js serves this wrapper in a development deployment and the production handler otherwise.
+const selectedCmsSubmitBugReport = process.env.CMS_DEPLOYMENT_ENVIRONMENT === "development"
+  ? cmsSubmitBugReport : require("./bug-report").cmsSubmitBugReport;
+
+module.exports = { cmsSubmitBugReport, createDevCmsSubmitBugReportHandler, selectedCmsSubmitBugReport };

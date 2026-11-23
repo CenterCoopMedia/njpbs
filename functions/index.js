@@ -136,8 +136,8 @@ lazyExport("decideStaffAccessRequest", "./staff-access");
 lazyExport("onStaffAccessEmailRetry", "./staff-access-email");
 lazyExport("onEditorialNotificationCreated", "./editorial-notification");
 lazyExport("onStaffAccessNotificationCreated", "./staff-access-notification");
-// The dev Admin sends its build revision; the dev wrapper accepts and checks it (dev-manifest.js).
-lazyExport("cmsSubmitBugReport", process.env.CMS_DEPLOYMENT_ENVIRONMENT === "development" ? "./dev-bug-report" : "./bug-report");
+// The dev Admin sends its build revision; dev-bug-report.js selects the wrapper that checks it in development.
+lazyExport("cmsSubmitBugReport", "./dev-bug-report", "selectedCmsSubmitBugReport");
 lazyExport("cmsListBugReports", "./bug-report-triage");
 lazyExport("cmsNudgeBugReport", "./bug-report-triage");
 lazyExport("cmsResolveBugReport", "./bug-report-triage");
