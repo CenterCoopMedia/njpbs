@@ -718,7 +718,8 @@ it("qualifies optional dev record and CODE bindings against the sealed public re
   const { assertDevPublicWorkerBindings } = await import("../../scripts/deploy-dev-staff-gateway.mjs");
   const sha = "a".repeat(40);
   const bindings = [{ name: "ASSETS", type: "assets" }, { name: "CMS_API", type: "service", service: "template-dev-cms-api", entrypoint: "PublicContentEntrypoint" },
-    { name: "NO_BUILD_POST_RENDERER_SHA", type: "plain_text", text: sha }];
+    { name: "NO_BUILD_POST_RENDERER_SHA", type: "plain_text", text: sha },
+    { name: "PUBLICATION_ENVIRONMENT", type: "plain_text", text: "development" }];
   for (const text of ["", sha]) expect(() => assertDevPublicWorkerBindings([...bindings,
     { name: "NO_BUILD_RECORD_RENDERER_SHA", type: "plain_text", text }, { name: "NO_BUILD_CODE_POST_RENDERER_SHA", type: "plain_text", text: sha }], sha)).not.toThrow();
   expect(() => assertDevPublicWorkerBindings([...bindings,

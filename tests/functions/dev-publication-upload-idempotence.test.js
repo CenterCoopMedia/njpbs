@@ -167,7 +167,8 @@ globalThis.fetch = async (url, options = {}) => {
       "workers/message": candidateModule.publicWorkerCandidateMessage(publication), "workers/triggered_by": "version_upload" },
     resources: { script: {}, bindings: [{ name: "ASSETS", type: "assets" },
       { name: "CMS_API", type: "service", service: "template-dev-cms-api", entrypoint: "PublicContentEntrypoint", environment: "production" },
-      { name: "NO_BUILD_POST_RENDERER_SHA", type: "plain_text", text: identity.commitSha }],
+      { name: "NO_BUILD_POST_RENDERER_SHA", type: "plain_text", text: identity.commitSha },
+      { name: "PUBLICATION_ENVIRONMENT", type: "plain_text", text: "development" }],
       script_runtime: { assets: { config: { run_worker_first: true, html_handling: "force-trailing-slash", not_found_handling: "404-page" } } } },
   };
   else if (parsed.pathname.endsWith("/deployments")) {

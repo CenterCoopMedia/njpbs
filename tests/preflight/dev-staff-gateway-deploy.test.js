@@ -18,6 +18,7 @@ const publicBindings = [
   { type: 'assets', name: 'ASSETS' },
   { type: 'service', name: 'CMS_API', service: 'template-dev-cms-api', entrypoint: 'PublicContentEntrypoint', environment: 'production' },
   { type: 'plain_text', name: 'NO_BUILD_POST_RENDERER_SHA', text: sha },
+  { type: 'plain_text', name: 'PUBLICATION_ENVIRONMENT', text: 'development' },
 ];
 it('qualifies the native version binding on development candidates and gateway readbacks', () => {
   const metadata = { type: 'version_metadata', name: 'CF_VERSION_METADATA' };
@@ -26,13 +27,14 @@ it('qualifies the native version binding on development candidates and gateway r
   expect(() => assertDevPublicWorkerBindings([...publicBindings, { ...metadata, type: 'plain_text' }], sha))
     .toThrow('exact reader bindings');
 });
-it('requires the development target on shared-entry candidates before activation', () => {
-  const families = { type: 'plain_text', name: 'NO_BUILD_POST_FAMILIES', text: 'posts' };
-  const environment = { type: 'plain_text', name: 'PUBLICATION_ENVIRONMENT', text: 'development' };
-  expect(() => assertDevPublicWorkerBindings([...publicBindings, families, environment], sha)).not.toThrow();
-  expect(() => assertDevPublicWorkerBindings([...publicBindings, families], sha)).toThrow('exact reader bindings');
-  expect(() => assertDevPublicWorkerBindings([...publicBindings, families, { ...environment, text: 'production' }], sha))
-    .toThrow('exact reader bindings');
+it('requires the development target on publication candidates before activation', () => {
+  const retired = publicBindings.filter(binding => binding.name !== 'PUBLICATION_ENVIRONMENT');
+  const production = [...retired, { type: 'plain_text', name: 'PUBLICATION_ENVIRONMENT', text: 'production' }];
+  expect(() => assertDevPublicWorkerBindings(publicBindings, sha)).not.toThrow();
+  expect(() => assertDevPublicWorkerBindings(retired, sha)).toThrow('exact reader bindings');
+  expect(() => assertDevPublicWorkerBindings(production, sha)).toThrow('exact reader bindings');
+  expect(() => assertDevPublicWorkerBindings(production)).toThrow('exact reader bindings');
+  expect(() => assertDevPublicWorkerBindings(retired)).not.toThrow();
 });
 it('accepts only an optional Page renderer sealed to the same dev source', () => {
   const page = { type: 'plain_text', name: 'NO_BUILD_PAGE_RENDERER_SHA', text: sha };
