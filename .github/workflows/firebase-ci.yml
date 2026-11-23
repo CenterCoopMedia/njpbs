@@ -285,6 +285,7 @@ jobs:
     steps:
       - uses: actions/checkout@v7
         with:
+          # The rollout replay reads two historical commits named in its fixture.
           fetch-depth: 0
       - uses: actions/setup-node@v7
         with:

@@ -1688,7 +1688,6 @@ jobs:
       - uses: actions/checkout@v7
         with:
           ref: ${{ needs.admin-build.outputs.deploy_sha }}
-          fetch-depth: 0
           persist-credentials: false
       - name: Check out the exact CMS smoke gate source
         uses: actions/checkout@v7
