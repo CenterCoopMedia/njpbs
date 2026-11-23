@@ -39,7 +39,10 @@ export async function developmentPublicWorkerConfig({ root, target, assetsDirect
 }): Promise<WorkerConfig> {
   const expected = assertPublicationTarget(target);
   if (expected.environment !== "development") throw new Error("Refusing a development Worker configuration that names production");
-  const { experimental_readRawConfig } = await import("wrangler");
+  // Wrangler is a root dependency outside the site's type graph.
+  const wrangler = "wrangler";
+  const { experimental_readRawConfig } = await import(wrangler) as {
+    experimental_readRawConfig(input: { config: string }): { rawConfig: WorkerConfig } };
   const config = experimental_readRawConfig({ config: path.join(root, "workers/wrangler.jsonc") }).rawConfig as WorkerConfig & {
     main: string; assets?: Record<string, unknown>; vars?: Record<string, unknown> };
   return assertDevelopmentPublicWorkerConfig({ ...config, name: expected.workerName, main: path.join(root, "workers", config.main),
