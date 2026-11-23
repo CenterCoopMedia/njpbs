@@ -49,9 +49,10 @@ describe("video upload panel", () => {
     await waitFor(() => expect(screen.getByRole("button", { name: "Upload media" })).toBeEnabled());
     const originals = ["first.mp4", "second.mp4"].map(name => new File(["data"], name, { type: "video/mp4", lastModified: 42 }));
     act(() => routeChosenFiles(originals));
-    const first = within(screen.getByRole("group", { name: "Details before upload: first.mp4" }));
-    const second = within(screen.getByRole("group", { name: "Details before upload: second.mp4" }));
+    const first = within(await screen.findByRole("group", { name: "Details before upload: first.mp4" }));
+    const second = within(await screen.findByRole("group", { name: "Details before upload: second.mp4" }));
     await first.findByRole("option", { name: "My clips" });
+    await second.findByRole("option", { name: "Field reports" });
     fireEvent.change(first.getByRole("combobox", { name: "Collection" }), { target: { value: privateId } });
     fireEvent.change(second.getByRole("combobox", { name: "Collection" }), { target: { value: sharedId } });
     fireEvent.click(screen.getByRole("button", { name: "Start all uploads" }));

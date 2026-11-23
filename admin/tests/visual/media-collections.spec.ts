@@ -250,16 +250,19 @@ test("Collections controls stay usable when the list scrolls on narrow and short
   await page.setViewportSize({ width: 320, height: 501 });
   await page.goto("/gallery.html?embed=media-collections-list&presentation=text");
   const filter = page.getByRole("button", { name: "Filter, 2 applied" });
+  const lastCollection = page.getByRole("button", { name: /^Retired station IDs/ });
   await expect(filter).toBeVisible();
-  const beforeScroll = await filter.boundingBox();
+  await expect(lastCollection).toBeVisible();
+  // The loaded rows use additional font faces that can still reflow the page.
+  await page.evaluate(async () => { await document.fonts.ready; });
+  const filterDocumentTop = () => filter.evaluate(button => button.getBoundingClientRect().top + window.scrollY);
+  const beforeScroll = await filterDocumentTop();
   await page.evaluate(() => window.scrollTo(0, document.documentElement.scrollHeight));
   // A shorter list can end before the filter leaves the viewport. At this
   // height it must move with the document rather than sticking over its rows.
   await expect.poll(() => page.evaluate(() => scrollY)).toBeGreaterThan(0);
-  await expect.poll(async () => Math.abs(
-    (await filter.boundingBox())!.y - (beforeScroll!.y - await page.evaluate(() => scrollY)),
-  )).toBeLessThanOrEqual(1);
-  await expect(page.getByRole("button", { name: /^Retired station IDs/ })).toBeInViewport();
+  await expect.poll(async () => Math.abs(await filterDocumentTop() - beforeScroll)).toBeLessThanOrEqual(1);
+  await expect(lastCollection).toBeInViewport();
 
   await page.setViewportSize({ width: 640, height: 390 });
   const display = page.getByRole("button", { name: "Display", exact: true });
