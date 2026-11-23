@@ -332,6 +332,13 @@ describe("media collection service", () => {
       receipts: records(receipts), audits: records(audits) };
   }
 
+  function setSharing(collection, uid, permission, currentActor = actor(), requestId = randomUUID()) {
+    return mutate({
+      action: "set_sharing", collectionId: collection.id, baseVersion: collection.version,
+      requestId, uid, permission,
+    }, currentActor);
+  }
+
   const writeCases = ["private", "all_staff"].flatMap((scope) =>
     ["inactive", "missing", "role-revoked", "grant-revoked"].flatMap((account) =>
       ["create", "update", "add", "remove"].map((operation) => ({
@@ -549,6 +556,103 @@ describe("media collection service", () => {
     expect(rename.body.collection.name).toBe("Shared by another staff member");
     expect(rename.body.collection).not.toHaveProperty("itemCount");
     expect(rename.body.collection).not.toHaveProperty("ownerUid");
+    expect((await setSharing(sharedCollection, other.uid, "view")).statusCode).toBe(403);
+  });
+
+  it("lets owners delegate sharing and revoke it without transferring owner authority", async () => {
+    const owner = actor();
+    const manager = actor("staff-2");
+    const reader = actor("voiceover-collector");
+    const collection = await create("private", owner);
+    const query = { collectionId: collection.id };
+    const delegated = await setSharing(collection, manager.uid, "manage_sharing", owner);
+    expect(delegated.statusCode).toBe(200);
+    const current = delegated.body.collection;
+    expect((await listItems(query, manager)).body).toMatchObject({
+      collection: { access: "manage_sharing", canEdit: true },
+      sharing: [{ uid: manager.uid, permission: "manage_sharing" }],
+    });
+    expect((await setSharing(current, reader.uid, "manage_sharing", manager)).statusCode).toBe(403);
+    expect((await setSharing(current, owner.uid, "view", manager)).statusCode).toBe(403);
+    expect((await setSharing(current, manager.uid, null, manager)).statusCode).toBe(403);
+
+    const requestId = randomUUID();
+    const shared = await setSharing(current, reader.uid, "view", manager, requestId);
+    expect(shared.statusCode).toBe(200);
+    const view = await listItems(query, reader);
+    expect(view.body.collection).toMatchObject({ access: "view", canEdit: false, shared: true });
+    expect(view.body.collection).not.toHaveProperty("itemCount");
+    expect(view.body).not.toHaveProperty("sharing");
+    const version = shared.body.collection.version;
+    const rename = await mutate({ action: "update", ...query, baseVersion: version,
+      requestId: randomUUID(), name: "Reader rename" }, reader);
+    expect(rename.statusCode).toBe(403);
+    const add = await setItems({ ...query, requestId: randomUUID(), baseMembershipVersion: 1,
+      present: true, refs: [{ backend: "r2", id: "asset-1" }] }, reader);
+    expect(add.statusCode).toBe(403);
+
+    expect((await setSharing(shared.body.collection, manager.uid, null, owner)).statusCode).toBe(200);
+    expect((await setSharing(current, reader.uid, "view", manager, requestId)).statusCode).toBe(404);
+    expect((await listItems(query, manager)).statusCode).toBe(404);
+    expect((await listItems(query, reader)).statusCode).toBe(200);
+  });
+
+  it("filters assets and blocks changes to inaccessible items for a private collection delegate", async () => {
+    const delegate = actor("voiceover-collector-3", true, [
+      { role: "contributor", sections: ["news"], registeredMediaSections: ["news"] },
+    ], { emailVerified: false });
+    const collection = await create();
+    const query = { collectionId: collection.id };
+    const protectedRef = { backend: "r2", id: VOICEOVER_ASSET_ID };
+    const visibleRef = { backend: "s3", sourceId: "video-library", id: "accessible-video" };
+    const deps = { registryFn: () => new Map([[
+      "video-library", { id: "video-library", prefix: "", access: "active_staff" },
+    ]]) };
+    await db.doc(`media_assets/${VOICEOVER_ASSET_ID}`).set(storedVoiceover());
+    await db.doc(`mediaSourceAssets/${visibleRef.id}`).set(storedSourceAsset(visibleRef.id));
+    const added = await setItems({ ...query, requestId: randomUUID(), baseMembershipVersion: 1,
+      present: true, refs: [protectedRef, visibleRef] }, actor(), deps);
+    expect(added.statusCode).toBe(200);
+    const covered = await mutate({ action: "update", ...query, baseVersion: collection.version,
+      requestId: randomUUID(), coverRef: protectedRef });
+    expect(covered.statusCode).toBe(200);
+    const shared = await setSharing(covered.body.collection, delegate.uid, "organize");
+    expect(shared.statusCode).toBe(200);
+
+    const view = await listItems(query, delegate, deps);
+    expect(view.body.collection).toMatchObject({ access: "organize", canEdit: true, cover: null });
+    expect(view.body.items).toEqual([expect.objectContaining({ ref: visibleRef, available: true })]);
+    const removal = { ...query, baseMembershipVersion: added.body.membershipVersion, present: false };
+    const before = await collectionState(collection.id);
+    expect((await setItems({ ...removal, requestId: randomUUID(), refs: [protectedRef] }, delegate)).statusCode).toBe(404);
+    expect(await collectionState(collection.id)).toEqual(before);
+    expect((await setItems({ ...removal, requestId: randomUUID(), refs: [visibleRef] }, delegate, deps)).statusCode).toBe(200);
+  });
+
+  it("rechecks collection sharing on a retried membership write", async () => {
+    const delegate = actor("staff-2");
+    const collection = await create();
+    const shared = await setSharing(collection, delegate.uid, "organize");
+    expect(shared.statusCode).toBe(200);
+    let retry = false;
+    const firestore = {
+      collection: db.collection.bind(db),
+      runTransaction: (callback) => db.runTransaction(async transaction => {
+        if (retry) {
+          expect((await setSharing(shared.body.collection, delegate.uid, "view")).statusCode).toBe(200);
+          return callback(transaction);
+        }
+        await callback(transaction);
+        retry = true;
+        throw Object.assign(new Error("Transaction aborted"), { code: 10 });
+      }),
+    };
+    const add = await setItems({ collectionId: collection.id, requestId: randomUUID(), baseMembershipVersion: 1,
+      present: true, refs: [{ backend: "r2", id: "asset-1" }] }, delegate, { firestore });
+    expect(add.statusCode).toBe(403);
+    const state = await collectionState(collection.id);
+    expect(state.items).toEqual([]);
+    expect(state.collection.membershipVersion).toBe(1);
   });
 
   it("makes duplicate concurrent membership idempotent and preserves asset records", async () => {

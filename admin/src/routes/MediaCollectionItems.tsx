@@ -200,11 +200,9 @@ export function MediaCollectionItems({
   const selectionStatus = selectionAnnouncement(selection.items.length, hadSelection ? 1 : 0)
     + (offPage ? `, ${offPage} from other loaded pages` : "")
     + (selection.items.length === 30 ? ". Limit of 30 reached" : "");
-  const selectionActions = mediaCollectionSelectionActions(selection.items.length).map(action => (
-    collection.lifecycle === "archived" && action.id === "remove-collection"
-      ? { ...action, hidden: true, disabledReason: "Restore this collection before changing its items." }
-      : action
-  ));
+  const canRemove = collection.canEdit && collection.lifecycle === "active";
+  const selectionActions = mediaCollectionSelectionActions(selection.items.length).map(action =>
+    !canRemove && action.id === "remove-collection" ? { ...action, hidden: true } : action);
   const actionsDisabled = removalPending || viewerDirty || viewerSaving;
 
   function writeOpened(ref: MediaAssetRef | null) {
@@ -350,7 +348,7 @@ export function MediaCollectionItems({
   }
 
   async function removeMany(refs: readonly MediaAssetRef[]) {
-    if (removalPending || collection.lifecycle === "archived" || refs.length < 1 || refs.length > 30) return;
+    if (removalPending || !canRemove || refs.length < 1 || refs.length > 30) return;
     let removed = false;
     try {
       removed = await onRemoveMany(refs);
@@ -383,7 +381,7 @@ export function MediaCollectionItems({
       selected,
       video: item.ref.backend === "s3",
     });
-    return collection.lifecycle === "archived"
+    return !canRemove
       ? actions.map(action => action.id === "remove-collection" ? { ...action, hidden: true } : action)
       : actions;
   }
@@ -457,7 +455,7 @@ export function MediaCollectionItems({
           onChange={event => context.onSelectChange(event.currentTarget.checked, { shiftKey: false })} />
         <div className="media-tile-actions"><Button variant="ghost" className="media-tile-action"
           aria-label="Remove unavailable item from collection"
-          disabled={actionsDisabled || collection.lifecycle === "archived"} tabIndex={context.tabbable ? undefined : -1}
+          disabled={actionsDisabled || !canRemove} tabIndex={context.tabbable ? undefined : -1}
           onClick={() => void removeMany([item.ref])}><Icon name="remove" /></Button><Menu items={mediaMenuItems(selectionMenu,
           context.selected && selection.items.length > 1 ? onSelectionAction : id => itemAction(item, id,
             () => context.onSelectChange(!context.selected, { shiftKey: false })))}
@@ -593,7 +591,7 @@ export function MediaCollectionItems({
     </> : null}
 
     {subclips.length ? <MediaCollectionSubclips key={`${collection.id}/${userId}`} items={subclips} collectionId={collection.id}
-      principal={principal} getIdToken={getIdToken} disabled={actionsDisabled} canRemove={collection.lifecycle === "active"}
+      principal={principal} getIdToken={getIdToken} disabled={actionsDisabled} canRemove={canRemove}
       onRemove={ref => void onRemoveMany([ref])} onDirtyChange={setViewerDirty} onSavingChange={setViewerSaving}
       onViewerOpenChange={onSubclipViewerOpenChange} navigationBlocked={navigationBlocked && !viewerSaving}
       onKeepNavigation={onKeepNavigation} onDiscardNavigation={onDiscardNavigation} /> : null}

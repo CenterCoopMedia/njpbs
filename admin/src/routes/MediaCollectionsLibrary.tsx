@@ -723,6 +723,7 @@ export function MediaCollectionsLibrary({
 
   if (collectionId) {
     const canOrganize = Boolean(collection?.canEdit && collection.lifecycle === "active");
+    const ownerOnly = collection?.scope === "private" && !collection.shared;
     const hasItems = Boolean(detail?.items.length || detail?.subclips?.length);
     return <section className="media-collections-library" aria-labelledby="media-collection-title">
       {blocker.state === "blocked" && !mutationPending && !viewerOpen ? <LeaveGuardDialog
@@ -741,19 +742,21 @@ export function MediaCollectionsLibrary({
         </InlineMessage>
           : collection ? <>
             <header className="surface-intro media-collection-detail-heading">
-              <div className="media-collection-detail-title"><span className="media-collection-folder-mark" data-color={collection.color ?? "slate"} aria-hidden="true"><Icon name="folder" /></span><div><h2 id="media-collection-title">{collection.name}</h2><p>{collection.scope === "private"
+              <div className="media-collection-detail-title"><span className="media-collection-folder-mark" data-color={collection.color ?? "slate"} aria-hidden="true"><Icon name="folder" /></span><div><h2 id="media-collection-title">{collection.name}</h2><p>{ownerOnly
                 ? "Only you can see this collection. Each file keeps its existing access."
-                : "All active staff can organize this collection. Each file keeps its existing access."}</p></div></div>
+                : collection.scope === "all_staff"
+                  ? "All active staff can organize this collection. Each file keeps its existing access."
+                  : `You can ${collection.access === "manage_sharing" ? "organize and share" : collection.canEdit ? "organize" : "view"} this collection. Each file keeps its existing access.`}</p></div></div>
               <div className="media-collection-heading-actions">
                 <CopyMediaLink key={collection.id} path={mediaPermalink(mediaCollectionsPath(collection.id))} />
-                <StatusBadge tone="neutral">{collection.scope === "private" ? "Private" : "All staff"}</StatusBadge>
+                <StatusBadge tone="neutral">{ownerOnly ? "Private" : collection.shared ? "Shared" : "All staff"}</StatusBadge>
                 <Button variant="ghost" disabled={Boolean(pinPending)} aria-pressed={pins.ids.includes(collection.id)}
                   aria-label={`${pins.ids.includes(collection.id) ? "Unpin" : "Pin"} ${collection.name}`}
                   onClick={() => void togglePin(collection)}><Icon name="pin" />{pins.ids.includes(collection.id) ? "Unpin" : "Pin"}</Button>
               </div>
             </header>
             {pinError ? <InlineMessage tone="error" title="Pin was not saved">{pinError}</InlineMessage> : null}
-            <form className="media-collection-details-form" onSubmit={saveDetails}>
+            {collection.canEdit ? <form className="media-collection-details-form" onSubmit={saveDetails}>
               <label>Name<TextInput required maxLength={120} disabled={editPending || collection.lifecycle === "archived"}
                 value={editName} onChange={event => { setEditName(event.target.value); editOperation.current = undefined; setEditError(""); }} /></label>
               <label>Description<Textarea rows={3} maxLength={500} disabled={editPending || collection.lifecycle === "archived"}
@@ -763,13 +766,13 @@ export function MediaCollectionsLibrary({
               {editError ? <InlineMessage tone="error" title="Collection details were not saved">{editError}</InlineMessage> : null}
               {collection.lifecycle === "active" ? <AsyncActionButton type="submit" variant="primary" label="Save collection details"
                 pending={editPending} pendingLabel="Saving" disabled={editName.trim() === collection.name && editDescription.trim() === collection.description && editColor === (collection.color ?? "slate")} /> : null}
-            </form>
+            </form> : collection.description ? <p>{collection.description}</p> : null}
             <section className="media-collection-items" aria-labelledby="media-collection-items-title">
-              <div className="media-collection-section-heading"><div><h3 id="media-collection-items-title" ref={itemsHeadingRef} tabIndex={-1}>Items</h3><p>Removing an item from this collection does not delete or change the file.</p></div>
+              <div className="media-collection-section-heading"><div><h3 id="media-collection-items-title" ref={itemsHeadingRef} tabIndex={-1}>Items</h3>{collection.canEdit ? <p>Removing an item from this collection does not delete or change the file.</p> : null}</div>
                 {collection.itemCount !== undefined ? <StatusBadge tone="neutral">{collection.itemCount} {collection.itemCount === 1 ? "item" : "items"}</StatusBadge> : null}</div>
               {!hasItems ? <EmptyState
-                title={collection.scope === "private" ? "This collection is empty" : "No accessible items to show"}
-                description={collection.scope === "private"
+                title={ownerOnly ? "This collection is empty" : "No accessible items to show"}
+                description={ownerOnly
                   ? (canOrganize ? "Browse a media source, select items, then choose Add to collection." : undefined)
                   : `This shared collection may contain files your account cannot open.${canOrganize ? " Browse a media source to add files you can access." : ""}`}
                 action={canOrganize ? <div className="button-row">
@@ -796,6 +799,7 @@ export function MediaCollectionsLibrary({
               {!hasItems && !detail.nextCursor && removeError ? <InlineMessage tone="error" title="Collection items were not removed">{removeError}</InlineMessage> : null}
               {detailMoreError ? <InlineMessage tone="error" title="More items were not loaded">{detailMoreError}</InlineMessage> : null}
             </section>
+            {collection.canEdit ? <>
             {archiveError ? <InlineMessage tone="error" title="Collection status did not change">{archiveError}</InlineMessage> : null}
             <section className="media-collection-lifecycle" aria-labelledby="media-collection-status-title">
               <h3 id="media-collection-status-title">Collection status</h3>
@@ -808,6 +812,7 @@ export function MediaCollectionsLibrary({
                 <Button disabled={archivePending} onClick={() => setArchiveDecision(false)}>Cancel</Button>
               </InlineMessage> : <Button onClick={() => setArchiveDecision(true)}>{collection.lifecycle === "active" ? "Archive collection" : "Restore collection"}</Button>}
             </section>
+            </> : collection.lifecycle === "archived" ? <p>This collection is archived.</p> : null}
           </> : null}
     </section>;
   }
@@ -924,7 +929,7 @@ export function MediaCollectionsLibrary({
                 navigate(`${mediaCollectionsPath(item.id)}${params.toString() ? `?${params}` : ""}`);
               }}>
               <span className="media-collection-folder-mark" data-color={item.color ?? "slate"} aria-hidden="true"><Icon name="folder" /></span>
-              <span className="media-collection-card-heading"><strong>{item.name}</strong><StatusBadge tone="neutral">{item.scope === "private" ? "Private" : "All staff"}</StatusBadge></span>
+              <span className="media-collection-card-heading"><strong>{item.name}</strong><StatusBadge tone="neutral">{item.shared ? "Shared" : item.scope === "private" ? "Private" : "All staff"}</StatusBadge></span>
               <span className="media-collection-card-description">{item.description || "No description"}</span>
               {item.itemCount !== undefined ? <span>{item.itemCount} {item.itemCount === 1 ? "item" : "items"}</span> : null}
             </button>
