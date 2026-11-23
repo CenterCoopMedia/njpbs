@@ -47,6 +47,7 @@ export function installLiveBlogImages(root: HTMLElement): void {
     entryId = entry?.dataset.liveBlogEntry;
     imageIndex = Array.from(entry?.querySelectorAll("[data-live-blog-image]") ?? []).indexOf(link);
     image.src = link.href;
+    image.hidden = false;
     image.alt = source.alt;
     full.href = link.href;
     const description = link.querySelector("figcaption");

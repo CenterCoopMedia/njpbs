@@ -1788,7 +1788,7 @@
    </dl>
    ${exporting?"":`<div class="familycare-toggle" role="group" aria-label="Select FamilyCare data view"><button type="button" data-familycare-view="trend" aria-pressed="${view==="trend"}">Enrollment trend</button><button type="button" data-familycare-view="categories" aria-pressed="${view==="categories"}">Eligibility categories</button></div>`}
    <div class="familycare-panel">${familyCareDisplay(m,view,instance)}</div>
-   <details class="v7-source-notes"><summary>Data source and limitations</summary><p>${escape(m.methodNote)}</p>${source?`<p><a href="${escape(source)}" target="_blank" rel="noopener noreferrer">Official October 2026 NJ FamilyCare report<span class="sr-only"> (opens in new tab)</span></a></p>`:""}<p><a href="${escape(m.scheduleUrl)}" target="_blank" rel="noopener noreferrer">All 2026 DMAHS monthly reports</a></p></details>
+   <details class="v7-source-notes"><summary>Data source and limitations</summary><p>${escape(m.methodNote)}</p>${source?`<p><a href="${escape(source)}" target="_blank" rel="noopener noreferrer">Official October 2026 NJ FamilyCare report<span class="sr-only"> (opens in new tab)</span></a></p>`:""}<p><a href="${escape(m.scheduleUrl)}" target="_blank" rel="noopener noreferrer">All 2026 DMAHS monthly reports<span class="sr-only"> (opens in new tab)</span></a></p></details>
  </section>`;
 }
 

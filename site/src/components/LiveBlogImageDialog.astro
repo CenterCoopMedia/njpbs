@@ -4,11 +4,11 @@ const { fallbackUrl } = Astro.props;
 ---
 <dialog class="live-blog-image-dialog" data-live-blog-image-dialog aria-label="Expanded live update image" aria-describedby="live-blog-image-caption">
   <div class="live-blog-image-dialog__controls">
-    <a data-full-image href={fallbackUrl} target="_blank" rel="noopener">Open full image<span class="live-blog__sr-only"> (opens in a new tab)</span></a>
+    <a data-full-image href={fallbackUrl} target="_blank" rel="noopener">Open full image<span class="live-blog__sr-only"> (opens in new tab)</span></a>
     <button type="button" data-dialog-close>Close image</button>
   </div>
   <figure>
-    <img data-expanded-image alt="" />
+    <img data-expanded-image alt="" hidden />
     <figcaption id="live-blog-image-caption" data-image-caption></figcaption>
   </figure>
 </dialog>
