@@ -1,0 +1,70 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<rss version="2.0"
+  xmlns:wp="http://wordpress.org/export/1.2/"
+  xmlns:content="http://purl.org/rss/1.0/modules/content/"
+  xmlns:excerpt="http://wordpress.org/export/1.2/excerpt/"
+  xmlns:dc="http://purl.org/dc/elements/1.1/">
+  <channel>
+    <wp:wxr_version>1.2</wp:wxr_version>
+    <wp:base_blog_url>https://example.org/</wp:base_blog_url>
+    <wp:author>
+      <wp:author_id>7</wp:author_id>
+      <wp:author_login><![CDATA[reporter]]></wp:author_login>
+      <wp:author_display_name><![CDATA[Archive Reporter]]></wp:author_display_name>
+      <wp:author_email><![CDATA[reporter@example.org]]></wp:author_email>
+    </wp:author>
+    <item>
+      <title><![CDATA[Transit & the café]]></title>
+      <link>https://example.org/2020/05/transit/</link>
+      <guid isPermaLink="false">https://example.org/?p=62</guid>
+      <dc:creator><![CDATA[reporter]]></dc:creator>
+      <content:encoded><![CDATA[<!-- wp:paragraph --><p>A &amp; B.</p><!-- /wp:paragraph -->]]></content:encoded>
+      <excerpt:encoded><![CDATA[Story summary.]]></excerpt:encoded>
+      <wp:post_id>62</wp:post_id>
+      <wp:post_type>post</wp:post_type>
+      <wp:post_name>transit</wp:post_name>
+      <wp:status>publish</wp:status>
+      <wp:post_date>2020-05-01 08:00:00</wp:post_date>
+      <wp:post_date_gmt>2020-05-01 12:00:00</wp:post_date_gmt>
+      <wp:post_modified_gmt>2020-05-02 17:00:00</wp:post_modified_gmt>
+      <wp:post_parent>0</wp:post_parent>
+      <category domain="category" nicename="transit"><![CDATA[Transit]]></category>
+      <category domain="post_tag" nicename="rail"><![CDATA[Rail]]></category>
+      <wp:postmeta>
+        <wp:meta_key>_thumbnail_id</wp:meta_key><wp:meta_value>63</wp:meta_value>
+      </wp:postmeta>
+      <wp:comment><wp:comment_content>Unrelated comment.</wp:comment_content></wp:comment>
+    </item>
+    <item>
+      <title>Train</title>
+      <link>https://example.org/train/</link>
+      <wp:post_id>63</wp:post_id>
+      <wp:post_type>attachment</wp:post_type>
+      <wp:status>inherit</wp:status>
+      <wp:post_parent>62</wp:post_parent>
+      <wp:attachment_url>https://example.org/uploads/train.jpg</wp:attachment_url>
+    </item>
+    <item>
+      <title>Draft note</title>
+      <link>https://example.org/?p=64</link>
+      <wp:post_id>64</wp:post_id>
+      <wp:post_type>post</wp:post_type>
+      <wp:status>future</wp:status>
+      <wp:post_date_gmt>0000-00-00 00:00:00</wp:post_date_gmt>
+    </item>
+    <item>
+      <title>Unsupported page</title>
+      <wp:post_id>65</wp:post_id>
+      <wp:post_type>page</wp:post_type>
+      <wp:status>publish</wp:status>
+    </item>
+    <item>
+      <title>Restricted story</title>
+      <wp:post_id>66</wp:post_id>
+      <wp:post_type>post</wp:post_type>
+      <wp:status>publish</wp:status>
+      <wp:post_password>example-only</wp:post_password>
+      <content:encoded><![CDATA[Restricted body.]]></content:encoded>
+    </item>
+  </channel>
+</rss>
