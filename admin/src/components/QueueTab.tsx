@@ -57,12 +57,13 @@ function queueItemFromDoc(id: string, data: DocumentData, settingsAccess: boolea
     typeof data.triggeredByEmail === "string" && data.triggeredByEmail.trim()
       ? data.triggeredByEmail
       : null;
-  const contextRecheck = legacyContext
+  const contextRecheck = /^[A-Za-z0-9]{20}$/.test(id) && (legacyContext
     ? Boolean(data.recordPublication || data.libraryCardPublication || settingsAccess && (automaticContext || data.settingsPublication))
     : pairedContext && (data.familyPublication?.kind === "record" ||
-      settingsAccess && (!data.familyPublication || data.familyPublication.kind === "settings"));
+      settingsAccess && (!data.familyPublication || data.familyPublication.kind === "settings")));
   let status = typeof data.status === "string" ? data.status : "unknown";
   let check = data.lastPublicCheck;
+  let contextCheckDueAt: number | undefined;
   if (legacyContext || pairedContext) {
     if (check?.queueStatus !== status || check?.alertEpoch !== (data.alertEpoch ?? null)) check = undefined;
     if (check?.outcome === "confirmed_late") status = "success";
@@ -75,15 +76,19 @@ function queueItemFromDoc(id: string, data: DocumentData, settingsAccess: boolea
         return proof?.rendererSha !== identity.rendererSha || proof?.contextDigest !== identity.contextDigest ||
           proof?.contextRevision !== identity.contextRevision || !(proof?.verifiedAt > 0);
       });
-      const startedAt = valueToDate(data.recordRetryAt ?? data.settingsRetryAt ?? data.cardRetryAt ?? data.triggeredAt ?? data.createdAt);
-      if (missingProof) status = startedAt && Date.now() - startedAt.getTime() >= 5 * 60_000 ? "public_unconfirmed" : "checking";
-      if (status !== "public_unconfirmed") check = undefined;
+      if (missingProof) {
+        const startedAt = valueToDate(data.recordPublication ? data.recordRetryAt ?? data.createdAt :
+          data.libraryCardPublication ? data.cardRetryAt ?? data.createdAt : data.settingsRetryAt ?? data.triggeredAt ?? data.createdAt);
+        if (startedAt) contextCheckDueAt = startedAt.getTime() + 5 * 60_000;
+        status = "checking";
+      } else check = undefined;
     }
   }
   return {
     id,
     status,
     contextRecheck,
+    contextCheckDueAt,
     automaticSiteUpdate: automaticContext,
     triggeredBy:
       requesterEmail ?? requesterId ?? (automaticContext ? "Automatic site update" : null),
@@ -185,10 +190,12 @@ export function QueueTab() {
         limit(PUBLISH_RECOVERY_LIMIT + 1)), items: null as QueueItem[] | null, error: null as string | null },
     ];
     let current = true;
+    let checkTimer: number | undefined;
     let recoveryTruncated = false, proofTruncated = false;
     proofRecoveryItems.current = [];
     function updateItems() {
       if (!current) return;
+      window.clearTimeout(checkTimer);
       const error = reads.find(read => read.error)?.error;
       if (error) {
         setPublishLoading(false);
@@ -198,7 +205,11 @@ export function QueueTab() {
       if (reads.some(read => read.items === null)) return;
       const proofItems = new Map(proofRecoveryItems.current.map(item => [item.id, item]));
       const items = new Map([...proofItems, ...reads.flatMap(read => read.items!.map(item => [item.id, item] as const))]);
+      const now = Date.now();
+      const nextCheck = Math.min(...[...items.values()].map(item => item.contextCheckDueAt ?? Infinity).filter(at => at > now));
+      if (Number.isFinite(nextCheck)) checkTimer = window.setTimeout(updateItems, nextCheck - now);
       setPublishItems([...items.values()].map(item => ({ ...item,
+        status: item.status === "checking" && (item.contextCheckDueAt ?? Infinity) <= now ? "public_unconfirmed" : item.status,
         proofRecovery: proofItems.get(item.id)?.proofRecovery === true && item.proofExhausted === true,
         contextRetry: proofItems.get(item.id)?.contextRetry === true,
       })).sort((a, b) => (b.timestamp?.getTime() ?? 0) - (a.timestamp?.getTime() ?? 0)));
@@ -254,7 +265,7 @@ export function QueueTab() {
         setPublishRecoveryError("Recent and failed requests are still shown. Try again to include older public checks and site updates.");
       }
     })();
-    return () => { current = false; stops.forEach(stop => stop()); };
+    return () => { current = false; window.clearTimeout(checkTimer); stops.forEach(stop => stop()); };
   }, [getIdToken, publishAttempt, settingsAccess, showPublishActivity]);
 
   return <QueueSurface

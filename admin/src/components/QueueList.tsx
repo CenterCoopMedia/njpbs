@@ -28,6 +28,7 @@ export interface QueueItem {
   contextRetry?: boolean;
   proofExhausted?: boolean;
   contextRecheck?: boolean;
+  contextCheckDueAt?: number;
   recheckMessage?: string;
   recheckOutcome?: string;
 }

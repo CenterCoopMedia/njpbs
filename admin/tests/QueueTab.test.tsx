@@ -476,6 +476,29 @@ it("loads an older current failed proof by the bounded server-selected identity"
   expect(publishMocks.getDocs).toHaveBeenCalledTimes(1);
 });
 
+it("offers a record check when its confirmation window expires without a fresh read", async () => {
+  emptyReviewQueue();
+  vi.useFakeTimers();
+  try {
+    const id = "R".repeat(20);
+    const createdAt = new Date(Date.now() - 299_000);
+    firestoreMocks.onSnapshot.mockImplementation((_request, next) => {
+      next({ docs: [{ id, data: () => ({ status: "success", transport: "public-context-no-build-v1",
+        recordPublication: { family: "events", rendererSha: "a".repeat(40), contextRevision: 2, contextDigest: "b".repeat(64) },
+        triggeredAt: createdAt, createdAt }) }] });
+      return firestoreMocks.unsubscribe;
+    });
+    renderQueue();
+    await act(async () => { await vi.advanceTimersByTimeAsync(0); });
+    expect(screen.queryByRole("button", { name: "Check again" })).not.toBeInTheDocument();
+    await act(async () => { await vi.advanceTimersByTimeAsync(1_000); });
+    expect(screen.getByRole("button", { name: "Check again" })).toBeEnabled();
+    expect(publishMocks.loadPublishActivitySummary).toHaveBeenCalledTimes(1);
+  } finally {
+    vi.useRealTimers();
+  }
+});
+
 it.each(["summary", "documents"])("keeps live activity available when the additional proof %s read fails, with a working retry", async source => {
   emptyReviewQueue();
   firestoreMocks.onSnapshot.mockImplementation((_request, next) => {
