@@ -1,0 +1,7 @@
+{
+  "date": "2026-11-23",
+  "kind": "improved",
+  "title": "See when uploaded videos are ready",
+  "body": "Check Recent video uploads to see which viewing copies are processing, ready or failed while you work in Media. If a viewing copy fails, open that video from the list to check options for the original.",
+  "prs": []
+}

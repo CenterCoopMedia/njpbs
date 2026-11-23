@@ -6,6 +6,7 @@ import { VideoRightsFields } from "./media/VideoRightsFields";
 import { MediaUploadTagInput } from "./media/MediaTagInput";
 import { EMPTY_UPLOAD_MEDIA_TAGS, uploadMediaTagsText, type UploadMediaTagDraft } from "../lib/media-tags";
 import { UploadTray, type UploadTrayRow } from "./media/UploadTray";
+import { useRecordVideoUpload } from "./media/VideoUploadResults";
 import { startVideoUpload, cancelVideoUpload, transferVideo, UploadFileMismatchError, VideoUploadValidationError, type VideoUploadMetadata, type VideoUploadResult, type VideoUploadSession } from "../lib/source-media-upload";
 import { clearRejectedUploads, registerVideoUpload, routeChosenFiles, uploadRouterSnapshot } from "../lib/upload-router";
 import { UNSUPPORTED_UPLOAD_MESSAGE, UNIVERSAL_UPLOAD_ACCEPT, videoUploadCompletionMessage } from "../lib/upload-destination";
@@ -158,6 +159,7 @@ export function VideoUploadPanel({ sourceId, userId, getIdToken, onUploaded, onA
   trayTarget?: Element | null;
 }) {
   const storageKey = `boardwalk-video-transfers:${userId}:${sourceId}`;
+  const recordUpload = useRecordVideoUpload();
   const ownerKey = `${storageKey}:owner`;
   const [transfers, setTransfers] = useState<Transfer[]>(() => savedTransfers(storageKey));
   const [assignment, setAssignment] = useState({ name: "", description: "", metadataUpdateRequested: false });
@@ -370,7 +372,11 @@ export function VideoUploadPanel({ sourceId, userId, getIdToken, onUploaded, onA
       const routedLeft = rows.current.some(item => routedIds.current.has(item.id))
         || [...busy.current].some(id => id !== row.id);
       onMoreWorkRef.current?.(routedLeft);
-      if (alive.current) { setNotice(videoUploadCompletionMessage(asset)); onUploadedRef.current(asset); }
+      if (alive.current) {
+        recordUpload?.(row.name, asset);
+        setNotice(videoUploadCompletionMessage(asset));
+        onUploadedRef.current(asset);
+      }
     } catch (error) {
       if (!session && firstStart && (error instanceof RequestNotDispatchedError ||
           error instanceof VideoUploadValidationError ||

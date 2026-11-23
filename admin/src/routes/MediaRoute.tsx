@@ -128,6 +128,7 @@ import {
 } from "../lib/use-media-categories";
 import "./MediaRoute.css";
 import { VideoUploadPanel } from "../components/VideoUploadPanel";
+import { VideoUploadResults } from "../components/media/VideoUploadResults";
 import { listMediaSources, uploadableSharedVideoSource, type MediaSourceSummary } from "../lib/source-media";
 import { MediaFavoriteButton } from "../components/MediaFavoriteButton";
 import { MediaCollectionPicker } from "../components/MediaCollectionPicker";
@@ -2059,12 +2060,8 @@ export function MediaRoute({
     onDiscardVideo: () => finishVideoUpload(),
   };
   const secondaryReloadBlocked = deferredGuardProps.libraryDirty || deferredGuardProps.videoActive;
-  return <RequireCapability allowed={canAccessMediaWorkspace} notice="The media workspace is not available for your account.">
-    <div className="media-workspace">
-      <div className="media-workspace-bar">
-        <MediaTabs tabs={tabs} currentId={currentMediaTabId(mediaRoute, sources)} />
-        {showWorkspaceUpload ? <WorkspaceUploadButton buttonRef={workspaceUploadRef} secondary={mediaRoute.kind === "collections"} /> : null}
-      </div>
+  const workspaceContent = (
+    <VideoUploadResults key={user.uid} userId={user.uid} getIdToken={getIdToken}>
       {routedUploads.rejected.length > 0 ? <InlineMessage tone="error" title="Some files were not added">
         <ul className="media-upload-intake-errors">
           {routedUploads.rejected.map((name, index) => (
@@ -2165,6 +2162,15 @@ export function MediaRoute({
         || mediaRoute.kind === "submissions"
         || (mediaRoute.kind === "videos" && Boolean(source) && !sourceError && !loading)
       ) ? <RoutedVideoLeaveGuard /> : null}
+    </VideoUploadResults>
+  );
+  return <RequireCapability allowed={canAccessMediaWorkspace} notice="The media workspace is not available for your account.">
+    <div className="media-workspace">
+      <div className="media-workspace-bar">
+        <MediaTabs tabs={tabs} currentId={currentMediaTabId(mediaRoute, sources)} />
+        {showWorkspaceUpload ? <WorkspaceUploadButton buttonRef={workspaceUploadRef} secondary={mediaRoute.kind === "collections"} /> : null}
+      </div>
+      {workspaceContent}
     </div>
   </RequireCapability>;
 }
@@ -2291,7 +2297,7 @@ function RoutedVideoUpload({ onActiveChange, onAdmissionFailed, onDestinationUpd
   const completed = useRef<VideoUploadResult[]>([]);
   function completedBatchMessage(assets: VideoUploadResult[], label: string) {
     if (assets.length === 1) return videoUploadCompletionMessage(assets[0]);
-    const summary = `${assets.length} videos uploaded to ${label}. Open Videos to check each viewing copy.`;
+    const summary = `${assets.length} videos uploaded to ${label}.`;
     return assets.some(asset => asset.collectionPlacement === "unavailable")
       ? `${summary} Some selected collections became unavailable. Choose new collections from Videos.` : summary;
   }

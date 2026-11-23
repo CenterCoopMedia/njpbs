@@ -2195,6 +2195,73 @@ describe("MediaRoute", () => {
     expect(screen.getAllByRole("button", { name: "Upload media" })).toHaveLength(1);
   });
 
+  it("tracks mixed viewing-copy outcomes after routed transfers close and opens the failed video", async () => {
+    installTestLockManager();
+    mocks.listSources.mockResolvedValue({
+      sources: [{ id: "video-library", label: "Videos", mediaKind: "video", canBrowse: true, canUpload: true }],
+    });
+    const sourceId = "video-library";
+    const readyId = "ready-clip";
+    const failedId = "failed-clip";
+    vi.mocked(listSourceMedia).mockImplementation(async (_token, query) => ({
+      success: true,
+      records: "pendingIds" in query ? [
+        { id: readyId, fileVersion: "original-1", viewingCopy: { state: "ready" } },
+        { id: failedId, fileVersion: "original-1", viewingCopy: { state: "failed" } },
+      ] as SourceMediaAssetSummary[] : [],
+      total: null, hasMore: false, nextCursor: null,
+    }));
+    const files = [
+      new File(["data"], "ready.mp4", { type: "video/mp4" }),
+      new File(["data"], "failed.mp4", { type: "video/mp4" }),
+    ];
+    const ids = [readyId, failedId];
+    const startUpload = vi.spyOn(sourceMediaUpload, "startVideoUpload")
+      .mockImplementation(async (_token, _source, file) => {
+        const id = ids[files.findIndex(candidate => candidate.name === file.name)];
+        return { success: true, upload: { sessionId: id, assetId: id,
+          partSize: 4, totalParts: 1, expiresAt: "2026-12-01T00:00:00Z", version: 1 } };
+      });
+    const finishing = new Map<string, (asset: sourceMediaUpload.VideoUploadResult) => void>();
+    const transferUpload = vi.spyOn(sourceMediaUpload, "transferVideo").mockImplementation(({ session }) =>
+      new Promise(resolve => { finishing.set(session.assetId, resolve); }));
+    try {
+      const { router } = renderRoute("/media/favorites");
+      act(() => routeChosenFiles(files));
+      fireEvent.click(await screen.findByRole("button", { name: "Start all uploads" }));
+      await waitFor(() => expect(finishing.size).toBe(2));
+
+      vi.useFakeTimers();
+      await act(async () => {
+        ids.forEach((id, index) => finishing.get(id)?.({
+          id, sourceId, name: files[index].name, fileVersion: "original-1",
+          viewingCopy: { state: "processing" }, collectionPlacement: "added",
+        } as sourceMediaUpload.VideoUploadResult));
+      });
+      expect(uploadRouterSnapshot().videoSession).toBe(false);
+      const uploads = within(screen.getByRole("list", { name: "Completed video uploads" }));
+      expect(uploads.getAllByRole("status")).toHaveLength(2);
+      expect(uploads.getAllByText(/Viewing copy processing/)).toHaveLength(2);
+
+      await act(async () => { await vi.advanceTimersByTimeAsync(10_000); });
+      expect(listSourceMedia).toHaveBeenCalledWith("id-token", { sourceId, pendingIds: [failedId, readyId] });
+      expect(uploads.getByText(/Ready to view/)).toHaveTextContent(/ready\.mp4.*Ready to view/);
+      expect(uploads.getByText(/Viewing copy failed/)).toHaveTextContent(/failed\.mp4.*Viewing copy failed/);
+      expect(uploads.getByText(/Viewing copy failed/)).toHaveTextContent("Added to the selected collection");
+      await act(async () => { await vi.advanceTimersByTimeAsync(10_000); });
+      expect(listSourceMedia).toHaveBeenCalledTimes(1);
+
+      await act(async () => { fireEvent.click(uploads.getByRole("button", { name: "View asset failed.mp4" })); });
+      expect(router.state.location.pathname).toBe("/media/videos/video-library");
+      expect(router.state.location.search).toBe("?asset=failed-clip");
+      expect(screen.getByRole("list", { name: "Completed video uploads" })).toBeInTheDocument();
+    } finally {
+      vi.useRealTimers();
+      startUpload.mockRestore();
+      transferUpload.mockRestore();
+    }
+  });
+
   it("reloads the open destination library after a routed video finishes", async () => {
     installTestLockManager();
     mocks.listSources.mockResolvedValue({

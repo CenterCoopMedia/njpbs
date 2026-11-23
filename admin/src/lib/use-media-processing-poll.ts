@@ -7,8 +7,8 @@ export function useMediaProcessingPoll(
   sourceId: string,
   pendingIds: string[],
   getIdToken: () => Promise<string | null>,
-  onResult: (page: SourceMediaStatusPage) => void,
-  onComplete: () => void,
+  onResult: (page: SourceMediaStatusPage, requestedIds: readonly string[]) => void,
+  onComplete?: () => void,
   paused = false,
 ) {
   const idsKey = JSON.stringify([...new Set(pendingIds)].sort());
@@ -38,8 +38,9 @@ export function useMediaProcessingPoll(
         polls.current.count += 1;
         const result = await listSourceMedia(token, { sourceId, pendingIds: ids });
         if (!current || !available()) return;
-        callbacks.current.onResult(result);
-        if (ids.some(id => result.records.find(record => record.id === id)?.viewingCopy?.state !== "processing")) {
+        callbacks.current.onResult(result, ids);
+        if (callbacks.current.onComplete && ids.some(id =>
+          result.records.find(record => record.id === id)?.viewingCopy?.state !== "processing")) {
           callbacks.current.onComplete();
         }
       } catch { /* A later bounded tick retries a transient read failure. */ }
