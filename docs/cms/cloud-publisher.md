@@ -187,8 +187,11 @@ and preserve preparation/task identities, reservations, attempts and backoff.
 
 Once preparation freezes, ordinary revisions leave it running; one waiting
 `followUp` tracks the latest accepted context. Same-context aliases share bounded
-work and exact success/failure. Completed aliases retire without rewriting queue
-receipts. Newer context supersedes only waiting work; waiting queues have no
+work and exact success/failure. When the active list fills, a new request can
+take the place of an already-failed alias. That alias keeps its original queue
+and failure. An explicit retry can rejoin the matching runtime, context and
+output set for exact proof. Completed aliases retire without rewriting queue
+receipts. Newer context supersedes only waiting work. Waiting queues have no
 family tasks. A withdrawal can preempt a pure aggregate cohort, but unfinished
 settings/library/record consumer proof retains its original frozen operation.
 Late writers are fenced by selected preparation/task, revision and renderer.

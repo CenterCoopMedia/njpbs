@@ -1,0 +1,7 @@
+{
+  "date": "2026-11-23",
+  "kind": "fixed",
+  "title": "Keep publishing after repeated site update failures",
+  "body": "Failed site updates can make room for new changes. Boardwalk keeps each failed update and its original details, so you can still retry an eligible change.",
+  "prs": []
+}

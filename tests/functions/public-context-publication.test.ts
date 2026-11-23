@@ -419,6 +419,72 @@ it("accepts another operation after 100 settled same-context aliases without gro
   expect(await publication.settlePublicContext({ firestore: db, operationId: "Z".repeat(20), runtime })).toBe(true);
 });
 
+it("makes room after repeated exhaustion and recovers a retained acceptance at its exact context", async () => {
+  await enqueue();
+  const selected = db.doc(publication.CURRENT_PATH);
+  const first = db.doc(`cmsPublishQueue/${operationId}`);
+  const prototype = (await first.get()).data()!;
+  const ids = [operationId, ...Array.from({ length: 99 }, (_, index) => String(index).padStart(20, "0"))];
+  const settingsPublication = { operationId, rendererSha: runtime.release, contextRevision: 1, contextDigest, sourceVersion: 3 };
+  const batch = db.batch();
+  batch.update(first, { settingsPublication });
+  for (const id of ids.slice(1)) batch.create(db.doc(`cmsPublishQueue/${id}`), {
+    ...prototype, publicContext: { ...prototype.publicContext, operationId: id },
+  });
+  batch.update(selected, { operationIds: ids });
+  await batch.commit();
+
+  const second = "B".repeat(20);
+  await expect(enqueue(second)).rejects.toThrow("Public context publication refused");
+  const exhaust = async (id: string) => {
+    await db.doc(`cmsPublishQueue/${id}/backgroundPreparation/${contextDigest}`).set({
+      runtime, status: "failed", attempts: 4, nextAttemptAt: null,
+    });
+    await publication.failPublicContextPreparation({ firestore: db, operationId: id, runtime });
+  };
+  await exhaust(operationId);
+  const failure = (await first.get()).data();
+  expect(failure).toMatchObject({ status: "failed", error: "background_preparation_failed", aggregateReceipt: null });
+  await enqueue(second);
+  await exhaust(second);
+  const third = "C".repeat(20);
+  await enqueue(third);
+  expect((await selected.get()).data()?.operationIds).toEqual([...ids.slice(2), second, third]);
+  expect((await first.get()).data()).toEqual(failure);
+  expect(await publication.settlePublicContext({ firestore: db, operationId, runtime })).toBe(false);
+
+  const retry = (id: string) => db.runTransaction(async transaction => {
+    const write = await publication.retryPublicContextInTransaction({ transaction, firestore: db, operationId: id, runtime });
+    write();
+  });
+  await retry(operationId);
+  expect((await selected.get()).data()).toMatchObject({
+    operationId: third, preparationOperationId: third, operationIds: [...ids.slice(3), second, third, operationId],
+  });
+  expect((await first.get()).data()).toMatchObject({
+    publicContext: prototype.publicContext, settingsPublication, status: "pending", aggregateReceipt: null,
+  });
+
+  await reader().recover();
+  await verifiedInput(third);
+  expect(await publication.settlePublicContext({ firestore: db, operationId: third, runtime })).toBe(true);
+  for (const id of [operationId, third]) {
+    expect((await db.doc(`cmsPublishQueue/${id}`).get()).data()).toMatchObject({
+      status: "success", aggregateReceipt: { runtime, contextRevision: 1, contextDigest, preparationOperationId: third },
+    });
+  }
+  const detached = db.doc(`cmsPublishQueue/${ids[1]}`);
+  const detachedFailure = (await detached.get()).data();
+  expect(detachedFailure).toMatchObject({
+    status: "failed", aggregateReceipt: null, publicContext: { operationId: ids[1], contextDigest },
+  });
+  expect((await first.get()).data()?.settingsPublication).toEqual(settingsPublication);
+  expect((await selected.get()).data()?.operationIds).toEqual([third, operationId]);
+  await db.doc(context.PUBLIC_CONTEXT_PATH).update({ revision: 2 });
+  await expect(retry(ids[1])).rejects.toThrow("Public context publication refused");
+  expect((await detached.get()).data()).toEqual(detachedFailure);
+});
+
 it.each(["pending", "failed"])("cancels a %s cloud aggregate predecessor when a new release takes the context", async status => {
   await enqueue();
   const successfulId = "B".repeat(20);
