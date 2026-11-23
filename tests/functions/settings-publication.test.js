@@ -1,4 +1,5 @@
 import editorRecheck from "../../functions/lib/publication-recheck.js";
+import listContent from "../../functions/list-content.js";
 import { enrollPublicReleaseLog, publicReleaseEntries } from "../helpers/public-release-producer.js";
 import { clearEmulatorFirestore, isolatedFirestore } from "../helpers/emulator-firestore.js";
 import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
@@ -421,6 +422,18 @@ it("rechecks a failed settings update only after its exact route consumers prove
   expect(await recheck()).toMatchObject({ outcome: "confirmed_late" });
   expect((await ref.get()).data()).toMatchObject({ status: "failed", error: "background_generation_failed", aggregateReceipt: null,
     lastPublicCheck: { outcome: "confirmed_late" } });
+});
+
+it("includes an untimestamped settings update before its confirmation deadline", async () => {
+  const result = await publish("site-navigation", 1);
+  expect(result.code).toBe(200);
+  const { queueId } = result.body.publication;
+  const ref = db.doc(`cmsPublishQueue/${queueId}`);
+  expect((await ref.get()).data().triggeredAt).toBeUndefined();
+  await ref.update({ status: "success", createdAt: Timestamp.now() });
+  const response = await call(listContent.createCmsListContentHandler(deps()), { view: "publish_activity", includePostProofRecovery: true });
+  expect(response.code).toBe(200);
+  expect(response.body.contextRecheckIds).toEqual([queueId]);
 });
 
 it("change-log: accepts public settings and deduplicates a lost-response retry", async () => {

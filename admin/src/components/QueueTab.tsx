@@ -242,7 +242,7 @@ export function QueueTab() {
         const summary = await loadPublishActivitySummary(await getIdToken(), true);
         if (!current) return;
         const postProofIds = new Set(summary.postProofRecoveryIds);
-        const ids = [...new Set([...postProofIds, ...(summary.contextRecheckIds ?? [])])];
+        const ids = [...postProofIds];
         const items: QueueItem[] = [];
         for (let offset = 0; offset < ids.length; offset += 30) {
           const rows = await getDocs(query(collection(db, "cmsPublishQueue"),
@@ -259,6 +259,21 @@ export function QueueTab() {
             ...(lastPublicCheck ? { recheckMessage: lastPublicCheck.message, recheckOutcome: lastPublicCheck.outcome } : {}) });
         }
         proofRecoveryItems.current = items;
+        const contextIds = summary.contextRecheckIds ?? [];
+        for (let offset = 0; offset < contextIds.length; offset += 30) {
+          const source = query(collection(db, "cmsPublishQueue"),
+            where(documentId(), "in", contextIds.slice(offset, offset + 30)));
+          const read = { source, items: [] as QueueItem[], error: null };
+          reads.push(read);
+          stops.push(onSnapshot(source, snapshot => {
+            if (!current) return;
+            read.items = snapshot.docs.map(row => queueItemFromDoc(row.id, row.data(), settingsAccess));
+            updateItems();
+          }, () => {
+            if (!current) return;
+            setPublishRecoveryError("Some site updates could not be loaded. Try the publish activity refresh.");
+          }));
+        }
         proofTruncated = summary.postProofRecoveryTruncated === true;
         setPublishRecoveryLoading(false);
         updateItems();

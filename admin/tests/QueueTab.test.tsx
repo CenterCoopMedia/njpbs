@@ -501,6 +501,38 @@ it("offers a record check when its confirmation window expires without a fresh r
   }
 });
 
+it("tracks a settings check without a triggered timestamp through its deadline and confirmation", async () => {
+  emptyReviewQueue();
+  vi.useFakeTimers();
+  try {
+    const id = "S".repeat(20);
+    const createdAt = new Date(Date.now() - 299_000);
+    const identity = { rendererSha: "a".repeat(40), contextRevision: 2, contextDigest: "b".repeat(64) };
+    const row = { status: "success", transport: "public-context-no-build-v1", settingsPublication: identity, createdAt };
+    publishMocks.loadPublishActivitySummary.mockResolvedValue({ activeCount: 0, recoveryCount: 0, contextRecheckIds: [id] });
+    let sendContext!: (snapshot: { docs: Array<{ id: string; data: () => Record<string, unknown> }> }) => void;
+    firestoreMocks.onSnapshot.mockImplementation((source, next) => {
+      if (source.parts.some((part: { field?: string }) => part.field === "__name__")) {
+        sendContext = next;
+        next({ docs: [{ id, data: () => row }] });
+      } else next({ docs: [] });
+      return firestoreMocks.unsubscribe;
+    });
+    renderQueue();
+    await act(async () => { await vi.advanceTimersByTimeAsync(0); });
+    expect(screen.getByRole("cell", { name: "Site settings update" })).toBeVisible();
+    expect(screen.queryByRole("button", { name: "Check again" })).not.toBeInTheDocument();
+    await act(async () => { await vi.advanceTimersByTimeAsync(1_000); });
+    expect(screen.getByRole("button", { name: "Check again" })).toBeEnabled();
+    const receipt = { ...identity, verifiedAt: Date.now() };
+    act(() => sendContext({ docs: [{ id, data: () => ({ ...row, consumerReceipts: { pages: receipt, posts: receipt, home: receipt } }) }] }));
+    expect(screen.queryByRole("button", { name: "Check again" })).not.toBeInTheDocument();
+    expect(publishMocks.loadPublishActivitySummary).toHaveBeenCalledTimes(1);
+  } finally {
+    vi.useRealTimers();
+  }
+});
+
 it.each(["summary", "documents"])("keeps live activity available when the additional proof %s read fails, with a working retry", async source => {
   emptyReviewQueue();
   firestoreMocks.onSnapshot.mockImplementation((_request, next) => {

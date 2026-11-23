@@ -2,7 +2,6 @@
 
 const { readNoBuildRecordOwner } = require("./no-build-record-ownership");
 const { recordFamily, readRecordPublication } = require("./no-build-record-publication");
-const { PUBLIC_CONTEXT_PATH, publicContextDigest } = require("./public-context-revision");
 const { currentContextCheck } = require("./context-publication-check-state");
 async function recordPublicationMetadata({ firestore, documentId, stored }) {
   if (!recordFamily(stored)) return null;
@@ -13,13 +12,10 @@ async function recordPublicationMetadata({ firestore, documentId, stored }) {
   const { queue, publication } = accepted;
   const check = currentContextCheck(queue);
   const proof = check?.outcome === "confirmed_late" ? check.recordProof : null;
-  let checked = false;
-  if (proof && proof.rendererSha === queue.recordPublication.rendererSha &&
-      proof.contextDigest === queue.recordPublication.contextDigest && proof.contextRevision === queue.recordPublication.contextRevision) {
-    const [pointer, context] = await firestore.getAll(firestore.doc("system/publicDeployment"), firestore.doc(PUBLIC_CONTEXT_PATH));
-    checked = pointer.data()?.state === "idle" && pointer.data().activeCommitSha === proof.rendererSha &&
-      context.data()?.schemaVersion === 1 && publicContextDigest(context.data().revision) === proof.contextDigest;
-  }
+  // The owner has already checked the accepted record and its exact snapshot.
+  // Later changes to other content do not revoke this publication's receipt.
+  const checked = proof && proof.rendererSha === queue.recordPublication.rendererSha &&
+    proof.contextDigest === queue.recordPublication.contextDigest && proof.contextRevision === queue.recordPublication.contextRevision;
   const receipt = checked ? { ...publication, status: "success", missingConsumers: [] } : publication;
   if (checked) delete receipt.warning;
   const awaitingCheck = !proof && check?.outcome !== "superseded" &&

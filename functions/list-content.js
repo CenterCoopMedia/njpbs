@@ -390,7 +390,7 @@ async function readPublishActivitySummary(firestore, includePostProofRecovery = 
   // aggregations or in none while those queries race.
   const { currentContextCheck } = require("./lib/context-publication-check-state");
   const recheckFields = includePostProofRecovery
-    ? ["triggeredAt", "createdAt", "settingsRetryAt", "cardRetryAt", "settingsPublication", "libraryCardPublication", "familyPublication.kind", "consumerReceipts"]
+    ? ["triggeredAt", "createdAt", "settingsPublication", "libraryCardPublication", "familyPublication.kind", "consumerReceipts"]
     : [];
   const snapshot = await firestore.collection("cmsPublishQueue")
     .select("status", "transport", "postProof.status", "postProof.attempts", "postProof.nextAttemptAt", "noBuildPost.postId",
@@ -411,8 +411,6 @@ async function readPublishActivitySummary(firestore, includePostProofRecovery = 
     .currentPostProofRecoveryIds(firestore, snapshot.docs);
   const contextRetry = includePostProofRecovery ? await require("./lib/generic-context-retry").genericContextRetry(firestore) : null;
   // Rows without triggeredAt use the existing bounded recovery lookup.
-  const now = Date.now();
-  const { PUBLICATION_BUDGET_MS } = require("./lib/settings-publication");
   const contextRechecks = includePostProofRecovery ? snapshot.docs.flatMap(row => {
     const queue = row.data();
     if (queue.triggeredAt) return [];
@@ -426,9 +424,7 @@ async function readPublishActivitySummary(firestore, includePostProofRecovery = 
       return proof?.rendererSha !== identity.rendererSha || proof?.contextRevision !== identity.contextRevision ||
         proof?.contextDigest !== identity.contextDigest || !(proof?.verifiedAt > 0);
     });
-    const startedAt = (queue.settingsRetryAt ?? queue.cardRetryAt ?? queue.createdAt)?.toMillis?.() ?? now;
-    return hasCheck || ["failed", "public_unconfirmed"].includes(queue.status) ||
-      queue.status === "success" && missing && now - startedAt >= PUBLICATION_BUDGET_MS
+    return hasCheck || ["failed", "public_unconfirmed"].includes(queue.status) || queue.status === "success" && missing
       ? [{ id: row.id, time: queue.createdAt?.toMillis?.() ?? 0 }] : [];
   }).sort((left, right) => right.time - left.time || left.id.localeCompare(right.id)).slice(0, 100).map(row => row.id) : [];
   recoveryCount += postProofRecoveryIds.length;

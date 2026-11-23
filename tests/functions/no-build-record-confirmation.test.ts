@@ -125,6 +125,8 @@ it("checks incomplete record confirmation without changing record, queue or disp
   expect((await db.doc(`cmsPosts/${id}`).get()).data()).toEqual(record);
   expect(await metadata()).toMatchObject({ queueStatus: "success", publicSourceVersion: identity.sourceVersion });
   expect((await metadata())?.recheckQueueId).toBeUndefined();
+  await db.doc(context.PUBLIC_CONTEXT_PATH).update({ revision: identity.contextRevision + 1 });
+  expect(await metadata()).toMatchObject({ queueStatus: "success", publicSourceVersion: identity.sourceVersion });
   const audit = await db.collection("admin_logs").get();
   expect(audit.docs.map(row => row.data().after)).toEqual(expect.arrayContaining([
     { outcome: "failed" }, expect.objectContaining({ outcome: "confirmed_late", operationId: ref.id,
