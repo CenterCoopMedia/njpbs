@@ -321,7 +321,7 @@ section.support-appeal--dark .support-appeal__button { border-color: var(--color
 .scroll-story__media figure { margin: 0; }
 .scroll-story__media img { display: block; max-inline-size: 100%; block-size: auto; }
 
-@media (prefers-reduced-motion: no-preference) and (min-height: 38rem) {
+@media screen and (prefers-reduced-motion: no-preference) and (min-height: 38rem) {
   @container (min-width: 44rem) {
     html:not([data-motion="off"]) .scroll-story__step:has(.scroll-story__media) {
       display: grid;
