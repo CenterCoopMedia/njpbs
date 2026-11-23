@@ -14,7 +14,7 @@ await cp(resolve(".shadow-renderer/client"), join(output, "client"), { recursive
 for (const file of await readdir(join(output, "client"), { recursive: true })) {
   if (!/\.(?:js|css)$/.test(file)) continue;
   const path = join(output, "client", file);
-  await writeFile(path, (await readFile(path, "utf8")).replaceAll("https://njpbs.org/posts/_no-build-assets", "/client"));
+  await writeFile(path, (await readFile(path, "utf8")).replaceAll("https://dev-public.example.org/posts/_shadow-assets", "/client"));
 }
 // Keep browser evidence self-contained: publication fixtures use non-existent immutable media URLs.
 await cp(resolve("public/brand"), join(output, "brand"), { recursive: true });
@@ -30,7 +30,7 @@ const cases = { sidebar: { sidebar: true, media: "image", reporters: true, follo
 } as const;
 for (const [name, options] of Object.entries(cases)) {
   const content = projectPublishedPostRead(liveBlogPostFixture(options), "live-blog-local", renderer.rendererSha, new Date(LIVE_BLOG_POST_AS_OF))!;
-  const html = (await renderer.renderPublishedPost(content)).replaceAll("https://njpbs.org/posts/_no-build-assets", "/client")
+  const html = (await renderer.renderPublishedPost(content)).replaceAll("https://dev-public.example.org/posts/_shadow-assets", "/client")
     .replaceAll(leadFixturePoster, "/brand/spotlight/politics-02.jpg")
     .replaceAll(LIVE_BLOG_REPORTER_PHOTO, reporterPortrait ? "./fixture-reporter.png" : "/brand/spotlight/politics-02.jpg")
     .replaceAll(leadFixturePublic.posterUrl, "/brand/spotlight/politics-02.jpg");
