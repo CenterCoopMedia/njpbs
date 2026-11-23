@@ -71,7 +71,8 @@ describe("CMS release source contract", () => {
       dispatchInputs: JSON.stringify({ ...inputs, ...overrides }),
     });
     expect(check()).toMatchObject({ deploySha: releaseSha, trustedWorkflowSha, releaseDispatchId });
-    expect(check({ emergency_authorization: "", migrations: "", reader_operation_id: "", reader_install_authorization: "" }))
+    const defaults = Object.fromEntries(Object.entries(definitions).map(([key, value]) => [key, value.default]));
+    expect(check({ ...defaults, deploy_ref: releaseSha, release_dispatch_id: releaseDispatchId }))
       .toMatchObject({ deploySha: releaseSha, trustedWorkflowSha, releaseDispatchId });
     for (const overrides of [
       { force_firebase: true }, { migrations: "repair" }, { migrations: null }, { force_firebase: "false" },
