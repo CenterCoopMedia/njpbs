@@ -10,10 +10,12 @@ import { readDurablePostWithdrawal } from "./durable-post-withdrawals";
 import { readDurablePageWithdrawal } from "./durable-page-withdrawals";
 import { createNoBuildCodePostWorker } from "./no-build-code-post-worker";
 import { rollbackCacheControl, rollbackProbe, rollbackRead, versionedProof } from "./rollback-proof";
+import { createDonationHealthReader, serveDonationDocument } from "./public-donation-fallback";
 import { serveSpotlightArchiveRedirect } from "./spotlight-archive-redirect";
 import { SPOTLIGHT_ARCHIVE_REDIRECT_ASSETS } from "../../packages/content-core/src/spotlight-archive-paths";
 
 const target = publicationTarget("development");
+const readDonationHealth = createDonationHealthReader(target.projectId);
 // Runtime Page capability binds the exact compiled graph; older candidates
 // can still expose only their original rendering exports.
 const graph: Partial<typeof compiled> = { ...compiled };
@@ -98,7 +100,7 @@ export default {
     const read = url.origin === target.origin ? rollbackRead(url, request.method) : null;
     const probe = request.headers.get(rollbackProbe);
     if (!read || !probe || request.headers.get("cache-control") !== rollbackCacheControl) {
-      return devPublic.fetch(request, env, ctx);
+      return serveDonationDocument(request, document => devPublic.fetch(document, env, ctx), readDonationHealth, ctx);
     }
     const version = env.CF_VERSION_METADATA?.id;
     if (!version || probe !== (read === "edge" ? "current" : version)) {

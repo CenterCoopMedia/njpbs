@@ -41,6 +41,7 @@
   "tests/functions/dev-inactive-bootstrap-operator.test.ts",
   "tests/functions/document-list-media.test.js",
   "tests/functions/document-size.test.js",
+  "tests/functions/donation-health.test.js",
   "tests/functions/election-candidate-details.test.ts",
   "tests/functions/election-result-sources.test.ts",
   "tests/functions/election-results-reader-release.test.ts",

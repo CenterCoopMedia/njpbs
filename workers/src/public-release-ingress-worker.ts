@@ -9,6 +9,13 @@ import { createPublicReleaseRouter, type SlotReply } from "./public-release-rout
 import { createRoutingObserver, type RoutingMeasurementEnvironment } from "./public-release-routing-observer";
 import { serveRetainedPairCodeAsset } from "./public-release-code-assets";
 import { readCommittedPairRecovery, recordCommittedPairRecovery, servePreviousVerifiedPairRecovery, type RoutingWriteStore } from "./public-release-recovery";
+import { publicationTarget } from "../../functions/lib/publication-target";
+import { createDonationHealthReader, serveDonationDocument } from "./public-donation-fallback";
+
+const donationHealth = {
+  production: createDonationHealthReader(publicationTarget("production").projectId),
+  development: createDonationHealthReader(publicationTarget("development").projectId),
+};
 
 type SlotBinding = { serve(request: Request, selection: SelectorReceipt, pair: PublicReleasePair, proof?: boolean, budgetMs?: number): Promise<SlotReply> };
 export type PublicReleaseIngressEnvironment = RoutingMeasurementEnvironment & {
@@ -79,7 +86,7 @@ export class PublicReleaseIngressProofEntrypoint extends WorkerEntrypoint<Public
       } });
   }
 }
-export default { async fetch(request: Request, env: PublicReleaseIngressEnvironment): Promise<Response> {
+export default { async fetch(request: Request, env: PublicReleaseIngressEnvironment, ctx: ExecutionContext): Promise<Response> {
   if (env.PUBLIC_PAIR_INGRESS_ENABLED !== "true") return new Response(null, { status: 404 });
   const deadline = performance.now() + AUTHORITY_BUDGET_MS;
   try {
@@ -104,7 +111,8 @@ export default { async fetch(request: Request, env: PublicReleaseIngressEnvironm
         if (asset) return asset;
       } catch { /* Refused retained bytes still allow fresh selected serving. */ }
     }
-    return await publicReleaseIngress(env).fetch(request, deadline);
+    return await serveDonationDocument(request, document => publicReleaseIngress(env).fetch(document, deadline),
+      donationHealth[pairs[0].environment], ctx);
     });
   }
   catch (error) { return ingressRateRefusal(error); }

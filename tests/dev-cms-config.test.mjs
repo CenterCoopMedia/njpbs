@@ -186,7 +186,7 @@ test("dev preview readiness requires the verified renderer SHA and dev-only serv
 
 test("dev manifest has exactly the reviewed endpoints and only admitted secrets", () => {
   const expected = [
-    "health", "cmsCollectBoardwalkUsage", "cmsGetBoardwalkUsage",
+    "health", "donationHealth", "cmsCollectBoardwalkUsage", "cmsGetBoardwalkUsage",
     "registerStaffProfile", "getStaffAccessStatus", "grantRole",
     "revokeRole", "deactivateStaff", "cmsValidateSiteAccess", "cmsGetContent",
     "cmsListContent", "cmsSaveContent", "cmsTransitionContent", "cmsGetRevision",
@@ -202,7 +202,7 @@ test("dev manifest has exactly the reviewed endpoints and only admitted secrets"
   const apiList = readFileSync(new URL("../cms-api/src/dev-endpoints.ts", import.meta.url), "utf8");
   const apiNames = [...apiList.matchAll(/"([A-Za-z][A-Za-z0-9]+)"/g)].map(match => match[1]);
   assert.deepEqual(apiNames.sort(), expected.filter(name =>
-    !["cmsReaderV1", "cmsReaderV2", "cmsReadPairCurrentCodeV2", "health", "cmsValidateSiteAccess", "cmsGetPublicPage", "onDatasetRefresh", "onElectionResultsSourcePoll", "onNoBuildPostConfirmation",
+    !["cmsReaderV1", "cmsReaderV2", "cmsReadPairCurrentCodeV2", "health", "donationHealth", "cmsValidateSiteAccess", "cmsGetPublicPage", "onDatasetRefresh", "onElectionResultsSourcePoll", "onNoBuildPostConfirmation",
       "onNoBuildPostConfirmationRecovery", "onScheduledPublish"].includes(name),
   ).sort());
   const script = `

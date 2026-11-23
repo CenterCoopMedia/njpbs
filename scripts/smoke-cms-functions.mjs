@@ -264,6 +264,7 @@ export const PRIVATE_RPC_FUNCTION_NAMES = Object.freeze([
 
 export const DEPLOYED_FUNCTION_NAMES = Object.freeze([
   "health",
+  "donationHealth",
   ...AUTHENTICATED_POST_FUNCTION_NAMES,
   ...PRIVATE_RPC_FUNCTION_NAMES,
   ...BACKGROUND_FUNCTION_NAMES,

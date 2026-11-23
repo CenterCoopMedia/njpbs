@@ -13,6 +13,7 @@ import { createPublicContentLastGood } from "./public-content-last-good";
 import { createContentBaselineAssetReader } from "./public-content-baseline";
 import { pendingAuthorResponse } from "./public-author-pending";
 import { rollbackCacheControl, rollbackProbe, rollbackRead, versionedProof } from "./rollback-proof";
+import { createDonationHealthReader, serveDonationDocument } from "./public-donation-fallback";
 
 type PublicEnv = Omit<Env, "CMS_API"> & IsolateStartEnvironment & {
   CMS_API: Service<typeof PublicContentEntrypoint>;
@@ -46,6 +47,28 @@ export default {
       return versionedProof(await serve(request, env, ctx, target, read === "schedule"), version);
     } catch {
       return versionedProof(new Response(null, { status: 503 }), version);
+const target = publicationTarget("production");
+const readDonationHealth = createDonationHealthReader(target.projectId);
+const publicSite = {
+  async fetch(request: Request, env: PublicEnv, ctx: ExecutionContext): Promise<Response> {
+    observePublicIsolateStart(env);
+    if (new URL(request.url).origin !== target.origin) return new Response(null, { status: 404, headers: { "cache-control": "no-store" } });
+    const assets = (assetRequest: Request) => env.ASSETS.fetch(assetRequest);
+    const fetchAsset = env.DURABLE_POST_WITHDRAWALS ? createContentBaselineAssetReader({
+      target, rendererSha, store: env.DURABLE_POST_WITHDRAWALS, fetchAsset: assets }) : assets;
+    if (env.NO_BUILD_PAGE_RENDERER_SHA || env.DURABLE_POST_WITHDRAWALS || isPageScheduleExportPath(new URL(request.url).pathname)) {
+      const pages = createNoBuildPageWorker({ target, rendererSha, cache: caches.default,
+        rendererReady: env.NO_BUILD_PAGE_RENDERER_SHA === rendererSha,
+        withdrawalsOnly: !env.NO_BUILD_PAGE_RENDERER_SHA,
+        render: renderPublishedPage, renderContext: renderPublicPageContext,
+        fetchAsset,
+        lastGood: env.DURABLE_POST_WITHDRAWALS ? createPublicContentLastGood({
+          store: env.DURABLE_POST_WITHDRAWALS, target, rendererSha }) : undefined,
+        waitUntil: task => ctx.waitUntil(task),
+        readWithdrawal: path => readDurablePageWithdrawal(env.DURABLE_POST_WITHDRAWALS, target.workerName, path),
+        getDecision: (path, method) => env.CMS_API.getNoBuildPage(path, rendererSha, method, true) });
+      const response = await pages.fetch(request);
+      if (response) return response;
     }
   },
 } satisfies ExportedHandler<PublicEnv>;
@@ -101,3 +124,8 @@ async function serve(request: Request, env: PublicEnv, ctx: ExecutionContext, ta
   return pendingAuthorResponse(request, response, { rendererSha, fetchAsset,
     readStaff: path => env.CMS_API.getNoBuildPage(path, rendererSha, "HEAD") });
 }
+export default {
+  async fetch(request: Request, env: PublicEnv, ctx: ExecutionContext): Promise<Response> {
+    return serveDonationDocument(request, document => publicSite.fetch(document, env, ctx), readDonationHealth, ctx);
+  },
+} satisfies ExportedHandler<PublicEnv>;

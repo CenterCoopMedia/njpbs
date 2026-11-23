@@ -26,9 +26,7 @@ export type PbsSurface =
  * The surfaces backed by a live PBS call, in the contract's surface order for a
  * stable, reviewable listing. Each is usable in an outage only if it also appears
  * in {@link SURFACES_WITH_FALLBACK}; a backed surface not listed there is broken
- * when it fails, and {@link assessOutage} reports it as such. One of these
- * (`donateTransaction`) has no fallback in this model, so a full lapse
- * leaves it broken.
+ * when it fails, and {@link assessOutage} reports it as such.
  */
 export const PBS_BACKED_SURFACES = [
   "livestreamPlayer",
@@ -49,13 +47,14 @@ export const PBS_FREE_SURFACES = [
 /**
  * The PBS-backed surfaces whose fallback a component renders today: the player's
  * persistent escape hatch ships in PublicSubpage, and the schedule grid's
- * widget-health state and the VOD launch cards ship in components. A visitor in a
- * live outage sees these.
+ * widget-health state and the VOD launch cards ship in components. The public
+ * Worker routes donation links to station help when the PBS form is unavailable.
  */
 export const SURFACES_WITH_WIRED_FALLBACK = [
   "livestreamPlayer",
   "scheduleGrid",
   "vodLaunchCards",
+  "donateTransaction",
 ] as const;
 
 /**
@@ -72,10 +71,6 @@ export const SURFACES_WITH_POLICY_ONLY_FALLBACK = [
  * Derived from the two lists above, so a surface cannot be counted as covered
  * without declaring which kind of fallback it has. A surface's usability in an
  * outage is membership here, not an assumption.
- *
- * `donateTransaction` (no CCM-hosted fallback donation path, not even a policy) is
- * deliberately absent, so the full-lapse test reports it broken -- the contract's
- * one remaining coverage gap -- instead of overstating coverage.
  */
 export const SURFACES_WITH_FALLBACK = [
   ...SURFACES_WITH_WIRED_FALLBACK,

@@ -190,6 +190,10 @@
           "module": "functions/deactivate-staff.js"
         },
         {
+          "name": "donationHealth",
+          "module": "functions/donation-health.js"
+        },
+        {
           "name": "getStaffAccessStatus",
           "module": "functions/dev-staff-access-status.js"
         },
@@ -809,6 +813,10 @@
         {
           "name": "getStaffAccessStatus",
           "module": "functions/staff-access.js"
+        },
+        {
+          "name": "donationHealth",
+          "module": "functions/donation-health.js"
         },
         {
           "name": "githubBugReportWebhook",

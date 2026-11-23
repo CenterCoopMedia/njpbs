@@ -41,6 +41,7 @@ import { renderHomepageAnnouncement } from "../../packages/content-core/src/home
 import { COUNTY_COMPARISON_DEFAULTS } from "../../packages/content-core/src/county-comparison";
 import { resolveDonateCta } from "../src/lib/donate-degradation";
 import { SURFACES_WITH_FALLBACK } from "../src/lib/pbs-outage-survivability";
+import { renderDonationDocument } from "./fixtures/donation-fallback-runtime";
 
 // Built where used, not at module top level: under the happy-dom test env a
 // top-level import.meta.url is not yet a file: URL (see schedule-degradation-wiring).
@@ -156,7 +157,7 @@ const inventoryDonationCarriers = (
  * Likewise, the page actions and donation cards name their actual render
  * expressions rather than relying only on the data objects that feed them.
  */
-const unwiredRenderSites: ReadonlyArray<{
+const donateRenderSites: ReadonlyArray<{
   name: string;
   source: string;
   landmarks: ReadonlyArray<{
@@ -907,16 +908,16 @@ const discoverCmsLinkCapableBlockTypes = () => {
     .sort();
 };
 
-describe("donate degradation wiring worklist (#189)", () => {
-  it("pins every unwired direct-donation render site to exact source landmarks", () => {
-    for (const site of unwiredRenderSites) {
+describe("public donation render coverage", () => {
+  it("pins every direct-donation render site to exact source landmarks", () => {
+    for (const site of donateRenderSites) {
       const source = readSource(site.source);
       for (const landmark of site.landmarks) {
         const found = countMatches(source, landmark.binding);
         expect(
           found,
-          `${site.name} / ${landmark.name}: expected ${landmark.occurrences} unwired ` +
-            `landmark(s), found ${found}. If this site was wired to resolveDonateCta, ` +
+          `${site.name} / ${landmark.name}: expected ${landmark.occurrences} ` +
+            `landmark(s), found ${found}. If this render path changed, ` +
             "update its worklist entry in the same change.",
         ).toBe(landmark.occurrences);
       }
@@ -1050,18 +1051,44 @@ describe("donate degradation wiring worklist (#189)", () => {
     );
   });
 
-  it("renders a stored PBS donation target through every CMS link path while unwired", () => {
-    // These are dynamic boundary proofs, not only source landmarks. When the
-    // outage policy is wired, each fixture must stop emitting this target and
-    // its worklist entry can be removed in the same change.
-    const escapedDonateUrl = donateUrl.replaceAll("&", "&amp;");
+  it("routes every rendered CMS donation link to station help during a full PBS lapse", async () => {
+    const sections = cmsDonationFixtures.map((fixture, index) =>
+      `<section id="donation-fixture-${index}">${fixture.render()}</section>`).join("");
+    const html = `<!doctype html><html><body><header><a href="${donateUrl}">Donate</a></header><main id="main">${sections}</main></body></html>`;
+    const output = await renderDonationDocument(html, { kind: "outage", status: "forbidden" });
+    const parse = (source: string) => new DOMParser().parseFromString(source, "text/html");
+    const before = parse(html);
+    const after = parse(output);
+    const notice = after.querySelector("aside[aria-label='Online donations'] p");
+    expect(notice?.querySelector("a")?.getAttribute("href")).toBe("/contact/");
+    expect(notice?.textContent).not.toContain("try again shortly");
+    expect(after.querySelector("header a")?.getAttribute("href")).toBe("/contact/");
+    expect(after.querySelector("header a")?.textContent).toBe("Giving help");
 
-    for (const fixture of cmsDonationFixtures) {
+    for (const [index, fixture] of cmsDonationFixtures.entries()) {
+      const selector = `#donation-fixture-${index} a`;
+      const hrefs = Array.from(before.querySelectorAll(selector), link => link.getAttribute("href"));
+      expect(hrefs, `${fixture.name}: fixture must contain a donation anchor`).toContain(donateUrl);
       expect(
-        fixture.render(),
-        `${fixture.name}: stored donation target no longer reaches the renderer`,
-      ).toContain(`href="${escapedDonateUrl}"`);
+        Array.from(after.querySelectorAll(selector), link => link.getAttribute("href")),
+        fixture.name,
+      ).toEqual(hrefs.map(href => href === donateUrl ? "/contact/" : href));
     }
+    expect(SURFACES_WITH_FALLBACK).toContain("donateTransaction");
+  });
+
+  it("keeps direct links when the health endpoint reports a reachable form or cannot be reached", async () => {
+    const html = `<!doctype html><html><body><main id="main"><a href="${donateUrl}">Donate</a></main></body></html>`;
+    const results = await Promise.all([
+      renderDonationDocument(html, { kind: "reachable" }),
+      renderDonationDocument(html, null),
+      renderDonationDocument(html, { kind: "outage", status: "error" }),
+    ]);
+    expect(results[0]).toBe(html);
+    expect(results[1]).toBe(html);
+    const outage = new DOMParser().parseFromString(results[2], "text/html");
+    expect(outage.querySelector("main a")?.getAttribute("href")).toBe("/contact/");
+    expect(outage.querySelector("aside a")?.getAttribute("href")).toBe("/contact/");
   });
 
   it("exempts Home giving only while its single action is fixed to the local Support page", () => {
@@ -1196,12 +1223,6 @@ describe("donate degradation wiring worklist (#189)", () => {
       href: donateUrl,
       opensInNewTab: true,
     });
-  });
-
-  it("keeps donateTransaction out of survivability coverage while the renders are unwired", () => {
-    // The honesty invariant. Listing the surface as covered without wiring these
-    // renders would let assessOutage report an all-clear a visitor cannot see.
-    expect(SURFACES_WITH_FALLBACK).not.toContain("donateTransaction");
   });
 
   it("resolves the donation policy for reachable and failed upstream states", () => {
