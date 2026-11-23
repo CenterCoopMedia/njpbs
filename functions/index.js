@@ -132,6 +132,7 @@ lazyExport("getStaffAccessStatus", "./staff-access");
 lazyExport("listStaffAccessRequests", "./staff-access");
 lazyExport("decideStaffAccessRequest", "./staff-access");
 lazyExport("onStaffAccessEmailRetry", "./staff-access-email");
+lazyExport("onEditorialNotificationCreated", "./editorial-notification");
 lazyExport("onStaffAccessNotificationCreated", "./staff-access-notification");
 lazyExport("cmsSubmitBugReport", "./bug-report");
 lazyExport("cmsListBugReports", "./bug-report-triage");

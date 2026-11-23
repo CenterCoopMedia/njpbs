@@ -488,6 +488,7 @@ describe("scheduled publish snapshot", () => {
     expect(logs.docs[0].data()).toMatchObject({
       action: "cms.schedule-publish",
       target: "cmsPages/contact",
+      after: { editorialNotice: { collection: "cmsPages", id: "contact", action: "publish" } },
     });
   });
 

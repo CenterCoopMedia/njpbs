@@ -2530,7 +2530,12 @@ describe("cmsSaveContent function", () => {
       expect.objectContaining({ action: "schedule" }),
     ]);
     expect(await docsIn("admin_logs")).toEqual([
-      expect.objectContaining({ action: "cms.schedule" }),
+      expect.objectContaining({
+        action: "cms.schedule",
+        after: expect.objectContaining({
+          editorialNotice: expect.objectContaining({ collection: "cmsPages", id: "contact", action: "schedule" }),
+        }),
+      }),
     ]);
   });
 
@@ -3856,6 +3861,7 @@ describe("cmsSaveContent function", () => {
     expect(logs[0]).toMatchObject({
       action: "cms.publish-snapshot",
       target: "cmsPages/home",
+      after: { editorialNotice: { collection: "cmsPages", id: "home", action: "publish" } },
     });
     // Pins the summarized before side (#538): status and block count, no second
     // copy of the page in the compliance row.

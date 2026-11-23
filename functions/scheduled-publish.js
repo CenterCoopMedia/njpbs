@@ -34,6 +34,7 @@ const {
   adminLogEntry,
   versionHistoryEntry,
 } = require("./lib/audit");
+const { editorialNotice } = require("./lib/editorial-notice");
 const { parseBlocks } = require("./lib/content-blocks");
 const {
   validateContentFieldValues,
@@ -943,7 +944,11 @@ function createScheduledPublishRunner(deps = {}) {
                 status: before.status,
                 version: before.version ?? null,
               },
-              after: { status: "published", version: after.version },
+              after: {
+                status: "published",
+                version: after.version,
+                ...editorialNotice(candidate.collection, candidate.ref.id, "publish", before, after),
+              },
               source: "scheduler",
             }),
           );
