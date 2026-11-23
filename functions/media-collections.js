@@ -14,6 +14,8 @@ const {
   canonicalMediaAssetRef,
 } = require("./lib/media-asset-ref");
 const {
+  assertMediaAssetAvailable,
+  MediaAssetUnavailableError,
   resolveMediaAssets,
 } = require("./lib/media-asset-resolver");
 const { authorizeMediaSource } = require("./lib/media-sources");
@@ -21,10 +23,12 @@ const {
   COLLECTION_SCHEMA_VERSION,
   MAX_COLLECTION_ITEM_BATCH,
   MAX_COLLECTION_ITEM_SCAN,
+  MAX_COLLECTION_SHARES,
   MediaCollectionValidationError,
   canonicalCollectionItemRef,
   collectionDocumentId,
   collectionItemDocumentId,
+  collectionPermission,
   collectionRequestDocumentId,
   encodeCursor,
   parseCollectionItemRef,
@@ -136,14 +140,20 @@ async function assertActiveCollectionActor(transaction, firestore, actor) {
   return principal;
 }
 
-function assertCollectionAccess(actor, collection) {
-  if (!collection || (collection.scope === "private" && collection.ownerUid !== actor.uid)) {
+function assertCollectionAccess(actor, collection, required = "view") {
+  const permission = collectionPermission(actor.uid, collection);
+  if (!permission) {
     throw new MediaCollectionRejection(404, COLLECTION_NOT_FOUND_MESSAGE);
+  }
+  if ((required === "manage_sharing" && permission !== required) ||
+      (required === "organize" && permission === "view")) {
+    throw new MediaCollectionRejection(403, ACCESS_DENIED_MESSAGE);
   }
   return collection;
 }
 
-function currentSummary(collectionId, collection) {
+function currentSummary(actor, collectionId, collection) {
+  const access = collectionPermission(actor.uid, collection);
   return {
     id: collectionId,
     scope: collection.scope,
@@ -154,19 +164,25 @@ function currentSummary(collectionId, collection) {
     version: collection.version,
     membershipVersion: collection.membershipVersion,
     cover: null,
-    canEdit: true,
+    canEdit: access !== "view",
+    access,
+    ...(collection.sharing.length > 0 ? { shared: true } : {}),
     createdAt: timestampIso(collection.createdAt),
     updatedAt: timestampIso(collection.updatedAt),
-    ...(collection.scope === "private" ? { itemCount: collection.itemCount } : {}),
+    ...(collection.ownerUid === actor.uid ? { itemCount: collection.itemCount } : {}),
   };
 }
 
-function conflict(collectionId, collection, revision) {
+function presentSharing(collection) {
+  return collection.sharing.map(({ uid, permission }) => ({ uid, permission }));
+}
+
+function conflict(actor, collectionId, collection, revision) {
   return new MediaCollectionRejection(
     409,
     COLLECTION_CONFLICT_MESSAGE,
     "media_collection_conflict",
-    { revision, collection: currentSummary(collectionId, collection) },
+    { revision, collection: currentSummary(actor, collectionId, collection) },
   );
 }
 
@@ -178,9 +194,9 @@ function storedCollectionOrThrow(snapshot) {
   return collection;
 }
 
-async function readAuthorizedCollection(firestore, actor, collectionId) {
+async function readAuthorizedCollection(firestore, actor, collectionId, required) {
   const snapshot = await collectionReference(firestore, collectionId).get();
-  return assertCollectionAccess(actor, storedCollectionOrThrow(snapshot));
+  return assertCollectionAccess(actor, storedCollectionOrThrow(snapshot), required);
 }
 
 function assertActiveCollection(collection) {
@@ -191,7 +207,7 @@ function assertActiveCollection(collection) {
 }
 
 async function requireActiveUploadCollection(firestore, actor, collectionId) {
-  return assertActiveCollection(await readAuthorizedCollection(firestore, actor, collectionId));
+  return assertActiveCollection(await readAuthorizedCollection(firestore, actor, collectionId, "organize"));
 }
 
 function sameRef(left, right) {
@@ -256,7 +272,7 @@ async function presentCollections({
     authorizeFn,
   });
   return records.map(({ document, collection }, index) => ({
-    ...currentSummary(document.id, collection),
+    ...currentSummary(actor, document.id, collection),
     cover: covers[index],
   }));
 }
@@ -361,9 +377,8 @@ async function resolveCollectionItems({
       const item = { ref: candidate.ref, addedAt: candidate.addedAt };
       if (asset?.available) {
         subclips.push({ ...item, available: true, subclip: presentCollectionSubclip(candidate.subclip, asset.summary) });
-      } else if (collection.scope === "private" || (browseSubclips ??= await canAccessSubclipSource({
-        firestore, actor, registryFn, authorizeFn,
-      }))) {
+      } else if (collection.ownerUid === actor.uid || (collection.scope === "all_staff" &&
+        (browseSubclips ??= await canAccessSubclipSource({ firestore, actor, registryFn, authorizeFn })))) {
         subclips.push({ ...item, available: false });
       }
     } else if (asset?.available) {
@@ -373,7 +388,7 @@ async function resolveCollectionItems({
         available: true,
         asset: asset.summary,
       });
-    } else if (collection.scope === "private") {
+    } else if (collection.ownerUid === actor.uid) {
       items.push({
         ref: candidate.ref,
         addedAt: candidate.addedAt,
@@ -440,7 +455,7 @@ function storedReceiptChangedRefs(value) {
   return refs;
 }
 
-function receiptResult(receipt, collection, collectionId, kind) {
+function receiptResult(actor, receipt, collection, collectionId, kind) {
   if (receipt.kind !== kind) {
     throw new MediaCollectionRejection(
       409,
@@ -451,7 +466,7 @@ function receiptResult(receipt, collection, collectionId, kind) {
     ? collection.version
     : collection.membershipVersion;
   if (receipt.resultingRevision !== currentRevision) {
-    throw conflict(collectionId, collection, kind);
+    throw conflict(actor, collectionId, collection, kind);
   }
   const changedRefs = kind === "membership"
     ? storedReceiptChangedRefs(receipt.changedRefs)
@@ -583,6 +598,28 @@ function metadataUpdates(request, collection) {
   };
 }
 
+async function sharingUpdates(transaction, firestore, actor, request, collection) {
+  const previous = collection.sharing.find(grant => grant.uid === request.uid)?.permission ?? null;
+  if (request.uid === collection.ownerUid ||
+      (actor.uid !== collection.ownerUid &&
+        (previous === "manage_sharing" || request.permission === "manage_sharing"))) {
+    throw new MediaCollectionRejection(403, ACCESS_DENIED_MESSAGE);
+  }
+  if (previous === request.permission) return {};
+  const sharing = collection.sharing.filter(grant => grant.uid !== request.uid);
+  if (request.permission !== null) {
+    if (sharing.length === MAX_COLLECTION_SHARES) {
+      throw new MediaCollectionValidationError("This collection has reached its sharing limit");
+    }
+    const target = await transaction.get(firestore.collection("users").doc(request.uid));
+    if (!target.exists || target.data()?.active === false) {
+      throw new MediaCollectionValidationError("Choose an active staff account");
+    }
+    sharing.push({ uid: request.uid, permission: request.permission });
+  }
+  return { sharing };
+}
+
 async function assertCoverMembership(transaction, collectionRef, request) {
   if (request.action !== "update" || !request.coverRef) return;
   const snapshot = await transaction.get(itemReference(collectionRef, request.coverRef));
@@ -604,12 +641,13 @@ async function updateCollectionMutation({
   fingerprint,
   timestamp,
 }) {
-  assertCollectionAccess(actor, collection);
   if (collection.version !== request.baseVersion) {
-    throw conflict(collectionId, collection, "metadata");
+    throw conflict(actor, collectionId, collection, "metadata");
   }
   await assertCoverMembership(transaction, collectionRef, request);
-  const updates = metadataUpdates(request, collection);
+  const updates = request.action === "set_sharing"
+    ? await sharingUpdates(transaction, firestore, actor, request, collection)
+    : metadataUpdates(request, collection);
   const changed = Object.keys(updates).length > 0;
   const resultingVersion = changed ? collection.version + 1 : collection.version;
   if (changed) {
@@ -628,7 +666,12 @@ async function updateCollectionMutation({
     resultingRevision: resultingVersion,
     createdAt: timestamp,
   });
-  if (changed && collection.scope === "all_staff") {
+  if (changed && request.action === "set_sharing") {
+    createAudit(transaction, firestore, actor, collectionId, "media_collection_set_sharing", {
+      uid: request.uid,
+      permission: collection.sharing.find(grant => grant.uid === request.uid)?.permission ?? null,
+    }, { uid: request.uid, permission: request.permission });
+  } else if (changed && collection.ownerUid !== actor.uid) {
     createAudit(
       transaction,
       firestore,
@@ -668,14 +711,15 @@ async function mutateCollection({
     const collectionSnapshot = await transaction.get(collectionRef);
     const receiptSnapshot = await transaction.get(receiptRef);
     const collection = storedCollectionOrThrow(collectionSnapshot);
+    if (request.action !== "create" || receiptSnapshot.exists) {
+      assertCollectionAccess(actor, collection, request.action === "set_sharing" ? "manage_sharing" : "organize");
+    }
     if (receiptSnapshot.exists) {
-      if (!collection) throw new Error("Collection request receipt has no collection");
-      assertCollectionAccess(actor, collection);
       const receipt = receiptSnapshot.data();
       assertReceipt(receipt, fingerprint, request.action);
       return {
         collectionId,
-        ...receiptResult(receipt, collection, collectionId, "metadata"),
+        ...receiptResult(actor, receipt, collection, collectionId, "metadata"),
       };
     }
     if (request.action === "create") {
@@ -725,6 +769,24 @@ function membershipChanges(request, itemRefs, snapshots) {
   return changes;
 }
 
+async function assertDelegatedCollectionItems({ firestore, transaction, actor, request, snapshots, registryFn, authorizeFn }) {
+  const refs = request.refs.map((ref, index) => {
+    if (ref.backend !== "subclip") return ref;
+    if (!snapshots[index].exists) throw new MediaCollectionRejection(404, ITEM_UNAVAILABLE_MESSAGE);
+    return subclipSourceRef(storedCollectionSubclip(snapshots[index].data().subclip));
+  });
+  try {
+    await Promise.all(refs.map(ref => assertMediaAssetAvailable({
+      firestore, transaction, actor, ref, registryFn, authorizeFn,
+    })));
+  } catch (error) {
+    if (error instanceof MediaAssetUnavailableError) {
+      throw new MediaCollectionRejection(404, ITEM_UNAVAILABLE_MESSAGE);
+    }
+    throw error;
+  }
+}
+
 function writeMembershipChanges(transaction, actor, changes, present, timestamp) {
   for (const change of changes) {
     if (!present) {
@@ -751,7 +813,7 @@ function applyCollectionMembership({ transaction, firestore, actor, collectionRe
   const membershipVersion = collection.membershipVersion + 1;
   writeMembershipChanges(transaction, actor, changes, present, timestamp);
   transaction.update(collectionRef, { membershipVersion, itemCount, updatedAt: timestamp, updatedBy: actor.uid });
-  if (collection.scope === "all_staff") {
+  if (collection.ownerUid !== actor.uid) {
     createAudit(transaction, firestore, actor, collectionRef.id,
       `media_collection_items_${present ? "add" : "remove"}`,
       { membershipVersion: collection.membershipVersion }, { membershipVersion });
@@ -769,7 +831,7 @@ async function placeUploadedVideo(transaction, firestore, actor, collectionId, r
   const [collectionSnapshot, itemSnapshot] = await Promise.all([
     transaction.get(collectionRef), transaction.get(itemRef),
   ]);
-  const collection = assertActiveCollection(assertCollectionAccess(actor, storedCollectionOrThrow(collectionSnapshot)));
+  const collection = assertActiveCollection(assertCollectionAccess(actor, storedCollectionOrThrow(collectionSnapshot), "organize"));
   const changes = membershipChanges({ refs: [ref], present: true }, [itemRef], [itemSnapshot]);
   applyCollectionMembership({ transaction, firestore, actor, collectionRef, collection,
     changes, present: true, timestamp: FieldValue.serverTimestamp() });
@@ -793,22 +855,28 @@ async function mutateCollectionItems({
     const collection = assertCollectionAccess(
       actor,
       storedCollectionOrThrow(collectionSnapshot),
+      "organize",
     );
     if (receiptSnapshot.exists) {
       const receipt = receiptSnapshot.data();
       assertReceipt(receipt, fingerprint, request.present ? "add" : "remove");
       return {
         collectionId: request.collectionId,
-        ...receiptResult(receipt, collection, request.collectionId, "membership"),
+        ...receiptResult(actor, receipt, collection, request.collectionId, "membership"),
       };
     }
     assertActiveCollection(collection);
     if (collection.membershipVersion !== request.baseMembershipVersion) {
-      throw conflict(request.collectionId, collection, "membership");
+      throw conflict(actor, request.collectionId, collection, "membership");
     }
     const itemRefs = request.refs.map((ref) => itemReference(collectionRef, ref));
     const snapshots = await transactionSnapshots(transaction, itemRefs);
     const changes = membershipChanges(request, itemRefs, snapshots);
+    if (collection.scope === "private" && collection.ownerUid !== actor.uid && !request.subclipAssetId) {
+      await assertDelegatedCollectionItems({
+        firestore, transaction, actor: { ...actor, principal }, request, snapshots, registryFn, authorizeFn,
+      });
+    }
     const subclip = request.subclipAssetId ? await readOwnedCollectionSubclip({
       transaction, firestore, actor: { ...actor, principal }, request, registryFn, authorizeFn,
     }) : null;
@@ -993,6 +1061,7 @@ function createCmsListMediaCollectionItemsHandler(deps = {}) {
       res.status(200).json({
         success: true,
         collection: presentedCollection,
+        ...(presentedCollection.access === "manage_sharing" ? { sharing: presentSharing(collection) } : {}),
         items: page.items,
         ...(page.subclips.length ? { subclips: page.subclips } : {}),
         nextCursor,
@@ -1019,7 +1088,7 @@ function createCmsMutateMediaCollectionHandler(deps = {}) {
         runtime.isActiveFn,
       );
       if (request.action === "update" && request.coverRef) {
-        await readAuthorizedCollection(runtime.firestore, actor, request.collectionId);
+        await readAuthorizedCollection(runtime.firestore, actor, request.collectionId, "organize");
         await assertItemsAvailable({
           ...runtime,
           actor,
@@ -1044,6 +1113,7 @@ function createCmsMutateMediaCollectionHandler(deps = {}) {
         changed: result.changed,
         replayed: result.replayed,
         collection: presented,
+        ...(presented.access === "manage_sharing" ? { sharing: presentSharing(collection) } : {}),
       });
     } catch (error) {
       respondWithError(res, runtime.log, "change media collection", error);
@@ -1067,7 +1137,7 @@ function createCmsSetMediaCollectionItemsHandler(deps = {}) {
       );
       let resolved;
       if (request.present && !request.subclipAssetId) {
-        await readAuthorizedCollection(runtime.firestore, actor, request.collectionId);
+        await readAuthorizedCollection(runtime.firestore, actor, request.collectionId, "organize");
         resolved = await assertItemsAvailable({
           ...runtime,
           actor,

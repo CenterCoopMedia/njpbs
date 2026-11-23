@@ -6,6 +6,7 @@ export const MEDIA_COLLECTION_COLORS = ["slate", "blue", "green", "gold", "red",
 export type MediaCollectionColor = (typeof MEDIA_COLLECTION_COLORS)[number];
 export type MediaCollectionScope = "private" | "all_staff";
 export type MediaCollectionLifecycle = "active" | "archived";
+export type MediaCollectionPermission = "view" | "organize" | "manage_sharing";
 export type MediaCollectionAsset = MediaAssetSummary | SourceMediaAssetSummary;
 export type MediaCollectionSubclipRef = { backend: "subclip"; id: string };
 export type MediaCollectionItemRef = MediaAssetRef | MediaCollectionSubclipRef;
@@ -48,7 +49,9 @@ export interface MediaCollectionSummary {
   version: number;
   membershipVersion: number;
   cover: MediaCollectionAsset | null;
-  canEdit: true;
+  canEdit: boolean;
+  access?: MediaCollectionPermission;
+  shared?: true;
   createdAt: string | null;
   updatedAt: string | null;
   itemCount?: number;

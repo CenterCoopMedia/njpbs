@@ -9,6 +9,7 @@ const { mediaAssetSummary } = require("./media-library");
 const {
   MediaSourceAccessError,
   authorizeMediaSource,
+  hasActiveArchiveCategory,
   objectKeyWithinSource,
 } = require("./media-sources");
 const {
@@ -149,12 +150,14 @@ async function assertMediaAssetAvailable({
   firestore,
   actor,
   ref,
+  transaction = null,
   registryFn = defaultRegistry,
   authorizeFn = authorizeMediaSource,
 }) {
   const parsedRef = parseMediaAssetRef(ref);
   if (parsedRef.backend === "r2") {
-    const snapshot = await firestore.collection("media_assets").doc(parsedRef.id).get();
+    const reference = firestore.collection("media_assets").doc(parsedRef.id);
+    const snapshot = await (transaction ? transaction.get(reference) : reference.get());
     const summary = snapshot.exists ? mediaAssetSummary(snapshot.id, snapshot.data()) : null;
     if (!summary || !mayUseMedia(
       actor.principal, summary.category, summary.kind, isAudioReadAdmitted(actor),
@@ -171,12 +174,14 @@ async function assertMediaAssetAvailable({
       source,
       operation: "browse",
       isApprovedActiveAccountFn: alreadyApprovedAccount,
+      ...(transaction ? { archiveCategoryActiveFn: () => hasActiveArchiveCategory(firestore, transaction) } : {}),
     });
   } catch (error) {
     if (isMediaSourceDenial(error)) throw new MediaAssetUnavailableError();
     throw error;
   }
-  const snapshot = await firestore.collection("mediaSourceAssets").doc(parsedRef.id).get();
+  const reference = firestore.collection("mediaSourceAssets").doc(parsedRef.id);
+  const snapshot = await (transaction ? transaction.get(reference) : reference.get());
   const asset = snapshot.exists ? parseSourceMediaAsset(snapshot.id, snapshot.data()) : null;
   if (!source || !asset || asset.sourceId !== source.id ||
     !objectKeyWithinSource(source, asset.objectKey)) {

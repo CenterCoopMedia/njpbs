@@ -12,6 +12,9 @@ const { ID_PATTERN } = require("./source-media-contract");
 
 const COLLECTION_SCHEMA_VERSION = 1;
 const COLLECTION_SCOPES = Object.freeze(["private", "all_staff"]);
+const COLLECTION_PERMISSIONS = Object.freeze(["view", "organize", "manage_sharing"]);
+const MAX_COLLECTION_SHARES = 50;
+const STAFF_UID_PATTERN = /^[A-Za-z0-9_-]{1,128}$/;
 const COLLECTION_LIFECYCLES = Object.freeze(["active", "archived"]);
 const COLLECTION_COLORS = Object.freeze(["slate", "blue", "green", "gold", "red", "purple"]);
 const MAX_COLLECTION_PAGE_SIZE = 30;
@@ -240,7 +243,7 @@ function parseMutateCollectionRequest(value) {
   }
   const action = requiredChoice(
     value.action,
-    ["create", "update", "archive", "restore"],
+    ["create", "update", "archive", "restore", "set_sharing"],
     "Collection action",
   );
   const allowed = {
@@ -251,6 +254,7 @@ function parseMutateCollectionRequest(value) {
     ]),
     archive: new Set(["action", "requestId", "collectionId", "baseVersion"]),
     restore: new Set(["action", "requestId", "collectionId", "baseVersion"]),
+    set_sharing: new Set(["action", "requestId", "collectionId", "baseVersion", "uid", "permission"]),
   }[action];
   rejectUnknownFields(value, allowed);
   const requestId = requiredRequestId(value.requestId);
@@ -270,6 +274,17 @@ function parseMutateCollectionRequest(value) {
     collectionId: requiredDocumentId(value.collectionId),
     baseVersion: positiveVersion(value.baseVersion, "Base version"),
   };
+  if (action === "set_sharing") {
+    if (typeof value.uid !== "string" || !STAFF_UID_PATTERN.test(value.uid)) {
+      throw new MediaCollectionValidationError("Staff account is invalid");
+    }
+    return {
+      ...request,
+      uid: value.uid,
+      permission: value.permission === null ? null
+        : requiredChoice(value.permission, COLLECTION_PERMISSIONS, "Collection permission"),
+    };
+  }
   if (action !== "update") return request;
   if (value.name === undefined && value.description === undefined && value.coverRef === undefined && value.color === undefined) {
     throw new MediaCollectionValidationError("Choose a collection field to update");
@@ -343,6 +358,13 @@ function storedCollection(value) {
   }
   if (value.scope === "private" && value.ownerUid !== value.createdBy) return null;
   if (value.scope === "all_staff" && value.ownerUid !== undefined) return null;
+  const sharing = value.sharing === undefined ? [] : value.sharing;
+  if (!Array.isArray(sharing) || sharing.length > MAX_COLLECTION_SHARES ||
+      (value.scope === "all_staff" && sharing.length > 0) ||
+      sharing.some(grant => !plainObject(grant) || typeof grant.uid !== "string" ||
+        !STAFF_UID_PATTERN.test(grant.uid) || grant.uid === value.ownerUid ||
+        !COLLECTION_PERMISSIONS.includes(grant.permission)) ||
+      new Set(sharing.map(grant => grant.uid)).size !== sharing.length) return null;
   let coverRef = null;
   if (value.coverRef !== null && value.coverRef !== undefined) {
     try {
@@ -351,7 +373,14 @@ function storedCollection(value) {
       return null;
     }
   }
-  return { ...value, coverRef, color: value.color === undefined ? "slate" : value.color };
+  return { ...value, sharing, coverRef, color: value.color === undefined ? "slate" : value.color };
+}
+
+function collectionPermission(actorUid, collection) {
+  if (!collection) return null;
+  if (collection.scope === "all_staff") return "organize";
+  if (collection.ownerUid === actorUid) return "manage_sharing";
+  return collection.sharing.find(grant => grant.uid === actorUid)?.permission ?? null;
 }
 
 function parseColor(value) {
@@ -383,16 +412,19 @@ function timestampIso(value) {
 module.exports = {
   COLLECTION_COLORS,
   COLLECTION_LIFECYCLES,
+  COLLECTION_PERMISSIONS,
   COLLECTION_SCHEMA_VERSION,
   COLLECTION_SCOPES,
   DOCUMENT_ID_PATTERN,
   MAX_COLLECTION_ITEM_BATCH,
   MAX_COLLECTION_ITEM_SCAN,
   MAX_COLLECTION_PAGE_SIZE,
+  MAX_COLLECTION_SHARES,
   MediaCollectionValidationError,
   canonicalCollectionItemRef,
   collectionDocumentId,
   collectionItemDocumentId,
+  collectionPermission,
   collectionRequestDocumentId,
   encodeCursor,
   mediaAssetRefDocumentId,

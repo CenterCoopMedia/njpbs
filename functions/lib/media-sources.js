@@ -95,11 +95,11 @@ function buildMediaSourceRegistry(config) {
   );
 }
 
-async function hasActiveArchiveCategory(firestore) {
-  const snapshot = await firestore
+async function hasActiveArchiveCategory(firestore, transaction) {
+  const reference = firestore
     .collection(MEDIA_CATEGORIES_COLLECTION)
-    .doc(ARCHIVE_CATEGORY_ID)
-    .get();
+    .doc(ARCHIVE_CATEGORY_ID);
+  const snapshot = await (transaction ? transaction.get(reference) : reference.get());
   if (!snapshot.exists) return false;
   return parseMediaCategoryDefinition(ARCHIVE_CATEGORY_ID, snapshot.data())?.active === true;
 }
