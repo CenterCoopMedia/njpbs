@@ -260,7 +260,9 @@ production-read/development-write project pair, the explicit Node type-stripping
 flag and service-account JSON on stdin. Export accepts only the production
 service account that `SEED_EXPORT_IDENTITY` names, and only after its granted
 permissions prove it can get and list Firestore entities, cannot write,
-delete, import or export, and has no Cloud Storage access. Import and verify accept only the dedicated dev seed
+delete, import or export, and holds no project-level Cloud Storage permission.
+The script never calls Cloud Storage; a bucket-level grant cannot be seen from
+the project and is not used. Import and verify accept only the dedicated dev seed
 writer. No ADC, Auth/database export or production storage authority.
 Never substitute an administrator credential.
 
