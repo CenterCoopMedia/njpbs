@@ -364,6 +364,24 @@ describe('injected BYOK runner',()=>{
   expect(s.counts).toEqual({ posts: 1, exports: 0 });
   expect(s.keys).toHaveLength(1);
  });
+ it('spools usable output when the completed identity write fails before commit', async () => {
+  const s = await completedProviderFixture();
+  const transact = s.firestore.runTransaction;
+  s.firestore.runTransaction = fn => transact(tx => fn({ ...tx, update(ref, value) {
+   if (Object.hasOwn(value, 'completedResponse')) throw Object.assign(Error('temporary write failure'), { code: 14 });
+   tx.update(ref, value);
+  } }));
+  s.deps.transcribe = async (_input, _key, _settings, options) => {
+   s.counts.posts++;
+   await options.recordCompleted(s.identity);
+   return { ...s.identity, model: jobs.MODEL, segments: [] };
+  };
+  expect(await runner.createByokRunner(s.deps)()).toEqual({ outcome: 'ready' });
+  expect(s.row()).not.toHaveProperty('completedResponse');
+  expect(s.row()).toMatchObject({ spoolReceipt: { versionId: 'v1' }, budgetReservation: { state: 'consumed' } });
+  expect(s.counts).toEqual({ posts: 1, exports: 1 });
+  expect(s.lookups).toEqual([]);
+ });
  it('marks missing spool uncertain after expired intent without replay',async()=>{const s=await prepared({transcribe:async()=>{throw Error('timeout');}});expect(await s.run()).toEqual({outcome:'recovery_pending'});s.advance(721000);expect(await s.run()).toEqual({outcome:'needs_reconciliation'});expect(s.rows.get(`mediaSourceTranscriptJobs/${s.job.id}`)).toMatchObject({errorCode:'elevenlabs_submission_uncertain'});expect(await s.run()).toEqual({outcome:'idle'});});
  it.each(['byok_storage_receipt_invalid', 'byok_storage_result_invalid', 'byok_storage_identity_invalid', 'byok_storage_result_too_large'])('settles %s once through the original attempt without another paid submission', async(code)=>{
   const s=await prepared({storage:{recoverSpool:async()=>{throw Object.assign(Error('private storage detail'),{code});}}});

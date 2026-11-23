@@ -1,6 +1,7 @@
 "use strict";
 
 const { randomUUID } = require("node:crypto");
+const logger = require("firebase-functions/logger");
 const jobs = require("./video-transcript-byok-job");
 const { activeAsset } = require("./video-transcript-job");
 const { sourceMatches } = require("./video-transcript-worker");
@@ -302,8 +303,11 @@ function createByokRunner({
         maxSpeakers: claim.maxSpeakers,
       }, {
         async recordCompleted(response) {
-          if (!await jobs.recordCompletedResponse({ firestore, claim: intent, response, now: clock() })) {
-            throw Error("byok_runner_lease_lost");
+          try { await jobs.recordCompletedResponse({ firestore, claim: intent, response, now: clock() }); }
+          catch (error) {
+            if (error?.code === "byok_completed_response_changed") throw error;
+            // A usable paid result can still be spooled if its ID write failed.
+            logger.warn("Completed ElevenLabs identity could not be saved");
           }
         },
       });

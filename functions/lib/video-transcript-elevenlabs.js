@@ -216,16 +216,19 @@ async function transcribe(input, key, settings, options = {}) {
       }
       const document = await readResult(response);
       if (!upload.state.verified || controller.signal.aborted) throw uncertain();
-      const transcriptionId = document?.transcription_id;
-      const inputSha256 = upload.state.inputSha256;
-      if (recordCompleted && validTranscriptionId(transcriptionId) && document.request_id === undefined &&
-          document.transcripts === undefined && (typeof document.text === "string" || Array.isArray(document.words))) {
-        await recordCompleted({ transcriptionId, inputSha256 });
-      }
-      return { segments: normalizeResult(document, input.durationSeconds, settings.maxSpeakers), model: MODEL,
-        inputSha256, ...(validTranscriptionId(transcriptionId) ? { transcriptionId } : {}) };
+      return document;
     };
-    return await Promise.race([submit(), deadline]);
+    const document = await Promise.race([submit(), deadline]);
+    clearTimeout(timer);
+    signal?.removeEventListener("abort", stop);
+    const transcriptionId = document?.transcription_id;
+    const inputSha256 = upload.state.inputSha256;
+    if (recordCompleted && validTranscriptionId(transcriptionId) && document.request_id === undefined &&
+        document.transcripts === undefined && (typeof document.text === "string" || Array.isArray(document.words))) {
+      await recordCompleted({ transcriptionId, inputSha256 });
+    }
+    return { segments: normalizeResult(document, input.durationSeconds, settings.maxSpeakers), model: MODEL,
+      inputSha256, ...(validTranscriptionId(transcriptionId) ? { transcriptionId } : {}) };
   } catch (error) {
     if (error instanceof AdapterError) throw error;
     throw uncertain();
