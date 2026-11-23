@@ -17,9 +17,8 @@ npm run test:cloud-publisher
 npm run test:preview-renderer
 ```
 
-`wrangler.jsonc` serves the public entry and uses `site/dist` assets;
-`wrangler.public.dev.jsonc` uses `dev-publication/dist`. These paths resolve from
-the config directory. The other configs select preview, staff and routing
+`wrangler.jsonc` serves the public entry and uses `site/dist` assets. These paths
+resolve from the config directory. The other configs select preview, staff and routing
 measurement entries.
 Pass the config path explicitly, for example
 `--config workers/wrangler.preview.jsonc`, from the repository root.
