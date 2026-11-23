@@ -145,6 +145,10 @@ function assertPublicWorkerCandidateDatabase(firestore, target) {
   if (!emulator) assertPublicationDatabase(firestore, expected);
 }
 
+function publicWorkerCmsApiService(target) {
+  return assertPublicationTarget(target).environment === "development" ? "template-dev-cms-api" : "njpbs-cms-api";
+}
+
 function projectCloudflareWorkerVersion(value, { tag, message, target = publicationTarget() } = {}) {
   target = assertPublicationTarget(target);
   const annotations = value?.annotations;
@@ -159,7 +163,7 @@ function projectCloudflareWorkerVersion(value, { tag, message, target = publicat
     (binding) =>
       binding?.name === "CMS_API" &&
       binding?.type === "service" &&
-      binding?.service === (target.environment === "development" ? "template-dev-cms-api" : "njpbs-cms-api") &&
+      binding?.service === publicWorkerCmsApiService(target) &&
       binding?.entrypoint === "PublicContentEntrypoint",
   );
   if (
@@ -407,6 +411,7 @@ module.exports = {
   projectCloudflareWorkerVersion,
   publicWorkerCandidateMessage,
   publicWorkerCandidateTag,
+  publicWorkerCmsApiService,
   samePublicWorkerCandidate,
   workerVersionIdFromWranglerOutput,
 };
