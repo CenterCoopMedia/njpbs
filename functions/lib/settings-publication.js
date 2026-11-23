@@ -8,7 +8,7 @@ const { FieldValue } = require("firebase-admin/firestore");
 const logger = require("firebase-functions/logger");
 const { confirmationErrorCauses } = require("./confirmation-error-causes");
 const { assertPublicDeploymentPointer, PUBLIC_DEPLOYMENT_SCHEMA_VERSION } = require("./public-deployment");
-const { readCmsPublicationRuntimeControlInTransaction, assertCmsPublicationCloudAdmission } = require("./cms-publication-runtime-control");
+const { CmsPublicationRuntimeControlError, readCmsPublicationRuntimeControlInTransaction, assertCmsPublicationCloudAdmission } = require("./cms-publication-runtime-control");
 const { publicationTarget } = require("./publication-target");
 const { PUBLIC_CONTEXT_PATH, readPublicContextRevisionInTransaction, publicContextDigest } = require("./public-context-revision");
 const { CURRENT_PATH, OUTPUTS: AGGREGATE_CONSUMERS, TRANSPORT, missingPublicContextConsumers } = require("./public-context-publication");
@@ -18,6 +18,8 @@ const PUBLIC_SETTINGS_IDS = new Set([require("./cms-settings-contract").STORY_CT
 const ROUTE_CONSUMERS = ["pages", "posts", "home"];
 const REQUIRED_CONSUMERS = [...ROUTE_CONSUMERS, ...AGGREGATE_CONSUMERS];
 const PUBLICATION_BUDGET_MS = 5 * 60_000;
+const ADMISSION_PAUSED = "settings_publication_admission_paused";
+const TRANSIENT_FIRESTORE_CODES = new Set([4, 8, 10, 13, 14]);
 const hash = value => createHash("sha256").update(JSON.stringify(value)).digest("hex");
 const pairProtocol = require("./public-release-pair");
 const pairAdmission = require("./public-release-admission-contract");
@@ -128,12 +130,12 @@ async function readSettingsPublication({ firestore, transaction, id, sourceVersi
 
 async function readPublicationPrerequisites(firestore, transaction, rootSnapshot) {
   const pointer = assertPublicDeploymentPointer((rootSnapshot ?? await transaction.get(firestore.doc("system/publicDeployment"))).data());
-  if (pointer.state !== "idle") refuse("A public code release is in progress. Try this publication again shortly.");
+  if (pointer.state !== "idle") refuse("A public code release is in progress. Try this publication again shortly.", ADMISSION_PAUSED);
   const control = await readCmsPublicationRuntimeControlInTransaction({ firestore, transaction });
   assertCmsPublicationCloudAdmission(control, { commitSha: pointer.activeCommitSha,
     serializerId: publicationTarget(process.env.CMS_DEPLOYMENT_ENVIRONMENT ?? "production").serializerId });
   const billing = (await transaction.get(firestore.doc("system/billing"))).data();
-  if (billing?.disabled === true) refuse("Public publication is paused by the billing control.");
+  if (billing?.disabled === true) refuse("Public publication is paused by the billing control.", ADMISSION_PAUSED);
   const revision = await readPublicContextRevisionInTransaction(transaction, firestore);
   return { revision, runtime: { owner: "cloudflare", release: pointer.activeCommitSha } };
 }
@@ -179,11 +181,21 @@ async function prepareSettingsSuccessor({ firestore, transaction, original, revi
   } };
 }
 
+function retryableSettingsRecovery(error) {
+  return error?.diagnosticCode === ADMISSION_PAUSED || error?.scheduleDeferred === true ||
+    error instanceof CmsPublicationRuntimeControlError || TRANSIENT_FIRESTORE_CODES.has(error?.code);
+}
+
 // A settled context wakes recovery for the current published settings only.
 // Each retry uses the existing deterministic successor and its own consumer proof.
 async function resumeSupersededSettingsAfterContext({ firestore, operationId, log = logger }) {
   const sourceRefs = [...PUBLIC_SETTINGS_IDS].map(id => firestore.doc(`cmsSettings/${id}`));
-  const sources = await firestore.getAll(...sourceRefs);
+  const sources = await firestore.getAll(...sourceRefs).catch(error => {
+    log.warn("Automatic settings publication scan deferred", { operationId, causes: confirmationErrorCauses(error) });
+    if (retryableSettingsRecovery(error)) throw error;
+    return [];
+  });
+  const deferred = [];
   for (const source of sources) {
     if (!source.data()?.published) continue;
     await firestore.runTransaction(async transaction => {
@@ -207,8 +219,10 @@ async function resumeSupersededSettingsAfterContext({ firestore, operationId, lo
       retry.write();
     }).catch(error => {
       log.warn("Automatic settings publication retry deferred", { settingsId: source.id, causes: confirmationErrorCauses(error) });
+      if (retryableSettingsRecovery(error)) deferred.push(error);
     });
   }
+  if (deferred.length) throw new AggregateError(deferred, "Automatic settings publication retry deferred");
 }
 
 async function prepareSettingsRetry({ firestore, transaction, accepted }) {

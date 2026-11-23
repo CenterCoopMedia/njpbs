@@ -321,8 +321,14 @@ describe("atomic public settings acceptance", () => {
     const event = { params: { queueId: newer.queueId }, data: {
       before: { data: () => ({ status: "pending" }) }, after: await db.doc(`cmsPublishQueue/${newer.queueId}`).get(),
     } };
-    const handler = confirmation.createNoBuildPostConfirmationHandler({ firestore: db,
-      readback() { throw new Error("This fixture supplies aggregate proof only"); } });
+    const readback = vi.fn(() => { throw new Error("This fixture supplies aggregate proof only"); });
+    const handler = confirmation.createNoBuildPostConfirmationHandler({ firestore: db, readback });
+    const billing = db.doc("system/billing");
+    await billing.set({ disabled: true });
+    await expect(handler(event)).rejects.toThrow("Automatic settings publication retry deferred");
+    expect(readback).not.toHaveBeenCalled();
+    expect((await queues()).size).toBe(2);
+    await billing.set({ disabled: false });
     await Promise.all([handler(event), handler(event)]);
 
     const recovered = (await get(id)).body;

@@ -38,6 +38,12 @@ function createNoBuildPostConfirmationHandler(deps = {}) {
       delete current.recordConfirmationPendingAt;
       if (isDeepStrictEqual(previous, current)) return;
     }
+    if (queue?.transport === "public-context-no-build-v1" && queue.status === "success" &&
+        before?.status !== "success" && queue.aggregateReceipt) {
+      // Transient failures keep this event eligible for redelivery before it
+      // starts public readback. The minute scheduler can confirm other owners.
+      await require("./lib/settings-publication").resumeSupersededSettingsAfterContext({ firestore, operationId: event.params.queueId });
+    }
     if (queue?.datasetRefreshJobId && ["success", "failed"].includes(queue.status)) {
       await require("./lib/dataset-refresh").processDatasetRefreshJob({ firestore, jobId: queue.datasetRefreshJobId, maxOwners: 2 });
     }
@@ -62,13 +68,6 @@ function createNoBuildPostConfirmationHandler(deps = {}) {
           try { await require("./lib/no-build-record-confirmation").recoverNoBuildRecordPublication({ firestore,
             operationId: event.params.queueId, ...readback(), ...network, deadline }); }
           catch { /* The same bounded recovery wake retains the accepted source. */ }
-        }
-      }
-      if (queue.status === "success" && before?.status !== "success" && queue.aggregateReceipt) {
-        const operationId = event.params.queueId;
-        try { await require("./lib/settings-publication").resumeSupersededSettingsAfterContext({ firestore, operationId }); }
-        catch (error) {
-          logger.warn("Automatic settings publication scan deferred", { operationId, causes: confirmationErrorCauses(error) });
         }
       }
       return;
