@@ -45,6 +45,7 @@ export const ROUTE_PATHS = {
   publishQueue: "/publish-queue",
   reports: "/reports",
   guide: "/guide",
+  whatsNew: "/whats-new",
   politicsResource: "/resources/nj-politics",
   schedule: "/schedule",
   liveProduction: "/live-production",
@@ -75,6 +76,7 @@ export function routeCategoryForPath(pathname: string): RouteCategory {
     return "reports";
   if (path === ROUTE_PATHS.guide || path.startsWith(`${ROUTE_PATHS.guide}/`))
     return "guide";
+  if (path === ROUTE_PATHS.whatsNew) return "whats-new";
   if (path === ROUTE_PATHS.politicsResource) return "resources";
   if (path === ROUTE_PATHS.schedule) return "schedule";
   if (path === ROUTE_PATHS.liveProduction || path === ROUTE_PATHS.liveProductionStudio) return "live-production";

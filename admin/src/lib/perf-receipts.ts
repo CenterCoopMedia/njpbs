@@ -71,6 +71,7 @@ export const ROUTE_CATEGORIES = [
   "queue",
   "reports",
   "guide",
+  "whats-new",
   "resources",
   "schedule",
   "live-production",

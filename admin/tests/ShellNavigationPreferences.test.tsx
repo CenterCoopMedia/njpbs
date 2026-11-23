@@ -55,6 +55,7 @@ function renderShell(data: ShellData, initialEntry = "/") {
           { path: "media", ...page("Media library") },
           { path: "reports/*", ...page("Reports") },
           { path: "resources/nj-politics", ...page("NJ politics") },
+          { path: "whats-new", ...page("What's new changelog") },
           { path: "settings/site", ...page("Admin settings") },
           { path: "*", ...page("Elsewhere") },
         ],
@@ -83,7 +84,12 @@ describe("primary navigation with per-account preferences", () => {
     );
     expect(screen.getByRole("link", { name: "Resources" })).toHaveAttribute("href", "/resources/nj-politics");
     expect(screen.getByText("NJ politics surface")).toBeInTheDocument();
-    expect(screen.queryByText("Use the Boardwalk guide, Resources, Broadcast schedule, the media library, Reports, or account settings.")).not.toBeInTheDocument();
+    expect(screen.queryByText(/^Use the Boardwalk guide,/)).not.toBeInTheDocument();
+  });
+
+  it.each(["/whats-new", "/whats-new/"])("opens %s directly for guide-only staff", (path) => {
+    renderShell(shell({ id: "staff", grants: [{ role: "staff" }] }, undefined), path);
+    expect(screen.getByText("What's new changelog surface")).toBeVisible();
   });
 
   it("offers Viewers their shared resources and report form without authoring access", () => {

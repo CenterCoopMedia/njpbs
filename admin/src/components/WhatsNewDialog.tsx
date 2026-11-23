@@ -1,16 +1,12 @@
 import "./WhatsNewDialog.css";
 import { useEffect, useRef, useState } from "react";
-import { instantToStationLocal } from "../../../packages/content-core/src/station-time";
 import type { WhatsNewNote } from "../data/whats-new";
+import { ROUTE_PATHS } from "../lib/routes";
 import { hasUnreadWhatsNew, markWhatsNewSeen } from "../lib/whats-new-seen";
-import { Button, InlineMessage } from "./ui/Primitives";
+import { Button, buttonClassName, InlineMessage } from "./ui/Primitives";
+import { Icon } from "./ui/Icon";
 import { LoadingIndicator } from "./ui/LoadingIndicator";
-
-const KIND_LABELS: Record<WhatsNewNote["kind"], string> = {
-  new: "New",
-  improved: "Improved",
-  fixed: "Fixed",
-};
+import { stationDateForNotes, WhatsNewNotes } from "./WhatsNewNotes";
 
 type NotesState =
   | { status: "idle" }
@@ -21,22 +17,8 @@ type NotesState =
 // The notes load on first open, so they stay out of the shell's startup bundle.
 const loadNotes = () => import("../data/whats-new").then(module => module.WHATS_NEW_NOTES);
 
-const monthHeading = new Intl.DateTimeFormat("en-US", { month: "long", year: "numeric", timeZone: "UTC" });
-const dayLabel = new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric", timeZone: "UTC" });
-
-function groupByMonth(notes: readonly WhatsNewNote[]) {
-  const groups: { month: string; notes: WhatsNewNote[] }[] = [];
-  for (const note of notes) {
-    const month = monthHeading.format(new Date(`${note.date}T00:00:00Z`));
-    const last = groups.at(-1);
-    if (last?.month === month) last.notes.push(note);
-    else groups.push({ month, notes: [note] });
-  }
-  return groups;
-}
-
 function recentNotes(notes: readonly WhatsNewNote[], now: number) {
-  const today = instantToStationLocal(new Date(now).toISOString()).slice(0, 10);
+  const today = stationDateForNotes(now);
   // Include today and the preceding 20 station dates, even across DST changes.
   const firstDay = new Date(`${today}T00:00:00Z`);
   firstDay.setUTCDate(firstDay.getUTCDate() - 20);
@@ -136,6 +118,15 @@ export function WhatsNewDialog({ userId, menuItem = false, initiallyOpen = false
               <span aria-hidden="true">×</span>
             </Button>
           </div>
+          <a
+            aria-label="View full changelog (opens in a new tab)"
+            className={buttonClassName("secondary", "standard", "whats-new-archive-link")}
+            href={ROUTE_PATHS.whatsNew}
+            rel="noopener noreferrer"
+            target="_blank"
+          >
+            View full changelog <Icon name="external-link" />
+          </a>
           {state.status === "loading" || state.status === "idle" ? (
             <LoadingIndicator label="Loading what's new" />
           ) : state.status === "error" ? (
@@ -146,25 +137,7 @@ export function WhatsNewDialog({ userId, menuItem = false, initiallyOpen = false
           ) : notes.length === 0 ? (
             <p>No changes in the last three weeks.</p>
           ) : (
-            <div className="whats-new-notes">
-              {groupByMonth(notes).map(group => (
-                <section key={group.month} aria-label={group.month}>
-                  <h3>{group.month}</h3>
-                  <ul>
-                    {group.notes.map(note => (
-                      <li key={`${note.date}-${note.title}`}>
-                        <p className="whats-new-meta">
-                          <time dateTime={note.date}>{dayLabel.format(new Date(`${note.date}T00:00:00Z`))}</time>
-                          <span className={`whats-new-kind whats-new-kind-${note.kind}`}>{KIND_LABELS[note.kind]}</span>
-                        </p>
-                        <h4>{note.title}</h4>
-                        <p>{note.body}</p>
-                      </li>
-                    ))}
-                  </ul>
-                </section>
-              ))}
-            </div>
+            <WhatsNewNotes notes={notes} inDialog />
           )}
         </div>
       </dialog>

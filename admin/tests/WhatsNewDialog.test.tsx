@@ -4,6 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { WhatsNewDialog } from "../src/components/WhatsNewDialog";
 import { LATEST_WHATS_NEW_ID } from "../src/lib/whats-new-seen";
 import { ControlPresentationProvider } from "../src/context/ControlPresentationContext";
+import { WhatsNewRoute } from "../src/routes/WhatsNewRoute";
 
 vi.mock("../src/data/whats-new", () => ({ WHATS_NEW_NOTES: [
   { date: "2026-11-02", kind: "new", title: "Future change", body: "Not released yet.", prs: [] },
@@ -82,6 +83,9 @@ describe("WhatsNewDialog", () => {
     const dialog = screen.getByRole("dialog", { name: "What's new" });
     expect(await within(dialog).findByText("No changes in the last three weeks.")).toBeVisible();
     expect(within(dialog).queryByRole("list")).not.toBeInTheDocument();
+    const archive = within(dialog).getByRole("link", { name: "View full changelog (opens in a new tab)" });
+    expect(archive).toHaveAttribute("href", "/whats-new");
+    expect(archive).toHaveAttribute("target", "_blank");
   });
 
   it("starts without the dot once the newest notes are seen", () => {
@@ -104,5 +108,17 @@ describe("WhatsNewDialog", () => {
     render(<ControlPresentationProvider value="text"><WhatsNewDialog userId="staff-1" /></ControlPresentationProvider>);
     expect(screen.getByRole("button", { name: /What's new/ })).toHaveClass("whats-new-launch");
     expect(screen.getByRole("button", { name: /What's new/ })).not.toHaveClass("whats-new-launch-text");
+  });
+});
+
+describe("What's new changelog", () => {
+  it("includes older notes and leaves the account's unread state alone", () => {
+    render(<WhatsNewRoute />);
+
+    const october = screen.getByRole("region", { name: "October 2026" });
+    expect(within(october).getByRole("heading", { level: 2 })).toHaveTextContent("October 2026");
+    expect(within(october).getByRole("heading", { level: 3, name: "First excluded day" })).toBeVisible();
+    expect(screen.queryByRole("heading", { name: "Future change" })).not.toBeInTheDocument();
+    expect(localStorage.length).toBe(0);
   });
 });
