@@ -88,7 +88,8 @@ describe("credential-free deploy verification", () => {
     const manifest = verifySteps.findIndex(row => row.run === "node scripts/component-runner.mjs functions manifest");
     expect(trustedScan).toBeGreaterThan(0);
     expect(render).toBeGreaterThan(trustedScan);
-    expect(verifySteps[render].run).toContain('"$RUNNER_TEMP/release-gate/scripts/render-development-config.mjs" --production');
+    expect(verifySteps[render].run).toContain('"$RUNNER_TEMP/release-gate/scripts/render-development-config.mjs" "${CMS_TARGET_RENDER_SCOPE:?}" --root');
+    expect(workflow.env.CMS_TARGET_RENDER_SCOPE).toBe("${{ inputs.target == 'development' && '--development' || '--production' }}");
     expect(manifest).toBeGreaterThan(render);
     expect(verifySteps[manifest].id).toBe("function_plan");
     expect(workflow.jobs.verify.outputs.function_targets).toBe("${{ steps.function_plan.outputs.function_targets }}");
@@ -99,7 +100,7 @@ describe("credential-free deploy verification", () => {
     }
     const preflight = workflow.jobs["firebase-preflight"].steps;
     const eventIam = preflight.find(row => row.name === "Verify selected event trigger IAM before mutation");
-    expect(eventIam.env.CLOUD_PUBLICATION_WAKE_ENVIRONMENT).toBe("production");
+    expect(eventIam.env.CLOUD_PUBLICATION_WAKE_ENVIRONMENT).toBe("${{ env.CMS_TARGET }}");
     expect(eventIam.env.CLOUD_PUBLICATION_WAKE_ENABLED).toBe("true");
     const probeAt = preflight.findIndex(row => row.name === "Check Containers reads before any provider mutation");
     expect(probeAt).toBeGreaterThan(0);
@@ -200,9 +201,9 @@ describe("Route D Cut A boundary placement", () => {
       const prepareAt = steps.findIndex(row => row.name === "Prepare the singleton contract runtime before credentials");
       expect(authAt).toBeGreaterThan(prepareAt);
       expect(authAt).toBeLessThan(captureAt);
-      expect(steps[authAt].with).toEqual({ credentials_json: "${{ secrets.FIREBASE_SERVICE_ACCOUNT }}", project_id: "njpbs-site" });
+      expect(steps[authAt].with).toEqual({ credentials_json: "${{ secrets.FIREBASE_SERVICE_ACCOUNT }}", project_id: "${{ env.CMS_TARGET_FIREBASE_PROJECT }}" });
       const result = spawnSync("bash", ["-c", `node() { test "$VITE_LIVE_PRODUCTION_ENABLED" = false && test "$(cat <&4)" = fixture-archive-access; }\n${capture.run}`], {
-        env: { PATH: process.env.PATH, RUNNER_TEMP: tmpdir(), GITHUB_WORKSPACE: "/fixture", DEPLOY_SHA: "a".repeat(40),
+        env: { PATH: process.env.PATH, RUNNER_TEMP: tmpdir(), GITHUB_WORKSPACE: "/fixture", DEPLOY_SHA: "a".repeat(40), CMS_TARGET: "production",
           VITE_LIVE_PRODUCTION_ENABLED: "false", CMS_PREVIEW_R2_CREDENTIAL: "fixture-archive-access" }, encoding: "utf8",
       });
       expect(result.status, result.stderr).toBe(0);
@@ -311,7 +312,7 @@ describe("Route D Cut A boundary placement", () => {
       PROVED_RUN_ID: "${{ needs.admin-contract.outputs.proof_run_id }}", PROVED_RUN_ATTEMPT: "${{ needs.admin-contract.outputs.proof_run_attempt }}" });
     expect(admin[binding].run).toContain(digest.run.match(/digest="\$\((.+)\)"/)[1]);
     expect(contractJob.outputs).toMatchObject({ proof_run_id: "${{ steps.admin_digest.outputs.run_id }}", proof_run_attempt: "${{ steps.admin_digest.outputs.run_attempt }}" });
-    expect(settlementJob.environment).toBe("production");
+    expect(settlementJob.environment).toBe("${{ inputs.target == 'development' && 'development' || 'production' }}");
     expect(JSON.stringify(settlement)).not.toMatch(/cms-smoke-gate|functions smoke|test:boot|ensure-panel-browser-deps|\bwrangler\b/);
     expect(JSON.stringify(production.jobs["live-smoke"])).not.toContain("FIREBASE_SERVICE_ACCOUNT");
     for (const steps of [contract, settlement]) {
@@ -354,6 +355,50 @@ describe("Route D Cut A boundary placement", () => {
         expect(row.with.path).not.toContain("cms-public-contract-private");
         if (row.with.name?.includes("public-contract")) expect(row.with.path).toMatch(/^\$\{\{ runner.temp \}\}\/cms-public-contract-summary-(?:preflight|before-upload|settlement)\.json$/);
       }
+    }
+  });
+});
+
+describe("CMS deploy target", () => {
+  const workflow = parse(deploy);
+  // Each value has the form `inputs.target == 'development' && <dev> || <production>`.
+  const branches = name => workflow.env[name].match(/^\$\{\{ inputs\.target == 'development' && (.+) \|\| (.+) \}\}$/).slice(1);
+  it("selects the GitHub environment and every system from one input, with production unchanged", () => {
+    expect(workflow.on.workflow_dispatch.inputs.target).toEqual({ description: expect.any(String), required: false,
+      default: "production", type: "choice", options: ["production", "development"] });
+    const environments = Object.entries(workflow.jobs).filter(([, job]) => job.environment).map(([name]) => name);
+    expect(environments).toHaveLength(9);
+    for (const name of environments) expect(workflow.jobs[name].environment).toBe("${{ inputs.target == 'development' && 'development' || 'production' }}");
+    expect(Object.fromEntries(["CMS_TARGET", "CMS_TARGET_FIREBASE_PROJECT", "CMS_TARGET_ADMIN_ORIGIN", "CMS_TARGET_API_ORIGIN",
+      "CMS_TARGET_PUBLIC_ORIGIN", "CMS_TARGET_MEDIA_ORIGIN", "CMS_TARGET_MEDIA_BUCKET", "CMS_TARGET_ADMIN_PAGES", "CMS_TARGET_RENDER_SCOPE"]
+      .map(name => [name, branches(name)]))).toEqual({
+      CMS_TARGET: ["'development'", "'production'"],
+      CMS_TARGET_FIREBASE_PROJECT: ["'njpbs-site-dev'", "'njpbs-site'"],
+      CMS_TARGET_ADMIN_ORIGIN: ["'https://dev-admin.njpbs.org'", "'https://admin.njpbs.org'"],
+      CMS_TARGET_API_ORIGIN: ["'https://dev-cms-api.njpbs.org'", "vars.CMS_PRODUCTION_API_ORIGIN"],
+      CMS_TARGET_PUBLIC_ORIGIN: ["'https://dev.njpbs.org'", "'https://njpbs.org'"],
+      CMS_TARGET_MEDIA_ORIGIN: ["'https://dev-media.njpbs.org'", "'https://media.njpbs.org'"],
+      CMS_TARGET_MEDIA_BUCKET: ["'njpbs-dev-media'", "vars.CMS_MEDIA_R2_BUCKET"],
+      CMS_TARGET_ADMIN_PAGES: ["'njpbs-dev-admin'", "'njpbs-admin'"],
+      CMS_TARGET_RENDER_SCOPE: ["'--development'", "'--production'"],
+    });
+    // Dev render inputs are empty in production, where the renderer ignores them.
+    for (const name of Object.keys(workflow.env).filter(name => name.startsWith("CMS_DEV_") || name === "CLOUDFLARE_DEV_PUBLIC_WORKER")) {
+      expect(branches(name)).toEqual([`vars.${name}`, "''"]);
+    }
+    expect(deploy).not.toMatch(/njpbs-site\.cloudfunctions|--project njpbs-site\b|project_id: njpbs-site$|environment: production$/m);
+  });
+
+  it("stops a development run before any mutation", () => {
+    const steps = workflow.jobs["admin-build"].steps;
+    const refusal = steps.findIndex(row => row.name === "Refuse development steps that still act on production systems");
+    expect(steps[refusal].if).toBe("inputs.target == 'development'");
+    expect(steps[refusal].run).toMatch(/exit 1\s*$/);
+    expect(refusal).toBe(steps.findIndex(row => row.name === "Require the target's deploy credentials") + 1);
+    expect(refusal).toBeLessThan(steps.findIndex(row => row.name === "Metered-API source scan (before any scanned code runs)"));
+    // Only the credential-free verify job runs beside admin-build.
+    for (const name of Object.keys(workflow.jobs).filter(name => !["admin-build", "verify"].includes(name))) {
+      expect(workflow.jobs[name].needs).toContain("admin-build");
     }
   });
 });

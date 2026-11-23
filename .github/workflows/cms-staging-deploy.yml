@@ -21,6 +21,14 @@ on:
         description: "Explicit full reviewed NEW commit SHA to deploy"
         required: true
         type: string
+      target:
+        description: "CMS to deploy: the production CMS or the dev CMS"
+        required: false
+        default: production
+        type: choice
+        options:
+          - production
+          - development
       release_dispatch_id:
         description: "Optional release CLI correlation ID for a deploy with default settings"
         required: false
@@ -63,7 +71,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: cms-staging-deploy
+  group: ${{ inputs.target == 'development' && 'cms-staging-deploy-development' || 'cms-staging-deploy' }}
   cancel-in-progress: false
 
 
@@ -75,12 +83,41 @@ env:
   CANONICAL_GITHUB_REPOSITORY: ${{ vars.CANONICAL_GITHUB_REPOSITORY }}
   CANONICAL_GITHUB_REPOSITORY_ID: ${{ vars.CANONICAL_GITHUB_REPOSITORY_ID }}
   VITE_CANONICAL_GITHUB_REPOSITORY: ${{ vars.CANONICAL_GITHUB_REPOSITORY }}
+  # Target record. The target input selects the GitHub environment (credentials
+  # and settings under the production names) and every system named below.
+  # Production evaluates to the values this workflow has always used. Names stay
+  # literal: repository variables hold production values, so a dev run must never
+  # fall back to one.
+  CMS_TARGET: ${{ inputs.target == 'development' && 'development' || 'production' }}
+  CMS_TARGET_FIREBASE_PROJECT: ${{ inputs.target == 'development' && 'njpbs-site-dev' || 'njpbs-site' }}
+  CMS_TARGET_ADMIN_ORIGIN: ${{ inputs.target == 'development' && 'https://dev-admin.njpbs.org' || 'https://admin.njpbs.org' }}
+  CMS_TARGET_API_ORIGIN: ${{ inputs.target == 'development' && 'https://dev-cms-api.njpbs.org' || vars.CMS_PRODUCTION_API_ORIGIN }}
+  CMS_TARGET_PUBLIC_ORIGIN: ${{ inputs.target == 'development' && 'https://dev.njpbs.org' || 'https://njpbs.org' }}
+  CMS_TARGET_MEDIA_ORIGIN: ${{ inputs.target == 'development' && 'https://dev-media.njpbs.org' || 'https://media.njpbs.org' }}
+  CMS_TARGET_MEDIA_BUCKET: ${{ inputs.target == 'development' && 'njpbs-dev-media' || vars.CMS_MEDIA_R2_BUCKET }}
+  CMS_TARGET_ADMIN_PAGES: ${{ inputs.target == 'development' && 'njpbs-dev-admin' || 'njpbs-admin' }}
+  CMS_TARGET_RENDER_SCOPE: ${{ inputs.target == 'development' && '--development' || '--production' }}
+  # The dev render writes these names into the dev configs; production renders none of them.
+  CLOUDFLARE_DEV_PUBLIC_WORKER: ${{ inputs.target == 'development' && vars.CLOUDFLARE_DEV_PUBLIC_WORKER || '' }}
+  CMS_DEV_ADMIN_ORIGIN: ${{ inputs.target == 'development' && vars.CMS_DEV_ADMIN_ORIGIN || '' }}
+  CMS_DEV_ADMIN_PAGES: ${{ inputs.target == 'development' && vars.CMS_DEV_ADMIN_PAGES || '' }}
+  CMS_DEV_API_ORIGIN: ${{ inputs.target == 'development' && vars.CMS_DEV_API_ORIGIN || '' }}
+  CMS_DEV_API_WORKER: ${{ inputs.target == 'development' && vars.CMS_DEV_API_WORKER || '' }}
+  CMS_DEV_MEDIA_BUCKET: ${{ inputs.target == 'development' && vars.CMS_DEV_MEDIA_BUCKET || '' }}
+  CMS_DEV_MEDIA_ORIGIN: ${{ inputs.target == 'development' && vars.CMS_DEV_MEDIA_ORIGIN || '' }}
+  CMS_DEV_PREVIEW_BUCKET: ${{ inputs.target == 'development' && vars.CMS_DEV_PREVIEW_BUCKET || '' }}
+  CMS_DEV_PREVIEW_ORIGIN: ${{ inputs.target == 'development' && vars.CMS_DEV_PREVIEW_ORIGIN || '' }}
+  CMS_DEV_PREVIEW_RENDERER: ${{ inputs.target == 'development' && vars.CMS_DEV_PREVIEW_RENDERER || '' }}
+  CMS_DEV_PREVIEW_STAFF_WORKER: ${{ inputs.target == 'development' && vars.CMS_DEV_PREVIEW_STAFF_WORKER || '' }}
+  CMS_DEV_PREVIEW_WORKER: ${{ inputs.target == 'development' && vars.CMS_DEV_PREVIEW_WORKER || '' }}
+  CMS_DEV_PUBLIC_ORIGIN: ${{ inputs.target == 'development' && vars.CMS_DEV_PUBLIC_ORIGIN || '' }}
+  CMS_DEV_SITE_PAGES: ${{ inputs.target == 'development' && vars.CMS_DEV_SITE_PAGES || '' }}
 
 jobs:
   admin-build:
     env:
       CMS_DEPLOY_OWNER: ${{ vars.CMS_DEPLOY_OWNER }}
-    environment: production
+    environment: ${{ inputs.target == 'development' && 'development' || 'production' }}
     # Use triggering_actor rather than actor so a collaborator cannot re-run a
     # deployment started by the owner. Repeat the check on every job because a partial
     # re-run does not re-evaluate jobs that already succeeded.
@@ -145,6 +182,43 @@ jobs:
           name: cms-release-source-identities
           path: ${{ runner.temp }}/cms-release-sources.json
           if-no-files-found: error
+      - name: Require the target's deploy credentials
+        env:
+          FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CMS_ADMIN_ACCESS_API_TOKEN: ${{ secrets.CMS_ADMIN_ACCESS_API_TOKEN }}
+          CMS_EDGE_ORIGIN_SECRET: ${{ secrets.CMS_EDGE_ORIGIN_SECRET }}
+          CMS_PREVIEW_R2_CREDENTIAL: ${{ secrets.CMS_PREVIEW_R2_CREDENTIAL }}
+          CMS_PREVIEW_SMOKE_CREDENTIAL: ${{ secrets.CMS_PREVIEW_SMOKE_CREDENTIAL }}
+        run: |
+          set -euo pipefail
+          missing=()
+          for name in FIREBASE_SERVICE_ACCOUNT CLOUDFLARE_ACCOUNT_ID CLOUDFLARE_API_TOKEN CMS_ADMIN_ACCESS_API_TOKEN \
+            CMS_EDGE_ORIGIN_SECRET CMS_PREVIEW_R2_CREDENTIAL CMS_PREVIEW_SMOKE_CREDENTIAL; do
+            if [ -z "${!name//[[:space:]]/}" ]; then missing+=("$name"); fi
+          done
+          if [ "${#missing[@]}" -gt 0 ]; then
+            echo "The $CMS_TARGET environment is missing deploy secrets: ${missing[*]}" >&2
+            exit 1
+          fi
+      # Delete each line as its step gains a development path (jawn-ops#1149).
+      - name: Refuse development steps that still act on production systems
+        if: inputs.target == 'development'
+        run: |
+          {
+            echo "The development target stops here before any mutation. These steps still name production:"
+            echo "- Functions: no functions-deployment.development.json; deploy-cms-function-batches, functions-secret-versions and the pre-deploy IAM check fix njpbs-site"
+            echo "- Functions migrations: the eight backfill and seed programs fix project njpbs-site"
+            echo "- CMS API: the Worker deploy selects the production wrangler config"
+            echo "- Receipts, plans, Functions configuration and retirement: the shared scripts accept only project njpbs-site and read production provider identities"
+            echo "- Live smoke: the Functions smoke accepts only the production API, Functions and Admin origins"
+            echo "- Preview renderer: deploy-cms-preview-cloud and the Containers read probe name the production renderer"
+            echo "- Admin: the Pages security check, the public authentication shell and the revision check name admin.njpbs.org"
+            echo "- Access: the publisher compatibility gate reads the dev public receipt without Access headers"
+            echo "- Source contract: older sources have no development path, so the release source must declare one"
+          } >&2
+          exit 1
       - name: Metered-API source scan (before any scanned code runs)
         run: node "$RUNNER_TEMP/admin-status-gate"/.github/scripts/metered-api-scan.mjs --target-root "$GITHUB_WORKSPACE"
       - name: Check out trusted configuration renderer
@@ -162,7 +236,7 @@ jobs:
         run: |
           set -euo pipefail
           mv .configuration-render-gate "$RUNNER_TEMP/configuration-render-gate"
-          node "$RUNNER_TEMP/configuration-render-gate/scripts/render-development-config.mjs" --production --root "$GITHUB_WORKSPACE"
+          node "$RUNNER_TEMP/configuration-render-gate/scripts/render-development-config.mjs" "${CMS_TARGET_RENDER_SCOPE:?}" --root "$GITHUB_WORKSPACE"
       - name: Metered-API source scan for current Admin status gate
         working-directory: ${{ runner.temp }}/admin-status-gate
         run: node .github/scripts/metered-api-scan.mjs
@@ -172,8 +246,8 @@ jobs:
           CMS_PRODUCTION_INSTALL_READER_BRIDGE: ${{ inputs.install_reader_bridge }}
           CMS_PRODUCTION_READER_OPERATION_ID: ${{ inputs.reader_operation_id }}
           CMS_PRODUCTION_READER_INSTALL_AUTHORIZATION: ${{ inputs.reader_install_authorization }}
-          CMS_DEPLOYMENT_ENVIRONMENT: production
-          FIREBASE_PROJECT_ID: njpbs-site
+          CMS_DEPLOYMENT_ENVIRONMENT: ${{ env.CMS_TARGET }}
+          FIREBASE_PROJECT_ID: ${{ env.CMS_TARGET_FIREBASE_PROJECT }}
           FORCE_FIREBASE: ${{ inputs.force_firebase }}
           DEPLOY_SHA: ${{ steps.reviewed_ref.outputs.deploy_sha }}
         run: node --input-type=module -e 'const { productionReaderBinding } = await import((await import("node:url")).pathToFileURL(process.env.RUNNER_TEMP + "/admin-status-gate/scripts/lib/production-reader-authorization.mjs").href); productionReaderBinding();'
@@ -185,7 +259,7 @@ jobs:
           EMERGENCY_AUTHORIZATION: ${{ inputs.emergency_authorization || '' }}
         run: node "$RUNNER_TEMP/admin-status-gate"/.github/scripts/require-main-ci.mjs
       - name: Require CMS deploy compatibility floor
-        run: node "$RUNNER_TEMP/admin-status-gate"/.github/scripts/cms-deploy-compatibility.mjs --target-root "$GITHUB_WORKSPACE" --publisher-receipt-url https://njpbs.org/_publication.json
+        run: node "$RUNNER_TEMP/admin-status-gate"/.github/scripts/cms-deploy-compatibility.mjs --target-root "$GITHUB_WORKSPACE" --publisher-receipt-url "$CMS_TARGET_PUBLIC_ORIGIN/_publication.json"
       - name: Remove checkout credential before build tools
         run: |
           set -euo pipefail
@@ -206,7 +280,7 @@ jobs:
         env:
           CMS_PREVIEW_SMOKE_CREDENTIAL: ${{ secrets.CMS_PREVIEW_SMOKE_CREDENTIAL }}
           CMS_PREVIEW_SMOKE_TARGET: ${{ vars.CMS_PREVIEW_SMOKE_TARGET }}
-        run: node "$RUNNER_TEMP/admin-status-gate"/scripts/smoke-signed-in-preview.mjs production --check-config
+        run: node "$RUNNER_TEMP/admin-status-gate"/scripts/smoke-signed-in-preview.mjs "$CMS_TARGET" --check-config
       - name: Install workspace deps
         run: npm ci --ignore-scripts
       - name: Preflight admin env
@@ -239,8 +313,14 @@ jobs:
             printf ' - %s\n' "${missing[@]}" >&2
             exit 1
           fi
-          if [ "$VITE_FUNCTIONS_BASE_URL" != "${CMS_PRODUCTION_API_ORIGIN:-}" ]; then
-            echo "VITE_FUNCTIONS_BASE_URL must match the configured production API origin" >&2
+          if [ "$VITE_FUNCTIONS_BASE_URL" != "${CMS_TARGET_API_ORIGIN:-}" ]; then
+            echo "VITE_FUNCTIONS_BASE_URL must match the $CMS_TARGET API origin" >&2
+            exit 1
+          fi
+          # Repository variables hold production values; the dev environment must override each.
+          if [ "$VITE_FIREBASE_PROJECT_ID" != "$CMS_TARGET_FIREBASE_PROJECT" ] \
+            || [ "$VITE_FIREBASE_AUTH_DOMAIN" != "$CMS_TARGET_FIREBASE_PROJECT.firebaseapp.com" ]; then
+            echo "VITE_FIREBASE_PROJECT_ID and VITE_FIREBASE_AUTH_DOMAIN must name the $CMS_TARGET Firebase project" >&2
             exit 1
           fi
       - name: Require exact-draft preview readiness
@@ -292,17 +372,17 @@ jobs:
           # The trusted main checkout builds this metadata, like the other gate scripts.
           manifest="$({
             node "$RUNNER_TEMP/admin-status-gate/scripts/admin-status-manifest.mjs" \
-              --environment Production \
+              --environment "${CMS_TARGET^}" \
               --milestones "$RUNNER_TEMP/admin-milestones.json" \
               --repository "$GITHUB_REPOSITORY" \
               --revision "$ADMIN_STATUS_REVISION"
           })"
           printf 'ADMIN_STATUS_MANIFEST_BASE64=%s\n' "$manifest" >> "$GITHUB_ENV"
       - name: Report unavailable Studio connector storage
-        if: vars.CMS_MEDIA_MASTER_R2_BUCKET == ''
+        if: inputs.target == 'development' || vars.CMS_MEDIA_MASTER_R2_BUCKET == ''
         run: echo "Studio connector download is unavailable because private master-media storage is not configured."
       - name: Build the exact-source Studio connector package
-        if: vars.CMS_MEDIA_MASTER_R2_BUCKET != ''
+        if: inputs.target != 'development' && vars.CMS_MEDIA_MASTER_R2_BUCKET != ''
         env:
           # Supplier layer for the source readers in PR #20; see docs/config/studio-build-suppliers.md.
           CMS_STUDIO_API_ORIGIN: ${{ vars.CMS_STUDIO_API_ORIGIN }}
@@ -313,7 +393,7 @@ jobs:
           npm ci --ignore-scripts --prefix agents/vmix
           node agents/vmix/build-windows.mjs --source-sha "$DEPLOY_SHA" --output "$RUNNER_TEMP/studio-connector"
       - name: Retain the Studio connector package for deployment
-        if: vars.CMS_MEDIA_MASTER_R2_BUCKET != ''
+        if: inputs.target != 'development' && vars.CMS_MEDIA_MASTER_R2_BUCKET != ''
         uses: actions/upload-artifact@v7
         with:
           name: cms-studio-connector
@@ -437,7 +517,7 @@ jobs:
           node preview-renderer/node_modules/wrangler/bin/wrangler.js types --config preview-renderer/wrangler.jsonc --strict-vars=false --include-runtime=false --check preview-renderer/worker-configuration.d.ts
           node scripts/check-prepared-worker.mjs preview-renderer "$(git rev-parse HEAD)"
       - name: Render deployment resource configuration
-        run: node "$RUNNER_TEMP/release-gate/scripts/render-development-config.mjs" --production --root "$GITHUB_WORKSPACE"
+        run: node "$RUNNER_TEMP/release-gate/scripts/render-development-config.mjs" "${CMS_TARGET_RENDER_SCOPE:?}" --root "$GITHUB_WORKSPACE"
       - name: Require the deployed function manifest to match the smoke gate
         id: function_plan
         env:
@@ -450,7 +530,7 @@ jobs:
     permissions:
       contents: read
       actions: read
-    environment: production
+    environment: ${{ inputs.target == 'development' && 'development' || 'production' }}
     if: >-
       (vars.CANONICAL_GITHUB_REPOSITORY != '' && vars.CANONICAL_GITHUB_REPOSITORY_ID != '' && github.repository == vars.CANONICAL_GITHUB_REPOSITORY && github.repository_id == vars.CANONICAL_GITHUB_REPOSITORY_ID) &&
       (vars.CMS_DEPLOY_OWNER != '' && github.triggering_actor == vars.CMS_DEPLOY_OWNER) && github.ref == 'refs/heads/main'
@@ -543,7 +623,7 @@ jobs:
         run: |
           set -euo pipefail
           mv .configuration-render-gate "$RUNNER_TEMP/configuration-render-gate"
-          node "$RUNNER_TEMP/configuration-render-gate/scripts/render-development-config.mjs" --production --root "$GITHUB_WORKSPACE"
+          node "$RUNNER_TEMP/configuration-render-gate/scripts/render-development-config.mjs" "${CMS_TARGET_RENDER_SCOPE:?}" --root "$GITHUB_WORKSPACE"
       - name: Metered-API source scan for current CMS smoke gate
         working-directory: ${{ runner.temp }}/cms-smoke-gate
         run: node .github/scripts/metered-api-scan.mjs
@@ -561,13 +641,13 @@ jobs:
           DEPLOY_SHA: ${{ needs.admin-build.outputs.deploy_sha }}
         run: >-
           node --import ./site/node_modules/tsx/dist/loader.mjs "$RUNNER_TEMP/cms-contract-source/scripts/check-cms-public-contract.mjs" prepare
-          --environment production --candidate "$DEPLOY_SHA" --source-root "$GITHUB_WORKSPACE"
+          --environment "$CMS_TARGET" --candidate "$DEPLOY_SHA" --source-root "$GITHUB_WORKSPACE"
           --state-directory "$RUNNER_TEMP/cms-public-contract-private"
       - name: Authenticate Firebase deploy service account
         uses: google-github-actions/auth@7c6bc770dae815cd3e89ee6cdf493a5fab2cc093 # v3
         with:
           credentials_json: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
-          project_id: njpbs-site
+          project_id: ${{ env.CMS_TARGET_FIREBASE_PROJECT }}
       - name: Require the legacy preview protocol before provider mutations
         run: node scripts/component-runner.mjs functions protocol
       - name: Verify the singleton public contract at preflight
@@ -590,7 +670,7 @@ jobs:
           FORCE_FIREBASE: ${{ inputs.force_firebase }}
           CMS_DEPLOY_MIGRATIONS: ${{ inputs.migrations }}
           CMS_EDGE_ORIGIN_SECRET: ${{ secrets.CMS_EDGE_ORIGIN_SECRET }}
-          CLOUD_PUBLICATION_WAKE_ENVIRONMENT: production
+          CLOUD_PUBLICATION_WAKE_ENVIRONMENT: ${{ env.CMS_TARGET }}
           CLOUD_PUBLICATION_WAKE_ENABLED: "true"
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
@@ -601,7 +681,7 @@ jobs:
           set -euo pipefail
           umask 077
           node --import ./site/node_modules/tsx/dist/loader.mjs "$RUNNER_TEMP/cms-contract-source/scripts/check-cms-public-contract.mjs" prove \
-            --environment production --boundary preflight --candidate "$DEPLOY_SHA" --source-root "$GITHUB_WORKSPACE" \
+            --environment "$CMS_TARGET" --boundary preflight --candidate "$DEPLOY_SHA" --source-root "$GITHUB_WORKSPACE" \
             --summary "$RUNNER_TEMP/cms-public-contract-summary-preflight.json" \
             --state-directory "$RUNNER_TEMP/cms-public-contract-private" 4<<< "$CMS_PREVIEW_R2_CREDENTIAL"
       - name: Retain only the sanitized singleton contract summary
@@ -614,7 +694,7 @@ jobs:
       - name: Set up Google Cloud CLI
         uses: google-github-actions/setup-gcloud@aa5489c8933f4cc7a4f7d45035b3b1440c9c10db # v3
         with:
-          project_id: njpbs-site
+          project_id: ${{ env.CMS_TARGET_FIREBASE_PROJECT }}
       - name: Check Containers reads before any provider mutation
         if: vars.CMS_PREVIEW_CLOUD_ENABLED == 'true'
         env:
@@ -631,7 +711,7 @@ jobs:
           fi
           secret_state="$(gcloud secrets versions describe latest \
             --secret=PUBLISHED_POST_READER_HMAC_KEY \
-            --project=njpbs-site --format='value(state)')" || {
+            --project="$CMS_TARGET_FIREBASE_PROJECT" --format='value(state)')" || {
             echo "PUBLISHED_POST_READER_HMAC_KEY must already have an enabled version" >&2
             exit 1
           }
@@ -666,7 +746,7 @@ jobs:
         env:
           DEPLOY_SHA: ${{ needs.admin-build.outputs.deploy_sha }}
           FIREBASE_DEPLOY_SERVICE_ACCOUNT: ${{ vars.FIREBASE_DEPLOY_SERVICE_ACCOUNT }}
-          CLOUD_PUBLICATION_WAKE_ENVIRONMENT: production
+          CLOUD_PUBLICATION_WAKE_ENVIRONMENT: ${{ env.CMS_TARGET }}
           CLOUD_PUBLICATION_WAKE_ENABLED: "true"
         run: node "$RUNNER_TEMP/cms-smoke-gate/scripts/check-cms-secret-iam.mjs" "$GITHUB_WORKSPACE" --pre-deploy
       - name: Verify Admin App Check registration
@@ -736,7 +816,7 @@ jobs:
           FORCE_FIREBASE: ${{ inputs.force_firebase }}
           CMS_DEPLOY_MIGRATIONS: ${{ inputs.migrations }}
           CMS_EDGE_ORIGIN_SECRET: ${{ secrets.CMS_EDGE_ORIGIN_SECRET }}
-          CLOUD_PUBLICATION_WAKE_ENVIRONMENT: production
+          CLOUD_PUBLICATION_WAKE_ENVIRONMENT: ${{ env.CMS_TARGET }}
           CLOUD_PUBLICATION_WAKE_ENABLED: "true"
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
@@ -748,21 +828,21 @@ jobs:
         if: always()
         run: rm -f "$RUNNER_TEMP/firebase-auth-config.json"
       - name: Download the exact-source Studio connector package
-        if: vars.CMS_MEDIA_MASTER_R2_BUCKET != ''
+        if: inputs.target != 'development' && vars.CMS_MEDIA_MASTER_R2_BUCKET != ''
         uses: actions/download-artifact@v8
         with:
           name: cms-studio-connector
           path: ${{ runner.temp }}/studio-connector/
       - name: Store the Studio connector in private media storage
-        if: vars.CMS_MEDIA_MASTER_R2_BUCKET != ''
+        if: inputs.target != 'development' && vars.CMS_MEDIA_MASTER_R2_BUCKET != ''
         env:
           DEPLOY_SHA: ${{ needs.admin-build.outputs.deploy_sha }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           CMS_MEDIA_MASTER_R2_BUCKET: ${{ vars.CMS_MEDIA_MASTER_R2_BUCKET }}
         run: |
           set -euo pipefail
-          id=$(npx --no-install firebase --non-interactive functions:secrets:access CMS_MEDIA_R2_ACCESS_KEY_ID --project njpbs-site)
-          secret=$(npx --no-install firebase --non-interactive functions:secrets:access CMS_MEDIA_R2_SECRET_ACCESS_KEY --project njpbs-site)
+          id=$(npx --no-install firebase --non-interactive functions:secrets:access CMS_MEDIA_R2_ACCESS_KEY_ID --project "$CMS_TARGET_FIREBASE_PROJECT")
+          secret=$(npx --no-install firebase --non-interactive functions:secrets:access CMS_MEDIA_R2_SECRET_ACCESS_KEY --project "$CMS_TARGET_FIREBASE_PROJECT")
           echo "::add-mask::$id"
           echo "::add-mask::$secret"
           if [[ -z "$id" || -z "$secret" ]]; then
@@ -786,7 +866,7 @@ jobs:
     # Deploy the origin functions first. A new edge route must never forward to
     # a function name that Firebase has not made available yet.
     needs: [admin-build, firebase-preflight, firebase]
-    environment: production
+    environment: ${{ inputs.target == 'development' && 'development' || 'production' }}
     if: >-
       (vars.CANONICAL_GITHUB_REPOSITORY != '' && vars.CANONICAL_GITHUB_REPOSITORY_ID != '' && github.repository == vars.CANONICAL_GITHUB_REPOSITORY && github.repository_id == vars.CANONICAL_GITHUB_REPOSITORY_ID) &&
       (vars.CMS_DEPLOY_OWNER != '' && github.triggering_actor == vars.CMS_DEPLOY_OWNER) && github.ref == 'refs/heads/main'
@@ -831,7 +911,7 @@ jobs:
       - name: Metered-API source scan (before any scanned code runs)
         run: node "$RUNNER_TEMP/release-gate"/.github/scripts/metered-api-scan.mjs --target-root "$GITHUB_WORKSPACE"
       - name: Render deployment resource configuration
-        run: node "$RUNNER_TEMP/release-gate/scripts/render-development-config.mjs" --production --root "$GITHUB_WORKSPACE"
+        run: node "$RUNNER_TEMP/release-gate/scripts/render-development-config.mjs" "${CMS_TARGET_RENDER_SCOPE:?}" --root "$GITHUB_WORKSPACE"
       - name: Refuse the retired settings-probe bypass
         run: |
           set -euo pipefail
@@ -899,8 +979,8 @@ jobs:
           CMS_PRODUCTION_INSTALL_READER_BRIDGE: ${{ inputs.install_reader_bridge }}
           CMS_PRODUCTION_READER_OPERATION_ID: ${{ inputs.reader_operation_id }}
           CMS_PRODUCTION_READER_INSTALL_AUTHORIZATION: ${{ inputs.reader_install_authorization }}
-          CMS_DEPLOYMENT_ENVIRONMENT: production
-          FIREBASE_PROJECT_ID: njpbs-site
+          CMS_DEPLOYMENT_ENVIRONMENT: ${{ env.CMS_TARGET }}
+          FIREBASE_PROJECT_ID: ${{ env.CMS_TARGET_FIREBASE_PROJECT }}
           FORCE_FIREBASE: ${{ inputs.force_firebase }}
           DEPLOY_SHA: ${{ needs.admin-build.outputs.deploy_sha }}
           CMS_PREVIEW_FIREBASE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
@@ -935,10 +1015,10 @@ jobs:
           # A first custom-domain request can receive a negatively cached DNS
           # miss. Resolve through a fresh DoH path and allow propagation time.
           retry_args=(--retry 18 --retry-delay 10 --retry-max-time 180 --retry-all-errors --doh-url https://1.1.1.1/dns-query)
-          test "$(curl "${retry_args[@]}" --silent --show-error --output /dev/null --write-out '%{http_code}' "${CMS_PRODUCTION_API_ORIGIN}/health")" = "200"
+          test "$(curl "${retry_args[@]}" --silent --show-error --output /dev/null --write-out '%{http_code}' "${CMS_TARGET_API_ORIGIN}/health")" = "200"
           test "$(curl "${retry_args[@]}" --silent --show-error --output /dev/null --write-out '%{http_code}' \
             --request POST --header 'Content-Type: application/json' --data '{}' \
-            "${CMS_PRODUCTION_API_ORIGIN}/cmsListContent")" = "401"
+            "${CMS_TARGET_API_ORIGIN}/cmsListContent")" = "401"
       - name: Verify legacy settings transition boundaries before Admin
         run: |
           set -euo pipefail
@@ -963,13 +1043,13 @@ jobs:
           }
           for endpoint in cmsPublishSettings; do
             expect_transition_status 401 "edge $endpoint" \
-              --request POST --header 'Origin: https://admin.njpbs.org' \
+              --request POST --header "Origin: $CMS_TARGET_ADMIN_ORIGIN" \
               --header 'Content-Type: application/json' --data '{}' \
-              "${CMS_PRODUCTION_API_ORIGIN}/$endpoint"
+              "${CMS_TARGET_API_ORIGIN}/$endpoint"
             expect_transition_status 403 "direct origin $endpoint" \
-              --request POST --header 'Origin: https://admin.njpbs.org' \
+              --request POST --header "Origin: $CMS_TARGET_ADMIN_ORIGIN" \
               --header 'Content-Type: application/json' --data '{}' \
-              "https://us-central1-njpbs-site.cloudfunctions.net/$endpoint"
+              "https://us-central1-$CMS_TARGET_FIREBASE_PROJECT.cloudfunctions.net/$endpoint"
           done
       - name: Record the completed CMS API receipt
         if: steps.cms_api_plan.outputs.mutated != 'false' && !inputs.install_reader_bridge
@@ -993,8 +1073,8 @@ jobs:
           CMS_PRODUCTION_INSTALL_READER_BRIDGE: ${{ inputs.install_reader_bridge }}
           CMS_PRODUCTION_READER_OPERATION_ID: ${{ inputs.reader_operation_id }}
           CMS_PRODUCTION_READER_INSTALL_AUTHORIZATION: ${{ inputs.reader_install_authorization }}
-          CMS_DEPLOYMENT_ENVIRONMENT: production
-          FIREBASE_PROJECT_ID: njpbs-site
+          CMS_DEPLOYMENT_ENVIRONMENT: ${{ env.CMS_TARGET }}
+          FIREBASE_PROJECT_ID: ${{ env.CMS_TARGET_FIREBASE_PROJECT }}
           FORCE_FIREBASE: ${{ inputs.force_firebase }}
           DEPLOY_SHA: ${{ needs.admin-build.outputs.deploy_sha }}
           CMS_PREVIEW_FIREBASE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
@@ -1021,7 +1101,7 @@ jobs:
     env:
       CMS_DEPLOY_OWNER: ${{ vars.CMS_DEPLOY_OWNER }}
     needs: [admin-build, firebase-preflight, verify]
-    environment: production
+    environment: ${{ inputs.target == 'development' && 'development' || 'production' }}
     if: >-
       (vars.CANONICAL_GITHUB_REPOSITORY != '' && vars.CANONICAL_GITHUB_REPOSITORY_ID != '' && github.repository == vars.CANONICAL_GITHUB_REPOSITORY && github.repository_id == vars.CANONICAL_GITHUB_REPOSITORY_ID) &&
       (vars.CMS_DEPLOY_OWNER != '' && github.triggering_actor == vars.CMS_DEPLOY_OWNER) && github.ref == 'refs/heads/main'
@@ -1064,7 +1144,7 @@ jobs:
           CMS_TRUSTED_WORKFLOW_SHA: ${{ github.sha }}
         run: node "$RUNNER_TEMP/release-gate"/.github/scripts/require-cms-release-sources.mjs
       - name: Render deployment resource configuration
-        run: node "$RUNNER_TEMP/release-gate/scripts/render-development-config.mjs" --production --root "$GITHUB_WORKSPACE"
+        run: node "$RUNNER_TEMP/release-gate/scripts/render-development-config.mjs" "${CMS_TARGET_RENDER_SCOPE:?}" --root "$GITHUB_WORKSPACE"
       - name: Metered-API source scan (before any scanned code runs)
         run: node "$RUNNER_TEMP/release-gate"/.github/scripts/metered-api-scan.mjs --target-root "$GITHUB_WORKSPACE"
       - uses: actions/setup-node@v7
@@ -1109,15 +1189,15 @@ jobs:
           umask 077
           printf '%s' "$SA" > "$credentials_path"
           project_id="$(node -e "const fs = require('node:fs'); const data = JSON.parse(fs.readFileSync(process.argv[1], 'utf8')); if (!data.project_id) process.exit(1); process.stdout.write(data.project_id);" "$credentials_path")"
-          if [ "$project_id" != "njpbs-site" ]; then
-            echo "FIREBASE_SERVICE_ACCOUNT project_id must be njpbs-site" >&2
+          if [ "$project_id" != "$CMS_TARGET_FIREBASE_PROJECT" ]; then
+            echo "FIREBASE_SERVICE_ACCOUNT project_id must be $CMS_TARGET_FIREBASE_PROJECT" >&2
             exit 1
           fi
           echo "GOOGLE_APPLICATION_CREDENTIALS=$credentials_path" >> "$GITHUB_ENV"
       - name: Set up Google Cloud CLI for Functions IAM
         uses: google-github-actions/setup-gcloud@aa5489c8933f4cc7a4f7d45035b3b1440c9c10db # v3
         with:
-          project_id: njpbs-site
+          project_id: ${{ env.CMS_TARGET_FIREBASE_PROJECT }}
       - name: Require the legacy preview protocol before Firebase mutation
         run: node scripts/component-runner.mjs functions protocol
       - name: Revalidate the selective release baseline before mutation
@@ -1134,8 +1214,8 @@ jobs:
           CMS_PRODUCTION_INSTALL_READER_BRIDGE: ${{ inputs.install_reader_bridge }}
           CMS_PRODUCTION_READER_OPERATION_ID: ${{ inputs.reader_operation_id }}
           CMS_PRODUCTION_READER_INSTALL_AUTHORIZATION: ${{ inputs.reader_install_authorization }}
-          CMS_DEPLOYMENT_ENVIRONMENT: production
-          FIREBASE_PROJECT_ID: njpbs-site
+          CMS_DEPLOYMENT_ENVIRONMENT: ${{ env.CMS_TARGET }}
+          FIREBASE_PROJECT_ID: ${{ env.CMS_TARGET_FIREBASE_PROJECT }}
           FORCE_FIREBASE: ${{ inputs.force_firebase }}
           DEPLOY_SHA: ${{ needs.admin-build.outputs.deploy_sha }}
         run: node scripts/production-reader-deployment.mjs preflight functions
@@ -1155,7 +1235,7 @@ jobs:
         env:
           DEPLOY_SHA: ${{ needs.admin-build.outputs.deploy_sha }}
           FUNCTION_TARGETS: ${{ needs.verify.outputs.function_targets }}
-          CLOUD_PUBLICATION_WAKE_ENVIRONMENT: production
+          CLOUD_PUBLICATION_WAKE_ENVIRONMENT: ${{ env.CMS_TARGET }}
           CLOUD_PUBLICATION_WAKE_ENABLED: "true"
         run: node scripts/component-runner.mjs functions prepare
       - name: Mark the renderer receipt in progress
@@ -1205,8 +1285,8 @@ jobs:
           CMS_PRODUCTION_INSTALL_READER_BRIDGE: ${{ inputs.install_reader_bridge }}
           CMS_PRODUCTION_READER_OPERATION_ID: ${{ inputs.reader_operation_id }}
           CMS_PRODUCTION_READER_INSTALL_AUTHORIZATION: ${{ inputs.reader_install_authorization }}
-          CMS_DEPLOYMENT_ENVIRONMENT: production
-          FIREBASE_PROJECT_ID: njpbs-site
+          CMS_DEPLOYMENT_ENVIRONMENT: ${{ env.CMS_TARGET }}
+          FIREBASE_PROJECT_ID: ${{ env.CMS_TARGET_FIREBASE_PROJECT }}
           FORCE_FIREBASE: ${{ inputs.force_firebase }}
           DEPLOY_SHA: ${{ needs.admin-build.outputs.deploy_sha }}
         run: node scripts/production-reader-deployment.mjs start functions
@@ -1215,7 +1295,7 @@ jobs:
         env:
           DEPLOY_SHA: ${{ needs.admin-build.outputs.deploy_sha }}
           FUNCTION_TARGETS: ${{ needs.verify.outputs.function_targets }}
-          CLOUD_PUBLICATION_WAKE_ENVIRONMENT: production
+          CLOUD_PUBLICATION_WAKE_ENVIRONMENT: ${{ env.CMS_TARGET }}
           CLOUD_PUBLICATION_WAKE_ENABLED: "true"
         run: node scripts/component-runner.mjs functions prepare
       - name: Backfill page seed media records
@@ -1230,21 +1310,21 @@ jobs:
         # GitHub provisioning secrets may be empty once the versions exist.
         env:
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-          CMS_MEDIA_R2_BUCKET: ${{ vars.CMS_MEDIA_R2_BUCKET }}
+          CMS_MEDIA_R2_BUCKET: ${{ env.CMS_TARGET_MEDIA_BUCKET }}
         run: |
           set -euo pipefail
           CMS_MEDIA_R2_ACCESS_KEY_ID="$(
             npx --no-install firebase --non-interactive functions:secrets:access \
-              CMS_MEDIA_R2_ACCESS_KEY_ID --project njpbs-site
+              CMS_MEDIA_R2_ACCESS_KEY_ID --project "$CMS_TARGET_FIREBASE_PROJECT"
           )"
           export CMS_MEDIA_R2_ACCESS_KEY_ID
           CMS_MEDIA_R2_SECRET_ACCESS_KEY="$(
             npx --no-install firebase --non-interactive functions:secrets:access \
-              CMS_MEDIA_R2_SECRET_ACCESS_KEY --project njpbs-site
+              CMS_MEDIA_R2_SECRET_ACCESS_KEY --project "$CMS_TARGET_FIREBASE_PROJECT"
           )"
           export CMS_MEDIA_R2_SECRET_ACCESS_KEY
           export CMS_MEDIA_R2_ENDPOINT="https://${CLOUDFLARE_ACCOUNT_ID}.r2.cloudflarestorage.com"
-          export CMS_MEDIA_PUBLIC_ORIGIN="https://media.njpbs.org"
+          export CMS_MEDIA_PUBLIC_ORIGIN="$CMS_TARGET_MEDIA_ORIGIN"
           node scripts/backfill-media-thumbnails.mjs --apply < "$GOOGLE_APPLICATION_CREDENTIALS"
       - name: Seed and verify the managed media-category registry
         if: needs.firebase-preflight.outputs.functions_mutated == 'true' || contains(format(',{0},', needs.firebase-preflight.outputs.selected_migrations), ',media-categories,')
@@ -1294,7 +1374,7 @@ jobs:
         # successful backend deploy can release the reviewed admin artifact.
         run: |
           npx --no-install firebase functions:artifacts:setpolicy \
-            --project njpbs-site \
+            --project "$CMS_TARGET_FIREBASE_PROJECT" \
             --location us-central1 \
             --days 7 \
             --force
@@ -1317,7 +1397,7 @@ jobs:
         if: vars.CMS_PREVIEW_CLOUD_ENABLED == 'true' && needs.firebase-preflight.outputs.preview_pause_late == 'true'
         run: |
           npx --no-install firebase deploy \
-            --project njpbs-site \
+            --project "$CMS_TARGET_FIREBASE_PROJECT" \
             --only "firestore:rules,firestore:indexes,storage" \
             --non-interactive
       - name: Deploy ordinary Functions before the preview pause
@@ -1329,7 +1409,7 @@ jobs:
           CMS_FUNCTION_DEPLOY_TARGETS: ${{ needs.firebase-preflight.outputs.functions_before_preview }}
           CMS_PREVIEW_FUNCTION_TARGETS: ${{ needs.firebase-preflight.outputs.functions_during_preview }}
           CMS_FUNCTION_DEPLOY_PHASE: before-preview
-          CLOUD_PUBLICATION_WAKE_ENVIRONMENT: production
+          CLOUD_PUBLICATION_WAKE_ENVIRONMENT: ${{ env.CMS_TARGET }}
           CLOUD_PUBLICATION_WAKE_ENABLED: "true"
         run: node scripts/component-runner.mjs functions deploy
       - name: Pause preview admission before the preview Functions subset
@@ -1354,7 +1434,7 @@ jobs:
           DEPLOY_SHA: ${{ needs.admin-build.outputs.deploy_sha }}
           CMS_FUNCTION_DEPLOY_TARGETS: ${{ vars.CMS_PREVIEW_CLOUD_ENABLED == 'true' && needs.firebase-preflight.outputs.preview_pause_late == 'true' && needs.firebase-preflight.outputs.functions_during_preview || needs.firebase-preflight.outputs.function_deploy_targets }}
           FUNCTION_TARGETS: ${{ needs.verify.outputs.function_targets }}
-          CLOUD_PUBLICATION_WAKE_ENVIRONMENT: production
+          CLOUD_PUBLICATION_WAKE_ENVIRONMENT: ${{ env.CMS_TARGET }}
           CLOUD_PUBLICATION_WAKE_ENABLED: "true"
         run: |
           set -euo pipefail
@@ -1363,7 +1443,7 @@ jobs:
             exit 1
           fi
           if [ "$FIRESTORE_DEPLOYED_BEFORE_PREVIEW" != success ]; then
-            npx --no-install firebase deploy --project njpbs-site \
+            npx --no-install firebase deploy --project "$CMS_TARGET_FIREBASE_PROJECT" \
               --only "firestore:rules,firestore:indexes,storage" --non-interactive
           fi
           node scripts/component-runner.mjs functions deploy
@@ -1455,8 +1535,8 @@ jobs:
           CMS_PRODUCTION_INSTALL_READER_BRIDGE: ${{ inputs.install_reader_bridge }}
           CMS_PRODUCTION_READER_OPERATION_ID: ${{ inputs.reader_operation_id }}
           CMS_PRODUCTION_READER_INSTALL_AUTHORIZATION: ${{ inputs.reader_install_authorization }}
-          CMS_DEPLOYMENT_ENVIRONMENT: production
-          FIREBASE_PROJECT_ID: njpbs-site
+          CMS_DEPLOYMENT_ENVIRONMENT: ${{ env.CMS_TARGET }}
+          FIREBASE_PROJECT_ID: ${{ env.CMS_TARGET_FIREBASE_PROJECT }}
           FORCE_FIREBASE: ${{ inputs.force_firebase }}
           DEPLOY_SHA: ${{ needs.admin-build.outputs.deploy_sha }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
@@ -1466,7 +1546,7 @@ jobs:
         if: needs.firebase-preflight.outputs.functions_mutated != 'true'
         env:
           FUNCTION_TARGETS: ${{ needs.verify.outputs.function_targets }}
-          CLOUD_PUBLICATION_WAKE_ENVIRONMENT: production
+          CLOUD_PUBLICATION_WAKE_ENVIRONMENT: ${{ env.CMS_TARGET }}
           CLOUD_PUBLICATION_WAKE_ENABLED: "true"
         run: node scripts/component-runner.mjs functions verify
       - name: Deploy Firestore and Storage rules without Functions
@@ -1474,7 +1554,7 @@ jobs:
         run: |
           npx --no-install firebase deploy \
             --only firestore:rules,firestore:indexes,storage \
-            --project njpbs-site \
+            --project "$CMS_TARGET_FIREBASE_PROJECT" \
             --non-interactive
       - name: Recheck live Functions identity before Admin
         if: needs.firebase-preflight.outputs.functions_mutated != 'true'
@@ -1488,7 +1568,7 @@ jobs:
           MEDIA_DISCOVERY_SOURCE_SHA: ${{ needs.firebase-preflight.outputs.functions_mutated == 'true' && needs.admin-build.outputs.deploy_sha || needs.firebase-preflight.outputs.live_functions_sha }}
         run: |
           set -euo pipefail
-          node scripts/backfill-media-discovery.mjs --apply --project njpbs-site --source-sha "$MEDIA_DISCOVERY_SOURCE_SHA" < "$GOOGLE_APPLICATION_CREDENTIALS"
+          node scripts/backfill-media-discovery.mjs --apply --project "$CMS_TARGET_FIREBASE_PROJECT" --source-sha "$MEDIA_DISCOVERY_SOURCE_SHA" < "$GOOGLE_APPLICATION_CREDENTIALS"
       - name: Restore the last complete Functions receipt if no mutation began
         # Both Functions deploy phases must be skipped before abandoning the
         # reservation. A success, failure or cancellation in either phase
@@ -1507,13 +1587,13 @@ jobs:
             --run-attempt "$GITHUB_RUN_ATTEMPT"
       - name: Clean up Firebase credentials
         if: always()
-        run: rm -f "$RUNNER_TEMP/firebase-service-account.json" functions/.env.njpbs-site
+        run: rm -f "$RUNNER_TEMP/firebase-service-account.json" "functions/.env.$CMS_TARGET_FIREBASE_PROJECT"
 
   preview-renderer:
     env:
       CMS_DEPLOY_OWNER: ${{ vars.CMS_DEPLOY_OWNER }}
     needs: [admin-build, firebase, firebase-preflight]
-    environment: production
+    environment: ${{ inputs.target == 'development' && 'development' || 'production' }}
     if: >-
       (vars.CANONICAL_GITHUB_REPOSITORY != '' && vars.CANONICAL_GITHUB_REPOSITORY_ID != '' && github.repository == vars.CANONICAL_GITHUB_REPOSITORY && github.repository_id == vars.CANONICAL_GITHUB_REPOSITORY_ID) &&
       (vars.CMS_DEPLOY_OWNER != '' && github.triggering_actor == vars.CMS_DEPLOY_OWNER) && github.ref == 'refs/heads/main'
@@ -1563,7 +1643,7 @@ jobs:
         run: node "$RUNNER_TEMP/release-gate"/.github/scripts/metered-api-scan.mjs --target-root "$GITHUB_WORKSPACE"
       - name: Render deployment resource configuration
         if: vars.CMS_PREVIEW_CLOUD_ENABLED == 'true'
-        run: node "$RUNNER_TEMP/release-gate/scripts/render-development-config.mjs" --production --root "$GITHUB_WORKSPACE"
+        run: node "$RUNNER_TEMP/release-gate/scripts/render-development-config.mjs" "${CMS_TARGET_RENDER_SCOPE:?}" --root "$GITHUB_WORKSPACE"
       - uses: actions/setup-node@v7
         if: vars.CMS_PREVIEW_CLOUD_ENABLED == 'true'
         with:
@@ -1626,7 +1706,7 @@ jobs:
     env:
       CMS_DEPLOY_OWNER: ${{ vars.CMS_DEPLOY_OWNER }}
     needs: [admin-build, firebase, admin-deploy]
-    environment: production
+    environment: ${{ inputs.target == 'development' && 'development' || 'production' }}
     if: >-
       (vars.CANONICAL_GITHUB_REPOSITORY != '' && vars.CANONICAL_GITHUB_REPOSITORY_ID != '' && github.repository == vars.CANONICAL_GITHUB_REPOSITORY && github.repository_id == vars.CANONICAL_GITHUB_REPOSITORY_ID) &&
       (vars.CMS_DEPLOY_OWNER != '' && github.triggering_actor == vars.CMS_DEPLOY_OWNER) && github.ref == 'refs/heads/main'
@@ -1671,7 +1751,7 @@ jobs:
         run: |
           set -euo pipefail
           mv .configuration-render-gate "$RUNNER_TEMP/configuration-render-gate"
-          node "$RUNNER_TEMP/configuration-render-gate/scripts/render-development-config.mjs" --production --root "$GITHUB_WORKSPACE"
+          node "$RUNNER_TEMP/configuration-render-gate/scripts/render-development-config.mjs" "${CMS_TARGET_RENDER_SCOPE:?}" --root "$GITHUB_WORKSPACE"
       - name: Metered-API source scan for current CMS smoke gate
         working-directory: ${{ runner.temp }}/cms-smoke-gate
         run: node .github/scripts/metered-api-scan.mjs
@@ -1694,20 +1774,20 @@ jobs:
         run: node "$RUNNER_TEMP/cms-smoke-gate"/.github/scripts/ensure-panel-browser-deps.mjs
       - name: Smoke-test the deployed signed-out Admin shell
         env:
-          ADMIN_BOOT_URL: https://admin.njpbs.org/
+          ADMIN_BOOT_URL: ${{ env.CMS_TARGET_ADMIN_ORIGIN }}/
         run: npm run test:boot -w njpbs-admin
       - name: Smoke-test one signed-in private preview
         timeout-minutes: 4
         env:
           CMS_PREVIEW_SMOKE_CREDENTIAL: ${{ secrets.CMS_PREVIEW_SMOKE_CREDENTIAL }}
           CMS_PREVIEW_SMOKE_TARGET: ${{ vars.CMS_PREVIEW_SMOKE_TARGET }}
-        run: node "$RUNNER_TEMP/cms-smoke-gate"/scripts/smoke-signed-in-preview.mjs production
+        run: node "$RUNNER_TEMP/cms-smoke-gate"/scripts/smoke-signed-in-preview.mjs "$CMS_TARGET"
 
   admin-deploy:
     env:
       CMS_DEPLOY_OWNER: ${{ vars.CMS_DEPLOY_OWNER }}
     needs: [admin-build, cms-api, firebase, preview-renderer, firebase-preflight, admin-contract]
-    environment: production
+    environment: ${{ inputs.target == 'development' && 'development' || 'production' }}
     if: >-
       (vars.CANONICAL_GITHUB_REPOSITORY != '' && vars.CANONICAL_GITHUB_REPOSITORY_ID != '' && github.repository == vars.CANONICAL_GITHUB_REPOSITORY && github.repository_id == vars.CANONICAL_GITHUB_REPOSITORY_ID) &&
       (vars.CMS_DEPLOY_OWNER != '' && github.triggering_actor == vars.CMS_DEPLOY_OWNER) && github.ref == 'refs/heads/main'
@@ -1751,7 +1831,7 @@ jobs:
         run: |
           set -euo pipefail
           mv .configuration-render-gate "$RUNNER_TEMP/configuration-render-gate"
-          node "$RUNNER_TEMP/configuration-render-gate/scripts/render-development-config.mjs" --production --root "$GITHUB_WORKSPACE"
+          node "$RUNNER_TEMP/configuration-render-gate/scripts/render-development-config.mjs" "${CMS_TARGET_RENDER_SCOPE:?}" --root "$GITHUB_WORKSPACE"
       - name: Metered-API source scan (before any scanned code runs)
         run: node "$RUNNER_TEMP/metered-api-gate"/.github/scripts/metered-api-scan.mjs --target-root "$GITHUB_WORKSPACE"
       - uses: actions/setup-node@v7
@@ -1838,7 +1918,7 @@ jobs:
           accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           workingDirectory: admin
           wranglerVersion: "4.134.0"
-          command: pages deploy dist --project-name=njpbs-admin --branch=${{ steps.pages_branch.outputs.value }}
+          command: pages deploy dist --project-name=${{ env.CMS_TARGET_ADMIN_PAGES }} --branch=${{ steps.pages_branch.outputs.value }}
       - name: Open only the Admin authentication shell
         env:
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
@@ -1858,7 +1938,7 @@ jobs:
     env:
       CMS_DEPLOY_OWNER: ${{ vars.CMS_DEPLOY_OWNER }}
     needs: [admin-build, cms-api, firebase, preview-renderer, firebase-preflight]
-    environment: production
+    environment: ${{ inputs.target == 'development' && 'development' || 'production' }}
     if: >-
       (vars.CANONICAL_GITHUB_REPOSITORY != '' && vars.CANONICAL_GITHUB_REPOSITORY_ID != '' && github.repository == vars.CANONICAL_GITHUB_REPOSITORY && github.repository_id == vars.CANONICAL_GITHUB_REPOSITORY_ID) &&
       (vars.CMS_DEPLOY_OWNER != '' && github.triggering_actor == vars.CMS_DEPLOY_OWNER) && github.ref == 'refs/heads/main'
@@ -1938,13 +2018,13 @@ jobs:
           DEPLOY_SHA: ${{ needs.admin-build.outputs.deploy_sha }}
         run: >-
           node --import ./site/node_modules/tsx/dist/loader.mjs "$RUNNER_TEMP/cms-contract-source/scripts/check-cms-public-contract.mjs" prepare
-          --environment production --candidate "$DEPLOY_SHA" --source-root "$GITHUB_WORKSPACE"
+          --environment "$CMS_TARGET" --candidate "$DEPLOY_SHA" --source-root "$GITHUB_WORKSPACE"
           --state-directory "$RUNNER_TEMP/cms-public-contract-private" --previous-summary "$RUNNER_TEMP/cms-contract-proof/cms-public-contract-summary-preflight.json"
       - name: Authenticate Firebase deploy service account
         uses: google-github-actions/auth@7c6bc770dae815cd3e89ee6cdf493a5fab2cc093 # v3
         with:
           credentials_json: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
-          project_id: njpbs-site
+          project_id: ${{ env.CMS_TARGET_FIREBASE_PROJECT }}
       - name: Verify the singleton public contract at before-upload
         id: public_contract
         env:
@@ -1966,7 +2046,7 @@ jobs:
           FORCE_FIREBASE: ${{ inputs.force_firebase }}
           CMS_DEPLOY_MIGRATIONS: ${{ inputs.migrations }}
           CMS_EDGE_ORIGIN_SECRET: ${{ secrets.CMS_EDGE_ORIGIN_SECRET }}
-          CLOUD_PUBLICATION_WAKE_ENVIRONMENT: production
+          CLOUD_PUBLICATION_WAKE_ENVIRONMENT: ${{ env.CMS_TARGET }}
           CLOUD_PUBLICATION_WAKE_ENABLED: "true"
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
@@ -1977,7 +2057,7 @@ jobs:
           set -euo pipefail
           umask 077
           node --import ./site/node_modules/tsx/dist/loader.mjs "$RUNNER_TEMP/cms-contract-source/scripts/check-cms-public-contract.mjs" prove \
-            --environment production --boundary before-upload --candidate "$DEPLOY_SHA" --source-root "$GITHUB_WORKSPACE" \
+            --environment "$CMS_TARGET" --boundary before-upload --candidate "$DEPLOY_SHA" --source-root "$GITHUB_WORKSPACE" \
             --summary "$RUNNER_TEMP/cms-public-contract-summary-before-upload.json" \
             --state-directory "$RUNNER_TEMP/cms-public-contract-private" --previous-summary "$RUNNER_TEMP/cms-contract-proof/cms-public-contract-summary-preflight.json" 4<<< "$CMS_PREVIEW_R2_CREDENTIAL"
       - name: Retain only the sanitized singleton contract summary
@@ -1999,7 +2079,7 @@ jobs:
     env:
       CMS_DEPLOY_OWNER: ${{ vars.CMS_DEPLOY_OWNER }}
     needs: [admin-build, admin-contract, live-smoke]
-    environment: production
+    environment: ${{ inputs.target == 'development' && 'development' || 'production' }}
     if: >-
       (vars.CANONICAL_GITHUB_REPOSITORY != '' && vars.CANONICAL_GITHUB_REPOSITORY_ID != '' && github.repository == vars.CANONICAL_GITHUB_REPOSITORY && github.repository_id == vars.CANONICAL_GITHUB_REPOSITORY_ID) &&
       (vars.CMS_DEPLOY_OWNER != '' && github.triggering_actor == vars.CMS_DEPLOY_OWNER) && github.ref == 'refs/heads/main' &&
@@ -2062,13 +2142,13 @@ jobs:
           DEPLOY_SHA: ${{ needs.admin-build.outputs.deploy_sha }}
         run: >-
           node --import ./site/node_modules/tsx/dist/loader.mjs "$RUNNER_TEMP/cms-contract-source/scripts/check-cms-public-contract.mjs" prepare
-          --environment production --candidate "$DEPLOY_SHA" --source-root "$GITHUB_WORKSPACE"
+          --environment "$CMS_TARGET" --candidate "$DEPLOY_SHA" --source-root "$GITHUB_WORKSPACE"
           --state-directory "$RUNNER_TEMP/cms-public-contract-private" --previous-summary "$RUNNER_TEMP/cms-contract-proof/cms-public-contract-summary-before-upload.json"
       - name: Authenticate Firebase deploy service account
         uses: google-github-actions/auth@7c6bc770dae815cd3e89ee6cdf493a5fab2cc093 # v3
         with:
           credentials_json: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
-          project_id: njpbs-site
+          project_id: ${{ env.CMS_TARGET_FIREBASE_PROJECT }}
       - name: Verify the singleton public contract at settlement
         env:
           GITHUB_TOKEN: ${{ github.token }}
@@ -2089,7 +2169,7 @@ jobs:
           FORCE_FIREBASE: ${{ inputs.force_firebase }}
           CMS_DEPLOY_MIGRATIONS: ${{ inputs.migrations }}
           CMS_EDGE_ORIGIN_SECRET: ${{ secrets.CMS_EDGE_ORIGIN_SECRET }}
-          CLOUD_PUBLICATION_WAKE_ENVIRONMENT: production
+          CLOUD_PUBLICATION_WAKE_ENVIRONMENT: ${{ env.CMS_TARGET }}
           CLOUD_PUBLICATION_WAKE_ENABLED: "true"
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
@@ -2100,7 +2180,7 @@ jobs:
           set -euo pipefail
           umask 077
           node --import ./site/node_modules/tsx/dist/loader.mjs "$RUNNER_TEMP/cms-contract-source/scripts/check-cms-public-contract.mjs" prove \
-            --environment production --boundary settlement --candidate "$DEPLOY_SHA" --source-root "$GITHUB_WORKSPACE" \
+            --environment "$CMS_TARGET" --boundary settlement --candidate "$DEPLOY_SHA" --source-root "$GITHUB_WORKSPACE" \
             --summary "$RUNNER_TEMP/cms-public-contract-summary-settlement.json" \
             --state-directory "$RUNNER_TEMP/cms-public-contract-private" --previous-summary "$RUNNER_TEMP/cms-contract-proof/cms-public-contract-summary-before-upload.json" 4<<< "$CMS_PREVIEW_R2_CREDENTIAL"
       - name: Retain only the sanitized singleton contract summary

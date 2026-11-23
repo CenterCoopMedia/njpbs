@@ -593,7 +593,7 @@ describe("cms staging deploy surface", () => {
     expect(stagingDeployWorkflow).toContain(
       "Configure functions runtime params",
     );
-    expect(stagingDeployWorkflow).toContain("functions/.env.njpbs-site");
+    expect(stagingDeployWorkflow).toContain('"functions/.env.$CMS_TARGET_FIREBASE_PROJECT"');
     expect(stagingDeployWorkflow).toContain("Preflight admin env");
     expect(stagingDeployWorkflow).toContain(
       "Missing required admin build env vars",
@@ -606,7 +606,7 @@ describe("cms staging deploy surface", () => {
     );
     expect(stagingDeployWorkflow).toContain("workingDirectory: admin");
     expect(stagingDeployWorkflow).toContain(
-      "pages deploy dist --project-name=njpbs-admin",
+      "pages deploy dist --project-name=${{ env.CMS_TARGET_ADMIN_PAGES }}",
     );
   });
 

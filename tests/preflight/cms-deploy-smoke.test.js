@@ -400,7 +400,7 @@ if(process.env.CMS_BUG_REPORT_TELEGRAM_ADMIN_MAP)process.exit(8); require("node:
       const callLog = join(root, "calls.txt");
       const run = (state, status = "0", targets = "functions:cmsGetPublishedPost") =>
         execFileSync("bash", ["-c", script], { cwd: root, stdio: "pipe", env: {
-          PATH: `${root}:${process.env.PATH}`, FUNCTION_TARGETS: targets,
+          PATH: `${root}:${process.env.PATH}`, FUNCTION_TARGETS: targets, CMS_TARGET_FIREBASE_PROJECT: "njpbs-site",
           READER_SECRET_STATE: state, READER_SECRET_STATUS: status, READER_CALL_LOG: callLog,
         } });
       expect(() => run("ENABLED")).not.toThrow();
@@ -977,7 +977,7 @@ if(process.env.CMS_BUG_REPORT_TELEGRAM_ADMIN_MAP)process.exit(8); require("node:
     expect(adminDeploy).toContain("scripts/confirm-admin-revision.mjs");
     expect(adminDeploy).toContain("workingDirectory: admin");
     expect(adminDeploy).toContain(
-      "command: pages deploy dist --project-name=njpbs-admin",
+      "command: pages deploy dist --project-name=${{ env.CMS_TARGET_ADMIN_PAGES }}",
     );
     expect(adminDeploy).toContain(
       "node scripts/check-admin-pages-security.mjs predeploy",

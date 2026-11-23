@@ -330,6 +330,7 @@ if (process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1]
       const flag = args.shift();
       if (flag === "--check-source" && !checking) checking = true;
       else if (flag === "--production" && !options.only) options.only = productionDeploymentInputs;
+      else if (flag === "--development" && !options.only) options.only = Object.keys(developmentInputs);
       else if (flag === "--inputs" && !options.only && args[0]) options.only = args.shift().split(",");
       else if (flag === "--root" && !root && args[0]) root = args.shift();
       else refuse();

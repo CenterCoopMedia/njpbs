@@ -36,7 +36,8 @@ export const CMS_FUNCTION_CONTRACT_FILES = Object.freeze([
 ]);
 
 // This gate runs from the trusted workflow checkout, before selected code runs.
-export function requireCmsReleaseSources({ releaseSha, trustedWorkflowSha, releaseRoot, trustedRoot, dispatchInputs }) {
+export function requireCmsReleaseSources({ releaseSha, trustedWorkflowSha, releaseRoot, trustedRoot, dispatchInputs, target = "production" }) {
+  if (target !== "production" && target !== "development") throw new Error("CMS deploy target must be production or development");
   for (const [label, sha, cwd] of [
     ["Release checks", releaseSha, releaseRoot],
     ["Trusted workflow", trustedWorkflowSha, trustedRoot],
@@ -78,18 +79,20 @@ export function requireCmsReleaseSources({ releaseSha, trustedWorkflowSha, relea
   if (typeof admin.scripts?.["test:boot"] !== "string" || !admin.scripts["test:boot"].trim()) {
     throw new Error("Release checks require the Admin test:boot contract");
   }
-  const receipt = { schemaVersion: 1, deploySha: releaseSha, releaseChecksSha: releaseSha, trustedWorkflowSha, releaseChecksContractVersion: version };
+  // Production receipts keep their original fields; the release command decodes them strictly.
+  const receipt = { schemaVersion: 1, deploySha: releaseSha, releaseChecksSha: releaseSha, trustedWorkflowSha, releaseChecksContractVersion: version,
+    ...(target === "development" ? { target } : {}) };
   if (!dispatchInputs) return receipt;
   // GitHub can omit optional inputs whose default is an empty string.
   const inputs = {
-    emergency_authorization: "", migrations: "", reader_operation_id: "", reader_install_authorization: "",
+    emergency_authorization: "", migrations: "", reader_operation_id: "", reader_install_authorization: "", target: "production",
     ...JSON.parse(dispatchInputs),
   };
   const releaseDispatchId = inputs.release_dispatch_id;
   if (typeof releaseDispatchId !== "string" || !/^[a-f0-9]{32}$/.test(releaseDispatchId) || !isDeepStrictEqual(inputs, {
     deploy_ref: releaseSha, release_dispatch_id: releaseDispatchId, cloudflare_pages_branch: "main",
     emergency_release: false, emergency_authorization: "", force_firebase: false, migrations: "",
-    install_reader_bridge: false, reader_operation_id: "", reader_install_authorization: "",
+    install_reader_bridge: false, reader_operation_id: "", reader_install_authorization: "", target,
   })) throw new Error("Correlated CMS dispatch requires the reviewed deploy ref and default settings");
   return { ...receipt, releaseDispatchId };
 }
@@ -99,6 +102,7 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
     releaseSha: process.env.CMS_RELEASE_CHECKS_SHA,
     trustedWorkflowSha: process.env.CMS_TRUSTED_WORKFLOW_SHA,
     dispatchInputs: process.env.CMS_CORRELATED_DISPATCH_INPUTS,
+    target: process.env.CMS_TARGET || undefined,
     releaseRoot: process.cwd(),
     trustedRoot: resolve(dirname(fileURLToPath(import.meta.url)), "../.."),
   });
