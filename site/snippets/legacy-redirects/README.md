@@ -105,7 +105,8 @@ have both been released.
 
 Paired code packs retain the aliases present at code build time. Content-only
 paired releases reuse those assets, so a newly approved alias enters the map
-at the next code build. The paired ingress lookup is tracked in [#373](https://github.com/CenterCoopMedia/njpbs/issues/373).
+at the next code build. The paired origin uses the selected code pack and
+checks that the destination still serves a public Post before redirecting.
 
 | Legacy path | Last selected CDX capture | Destination | Evidence |
 |---|---|---|---|

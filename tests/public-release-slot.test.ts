@@ -10,6 +10,9 @@ import { createPublicReleaseRouter } from "../workers/src/public-release-router"
 import type { PairServingDecision } from "../functions/lib/public-release-serving";
 import type { PairTaskIdentity } from "../functions/lib/public-release-pair-work";
 import sourceBody from "../functions/lib/public-release-source-body.js";
+import type { SelectorReceipt } from "../packages/content-core/src/public-release-routing";
+import { SPOTLIGHT_ARCHIVE_REDIRECT_ASSETS, spotlightArchiveRedirectShard } from "../packages/content-core/src/spotlight-archive-paths";
+import legacyRedirects from "../site/snippets/legacy-redirects/snippet.js";
 
 const pair = releasePair(), operationId = "O".repeat(20), snapshotDigest = "d".repeat(64), claimDigest = "e".repeat(64);
 const body = new TextEncoder().encode("<!doctype html><html>current</html>");
@@ -24,7 +27,7 @@ const store = {
 };
 let decision: PairServingDecision;
 const selection = () => ({ environment: "development" as const, selector: { ...releaseSelector(), contentHead: decision.contentHead }, readStartedAt: Date.now() });
-const getDecision = vi.fn(async () => decision as PairServingDecision | { kind: "reselect" });
+const getDecision = vi.fn(async (_selection: SelectorReceipt, _path: string) => decision as PairServingDecision | { kind: "reselect" });
 const slot = () => createPublicReleaseSlot({ pair, workerVersionId: pair.publicWorker.versionId, store, getDecision });
 const request = (headers = {}, method = "GET") => new Request("https://dev-public.example.org/contact/", { method, headers });
 async function setup(staticPost = false, staticProof?: unknown, contentRedirect = false) {
@@ -166,6 +169,67 @@ it("rechecks an absent route after storage I/O and reselects when ownership chan
   getDecision.mockReset(); getDecision.mockResolvedValueOnce(decision).mockResolvedValue({ ...decision, authorityDigest: "e".repeat(64) });
   expect(await slot().serve(missing, selection())).toEqual({ kind: "reselect" });
 });
+
+const archiveAlias = "/blog-post/caf%C3%A9/";
+const archiveTarget = "/posts/old-story/";
+const canonicalArchivePost = "/posts/current-story/";
+const archiveRequest = (path: string, method = "GET") => new Request(`https://dev-public.example.org${path}`, { method });
+async function archiveFixture() {
+  const shard = `${SPOTLIGHT_ARCHIVE_REDIRECT_ASSETS}${spotlightArchiveRedirectShard(archiveAlias)}.json`;
+  const view = await writePublicReleasePairView({ store, pair, identity, claimDigest, cursor,
+    outputs: (async function* () {
+      yield { path: shard, status: 200 as const, bytes: new TextEncoder().encode(JSON.stringify({ [archiveAlias]: archiveTarget })),
+        headers: { "cache-control": "no-store", "content-type": "application/json" } };
+      yield { path: `${canonicalArchivePost}index.html`, status: 200 as const, bytes: body,
+        headers: { "cache-control": "no-store", "content-type": "text/html" } };
+    })() });
+  const lookup = (path: string): PairServingDecision => ({ ...decision, path,
+    route: path === archiveTarget ? { ...decision.route, kind: "redirect", family: "post", canonicalPath: canonicalArchivePost } as PairServingDecision["route"] : { kind: "unowned" },
+    locator: { ...decision.locator, manifestDigest: view.manifestDigest, manifestBytes: view.manifestBytes },
+    composition: { artifactPath: `${path}index.html`, absent: false, witnessDigest: decision.contentHead.viewId, expectedBodyDigest: null },
+  });
+  getDecision.mockImplementation(async (_, path) => lookup(path));
+  const router = createPublicReleaseRouter({ environment: "development", slots: [slot(), { identity: releasePair("b"), serve: vi.fn() }],
+    readSelector: async () => selection() });
+  return { lookup, shard, ingress: router.fetch };
+}
+
+it("redirects an exact archive alias through paired ingress and the legacy retirement rule", async () => {
+  const { shard, ingress } = await archiveFixture();
+  const throughRetirement = (path: string, method?: string) => legacyRedirects.fetch(archiveRequest(path, method), { ASSETS: { fetch: ingress } });
+  for (const method of ["GET", "HEAD"]) {
+    const response = await throughRetirement("/blog-post/caf%c3%a9/?ref=archive", method);
+    expect(response.status).toBe(301);
+    expect(response.headers.get("location")).toBe(`${canonicalArchivePost}?ref=archive`);
+    expect(response.headers.get("cache-control")).toBe("no-store");
+    expect(await response.text()).toBe("");
+  }
+  expect((await ingress(archiveRequest(canonicalArchivePost))).status).toBe(200);
+  expect((await throughRetirement("/blog-post/unknown/")).status).toBe(410);
+  expect((await ingress(archiveRequest(shard))).status).toBe(404);
+});
+
+it("keeps a retired archive URL gone when its Post is withdrawn or missing", async () => {
+  const { lookup, ingress } = await archiveFixture();
+  for (const kind of ["gone", "unowned"] as const) {
+    getDecision.mockImplementation(async (_, path) => {
+      const current = lookup(path);
+      return path === archiveTarget ? { ...current, route: { ...current.route, kind } as PairServingDecision["route"] } : current;
+    });
+    const request = archiveRequest(archiveAlias);
+    expect((await ingress(request)).status).toBe(404);
+    const response = await legacyRedirects.fetch(request, { ASSETS: { fetch: ingress } });
+    expect(response.status).toBe(410);
+    expect(response.headers.get("location")).toBeNull();
+  }
+});
+
+it("reselects if the current archive destination cannot be confirmed", async () => {
+  const { lookup } = await archiveFixture();
+  getDecision.mockImplementation(async (_, path) => path === canonicalArchivePost ? { kind: "reselect" } : lookup(path));
+  expect(await slot().serve(archiveRequest(archiveAlias), selection())).toEqual({ kind: "reselect" });
+});
+
 it.each(["/bad%xy/", "/a+b/", "/foo%20bar/", "/x//y", "/assets/cafe%CC%81.svg", "/_pair-compiled/server.js",
   "/%5Fspotlight-archive-redirects/a1.json"])("returns 404 before authority for malformed/private path %s", async path => {
   const result = await slot().serve(new Request(`https://dev-public.example.org${path}`), selection());

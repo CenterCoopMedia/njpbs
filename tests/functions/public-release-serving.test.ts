@@ -97,6 +97,12 @@ it("accepts canonical Unicode artifact paths and refuses private compiled graph 
   await expect(serving.readPublicReleaseDecision(request("/_pair-compiled/entry.js"))).rejects.toThrow();
   await expect(serving.readPublicReleaseDecision(request("/assets/cafe\u0301.svg"))).rejects.toThrow();
 });
+it("accepts normalized encoded archive paths at the pair authority boundary", async () => {
+  const result = await serving.readPublicReleaseDecision(request("/blog-post/caf%C3%A9/"));
+  expect(result).toMatchObject({ kind: "decision", path: "/blog-post/caf%C3%A9/", route: { kind: "unowned" } });
+  await expect(serving.readPublicReleaseDecision(request("/blog-post/caf%c3%a9/"))).rejects.toThrow();
+  await expect(serving.readPublicReleaseDecision(request("/blog-post/not%2Fa-slug/"))).rejects.toThrow();
+});
 it("uses a bounded indexed route lookup for unknown record slugs", async () => {
   let scanned = false;
   const collection = db.collection.bind(db);

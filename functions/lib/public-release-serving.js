@@ -3,6 +3,7 @@
 const { parseStoredPublicReleaseSelector, PublicReleaseProtocolError } = require("./public-release-pair");
 const { publicationTarget, assertPublicationDatabase } = require("./publication-target");
 const { postSlugForPath, postRoutePath } = require("./post-slug-contract");
+const { spotlightArchivePath } = require("./spotlight-archive-paths");
 
 function assertServingDatabase(firestore, environment) {
   const target = publicationTarget(environment);
@@ -107,8 +108,8 @@ async function readPublicReleaseDecision({ firestore, environment, selection, pa
   if (selection.environment !== environment || pair.environment !== environment ||
       !Number.isSafeInteger(selection.readStartedAt) || selection.readStartedAt > at + 100 ||
       !same(requested.selectedPair, protocol.publicReleasePairReference(pair)) ||
-      !(typeof path === "string" && path.length <= 1024 && /^\/(?:[A-Za-z0-9._~-]+\/)*[A-Za-z0-9._~-]*$/.test(path) &&
-        path.split("/").every(part => ![".", ".."].includes(part)) || view.isPrivatePairArtifactPath(path)) ||
+      typeof path !== "string" || !(path.length <= 1024 && /^\/(?:[A-Za-z0-9._~-]+\/)*[A-Za-z0-9._~-]*$/.test(path) &&
+        path.split("/").every(part => ![".", ".."].includes(part)) || view.isPrivatePairArtifactPath(path) || spotlightArchivePath(path) === path) ||
       path.startsWith("/_pair-compiled/")) refuse();
   if (at - selection.readStartedAt >= 5_000) return { kind: "reselect" };
   const base = work.publicReleasePairPath(pair.pairId);

@@ -3,9 +3,10 @@ import type { PairServingDecision } from "../../functions/lib/public-release-ser
 import type { PairProofEvidence, PublicSlot, SlotReply } from "./public-release-router";
 import { bytesDigest, canonicalReleaseValue, matchesSelectedPair, originFor, responseCacheKey, stripInternalHeaders, type SelectorReceipt } from "../../packages/content-core/src/public-release-routing";
 import { SECURITY_HEADER_BASELINE } from "../../packages/content-core/src/public-security-headers";
-import { SPOTLIGHT_ARCHIVE_REDIRECT_ASSETS } from "../../packages/content-core/src/spotlight-archive-paths";
+import { SPOTLIGHT_ARCHIVE_REDIRECT_ASSETS, spotlightArchivePath } from "../../packages/content-core/src/spotlight-archive-paths";
 import { PUBLIC_GONE_BRANCH_HEADER } from "./public-gone";
 import { readBoundedPairObject, readPublicReleasePairOutput, verifyPairRouteTarget, isPublicPairRequestPath, type PairReadStore } from "./public-release-view-reader";
+import { serveSpotlightArchiveRedirect } from "./spotlight-archive-redirect";
 import protocol from "../../functions/lib/public-release-pair.js";
 import inputs from "../../functions/lib/public-release-pair-input.js";
 import views from "../../functions/lib/public-release-pair-view.js";
@@ -90,22 +91,27 @@ export function createPublicReleaseSlot({ pair, workerVersionId, store, getDecis
   getDecision(selection: SelectorReceipt, path: string, budgetMs?: number): Promise<Decision>;
   cache?: Pick<Cache, "match" | "put">;
 }): PublicSlot {
-  return { identity: pair,
+  const slot: PublicSlot = { identity: pair,
     async serve(request, selection, proof = false, budgetMs = 3_000) {
       if (!Number.isSafeInteger(budgetMs) || budgetMs < 1 || budgetMs > 3_000) fail();
       const deadline = performance.now() + budgetMs;
+      const url = new URL(request.url);
       if (workerVersionId !== pair.publicWorker.versionId || !matchesSelectedPair(pair, selection) ||
-          new URL(request.url).origin !== originFor(pair.environment) || !["GET", "HEAD"].includes(request.method)) fail();
+          url.origin !== originFor(pair.environment) || !["GET", "HEAD"].includes(request.method)) fail();
       let path: string;
-      try { path = decodeURI(new URL(request.url).pathname); } catch { return { kind: "response", response: none(404) }; }
-      if (path.startsWith(SPOTLIGHT_ARCHIVE_REDIRECT_ASSETS) || !isPublicPairRequestPath(path)) {
-        return { kind: "response", response: none(404) };
+      try { path = decodeURI(url.pathname); } catch { return { kind: "response", response: none(404) }; }
+      if (path.startsWith(SPOTLIGHT_ARCHIVE_REDIRECT_ASSETS)) return { kind: "response", response: none(404) };
+      const archivePath = !proof && spotlightArchivePath(url.pathname);
+      if (!isPublicPairRequestPath(path)) {
+        if (!archivePath) return { kind: "response", response: none(404) };
+        path = archivePath;
       }
-      const decide = () => {
+      const remainingBudget = () => {
         const remaining = Math.floor(deadline - performance.now());
         if (remaining < 1) fail();
-        return getDecision(selection, path, remaining);
+        return remaining;
       };
+      const decide = () => getDecision(selection, path, remainingBudget());
       const before = await decide();
       if (before.kind === "reselect") return miss();
       if (before.pairId !== pair.pairId || before.epoch !== selection.selector.epoch || before.path !== path ||
@@ -128,9 +134,23 @@ export function createPublicReleaseSlot({ pair, workerVersionId, store, getDecis
         path: before.composition?.artifactPath ?? path });
       if (before.composition?.expectedBodyDigest && (!output || output.bodyDigest !== before.composition.expectedBodyDigest)) fail();
       if (!output) {
+        let response = none(404);
+        let reselect = false;
+        if (before.route.kind === "unowned" && archivePath) {
+          response = await serveSpotlightArchiveRedirect(request, response, async (shard) => {
+            // An unowned composed miss resolves against this pair's sealed code pack.
+            const asset = await readPublicReleasePairOutput({ store, pair, locator: before.locator, path: new URL(shard.url).pathname });
+            return asset?.status === 200 ? new Response(new Uint8Array(asset.body)) : none(404);
+          }, async (canonical) => {
+            const reply = await slot.serve(canonical, selection, false, remainingBudget());
+            if (reply.kind === "response") return reply.response;
+            reselect = true;
+            return none(503);
+          });
+        }
         const after = await decide();
-        if (after.kind !== "decision" || before.authorityDigest !== after.authorityDigest) return miss();
-        return before.route.kind === "unowned" ? { kind: "response", response: none(404, { "cache-control": "no-store" }) } : miss();
+        if (reselect || after.kind !== "decision" || before.authorityDigest !== after.authorityDigest) return miss();
+        return before.route.kind === "unowned" ? { kind: "response", response } : miss();
       }
       let proofOutput = output;
       if (before.route.kind === "serve" && before.composition?.proofLocator) {
@@ -163,4 +183,5 @@ export function createPublicReleaseSlot({ pair, workerVersionId, store, getDecis
       return { kind: "response", response, evidence: evidenceFor(output.bodyDigest) };
     },
   };
+  return slot;
 }
