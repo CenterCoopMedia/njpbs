@@ -86,7 +86,7 @@ export class PublicReleaseIngressProofEntrypoint extends WorkerEntrypoint<Public
       } });
   }
 }
-export default { async fetch(request: Request, env: PublicReleaseIngressEnvironment, ctx: ExecutionContext): Promise<Response> {
+export default { async fetch(request: Request, env: PublicReleaseIngressEnvironment, ctx?: ExecutionContext): Promise<Response> {
   if (env.PUBLIC_PAIR_INGRESS_ENABLED !== "true") return new Response(null, { status: 404 });
   const deadline = performance.now() + AUTHORITY_BUDGET_MS;
   try {

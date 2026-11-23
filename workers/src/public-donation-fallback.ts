@@ -80,9 +80,9 @@ export async function serveDonationDocument(
   request: Request,
   serve: (request: Request) => Promise<Response>,
   readHealth: ReadDonationHealth,
-  ctx: HealthContext,
+  ctx?: HealthContext,
 ): Promise<Response> {
-  if (request.method !== "GET" || !/(?:\/|\.html)$/.test(new URL(request.url).pathname)) return serve(request);
+  if (!ctx || request.method !== "GET" || !/(?:\/|\.html)$/.test(new URL(request.url).pathname)) return serve(request);
   const signal = readHealth(ctx);
   if (signal?.kind !== "outage") return serve(request);
   const response = await serve(donationDocumentRequest(request));
