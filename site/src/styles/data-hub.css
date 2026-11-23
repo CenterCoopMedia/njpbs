@@ -756,13 +756,13 @@
 .data-hub .budget-view-toggle button[aria-pressed="true"],.data-hub .budget-view-toggle button:hover{background:var(--color-data-hub-hover);border-color:var(--color-data-hub-link)}
 .data-hub .budget-view-toggle button:focus-visible{outline:3px solid var(--color-data-hub-focus);outline-offset:3px}
 .data-hub .budget-chart-caption{font-size:1rem;font-weight:650;line-height:1.4;margin:.5rem 0 .8rem}
-.data-hub .budget-plot-scroll{max-width:100%;overflow-x:auto}
-.data-hub .budget-plot-scroll:focus-visible{outline:var(--focus-outline);outline-offset:var(--focus-offset)}
-.data-hub .budget-treemap{position:relative;width:100%;min-width:24rem;min-height:260px;aspect-ratio:1.9/1;overflow:hidden;background:var(--bg-1)}
-.data-hub .budget-tile{position:absolute;box-sizing:border-box;border:2px solid var(--bg-0);padding:clamp(.4rem,1.2vw,1rem);color:white;display:flex;flex-direction:column;align-items:flex-start;justify-content:center;gap:.25rem;overflow:hidden}
-.data-hub .budget-tile span{max-inline-size:100%;font-size:clamp(.95rem,1.6vw,1.3rem);line-height:1.15;font-weight:700;overflow-wrap:anywhere}
+.data-hub .budget-treemap{position:relative;width:100%;min-height:260px;aspect-ratio:1.9/1;overflow:hidden;background:var(--bg-1)}
+.data-hub .budget-tile{position:absolute;box-sizing:border-box;border:2px solid var(--bg-0);padding:clamp(.4rem,1.2vw,1rem);color:white;display:flex;flex-direction:column;align-items:flex-start;justify-content:center;gap:.25rem;overflow:hidden;container:budget-tile / inline-size}
+.data-hub .budget-tile span{max-inline-size:100%;font-size:clamp(.95rem,1.6vw,1.3rem);line-height:1.15;font-weight:700;hyphens:manual}
 .data-hub .budget-tile strong{font-size:clamp(1.2rem,2vw,2rem);line-height:1.2;font-weight:800;font-variant-numeric:tabular-nums}
 .data-hub .budget-tile small{font-size:.95rem;line-height:1.2;font-weight:600}
+/* The legend provides the values when a tile is too narrow for its text. */
+@container budget-tile (inline-size < 3.75rem){.data-hub .budget-tile > *{display:none}}
 .data-hub .budget-legend{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));column-gap:1.4rem;margin:1rem 0 1.2rem}
 .data-hub .budget-legend>div{display:flex;gap:.6rem;align-items:center;min-width:0;border-bottom:1px solid var(--color-data-hub-table-rule);padding:.7rem 0;font-size:.9rem}
 .data-hub .budget-legend span:nth-child(2){flex:1;min-width:0}
