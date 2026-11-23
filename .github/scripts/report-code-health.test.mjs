@@ -9,26 +9,34 @@ import { compare } from "./report-code-health.mjs";
 
 test("reports only added lint errors and type errors", () => {
   const lint = { file: "admin/src/old.ts", line: 5, rule: "no-undef", severity: 2, message: "old" };
-  const type = { file: "functions/old.js", line: 6, rule: "TS2322", message: "old" };
-  const base = {
-    lint: [lint],
-    types: { findings: [type] },
-  };
+  const kept = { file: "functions/f.js", line: 6, column: 3, rule: "TS2345", message: "old signature", text: "x" };
+  const edited = { file: "functions/f.js", line: 10, column: 5, rule: "TS2322", message: "old", text: "y" };
+  const base = { lint: [lint], types: { findings: [kept, edited] } };
+  // Two lines inserted after line 2; line 10 edited and now at line 12.
+  const changes = new Map([
+    ["admin/src/new.ts", { from: lint.file, hunks: [] }],
+    ["functions/f.js", { from: "functions/f.js", hunks: [
+      { oldStart: 2, oldCount: 0, newStart: 3, newCount: 2 },
+      { oldStart: 10, oldCount: 1, newStart: 12, newCount: 1 },
+    ] }],
+  ]);
   const moved = { ...lint, file: "admin/src/new.ts", line: 20 };
-  const extraLint = { ...moved, line: 30 };
-  const extraType = { ...type, line: 9, message: "new" };
+  const extraLint = { ...moved, line: 30, message: "replaced name" };
+  const sameName = { ...kept, line: 8, column: 6 };
   const head = {
     lint: [
       moved, extraLint, { ...lint, severity: 1, rule: "complexity" },
       { ...lint, rule: "max-lines-per-function", message: "Function 'f' has too many lines (201)." },
     ],
-    types: { findings: [{ ...type, line: 8 }, extraType] },
+    types: { findings: [
+      sameName, { ...kept, line: 8, message: "changed signature" },
+      { ...edited, line: 12, column: 9 }, { ...edited, line: 4, column: 1 },
+    ] },
   };
-  const renames = new Map([["admin/src/new.ts", lint.file]]);
 
-  assert.deepEqual(compare(base, head, renames), {
+  assert.deepEqual(compare(base, head, changes), {
     lint: [extraLint],
-    types: [extraType],
+    types: [sameName, { ...edited, line: 4, column: 1 }],
   });
   assert.deepEqual(compare(base, base), { lint: [], types: [] });
 });
@@ -51,15 +59,23 @@ test("the report exits nonzero for a new lint or type error and saves the findin
   mkdirSync(join(candidate, "functions"), { recursive: true });
   git("init", "-q");
   write("existing.cjs", "module.exports = existingUndefinedName;\n");
-  write("functions/value.js", "/** @type {number} */\nconst value = 1;\nmodule.exports = value;\n");
+  const pair = (call) => `/**\n * @param {number} a\n * @param {number} b\n */\nconst f = (a, b) => a + b;\nconst x = "s";\nmodule.exports = ${call};\n`;
+  write("functions/pair.js", pair("[f(1, x), f(1, 1)]"));
   commit();
   git("worktree", "add", "--detach", baseline, "HEAD");
 
-  const unchanged = report();
-  assert.equal(unchanged.status, 0, unchanged.stderr || unchanged.stdout);
+  // The existing error keeps its identity when lines move and its own line changes.
+  for (const contents of [pair("[f(1, x), f(1, 1)]").replace("const x", "// moved\nconst x"), pair("[f(2, x), f(1, 1)]")]) {
+    write("functions/pair.js", contents);
+    commit();
+    const result = report();
+    assert.equal(result.status, 0, result.stderr || result.stdout);
+    git("reset", "--hard", "HEAD^1");
+  }
 
   for (const [category, file, contents] of [
     ["lint", "new.cjs", "module.exports = newUndefinedName;\n"],
+    ["types", "functions/pair.js", pair("[f(1, x), f(1, x)]")],
     ["types", "functions/value.js", '/** @type {number} */\nconst value = "text";\nmodule.exports = value;\n'],
   ]) {
     write(file, contents);
