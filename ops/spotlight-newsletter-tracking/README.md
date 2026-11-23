@@ -26,10 +26,13 @@ client rechecks known players before requesting vendors and before processing
 the ActiveCampaign page visit. If a known player appears after loading, the
 client saves a per-page session exclusion before ending the vendor document.
 The replacement document keeps the tools off, even before that player is
-opened again. If session storage is unavailable, a URL fragment carries the
-exclusion through navigation. This can reload a newly opened player once;
+opened again. If session storage is unavailable, a query parameter carries the
+exclusion through navigation without replacing the reader's existing anchor.
+The server and client both reject that marked address. This reloads a newly
+opened player once only when newsletter tools were running;
 it does not repeatedly reload or record another tracking visit. New code that
 can insert a player still needs the eligibility review described below.
+Readers who have not loaded the tools keep their video document without a reload.
 
 Admin, authenticated, preview, private, password-protected, Kids and descendant,
 child-directed, search, feed, REST, embedded, non-GET, and nonproduction requests

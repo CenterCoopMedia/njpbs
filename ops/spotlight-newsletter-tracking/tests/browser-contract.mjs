@@ -12,7 +12,7 @@ const evidence = process.argv[2];
 assert.ok(evidence, "Supply an evidence directory outside the checkout");
 mkdirSync(evidence, { recursive: true });
 const render = name => execFileSync("php", [join(directory, "tests/wordpress-contract.php"), "render", name], { encoding: "utf8" });
-const fixtures = Object.fromEntries(["article", "video", "noindex", "baseline"].map(name => [name, render(name)]));
+const fixtures = Object.fromEntries(["article", "video", "noindex", "baseline", "media-blocked"].map(name => [name, render(name)]));
 const browser = await chromium.launch({ channel: "chrome", headless: true, chromiumSandbox: true });
 const version = browser.version().split(".").map(Number);
 assert.ok(version[0] > 156 || (version[0] === 156 && (version[2] > 8078 || (version[2] === 8078 && version[3] >= 73))), "Use system Chrome at or above the approved version");
@@ -44,7 +44,8 @@ async function context({ gpc = false, blockedCookies = false, blockedWrites = fa
       const name = url.pathname.endsWith(".js") ? "consent.js" : "consent.css";
       return route.fulfill({ contentType: name.endsWith(".js") ? "application/javascript" : "text/css", body: readFileSync(join(directory, name), "utf8") });
     }
-    const fixture = fixtures[url.pathname.split("/")[1]] ?? fixtures.article;
+    const fixture = url.searchParams.has("spotlight_newsletter_media") ? fixtures["media-blocked"]
+      : fixtures[url.pathname.split("/")[1]] ?? fixtures.article;
     return route.fulfill({ contentType: "text/html", body: fixture });
   });
   return { ctx, page: await ctx.newPage(), vendors };
@@ -173,17 +174,40 @@ try {
   }
   for (const blockedSession of [false, true]) {
     const { ctx, page, vendors } = await context({ saved: "v1:granted", blockedSession });
-    await page.goto("https://news.example.org/article/");
+    await page.goto("https://news.example.org/article/#comments");
     await page.waitForFunction(() => window.acCommands?.some(args => args[0] === "process") && window.wpCommands?.length === 2);
     await Promise.all([page.waitForEvent("load"), page.evaluate(() => document.body.append(document.createElement("video")))]);
     assert.equal(vendors.length, 2, "A media-exclusion reload must not record another tracked visit");
-    await page.getByRole("button", { name: "Newsletter privacy settings", exact: true }).click();
-    await page.getByText("Newsletter tools stay off on this page because it can display video.", { exact: true }).waitFor();
-    assert.equal(await page.getByRole("button", { name: "Allow newsletter tools", exact: true }).isVisible(), false);
+    if (!blockedSession) {
+      await page.getByRole("button", { name: "Newsletter privacy settings", exact: true }).click();
+      await page.getByText("Newsletter tools stay off on this page because it can display video.", { exact: true }).waitFor();
+      assert.equal(await page.getByRole("button", { name: "Allow newsletter tools", exact: true }).isVisible(), false);
+    } else {
+      assert.equal(new URL(page.url()).hash, "#comments");
+      assert.equal(new URL(page.url()).searchParams.get("spotlight_newsletter_media"), "off");
+      await page.evaluate(() => { location.hash = "article-link"; });
+      await page.reload();
+      assert.equal(vendors.length, 2, "An in-page anchor cannot erase the media exclusion");
+    }
     await page.evaluate(() => document.body.append(document.createElement("video")));
     await page.locator("video").waitFor({ state: "attached" });
     assert.equal(vendors.length, 2, "Reopening a player cannot restart tracking or a reload loop");
-    if (blockedSession) assert.match(page.url(), /#spotlight-newsletter-media-off$/);
+    await ctx.close();
+  }
+  for (const options of [{}, { saved: "v1:denied" }, { blockedCookies: true }, { gpc: true }]) {
+    const { ctx, page, vendors } = await context({ ...options, blockedSession: true });
+    await page.goto("https://news.example.org/article/");
+    let loads = 0;
+    page.on("load", () => { loads += 1; });
+    if (!options.gpc) {
+      await page.getByRole("button", { name: "Newsletter privacy settings", exact: true }).click();
+      await page.getByRole("button", { name: "Allow newsletter tools", exact: true }).focus();
+    }
+    await page.evaluate(() => document.body.append(document.createElement("video")));
+    await page.locator("video").waitFor({ state: "attached" });
+    assert.equal(loads, 0, "A reader who never loaded newsletter tools keeps the video document");
+    assert.equal(vendors.length, 0);
+    if (!options.gpc) assert.equal(await page.getByRole("button", { name: "Close", exact: true }).evaluate(node => node === document.activeElement), true);
     await ctx.close();
   }
   {

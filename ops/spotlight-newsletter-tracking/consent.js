@@ -1,7 +1,7 @@
 const COOKIE = "spotlight-newsletter-consent";
 const GRANT = "v1:granted";
 const DENY = "v1:denied";
-const MEDIA_FRAGMENT = "spotlight-newsletter-media-off";
+const MEDIA_PARAMETER = "spotlight_newsletter_media";
 
 export function mountNewsletterConsent(win) {
   const doc = win.document;
@@ -14,8 +14,8 @@ export function mountNewsletterConsent(win) {
   let ending = false;
   let existingVendor = false;
   const mediaKey = `spotlight-newsletter-media:${win.location.pathname}${win.location.search}`;
-  let mediaBlocked = win.location.hash === `#${MEDIA_FRAGMENT}`;
-  try { mediaBlocked ||= win.sessionStorage.getItem(mediaKey) === "blocked"; } catch { /* A URL marker is the storage fallback. */ }
+  let mediaBlocked = new win.URL(win.location.href).searchParams.has(MEDIA_PARAMETER);
+  try { mediaBlocked ||= win.sessionStorage.getItem(mediaKey) === "blocked"; } catch { /* A page-address marker is the storage fallback. */ }
   let channel;
   try { channel = new win.BroadcastChannel(COOKIE); } catch { /* Focus also reconciles the saved choice. */ }
 
@@ -35,7 +35,7 @@ export function mountNewsletterConsent(win) {
     return !mediaBlocked && decision() === GRANT && win.navigator.globalPrivacyControl !== true && !hasMedia();
   }
 
-  function endVendorDocument(target) {
+  function endVendorDocument() {
     if (ending) return;
     ending = true;
     for (const script of doc.querySelectorAll("script[data-spotlight-newsletter-vendor]")) {
@@ -44,22 +44,20 @@ export function mountNewsletterConsent(win) {
     }
     if (loaded && win.vgo?.q) win.vgo.q.length = 0;
     if (loaded && win.wisepops?.q) win.wisepops.q.length = 0;
-    if (target) win.history.replaceState(null, "", target);
     win.location.reload();
   }
 
   function excludeMedia() {
     mediaBlocked = true;
-    let target;
     try {
       win.sessionStorage.setItem(mediaKey, "blocked");
       if (win.sessionStorage.getItem(mediaKey) !== "blocked") throw new Error("Exclusion was not saved");
     } catch {
       const address = new win.URL(win.location.href);
-      address.hash = MEDIA_FRAGMENT;
-      target = address.href;
+      address.searchParams.set(MEDIA_PARAMETER, "off");
+      win.history.replaceState(null, "", address.href);
     }
-    if (loaded || target) endVendorDocument(target);
+    if (loaded) endVendorDocument();
     else display();
   }
 
@@ -106,10 +104,15 @@ export function mountNewsletterConsent(win) {
 
   function display() {
     const gpc = win.navigator.globalPrivacyControl === true;
-    for (const node of root.querySelectorAll("[data-newsletter-choice]")) node.hidden = gpc || mediaBlocked;
+    let moveFocus = false;
+    for (const node of root.querySelectorAll("[data-newsletter-choice]")) {
+      if ((gpc || mediaBlocked) && node.contains(doc.activeElement)) moveFocus = true;
+      node.hidden = gpc || mediaBlocked;
+    }
     root.querySelector("[data-newsletter-gpc]").hidden = !gpc;
     root.querySelector("[data-newsletter-media]").hidden = !mediaBlocked;
     root.querySelector("[data-newsletter-close]").hidden = !gpc && !mediaBlocked;
+    if (!root.hidden && moveFocus) root.querySelector("[data-newsletter-close]").focus();
   }
 
   function reconcile() {

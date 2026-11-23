@@ -44,7 +44,7 @@ function public_request() {
         || is_user_logged_in() || is_preview() || is_feed() || is_embed() || is_404()
         || is_search() || (defined('REST_REQUEST') && REST_REQUEST)
         || !empty($_SERVER['HTTP_AUTHORIZATION']) || !empty($_SERVER['REDIRECT_HTTP_AUTHORIZATION'])
-        || get_option('blog_public') !== '1') {
+        || isset($_GET['spotlight_newsletter_media']) || get_option('blog_public') !== '1') {
         return false;
     }
     $path = wp_parse_url($_SERVER['REQUEST_URI'] ?? '', PHP_URL_PATH);
@@ -123,9 +123,9 @@ function privacy_text() {
         . 'and other excluded pages. Newsletter privacy settings lets you change your choice. '
         . 'Changing to Do not allow reloads the page to stop running vendor code. '
         . 'This cannot recall information already sent.</p>'
-        . '<p>If a page starts to display video after loading, it reloads once to stop the tools. '
+        . '<p>If a page starts to display video while newsletter tools are running, it reloads once to stop the tools. '
         . 'A session-only page record keeps them off. If the browser cannot save that record, '
-        . 'a marker after # in the page address keeps them off after the reload.</p>'
+        . 'a marker in the page address keeps them off after the reload.</p>'
         . '<p><a href="https://www.activecampaign.com/legal/privacy-policy">ActiveCampaign privacy policy</a>. '
         . '<a href="https://wisepops.com/privacy-policy">Wisepops privacy policy</a>. '
         . 'Use the privacy contact on this page for questions or deletion requests.</p></section>';

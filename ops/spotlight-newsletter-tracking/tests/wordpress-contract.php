@@ -55,9 +55,10 @@ function document($content = '', $head = '') {
 environment();
 if (($argv[1] ?? '') === 'render') {
     $case = $argv[2] ?? 'article';
+    if ($case === 'media-blocked') $_GET['spotlight_newsletter_media'] = 'off';
     $content = $case === 'video' ? '<div class="video-wrap"><iframe src="https://player.pbs.org/viralplayer/123456/"></iframe></div>' : '';
     $html = document($content, $case === 'noindex' ? '<meta name="robots" content="noindex">' : '');
-    $replacement = $case !== 'baseline' && NJSpotlightNewsletter\eligible_document($html)
+    $replacement = $case !== 'baseline' && NJSpotlightNewsletter\public_request() && NJSpotlightNewsletter\eligible_document($html)
         ? NJSpotlightNewsletter\footer_markup(NJSpotlightNewsletter\configuration()) : '';
     echo str_replace(NJSpotlightNewsletter\MARKER, $replacement, $html);
     exit;
@@ -90,6 +91,9 @@ foreach (array('/kids/', '/fr/%6Bids/game/', '/%invalid') as $path) {
     check(!NJSpotlightNewsletter\public_request(), 'Excluded child or malformed route');
 }
 environment();
+$_GET['spotlight_newsletter_media'] = 'off';
+check(!NJSpotlightNewsletter\public_request(), 'A marked dynamic-media address cannot initialize vendors');
+unset($_GET['spotlight_newsletter_media']);
 $request['singular'] = true;
 foreach (array('post_status' => 'private', 'post_password' => 'example', 'post_type' => 'njt_video') as $key => $value) {
     $before = $page->$key;
