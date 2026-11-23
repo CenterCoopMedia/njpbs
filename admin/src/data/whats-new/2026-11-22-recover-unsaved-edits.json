@@ -1,0 +1,8 @@
+{
+  "date": "2026-11-22",
+  "order": 1795398060000,
+  "kind": "new",
+  "title": "Recover unsaved Page and Post edits",
+  "body": "After a reload, open the same Page or Post in the same browser. If Boardwalk kept unsaved changes on this device, it offers to restore or discard them. Review restored changes and save them as a draft.",
+  "prs": []
+}

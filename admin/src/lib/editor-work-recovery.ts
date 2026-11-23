@@ -1,12 +1,8 @@
-// A forced takeover moves the lease while the displaced editor may still be holding unsaved
-// work. The workspace already keeps that draft in memory for the rest of the visit, but memory
-// does not survive a reload, a crash, or the person closing the tab to get out of the way. This
-// module writes one displaced-work snapshot per person per record so the draft is still there to
-// recover afterwards.
+// Keep one unsaved snapshot per person and record so a reload or crash does not erase the draft.
 // Auth resolution sweeps stale entries across every record. An involuntary session end keeps
 // work for the same account. Deliberate sign-out removes it from this browser.
 //
-// It is deliberately per-browser and per-person: the displaced draft is unreviewed work that was
+// It is deliberately per-browser and per-person: the draft is unreviewed work that was
 // never accepted by the version guard, so it must not be published to anyone else through a
 // shared store. Every entry is total and fail-quiet — a browser that blocks site data loses the
 // recovery affordance, never the running editing session.
@@ -18,8 +14,7 @@ const KEY_PREFIX = "njpbs-admin:displaced-work";
 export interface RecoveredEditorWork {
   actorId: string;
   surfaceKey: string;
-  // The record's human title at the moment of displacement, so the recovery prompt can name what
-  // the draft belongs to without re-reading the document.
+  // The record's human title when the browser kept the draft.
   label: string;
   // Set when work was held after another editor took the lease.
   displacedBy?: string;
@@ -112,9 +107,13 @@ export function clearRecoveredWork(
   storage: EditorWorkStorage,
   actorId: string,
   surfaceKey: string,
+  expected?: RecoveredEditorWork,
 ): void {
   try {
-    storage.removeItem(editorWorkRecoveryKey(actorId, surfaceKey));
+    const key = editorWorkRecoveryKey(actorId, surfaceKey);
+    // A save or discard from another tab must not clear a more recent snapshot.
+    if (expected && storage.getItem(key) !== JSON.stringify(expected)) return;
+    storage.removeItem(key);
   } catch {
     // Nothing to do: the read path already treats an unreachable store as empty.
   }

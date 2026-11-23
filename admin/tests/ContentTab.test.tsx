@@ -304,7 +304,7 @@ function mockMissingContent() {
   });
 }
 
-afterEach(() => { cleanup(); vi.unstubAllEnvs(); });
+afterEach(() => { cleanup(); localStorage.clear(); vi.unstubAllEnvs(); });
 
 describe("ContentTab", () => {
   beforeEach(() => {
@@ -3322,6 +3322,69 @@ describe("ContentTab page version echo (#530, #563)", () => {
     await openHomeAndSave();
 
     expect(functionsMocks.cmsSaveContent.mock.calls[0]![1].baseVersion).toBe(3);
+  });
+
+  it("restores disconnected Page edits through the addressed read and saves them once", async () => {
+    const workspace = () => <MemoryRouter><ContentTab principal={editor}
+      surface={{ kind: "page", pageId: "home", section: "home" }} /></MemoryRouter>;
+    storedPage({ version: 3 });
+    const first = render(workspace());
+    const heading = await screen.findByDisplayValue("Existing headline");
+    fireEvent(window, new Event("offline"));
+    fireEvent.change(heading, { target: { value: "Draft written offline" } });
+    first.unmount();
+
+    functionsMocks.cmsGetContent.mockRejectedValueOnce(new TypeError("Offline"));
+    const reopened = render(workspace());
+    await screen.findByText("Page editing unavailable");
+    const restore = screen.getByRole("button", { name: "Restore unsaved changes" });
+    expect(restore).toBeDisabled();
+    expect(screen.queryByText("Recovered your unsaved changes")).toBeNull();
+
+    mockFoundContent({ id: "home", version: 3, blocks: [storedHeadline] });
+    fireEvent(window, new Event("online"));
+    await waitFor(() => expect(restore).toBeEnabled());
+    fireEvent.click(restore);
+    expect(await screen.findByDisplayValue("Draft written offline")).toBeVisible();
+
+    const savedBlocks = [{ ...storedHeadline, data: { ...storedHeadline.data, text: "Draft written offline" } }];
+    savedPage({ version: 4, blocks: savedBlocks });
+    fireEvent.click(screen.getByRole("button", { name: "Save page" }));
+    await waitFor(() => expect(screen.queryByText("Recovered your unsaved changes")).toBeNull());
+    expect(functionsMocks.cmsSaveContent.mock.calls.map(([, body]) => body)).toEqual([
+      expect.objectContaining({
+        id: "home",
+        baseVersion: 3,
+        document: expect.objectContaining({ blocks: savedBlocks }),
+      }),
+    ]);
+
+    reopened.unmount();
+    storedPage({ version: 4, blocks: savedBlocks });
+    render(workspace());
+    await screen.findByDisplayValue("Draft written offline");
+    expect(screen.queryByRole("button", { name: "Restore unsaved changes" })).toBeNull();
+    expect(functionsMocks.cmsSaveContent).toHaveBeenCalledTimes(1);
+  });
+
+  it("keeps the recovered Page's original version when another editor has saved", async () => {
+    const workspace = () => <MemoryRouter><ContentTab principal={editor}
+      surface={{ kind: "page", pageId: "home", section: "home" }} /></MemoryRouter>;
+    storedPage({ version: 3 });
+    const first = render(workspace());
+    fireEvent.change(await screen.findByDisplayValue("Existing headline"), { target: { value: "Uncommitted copy" } });
+    first.unmount();
+
+    storedPage({ version: 4 });
+    functionsMocks.cmsSaveContent.mockRejectedValueOnce(new HttpError(409, "This document changed since you opened it."));
+    render(workspace());
+    fireEvent.click(await screen.findByRole("button", { name: "Restore unsaved changes" }));
+    await screen.findByDisplayValue("Uncommitted copy");
+    fireEvent.click(screen.getByRole("button", { name: "Save page" }));
+    await screen.findByText(/Someone else saved this page/);
+    expect(functionsMocks.cmsSaveContent).toHaveBeenCalledTimes(1);
+    expect(functionsMocks.cmsSaveContent.mock.calls[0]![1].baseVersion).toBe(3);
+    expect(screen.getByDisplayValue("Uncommitted copy")).toBeVisible();
   });
 
   it.each(["blocks", "metadata"] as const)("reviews the current Page before resubmitting local %s at its exact version", async panel => {
