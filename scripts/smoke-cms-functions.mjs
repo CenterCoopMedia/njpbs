@@ -7,12 +7,24 @@ export class CmsSmokeError extends Error { name = "CmsSmokeError"; }
 
 // Scheduler metadata is verified after deployment by assertSchedulesReady in
 // deploy-cms-function-batches.mjs; HTTP existence alone cannot prove a schedule.
-const DEFAULT_FUNCTIONS_ORIGIN =
-  "https://us-central1-njpbs-site.cloudfunctions.net";
 const DEFAULT_CMS_API_BASE_URL = process.env.CMS_PRODUCTION_API_ORIGIN || "https://api.example.org";
-const DEFAULT_ADMIN_ORIGIN = "https://admin.njpbs.org";
+// One tuple per environment; the API and Admin origins are rendered per
+// checkout (config/development-inputs.json). The workflow runs a staged copy of
+// this script against the release tree, so it must not load release-tree
+// modules such as functions/lib/publication-target.js at startup.
+const SMOKE_TARGETS = Object.freeze({
+  production: Object.freeze({ baseUrl: DEFAULT_CMS_API_BASE_URL,
+    functionsOrigin: "https://us-central1-njpbs-site.cloudfunctions.net", adminOrigin: "https://admin.njpbs.org" }),
+  development: Object.freeze({ baseUrl: "https://dev-api.example.org",
+    functionsOrigin: "https://us-central1-njpbs-site-dev.cloudfunctions.net", adminOrigin: "https://dev-admin.example.org" }),
+});
 
-function declaredDevFunctionNames(root = new URL("../", import.meta.url)) {
+export function cmsSmokeTarget(environment = "production") {
+  if (!Object.hasOwn(SMOKE_TARGETS, environment)) throw new Error("Invalid CMS smoke environment");
+  return SMOKE_TARGETS[environment];
+}
+
+export function declaredDevFunctionNames(root = new URL("../", import.meta.url)) {
   const require = createRequire(new URL("package.json", root));
   const { devFunctionManifest } = require("./functions/dev-manifest.js");
   return Object.keys(devFunctionManifest({ schemaVersion: 1, environment: "development", enabled: false })).sort();
@@ -37,12 +49,11 @@ export async function runDevCmsFunctionSmoke({ deployedFunctionNames, request = 
       [...deployedFunctionNames].sort().join() !== declaredDevFunctionNames().join()) {
     throw new Error("Dev smoke requires the verified complete dev manifest");
   }
-  const result = await runFunctionSmoke({ baseUrl: "https://dev-api.example.org",
-    functionsOrigin: "https://us-central1-njpbs-site-dev.cloudfunctions.net",
-    adminOrigin: "https://dev-admin.example.org", deployedFunctionNames, request });
+  const target = cmsSmokeTarget("development");
+  const result = await runFunctionSmoke({ ...target, deployedFunctionNames, request });
   const { checkDevAnonymousRefusal } = await import("./check-dev-anonymous-refusal.mjs");
   let adminChecks = 0;
-  await checkDevAnonymousRefusal({ hosts: ["dev-admin.example.org"], fetchImpl: (...args) => {
+  await checkDevAnonymousRefusal({ hosts: [new URL(target.adminOrigin).hostname], fetchImpl: (...args) => {
     adminChecks += 1; return request(...args);
   } });
   return { checked: result.checked + adminChecks };
@@ -356,17 +367,17 @@ async function expectStatus({
   console.log(`${label}: ${response.status}`);
 }
 
-export async function runCmsFunctionSmoke({
-  baseUrl = DEFAULT_CMS_API_BASE_URL,
-  functionsOrigin = DEFAULT_FUNCTIONS_ORIGIN,
-  adminOrigin = DEFAULT_ADMIN_ORIGIN,
-  request = fetch,
-} = {}) {
-  assertProductionCmsApiBaseUrl(baseUrl);
-  if (functionsOrigin !== DEFAULT_FUNCTIONS_ORIGIN || adminOrigin !== DEFAULT_ADMIN_ORIGIN) {
-    throw new Error("Production smoke requires the exact production target tuple");
+// A development caller supplies the dev Access service token in `request`, so
+// the dev Admin shell answers 200 exactly as the public production shell does.
+export async function runCmsFunctionSmoke({ environment = "production", request = fetch, ...tuple } = {}) {
+  const target = cmsSmokeTarget(environment);
+  const { baseUrl = target.baseUrl, functionsOrigin = target.functionsOrigin, adminOrigin = target.adminOrigin } = tuple;
+  if (environment === "production") assertProductionCmsApiBaseUrl(baseUrl);
+  if (baseUrl !== target.baseUrl || functionsOrigin !== target.functionsOrigin || adminOrigin !== target.adminOrigin) {
+    throw new Error(`CMS smoke requires the exact ${environment} target tuple`);
   }
-  const result = await runFunctionSmoke({ baseUrl, functionsOrigin, adminOrigin, deployedFunctionNames: DEPLOYED_FUNCTION_NAMES, request });
+  const deployedFunctionNames = environment === "production" ? DEPLOYED_FUNCTION_NAMES : declaredDevFunctionNames();
+  const result = await runFunctionSmoke({ baseUrl, functionsOrigin, adminOrigin, deployedFunctionNames, request });
   await expectStatus({ request, url: adminOrigin, init: { redirect: "manual" }, expected: 200,
     label: "public Admin authentication shell" });
   return { checked: result.checked + 1 };
