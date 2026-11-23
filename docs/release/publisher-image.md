@@ -65,3 +65,23 @@ The coordinator owns the separately authorized first dispatch and read-only
 digest proof. Estimate 15–25 hosted runner minutes for a new SHA and 2–5 for a
 rerun, with zero scheduled minutes. Keep this producer while the release method
 consumes registry images; it adds no alternate deployment path.
+
+## Development target
+
+Dispatch with `target=development` to build the development publisher from the
+same source. The image, Worker and container are named `njpbs-dev-cms-publisher`;
+the config changes only the Worker and container name, the
+`DURABLE_POST_WITHDRAWALS` bucket (`njpbs-dev-cms-publication`) and the route
+(`dev-publisher-health.njpbs.org`), all from
+`functions/lib/publication-target.js`. Every development input is rendered, so
+the image fingerprint covers all of them. The run title is
+`Publisher image development <SHA>`, the artifact is
+`publisher-image-development-<SHA>-<attempt>` and the receipt adds
+`"target": "development"`. Production titles, artifacts and receipts are
+unchanged.
+
+The development job reads `PUBLISHER_DEVELOPMENT_PUBLIC_VARS_JSON` from the same
+`publisher-image` environment: the same key set, with `CMS_DEPLOYMENT_ENVIRONMENT`
+`development` and `PUBLICATION_SERIALIZER_ID` `cloudflare-dev-publisher`. Both
+targets refuse a variables map whose environment or serializer names the other
+target.

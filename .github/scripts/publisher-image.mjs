@@ -7,14 +7,33 @@ import { requireReleaseSource } from "./require-release-source.mjs";
 import { requireMainCi } from "./require-main-ci.mjs";
 import { repositoryMatches, workflowMatches } from "../../scripts/lib/repository-identity.mjs";
 import { deploymentInputFingerprint, productionDeploymentInputs, readDeploymentManifest } from "../../scripts/render-development-config.mjs";
+import targets from "../../functions/lib/publication-target.js";
 
-const imageName = "njpbs-cms-publisher";
 const inputLabel = "org.njpbs.deployment-input-sha256";
 const digestPattern = /^sha256:[a-f0-9]{64}$/;
 class ImageRefusal extends Error {}
 const json = (file) => JSON.parse(readFileSync(file, "utf8"));
 const bytes = (value) => `${JSON.stringify(value, null, 2)}\n`;
 const sha256 = (value) => createHash("sha256").update(value).digest("hex");
+
+// One publisher source builds a distinct image and Worker per target. The image
+// name is the target's publisher Worker, so a development image can never carry
+// the production name, tag or receipt.
+export function publisherTarget(environment) {
+  if (!["production", "development"].includes(environment)) throw new ImageRefusal("Publisher target must be production or development");
+  return targets.publicationTarget(environment);
+}
+
+// Development replaces only the production resource names in the same source.
+export function targetSource(source, target) {
+  if (target.environment === "production") return source;
+  const config = structuredClone(source);
+  config.name = target.publisherWorker;
+  config.containers[0].name = target.publisherWorker;
+  config.r2_buckets = config.r2_buckets.map(bucket => ({ ...bucket, bucket_name: target.publicationBucket }));
+  config.routes = [{ pattern: new URL(target.publisherOrigin).host, custom_domain: true }];
+  return config;
+}
 
 export async function verifySource({ sha, cwd = process.cwd(), env = process.env, request }) {
   if (!repositoryMatches(env.GITHUB_REPOSITORY, env, env.GITHUB_REPOSITORY_ID) ||
@@ -30,7 +49,7 @@ export async function verifySource({ sha, cwd = process.cwd(), env = process.env
 
 // Wrangler's managed-registry API issues a short-lived pull credential. Keep it
 // in memory; response bodies and authorization headers never enter logs/files.
-export async function registryReader(account, token, request = fetch) {
+export async function registryReader(account, token, imageName, request = fetch) {
   const response = await request(`https://api.cloudflare.com/client/v4/accounts/${account}/containers/registries/registry.cloudflare.com/credentials`, {
     method: "POST", redirect: "error", signal: AbortSignal.timeout(30_000),
     headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
@@ -75,7 +94,7 @@ export async function registryReader(account, token, request = fetch) {
   };
 }
 
-export async function publishImage({ sha, account, inputFingerprint, lookup, build }) {
+export async function publishImage({ sha, account, imageName, inputFingerprint, lookup, build }) {
   if (!/^[a-f0-9]{64}$/.test(inputFingerprint ?? "")) throw new ImageRefusal("Deployment input fingerprint missing");
   let record = await lookup(sha);
   if (!record) {
@@ -90,8 +109,10 @@ export async function publishImage({ sha, account, inputFingerprint, lookup, bui
   return `registry.cloudflare.com/${account}/${imageName}@${record.digest}`;
 }
 
-export function productionConfig(source, prepared, { checkout, sha, image, variables }) {
-  if (source.main !== "worker.ts" || source.containers?.length !== 1 ||
+export function productionConfig(source, prepared, { checkout, sha, image, variables, target = publisherTarget("production") }) {
+  const imageName = target.publisherWorker;
+  if (variables.CMS_DEPLOYMENT_ENVIRONMENT !== target.environment || variables.PUBLICATION_SERIALIZER_ID !== target.serializerId ||
+      source.main !== "worker.ts" || source.containers?.length !== 1 ||
       source.containers[0].image !== "./Dockerfile" || source.containers[0].image_build_context !== "./build" ||
       !path.isAbsolute(checkout) || !/^[a-f0-9]{40}$/.test(sha) ||
       !/^[a-f0-9]{32}$/.test(variables.CLOUDFLARE_ACCOUNT_ID ?? "") ||
@@ -122,12 +143,14 @@ export function productionConfig(source, prepared, { checkout, sha, image, varia
   return config;
 }
 
-export function receiptFiles({ sha, image, config, runId, checkout, inputFingerprint }) {
+export function receiptFiles({ sha, image, config, runId, checkout, inputFingerprint, target = publisherTarget("production") }) {
   if (!/^[1-9][0-9]*$/.test(runId)) throw new ImageRefusal("Workflow run ID missing");
   const configBytes = bytes(config);
+  // Production receipts keep their bytes; a development receipt names its target.
+  const named = target.environment === "production" ? {} : { target: target.environment };
   return {
     "publisher.json": configBytes,
-    "receipt.json": bytes({ schema: 1, source_sha: sha, image, config: "publisher.json", config_sha256: sha256(configBytes), workflow_run_id: runId, source_checkout: checkout, deployment_input_sha256: inputFingerprint }),
+    "receipt.json": bytes({ schema: 1, source_sha: sha, image, config: "publisher.json", config_sha256: sha256(configBytes), workflow_run_id: runId, source_checkout: checkout, deployment_input_sha256: inputFingerprint, ...named }),
   };
 }
 
@@ -142,6 +165,8 @@ function command(executable, args, options = {}) {
 
 async function main(mode, env = process.env) {
   const sha = env.SOURCE_SHA, checkout = process.cwd();
+  const target = publisherTarget(env.PUBLISHER_TARGET), imageName = target.publisherWorker;
+  const source = () => targetSource(json("publisher/wrangler.json"), target);
   const metadataPath = path.join(env.RUNNER_TEMP, "publisher-image-prepared.json");
   if (mode === "verify") {
     await verifySource({ sha, env, request: async route => {
@@ -154,16 +179,18 @@ async function main(mode, env = process.env) {
     } });
   } else if (mode === "prepare") {
     const variables = JSON.parse(env.PUBLISHER_PUBLIC_VARS_JSON);
-    const prepared = JSON.parse(command(process.execPath, ["scripts/prepare-cloud-publisher.mjs", sha], {
+    const prepared = JSON.parse(command(process.execPath, ["scripts/prepare-cloud-publisher.mjs", sha, target.environment], {
       env: { ...env, CLOUDFLARE_ACCOUNT_ID: variables.CLOUDFLARE_ACCOUNT_ID, CLOUDFLARE_PUBLIC_WORKER_TAG: variables.CLOUDFLARE_PUBLIC_WORKER_TAG, PUBLIC_SHARE_UPLOAD_ORIGIN: variables.PUBLIC_SHARE_UPLOAD_ORIGIN },
     }));
     if (prepared.commitSha !== sha) throw new ImageRefusal("Prepared source SHA differs");
-    productionConfig(json("publisher/wrangler.json"), json(prepared.configPath), {
-      checkout, sha, variables, image: `registry.cloudflare.com/${variables.CLOUDFLARE_ACCOUNT_ID}/${imageName}@sha256:${"0".repeat(64)}`,
+    productionConfig(source(), targetSource(json(prepared.configPath), target), {
+      checkout, sha, variables, target, image: `registry.cloudflare.com/${variables.CLOUDFLARE_ACCOUNT_ID}/${imageName}@sha256:${"0".repeat(64)}`,
     });
     const manifest = readDeploymentManifest(prepared.source);
     const inputs = json(path.join(prepared.source, ".rendered-deployment-inputs.json")).inputs;
-    const paths = productionDeploymentInputs.flatMap(name => manifest.inputs[name].files);
+    // Development renders every input; production renders only its own.
+    const names = target.environment === "production" ? productionDeploymentInputs : Object.keys(manifest.inputs);
+    const paths = names.flatMap(name => manifest.inputs[name].files);
     const inputFingerprint = deploymentInputFingerprint(paths, inputs, manifest);
     if (!/^[a-f0-9]{64}$/.test(inputFingerprint)) throw new ImageRefusal("Prepared deployment input fingerprint missing");
     const dockerfile = readFileSync(path.join(prepared.source, "publisher/Dockerfile"), "utf8");
@@ -172,16 +199,16 @@ async function main(mode, env = process.env) {
   } else if (mode === "image") {
     const prepared = json(metadataPath), account = prepared.variables.CLOUDFLARE_ACCOUNT_ID;
     if (!/^[a-f0-9]{32}$/.test(account ?? "") || !env.CLOUDFLARE_API_TOKEN) throw new ImageRefusal("Registry configuration missing");
-    const image = await publishImage({ sha, account, inputFingerprint: prepared.inputFingerprint,
-      lookup: async ref => (await registryReader(account, env.CLOUDFLARE_API_TOKEN))(ref),
+    const image = await publishImage({ sha, account, imageName, inputFingerprint: prepared.inputFingerprint,
+      lookup: async ref => (await registryReader(account, env.CLOUDFLARE_API_TOKEN, imageName))(ref),
       build: tag => command(process.execPath, [prepared.wrangler, "containers", "build", prepared.directory, "--push", "--tag", tag], {
         env: { ...env, CLOUDFLARE_ACCOUNT_ID: account },
       }),
     });
-    const config = productionConfig(json("publisher/wrangler.json"), json(prepared.configPath), { checkout, sha, image, variables: prepared.variables });
+    const config = productionConfig(source(), targetSource(json(prepared.configPath), target), { checkout, sha, image, target, variables: prepared.variables });
     const directory = path.join(env.RUNNER_TEMP, "publisher-image-receipt");
     mkdirSync(directory);
-    for (const [name, content] of Object.entries(receiptFiles({ sha, image, config, checkout, runId: env.GITHUB_RUN_ID, inputFingerprint: prepared.inputFingerprint }))) writeFileSync(path.join(directory, name), content);
+    for (const [name, content] of Object.entries(receiptFiles({ sha, image, config, checkout, target, runId: env.GITHUB_RUN_ID, inputFingerprint: prepared.inputFingerprint }))) writeFileSync(path.join(directory, name), content);
   } else throw new ImageRefusal("Expected verify, prepare or image");
 }
 
