@@ -143,7 +143,7 @@ const images = [...newsletters.images.values()].map(image => renderResolvedImage
     }
   }, 30_000);
 
-  it("fetches an allowed local original and emits bounded static picture variants", async () => {
+  it("shares static picture variants across routes and rejects a build over the image budget", async () => {
     const siteRoot = process.cwd();
     const sourceImage = readFileSync(
       join(siteRoot, "public", "brand", "spotlight", "watch.jpg"),
@@ -196,26 +196,28 @@ const images = [...newsletters.images.values()].map(image => renderResolvedImage
         join(fixtureRoot, "astro.config.mjs"),
         `import { defineConfig } from "astro/config";\n` +
           `export default defineConfig({\n` +
-          `  image: { remotePatterns: [{ protocol: "http", hostname: "127.0.0.1", port: "${address.port}", pathname: "/cms-media/**" }] },\n` +
+          `  image: {\n` +
+          `    remotePatterns: [{ protocol: "http", hostname: "127.0.0.1", port: "${address.port}", pathname: "/cms-media/**" }],\n` +
+          `    service: { entrypoint: "../src/lib/build-image-service.ts", config: { maxRemoteVariants: 12 } },\n` +
+          `  },\n` +
           `});\n`,
         "utf8",
       );
-      writeFileSync(
-        join(pages, "index.astro"),
-        `---\n` +
+      const page = `---\n` +
           `import { getImage } from "astro:assets";\n` +
           `import { resolveCmsResponsiveImage } from ${JSON.stringify(adapter)};\n` +
           `import { renderResolvedImage } from ${JSON.stringify(renderer)};\n` +
           `const image = await resolveCmsResponsiveImage({ url: "http://127.0.0.1:${address.port}/cms-media/watch.jpg", mimeType: "image/jpeg", width: 640, height: 360 }, "grid", getImage);\n` +
           `const markup = renderResolvedImage("watch", "Watch NJ PBS", image);\n` +
           `---\n` +
-          `<html lang="en"><body set:html={markup} /></html>\n`,
-        "utf8",
-      );
+          `<html lang="en"><body set:html={markup} /></html>\n`;
+      writeFileSync(join(pages, "index.astro"), page);
+      writeFileSync(join(pages, "duplicate.astro"), page);
 
       await build({ root: fixtureRoot, logLevel: "silent" });
 
       const html = readFileSync(join(fixtureRoot, "dist", "index.html"), "utf8");
+      const duplicate = readFileSync(join(fixtureRoot, "dist", "duplicate", "index.html"), "utf8");
       const outputs = allFiles(join(fixtureRoot, "dist", "_astro"));
       expect(requests.length).toBeGreaterThan(0);
       expect(new Set(requests)).toEqual(new Set(["/cms-media/watch.jpg"]));
@@ -228,6 +230,20 @@ const images = [...newsletters.images.values()].map(image => renderResolvedImage
       expect(outputs.some((path) => path.endsWith(".webp"))).toBe(true);
       expect(outputs.some((path) => path.endsWith(".jpeg"))).toBe(true);
       expect(outputs.length).toBeLessThanOrEqual(12);
+      expect(duplicate).toEqual(html);
+
+      requests.length = 0;
+      writeFileSync(join(pages, "duplicate.astro"), page.replace(
+        "const markup",
+        `await Promise.all(Array.from({ length: 16 }, (_, i) => resolveCmsResponsiveImage(
+          { url: "http://127.0.0.1:${address.port}/cms-media/" + i + ".jpg", mimeType: "image/jpeg", width: 640, height: 360 },
+          "grid", getImage,
+        )));\nconst markup`,
+      ));
+      await expect(build({ root: fixtureRoot, logLevel: "silent" })).rejects.toThrow(
+        "Build image budget reached (12 distinct remote variants)",
+      );
+      expect(requests).toEqual([]);
     } finally {
       try {
         if (server.listening) {

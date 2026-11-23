@@ -151,6 +151,29 @@ const workersAssetLimits = {
 };
 
 /** @type {import('astro').AstroIntegration} */
+const buildImageBudget = {
+  name: "njpbs-build-image-budget",
+  hooks: {
+    "astro:config:setup": ({ command, updateConfig }) => {
+      if (command !== "build") return;
+      updateConfig({
+        image: {
+          service: {
+            build: {
+              entrypoint: "./src/lib/build-image-service.ts",
+              // Allow up to 256 retained originals at nine widths across both
+              // placements and three formats per width.
+              config: { maxRemoteVariants: 6_912 },
+            },
+            runtime: { entrypoint: "astro/assets/services/sharp" },
+          },
+        },
+      });
+    },
+  },
+};
+
+/** @type {import('astro').AstroIntegration} */
 const externalContentRoutes = {
   name: "njpbs-external-content-routes",
   hooks: {
@@ -207,6 +230,7 @@ export default defineConfig({
   },
   integrations: [
     publicFonts,
+    buildImageBudget,
     meaningSearchIndex(),
     internalSurfaceRoutes,
     publicAuxiliaryRoutes,
