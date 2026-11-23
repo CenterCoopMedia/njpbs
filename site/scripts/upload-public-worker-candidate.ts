@@ -408,7 +408,6 @@ export async function uploadPublicWorkerCandidate({
 }): Promise<PublicWorkerCandidate> {
   // Resolve the Wrangler config first: a refused dev config precedes every read and Wrangler call.
   const selected = target === undefined ? undefined : assertPublicationTarget(target);
-  if (selected?.environment === "development" && preparationId !== undefined) throw new Error("Detached public release uploads are production-only");
   const config = await publicWorkerWranglerConfig({ target: selected, directory: path.dirname(preparedArtifactPath), distDirectory });
   const legacySettings = parseNoBuildPostEnvironment(publicBuildEnvironment);
   const admission = await readNoBuildFamilyAdmission({ firestore, env: publicBuildEnvironment });
@@ -444,8 +443,8 @@ export async function uploadPublicWorkerCandidate({
 
   let batch: { noBuildStaticInput?: unknown; runtime?: PublicationRuntime };
   if (preparationId !== undefined) {
-    batch = await readPublicReleasePreparation({ firestore, preparationId, commitSha: prepared.commitSha });
-    await assertPreparedPublicReleaseCheckpoint({ firestore, preparationId, preparedArtifact: prepared });
+    batch = await readPublicReleasePreparation({ firestore, preparationId, commitSha: prepared.commitSha, target: selected });
+    await assertPreparedPublicReleaseCheckpoint({ firestore, preparationId, preparedArtifact: prepared, target: selected });
   } else {
     const snapshot = await publicBuildBatchRef(firestore, artifact.buildBatchId).get();
     if (!snapshot.exists) throw new Error("The public deployment reservation does not exist");
@@ -570,7 +569,7 @@ export async function uploadPublicWorkerCandidate({
     });
   }
   if (preparationId !== undefined) {
-    return recordPreparedPublicWorkerCandidate({ firestore, preparationId, candidate });
+    return recordPreparedPublicWorkerCandidate({ firestore, preparationId, candidate, target: selected });
   }
   await stagePublicMediaManifest({ firestore, manifest });
   await markPublicMediaManifestReady({ firestore, manifest });

@@ -13,6 +13,7 @@ import mediaStore from "../../functions/lib/public-media-manifest-store.js";
 import candidateStore from "../../functions/lib/public-worker-candidate-store.js";
 import { createHash } from "node:crypto";
 import { runNoBuildCloudRelease } from "../../site/scripts/no-build-cloud-release";
+import { publicationTarget } from "../../functions/lib/publication-target.js";
 
 const oldCommitSha = "a".repeat(40), commitSha = "b".repeat(40);
 const publicBuildSettings = { schemaVersion: 1, commitSha, overridesAbsent: true,
@@ -173,13 +174,14 @@ it("refuses a freshness check under NEW pins or an unaccepted phase", async () =
   await expect(check("starting")).rejects.toThrow("invalid");
 });
 
-async function seal() {
-  const reservation = await prepare();
+async function seal(target) {
+  const scoped = target ? { target } : {};
+  const reservation = await prepare(scoped);
   const mediaManifest = mediaModule.createPublicMediaManifest({ reservation, owners: [],
     artifactInventory: ["cmsPages", "cmsPosts", "cmsSettings", "cmsAuthorProfilesPublic"]
       .map(collection => ({ collection, complete: true, documentIds: [] })) });
   const candidate = { schemaVersion: 1, runtime: { owner: "cloudflare", release: commitSha },
-    buildBatchId: reservation.buildBatchId, generation: 8, commitSha, workerName: "njpbs-production",
+    buildBatchId: reservation.buildBatchId, generation: 8, commitSha, workerName: (target ?? publicationTarget()).workerName,
     workerVersionId: "11111111-1111-4111-8111-111111111111", versionCreatedOn: "2026-10-26T12:00:00.000Z",
     artifactDigest: "a".repeat(64), artifactReceiptDigest: "b".repeat(64), publicationReceiptDigest: "c".repeat(64),
     mediaManifestDigest: mediaManifest.mediaManifestDigest, artifactFileCount: 2, artifactBytes: 100, wranglerVersion: "4.76.0" };
@@ -189,14 +191,14 @@ async function seal() {
   candidate.publicationReceiptDigest = createHash("sha256").update(JSON.stringify(publication)).digest("hex");
   await preparation.recordPreparedPublicReleaseCheckpoint({ firestore: db, preparationId, commitSha,
     inputSha256: "f".repeat(64), artifactCheckpointDigest: "a".repeat(64),
-    preparedArtifact: promotion.preparedArtifactFromCandidate(candidate), publicBuildSettings });
-  await preparation.recordPreparedPublicWorkerCandidate({ firestore: db, preparationId, candidate });
+    preparedArtifact: promotion.preparedArtifactFromCandidate(candidate), publicBuildSettings, ...scoped });
+  await preparation.recordPreparedPublicWorkerCandidate({ firestore: db, preparationId, candidate, ...scoped });
   await db.doc(`cmsPreviewPublicContexts/${reservation.buildBatchId}`).set({ schemaVersion: 1,
     buildBatchId: reservation.buildBatchId, artifactReceiptDigest: candidate.artifactReceiptDigest, sha256: "e".repeat(64),
     byteLength: 100, key: `public-context/${reservation.buildBatchId}/${"e".repeat(64)}.json` });
   const input = { firestore: db, preparationId, commitSha, inputSha256: "f".repeat(64),
     artifactCheckpointDigest: "a".repeat(64), preparedArtifact: promotion.preparedArtifactFromCandidate(candidate),
-    mediaManifest, publicBuildSettings };
+    mediaManifest, publicBuildSettings, ...scoped };
   const proof = await promotion.sealPreparedPublicRelease(input);
   return { reservation, candidate, proof, input };
 }
@@ -294,6 +296,25 @@ it("atomically changes both OLD-paused pins, reserves the planned generation and
   expect((await db.doc(`cmsPublicationSerializerJournals/cloudflare-publisher/releases/${preparationId}`).get()).data())
     .toMatchObject({ status: "pending", attempts: 0, preparationId, commitSha });
   expect((await db.doc(`system/publicDeployment/buildBatches/cms-${preparationId}/candidates/worker`).get()).exists).toBe(false);
+});
+
+it("prepares, seals, hands over and promotes a development release on development records only", async () => {
+  const development = publicationTarget("development");
+  await db.doc("system/cmsPublicationRuntime").update({ "cloud.serializerId": development.serializerId });
+  // Production preparation refuses the development publisher pin.
+  await expect(prepare()).rejects.toThrow("current publisher and public source ready at OLD");
+  await seal(development);
+  await expect(promotion.checkSealedPublicRelease({ firestore: db, preparationId, commitSha, target: development }))
+    .resolves.toMatchObject({ candidate: { workerName: development.workerName } });
+  await db.doc("system/cmsPublicationRuntime").update({ phase: "paused", "cloud.phase": "paused" });
+  await promotion.handoverPreparedPublicRelease({ firestore: db, preparationId, commitSha, target: development });
+  await expect(promote()).rejects.toThrow();
+  const { receipt } = await promotion.promotePreparedPublicRelease({ firestore: db, preparationId, commitSha, apply: true,
+    target: development });
+  expect(receipt).toMatchObject({ generation: 8, commitSha, preparationId });
+  expect((await db.doc(`cmsPublicationSerializerJournals/${development.serializerId}/releases/${preparationId}`).get()).data())
+    .toMatchObject({ status: "pending", preparationId, commitSha });
+  expect((await db.collection("cmsPublicationSerializerJournals/cloudflare-publisher/releases").get()).empty).toBe(true);
 });
 
 it("refuses a sealed release after newer published content becomes visible", async () => {
