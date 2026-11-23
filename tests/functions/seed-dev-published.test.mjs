@@ -506,18 +506,23 @@ describe('isolated published-content seed', () => {
     expect((await dev.doc(`cmsAuthorProfilesPublic/${authorId}`).get()).data().photo.url).toBe(mediaUrl);
     expect((await dev.doc(`cmsAuthorProfiles/${authorId}`).get()).data().photo).toBeNull();
     expect((await dev.doc('cmsPosts/post-one').get()).data().published.metadata.credits[0].displayName).toBe('Public author');
-    // A profile no source content references is still published, so it stays on dev.
+    // Dev mirrors every published profile: one no source content references stays and stays current.
     await source.doc('cmsPosts/post-one').update({ publiclyVisible: false });
+    await source.doc(`cmsAuthorProfilesPublic/${authorId}`).update({ jobTitle: 'Senior reporter', snapshotVersion: 3 });
+    await source.doc(`cmsAuthorProfilesPublic/au_${'2'.repeat(32)}`).set({ authorId: `au_${'2'.repeat(32)}`, slug: 'second-author',
+      displayName: 'Second author', jobTitle: 'Producer', bio: 'Public biography', previousSlugs: [], photo: null, links: {}, publishedAt: when, snapshotVersion: 1 });
     const unreferenced = await exportSeed();
-    expect(unreferenced.publicAuthorIds).toEqual([authorId]);
+    expect(unreferenced.counts.cmsAuthorProfilesPublic).toBe(2);
     expect(await refresh({ firestore: dev, manifest: unreferenced })).toMatchObject({ removed: at('cmsPosts/post-one') });
-    expect((await dev.doc(`cmsAuthorProfilesPublic/${authorId}`).get()).exists).toBe(true);
+    expect((await dev.doc(`cmsAuthorProfilesPublic/${authorId}`).get()).data().jobTitle).toBe('Senior reporter');
+    expect((await dev.doc(`cmsAuthorProfilesPublic/au_${'2'.repeat(32)}`).get()).data().displayName).toBe('Second author');
     expect((await verifyPublished({ firestore: dev, manifest: unreferenced })).verified).toBe(true);
+    await source.doc(`cmsAuthorProfilesPublic/au_${'2'.repeat(32)}`).delete();
     // A withdrawn public profile leaves dev, as on production; the working profile stays.
     await source.doc(`cmsAuthorProfilesPublic/${authorId}`).delete();
     const withdrawn = await exportSeed();
-    expect(withdrawn.publicAuthorIds).toEqual([]);
-    expect(await refresh({ firestore: dev, manifest: withdrawn })).toMatchObject({ removed: at(`cmsAuthorProfilesPublic/${authorId}`) });
+    expect(withdrawn.counts.cmsAuthorProfilesPublic).toBeUndefined();
+    expect(await refresh({ firestore: dev, manifest: withdrawn })).toMatchObject({ removed: at(`cmsAuthorProfilesPublic/${authorId}`, `cmsAuthorProfilesPublic/au_${'2'.repeat(32)}`) });
     expect((await dev.doc(`cmsAuthorProfilesPublic/${authorId}`).get()).exists).toBe(false);
     expect((await dev.doc(`cmsAuthorProfiles/${authorId}`).get()).exists).toBe(true);
     expect((await verifyPublished({ firestore: dev, manifest: withdrawn })).verified).toBe(true);
@@ -564,6 +569,10 @@ describe('isolated published-content seed', () => {
     // A card the source stops referencing stays: a dev-authored page may still use it.
     await source.doc('cmsPages/contact').update({ 'published.blocks': [] });
     const next = await exportSeed({ publication: live, context });
+    // A row that no longer matches its seed receipt has no known kind, so it is never removed.
+    await dev.doc('cmsPosts/sponsor-1').update({ type: 'post' });
+    expect(await refresh({ firestore: dev, manifest: next })).toMatchObject({ deleted: 0, removed: [] });
+    await dev.doc('cmsPosts/sponsor-1').update({ type: 'sponsor' });
     expect(await refresh({ firestore: dev, manifest: next })).toMatchObject({ deleted: 0, removed: [] });
     expect((await dev.doc('cmsPosts/sponsor-1').get()).data().name).toBe('Released sponsor');
     expect((await verifyPublished({ firestore: dev, manifest: next })).verified).toBe(true);

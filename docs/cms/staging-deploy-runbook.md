@@ -340,7 +340,8 @@ plan to resume an interrupted refresh; finished groups report `unchanged`.
 
 Public immutable snapshots and allowlisted registries only: routed published
 Pages, Posts, Programs and Events whose `publishAt` has passed, the three public
-settings, public author profiles, and the public media records they reference.
+settings, every published public author profile (referenced or not), and the
+public media records they reference.
 No draft, hidden, deleted, scheduled, staff-type, private profile, Auth, queue,
 lease, system, secret or rights-attestation data. Published snapshots are
 rebuilt through the publish contract and scrubbed of email, private, internal,
@@ -362,7 +363,9 @@ restores or removes only the listed seed-written rows whose document and receipt
 still match the dry run; a seeded record changed after the dry run is refused.
 The refresh removes only withdrawn public records (Pages, Posts, settings and
 public author profiles). Seeded media, categories, sections, private author rows
-and Sponsor or Newsletter cards stay, because dev-authored records may use them. Like
+and Sponsor or Newsletter cards stay, because dev-authored records may use them.
+A seeded Post whose row no longer matches its seed receipt has no known kind and
+is never removed. Like
 the publication owners, apply advances the public context (and its withdrawal
 fence for a removal) when it changes public records, and advances the media
 discovery revision, clearing the cached active count, when it changes seeded

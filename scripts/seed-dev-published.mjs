@@ -360,9 +360,12 @@ export async function exportPublished({ firestore, source = SOURCE, destination 
       records.push(seedRecord('cmsSettings', id, projection, projection.sourceVersion, confirmed('cmsSettings', id, projection.sourceVersion)));
     }
     let refs = referenceSets(records);
-    for (const id of [...refs.authors].sort()) {
+    // Dev mirrors every published public profile, referenced or not, so an author
+    // page matches production and a withdrawn profile is the only one missing.
+    const profiles = new Map((await transaction.get(firestore.collection('cmsAuthorProfilesPublic'))).docs.map(doc => [doc.id, doc]));
+    for (const id of [...new Set([...refs.authors, ...profiles.keys()])].sort()) {
       if (!ID.test(id)) fail('Invalid author reference');
-      const snapshot = await transaction.get(firestore.doc(`cmsAuthorProfilesPublic/${id}`));
+      const snapshot = profiles.get(id) ?? { exists: false };
       // A frozen freeform byline needs no private profile or staff lookup.
       if (!snapshot.exists) { omissions.push({ collection: 'cmsAuthorProfilesPublic', id, reason: 'No public author profile; retain frozen byline only' }); continue; }
       const projection = projectAt('cmsAuthorProfilesPublic', id, () => publicAuthor(id, snapshot.data()));
@@ -404,11 +407,7 @@ export async function exportPublished({ firestore, source = SOURCE, destination 
         omissions.push({ collection, id, reason: 'No admitted target; renderer uses its fallback or hides this link' });
       }
     }
-    // Every published public profile at this read time, referenced or not, so a
-    // refresh removes a seeded profile only when production withdrew it.
-    const publicAuthorIds = (await transaction.get(firestore.collection('cmsAuthorProfilesPublic').select())).docs.map(doc => doc.id)
-      .sort((a, b) => a.localeCompare(b, 'en'));
-    const manifest = finishManifest({ ...manifestBody, publicAuthorIds, omissions: omissions.sort((a, b) => canonical(a).localeCompare(canonical(b), 'en')) });
+    const manifest = finishManifest({ ...manifestBody, omissions: omissions.sort((a, b) => canonical(a).localeCompare(canonical(b), 'en')) });
     validateManifest(manifest);
     return manifest;
   }, { readOnly: true, ...(readTime ? { readTime } : {}) });
@@ -419,10 +418,7 @@ export function validateManifest(manifest) {
   const { hash, ...body } = manifest;
   if (manifest.schemaVersion !== 1 || !SHA.test(hash) || digest(body) !== hash || !/^[a-f0-9]{40}$/.test(manifest.sourceSha)) fail('Invalid manifest hash or schema');
   if (manifest.configurationOnly !== undefined && manifest.configurationOnly !== true) fail('Invalid configuration-only scope');
-  if (canonical(Object.keys(body).sort()) !== canonical(['schemaVersion', 'source', 'destination', 'sourceSha', 'readTime', 'exportedAt', 'publication', 'records', 'omissions', 'excluded', 'counts', 'mediaUrls', ...(manifest.configurationOnly ? ['configurationOnly'] : ['publicAuthorIds'])].sort())) fail('Unexpected manifest field');
-  if (!manifest.configurationOnly && (!Array.isArray(manifest.publicAuthorIds) || manifest.publicAuthorIds.some(id => typeof id !== 'string' || !ID.test(id)) ||
-      canonical(manifest.publicAuthorIds) !== canonical([...new Set(manifest.publicAuthorIds)].sort((a, b) => a.localeCompare(b, 'en'))) ||
-      manifest.records.some(record => record.collection === 'cmsAuthorProfilesPublic' && !manifest.publicAuthorIds.includes(record.id)))) fail('Invalid public author inventory');
+  if (canonical(Object.keys(body).sort()) !== canonical(['schemaVersion', 'source', 'destination', 'sourceSha', 'readTime', 'exportedAt', 'publication', 'records', 'omissions', 'excluded', 'counts', 'mediaUrls', ...(manifest.configurationOnly ? ['configurationOnly'] : [])].sort())) fail('Unexpected manifest field');
   const time = new Timestamp(manifest.readTime.seconds, manifest.readTime.nanoseconds);
   if (time.toDate().toISOString() !== instant(manifest.exportedAt)) fail('Invalid export read time');
   projectAt('publication', 'receipt', () => canonicalPublicationReceipt(manifest.publication));
@@ -595,19 +591,21 @@ const REMOVABLE = /^(cmsPages|cmsPosts|cmsSettings|cmsAuthorProfilesPublic)\//;
 async function trackedRemovals(transaction, firestore, manifest, records) {
   if (manifest.configurationOnly) return [];
   const paths = new Set(records.map(record => record.path));
-  const tracked = await transaction.get(firestore.collection('devSeedRecords'));
-  const candidates = tracked.docs.map(doc => doc.data().path)
-    .filter(path => typeof path === 'string' && !paths.has(path) && REMOVABLE.test(path))
-    // An unreferenced profile is still published; only a withdrawn one leaves dev.
-    .filter(path => !path.startsWith('cmsAuthorProfilesPublic/') || !manifest.publicAuthorIds.includes(path.split('/')[1]));
-  // Cards are stored with Posts; keep a seeded card whatever the source references.
+  const tracked = new Map((await transaction.get(firestore.collection('devSeedRecords'))).docs.map(doc => [doc.data().path, doc.data()]));
+  const candidates = [...tracked.keys()].filter(path => typeof path === 'string' && !paths.has(path) && REMOVABLE.test(path));
+  // Cards are stored with Posts. A row's seeded kind is known only while it still
+  // matches the receipt the seed wrote; a seeded card, or a Post whose kind cannot
+  // be established that way, is never removed.
   const posts = candidates.filter(path => path.startsWith('cmsPosts/'));
-  const cards = new Set();
+  const kept = new Set();
   for (let offset = 0; offset < posts.length; offset += 100) {
     const snapshots = await transaction.getAll(...posts.slice(offset, offset + 100).map(path => firestore.doc(path)));
-    snapshots.forEach(snapshot => { if (['sponsor', 'newsletter'].includes(snapshot.data()?.type)) cards.add(snapshot.ref.path); });
+    snapshots.forEach(snapshot => {
+      const seeded = snapshot.exists && digest(snapshot.data()) === tracked.get(snapshot.ref.path).recordHash;
+      if (!seeded || ['sponsor', 'newsletter'].includes(snapshot.data().type)) kept.add(snapshot.ref.path);
+    });
   }
-  return candidates.filter(path => !cards.has(path)).sort((a, b) => a.localeCompare(b, 'en'));
+  return candidates.filter(path => !kept.has(path)).sort((a, b) => a.localeCompare(b, 'en'));
 }
 const PUBLIC_RECORD = /^(cmsPosts|cmsPages|cmsSettings|cmsAuthorProfilesPublic|media_assets_public)\//;
 
