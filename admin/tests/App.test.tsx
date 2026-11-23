@@ -262,6 +262,57 @@ describe("App auth-state routing", () => {
     }
   });
 
+  it.each([
+    ["Firebase failure", { code: "auth/internal-error", message: "private detail for person@example.org" }, "auth/internal-error"],
+    ["nested service code", { data: { code: "auth/operation-not-allowed", email: "person@example.org" } }, "auth/operation-not-allowed"],
+    ["rate limit", { status: 429, data: { code: "person@example.org" } }, "auth/too-many-requests"],
+    ["service unavailable", { status: 503, message: "private gateway detail" }, "account-service-unavailable"],
+  ])("includes only the recognized code for a %s", async (_case, failure, code) => {
+    const previous = authMocks.state;
+    authMocks.state = { status: "signed-out" } as unknown as typeof authMocks.state;
+    authMocks.signIn.mockRejectedValueOnce(failure);
+
+    try {
+      render(<App />);
+      fireEvent.click(screen.getByRole("button", { name: "Choose a test Google account" }));
+      const alert = await screen.findByRole("alert");
+      expect(alert).not.toHaveTextContent(/private|person@example\.org|auth\//);
+      const reportLink = screen.getByRole("link", { name: /^Report a problem/ });
+      expect(reportLink).toHaveAttribute(
+        "href",
+        `https://njpbs.org/contact/?account-error=${encodeURIComponent(code)}#report-a-problem`,
+      );
+
+      fireEvent.click(screen.getByRole("button", { name: "Create account" }));
+      expect(reportLink).toHaveAttribute("href", "https://njpbs.org/contact/#report-a-problem");
+    } finally {
+      authMocks.state = previous;
+    }
+  });
+
+  it.each([
+    ["object", { code: { code: "auth/internal-error" }, data: { token: "synthetic-token" } }],
+    ["raw message", "auth/internal-error and synthetic-password"],
+    ["unknown code", { code: "auth/internal-error/synthetic-password" }],
+    ["credentials and account details", { code: "person@example.org", message: "synthetic-password" }],
+    ["account status", { code: "auth/email-already-in-use", email: "person@example.org" }],
+    ["accessor", { get code() { throw new Error("must not read the getter"); } }],
+  ])("omits the diagnostic for %s", async (_case, failure) => {
+    const previous = authMocks.state;
+    authMocks.state = { status: "signed-out" } as unknown as typeof authMocks.state;
+    authMocks.signIn.mockRejectedValueOnce(failure);
+
+    try {
+      render(<App />);
+      fireEvent.click(screen.getByRole("button", { name: "Choose a test Google account" }));
+      expect(await screen.findByRole("alert")).toHaveTextContent(/couldn't complete this account action/i);
+      expect(screen.getByRole("link", { name: /^Report a problem/ }))
+        .toHaveAttribute("href", "https://njpbs.org/contact/#report-a-problem");
+    } finally {
+      authMocks.state = previous;
+    }
+  });
+
   it("does not claim a failed verification email was sent", async () => {
     const previous = authMocks.state;
     authMocks.state = {
