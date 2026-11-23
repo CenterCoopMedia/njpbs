@@ -263,7 +263,10 @@ viewer access and nothing else. Before any read, export confirms at project
 level that the account can get and list Firestore entities and holds none of
 the probed Firestore write, import, export or Cloud Storage permissions. That
 check cannot see a grant on an individual bucket. The script makes no Cloud
-Storage call. Import and verify accept only the dedicated dev seed writer. The
+Storage call. Import and verify accept only the dedicated dev seed writer. A
+private operator step verifies the dedicated read-only source identity
+(including that it has no production bucket-level storage grant) and the
+dev-only writer identity before their first use and after any IAM change. The
 procedure uses no ADC and no Auth or database export. Never substitute an
 administrator credential.
 
