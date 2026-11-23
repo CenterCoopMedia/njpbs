@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { Link, useSearchParams } from "react-router";
-import { cmsListBinnedMedia, cmsRestoreMedia, HttpError, type BinnedMediaAsset, type ListBinnedMediaResponse, type MediaCategoryDefinition } from "../lib/functions";
+import { cmsListBinnedMedia, cmsPurgeBinnedImage, cmsRestoreMedia, HttpError, type BinnedMediaAsset, type ListBinnedMediaResponse, type MediaCategoryDefinition } from "../lib/functions";
 import { mediaDisplayUrl } from "../lib/media-image";
 import { mediaImagesPath } from "../lib/routes";
 import { Button, EmptyState, InlineMessage } from "./ui/Primitives";
@@ -28,17 +28,24 @@ export function MediaRecycleBin({ getIdToken, categories, targetId = null }: {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [restoreError, setRestoreError] = useState("");
+  const [deleteError, setDeleteError] = useState("");
   const [success, setSuccess] = useState("");
   const [restoring, setRestoring] = useState<string | null>(null);
+  const [confirming, setConfirming] = useState<BinnedMediaAsset | null>(null);
+  const [deleting, setDeleting] = useState(false);
+  const busy = restoring !== null || deleting;
   const [now, setNow] = useState(Date.now);
   const [missingTarget, setMissingTarget] = useState(false);
   const searchedTarget = useRef<string | null>(null);
   const focusTargetOnLoad = useRef(false);
   const heading = useRef<HTMLHeadingElement>(null);
   const target = useRef<HTMLLIElement>(null);
+  const deleteTrigger = useRef<HTMLButtonElement | null>(null);
+  const confirmGroup = useRef<HTMLDivElement>(null);
 
   useEffect(() => { heading.current?.focus(); }, []);
   useEffect(() => { setSuccess(""); }, [getIdToken, targetId]);
+  useEffect(() => { if (confirming) confirmGroup.current?.focus(); }, [confirming]);
 
   useEffect(() => {
     const timer = window.setInterval(() => setNow(Date.now()), 60_000);
@@ -93,14 +100,17 @@ export function MediaRecycleBin({ getIdToken, categories, targetId = null }: {
   function refresh(nextPage = result?.page ?? page) {
     setSuccess("");
     setRestoreError("");
+    setDeleteError("");
+    setConfirming(null);
     setPage(nextPage);
     setRevision(value => value + 1);
   }
 
   async function restore(asset: BinnedMediaAsset) {
-    if (restoring) return;
+    if (busy || confirming) return;
     setRestoring(asset.id);
     setRestoreError("");
+    setDeleteError("");
     setSuccess("");
     try {
       await cmsRestoreMedia(await getIdToken(), asset);
@@ -118,16 +128,42 @@ export function MediaRecycleBin({ getIdToken, categories, targetId = null }: {
     }
   }
 
+  async function deletePermanently(asset: BinnedMediaAsset) {
+    if (busy || confirming !== asset) return;
+    setDeleting(true);
+    setDeleteError("");
+    setRestoreError("");
+    setSuccess("");
+    try {
+      const response = await cmsPurgeBinnedImage(await getIdToken(), asset);
+      setSuccess(response.outcome === "purged"
+        ? `Permanently deleted “${asset.name}”.`
+        : `Permanent deletion of “${asset.name}” is in progress. Check the bin for its current status.`);
+      setConfirming(null);
+      setPage(result?.page ?? 1);
+      setRevision(value => value + 1);
+      heading.current?.focus();
+    } catch (failure) {
+      setConfirming(null);
+      const message = failure instanceof Error ? failure.message : "Permanent deletion could not be confirmed.";
+      setDeleteError(`${asset.name}: ${message}`);
+      heading.current?.focus();
+    } finally {
+      setDeleting(false);
+    }
+  }
+
   const records = [...(result?.records ?? [])].sort((a, b) => a.purgeAfter.localeCompare(b.purgeAfter) || a.id.localeCompare(b.id));
   return <section aria-labelledby="recycle-bin-heading">
     <h2 id="recycle-bin-heading" tabIndex={-1} ref={heading}>Recycle bin</h2>
     <p>Deleted images stay in the bin for 30 days. Restore an image to use it again.</p>
     <div className="media-bin-actions">
       <Link to={{ pathname: mediaImagesPath(), search: returnParams.toString() }}>Back to Images</Link>
-      <Button disabled={loading || restoring !== null} onClick={() => refresh()}>Refresh bin</Button>
+      <Button disabled={loading || busy} onClick={() => refresh()}>Refresh bin</Button>
     </div>
     {success ? <InlineMessage tone="success">{success}</InlineMessage> : null}
     {restoreError ? <InlineMessage tone="error" title="Image was not restored">{restoreError} Use Refresh bin to check the image's current status.</InlineMessage> : null}
+    {deleteError ? <InlineMessage tone="error" title="Permanent deletion could not be confirmed">{deleteError} Use Refresh bin to check the image's current status.</InlineMessage> : null}
     {loading ? <LoadingIndicator label="Loading recycle bin" /> : error ? <InlineMessage tone="error" title="Recycle bin could not be loaded">{error}</InlineMessage> : <>
       {missingTarget ? <InlineMessage tone="warning">The matching image is no longer in this bin, or you do not have permission to manage media.</InlineMessage> : null}
       {records.length === 0 ? <EmptyState title="The recycle bin is empty" description="Deleted images you can manage will appear here." /> : <ul className="media-bin-list" aria-label="Binned images">
@@ -142,13 +178,33 @@ export function MediaRecycleBin({ getIdToken, categories, targetId = null }: {
             </dl>
             <p>{asset.lifecycle === "purging" ? "Being removed" : removalCountdown(asset.purgeAfter, now)}</p>
           </div>
-          {asset.lifecycle === "tombstoned" ? <Button disabled={restoring !== null} aria-label={`${restoring === asset.id ? "Restoring" : "Restore"} ${asset.name}`} onClick={() => void restore(asset)}>{restoring === asset.id ? "Restoring…" : "Restore"}</Button> : null}
+          {asset.lifecycle === "tombstoned" ? <div className="media-bin-row-actions">
+            <Button disabled={busy || confirming !== null} aria-label={`${restoring === asset.id ? "Restoring" : "Restore"} ${asset.name}`} onClick={() => void restore(asset)}>{restoring === asset.id ? "Restoring…" : "Restore"}</Button>
+            {result?.canDeletePermanently ? <Button variant="danger" disabled={busy || confirming !== null}
+              aria-label={`Delete ${asset.name} permanently`} onClick={event => {
+                deleteTrigger.current = event.currentTarget;
+                setDeleteError("");
+                setConfirming(asset);
+              }}>Delete permanently</Button> : null}
+          </div> : null}
+          {confirming?.id === asset.id && result?.canDeletePermanently && asset.lifecycle === "tombstoned"
+            ? <div className="media-bin-confirm" role="group" aria-label={`Confirm permanent deletion of ${confirming.name}`} tabIndex={-1} ref={confirmGroup}>
+              <p>Permanently delete “{confirming.name}”? You cannot restore it after this.</p>
+              <div className="media-bin-row-actions">
+                <Button disabled={deleting} onClick={() => {
+                  setConfirming(null);
+                  requestAnimationFrame(() => deleteTrigger.current?.focus());
+                }}>Keep image</Button>
+                <Button variant="danger" disabled={deleting} onClick={() => void deletePermanently(confirming)}>{deleting ? "Deleting…" : "Confirm permanent deletion"}</Button>
+              </div>
+              {deleting ? <p role="status">Permanently deleting “{confirming.name}”.</p> : null}
+            </div> : null}
         </li>)}
       </ul>}
       {result && result.pageCount > 1 ? <nav aria-label="Recycle bin pages" className="media-bin-actions">
-        <Button disabled={result.page <= 1 || restoring !== null} onClick={() => refresh(result.page - 1)}>Previous bin page</Button>
+        <Button disabled={result.page <= 1 || busy} onClick={() => refresh(result.page - 1)}>Previous bin page</Button>
         <span>Page {result.page} of {result.pageCount}</span>
-        <Button disabled={result.page >= result.pageCount || restoring !== null} onClick={() => refresh(result.page + 1)}>Next bin page</Button>
+        <Button disabled={result.page >= result.pageCount || busy} onClick={() => refresh(result.page + 1)}>Next bin page</Button>
       </nav> : null}
     </>}
   </section>;

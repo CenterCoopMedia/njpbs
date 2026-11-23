@@ -605,6 +605,10 @@
           "module": "functions/source-video-publication.js"
         },
         {
+          "name": "cmsPurgeBinnedImage",
+          "module": "functions/media-purge-now.js"
+        },
+        {
           "name": "cmsReadPairCurrentCodeV2",
           "module": "functions/cms-reader-endpoints.js"
         },
@@ -1150,7 +1154,7 @@
     {"id":"ema-original-availability","kind":"media","sources":["functions/lib/source-original-state.js"],"states":["available","archived","restoring","restored"]},
     {"id":"ema-original-restore","kind":"media","sources":["functions/lib/source-originals.js"],"states":["requesting","restoring","restored","stale","failed"]},
     {"id":"ema-media-bin","kind":"media","sources":["functions/lib/media-purge-executor.js","functions/set-media-lifecycle.js","functions/update-media.js"],"states":["active","tombstoned","purging","purged"]},
-    {"id":"ema-media-purge","kind":"media","sources":["functions/lib/media-purge-executor.js","functions/set-media-lifecycle.js"],"states":["pending","purging","purged","cancelled"]},
+    {"id":"ema-media-purge","kind":"media","sources":["functions/lib/media-purge-executor.js","functions/media-purge-now.js","functions/set-media-lifecycle.js"],"states":["pending","purging","purged","cancelled"]},
     {"id":"ema-master-cleanup","kind":"media","sources":["functions/lib/media-master-cleanup.js"],"states":["pending","deleting","removed"]},
     {"id":"ema-video-backup","kind":"media","sources":["functions/lib/video-backup.js"],"states":["pending","verified","failed"]},
     {"id":"ema-editorial","kind":"media","sources":["functions/lifecycle-transition.js","functions/save.js"],"states":["draft","in_review","approved","scheduled","published","archived"]},

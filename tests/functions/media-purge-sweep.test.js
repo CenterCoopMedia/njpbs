@@ -3,6 +3,10 @@ import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } 
 import admin from "../helpers/firebase-admin.js";
 import sweep from "../../functions/media-purge-sweep.js";
 import bin from "../../functions/lib/media-bin.js";
+import immediate from "../../functions/media-purge-now.js";
+import cacheModule from "../../functions/lib/media-purge-cache.js";
+import storageModule from "../../functions/lib/media-purge-storage.js";
+import mediaLibrary from "../../functions/lib/media-library.js";
 import { releaseSelector } from "../helpers/private-public-release-pair.js";
 
 const PROJECT = "demo-njpbs";
@@ -513,5 +517,133 @@ describe("fenced permanent image purge", () => {
     expect(report.inventory).toMatchObject({ reportOnly: true, candidates: [orphan], scanned: 1 });
     expect((await db.collection("mediaPurgeQueue").get()).empty).toBe(true);
     expect(storage.remove).not.toHaveBeenCalled();
+  });
+});
+
+describe("immediate image purge", () => {
+  const origin = "https://media.example.org";
+  const assetId = "asset-1";
+  const uid = "delegated-admin";
+  const key = `cms-media/news/${assetId}/${HASH}.webp`;
+  const thumbnailKey = `cms-media/news/${assetId}/thumbs/${HASH}-w480.webp`;
+  const neighborKey = `cms-media/news/asset-2/${HASH}.webp`;
+  const entryRef = () => db.doc(`mediaPurgeQueue/asset:${assetId}`);
+  let clock;
+  let objects;
+  let cached;
+  let fetchImpl;
+  let storage;
+  let cache;
+  let keepCached;
+
+  beforeEach(async () => {
+    clock = NOW;
+    keepCached = false;
+    objects = new Set([key, thumbnailKey, MASTER, neighborKey]);
+    cached = new Set([...objects].filter(path => path !== MASTER).map(path => `${origin}/${path}`));
+    fetchImpl = vi.fn(async (url, options) => {
+      if (options?.method === "POST") {
+        for (const prefix of JSON.parse(options.body).prefixes) {
+          const target = `https://${prefix}`;
+          expect(objects.has(new URL(target).pathname.slice(1))).toBe(false);
+          if (!keepCached) cached.delete(target);
+        }
+        return Response.json({ success: true });
+      }
+      return new Response(null, { status: cached.has(url) || objects.has(new URL(url).pathname.slice(1)) ? 200 : 404 });
+    });
+    const client = { send: vi.fn(async (command) => {
+      const { Key, Bucket } = command.input;
+      expect(Bucket).toBe(Key === MASTER ? "masters-fixture" : "public-fixture");
+      if (command.constructor.name === "DeleteObjectCommand") objects.delete(Key);
+      else if (!objects.has(Key)) throw Object.assign(new Error("Not found"), { name: "NoSuchKey" });
+      return {};
+    }) };
+    storage = new storageModule.MediaPurgeStorage({ publicBucket: "public-fixture", masterBucket: "masters-fixture",
+      client, clock: () => clock });
+    storage.listMasters = vi.fn(async () => ({ objects: [], cursor: null }));
+    cache = cacheModule.createMediaCacheRetirement({ origin, zoneId: "a".repeat(32), token: "fixture-only",
+      fetchImpl, clock: () => clock });
+    await seed(assetId, { version: 2, url: `${origin}/${key}`, master: { key: MASTER },
+      thumbnails: [{ storageKey: thumbnailKey, url: `${origin}/${thumbnailKey}` }] },
+    { queuedAt: new Date(NOW - 10_000).toISOString(), eligibleAt: new Date(NOW + bin.MEDIA_RETENTION_MS - 10_000).toISOString() });
+    await Promise.all([
+      db.doc(`users/${uid}`).set({ role: "admin" }),
+      db.doc("system/mediaPurge").set({ enabled: true, dryRun: false, immediateDeleteDelegates: [uid] }),
+      db.doc("system/publicDeployment").set({ schemaVersion: 1, state: "idle", mediaLifecycleReady: true,
+        activeGeneration: 1, lastReservedGeneration: 1, newestEligibleGeneration: 1,
+        activeDeploymentId: "baseline", newestEligibleBuildBatchId: "baseline", activeCommitSha: "b".repeat(40) }),
+    ]);
+  });
+
+  async function request({ role = "admin", actorUid = uid, confirmed = assetId, version = 2, ...overrides } = {}) {
+    const handler = immediate.createCmsPurgeBinnedImageHandler({ firestore: db, realDeletesEnabled: true,
+      requirePrincipalFn: async () => ({ uid: actorUid, principal: { grants: [{ role }] } }),
+      storageFactory: () => storage, cacheFactory: () => cache, clock: () => clock,
+      log: { error: vi.fn() }, ...overrides });
+    const res = { set: vi.fn(), status: vi.fn(), json: vi.fn() };
+    res.status.mockReturnValue(res);
+    await handler({ method: "POST", headers: { "content-type": "application/json",
+      "if-match": mediaLibrary.formatMediaEtag(assetId, version) }, body: { assetId, confirmAssetId: confirmed } }, res);
+    return { status: res.status.mock.lastCall[0], body: res.json.mock.lastCall[0] };
+  }
+
+  it.each([
+    [{ role: "editor" }, 403], [{ actorUid: "another-admin" }, 403],
+    [{ confirmed: "another-image" }, 400], [{ version: 1 }, 412], [{ realDeletesEnabled: false }, 503],
+  ])("refuses invalid admission %j", async (options, status) => {
+    expect((await request(options)).status).toBe(status);
+    expect((await entryRef().get()).data()).toMatchObject({ state: "pending", attempts: 0 });
+    expect(objects.size).toBe(4);
+    expect(fetchImpl).not.toHaveBeenCalled();
+  });
+
+  it.each(["working", "published", "deployed"])("refuses %s references before claiming or deleting", async (state) => {
+    await db.doc(`cmsPages/fixture/mediaUsage/${state}-1`).set({ state, generation: 1, assetIds: [assetId] });
+    expect(await request()).toMatchObject({ status: 409, body: { error: expect.stringContaining("in use") } });
+    expect((await entryRef().get()).data()).toMatchObject({ state: "pending", attempts: 0 });
+    expect(objects.size).toBe(4);
+    expect(fetchImpl).not.toHaveBeenCalled();
+  });
+
+  it("refuses a queue key that does not match the confirmed image", async () => {
+    await entryRef().update({ objects: [{ store: "public", key: neighborKey }] });
+    expect((await request()).status).toBe(409);
+    expect(objects.size).toBe(4);
+    expect(fetchImpl).not.toHaveBeenCalled();
+  });
+
+  it("removes the confirmed objects and verifies only their public delivery before retention is due", async () => {
+    expect((await fetchImpl(`${origin}/${key}`)).status).toBe(200);
+    expect(await request()).toEqual({ status: 200, body: { success: true, outcome: "purged" } });
+    expect([...objects]).toEqual([neighborKey]);
+    const [, purge, imageRead, thumbnailRead] = fetchImpl.mock.calls;
+    expect(JSON.parse(purge[1].body).prefixes).toEqual([`media.example.org/${key}`, `media.example.org/${thumbnailKey}`]);
+    expect([imageRead[0], thumbnailRead[0]]).toEqual([`${origin}/${key}`, `${origin}/${thumbnailKey}`]);
+    expect((await fetchImpl(`${origin}/${neighborKey}`)).status).toBe(200);
+    expect((await db.doc(`media_assets/${assetId}`).get()).data()).toMatchObject({ lifecycle: "purged", purgedBy: uid });
+    expect((await entryRef().get()).data()).toMatchObject({ state: "purged", cacheRetirement: "verified" });
+    const audits = (await db.collection("admin_logs").where("actorUid", "==", uid).get()).docs.map(doc => doc.data());
+    expect(audits).toEqual(expect.arrayContaining([
+      expect.objectContaining({ action: "media.purge.request", after: expect.objectContaining({ cacheRetirement: "pending" }) }),
+      expect.objectContaining({ action: "media.purge", after: expect.objectContaining({ cacheRetirement: "verified" }) }),
+    ]));
+  });
+
+  it("keeps restore fenced after cache failure and lets the sweep resume before the original deadline", async () => {
+    keepCached = true;
+    expect(await request()).toMatchObject({ status: 202, body: { outcome: "retry_required" } });
+    expect((await entryRef().get()).data()).toMatchObject({ state: "purging", cacheRetirement: "pending",
+      lastError: "public_cache_retirement_failed" });
+    expect((await db.doc(`media_assets/${assetId}`).get()).data().lifecycle).toBe("purging");
+    expect((await fetchImpl(`${origin}/${key}`)).status).toBe(200);
+    clock += 120_000;
+    keepCached = false;
+    const report = await runner({ deployment: { enabled: true, realDeletesEnabled: true }, now: () => clock,
+      storageFactory: () => storage, retirePublicCopies: cache.retire })();
+    expect(report.entries[0].execution.outcome).toBe("purged");
+    expect((await fetchImpl(`${origin}/${key}`)).status).toBe(404);
+    expect((await entryRef().get()).data()).toMatchObject({ state: "purged", cacheRetirement: "verified", attempts: 2 });
+    expect((await db.collection("admin_logs").where("action", "==", "media.purge").get()).size).toBe(1);
   });
 });

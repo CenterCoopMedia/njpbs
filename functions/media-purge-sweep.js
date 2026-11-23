@@ -8,18 +8,22 @@ const logger = require("firebase-functions/logger");
 const { db } = require("./lib/firebase");
 const { assertBillingEnabled } = require("./lib/billing-state");
 const { adminLogEntry, AUDIT_COLLECTIONS } = require("./lib/audit");
-const { MEDIA_RETENTION_MS } = require("./lib/media-bin");
+const { MEDIA_RETENTION_MS, MEDIA_PURGE_CONTROL_PATH } = require("./lib/media-bin");
 const { mediaReplacementRef } = require("./lib/media-replacement");
 const { readRetainedPairMediaHoldInTransaction } = require("./lib/public-release-media-retention");
+const { assertMediaLifecycleDeploymentFence } = require("./lib/public-deployment-pointer");
 
 const { readPurgeDeployment } = require("./lib/media-purge-deployment");
 const executor = require("./lib/media-purge-executor");
 const { MediaPurgeStorage } = require("./lib/media-purge-storage");
+const { MEDIA_CACHE_PURGE_TOKEN, createMediaCacheRetirement } = require("./lib/media-purge-cache");
 const DEPLOYMENT = readPurgeDeployment();
 const REAL_DELETES_ENABLED = DEPLOYMENT.realDeletesEnabled;
 const PURGE_SERVICE_ACCOUNT = "cms-media-purge@njpbs-site.iam.gserviceaccount.com";
 const PURGE_ACCESS_KEY = DEPLOYMENT.enabled ? defineSecret("CMS_MEDIA_PURGE_R2_ACCESS_KEY_ID") : null;
 const PURGE_SECRET_KEY = DEPLOYMENT.enabled ? defineSecret("CMS_MEDIA_PURGE_R2_SECRET_ACCESS_KEY") : null;
+const PURGE_WRITE_SECRETS = DEPLOYMENT.enabled ? [PURGE_ACCESS_KEY, PURGE_SECRET_KEY,
+  ...(REAL_DELETES_ENABLED ? [MEDIA_CACHE_PURGE_TOKEN] : [])] : [];
 const R2_ENDPOINT = defineString("CMS_MEDIA_R2_ENDPOINT", { default: "" });
 const PUBLIC_BUCKET = defineString("CMS_MEDIA_R2_BUCKET", { default: "" });
 const MASTER_BUCKET = defineString("CMS_MEDIA_MASTER_R2_BUCKET", { default: "" });
@@ -80,7 +84,7 @@ async function masterSkipReason(transaction, firestore, entryId, entry) {
   return null;
 }
 
-async function inspectEntry({ firestore, entryRef, nowMs, config, prepare }) {
+async function inspectEntry({ firestore, entryRef, nowMs, config, prepare, confirm = null }) {
   return firestore.runTransaction(async (transaction) => {
     const snapshot = await transaction.get(entryRef);
     const entry = snapshot.data() || {};
@@ -100,8 +104,11 @@ async function inspectEntry({ firestore, entryRef, nowMs, config, prepare }) {
     const oldHash = entryRef.id.startsWith(versionPrefix) ? entryRef.id.slice(versionPrefix.length) : null;
     if (!assetEntry && !/^[a-f0-9]{64}$/.test(oldHash || "")) return skip("invalid_entry_id");
     if (!["pending", "purging"].includes(entry.state)) return skip("entry_not_pending");
-    if (!Number.isFinite(millis(entry.eligibleAt)) || millis(entry.eligibleAt) > nowMs ||
-        !Number.isFinite(millis(entry.queuedAt)) || nowMs - millis(entry.queuedAt) < MEDIA_RETENTION_MS) {
+    const recoveringImmediate = assetEntry && entry.state === "purging" &&
+      typeof entry.immediateDelete?.actorUid === "string" && entry.cacheRetirement === "pending";
+    // Once a confirmed claim enters purging it cannot return to the normal retention path.
+    if (!confirm && (!Number.isFinite(millis(entry.eligibleAt)) || millis(entry.eligibleAt) > nowMs ||
+        !Number.isFinite(millis(entry.queuedAt)) || (!recoveringImmediate && nowMs - millis(entry.queuedAt) < MEDIA_RETENTION_MS))) {
       return skip("retention_period");
     }
     if (entry.state === "purging" &&
@@ -116,6 +123,7 @@ async function inspectEntry({ firestore, entryRef, nowMs, config, prepare }) {
     ]);
     if (!assetSnapshot.exists || assetSnapshot.data().kind !== "image") return skip("asset_missing_or_not_image");
     const asset = assetSnapshot.data();
+    if (confirm) await confirm({ transaction, asset, entry });
     // Even an expired replacement claim can recover. Reading its deterministic
     // document in the claim transaction fences a revert reservation and commit.
     if (replacement.exists) return skip("replacement_in_progress");
@@ -151,6 +159,13 @@ async function inspectEntry({ firestore, entryRef, nowMs, config, prepare }) {
       const pairHold = await readRetainedPairMediaHoldInTransaction({ firestore, transaction,
         root: root.data(), assetId: entry.assetId });
       if (pairHold) return skip(pairHold);
+    } else if (confirm || recoveringImmediate) {
+      try { assertMediaLifecycleDeploymentFence(root.data()); }
+      catch { return skip("public_release_unproven"); }
+    }
+    if (confirm || recoveringImmediate) {
+      const projection = await transaction.get(firestore.collection("media_assets_public").doc(entry.assetId));
+      if (projection.exists) return skip("public_projection_present");
     }
     const masterReason = entry.masterKey
       ? await masterSkipReason(transaction, firestore, entryRef.id, entry) : null;
@@ -168,10 +183,11 @@ function createMediaPurgeSweepRunner(deps = {}) {
     firestore = db, now = () => Date.now(), runIdFactory = randomUUID,
     getHealthchecksUrl = () => HEALTHCHECKS_MEDIA_PURGE_SWEEP.value(),
     fetchImpl = fetch, log = logger, deployment = DEPLOYMENT, storageFactory = defaultStorage,
+    retirePublicCopies = (objects, deadlineMs) => createMediaCacheRetirement().retire(objects, deadlineMs),
   } = deps;
   return async () => {
     if (!deployment.enabled) return { skipped: "deployment_disabled" };
-    const configRef = firestore.doc("system/mediaPurge");
+    const configRef = firestore.doc(MEDIA_PURGE_CONTROL_PATH);
     const nowMs = Number(now());
     const startedAt = new Date(nowMs).toISOString();
     const runId = runIdFactory();
@@ -236,7 +252,7 @@ function createMediaPurgeSweepRunner(deps = {}) {
         const claim = inspected.claim;
         delete inspected.claim;
         inspected.execution = await executor.executeClaim({ firestore, entryRef: snapshot.ref, claim,
-          configRef, runId, storage: getStorage(), clock: now, readConfig });
+          configRef, runId, storage: getStorage(), clock: now, readConfig, retirePublicCopies });
       }
       entries.push(inspected);
     }
@@ -313,10 +329,11 @@ const onMediaPurgeSweep = onSchedule({
   schedule: "30 3 * * *", timeZone: "America/New_York", maxInstances: 1, region: "us-central1",
   timeoutSeconds: 540, memory: "256MiB", concurrency: 1, retryCount: 0,
   serviceAccount: DEPLOYMENT.enabled ? PURGE_SERVICE_ACCOUNT : undefined,
-  secrets: DEPLOYMENT.enabled ? [HEALTHCHECKS_MEDIA_PURGE_SWEEP, PURGE_ACCESS_KEY, PURGE_SECRET_KEY] : [],
+  secrets: DEPLOYMENT.enabled ? [HEALTHCHECKS_MEDIA_PURGE_SWEEP, ...PURGE_WRITE_SECRETS] : [],
 }, createMediaPurgeSweepRunner());
 
 module.exports = {
-  REAL_DELETES_ENABLED, HEALTHCHECKS_MEDIA_PURGE_SWEEP, readConfig,
+  REAL_DELETES_ENABLED, HEALTHCHECKS_MEDIA_PURGE_SWEEP, PURGE_SERVICE_ACCOUNT, PURGE_WRITE_SECRETS,
+  defaultStorage, readConfig,
   inspectEntry, createMediaPurgeSweepRunner, onMediaPurgeSweep,
 };

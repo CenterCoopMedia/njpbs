@@ -35,15 +35,23 @@ async function ownedReceipt(transaction, firestore, assetId, hash, keys) {
   return candidates.length === 1 ? candidates[0] : null;
 }
 
+function mayExecute(config, billing, readConfig, scheduledRunId, at, inspectOnly = false) {
+  const switches = readConfig(config);
+  return switches.enabled && (inspectOnly || !switches.dryRun) && billing?.disabled !== true &&
+    (scheduledRunId === null || (config?.lease?.runId === scheduledRunId &&
+      Date.parse(config.lease.expiresAt) > at));
+}
+
 async function claimEntry({ transaction, firestore, entryRef, entry, assetRef, asset,
-  result, runId, clock, configRef, readConfig, runDeadlineMs, inspectOnly = false }) {
+  result, runId, clock, configRef, readConfig, runDeadlineMs, inspectOnly = false, immediate = null }) {
   const defer = (reason) => ({ ...result, wouldDelete: [], deferred: reason });
   const config = await transaction.get(configRef);
   const billing = await transaction.get(firestore.doc("system/billing"));
   const at = clock();
-  if (!readConfig(config.data()).enabled || (!inspectOnly && readConfig(config.data()).dryRun) ||
-      billing.data()?.disabled === true || config.data()?.lease?.runId !== runId ||
-      !(Date.parse(config.data()?.lease?.expiresAt) > at)) return defer("disabled_or_lease_lost");
+  const scheduledRunId = immediate ? null : runId;
+  if (!mayExecute(config.data(), billing.data(), readConfig, scheduledRunId, at, inspectOnly)) {
+    return defer("disabled_or_lease_lost");
+  }
   const hash = entryRef.id.startsWith("asset:") ? asset.contentHash : entryRef.id.split(":").at(-1);
   if (!exactPublicKeys(entry, entry.assetId, hash)) return defer("invalid_object_identity");
   const receipt = await ownedReceipt(transaction, firestore, entry.assetId, hash,
@@ -87,31 +95,41 @@ async function claimEntry({ transaction, firestore, entryRef, entry, assetRef, a
   // The durable fences remain on error; only the execution token has a deadline.
   transaction.update(entryRef, { state: "purging", runId, deleteToken: token, leaseExpiresAt,
     attempts: entry.attempts + 1, lastError: null, deleteObjects: objects, ownerPath: receipt.ref.path,
-    retainedMasterKey: entry.masterKey && !deleteMaster ? entry.masterKey : null });
+    retainedMasterKey: entry.masterKey && !deleteMaster ? entry.masterKey : null,
+    ...(immediate ? { immediateDelete: immediate, eligibleAt: new Date(checkedAt).toISOString(),
+      cacheRetirement: "pending" } : {}) });
   transaction.update(receipt.ref, { state: "purging", purgeEntryId: entryRef.id });
   if (entryRef.id.startsWith("asset:")) transaction.update(assetRef, { lifecycle: "purging" });
   if (deleteMaster) transaction.set(lockRef, { state: "purging", key: entry.masterKey, purgeEntryId: entryRef.id });
   return { ...checked, claim: { token, objects, leaseExpiresAt, ownerPath: receipt.ref.path,
-    masterLockPath: deleteMaster ? lockRef.path : null } };
+    masterLockPath: deleteMaster ? lockRef.path : null, scheduledRunId,
+    immediateDelete: immediate ?? entry.immediateDelete ?? null } };
 }
 
-async function executeClaim({ firestore, entryRef, claim, configRef, runId, storage, clock, readConfig }) {
+async function executeClaim({ firestore, entryRef, claim, configRef, runId, storage, clock, readConfig,
+  retirePublicCopies = null }) {
   const deadlineMs = Date.parse(claim.leaseExpiresAt) - IO_MARGIN_MS;
   const stillOwned = async () => {
     const [entry, config, billing] = await Promise.all([
       entryRef.get(), configRef.get(), firestore.doc("system/billing").get(),
     ]);
-    const switches = readConfig(config.data());
     if (entry.data()?.state !== "purging" || entry.data()?.deleteToken !== claim.token ||
-        !switches.enabled || switches.dryRun || billing.data()?.disabled === true ||
-        config.data()?.lease?.runId !== runId || !(Date.parse(config.data()?.lease?.expiresAt) > clock()) ||
+        !mayExecute(config.data(), billing.data(), readConfig, claim.scheduledRunId, clock()) ||
         !(clock() < deadlineMs)) throw new Error("Purge execution fence changed");
   };
+  let lastError = "object_delete_or_receipt_failed";
   try {
+    if (claim.immediateDelete && !retirePublicCopies) throw new Error("Public cache retirement is unavailable");
     const order = (object) => object.store === "masters" ? 2 : object.key.includes("/thumbs/") ? 0 : 1;
     for (const object of [...claim.objects].sort((a, b) => order(a) - order(b))) {
       await stillOwned();
       await storage.remove(object, deadlineMs);
+    }
+    if (claim.immediateDelete) {
+      lastError = "public_cache_retirement_failed";
+      await stillOwned();
+      await retirePublicCopies(claim.objects, deadlineMs);
+      lastError = "object_delete_or_receipt_failed";
     }
     await stillOwned();
     await firestore.runTransaction(async (transaction) => {
@@ -122,23 +140,26 @@ async function executeClaim({ firestore, entryRef, claim, configRef, runId, stor
       const entry = entrySnapshot.data();
       const lock = claim.masterLockPath ? await transaction.get(firestore.doc(claim.masterLockPath)) : null;
       if (entry?.deleteToken !== claim.token || entry.state !== "purging" ||
-          config.data()?.lease?.runId !== runId || !(clock() < deadlineMs) ||
-          !readConfig(config.data()).enabled || readConfig(config.data()).dryRun || billing.data()?.disabled === true ||
+          !mayExecute(config.data(), billing.data(), readConfig, claim.scheduledRunId, clock()) ||
+          !(clock() < deadlineMs) ||
           owner.data()?.state !== "purging" || owner.data()?.purgeEntryId !== entryRef.id ||
           lock && (lock.data()?.state !== "purging" || lock.data()?.purgeEntryId !== entryRef.id)) {
         throw new Error("Purge completion fence changed");
       }
       const timestamp = new Date(clock()).toISOString();
-      transaction.update(entryRef, { state: "purged", purgedAt: timestamp, leaseExpiresAt: null, lastError: null });
+      const cacheResult = claim.immediateDelete ? { cacheRetirement: "verified" } : {};
+      const actorUid = claim.immediateDelete?.actorUid ?? "system:mediaPurgeSweep";
+      transaction.update(entryRef, { state: "purged", purgedAt: timestamp, leaseExpiresAt: null, lastError: null,
+        ...cacheResult });
       transaction.update(owner.ref, { state: "purged", purgedAt: timestamp });
       if (claim.masterLockPath) transaction.delete(firestore.doc(claim.masterLockPath));
       if (entryRef.id.startsWith("asset:")) transaction.update(firestore.doc(`media_assets/${entry.assetId}`), {
-        lifecycle: "purged", purgedAt: timestamp, purgedBy: "system:mediaPurgeSweep",
+        lifecycle: "purged", purgedAt: timestamp, purgedBy: actorUid,
       });
       transaction.create(firestore.collection(AUDIT_COLLECTIONS.adminLogs).doc(), adminLogEntry({
-        actorUid: "system:mediaPurgeSweep", action: "media.purge", target: `media_assets/${entry.assetId}`,
+        actorUid, action: "media.purge", target: `media_assets/${entry.assetId}`,
         before: { entryId: entryRef.id, objects: entry.objects, masterKey: entry.masterKey || null },
-        after: { state: "purged", runId, retainedMasterKey: entry.retainedMasterKey || null },
+        after: { state: "purged", runId, retainedMasterKey: entry.retainedMasterKey || null, ...cacheResult },
       }));
     });
     return { outcome: "purged" };
@@ -147,7 +168,7 @@ async function executeClaim({ firestore, entryRef, claim, configRef, runId, stor
     await firestore.runTransaction(async (transaction) => {
       const entry = await transaction.get(entryRef);
       if (entry.data()?.deleteToken === claim.token && entry.data()?.state === "purging") {
-        transaction.update(entryRef, { lastError: "object_delete_or_receipt_failed" });
+        transaction.update(entryRef, { lastError });
       }
     });
     return { outcome: "retry_required" };

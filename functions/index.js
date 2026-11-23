@@ -60,6 +60,7 @@ lazyExport("cmsTransitionContent", "./lifecycle-transition");
 lazyExport("cmsListContent", "./list-content");
 lazyExport("cmsListMedia", "./list-media");
 lazyExport("cmsListBinnedMedia", "./list-binned-media");
+lazyExport("cmsPurgeBinnedImage", "./media-purge-now");
 lazyExport("cmsRestoreMedia", "./set-media-lifecycle");
 lazyExport("cmsListMediaSources", "./source-media");
 lazyExport("cmsListSourceMedia", "./source-media");

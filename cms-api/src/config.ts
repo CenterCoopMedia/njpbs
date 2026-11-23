@@ -103,6 +103,7 @@ export const ENDPOINTS = Object.freeze({
   cmsListContent: { contentType: "json", maxBytes: 64 * KIB, rateClass: "read" },
   cmsListMedia: { contentType: "json", maxBytes: 16 * KIB, rateClass: "read" },
   cmsListBinnedMedia: { contentType: "json", maxBytes: 4 * KIB, rateClass: "read" },
+  cmsPurgeBinnedImage: { contentType: "json", maxBytes: 4 * KIB, rateClass: "lifecycle" },
   cmsRestoreMedia: { contentType: "json", maxBytes: 4 * KIB, rateClass: "metadata" },
   cmsListMediaSources: { contentType: "json", maxBytes: 8 * KIB, rateClass: "read" },
   cmsListSourceMedia: { contentType: "json", maxBytes: 8 * KIB, rateClass: "read" },

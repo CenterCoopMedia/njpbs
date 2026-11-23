@@ -1677,6 +1677,11 @@ export async function cmsRestoreMedia(idToken: string, asset: BinnedMediaAsset) 
   return result;
 }
 
+export function cmsPurgeBinnedImage(idToken: string, asset: BinnedMediaAsset) {
+  return postFunction<{ success: true; outcome: "purged" | "retry_required" }>("cmsPurgeBinnedImage", idToken,
+    { assetId: asset.id, confirmAssetId: asset.id }, { "If-Match": asset.etag });
+}
+
 export function cmsListMediaCorpus(
   idToken: string,
   body: MediaCorpusRequest,

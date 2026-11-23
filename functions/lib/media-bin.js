@@ -1,6 +1,15 @@
 "use strict";
 
+const { hasGlobalCapability } = require("./rbac");
+
 const MEDIA_RETENTION_MS = 30 * 24 * 60 * 60 * 1000;
+const MEDIA_PURGE_CONTROL_PATH = "system/mediaPurge";
+
+function isImmediatePurgeDelegate({ uid, principal }, control) {
+  return hasGlobalCapability(principal, "users.manage") &&
+    typeof uid === "string" && uid.length > 0 &&
+    Array.isArray(control?.immediateDeleteDelegates) && control.immediateDeleteDelegates.includes(uid);
+}
 
 function purgeAfterFor(timestamp) {
   const time = Date.parse(timestamp);
@@ -48,4 +57,5 @@ function createImagePurgeEntry(assetId, stored, queuedAt, eligibleAt = purgeAfte
   };
 }
 
-module.exports = { MEDIA_RETENTION_MS, purgeAfterFor, mediaPurgeRef, createImagePurgeEntry };
+module.exports = { MEDIA_RETENTION_MS, MEDIA_PURGE_CONTROL_PATH, isImmediatePurgeDelegate,
+  purgeAfterFor, mediaPurgeRef, createImagePurgeEntry };

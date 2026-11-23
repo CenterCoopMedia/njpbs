@@ -3,14 +3,17 @@
 const { cmsOnRequest } = require("./lib/cms-edge");
 const { db } = require("./lib/firebase");
 const { requirePrincipal } = require("./lib/auth");
-const { can, hasCapability } = require("./lib/rbac");
+const { can, hasCapability, hasGlobalCapability } = require("./lib/rbac");
 const { validateBoundedJsonRequest } = require("./lib/http-json");
 const { mediaAssetSummary } = require("./lib/media-library");
 const { MAX_MEDIA_SCAN, SUMMARY_FIELDS, setPrivateNoStore } = require("./list-media");
 const logger = require("firebase-functions/logger");
+const { MEDIA_PURGE_CONTROL_PATH, isImmediatePurgeDelegate } = require("./lib/media-bin");
+const { readPurgeDeployment } = require("./lib/media-purge-deployment");
 
 function createCmsListBinnedMediaHandler(deps = {}) {
-  const { firestore = db, requirePrincipalFn = requirePrincipal, log = logger } = deps;
+  const { firestore = db, requirePrincipalFn = requirePrincipal, log = logger,
+    realDeletesEnabled = readPurgeDeployment().realDeletesEnabled } = deps;
   return async (req, res) => {
     setPrivateNoStore(res);
     if (req.method !== "POST") return res.status(405).json({ error: "Method not allowed" });
@@ -67,7 +70,17 @@ function createCmsListBinnedMediaHandler(deps = {}) {
           return [uid, null];
         }
       })));
-      return res.status(200).json({ success: true, total: records.length,
+      let canDeletePermanently = false;
+      if (realDeletesEnabled && hasGlobalCapability(user.principal, "users.manage")) {
+        try {
+          const control = (await firestore.doc(MEDIA_PURGE_CONTROL_PATH).get()).data();
+          canDeletePermanently = (control?.enabled === undefined || control.enabled === true) &&
+            control?.dryRun === false && isImmediatePurgeDelegate(user, control);
+        } catch {
+          log.warn("Immediate media purge availability could not be read");
+        }
+      }
+      return res.status(200).json({ success: true, total: records.length, canDeletePermanently,
         page: currentPage, pageCount,
         records: pageRecords.map((record) => {
           const presented = { ...record,

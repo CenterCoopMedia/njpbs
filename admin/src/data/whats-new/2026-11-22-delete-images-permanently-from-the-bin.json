@@ -1,0 +1,7 @@
+{
+  "date": "2026-11-22",
+  "kind": "new",
+  "title": "Delete unused images permanently from the recycle bin",
+  "body": "Administrators with permanent deletion permission can choose Delete permanently beside an unused image and confirm the removal. The recycle bin still offers Restore while removal has not started.",
+  "prs": []
+}
