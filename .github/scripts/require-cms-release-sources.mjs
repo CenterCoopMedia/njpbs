@@ -80,8 +80,12 @@ export function requireCmsReleaseSources({ releaseSha, trustedWorkflowSha, relea
   }
   const receipt = { schemaVersion: 1, deploySha: releaseSha, releaseChecksSha: releaseSha, trustedWorkflowSha, releaseChecksContractVersion: version };
   if (!dispatchInputs) return receipt;
-  const inputs = JSON.parse(dispatchInputs);
-  const releaseDispatchId = inputs?.release_dispatch_id;
+  // GitHub can omit optional inputs whose default is an empty string.
+  const inputs = {
+    emergency_authorization: "", migrations: "", reader_operation_id: "", reader_install_authorization: "",
+    ...JSON.parse(dispatchInputs),
+  };
+  const releaseDispatchId = inputs.release_dispatch_id;
   if (typeof releaseDispatchId !== "string" || !/^[a-f0-9]{32}$/.test(releaseDispatchId) || !isDeepStrictEqual(inputs, {
     deploy_ref: releaseSha, release_dispatch_id: releaseDispatchId, cloudflare_pages_branch: "main",
     emergency_release: false, emergency_authorization: "", force_firebase: false, migrations: "",
