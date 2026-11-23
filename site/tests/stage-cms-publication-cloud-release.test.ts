@@ -157,8 +157,8 @@ it("builds and checkpoints NEW while OLD stays pinned, without creating executab
   expect(fakes.recordCheckpoint).toHaveBeenCalledWith(expect.objectContaining({ publicBuildSettings,
     artifactCheckpointDigest: "d".repeat(64), preparedArtifact: expect.objectContaining({ artifactDigest: "c".repeat(64) }) }));
   // Production calls the shared release records exactly as before.
-  expect(fakes.prepareDetached.mock.calls[0][0]).not.toHaveProperty("target");
-  expect(fakes.recordCheckpoint.mock.calls[0][0]).not.toHaveProperty("target");
+  expect(fakes.prepareDetached).toHaveBeenCalledWith(expect.not.objectContaining({ target: expect.anything() }));
+  expect(fakes.recordCheckpoint).toHaveBeenCalledWith(expect.not.objectContaining({ target: expect.anything() }));
   expect(fakes.build).toHaveBeenCalledWith(expect.objectContaining({
     buildEnvironment: expect.objectContaining({ CMS_DEPLOYMENT_ENVIRONMENT: "production" }) }));
 });

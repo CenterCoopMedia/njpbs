@@ -219,7 +219,7 @@ export function cloudReleaseTarget(environment: NodeJS.ProcessEnv): PublicationT
 export async function assertReleaseRendererSeals(directory: string, commitSha: string,
   environment: "production" | "development" = "production"): Promise<void> {
   const read = async (file: string) => publicWorkerCandidateRendererSeal(
-    JSON.parse(await readFile(path.join(directory, file), "utf8")), environment) as Record<string, any> | null;
+    JSON.parse(await readFile(path.join(directory, file), "utf8")), environment) as ReturnType<typeof JSON.parse>;
   const seal = await read("renderer/renderer-release.json");
   const publicSeal = await read("dist/posts/_no-build-assets/renderer-release.json");
   // The production upload accepts exactly this public seal.
