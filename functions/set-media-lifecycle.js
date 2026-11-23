@@ -34,6 +34,7 @@ const {
   assertMediaLifecycleDeploymentFence,
 } = require("./lib/public-deployment");
 const { mediaReplacementRef } = require("./lib/media-replacement");
+const { ownerRef } = require("./lib/media-hash-owner");
 const {
   readMediaAdmission,
   writeMediaAdmission,
@@ -93,14 +94,6 @@ function sourceIp(req) {
 
 function deploymentRef(firestore) {
   return firestore.collection("system").doc("publicDeployment");
-}
-
-function ownerRef(firestore, contentHash) {
-  return firestore
-    .collection("system")
-    .doc("media")
-    .collection("hashOwners")
-    .doc(contentHash);
 }
 
 function usageQuery(firestore, state, assetId, generation = null) {
@@ -439,7 +432,7 @@ function createCmsSetMediaLifecycleHandler(deps = {}) {
           "The stored media object cannot be verified.",
         );
       }
-      const initialOwnerRef = ownerRef(firestore, stored.contentHash);
+      const initialOwnerRef = ownerRef(firestore, stored.contentHash, assetId);
       const ownerSnapshot = await initialOwnerRef.get();
       const owner = ownerSnapshot.exists ? ownerSnapshot.data() : null;
       const attemptId = assertCommittedOwner(owner, stored, assetId);

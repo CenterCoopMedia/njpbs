@@ -9,8 +9,14 @@ import { afterEach, beforeEach, expect, it } from "vitest";
 import { checkWordPressArchiveBatch } from "../../scripts/check-wordpress-archive-batch.mjs";
 import { archiveItemRef, stageWordPressArchive } from "../../scripts/stage-wordpress-archive.mjs";
 import { stageWordPressArchiveMedia } from "../../scripts/stage-wordpress-archive-media.mjs";
+import { registerWordPressArchiveMedia } from "../../scripts/register-wordpress-archive-media.mjs";
 import lifecycle from "../../functions/lifecycle-transition.js";
 import scheduled from "../../functions/scheduled-publish.js";
+import listMedia from "../../functions/list-media.js";
+import { renderBlock } from "../../packages/content-core/src/content-render.ts";
+import preview from "../../functions/preview.js";
+import publicContent from "../../functions/public-content.js";
+import purge from "../../functions/lib/media-purge-executor.js";
 import { clearEmulatorFirestore, isolatedFirestore } from "../helpers/emulator-firestore.js";
 
 const fixture = fileURLToPath(new URL("../fixtures/wordpress-archive/interchange.ndjson", import.meta.url));
@@ -301,4 +307,153 @@ it("stages verified image and PDF originals by attachment identity and keeps rev
   expect(rows.filter(row => row.action === "review").map(row => row.reason))
     .toEqual(["original-or-metadata-conflict", "source-revision-conflict"]);
   expect((await stagedRef(attachment.postId).get()).data()).toEqual(image);
+});
+
+it("registers approved originals independently and delivers only admitted assets to editors and readers", async () => {
+  const file = await tempFile();
+  const source = "example-news";
+  const parent = await loadStory();
+  const attachment = JSON.parse((await readFile(fixture, "utf8")).split("\n")[3]);
+  const [image, duplicate, document, privateItem, unstaged] = ["63", "64", "65", "66", "67"].map(postId =>
+    sourceRevision(attachment, { postId, parentPostId: parent.postId, sourceStatus: postId === "66" ? "private" : "inherit" }));
+  await writeArchive(file, parent, image, duplicate, document, privateItem, unstaged);
+  await stageWordPressArchive({ firestore, file, apply: true });
+  const png = await sharp({ create: { width: 16, height: 8, channels: 3, background: "blue" } }).png().toBuffer();
+  const pdfDocument = await PDFDocument.create();
+  pdfDocument.addPage();
+  const pdf = Buffer.from(await pdfDocument.save());
+  const digest = bytes => createHash("sha256").update(bytes).digest("hex");
+  await writeFile(join(scratch, digest(png)), png);
+  await writeFile(join(scratch, digest(pdf)), pdf);
+  const manifestItem = (row, fields = {}) => ({ postId: row.postId, revisionSha256: row.revision.sha256,
+    sha256: digest(png), originalName: "train.png", mimeType: "image/png", title: "Train",
+    caption: "A train at the station.", altText: "Blue train", credit: "Archive Photography",
+    license: "Approved for reuse", ...fields });
+  const manifest = [manifestItem(image), manifestItem(duplicate, { title: "Another record for the train" }),
+    manifestItem(document, { sha256: digest(pdf), originalName: "schedule.pdf", mimeType: "application/pdf",
+      title: "Service schedule", altText: null }), manifestItem(privateItem), manifestItem(unstaged)];
+  const manifestFile = join(scratch, "approved.json");
+  const writeManifest = items => writeFile(manifestFile, JSON.stringify({ source, version: 1, items }));
+  const options = { firestore, manifestFile, originals: scratch };
+  await writeManifest(manifest.slice(0, 3));
+  await stageWordPressArchiveMedia({ ...options, apply: true });
+  await writeManifest(manifest);
+  const staged = row => archiveItemRef(firestore, source, row.postId);
+  const id = row => `archive-${staged(row).id}`;
+  const imageProof = (await staged(image).get()).data().media;
+  // A copied verification payload alone cannot approve an explicitly private source.
+  await staged(privateItem).update({ media: { ...imageProof, sourceRevisionSha256: privateItem.revision.sha256 } });
+
+  const objects = new Map();
+  const storage = {
+    async putFinal({ key, body, mimeType, metadata }) {
+      if (objects.has(key)) return { created: false };
+      objects.set(key, { bytes: body, contentType: mimeType, contentLength: body.length, metadata });
+      return { created: true };
+    },
+    async head(key) { return objects.get(key); },
+  };
+  const rows = [];
+  const register = (overrides = {}) => registerWordPressArchiveMedia({ ...options, publicOrigin: "https://media.njpbs.org",
+    getStorage: () => storage, report: row => rows.push(row), ...overrides });
+  await expect(register()).resolves.toEqual({ register: 3, skip: 0, review: 2 });
+  expect(rows.filter(row => row.action === "review").map(row => row.reason)).toEqual(["nonpublic-source", "original-not-staged"]);
+  expect(objects.size).toBe(0);
+  await firestore.doc("mediaCategories/general").set({ id: "general", label: "General", description: "",
+    order: 10, active: true, version: 1 });
+  await expect(register({ apply: true, report: async row => {
+    if (row.phase === "plan-complete") await staged(document).update({ version: 3 });
+  } })).resolves.toEqual({ register: 2, skip: 0, review: 3 });
+  expect([...objects.keys()].every(key => !key.includes(id(document)))).toBe(true);
+
+  // An interrupted write can resume against the same immutable object and owner.
+  const write = storage.putFinal;
+  storage.putFinal = async input => {
+    await write(input);
+    throw Error("Synthetic interrupted write");
+  };
+  const head = storage.head;
+  storage.head = async () => null;
+  await expect(register({ apply: true })).rejects.toThrow("Synthetic interrupted write");
+  expect(rows.at(-1)).toMatchObject({ phase: "apply", sourceRef: { source, postId: document.postId },
+    action: "failed", reason: "apply-interrupted" });
+  storage.putFinal = write;
+  storage.head = head;
+  await expect(register({ apply: true })).resolves.toEqual({ register: 1, skip: 2, review: 2 });
+  await expect(register({ apply: true })).resolves.toEqual({ register: 0, skip: 3, review: 2 });
+
+  const asset = row => firestore.doc(`media_assets/${id(row)}`);
+  const publicAsset = row => firestore.doc(`media_assets_public/${id(row)}`);
+  const registered = (await asset(image).get()).data();
+  const second = (await asset(duplicate).get()).data();
+  const notice = (await asset(document).get()).data();
+  expect(registered).toMatchObject({ archiveImport: { source, postId: image.postId,
+    revisionSha256: image.revision.sha256, originalSha256: digest(png) }, contentHash: digest(png),
+    thumbnailStatus: "ready", thumbnails: [{ width: 16, height: 8 }] });
+  expect(second).toMatchObject({ contentHash: digest(png), name: "Another record for the train" });
+  expect(second.storageKey).not.toBe(registered.storageKey);
+  expect(objects.get(registered.storageKey).bytes).toEqual(png);
+  expect(objects.get(registered.thumbnails[0].storageKey).contentType).toBe("image/webp");
+  expect(objects.get(notice.storageKey).bytes).toEqual(pdf);
+  expect(notice.archiveImport).toMatchObject({ pageCount: 1, originalSha256: digest(pdf) });
+  expect((await publicAsset(document).get()).data()).not.toHaveProperty("archiveImport");
+  expect([...objects.keys()].some(key => key.includes(id(privateItem)) || key.includes(id(unstaged)))).toBe(false);
+  for (const record of [registered, second]) {
+    const owner = await firestore.runTransaction(transaction => purge.ownedReceipt(transaction, firestore,
+      record.id, record.contentHash, [record.storageKey]));
+    expect(owner.data()?.assetId).toBe(record.id);
+  }
+  const { records } = await listMedia.readMediaAssetSummariesByIds(firestore, [image, document, privateItem, unstaged].map(id));
+  expect(records).toMatchObject([
+    { id: id(image), description: "A train at the station.", altText: "Blue train", credit: "Archive Photography",
+      license: "Approved for reuse", kind: "image" },
+    { id: id(document), name: "Service schedule", kind: "document", mimeType: "application/pdf" },
+  ]);
+
+  const date = "2026-11-20T00:00:00.000Z";
+  const blocks = [
+    { id: "image", type: "image", order: 0, visible: true,
+      data: { assetId: records[0].id, alt: records[0].altText, caption: records[0].description } },
+    { id: "notices", type: "document_list", order: 1, visible: true,
+      data: { documents: [{ itemId: "schedule", assetId: records[1].id, title: records[1].name, addedAt: date }] } },
+  ];
+  const pageId = "public-meetings";
+  const pageRef = firestore.doc(`cmsPages/${pageId}`);
+  const page = { title: "Archive fixtures", description: "Synthetic archive media", template: "genericPage",
+    status: "published", version: 7, blocks, publishAt: date, publiclyVisible: true,
+    published: { metadata: { title: "Archive fixtures", description: "Synthetic archive media" },
+      blocks, publishedAt: date, publishedBy: "editor", sourceVersion: 7 },
+  };
+  await pageRef.set(page);
+  await firestore.doc("system/cmsPreviewRuntime").set({ schemaVersion: 1, phase: "ready",
+    rendererSha: preview.EMULATOR_RENDERER_SHA, serializerId: "cloud-preview" });
+  const enqueue = sourceVersion => preview.enqueuePreview({ pageId, sourceVersion,
+    actor: { uid: "editor", principal: { id: "editor", grants: [{ role: "admin" }] } } },
+  { firestore, getTransport: () => "serializer", serializerReady: true,
+    getRendererSha: () => preview.EMULATOR_RENDERER_SHA });
+  const { queueId } = await enqueue(7);
+  const saved = (await firestore.doc(`cmsPreviewQueue/${queueId}`).get()).data();
+  expect(saved.sourceVersion).toBe(7);
+  const render = (content, assets) => content.map(block => renderBlock(block,
+    { resolveAsset: assetId => assets[assetId], showImageCredits: true })).join("");
+  const previewHtml = render(saved.snapshot.blocks, Object.fromEntries(saved.assets.map(media => [media.id, media])));
+  expect(previewHtml).toContain(`src="${registered.url}"`);
+  expect(previewHtml).toContain(`href="${notice.url}"`);
+
+  await firestore.doc("system/publicDeployment").set({ schemaVersion: 1, mediaLifecycleReady: true,
+    state: "idle", activeGeneration: 1, activeDeploymentId: "fixture-deployment", activeCommitSha: "b".repeat(40),
+    lastReservedGeneration: 1, newestEligibleGeneration: 1, newestEligibleBuildBatchId: "fixture-build" });
+  const readPublicPage = () => publicContent.readPublicPageProjection({ firestore, pageId, now: new Date("2026-11-21") });
+  const publicPage = (await readPublicPage()).page;
+  const publicHtml = render(publicPage.blocks, publicPage.assets);
+  expect(publicHtml).toContain('alt="Blue train"');
+  expect(publicHtml).toContain("A train at the station.");
+  expect(publicHtml).toContain("Archive Photography");
+  expect(publicHtml).toContain(`href="${notice.url}"`);
+
+  const privateBlocks = [{ ...blocks[0], data: { ...blocks[0].data, assetId: id(privateItem) } }, blocks[1]];
+  await pageRef.update({ version: 8, blocks: privateBlocks, "published.blocks": privateBlocks });
+  await expect(enqueue(8)).rejects.toThrow("is missing");
+  await expect(readPublicPage()).rejects.toThrow();
+  expect((await publicAsset(privateItem).get()).exists).toBe(false);
 });

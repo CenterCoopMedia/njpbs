@@ -1,5 +1,7 @@
 "use strict";
 
+const { ownerRef } = require("./lib/media-hash-owner");
+
 const { preparePublicMediaChangeInTransaction } = require("./lib/public-release-producer");
 
 const { createHash, randomUUID } = require("node:crypto");
@@ -538,14 +540,6 @@ async function putOrConfirm({
   }
 }
 
-function ownerRef(firestore, contentHash) {
-  return firestore
-    .collection("system")
-    .doc("media")
-    .collection("hashOwners")
-    .doc(contentHash);
-}
-
 function mayUseMediaCategory(principal, category, kind, audioReadAdmitted = false) {
   return mayUseMedia(principal, category, kind, audioReadAdmitted);
 }
@@ -610,6 +604,7 @@ function uploadRecordFromClaim({ contentHash, claim, publicOrigin, nowIso, thumb
       ? { animated: claim.recordSeed.animated }
       : {}),
     ...(claim.recordSeed.master ? { master: claim.recordSeed.master } : {}),
+    ...(claim.recordSeed.archiveImport ? { archiveImport: claim.recordSeed.archiveImport } : {}),
     contentHash,
     storageKey: claim.finalKey,
     url: publicMediaUrl(publicOrigin, claim.finalKey),
@@ -1170,7 +1165,7 @@ async function committedUpload(
   { contentHash, attemptId, record, allowTombstoned = false },
 ) {
   const [ownerSnapshot, privateSnapshot, publicSnapshot] = await Promise.all([
-    ownerRef(firestore, contentHash).get(),
+    ownerRef(firestore, contentHash, record.id).get(),
     firestore.collection("media_assets").doc(record.id).get(),
     firestore.collection("media_assets_public").doc(record.id).get(),
   ]);
