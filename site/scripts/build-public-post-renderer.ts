@@ -4,10 +4,9 @@ import { isDeepStrictEqual } from "node:util";
 import { cp, mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { dataHubPageEnabled } from "../src/lib/build-target.ts";
 import { publicPostRenderEnvironment } from "./public-post-render-environment";
+import { publicPostRendererRelease } from "./public-post-renderer-release.ts";
 import { publicationTarget } from "../../functions/lib/publication-target";
-import pageReaderContract from "../../functions/lib/page-reader-contract.js";
 import { createPublicBuildSettings } from "../../functions/lib/public-build-settings.js";
 const site = fileURLToPath(new URL("..", import.meta.url));
 const repo = path.dirname(site);
@@ -17,10 +16,7 @@ if (process.argv.length > 3 || (phase && !["--compile-only", "--copy-assets", "-
 const testPages = phase === "--test-pages";
 const sha = git("rev-parse", "HEAD");
 const target = publicationTarget(testPages ? "development" : process.env.CMS_DEPLOYMENT_ENVIRONMENT ?? "production");
-const releaseSeal = { schemaVersion: 1, rendererSha: sha, liveBlogVersion: 1, electionResultsVersion: 2, spanishPostVersion: 1,
-  pageReaderVersion: pageReaderContract.PAGE_READER_VERSION,
-  ...(dataHubPageEnabled(process.env) ? { dataHubReportingVersion: 1, dataHubCompositionVersion: 1 } : {}),
-  ...(target.environment === "development" ? { environment: "development" } : {}) };
+const releaseSeal = publicPostRendererRelease(sha, target.environment, process.env);
 const seal = path.join(site, testPages ? ".public-page-renderer/renderer-release.json" : ".public-post-renderer/renderer-release.json");
 if (phase !== "--copy-assets") {
   const compilerEnvironment = publicPostRenderEnvironment(testPages
