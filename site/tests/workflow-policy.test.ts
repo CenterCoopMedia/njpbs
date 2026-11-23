@@ -438,6 +438,7 @@ describe("workflow gate", () => {
     const publisher = read("../scripts/cms-dev-publication.mjs");
     expect(publisher).toContain('"--unshare-net"');
     expect(publisher).toContain('INTERNAL_SURFACES: "0"');
+    expect(publisher).toContain('DATA_HUB_PUBLIC: "1"');
     expect(publisher).toContain('LAUNCH_CONTENT_DATA_PATH: path.join(directory, "launch.json")');
     expect(publisher).toContain('SPOTLIGHT_NEWS_DATA_PATH: path.join(directory, "spotlight.json")');
   });
