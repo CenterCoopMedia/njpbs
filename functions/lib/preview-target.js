@@ -2,7 +2,7 @@
 
 const { createHash } = require("node:crypto");
 const { publicPageDefinition, publicPagePath } = require("./public-page-contract");
-const { isServerMintableSlugShape } = require("./post-slug-contract");
+const { isPostRouteSlug, isServerMintableSlugShape, postRoutePath } = require("./post-slug-contract");
 const { publicRouteBaseForRecordKind } = require("./public-record-kinds");
 
 const PREVIEW_HEADS_COLLECTION = "cmsPreviewHeads";
@@ -53,11 +53,16 @@ function previewTargetPath(collection, id, snapshot) {
     if (!path) throw new Error("Page preview has no saved route");
     return path;
   }
-  const slug = snapshot?.published?.metadata?.slug;
-  if (!isServerMintableSlugShape(slug)) throw new Error("Record preview has no saved route");
   // Older private Post snapshots predate the type discriminator in this route
   // lookup. They still belong under /posts/; new Event snapshots name their type.
-  const base = publicRouteBaseForRecordKind(snapshot?.published?.metadata?.type ?? "post");
+  const metadata = snapshot?.published?.metadata;
+  const slug = metadata?.slug;
+  const type = metadata?.type ?? "post";
+  if (type === "post" ? !isPostRouteSlug(slug) : !isServerMintableSlugShape(slug)) {
+    throw new Error("Record preview has no saved route");
+  }
+  if (type === "post") return postRoutePath(slug);
+  const base = publicRouteBaseForRecordKind(type);
   if (!base) throw new Error("Record preview has no public route");
   return `${base}${slug}/`;
 }

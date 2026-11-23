@@ -504,14 +504,14 @@ describe("development renderer, version and baseline boundaries", () => {
 
   it.each([404, 410])("verifies frozen withdrawal routes after gateway HTTP %s", async status => {
     writeFileSync(join(directory, "post-routes.json"), JSON.stringify([
-      { route: "/posts/removed-post/", removed: true }, { route: "/posts/former-post/", removed: true },
+      { route: "/posts/removed-post/", removed: true }, { route: "/es/posts/former-post/", removed: true },
     ]));
     vi.stubGlobal("fetch", vi.fn(async (_url, options) => {
       expect(options.redirect).toBe("manual");
       return new Response(null, { status });
     }));
     await verifyDevPostRoutes();
-    expect(globalThis.fetch.mock.calls.map(([url]) => new URL(url).pathname)).toEqual(["/posts/removed-post/", "/posts/former-post/"]);
+    expect(globalThis.fetch.mock.calls.map(([url]) => new URL(url).pathname)).toEqual(["/posts/removed-post/", "/es/posts/former-post/"]);
   });
   it.each([200, 302, 403, 500])("refuses unconfirmed frozen withdrawal HTTP %s", async status => {
     writeFileSync(join(directory, "post-routes.json"), JSON.stringify([{ route: "/posts/removed-post/", removed: true }]));
@@ -533,16 +533,18 @@ describe("development renderer, version and baseline boundaries", () => {
       expect(globalThis.fetch).not.toHaveBeenCalled();
     });
 
-  it.each(["post", "sponsor", "newsletter"])("freezes exact %s withdrawal input at its artifact cutoff", async type => {
+  it.each([
+    ["post", "", "/posts/"], ["post", "es/", "/es/posts/"], ["sponsor", "", null], ["newsletter", "", null],
+  ])("freezes exact %s withdrawal input with slug prefix %s", async (type, slugPrefix, routeBase) => {
     const cutoffAt = { seconds: 100, nanoseconds: 0 };
     const queue = { transport: "github", environment: "development", projectId: "njpbs-site-dev",
       changes: [{ collection: "cmsPosts", id: "removed", sourceVersion: 7, operation: "withdraw" }] };
     const document = { publiclyVisible: false, published: { sourceVersion: 7,
-      metadata: { type, slug: "removed-post", previousSlugs: ["former-post"] } } };
+      metadata: { type, slug: `${slugPrefix}removed-post`, previousSlugs: [`${slugPrefix}former-post`] } } };
     const db = { collection: collection => ({ doc: () => ({ get: async () => ({ data: () => collection === "cmsPublishQueue" ? queue : document }) }) }),
       runTransaction: async (read, options) => { expect(options).toEqual({ readOnly: true, readTime: cutoffAt }); return read({ get: ref => ref.get() }); } };
     const result = await freezeDevPostRoutes(db, identity, { cutoffAt }, { families: [{ collection: "cmsPosts", artifacts: [] }] });
-    expect(result).toEqual(type === "post" ? [{ route: "/posts/removed-post/", removed: true }, { route: "/posts/former-post/", removed: true }] : []);
+    expect(result).toEqual(routeBase ? [{ route: `${routeBase}removed-post/`, removed: true }, { route: `${routeBase}former-post/`, removed: true }] : []);
     document.published.sourceVersion = 8;
     await expect(freezeDevPostRoutes(db, identity, { cutoffAt }, { families: [{ collection: "cmsPosts", artifacts: [] }] })).rejects.toThrow("withdrawal input differs");
   });

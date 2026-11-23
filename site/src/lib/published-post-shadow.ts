@@ -15,7 +15,7 @@ import { projectCmsPost } from "./cms-posts-projection";
 import { projectCmsProgram, type CmsProgramBuildData, type CmsProgramDoc } from "./cms-programs-projection";
 import { projectCmsEvent, type CmsEventBuildData } from "./cms-events-projection";
 import { exportRecordCards } from "./record-card-resolution";
-import { isPostRouteSlug, isSpanishPostSlug, postSlugForPath } from "./public-content-routes";
+import { isPostRouteSlug, isPublicContentSlug, isSpanishPostSlug, postSlugForPath } from "./public-content-routes";
 import { isAuthorId, isValidAuthorSlug } from "../../../packages/content-core/src/author-profiles";
 import { SECTION_BLOCK_CATALOG } from "../../../packages/content-core/src/editor-admin";
 import { STORY_CREDITS_MAX, STORY_CREDIT_NAME_MAX, normalizeCustomCreditName } from "../../../packages/content-core/src/story-credits";
@@ -155,8 +155,10 @@ export function projectChrome(input: Record<string, unknown>) {
   if (!contentLinkDirectoryFits(contentLinks)) throw new Error("Invalid content link directory");
   const projectedLinks = (contentLinks as unknown[]).map(entry => {
     if (!object(entry) || typeof entry.path !== "string" || !/^\/(?:[a-z0-9]+(?:-[a-z0-9]+)*\/)*$/.test(entry.path)) throw new Error("Invalid content link path");
+    const postSlug = postSlugForPath(entry.path);
+    const validPreviousSlug = isSpanishPostSlug(postSlug) ? isSpanishPostSlug : isPublicContentSlug;
     return { path: entry.path, ...contentLinkMetadata(entry),
-      ...(Array.isArray(entry.previousSlugs) && entry.previousSlugs.every(slug => typeof slug === "string" && /^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(slug)) ? { previousSlugs: entry.previousSlugs as string[] } : {}) };
+      ...(Array.isArray(entry.previousSlugs) && entry.previousSlugs.every(validPreviousSlug) ? { previousSlugs: entry.previousSlugs as string[] } : {}) };
   });
   return { settings, navigationPages, ...(projectedLinks.length ? { contentLinks: projectedLinks } : {}) };
 }
