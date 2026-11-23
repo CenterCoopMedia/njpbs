@@ -85,9 +85,10 @@ Its only deployment branch policy entry must be:
 Remove other branch and tag entries. Selecting all protected branches would
 also admit `production`, so it does not implement this policy.
 
-Provision `CCM_PROMOTE_APP_PRIVATE_KEY` only as a secret of this environment,
-never at repository or organization scope. Set the environment variable
-`CCM_PROMOTE_APP_CLIENT_ID` to the App's public client ID; this differs from its
+Provision `CCM_PROMOTE_APP_PRIVATE_KEY` only as a secret of this environment
+and the `development` environment, never at repository or organization scope.
+Set the environment variable `CCM_PROMOTE_APP_CLIENT_ID` in both environments
+to the App's public client ID; this differs from its
 numeric App ID. Existing canonical repository name and numeric ID variables
 must identify this repository. The workflow refuses a different repository or
 workflow ref before entering its job. `CMS_DEPLOY_OWNER` must identify the owner
