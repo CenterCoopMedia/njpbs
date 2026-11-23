@@ -35,6 +35,9 @@ jobs:
         with:
           path: ~/.cache/firebase/emulators
           key: ${{ runner.os }}-firebase-emulators-15.36.0
+      - name: Check search model loading and indexing
+        working-directory: site
+        run: npx --no-install vitest run tests/search-model-download.test.ts tests/build-with-production-sync-environment.test.ts
       - name: Run the enabled Astro build case
         env:
           ASTRO_TELEMETRY_DISABLED: "1"
