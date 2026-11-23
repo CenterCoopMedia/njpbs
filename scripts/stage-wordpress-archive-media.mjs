@@ -1,7 +1,5 @@
 #!/usr/bin/env node
 
-import { constants } from "node:fs";
-import { open } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { isDeepStrictEqual, parseArgs } from "node:util";
@@ -12,34 +10,14 @@ import media from "../functions/media.js";
 import contract from "../functions/lib/media-contract.js";
 import { archiveItemRef, firebaseOptions, writeArchiveReportRow } from "./stage-wordpress-archive.mjs";
 import { ArchiveInputError, sha256 } from "./lib/wordpress-archive-interchange.mjs";
+import { attachmentProblem, HEX_DIGEST, matches, POST_ID, readRegularFile, SOURCE_KEY } from "./lib/wordpress-archive-staging.mjs";
 
 const MAX_MANIFEST_BYTES = 4 * 1024 * 1024;
-const HEX_DIGEST = /^[a-f0-9]{64}$/;
-const SOURCE_KEY = /^[a-z0-9][a-z0-9-]{0,62}$/;
-const POST_ID = /^[1-9][0-9]{0,19}$/;
 const ENTRY_FIELDS = ["postId", "revisionSha256", "sha256", "originalName", "mimeType",
   "title", "caption", "altText", "credit", "license"];
 
-const matches = (value, pattern) => typeof value === "string" && pattern.test(value);
 const text = value => typeof value === "string" && value.isWellFormed();
 const review = reason => ({ action: "review", reason });
-
-async function readRegularFile(path, limit) {
-  const file = await open(path, constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK);
-  try {
-    const stat = await file.stat();
-    if (!stat.isFile() || stat.size === 0 || stat.size > limit) return null;
-    const chunks = [];
-    let length = 0;
-    for await (const chunk of file.createReadStream({ start: 0, end: limit, autoClose: false })) {
-      chunks.push(chunk);
-      length += chunk.length;
-    }
-    return length <= limit && length === stat.size ? Buffer.concat(chunks, length) : null;
-  } finally {
-    await file.close();
-  }
-}
 
 async function readManifest(path) {
   const bytes = await readRegularFile(path, MAX_MANIFEST_BYTES);
@@ -66,32 +44,6 @@ async function readManifest(path) {
     seen.add(item.postId);
   }
   return manifest;
-}
-
-function matchesStagingReceipt(staged, receipt, sourceRef, kind) {
-  return staged?.kind === kind && staged.record?.kind === kind &&
-    staged.formatVersion === 1 && Number.isSafeInteger(staged.version) && staged.version >= 1 &&
-    staged.record.lifecycle === "staged" && staged.record.postId === sourceRef.postId &&
-    matches(staged.record.revision?.sha256, HEX_DIGEST) &&
-    isDeepStrictEqual(staged.sourceRef, sourceRef) && isDeepStrictEqual(receipt?.sourceRef, sourceRef) &&
-    receipt.kind === kind && receipt.action === "create" &&
-    isDeepStrictEqual(receipt.revision, staged.record.revision);
-}
-
-async function attachmentProblem({ firestore, reader, staged, receipt, sourceRef, entry }) {
-  if (!staged) return "missing-staged-attachment";
-  if (!matchesStagingReceipt(staged, receipt, sourceRef, "attachment")) return "invalid-staged-attachment";
-  if (staged.record.revision.sha256 !== entry.revisionSha256) return "source-revision-conflict";
-  const { sourceStatus, parentPostId } = staged.record;
-  if (sourceStatus === "publish") return null;
-  if (sourceStatus !== "inherit") return "nonpublic-source";
-  if (!matches(parentPostId, POST_ID)) return "unverified-parent";
-  const parentSource = { source: sourceRef.source, postId: parentPostId };
-  const ref = archiveItemRef(firestore, parentSource.source, parentSource.postId);
-  const [parent, accepted] = await reader.getAll(ref, ref.collection("archiveImportReceipts").doc("staged"));
-  const story = parent.data();
-  if (!matchesStagingReceipt(story, accepted.data(), parentSource, "story")) return "unverified-parent";
-  return story.record.sourceStatus === "publish" ? null : "nonpublic-source";
 }
 
 async function verifyOriginal(directory, entry) {
@@ -164,7 +116,8 @@ export async function stageWordPressArchiveMedia({ firestore, manifestFile, orig
     const receipt = ref.collection("archiveImportReceipts").doc("staged");
     const [doc, accepted] = await firestore.getAll(ref, receipt);
     const staged = doc.data();
-    const problem = await attachmentProblem({ firestore, reader: firestore, staged, receipt: accepted.data(), sourceRef, entry });
+    const problem = await attachmentProblem({ firestore, reader: firestore, staged, receipt: accepted.data(), sourceRef,
+      revisionSha256: entry.revisionSha256 });
     const verified = problem ? review(problem) : await verifyOriginal(originals, entry);
     const result = verified.proof ? decide(ref, staged, verified.proof, staged.version) : verified;
     counts[result.action]++;
@@ -179,7 +132,8 @@ export async function stageWordPressArchiveMedia({ firestore, manifestFile, orig
     const result = await firestore.runTransaction(async transaction => {
       const [doc, accepted] = await transaction.getAll(ref, receipt);
       const staged = doc.data();
-      const problem = await attachmentProblem({ firestore, reader: transaction, staged, receipt: accepted.data(), sourceRef, entry });
+      const problem = await attachmentProblem({ firestore, reader: transaction, staged, receipt: accepted.data(), sourceRef,
+        revisionSha256: entry.revisionSha256 });
       if (problem) return review(problem);
       const decision = decide(ref, staged, proof, version);
       if (decision.action === "stage") transaction.update(ref, { version: version + 1, media: proof });

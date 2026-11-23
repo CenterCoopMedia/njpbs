@@ -6,6 +6,7 @@ import { fileURLToPath } from "node:url";
 import { PDFDocument } from "pdf-lib";
 import sharp from "sharp";
 import { afterEach, beforeEach, expect, it } from "vitest";
+import { checkWordPressArchiveBatch } from "../../scripts/check-wordpress-archive-batch.mjs";
 import { archiveItemRef, stageWordPressArchive } from "../../scripts/stage-wordpress-archive.mjs";
 import { stageWordPressArchiveMedia } from "../../scripts/stage-wordpress-archive-media.mjs";
 import lifecycle from "../../functions/lifecycle-transition.js";
@@ -49,6 +50,59 @@ function sourceRevision(story, changes) {
   const canonical = Object.fromEntries(Object.keys(record).sort().map(key => [key, record[key]]));
   return { ...record, revision: { ...revision, sha256: createHash("sha256").update(JSON.stringify(canonical)).digest("hex") } };
 }
+
+it("checks one approved archive batch and rejects stale, incomplete, or private inputs", async () => {
+  const manifestFile = await tempFile();
+  const source = "example-news";
+  const [story, attachment, future] = (await readFile(fixture, "utf8")).trimEnd().split("\n").slice(2, 5).map(JSON.parse);
+  await stageWordPressArchive({ firestore, file: fixture, apply: true });
+  const png = await sharp({ create: { width: 2, height: 2, channels: 3, background: "blue" } }).png().toBuffer();
+  const originalSha256 = createHash("sha256").update(png).digest("hex");
+  await writeFile(join(scratch, originalSha256), png);
+  const writeManifest = items => writeFile(manifestFile, JSON.stringify({ version: 1, source, items }));
+  await writeManifest([{ postId: attachment.postId, revisionSha256: attachment.revision.sha256,
+    sha256: originalSha256, originalName: "train.png", mimeType: "image/png", title: "Train",
+    caption: null, altText: "Train", credit: null, license: null }]);
+  await expect(stageWordPressArchiveMedia({ firestore, manifestFile, originals: scratch, apply: true }))
+    .resolves.toEqual({ stage: 1, skip: 0, review: 0 });
+
+  const entry = (row, stagedVersion) => ({ kind: row.kind, postId: row.postId, revisionSha256: row.revision.sha256, stagedVersion });
+  const storyEntry = entry(story, 1);
+  const attachmentEntry = { ...entry(attachment, 2), originalSha256 };
+  const check = (reader = firestore) => checkWordPressArchiveBatch({ firestore: reader, manifestFile });
+  for (const [items, reason] of [
+    [[storyEntry, storyEntry], "repeated archive batch entry"],
+    [[storyEntry], "missing-featured-attachment"],
+    [[storyEntry, { ...attachmentEntry, originalSha256: "a".repeat(64) }], "missing-verified-original"],
+    [[entry(future, 1)], "nonpublic-source"],
+  ]) {
+    await writeManifest(items);
+    await expect(check()).rejects.toThrow(reason);
+  }
+
+  await writeManifest([storyEntry, attachmentEntry]);
+  let reads = 0;
+  const interrupted = {
+    collection: firestore.collection.bind(firestore),
+    runTransaction: (inspect, options) => firestore.runTransaction(transaction => inspect({
+      async getAll(...refs) {
+        if (++reads === 2) throw new Error("Synthetic interrupted read");
+        return transaction.getAll(...refs);
+      },
+    }), options),
+  };
+  await expect(check(interrupted)).rejects.toThrow("Synthetic interrupted read");
+  const first = await check();
+  expect(first).toEqual({ phase: "batch-inputs-checked", inputDigest: expect.stringMatching(/^[a-f0-9]{64}$/), stories: 1, attachments: 1 });
+  await writeManifest([attachmentEntry, storyEntry]);
+  await expect(check()).resolves.toEqual(first);
+
+  await archiveItemRef(firestore, source, story.postId).update({ version: 2 });
+  await expect(check()).rejects.toThrow("missing-staged-version");
+  await writeManifest([entry(story, 2), attachmentEntry]);
+  expect((await check()).inputDigest).not.toBe(first.inputDigest);
+  expect((await firestore.listCollections()).map(collection => collection.id)).toEqual([archive]);
+});
 
 it("previews the complete export and keeps a resumed import isolated from publication", async () => {
   const plan = [];
