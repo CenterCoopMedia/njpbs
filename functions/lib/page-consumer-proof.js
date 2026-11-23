@@ -45,9 +45,10 @@ async function claimPageConsumerProof({ firestore, operationId, identity, now, d
     if (prior?.nextAttemptAt > time) return null;
     const attempts = (prior?.attempts ?? 0) + 1;
     const leaseUntil = Math.max(time + LEASE_MS, deadline + 5_000);
+    const postCheckpoint = prior?.postCheckpoint;
     transaction.set(ref, { key, claim, attempts, status: "running", leaseUntil,
-      nextAttemptAt: leaseUntil + 60_000 * 2 ** (attempts - 1) });
-    return { ref, key, claim, attempts };
+      nextAttemptAt: leaseUntil + 60_000 * 2 ** (attempts - 1), ...(postCheckpoint ? { postCheckpoint } : {}) });
+    return { key, attempts, postCheckpoint };
   });
   if (!acquired) return null;
   if (acquired.exhausted) {
@@ -58,24 +59,37 @@ async function claimPageConsumerProof({ firestore, operationId, identity, now, d
     log.warn("Page consumer confirmation skipped for stale context", { operationId, contextRevision: identity.contextRevision });
     return null;
   }
-  return { async assertCurrent(transaction, queue) {
-    const prior = (await transaction.get(ref)).data();
-    if (prior?.claim !== claim || prior.key !== acquired.key || proofKey(queue) !== acquired.key || now() >= prior.leaseUntil) {
-      throw Object.assign(new Error("Page consumer confirmation lease expired"), { status: 409 });
-    }
-  }, async finish(confirmed, { waitingForInputs = false, failureReason = { code: "confirmation_incomplete" } } = {}) {
+  let postCheckpoint;
+  return {
+    postCheckpoint: acquired.postCheckpoint,
+    recordPostCheckpoint(checkpoint) { postCheckpoint = checkpoint; },
+    async assertCurrent(transaction, queue) {
+      const prior = (await transaction.get(ref)).data();
+      if (prior?.claim !== claim || prior.key !== acquired.key || proofKey(queue) !== acquired.key || now() >= prior.leaseUntil) {
+        throw Object.assign(new Error("Page consumer confirmation lease expired"), { status: 409 });
+      }
+  }, async finish(confirmed, { waitingForInputs = false, continuingPosts = false,
+    failureReason = { code: "confirmation_incomplete" } } = {}) {
     const exhausted = await firestore.runTransaction(async transaction => {
       const prior = (await transaction.get(ref)).data();
       if (prior?.claim !== claim || prior.key !== acquired.key) return false;
-      if (waitingForInputs) {
+      let checkpointUpdate = {};
+      if (confirmed && prior.postCheckpoint) checkpointUpdate = { postCheckpoint: null };
+      if (!confirmed && postCheckpoint !== undefined) {
+        const queue = (await transaction.get(queueRef)).data();
+        if (queue && queue.status !== "cancelled" && proofKey(queue) === acquired.key && now() < prior.leaseUntil) {
+          checkpointUpdate = { postCheckpoint };
+        }
+      }
+      if (waitingForInputs || (continuingPosts && checkpointUpdate.postCheckpoint)) {
         transaction.update(ref, { status: "waiting", attempts: acquired.attempts - 1,
-          claim: null, leaseUntil: null, nextAttemptAt: null });
+          claim: null, leaseUntil: null, nextAttemptAt: null, ...checkpointUpdate });
         return false;
       }
       const exhausted = !confirmed && acquired.attempts >= MAX_ATTEMPTS;
       transaction.update(ref, { status: confirmed ? "verified" : "failed", claim: null, leaseUntil: null,
         ...(confirmed ? {} : { failureReason }),
-        nextAttemptAt: confirmed || exhausted ? null : now() + 60_000 * 2 ** (acquired.attempts - 1) });
+        nextAttemptAt: confirmed || exhausted ? null : now() + 60_000 * 2 ** (acquired.attempts - 1), ...checkpointUpdate });
       return exhausted;
     });
     if (exhausted) log.error("Page consumer confirmation retry budget exhausted", { operationId, attempts: MAX_ATTEMPTS });
