@@ -1,0 +1,7 @@
+{
+  "date": "2026-11-23",
+  "kind": "fixed",
+  "title": "Retry interrupted settings updates automatically",
+  "body": "If a newer site update interrupts your published settings, Boardwalk waits for it and retries your published version automatically when it is still current. Your draft stays as it is.",
+  "prs": []
+}

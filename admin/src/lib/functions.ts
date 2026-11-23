@@ -2205,6 +2205,7 @@ export interface SettingsPublicationReceipt {
   contextDigest: string;
   status: "pending" | "success" | "failed";
   missingConsumers: string[];
+  waitingForNewerContext?: true;
   warning?: string;
 }
 
