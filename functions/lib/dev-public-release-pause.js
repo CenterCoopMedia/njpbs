@@ -10,6 +10,7 @@ const { exhaustedPostProof } = require("./no-build-post-proof-state");
 const { readPublicContextInTransaction } = require("./public-context-revision");
 const { verifiedPreparation } = require("./public-context-publication");
 const { retryExhausted } = require("./no-build-cloud-work");
+const { contextOutputs } = require("./no-build-record-namespace");
 const { publicationTarget } = require("./publication-target");
 const isDevelopment = attempt => attempt.environment === "development";
 const publicReleasePauseRoot = attempt => isDevelopment(attempt) ? "system/devPublicReleasePause" : "system/productionPublicReleasePause";
@@ -167,17 +168,21 @@ function preparationRetryable(value, oldOwner, contextDigest) {
     p.positive(value.reservation.generation) && Number.isSafeInteger(value.reservation.cutoffAt?.toMillis?.()) &&
     value.reservation.cutoffAt.toMillis() > 0 && (value.admissionRevision === null || p.positive(value.admissionRevision));
 }
-async function currentQueueIds(firestore, transaction) {
+const backgroundTaskPath = /^cmsPublishQueue\/([A-Za-z0-9._:-]{1,128})\/backgroundOutputs\/[A-Za-z0-9_-]+$/;
+const queueTerminal = ["success", "failure", "failed", "public_unconfirmed", "cancelled", "superseded", "deployed"];
+async function candidateDependencies(firestore, transaction, queues) {
   const ids = new Set(), add = value => {
     if (value == null) return;
     if (!deployment.isPublicDeploymentIdentifier(value)) refuse();
     ids.add(value);
   };
-  for (const path of ["system/publicDeployment/noBuildPostOwners", "system/publicDeployment/noBuildPageOwners"]) {
+  for (const path of ["system/publicDeployment/noBuildPostOwners", "system/publicDeployment/noBuildPageOwners",
+    "system/publicDeployment/noBuildRecordOwners"]) {
     for (const row of await rows(firestore, transaction, path)) {
       const owner = row.data();
       if (path.endsWith("noBuildPostOwners") && owner.mode === "static") continue;
       add(owner.operationId);
+      if (path.endsWith("noBuildPageOwners")) add(owner.contextQueueId);
     }
   }
   const [legacy, aggregate] = await transaction.getAll(firestore.doc("system/publicDeployment/noBuildPosts/current"),
@@ -191,34 +196,93 @@ async function currentQueueIds(firestore, transaction) {
       context.operationIds.forEach(add);
     }
   }
-  return ids;
+  const taskPaths = new Set();
+  for (const id of ids) {
+    const queue = queues.get(id);
+    add(queue?.contextPublication?.queueId);
+    for (const output of Object.values(queue?.aggregateReceipt?.outputs ?? {})) {
+      if (typeof output?.taskPath !== "string" || !backgroundTaskPath.test(output.taskPath)) refuse();
+      taskPaths.add(output.taskPath);
+    }
+  }
+  return { ids, taskPaths };
+}
+
+function withdrawalQueue(queue) {
+  return queue?.noBuildPost?.visible === false || queue?.noBuildPage?.visible === false ||
+    queue?.recordPublication?.visible === false || (Array.isArray(queue?.changes) && queue.changes.some(change => change?.operation === "withdraw"));
+}
+
+async function backgroundWarnings(firestore, transaction, queues, outputs, oldOwner, dependencies) {
+  const warnings = new Map(), aliases = new Set();
+  for (const row of outputs) {
+    const output = row.data(), path = output.taskPath, match = typeof path === "string" && backgroundTaskPath.exec(path);
+    if (row.id === "home" || !/^[A-Za-z0-9_-]{1,128}$/.test(row.id) || !match || path.length > 350 ||
+        !deployment.isPublicDeploymentIdentifier(match[1]) || output.schemaVersion !== 1 || output.owner !== "post-background-v1" ||
+        output.output !== row.id || !p.positive(output.revision) || output.status !== "failed" || output.claim != null ||
+        output.nextAttemptAt != null || output.withdrawalDeadlineRevision != null || !output.runtime || !same(output.runtime, oldOwner)) continue;
+    const operationId = match[1], queue = queues.get(operationId);
+    if (!queue || !originalBuildFreeQueue(queue, oldOwner) || !queueTerminal.includes(queue.status) ||
+        queue.claim != null || queue.nextAttemptAt != null || withdrawalQueue(queue)) continue;
+    const task = (await transaction.get(firestore.doc(path))).data();
+    if (task?.schemaVersion !== 1 || task.owner !== output.owner || task.output !== row.id || task.revision !== output.revision ||
+        !task.runtime || !same(task.runtime, oldOwner) || task.status !== "failed" || !retryExhausted(task) || task.claim != null ||
+        task.nextAttemptAt !== null || task.slowRetryAt != null ||
+        task.dependencies?.before?.visible === true && task.dependencies.after?.visible === false) continue;
+
+    // Aggregate failures copy the same output failure to each operation at the
+    // exact context. A queue's own content or preparation failure still blocks.
+    const cohort = [];
+    if (output.contextOnly === true && task.contextOnly === true && p.digest(output.contextDigest) &&
+        output.contextDigest === task.contextDigest && queue.publicContext?.contextDigest === task.contextDigest &&
+        queue.transport === "public-context-no-build-v1") {
+      for (const [id, alias] of queues) {
+        if (alias.transport === queue.transport && originalBuildFreeQueue(alias, oldOwner) &&
+            alias.status === "failed" && alias.error === "background_generation_failed" &&
+            alias.claim == null && alias.nextAttemptAt == null && alias.publicContext?.operationId === id &&
+            alias.publicContext.contextDigest === task.contextDigest && !withdrawalQueue(alias) &&
+            !alias.recordPublication && !alias.libraryCardPublication && !alias.settingsPublication &&
+            contextOutputs(alias.publicContext).includes(row.id)) cohort.push(id);
+      }
+    }
+    const { ids, taskPaths } = await dependencies();
+    if (taskPaths.has(path) || ids.has(operationId) || cohort.some(id => ids.has(id))) continue;
+    warnings.set(path, { output: row.id, operationId, path });
+    for (const id of cohort) aliases.add(id);
+  }
+  return { warnings, aliases };
 }
 /** Retained C2's public-work surfaces plus the native nested Post public proof:
  * queues, batches, journals/releases, external refresh and outputs/Home. Reads
  * share the completion transaction. No accepted document is written. */
-async function drain(firestore, transaction, attempt, beforePause = false, initialQueueFailures = null, recoveredFailures = null) {
+async function drain(firestore, transaction, attempt, beforePause = false, initialQueueFailures = null, recoveredFailures = null, receiptWarnings = null) {
   const recovered = (code, path) => recoveredFailures?.has(`${code}:${path}`) === true;
   const counts = { queues: 0, batches: 0, retiredBatches: 0, releases: 0, outputs: 0, externalRefresh: 0 };
   const originalQueues = new Set(), oldOwner = { owner: "cloudflare", release: attempt.oldRuntime.commitSha };
   const initialFailures = initialQueueFailures && new Map(initialQueueFailures.map(row => [row.operationId, row.status]));
-  let currentIds, preparationDigest;
+  const queueRows = await rows(firestore, transaction, "cmsPublishQueue"), outputs = await rows(firestore, transaction, "cmsBackgroundOutputs");
+  const queues = new Map(queueRows.map(row => [row.id, row.data()]));
+  let candidate, preparationDigest;
+  const dependencies = () => candidate ??= candidateDependencies(firestore, transaction, queues);
+  const { warnings, aliases } = recoveredFailures ? { warnings: new Map(), aliases: new Set() } :
+    await backgroundWarnings(firestore, transaction, queues, outputs, oldOwner, dependencies);
   const unclaimed = value => value.claim == null;
   for (const [path, terminal, key] of [
     // Canonical retained-owner terminal labels, including historical results
     // whose public proof failed. Drain never relabels them as public success.
-    ["cmsPublishQueue", ["success", "failure", "failed", "public_unconfirmed", "cancelled", "superseded", "deployed"], "queues"],
+    ["cmsPublishQueue", queueTerminal, "queues"],
     ["system/publicDeployment/buildBatches", ["deployed", "failed", "superseded", "cancelled", "retired"], "batches"],
   ]) {
-    for (const row of await rows(firestore, transaction, path)) {
+    for (const row of key === "queues" ? queueRows : await rows(firestore, transaction, path)) {
       const value = row.data(); counts[key]++;
       // Native staff retry can re-arm a current failed operation without a new
       // ID. Resolve it while ready; only inactive failed history may be sealed.
       if (beforePause && key === "queues" && ["failed", "public_unconfirmed"].includes(value.status) &&
           ["post-no-build-v1", "page-no-build-v1", "public-context-no-build-v1"].includes(value.transport)) {
-        currentIds ??= await currentQueueIds(firestore, transaction);
-        if (currentIds.has(row.id)) refuse();
+        if ((await dependencies()).ids.has(row.id)) refuse();
       }
-      if (key === "queues" && queueFailedAfterPause(row, oldOwner, initialFailures) && !recovered("queue-failed", row.ref.path)) refuse();
+      if (key === "queues" && queueFailedAfterPause(row, oldOwner, initialFailures) &&
+          !aliases.has(row.id) && !recovered("queue-failed", row.ref.path)) refuse();
       const originalQueue = key === "queues" && ["pending", "publishing", "success"].includes(value.status) &&
         originalBuildFreeQueue(value, oldOwner);
       if (originalQueue) {
@@ -280,8 +344,9 @@ async function drain(firestore, transaction, attempt, beforePause = false, initi
         !Number.isSafeInteger(refresh.nextAttemptAt) || refresh.nextAttemptAt < 0 || !/^[A-Za-z0-9]{20}$/.test(refresh.operationId ?? "")) refuse();
     counts.externalRefresh++;
   }
-  for (const row of await rows(firestore, transaction, "cmsBackgroundOutputs")) {
+  for (const row of outputs) {
     const value = row.data(); counts.outputs++;
+    if (warnings.get(value.taskPath)?.output === row.id) continue;
     if (row.id === "home" && value.owner === "page-no-build-v1") {
       const home = (await transaction.get(firestore.doc("system/publicDeployment/noBuildPageOwners/home"))).data();
       if (value.schemaVersion !== 1 || value.output !== "home" || value.pageId !== "home" ||
@@ -319,19 +384,30 @@ async function drain(firestore, transaction, attempt, beforePause = false, initi
       if (!retryableTask(task) || task.owner !== value.owner || task.output !== row.id || task.revision !== value.revision) refuse();
     } else if (!["verified", "superseded", "cancelled"].includes(value.status) || !unclaimed(value)) refuse();
   }
+  if (receiptWarnings) receiptWarnings.push(...warnings.values());
   return counts;
 }
-function drainReceipt(attempt, counts, source) {
+function drainReceipt(attempt, counts, source, warnings = []) {
   return { schemaVersion: 1, kind: kind(attempt, "public-release-paused-and-drained"), operationId: attempt.operationId,
     projectId: attempt.projectId, attemptDigest: p.publicReleaseDigest(attempt), pauseReceiptDigest: p.publicReleaseDigest(source),
-    bootstrapAttemptDigest: p.publicReleaseDigest(bootstrapAttempt(attempt)), counts, acceptedWorkChanged: 0 };
+    bootstrapAttemptDigest: p.publicReleaseDigest(bootstrapAttempt(attempt)), counts, acceptedWorkChanged: 0,
+    ...(warnings.length ? { warnings } : {}) };
 }
 function readOriginalDrain(s, attempt) {
   if (!s.drained.exists) return null;
   const value = s.drained.data();
   p.exact(value.counts, ["queues", "batches", "retiredBatches", "releases", "outputs", "externalRefresh"]);
   if (!Object.values(value.counts).every(count => Number.isSafeInteger(count) && count >= 0)) refuse();
-  return original(s.drained, drainReceipt(attempt, value.counts, readOriginalPause(s, attempt)));
+  const warnings = value.warnings === undefined ? [] : value.warnings, outputs = new Set();
+  if (!Array.isArray(warnings) || warnings.length > value.counts.outputs || warnings.length > 1000) refuse();
+  for (const warning of warnings) {
+    p.exact(warning, ["output", "operationId", "path"]);
+    if (typeof warning.output !== "string" || !/^[A-Za-z0-9_-]{1,128}$/.test(warning.output) || warning.output === "home" ||
+        typeof warning.path !== "string" || warning.path.length > 350 || backgroundTaskPath.exec(warning.path)?.[1] !== warning.operationId ||
+        !deployment.isPublicDeploymentIdentifier(warning.operationId) || outputs.has(warning.output)) refuse();
+    outputs.add(warning.output);
+  }
+  return original(s.drained, drainReceipt(attempt, value.counts, readOriginalPause(s, attempt), warnings));
 }
 function failureReceipt(attempt, blockers, source) {
   return { schemaVersion: 1, kind: kind(attempt, "public-release-pause-failed"), operationId: attempt.operationId,
@@ -369,16 +445,20 @@ async function recordFailedPause(firestore, attempt) {
     if (s.drained.exists) return null;
     requireOld(s, attempt);
     if (!current(s, attempt).ownsPausedRuntime) return null;
-    const oldOwner = { owner: "cloudflare", release: attempt.oldRuntime.commitSha }, queues = new Map(), blockers = [];
+    const oldOwner = { owner: "cloudflare", release: attempt.oldRuntime.commitSha }, blockers = [];
+    const queueRows = await rows(firestore, transaction, "cmsPublishQueue"), outputs = await rows(firestore, transaction, "cmsBackgroundOutputs");
+    const queues = new Map(queueRows.map(row => [row.id, row.data()]));
+    let candidate;
+    const { warnings, aliases } = await backgroundWarnings(firestore, transaction, queues, outputs, oldOwner,
+      () => candidate ??= candidateDependencies(firestore, transaction, queues));
     const initialFailures = new Map(source.initialQueueFailures.map(row => [row.operationId, row.status]));
     let preparationDigest;
     const add = (code, operationId, path) => blockers.push({ code, operationId, path });
     const exhausted = task => task?.schemaVersion === 1 && task.status === "failed" && task.claim == null &&
       Number.isSafeInteger(task.attempts) && task.attempts >= 4 && task.nextAttemptAt === null && task.runtime && same(task.runtime, oldOwner);
-    for (const row of await rows(firestore, transaction, "cmsPublishQueue")) {
+    for (const row of queueRows) {
       const queue = row.data();
       if (!originalBuildFreeQueue(queue, oldOwner)) continue;
-      queues.set(row.id, queue);
       if (queueFailedAfterPause(row, oldOwner, initialFailures))
         add("queue-failed", row.id, row.ref.path);
       if (["pending", "publishing", "success"].includes(queue.status) || queueFailedAfterPause(row, oldOwner, initialFailures)) {
@@ -388,18 +468,20 @@ async function recordFailedPause(firestore, attempt) {
           add("background-preparation-exhausted", row.id, ref.path);
       }
     }
-    for (const row of await rows(firestore, transaction, "cmsBackgroundOutputs")) {
+    for (const row of outputs) {
       const value = row.data();
       if (value.owner === "post-background-v1") {
-        const match = /^cmsPublishQueue\/([A-Za-z0-9._:-]{1,128})\/backgroundOutputs\/[A-Za-z0-9_-]+$/.exec(value.taskPath ?? "");
-        if (!match || !queues.has(match[1]) || !value.runtime || !same(value.runtime, oldOwner)) continue;
+        const match = backgroundTaskPath.exec(value.taskPath ?? "");
+        if (!match || !queues.has(match[1]) || !originalBuildFreeQueue(queues.get(match[1]), oldOwner) ||
+            !value.runtime || !same(value.runtime, oldOwner)) continue;
         const task = (await transaction.get(firestore.doc(value.taskPath))).data();
         if (exhausted(task) && task.owner === value.owner && task.output === row.id && task.revision === value.revision)
           add("background-exhausted", match[1], value.taskPath);
       } else if (row.id === "home" && value.owner === "page-no-build-v1") {
         const home = (await transaction.get(firestore.doc("system/publicDeployment/noBuildPageOwners/home"))).data(), refresh = home?.homeRefresh;
         if (!home?.runtime || !same(home.runtime, oldOwner) || home.operationId !== value.operationId || !refresh ||
-            !queues.has(refresh.sourceOperationId) || refresh.taskPath !== `cmsPublishQueue/${refresh.sourceOperationId}/homePageRefresh/home`) continue;
+            !queues.has(refresh.sourceOperationId) || !originalBuildFreeQueue(queues.get(refresh.sourceOperationId), oldOwner) ||
+            refresh.taskPath !== `cmsPublishQueue/${refresh.sourceOperationId}/homePageRefresh/home`) continue;
         const task = (await transaction.get(firestore.doc(refresh.taskPath))).data();
         if (exhausted(task) && task.owner === value.owner && task.revision === refresh.revision &&
             task.input?.homeOperationId === home.operationId && task.input.homeSourceVersion === home.sourceVersion) {
@@ -408,7 +490,10 @@ async function recordFailedPause(firestore, attempt) {
         }
       }
     }
-    if (!blockers.length) return null;
+    // A warning alone cannot create a STOP. For a failed pause, keep the full
+    // original blocker inventory for recovery, including settled sibling work.
+    if (!blockers.some(row => !(row.code === "queue-failed" && aliases.has(row.operationId)) &&
+        !(row.code === "background-exhausted" && warnings.has(row.path)))) return null;
     blockers.sort((a, b) => `${a.path}:${a.code}`.localeCompare(`${b.path}:${b.code}`, "en"));
     const receipt = failureReceipt(attempt, blockers, source);
     transaction.create(firestore.doc(`${publicReleasePauseRoot(attempt)}/failures/${attempt.operationId}`), receipt);
@@ -449,8 +534,10 @@ async function pausePublicRelease({ firestore, attempt: raw }) {
       const s = await state(firestore, transaction, attempt);
       const source = readOriginalPause(s, attempt); requireOld(s, attempt);
       if (s.failed.exists || !current(s, attempt).currentReady) refuse();
-      const counts = await drain(firestore, transaction, attempt, false, source.initialQueueFailures), before = readOriginalDrain(s, attempt);
-      const receipt = before ?? drainReceipt(attempt, counts, source);
+      const warnings = [];
+      const counts = await drain(firestore, transaction, attempt, false, source.initialQueueFailures, null, warnings);
+      const before = readOriginalDrain(s, attempt);
+      const receipt = before ?? drainReceipt(attempt, counts, source, warnings);
       if (!before) transaction.create(firestore.doc(`${publicReleasePauseRoot(attempt)}/drains/${attempt.operationId}`), receipt);
       return { idempotent: Boolean(before), pauseCommitted: true, drainCommitted: true, ...current(s, attempt), stop: false, outcome: "drained",
         pauseReceipt: source, receipt, receiptDigest: p.publicReleaseDigest(receipt) };
