@@ -54,6 +54,15 @@ function freeLease() {
 }
 
 describe("content operations requests", () => {
+  it.each([0, 2])("advertises supported schemas on an unsupported schema %s before reading any record", async schema => {
+    const { calls, fetcher } = upstream({});
+    const response = await run({ schema, requestReference: undefined }, fetcher);
+    expect(response.status).toBe(400);
+    expect(await response.json()).toEqual({ error: "Send a schema 1 content operations request.",
+      code: "unsupported_content_ops_schema", supportedSchemas: [1] });
+    expect(calls).toHaveLength(0);
+  });
+
   it.each([
     ["an unknown field", { mode: "dry-run", collection: "cmsPages", id: "about", baseVersion: 1, ops: [{ op: "remove", id: "a" }], force: true }, /unknown field/],
     ["publish with operations", { mode: "publish", collection: "cmsPages", id: "about", baseVersion: 1, ops: [{ op: "remove", id: "a" }], expectDigest: "a".repeat(64) }, /no operations/],
