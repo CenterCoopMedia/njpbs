@@ -984,7 +984,12 @@ export function SourceMediaLibrary({ principal, source, getIdToken, userId, onEx
   const notice = useSuccessNotice();
   const currentNotice = useRef(notice);
   currentNotice.current = notice;
-  const routeKey = useLocation().key;
+  const location = useLocation();
+  const routeKey = location.key;
+  const fromVideoBin = location.state?.fromVideoBin === true;
+  useEffect(() => {
+    if (fromVideoBin) document.getElementById("video-library-title")?.focus();
+  }, [fromVideoBin, routeKey]);
   const [routeParams, setRouteParams] = useSearchParams();
   const permalink = parseMediaPermalink(routeParams);
   const videoLocation = parseVideoMediaLocation(routeParams.toString());
@@ -1794,7 +1799,17 @@ export function SourceMediaLibrary({ principal, source, getIdToken, userId, onEx
       focusRequest: uploadFocusRequest,
       lockedReason: uploadOpenBlockedReason,
     } : null,
-    moreItems: [{ key: "select-page", label: "Select this page", icon: "check-square", onSelect: () => bulk.pageSelection.onChange(true) }],
+    moreItems: [
+      { key: "select-page", label: "Select this page", icon: "check-square", onSelect: () => bulk.pageSelection.onChange(true) },
+      ...(source.canDelete ? [{
+        key: "recycle-bin", label: "Recycle bin", icon: "trash" as const,
+        onSelect: () => setRouteParams(current => {
+          const params = new URLSearchParams(current);
+          params.set("bin", "1");
+          return params;
+        }),
+      }] : []),
+    ],
     shortcuts: null,
   };
 

@@ -1,10 +1,13 @@
 import { describe, expect, it, vi } from "vitest";
 import { createRequire } from "node:module";
 import sourceMedia from "../../functions/source-media.js";
+import sourceVideoBin from "../../functions/source-video-bin.js";
 import mediaSources from "../../functions/lib/media-sources.js";
 import sourceContract from "../../functions/lib/source-media-contract.js";
 import s3MediaSource from "../../functions/lib/s3-media-source.js";
 import workloadCredentials from "../../functions/lib/aws-workload-credentials.js";
+import videoPreviewJob from "../../functions/lib/video-preview-job.js";
+import { fakeFirestore } from "../helpers/master-cleanup-firestore.js";
 
 const {
   createCmsCreateSourceMediaReadHandler,
@@ -97,6 +100,135 @@ function categoryFirestore(categoryData) {
     },
   };
 }
+
+describe("source video recycle bin", () => {
+  const key = "mediaSourceAssets/fixture-video";
+  const requestSource = { sourceId: "video-library" };
+  const restore = { ...requestSource, action: "restore", assetId: "fixture-video", expectedVersion: 2 };
+  function binFixture() {
+    const { firestore, rows } = fakeFirestore();
+    const original = storedAsset({ lifecycle: "deleted", version: 2, deletedBy: "fixture-editor" });
+    rows.set(key, original);
+    rows.set("mediaSourceStats/video-library", { sourceId: "video-library", exact: true, activeCount: 0 });
+    return { firestore, rows, original };
+  }
+  async function call(body, deps) {
+    const res = response();
+    const mediaSource = source();
+    const handler = sourceVideoBin.createVideoBinHandler({
+      firestore: {},
+      registry: () => new Map([[mediaSource.id, mediaSource]]),
+      requirePrincipal: async () => actor([{ role: "super_admin" }]),
+      authorize: args => authorizeMediaSource({ ...args, isApprovedActiveAccountFn: async () => true }),
+      verifyAppCheck: async () => {},
+      now: () => "2026-11-23T12:00:00.000Z",
+      audit: fields => fields,
+      ...deps,
+    });
+    await handler(request(body), res);
+    return res;
+  }
+
+  it("restores the verified version with one count, audit and search update", async () => {
+    const { firestore, rows, original } = binFixture();
+    const verifyFiles = vi.fn();
+    const verifyAppCheck = vi.fn();
+    const res = await call(restore, { firestore, verifyFiles, verifyAppCheck });
+    expect(res.body).toEqual({ success: true, restored: true });
+    expect(verifyAppCheck).toHaveBeenCalledOnce();
+    expect(verifyFiles).toHaveBeenCalledExactlyOnceWith(expect.objectContaining({ id: "video-library" }),
+      expect.objectContaining({ objectKey: original.objectKey, objectVersionId: original.objectVersionId, version: 2 }));
+    expect(rows.get(key)).toMatchObject({
+      lifecycle: "active", version: 3, objectKey: original.objectKey, objectVersionId: original.objectVersionId,
+    });
+    expect(rows.get("mediaSourceStats/video-library").activeCount).toBe(1);
+    expect(rows.get("mediaSourceSearchShards/fixture-video")).toMatchObject({ pending: true });
+    expect([...rows.values()].filter(row => row.action === "media.library.restore")).toHaveLength(1);
+    expect((await call(restore, { firestore, verifyFiles })).statusCode).toBe(409);
+    expect(rows.get("mediaSourceStats/video-library").activeCount).toBe(1);
+  });
+
+  it("keeps the tombstone on a missing dependency or a concurrent file change", async () => {
+    const { firestore, rows, original } = binFixture();
+    const missing = await call(restore, { firestore, verifyFiles: async () => {
+      throw new SourceObjectError(409, "The viewing copy is no longer available.");
+    } });
+    expect(missing.body.error).toBe("The viewing copy is no longer available.");
+    expect(rows.get(key)).toEqual(original);
+    const conflict = await call(restore, { firestore, verifyFiles: async () => {
+      rows.set(key, { ...original, objectVersionId: "fixture-other-version" });
+    } });
+    expect(conflict.statusCode).toBe(409);
+    expect(rows.get(key)).toMatchObject({ lifecycle: "deleted", objectVersionId: "fixture-other-version" });
+    expect(rows.get("mediaSourceStats/video-library").activeCount).toBe(0);
+  });
+
+  it.each([true, false])("restores a video deleted during processing (job active: %s)", async active => {
+    const { firestore, rows, original } = binFixture();
+    const job = videoPreviewJob.pendingPreview({ ...original, id: restore.assetId });
+    const storedJob = { ...job, active, phase: active ? "running" : "needs_reconciliation" };
+    const jobPath = `${videoPreviewJob.PREVIEW_JOBS}/${job.id}`;
+    rows.set(jobPath, storedJob);
+    rows.set(key, { ...original, rendition: videoPreviewJob.renditionState(job, "processing") });
+    const res = await call(restore, { firestore, verifyFiles: vi.fn() });
+    expect(res.body).toEqual({ success: true, restored: true, ...(active ? {} : { viewingCopyUnavailable: true }) });
+    expect(rows.get(key)).toMatchObject({
+      lifecycle: "active", objectVersionId: original.objectVersionId,
+      rendition: { state: active ? "processing" : "failed", attemptId: job.attemptId },
+    });
+    expect(rows.get(jobPath)).toEqual(storedJob);
+  });
+
+  it("lists only source tombstones and refuses ordinary video readers", async () => {
+    const { firestore, rows } = binFixture();
+    rows.set("mediaSourceAssets/active", storedAsset());
+    rows.set("mediaSourceAssets/archive", storedAsset({ lifecycle: "deleted", sourceId: "archive-working" }));
+    const body = { ...requestSource, action: "list" };
+    expect((await call(body, { firestore })).body).toEqual({ success: true, nextCursor: null, records: [{
+      id: "fixture-video", name: "County meeting.mp4", version: 2, deletedAt: "2026-09-14T16:00:00.000Z",
+    }] });
+    expect((await call(body, { firestore, requirePrincipal: async () => actor() })).statusCode).toBe(403);
+  });
+
+  it("returns only readable current usages with their content link targets", async () => {
+    const { firestore } = binFixture();
+    const video = { type: "video", visible: true, data: { ...requestSource, assetId: "fixture-video" } };
+    const object = `https://media.njpbs.org/cms-media/video/fixture-video/${"a".repeat(64)}`;
+    const publicVideo = { ...video, data: { ...video.data, public: {
+      url: `${object}.mp4`, posterUrl: `${object}.jpg`, width: 1920, height: 1080, mimeType: "video/mp4",
+    } } };
+    const post = (id, stored) => ({ id, ref: { parent: { id: "cmsPosts" } }, data: () => stored });
+    const docs = [
+      post("open-post", { type: "post", title: "Planning meeting", section: "news", createdBy: "staff-1", blocks: [video] }),
+      post("published-post", { type: "post", title: "Past coverage", section: "news", publiclyVisible: true,
+        published: { blocks: [publicVideo] } }),
+      post("live-post", { type: "post", title: "Earlier public rendering", section: "news", publiclyVisible: true,
+        publishBuildPending: true, published: { blocks: [], previousVideoCopies: [{ assetId: "fixture-video", url: `${object}.mp4` }] } }),
+      post("settled-post", { type: "post", title: "Settled revision", section: "news", publiclyVisible: true,
+        published: { blocks: [], previousVideoCopies: [{ assetId: "fixture-video", url: `${object}.mp4` }] } }),
+      post("closed-post", { type: "post", title: "Private draft", section: "other", createdBy: "staff-2", blocks: [video] }),
+      post("deleted-post", { type: "post", title: "Deleted", section: "news", deleted: true, blocks: [video] }),
+      post("other-source", { type: "post", title: "Other source", section: "news", blocks: [
+        { ...video, data: { ...video.data, sourceId: "archive-working" } },
+      ] }),
+    ];
+    const collection = firestore.collection;
+    const query = { orderBy: () => query, offset: () => query, select: () => query, limit: () => query };
+    firestore.collection = name => name === "cmsPosts" ? query : collection(name);
+    firestore.runTransaction = fn => fn({ get: ref => ref === query ? { docs } : ref.get() });
+    const res = await call({ ...requestSource, action: "usage", assetId: "fixture-video" }, {
+      firestore,
+      // The endpoint's source boundary is covered above. Exercise scoped content read separately.
+      authorize: async () => {},
+      requirePrincipal: async () => actor([{ role: "editor", sections: ["news"], registeredMediaSections: ["news"] }]),
+    });
+    expect(res.body).toEqual({ success: true, incomplete: false, nextCursor: "cmsPages:0", items: [
+      { collection: "cmsPosts", documentId: "open-post", title: "Planning meeting", working: true, published: false },
+      { collection: "cmsPosts", documentId: "published-post", title: "Past coverage", working: false, published: true },
+      { collection: "cmsPosts", documentId: "live-post", title: "Earlier public rendering", working: false, published: true },
+    ] });
+  });
+});
 
 describe("source media authorization", () => {
   it("denies active accounts without a video read capability", async () => {

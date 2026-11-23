@@ -9,7 +9,7 @@ const { getSignedUrl } = require("@aws-sdk/s3-request-presigner");
 const { createAwsRoleCredentialProvider } = require("./aws-workload-credentials");
 const { parseSourceMediaRendition } = require("./source-media-rendition");
 
-const { assertOriginalReadable, mapOriginalStorageError } = require("./source-original-state");
+const { assertOriginalReadable, mapOriginalStorageError, stateFromHead } = require("./source-original-state");
 
 const READ_URL_TTL_SECONDS = 5 * 60;
 const AWS_ACCOUNT_ID_PATTERN = /^\d{12}$/;
@@ -135,17 +135,14 @@ async function verifyTarget(client, target, options) {
   return head;
 }
 
-function createS3MediaSourceReader(config, deps = {}) {
+function sourceClientFactory(config, deps) {
   const S3ClientCtor = deps.S3ClientCtor ?? S3Client;
   const credentialProviderFn = deps.createAwsRoleCredentialProviderFn ??
     ((value) => deps.createAwsRoleCredentialsFn
       ? () => deps.createAwsRoleCredentialsFn(value)
       : createAwsRoleCredentialProvider(value));
-  const signUrlFn = deps.getSignedUrlFn ?? getSignedUrl;
-  const nowFn = deps.nowFn ?? (() => Date.now());
-
   const clients = new Map();
-  function clientFor(source) {
+  return function clientFor(source) {
     if (clients.has(source.roleArn)) return clients.get(source.roleArn);
     const credentials = credentialProviderFn({
       roleArn: source.roleArn,
@@ -155,7 +152,46 @@ function createS3MediaSourceReader(config, deps = {}) {
     const client = new S3ClientCtor({ region: config.region, credentials });
     clients.set(source.roleArn, client);
     return client;
-  }
+  };
+}
+
+function createS3MediaRestoreCheck(config, deps = {}) {
+  const clientFor = sourceClientFactory(config, deps);
+  return async (source, asset) => {
+    const client = clientFor(source);
+    const options = { abortSignal: AbortSignal.timeout(12_000) };
+    async function check(target, label) {
+      if (!target || target.objectVersionId === "null") {
+        throw new SourceObjectError(409, `${label} has no retained file version.`);
+      }
+      try {
+        return await verifyTarget(client, target, options);
+      } catch (error) {
+        if (error instanceof SourceObjectError) {
+          throw new SourceObjectError(409, `${label} is no longer available.`);
+        }
+        const unavailable = new SourceObjectError(503, `${label} could not be verified. Try again.`);
+        unavailable.cause = error;
+        throw unavailable;
+      }
+    }
+    // An archived S3 version is still retained. The existing original retrieval
+    // action can make its bytes readable after the library entry is restored.
+    const original = await check(originalTarget(source, asset), "The original video");
+    if (asset.rendition?.state === "ready") {
+      await Promise.all([
+        check(renditionTarget(config, source, asset, "web"), "The viewing copy"),
+        check(renditionTarget(config, source, asset, "poster"), "The video poster"),
+      ]);
+    }
+    return stateFromHead(original).state;
+  };
+}
+
+function createS3MediaSourceReader(config, deps = {}) {
+  const clientFor = sourceClientFactory(config, deps);
+  const signUrlFn = deps.getSignedUrlFn ?? getSignedUrl;
+  const nowFn = deps.nowFn ?? (() => Date.now());
 
   return async function createRead(source, asset, action) {
     const client = clientFor(source);
@@ -201,6 +237,7 @@ function createS3MediaSourceReader(config, deps = {}) {
 module.exports = {
   READ_URL_TTL_SECONDS,
   SourceObjectError,
+  createS3MediaRestoreCheck,
   createS3MediaSourceReader,
   readDisposition,
   safeDownloadName,

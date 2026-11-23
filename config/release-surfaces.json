@@ -757,6 +757,10 @@
           "module": "functions/source-media-originals.js"
         },
         {
+          "name": "cmsSourceVideoBin",
+          "module": "functions/source-video-bin.js"
+        },
+        {
           "name": "cmsStartPremierePairing",
           "module": "functions/premiere-desktop.js"
         },

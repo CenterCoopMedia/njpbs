@@ -67,6 +67,7 @@ lazyExport("cmsListSourceMedia", "./source-media");
 lazyExport("cmsSearchMedia", "./search-media");
 lazyExport("cmsCreateSourceMediaRead", "./source-media");
 lazyExport("cmsSourceMediaOriginal", "./source-media-originals");
+lazyExport("cmsSourceVideoBin", "./source-video-bin");
 lazyExport("cmsPublishSourceVideo", "./source-video-publication");
 lazyExport("onPublicVideoPostWithdrawal", "./source-video-publication");
 lazyExport("onPublicVideoPageWithdrawal", "./source-video-publication");

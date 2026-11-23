@@ -137,6 +137,7 @@ export const ENDPOINTS = Object.freeze({
   cmsSaveVideoTranscript: { contentType: "json", maxBytes: 2 * MIB, rateClass: "upload" },
   cmsCreateVideoTranscriptRead: { contentType: "json", maxBytes: 8 * KIB, rateClass: "read" },
   cmsSourceMediaOriginal: { contentType: "json", maxBytes: 4 * KIB, rateClass: "mutation" },
+  cmsSourceVideoBin: { contentType: "json", maxBytes: 4 * KIB, rateClass: "metadata" },
   cmsCreateSourceMediaRead: { contentType: "json", maxBytes: 8 * KIB, rateClass: "read" },
   cmsPublishSourceVideo: { contentType: "json", maxBytes: 2 * KIB, rateClass: "lifecycle" },
   cmsStartSourceMediaUpload: { contentType: "json", maxBytes: 96 * KIB, rateClass: "upload" },
