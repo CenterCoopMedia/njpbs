@@ -207,6 +207,7 @@ const CLOUD_WAKE_FUNCTION_NAMES = Object.freeze([
 const BACKGROUND_FUNCTION_NAMES = Object.freeze([
   ...CLOUD_WAKE_FUNCTION_NAMES,
   "onDatasetRefresh",
+  "onEditorialNotificationCreated",
   "onElectionResultsSourcePoll",
   "onCmsSaveWarmup",
   "onNavigationShareOwnerWrite",

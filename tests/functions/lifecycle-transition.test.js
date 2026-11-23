@@ -18,6 +18,7 @@ import {
 } from "firebase/auth";
 import lifecycleTransition from "../../functions/lifecycle-transition.js";
 import reviewQueue from "../../functions/lib/review-queue.js";
+import editorialNotifications from "../../functions/editorial-notification.js";
 
 const {
   cmsTransitionContent,
@@ -644,12 +645,37 @@ describe("cmsTransitionContent", () => {
     expect(await rows(db, "cmsVersionHistory")).toEqual([
       expect.objectContaining({ action: "sendBack", comment: "Add a second source." }),
     ]);
-    expect(await rows(db, "admin_logs")).toEqual([
+    const auditRows = await rows(db, "admin_logs");
+    expect(auditRows).toEqual([
       expect.objectContaining({
         action: "cms.sendBack",
-        after: { status: "draft", version: 4, comment: "Add a second source." },
+        after: {
+          status: "draft", version: 4, comment: "Add a second source.",
+          editorialNotice: {
+            collection: "cmsPosts", id: "record-1", action: "sendBack", ownerId: "author-1",
+            requester: null, assignee: null, section: null,
+          },
+        },
       }),
     ]);
+    await db.doc("users/author-1").set({ grants: [{ role: "contributor" }] });
+    let committedAtDelivery;
+    const sendEmail = vi.fn(async () => {
+      committedAtDelivery = {
+        document: (await db.doc("cmsPosts/record-1").get()).data(),
+        audit: await rows(db, "admin_logs"),
+      };
+      throw new Error("Synthetic mail transport failure");
+    });
+    const [notice] = auditRows;
+    const authClient = { getUser: async () => ({ email: "author@example.org", emailVerified: true }) };
+    await expect(editorialNotifications.deliverEditorialNotification(notice.id, notice, {
+      firestore: db, authClient, sendEmail, adminOrigin: "https://boardwalk.example.org",
+    })).resolves.toEqual([{ state: "unknown" }]);
+    expect(sendEmail).toHaveBeenCalledOnce();
+    expect(committedAtDelivery).toMatchObject({ document: { status: "draft", version: 4 }, audit: auditRows });
+    expect((await db.doc("cmsPosts/record-1").get()).data()).toMatchObject({ status: "draft", version: 4 });
+    expect(await rows(db, "admin_logs")).toEqual(auditRows);
   });
 
   it("lets an owner submit a draft but does not let that contributor approve it", async () => {

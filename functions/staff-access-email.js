@@ -8,7 +8,9 @@
 
 const { defineSecret, defineString } = require("firebase-functions/params");
 const { onSchedule } = require("firebase-functions/v2/scheduler");
-const { db } = require("./lib/firebase");
+const { admin, db } = require("./lib/firebase");
+const { accessTierReadsActive } = require("./lib/access-tier-activation");
+const { editorialEmailContent, editorialRecipient } = require("./lib/editorial-notice");
 const approvalRoleNames = require("./lib/staff-approval-role-names.json");
 const {
   njpbsEmailLogoAttachment,
@@ -113,6 +115,7 @@ function renderDetails(details, title) {
 }
 
 function renderEmailHtml({
+  serviceLabel = "Staff services",
   preheader,
   heading,
   paragraphs,
@@ -137,7 +140,7 @@ function renderEmailHtml({
     <tr>
       <td align="center" style="padding:24px 12px;">
         <table role="presentation" width="600" cellspacing="0" cellpadding="0" border="0" style="width:100%;max-width:600px;border-collapse:separate;background:#ffffff;border-radius:10px;box-shadow:0 2px 10px rgba(9,15,47,0.08);">
-          ${renderNjpbsEmailHeader("Staff services")}
+          ${renderNjpbsEmailHeader(serviceLabel)}
           <tr>
             <td style="padding:30px 28px 10px;">
               <div style="margin:0 0 8px;color:#2638c4;font-family:Arial,Helvetica,sans-serif;font-size:13px;font-weight:700;letter-spacing:0.08em;line-height:18px;text-transform:uppercase;">NJ PBS</div>
@@ -152,7 +155,7 @@ function renderEmailHtml({
                 </tr>
               </table>
               <p style="margin:0 0 20px;color:#59617a;font-family:Arial,Helvetica,sans-serif;font-size:14px;line-height:21px;overflow-wrap:anywhere;word-break:break-word;">If the button does not work, copy this address into your browser:<br>${safeCtaUrl}</p>
-              <p style="margin:0 0 18px;color:#29304a;font-family:Arial,Helvetica,sans-serif;font-size:15px;line-height:23px;">${escapeHtml(closing)}</p>
+              ${closing ? `<p style="margin:0 0 18px;color:#29304a;font-family:Arial,Helvetica,sans-serif;font-size:15px;line-height:23px;">${escapeHtml(closing)}</p>` : ""}
             </td>
           </tr>
           <tr>
@@ -170,6 +173,7 @@ function renderEmailHtml({
 }
 
 function renderEmailText({
+  serviceLabel = "Staff services",
   heading,
   paragraphs,
   details = [],
@@ -178,7 +182,7 @@ function renderEmailText({
   ctaUrl,
   closing,
 }) {
-  const blocks = ["NJ PBS", "Staff services", heading, ...paragraphs];
+  const blocks = ["NJ PBS", serviceLabel, heading, ...paragraphs];
   if (details.length > 0) {
     blocks.push(
       `${detailsTitle}\n${details.map(({ label, value }) => `${label}: ${value}`).join("\n")}`,
@@ -290,6 +294,10 @@ function renderStaffAccessEmail(message, { adminOrigin } = {}) {
         closing:
           "If you did not request a password reset, you can ignore this message.",
       };
+      break;
+    case "editorial":
+      content = { ...editorialEmailContent(message.editorialNotice, origin), serviceLabel: "Boardwalk" };
+      subject = `${content.heading} in Boardwalk`;
       break;
     default:
       throw new EmailDeliveryError("Unknown staff email template", {
@@ -406,36 +414,35 @@ function createCloudflareEmailSender(deps = {}) {
   };
 }
 
-function queueStaffAccessEmail(transaction, firestore, message, nowValue) {
+function queueStaffAccessEmail(transaction, firestore, message, nowValue, { createOnly = false } = {}) {
   const deliveryId = message.deliveryId ?? message.requestVersion;
   const id = outboxId(message.uid, deliveryId, message.eventType);
   const ref = firestore.collection(OUTBOX_COLLECTION).doc(id);
-  transaction.set(
-    ref,
-    {
-      uid: message.uid,
-      requestVersion: message.requestVersion ?? null,
-      deliveryId,
-      eventType: message.eventType,
-      to: normalizeEmail(message.to),
-      displayName: message.displayName ?? null,
-      verificationLink: message.verificationLink ?? null,
-      passwordResetLink: message.passwordResetLink ?? null,
-      reference: message.reference ?? null,
-      role: message.role ?? null,
-      state: "pending",
-      attemptCount: 0,
-      nextAttemptAt: nowValue,
-      createdAt: nowValue,
-      updatedAt: nowValue,
-      leaseUntil: null,
-      provider: null,
-      providerState: null,
-      lastStatus: null,
-      sentAt: null,
-    },
-    { merge: true },
-  );
+  const row = {
+    uid: message.uid,
+    requestVersion: message.requestVersion ?? null,
+    deliveryId,
+    eventType: message.eventType,
+    to: normalizeEmail(message.to),
+    displayName: message.displayName ?? null,
+    verificationLink: message.verificationLink ?? null,
+    passwordResetLink: message.passwordResetLink ?? null,
+    reference: message.reference ?? null,
+    role: message.role ?? null,
+    ...(message.editorialNotice ? { editorialNotice: message.editorialNotice } : {}),
+    state: "pending",
+    attemptCount: 0,
+    nextAttemptAt: nowValue,
+    createdAt: nowValue,
+    updatedAt: nowValue,
+    leaseUntil: null,
+    provider: null,
+    providerState: null,
+    lastStatus: null,
+    sentAt: null,
+  };
+  if (createOnly) transaction.create(ref, row);
+  else transaction.set(ref, row, { merge: true });
   return id;
 }
 
@@ -559,6 +566,23 @@ async function deliverStaffAccessEmail(id, deps = {}) {
   if (!row) return { state: "skipped" };
   let receipt;
   try {
+    if (row.eventType === "editorial") {
+      let recipient;
+      try {
+        const [profile, tiersActive] = await Promise.all([
+          firestore.collection("users").doc(row.uid).get(),
+          accessTierReadsActive(firestore),
+        ]);
+        recipient = await editorialRecipient(firestore, deps.authClient ?? admin.auth(), tiersActive,
+          profile, row.editorialNotice);
+      } catch (cause) {
+        throw new EmailDeliveryError("Staff account verification failed", { kind: "retryable", cause });
+      }
+      if (recipient?.to !== row.to) {
+        await row.ref.update({ state: "cancelled", leaseUntil: null, nextAttemptAt: null, updatedAt: now() });
+        return { state: "cancelled" };
+      }
+    }
     receipt = await sendEmail({ to: row.to, ...rendered });
     await row.ref.update({
       state: "sent",

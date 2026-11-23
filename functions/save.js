@@ -113,6 +113,7 @@ const {
   adminLogEntry,
   versionHistoryEntry,
 } = require("./lib/audit");
+const { editorialNotice } = require("./lib/editorial-notice");
 const { parseBlocks } = require("./lib/content-blocks");
 const { isBoundedDocumentId } = require("./get-content");
 const { blockContentError } = require("./lib/block-content-validation");
@@ -3207,6 +3208,9 @@ function createCmsSaveHandler(deps = {}) {
             after: {
               status,
               created: creating,
+              ...editorialNotice(collection, docId,
+                publish === true && !liveBlogUpdate ? "publish" : schedulesPublication ? "schedule" : null,
+                stored, composed),
               ...(contentLinkChanged ? { contentLink: contentLinkAfter } : {}),
               // Count the blocks actually stored, not just the ones this save sent: a
               // metadata-only save carries the stored blocks forward, so the compliance

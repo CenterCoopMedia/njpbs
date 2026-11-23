@@ -841,6 +841,10 @@
           "module": "functions/dataset-refresh.js"
         },
         {
+          "name": "onEditorialNotificationCreated",
+          "module": "functions/editorial-notification.js"
+        },
+        {
           "name": "onElectionResultsSourcePoll",
           "module": "functions/election-results-sources.js"
         },

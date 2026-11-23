@@ -62,6 +62,7 @@ const { collectWorkingMediaUsage, mediaUsageDocument } = require("./lib/media-us
 const { mediaReplacementRef } = require("./lib/media-replacement");
 const { postPresentationError } = require("./lib/post-formats");
 const { createReviewRequest, advanceReviewRequest } = require("./lib/review-queue");
+const { editorialNotice } = require("./lib/editorial-notice");
 const { enqueuePublishBuild } = require("./publish");
 const { publishSecretBindings } = require("./lib/cms-publish-credentials");
 const { routePurgeSecretNames } = require("./lib/post-route-purge");
@@ -719,6 +720,7 @@ function createCmsTransitionContentHandler(deps = {}) {
             after: {
               status: changed.status,
               version: changed.version,
+              ...editorialNotice(collection, id, action, current, changed),
               ...(changed.reviewRequest
                 ? { requestId: changed.reviewRequest.requestId }
                 : {}),
