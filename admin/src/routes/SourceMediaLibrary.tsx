@@ -293,7 +293,7 @@ export function VideoViewerBody({
   // Media time of the frame on screen, from requestVideoFrameCallback.
   const shownMediaTime = useRef<number | null>(null);
   const production = useVideoProductionTools({ headerControls: true, workspace: hasTranscriptPane, initialClipRange,
-    correctionReturnTarget: workspaceView === "transcript" ? null : correctionReturnTarget,
+    correctionReturnTarget,
     commentThreads: commentThreads(feedback.comments.comments).filter(thread => timelineComments.includes(thread.comment)),
     commentsIncomplete: Boolean(feedback.comments.nextCursor),
     onOpenComment: comment => {

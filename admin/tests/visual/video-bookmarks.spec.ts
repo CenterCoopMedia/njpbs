@@ -79,6 +79,8 @@ for (const width of [390, 1280]) test(`return to a transcript draft after visiti
   await expect(resume).toBeVisible();
   await page.keyboard.press("Escape");
 
+  const returnToCorrection = page.getByRole("button", { name: "Return to transcript correction", exact: true });
+  await expect(returnToCorrection).toBeHidden();
   const transcript = page.getByRole("region", { name: "Saved video transcript", exact: true });
   const search = transcript.getByRole("searchbox", { name: "Search loaded transcript" });
   await search.fill("Archive");
@@ -93,8 +95,6 @@ for (const width of [390, 1280]) test(`return to a transcript draft after visiti
   await correction.fill(draft);
   const passages = transcript.getByRole("list", { name: "Transcript passages" });
   const readingPosition = await passages.evaluate(list => list.scrollTop);
-  const returnToCorrection = page.getByRole("button", { name: "Return to transcript correction", exact: true });
-  await expect(returnToCorrection).toBeHidden();
 
   for (const [moment, seconds] of [[jump, 12], [resume, 48]] as const) {
     await open.press("Enter");
@@ -114,6 +114,7 @@ for (const width of [390, 1280]) test(`return to a transcript draft after visiti
   }
 
   await transcript.getByRole("button", { name: "Cancel edits", exact: true }).press("Enter");
+  await expect(returnToCorrection).toHaveCount(0);
   const follow = transcript.getByRole("button", { name: "Follow playback", exact: true });
   await expect(follow).toHaveAttribute("aria-pressed", "false");
   await follow.press("Enter");
