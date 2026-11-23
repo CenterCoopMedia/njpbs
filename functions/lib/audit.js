@@ -72,9 +72,14 @@ function versionHistoryEntry({
   };
 }
 
+function isHistoryBeforeTruncated(entry) {
+  return Boolean(entry?.beforeTruncated || entry?.before?.beforeTruncated);
+}
+
 module.exports = {
   AUDIT_COLLECTIONS,
   adminLogEntry,
   logAdminAction,
   versionHistoryEntry,
+  isHistoryBeforeTruncated,
 };
