@@ -47,7 +47,7 @@ const deployments = { success: true, result: { deployments: [{ id: DEPLOYMENT_ID
 const workers = { success: true, result: [{ id: production.workerName, tag: "e".repeat(32) }, { id: development.workerName, tag: TAG }] };
 const noTriggers = { success: true, result: [] };
 
-afterEach(() => { vi.doUnmock("wrangler"); vi.resetModules(); vi.unstubAllGlobals(); });
+afterEach(() => { vi.doUnmock("jsonc-parser"); vi.resetModules(); vi.unstubAllGlobals(); });
 
 describe("development Worker configuration", () => {
   it("derives only development names from the production Worker program", async () => {
@@ -96,9 +96,9 @@ describe("development Worker configuration", () => {
   });
 
   it("refuses a derived development upload that would name production before any read or Wrangler call", async () => {
-    vi.doMock("wrangler", () => ({ experimental_readRawConfig: () => ({ rawConfig: {
+    vi.doMock("jsonc-parser", () => ({ parse: () => ({
       name: production.workerName, main: "./src/public-no-build-entry.ts", vars: { PUBLIC_ORIGIN: "https://njpbs.org/" },
-      routes: [{ pattern: "https://njpbs.org/*", zone_name: "njpbs.org" }] } }) }));
+      routes: [{ pattern: "https://njpbs.org/*", zone_name: "njpbs.org" }] }) }));
     const { uploadPublicWorkerCandidate } = await import("../scripts/upload-public-worker-candidate");
     const directory = await mkdtemp(path.join(tmpdir(), "dev-worker-upload-"));
     const runCommand = vi.fn();

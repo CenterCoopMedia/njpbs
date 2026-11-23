@@ -1,4 +1,5 @@
-import { writeFile } from "node:fs/promises";
+import { readFile, writeFile } from "node:fs/promises";
+import { parse, type ParseError } from "jsonc-parser";
 import { createRequire } from "node:module";
 import path from "node:path";
 import type { PublicationTarget } from "../../functions/lib/publication-target";
@@ -39,12 +40,10 @@ export async function developmentPublicWorkerConfig({ root, target, assetsDirect
 }): Promise<WorkerConfig> {
   const expected = assertPublicationTarget(target);
   if (expected.environment !== "development") throw new Error("Refusing a development Worker configuration that names production");
-  // Wrangler is a root dependency outside the site's type graph.
-  const wrangler = "wrangler";
-  const { experimental_readRawConfig } = await import(wrangler) as {
-    experimental_readRawConfig(input: { config: string }): { rawConfig: WorkerConfig } };
-  const config = experimental_readRawConfig({ config: path.join(root, "workers/wrangler.jsonc") }).rawConfig as WorkerConfig & {
+  const errors: ParseError[] = [];
+  const config = parse(await readFile(path.join(root, "workers/wrangler.jsonc"), "utf8"), errors, { allowTrailingComma: true }) as WorkerConfig & {
     main: string; assets?: Record<string, unknown>; vars?: Record<string, unknown> };
+  if (errors.length || !config || typeof config !== "object") throw new Error("The production Worker configuration is unreadable");
   return assertDevelopmentPublicWorkerConfig({ ...config, name: expected.workerName, main: path.join(root, "workers", config.main),
     routes: [], workers_dev: false, preview_urls: false,
     assets: { ...config.assets, directory: assetsDirectory },
