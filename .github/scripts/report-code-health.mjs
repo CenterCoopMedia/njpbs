@@ -52,11 +52,12 @@ function checkFunctions(ts, cwd, sizes) {
     const { line, character } = start === undefined || !sourceFile ? {}
       : sourceFile.getLineAndCharacterOfPosition(start);
     const message = ts.flattenDiagnosticMessageText(diagnostic.messageText, "\n").replaceAll(cwd + "/", "");
-    // The flagged line, column and text: two errors on the same name differ, and
-    // an error keeps its identity when other lines move. Editing the line makes it new.
+    // The line up to the end of the flagged text, with its column: two errors on the
+    // same name differ, and an error keeps its identity when other lines move or
+    // the rest of its line changes. Editing the line before it makes it new.
     let source = message;
     if (line !== undefined) {
-      const lineText = sourceFile.text.slice(sourceFile.getLineStarts()[line], sourceFile.getLineStarts()[line + 1]);
+      const lineText = sourceFile.text.slice(sourceFile.getLineStarts()[line], start + length);
       const indent = lineText.length - lineText.trimStart().length;
       source = [lineText.trim(), character - indent, sourceFile.text.slice(start, start + length)]
         .join(" ").replace(/\s+/g, " ");

@@ -88,9 +88,10 @@ appear in the report totals only; a long function or file runs the same as a
 short one. Download the `code-health` artifact for the tested tree, its base,
 the base's ESLint bulk suppressions and the new findings. The check compares
 lint counts by file, rule and message, and type counts by file, rule, flagged
-line text, column and flagged text, so shifted lines and type messages that
-quote a changed signature keep their baseline. An error on a line the change
-edits counts as new. It also tracks detected renames.
+text, its column and its line up to the flagged text, so shifted lines, later
+edits on the line and type messages that quote a changed signature keep their
+baseline. An edit before the error on its line makes it new. It also tracks
+detected renames.
 Test files are linted and excluded from size counts. Main pushes record the
 current baseline in the **Code health** workflow.
 
