@@ -749,6 +749,10 @@
           "module": "functions/source-media-uploads.js"
         },
         {
+          "name": "cmsSourceMediaMetadataBatch",
+          "module": "functions/source-media-metadata-batch.js"
+        },
+        {
           "name": "cmsSourceMediaOriginal",
           "module": "functions/source-media-originals.js"
         },
@@ -1212,6 +1216,7 @@
     {"id":"ema-video-upload-ui","kind":"ui","sources":["admin/src/components/VideoUploadPanel.tsx"],"states":["ready","checking","uploading","finishing","paused","error","completed"]},
     {"id":"ema-upload-router","kind":"ui","sources":["admin/src/lib/upload-router.ts"],"states":["empty","held","routed","rejected"]},
     {"id":"ema-bulk-metadata-ui","kind":"ui","sources":["admin/src/lib/source-media-bulk.ts"],"states":["pending","unchanged","saving","saved","conflict","failed","unconfirmed"]},
+    {"id":"source-media-metadata-batch","kind":"media","sources":["functions/source-media-metadata-batch.js"],"states":["active","completed","canceled"]},
     {"id":"ema-media-processing-poll","kind":"ui","sources":["admin/src/lib/use-media-processing-poll.ts"],"states":["paused","waiting","in_flight"]},
     {"id":"ema-saved-media-views-ui","kind":"ui","sources":["admin/src/lib/use-saved-media-views.ts"],"states":["idle","loading","ready","error","mutating"]},
     {"id":"ema-coverage-label-load","kind":"ui","sources":["admin/src/context/CoverageLabelsContext.tsx"],"states":["unavailable","idle","loading","ready","error"]},

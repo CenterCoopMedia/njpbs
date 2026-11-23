@@ -91,6 +91,7 @@ lazyExport("cmsCompleteSourceMediaUpload", "./source-media-uploads");
 lazyExport("cmsCancelSourceMediaUpload", "./source-media-uploads");
 lazyExport("cmsDeleteSourceMedia", "./source-media-uploads");
 lazyExport("cmsUpdateSourceMediaMetadata", "./source-media-uploads");
+lazyExport("cmsSourceMediaMetadataBatch", "./source-media-metadata-batch");
 lazyExport("cmsGetSourceVideoReplacement", "./source-video-replacement");
 lazyExport("cmsRollbackSourceVideoReplacement", "./source-video-replacement");
 lazyExport("onSourceVideoReplacementTick", "./source-video-replacement");

@@ -146,6 +146,7 @@ export const ENDPOINTS = Object.freeze({
   cmsCancelSourceMediaUpload: { contentType: "json", maxBytes: 4 * KIB, rateClass: "multipartControl" },
   cmsDeleteSourceMedia: { contentType: "json", maxBytes: 4 * KIB, rateClass: "metadata" },
   cmsUpdateSourceMediaMetadata: { contentType: "json", maxBytes: 96 * KIB, rateClass: "metadata" },
+  cmsSourceMediaMetadataBatch: { contentType: "json", maxBytes: 4 * MIB, rateClass: "metadata" },
   cmsGetSourceVideoReplacement: { contentType: "json", maxBytes: 4 * KIB, rateClass: "read" },
   cmsRollbackSourceVideoReplacement: { contentType: "json", maxBytes: 4 * KIB, rateClass: "metadata" },
   cmsListMediaUsage: { contentType: "json", maxBytes: 4 * KIB, rateClass: "read" },

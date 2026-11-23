@@ -877,22 +877,43 @@ async function cancelUpload({
   return { canceled: true };
 }
 
-async function updateMetadata({
-  actor,
-  adminLogEntryFn = adminLogEntry,
-  firestore,
-  nowFn,
-  request,
-  source,
-}) {
+function sourceMetadataAsset(snapshot, source) {
+  const asset = snapshot.exists ? parseSourceMediaAsset(snapshot.id, snapshot.data()) : null;
+  return asset && asset.sourceId === source.id && objectKeyWithinSource(source, asset.objectKey)
+    ? asset : null;
+}
+
+function writeSourceMetadata({ transaction, firestore, ref, current, patch, actor, adminLogEntryFn, now }) {
+  const changes = {
+    ...patch,
+    ...(patch.name ? { nameSort: normalizeSourceMediaNameSort(patch.name) } : {}),
+    version: current.version + 1,
+    updatedAt: now,
+    updatedAtSort: now,
+    updatedBy: actor.uid,
+  };
+  transaction.update(ref, changes);
+  enqueueVideoSearchShard(transaction, firestore, current.id, current.sourceId);
+  const updated = { ...current, ...changes };
+  transaction.create(
+    firestore.collection(AUDIT_COLLECTIONS.adminLogs).doc(),
+    adminLogEntryFn({
+      actorUid: actor.uid,
+      actorEmail: actor.email ?? null,
+      action: "media.metadata.update",
+      target: `mediaSourceAssets/${current.id}`,
+      before: auditMetadata(current),
+      after: auditMetadata(updated),
+    }),
+  );
+  return updated;
+}
+
+async function updateMetadata({ actor, adminLogEntryFn = adminLogEntry, firestore, nowFn, request, source }) {
   const ref = firestore.collection("mediaSourceAssets").doc(request.assetId);
   const asset = await firestore.runTransaction(async (transaction) => {
-    const snapshot = await transaction.get(ref);
-    const current = snapshot.exists ? parseSourceMediaAsset(snapshot.id, snapshot.data()) : null;
-    if (!current || current.sourceId !== source.id ||
-        !objectKeyWithinSource(source, current.objectKey)) {
-      throw new SourceUploadError(404, "Media asset not found");
-    }
+    const current = sourceMetadataAsset(await transaction.get(ref), source);
+    if (!current) throw new SourceUploadError(404, "Media asset not found");
     if (current.version !== request.expectedVersion) {
       throw new SourceUploadError(
         409,
@@ -900,31 +921,9 @@ async function updateMetadata({
         { current: sourceMediaAssetDetail(current) },
       );
     }
-    const now = nowFn();
-    const changes = {
-      ...request.changes,
-      ...(request.changes.name
-        ? { nameSort: normalizeSourceMediaNameSort(request.changes.name) }
-        : {}),
-      version: current.version + 1,
-      updatedAt: now,
-      updatedAtSort: now,
-      updatedBy: actor.uid,
-    };
-    transaction.update(ref, changes);
-    enqueueVideoSearchShard(transaction, firestore, current.id, current.sourceId);
-    const updated = { ...current, ...changes };
-    transaction.create(
-      firestore.collection(AUDIT_COLLECTIONS.adminLogs).doc(),
-      adminLogEntryFn({
-        actorUid: actor.uid,
-        actorEmail: actor.email ?? null,
-        action: "media.metadata.update",
-        target: `mediaSourceAssets/${current.id}`,
-        before: auditMetadata(current),
-        after: auditMetadata(updated),
-      }),
-    );
+    const updated = writeSourceMetadata({
+      transaction, firestore, ref, current, patch: request.changes, actor, adminLogEntryFn, now: nowFn(),
+    });
     return sourceMediaAssetDetail(updated);
   });
   return { asset };
@@ -1057,6 +1056,7 @@ module.exports = {
   cmsUpdateSourceMediaMetadata,
   completeUpload,
   completedAsset,
+  commonOptions,
   createIndexedVideo,
   objectKey,
   loadSession,
@@ -1064,9 +1064,11 @@ module.exports = {
   publicUpload,
   resumeUpload,
   signUploadParts,
+  sourceMetadataAsset,
   signedManifestChecksum,
   startUpload,
   storeCompletedAsset,
   updateMetadata,
   verifiedCompletedParts,
+  writeSourceMetadata,
 };

@@ -149,6 +149,7 @@ export const AUTHENTICATED_POST_FUNCTION_NAMES = Object.freeze([
   "cmsRollbackSourceVideoReplacement",
   "cmsDeleteSourceMedia",
   "cmsUpdateSourceMediaMetadata",
+  "cmsSourceMediaMetadataBatch",
   "cmsListMediaUsage",
   "cmsListMediaCategories",
   "cmsMutateMediaCategory",
