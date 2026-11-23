@@ -257,10 +257,11 @@ reloading cannot repair a server response contract.
 The [seed operator](../../scripts/seed-dev-published.mjs) keeps `export`,
 `validate`, `copy-media`, `import` and `verify` separate, with a fixed
 production-read/development-write project pair, the explicit Node type-stripping
-flag and service-account JSON on stdin. Export accepts a production service
-account only after its granted permissions prove it can get and list Firestore
-entities and do nothing else. Import and verify accept only the dedicated dev
-seed writer. No ADC, Auth/database export or production storage authority.
+flag and service-account JSON on stdin. Export accepts only the production
+service account that `SEED_EXPORT_IDENTITY` names, and only after its granted
+permissions prove it can get and list Firestore entities and cannot write,
+delete, import or export. Import and verify accept only the dedicated dev seed
+writer. No ADC, Auth/database export or production storage authority.
 Never substitute an administrator credential.
 
 ### Refresh dev before a rehearsal
@@ -268,7 +269,8 @@ Never substitute an administrator credential.
 Run from a fresh clone at the source SHA, after the root and `site` installs and
 `npm run functions:build`. `SEED_READER_COMMAND` and `SEED_WRITER_COMMAND` are
 operator-supplied commands that stream the production reader and dev writer
-service-account JSON to stdout at use time.
+service-account JSON to stdout at use time; `SEED_EXPORT_IDENTITY` is the
+reader's service-account email.
 
 Plan (read-only on both projects):
 
@@ -291,7 +293,12 @@ The dry run is the plan. `restored` lists seeded records that dev changed or
 deleted; `removed` lists seeded records the source no longer publishes. Each
 entry records the document and receipt hashes the dry run saw. Apply takes the
 plan from the same run and restores or removes a listed row only while both
-hashes still match, then verifies:
+hashes still match.
+
+Review the plan before apply. Every `restored` path must be a seeded record a
+dev rehearsal or proof changed, and every `removed` path must be a record
+production no longer publishes. Stop and investigate a path you cannot explain.
+Then apply and verify:
 
 ```bash
 sh -c "$SEED_WRITER_COMMAND" | $SEED import $PAIR --manifest "$MANIFEST" --plan "$STATE/plan.json" --apply | tee "$STATE/apply.json"

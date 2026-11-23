@@ -7,7 +7,7 @@ import { resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { parseArgs } from 'node:util';
 import { cert, initializeApp, deleteApp } from 'firebase-admin/app';
-import { getFirestore, FieldValue, Timestamp } from 'firebase-admin/firestore';
+import { getFirestore, Timestamp } from 'firebase-admin/firestore';
 import snapshotContract from '../functions/lib/publish-snapshot.js';
 import blockContract from '../functions/lib/content-blocks.js';
 import publicProjection from '../functions/lib/public-content-projection.js';
@@ -683,9 +683,10 @@ export async function importPublished({ firestore, manifest, copy, plan, source 
         transaction.set(priorRef, { path: record.path, recordHash: digest(data), seedHash, manifestHash: manifest.hash, refreshId });
       }
       for (const { ref, priorRef } of removed) { transaction.delete(ref); transaction.delete(priorRef); }
-      // Seeded media bypass the media owners, so their cached active count is stale; readers recount.
+      // Seeded media bypass the media owners. Advance the discovery revision as they
+      // do, so open media cursors restart and the cached active count is recounted.
       if (touched.some(path => path.startsWith('media_assets/'))) {
-        transaction.set(firestore.doc(mediaDiscovery.MEDIA_DISCOVERY_STATE), { admission: FieldValue.delete() }, { merge: true });
+        mediaDiscovery.bumpMediaDiscoveryRevision(transaction, firestore, { withdrawal: removed.some(({ seen }) => seen.path.startsWith('media_assets/')) });
       }
       if (!manifest.configurationOnly && !marker.exists) {
         transaction.create(pointerRef, deploymentContract.initialPublicDeploymentPointer());
@@ -737,7 +738,7 @@ export async function verifyPublished({ firestore, manifest, source = SOURCE, de
             prior.data().seedHash !== seedHashOf(record.data)) differ.push(record.path);
       });
     }
-    const extra = (await trackedRemovals(transaction, firestore, manifest, records)).map(({ path }) => path);
+    const extra = await trackedRemovals(transaction, firestore, manifest, records);
     if (differ.length || extra.length) {
       fail(`Dev does not match source snapshot ${manifest.hash}: ${differ.length} differ, ${extra.length} extra (first: ${[...differ, ...extra][0]})`);
     }
@@ -757,8 +758,9 @@ async function cliDatabase(mode, emulator) {
   let input = '';
   for await (const chunk of process.stdin) { input += chunk; if (input.length > 32_768) fail('Credential input too large'); }
   const account = JSON.parse(input);
-  // The export identity is proven read-only by its granted permissions below.
-  if (account.project_id !== projectId || (mode !== 'export' && account.client_email !== `dev-seed-writer@${DESTINATION}.iam.gserviceaccount.com`)) fail('The dedicated seed service identity is required');
+  // The operator names the production reader; its granted permissions are then proven read-only.
+  const identity = mode === 'export' ? process.env.SEED_EXPORT_IDENTITY : `dev-seed-writer@${DESTINATION}.iam.gserviceaccount.com`;
+  if (!identity || account.project_id !== projectId || account.client_email !== identity) fail('The dedicated seed service identity is required');
   const credential = cert(account);
   if (mode === 'export') {
     const token = await credential.getAccessToken();

@@ -588,6 +588,18 @@ describe('isolated published-content seed', () => {
     expect(contextResult.status).toBe(1);
     expect(contextResult.stderr).toContain('Dev seed refused: Invalid published contract: publication/retained-context');
     expect(contextResult.stderr).not.toContain('Do not echo this input');
+    // A live export needs the operator-named reader identity before any network call.
+    const liveEnvironment = Object.fromEntries(Object.entries(process.env).filter(([key]) =>
+      !['FIRESTORE_EMULATOR_HOST', 'GOOGLE_APPLICATION_CREDENTIALS', 'FIREBASE_CONFIG', 'SEED_EXPORT_IDENTITY'].includes(key)));
+    for (const identity of [undefined, 'other-reader@example.org']) {
+      const env = { ...liveEnvironment, ...(identity ? { SEED_EXPORT_IDENTITY: identity } : {}) };
+      const live = spawnSync(process.execPath, ['--experimental-strip-types', 'scripts/seed-dev-published.mjs', 'export', '--source-sha', sourceSha,
+        '--publication', receiptFile, '--output', directory], { encoding: 'utf8', env,
+        input: JSON.stringify({ project_id: SOURCE, client_email: 'reader@example.org', private_key: 'not-a-key' }) });
+      expect(live.status).toBe(1);
+      expect(live.stderr).toContain('The dedicated seed service identity is required');
+      expect(live.stderr).not.toContain('not-a-key');
+    }
   });
   it('imports published video URLs unchanged and keeps the renderer contract valid', async () => {
     await source.doc('cmsPages/contact').update({ 'published.blocks': [{ id: 'video', type: 'video', order: 0, visible: true,
@@ -695,7 +707,7 @@ describe('isolated published-content seed', () => {
     await dev.doc('cmsPages/contact').update({ title: 'Dev rehearsal edit' });
     await source.doc('cmsPages/contact').update({ publiclyVisible: false });
     const next = await exportSeed();
-    await expect(verifyPublished({ firestore: dev, manifest: next })).rejects.toThrow(/0 differ, 4 extra/);
+    await expect(verifyPublished({ firestore: dev, manifest: next })).rejects.toThrow('0 differ, 4 extra (first: cmsPages/contact)');
     const plan = await importPublished({ firestore: dev, manifest: next });
     await dev.doc('cmsPages/contact').update({ title: 'Edited after the dry run' });
     await expect(importPublished({ firestore: dev, manifest: next, plan, apply: true })).rejects.toThrow('Seed record changed after the dry run: cmsPages/contact');
@@ -706,7 +718,8 @@ describe('isolated published-content seed', () => {
       removed: at('cmsPages/contact', 'media_assets_public/image-1', 'media_assets/image-1', 'mediaCategories/dev-seed') });
     expect((await dev.doc('cmsPages/contact').get()).exists).toBe(false);
     // The removed media leave the cached active count stale, so readers must recount.
-    expect((await dev.doc('system/mediaDiscovery').get()).data()).toEqual({ revision: 3 });
+    // Like the media owners, the refresh advances the revision that binds media cursors.
+    expect((await dev.doc('system/mediaDiscovery').get()).data()).toEqual({ revision: 4 });
     expect((await dev.doc('cmsPages/local-page').get()).data().title).toBe('Dev-only work');
     expect(await verifyPublished({ firestore: dev, manifest: next })).toMatchObject({ verified: true, manifestHash: next.hash });
     await source.doc('cmsPages/contact').update({ publiclyVisible: true });
