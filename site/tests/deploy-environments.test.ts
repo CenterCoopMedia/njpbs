@@ -14,8 +14,12 @@ const TARGET_ENVIRONMENT = "${{ inputs.target == 'development' && 'development' 
 const environmentsOf = (job: { environment?: string | { name?: string } }): (string | undefined)[] => job.environment === TARGET_ENVIRONMENT ? ["production", "development"]
   : [typeof job.environment === "string" ? job.environment : job.environment?.name];
 
-function secretNames(value: unknown): string[] {
-  const expressions = JSON.stringify(value).match(/\$\{\{[\s\S]*?\}\}/g) ?? [];
+// `inputs.target == 'development' && secrets.X` reads X in the development environment only.
+const DEVELOPMENT_ONLY = /inputs\.target == 'development' && secrets\.[A-Za-z_]\w*/g;
+function secretNames(value: unknown, environment?: string): string[] {
+  const text = JSON.stringify(value);
+  const expressions = (environment === "development" ? text : text.replace(DEVELOPMENT_ONLY, "inputs.target == 'development' && ''"))
+    .match(/\$\{\{[\s\S]*?\}\}/g) ?? [];
   const names = new Set<string>();
   for (const expression of expressions) {
     const remaining = expression.replace(/\bsecrets\s*(?:\.\s*([a-zA-Z_][\w]*)|\[\s*'([^']+)'\s*\])/gi, (_, dot, bracket) => {
@@ -191,7 +195,7 @@ describe("deploy credential environments", () => {
         expect(job.secrets, `${context}: inherited secrets need an explicit policy`).not.toBe("inherit");
         for (const environment of environmentsOf(job)) {
           if (job.environment !== undefined) expect(Object.keys(policy), context).toContain(environment);
-          for (const secret of secretNames([definition.env, job])) {
+          for (const secret of secretNames([definition.env, job], environment)) {
             // GITHUB_TOKEN is created by GitHub for each job; it is not migrated.
             if (secret === "GITHUB_TOKEN") continue;
             if (secret === "SCHEDULE_BAKE_APP_PRIVATE_KEY") {

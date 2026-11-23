@@ -1,5 +1,6 @@
 "use strict";
 
+const { productionServiceAccount } = require("./lib/production-service-account");
 const { enrichSourceMediaUploaders } = require("./lib/source-media-uploader");
 const { FieldPath } = require("firebase-admin/firestore");
 const logger = require("firebase-functions/logger");
@@ -45,8 +46,7 @@ const { READ_SECRETS, privateVideoStorage } = require("./lib/private-video-runti
 const { createPrivateVideoReader } = require("./lib/private-video-reader");
 
 const MAX_SOURCE_JSON_BYTES = 8 * 1024;
-const FUNCTION_SERVICE_ACCOUNT =
-  "boardwalk-s3-media@njpbs-site.iam.gserviceaccount.com";
+const FUNCTION_SERVICE_ACCOUNT = productionServiceAccount("boardwalk-s3-media");
 
 function privateNoStore(res) {
   res.set("Cache-Control", "private, no-store");

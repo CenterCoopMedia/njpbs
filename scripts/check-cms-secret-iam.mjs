@@ -4,9 +4,10 @@ import { existsSync, readFileSync } from "node:fs";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { resolve } from "node:path";
 import { loadFunctionSource, functionDeployManifest, readFunctionsDeployInventory, requestDeploymentInventory, FunctionsDeployInventoryError } from "./lib/functions-deploy-inventory.mjs";
+import { cmsTarget } from "./lib/cms-target.mjs";
 
 
-const PROJECT = "njpbs-site";
+const PROJECT = cmsTarget().projectId;
 const DEPLOY_ACCOUNT = process.env.FIREBASE_DEPLOY_SERVICE_ACCOUNT ?? "";
 const EMAIL = /^[a-z0-9-]+@[a-z0-9.-]+\.gserviceaccount\.com$/;
 
@@ -175,8 +176,8 @@ export async function main(sourceRoot = new URL("../", import.meta.url), { preDe
   if (preDeploy) {
     const environment = process.env.CLOUD_PUBLICATION_WAKE_ENVIRONMENT;
     const decision = process.env.CLOUD_PUBLICATION_WAKE_ENABLED;
-    if (environment !== "production" || !["true", "false"].includes(decision)) {
-      throw new FunctionsDeployInventoryError("An explicit production cloud wake decision is required");
+    if (environment !== cmsTarget().environment || !["true", "false"].includes(decision)) {
+      throw new FunctionsDeployInventoryError("An explicit cloud wake decision for the selected target is required");
     }
     const { prepareCloudPublicationWake } = await import("./prepare-cloud-publication-wake.mjs");
     const { default: wakeDeployment } = await import("../functions/lib/cloud-publication-wake-deployment.js");

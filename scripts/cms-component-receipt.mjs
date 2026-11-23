@@ -3,6 +3,7 @@ import { appendFileSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { cert, deleteApp, getApps, initializeApp } from "firebase-admin/app";
 import { getFirestore } from "firebase-admin/firestore";
+import { cmsTarget } from "./lib/cms-target.mjs";
 import {
   ComponentReceiptError,
   abandonReceipt,
@@ -114,12 +115,13 @@ function credential() {
   const parsed = typeof json === "string" && json.trim().startsWith("{")
     ? JSON.parse(json)
     : JSON.parse(readFileSync(json, "utf8"));
-  if (parsed.project_id !== "njpbs-site") fail("Firebase project must be njpbs-site");
+  const { projectId } = cmsTarget();
+  if (parsed.project_id !== projectId) fail(`Firebase project must be ${projectId}`);
   return parsed;
 }
 
 async function withFirestore(work) {
-  const app = getApps()[0] || initializeApp({ credential: cert(credential()), projectId: "njpbs-site" });
+  const app = getApps()[0] || initializeApp({ credential: cert(credential()), projectId: cmsTarget().projectId });
   try {
     return await work(getFirestore(app), app);
   } finally {

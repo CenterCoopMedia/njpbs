@@ -9,6 +9,7 @@ import { cert, deleteApp, initializeApp } from "firebase-admin/app";
 import { FieldPath, FieldValue, getFirestore } from "firebase-admin/firestore";
 import mediaDiscovery from "../functions/lib/media-discovery.js";
 import mediaDiscoveryQuery from "../functions/lib/media-discovery-query.js";
+import { cmsTarget } from "./lib/cms-target.mjs";
 
 const {
   MEDIA_DISCOVERY_SCHEMA,
@@ -17,7 +18,7 @@ const {
 } = mediaDiscovery;
 const { probeDiscoveryIndexes } = mediaDiscoveryQuery;
 
-const PROJECT_ID = "njpbs-site";
+const PROJECT_ID = cmsTarget().projectId;
 const PAGE_SIZE = 100;
 const LEASE_MS = 5 * 60 * 1_000;
 const TRANSACTION_TOO_BIG = "Transaction too big. Decrease transaction size.";

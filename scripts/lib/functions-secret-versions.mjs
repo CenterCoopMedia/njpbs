@@ -1,6 +1,7 @@
 import { timingSafeEqual } from "node:crypto";
 import { FUNCTION_SECRETS, FunctionsConfigurationError } from "./functions-configuration.mjs";
-const project = "njpbs-site";
+import { cmsTarget } from "./cms-target.mjs";
+const project = cmsTarget().projectId;
 const names = new Set(Object.keys(FUNCTION_SECRETS));
 
 function secretPath(name) {

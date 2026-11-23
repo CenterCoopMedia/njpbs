@@ -49,7 +49,7 @@ describe("CMS function deployment completion", () => {
     await expect(loadCloudWakeDeployment({
       env: { CLOUD_PUBLICATION_WAKE_ENVIRONMENT: "development", CLOUD_PUBLICATION_WAKE_ENABLED: "true" },
       readerPath, preparePath, prepare: async () => {}, read: () => ({ enabled: true, environment: "development" }),
-    })).rejects.toThrow(/production codebase only/);
+    })).rejects.toThrow(/selected target's codebase only/);
     const loaded = await loadCloudWakeDeployment({
       env, readerPath, preparePath,
       prepare: async (decision) => { expect(decision).toEqual({ environment: "production", enabled: true }); },

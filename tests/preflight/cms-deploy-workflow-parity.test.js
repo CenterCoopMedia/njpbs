@@ -101,7 +101,7 @@ describe("credential-free deploy verification", () => {
     const preflight = workflow.jobs["firebase-preflight"].steps;
     const eventIam = preflight.find(row => row.name === "Verify selected event trigger IAM before mutation");
     expect(eventIam.env.CLOUD_PUBLICATION_WAKE_ENVIRONMENT).toBe("${{ env.CMS_TARGET }}");
-    expect(eventIam.env.CLOUD_PUBLICATION_WAKE_ENABLED).toBe("true");
+    expect(eventIam.env.CLOUD_PUBLICATION_WAKE_ENABLED).toBe("${{ inputs.target != 'development' }}");
     const probeAt = preflight.findIndex(row => row.name === "Check Containers reads before any provider mutation");
     expect(probeAt).toBeGreaterThan(0);
     expect(Object.keys(preflight[probeAt].env)).toEqual(["CLOUDFLARE_ACCOUNT_ID", "CLOUDFLARE_API_TOKEN"]);
@@ -389,16 +389,29 @@ describe("CMS deploy target", () => {
     expect(deploy).not.toMatch(/njpbs-site\.cloudfunctions|--project njpbs-site\b|project_id: njpbs-site$|environment: production$/m);
   });
 
-  it("stops a development run before any mutation", () => {
-    const steps = workflow.jobs["admin-build"].steps;
-    const refusal = steps.findIndex(row => row.name === "Refuse development steps that still act on production systems");
-    expect(steps[refusal].if).toBe("inputs.target == 'development'");
-    expect(steps[refusal].run).toMatch(/exit 1\s*$/);
-    expect(refusal).toBe(steps.findIndex(row => row.name === "Require the target's deploy credentials") + 1);
-    expect(refusal).toBeLessThan(steps.findIndex(row => row.name === "Metered-API source scan (before any scanned code runs)"));
-    // Only the credential-free verify job runs beside admin-build.
-    for (const name of Object.keys(workflow.jobs).filter(name => !["admin-build", "verify"].includes(name))) {
-      expect(workflow.jobs[name].needs).toContain("admin-build");
+  it("keeps every Cloudflare write of a development run on dev names", () => {
+    expect(branches("CMS_TARGET_FIREBASE_CONFIG")).toEqual(["'firebase.dev.json'", "'firebase.json'"]);
+    expect(branches("CMS_TARGET_FIREBASE_RULES")).toEqual(["'firestore:rules,firestore:indexes'", "'firestore:rules,firestore:indexes,storage'"]);
+    expect(branches("CMS_TARGET_RENDERER_SHA")).toEqual(["vars.CMS_DEV_RENDERER_SOURCE_SHA", "''"]);
+    const steps = Object.values(workflow.jobs).flatMap(current => current.steps);
+    expect(steps.some(row => row.name === "Refuse development steps that still act on production systems")).toBe(false);
+    // The renderer, Containers and Studio connector steps name production resources; cms-dev-deploy.yml owns the dev renderer.
+    const gated = steps.filter(row => /CMS_PREVIEW_CLOUD_ENABLED|CMS_MEDIA_MASTER_R2_BUCKET != ''/.test(row.if ?? ""));
+    expect(gated.length).toBeGreaterThan(20);
+    for (const row of gated) expect(row.if).toMatch(/inputs\.target != 'development' && /);
+    for (const name of ["Open only the Admin authentication shell", "Smoke-test the deployed signed-out Admin shell",
+      "Verify the private guide boundary before Admin upload", "Verify the private guide boundary after Admin upload"]) {
+      expect(steps.find(row => row.name === name).if).toMatch(/^inputs\.target != 'development'/);
     }
+    // The remaining Cloudflare writers on a dev run: the guarded Worker deploy, the dev Pages project and the
+    // reader-bridge steps, which productionReaderBinding refuses for a dev target in admin-build.
+    const writers = steps.filter(row => /secrets\.CLOUDFLARE_API_TOKEN/.test(JSON.stringify({ ...row.env, ...row.with }))
+      && !/inputs\.target != 'development'/.test(row.if ?? "")
+      && /pages deploy|deploy-cms-api-worker|production-reader-deployment|wrangler (?:deploy|secret)/.test(`${row.run ?? ""} ${row.with?.command ?? ""}`));
+    expect(writers.map(row => row.name).sort()).toEqual(["Deploy CMS API Worker", "Deploy edge-based admin Pages project",
+      "Verify and record the original production API reader and complete mount", "Verify and record the original production Functions reader"]);
+    expect(steps.find(row => row.name === "Deploy CMS API Worker").run).toContain("scripts/deploy-cms-api-worker.mjs");
+    expect(steps.find(row => row.name === "Deploy edge-based admin Pages project").with.command).toContain("--project-name=${{ env.CMS_TARGET_ADMIN_PAGES }}");
+    expect(steps.find(row => row.name === "Validate the separate production reader installation authorization").env.CMS_DEPLOYMENT_ENVIRONMENT).toBe("${{ env.CMS_TARGET }}");
   });
 });

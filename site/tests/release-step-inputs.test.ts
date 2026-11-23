@@ -150,7 +150,10 @@ describe("release step inputs", () => {
         const names = { vars: variables, secrets: new Set(["GITHUB_TOKEN", ...provisioned[0].filter(secret => provisioned.every(list => list.includes(secret)))]) };
         const bareConditions = [job.if, ...(job.steps ?? []).map(step => step.if)]
           .filter((value): value is string => typeof value === "string" && !value.includes("${{"));
-        const expressions = [...expressionText([workflow.env, job]), ...bareConditions];
+        // `inputs.target == 'development' && secrets.X` needs X in the development environment only.
+        const developmentOnly = (expression: string) => expression.replace(/inputs\.target == 'development' && secrets\.([A-Za-z_]\w*)/g,
+          (read, name) => policy.development.secrets.includes(name) ? "inputs.target == 'development' && ''" : read);
+        const expressions = [...expressionText([workflow.env, job]), ...bareConditions].map(developmentOnly);
         return expressions.flatMap(expression => referenceGaps(expression, names)).map(ref => id + " / " + ref);
       });
       expect([...new Set(missing)]).toEqual([]);

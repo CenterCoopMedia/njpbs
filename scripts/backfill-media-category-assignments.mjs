@@ -7,6 +7,7 @@ import { deleteApp, getApps, initializeApp } from "firebase-admin/app";
 import { FieldPath, FieldValue, getFirestore } from "firebase-admin/firestore";
 import mediaContract from "../functions/lib/media-contract.js";
 import mediaDiscovery from "../functions/lib/media-discovery.js";
+import { cmsTarget } from "./lib/cms-target.mjs";
 
 const SYSTEM_ACTOR = "system:media-category-assignment-backfill";
 const PAGE_SIZE = 100;
@@ -125,7 +126,7 @@ async function main() {
   if (!process.env.GOOGLE_APPLICATION_CREDENTIALS) {
     throw new Error("GOOGLE_APPLICATION_CREDENTIALS is required");
   }
-  const app = getApps()[0] || initializeApp({ projectId: "njpbs-site" });
+  const app = getApps()[0] || initializeApp({ projectId: cmsTarget().projectId });
   try {
     const firestore = getFirestore(app);
     const result = await backfillMediaCategoryAssignments({ firestore });

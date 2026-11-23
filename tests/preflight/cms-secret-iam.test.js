@@ -332,7 +332,7 @@ describe("deployed Functions secret IAM", () => {
   ])("refuses a missing or mismatched wake decision before provider reads: %j", overrides => {
     const result = run("first-new", undefined, undefined, [fixture, "--pre-deploy"], overrides);
     expect(result.status).toBe(1);
-    expect(result.stderr).toContain("An explicit production cloud wake decision is required");
+    expect(result.stderr).toContain("An explicit cloud wake decision for the selected target is required");
     expect(result.calls).toEqual([]);
   });
 
@@ -424,7 +424,7 @@ describe("deployed Functions secret IAM", () => {
     expect(checker.with["persist-credentials"]).toBe(false);
     expect(checker.with["sparse-checkout-cone-mode"]).toBe(false);
     expect(checker.with["sparse-checkout"].trim().split("\n")).toEqual([
-      "scripts/check-cms-secret-iam.mjs", "scripts/lib/functions-deploy-inventory.mjs", "scripts/lib/functions-readbacks.sh",
+      "scripts/check-cms-secret-iam.mjs", "scripts/lib/cms-target.mjs", "scripts/lib/functions-deploy-inventory.mjs", "scripts/lib/functions-readbacks.sh",
     ]);
     const setup = steps.findIndex(step => step.name === "Set up Google Cloud CLI for Functions IAM");
     const deploy = steps.findIndex(step => step.id === "deploy_functions");

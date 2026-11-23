@@ -810,7 +810,8 @@ if(process.env.CMS_BUG_REPORT_TELEGRAM_ADMIN_MAP)process.exit(8); require("node:
     expect(firestoreDeployStart).toBeGreaterThan(targetValidation);
     expect(functionDeployStart).toBeGreaterThan(firestoreDeployStart);
     const firestoreDeployInvocation = deployCommand.slice(firestoreDeployStart, functionDeployStart);
-    expect(firestoreDeployInvocation).toContain('--only "firestore:rules,firestore:indexes,storage"');
+    expect(firestoreDeployInvocation).toContain('--config "$CMS_TARGET_FIREBASE_CONFIG"');
+    expect(firestoreDeployInvocation).toContain('--only "$CMS_TARGET_FIREBASE_RULES"');
     expect(firestoreDeployInvocation).toContain("--non-interactive");
     expect(firestoreDeployInvocation).not.toContain("--force");
     expect(deployCommand).not.toContain("firebase functions:delete");
@@ -865,8 +866,8 @@ if(process.env.CMS_BUG_REPORT_TELEGRAM_ADMIN_MAP)process.exit(8); require("node:
     expect(workflow).toContain("force_firebase:");
     expect(workflow).toContain("node scripts/component-runner.mjs functions plan");
     expect(workflow).toContain("node scripts/component-runner.mjs functions verify");
-    expect(workflow).toContain("CMS_FUNCTION_DEPLOY_TARGETS: ${{ vars.CMS_PREVIEW_CLOUD_ENABLED == 'true' && needs.firebase-preflight.outputs.preview_pause_late == 'true' && needs.firebase-preflight.outputs.functions_during_preview || needs.firebase-preflight.outputs.function_deploy_targets }}");
-    expect(workflow).toContain("CMS_PREVIEW_RENDERER_SHA: ${{ needs.firebase-preflight.outputs.renderer_target_sha }}");
+    expect(workflow).toContain("CMS_FUNCTION_DEPLOY_TARGETS: ${{ inputs.target != 'development' && vars.CMS_PREVIEW_CLOUD_ENABLED == 'true' && needs.firebase-preflight.outputs.preview_pause_late == 'true' && needs.firebase-preflight.outputs.functions_during_preview || needs.firebase-preflight.outputs.function_deploy_targets }}");
+    expect(workflow).toContain("CMS_PREVIEW_RENDERER_SHA: ${{ env.CMS_TARGET_RENDERER_SHA || needs.firebase-preflight.outputs.renderer_target_sha }}");
     expect(workflow.indexOf("Revalidate the selective release baseline before mutation"))
       .toBeLessThan(workflow.indexOf("Mark the Functions receipt in progress"));
     // The cms-api job plans its own Worker release, so a partial rerun recomputes
@@ -900,7 +901,7 @@ if(process.env.CMS_BUG_REPORT_TELEGRAM_ADMIN_MAP)process.exit(8); require("node:
     expect(confirm).toContain("component-runner.mjs cmsApi confirm");
     expect(workflow).not.toContain("cms_api_mutated");
     expect(workflow).toContain("Deploy Firestore and Storage rules without Functions");
-    expect(workflow).toContain("firestore:rules,firestore:indexes,storage");
+    expect(workflow).toContain("'firestore:rules,firestore:indexes,storage' }}");
     expect(workflow).toContain("component-runner.mjs functions confirm");
     expect(workflow).toContain("component-runner.mjs renderer confirm");
     expect(workflow).toContain("node scripts/component-runner.mjs functions plan");
@@ -986,7 +987,7 @@ if(process.env.CMS_BUG_REPORT_TELEGRAM_ADMIN_MAP)process.exit(8); require("node:
       "node scripts/check-admin-pages-security.mjs postdeploy",
     );
     expect(adminDeploy).toContain(
-      "if: hashFiles('admin/dist/guide-content/manifest.json') != ''",
+      "if: inputs.target != 'development' && hashFiles('admin/dist/guide-content/manifest.json') != ''",
     );
     expect(adminDeploy).toContain(
       "node scripts/check-admin-pages-security.mjs",

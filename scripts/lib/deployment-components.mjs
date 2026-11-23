@@ -69,7 +69,8 @@ export const DEPLOYMENT_COMPONENTS = Object.freeze(Object.fromEntries(
   Object.entries({ ...INPUT_PATHS, ...INDEPENDENT_INPUTS }).map(([component, inputPaths]) => [component, Object.freeze({
     inputPaths,
     selection: component === "migrations" ? "explicit" : "routine",
-    configuration: Object.freeze(component === "functions" ? ["firebase.json", ".firebaserc", "config/functions-deployment.json", "config/functions-configuration.json"]
+    configuration: Object.freeze(component === "functions" ? ["firebase.json", "firebase.dev.json", ".firebaserc", "config/functions-deployment.json",
+      "config/functions-deployment.development.json", "config/functions-configuration.json"]
       : component === "renderer" ? ["preview-renderer/wrangler.jsonc", "preview-renderer/wrangler.dev.jsonc"]
       : component === "cmsApi" ? ["cms-api/wrangler.jsonc", "cms-api/wrangler.dev.jsonc"] : []),
     operations: Object.freeze(Object.fromEntries(Object.entries({

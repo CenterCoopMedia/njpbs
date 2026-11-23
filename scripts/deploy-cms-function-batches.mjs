@@ -7,8 +7,9 @@ import { setTimeout as pause } from "node:timers/promises";
 import { stripVTControlCharacters } from "node:util";
 import { explicitCloudWakeDecision } from "./lib/cms-release-plan.mjs";
 import { assertNoFunctionDeletions, loadFunctionDeployManifest, readFunctionsDeployInventory, requestDeploymentInventory } from "./lib/functions-deploy-inventory.mjs";
+import { cmsTarget } from "./lib/cms-target.mjs";
 
-const PROJECT = "njpbs-site";
+const PROJECT = cmsTarget().projectId;
 const REGION = "us-central1";
 export { REGION as FUNCTION_DEPLOY_REGION };
 const CLOUD_WAKE_FUNCTIONS = ["onNoBuildCloudState", "onNoBuildCloudCandidate", "onNoBuildCloudRelease"];
@@ -26,15 +27,17 @@ export async function loadCloudWakeDeployment({
     throw new ComponentReceiptError("Cloud wake deployment inputs are required");
   }
   const decision = explicitCloudWakeDecision(env);
-  if (decision.environment !== "production") {
-    throw new ComponentReceiptError("The function batch runner deploys the production codebase only");
+  const target = cmsTarget(env);
+  if (decision.environment !== target.environment) {
+    throw new ComponentReceiptError("The function batch runner deploys the selected target's codebase only");
   }
   await prepare({ environment: decision.environment, enabled: decision.enabled });
-  const deployment = read({ env: { GCLOUD_PROJECT: PROJECT, GOOGLE_CLOUD_PROJECT: PROJECT } });
-  if (deployment.enabled !== decision.enabled || deployment.environment !== "production") {
+  const deployment = read({ env: { GCLOUD_PROJECT: target.projectId, GOOGLE_CLOUD_PROJECT: target.projectId } });
+  // The reader reports production for an unreadable artifact, so dev needs an exact match.
+  if (deployment.enabled !== decision.enabled || deployment.environment !== target.environment) {
     throw new ComponentReceiptError("Cloud wake discovery does not match the explicit decision");
   }
-  return { ...deployment, projectId: PROJECT };
+  return { ...deployment, projectId: target.projectId };
 }
 
 export function assertCloudWakeSettings(functions) {
@@ -178,8 +181,9 @@ function expiredFunctionFailures(output, names, project = PROJECT) {
 
 function runFunctionDeploy(names, launch, project) {
   return new Promise((resolve, reject) => {
+    const { firebaseConfig } = cmsTarget();
     const child = launch("npx", ["--no-install", "firebase", "deploy", "--project", project,
-      "--only", names.map((name) => `functions:${name}`).join(","), "--force", "--non-interactive"],
+      ...(firebaseConfig === "firebase.json" ? [] : ["--config", firebaseConfig]), "--only", names.map((name) => `functions:${name}`).join(","), "--force", "--non-interactive"],
     { stdio: ["ignore", "pipe", "pipe"] });
     let output = "";
     const observe = (chunk, stream) => {
@@ -200,7 +204,7 @@ export async function deployBatch(names, launch = spawn, project = PROJECT, { ma
       names.some(name => !manifest.some(fn => fn.name === name))) throw new ComponentReceiptError("Function batch differs from the exact manifest");
   let pending = names;
   for (let attempt = 1; attempt <= 3; attempt++) {
-    assertNoFunctionDeletions(manifest, await readFunctionsDeployInventory(project, request), { projectId: project, codebase: "default", only: pending });
+    assertNoFunctionDeletions(manifest, await readFunctionsDeployInventory(project, request), { projectId: project, codebase: cmsTarget().codebase, only: pending });
     const { code, output } = await runFunctionDeploy(pending, launch, project);
     if (code === 0 && output.includes("Deploy complete!")) return;
     const failed = code !== 0 ? expiredFunctionFailures(output, pending, project) : [];

@@ -8,6 +8,7 @@ import { FieldValue, getFirestore } from "firebase-admin/firestore";
 import releaseProducer from "../functions/lib/public-release-producer.js";
 import mediaContract from "../functions/lib/media-contract.js";
 import mediaDiscovery from "../functions/lib/media-discovery.js";
+import { cmsTarget } from "./lib/cms-target.mjs";
 
 const REPO_ROOT = fileURLToPath(new URL("../", import.meta.url));
 const SYSTEM_ACTOR = "system:page-seed-backfill";
@@ -431,7 +432,7 @@ async function main() {
   if (!process.env.GOOGLE_APPLICATION_CREDENTIALS) {
     throw new Error("GOOGLE_APPLICATION_CREDENTIALS is required");
   }
-  const app = getApps()[0] || initializeApp({ projectId: "njpbs-site" });
+  const app = getApps()[0] || initializeApp({ projectId: cmsTarget().projectId });
   try {
     const result = await backfillPageSeedMedia({
       firestore: getFirestore(app),
