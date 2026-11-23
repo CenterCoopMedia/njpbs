@@ -93,11 +93,11 @@ async function checkCapabilities(read, sha, { noBuildPost, noBuildPage, noBuildR
   writeNoBuildPageCandidateActivation(transaction, firestore, { contract: noBuildPage, recordContract: noBuildRecord }, identity);
   const documents = [...rows].map(([path, data]) => ({ path, data }));
   await checkSourceBody(read, documents);
-  const { CAPABILITY_PATH: postPath } = require("../../functions/lib/no-build-post-ownership.js");
+  const post = read("no-build-post-ownership");
   const page = read("no-build-page-ownership");
   const record = read("no-build-record-capability");
   for (const [path, parse] of [
-    [postPath, () => read("no-build-post-state").validateCapability(rows.get(postPath))],
+    [post.CAPABILITY_PATH, () => post.readNoBuildPostCapability({ firestore, transaction })],
     [page.PAGE_CAPABILITY_PATH, () => page.readNoBuildPageCapability({ firestore, transaction })],
     [record.CAPABILITY_PATH, () => record.readRecordCapability({ firestore, transaction })],
   ]) {
