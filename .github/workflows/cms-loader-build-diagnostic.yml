@@ -30,6 +30,7 @@ jobs:
           java-version: "21.0.13+9.0.LTS"
       - run: npm ci --ignore-scripts
       - run: npm --prefix site ci --ignore-scripts
+      - run: npm run functions:build
       - uses: actions/cache@v6
         with:
           path: ~/.cache/firebase/emulators
