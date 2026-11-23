@@ -226,7 +226,10 @@ thumbnail status can be picked up by the standard media thumbnail backfill.
 
 Apply rechecks source eligibility in the media commit transaction. If eligibility
 has changed, it discards the upload under its ownership lease before reporting
-the attachment for review. If the store refuses that cleanup, the
-`registration-cleanup-required` failure names the attachment. An authorized
-operator must reconcile the pending upload receipt and its exact media object
-before repeating the import.
+the attachment for review. A rerun also checks pending uploads for attachments
+that became ineligible after interruption. A `cleanup: wait-for-lease` row means
+another attempt still holds the receipt. Rerun the manifest after its lease
+expires. A `cleanup: discarded` row confirms removal. If the store refuses
+cleanup, the `registration-cleanup-required` failure names the attachment. An
+authorized operator must reconcile the pending upload receipt and its exact
+media object before repeating the import.

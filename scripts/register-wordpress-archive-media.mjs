@@ -13,12 +13,13 @@ import discovery from "../functions/lib/media-discovery.js";
 import thumbnails from "../functions/lib/media-thumbnails.js";
 import media from "../functions/media.js";
 import { ArchiveInputError } from "./lib/wordpress-archive-interchange.mjs";
-import { attachmentProblem } from "./lib/wordpress-archive-staging.mjs";
+import { attachmentProblem, HEX_DIGEST } from "./lib/wordpress-archive-staging.mjs";
 import { readManifest, verifyOriginal } from "./stage-wordpress-archive-media.mjs";
 import { archiveItemRef, firebaseOptions, writeArchiveReportRow } from "./stage-wordpress-archive.mjs";
 
 const ACTOR = { uid: "system:wordpress-archive-media", email: null };
 const review = reason => ({ action: "review", reason });
+const leaseEnd = nowDate => new Date(nowDate.getTime() + media.RESERVATION_LEASE_MS).toISOString();
 
 function applyFailure(error) {
   if (error instanceof RegistrationCleanupError) return "registration-cleanup-required";
@@ -80,7 +81,7 @@ function registrationClaim(target, proof, nowDate) {
     },
     createdAt: nowDate.toISOString(),
     updatedAt: nowDate.toISOString(),
-    leaseExpiresAt: new Date(nowDate.getTime() + media.RESERVATION_LEASE_MS).toISOString(),
+    leaseExpiresAt: leaseEnd(nowDate),
   };
 }
 
@@ -92,6 +93,56 @@ class RegistrationChanged extends Error {
 }
 
 class RegistrationCleanupError extends Error {}
+
+async function discardRejectedUpload(discard, { firestore, storage, ref, claim, nowIso }) {
+  const { attemptId, finalKey, leaseExpiresAt } = claim;
+  try {
+    await discard({ firestore, storage, ref, attemptId, finalKey, stagingKeys: [], nowIso, leaseExpiresAt });
+  } catch {
+    throw new RegistrationCleanupError("The rejected archive object needs operator cleanup.");
+  }
+}
+
+async function reconcileRejectedUpload({ firestore, target, getStorage, now }) {
+  const { assetId, entry, sourceRef } = target;
+  const ref = media.ownerRef(firestore, entry.sha256, assetId);
+  const nowDate = now();
+  const nowIso = nowDate.toISOString();
+  const reservation = await firestore.runTransaction(async transaction => {
+    const owner = (await transaction.get(ref)).data();
+    if (!owner || !["reserved", "object_ready", "capacity_cleanup"].includes(owner.state)) return null;
+    const proof = owner.recordSeed?.archiveImport;
+    const type = contract.mediaType(owner.mimeType);
+    if (owner.assetId !== assetId || owner.contentHash !== entry.sha256 || owner.category !== "general" ||
+        !type || type.kind === "audio" || !/^[0-9a-f-]{36}$/.test(owner.attemptId ?? "") ||
+        !Number.isFinite(Date.parse(owner.leaseExpiresAt)) || proof?.source !== sourceRef.source ||
+        proof.postId !== sourceRef.postId || proof.originalSha256 !== entry.sha256 ||
+        !HEX_DIGEST.test(proof.revisionSha256 ?? "") || owner.finalKey !== contract.finalObjectKey({
+          category: owner.category, assetId, contentHash: entry.sha256, mimeType: owner.mimeType,
+        })) throw new RegistrationCleanupError("The pending archive claim needs operator inspection.");
+
+    // Use the pending claim's revision. A new manifest with the wrong revision
+    // must not discard work still approved by the current staging record.
+    const stored = await readRegistration(firestore, transaction, { ...target,
+      entry: { ...entry, revisionSha256: proof.revisionSha256 } });
+    const approved = stored.staged?.media;
+    const reason = stored.problem ?? (approved?.sourceRevisionSha256 === proof.revisionSha256 &&
+      approved?.original?.sha256 === entry.sha256 ? null : "original-or-metadata-conflict");
+    if (!reason) return null;
+    if (stored.asset.exists || stored.projection.exists) {
+      throw new RegistrationCleanupError("The pending archive claim conflicts with a library asset.");
+    }
+    if (Date.parse(owner.leaseExpiresAt) > nowDate.getTime()) return { ...review(reason), cleanup: "wait-for-lease" };
+    const patch = { state: owner.state === "capacity_cleanup" ? "object_ready" : owner.state,
+      leaseExpiresAt: leaseEnd(nowDate), updatedAt: nowIso };
+    transaction.update(ref, patch);
+    return { reason, claim: { ...owner, ...patch } };
+  });
+  if (!reservation?.claim) return reservation;
+  await discardRejectedUpload(media.discardArchiveRejectedUpload, { firestore, storage: await getStorage(),
+    ref, claim: reservation.claim, nowIso });
+  return { ...review(reservation.reason), cleanup: "discarded" };
+}
 
 async function releaseRegistrationLease(firestore, ref, claim, nowIso) {
   await firestore.runTransaction(async transaction => {
@@ -118,7 +169,7 @@ async function registerOriginal({ firestore, target, verified, expectedVersion, 
     if (state.action !== "register") return state;
     const owner = (await transaction.get(ref)).data();
     if (owner) {
-      if (!["reserved", "object_ready"].includes(owner.state) ||
+      if (!["reserved", "object_ready", "capacity_cleanup"].includes(owner.state) ||
           !isDeepStrictEqual(owner.recordSeed, proposed.recordSeed) ||
           owner.assetId !== proposed.assetId || typeof owner.attemptId !== "string" ||
           owner.contentHash !== contentHash || !Number.isFinite(Date.parse(owner.leaseExpiresAt)) ||
@@ -131,7 +182,8 @@ async function registerOriginal({ firestore, target, verified, expectedVersion, 
     await categories.requireActiveMediaCategory(transaction, firestore, proposed.category);
     const admission = await discovery.readMediaAdmission(transaction, firestore);
     if (admission.activeCount >= admission.limit) throw new media.MediaCapacityError();
-    const claim = owner ? { ...owner, leaseExpiresAt: proposed.leaseExpiresAt, updatedAt: nowIso } : proposed;
+    const claim = owner ? { ...owner, state: owner.state === "capacity_cleanup" ? "object_ready" : owner.state,
+      leaseExpiresAt: proposed.leaseExpiresAt, updatedAt: nowIso } : proposed;
     transaction.set(ref, claim);
     return { claim };
   });
@@ -161,12 +213,8 @@ async function registerOriginal({ firestore, target, verified, expectedVersion, 
       : error instanceof media.MediaCapacityError ? media.discardCapacityRejectedUpload
         : error instanceof categories.MediaCategoryValidationError ? media.discardCategoryRejectedUpload : null;
     if (discard) {
-      try {
-        await discard({ firestore, storage, ref, attemptId, finalKey, stagingKeys: [], nowIso, leaseExpiresAt });
-      } catch {
-        throw new RegistrationCleanupError("The rejected archive object needs operator cleanup.");
-      }
-      if (error instanceof RegistrationChanged) return error.result;
+      await discardRejectedUpload(discard, { firestore, storage, ref, claim, nowIso });
+      if (error instanceof RegistrationChanged) return { ...error.result, cleanup: "discarded" };
       throw error;
     }
     if (!await media.committedUpload(firestore, { contentHash, attemptId, record })) {
@@ -212,6 +260,7 @@ export async function registerWordPressArchiveMedia({ firestore, manifestFile, o
       ? registrationState(stored, withImportProof(target, verified.proof), verified.proof) : verified;
     counts[result.action]++;
     if (result.action === "register") plan.push({ target, version: result.version });
+    if (apply && result.action === "review") plan.push({ target, rejected: true });
     await report({ phase: "plan", sourceRef: target.sourceRef, action: result.action,
       ...(result.reason ? { reason: result.reason } : {}),
       ...(result.action === "review" ? {} : { assetId: target.assetId }),
@@ -221,18 +270,27 @@ export async function registerWordPressArchiveMedia({ firestore, manifestFile, o
   if (!apply) return counts;
 
   const applied = { ...counts, register: 0 };
-  for (const { target, version } of plan) {
+  for (const { target, version, rejected } of plan) {
     let result;
     try {
-      const verified = await verifyOriginal(originals, target.entry);
-      result = verified.proof ? await registerOriginal({ firestore, target: withImportProof(target, verified.proof),
-        verified, expectedVersion: version, getStorage, publicOrigin, now }) : verified;
+      if (rejected) {
+        result = await reconcileRejectedUpload({ firestore, target, getStorage, now });
+      } else {
+        const verified = await verifyOriginal(originals, target.entry);
+        result = verified.proof ? await registerOriginal({ firestore, target: withImportProof(target, verified.proof),
+          verified, expectedVersion: version, getStorage, publicOrigin, now }) : verified;
+        if (result.action === "review" && !result.cleanup) {
+          result = await reconcileRejectedUpload({ firestore, target, getStorage, now }) ?? result;
+        }
+      }
     } catch (error) {
       await report({ phase: "apply", sourceRef: target.sourceRef, action: "failed", reason: applyFailure(error) });
       throw error;
     }
-    applied[result.action]++;
-    await report({ phase: "apply", sourceRef: target.sourceRef, ...result });
+    if (result) {
+      if (!rejected) applied[result.action]++;
+      await report({ phase: "apply", sourceRef: target.sourceRef, ...result });
+    }
   }
   await report({ phase: "apply-complete", counts: applied });
   return applied;

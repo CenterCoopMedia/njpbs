@@ -379,6 +379,21 @@ it("registers approved originals independently and delivers only admitted assets
   expect(rows.at(-1)).toMatchObject({ phase: "apply", sourceRef: { source, postId: document.postId },
     action: "failed", reason: "apply-interrupted" });
   storage.head = head;
+
+  await writeManifest([{ ...manifest[2], revisionSha256: "a".repeat(64) }]);
+  await expect(register({ apply: true })).resolves.toEqual({ register: 0, skip: 0, review: 1 });
+  expect([...objects.keys()].some(key => key.includes(id(document)))).toBe(true);
+  await writeManifest(manifest);
+
+  await staged(document).update({ "record.sourceStatus": "private" });
+  const retryRows = [];
+  await expect(register({ apply: true, report: row => retryRows.push(row) }))
+    .resolves.toEqual({ register: 0, skip: 2, review: 3 });
+  expect(retryRows).toContainEqual({ phase: "apply", sourceRef: { source, postId: document.postId },
+    action: "review", reason: "nonpublic-source", cleanup: "discarded" });
+  expect([...objects.keys()].some(key => key.includes(id(document)))).toBe(false);
+
+  await staged(document).update({ "record.sourceStatus": "inherit" });
   storage.putFinal = async input => {
     const result = await write(input);
     await staged(document).update({ "record.sourceStatus": "private" });
@@ -387,8 +402,12 @@ it("registers approved originals independently and delivers only admitted assets
   await expect(register({ apply: true })).resolves.toEqual({ register: 0, skip: 2, review: 3 });
   expect([...objects.keys()].some(key => key.includes(id(document)))).toBe(false);
   expect((await firestore.doc(`media_assets_public/${id(document)}`).get()).exists).toBe(false);
-  expect((await firestore.collection("admin_logs").where("action", "==", "media.upload.discard").get()).docs[0].data())
-    .toMatchObject({ before: { assetId: id(document), contentHash: digest(pdf), reason: "archive_media_eligibility_changed" } });
+  const discarded = (await firestore.collection("admin_logs").where("action", "==", "media.upload.discard").get()).docs;
+  expect(discarded).toHaveLength(2);
+  for (const receipt of discarded) {
+    expect(receipt.data()).toMatchObject({ before: { assetId: id(document), contentHash: digest(pdf),
+      reason: "archive_media_eligibility_changed" } });
+  }
 
   storage.putFinal = write;
   await staged(document).update({ "record.sourceStatus": "inherit", version: 4 });

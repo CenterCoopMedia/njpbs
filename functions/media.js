@@ -1086,7 +1086,7 @@ async function discardUploadAfterCommitRejection({
       const current = await transaction.get(ref);
       if (!current.exists) return;
       const owner = current.data();
-      if (owner.attemptId !== attemptId || owner.state !== "capacity_cleanup") {
+      if (owner.attemptId !== attemptId || owner.state !== "capacity_cleanup" || owner.leaseExpiresAt !== leaseExpiresAt) {
         throw new MediaRequestError(
           `The ${rejectionLabel} upload changed during cleanup`,
           503,
@@ -1118,7 +1118,8 @@ async function discardUploadAfterCommitRejection({
         const owner = current.data();
         if (
           owner.attemptId === attemptId &&
-          owner.state === "capacity_cleanup"
+          owner.state === "capacity_cleanup" &&
+          owner.leaseExpiresAt === leaseExpiresAt
         ) {
           transaction.update(ref, {
             state: previousState,
@@ -1165,6 +1166,7 @@ async function discardArchiveRejectedUpload(args) {
     ...args,
     discardReason: DISCARD_REASONS.archiveEligibility,
     rejectionLabel: "archive-rejected",
+    allowReserved: true,
   });
 }
 
