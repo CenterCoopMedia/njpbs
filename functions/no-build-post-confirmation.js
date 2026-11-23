@@ -65,7 +65,11 @@ function createNoBuildPostConfirmationHandler(deps = {}) {
         }
       }
       if (queue.status === "success" && before?.status !== "success" && queue.aggregateReceipt) {
-        await require("./lib/settings-publication").resumeSupersededSettingsAfterContext({ firestore, operationId: event.params.queueId });
+        const operationId = event.params.queueId;
+        try { await require("./lib/settings-publication").resumeSupersededSettingsAfterContext({ firestore, operationId }); }
+        catch (error) {
+          logger.warn("Automatic settings publication scan deferred", { operationId, causes: confirmationErrorCauses(error) });
+        }
       }
       return;
     }

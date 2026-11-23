@@ -358,6 +358,23 @@ describe("atomic public settings acceptance", () => {
     expect((await get(id)).body.publication).toMatchObject({ queueId: newer.queueId, sourceVersion: 3 });
   });
 
+  it("refuses an altered snapshot digest and continues with other settings", async () => {
+    const banner = (await publish("public-homepage-banner", 1)).body.publication;
+    const chrome = (await publish("public-site-chrome", 1)).body.publication;
+    const newer = (await publish("site-navigation", 1)).body.publication;
+    const bannerRef = db.doc(`cmsPublishQueue/${banner.queueId}`);
+    await bannerRef.update({ "settingsPublication.snapshotDigest": "a".repeat(64) });
+    await verifyAggregate(newer);
+    await publication.resumeSupersededSettingsAfterContext({ firestore: db, operationId: newer.queueId, log });
+
+    expect(log.warn).toHaveBeenCalledWith("Automatic settings publication retry deferred",
+      expect.objectContaining({ settingsId: "public-homepage-banner" }));
+    expect((await bannerRef.get()).data()).not.toHaveProperty("successorOperationId");
+    expect((await get("public-site-chrome")).body.publication).toMatchObject({ originalOperationId: chrome.queueId,
+      contextRevision: newer.contextRevision });
+    expect((await queues()).size).toBe(4);
+  });
+
   it("keeps a retry's billing refusal specific and leaves its accepted work intact", async () => {
     const original = await publish("public-site-chrome", 1);
     expect(original.code).toBe(200);

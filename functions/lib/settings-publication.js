@@ -5,6 +5,8 @@ const { preparePublicReleaseProducerInTransaction } = require("./public-release-
 const { createHash } = require("node:crypto");
 const { isDeepStrictEqual } = require("node:util");
 const { FieldValue } = require("firebase-admin/firestore");
+const logger = require("firebase-functions/logger");
+const { confirmationErrorCauses } = require("./confirmation-error-causes");
 const { assertPublicDeploymentPointer, PUBLIC_DEPLOYMENT_SCHEMA_VERSION } = require("./public-deployment");
 const { readCmsPublicationRuntimeControlInTransaction, assertCmsPublicationCloudAdmission } = require("./cms-publication-runtime-control");
 const { publicationTarget } = require("./publication-target");
@@ -179,7 +181,7 @@ async function prepareSettingsSuccessor({ firestore, transaction, original, revi
 
 // A settled context wakes recovery for the current published settings only.
 // Each retry uses the existing deterministic successor and its own consumer proof.
-async function resumeSupersededSettingsAfterContext({ firestore, operationId }) {
+async function resumeSupersededSettingsAfterContext({ firestore, operationId, log = logger }) {
   const sourceRefs = [...PUBLIC_SETTINGS_IDS].map(id => firestore.doc(`cmsSettings/${id}`));
   const sources = await firestore.getAll(...sourceRefs);
   for (const source of sources) {
@@ -203,6 +205,8 @@ async function resumeSupersededSettingsAfterContext({ firestore, operationId }) 
           missingPublicContextConsumers(newer, current, AGGREGATE_CONSUMERS, []).length) return;
       const retry = await prepareSettingsSuccessor({ firestore, transaction, original, revision, runtime });
       retry.write();
+    }).catch(error => {
+      log.warn("Automatic settings publication retry deferred", { settingsId: source.id, causes: confirmationErrorCauses(error) });
     });
   }
 }
