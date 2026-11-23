@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { assertLiveBlogData, LIVE_BLOG_MAX_BYTES, LIVE_BLOG_MAX_UPDATES, orderedLiveBlogUpdates, type LiveBlogData, type LiveBlogUpdate } from "../../packages/content-core/src/live-blog";
 import { renderLiveBlog } from "../../packages/content-core/src/live-blog-render";
+import { manifestFromLiveBlogHtml } from "../../packages/content-core/src/live-blog-manifest";
 
 function update(id = "entry-a", overrides: Partial<LiveBlogUpdate> = {}): LiveBlogUpdate {
   return {
@@ -115,6 +116,28 @@ describe("live blog reader scaffold", () => {
     expect(changed).toContain('id="live-blog-12-post-example-entry-6-stable"');
     expect(changed).toContain("Correction:</strong> The earlier location was incorrect.");
     expect(changed).toContain("Updated <time");
+  });
+
+  it("orders ended reporting by first publication and keeps its anchors and newest-first feed", () => {
+    const updates = [update("z"), update("a", { keyUpdate: true, updatedAt: options.asOf,
+      correction: "The earlier location was incorrect." }), update("new", { keyUpdate: true,
+      publishedAt: "2026-11-04T02:00:00Z", updatedAt: "2026-11-04T02:00:00Z" })];
+    const entryAnchors = () => Array.from(document.querySelectorAll<HTMLAnchorElement>(".live-blog__permalink"), link => link.hash);
+    const entryOrder = () => Array.from(document.querySelectorAll<HTMLElement>("[data-live-blog-entry]"), entry => entry.dataset.liveBlogEntry);
+    for (const coverageState of ["ongoing", "paused"] as const) {
+      document.body.innerHTML = renderLiveBlog(blog({ coverageState, updates, updatedAt: options.asOf }), options);
+      expect(entryOrder()).toEqual(["new", "a", "z"]);
+    }
+    const stableAnchors = entryAnchors().sort();
+    const archive = renderLiveBlog(blog({ coverageState: "ended", updates, updatedAt: options.asOf }), options);
+    document.body.innerHTML = archive;
+    expect(entryOrder()).toEqual(["a", "z", "new"]);
+    expect(entryAnchors().sort()).toEqual(stableAnchors);
+    const keyTargets = Array.from(document.querySelectorAll<HTMLAnchorElement>(".live-blog__keys a"), link => document.getElementById(link.hash.slice(1)));
+    expect(keyTargets.map(target => target?.dataset.liveBlogEntry)).toEqual(["a", "new"]);
+    expect(keyTargets[0]?.querySelector(".live-blog__correction")?.textContent).toContain(updates[1].correction);
+    expect(document.querySelector(".live-blog__updates > li[hidden]")).toBeNull();
+    expect(manifestFromLiveBlogHtml(archive)?.updates.map(entry => entry.id)).toEqual(["new", "a", "z"]);
   });
 
   it("escapes metadata, strips unsafe body links and keeps body headings below the entry", () => {

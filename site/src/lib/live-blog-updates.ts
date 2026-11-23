@@ -187,18 +187,21 @@ export function installLiveBlogUpdates(root: HTMLElement, onLoaded: () => void =
       const next = parseLiveBlogFeed(JSON.parse(text));
       if (!follows(next, applied) || (pending && !follows(next, pending))) throw new Error("Stale live blog revision");
       const nextCount = next.totalCount - applied.totalCount;
-      pending = nextCount ? next : undefined;
-      button.hidden = nextCount === 0;
-      button.textContent = `${nextCount} new update${nextCount === 1 ? "" : "s"}`;
-      button.setAttribute("aria-label", `Load ${nextCount} new update${nextCount === 1 ? "" : "s"}`);
-      if (nextCount && nextCount !== count) status.textContent = `${nextCount} new update${nextCount === 1 ? "" : "s"} available.`;
+      const archive = next.coverageState === "ended";
+      const newUpdates = `${nextCount} new update${nextCount === 1 ? "" : "s"}`;
+      pending = nextCount || archive ? next : undefined;
+      button.hidden = !pending;
+      button.textContent = archive ? "View coverage archive" : newUpdates;
+      button.setAttribute("aria-label", archive ? "View coverage archive" : `Load ${newUpdates}`);
+      if (archive) status.textContent = "Coverage ended. The archive is available.";
+      else if (nextCount && nextCount !== count) status.textContent = `${newUpdates} available.`;
       count = nextCount; failures = 0;
       positionControl();
       if ((next.followUpsUpdatedAt && next.followUpsUpdatedAt !== applied.followUpsUpdatedAt) || appearance(next) !== appearance(applied)) {
         loading = true;
         try { await refreshExistingEntries(next); } finally { loading = false; }
       }
-      observedEnded = next.coverageState === "ended";
+      observedEnded = archive;
     } catch { if (!doc.hidden) failures = Math.min(failures + 1, 4); }
     finally { schedule(); }
   };
@@ -214,7 +217,9 @@ export function installLiveBlogUpdates(root: HTMLElement, onLoaded: () => void =
       const incoming = incomingDoc.querySelector<HTMLElement>("[data-live-blog]");
       const incomingMarker = incoming?.querySelector("[data-live-blog-manifest]");
       const next = parseLiveBlogManifest(JSON.parse(incomingMarker?.textContent ?? ""));
-      if (!incoming || next.updates.length !== next.totalCount || !follows(next, applied, true) || !follows(next, pending, true)) throw new Error("Stale Post output");
+      const archive = next.coverageState === "ended";
+      if (!incoming || next.updates.length !== next.totalCount || !follows(next, applied, true) || !follows(next, pending, true)
+        || (pending.coverageState === "ended" && !archive)) throw new Error("Stale Post output");
       incoming.querySelectorAll("noscript").forEach(node => node.remove());
       const fresh = newEntries(next);
       const list = root.querySelector<HTMLOListElement>(".live-blog__updates");
@@ -233,9 +238,9 @@ export function installLiveBlogUpdates(root: HTMLElement, onLoaded: () => void =
         if (entry !== old) preserveThread(old, entry);
         if (entry === cursor) cursor = cursor.nextElementSibling;
         else if (old === cursor) { cursor = cursor!.nextElementSibling; old!.replaceWith(entry); }
-        else { list.insertBefore(entry, cursor); old?.remove(); }
+        else { list.insertBefore(entry, cursor); if (entry !== old) old?.remove(); }
       }
-      for (const selector of ["[data-live-blog-branding]", ".live-blog__state", ":scope > .live-blog__metadata", ".live-blog__keys", "[data-live-blog-empty]", "[data-live-blog-order]"]) {
+      for (const selector of ["[data-live-blog-branding]", ":scope > h2", ".live-blog__state", ":scope > .live-blog__metadata", ".live-blog__keys", "[data-live-blog-empty]", "[data-live-blog-order]"]) {
         const old = root.querySelector(selector), replacement = incoming.querySelector(selector);
         if (replacement) {
           if (old) old.replaceWith(doc.importNode(replacement, true));
@@ -244,24 +249,36 @@ export function installLiveBlogUpdates(root: HTMLElement, onLoaded: () => void =
         }
         else old?.remove();
       }
+      if (archive) {
+        const postHead = root.closest(".post")?.querySelector(".post-head");
+        const incomingHead = incoming.closest(".post")?.querySelector(".post-head");
+        if (postHead && incomingHead) {
+          const summary = postHead.querySelector(".post-head__summary");
+          const recap = incomingHead.querySelector(".post-head__summary");
+          if (summary && recap) summary.replaceWith(doc.importNode(recap, true));
+          else if (recap) postHead.querySelector("h1")?.after(doc.importNode(recap, true));
+          else summary?.remove();
+        }
+      }
       syncReporterCounts(incoming);
       copyAppearance(incoming);
       marker.textContent = incomingMarker!.textContent;
       applied = next;
       if (pagination) pagination.refresh(); else pagination = installLiveBlogPagination(root);
       onLoaded();
-      const newest = Array.from(list.querySelectorAll<HTMLElement>("[data-live-blog-entry]")).find(article => fresh.some(entry => entry.id === article.dataset.liveBlogEntry));
+      const target = archive ? root.querySelector<HTMLElement>(":scope > h2")
+        : Array.from(list.querySelectorAll<HTMLElement>("[data-live-blog-entry]")).find(article => fresh.some(entry => entry.id === article.dataset.liveBlogEntry));
       // This focus change belongs to the explicit click. Polling never moves it.
-      newest?.focus({ preventScroll: true });
-      if (newest) {
-        const box = newest.getBoundingClientRect();
-        const heading = newest.querySelector("h3")?.getBoundingClientRect() ?? box;
-        const inset = Math.max(Number.parseFloat(win.getComputedStyle(newest).scrollMarginBlockStart) || 0, head?.getBoundingClientRect().bottom ?? 0);
-        if (box.top < inset || heading.bottom > win.innerHeight) newest.scrollIntoView({ block: "start", behavior: "instant" });
+      target?.focus({ preventScroll: true });
+      if (target) {
+        const box = target.getBoundingClientRect();
+        const heading = target.querySelector("h3")?.getBoundingClientRect() ?? box;
+        const inset = Math.max(Number.parseFloat(win.getComputedStyle(target).scrollMarginBlockStart) || 0, head?.getBoundingClientRect().bottom ?? 0);
+        if (box.top < inset || heading.bottom > win.innerHeight) target.scrollIntoView({ block: "start", behavior: "instant" });
       }
       button.hidden = true; pending = undefined; count = 0;
       positionControl();
-      status.textContent = `${fresh.length} new update${fresh.length === 1 ? "" : "s"} loaded.`;
+      status.textContent = archive ? "" : `${fresh.length} new update${fresh.length === 1 ? "" : "s"} loaded.`;
       failures = 0;
     } catch { failures = Math.min(failures + 1, 4); status.textContent = "Updates could not be loaded. Try again."; }
     finally { loading = false; button.removeAttribute("aria-busy"); button.removeAttribute("aria-disabled"); schedule(); }

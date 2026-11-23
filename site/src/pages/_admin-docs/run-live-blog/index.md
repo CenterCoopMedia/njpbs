@@ -99,9 +99,11 @@ finished. Save and publish that change. Add a final update when readers need to
 know what happens next or where to find continuing reporting.
 
 Ending coverage keeps the archive, times, corrections and update links. A page
-that observes ended coverage stops checking for new entries. Readers can still
-open older updates and share their links. If an open page has no new entries to
-load, reloading shows the latest coverage status.
+that observes ended coverage stops checking for new entries and offers
+**View coverage archive**. Readers see the Post summary above the archive when
+one is published. They can follow the key update links or read all updates from
+oldest to newest. The time marked **Last published change** includes later
+corrections and edits.
 
 For a new assignment, see [Create a live blog](../create-live-blog/).
 

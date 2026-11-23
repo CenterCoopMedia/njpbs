@@ -157,10 +157,11 @@ export function assertLiveBlogData(value: unknown, { complete = true } = {}): as
   }
 }
 
-/** Latest first; equal instants use immutable IDs, independent of input order. */
-export function orderedLiveBlogUpdates(data: LiveBlogData): LiveBlogUpdate[] {
+/** Equal instants use immutable IDs, independent of input order. */
+export function orderedLiveBlogUpdates(data: LiveBlogData, order: "newest-first" | "oldest-first" = "newest-first"): LiveBlogUpdate[] {
+  const direction = order === "oldest-first" ? 1 : -1;
   return [...data.updates].sort((a, b) => {
-    const difference = parsePublishInstant(b.publishedAt)! - parsePublishInstant(a.publishedAt)!;
+    const difference = direction * (parsePublishInstant(a.publishedAt)! - parsePublishInstant(b.publishedAt)!);
     return difference || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0);
   });
 }
