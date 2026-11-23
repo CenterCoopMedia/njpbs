@@ -5,14 +5,12 @@ import type { MediaAssetRef } from "../../lib/media-identity";
 import type { MediaApprovalRendition, MediaApprovalVersions } from "../../lib/source-media";
 import { Button, Select } from "../ui/Primitives";
 
-const RENDITIONS = { original: "Original video", viewingCopy: "Web copy" };
 const PURPOSES = { editorial: "Editorial review", technical: "Technical review" };
 
 const approvalDate = new Intl.DateTimeFormat(undefined, { dateStyle: "medium", timeStyle: "short" });
 
-export function MediaApprovals({ sourceId, assetId, versions, getIdToken, locked }: {
-  sourceId: string;
-  assetId: string;
+export function MediaApprovals({ mediaRef, versions, getIdToken, locked }: {
+  mediaRef: MediaAssetRef;
   versions: MediaApprovalVersions;
   getIdToken: () => Promise<string>;
   locked: boolean;
@@ -25,7 +23,8 @@ export function MediaApprovals({ sourceId, assetId, versions, getIdToken, locked
   const [error, setError] = useState("");
   const [changed, setChanged] = useState(false);
   const controller = useRef<AbortController>();
-  const ref: MediaAssetRef = { backend: "s3", sourceId, id: assetId };
+  const sourceId = mediaRef.backend === "s3" ? mediaRef.sourceId : null;
+  const renditionLabels = { original: sourceId ? "Original video" : "Original file", viewingCopy: "Web copy" };
 
   async function load(cursor?: string) {
     controller.current?.abort();
@@ -35,7 +34,7 @@ export function MediaApprovals({ sourceId, assetId, versions, getIdToken, locked
     setSaving(false);
     setError("");
     try {
-      const next = await listMediaApprovals(await getIdToken(), ref, cursor, request.signal);
+      const next = await listMediaApprovals(await getIdToken(), mediaRef, cursor, request.signal);
       if (!request.signal.aborted) {
         setPage(previous => cursor && previous ? { ...next, history: [...previous.history,
           ...next.history.filter(row => !previous.history.some(existing => existing.id === row.id))] } : next);
@@ -50,7 +49,7 @@ export function MediaApprovals({ sourceId, assetId, versions, getIdToken, locked
   useEffect(() => {
     void load();
     return () => controller.current?.abort();
-  }, [sourceId, assetId, getIdToken]);
+  }, [sourceId, mediaRef.id, getIdToken]);
 
   const version = versions[rendition];
   const matching = page?.current.find(approval => approval.rendition === rendition &&
@@ -64,7 +63,7 @@ export function MediaApprovals({ sourceId, assetId, versions, getIdToken, locked
     setSaving(true);
     setError("");
     try {
-      const { approval } = await saveMediaApproval(await getIdToken(), ref, { rendition, purpose, version }, request.signal);
+      const { approval } = await saveMediaApproval(await getIdToken(), mediaRef, { rendition, purpose, version }, request.signal);
       if (!request.signal.aborted) {
         setPage(previous => previous && { ...previous, current: [...previous.current, approval],
           history: [approval, ...previous.history.filter(row => row.id !== approval.id)]
@@ -80,21 +79,24 @@ export function MediaApprovals({ sourceId, assetId, versions, getIdToken, locked
   }
 
   return <>
-    <p className="media-feedback-help">Choose the file you reviewed. Use the Download menu to open a specific file.</p>
-    <label className="media-feedback-field">File reviewed
-      <Select value={rendition} disabled={saving} onChange={event => setRendition(event.target.value as MediaApprovalRendition)}>
-        {!versions.original && !versions.viewingCopy ? <option value="viewingCopy">No versioned file available</option> : null}
-        {versions.original ? <option value="original">{RENDITIONS.original}</option> : null}
-        {versions.viewingCopy ? <option value="viewingCopy">{RENDITIONS.viewingCopy}</option> : null}
-      </Select>
-    </label>
-    <label className="media-feedback-field">Review purpose
-      <Select value={purpose} disabled={saving} onChange={event => setPurpose(event.target.value as MediaApprovalPurpose)}>
-        <option value="editorial">{PURPOSES.editorial}</option>
-        <option value="technical">{PURPOSES.technical}</option>
-      </Select>
-    </label>
-    <p className="media-feedback-status" role="status">{stale ? "The video file changed. Reopen it before recording approval."
+    {version ? <>
+      <p className="media-feedback-help">{sourceId
+        ? "Use the Download menu to open the file you want to approve."
+        : "Use Download in the full-size viewer to open the file you want to approve."}</p>
+      <label className="media-feedback-field">File reviewed
+        <Select value={rendition} disabled={saving} onChange={event => setRendition(event.target.value as MediaApprovalRendition)}>
+          {versions.original ? <option value="original">{renditionLabels.original}</option> : null}
+          {versions.viewingCopy ? <option value="viewingCopy">{renditionLabels.viewingCopy}</option> : null}
+        </Select>
+      </label>
+      <label className="media-feedback-field">Review purpose
+        <Select value={purpose} disabled={saving} onChange={event => setPurpose(event.target.value as MediaApprovalPurpose)}>
+          <option value="editorial">{PURPOSES.editorial}</option>
+          <option value="technical">{PURPOSES.technical}</option>
+        </Select>
+      </label>
+    </> : <p className="media-feedback-help">No versioned file available for approval.</p>}
+    <p className="media-feedback-status" role="status">{stale ? "The file changed. Reopen it before recording approval."
       : pending && !page ? "Loading approvals."
       : saving ? "Recording approval."
       : matching ? `Approved by ${matching.approvedByName} for ${PURPOSES[purpose].toLowerCase()}.`
@@ -107,7 +109,7 @@ export function MediaApprovals({ sourceId, assetId, versions, getIdToken, locked
       <h4>Approval history</h4>
       {page.history.length === 0 ? <p className="media-feedback-empty">No approvals recorded.</p> : <ul className="media-feedback-comments">
         {page.history.map(approval => <li key={approval.id} className="media-feedback-comment">
-          <strong>{PURPOSES[approval.purpose]} · {RENDITIONS[approval.rendition]}</strong>
+          <strong>{PURPOSES[approval.purpose]} · {renditionLabels[approval.rendition]}</strong>
           <p className="media-feedback-comment-text">{approval.originalName} · {page.versions[approval.rendition] === approval.version ? "Current version" : "Earlier version"}
             {` (${approval.version.slice(0, 8)})`}</p>
           <p className="media-feedback-comment-meta">{approval.approvedByName} · <time dateTime={approval.approvedAt}>{approvalDate.format(new Date(approval.approvedAt))}</time></p>

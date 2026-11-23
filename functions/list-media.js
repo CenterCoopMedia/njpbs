@@ -77,7 +77,8 @@ const SUMMARY_FIELDS = Object.freeze([
   "url",
   "thumbnails",
   "animated",
-  // Server-only receipt: mediaAssetSummary exposes only its availability flag.
+  // Server-only file identities. The summary projects opaque approval tokens.
+  "contentHash",
   "master",
   "source",
   "voiceover",
@@ -220,7 +221,7 @@ function visibleMediaSummaries(
   audioReadAdmitted = false,
 ) {
   return records.flatMap((record) => {
-    const summary = mediaAssetSummary(record?.id, record);
+    const summary = mediaAssetSummary(record?.id, record, { fromSummary: true });
     if (!summary) return [];
     if (selfProfileUid !== null) {
       return summary.category === AUTHOR_PHOTO_CATEGORY &&

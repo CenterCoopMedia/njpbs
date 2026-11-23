@@ -2,6 +2,7 @@ import { ControlSizingProvider } from "../../context/ControlSizingContext";
 import { useControlPresentation } from "../../context/ControlPresentationContext";
 import { MediaDialogContext } from "../../context/MediaDialogContext";
 import { AudioPlayback, type AudioToken } from "./AudioMedia";
+import { MediaApprovals } from "./MediaApprovals";
 import { MediaFeedbackSections } from "./MediaFeedbackSections";
 import {
   useCallback,
@@ -218,6 +219,7 @@ function MediaInspectorContent({
   onOpenFullSize,
 }: MediaInspectorProps) {
   const feedback = useMediaFeedback({ backend: "r2", id: asset.id }, getIdToken);
+  const approvalVersions = asset.approvalVersions;
   const [commentDirty, setCommentDirty] = useState(false);
   const feedbackDirty = feedback.reviewDirty || commentDirty;
   const maySave = canEdit || feedback.enabled;
@@ -625,7 +627,7 @@ function MediaInspectorContent({
               {onOpenFullSize ? (
                 <span>Open full size <Icon name="maximize" /></span>
               ) : (
-                <span>Open original <Icon name="external-link" /></span>
+                <span>{asset.originalAvailable ? "Open web copy" : "Open original"} <Icon name="external-link" /></span>
               )}
             </a>}
             <p className="media-file-summary" id={descriptionId}>
@@ -823,6 +825,11 @@ function MediaInspectorContent({
           )}
         </InspectorSection>
 
+        {approvalVersions && getIdToken ? <InspectorSection id="media-approvals" title="Approvals" defaultOpen={false} mountWhenOpen>
+          <MediaApprovals key={JSON.stringify([asset.id, approvalVersions.original, approvalVersions.viewingCopy])}
+            mediaRef={{ backend: "r2", id: asset.id }} versions={approvalVersions}
+            getIdToken={getIdToken} locked={locked || saving || deleting} />
+        </InspectorSection> : null}
         <MediaFeedbackSections feedback={feedback} locked={locked || saving || deleting}
           onCommentDirtyChange={setCommentDirty} reviewSaveMode="combined" />
 

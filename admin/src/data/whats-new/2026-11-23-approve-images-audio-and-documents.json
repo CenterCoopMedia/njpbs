@@ -1,0 +1,7 @@
+{
+  "date": "2026-11-23",
+  "kind": "new",
+  "title": "Approve exact versions of images, audio, and documents",
+  "body": "Open Approvals in the file details and choose editorial or technical review. Images with a separate web copy have an approval for each file. Approval history keeps earlier decisions visible after replacement.",
+  "prs": []
+}

@@ -1,4 +1,5 @@
 import type { MediaTabCounts } from "./media-session-cache";
+import type { MediaApprovalVersions } from "./source-media";
 
 /** The kinds the Images tab lists and filters. */
 export type MediaKind = "image" | "document" | "audio";
@@ -56,6 +57,7 @@ export interface MediaAssetSummary {
   originalAvailable?: boolean;
   /** The retained original's file format, shown in the Download menu. */
   originalFormat?: "JPG" | "PNG";
+  approvalVersions?: MediaApprovalVersions;
   source?: "upload" | "site_seed" | "voiceover" | null;
   voiceoverTakeId?: string;
   voiceover?: import("./voiceovers").VoiceoverTake & { manifestVersion: number; performer_name: string };
