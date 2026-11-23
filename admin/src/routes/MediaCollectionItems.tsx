@@ -32,6 +32,8 @@ import {
 import type { MediaAssetRef } from "../lib/media-identity";
 import {
   type MediaCollectionItem,
+  type MediaCollectionItemRef,
+  type MediaCollectionSubclip,
   type MediaCollectionSummary,
 } from "../lib/media-collections";
 import { MEDIA_CARD_FIELD_ORDER, listColumns } from "../lib/media-display";
@@ -67,6 +69,7 @@ import { useMediaDisplay } from "../lib/use-media-display";
 import { VideoViewerBody, sharePosterRead } from "./SourceMediaLibrary";
 import { useSourceMediaAssetRefresh } from "../lib/use-source-media-asset-refresh";
 import { LeaveGuardDialog } from "./LeaveGuardDialog";
+import { MediaCollectionSubclips } from "./MediaCollectionSubclips";
 
 type AvailableCollectionItem = Extract<MediaCollectionItem, { available: true }>;
 type AvailableR2Item = AvailableCollectionItem & {
@@ -100,13 +103,14 @@ type SourceState =
 export interface MediaCollectionItemsProps {
   collection: MediaCollectionSummary;
   items: readonly MediaCollectionItem[];
+  subclips?: readonly MediaCollectionSubclip[];
   principal: Principal;
   categories: readonly MediaCategoryDefinition[];
   getIdToken: () => Promise<string>;
   userId: string;
   removalPending?: boolean;
   removalError?: string;
-  onRemoveMany: (refs: readonly MediaAssetRef[]) => Promise<boolean>;
+  onRemoveMany: (refs: readonly MediaCollectionItemRef[]) => Promise<boolean>;
   onLoadMore: () => void;
   loadingMore: boolean;
   nextCursor: string | null;
@@ -114,6 +118,7 @@ export interface MediaCollectionItemsProps {
   onReload: () => void;
   onViewerRiskChange?: (active: boolean) => void;
   onViewerSavingChange?: (saving: boolean) => void;
+  onSubclipViewerOpenChange: (open: boolean) => void;
   /** Marks viewer Close and Step URL writes so the collection route does not prompt twice. */
   onInternalNavigation?: () => void;
   navigationBlocked?: boolean;
@@ -143,6 +148,7 @@ export function MediaCollectionItems({
   collection,
   getIdToken,
   items,
+  subclips = [],
   loadingMore,
   nextCursor,
   onLoadMore,
@@ -153,6 +159,7 @@ export function MediaCollectionItems({
   onRemoveMany,
   onViewerRiskChange,
   onViewerSavingChange,
+  onSubclipViewerOpenChange,
   navigationBlocked = false,
   pages,
   principal,
@@ -569,6 +576,7 @@ export function MediaCollectionItems({
       {sourceState.message} The video stays read-only until its source permissions load.
       <Button onClick={() => setSourceAttempt(value => value + 1)}>Try again</Button>
     </InlineMessage> : null}
+    {gridItems.length || !subclips.length ? <>
     <MediaToolbar configuration={toolbar} />
     <p className="sr-only media-selection-status" role="status">{selectionStatus}</p>
     <MediaGrid label="Collection media" className="media-collection-shared-grid" items={gridItems} layout={display.layout}
@@ -582,8 +590,15 @@ export function MediaCollectionItems({
         !previous.items.some(item => item.id === record.id), { cap: { max: 30, message: "Select no more than 30 collection items." } }))}
       onQuickLook={record => { if (record.item.available) openQuickLook(record.item); }}
       onEscape={() => setSelection(emptySelection())} />
+    </> : null}
 
-    {nextCursor || pages > 1 ? <MediaPaging mode="load-more" label="Collection item pages" loaded={gridItems.length}
+    {subclips.length ? <MediaCollectionSubclips key={`${collection.id}/${userId}`} items={subclips} collectionId={collection.id}
+      principal={principal} getIdToken={getIdToken} disabled={actionsDisabled} canRemove={collection.lifecycle === "active"}
+      onRemove={ref => void onRemoveMany([ref])} onDirtyChange={setViewerDirty} onSavingChange={setViewerSaving}
+      onViewerOpenChange={onSubclipViewerOpenChange} navigationBlocked={navigationBlocked && !viewerSaving}
+      onKeepNavigation={onKeepNavigation} onDiscardNavigation={onDiscardNavigation} /> : null}
+
+    {nextCursor || pages > 1 ? <MediaPaging mode="load-more" label="Collection item pages" loaded={items.length + subclips.length}
       total={collection.itemCount} hasMore={Boolean(nextCursor)} loading={loadingMore} onMore={onLoadMore} /> : null}
 
     <SelectionBar label="Collection selection" count={selection.items.length} offPage={offPage} cap={30}

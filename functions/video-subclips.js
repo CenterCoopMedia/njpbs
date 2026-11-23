@@ -1,6 +1,5 @@
 "use strict";
 
-const { createHash } = require("node:crypto");
 const logger = require("firebase-functions/logger");
 const { db } = require("./lib/firebase");
 const { cmsOnRequest } = require("./lib/cms-edge");
@@ -9,9 +8,9 @@ const { validateBoundedJsonRequest } = require("./lib/http-json");
 const { authorizeMediaSource, objectKeyWithinSource } = require("./lib/media-sources");
 const { ID_PATTERN, parseSourceMediaAsset, sourceMediaFileVersion } = require("./lib/source-media-contract");
 const { problem, validateClipRange } = require("./lib/video-clip-contract");
+const { SUBCLIP_ID_PATTERN, hashSubclipFields, subclipState, videoSubclipLibraryRef } = require("./lib/saved-video-subclips");
 const { runtimeRegistry, FUNCTION_SERVICE_ACCOUNT } = require("./source-media");
 
-const SUBCLIP_LIBRARIES = "mediaSourceSubclipLibraries";
 const MAX_SUBCLIPS = 50;
 const actionFields = {
   list: [],
@@ -31,7 +30,7 @@ function parseRequest(value) {
   if (fields.includes("fileVersion") && (typeof value.fileVersion !== "string" || !/^[a-f0-9]{32}$/.test(value.fileVersion))) {
     throw problem(400, "Reopen the video to select its current file version");
   }
-  if (fields.includes("id") && (typeof value.id !== "string" || !/^[a-f0-9]{64}$/.test(value.id))) {
+  if (fields.includes("id") && (typeof value.id !== "string" || !SUBCLIP_ID_PATTERN.test(value.id))) {
     throw problem(400, "Saved subclip id is invalid");
   }
   if (value.action === "save") {
@@ -43,18 +42,9 @@ function parseRequest(value) {
   return value;
 }
 
-function hash(fields) {
-  return createHash("sha256").update(JSON.stringify(fields)).digest("hex");
-}
-
-function subclipState(subclip, fileVersion, durationMs) {
-  if (subclip.fileVersion !== fileVersion) return "replaced";
-  return Number.isSafeInteger(durationMs) && subclip.outMs <= durationMs ? "current" : "unavailable";
-}
-
 async function manageSubclips(firestore, source, uid, request) {
   const assetRef = firestore.collection("mediaSourceAssets").doc(request.assetId);
-  const libraryRef = firestore.collection(SUBCLIP_LIBRARIES).doc(hash([uid, source.id, request.assetId]));
+  const libraryRef = videoSubclipLibraryRef(firestore, uid, source.id, request.assetId);
   return firestore.runTransaction(async tx => {
     const [assetSnapshot, librarySnapshot] = await tx.getAll(assetRef, libraryRef);
     const asset = parseSourceMediaAsset(assetSnapshot.id, assetSnapshot.data());
@@ -62,7 +52,7 @@ async function manageSubclips(firestore, source, uid, request) {
       throw problem(404, "This video is no longer available");
     }
     const fileVersion = sourceMediaFileVersion(asset.objectVersionId);
-    const durationMs = asset.rendition?.state === "ready" ? Math.floor((asset.rendition.web.durationSeconds ?? 0) * 1000) : 0;
+    const durationSeconds = asset.rendition?.state === "ready" ? asset.rendition.web.durationSeconds : undefined;
     let subclips = librarySnapshot.data()?.subclips ?? [];
     if (request.action === "save" || request.action === "open") {
       if (request.fileVersion !== fileVersion) {
@@ -70,10 +60,10 @@ async function manageSubclips(firestore, source, uid, request) {
       }
       const { name, inMs, outMs } = request;
       const subclip = request.action === "save"
-        ? { id: hash([libraryRef.id, fileVersion, name, inMs, outMs]), name, fileVersion, inMs, outMs }
+        ? { id: hashSubclipFields([libraryRef.id, fileVersion, name, inMs, outMs]), name, fileVersion, inMs, outMs }
         : subclips.find(clip => clip.id === request.id);
       if (!subclip) throw problem(404, "This saved subclip is no longer available");
-      const state = subclipState(subclip, fileVersion, durationMs);
+      const state = subclipState(subclip, fileVersion, durationSeconds);
       if (state === "replaced") throw problem(409, "This subclip belongs to a previous video file.");
       if (state === "unavailable") throw problem(409, "This range is unavailable in the current viewing copy.");
       if (request.action === "save" && !subclips.some(clip => clip.id === subclip.id)) {
@@ -86,7 +76,7 @@ async function manageSubclips(firestore, source, uid, request) {
       if (subclips.length) tx.set(libraryRef, { assetId: request.assetId, subclips });
       else tx.delete(libraryRef);
     }
-    return subclips.map(clip => ({ ...clip, state: subclipState(clip, fileVersion, durationMs) }));
+    return subclips.map(clip => ({ ...clip, state: subclipState(clip, fileVersion, durationSeconds) }));
   });
 }
 

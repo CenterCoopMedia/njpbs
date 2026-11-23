@@ -5,6 +5,9 @@ import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import admin from "../helpers/firebase-admin.js";
 import collections from "../../functions/media-collections.js";
 import contract from "../../functions/lib/media-collections.js";
+import subclips from "../../functions/video-subclips.js";
+import sourceMedia from "../../functions/lib/source-media-contract.js";
+import rendition from "../../functions/lib/source-media-rendition.js";
 
 const {
   createCmsListMediaCollectionItemsHandler,
@@ -751,6 +754,81 @@ describe("media collection service", () => {
       expect(item.data()).not.toHaveProperty("objectVersionId");
       expect(item.data()).not.toHaveProperty("name");
     }
+  });
+
+  it("shares a saved range independently of its source and rechecks collection and video access", async () => {
+    const assetId = "interview-video";
+    const assetRef = db.doc(`mediaSourceAssets/${assetId}`);
+    const asset = storedSourceAsset(assetId, { objectVersionId: "source-v1" });
+    const prefix = rendition.sourceMediaRenditionOutputPrefix({ ...asset, id: assetId }, "viewing-attempt");
+    const web = { objectKey: `${prefix}preview.mp4`, objectVersionId: "web-v1", sizeBytes: 500, mimeType: "video/mp4", durationSeconds: 4.0019 };
+    asset.rendition = {
+      schemaVersion: 1, state: "ready", sourceObjectKey: asset.objectKey, sourceObjectVersionId: asset.objectVersionId,
+      sourceSizeBytes: asset.sizeBytes, attemptId: "viewing-attempt", updatedAt: asset.updatedAt,
+      web, poster: { objectKey: `${prefix}preview-poster.0000000.jpg`, objectVersionId: "poster-v1", sizeBytes: 100, mimeType: "image/jpeg" },
+    };
+    await assetRef.set(asset);
+    const source = { id: "video-library", access: "active_staff", prefix: "" };
+    const deps = { registryFn: () => new Map([[source.id, source]]) };
+    const fileVersion = sourceMedia.sourceMediaFileVersion(asset.objectVersionId);
+    const range = { name: "Interview opening", fileVersion, inMs: 3751, outMs: 4001 };
+    const save = subclips.createVideoSubclipsHandler({
+      firestore: db, requirePrincipal: async () => actor(), verifyAppCheck: async () => {}, registry: deps.registryFn,
+    });
+    const saved = response();
+    await save(request({ action: "save", sourceId: source.id, assetId, ...range }, true), saved);
+    expect(saved.statusCode, JSON.stringify(saved.body)).toBe(200);
+    const ref = { backend: "subclip", id: saved.body.subclips[0].id };
+    const shared = await create("all_staff");
+    const personal = await create();
+    const other = actor("staff-2");
+    const noVideo = actor("staff-2", true, []);
+    const sourceRef = { backend: "s3", sourceId: source.id, id: assetId };
+    const rootsBefore = (await db.listCollections()).map(collection => collection.id).sort();
+    const change = (collection, version, fields) => ({
+      collectionId: collection.id, requestId: randomUUID(), baseMembershipVersion: version, present: true, ...fields,
+    });
+    const share = (collection, version) => change(collection, version, { refs: [ref], subclipAssetId: assetId });
+    expect((await setItems(share(personal, 1), other, deps)).statusCode).toBe(404);
+    expect((await setItems(share(shared, 1), other, deps)).statusCode).toBe(404);
+    expect((await setItems(share(personal, 1), actor(), deps)).statusCode).toBe(200);
+    expect((await setItems(change(shared, 1, { refs: [sourceRef] }), actor(), deps)).statusCode).toBe(200);
+    const add = share(shared, 2);
+    expect((await setItems(add, actor(), deps)).body).toMatchObject({ changedRefs: [ref], membershipVersion: 3 });
+    expect((await setItems(add, actor(), deps)).body).toMatchObject({ replayed: true, membershipVersion: 3 });
+
+    const query = { collectionId: shared.id };
+    const open = { ...query, subclipId: ref.id };
+    const page = await listItems({ ...query, limit: 1 }, other, deps);
+    expect(page.body.items.length + (page.body.subclips?.length ?? 0)).toBe(1);
+    const next = await listItems({ ...query, cursor: page.body.nextCursor, limit: 1 }, other, deps);
+    expect([...(page.body.subclips ?? []), ...(next.body.subclips ?? [])]).toEqual([
+      expect.objectContaining({ ref, subclip: { ...range, state: "current" } }),
+    ]);
+    expect([...page.body.items, ...next.body.items]).toEqual([
+      expect.objectContaining({ ref: sourceRef, asset: expect.objectContaining({ id: assetId }) }),
+    ]);
+    expect((await listItems({ ...open, collectionId: personal.id }, other, deps)).statusCode).toBe(404);
+    const hidden = await listItems(query, noVideo, deps);
+    expect(hidden.body.items).toEqual([]);
+    expect(hidden.body.subclips).toBeUndefined();
+    expect((await listItems(open, noVideo, deps)).statusCode).toBe(404);
+    expect((await listItems(open, other, deps)).body).toMatchObject({ subclip: { ...range, state: "current" } });
+    expect((await assetRef.get()).data()).toEqual(asset);
+    expect((await db.listCollections()).map(collection => collection.id).sort()).toEqual(rootsBefore);
+
+    await assetRef.update({ "rendition.web.durationSeconds": 4 });
+    expect((await listItems(open, other, deps)).body).toMatchObject({ code: "subclip_unavailable" });
+    await assetRef.update({ objectVersionId: "source-v2" });
+    expect((await listItems(open, other, deps)).body).toMatchObject({ code: "subclip_replaced" });
+    expect((await setItems(share(shared, 3), actor(), deps)).body).toMatchObject({ code: "subclip_replaced" });
+    await assetRef.update({ lifecycle: "deleted" });
+    expect((await listItems(query, other, deps)).body.subclips).toEqual([
+      expect.objectContaining({ ref, available: false }),
+    ]);
+    expect((await listItems(open, other, deps)).statusCode).toBe(404);
+    expect((await setItems(change(shared, 3, { refs: [ref], present: false }), other, deps)).statusCode).toBe(200);
+    expect((await collectionState(shared.id)).items.map(item => item.data.ref)).toEqual([sourceRef]);
   });
 
   it("lets a rename and membership change commit on independent revisions", async () => {

@@ -7,10 +7,10 @@ import {
   confirmedCollectionChangedRefs,
   listMediaCollections,
   setMediaCollectionItems,
+  type MediaCollectionItemRef,
   type MediaCollectionPage,
   type MediaCollectionSummary,
 } from "../lib/media-collections";
-import type { MediaAssetRef } from "../lib/media-identity";
 import { HttpError } from "../lib/functions";
 import { useSuccessNotice } from "./ui/SuccessNoticeRegion";
 
@@ -44,6 +44,7 @@ export function MediaCollectionPicker({
   open,
   userId,
   refs,
+  subclipAssetId,
   getIdToken,
   onClose,
   focusOpener,
@@ -53,13 +54,14 @@ export function MediaCollectionPicker({
 }: {
   open: boolean;
   userId: string;
-  refs: readonly MediaAssetRef[];
+  refs: readonly MediaCollectionItemRef[];
+  subclipAssetId?: string;
   getIdToken: () => Promise<string>;
   onClose: () => void;
   focusOpener?: Element | null;
   onFocusFallback?: () => void;
   onAdded: (collection: MediaCollectionSummary) => void;
-  onOpenCollections: () => void;
+  onOpenCollections?: () => void;
 }) {
   const notice = useSuccessNotice();
   const [privateState, setPrivateState] = useState<ScopeState>(emptyScope);
@@ -156,6 +158,7 @@ export function MediaCollectionPicker({
         ...next,
         present: true,
         refs: [...refs],
+        ...(subclipAssetId ? { subclipAssetId } : {}),
       });
       if (generation.current !== current) return;
       if (result.collectionId !== selected.id) throw new Error("Collection response identity mismatch");
@@ -204,7 +207,8 @@ export function MediaCollectionPicker({
       onAdded({ ...selected, membershipVersion: result.membershipVersion });
     } catch (failure) {
       if (generation.current === current) {
-        if (failure instanceof HttpError && failure.status === 409) {
+        if (failure instanceof HttpError && failure.status === 409 &&
+          failure.data.code !== "subclip_replaced" && failure.data.code !== "subclip_unavailable") {
           operation.current = undefined;
           setPending(false);
           setSelectedId("");
@@ -253,7 +257,7 @@ export function MediaCollectionPicker({
     {noCollections ? <EmptyState
       title="No active collections"
       description="Create a private collection or one that all active staff can organize."
-      action={<Button variant="primary" onClick={onOpenCollections}>Create collection</Button>}
+      action={onOpenCollections ? <Button variant="primary" onClick={onOpenCollections}>Create collection</Button> : undefined}
     /> : <div className="media-collection-picker" aria-busy={loading || undefined}>
       {([
         ["Private collections", privateState, "private", setPrivateState],

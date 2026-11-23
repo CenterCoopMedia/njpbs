@@ -14,6 +14,7 @@ import type { MediaCollectionItemPage, MediaCollectionScope, MediaCollectionSumm
 const mocks = vi.hoisted(() => ({
   list: vi.fn(),
   listItems: vi.fn(),
+  openSubclip: vi.fn(),
   mutate: vi.fn(),
   setItems: vi.fn(),
   savePins: vi.fn(),
@@ -37,6 +38,7 @@ vi.mock("../src/lib/media-collections", async importOriginal => ({
   ...(await importOriginal<typeof import("../src/lib/media-collections")>()),
   listMediaCollections: (...args: unknown[]) => mocks.list(...args),
   listMediaCollectionItems: (...args: unknown[]) => mocks.listItems(...args),
+  openMediaCollectionSubclip: (...args: unknown[]) => mocks.openSubclip(...args),
   mutateMediaCollection: (...args: unknown[]) => mocks.mutate(...args),
   setMediaCollectionItems: (...args: unknown[]) => mocks.setItems(...args),
 }));
@@ -54,10 +56,16 @@ vi.mock("../src/lib/source-media", async importOriginal => ({
 }));
 vi.mock("../src/routes/SourceMediaLibrary", async () => {
   const { useEffect } = await vi.importActual<typeof import("react")>("react");
+  const { LeaveGuardDialog } = await vi.importActual<typeof import("../src/routes/LeaveGuardDialog")>("../src/routes/LeaveGuardDialog");
   return {
     VideoViewerBody: ({ onDirtyChange, canReplace }: { onDirtyChange: (dirty: boolean) => void; canReplace?: boolean }) => {
       useEffect(() => { onDirtyChange(true); return () => onDirtyChange(false); }, [onDirtyChange]);
       return <section>Video body<output aria-label="Replacement capability">{String(canReplace === true)}</output></section>;
+    },
+    VideoPreview: ({ asset, onDirtyChange, navigationBlocked, onKeepNavigation, onDiscardNavigation }: import("../src/routes/SourceMediaLibrary").VideoPreviewProps) => {
+      useEffect(() => { onDirtyChange(true); return () => onDirtyChange(false); }, [onDirtyChange]);
+      return <section role="dialog" aria-label={asset.name}>{navigationBlocked ? <LeaveGuardDialog
+        onCancel={onKeepNavigation} onConfirm={onDiscardNavigation} /> : null}</section>;
     },
     sharePosterRead: vi.fn(),
   };
@@ -742,6 +750,32 @@ describe("MediaCollectionsLibrary", () => {
     expect(screen.getAllByRole("dialog", { name: "Leave with unsaved changes?" })).toHaveLength(1);
     fireEvent.click(screen.getByRole("button", { name: "Keep editing" }));
     expect(router.state.location.pathname).toBe(`/media/collections/${collectionId}`);
+    await act(async () => { await router.navigate("/media/collections"); });
+    fireEvent.click(screen.getByRole("button", { name: "Discard and leave" }));
+    await waitFor(() => expect(router.state.location.pathname).toBe("/media/collections"));
+  });
+
+  it("shows one leave guard for an open collection subclip", async () => {
+    const ref = { backend: "subclip" as const, id: "c".repeat(64) };
+    const subclip = { name: "Interview opening", fileVersion: "d".repeat(32), inMs: 1251, outMs: 2702, state: "current" as const };
+    mocks.listItems.mockResolvedValue({ ...detail(), items: [], subclips: [{
+      ref, available: true, subclip, addedAt: "2026-11-22T10:00:00Z",
+    }] });
+    mocks.openSubclip.mockResolvedValue({ success: true, subclip, asset: { name: "Interview source" }, canRequestProduction: true });
+    const { router } = renderLibrary(`/media/collections/${collectionId}`);
+    fireEvent.click(await screen.findByRole("button", { name: "Open range for Interview opening" }));
+    await screen.findByRole("dialog", { name: "Interview source" });
+    await waitFor(() => {
+      const unload = new Event("beforeunload", { cancelable: true });
+      window.dispatchEvent(unload);
+      expect(unload.defaultPrevented).toBe(true);
+    });
+
+    await act(async () => { await router.navigate("/media/collections"); });
+    expect(screen.getAllByRole("dialog", { name: "Leave with unsaved changes?" })).toHaveLength(1);
+    fireEvent.click(screen.getByRole("button", { name: "Keep editing" }));
+    expect(router.state.location.pathname).toBe(`/media/collections/${collectionId}`);
+
     await act(async () => { await router.navigate("/media/collections"); });
     fireEvent.click(screen.getByRole("button", { name: "Discard and leave" }));
     await waitFor(() => expect(router.state.location.pathname).toBe("/media/collections"));

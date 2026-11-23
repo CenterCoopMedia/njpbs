@@ -12,8 +12,6 @@ const { JsonRequestError, validateBoundedJsonRequest } = require("./lib/http-jso
 const { adminLogEntry, AUDIT_COLLECTIONS } = require("./lib/audit");
 const {
   canonicalMediaAssetRef,
-  mediaAssetRefDocumentId,
-  parseMediaAssetRef,
 } = require("./lib/media-asset-ref");
 const {
   resolveMediaAssets,
@@ -24,9 +22,12 @@ const {
   MAX_COLLECTION_ITEM_BATCH,
   MAX_COLLECTION_ITEM_SCAN,
   MediaCollectionValidationError,
+  canonicalCollectionItemRef,
   collectionDocumentId,
+  collectionItemDocumentId,
   collectionRequestDocumentId,
   encodeCursor,
+  parseCollectionItemRef,
   parseListCollectionItemsRequest,
   parseListCollectionsRequest,
   parseMutateCollectionRequest,
@@ -36,6 +37,14 @@ const {
   storedCollectionItem,
   timestampIso,
 } = require("./lib/media-collections");
+const {
+  assertCurrentSubclip,
+  canAccessSubclipSource,
+  presentCollectionSubclip,
+  readOwnedCollectionSubclip,
+  storedCollectionSubclip,
+  subclipSourceRef,
+} = require("./lib/media-collection-subclips");
 
 const COLLECTIONS_COLLECTION = "mediaCollections";
 const COLLECTION_ITEMS_COLLECTION = "items";
@@ -80,7 +89,7 @@ function collectionReference(firestore, collectionId) {
 
 function itemReference(collectionRef, ref) {
   return collectionRef.collection(COLLECTION_ITEMS_COLLECTION).doc(
-    mediaAssetRefDocumentId(ref),
+    collectionItemDocumentId(ref),
   );
 }
 
@@ -188,7 +197,7 @@ async function requireActiveUploadCollection(firestore, actor, collectionId) {
 function sameRef(left, right) {
   return left === null && right === null ||
     left !== null && right !== null &&
-      canonicalMediaAssetRef(left) === canonicalMediaAssetRef(right);
+      canonicalCollectionItemRef(left) === canonicalCollectionItemRef(right);
 }
 
 async function resolveCollectionCovers({
@@ -314,7 +323,8 @@ async function readCollectionItemCandidates(
     if (!ref || !addedAt) {
       throw new Error(`Media collection item ${document.id} has invalid stored data`);
     }
-    return { document, ref, addedAt };
+    const subclip = ref.backend === "subclip" ? storedCollectionSubclip(document.data()?.subclip) : null;
+    return { document, ref, addedAt, subclip };
   });
   return {
     candidates,
@@ -331,19 +341,32 @@ async function resolveCollectionItems({
   registryFn,
   authorizeFn,
 }) {
+  const refs = candidates.map(({ ref, subclip }) => subclip ? subclipSourceRef(subclip) : ref);
   const resolved = await resolveMediaAssets({
     firestore,
     actor,
-    refs: candidates.map((candidate) => candidate.ref),
+    refs: [...new Map(refs.map(ref => [canonicalMediaAssetRef(ref), ref])).values()],
     registryFn,
     authorizeFn,
   });
+  const assetsByRef = new Map(resolved.map(asset => [canonicalMediaAssetRef(asset.ref), asset]));
+  let browseSubclips;
   const items = [];
+  const subclips = [];
   let consumed = 0;
   for (const [index, candidate] of candidates.entries()) {
     consumed = index + 1;
-    const asset = resolved[index];
-    if (asset.available) {
+    const asset = assetsByRef.get(canonicalMediaAssetRef(refs[index]));
+    if (candidate.subclip) {
+      const item = { ref: candidate.ref, addedAt: candidate.addedAt };
+      if (asset?.available) {
+        subclips.push({ ...item, available: true, subclip: presentCollectionSubclip(candidate.subclip, asset.summary) });
+      } else if (collection.scope === "private" || (browseSubclips ??= await canAccessSubclipSource({
+        firestore, actor, registryFn, authorizeFn,
+      }))) {
+        subclips.push({ ...item, available: false });
+      }
+    } else if (asset?.available) {
       items.push({
         ref: candidate.ref,
         addedAt: candidate.addedAt,
@@ -357,9 +380,24 @@ async function resolveCollectionItems({
         available: false,
       });
     }
-    if (items.length === limit) break;
+    if (items.length + subclips.length === limit) break;
   }
-  return { items, consumed };
+  return { items, subclips, consumed };
+}
+
+async function openCollectionSubclip(runtime, actor, collectionRef, ref) {
+  const snapshot = await itemReference(collectionRef, ref).get();
+  const value = snapshot.data();
+  if (!sameRef(storedCollectionItem(value), ref)) {
+    throw new MediaCollectionRejection(404, "This collection subclip is no longer available.");
+  }
+  const saved = storedCollectionSubclip(value.subclip);
+  const [asset] = await resolveMediaAssets({ ...runtime, actor, refs: [subclipSourceRef(saved)] });
+  if (!asset.available) throw new MediaCollectionRejection(404, "This collection subclip is no longer available.");
+  const subclip = presentCollectionSubclip(saved, asset.summary);
+  assertCurrentSubclip(subclip.state);
+  const canRequestProduction = await canAccessSubclipSource({ ...runtime, actor }, "transcript");
+  return { success: true, subclip, asset: asset.summary, canRequestProduction };
 }
 
 async function assertItemsAvailable({
@@ -389,11 +427,11 @@ function storedReceiptChangedRefs(value) {
   }
   let refs;
   try {
-    refs = value.map(parseMediaAssetRef);
+    refs = value.map(parseCollectionItemRef);
   } catch {
     throw new Error("Media collection request receipt has invalid changed refs");
   }
-  const canonical = refs.map(canonicalMediaAssetRef);
+  const canonical = refs.map(canonicalCollectionItemRef);
   const sorted = [...canonical].sort((left, right) => left.localeCompare(right));
   if (new Set(canonical).size !== canonical.length ||
       canonical.some((ref, index) => ref !== sorted[index])) {
@@ -696,7 +734,8 @@ function writeMembershipChanges(transaction, actor, changes, present, timestamp)
     transaction.create(change.reference, {
       schemaVersion: COLLECTION_SCHEMA_VERSION,
       ref: change.ref,
-      canonicalRef: canonicalMediaAssetRef(change.ref),
+      canonicalRef: canonicalCollectionItemRef(change.ref),
+      ...(change.subclip ? { subclip: change.subclip } : {}),
       addedBy: actor.uid,
       addedAt: timestamp,
     });
@@ -740,13 +779,15 @@ async function mutateCollectionItems({
   firestore,
   actor,
   request,
+  registryFn,
+  authorizeFn,
   serverTimestampFn = () => FieldValue.serverTimestamp(),
 }) {
   const collectionRef = collectionReference(firestore, request.collectionId);
   const receiptRef = requestReference(collectionRef, actor.uid, request.requestId);
   const fingerprint = requestFingerprint(request);
   return firestore.runTransaction(async (transaction) => {
-    await assertActiveCollectionActor(transaction, firestore, actor);
+    const principal = await assertActiveCollectionActor(transaction, firestore, actor);
     const collectionSnapshot = await transaction.get(collectionRef);
     const receiptSnapshot = await transaction.get(receiptRef);
     const collection = assertCollectionAccess(
@@ -768,11 +809,15 @@ async function mutateCollectionItems({
     const itemRefs = request.refs.map((ref) => itemReference(collectionRef, ref));
     const snapshots = await transactionSnapshots(transaction, itemRefs);
     const changes = membershipChanges(request, itemRefs, snapshots);
+    const subclip = request.subclipAssetId ? await readOwnedCollectionSubclip({
+      transaction, firestore, actor: { ...actor, principal }, request, registryFn, authorizeFn,
+    }) : null;
+    const writes = subclip ? changes.map(change => ({ ...change, subclip })) : changes;
     const changedRefs = changes.map((change) => change.ref);
     const changed = changes.length > 0;
     const timestamp = serverTimestampFn();
     const resultingRevision = applyCollectionMembership({ transaction, firestore, actor, collectionRef,
-      collection, changes, present: request.present, timestamp });
+      collection, changes: writes, present: request.present, timestamp });
     const action = request.present ? "add" : "remove";
     createReceipt(transaction, receiptRef, {
       action,
@@ -799,20 +844,21 @@ async function projectChangedRefs({
   actor,
   changedRefs,
   resolved,
+  addedSubclip,
   registryFn,
   authorizeFn,
 }) {
   const records = resolved ?? await resolveMediaAssets({
     firestore,
     actor,
-    refs: changedRefs,
+    refs: changedRefs.filter(ref => ref.backend !== "subclip"),
     registryFn,
     authorizeFn,
   });
   const available = new Set(records.flatMap((record) =>
     record.available ? [canonicalMediaAssetRef(record.ref)] : []));
   const projected = changedRefs.filter((ref) =>
-    available.has(canonicalMediaAssetRef(ref)));
+    ref.backend === "subclip" ? addedSubclip : available.has(canonicalMediaAssetRef(ref)));
   return {
     changedRefs: projected,
     hiddenChangedCount: changedRefs.length - projected.length,
@@ -907,6 +953,11 @@ function createCmsListMediaCollectionItemsHandler(deps = {}) {
       const collectionRef = collectionReference(runtime.firestore, request.collectionId);
       const snapshot = await collectionRef.get();
       const collection = assertCollectionAccess(actor, storedCollectionOrThrow(snapshot));
+      if (request.subclipRef) {
+        const opened = await openCollectionSubclip(runtime, actor, collectionRef, request.subclipRef);
+        res.status(200).json(opened);
+        return;
+      }
       const candidatePage = await readCollectionItemCandidates(
         runtime.firestore,
         actor,
@@ -943,6 +994,7 @@ function createCmsListMediaCollectionItemsHandler(deps = {}) {
         success: true,
         collection: presentedCollection,
         items: page.items,
+        ...(page.subclips.length ? { subclips: page.subclips } : {}),
         nextCursor,
         hasMore: nextCursor !== null,
       });
@@ -1014,7 +1066,7 @@ function createCmsSetMediaCollectionItemsHandler(deps = {}) {
         runtime.isActiveFn,
       );
       let resolved;
-      if (request.present) {
+      if (request.present && !request.subclipAssetId) {
         await readAuthorizedCollection(runtime.firestore, actor, request.collectionId);
         resolved = await assertItemsAvailable({
           ...runtime,
@@ -1023,7 +1075,7 @@ function createCmsSetMediaCollectionItemsHandler(deps = {}) {
         });
       }
       const result = await mutateCollectionItems({
-        firestore: runtime.firestore,
+        ...runtime,
         actor,
         request,
         serverTimestampFn: deps.serverTimestampFn,
@@ -1036,6 +1088,7 @@ function createCmsSetMediaCollectionItemsHandler(deps = {}) {
           actor,
           changedRefs,
           resolved,
+          addedSubclip: Boolean(request.subclipAssetId && !result.replayed),
         });
       } catch (error) {
         // Membership has committed. Keep the success receipt but omit optional Undo details.
