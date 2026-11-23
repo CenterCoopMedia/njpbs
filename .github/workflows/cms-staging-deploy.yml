@@ -89,10 +89,11 @@ env:
   # literal: repository variables hold production values, so a dev run must never
   # fall back to one.
   # A development-environment job falls back to the repository (production) value of a
-  # secret the environment lacks. No list of required development names lives here: the
-  # jawn-ops release input check refuses a development dispatch when any secret this
-  # workflow references is absent from the development environment itself, so a second
-  # hand-kept list would only drift. Development reads drop production-only fallbacks.
+  # secret or variable the environment lacks (CenterCoopMedia/njpbs#562). The jawn-ops
+  # release input check refuses a development dispatch when a secret this workflow
+  # references is absent from the development environment itself. Development reads drop
+  # production-only fallbacks; tests/preflight/cms-deploy-workflow-parity.test.js names
+  # every secret and variable a development run reads and why each variable may be shared.
   CMS_TARGET: ${{ inputs.target == 'development' && 'development' || 'production' }}
   CMS_TARGET_FIREBASE_PROJECT: ${{ inputs.target == 'development' && 'njpbs-site-dev' || 'njpbs-site' }}
   CMS_TARGET_ADMIN_ORIGIN: ${{ inputs.target == 'development' && 'https://dev-admin.njpbs.org' || 'https://admin.njpbs.org' }}

@@ -389,6 +389,46 @@ describe("CMS deploy target", () => {
     expect(deploy).not.toMatch(/njpbs-site\.cloudfunctions|--project njpbs-site\b|project_id: njpbs-site$|environment: production$/m);
   });
 
+  it("names every value a development run takes from outside its environment", () => {
+    // A development-environment job falls back to the repository (production) value of any
+    // secret or variable the environment lacks (CenterCoopMedia/njpbs#562). The jawn-ops release
+    // input check refuses a development dispatch when a secret below is absent from the
+    // development environment itself; this test keeps the lists equal to the workflow's reads.
+    const strip = text => text.replace(/inputs\.target != 'development' && (?:secrets|vars)\.[A-Z]\w*/g, "")
+      .replace(/inputs\.target == 'development' && ([^|}]+?) \|\| (?:secrets|vars)\.[A-Z]\w*/g, "$1");
+    const reads = { secrets: new Set(), vars: new Set() };
+    const collect = value => {
+      for (const [, kind, name] of strip(JSON.stringify(value)).matchAll(/\b(secrets|vars)\.([A-Z][A-Z0-9_]*)\b/g)) reads[kind].add(name);
+    };
+    collect(workflow.env);
+    for (const { steps, ...current } of Object.values(workflow.jobs)) {
+      collect(current);
+      for (const row of steps) if (!/^inputs\.target != 'development'/.test(row.if ?? "")) collect(row);
+    }
+    expect([...reads.secrets].sort()).toEqual(["CLOUDFLARE_ACCOUNT_ID", "CLOUDFLARE_API_TOKEN", "CMS_BUG_REPORT_GITHUB_TOKEN",
+      "CMS_BUG_REPORT_GITHUB_WEBHOOK_SECRET", "CMS_BUG_REPORT_TELEGRAM_ADMIN_MAP", "CMS_BUG_REPORT_TELEGRAM_BOT_TOKEN",
+      "CMS_BUG_REPORT_TELEGRAM_CHAT_ID", "CMS_BUG_REPORT_TELEGRAM_WEBHOOK_SECRET", "CMS_DEV_ACCESS_CLIENT_ID", "CMS_DEV_ACCESS_CLIENT_SECRET",
+      "CMS_EDGE_ORIGIN_SECRET", "CMS_MEDIA_CACHE_PURGE_TOKEN", "CMS_PREVIEW_R2_CREDENTIAL", "CMS_PREVIEW_SMOKE_CREDENTIAL",
+      "CMS_STAFF_EMAIL_API_TOKEN", "CMS_VOICEOVER_R2_ACCESS_KEY_ID", "CMS_VOICEOVER_R2_SECRET_ACCESS_KEY", "FIREBASE_SERVICE_ACCOUNT"]);
+    // The development environment overrides each of these, and a production value fails a check:
+    // the Admin preflight checks the project, auth domain and API origin, the Admin build refuses
+    // another app id, App Check compares the site key with the dev app's registration, the IAM
+    // check requires the active dev deploy account, and the signed-in preview smoke signs in
+    // through the dev Admin (API key) and opens its target record in dev. The renderer SHA has no
+    // repository value.
+    const overridden = ["CMS_DEV_RENDERER_SOURCE_SHA", "CMS_PREVIEW_SMOKE_TARGET", "FIREBASE_DEPLOY_SERVICE_ACCOUNT", "VITE_FIREBASE_API_KEY",
+      "VITE_FIREBASE_APPCHECK_SITE_KEY", "VITE_FIREBASE_APP_ID", "VITE_FIREBASE_AUTH_DOMAIN", "VITE_FIREBASE_PROJECT_ID", "VITE_FUNCTIONS_BASE_URL"];
+    for (const name of overridden) expect(reads.vars.has(name), name).toBe(true);
+    // Shared on purpose: admission identities (canonical repository, deploy owner), dev resource
+    // names (CMS_DEV_*, checked by scripts/lib/cms-target.mjs), render placeholders and the
+    // readiness and feature flags both targets assert.
+    expect([...reads.vars].filter(name => !overridden.includes(name) && !name.startsWith("CMS_DEV_")).sort()).toEqual([
+      "AUTHOR_PAGES_LIVE", "CANONICAL_GITHUB_REPOSITORY", "CANONICAL_GITHUB_REPOSITORY_ID", "CLOUDFLARE_DEV_PUBLIC_WORKER", "CMS_DEPLOY_OWNER",
+      "CMS_GPU_WORKER_ID", "CMS_LOCAL_PUBLICATION_OWNER", "CMS_MEDIA_MASTER_R2_BUCKET", "CMS_PREVIEW_ACCESS_VERIFIED", "CMS_PREVIEW_SERIALIZER_READY",
+      "CMS_PREVIEW_TRANSPORT", "CMS_PRODUCTION_API_ORIGIN", "VITE_CMS_PREVIEW_ENABLED", "VITE_VIDEO_REPLACEMENT_ENABLED",
+    ]);
+  });
+
   it("keeps every Cloudflare write of a development run on dev names", () => {
     expect(branches("CMS_TARGET_FIREBASE_CONFIG")).toEqual(["'firebase.dev.json'", "'firebase.json'"]);
     expect(branches("CMS_TARGET_FIREBASE_RULES")).toEqual(["'firestore:rules,firestore:indexes'", "'firestore:rules,firestore:indexes,storage'"]);
