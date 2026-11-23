@@ -54,7 +54,8 @@ describe("Data Hub HTML route emission", () => {
     expect(headers).not.toMatch(/^\/data-hub(?:\/\*)?$/m);
     expect(readFileSync(`${dist}sitemap-0.xml`, "utf8"))
       .toContain("<loc>https://njpbs.org/data-hub/</loc>");
-    expect(html).toContain('class="data-hub"');
+    // [...hub].astro renders the composed root when the CMS composition is on.
+    expect(html).toMatch(/class="data-hub(?: data-hub--composed)?"/);
     expect(html).not.toContain('Editorial design preview — not published on NJ PBS');
     expect(html).toContain('Published on NJ PBS. Downloads preserve this dated source snapshot.');
     expect(html).not.toContain('data-pagefind-body');
