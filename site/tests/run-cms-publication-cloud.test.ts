@@ -126,7 +126,8 @@ it("validates an explicit pin during preflight without starting the runtime", as
 const serving = (deployment: string | undefined) => ({ CMS_DEPLOYMENT_ENVIRONMENT: deployment, CLOUDFLARE_PUBLIC_WORKER_TAG: "d".repeat(32),
   CMS_PUBLICATION_ACTIVATION_TOKEN: "fixture".repeat(4), CMS_PUBLICATION_FIREBASE_ACCOUNT: "fixture-account",
   CMS_PUBLICATION_MEDIA_MANAGER_CREDENTIAL: "fixture-key\nfixture-secret",
-  ...(deployment === "development" ? { CMS_DEV_ACCESS_CLIENT_ID: "fixture-access-id", CMS_DEV_ACCESS_CLIENT_SECRET: "fixture-access-secret" } : {}) });
+  ...(deployment === "development" ? { CMS_DEV_ACCESS_CLIENT_ID: "fixture-access-id", CMS_DEV_ACCESS_CLIENT_SECRET: "fixture-access-secret",
+    CLOUDFLARE_ACCOUNT_ID: "a".repeat(32), CMS_DEV_CLOUDFLARE_ACCOUNT_ID: "a".repeat(32) } : {}) });
 
 it.each(["production", "development"])("selects one %s target for Firebase, storage and the runtime", async deployment => {
   const target = createRequire(import.meta.url)("../../functions/lib/publication-target.js").publicationTarget(deployment);
@@ -146,6 +147,18 @@ it.each([undefined, "", "staging", "Production"])("refuses a missing or unknown 
   const initialized = boundary.initializeApp.mock.calls.length;
   const failure = await runCmsPublicationCloud("--serve", serving(deployment)).catch(error => error);
   expect(failure).toMatchObject({ stage: "target", message: "Invalid publication environment" });
+  expect(boundary.initializeApp).toHaveBeenCalledTimes(initialized);
+  expect(boundary.start).toHaveBeenCalledTimes(starts);
+});
+
+it.each([
+  ["a missing account pin", { CMS_DEV_CLOUDFLARE_ACCOUNT_ID: undefined }],
+  ["a different active account", { CLOUDFLARE_ACCOUNT_ID: "c".repeat(32) }],
+])("refuses a development container with %s before Firebase", async (_label, change) => {
+  const initialized = boundary.initializeApp.mock.calls.length;
+  const starts = boundary.start.mock.calls.length;
+  const failure = await runCmsPublicationCloud("--serve", { ...serving("development"), ...change }).catch(error => error);
+  expect(failure).toMatchObject({ stage: "target", message: "Development Cloudflare account configuration is missing or differs" });
   expect(boundary.initializeApp).toHaveBeenCalledTimes(initialized);
   expect(boundary.start).toHaveBeenCalledTimes(starts);
 });
