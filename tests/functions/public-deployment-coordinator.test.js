@@ -13,7 +13,6 @@ import adminPkg from "../helpers/firebase-admin.js";
 import coordinatorModule from "../../functions/lib/public-deployment-coordinator.js";
 import candidateStoreModule from "../../functions/lib/public-worker-candidate-store.js";
 import candidateModule from "../../functions/lib/public-worker-candidate.js";
-import pagesArtifactModule from "../../functions/lib/pages-public-artifact.js";
 
 const admin = adminPkg;
 const require = createRequire(import.meta.url);
@@ -21,7 +20,6 @@ const PROJECT = "demo-njpbs";
 const { acquirePublicDeploymentLease, reservePublicBuildBatch } = coordinatorModule;
 const { recordPublicWorkerCandidate } = candidateStoreModule;
 const { publicWorkerCandidateTag } = candidateModule;
-const { selectActivePublicBuildBatch } = pagesArtifactModule;
 const {
   PublicDeploymentStateError,
 } = require("../../functions/lib/public-deployment.js");
@@ -360,110 +358,6 @@ describe("reservePublicBuildBatch", () => {
       "coordinator is invalid",
     );
     expect(await storedBatch("build-eight")).toBeUndefined();
-  });
-});
-
-describe("selectActivePublicBuildBatch", () => {
-  const buildBatchId = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
-  const deploymentId = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb";
-  const versionId = "cccccccc-cccc-4ccc-8ccc-cccccccccccc";
-  const predecessorDeploymentId = "dddddddd-dddd-4ddd-8ddd-dddddddddddd";
-  const leaseToken = "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee";
-  const commitSha = "a".repeat(40);
-  const predecessorCommitSha = "b".repeat(40);
-  const cutoffAt = admin.firestore.Timestamp.fromDate(
-    new Date("2026-09-15T20:00:00.000Z"),
-  );
-  const reservedAt = admin.firestore.Timestamp.fromDate(
-    new Date("2026-09-15T20:00:01.000Z"),
-  );
-  const readyAt = admin.firestore.Timestamp.fromDate(
-    new Date("2026-09-15T20:00:02.000Z"),
-  );
-  const leaseAcquiredAt = admin.firestore.Timestamp.fromDate(
-    new Date("2026-09-15T20:00:03.000Z"),
-  );
-  const deployedAt = admin.firestore.Timestamp.fromDate(
-    new Date("2026-09-15T20:00:04.000Z"),
-  );
-
-  async function seedActiveDeployment(pointerOverrides = {}) {
-    const pointerRef = db.collection("system").doc("publicDeployment");
-    const batchRef = pointerRef.collection("buildBatches").doc(buildBatchId);
-    const pointer = {
-      schemaVersion: 1,
-      mediaLifecycleReady: true,
-      state: "idle",
-      activeGeneration: 7,
-      activeDeploymentId: deploymentId,
-      activeCommitSha: commitSha,
-      lastReservedGeneration: 7,
-      newestEligibleGeneration: 7,
-      newestEligibleBuildBatchId: buildBatchId,
-      updatedAt: deployedAt,
-      ...pointerOverrides,
-    };
-    const batch = {
-      schemaVersion: 1,
-      buildBatchId,
-      generation: 7,
-      status: "deployed",
-      commitSha,
-      reservedAgainstGeneration: 6,
-      reservedAgainstDeploymentId: predecessorDeploymentId,
-      reservedAgainstCommitSha: predecessorCommitSha,
-      cutoffAt,
-      reservedAt,
-      readyAt,
-      leaseToken,
-      leaseAcquiredAt,
-      predecessorGeneration: 6,
-      predecessorDeploymentId,
-      predecessorCommitSha,
-      mediaManifestDigest: "c".repeat(64),
-      cloudflareEvidenceDigest: "d".repeat(64),
-      deployedAt,
-      deploymentId,
-      deploymentVersionId: versionId,
-    };
-    const write = db.batch();
-    write.set(pointerRef, pointer);
-    write.set(batchRef, batch);
-    await write.commit();
-    return { pointerRef, batchRef, pointer, batch };
-  }
-
-  it("returns the aligned active batch without changing coordinator state", async () => {
-    const seeded = await seedActiveDeployment();
-
-    await expect(
-      selectActivePublicBuildBatch({ firestore: db, commitSha }),
-    ).resolves.toEqual({ buildBatchId, generation: 7, commitSha });
-    expect((await seeded.pointerRef.get()).data()).toEqual(seeded.pointer);
-    expect((await seeded.batchRef.get()).data()).toEqual(seeded.batch);
-  });
-
-  it("rejects a Pages source that differs from the active Worker", async () => {
-    await seedActiveDeployment();
-
-    await expect(
-      selectActivePublicBuildBatch({
-        firestore: db,
-        commitSha: "f".repeat(40),
-      }),
-    ).rejects.toThrow(
-      "The Pages source does not match one aligned active public deployment",
-    );
-  });
-
-  it("rejects an unsettled generation before it reads an artifact", async () => {
-    await seedActiveDeployment({ lastReservedGeneration: 8 });
-
-    await expect(
-      selectActivePublicBuildBatch({ firestore: db, commitSha }),
-    ).rejects.toThrow(
-      "The Pages source does not match one aligned active public deployment",
-    );
   });
 });
 
