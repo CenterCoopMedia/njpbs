@@ -1,22 +1,10 @@
 # PBS proxy interface
 
-The thin, documented boundary between the static NJ PBS front and the PBS
-platform (#185). A pure static deploy cannot hold a PBS secret or run an OAuth2
-token exchange, so PBS calls run in these Cloud Functions and the browser reaches
-them over a small, stable contract. Keeping the boundary thin is what makes the
-PBS integration swappable and is the survivability line for the whole site.
+Cloud Functions provide the server-side TV schedule adapter for the static
+NJ PBS site. The public Media Manager catalog uses its own build-time fetch.
 
 ## Modules behind the boundary
 
-- `media-manager-lookup.js` — the unexported per-viewer asset transport. Uses a
-  fixed origin, server-owned station and entitlement context, and a bounded
-  deadline. Returns only the asset fields consumed by `assetToGateInput()`.
-- `mvault-lookup.js` — the server-only UID lookup and strict response mapping.
-  Built, not exported as a Cloud Function; accepts injected fetch and config.
-  Returns finite entitlement and identity-mismatch decisions without upstream
-  contact data or credentials. Its deadline includes the response body read.
-- `mvault-entitlement.js` — the deployable CommonJS decision mirror of
-  `site/src/lib/mvault-entitlement.ts`. Shared behavioral fixtures check parity.
 - `schedule-proxy.js` — the TVSS fetch core: URL building, the timeout, the
   `X-PBSAUTH` header, and the mapping from TVSS's HTTP reality onto the
   `ScheduleFetchStatus` vocabulary the client degradation policy already acts on
@@ -40,80 +28,7 @@ PBS integration swappable and is the survivability line for the whole site.
 
 ## The function set the front calls
 
-The schedule handler, MVault transport and Media Manager per-viewer transport
-are built but remain unexported; PMSSO token exchange wiring remains unbuilt.
-
-### Media Manager asset availability core
-
-`fetchAssetAvailability({ assetId }, serverContext)` reads one immutable asset
-UUID from the request and normalizes its case. The separate server context supplies `stationCid`,
-`verifiedEntitlement`, `apiKey`, `apiSecret`, `fetchImpl` and `timeoutMs`.
-A future handler must construct this context itself: never spread browser input
-into it. `stationCid` is the configured PBS station CID, not the MVault lookup
-station identifier. `verifiedEntitlement` must come from the current server-side
-MVault lookup for that same station. Only an entitled `active` or `grace` result
-adds `membership`; absent, denied or inconsistent results omit it. Both query
-CIDs come from `stationCid`. Browser-supplied CIDs and entitlement fields in the
-first argument are ignored.
-
-The transport makes one GET to the fixed HTTPS `media.services.pbs.org` origin,
-encodes the asset path segment, always sets `localized_station`, sends Basic
-Auth only in its header, disables redirects and requests no-store caching.
-The default and maximum deadline is 8,000 ms, including the body read. It does
-not retry, fetch related records, or bind a secret.
-
-Results are `{ status }` for `not-configured`, `not-found`, `forbidden`,
-`rate-limited`, `timeout` and `error`. An `ok` result adds `asset`: one matching
-JSON:API asset projected to its ID, type, audience-keyed availability bounds,
-PBS's `availability_window` and `playable_window` decisions, and only the
-rendition bucket named by `playable_window`. An `unavailable` decision returns
-no rendition URLs; unknown window values fail closed.
-Empty data is `not-found`; ambiguous resources, mismatched identities and
-malformed envelopes are `error`. PBS's empty video list remains a readable asset
-without HLS. Malformed individual renditions are omitted, matching the existing
-adapter without hiding other usable renditions.
-Unrelated metadata, links, error bodies and exception text do not cross the
-boundary. `ok` means a readable asset, not permission to play: pass the projection
-through the existing `assetToGateInput()` and playback gate with the independently
-resolved viewer. The gate still checks timing, entitlement and URS HLS URLs.
-
-The wire contract follows the PBS Assets API.
-Synthetic contract tests use real JSON serialization and the existing MVault
-mapper and playback gate. No live request or credential is needed for this slice
-(#1262). Runtime use remains gated on #206 provisioning, #187 secret binding,
-verified member identity and a separately reviewed handler. The build-time
-public catalog remains a separate consumer.
-
-### MVault UID lookup core
-
-`fetchMembership({ stationId, pbsUid, apiKey, apiSecret, signInEmail, now,
-fetchImpl, timeoutMs })` calls only the fixed HTTPS MVault origin with Basic
-Auth in its header, separately encoded path segments, and redirects disabled.
-Missing configuration returns `not-configured` before a network call. A later
-handler must supply a verified PBS UID from the member sign-in flow.
-The default and maximum timeout is 8,000 ms; a smaller positive timeout is
-accepted. The deadline covers both response headers and the complete body read.
-
-Results are `{ status }` for `not-found`, `not-configured`, `forbidden`,
-`rate-limited`, `timeout`, and `error`. An `ok` result adds `entitlement`,
-`identityMismatch`, and `passportResetOffered`. It contains no raw membership,
-contact email, UID, or exception text. `ok` can carry a denied entitlement.
-An empty response array is `not-found`; multiple records and unreadable bodies
-are `error`. Only one readable membership can reach the decision policy.
-
-The transport contract is pinned to [WNET's station implementation](https://github.com/wnet-ieg-2/pbs-passport-authenticate/blob/2e7bc512ccd00a01308e5b5c5ad0319065d78395/classes/class-PBS-MVault-client.php#L54-L70).
-The [PBS API response examples and field definitions](https://docs.pbs.org/space/MV/5799969/Membership%20Vault%20API)
-place timing under `current_state.explanation.timing`. The mapper requires that
-known verdict, matching status, boolean `token_activated`, and boolean
-`current_state.has_access`. An unactivated token or upstream denial never grants
-access. Unknown timing and missing or malformed state blocks return `error`.
-The wire's `start_date`, `expire_date`, and `grace_period` are UTC timestamps;
-the transport does not truncate them into the pure policy's date-only fallback.
-Grace uses PBS's `within_grace_period` verdict. The mirror retains date fallback
-for parity with existing policy callers, but this transport does not use it.
-No live MVault request or secret binding is part of this slice (#1261).
-Live use remains gated on keypair and station-ID confirmation (#206), Secret
-Manager wiring (#187), and a verified PBS UID from the replacement sign-in flow.
+The schedule handler is built but remains unexported.
 
 ### `scheduleProxy`
 

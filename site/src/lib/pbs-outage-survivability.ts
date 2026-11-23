@@ -7,7 +7,7 @@
 
 /**
  * Surface taxonomy for the outage model. The player, schedule embed, now/next
- * proxy, Media Manager cards, membership gate and donation transaction depend on
+ * proxy, Media Manager cards and donation transaction depend on
  * PBS services. Editorial content, navigation and the donation landing page are
  * modeled independently. A usable landing page does not prove that an upstream
  * payment transaction can complete.
@@ -17,7 +17,6 @@ export type PbsSurface =
   | "scheduleGrid"
   | "nowNextStrip"
   | "vodLaunchCards"
-  | "memberGatedPlayback"
   | "donateTransaction"
   | "editorialContent"
   | "navigation"
@@ -36,7 +35,6 @@ export const PBS_BACKED_SURFACES = [
   "scheduleGrid",
   "nowNextStrip",
   "vodLaunchCards",
-  "memberGatedPlayback",
   "donateTransaction",
 ] as const;
 
@@ -67,7 +65,6 @@ export const SURFACES_WITH_WIRED_FALLBACK = [
  */
 export const SURFACES_WITH_POLICY_ONLY_FALLBACK = [
   "nowNextStrip",
-  "memberGatedPlayback",
 ] as const;
 
 /**

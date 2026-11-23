@@ -5,14 +5,6 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 export const ADR =
   "ADR 0015 (docs/decisions/0015-two-identity-system-boundary.md)";
 
-export const MEMBER_GATE = Object.freeze([
-  "site/src/lib/pmsso-login.ts",
-  "site/src/lib/member-gated-playback.ts",
-  "site/src/lib/mvault-entitlement.ts",
-  "functions/lib/pbs/mvault-entitlement.js",
-  "functions/lib/pbs/mvault-lookup.js",
-]);
-
 export const STAFF_IDENTITY = Object.freeze([
   "packages/content-core/src/rbac.ts",
   "admin/src/lib/principal.ts",
@@ -56,8 +48,11 @@ const SKIP_DIRS = new Set([
   "__tests__",
 ]);
 const NON_SOURCE = /\.d\.[cm]?ts$|\.(test|spec)\.[cm]?[tj]sx?$/;
-const IDENTITY_VOCAB =
-  /pmsso|mvault|passport|entitlement|member-gated|rbac|principal|authcontext|authreducer|roles\.[cm]?[tj]sx?$/i;
+const MEMBER_IDENTITY_VOCAB = /pmsso|mvault|passport|entitlement|member-gated/i;
+const IDENTITY_VOCAB = new RegExp(
+  `${MEMBER_IDENTITY_VOCAB.source}|rbac|principal|authcontext|authreducer|roles\\.[cm]?[tj]sx?$`,
+  "i",
+);
 
 // Name matches that deliberately are not identity owners. Empty today. Any future
 // entry needs a reason beside it so the completeness escape remains reviewable.
@@ -68,9 +63,6 @@ const REPO_ROOT = resolve(fileURLToPath(new URL("../../", import.meta.url)));
 export function withoutExecutableExtension(path) {
   return path.replace(EXECUTABLE_SOURCE_EXTENSION, "");
 }
-
-const MEMBER_TARGETS = new Set(MEMBER_GATE.map(withoutExecutableExtension));
-const STAFF_TARGETS = new Set(STAFF_IDENTITY.map(withoutExecutableExtension));
 
 // A `/` opens a regular expression literal only where an operand is expected.
 // The literal body may hold a quote, so consuming it keeps the string scanner in
@@ -397,29 +389,11 @@ function collectSourceFiles(root, relativeDirectory, files, violations) {
 export function identityBoundaryViolations(root = REPO_ROOT) {
   const violations = [];
 
-  for (const owner of MEMBER_GATE) {
-    const source = readOwner(root, owner, violations);
-    if (source === null) continue;
-    const leaks = localImportTargets(owner, source).filter((target) =>
-      STAFF_TARGETS.has(target),
-    );
-    for (const target of leaks) {
-      violations.push({
-        rule: "member-imports-staff-identity",
-        owner,
-        target,
-        message:
-          `${owner} imports staff identity (${target}); the member gate must ` +
-          `never reach staff identity (${ADR})`,
-      });
-    }
-  }
-
   for (const owner of STAFF_IDENTITY) {
     const source = readOwner(root, owner, violations);
     if (source === null) continue;
     const leaks = localImportTargets(owner, source).filter((target) =>
-      MEMBER_TARGETS.has(target),
+      MEMBER_IDENTITY_VOCAB.test(target),
     );
     for (const target of leaks) {
       violations.push({
@@ -427,7 +401,7 @@ export function identityBoundaryViolations(root = REPO_ROOT) {
         owner,
         target,
         message:
-          `${owner} imports the member gate (${target}); staff identity reaches ` +
+          `${owner} imports member identity (${target}); staff identity reaches ` +
           `members only through the sanctioned one-way members.view lookup (${ADR})`,
       });
     }
@@ -441,13 +415,9 @@ export function identityBoundaryViolations(root = REPO_ROOT) {
   const identityNamed = sourceFiles
     .filter((relativePath) => IDENTITY_VOCAB.test(relativePath))
     .sort();
-  const classified = new Set([
-    ...MEMBER_GATE,
-    ...STAFF_IDENTITY,
-    ...EXEMPT_NON_OWNERS,
-  ]);
+  const classified = new Set([...STAFF_IDENTITY, ...EXEMPT_NON_OWNERS]);
 
-  const vocabularyOwners = [...MEMBER_GATE, ...STAFF_IDENTITY].filter(
+  const vocabularyOwners = STAFF_IDENTITY.filter(
     (relativePath) => IDENTITY_VOCAB.test(relativePath),
   );
   for (const owner of vocabularyOwners) {
@@ -504,9 +474,7 @@ if (isDirectInvocation()) {
     process.exitCode = 1;
   } else {
     console.log(
-      `identity-boundary guard: ${
-        MEMBER_GATE.length + STAFF_IDENTITY.length
-      } identity owners clean.`,
+      `identity-boundary guard: ${STAFF_IDENTITY.length} identity owners clean.`,
     );
   }
 }
