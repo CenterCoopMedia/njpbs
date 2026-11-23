@@ -135,3 +135,52 @@ review. Attachments with identical original bytes retain separate source IDs.
 The original files stay in the supplied directory. The command writes only
 server-only attachment metadata. Media library registration, variant generation,
 and delivery approval are tracked in [#370](https://github.com/CenterCoopMedia/njpbs/issues/370).
+
+## Check an approved batch
+
+Prepare a private version 1 JSON file for a single source after reviewing the
+staged stories and verified originals. Include the approved `record.revision.sha256`
+and current staged `version` for each item. For attachments, include the approved
+`media.original.sha256`. Include any featured attachment in the same batch.
+The command accepts up to 100 items in a file of at most 64 KiB.
+
+```json
+{
+  "version": 1,
+  "source": "example-news",
+  "items": [
+    {
+      "kind": "story",
+      "postId": "62",
+      "revisionSha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "stagedVersion": 1
+    },
+    {
+      "kind": "attachment",
+      "postId": "63",
+      "revisionSha256": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+      "stagedVersion": 2,
+      "originalSha256": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd"
+    }
+  ]
+}
+```
+
+Use the same operator shell and credential input with read access to the staged
+items and receipts.
+
+```sh
+node scripts/check-wordpress-archive-batch.mjs approved-batch.json --project "$ARCHIVE_PROJECT" 3<&0
+```
+
+The command checks one read-only Firestore snapshot. Stories need published
+source status and a completed conversion. Attachments need a verified original
+and either published source status or a verified published parent. Success
+prints one `batch-inputs-checked` row with the item counts and an input digest.
+The digest is stable across retries and manifest row reordering. If the check
+is interrupted, run the same manifest again. If an approved revision or version
+changes, review the new staged record before updating the manifest.
+
+The check reads staging data only. Building and validating the public artifacts,
+switching and returning generations, and measuring concurrent editorial
+publication remain in [#379](https://github.com/CenterCoopMedia/njpbs/issues/379).
