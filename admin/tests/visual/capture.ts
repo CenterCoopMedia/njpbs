@@ -70,6 +70,7 @@ export async function openSpecimen(
 ): Promise<void> {
   // Gallery records are fixtures, not production records. Keep their public
   // evidence fixed too, so a live deployment cannot change visual assertions.
+  const pageStatusFixture = pair.id === "study-reference-page" || pair.id === "home-editor-recovery";
   const identity = { schemaVersion: 1, buildBatchId: "visual-gallery", generation: 1, commitSha: "a".repeat(40) };
   await page.route("https://njpbs.org/_publication.json?*", route => route.fulfill({ json: identity }));
   await page.route("https://njpbs.org/_content-status.json?*", route => route.fulfill({ json: {
@@ -80,7 +81,7 @@ export async function openSpecimen(
       path: "/posts/man-who-waged-delaney-hall-hunger-strike-released-from-ice-custody/", source: "cms", sourceVersion: 29,
       contentKey: createHash("sha256").update("cmsPosts/study-post").digest("hex") }] : [])],
   } }));
-  if (pair.id === "study-reference-page" || pair.id === "home-editor-recovery") {
+  if (pageStatusFixture) {
     const cors = { "access-control-allow-origin": "*" };
     await page.route("http://127.0.0.1:5001/**/cmsGetContent", route => route.fulfill({ headers: cors, json: {
       success: true, found: true, publication: {
@@ -113,7 +114,8 @@ export async function openSpecimen(
   if (pair.id === "media-favorites-list") {
     await page.addInitScript(() => localStorage.setItem("njpbs-admin:media-display:favorites", JSON.stringify({ layout: "list" })));
   }
-  await page.goto(visualSpecimenUrl(GALLERY_PATH, pair));
+  const captureUrl = visualSpecimenUrl(GALLERY_PATH, pair);
+  await page.goto(pageStatusFixture ? `${captureUrl}&pageStatusFixture=1` : captureUrl);
   // A specimen's visible control or region proves it has mounted even when
   // background requests remain active. Fonts still settle before capture.
   const ready = readyLocator ?? (readyRegion ? page.getByRole("region", { name: readyRegion, exact: true }) : undefined);
