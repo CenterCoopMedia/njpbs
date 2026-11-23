@@ -679,7 +679,7 @@ describe("Data Hub reader and downloads", () => {
       expect(record.previewOnly).toBe(false);
       expect(record.editorialStatus).toBe("source-verified");
       expect(record.metric.id).toBe(metric.id);
-      expect(record.asOf).toBe("2026-11-09");
+      expect(record.asOf).toBe("2026-11-19");
       expect(doc.querySelector("#figure-release-status")!.textContent).toBe(
         "Published on NJ PBS. Downloads preserve this dated source snapshot.",
       );
@@ -691,7 +691,7 @@ describe("Data Hub reader and downloads", () => {
     }
   });
 
-  it("uses the reviewed BLS history value and keeps one source snapshot in exports", async () => {
+  it("keeps the October 20 BLS history and appends preliminary October NJDOL rate", async () => {
     const { doc, csv, exportText } = mount();
     expect(doc.querySelector("#metric-unemployment")!.textContent).toContain("October 20, 2026");
     const [header, ...rows] = await csv("unemployment");
@@ -702,8 +702,41 @@ describe("Data Hub reader and downloads", () => {
     const record = JSON.parse(await exportText("unemployment", "json"));
     expect(record.metric.historyRetrieved).toBe("2026-10-20");
     expect(record.metric.historyVerificationUrl).toContain("LASST340000000000003");
-    expect(record.metric.history).toHaveLength(62);
+    expect(record.metric.history).toHaveLength(63);
     expect(record.metric.history.find((row: { date: string }) => row.date === "2026-09").value).toBe(4.2);
+  });
+
+
+  it("uses the November 19 NJDOL October jobs update in both figures and exports", async () => {
+    const { doc, csv, exportText }=mount();
+    const nj="https://nj.gov/labor/lwdhome/press/2026/20261119_jobs.shtml";
+    const u=seed.metrics.find((m:{id:string})=>m.id==="unemployment");
+    const j=seed.metrics.find((m:{id:string})=>m.id==="industryjobs");
+    expect(u.period).toBe("October 2026");
+    expect(u.value).toBe(4.2);
+    expect(u.checked).toBe("2026-11-19");
+    expect(u.sourceUrl).toBe(nj);
+    expect(u.history.at(-1)).toMatchObject({date:"2026-10",value:4.2,sourceUrl:nj});
+    expect(u.history.find((p:{date:string})=>p.date==="2025-10").value).toBeNull();
+    expect(u.comparisonsPublic[0]).toMatchObject({value:"4.1%",period:"October 2026"});
+    expect(j.value).toBe(-900);
+    expect(j.display).toBe("−900 jobs");
+    expect(j.checked).toBe("2026-11-19");
+    expect(j.sourceUrl).toBe(nj);
+    expect(j.comparisonsPublic[0]).toMatchObject({label:"Revised September change",value:"+17,400 jobs"});
+    expect(j.industryBreakdown).toHaveLength(10);
+    expect(j.industryBreakdown.reduce((s:number,p:{change:number})=>s+p.change,0)).toBe(-900);
+    expect(j.industryBreakdown.find((p:{sector:string})=>p.sector==="Private education and health services").change).toBe(5900);
+    expect(doc.querySelector("#metric-industryjobs")!.textContent).toContain("−900 jobs");
+    expect(doc.querySelector(".latest-findings [data-latest-metric='industryjobs']")!.textContent).toContain("October payrolls declined by 900 jobs");
+    const [header,...rows]=await csv("industryjobs");
+    expect(rows.filter((row:string[])=>row[0]==="industry_monthly_change")).toHaveLength(10);
+    expect(rows.every((row:string[])=>row.length===header.length)).toBe(true);
+    const jobJson=JSON.parse(await exportText("industryjobs","json"));
+    expect(jobJson.asOf).toBe("2026-11-19");
+    expect(jobJson.metric.value).toBe(-900);
+    const unemploymentJson=JSON.parse(await exportText("unemployment","json"));
+    expect(unemploymentJson.metric.history.at(-1).date).toBe("2026-10");
   });
 
   it("uses 2022–2025 NJDOE state four-year graduation rates and a verified 2025 student-group toggle", async () => {
@@ -994,7 +1027,7 @@ describe("Data Hub reader and downloads", () => {
     });
     const { doc } = mount(source);
     expect(doc.querySelector("#metric-industryjobs .v10-benchmark dt a")).toBeNull();
-    expect(doc.querySelector("#metric-industryjobs .v10-benchmark dt")?.textContent).toContain("Revised August change");
+    expect(doc.querySelector("#metric-industryjobs .v10-benchmark dt")?.textContent).toContain("Revised September change");
   });
 
 
