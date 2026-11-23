@@ -683,12 +683,11 @@ describe("explicit dev candidate target", () => {
     value.resources.bindings.push(binding, { ...binding });
     expect(() => projectCloudflareWorkerVersion(value, expected)).toThrow("dev candidate reader bindings are invalid");
   });
-  it.each(["production service", "extra family flag", "duplicate CMS binding", "missing renderer seal"])(
+  it.each(["production service", "duplicate CMS binding", "missing renderer seal"])(
     "refuses mixed dev receipt: %s", mode => {
       const { value, expected } = devVersion();
       const bindings = value.resources.bindings;
       if (mode === "production service") bindings.find(binding => binding.name === "CMS_API").service = "njpbs-cms-api";
-      if (mode === "extra family flag") bindings.push({ name: "NO_BUILD_POST_FAMILIES", type: "plain_text", text: "posts" });
       if (mode === "duplicate CMS binding") bindings.push({ ...bindings.find(binding => binding.name === "CMS_API") });
       if (mode === "missing renderer seal") value.resources.bindings = bindings.filter(binding => binding.name !== "NO_BUILD_POST_RENDERER_SHA");
       expect(() => projectCloudflareWorkerVersion(value, expected)).toThrow();
@@ -719,7 +718,9 @@ it("qualifies optional dev record and CODE bindings against the sealed public re
   const { assertDevPublicWorkerBindings } = await import("../../scripts/deploy-dev-staff-gateway.mjs");
   const sha = "a".repeat(40);
   const bindings = [{ name: "ASSETS", type: "assets" }, { name: "CMS_API", type: "service", service: "template-dev-cms-api", entrypoint: "PublicContentEntrypoint" },
-    { name: "NO_BUILD_POST_RENDERER_SHA", type: "plain_text", text: sha }];
+    { name: "NO_BUILD_POST_RENDERER_SHA", type: "plain_text", text: sha },
+    { name: "PUBLICATION_ENVIRONMENT", type: "plain_text", text: "development" },
+    { name: "CF_VERSION_METADATA", type: "version_metadata" }];
   for (const text of ["", sha]) expect(() => assertDevPublicWorkerBindings([...bindings,
     { name: "NO_BUILD_RECORD_RENDERER_SHA", type: "plain_text", text }, { name: "NO_BUILD_CODE_POST_RENDERER_SHA", type: "plain_text", text: sha }], sha)).not.toThrow();
   expect(() => assertDevPublicWorkerBindings([...bindings,

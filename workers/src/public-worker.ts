@@ -38,7 +38,6 @@ const PUBLIC_PAGE_CACHE_URL = "https://cms-runtime-cache.invalid/v1/contact";
 const PUBLIC_PAGE_CACHED_AT_HEADER = "x-njpbs-cached-at";
 const PUBLICATION_PROBE_PATH = "/_publication.json";
 const PUBLICATION_ORIGIN_HEADER = "x-njpbs-publication-origin";
-const PUBLICATION_ORIGIN_VALUE = "njpbs-production";
 const CONTACT_ASTRO_ASSET_PREFIX = "/contact/_astro/";
 const ASTRO_ASSET_PREFIX = "/_astro/";
 
@@ -56,6 +55,8 @@ interface PublicWorkerDependencies {
   getPublishedPage(pageId: string): Promise<PublicPageProjection>;
   /** Optional source-only pilot. Null means the route is outside its ownership. */
   noBuildPosts?: { fetch(request: Request): Promise<Response | null> };
+  /** Worker name of the serving publication target. */
+  publicationOrigin?: string;
   lookupTimeoutMs?: number;
   projectionCache?: Pick<Cache, "match" | "put">;
   now?: () => number;
@@ -256,11 +257,11 @@ function publicationReceiptRequest(request: Request): Request {
   return unconditionalAssetRequest(new Request(url, request));
 }
 
-function publicationProbeResponse(response: Response): Response {
+function publicationProbeResponse(response: Response, publicationOrigin: string): Response {
   const headers = new Headers(response.headers);
   headers.set("access-control-allow-origin", ADMIN_ORIGIN);
   headers.set("cache-control", "no-store");
-  headers.set(PUBLICATION_ORIGIN_HEADER, PUBLICATION_ORIGIN_VALUE);
+  headers.set(PUBLICATION_ORIGIN_HEADER, publicationOrigin);
   headers.delete("etag");
   headers.delete("last-modified");
   return withSecurityHeaderBaseline(new Response(response.body, {
@@ -501,7 +502,7 @@ export async function servePublicRequest(
       request.method === "GET" ? publicationReceiptRequest(request) : request,
     );
     return request.method === "GET"
-      ? publicationProbeResponse(asset)
+      ? publicationProbeResponse(asset, deps.publicationOrigin ?? "njpbs-production")
       : withSecurityHeaderBaseline(asset);
   }
   const isContact = isContactPage(url.pathname);

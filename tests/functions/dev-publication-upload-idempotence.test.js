@@ -85,7 +85,6 @@ async function disposableUploader() {
   const checkout = path.join(directory, "checkout");
   await mkdir(path.join(checkout, "site/scripts"), { recursive: true });
   await mkdir(path.join(checkout, "cms-api"), { recursive: true });
-  await mkdir(path.join(checkout, "workers"), { recursive: true });
   await mkdir(path.join(checkout, "node_modules/.bin"), { recursive: true });
   for (const name of ["functions", "packages", "scripts", ".github"]) await symlink(path.join(root, name), path.join(checkout, name));
   for (const name of ["src", "node_modules"]) await symlink(path.join(root, "site", name), path.join(checkout, "site", name));
@@ -95,7 +94,6 @@ async function disposableUploader() {
     if (name === "cms-dev-publication.mjs") await copyFile(source, destination);
     else await symlink(source, destination);
   }
-  await copyFile(path.join(root, "workers/wrangler.public.dev.jsonc"), path.join(checkout, "workers/wrangler.public.dev.jsonc"));
   await copyFile(path.join(root, "cms-api/wrangler.dev.jsonc"), path.join(checkout, "cms-api/wrangler.dev.jsonc"));
   await writeJson(path.join(checkout, "package.json"), { type: "module" });
   const commands = path.join(directory, "provider-commands.jsonl");
@@ -169,7 +167,9 @@ globalThis.fetch = async (url, options = {}) => {
       "workers/message": candidateModule.publicWorkerCandidateMessage(publication), "workers/triggered_by": "version_upload" },
     resources: { script: {}, bindings: [{ name: "ASSETS", type: "assets" },
       { name: "CMS_API", type: "service", service: "template-dev-cms-api", entrypoint: "PublicContentEntrypoint", environment: "production" },
-      { name: "NO_BUILD_POST_RENDERER_SHA", type: "plain_text", text: identity.commitSha }],
+      { name: "NO_BUILD_POST_RENDERER_SHA", type: "plain_text", text: identity.commitSha },
+      { name: "PUBLICATION_ENVIRONMENT", type: "plain_text", text: "development" },
+      { name: "CF_VERSION_METADATA", type: "version_metadata" }],
       script_runtime: { assets: { config: { run_worker_first: true, html_handling: "force-trailing-slash", not_found_handling: "404-page" } } } },
   };
   else if (parsed.pathname.endsWith("/deployments")) {
