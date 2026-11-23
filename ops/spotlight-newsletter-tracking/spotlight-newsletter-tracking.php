@@ -123,6 +123,9 @@ function privacy_text() {
         . 'and other excluded pages. Newsletter privacy settings lets you change your choice. '
         . 'Changing to Do not allow reloads the page to stop running vendor code. '
         . 'This cannot recall information already sent.</p>'
+        . '<p>If a page starts to display video after loading, it reloads once to stop the tools. '
+        . 'A session-only page record keeps them off. If the browser cannot save that record, '
+        . 'a marker after # in the page address keeps them off after the reload.</p>'
         . '<p><a href="https://www.activecampaign.com/legal/privacy-policy">ActiveCampaign privacy policy</a>. '
         . '<a href="https://wisepops.com/privacy-policy">Wisepops privacy policy</a>. '
         . 'Use the privacy contact on this page for questions or deletion requests.</p></section>';
@@ -141,6 +144,7 @@ function footer_markup($config) {
         . 'marketing and link visits to an existing contact record. You can change your choice at any time '
         . 'in Newsletter privacy settings.</p></div>'
         . '<p data-newsletter-gpc hidden>Your browser sent a Global Privacy Control signal. Newsletter tools stay off.</p>'
+        . '<p data-newsletter-media hidden>Newsletter tools stay off on this page because it can display video.</p>'
         . '<p><a href="' . esc_url($config['policyUrl']) . '">Read the privacy policy</a></p>'
         . '<p role="status" data-newsletter-status></p><div class="spotlight-newsletter-actions" data-newsletter-choice>'
         . '<button type="button" data-newsletter-deny>Do not allow</button>'

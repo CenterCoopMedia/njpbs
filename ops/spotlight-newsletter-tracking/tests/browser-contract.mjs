@@ -17,17 +17,19 @@ const browser = await chromium.launch({ channel: "chrome", headless: true, chrom
 const version = browser.version().split(".").map(Number);
 assert.ok(version[0] > 156 || (version[0] === 156 && (version[2] > 8078 || (version[2] === 8078 && version[3] >= 73))), "Use system Chrome at or above the approved version");
 
-async function context({ gpc = false, blockedCookies = false, blockedWrites = false, saved = "", javaScriptEnabled = true } = {}) {
+async function context({ gpc = false, blockedCookies = false, blockedWrites = false, blockedSession = false, existingGlobal = false, saved = "", javaScriptEnabled = true } = {}) {
   const ctx = await browser.newContext({ javaScriptEnabled });
   if (saved) await ctx.addCookies([{ name: "spotlight-newsletter-consent", value: saved, domain: "news.example.org", path: "/", secure: true }]);
-  await ctx.addInitScript(({ gpc, blockedCookies, blockedWrites }) => {
+  await ctx.addInitScript(({ gpc, blockedCookies, blockedWrites, blockedSession, existingGlobal }) => {
     Object.defineProperty(navigator, "globalPrivacyControl", { value: gpc });
     if (blockedCookies) Object.defineProperty(document, "cookie", { get() { throw new Error("Cookie storage blocked"); }, set() {} });
     else if (blockedWrites) {
       const descriptor = Object.getOwnPropertyDescriptor(Document.prototype, "cookie");
       Object.defineProperty(document, "cookie", { get() { return descriptor.get.call(document); }, set() {} });
     }
-  }, { gpc, blockedCookies, blockedWrites });
+    if (blockedSession) Object.defineProperty(window, "sessionStorage", { get() { throw new Error("Session storage blocked"); } });
+    if (existingGlobal) window.vgo = () => {};
+  }, { gpc, blockedCookies, blockedWrites, blockedSession, existingGlobal });
   const vendors = [];
   await ctx.route("**/*", async route => {
     const url = new URL(route.request().url());
@@ -167,6 +169,31 @@ try {
     await page.getByRole("status").filter({ hasText: "Your earlier permission is still active." }).waitFor();
     assert.equal(vendors.length, 2, "Failed withdrawal must not reload and repeat tracking under the old grant");
     assert.match((await ctx.cookies()).find(cookie => cookie.name === "spotlight-newsletter-consent").value, /granted/);
+    await ctx.close();
+  }
+  for (const blockedSession of [false, true]) {
+    const { ctx, page, vendors } = await context({ saved: "v1:granted", blockedSession });
+    await page.goto("https://news.example.org/article/");
+    await page.waitForFunction(() => window.acCommands?.some(args => args[0] === "process") && window.wpCommands?.length === 2);
+    await Promise.all([page.waitForEvent("load"), page.evaluate(() => document.body.append(document.createElement("video")))]);
+    assert.equal(vendors.length, 2, "A media-exclusion reload must not record another tracked visit");
+    await page.getByRole("button", { name: "Newsletter privacy settings", exact: true }).click();
+    await page.getByText("Newsletter tools stay off on this page because it can display video.", { exact: true }).waitFor();
+    assert.equal(await page.getByRole("button", { name: "Allow newsletter tools", exact: true }).isVisible(), false);
+    await page.evaluate(() => document.body.append(document.createElement("video")));
+    await page.locator("video").waitFor({ state: "attached" });
+    assert.equal(vendors.length, 2, "Reopening a player cannot restart tracking or a reload loop");
+    if (blockedSession) assert.match(page.url(), /#spotlight-newsletter-media-off$/);
+    await ctx.close();
+  }
+  {
+    const { ctx, page, vendors } = await context({ saved: "v1:granted", existingGlobal: true });
+    await page.goto("https://news.example.org/article/");
+    await page.getByRole("status").filter({ hasText: "Newsletter tools are unavailable." }).waitFor();
+    await page.locator("#article-link").focus();
+    await page.evaluate(() => { window.dispatchEvent(new Event("focus")); document.dispatchEvent(new Event("visibilitychange")); });
+    assert.equal(await page.locator("#spotlight-newsletter-choice").isVisible(), false, "An existing vendor notice is shown only once per document");
+    assert.equal(vendors.length, 0);
     await ctx.close();
   }
   {

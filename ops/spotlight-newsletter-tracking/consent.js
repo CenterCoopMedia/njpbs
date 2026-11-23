@@ -1,6 +1,7 @@
 const COOKIE = "spotlight-newsletter-consent";
 const GRANT = "v1:granted";
 const DENY = "v1:denied";
+const MEDIA_FRAGMENT = "spotlight-newsletter-media-off";
 
 export function mountNewsletterConsent(win) {
   const doc = win.document;
@@ -11,6 +12,10 @@ export function mountNewsletterConsent(win) {
   const status = root.querySelector("[data-newsletter-status]");
   let loaded = false;
   let ending = false;
+  let existingVendor = false;
+  const mediaKey = `spotlight-newsletter-media:${win.location.pathname}${win.location.search}`;
+  let mediaBlocked = win.location.hash === `#${MEDIA_FRAGMENT}`;
+  try { mediaBlocked ||= win.sessionStorage.getItem(mediaKey) === "blocked"; } catch { /* A URL marker is the storage fallback. */ }
   let channel;
   try { channel = new win.BroadcastChannel(COOKIE); } catch { /* Focus also reconciles the saved choice. */ }
 
@@ -27,19 +32,35 @@ export function mountNewsletterConsent(win) {
   }
 
   function allowed() {
-    return decision() === GRANT && win.navigator.globalPrivacyControl !== true && !hasMedia();
+    return !mediaBlocked && decision() === GRANT && win.navigator.globalPrivacyControl !== true && !hasMedia();
   }
 
-  function endVendorDocument() {
+  function endVendorDocument(target) {
     if (ending) return;
     ending = true;
     for (const script of doc.querySelectorAll("script[data-spotlight-newsletter-vendor]")) {
       script.onload = null;
       script.remove();
     }
-    if (win.vgo?.q) win.vgo.q.length = 0;
-    if (win.wisepops?.q) win.wisepops.q.length = 0;
-    win.location.reload();
+    if (loaded && win.vgo?.q) win.vgo.q.length = 0;
+    if (loaded && win.wisepops?.q) win.wisepops.q.length = 0;
+    if (target) win.location.replace(target);
+    else win.location.reload();
+  }
+
+  function excludeMedia() {
+    mediaBlocked = true;
+    let target;
+    try {
+      win.sessionStorage.setItem(mediaKey, "blocked");
+      if (win.sessionStorage.getItem(mediaKey) !== "blocked") throw new Error("Exclusion was not saved");
+    } catch {
+      const address = new win.URL(win.location.href);
+      address.hash = MEDIA_FRAGMENT;
+      target = address.href;
+    }
+    if (loaded || target) endVendorDocument(target);
+    else display();
   }
 
   function vendorScript(src) {
@@ -52,8 +73,9 @@ export function mountNewsletterConsent(win) {
   }
 
   function load() {
-    if (loaded || !allowed()) return;
+    if (loaded || existingVendor || !allowed()) return;
     if (win.vgo || win.wisepops) {
+      existingVendor = true;
       status.textContent = "Newsletter tools are unavailable. Your privacy choice is saved.";
       root.hidden = false;
       return;
@@ -84,12 +106,17 @@ export function mountNewsletterConsent(win) {
 
   function display() {
     const gpc = win.navigator.globalPrivacyControl === true;
-    for (const node of root.querySelectorAll("[data-newsletter-choice]")) node.hidden = gpc;
+    for (const node of root.querySelectorAll("[data-newsletter-choice]")) node.hidden = gpc || mediaBlocked;
     root.querySelector("[data-newsletter-gpc]").hidden = !gpc;
-    root.querySelector("[data-newsletter-close]").hidden = !gpc;
+    root.querySelector("[data-newsletter-media]").hidden = !mediaBlocked;
+    root.querySelector("[data-newsletter-close]").hidden = !gpc && !mediaBlocked;
   }
 
   function reconcile() {
+    if (!mediaBlocked && hasMedia()) {
+      excludeMedia();
+      return;
+    }
     display();
     if (loaded && !allowed()) {
       endVendorDocument();
@@ -117,7 +144,7 @@ export function mountNewsletterConsent(win) {
   opener.addEventListener("click", () => {
     display();
     root.hidden = false;
-    root.querySelector(win.navigator.globalPrivacyControl === true
+    root.querySelector(win.navigator.globalPrivacyControl === true || mediaBlocked
       ? "[data-newsletter-close]" : "[data-newsletter-deny]").focus();
   });
   root.querySelector("[data-newsletter-allow]").addEventListener("click", () => choose(GRANT));
@@ -130,13 +157,17 @@ export function mountNewsletterConsent(win) {
   win.addEventListener("focus", reconcile);
   win.addEventListener("pageshow", reconcile);
   doc.addEventListener("visibilitychange", reconcile);
+  new win.MutationObserver(reconcile).observe(doc.body, {
+    childList: true, subtree: true, attributes: true,
+    attributeFilter: ["src", "data-video-id", "data-child-directed", "data-remodal-target"],
+  });
   doc.addEventListener("focusin", event => {
     if (!root.hidden && !root.contains(event.target)) root.hidden = true;
   });
   display();
   opener.hidden = false;
-  root.hidden = win.navigator.globalPrivacyControl === true || [GRANT, DENY].includes(decision());
-  load();
+  root.hidden = mediaBlocked || win.navigator.globalPrivacyControl === true || [GRANT, DENY].includes(decision());
+  reconcile();
 }
 
 if (typeof window !== "undefined") mountNewsletterConsent(window);

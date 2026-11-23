@@ -23,8 +23,13 @@ including nonvideo frames, because their contents can change independently.
 Unrendered Handlebars templates do not constitute a player. Existing shared
 CDN libraries are allowed by exact package path and version. The first-party
 client rechecks known players before requesting vendors and before processing
-the ActiveCampaign page visit. New code that can insert a player needs the
-eligibility review described below before it is enabled with this package.
+the ActiveCampaign page visit. If a known player appears after loading, the
+client saves a per-page session exclusion before ending the vendor document.
+The replacement document keeps the tools off, even before that player is
+opened again. If session storage is unavailable, a URL fragment carries the
+exclusion through navigation. This can reload a newly opened player once;
+it does not repeatedly reload or record another tracking visit. New code that
+can insert a player still needs the eligibility review described below.
 
 Admin, authenticated, preview, private, password-protected, Kids and descendant,
 child-directed, search, feed, REST, embedded, non-GET, and nonproduction requests
