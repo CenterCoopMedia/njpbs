@@ -61,7 +61,7 @@ it("derives every exact baseline file, family and canonical digest from both sea
   expect(manifest.members.find(member => member.path === "/wiki/index.html")).toMatchObject({ family: "wiki", dynamic: false });
   expect(manifest.members.find(member => member.path === "/schedule/downloads/nj-pbs-schedule.pdf")).toMatchObject({ family: "schedule", dynamic: true });
   expect(manifest.members.find(member => member.path === archiveShard)).toMatchObject({
-    mime: "application/json; charset=utf-8", family: "aggregate", source: "aggregate", dynamic: true,
+    mime: "application/json; charset=utf-8", family: "static", source: "static", dynamic: false,
   });
   const canonical = JSON.stringify(manifest.members.map(member => ({ path: member.path, mime: member.mime, size: member.size,
     sha256: member.sha256, family: member.family, source: member.source, dynamic: member.dynamic })));

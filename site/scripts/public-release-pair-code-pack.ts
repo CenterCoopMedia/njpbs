@@ -65,11 +65,11 @@ function classification(file: string) {
   else if (/^\/sitemap(?:-[A-Za-z0-9_-]+)?\.xml$/.test(file)) family = "sitemap";
   else if (file.startsWith("/feeds/") || file.startsWith("/_external-content/") || file === "/api/v1/content.json" ||
       /^\/api\/v1\/content\/[0-9]+\.json$/.test(file) || ["/rss.xml", "/feed.xml", "/atom.xml"].includes(file)) family = "feed";
-  else if (file.startsWith("/api/") || ["/_publication.json", "/_content-status.json", "/_home-sources.json"].includes(file) ||
-      file.startsWith(SPOTLIGHT_ARCHIVE_REDIRECT_ASSETS) && /^[0-9a-f]{2}\.json$/.test(file.slice(SPOTLIGHT_ARCHIVE_REDIRECT_ASSETS.length))) family = "aggregate";
+  else if (file.startsWith("/api/") || ["/_publication.json", "/_content-status.json", "/_home-sources.json"].includes(file)) family = "aggregate";
   else if (extension === "html") family = "fallbackAsset";
   else if (file.startsWith("/_astro/") || file.startsWith("/posts/_no-build-assets/") || ["js", "mjs", "css", "wasm"].includes(extension)) family = "clientAsset";
   else if (file === "/_design-system-tokens.json" || /^(image\/|font\/|video\/|audio\/)/.test(mime) ||
+      file.startsWith(SPOTLIGHT_ARCHIVE_REDIRECT_ASSETS) && /^[0-9a-f]{2}\.json$/.test(file.slice(SPOTLIGHT_ARCHIVE_REDIRECT_ASSETS.length)) ||
       file.startsWith("/meeting-notices/") && extension === "pdf" ||
       ["txt", "md", "webmanifest", "csv"].includes(extension) || ["_headers", "_redirects", "CNAME", "LICENSE"].includes(path.posix.basename(file))) family = "static";
   else fail(); // New aggregate paths must be added to this authoritative census.

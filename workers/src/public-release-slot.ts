@@ -3,6 +3,7 @@ import type { PairServingDecision } from "../../functions/lib/public-release-ser
 import type { PairProofEvidence, PublicSlot, SlotReply } from "./public-release-router";
 import { bytesDigest, canonicalReleaseValue, matchesSelectedPair, originFor, responseCacheKey, stripInternalHeaders, type SelectorReceipt } from "../../packages/content-core/src/public-release-routing";
 import { SECURITY_HEADER_BASELINE } from "../../packages/content-core/src/public-security-headers";
+import { SPOTLIGHT_ARCHIVE_REDIRECT_ASSETS } from "../../packages/content-core/src/spotlight-archive-paths";
 import { PUBLIC_GONE_BRANCH_HEADER } from "./public-gone";
 import { readBoundedPairObject, readPublicReleasePairOutput, verifyPairRouteTarget, isPublicPairRequestPath, type PairReadStore } from "./public-release-view-reader";
 import protocol from "../../functions/lib/public-release-pair.js";
@@ -97,7 +98,9 @@ export function createPublicReleaseSlot({ pair, workerVersionId, store, getDecis
           new URL(request.url).origin !== originFor(pair.environment) || !["GET", "HEAD"].includes(request.method)) fail();
       let path: string;
       try { path = decodeURI(new URL(request.url).pathname); } catch { return { kind: "response", response: none(404) }; }
-      if (!isPublicPairRequestPath(path)) return { kind: "response", response: none(404) };
+      if (path.startsWith(SPOTLIGHT_ARCHIVE_REDIRECT_ASSETS) || !isPublicPairRequestPath(path)) {
+        return { kind: "response", response: none(404) };
+      }
       const decide = () => {
         const remaining = Math.floor(deadline - performance.now());
         if (remaining < 1) fail();

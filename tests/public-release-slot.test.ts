@@ -166,7 +166,8 @@ it("rechecks an absent route after storage I/O and reselects when ownership chan
   getDecision.mockReset(); getDecision.mockResolvedValueOnce(decision).mockResolvedValue({ ...decision, authorityDigest: "e".repeat(64) });
   expect(await slot().serve(missing, selection())).toEqual({ kind: "reselect" });
 });
-it.each(["/bad%xy/", "/a+b/", "/foo%20bar/", "/x//y", "/assets/cafe%CC%81.svg", "/_pair-compiled/server.js"])("returns 404 before authority for malformed/private path %s", async path => {
+it.each(["/bad%xy/", "/a+b/", "/foo%20bar/", "/x//y", "/assets/cafe%CC%81.svg", "/_pair-compiled/server.js",
+  "/%5Fspotlight-archive-redirects/a1.json"])("returns 404 before authority for malformed/private path %s", async path => {
   const result = await slot().serve(new Request(`https://dev-public.example.org${path}`), selection());
   expect(result.kind === "response" && result.response.status).toBe(404); expect(getDecision).not.toHaveBeenCalled();
   expect(result.kind === "response" && result.response.headers.get("x-content-type-options")).toBe("nosniff");

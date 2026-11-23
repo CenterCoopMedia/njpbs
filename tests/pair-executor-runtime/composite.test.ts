@@ -19,6 +19,8 @@ import { derivePublicReleasePairPublicReceipts } from "../../site/scripts/public
 import { deriveFrozenPublicReleasePairCatalogImages, openFrozenPublicReleasePairCatalogImages } from "../../site/scripts/public-release-pair-catalog-image-storage";
 import work from "../../functions/lib/public-release-pair-work.js";
 import view from "../../functions/lib/public-release-pair-view.js";
+import { publicReleaseCodePackFixture } from "../helpers/public-release-code-pack";
+import { SPOTLIGHT_ARCHIVE_REDIRECT_ASSETS, spotlightArchiveRedirectShard } from "../../packages/content-core/src/spotlight-archive-paths";
 let runtime: Miniflare;
 beforeAll(async () => { runtime = new Miniflare({ workers: [{ config: { name: "composite-source", type: "worker", compatibilityDate: "2026-07-09",
   manifest: { mainModule: "index.js", modules: { "index.js": { type: "esm", contents: "export default {fetch(){return new Response(null,{status:404})}}" } } },
@@ -88,7 +90,12 @@ it.each(["complete", "crash"])("stages the complete real H composite under its o
   const firestore = isolatedFirestore(`composite-${mode}-${Date.now()}`), store = await runtime.getR2Bucket("CONTENT"), directory = await mkdtemp(path.join(os.tmpdir(), "composite-stage-"));
   let fixture;
   try {
-    fixture = await publicReleasePairCompositeFixture({ firestore, store, directory });
+    const alias = "/2012/02/old-transit/";
+    const shard = `${SPOTLIGHT_ARCHIVE_REDIRECT_ASSETS}${spotlightArchiveRedirectShard(alias)}.json`;
+    fixture = await publicReleasePairCompositeFixture({ firestore, store, directory,
+      prepareArtifacts: (directory, sourceInputs) => publicReleaseCodePackFixture(directory, "b".repeat(40), sourceInputs,
+        { [shard.slice(1)]: JSON.stringify({ [alias]: "/posts/shadow-fixture/" }) }),
+    });
     const value = await stagedPublicReleasePairCompositeFixture(fixture, store, mode === "crash");
     const receipt = (await firestore.doc(`${fixture.base}/receipts/${fixture.taskId}`).get()).data();
     if (mode === "crash") {
@@ -97,6 +104,7 @@ it.each(["complete", "crash"])("stages the complete real H composite under its o
     }
     const opened = await openStagedPublicReleasePairComposite(value.owner);
     await opened.verifyAll();
+    expect(opened.manifest.members.some(row => row.path === shard)).toBe(false);
     expect(opened.manifest.members.map(row => row.role)).toEqual(expect.arrayContaining(["route", "auxiliary", "search", "content-feed", "catalog"]));
     for (const output of value.outputs) expect((await opened.readMember(output.path)).body).toEqual(output.bytes);
     await stagePublicReleasePairComposite(value.owner);
