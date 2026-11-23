@@ -5,6 +5,27 @@ const {
   parseSourceMediaRendition,
   sourceMediaViewingCopySummary,
 } = require("./source-media-rendition");
+const { METADATA_BOUND_FIELDS, parseMetadataBounds } = require("./media-browse-metadata");
+
+/** @typedef {import("./media-browse-metadata").MediaMetadataBounds} MediaMetadataBounds */
+
+/**
+ * @typedef {MediaMetadataBounds & {
+ *   sourceId: string,
+ *   tagsOnly?: true,
+ *   pendingIds?: string[],
+ *   assetId?: string,
+ *   posters?: boolean,
+ *   q?: string,
+ *   tag?: string,
+ *   createdBy?: string,
+ *   rightsStatus?: string,
+ *   metadataUpdateRequested?: true,
+ *   sort?: string,
+ *   limit?: number,
+ *   cursor?: {id: string, sort: string | number} | null,
+ * }} SourceMediaListRequest
+ */
 
 const MAX_QUERY_LENGTH = 160;
 const MAX_PAGE_SIZE = 100;
@@ -155,6 +176,7 @@ function parseCursor(value, request) {
       (decoded.createdBy ?? "") !== request.createdBy ||
       (decoded.rightsStatus ?? "") !== request.rightsStatus ||
       decoded.metadataUpdateRequested !== request.metadataUpdateRequested ||
+      METADATA_BOUND_FIELDS.some(field => decoded[field] !== request[field]) ||
       (decoded.order ?? (request.q ? "name_asc" : "updated_desc")) !== request.sort ||
       typeof decoded.id !== "string" ||
       !ID_PATTERN.test(decoded.id) ||
@@ -168,9 +190,16 @@ function parseCursor(value, request) {
   }
 }
 
+/**
+ * @param {MediaMetadataBounds & {
+ *   sourceId: string, q: string, id: string, sort: string | number,
+ *   tag?: string, createdBy?: string, rightsStatus?: string, metadataUpdateRequested?: boolean, order?: string,
+ * }} cursor
+ */
 function encodeCursor({ sourceId, q, tag = "", createdBy = "", rightsStatus = "", metadataUpdateRequested,
-  order = q ? "name_asc" : "updated_desc", id, sort }) {
-  return Buffer.from(JSON.stringify({ sourceId, q, tag, createdBy, rightsStatus, metadataUpdateRequested, order, id, sort }), "utf8")
+  updatedFrom, updatedTo, minDuration, maxDuration, aspect, order = q ? "name_asc" : "updated_desc", id, sort }) {
+  return Buffer.from(JSON.stringify({ sourceId, q, tag, createdBy, rightsStatus, metadataUpdateRequested,
+    updatedFrom, updatedTo, minDuration, maxDuration, aspect, order, id, sort }), "utf8")
     .toString("base64url");
 }
 
@@ -195,10 +224,11 @@ function normalizeSourceMediaRightsStatus(value, { optional = false } = {}) {
   return status;
 }
 
+/** @returns {SourceMediaListRequest} */
 function parseSourceMediaListRequest(value) {
   rejectUnknownFields(value, new Set([
     "sourceId", "assetId", "pendingIds", "cursor", "limit", "q", "tag", "createdBy", "rightsStatus", "sort", "posters", "tagsOnly",
-    "metadataUpdateRequested",
+    "metadataUpdateRequested", ...METADATA_BOUND_FIELDS,
   ]), "Request");
   const sourceId = requiredId(value.sourceId, "Source id");
   if (Object.hasOwn(value, "tagsOnly")) {
@@ -232,9 +262,10 @@ function parseSourceMediaListRequest(value) {
   if (metadataUpdateRequested !== undefined && metadataUpdateRequested !== true) {
     throw new SourceMediaValidationError("Metadata update requested must be true when present");
   }
-  // A single indexed filter keeps every supported query bounded without a filter cross-product.
-  if ([tag, createdBy, rightsStatus, metadataUpdateRequested].filter(Boolean).length > 1) {
-    throw new SourceMediaValidationError("Choose one tag, uploader, rights, or metadata review filter at a time");
+  const bounds = parseMetadataBounds(value, SourceMediaValidationError);
+  if ([tag, createdBy, rightsStatus, metadataUpdateRequested, bounds.updatedFrom || bounds.updatedTo,
+    bounds.minDuration !== undefined || bounds.maxDuration !== undefined, bounds.aspect].filter(Boolean).length > 1) {
+    throw new SourceMediaValidationError("Choose one filter property at a time");
   }
   const requestedSort = value.sort ?? "updated_desc";
   if (!["updated_desc", "updated_asc", "name_asc", "size_desc", "size_asc"].includes(requestedSort)) {
@@ -250,7 +281,7 @@ function parseSourceMediaListRequest(value) {
       `Limit must be a whole number from 1 through ${MAX_PAGE_SIZE}`,
     );
   }
-  const request = { sourceId, q, tag, createdBy, rightsStatus, metadataUpdateRequested, sort, limit };
+  const request = { sourceId, q, tag, createdBy, rightsStatus, metadataUpdateRequested, ...bounds, sort, limit };
   return { ...request, cursor: parseCursor(value.cursor, request), ...posters };
 }
 

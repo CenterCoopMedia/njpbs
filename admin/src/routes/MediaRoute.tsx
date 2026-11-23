@@ -95,6 +95,7 @@ import {
 import {
   DEFAULT_MEDIA_QUERY,
   encodeMediaLocation,
+  mediaAssetLookupQuery,
   parseMediaLocation,
   type MediaLocationState,
 } from "../lib/media-query";
@@ -216,7 +217,7 @@ export function MediaLibrarySurface({
   const routeKey = useLocation().key;
   const locationKey = searchParams.toString();
   const location = useMemo(() => {
-    const parsed = parseMediaLocation(locationKey);
+    const parsed = parseMediaLocation(locationKey, audioLibrary);
     return { ...parsed, query: { ...parsed.query, kinds: audioLibrary ? [] : parsed.query.kinds.filter(kind => kind !== "audio") } };
   }, [locationKey, audioLibrary]);
   const libraryLabel = audioLibrary ? "Audio" : "Images";
@@ -617,7 +618,7 @@ export function MediaLibrarySurface({
       notice.show("Finish editing asset details before opening a saved view.", { tone: "error" });
       return;
     }
-    const saved = parseMediaLocation(view.query);
+    const saved = parseMediaLocation(view.query, audioLibrary);
     setSearchParams(
       encodeMediaLocation({ ...saved.query, page: 1 }, null, view.id),
       { replace: true },
@@ -719,7 +720,7 @@ export function MediaLibrarySurface({
     setMetadataDirty(false);
     if (relatedSelection?.context === selectionContext && relatedSelection.asset.id === location.selectedId) {
       const id = relatedSelection.asset.id;
-      void loadMedia({ ...location.query, q: "", page: 1, assetIds: [id] }).then(fresh => {
+      void loadMedia(mediaAssetLookupQuery(id, location.query)).then(fresh => {
         const asset = fresh.records.find(record => record.id === id);
         setRelatedSelection(previous => previous?.context === selectionContext && previous.asset.id === id
           ? (asset ? { context: selectionContext, asset } : null) : previous);
@@ -880,9 +881,7 @@ export function MediaLibrarySurface({
   }
   const categoryLabel = useCallback((id: string) => mediaCategoryLabel(categories, id), [categories]);
   const filtered =
-    Boolean(location.query.q) ||
-    location.query.categories.length > 0 ||
-    location.query.kinds.length > 0;
+    Boolean(location.query.q) || filterChips(location.query, categoryLabel).length > 0;
 
   function recordUploadedAsset(
     asset: MediaAssetSummary,

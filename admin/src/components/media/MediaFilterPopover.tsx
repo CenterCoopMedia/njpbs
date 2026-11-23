@@ -4,6 +4,7 @@ import { Icon } from "../ui/Icon";
 import { Popover } from "../ui/Popover";
 import { Button, TextInput } from "../ui/Primitives";
 import type { SavedMediaViewsController } from "../../lib/use-saved-media-views";
+import { MEDIA_ASPECTS, parseMediaRange, type MediaMetadataBounds, type MediaRange } from "../../lib/media-browse-metadata";
 import "./MediaFilterPopover.css";
 
 export type MediaFilterProperty = string;
@@ -28,11 +29,12 @@ export interface MediaFilterPropertyModel {
   label: string;
   appliedCount?: number;
   /** Actions are tag-like choices that do not stay selected in this picker. */
-  picker: "options" | "actions" | "text";
+  picker: "options" | "actions" | "text" | "range";
   options: readonly MediaFilterOptionModel[];
   hint?: string;
   emptyLabel?: string;
   text?: { value: string; onChange: (value: string) => void; placeholder: string; maxLength: number; error?: string };
+  range?: { kind: MediaRange; from?: string | number; to?: string | number; onApply: (bounds: MediaMetadataBounds) => void };
 }
 
 export interface MediaFilterPopoverProps {
@@ -49,9 +51,73 @@ export interface MediaFilterPopoverProps {
   savedViews?: SavedMediaViewsController;
 }
 
+export function metadataFilterProperties(query: MediaMetadataBounds, {
+  duration, aspect, requested, applyRange,
+}: {
+  duration: boolean;
+  aspect: boolean;
+  requested: boolean;
+  applyRange: (bounds: MediaMetadataBounds) => void;
+}): MediaFilterPropertyModel[] {
+  const properties: MediaFilterPropertyModel[] = [{
+    id: "updated", label: "Last updated", picker: "range", options: [],
+    appliedCount: Number(Boolean(query.updatedFrom || query.updatedTo)),
+    hint: "Both dates are inclusive and use UTC.",
+    range: { kind: "updated", from: query.updatedFrom, to: query.updatedTo, onApply: applyRange },
+  }];
+  if (duration) properties.push({
+    id: "duration", label: "Duration", picker: "range", options: [],
+    appliedCount: Number(query.minDuration !== undefined || query.maxDuration !== undefined),
+    hint: "Both bounds are inclusive. Only files with a known duration match.",
+    range: { kind: "duration", from: query.minDuration, to: query.maxDuration, onApply: applyRange },
+  });
+  if (aspect) properties.push({
+    id: "aspect", label: "Aspect", picker: "options", appliedCount: query.aspect ? 1 : 0,
+    options: MEDIA_ASPECTS.map(option => ({ ...option, selected: query.aspect === option.value })),
+  });
+  properties.push({
+    id: "metadata", label: "Metadata review", picker: "options", appliedCount: requested ? 1 : 0,
+    options: [{ value: "requested", label: "Metadata update requested", selected: requested }],
+  });
+  return properties;
+}
+
 const FIRST_OPTION = ".media-filter-option input, .media-filter-tag, .media-filter-text-input";
 
 const itemCount = (count: number) => `${count.toLocaleString("en-US")} ${count === 1 ? "item" : "items"}`;
+
+function FilterRange({ range, close }: {
+  range: NonNullable<MediaFilterPropertyModel["range"]>;
+  close: () => void;
+}) {
+  const [from, setFrom] = useState(String(range.from ?? ""));
+  const [to, setTo] = useState(String(range.to ?? ""));
+  const [invalid, setInvalid] = useState(false);
+  const date = range.kind === "updated";
+  const inputType = date ? { type: "date", max: "9999-12-31" } : { type: "number", min: 0, step: 1 };
+  return (
+    <form className="media-filter-text" onSubmit={event => {
+      event.preventDefault();
+      const bounds = parseMediaRange(range.kind, from, to);
+      if (!bounds) { setInvalid(true); return; }
+      range.onApply(bounds);
+      close();
+    }}>
+      <label>{date ? "From date" : "Minimum seconds"}
+        <TextInput {...inputType} className="media-filter-text-input" value={from}
+          onChange={event => { setFrom(event.target.value); setInvalid(false); }} aria-invalid={invalid || undefined} />
+      </label>
+      <label>{date ? "Through date" : "Maximum seconds"}
+        <TextInput {...inputType} className="media-filter-text-input" value={to}
+          onChange={event => { setTo(event.target.value); setInvalid(false); }} aria-invalid={invalid || undefined} />
+      </label>
+      {invalid ? <p className="media-filter-text-error" role="alert">
+        {date ? "Enter valid dates with the start on or before the end." : "Enter whole seconds with the minimum at or below the maximum."}
+      </p> : null}
+      <Button type="submit">Apply {date ? "dates" : "duration"}</Button>
+    </form>
+  );
+}
 
 // The Filter popover. The first level lists the
 // configured properties; choosing one swaps the body to that property's bounded picker.
@@ -130,6 +196,12 @@ export function MediaFilterPopover({
   }
 
   function picker(property: MediaFilterPropertyModel) {
+    if (property.range) {
+      return <>
+        {property.hint ? <p className="media-filter-hint">{property.hint}</p> : null}
+        <FilterRange key={property.id} range={property.range} close={() => onOpenChange(false)} />
+      </>;
+    }
     if (property.picker === "text" && property.text) {
       return <>
         {property.hint ? <p className="media-filter-hint">{property.hint}</p> : null}

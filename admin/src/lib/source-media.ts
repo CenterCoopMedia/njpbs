@@ -1,4 +1,5 @@
 import type { OriginalAvailability } from "./video-original";
+import type { MediaMetadataBounds } from "./media-browse-metadata";
 import { postFunction } from "./functions";
 import type { MediaTabCounts } from "./media-session-cache";
 import { invalidateVideoSearchCorpus, videoSearchCacheRevision } from "./video-search-session-cache";
@@ -129,7 +130,7 @@ export async function listMediaSources(token: string | null, options: { counts?:
     : source) };
 }
 
-export interface SourceMediaQuery {
+export interface SourceMediaQuery extends MediaMetadataBounds {
   sourceId: string;
   assetId?: string;
   cursor?: string;

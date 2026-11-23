@@ -72,7 +72,6 @@ export function MediaLibraryResults({
               title={keywordFilter ? "No keyword matches" : "No media found"}
               description="Change or clear the current filters."
               action={filtered ? (
-                // Clears the search, Type and Category; sort stays.
                 <Button onClick={clearFilters}>Clear filters</Button>
               ) : undefined}
             />

@@ -221,6 +221,26 @@ describe('private video search with an older Function', () => {
     mount({ tag: 'other', createdBy: 'someone-else', rightsStatus: 'pending' }); await flush();
     expect(screen.queryByRole('button', { name: /at 12s$/ })).not.toBeInTheDocument();
   });
+  it.each([
+    [{ updatedTo: '2026-09-14' }, { updatedAt: '2026-09-15T00:00:00Z' }],
+    [{ minDuration: 60 }, { viewingCopy: { state: 'ready', width: 1920, height: 1080 } }],
+    [{ aspect: 'landscape' }, { viewingCopy: { state: 'ready', width: 1080, height: 1920, durationSeconds: 60 } }],
+  ])('filters transcript matches by %j and rechecks refreshed metadata before opening', async (filters, changes) => {
+    const matching = { ...asset, updatedAt: '2026-09-14T23:59:59.999Z',
+      viewingCopy: { state: 'ready', width: 1920, height: 1080, durationSeconds: 60 } };
+    vi.mocked(legacyPostFunction).mockResolvedValueOnce(batch([
+      item({ asset: matching }),
+      item({ asset: { ...matching, ...changes, id: 'excluded', name: 'Nonmatching meeting' },
+        chunks: [{ ...chunk, id: 'excluded/transcript/2/0', assetId: 'excluded' }] }),
+    ]));
+    vi.mocked(listSourceMedia).mockResolvedValueOnce({ records: [{ ...matching, ...changes }] } as never);
+    mount(filters); await flush();
+    expect(screen.queryByRole('button', { name: 'Nonmatching meeting at 12s' })).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Meeting at 12s' }));
+    await flush();
+    expect(listSourceMedia).toHaveBeenCalledWith('token', { sourceId: 'video-library', assetId: 'video' });
+    expect(onOpen).not.toHaveBeenCalled();
+  });
   it('filters related transcript matches and rechecks the metadata request before opening', async () => {
     const requestedAsset = { ...asset, id: 'requested', name: 'Review meeting', metadataUpdateRequested: true };
     vi.mocked(legacyPostFunction).mockResolvedValue(batch([

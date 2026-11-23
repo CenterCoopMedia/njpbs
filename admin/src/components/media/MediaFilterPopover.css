@@ -216,6 +216,12 @@
   margin-bottom: var(--cms-space-3);
 }
 
+.media-filter-text label {
+  display: grid;
+  gap: var(--cms-space-1);
+  min-width: 0;
+}
+
 .media-filter-text-error {
   margin: 0 0 var(--cms-space-2);
   color: var(--cms-danger);

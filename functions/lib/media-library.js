@@ -41,6 +41,7 @@ function originalDownload(data) {
 }
 
 const { projectVoiceoverMedia } = require("./voiceover-media");
+const { METADATA_BOUND_FIELDS, parseMetadataBounds, hasMetadataBounds, matchesMediaMetadata } = require("./media-browse-metadata");
 
 // This pure module owns the private media-library response contract. Browser clients never read
 // media_assets directly. The HTTP boundary authenticates the caller and filters each record by
@@ -83,6 +84,8 @@ const REQUEST_FIELDS = new Set([
   "profilePhotoScope",
   "paging",
   "cursor",
+  "metadataUpdateRequested",
+  ...METADATA_BOUND_FIELDS,
 ]);
 
 const DEFAULT_MEDIA_QUERY = Object.freeze({
@@ -259,6 +262,24 @@ function parseMediaListRequest(body) {
     );
   }
 
+  const bounds = parseMetadataBounds(body, MediaLibraryValidationError);
+  const { metadataUpdateRequested } = body;
+  if (metadataUpdateRequested !== undefined && metadataUpdateRequested !== true) {
+    throw new MediaLibraryValidationError("Metadata update requested must be true when present");
+  }
+  if ((assetIds || body.profilePhotoScope) && (metadataUpdateRequested || hasMetadataBounds(bounds))) {
+    throw new MediaLibraryValidationError("Metadata filters require a browse request");
+  }
+  if ((bounds.minDuration !== undefined || bounds.maxDuration !== undefined) && !kinds.includes("audio")) {
+    throw new MediaLibraryValidationError("Duration filtering requires audio");
+  }
+  if (bounds.aspect && kinds.length && !kinds.includes("image")) {
+    throw new MediaLibraryValidationError("Aspect filtering requires images");
+  }
+  if (bounds.aspect && (bounds.minDuration !== undefined || bounds.maxDuration !== undefined)) {
+    throw new MediaLibraryValidationError("Aspect and duration cannot be combined here");
+  }
+
   return {
     q,
     categories,
@@ -266,6 +287,8 @@ function parseMediaListRequest(body) {
     sort,
     direction,
     page,
+    ...bounds,
+    ...(metadataUpdateRequested ? { metadataUpdateRequested } : {}),
     ...(pageSize === undefined ? {} : { pageSize }),
     ...(assetIds === undefined ? {} : { assetIds }),
     ...(body.paging ? { paging: body.paging } : {}),
@@ -541,6 +564,16 @@ function countBy(values, keys) {
   );
 }
 
+function matchesLibraryMetadata(asset, query) {
+  return matchesMediaMetadata(query, {
+    updatedAt: asset.updatedAt,
+    metadataUpdateRequested: asset.metadataUpdateRequested,
+    width: asset.kind === "image" ? asset.width : undefined,
+    height: asset.kind === "image" ? asset.height : undefined,
+    duration: asset.voiceover?.duration_seconds,
+  });
+}
+
 function selectMediaLibrary(
   records,
   query,
@@ -553,11 +586,8 @@ function selectMediaLibrary(
     ? records
     : records.filter((asset) => DEFAULT_MEDIA_KINDS.includes(asset.kind));
   const search = query.q.toLocaleLowerCase("en-US");
-  const searched =
-    search === ""
-      ? scoped
-      : scoped.filter((asset) =>
-        mediaSearchText(asset, categoryLabels).includes(search));
+  const searched = scoped.filter((asset) => matchesLibraryMetadata(asset, query) &&
+    (search === "" || mediaSearchText(asset, categoryLabels).includes(search)));
   const beforeCategory =
     query.kinds.length === 0
       ? searched
@@ -625,6 +655,7 @@ module.exports = {
   isMediaAssetId,
   mediaAssetSummary,
   mediaSearchText,
+  matchesLibraryMetadata,
   mediaDisplayUrl,
   parseMediaIfMatch,
   parseMediaListRequest,

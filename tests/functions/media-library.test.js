@@ -87,6 +87,27 @@ const assets = [
 ];
 
 describe("media library contract", () => {
+  it("matches inclusive UTC days, known orientation and measured voiceover duration", () => {
+    const records = [
+      { ...assets[0], updatedAt: "2026-08-12T20:00:00-04:00", metadataUpdateRequested: true },
+      { ...assets[1], updatedAt: "2026-08-13T23:59:59.999Z", metadataUpdateRequested: true },
+      { ...assets[2], updatedAt: "2026-08-14T00:00:00Z", metadataUpdateRequested: true },
+      { ...assets[0], id: "voiceover", kind: "audio", voiceover: { duration_seconds: 20 } },
+      { ...assets[0], id: "unmeasured", kind: "audio" },
+    ];
+    const list = query => selectMediaLibrary(records, parseMediaListRequest(query)).records.map(row => row.id);
+    const sameDay = { updatedFrom: "2026-08-13", updatedTo: "2026-08-13", metadataUpdateRequested: true };
+    expect(list(sameDay).sort()).toEqual(["annual-report", "studio-one"]);
+    expect(list({ ...sameDay, aspect: "landscape" })).toEqual(["studio-one"]);
+    expect(list({ kinds: ["audio"], minDuration: 20, maxDuration: 20 })).toEqual(["voiceover"]);
+    expect(list({ kinds: ["audio"], maxDuration: 19 })).toEqual([]);
+    for (const query of [{ updatedFrom: "2026-02-30" }, { updatedFrom: "2026-02-02", updatedTo: "2026-02-01" },
+      { minDuration: 10 }, { kinds: ["audio"], maxDuration: 2.5 }, { kinds: ["document"], aspect: "landscape" },
+      { metadataUpdateRequested: false }, { assetIds: ["studio-one"], metadataUpdateRequested: true }]) {
+      expect(() => parseMediaListRequest(query)).toThrow(MediaLibraryValidationError);
+    }
+  });
+
   it("projects original availability and opaque approval tokens through a second list projection", () => {
     const contentHash = "b".repeat(64);
     const master = { retained: true, contentHash, key: `masters/bb/${contentHash}.jpg`,

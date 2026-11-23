@@ -142,6 +142,24 @@ describe("private indexed discovery", () => {
     expect(last.nextCursor).toBeNull();
   });
 
+  it("binds metadata filters to a stable cursor across images and documents", async () => {
+    const requested = { metadataUpdateRequested: true };
+    await Promise.all([
+      put("a-unrequested", 0),
+      put("b-image", 1, { ...requested, source: "site_seed" }),
+      put("c-doc", 1, { ...requested, source: "upload", kind: "document", mimeType: "application/pdf", width: null, height: null }),
+      put("d-old", 2, { ...requested, updatedAt: "2025-12-31T23:59:59.999Z" }),
+    ]);
+    const filters = body({ ...requested, updatedFrom: "2026-01-01", pageSize: 1 });
+    const first = await page(filters);
+    expect(first.records).toMatchObject([{ id: "b-image", source: "site_seed" }]);
+    expect(first.nextCursor).toEqual(expect.any(String));
+    await expect(page({ ...filters, aspect: "landscape", cursor: first.nextCursor })).rejects.toMatchObject({ status: 409 });
+    const next = await page({ ...filters, cursor: first.nextCursor, page: 2 });
+    expect(next.records).toMatchObject([{ id: "c-doc", source: "upload" }]);
+    expect((await exhaust(filters)).last).toMatchObject({ allCount: null, total: 2 });
+  });
+
   it("confines read-only staff to audio across all categories", async () => {
     const reader = {
       uid: "audio-reader", emailVerified: true, approvedActive: true,
