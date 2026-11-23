@@ -166,7 +166,7 @@ function convertWordPressStory({ html, sourceRef, permalink, mediaByUrl = new Ma
         || args.includes("=") || args.endsWith("/") || closingShortcodes.has(name.toLowerCase()));
     }
     let start = 0;
-    for (const match of value.matchAll(/\[\[([a-z][\w:-]*)([^\[\]]*)\]\]|\[(\/?)([a-z][\w:-]*)([^\[\]]*)\]/gi)) {
+    for (const match of value.matchAll(/\[\[([a-z][\w:-]*)([^[\]]*)\]\]|\[(\/?)([a-z][\w:-]*)([^[\]]*)\]/gi)) {
       const [, escapedName, escapedArgs, closing, name, args] = match;
       if (!recognized(escapedName ?? name, escapedArgs ?? args, closing)) continue;
       addText(value.slice(start, match.index));
@@ -330,8 +330,11 @@ function convertWordPressStory({ html, sourceRef, permalink, mediaByUrl = new Ma
     }
     if (tag === "ul" || tag === "ol") {
       const items = richOnly(pieces).filter(piece => piece.type === "listItem");
+      const customNumbering = tag === "ol" && ((attr(node, "start") ?? "1") !== "1"
+        || (attr(node, "type") ?? "1") !== "1" || attr(node, "reversed") !== undefined
+        || children(node).some(child => child.tagName === "li" && attr(child, "value") !== undefined));
       if (pieces.some(piece => piece.type !== "listItem" && (!isInline(piece) || piece.text?.trim()))
-        || (tag === "ol" && (attr(node, "start") ?? "1") !== "1")) flag("list_layout", location);
+        || customNumbering) flag("list_layout", location);
       return items.length ? [{ type: tag === "ul" ? "bulletList" : "orderedList", content: items }] : [];
     }
     if (!INLINE.has(tag)) flag("unsupported_markup", location);

@@ -93,6 +93,17 @@ https://vimeo.com/123456789`);
   expect(renderBlock(checkEditableBlocks(damagedHeading.blocks)[0])).toContain("<p>A title in a paragraph</p>");
 });
 
+it.each([
+  '<ol start="2"><li>First</li><li>Second</li></ol>',
+  '<ol type="a"><li>First</li><li>Second</li></ol>',
+  '<ol reversed><li>First</li><li>Second</li></ol>',
+  '<ol><li>First</li><li value="5">Second</li></ol>',
+])("flags unsupported ordered-list numbering while keeping list entries in order", (html) => {
+  const { blocks, report } = convert(html);
+  expect(report).toMatchObject({ status: "manual_review", issues: [{ code: "list_layout", start: 0, end: html.length }] });
+  expect(renderBlock(checkEditableBlocks(blocks)[0])).toBe("<ol><li><p>First</p></li><li><p>Second</p></li></ol>");
+});
+
 it("distinguishes empty input from source that requires review before import", () => {
   expect(convert("<!-- ordinary comment --> \n")).toEqual({
     blocks: [], report: { sourceRef, status: "skipped", issues: [] },
