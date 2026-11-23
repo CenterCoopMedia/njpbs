@@ -1,6 +1,6 @@
 {
   "date": "2026-11-23",
-  "kind": "added",
+  "kind": "new",
   "title": "Filter media by date, duration, and aspect",
   "body": "Use Filter to find recently updated files and open metadata requests in Images, Audio, and Videos. Narrow images and videos by aspect, or set a duration range for measured videos and voiceover takes. A personal view saves your filters for that library.",
   "prs": []
