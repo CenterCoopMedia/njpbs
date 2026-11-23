@@ -61,6 +61,32 @@ describe("isolated development smoke target", () => {
     await expect(runCmsFunctionSmoke({ ...patch, request })).rejects.toThrow();
     expect(request).not.toHaveBeenCalled();
   });
+  it("runs the production entry on the development tuple with the dev manifest", async () => {
+    const calls = [];
+    const request = async (url, init = {}) => {
+      calls.push(url);
+      // The caller's Access service token admits the dev Admin shell.
+      return new URL(url).origin === "https://dev-admin.example.org" ? new Response(null, { status: 200 }) : devResponse(url, init);
+    };
+    const result = await runCmsFunctionSmoke({ environment: "development", request });
+    expect(result.checked).toBe(calls.length);
+    expect(calls.at(-1)).toBe("https://dev-admin.example.org");
+    for (const url of calls) expect(url).not.toMatch(/https:\/\/(?:cms-api|admin)\.njpbs\.org|njpbs-site\.cloudfunctions/);
+    const endpoints = new Set(calls.map(url => new URL(url).pathname.slice(1)));
+    for (const name of Object.keys(DEV_FUNCTIONS).filter(name => !name.startsWith("on"))) expect(endpoints.has(name), name).toBe(true);
+  });
+  it("fails the development entry when the dev Admin is not admitted", async () => {
+    await expect(runCmsFunctionSmoke({ environment: "development", request: devResponse })).rejects.toThrow("Admin authentication shell");
+  });
+  it.each([
+    { baseUrl: "https://api.example.org" },
+    { functionsOrigin: "https://us-central1-njpbs-site.cloudfunctions.net" },
+    { adminOrigin: "https://admin.njpbs.org" },
+  ])("keeps the development entry closed to a production tuple: %j", async patch => {
+    const request = vi.fn();
+    await expect(runCmsFunctionSmoke({ environment: "development", ...patch, request })).rejects.toThrow("exact development target tuple");
+    expect(request).not.toHaveBeenCalled();
+  });
   it("refuses an anonymously exposed dev Admin", async () => {
     await expect(runDevCmsFunctionSmoke({ deployedFunctionNames: Object.keys(DEV_FUNCTIONS),
       request: (url, init) => new URL(url).hostname === "dev-admin.example.org"

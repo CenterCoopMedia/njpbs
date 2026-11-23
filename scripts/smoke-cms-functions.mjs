@@ -7,10 +7,20 @@ export class CmsSmokeError extends Error { name = "CmsSmokeError"; }
 
 // Scheduler metadata is verified after deployment by assertSchedulesReady in
 // deploy-cms-function-batches.mjs; HTTP existence alone cannot prove a schedule.
-const DEFAULT_FUNCTIONS_ORIGIN =
-  "https://us-central1-njpbs-site.cloudfunctions.net";
 const DEFAULT_CMS_API_BASE_URL = process.env.CMS_PRODUCTION_API_ORIGIN || "https://api.example.org";
-const DEFAULT_ADMIN_ORIGIN = "https://admin.njpbs.org";
+const { publicationTarget } = createRequire(import.meta.url)("../functions/lib/publication-target.js");
+// The publication target record names the project. The API and Admin origins
+// are rendered per checkout (config/development-inputs.json).
+const SMOKE_ORIGINS = Object.freeze({
+  production: { baseUrl: DEFAULT_CMS_API_BASE_URL, adminOrigin: "https://admin.njpbs.org" },
+  development: { baseUrl: "https://dev-api.example.org", adminOrigin: "https://dev-admin.example.org" },
+});
+
+export function cmsSmokeTarget(environment = "production") {
+  const { projectId } = publicationTarget(environment);
+  return Object.freeze({ ...SMOKE_ORIGINS[environment],
+    functionsOrigin: `https://us-central1-${projectId}.cloudfunctions.net` });
+}
 
 function declaredDevFunctionNames(root = new URL("../", import.meta.url)) {
   const require = createRequire(new URL("package.json", root));
@@ -37,12 +47,11 @@ export async function runDevCmsFunctionSmoke({ deployedFunctionNames, request = 
       [...deployedFunctionNames].sort().join() !== declaredDevFunctionNames().join()) {
     throw new Error("Dev smoke requires the verified complete dev manifest");
   }
-  const result = await runFunctionSmoke({ baseUrl: "https://dev-api.example.org",
-    functionsOrigin: "https://us-central1-njpbs-site-dev.cloudfunctions.net",
-    adminOrigin: "https://dev-admin.example.org", deployedFunctionNames, request });
+  const target = cmsSmokeTarget("development");
+  const result = await runFunctionSmoke({ ...target, deployedFunctionNames, request });
   const { checkDevAnonymousRefusal } = await import("./check-dev-anonymous-refusal.mjs");
   let adminChecks = 0;
-  await checkDevAnonymousRefusal({ hosts: ["dev-admin.example.org"], fetchImpl: (...args) => {
+  await checkDevAnonymousRefusal({ hosts: [new URL(target.adminOrigin).hostname], fetchImpl: (...args) => {
     adminChecks += 1; return request(...args);
   } });
   return { checked: result.checked + adminChecks };
@@ -355,17 +364,17 @@ async function expectStatus({
   console.log(`${label}: ${response.status}`);
 }
 
-export async function runCmsFunctionSmoke({
-  baseUrl = DEFAULT_CMS_API_BASE_URL,
-  functionsOrigin = DEFAULT_FUNCTIONS_ORIGIN,
-  adminOrigin = DEFAULT_ADMIN_ORIGIN,
-  request = fetch,
-} = {}) {
-  assertProductionCmsApiBaseUrl(baseUrl);
-  if (functionsOrigin !== DEFAULT_FUNCTIONS_ORIGIN || adminOrigin !== DEFAULT_ADMIN_ORIGIN) {
-    throw new Error("Production smoke requires the exact production target tuple");
+// A development caller supplies the dev Access service token in `request`, so
+// the dev Admin shell answers 200 exactly as the public production shell does.
+export async function runCmsFunctionSmoke({ environment = "production", request = fetch, ...tuple } = {}) {
+  const target = cmsSmokeTarget(environment);
+  const { baseUrl = target.baseUrl, functionsOrigin = target.functionsOrigin, adminOrigin = target.adminOrigin } = tuple;
+  if (environment === "production") assertProductionCmsApiBaseUrl(baseUrl);
+  if (baseUrl !== target.baseUrl || functionsOrigin !== target.functionsOrigin || adminOrigin !== target.adminOrigin) {
+    throw new Error(`CMS smoke requires the exact ${environment} target tuple`);
   }
-  const result = await runFunctionSmoke({ baseUrl, functionsOrigin, adminOrigin, deployedFunctionNames: DEPLOYED_FUNCTION_NAMES, request });
+  const deployedFunctionNames = environment === "production" ? DEPLOYED_FUNCTION_NAMES : declaredDevFunctionNames();
+  const result = await runFunctionSmoke({ baseUrl, functionsOrigin, adminOrigin, deployedFunctionNames, request });
   await expectStatus({ request, url: adminOrigin, init: { redirect: "manual" }, expected: 200,
     label: "public Admin authentication shell" });
   return { checked: result.checked + 1 };
