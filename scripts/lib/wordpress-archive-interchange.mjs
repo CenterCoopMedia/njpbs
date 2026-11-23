@@ -39,7 +39,10 @@ function date(value, utc) {
 }
 
 function webUrl(value) {
-  if (!matching(value, /^https?:\/\/[^/\s\\]/i) || /[\s\\\x00-\x1f]/u.test(value)) return false;
+  if (!matching(value, /^https?:\/\/[^/\s\\]/i) || /[\s\\]/u.test(value)) return false;
+  for (let index = 0; index < value.length; index++) {
+    if (value.charCodeAt(index) < 32) return false;
+  }
   try {
     const url = new URL(value);
     return !!url.hostname && !url.username && !url.password && url.port !== "0" && !/^https?:\/\/[^/?#]*@/i.test(value);

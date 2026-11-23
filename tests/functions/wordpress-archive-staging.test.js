@@ -3,15 +3,21 @@ import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { afterEach, expect, it } from "vitest";
+import { afterEach, beforeEach, expect, it } from "vitest";
 import { stageWordPressArchive } from "../../scripts/stage-wordpress-archive.mjs";
 import lifecycle from "../../functions/lifecycle-transition.js";
 import scheduled from "../../functions/scheduled-publish.js";
-import { isolatedFirestore } from "../helpers/emulator-firestore.js";
+import { clearEmulatorFirestore, isolatedFirestore } from "../helpers/emulator-firestore.js";
 
 const fixture = fileURLToPath(new URL("../fixtures/wordpress-archive/interchange.ndjson", import.meta.url));
 const archive = "wordpressArchiveItems";
+const firestore = isolatedFirestore("wordpress-staging");
 let scratch;
+beforeEach(async () => {
+  const host = process.env.FIRESTORE_EMULATOR_HOST;
+  await clearEmulatorFirestore(`http://${host}/emulator/v1/projects/${firestore.projectId}/databases/(default)/documents`,
+    { method: "DELETE" });
+});
 afterEach(async () => {
   if (scratch) await rm(scratch, { recursive: true });
   scratch = undefined;
@@ -40,7 +46,6 @@ function sourceRevision(story, changes) {
 }
 
 it("previews the complete export and keeps a resumed import isolated from publication", async () => {
-  const firestore = isolatedFirestore("wordpress-staging-resume");
   const plan = [];
   await expect(stageWordPressArchive({ firestore, file: fixture, report: row => plan.push(row) }))
     .resolves.toEqual({ create: 4, skip: 0, review: 2 });
@@ -73,7 +78,6 @@ it("previews the complete export and keeps a resumed import isolated from public
 });
 
 it("distinguishes duplicate IDs from changed source revisions and preserves a concurrent editorial edit", async () => {
-  const firestore = isolatedFirestore("wordpress-staging-conflict");
   const file = await tempFile();
   const original = await loadStory();
   const updated = sourceRevision(original, { title: "Changed at source" });
@@ -105,7 +109,6 @@ it("distinguishes duplicate IDs from changed source revisions and preserves a co
 });
 
 it("rejects altered records and truncated files before the first write", async () => {
-  const firestore = isolatedFirestore("wordpress-staging-invalid");
   const file = await tempFile();
   const contents = await readFile(fixture, "utf8");
   for (const [bad, message] of [
@@ -119,7 +122,6 @@ it("rejects altered records and truncated files before the first write", async (
 });
 
 it("records a durable review for a source record above the Firestore size budget", async () => {
-  const firestore = isolatedFirestore("wordpress-staging-oversized");
   const file = await tempFile();
   const oversized = sourceRevision(await loadStory(), { html: "x".repeat(1024 * 1024) });
   await storyRows(file, oversized);
@@ -131,4 +133,16 @@ it("records a durable review for a source record above the Firestore size budget
   expect(receipts.docs.map(doc => doc.data())).toEqual([
     expect.objectContaining({ action: "review", reason: "staging-size-limit", revision: oversized.revision }),
   ]);
+});
+
+it("keeps the source when only the derived blocks exceed the Firestore depth limit", async () => {
+  const file = await tempFile();
+  const html = '<ul><li>First<ul><li>Second<ul><li><a href="https://example.org/news">Third</a></li></ul></li></ul></li></ul>';
+  const original = sourceRevision(await loadStory(), { html });
+  await storyRows(file, original);
+  await expect(stageWordPressArchive({ firestore, file, apply: true })).resolves.toEqual({ create: 1, skip: 0, review: 0 });
+  const [staged] = (await firestore.collection(archive).get()).docs;
+  expect(staged.data()).toMatchObject({ record: original, conversion: { blocks: [], report: {
+    status: "manual_review", issues: [{ code: "staging_conversion_depth_limit", start: 0, end: 0 }],
+  } } });
 });

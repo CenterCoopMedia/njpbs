@@ -45,6 +45,8 @@ project and omit descriptor 3.
 - A story can stage with conversion status `manual_review`. Keep the raw body
   for remediation. The converter receives no media mapping during import, so
   unmapped images require review. Attachment rows retain their WordPress URLs.
+  When derived blocks alone exceed Firestore's size or depth limit, the draft
+  keeps the source row and a conversion report that identifies the limit.
 
 If interrupted, repeat the command with the same file. Use the `apply` rows
 for the transactional decisions and `apply-complete` for the final counts.

@@ -18,7 +18,22 @@ const digest = parts => sha256(JSON.stringify(parts));
 
 function fitsFirestoreDepth(value, depth = 0) {
   if (value === null || typeof value !== "object") return true;
-  return depth < 20 && Object.values(value).every(child => fitsFirestoreDepth(child, depth + 1));
+  return depth <= 20 && Object.values(value).every(child => fitsFirestoreDepth(child, depth + 1));
+}
+
+function stageConversion(document, path) {
+  const { record: { html, permalink }, sourceRef } = document;
+  const conversion = converter.convertWordPressStory({ html, permalink, sourceRef });
+  const withConversion = { ...document, conversion };
+  const fitsSize = documentSize.firestoreDocumentBytes(withConversion, path) <= documentSize.DOCUMENT_SIZE_BUDGET_BYTES;
+  const fitsDepth = fitsFirestoreDepth(withConversion);
+  if (fitsSize && fitsDepth) return conversion;
+
+  // The raw row fits the reserved budget. This fixed-size report fits in the
+  // reserve even when the converted blocks would exceed Firestore's limits.
+  return { blocks: [], report: { sourceRef, status: "manual_review", issues: [
+    { code: fitsDepth ? "staging_conversion_size_limit" : "staging_conversion_depth_limit", start: 0, end: 0 },
+  ] } };
 }
 
 function candidate(firestore, source, record) {
@@ -27,15 +42,11 @@ function candidate(firestore, source, record) {
   const ref = firestore.collection(COLLECTION).doc(id);
   const receipts = ref.collection("archiveImportReceipts");
   const document = { formatVersion: FORMAT_VERSION, version: 1, kind: record.kind, sourceRef, record };
-  if (record.kind === "story") {
-    document.conversion = converter.convertWordPressStory({ html: record.html, permalink: record.permalink, sourceRef });
+  const oversized = documentSize.firestoreDocumentBytes(document, ref.path) > documentSize.DOCUMENT_SIZE_BUDGET_BYTES;
+  if (!oversized && record.kind === "story") {
+    document.conversion = stageConversion(document, ref.path);
   }
-  let stagingError;
-  if (!fitsFirestoreDepth(document)) stagingError = "staging-depth-limit";
-  else if (documentSize.firestoreDocumentBytes(document, ref.path) > documentSize.DOCUMENT_SIZE_BUDGET_BYTES) {
-    stagingError = "staging-size-limit";
-  }
-  return { ref, receipts, document, accepted: receipts.doc("staged"), stagingError };
+  return { ref, receipts, document, accepted: receipts.doc("staged"), oversized };
 }
 
 function versionOf(current) {
@@ -49,7 +60,7 @@ function decide(item, current, accepted, expectedVersion = versionOf(current)) {
   if (current === undefined) {
     if (accepted) return { action: "review", reason: "missing-staged-record" };
     if (expectedVersion !== 0) return { action: "review", reason: "staging-changed" };
-    if (item.stagingError) return { action: "review", reason: item.stagingError };
+    if (item.oversized) return { action: "review", reason: "staging-size-limit" };
     return { action: "create" };
   }
   if (version === null || !accepted || current.formatVersion !== FORMAT_VERSION ||
@@ -169,18 +180,41 @@ async function firebaseOptions(projectId) {
     return { projectId };
   }
   if (projectId.startsWith("demo-")) throw new ArchiveInputError("A demo project requires a local emulator.");
-  const chunks = [];
-  let bytes = 0;
-  for await (const chunk of createReadStream(null, { fd: 3 })) {
-    bytes += chunk.length;
-    if (bytes > 64 * 1024) throw new ArchiveInputError("Invalid service account input.");
-    chunks.push(chunk);
+  try {
+    const chunks = [];
+    let bytes = 0;
+    for await (const chunk of createReadStream(null, { fd: 3 })) {
+      bytes += chunk.length;
+      if (bytes > 64 * 1024) throw new ArchiveInputError("Invalid service account input.");
+      chunks.push(chunk);
+    }
+    const account = JSON.parse(Buffer.concat(chunks).toString("utf8"));
+    if (account?.type !== "service_account" || account.project_id !== projectId) {
+      throw new ArchiveInputError("The service account project must match the requested project.");
+    }
+    return { projectId, credential: cert(account) };
+  } catch (error) {
+    if (error instanceof ArchiveInputError) throw error;
+    throw new ArchiveInputError("Supply valid service account JSON on file descriptor 3.");
   }
-  const account = JSON.parse(Buffer.concat(chunks).toString("utf8"));
-  if (account?.type !== "service_account" || account.project_id !== projectId) {
-    throw new ArchiveInputError("The service account project must match the requested project.");
+}
+
+function failureMessage(error) {
+  if (error instanceof ArchiveInputError) return error.message;
+  switch (error?.code) {
+    case 7:
+    case 16:
+      return "Firestore refused archive access. Check the target and service account permissions.";
+    case 4:
+    case 14:
+      return "Firestore did not complete the request. Rerun the same input to reconcile committed items.";
+    case "EACCES":
+    case "ENOENT":
+    case "ENOSPC":
+      return "Could not read the archive or prepare its temporary copy. Check the file and available space.";
+    default:
+      return "Archive staging stopped. Keep the input and rerun to reconcile any committed items.";
   }
-  return { projectId, credential: cert(account) };
 }
 
 async function main() {
@@ -199,7 +233,7 @@ async function main() {
       }),
     });
   } catch (error) {
-    console.error(error instanceof ArchiveInputError ? error.message : "Archive staging stopped. Keep the input and rerun to reconcile committed items.");
+    console.error(failureMessage(error));
     process.exitCode = 1;
   } finally {
     if (app) await deleteApp(app);
