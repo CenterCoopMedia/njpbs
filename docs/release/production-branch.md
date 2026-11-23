@@ -33,10 +33,27 @@ history and CI protections in a second ruleset with no bypass actors: bypass
 applies to a whole ruleset, so combining these payloads would let the App
 bypass every protection.
 
+## Development target
+
+The optional `target` input selects `production` (the default) or
+`development`. The target names the branch the workflow fast-forwards, the
+GitHub environment of the job and the concurrency group. The run title is
+`Promote <target> <sha>`, so a production dispatch keeps its title and API
+readback binds both the target and the selected input. `jawn-ops njpbs release
+run --target development` dispatches this input so the release command
+promotes the dev website with the same workflow and rules as production
+(jawn-ops #1147).
+
+A development promotion needs a `development` branch, both rulesets below
+covering `refs/heads/development`, and the App client ID variable and private
+key secret in the `development` environment. Without them it fails closed at
+the fetch, the push or token creation.
+
 ## Production rulesets
 
 Apply both payloads through the repository rulesets API or equivalent settings
-at the approved switch. Both target exactly `refs/heads/production`.
+at the approved switch. Both target exactly `refs/heads/production` and
+`refs/heads/development`.
 
 The exact API payloads are [the App-only update lock](production-updates.ruleset.json)
 and [the no-bypass CI/history guards](production-checks.ruleset.json). The

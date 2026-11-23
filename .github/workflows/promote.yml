@@ -1,5 +1,5 @@
 name: Promote production
-run-name: Promote production ${{ inputs.sha }}
+run-name: Promote ${{ inputs.target || 'production' }} ${{ inputs.sha }}
 
 on:
   workflow_dispatch:
@@ -8,13 +8,21 @@ on:
         description: Full main commit SHA to promote
         required: true
         type: string
+      target:
+        description: Branch and environment to promote
+        required: false
+        default: production
+        type: choice
+        options:
+          - production
+          - development
 
 permissions:
   contents: read
   actions: read
 
 concurrency:
-  group: promote-production
+  group: promote-${{ inputs.target || 'production' }}
   cancel-in-progress: false
 
 env:
@@ -31,7 +39,7 @@ jobs:
       github.repository_id == vars.CANONICAL_GITHUB_REPOSITORY_ID &&
       github.workflow_ref == format('{0}/.github/workflows/promote.yml@refs/heads/main', vars.CANONICAL_GITHUB_REPOSITORY) &&
       vars.CMS_DEPLOY_OWNER != '' && github.triggering_actor == vars.CMS_DEPLOY_OWNER
-    environment: production
+    environment: ${{ inputs.target || 'production' }}
     runs-on: ubuntu-24.04
     timeout-minutes: 5
     steps:
@@ -57,20 +65,23 @@ jobs:
           token: ${{ steps.app.outputs.token }}
           ref: ${{ github.sha }}
           fetch-depth: 0
-      - name: Require main ancestry and an existing production branch
+      - name: Require main ancestry and an existing target branch
         env:
           SELECTED_SHA: ${{ inputs.sha }}
+          TARGET: ${{ inputs.target || 'production' }}
         run: |
           set -euo pipefail
-          git fetch --no-tags origin +refs/heads/main:refs/remotes/origin/main +refs/heads/production:refs/remotes/origin/production
+          [[ "$TARGET" == production || "$TARGET" == development ]] || { echo 'Target must be production or development'; exit 1; }
+          git fetch --no-tags origin +refs/heads/main:refs/remotes/origin/main "+refs/heads/$TARGET:refs/remotes/origin/$TARGET"
           git merge-base --is-ancestor "$SELECTED_SHA" origin/main
-          git merge-base --is-ancestor origin/production "$SELECTED_SHA"
+          git merge-base --is-ancestor "origin/$TARGET" "$SELECTED_SHA"
       - name: Require successful main CI for this SHA
         env:
           GH_TOKEN: ${{ github.token }}
           DEPLOY_SHA: ${{ inputs.sha }}
         run: node .github/scripts/require-main-ci.mjs
-      - name: Fast-forward production
+      - name: Fast-forward the target branch
         env:
           SELECTED_SHA: ${{ inputs.sha }}
-        run: git push origin "$SELECTED_SHA:refs/heads/production"
+          TARGET: ${{ inputs.target || 'production' }}
+        run: git push origin "$SELECTED_SHA:refs/heads/$TARGET"

@@ -5,6 +5,6 @@
   "bypass_actors": [
     {"actor_id": 5705771, "actor_type": "Integration", "bypass_mode": "always"}
   ],
-  "conditions": {"ref_name": {"include": ["refs/heads/production"], "exclude": []}},
+  "conditions": {"ref_name": {"include": ["refs/heads/production", "refs/heads/development"], "exclude": []}},
   "rules": [{"type": "update"}]
 }
