@@ -7,6 +7,26 @@ const {
 } = require("./source-media-rendition");
 const { METADATA_BOUND_FIELDS, parseMetadataBounds } = require("./media-browse-metadata");
 
+/** @typedef {import("./media-browse-metadata").MediaMetadataBounds} MediaMetadataBounds */
+
+/**
+ * @typedef {MediaMetadataBounds & {
+ *   sourceId: string,
+ *   tagsOnly?: true,
+ *   pendingIds?: string[],
+ *   assetId?: string,
+ *   posters?: boolean,
+ *   q?: string,
+ *   tag?: string,
+ *   createdBy?: string,
+ *   rightsStatus?: string,
+ *   metadataUpdateRequested?: true,
+ *   sort?: string,
+ *   limit?: number,
+ *   cursor?: {id: string, sort: string | number} | null,
+ * }} SourceMediaListRequest
+ */
+
 const MAX_QUERY_LENGTH = 160;
 const MAX_PAGE_SIZE = 100;
 const DEFAULT_PAGE_SIZE = 30;
@@ -170,6 +190,12 @@ function parseCursor(value, request) {
   }
 }
 
+/**
+ * @param {MediaMetadataBounds & {
+ *   sourceId: string, q: string, id: string, sort: string | number,
+ *   tag?: string, createdBy?: string, rightsStatus?: string, metadataUpdateRequested?: boolean, order?: string,
+ * }} cursor
+ */
 function encodeCursor({ sourceId, q, tag = "", createdBy = "", rightsStatus = "", metadataUpdateRequested,
   updatedFrom, updatedTo, minDuration, maxDuration, aspect, order = q ? "name_asc" : "updated_desc", id, sort }) {
   return Buffer.from(JSON.stringify({ sourceId, q, tag, createdBy, rightsStatus, metadataUpdateRequested,
@@ -198,6 +224,7 @@ function normalizeSourceMediaRightsStatus(value, { optional = false } = {}) {
   return status;
 }
 
+/** @returns {SourceMediaListRequest} */
 function parseSourceMediaListRequest(value) {
   rejectUnknownFields(value, new Set([
     "sourceId", "assetId", "pendingIds", "cursor", "limit", "q", "tag", "createdBy", "rightsStatus", "sort", "posters", "tagsOnly",

@@ -3,7 +3,17 @@
 const FIELDS = ["updatedFrom", "updatedTo", "minDuration", "maxDuration", "aspect"];
 const ASPECTS = ["landscape", "portrait", "square"];
 
+/**
+ * @typedef {object} MediaMetadataBounds
+ * @property {string} [updatedFrom]
+ * @property {string} [updatedTo]
+ * @property {number} [minDuration]
+ * @property {number} [maxDuration]
+ * @property {"landscape" | "portrait" | "square"} [aspect]
+ */
+
 function parseMetadataBounds(value, ErrorClass) {
+  /** @type {MediaMetadataBounds} */
   const filters = {};
   for (const field of FIELDS) {
     const bound = value[field];
@@ -30,6 +40,10 @@ function hasMetadataBounds(query) {
   return FIELDS.some(field => query[field] !== undefined);
 }
 
+/**
+ * @param {MediaMetadataBounds & {metadataUpdateRequested?: boolean}} query
+ * @param {{updatedAt?: string | null, duration?: number, width?: number, height?: number, metadataUpdateRequested?: boolean}} record
+ */
 function matchesMediaMetadata(query, { updatedAt, duration, width, height, metadataUpdateRequested }) {
   if (query.metadataUpdateRequested && metadataUpdateRequested !== true) return false;
   if (query.updatedFrom || query.updatedTo) {
