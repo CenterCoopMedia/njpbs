@@ -180,6 +180,7 @@ export function selectedBlock(block: PageBlock): Record<string, unknown> {
     case "home_newscast":
     case "newsletter_signup":
     case "record_card":
+    case "scroll_story":
     case "sponsor_strip":
     case "video":
       // These schemas reject unknown keys, including nested payload fields.
@@ -506,6 +507,9 @@ function validateAssetSlots(
         break;
       case "image_gallery":
         for (const image of block.data.images) images.add(image.assetId);
+        break;
+      case "scroll_story":
+        for (const step of block.data.steps) images.add(step.assetId);
         break;
       case "card_grid":
       case "promotion_playlist":

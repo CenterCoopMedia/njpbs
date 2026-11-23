@@ -289,6 +289,7 @@ describe("BlockEditor palette", () => {
       "image",
       "uploaded video",
       "image gallery",
+      "scroll story",
       "video or embed",
       "custom HTML",
       "buttons",

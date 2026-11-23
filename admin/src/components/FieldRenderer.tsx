@@ -8,6 +8,7 @@ import { RichTextEditor } from "./RichTextEditor";
 import { EMPTY_RICH_TEXT_DOC } from "../lib/rich-text";
 import { defaultValueForField, emptyItem } from "../lib/field-defaults";
 import {
+  fieldIsRequired,
   recommendedFieldWarning,
   unfinishedDatetimeDraftMessage,
   unreadableDatetimeMessage,
@@ -1216,7 +1217,7 @@ function StructuredListField({
             {itemFields.map((sub) => (
               <FieldRenderer
                 key={sub.key}
-                field={sub}
+                field={{ ...sub, required: fieldIsRequired(sub, (item ?? {}) as Record<string, unknown>) }}
                 value={(item as Record<string, unknown>)?.[sub.key]}
                 onChange={(subValue) =>
                   replaceAt(index, { ...(item as Record<string, unknown>), [sub.key]: subValue })

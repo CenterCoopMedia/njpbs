@@ -568,6 +568,21 @@ export function renderBlock(
     }
     case "image":
       return renderImageFigure(block.data, options, "content", block.data);
+    case "scroll_story": {
+      const steps = block.data.steps.filter(step => step.text.trim());
+      if (!steps.length) return "";
+      const items = steps.map(step => {
+        const text = step.text.trim().split(/\n\s*\n/).map(paragraph => `<p>${escapeHtml(paragraph)}</p>`).join("");
+        const media = step.assetId && options.resolveAsset?.(step.assetId, "grid")
+          ? `<div class="scroll-story__media">${renderImageFigure(step, options, "grid")}</div>`
+          : "";
+        const description = step.assetId && !media
+          ? [step.alt, step.caption].filter(value => value.trim()).map(value => `<p>${escapeHtml(value)}</p>`).join("")
+          : "";
+        return `<li><div class="scroll-story__step"><div class="scroll-story__copy">${text}${description}</div>${media}</div></li>`;
+      });
+      return `<ol class="scroll-story">${items.join("")}</ol>`;
+    }
     case "video":
       return renderVideoBlock(block.data, { placeholder: options.videoPlaceholder === true });
     case "support_appeal": {

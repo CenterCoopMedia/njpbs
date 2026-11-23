@@ -152,6 +152,7 @@ function selectedBlock(block) {
       break;
     case "data_hub_section":
     case "data_figure":
+    case "scroll_story":
       data = structuredClone(block.data);
       break;
     case "row":

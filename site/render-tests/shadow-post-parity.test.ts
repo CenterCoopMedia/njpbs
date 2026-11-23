@@ -136,6 +136,9 @@ describe("compiled shadow uses the static Post output", () => {
       if (read === catalogReads.topic_shelf) expect(html).toContain("More on the budget");
       if (read === catalogReads.promotion_playlist) expect(html).toContain("custom-shelf--grid");
       if (read === catalogReads.image_gallery) expect(html).toContain("Morning rush");
+      if (read === catalogReads.scroll_story) {
+        expect(html).toMatch(/<ol class="scroll-story">.*Commuters arrive.*alt="Commuters waiting for a train".*The train departs.*The station quiets down.*alt="A passenger at the station"/s);
+      }
       if (read === catalogReads.link_card) expect(html).toContain("Budget hearing schedule");
     }
   });

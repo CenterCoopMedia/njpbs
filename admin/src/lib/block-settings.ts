@@ -50,6 +50,7 @@ const BLOCK_SETTINGS_FIELDS: Readonly<
   video: [],
   // A gallery settles how it is presented publicly, so its Settings control stays (#1034).
   image_gallery: [GALLERY_PRESENTATION_FIELD],
+  scroll_story: [],
   cta_row: [],
   support_appeal: [],
   card_grid: [],

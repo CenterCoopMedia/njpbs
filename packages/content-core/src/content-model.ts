@@ -859,6 +859,7 @@ export const BLOCK_TYPES = [
   "image",
   "video",
   "image_gallery",
+  "scroll_story",
   "cta_row",
   "support_appeal",
   "card_grid",
@@ -994,6 +995,12 @@ export interface ImageGalleryData {
    * rewriting stored content.
    */
   presentation?: GalleryPresentation;
+}
+
+export const SCROLL_STORY_LIMITS = { steps: 12, text: 1200, alt: 300, caption: 600 } as const;
+
+export interface ScrollStoryData {
+  steps: Array<{ text: string; assetId: string; alt: string; caption: string }>;
 }
 
 /** The mode to render, resolving an absent choice to today's behavior. */
@@ -1235,6 +1242,7 @@ export type ProseBlock = BlockEnvelope<"prose", ProseData>;
 export type ImageBlock = BlockEnvelope<"image", ImageBlockData>;
 export type VideoBlock = BlockEnvelope<"video", VideoBlockData>;
 export type ImageGalleryBlock = BlockEnvelope<"image_gallery", ImageGalleryData>;
+export type ScrollStoryBlock = BlockEnvelope<"scroll_story", ScrollStoryData>;
 export type CtaRowBlock = BlockEnvelope<"cta_row", CtaRowData>;
 export type SupportAppealBlock = BlockEnvelope<"support_appeal", SupportAppealData>;
 export type CardGridBlock = BlockEnvelope<"card_grid", CardGridData>;
@@ -1278,6 +1286,7 @@ export type PageBlock =
   | ImageBlock
   | VideoBlock
   | ImageGalleryBlock
+  | ScrollStoryBlock
   | CtaRowBlock
   | SupportAppealBlock
   | CardGridBlock
@@ -1561,6 +1570,18 @@ function hasValidBlockData(
         && (data.presentation === undefined
           || (typeof data.presentation === "string"
             && GALLERY_PRESENTATION_SET.has(data.presentation)));
+    case "scroll_story":
+      return Reflect.ownKeys(data).every(key => key === "steps")
+        && Array.isArray(data.steps)
+        && data.steps.length >= (publishable ? 1 : 0)
+        && data.steps.length <= SCROLL_STORY_LIMITS.steps
+        && data.steps.every(step => isRecord(step)
+          && Reflect.ownKeys(step).every(key => key === "text" || key === "assetId" || key === "alt" || key === "caption")
+          && typeof step.text === "string" && step.text.length <= SCROLL_STORY_LIMITS.text
+          && typeof step.assetId === "string" && /^[A-Za-z0-9_-]{0,128}$/.test(step.assetId)
+          && typeof step.alt === "string" && step.alt.length <= SCROLL_STORY_LIMITS.alt
+          && typeof step.caption === "string" && step.caption.length <= SCROLL_STORY_LIMITS.caption
+          && (!publishable || (step.text.trim().length > 0 && (!step.assetId || step.alt.trim().length > 0))));
     case "support_appeal":
       return Object.keys(data).every(key => ["heading", "copy", "buttonLabel", "href", "style", "backgroundImageAssetId"].includes(key))
         && ([["heading", 120], ["copy", 2000], ["buttonLabel", 60]] as const).every(([key, max]) => {

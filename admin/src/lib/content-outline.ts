@@ -118,6 +118,10 @@ export function outlineSummary(block: AdminBlock, pageId?: PublicPageId): string
   if (block.type === "home_newscast") return typeof block.data.heading === "string" && block.data.heading.trim() ? block.data.heading : "Newscast";
   if (block.type === "bio_card") return typeof block.data.name === "string" && block.data.name.trim() ? `Bio: ${block.data.name}` : "Choose a bio";
   if (block.type === "video") return typeof block.data.title === "string" && block.data.title.trim() ? `Video: ${block.data.title}` : "Choose a video";
+  if (block.type === "scroll_story") {
+    const count = Array.isArray(block.data.steps) ? block.data.steps.length : 0;
+    return count ? `${count} ${count === 1 ? "story step" : "story steps"}` : "Add the first story step";
+  }
   if (block.type === "divider") return "Visual separator";
   if (block.type === "record_card") {
     const kind = typeof block.data.recordKind === "string" ? block.data.recordKind : "record";

@@ -131,6 +131,7 @@ describe("SECTION_BLOCK_CATALOG", () => {
       "image",
       "video",
       "image_gallery",
+      "scroll_story",
       "embed",
       "html",
       "cta_row",

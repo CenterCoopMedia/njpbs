@@ -22,6 +22,7 @@ export const BLOCK_TYPE_ICONS: Readonly<Record<BlockType, IconName>> = {
   image: "image",
   video: "video",
   image_gallery: "media",
+  scroll_story: "media",
   cta_row: "link",
   support_appeal: "heart",
   card_grid: "grid",

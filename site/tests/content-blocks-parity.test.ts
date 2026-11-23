@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { createRequire } from "node:module";
-import { parseBlocks as parseBlocksTs } from "../../packages/content-core/src/content-model";
+import { parseBlocks as parseBlocksTs, SCROLL_STORY_LIMITS } from "../../packages/content-core/src/content-model";
 
 // The Cloud Functions runtime is CommonJS and cannot import the TypeScript content
 // model, so functions/lib/content-blocks.js hand-mirrors parseBlocks. This test is
@@ -31,6 +31,8 @@ const videoCase = (name: string, data: unknown) => ({
   input: [{ id: "v", type: "video", order: 0, visible: true, data }],
 });
 
+const step = { text: "Morning commuters arrive.", assetId: "platform", alt: "A railway platform", caption: "" };
+
 // A valid block of every catalog type, so the accept path is exercised per type.
 const validBlocks = [
   { id: "h", type: "headline", order: 0, visible: true, data: { text: "Tonight", level: 2 } },
@@ -38,6 +40,7 @@ const validBlocks = [
   { id: "p", type: "prose", order: 2, visible: true, data: { content: doc("Body") } },
   { id: "img", type: "image", order: 3, visible: false, section: "hero", data: { assetId: "a1", alt: "Alt", caption: "Cap" } },
   { id: "gal", type: "image_gallery", order: 4, visible: true, data: { images: [{ itemId: "image-1", assetId: "a2", alt: "A" }] } },
+  { id: "scroll", type: "scroll_story", order: 30, visible: true, data: { steps: [step] } },
   { id: "cta", type: "cta_row", order: 5, visible: true, data: { ctas: [{ label: "Give", href: "https://x", variant: "primary" }] } },
   { id: "cards", type: "card_grid", order: 6, visible: true, data: { cards: [{ itemId: "card-1", label: "Watch", title: "T", body: doc("b"), href: "/x" }] } },
   { id: "link", type: "link_card", order: 17, visible: true, data: { title: "Story", url: "https://example.com/story", source: "Outlet", date: "2026-09-17", summary: "Summary" } },
@@ -233,6 +236,20 @@ describe("the CJS block validator mirrors the canonical parseBlocks (#514/#515 w
   it("both accept the full valid set", () => {
     expect(parseBlocksTs(validBlocks).ok).toBe(true);
     expect(parseBlocksCjs(validBlocks).ok).toBe(true);
+  });
+
+  it.each([
+    { steps: [], draft: true },
+    { steps: [{ ...step, text: " " }], draft: true },
+    { steps: [{ ...step, alt: "" }], draft: true },
+    { steps: [{ ...step, privateNote: "working copy" }], draft: false },
+    { steps: Array(SCROLL_STORY_LIMITS.steps + 1).fill(step), draft: false },
+  ])("enforces scroll story limits and draft completeness", ({ steps, draft }) => {
+    const input = [{ id: "scroll", type: "scroll_story", order: 0, visible: true, data: { steps } }];
+    for (const parse of [parseBlocksTs, parseBlocksCjs]) {
+      expect(parse(input, { complete: false }).ok).toBe(draft);
+      expect(parse(input, { complete: true }).ok).toBe(false);
+    }
   });
 
   it("both reject source-owned fields copied into a content shelf", () => {

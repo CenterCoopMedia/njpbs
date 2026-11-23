@@ -43,8 +43,8 @@ describe("joined record admission", () => {
 
   it("admits every block type the editor allows in a Post and refuses every other known type", () => {
     // The editor's Post catalog (packages/content-core/src/editor-admin.ts) is the
-    // specification. Each of its 20 types has a Post template renderer (#3409, #5079).
-    expect(SECTION_BLOCK_CATALOG.post).toHaveLength(20);
+    // specification. Each type has a Post template renderer (#3409, #5079).
+    expect(SECTION_BLOCK_CATALOG.post).toHaveLength(21);
     for (const type of SECTION_BLOCK_CATALOG.post) {
       expect(instantBlockAllowed(type), type).toBe(true);
       expect(supportedSnapshot(post([{ id: type, type, visible: true, order: 0, data: {} }])), type).toBe(true);
