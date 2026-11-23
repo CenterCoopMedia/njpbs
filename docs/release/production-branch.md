@@ -1,10 +1,10 @@
 # Production branch promotion
 
-Status: **App route untested.** This document describes the proposed switch;
-committing these files applies no GitHub configuration. Activation requires
-separate approval. The promotion workflow must stay undispatched until then.
-Track the remaining activation work and live probes in
-[issue #57](https://github.com/CenterCoopMedia/njpbs/issues/57).
+Status: **active.** Production releases promote through this workflow (for
+example `Promote production a45b5368…` succeeded on Nov. 23, 2026). The
+`production` and `development` branches, both rulesets and both environments
+were read back on Nov. 23, 2026. Committing these files applies no GitHub
+configuration; settings changes need separate approval.
 The `production` branch selects a release by fast-forwarding to a green commit
 already on `main`. The only trigger for `promote.yml` is `workflow_dispatch`,
 with a required `sha` input of 40 lowercase hexadecimal characters. The dispatch
@@ -33,10 +33,32 @@ history and CI protections in a second ruleset with no bypass actors: bypass
 applies to a whole ruleset, so combining these payloads would let the App
 bypass every protection.
 
+## Development target
+
+The optional `target` input selects `production` (the default) or
+`development`. The target names the branch the workflow fast-forwards, the
+GitHub environment of the job and the concurrency group. The run title is
+`Promote <target> <sha>`, so a production dispatch keeps its title and API
+readback binds both the target and the selected input. `jawn-ops njpbs release
+run --target development` dispatches this input, so the release command moves
+the `development` branch with the same workflow and rules as production
+(jawn-ops #1147). Moving the branch does not deploy the dev website. Building
+and activating dev from that branch is later work (jawn-ops #1148, #1156); until
+then the release command stops after promotion and reports the later steps as
+not rehearsed.
+
+A development promotion needs a `development` branch and the App client ID
+variable and private key secret in the `development` environment. Without them
+it fails closed at the fetch or at token creation. The workflow does not check
+rulesets: apply both rulesets below to `refs/heads/development` before the first
+development promotion. The read-only precheck compares the live rulesets with
+these files, so it fails until the live rulesets cover both branches.
+
 ## Production rulesets
 
 Apply both payloads through the repository rulesets API or equivalent settings
-at the approved switch. Both target exactly `refs/heads/production`.
+at the approved switch. Both target exactly `refs/heads/production` and
+`refs/heads/development`.
 
 The exact API payloads are [the App-only update lock](production-updates.ruleset.json)
 and [the no-bypass CI/history guards](production-checks.ruleset.json). The
@@ -63,9 +85,10 @@ Its only deployment branch policy entry must be:
 Remove other branch and tag entries. Selecting all protected branches would
 also admit `production`, so it does not implement this policy.
 
-Provision `CCM_PROMOTE_APP_PRIVATE_KEY` only as a secret of this environment,
-never at repository or organization scope. Set the environment variable
-`CCM_PROMOTE_APP_CLIENT_ID` to the App's public client ID; this differs from its
+Provision `CCM_PROMOTE_APP_PRIVATE_KEY` only as a secret of this environment
+and the `development` environment, never at repository or organization scope.
+Set the environment variable `CCM_PROMOTE_APP_CLIENT_ID` in both environments
+to the App's public client ID; this differs from its
 numeric App ID. Existing canonical repository name and numeric ID variables
 must identify this repository. The workflow refuses a different repository or
 workflow ref before entering its job. `CMS_DEPLOY_OWNER` must identify the owner
