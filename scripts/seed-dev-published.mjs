@@ -773,7 +773,8 @@ async function cliDatabase(mode, emulator) {
   let input = '';
   for await (const chunk of process.stdin) { input += chunk; if (input.length > 32_768) fail('Credential input too large'); }
   const account = JSON.parse(input);
-  // The operator names the production reader; its granted permissions are then proven read-only.
+  // The operator names the production reader. The probe below checks selected permissions at
+  // project scope only; bucket-level grants are the runbook's private identity check.
   const identity = mode === 'export' ? process.env.SEED_EXPORT_IDENTITY : `dev-seed-writer@${DESTINATION}.iam.gserviceaccount.com`;
   if (!identity || account.project_id !== projectId || account.client_email !== identity) fail('The dedicated seed service identity is required');
   const credential = cert(account);
