@@ -2419,7 +2419,10 @@ function createCmsSaveHandler(deps = {}) {
           ...editorialDateFields,
           ...creditFields,
           ...persistenceDefaults,
-          ...(spanishEditionRequest ? { editionOf: postSource.id } : {}),
+          ...(spanishEditionRequest ? {
+            editionOf: postSource.id,
+            translationSource: { version: duplicateSource.version, contentVersion: contentVersion(duplicateSource) },
+          } : {}),
           ...routeFields,
           ...(hasBlocks ? { blocks: outBlocks } : {}),
           ...(expectedPageTemplate === null
