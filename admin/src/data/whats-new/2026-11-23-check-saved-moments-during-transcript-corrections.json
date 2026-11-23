@@ -1,0 +1,7 @@
+{
+  "date": "2026-11-23",
+  "kind": "improved",
+  "title": "Check saved moments during transcript corrections",
+  "body": "Open a bookmark or resume position while correcting a transcript. Use Return to transcript correction below the video to keep working on the same passage with your unsaved text. Playback following stays paused until you turn it back on.",
+  "prs": []
+}

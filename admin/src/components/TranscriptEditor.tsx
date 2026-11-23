@@ -1,4 +1,5 @@
 import { Fragment, useEffect, useId, useMemo, useRef, useState, type FormEvent, type ReactNode } from "react";
+import { createPortal } from "react-dom";
 import { HttpError } from "../lib/functions";
 import { videoTime, type TranscriptAlignment, type TranscriptEdits, type TranscriptResponse, type TranscriptSegment } from "../lib/video-production";
 import { matchingPassages, passageAtPosition, passageId, passageTimestamp, parseTranscriptPosition, selectedPassageRange, speakerLabel, togglePassageSelection, TRANSCRIPT_PAGE_SIZE } from "../lib/transcript-workspace";
@@ -61,7 +62,7 @@ function alignmentStatus(alignment: TranscriptAlignment, reviewed: boolean, allL
   }
 }
 
-export function TranscriptEditor({ pane = false, playbackSeconds, commentThreads = [], commentsIncomplete, onOpenComment, commentsAction, loadMoreAction, response, canEdit, disabled, onSeek, onSelectPassage, canSelectPassage, onSave, onAlign, onCancelAlignment, onSaved, onReload, onDirtyChange, onSavingChange, onEditingChange }: {
+export function TranscriptEditor({ pane = false, playbackSeconds, commentThreads = [], commentsIncomplete, onOpenComment, commentsAction, loadMoreAction, correctionReturnTarget, onReturnToTranscript, response, canEdit, disabled, onSeek, onSelectPassage, canSelectPassage, onSave, onAlign, onCancelAlignment, onSaved, onReload, onDirtyChange, onSavingChange, onEditingChange }: {
   pane?: boolean;
   playbackSeconds?: number;
   commentThreads?: readonly CommentThread[];
@@ -69,6 +70,8 @@ export function TranscriptEditor({ pane = false, playbackSeconds, commentThreads
   onOpenComment?: (comment: MediaComment) => void;
   commentsAction?: ReactNode;
   loadMoreAction?: ReactNode;
+  correctionReturnTarget?: HTMLElement | null;
+  onReturnToTranscript?: () => void;
   response: TranscriptResponse;
   canEdit: boolean;
   disabled: boolean;
@@ -511,5 +514,11 @@ export function TranscriptEditor({ pane = false, playbackSeconds, commentThreads
     </div> : null}
     {pane ? resultsBar : null}
     {pane ? null : reviewTools}
+    {correctionReturnTarget && editMode === "text" && activePassage !== null ? createPortal(
+      <Button disabled={blocked} onClick={() => {
+        onReturnToTranscript?.();
+        returnToCorrection();
+      }}>Return to transcript correction</Button>, correctionReturnTarget,
+    ) : null}
   </section>;
 }

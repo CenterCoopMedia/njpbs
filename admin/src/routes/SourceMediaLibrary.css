@@ -104,6 +104,7 @@
 .video-viewer-preview { flex: none; min-width: 0; padding: var(--cms-space-4); }
 .video-viewer-preview .source-video-player { width: 100%; max-height: 38dvh; }
 .video-viewer-preview .source-video-shortcuts { margin-top: var(--cms-space-1); }
+.video-viewer-correction-return:not(:empty) { margin-block-start: var(--cms-space-2); }
 .video-viewer-context-content { min-height: 0; overflow-y: auto; overscroll-behavior: contain; }
 .video-viewer-production { padding-inline: var(--cms-space-4); }
 .video-viewer-production .video-production-actions { margin-block: 0 var(--cms-space-2); }

@@ -221,6 +221,7 @@ export function VideoViewerBody({
   headerTarget, factsTarget, footerTarget, sourceLabel,
 }: VideoViewerBodyProps) {
   const [workspaceView, setWorkspaceView] = useState<"watch" | "transcript" | "comments">(initialConfirmDelete || initialClipRange || initialSeek > 0 || asset.viewingCopy?.state !== "ready" ? "watch" : "transcript");
+  const [correctionReturnTarget, setCorrectionReturnTarget] = useState<HTMLDivElement | null>(null);
   const [contextView, setContextView] = useState<VideoContextView>("details");
   const workspaceId = useId();
   const contextId = `${workspaceId}-context`;
@@ -294,6 +295,7 @@ export function VideoViewerBody({
   // Media time of the frame on screen, from requestVideoFrameCallback.
   const shownMediaTime = useRef<number | null>(null);
   const production = useVideoProductionTools({ headerControls: true, workspace: hasTranscriptPane, initialClipRange,
+    correctionReturnTarget,
     commentThreads: commentThreads(feedback.comments.comments).filter(thread => timelineComments.includes(thread.comment)),
     commentsIncomplete: Boolean(feedback.comments.nextCursor),
     onOpenComment: comment => {
@@ -798,7 +800,7 @@ export function VideoViewerBody({
       <section className="video-viewer-context" id={`${workspaceId}-watch`} role="tabpanel" aria-label="Watch & details" onKeyDown={onContextKeyDown} onFocusCapture={event => {
         if (event.currentTarget.contains(event.target as Node)) setWorkspaceView("watch");
       }}>
-        <div className="video-viewer-preview">{preview}</div>
+        <div className="video-viewer-preview">{preview}<div className="video-viewer-correction-return" ref={setCorrectionReturnTarget} /></div>
         <div className="video-viewer-context-content">
           {!showOriginalNotice ? <VideoOriginalStatus controls={originalControls} /> : null}
           {details}
