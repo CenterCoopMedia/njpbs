@@ -255,7 +255,7 @@ async function backgroundWarnings(firestore, transaction, queues, outputs, oldOw
 /** Retained C2's public-work surfaces plus the native nested Post public proof:
  * queues, batches, journals/releases, external refresh and outputs/Home. Reads
  * share the completion transaction. No accepted document is written. */
-async function drain(firestore, transaction, attempt, beforePause = false, initialQueueFailures = null, recoveredFailures = null) {
+async function drain(firestore, transaction, attempt, beforePause = false, initialQueueFailures = null, recoveredFailures = null, receiptWarnings = null) {
   const recovered = (code, path) => recoveredFailures?.has(`${code}:${path}`) === true;
   const counts = { queues: 0, batches: 0, retiredBatches: 0, releases: 0, outputs: 0, externalRefresh: 0 };
   const originalQueues = new Set(), oldOwner = { owner: "cloudflare", release: attempt.oldRuntime.commitSha };
@@ -384,7 +384,8 @@ async function drain(firestore, transaction, attempt, beforePause = false, initi
       if (!retryableTask(task) || task.owner !== value.owner || task.output !== row.id || task.revision !== value.revision) refuse();
     } else if (!["verified", "superseded", "cancelled"].includes(value.status) || !unclaimed(value)) refuse();
   }
-  return { counts, warnings: [...warnings.values()] };
+  if (receiptWarnings) receiptWarnings.push(...warnings.values());
+  return counts;
 }
 function drainReceipt(attempt, counts, source, warnings = []) {
   return { schemaVersion: 1, kind: kind(attempt, "public-release-paused-and-drained"), operationId: attempt.operationId,
@@ -533,7 +534,9 @@ async function pausePublicRelease({ firestore, attempt: raw }) {
       const s = await state(firestore, transaction, attempt);
       const source = readOriginalPause(s, attempt); requireOld(s, attempt);
       if (s.failed.exists || !current(s, attempt).currentReady) refuse();
-      const { counts, warnings } = await drain(firestore, transaction, attempt, false, source.initialQueueFailures), before = readOriginalDrain(s, attempt);
+      const warnings = [];
+      const counts = await drain(firestore, transaction, attempt, false, source.initialQueueFailures, null, warnings);
+      const before = readOriginalDrain(s, attempt);
       const receipt = before ?? drainReceipt(attempt, counts, source, warnings);
       if (!before) transaction.create(firestore.doc(`${publicReleasePauseRoot(attempt)}/drains/${attempt.operationId}`), receipt);
       return { idempotent: Boolean(before), pauseCommitted: true, drainCommitted: true, ...current(s, attempt), stop: false, outcome: "drained",
