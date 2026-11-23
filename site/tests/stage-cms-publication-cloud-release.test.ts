@@ -13,8 +13,8 @@ import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { createCmsPublicationCloudStorage } from "../scripts/cms-publication-cloud-storage";
 import { createPublicArtifactInventoryReceipt } from "../src/lib/public-artifact-inventory";
 import {
-  assertProductionReleaseTarget,
-  assertProductionRendererSeals,
+  assertReleaseRendererSeals,
+  cloudReleaseTarget,
   main,
   parseReleaseArguments,
   retireCmsPublicationCloudReleaseReservation,
@@ -46,11 +46,11 @@ beforeEach(async () => {
 });
 afterEach(() => rm(root, { recursive: true, force: true }));
 
-function database({ cloudCommit = release, state = "idle", activeCommitSha = active,
+function database({ cloudCommit = release, state = "idle", activeCommitSha = active, serializerId = "cloudflare-publisher",
   extra = {} as Record<string, object> } = {}) {
   const documents: Record<string, object> = {
     "system/cmsPublicationRuntime": { schemaVersion: 1, phase: "paused", commitSha: active, serializerId: "node-compute-publisher",
-      cloud: { phase: "paused", commitSha: cloudCommit, serializerId: "cloudflare-publisher" } },
+      cloud: { phase: "paused", commitSha: cloudCommit, serializerId } },
     "system/publicDeployment": { state, activeCommitSha },
     ...extra,
   };
@@ -60,9 +60,9 @@ function database({ cloudCommit = release, state = "idle", activeCommitSha = act
 // The two seals of a compiled renderer: the server graph and its public copy.
 const serverSeal = JSON.stringify({ schemaVersion: 1, rendererSha: release, files: {} });
 async function writeSeals(renderer: string, dist: string, publicSeal: object = { schemaVersion: 1, rendererSha: release },
-  settings: unknown = publicBuildSettings) {
+  settings: unknown = publicBuildSettings, server = serverSeal) {
   await mkdir(renderer, { recursive: true });
-  await writeFile(path.join(renderer, "renderer-release.json"), serverSeal);
+  await writeFile(path.join(renderer, "renderer-release.json"), server);
   if (settings !== null) await writeFile(path.join(renderer, "public-build-settings.json"), JSON.stringify(settings));
   await mkdir(path.join(dist, "posts/_no-build-assets"), { recursive: true });
   await writeFile(path.join(dist, "posts/_no-build-assets/renderer-release.json"), JSON.stringify(publicSeal));
@@ -70,23 +70,23 @@ async function writeSeals(renderer: string, dist: string, publicSeal: object = {
 
 it("accepts the gated production compiler seal and rejects unknown capability versions",async()=>{
   await writeSeals(rendererDirectory,distDirectory,{schemaVersion:1,rendererSha:release,dataHubReportingVersion:1});
-  await expect(assertProductionRendererSeals(root,release)).resolves.toBeUndefined();
+  await expect(assertReleaseRendererSeals(root,release)).resolves.toBeUndefined();
   await writeSeals(rendererDirectory,distDirectory,{schemaVersion:1,rendererSha:release,pageReaderVersion:1});
-  await expect(assertProductionRendererSeals(root,release)).resolves.toBeUndefined();
+  await expect(assertReleaseRendererSeals(root,release)).resolves.toBeUndefined();
   await writeSeals(rendererDirectory,distDirectory,{schemaVersion:1,rendererSha:release,pageReaderVersion:2});
-  await expect(assertProductionRendererSeals(root,release)).resolves.toBeUndefined();
+  await expect(assertReleaseRendererSeals(root,release)).resolves.toBeUndefined();
   await writeSeals(rendererDirectory,distDirectory,{schemaVersion:1,rendererSha:release,pageReaderVersion:3});
-  await expect(assertProductionRendererSeals(root,release)).resolves.toBeUndefined();
+  await expect(assertReleaseRendererSeals(root,release)).resolves.toBeUndefined();
   await writeSeals(rendererDirectory,distDirectory,{schemaVersion:1,rendererSha:release,pageReaderVersion:4});
-  await expect(assertProductionRendererSeals(root,release)).rejects.toThrow("not a production release");
+  await expect(assertReleaseRendererSeals(root,release)).rejects.toThrow("not a production release");
   await writeSeals(rendererDirectory,distDirectory,{schemaVersion:1,rendererSha:release,dataHubReportingVersion:1,dataHubCompositionVersion:1});
-  await expect(assertProductionRendererSeals(root,release)).resolves.toBeUndefined();
+  await expect(assertReleaseRendererSeals(root,release)).resolves.toBeUndefined();
   // The release 23 production build seal (October 26, 2026) carries the live blog marker.
   await writeSeals(rendererDirectory,distDirectory,{schemaVersion:1,rendererSha:release,liveBlogVersion:1,dataHubReportingVersion:1,dataHubCompositionVersion:1});
-  await expect(assertProductionRendererSeals(root,release)).resolves.toBeUndefined();
+  await expect(assertReleaseRendererSeals(root,release)).resolves.toBeUndefined();
   for (const extra of [{dataHubReportingVersion:2},{dataHubReportingVersion:1,environment:"development"},{dataHubReportingVersion:1,unexpected:true},{dataHubReportingVersion:1,dataHubCompositionVersion:2},{dataHubCompositionVersion:1},{liveBlogVersion:2},{liveBlogVersion:"1"}]) {
     await writeSeals(rendererDirectory,distDirectory,{schemaVersion:1,rendererSha:release,...extra});
-    await expect(assertProductionRendererSeals(root,release)).rejects.toThrow("not a production release");
+    await expect(assertReleaseRendererSeals(root,release)).rejects.toThrow("not a production release");
   }
 });
 
@@ -104,7 +104,8 @@ function storage({ frozen = null as Buffer | null, restored = false, publicSeal 
   };
 }
 
-function dependencies({ generation = 298, publicSeal = undefined as object | undefined } = {}) {
+function dependencies({ generation = 298, publicSeal = undefined as object | undefined, server = serverSeal,
+  settings = publicBuildSettings as unknown } = {}) {
   const prepared = { commitSha: release, buildBatchId, generation, artifactDigest: "c".repeat(64) };
   return {
     assertSourceCheckout: vi.fn(async () => undefined),
@@ -117,7 +118,7 @@ function dependencies({ generation = 298, publicSeal = undefined as object | und
       const content = await readFile(path.join(retainedInputDirectory ?? "", "input.json"), "utf8");
       await mkdir(path.join(distDirectory, "posts"), { recursive: true });
       await writeFile(path.join(distDirectory, "posts/index.html"), `built from ${content}`);
-      await writeSeals(rendererDirectory, distDirectory, publicSeal);
+      await writeSeals(rendererDirectory, distDirectory, publicSeal, settings, server);
       await writeFile(artifactReceiptPath, "{}");
       return { receipt: true };
     }),
@@ -130,13 +131,15 @@ function dependencies({ generation = 298, publicSeal = undefined as object | und
 }
 
 const run = (overrides: { firestore?: object; storage?: object; dependencies?: object; stateDirectory?: string; now?: () => number;
-  interrupted?: () => boolean; prepareAgainstCommitSha?: string; buildEnvironment?: Record<string, string> } = {}) =>
+  interrupted?: () => boolean; prepareAgainstCommitSha?: string; buildEnvironment?: Record<string, string>;
+  target?: ReturnType<typeof cloudReleaseTarget> } = {}) =>
   stageCmsPublicationCloudRelease({
     firestore: (overrides.firestore ?? database()) as never, storage: (overrides.storage ?? storage()) as never,
     queueId, commitSha: release, stateDirectory: overrides.stateDirectory ?? stateDirectory, distDirectory, rendererDirectory,
     buildEnvironment: overrides.buildEnvironment ?? publicBuildValues, now: overrides.now ?? (() => cutoff + 1_000),
     ...(overrides.interrupted ? { interrupted: overrides.interrupted } : {}),
     ...(overrides.prepareAgainstCommitSha ? { prepareAgainstCommitSha: overrides.prepareAgainstCommitSha } : {}),
+    ...(overrides.target ? { target: overrides.target } : {}),
     dependencies: (overrides.dependencies ?? dependencies()) as never,
   });
 
@@ -154,6 +157,36 @@ it("builds and checkpoints NEW while OLD stays pinned, without creating executab
   expect(fakes.stage).not.toHaveBeenCalled();
   expect(fakes.recordCheckpoint).toHaveBeenCalledWith(expect.objectContaining({ publicBuildSettings,
     artifactCheckpointDigest: "d".repeat(64), preparedArtifact: expect.objectContaining({ artifactDigest: "c".repeat(64) }) }));
+  // Production calls the shared release records exactly as before.
+  expect(fakes.prepareDetached).toHaveBeenCalledWith(expect.not.objectContaining({ target: expect.anything() }));
+  expect(fakes.recordCheckpoint).toHaveBeenCalledWith(expect.not.objectContaining({ target: expect.anything() }));
+  expect(fakes.build).toHaveBeenCalledWith(expect.objectContaining({
+    buildEnvironment: expect.objectContaining({ CMS_DEPLOYMENT_ENVIRONMENT: "production" }) }));
+});
+
+it("builds and checkpoints a development release against development records only", async () => {
+  const development = cloudReleaseTarget({ CMS_DEPLOYMENT_ENVIRONMENT: "development" });
+  const seal = { schemaVersion: 1, rendererSha: release, environment: "development" };
+  // The development compiler records an empty development settings receipt.
+  const settings = { schemaVersion: 1, commitSha: release, environment: "development", values: {}, overridesAbsent: true };
+  const developmentSeals = () => dependencies({ publicSeal: seal, server: JSON.stringify({ ...seal, files: {} }), settings });
+  const fakes = developmentSeals();
+  const result = await run({ firestore: database({ cloudCommit: active, serializerId: "cloudflare-dev-publisher" }),
+    dependencies: fakes, prepareAgainstCommitSha: active, target: development });
+  expect(result).toMatchObject({ queueId, commitSha: release, status: "prepared" });
+  expect(fakes.build).toHaveBeenCalledWith(expect.objectContaining({
+    buildEnvironment: expect.objectContaining({ CMS_DEPLOYMENT_ENVIRONMENT: "development" }) }));
+  expect(fakes.prepareDetached).toHaveBeenCalledWith(expect.objectContaining({ target: development }));
+  expect(fakes.recordCheckpoint).toHaveBeenCalledWith(expect.objectContaining({ target: development, publicBuildSettings: settings }));
+  // The production publisher pin and a production seal both refuse a development release.
+  const production = developmentSeals();
+  await expect(run({ firestore: database({ cloudCommit: active }), dependencies: production, prepareAgainstCommitSha: active,
+    target: development })).rejects.toThrow("not pinned to this release");
+  expect(production.prepareDetached).not.toHaveBeenCalled();
+  const productionSeal = dependencies();
+  await expect(run({ firestore: database({ cloudCommit: active, serializerId: "cloudflare-dev-publisher" }),
+    dependencies: productionSeal, prepareAgainstCommitSha: active, target: development })).rejects.toThrow();
+  expect(productionSeal.checkpoint).not.toHaveBeenCalled();
 });
 
 it("reuses the retained detached build and never stages it on a retry", async () => {
@@ -392,14 +425,20 @@ it.each([["built", false], ["stored", true]])("does not stage a %s renderer that
   expect(fakes.stage).not.toHaveBeenCalled();
 });
 
-it("refuses a development target before it opens a credential", async () => {
-  expect(() => assertProductionReleaseTarget({})).not.toThrow();
-  expect(() => assertProductionReleaseTarget({ CMS_DEPLOYMENT_ENVIRONMENT: "production" })).not.toThrow();
+it("selects the release target only from the explicit deployment environment", () => {
+  expect(cloudReleaseTarget({}).projectId).toBe("njpbs-site");
+  expect(cloudReleaseTarget({ CMS_DEPLOYMENT_ENVIRONMENT: "production" }).serializerId).toBe("cloudflare-publisher");
+  const development = cloudReleaseTarget({ CMS_DEPLOYMENT_ENVIRONMENT: "development" });
+  expect([development.projectId, development.serializerId, development.publicationBucket, development.backgroundBucket])
+    .toEqual(["njpbs-site-dev", "cloudflare-dev-publisher", "njpbs-dev-cms-publication", "njpbs-dev-public-artifacts"]);
+});
+
+it.each(["", "staging", "Production"])("refuses the unknown target %j before it opens a credential", async target => {
   const write = vi.spyOn(process.stderr, "write").mockImplementation(() => true);
   const exitCode = process.exitCode;
   try {
-    await main(["--apply", queueId, release], { CMS_DEPLOYMENT_ENVIRONMENT: "development" });
-    expect(write.mock.calls).toEqual([["Cloud release refused: The cloud release target must be production\n"]]);
+    await main(["--apply", queueId, release], { CMS_DEPLOYMENT_ENVIRONMENT: target });
+    expect(write.mock.calls).toEqual([["Cloud release refused: The cloud release target must be production or development\n"]]);
     expect(process.exitCode).toBe(1);
   } finally {
     process.exitCode = exitCode;

@@ -36,11 +36,11 @@ afterAll(async () => {
   await Promise.all([fixture, ...preparedDirectories].filter(Boolean).map(directory => rm(directory, { recursive: true, force: true })));
 });
 
-function prepare(module: string, method: string, settings: Record<string, string> = {}) {
+function prepare(module: string, method: string, settings: Record<string, string> = {}, environment?: string) {
   return spawnSync(process.execPath, ["--input-type=module", "--eval", `
     import { ${method} as prepare } from ${JSON.stringify(new URL(module, import.meta.url).href)};
     import { readFile } from "node:fs/promises";
-    const result = await prepare(${JSON.stringify(commit)}, { sourceRepository: ${JSON.stringify(fixture)} });
+    const result = await prepare(${JSON.stringify(commit)}, { sourceRepository: ${JSON.stringify(fixture)}${environment ? `, environment: ${JSON.stringify(environment)}` : ""} });
     const config = JSON.parse(await readFile(result.configPath, "utf8"));
     process.stdout.write(JSON.stringify({ directory: result.directory, config }));
   `], { cwd: repository, encoding: "utf8", timeout: 5_000,
@@ -64,6 +64,34 @@ for (const method of ["preparePreviewRenderer", "prepareDevPreviewRenderer", "pr
     if (method === "prepareDevPreviewRenderer") assert.equal(config.vars.CMS_DEV_ACCESS_ORIGIN, "https://access.example.test");
   });
 }
+
+test("development publisher preparation carries the account pin into the runtime binding", () => {
+  const result = prepare("../scripts/prepare-cloud-publisher.mjs", "prepareCloudPublisher",
+    { CLOUDFLARE_ACCOUNT_ID: account, CMS_DEV_CLOUDFLARE_ACCOUNT_ID: account }, "development");
+  assert.equal(result.status, 0, result.stderr);
+  const { directory, config } = JSON.parse(result.stdout);
+  preparedDirectories.push(directory);
+  assert.equal(config.vars.CLOUDFLARE_ACCOUNT_ID, account);
+  assert.equal(config.vars.CMS_DEV_CLOUDFLARE_ACCOUNT_ID, account);
+});
+
+test.each([undefined, "c".repeat(32)])("development publisher preparation refuses a missing or different account pin (%s)", pin => {
+  const settings: Record<string, string> = { CLOUDFLARE_ACCOUNT_ID: account };
+  if (pin !== undefined) settings.CMS_DEV_CLOUDFLARE_ACCOUNT_ID = pin;
+  const result = prepare("../scripts/prepare-cloud-publisher.mjs", "prepareCloudPublisher", settings, "development");
+  assert.notEqual(result.status, 0);
+  assert.match(result.stderr, /Development Cloudflare account configuration is missing or differs/);
+});
+
+test("production publisher preparation never binds the development account pin", () => {
+  const result = prepare("../scripts/prepare-cloud-publisher.mjs", "prepareCloudPublisher",
+    { CLOUDFLARE_ACCOUNT_ID: account, CMS_DEV_CLOUDFLARE_ACCOUNT_ID: account });
+  assert.equal(result.status, 0, result.stderr);
+  const { directory, config } = JSON.parse(result.stdout);
+  preparedDirectories.push(directory);
+  assert.equal(config.vars.CLOUDFLARE_ACCOUNT_ID, account);
+  assert.equal("CMS_DEV_CLOUDFLARE_ACCOUNT_ID" in config.vars, false);
+});
 
 test("image-only publisher preparation needs no account in a scrubbed process", () => {
   const result = prepare("../scripts/prepare-cloud-publisher.mjs", "prepareCloudPublisher");

@@ -112,14 +112,6 @@ describe("development Worker configuration", () => {
     } finally { await rm(directory, { recursive: true, force: true }); }
   });
 
-  it("refuses a detached development upload before any Wrangler call", async () => {
-    const { uploadPublicWorkerCandidate } = await import("../scripts/upload-public-worker-candidate");
-    const runCommand = vi.fn();
-    await expect(uploadPublicWorkerCandidate({ target: development, runCommand, firestore: {} as never, preparationId: "a".repeat(20),
-      artifactReceiptPath: "/unused/artifact.json", preparedArtifactPath: "/unused/prepared.json" }))
-      .rejects.toThrow("production-only");
-    expect(runCommand).not.toHaveBeenCalled();
-  });
 });
 
 describe("development activation and reconciliation", () => {

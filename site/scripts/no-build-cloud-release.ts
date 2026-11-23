@@ -135,8 +135,8 @@ export async function stageNoBuildCloudRelease({ firestore, storage, serializerI
 }
 
 async function readPreparedReleaseRequest(firestore: Firestore, transaction: Transaction,
-  preparationId: string, commitSha: string) {
-  const retained = await readPreparedReleaseProof(transaction, firestore, preparationId, commitSha);
+  preparationId: string, commitSha: string, target?: PublicationTarget) {
+  const retained = await readPreparedReleaseProof(transaction, firestore, preparationId, commitSha, target);
   const [batch, candidate, promotion] = await transaction.getAll(
     firestore.doc(`system/publicDeployment/buildBatches/cms-${preparationId}`),
     firestore.doc(`system/publicDeployment/buildBatches/cms-${preparationId}/candidates/worker`),
@@ -144,19 +144,19 @@ async function readPreparedReleaseRequest(firestore: Firestore, transaction: Tra
   if (!batch.exists || !["ready", "deploying", "reconciling"].includes(batch.data()?.status) || !promotion.exists ||
       promotion.data()?.proofDigest !== metadataDigest(retained.proof)) throw new Error("Prepared release promotion differs");
   assertPublicationOwner(batch.data(), { owner: "cloudflare", release: commitSha });
-  const { recordedAt: _at, ...liveCandidate } = projectPublicWorkerCandidate(candidate.data());
+  const { recordedAt: _at, ...liveCandidate } = projectPublicWorkerCandidate(candidate.data(), null, { target });
   if (!isDeepStrictEqual(liveCandidate, retained.candidate)) throw new Error("Prepared release candidate differs");
   return retained;
 }
 
 /** Materialize only sealed metadata. The atomic promotion already created the
  * original owner's request, so interruption here resumes the same durable job. */
-async function materializePreparedRelease(firestore: Firestore, preparationId: string, commitSha: string) {
-  const retained = await firestore.runTransaction(async transaction => readPreparedReleaseProof(transaction, firestore, preparationId, commitSha),
+async function materializePreparedRelease(firestore: Firestore, preparationId: string, commitSha: string, target?: PublicationTarget) {
+  const retained = await firestore.runTransaction(async transaction => readPreparedReleaseProof(transaction, firestore, preparationId, commitSha, target),
     { readOnly: true });
   await stagePublicMediaManifest({ firestore, manifest: retained.proof.mediaManifest });
   await markPublicMediaManifestReady({ firestore, manifest: retained.proof.mediaManifest });
-  await recordPublicWorkerCandidate({ firestore, candidate: retained.candidate, runtime: { owner: "cloudflare", release: commitSha } });
+  await recordPublicWorkerCandidate({ firestore, candidate: retained.candidate, runtime: { owner: "cloudflare", release: commitSha }, target });
 }
 
 /** One request per pass. The cloud journal retains its original job until a
@@ -239,14 +239,12 @@ export async function runNoBuildCloudRelease({ firestore, storage, serializerId,
     let prepared: Awaited<ReturnType<typeof verifyRelease>>;
     if (request.preparationId !== undefined) {
       stage = "release verification";
-      // Promotion seals only production pins and journals; development never reads them.
-      if (target?.environment === "development") throw new Error("Prepared releases are production-only");
       if (request.preparationId !== row.id) throw new Error("Prepared release operation differs");
       // A leased candidate keeps its original reconciliation path. Its metadata
       // is already durable and must not be registered again after traffic moves.
-      if (batch.status === "reserved" || batch.status === "ready") await materializePreparedRelease(firestore, row.id, commitSha);
+      if (batch.status === "reserved" || batch.status === "ready") await materializePreparedRelease(firestore, row.id, commitSha, target);
       const sealed = await firestore.runTransaction(transaction => readPreparedReleaseRequest(firestore, transaction,
-        row.id, commitSha), { readOnly: true });
+        row.id, commitSha, target), { readOnly: true });
       prepared = assertPreparedPublicWorkerArtifact(request.preparedArtifact);
       if (!isDeepStrictEqual(prepared, sealed.preparedArtifact) || identity.inputSha256 !== sealed.proof.inputSha256 ||
           request.artifactCheckpointDigest !== sealed.proof.artifactCheckpointDigest) throw new Error("Prepared release proof differs");

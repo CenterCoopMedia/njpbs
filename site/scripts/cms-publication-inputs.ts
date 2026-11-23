@@ -18,9 +18,20 @@ function operatorError(message: string): never {
   throw new CmsPublicationSerializerOperatorError(message);
 }
 
+function parseNoBuildEnvironment(environment: NodeJS.ProcessEnv): Record<string, string> {
+  try {
+    return parseNoBuildPostEnvironment(environment);
+  } catch {
+    operatorError("The instant publication configuration is invalid");
+  }
+}
+
 export function parseCmsPublicationPublicBuildEnvironment(
   environment: NodeJS.ProcessEnv,
+  target: "production" | "development" = "production",
 ): Record<string, string> {
+  // The development compiler receives no analytics, report or share values.
+  if (target === "development") return parseNoBuildEnvironment(environment);
   const ga4MeasurementId = environment.PUBLIC_GA4_MEASUREMENT_ID?.trim();
   if (!isGa4MeasurementId(ga4MeasurementId)) {
     operatorError("The public GA4 measurement ID is missing or invalid");
@@ -56,12 +67,7 @@ export function parseCmsPublicationPublicBuildEnvironment(
     operatorError("The public Turnstile site key is missing");
   }
 
-  let noBuildEnvironment: Record<string, string>;
-  try {
-    noBuildEnvironment = parseNoBuildPostEnvironment(environment);
-  } catch {
-    operatorError("The instant publication configuration is invalid");
-  }
+  const noBuildEnvironment = parseNoBuildEnvironment(environment);
 
   return {
     PUBLIC_GA4_MEASUREMENT_ID: ga4MeasurementId,

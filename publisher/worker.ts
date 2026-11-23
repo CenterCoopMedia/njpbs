@@ -5,7 +5,7 @@ import { publishWithdrawalCatalog } from "./withdrawal-catalog";
 import { publishPageWithdrawalCatalog } from "./page-withdrawal-catalog";
 import { publishRecordWithdrawalCatalog } from "./record-withdrawal-catalog";
 
-type PublicationEnvironment = Env & { R2_MEDIA_CREDENTIAL?: string; CMS_DEV_ACCESS_CLIENT_ID?: string; CMS_DEV_ACCESS_CLIENT_SECRET?: string };
+type PublicationEnvironment = Env & { R2_MEDIA_CREDENTIAL?: string; CMS_DEV_ACCESS_CLIENT_ID?: string; CMS_DEV_ACCESS_CLIENT_SECRET?: string; CMS_DEV_CLOUDFLARE_ACCOUNT_ID?: string };
 
 export class PublicationRuntime extends Container<PublicationEnvironment> {
   defaultPort = 8080;
@@ -25,6 +25,8 @@ export class PublicationRuntime extends Container<PublicationEnvironment> {
     // Optional dev-only secrets for the Access-protected dev origin; the container refuses them for production.
     ...(this.env.CMS_DEV_ACCESS_CLIENT_ID ? { CMS_DEV_ACCESS_CLIENT_ID: this.env.CMS_DEV_ACCESS_CLIENT_ID } : {}),
     ...(this.env.CMS_DEV_ACCESS_CLIENT_SECRET ? { CMS_DEV_ACCESS_CLIENT_SECRET: this.env.CMS_DEV_ACCESS_CLIENT_SECRET } : {}),
+    // The development account pin; the container compares it with CLOUDFLARE_ACCOUNT_ID before any upload.
+    ...(this.env.CMS_DEV_CLOUDFLARE_ACCOUNT_ID ? { CMS_DEV_CLOUDFLARE_ACCOUNT_ID: this.env.CMS_DEV_CLOUDFLARE_ACCOUNT_ID } : {}),
     CMS_MEDIA_R2_ENDPOINT: this.env.CMS_MEDIA_R2_ENDPOINT,
     CMS_MEDIA_R2_BUCKET: this.env.CMS_MEDIA_R2_BUCKET,
     PUBLIC_GA4_MEASUREMENT_ID: this.env.PUBLIC_GA4_MEASUREMENT_ID,

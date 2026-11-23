@@ -22,8 +22,8 @@ if (phase !== "--copy-assets") {
   const compilerEnvironment = publicPostRenderEnvironment(testPages
     ? { CMS_DEPLOYMENT_ENVIRONMENT: "development", DATA_HUB_PUBLIC: process.env.DATA_HUB_PUBLIC, PUBLIC_ONLY: process.env.PUBLIC_ONLY }
     : process.env);
-  const publicBuildSettings = target.environment === "production"
-    ? createPublicBuildSettings(sha, compilerEnvironment, process.env) : undefined;
+  // Release preparation checks this receipt for both targets; test pages have none.
+  const publicBuildSettings = testPages ? undefined : createPublicBuildSettings(sha, compilerEnvironment, process.env);
   if (!assertDevelopmentSource(repo)) throw new Error("Compile public Post templates from clean exact source");
   execFileSync(process.execPath, [path.join(site, "node_modules/astro/bin/astro.mjs"), "build", "--config",
     testPages ? "astro.public-page-renderer.config.mjs" : "astro.public-post.config.mjs"], {

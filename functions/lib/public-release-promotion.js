@@ -14,6 +14,7 @@ const { assertPublicMediaManifest } = require("./public-media-manifest");
 const { digest } = require("./no-build-page-ownership");
 const { PreparedPublicReleaseError } = require("./public-release-error");
 const { assertPreparedPublicBuildSettings } = require("./public-build-settings");
+const { publicationTarget } = require("./publication-target");
 
 const validDigest = value => typeof value === "string" && /^[a-f0-9]{64}$/.test(value);
 function refuse(message) { throw new PreparedPublicReleaseError(message); }
@@ -24,8 +25,10 @@ function refs(firestore, preparationId) {
     proof: preparation.collection("proofs").doc("complete"),
     promotion: preparation.collection("promotions").doc("reservation"), handover: preparation.collection("proofs").doc("handover") };
 }
-function candidateInput(value) {
-  return Object.fromEntries(Object.entries(projectPublicWorkerCandidate(value)).filter(([field]) => field !== "recordedAt"));
+// An absent target is production; the operators pass one only for development.
+const serializerId = target => publicationTarget(target?.environment).serializerId;
+function candidateInput(value, target) {
+  return Object.fromEntries(Object.entries(projectPublicWorkerCandidate(value, null, { target })).filter(([field]) => field !== "recordedAt"));
 }
 function preparedArtifactFromCandidate(candidate) {
   const fields = ["buildBatchId", "generation", "commitSha", "artifactDigest", "artifactReceiptDigest",
@@ -33,12 +36,12 @@ function preparedArtifactFromCandidate(candidate) {
   return { schemaVersion: 1, digestAlgorithm: "sha256", ...Object.fromEntries(fields.map(field => [field, candidate[field]])) };
 }
 
-async function readPreparedReleaseProof(transaction, firestore, preparationId, commitSha) {
+async function readPreparedReleaseProof(transaction, firestore, preparationId, commitSha, target) {
   const ref = refs(firestore, preparationId);
   const [proof, candidateSnapshot, context, checkpointSnapshot] = await transaction.getAll(ref.proof, ref.candidate,
     firestore.doc(`cmsPreviewPublicContexts/cms-${preparationId}`), ref.checkpoint);
   if (!proof.exists || !candidateSnapshot.exists || !context.exists) refuse("The prepared release has no matching complete proof");
-  const candidate = candidateInput(candidateSnapshot.data());
+  const candidate = candidateInput(candidateSnapshot.data(), target);
   const sealed = proof.data();
   const checkpoint = projectPreparedPublicReleaseCheckpoint(checkpointSnapshot.data(), preparationId, candidate);
   const publicBuildSettings = assertPreparedPublicBuildSettings(sealed?.publicBuildSettings, commitSha);
@@ -62,8 +65,8 @@ async function readPreparedReleaseProof(transaction, firestore, preparationId, c
 async function checkSealedPublicRelease({ firestore, preparationId, commitSha, phase = "ready", target }) {
   assertPublicWorkerCandidateDatabase(firestore, target);
   return firestore.runTransaction(async transaction => {
-    await readFreshPublicReleasePreparationInTransaction({ firestore, transaction, preparationId, commitSha, phase });
-    return readPreparedReleaseProof(transaction, firestore, preparationId, commitSha);
+    await readFreshPublicReleasePreparationInTransaction({ firestore, transaction, preparationId, commitSha, phase, target });
+    return readPreparedReleaseProof(transaction, firestore, preparationId, commitSha, target);
   }, { readOnly: true });
 }
 
@@ -73,8 +76,8 @@ async function handoverPreparedPublicRelease({ firestore, preparationId, commitS
   assertPublicWorkerCandidateDatabase(firestore, target);
   return firestore.runTransaction(async transaction => {
     const { preparation, runtimeUpdateTime } = await readFreshPublicReleasePreparationInTransaction({ firestore, transaction,
-      preparationId, commitSha, phase: "paused" });
-    const { proof } = await readPreparedReleaseProof(transaction, firestore, preparationId, commitSha);
+      preparationId, commitSha, phase: "paused", target });
+    const { proof } = await readPreparedReleaseProof(transaction, firestore, preparationId, commitSha, target);
     transaction.set(refs(firestore, preparationId).handover, { schemaVersion: 1, proofDigest: digest(proof),
       predecessor: preparation.predecessor, runtimeUpdateTime });
     return { preparationId, commitSha, status: "handed-over" };
@@ -85,16 +88,16 @@ async function handoverPreparedPublicRelease({ firestore, preparationId, commitS
 // transaction. This read establishes that only preparation content is stale.
 async function readStalePublicReleaseBeforeHandover({ firestore, transaction, preparationId, commitSha, target }) {
   assertPublicWorkerCandidateDatabase(firestore, target);
-  const state = await readPublicReleasePreparationStateInTransaction({ firestore, transaction, preparationId, commitSha, phase: "paused" });
+  const state = await readPublicReleasePreparationStateInTransaction({ firestore, transaction, preparationId, commitSha, phase: "paused", target });
   if (!state.preparation.freshnessDigest || !state.predecessorCurrent || state.contentCurrent ||
       !Number.isSafeInteger(state.contextRevision) || state.contextRevision < state.preparation.predecessor.contextRevision) {
     refuse("OLD recovery requires stale preparation content and the original paused predecessor");
   }
   const ref = refs(firestore, preparationId), batchId = state.reservation.buildBatchId;
   const work = await transaction.getAll(ref.handover, ref.promotion, firestore.doc(`system/publicDeployment/buildBatches/${batchId}`),
-    firestore.doc(`cmsPublicationSerializerJournals/cloudflare-publisher/releases/${preparationId}`));
+    firestore.doc(`cmsPublicationSerializerJournals/${serializerId(target)}/releases/${preparationId}`));
   if (work.some(row => row.exists)) refuse("OLD recovery requires no handover or promotion work");
-  const { proof, candidate } = await readPreparedReleaseProof(transaction, firestore, preparationId, commitSha);
+  const { proof, candidate } = await readPreparedReleaseProof(transaction, firestore, preparationId, commitSha, target);
   if (candidate.generation !== state.reservation.generation) refuse("The prepared release candidate differs from its reservation");
   return { proofDigest: digest(proof), runtimeUpdateTime: state.runtimeUpdateTime };
 }
@@ -109,10 +112,10 @@ async function sealPreparedPublicRelease({ firestore, preparationId, commitSha, 
   const ref = refs(firestore, preparationId);
   return firestore.runTransaction(async transaction => {
     const { reservation } = await readFreshPublicReleasePreparationInTransaction({ firestore, transaction,
-      preparationId, commitSha, phase: "ready" });
+      preparationId, commitSha, phase: "ready", target });
     const [candidateSnapshot, context, before, checkpointSnapshot] = await transaction.getAll(ref.candidate,
       firestore.doc(`cmsPreviewPublicContexts/${reservation.buildBatchId}`), ref.proof, ref.checkpoint);
-    const candidate = candidateInput(candidateSnapshot.data());
+    const candidate = candidateInput(candidateSnapshot.data(), target);
     const checkpoint = projectPreparedPublicReleaseCheckpoint(checkpointSnapshot.data(), preparationId, reservation);
     assertPublicMediaManifest(mediaManifest, reservation);
     const prepared = preparedArtifactFromCandidate(candidate);
@@ -146,11 +149,11 @@ async function promotePreparedPublicRelease({ firestore, preparationId, commitSh
   if (typeof apply !== "boolean") refuse("The prepared release apply flag is invalid");
   const ref = refs(firestore, preparationId);
   const batchRef = firestore.doc(`system/publicDeployment/buildBatches/cms-${preparationId}`);
-  const requestRef = firestore.doc(`cmsPublicationSerializerJournals/cloudflare-publisher/releases/${preparationId}`);
+  const requestRef = firestore.doc(`cmsPublicationSerializerJournals/${serializerId(target)}/releases/${preparationId}`);
   const result = await firestore.runTransaction(async transaction => {
     const [batch, promotion, request, runtime] = await transaction.getAll(batchRef, ref.promotion, requestRef,
       firestore.doc("system/cmsPublicationRuntime"));
-    const { candidate, proof: sealed } = await readPreparedReleaseProof(transaction, firestore, preparationId, commitSha);
+    const { candidate, proof: sealed } = await readPreparedReleaseProof(transaction, firestore, preparationId, commitSha, target);
     const receipt = { schemaVersion: 1, preparationId, commitSha, buildBatchId: candidate.buildBatchId,
       generation: candidate.generation, workerVersionId: candidate.workerVersionId, proofDigest: digest(sealed) };
     const work = { schemaVersion: 1, runtime: { owner: "cloudflare", release: commitSha }, queueId: preparationId,
@@ -178,7 +181,7 @@ async function promotePreparedPublicRelease({ firestore, preparationId, commitSh
     const control = parseCmsPublicationRuntimeControl(runtime.data());
     if (control.phase !== "paused" || control.cloud?.phase !== "paused" ||
         control.commitSha !== value.predecessor.commitSha || control.cloud?.commitSha !== value.predecessor.commitSha ||
-        control.cloud?.serializerId !== "cloudflare-publisher") {
+        control.cloud?.serializerId !== serializerId(target)) {
       refuse("Prepared release promotion requires both OLD publisher pins paused");
     }
     if (handover.data()?.schemaVersion !== 1 || handover.data().proofDigest !== digest(sealed) ||

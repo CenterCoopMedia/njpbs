@@ -1,4 +1,5 @@
 import { cloudflarePublicWorkerTag } from "./cloudflare-account.mjs";
+import { devCloudflareAccount } from "./dev-cloudflare-account.mjs";
 import { createServer } from "node:http";
 import { createRequire } from "node:module";
 import path from "node:path";
@@ -115,6 +116,8 @@ async function runCloudPublicationStages(
     // The Spotlight cache writes the production media bucket and origin only.
     throw new Error("Development cloud publication refuses Spotlight media storage");
   }
+  // A development publisher uploads only to its separately pinned account.
+  if (target.environment === "development") devCloudflareAccount(environment);
   // Only the private dev origin is read through Access; production never receives these.
   if (target.environment === "production" ? accessClientId !== undefined || accessClientSecret !== undefined
     : !accessClientId?.trim() || !accessClientSecret?.trim()) {
@@ -128,7 +131,7 @@ async function runCloudPublicationStages(
   await assertPreviewSandboxAvailable();
   if (mode === "--preflight") return;
   progress.stage = "inputs";
-  const buildEnvironment = { ...parseCmsPublicationPublicBuildEnvironment(environment),
+  const buildEnvironment = { ...parseCmsPublicationPublicBuildEnvironment(environment, target.environment),
     CMS_DEPLOYMENT_ENVIRONMENT: target.environment };
   if (!/^[A-Za-z0-9_-]{20,80}$/.test(cloudflareApiToken)) {
     throw new Error("Cloud publication credentials are invalid");

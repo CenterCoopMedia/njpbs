@@ -11,8 +11,11 @@ const { PUBLIC_CONTEXT_PATH } = require("./public-context-revision");
 const { publicReleaseFreshnessDigest } = require("./public-release-freshness");
 const { PreparedPublicReleaseError } = require("./public-release-error");
 const { assertPreparedPublicBuildSettings } = require("./public-build-settings");
+const { publicationTarget } = require("./publication-target");
 
 const COLLECTION = "system/publicReleasePreparations/entries";
+// An absent target is production; the operators pass one only for development.
+const serializerId = target => publicationTarget(target?.environment).serializerId;
 const validId = value => typeof value === "string" && /^[A-Za-z0-9]{20}$/.test(value);
 function refuse(message = "The public release preparation is invalid") { throw new PreparedPublicReleaseError(message); }
 function exact(value, fields) {
@@ -152,7 +155,7 @@ async function preparePublicRelease({ firestore, preparationId, commitSha, oldCo
     const control = parseCmsPublicationRuntimeControl(runtime.data());
     const cloud = control.cloud;
     if (predecessor.commitSha !== oldCommitSha || control.phase !== "ready" || control.commitSha !== oldCommitSha ||
-        !cloud || cloud.phase !== "ready" || cloud.commitSha !== oldCommitSha || cloud.serializerId !== "cloudflare-publisher") {
+        !cloud || cloud.phase !== "ready" || cloud.commitSha !== oldCommitSha || cloud.serializerId !== serializerId(target)) {
       refuse("Release preparation requires the current publisher and public source ready at OLD");
     }
     const publicContext = context.data();
@@ -187,11 +190,11 @@ async function checkPublicReleasePreparation({ firestore, preparationId, commitS
   assertPublicWorkerCandidateDatabase(firestore, target);
   if (!["ready", "paused"].includes(phase)) refuse();
   return firestore.runTransaction(async transaction => (await readFreshPublicReleasePreparationInTransaction({
-    firestore, transaction, preparationId, commitSha, phase })).reservation, { readOnly: true });
+    firestore, transaction, preparationId, commitSha, phase, target })).reservation, { readOnly: true });
 }
 
 async function readPublicReleasePreparationStateInTransaction({ firestore, transaction, preparationId, commitSha,
-  phase }) {
+  phase, target }) {
   const [prepared, deployment, runtime, context] = await transaction.getAll(preparationRef(firestore, preparationId),
     firestore.doc("system/publicDeployment"), firestore.doc("system/cmsPublicationRuntime"), firestore.doc(PUBLIC_CONTEXT_PATH));
   const value = prepared.data();
@@ -203,7 +206,7 @@ async function readPublicReleasePreparationStateInTransaction({ firestore, trans
   if (!["ready", "paused"].includes(phase)) refuse();
   if (control.phase !== phase || control.cloud?.phase !== phase ||
       control.commitSha !== publisher || control.cloud?.commitSha !== publisher ||
-      control.cloud?.serializerId !== "cloudflare-publisher") refuse("The preparation check requires both exact publisher pins");
+      control.cloud?.serializerId !== serializerId(target)) refuse("The preparation check requires both exact publisher pins");
   const freshnessDigest = await publicReleaseFreshnessDigest(transaction, firestore);
   const contextRevision = context.data()?.revision;
   const { contextRevision: preparedRevision, ...preparedPredecessor } = value.predecessor;
