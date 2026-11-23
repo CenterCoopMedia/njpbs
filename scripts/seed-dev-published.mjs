@@ -766,13 +766,16 @@ async function cliDatabase(mode, emulator) {
   const credential = cert(account);
   if (mode === 'export') {
     const token = await credential.getAccessToken();
-    const permissions = ['datastore.entities.get', 'datastore.entities.list', 'datastore.entities.create', 'datastore.entities.update', 'datastore.entities.delete', 'datastore.databases.import', 'datastore.databases.export'];
+    // The first two are required; every other probed permission, including any
+    // production storage access, must be absent.
+    const permissions = ['datastore.entities.get', 'datastore.entities.list', 'datastore.entities.create', 'datastore.entities.update', 'datastore.entities.delete', 'datastore.databases.import', 'datastore.databases.export',
+      'storage.buckets.get', 'storage.objects.get', 'storage.objects.list', 'storage.objects.create', 'storage.objects.delete'];
     const response = await fetch(`https://cloudresourcemanager.googleapis.com/v1/projects/${SOURCE}:testIamPermissions`, {
       method: 'POST', headers: { Authorization: `Bearer ${token.access_token}`, 'Content-Type': 'application/json' }, body: JSON.stringify({ permissions }),
     });
     if (!response.ok) fail('Cannot verify export read-only authority');
     const granted = (await response.json()).permissions ?? [];
-    if (!permissions.slice(0, 2).every(item => granted.includes(item)) || granted.some(item => !permissions.slice(0, 2).includes(item))) fail('Export identity must have read-only Firestore authority');
+    if (!permissions.slice(0, 2).every(item => granted.includes(item)) || granted.some(item => !permissions.slice(0, 2).includes(item))) fail('Export identity must have read-only Firestore authority and no storage authority');
   }
   const app = initializeApp({ projectId, credential }, `dev-seed-${mode}`);
   return { app, firestore: getFirestore(app) };

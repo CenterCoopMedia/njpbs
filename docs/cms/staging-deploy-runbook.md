@@ -259,8 +259,8 @@ The [seed operator](../../scripts/seed-dev-published.mjs) keeps `export`,
 production-read/development-write project pair, the explicit Node type-stripping
 flag and service-account JSON on stdin. Export accepts only the production
 service account that `SEED_EXPORT_IDENTITY` names, and only after its granted
-permissions prove it can get and list Firestore entities and cannot write,
-delete, import or export. Import and verify accept only the dedicated dev seed
+permissions prove it can get and list Firestore entities, cannot write,
+delete, import or export, and has no Cloud Storage access. Import and verify accept only the dedicated dev seed
 writer. No ADC, Auth/database export or production storage authority.
 Never substitute an administrator credential.
 
