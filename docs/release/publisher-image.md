@@ -65,3 +65,36 @@ The coordinator owns the separately authorized first dispatch and read-only
 digest proof. Estimate 15–25 hosted runner minutes for a new SHA and 2–5 for a
 rerun, with zero scheduled minutes. Keep this producer while the release method
 consumes registry images; it adds no alternate deployment path.
+
+## Development target
+
+Dispatch with `target=development` to build the development publisher from the
+same source. The image is named `njpbs-dev-cms-publisher`. The run checks the
+development config against the source with only the Worker and container name
+(`njpbs-dev-cms-publisher`), the `DURABLE_POST_WITHDRAWALS` bucket
+(`njpbs-dev-cms-publication`) and the route (`dev-publisher-health.njpbs.org`)
+replaced, all from `functions/lib/publication-target.js`. Every development
+input is rendered, so the image fingerprint covers all of them. The run title
+is `Publisher image development <SHA>` and the artifact is
+`publisher-image-development-<SHA>-<attempt>`. Production titles, artifacts and
+receipts are unchanged.
+
+The development job reads `PUBLISHER_DEVELOPMENT_PUBLIC_VARS_JSON` from the same
+`publisher-image` environment: the same key set, with `CMS_DEPLOYMENT_ENVIRONMENT`
+`development` and `PUBLICATION_SERIALIZER_ID` `cloudflare-dev-publisher`. Both
+targets refuse a variables map whose environment or serializer names the other
+target.
+
+A production run calls the source's preparation script with only the SHA, as
+older source commits require; only a development run adds `development`, so a
+source commit without development preparation refuses.
+
+A development artifact contains only `receipt.json`: schema 1, `target`,
+`source_sha`, the immutable `image`, `workflow_run_id` and
+`deployment_input_sha256`. It has no `publisher.json`. The development Worker
+bundles `functions/lib/publication-target.js`, whose development Worker name,
+origin and preview bucket are templates until rendering, and the withdrawal
+catalog keys derive from that Worker name; a config pointing at this unrendered
+checkout would write catalogs the development public Worker never reads. No
+development publisher deployment path exists yet; the artifact grants no
+deployment authority.

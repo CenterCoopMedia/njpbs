@@ -103,8 +103,8 @@ if (
   process.argv[1] &&
   path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)
 ) {
-  if (process.argv.length !== 3)
-    throw new Error("Usage: prepare-cloud-publisher <exact commit>");
+  if (process.argv.length !== 3 && process.argv.length !== 4)
+    throw new Error("Usage: prepare-cloud-publisher <exact commit> [production|development]");
   cloudflarePublicWorkerTag();
-  console.log(JSON.stringify(await prepareCloudPublisher(process.argv[2])));
+  console.log(JSON.stringify(await prepareCloudPublisher(process.argv[2], { environment: process.argv[3] ?? "production" })));
 }

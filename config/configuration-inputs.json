@@ -78,7 +78,7 @@
     },
     {
       "suppliers": ["github-variable", "process-environment"],
-      "names": ["PUBLISHER_PUBLIC_VARS_JSON"]
+      "names": ["PUBLISHER_DEVELOPMENT_PUBLIC_VARS_JSON", "PUBLISHER_PUBLIC_VARS_JSON"]
     },
     {
       "suppliers": ["worker-binding"],
@@ -869,6 +869,7 @@
         "PUBLIC_PAIR_ROUTING_MEASUREMENT_ENABLED",
         "PUBLIC_POST_RENDERER_COMPILE",
         "PUBLIC_RELEASE_COMPOSED_READERS_ENABLED",
+        "PUBLISHER_TARGET",
         "PWDEBUG",
         "PYANNOTE_METRICS_ENABLED",
         "QUEUE_ID",
