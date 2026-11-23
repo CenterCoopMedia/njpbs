@@ -30,6 +30,8 @@ import { assertPreparedPublicWorkerArtifact, preparePublicWorkerArtifact } from 
 import pageReaderContract from "../../functions/lib/page-reader-contract.js";
 import { readRetainedVideoCatalog } from "./cloud-external-refresh";
 import { publicationTarget } from "../../functions/lib/publication-target.js";
+import type { PublicationTarget } from "../../functions/lib/publication-target";
+import { publicWorkerCandidateRendererSeal } from "./public-post-renderer-release";
 
 const requireModule = createRequire(import.meta.url);
 const { reservePublicBuildBatch } = requireModule("../../functions/lib/public-deployment-coordinator.js");
@@ -42,8 +44,7 @@ const { PUBLIC_CONTEXT_PATH } = requireModule("../../functions/lib/public-contex
 const { createPostBackgroundStorage } = requireModule("../../functions/lib/post-background-storage.js");
 
 const site = fileURLToPath(new URL("..", import.meta.url));
-const FIREBASE_PROJECT_ID = "njpbs-site";
-const CLOUD_SERIALIZER_ID = "cloudflare-publisher";
+const PRODUCTION = publicationTarget("production");
 const FIREBASE_CREDENTIAL_FD = 3;
 const STORAGE_CREDENTIAL_FD = 4;
 const MEDIA_MANAGER_CREDENTIAL_FD = 5;
@@ -92,10 +93,11 @@ export function parseReleaseArguments(args: string[]): ReleaseArguments {
 /** Retire only an exhausted upload that has no candidate or activation owner.
  * All fences and both terminal writes share one transaction. A retained journal
  * is cleared only when its job belongs to this exact request. */
-export async function supersedeUploadExhaustedCloudRelease({ firestore, queueId, commitSha, apply = false,
+export async function supersedeUploadExhaustedCloudRelease({ firestore, queueId, commitSha, apply = false, target = PRODUCTION,
   serverTimestamp = () => firebaseAdminRuntime.FieldValue.serverTimestamp() }: {
-  firestore: Firestore; queueId: string; commitSha: string; apply?: boolean; serverTimestamp?: () => unknown;
+  firestore: Firestore; queueId: string; commitSha: string; apply?: boolean; target?: PublicationTarget; serverTimestamp?: () => unknown;
 }) {
+  const CLOUD_SERIALIZER_ID = target.serializerId;
   if (!QUEUE_ID.test(queueId ?? "") || !COMMIT_SHA.test(commitSha ?? "") || typeof apply !== "boolean") {
     operatorError("The cloud release supersede input is invalid");
   }
@@ -155,9 +157,12 @@ export async function supersedeUploadExhaustedCloudRelease({ firestore, queueId,
 /** Recheck the complete paused release fence in one transaction. The default
  * is read-only; applying changes only the exhausted request, never its journal,
  * artifact, batch, deployment pointer or publication controls. */
-export async function retryCmsPublicationCloudRelease({ firestore, queueId, commitSha, oldCommitSha, apply = false, now = Date.now }: {
+export async function retryCmsPublicationCloudRelease({ firestore, queueId, commitSha, oldCommitSha, apply = false, now = Date.now,
+  target = PRODUCTION }: {
   firestore: Firestore; queueId: string; commitSha: string; oldCommitSha: string; apply?: boolean; now?: () => number;
+  target?: PublicationTarget;
 }) {
+  const CLOUD_SERIALIZER_ID = target.serializerId;
   if (!QUEUE_ID.test(queueId ?? "") || !COMMIT_SHA.test(commitSha ?? "") || !COMMIT_SHA.test(oldCommitSha ?? "") ||
       commitSha === oldCommitSha || typeof apply !== "boolean") operatorError("The cloud release retry input is invalid");
   const buildBatchId = `cms-${queueId}`;
@@ -199,16 +204,22 @@ export async function retryCmsPublicationCloudRelease({ firestore, queueId, comm
   }, apply ? {} : { readOnly: true });
 }
 
-/** The build child inherits the process environment. A development target
- * would compile a renderer that the production upload refuses after the
- * release request exists, when the reservation can no longer be retired. */
-export function assertProductionReleaseTarget(environment: NodeJS.ProcessEnv): void {
+/** The release runner names the target from its run record and always passes
+ * it. Unset is the installed production runner. Any other value refuses before
+ * credentials are read, so the build child never compiles for a mixed target. */
+export function cloudReleaseTarget(environment: NodeJS.ProcessEnv): PublicationTarget {
   const target = environment.CMS_DEPLOYMENT_ENVIRONMENT;
-  if (target !== undefined && target !== "production") operatorError("The cloud release target must be production");
+  if (target !== undefined && target !== "production" && target !== "development") {
+    operatorError("The cloud release target must be production or development");
+  }
+  return publicationTarget(target ?? "production");
 }
 
-export async function assertProductionRendererSeals(directory: string, commitSha: string): Promise<void> {
-  const read = async (file: string) => JSON.parse(await readFile(path.join(directory, file), "utf8"));
+/** A development seal must name development; the rest is the production contract. */
+export async function assertReleaseRendererSeals(directory: string, commitSha: string,
+  environment: "production" | "development" = "production"): Promise<void> {
+  const read = async (file: string) => publicWorkerCandidateRendererSeal(
+    JSON.parse(await readFile(path.join(directory, file), "utf8")), environment) as Record<string, any> | null;
   const seal = await read("renderer/renderer-release.json");
   const publicSeal = await read("dist/posts/_no-build-assets/renderer-release.json");
   // The production upload accepts exactly this public seal.
@@ -234,7 +245,8 @@ interface StageDependencies {
   assertSourceCheckout: typeof assertCmsPublicationSourceCheckout;
   reserveBatch: (input: { firestore: Firestore; buildBatchId: string; commitSha: string;
     runtime: { owner: "cloudflare"; release: string } }) => Promise<{ batch: { generation: number; cutoffAt: { toMillis(): number } } }>;
-  prepareDetached: (input: { firestore: Firestore; preparationId: string; commitSha: string; oldCommitSha: string }) =>
+  prepareDetached: (input: { firestore: Firestore; preparationId: string; commitSha: string; oldCommitSha: string;
+    target?: PublicationTarget }) =>
     Promise<{ generation: number; cutoffAt: { toMillis(): number } }>;
   readContent: (firestore: Firestore, identity: { buildBatchId: string; commitSha: string; preparationId?: string }, scratch: string) => Promise<Buffer>;
   freezeExternalInputs: typeof freezeBackgroundPublicationInputs;
@@ -288,6 +300,7 @@ type StageReleaseInput = {
   interrupted?: () => boolean;
   dependencies?: Partial<StageDependencies>;
   prepareAgainstCommitSha?: string;
+  target?: PublicationTarget;
 };
 
 type PrepareStage = "preflight" | "input freeze" | "build" | "checkpoint upload" | "checkpoint restore" | "checkpoint record";
@@ -349,7 +362,7 @@ export async function stageCmsPublicationCloudRelease(input: StageReleaseInput) 
 async function produceCloudRelease({ firestore, storage, queueId, commitSha, stateDirectory,
   distDirectory = path.join(site, "dist"), rendererDirectory = path.join(site, ".public-post-renderer"),
   buildEnvironment, mediaManagerCredential, prepareAgainstCommitSha, readRetainedVideoCatalog: readCatalog,
-  now = Date.now, interrupted = () => false, dependencies: overrides }: StageReleaseInput,
+  now = Date.now, interrupted = () => false, dependencies: overrides, target = PRODUCTION }: StageReleaseInput,
   setStage: (stage: PrepareStage) => void) {
   if (!QUEUE_ID.test(queueId ?? "") || !COMMIT_SHA.test(commitSha ?? "") || !path.isAbsolute(stateDirectory) ||
       !path.relative(path.resolve(site, ".."), path.resolve(stateDirectory)).startsWith("..")) {
@@ -360,6 +373,8 @@ async function produceCloudRelease({ firestore, storage, queueId, commitSha, sta
     operatorError("The detached release predecessor is invalid");
   }
   const dependencies = { ...defaultDependencies, ...overrides };
+  // Shared release records treat an absent target as production.
+  const scoped = target.environment === "development" ? { target } : {};
   const expectedValues = prepareAgainstCommitSha ? expectedPublicBuildValues(commitSha, buildEnvironment) : undefined;
   await dependencies.assertSourceCheckout(commitSha);
   const runtime = { owner: "cloudflare" as const, release: commitSha };
@@ -371,7 +386,7 @@ async function produceCloudRelease({ firestore, storage, queueId, commitSha, sta
   if (!control.exists || !pointer.exists) operatorError("The publication control state is missing");
   const cloud = cloudCmsPublicationRuntimeControl(control.data());
   const expectedPublisher = prepareAgainstCommitSha ?? commitSha;
-  if (cloud.serializerId !== CLOUD_SERIALIZER_ID || cloud.commitSha !== expectedPublisher) {
+  if (cloud.serializerId !== target.serializerId || cloud.commitSha !== expectedPublisher) {
     operatorError("The cloud publisher is not pinned to this release");
   }
   if (pointer.data()?.state !== "idle") operatorError("A public deployment is in progress");
@@ -391,7 +406,7 @@ async function produceCloudRelease({ firestore, storage, queueId, commitSha, sta
 
   setStage("input freeze");
   const batch = prepareAgainstCommitSha
-    ? await dependencies.prepareDetached({ firestore, preparationId: queueId, commitSha, oldCommitSha: prepareAgainstCommitSha })
+    ? await dependencies.prepareDetached({ firestore, preparationId: queueId, commitSha, oldCommitSha: prepareAgainstCommitSha, ...scoped })
     : (await dependencies.reserveBatch({ firestore, buildBatchId, commitSha, runtime })).batch;
   const directory = path.join(stateDirectory, "releases", queueId);
   await rm(directory, { recursive: true, force: true });
@@ -436,7 +451,7 @@ async function produceCloudRelease({ firestore, storage, queueId, commitSha, sta
       artifactReceiptPath: path.join(directory, "artifact-inventory.json"),
       ...(prepareAgainstCommitSha ? { forwardBuildOutput: false } : {}),
       buildEnvironment: { ...buildEnvironment, PUBLIC_ARTIFACT_BATCH_MODE: "background",
-        CMS_DEPLOYMENT_ENVIRONMENT: "production" } });
+        CMS_DEPLOYMENT_ENVIRONMENT: target.environment } });
     // The build child has ended here, so the checkout is quiet again.
     stopIfInterrupted();
     prepared = await dependencies.prepareArtifact({ artifactReceipt, distDirectory,
@@ -450,7 +465,7 @@ async function produceCloudRelease({ firestore, storage, queueId, commitSha, sta
   if (prepared.commitSha !== commitSha || prepared.buildBatchId !== buildBatchId || prepared.generation !== batch.generation) {
     operatorError("The built artifact differs from its reservation");
   }
-  await assertProductionRendererSeals(directory, commitSha);
+  await assertReleaseRendererSeals(directory, commitSha, target.environment);
   stopIfInterrupted();
   if (prepareAgainstCommitSha) {
     await readPreparedPublicBuildSettings(directory, commitSha, expectedValues!);
@@ -462,20 +477,21 @@ async function produceCloudRelease({ firestore, storage, queueId, commitSha, sta
     const publicBuildSettings = await readPreparedPublicBuildSettings(directory, commitSha, expectedValues!);
     setStage("checkpoint record");
     await dependencies.recordCheckpoint({ firestore, preparationId: queueId, commitSha,
-      inputSha256: identity.inputSha256, artifactCheckpointDigest, preparedArtifact: prepared, publicBuildSettings });
+      inputSha256: identity.inputSha256, artifactCheckpointDigest, preparedArtifact: prepared, publicBuildSettings, ...scoped });
     return { queueId, buildBatchId, commitSha, generation: batch.generation, artifactDigest: prepared.artifactDigest,
       artifactCheckpointDigest, status: "prepared" as const };
   }
-  await dependencies.stage({ firestore, storage, serializerId: CLOUD_SERIALIZER_ID, identity, directory });
+  await dependencies.stage({ firestore, storage, serializerId: target.serializerId, identity, directory });
   return { queueId, buildBatchId, commitSha, generation: batch.generation, artifactDigest: prepared.artifactDigest, status: "staged" as const };
 }
 
 /** Retires a reservation of this producer that will never be staged. A staged
  * request, a candidate or a queue row belongs to another owner and refuses. */
-export async function retireCmsPublicationCloudReleaseReservation({ firestore, queueId, commitSha,
+export async function retireCmsPublicationCloudReleaseReservation({ firestore, queueId, commitSha, target = PRODUCTION,
   serverTimestamp = () => firebaseAdminRuntime.FieldValue.serverTimestamp() }: {
-  firestore: Firestore; queueId: string; commitSha: string; serverTimestamp?: () => unknown;
+  firestore: Firestore; queueId: string; commitSha: string; target?: PublicationTarget; serverTimestamp?: () => unknown;
 }) {
+  const CLOUD_SERIALIZER_ID = target.serializerId;
   if (!QUEUE_ID.test(queueId ?? "") || !COMMIT_SHA.test(commitSha ?? "")) operatorError("The cloud release input is invalid");
   const buildBatchId = `cms-${queueId}`;
   const batchRef = firestore.doc(`system/publicDeployment/buildBatches/${buildBatchId}`);
@@ -519,28 +535,29 @@ export async function main(args = process.argv.slice(2), environment: NodeJS.Pro
   let storage: Storage | undefined;
   try {
     assertProductionFirestoreRouting(environment);
-    assertProductionReleaseTarget(environment);
+    const target = cloudReleaseTarget(environment);
     const parsed = parseReleaseArguments(args);
     const { action, queueId, commitSha } = parsed;
     if (parsed.action === "prepare") expectedPublicBuildValues(commitSha, environment);
-    const serviceAccount = parseCmsPublicationFirebaseServiceAccount(readFileSync(FIREBASE_CREDENTIAL_FD, "utf8"));
+    // The account must belong to the target project, so a mixed credential refuses.
+    const serviceAccount = parseCmsPublicationFirebaseServiceAccount(readFileSync(FIREBASE_CREDENTIAL_FD, "utf8"), target.projectId);
     const initialize = () => firebaseAdminRuntime.getFirestore(app = firebaseAdminRuntime.initializeApp(
-      { credential: firebaseAdminRuntime.cert(serviceAccount), projectId: FIREBASE_PROJECT_ID },
+      { credential: firebaseAdminRuntime.cert(serviceAccount), projectId: target.projectId },
       "cms-publication-cloud-release-operator",
     ));
     if (parsed.action === "supersede-upload-exhausted") {
-      const result = await supersedeUploadExhaustedCloudRelease({ firestore: initialize(), queueId, commitSha, apply: parsed.apply });
+      const result = await supersedeUploadExhaustedCloudRelease({ firestore: initialize(), queueId, commitSha, apply: parsed.apply, target });
       process.stdout.write(`${JSON.stringify(result)}\n`);
       return;
     }
     if (parsed.action === "retry") {
       const result = await retryCmsPublicationCloudRelease({ firestore: initialize(), queueId, commitSha,
-        oldCommitSha: parsed.oldCommitSha, apply: parsed.apply });
+        oldCommitSha: parsed.oldCommitSha, apply: parsed.apply, target });
       process.stdout.write(`${JSON.stringify(result)}\n`);
       return;
     }
     if (action === "retire") {
-      const retired = await retireCmsPublicationCloudReleaseReservation({ firestore: initialize(), queueId, commitSha });
+      const retired = await retireCmsPublicationCloudReleaseReservation({ firestore: initialize(), queueId, commitSha, target });
       process.stdout.write(`${JSON.stringify(retired)}\n`);
       return;
     }
@@ -549,13 +566,13 @@ export async function main(args = process.argv.slice(2), environment: NodeJS.Pro
     const buildEnvironment = parseCmsPublicationPublicBuildEnvironment(environment);
     const storageCredential = parsePreviewStorageCredential(readFileSync(STORAGE_CREDENTIAL_FD, "utf8"));
     const mediaManagerCredential = parseCmsPublicationMediaManagerCredential(readFileSync(MEDIA_MANAGER_CREDENTIAL_FD, "utf8"));
-    storage = createCmsPublicationCloudStorage({ ...storageCredential, includeRenderer: true });
+    storage = createCmsPublicationCloudStorage({ ...storageCredential, includeRenderer: true, target });
     const firestore = initialize();
     const result = await stageCmsPublicationCloudRelease({
-      firestore, storage, queueId, commitSha, stateDirectory, mediaManagerCredential, buildEnvironment,
+      firestore, storage, queueId, commitSha, stateDirectory, mediaManagerCredential, buildEnvironment, target,
       readRetainedVideoCatalog: async () => {
         const input = (await firestore.doc(PUBLIC_CONTEXT_PATH).get()).data()?.externalInputs;
-        return readRetainedVideoCatalog(input, createPostBackgroundStorage(publicationTarget("production").backgroundBucket, app));
+        return readRetainedVideoCatalog(input, createPostBackgroundStorage(target.backgroundBucket, app));
       },
       ...(parsed.action === "prepare" ? { prepareAgainstCommitSha: parsed.oldCommitSha } : {}),
       interrupted: installInterruptGuard(),
