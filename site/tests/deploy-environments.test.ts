@@ -227,6 +227,11 @@ describe("deploy credential environments", () => {
               expect(["schedule-bake.yml/bake", "schedule-bake.yml/deferred-merge"]).toContain(context);
               expect(environment, context).toBe("schedule-bake");
             }
+            // The promote App key shares the production and development environments
+            // with deploy jobs; only the two promotion jobs may read it.
+            if (secret === "CCM_PROMOTE_APP_PRIVATE_KEY") {
+              expect(["promote.yml/promote", "promote.yml/promote-development"]).toContain(context);
+            }
             if (secretExceptions[context]?.includes(secret)) continue;
             expect(environment, `${context}: ${secret} has no environment`).toBeDefined();
             expect(policy[environment!]?.secrets, `${context}: ${secret} is not provisioned in ${environment}`).toContain(secret);
