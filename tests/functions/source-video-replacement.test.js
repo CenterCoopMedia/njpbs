@@ -11,6 +11,7 @@ import previews from "../../functions/video-previews.js";
 import previewJob from "../../functions/lib/video-preview-job.js";
 import previewProcessor from "../../functions/lib/video-preview-processor.js";
 import renditions from "../../functions/lib/source-media-rendition.js";
+import sourceContract from "../../functions/lib/source-media-contract.js";
 import snapshots from "../../functions/lib/publish-snapshot.js";
 import publicVideo from "../../functions/lib/public-video.js";
 import withdrawals from "../../functions/lib/public-video-withdrawal.js";
@@ -449,6 +450,8 @@ describe("video replacement HTTP contract and processing boundary", () => {
     expect((await assetRef().get()).data()).toMatchObject({ objectVersionId: "original-v1", version: 1 });
   });
   it("keeps current playback, staff metadata and placements throughout processing, then retains one rollback version and audit hash", async () => {
+    const parentSource = { sourceId: source.id, assetId: "parent-video" };
+    await assetRef().update({ parentSource });
     const before = (await assetRef().get()).data();
     const placement = db.doc("cmsPosts/fixture-placement");
     await placement.set({ status: "draft", blocks: [{ id: "video-block", order: 0, visible: true, type: "video", data: { sourceId: source.id, assetId } }] });
@@ -458,6 +461,7 @@ describe("video replacement HTTP contract and processing boundary", () => {
     expect((await assetRef().get()).data()).toMatchObject({ objectVersionId: "original-v1", rendition: before.rendition });
     const current = await promote();
     expect(current).toMatchObject({ name: "Staff edit during processing", credit: "Staff credit", description: before.description, tags: before.tags, version: 3 });
+    expect(sourceContract.sourceMediaAssetSummary(sourceContract.parseSourceMediaAsset(assetId, current)).parentSource).toEqual(parentSource);
     expect(current.objectVersionId).not.toBe(before.objectVersionId);
     expect((await placement.get()).data().blocks[0].data.assetId).toBe(assetId);
     const retained = await replacementRef().collection("versions").get();
@@ -503,13 +507,23 @@ describe("video replacement HTTP contract and processing boundary", () => {
   });
   it("rollback restores the previous binary within 14 days and atomically protects it from cleanup", async () => {
     const original = (await assetRef().get()).data();
-    await replace(); clock += versions.RETENTION_MS - 1;
+    const parentSource = { sourceId: source.id, assetId: "parent-video" };
+    const parentSourceVersions = { outputFileVersion: sourceContract.sourceMediaFileVersion(original.objectVersionId),
+      fileVersion: sourceContract.sourceMediaFileVersion("parent-original"), viewingCopyVersion: "a".repeat(64) };
+    await assetRef().update({ parentSource, parentSourceVersions });
+    const { current } = await replace();
+    const summarize = asset => sourceContract.sourceMediaAssetSummary(sourceContract.parseSourceMediaAsset(assetId, asset));
+    expect(summarize(current).parentSource).toBeNull();
+    clock += versions.RETENTION_MS - 1;
     const response = await call("rollback", { sourceId: source.id, assetId, expectedVersion: 2, confirmed: true });
     expect(response.statusCode, JSON.stringify(response.body)).toBe(200);
     await purge(clock + 2);
     expect(objects.has(original.objectKey)).toBe(true);
     await promote();
-    expect((await assetRef().get()).data()).toMatchObject({ objectKey: original.objectKey, rendition: original.rendition });
+    const restored = (await assetRef().get()).data();
+    expect(restored).toMatchObject({ objectKey: original.objectKey, rendition: original.rendition });
+    expect(summarize(restored).parentSource).toEqual({ ...parentSource,
+      fileVersion: parentSourceVersions.fileVersion, viewingCopyVersion: parentSourceVersions.viewingCopyVersion });
   });
   it("expired rollback disappears with a clear label and cleanup is repeatable and dry-run safe", async () => {
     const original = (await assetRef().get()).data();
