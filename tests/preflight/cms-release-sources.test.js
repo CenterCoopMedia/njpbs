@@ -149,6 +149,10 @@ describe("CMS release source contract", () => {
     writeFileSync(network, `globalThis.fetch = async (url, init = {}) => {
       const { origin, pathname } = new URL(url);
       if (origin === "https://admin.njpbs.org") return new Response(null, {status: 200});
+      if (origin === "https://us-central1-njpbs-site.cloudfunctions.net" &&
+          pathname === "/donationHealth" && init.method === "HEAD") {
+        return new Response(null, {status: 405});
+      }
       if (origin === "https://us-central1-njpbs-site.cloudfunctions.net") return new Response(null, {status: 403});
       if (origin !== "https://cms-api.example.test") throw Error("Unexpected smoke origin");
       if (pathname === "/health") return new Response(null, {status: 200});
