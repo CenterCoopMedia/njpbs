@@ -1,5 +1,5 @@
 #!/usr/bin/env -S node --experimental-strip-types
-// This operator never uses ADC or production storage credentials. See the runbook.
+// This operator never uses ADC and makes no Cloud Storage call. See the runbook.
 import { createHash, randomUUID } from 'node:crypto';
 import { constants } from 'node:fs';
 import { readFile, mkdir, writeFile, open, link, unlink } from 'node:fs/promises';
@@ -14,8 +14,10 @@ import publicProjection from '../functions/lib/public-content-projection.js';
 import pageContract from '../functions/lib/public-page-contract.js';
 import settingsContract from '../functions/lib/cms-settings-contract.js';
 import mediaUsage from '../functions/lib/media-usage.js';
+import electionApproval from '../functions/lib/election-results-approval.js';
 import mediaContract from '../functions/lib/media-contract.js';
 import mediaDiscovery from '../functions/lib/media-discovery.js';
+import publicContext from '../functions/lib/public-context-revision.js';
 import mediaCategories from '../functions/lib/media-categories.js';
 import { parseContentSectionDefinition, SEEDED_CONTENT_SECTIONS } from '../packages/content-core/src/content-sections.ts';
 import publicAssetHosts from '../functions/lib/public-asset-hosts.json' with { type: 'json' };
@@ -49,7 +51,8 @@ export function canonical(value) {
   if (Array.isArray(value)) return `[${value.map(canonical).join(',')}]`;
   if (value && typeof value === 'object') {
     if (typeof value.toDate === 'function') return canonical(value.toDate().toISOString());
-    return `{${Object.keys(value).sort().map(key => `${JSON.stringify(key)}:${canonical(value[key])}`).join(',')}}`;
+    // Block projections leave absent optional fields as undefined; JSON omits them.
+    return `{${Object.keys(value).filter(key => value[key] !== undefined).sort().map(key => `${JSON.stringify(key)}:${canonical(value[key])}`).join(',')}}`;
   }
   if (value === undefined || (typeof value === 'number' && !Number.isFinite(value))) throw new Error('Non-JSON seed value');
   return JSON.stringify(value);
@@ -108,11 +111,18 @@ function publicSnapshot(collection, id, value) {
   if (collection === 'cmsPages' && !pageContract.publicPagePath(id, cleaned.metadata)) fail(`Invalid public page route: ${id}`);
   const parsed = blockContract.parseBlocks(cleaned.blocks, { complete: true, ...(collection === 'cmsPages' ? { pageId: id } : {}) });
   if (!parsed.ok) fail(`Invalid published blocks: ${collection}/${id}`);
-  return snapshotContract.createPublishedSnapshot({ collection, document: {
+  const document = {
     ...cleaned.metadata, id, blocks: visibleLayoutBlocks(parsed.blocks).map(block => block.type === 'bio_card'
       ? pick(block, ['id', 'type', 'section', 'layout', 'order', 'visible', 'data']) : publicProjection.selectedBlock(block)), version: value.sourceVersion,
     contentVersion: value.contentVersion ?? value.sourceVersion,
-  }, publishedAt: instant(value.publishedAt), publishedBy: ACTOR });
+  };
+  // Published election races were approved before publication. The snapshot
+  // gate needs those approvals; they never enter the snapshot or dev. A race's
+  // as-of time can follow the first publication, so approve at the latest one.
+  const asOf = document.blocks.flatMap(block => block.type === 'election_results' ? block.data.races.map(race => Date.parse(race.asOf)) : []);
+  const approvedAt = new Date(Math.max(Date.parse(instant(value.publishedAt)), ...asOf.filter(Number.isFinite))).toISOString();
+  document.electionResultsApprovals = electionApproval.approveElectionResults(document, { uid: ACTOR, displayName: ACTOR }, approvedAt);
+  return snapshotContract.createPublishedSnapshot({ collection, document, publishedAt: instant(value.publishedAt), publishedBy: ACTOR });
 }
 function publicSetting(id, value) {
   const published = settingsContract.projectPublishedCmsSettings({
@@ -350,9 +360,12 @@ export async function exportPublished({ firestore, source = SOURCE, destination 
       records.push(seedRecord('cmsSettings', id, projection, projection.sourceVersion, confirmed('cmsSettings', id, projection.sourceVersion)));
     }
     let refs = referenceSets(records);
-    for (const id of [...refs.authors].sort()) {
+    // Dev mirrors every published public profile, referenced or not, so an author
+    // page matches production and a withdrawn profile is the only one missing.
+    const profiles = new Map((await transaction.get(firestore.collection('cmsAuthorProfilesPublic'))).docs.map(doc => [doc.id, doc]));
+    for (const id of [...new Set([...refs.authors, ...profiles.keys()])].sort()) {
       if (!ID.test(id)) fail('Invalid author reference');
-      const snapshot = await transaction.get(firestore.doc(`cmsAuthorProfilesPublic/${id}`));
+      const snapshot = profiles.get(id) ?? { exists: false };
       // A frozen freeform byline needs no private profile or staff lookup.
       if (!snapshot.exists) { omissions.push({ collection: 'cmsAuthorProfilesPublic', id, reason: 'No public author profile; retain frozen byline only' }); continue; }
       const projection = projectAt('cmsAuthorProfilesPublic', id, () => publicAuthor(id, snapshot.data()));
@@ -564,14 +577,72 @@ function editableRecords(manifest) {
   return output.sort((a, b) => a.path.localeCompare(b.path, 'en'));
 }
 
-export async function importPublished({ firestore, manifest, copy, source = SOURCE, destination = DESTINATION, apply = false }) {
+// Timestamps are not seed content; an earlier seed's createdAt is kept on refresh.
+function seedHashOf(data) {
+  const seedData = Object.fromEntries(Object.entries(data).filter(([key]) => !['createdAt', 'updatedAt'].includes(key)));
+  if (seedData.mediaDiscovery) seedData.mediaDiscovery = Object.fromEntries(Object.entries(seedData.mediaDiscovery).filter(([key]) => !['createdAtKey', 'updatedAtKey'].includes(key)));
+  return digest(seedData);
+}
+// A refresh removes only withdrawn public records: production withdrew them, so
+// dev does too. Shared rows (media, categories, sections, private author rows and
+// Sponsor or Newsletter cards) stay, because dev-authored records may use them.
+// A configuration-only manifest removes nothing.
+const REMOVABLE = /^(cmsPages|cmsPosts|cmsSettings|cmsAuthorProfilesPublic)\//;
+async function trackedRemovals(transaction, firestore, manifest, records) {
+  if (manifest.configurationOnly) return { removals: [], unresolved: [] };
+  const paths = new Set(records.map(record => record.path));
+  const tracked = new Map((await transaction.get(firestore.collection('devSeedRecords'))).docs.map(doc => [doc.data().path, doc.data()]));
+  const candidates = [...tracked.keys()].filter(path => typeof path === 'string' && !paths.has(path) && REMOVABLE.test(path));
+  // Cards are stored with Posts. A row's seeded kind is known only while it still
+  // matches the receipt the seed wrote; a seeded card, or a Post whose kind cannot
+  // be established that way, is never removed.
+  const posts = candidates.filter(path => path.startsWith('cmsPosts/'));
+  const kept = new Set(); const unresolved = [];
+  for (let offset = 0; offset < posts.length; offset += 100) {
+    const snapshots = await transaction.getAll(...posts.slice(offset, offset + 100).map(path => firestore.doc(path)));
+    snapshots.forEach(snapshot => {
+      const seeded = snapshot.exists && digest(snapshot.data()) === tracked.get(snapshot.ref.path).recordHash;
+      if (!seeded || ['sponsor', 'newsletter'].includes(snapshot.data().type)) kept.add(snapshot.ref.path);
+      // A dev-edited row the source withdrew stays, but the refresh has not reconciled it.
+      if (snapshot.exists && !seeded) unresolved.push(snapshot.ref.path);
+    });
+  }
+  const byPath = (a, b) => a.localeCompare(b, 'en');
+  return { removals: candidates.filter(path => !kept.has(path)).sort(byPath), unresolved: unresolved.sort(byPath) };
+}
+const PUBLIC_RECORD = /^(cmsPosts|cmsPages|cmsSettings|cmsAuthorProfilesPublic|media_assets_public)\//;
+
+// A dry run is the plan. Each entry binds a seed-written path to the document
+// and receipt hashes the dry run saw. Apply restores or removes a row only while
+// both still match; anything else is refused or retained as without a plan.
+const HASH_OR_NULL = value => value === null || SHA.test(value);
+function planScope(manifest, plan) {
+  if (!plan) return { restored: new Map(), removed: new Map() };
+  const list = value => Array.isArray(value) && value.every(entry => canonical(Object.keys(entry ?? {}).sort()) === canonical(['document', 'path', 'receipt']) &&
+    typeof entry.path === 'string' && HASH_OR_NULL(entry.document) && SHA.test(entry.receipt));
+  if (plan.applied !== false || plan.manifestHash !== manifest.hash || !list(plan.restored) || !list(plan.removed)) fail('The plan must be a dry run of this manifest');
+  return { restored: new Map(plan.restored.map(entry => [entry.path, entry])), removed: new Map(plan.removed.map(entry => [entry.path, entry])) };
+}
+// The observed state of a seed-written row: its document (null when deleted) and its receipt.
+const observed = (path, current, prior) => ({ path, document: current.exists ? digest(current.data()) : null, receipt: digest(prior.data()) });
+const samePlan = (planned, seen) => planned?.document === seen.document && planned.receipt === seen.receipt;
+
+export async function importPublished({ firestore, manifest, copy, plan, source = SOURCE, destination = DESTINATION, apply = false, onGroup = () => {} }) {
   assertPair(source, destination); assertDatabase(firestore, DESTINATION);
   validateManifest(manifest);
   if (copy) validateCopy(manifest, copy);
+  if (plan && !apply) fail('A plan is an apply option');
+  const scope = planScope(manifest, plan);
   const records = editableRecords(manifest);
-  // Preflight every record before any write. Each bounded apply transaction then
-  // repeats the conflict check. An interrupted large import resumes by seed hashes.
-  const run = (selected, write) => firestore.runTransaction(async transaction => {
+  // The dry run lists seeded rows dev changed or deleted (restored) and seeded
+  // rows the source withdrew (removed). Without a plan, apply refuses a restore
+  // and retains a withdrawn row. Untracked dev-authored rows at a source path are
+  // always refused. Preflight every record before any write; each bounded apply
+  // transaction repeats the check. An interrupted refresh resumes by seed hashes.
+  // Every receipt this run writes carries its id, so a plan made before another
+  // refresh rewrote a row no longer matches it, even when the hashes are identical.
+  const refreshId = randomUUID();
+  const run = (selected, removals, enforce, write) => firestore.runTransaction(async transaction => {
     const pointerRef = firestore.doc('system/publicDeployment');
     const pointer = manifest.configurationOnly ? null : await transaction.get(pointerRef);
     const runtimeRef = firestore.doc('system/cmsPreviewRuntime');
@@ -584,31 +655,68 @@ export async function importPublished({ firestore, manifest, copy, source = SOUR
         if (!(await transaction.get(firestore.collection(collection).limit(1))).empty) fail('Initial dev seed requires empty queues');
       }
     }
-    const changes = []; let unchanged = 0;
+    const changes = []; const restored = []; const removed = []; const retained = []; let unchanged = 0;
     for (const record of selected) {
       const ref = firestore.doc(record.path);
       const priorRef = firestore.doc(`devSeedRecords/${digest(record.path)}`);
       const [current, prior] = await transaction.getAll(ref, priorRef);
-      const seedData = Object.fromEntries(Object.entries(record.data).filter(([key]) => !['createdAt', 'updatedAt'].includes(key)));
-      if (seedData.mediaDiscovery) seedData.mediaDiscovery = Object.fromEntries(Object.entries(seedData.mediaDiscovery).filter(([key]) => !['createdAtKey', 'updatedAtKey'].includes(key)));
-      const seedHash = digest(seedData);
+      const seedHash = seedHashOf(record.data);
+      const tracked = prior.exists && prior.data().path === record.path;
+      // An untracked row at a source path is dev-authored work; overwriting it would lose it.
+      if (current.exists && !tracked) fail(`Dev-authored record collides with the source: ${record.path}`);
+      const clean = current.exists && digest(current.data()) === prior.data().recordHash;
+      if (clean && prior.data().seedHash === seedHash) { unchanged++; continue; }
+      if (tracked && !clean) {
+        const seen = observed(record.path, current, prior);
+        if (enforce && !samePlan(scope.restored.get(record.path), seen)) {
+          fail(`Dev ${current.exists ? 'edit' : 'deletion'} conflict: ${record.path}; it is not in the plan or changed after the dry run`);
+        }
+        restored.push(seen);
+      }
       let data = record.data;
       if (current.exists) {
-        if (!prior.exists || prior.data().path !== record.path || digest(current.data()) !== prior.data().recordHash) fail(`Dev edit conflict: ${record.path}`);
-        if (prior.data().seedHash === seedHash) { unchanged++; continue; }
         if (!record.path.startsWith('cmsSettings/') && current.data().createdAt !== undefined) data = { ...data, createdAt: current.data().createdAt };
         if (data.mediaDiscovery) data = mediaDiscovery.withMediaDiscovery(record.path.split('/')[1], data);
-      } else if (prior.exists) fail(`Dev deletion conflict: ${record.path}; explicit reset required`);
+      }
       changes.push({ ref, priorRef, record, data, seedHash });
     }
-    if (write && changes.some(({ record }) => /^(cmsPosts|cmsPages|cmsSettings|cmsAuthorProfilesPublic|media_assets_public)\//.test(record.path))) {
+    for (const path of removals) {
+      const ref = firestore.doc(path);
+      const priorRef = firestore.doc(`devSeedRecords/${digest(path)}`);
+      const [current, prior] = await transaction.getAll(ref, priorRef);
+      // A resumed refresh already removed this row.
+      if (!prior.exists) continue;
+      // Only a receipt that names this path shows that the seed wrote it.
+      if (prior.data().path !== path) fail(`Seed receipt does not match its record: ${path}`);
+      const seen = observed(path, current, prior);
+      if (enforce && !scope.removed.has(path)) { retained.push(path); continue; }
+      // A row edited or rewritten by another refresh after the dry run is never deleted.
+      if (enforce && !samePlan(scope.removed.get(path), seen)) fail(`Seed record changed after the dry run: ${path}; run the refresh again`);
+      removed.push({ ref, priorRef, seen });
+    }
+    // The preflight checks the whole plan, so a refused refresh writes nothing.
+    const touched = [...changes.map(({ record }) => record.path), ...removed.map(({ seen }) => seen.path)];
+    if (touched.some(path => PUBLIC_RECORD.test(path))) {
       const enrollment = await transaction.get(firestore.doc('system/publicReleaseChangeLog'));
       if (enrollment.exists && enrollment.data()?.enabled !== false) fail('Published seeding refuses an enrolled public change log; use its publication owners');
     }
     if (write) {
       for (const { ref, priorRef, record, data, seedHash } of changes) {
         transaction.set(ref, data);
-        transaction.set(priorRef, { path: record.path, recordHash: digest(data), seedHash, manifestHash: manifest.hash });
+        transaction.set(priorRef, { path: record.path, recordHash: digest(data), seedHash, manifestHash: manifest.hash, refreshId });
+      }
+      for (const { ref, priorRef } of removed) { transaction.delete(ref); transaction.delete(priorRef); }
+      // Seeded rows bypass their publication owners. Advance the public context as
+      // they do, so aggregate receipts and the withdrawal fence see the change.
+      const withdrawal = removed.some(({ seen }) => PUBLIC_RECORD.test(seen.path));
+      const media = touched.some(path => path.startsWith('media_assets/'));
+      const home = touched.includes('cmsPages/home');
+      // The media owners' function also restarts open media cursors, clears the
+      // cached active count and advances the public context.
+      if (media) mediaDiscovery.bumpMediaDiscoveryRevision(transaction, firestore, { withdrawal });
+      // A Home change also advances the Home revision, as staff publication does.
+      if (touched.some(path => PUBLIC_RECORD.test(path)) && (!media || home)) {
+        publicContext.bumpPublicContextRevision(transaction, firestore, { withdrawal, homePublication: home });
       }
       if (!manifest.configurationOnly && !marker.exists) {
         transaction.create(pointerRef, deploymentContract.initialPublicDeploymentPointer());
@@ -616,17 +724,71 @@ export async function importPublished({ firestore, manifest, copy, source = SOUR
         transaction.create(markerRef, { schemaVersion: 1, firstManifestHash: manifest.hash, actor: ACTOR });
       }
     }
-    return { applied: write, changed: changes.length, unchanged, deleted: 0, manifestHash: manifest.hash };
+    return { applied: write, changed: changes.length, unchanged, deleted: removed.length, restored,
+      removed: removed.map(({ seen }) => seen), retained, manifestHash: manifest.hash };
   }, write ? {} : { readOnly: true });
-  const preflight = await run(records, false);
+  const { removals, unresolved } = await firestore.runTransaction(transaction => trackedRemovals(transaction, firestore, manifest, records), { readOnly: true });
+  const preflight = { ...await run(records, removals, apply, false), unresolved };
   if (!apply) return preflight;
-  const result = { ...preflight, applied: true, changed: 0, unchanged: 0 };
+  const result = { ...preflight, applied: true, changed: 0, unchanged: 0, deleted: 0, restored: [], removed: [], retained: [] };
+  const items = [...records.map(record => ({ record })), ...removals.map(removal => ({ removal }))];
+  let group = 0;
+  const applyGroup = async slice => {
+    let batch;
+    try {
+      batch = await run(slice.filter(item => item.record).map(item => item.record), slice.filter(item => item.removal).map(item => item.removal), true, true);
+    } catch (error) {
+      // Firestore counts index entries toward its commit limit, so a group of
+      // index-heavy rows can exceed it (production media on Nov. 23, 2026).
+      // Halve the group; each half repeats every check in its own transaction.
+      if (slice.length < 2 || error?.code !== 3 || !/Transaction too big/.test(String(error.message))) throw error;
+      const half = Math.ceil(slice.length / 2);
+      await applyGroup(slice.slice(0, half));
+      await applyGroup(slice.slice(half));
+      return;
+    }
+    // Each committed group is reported at once, so a later failure keeps the record of earlier writes.
+    onGroup({ group: group++, ...batch });
+    result.changed += batch.changed; result.unchanged += batch.unchanged; result.deleted += batch.deleted;
+    result.restored.push(...batch.restored); result.removed.push(...batch.removed); result.retained.push(...batch.retained);
+  };
   // The empty seed still initializes the fresh coordinator.
-  for (let offset = 0; offset < Math.max(1, records.length); offset += 100) {
-    const batch = await run(records.slice(offset, offset + 100), true);
-    result.changed += batch.changed; result.unchanged += batch.unchanged;
-  }
+  for (let offset = 0; offset < Math.max(1, items.length); offset += 100) await applyGroup(items.slice(offset, offset + 100));
+  // Compare what apply did with the plan it was given. Planned rows already at the
+  // source (a resumed refresh) are notApplied; retained rows still fail verify.
+  const done = new Set([...result.restored, ...result.removed].map(({ path }) => path));
+  const planned = [...scope.restored.keys(), ...scope.removed.keys()];
+  result.plan = { matched: result.retained.length === 0 && planned.every(path => done.has(path)),
+    notApplied: planned.filter(path => !done.has(path)).sort() };
   return result;
+}
+
+// Read-only proof that dev holds exactly this source snapshot's seeded records.
+export async function verifyPublished({ firestore, manifest, source = SOURCE, destination = DESTINATION }) {
+  assertPair(source, destination); assertDatabase(firestore, DESTINATION);
+  validateManifest(manifest);
+  const records = editableRecords(manifest);
+  return firestore.runTransaction(async transaction => {
+    const differ = [];
+    for (let offset = 0; offset < records.length; offset += 100) {
+      const group = records.slice(offset, offset + 100);
+      const snapshots = await transaction.getAll(...group.flatMap(record => [firestore.doc(record.path), firestore.doc(`devSeedRecords/${digest(record.path)}`)]));
+      group.forEach((record, index) => {
+        const [current, prior] = snapshots.slice(index * 2, index * 2 + 2);
+        // A matching receipt is what lets the next refresh treat this row as seeded.
+        if (!current.exists || seedHashOf(current.data()) !== seedHashOf(record.data) || !prior.exists ||
+            prior.data().path !== record.path || prior.data().recordHash !== digest(current.data()) ||
+            prior.data().seedHash !== seedHashOf(record.data)) differ.push(record.path);
+      });
+    }
+    const { removals: extra, unresolved } = await trackedRemovals(transaction, firestore, manifest, records);
+    if (differ.length || extra.length) {
+      fail(`Dev does not match source snapshot ${manifest.hash}: ${differ.length} differ, ${extra.length} extra (first: ${[...differ, ...extra][0]})`);
+    }
+    if (unresolved.length) fail(`Dev keeps ${unresolved.length} edited record(s) the source withdrew (first: ${unresolved[0]})`);
+    return { verified: true, manifestHash: manifest.hash, publication: manifest.publication, exportedAt: manifest.exportedAt,
+      counts: manifest.counts, documents: records.length };
+  }, { readOnly: true });
 }
 
 async function cliDatabase(mode, emulator) {
@@ -640,29 +802,34 @@ async function cliDatabase(mode, emulator) {
   let input = '';
   for await (const chunk of process.stdin) { input += chunk; if (input.length > 32_768) fail('Credential input too large'); }
   const account = JSON.parse(input);
-  const identity = mode === 'export' ? `dev-seed-reader@${SOURCE}.iam.gserviceaccount.com` : `dev-seed-writer@${DESTINATION}.iam.gserviceaccount.com`;
-  if (account.project_id !== projectId || account.client_email !== identity) fail('The dedicated seed service identity is required');
+  // The operator names the production reader. The probe below checks selected permissions at
+  // project scope only; bucket-level grants are the runbook's private identity check.
+  const identity = mode === 'export' ? process.env.SEED_EXPORT_IDENTITY : `dev-seed-writer@${DESTINATION}.iam.gserviceaccount.com`;
+  if (!identity || account.project_id !== projectId || account.client_email !== identity) fail('The dedicated seed service identity is required');
   const credential = cert(account);
   if (mode === 'export') {
     const token = await credential.getAccessToken();
-    const permissions = ['datastore.entities.get', 'datastore.entities.list', 'datastore.entities.create', 'datastore.entities.update', 'datastore.entities.delete', 'datastore.databases.import', 'datastore.databases.export'];
+    // The first two are required; every other probed permission, including
+    // project-level storage access, must be absent. The script never calls storage.
+    const permissions = ['datastore.entities.get', 'datastore.entities.list', 'datastore.entities.create', 'datastore.entities.update', 'datastore.entities.delete', 'datastore.databases.import', 'datastore.databases.export',
+      'storage.buckets.get', 'storage.objects.get', 'storage.objects.list', 'storage.objects.create', 'storage.objects.delete'];
     const response = await fetch(`https://cloudresourcemanager.googleapis.com/v1/projects/${SOURCE}:testIamPermissions`, {
       method: 'POST', headers: { Authorization: `Bearer ${token.access_token}`, 'Content-Type': 'application/json' }, body: JSON.stringify({ permissions }),
     });
     if (!response.ok) fail('Cannot verify export read-only authority');
     const granted = (await response.json()).permissions ?? [];
-    if (!permissions.slice(0, 2).every(item => granted.includes(item)) || granted.some(item => !permissions.slice(0, 2).includes(item))) fail('Export identity must have read-only Firestore authority');
+    if (!permissions.slice(0, 2).every(item => granted.includes(item)) || granted.some(item => !permissions.slice(0, 2).includes(item))) fail('Export identity must have read-only Firestore authority and no project storage authority');
   }
   const app = initializeApp({ projectId, credential }, `dev-seed-${mode}`);
   return { app, firestore: getFirestore(app) };
 }
 async function main() {
   const { values, positionals } = parseArgs({ allowPositionals: true, options: Object.fromEntries([
-    ...['source', 'destination', 'manifest', 'copy', 'output', 'source-sha', 'publication', 'context', 'directory'].map(name => [name, { type: 'string' }]),
+    ...['source', 'destination', 'manifest', 'copy', 'plan', 'output', 'source-sha', 'publication', 'context', 'directory'].map(name => [name, { type: 'string' }]),
     ...['apply', 'emulator', 'configuration-only'].map(name => [name, { type: 'boolean', default: false }]),
   ]) });
   const [mode] = positionals;
-  if (positionals.length !== 1 || !['export', 'validate', 'copy-media', 'import'].includes(mode)) fail('Usage: seed-dev-published.mjs export|validate|copy-media|import [options]');
+  if (positionals.length !== 1 || !['export', 'validate', 'copy-media', 'import', 'verify'].includes(mode)) fail('Usage: seed-dev-published.mjs export|validate|copy-media|import|verify [options]');
   assertPair(values.source, values.destination);
   if (values['configuration-only'] && !['export', 'import'].includes(mode)) fail('Configuration-only is an export/import option');
   const json = async file => JSON.parse(await readFile(file, 'utf8'));
@@ -679,10 +846,12 @@ async function main() {
   const { app, firestore } = await cliDatabase(mode, values.emulator);
   try {
     if (mode === 'export') await save(await exportPublished({ firestore, sourceSha: values['source-sha'], publication: await json(values.publication), context: values.context ? await json(values.context) : undefined, configurationOnly: values['configuration-only'] }), values.output);
+    else if (mode === 'verify') console.log(JSON.stringify(await verifyPublished({ firestore, manifest: await json(values.manifest) })));
     else {
       const manifest = await json(values.manifest);
       if (values['configuration-only'] && manifest.configurationOnly !== true) fail('Configuration-only import requires a configuration-only export');
-      console.log(JSON.stringify(await importPublished({ firestore, manifest, copy: values.copy ? await json(values.copy) : undefined, apply: values.apply })));
+      console.log(JSON.stringify(await importPublished({ firestore, manifest, copy: values.copy ? await json(values.copy) : undefined,
+        plan: values.plan ? await json(values.plan) : undefined, apply: values.apply, onGroup: group => console.log(JSON.stringify(group)) })));
     }
   } finally { await deleteApp(app); }
 }

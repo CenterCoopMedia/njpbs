@@ -255,41 +255,125 @@ reloading cannot repair a server response contract.
 ## Development published seed
 
 The [seed operator](../../scripts/seed-dev-published.mjs) keeps `export`,
-`validate`, `copy-media` and `import` separate, fixed production-read/development-
-write project pair, explicit Node type-stripping flag and service-account stdin.
-A private operator step verifies dedicated read-only source and dev-only writer
-identities first. No ADC, Auth/database export or production storage authority.
-Never substitute an administrator credential.
+`validate`, `copy-media`, `import` and `verify` separate, with a fixed
+production-read/development-write project pair, the explicit Node type-stripping
+flag and service-account JSON on stdin. Export accepts only the production
+service account that `SEED_EXPORT_IDENTITY` names; give that account Firestore
+viewer access and nothing else. Before any read, export confirms at project
+level that the account can get and list Firestore entities and holds none of
+the probed Firestore write, import, export or Cloud Storage permissions. That
+check cannot see a grant on an individual bucket. The script makes no Cloud
+Storage call. Import and verify accept only the dedicated dev seed writer. A
+private operator step verifies the dedicated read-only source identity
+(including that it has no production bucket-level storage grant) and the
+dev-only writer identity before their first use and after any IAM change. The
+procedure uses no ADC and no Auth or database export. Never substitute an
+administrator credential.
 
-Order: provision dev roles/test accounts/billing/rules/indexes with admission
-paused; obtain exact verified active publication and matching retained context;
-export from one read-only snapshot; validate the content-addressed manifest;
-optionally copy admitted public media locally; dry-run import; separately
-authorized apply; readback; first dev publication; then matched preview setup.
+### Refresh dev before a rehearsal
 
-Export arguments remain `--source njpbs-site --destination njpbs-site-dev`,
-`--source-sha <reviewed-40-character-sha>`, `--publication`, optional required
-`--context` for frozen cards and `--output`. Validation takes `--manifest`.
-Import takes that manifest; `--apply` writes. `--configuration-only` hashes
-scope and imports only complete section/media-category registries with receipts,
-never content or runtime controls. A scoped manifest cannot broaden if that flag
-is omitted. These are argument contracts, not credential-producing examples.
+Run from a fresh clone at the source SHA, after the root and `site` installs and
+`npm run functions:build`. `SEED_READER_COMMAND` and `SEED_WRITER_COMMAND` are
+operator-supplied commands that stream the production reader and dev writer
+service-account JSON to stdout at use time; `SEED_EXPORT_IDENTITY` is the
+reader's service-account email.
 
-Public immutable snapshots and allowlisted registries only; no draft/hidden/
-private profile/auth/queue/lease/system/secret import. Settings retain their
-public schema; provenance lives in `devSeedRecords`. Registered credits missing
-a public profile become frozen custom credits; private rights attestations are
-not copied. Public media remains a read-only production dependency. Strict HTTPS
-host/path/type/size/redirect gates and actual HEAD/GET byte counts apply.
-Local hashed copy receipts never upload or rewrite URLs.
+Plan (read-only on both projects):
 
-First full import requires absent deployment/preview pointers and empty queues,
-then creates generation zero and paused unconfigured preview. Later imports
-never reset controls. Inventory preflight and groups of at most 100 transactional
-records reject staff edits/deletions/untracked rows. A partial import resumes
-the same manifest; unchanged is no-op. Source updates touch only still-matching
-tracked records. No deletion/reset/adoption override exists. Configuration-only
-repair leaves content/runtime controls and existing seed category unchanged.
+```bash
+set -euo pipefail
+STATE=$(mktemp -d)   # owner-only; keep it for the rehearsal record
+SHA=$(git rev-parse HEAD)
+SEED="node --experimental-strip-types --no-warnings scripts/seed-dev-published.mjs"
+PAIR="--source njpbs-site --destination njpbs-site-dev"
+# The code-context receipt names the generation the production pointer serves.
+curl -fsS 'https://njpbs.org/_publication.json?cms-context=code' > "$STATE/publication.json"
+sh -c "$SEED_READER_COMMAND" |
+  $SEED export $PAIR --source-sha "$SHA" --publication "$STATE/publication.json" --output "$STATE/manifests" | tee "$STATE/export.json"
+MANIFEST=$(node -e 'console.log(JSON.parse(require("fs").readFileSync(process.argv[1],"utf8")).path)' "$STATE/export.json")
+$SEED validate $PAIR --manifest "$MANIFEST"
+sh -c "$SEED_WRITER_COMMAND" | $SEED import $PAIR --manifest "$MANIFEST" | tee "$STATE/plan.json"
+```
+
+The dry run is the plan. `restored` lists seeded records that dev changed or
+deleted; `removed` lists seeded Pages, Posts, settings and public author
+profiles the source no longer publishes. Each
+entry records the document and receipt hashes the dry run saw. Apply takes the
+plan from the same run and restores or removes a listed row only while both
+hashes still match.
+
+The plan is checked before apply in one of two ways:
+
+- By hand: read `plan.json`. Every `restored` path must be a seeded record a dev
+  rehearsal or proof changed, and every `removed` path must be a record
+  production no longer publishes. Stop and investigate a path you cannot explain.
+- Through `jawn-ops njpbs release run --target development`: the command applies
+  the plan from the same run with no person wait. Apply itself enforces the
+  [dev rehearsal refresh policy](../../AGENTS.md): it acts only on seed-written
+  rows whose path, document and receipt hashes the plan binds, and refuses
+  anything else. The plan and apply records go into the run record.
+
+Then apply and verify:
+
+```bash
+sh -c "$SEED_WRITER_COMMAND" | $SEED import $PAIR --manifest "$MANIFEST" --plan "$STATE/plan.json" --apply | tee -a "$STATE/apply.json"
+sh -c "$SEED_WRITER_COMMAND" | $SEED verify $PAIR --manifest "$MANIFEST" | tee "$STATE/verify.json"
+```
+
+If the snapshot references a Sponsor or Newsletter card, export also needs
+`--context` with the retained public context of that publication and refuses
+without it. Production's Nov. 23, 2026 snapshot references none.
+
+Keep `plan.json`, `apply.json` and `verify.json` with the rehearsal run record.
+Apply prints one JSON line per committed group, then a summary, so a partial
+apply still records what it wrote; `tee -a` keeps every attempt when you resume. The summary's `plan` field compares the apply
+with its plan: `matched` is false when a planned path was not applied or a
+withdrawn row was `retained` because the plan did not list it.
+
+`verify` prints the manifest hash, the source publication receipt, the export
+time and per-collection counts; record that line with the rehearsal. It fails
+when any seeded dev document differs from the manifest or dev still tracks a
+record the snapshot no longer has. Rerun the apply with the same manifest and
+plan to resume an interrupted refresh; finished groups report `unchanged`.
+
+### What the refresh copies and reconciles
+
+Public immutable snapshots and allowlisted registries only: routed published
+Pages, Posts, Programs and Events whose `publishAt` has passed, the three public
+settings, every published public author profile (referenced or not), and the
+public media records they reference.
+No draft, hidden, deleted, scheduled, staff-type, private profile, Auth, queue,
+lease, system, secret or rights-attestation data. Published snapshots are
+rebuilt through the publish contract and scrubbed of email, private, internal,
+credential, token and storage fields. Settings keep their public schema;
+provenance lives in `devSeedRecords`. Registered credits missing a public
+profile become frozen custom credits. Public media stays a read-only production
+dependency: dev records keep the `media.njpbs.org` URLs, so the refresh adds no
+dev storage. Strict HTTPS host/path/type/size/redirect gates and real HEAD/GET
+byte counts apply. Optional local hashed copy receipts never upload or rewrite
+URLs.
+
+The first full import requires absent deployment and preview pointers and
+empty queues; it then creates generation zero and a paused, unconfigured
+preview. Later imports never reset controls. Apply writes in transactional
+groups of at most 100; a group Firestore refuses as too big is halved until it
+commits. Without a plan it refuses a seeded record that dev edited
+or deleted and retains a seeded record the source withdrew. With a plan it
+restores or removes only the listed seed-written rows whose document and receipt
+still match the dry run; a seeded record changed after the dry run is refused.
+The refresh removes only withdrawn public records (Pages, Posts, settings and
+public author profiles). Seeded media, categories, sections, private author rows
+and Sponsor or Newsletter cards stay, because dev-authored records may use them.
+A seeded Post whose row no longer matches its seed receipt has no known kind and
+is never removed; if the source withdrew it, the plan lists it as `unresolved`
+and verify fails until it is resolved. Like
+the publication owners, apply advances the public context (and its withdrawal
+fence for a removal) when it changes public records, and advances the media
+discovery revision, clearing the cached active count, when it changes seeded
+media. An untracked dev record at a source path is always refused, so
+dev-authored fixtures are never overwritten. Configuration-only manifests
+reconcile only the section and media-category registries, remove nothing, and
+leave content, runtime controls and the `dev-seed` category alone.
 
 ## Schedule automation and timing evidence
 
