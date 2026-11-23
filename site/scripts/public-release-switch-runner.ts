@@ -102,6 +102,8 @@ export async function observeCurrentPublicReleaseOperation({ firestore, store, i
   const decision = await serving.readPublicReleaseDecision({ firestore, environment: pair.environment, pair, selection, path, composedReadersEnabled: true });
   if (decision.kind !== "decision" || decision.route.kind === "unowned" || decision.route.operationId !== operationId ||
       decision.route.sourceVersion !== sourceVersion || decision.route.snapshotDigest !== snapshotDigest) refuse();
+  if (status === 302 && (original.accepted.source.kind !== "post" || original.accepted.source.action !== "publish" ||
+      decision.route.kind !== "serve" || decision.route.family !== "post" || decision.route.canonicalPath !== path)) refuse();
   const output = decision.route.kind === "serve" ? await readPublicReleasePairOutput({ store, pair, locator: decision.locator,
     path: decision.composition?.artifactPath ?? path }) : null;
   const expectedStatus = decision.route.kind === "gone" ? 410 : decision.route.kind === "redirect" ? 308 : output?.status;

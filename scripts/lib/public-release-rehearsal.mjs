@@ -340,15 +340,15 @@ function checkProofIdentity(packet, proof, state, operation) {
   for (const [name, value] of Object.entries(expected)) assert.equal(proof.headers[name], value, `Public proof identity mismatch: ${name}`);
 }
 
-async function checkPublicBytes(packet, proof, state, operation, httpCredential) {
+async function checkPublicBytes(packet, proof, state, operation, httpCredential, location) {
   assert(proof && proof.path.startsWith('/') && !proof.path.startsWith('//'));
   const url = new URL(proof.path, packet.proofOrigin);
   assert.equal(url.origin, packet.proofOrigin);
   assert(!url.search && !url.hash && !url.username && !url.password);
   assert(sha256.test(proof.bodyDigest));
-  assert([200, 410].includes(proof.status));
+  assert([200, 302, 410].includes(proof.status));
   assert.equal(proof.headers['x-njpbs-html-sha256'], proof.bodyDigest, 'Exact-byte proof required');
-  if (proof.status === 410) assert.equal(proof.bodyDigest, digest(''), 'Withdrawal body must be empty');
+  if (proof.status === 302 || proof.status === 410) assert.equal(proof.bodyDigest, digest(''), 'Redirect or withdrawal body must be empty');
   checkProofIdentity(packet, proof, state, operation);
   // This local bridge invokes ingress.prove(Request(canonicalURL), digest).
   // It never forwards a viewer header as proof authorization. Normal ingress
@@ -358,6 +358,10 @@ async function checkPublicBytes(packet, proof, state, operation, httpCredential)
       'x-rehearsal-expected-status': String(proof.status),
       ...(httpCredential ? rehearsalHttpHeaders(httpCredential, url.origin) : {}) }, signal: AbortSignal.timeout(3_000) });
   assert.equal(response.status, proof.status);
+  if (proof.status === 302) {
+    assert.equal(response.headers.get('location'), location);
+    assert.equal(response.headers.get('x-robots-tag'), 'noindex, nofollow');
+  }
   assert.notEqual(response.headers.get('publication-refresh'), 'pending', 'Fallback cannot certify publication');
   assert.notEqual(response.headers.get('x-njpbs-publication-refresh'), 'pending', 'Fallback cannot certify publication');
   for (const [name, value] of Object.entries(proof.headers)) assert.equal(response.headers.get(name), value);
@@ -610,7 +614,7 @@ export async function runRehearsal(rawPacket, outputDirectory, adapterOptions = 
           originalProof = await verifyOriginalRehearsalProof({ firestore: proofContext.firestore, packet,
             operation, proof: result.proof, selector: observed.state.selector, httpCredential: adapterOptions.httpCredential });
         }
-        await checkPublicBytes(packet, result.proof, observed.state, operation, adapterOptions.httpCredential);
+        await checkPublicBytes(packet, result.proof, observed.state, operation, adapterOptions.httpCredential, originalProof?.location);
         await checkOrdinaryIngress(packet, result.proof, adapterOptions.httpCredential);
         const after = await inspectRehearsal(request, `${actionId}-after-get`, adapterOptions);
         assert.deepEqual(after.state, observed.state, 'Authority changed during exact-byte GET; revalidate');
