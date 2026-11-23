@@ -23,47 +23,24 @@ function checkPacket(args, stage) {
       git(["rev-parse", "HEAD^{tree}"]) !== git(["rev-parse", `${sha}^{tree}`])) throw new Error();
 }
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
-  let stage = "packet-guard", firstFailure = null, finished = false, emitted = false;
-  const setStage = value => { stage = value; };
-  const emit = () => {
-    if (!firstFailure || emitted) return;
-    emitted = true;
-    const errorClass = [AggregateError, TypeError, SyntaxError, RangeError, ReferenceError, URIError, EvalError, Error]
-      .find(type => firstFailure.error instanceof type)?.name ?? "Unknown";
-    const direction = process.argv[6] === "--inspect"
-      ? "no request confirmed; obtain coordinator diagnosis GO before another inspect"
-      : "obtain coordinator GO for the original packet's --readback";
-    process.stderr.write(`Development inactive bootstrap retirement was not confirmed; code=DEV_RETIRE_REFUSED stage=${firstFailure.stage} errorClass=${errorClass}; preserve the packet; ${direction}\n`);
-  };
-  const remember = error => {
-    firstFailure ??= { error, stage };
-    process.exitCode = 1;
-    if (finished) emit();
-  };
-  // A first read-only SDK read can leave its transaction-ID promise rejected.
-  // Keep it private and let the operator finish both cleanups before reporting.
-  process.on("unhandledRejection", remember);
-  (async () => {
-    try {
-      const args = process.argv.slice(2); checkPacket(args, setStage);
-      setStage("module-import");
+  const args = process.argv.slice(2);
+  const direction = args[4] === "--inspect"
+    ? "no request confirmed; obtain coordinator diagnosis GO before another inspect"
+    : "obtain coordinator GO for the original packet's --readback";
+  const refusal = ({ stage, errorClass }) =>
+    `Development inactive bootstrap retirement was not confirmed; code=DEV_RETIRE_REFUSED stage=${stage} errorClass=${errorClass}; preserve the packet; ${direction}`;
+  let stage = "packet-guard";
+  try {
+    checkPacket(args, value => { stage = value; });
+    stage = "module-import";
+    const { runReadOnlyOperator } = await import("./lib/read-only-operator.mjs");
+    await runReadOnlyOperator({ stage, refusal, async run(setStage) {
       const { runDevInactiveBootstrapOperator } = await import("./lib/dev-inactive-bootstrap-operator.mjs");
-      const result = await runDevInactiveBootstrapOperator(args, setStage);
-      await new Promise(resolve => setImmediate(resolve));
-      if (firstFailure) return;
-      setStage("result-write");
-      await new Promise((resolve, reject) => {
-        process.stdout.once("error", reject);
-        process.stdout.write(`${JSON.stringify(result)}\n`, error => {
-          if (error) reject(error);
-          else { process.stdout.removeListener("error", reject); resolve(); }
-        });
-      });
-    } catch (error) { remember(error); }
-    finally {
-      await new Promise(resolve => setImmediate(resolve));
-      finished = true; emit();
-      // Retain this CLI-only listener through exit; it creates no live handle.
-    }
-  })();
+      return runDevInactiveBootstrapOperator(args, setStage);
+    } });
+  } catch (error) {
+    const errorClass = error instanceof SyntaxError ? "SyntaxError" : error instanceof TypeError ? "TypeError" : "Error";
+    process.stderr.write(`${refusal({ stage, errorClass })}\n`);
+    process.exitCode = 1;
+  }
 }
