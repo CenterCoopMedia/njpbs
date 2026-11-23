@@ -121,6 +121,7 @@ export const ENDPOINTS = Object.freeze({
   cmsMutateMediaComment: { contentType: "json", maxBytes: 16 * KIB, rateClass: "mutation" },
   cmsRequestVideoClip: { contentType: "json", maxBytes: 4 * KIB, rateClass: "metadata" },
   cmsGetVideoClip: { contentType: "json", maxBytes: 4 * KIB, rateClass: "read" },
+  cmsManageVideoSubclips: { contentType: "json", maxBytes: 4 * KIB, rateClass: "mutation" },
   cmsCreateVideoClipRead: { contentType: "json", maxBytes: 4 * KIB, rateClass: "read" },
   cmsCancelVideoClip: { contentType: "json", maxBytes: 4 * KIB, rateClass: "metadata" },
   cmsRequestVideoTranscript: { contentType: "json", maxBytes: 8 * KIB, rateClass: "mutation" },

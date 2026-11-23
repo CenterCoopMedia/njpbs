@@ -10,6 +10,7 @@ import { TranscriptionCredentials } from "./TranscriptionCredentials";
 import { VideoTranscriptVariants } from "./VideoTranscriptVariants";
 import { TranscriptEditor } from "./TranscriptEditor";
 import { EditorVideoExports } from "./EditorVideoExports";
+import { VideoSubclips } from "./media/VideoSubclips";
 import type { MenuItem } from "./ui/Menu";
 import { MediaDialogNotice } from "../context/MediaDialogContext";
 import type { SourceMediaAssetSummary } from "../lib/source-media";
@@ -698,14 +699,27 @@ export function useVideoProductionTools({ headerControls = false, workspace = fa
     {workspace ? transcriptSettingsPanel : null}
     <details ref={clipSection} id={clipSectionId} open={clipOpen} onToggle={event => setClipOpen(event.currentTarget.open)}>
       <summary>Create a clip</summary>
-      <p>Export an MP4 from the web copy. The original stays unchanged. Clips stay available for 7 days.</p>
+      <p>Choose a range to save or export. MP4 exports stay available for 7 days.</p>
       {!ready || duration <= 0 ? <p>Wait for a ready web copy before selecting a clip.</p> : <>
         <label ref={clipInInput}>In time<TextInput value={inTime} disabled={controlsDisabled} onChange={event => { cancelSelection(); setInTime(event.target.value); }} /></label>
         <Button disabled={controlsDisabled} onClick={() => mark("in")}>Set in to playhead</Button>
         <label>Out time<TextInput value={outTime} disabled={controlsDisabled} onChange={event => { cancelSelection(); outEdited.current = true; setOutTime(event.target.value); }} /></label>
         <Button disabled={controlsDisabled} onClick={() => mark("out")}>Set out to playhead</Button>
-        <p>Use hours:minutes:seconds or decimal seconds. The out point is excluded. Select 0.25 seconds to 30 minutes. Cuts round to video frames.</p>
+        <p>Use hours:minutes:seconds or decimal seconds. The out point is excluded. Select 0.25 seconds to 30 minutes. Exported cuts round to video frames.</p>
         {!validRange ? <p role="status">Enter an in/out range within this video ({videoTime(duration)}).</p> : <p>Selected length: {videoTime((outMs! - inMs!) / 1000)}</p>}
+      </>}
+      {clipOpen && principal?.id && asset.sourceId === "video-library" && asset.fileVersion ? <VideoSubclips
+        key={`${principal.id}/${binaryIdentity}`} assetId={asset.id} fileVersion={asset.fileVersion}
+        durationMs={ready ? durationMs : 0} range={ready && validRange ? { inMs: inMs!, outMs: outMs! } : undefined}
+        getIdToken={getIdToken} disabled={controlsDisabled}
+        onOpen={range => {
+          cancelSelection();
+          setInTime(videoTime(range.inMs / 1000));
+          setOutTime(videoTime(range.outMs / 1000));
+          outEdited.current = true;
+          requestAnimationFrame(() => { if (mounted.current) clipInInput.current?.querySelector("input")?.focus(); });
+        }} /> : null}
+      {ready && duration > 0 ? <>
         <label>Clip resolution<Select value={clipSettings.resolution} disabled={controlsDisabled} aria-describedby={clipSettingsHelpId} onChange={event => setClipSettings(previous => ({ ...previous, resolution: event.target.value as ClipSettings["resolution"] }))}>
           <option value="source">Match web copy</option>
           {(["1080p", "720p", "480p"] as const).map(resolution => <option key={resolution} value={resolution} disabled={!clipResolutionAvailable(resolution, asset.viewingCopy?.width, asset.viewingCopy?.height)}>{resolution}</option>)}
@@ -731,7 +745,7 @@ export function useVideoProductionTools({ headerControls = false, workspace = fa
         }}>{videoTime(recent.inMs / 1000)} to {videoTime(recent.outMs / 1000)} · {clipSettingsLabel(recent)} · {recent.state}</Button></li>)}</ul></section> : null}
         {recentCursor ? <Button disabled={recentLoading || clipBusy} onClick={() => void loadOlderClips()}>{recentLoading ? "Loading older exports" : "Load older MP4 exports"}</Button> : null}
         {clipError ? <InlineMessage tone="error" title="Clip needs attention">{clipError}</InlineMessage> : null}
-      </>}
+      </> : null}
     </details>
     {asset.sourceId === "video-library" ? <div ref={editorExportsHost}><EditorVideoExports
       key={`${principal?.id ?? "signed-out"}:${asset.sourceId}:${asset.id}:${asset.version}`}

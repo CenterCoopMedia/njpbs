@@ -216,6 +216,7 @@ lazyExport("cmsRequestVideoClip", "./video-clips");
 lazyExport("cmsGetVideoClip", "./video-clips");
 lazyExport("cmsCreateVideoClipRead", "./video-clips");
 lazyExport("cmsCancelVideoClip", "./video-clips");
+lazyExport("cmsManageVideoSubclips", "./video-subclips");
 lazyExport("onVideoClipTick", "./video-clips");
 lazyExport("cmsRequestVideoTranscript", "./video-transcripts");
 lazyExport("cmsGetVideoTranscript", "./video-transcripts");
