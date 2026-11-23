@@ -331,7 +331,7 @@ section.support-appeal--dark .support-appeal__button { border-color: var(--color
       min-block-size: 65svh;
     }
 
-    .scroll-story__media {
+    html:not([data-motion="off"]) .scroll-story__media {
       margin-block-start: 0;
     }
 
