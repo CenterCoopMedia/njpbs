@@ -296,9 +296,24 @@ it("atomically changes both OLD-paused pins, reserves the planned generation and
   expect((await db.doc(`system/publicDeployment/buildBatches/cms-${preparationId}/candidates/worker`).get()).exists).toBe(false);
 });
 
-it.each(["content", "generation", "context"])("refuses %s drift at handover before replacing OLD", async kind => {
+it("refuses a sealed release after newer published content becomes visible", async () => {
   await seal();
-  if (kind === "content") await db.doc("cmsPages/home").set({ publiclyVisible: true, published: { title: "Newer staff revision" } });
+  const sealedRelease = { firestore: db, preparationId, commitSha };
+  const page = db.doc("cmsPages/home");
+  await page.set({ status: "draft", draft: { title: "Newer staff revision" } });
+  await expect(promotion.checkSealedPublicRelease(sealedRelease)).resolves.toMatchObject({ candidate: { generation: 8 } });
+  await page.update({ status: "published", publiclyVisible: true, published: { title: "Newer staff revision" } });
+  const before = (await db.doc("system/publicDeployment").get()).data();
+  await expect(promotion.checkSealedPublicRelease(sealedRelease)).rejects.toThrow("stale");
+  await expect(pauseForHandover()).rejects.toThrow("stale");
+  await expect(promote()).rejects.toThrow("handover or generation is stale");
+  expect((await db.doc("system/publicDeployment").get()).data()).toEqual(before);
+  expect((await db.doc(`system/publicDeployment/buildBatches/cms-${preparationId}`).get()).exists).toBe(false);
+  expect((await db.doc(`cmsPublicationSerializerJournals/cloudflare-publisher/releases/${preparationId}`).get()).exists).toBe(false);
+});
+
+it.each(["generation", "context"])("refuses %s drift at handover before replacing OLD", async kind => {
+  await seal();
   if (kind === "generation") await db.doc("system/publicDeployment").update({ lastReservedGeneration: 8 });
   if (kind === "context") await db.doc("system/publicDeployment/contexts/public").update({ revision: 12 });
   const before = (await db.doc("system/publicDeployment").get()).data();
