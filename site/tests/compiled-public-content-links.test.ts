@@ -5,7 +5,7 @@ import { afterAll, describe, expect, it, vi } from "vitest";
 import { parseFrontmatter } from "astro/markdown";
 import { satteri } from "@astrojs/markdown-satteri";
 import privatePreview from "../astro.renderer.config.mjs";
-import shadowRuntime from "../astro.shadow.config.mjs";
+import postParityRuntime from "../astro.post-parity.config.mjs";
 vi.stubEnv("CMS_DEPLOYMENT_ENVIRONMENT", "development");
 vi.stubEnv("FIREBASE_PROJECT_ID", undefined);
 const { default: publicRuntime } = await import("../astro.public-post.config.mjs");
@@ -48,7 +48,7 @@ describe.each([
 });
 
 describe.each([
-  ["private preview", privatePreview], ["shadow Post", shadowRuntime],
+  ["private preview", privatePreview], ["compiled Post parity", postParityRuntime],
   ["public runtime", publicRuntime], ["public Page runtime", publicPageTest], ["pair replay", pairRuntime],
 ])("%s compiled HTML link boundary", (_name, config) => {
   it("loads the shared middleware from the actual configured Astro source directory", async () => {

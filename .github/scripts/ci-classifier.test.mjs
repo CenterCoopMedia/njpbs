@@ -109,7 +109,6 @@ describe("CI path classifier", () => {
     ".github/workflows/dev-machine-receipt-proof.yml",
     ".github/workflows/dev-staff-gateway-deploy.yml",
     ".github/workflows/cms-dev-deploy.yml",
-    ".github/workflows/shadow-posts-dev-deploy.yml",
   ]) {
     it(`routes ${path} to Site and Firebase`, () => {
       assert.deepEqual(classifyPath(path), gates(false, true, false, true));

@@ -179,9 +179,7 @@ lazyExport("cmsGetVoiceoverAudio", "./voiceover-audio");
 // The other scheduled and event functions need no emulator export, because no
 // test calls them over HTTP:
 //
-// Dev shadow reader: Enabled for nj-pbs-announces-six-staff-appointments with
-// the approved read-only account and HMAC secret. The relay and shadow Worker
-// are not deployed yet; this export does not change public site routing.
+// Published Post origin reads require a signed request for an admitted slug.
 lazyExport("cmsGetPublishedPost", "./published-post-reader");
 //
 // onPublishQueueReconcile binds its dedicated Healthchecks URL. Provision
@@ -250,13 +248,6 @@ lazyExport("cmsApprovePremierePairing", "./premiere-desktop");
 lazyExport("cmsPollPremierePairing", "./premiere-desktop");
 lazyExport("cmsPremiereRequest", "./premiere-desktop");
 lazyExport("cmsRevokePremiereSession", "./premiere-desktop");
-
-// Dev shadow follow-ups are opt-in after the dedicated KV namespace and token
-// are provisioned. The production publication transport stays unchanged.
-if (process.env.SHADOW_POST_REVISIONS_ENABLED === "true") {
-  lazyExport("onShadowPostRevisionWrite", "./shadow-post-revisions");
-  lazyExport("onShadowPostRevisionRetry", "./shadow-post-revisions");
-}
 
 // Source-only until the coordinator provisions the authenticated wake boundary.
 // This export switch is deployment configuration, never publication admission.

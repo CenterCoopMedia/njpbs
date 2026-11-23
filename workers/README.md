@@ -10,7 +10,6 @@ Run commands from the repository root:
 ```sh
 npm run check:preview-worker
 npm run check:staff-sites
-npx --no-install tsc --project workers/tsconfig.shadow-posts.json
 npm run test:public-worker
 npm run test:preview-worker
 npm run test:staff-sites
@@ -19,9 +18,9 @@ npm run test:preview-renderer
 ```
 
 `wrangler.jsonc` serves the public entry and uses `site/dist` assets;
-`wrangler.public.dev.jsonc` uses `dev-publication/dist`. The shadow config uses
-`site/.shadow-renderer/client`. These paths resolve from the config directory.
-The other configs select preview, staff, relay and routing measurement entries.
+`wrangler.public.dev.jsonc` uses `dev-publication/dist`. These paths resolve from
+the config directory. The other configs select preview, staff and routing
+measurement entries.
 Pass the config path explicitly, for example
 `--config workers/wrangler.preview.jsonc`, from the repository root.
 

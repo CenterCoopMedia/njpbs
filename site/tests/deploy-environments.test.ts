@@ -121,7 +121,6 @@ describe("deploy credential environments", () => {
   it.each([
     ["cms-staging-deploy", ["admin-build", "firebase-preflight", "cms-api", "firebase", "preview-renderer", "live-smoke", "admin-deploy"]],
     ["probe-media-manager", ["probe"]],
-    ["shadow-posts-dev-deploy", ["deploy"]],
   ] as const)("places main-only secret jobs in production: %s", (name, jobs) => {
     for (const id of jobs) expect(workflow(name).jobs[id].environment).toBe("production");
   });

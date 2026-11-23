@@ -10,8 +10,6 @@ import { catalogFixtures, catalogReads } from "../tests/fixtures/shadow-posts/bl
 import { postLeadFixture } from "../tests/fixtures/post-lead-media";
 import { projectPublishedPostRead } from "../src/lib/published-post-shadow";
 import { archiveHtmlMetadata, comparePostHtml, postHtmlSemantics } from "../src/lib/post-html-comparison";
-import { createFakePublishedPostReader } from "../src/lib/published-post-shadow";
-import { createShadowPostWorker } from "../../workers/src/shadow-post-worker";
 import { SPOTLIGHT_ARCHIVE_REDIRECT_ASSETS, spotlightArchiveRedirectShard } from "../../packages/content-core/src/spotlight-archive-paths";
 
 let compiled: { rendererSha: string; renderPublishedPost: (content: NonNullable<ReturnType<typeof projectPublishedPostRead>>) => Promise<string> };
@@ -26,7 +24,7 @@ function renderFixture(read: any) {
   return projectPublishedPostRead(read, read.document.published.metadata.slug, compiled.rendererSha, now)!;
 }
 
-describe("compiled shadow uses the static Post output", () => {
+describe("compiled and static Post output", () => {
   it("emits the registered archive redirect endpoint as a static release asset", () => {
     for (const alias of spotlightArchivePost.document.published.metadata.archiveLegacyPaths) {
       const shard = spotlightArchiveRedirectShard(alias);
@@ -225,44 +223,23 @@ describe("compiled shadow uses the static Post output", () => {
   it("refreshes published chrome through one compiled renderer without rebuilding or changing the Post", async () => {
     const read = { ...structuredClone(fixture), settings: chromeSettings(),
       navigationPages: [{ pageId: newsPageId, path: "/in-the-news/" }] };
-    const reader = createFakePublishedPostReader({ "shadow-fixture": read });
-    const entries = new Map<string, Response>();
-    const worker = createShadowPostWorker({ reader, render: compiled.renderPublishedPost,
-      rendererSha: compiled.rendererSha, now: () => now,
-      cache: { async match(key) { return entries.get(key.url)?.clone(); },
-        async put(key, response) { entries.set(key.url, response.clone()); } } });
-    const get = () => worker.fetch(new Request("https://dev-public.example.org/posts/shadow-fixture/"), {
-      SHADOW_POSTS_ENABLED: "true", SHADOW_POST_SLUGS: "shadow-fixture",
-    });
-    const first = await get();
-    expect(first.status).toBe(200);
-    const html = await first.text();
+    const first = renderFixture(read);
+    const html = await compiled.renderPublishedPost(first);
     expect(postHtmlSemantics(html).links).toEqual(expect.arrayContaining([
       "/staff/|Staff", "/in-the-news/|In the news", "/in-the-news/|News page",
       "https://njpbs.bluelena.io/f/1|Newsletter (opens in new tab)",
     ]));
     expect(html).not.toContain("Subscribe to the newsletter");
-    reader.set("shadow-fixture", { ...read, settings: chromeSettings("Station newsletter"), navigationPages: [] });
-    const second = await get();
-    expect(second.status).toBe(200);
-    expect(second.headers.get("X-Njpbs-Source-Version")).toBe(first.headers.get("X-Njpbs-Source-Version"));
-    expect(second.headers.get("X-Njpbs-Input-Sha256")).not.toBe(first.headers.get("X-Njpbs-Input-Sha256"));
-    const updated = await second.text();
+    const second = renderFixture({ ...read, settings: chromeSettings("Station newsletter"), navigationPages: [] });
+    expect(second.target.sourceVersion).toBe(first.target.sourceVersion);
+    const updated = await compiled.renderPublishedPost(second);
     expect(updated).toContain("Station newsletter");
     expect(updated).not.toContain('href="/in-the-news/"');
     expect(updated).toContain("A published fixture");
   });
 
   it("keeps the actual video response free of SDKs and trackers", async () => {
-    const reader = createFakePublishedPostReader({ "shadow-video": videoFixture });
-    const worker = createShadowPostWorker({ reader, render: compiled.renderPublishedPost,
-      rendererSha: compiled.rendererSha, now: () => now,
-      cache: { async match() { return undefined; }, async put() {} } });
-    const response = await worker.fetch(new Request("https://dev-public.example.org/posts/shadow-video/"), {
-      SHADOW_POSTS_ENABLED: "true", SHADOW_POST_SLUGS: "shadow-video",
-    });
-    expect(response.status).toBe(200);
-    const html = await response.text();
+    const html = await compiled.renderPublishedPost(renderFixture(videoFixture));
     expect(html).toContain("<video");
     expect(html).toContain(videoUrl);
     // Same exclusions as analytics-consent-dist.test.ts, plus the public SDK ban.

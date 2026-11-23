@@ -485,7 +485,7 @@ function createCmsGetPublishedPostHandler(deps = {}) {
   };
 }
 
-// The shadow and relay abort after 10 seconds; a cold start measured 4.7-9.6 s.
+// Keep one warm instance for reads that cannot wait for a cold start.
 const cmsGetPublishedPost = onRequest({ invoker: "public", minInstances: 1, maxInstances: 10, cpu: 1, concurrency: 80,
   serviceAccount: "njpbs-published-post-reader@njpbs-site.iam.gserviceaccount.com",
   secrets: [PUBLISHED_POST_READER_HMAC_KEY] },

@@ -5,8 +5,6 @@ import deployment from "../../functions/lib/public-deployment.js";
 import mediaContract from "../../functions/lib/media-contract.js";
 import readerModule from "../../functions/published-post-reader.js";
 import editions from "../../functions/lib/spanish-edition.js";
-import { servicePublishedPostReader, createShadowPostWorker } from "../../workers/src/shadow-post-worker";
-import { forwardPublishedPostRead } from "../../workers/src/published-post-reader-worker";
 import "../../functions/lib/firebase.js";
 import { chromeSettings, newsPageId } from "../../site/tests/fixtures/shadow-posts/chrome";
 import fixture from "../../site/tests/fixtures/shadow-posts/post.json";
@@ -58,22 +56,16 @@ async function call(request: Request, run = handler()) {
     headers: Object.fromEntries(request.headers) }, res);
   return new Response(JSON.stringify(body), { status, headers });
 }
-function service(run = handler()) {
-  return { fetch: (request: Request) => forwardPublishedPostRead(request,
-    { PUBLISHED_POST_FUNCTION_URL: "https://us-central1-demo-njpbs.cloudfunctions.net/cmsGetPublishedPost" },
-    async upstream => {
-      const url = new URL(upstream.url);
-      expect(url.origin).toBe("https://us-central1-demo-njpbs.cloudfunctions.net");
-      expect(upstream.headers.get("cookie")).toBeNull();
-      return call(new Request(`https://function.test${url.pathname.replace("/cmsGetPublishedPost", "")}`,
-        { headers: upstream.headers, method: upstream.method }), run);
-    }) };
-}
 function authenticated(path = "/posts/shadow-fixture/", timestamp = String(now.getTime())) {
   const signature = createHmac("sha256", key).update(`njpbs-post-reader-v1\nGET\n${path}\n${timestamp}`).digest("hex");
   return new Request(`https://published-posts.internal${path}`, { headers: {
     "x-njpbs-post-timestamp": timestamp, "x-njpbs-post-signature": signature,
   } });
+}
+async function readPublishedPostResponse() {
+  const response = await call(authenticated());
+  expect(response.status).toBe(200);
+  return response.json();
 }
 beforeAll(async () => {
   if (!/^127\.0\.0\.1:\d+$/.test(process.env.FIRESTORE_EMULATOR_HOST ?? "") ||
@@ -113,7 +105,7 @@ describe("published Post reader with the real Firestore emulator", () => {
       archivePublishedAt: "2012-03-01T02:30:00Z",
     });
     await put("cmsPosts/reader-fixture", value);
-    const result = await servicePublishedPostReader(service(), { secret: key, now: () => now }).read("shadow-fixture");
+    const result = await readPublishedPostResponse();
     expect(projectPublishedPostRead(result, "shadow-fixture", "a".repeat(40), now)?.posts[0]).toMatchObject({
       displayDate: "2012-02-29", archivePublishedAt: "2012-03-01T02:30:00Z",
     });
@@ -132,15 +124,14 @@ describe("published Post reader with the real Firestore emulator", () => {
     await put("cmsPosts/reader-fixture", value);
     await put(`cmsAuthorProfilesPublic/${authorId}`, authorSnapshot({ uid: "PRIVATE uid", email: "private@example.test" }));
     await put(`cmsAuthorProfiles/${otherAuthorId}`, { displayName: "PRIVATE working profile" });
-    const reader = servicePublishedPostReader(service(), { secret: key, now: () => now });
-    const result: any = await reader.read("shadow-fixture");
+    const result: any = await readPublishedPostResponse();
     expect(result.authors.map((author: any) => author.id)).toEqual([authorId]);
     expect(result.authors[0].bio).toBe("Covers the Legislature for NJ PBS.");
     expect(result.authors[0]).not.toHaveProperty("links");
     expect(JSON.stringify(result)).not.toMatch(/PRIVATE|private@example/);
     expect(projectPublishedPostRead(result, "shadow-fixture", "a".repeat(40), now)?.authors[0].jobTitle).toBe("Statehouse reporter");
     await db.doc(`cmsAuthorProfilesPublic/${authorId}`).delete();
-    const withdrawn: any = await reader.read("shadow-fixture");
+    const withdrawn: any = await readPublishedPostResponse();
     expect(withdrawn.authors).toEqual([]);
     expect(withdrawn.document.published.metadata.liveBlog.updates[0].credits).toHaveLength(2);
   });
@@ -165,7 +156,7 @@ describe("published Post reader with the real Firestore emulator", () => {
       }] } });
     await put("cmsPosts/reader-fixture", value);
     await put(`cmsAuthorProfilesPublic/${authorId}`, authorSnapshot({ bio, uid: "PRIVATE uid", email: "private@example.test" }));
-    const result: any = await servicePublishedPostReader(service(), { secret: key, now: () => now }).read("shadow-fixture");
+    const result: any = await readPublishedPostResponse();
     expect(result.authors[0].bio).toBe(expected);
     if (expected === undefined) expect(result.authors[0]).not.toHaveProperty("bio");
     else expect(Array.from(result.authors[0].bio)).toHaveLength(Array.from(expected).length);
@@ -197,7 +188,7 @@ describe("published Post reader with the real Firestore emulator", () => {
     await put(`cmsAuthorProfilesPublic/${authorId}`, authorSnapshot());
     await put(`cmsAuthorProfilesPublic/${auditAuthorId}`, authorSnapshot({ authorId: auditAuthorId, slug: "audit-reporter" }));
     await put(`cmsAuthorProfiles/${otherAuthorId}`, { displayName: "PRIVATE working profile" });
-    const result: any = await servicePublishedPostReader(service(), { secret: key, now: () => now }).read("shadow-fixture");
+    const result: any = await readPublishedPostResponse();
     expect(result.authors.map((author: any) => author.id)).toEqual([authorId]);
     expect(result.document.published.metadata.liveBlog.updates[0].followUps[1].credits).toEqual(credits);
     expect(result.document.published.metadata.liveBlog.updates[1]).not.toHaveProperty("followUps");
@@ -220,7 +211,7 @@ describe("published Post reader with the real Firestore emulator", () => {
     await put("cmsPosts/reader-fixture", value);
     await put(`cmsAuthorProfilesPublic/${ids[0]}`, authorSnapshot({ authorId: ids[0] }));
     await put(`cmsAuthorProfilesPublic/${ids[100]}`, authorSnapshot({ authorId: ids[100], slug: "overflow-profile" }));
-    const result: any = await servicePublishedPostReader(service(), { secret: key, now: () => now }).read("shadow-fixture");
+    const result: any = await readPublishedPostResponse();
     expect(result.authors.map((author: any) => author.id)).toEqual([ids[0]]);
     expect(result.document.published.metadata.liveBlog.updates).toHaveLength(101);
     expect(result.document.published.metadata.liveBlog.updates[100].credits[0].displayName).toBe("Reporter 100");
@@ -237,7 +228,7 @@ describe("published Post reader with the real Firestore emulator", () => {
     Object.assign(prose, { internalNote: "Private field" });
     Object.assign(prose.data.content.content[0], { attrs: { staffNote: "Private field" } });
     await put("cmsPosts/reader-fixture", value);
-    const result = await servicePublishedPostReader(service(), { secret: key, now: () => now }).read("shadow-fixture") as any;
+    const result = await readPublishedPostResponse() as any;
     expect(result.document).toEqual({ id: "reader-fixture", status: "published", publiclyVisible: true, deleted: false,
       publishAt: "2026-10-07T12:00:00.000Z", published: { sourceVersion: 7, publishedAt: "2026-10-07T12:00:00.000Z",
         metadata: { type: "post", title: "A published fixture", slug: "shadow-fixture", previousSlugs: [], summary: "Published fixture summary.",
@@ -260,7 +251,7 @@ describe("published Post reader with the real Firestore emulator", () => {
       photo: { url: "https://media.njpbs.org/cms-media/ada.jpg", mimeType: "image/jpeg", width: 800, height: 800,
         focalX: 0.25, focalY: 0.75, credit: "Portrait credit", privateKey: "Private photo key",
         thumbnails: [{ url: "https://media.njpbs.org/cms-media/ada-w960.webp", width: 960, height: 960, storageKey: "Private object key" }] } }));
-    const result: any = await servicePublishedPostReader(service(), { secret: key, now: () => now }).read("shadow-fixture");
+    const result: any = await readPublishedPostResponse();
     expect(result.document.published.metadata.credits).toEqual([
       { kind: "registered", authorId, displayName: "Ada at publication", slug: "old-ada" },
       { kind: "custom", name: "Ada Reporter" },
@@ -283,32 +274,31 @@ describe("published Post reader with the real Firestore emulator", () => {
     await put("cmsPosts/reader-fixture", authorDocument());
     await put(`cmsAuthorProfilesPublic/${authorId}`, authorSnapshot());
     await put(`cmsAuthorProfiles/${authorId}`, { displayName: "Private initial name" });
-    const reader = servicePublishedPostReader(service(), { secret: key, now: () => now });
     const resolve = (result: any) => {
       const content = projectPublishedPostRead(result, "shadow-fixture", "a".repeat(40), now)!;
       expect(content.posts[0].sourceVersion).toBe(7);
       expect(content.posts[0].credits[0].name).toBe("Ada at publication");
       return resolvePublicCreditLinks(content.posts[0].credits, content.authors);
     };
-    const first: any = await reader.read("shadow-fixture");
+    const first: any = await readPublishedPostResponse();
     expect(resolve(first)[0]).toEqual({ authorId, name: "Ada Reporter", slug: "ada-reporter" });
     await db.doc(`cmsAuthorProfiles/${authorId}`).update({ displayName: "Private edited name" });
-    expect(await reader.read("shadow-fixture")).toEqual(first);
+    expect(await readPublishedPostResponse()).toEqual(first);
     await db.doc(`cmsAuthorProfilesPublic/${authorId}`).update({ displayName: "Ada Current", slug: "ada-current", previousSlugs: ["ada-reporter", "a-reporter"], snapshotVersion: 3 });
-    expect(resolve(await reader.read("shadow-fixture"))[0]).toEqual({ authorId, name: "Ada Current", slug: "ada-current" });
+    expect(resolve(await readPublishedPostResponse())[0]).toEqual({ authorId, name: "Ada Current", slug: "ada-current" });
     await db.doc(`cmsAuthorProfilesPublic/${authorId}`).delete();
-    const withdrawn: any = await reader.read("shadow-fixture");
+    const withdrawn: any = await readPublishedPostResponse();
     expect(withdrawn.authors).toEqual([]);
     expect(resolve(withdrawn)[0]).toEqual({ authorId, name: "Ada at publication" });
     await db.doc(`cmsAuthorProfilesPublic/${authorId}`).set(authorSnapshot());
-    expect(resolve(await reader.read("shadow-fixture"))[0]).toEqual({ authorId, name: "Ada Reporter", slug: "ada-reporter" });
+    expect(resolve(await readPublishedPostResponse())[0]).toEqual({ authorId, name: "Ada Reporter", slug: "ada-reporter" });
   });
 
   it.each([{ slug: "Ada Reporter" }, { displayName: " " }, { snapshotVersion: 0 }, { displayName: { email: "Private malformed name" } }])(
     "uses the full-build fallback for an unusable public profile %j", async overrides => {
       await put("cmsPosts/reader-fixture", authorDocument());
       await put(`cmsAuthorProfilesPublic/${authorId}`, authorSnapshot(overrides));
-      const result: any = await servicePublishedPostReader(service(), { secret: key, now: () => now }).read("shadow-fixture");
+      const result: any = await readPublishedPostResponse();
       const content = projectPublishedPostRead(result, "shadow-fixture", "a".repeat(40), now)!;
       expect(content.authors).toEqual([]);
       expect(resolvePublicCreditLinks(content.posts[0].credits, content.authors)[0]).toEqual({ authorId, name: "Ada at publication" });
@@ -329,7 +319,7 @@ describe("published Post reader with the real Firestore emulator", () => {
       authorId: `au_${(index + 3).toString(16).padStart(32, "0")}`, displayName: `Registered ${index + 1}` }));
     Object.assign(value.published.metadata, { credits });
     await put("cmsPosts/reader-fixture", value);
-    const result: any = await servicePublishedPostReader(service(), { secret: key, now: () => now }).read("shadow-fixture");
+    const result: any = await readPublishedPostResponse();
     expect(result.document.published.metadata.credits).toEqual(credits);
     expect(result.authors).toEqual([]);
     const content = projectPublishedPostRead(result, "shadow-fixture", "a".repeat(40), now)!;
@@ -356,7 +346,7 @@ describe("published Post reader with the real Firestore emulator", () => {
     const value = document({ spotlightNews: spotlightNews !== true });
     if (spotlightNews !== undefined) Object.assign(value.published.metadata, { spotlightNews });
     await put("cmsPosts/reader-fixture", value);
-    const result: any = await servicePublishedPostReader(service(), { secret: key, now: () => now }).read("shadow-fixture");
+    const result: any = await readPublishedPostResponse();
     expect(result.document.published.metadata.spotlightNews).toBe(spotlightNews === true);
     const content = projectPublishedPostRead(result, "shadow-fixture", "a".repeat(40), now)!;
     expect(content.posts[0].spotlightNews).toBe(spotlightNews === true);
@@ -379,18 +369,17 @@ describe("published Post reader with the real Firestore emulator", () => {
       title: "Private page title", slug: "private-draft-slug", template: "genericPage",
       published: { sourceVersion: 7, publishedAt: "2026-10-07T12:00:00.000Z",
         metadata: { title: "Public news", description: "", slug: "in-the-news" }, blocks: [] } });
-    const reader = servicePublishedPostReader(service(), { secret: key, now: () => now });
-    const first: any = await reader.read("shadow-fixture");
+    const first: any = await readPublishedPostResponse();
     expect(first.settings).toEqual(chromeSettings().map(({ id, published }) => ({ id, version: 3, published })));
     expect(first.navigationPages).toEqual([{ pageId: newsPageId, path: "/in-the-news/" }]);
     expect(JSON.stringify(first)).not.toMatch(/Private|private-draft-slug|Public news/);
     const next = chromeSettings("Station newsletter")[1];
     await db.doc("cmsSettings/public-site-chrome").update({ published: next.published });
-    const second: any = await reader.read("shadow-fixture");
+    const second: any = await readPublishedPostResponse();
     expect(second.document.published.sourceVersion).toBe(first.document.published.sourceVersion);
     expect(second.settings[1].published.values.newsletterLabel).toBe("Station newsletter");
     await db.doc(`cmsPages/${newsPageId}`).update({ publiclyVisible: false });
-    expect((await reader.read("shadow-fixture") as any).navigationPages).toEqual([]);
+    expect((await readPublishedPostResponse() as any).navigationPages).toEqual([]);
   });
 
   it("joins approved newsletter cards selected by published CTA rules without copying draft fields", async () => {
@@ -450,7 +439,7 @@ describe("published Post reader with the real Firestore emulator", () => {
     expect(JSON.stringify(read)).not.toMatch(/Automatic weekly|Private Authored weekly/);
   });
 
-  it("keeps shadow Posts available when a built-in Page has an unmigrated block-only snapshot", async () => {
+  it("keeps published Posts available when a built-in Page has an unmigrated block-only snapshot", async () => {
     await put("cmsPosts/reader-fixture", document());
     // The publisher's legacy Page fixture has no document-level publishAt.
     await put("cmsPages/contact", { status: "published", template: "genericPage",
@@ -465,12 +454,11 @@ describe("published Post reader with the real Firestore emulator", () => {
 
   it("uses the publisher fallback for missing, unpublished or invalid chrome", async () => {
     await put("cmsPosts/reader-fixture", document());
-    const reader = servicePublishedPostReader(service(), { secret: key, now: () => now });
-    expect((await reader.read("shadow-fixture") as any).settings).toEqual([]);
+    expect((await readPublishedPostResponse() as any).settings).toEqual([]);
     await put("cmsSettings/public-site-chrome", { version: 1, values: { newsletterLabel: "Private draft" } });
     await put("cmsSettings/site-navigation", { version: 1, published: { schemaVersion: 1,
       sourceVersion: 1, publishedAt: now.toISOString(), values: { header: "invalid" } } });
-    expect((await reader.read("shadow-fixture") as any).settings).toEqual([]);
+    expect((await readPublishedPostResponse() as any).settings).toEqual([]);
   });
 
   it.each([
@@ -479,7 +467,9 @@ describe("published Post reader with the real Firestore emulator", () => {
     ["future", { published: { ...fixture.document.published, publishedAt: "2026-10-08T12:00:00Z" } }],
   ])("returns no published data for %s", async (_name, overrides) => {
     await put("cmsPosts/reader-fixture", document(overrides));
-    expect(await servicePublishedPostReader(service(), { secret: key, now: () => now }).read("shadow-fixture")).toBeNull();
+    const response = await call(authenticated());
+    expect(response.status).toBe(404);
+    expect(await response.json()).toEqual({ kind: "not-found" });
   });
   it("returns not found for an unknown slug and gone for a deleted snapshot", async () => {
     const request = authenticated();
@@ -489,15 +479,7 @@ describe("published Post reader with the real Firestore emulator", () => {
     expect(response.status).toBe(410);
     expect(response.headers.get("x-njpbs-gone-branch")).toBe("post-reader-deleted");
     expect(await response.json()).toEqual({ kind: "gone" });
-    const reader = servicePublishedPostReader(service(), { secret: key, now: () => now });
-    const worker = createShadowPostWorker({ reader, rendererSha: "a".repeat(40), now: () => now,
-      cache: { async match() { throw new Error("Gone content must not reach cache"); }, async put() {} },
-      async render() { throw new Error("Gone content must not render"); } });
-    const gone = await worker.fetch(new Request("https://dev-public.example.org/posts/shadow-fixture/"),
-      { SHADOW_POSTS_ENABLED: "true", SHADOW_POST_SLUGS: "shadow-fixture" });
-    expect(gone.status).toBe(410);
-    expect(gone.headers.get("x-njpbs-gone-branch")).toBe("shadow-post-reader-deleted");
-    expect(gone.headers.get("Cache-Control")).toBe("no-store");
+    expect(response.headers.get("Cache-Control")).toBe("private, no-store");
   });
   it("requires explicit public visibility even for a legacy published record", async () => {
     const value = document({ status: "published" });
@@ -507,24 +489,17 @@ describe("published Post reader with the real Firestore emulator", () => {
     expect(response.status).toBe(404);
     expect(await response.json()).toEqual({ kind: "not-found" });
   });
-  it("preserves an absent legacy video public copy through the shadow projector", async () => {
+  it("preserves an absent legacy video public copy through the published Post projector", async () => {
     const value: any = document();
     const video = { id: "legacy-video", type: "video", order: 1, visible: true,
       data: { sourceId: "video-library", assetId: "legacy-video", title: "Legacy clip" } };
     value.published.blocks.push(video);
     await put("cmsPosts/reader-fixture", value);
-    const reader = servicePublishedPostReader(service(), { secret: key, now: () => now });
-    const result: any = await reader.read("shadow-fixture");
+    const result: any = await readPublishedPostResponse();
     expect(result.document.published.blocks[1].data).toEqual(video.data);
     expect(result.document.published.blocks[1].data).not.toHaveProperty("public");
-    const render = vi.fn(async () => "<!doctype html><html><main>Published body</main></html>");
-    const worker = createShadowPostWorker({ reader, rendererSha: "a".repeat(40), now: () => now, render,
-      cache: { async match() { return undefined; }, async put() {} } });
-    const response = await worker.fetch(new Request("https://dev-public.example.org/posts/shadow-fixture/"),
-      { SHADOW_POSTS_ENABLED: "true", SHADOW_POST_SLUGS: "shadow-fixture" });
-    expect(response.status).toBe(200);
-    expect(render).toHaveBeenCalledOnce();
-    expect((render.mock.calls[0] as any)[0].posts[0].blocks[1].data).toEqual(video.data);
+    const projected = projectPublishedPostRead(result, "shadow-fixture", "a".repeat(40), now);
+    expect(projected?.posts[0].blocks[1].data).toEqual(video.data);
   });
   it("distinguishes version faults and SDK refusal codes without retaining error text", async () => {
     await put("cmsPosts/reader-fixture", document({ publicSourceVersion: 9 }));
