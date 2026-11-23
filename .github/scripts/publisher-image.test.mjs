@@ -162,9 +162,10 @@ test("a development image uses the same source with only the development names",
   const prodPrepared = structuredClone(source);
   prodPrepared.containers[0].image_build_context = "/tmp/prepared";
   assert.throws(() => productionConfig(source, prodPrepared, { checkout, sha, image, variables: { ...variables, PUBLICATION_SERIALIZER_ID: "cloudflare-publisher" } }), /contract refused/);
-  const receipt = JSON.parse(receiptFiles({ sha, image: devImage, config, checkout, runId: "1", inputFingerprint, target })["receipt.json"]);
-  assert.equal(receipt.target, "development");
-  assert.equal(receipt.image, devImage);
+  // The development artifact carries no deployable config.
+  const files = receiptFiles({ sha, image: devImage, config, checkout, runId: "1", inputFingerprint, target });
+  assert.deepEqual(Object.keys(files), ["receipt.json"]);
+  assert.deepEqual(JSON.parse(files["receipt.json"]), { schema: 1, target: "development", source_sha: sha, image: devImage, workflow_run_id: "1", deployment_input_sha256: inputFingerprint });
   assert.throws(() => publisherTarget("staging"), /production or development/);
   assert.throws(() => publisherTarget(undefined), /production or development/);
 });

@@ -146,11 +146,15 @@ export function productionConfig(source, prepared, { checkout, sha, image, varia
 export function receiptFiles({ sha, image, config, runId, checkout, inputFingerprint, target = publisherTarget("production") }) {
   if (!/^[1-9][0-9]*$/.test(runId)) throw new ImageRefusal("Workflow run ID missing");
   const configBytes = bytes(config);
-  // Production receipts keep their bytes; a development receipt names its target.
-  const named = target.environment === "production" ? {} : { target: target.environment };
-  return {
+  if (target.environment === "production") return {
     "publisher.json": configBytes,
-    "receipt.json": bytes({ schema: 1, source_sha: sha, image, config: "publisher.json", config_sha256: sha256(configBytes), workflow_run_id: runId, source_checkout: checkout, deployment_input_sha256: inputFingerprint, ...named }),
+    "receipt.json": bytes({ schema: 1, source_sha: sha, image, config: "publisher.json", config_sha256: sha256(configBytes), workflow_run_id: runId, source_checkout: checkout, deployment_input_sha256: inputFingerprint }),
+  };
+  // A development Worker bundles development templates, so a config pointing at
+  // this unrendered checkout is not deployable. The development release builds
+  // its config from its own checkout rendered with the same inputs.
+  return {
+    "receipt.json": bytes({ schema: 1, target: target.environment, source_sha: sha, image, workflow_run_id: runId, deployment_input_sha256: inputFingerprint }),
   };
 }
 

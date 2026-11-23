@@ -69,16 +69,15 @@ consumes registry images; it adds no alternate deployment path.
 ## Development target
 
 Dispatch with `target=development` to build the development publisher from the
-same source. The image, Worker and container are named `njpbs-dev-cms-publisher`;
-the config changes only the Worker and container name, the
-`DURABLE_POST_WITHDRAWALS` bucket (`njpbs-dev-cms-publication`) and the route
-(`dev-publisher-health.njpbs.org`), all from
-`functions/lib/publication-target.js`. Every development input is rendered, so
-the image fingerprint covers all of them. The run title is
-`Publisher image development <SHA>`, the artifact is
-`publisher-image-development-<SHA>-<attempt>` and the receipt adds
-`"target": "development"`. Production titles, artifacts and receipts are
-unchanged.
+same source. The image is named `njpbs-dev-cms-publisher`. The run checks the
+development config against the source with only the Worker and container name
+(`njpbs-dev-cms-publisher`), the `DURABLE_POST_WITHDRAWALS` bucket
+(`njpbs-dev-cms-publication`) and the route (`dev-publisher-health.njpbs.org`)
+replaced, all from `functions/lib/publication-target.js`. Every development
+input is rendered, so the image fingerprint covers all of them. The run title
+is `Publisher image development <SHA>` and the artifact is
+`publisher-image-development-<SHA>-<attempt>`. Production titles, artifacts and
+receipts are unchanged.
 
 The development job reads `PUBLISHER_DEVELOPMENT_PUBLIC_VARS_JSON` from the same
 `publisher-image` environment: the same key set, with `CMS_DEPLOYMENT_ENVIRONMENT`
@@ -90,11 +89,12 @@ A production run calls the source's preparation script with only the SHA, as
 older source commits require; only a development run adds `development`, so a
 source commit without development preparation refuses.
 
-The Worker entry in `publisher.json` is the unrendered `source_checkout`. A
-production publisher bundles no development template, so the release deploys
-from its production-rendered checkout. A development publisher bundles
-`functions/lib/publication-target.js`, whose development Worker name, origin
-and preview bucket are templates, and the withdrawal catalog keys derive from
-that Worker name. The development release must therefore render its checkout
-with every development input, require the same `deployment_input_sha256` as the
-receipt, and rebind only `main` to that rendered checkout before deploying.
+A development artifact contains only `receipt.json`: schema 1, `target`,
+`source_sha`, the immutable `image`, `workflow_run_id` and
+`deployment_input_sha256`. It has no `publisher.json`. The development Worker
+bundles `functions/lib/publication-target.js`, whose development Worker name,
+origin and preview bucket are templates until rendering, and the withdrawal
+catalog keys derive from that Worker name; a config pointing at this unrendered
+checkout would write catalogs the development public Worker never reads. The
+development release builds its config from its own checkout rendered with the
+inputs that `deployment_input_sha256` records.
