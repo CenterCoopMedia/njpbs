@@ -526,6 +526,13 @@ describe("development renderer, version and baseline boundaries", () => {
     if (stale) await expect(verifyDevPostRoutes()).rejects.toThrow("Post bytes differ");
     else await verifyDevPostRoutes();
   });
+  it("leaves owned Spanish Post routes to the fresh reader proof", async () => {
+    writeFileSync(join(directory, "post-routes.json"), JSON.stringify([
+      { route: "/es/posts/current-post/", removed: false }, { route: "/es/posts/former-post/", removed: true },
+    ]));
+    await verifyDevPostRoutes([{ state: { ownedSlugs: ["es/current-post", "es/former-post"] } }]);
+    expect(globalThis.fetch).not.toHaveBeenCalled();
+  });
   it.each(["https://njpbs.org/posts/example/", "//njpbs.org/posts/example/", "/posts/example/?token=private"])(
     "refuses an unsafe retained route before sending Access credentials: %s", async route => {
       writeFileSync(join(directory, "post-routes.json"), JSON.stringify([{ route, removed: false }]));

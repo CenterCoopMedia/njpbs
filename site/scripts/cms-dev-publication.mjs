@@ -429,7 +429,8 @@ export async function freezeDevPostRoutes(db, id, reservation, inventory) {
   }, { readOnly: true, readTime: reservation.cutoffAt });
 }
 
-export async function verifyDevPostRoutes(ownedPaths = new Set()) {
+export async function verifyDevPostRoutes(owners = []) {
+  const ownedPaths = new Set(owners.flatMap(({ state }) => state.ownedSlugs.map(postRoutePath)));
   const checks = await json(path.join(directory, "post-routes.json"));
   for (const { route, removed } of checks) {
     // Validate even retained paths before sending the publisher Access identity.
@@ -631,8 +632,7 @@ export async function upload(db, id, reconcileOnly = false, recovery = null) {
     if (evidence.action !== "activate") throw new Error("The generic dev candidate activation is unconfirmed");
     await verifyDevReadback(candidate.workerVersionId, active.id, publication, { timedOutRecovery });
     const owners = await listNoBuildPostOwners({ firestore: db });
-    const ownedPaths = new Set(owners.flatMap(({ state: owner }) => owner.ownedSlugs.map(slug => "/posts/" + slug + "/")));
-    await verifyDevPostRoutes(ownedPaths);
+    await verifyDevPostRoutes(owners);
     await verifyNoBuildPostPublicRoute({ firestore: db, candidate, target: publicationTarget,
       headers: { "cf-access-client-id": process.env.CMS_DEV_ACCESS_CLIENT_ID,
         "cf-access-client-secret": process.env.CMS_DEV_ACCESS_CLIENT_SECRET } });
