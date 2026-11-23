@@ -1,5 +1,6 @@
 import { useContext, useEffect, useId, useRef, useState, type ComponentProps } from "react";
-import { ELECTION_SHEET_COLUMNS, type ElectionRoster, type ElectionSourceMode } from "../../../packages/content-core/src/election-result-sources";
+import { DEFAULT_ELECTION, ELECTION_DATASET_PATTERN, ELECTION_SHEET_COLUMNS, parseElectionSelection,
+  type ElectionRoster, type ElectionSelection, type ElectionSourceMode } from "../../../packages/content-core/src/election-result-sources";
 import { ElectionResultsSourceHost } from "../context/ElectionResultsSourceHost";
 import { useRegisterContentQuickEditGuard } from "../context/ContentQuickActionsContext";
 import type { ElectionSourceConfig, ElectionSourceMutation, ElectionSourceState } from "../lib/election-sources";
@@ -19,6 +20,14 @@ function apDraftFrom(config: ElectionSourceConfig): ApDraft {
     [race.raceId, { sourceId, candidateIds: Object.fromEntries(Object.entries(race.candidateIds).map(([id, candidate]) => [candidate, id])) }])) : {};
 }
 const initialConfig = (): ElectionSourceConfig => ({ source: { kind: "repo" }, mode: "approve-once", raceIds: [], maxAgeSeconds: 300 });
+const sameElection = (a: ElectionSelection, b: ElectionSelection) => a.date === b.date && a.dataset === b.dataset;
+function withReviewedRoster(config: ElectionSourceConfig, election: ElectionSelection, rosterDigest: string): ElectionSourceConfig {
+  const previous = config.election ?? DEFAULT_ELECTION;
+  const reset = !sameElection(election, previous) || config.election !== undefined && config.election.rosterDigest !== rosterDigest;
+  return { ...config, election: { ...election, rosterDigest }, ...(reset ? {
+    raceIds: [], photos: {}, source: config.source.kind === "ap" ? { kind: "ap", mapping: {} } : config.source,
+  } : {}) };
+}
 const time = (value: string | null) => value ? new Date(value).toLocaleString("en-US", { timeZone: "America/New_York", timeZoneName: "short" }) : "Not yet";
 type MediaProps = Pick<ComponentProps<typeof FieldRenderer>, "loadMedia" | "mediaPickerUnavailable" | "uploadMedia" | "mediaCategories" | "defaultUploadCategory" | "canUploadCategory" | "onMediaPickerDirtyChange">;
 
@@ -30,6 +39,7 @@ export function ElectionResultsSourcePanel({ blockId, title, draftState, onUseMa
   const headingId = useId();
   const [state, setState] = useState<ElectionSourceState | null>(null);
   const [roster, setRoster] = useState<ElectionRoster | null>(null);
+  const [electionInput, setElectionInput] = useState<ElectionSelection>(DEFAULT_ELECTION);
   const [config, setConfig] = useState<ElectionSourceConfig | null>(null);
   const [apDraft, setApDraft] = useState<ApDraft>({});
   const [configBaseline, setConfigBaseline] = useState("");
@@ -52,7 +62,8 @@ export function ElectionResultsSourcePanel({ blockId, title, draftState, onUseMa
   const documentId = host?.documentId;
   const collection = host?.collection;
   const saved = !!host?.version;
-  const dirty = config !== null && JSON.stringify({ config, apDraft }) !== configBaseline;
+  const dirty = config !== null && (JSON.stringify({ config, apDraft }) !== configBaseline ||
+    !sameElection(electionInput, config.election ?? DEFAULT_ELECTION));
   useRegisterContentQuickEditGuard({ label: "Election source settings", dirty, saving: busy,
     save: async () => ({ status: "unsaved-elsewhere", items: ["Election source settings: review and connect or discard them in the election section"] }) });
   useEffect(() => () => { read.current?.abort(); sequence.current++; }, []);
@@ -83,12 +94,13 @@ export function ElectionResultsSourcePanel({ blockId, title, draftState, onUseMa
   const busyCallback = host?.onBusyChange;
   useEffect(() => { busyCallback?.(blockId, busy); return () => busyCallback?.(blockId, false); }, [busy, busyCallback, blockId]);
   const target = collection && documentId ? { collection, documentId, blockId } : null;
-  async function reload(includeRoster = false) {
+  async function reload(includeRoster = false, election?: ElectionSelection) {
     if (!api || !target || busyRef.current) return null;
     const controller = new AbortController(); read.current?.abort(); read.current = controller;
     const request = ++sequence.current; setLoading(true); setError("");
     try {
-      const result = await api.get(target, includeRoster, controller.signal);
+      const result = election ? await api.get(target, includeRoster, controller.signal, election)
+        : await api.get(target, includeRoster, controller.signal);
       if (controller.signal.aborted || request !== sequence.current) return null;
       setState(result); if (includeRoster) setRoster(result.roster ?? null);
       if (result.rosterError) setError(result.rosterError);
@@ -98,11 +110,36 @@ export function ElectionResultsSourcePanel({ blockId, title, draftState, onUseMa
   }
   async function configure() {
     const result = await reload(true);
-    if (!result?.roster) return;
-    const value = structuredClone(result.connection?.config ?? initialConfig());
+    if (!result) return;
+    const original = structuredClone(result.connection?.config ?? initialConfig());
+    const { date, dataset } = original.election ?? DEFAULT_ELECTION;
+    const election = { date, dataset };
+    const value = result.roster && result.rosterDigest && !original.rehearsal && !original.apRehearsal
+      ? withReviewedRoster(original, election, result.rosterDigest) : original;
     const draft = apDraftFrom(value);
+    setElectionInput(election);
     setConfig(value); setApDraft(draft); setConfigBaseline(JSON.stringify({ config: value, apDraft: draft })); setConfigVersion(result.connection?.version ?? 0); setConfigContentVersion(Math.max(result.documentVersion ?? 0, host?.version ?? 0)); setNotice("");
   }
+  async function loadElectionRoster() {
+    if (!config) return;
+    setNotice("");
+    let election: ElectionSelection;
+    try { election = parseElectionSelection(electionInput); }
+    catch (cause) { if (cause instanceof Error) setError(cause.message); return; }
+    const result = await reload(true, election);
+    if (!result?.roster || !result.rosterDigest) return;
+    const next = withReviewedRoster(config, election, result.rosterDigest);
+    if (next.raceIds !== config.raceIds) setApDraft({});
+    setConfig(next);
+    setNotice("Roster loaded. Review the candidates and select the races to include.");
+  }
+  function editElection(election: ElectionSelection) {
+    setElectionInput(election);
+    setNotice("");
+    setError("");
+  }
+  const rehearsal = config?.rehearsal || config?.apRehearsal;
+  const rosterReady = roster && (rehearsal || sameElection(electionInput, config?.election ?? DEFAULT_ELECTION));
   const latestDocumentVersion = Math.max(state?.documentVersion ?? 0, host?.version ?? 0);
   const documentChanged = config !== null && configContentVersion !== latestDocumentVersion;
   const blocked = !host?.canPublish || !state?.canManage || host.locked || loading || busy || needsReview;
@@ -189,6 +226,7 @@ export function ElectionResultsSourcePanel({ blockId, title, draftState, onUseMa
       {state && (!state.canManage || !host.canPublish) ? <p>You can inspect this connection. A staff publisher can change it.</p> : null}
       {connection ? <>
         <p><strong>{connection.config.source.kind === "repo" ? "nj-decides public results" : connection.config.source.kind === "sheet" ? "Google Sheet" : "The Associated Press"}</strong> · {connection.paused ? "Paused" : "Enabled"} · {modes[connection.config.mode].label}</p>
+        {connection.config.election ? <p>Election date: <time dateTime={connection.config.election.date}>{connection.config.election.date}</time></p> : null}
         <p>{modes[connection.config.mode].help}</p>
         <dl className="election-source-panel__times"><dt>Last check</dt><dd>{time(connection.lastCheckAt)}</dd><dt>Last successful source check</dt><dd>{time(connection.lastSourceSuccessAt)}</dd><dt>Last accepted update</dt><dd>{time(connection.lastGoodAt)}</dd></dl>
         {connection.lastSchedulingReason ? <p role="status">Polling deferred: {connection.lastSchedulingReason.message} Last deferral: {time(connection.lastSchedulingReason.at)}. Fresh pending values can still be approved.</p> : null}
@@ -218,7 +256,16 @@ export function ElectionResultsSourcePanel({ blockId, title, draftState, onUseMa
         {state?.publicData ? <details open><summary>Current public results section</summary>{state.publicData.races.map(race => <p key={race.id}>{race.office}: {race.district} · {race.status} · As of {time(race.asOf)}<br />{race.candidates.map(candidate => `${candidate.name}: ${candidate.votes ?? "unknown"} (${candidate.share ?? "unknown"}%)`).join("; ")}</p>)}</details> : null}
         <Button disabled={busy || loading || requiresFreshRead || !state?.canConnect || !state.documentVersion || state.documentVersion !== latestDocumentVersion || (connection?.version ?? 0) !== configVersion} onClick={() => { setConfigContentVersion(state!.documentVersion!); setNeedsReview(false); setError(""); setNotice("Current public section reviewed. Your source settings are kept for this saved revision."); }}>Use saved Page/Post revision</Button>
       </div> : null}
-      {config && roster ? <div role="group" aria-label="Source settings form">
+      {config ? <div role="group" aria-label="Source settings form">
+        {!rehearsal ? <fieldset disabled={blocked || !state?.canConnect}><legend>Election roster</legend>
+          <div className="election-results-editor__fields">
+            <label>Election date<TextInput type="date" required disabled={!!connection} value={electionInput.date} onChange={event => editElection({ ...electionInput, date: event.target.value })} /></label>
+            <label>Roster filename stem<TextInput required disabled={!!connection} maxLength={64} pattern={ELECTION_DATASET_PATTERN} value={electionInput.dataset} onChange={event => editElection({ ...electionInput, dataset: event.target.value })} /></label>
+          </div>
+          <p>{connection ? "Use a separate results section for a different election." : "Enter the date and the part of the reviewed NJ Decides filename before -candidates.json."}</p>
+          <Button type="button" onClick={() => void loadElectionRoster()}>Load election roster</Button>
+        </fieldset> : null}
+        {rosterReady && roster ?
         <fieldset ref={fields} disabled={blocked || !state?.canConnect}><legend>Source settings</legend>
           <label>Results source<Select value={config.source.kind} onChange={event => setSource(event.target.value as "repo" | "sheet" | "ap")}><option value="repo">nj-decides public JSON</option><option value="sheet">Google Sheet</option><option value="ap">AP Elections API</option></Select></label>
           <p>One connection uses one source. Sources are never blended automatically. The selected roster races replace this section's source results after validation.</p>
@@ -258,8 +305,8 @@ export function ElectionResultsSourcePanel({ blockId, title, draftState, onUseMa
           <details><summary>Source age limit</summary><label>Maximum source age in seconds<TextInput type="number" min={60} max={86400} step={1} required value={config.maxAgeSeconds} onChange={event => setConfig({ ...config, maxAgeSeconds: Number(event.target.value) })} /></label><p>Sheet and repo use the source as-of time. AP uses the last successful HTTP check while retaining its real race as-of time.</p></details>
           <p>Review the selected races, mapping and mode. Saving can authorize public updates.{config.mode === "approve-once" ? " This mode waits for your first approval." : " The next valid server check can publish updates in this mode."}</p>
           <Button type="button" disabled={!config.raceIds.length || (connection?.version ?? 0) !== configVersion || documentChanged} onClick={() => { if (!validateSettings()) return; const next = connectionConfig(); if (next) void mutate({ action: "connect", baseVersion: configVersion, contentVersion: configContentVersion, config: next }); }}>{connection ? "Save connection" : "Connect source"}</Button>
-        </fieldset>
-        <Button type="button" disabled={busy} onClick={() => { setConfig(null); setError(""); }}>Discard source settings</Button>
+        </fieldset> : null}
+        <Button type="button" disabled={busy || loading} onClick={() => { setConfig(null); setError(""); }}>Discard source settings</Button>
       </div> : null}
     </>}
   </section>;

@@ -4,9 +4,9 @@ const { db } = require("./lib/firebase");
 const { cmsOnRequest } = require("./lib/cms-edge");
 const { requirePrincipal } = require("./lib/auth");
 const { validateBoundedJsonRequest } = require("./lib/http-json");
-const { COLLECTION, parseRequest, contentPrincipal, mutateConnection, view } = require("./lib/election-source-connections");
+const { COLLECTION, parseRequest, configuredElection, contentPrincipal, mutateConnection, view } = require("./lib/election-source-connections");
 const { publiclyVisible } = require("./lib/public-video-references");
-const { connectionId, publicBlock } = require("./lib/election-source-refresh");
+const { connectionId, publicBlock, digest } = require("./lib/election-source-refresh");
 const { readRoster } = require("./lib/election-source-http");
 const { pollConnections } = require("./lib/election-source-poller");
 const { logUnexpected } = require("./lib/election-source-log");
@@ -21,7 +21,7 @@ function createElectionSourcesHandler({ firestore = db, now = () => new Date().t
       const request = parseRequest(req.body);
       if (request.action !== "get") {
         const roster = request.action === "connect" ? request.config?.rehearsal === true
-          ? rehearsalRoster() : await readRoster({ fetchImpl }) : undefined;
+          ? rehearsalRoster() : await readRoster({ fetchImpl, election: configuredElection(request.config) }) : undefined;
         return res.status(200).json({ success: true, ...await mutateConnection({ firestore, actor, request, roster, now: now() }) });
       }
       const result = await firestore.runTransaction(async transaction => {
@@ -36,7 +36,13 @@ function createElectionSourcesHandler({ firestore = db, now = () => new Date().t
           collection: request.collection, documentId: request.documentId, stored: document })) };
       });
       if (request.includeRoster) {
-        try { result.roster = await readRoster({ fetchImpl }); }
+        const config = result.connection?.config;
+        try {
+          result.roster = config?.rehearsal ? rehearsalRoster() : await readRoster({
+            fetchImpl, election: config?.apRehearsal ? undefined : request.election ?? config?.election,
+          });
+          result.rosterDigest = digest(result.roster);
+        }
         catch { result.roster = null; result.rosterError = "The public candidate roster is unavailable. Existing public values are retained."; }
       }
       return res.status(200).json({ success: true, ...result });

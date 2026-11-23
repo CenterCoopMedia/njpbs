@@ -1,0 +1,8 @@
+{
+  "date": "2026-11-22",
+  "kind": "improved",
+  "title": "Configure results for a new election",
+  "body": "Publish a results section for the election, then open Connect a source. Enter the election date and the reviewed NJ Decides roster filename stem. Load the roster, select the races and review the source settings before saving. If the roster changes, the connection holds updates and keeps the current public results. Open Edit connection to review the new roster.",
+  "prs": [],
+  "order": 1795392000000
+}

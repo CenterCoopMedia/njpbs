@@ -82,6 +82,11 @@ describe("bounded election source HTTP and credential boundaries", () => {
     "https://user:fixture-a1316aef88@example.org/v3/elections/2026-11-03?statePostal=NJ",
     "https://api.ap.org/v3/elections/2026-11-03?statePostal=PA",
   ])("refuses an unsafe AP cursor %s", url => { expect(() => provider.apCursor(url)).toThrow(); });
+  it("accepts an AP cursor only for the configured election date", () => {
+    const url = "https://api.ap.org/v3/elections/2027-11-02?statePostal=NJ&raceID=100";
+    expect(provider.apCursor(url, { electionDate: "2027-11-02" })).toBe(url);
+    expect(() => provider.apCursor(url.replace("2027-11-02", "2026-11-03"), { electionDate: "2027-11-02" })).toThrow();
+  });
   it("reads the optional AP secret only at request time and sends it only as the AP header", async () => {
     const calls = [];
     const fetchImpl = async (url, options) => {

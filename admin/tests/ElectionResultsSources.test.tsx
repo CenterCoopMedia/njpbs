@@ -14,7 +14,8 @@ import type { ElectionSourceApi, ElectionSourceConfig, ElectionSourceConnection,
 import { HttpError } from "../src/lib/functions";
 import { electionBlock, electionRace } from "../../tests/fixtures/election-results";
 import rosterFixture from "../../tests/fixtures/election-sources/roster.json";
-import type { ElectionRoster } from "../../packages/content-core/src/election-result-sources";
+import nextRosterFixture from "../../tests/fixtures/election-sources/next-roster.json";
+import type { ElectionRoster, ElectionSelection } from "../../packages/content-core/src/election-result-sources";
 
 afterEach(cleanup);
 const roster = rosterFixture as ElectionRoster;
@@ -27,7 +28,9 @@ function connected(patch: Partial<ElectionSourceConnection> = {}): ElectionSourc
 function transport(initial: Partial<ElectionSourceState> = {}) {
   let state: ElectionSourceState = { connection: null, canManage: true, canConnect: true, ...initial };
   const api = {
-    get: vi.fn(async (_target, includeRoster, _signal?: AbortSignal) => ({ ...state, ...(includeRoster ? { roster } : {}) })),
+    get: vi.fn(async (_target, includeRoster, _signal?: AbortSignal, election?: ElectionSelection) => ({ ...state, ...(includeRoster ? {
+      roster: election ? nextRosterFixture as ElectionRoster : roster, rosterDigest: (election ? "b" : "a").repeat(64),
+    } : {}) })),
     mutate: vi.fn(async (_target, request) => {
       const previous = state.connection ?? connected();
       const connection = connected({ ...previous, version: previous.version + 1,
@@ -118,7 +121,22 @@ describe("shared election source controls", () => {
     fireEvent.change(screen.getByRole("combobox", { name: "Publish mode" }), { target: { value: mode } });
     fireEvent.click(screen.getByRole("button", { name: "Connect source" }));
     await waitFor(() => expect(api.mutate).toHaveBeenCalledWith({ collection: "cmsPages", documentId: "contact", blockId: "results-block" }, { action: "connect", baseVersion: 0, contentVersion: 7,
-      config: { ...config, mode, photos: {} } }));
+      config: { ...config, mode, photos: {}, election: { date: "2026-11-03", dataset: "2026-general", rosterDigest: "a".repeat(64) } } }));
+  });
+  it("requires review and race selection again after switching elections", async () => {
+    const { api } = transport(); editor(api); await openConfig(); chooseRace();
+    fireEvent.change(screen.getByLabelText("Election date"), { target: { value: "2027-11-02" } });
+    fireEvent.change(screen.getByLabelText("Roster filename stem"), { target: { value: "2027-general" } });
+    expect(screen.queryByRole("button", { name: "Connect source" })).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Load election roster" }));
+    const nextRace = await screen.findByLabelText("Include District 9");
+    expect(screen.queryByLabelText("Include New Jersey")).toBeNull();
+    expect(screen.getByRole("button", { name: "Connect source" })).toBeDisabled();
+    fireEvent.click(nextRace);
+    fireEvent.click(screen.getByRole("button", { name: "Connect source" }));
+    await waitFor(() => expect(api.mutate.mock.calls[0]?.[1]).toMatchObject({ action: "connect", config: {
+      election: { date: "2027-11-02", dataset: "2027-general", rosterDigest: "b".repeat(64) }, raceIds: ["state-senate-09"],
+    } }));
   });
   it("keeps source settings in the exit guard without auto-connecting", async () => {
     const { api } = transport(); editor(api); await openConfig(); chooseRace();

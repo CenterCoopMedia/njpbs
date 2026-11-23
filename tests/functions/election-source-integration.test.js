@@ -145,6 +145,7 @@ beforeEach(async () => {
   sourceData = repoFixture();
   providerCalls = [];
   providerFailure = null;
+  nextElection = null;
 });
 afterEach(() => vi.unstubAllEnvs());
 afterAll(async () => {
@@ -158,6 +159,7 @@ const roster = fixture("roster");
 let sourceData;
 let providerCalls = [];
 let providerFailure = null;
+let nextElection = null;
 const now = () => "2026-11-04T03:00:00.000Z";
 function repoFixture() {
   const value = fixture("repo-live");
@@ -168,6 +170,8 @@ function repoFixture() {
 async function providerFetch(url, options) {
   providerCalls.push({ url: String(url), options });
   if (String(url) === provider.ROSTER_URL) return Response.json(roster);
+  if (String(url) === "https://centercoopmedia.github.io/nj-decides/data/2027-general-candidates.json") return Response.json(nextElection.roster);
+  if (String(url) === "https://centercoopmedia.github.io/nj-decides/data/2027-general-results.json") return Response.json(nextElection.results);
   if (providerFailure && (String(url) === provider.RESULTS_URL || String(url).startsWith("https://api.ap.org/"))) return new Response("provider body must not leak", { status: providerFailure });
   if (String(url) === provider.RESULTS_URL) return Response.json(sourceData, { headers: { ETag: '"synthetic-results-v1"' } });
   if (String(url) === rehearsal.RESULTS_URL) return Response.json(sourceData, { headers: { ETag: '"rehearsal-results-v1"' } });
@@ -256,6 +260,61 @@ async function refreshTask(record) {
 // Source HTTP and the Sheets API are the only mocked boundaries. Auth, content
 // handlers, authorization, transactions, publication owners and audit are real.
 describe("Election source Auth/HTTP/Firestore and publication boundaries", () => {
+  it("keeps two elections independent and retains public snapshots through roster and race holds", async () => {
+    const previous = await connect();
+    expect(await poll(previous.id)).toMatchObject({ published: true });
+    const previousRef = db.doc("cmsPages/contact");
+    const previousSnapshot = (await previousRef.get()).data().published;
+    const next = await publishedRecord("cmsPosts");
+    const target = address("cmsPosts");
+    const futureDate = "2027-11-02";
+    const asOf = "2027-11-03T02:59:00Z";
+    const firstPoll = "2027-11-03T03:00:00Z";
+    const nextRoster = fixture("next-roster");
+    nextElection = { roster: nextRoster, results: { schemaVersion: 1, sample: false, electionDate: futureDate, generatedAt: asOf,
+      races: [{ id: "state-senate-09", status: "counting", asOf, reportingShare: 50, sourceKind: "official",
+        sourceLabel: "Example election office", sourceUrl: "https://results.example.org/",
+        candidates: nextRoster.candidates.map(({ id }) => ({ id, votes: 500, share: 50 })) }] } };
+    const election = { date: futureDate, dataset: "2027-general" };
+    const getRequest = { action: "get", ...target, includeRoster: true };
+    const loaded = await call("sources", { ...getRequest, election });
+    expect(loaded.status).toBe(200);
+    expect(loaded.body.roster).toEqual(nextRoster);
+    expect(loaded.body.rosterDigest).toMatch(/^[a-f0-9]{64}$/);
+    expect((await call("sources", { ...getRequest, election: { ...election, date: "2027-02-30" } })).status).toBe(400);
+    expect((await call("sources", { ...getRequest, election: { ...election, dataset: "2027-../rehearsal" } })).status).toBe(400);
+    const settings = { ...config(), election: { ...election, rosterDigest: loaded.body.rosterDigest }, raceIds: ["state-senate-09"] };
+    const request = { action: "connect", ...target, baseVersion: 0, contentVersion: next.version, config: settings };
+    expect((await call("sources", { ...request, config: { ...settings, raceIds: ["us-senate"] } })).status).toBe(400);
+    expect((await call("sources", { ...request, config: { ...settings, rehearsal: true } })).status).toBe(400);
+    nextElection.roster = { ...nextRoster, races: [{ ...nextRoster.races[0], district: "Changed district" }] };
+    expect((await call("sources", request)).body.error).toContain("roster changed");
+    nextElection.roster = nextRoster;
+    const connected = await call("sources", request);
+    expect(connected.status, connected.body.error).toBe(200);
+    expect(connected.body.connection.config.election).toEqual(settings.election);
+    const reloaded = await call("sources", getRequest);
+    expect(reloaded.body.rosterDigest).toBe(loaded.body.rosterDigest);
+
+    await makeDue(previous.id);
+    await poller.pollConnections({ firestore, now: () => firstPoll, fetchImpl: providerFetch });
+    const nextId = refresh.connectionId(target.collection, target.documentId, target.blockId);
+    const nextRef = db.doc(`${target.collection}/${target.documentId}`);
+    const good = (await connection(nextId)).lastGoodData;
+    const nextSnapshot = (await nextRef.get()).data().published;
+    expect(good?.races[0]).toMatchObject({ id: "state-senate-09", candidates: [{ id: "alex-river" }, { id: "jordan-lee" }] });
+    expect(nextSnapshot.blocks[0].data).toEqual(good);
+    expect((await previousRef.get()).data().published).toEqual(previousSnapshot);
+
+    nextElection.results.races[0].id = "unknown-race";
+    await makeDue(nextId);
+    expect(await poll(nextId, { now: () => firstPoll })).toMatchObject({ held: true, code: "roster" });
+    nextElection.roster = { ...nextRoster, races: [{ ...nextRoster.races[0], district: "Changed district" }] };
+    await makeDue(nextId);
+    expect(await poll(nextId, { now: () => firstPoll })).toMatchObject({ held: true, code: "roster-review" });
+    expect((await connection(nextId)).lastGoodData).toEqual(good);
+    expect((await nextRef.get()).data().published).toEqual(nextSnapshot);
+  });
   it.each(["cmsPages", "cmsPosts"])("refreshes actual pair %s election and dataset dependencies without changing saved editorial versions", async collection => {
     const art = { source: "upload", lifecycle: "active", mimeType: "image/png", width: 800, height: 300,
       url: "https://media.njpbs.org/cms-media/fixture/election.png", altText: "Election illustration" };
