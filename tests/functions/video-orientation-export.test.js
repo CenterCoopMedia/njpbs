@@ -5,6 +5,8 @@ import worker from "../../functions/lib/video-transcript-worker.js";
 import handlers from "../../functions/video-transcript-worker.js";
 import uploads from "../../functions/source-media-uploads.js";
 import staff from "../../functions/video-orientation-exports.js";
+import sourceMedia from "../../functions/source-media.js";
+import sourceContract from "../../functions/lib/source-media-contract.js";
 
 const now = 1_800_000_000_000;
 const source = { id: "video-library", bucket: "originals", prefix: "" };
@@ -111,6 +113,8 @@ describe("orientation export jobs", () => {
     expect(await exportJobs.completeExportJob(completion(s, identity, true).args))
       .toEqual({ completed: true, outputAssetId: job.outputAssetId });
     expect(s.all("mediaSourceAssets/")).toHaveLength(2);
+    await expect(exportJobs.requestExport({ firestore: s.firestore, request: request(), actor, now }))
+      .resolves.toMatchObject({ cached: true, job: { outputAssetId: job.outputAssetId } });
   });
 
   it("waits for viewing-copy capacity before issuing the upload", async () => {
@@ -142,15 +146,28 @@ describe("orientation export jobs", () => {
     expect(s.all("mediaSourceAssets/")).toHaveLength(1);
   });
 
-  it("finishes an export whose source changes after its upload address is issued", async () => {
+  it.each(["replacement", "deletion"])("keeps export provenance after parent %s", async (change) => {
     const s = store();
+    const parent = s.rows.get("mediaSourceAssets/asset");
+    const parentSource = { sourceId: source.id, assetId: "asset",
+      fileVersion: sourceContract.sourceMediaFileVersion(parent.objectVersionId),
+      viewingCopyVersion: sourceContract.sourceMediaApprovalVersions(parent).viewingCopy };
     const { job, identity } = await claimed(s, "vertical");
     await exportJobs.completeExportJob(completion(s, identity, false).args);
-    s.rows.get("mediaSourceAssets/asset").lifecycle = "deleted";
+    if (change === "replacement") {
+      parent.objectVersionId = "v2";
+      parent.rendition.web.objectVersionId = "web2";
+    } else {
+      parent.lifecycle = "deleted";
+    }
     expect(await exportJobs.completeExportJob(completion(s, identity, true).args))
       .toEqual({ completed: true, outputAssetId: job.outputAssetId });
-    expect(s.rows.get(`mediaSourceAssets/${job.outputAssetId}`)).toMatchObject({ name: "Board meeting (vertical)",
-      parentSource: { sourceId: "video-library", assetId: "asset" } });
+    const read = () => sourceMedia.readSourceMediaPage(s.firestore, source, { assetId: job.outputAssetId });
+    expect((await read()).records).toEqual([expect.objectContaining({ name: "Board meeting (vertical)", parentSource })]);
+
+    // Old code could replace the output without clearing the version fields.
+    s.rows.get(`mediaSourceAssets/${job.outputAssetId}`).objectVersionId = "out-v2";
+    expect((await read()).records).toEqual([expect.objectContaining({ parentSource: null })]);
   });
 
   it("keeps an issued upload with its worker until the deadline without holding the slot", async () => {

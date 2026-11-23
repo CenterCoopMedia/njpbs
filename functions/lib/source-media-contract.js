@@ -352,6 +352,7 @@ function parseSourceMediaAsset(id, value) {
     tags: value.tags.map((tag) => tag.trim()),
     markers,
     parentSource,
+    parentSourceVersions: value.parentSourceVersions ?? null,
     rightsStatus: value.rightsStatus,
     version: value.version,
     createdBy: nullableText(value.createdBy, 128),
@@ -396,7 +397,20 @@ function sourceMediaApprovalVersions(asset) {
   };
 }
 
+function sourceMediaParentSummary(asset, fileVersion) {
+  const parent = asset.parentSource ?? null;
+  const versions = asset.parentSourceVersions;
+  if (!parent || !versions) return parent;
+  if (!fileVersion || versions.outputFileVersion !== fileVersion ||
+      typeof versions.fileVersion !== "string" || !/^[a-f0-9]{32}$/.test(versions.fileVersion) ||
+      typeof versions.viewingCopyVersion !== "string" || !/^[a-f0-9]{64}$/.test(versions.viewingCopyVersion)) {
+    return null;
+  }
+  return { ...parent, fileVersion: versions.fileVersion, viewingCopyVersion: versions.viewingCopyVersion };
+}
+
 function sourceMediaAssetSummary(asset) {
+  const fileVersion = sourceMediaFileVersion(asset.objectVersionId);
   return {
     id: asset.id,
     sourceId: asset.sourceId,
@@ -412,10 +426,10 @@ function sourceMediaAssetSummary(asset) {
     license: asset.license,
     credit: asset.credit,
     tags: asset.tags,
-    parentSource: asset.parentSource ?? null,
+    parentSource: sourceMediaParentSummary(asset, fileVersion),
     rightsStatus: asset.rightsStatus,
     version: asset.version,
-    fileVersion: sourceMediaFileVersion(asset.objectVersionId),
+    fileVersion,
     approvalVersions: sourceMediaApprovalVersions(asset),
     createdAt: asset.createdAt,
     updatedAt: asset.updatedAt,

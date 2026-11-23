@@ -8,7 +8,7 @@
 const { createHash, randomUUID } = require("node:crypto");
 const { enqueueVideoSearchShard } = require("./video-search-outbox");
 const { AUDIT_COLLECTIONS, adminLogEntry } = require("./audit");
-const { SourceMediaValidationError } = require("./source-media-contract");
+const { SourceMediaValidationError, sourceMediaApprovalVersions, sourceMediaFileVersion } = require("./source-media-contract");
 const { PREVIEW_JOBS, pendingPreview, renditionState, sameOriginal } = require("./video-preview-job");
 const { WORKERS, WORKER_ID } = require("./video-transcript-worker");
 
@@ -381,6 +381,20 @@ function finishExport(args, session, head) {
       metadata: { name: outputName(meta.name, current.orientation), description: meta.description ?? null,
         license: meta.license ?? null, credit: meta.credit ?? null, tags: meta.tags ?? [], markers: [],
         rightsStatus: meta.rightsStatus } }, head, at);
+    // Use the job's inputs even when the parent changed after rendering.
+    const { viewingCopy } = sourceMediaApprovalVersions({
+      objectKey: current.sourceObjectKey,
+      objectVersionId: current.sourceObjectVersionId,
+      rendition: { state: "ready", web: current.input },
+    });
+    if (viewingCopy && asset.objectVersionId !== "null") {
+      // The output token keeps the relationship attached to the bytes across replacement.
+      asset.parentSourceVersions = {
+        outputFileVersion: sourceMediaFileVersion(asset.objectVersionId),
+        fileVersion: sourceMediaFileVersion(current.sourceObjectVersionId),
+        viewingCopyVersion: viewingCopy,
+      };
+    }
     const preview = { ...pendingPreview(asset, now), actorUid: current.requestedBy };
     asset = { ...asset, rendition: renditionState(preview, "processing") };
     tx.create(firestore.collection(PREVIEW_JOBS).doc(preview.id), preview);
@@ -390,7 +404,8 @@ function finishExport(args, session, head) {
     tx.create(firestore.collection(AUDIT_COLLECTIONS.adminLogs).doc(), adminLogEntry({ actorUid: current.requestedBy,
       actorEmail: null, action: "media.upload", target: `mediaSourceAssets/${asset.id}`, before: null,
       after: { sourceId: asset.sourceId, name: asset.name, sizeBytes: asset.sizeBytes,
-        parentSource: asset.parentSource, exportId: current.id, orientation: current.orientation } }));
+        parentSource: asset.parentSource, parentSourceVersions: asset.parentSourceVersions ?? null,
+        exportId: current.id, orientation: current.orientation } }));
     if (stats?.exact === true && Number.isSafeInteger(stats.activeCount)) {
       tx.update(statsRef, { activeCount: stats.activeCount + 1, updatedAt: at });
     }
