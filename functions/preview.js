@@ -12,6 +12,7 @@ const { waitForPreviewStatus } = require("./lib/preview-status-wait");
 const {
   AUDIT_COLLECTIONS,
   adminLogEntry,
+  isHistoryBeforeTruncated,
 } = require("./lib/audit");
 const { assertBillingEnabled } = require("./lib/billing-state");
 const previewPairs = require("./lib/cms-preview-pair");
@@ -291,9 +292,9 @@ async function readSavedPreviewVersion(firestore, transaction, collection, pageI
   const entry = after.docs[0]?.data();
   if (entry?.restorable !== false && fullSnapshot(entry?.after)) return entry.after;
   const before = await transaction.get(history.where("before.version", "==", version).limit(2));
-  const document = before.docs[0]?.data().before;
-  if (before.size !== 1 || document?.beforeTruncated || !fullSnapshot(document)) throw unavailable();
-  return document;
+  const successor = before.docs[0]?.data();
+  if (before.size !== 1 || isHistoryBeforeTruncated(successor) || !fullSnapshot(successor?.before)) throw unavailable();
+  return successor.before;
 }
 
 async function enqueuePreview(fields, deps = {}) {

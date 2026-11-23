@@ -11,6 +11,7 @@ const logger = require("firebase-functions/logger");
 const { FieldPath } = require("firebase-admin/firestore");
 const { db } = require("./lib/firebase");
 const { requirePrincipal } = require("./lib/auth");
+const { isHistoryBeforeTruncated } = require("./lib/audit");
 const {
   authorizeContentRead,
   contentResource,
@@ -229,7 +230,7 @@ function revisionSummaryFromDoc(doc) {
   const before = data.before;
   const after = data.after;
   const afterMedia = referencedMediaIds(after);
-  const beforeTruncated = data.beforeTruncated === true || before?.beforeTruncated === true;
+  const beforeTruncated = isHistoryBeforeTruncated(data);
   const comparison = beforeTruncated
     ? {
         diffAvailable: false,
@@ -279,7 +280,7 @@ function revisionDetailFromDoc(doc) {
     at: data.at,
     before: jsonSafe(data.before),
     after: jsonSafe(data.after),
-    beforeTruncated: data.beforeTruncated === true || data.before?.beforeTruncated === true,
+    beforeTruncated: isHistoryBeforeTruncated(data),
   };
 }
 

@@ -2,6 +2,8 @@ import { clearEmulatorFirestore, isolatedFirestore } from "../helpers/emulator-f
 import { beforeAll, beforeEach, afterAll, describe, it, expect, vi } from "vitest";
 import admin from "../helpers/firebase-admin.js";
 import preview from "../../functions/preview.js";
+import save from "../../functions/save.js";
+import revisions from "../../functions/revisions.js";
 import contract from "../../functions/lib/preview-target.js";
 const { enqueuePreview, createCmsPreviewStatusHandler } = preview;
 const rendererSha = "a".repeat(40);
@@ -23,6 +25,17 @@ async function markReady(queueId) {
 }
 async function history(after, fields = {}) {
   await db.collection("cmsVersionHistory").add({ collection: "cmsPages", documentId: "contact", after, ...fields });
+}
+
+async function post(handler, body) {
+  const response = {
+    headers: new Headers(),
+    status(code) { this.code = code; return this; },
+    set(name, value) { this.headers.set(name, value); },
+    json(value) { this.body = value; return this; },
+  };
+  await handler({ method: "POST", headers: {}, body }, response);
+  return response;
 }
 // Observe the real emulator transaction; reads and writes still use Firestore.
 function observeTransactionReads() {
@@ -64,6 +77,54 @@ beforeEach(async () => {
 });
 afterAll(async () => { await Promise.all(admin.apps.map(app => app.delete())); });
 describe("interactive immutable previews", () => {
+  it.each([
+    { collection: "cmsPages", id: "contact" },
+    { collection: "cmsPosts", id: "preview-story" },
+  ])("keeps a $collection acknowledgment readable after a stale editor saves its reviewed changes", async ({ collection, id }) => {
+    if (collection === "cmsPosts") {
+      await db.doc(`${collection}/${id}`).set({
+        id, type: "post", title: "Draft 7", slug: id, locale: "en",
+        version: 7, status: "draft", blocks: [], tags: [],
+      });
+    }
+    const firstEditor = save.createCmsSaveHandler({ firestore: db, requirePrincipalFn: deps().requirePrincipalFn });
+    const secondEditor = save.createCmsSaveHandler({
+      firestore: db,
+      requirePrincipalFn: async () => ({
+        uid: "second-editor", principal: { id: "second-editor", grants: [{ role: "admin" }] },
+      }),
+    });
+    const saveFirst = await post(firstEditor, { collection, id, baseVersion: 7, document: { title: "First editor's draft" } });
+    expect(saveFirst.code).toBe(200);
+    const acknowledged = saveFirst.body.document.version;
+    expect(acknowledged).toBe(8);
+    const nextDraft = { title: "Second editor's draft" };
+    const stale = await post(secondEditor, { collection, id, baseVersion: 7, document: nextDraft });
+    expect(stale.code).toBe(409);
+    const successor = await post(secondEditor, { collection, id, baseVersion: acknowledged, document: nextDraft });
+    expect(successor.code).toBe(200);
+    expect(successor.body.document).toMatchObject({ version: 9, ...nextDraft });
+
+    const historyRow = await db.collection("cmsVersionHistory")
+      .where("collection", "==", collection).where("documentId", "==", id)
+      .where("after.version", "==", acknowledged).get();
+    expect(historyRow.size).toBe(1);
+    const revision = await post(revisions.createCmsGetRevisionHandler(deps()),
+      { collection, id, revisionId: historyRow.docs[0].id });
+    expect(revision.code).toBe(200);
+    expect(revision.body.revision.after).toMatchObject({ version: 8, title: "First editor's draft" });
+
+    const accepted = await post(preview.createCmsPreviewHandler(deps()),
+      { collection, pageId: id, sourceVersion: acknowledged });
+    expect(accepted.code).toBe(202);
+    expect(accepted.body).toMatchObject({ collection, sourceVersion: 8, status: "pending" });
+    expect(accepted.headers.get("x-njpbs-preview-wake")).toBe(rendererSha);
+    const queue = (await db.doc(`cmsPreviewQueue/${accepted.body.queueId}`).get()).data();
+    const previewContent = collection === "cmsPages" ? queue.snapshot : queue.snapshot.published.metadata;
+    expect(previewContent.title).toBe("First editor's draft");
+    expect((await db.doc(`${collection}/${id}`).get()).data()).toMatchObject({ version: 9, ...nextDraft });
+  });
+
   it("returns a real listener update after one admission read without polling", async () => {
     const accepted = await accept();
     const ref = db.doc(`cmsPreviewQueue/${accepted.queueId}`);
@@ -216,6 +277,12 @@ describe("interactive immutable previews", () => {
     await history({ id: "contact", version: 7, status: "approved" }, { restorable: false });
     await db.doc("cmsPages/contact").set(page(8));
     await expect(accept()).rejects.toMatchObject({ code: "preview-version-unavailable" });
+    expect((await db.collection("cmsPreviewQueue").get()).empty).toBe(true);
+  });
+  it("refuses a partial before-state marked truncated on the history row", async () => {
+    await db.doc("cmsPages/contact").set(page(8));
+    await history(page(8), { beforeTruncated: true, before: { ...page(7), blocks: [] } });
+    await expect(accept()).rejects.toMatchObject({ status: 409, code: "preview-version-unavailable" });
     expect((await db.collection("cmsPreviewQueue").get()).empty).toBe(true);
   });
   it("reuses a ready immutable artifact without extending or replacing its lifetime", async () => {

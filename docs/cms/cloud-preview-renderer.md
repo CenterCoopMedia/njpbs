@@ -118,7 +118,9 @@ All approved active staff can request/check/open saved previews across owners
 and areas; raw history and editing retain their own permissions. Missing,
 archived and deleted records remain unavailable. Acknowledged versions may be
 recovered only from complete history after-state or the next full before-state,
-never bounded audit receipts. Different exact versions keep independent attempts.
+never bounded audit receipts. Preview and revision history recognize a truncated
+before-state marker on either the history row or the before-state itself.
+Different exact versions keep independent attempts.
 
 The click opens one owned progress tab. Acceptance/save/status can proceed in
 parallel, but ready navigation waits for the bounded private session attempt.
