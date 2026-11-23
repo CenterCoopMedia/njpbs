@@ -81,3 +81,15 @@ it("serves the development origin only when the upload selects the development t
   expect(development.status).toBe(200);
   expect(development.headers.get("x-njpbs-publication-origin")).toBe("template-dev-public");
 });
+
+it("answers the rollback proof read only on development", async () => {
+  vi.stubGlobal("caches", { default: {} });
+  const version = "11111111-2222-3333-4444-555555555555";
+  const read = (origin: string, environment?: string) => load().default.fetch(
+    new Request(`${origin}/_publication.json?cms-context=code`, { method: "HEAD",
+      headers: { "x-njpbs-rollback-probe": version, "cache-control": "no-cache, no-store" } }),
+    { ASSETS: { fetch: asset }, CMS_API: {}, CF_VERSION_METADATA: { id: version },
+      ...(environment ? { PUBLICATION_ENVIRONMENT: environment } : {}) }, { waitUntil: vi.fn() });
+  expect((await read("https://dev-public.example.org", "development")).headers.get("x-njpbs-worker-version")).toBe(version);
+  expect((await read("https://njpbs.org")).headers.get("x-njpbs-worker-version")).toBeNull();
+});

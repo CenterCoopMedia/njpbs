@@ -26,6 +26,14 @@ it('qualifies the native version binding on development candidates and gateway r
   expect(() => assertDevPublicWorkerBindings([...publicBindings, { ...metadata, type: 'plain_text' }], sha))
     .toThrow('exact reader bindings');
 });
+it('requires the development target on shared-entry candidates before activation', () => {
+  const families = { type: 'plain_text', name: 'NO_BUILD_POST_FAMILIES', text: 'posts' };
+  const environment = { type: 'plain_text', name: 'PUBLICATION_ENVIRONMENT', text: 'development' };
+  expect(() => assertDevPublicWorkerBindings([...publicBindings, families, environment], sha)).not.toThrow();
+  expect(() => assertDevPublicWorkerBindings([...publicBindings, families], sha)).toThrow('exact reader bindings');
+  expect(() => assertDevPublicWorkerBindings([...publicBindings, families, { ...environment, text: 'production' }], sha))
+    .toThrow('exact reader bindings');
+});
 it('accepts only an optional Page renderer sealed to the same dev source', () => {
   const page = { type: 'plain_text', name: 'NO_BUILD_PAGE_RENDERER_SHA', text: sha };
   const dataFigures = { type: 'plain_text', name: 'DATA_FIGURE_VERSION', text: '1' };

@@ -300,6 +300,7 @@ async function writeDevWorkerConfig() {
     assets: { ...config.assets, directory: path.join(directory, "dist") },
     r2_buckets: [{ binding: "DURABLE_POST_WITHDRAWALS", bucket_name: publicationTarget.publicationBucket }],
     services: [{ binding: "CMS_API", service: "template-dev-cms-api", entrypoint: "PublicContentEntrypoint" }],
+    version_metadata: { binding: "CF_VERSION_METADATA" },
     vars: { ...config.vars, PUBLICATION_ENVIRONMENT: "development" } });
   return file;
 }
