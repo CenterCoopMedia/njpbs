@@ -3,7 +3,7 @@ import { installLiveBlogInteractions } from "../../packages/content-core/src/liv
 import { installLiveBlogImages } from "../src/lib/live-blog-images";
 
 function setup(modals = true) {
-  document.body.innerHTML = `<div><section data-live-blog><article data-live-blog-entry="one" tabindex="-1"><a data-live-blog-image href="https://media.njpbs.org/full.jpg" target="_blank"><figure><img src="/small.webp" alt="Voters outside town hall"><figcaption>Voting begins<span class="cms-image-credit">NJ PBS</span></figcaption></figure><span data-live-blog-image-fallback> (opens in a new tab)</span></a></article></section><dialog data-live-blog-image-dialog aria-label="Expanded image"><button data-dialog-close>Close image</button><a data-full-image target="_blank" rel="noopener">Open full image</a><img data-expanded-image hidden><figcaption data-image-caption></figcaption></dialog></div>`;
+  document.body.innerHTML = `<div><section data-live-blog><article data-live-blog-entry="one" tabindex="-1"><a data-live-blog-image data-width="1600" data-height="900" href="https://media.njpbs.org/full.jpg" target="_blank"><figure><img src="/small.webp" alt="Voters outside town hall"><figcaption>Voting begins<span class="cms-image-credit">NJ PBS</span></figcaption></figure><span data-live-blog-image-fallback> (opens in a new tab)</span></a></article></section><dialog data-live-blog-image-dialog aria-label="Expanded image"><button data-dialog-close>Close image</button><a data-full-image target="_blank" rel="noopener">Open full image</a><img data-expanded-image hidden><figcaption data-image-caption></figcaption></dialog></div>`;
   const root = document.querySelector<HTMLElement>("[data-live-blog]")!;
   const dialog = document.querySelector<HTMLDialogElement>("dialog")!;
   dialog.showModal = modals ? vi.fn(() => { dialog.open = true; }) : undefined as unknown as typeof dialog.showModal;
@@ -22,6 +22,7 @@ describe("live update image dialog", () => {
     expect(link.querySelector<HTMLElement>("[data-live-blog-image-fallback]")?.hidden).toBe(true);
     expect(dialog.querySelector("[data-expanded-image]")?.getAttribute("src")).toBe(link.href);
     expect(dialog.querySelector<HTMLImageElement>("[data-expanded-image]")?.hidden).toBe(false);
+    expect([dialog.querySelector("[data-expanded-image]")?.getAttribute("width"), dialog.querySelector("[data-expanded-image]")?.getAttribute("height")]).toEqual(["1600", "900"]);
     expect(dialog.querySelector("[data-expanded-image]")?.getAttribute("alt")).toBe("Voters outside town hall");
     expect(dialog.querySelector("[data-full-image]")?.getAttribute("href")).toBe(link.href);
     expect(dialog.querySelector("[data-image-caption]")?.innerHTML).toBe('Voting begins<span class="cms-image-credit">NJ PBS</span>');

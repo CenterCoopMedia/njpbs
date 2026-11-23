@@ -46,6 +46,11 @@ export function installLiveBlogImages(root: HTMLElement): void {
     const entry = link.closest<HTMLElement>("[data-live-blog-entry]");
     entryId = entry?.dataset.liveBlogEntry;
     imageIndex = Array.from(entry?.querySelectorAll("[data-live-blog-image]") ?? []).indexOf(link);
+    // Reserve the full image's box before its bytes arrive.
+    for (const side of ["width", "height"] as const) {
+      const value = link.dataset[side];
+      if (value && /^[1-9]\d*$/.test(value)) image.setAttribute(side, value); else image.removeAttribute(side);
+    }
     image.src = link.href;
     image.hidden = false;
     image.alt = source.alt;

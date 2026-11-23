@@ -21,7 +21,9 @@ const { fallbackUrl } = Astro.props;
   .live-blog-image-dialog button { border: 1px solid var(--line-strong); border-radius: var(--radius-control); background: var(--color-surface-page); cursor: pointer; }
   .live-blog-image-dialog :is(a, button):focus-visible { outline: var(--focus-outline); outline-offset: var(--focus-offset); }
   figure { margin: 0; }
-  img { display: block; max-inline-size: 100%; max-block-size: 72dvh; inline-size: auto; block-size: auto; margin-inline: auto; object-fit: contain; }
+  img[hidden] { display: none; }
+  /* The width and height attributes reserve the box before the full image loads. */
+  img { display: block; max-inline-size: 100%; max-block-size: 72dvh; block-size: auto; margin-inline: auto; object-fit: contain; }
   figcaption :global(.cms-image-credit) { display: block; }
   figcaption { margin-block-start: var(--space-3); white-space: pre-line; overflow-wrap: anywhere; }
 </style>
