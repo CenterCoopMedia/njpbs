@@ -65,7 +65,8 @@ it.each(["", "staging", "Production"])("refuses the unknown target %j before ope
 
 it("refuses a development seal whose active Cloudflare account is not the development pin", () => {
   const pin = "a".repeat(32);
-  for (const environment of [{}, { CMS_DEV_CLOUDFLARE_ACCOUNT_ID: pin, CLOUDFLARE_ACCOUNT_ID: "b".repeat(32) }]) {
+  const environments: Record<string, string>[] = [{}, { CMS_DEV_CLOUDFLARE_ACCOUNT_ID: pin, CLOUDFLARE_ACCOUNT_ID: "b".repeat(32) }];
+  for (const environment of environments) {
     const result = runOperator({ CMS_DEPLOYMENT_ENVIRONMENT: "development", ...environment }, account("njpbs-site-dev"), "--seal");
     expect([result.status, result.stderr]).toEqual([1, "Development Cloudflare account configuration is missing or differs\n"]);
   }
