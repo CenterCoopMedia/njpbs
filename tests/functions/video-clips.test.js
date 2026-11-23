@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 import { describe, expect, it, vi } from "vitest";
 import clips from "../../functions/video-clips.js";
 import contract from "../../functions/lib/video-clip-contract.js";
+import sourceContract from "../../functions/lib/source-media-contract.js";
 import rendition from "../../functions/lib/source-media-rendition.js";
 import originals from "../../functions/lib/source-originals.js";
 const now = Date.parse("2026-09-15T15:00:00Z");
@@ -301,8 +302,21 @@ describe("private clip exports", () => {
   });
   it("deduplicates accepted requests without another quota or audit write", async () => {
     const db = firestore(); const first = await submit(db); const count = db.records.size;
+    const original = stored();
+    expect(first).toMatchObject({ fileVersion: null,
+      sourceFileVersion: sourceContract.sourceMediaFileVersion(original.objectVersionId),
+      sourceViewingCopyVersion: sourceContract.sourceMediaApprovalVersions(original).viewingCopy });
     expect(await submit(db)).toEqual(first); expect(db.records.size).toBe(count);
     expect(getJob(db, first.id).requestedBy).toBe("staff");
+  });
+  it("attributes original-range and editor exports to the original's bytes", async () => {
+    for (const format of ["original_copy", "prores_mov"]) {
+      const original = stored();
+      expect(await submit(firestore(), { format })).toMatchObject({
+        sourceFileVersion: sourceContract.sourceMediaFileVersion(original.objectVersionId),
+        sourceViewingCopyVersion: null,
+      });
+    }
   });
   it("refuses out of duration, missing viewing copy and deleted sources", async () => {
     const db = firestore(); await expect(submit(db, { outMs: 121000 })).rejects.toMatchObject({ status: 409 });
@@ -664,6 +678,56 @@ describe("private clip exports", () => {
     const res = { set() {}, status(code) { this.code = code; return this; }, json(value) { this.body = value; } };
     await handler({ method: "POST", body, rawBody: Buffer.from(JSON.stringify(body)), headers: { "content-type": "application/json" } }, res);
     expect(res.code).toBe(404); expect(JSON.stringify(res.body)).not.toContain("private-url");
+  });
+  it("keeps completed export provenance and exact reads tied to the older source after replacement", async () => {
+    const db = firestore(); const first = await submit(db); const job = ready(getJob(db, first.id));
+    job.expiresAt = new Date(Date.now() + 86400000).toISOString();
+    db.records.set(`${contract.CLIP_JOBS}/${first.id}`, job);
+    db.records.set("mediaSourceAssets/asset", { ...stored(), objectVersionId: "original-v2" });
+    const authorize = vi.fn(async () => {});
+    const clipRead = vi.fn(async () => ({ url: "private-url" }));
+    const deps = { firestore: db, registry: () => new Map([[source.id, source]]), readConfig: () => ({}),
+      verifyAppCheck: async () => {}, requirePrincipal: async () => ({ uid: "staff" }), authorize, clipRead };
+    const identity = { sourceId: source.id, assetId: "asset" };
+    const reference = { ...identity, clipId: first.id };
+    const call = async (action, body) => {
+      const res = { set() {}, status(code) { this.code = code; return this; }, json(value) { this.body = value; } };
+      await clips.clipHandler(action, deps)({ method: "POST", body, rawBody: Buffer.from(JSON.stringify(body)), headers: { "content-type": "application/json" } }, res);
+      return res;
+    };
+    const detail = await call("get", reference);
+    const history = await call("get", identity);
+    expect(detail.code).toBe(200);
+    expect(history.code).toBe(200);
+    const { fileVersion } = detail.body.clip;
+    expect(fileVersion).toMatch(/^[a-f0-9]{64}$/);
+    expect(detail.body.clip).toMatchObject({ sourceFileVersion: first.sourceFileVersion,
+      sourceViewingCopyVersion: first.sourceViewingCopyVersion });
+    expect(history.body.clips[0].fileVersion).toBe(fileVersion);
+    expect(detail.body.clip).not.toHaveProperty("output");
+    expect(detail.body.clip).not.toHaveProperty("sourceObjectVersionId");
+    expect(await call("read", { ...reference, fileVersion })).toMatchObject({
+      code: 200, body: { access: { url: "private-url", fileVersion } },
+    });
+    expect(clipRead).toHaveBeenCalledWith({}, source, job);
+    clipRead.mockClear();
+
+    authorize.mockRejectedValueOnce({ status: 403 });
+    expect((await call("read", { ...reference, fileVersion })).code).toBe(403);
+    expect((await call("read", { ...reference, fileVersion: "clip-v1" })).code).toBe(400);
+    const newOutput = { ...job.output, objectVersionId: "clip-v2" };
+    db.records.set(`${contract.CLIP_JOBS}/${first.id}`, { ...job, output: newOutput });
+    expect((await call("read", { ...reference, fileVersion })).code).toBe(409);
+    expect(clipRead).not.toHaveBeenCalled();
+
+    db.records.set(`${contract.CLIP_JOBS}/${first.id}`, job);
+    clipRead.mockImplementationOnce(async () => {
+      db.records.set(`${contract.CLIP_JOBS}/${first.id}`, { ...job, output: newOutput });
+      return { url: "private-url" };
+    });
+    const raced = await call("read", { ...reference, fileVersion });
+    expect(raced.code).toBe(409);
+    expect(raced.body).not.toHaveProperty("access");
   });
   it("accepts low-rate frame rounding but rejects unrelated durations", async () => {
     const db = firestore(); const first = await submit(db); const job = ready(getJob(db, first.id));

@@ -1,7 +1,9 @@
 "use strict";
 const { processingStatus } = require("./video-processing-status");
 const { createHash } = require("node:crypto");
-const { ID_PATTERN, SourceMediaValidationError } = require("./source-media-contract");
+const {
+  ID_PATTERN, SourceMediaValidationError, sourceMediaApprovalVersions, sourceMediaFileVersion,
+} = require("./source-media-contract");
 
 const CLIP_JOBS = "mediaSourceClipJobs";
 const CLIP_TTL_MS = 7 * 86400 * 1000;
@@ -85,7 +87,7 @@ function parseClipRequest(value, action) {
   const fields = action === "request"
     ? ["sourceId", "assetId", "inMs", "outMs", "retry", "resolution", "quality", "scope", "format", "frameRateMode"]
     : ["sourceId", "assetId", "clipId", ...(action === "get" ? ["scope", "cursor"] : []),
-      ...(["cancel", "register"].includes(action) ? ["attemptId"] : [])];
+      ...(["cancel", "register"].includes(action) ? ["attemptId"] : []), ...(action === "read" ? ["fileVersion"] : [])];
   if (!value || typeof value !== "object" || Array.isArray(value) ||
       Object.keys(value).some((key) => !fields.includes(key)) || value.sourceId !== "video-library" ||
       typeof value.assetId !== "string" || !ID_PATTERN.test(value.assetId)) {
@@ -104,6 +106,9 @@ function parseClipRequest(value, action) {
     }
     if (["cancel", "register"].includes(action) && (typeof value.attemptId !== "string" || !ID_PATTERN.test(value.attemptId))) {
       throw problem(400, "Video export attempt is invalid");
+    }
+    if (value.fileVersion !== undefined && (typeof value.fileVersion !== "string" || !/^[a-f0-9]{64}$/.test(value.fileVersion))) {
+      throw problem(400, "Video export file version is invalid");
     }
     return value;
   }
@@ -199,13 +204,27 @@ function editorExportChargeUsd(job) {
   return Math.round((conversion + storage) * 10000) / 10000;
 }
 
+function clipFileVersion(job) {
+  const { objectKey, objectVersionId } = job.output ?? {};
+  if (job.phase !== "ready" || !objectKey || !objectVersionId || objectVersionId === "null") return null;
+  return createHash("sha256").update(JSON.stringify(["video-export", objectKey, objectVersionId])).digest("hex");
+}
+
 function clipSummary(job, now = Date.now()) {
   const expired = job.phase === "ready" && Date.parse(job.expiresAt) <= now;
   const states = { pending: "queued", running: "processing", ready: "ready", failed: "failed", needs_reconciliation: "failed", cancelled: "cancelled" };
   const format = jobFormat(job);
+  const sourceFileVersion = job.sourceObjectVersionId === "null" ? null : sourceMediaFileVersion(job.sourceObjectVersionId);
+  const sourceViewingCopyVersion = jobScope(job) === "clip" && format === "web_mp4" && job.inputObjectKey && job.inputObjectVersionId
+    ? sourceMediaApprovalVersions({
+      objectKey: job.sourceObjectKey,
+      objectVersionId: job.sourceObjectVersionId,
+      rendition: { state: "ready", web: { objectKey: job.inputObjectKey, objectVersionId: job.inputObjectVersionId } },
+    }).viewingCopy : null;
   return {
     processing: { ...processingStatus(job, format === "original_copy" ? "aws-ffmpeg" : "aws-mediaconvert", expired), estimatedAwsChargeUsd: editorExportChargeUsd(job) },
     id: job.id, attemptId: job.attemptId,
+    fileVersion: clipFileVersion(job), sourceFileVersion, sourceViewingCopyVersion,
     state: expired ? "expired" : states[job.phase] ?? "failed", scope: jobScope(job), format,
     inMs: job.inMs, outMs: job.outMs, ...(format === "web_mp4" ? clipSettings(job) : {}),
     width: job.output?.width ?? null, height: job.output?.height ?? null,
@@ -441,5 +460,5 @@ module.exports = {
   OUTPUT_FRAME_RATES, CLIP_JOBS, CLIP_TTL_MS, EXPORT_FORMATS, EXPORT_SCOPES, EDITOR_FORMATS, SOURCE_EXPORT_MAX_DURATION_SECONDS,
   problem, parseClipRequest, parseClipHistoryCursor, encodeClipHistoryCursor,
   clipSettings, exportSettings, jobScope, jobFormat, validateClipResolution, validateClipRange,
-  clipIdentity, sameClipSource, clipSummary, validateClipOutput,
+  clipIdentity, sameClipSource, clipFileVersion, clipSummary, validateClipOutput,
 };
