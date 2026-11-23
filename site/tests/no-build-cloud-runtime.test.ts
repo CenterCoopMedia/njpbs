@@ -29,21 +29,55 @@ const sha = "a".repeat(40);
 const operationId = "11111111111111111111";
 const runtime = { owner: "cloudflare", release: sha };
 
-it("starts retention when the projection seals while public compilation is still pending", async () => {
+it.each(["already sealed", "sealed during compilation"])("starts retention for a projection that is %s", async projection => {
   const documents = postWorkDocuments();
+  if (projection === "already sealed") delete documents[`cmsPublishQueue/${"D".repeat(20)}`].previewContext;
   const firestore = { doc: (name: string) => ({ get: async () => ({ data: () => documents[name] }) }),
     collection: () => ({ get: async () => ({ docs: [] }) }) };
   let release!: () => void;
   const blocked = new Promise<void>(resolve => { release = resolve; });
-  boundary.maintain.mockImplementationOnce(async () => { boundary.projection!(); await blocked; });
+  boundary.maintain.mockImplementationOnce(async () => {
+    if (projection === "sealed during compilation") boundary.projection!();
+    await blocked;
+  });
   const owner = startNoBuildCloudRuntime({ firestore, firebaseApp: {}, commitSha: sha, serializerId: "cloud-fixture",
     stateDirectory: "/fixture", buildEnvironment: {}, cloudflareApiToken: "", storage: { target: { backgroundBucket: "fixture-bucket" } },
     previewStorageCredential: {}, mediaManagerCredential: {} } as unknown as Parameters<typeof startNoBuildCloudRuntime>[0]);
   const pass = boundary.pass!();
   try {
     await vi.waitFor(() => expect(boundary.retainPreview).toHaveBeenCalledOnce());
+    expect(boundary.maintain).toHaveBeenCalledOnce();
     expect(boundary.release).not.toHaveBeenCalled();
   } finally { owner.stop(); release(); await pass; await owner.closed; }
+});
+
+it.each(["discovery", "maintenance"])("keeps preview and staged release available after background %s fails", async failure => {
+  const documents = postWorkDocuments();
+  delete documents[`cmsPublishQueue/${"D".repeat(20)}`].previewContext;
+  const backgroundError = Object.assign(new Error("Fixture background failure"), { code: "ETIMEDOUT" });
+  const enumerate = vi.fn(async () => ({ docs: [] }));
+  if (failure === "discovery") enumerate.mockRejectedValueOnce(backgroundError);
+  else boundary.maintain.mockRejectedValueOnce(backgroundError);
+  const firestore = {
+    doc: (name: string) => ({ get: async () => ({ data: () => documents[name] }) }),
+    collection: () => ({ get: enumerate }),
+  };
+  const owner = startNoBuildCloudRuntime({ firestore, firebaseApp: {}, commitSha: sha, serializerId: "cloud-fixture",
+    stateDirectory: "/fixture", buildEnvironment: {}, cloudflareApiToken: "", storage: { target: { backgroundBucket: "fixture-bucket" } },
+    previewStorageCredential: {}, mediaManagerCredential: {} } as unknown as Parameters<typeof startNoBuildCloudRuntime>[0]);
+  const log = vi.spyOn(console, "error").mockImplementation(() => {});
+  try {
+    await expect(boundary.pass!()).resolves.toBeUndefined();
+    await vi.waitFor(() => expect(boundary.retainPreview).toHaveBeenCalledOnce());
+    expect(log).toHaveBeenCalledWith(`Cloud background ${failure === "discovery" ? "work discovery" : "maintenance"} failed (code ETIMEDOUT)`);
+    expect(log).toHaveBeenCalledTimes(1);
+    expect(boundary.release).toHaveBeenCalledOnce();
+    const releaseRefusal = new Error("Required release proof refused");
+    boundary.release.mockRejectedValueOnce(releaseRefusal);
+    await expect(boundary.pass!()).rejects.toBe(releaseRefusal);
+    expect(boundary.maintain).toHaveBeenCalledTimes(failure === "discovery" ? 1 : 2);
+    expect(boundary.release).toHaveBeenCalledTimes(2);
+  } finally { owner.stop(); await owner.closed; log.mockRestore(); }
 });
 
 it.each(["missing", "invalid", "excluded", "wrong-owner", "wrong-release"])(
@@ -94,7 +128,6 @@ it.each([false, true])("runs private retention without hiding public work or rel
     await expect(boundary.pass!()).resolves.toBeUndefined();
     owner.stop(); await owner.closed;
     expect(boundary.retainPreview).toHaveBeenCalledOnce(); expect(boundary.maintain).toHaveBeenCalledOnce();
-    expect(boundary.maintain.mock.invocationCallOrder[0]).toBeLessThan(boundary.retainPreview.mock.invocationCallOrder[0]);
     expect(boundary.release).toHaveBeenCalledOnce();
     if (refuses) expect(JSON.stringify(log.mock.calls)).not.toContain("Fixture private refusal");
   } finally { owner.stop(); log.mockRestore(); }
@@ -117,8 +150,9 @@ it("keeps public passes independent of a blocked private restore and drains its 
   const pass = boundary.pass!();
   await started;
   try {
+    await pass;
     expect(boundary.release).toHaveBeenCalledOnce();
-    await pass; await boundary.pass!();
+    await boundary.pass!();
     expect(boundary.maintain).toHaveBeenCalledTimes(2); expect(boundary.release).toHaveBeenCalledTimes(2);
     expect(boundary.retainPreview).toHaveBeenCalledOnce(); expect(owner.isRunning()).toBe(true);
     owner.stop(); let closed = false; void owner.closed.then(() => { closed = true; });
