@@ -16,6 +16,10 @@ const COLLECTION = "wordpressArchiveItems";
 const FORMAT_VERSION = 1;
 const digest = parts => sha256(JSON.stringify(parts));
 
+export function archiveItemRef(firestore, source, postId) {
+  return firestore.collection(COLLECTION).doc(digest([source, "item", postId]));
+}
+
 function fitsFirestoreDepth(value, depth = 0) {
   if (value === null || typeof value !== "object") return true;
   return depth <= 20 && Object.values(value).every(child => fitsFirestoreDepth(child, depth + 1));
@@ -38,8 +42,9 @@ function stageConversion(document, path) {
 
 function candidate(firestore, source, record) {
   const sourceRef = record.kind === "author" ? { source, authorId: record.authorId } : { source, postId: record.postId };
-  const id = digest(record.kind === "author" ? [source, "author", record.authorId] : [source, "item", record.postId]);
-  const ref = firestore.collection(COLLECTION).doc(id);
+  const ref = record.kind === "author"
+    ? firestore.collection(COLLECTION).doc(digest([source, "author", record.authorId]))
+    : archiveItemRef(firestore, source, record.postId);
   const receipts = ref.collection("archiveImportReceipts");
   const document = { formatVersion: FORMAT_VERSION, version: 1, kind: record.kind, sourceRef, record };
   const oversized = documentSize.firestoreDocumentBytes(document, ref.path) > documentSize.DOCUMENT_SIZE_BUDGET_BYTES;
@@ -171,7 +176,7 @@ export async function stageWordPressArchive({ firestore, file, apply = false, re
   }
 }
 
-async function firebaseOptions(projectId) {
+export async function firebaseOptions(projectId) {
   const emulator = process.env.FIRESTORE_EMULATOR_HOST;
   if (emulator !== undefined) {
     if (!/^(127\.0\.0\.1|localhost):\d+$/.test(emulator) || !projectId.startsWith("demo-")) {
@@ -197,6 +202,12 @@ async function firebaseOptions(projectId) {
     if (error instanceof ArchiveInputError) throw error;
     throw new ArchiveInputError("Supply valid service account JSON on file descriptor 3.");
   }
+}
+
+export function writeArchiveReportRow(row) {
+  return new Promise((resolveWrite, reject) => {
+    process.stdout.write(`${JSON.stringify(row)}\n`, error => error ? reject(error) : resolveWrite());
+  });
 }
 
 function failureMessage(error) {
@@ -227,11 +238,8 @@ async function main() {
       throw new ArchiveInputError("Usage: node scripts/stage-wordpress-archive.mjs <archive.ndjson> --project <project-id> [--apply]");
     }
     app = initializeApp(await firebaseOptions(values.project), "wordpress-archive-import");
-    await stageWordPressArchive({ firestore: getFirestore(app), file: positionals[0], apply: values.apply,
-      report: row => new Promise((resolveWrite, reject) => {
-        process.stdout.write(`${JSON.stringify(row)}\n`, error => error ? reject(error) : resolveWrite());
-      }),
-    });
+    await stageWordPressArchive({ firestore: getFirestore(app), file: positionals[0],
+      apply: values.apply, report: writeArchiveReportRow });
   } catch (error) {
     console.error(failureMessage(error));
     process.exitCode = 1;

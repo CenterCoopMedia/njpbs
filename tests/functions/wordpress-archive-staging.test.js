@@ -3,8 +3,11 @@ import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
+import { PDFDocument } from "pdf-lib";
+import sharp from "sharp";
 import { afterEach, beforeEach, expect, it } from "vitest";
-import { stageWordPressArchive } from "../../scripts/stage-wordpress-archive.mjs";
+import { archiveItemRef, stageWordPressArchive } from "../../scripts/stage-wordpress-archive.mjs";
+import { stageWordPressArchiveMedia } from "../../scripts/stage-wordpress-archive-media.mjs";
 import lifecycle from "../../functions/lifecycle-transition.js";
 import scheduled from "../../functions/scheduled-publish.js";
 import { clearEmulatorFirestore, isolatedFirestore } from "../helpers/emulator-firestore.js";
@@ -28,9 +31,11 @@ async function tempFile() {
   return join(scratch, "archive.ndjson");
 }
 
-async function storyRows(file, ...rows) {
+async function writeArchive(file, ...rows) {
   const [header] = (await readFile(fixture, "utf8")).trimEnd().split("\n");
-  const summary = { kind: "summary", counts: { story: rows.length, author: 0, attachment: 0, unmappable: 0 }, reasons: {} };
+  const counts = { story: 0, author: 0, attachment: 0, unmappable: 0 };
+  for (const row of rows) counts[row.kind]++;
+  const summary = { kind: "summary", counts, reasons: {} };
   await writeFile(file, `${[header, ...[...rows, summary].map(row => JSON.stringify(row))].join("\n")}\n`);
 }
 
@@ -81,7 +86,7 @@ it("distinguishes duplicate IDs from changed source revisions and preserves a co
   const file = await tempFile();
   const original = await loadStory();
   const updated = sourceRevision(original, { title: "Changed at source" });
-  await storyRows(file, original, original, updated);
+  await writeArchive(file, original, original, updated);
   await expect(stageWordPressArchive({ firestore, file, apply: true })).resolves.toEqual({ create: 1, skip: 1, review: 1 });
   const [staged] = (await firestore.collection(archive).get()).docs;
   const receipts = staged.ref.collection("archiveImportReceipts");
@@ -91,7 +96,7 @@ it("distinguishes duplicate IDs from changed source revisions and preserves a co
   ]));
 
   const outcomes = [];
-  await storyRows(file, updated, original);
+  await writeArchive(file, updated, original);
   await expect(stageWordPressArchive({ firestore, file, apply: true, report: async row => {
     outcomes.push(row);
     if (row.phase === "plan-complete") await staged.ref.update({ version: 2, editorialTitle: "Staff correction" });
@@ -103,7 +108,7 @@ it("distinguishes duplicate IDs from changed source revisions and preserves a co
   }));
 
   await staged.ref.delete();
-  await storyRows(file, original);
+  await writeArchive(file, original);
   await expect(stageWordPressArchive({ firestore, file, apply: true })).resolves.toEqual({ create: 0, skip: 0, review: 1 });
   expect((await staged.ref.get()).exists).toBe(false);
 });
@@ -124,7 +129,7 @@ it("rejects altered records and truncated files before the first write", async (
 it("records a durable review for a source record above the Firestore size budget", async () => {
   const file = await tempFile();
   const oversized = sourceRevision(await loadStory(), { html: "x".repeat(1024 * 1024) });
-  await storyRows(file, oversized);
+  await writeArchive(file, oversized);
   const options = { firestore, file, apply: true };
   await expect(stageWordPressArchive(options)).resolves.toEqual({ create: 0, skip: 0, review: 1 });
   await expect(stageWordPressArchive(options)).resolves.toEqual({ create: 0, skip: 0, review: 1 });
@@ -139,10 +144,98 @@ it("keeps the source when only the derived blocks exceed the Firestore depth lim
   const file = await tempFile();
   const html = '<ul><li>First<ul><li>Second<ul><li><a href="https://example.org/news">Third</a></li></ul></li></ul></li></ul>';
   const original = sourceRevision(await loadStory(), { html });
-  await storyRows(file, original);
+  await writeArchive(file, original);
   await expect(stageWordPressArchive({ firestore, file, apply: true })).resolves.toEqual({ create: 1, skip: 0, review: 0 });
   const [staged] = (await firestore.collection(archive).get()).docs;
   expect(staged.data()).toMatchObject({ record: original, conversion: { blocks: [], report: {
     status: "manual_review", issues: [{ code: "staging_conversion_depth_limit", start: 0, end: 0 }],
   } } });
+});
+
+it("stages verified image and PDF originals by attachment identity and keeps review cases private", async () => {
+  const file = await tempFile();
+  const source = "example-news";
+  const fixtureAttachment = JSON.parse((await readFile(fixture, "utf8")).split("\n")[3]);
+  const attachment = sourceRevision(fixtureAttachment, { attachmentUrl: "https://example.org/uploads/train.png" });
+  const stagedRef = postId => archiveItemRef(firestore, source, postId);
+  const [document, duplicate, privateItem, missing, changed, unsupported] =
+    ["70", "71", "72", "73", "74", "75"].map(postId => sourceRevision(attachment, {
+      postId, sourceStatus: postId === "72" ? "private" : "inherit",
+      ...(postId === "70" && { attachmentUrl: "https://example.org/uploads/schedule.pdf", title: "Service schedule" }),
+    }));
+  await writeArchive(file, attachment, document, duplicate, privateItem, missing, changed, unsupported);
+  await stageWordPressArchive({ firestore, file, apply: true });
+
+  const png = await sharp({ create: { width: 8, height: 4, channels: 3, background: "blue" } }).png().toBuffer();
+  const pdfDocument = await PDFDocument.create();
+  pdfDocument.addPage();
+  pdfDocument.addPage();
+  const pdf = await pdfDocument.save();
+  const imageHash = createHash("sha256").update(png).digest("hex");
+  const pdfHash = createHash("sha256").update(pdf).digest("hex");
+  await writeFile(join(scratch, imageHash), png);
+  await writeFile(join(scratch, pdfHash), pdf);
+  const imageEntry = { postId: attachment.postId, revisionSha256: attachment.revision.sha256,
+    sha256: imageHash, originalName: "train.png", mimeType: "image/png", title: "Train",
+    caption: "A train at the station.", altText: "Blue train", credit: "Archive Photography", license: "Approved for reuse" };
+  const item = (row, fields = {}) => ({ ...imageEntry, postId: row.postId, revisionSha256: row.revision.sha256, ...fields });
+  const missingHash = "a".repeat(64);
+  const incorrectHash = "b".repeat(64);
+  await writeFile(join(scratch, incorrectHash), png);
+  const items = [
+    imageEntry,
+    item(document, { sha256: pdfHash, originalName: "schedule.pdf", mimeType: "application/pdf", title: "Service schedule", altText: null }),
+    item(duplicate),
+    item(privateItem, { sha256: missingHash }),
+    item(missing, { sha256: missingHash }),
+    item(changed, { sha256: incorrectHash }),
+    item(unsupported, { mimeType: "image/svg+xml" }),
+  ];
+  const manifestFile = join(scratch, "approved.json");
+  const writeManifest = entries => writeFile(manifestFile, JSON.stringify({ source, version: 1, items: entries }));
+  const options = { firestore, manifestFile, originals: scratch };
+  await writeManifest([...items, imageEntry]);
+  await expect(stageWordPressArchiveMedia({ ...options, apply: true })).rejects.toThrow("repeated media manifest entry");
+  await writeManifest(items);
+  const rows = [];
+  await expect(stageWordPressArchiveMedia({ ...options, report: row => rows.push(row) }))
+    .resolves.toEqual({ stage: 3, skip: 0, review: 4 });
+  expect(rows.filter(row => row.action === "review").map(row => row.reason))
+    .toEqual(["nonpublic-source", "missing-original", "checksum-mismatch", "unsupported-type"]);
+  expect((await stagedRef(attachment.postId).get()).data().media).toBeUndefined();
+
+  await expect(stageWordPressArchiveMedia({ ...options, apply: true, report: async row => {
+    if (row.phase === "plan-complete") await stagedRef(document.postId).update({ version: 2, editorialTitle: "Staff correction" });
+  } })).resolves.toEqual({ stage: 2, skip: 0, review: 5 });
+  expect((await stagedRef(document.postId).get()).data()).toMatchObject({ version: 2, editorialTitle: "Staff correction" });
+  expect((await stagedRef(document.postId).get()).data().media).toBeUndefined();
+  await expect(stageWordPressArchiveMedia({ ...options, apply: true })).resolves.toEqual({ stage: 1, skip: 2, review: 4 });
+  await expect(stageWordPressArchiveMedia({ ...options, apply: true })).resolves.toEqual({ stage: 0, skip: 3, review: 4 });
+
+  const image = (await stagedRef(attachment.postId).get()).data();
+  expect(image).toMatchObject({ version: 2, sourceRef: { source, postId: attachment.postId }, record: attachment });
+  expect(image.media).toEqual({
+    sourceRevisionSha256: attachment.revision.sha256, kind: "image", title: "Train", caption: "A train at the station.",
+    altText: "Blue train", credit: "Archive Photography", license: "Approved for reuse",
+    original: { sha256: imageHash, originalName: "train.png", mimeType: "image/png", sizeBytes: png.length, width: 8, height: 4, animated: false },
+  });
+  const storedPdf = (await stagedRef(document.postId).get()).data();
+  expect(storedPdf.media).toMatchObject({
+    kind: "document", title: "Service schedule", altText: null,
+    original: { sha256: pdfHash, originalName: "schedule.pdf", mimeType: "application/pdf", sizeBytes: pdf.length, pageCount: 2 },
+  });
+  const sameBytes = (await stagedRef(duplicate.postId).get()).data();
+  expect(sameBytes.sourceRef.postId).toBe(duplicate.postId);
+  expect(sameBytes.media.original.sha256).toBe(imageHash);
+  expect((await stagedRef(privateItem.postId).get()).data().media).toBeUndefined();
+  expect((await firestore.listCollections()).map(collection => collection.id)).toEqual([archive]);
+
+  await writeManifest([{ ...imageEntry, caption: "A replacement caption" },
+    item(document, { revisionSha256: imageEntry.revisionSha256 })]);
+  rows.length = 0;
+  await expect(stageWordPressArchiveMedia({ ...options, apply: true, report: row => rows.push(row) }))
+    .resolves.toEqual({ stage: 0, skip: 0, review: 2 });
+  expect(rows.filter(row => row.action === "review").map(row => row.reason))
+    .toEqual(["original-or-metadata-conflict", "source-revision-conflict"]);
+  expect((await stagedRef(attachment.postId).get()).data()).toEqual(image);
 });

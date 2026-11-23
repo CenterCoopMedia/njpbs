@@ -525,7 +525,7 @@ describe("media upload validation", () => {
   it("accepts a minimal valid PDF and refuses a truncated PDF prefix", async () => {
     await expect(
       inspectUpload(minimalPdf(), "application/pdf"),
-    ).resolves.toEqual({ width: null, height: null, animated: false });
+    ).resolves.toEqual({ width: null, height: null, animated: false, pageCount: 1 });
     await expect(
       inspectUpload(Buffer.from("%PDF-1.7\n"), "application/pdf"),
     ).rejects.toMatchObject({ status: 415 });
