@@ -5,6 +5,7 @@ import { fileURLToPath } from "node:url";
 import type { App } from "firebase-admin/app";
 import { parsePreviewStorageCredential } from "./cms-preview-storage-credential";
 import { CmsPublicationRuntimeGuardError } from "./cms-publication-runtime-guard";
+import { assertProductionFirestoreRouting, parseCmsPublicationFirebaseServiceAccount } from "./cms-publication-credentials";
 import { expectedPublicBuildValues } from "./prepared-public-build-settings";
 import { assertPreparedPublicBuildSettings } from "../../functions/lib/public-build-settings.js";
 
@@ -42,15 +43,12 @@ export function parsePreparedReleaseArguments(args: string[]) {
 
 async function loadReleaseDependencies() {
   try {
-    const [{ firebaseAdminRuntime }, { assertProductionFirestoreRouting, parseCmsPublicationFirebaseServiceAccount },
-      { createCmsPublicationCloudStorage }, { sealPreparedCloudRelease, promotePreparedCloudRelease }] = await Promise.all([
-      import("./firebase-admin-runtime"), import("./run-cms-publication-serializer"),
-      import("./cms-publication-cloud-storage"), import("./prepared-cloud-release"),
+    const [{ firebaseAdminRuntime }, { createCmsPublicationCloudStorage }, { sealPreparedCloudRelease, promotePreparedCloudRelease }] =
+      await Promise.all([import("./firebase-admin-runtime"), import("./cms-publication-cloud-storage"), import("./prepared-cloud-release"),
     ]);
     const { checkSealedPublicRelease, handoverPreparedPublicRelease } = require("../../functions/lib/public-release-promotion");
     const { parseCloudflareToken } = require("../../scripts/bootstrap-public-deployment.cjs");
-    return { firebaseAdminRuntime, assertProductionFirestoreRouting, parseCmsPublicationFirebaseServiceAccount,
-      createCmsPublicationCloudStorage, sealPreparedCloudRelease, promotePreparedCloudRelease,
+    return { firebaseAdminRuntime, createCmsPublicationCloudStorage, sealPreparedCloudRelease, promotePreparedCloudRelease,
       checkSealedPublicRelease, handoverPreparedPublicRelease, parseCloudflareToken };
   } catch {
     throw new PreparedReleaseOperatorError("Prepared release dependencies failed to load; check the local installation before retrying");
@@ -66,13 +64,12 @@ export async function main(args = process.argv.slice(2), environment: NodeJS.Pro
     const target = preparedReleaseTarget(environment);
     // Shared release records treat an absent target as production.
     const scoped = target.environment === "development" ? { target } : {};
-    const { firebaseAdminRuntime, assertProductionFirestoreRouting, parseCmsPublicationFirebaseServiceAccount,
-      createCmsPublicationCloudStorage, sealPreparedCloudRelease, promotePreparedCloudRelease,
+    assertProductionFirestoreRouting(environment);
+    // The account must belong to the target project, so a mixed credential refuses before any dependency loads.
+    const serviceAccount = parseCmsPublicationFirebaseServiceAccount(readFileSync(3, "utf8"), target.projectId);
+    const { firebaseAdminRuntime, createCmsPublicationCloudStorage, sealPreparedCloudRelease, promotePreparedCloudRelease,
       checkSealedPublicRelease, handoverPreparedPublicRelease, parseCloudflareToken } = await loadReleaseDependencies();
     runtime = firebaseAdminRuntime;
-    assertProductionFirestoreRouting(environment);
-    // The account must belong to the target project, so a mixed credential refuses.
-    const serviceAccount = parseCmsPublicationFirebaseServiceAccount(readFileSync(3, "utf8"), target.projectId);
     app = firebaseAdminRuntime.initializeApp({ credential: firebaseAdminRuntime.cert(serviceAccount), projectId: target.projectId },
       "prepared-cloud-release-operator");
     const firestore = firebaseAdminRuntime.getFirestore(app);
