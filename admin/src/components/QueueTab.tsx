@@ -15,7 +15,7 @@ import { canManageSettings, canPublishContent, canViewPublishActivity } from "..
 import { retrySiteUpdate } from "../lib/site-update-retry";
 import type { SiteUpdateRetryResult } from "../lib/site-update-retry";
 import { cmsRecheckPublication } from "../lib/functions";
-import { loadPublishActivitySummary } from "../lib/publish-activity";
+import { loadPublishActivitySummary, type PublishActivitySummary } from "../lib/publish-activity";
 import { db } from "../lib/firebase";
 import {
   cmsListReviewQueue,
@@ -43,10 +43,12 @@ function valueToDate(value: unknown): Date | null {
   return null;
 }
 
-function queueItemFromDoc(id: string, data: DocumentData): QueueItem {
-  const automaticContext = data.transport === "public-context-no-build-v1" &&
+function queueItemFromDoc(id: string, data: DocumentData, settingsAccess: boolean): QueueItem {
+  const legacyContext = data.transport === "public-context-no-build-v1";
+  const pairedContext = data.transport === "release-pair-publication-v2";
+  const automaticContext = (legacyContext &&
     !data.settingsPublication && !data.libraryCardPublication && !data.recordPublication &&
-    Array.isArray(data.changes) && data.changes.length === 0;
+    Array.isArray(data.changes) && data.changes.length === 0) || (pairedContext && !data.familyPublication);
   const requesterId =
     typeof data.triggeredBy === "string" && data.triggeredBy.trim()
       ? data.triggeredBy
@@ -55,14 +57,45 @@ function queueItemFromDoc(id: string, data: DocumentData): QueueItem {
     typeof data.triggeredByEmail === "string" && data.triggeredByEmail.trim()
       ? data.triggeredByEmail
       : null;
+  const contextRecheck = /^[A-Za-z0-9]{20}$/.test(id) && (legacyContext
+    ? Boolean(data.recordPublication || data.libraryCardPublication || settingsAccess && (automaticContext || data.settingsPublication))
+    : pairedContext && (data.familyPublication?.kind === "record" ||
+      settingsAccess && (!data.familyPublication || data.familyPublication.kind === "settings")));
+  let status = typeof data.status === "string" ? data.status : "unknown";
+  let check = data.lastPublicCheck;
+  let contextCheckDueAt: number | undefined;
+  if (legacyContext || pairedContext) {
+    if (check?.queueStatus !== status || check?.alertEpoch !== (data.alertEpoch ?? null)) check = undefined;
+    if (check?.outcome === "confirmed_late") status = "success";
+    else if (check?.outcome === "superseded") status = "superseded";
+    else if (legacyContext && status === "success") {
+      const identity = data.recordPublication ?? data.settingsPublication ?? data.libraryCardPublication;
+      const consumers = data.recordPublication ? ["pages", "home", "posts", "record"] : ["pages", "home", "posts"];
+      const missingProof = identity && consumers.some(name => {
+        const proof = data.consumerReceipts?.[name];
+        return proof?.rendererSha !== identity.rendererSha || proof?.contextDigest !== identity.contextDigest ||
+          proof?.contextRevision !== identity.contextRevision || !(proof?.verifiedAt > 0);
+      });
+      if (missingProof) {
+        const startedAt = valueToDate(data.recordPublication ? data.recordRetryAt ?? data.createdAt :
+          data.libraryCardPublication ? data.cardRetryAt ?? data.createdAt : data.settingsRetryAt ?? data.triggeredAt ?? data.createdAt);
+        if (startedAt) contextCheckDueAt = startedAt.getTime() + 5 * 60_000;
+        status = "checking";
+      } else check = undefined;
+    }
+  }
   return {
     id,
-    status: typeof data.status === "string" ? data.status : "unknown",
+    status,
+    contextRecheck,
+    contextCheckDueAt,
     automaticSiteUpdate: automaticContext,
     triggeredBy:
       requesterEmail ?? requesterId ?? (automaticContext ? "Automatic site update" : null),
     triggeredById: requesterId,
-    changes: automaticContext ? ["Site-wide update"] : data.changes,
+    changes: automaticContext ? ["Site-wide update"] : legacyContext && data.settingsPublication ? ["Site settings update"] :
+      legacyContext && data.recordPublication ? [data.recordPublication.family === "programs" ? "Program update" : "Event update"] :
+        legacyContext && data.libraryCardPublication ? ["Library card update"] : data.changes,
     timestamp: valueToDate(data.triggeredAt ?? (data.transport === "public-context-no-build-v1" ? data.createdAt : undefined)),
     completedAt: valueToDate(data.completedAt),
     error: automaticContext && data.status === "failed" ? "The accepted site update did not complete."
@@ -72,17 +105,38 @@ function queueItemFromDoc(id: string, data: DocumentData): QueueItem {
     proofExhausted: data.transport === "post-no-build-v1" && data.status === "success" &&
       data.postProof?.status === "failed" && data.postProof.nextAttemptAt === null &&
       Number.isSafeInteger(data.postProof.attempts) && data.postProof.attempts >= 4,
-    ...(typeof data.lastPublicCheck?.message === "string" ? {
-      recheckMessage: data.lastPublicCheck.message,
-      recheckOutcome: data.lastPublicCheck.outcome,
+    ...(typeof check?.message === "string" ? {
+      recheckMessage: check.message,
+      recheckOutcome: check.outcome,
     } : {}),
   };
+}
+
+async function readRecoveryQueueItems(summary: PublishActivitySummary, settingsAccess: boolean, isCurrent: () => boolean) {
+  const ids = [...new Set(summary.postProofRecoveryIds)];
+  const items: QueueItem[] = [];
+  for (let offset = 0; offset < ids.length; offset += 30) {
+    const batch = new Set(ids.slice(offset, offset + 30));
+    const rows = await getDocs(query(collection(db, "cmsPublishQueue"), where(documentId(), "in", [...batch])));
+    if (!isCurrent()) return [];
+    items.push(...rows.docs.map(row => ({ ...queueItemFromDoc(row.id, row.data(), settingsAccess), proofRecovery: batch.has(row.id) })));
+  }
+  if (summary.contextRetry) {
+    const { queueId, createdAt, lastPublicCheck } = summary.contextRetry;
+    const status = lastPublicCheck?.outcome === "confirmed_late" ? "success" : lastPublicCheck?.outcome === "superseded" ? "superseded" : "failed";
+    items.push({ id: queueId, status, contextRecheck: settingsAccess, transport: "public-context-no-build-v1",
+      automaticSiteUpdate: true, contextRetry: status === "failed", timestamp: valueToDate(createdAt),
+      triggeredBy: "Automatic site update", changes: ["Site-wide update"], error: "The accepted site update did not complete.",
+      ...(lastPublicCheck ? { recheckMessage: lastPublicCheck.message, recheckOutcome: lastPublicCheck.outcome } : {}) });
+  }
+  return items;
 }
 
 export function QueueTab() {
   const { principal } = useShell();
   const { getIdToken } = useAuth();
   const showPublishActivity = canViewPublishActivity(principal);
+  const settingsAccess = canManageSettings(principal);
 
   const [reviewRequests, setReviewRequests] = useState<ReviewQueueItem[]>([]);
   const [reviewLoading, setReviewLoading] = useState(true);
@@ -156,10 +210,12 @@ export function QueueTab() {
         limit(PUBLISH_RECOVERY_LIMIT + 1)), items: null as QueueItem[] | null, error: null as string | null },
     ];
     let current = true;
+    let checkTimer: number | undefined;
     let recoveryTruncated = false, proofTruncated = false;
     proofRecoveryItems.current = [];
     function updateItems() {
       if (!current) return;
+      window.clearTimeout(checkTimer);
       const error = reads.find(read => read.error)?.error;
       if (error) {
         setPublishLoading(false);
@@ -169,10 +225,17 @@ export function QueueTab() {
       if (reads.some(read => read.items === null)) return;
       const proofItems = new Map(proofRecoveryItems.current.map(item => [item.id, item]));
       const items = new Map([...proofItems, ...reads.flatMap(read => read.items!.map(item => [item.id, item] as const))]);
-      setPublishItems([...items.values()].map(item => ({ ...item,
-        proofRecovery: proofItems.get(item.id)?.proofRecovery === true && item.proofExhausted === true,
-        contextRetry: proofItems.get(item.id)?.contextRetry === true,
-      })).sort((a, b) => (b.timestamp?.getTime() ?? 0) - (a.timestamp?.getTime() ?? 0)));
+      const now = Date.now();
+      const nextCheck = Math.min(...[...items.values()].map(item => item.contextCheckDueAt ?? Infinity).filter(at => at > now));
+      if (Number.isFinite(nextCheck)) checkTimer = window.setTimeout(updateItems, nextCheck - now);
+      setPublishItems([...items.values()].map(item => {
+        const status = item.status === "checking" && (item.contextCheckDueAt ?? Infinity) <= now ? "public_unconfirmed" : item.status;
+        return { ...item, status,
+          ...(status === "checking" ? { recheckMessage: undefined, recheckOutcome: undefined } : {}),
+          proofRecovery: proofItems.get(item.id)?.proofRecovery === true && item.proofExhausted === true,
+          contextRetry: proofItems.get(item.id)?.contextRetry === true,
+        };
+      }).sort((a, b) => (b.timestamp?.getTime() ?? 0) - (a.timestamp?.getTime() ?? 0)));
       setPublishRecoveryTruncated(recoveryTruncated || proofTruncated);
       setPublishLoading(false);
       setPublishError(null);
@@ -186,7 +249,7 @@ export function QueueTab() {
         ? "Too many active publication requests. Contact a Site owner." : null;
       if (index === 2) recoveryTruncated = snapshot.docs.length > PUBLISH_RECOVERY_LIMIT;
       const rows = index === 2 ? snapshot.docs.slice(0, PUBLISH_RECOVERY_LIMIT) : snapshot.docs;
-      read.items = rows.map(row => queueItemFromDoc(row.id, row.data()));
+      read.items = rows.map(row => queueItemFromDoc(row.id, row.data(), settingsAccess));
       updateItems();
     }, error => {
       read.error = error.message;
@@ -198,18 +261,24 @@ export function QueueTab() {
       try {
         const summary = await loadPublishActivitySummary(await getIdToken(), true);
         if (!current) return;
-        const ids = summary.postProofRecoveryIds ?? [];
-        const items: QueueItem[] = [];
-        for (let offset = 0; offset < ids.length; offset += 30) {
-          const rows = await getDocs(query(collection(db, "cmsPublishQueue"),
-            where(documentId(), "in", ids.slice(offset, offset + 30))));
-          if (!current) return;
-          items.push(...rows.docs.map(row => ({ ...queueItemFromDoc(row.id, row.data()), proofRecovery: true })));
-        }
-        if (summary.contextRetry) items.push({ id: summary.contextRetry.queueId, status: "failed",
-          transport: "public-context-no-build-v1", automaticSiteUpdate: true, contextRetry: true, timestamp: valueToDate(summary.contextRetry.createdAt),
-          triggeredBy: "Automatic site update", changes: ["Site-wide update"], error: "The accepted site update did not complete." });
+        const items = await readRecoveryQueueItems(summary, settingsAccess, () => current);
+        if (!current) return;
         proofRecoveryItems.current = items;
+        const contextIds = summary.contextRecheckIds ?? [];
+        for (let offset = 0; offset < contextIds.length; offset += 30) {
+          const source = query(collection(db, "cmsPublishQueue"),
+            where(documentId(), "in", contextIds.slice(offset, offset + 30)));
+          const read = { source, items: [] as QueueItem[], error: null };
+          reads.push(read);
+          stops.push(onSnapshot(source, snapshot => {
+            if (!current) return;
+            read.items = snapshot.docs.map(row => queueItemFromDoc(row.id, row.data(), settingsAccess));
+            updateItems();
+          }, () => {
+            if (!current) return;
+            setPublishRecoveryError("Some site updates could not be loaded. Try the publish activity refresh.");
+          }));
+        }
         proofTruncated = summary.postProofRecoveryTruncated === true;
         setPublishRecoveryLoading(false);
         updateItems();
@@ -219,8 +288,8 @@ export function QueueTab() {
         setPublishRecoveryError("Recent and failed requests are still shown. Try again to include older public checks and site updates.");
       }
     })();
-    return () => { current = false; stops.forEach(stop => stop()); };
-  }, [getIdToken, publishAttempt, showPublishActivity]);
+    return () => { current = false; window.clearTimeout(checkTimer); stops.forEach(stop => stop()); };
+  }, [getIdToken, publishAttempt, settingsAccess, showPublishActivity]);
 
   return <QueueSurface
     reviewRequests={reviewRequests} reviewLoading={reviewLoading} reviewError={reviewError}

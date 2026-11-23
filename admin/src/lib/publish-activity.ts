@@ -1,11 +1,19 @@
 import { postFunction } from "./functions";
+import type { PublicationRecheckResult } from "./functions";
+
+interface SiteUpdateRecovery {
+  queueId: string;
+  createdAt: string | null;
+  lastPublicCheck?: Pick<PublicationRecheckResult, "outcome" | "message">;
+}
 
 export interface PublishActivitySummary {
   activeCount: number;
   recoveryCount: number;
   postProofRecoveryIds?: string[];
   postProofRecoveryTruncated?: boolean;
-  contextRetry?: { queueId: string; createdAt: string | null } | null;
+  contextRecheckIds?: string[];
+  contextRetry?: SiteUpdateRecovery | null;
 }
 
 export function summarizePublishActivity(
@@ -38,7 +46,8 @@ export async function loadPublishActivitySummary(
     recoveryCount: number;
     postProofRecoveryIds?: string[];
     postProofRecoveryTruncated?: boolean;
-    contextRetry?: { queueId: string; createdAt: string | null } | null;
+    contextRecheckIds?: string[];
+    contextRetry?: SiteUpdateRecovery | null;
   }>("cmsListContent", idToken, { view: "publish_activity", ...(includePostProofRecovery ? { includePostProofRecovery: true } : {}) });
   if (
     body?.success !== true
@@ -49,13 +58,20 @@ export async function loadPublishActivitySummary(
     || includePostProofRecovery && body.postProofRecoveryIds !== undefined &&
       (!Array.isArray(body.postProofRecoveryIds) || body.postProofRecoveryIds.length > 100 ||
         body.postProofRecoveryIds.some(id => typeof id !== "string" || !/^[A-Za-z0-9]{20}$/.test(id)))
+    || includePostProofRecovery && body.contextRecheckIds !== undefined &&
+      (!Array.isArray(body.contextRecheckIds) || body.contextRecheckIds.length > 100 ||
+        body.contextRecheckIds.some(id => typeof id !== "string" || !/^[A-Za-z0-9]{20}$/.test(id)))
     || includePostProofRecovery && body.contextRetry != null &&
       (!/^[A-Za-z0-9]{20}$/.test(body.contextRetry.queueId) ||
-        body.contextRetry.createdAt !== null && (typeof body.contextRetry.createdAt !== "string" || !Number.isFinite(Date.parse(body.contextRetry.createdAt))))
+        body.contextRetry.createdAt !== null && (typeof body.contextRetry.createdAt !== "string" || !Number.isFinite(Date.parse(body.contextRetry.createdAt))) ||
+        body.contextRetry.lastPublicCheck !== undefined &&
+          (!["confirmed_late", "superseded", "failed"].includes(body.contextRetry.lastPublicCheck?.outcome) ||
+            typeof body.contextRetry.lastPublicCheck?.message !== "string"))
   ) {
     throw new Error("Publish activity is unavailable.");
   }
   return { activeCount: body.activeCount, recoveryCount: body.recoveryCount,
     ...(includePostProofRecovery ? { postProofRecoveryIds: body.postProofRecoveryIds ?? [],
-      postProofRecoveryTruncated: body.postProofRecoveryTruncated === true, contextRetry: body.contextRetry ?? null } : {}) };
+      postProofRecoveryTruncated: body.postProofRecoveryTruncated === true, contextRetry: body.contextRetry ?? null,
+      ...(body.contextRecheckIds ? { contextRecheckIds: body.contextRecheckIds } : {}) } : {}) };
 }

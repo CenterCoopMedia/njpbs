@@ -5,6 +5,7 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { initializeApp, deleteApp, getApps } from "firebase-admin/app";
 import { getFirestore, Timestamp, type Firestore } from "firebase-admin/firestore";
+import { clearEmulatorFirestore } from "../helpers/emulator-firestore.js";
 import { installedConsumerFixture } from "../helpers/public-release-installed-consumers";
 import { sealedPair } from "../helpers/sealed-public-release-pair";
 import { releasePair } from "../helpers/private-public-release-pair.js";
@@ -28,7 +29,8 @@ beforeAll(() => {
 });
 afterAll(async () => { if (app) await deleteApp(app); vi.unstubAllEnvs(); });
 beforeEach(async () => {
-  for (const collection of ["system", "cmsDeploymentReceipts", "cmsReaderCompatibilityReceipts", "admin_logs"]) await db.recursiveDelete(db.collection(collection));
+  await clearEmulatorFirestore(`http://${process.env.FIRESTORE_EMULATOR_HOST}/emulator/v1/projects/njpbs-site-dev/databases/(default)/documents`,
+    { method: "DELETE" }, db);
   f = installedConsumerFixture(); f.data.get("system/publicDeployment").updatedAt = Timestamp.fromMillis(1_800_000_000_000);
   const batch = db.batch();
   for (const [path, value] of f.data) batch.set(db.doc(path), value);

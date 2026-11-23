@@ -13,6 +13,21 @@ const TRANSPORT = "public-context-no-build-v1";
 const MAX_CONTEXT_ALIASES = 100;
 const { CONTEXT_OUTPUTS: OUTPUTS, contextOutputs, prepareRecordNamespace } = require("./no-build-record-namespace");
 function requireValue(value) { if (!value) throw new Error("Public context publication refused"); }
+function verifiedContextOutput(value, runtime, contextDigest) {
+  return value?.owner === "post-background-v1" && ownsPublication(value, runtime) &&
+    value.status === "verified" && value.contextDigest === contextDigest && value.receipt?.revision === value.revision &&
+    value.receipt?.contextDigest === contextDigest && value.receipt?.rendererSha === runtime.release;
+}
+
+function aggregateContextReceipt({ states, outputs, runtime, contextRevision, contextDigest, preparationOperationId }) {
+  return { runtime, contextRevision, contextDigest, preparationOperationId,
+    outputs: Object.fromEntries(states.map((row, index) => {
+      const { receipt, taskPath } = row.data();
+      return [outputs[index], { rendererSha: receipt.rendererSha, contextRevision, contextDigest: receipt.contextDigest,
+        verifiedAt: receipt.verifiedAt, revision: receipt.revision, digest: receipt.digest, routeSetDigest: receipt.routeSetDigest, taskPath }];
+    })) };
+}
+
 function missingPublicContextConsumers(queue, identity, requiredConsumers, routeConsumers) {
   const aggregate = queue.aggregateReceipt;
   const exactAggregate = aggregate?.runtime?.owner === "cloudflare" && aggregate.runtime.release === identity.rendererSha &&
@@ -319,18 +334,17 @@ async function settlePublicContext({ firestore, operationId, runtime }) {
     const anchor = anchorId === operationId ? queue : await transaction.get(firestore.doc(`cmsPublishQueue/${anchorId}`));
     const recoveryPreparation = anchor.data()?.preparationRecoveryOfQueueId
       ? await transaction.get(firestore.doc(`cmsPublishQueue/${anchorId}/backgroundPreparation/${job.publicContext.contextDigest}`)) : null;
-    const completeBytes = exact && states.every(row => row.data()?.owner === "post-background-v1" && ownsPublication(row.data(), runtime) &&
-      row.data()?.status === "verified" && row.data()?.contextDigest === job.publicContext.contextDigest && row.data()?.receipt?.revision === row.data()?.revision &&
-      row.data()?.receipt?.contextDigest === job.publicContext.contextDigest && row.data()?.receipt?.rendererSha === runtime.release);
+    const { contextRevision, contextDigest } = job.publicContext;
+    const completeBytes = exact && states.every(row => verifiedContextOutput(row.data(), runtime, contextDigest));
     const complete = completeBytes && (!anchor.data()?.preparationRecoveryOfQueueId ||
       verifiedPreparation(recoveryPreparation?.data(), runtime, job.publicContext.contextDigest));
     if (complete) {
       const aliases = await contextAliases(transaction, firestore, operationId, runtime, job, current.data());
+      const aggregateReceipt = aggregateContextReceipt({ states, outputs, runtime, contextRevision, contextDigest,
+        preparationOperationId: current.data()?.contextDigest === contextDigest && ownsPublication(current.data(), runtime)
+          ? current.data().preparationOperationId ?? null : null });
       for (const alias of aliases.filter(row => row.data().status !== "cancelled")) transaction.update(alias.ref, { status: "success", completedAt: FieldValue.serverTimestamp(), error: null,
-        aggregateReceipt: { runtime, contextRevision: job.publicContext.contextRevision, contextDigest: job.publicContext.contextDigest,
-          preparationOperationId: current.data()?.contextDigest === job.publicContext.contextDigest && ownsPublication(current.data(), runtime)
-            ? current.data().preparationOperationId ?? null : null,
-          outputs: Object.fromEntries(states.map((row, index) => [outputs[index], { rendererSha: row.data().receipt.rendererSha, contextRevision: job.publicContext.contextRevision, contextDigest: row.data().receipt.contextDigest, verifiedAt: row.data().receipt.verifiedAt, revision: row.data().receipt.revision, digest: row.data().receipt.digest, routeSetDigest: row.data().receipt.routeSetDigest, taskPath: row.data().taskPath }])) } });
+        aggregateReceipt });
       if (current.data()?.contextDigest === job.publicContext.contextDigest && ownsPublication(current.data(), runtime)) {
         transaction.update(current.ref, { operationIds: aliases.filter(row => row.id === current.data().operationId || needsConsumerConfirmation(row.data())).map(row => row.id), servingEstablished: true,
           pendingSince: current.data().followUp?.pendingSince ?? null });
@@ -442,5 +456,5 @@ async function retryPublicContextInTransaction({ transaction, firestore, operati
 }
 
 module.exports = { preparePairContextPublication: options => require("./public-release-family-admission").preparePairContextPublication(options),
-  CURRENT_PATH, TRANSPORT, OUTPUTS, missingPublicContextConsumers, verifiedPreparation, frozenContextMatches, canSupersedeFrozenContext, readSelectedPublicContextInTransaction, retainedPublicContextQueueIdsInTransaction,
+  CURRENT_PATH, TRANSPORT, OUTPUTS, missingPublicContextConsumers, verifiedContextOutput, aggregateContextReceipt, verifiedPreparation, frozenContextMatches, canSupersedeFrozenContext, readSelectedPublicContextInTransaction, retainedPublicContextQueueIdsInTransaction,
   publicContextFollowUpQueuesInTransaction, retireConfirmedPublicContextAliases, enqueuePublicContextInTransaction, settlePublicContext, retryPublicContextInTransaction, failPublicContextPreparation };
