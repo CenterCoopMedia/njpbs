@@ -5,6 +5,11 @@
       "scope": "Local build, operator or service process",
       "deployStep": "Supply the named input before the build or operator command starts."
     },
+    "video-backup-service": {
+      "supplier": "Video backup process environment",
+      "scope": "scripts/backup-video-viewing-copies.mjs",
+      "deployStep": "Set the Firebase project in the backup service environment file or the operator environment before running the command."
+    },
     "github-variable": {
       "supplier": "GitHub Actions variable",
       "scope": "Repository or selected deployment environment",
@@ -82,6 +87,10 @@
     {
       "suppliers": ["process-environment"],
       "names": ["BILLING_KILL_SWITCH_MODE", "BILLING_KILL_SWITCH_THRESHOLD"]
+    },
+    {
+      "suppliers": ["process-environment", "video-backup-service"],
+      "names": ["GOOGLE_CLOUD_PROJECT"]
     },
     {
       "suppliers": [
@@ -767,7 +776,6 @@
         "GITHUB_WORKFLOW_SHA",
         "GITHUB_WORKSPACE",
         "GOOGLE_APPLICATION_CREDENTIALS",
-        "GOOGLE_CLOUD_PROJECT",
         "GOOGLE_RUNTIME_EMAIL",
         "GUIDE_CAPTURE_OUTPUT",
         "GUIDE_VIDEOS",

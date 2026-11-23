@@ -56,12 +56,16 @@ export async function main(args = process.argv.slice(2), env = process.env) {
   if (args.length !== 1 || !["--inventory", "--tick"].includes(args[0])) throw Error("Invalid backup mode");
   const inventory = args[0] === "--inventory";
   if (!inventory && env.NJPBS_VIDEO_BACKUP_ENABLED !== "true") return { phase: "disabled" };
+  const projectId = env.GOOGLE_CLOUD_PROJECT;
+  if (!/^[a-z][a-z0-9-]{4,28}[a-z0-9]$/.test(projectId ?? "")) {
+    throw Error("Valid GOOGLE_CLOUD_PROJECT required");
+  }
   if (env.FIRESTORE_EMULATOR_HOST || !/^[a-z0-9][a-z0-9.-]{1,61}[a-z0-9]$/.test(env.CMS_MEDIA_AWS_RENDITION_BUCKET || "")) {
     throw Error("Production rendition binding required");
   }
   const input = JSON.parse(readFileSync(0, "utf8"));
   const firebase = inventory ? input : input.firebase;
-  if (firebase?.project_id !== "njpbs-site") throw Error("Wrong Firebase project");
+  if (firebase?.project_id !== projectId) throw Error("Wrong Firebase project");
   if (!inventory && (!/^[a-f0-9]{32}$/.test(env.CLOUDFLARE_ACCOUNT_ID || "") ||
       !/^[a-z0-9][a-z0-9-]{1,61}[a-z0-9]$/.test(env.NJPBS_VIDEO_BACKUP_BUCKET || "") ||
       !/^\d{12}$/.test(env.CMS_MEDIA_AWS_VIDEO_ACCOUNT_ID || "") ||
@@ -71,7 +75,7 @@ export async function main(args = process.argv.slice(2), env = process.env) {
   }
   const { initializeApp, cert, deleteApp } = require("firebase-admin/app");
   const { getFirestore } = require("firebase-admin/firestore");
-  const app = initializeApp({ credential: cert(firebase), projectId: "njpbs-site" });
+  const app = initializeApp({ credential: cert(firebase), projectId });
   const clients = [];
   try {
     const db = getFirestore(app), sourceBucket = env.CMS_MEDIA_AWS_RENDITION_BUCKET;
@@ -101,7 +105,8 @@ export async function main(args = process.argv.slice(2), env = process.env) {
     const stagingDirectory = join(directory, "staging");
     await mkdir(stagingDirectory, { recursive: true, mode: 0o700 });
     const state = createFileBackupState(directory);
-    const result = await createVideoBackupRunner({ db, source, sourceBucket, destination, state, stagingDirectory }).tick({ allowCopy: true });
+    const runner = createVideoBackupRunner({ projectId, db, source, sourceBucket, destination, state, stagingDirectory });
+    const result = await runner.tick({ allowCopy: true });
     process.exitCode = backupExitCode(result);
     return result;
   } finally {

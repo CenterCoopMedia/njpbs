@@ -25,7 +25,7 @@ beforeEach(async () => {
   await writeFile(join(root, "source", `${identityKey(sourceIdentity(records.a))}.mp4`), bytes);
 });
 afterEach(async () => { await rm(root, { recursive: true, force: true }); });
-const runner = extra => createVideoBackupRunner({ db, source, sourceBucket, destination, state, pageSize: 2, ...extra });
+const runner = extra => createVideoBackupRunner({ projectId: "example-backup", db, source, sourceBucket, destination, state, pageSize: 2, ...extra });
 const entry = async () => (await backup.inventoryPage({ db, source, sourceBucket })).entries[0];
 const copy = async (candidate, extra) => backup.copyViewingCopy({ entry: candidate, source, destination, state, ...extra });
 
@@ -118,6 +118,14 @@ describe("viewing-copy inventory and durable worker", () => {
     await worker.tick({ allowCopy: true });
     expect((await worker.tick({ allowCopy: true })).inventory.eligibleFiles).toBe(2);
     expect((await worker.tick({ allowCopy: true })).copy).toMatchObject({ verified: 2, reused: 1 });
+  });
+
+  it("starts a separate sweep for each Firebase project at the same destination", async () => {
+    const first = runner();
+    expect(await first.tick()).toMatchObject({ phase: "inventory", inventory: { complete: true, scanned: 1 } });
+    const second = runner({ projectId: "example-other", db: fakeDatabase({}) });
+    expect(await second.tick({ allowCopy: true })).toMatchObject({ phase: "inventory", inventory: { complete: true, scanned: 0 } });
+    expect(await first.tick({ allowCopy: true })).toMatchObject({ phase: "copy", copy: { verified: 1 } });
   });
 });
 
@@ -349,9 +357,54 @@ describe("production backup admission", () => {
     expect(scheduled.stdout).toBe("");
   });
 
+  it.each([
+    [undefined, "invalid JSON", "Valid GOOGLE_CLOUD_PROJECT required"],
+    ["invalid/project", "invalid JSON", "Valid GOOGLE_CLOUD_PROJECT required"],
+    ["example-backup", JSON.stringify({ project_id: "example-other" }), "Wrong Firebase project"],
+    ["example-backup", JSON.stringify({ project_id: "example-backup" }), null],
+  ])("binds backup inventory to the configured Firebase project (%s, %s)", (project, input, error) => {
+    const env = { PATH: process.env.PATH, CMS_MEDIA_AWS_RENDITION_BUCKET: sourceBucket };
+    if (project !== undefined) env.GOOGLE_CLOUD_PROJECT = project;
+    const result = spawnSync(process.execPath, ["--input-type=module", "-e", `
+      import assert from "node:assert/strict";
+      import { createRequire } from "node:module";
+      import { main } from "./scripts/backup-video-viewing-copies.mjs";
+      import { fakeDatabase } from "./tests/fixtures/video-backup.mjs";
+
+      const require = createRequire(new URL("./functions/package.json", import.meta.url));
+      require.cache[require.resolve("firebase-admin/app")] = { exports: {
+        cert: account => account,
+        initializeApp({ credential, projectId }) {
+          assert.equal(projectId, "example-backup");
+          assert.equal(credential.project_id, projectId);
+          return { projectId };
+        },
+        deleteApp: async () => {},
+      } };
+      require.cache[require.resolve("firebase-admin/firestore")] = { exports: {
+        FieldPath: { documentId: () => "__name__" },
+        getFirestore: () => fakeDatabase({}),
+      } };
+      main(["--inventory"]).then(receipt => console.log(JSON.stringify(receipt))).catch(error => {
+        console.error(error.message);
+        process.exitCode = 1;
+      });
+    `], { env, input, encoding: "utf8", timeout: 3000 });
+    expect(result.error).toBeUndefined();
+    if (error) {
+      expect(result.status).toBe(1);
+      expect(result.stderr).toBe(`${error}\n`);
+      expect(result.stdout).toBe("");
+    } else {
+      expect(result.status).toBe(0);
+      expect(result.stderr).toBe("");
+      expect(JSON.parse(result.stdout)).toMatchObject({ phase: "inventory", complete: true });
+    }
+  });
+
   it("suppresses malformed credential and provider details at the command boundary", () => {
     const result = spawnSync(process.execPath, ["scripts/backup-video-viewing-copies.mjs", "--inventory"], {
-      env: { PATH: process.env.PATH, CMS_MEDIA_AWS_RENDITION_BUCKET: sourceBucket },
+      env: { PATH: process.env.PATH, CMS_MEDIA_AWS_RENDITION_BUCKET: sourceBucket, GOOGLE_CLOUD_PROJECT: "example-backup" },
       input: "invalid-synthetic-credential", encoding: "utf8",
     });
     expect(result.status).toBe(1);
