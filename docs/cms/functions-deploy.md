@@ -133,9 +133,20 @@ verified credential file when supplied, without enrolling a gcloud account.
 Gen 2 event trigger's declared runtime account, or the Compute default account
 when none is declared. It requires an unconditional `roles/eventarc.eventReceiver`
 grant on the project and `roles/run.invoker` on the project or target Cloud Run
-service. Missing grants require separate authorization. The checker does not add
-them. A new service can have pending invocation proof before deployment;
-post-deploy checks must confirm its actual trigger account and invocation grant.
+service. A new service can have pending invocation proof before deployment,
+because its Cloud Run service exists only after the Functions deploy. The
+post-deploy step confirms each trigger's actual account matches the release
+source, adds the missing `roles/run.invoker` binding on that one service
+(additive, unconditional), and then checks the grant. The check stays because a
+trigger that cannot be invoked drops its events silently. The deploy never adds
+receiver grants or project-wide grants.
+
+The grant needs `run.services.getIamPolicy` and `run.services.setIamPolicy`.
+Both deploy identities (`njpbs-site` and `njpbs-site-dev`) hold the project-level
+`roles/run.admin` grant, which includes both, so no extra role is needed. When
+the release adds a trigger service, the pre-deploy check tests these permissions
+before any mutation. If that grant is ever removed, the release stops at
+preflight instead of after the Functions deploy.
 
 ## Video replacement cleanup
 
