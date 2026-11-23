@@ -400,8 +400,7 @@ describe("CMS deploy target", () => {
     const collect = value => {
       for (const [, kind, name] of strip(JSON.stringify(value)).matchAll(/\b(secrets|vars)\.([A-Z][A-Z0-9_]*)\b/g)) reads[kind].add(name);
     };
-    const { CMS_DEVELOPMENT_ENVIRONMENT_NAMES: _names, ...env } = workflow.env;
-    collect(env);
+    collect(Object.fromEntries(Object.entries(workflow.env).filter(([name]) => name !== "CMS_DEVELOPMENT_ENVIRONMENT_NAMES")));
     for (const { steps, ...current } of Object.values(workflow.jobs)) {
       collect(current);
       for (const row of steps) if (!/^inputs\.target != 'development'/.test(row.if ?? "")) collect(row);
