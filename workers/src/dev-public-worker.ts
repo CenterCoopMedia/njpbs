@@ -51,7 +51,7 @@ const devPublic = {
         readWithdrawal: path => readDurablePageWithdrawal(env.DURABLE_POST_WITHDRAWALS, target.workerName, path),
         withdrawalsOnly: !env.NO_BUILD_PAGE_RENDERER_SHA,
         scheduleProof,
-        getDecision: (path, method) => env.CMS_API.getNoBuildPage(path, rendererSha, method, false, scheduleProof) });
+        getDecision: (path, method, pageStatus) => env.CMS_API.getNoBuildPage(path, rendererSha, method, false, scheduleProof, pageStatus) });
       const pageResponse = await pages.fetch(request);
       if (pageResponse) return pageResponse;
     }

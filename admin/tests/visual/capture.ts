@@ -76,11 +76,25 @@ export async function openSpecimen(
     ...identity, collections: ["cmsPages", "cmsPosts"], routes: [{
       path: "/posts/station-update/", source: "cms", sourceVersion: 8,
       contentKey: createHash("sha256").update("cmsPosts/post-station-update").digest("hex"),
-    }, ...(pair.id === "study-reference-page" ? [{ path: "/", source: "cms", sourceVersion: 50,
-      contentKey: createHash("sha256").update("cmsPages/home").digest("hex") }] : pair.id === "study-reference-post" ? [{
+    }, ...(pair.id === "study-reference-post" ? [{
       path: "/posts/man-who-waged-delaney-hall-hunger-strike-released-from-ice-custody/", source: "cms", sourceVersion: 29,
       contentKey: createHash("sha256").update("cmsPosts/study-post").digest("hex") }] : [])],
   } }));
+  if (pair.id === "study-reference-page" || pair.id === "home-editor-recovery") {
+    const cors = { "access-control-allow-origin": "*" };
+    await page.route("http://127.0.0.1:5001/**/cmsGetContent", route => route.fulfill({ headers: cors, json: {
+      success: true, found: true, publication: {
+        workingVersion: 51, contentVersion: 51, workingStatus: "draft", publiclyVisible: true,
+        publishedSourceVersion: 50, publishedContentVersion: 50, publicSourceVersion: 50,
+        publicUpdatePending: false, publicBuildQueueId: null, queueStatus: null, pagePublicPath: "/",
+      },
+    } }));
+    const key = createHash("sha256").update("cmsPages/home").digest("hex");
+    await page.route("https://njpbs.org/?cms-page-status=1", route => route.fulfill({ headers: {
+      ...cors, "access-control-expose-headers": "x-njpbs-page-status, x-njpbs-page-path",
+      "x-njpbs-page-status": `${key}:50`, "x-njpbs-page-path": "/",
+    } }));
+  }
   await page.route("https://njpbs.org/contact/?*", route => route.fulfill({
     body: "", headers: { "x-njpbs-content-source": "committed-fallback" },
   }));

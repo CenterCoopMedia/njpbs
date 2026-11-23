@@ -34,14 +34,14 @@ async function readPageAuthorityInTransaction({ firestore, transaction, state, r
 /** An accepted route retains authority when admission is paused or unselected.
  * Only authoritative absence is a pass. Refusal leaves any Worker Assets
  * fallback unconfirmed; it cannot manufacture a publication receipt. */
-async function readNoBuildPageDecision({ firestore, path, rendererSha, target, currentCodeRequest, scheduleCapture, readScheduledDecision, legacyStaffServing = false }) {
+async function readNoBuildPageDecision({ firestore, path, rendererSha, target, currentCodeRequest, scheduleCapture, readScheduledDecision, legacyStaffServing = false, pageStatus = false }) {
   target = pagePublicationTarget({ firestore, target });
   const schedules = require("./no-build-page-schedule-reader");
   if (schedules.isPageScheduleExportPath(path)) return schedules.readNoBuildPageScheduleExport({ firestore, path, rendererSha, target, currentCodeRequest, scheduleCapture });
   if (typeof path !== "string" || path.length > 512 || /[%?#\\]/.test(path) ||
       !/^(?:\/|\/_home-sources\.json|\/[^/]+\/)$/.test(path) || !/^[a-f0-9]{40}$/.test(rendererSha ?? "")) refuse();
   const read = () => firestore.runTransaction(transaction => readNoBuildPageDecisionInTransaction({
-    firestore, transaction, path, rendererSha, target, scheduleCapture, legacyStaffServing }), { readOnly: true });
+    firestore, transaction, path, rendererSha, target, scheduleCapture, legacyStaffServing, pageStatus }), { readOnly: true });
   try { return await read(); }
   catch (error) {
     if (!(error instanceof schedules.PageScheduleCaptureRequired)) throw error;
@@ -56,14 +56,14 @@ async function readNoBuildPageDecision({ firestore, path, rendererSha, target, c
   }
 }
 
-async function readNoBuildPageDecisionInTransaction({ firestore, transaction, path, rendererSha, target, scheduleCapture, legacyStaffServing = false }) {
+async function readNoBuildPageDecisionInTransaction({ firestore, transaction, path, rendererSha, target, scheduleCapture, legacyStaffServing = false, pageStatus = false }) {
   const schedules = require("./no-build-page-schedule-reader");
   const route = (await transaction.get(pageRouteRef(firestore, path))).data();
   if (!route) {
     if ((await listNoBuildPageOwners({ firestore, transaction, path })).length) refuse();
     const decision = await require("./no-build-page-context-decision").readNoBuildPageContextDecision({
       firestore, transaction, path: path === "/_home-sources.json" ? "/" : path, unownedPath: path,
-      rendererSha, target, scheduleCapture, requestScheduleCapture: true, legacyStaffServing });
+      rendererSha, target, scheduleCapture, requestScheduleCapture: true, legacyStaffServing, pageStatus });
     if (decision.kind === "pass") return decision;
     const { receipt, ...context } = decision;
     return { ...context, contextReceipt: receipt,

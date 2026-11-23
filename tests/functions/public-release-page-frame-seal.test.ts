@@ -1,6 +1,7 @@
 import { afterAll, afterEach, beforeAll, beforeEach, expect, it } from "vitest";
 import { createRequire } from "node:module";
 import { readFileSync } from "node:fs";
+import { createHash } from "node:crypto";
 import { clearEmulatorFirestore, isolatedFirestore } from "../helpers/emulator-firestore.js";
 import { pairReference, releasePair } from "../helpers/private-public-release-pair.js";
 import { seedSwitch, fixtureGuard, fixtureReadOwner } from "../helpers/public-release-switch.js";
@@ -37,11 +38,11 @@ beforeEach(async () => {
   boundary.objects.clear();
 });
 afterEach(async () => { await fixture?.close(); fixture = undefined; });
-async function read(selector?: any) {
+async function read(selector?: any, pageStatus = false) {
   const capture = await schedules.capturePageSchedule({ firestore, target, rendererSha: sha,
     request: fixture!.request, ...(selector ? { releaseSelector: selector } : {}) });
   return db.runTransaction(transaction => decisions.readNoBuildPageContextDecision({ firestore, transaction,
-    path: "/schedule/", rendererSha: sha, target, now, scheduleCapture: capture }), { readOnly: true });
+    path: "/schedule/", rendererSha: sha, target, now, scheduleCapture: capture, pageStatus }), { readOnly: true });
 }
 async function assertWorkerFrame(decision: any) {
   const content = await projectPublicPageContextRead(decision.renderContext, sha, now);
@@ -77,6 +78,10 @@ it("keeps the exact schema-one Schedule decision bytes captured before the chang
   // and the nonempty synthetic packet inputs reviewed in PR51; never from this reader.
   const oracle = new URL("../fixtures/public-release-page-frame-schema-one.json", import.meta.url);
   expect(bytes).toBe(readFileSync(oracle, "utf8").trimEnd());
+  const status = await read(undefined, true);
+  const { contentKey, ...receipt } = status.receipt;
+  expect(contentKey).toBe(createHash("sha256").update("cmsPages/schedule").digest("hex"));
+  expect(JSON.stringify({ ...status, receipt })).toBe(bytes);
 });
 it("keeps steady-state schema-two Schedule seals when original CODE and selector generations agree", async () => {
   const { selector } = await seedPair();

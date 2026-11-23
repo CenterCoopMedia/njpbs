@@ -942,18 +942,20 @@ export class PublicContentEntrypoint extends WorkerEntrypoint<CmsApiEnv> {
   }
 
   async getNoBuildPage(path: string, rendererSha: string, method = "GET", includeCacheLease = false,
-    scheduleProof = false): Promise<NoBuildPageReply> {
+    scheduleProof = false, pageStatus = false): Promise<NoBuildPageReply> {
     const environment = pageReaderEnvironment(this.env);
     const schedulePath = ["/_schedule-sources.json", "/schedule/downloads/nj-pbs-schedule.pdf"].includes(path);
     if (!environment || !this.env.CMS_EDGE_ORIGIN_SECRET?.trim() ||
         typeof path !== "string" || !path.startsWith("/") || path.length > 512 || /[%?#\\]/.test(path) ||
         !/^[a-f0-9]{40}$/.test(rendererSha) || !["GET", "HEAD"].includes(method) ||
+        typeof pageStatus !== "boolean" || (pageStatus && method !== "HEAD") ||
         typeof scheduleProof !== "boolean" || (scheduleProof && (environment !== "development" || !schedulePath || method !== "GET"))) {
       throw new PublicContentRpcError("Dev Page request was refused");
     }
     const response = await fetch(`${this.env.FUNCTIONS_ORIGIN}/${PUBLIC_CONTENT_FUNCTION}`, {
       method: "POST", headers: publicDecisionHeaders(this.env.CMS_EDGE_ORIGIN_SECRET),
-      body: JSON.stringify({ mode: "no-build-page-v1", path, rendererSha, method, ...(scheduleProof ? { scheduleProof } : {}) }),
+      body: JSON.stringify({ mode: "no-build-page-v1", path, rendererSha, method,
+        ...(scheduleProof ? { scheduleProof } : {}), ...(pageStatus ? { pageStatus } : {}) }),
       redirect: "manual", signal: AbortSignal.timeout(10_000),
     });
     if (!response.ok) throw new PublicContentRpcError("Public Page service is unavailable");

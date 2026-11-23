@@ -125,7 +125,7 @@ async function baselineHomeSources(reply: NoBuildPageReply, fetchAsset: (request
  * and misses read current origin authority; guarded fallback keeps outages readable. */
 export function createNoBuildPageWorker(deps: {
   target?: PublicationTarget; rendererSha: string; rendererReady: boolean; cache: Pick<Cache, "match" | "put">;
-  getDecision(path: string, method: string): Promise<NoBuildPageReply>;
+  getDecision(path: string, method: string, pageStatus?: boolean): Promise<NoBuildPageReply>;
   render(content: PublishedPageContent): Promise<string>; now?: () => Date;
   renderContext?(content: PublicPageContextContent): Promise<string>;
   fetchAsset(request: Request): Promise<Response>;
@@ -253,6 +253,7 @@ export function createNoBuildPageWorker(deps: {
       } catch { return scheduleProof ? unavailable(head, 503) : null; }
     }
     const publicPageRequest = ["GET", "HEAD"].includes(request.method) && path !== "/_home-sources.json";
+    const readDecision = () => statusProbe ? deps.getDecision(path, "HEAD", true) : deps.getDecision(path, head ? "HEAD" : "GET");
     const phases = ["decision", "render", "recheck", "withdrawal", "fallback"] as const;
     const durations = new Map<string, number>();
     let renderStarted: number | null = null;
@@ -334,7 +335,7 @@ export function createNoBuildPageWorker(deps: {
         const homeFence = anonymousHome ? await cacheWork(() => responseCache.beginHome()) : undefined;
         // Keep the first lookup's 10 s allowance for cold cmsGetPublicPage
         // instances. Bound rendering and all later reads after it succeeds.
-        let reply = await measure("decision", () => wait(() => deps.getDecision(path, head ? "HEAD" : "GET")));
+        let reply = await measure("decision", () => wait(readDecision));
         if (publicPageRequest) deadline = Date.now() + PUBLIC_PAGE_WAIT_MS;
         // Continuous publishing is valid authority. After three renders, keep
         // the newest completed bytes rather than an older last-good/Assets copy.
@@ -373,7 +374,7 @@ export function createNoBuildPageWorker(deps: {
               // Before transfer, the picker keeps the existing code catalog and
               // its registered digest. A context frame is no editorial operation.
               const sources = await wait(() => baselineHomeSources(reply, deps.fetchAsset, target));
-              const current = await measure("recheck", () => wait(() => deps.getDecision(path, head ? "HEAD" : "GET")));
+              const current = await measure("recheck", () => wait(readDecision));
               if (pageDecisionIdentity(current) !== pageDecisionIdentity(reply)) return pageFallback();
               return new Response(head ? null : JSON.stringify(sources), { headers: {
                 ...SECURITY_HEADER_BASELINE, "cache-control": "no-store", "content-type": "application/json",
@@ -430,7 +431,7 @@ export function createNoBuildPageWorker(deps: {
             } else throw new Error("Invalid context Page decision");
             const response = new Response(head ? null : body, { status, headers });
             const prepared = canCacheResponse ? await cacheWork(() => responseCache.store(path, reply, response.clone())) ?? response : response;
-            const current = await measure("recheck", () => wait(() => deps.getDecision(path, head ? "HEAD" : "GET")));
+            const current = await measure("recheck", () => wait(readDecision));
             if (publicPageRequest && ["pass", "schedule-unavailable"].includes(current.kind)) return servingRefusal(current);
             const authorityUnchanged = pageDecisionIdentity(current) === pageDecisionIdentity(reply);
             if (!authorityUnchanged) {
@@ -509,7 +510,7 @@ export function createNoBuildPageWorker(deps: {
           } else throw new Error("Invalid Page decision");
           const prepared = canCacheResponse && status === 200
             ? await cacheWork(() => responseCache.store(path, reply, new Response(body, { status, headers }))) : null;
-          const current = await measure("recheck", () => wait(() => deps.getDecision(path, head ? "HEAD" : "GET")));
+          const current = await measure("recheck", () => wait(readDecision));
           if (publicPageRequest && ["pass", "schedule-unavailable"].includes(current.kind)) return servingRefusal(current);
           const authorityUnchanged = pageDecisionIdentity(current) === pageDecisionIdentity(reply);
           if (!authorityUnchanged) {

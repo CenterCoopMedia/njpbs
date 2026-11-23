@@ -57,11 +57,13 @@ it.each([
     fetchAsset: async () => new Response("Retained copy"), now: () => now });
   const ordinary = await worker.fetch(new Request(`https://njpbs.org${path}`, { method: "HEAD" }));
   expect(ordinary?.status).toBe(status);
+  expect(getDecision).toHaveBeenLastCalledWith(path, "HEAD");
   expect(ordinary?.headers.get("x-njpbs-page-status")).toBeNull();
   if (status === 302) expect(ordinary?.headers.get("location")).toBe("https://example.org/external/");
   const request = new Request(`https://njpbs.org${path}?cms-page-status=1`, { method: "HEAD" });
   const response = await worker.fetch(request);
   expect(response?.status).toBe(status === 410 ? 410 : 200);
+  expect(getDecision).toHaveBeenLastCalledWith(path, "HEAD", true);
   expect(response?.headers.get("x-njpbs-page-status")).toBe(`${contentKey}:${version}`);
   expect(response?.headers.get("access-control-expose-headers")).toContain("x-njpbs-page-status");
   expect(response?.headers.get("location")).toBeNull();

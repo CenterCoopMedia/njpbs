@@ -1770,6 +1770,7 @@ const refuseNjDecidesBrandMutation = async () => { throw new Error("This local f
 
 function ShellSpecimen({
   adminSettingsPanel,
+  getIdToken,
   reportingTransport,
   loadRevisions, loadRevision,
   requestSavedPreview,
@@ -1801,6 +1802,7 @@ function ShellSpecimen({
   surface,
 }: {
   adminSettingsPanel?: ReactNode;
+  getIdToken?: ShellData["getIdToken"];
   reportingTransport?: ComponentProps<typeof EditorWorkspace>["reportingTransport"];
   loadRevisions?: ComponentProps<typeof EditorWorkspace>["loadRevisions"];
   loadRevision?: ComponentProps<typeof EditorWorkspace>["loadRevision"];
@@ -1995,6 +1997,7 @@ function ShellSpecimen({
       preferences: navigation === undefined ? undefined : { navigation },
     },
     signOut: () => {},
+    getIdToken,
     navigationShares,
   };
   return (
@@ -2024,7 +2027,9 @@ function bannerDocument(
 function StudyReferenceShell({ kind, homeBlocks }: { kind: "page" | "post"; homeBlocks?: readonly AdminBlock[] }) {
   const [api] = useState(() => createStudyReferenceFixtures({ homeBlocks }));
   const unavailable = async () => { throw Object.assign(new Error("This local design fixture does not connect to publication or preview services."), { status: 503 }); };
-  return <ShellSpecimen {...api} requestSavedPreview={kind === "post" ? unavailable : undefined}
+  return <ShellSpecimen {...api} getIdToken={kind === "page" ? async () => "" : undefined}
+    navigationShares={kind === "page" ? [] : undefined}
+    requestSavedPreview={kind === "post" ? unavailable : undefined}
     publishContent={unavailable} scheduleContent={unavailable} transitionContent={unavailable} loadRevisions={unavailable} loadRevision={unavailable} initialEntry={kind === "page" ? "/content/pages/home/edit" : "/content/post/study-post/edit"}
     surface={kind === "page" ? { kind: "page", pageId: "home", section: "home" } : { kind: "record", record: "post", id: "study-post" }} />;
 }
