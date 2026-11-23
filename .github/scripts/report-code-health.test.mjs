@@ -22,7 +22,7 @@ test("reports only added lint errors and type errors", () => {
       moved, extraLint, { ...lint, severity: 1, rule: "complexity" },
       { ...lint, rule: "max-lines-per-function", message: "Function 'f' has too many lines (201)." },
     ],
-    types: { findings: [{ ...type, line: 8 }, extraType] },
+    types: { findings: [{ ...type, line: 8, message: "callee signature changed" }, extraType] },
   };
   const renames = new Map([["admin/src/new.ts", lint.file]]);
 

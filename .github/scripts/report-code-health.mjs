@@ -85,8 +85,10 @@ function renamedPaths(cwd, base) {
   return renames;
 }
 
+// Count by file and rule. A type message quotes the callee's signature, so a
+// signature change elsewhere would relabel every existing error as new.
 function addedDiagnostics(baseline, current, renames) {
-  const key = ({ rule, message }, file) => JSON.stringify([file, rule, message]);
+  const key = ({ rule }, file) => JSON.stringify([file, rule]);
   const counts = new Map();
   for (const finding of baseline) {
     const id = key(finding, finding.file);
