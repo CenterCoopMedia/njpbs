@@ -6,6 +6,7 @@ const logger = require("firebase-functions/logger");
 const { Timestamp } = require("firebase-admin/firestore");
 const { db } = require("./lib/firebase");
 const { requirePrincipal } = require("./lib/auth");
+const { ADMIN_ACCESS_REQUIRED } = require("./lib/staff-access-messages");
 const { can } = require("./lib/rbac");
 const { hasPreviewAccess } = require("./lib/preview-access");
 const { waitForPreviewStatus } = require("./lib/preview-status-wait");
@@ -663,7 +664,7 @@ function createCmsPreviewHandler(deps = {}) {
       if ((req.body?.persistent === true || req.body?.automatic === true) &&
           !can(actor.principal, "settings.manage")) {
         throw new PreviewRequestError(
-          "Administrator access is required for retained or automatic previews", 403,
+          `${ADMIN_ACCESS_REQUIRED} for retained or automatic previews`, 403,
         );
       }
       const pageId =

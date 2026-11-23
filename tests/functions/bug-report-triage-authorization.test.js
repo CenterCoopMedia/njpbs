@@ -144,7 +144,7 @@ describe("bug report triage authorization at the request and storage boundaries"
       const result = await update(firestore);
 
       expect(result.statusCode).toBe(403);
-      expect(result.body).toEqual({ error: "Admin access required" });
+      expect(result.body).toEqual({ error: "Admin or Manager access required" });
       expect(await storedState()).toEqual(before);
       expect((await db.collection("users").doc(ACTOR_UID).get()).data())
         .toEqual(profile ?? undefined);

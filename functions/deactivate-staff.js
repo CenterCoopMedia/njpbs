@@ -13,6 +13,7 @@ const { FieldValue } = require("firebase-admin/firestore");
 const { Filter } = require("firebase-admin/firestore");
 const { db } = require("./lib/firebase");
 const { requireSuperAdmin, ForbiddenError } = require("./lib/auth");
+const { OWNER_ACCESS_REQUIRED } = require("./lib/staff-access-messages");
 const { adminLogEntry } = require("./lib/audit");
 const { accessTierReadsActive } = require("./lib/access-tier-activation");
 const { administrativeRoleFromUserDoc } = require("./lib/principal");
@@ -99,7 +100,7 @@ async function deactivateProfile({
       actorSnapshot.data().active === false ||
       administrativeRoleFromUserDoc(actorSnapshot.data(), tiersActive) !== "super_admin"
     ) {
-      throw new ForbiddenError("Super admin access required");
+      throw new ForbiddenError(OWNER_ACCESS_REQUIRED);
     }
     if (!targetSnapshot.exists) {
       throw new StaffDeactivationError(404, "Target user not found");

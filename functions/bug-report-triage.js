@@ -11,6 +11,7 @@ const { db } = require("./lib/firebase");
 const { githubIssueRepository } = require("./lib/bug-report-github-config");
 const { hasCapability } = require("./lib/rbac");
 const { requirePrincipal, isAdmin, AuthError, ForbiddenError } = require("./lib/auth");
+const { ADMIN_ACCESS_REQUIRED } = require("./lib/staff-access-messages");
 const { accessTierReadsActive, userDocUsesAccessTier } = require("./lib/access-tier-activation");
 const {
   administrativeRoleFromStoredUserDoc,
@@ -599,7 +600,7 @@ function createCmsListBugReportsHandler(deps = {}) {
       const allReports = view === "all";
       const admin = allReports && await isAdminFn(user.uid, user.emailVerified, user.authTime);
       if (allReports && !admin && !sharedReportsActive) {
-        throw new BugReportTriageError(403, "Admin access required");
+        throw new BugReportTriageError(403, ADMIN_ACCESS_REQUIRED);
       }
       if (!allReports) query = query.where("reporter.uid", "==", user.uid);
       const snapshots = await query
@@ -746,7 +747,7 @@ function createCmsUpdateBugReportHandler(deps = {}, requiredAction) {
       requireJsonPost(req);
       const user = requireApprovedPrincipal(await requirePrincipalFn(req));
       if (!(await isAdminFn(user.uid, user.emailVerified, user.authTime))) {
-        throw new BugReportTriageError(403, "Admin access required");
+        throw new BugReportTriageError(403, ADMIN_ACCESS_REQUIRED);
       }
       if (requiredAction && req.body.action !== requiredAction) {
         throw new BugReportTriageError(400, "Report action is invalid");
@@ -764,7 +765,7 @@ function createCmsUpdateBugReportHandler(deps = {}, requiredAction) {
           const profile = snapshot.data();
           if (!snapshot.exists ||
             !["admin", "super_admin"].includes(await administrativeRoleFromStoredUserDoc(firestore, profile, transaction))) {
-            throw new BugReportTriageError(403, "Admin access required");
+            throw new BugReportTriageError(403, ADMIN_ACCESS_REQUIRED);
           }
         },
       });

@@ -2,7 +2,7 @@
 
 const { userDocUsesAccessTier } = require("./lib/access-tier-activation");
 const { administrativeRoleFromStoredUserDoc, administrativeRoleFromUserDoc } = require("./lib/principal");
-
+const { OWNER_ACCESS_REQUIRED } = require("./lib/staff-access-messages");
 // Staff account registration and approval. Firebase Auth proves ownership of
 // the address. A request remains permissionless until the only super admin
 // approves one site-wide staff, editor, or contributor grant.
@@ -890,7 +890,7 @@ function createStaffAccessHandlers(overrides = {}) {
     if (administrativeRoleFromUserDoc(profile, tiersActive) !== "super_admin" ||
         (tiersActive && caller.emailVerified !== true) ||
         sessionPredatesWatermark(caller.authTime, profile)) {
-      throw new ForbiddenError("Super admin access required");
+      throw new ForbiddenError(OWNER_ACCESS_REQUIRED);
     }
     return caller;
   }
@@ -1013,7 +1013,7 @@ function createStaffAccessHandlers(overrides = {}) {
         }
         const liveCaller = callerSnapshot.exists ? callerSnapshot.data() : null;
         if (await administrativeRoleFromStoredUserDoc(deps.firestore, liveCaller, transaction) !== "super_admin") {
-          throw new ForbiddenError("Super admin access required");
+          throw new ForbiddenError(OWNER_ACCESS_REQUIRED);
         }
         if (!requestSnapshot.exists) {
           throw new StaffAccessError(404, "Access request not found", "request_missing");

@@ -156,6 +156,6 @@ describe("GitHub issue list for Admin reports", () => {
     await handler(req({ state: "open" }), response);
 
     expect(response.statusCode).toBe(403);
-    expect(response.body.error).toMatch(/admin access required/i);
+    expect(response.body.error).toBe("Admin or Manager access required");
   });
 });

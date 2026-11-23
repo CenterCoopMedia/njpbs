@@ -127,7 +127,7 @@ describe.each(targets)("preview authorization through stored principals: $collec
     it.each(["writer", "news-editor", "site-editor"])("refuses %s without creating work or a head", async uid => {
       const response = await request(preview.createCmsPreviewHandler(deps()), uid, { ...target, ...flags });
       expect(response).toMatchObject({ statusCode: 403, body: {
-        error: "Administrator access is required for retained or automatic previews",
+        error: "Admin or Manager access required for retained or automatic previews",
       } });
       for (const collection of ["cmsPreviewQueue", "cmsPreviewHeads", "admin_logs"]) {
         expect((await db.collection(collection).get()).empty).toBe(true);
