@@ -132,9 +132,8 @@ metadata on each matched attachment. The transaction checks the staged revision
 and version again before saving. Exact replays skip and changed metadata goes to
 review. Attachments with identical original bytes retain separate source IDs.
 
-The original files stay in the supplied directory. The command writes only
-server-only attachment metadata. Media library registration, variant generation,
-and delivery approval are tracked in [#370](https://github.com/CenterCoopMedia/njpbs/issues/370).
+The original files stay in the supplied directory. The command writes
+server-only attachment metadata.
 
 ## Check an approved batch
 
@@ -184,3 +183,53 @@ changes, review the new staged record before updating the manifest.
 The check reads staging data only. Building and validating the public artifacts,
 switching and returning generations, and measuring concurrent editorial
 publication remain in [#379](https://github.com/CenterCoopMedia/njpbs/issues/379).
+
+## Register approved assets in the media library
+
+Use the same manifest and originals after verification. Include the attachments
+whose original bytes and metadata are approved for public delivery. Registration
+uploads those bytes to the standard public media store and makes the attachments
+selectable in Boardwalk's image and PDF pickers in the General category. A story
+or page still follows its own editorial publishing workflow.
+
+Run the preview in the authorized operator shell with the same project and
+Firestore credential input.
+
+```sh
+node scripts/register-wordpress-archive-media.mjs approved.json originals --project "$ARCHIVE_PROJECT" 3<&0
+```
+
+Review the `plan-complete` row and any `review` rows. Before applying, confirm
+the media origin and R2 bucket belong to the selected project. Supply their
+standard CMS settings (`CMS_MEDIA_PUBLIC_ORIGIN`, `CMS_MEDIA_R2_ENDPOINT`, and
+`CMS_MEDIA_R2_BUCKET`) and the media store credentials through the operator
+environment. Apply also requires the Firestore permissions used by media uploads.
+
+```sh
+node scripts/register-wordpress-archive-media.mjs approved.json originals --project "$ARCHIVE_PROJECT" --apply 3<&0
+```
+
+- `register` identifies the CMS asset. Each source attachment keeps a stable ID
+  and its own metadata, including when two attachments contain the same bytes.
+- `skip` identifies an existing registration. Subsequent editorial edits are
+  preserved.
+- `review` identifies a missing original, an unsupported format, an ineligible
+  source, or a conflict with the verified staging record or media identity.
+
+Use `apply-complete` for the final counts. A `failed` row names the attachment
+and the reason that stopped apply. After correcting the cause, rerun the same
+manifest against the same target to reconcile saved records and immutable
+objects. The private media record keeps the source revision, original SHA-256,
+and the PDF page count when applicable. Images use the admitted original as the
+full-size asset and separate WebP thumbnails for smaller views. A `retryable`
+thumbnail status can be picked up by the standard media thumbnail backfill.
+
+Apply rechecks source eligibility in the media commit transaction. If eligibility
+has changed, it discards the upload under its ownership lease before reporting
+the attachment for review. A rerun also checks pending uploads for attachments
+that became ineligible after interruption. A `cleanup: wait-for-lease` row means
+another attempt still holds the receipt. Rerun the manifest after its lease
+expires. A `cleanup: discarded` row confirms removal. If the store refuses
+cleanup, the `registration-cleanup-required` failure names the attachment. An
+authorized operator must reconcile the pending upload receipt and its exact
+media object before repeating the import.

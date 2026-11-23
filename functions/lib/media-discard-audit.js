@@ -30,6 +30,7 @@ const DISCARD_REASONS = Object.freeze({
   capacity: "active_media_capacity",
   category: "invalid_media_category",
   ugcDecision: "ugc_review_decision_changed",
+  archiveEligibility: "archive_media_eligibility_changed",
   objectMissing: "final_object_missing",
 });
 
