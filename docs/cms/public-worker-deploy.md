@@ -66,6 +66,14 @@ then prove idle pointer, exact public root receipt, body bytes, family/withdrawa
 and media readiness. Failed proof retains the original attempt for diagnosis.
 No second uncoordinated public writer is permitted.
 
+During reconciliation, the read-only CMS diagnostics observer
+(`scripts/cms-diagnostics.mjs --firebase`) checks the candidate bound to the
+deployment pointer. The `candidateProbe` check reports its HTTP status, time to
+response headers and refresh outcome. A null status means the request returned
+no response. The probe uses the same candidate and version query as
+reconciliation. The reconciler still validates the complete receipt and lease
+before it can settle the deployment.
+
 ## Proof boundary
 
 Build/source tests, immutable upload readback, actual active deployment, public
