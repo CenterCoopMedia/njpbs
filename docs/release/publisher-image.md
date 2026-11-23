@@ -95,6 +95,6 @@ A development artifact contains only `receipt.json`: schema 1, `target`,
 bundles `functions/lib/publication-target.js`, whose development Worker name,
 origin and preview bucket are templates until rendering, and the withdrawal
 catalog keys derive from that Worker name; a config pointing at this unrendered
-checkout would write catalogs the development public Worker never reads. The
-development release builds its config from its own checkout rendered with the
-inputs that `deployment_input_sha256` records.
+checkout would write catalogs the development public Worker never reads. No
+development publisher deployment path exists yet; the artifact grants no
+deployment authority.
