@@ -58,23 +58,24 @@ export async function runReadOnlyOperator({ stage, run, refusal }) {
 export async function withOperatorDatabase({ stage, openCredential, openDatabase, run }) {
   stage("credential-open");
   const credential = openCredential();
-  let connection, failure;
+  let connection, result, failure;
   try {
     stage("credential-read");
     const account = await credential.read();
     stage("database-open");
     connection = await openDatabase(account);
-    return await run(connection.firestore);
+    result = await run(connection.firestore);
   } catch (error) {
     failure = { error };
-  } finally {
-    // Keep the first failure and its stage, and attempt both cleanups.
-    if (!failure) stage("credential-close");
-    try { credential.close(); }
-    catch (error) { failure ??= { error }; }
-    if (!failure && connection) stage("database-close");
-    try { await connection?.close(); }
-    catch (error) { failure ??= { error }; }
-    if (failure) throw failure.error;
   }
+
+  // Keep the first failure and its stage, and attempt both cleanups.
+  if (!failure) stage("credential-close");
+  try { credential.close(); }
+  catch (error) { failure ??= { error }; }
+  if (!failure && connection) stage("database-close");
+  try { await connection?.close(); }
+  catch (error) { failure ??= { error }; }
+  if (failure) throw failure.error;
+  return result;
 }
