@@ -138,6 +138,25 @@ describe("shared election source controls", () => {
       election: { date: "2027-11-02", dataset: "2027-general", rosterDigest: "b".repeat(64) }, raceIds: ["state-senate-09"],
     } }));
   });
+  it("retains valid AP mappings and photos when the same election roster changes", async () => {
+    const candidateIds = Object.fromEntries(roster.races[0].candidateIds.map((id, index) => [String(index + 1), id]));
+    const source = { kind: "ap" as const, mapping: { "100": { raceId: "us-senate", candidateIds } } };
+    const [candidate] = roster.races[0].candidateIds;
+    const photo = { assetId: "portrait-fixture", alt: "Synthetic portrait" };
+    const election = { date: "2026-11-03", dataset: "2026-general", rosterDigest: "c".repeat(64) };
+    const { api } = transport({ connection: connected({ config: { ...config, source, election,
+      raceIds: ["us-senate", "removed-race"], photos: { [candidate]: photo, "removed-candidate": photo },
+    } }) });
+    editor(api); await openConfig();
+    expect(screen.getByLabelText("Include New Jersey")).toBeChecked();
+    expect(screen.getByLabelText("AP race ID for New Jersey")).toHaveValue("100");
+    fireEvent.click(screen.getByRole("button", { name: "Save connection" }));
+    await waitFor(() => expect(api.mutate.mock.calls[0]?.[1]).toMatchObject({ action: "connect", config: {
+      election: { ...election, rosterDigest: "a".repeat(64) }, raceIds: ["us-senate"], source,
+    } }));
+    const request = api.mutate.mock.calls[0][1];
+    expect(request.action === "connect" && request.config.photos).toEqual({ [candidate]: photo });
+  });
   it("keeps source settings in the exit guard without auto-connecting", async () => {
     const { api } = transport(); editor(api); await openConfig(); chooseRace();
     expect(screen.getByLabelText("Source draft dirty")).toHaveTextContent("true");

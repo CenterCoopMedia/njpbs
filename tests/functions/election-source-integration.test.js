@@ -754,17 +754,24 @@ describe("Election source Auth/HTTP/Firestore and publication boundaries", () =>
     expect((await connection(current.id)).apStaging).toBeNull();
     expect((await connection(current.id)).lastGoodData.races).toHaveLength(2);
   });
-  it("paces two AP connections inside the shared key quota without delaying other source kinds", async () => {
+  it("paces two AP connections inside the shared key quota after a slow roster fetch", async () => {
     const first = await connect("cmsPages", "automatic", { kind: "ap", mapping: apMapping });
     const second = await connect("cmsPosts", "automatic", { kind: "ap", mapping: apMapping });
     await db.doc(poller.CONTROL).set({ schemaVersion: 1, ap: { enabled: true, requestsPerMinute: 2 } });
     sourceData = apFixture(); let time = Date.parse("2026-11-04T03:00:00Z");
-    const delays = [];
-    await poller.pollConnections({ firestore, now: () => new Date(time).toISOString(), fetchImpl: providerFetch,
+    const delays = [], requests = [];
+    const fetchImpl = async (url, options) => {
+      if (String(url) === provider.ROSTER_URL) time += 8000;
+      if (String(url).startsWith("https://api.ap.org/")) requests.push(time);
+      return providerFetch(url, options);
+    };
+    await poller.pollConnections({ firestore, now: () => new Date(time).toISOString(), fetchImpl,
       wait: async milliseconds => { delays.push(milliseconds); time += milliseconds; } });
     expect((await connection(first.id)).lastGoodDigest).not.toBeNull();
     expect((await connection(second.id)).lastGoodDigest).not.toBeNull();
     expect(delays).toEqual([5000]);
+    expect(requests).toHaveLength(2);
+    expect(requests[1] - requests[0]).toBe(5000);
     expect((await db.doc("system/electionResultApBudget").get()).data().used).toBe(2);
   });
   it("polls on the next scheduler minute after a slow successful check, without forcing it due", async () => {

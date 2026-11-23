@@ -21,12 +21,15 @@ function apDraftFrom(config: ElectionSourceConfig): ApDraft {
 }
 const initialConfig = (): ElectionSourceConfig => ({ source: { kind: "repo" }, mode: "approve-once", raceIds: [], maxAgeSeconds: 300 });
 const sameElection = (a: ElectionSelection, b: ElectionSelection) => a.date === b.date && a.dataset === b.dataset;
-function withReviewedRoster(config: ElectionSourceConfig, election: ElectionSelection, rosterDigest: string): ElectionSourceConfig {
-  const previous = config.election ?? DEFAULT_ELECTION;
-  const reset = !sameElection(election, previous) || config.election !== undefined && config.election.rosterDigest !== rosterDigest;
-  return { ...config, election: { ...election, rosterDigest }, ...(reset ? {
-    raceIds: [], photos: {}, source: config.source.kind === "ap" ? { kind: "ap", mapping: {} } : config.source,
-  } : {}) };
+function withReviewedRoster(config: ElectionSourceConfig, election: ElectionSelection, roster: ElectionRoster, rosterDigest: string): ElectionSourceConfig {
+  const next = { ...config, election: { ...election, rosterDigest } };
+  if (!sameElection(election, config.election ?? DEFAULT_ELECTION)) {
+    return { ...next, raceIds: [], photos: {}, source: config.source.kind === "ap" ? { kind: "ap", mapping: {} } : config.source };
+  }
+  const raceIds = config.raceIds.filter(id => roster.races.some(race => race.id === id));
+  const photos = config.photos && Object.fromEntries(Object.entries(config.photos).filter(([id]) =>
+    roster.candidates.some(candidate => candidate.id === id && raceIds.includes(candidate.raceId))));
+  return { ...next, raceIds, ...(photos ? { photos } : {}) };
 }
 const time = (value: string | null) => value ? new Date(value).toLocaleString("en-US", { timeZone: "America/New_York", timeZoneName: "short" }) : "Not yet";
 type MediaProps = Pick<ComponentProps<typeof FieldRenderer>, "loadMedia" | "mediaPickerUnavailable" | "uploadMedia" | "mediaCategories" | "defaultUploadCategory" | "canUploadCategory" | "onMediaPickerDirtyChange">;
@@ -115,10 +118,12 @@ export function ElectionResultsSourcePanel({ blockId, title, draftState, onUseMa
     const { date, dataset } = original.election ?? DEFAULT_ELECTION;
     const election = { date, dataset };
     const value = result.roster && result.rosterDigest && !original.rehearsal && !original.apRehearsal
-      ? withReviewedRoster(original, election, result.rosterDigest) : original;
+      ? withReviewedRoster(original, election, result.roster, result.rosterDigest) : original;
     const draft = apDraftFrom(value);
     setElectionInput(election);
-    setConfig(value); setApDraft(draft); setConfigBaseline(JSON.stringify({ config: value, apDraft: draft })); setConfigVersion(result.connection?.version ?? 0); setConfigContentVersion(Math.max(result.documentVersion ?? 0, host?.version ?? 0)); setNotice("");
+    setConfig(value); setApDraft(draft); setConfigBaseline(JSON.stringify({ config: value, apDraft: draft })); setConfigVersion(result.connection?.version ?? 0); setConfigContentVersion(Math.max(result.documentVersion ?? 0, host?.version ?? 0));
+    setNotice(original.election && value.election?.rosterDigest !== original.election.rosterDigest
+      ? "The roster changed. Review the selected races and candidate IDs before saving." : "");
   }
   async function loadElectionRoster() {
     if (!config) return;
@@ -128,8 +133,8 @@ export function ElectionResultsSourcePanel({ blockId, title, draftState, onUseMa
     catch (cause) { if (cause instanceof Error) setError(cause.message); return; }
     const result = await reload(true, election);
     if (!result?.roster || !result.rosterDigest) return;
-    const next = withReviewedRoster(config, election, result.rosterDigest);
-    if (next.raceIds !== config.raceIds) setApDraft({});
+    const next = withReviewedRoster(config, election, result.roster, result.rosterDigest);
+    if (!sameElection(election, config.election ?? DEFAULT_ELECTION)) setApDraft({});
     setConfig(next);
     setNotice("Roster loaded. Review the candidates and select the races to include.");
   }
