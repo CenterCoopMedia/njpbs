@@ -48,11 +48,15 @@ function checkFunctions(ts, cwd, sizes) {
     if (diagnostic.category !== ts.DiagnosticCategory.Error) continue;
     const file = diagnostic.file ? relative(cwd, diagnostic.file.fileName) : null;
     if (file && !checked.has(file)) continue;
-    const line = diagnostic.start === undefined ? undefined
-      : diagnostic.file?.getLineAndCharacterOfPosition(diagnostic.start).line;
+    const { file: sourceFile, start, length = 0 } = diagnostic;
+    const line = start === undefined ? undefined : sourceFile?.getLineAndCharacterOfPosition(start).line;
     const message = ts.flattenDiagnosticMessageText(diagnostic.messageText, "\n").replaceAll(cwd + "/", "");
-    const source = diagnostic.start === undefined ? message
-      : diagnostic.file?.text.slice(diagnostic.start, diagnostic.start + (diagnostic.length ?? 0)).replace(/\s+/g, " ");
+    const lineStarts = sourceFile?.getLineStarts();
+    // The flagged line plus the flagged text, so two errors on the same name differ.
+    const source = line === undefined ? message : [
+      sourceFile.text.slice(lineStarts[line], lineStarts[line + 1]),
+      sourceFile.text.slice(start, start + length),
+    ].join(" ").replace(/\s+/g, " ").trim();
     findings.push({ file, line: line === undefined ? null : line + 1, rule: "TS" + diagnostic.code, message, source });
   }
   return { files: files.length, findings };
@@ -111,7 +115,7 @@ export function compare(baseline, current, renames = new Map()) {
   return {
     lint: addedDiagnostics(errors(baseline.lint), errors(current.lint), renames, "message"),
     // A type message quotes the callee's signature, so a signature change elsewhere
-    // would relabel existing errors as new. The flagged source text does not change.
+    // would relabel existing errors as new. The flagged line and text do not change.
     types: addedDiagnostics(baseline.types.findings, current.types.findings, renames, "source"),
   };
 }
