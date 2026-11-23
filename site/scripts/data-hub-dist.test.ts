@@ -5,7 +5,7 @@ import { parse, type DefaultTreeAdapterMap } from "parse5";
 import * as pagefind from "pagefind";
 import { decodePagefindFragment } from "../src/lib/pagefind-index";
 import { dataHubPageEnabled } from "../src/lib/build-target";
-import snapshot from "../src/data/data-hub-revisions/2026-11-09.json";
+import snapshot from "../src/data/data-hub-revisions/2026-11-19.json";
 
 const dist = fileURLToPath(new URL("../dist/", import.meta.url));
 
