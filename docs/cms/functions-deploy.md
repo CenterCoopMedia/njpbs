@@ -133,9 +133,29 @@ verified credential file when supplied, without enrolling a gcloud account.
 Gen 2 event trigger's declared runtime account, or the Compute default account
 when none is declared. It requires an unconditional `roles/eventarc.eventReceiver`
 grant on the project and `roles/run.invoker` on the project or target Cloud Run
-service. Missing grants require separate authorization. The checker does not add
-them. A new service can have pending invocation proof before deployment;
-post-deploy checks must confirm its actual trigger account and invocation grant.
+service. A new service can have pending invocation proof before deployment,
+because its Cloud Run service exists only after the Functions deploy. The
+post-deploy step confirms each trigger's actual account matches the release
+source, adds the missing `roles/run.invoker` binding on that one service
+(additive, unconditional), and then checks the grant. The check stays because a
+trigger that cannot be invoked drops its events silently. The deploy never adds
+receiver grants or project-wide grants.
+
+The deploy identity holds a custom role with only `run.services.getIamPolicy`
+and `run.services.setIamPolicy`. When the release adds a trigger service, the
+pre-deploy check tests these permissions before any mutation, so a missing role
+stops the release at preflight rather than after the Functions deploy. Set it up
+once per project (`njpbs-site`, `njpbs-site-dev`) with an owner login, using that
+project's deploy service account:
+
+```sh
+gcloud iam roles create cmsEventInvokerGranter --project=PROJECT \
+  --title="CMS event trigger invoker granter" --stage=GA \
+  --permissions=run.services.getIamPolicy,run.services.setIamPolicy
+gcloud projects add-iam-policy-binding PROJECT --condition=None \
+  --member="serviceAccount:DEPLOY_SERVICE_ACCOUNT" \
+  --role=projects/PROJECT/roles/cmsEventInvokerGranter
+```
 
 ## Video replacement cleanup
 

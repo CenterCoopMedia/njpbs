@@ -150,6 +150,24 @@ async function firstDeployFunctionNames() {
   } catch { throw new FunctionsDeployInventoryError("Complete nonempty Functions inventory required for first deployment"); }
 }
 
+// The post-deploy step grants invocation on new trigger services. Without this
+// permission it fails after Functions deploy, leaving Functions new and Admin old.
+const INVOKER_GRANT_PERMISSIONS = ["run.services.getIamPolicy", "run.services.setIamPolicy"];
+async function requireInvokerGrantPermission() {
+  const token = gcloud(["auth", "print-access-token"]);
+  let granted = [];
+  try {
+    const response = await fetch(`https://cloudresourcemanager.googleapis.com/v1/projects/${PROJECT}:testIamPermissions`, {
+      method: "POST", headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+      body: JSON.stringify({ permissions: INVOKER_GRANT_PERMISSIONS }), redirect: "error", signal: AbortSignal.timeout(30_000) });
+    if (response.ok) granted = (await response.json()).permissions ?? [];
+    else await response.body?.cancel();
+  } catch { /* Reported below without provider response details. */ }
+  if (!INVOKER_GRANT_PERMISSIONS.every(permission => granted.includes(permission))) {
+    throw new FunctionsDeployInventoryError(`New event trigger services need an invoker grant after deployment; the deploy identity needs ${INVOKER_GRANT_PERMISSIONS.join(" and ")} on ${PROJECT}`);
+  }
+}
+
 function requirePostDeployCredential(project, development) {
   let valid = false;
   try {
@@ -214,9 +232,19 @@ export async function main(sourceRoot = new URL("../", import.meta.url), { preDe
       const prefix = `projects/${project}/locations/${region}/services/`;
       const serviceName = service.startsWith(prefix) ? service.slice(prefix.length) : "";
       if (!/^[a-z][a-z0-9-]{0,62}$/.test(serviceName)) throw new FunctionsDeployInventoryError(`Could not identify the Cloud Run service for event trigger ${name}`);
-      const policy = await read(["run", "services", "get-iam-policy", serviceName, `--region=${region}`, `--project=${project}`, "--format=json"]);
+      let policy = await read(["run", "services", "get-iam-policy", serviceName, `--region=${region}`, `--project=${project}`, "--format=json"]);
       if (!eventRole(eventPolicy(policy), account, "roles/run.invoker")) {
-        throw new FunctionsDeployInventoryError(`Event trigger ${name} needs an authorized grant: gcloud run services add-iam-policy-binding ${serviceName} --member=serviceAccount:${account} --role=roles/run.invoker --condition=None --region=${region} --project=${project}`);
+        // A new trigger's service exists only after this deploy, so the release
+        // grants the account its reviewed source declares. The binding is additive.
+        try {
+          policy = execFileSync("gcloud", ["run", "services", "add-iam-policy-binding", serviceName,
+            `--member=serviceAccount:${account}`, "--role=roles/run.invoker", "--condition=None",
+            `--region=${region}`, `--project=${project}`, "--format=json"],
+          { encoding: "utf8", stdio: ["ignore", "pipe", "pipe"], timeout: 30000 });
+        } catch {
+          throw new FunctionsDeployInventoryError(`Could not grant roles/run.invoker on ${serviceName} to serviceAccount:${account} for event trigger ${name}; the deploy identity needs run.services.setIamPolicy`);
+        }
+        console.log(`Granted roles/run.invoker on ${serviceName} for event trigger ${name}`);
       }
       policies.set(`${name}:${region}`, policy);
     }
@@ -227,6 +255,7 @@ export async function main(sourceRoot = new URL("../", import.meta.url), { preDe
   const existingNames = preDeploy ? await firstDeployFunctionNames() : undefined;
   const pending = checkEventTriggerIam(events, () => gcloud(["projects", "get-iam-policy", PROJECT, "--format=json"]),
     requirement => readEventServicePolicy(requirement, { allowFirstDeploy: preDeploy, existingNames, postDeploy }), { allowFirstDeploy: preDeploy });
+  if (pending.length) await requireInvokerGrantPermission();
   console.log(`Verified event receiver IAM for ${events.length} Functions; ${pending.length} new service invocation grants require post-deploy verification`);
   const requirements = secretRequirements(source, number);
   checkSecretIam(requirements, secret => gcloud([
