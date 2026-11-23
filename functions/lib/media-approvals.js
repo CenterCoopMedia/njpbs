@@ -29,11 +29,15 @@ function projectApproval(snapshot) {
   return approvalProjection(snapshot.id, snapshot.data());
 }
 
+function currentVersions(target, asset) {
+  return target.ref.backend === "r2" ? asset.approvalVersions : sourceMediaApprovalVersions(asset);
+}
+
 async function readMediaApprovals({ firestore, target, cursor }) {
   const items = approvalItems(firestore, target);
   return firestore.runTransaction(async (transaction) => {
     const asset = target.assertSnapshot(await transaction.get(target.reference));
-    const versions = sourceMediaApprovalVersions(asset);
+    const versions = currentVersions(target, asset);
     let history = items.orderBy("approvedAt", "desc").limit(PAGE_SIZE + 1);
     if (cursor) {
       const previous = await transaction.get(items.doc(cursor));
@@ -62,9 +66,9 @@ async function recordMediaApproval({ firestore, target, actor, approval, authorN
   return firestore.runTransaction(async (transaction) => {
     const [assetSnapshot, existing] = await transaction.getAll(target.reference, reference);
     const asset = target.assertSnapshot(assetSnapshot);
-    if (sourceMediaApprovalVersions(asset)[rendition] !== version) {
+    if (currentVersions(target, asset)[rendition] !== version) {
       throw new MediaFeedbackValidationError(
-        "The video file changed. Reopen it before recording approval.", 409, "media_approval_version_changed",
+        "The file changed. Reopen it before recording approval.", 409, "media_approval_version_changed",
       );
     }
     // A retry or a concurrent approval for this purpose preserves the first decision.

@@ -371,7 +371,8 @@ export function VideoDetailsInspector({
 
       {approvalVersions && <InspectorSection id="media-approvals" title="Approvals" defaultOpen={false} mountWhenOpen>
         <MediaApprovals key={JSON.stringify([asset.sourceId, asset.id, approvalVersions.original, approvalVersions.viewingCopy])}
-          sourceId={asset.sourceId} assetId={asset.id} versions={approvalVersions} getIdToken={getIdToken} locked={busy} />
+          mediaRef={{ backend: "s3", sourceId: asset.sourceId, id: asset.id }}
+          versions={approvalVersions} getIdToken={getIdToken} locked={busy} />
       </InspectorSection>}
   </>;
   const fileFields = <>

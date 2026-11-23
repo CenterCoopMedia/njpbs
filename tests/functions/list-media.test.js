@@ -87,6 +87,7 @@ describe("cmsListMedia handler", () => {
             id: "upload-one",
             data: () => stored("upload-one", "news", {
               source: "upload",
+              contentHash: "a".repeat(64),
               altTextGenerated: true,
               thumbnails: [{
                 width: 480,
@@ -111,6 +112,7 @@ describe("cmsListMedia handler", () => {
     const result = await readMediaAssetSummaries(firestore);
 
     expect(select.mock.calls[0]).toContain("source");
+    expect(select.mock.calls[0]).toContain("contentHash");
     expect(select.mock.calls[0]).toContain("altTextGenerated");
     expect(select.mock.calls[0]).toContain("thumbnails");
     expect(select.mock.calls[0]).toContain("animated");
@@ -118,6 +120,7 @@ describe("cmsListMedia handler", () => {
       id: "upload-one",
       source: "upload",
       altTextGenerated: true,
+      approvalVersions: { original: expect.stringMatching(/^[a-f0-9]{64}$/), viewingCopy: null },
       thumbnails: [{
         width: 480,
         height: 320,

@@ -585,7 +585,70 @@ describe("media feedback API", () => {
     overrides,
   );
 
-  describe("version approvals", () => {
+  describe("library file approvals", () => {
+    const list = (ref = ASSET_REF, currentActor) => invoke(createCmsGetMediaReviewHandler,
+      { schemaVersion: 1, ref, approvalHistory: {} }, currentActor);
+
+    it("offers history and refuses approval when an earlier image has no recorded file identity", async () => {
+      const result = await list();
+      expect(result.statusCode, JSON.stringify(result.body)).toBe(200);
+      expect(result.body).toMatchObject({ versions: { original: null, viewingCopy: null }, current: [], history: [] });
+      const save = await saveReview({ approval: { rendition: "original", purpose: "editorial", version: "a".repeat(64) } });
+      expect(save.statusCode).toBe(409);
+      expect(save.body.code).toBe("media_approval_version_changed");
+    });
+
+    it("keeps image approvals separate by rendition and purpose and retains history after replacement", async () => {
+      const reference = db.doc("media_assets/asset-1");
+      const masterHash = "b".repeat(64);
+      await reference.update({
+        contentHash: "a".repeat(64),
+        master: { contentHash: masterHash, key: `masters/bb/${masterHash}.jpg`,
+          mimeType: "image/jpeg", retained: true, sizeBytes: 1024, width: 100, height: 100 },
+      });
+      const { versions } = (await list()).body;
+      const editorial = { rendition: "viewingCopy", purpose: "editorial", version: versions.viewingCopy };
+      const first = await saveReview({ approval: editorial });
+      expect(first.statusCode, JSON.stringify(first.body)).toBe(200);
+      expect(first.body.approval).toMatchObject({ ...editorial, originalName: "feedback.png", approvedByName: "Sam Staff" });
+      expect((await saveReview({ approval: { ...editorial, rendition: "original" } })).statusCode).toBe(409);
+      const original = { rendition: "original", purpose: "technical", version: versions.original };
+      expect((await saveReview({ approval: original }, actor("staff-2"))).statusCode).toBe(200);
+      const technical = { ...editorial, purpose: "technical" };
+      expect((await saveReview({ approval: technical }, actor("staff-2"))).statusCode).toBe(200);
+
+      await reference.update({ version: 4, description: "Metadata only" });
+      expect((await list()).body.current).toEqual(expect.arrayContaining([
+        first.body.approval, expect.objectContaining(original), expect.objectContaining(technical),
+      ]));
+      await reference.update({ version: 5, contentHash: "c".repeat(64), originalName: "replacement.png", master: null });
+      const fresh = (await list()).body;
+      expect(fresh.versions.original).not.toBe(versions.original);
+      expect(fresh.versions.viewingCopy).toBeNull();
+      expect(fresh.current).toEqual([]);
+      expect(fresh.history).toMatchObject([technical, original, first.body.approval]);
+      expect((await saveReview({ approval: editorial })).statusCode).toBe(409);
+    });
+
+    it.each([
+      ["audio", "audio/wav", "interview.wav"],
+      ["document", "application/pdf", "notice.pdf"],
+    ])("checks access before reading or recording approval for a %s original", async (kind, mimeType, originalName) => {
+      await db.doc("media_assets/asset-1").set(storedAsset({
+        kind, mimeType, originalName, width: null, height: null, contentHash: "d".repeat(64),
+      }));
+      const result = await list();
+      expect(result.statusCode, JSON.stringify(result.body)).toBe(200);
+      expect(result.body.versions).toEqual({ original: expect.stringMatching(/^[0-9a-f]{64}$/), viewingCopy: null });
+      const request = { approval: { rendition: "original", purpose: "editorial", version: result.body.versions.original } };
+      const denied = actor("unassigned", []);
+      expect((await list(ASSET_REF, denied)).statusCode).toBe(404);
+      expect((await saveReview(request, denied)).statusCode).toBe(404);
+      expect((await saveReview(request)).body.approval).toMatchObject({ ...request.approval, originalName });
+    });
+  });
+
+  describe("video version approvals", () => {
     const list = (currentActor, overrides, cursor) => invoke(createCmsGetMediaReviewHandler, {
       schemaVersion: 1, ref: SOURCE_REF, approvalHistory: cursor ? { cursor } : {},
     }, currentActor, overrides);

@@ -1,8 +1,33 @@
 "use strict";
 
+const { createHash } = require("node:crypto");
 const { MASTER_EXTENSIONS, retainedOriginal } = require("./media-master-contract");
 
 const ORIGINAL_FORMATS = new Set(Object.values(MASTER_EXTENSIONS).map(extension => extension.toUpperCase()));
+const SHA256 = /^[a-f0-9]{64}$/;
+
+function approvalToken(value) {
+  return typeof value === "string" && SHA256.test(value) ? value : null;
+}
+
+function mediaApprovalVersions(id, data, fromSummary) {
+  if (fromSummary && data.approvalVersions) {
+    return {
+      original: approvalToken(data.approvalVersions.original),
+      viewingCopy: approvalToken(data.approvalVersions.viewingCopy),
+    };
+  }
+  const hash = approvalToken(data.contentHash);
+  // Built-in files are served at paths that can change bytes on a site release.
+  if (!hash || data.source === "site_seed") return { original: null, viewingCopy: null };
+  const master = data.kind === "image" && data.source === "upload" ? retainedOriginal(data.master) : null;
+  const token = (rendition, contentHash) => createHash("sha256")
+    .update(JSON.stringify(["library-media-approval", id, rendition, contentHash])).digest("hex");
+  return {
+    original: token("original", master?.contentHash ?? hash),
+    viewingCopy: master ? token("viewingCopy", hash) : null,
+  };
+}
 
 // Staff see only the original's format. Its key, hash, size and dimensions stay server-side.
 function originalDownload(data) {
@@ -359,7 +384,7 @@ function mediaDisplayUrl(asset, displayWidth = 480, displayHeight = 0) {
   return selected?.url ?? asset.url;
 }
 
-function mediaAssetSummary(id, data) {
+function mediaAssetSummary(id, data, { fromSummary = false } = {}) {
   if (!isMediaAssetId(id) || !plainObject(data) || data.lifecycle !== "active")
     return null;
   if (!Number.isSafeInteger(data.version) || data.version < 1) return null;
@@ -446,6 +471,7 @@ function mediaAssetSummary(id, data) {
     ...(typeof data.animated === "boolean" ? { animated: data.animated } : {}),
     // Preserve availability and format when cmsListMedia projects an already-safe summary again.
     ...originalDownload(data),
+    approvalVersions: mediaApprovalVersions(id, data, fromSummary),
     ...(voiceover ? { voiceover, voiceoverTakeId: data.voiceoverTakeId } : {}),
     source:
       data.source === "upload" || data.source === "site_seed" || data.source === "voiceover"

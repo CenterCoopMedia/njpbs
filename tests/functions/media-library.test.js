@@ -87,7 +87,7 @@ const assets = [
 ];
 
 describe("media library contract", () => {
-  it("projects only original availability and preserves it through a second list projection", () => {
+  it("projects original availability and opaque approval tokens through a second list projection", () => {
     const contentHash = "b".repeat(64);
     const master = { retained: true, contentHash, key: `masters/bb/${contentHash}.jpg`,
       mimeType: "image/jpeg", sizeBytes: 8_000_000, width: 6000, height: 4000 };
@@ -95,7 +95,11 @@ describe("media library contract", () => {
     const summary = mediaAssetSummary(raw.id, raw);
     expect(summary.originalAvailable).toBe(true);
     expect(summary.originalFormat).toBe("JPG");
-    expect(mediaAssetSummary(summary.id, summary)).toEqual(summary);
+    expect(summary.approvalVersions.original).toMatch(/^[a-f0-9]{64}$/);
+    expect(summary.approvalVersions.viewingCopy).toMatch(/^[a-f0-9]{64}$/);
+    expect(summary.approvalVersions.viewingCopy).not.toBe(summary.approvalVersions.original);
+    expect(JSON.stringify(summary)).not.toContain(contentHash);
+    expect(mediaAssetSummary(summary.id, summary, { fromSummary: true })).toEqual(summary);
     const pngHash = "c".repeat(64);
     const png = { ...master, contentHash: pngHash, key: `masters/cc/${pngHash}.png`, mimeType: "image/png" };
     expect(mediaAssetSummary(raw.id, { ...raw, master: png }).originalFormat).toBe("PNG");
@@ -108,7 +112,9 @@ describe("media library contract", () => {
       expect(mediaAssetSummary(raw.id, { ...raw, master: invalid, originalAvailable: true }))
         .not.toHaveProperty("originalAvailable");
     }
-    expect(mediaAssetSummary(raw.id, { ...raw, source: "site_seed" })).not.toHaveProperty("originalAvailable");
+    const builtIn = mediaAssetSummary(raw.id, { ...raw, source: "site_seed" });
+    expect(builtIn).not.toHaveProperty("originalAvailable");
+    expect(builtIn.approvalVersions).toEqual({ original: null, viewingCopy: null });
   });
   it("keeps uploaded audio out of Images and admits it only to Audio or exact-id reads", () => {
     const audio = { ...assets[0], id: "interview", kind: "audio", mimeType: "audio/wav", width: null, height: null };
@@ -211,6 +217,7 @@ describe("media library contract", () => {
       metadataUpdateRequested: false,
       categories: ["news"],
       source: "upload",
+      approvalVersions: { original: null, viewingCopy: null },
       etag: formatMediaEtag("studio-one", 2),
     });
     expect(summary).not.toHaveProperty("contentHash");
