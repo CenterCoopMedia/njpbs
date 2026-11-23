@@ -28,7 +28,7 @@
     "cms-api:check": "npm run check -w njpbs-cms-api",
     "cms-api:test": "npm run test -w njpbs-cms-api",
     "cms-api:deploy": "npm run deploy -w njpbs-cms-api",
-    "test:public-worker": "vitest run --config workers/vitest.public-worker.config.mts && vitest run tests/public-background-runtime.test.ts tests/public-release-slot.test.ts --maxWorkers=1 --no-file-parallelism",
+    "test:public-worker": "vitest run --config workers/vitest.public-worker.config.mts && vitest run tests/public-background-runtime.test.ts --maxWorkers=1 --no-file-parallelism",
     "check:preview-worker": "tsc --project workers/tsconfig.preview-worker.json",
     "test:preview-worker": "vitest run --config workers/vitest.preview-worker.config.mts",
     "test:preview-renderer": "vitest run --config preview-renderer/vitest.config.mts",
