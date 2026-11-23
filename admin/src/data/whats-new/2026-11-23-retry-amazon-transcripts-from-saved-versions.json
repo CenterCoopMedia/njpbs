@@ -1,0 +1,7 @@
+{
+  "date": "2026-11-23",
+  "kind": "fixed",
+  "title": "Retry Amazon transcription from a saved version",
+  "body": "If an earlier Amazon request has ended, you can request a new Amazon transcript from the saved version you are viewing. If the earlier request still needs confirmation, select it in the saved transcript list.",
+  "prs": []
+}
