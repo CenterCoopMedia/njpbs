@@ -14,6 +14,10 @@ function createPostBackgroundStorage(bucketName = process.env.NO_BUILD_POST_BACK
     return getStorage(app).bucket(bucketName).file(key);
   }
   return {
+    /**
+     * @param {string} operationId
+     * @param {{ signal?: AbortSignal }} [options]
+     */
     async deleteExternalInputs(operationId, { signal } = {}) {
       if (typeof operationId !== "string" || !/^[A-Za-z0-9]{20}$/.test(operationId)) {
         throw new Error("Invalid external refresh operation");
