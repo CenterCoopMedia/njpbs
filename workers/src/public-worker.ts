@@ -11,6 +11,7 @@ import {
   renderBlock,
 } from "../../packages/content-core/src/content-render";
 import { contentBlockHtml, renderContentGroups } from "../../packages/content-core/src/content-row-render";
+import { createReadingSections } from "../../packages/content-core/src/reading-sections";
 import { contactPageFallback } from "../../packages/content-core/src/contact-page-fallback";
 import {
   groupLinkCardDirectories,
@@ -68,7 +69,7 @@ type PublicWorkerEnv = Omit<Env, "CMS_API"> & {
 type LiveContactPage = Extract<PublicPageProjection, { state: "live" }>["page"];
 type ContactRenderPage = Pick<
   LiveContactPage,
-  "title" | "description" | "childDirected" | "noindex" | "seo" | "social" | "blocks" | "assets" | "heroBackgroundImage" | "heroBackgroundPosition"
+  "title" | "description" | "childDirected" | "noindex" | "seo" | "social" | "blocks" | "assets" | "heroBackgroundImage" | "heroBackgroundPosition" | "publishedLayout"
 >;
 type ContactRenderSource =
   | { kind: "cms"; sourceVersion: number }
@@ -290,12 +291,14 @@ function renderedBlocks(
   // The runtime Contact page reuses a built shell that may load analytics, so it
   // never plays a video (VPPA, #2751). A video block on Contact renders nothing.
   const blocks = page.blocks.filter((block) => block.type !== "video");
+  const readingSections = page.publishedLayout === "reading" ? createReadingSections() : undefined;
   const groups = renderContentGroups(blocks, (block, index) => {
     const generatedHeadingLevel = generatedHeadingLevelAt(blocks, index);
     return {
       generatedHeadingLevel,
       html: renderBlock(block, {
         generatedHeadingLevel,
+        sectionHeadingId: readingSections?.addHeading,
         resolveAsset: (assetId) => page.assets[assetId] ?? null,
       }),
     };
@@ -304,7 +307,7 @@ function renderedBlocks(
     item.kind === "link-card-directory"
       ? renderLinkCardDirectory(item.groups)
       : contentBlockHtml(item.group));
-  return `<div class="cms-page__blocks cms-page__blocks--within-frame">${body.join("")}</div>`;
+  return `<div class="cms-page__blocks cms-page__blocks--within-frame${readingSections ? " reading-body" : ""}">${readingSections?.renderIndex() ?? ""}${body.join("")}</div>`;
 }
 
 function renderedHeroBackground(page: ContactRenderPage): string {

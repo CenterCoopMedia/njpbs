@@ -15,6 +15,7 @@ const additionalFieldLabels: Record<string, string> = {
   dataHubReporting: "Data Hub reporting settings",
   keyArt: "Program artwork URL",
   pageTheme: "Page theme",
+  publishedLayout: "Published layout",
   homeHero: "Home hero",
   homeHeroTitle: "Home hero title",
   homeHeroSubtitle: "Home hero summary",

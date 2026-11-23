@@ -123,6 +123,14 @@ describe("CMS content mode", () => {
 });
 
 describe("projectCmsPage", () => {
+  it("keeps a layout edit in the draft until it is published", () => {
+    const doc = publishedPage({ publishedLayout: "reading" });
+    expect(projectCmsPage(doc, { mode: "published", now: NOW })?.publishedLayout).toBeUndefined();
+    expect(projectCmsPage(doc, { mode: "draft", pageId: "contact", now: NOW })?.publishedLayout).toBe("reading");
+    (doc.published as { metadata: Record<string, unknown> }).metadata.publishedLayout = "reading";
+    expect(projectCmsPage({ ...doc, publishedLayout: "standard" }, { mode: "published", now: NOW })?.publishedLayout).toBe("reading");
+  });
+
   it("builds a public page only from its immutable snapshot", () => {
     const page = projectCmsPage(publishedPage(), {
       mode: "published",

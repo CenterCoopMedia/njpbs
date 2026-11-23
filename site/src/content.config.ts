@@ -33,7 +33,7 @@ import type {
   PageBlock,
   RichTextDoc,
 } from "../../packages/content-core/src/content-model";
-import { safeHref } from "../../packages/content-core/src/content-model";
+import { PUBLISHED_LAYOUTS, safeHref } from "../../packages/content-core/src/content-model";
 import {
   isDatasetFigures,
   type DatasetFigures,
@@ -122,6 +122,7 @@ const cmsPages = defineCollection({
     template: z.enum(["home", "programLanding", "genericPage"]),
     title: z.string(),
     pageTheme: z.enum(["default", "nj-decides"]).optional(),
+    publishedLayout: z.enum(PUBLISHED_LAYOUTS).optional(),
     description: z.string(),
     heroBackgroundImage: z.string().optional(),
     heroBackgroundPosition: z.enum(["center", "top", "bottom"]).optional(),
@@ -197,6 +198,7 @@ const cmsPosts = defineCollection({
     coverageLabelId: z.string().regex(/^[a-z0-9][a-z0-9-]{0,63}$/).optional(),
     showInHomeHero: z.boolean().optional(),
     disableStoryCtas: z.boolean().optional(),
+    publishedLayout: z.enum(PUBLISHED_LAYOUTS).optional(),
     postSidebar: z.custom<PostSidebar>(isPostSidebar).optional(),
     summary: z.string(),
     excerpt: z.string(),

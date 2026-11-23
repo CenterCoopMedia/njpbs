@@ -217,6 +217,12 @@ export interface RenderRichTextOptions {
   minimumHeadingLevel?: number;
   /** Return an id for an authored heading, or undefined to leave it unanchored. */
   headingId?: (text: string, level: number) => string | undefined;
+  focusHeadingTargets?: boolean;
+}
+
+export function headingTargetAttributes(rawId?: string, focusable = false): string {
+  const id = rawId?.trim();
+  return id ? ` id="${escapeHtml(id)}"${focusable ? ' tabindex="-1"' : ""}` : "";
 }
 
 /** Resolve one stored rich-text heading to the rank emitted in its current context. */
@@ -267,10 +273,8 @@ function renderNode(node: RichTextNode, options: RenderRichTextOptions): string 
     case "heading": {
       // Clamp to h1..h6 so a malformed level can never emit an invalid tag.
       const level = resolvedRichTextHeadingLevel(node.attrs?.level, options);
-      const rawId = options.headingId?.(plainText(node.content), level);
-      const id = rawId?.trim();
-      const idAttribute = id ? ` id="${escapeHtml(id)}"` : "";
-      return `<h${level}${idAttribute}>${renderChildren(node.content, options)}</h${level}>`;
+      const target = headingTargetAttributes(options.headingId?.(plainText(node.content), level), options.focusHeadingTargets);
+      return `<h${level}${target}>${renderChildren(node.content, options)}</h${level}>`;
     }
     case "bulletList":
       return `<ul>${renderChildren(node.content, options)}</ul>`;
@@ -589,12 +593,20 @@ export function isPageTheme(value: unknown): value is PageTheme {
   return typeof value === "string" && PAGE_THEMES.includes(value as PageTheme);
 }
 
+export const PUBLISHED_LAYOUTS = ["standard", "reading"] as const;
+export type PublishedLayout = (typeof PUBLISHED_LAYOUTS)[number];
+
+export function isPublishedLayout(value: unknown): value is PublishedLayout {
+  return value === "standard" || value === "reading";
+}
+
 export interface PageMetadata extends DiscoverabilityMetadata, HeroBackgroundMetadata, ContentLinkMetadata {
   title: string;
   /** Exclude child-directed content from all site analytics, at every URL. */
   childDirected?: boolean;
   /** Optional presentation theme. Absence retains the standard page design. */
   pageTheme?: PageTheme;
+  publishedLayout?: PublishedLayout;
   slug?: string;
   previousSlugs?: string[];
   description?: string;
@@ -625,6 +637,7 @@ export interface PostPublishedMetadata
     HeroBackgroundMetadata,
     EditorialDateFields {
   type: "post";
+  publishedLayout?: PublishedLayout;
   /** Set by the archive publication workflow on approved historical stories. */
   spotlightArchive?: true;
   /** Original UTC time from the archive export, when available. */
@@ -696,6 +709,7 @@ export interface PostRecord
     DiscoverabilityMetadata,
     EditorialDateFields {
   type: "post";
+  publishedLayout?: PublishedLayout;
   liveBlog?: import("./live-blog-draft").LiveBlogDraft;
   /** Show the NJ Spotlight News publication label. Defaults off. */
   spotlightNews?: boolean;
@@ -779,6 +793,7 @@ export function keyOf(record: EditorialBase): string {
 export interface PageSingleton extends EditorialBase, ContentLinkMetadata {
   title: string;
   pageTheme?: PageTheme;
+  publishedLayout?: PublishedLayout;
   blocks: PageBlock[];
   homeCompositionVersion?: 1 | 2;
   serviceCompositionVersion?: 1;

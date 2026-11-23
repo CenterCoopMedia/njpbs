@@ -186,7 +186,7 @@ export async function projectPublishedPageRead(input: unknown, pageId: string, r
     throw new Error("Published Page context seal differs");
   }
   const raw = structuredClone(input.page);
-  const metadata = Object.fromEntries(["contentLinkMode", "contentLinkUrl", "contentLinkNewTab", "title", "pageTheme", "description", "childDirected", "slug", "previousSlugs", "homeCompositionVersion", "serviceCompositionVersion", "scheduleCopy",
+  const metadata = Object.fromEntries(["contentLinkMode", "contentLinkUrl", "contentLinkNewTab", "title", "pageTheme", "publishedLayout", "description", "childDirected", "slug", "previousSlugs", "homeCompositionVersion", "serviceCompositionVersion", "scheduleCopy",
     "dataHubCompositionVersion", "dataHubReporting", "homeHero", "homeHeroTitle", "homeHeroSubtitle", "heroBackgroundImage", "heroBackgroundPosition", "seo", "social"]
     .filter(key => raw[key] !== undefined).map(key => [key, raw[key]]));
   for (const group of ["seo", "social"]) if (object(raw[group])) {

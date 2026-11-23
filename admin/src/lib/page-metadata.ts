@@ -1,4 +1,4 @@
-import { isPageTheme } from "../../../packages/content-core/src/content-model";
+import { isPageTheme, isPublishedLayout } from "../../../packages/content-core/src/content-model";
 import { publicPage, type PublicPageId } from "../../../packages/content-core/src/public-pages";
 import { parseScheduleCopy } from "../../../packages/content-core/src/schedule-copy";
 
@@ -23,6 +23,7 @@ export function pageMetadataFromDocument(
         : (publicPage(pageId)?.title ?? pageId),
   };
   if (pageId !== "contact" && isPageTheme(document.pageTheme)) metadata.pageTheme = document.pageTheme;
+  if (isPublishedLayout(document.publishedLayout)) metadata.publishedLayout = document.publishedLayout;
   // Composition ownership travels with the loaded page; ordinary metadata saves
   // omit it so staff cannot accidentally restore the fixed template.
   if (document.serviceCompositionVersion === 1) metadata.serviceCompositionVersion = 1;
@@ -58,6 +59,7 @@ export function pageMetadataSaveDocument(
   // Keep malformed client input visible to the strict server save boundary.
   // Loaded historical values are already omitted by pageMetadataFromDocument.
   if (values.pageTheme !== undefined) document.pageTheme = values.pageTheme;
+  if (values.publishedLayout !== undefined) document.publishedLayout = values.publishedLayout;
   if (typeof values.heroBackgroundImage === "string") document.heroBackgroundImage = values.heroBackgroundImage;
   if (typeof values.heroBackgroundPosition === "string") document.heroBackgroundPosition = values.heroBackgroundPosition;
   if (typeof values.description === "string") document.description = values.description;

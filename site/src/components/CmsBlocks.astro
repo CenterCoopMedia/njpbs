@@ -7,6 +7,7 @@ import { getCollection, type CollectionEntry } from "astro:content";
 import { getImage } from "astro:assets";
 import { renderContentGroups } from "../../../packages/content-core/src/content-row-render";
 import { visibleLayoutBlocks } from "../../../packages/content-core/src/content-layout";
+import { createReadingSections } from "../../../packages/content-core/src/reading-sections";
 import {
   generatedHeadingLevelAt,
   renderBlock,
@@ -48,6 +49,8 @@ const responsiveAssets = await resolveCmsResponsiveAssets(
   getImage,
 );
 const newsletters = await newsletterSignupResolution(blocks, getImage, recordCards);
+const readingSections = entry.data.family === "article" && entry.data.publishedLayout === "reading"
+  ? createReadingSections() : undefined;
 let privacyChoicesAnchorAssigned = false;
 const privacyChoicesHeadingId = (text: string): string | undefined => {
   if (
@@ -60,8 +63,10 @@ const privacyChoicesHeadingId = (text: string): string | undefined => {
   privacyChoicesAnchorAssigned = true;
   return "your-privacy-choices";
 };
+const sectionHeadingId = readingSections && ((text: string, level: number) =>
+  readingSections.addHeading(text, level, privacyChoicesHeadingId(text)));
 const groups = renderContentGroups(blocks, (block, index) => ({
-  id: block.type === "headline" ? privacyChoicesHeadingId(block.data.text) : undefined,
+  id: block.type === "headline" && !sectionHeadingId ? privacyChoicesHeadingId(block.data.text) : undefined,
   generatedHeadingLevel: generatedHeadingLevelAt(blocks, index),
   html: renderBlock(block, {
     sponsors,
@@ -73,6 +78,7 @@ const groups = renderContentGroups(blocks, (block, index) => ({
     resolveNewsletter: id => newsletters.cards.get(id) ?? null,
     generatedHeadingLevel: generatedHeadingLevelAt(blocks, index),
     richTextHeadingId: privacyChoicesHeadingId,
+    sectionHeadingId,
     // Composed service pages keep the public page frame's rule: external links open in a new tab.
     externalLinksNewTab: usesServiceComposition(entry.data),
     videoPlaceholder: entry.data.contentMode === "draft",
@@ -91,11 +97,13 @@ const hasProse = visibleLayoutBlocks(blocks).some(block => block.type === "prose
     {
       wrap: contained,
       "cms-page__blocks--within-frame": !contained,
+      "reading-body": Boolean(readingSections),
     },
   ]}
   data-cms-page-blocks={entry.data.pageId}
   data-cms-content-mode={entry.data.contentMode}
 >
+  <Fragment set:html={readingSections?.renderIndex() ?? ""} />
   {
     publicGroups.map((item) => item.kind === "link-card-directory" ? (
       <LinkCardDirectory groups={item.groups} />

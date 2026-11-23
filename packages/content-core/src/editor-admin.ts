@@ -70,6 +70,7 @@ import {
   VIDEO_LIBRARY_LABELS,
 } from "./dynamic-shelves.ts";
 import { SEEDED_CONTENT_SECTIONS } from "./content-sections.ts";
+import { publicPage } from "./public-pages.ts";
 
 // ---------------------------------------------------------------------------
 // The two surfaces: block pages and structured records
@@ -1355,10 +1356,17 @@ const CONTENT_LINK_FIELDS: readonly EditorField[] = [
 ];
 const CONTENT_LINK_GROUP: EditorFieldGroup = { id: "content-link", label: "Content link", help: "Send readers to another website while keeping this content.", fields: CONTENT_LINK_FIELDS };
 
+const PUBLISHED_LAYOUT_FIELD = {
+  key: "publishedLayout", label: "Published layout", kind: "select", required: false,
+  help: "Reading narrows the text and links to Heading 2 sections. Save and publish to apply.",
+  options: [{ value: "standard", label: "Standard" }, { value: "reading", label: "Reading" }],
+} satisfies RecordFieldFor<PageMetadata & PostRecord>;
+
 const PAGE_BASIC_FIELDS: readonly RecordFieldFor<PageMetadata>[] = [
   { key: "title", label: "Page title", help: "Used for the Page heading, browser tab and shared links. NJ Decides shows the logo as its visible heading.", kind: "text", required: true },
   { key: "description", label: "Page summary", help: "This summary appears with the page.", kind: "text", required: false },
   { key: "pageTheme", label: "Page theme", help: "Use the shared election heading. Rows and planks stay in their saved order.", kind: "select", required: false, options: [{ value: "default", label: "NJ PBS default" }, { value: "nj-decides", label: "NJ Decides 2026" }] },
+  PUBLISHED_LAYOUT_FIELD,
   { key: "slug", label: "URL slug", help: "The part after njpbs.org/. Use lowercase letters, numbers and hyphens. A URL change takes effect when you publish; old links redirect to the new address.", kind: "text", required: false },
 ];
 
@@ -1400,6 +1408,7 @@ const POST_SOCIAL_FIELDS: readonly RecordFieldFor<SocialMetadata>[] = SOCIAL_FIE
 const POST_BASIC_FIELDS: readonly RecordFieldFor<PostRecord>[] = [
   { key: "title", label: "Post title", help: "The title people see on the post and in listings.", kind: "text", required: true },
   { key: "summary", label: "Summary", help: "Optional text below the title. Also used in listings, search, and social sharing.", kind: "text", required: false },
+  PUBLISHED_LAYOUT_FIELD,
 ];
 
 const POST_EXCERPT_FIELDS: readonly RecordFieldFor<PostRecord>[] = [
@@ -1630,6 +1639,9 @@ export function editorFieldGroupsFor(kind: EditorDocumentKind, pageId?: string):
       ],
     }] : []),
     ...PAGE_FIELD_GROUPS.map(group => {
+      if (pageId && publicPage(pageId)?.family !== "article") {
+        group = { ...group, fields: group.fields.filter(field => field.key !== "publishedLayout") };
+      }
       if (["home", "contact", "data-hub", "staff", "schedule"].includes(pageId ?? "")) {
         group = { ...group, fields: group.fields.filter(field => field.key !== "pageTheme") };
       }

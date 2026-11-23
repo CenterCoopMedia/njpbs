@@ -9,7 +9,7 @@ import { isCmsImageUrl, isCmsMediaUrl } from "../../../packages/content-core/src
 import { serviceCompositionError } from "../../../packages/content-core/src/service-composition.ts";
 import { homeCompositionError } from "../../../packages/content-core/src/home-composition-contract.ts";
 import { visibleLayoutBlocks } from "../../../packages/content-core/src/content-layout.ts";
-import { isPageTheme, parseBlocks, type PageBlock, type PageMetadata, type SearchMetadata, type SocialMetadata } from "../../../packages/content-core/src/content-model.ts";
+import { isPageTheme, isPublishedLayout, parseBlocks, type PageBlock, type PageMetadata, type SearchMetadata, type SocialMetadata } from "../../../packages/content-core/src/content-model.ts";
 import { validateSection, type SectionId } from "../../../packages/content-core/src/editor-admin.ts";
 import { publicPagePath, isAvailablePageSlug, publicPage } from "../../../packages/content-core/src/public-pages.ts";
 import { isPublishable } from "./publish-gate.ts";
@@ -81,6 +81,7 @@ function pageMetadata(value: unknown): PageMetadata {
     ...childDirectedMetadata(value.childDirected),
     ...contentLinkMetadata(value as unknown as Record<string, unknown>),
     ...(isPageTheme(value.pageTheme) ? { pageTheme: value.pageTheme } : {}),
+    ...(isPublishedLayout(value.publishedLayout) ? { publishedLayout: value.publishedLayout } : {}),
     ...heroBackgroundMetadata(value),
     ...(value.dataHubCompositionVersion === undefined ? {} : { dataHubCompositionVersion: parseDataHubCompositionVersion(value.dataHubCompositionVersion) }),
     ...(value.dataHubReporting === undefined ? {} : { dataHubReporting: parseDataHubReporting(value.dataHubReporting) }),
@@ -114,6 +115,7 @@ function workingPageMetadata(doc: CmsPageDoc): PageMetadata {
     ...childDirectedMetadata(doc.childDirected),
     ...contentLinkMetadata(doc as unknown as Record<string, unknown>),
     ...(isPageTheme(doc.pageTheme) ? { pageTheme: doc.pageTheme } : {}),
+    ...(isPublishedLayout(doc.publishedLayout) ? { publishedLayout: doc.publishedLayout } : {}),
     ...heroBackgroundMetadata(doc),
     ...(doc.dataHubCompositionVersion === undefined ? {} : { dataHubCompositionVersion: parseDataHubCompositionVersion(doc.dataHubCompositionVersion) }),
     ...(doc.dataHubReporting === undefined ? {} : { dataHubReporting: parseDataHubReporting(doc.dataHubReporting) }),
@@ -411,6 +413,7 @@ export function projectCmsPage(
     ...childDirectedMetadata(metadata.childDirected),
     ...contentLinkMetadata(metadata as unknown as Record<string, unknown>),
     ...(metadata.pageTheme !== undefined ? { pageTheme: metadata.pageTheme } : {}),
+    ...(metadata.publishedLayout !== undefined ? { publishedLayout: metadata.publishedLayout } : {}),
     ...heroBackgroundMetadata(metadata as unknown as Record<string, unknown>),
     ...(metadata.dataHubCompositionVersion === undefined ? {} : { dataHubCompositionVersion: parseDataHubCompositionVersion(metadata.dataHubCompositionVersion) }),
     ...(metadata.dataHubReporting === undefined ? {} : { dataHubReporting: parseDataHubReporting(metadata.dataHubReporting) }),

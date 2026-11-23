@@ -40,6 +40,7 @@ import {
   isRichTextDoc,
   isEmbedAnchorData,
   renderRichText,
+  headingTargetAttributes,
   richTextRendersEmpty,
   safeHref,
 } from "./content-model";
@@ -221,6 +222,8 @@ export interface RenderBlockOptions {
   generatedHeadingLevel?: number;
   /** Optional id assignment for authored headings inside a prose block. */
   richTextHeadingId?: (text: string, level: number) => string | undefined;
+  /** Attach focusable section links to authored prose and headline headings. */
+  sectionHeadingId?: (text: string, level: number) => string | undefined;
   /** Preserve a page frame's rule that external rich-text links open in a new tab. */
   externalLinksNewTab?: boolean;
   /** Private draft previews: hold an unpublished video's space with a placeholder. */
@@ -547,11 +550,13 @@ export function renderBlock(
     case "prose":
       return renderRichText(block.data.content, {
         externalLinksNewTab: options.externalLinksNewTab,
-        headingId: options.richTextHeadingId,
+        headingId: options.sectionHeadingId ?? options.richTextHeadingId,
+        focusHeadingTargets: Boolean(options.sectionHeadingId),
       });
     case "headline": {
       const level = clampHeadingLevel(block.data.level);
-      return `<h${level}>${escapeHtml(block.data.text)}</h${level}>`;
+      const target = headingTargetAttributes(options.sectionHeadingId?.(block.data.text, level), true);
+      return `<h${level}${target}>${escapeHtml(block.data.text)}</h${level}>`;
     }
     case "divider":
       return "<hr>";

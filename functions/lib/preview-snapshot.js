@@ -177,6 +177,7 @@ function createPreviewSnapshot(pageId, document) {
     ...(scheduleCopy ? { scheduleCopy } : {}),
     title,
     ...(pageTheme !== undefined ? { pageTheme } : {}),
+    ...(document.publishedLayout !== undefined ? { publishedLayout: document.publishedLayout } : {}),
     ...(document.dataHubCompositionVersion === 1 ? { dataHubCompositionVersion: 1 } : {}),
     ...(document.dataHubReporting !== undefined ? { dataHubReporting: require("./data-hub-reporting").parseDataHubReporting(document.dataHubReporting) } : {}),
     ...(document.homeHero !== undefined ? { homeHero: parseHomeHero(document.homeHero) } : {}),

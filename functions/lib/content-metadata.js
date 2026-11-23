@@ -14,6 +14,11 @@ function pageThemeError(value) {
   return value === undefined || isPageTheme(value) ? null : PAGE_THEME_ERROR;
 }
 
+function publishedLayoutError(value) {
+  return value === undefined || value === "standard" || value === "reading"
+    ? null : "publishedLayout must be standard or reading";
+}
+
 // Validation and normalization for editor-visible page/post metadata. This module checks the
 // fields the CMS understands while deliberately allowing unknown siblings inside metadata
 // groups: old imports and future integrations can round-trip vendor-specific values without
@@ -80,6 +85,8 @@ function validateKnownMetadata(document, { descriptionIsString = true } = {}) {
   if (linkError) return linkError;
   const themeError = pageThemeError(document.pageTheme);
   if (themeError) return themeError;
+  const layoutError = publishedLayoutError(document.publishedLayout);
+  if (layoutError) return layoutError;
   if (document.serviceCompositionVersion !== undefined && document.serviceCompositionVersion !== 1) {
     return "The service composition version is invalid.";
   }
@@ -252,5 +259,6 @@ module.exports = {
   normalizeLegacyPostDate,
   normalizePublishAt,
   pageThemeError,
+  publishedLayoutError,
   validateKnownMetadata,
 };

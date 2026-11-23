@@ -7,15 +7,17 @@ import PostPublication from "./PostPublication.astro";
 import PostLiveBlog from "./PostLiveBlog.astro";
 import PostLiveBlogLayout from "./PostLiveBlogLayout.astro";
 import { splitLiveBlogBlocks } from "../../../packages/content-core/src/live-blog-layout";
+import { createReadingSections } from "../../../packages/content-core/src/reading-sections";
 // One published Post, composed from the content already in its immutable public
-// snapshot. The lead-media and block mix choose a deterministic branded layout;
-// editors do not have to maintain a separate presentation switch.
+// snapshot. The lead media and block mix choose the masthead while the saved
+// Reading layout controls the article body.
 //
 // The body still renders through the canonical `renderBlock` and responsive
 // asset contract shared by CMS pages and the editor, with immutable Post originals.
 // This visual layer cannot
 // invent a second content model or bypass the media and heading contracts.
 import "../styles/branded-masthead.css";
+import "../styles/reading-layout.css";
 import "../../../packages/content-core/src/link-card.css";
 import "../../../packages/content-core/src/link-card-directory.css";
 import "../../../packages/content-core/src/component-blocks.css";
@@ -65,6 +67,8 @@ const eyebrow = postEyebrow(post.categories, post.tags);
 const categories = publicPostCategories(post.categories);
 const tags = publicPostTopics(post.tags);
 const archive = post.spotlightArchive === true;
+const readingSections = post.publishedLayout === "reading" && !post.liveBlog && !archive
+  ? createReadingSections() : undefined;
 const archiveTopicHref = (topic: string) => `${SPOTLIGHT_ARCHIVE_SEARCH_PATH}?${new URLSearchParams({ topic })}`;
 const responsiveAssets = await resolveCmsPostAssets(
   post.blocks,
@@ -102,6 +106,7 @@ const renderGroups = (blocks: typeof post.blocks) => renderContentGroups(blocks,
     resolveNewsletter: id => newsletters.cards.get(id) ?? null,
     externalLinksNewTab: true,
     generatedHeadingLevel: generatedHeadingLevelAt(blocks, index),
+    sectionHeadingId: blocks === bodyBlocks ? readingSections?.addHeading : undefined,
     videoPlaceholder: isPrivatePreviewRender(Astro.locals.cmsRender),
     publicElectionResults: !isPrivatePreviewRender(Astro.locals.cmsRender),
   }),
@@ -178,7 +183,8 @@ const sidebarGroups = groupLinkCardDirectories(renderGroups(sidebarBlocks).filte
   <ReaderTextSize />
 
   <div class:list={["post-content", { "post-content--full-width-updates": post.liveBlog && hideSidebar }]}>
-    <div class="post-body">
+    <div class:list={["post-body", { "reading-body": Boolean(readingSections) }]}>
+      <Fragment set:html={readingSections?.renderIndex() ?? ""} />
       {publicGroups.map((item) => item.kind === "link-card-directory" ? (
         <LinkCardDirectory groups={item.groups} />
       ) : (

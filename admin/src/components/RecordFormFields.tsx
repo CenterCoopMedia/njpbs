@@ -212,6 +212,10 @@ export function RecordFormFields({
       return editorView?.kind === "post" ? <PostLeadMediaInspector key={pathKey} record={record} loadMedia={loadMedia} mediaPickerUnavailable={mediaPickerUnavailable} error={errors.heroImage}
         onRemove={interactionLocked ? undefined : () => setField({ ...field, key: "leadMedia" }, null)}>{leadEditor}</PostLeadMediaInspector> : <Fragment key={pathKey}>{leadEditor()}</Fragment>;
     }
+    if (kind === "post" && field.key === "publishedLayout" &&
+        (presentation !== "standard" || record.liveBlog != null || record.spotlightArchive === true)) {
+      return null;
+    }
     const value = readFieldValue(record, field);
     const postTitleOverride = isPostTitleOverrideField(kind, field);
     const hasPostTitleOverride =

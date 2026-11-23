@@ -52,6 +52,12 @@ function post(overrides: Partial<CmsPostDoc> = {}, metadata: Record<string, unkn
 }
 
 describe("admission", () => {
+  it("takes the Post layout from the published snapshot even after the draft switches back", () => {
+    expect(projectCmsPost(post({ publishedLayout: "reading" }), { now: NOW })?.publishedLayout).toBeUndefined();
+    expect(projectCmsPost(post({ publishedLayout: "standard" }, { publishedLayout: "reading" }), { now: NOW })?.publishedLayout)
+      .toBe("reading");
+  });
+
   it("keeps an English slug and its linked Spanish slug in separate route namespaces", () => {
     const original = projectCmsPost(post(), { now: NOW })!;
     const edition = post({ id: "spanish-edition" }, {

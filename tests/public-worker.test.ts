@@ -414,6 +414,18 @@ describe("public Contact runtime projection", () => {
     }
   });
 
+  it("renders Reading section targets when the live Contact body is replaced", async () => {
+    const response = await servePublicRequest(new Request("https://njpbs.org/contact/"), {
+      fetchAsset: async () => asset(STATIC_CONTACT),
+      getPublishedPage: async () => ({ ...LIVE, page: { ...LIVE_PAGE, publishedLayout: "reading", blocks: [
+        { id: "help", type: "headline", order: 0, visible: true, data: { text: "Help with viewing", level: 2 } },
+      ] } }),
+    });
+    const html = await response.text();
+    expect(html).toContain('href="#reading-section-help-with-viewing"');
+    expect(html).toContain('<h2 id="reading-section-help-with-viewing" tabindex="-1">');
+  });
+
   it("coalesces concurrent projection lookups and caches them across query strings", async () => {
     const entries = new Map<string, Response>();
     const projectionCache = {

@@ -22,13 +22,14 @@ const { parseScheduleCopy } = require("./schedule-copy");
 const { isPostLeadMedia, leadVideoBlocks } = require("./post-lead-media");
 const { isPostSidebar } = require("./post-sidebar");
 const { videoCopies, previousVideoCopies, pendingPublicRevision } = require("./public-video-references");
-const { pageThemeError } = require("./content-metadata");
+const { pageThemeError, publishedLayoutError } = require("./content-metadata");
 
 const PAGE_HERO_FIELDS = ["homeHeroTitle", "homeHeroSubtitle"];
 const PAGE_METADATA_FIELDS = [
   "title",
   "childDirected",
   "pageTheme",
+  "publishedLayout",
   "slug",
   "previousSlugs",
   "description",
@@ -70,6 +71,7 @@ const EVENT_METADATA_FIELDS = [
   "isFree", "priceText",
 ];
 const POST_METADATA_FIELDS = [
+  "publishedLayout",
   "disableStoryCtas",
   "postSidebar",
   "type",
@@ -213,6 +215,10 @@ function createPublishedSnapshot({
   }
   if (typeof document.title !== "string" || document.title.trim() === "") {
     throw new PublishSnapshotError("Published content requires a title");
+  }
+  if (kind === "page" || kind === "post") {
+    const layoutError = publishedLayoutError(document.publishedLayout);
+    if (layoutError) throw new PublishSnapshotError(layoutError);
   }
   if (kind === "page") {
     if (document.childDirected !== undefined && typeof document.childDirected !== "boolean") {
