@@ -10,6 +10,7 @@ import { heroBackgroundMetadata } from "../../../packages/content-core/src/hero-
 import { publicLiveBlogData, previewLiveBlogData, type LiveBlogData } from "../../../packages/content-core/src/live-blog.ts";
 import { isCmsImageUrl } from "../../../packages/content-core/src/media-origin.ts";
 import { parsePublishInstant } from "../../../packages/content-core/src/publish-instant.ts";
+import { isSpotlightArchivePaths } from "../../../packages/content-core/src/spotlight-archive-paths.ts";
 // The public Post loader: Firestore `cmsPosts` published snapshots -> /posts/{slug}/.
 //
 // This mirrors `cms-loader.ts` deliberately rather than sharing its body. The two
@@ -107,6 +108,7 @@ export interface CmsPostBuildData extends ContentLinkMetadata {
   spotlightNews?: boolean;
   spotlightArchive?: true;
   archivePublishedAt?: string;
+  archiveLegacyPaths?: string[];
   coverageLabelId?: string;
   showInHomeHero?: boolean;
   disableStoryCtas?: boolean;
@@ -470,6 +472,10 @@ export function projectCmsPost(
   }
   const spotlightArchive = metadata.spotlightArchive === true;
   const archivePublishedAt = metadata.archivePublishedAt;
+  const archiveLegacyPaths = metadata.archiveLegacyPaths;
+  if (archiveLegacyPaths !== undefined && (!spotlightArchive || !isSpotlightArchivePaths(archiveLegacyPaths))) {
+    throw new Error(`post ${doc.id} archive snapshot has invalid original URL paths`);
+  }
   if (archivePublishedAt !== undefined && (!spotlightArchive ||
       typeof archivePublishedAt !== "string" || parsePublishInstant(archivePublishedAt) === null)) {
     throw new Error(`post ${doc.id} archive snapshot requires a valid original UTC publication time`);
@@ -536,6 +542,7 @@ export function projectCmsPost(
     spotlightNews: spotlightArchive || metadata.spotlightNews === true,
     ...(spotlightArchive ? { spotlightArchive: true } : {}),
     ...(archivePublishedAt === undefined ? {} : { archivePublishedAt }),
+    ...(archiveLegacyPaths === undefined ? {} : { archiveLegacyPaths }),
     ...(postCoverageLabelId(metadata) ? { coverageLabelId: postCoverageLabelId(metadata) } : {}),
     ...(metadata.showInHomeHero === undefined ? {} : { showInHomeHero: metadata.showInHomeHero }),
     ...(metadata.disableStoryCtas === undefined ? {} : { disableStoryCtas: metadata.disableStoryCtas }),

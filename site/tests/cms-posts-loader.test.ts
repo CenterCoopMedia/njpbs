@@ -7,6 +7,7 @@ import {
   publicCredits,
   type CmsPostDoc,
 } from "../src/lib/cms-posts-loader";
+import { buildSpotlightArchiveRedirectShards } from "../src/lib/spotlight-archive-redirect-shards";
 
 // The public Post projection. Mirrors tests/cms-page-projection.test.ts in
 // shape, because the two loaders answer the same question about different
@@ -85,10 +86,12 @@ describe("admission", () => {
   });
 
   it("admits only a published archive snapshot with its original editorial day", () => {
-    const metadata = { spotlightArchive: true, date: "2012-02-29", editorialDateSource: "backdated" };
-    const archived = post({ spotlightArchive: false, date: "2026-08-21" }, metadata);
+    const metadata = { spotlightArchive: true, date: "2012-02-29", editorialDateSource: "backdated",
+      archiveLegacyPaths: ["/2012/02/trenton-budget/", "/blog-post/trenton-budget/"] };
+    const archived = post({ spotlightArchive: false, date: "2026-08-21", archiveLegacyPaths: ["/blog-post/draft/"] }, metadata);
     expect(projectCmsPost(archived, { now: NOW })).toMatchObject({
       spotlightArchive: true, spotlightNews: true, displayDate: "2012-02-29", path: "/posts/trenton-budget-hearing/",
+      archiveLegacyPaths: metadata.archiveLegacyPaths,
     });
     expect(projectCmsPost({ ...archived, status: "draft" }, { now: NOW })).toBeNull();
     expect(projectCmsPost({ ...archived, publiclyVisible: false }, { now: NOW })).toBeNull();
@@ -100,6 +103,15 @@ describe("admission", () => {
       .toThrow(/original UTC publication time/);
     expect(() => projectCmsPost(post({}, { archivePublishedAt: "2012-03-01T02:30:00Z" }), { now: NOW }))
       .toThrow(/original UTC publication time/);
+    expect(() => projectCmsPost(post({}, { ...metadata, archiveLegacyPaths: ["/video/foo%2Fbar/"] }), { now: NOW }))
+      .toThrow(/invalid original URL paths/);
+
+    const candidates = [archived, { ...archived, publiclyVisible: false }, { ...archived, deleted: true }]
+      .flatMap(candidate => projectCmsPost(candidate, { now: NOW }) ?? []);
+    const shards = buildSpotlightArchiveRedirectShards(candidates);
+    expect([...shards.values()].flatMap(paths => [...paths])).toEqual(
+      metadata.archiveLegacyPaths.map(path => [path, "/posts/trenton-budget-hearing/"]));
+    expect(() => buildSpotlightArchiveRedirectShards([...candidates, ...candidates])).toThrow(/same path/);
   });
 
   it("ignores the other record kinds that share the cmsPosts collection", () => {

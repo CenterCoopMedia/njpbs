@@ -95,6 +95,18 @@ static page remains a noindex refresh alias.
 The Snippet keeps the request query string when the destination has no query of
 its own.
 
+An approved NJ Spotlight News archive alias can reclaim an exact path under
+`/blog-post/`. The Snippet checks the origin before issuing its retirement
+response for an individual story path. An origin 301 to a canonical Post
+wins. An origin outage stays retryable. A missing alias retains its 410 with
+`Cache-Control: no-store` so a later archive publication can claim the path.
+Verify an approved alias and an unrelated 410 after the origin and Snippet
+have both been released.
+
+Paired code packs retain the aliases present at code build time. Content-only
+paired releases reuse those assets, so a newly approved alias enters the map
+at the next code build. The paired ingress lookup is tracked in [#373](https://github.com/CenterCoopMedia/njpbs/issues/373).
+
 | Legacy path | Last selected CDX capture | Destination | Evidence |
 |---|---|---|---|
 | `/all-programs` | 2023-06-27 03:43:03 UTC | `/watch/` | The archive is the all-programs browser; Watch is the current program and on-demand browser. |

@@ -21,6 +21,7 @@ import { resolveShareUploadOrigin } from "../packages/content-core/src/share-upl
 import { pageDeclaresNoindex } from "./src/lib/sitemap-noindex.ts";
 import { assertWorkersAssetLimits, pruneUnusedRuntimeAssets } from "./src/lib/workers-asset-limits.ts";
 import { resolveCmsPreviewInput } from "./src/lib/cms-preview-input.ts";
+import { spotlightArchiveRedirectRoutes } from "./src/lib/spotlight-archive-redirect-routes.ts";
 import { nameAtlasRoutesEnabled } from "./src/lib/name-atlas-preview.ts";
 import { politicsGuidePreviewRoutes } from "./src/lib/politics-guide-preview.ts";
 import {
@@ -210,6 +211,7 @@ export default defineConfig({
     internalSurfaceRoutes,
     publicAuxiliaryRoutes,
     externalContentRoutes,
+    spotlightArchiveRedirectRoutes,
     workersAssetLimits,
     // Page heads own hreflang because only their pageLocales know which
     // translations exist. Do not add sitemap i18n or an alternate serializer.

@@ -94,6 +94,16 @@ it for `article:published_time` and `NewsArticle.datePublished`. The byline stil
 shows the original local day. If the source UTC time is absent, JSON-LD uses that
 day and the page omits `article:published_time`.
 
+An approved archive snapshot can carry `archiveLegacyPaths`, the normalized
+pathnames of the original WordPress permalink and verified aliases. Store the
+paths with a trailing slash and omit the scheme, host, query and fragment.
+The origin accepts dated article paths, dated `/stories/` paths, and individual
+`/video/` and `/blog-post/` story paths. The public build packages exact aliases
+from its admitted Posts with the release assets. The origin checks the deployed
+asset and returns an HTTP 301 once the canonical Post is serving. Listed Posts
+appear under their canonical URLs in metadata, the sitemap and search. A
+working draft cannot add or replace an archive alias.
+
 ### Archive route comparison
 
 Use `compare:archive` from `site/` with two anonymously readable origins and

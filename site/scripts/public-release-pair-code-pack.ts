@@ -4,6 +4,7 @@ import { constants } from "node:fs";
 import { lstat, open, readdir, readFile } from "node:fs/promises";
 import path from "node:path";
 import type { PublicReleasePair } from "../../packages/content-core/src/public-release";
+import { SPOTLIGHT_ARCHIVE_REDIRECT_ASSETS } from "../../packages/content-core/src/spotlight-archive-paths";
 import { verifyPreparedPublicWorkerArtifact, type PreparedPublicWorkerArtifact } from "../src/lib/public-worker-artifact";
 import { assertPublicReleasePairSearchAuthority } from "./public-release-pair-search-authority";
 import { assertPublicReleasePairContentFeedAuthority, assertPublicReleasePairContentFeedIndex, PAIR_CONTENT_FEED_INDEX } from "./public-release-pair-content-feed-authority";
@@ -68,6 +69,7 @@ function classification(file: string) {
   else if (extension === "html") family = "fallbackAsset";
   else if (file.startsWith("/_astro/") || file.startsWith("/posts/_no-build-assets/") || ["js", "mjs", "css", "wasm"].includes(extension)) family = "clientAsset";
   else if (file === "/_design-system-tokens.json" || /^(image\/|font\/|video\/|audio\/)/.test(mime) ||
+      file.startsWith(SPOTLIGHT_ARCHIVE_REDIRECT_ASSETS) && /^[0-9a-f]{2}\.json$/.test(file.slice(SPOTLIGHT_ARCHIVE_REDIRECT_ASSETS.length)) ||
       file.startsWith("/meeting-notices/") && extension === "pdf" ||
       ["txt", "md", "webmanifest", "csv"].includes(extension) || ["_headers", "_redirects", "CNAME", "LICENSE"].includes(path.posix.basename(file))) family = "static";
   else fail(); // New aggregate paths must be added to this authoritative census.

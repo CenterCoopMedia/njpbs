@@ -2,6 +2,8 @@ export { createPublicReleaseRouter } from "./public-release-router";
 import { escapeHtml } from "../../packages/content-core/src/content-model";
 import { SECURITY_HEADER_BASELINE } from "../../packages/content-core/src/public-security-headers";
 import { serveDataHubEmbed } from "../../packages/content-core/src/data-hub-embed";
+import { serveSpotlightArchiveRedirect } from "./spotlight-archive-redirect";
+import { SPOTLIGHT_ARCHIVE_REDIRECT_ASSETS } from "../../packages/content-core/src/spotlight-archive-paths";
 export { SECURITY_HEADER_BASELINE } from "../../packages/content-core/src/public-security-headers";
 import { hasVideoPlayer } from "../../packages/content-core/src/video-page";
 import {
@@ -474,13 +476,14 @@ export async function servePublicRequest(
   const url = new URL(request.url);
   const figure = serveDataHubEmbed(request, deps.fetchAsset);
   if (figure) return figure;
-  // Compiled pair modules are private execution inputs, including encoded paths.
+  // Compiled pair modules and archive redirect data are internal assets.
   let compiledPath = url.pathname;
   // Decode valid bytes only for this ASCII-prefix check. A literal percent or
   // malformed public escape must still reach ordinary routing and its headers.
   for (let pass = 0; pass < 3; pass++) compiledPath = compiledPath.replace(/%([a-f0-9]{2})/gi,
     (_match, byte) => String.fromCharCode(Number.parseInt(byte, 16)));
-  if (compiledPath.replaceAll("\\", "/").split("/").includes("_pair-compiled")) {
+  const assetPath = compiledPath.replaceAll("\\", "/").replace(/\/{2,}/g, "/");
+  if (assetPath.split("/").includes("_pair-compiled") || assetPath.startsWith(SPOTLIGHT_ARCHIVE_REDIRECT_ASSETS)) {
     return withSecurityHeaderBaseline(new Response(null, { status: 404 }));
   }
   const post = await deps.noBuildPosts?.fetch(request);
@@ -501,9 +504,13 @@ export async function servePublicRequest(
   const isContact = isContactPage(url.pathname);
   const isContactPath = isContactWorkerPath(url.pathname);
   const canTransform = request.method === "GET" && isContact;
-  const asset = await deps.fetchAsset(
+  let asset = await deps.fetchAsset(
     canTransform ? unconditionalAssetRequest(request) : request,
   );
+  if (asset.status === 404) {
+    asset = await serveSpotlightArchiveRedirect(request, asset, deps.fetchAsset,
+      async canonical => await deps.noBuildPosts?.fetch(canonical) ?? deps.fetchAsset(canonical));
+  }
   if (
     !canTransform ||
     asset.status !== 200 ||

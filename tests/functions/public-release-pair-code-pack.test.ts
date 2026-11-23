@@ -12,13 +12,17 @@ import type { PreparedPublicWorkerArtifact } from "../../site/src/lib/public-pub
 import postSlugs from "../../functions/lib/post-slug-contract.js";
 import pages from "../../functions/lib/public-page-contract.js";
 import { isPublicPagePath } from "../../packages/content-core/src/public-pages";
+import { SPOTLIGHT_ARCHIVE_REDIRECT_ASSETS, spotlightArchiveRedirectShard } from "../../packages/content-core/src/spotlight-archive-paths";
 const sha = (value: string | Uint8Array) => createHash("sha256").update(value).digest("hex");
 const commitSha = "a".repeat(40), roots: string[] = [];
+const archiveAlias = "/2012/02/old-transit/";
+const archiveShard = `${SPOTLIGHT_ARCHIVE_REDIRECT_ASSETS}${spotlightArchiveRedirectShard(archiveAlias)}.json`;
 afterEach(async () => { await Promise.all(roots.splice(0).map(root => rm(root, { recursive: true, force: true }))); });
 async function fixture(feedPages = 1, indexPages = feedPages) {
   const root = await mkdtemp(path.join(tmpdir(), "pair-code-pack-")); roots.push(root);
   const distDirectory = path.join(root, "dist"), compiledDirectory = path.join(root, "compiled");
   const dist: Record<string, string> = {
+    [archiveShard.slice(1)]: JSON.stringify({ [archiveAlias]: "/posts/archived-transit/" }),
     "_astro/client.js": "export{}", "_home-sources.json": "{}", "_schedule-sources.json": "{}", "api/v1/content.json": JSON.stringify({ apiVersion: 1, pages: [{ page: 1, url: "https://njpbs.org/api/v1/content/1.json" }] }), "api/v1/content/1.json": "{}",
     "brand/logo.svg": "<svg/>", "index.html": "<html>Baseline fallback</html>",
     "meeting-notices/njpba-audit-committee-2026-10-16.pdf": "%PDF-1.7 public meeting notice fixture",
@@ -56,6 +60,9 @@ it("derives every exact baseline file, family and canonical digest from both sea
   expect(manifest.members.find(member => member.path === "/index.html")).toMatchObject({ family: "fallbackAsset", dynamic: false });
   expect(manifest.members.find(member => member.path === "/wiki/index.html")).toMatchObject({ family: "wiki", dynamic: false });
   expect(manifest.members.find(member => member.path === "/schedule/downloads/nj-pbs-schedule.pdf")).toMatchObject({ family: "schedule", dynamic: true });
+  expect(manifest.members.find(member => member.path === archiveShard)).toMatchObject({
+    mime: "application/json; charset=utf-8", family: "static", source: "static", dynamic: false,
+  });
   const canonical = JSON.stringify(manifest.members.map(member => ({ path: member.path, mime: member.mime, size: member.size,
     sha256: member.sha256, family: member.family, source: member.source, dynamic: member.dynamic })));
   expect(manifest.codeAssetManifestDigest).toBe(sha(canonical));
