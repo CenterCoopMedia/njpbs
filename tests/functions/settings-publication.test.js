@@ -10,6 +10,7 @@ import publication from "../../functions/lib/settings-publication.js";
 import context from "../../functions/lib/public-context-revision.js";
 import deployment from "../../functions/lib/public-deployment.js";
 import aggregatePublication from "../../functions/lib/public-context-publication.js";
+import editorRecheck from "../../functions/lib/publication-recheck.js";
 import { DEFAULT_SITE_NAVIGATION, DEFAULT_PUBLIC_SITE_CHROME_SETTINGS, DEFAULT_PUBLIC_HOMEPAGE_BANNER_SETTINGS } from "../../packages/content-core/src/cms-settings";
 const db = isolatedFirestore("settings-publication.test.js");
 
@@ -395,6 +396,31 @@ describe("atomic public settings acceptance", () => {
     expect(await currentRevision()).toBe(3);
     expect((await queues()).size).toBe(3);
   });
+});
+
+it("rechecks a failed settings update only after its exact route consumers prove it", async () => {
+  const result = await publish("site-navigation", 1);
+  expect(result.code).toBe(200);
+  const { queueId } = result.body.publication;
+  const ref = db.doc(`cmsPublishQueue/${queueId}`);
+  const { runtime, settingsPublication: identity } = (await ref.get()).data();
+  const edge = { rendererSha: sha, contextRevision: identity.contextRevision, contextDigest: identity.contextDigest, verifiedAt: 100 };
+  const batch = db.batch();
+  batch.update(ref, { status: "failed", error: "background_generation_failed" });
+  for (const family of aggregatePublication.OUTPUTS) {
+    const target = db.doc(`cmsBackgroundOutputs/${family}`);
+    batch.update(target, { status: "verified", receipt: { ...edge, revision: 1,
+      digest: "c".repeat(64), routeSetDigest: "d".repeat(64) }, runtime });
+  }
+  await batch.commit();
+  const recheck = () => editorRecheck.recheckPublication({ firestore: db, queueId, actor });
+  expect(await recheck()).toMatchObject({ outcome: "failed" });
+  await ref.update({ consumerReceipts: { pages: edge, home: edge, posts: { ...edge, contextRevision: identity.contextRevision + 1 } } });
+  expect(await recheck()).toMatchObject({ outcome: "failed" });
+  await ref.update({ "consumerReceipts.posts": edge });
+  expect(await recheck()).toMatchObject({ outcome: "confirmed_late" });
+  expect((await ref.get()).data()).toMatchObject({ status: "failed", error: "background_generation_failed", aggregateReceipt: null,
+    lastPublicCheck: { outcome: "confirmed_late" } });
 });
 
 it("change-log: accepts public settings and deduplicates a lost-response retry", async () => {

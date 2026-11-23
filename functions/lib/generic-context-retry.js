@@ -29,8 +29,12 @@ async function genericContextRetry(firestore) {
   const id = selected?.operationId;
   if (!/^[A-Za-z0-9]{20}$/.test(id ?? "")) return null;
   const job = (await firestore.doc(`cmsPublishQueue/${id}`).get()).data();
-  return genericJob(job, id) && job.status === "failed" && ownsPublication(selected, job.runtime) &&
-    selected.contextDigest === job.publicContext.contextDigest ? { queueId: id, createdAt: job.createdAt?.toDate?.().toISOString() ?? null } : null;
+  if (!genericJob(job, id) || job.status !== "failed" || !ownsPublication(selected, job.runtime) ||
+      selected.contextDigest !== job.publicContext.contextDigest) return null;
+  const { outcome, message } = job.lastPublicCheck ?? {};
+  return { queueId: id, createdAt: job.createdAt?.toDate?.().toISOString() ?? null,
+    ...(["confirmed_late", "superseded", "failed"].includes(outcome) && typeof message === "string"
+      ? { lastPublicCheck: { outcome, message } } : {}) };
 }
 
 async function retryGenericPublicContext({ firestore, actor, operationId, source = null, now = Date.now() }) {

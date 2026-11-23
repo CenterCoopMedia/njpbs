@@ -1,9 +1,12 @@
 import { clearEmulatorFirestore } from "../helpers/emulator-firestore.js";
 import { afterAll, beforeAll, beforeEach, expect, it } from "vitest";
 import { initializeApp, deleteApp } from "firebase-admin/app";
-import { getFirestore } from "firebase-admin/firestore";
+import { getFirestore, Timestamp } from "firebase-admin/firestore";
 import publication from "../../functions/lib/no-build-record-publication.js";
 import confirmation from "../../functions/lib/no-build-record-confirmation.js";
+import editorRecheck from "../../functions/lib/publication-recheck.js";
+import postConfirmation from "../../functions/no-build-post-confirmation.js";
+import recordMetadata from "../../functions/lib/no-build-record-metadata.js";
 import capability from "../../functions/lib/no-build-record-capability.js";
 import snapshots from "../../functions/lib/publish-snapshot.js";
 import deployment from "../../functions/lib/public-deployment.js";
@@ -98,6 +101,55 @@ it.each(["program", "event"] as const)("confirms every %s detail, alias and inde
   expect(queue.recordReceipt.routes).toHaveLength(identity.ownedPaths.length + (kind === "program" ? 2 : 1));
   expect((await db.doc(`cmsPosts/${id}`).get()).data()).toMatchObject({ publishBuildPending: false, publishBuildQueueId: null, publicSourceVersion: 10,
     publishBuildSettlement: { recordQueueId: identity.operationId, sourceVersion: 10, status: "success" } });
+});
+
+it("checks incomplete record confirmation without changing record, queue or dispatch state", async () => {
+  const identity = await accept("event"); await prepare(identity);
+  const ref = db.doc(`cmsPublishQueue/${identity.operationId}`);
+  await ref.update({ createdAt: Timestamp.fromMillis(Date.now() - 360_000) });
+  const before = await ref.get();
+  const record = (await db.doc(`cmsPosts/${id}`).get()).data();
+  const metadata = () => recordMetadata.recordPublicationMetadata({ firestore: db, documentId: id, stored: record });
+  expect(await metadata()).toMatchObject({ recheckQueueId: ref.id, queueStatus: "failed" });
+  const staff = { uid: "fixture-admin", principal: { id: "fixture-admin", grants: [{ role: "admin" }] } };
+  const check = () => editorRecheck.recheckPublication({ firestore: db, queueId: ref.id, actor: staff, target, headers, artifacts, fetchPublic });
+  corruptPath = identity.ownedPaths[0];
+  expect(await check()).toMatchObject({ outcome: "failed" });
+  corruptPath = undefined;
+  expect(await check()).toMatchObject({ outcome: "confirmed_late" });
+  const after = await ref.get();
+  const { lastPublicCheck, ...queue } = after.data()!;
+  expect(queue).toEqual(before.data());
+  expect(lastPublicCheck.outcome).toBe("confirmed_late");
+  expect((await db.doc(`cmsPosts/${id}`).get()).data()).toEqual(record);
+  expect(await metadata()).toMatchObject({ queueStatus: "success", publicSourceVersion: identity.sourceVersion });
+  expect((await metadata())?.recheckQueueId).toBeUndefined();
+  const audit = await db.collection("admin_logs").get();
+  expect(audit.docs.map(row => row.data().after)).toEqual(expect.arrayContaining([
+    { outcome: "failed" }, expect.objectContaining({ outcome: "confirmed_late", operationId: ref.id,
+      receipt: expect.objectContaining({ sourceVersion: identity.sourceVersion, snapshotDigest: identity.snapshotDigest }) }),
+  ]));
+  let woke = false;
+  const wake = postConfirmation.createNoBuildPostConfirmationHandler({ firestore: db, readback: () => { woke = true; return { target, headers }; } });
+  await wake({ params: { queueId: ref.id }, data: { before, after } });
+  expect(woke).toBe(false);
+});
+
+it("requires current withdrawal readback before retiring an older record check", async () => {
+  const original = await accept();
+  await prepare(original);
+  const removal = await accept("program", true);
+  await prepare(removal);
+  const staff = { uid: "fixture-admin", principal: { id: "fixture-admin", grants: [{ role: "admin" }] } };
+  const check = () => editorRecheck.recheckPublication({ firestore: db, queueId: original.operationId, actor: staff,
+    target, headers, artifacts, fetchPublic });
+  expect(await check()).toMatchObject({ outcome: "failed" });
+  durable = true;
+  expect(await check()).toMatchObject({ outcome: "superseded" });
+  expect((await db.doc(`cmsPublishQueue/${removal.operationId}`).get()).data()?.lastPublicCheck).toBeUndefined();
+  expect((await db.doc(`cmsPosts/${id}`).get()).data()).toMatchObject({
+    publiclyVisible: false, publishBuildPending: true, publishBuildQueueId: removal.operationId,
+  });
 });
 it("keeps staff pending until Page, Home and Post card consumers finish", async () => {
   await prepare(await accept(), false);

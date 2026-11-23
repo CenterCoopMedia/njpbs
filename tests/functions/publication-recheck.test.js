@@ -6,6 +6,7 @@ import endpoint from "../../functions/recheck-publication.js";
 import listContent from "../../functions/list-content.js";
 import deployment from "../../functions/lib/public-deployment.js";
 import context from "../../functions/lib/public-context-revision.js";
+import aggregate from "../../functions/lib/public-context-publication.js";
 import ownership from "../../functions/lib/no-build-page-ownership.js";
 import snapshots from "../../functions/lib/publish-snapshot.js";
 import targets from "../../functions/lib/publication-target.js";
@@ -17,6 +18,7 @@ const sha = "a".repeat(40), target = targets.publicationTarget("development");
 const headers = { "cf-access-client-id": "fixture-id", "cf-access-client-secret": "fixture-secret" };
 const actor = { uid: "publisher-fixture", email: "publisher@example.test", emailVerified: true,
   principal: { id: "publisher-fixture", grants: [{ role: "editor", sections: ["news"] }] } };
+const admin = { ...actor, principal: { id: actor.uid, grants: [{ role: "admin" }] } };
 let app, firestore, state, record;
 const queueRef = () => firestore.doc(`cmsPublishQueue/${queueId}`);
 const recordRef = () => firestore.doc(`cmsPosts/${postId}`);
@@ -89,6 +91,66 @@ it.each(["failed", "public_unconfirmed", "exhausted proof"])("confirms a Post %s
     publicPostProof: { operationId: queueId, sourceVersion: 6, status: "verified", retryPending: false } });
   expect((await firestore.collection("admin_logs").get()).size).toBe(1);
   expect((await summary()).body).toMatchObject({ recoveryCount: 0, postProofRecoveryIds: [] });
+});
+
+async function seedContext(id, revision, status = "failed") {
+  const runtime = { owner: "cloudflare", release: sha };
+  const contextDigest = context.publicContextDigest(revision);
+  const identity = { schemaVersion: 1, operationId: id, contextRevision: revision, contextDigest, runtime, reason: "context" };
+  const queue = { schemaVersion: 1, transport: aggregate.TRANSPORT, publicContext: identity, runtime,
+    status, attempts: 4, claim: null, nextAttemptAt: null, changes: [], aggregateReceipt: null };
+  const batch = firestore.batch();
+  batch.set(firestore.doc(`cmsPublishQueue/${id}`), queue);
+  batch.set(firestore.doc(context.PUBLIC_CONTEXT_PATH), { schemaVersion: 1, revision });
+  batch.set(firestore.doc(aggregate.CURRENT_PATH), { ...identity, finalNamespaceOwner: true,
+    namespaceOperationId: id, preparationOperationId: id });
+  for (const family of aggregate.OUTPUTS) {
+    batch.set(firestore.doc(`cmsBackgroundOutputs/${family}`), {
+      owner: "post-background-v1", runtime, status: "verified", contextOnly: true, contextDigest, revision,
+      taskPath: `cmsPublishQueue/${id}/backgroundOutputs/${family}`,
+      receipt: { revision, contextDigest, rendererSha: sha, verifiedAt: 100,
+        digest: "a".repeat(64), routeSetDigest: "b".repeat(64) },
+    });
+  }
+  await batch.commit();
+  return queue;
+}
+
+it("rechecks an exact site-wide update with settings access and an atomic audit", async () => {
+  const before = await seedContext(queueId, 3);
+  expect((await invoke(handler(), { queueId })).code).toBe(403);
+  const check = () => invoke(handler({ requirePrincipalFn: async () => admin }), { queueId });
+  const results = await Promise.all([check(), check()]);
+  expect(results.map(result => result.code).sort()).toEqual([200, 409]);
+  expect(results.find(result => result.code === 200).body).toMatchObject({ outcome: "confirmed_late" });
+  const { lastPublicCheck, ...state } = (await queueRef().get()).data();
+  expect(state).toEqual(before);
+  expect(lastPublicCheck).toMatchObject({ outcome: "confirmed_late", actorUid: admin.uid });
+  const audit = await firestore.collection("admin_logs").get();
+  expect(audit.size).toBe(1);
+  expect(audit.docs[0].data()).toMatchObject({ target: queueId, after: {
+    outcome: "confirmed_late", operationId: queueId, receipt: { contextRevision: 3, contextDigest: context.publicContextDigest(3) },
+  } });
+});
+
+it("only reports a newer site-wide update after every selected family verifies", async () => {
+  const before = await seedContext(queueId, 3, "public_unconfirmed");
+  await seedContext(successor, 4, "success");
+  const output = firestore.doc("cmsBackgroundOutputs/search");
+  const proof = (await output.get()).data();
+  await output.update({ taskPath: `cmsPublishQueue/${queueId}/backgroundOutputs/search` });
+  const check = () => invoke(handler({ requirePrincipalFn: async () => admin }), { queueId });
+  expect((await check()).body).toMatchObject({ outcome: "failed" });
+  expect((await queueRef().get()).data()).toMatchObject(before);
+  await output.set(proof);
+  expect((await check()).body).toMatchObject({ outcome: "superseded" });
+  const { lastPublicCheck, ...state } = (await queueRef().get()).data();
+  expect(state).toEqual(before);
+  expect(lastPublicCheck.outcome).toBe("superseded");
+  const audit = await firestore.collection("admin_logs").get();
+  expect(audit.docs.map(row => row.data().after)).toEqual(expect.arrayContaining([
+    { outcome: "failed" }, expect.objectContaining({ outcome: "superseded", operationId: successor, receipt: expect.anything() }),
+  ]));
 });
 it("counts only the current exhausted Post proof, and supersedes it only with a live newer proof", async () => {
   await seedProofFailure();

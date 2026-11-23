@@ -121,4 +121,11 @@ describe("publication recheck", () => {
     render(<QueueList items={[page]} />);
     expect(screen.queryByRole("button", { name: "Check again" })).not.toBeInTheDocument();
   });
+  it("offers context confirmation for an authorized site update and retains saved proof", () => {
+    const context = { ...page, transport: "public-context-no-build-v1", contextRecheck: true };
+    render(<QueueList items={[context, { ...context, id: "B".repeat(20), status: "success",
+      recheckOutcome: "confirmed_late", recheckMessage: "Publication confirmed on the public site." }]} onCheckAgain={vi.fn()} />);
+    expect(screen.getAllByRole("button", { name: "Check again" })).toHaveLength(1);
+    expect(screen.getByText("Publication confirmed on the public site.")).toBeVisible();
+  });
 });

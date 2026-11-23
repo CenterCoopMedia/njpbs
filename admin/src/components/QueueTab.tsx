@@ -43,10 +43,12 @@ function valueToDate(value: unknown): Date | null {
   return null;
 }
 
-function queueItemFromDoc(id: string, data: DocumentData): QueueItem {
-  const automaticContext = data.transport === "public-context-no-build-v1" &&
+function queueItemFromDoc(id: string, data: DocumentData, settingsAccess: boolean): QueueItem {
+  const legacyContext = data.transport === "public-context-no-build-v1";
+  const pairedContext = data.transport === "release-pair-publication-v2";
+  const automaticContext = (legacyContext &&
     !data.settingsPublication && !data.libraryCardPublication && !data.recordPublication &&
-    Array.isArray(data.changes) && data.changes.length === 0;
+    Array.isArray(data.changes) && data.changes.length === 0) || (pairedContext && !data.familyPublication);
   const requesterId =
     typeof data.triggeredBy === "string" && data.triggeredBy.trim()
       ? data.triggeredBy
@@ -55,14 +57,35 @@ function queueItemFromDoc(id: string, data: DocumentData): QueueItem {
     typeof data.triggeredByEmail === "string" && data.triggeredByEmail.trim()
       ? data.triggeredByEmail
       : null;
+  const contextRecheck = legacyContext
+    ? Boolean(data.recordPublication || data.libraryCardPublication || settingsAccess && (automaticContext || data.settingsPublication))
+    : pairedContext && (data.familyPublication?.kind === "record" ||
+      settingsAccess && (!data.familyPublication || data.familyPublication.kind === "settings"));
+  let status = typeof data.status === "string" ? data.status : "unknown";
+  if (legacyContext || pairedContext) {
+    if (data.lastPublicCheck?.outcome === "confirmed_late") status = "success";
+    else if (data.lastPublicCheck?.outcome === "superseded") status = "superseded";
+    else if (legacyContext && status === "success") {
+      const identity = data.recordPublication ?? data.settingsPublication ?? data.libraryCardPublication;
+      const consumers = data.recordPublication ? ["pages", "home", "posts", "record"] : ["pages", "home", "posts"];
+      if (identity && consumers.some(name => {
+        const proof = data.consumerReceipts?.[name];
+        return proof?.rendererSha !== identity.rendererSha || proof?.contextDigest !== identity.contextDigest ||
+          proof?.contextRevision !== identity.contextRevision || !(proof?.verifiedAt > 0);
+      })) status = "public_unconfirmed";
+    }
+  }
   return {
     id,
-    status: typeof data.status === "string" ? data.status : "unknown",
+    status,
+    contextRecheck,
     automaticSiteUpdate: automaticContext,
     triggeredBy:
       requesterEmail ?? requesterId ?? (automaticContext ? "Automatic site update" : null),
     triggeredById: requesterId,
-    changes: automaticContext ? ["Site-wide update"] : data.changes,
+    changes: automaticContext ? ["Site-wide update"] : legacyContext && data.settingsPublication ? ["Site settings update"] :
+      legacyContext && data.recordPublication ? [data.recordPublication.family === "programs" ? "Program update" : "Event update"] :
+        legacyContext && data.libraryCardPublication ? ["Library card update"] : data.changes,
     timestamp: valueToDate(data.triggeredAt ?? (data.transport === "public-context-no-build-v1" ? data.createdAt : undefined)),
     completedAt: valueToDate(data.completedAt),
     error: automaticContext && data.status === "failed" ? "The accepted site update did not complete."
@@ -83,6 +106,7 @@ export function QueueTab() {
   const { principal } = useShell();
   const { getIdToken } = useAuth();
   const showPublishActivity = canViewPublishActivity(principal);
+  const settingsAccess = canManageSettings(principal);
 
   const [reviewRequests, setReviewRequests] = useState<ReviewQueueItem[]>([]);
   const [reviewLoading, setReviewLoading] = useState(true);
@@ -186,7 +210,7 @@ export function QueueTab() {
         ? "Too many active publication requests. Contact a Site owner." : null;
       if (index === 2) recoveryTruncated = snapshot.docs.length > PUBLISH_RECOVERY_LIMIT;
       const rows = index === 2 ? snapshot.docs.slice(0, PUBLISH_RECOVERY_LIMIT) : snapshot.docs;
-      read.items = rows.map(row => queueItemFromDoc(row.id, row.data()));
+      read.items = rows.map(row => queueItemFromDoc(row.id, row.data(), settingsAccess));
       updateItems();
     }, error => {
       read.error = error.message;
@@ -198,17 +222,23 @@ export function QueueTab() {
       try {
         const summary = await loadPublishActivitySummary(await getIdToken(), true);
         if (!current) return;
-        const ids = summary.postProofRecoveryIds ?? [];
+        const postProofIds = new Set(summary.postProofRecoveryIds);
+        const ids = [...new Set([...postProofIds, ...(summary.contextRecheckIds ?? [])])];
         const items: QueueItem[] = [];
         for (let offset = 0; offset < ids.length; offset += 30) {
           const rows = await getDocs(query(collection(db, "cmsPublishQueue"),
             where(documentId(), "in", ids.slice(offset, offset + 30))));
           if (!current) return;
-          items.push(...rows.docs.map(row => ({ ...queueItemFromDoc(row.id, row.data()), proofRecovery: true })));
+          items.push(...rows.docs.map(row => ({ ...queueItemFromDoc(row.id, row.data(), settingsAccess), proofRecovery: postProofIds.has(row.id) })));
         }
-        if (summary.contextRetry) items.push({ id: summary.contextRetry.queueId, status: "failed",
-          transport: "public-context-no-build-v1", automaticSiteUpdate: true, contextRetry: true, timestamp: valueToDate(summary.contextRetry.createdAt),
-          triggeredBy: "Automatic site update", changes: ["Site-wide update"], error: "The accepted site update did not complete." });
+        if (summary.contextRetry) {
+          const { queueId, createdAt, lastPublicCheck } = summary.contextRetry;
+          const status = lastPublicCheck?.outcome === "confirmed_late" ? "success" : lastPublicCheck?.outcome === "superseded" ? "superseded" : "failed";
+          items.push({ id: queueId, status, contextRecheck: settingsAccess, transport: "public-context-no-build-v1",
+            automaticSiteUpdate: true, contextRetry: status === "failed", timestamp: valueToDate(createdAt),
+            triggeredBy: "Automatic site update", changes: ["Site-wide update"], error: "The accepted site update did not complete.",
+            ...(lastPublicCheck ? { recheckMessage: lastPublicCheck.message, recheckOutcome: lastPublicCheck.outcome } : {}) });
+        }
         proofRecoveryItems.current = items;
         proofTruncated = summary.postProofRecoveryTruncated === true;
         setPublishRecoveryLoading(false);
@@ -220,7 +250,7 @@ export function QueueTab() {
       }
     })();
     return () => { current = false; stops.forEach(stop => stop()); };
-  }, [getIdToken, publishAttempt, showPublishActivity]);
+  }, [getIdToken, publishAttempt, settingsAccess, showPublishActivity]);
 
   return <QueueSurface
     reviewRequests={reviewRequests} reviewLoading={reviewLoading} reviewError={reviewError}

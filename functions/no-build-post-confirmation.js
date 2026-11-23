@@ -31,11 +31,15 @@ function createNoBuildPostConfirmationHandler(deps = {}) {
   return async event => {
     const queue = event.data?.after.data();
     const before = event.data?.before?.data();
-    if (queue?.recordPublication && before) {
-      // Reordering the recovery index must not start another public proof.
+    if (queue?.transport === "public-context-no-build-v1" && before) {
+      // Manual check results and recovery-index ordering never dispatch work.
       const previous = { ...before }, current = { ...queue };
-      delete previous.recordConfirmationPendingAt;
-      delete current.recordConfirmationPendingAt;
+      delete previous.lastPublicCheck;
+      delete current.lastPublicCheck;
+      if (queue.recordPublication) {
+        delete previous.recordConfirmationPendingAt;
+        delete current.recordConfirmationPendingAt;
+      }
       if (isDeepStrictEqual(previous, current)) return;
     }
     if (queue?.datasetRefreshJobId && ["success", "failed"].includes(queue.status)) {

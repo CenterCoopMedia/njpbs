@@ -29,9 +29,13 @@ function eligible(queue) {
   return ["failed", "public_unconfirmed"].includes(queue?.status) || exhaustedPostProof(queue);
 }
 
-async function readRecheck({ firestore, transaction, queueId, actor }) {
+async function readRecheck({ firestore, transaction, queueId, actor, allowContext = false }) {
   const queueRef = firestore.doc(`cmsPublishQueue/${queueId}`);
   const queue = (await transaction.get(queueRef)).data();
+  if (allowContext && require("./context-publication-recheck").handlesContextRecheck(queue)) {
+    return { context: await require("./context-publication-recheck").readContextRecheck({ firestore, transaction, queueId, actor, queue }) };
+  }
+  if (!hasCapability(actor.principal, "content.publish")) refuse(403, "Publish access required.");
   if (!queue) refuse(404, "Publication request not found.");
   if (!eligible(queue)) refuse(409, "Only failed or unconfirmed publications can be checked again.");
   if (![PAGE, POST].includes(queue.transport)) refuse(409, failedMessage(queue));
@@ -80,9 +84,10 @@ async function preparePostConfirmation({ firestore, state, target, headers = {},
 }
 
 async function recheckPublication({ firestore, queueId, actor, source = null, ...network }) {
-  if (!hasCapability(actor.principal, "content.publish")) refuse(403, "Publish access required.");
+  if (!hasCapability(actor.principal, "content.publish") && !can(actor.principal, "settings.manage", {})) refuse(403, "Publish access required.");
   if (typeof queueId !== "string" || !/^[A-Za-z0-9]{20}$/.test(queueId)) refuse(400, "A valid publication request is required.");
-  const initial = await firestore.runTransaction(transaction => readRecheck({ firestore, transaction, queueId, actor }), { readOnly: true });
+  const initial = await firestore.runTransaction(transaction => readRecheck({ firestore, transaction, queueId, actor, allowContext: true }), { readOnly: true });
+  if (initial.context) return require("./context-publication-recheck").completeContextRecheck({ firestore, queueId, actor, source, initial: initial.context, ...network });
   let proof;
   try {
     proof = await (initial.page ? preparePageConfirmation : preparePostConfirmation)({ firestore, state: initial.state, ...network });

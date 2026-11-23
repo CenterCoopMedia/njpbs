@@ -1,0 +1,7 @@
+{
+  "date": "2026-11-23",
+  "kind": "improved",
+  "title": "Check site and record updates again",
+  "body": "Use Check again on eligible site updates in Publish activity and on structured records. Boardwalk checks for public confirmation and leaves the original publication in place.",
+  "prs": []
+}

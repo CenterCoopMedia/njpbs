@@ -30,12 +30,12 @@ function libraryCardReceipt(queue, now = Date.now()) {
       !Number.isSafeInteger(identity.contextRevision) || identity.contextRevision < 1 ||
       identity.contextDigest !== publicContextDigest(identity.contextRevision) ||
       !/^[a-f0-9]{64}$/.test(identity.cardDigest ?? "") || !/^[a-f0-9]{40}$/.test(identity.rendererSha ?? "") ||
-      !["pending", "publishing", "success", "failed", "cancelled"].includes(queue.status) ||
+      !["pending", "publishing", "success", "failed", "public_unconfirmed", "cancelled"].includes(queue.status) ||
       queue.runtime?.owner !== "cloudflare" || queue.runtime.release !== identity.rendererSha ||
       queue.publicContext?.operationId !== identity.operationId || queue.publicContext.contextRevision !== identity.contextRevision ||
       queue.publicContext.contextDigest !== identity.contextDigest) refuse("The library card publication receipt is invalid.");
   const missingConsumers = missingPublicContextConsumers(queue, identity, REQUIRED_CONSUMERS, ["pages", "posts", "home"]);
-  const failed = ["failed", "cancelled"].includes(queue.status);
+  const failed = ["failed", "public_unconfirmed", "cancelled"].includes(queue.status);
   const started = queue.cardRetryAt?.toMillis?.() ?? queue.createdAt?.toMillis?.() ?? now;
   return { queueId: identity.operationId, transport: TRANSPORT, sourceVersion: identity.sourceVersion,
     action: identity.action, withdrawal: identity.withdrawal, status: failed ? "failed" : missingConsumers.length ? "pending" : "success",
@@ -129,11 +129,11 @@ async function prepareLibraryCardRetry({ firestore, transaction, accepted }) {
   } };
 }
 
-async function libraryCardMetadata({ firestore, stored }) {
-  if (!isLibraryCard(stored)) return null;
-  const history = await firestore.collection("cmsVersionHistory").where("collection", "==", "cmsPosts").where("documentId", "==", stored.id).get();
-  const record = shapeJoinedRecord(stored.id, stored, history.docs.map(row => row.data()));
+async function latestLibraryCardPublication({ firestore, transaction, stored }) {
+  const query = firestore.collection("cmsVersionHistory").where("collection", "==", "cmsPosts").where("documentId", "==", stored.id);
+  const history = await (transaction ? transaction.get(query) : query.get());
   const events = history.docs.map(row => row.data());
+  const record = shapeJoinedRecord(stored.id, stored, events);
   const approvalVersion = events.reduce((version, row) => row.action === "approve"
     ? Math.max(version, row.after?.version ?? 0) : version, 0);
   const candidates = events.filter(row => row.after?.version >= approvalVersion && ["approve", "archive", "unpublish"].includes(row.action))
@@ -142,12 +142,17 @@ async function libraryCardMetadata({ firestore, stored }) {
   // Archive after Unpublish changes no public card and creates no new queue.
   // Keep the accepted removal visible until its consumers finish.
   for (const event of candidates) {
-    accepted = await readLibraryCardPublication({ firestore,
+    accepted = await readLibraryCardPublication({ firestore, transaction,
       operationId: operationIdFor(stored.id, event.after.version, event.action), document: stored });
     if (accepted) break;
   }
+  return { accepted, approved: record?.approvedLibraryVersion };
+}
+
+async function libraryCardMetadata({ firestore, stored }) {
+  if (!isLibraryCard(stored)) return null;
+  const { accepted, approved } = await latestLibraryCardPublication({ firestore, stored });
   const receipt = accepted?.publication;
-  const approved = record?.approvedLibraryVersion;
   const version = value => Number.isSafeInteger(value) && value > 0 ? value : null;
   return { workingVersion: version(stored.version), contentVersion: version(stored.contentVersion ?? stored.version),
     workingStatus: typeof stored.status === "string" ? stored.status : "draft",
@@ -159,4 +164,4 @@ async function libraryCardMetadata({ firestore, stored }) {
 }
 
 module.exports = { isLibraryCard, operationIdFor, libraryCardReceipt, readLibraryCardPublication,
-  prepareLibraryCardPublication, prepareLibraryCardRetry, libraryCardMetadata };
+  prepareLibraryCardPublication, prepareLibraryCardRetry, latestLibraryCardPublication, libraryCardMetadata };

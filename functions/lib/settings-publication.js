@@ -39,11 +39,11 @@ function settingsPublicationReceipt(queue, now = Date.now()) {
       !/^[A-Za-z0-9]{20}$/.test(identity.operationId ?? "") ||
       identity.originalOperationId !== settingsOperationId(identity.id, identity.sourceVersion) ||
       (identity.operationId !== identity.originalOperationId && identity.operationId !== successorOperationId(identity)) ||
-      !["pending", "publishing", "success", "failed", "cancelled"].includes(queue.status)) {
+      !["pending", "publishing", "success", "failed", "public_unconfirmed", "cancelled"].includes(queue.status)) {
     refuse("This settings publication receipt is invalid.");
   }
   const missingConsumers = missingPublicContextConsumers(queue, identity, REQUIRED_CONSUMERS, ["pages", "posts", "home"]);
-  const failed = ["failed", "cancelled"].includes(queue.status);
+  const failed = ["failed", "public_unconfirmed", "cancelled"].includes(queue.status);
   const startedAt = queue.settingsRetryAt?.toMillis?.() ?? queue.triggeredAt?.toMillis?.() ?? queue.createdAt?.toMillis?.() ?? now;
   const overdue = missingConsumers.length > 0 && now - startedAt >= PUBLICATION_BUDGET_MS;
   return {
