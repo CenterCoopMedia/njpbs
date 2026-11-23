@@ -20,6 +20,9 @@ class AdapterError extends Error {
 }
 const invalid = () => new AdapterError("elevenlabs_result_invalid", "needs_reconciliation");
 const uncertain = () => new AdapterError("elevenlabs_submission_uncertain", "needs_reconciliation");
+const validTranscriptionId = value => typeof value === "string" && /^[A-Za-z0-9_-]{1,200}$/.test(value);
+const validKey = key => Buffer.isBuffer(key) && key.length >= 16 && key.length <= 4096 &&
+  key.every(byte => byte >= 33 && byte <= 126);
 function safeText(text) {
   return typeof text === "string" && ![...text].some((character) => {
     const code = character.charCodeAt(0);
@@ -37,7 +40,7 @@ function validateInput(input, key, settings, options) {
       !Number.isFinite(input.durationSeconds) || input.durationSeconds < 0.1 || input.durationSeconds > MAX_DURATION_SECONDS) {
     throw new AdapterError("elevenlabs_input_invalid", "pre_submission");
   }
-  if (!Buffer.isBuffer(key) || key.length < 16 || key.length > 4096 || key.some((byte) => byte < 33 || byte > 126)) {
+  if (!validKey(key)) {
     throw new AdapterError("elevenlabs_key_invalid", "pre_submission");
   }
   if (!settings || Object.keys(settings).some((name) => !["languageCode", "maxSpeakers"].includes(name)) ||
@@ -192,7 +195,7 @@ async function readResult(response) {
  * follows the account default; this does not promise zero retention.
  */
 async function transcribe(input, key, settings, options = {}) {
-  const { fetchFn, timeoutMs = TIMEOUT_MS, signal } = options;
+  const { fetchFn, timeoutMs = TIMEOUT_MS, signal, recordCompleted } = options;
   validateInput(input, key, settings, { fetchFn, timeoutMs });
   if (signal !== undefined && !(signal instanceof AbortSignal)) throw new AdapterError("elevenlabs_signal_invalid", "pre_submission");
   if (signal?.aborted) throw new AdapterError("elevenlabs_cancelled", "pre_submission");
@@ -213,10 +216,14 @@ async function transcribe(input, key, settings, options = {}) {
       }
       const document = await readResult(response);
       if (!upload.state.verified || controller.signal.aborted) throw uncertain();
+      const transcriptionId = document?.transcription_id;
+      const inputSha256 = upload.state.inputSha256;
+      if (recordCompleted && validTranscriptionId(transcriptionId) && document.request_id === undefined &&
+          document.transcripts === undefined && (typeof document.text === "string" || Array.isArray(document.words))) {
+        await recordCompleted({ transcriptionId, inputSha256 });
+      }
       return { segments: normalizeResult(document, input.durationSeconds, settings.maxSpeakers), model: MODEL,
-        inputSha256: upload.state.inputSha256,
-        ...(typeof document.transcription_id === "string" && /^[A-Za-z0-9_-]{1,200}$/.test(document.transcription_id)
-          ? { transcriptionId: document.transcription_id } : {}) };
+        inputSha256, ...(validTranscriptionId(transcriptionId) ? { transcriptionId } : {}) };
     };
     return await Promise.race([submit(), deadline]);
   } catch (error) {
@@ -230,4 +237,30 @@ async function transcribe(input, key, settings, options = {}) {
     input.stream.destroy();
   }
 }
-module.exports = { MODEL, ENDPOINT, MAX_INPUT_BYTES, MAX_RESULT_BYTES, MAX_DURATION_SECONDS, TIMEOUT_MS, normalizeResult, transcribe };
+
+async function retrieveTranscript({ transcriptionId, inputSha256 }, key, settings, { fetchFn }) {
+  if (!validTranscriptionId(transcriptionId) || !/^[a-f0-9]{64}$/.test(inputSha256 ?? "") || !validKey(key)) throw invalid();
+  const unavailable = () => new AdapterError("elevenlabs_result_unavailable", "retry_recovery");
+  let response;
+  try {
+    response = await fetchFn(`${ENDPOINT}/transcripts/${transcriptionId}`, { method: "GET", redirect: "error",
+      signal: AbortSignal.timeout(30_000), headers: { "xi-api-key": key.toString("ascii") } });
+  } catch { throw unavailable(); }
+  if (!response.ok) {
+    void response.body?.cancel().catch(() => {});
+    if (response.status === 408 || response.status === 429 || response.status >= 500) throw unavailable();
+    throw invalid();
+  }
+  let document;
+  try { document = await readResult(response); }
+  catch (error) {
+    if (error instanceof SyntaxError || error instanceof AdapterError) throw invalid();
+    throw unavailable();
+  }
+  // The lookup path names the exact identity. Some responses omit an echo.
+  if (document?.transcription_id !== undefined && document.transcription_id !== transcriptionId) throw invalid();
+  return { segments: normalizeResult(document, settings.durationSeconds, settings.maxSpeakers), model: MODEL, inputSha256, transcriptionId };
+}
+
+module.exports = { MODEL, ENDPOINT, MAX_INPUT_BYTES, MAX_RESULT_BYTES, MAX_DURATION_SECONDS, TIMEOUT_MS,
+  normalizeResult, retrieveTranscript, transcribe, validTranscriptionId };

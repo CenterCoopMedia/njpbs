@@ -12,7 +12,7 @@ const { createAwsRoleCredentialProvider } = require("./lib/aws-workload-credenti
 const { createByokRunner } = require("./lib/video-transcript-byok-runner");
 const { createVideoTranscriptByokStorage } = require("./lib/video-transcript-byok-storage");
 const { createTranscriptAudioRuntime } = require("./lib/video-transcript-audio-runtime");
-const { transcribe } = require("./lib/video-transcript-elevenlabs");
+const { retrieveTranscript, transcribe } = require("./lib/video-transcript-elevenlabs");
 const { credentialIdentity, CREDENTIAL_COLLECTION, encryptionKey, decryptCredential } = require("./lib/video-transcription-credentials");
 const { KEY, KEY_VERSION, BYOK_ENABLED, DATA_ROLE, RUNNER_SERVICE_ACCOUNT, isConfigured } = require("./lib/video-transcription-config");
 
@@ -56,7 +56,8 @@ function createRunnerTick(dependencies = {}) {
     const run = (dependencies.createRunnerFn ?? createByokRunner)({ firestore,
       source: (dependencies.registryFn ?? runtimeRegistry)().get("video-library"), renditionBucket: config.renditionBucket,
       storage, loadCredential, getAuthUser: dependencies.getAuthUser ?? ((uid) => getAuth().getUser(uid)),
-      transcribe: (input, key, settings) => transcribe(input, key, settings, { fetchFn: dependencies.fetchFn ?? fetch }) });
+      transcribe: (input, key, settings, options) => transcribe(input, key, settings, { ...options, fetchFn: dependencies.fetchFn ?? fetch }),
+      retrieveTranscript: (response, key, settings) => retrieveTranscript(response, key, settings, { fetchFn: dependencies.fetchFn ?? fetch }) });
     try { return await run(); }
     finally {
       try { await audio?.cleanup(); }

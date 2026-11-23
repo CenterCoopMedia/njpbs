@@ -1,0 +1,7 @@
+{
+  "date": "2026-11-23",
+  "kind": "fixed",
+  "title": "Recover completed ElevenLabs transcripts",
+  "body": "Boardwalk can retrieve a completed ElevenLabs transcript when it has the original result ID. It checks the result before making the transcript available and reuses the original request.",
+  "prs": []
+}

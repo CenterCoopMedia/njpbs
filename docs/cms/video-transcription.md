@@ -21,3 +21,9 @@ be returned without consuming another local retry.
 `cmsRequestByokVideoTranscript` accepts `newAttemptOf` and `attemptKey` with its
 ElevenLabs credential fields. A retry preserves the earlier request and its
 history.
+
+The ElevenLabs runner first recovers the existing normalized result. If it has
+the validated provider ID from the original completed response, it can retrieve
+that transcript with the original credential revision and verify it before
+creating the normalized result. Recovery reuses the original request and usage
+record. Access, media version and billing checks still apply.

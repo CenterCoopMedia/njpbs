@@ -21,6 +21,7 @@ function createByokRunner({
   storage,
   loadCredential,
   transcribe,
+  retrieveTranscript,
   clock = Date.now,
   onlyJobId,
 }) {
@@ -189,6 +190,38 @@ function createByokRunner({
     });
     return { outcome: finished ? "ready" : "lease_lost" };
   }
+  async function retrieveCompleted(owner, claim, response) {
+    const authorized = async credential => (await authCurrent(claim)) && await firestore.runTransaction(async tx => {
+      const job = (await tx.get(queue.doc(claim.id))).data();
+      const currentResponse = jobs.completedResponse(job);
+      return job?.active === true && job.phase === "running" && job.leaseOwner === claim.leaseOwner &&
+        job.leaseUntil > clock() && job.requestedBy === claim.requestedBy && job.requestedAuthTime === claim.requestedAuthTime &&
+        job.submissionIntentAt === claim.submissionIntentAt && currentResponse?.attemptId === response.attemptId &&
+        currentResponse?.transcriptionId === response.transcriptionId && currentResponse?.inputSha256 === response.inputSha256 &&
+        await current(owner, credential)(tx, job, "provider_recovery");
+    });
+    if (!await authorized()) return null;
+    const credential = await loadCredential(claim);
+    try {
+      if (!Buffer.isBuffer(credential?.key) || !await authorized(credential)) return null;
+      let result;
+      try {
+        result = await retrieveTranscript(response, credential.key, {
+          durationSeconds: claim.durationSeconds, maxSpeakers: claim.maxSpeakers,
+        });
+      } catch (error) {
+        if (error?.code === "elevenlabs_result_invalid") return null;
+        throw error;
+      }
+      if (result.transcriptionId !== response.transcriptionId || result.inputSha256 !== response.inputSha256) return null;
+      const receipt = await storage.persistSpool(claim, claim, result);
+      const recovered = await storage.recoverSpool(claim, claim, receipt);
+      if (!recovered) throw Error("byok_spool_unavailable");
+      return recovered;
+    } finally {
+      if (Buffer.isBuffer(credential?.key)) credential.key.fill(0);
+    }
+  }
   async function recover(owner, row) {
     const claim = await jobs.claimRecovery({
       firestore,
@@ -206,6 +239,10 @@ function createByokRunner({
         if (!["byok_storage_receipt_invalid", "byok_storage_result_invalid", "byok_storage_identity_invalid", "byok_storage_result_too_large"].includes(error?.code)) throw error;
         recoveryError = "byok_spool_invalid";
       }
+    }
+    const response = jobs.completedResponse(claim);
+    if (!recovered && !recoveryError && response && typeof retrieveTranscript === "function") {
+      recovered = await retrieveCompleted(owner, claim, response);
     }
     if (recovered) return publish(owner, claim, recovered);
     const finished = await jobs.finishJob({
@@ -263,6 +300,12 @@ function createByokRunner({
       const result = await transcribe(prepared.input, credential.key, {
         languageCode: claim.languageCode,
         maxSpeakers: claim.maxSpeakers,
+      }, {
+        async recordCompleted(response) {
+          if (!await jobs.recordCompletedResponse({ firestore, claim: intent, response, now: clock() })) {
+            throw Error("byok_runner_lease_lost");
+          }
+        },
       });
       const receipt = await storage.persistSpool(intent, intent, result);
       const recovered = await storage.recoverSpool(intent, intent, receipt);
