@@ -1,10 +1,10 @@
 import { useEffect, useState } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { act, cleanup, fireEvent, render, screen, within } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { EditorBento, type BentoPanel } from "../src/components/EditorBento";
-import { PagePreview } from "../src/components/PagePreview";
+import { SavedPreview } from "../src/components/SavedPreview";
 import { createMemoryBentoStore } from "../src/lib/editor-bento-store";
-import type { PreviewRequestResponse } from "../src/lib/functions";
+import type { SavedPreviewRequestResponse } from "../src/lib/functions";
 
 afterEach(cleanup);
 
@@ -326,27 +326,33 @@ describe("EditorBento", () => {
   });
 
   it("keeps a pending preview request alive when moving its panel", async () => {
-    let resolvePreview: ((value: PreviewRequestResponse) => void) | undefined;
-    const requestPreview = () =>
-      new Promise<PreviewRequestResponse>((resolve) => {
-        resolvePreview = resolve;
-      });
+    const queueId = "abcdefghijklmnopqrst";
+    const target = { collection: "cmsPages", documentId: "home", sourceVersion: 7 } as const;
+    let resolvePreview!: (value: SavedPreviewRequestResponse) => void;
+    const pending = new Promise<SavedPreviewRequestResponse>((resolve) => { resolvePreview = resolve; });
+    const requestPreview = vi.fn(() => pending);
+    const replace = vi.fn();
+    const close = vi.fn();
+    const open = vi.spyOn(window, "open").mockReturnValue({ closed: false,
+      document: document.implementation.createHTMLDocument(), opener: null, close,
+      location: { replace },
+    } as unknown as Window);
     const previewPanel: BentoPanel[] = [
       {
         id: "preview",
         title: "Preview",
+        toggleLabel: "Preview panel",
         defaultZone: "side",
         body: (
-          <PagePreview
-            pageId="home"
-            pagePath="/"
-            dirty={false}
-            saving={false}
+          <SavedPreview
+            collection={target.collection}
+            documentId={target.documentId}
+            enabled
+            preparePreview={async () => target}
             requestPreview={requestPreview}
             loadPreviewStatus={async () => {
               throw new Error("Polling is not expected in this test.");
             }}
-            headless
           />
         ),
       },
@@ -359,25 +365,25 @@ describe("EditorBento", () => {
       />,
     );
 
-    fireEvent.click(screen.getByRole("button", { name: "Build preview" }));
-    expect(within(zone("Side panel")).getByText("Requesting")).toBeVisible();
-    fireEvent.keyDown(screen.getByRole("button", { name: "Move section: Preview" }), {
-      key: "ArrowLeft",
-    });
-    expect(within(zone("Main area")).getByText("Requesting")).toBeVisible();
-
-    await act(async () => {
-      resolvePreview?.({
-        success: true,
-        queueId: "queue123",
-        pageId: "home",
-        sourceVersion: 7,
-        dispatched: true,
-        status: "building",
+    try {
+      fireEvent.click(screen.getByRole("button", { name: "Preview" }));
+      await waitFor(() => expect(requestPreview).toHaveBeenCalledExactlyOnceWith(target));
+      fireEvent.keyDown(screen.getByRole("button", { name: "Move section: Preview" }), {
+        key: "ArrowLeft",
       });
-    });
-
-    expect(within(zone("Main area")).getByText(/Building saved version 7/)).toBeVisible();
+      expect(within(zone("Main area")).getByRole("button", { name: /Preparing preview/ })).toHaveAttribute("aria-busy", "true");
+      const previewUrl = `https://preview.njpbs.org/p/${queueId}/`;
+      await act(async () => resolvePreview({ success: true, queueId, collection: target.collection,
+        pageId: target.documentId, sourceVersion: target.sourceVersion, status: "ready", previewUrl,
+        pagePath: "/", rendererSha: "a".repeat(40), error: null, requestedAt: null, completedAt: null,
+        expiresAt: null, reused: true, retryAfterMs: 0,
+      }));
+      expect(replace).toHaveBeenCalledExactlyOnceWith(previewUrl);
+      expect(open).toHaveBeenCalledTimes(1);
+      expect(close).not.toHaveBeenCalled();
+    } finally {
+      open.mockRestore();
+    }
   });
 
   it("exposes movable grips as keyboard controls and omits an immovable grip", () => {

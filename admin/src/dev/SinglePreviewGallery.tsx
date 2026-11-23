@@ -1,6 +1,6 @@
 import { useRef, useState } from "react";
 import { createMemoryRouter, RouterProvider } from "react-router";
-import { EditorWorkspace, type PageContent } from "../components/EditorWorkspace";
+import { EditorWorkspace, type PageContent, type Surface } from "../components/EditorWorkspace";
 import type { AdminBlock } from "../lib/block-factory";
 import type { PreviewTarget } from "../lib/saved-preview-operation";
 import type { RouteHandle } from "../routes/buildRoutes";
@@ -24,7 +24,7 @@ export function SinglePreviewGallery() {
   if (!fixture.current) fixture.current = transport();
   const { state, props } = fixture.current;
   window.__CMS_PREVIEW_FIXTURE__ = state;
-  const page = props.surface.kind === "page";
+  const pageId = props.surface.kind === "page" ? props.surface.pageId : null;
   const recordKind = props.surface.kind === "record" ? props.surface.record : "post";
   const recordLabel = recordKind[0].toUpperCase() + recordKind.slice(1);
   const [router] = useState(() => createMemoryRouter([
@@ -35,12 +35,12 @@ export function SinglePreviewGallery() {
         path: "content/*",
         element: <EditorWorkspace principal={principal} {...props} />,
         handle: {
-          title: page ? "Page /pages/contact" : `${recordLabel} /${recordKind}s/preview-story`,
+          title: pageId ? `Page /pages/${pageId}` : `${recordLabel} /${recordKind}s/preview-story`,
           description: "Preview test draft",
         } satisfies RouteHandle,
       }],
     },
-  ], { initialEntries: [page ? "/content/pages/contact/edit" : `/content/${recordKind}/preview-story/edit`] }));
+  ], { initialEntries: [pageId ? `/content/pages/${pageId}/edit` : `/content/${recordKind}/preview-story/edit`] }));
   const shell: ShellData = {
     principal,
     user: {
@@ -62,9 +62,9 @@ export function SinglePreviewGallery() {
 function transport() {
   const parameters = new URLSearchParams(window.location.search);
   const requestedKind = parameters.get("previewKind");
-  const page = requestedKind === "page";
+  const pageId = requestedKind === "staff" ? "staff" : requestedKind === "page" ? "contact" : null;
   const kind = requestedKind === "program" || requestedKind === "event" ? requestedKind : "post";
-  const pagePath = page ? "/contact/" : `/${kind}s/preview-story/`;
+  const pagePath = pageId ? `/${pageId}/` : `/${kind}s/preview-story/`;
   let release = () => {};
   let releaseStatus = () => {};
   let terminalStatus: "ready" | "failed" = "ready";
@@ -77,10 +77,11 @@ function transport() {
     ...(kind === "post" ? {} : { description: { type: "doc", content: [{ type: "paragraph", content: [{ type: "text", text: "Saved preview synopsis and details." }] }] },
       startsAt: "2026-10-13T18:00:00.000Z", previousSlugs: [], locale: "en" }) };
   let storedPage: PageContent = { blocks: [], metadata: { title: "Preview test draft" }, version: 7, status: "draft" };
+  const surface: Surface = pageId ? { kind: "page", pageId, section: "genericPage" }
+    : { kind: "record", record: kind, id: "preview-story" };
   let accepted: PreviewTarget;
   return { state, props: {
-    surface: page ? { kind: "page" as const, pageId: "contact" as const, section: "genericPage" as const }
-      : { kind: "record" as const, record: kind as "post" | "program" | "event", id: "preview-story" },
+    surface,
     loadRecord: async () => ({ status: "ready" as const, record: structuredClone(stored) }),
     loadPage: async () => structuredClone(storedPage),
     savePage: async (_pageId: unknown, _section: unknown, blocks: AdminBlock[]) => {

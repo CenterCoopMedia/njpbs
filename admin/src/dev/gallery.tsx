@@ -251,8 +251,6 @@ import type {
   MediaListQuery,
   ListMediaResponse,
   MediaAssetSummary,
-  PreviewRequestResponse,
-  PreviewStatusResponse,
   UploadMediaMetadata,
   UploadMediaResponse,
   UpdateMediaMetadata,
@@ -521,35 +519,15 @@ function ServiceCompositionGallery() {
   );
 }
 
-// Start `npm --prefix site run preview -- --host 127.0.0.1 --port 4321`
-// before opening the ready-page specimen, then click Build preview. This keeps
-// the gallery on the real PagePreview component and frames a real locally built
-// public route without needing Firebase, GitHub, Cloudflare, or a fake renderer.
-const requestGalleryPreview = async (
-  pageId: string,
-): Promise<PreviewRequestResponse> => ({
-  success: true,
-  queueId: "gallery-preview",
-  pageId,
-  sourceVersion: 7,
-  dispatched: true,
-  status: "building",
-});
-
-const loadGalleryPreviewStatus = async (): Promise<PreviewStatusResponse> => ({
-  success: true,
-  queueId: "gallery-preview",
-  status: "ready",
-  pageId: "home",
-  sourceVersion: 7,
-  previewUrl: "http://127.0.0.1:4321",
-  error: null,
-  requestedAt: "2026-07-23T12:00:00.000Z",
-  completedAt: "2026-07-23T12:01:00.000Z",
-  // Relative, not a fixed date: a hard-coded expiry silently turns this specimen into the
-  // expired state once that date passes, and the ready state stops being reviewable at all.
-  expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1_000).toISOString(),
-});
+// Layout specimens can show the action without starting a real build.
+// The single-preview-workspace specimen exercises the full queue handoff.
+const galleryPreviewUnavailable = async (): Promise<never> => {
+  throw new Error("This layout specimen has no preview renderer.");
+};
+const galleryPagePreview = {
+  requestSavedPreview: galleryPreviewUnavailable,
+  loadPagePreviewStatus: galleryPreviewUnavailable,
+} satisfies Pick<React.ComponentProps<typeof EditorWorkspace>, "requestSavedPreview" | "loadPagePreviewStatus">;
 
 const LOCKED_EDITOR_CLIENT: EditorLockClient = {
   subscribe: (surfaceKey, onLock) => {
@@ -858,8 +836,7 @@ function StaffPageGallery({ kind }: { kind: "empty" | "blocks" | "readonly" }) {
       savePage={saveOk}
       savePageMetadata={saveMetadataOk}
       loadMedia={loadGalleryMedia}
-      requestPagePreview={requestGalleryPreview}
-      loadPagePreviewStatus={loadGalleryPreviewStatus}
+      {...galleryPagePreview}
       newId={galleryIds}
       surface={STAFF_PAGE_SURFACE}
     />
@@ -1857,6 +1834,7 @@ function ShellSpecimen({
   section?: SectionId;
   surface?: Surface;
 }) {
+  const previewRequest = requestSavedPreview ?? (!surface || surface.kind === "page" ? galleryPreviewUnavailable : undefined);
   const [router] = useState(() =>
     createMemoryRouter(
       [
@@ -1896,7 +1874,8 @@ function ShellSpecimen({
                 <EditorWorkspace
                   reportingTransport={reportingTransport}
                   loadRevisions={loadRevisions} loadRevision={loadRevision}
-                  requestSavedPreview={requestSavedPreview}
+                  requestSavedPreview={previewRequest}
+                  loadPagePreviewStatus={previewRequest ? galleryPreviewUnavailable : undefined}
                   capturePostTemplate={capturePostTemplate}
                   duplicatePost={duplicatePost}
                   assignRecord={
@@ -1941,8 +1920,6 @@ function ShellSpecimen({
                       ? transitionGalleryPost
                       : undefined)
                   }
-                  requestPagePreview={requestGalleryPreview}
-                  loadPagePreviewStatus={loadGalleryPreviewStatus}
                   newId={galleryIds}
                   surface={surface ?? { kind: "page", pageId, section }}
                 />
@@ -3246,8 +3223,7 @@ export const SHOTS: Shot[] = [
           savePage={saveOk}
           savePageMetadata={saveMetadataOk}
           loadMedia={loadGalleryMedia}
-          requestPagePreview={requestGalleryPreview}
-          loadPagePreviewStatus={loadGalleryPreviewStatus}
+          {...galleryPagePreview}
           newId={galleryIds}
           surface={HOME_PAGE_SURFACE}
         />
@@ -3269,8 +3245,7 @@ export const SHOTS: Shot[] = [
           savePage={saveOk}
           savePageMetadata={saveMetadataOk}
           loadMedia={loadGalleryMedia}
-          requestPagePreview={requestGalleryPreview}
-          loadPagePreviewStatus={loadGalleryPreviewStatus}
+          {...galleryPagePreview}
           newId={galleryIds}
           surface={HOME_PAGE_SURFACE}
         />
@@ -3474,7 +3449,7 @@ export const SHOTS: Shot[] = [
   {
     id: "single-preview-workspace",
     title: "One Preview action",
-    note: "Real Page/Post workspace with isolated in-memory saves, addressed preview receipts and a real new-tab handoff. No CMS or public data is changed.",
+    note: "Page, Post and Staff page editors with in-memory saves, addressed preview receipts and a new-tab handoff.",
     isolateDocument: true,
     render: () => <SinglePreviewGallery />,
   },

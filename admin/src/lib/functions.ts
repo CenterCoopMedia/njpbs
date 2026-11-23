@@ -2161,18 +2161,6 @@ export function cmsRequestSavedPreview(
   });
 }
 
-// Capture and build one exact saved page revision. The function copies the
-// renderer-owned fields into an immutable queue row before dispatching, so a
-// save made while the build runs cannot change the review artifact.
-export function cmsRequestPagePreview(
-  idToken: string,
-  pageId: string,
-): Promise<PreviewRequestResponse> {
-  return postFunction<PreviewRequestResponse>("cmsPreview", idToken, {
-    pageId,
-  });
-}
-
 // Poll through the authenticated function boundary. The response deliberately
 // omits the captured document and exposes the deployment URL only after the
 // workflow has recorded a terminal ready result.

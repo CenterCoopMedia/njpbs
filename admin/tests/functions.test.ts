@@ -27,7 +27,7 @@ import {
   cmsListRevisions,
   cmsLoadPagePreviewStatus,
   cmsPublish,
-  cmsRequestPagePreview,
+  cmsRequestSavedPreview,
   cmsPublishSettings,
   cmsRestoreRevision,
   cmsSaveContent,
@@ -1047,15 +1047,19 @@ describe("cmsAssignContent", () => {
   });
 });
 
-describe("CMS page preview", () => {
-  it("requests one canonical page and polls one opaque queue id", async () => {
+describe("CMS saved preview", () => {
+  it("requests the acknowledged version and waits on the accepted queue id", async () => {
+    const queueId = "abcdefghijklmnopqrst";
     const fetchMock = vi
       .fn()
       .mockResolvedValueOnce(
         okResponse({
           success: true,
-          queueId: "queue123",
+          queueId,
           pageId: "contact",
+          collection: "cmsPages",
+          pagePath: "/contact/",
+          rendererSha: "a".repeat(40),
           sourceVersion: 7,
           dispatched: true,
           status: "building",
@@ -1064,11 +1068,14 @@ describe("CMS page preview", () => {
       .mockResolvedValueOnce(
         okResponse({
           success: true,
-          queueId: "queue123",
+          queueId,
           pageId: "contact",
           sourceVersion: 7,
           status: "ready",
-          previewUrl: "https://abc123.njpbs-preview.pages.dev",
+          collection: "cmsPages",
+          pagePath: "/contact/",
+          rendererSha: "a".repeat(40),
+          previewUrl: `https://preview.njpbs.org/p/${queueId}/`,
           error: null,
           requestedAt: "2026-07-23T12:00:00.000Z",
           completedAt: "2026-07-23T12:01:00.000Z",
@@ -1077,17 +1084,24 @@ describe("CMS page preview", () => {
       );
     vi.stubGlobal("fetch", fetchMock);
 
-    await cmsRequestPagePreview("id-token", "contact");
-    await cmsLoadPagePreviewStatus("id-token", "queue123");
+    const accepted = await cmsRequestSavedPreview("id-token", "cmsPages", "contact", 7);
+    const signal = new AbortController().signal;
+    await cmsLoadPagePreviewStatus("id-token", accepted.queueId, { signal, waitMs: 5000, observedStatus: "building" });
 
     expect(fetchMock.mock.calls[0]![0]).toBe(`${BASE}/cmsPreview`);
     expect(JSON.parse(fetchMock.mock.calls[0]![1].body as string)).toEqual({
       pageId: "contact",
+      collection: "cmsPages",
+      sourceVersion: 7,
+      persistent: false,
     });
     expect(fetchMock.mock.calls[1]![0]).toBe(`${BASE}/cmsPreviewStatus`);
     expect(JSON.parse(fetchMock.mock.calls[1]![1].body as string)).toEqual({
-      queueId: "queue123",
+      queueId,
+      waitMs: 5000,
+      observedStatus: "building",
     });
+    expect(fetchMock.mock.calls[1]![1].signal).toBe(signal);
     for (const [, init] of fetchMock.mock.calls) {
       expect((init.headers as Record<string, string>).Authorization).toBe(
         "Bearer id-token",

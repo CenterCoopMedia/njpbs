@@ -2941,53 +2941,18 @@
   gap: var(--space-5);
 }
 
-/* The standalone (non-headless) page preview keeps its own card chrome for the design gallery and
-   isolated tests; inside the editor the bento card supplies the chrome and the preview is headless. */
-.page-preview-editor {
-  display: grid;
-  min-width: 0;
-  gap: var(--space-5);
-  border: var(--border-width) solid var(--color-border);
-  border-radius: var(--radius-surface);
-  padding: var(--space-6);
-  background: var(--color-surface);
-}
-
-.page-editor-section-heading {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: var(--space-4);
-  border-bottom: var(--border-width) solid var(--color-border);
-  padding-bottom: var(--space-4);
-}
-
-.page-editor-section-heading > div {
-  display: grid;
-  gap: var(--space-1);
-}
-
-.page-editor-section-heading h3,
-.page-editor-section-heading p,
-.page-public-path {
-  margin: 0;
-}
-
-.page-editor-section-heading p,
-.page-public-path {
-  color: var(--color-text-muted);
-  font-size: var(--font-size-sm);
-}
-
 .page-public-path {
   display: flex;
   flex: 0 0 auto;
   align-items: center;
   gap: var(--space-2);
+  margin: 0;
   border: var(--border-width) solid var(--color-border);
   border-radius: var(--radius-pill);
   padding: var(--space-2) var(--space-3);
   background: var(--color-surface-soft);
+  color: var(--color-text-muted);
+  font-size: var(--font-size-sm);
   font-weight: 700;
 }
 
@@ -3272,17 +3237,6 @@
   grid-column: 1 / -1;
 }
 
-.page-preview-editor--headless {
-  display: grid;
-  min-width: 0;
-  gap: var(--space-5);
-}
-
-.page-preview-status-row {
-  display: flex;
-  justify-content: flex-end;
-}
-
 @container studio (max-width: 72rem) {
   .editor-bento {
     grid-template-columns: minmax(0, 1fr);
@@ -3299,101 +3253,6 @@
   }
 }
 
-.page-preview-actions,
-.page-preview-toolbar,
-.page-preview-details {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--space-4);
-}
-
-.page-preview-toolbar {
-  flex-wrap: wrap;
-}
-
-/* A link wearing the button shape should read as the control it is; the underline it inherits
-   from body links leaves it looking like text that happens to sit on a blue field. */
-.page-preview-open-tab {
-  text-decoration: none;
-}
-
-.page-preview-toolbar > * {
-  flex: 1 1 16rem;
-}
-
-.page-preview-actions > div {
-  display: grid;
-  gap: var(--space-2);
-}
-
-.page-preview-help,
-.page-preview-version,
-.page-preview-copy-error {
-  margin: 0;
-  color: var(--color-text-muted);
-  font-size: var(--font-size-sm);
-}
-
-.page-preview-version {
-  font-weight: 700;
-}
-
-.page-preview-copy-error {
-  color: var(--color-danger-strong);
-}
-
-/* The save-or-discard gate the preview shows instead of a locked build button (#1042). */
-.page-preview-gate {
-  display: grid;
-  gap: var(--space-3);
-  min-width: 0;
-}
-
-.page-preview-gate-actions {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--space-2);
-}
-
-.page-preview-gate-actions .button {
-  flex: 1 1 auto;
-}
-
-.page-preview-ready {
-  display: grid;
-  min-width: 0;
-  gap: var(--space-3);
-}
-
-.page-preview-link-actions {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: var(--space-2);
-}
-
-.page-preview-details {
-  justify-content: flex-start;
-  flex-wrap: wrap;
-  color: var(--color-text-muted);
-  font-size: var(--font-size-sm);
-}
-
-.page-preview-details span {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--space-2);
-}
-
-.page-preview-details span + span::before {
-  width: var(--space-1);
-  height: var(--space-1);
-  border-radius: var(--radius-pill);
-  background: var(--color-border-strong);
-  content: "";
-}
-
 @media (max-width: 720px) {
   .account-settings {
     margin: var(--space-2);
@@ -3401,18 +3260,6 @@
 
   .account-settings-panel {
     padding: var(--space-4);
-  }
-
-  .page-editor-section-heading,
-  .page-preview-actions,
-  .page-preview-toolbar {
-    align-items: stretch;
-    flex-direction: column;
-  }
-
-  .page-preview-link-actions .button,
-  .page-preview-link-actions a {
-    flex: 1 1 auto;
   }
 }
 
@@ -7089,10 +6936,6 @@
 
   .content-area-studio {
     padding: var(--studio-gutter);
-  }
-
-  .page-editor-section-heading {
-    flex-direction: column;
   }
 
   .dashboard-intro,

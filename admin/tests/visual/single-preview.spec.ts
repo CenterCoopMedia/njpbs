@@ -1,7 +1,10 @@
 import { expect, test } from "./fixtures";
 
 for (const width of [1280, 390]) {
-  for (const kind of ["page", "post", "program", "event"]) {
+  for (const [kind, path] of [
+    ["page", "/contact/"], ["staff", "/staff/"], ["post", "/posts/preview-story/"],
+    ["program", "/programs/preview-story/"], ["event", "/events/preview-story/"],
+  ]) {
     test(`one ${kind} Preview opens automatically at ${width}px`, async ({ page, context }) => {
       await context.route("https://preview.njpbs.org/p/**", route => route.fulfill({ contentType: "text/html", body: "<h1>Exact private preview</h1>" }));
       await page.setViewportSize({ width, height: 900 });
@@ -21,7 +24,7 @@ for (const width of [1280, 390]) {
       await expect.poll(() => page.evaluate(() => window.__CMS_PREVIEW_FIXTURE__?.reads.length)).toBe(1);
       await page.evaluate(() => window.__CMS_PREVIEW_FIXTURE__?.releaseStatus());
       await expect(popup.getByRole("heading", { name: "Exact private preview" })).toBeVisible();
-      expect(popup.url()).toContain(kind === "page" ? "/contact/" : `/${kind}s/preview-story/`);
+      expect(new URL(popup.url()).pathname).toBe(`/p/abcdefghijklmnopqrst${path}`);
       expect(await page.evaluate(() => window.__CMS_PREVIEW_FIXTURE__?.saves)).toBe(0);
       expect(await page.evaluate(() => window.__CMS_PREVIEW_FIXTURE__?.requests.length)).toBe(1);
       const geometry = await page.evaluate(() => ({ width: document.documentElement.clientWidth, scroll: document.documentElement.scrollWidth }));
