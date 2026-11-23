@@ -40,11 +40,6 @@ import {
   type ScheduleFetchStatus,
 } from "../src/lib/schedule-availability";
 import {
-  resolveGatedPlayback,
-  type GatedFetchFailure,
-  type GatedOutageLayer,
-} from "../src/lib/member-gated-playback";
-import {
   manualLaunchCards,
   pbsLivestreamWatchUrl,
   pbsLivestreamEmbedUrl,
@@ -187,19 +182,6 @@ const PROVERS: Record<(typeof SURFACES_WITH_FALLBACK)[number], () => void> = {
     expect(homepage).toContain("homeSources.pbs.more.map(");
   },
 
-  // Fail-closed: an entitlement or sign-in outage denies access and shows an honest
-  // unavailable island (never a broken/blank state, never access from stale data).
-  memberGatedPlayback: () => {
-    const layers: GatedOutageLayer[] = ["auth", "entitlement"];
-    for (const layer of layers) {
-      for (const status of FETCH_FAILURES as readonly GatedFetchFailure[]) {
-        const r = resolveGatedPlayback({ kind: "outage", layer, status });
-        expect(r.render.mode).toBe("unavailable");
-        expect(r.render.mode === "unavailable" && r.render.notice.length).toBeGreaterThan(0);
-        expect(r.grantAccess).toBe(false);
-      }
-    }
-  },
 };
 
 describe("SURFACES_WITH_FALLBACK is backed by each surface's real fallback (issue #189)", () => {

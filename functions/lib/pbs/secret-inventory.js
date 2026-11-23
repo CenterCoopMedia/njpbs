@@ -24,47 +24,15 @@ const PBS_SECRET_INVENTORY = Object.freeze([
     id: "media-manager",
     label: "Media Manager key and secret",
     endpoint: "https://media.services.pbs.org/api/v1/",
-    trustTier: "build time (GitHub Actions); unexported runtime transport",
+    trustTier: "build time (GitHub Actions)",
     implementation:
-      "site/scripts/sync-launch-content.mjs, site/scripts/probe-launch-content.mjs and functions/lib/pbs/media-manager-lookup.js",
-    status: "implemented build-time consumer; runtime transport built, not exported",
+      "site/scripts/sync-launch-content.mjs and site/scripts/probe-launch-content.mjs",
+    status: "implemented build-time consumer",
     runtimeHandles: Object.freeze([]),
     buildEnvironmentNames: Object.freeze([
       "MEDIA_MANAGER_API_KEY",
       "MEDIA_MANAGER_API_SECRET",
     ]),
-  }),
-  Object.freeze({
-    id: "pmsso",
-    label: "PMSSO client secret",
-    endpoint: "PBS partner-gated PMSSO authorize and token endpoints",
-    trustTier: "runtime (Cloud Functions)",
-    implementation: "credential-free core only: site/src/lib/pmsso-login.ts",
-    status: "unbuilt; external provisioning required",
-    runtimeHandles: Object.freeze([]),
-    buildEnvironmentNames: Object.freeze([]),
-  }),
-  Object.freeze({
-    id: "mvault",
-    label: "MVault keypair",
-    endpoint: "https://mvault.services.pbs.org/api/",
-    trustTier: "runtime (Cloud Functions)",
-    implementation:
-      "functions/lib/pbs/mvault-lookup.js and deployable mvault-entitlement.js decision mirror",
-    status: "built, not exported; external provisioning required",
-    runtimeHandles: Object.freeze([]),
-    buildEnvironmentNames: Object.freeze([]),
-  }),
-  Object.freeze({
-    id: "laas",
-    label: "PBS Account (LAAS) access key",
-    endpoint: "PBS Account / Login-as-a-Service (partner-gated exact endpoint unverified)",
-    trustTier: "runtime (Cloud Functions)",
-    implementation:
-      "no credentialed consumer; VPPA policy is modeled by site/src/lib/member-gated-playback.ts",
-    status: "unbuilt; external provisioning required",
-    runtimeHandles: Object.freeze([]),
-    buildEnvironmentNames: Object.freeze([]),
   }),
 ]);
 

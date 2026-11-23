@@ -3,7 +3,6 @@ export type IdentityBoundaryViolation = {
     | "identity-owner-unreadable"
     | "identity-owner-empty"
     | "identity-scan-root-unreadable"
-    | "member-imports-staff-identity"
     | "staff-imports-member-gate"
     | "listed-owner-not-scanned"
     | "identity-owner-unclassified";
@@ -13,7 +12,6 @@ export type IdentityBoundaryViolation = {
 };
 
 export const ADR: string;
-export const MEMBER_GATE: readonly string[];
 export const STAFF_IDENTITY: readonly string[];
 export const EXECUTABLE_SOURCE_EXTENSION: RegExp;
 export const SCAN_ROOTS: readonly string[];

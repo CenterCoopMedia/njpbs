@@ -51,7 +51,7 @@ describe("identity-boundary required CI binding (#459, #1101)", () => {
     expect(guard).toContain('from "node:path"');
     expect(guard).toContain('from "node:url"');
     expect(guard).not.toMatch(/\bfrom\s+["'](?!node:)/);
-    expect(guard).toContain("export const MEMBER_GATE");
+    expect(guard).toContain("const MEMBER_IDENTITY_VOCAB");
     expect(guard).toContain("export const STAFF_IDENTITY");
     expect(readRepo(TEST_PATH)).toContain(`from "../../${GUARD_PATH}"`);
     expect(existsSync(repoPath("vitest.identity-boundary.config.ts"))).toBe(
