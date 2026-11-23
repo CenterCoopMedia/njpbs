@@ -8,6 +8,7 @@ import { ContentShelfSources } from "./ContentShelfPicker";
 import { BannerPageExclusions } from "./BannerPageExclusions";
 import {
   DEFAULT_PUBLIC_HOMEPAGE_BANNER_SETTINGS,
+  DEFAULT_STANDARD_HOMEPAGE_BANNER_COLORS,
   PUBLIC_HOMEPAGE_BANNER_SETTINGS_ID,
   activeHomepageBannerContent,
   cmsSettingsSchemaFor,
@@ -20,6 +21,7 @@ import {
   type LegacyHomepageBannerSettingsValues,
   type PublicHomepageBannerSettingsValues,
   type StandardHomepageBannerContent,
+  type StandardHomepageBannerColors,
 } from "../../../packages/content-core/src/cms-settings";
 import { renderNjDecidesBand } from "../../../packages/content-core/src/nj-decides-render";
 import { renderHomepageAnnouncement } from "../../../packages/content-core/src/homepage-announcement-render";
@@ -95,16 +97,21 @@ interface ContentDraft {
   secondLinkHref: string;
 }
 
-interface ElectionDraft extends ContentDraft {
-  liveLabel: string;
+interface ScheduledDraft extends ContentDraft {
   startsAt: string;
   endsAt: string;
+}
+
+interface StandardDraft extends ScheduledDraft, StandardHomepageBannerColors {}
+
+interface ElectionDraft extends ScheduledDraft {
+  liveLabel: string;
   excludedPaths: string[];
 }
 
 interface BannerDraft {
   njDecides: boolean;
-  standard: ContentDraft;
+  standard: StandardDraft;
   election: ElectionDraft;
 }
 
@@ -128,7 +135,7 @@ type ActionState =
   | { type: "save-error" }
   | { type: "publish-error"; message?: string };
 
-interface ValidationErrors {
+interface ValidationErrors extends Partial<StandardHomepageBannerColors> {
   message?: string;
   linkLabel?: string;
   linkHref?: string;
@@ -146,10 +153,16 @@ type DateDraftErrors = Partial<Record<"startsAt" | "endsAt", string>>;
 
 const DEFAULT_VALUES = separateHomepageBannerContent(DEFAULT_PUBLIC_HOMEPAGE_BANNER_SETTINGS);
 
+const STANDARD_COLOR_FIELDS = [
+  { key: "backgroundColor", label: "Background color" },
+  { key: "textColor", label: "Text color" },
+  { key: "linkColor", label: "Link color" },
+] as const;
+
 const MODE_FIELD: EditorField = {
   key: "njDecides",
   label: "Use NJ Decides sitewide mode",
-  help: "Choose which banner to publish. Each mode keeps its own message, links and visibility setting.",
+  help: "Choose which banner to publish. Each mode keeps its own message, links, visibility and schedule.",
   kind: "toggle",
   required: false,
 };
@@ -199,7 +212,7 @@ const LIVE_LABEL_FIELD: EditorField = {
 const STARTS_AT_FIELD: EditorField = {
   key: "startsAt",
   label: "Start date and time",
-  help: `Optional. The band starts at this time in Eastern Time (${STATION_TIME_ZONE}).`,
+  help: `Optional. The banner starts at this time in Eastern Time (${STATION_TIME_ZONE}).`,
   kind: "datetime",
   required: false,
 };
@@ -207,7 +220,7 @@ const STARTS_AT_FIELD: EditorField = {
 const ENDS_AT_FIELD: EditorField = {
   key: "endsAt",
   label: "End date and time",
-  help: `Optional. The band ends at this time in Eastern Time (${STATION_TIME_ZONE}).`,
+  help: `Optional. The banner ends at this time in Eastern Time (${STATION_TIME_ZONE}).`,
   kind: "datetime",
   required: false,
 };
@@ -216,7 +229,7 @@ function utf8Bytes(value: string): number {
   return new TextEncoder().encode(value).length;
 }
 
-function contentValues(draft: ContentDraft): StandardHomepageBannerContent {
+function contentValues(draft: ScheduledDraft) {
   const message = draft.message.trim();
   const linkLabel = draft.linkLabel.trim();
   const linkHref = draft.linkHref.trim();
@@ -227,25 +240,34 @@ function contentValues(draft: ContentDraft): StandardHomepageBannerContent {
     ...(linkHref ? { linkHref } : {}),
     ...(draft.secondLinkLabel.trim() ? { secondLinkLabel: draft.secondLinkLabel.trim() } : {}),
     ...(draft.secondLinkHref.trim() ? { secondLinkHref: draft.secondLinkHref.trim() } : {}),
+    ...(draft.startsAt ? { startsAt: draft.startsAt } : {}),
+    ...(draft.endsAt ? { endsAt: draft.endsAt } : {}),
   };
+}
+
+function standardColors(draft: StandardDraft): Partial<StandardHomepageBannerColors> {
+  const colors: Partial<StandardHomepageBannerColors> = {};
+  for (const { key } of STANDARD_COLOR_FIELDS) {
+    const value = draft[key].trim().toLowerCase();
+    if (value !== DEFAULT_STANDARD_HOMEPAGE_BANNER_COLORS[key]) colors[key] = value;
+  }
+  return colors;
 }
 
 function canonicalValues({ njDecides, standard, election }: BannerDraft): PublicHomepageBannerSettingsValues {
   const liveLabel = election.liveLabel.trim();
   return {
     njDecides,
-    standard: contentValues(standard),
+    standard: { ...contentValues(standard), ...standardColors(standard) },
     election: {
       ...contentValues(election),
       ...(liveLabel ? { liveLabel } : {}),
-      ...(election.startsAt ? { startsAt: election.startsAt } : {}),
-      ...(election.endsAt ? { endsAt: election.endsAt } : {}),
       ...(election.excludedPaths.length ? { excludedPaths: [...election.excludedPaths] } : {}),
     },
   };
 }
 
-function contentDraft(values: StandardHomepageBannerContent): ContentDraft {
+function contentDraft(values: StandardHomepageBannerContent): ScheduledDraft {
   return {
     enabled: values.enabled,
     message: values.message,
@@ -253,18 +275,23 @@ function contentDraft(values: StandardHomepageBannerContent): ContentDraft {
     linkHref: values.linkHref ?? "",
     secondLinkLabel: values.secondLinkLabel ?? "",
     secondLinkHref: values.secondLinkHref ?? "",
+    startsAt: values.startsAt ?? "",
+    endsAt: values.endsAt ?? "",
   };
 }
 
 function draftFromValues({ njDecides, standard, election }: PublicHomepageBannerSettingsValues): BannerDraft {
   return {
     njDecides,
-    standard: contentDraft(standard),
+    standard: {
+      ...contentDraft(standard),
+      backgroundColor: standard.backgroundColor ?? DEFAULT_STANDARD_HOMEPAGE_BANNER_COLORS.backgroundColor,
+      textColor: standard.textColor ?? DEFAULT_STANDARD_HOMEPAGE_BANNER_COLORS.textColor,
+      linkColor: standard.linkColor ?? DEFAULT_STANDARD_HOMEPAGE_BANNER_COLORS.linkColor,
+    },
     election: {
       ...contentDraft(election),
       liveLabel: election.liveLabel ?? "",
-      startsAt: election.startsAt ?? "",
-      endsAt: election.endsAt ?? "",
       excludedPaths: [...(election.excludedPaths ?? [])],
     },
   };
@@ -277,8 +304,8 @@ function valuesEqual(
   return JSON.stringify(canonicalValues(draftFromValues(left))) === JSON.stringify(canonicalValues(draftFromValues(right)));
 }
 
-function validationErrors(mode: "standard" | "election", values: ElectionHomepageBannerContent): ValidationErrors {
-  const error = validateHomepageBannerContent(mode, values);
+function validationErrors(mode: "standard" | "election", values: StandardHomepageBannerContent | ElectionHomepageBannerContent): ValidationErrors {
+  const error = validateHomepageBannerContent(mode === "standard" ? "standardWithPresentation" : mode, values);
   const errors: ValidationErrors = {};
   if (!error) return errors;
   if (error.startsWith("message")) {
@@ -316,7 +343,14 @@ function validationErrors(mode: "standard" | "election", values: ElectionHomepag
   } else if (error.startsWith("endsAt")) {
     errors.endsAt = "Choose a valid end date and time.";
   } else {
-    errors.message = "The homepage banner fields are invalid.";
+    const color = STANDARD_COLOR_FIELDS.find(({ key }) => error.startsWith(`${key} `));
+    if (color) {
+      errors[color.key] = error.includes("contrast")
+        ? `${color.label} needs at least 4.5:1 contrast against the background.`
+        : "Enter a six-digit hex color, such as #14193a.";
+    } else {
+      errors.message = "The homepage banner fields are invalid.";
+    }
   }
   return errors;
 }
@@ -501,13 +535,13 @@ export function PublicHomepageBannerSettings({
   const content = draft[mode];
   const election = draft.election;
   const draftValues = canonicalValues(draft);
-  const standardErrors = validationErrors("standard", draftValues.standard);
-  const electionErrors = { ...validationErrors("election", draftValues.election), ...dateDraftErrors };
+  const standardErrors = { ...validationErrors("standard", draftValues.standard), ...(!draft.njDecides ? dateDraftErrors : {}) };
+  const electionErrors = { ...validationErrors("election", draftValues.election), ...(draft.njDecides ? dateDraftErrors : {}) };
   const errors = draft.njDecides ? electionErrors : standardErrors;
   const otherModeErrors = draft.njDecides ? standardErrors : electionErrors;
   const valid = isValid(standardErrors) && isValid(electionErrors);
 
-  function editContent(update: Partial<ContentDraft>) {
+  function editContent(update: Partial<ScheduledDraft>) {
     edit(current => ({ ...current, [mode]: { ...current[mode], ...update } }));
   }
 
@@ -633,10 +667,10 @@ export function PublicHomepageBannerSettings({
         liveLabel: values.liveLabel,
         links,
       })
-    : renderHomepageAnnouncement({ message: values.message || "Banner message", link, secondLink });
+    : renderHomepageAnnouncement({ message: values.message || "Banner message", link, secondLink, colors: standardColors(draft.standard) });
 
-  const scheduleHasError = Boolean(electionErrors.startsAt || electionErrors.endsAt || electionErrors.schedule);
-  const scheduleSummary = [election.startsAt && `Starts ${scheduleInstantLabel(election.startsAt)}`, election.endsAt && `Ends ${scheduleInstantLabel(election.endsAt)}`].filter(Boolean).join(" · ") || "No schedule set";
+  const scheduleHasError = Boolean(errors.startsAt || errors.endsAt || errors.schedule);
+  const scheduleSummary = [content.startsAt && `Starts ${scheduleInstantLabel(content.startsAt)}`, content.endsAt && `Ends ${scheduleInstantLabel(content.endsAt)}`].filter(Boolean).join(" · ") || "No schedule set";
 
   return (
     <Panel className="admin-settings-panel settings-public-panel" aria-labelledby="public-homepage-banner-heading">
@@ -762,7 +796,28 @@ export function PublicHomepageBannerSettings({
           ) : null}
         </fieldset>
 
-        <fieldset
+        {!draft.njDecides && <fieldset className="record-field-group settings-card" disabled={pending !== null}>
+          <legend>Homepage banner colors</legend>
+          <p className="muted">Enter hex colors. Text and links need at least 4.5:1 contrast against the background.</p>
+          <div className="record-field-group-fields">
+            {STANDARD_COLOR_FIELDS.map(({ key, label }) => <FieldRenderer
+              key={key}
+              error={standardErrors[key]}
+              field={{ key, label, help: "", kind: "text", required: false }}
+              fieldId={`public-banner-${key}`}
+              onChange={value => edit(current => ({
+                ...current, standard: { ...current.standard, [key]: String(value) },
+              }))}
+              value={draft.standard[key]}
+            />)}
+          </div>
+          <Button type="button" disabled={Object.keys(standardColors(draft.standard)).length === 0}
+            onClick={() => edit(current => ({
+              ...current, standard: { ...current.standard, ...DEFAULT_STANDARD_HOMEPAGE_BANNER_COLORS },
+            }))}>Reset colors</Button>
+        </fieldset>}
+
+        {draft.njDecides && <fieldset
           className="record-field-group settings-card"
           data-field-group="nj-decides-details"
           disabled={pending !== null}
@@ -784,40 +839,40 @@ export function PublicHomepageBannerSettings({
               valueStatus={`${utf8Bytes(election.liveLabel.trim())} of ${PUBLIC_HOMEPAGE_BANNER_LIVE_LABEL_BYTES} bytes used.`}
             />
           </div>
-        </fieldset>
+        </fieldset>}
         <details className="settings-card settings-schedule" open={scheduleOpen || scheduleHasError}
           onToggle={event => {
             if (scheduleHasError && !event.currentTarget.open) event.currentTarget.open = true;
             setScheduleOpen(event.currentTarget.open);
           }}>
-          <summary>Schedule · {scheduleSummary} · NJ Decides band only</summary>
-          <fieldset disabled={pending !== null}>
+          <summary>Schedule · {scheduleSummary}</summary>
+          <fieldset key={mode} disabled={pending !== null}>
             <legend className="sr-only">Optional schedule</legend>
             <div className="record-field-group-fields">
             <FieldRenderer
-              additionalDescriptionId={electionErrors.schedule ? "public-banner-schedule-error" : undefined}
-              error={electionErrors.startsAt}
+              additionalDescriptionId={errors.schedule ? "public-banner-schedule-error" : undefined}
+              error={errors.startsAt}
               field={STARTS_AT_FIELD}
               fieldId="public-banner-starts-at"
-              invalid={Boolean(electionErrors.schedule)}
-              onChange={(value) => editElection({ startsAt: String(value) })}
+              invalid={Boolean(errors.schedule)}
+              onChange={(value) => editContent({ startsAt: String(value) })}
               onDraftError={(message) => reportDateDraftError("startsAt", message)}
-              value={election.startsAt}
+              value={content.startsAt}
             />
             <FieldRenderer
-              additionalDescriptionId={electionErrors.schedule ? "public-banner-schedule-error" : undefined}
-              error={electionErrors.endsAt}
+              additionalDescriptionId={errors.schedule ? "public-banner-schedule-error" : undefined}
+              error={errors.endsAt}
               field={ENDS_AT_FIELD}
               fieldId="public-banner-ends-at"
-              invalid={Boolean(electionErrors.schedule)}
-              onChange={(value) => editElection({ endsAt: String(value) })}
+              invalid={Boolean(errors.schedule)}
+              onChange={(value) => editContent({ endsAt: String(value) })}
               onDraftError={(message) => reportDateDraftError("endsAt", message)}
-              value={election.endsAt}
+              value={content.endsAt}
             />
           </div>
-          {electionErrors.schedule ? (
+          {errors.schedule ? (
             <p className="error-text" id="public-banner-schedule-error" role="alert">
-              {electionErrors.schedule}
+              {errors.schedule}
             </p>
           ) : null}
         </fieldset>
@@ -842,6 +897,8 @@ export function PublicHomepageBannerSettings({
           {njDecides && <p className="muted">Sample page: Home. {election.excludedPaths.includes("/")
             ? "The band is hidden on Home."
             : "The band can appear here when enabled and within its schedule."}</p>}
+          {!njDecides && (content.startsAt || content.endsAt) &&
+            <p className="muted">The homepage shows this banner only while it is enabled and within its schedule.</p>}
           {njDecides && appearanceError && <p role="status">Published appearance could not be loaded. This preview uses the approved defaults. Reload settings to try again.</p>}
           {values.enabled && !(njDecides && election.excludedPaths.includes("/")) ? (
             <>

@@ -313,8 +313,8 @@ function requireCurrentSchema(documentId, settingsSchemas) {
 
 function isPublicHomepageBannerUpgrade(documentId, stored, currentSchema) {
   return documentId === PUBLIC_HOMEPAGE_BANNER_SETTINGS_ID &&
-    [1, 2, 3, 4].includes(stored?.schemaVersion) &&
-    currentSchema?.schemaVersion === 5;
+    [1, 2, 3, 4, 5].includes(stored?.schemaVersion) &&
+    currentSchema?.schemaVersion === 6;
 }
 
 function isSiteNavigationUpgrade(documentId, stored, currentSchema) {

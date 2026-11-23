@@ -95,7 +95,7 @@ export function SettingsWorkspaceSpecimen() {
       njDecides: true,
       standard: DEFAULT_PUBLIC_HOMEPAGE_BANNER_SETTINGS,
       election: { enabled: true, message: "Find voting information for New Jersey.", linkLabel: "NJ Decides 2026", linkHref: "/nj-decides-2026/" },
-    }, 5, new URLSearchParams(location.search).has("pending-save") ? 1_000 : 0),
+    }, 6, new URLSearchParams(location.search).has("pending-save") ? 1_000 : 0),
     brand: transport<NjDecidesValues>("nj-decides-brand", DEFAULT_NJ_DECIDES_SETTINGS),
     coverage: transport("coverage-labels", DEFAULT_COVERAGE_LABELS),
     storyCtas: transport("story-ctas", storyCtas, 2),

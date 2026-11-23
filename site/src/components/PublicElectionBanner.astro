@@ -20,6 +20,6 @@ const state = election ? electionBannerWindow(election, Date.now()) : null;
   </aside>
 )}
 <script>
-  import { mountElectionBanner } from "../lib/nj-decides-banner-dom";
-  document.querySelectorAll<HTMLElement>("[data-nj-decides-announcement]").forEach(mountElectionBanner);
+  import { mountHomepageBannerSchedule } from "../lib/homepage-banner-dom";
+  document.querySelectorAll<HTMLElement>("[data-nj-decides-announcement]").forEach(mountHomepageBannerSchedule);
 </script>

@@ -1,8 +1,22 @@
 ---
 import { renderHomepageAnnouncement, type HomepageAnnouncementOptions } from "../../../packages/content-core/src/homepage-announcement-render";
+import type { HomepageBannerSchedule } from "../../../packages/content-core/src/cms-settings";
+import { homepageBannerWindow } from "../../../packages/content-core/src/homepage-banner-window";
 import "../../../packages/content-core/src/homepage-announcement.css";
 
-interface Props extends HomepageAnnouncementOptions {}
+interface Props extends HomepageAnnouncementOptions, HomepageBannerSchedule {}
+const { startsAt, endsAt, ...options } = Astro.props;
+const scheduled = startsAt !== undefined || endsAt !== undefined;
+const visible = homepageBannerWindow({ enabled: true, startsAt, endsAt }, Date.now()).visible;
+const html = renderHomepageAnnouncement(options);
 ---
 
-<Fragment set:html={renderHomepageAnnouncement(Astro.props)} />
+{scheduled ? (
+  <div data-homepage-announcement-schedule data-starts-at={startsAt} data-ends-at={endsAt} hidden={!visible} data-pagefind-ignore>
+    <Fragment set:html={html} />
+  </div>
+) : <Fragment set:html={html} />}
+<script>
+  import { mountHomepageBannerSchedule } from "../lib/homepage-banner-dom";
+  document.querySelectorAll<HTMLElement>("[data-homepage-announcement-schedule]").forEach(mountHomepageBannerSchedule);
+</script>

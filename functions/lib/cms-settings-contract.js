@@ -193,7 +193,7 @@ const CMS_SETTINGS_SCHEMAS = Object.freeze({
     }),
   }),
   [PUBLIC_HOMEPAGE_BANNER_SETTINGS_ID]: Object.freeze({
-    currentVersion: 5,
+    currentVersion: 6,
     versions: Object.freeze({
       1: Object.freeze({
         schemaVersion: 1,
@@ -342,6 +342,14 @@ const CMS_SETTINGS_SCHEMAS = Object.freeze({
         fields: Object.freeze({
           njDecides: Object.freeze({ kind: "boolean", required: true }),
           standard: Object.freeze({ kind: "homepageBannerContent", required: true, mode: "standard" }),
+          election: Object.freeze({ kind: "homepageBannerContent", required: true, mode: "election" }),
+        }),
+      }),
+      6: Object.freeze({
+        schemaVersion: 6,
+        fields: Object.freeze({
+          njDecides: Object.freeze({ kind: "boolean", required: true }),
+          standard: Object.freeze({ kind: "homepageBannerContent", required: true, mode: "standardWithPresentation" }),
           election: Object.freeze({ kind: "homepageBannerContent", required: true, mode: "election" }),
         }),
       }),
@@ -754,7 +762,7 @@ function cloneNavigationLink(link) {
 }
 
 function cloneSettingsValue(definition, value) {
-  if (definition.kind === "homepageBannerContent" && plainObject(value)) return cloneSettingsValues(activeBannerSchema, value);
+  if (definition.kind === "homepageBannerContent" && plainObject(value)) return cloneSettingsValues(homepageBannerContentSchema(definition.mode), value);
   if (definition.kind === "storyCtaRules") return structuredClone(value);
   if (definition.kind === "postsBrowse") return JSON.parse(JSON.stringify(value));
   if (definition.kind === "coverageLabels" && Array.isArray(value)) return value.map(label => ({ ...label }));
@@ -808,7 +816,8 @@ function schemaError(schema) {
     keys.delete("required");
     if (definition.kind === "homepageBannerContent") {
       keys.delete("mode");
-      if (definition.required !== true || (definition.mode !== "standard" && definition.mode !== "election")) {
+      if (definition.required !== true ||
+          (definition.mode !== "standard" && definition.mode !== "election" && definition.mode !== "standardWithPresentation")) {
         return "The CMS settings schema is invalid";
       }
     } else if (definition.kind === "string" || definition.kind === "safeHref") {
@@ -1206,12 +1215,37 @@ const activeBannerSchema = {
   valueContract: "publicHomepageBannerContentV5",
 };
 
+const standardBannerContentSchema = {
+  ...activeBannerSchema,
+  fields: {
+    ...activeBannerSchema.fields,
+    backgroundColor: { kind: "string", format: "hexColor", maxBytes: 7 },
+    textColor: { kind: "string", format: "hexColor", maxBytes: 7 },
+    linkColor: { kind: "string", format: "hexColor", maxBytes: 7 },
+  },
+};
+
+function homepageBannerContentSchema(mode) {
+  return mode === "standardWithPresentation" ? standardBannerContentSchema : activeBannerSchema;
+}
+
 function validateHomepageBannerContent(mode, value) {
   if (!plainObject(value)) return "Banner content must be an object";
-  for (const key of mode === "standard" ? ["njDecides", "liveLabel", "startsAt", "endsAt", "excludedPaths"] : ["njDecides"]) {
+  const electionOnly = mode === "election" ? [] : ["liveLabel", "excludedPaths"];
+  const schedule = mode === "standard" ? ["startsAt", "endsAt"] : [];
+  for (const key of ["njDecides", ...electionOnly, ...schedule]) {
     if (Object.hasOwn(value, key)) return `Unknown settings field ${key}`;
   }
-  return validateCmsSettingsValues(activeBannerSchema, { ...value, njDecides: mode === "election" });
+  const error = validateCmsSettingsValues(homepageBannerContentSchema(mode), { ...value, njDecides: mode === "election" });
+  if (error || mode !== "standardWithPresentation") return error;
+  const colors = { backgroundColor: "#14193a", textColor: "#f3f4fb", linkColor: "#8a97ff" };
+  const background = value.backgroundColor ?? colors.backgroundColor;
+  for (const field of ["textColor", "linkColor"]) {
+    if (contrastRatio(value[field] ?? colors[field], background) < 4.5) {
+      return `${field} must have at least 4.5:1 contrast against the background color.`;
+    }
+  }
+  return null;
 }
 
 function validateValueContract(contract, values) {

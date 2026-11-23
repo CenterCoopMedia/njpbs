@@ -1,13 +1,13 @@
 .announcement {
-  background:
+  background: var(--announcement-background,
     linear-gradient(
       180deg,
       rgba(38, 56, 196, 0.22),
       rgba(38, 56, 196, 0.08)
     ),
-    var(--color-announcement-surface);
+    var(--color-announcement-surface));
   border-bottom: 1px solid var(--line);
-  color: var(--text);
+  color: var(--announcement-text, var(--text));
 }
 
 .announcement__inner {
@@ -34,14 +34,14 @@
 }
 
 .announcement__eyebrow {
-  color: var(--color-announcement-copy);
+  color: var(--announcement-text, var(--color-announcement-copy));
   font-size: 0.78rem;
   font-weight: 700;
   letter-spacing: 0.08em;
 }
 
 .announcement__heading {
-  color: var(--text);
+  color: var(--announcement-text, var(--text));
   font-size: 1.02rem;
   font-weight: 700;
   letter-spacing: -0.01em;
@@ -57,7 +57,7 @@
   align-items: center;
   gap: 0.45rem;
   padding: 0.35rem 0;
-  color: var(--color-announcement-link);
+  color: var(--announcement-link, var(--color-announcement-link));
   font-size: 0.9rem;
   font-weight: 700;
   line-height: 1.35;
@@ -66,11 +66,12 @@
 }
 
 .announcement__link:hover {
-  color: var(--color-text-on-surface);
+  color: var(--announcement-link, var(--color-text-on-surface));
 }
 
 .announcement__link:focus-visible {
   outline: var(--focus-outline);
+  outline-color: var(--announcement-link, var(--color-focus-ring));
   outline-offset: var(--focus-offset);
   border-radius: var(--radius-sm);
 }

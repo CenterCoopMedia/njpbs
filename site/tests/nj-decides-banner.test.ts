@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { electionBannerExcluded, electionBannerWindow } from "../../packages/content-core/src/nj-decides-banner";
-import { mountElectionBanner } from "../src/lib/nj-decides-banner-dom";
+import { mountHomepageBannerSchedule } from "../src/lib/homepage-banner-dom";
 import { projectChrome } from "../src/lib/published-post-shadow";
 import { renderNjDecidesBand } from "../../packages/content-core/src/nj-decides-render";
 
@@ -26,7 +26,7 @@ describe("election banner schedule and public context", () => {
     element.dataset.startsAt = start;
     element.dataset.endsAt = end;
     document.body.append(element);
-    const stop = mountElectionBanner(element);
+    const stop = mountHomepageBannerSchedule(element);
     expect(element.hidden).toBe(true);
     vi.advanceTimersByTime(1000);
     expect(element.hidden).toBe(false);

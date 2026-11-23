@@ -5,6 +5,7 @@ import {
   type CmsSettingsPublishedSnapshot,
   type LegacyHomepageBannerSettingsValues,
   type PublicHomepageBannerSettingsValues,
+  type StandardHomepageBannerPresentation,
 } from "../../../packages/content-core/src/cms-settings.ts";
 
 export { PUBLIC_HOMEPAGE_BANNER_SETTINGS_ID };
@@ -25,6 +26,7 @@ export interface PublicHomepageBannerBuildData {
   startsAt?: string;
   endsAt?: string;
   excludedPaths?: readonly string[];
+  standardPresentation?: StandardHomepageBannerPresentation;
   sourceVersion: number;
   publishedAt: string;
 }
@@ -62,8 +64,22 @@ export function projectPublicHomepageBannerArtifact(
     );
   }
   if (!snapshot) return null;
-  const values = activeHomepageBannerContent(snapshot.values as unknown as PublicHomepageBannerSettingsValues | LegacyHomepageBannerSettingsValues);
+  const stored = snapshot.values as unknown as PublicHomepageBannerSettingsValues | LegacyHomepageBannerSettingsValues;
+  const values = activeHomepageBannerContent(stored);
   const { njDecides } = values;
+  let standardPresentation: StandardHomepageBannerPresentation | undefined;
+  if ("standard" in stored && !njDecides) {
+    const { startsAt, endsAt, backgroundColor, textColor, linkColor } = stored.standard;
+    if (startsAt || endsAt || backgroundColor || textColor || linkColor) {
+      standardPresentation = {
+        ...(startsAt ? { startsAt } : {}),
+        ...(endsAt ? { endsAt } : {}),
+        ...(backgroundColor ? { backgroundColor } : {}),
+        ...(textColor ? { textColor } : {}),
+        ...(linkColor ? { linkColor } : {}),
+      };
+    }
+  }
   const hasLink =
     typeof values.linkLabel === "string" &&
     values.linkLabel.trim() !== "" &&
@@ -86,13 +102,14 @@ export function projectPublicHomepageBannerArtifact(
       ...(typeof values.liveLabel === "string"
         ? { liveLabel: values.liveLabel }
         : {}),
-      ...(typeof values.startsAt === "string"
+      ...(!standardPresentation && typeof values.startsAt === "string"
         ? { startsAt: values.startsAt }
         : {}),
-      ...(typeof values.endsAt === "string"
+      ...(!standardPresentation && typeof values.endsAt === "string"
         ? { endsAt: values.endsAt }
         : {}),
       ...(values.excludedPaths ? { excludedPaths: [...values.excludedPaths] } : {}),
+      ...(standardPresentation ? { standardPresentation } : {}),
       sourceVersion: snapshot.sourceVersion,
       publishedAt: snapshot.publishedAt,
     },

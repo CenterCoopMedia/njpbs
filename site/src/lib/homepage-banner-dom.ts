@@ -1,12 +1,12 @@
-import { electionBannerWindow } from "../../../packages/content-core/src/nj-decides-banner";
+import { homepageBannerWindow } from "../../../packages/content-core/src/homepage-banner-window";
 
 /** Cached HTML still observes the staff schedule without another publication. */
-export function mountElectionBanner(element: HTMLElement) {
+export function mountHomepageBannerSchedule(element: HTMLElement) {
   let timer: ReturnType<typeof setTimeout> | undefined;
   function update() {
     clearTimeout(timer);
     const now = Date.now();
-    const state = electionBannerWindow({ enabled: true, njDecides: true,
+    const state = homepageBannerWindow({ enabled: true,
       startsAt: element.dataset.startsAt, endsAt: element.dataset.endsAt }, now);
     element.hidden = !state.visible;
     if (state.nextBoundary !== undefined) {

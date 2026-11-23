@@ -2110,7 +2110,7 @@ function publicBannerTransport(
       },
     }),
     save: async (request) => {
-      schemaVersion = 5;
+      schemaVersion = 6;
       stored = request.values as PublicHomepageBannerValues;
       version += 1;
       return {
