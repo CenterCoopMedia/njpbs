@@ -88,12 +88,16 @@ export function assertCloudWakeRetired(names, functions) {
 export const FUNCTION_SCHEDULES = Object.freeze([
   { name: "onMediaPurgeSweep", schedules: ["30 3 * * *"], timeZone: "America/New_York", retryCount: 0 },
   { name: "onCmsSaveWarmup", schedules: ["*/5 9-20 * * *"], timeZone: "America/New_York", retryCount: 0 },
+  { name: "onScheduledPublish", schedules: ["* * * * *", "every 1 minutes"], timeZone: "UTC", retryCount: 0 },
   { name: "onNoBuildPostConfirmationRecovery", schedules: ["* * * * *", "every 1 minutes"], timeZone: "UTC" },
   ...["onVideoPreviewTick", "onPrivateVideoCopyTick", "onVideoClipTick", "onVideoTranscriptTick", "onVideoTranscriptByokTick"]
     .map((name) => ({ name, schedules: ["* * * * *", "every 1 minutes"], timeZone: "UTC" })),
   { name: "onSourceVideoReplacementTick", schedules: ["* * * * *", "every 1 minutes"], timeZone: "UTC", retryCount: 0 },
   { name: "onPublicVideoWithdrawalRecovery", schedules: ["*/15 * * * *", "every 15 minutes"], timeZone: "UTC" },
   { name: "onCostLedgerRefresh", schedules: ["0 8 * * 1"], timeZone: "America/New_York" },
+  { name: "onStaffAccessEmailRetry", schedules: ["every 60 minutes"], timeZone: "UTC", retryCount: 0 },
+  { name: "onBugReportDelivery", schedules: ["every 10 minutes"], timeZone: "UTC", retryCount: 0 },
+  { name: "onBugReportGithubSync", schedules: ["every 60 minutes"], timeZone: "America/New_York", retryCount: 0 },
   { name: "onElectionResultsSourcePoll", schedules: ["0 8,20 * * *"], timeZone: "America/New_York" },
 ]);
 

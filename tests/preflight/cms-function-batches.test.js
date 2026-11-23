@@ -4,10 +4,21 @@ import { cpSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } f
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it, vi } from "vitest";
-import { functionBatches, cloudWakeFunctionPlan, assertCloudWakeRetired, assertCloudWakeSettings, explicitCloudWakeDecision, loadCloudWakeDeployment, assertFunctionsReady, assertSchedulesReady, listPages, deployBatch } from "../../scripts/deploy-cms-function-batches.mjs";
+import { FUNCTION_SCHEDULES, functionBatches, cloudWakeFunctionPlan, assertCloudWakeRetired, assertCloudWakeSettings, explicitCloudWakeDecision, loadCloudWakeDeployment, assertFunctionsReady, assertSchedulesReady, listPages, deployBatch } from "../../scripts/deploy-cms-function-batches.mjs";
 import { meteredOffenders, scanRepositorySourceFiles } from "../../.github/scripts/metered-api-scan.mjs";
 
 describe("CMS function deployment completion", () => {
+  it("lists every exported scheduled function for the Scheduler check", () => {
+    const root = join(import.meta.dirname, "../..");
+    const exported = [...readFileSync(join(root, "functions/index.js"), "utf8")
+      .matchAll(/^lazyExport\("(\w+)", "\.\/([\w-]+)"(?:, "(\w+)")?/gm)];
+    const scheduled = exported.filter(([, name, file, moduleName = name]) =>
+      new RegExp(`^const ${moduleName} = onSchedule\\(`, "m").test(readFileSync(join(root, "functions", `${file}.js`), "utf8")))
+      .map(([, name]) => name);
+    expect(scheduled).toContain("onScheduledPublish");
+    expect(scheduled.filter((name) => !FUNCTION_SCHEDULES.some((value) => value.name === name))).toEqual([]);
+  });
+
   it("selects enabled wake exports and requires explicit deletion before an inactive deployment", () => {
     const wakes = ["onNoBuildCloudState", "onNoBuildCloudCandidate", "onNoBuildCloudRelease"];
     const targets = ["health", ...wakes].map((name) => `functions:${name}`).join(",");
