@@ -37,8 +37,16 @@ function paragraphs(pieces) {
   function flush() {
     const first = inline.findIndex(visibleInline);
     if (first >= 0) {
-      const content = inline.slice(first, inline.findLastIndex(visibleInline) + 1)
-        .map(node => node.type === "classicBreak" ? { type: "hardBreak" } : node);
+      const content = [];
+      let afterExplicitBreak = false;
+      for (const node of inline.slice(first, inline.findLastIndex(visibleInline) + 1)) {
+        if (node.type === "classicBreak") {
+          if (!afterExplicitBreak) content.push({ type: "hardBreak" });
+        } else {
+          content.push(node);
+          if (visibleInline(node)) afterExplicitBreak = node.type === "hardBreak";
+        }
+      }
       result.push({ type: "paragraph", content });
     }
     inline = [];

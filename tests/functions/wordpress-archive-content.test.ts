@@ -60,7 +60,7 @@ it("reports lossy or unsupported source regions while keeping safe text and link
   expect(html.slice(unsupported.start, unsupported.end)).toMatch(/^<!-- wp:example\//);
   expect(JSON.stringify(report)).not.toMatch(/private-content|https:|A recovered paragraph|Archive desk/);
   const rendered = checkEditableBlocks(blocks).map(block => renderBlock(block)).join("");
-  expect(rendered).toContain("<p>Opening from a classic story.<br><em>A line from City Hall.</em></p>");
+  expect(rendered).toContain("<p>Opening from a classic story.<br><em>A line from City Hall.</em><br>The next line follows.</p>");
   expect(rendered).toContain("<p>Next paragraph with [Note] and [gallery].</p>");
   expect(rendered).toMatch(/<p>A recovered paragraph<\/p><p>Later paragraph<\/p>.*<h3>Deeper heading<\/h3>/s);
   expect(rendered).toContain('<a href="https://archive.example.org/credits/">Archive desk</a>');
