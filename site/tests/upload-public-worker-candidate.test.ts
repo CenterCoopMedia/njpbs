@@ -5,7 +5,7 @@ import { main, retryWorkerVersionReceipt } from
   "../scripts/upload-public-worker-candidate";
 import { findExactRecentWorkerVersion } from
   "../src/lib/public-worker-version-recovery";
-import { publicPostRendererRelease, publicWorkerCandidateVariables } from "../scripts/public-post-renderer-release";
+import { publicPostRendererRelease, publicWorkerCandidateRendererContract } from "../scripts/public-post-renderer-release";
 import candidateModule from "../../functions/lib/public-worker-candidate.js";
 import { privatePairReaderCapabilities } from "../../packages/content-core/src/private-pair-http.mjs";
 
@@ -29,7 +29,7 @@ function version(overrides: Record<string, unknown> = {}) {
 it("emits a Post candidate accepted by the deployed CMS reader", () => {
   const sha = "a".repeat(40);
   const seal = publicPostRendererRelease(sha, "production", {});
-  const variables = publicWorkerCandidateVariables(seal, sha);
+  const { variables, pageReaderVersion } = publicWorkerCandidateRendererContract(seal, sha);
   const candidate = candidateModule.projectCloudflareWorkerVersion(version({
     metadata: { source: "wrangler", created_on: "2026-08-27T20:00:00.000Z" },
     annotations: { "workers/tag": TAG, "workers/message": MESSAGE, "workers/triggered_by": "version_upload" },
@@ -50,6 +50,7 @@ it("emits a Post candidate accepted by the deployed CMS reader", () => {
     dataFigureVersion: 1, electionResultsVersion: 2, liveBlogVersion: 1,
   });
   expect(variables.SPANISH_POST_VERSION).toBe("0");
+  expect(pageReaderVersion).toBe(seal.pageReaderVersion);
   expect(privatePairReaderCapabilities(sha).post).toEqual({
     dataFigureVersion: 1, electionResultsVersion: 2, liveBlogVersion: 1,
   });

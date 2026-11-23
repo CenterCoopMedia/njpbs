@@ -11,7 +11,7 @@ export function publicPostRendererRelease(rendererSha: string, environment: "pro
     ...(environment === "development" ? { environment } : {}) };
 }
 
-export function publicWorkerCandidateVariables(rendererRelease: unknown, commitSha: string) {
+export function publicWorkerCandidateRendererContract(rendererRelease: unknown, commitSha: string) {
   const dataHubPublic = rendererRelease !== null && typeof rendererRelease === "object" &&
     "dataHubReportingVersion" in rendererRelease && rendererRelease.dataHubReportingVersion === 1;
   const dataHubComposition = dataHubPublic && "dataHubCompositionVersion" in rendererRelease && rendererRelease.dataHubCompositionVersion === 1;
@@ -36,7 +36,7 @@ export function publicWorkerCandidateVariables(rendererRelease: unknown, commitS
   }
   // Fixed metadata attests the family reader. Each request reads admission;
   // neither this marker nor retained legacy variables enable publication.
-  return {
+  const variables = {
     NO_BUILD_RECORD_RENDERER_SHA: commitSha,
     NO_BUILD_POST_FAMILIES: "posts",
     NO_BUILD_POST_RENDERER_SHA: commitSha,
@@ -49,4 +49,5 @@ export function publicWorkerCandidateVariables(rendererRelease: unknown, commitS
     DATA_HUB_PUBLIC: dataHubPublic ? "1" : "0",
     DATA_HUB_COMPOSITION_VERSION: dataHubComposition ? "1" : "0",
   };
+  return { variables, pageReaderVersion };
 }

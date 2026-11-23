@@ -19,7 +19,7 @@ import {
 import { findExactRecentWorkerVersion } from
   "../src/lib/public-worker-version-recovery";
 import { assertCmsPublicationSourceCheckout } from "./cms-publication-runtime-guard";
-import { publicWorkerCandidateVariables } from "./public-post-renderer-release.ts";
+import { publicWorkerCandidateRendererContract } from "./public-post-renderer-release.ts";
 const requireModule = createRequire(import.meta.url);
 const { readNoBuildFamilyAdmission } = requireModule("../../functions/lib/no-build-family-admission.js");
 const { listNoBuildPostOwners } = requireModule("../../functions/lib/no-build-post-ownership.js");
@@ -415,7 +415,7 @@ export async function uploadPublicWorkerCandidate({
     throw new Error("The detached upload does not match its preparation");
   }
   const rendererRelease = await readJson(path.join(distDirectory, "posts/_no-build-assets/renderer-release.json"), "The public Post renderer release");
-  const variables = publicWorkerCandidateVariables(rendererRelease, prepared.commitSha);
+  const { variables, pageReaderVersion } = publicWorkerCandidateRendererContract(rendererRelease, prepared.commitSha);
 
   let batch: { noBuildStaticInput?: unknown; runtime?: PublicationRuntime };
   if (preparationId !== undefined) {
