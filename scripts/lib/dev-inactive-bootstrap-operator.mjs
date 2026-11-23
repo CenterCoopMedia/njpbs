@@ -4,6 +4,7 @@ import p from "../../functions/lib/public-release-pair.js";
 import owner from "./dev-inactive-bootstrap.cjs";
 import { developmentInstallCredential } from "./development-install-credentials.mjs";
 import { assertDevelopmentRehearsalEnvironment } from "./development-rehearsal-credentials.mjs";
+import { withOperatorDatabase } from "./read-only-operator.mjs";
 import { operatorRefused as refuse, parseOperatorArgs, readOperatorPacket, assertOperatorSource,
   parseOperatorCredentialIdentity, operatorAccount, openOperatorDatabase } from "./public-release-operator-io.mjs";
 
@@ -36,33 +37,19 @@ export async function runDevInactiveBootstrapOperator(args, stage = () => {}) {
     providerWrites: 0, slots: owner.SLOTS };
   if (options.mode === "plan") return { ...base, request: packet.request,
     requestDigest: p.publicReleaseDigest(packet.request), authorityReads: 0, authorityWrites: 0 };
-  stage("credential-open");
-  const credential = developmentInstallCredential(3, raw => operatorAccount(raw, packet.credentialIdentity));
-  let connection, failed = false;
-  try {
-    stage("credential-read");
-    const account = await credential.read();
-    stage("database-open");
-    connection = await openOperatorDatabase(account);
-    const firestore = connection.firestore;
-    stage(options.mode);
-    if (options.mode === "inspect") {
-      const request = await owner.inspectDevInactiveBootstrap({ firestore, operationId: packet.operationId, retainedAccess: packet.retainedAccess ?? null, stage });
-      return { ...base, request, requestDigest: p.publicReleaseDigest(request), authorityWrites: 0 };
-    }
-    const result = options.mode === "readback" ? await owner.readDevInactiveBootstrap({ firestore, request: packet.request, retainedAccess: packet.retainedAccess ?? null })
-      : await owner.retireDevInactiveBootstrap({ firestore, request: packet.request, retainedAccess: packet.retainedAccess ?? null, dryRun: options.mode === "dry-run" });
-    return { ...base, ...result, ...(options.mode === "dry-run" || options.mode === "readback" ? { authorityWrites: 0 } : {}) };
-  } catch (error) { failed = true; throw error; }
-  finally {
-    // Attempt both cleanups, preserving the original error object and stage.
-    let cleanupError, cleanupFailed = false;
-    if (!failed) stage("credential-close");
-    try { credential.close(); }
-    catch (error) { if (!failed) { failed = true; cleanupFailed = true; cleanupError = error; } }
-    if (!failed) stage("database-close");
-    try { await connection?.close(); }
-    catch (error) { if (!failed) { failed = true; cleanupFailed = true; cleanupError = error; } }
-    if (cleanupFailed) throw cleanupError;
-  }
+  return withOperatorDatabase({
+    stage,
+    openCredential: () => developmentInstallCredential(3, raw => operatorAccount(raw, packet.credentialIdentity)),
+    openDatabase: openOperatorDatabase,
+    async run(firestore) {
+      stage(options.mode);
+      if (options.mode === "inspect") {
+        const request = await owner.inspectDevInactiveBootstrap({ firestore, operationId: packet.operationId, retainedAccess: packet.retainedAccess ?? null, stage });
+        return { ...base, request, requestDigest: p.publicReleaseDigest(request), authorityWrites: 0 };
+      }
+      const result = options.mode === "readback" ? await owner.readDevInactiveBootstrap({ firestore, request: packet.request, retainedAccess: packet.retainedAccess ?? null })
+        : await owner.retireDevInactiveBootstrap({ firestore, request: packet.request, retainedAccess: packet.retainedAccess ?? null, dryRun: options.mode === "dry-run" });
+      return { ...base, ...result, ...(options.mode === "dry-run" || options.mode === "readback" ? { authorityWrites: 0 } : {}) };
+    },
+  });
 }
