@@ -55,6 +55,7 @@ beforeEach(async () => {
   );
   boundary.objects.clear();
   boundary.reject(null);
+  boundary.rejectDelete(null);
   boundary.refuseReads(false);
   now = Date.parse("2026-10-12T14:00:00Z");
   title = "Public provider story";
@@ -106,6 +107,7 @@ it("freezes provider bytes with readback and atomically advances context without
   expect(refresh).toMatchObject({ status: "verified", attempts: 1, checkedAt: now });
   const current = (await db.doc(context.PUBLIC_CONTEXT_PATH).get()).data();
   expect(current.revision).toBe(2);
+  expect((await db.doc(state.EXTERNAL_REFRESH_PATH).collection("stagedInputs").doc(current.externalInputs.operationId).get()).exists).toBe(false);
   expect(Object.keys(current.externalInputs.files).sort()).toEqual(["launch-media-manager.json", "schedule.json", "spotlight-news.json"]);
   expect(current.externalInputs.schedulePacket).toMatchObject({ schemaVersion: 1,
     source: { operationId: current.externalInputs.operationId, runtime: { owner: "cloudflare", release },
@@ -121,13 +123,65 @@ it("freezes provider bytes with readback and atomically advances context without
   const count = requests;
   await owner()();
   expect(requests).toBe(count);
+  const uploaded = boundary.writes.length;
   now = refresh.nextAttemptAt;
   await owner()();
+  expect(boundary.writes).toHaveLength(uploaded);
+  expect((await db.doc(state.EXTERNAL_REFRESH_PATH).get()).data()).toMatchObject({
+    status: "verified", checkedAt: now, contentDigest: current.externalInputs.contentDigest,
+  });
   expect((await db.doc(context.PUBLIC_CONTEXT_PATH).get()).data().revision).toBe(2);
   title = "Updated public provider story";
   now = (await db.doc(state.EXTERNAL_REFRESH_PATH).get()).data().nextAttemptAt;
   await owner()();
   expect((await db.doc(context.PUBLIC_CONTEXT_PATH).get()).data().revision).toBe(3);
+});
+
+it("continues refreshing after an interrupted attempt and retries its partial cleanup", async () => {
+  await owner()();
+  const ref = db.doc(state.EXTERNAL_REFRESH_PATH);
+  const contextRef = db.doc(context.PUBLIC_CONTEXT_PATH);
+  const accepted = (await contextRef.get()).data()!;
+  const retained = new Map(boundary.objects);
+  const operationId = "I".repeat(20);
+  const orphan = ref.collection("stagedInputs").doc(operationId);
+  const [first, second] = state.EXTERNAL_INPUT_FILES.map(name => `post-background-v1/external-inputs/${operationId}/${name}`);
+  boundary.objects.set(first, Buffer.from("candidate first"));
+  boundary.objects.set(second, Buffer.from("candidate second"));
+  boundary.rejectDelete(key => key === second);
+  const leaseUntil = now + 10 * 60_000;
+  await ref.update({ operationId, status: "fetching", nextAttemptAt: leaseUntil });
+  await orphan.set({ cleanupAfter: leaseUntil });
+  const count = requests;
+  now = leaseUntil - 1;
+  await owner()();
+  expect(requests).toBe(count);
+  expect(boundary.objects.has(first)).toBe(true);
+  expect(boundary.objects.has(second)).toBe(true);
+
+  now = leaseUntil;
+  title = "Changed provider story";
+  const errorLog = vi.spyOn(console, "error").mockImplementation(() => {});
+  await owner()();
+  expect(errorLog).toHaveBeenCalledWith("Abandoned external input cleanup failed");
+  expect((await ref.get()).data()).toMatchObject({ status: "verified", checkedAt: now });
+  expect((await ref.get()).data()?.operationId).not.toBe(operationId);
+  expect((await orphan.get()).data()?.cleanupAfter).toBeGreaterThan(now);
+  expect(boundary.objects.has(first)).toBe(false);
+  expect(boundary.objects.has(second)).toBe(true);
+  expect(requests).toBeGreaterThan(count);
+  const updated = (await contextRef.get()).data()!;
+  expect(updated.revision).toBe(accepted.revision + 1);
+  expect(updated.externalInputs.operationId).not.toBe(operationId);
+
+  boundary.rejectDelete(null);
+  now += 60_000;
+  await ref.update({ nextAttemptAt: now });
+  await owner()();
+  expect((await orphan.get()).exists).toBe(false);
+  expect(boundary.objects.has(second)).toBe(false);
+  expect((await contextRef.get()).data()).toEqual(updated);
+  for (const [key, bytes] of retained) expect(boundary.objects.get(key)).toEqual(bytes);
 });
 
 it("keeps the accepted video catalog and advances the other inputs when video pagination is incomplete", async () => {
@@ -204,7 +258,7 @@ it("keeps failure fixed and bounded, preserves prior context, and respects globa
 });
 
 it("records a safe seal failure without changing context or logging SDK details", async () => {
-  boundary.reject(() => true);
+  boundary.reject(key => key.endsWith("/spotlight-news.json"));
   const errorLog = vi.spyOn(console, "error").mockImplementation(() => {});
   await owner()();
   expect((await db.doc(state.EXTERNAL_REFRESH_PATH).get()).data()).toMatchObject({
@@ -213,6 +267,14 @@ it("records a safe seal failure without changing context or logging SDK details"
   expect(errorLog.mock.calls).toEqual([["Cloud external refresh failed at seal"]]);
   expect((await db.doc(context.PUBLIC_CONTEXT_PATH).get()).data().revision).toBe(1);
   expect((await db.collection("cmsPublishQueue").get()).size).toBe(0);
+  const failed = (await db.doc(state.EXTERNAL_REFRESH_PATH).get()).data()!;
+  const orphan = `post-background-v1/external-inputs/${failed.operationId}/launch-media-manager.json`;
+  expect(boundary.objects.has(orphan)).toBe(true);
+  now = failed.nextAttemptAt;
+  boundary.reject(null);
+  await owner()();
+  expect(boundary.objects.has(orphan)).toBe(false);
+  expect((await db.doc(context.PUBLIC_CONTEXT_PATH).get()).data().revision).toBe(2);
 });
 
 it("preserves the accepted schedule pair and clock on unchanged refresh and cold reads", async () => {

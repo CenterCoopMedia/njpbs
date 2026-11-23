@@ -109,8 +109,9 @@ export async function startDevelopmentRehearsalHttp({ projectId, operatorOrigin,
       let upstream: Response;
       if (proof) {
         const bodyDigest = request.headers["x-rehearsal-expected-sha256"], status = request.headers["x-rehearsal-expected-status"];
-        if (typeof bodyDigest !== "string" || !/^[a-f0-9]{64}$/.test(bodyDigest) || typeof status !== "string" || !["200", "308", "410"].includes(status)) refuse();
-        upstream = await operator.prove({ path, bodyDigest, status: status === "200" ? 200 : status === "308" ? 308 : 410, signal: controller.signal });
+        if (typeof bodyDigest !== "string" || !/^[a-f0-9]{64}$/.test(bodyDigest) ||
+            (status !== "200" && status !== "302" && status !== "308" && status !== "410")) refuse();
+        upstream = await operator.prove({ path, bodyDigest, status: Number(status) as 200 | 302 | 308 | 410, signal: controller.signal });
       } else {
         const headers = viewerHeaders(request);
         // Preserve forged viewer proof headers so the real ingress, rather

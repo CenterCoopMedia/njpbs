@@ -1061,6 +1061,63 @@ it("proves all 62 canonical Post details with Page/Home in one settings receipt,
   expect((await firestore.doc("cmsPosts/settings-post-0").get()).data()).toEqual(before);
 }, 45_000);
 
+it.each(["unchanged", "changed Post roster", "staff retry", "in-flight staff retry"])("resumes a bounded settings proof with %s inputs", async change => {
+  const { home, settingsOperationId } = await seedFullPageCoverage();
+  await seedSettingsPosts(10);
+  const queueRef = firestore.doc(`cmsPublishQueue/${settingsOperationId}`);
+  const proofRef = queueRef.collection("confirmation").doc("page-consumers");
+  const publicFetch = settingsPublicFetch(home);
+  const visited = new Set();
+  let time = Date.now(), firstWake = true;
+  const options = { firestore, operationId: settingsOperationId, target, headers, now: () => time,
+    currentCodeRequest: scheduleFixture.request, fetchPublic: async (url, options) => {
+      const path = new URL(url).pathname;
+      if (path.startsWith("/posts/")) {
+        const firstPost = !visited.size;
+        visited.add(path);
+        if (firstPost && firstWake) {
+          time += 36_000;
+          if (change === "in-flight staff retry") await queueRef.update({ settingsRetryAt: Timestamp.now() });
+        }
+      }
+      return publicFetch(url, options);
+    } };
+  expect(await settingsConfirmation.confirmNoBuildPageSettings(options)).toEqual({ confirmed: false });
+  const firstBatch = [...visited];
+  expect(firstBatch).toHaveLength(8);
+  const checkpoint = (await proofRef.get()).data();
+  if (change === "in-flight staff retry") {
+    expect(checkpoint).toMatchObject({ attempts: 1, status: "failed", claim: null,
+      failureReason: { code: "confirmation_incomplete" } });
+    expect(checkpoint.postCheckpoint).toBeUndefined();
+  } else {
+    expect(checkpoint).toMatchObject({ attempts: 0, status: "waiting", postCheckpoint: { verified: 8 } });
+  }
+  expect((await queueRef.get()).data().consumerReceipts).toBeUndefined();
+
+  if (change === "changed Post roster") {
+    // A retained withdrawal changes the proof roster without changing the Home catalog.
+    const prior = (await firestore.doc("cmsPosts/settings-post-0").get()).data();
+    const slug = "withdrawn-settings-story";
+    await firestore.doc("cmsPosts/withdrawn-settings-post").set({ ...prior, slug, previousSlugs: [], publiclyVisible: false,
+      published: { ...prior.published, metadata: { ...prior.published.metadata, slug, previousSlugs: [] } } });
+  }
+  if (change === "staff retry") await queueRef.update({ settingsRetryAt: Timestamp.now() });
+  firstWake = false;
+  time += 9_000;
+  visited.clear();
+  expect(await settingsConfirmation.confirmNoBuildPageSettings(options)).toEqual({ confirmed: true });
+  expect(visited.size).toBe(change === "unchanged" ? 2 : 10);
+  for (const path of firstBatch) expect(visited.has(path)).toBe(change !== "unchanged");
+  const { consumerReceipts } = (await queueRef.get()).data();
+  expect(consumerReceipts.posts).toEqual(consumerReceipts.pages);
+  expect(consumerReceipts.posts).toEqual(consumerReceipts.home);
+
+  visited.clear();
+  expect(await settingsConfirmation.confirmNoBuildPageSettings(options)).toEqual({ confirmed: true });
+  expect(visited.size).toBe(0);
+}, 45_000);
+
 it("confirms settings with a published custom-link Post while ignoring its later private link draft", async () => {
   const { home, settingsOperationId } = await seedFullPageCoverage();
   await seedSettingsPosts(1);

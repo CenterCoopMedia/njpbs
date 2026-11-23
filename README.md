@@ -28,6 +28,9 @@ publishing services, and related development tools.
 - `docs/decisions/`: Architecture decisions.
 - `docs/requirements/`: Accessibility requirements.
 
+See the [CMS content operations contract](docs/cms/content-operations.md) for
+request versions, supported edits, and publication receipts.
+
 ## Local setup
 
 Use Node.js 22 and npm. Install dependencies from the root lockfile, then install
@@ -78,21 +81,23 @@ fixed before submission.
 After changing a pull request's base branch, push an updated head or reopen
 the pull request to run CI for the new base.
 
-The hosted **Code health** workflow records lint, Functions JavaScript type
-errors, and source size. Download the `code-health` artifact for the tested
-merge tree, its base, the base's ESLint bulk suppressions and the new findings.
-The report uses the same rules on both trees. It compares diagnostic counts
-by file, rule and message so shifted lines keep their baseline. It also
-tracks detected renames. Test files are linted and excluded from size counts.
+Required CI compares lint and Functions JavaScript types on pull requests and
+merge groups, each against the first parent of the tested merge, and fails for
+new errors. Function length (over 200 lines) and file size (over 1,000 lines)
+appear in the report totals only; a long function or file runs the same as a
+short one. Download the `code-health`
+artifact for the tested tree, its base, the base's ESLint bulk suppressions and
+the new findings. The check compares diagnostic counts by file, rule and
+message so shifted lines keep their baseline. It also tracks detected renames.
+Test files are linted and excluded from size counts. Main pushes record the
+current baseline in the **Code health** workflow.
 
 | Report | Failure it identifies | Existing protection | Removal condition |
 | --- | --- | --- | --- |
 | Lint | New correctness findings such as invalid hooks or undefined JavaScript names | Required Functions lint and Astro accessibility lint, builds and review | Remove a rule when another check catches the same defect |
 | Functions types | New JavaScript type mismatches such as invalid call arguments | Functions unit and emulator tests exercise runtime paths | Remove this pass when equivalent type coverage checks Functions |
-| Size | Source files crossing 1,000 lines or oversized files growing, and functions crossing 200 lines | Code review | Remove the file growth comparison when all files are within the limit |
 
-Complexity warnings help identify functions for review. The quality reports
-run independently of required CI.
+Complexity warnings help identify functions for review.
 
 The configuration input check scans current source reads against
 `config/configuration-inputs.json`. Each input needs a named supplier, scope and

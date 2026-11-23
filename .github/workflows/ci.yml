@@ -134,7 +134,9 @@ jobs:
           node-version: "22.23.5"
           cache: npm
           package-manager-cache: true
-          cache-dependency-path: site/package-lock.json
+          cache-dependency-path: |
+            package-lock.json
+            site/package-lock.json
       - uses: actions/setup-python@v7
         if: steps.reuse.outputs.reused != 'true'
         with:
@@ -143,6 +145,14 @@ jobs:
         if: steps.reuse.outputs.reused != 'true'
         working-directory: site
         run: npm ci --ignore-scripts
+      - name: Check public release writers against production readers
+        if: steps.reuse.outputs.reused != 'true'
+        env:
+          NODE_PATH: ${{ github.workspace }}/functions/node_modules:${{ github.workspace }}/node_modules
+        run: |
+          npm ci --ignore-scripts --omit=dev
+          git fetch --no-tags origin refs/heads/production
+          ./site/node_modules/.bin/tsx .github/scripts/check-production-reader-contracts.mjs FETCH_HEAD
       - name: Site diagnostics reporter contract
         if: steps.reuse.outputs.reused != 'true'
         # The release gate tests read yaml from the site install above.
@@ -466,10 +476,19 @@ jobs:
       contents: read
     uses: ./.github/workflows/firebase-ci.yml
 
+  code-health:
+    name: Code health
+    needs: [policy]
+    if: >-
+      !cancelled() &&
+      needs.policy.result == 'success' &&
+      (github.event_name == 'pull_request' || github.event_name == 'merge_group')
+    uses: ./.github/workflows/code-health.yml
+
   ci:
     name: ci
     if: always()
-    needs: [policy, docs, site, admin, firebase]
+    needs: [policy, docs, site, admin, firebase, code-health]
     runs-on: ubuntu-24.04
     # Allow checkout/network overhead on busy runners; aggregation is Node-only.
     timeout-minutes: 5 # Runaway guard: 3x max 38s rounds to 2m; keep fleet#21's 5m floor.
@@ -516,6 +535,11 @@ jobs:
           ADMIN_RESULT: ${{ needs.admin.result }}
           FIREBASE_RESULT: ${{ needs.firebase.result }}
         run: node .github/scripts/ci-classifier.mjs aggregate
+      - name: Require code health for pull requests and merge groups
+        if: github.event_name == 'pull_request' || github.event_name == 'merge_group'
+        env:
+          CODE_HEALTH_RESULT: ${{ needs['code-health'].result }}
+        run: test "$CODE_HEALTH_RESULT" = success
       - name: Full CI inputs ${{ needs.policy.outputs.inputs_hash }}
         # Only a full run can supply proof for a later main push.
         if: >-

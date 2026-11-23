@@ -18,8 +18,8 @@
     ".github/workflows/publisher-image.yml",
     ".github/workflows/recovered-service-source.yml",
     ".github/workflows/recovered-services-deploy.yml.disabled",
-    ".github/workflows/schedule-bake.yml",
-    ".github/workflows/shadow-posts-dev-deploy.yml"
+    ".github/workflows/report-relay-check.yml",
+    ".github/workflows/schedule-bake.yml"
   ],
   "wrangler": [
     "admin/wrangler.jsonc",
@@ -40,9 +40,7 @@
     "workers/wrangler.preview.dev.jsonc",
     "workers/wrangler.preview.jsonc",
     "workers/wrangler.public.dev.jsonc",
-    "workers/wrangler.published-post-reader.jsonc",
     "workers/wrangler.routing-measurement.dev.jsonc",
-    "workers/wrangler.shadow-posts.jsonc",
     "workers/wrangler.staff-preview.dev.jsonc",
     "workers/wrangler.staff-sites.dev.jsonc",
     "workers/wrangler.staff-sites.jsonc"
@@ -757,6 +755,10 @@
           "module": "functions/source-media-originals.js"
         },
         {
+          "name": "cmsSourceVideoBin",
+          "module": "functions/source-video-bin.js"
+        },
+        {
           "name": "cmsStartPremierePairing",
           "module": "functions/premiere-desktop.js"
         },
@@ -911,14 +913,6 @@
         {
           "name": "onScheduledPublish",
           "module": "functions/scheduled-publish.js"
-        },
-        {
-          "name": "onShadowPostRevisionRetry",
-          "module": "functions/shadow-post-revisions.js"
-        },
-        {
-          "name": "onShadowPostRevisionWrite",
-          "module": "functions/shadow-post-revisions.js"
         },
         {
           "name": "onSourceVideoReplacementTick",
@@ -1324,7 +1318,6 @@
     {"id":"pkg-town-selection-projection","kind":"ui","sources":["packages/content-core/src/town-lookup-controls.ts"],"states":["unselected","selected","no_exact_match"]},
     {"id":"pkg-data-table-filter","kind":"ui","sources":["packages/content-core/src/data-table-controls.ts"],"states":["all_rows","filtered_rows"]},
     {"id":"wfr-dev-cms-dag","kind":"deploy","sources":[".github/workflows/cms-dev-deploy.yml"],"states":["source-admitted","renderer-ready","renderer-skipped","renderer-only-terminal","pinned-renderer-verified","firestore-updated","readers-installed","functions-api-updated","gateways-updated","admin-uploaded","boundary-verified","partial-stop"]},
-    {"id":"wfr-shadow-route","kind":"deploy","sources":[".github/workflows/shadow-posts-dev-deploy.yml","scripts/manage-shadow-post-route.mjs"],"states":["admitted","relay-installed","secret-installed","pilot-disabled","pilot-enabled","route-absent","caller-absent","both-workers-absent","refusal-verified","reconcile"]},
     {"id":"wfr-staff-gateway","kind":"deploy","sources":["scripts/deploy-dev-staff-gateway.mjs"],"states":["old-route-owned","new-route-owned","preflight-verified","deployment-unverified","version-verified","gateway-verified","reconcile"]},
     {"id":"wfr-preview-gateways","kind":"deploy","sources":["scripts/deploy-dev-preview-gateways.mjs"],"states":["inventory-verified","private-worker-staged","staff-worker-staged","domain-attached","provisioning","verified","partial-stop"]},
     {"id":"wfr-dev-readers","kind":"deploy","sources":["functions/lib/dev-reader-deployment.js","scripts/deploy-dev-reader-mounts.mjs"],"states":["inert-default","authorized","candidates-started","functions-deployed","api-deployed","providers-verified","live-readers-committed","descriptor-verified","reconciliation-required"]},
@@ -1336,7 +1329,7 @@
     {"id":"wfr-preview-candidate-pointer","kind":"deploy","sources":["functions/lib/cms-preview-pair-candidate.js"],"states":["unretained","candidate-valid","candidate-expired-or-drifted","retained","disabled"]},
     {"id":"wfr-inactive-retirement","kind":"deploy","sources":["scripts/lib/dev-inactive-bootstrap.cjs"],"states":["inactive-enrolled","inspected","dry-run-confirmed","archived-retired","legacy-cycle-open","committed-drifted","refused"]},
     {"id":"wfr-visual-fanin","kind":"deploy","sources":[".github/workflows/admin-ci.yml"],"states":["shards-running","some-markers","all-markers","barrier-success","barrier-failed","cancelled"]},
-    {"id":"edge-dev-route","kind":"deploy","sources":["workers/src/dev-preview-staff-worker.ts","workers/src/shadow-staff-gateway.ts","workers/src/staff-site-dev-worker.ts"],"states":["unadmitted","admitted","callback_consumed","public_served","preview_served","shadow_served","asset_served","refused"]},
+    {"id":"edge-dev-route","kind":"deploy","sources":["workers/src/dev-preview-staff-worker.ts","workers/src/staff-site-dev-worker.ts"],"states":["unadmitted","admitted","callback_consumed","public_served","preview_served","asset_served","refused"]},
     {"id":"srv-selector-cache","kind":"release","sources":["workers/src/public-release-router.ts"],"states":["empty","refreshing","fresh","expired","invalidated","refused"]},
     {"id":"srv-forced-selector","kind":"release","sources":["workers/src/public-release-router.ts"],"states":["absent","queued","running","finished"]},
     {"id":"srv-router-request","kind":"release","sources":["workers/src/public-release-router.ts"],"states":["admitted","selected","reselect","served","recovery","unavailable"]},

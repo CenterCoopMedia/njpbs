@@ -17,6 +17,7 @@ function ImageViewingPane({ asset, comparison = false, labeled, detailsOpen }: {
   const fit = Math.min(1, viewport.width / size.width, viewport.height / size.height);
   const scale = zoom === "fit" ? Math.max(0.01, fit) : zoom;
   const percent = Math.round(scale * 100);
+  const fileLabel = asset.originalAvailable ? "Web copy" : "Original image";
 
   useEffect(() => {
     const element = stage.current;
@@ -55,8 +56,8 @@ function ImageViewingPane({ asset, comparison = false, labeled, detailsOpen }: {
     <div className="image-viewer-stage" data-status={status} ref={stage} role="region" aria-label={comparison ? "Comparison image viewing surface" : "Image viewing surface"} tabIndex={0}
       onKeyDown={event => { if (event.key.startsWith("Arrow")) event.stopPropagation(); }}
       onScroll={event => { if (event.currentTarget.getClientRects().length) pan.current = { left: event.currentTarget.scrollLeft, top: event.currentTarget.scrollTop }; }}>
-      {status === "loading" ? <LoadingIndicator label="Loading original image" layout="stack" /> : null}
-      {status === "error" ? <InlineMessage tone="error" title="Original image could not be loaded"><a href={asset.url} rel="noreferrer" target="_blank">Open original</a> to try again.</InlineMessage> : null}
+      {status === "loading" ? <LoadingIndicator label={`Loading ${fileLabel.toLowerCase()}`} layout="stack" /> : null}
+      {status === "error" ? <InlineMessage tone="error" title={`${fileLabel} could not be loaded`}><a href={asset.url} rel="noreferrer" target="_blank">{asset.originalAvailable ? "Open web copy" : "Open original"}</a> to try again.</InlineMessage> : null}
       <div className="image-viewer-canvas" style={{ width: size.width * scale, height: size.height * scale }}>
         <img alt={asset.altText ?? ""} decoding="async" draggable={false} src={asset.url}
           onError={() => setStatus("error")}

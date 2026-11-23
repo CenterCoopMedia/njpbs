@@ -344,12 +344,13 @@ describe("public deployment reservation", () => {
 });
 
 describe("workflow gate", () => {
-  it("gates every consumer with fail-closed exact-diff classification", () => {
+  it("gates the four diff-selected consumers with fail-closed exact-diff classification", () => {
     expect(ciWorkflow).toMatch(
       /name:\s*Set fail-closed defaults[\s\S]*?docs=true\\nsite=true\\nadmin=true\\nfirebase=true/,
     );
     expect(ciWorkflow).toContain("fetch-depth: 0");
-    const classifier = parse(ciWorkflow).jobs.policy.steps.find(
+    const { jobs } = parse(ciWorkflow);
+    const classifier = jobs.policy.steps.find(
       (step: { id?: string }) => step.id === "changes",
     );
     const baseExpression = classifier.env.BASE_SHA.replace(/^\$\{\{\s*|\s*\}\}$/g, "");
@@ -368,21 +369,15 @@ describe("workflow gate", () => {
     expect(ciWorkflow).toContain('HEAD_REF: ${{ github.sha }}');
     expect(ciWorkflow).toContain('git show "$TRUSTED_SHA:.github/scripts/ci-classifier.mjs"');
     expect(ciWorkflow).toContain('node "$RUNNER_TEMP/ci-classifier.mjs" classify');
-    expect(ciWorkflow.match(/needs: \[policy\]/g)).toHaveLength(4);
-    expect(ciWorkflow).toContain(
-      "needs.policy.outputs.classifier_result != 'success' || needs.policy.outputs.docs != 'false'",
-    );
-    expect(ciWorkflow).toContain(
-      "needs.policy.outputs.classifier_result != 'success' || needs.policy.outputs.site != 'false'",
-    );
-    expect(ciWorkflow).toContain(
-      "needs.policy.outputs.classifier_result != 'success' || needs.policy.outputs.admin != 'false'",
-    );
-    expect(ciWorkflow).toContain(
-      "needs.policy.outputs.classifier_result != 'success' || needs.policy.outputs.firebase != 'false'",
-    );
-    expect(ciWorkflow).toContain("needs: [policy, docs, site, admin, firebase]");
-    expect(parse(ciWorkflow).jobs.ci.name).toBe("ci");
+    const consumers = ["docs", "site", "admin", "firebase"];
+    for (const name of consumers) {
+      expect(jobs[name].needs).toEqual(["policy"]);
+      expect(jobs[name].if).toContain(
+        `needs.policy.outputs.classifier_result != 'success' || needs.policy.outputs.${name} != 'false'`,
+      );
+    }
+    expect(jobs.ci.needs).toEqual(["policy", ...consumers, "code-health"]);
+    expect(jobs.ci.name).toBe("ci");
   });
 
   it("keeps the docs pointer guardrail wired and ordered", () => {

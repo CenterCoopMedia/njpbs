@@ -89,7 +89,7 @@ export function SourceMediaLibraryBrowse({
         <VideoOriginalNotices {...originals} />
         {linkError ? <InlineMessage tone="warning" title="Media link">{linkError}</InlineMessage> : null}
         {related}
-        {deletedName ? <InlineMessage tone="success" title="Video deleted from library">{deletedName} was removed. The original is retained for recovery.</InlineMessage> : null}
+        {deletedName ? <InlineMessage tone="success" title="Video deleted from library">{deletedName} was moved to the video recycle bin.</InlineMessage> : null}
         {favoriteError ? <InlineMessage tone="error" title="Favorites need attention">
           <span>{favoriteError}</span>
           {onRetryFavorites ? <Button disabled={favoriteRetryDisabled} onClick={onRetryFavorites}>Try again</Button> : null}
@@ -105,7 +105,9 @@ export function SourceMediaLibraryBrowse({
           <div className="source-video-results" data-bulk-open={bulkOpen || undefined}>
             {loading ? <LoadingIndicator label="Loading videos" /> : error ? <InlineMessage tone="error" title="Video library unavailable">{error}<Button onClick={onRetry}>Try again</Button></InlineMessage>
               : page && <>
-                {page.records.length === 0 ? <EmptyState title="No videos found" description={filtered ? "Try a different name or clear the filters." : "Videos will appear here after they are added to this library."} />
+                {page.records.length === 0 ? (page.hasMore
+                  ? <EmptyState title="Search continues" description="Choose Next to check more videos." />
+                  : <EmptyState title="No videos found" description={filtered ? "Try a different name or clear the filters." : "Videos will appear here after they are added to this library."} />)
                   : <MediaGrid {...grid} items={page.records} header={<MediaRowHeader {...rowHeader} />} />}
               </>}
             {paging ? <MediaPaging {...paging} /> : null}

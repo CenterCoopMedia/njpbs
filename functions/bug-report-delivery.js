@@ -1,5 +1,4 @@
 "use strict";
-
 // Durable Telegram and reporter-email delivery for the authenticated CMS report
 // workflow. Report writes commit first. This worker sends or updates one Telegram
 // card and sends bounded transactional confirmations afterward.
@@ -14,6 +13,7 @@ const { db } = require("./lib/firebase");
 const { adminLogEntry } = require("./lib/audit");
 const { accessTierReadsActive, userDocUsesAccessTier } = require("./lib/access-tier-activation");
 const { administrativeRoleFromUserDoc } = require("./lib/principal");
+const { ADMIN_ACCESS_REQUIRED } = require("./lib/staff-access-messages");
 const {
   ADMIN_ORIGIN,
   BUG_REPORT_COLLECTIONS,
@@ -623,7 +623,7 @@ function isActiveAdminProfile(profile, tiersActive = false) {
 async function telegramActor(firestore, uid) {
   const snapshot = await firestore.collection("users").doc(uid).get();
   if (!snapshot.exists || !isActiveAdminProfile(snapshot.data(), await userDocUsesAccessTier(firestore, snapshot.data()))) {
-    throw new BugReportTriageError(403, "Admin access required");
+    throw new BugReportTriageError(403, ADMIN_ACCESS_REQUIRED);
   }
   const profile = snapshot.data();
   return { uid, email: typeof profile.email === "string" ? profile.email : null };
@@ -758,7 +758,7 @@ async function createTelegramWebhookHandler(deps = {}) {
           authorizeInTransaction: async (transaction) => {
             const snapshot = await transaction.get(firestore.collection("users").doc(mappedUid));
             if (!snapshot.exists || !isActiveAdminProfile(snapshot.data(), await userDocUsesAccessTier(firestore, snapshot.data(), transaction))) {
-              throw new BugReportTriageError(403, "Admin access required");
+              throw new BugReportTriageError(403, ADMIN_ACCESS_REQUIRED);
             }
           },
         });

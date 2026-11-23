@@ -12,6 +12,7 @@ import { insertableBlocksForSection, type SectionId } from "../../packages/conte
 import { normalizeStoryCredits, resolveStoryCredits } from "../../packages/content-core/src/story-credits";
 
 export const MAX_CONTENT_OPS = 100;
+const CONTENT_OPS_SCHEMA = 1;
 const ID_PATTERN = /^[A-Za-z0-9_-]{1,128}$/;
 const REF_PATTERN = /^[a-z][a-z0-9-]{0,39}$/;
 const BLOCK_TYPE_SET = new Set<string>(BLOCK_TYPES);
@@ -41,7 +42,7 @@ export type ContentOp =
   | { op: "setCredits"; credits: unknown[] };
 
 export interface ContentOpsRequest {
-  schema: 1;
+  schema: typeof CONTENT_OPS_SCHEMA;
   mode: ContentOpsMode;
   collection: "cmsPages" | "cmsPosts";
   id: string;
@@ -117,7 +118,11 @@ function parseOp(value: unknown, index: number, collection: ContentOpsRequest["c
 /** Validate the request envelope and every operation before any upstream call. */
 export function parseContentOpsRequest(value: unknown): ContentOpsRequest {
   const fail = (message: string): never => { throw new ContentOpsError(400, message); };
-  if (!isPlainObject(value) || value.schema !== 1) return fail("Send a schema 1 content operations request.");
+  const schemaError = `Send a schema ${CONTENT_OPS_SCHEMA} content operations request.`;
+  if (!isPlainObject(value)) return fail(schemaError);
+  if (value.schema !== CONTENT_OPS_SCHEMA) {
+    throw new ContentOpsError(400, schemaError, { code: "unsupported_content_ops_schema", supportedSchemas: [CONTENT_OPS_SCHEMA] });
+  }
   if (!hasOnly(value, ["schema", "mode", "collection", "id", "baseVersion", "requestReference", "expectDigest", "ops"])) {
     return fail("The request has an unknown field.");
   }
@@ -144,7 +149,7 @@ export function parseContentOpsRequest(value: unknown): ContentOpsRequest {
     return fail(publishing ? "Publish sends the saved version with no operations." : "List at least one operation.");
   }
   const ops = value.ops.map((op, index) => parseOp(op, index, collection));
-  return { schema: 1, mode, collection, id: value.id, baseVersion: value.baseVersion as number,
+  return { schema: value.schema, mode, collection, id: value.id, baseVersion: value.baseVersion as number,
     requestReference: value.requestReference, expectDigest: value.expectDigest as string | undefined, ops };
 }
 
@@ -163,7 +168,7 @@ function canonicalJson(value: unknown): string {
  * is the change that was reviewed. The audit row records it.
  */
 export async function planDigest(request: ContentOpsRequest): Promise<string> {
-  const plan = { schema: 1, collection: request.collection, id: request.id, baseVersion: request.baseVersion,
+  const plan = { schema: request.schema, collection: request.collection, id: request.id, baseVersion: request.baseVersion,
     action: request.mode === "publish" || request.mode === "publish-dry-run" ? "publish" : "save", ops: request.ops };
   const bytes = new TextEncoder().encode(canonicalJson(plan));
   const digest = new Uint8Array(await crypto.subtle.digest("SHA-256", bytes));

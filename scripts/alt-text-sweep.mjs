@@ -6,6 +6,7 @@ import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { pipeline } from "node:stream/promises";
 import { Readable, Transform } from "node:stream";
+import { setTimeout as sleep } from "node:timers/promises";
 import { pathToFileURL } from "node:url";
 import { parseBrowserCredential } from "./cms-debug-browser.mjs";
 import postLeadMedia from "../functions/lib/post-lead-media.js";
@@ -14,15 +15,32 @@ const { readPostLeadMedia } = postLeadMedia;
 const DEFAULT_BASE_URL = "https://api.example.org"; // scripts/smoke-cms-functions.mjs
 const MAX_IMAGE_BYTES = 20 * 1024 * 1024;
 const IMAGE_TYPES = new Set(["image/jpeg", "image/png", "image/gif", "image/webp"]);
-const ALLOWED_ENDPOINTS = new Set([
-  "cmsListMedia", "cmsUpdateMediaMetadata", "cmsListContent", "cmsGetContent", "cmsSaveContent",
+const CMS_ENDPOINTS = new Map([
+  ["cmsListMedia", "read"], ["cmsListContent", "read"], ["cmsGetContent", "read"],
+  ["cmsUpdateMediaMetadata", "metadata"], ["cmsSaveContent", "mutation"],
 ]);
+// Match the actor refill of the shared read bucket in cms-api/src/config.ts.
+const CMS_READ_INTERVAL_MS = 500;
+const MAX_CMS_RETRIES = 3;
+const MAX_CMS_RETRY_DELAY_MS = 60_000;
 const SAVABLE_STATUSES = new Set(["draft", "published"]);
 const isObject = value => value !== null && typeof value === "object" && !Array.isArray(value);
 const empty = value => value == null || (typeof value === "string" && !value.trim());
 const brief = value => typeof value === "string" ? value.replace(/\s+/g, " ").trim().slice(0, 600) : "";
 class SkipImage extends Error {}
 class ReportWriteError extends Error {}
+class CmsHttpError extends Error {
+  constructor(endpoint, response, now) {
+    super(`cms_${response.status}`);
+    this.endpoint = endpoint;
+    this.status = response.status;
+    if (response.status === 429) {
+      const scope = response.headers.get("x-rate-limit-scope");
+      if (scope === "actor" || scope === "ip") this.scope = scope;
+      this.retryAfterMs = retryAfterMs(response.headers.get("retry-after"), now);
+    }
+  }
+}
 
 export function parseArgs(argv) {
   const options = { apply: false, maxCalls: 120, report: null };
@@ -89,9 +107,16 @@ export async function claudeModel({ imagePath, title, context, retryNote = "" },
   return parseModelReply(stdout);
 }
 
-export function createCmsClient({ fetchImpl, credential, apiKey, baseUrl = DEFAULT_BASE_URL, now = Date.now }) {
+function retryAfterMs(retryAfter, now) {
+  if (/^\d+$/.test(retryAfter)) return Math.min(Number(retryAfter) * 1000, Number.MAX_SAFE_INTEGER);
+  const date = /^[A-Za-z]/.test(retryAfter) ? Date.parse(retryAfter) : NaN;
+  return Number.isFinite(date) ? Math.max(0, date - now) : null;
+}
+
+export function createCmsClient({ fetchImpl, credential, apiKey, baseUrl = DEFAULT_BASE_URL, now = Date.now, wait = sleep }) {
   if (!apiKey || !/^https?:\/\//.test(baseUrl)) throw new Error("invalid_configuration");
   let session;
+  let nextReadAt = 0;
   async function token() {
     if (session && now() < session.expiresAt - 60_000) return session.idToken;
     const refresh = Boolean(session);
@@ -111,17 +136,29 @@ export function createCmsClient({ fetchImpl, credential, apiKey, baseUrl = DEFAU
     return idToken;
   }
   return async function call(endpoint, body, headers = {}) {
-    if (!ALLOWED_ENDPOINTS.has(endpoint)) throw new Error("endpoint_not_allowed");
-    const response = await fetchImpl(`${baseUrl.replace(/\/$/, "")}/${endpoint}`, {
-      method: "POST", headers: { "Content-Type": "application/json", Authorization: `Bearer ${await token()}`, ...headers },
-      body: JSON.stringify(body), signal: AbortSignal.timeout(30_000),
-    });
-    if (!response.ok) {
-      const error = new Error(`cms_${response.status}`);
-      error.status = response.status;
-      throw error;
+    const rateClass = CMS_ENDPOINTS.get(endpoint);
+    if (!rateClass) throw new Error("endpoint_not_allowed");
+    const isRead = rateClass === "read";
+    for (let attempt = 0; ; attempt++) {
+      const authorization = `Bearer ${await token()}`;
+      if (isRead) {
+        const remaining = Math.min(CMS_READ_INTERVAL_MS, nextReadAt - now());
+        if (remaining > 0) await wait(remaining);
+        nextReadAt = now() + CMS_READ_INTERVAL_MS;
+      }
+      const response = await fetchImpl(`${baseUrl.replace(/\/$/, "")}/${endpoint}`, {
+        method: "POST", headers: { "Content-Type": "application/json", Authorization: authorization, ...headers },
+        body: JSON.stringify(body), signal: AbortSignal.timeout(30_000),
+      });
+      if (response.ok) return response.json();
+      const error = new CmsHttpError(endpoint, response, now());
+      await response.body?.cancel().catch(() => {});
+      // A scoped gateway rejection occurs before a write reaches the Function.
+      if (error.status !== 429 || attempt >= MAX_CMS_RETRIES || (!isRead && !error.scope)) throw error;
+      const delay = error.retryAfterMs ?? 1000 * 2 ** attempt;
+      if (delay > MAX_CMS_RETRY_DELAY_MS) throw error;
+      if (delay > 0) await wait(delay);
     }
-    return response.json();
   };
 }
 
@@ -231,8 +268,17 @@ export async function runSweep({ apply = false, maxCalls = 120, call, model = cl
     if (error instanceof ReportWriteError) throw error;
     const safeReasons = new Set(["invalid_model_reply", "invalid_image_url", "image_download_failed", "image_too_large", "authentication_failed"]);
     const reason = error?.status ? `cms_${error.status}` : safeReasons.has(error?.message) ? error.message : "operation_failed";
-    report.errors.push(reason === "invalid_model_reply" && error.detail ? { target, reason, detail: error.detail } : { target, reason });
-    if (++consecutiveErrors >= 3) report.stopped = "three_consecutive_errors";
+    const entry = { target, reason };
+    if (error instanceof CmsHttpError) {
+      entry.endpoint = error.endpoint;
+      entry.status = error.status;
+      if (error.scope) entry.scope = error.scope;
+      if (error.retryAfterMs != null) entry.retryAfterSeconds = error.retryAfterMs / 1000;
+    }
+    if (reason === "invalid_model_reply" && error.detail) entry.detail = error.detail;
+    report.errors.push(entry);
+    if (error instanceof CmsHttpError && error.status === 429) report.stopped = "cms_rate_limit";
+    else if (++consecutiveErrors >= 3) report.stopped = "three_consecutive_errors";
   };
   const succeeded = () => { consecutiveErrors = 0; };
   const canContinue = () => !report.stopped && report.modelCalls < maxCalls;
@@ -362,6 +408,17 @@ export async function runSweep({ apply = false, maxCalls = 120, call, model = cl
   return report;
 }
 
+export function writeSweepErrors(report, stderr = process.stderr) {
+  if (!report.errors.length) return;
+  const failures = new Set(report.errors.map(({ reason, endpoint, status, scope, retryAfterSeconds }) => {
+    if (!endpoint) return reason;
+    const limit = scope ? ` (${scope} limit)` : "";
+    const retry = retryAfterSeconds == null ? "" : ` with Retry-After ${retryAfterSeconds}s`;
+    return `${endpoint} HTTP ${status}${limit}${retry}`;
+  }));
+  stderr.write(`Alt-text sweep failed after scanning ${report.assetsScanned} assets and ${report.documentsScanned} documents with ${report.changes.length} field changes. Encountered ${[...failures].join(", ")}.\n`);
+}
+
 async function readCredential() {
   if (process.stdin.isTTY) throw new Error("invalid_credential");
   let input = "";
@@ -397,7 +454,10 @@ async function main() {
     if (options.report) await persist(report);
     else process.stdout.write(`${JSON.stringify(report)}\n`);
     process.stdout.write(`Alt-text sweep: ${report.mode}, ${report.modelCalls} model calls, ${report.changes.length} field changes, ${report.skipped.length} skipped, ${report.errors.length} errors${report.stopped ? `, stopped: ${report.stopped}` : ""}.\n`);
-    if (report.errors.length) process.exitCode = 1;
+    if (report.errors.length) {
+      writeSweepErrors(report);
+      process.exitCode = 1;
+    }
   } catch (error) {
     process.stderr.write(`Alt-text sweep failed: ${["invalid_arguments", "invalid_credential", "invalid_configuration", "EEXIST"].includes(error?.code || error?.message) ? error.code || error.message : "run_error"}.\n`);
     process.exitCode = 1;

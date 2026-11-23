@@ -2,6 +2,7 @@
 
 const logger = require("firebase-functions/logger");
 const { requirePrincipal, verifyAppCheckToken } = require("./lib/auth");
+const { ADMIN_ACCESS_REQUIRED, OWNER_ACCESS_REQUIRED } = require("./lib/staff-access-messages");
 const { cmsOnRequest } = require("./lib/cms-edge");
 const { db } = require("./lib/firebase");
 const { JsonRequestError, validateBoundedJsonRequest } = require("./lib/http-json");
@@ -67,7 +68,7 @@ function createCmsCostLedgerHandler(deps = {}) {
       await verifyAppCheckFn(req.headers?.["x-firebase-appcheck"]);
       const user = await requirePrincipalFn(req);
       const role = topLevelRole(user);
-      if (!role) throw rejection(403, "Admin access is required.");
+      if (!role) throw rejection(403, ADMIN_ACCESS_REQUIRED);
       const body = req.body;
       if (!body || typeof body !== "object" || Array.isArray(body)) {
         throw rejection(400, "Request body must be an object.");
@@ -78,7 +79,7 @@ function createCmsCostLedgerHandler(deps = {}) {
         throw rejection(400, "That cost ledger action is not recognized.");
       }
       if (WRITE_ACTIONS.has(action) && !canEdit) {
-        throw rejection(403, "Super admin access is required.");
+        throw rejection(403, OWNER_ACCESS_REQUIRED);
       }
       const clock = now();
       const nowIso = clock.toISOString();

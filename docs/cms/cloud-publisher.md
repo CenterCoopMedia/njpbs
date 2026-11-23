@@ -97,6 +97,23 @@ a fresh operation outside the pause within its retry limit. A fresh operation
 uses the original verified image for the same NEW source and release inputs.
 The candidate must take a fresh content cutoff and pass the same checks.
 
+Before preparing a release, read the last-good receipt for each of the six
+aggregate outputs (listings, authors, feed, Content API, sitemap and paired
+search). Recheck their ages before activation. When a renderer or context
+change makes an output stale, its serving cutoff is 24 hours after that
+output's `verifiedAt`. An old receipt can expire as soon as the release changes
+the renderer. Check that each renderer's retained Assets graph is compatible
+and each receipt has enough time left for the replacement to verify. If a
+receipt is missing or too old, keep publication open until the publisher has
+verified a fresh output. Use the [context recovery procedure](#external-inputs-output-recovery-and-health)
+for a failed preparation, then read the resulting receipts again.
+
+An existing withdrawal can impose a shorter cutoff. The reader uses the
+active withdrawal deadline when present, or 60 seconds from the earlier of
+`verifiedAt` and `sourceReadAt` when the latter is recorded. The candidate's
+preparation read-time and the final-ready check qualify the release itself.
+Each output keeps its original serving timestamps through both checks.
+
 Record the prepare-to-seal duration from the release journal. Subtract the
 `candidate-prepare` intent timestamp from the successful `candidate-seal`
 timestamp for the same candidate attempt. For a stale restart, record the
@@ -187,8 +204,11 @@ and preserve preparation/task identities, reservations, attempts and backoff.
 
 Once preparation freezes, ordinary revisions leave it running; one waiting
 `followUp` tracks the latest accepted context. Same-context aliases share bounded
-work and exact success/failure. Completed aliases retire without rewriting queue
-receipts. Newer context supersedes only waiting work; waiting queues have no
+work and exact success/failure. When the active list fills, a new request can
+take the place of an already-failed alias. That alias keeps its original queue
+and failure. An explicit retry can rejoin the matching runtime, context and
+output set for exact proof. Completed aliases retire without rewriting queue
+receipts. Newer context supersedes only waiting work. Waiting queues have no
 family tasks. A withdrawal can preempt a pure aggregate cohort, but unfinished
 settings/library/record consumer proof retains its original frozen operation.
 Late writers are fenced by selected preparation/task, revision and renderer.
@@ -208,7 +228,17 @@ to Assets. Home root/source catalogs retain their own authority.
 The single external-refresh owner seals schedule, Spotlight and media inputs as
 three immutable JSON objects, verifies size/digest readback, then advances
 context and enqueues aggregates transactionally. Observation timestamps alone
-do not advance context. Unchanged checks retain original input provenance.
+do not advance context. The owner compares the effective content digest before
+uploading, so unchanged checks reuse the original input objects and provenance.
+Before the first upload, it records the staged prefix and lease. Acceptance
+removes the staging entry in the same transaction that publishes the input
+receipts. A later refresh claim fences the previous attempt and sweeps up to
+four expired staging entries, each with three exact JSON object keys. Cleanup
+has a 30-second budget. Failures keep entries for a later pass while provider
+refresh continues.
+Accepted input objects remain available for historical replay and recovery.
+The publisher storage identity needs `storage.objects.delete` on the
+`post-background-v1/external-inputs/` namespace for that cleanup.
 Consumers restore accepted bytes; they never refetch under an accepted revision.
 Four bounded attempts per scheduled period preserve last accepted context.
 Concurrent wake hints cannot start duplicate refreshes; shutdown drains it.

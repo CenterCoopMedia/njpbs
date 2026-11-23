@@ -14,7 +14,7 @@ const { PUBLIC_PAGE_HTML_MAX_BYTES, readPublicPageReceipt, recoverNoBuildHomeCat
 const { readNoBuildPageContextDecision } = require("./no-build-page-context-decision");
 const { projectPublishedCmsSettings } = require("./cms-settings-contract");
 const { assertReadbackTarget, publicReadbackHeaders, withinDeadline, verifyPublicHtml, readPublicPostAfterRefresh } = require("./no-build-post-recovery");
-const { postSettingsCoverage, readPostSettingsReceipt, readSettingsProofs } = require("./no-build-post-settings-confirmation");
+const { postSettingsCoverage, readPostSettingsProof, readSettingsProofs } = require("./no-build-post-settings-confirmation");
 
 const { readRenderedRecordSourceReceipt, assertRecordSourceBinding, assertRenderedRecordSourceBinding } = require("./no-build-page-source-binding");
 const { claimPageConsumerProof } = require("./page-consumer-proof");
@@ -233,12 +233,12 @@ async function confirmNoBuildPageSettings({ firestore, operationId, target, head
   if (now() >= deadline) return { confirmed: false };
   const proof = await claimPageConsumerProof({ firestore, operationId, identity, now, deadline, log });
   if (!proof) return { confirmed: false };
-  let result, failureReason, waitingForInputs = false;
+  let result, failureReason, waitingForInputs = false, continuingPosts = false;
   try {
     const outcome = await provePageConsumers({ firestore, operationId, queue, identity, target, headers, fetchPublic,
       now, deadline, currentCodeRequest, log, proof, fetchPurge, purgeConfig });
-    ({ waitingForInputs = false, failureReason, ...result } = outcome);
-    if (!result.confirmed) {
+    ({ waitingForInputs = false, continuingPosts = false, failureReason, ...result } = outcome);
+    if (!result.confirmed && !continuingPosts) {
       const missingPageCount = result.missingPages?.length ?? 0;
       const missingPostCount = result.missingPosts?.length ?? 0;
       if (!failureReason && missingPageCount) failureReason = { code: "page_coverage_incomplete" };
@@ -251,7 +251,7 @@ async function confirmNoBuildPageSettings({ firestore, operationId, target, head
     failureReason = { code: "confirmation_error", causes: confirmationErrorCauses(error, { includeSource: false }) };
     throw error;
   } finally {
-    await proof.finish(result?.confirmed === true, { waitingForInputs, failureReason });
+    await proof.finish(result?.confirmed === true, { waitingForInputs, continuingPosts, failureReason });
   }
 }
 
@@ -310,33 +310,32 @@ async function provePageConsumers({ firestore, operationId, queue, identity, tar
   homeCapture.seal();
   const coverage = await withinDeadline(deadline - now(), () => readCoverage());
   if (coverage.missing.length) return { confirmed: false, missingPages: coverage.missing };
-  // A prior-slug redirect has no settings frame. Normal Post publication proves
-  // aliases; settings proves every canonical detail through this shared pool.
   const proofs = [
     ...coverage.owners.map(({ state }) => ({ pageId: state.pageId, read: async signal => ({ kind: "page", state,
       receipt: await readPublicPageReceipt({ state, target, headers, fetchPublic, signal }) }) })),
     ...coverage.contexts.map(context => ({ pageId: context.pageId, read: async signal => ({ kind: "context",
       receipt: await readContextReceipt({ ...context, target, headers, fetchPublic, signal }) }) })),
-    ...postCoverage.entries.map(entry => ({ postId: entry.postId, read: async signal => ({ kind: "post",
-      receipt: await readPostSettingsReceipt({ entry, target, headers, fetchPublic, signal }) }) })),
   ];
   // Keep probing other owners, but never acknowledge a partial family. Failures
   // expose only bounded owner IDs, with no response bodies, URLs or errors.
   const failures = [];
-  let results;
+  let results, posts;
   try {
     results = await readSettingsProofs(proofs, (proof, signal) => proof.read(signal), {
       deadline, now, onFailure(proof, error) {
-        if (proof.postId) throw error;
         failures.push({ pageId: proof.pageId, error });
         return { kind: "missing" };
       },
     });
+    // A prior-slug redirect has no settings frame. Check canonical Post details
+    // after Pages so a Post refusal can still report any earlier Page failures.
+    posts = await readPostSettingsProof({ coverage: postCoverage, target, headers, fetchPublic, now, deadline, proof });
   } catch (error) {
     if (failures.length) unavailablePageConsumers(failures, log);
     throw error;
   }
   if (failures.length) return unavailablePageConsumers(failures, log);
+  if (!posts.ready) return { confirmed: false, continuingPosts: posts.advanced };
   const receipts = results.filter(result => result.kind === "page");
   const contextReceipts = results.filter(result => result.kind === "context").map(result => result.receipt);
   const { readSettingsPublication } = require("./settings-publication");

@@ -19,7 +19,6 @@ const intakeUrl = value => {
   } catch { return false; }
 };
 const suppliers = Object.freeze({
-  SHADOW_POST_REVISIONS_KV_NAMESPACE_ID: kvId,
   RATE_LIMIT_KV_NAMESPACE_ID: kvId,
   CRAWL_RATE_LIMIT_NAMESPACE_ID: rateLimitId,
   REPORT_INTAKE_URL: intakeUrl,
@@ -47,7 +46,6 @@ export function renderWranglerConfig(filename, { env = process.env, environment 
   const rendered = body.replace(/\$\{([A-Z][A-Z0-9_]*)\}/g, (_placeholder, name) => {
     if (!Object.hasOwn(suppliers, name)) throw new RenderError("Unknown template input");
     // config-input: CRAWL_RATE_LIMIT_NAMESPACE_ID, RATE_LIMIT_KV_NAMESPACE_ID, REPORT_INTAKE_URL
-    // config-input: SHADOW_POST_REVISIONS_KV_NAMESPACE_ID
     const value = env[name];
     if (typeof value !== "string" ||
         /replace|placeholder|template|\$\{/i.test(value) || !suppliers[name](value)) {

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { DEFAULT_MEDIA_DISPLAY, DEFAULT_VIDEO_MEDIA_DISPLAY } from "../src/lib/media-display";
-import { parseVideoMediaLocation } from "../src/lib/media-query";
+import { parseMediaLocation, parseVideoMediaLocation } from "../src/lib/media-query";
 import {
   MAX_SAVED_MEDIA_VIEWS,
   SavedMediaViewValidationError,
@@ -56,6 +56,27 @@ describe("saved media views", () => {
       selectedId: null,
     });
     expect(parseVideoMediaLocation("metadata=requested&tag=Interview").query).not.toHaveProperty("metadata");
+  });
+
+  it("round-trips each surface's metadata bounds and removes unsupported filters", () => {
+    const images = createSavedMediaView("images", "Latest portraits", "images",
+      "updatedFrom=2026-11-22&aspect=portrait&metadata=requested&minDuration=12&page=2");
+    const audio = createSavedMediaView("audio", "Short requests", "audio",
+      "aspect=square&minDuration=0&maxDuration=30&metadata=requested&cursor=opaque");
+    const videos = createSavedMediaView("videos", "Timed videos", "video:archive",
+      "q=town&minDuration=30&maxDuration=60&cursor=opaque");
+    const restored = parseSavedMediaViews([images, audio, videos]);
+    expect(parseMediaLocation(restored[0].query).query).toMatchObject({
+      updatedFrom: "2026-11-22", aspect: "portrait", metadataUpdateRequested: true, page: 1,
+    });
+    expect(restored[0].query).not.toContain("minDuration");
+    expect(parseMediaLocation(restored[1].query, true).query).toMatchObject({
+      minDuration: 0, maxDuration: 30, metadataUpdateRequested: true,
+    });
+    expect(restored[1].query).not.toContain("aspect");
+    expect(parseVideoMediaLocation(restored[2].query).query).toMatchObject({ q: "town", minDuration: 30, maxDuration: 60 });
+    expect(parseVideoMediaLocation("updatedTo=2026-02-30").query).not.toHaveProperty("updatedTo");
+    expect(parseVideoMediaLocation("aspect=square&minDuration=10").query).not.toHaveProperty("aspect");
   });
 
   it("accepts only bounded ids, names, and known source-isolated surfaces", () => {

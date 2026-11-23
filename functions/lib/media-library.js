@@ -1,8 +1,33 @@
 "use strict";
 
+const { createHash } = require("node:crypto");
 const { MASTER_EXTENSIONS, retainedOriginal } = require("./media-master-contract");
 
 const ORIGINAL_FORMATS = new Set(Object.values(MASTER_EXTENSIONS).map(extension => extension.toUpperCase()));
+const SHA256 = /^[a-f0-9]{64}$/;
+
+function approvalToken(value) {
+  return typeof value === "string" && SHA256.test(value) ? value : null;
+}
+
+function mediaApprovalVersions(id, data, fromSummary) {
+  if (fromSummary && data.approvalVersions) {
+    return {
+      original: approvalToken(data.approvalVersions.original),
+      viewingCopy: approvalToken(data.approvalVersions.viewingCopy),
+    };
+  }
+  const hash = approvalToken(data.contentHash);
+  // Built-in files are served at paths that can change bytes on a site release.
+  if (!hash || data.source === "site_seed") return { original: null, viewingCopy: null };
+  const master = data.kind === "image" && data.source === "upload" ? retainedOriginal(data.master) : null;
+  const token = (rendition, contentHash) => createHash("sha256")
+    .update(JSON.stringify(["library-media-approval", id, rendition, contentHash])).digest("hex");
+  return {
+    original: token("original", master?.contentHash ?? hash),
+    viewingCopy: master ? token("viewingCopy", hash) : null,
+  };
+}
 
 // Staff see only the original's format. Its key, hash, size and dimensions stay server-side.
 function originalDownload(data) {
@@ -16,6 +41,7 @@ function originalDownload(data) {
 }
 
 const { projectVoiceoverMedia } = require("./voiceover-media");
+const { METADATA_BOUND_FIELDS, parseMetadataBounds, hasMetadataBounds, matchesMediaMetadata } = require("./media-browse-metadata");
 
 // This pure module owns the private media-library response contract. Browser clients never read
 // media_assets directly. The HTTP boundary authenticates the caller and filters each record by
@@ -58,6 +84,8 @@ const REQUEST_FIELDS = new Set([
   "profilePhotoScope",
   "paging",
   "cursor",
+  "metadataUpdateRequested",
+  ...METADATA_BOUND_FIELDS,
 ]);
 
 const DEFAULT_MEDIA_QUERY = Object.freeze({
@@ -234,6 +262,24 @@ function parseMediaListRequest(body) {
     );
   }
 
+  const bounds = parseMetadataBounds(body, MediaLibraryValidationError);
+  const { metadataUpdateRequested } = body;
+  if (metadataUpdateRequested !== undefined && metadataUpdateRequested !== true) {
+    throw new MediaLibraryValidationError("Metadata update requested must be true when present");
+  }
+  if ((assetIds || body.profilePhotoScope) && (metadataUpdateRequested || hasMetadataBounds(bounds))) {
+    throw new MediaLibraryValidationError("Metadata filters require a browse request");
+  }
+  if ((bounds.minDuration !== undefined || bounds.maxDuration !== undefined) && !kinds.includes("audio")) {
+    throw new MediaLibraryValidationError("Duration filtering requires audio");
+  }
+  if (bounds.aspect && kinds.length && !kinds.includes("image")) {
+    throw new MediaLibraryValidationError("Aspect filtering requires images");
+  }
+  if (bounds.aspect && (bounds.minDuration !== undefined || bounds.maxDuration !== undefined)) {
+    throw new MediaLibraryValidationError("Aspect and duration cannot be combined here");
+  }
+
   return {
     q,
     categories,
@@ -241,6 +287,8 @@ function parseMediaListRequest(body) {
     sort,
     direction,
     page,
+    ...bounds,
+    ...(metadataUpdateRequested ? { metadataUpdateRequested } : {}),
     ...(pageSize === undefined ? {} : { pageSize }),
     ...(assetIds === undefined ? {} : { assetIds }),
     ...(body.paging ? { paging: body.paging } : {}),
@@ -359,7 +407,7 @@ function mediaDisplayUrl(asset, displayWidth = 480, displayHeight = 0) {
   return selected?.url ?? asset.url;
 }
 
-function mediaAssetSummary(id, data) {
+function mediaAssetSummary(id, data, { fromSummary = false } = {}) {
   if (!isMediaAssetId(id) || !plainObject(data) || data.lifecycle !== "active")
     return null;
   if (!Number.isSafeInteger(data.version) || data.version < 1) return null;
@@ -446,6 +494,7 @@ function mediaAssetSummary(id, data) {
     ...(typeof data.animated === "boolean" ? { animated: data.animated } : {}),
     // Preserve availability and format when cmsListMedia projects an already-safe summary again.
     ...originalDownload(data),
+    approvalVersions: mediaApprovalVersions(id, data, fromSummary),
     ...(voiceover ? { voiceover, voiceoverTakeId: data.voiceoverTakeId } : {}),
     source:
       data.source === "upload" || data.source === "site_seed" || data.source === "voiceover"
@@ -515,6 +564,16 @@ function countBy(values, keys) {
   );
 }
 
+function matchesLibraryMetadata(asset, query) {
+  return matchesMediaMetadata(query, {
+    updatedAt: asset.updatedAt,
+    metadataUpdateRequested: asset.metadataUpdateRequested,
+    width: asset.kind === "image" ? asset.width : undefined,
+    height: asset.kind === "image" ? asset.height : undefined,
+    duration: asset.voiceover?.duration_seconds,
+  });
+}
+
 function selectMediaLibrary(
   records,
   query,
@@ -527,11 +586,8 @@ function selectMediaLibrary(
     ? records
     : records.filter((asset) => DEFAULT_MEDIA_KINDS.includes(asset.kind));
   const search = query.q.toLocaleLowerCase("en-US");
-  const searched =
-    search === ""
-      ? scoped
-      : scoped.filter((asset) =>
-        mediaSearchText(asset, categoryLabels).includes(search));
+  const searched = scoped.filter((asset) => matchesLibraryMetadata(asset, query) &&
+    (search === "" || mediaSearchText(asset, categoryLabels).includes(search)));
   const beforeCategory =
     query.kinds.length === 0
       ? searched
@@ -599,6 +655,7 @@ module.exports = {
   isMediaAssetId,
   mediaAssetSummary,
   mediaSearchText,
+  matchesLibraryMetadata,
   mediaDisplayUrl,
   parseMediaIfMatch,
   parseMediaListRequest,

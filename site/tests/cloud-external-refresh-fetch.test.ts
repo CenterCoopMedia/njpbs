@@ -1,8 +1,9 @@
 // @vitest-environment node
 import { createServer } from "node:http";
 import { once } from "node:events";
+import type { CollectionReference } from "firebase-admin/firestore";
 import { afterEach, expect, it, vi } from "vitest";
-import { boundedFetch } from "../scripts/cloud-external-refresh";
+import { boundedFetch, cleanAbandonedExternalInputs } from "../scripts/cloud-external-refresh";
 
 afterEach(() => { vi.restoreAllMocks(); vi.useRealTimers(); });
 function simulatedDeadlines() {
@@ -33,6 +34,32 @@ it("still bounds a provider that never responds to at most the largest provider 
   const assertion = expect(boundedFetch(provider)("https://www.njspotlightnews.org/feed/")).rejects.toThrow("External provider request failed");
   await vi.advanceTimersByTimeAsync(60_000);
   await assertion;
+});
+
+it("bounds an abandoned input sweep and leaves a late deletion pending for retry", async () => {
+  vi.useFakeTimers();
+  const slowEntry = { id: "A".repeat(20), ref: { delete: vi.fn(), update: vi.fn() } };
+  const nextEntry = { id: "B".repeat(20), ref: { delete: vi.fn(), update: vi.fn() } };
+  const query = {
+    where: () => query, orderBy: () => query, limit: () => query,
+    get: async () => ({ docs: [slowEntry, nextEntry] }),
+  };
+  let finishSlowDelete!: () => void;
+  const pending = new Promise<void>(resolve => { finishSlowDelete = resolve; });
+  const deleteExternalInputs = vi.fn(async (operationId: string) => {
+    if (operationId === slowEntry.id) await pending;
+  });
+  const sweep = cleanAbandonedExternalInputs(query as unknown as CollectionReference, { deleteExternalInputs }, 0);
+  const failure = expect(sweep).rejects.toThrow("Abandoned external input cleanup timed out");
+  await vi.advanceTimersByTimeAsync(30_000);
+  await failure;
+  expect(deleteExternalInputs.mock.calls.map(([id]) => id)).toEqual([slowEntry.id, nextEntry.id]);
+  expect(nextEntry.ref.delete).toHaveBeenCalledOnce();
+
+  finishSlowDelete();
+  await vi.advanceTimersByTimeAsync(0);
+  expect(slowEntry.ref.delete).not.toHaveBeenCalled();
+  expect(slowEntry.ref.update).not.toHaveBeenCalled();
 });
 
 // Exercise native fetch and a real streamed HTTP response. No production data is used.

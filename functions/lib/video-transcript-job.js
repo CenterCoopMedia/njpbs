@@ -12,10 +12,10 @@ const { AUDIT_COLLECTIONS, adminLogEntry } = require("./audit");
 const { registeredPrincipalFromUserDoc } = require("./principal");
 const { ENGINE_REVISION, transcriptId, transcriptInput } = require("./video-transcript-contract");
 
-const { variantId, MODEL: BYOK_MODEL, ADAPTER_REVISION: BYOK_REVISION, AUDIO_ADAPTER_REVISION } = require("./video-transcript-byok-job");
+const { variantId, validJob: validByokJob, MODEL: BYOK_MODEL, ADAPTER_REVISION: BYOK_REVISION, AUDIO_ADAPTER_REVISION } = require("./video-transcript-byok-job");
 const { LOCAL_ENGINE, sourceMatches, WORKERS, WORKER_ID } = require("./video-transcript-worker");
 const { ALIGNMENT_JOBS } = require("./video-transcript-alignment-job");
-const { PAID_FALLBACK_POLICY } = require("./video-transcript-fallback-policy");
+const { PAID_FALLBACK_POLICY, paidFallbackDecision } = require("./video-transcript-fallback-policy");
 const { readLocalQueue, reserveLocalQueue, releaseLocalQueue, requeueLocalFallback } = require("./video-transcript-local-queue");
 const { admitAmazon, LIMITS: PAID_LIMITS } = require("./video-transcript-paid-budget");
 const { transcriptAttempt, readAttemptSlot, assertAttemptProvider,
@@ -30,6 +30,7 @@ const ACTOR_DAILY_LIMIT = 5;
 const GLOBAL_DAILY_LIMIT = 20;
 const GLOBAL_OUTSTANDING_LIMIT = 20;
 const LEGACY_DAILY_READ_LIMIT = 500;
+const MAX_RECOVERY_ANCESTRY_DEPTH = 20;
 
 function activeAsset(snapshot, source) {
   const asset = snapshot.exists ? parseSourceMediaAsset(snapshot.id, snapshot.data()) : null;
@@ -53,6 +54,65 @@ function utcDayRange(day) {
 
 function legacyPaidJob(job) {
   return Boolean(job && [undefined, "amazon-transcribe"].includes(job.provider) && !job.localQueueSlot && !job.fallbackAt);
+}
+
+function verifiedAttempt(asset, source, id, job) {
+  if (!job || job.id !== id || job.assetId !== asset.id || !sourceMatches(asset, job, source)) return false;
+  if (job.provider !== "elevenlabs") {
+    return [undefined, "local", "amazon-transcribe"].includes(job.provider) &&
+      (!job.attemptGeneration || ["local", "amazon-transcribe"].includes(job.requestedProvider)) &&
+      transcriptId(asset, source.bucket, job) === id;
+  }
+  try { validByokJob(job, id); return true; }
+  catch { return false; }
+}
+
+function providerWorkSettled(job) {
+  if (job.active !== false || !["ready", "failed", "needs_reconciliation", "cancelled", "stale"].includes(job.phase)) return false;
+  if (job.provider === "elevenlabs") {
+    return !job.submissionIntentAt || ["ready", "amazon"].includes(paidFallbackDecision(job));
+  }
+  return !job.startIntentAt || job.audioProviderTerminal === true || job.phase === "ready" ||
+    (job.phase === "failed" && job.errorCode === "transcription_failed");
+}
+
+function verifiedFallback(asset, source, parent, child) {
+  return parent.processingPolicy === PAID_FALLBACK_POLICY && child?.provider === "elevenlabs" &&
+    verifiedAttempt(asset, source, parent.fallbackTranscriptId, child) && child.identity.credentialScope === "organization" &&
+    child.languageCode === parent.languageCode && child.maxSpeakers === parent.maxSpeakers &&
+    ["ready", "amazon"].includes(paidFallbackDecision(child));
+}
+
+async function readPaidReplacementAncestor(tx, collection, asset, source, selectedId, held) {
+  if (!held.size) return null;
+  // Cap the reads for an indirect replacement. Staff can still select the slot holder directly.
+  let id = selectedId, expectedGeneration;
+  for (let depth = 0; depth < MAX_RECOVERY_ANCESTRY_DEPTH && /^[a-f0-9]{64}$/.test(id ?? ""); depth++) {
+    const job = held.get(id) ?? (await tx.get(collection.doc(id))).data();
+    if (!verifiedAttempt(asset, source, id, job) || !providerWorkSettled(job)) return null;
+    const lineage = job.provider === "elevenlabs" ? job.identity : job;
+    const generation = lineage.attemptGeneration ?? 0;
+    if (!Number.isSafeInteger(generation) || generation < 0 ||
+        (expectedGeneration !== undefined && generation !== expectedGeneration)) return null;
+    if (job.fallbackTranscriptId) {
+      if (!/^[a-f0-9]{64}$/.test(job.fallbackTranscriptId)) return null;
+      const child = (await tx.get(collection.doc(job.fallbackTranscriptId))).data();
+      if (!verifiedFallback(asset, source, job, child)) return null;
+    }
+    if (held.has(id)) return id;
+    if (job.provider === "elevenlabs") {
+      const linked = [...held].filter(([, parent]) => parent.fallbackTranscriptId === id);
+      if (linked.length) {
+        const [parentId, parent] = linked[0];
+        return linked.length === 1 && verifiedAttempt(asset, source, parentId, parent) &&
+          providerWorkSettled(parent) && verifiedFallback(asset, source, parent, job) ? parentId : null;
+      }
+    }
+    if (generation === 0) return null;
+    id = lineage.previousTranscriptId;
+    expectedGeneration = generation - 1;
+  }
+  return null;
 }
 
 async function listLegacyOutstandingIds(tx, firestore) {
@@ -124,8 +184,6 @@ async function requestTranscript({ firestore, source, request, actor, now = Date
   return firestore.runTransaction(async (tx) => {
     const asset = activeAsset(await tx.get(firestore.collection("mediaSourceAssets").doc(request.assetId)), source);
     const attempt = await transcriptAttempt(tx, firestore, asset, source, request.newAttemptOf, request.attemptKey);
-    const replaces = (job) => request.newAttemptOf && job?.active === false &&
-      (job.id === request.newAttemptOf || job.fallbackTranscriptId === request.newAttemptOf);
     const identity = { ...request, ...(request.provider ? { requestedProvider: request.provider, ...attempt } : {}) };
     const id = transcriptId(asset, source.bucket, identity);
     const ref = firestore.collection(TRANSCRIPT_JOBS).doc(id);
@@ -159,19 +217,33 @@ async function requestTranscript({ firestore, source, request, actor, now = Date
         ? (Array.isArray(outstandingLimitSnapshot.data()?.activeIds)
           ? outstandingLimitSnapshot.data().activeIds.slice(0, GLOBAL_OUTSTANDING_LIMIT) : [])
         : await listLegacyOutstandingIds(tx, firestore);
-      const outstandingJobs = await Promise.all(outstandingIds.map((activeId) =>
-        tx.get(firestore.collection(TRANSCRIPT_JOBS).doc(activeId))));
-      const outstanding = outstandingIds.map((activeId, index) => ({
+      const collection = firestore.collection(TRANSCRIPT_JOBS);
+      const outstandingJobs = await Promise.all(outstandingIds.map((activeId) => tx.get(collection.doc(activeId))));
+      const retained = outstandingIds.map((activeId, index) => ({
         id: activeId,
         job: outstandingJobs[index].data(),
-      })).filter(({ job }) => legacyPaidJob(job) && occupiesTranscriptSlot(job) && !replaces(job));
-      activeIds = outstanding.map(({ id }) => id);
+      })).filter(({ job }) => legacyPaidJob(job) && occupiesTranscriptSlot(job));
       const actorJob = actorLimit.activeId
-        ? (await tx.get(firestore.collection(TRANSCRIPT_JOBS).doc(actorLimit.activeId))).data() : null;
+        ? (await tx.get(collection.doc(actorLimit.activeId))).data() : null;
+      const directlyReplaces = (job) => request.newAttemptOf && job?.active === false &&
+        (job.id === request.newAttemptOf || job.fallbackTranscriptId === request.newAttemptOf);
+      let replacementId = null;
+      const actorSlot = legacyPaidJob(actorJob) && occupiesTranscriptSlot(actorJob);
+      if (request.newAttemptOf && !(actorSlot && directlyReplaces(actorJob)) &&
+          !retained.some(({ job }) => directlyReplaces(job))) {
+        const held = new Map([...retained, { id: actorLimit.activeId, job: actorJob }]
+          .filter(({ id, job }) => id === job?.id && legacyPaidJob(job) && job.active === false &&
+            job.phase === "needs_reconciliation" && job.assetId === asset.id && sourceMatches(asset, job, source))
+          .map(({ id, job }) => [id, job]));
+        replacementId = await readPaidReplacementAncestor(tx, collection, asset, source, request.newAttemptOf, held);
+      }
+      const replaces = (id, job) => directlyReplaces(job) || (replacementId !== null && id === replacementId && job?.id === id);
+      const outstanding = retained.filter(({ id, job }) => !replaces(id, job));
+      activeIds = outstanding.map(({ id }) => id);
       const actorWasLocal = Boolean(actorJob && !legacyPaidJob(actorJob));
       const oldQueueHadLocal = outstandingJobs.some(snapshot => snapshot.exists && !legacyPaidJob(snapshot.data()));
       const actorBusy = actorLimitSnapshot.exists && actorLimit.activeId
-        ? legacyPaidJob(actorJob) && occupiesTranscriptSlot(actorJob) && !replaces(actorJob)
+        ? actorSlot && !replaces(actorLimit.activeId, actorJob)
         : outstanding.some(({ job }) => job?.requestedBy === actor.uid);
       if (actorBusy) {
         const blocking = actorJob ?? outstanding.find(({ job }) => job?.requestedBy === actor.uid)?.job;

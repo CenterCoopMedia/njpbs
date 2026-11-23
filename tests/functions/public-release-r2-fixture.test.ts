@@ -8,12 +8,13 @@ it("streams fresh real R2 bytes and plain metadata, retaining conditional writes
     const bytes = new TextEncoder().encode("actual R2 fixture bytes"), key = "pair/object";
     const sha256 = createHash("sha256").update(bytes).digest("hex");
     expect(await store.get(key)).toBeNull();
-    await store.put(key, bytes, { onlyIf: { etagDoesNotMatch: "*" }, sha256, customMetadata: { bodydigest: sha256, label: "é" } });
+    const written = await store.put(key, bytes, { onlyIf: { etagDoesNotMatch: "*" }, sha256, customMetadata: { bodydigest: sha256, label: "é" } });
     const direct = await runtime.getR2Bucket("CONTENT"), expected = (await direct.get(key))!;
     const observed = (await store.get(key))!;
     expect(observed.size).toBe(expected.size);
     expect(observed.customMetadata).toEqual(expected.customMetadata);
     expect(observed.etag).toBe(expected.etag);
+    expect(written).toMatchObject({ etag: expected.etag, size: expected.size, customMetadata: expected.customMetadata });
     expect(observed.uploaded.toISOString()).toBe(expected.uploaded.toISOString());
     expect(Object.getOwnPropertyDescriptor(observed, "size")?.value).toBe(bytes.length);
     expect(observed.bodyUsed).toBe(false);

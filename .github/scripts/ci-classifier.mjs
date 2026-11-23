@@ -103,7 +103,6 @@ const SITE_FIREBASE_WORKFLOWS = new Set([
   ".github/workflows/dev-staff-gateway-deploy.yml",
 
   ".github/workflows/cms-dev-deploy.yml",
-  ".github/workflows/shadow-posts-dev-deploy.yml",
   ".github/workflows/cms-dev-publish.yml",
 ]);
 

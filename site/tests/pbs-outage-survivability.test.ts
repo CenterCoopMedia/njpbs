@@ -57,16 +57,14 @@ describe("PBS outage survivability: the editorial shell outlives any PBS failure
     for (const s of SURFACES_WITH_FALLBACK) {
       expect(page.surfaces[s]).toEqual({ usable: true, degraded: true });
     }
-    // Usable is not the same as visible. Two of those fallbacks are policy cores
-    // that no component renders yet, and the model says which, so this verdict
-    // cannot be read as production coverage it does not have (#432).
+    // The now/next fallback is a policy core. The model reports it separately
+    // from the fallback coverage currently wired into components (#432).
     // Written out by hand, not derived: comparing against
     // SURFACES_WITH_POLICY_ONLY_FALLBACK would reduce to POLICY intersect BACKED
     // === POLICY and stay green while production coverage shrank. Unsorted, so it
     // also pins the taxonomy order the field documents.
     expect(page.surfacesAwaitingWiring).toEqual([
       "nowNextStrip",
-      "memberGatedPlayback",
     ]);
     // The one PBS-backed surface still without a built fallback is broken -- the
     // contract's one remaining coverage gap: the PBS-hosted donate transaction,
@@ -97,12 +95,6 @@ describe("PBS outage survivability: the editorial shell outlives any PBS failure
   });
 
   it("fallback coverage is explicit: only donateTransaction lacks a built fallback", () => {
-    // The shell's survival does not depend on this, but which PBS surfaces still
-    // break in a full outage does. Pin the coverage so shipping a fallback (moving
-    // a surface into SURFACES_WITH_FALLBACK) or regressing one is a deliberate test
-    // change, not a silent drift. member-gated playback moved into coverage with
-    // its degradation policy, leaving the PBS-hosted donate transaction as the one
-    // remaining gap the contract names.
     const covered = new Set<PbsSurface>(SURFACES_WITH_FALLBACK);
     const uncovered = PBS_BACKED_SURFACES.filter((s) => !covered.has(s));
     expect(uncovered.slice().sort()).toEqual(["donateTransaction"]);
@@ -123,7 +115,6 @@ describe("PBS outage survivability: the editorial shell outlives any PBS failure
       "vodLaunchCards",
     ]);
     expect([...SURFACES_WITH_POLICY_ONLY_FALLBACK].sort()).toEqual([
-      "memberGatedPlayback",
       "nowNextStrip",
     ]);
 
@@ -159,7 +150,7 @@ describe("PBS outage survivability: the editorial shell outlives any PBS failure
     // Flip each surface into failure ALONE and assert nothing else moves -- so a
     // coupling between any pair (a shared error boundary that blanks the page, a
     // fallback that reads a sibling's status) fails here instead of shipping.
-    // Exhaustive over all eight, not a two-surface sample.
+    // Check each surface on its own.
     const base = assessOutage(new Set());
     for (const s of ALL_SURFACES) {
       const diff = surfacesThatDiffer(assessOutage(new Set([s])), base);
@@ -219,7 +210,6 @@ describe("PBS outage survivability: the editorial shell outlives any PBS failure
       "scheduleGrid",
       "nowNextStrip",
       "vodLaunchCards",
-      "memberGatedPlayback",
       "donateTransaction",
       "editorialContent",
       "navigation",
@@ -233,7 +223,7 @@ describe("PBS outage survivability: the editorial shell outlives any PBS failure
     expect(overlap).toEqual([]);
 
     // Compile-time partition guard: `never` means every PbsSurface is classified
-    // as backed or free. Add a ninth surface to the union without listing it and
+    // as backed or free. Add a surface to the union without listing it and
     // this resolves away from `never`, so the assignment stops compiling -- a new
     // surface cannot be silently dropped from an outage assessment.
     type Unclassified = Exclude<

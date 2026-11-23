@@ -210,6 +210,85 @@ it("reuses a ready local result without createdAt before another provider's acti
   expect((await ref(amazon.body.transcript.id).get()).data()).toMatchObject({ provider: "amazon-transcribe", active: true });
 });
 
+async function retainedAmazonAttempt() {
+  const result = await call("request", { ...identity, ...settings, provider: "amazon-transcribe", newAttemptOf: await uncertain() });
+  expect(result.statusCode).toBe(200);
+  const id = result.body.transcript.id;
+  const claim = await jobs.claimTranscript(firestore, ref(id), source);
+  expect(claim).not.toBeNull();
+  await jobs.saveTranscript(firestore, ref(id), claim, { active: false, phase: "needs_reconciliation",
+    startIntentAt: "2026-10-28T12:00:00Z", audioProviderTerminal: true });
+  return { id, budgetRef: firestore.collection("mediaTranscriptionBudgets").doc(`global-${claim.amazonBudgetReservation.day}`) };
+}
+
+async function localDescendant(previous, phase = "ready") {
+  const result = await call("request", { ...identity, ...settings, provider: "local", newAttemptOf: previous });
+  expect(result.statusCode).toBe(200);
+  const id = result.body.transcript.id;
+  await ref(id).update({ active: false, phase });
+  return id;
+}
+
+describe("paid slot recovery from saved descendants", () => {
+  it("transfers the retained slot once through two verified links and counts both submissions", async () => {
+    const ancestor = await retainedAmazonAttempt();
+    const older = await localDescendant(ancestor.id, "failed");
+    const selected = await localDescendant(older);
+    const before = (await ref(ancestor.id).get()).data();
+    const body = { ...identity, ...settings, provider: "amazon-transcribe", newAttemptOf: selected };
+    const replies = await Promise.all([
+      call("request", { ...body, attemptKey: "11111111-1111-4111-8111-111111111111" }),
+      call("request", { ...body, attemptKey: "22222222-2222-4222-8222-222222222222" }),
+    ]);
+    expect(replies.map(reply => reply.statusCode)).toEqual([200, 200]);
+    expect(replies.map(reply => reply.body.cached).sort()).toEqual([false, true]);
+    const id = replies[0].body.transcript.id;
+    expect(replies[1].body.transcript.id).toBe(id);
+    expect((await ref(id).get()).data()).toMatchObject({ previousTranscriptId: selected });
+    expect((await firestore.collection(jobs.TRANSCRIPT_LIMITS).doc("outstanding").get()).data()).toEqual({ activeIds: [id] });
+    const actorLimitId = createHash("sha256").update(actor.uid).digest("hex");
+    expect((await firestore.collection(jobs.TRANSCRIPT_LIMITS).doc(actorLimitId).get()).data()).toMatchObject({ count: 2, activeId: id });
+    expect((await ref(ancestor.id).get()).data()).toEqual(before);
+    expect((await ancestor.budgetRef.get()).data()).toMatchObject({ consumedSubmissions: 1, consumedAudioSeconds: 60 });
+    expect(await jobs.claimTranscript(firestore, ref(id), source)).not.toBeNull();
+    expect((await ancestor.budgetRef.get()).data()).toMatchObject({ consumedSubmissions: 2, consumedAudioSeconds: 120 });
+  });
+
+  it.each(["unrelated", "changed source", "unresolved Amazon work"])("keeps the retained slot for %s", async reason => {
+    const ancestor = await retainedAmazonAttempt();
+    const older = reason === "unrelated" ? await uncertain() : await localDescendant(ancestor.id, "failed");
+    const selected = await localDescendant(older);
+    if (reason === "changed source") await ref(older).update({ sourceObjectVersionId: "different-original" });
+    if (reason === "unresolved Amazon work") await ref(ancestor.id).update({ audioProviderTerminal: false });
+    const result = await call("request", { ...identity, ...settings, provider: "amazon-transcribe", newAttemptOf: selected });
+    expect(result.statusCode).toBe(429);
+    expect((await firestore.collection(jobs.TRANSCRIPT_LIMITS).doc("outstanding").get()).data()).toEqual({ activeIds: [ancestor.id] });
+    expect((await ancestor.budgetRef.get()).data()).toMatchObject({ consumedSubmissions: 1, consumedAudioSeconds: 60 });
+  });
+
+  it.each([["rejected", 200], ["needs_reconciliation", 429]])("checks the named fallback receipt before transferring its parent slot (%s)", async (outcome, expected) => {
+    const key = credentials.credentialIdentity(actor, { scope: "organization", provider: "elevenlabs" });
+    await firestore.collection(credentials.CREDENTIAL_COLLECTION).doc(key.id).set({ ...key, enabled: true, revision: 1 });
+    const parent = await call("request", { ...identity, ...settings }, { configuration: { ...config, localEnabled: false } });
+    expect(parent.statusCode).toBe(200);
+    const parentRef = ref(parent.body.transcript.id), now = Date.now();
+    await fallback.routePaidFallback({ firestore, ref: parentRef, source, settings: config, admit: byok.admit, now });
+    const childId = (await parentRef.get()).data().fallbackTranscriptId;
+    const validateCurrent = async () => true;
+    const claim = await paidJobs.claimJob({ firestore, id: childId, validateCurrent, now });
+    expect(claim).not.toBeNull();
+    await paidJobs.recordIntent({ firestore, claim, validateCurrent, now });
+    await paidJobs.finishJob({ firestore, claim, result: { outcome }, now });
+    await parentRef.update({ phase: "needs_reconciliation", active: false });
+    const selected = await localDescendant(childId);
+    const result = await call("request", { ...identity, ...settings, provider: "amazon-transcribe", newAttemptOf: selected });
+    expect(result.statusCode).toBe(expected);
+    expect((await firestore.collection(jobs.TRANSCRIPT_LIMITS).doc("outstanding").get()).data()).toEqual({
+      activeIds: [expected === 200 ? result.body.transcript.id : parentRef.id],
+    });
+  });
+});
+
 it("admits one free retry when the same predecessor races with different recognition settings", async () => {
   const previous = await uncertain();
   const results = await Promise.all([

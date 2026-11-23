@@ -17,7 +17,7 @@ const { requirePrincipal, isAdmin } = require("./lib/auth");
 const { cmsOnRequest } = require("./lib/cms-edge");
 const { AUDIT_COLLECTIONS, adminLogEntry } = require("./lib/audit");
 const { ADMIN_ORIGIN, BUG_REPORT_COLLECTIONS } = require("./lib/bug-report-contract");
-
+const { ADMIN_ACCESS_REQUIRED } = require("./lib/staff-access-messages");
 const GITHUB_TOKEN = defineSecret("CMS_BUG_REPORT_GITHUB_TOKEN");
 const GITHUB_WEBHOOK_SECRET = defineSecret(
   "CMS_BUG_REPORT_GITHUB_WEBHOOK_SECRET",
@@ -1527,7 +1527,7 @@ function sendGithubIssueError(res, error, log, operation) {
   const message = status === 401
     ? (error.message || "Authentication required")
     : status === 403
-      ? (error.message || "Admin access required")
+      ? (error.message || ADMIN_ACCESS_REQUIRED)
       : status === 404
         ? "Issue not found"
         : status >= 500
@@ -1539,7 +1539,7 @@ function sendGithubIssueError(res, error, log, operation) {
 async function requireGithubAdmin(req, deps) {
   const user = requireApprovedPrincipal(await deps.requirePrincipalFn(req));
   if (!(await deps.isAdminFn(user.uid, user.emailVerified, user.authTime))) {
-    throw new GithubIssueError(403, "Admin access required");
+    throw new GithubIssueError(403, ADMIN_ACCESS_REQUIRED);
   }
   return user;
 }

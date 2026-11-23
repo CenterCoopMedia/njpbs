@@ -40,11 +40,6 @@ import {
   type ScheduleFetchStatus,
 } from "../src/lib/schedule-availability";
 import {
-  resolveGatedPlayback,
-  type GatedFetchFailure,
-  type GatedOutageLayer,
-} from "../src/lib/member-gated-playback";
-import {
   manualLaunchCards,
   pbsLivestreamWatchUrl,
   pbsLivestreamEmbedUrl,
@@ -52,25 +47,19 @@ import {
   type LaunchCard,
 } from "../src/data/launch-fallback";
 
-// Every non-ok transport failure the proxy collapses PBS into, shared across the
-// surfaces that take a ScheduleFetchStatus / GatedFetchFailure. The list is bound to
-// both status unions, not free-standing: `satisfies` proves no *extra* case (every
-// entry is a real non-ok status on both surfaces), and the AssertCovers aliases below
-// prove no *missing* case (every non-ok ScheduleFetchStatus and every GatedFetchFailure
-// appears here). So a surface that grows a new outage status fails to compile until it
-// is listed and exercised, instead of silently skipping coverage.
+// Pin the schedule failure cases in both directions. `satisfies` rejects extra
+// cases and AssertCovers rejects any missing case when the schedule status grows.
 const FETCH_FAILURES = [
   "timeout",
   "forbidden",
   "rateLimited",
   "error",
-] as const satisfies readonly (Exclude<ScheduleFetchStatus, "ok"> & GatedFetchFailure)[];
+] as const satisfies readonly Exclude<ScheduleFetchStatus, "ok">[];
 
 type FetchFailure = (typeof FETCH_FAILURES)[number];
 // Fails to compile if Union has a member missing from FETCH_FAILURES.
 type AssertCovers<Union extends FetchFailure> = Union;
 type _CoversSchedule = AssertCovers<Exclude<ScheduleFetchStatus, "ok">>;
-type _CoversGated = AssertCovers<GatedFetchFailure>;
 const NOW = new Date("2026-07-09T12:00:00-04:00");
 
 // One prover per surface the model claims has a fallback. Each drives that surface's
@@ -187,19 +176,6 @@ const PROVERS: Record<(typeof SURFACES_WITH_FALLBACK)[number], () => void> = {
     expect(homepage).toContain("homeSources.pbs.more.map(");
   },
 
-  // Fail-closed: an entitlement or sign-in outage denies access and shows an honest
-  // unavailable island (never a broken/blank state, never access from stale data).
-  memberGatedPlayback: () => {
-    const layers: GatedOutageLayer[] = ["auth", "entitlement"];
-    for (const layer of layers) {
-      for (const status of FETCH_FAILURES as readonly GatedFetchFailure[]) {
-        const r = resolveGatedPlayback({ kind: "outage", layer, status });
-        expect(r.render.mode).toBe("unavailable");
-        expect(r.render.mode === "unavailable" && r.render.notice.length).toBeGreaterThan(0);
-        expect(r.grantAccess).toBe(false);
-      }
-    }
-  },
 };
 
 describe("SURFACES_WITH_FALLBACK is backed by each surface's real fallback (issue #189)", () => {

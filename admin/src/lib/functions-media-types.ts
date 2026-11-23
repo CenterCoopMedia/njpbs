@@ -1,4 +1,6 @@
 import type { MediaTabCounts } from "./media-session-cache";
+import type { MediaMetadataBounds } from "./media-browse-metadata";
+import type { MediaApprovalVersions } from "./source-media";
 
 /** The kinds the Images tab lists and filters. */
 export type MediaKind = "image" | "document" | "audio";
@@ -56,6 +58,7 @@ export interface MediaAssetSummary {
   originalAvailable?: boolean;
   /** The retained original's file format, shown in the Download menu. */
   originalFormat?: "JPG" | "PNG";
+  approvalVersions?: MediaApprovalVersions;
   source?: "upload" | "site_seed" | "voiceover" | null;
   voiceoverTakeId?: string;
   voiceover?: import("./voiceovers").VoiceoverTake & { manifestVersion: number; performer_name: string };
@@ -68,7 +71,8 @@ export interface MediaAssetSummary {
   updatedBy: string | null;
 }
 
-export interface ListMediaRequest {
+export interface ListMediaRequest extends MediaMetadataBounds {
+  metadataUpdateRequested?: true;
   q?: string;
   assetIds?: string[];
   categories?: string[];
@@ -113,10 +117,10 @@ export interface ListBinnedMediaResponse {
   pageCount: number;
 }
 
-/** The Images tab's query. Its Type filter offers only the Images tab's kinds. */
+/** Query used by the Images and Audio tabs. */
 export type MediaListQuery = Required<
-  Omit<ListMediaRequest, "assetIds" | "pageSize" | "paging" | "cursor" | "kinds">
-> & { kinds: MediaKind[] } & Pick<ListMediaRequest, "assetIds" | "pageSize" | "paging" | "cursor">;
+  Pick<ListMediaRequest, "q" | "categories" | "sort" | "direction" | "page">
+> & Omit<ListMediaRequest, "kinds"> & { kinds: MediaKind[] };
 
 export interface SelfProfilePhotoListMediaRequest extends ListMediaRequest {
   /** Narrow self-service view: only this caller's staff profile images. */

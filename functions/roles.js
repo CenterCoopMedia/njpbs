@@ -11,6 +11,7 @@ const {
   ForbiddenError,
 } = require("./lib/auth");
 const { adminLogEntry } = require("./lib/audit");
+const { OWNER_ACCESS_REQUIRED } = require("./lib/staff-access-messages");
 const {
   BOOTSTRAP_SUPER_ADMINS,
   exactEmailIsAllowed,
@@ -329,7 +330,7 @@ async function ensureAnotherSuperAdminRemains(transaction, targetUid) {
     (doc) => doc.id !== targetUid && administrativeRoleFromUserDoc(doc.data(), tiersActive) === "super_admin",
   );
   if (others.length === 0) {
-    throw httpError(409, "Cannot remove the last super admin");
+    throw httpError(409, "At least one Owner or Site owner must remain");
   }
 }
 
@@ -446,11 +447,11 @@ async function grantRoleHandler(req, res) {
         role !== "super_admin" ||
         !bootstrapTargetMatchesCaller(caller, target)
       ) {
-        throw new ForbiddenError("Super admin access required");
+        throw new ForbiddenError(OWNER_ACCESS_REQUIRED);
       }
 
       if (!bootstrapEmailAllowed(caller.email)) {
-        throw new ForbiddenError("Super admin access required");
+        throw new ForbiddenError(OWNER_ACCESS_REQUIRED);
       }
 
       // The allowlist keys on an email address, so the caller must own a verified
@@ -513,7 +514,7 @@ async function grantRoleHandler(req, res) {
         callerSnapshot.data().active === false ||
         await administrativeRoleFromStoredUserDoc(db, callerSnapshot.data(), transaction) !== "super_admin"
       ) {
-        throw new ForbiddenError("Super admin access required");
+        throw new ForbiddenError(OWNER_ACCESS_REQUIRED);
       }
 
       const provisioning = !userSnapshot.exists;
@@ -687,7 +688,7 @@ async function revokeRoleHandler(req, res) {
         callerSnapshot.data().active === false ||
         await administrativeRoleFromStoredUserDoc(db, callerSnapshot.data(), transaction) !== "super_admin"
       ) {
-        throw new ForbiddenError("Super admin access required");
+        throw new ForbiddenError(OWNER_ACCESS_REQUIRED);
       }
 
       if (!userSnapshot.exists) {

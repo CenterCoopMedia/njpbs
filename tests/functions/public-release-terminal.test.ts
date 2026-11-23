@@ -4,6 +4,7 @@ import { releasePair, releaseSelector, pairReference } from "../helpers/private-
 import p from "../../functions/lib/public-release-pair.js";
 import a from "../../functions/lib/public-release-admission-contract.js";
 import terminal from "../../functions/lib/public-release-terminal.js";
+import editorRecheck from "../../functions/lib/publication-recheck.js";
 const db = isolatedFirestore("public-release-terminal.test.ts"), operationId = "A".repeat(20), baseSelector = releaseSelector();
 const selector = { ...baseSelector, contentHead: { ...baseSelector.contentHead, contextSequence: 2 } };
 const pair = releasePair();
@@ -66,4 +67,36 @@ it("requires the actual linked later successful terminal fact for supersession",
   expect((await read()).outcome).toBe("superseded");
   await db.doc(`cmsPublishQueue/${id}`).update({ terminalReceipt: "0".repeat(64) });
   await expect(read()).rejects.toThrow();
+});
+
+it("reports newer paired site work only through the exact terminal owner", async () => {
+  const originalId = "C".repeat(20);
+  const source = { kind: "provider", id: "provider-refresh", family: "context", action: "dependency" };
+  const prior = { ...admission, operationId: originalId, source: { ...admission.source, ...source, sourceVersion: 1 } };
+  const current = { ...admission, source: { ...admission.source, ...source }, admissionSequence: 2 };
+  const digest = p.publicReleaseDigest(current);
+  const proof = { ...receipt, admissionDigest: digest };
+  const queue = db.doc(`cmsPublishQueue/${originalId}`);
+  const retained = { schemaVersion: 2, transport: a.TRANSPORT, operationId: originalId, admissionDigest: p.publicReleaseDigest(prior),
+    pair: prior.pair, status: "failed", execution: null, terminalReceipt: null };
+  const owner = db.doc(a.ownerPath(current.source));
+  const batch = db.batch();
+  batch.set(db.doc(`${a.ADMISSIONS}/operations/${originalId}`), prior);
+  batch.set(db.doc(`${a.ADMISSIONS}/operations/${operationId}`), current);
+  batch.set(owner, { schemaVersion: 2, operationId, admissionDigest: digest, admissionSequence: 2 });
+  batch.set(queue, retained);
+  batch.update(db.doc(`cmsPublishQueue/${operationId}`), { admissionDigest: digest, terminalReceipt: "0".repeat(64) });
+  batch.set(db.doc(`${terminal.TERMINAL_RECEIPTS}/${operationId}`), proof);
+  await batch.commit();
+  const actor = { uid: "fixture-admin", principal: { id: "fixture-admin", grants: [{ role: "admin" }] } };
+  const check = () => editorRecheck.recheckPublication({ firestore: db, queueId: originalId, actor });
+  await expect(check()).rejects.toThrow();
+  expect((await queue.get()).data()).toEqual(retained);
+  await db.doc(`cmsPublishQueue/${operationId}`).update({ terminalReceipt: p.publicReleaseDigest(proof) });
+  expect(await check()).toMatchObject({ outcome: "superseded" });
+  const { lastPublicCheck, ...after } = (await queue.get()).data()!;
+  expect(after).toEqual(retained);
+  expect(lastPublicCheck.outcome).toBe("superseded");
+  const audit = await db.collection("admin_logs").get();
+  expect(audit.docs[0].data()).toMatchObject({ target: originalId, after: { operationId, receipt: { admissionDigest: digest } } });
 });

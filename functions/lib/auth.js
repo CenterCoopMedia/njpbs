@@ -7,6 +7,7 @@ const { principalFromUserDoc, registeredPrincipalFromUserDoc, administrativeRole
 const { userDocUsesAccessTier } = require("./access-tier-activation");
 const { isAccessTier } = require("./rbac");
 const { isApprovedPreviewStaff } = require("./preview-access");
+const { ADMIN_ACCESS_REQUIRED, OWNER_ACCESS_REQUIRED } = require("./staff-access-messages");
 const { markSessionRefused, sessionOutlivedMaximum, SESSION_EXPIRED_CODE } = require("./session-refusal");
 
 class AuthError extends Error {
@@ -232,7 +233,7 @@ async function requirePrincipal(req, options = {}) {
 async function requireAdmin(req) {
   const user = await requireAuth(req);
   if (!(await isAdmin(user.uid, user.emailVerified, user.authTime))) {
-    throw new ForbiddenError("Admin access required");
+    throw new ForbiddenError(ADMIN_ACCESS_REQUIRED);
   }
   return user;
 }
@@ -240,7 +241,7 @@ async function requireAdmin(req) {
 async function requireSuperAdmin(req) {
   const user = await requireAuth(req);
   if (!(await isSuperAdmin(user.uid, user.emailVerified, user.authTime))) {
-    throw new ForbiddenError("Super admin access required");
+    throw new ForbiddenError(OWNER_ACCESS_REQUIRED);
   }
   return user;
 }

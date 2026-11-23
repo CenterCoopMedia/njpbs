@@ -6,6 +6,18 @@ const refreshAfter = "2026-09-13T01:00:00.000Z";
 const start = "2026-09-12T01:00:00.000Z";
 const id = "Ab" + "1".repeat(18);
 const secret = "PRIVATE-TOKEN-user@example.org-https://example.org/?token=secret";
+const workerVersionId = "11111111-1111-4111-8111-111111111111";
+const reconciling = {
+  state: "reconciling", activeGeneration: 95,
+  candidateBuildBatchId: id, candidateGeneration: 96, candidateCommitSha: revision,
+};
+const storedCandidate = { buildBatchId: id, generation: 96, commitSha: revision, workerVersionId };
+const releaseReads = {
+  runtime: async () => ({ phase: "paused", rendererSha: revision, serializerId: "cloudflare-preview" }),
+  deployment: async () => reconciling,
+  candidate: async () => storedCandidate,
+  queue: async () => [],
+};
 function fetcher(url) {
   let data = { ok: true, service: "njpbs-cms-api" };
   if (url.endsWith("admin-status.json")) data = { status: "current", refreshAfter, build: { revision, builtAt: start }, milestones: secret };
@@ -52,8 +64,43 @@ describe("CMS diagnostics", () => {
         deployment: async () => ({ state: "idle", activeGeneration: 95 }), queue: async () => [],
       } });
       expect(result.checks.previewRuntime.ok).toBe(phase !== "ready");
+      expect(result.checks.candidateProbe).toBeUndefined();
       if (phase !== "ready") expect(result.checks.previewRuntime.data).toMatchObject({ phase, checkedAt: null });
     }
+  });
+  it.each([["pending", "pending"], [null, "none"], [secret, "unknown"]])(
+    "reports only safe status and refresh data for the leased candidate (%#)", async (header, refreshOutcome) => {
+      const observe = vi.fn(async url => url.includes("?candidate=")
+        ? new Response(secret, { status: 503, headers: header === null ? {} : { "x-njpbs-publication-refresh": header } })
+        : fetcher(url));
+      const reads = { ...releaseReads, candidate: vi.fn(releaseReads.candidate) };
+      const result = await diagnose({ ...options, reads, fetcher: observe });
+      expect(reads.candidate).toHaveBeenCalledExactlyOnceWith(id);
+      expect(observe).toHaveBeenLastCalledWith(
+        `https://njpbs.org/_publication.json?candidate=${id}&version=${workerVersionId}`,
+        expect.objectContaining({ credentials: "omit", redirect: "error", headers: { "cache-control": "no-cache" } }),
+      );
+      expect(result.checks.publicDeployment.data.state).toBe("reconciling");
+      expect(result.checks.candidateProbe).toMatchObject({ ok: true, data: { status: 503, refreshOutcome } });
+      expect(result.checks.candidateProbe.data.durationMs).toBeGreaterThanOrEqual(0);
+      expect(JSON.stringify(result)).not.toContain(secret);
+    },
+  );
+  it("keeps the deployment state when the probe has no HTTP response", async () => {
+    const result = await diagnose({ ...options, reads: releaseReads,
+      fetcher: async url => { if (url.includes("?candidate=")) throw new Error(secret); return fetcher(url); } });
+    expect(result.checks.publicDeployment.data.state).toBe("reconciling");
+    expect(result.checks.candidateProbe).toMatchObject({ ok: true,
+      data: { status: null, durationMs: expect.any(Number), refreshOutcome: "unknown" } });
+    expect(JSON.stringify(result)).not.toContain(secret);
+  });
+  it("refuses a mismatched candidate without making the probe request", async () => {
+    const observe = vi.fn(fetcher);
+    const result = await diagnose({ ...options, fetcher: observe,
+      reads: { ...releaseReads, candidate: async () => ({ ...storedCandidate, generation: 97 }) } });
+    expect(result.checks.publicDeployment.data.state).toBe("reconciling");
+    expect(result.checks.candidateProbe).toEqual({ ok: false, error: "invalid_data" });
+    expect(observe).toHaveBeenCalledTimes(3);
   });
   it("preserves successful checks when a required check fails and suppresses raw errors", async () => {
     const result = await diagnose({ ...options, readGit: async () => { throw new Error(secret); }, firebaseError: new Error(secret) });
@@ -85,8 +132,12 @@ describe("CMS diagnostics", () => {
     const query = { orderBy: vi.fn().mockReturnThis(), limit: vi.fn().mockReturnThis(), select: vi.fn().mockReturnThis(), get: vi.fn().mockResolvedValue({ docs: [] }) };
     const db = { doc: vi.fn(path => path), getAll: vi.fn().mockResolvedValue([{ exists: true, id, data: () => ({}) }]), collection: vi.fn(() => query) };
     const reads = firestoreReads(db);
-    await reads.runtime(); await reads.deployment(); await reads.queue();
-    expect(db.getAll.mock.calls).toEqual([["system/cmsPreviewRuntime", { fieldMask: FIELDS.runtime }], ["system/publicDeployment", { fieldMask: FIELDS.deployment }]]);
+    await reads.runtime(); await reads.deployment(); await reads.candidate(id); await reads.queue();
+    expect(db.getAll.mock.calls).toEqual([["system/cmsPreviewRuntime", { fieldMask: FIELDS.runtime }],
+      ["system/publicDeployment", { fieldMask: FIELDS.deployment }],
+      [`system/publicDeployment/buildBatches/${id}/candidates/worker`, { fieldMask: FIELDS.candidate }]]);
+    await expect(reads.candidate("../untrusted")).rejects.toThrow("invalid_data");
+    expect(db.getAll).toHaveBeenCalledTimes(3);
     expect(query.orderBy).toHaveBeenCalledWith("requestedAt", "desc");
     expect(query.limit).toHaveBeenCalledWith(20);
     expect(query.select).toHaveBeenCalledWith("status", "rendererSha", "requestedAt", "serializerClaim.claimedAt", "completedAt", "timingsMs", "startup");

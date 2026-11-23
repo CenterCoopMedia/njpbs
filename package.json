@@ -53,8 +53,7 @@
     "test:loader": "node scripts/run-firebase-emulators.mjs exec firestore \"npm --prefix site run test:cms-loader\"",
     "test": "npm run test:rules && npm run test:functions",
     "check:staff-sites": "tsc --project workers/tsconfig.staff-sites.json",
-    "test:staff-sites": "vitest run tests/staff-site-worker.test.ts tests/dev-staff-origin.test.ts tests/dev-preview-staff-origin.test.ts tests/functions/site-access-unit.test.js tests/shadow-staff-gateway.test.ts tests/transitional-post-read-worker.test.ts tests/live-blog-feed.test.ts tests/record-background-routing.test.ts tests/post-withdrawal-retirement-prep.test.ts tests/durable-post-withdrawals.test.ts",
-    "test:published-post-reader": "vitest run tests/published-post-reader-relay.test.ts --maxWorkers=1 --no-file-parallelism && node scripts/test-published-post-reader-runtime.mjs",
+    "test:staff-sites": "vitest run tests/staff-site-worker.test.ts tests/dev-staff-origin.test.ts tests/dev-preview-staff-origin.test.ts tests/functions/site-access-unit.test.js tests/transitional-post-read-worker.test.ts tests/live-blog-feed.test.ts tests/record-background-routing.test.ts tests/post-withdrawal-retirement-prep.test.ts tests/durable-post-withdrawals.test.ts",
     "cms:fastpub:dev-proof": "node -e \"console.error('Use python3 scripts/fastpub-dev-proof.py directly with inherited fd 3 and, for --publish, fd 4.'); process.exitCode = 1;\" --"
   },
   "devDependencies": {

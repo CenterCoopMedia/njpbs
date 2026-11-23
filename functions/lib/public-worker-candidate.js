@@ -181,8 +181,9 @@ function projectCloudflareWorkerVersion(value, { tag, message, target = publicat
     stateError("The uploaded public Worker version receipt is invalid");
   }
   if (target.environment === "development" &&
-      (bindings.length < 3 || bindings.length > 13 || new Set(bindings.map(binding => binding?.name)).size !== bindings.length ||
-        !bindings.every(binding => ["ASSETS", "CMS_API", "NO_BUILD_POST_RENDERER_SHA", "NO_BUILD_PAGE_RENDERER_SHA", "NO_BUILD_CODE_POST_RENDERER_SHA", "NO_BUILD_RECORD_RENDERER_SHA", "DATA_FIGURE_VERSION", "ELECTION_RESULTS_VERSION", "LIVE_BLOG_VERSION", "SPANISH_POST_VERSION", "DATA_HUB_PUBLIC", "DATA_HUB_COMPOSITION_VERSION", "DURABLE_POST_WITHDRAWALS", "CF_VERSION_METADATA"].includes(binding?.name)) ||
+      (bindings.length < 3 || new Set(bindings.map(binding => binding?.name)).size !== bindings.length ||
+        !bindings.every(binding => ["ASSETS", "CMS_API", "NO_BUILD_POST_RENDERER_SHA", "NO_BUILD_PAGE_RENDERER_SHA", "NO_BUILD_CODE_POST_RENDERER_SHA", "NO_BUILD_RECORD_RENDERER_SHA", "DATA_FIGURE_VERSION", "ELECTION_RESULTS_VERSION", "LIVE_BLOG_VERSION", "SPANISH_POST_VERSION", "DATA_HUB_PUBLIC", "DATA_HUB_COMPOSITION_VERSION", "DURABLE_POST_WITHDRAWALS", "CF_VERSION_METADATA",
+          "NO_BUILD_POST_FAMILIES", "PUBLIC_PAIR_INGRESS_ENABLED", "PUBLIC_PAIR_ROUTING_MEASUREMENT_ENABLED", "NO_BUILD_POST_ENABLED", "NO_BUILD_POST_ID", "PUBLICATION_ENVIRONMENT"].includes(binding?.name)) ||
         bindings.some(binding => binding.name === "CF_VERSION_METADATA" && binding.type !== "version_metadata") ||
         bindings.some(binding => binding.name === "DURABLE_POST_WITHDRAWALS" &&
           (binding.type !== "r2_bucket" || binding.bucket_name !== "njpbs-dev-cms-publication")))) {

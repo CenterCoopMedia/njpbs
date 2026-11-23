@@ -1,0 +1,8 @@
+{
+  "date": "2026-11-23",
+  "kind": "improved",
+  "title": "See which staff access an action requires",
+  "body": "When Boardwalk refuses an administrative action, the message names the required whole-site level and the equivalent legacy role.",
+  "prs": [],
+  "order": 1795472400001
+}

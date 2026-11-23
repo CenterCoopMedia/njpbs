@@ -1,9 +1,8 @@
 import { buildProgram, type AssetAttributes, type EpisodeAttributes, type MediaManagerRecord,
   type RawShow, type SeasonAttributes, type ShowAttributes } from "../src/lib/media-manager-catalog.ts";
-import { mediaManagerWindowAt } from "../src/lib/media-manager-gating.ts";
 import { reportMediaCoverage } from "../src/lib/media-manager-coverage.ts";
 import { catalogCaptionLanguage, catalogDate, catalogRecord, catalogSlug, isCatalogImage, MAX_CATALOG_BYTES, MAX_CATALOG_VIDEOS,
-  readPublicVideoCatalog, type PublicVideo, type PublicVideoCatalog } from "../src/lib/public-video-catalog.ts";
+  mediaManagerWindowAt, readPublicVideoCatalog, type PublicVideo, type PublicVideoCatalog } from "../src/lib/public-video-catalog.ts";
 
 const MAX_RESPONSE_BYTES = 4 * 1024 * 1024;
 const MAX_FETCH_BYTES = 128 * 1024 * 1024;

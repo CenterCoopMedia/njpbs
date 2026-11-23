@@ -118,6 +118,7 @@ export const AUTHENTICATED_POST_FUNCTION_NAMES = Object.freeze([
   "cmsMutateMediaComment",
   "cmsCreateSourceMediaRead",
   "cmsSourceMediaOriginal",
+  "cmsSourceVideoBin",
   "cmsPublishSourceVideo",
   "cmsRequestVideoClip",
   "cmsGetVideoClip",

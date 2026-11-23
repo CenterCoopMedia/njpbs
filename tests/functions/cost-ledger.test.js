@@ -337,6 +337,7 @@ describe("cost ledger manual API", () => {
     const edit = response();
     await handler("admin")(request({ action: "seed" }), edit);
     expect(edit.statusCode).toBe(403);
+    expect(edit.body).toEqual({ error: "Owner or Site owner access required" });
   });
 
   it("returns the server current month separately from a selected historical period", async () => {
@@ -501,6 +502,7 @@ describe("cost ledger manual API", () => {
     const editor = response();
     await handler("editor")(request({ action: "view" }), editor);
     expect(editor.statusCode).toBe(403);
+    expect(editor.body).toEqual({ error: "Admin or Manager access required" });
     const unchecked = response();
     await handler("super_admin", {
       appCheck: async () => {

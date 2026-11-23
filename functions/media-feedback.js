@@ -146,7 +146,7 @@ function r2TargetGuard(firestore, actor, ref, summary) {
       ) {
         unavailable();
       }
-      return null;
+      return current;
     },
     // The uploader and accounts that manage media in the item category may resolve threads.
     moderates(snapshot) {
@@ -710,7 +710,7 @@ async function commitCommentChange({
         authorName,
         request,
         timestamp,
-        timedCommentFields(asset, request.time),
+        timedCommentFields(target.ref.backend === "s3" ? asset : null, request.time),
       );
       transaction.create(reference, created);
       transaction.create(

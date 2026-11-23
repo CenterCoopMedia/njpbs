@@ -43,9 +43,7 @@
     "test:public-post-runtime": "tsx scripts/check-public-resource-admission.ts && npm --prefix ../tests/public-post-runtime test && npm run test:public-page-runtime",
     "test:public-page-runtime": "tsx scripts/build-public-post-renderer.ts --test-pages && tsx scripts/check-public-resource-admission.ts development && tsx scripts/check-public-page-renderer.ts && tsx scripts/check-public-page-serving.ts && npm run test:public-record-runtime",
     "test:public-record-runtime": "tsx scripts/check-public-record-renderer.ts && tsx scripts/check-published-record-images.ts",
-    "build:shadow": "tsx scripts/build-shadow-post-renderer.ts",
-    "test:shadow": "tsx scripts/build-shadow-post-renderer.ts --fixtures && vitest run --config vitest.shadow-posts.config.ts",
-    "compare:shadow": "tsx scripts/compare-shadow-posts.ts",
+    "test:post-parity": "tsx scripts/build-post-parity-fixtures.ts && vitest run --config vitest.post-parity.config.ts",
     "compare:archive": "tsx scripts/compare-archive-routes.ts"
   },
   "dependencies": {
@@ -59,6 +57,7 @@
     "esbuild": "0.28.2",
     "firebase-admin": "14.5.0",
     "happy-dom": "^21.0.4",
+    "p-limit": "^7.3.3",
     "pagefind": "1.5.0",
     "parse5": "7.3.0",
     "pdfkit": "^0.20.2",

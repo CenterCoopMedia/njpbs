@@ -26,26 +26,23 @@ remain required. These source rules do not claim a deployment is live.
 
 Probe unauthenticated edge denial, direct-origin denial, configured CORS/App
 Check, navigation/settings readiness and supported old-reader routes. Optional
-preview wake failure preserves accepted queue and cron recovery. Staff cookies
-or bearer credentials cannot leak into private artifact or published-read relays.
+preview wake failure preserves accepted queue and cron recovery. Keep staff
+cookies and bearer credentials out of private artifact relays.
 
 ## Published Post read boundary
 
-`cmsGetPublishedPost` is a read-only published projection, not generic CMS API
-access. Explicit enable/slug allowlists on both sides default closed. Only
-canonical `GET /posts/{slug}/` with no query/body is admitted. HMAC input is four
-newline-separated fields: `njpbs-post-reader-v1`, `GET`, canonical path and
-13-digit Unix milliseconds. Compare lowercase-hex signature in constant time
-with at most 60 seconds clock skew. A replay repeats a fresh nonmutating read.
-No browser signature, URL token or anonymous fallback is accepted.
+`cmsGetPublishedPost` returns a read-only published projection. It requires
+explicit enablement, an allowlisted slug and a signed canonical
+`GET /posts/{slug}/` with an empty query. The HMAC covers
+`njpbs-post-reader-v1`, the method, the canonical path and a 13-digit Unix
+timestamp in milliseconds, each on its own line. The Function compares the
+lowercase hexadecimal signature in constant time and allows at most 60 seconds
+of clock skew. A repeated valid request performs a fresh read.
 
-The relay has no public route/workers.dev/preview URL, no Firestore credential,
-strips staff credentials, refuses redirects and permits only the exact HTTPS
-Function endpoint. Its ten-second origin deadline bounds cold reads. The
-Function's read-only identity is distinct from ordinary CMS edge credentials;
-Firestore IAM alone is broader than this projection, so HMAC and public-only
-validation remain necessary. Rotate matching reader keys on every consumer
-together; never reuse edge or activation secrets.
+The Function uses a dedicated read-only identity. HMAC admission and
+published-data checks narrow what that identity can return through this endpoint.
+Use a dedicated signing key and rotate the Function key together with the keys
+of any approved consumers.
 
 One read-only transaction checks canonical/retired-slug ownership, explicit
 visibility, immutable published snapshot, due publication time and required
@@ -75,23 +72,6 @@ version, not draft save version. Only bounded admitted Page path identities
 leave navigation reads; no bodies or working slugs. Duplicate paths refuse.
 Missing/invalid published settings retain publisher defaults. Chrome digest
 and optional sweep preserve their own refresh bounds.
-
-## Retained pilot rollout and removal
-
-Use the retained shadow workflow only for its explicitly authorized pilot.
-Functions/indexes first, private relay/disabled shadow second, signed-out and
-staff proof before explicit enable. `enabled=false, remove=false` stages off;
-`enabled=true, remove=false` admits only the configured pilot;
-`remove=true` takes precedence and skips build/secret upload.
-
-Admission/removal require exactly one approved parent gateway route and no
-foreign/unassigned/duplicate owner. Deploy refuses active development public
-publication; removal remains available. Removal deletes only its exact Post
-route (including orphan), proves absence and unchanged parent identity, then
-deletes shadow and relay. Unexpected ownership/API failure stops. Function,
-secret and read-only account have separate retirement authority; names alone
-do not prove retirement. Preserve serving/cold/withdrawal and binding census
-before any later source removal.
 
 ## Reader-before-writer compatibility
 

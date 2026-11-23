@@ -4,7 +4,7 @@ import path from "node:path";
 import { describe, expect, it, vi } from "vitest";
 import { fetchPublicVideoCatalog } from "../scripts/fetch-public-video-catalog";
 import { main } from "../scripts/sync-launch-content.mjs";
-import { readPublicVideoCatalog } from "../src/lib/public-video-catalog";
+import { mediaManagerWindowAt, readPublicVideoCatalog } from "../src/lib/public-video-catalog";
 import { catalogAsset, coastShow, duplicateCoastShow, riverShow } from "./fixtures/public-video-catalog";
 
 const now = new Date("2026-11-20T12:00:00.000Z");
@@ -18,6 +18,27 @@ const nextPage = (url: URL) => {
 };
 
 describe("public video catalog", () => {
+  it.each([
+    { window: { start: "2026-07-09" }, at: "2026-07-09T18:00:00Z", result: "open" },
+    { window: { end: "2026-07-09" }, at: "2026-07-09T18:00:00Z", result: "open" },
+    { window: { end: "2026-07-09" }, at: "2026-07-10T01:00:00Z", result: "open" },
+    { window: { end: "2026-07-09" }, at: "2026-07-10T04:00:00Z", result: "after" },
+    { window: { start: null, end: null }, at: "2026-07-09T18:00:00Z", result: "open" },
+    { window: { start: "2026-07-09T20:00:00Z" }, at: "2026-07-09T18:00:00Z", result: "before" },
+    { window: { end: "2026-07-09T17:00:00Z" }, at: "2026-07-09T18:00:00Z", result: "after" },
+    { window: { start: "2026-07-09T18:00:00Z", end: "2026-07-09T18:00:00Z" }, at: "2026-07-09T18:00:00Z", result: "open" },
+    { window: { start: "2018-07-25T04:00:00Z", end: "2028-07-24T03:59:59Z" }, at: "2026-07-09T18:00:00Z", result: "open" },
+    { window: "2026-07-09", at: "2026-07-09T18:00:00Z", result: "invalid" },
+    { window: [], at: "2026-07-09T18:00:00Z", result: "invalid" },
+    { window: 42, at: "2026-07-09T18:00:00Z", result: "invalid" },
+    { window: { start: "not-a-date" }, at: "2026-07-09T18:00:00Z", result: "invalid" },
+    { window: { start: "" }, at: "2026-07-09T18:00:00Z", result: "invalid" },
+    { window: { start: "   " }, at: "2026-07-09T18:00:00Z", result: "invalid" },
+    { window: { start: null }, at: "nonsense", result: "invalid" },
+  ])("evaluates $window at $at as $result", ({ window, at, result }) => {
+    expect(mediaManagerWindowAt(window, new Date(at))).toBe(result);
+  });
+
   it("walks both paginated collections and publishes only unambiguous, authorized editions", async () => {
     const publicEpisode = catalogAsset("river-crossing");
     const noCaptions = catalogAsset("river-special", { special: true, title: "River voices",

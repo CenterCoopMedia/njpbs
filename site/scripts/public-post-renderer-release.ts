@@ -3,10 +3,13 @@ import { isDeepStrictEqual } from "node:util";
 import pageReaderContract from "../../functions/lib/page-reader-contract.js";
 import { dataHubPageEnabled } from "../src/lib/build-target.ts";
 
+// The deployed CMS must accept version 3 before public candidates advertise it.
+const PUBLIC_PAGE_READER_SEAL_VERSION = 2;
+
 export function publicPostRendererRelease(rendererSha: string, environment: "production" | "development", env: NodeJS.ProcessEnv) {
   return { schemaVersion: 1, rendererSha, liveBlogVersion: 1, electionResultsVersion: 2,
     ...(SPANISH_POST_SEAL_ENABLED ? { spanishPostVersion: 1 } : {}),
-    pageReaderVersion: pageReaderContract.PAGE_READER_VERSION,
+    pageReaderVersion: PUBLIC_PAGE_READER_SEAL_VERSION,
     ...(dataHubPageEnabled(env) ? { dataHubReportingVersion: 1, dataHubCompositionVersion: 1 } : {}),
     ...(environment === "development" ? { environment } : {}) };
 }

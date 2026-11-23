@@ -1,9 +1,10 @@
 import { afterAll, afterEach, beforeAll, beforeEach, expect, it, vi } from "vitest";
-import { mkdtempSync, writeFileSync, rmSync, openSync, closeSync, existsSync } from "node:fs";
+import { mkdtempSync, readFileSync, writeFileSync, rmSync, openSync, closeSync, existsSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { execFileSync, spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
+import { pathToFileURL } from "node:url";
 import { repositoryFixture } from "../helpers/repository-identity.mjs";
 import { copyImportClosure } from "../helpers/isolated-checkout.mjs";
 
@@ -89,14 +90,18 @@ it("preserves an owner inspect substage and original error through both cleanup 
   expect(mocks.databaseClose).toHaveBeenCalledOnce();
 });
 
+const retirementEntry = "scripts/retire-dev-inactive-bootstrap.mjs";
+const predecessorEntry = "scripts/initialize-dev-public-predecessor.mjs";
 let fixture: string, sha: string;
 beforeAll(async () => {
   fixture = mkdtempSync(join(tmpdir(), "retire-stage-cli-"));
-  const entry = "scripts/retire-dev-inactive-bootstrap.mjs";
-  await copyImportClosure(resolve("."), fixture, [entry], { boundary: {
-    rule: "the inactive-bootstrap CLI's refusal before loading operator code",
-    files: [entry, "scripts/render-development-config.mjs", "config/development-inputs.json"],
-  } });
+  await copyImportClosure(resolve("."), fixture, [retirementEntry, predecessorEntry], {
+    boundary: {
+      rule: "development CLI startup before source validation",
+      files: [retirementEntry, predecessorEntry, "scripts/render-development-config.mjs", "config/development-inputs.json"],
+    },
+    assets: ["scripts/lib/read-only-operator.mjs"],
+  });
   const git = (...args: string[]) => execFileSync("git", args, { cwd: fixture, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] });
   git("init", "--quiet"); git("add", "scripts", "config");
   git("-c", "user.name=Fixture", "-c", "user.email=fixture@example.org", "commit", "--quiet", "-m", "CLI fixture");
@@ -104,7 +109,11 @@ beforeAll(async () => {
 });
 afterAll(() => { rmSync(fixture, { recursive: true, force: true }); });
 
-function cli(options: { mode?: string; value?: unknown; mock?: string; stdout?: number } = {}) {
+function cli(options: { entry?: typeof retirementEntry | typeof predecessorEntry; mode?: string;
+  value?: unknown; mock?: string; stdout?: number } = {}) {
+  const entry = options.entry ?? retirementEntry;
+  const specifier = entry === retirementEntry
+    ? "./lib/dev-inactive-bootstrap-operator.mjs" : "./lib/dev-public-predecessor-operator.mjs";
   const dir = mkdtempSync(join(tmpdir(), "retire-stage-packet-")), file = join(dir, "packet.json");
   const bytes = JSON.stringify(options.value ?? { ...packet, operatorCommitSha: sha });
   writeFileSync(file, bytes);
@@ -112,17 +121,17 @@ function cli(options: { mode?: string; value?: unknown; mock?: string; stdout?: 
   const cleanupFile = join(dir, "cleanup-completed");
   writeFileSync(loader, `import { registerHooks } from 'node:module';
     registerHooks({ resolve(specifier, context, next) {
-      if (specifier === './lib/dev-inactive-bootstrap-operator.mjs') return { url: 'data:text/javascript,' + encodeURIComponent(${JSON.stringify((options.mock ?? "").replaceAll("__CLEANUP_FILE__", JSON.stringify(cleanupFile)))}), shortCircuit: true };
+      if (specifier === ${JSON.stringify(specifier)}) return { url: 'data:text/javascript,' + encodeURIComponent(${JSON.stringify((options.mock ?? "").replaceAll("__CLEANUP_FILE__", JSON.stringify(cleanupFile)))}), shortCircuit: true };
       return next(specifier, context);
     }});`);
   try {
     const result = spawnSync(process.execPath, [...(options.mock ? ["--import", loader] : []),
-      "scripts/retire-dev-inactive-bootstrap.mjs", "--packet", file, "--packet-digest",
+      entry, "--packet", file, "--packet-digest",
       createHash("sha256").update(bytes).digest("hex"), options.mode ?? "--inspect"],
     { cwd: fixture, env: { PATH: process.env.PATH, ...repositoryFixture,
       CMS_DEV_SDK_CLIENT_EMAIL: packet.credentialIdentity.clientEmail }, encoding: "utf8", timeout: 5000,
       stdio: ["ignore", options.stdout ?? "pipe", "pipe"] });
-    return { ...result, cleanupCompleted: existsSync(cleanupFile) };
+    return { ...result, cleanup: existsSync(cleanupFile) ? readFileSync(cleanupFile, "utf8") : "" };
   } finally { rmSync(dir, { recursive: true, force: true }); }
 }
 it.each([
@@ -171,21 +180,45 @@ it.each(["--inspect", "--apply"])("bounds a real failed receipt write for %s", m
   } finally { closeSync(fd); }
 });
 
-it("contains the installed SDK's unhandled first-read rejection and finishes cleanup", () => {
+it.each([
+  { entry: retirementEntry, operator: "runDevInactiveBootstrapOperator", mode: "--inspect", stage: "inspect-archive-read",
+    refusal: "Development inactive bootstrap retirement was not confirmed; code=DEV_RETIRE_REFUSED stage=inspect-archive-read errorClass=TypeError; preserve the packet; no request confirmed; obtain coordinator diagnosis GO before another inspect" },
+  { entry: predecessorEntry, operator: "runDevPublicPredecessorOperator", mode: "--readback", stage: "readback",
+    refusal: "Development predecessor initialization was not confirmed; stage=readback errorClass=TypeError; preserve the packet and use --readback" },
+])("contains the installed SDK's first-read rejection and finishes cleanup in $entry", ({
+  entry, operator, mode, stage, refusal,
+}) => {
   const sdk = resolve("node_modules/@google-cloud/firestore/build/src/transaction.js");
-  const result = cli({ mock: `import { createRequire } from 'node:module';
-    import { writeFileSync } from 'node:fs';
+  const value = entry === predecessorEntry ? { ...packet, operatorCommitSha: sha,
+    request: { environment: "development", projectId: "njpbs-site-dev" } } : undefined;
+  const result = cli({ entry, mode, value, mock: `import { createRequire } from 'node:module';
+    import { appendFileSync } from 'node:fs';
+    import { withOperatorDatabase } from ${JSON.stringify(pathToFileURL(join(fixture, "scripts/lib/read-only-operator.mjs")).href)};
     const require = createRequire(${JSON.stringify(resolve("package.json"))});
     const { Transaction } = require(${JSON.stringify(sdk)});
-    export async function runDevInactiveBootstrapOperator(args, stage) {
-      stage('inspect-archive-read');
+    export async function ${operator}(args, stage) {
       const tx = Object.create(Transaction.prototype);
       tx._firestore = { _traceUtil: { startActiveSpan: (name, action) => action() } };
-      try { await tx.withLazyStartedTransaction(null, () => Promise.reject(new TypeError('PRIVATE SDK payload'))); }
-      finally { await tx.rollback(); await new Promise(resolve => setImmediate(resolve)); writeFileSync(__CLEANUP_FILE__, 'complete'); }
+      return withOperatorDatabase({
+        stage,
+        openCredential: () => ({ read: async () => ({}), close() {
+          appendFileSync(__CLEANUP_FILE__, 'credential ');
+          throw new RangeError('PRIVATE credential close');
+        } }),
+        openDatabase: async () => ({ firestore: tx, async close() {
+          await new Promise(resolve => setImmediate(resolve));
+          appendFileSync(__CLEANUP_FILE__, 'database');
+        } }),
+        async run(transaction) {
+          stage(${JSON.stringify(stage)});
+          try { await transaction.withLazyStartedTransaction(null, () => Promise.reject(new TypeError('PRIVATE SDK payload'))); }
+          finally { await transaction.rollback(); }
+        },
+      });
     }` });
-  expect(result.status).toBe(1); expect(result.stdout).toBe(""); expect(result.cleanupCompleted).toBe(true);
-  expect(result.stderr).toBe("Development inactive bootstrap retirement was not confirmed; code=DEV_RETIRE_REFUSED stage=inspect-archive-read errorClass=TypeError; preserve the packet; no request confirmed; obtain coordinator diagnosis GO before another inspect\n");
+  expect(result.status).toBe(1); expect(result.stdout).toBe("");
+  expect(result.cleanup).toBe("credential database");
+  expect(result.stderr).toBe(`${refusal}\n`);
 });
 it("refuses malformed retained Access proof before opening a credential", async () => {
   mocks.packet.mockResolvedValue({ ...packet, retainedAccess: { schemaVersion: 1 } });

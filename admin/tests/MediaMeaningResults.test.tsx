@@ -65,8 +65,11 @@ describe('media meaning result selection', () => {
   });
 
   it('loads automatically and re-reads the exact ID under current filters before selection', async () => {
-    render(<MediaMeaningResults {...props} />); openRelated(); await flush(); await flush(181);
-    loadMedia.mockResolvedValueOnce(response([{ ...asset, name: 'Current title' }]));
+    const matching = { ...asset, updatedAt: '2026-09-14T22:00:00Z', width: 1280, height: 720, metadataUpdateRequested: true };
+    loadCorpus.mockResolvedValueOnce(corpus([matching]));
+    render(<MediaMeaningResults {...props} query={{ ...query, aspect: 'landscape', updatedFrom: '2026-09-14', metadataUpdateRequested: true }} />);
+    openRelated(); await flush(); await flush(181);
+    loadMedia.mockResolvedValueOnce(response([{ ...matching, name: 'Current title' }]));
     fireEvent.click(screen.getByRole('button', { name: 'Original title' })); await flush();
     expect(loadMedia).toHaveBeenLastCalledWith({ ...query, q: '', page: 1, assetIds: ['asset'] });
     expect(onSelect).toHaveBeenCalledWith(expect.objectContaining({ name: 'Current title' }));

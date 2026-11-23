@@ -18,13 +18,26 @@ const publicBindings = [
   { type: 'assets', name: 'ASSETS' },
   { type: 'service', name: 'CMS_API', service: 'template-dev-cms-api', entrypoint: 'PublicContentEntrypoint', environment: 'production' },
   { type: 'plain_text', name: 'NO_BUILD_POST_RENDERER_SHA', text: sha },
+  { type: 'plain_text', name: 'PUBLICATION_ENVIRONMENT', text: 'development' },
+  { type: 'version_metadata', name: 'CF_VERSION_METADATA' },
 ];
 it('qualifies the native version binding on development candidates and gateway readbacks', () => {
   const metadata = { type: 'version_metadata', name: 'CF_VERSION_METADATA' };
-  expect(() => assertDevPublicWorkerBindings([...publicBindings, metadata], sha)).not.toThrow();
-  expect(() => assertDevPublicWorkerBindings([...publicBindings, metadata])).not.toThrow();
-  expect(() => assertDevPublicWorkerBindings([...publicBindings, { ...metadata, type: 'plain_text' }], sha))
+  const unversioned = publicBindings.filter(binding => binding.name !== 'CF_VERSION_METADATA');
+  expect(() => assertDevPublicWorkerBindings(publicBindings, sha)).not.toThrow();
+  expect(() => assertDevPublicWorkerBindings(unversioned, sha)).toThrow('exact reader bindings');
+  expect(() => assertDevPublicWorkerBindings(unversioned)).not.toThrow();
+  expect(() => assertDevPublicWorkerBindings([...unversioned, { ...metadata, type: 'plain_text' }], sha))
     .toThrow('exact reader bindings');
+});
+it('requires the development target on publication candidates before activation', () => {
+  const retired = publicBindings.filter(binding => binding.name !== 'PUBLICATION_ENVIRONMENT');
+  const production = [...retired, { type: 'plain_text', name: 'PUBLICATION_ENVIRONMENT', text: 'production' }];
+  expect(() => assertDevPublicWorkerBindings(publicBindings, sha)).not.toThrow();
+  expect(() => assertDevPublicWorkerBindings(retired, sha)).toThrow('exact reader bindings');
+  expect(() => assertDevPublicWorkerBindings(production, sha)).toThrow('exact reader bindings');
+  expect(() => assertDevPublicWorkerBindings(production)).toThrow('exact reader bindings');
+  expect(() => assertDevPublicWorkerBindings(retired)).not.toThrow();
 });
 it('accepts only an optional Page renderer sealed to the same dev source', () => {
   const page = { type: 'plain_text', name: 'NO_BUILD_PAGE_RENDERER_SHA', text: sha };
@@ -49,8 +62,7 @@ const staffHeaders = {
 const publicHost = new URL('https://dev-public.example.org').hostname;
 const parentDomain = publicHost.split('.').slice(1).join('.');
 const login = 'https://fixture.cloudflareaccess.com/cdn-cgi/access/login/dev-public.example.org?token=fixture-private';
-// Synthetic existing development shadow route.
-const shadowRoute = { id: '1'.repeat(32), pattern: 'https://dev-public.example.org/posts/*', script: 'njpbs-shadow-posts' };
+const overlappingPostRoute = { id: '1'.repeat(32), pattern: 'https://dev-public.example.org/posts/*', script: 'unexpected-worker' };
 
 // Only fake the Cloudflare HTTP and Wrangler process boundaries. Response shapes
 // follow Cloudflare's route, settings, deployment and version APIs and Wrangler
@@ -107,8 +119,6 @@ function fixture(options = {}) {
       if (options.uncertainWrite) throw new Error('fixture response includes sensitive data');
       if (!options.badReadback) routes[0].script = worker;
       if (options.previewChanged) routes[1].script = worker;
-      if (options.shadowChange === 'removed') routes = routes.filter(r => r.id !== shadowRoute.id);
-      else if (options.shadowChange) Object.assign(routes.find(r => r.id === shadowRoute.id), options.shadowChange);
       result = routes[0];
     } else if (path === `/accounts/${account}/workers/scripts/template-dev-cms-api/settings`) {
       result = { bindings: Object.entries({
@@ -262,7 +272,7 @@ describe('isolated dev gateway deployment boundary', () => {
 
   it.each([
     { owner: 'njpbs-staff-sites' },
-    { extraRoutes: [{ ...shadowRoute }] },
+    { extraRoutes: [{ ...overlappingPostRoute }] },
     { settingsBindings: [] },
     { race: true },
   ])('refuses an unsafe update before deployment: %j', async options => {
@@ -295,19 +305,9 @@ describe('isolated dev gateway deployment boundary', () => {
     expect(f.mutations()).toEqual([]);
   });
 
-  it.each(['stage'])('admits the exact shadow route during %s and leaves it unchanged', async mode => {
-    const f = fixture({ env: { GATEWAY_MODE: mode }, extraRoutes: [{ ...shadowRoute }] });
-    const before = structuredClone(f.routes());
-    await f.execute();
-    expect(f.routes()).toEqual(before.map(r => r.id === routeId && mode === 'transfer' ? { ...r, script: worker } : r));
-    expect(f.mutations()).toHaveLength(1);
-    if (mode === 'stage') expect(f.mutations()[0].config.routes).toEqual([]);
-    else expect(f.mutations()[0]).toEqual({ path: `${routePath}/${routeId}`, method: 'PUT', body: { pattern: 'dev-public.example.org/*', script: worker } });
-  });
-
-  it.each(['unexpected-worker', worker, null, undefined])('refuses the shadow route with owner %s before staging', async script => {
+  it.each(['other-worker', worker, null, undefined])('refuses an overlapping Post route with owner %s before staging', async script => {
     for (const mode of ['stage']) {
-      const f = fixture({ env: { GATEWAY_MODE: mode }, extraRoutes: [{ ...shadowRoute, script }] });
+      const f = fixture({ env: { GATEWAY_MODE: mode }, extraRoutes: [{ ...overlappingPostRoute, script }] });
       await expect(f.execute()).rejects.toThrow(/overlapping/);
       expect(f.mutations()).toEqual([]);
     }
@@ -315,21 +315,15 @@ describe('isolated dev gateway deployment boundary', () => {
 
   it.each(['dev-public.example.org/posts/*', 'http://dev-public.example.org/posts/*', 'https://dev-public.example.org/posts*',
     'https://dev-public.example.org/posts/other/*', 'https://dev-public.example.org/*', `https://*.${parentDomain}/posts/*`,
-    `https://${publicHost.toUpperCase()}/posts/*`])('refuses shadow pattern variant %s', async pattern => {
-    const f = fixture({ extraRoutes: [{ ...shadowRoute, pattern }] });
+    `https://${publicHost.toUpperCase()}/posts/*`])('refuses overlapping route pattern %s', async pattern => {
+    const f = fixture({ extraRoutes: [{ ...overlappingPostRoute, pattern }] });
     await expect(f.execute()).rejects.toThrow(/overlapping/);
     expect(f.mutations()).toEqual([]);
   });
 
-  it('still refuses a second isolated gateway route alongside the shadow route', async () => {
-    const f = fixture({ extraRoutes: [{ ...shadowRoute }, { id: '2'.repeat(32), pattern: 'other.njpbs.org/*', script: worker }] });
+  it('refuses a second isolated gateway route on another host', async () => {
+    const f = fixture({ extraRoutes: [{ id: '2'.repeat(32), pattern: 'other.njpbs.org/*', script: worker }] });
     await expect(f.execute()).rejects.toThrow(/overlapping/);
-    expect(f.mutations()).toEqual([]);
-  });
-
-  it('refuses duplicate shadow routes', async () => {
-    const f = fixture({ extraRoutes: [{ ...shadowRoute }, { ...shadowRoute, id: '2'.repeat(32) }] });
-    await expect(f.execute()).rejects.toThrow(/at most one coexisting shadow route/);
     expect(f.mutations()).toEqual([]);
   });
 

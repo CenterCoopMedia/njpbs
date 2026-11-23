@@ -14,12 +14,11 @@ const PATTERN = 'dev-public.example.org/*';
 const UUID = /^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/;
 const ID = /^[a-f0-9]{32}$/;
 const CONFIG = 'workers/wrangler.staff-sites.dev.jsonc';
-const SHADOW_CONFIG = 'workers/wrangler.shadow-posts.jsonc';
 const PUBLIC_TARGET = targetContract.publicationTarget('development');
 const PUBLIC_WORKER = PUBLIC_TARGET.workerName;
 const RETIRED_SECRETS = ['DEV_PAGES_ACCESS_CLIENT_ID', 'DEV_PAGES_ACCESS_CLIENT_SECRET'];
 const PATHS = ['/', '/_publication.json', '/_home-sources.json',
-  '/posts/nj-pbs-announces-six-staff-appointments/', '/posts/_shadow-assets/_astro/'];
+  '/posts/nj-pbs-announces-six-staff-appointments/', '/posts/_no-build-assets/_astro/'];
 const REDIRECT_BODY = '<html><head><title>302 Found</title></head><body><center><h1>302 Found</h1></center><hr><center>cloudflare</center></body></html>';
 
 function requireState(condition, message) {
@@ -31,7 +30,8 @@ function requireState(condition, message) {
 export function assertDevPublicWorkerBindings(bindings, rendererSha) {
   requireState(Array.isArray(bindings) && bindings.length >= 3 &&
     new Set(bindings.map(binding => binding?.name)).size === bindings.length &&
-    bindings.every(binding => ['ASSETS', 'CMS_API', 'NO_BUILD_POST_RENDERER_SHA', 'NO_BUILD_PAGE_RENDERER_SHA', 'NO_BUILD_CODE_POST_RENDERER_SHA', 'NO_BUILD_RECORD_RENDERER_SHA', 'DATA_HUB_PUBLIC', 'DATA_FIGURE_VERSION', 'ELECTION_RESULTS_VERSION', 'SPANISH_POST_VERSION', 'DURABLE_POST_WITHDRAWALS', 'CF_VERSION_METADATA'].includes(binding?.name)),
+    bindings.every(binding => ['ASSETS', 'CMS_API', 'NO_BUILD_POST_RENDERER_SHA', 'NO_BUILD_PAGE_RENDERER_SHA', 'NO_BUILD_CODE_POST_RENDERER_SHA', 'NO_BUILD_RECORD_RENDERER_SHA', 'DATA_HUB_PUBLIC', 'DATA_FIGURE_VERSION', 'ELECTION_RESULTS_VERSION', 'SPANISH_POST_VERSION', 'DURABLE_POST_WITHDRAWALS', 'CF_VERSION_METADATA',
+      'NO_BUILD_POST_FAMILIES', 'LIVE_BLOG_VERSION', 'DATA_HUB_COMPOSITION_VERSION', 'PUBLIC_PAIR_INGRESS_ENABLED', 'PUBLIC_PAIR_ROUTING_MEASUREMENT_ENABLED', 'NO_BUILD_POST_ENABLED', 'NO_BUILD_POST_ID', 'PUBLICATION_ENVIRONMENT'].includes(binding?.name)),
   'Dev public Worker must have the exact reader bindings');
   const assets = bindings.find(binding => binding?.name === 'ASSETS');
   const api = bindings.find(binding => binding?.name === 'CMS_API');
@@ -44,6 +44,9 @@ export function assertDevPublicWorkerBindings(bindings, rendererSha) {
   const dataFigureVersion = bindings.find(binding => binding?.name === 'DATA_FIGURE_VERSION');
   const spanishPostVersion = bindings.find(binding => binding?.name === 'SPANISH_POST_VERSION');
   const versionMetadata = bindings.find(binding => binding?.name === 'CF_VERSION_METADATA');
+  const environment = bindings.find(binding => binding?.name === 'PUBLICATION_ENVIRONMENT');
+  // Publication candidates run the shared entry, which serves dev and its rollback
+  // proof only with these bindings. Gateway readbacks may still see the retired entry.
   requireState(assets?.type === 'assets' && api?.type === 'service' &&
     api.service === 'template-dev-cms-api' && api.entrypoint === 'PublicContentEntrypoint' &&
     (api.environment === undefined || api.environment === 'production') &&
@@ -55,8 +58,9 @@ export function assertDevPublicWorkerBindings(bindings, rendererSha) {
     (!pageRenderer || pageRenderer.type === 'plain_text' && pageRenderer.text === renderer.text) &&
     (!electionResultsVersion || electionResultsVersion.type === 'plain_text' && ['0', '1', '2'].includes(electionResultsVersion.text)) &&
     (!dataFigureVersion || dataFigureVersion.type === 'plain_text' && dataFigureVersion.text === '1') &&
-    (!spanishPostVersion || spanishPostVersion.type === 'plain_text' && spanishPostVersion.text === '1') &&
-    (!versionMetadata || versionMetadata.type === 'version_metadata'),
+    (!spanishPostVersion || spanishPostVersion.type === 'plain_text' && ['0', '1'].includes(spanishPostVersion.text)) &&
+    (versionMetadata ? versionMetadata.type === 'version_metadata' : rendererSha === undefined) &&
+    (environment ? environment.type === 'plain_text' && environment.text === 'development' : rendererSha === undefined),
   'Dev public Worker must have the exact reader bindings');
 }
 
@@ -111,18 +115,14 @@ function routeSnapshot(routes) {
     .sort((a, b) => a.id.localeCompare(b.id)));
 }
 
-function devRoute(routes, owner, shadowConfig) {
+function devRoute(routes, owner) {
   routeSnapshot(routes);
   const matches = routes.filter(route => route.pattern === PATTERN);
   requireState(matches.length === 1 && matches[0].script === owner,
     'Expected one dev route with the required owner; stop and reconcile');
-  const shadowRoutes = routes.filter(route => route.pattern === shadowConfig.routes[0].pattern &&
-    route.script === shadowConfig.name);
-  requireState(shadowRoutes.length <= 1, 'Expected at most one coexisting shadow route');
-  // Include scheme-qualified and wildcard hosts. Reject overlaps conservatively,
-  // except the exact checked-in shadow route. Worker-less routes still refuse.
+  // Reject overlaps including scheme-qualified, wildcard and Worker-less routes.
   for (const route of routes) {
-    if (route.id === matches[0].id || route === shadowRoutes[0]) continue;
+    if (route.id === matches[0].id) continue;
     const host = route.pattern.replace(/^https?:\/\//, '').split('/')[0];
     const matcher = new RegExp(`^${host.replace(/[.+?^${}()|[\]\\]/g, '\\$&').replace(/\*/g, '.*')}$`, 'i');
     requireState(!matcher.test('dev-public.example.org') && route.script !== WORKER,
@@ -159,8 +159,7 @@ export async function verifyGuardedRouteTarget({ api, routePath, routeId, owner,
   requireState(UUID.test(versionId ?? '') && /^[a-f0-9]{40}$/.test(sourceSha ?? '') &&
     /^[a-f0-9]{64}$/.test(audience ?? ''), 'Missing approved staged gateway identity');
   const routes = await api(routePath);
-  const route = devRoute(routes, owner, { name: 'njpbs-shadow-posts',
-    routes: [{ pattern: 'https://dev-public.example.org/posts/*' }] });
+  const route = devRoute(routes, owner);
   requireState(route.id === routeId, 'Dev route identity changed');
   if (expectedRoutes) requireState(routeSnapshot(routes) === routeSnapshot(expectedRoutes),
     'Zone routes changed during the guarded transfer');
@@ -226,13 +225,6 @@ export async function run({ env = process.env, fetchImpl = fetch, spawn = spawnS
       { binding: 'DEV_STAFF_ACCESS', service: 'template-dev-cms-api', entrypoint: 'StaffSiteEntrypoint' },
       { binding: 'DEV_PUBLIC', service: PUBLIC_WORKER },
     ]), 'Unexpected dev gateway config; review before deploying');
-  const parsedShadow = ts.parseConfigFileTextToJson(SHADOW_CONFIG, readFileSync(SHADOW_CONFIG, 'utf8'));
-  const shadowConfig = parsedShadow.config;
-  requireState(!parsedShadow.error && shadowConfig?.name === 'njpbs-shadow-posts' &&
-    JSON.stringify(shadowConfig.routes) === JSON.stringify([
-      { pattern: 'https://dev-public.example.org/posts/*', zone_name: 'njpbs.org' },
-    ]), 'Unexpected shadow route config; review before deploying');
-
   async function api(path, method = 'GET', data) {
     let response, body;
     try {
@@ -251,9 +243,7 @@ export async function run({ env = process.env, fetchImpl = fetch, spawn = spawnS
     zones[0].name === 'njpbs.org' && zones[0].account?.id === ACCOUNT, 'Expected the configured account and zone');
   const routePath = `/zones/${zones[0].id}/workers/routes`;
   const initialRoutes = await api(routePath);
-  const initialRoute = devRoute(initialRoutes, initialOwner, shadowConfig);
-  if (mode === 'update') requireState(!initialRoutes.some(r => r.pattern === shadowConfig.routes[0].pattern),
-    'Remove the shadow route before updating the dev origin transport');
+  const initialRoute = devRoute(initialRoutes, initialOwner);
   const initialSnapshot = routeSnapshot(initialRoutes);
   const workerPath = `/accounts/${ACCOUNT}/workers/scripts/${WORKER}`;
   const apiSettings = await api(`/accounts/${ACCOUNT}/workers/scripts/template-dev-cms-api/settings`);
@@ -283,7 +273,7 @@ export async function run({ env = process.env, fetchImpl = fetch, spawn = spawnS
     const stagingRoutes = await api(routePath);
     requireState(routeSnapshot(stagingRoutes) === initialSnapshot,
       'Routes changed before staging; stop and reconcile');
-    devRoute(stagingRoutes, initialOwner, shadowConfig);
+    devRoute(stagingRoutes, initialOwner);
     const temp = `workers/wrangler.staff-sites.dev.staging-${process.pid}.json`;
     writeFileSync(temp, JSON.stringify({ ...config, routes: [], vars: { ...config.vars, CMS_DEV_ACCESS_ORIGIN: devAccessOrigin(env) } }), { flag: 'wx', mode: 0o600 });
     try {
@@ -348,18 +338,16 @@ export async function run({ env = process.env, fetchImpl = fetch, spawn = spawnS
   await waitForWorkerReadback(verifyVersion, readbackClock);
   const before = await api(routePath);
   requireState(routeSnapshot(before) === initialSnapshot, 'Routes changed during verification; stop and reconcile');
-  const route = devRoute(before, initialOwner, shadowConfig);
+  const route = devRoute(before, initialOwner);
   requireState(route.id === initialRoute.id, 'Dev route identity changed');
   const after = await api(routePath);
-  devRoute(after, mode === 'stage' ? OLD_WORKER : WORKER, shadowConfig);
+  devRoute(after, mode === 'stage' ? OLD_WORKER : WORKER);
   requireState(routeSnapshot(after) === routeSnapshot(before), 'Route readback mismatch; preserve the gate and reconcile');
   await verifyVersion();
   await verifyPrivatePublicWorker(after);
   await verifySignedOut(fetchImpl);
   const receipt = `Dev gateway ${mode} verified\nSource: ${env.GITHUB_SHA}\nVersion: ${versionId}\n` +
     `Route ID: ${route.id}\nOwner: ${mode === 'stage' ? OLD_WORKER : WORKER}\n` +
-    (after.some(r => r.pattern === shadowConfig.routes[0].pattern) ?
-      `Coexisting route unchanged: ${shadowConfig.routes[0].pattern} -> ${shadowConfig.name}; shadow admission and origin verification remain separate.\n` : '') +
     `Audience and exact dev-only service bindings verified; dev public Worker private. Retired origin secrets, if retained, require coordinator cleanup.\n` +
     `Signed-out refusal verified; authenticated staff and publisher proof remains separate.\n` +
     `Verified at: ${new Date().toISOString()}\n`;

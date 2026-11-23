@@ -56,7 +56,9 @@ async function processPrivateVideoTick({ firestore = db, source = runtimeRegistr
           const current = (await tx.get(snapshot.ref)).data();
           if (current?.leaseOwner !== job.leaseOwner || current.generation !== job.generation) return;
           const binding = currentIdentity(source, await tx.get(firestore.collection("mediaSourceAssets").doc(job.identity.assetId)));
-          if (!current.revoked && binding?.id === job.id) tx.set(snapshot.ref, newCopy(binding, now()));
+          // A restore can make this binding current again during revocation.
+          // The old keys are gone, so start with a fresh generation.
+          if (copyEnabled && binding?.id === job.id) tx.set(snapshot.ref, newCopy(binding, now()));
           else tx.update(snapshot.ref, { phase: "deleted", active: false, leaseUntil: 0 });
         });
       } else {

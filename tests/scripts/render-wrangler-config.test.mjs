@@ -11,7 +11,6 @@ const script = join(root, "scripts/render-wrangler-config.mjs");
 const kv = "a".repeat(32);
 const baseEnv = { PATH: dirname(process.execPath) + ":/usr/bin:/bin" };
 const inputs = {
-  SHADOW_POST_REVISIONS_KV_NAMESPACE_ID: kv,
   RATE_LIMIT_KV_NAMESPACE_ID: "b".repeat(32),
   CRAWL_RATE_LIMIT_NAMESPACE_ID: "123456",
   REPORT_INTAKE_URL: "https://intake.fixture.test/api/report",
@@ -30,8 +29,8 @@ function fixture(run) {
 it("refuses missing, empty, template and malformed inputs before creating output", () => fixture(dir => {
   const template = join(dir, "worker.jsonc");
   const cases = {
-    SHADOW_POST_REVISIONS_KV_NAMESPACE_ID: [undefined, "", "REPLACE_ME", "${NAMESPACE}", "0".repeat(32), "a".repeat(31), "A".repeat(32)],
-    RATE_LIMIT_KV_NAMESPACE_ID: [undefined, "", "template-value", "0".repeat(32), "1"],
+    RATE_LIMIT_KV_NAMESPACE_ID: [undefined, "", "template-value", "REPLACE_ME", "${NAMESPACE}", "0".repeat(32),
+      "1", "a".repeat(31), "A".repeat(32)],
     CRAWL_RATE_LIMIT_NAMESPACE_ID: [undefined, "", "REPLACE_ME", "0", "-1", "1.5", "0123", kv],
     REPORT_INTAKE_URL: [undefined, "", "https://intake.example.org/api/report", "http://intake.fixture.test/api/report",
       "https://user:pass@intake.fixture.test/api/report", "https://intake.fixture.test:8443/api/report",
@@ -74,7 +73,7 @@ it("selects only the requested JSONC profile and preserves relative paths and th
   const source = `{
     // A relative entry and optional resource.
     "main": "./entry.ts", "assets": {"directory":"./client"},
-    "env": {"kv":{"kv_namespaces":[{"binding":"CACHE","id":"\${SHADOW_POST_REVISIONS_KV_NAMESPACE_ID}"}]},
+    "env": {"kv":{"kv_namespaces":[{"binding":"CACHE","id":"\${RATE_LIMIT_KV_NAMESPACE_ID}"}]},
       "other":{"vars":{"x":"\${UNRECOGNIZED_INPUT}"}}}
   }`;
   writeFileSync(template, source);
@@ -89,7 +88,7 @@ it("selects only the requested JSONC profile and preserves relative paths and th
     assert.equal(config.assets.directory, "./client");
     if (environment) {
       assert.deepEqual(Object.keys(config.env), ["kv"]);
-      assert.equal(config.env.kv.kv_namespaces[0].id, kv);
+      assert.equal(config.env.kv.kv_namespaces[0].id, inputs.RATE_LIMIT_KV_NAMESPACE_ID);
     } else assert.equal(config.env, undefined);
     assert.equal(readFileSync(template, "utf8"), source);
     rmSync(output);
@@ -99,10 +98,9 @@ it("selects only the requested JSONC profile and preserves relative paths and th
 }));
 
 it("renders every repository template to an ignored file with the expected binding values", () => {
-  for (const [name, extra] of [["workers/wrangler.shadow-posts.jsonc", []], ["workers/wrangler.shadow-posts.jsonc", ["--env", "kv"]],
-    ["site/worker/wrangler.toml", []], ["crawl-worker/wrangler.jsonc", []]]) {
+  for (const name of ["site/worker/wrangler.toml", "crawl-worker/wrangler.jsonc"]) {
     const template = join(root, name), before = readFileSync(template, "utf8");
-    const result = render(template, inputs, extra);
+    const result = render(template, inputs);
     assert.equal(result.status, 0, result.stderr);
     const output = result.stdout.trim();
     try {
@@ -117,9 +115,7 @@ it("renders every repository template to an ignored file with the expected bindi
         assert.equal(render(template, inputs, ["--env", "kv"]).status, 1);
       } else {
         const config = JSON.parse(body);
-        if (name.startsWith("crawl")) assert.equal(config.ratelimits[0].namespace_id, inputs.CRAWL_RATE_LIMIT_NAMESPACE_ID);
-        else if (extra.length) assert.equal(config.env.kv.kv_namespaces[0].id, kv);
-        else assert.equal(config.env, undefined);
+        assert.equal(config.ratelimits[0].namespace_id, inputs.CRAWL_RATE_LIMIT_NAMESPACE_ID);
       }
       assert.equal(readFileSync(template, "utf8"), before);
     } finally { rmSync(output, { force: true }); }
@@ -155,20 +151,4 @@ it("runs the documented Bash deployment block with a fake CLI and cleans up on s
   const missing = spawnSync("bash", ["-c", block], { cwd: root, encoding: "utf8", env: fake, timeout: 5000 });
   assert.equal(missing.status, 1);
   assert.equal(existsSync(fake.MARKER), false, "Refuse before the deploy process");
-}));
-
-it("passes a rendered default config through the real shadow workflow command and removes it", () => fixture(dir => {
-  const workflow = readFileSync(join(root, ".github/workflows/shadow-posts-dev-deploy.yml"), "utf8");
-  const section = workflow.split("- name: Deploy the dev shadow Post Worker")[1].split("- name:")[0];
-  const block = section.split("        run: |\n")[1].split("\n").map(line => line.replace(/^          /, "")).join("\n");
-  const fake = fakeWrangler(dir);
-  for (const status of [0, 9]) {
-    const result = spawnSync("bash", ["-c", block], { cwd: root, encoding: "utf8", timeout: 5000,
-      env: { ...fake, SHADOW_POSTS_ENABLED: "false", SHADOW_POST_SLUGS: "", FAKE_EXIT: String(status) } });
-    assert.equal(result.status, status, result.stderr);
-    const call = JSON.parse(readFileSync(fake.MARKER, "utf8"));
-    assert.equal(JSON.parse(call.body).env, undefined);
-    assert.equal(existsSync(call.config), false);
-    assert.deepEqual(call.args.slice(-4), ["--var", "SHADOW_POSTS_ENABLED:false", "--var", "SHADOW_POST_SLUGS:"]);
-  }
 }));

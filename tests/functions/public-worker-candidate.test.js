@@ -1,10 +1,10 @@
 import { createRequire } from "node:module";
 import { readFileSync } from "node:fs";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 const require = createRequire(import.meta.url);
 const {
-  PublicDeploymentStateError,
+  initialPublicDeploymentPointer, PublicDeploymentStateError,
 } = require("../../functions/lib/public-deployment.js");
 const {
   assertPublicWorkerCandidateMatchesBatch,
@@ -138,7 +138,7 @@ function ownedCandidateBoundary(family, { visible = true, figures = true, liveBl
 // Nine retained Posts cross the eight-owner read batch. One owner can carry a
 // live blog (refused after its Post read) and one a data figure digest
 // (refused before any read) so the refusal order is observable.
-function ownerSetBoundary({ liveBlogAt = -1, figuresAt = -1 } = {}) {
+function ownerSetBoundary({ liveBlogAt = -1, figuresAt = -1, count = 9, readMs = 0 } = {}) {
   const currentSha = "a".repeat(40);
   const candidateSha = "b".repeat(40);
   const ownerCollection = "system/publicDeployment/noBuildPostOwners";
@@ -146,7 +146,7 @@ function ownerSetBoundary({ liveBlogAt = -1, figuresAt = -1 } = {}) {
     doc: path => ({ path }),
     collection: path => ({ path, limit() { return this; } }),
   };
-  const owners = Array.from({ length: 9 }, (_, index) => {
+  const owners = Array.from({ length: count }, (_, index) => {
     const postId = `post-${index}`;
     const published = { sourceVersion: 1, blocks: [], metadata: { type: "post", slug: postId, credits: [],
       ...(index === liveBlogAt ? { liveBlog: { schemaVersion: 1, coverageState: "ongoing", updatedAt: "2026-10-25T15:00:00.000Z", updates: [] } } : {}) } };
@@ -156,13 +156,24 @@ function ownerSetBoundary({ liveBlogAt = -1, figuresAt = -1 } = {}) {
       ...(index === figuresAt ? { datasetFiguresDigest: "d".repeat(64) } : {}) };
     return { postId, state, document: { publiclyVisible: true, published } };
   });
+  const contract = { schemaVersion: 2, families: ["posts"], rendererSha: candidateSha, enabled: true, authoritative: true };
+  const value = candidate({ commitSha: candidateSha, generation: 2, noBuildPost: contract });
+  const pointer = { ...initialPublicDeploymentPointer(), state: "deploying",
+    lastReservedGeneration: 2, newestEligibleGeneration: 2, newestEligibleBuildBatchId: value.buildBatchId,
+    leaseToken: "fixture-lease", leaseAcquiredAt: timestamp,
+    candidateGeneration: 2, candidateBuildBatchId: value.buildBatchId, candidateCommitSha: candidateSha,
+    predecessorGeneration: 0, predecessorDeploymentId: null, predecessorCommitSha: null };
   const transaction = {
     async get(ref) {
+      if (readMs) await new Promise(resolve => setTimeout(resolve, readMs));
       if (ref.path === "system/publicDeployment/noBuildRecordFamilies/current") return { exists: false, data: () => undefined };
       if (ref.path === "system/publicDeployment/noBuildRecordOwners") return { size: 0, docs: [] };
       if (ref.path === ownerCollection) return { docs: owners.map(owner => ({ id: owner.postId,
         ref: firestore.doc(`${ownerCollection}/${owner.postId}`), data: () => owner.state })) };
       if (ref.path === "system/publicDeployment/noBuildPosts/current") return { data: () => undefined };
+      if (ref.path === "system/publicDeployment/noBuildPosts/capability") return { data: () => undefined };
+      if (ref.path === "system/publicDeployment") return { data: () => pointer };
+      if (ref.path === `system/publicDeployment/buildBatches/${value.buildBatchId}/candidates/worker`) return { data: () => value };
       const owner = owners.find(entry => ref.path === `cmsPosts/${entry.postId}`);
       if (owner) return { data: () => owner.document };
       if (ref.path === "cmsPages/home") return { data: () => undefined };
@@ -170,10 +181,12 @@ function ownerSetBoundary({ liveBlogAt = -1, figuresAt = -1 } = {}) {
     },
     async getAll() { return []; },
   };
-  const contract = { schemaVersion: 2, families: ["posts"], rendererSha: candidateSha, enabled: true, authoritative: true };
   const qualify = () => postPublication.assertNoBuildCandidateInTransaction({ firestore, transaction,
-    candidate: { commitSha: candidateSha, generation: 2, noBuildPost: contract } });
-  return { owners, qualify };
+    candidate: value });
+  const probe = () => postPublication.readNoBuildPostDecisionInTransaction({ firestore, transaction,
+    path: "/_publication.json", rendererSha: candidateSha,
+    probe: { buildBatchId: value.buildBatchId, versionId: value.workerVersionId } });
+  return { owners, qualify, probe };
 }
 
 describe("public Worker candidate receipts", () => {
@@ -349,6 +362,21 @@ describe("public Worker candidate receipts", () => {
     // first owner in registry order still decides the reason, as a serial pass did.
     await expect(ownerSetBoundary({ liveBlogAt: 2, figuresAt: 5 }).qualify())
       .rejects.toThrow("does not preserve published live blogs");
+  });
+
+  it.each([54, 120])("keeps candidate probes within the reader budget with %i retained Posts", async count => {
+    // The incident saw about 60 ms per serial owner. Reserve 500 ms of the
+    // three-second Worker deadline for work outside the Firestore reads.
+    vi.useFakeTimers({ toFake: ["Date", "setTimeout", "clearTimeout"] });
+    try {
+      const { probe } = ownerSetBoundary({ count, readMs: 60 });
+      const started = Date.now();
+      const [result] = await Promise.all([probe(), vi.runAllTimersAsync()]);
+      expect(result).toEqual({ kind: "baseline-probe" });
+      expect(Date.now() - started).toBeLessThanOrEqual(2_500);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it("seals election result support from immutable upload metadata for Pages and Posts", () => {
@@ -655,12 +683,11 @@ describe("explicit dev candidate target", () => {
     value.resources.bindings.push(binding, { ...binding });
     expect(() => projectCloudflareWorkerVersion(value, expected)).toThrow("dev candidate reader bindings are invalid");
   });
-  it.each(["production service", "extra family flag", "duplicate CMS binding", "missing renderer seal"])(
+  it.each(["production service", "duplicate CMS binding", "missing renderer seal"])(
     "refuses mixed dev receipt: %s", mode => {
       const { value, expected } = devVersion();
       const bindings = value.resources.bindings;
       if (mode === "production service") bindings.find(binding => binding.name === "CMS_API").service = "njpbs-cms-api";
-      if (mode === "extra family flag") bindings.push({ name: "NO_BUILD_POST_FAMILIES", type: "plain_text", text: "posts" });
       if (mode === "duplicate CMS binding") bindings.push({ ...bindings.find(binding => binding.name === "CMS_API") });
       if (mode === "missing renderer seal") value.resources.bindings = bindings.filter(binding => binding.name !== "NO_BUILD_POST_RENDERER_SHA");
       expect(() => projectCloudflareWorkerVersion(value, expected)).toThrow();
@@ -691,7 +718,9 @@ it("qualifies optional dev record and CODE bindings against the sealed public re
   const { assertDevPublicWorkerBindings } = await import("../../scripts/deploy-dev-staff-gateway.mjs");
   const sha = "a".repeat(40);
   const bindings = [{ name: "ASSETS", type: "assets" }, { name: "CMS_API", type: "service", service: "template-dev-cms-api", entrypoint: "PublicContentEntrypoint" },
-    { name: "NO_BUILD_POST_RENDERER_SHA", type: "plain_text", text: sha }];
+    { name: "NO_BUILD_POST_RENDERER_SHA", type: "plain_text", text: sha },
+    { name: "PUBLICATION_ENVIRONMENT", type: "plain_text", text: "development" },
+    { name: "CF_VERSION_METADATA", type: "version_metadata" }];
   for (const text of ["", sha]) expect(() => assertDevPublicWorkerBindings([...bindings,
     { name: "NO_BUILD_RECORD_RENDERER_SHA", type: "plain_text", text }, { name: "NO_BUILD_CODE_POST_RENDERER_SHA", type: "plain_text", text: sha }], sha)).not.toThrow();
   expect(() => assertDevPublicWorkerBindings([...bindings,

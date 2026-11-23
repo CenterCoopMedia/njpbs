@@ -7,6 +7,7 @@ import s3MediaSource from "../../functions/lib/s3-media-source.js";
 const { createCmsCreateSourceMediaReadHandler } = sourceMedia;
 const {
   parseSourceMediaAsset,
+  parseSourceMediaListRequest,
   parseSourceMediaReadRequest,
   sourceMediaAssetSummary,
 } = sourceContract;
@@ -106,6 +107,50 @@ function readyRendition(assetId = "asset-1", assetValue = storedAsset(), overrid
     ...overrides,
   };
 }
+
+it("pages measured video matches in stable order and carries the cursor over unmatched rows", async () => {
+  const mediaSource = source();
+  const date = "2026-09-14T23:59:59.999Z";
+  const rows = ["a", "b", "c", "d", "e"].map(id => {
+    const base = storedAsset({ updatedAt: date, updatedAtSort: date, nameSort: "interview" });
+    const rendition = readyRendition(id, base);
+    if (id === "a") rendition.web.durationSeconds = 91.9;
+    if (id === "b") rendition.web.durationSeconds = 92;
+    if (id === "c") delete rendition.web.durationSeconds;
+    if (id === "e") rendition.web.durationSeconds = 93;
+    return { id, data: () => ({ ...base, rendition }) };
+  });
+  let start = 0;
+  const fakeQuery = {
+    where() { return this; },
+    orderBy() { return this; },
+    startAfter(_sort, id) { start = rows.findIndex(row => row.id === id) + 1; return this; },
+    limit(n) { return { get: async () => ({ docs: rows.slice(start, start + n) }) }; },
+  };
+  const filters = { sourceId: mediaSource.id, sort: "name_asc", minDuration: 92, maxDuration: 93, limit: 1 };
+  const run = options => {
+    start = 0;
+    return sourceMedia.readSourceMediaPage({ collection: () => fakeQuery }, mediaSource,
+      parseSourceMediaListRequest(options), "__name__");
+  };
+  const first = await run(filters);
+  expect(first.records.map(row => row.id)).toEqual(["b"]);
+  expect(() => run({ ...filters, minDuration: 93, cursor: first.nextCursor })).toThrow("Cursor is invalid");
+  const second = await run({ ...filters, cursor: first.nextCursor });
+  expect(second.records.map(row => row.id)).toEqual(["d"]);
+  expect((await run({ ...filters, cursor: second.nextCursor })).records.map(row => row.id)).toEqual(["e"]);
+  const browse = { sourceId: mediaSource.id, sort: "name_asc" };
+  expect((await run({ ...browse, updatedFrom: "2026-09-14", updatedTo: "2026-09-14" })).records).toHaveLength(5);
+  expect((await run({ ...browse, aspect: "landscape" })).records).toHaveLength(5);
+  expect((await run({ ...browse, aspect: "portrait" })).records).toEqual([]);
+  expect(() => run({ ...filters, aspect: "landscape" })).toThrow("Choose one filter property");
+
+  const unknown = rows[2];
+  rows.splice(0, rows.length, ...Array.from({ length: 120 }, (_, index) => ({ ...unknown, id: `unknown-${index}` })), rows[4]);
+  const empty = await run(filters);
+  expect(empty).toMatchObject({ records: [], hasMore: true, nextCursor: expect.any(String) });
+  expect((await run({ ...filters, cursor: empty.nextCursor })).records.map(row => row.id)).toEqual(["e"]);
+});
 
 function parsedReadyAsset(overrides = {}) {
   const value = storedAsset(overrides);

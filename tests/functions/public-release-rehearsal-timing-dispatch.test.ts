@@ -46,6 +46,26 @@ describe.sequential('fresh original timing dispatch', () => {
     await expect(dispatch(input, new AbortController().signal)).rejects.toThrow('timing dispatch refused');
     expect((await queue.ref.get()).updateTime!.isEqual(queue.updateTime!)).toBe(true);
   });
+  it('binds the status to the visible canonical Post, its aliases and its published link mode', () => {
+    const document = publication.nextDocument, metadata = document.published.metadata;
+    metadata.previousSlugs = ['previous-story'];
+    const canonicalPath = input.path, aliasPath = '/posts/previous-story/';
+    const select = (status: number, path = canonicalPath) => {
+      input = { ...input, status, path, snapshotDigest: protocol.publicReleaseDigest(document.published) };
+      return open();
+    };
+    expect(() => select(302)).toThrow();
+    expect(() => select(200)).not.toThrow();
+    metadata.contentLinkMode = 'custom';
+    metadata.contentLinkUrl = 'https://example.org/linked-story';
+    expect(() => select(302)).not.toThrow();
+    expect(() => select(200)).toThrow();
+    expect(() => select(302, aliasPath)).toThrow();
+    expect(() => select(308, aliasPath)).not.toThrow();
+    document.publiclyVisible = false;
+    expect(() => select(302)).toThrow();
+    expect(() => select(410)).not.toThrow();
+  });
   it('refuses changed source bytes even when its version is unchanged', async () => {
     const dispatch = open();
     await firestore.doc(`cmsPosts/${publication.documentId}`).update({ title: 'Private edit without a version change' });

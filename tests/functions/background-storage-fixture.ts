@@ -10,6 +10,7 @@ export async function backgroundStorageFixture(bucket: string) {
   const writes: string[] = [];
   const reads: string[] = [];
   let rejectReads = false;
+  let rejectDelete: ((key: string) => boolean) | null = null;
   let beforeRead: ((key: string) => Promise<void>) | null = null;
   const previousHost = process.env.STORAGE_EMULATOR_HOST;
   let rejectKey: ((key: string) => boolean) | null = null;
@@ -42,6 +43,14 @@ export async function backgroundStorageFixture(bucket: string) {
       return;
     }
     const prefix = `/b/${bucket}/o/`;
+    if (request.method === "DELETE" && url.pathname.startsWith(prefix)) {
+      const key = decodeURIComponent(url.pathname.slice(prefix.length));
+      if (rejectDelete?.(key)) {
+        response.writeHead(403, { "content-type": "application/json" }).end(JSON.stringify({ error: { code: 403 } }));
+        return;
+      }
+      if (objects.delete(key)) { response.writeHead(204).end(); return; }
+    }
     if (request.method === "GET" && url.pathname.startsWith(prefix)) {
       const key = decodeURIComponent(url.pathname.slice(prefix.length));
       reads.push(key);
@@ -60,6 +69,7 @@ export async function backgroundStorageFixture(bucket: string) {
   await once(server, "listening");
   process.env.STORAGE_EMULATOR_HOST = `http://127.0.0.1:${(server.address() as { port: number }).port}`;
   return { objects, writes, reads, onRead: (hook: typeof beforeRead) => { beforeRead = hook; }, refuseReads: (refuse: boolean) => { rejectReads = refuse; }, reject: (predicate: typeof rejectKey) => { rejectKey = predicate; },
+    rejectDelete: (predicate: typeof rejectDelete) => { rejectDelete = predicate; },
     close: async () => {
       if (previousHost === undefined) delete process.env.STORAGE_EMULATOR_HOST;
       else process.env.STORAGE_EMULATOR_HOST = previousHost;

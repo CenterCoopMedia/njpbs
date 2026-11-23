@@ -27,6 +27,8 @@ export interface QueueItem {
   automaticSiteUpdate?: boolean;
   contextRetry?: boolean;
   proofExhausted?: boolean;
+  contextRecheck?: boolean;
+  contextCheckDueAt?: number;
   recheckMessage?: string;
   recheckOutcome?: string;
 }
@@ -241,10 +243,12 @@ export function QueueList({ items, onCheckAgain, onRetrySiteUpdate }: { items: Q
             const submittedAt = exactTimestamp(item.timestamp);
             const expanded = expandedJobs.has(item.id);
             const detailsId = `publication-details-${item.id}`;
-            const supported = ["page-no-build-v1", "post-no-build-v1"].includes(item.transport ?? "");
-            const recoverable = ["failed", "public_unconfirmed"].includes(status) || item.proofRecovery === true;
+            const detailRecheck = ["page-no-build-v1", "post-no-build-v1"].includes(item.transport ?? "");
+            const supported = detailRecheck || item.contextRecheck === true;
+            const recoverable = ["failed", "public_unconfirmed"].includes(status) || item.proofRecovery === true ||
+              item.contextRecheck === true && status === "superseded" && !item.recheckOutcome;
             const change = Array.isArray(item.changes) ? item.changes[0] : null;
-            const recordPath = supported && typeof change?.id === "string" ? item.transport === "page-no-build-v1"
+            const recordPath = detailRecheck && typeof change?.id === "string" ? item.transport === "page-no-build-v1"
               ? `/content/pages/${encodeURIComponent(change.id)}/edit` : editRecordPath("post", change.id) : null;
             return (
               <Fragment key={item.id}>
@@ -262,7 +266,7 @@ export function QueueList({ items, onCheckAgain, onRetrySiteUpdate }: { items: Q
                   ) : null}
                   {onCheckAgain && recoverable && recordPath ? <a className="publication-recheck-record" href={recordPath}>Open record</a> : null}
                   {["failed", "public_unconfirmed"].includes(status) &&
-                    !["page-no-build-v1", "post-no-build-v1"].includes(item.transport ?? "") && !item.contextRetry ? (
+                    !supported && !item.contextRetry ? (
                     <span className="published-version-note">{item.automaticSiteUpdate ? item.error :
                       "This publication cannot be checked here. Open the record to retry publication."}</span>
                   ) : null}

@@ -25,7 +25,7 @@ it("serves immediate, scheduled, uploaded and live-blog Posts in one compiled re
   const { liveBlogPostFixture } = await import(`data:text/javascript;base64,${Buffer.from(fixtureCode.outputFiles[0].text).toString("base64")}`);
   const release = JSON.parse(await readFile(rendererRelease, "utf8"));
   const { rendererSha } = release;
-  expect(release).toEqual({ schemaVersion: 1, rendererSha, liveBlogVersion: 1, electionResultsVersion: 2, pageReaderVersion: 3,
+  expect(release).toEqual({ schemaVersion: 1, rendererSha, liveBlogVersion: 1, electionResultsVersion: 2, pageReaderVersion: 2,
     ...(SPANISH_POST_SEAL_ENABLED ? { spanishPostVersion: 1 } : {}),
     ...(target.environment === "development" ? { environment: "development" } : {}) });
   const secondPost = { ...video, document: { ...video.document, id: "runtime-video" } };

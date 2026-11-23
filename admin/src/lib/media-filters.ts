@@ -1,4 +1,5 @@
 import type { ListMediaResponse, MediaAssetSummary, MediaKind, MediaListQuery, MediaSortDirection, MediaSortField } from "./functions";
+import { MEDIA_ASPECTS, type MediaMetadataBounds } from "./media-browse-metadata";
 import type {
   CollectionsMediaLocationState,
   FavoritesMediaLocationState,
@@ -81,20 +82,42 @@ export function categoryOptions(
 
 export interface FilterChip {
   key: string;
-  field: "kind" | "category";
+  field: "kind" | "category" | MetadataFilterField;
   value: string;
   label: string;
+}
+
+type MetadataFilterField = "updated" | "duration" | "aspect" | "metadata";
+type MetadataFilterChip = FilterChip & { field: MetadataFilterField };
+
+export function metadataFilterChips(query: MediaMetadataBounds, requested: boolean): MetadataFilterChip[] {
+  const { updatedFrom, updatedTo, minDuration, maxDuration, aspect } = query;
+  const chips: MetadataFilterChip[] = [];
+  if (updatedFrom || updatedTo) {
+    const value = updatedFrom && updatedTo ? `${updatedFrom} to ${updatedTo}` : updatedFrom ? `from ${updatedFrom}` : `through ${updatedTo}`;
+    chips.push({ key: `updated:${value}`, field: "updated", value, label: `Last updated ${value}` });
+  }
+  if (minDuration !== undefined || maxDuration !== undefined) {
+    const value = minDuration !== undefined && maxDuration !== undefined ? `${minDuration}–${maxDuration} seconds`
+      : minDuration !== undefined ? `at least ${minDuration} seconds` : `up to ${maxDuration} seconds`;
+    chips.push({ key: `duration:${value}`, field: "duration", value, label: `Duration: ${value}` });
+  }
+  if (aspect) chips.push({ key: `aspect:${aspect}`, field: "aspect", value: aspect,
+    label: `Aspect: ${MEDIA_ASPECTS.find(option => option.value === aspect)?.label}` });
+  if (requested) chips.push({ key: "metadata:requested", field: "metadata", value: "requested", label: "Metadata update requested" });
+  return chips;
 }
 
 export function filterChips(query: MediaListQuery, categoryLabel: (id: string) => string): FilterChip[] {
   return [
     ...query.kinds.map((kind) => ({ key: `kind:${kind}`, field: "kind" as const, value: kind, label: `Type: ${KIND_LABELS[kind]}` })),
     ...query.categories.map((id) => ({ key: `category:${id}`, field: "category" as const, value: id, label: `Category: ${categoryLabel(id)}` })),
+    ...metadataFilterChips(query, query.metadataUpdateRequested === true),
   ];
 }
 
 export function appliedFilterCount(query: MediaListQuery): number {
-  return query.kinds.length + query.categories.length;
+  return query.kinds.length + query.categories.length + metadataFilterChips(query, query.metadataUpdateRequested === true).length;
 }
 
 function withQuery(state: MediaLocationState, query: Partial<MediaListQuery>): MediaLocationState {
@@ -102,21 +125,28 @@ function withQuery(state: MediaLocationState, query: Partial<MediaListQuery>): M
 }
 
 export function removeFilterChip(state: MediaLocationState, chip: FilterChip): MediaLocationState {
-  return chip.field === "kind"
-    ? withQuery(state, { kinds: state.query.kinds.filter((kind) => kind !== chip.value) })
-    : withQuery(state, { categories: state.query.categories.filter((id) => id !== chip.value) });
+  switch (chip.field) {
+    case "kind": return withQuery(state, { kinds: state.query.kinds.filter((kind) => kind !== chip.value) });
+    case "category": return withQuery(state, { categories: state.query.categories.filter((id) => id !== chip.value) });
+    case "updated": return withQuery(state, { updatedFrom: undefined, updatedTo: undefined });
+    case "duration": return withQuery(state, { minDuration: undefined, maxDuration: undefined });
+    case "aspect": return withQuery(state, { aspect: undefined });
+    case "metadata": return withQuery(state, { metadataUpdateRequested: undefined });
+  }
 }
 
 /** Clear all: removes every chip and the search text; sort, view and selection stay. */
 export function clearFilterChips(state: MediaLocationState): MediaLocationState {
-  return withQuery(state, { kinds: [], categories: [], q: "" });
+  return withQuery(state, { kinds: [], categories: [], q: "", updatedFrom: undefined, updatedTo: undefined,
+    minDuration: undefined, maxDuration: undefined, aspect: undefined, metadataUpdateRequested: undefined });
 }
 
 export function applyFilterDraft(
   state: MediaLocationState,
   draft: { kinds: MediaKind[]; categories: string[] },
 ): MediaLocationState {
-  return withQuery(state, { kinds: [...draft.kinds], categories: [...draft.categories] });
+  return withQuery(state, { kinds: [...draft.kinds], categories: [...draft.categories],
+    ...(draft.kinds.length && !draft.kinds.includes("image") ? { aspect: undefined } : {}) });
 }
 
 /** After removing chip `index` of `count`, focus the next remove button, else the previous, else Filter. */
@@ -182,11 +212,12 @@ export type VideoStructuredFilter =
   | { field: "tag"; value: string }
   | { field: "by"; value: string }
   | { field: "rights"; value: VideoRightsFilter }
-  | { field: "metadata"; value: "requested" };
+  | { field: "metadata"; value: "requested" }
+  | { bounds: MediaMetadataBounds };
 
 export interface SurfaceFilterChip {
   key: string;
-  field: "tag" | "by" | "rights" | "metadata" | "kind" | "show" | "scope";
+  field: "tag" | "by" | "rights" | MetadataFilterField | "kind" | "show" | "scope";
   value: string;
   label: string;
   /** Client-only filters use this visible qualifier beside the chip row. */
@@ -198,10 +229,11 @@ export function setVideoStructuredFilter(
   state: VideoMediaLocationState,
   filter: VideoStructuredFilter | null,
 ): VideoMediaLocationState {
-  const { tag: _tag, by: _by, rights: _rights, metadata: _metadata, cursor: _cursor, ...query } = state.query;
+  const { q, sort, limit } = state.query;
+  const query = { q, sort, limit };
   return {
     ...state,
-    query: filter ? { ...query, [filter.field]: filter.value } : query,
+    query: filter ? { ...query, ...("bounds" in filter ? filter.bounds : { [filter.field]: filter.value }) } : query,
   };
 }
 
@@ -219,10 +251,7 @@ export function videoFilterChips(
     const label = state.query.rights === "pending" ? "Needs review" : "Recorded";
     return [{ key: `rights:${state.query.rights}`, field: "rights", value: state.query.rights, label: `Rights: ${label}` }];
   }
-  if (state.query.metadata) {
-    return [{ key: "metadata:requested", field: "metadata", value: "requested", label: "Metadata update requested" }];
-  }
-  return [];
+  return metadataFilterChips(state.query, state.query.metadata === "requested");
 }
 
 /** Video Clear all removes search and its one chip while retaining URL sort and page size. */

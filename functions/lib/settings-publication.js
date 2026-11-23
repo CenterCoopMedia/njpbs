@@ -27,6 +27,7 @@ function refuse(message, diagnosticCode) {
 }
 
 function settingsPublicationReceipt(queue, now = Date.now()) {
+  if (queue?.status === "public_unconfirmed") queue = { ...queue, status: "failed" };
   const identity = queue?.settingsPublication;
   if (queue?.transport !== "public-context-no-build-v1" || !identity ||
       !PUBLIC_SETTINGS_IDS.has(identity.id) || !Number.isSafeInteger(identity.sourceVersion) || identity.sourceVersion < 1 ||

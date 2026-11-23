@@ -102,7 +102,6 @@ function parseGetMediaReviewRequest(value) {
   requireSchemaVersion(value.schemaVersion);
   const ref = parseFeedbackRef(value.ref);
   if (Object.hasOwn(value, "approvalHistory")) {
-    requireVideoApprovalRef(ref);
     rejectUnknownFields(value.approvalHistory, new Set(["cursor"]), "Approval history");
     const cursor = value.approvalHistory.cursor;
     if (cursor !== undefined &&
@@ -117,18 +116,11 @@ function parseGetMediaReviewRequest(value) {
   };
 }
 
-function requireVideoApprovalRef(ref) {
-  if (ref.backend !== "s3") {
-    throw new MediaFeedbackValidationError("Version approvals are available for source videos");
-  }
-}
-
 function parseSaveMediaReviewRequest(value) {
   if (plainObject(value) && Object.hasOwn(value, "approval")) {
     rejectUnknownFields(value, new Set(["schemaVersion", "ref", "approval"]));
     requireSchemaVersion(value.schemaVersion);
     const ref = parseFeedbackRef(value.ref);
-    requireVideoApprovalRef(ref);
     rejectUnknownFields(value.approval, new Set(["rendition", "purpose", "version"]), "Approval");
     const { rendition, purpose, version } = value.approval;
     if (!MEDIA_APPROVAL_RENDITIONS.includes(rendition) || !MEDIA_APPROVAL_PURPOSES.includes(purpose) ||

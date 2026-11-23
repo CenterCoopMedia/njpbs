@@ -152,10 +152,10 @@ function recordPublicationReceipt(queue, now = Date.now()) {
       queue.runtime?.owner !== "cloudflare" || queue.runtime.release !== identity.rendererSha ||
       queue.publicContext?.operationId !== identity.operationId || queue.publicContext.contextRevision !== identity.contextRevision ||
       queue.publicContext.contextDigest !== identity.contextDigest || !contextOutputs(queue.publicContext).includes(identity.family) ||
-      !["pending", "publishing", "success", "failed", "cancelled"].includes(queue.status)) refuse("The record publication receipt is invalid.");
+      !["pending", "publishing", "success", "failed", "public_unconfirmed", "cancelled"].includes(queue.status)) refuse("The record publication receipt is invalid.");
   const required = ["pages", "home", "posts", "record", ...contextOutputs(queue.publicContext)];
   const missingConsumers = missingPublicContextConsumers(queue, identity, required, ["pages", "home", "posts", "record"]);
-  const failed = ["failed", "cancelled"].includes(queue.status);
+  const failed = ["failed", "public_unconfirmed", "cancelled"].includes(queue.status);
   const started = queue.recordRetryAt?.toMillis?.() ?? queue.createdAt?.toMillis?.() ?? now;
   let warning;
   if (queue.recordRegeneration === "deferred") warning = "Record removal is accepted. Card and index updates will resume when publishing resumes.";

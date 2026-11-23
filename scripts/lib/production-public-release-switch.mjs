@@ -1,5 +1,6 @@
 import protocol from '../../functions/lib/public-release-pair.js';
 import work from '../../functions/lib/public-release-pair-work.js';
+import postSlugs from '../../functions/lib/post-slug-contract.js';
 import { parseOperatorArgs, readOperatorPacket, assertOperatorSource } from './public-release-operator-io.mjs';
 import { assertProductionInstallEnvironment, parseProductionInstallIdentity, openProductionInstallSdk,
   productionInstallCredential, productionInstallAccess, productionInstallToken } from './production-install-binding.mjs';
@@ -42,7 +43,8 @@ export function parseProductionSwitchPacket(raw) {
     protocol.exact(observation, ['operationId', 'path', 'sourceVersion', 'snapshotDigest', 'status']);
     if (!id(observation.operationId) || !canonicalPath(observation.path) || observation.path.startsWith('/_pair-') ||
         !Number.isSafeInteger(observation.sourceVersion) || observation.sourceVersion < 1 ||
-        !protocol.digest(observation.snapshotDigest) || ![200, 308, 410].includes(observation.status)) refuse();
+        !protocol.digest(observation.snapshotDigest) || ![200, 302, 308, 410].includes(observation.status) ||
+        observation.status === 302 && !postSlugs.postSlugForPath(observation.path)) refuse();
   }
   return protocol.freeze(structuredClone(raw));
 }

@@ -4,10 +4,8 @@
 // reachability observation; this module performs no network, DOM or clock work.
 
 /**
- * How the live call to the PBS donation form failed, as the same non-ok taxonomy
- * the schedule and gate surfaces collapse an upstream failure into
- * ({@link import("./member-gated-playback").GatedFetchFailure}). The `forbidden`
- * case is a service-side refusal: a 403 is never retried; the rest are transient.
+ * How the live call to the PBS donation form failed. The `forbidden` case is a
+ * service-side refusal and a 403 is never retried. The rest are transient.
  */
 export type DonatePortalFailure =
   | "timeout" // upstream did not answer in time, or the network is down
@@ -32,8 +30,7 @@ export type DonatePortalSignal =
  * routes to the PBS form, and `unavailable` is an honest fallback that keeps a
  * CCM-controlled way to reach the station in front of the donor instead of a dead
  * link. The caller maps `donate` to `donateUrl` and `unavailable` to the /contact/
- * reach path; the policy decides the mode and copy, not the concrete hrefs, the
- * same split member-gated-playback.ts uses.
+ * reach path. The policy decides the mode and copy.
  */
 export type DonateCtaRender =
   /** The PBS donation form is reachable: route the CTA to it. */
@@ -87,7 +84,7 @@ function unavailableNotice(status: DonatePortalFailure): string {
 }
 
 /** A failed check worth retrying: any transport failure except a 403 lapse, which
- *  does not self-heal. Mirrors member-gated-playback.ts and schedule-availability.ts. */
+ *  does not self-heal. */
 function isRetryableFailure(status: DonatePortalFailure): boolean {
   return status !== "forbidden";
 }

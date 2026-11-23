@@ -7,7 +7,7 @@ const root = resolve(process.cwd(), "..");
 const entry = resolve(root, "workers/src/public-no-build-entry.ts");
 const stubs: Record<string, string> = {
   "./durable-record-withdrawals": "export const publicRecordFamily=()=>null,readDurableRecordAuthority=async()=>null;",
-  "./no-build-page-worker": "export const isPageScheduleExportPath=()=>false,createNoBuildPageWorker=()=>({fetch:async()=>null});",
+  "./no-build-page-worker": "export const isPageScheduleExportPath=()=>false,createNoBuildPageWorker=d=>({fetch:async r=>d.scheduleProof?new Response(JSON.stringify(await d.getDecision(new URL(r.url).pathname,r.method))):null});",
   "./durable-page-withdrawals": "export const readDurablePageWithdrawal=async()=>null;",
   "./transitional-post-read-worker": "export const createTransitionalPostReadWorker=()=>({fetch:async()=>null});",
   "../../site/.public-post-renderer/server/entry.mjs": "export const rendererSha='a'.repeat(40),renderPublishedPost=()=>{},renderPublishedPage=()=>{},renderPublicPageContext=()=>{};",
@@ -67,4 +67,41 @@ it("the real entry attempts at most one start without awaiting telemetry or alte
     expect(await response.arrayBuffer()).toEqual(await asset().arrayBuffer());
   }
   expect(write).toHaveBeenCalledTimes(1); expect(then).not.toHaveBeenCalled();
+});
+it("serves the development origin only when the upload selects the development target", async () => {
+  vi.stubGlobal("caches", { default: {} });
+  const probe = (origin: string) => new Request(`${origin}/_publication.json`);
+  const serve = (origin: string, environment?: string) => load().default.fetch(probe(origin),
+    { ASSETS: { fetch: asset }, CMS_API: {}, ...(environment ? { PUBLICATION_ENVIRONMENT: environment } : {}) }, { waitUntil: vi.fn() });
+  expect((await serve("https://dev-public.example.org")).status).toBe(404);
+  expect((await serve("https://njpbs.org", "development")).status).toBe(404);
+  const production = await serve("https://njpbs.org");
+  expect(production.headers.get("x-njpbs-publication-origin")).toBe("njpbs-production");
+  const development = await serve("https://dev-public.example.org", "development");
+  expect(development.status).toBe(200);
+  expect(development.headers.get("x-njpbs-publication-origin")).toBe("template-dev-public");
+});
+
+it("answers the rollback proof read only on development", async () => {
+  vi.stubGlobal("caches", { default: {} });
+  const version = "11111111-2222-3333-4444-555555555555";
+  const getNoBuildPage = vi.fn(async (...args: unknown[]) => ({ scheduleProof: args[4] }));
+  const read = (origin: string, environment?: string, path = "/_publication.json?cms-context=code", method = "HEAD") =>
+    load().default.fetch(new Request(`${origin}${path}`, { method,
+      headers: { "x-njpbs-rollback-probe": version, "cache-control": "no-cache, no-store" } }),
+    { ASSETS: { fetch: asset }, CMS_API: { getNoBuildPage }, CF_VERSION_METADATA: { id: version },
+      NO_BUILD_PAGE_RENDERER_SHA: "a".repeat(40), ...(environment ? { PUBLICATION_ENVIRONMENT: environment } : {}) },
+    { waitUntil: vi.fn() });
+  const code = await read("https://dev-public.example.org", "development");
+  expect(code.status).toBe(200);
+  expect(code.headers.get("x-njpbs-worker-version")).toBe(version);
+  const schedule = await read("https://dev-public.example.org", "development", "/_schedule-sources.json", "GET");
+  expect(schedule.status).toBe(200);
+  expect(schedule.headers.get("x-njpbs-worker-version")).toBe(version);
+  expect(await schedule.json()).toEqual({ scheduleProof: true });
+  expect(getNoBuildPage).toHaveBeenCalledWith("/_schedule-sources.json", "a".repeat(40), "GET", true, true, undefined);
+  getNoBuildPage.mockClear();
+  const production = await read("https://njpbs.org", undefined, "/_schedule-sources.json", "GET");
+  expect(production.headers.get("x-njpbs-worker-version")).toBeNull();
+  expect(getNoBuildPage).not.toHaveBeenCalledWith(expect.anything(), expect.anything(), expect.anything(), expect.anything(), true);
 });

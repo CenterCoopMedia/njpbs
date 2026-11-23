@@ -10,7 +10,7 @@ import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import {
   EXECUTABLE_SOURCE_EXTENSION,
-  MEMBER_GATE,
+  SCAN_ROOTS,
   STAFF_IDENTITY,
   identityBoundaryViolations,
   localImportTargets,
@@ -33,7 +33,10 @@ function fixtureRepository(
   const root = mkdtempSync(join(tmpdir(), "njpbs-identity-boundary-"));
   temporaryRoots.push(root);
 
-  for (const owner of [...MEMBER_GATE, ...STAFF_IDENTITY]) {
+  for (const directory of SCAN_ROOTS) {
+    mkdirSync(join(root, directory), { recursive: true });
+  }
+  for (const owner of STAFF_IDENTITY) {
     writeFixtureFile(root, owner, overrides[owner] ?? "export {};\n");
   }
   for (const [relativePath, source] of Object.entries(extras)) {
@@ -53,34 +56,27 @@ describe("two-identity-system boundary (ADR 0015, #210)", () => {
     expect(identityBoundaryViolations()).toEqual([]);
   });
 
-  it("turns isolated Admin, Functions, CMS API, and member cross-imports red", () => {
+  it("rejects member identity imports from Admin, Functions and CMS API owners", () => {
     const fixtures = [
       {
         owner: "admin/src/lib/access.ts",
-        source: 'import "../../../site/src/lib/pmsso-login.ts";\n',
+        source: 'import "../../../site/src/lib/passport-fixture.ts";\n',
         rule: "staff-imports-member-gate",
-        target: "site/src/lib/pmsso-login",
+        target: "site/src/lib/passport-fixture",
       },
       {
         owner: "functions/lib/auth.js",
         source:
-          'const entitlement = require("../../site/src/lib/mvault-entitlement.ts");\n',
+          'const entitlement = require("../../site/src/lib/entitlement-fixture.ts");\n',
         rule: "staff-imports-member-gate",
-        target: "site/src/lib/mvault-entitlement",
+        target: "site/src/lib/entitlement-fixture",
       },
       {
         owner: "cms-api/src/firebase-auth.ts",
         source:
-          'void import(`../../site/src/lib/member-gated-playback.ts`);\n',
+          'void import(`../../site/src/lib/member-gated-fixture.ts`);\n',
         rule: "staff-imports-member-gate",
-        target: "site/src/lib/member-gated-playback",
-      },
-      {
-        owner: "site/src/lib/pmsso-login.ts",
-        source:
-          'export { requireAdmin } from "../../../functions/lib/auth.js";\n',
-        rule: "member-imports-staff-identity",
-        target: "functions/lib/auth",
+        target: "site/src/lib/member-gated-fixture",
       },
     ] as const;
 
@@ -96,8 +92,7 @@ describe("two-identity-system boundary (ADR 0015, #210)", () => {
     }
   });
 
-  it("fails completeness when a new identity-named owner is unclassified", () => {
-    const relativePath = "admin/src/principal/new-session.ts";
+  it.each(["admin/src/principal/new-session.ts", "site/src/lib/entitlement-fixture.ts"])("fails completeness for unclassified owner %s", relativePath => {
     const root = fixtureRepository({}, { [relativePath]: "export {};\n" });
 
     expect(identityBoundaryViolations(root)).toEqual([
@@ -109,7 +104,7 @@ describe("two-identity-system boundary (ADR 0015, #210)", () => {
   });
 
   it("covers every supported import form and executable source extension", () => {
-    const owner = "site/src/lib/pmsso-login.ts";
+    const owner = "site/src/lib/public-playback.ts";
     const forms = [
       'import { requireAdmin } from "../../../functions/lib/auth.js";',
       'export { requireAdmin } from "../../../functions/lib/auth.js";',
@@ -157,8 +152,8 @@ describe("two-identity-system boundary (ADR 0015, #210)", () => {
   it("ignores comments and unrelated bare packages", () => {
     const owner = "admin/src/lib/access.ts";
     const source = `
-// import "../../../site/src/lib/pmsso-login.ts";
-/* require("../../site/src/lib/mvault-entitlement.ts"); */
+// import "../../../site/src/lib/passport-fixture.ts";
+/* require("../../site/src/lib/entitlement-fixture.ts"); */
 import "firebase/auth";
 const url = "https://example.com/member-gated";
 `;
@@ -175,19 +170,19 @@ const url = "https://example.com/member-gated";
 
     const root = fixtureRepository({
       "functions/staff-access.js":
-        'const gate = require("../site/src/lib/mvault-entitlement.ts");\n',
+        'const gate = require("../site/src/lib/entitlement-fixture.ts");\n',
     });
     expect(identityBoundaryViolations(root)).toEqual([
       expect.objectContaining({
         rule: "staff-imports-member-gate",
         owner: "functions/staff-access.js",
-        target: "site/src/lib/mvault-entitlement",
+        target: "site/src/lib/entitlement-fixture",
       }),
     ]);
   });
 
   it("resolves escaped module specifiers by their cooked value", () => {
-    const owner = "site/src/lib/pmsso-login.ts";
+    const owner = "site/src/lib/public-playback.ts";
     const escapes = [
       'import "..\\u002f..\\u002f..\\u002ffunctions\\u002flib\\u002fauth.js";',
       'import "..\\/..\\/..\\/functions\\/lib\\/auth.js";',
@@ -203,20 +198,20 @@ const url = "https://example.com/member-gated";
     }
 
     const root = fixtureRepository({
-      "site/src/lib/pmsso-login.ts":
-        'import "..\\u002f..\\u002f..\\u002ffunctions\\u002flib\\u002fauth.js";\n',
+      "functions/staff-access.js":
+        'import "..\\u002fsite\\u002fsrc\\u002flib\\u002fentitlement-fixture.ts";\n',
     });
     expect(identityBoundaryViolations(root)).toEqual([
       expect.objectContaining({
-        rule: "member-imports-staff-identity",
-        owner: "site/src/lib/pmsso-login.ts",
-        target: "functions/lib/auth",
+        rule: "staff-imports-member-gate",
+        owner: "functions/staff-access.js",
+        target: "site/src/lib/entitlement-fixture",
       }),
     ]);
   });
 
   it("keeps comment stripping out of string and template literals", () => {
-    const owner = "site/src/lib/pmsso-login.ts";
+    const owner = "site/src/lib/public-playback.ts";
 
     const globString = [
       'const media = "image/*";',

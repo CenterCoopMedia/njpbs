@@ -898,7 +898,7 @@ describe("ContentLibrary", () => {
   it("reports a structured server rejection without implying partial changes", async () => {
     const loadRecords = vi.fn(async () => [records[0]!]);
     const archiveRecords = vi.fn(async () => {
-      throw new HttpError(403, "Admin access required");
+      throw new HttpError(403, "Admin or Manager access required");
     });
     render(
       <MemoryRouter initialEntries={["/content/library"]}>
@@ -920,7 +920,7 @@ describe("ContentLibrary", () => {
     expect(await screen.findByText("Move to Recycle bin was rejected")).toBeInTheDocument();
     expect(
       screen.getByText(
-        "Request failed (403): Admin access required. No records were changed.",
+        "Request failed (403): Admin or Manager access required. No records were changed.",
       ),
     ).toBeInTheDocument();
     expect(screen.queryByText(/Some records may have changed/)).not.toBeInTheDocument();
