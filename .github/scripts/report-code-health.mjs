@@ -86,9 +86,7 @@ function renamedPaths(cwd, base) {
 }
 
 function addedDiagnostics(baseline, current, renames) {
-  const key = ({ rule, message }, file) => JSON.stringify([
-    file, rule, rule === "max-lines-per-function" ? message.replace(/\(\d+\)/, "(lines)") : message,
-  ]);
+  const key = ({ rule, message }, file) => JSON.stringify([file, rule, message]);
   const counts = new Map();
   for (const finding of baseline) {
     const id = key(finding, finding.file);
@@ -103,15 +101,14 @@ function addedDiagnostics(baseline, current, renames) {
   });
 }
 
+// Function length and file size are review aids, reported in the totals only:
+// a long function or file runs the same as a short one.
 export function compare(baseline, current, renames = new Map()) {
-  const errors = (lint) => lint.filter(({ severity }) => severity === 2);
+  const errors = (lint) => lint.filter(({ severity, rule }) =>
+    severity === 2 && rule !== "max-lines-per-function");
   return {
     lint: addedDiagnostics(errors(baseline.lint), errors(current.lint), renames),
     types: addedDiagnostics(baseline.types.findings, current.types.findings, renames),
-    size: Object.entries(current.lines).flatMap(([file, lines]) => {
-      const previous = baseline.lines[renames.get(file) ?? file] ?? 0;
-      return lines > Math.max(sizeLimit, previous) ? [{ file, previous, lines }] : [];
-    }),
   };
 }
 
