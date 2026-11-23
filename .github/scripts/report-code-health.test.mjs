@@ -31,16 +31,32 @@ test("reports only added lint errors and type errors", () => {
     ],
     types: { findings: [
       sameName, { ...kept, line: 8, message: "changed signature" },
-      { ...edited, line: 12, column: 20, message: "other argument" }, { ...edited, line: 12, column: 9 },
-      { ...edited, line: 4, column: 1 },
+      { ...edited, line: 12, column: 9 }, { ...edited, line: 4, column: 1 },
     ] },
   };
 
   assert.deepEqual(compare(base, head, changes), {
     lint: [extraLint, replacedLint],
-    types: [sameName, { ...edited, line: 12, column: 20, message: "other argument" }, { ...edited, line: 4, column: 1 }],
+    types: [sameName, { ...edited, line: 4, column: 1 }],
   });
   assert.deepEqual(compare(base, base), { lint: [], types: [] });
+});
+
+test("an existing type error on an edited line matches by rule and flagged text, whatever its message", () => {
+  const message = (type) => `Argument of type 'string' is not assignable to parameter of type '${type}'.`;
+  const existing = { file: "functions/f.js", line: 3, column: 9, rule: "TS2345", message: message("number"), text: "x" };
+  const changes = new Map([["functions/f.js", { from: "functions/f.js", hunks: [
+    { oldStart: 3, oldCount: 1, newStart: 3, newCount: 1 },
+  ] }]]);
+  const base = { lint: [], types: { findings: [existing] } };
+  const report = (finding) => compare(base, { lint: [], types: { findings: [finding] } }, changes);
+
+  // `numeric(x)` -> `numeric(x, 2)` while another file changes the parameter to boolean:
+  // the same error under a new message stays matched.
+  assert.deepEqual(report({ ...existing, column: 12, message: message("boolean") }), { lint: [], types: [] });
+  // `numeric(x); boolean(true);` -> `numeric(1); boolean(x);`: also matched. A replaced
+  // error with the same rule and flagged text in the same hunk is not reported.
+  assert.deepEqual(report({ ...existing, column: 23, message: message("boolean") }), { lint: [], types: [] });
 });
 
 test("the report exits nonzero for a new lint or type error and saves the findings", (t) => {

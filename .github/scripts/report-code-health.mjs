@@ -143,15 +143,13 @@ export function compare(baseline, current, changes = new Map()) {
     severity === 2 && rule !== "max-lines-per-function");
   const byBase = new Map([...changes.values()].filter(({ from }) => from).map((file) => [file.from, file]));
   const basePath = (file, head) => (head ? changes.get(file)?.from : file) ?? file;
-  // A type message quotes the callee's signature, so on an unchanged line a type
-  // error matches by base line and column. Inside a changed hunk it matches by
-  // flagged text and message.
+  // A type message quotes the callee's signature, so type errors match by position:
+  // the same base line and column, or the same flagged text in the same changed hunk.
   const typeKey = ({ file, line, column, rule, message, text }, head) => {
     if (line === null) return JSON.stringify([basePath(file, head), rule, message]);
     const hunks = (head ? changes.get(file) : byBase.get(file))?.hunks ?? [];
     const position = (head ? headPosition : basePosition)(hunks, line);
-    const identity = position.startsWith("hunk") ? [text, message] : [column];
-    return JSON.stringify([basePath(file, head), rule, position, ...identity]);
+    return JSON.stringify([basePath(file, head), rule, position, position.startsWith("hunk") ? text : column]);
   };
   return {
     lint: addedDiagnostics(errors(baseline.lint), errors(current.lint),
