@@ -118,6 +118,7 @@ export interface MediaCollectionItemsProps {
   onReload: () => void;
   onViewerRiskChange?: (active: boolean) => void;
   onViewerSavingChange?: (saving: boolean) => void;
+  onSubclipViewerOpenChange: (open: boolean) => void;
   /** Marks viewer Close and Step URL writes so the collection route does not prompt twice. */
   onInternalNavigation?: () => void;
   navigationBlocked?: boolean;
@@ -158,6 +159,7 @@ export function MediaCollectionItems({
   onRemoveMany,
   onViewerRiskChange,
   onViewerSavingChange,
+  onSubclipViewerOpenChange,
   navigationBlocked = false,
   pages,
   principal,
@@ -593,7 +595,8 @@ export function MediaCollectionItems({
     {subclips.length ? <MediaCollectionSubclips key={`${collection.id}/${userId}`} items={subclips} collectionId={collection.id}
       principal={principal} getIdToken={getIdToken} disabled={actionsDisabled} canRemove={collection.lifecycle === "active"}
       onRemove={ref => void onRemoveMany([ref])} onDirtyChange={setViewerDirty} onSavingChange={setViewerSaving}
-      navigationBlocked={navigationBlocked} onKeepNavigation={onKeepNavigation} onDiscardNavigation={onDiscardNavigation} /> : null}
+      onViewerOpenChange={onSubclipViewerOpenChange} navigationBlocked={navigationBlocked && !viewerSaving}
+      onKeepNavigation={onKeepNavigation} onDiscardNavigation={onDiscardNavigation} /> : null}
 
     {nextCursor || pages > 1 ? <MediaPaging mode="load-more" label="Collection item pages" loaded={items.length + subclips.length}
       total={collection.itemCount} hasMore={Boolean(nextCursor)} loading={loadingMore} onMore={onLoadMore} /> : null}

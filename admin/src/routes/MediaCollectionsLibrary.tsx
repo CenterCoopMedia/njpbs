@@ -191,7 +191,8 @@ export function MediaCollectionsLibrary({
   const detail = detailState.status === "ready" ? detailState.page : undefined;
   const collection = detail?.collection;
   const openedRef = mediaLocation.selectedRef;
-  const viewerOpen = Boolean(openedRef && detail?.items.some(item => item.available
+  const [subclipViewerOpen, setSubclipViewerOpen] = useState(false);
+  const viewerOpen = subclipViewerOpen || Boolean(openedRef && detail?.items.some(item => item.available
     && mediaFullViewerKey(item.ref) === mediaFullViewerKey(openedRef)));
   const mutationPending = createPending || editPending || archivePending || Boolean(removePending) || viewerSaving;
   const createDirty = createOpen && (Boolean(createName) || Boolean(createDescription) || createScope !== "private" || createColor !== "slate");
@@ -783,6 +784,7 @@ export function MediaCollectionsLibrary({
                   nextCursor={detail.nextCursor} pages={detailState.status === "ready" ? detailState.pages : 1}
                   onReload={refreshDetail} onViewerRiskChange={setViewerExitRisk}
                   onViewerSavingChange={setViewerSaving}
+                  onSubclipViewerOpenChange={setSubclipViewerOpen}
                   navigationBlocked={blocker.state === "blocked"}
                   onKeepNavigation={() => blocker.reset?.()}
                   onDiscardNavigation={() => {

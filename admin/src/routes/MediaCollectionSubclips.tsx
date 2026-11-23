@@ -9,7 +9,7 @@ import { VideoPreview } from "./SourceMediaLibrary";
 const replacedMessage = "This subclip belongs to a previous video file.";
 const unavailableRangeMessage = "This range is unavailable in the current viewing copy.";
 
-export function MediaCollectionSubclips({ items, collectionId, principal, getIdToken, disabled, canRemove, onRemove, onDirtyChange, onSavingChange, navigationBlocked, onKeepNavigation, onDiscardNavigation }: {
+export function MediaCollectionSubclips({ items, collectionId, principal, getIdToken, disabled, canRemove, onRemove, onDirtyChange, onSavingChange, onViewerOpenChange, navigationBlocked, onKeepNavigation, onDiscardNavigation }: {
   items: readonly MediaCollectionSubclip[];
   collectionId: string;
   principal: Principal;
@@ -19,6 +19,7 @@ export function MediaCollectionSubclips({ items, collectionId, principal, getIdT
   onRemove: (ref: MediaCollectionSubclipRef) => void;
   onDirtyChange: (dirty: boolean) => void;
   onSavingChange: (saving: boolean) => void;
+  onViewerOpenChange: (open: boolean) => void;
   navigationBlocked: boolean;
   onKeepNavigation: () => void;
   onDiscardNavigation: () => void;
@@ -28,6 +29,12 @@ export function MediaCollectionSubclips({ items, collectionId, principal, getIdT
   const [error, setError] = useState("");
   const active = useRef<AbortController>();
   useEffect(() => () => active.current?.abort(), []);
+  const viewerOpen = Boolean(opened);
+  useEffect(() => {
+    if (!viewerOpen) return;
+    onViewerOpenChange(true);
+    return () => onViewerOpenChange(false);
+  }, [onViewerOpenChange, viewerOpen]);
 
   async function open(item: MediaCollectionSubclip) {
     if (active.current || disabled || !item.available || item.subclip.state !== "current") return;
