@@ -186,10 +186,15 @@ function adjustmentLabel(value: DatasetRelease["adjustment"]): string {
   return "No adjustment";
 }
 
-function formatDate(value: string): string {
+export function formatDatasetDate(value: string): string {
   return new Intl.DateTimeFormat("en-US", {
     year: "numeric", month: "long", day: "numeric", timeZone: "UTC",
   }).format(new Date(value.length === 10 ? `${value}T00:00:00Z` : value));
+}
+
+export function formatDatasetCoverage({ start, end }: DatasetPeriod): string {
+  const first = formatDatasetDate(start);
+  return start === end ? first : `${first} through ${formatDatasetDate(end)}`;
 }
 
 function hasAnnualChartPeriods(release: PublicDatasetRelease): boolean {
@@ -293,12 +298,21 @@ function renderChart(ids: FigureIds, release: PublicDatasetRelease): string {
 }
 
 function renderTable(release: PublicDatasetRelease): string {
+  const hasNotes = release.points.some(point => point.value === null);
   const rows = release.points.map((point) => {
     const value = point.value === null ? "Missing" : formatDatasetValue(point.value, release.unit);
-    const note = point.value === null ? point.missingReason : "";
-    return `<tr><th scope="row">${escapeHtml(formatDate(point.period))}</th><td>${escapeHtml(value)}</td><td>${escapeHtml(note ?? "")}</td></tr>`;
+    const note = hasNotes ? `<td>${escapeHtml(point.missingReason ?? "")}</td>` : "";
+    return `<tr><th scope="row">${escapeHtml(formatDatasetDate(point.period))}</th><td>${escapeHtml(value)}</td>${note}</tr>`;
   }).join("");
-  return `<div class="cms-data-figure__values"><p class="cms-data-figure__scroll-cue">Scroll sideways to see all columns.</p><div class="cms-data-figure__table-scroll" tabindex="0" role="region" aria-label="${escapeHtml(release.label)} source values"><table><caption>Source values for ${escapeHtml(release.label)}</caption><thead><tr><th scope="col">Period</th><th scope="col">Value</th><th scope="col">Note</th></tr></thead><tbody>${rows}</tbody></table></div></div>`;
+  const scrollCue = hasNotes ? '<p class="cms-data-figure__scroll-cue">Scroll sideways to see all columns.</p>' : "";
+  const noteHeader = hasNotes ? '<th scope="col">Note</th>' : "";
+  const label = escapeHtml(release.label);
+  const notesClass = hasNotes ? " cms-data-figure__values--with-notes" : "";
+  return `<div class="cms-data-figure__values${notesClass}">${scrollCue}` +
+    `<div class="cms-data-figure__table-scroll" tabindex="0" role="region" aria-label="${label} source values">` +
+    `<table><caption>Source values for ${label}</caption>` +
+    `<thead><tr><th scope="col">Period</th><th scope="col">Value</th>${noteHeader}</tr></thead>` +
+    `<tbody>${rows}</tbody></table></div></div>`;
 }
 
 function renderSource(source: DatasetSource): string {
@@ -337,8 +351,13 @@ function figureIds(blockId: string): FigureIds {
 }
 
 function renderDisclosure(ids: FigureIds, release: PublicDatasetRelease, chart: string, compact: boolean): string {
-  const summary = compact ? "View chart, source values and method" : "View source values and method";
-  return `<details class="cms-data-figure__details" id="${ids.disclosure}"><summary>${summary}</summary>${compact ? chart : ""}${renderTable(release)}<section class="cms-data-figure__method" aria-label="Method and source notes"><p class="cms-data-figure__subheading">Method and source notes</p><p>${escapeHtml(release.methodNote)}</p>${renderComparators(release)}</section></details>`;
+  const table = renderTable(release);
+  const method = `<section class="cms-data-figure__method" aria-label="Method and source notes"><p class="cms-data-figure__subheading">Method and source notes</p><p>${escapeHtml(release.methodNote)}</p>${renderComparators(release)}</section>`;
+  if (compact) {
+    return `<details class="cms-data-figure__details" id="${ids.disclosure}"><summary>View chart, source values and method</summary>${chart}${table}${method}</details>`;
+  }
+  return `<details class="cms-data-figure__details" id="${ids.disclosure}"><summary>View source values</summary>${table}</details>` +
+    `<details class="cms-data-figure__details"><summary>View method and source notes</summary>${method}</details>`;
 }
 
 /** Render one admitted public projection. Invalid or mismatched input emits no dataset fields. */
@@ -357,7 +376,7 @@ export function renderDataFigure(
   const chart = renderChart(ids, release);
   const compact = data.display === "compact";
   const correction = release.changeKind === "correction"
-    ? `<span>Corrected ${escapeHtml(formatDate(projection.approvedAt))}: ${escapeHtml(release.changeNote)}</span>`
+    ? `<span>Corrected ${escapeHtml(formatDatasetDate(projection.approvedAt))}: ${escapeHtml(release.changeNote)}</span>`
     : "";
   const creditNote = release.reuse.note.trim();
   const creditLabel = /^credits?\b/i.test(creditNote) ? "" : "<strong>Credit:</strong> ";
@@ -365,5 +384,13 @@ export function renderDataFigure(
     ? `<p class="cms-data-figure__credit">${creditLabel}${escapeHtml(creditNote)}</p>`
     : "";
 
-  return `<figure class="cms-data-figure cms-data-figure--${data.display}" data-dataset-id="${escapeHtml(projection.datasetId)}" data-release-id="${escapeHtml(projection.releaseId)}"><h${heading}>${escapeHtml(release.label)}</h${heading}><p class="cms-data-figure__value">${escapeHtml(formatDatasetValue(release.value, release.unit))}</p><p class="cms-data-figure__context"><span>${escapeHtml(release.period.label)}</span><span>${escapeHtml(release.geography.label)}</span><span>${escapeHtml(adjustmentLabel(release.adjustment))}</span></p>${compact ? "" : chart}${renderDisclosure(ids, release, chart, compact)}<figcaption><p class="cms-data-figure__source"><strong>Source:</strong> ${renderSource(release.source)}</p><p class="cms-data-figure__dates"><span>Released ${escapeHtml(formatDate(release.releasedOn))}</span><span>Verified ${escapeHtml(formatDate(release.verifiedOn))}</span><span>Revision ${projection.revision}</span>${correction}</p>${credit}</figcaption></figure>`;
+  return `<figure class="cms-data-figure cms-data-figure--${data.display}" data-dataset-id="${escapeHtml(projection.datasetId)}" data-release-id="${escapeHtml(projection.releaseId)}">` +
+    `<h${heading}>${escapeHtml(release.label)}</h${heading}>` +
+    `<p class="cms-data-figure__value">${escapeHtml(formatDatasetValue(release.value, release.unit))}</p>` +
+    `<p class="cms-data-figure__context"><span>${escapeHtml(release.period.label)}</span><span>${escapeHtml(release.geography.label)}</span><span>${escapeHtml(adjustmentLabel(release.adjustment))}</span></p>` +
+    `${compact ? "" : chart}${renderDisclosure(ids, release, chart, compact)}` +
+    `<figcaption><p class="cms-data-figure__source"><strong>Source:</strong> ${renderSource(release.source)}</p>` +
+    `<p><strong>Headline coverage:</strong> ${escapeHtml(formatDatasetCoverage(release.period))}</p>` +
+    `<p class="cms-data-figure__dates"><span>Released ${escapeHtml(formatDatasetDate(release.releasedOn))}</span>` +
+    `<span>Verified ${escapeHtml(formatDatasetDate(release.verifiedOn))}</span><span>Revision ${projection.revision}</span>${correction}</p>${credit}</figcaption></figure>`;
 }

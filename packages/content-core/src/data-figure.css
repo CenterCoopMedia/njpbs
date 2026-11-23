@@ -213,9 +213,12 @@
 
 .cms-data-figure table {
   width: 100%;
-  min-width: 34rem;
   border-collapse: collapse;
   font-variant-numeric: tabular-nums;
+}
+
+.cms-data-figure__values--with-notes table {
+  min-width: 34rem;
 }
 
 .cms-data-figure caption {
@@ -236,7 +239,7 @@
   overflow-wrap: anywhere;
 }
 
-.cms-data-figure :is(th, td):nth-child(2) {
+.cms-data-figure__values--with-notes :is(th, td):nth-child(2) {
   min-width: 7rem;
   white-space: nowrap;
   overflow-wrap: normal;

@@ -1,0 +1,7 @@
+{
+  "date": "2026-11-22",
+  "kind": "improved",
+  "title": "Check coverage dates and source values for data figures",
+  "body": "When you review an approved dataset, you can see its headline coverage dates and when the source was released and verified. Expanded figures have separate controls for the source table and the method notes.",
+  "prs": []
+}

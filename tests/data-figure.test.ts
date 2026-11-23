@@ -223,6 +223,37 @@ describe("data figure renderer", () => {
     expect(compact.match(/<table>/g)).toHaveLength(1);
     expect(compact).toContain("The synthetic rate is 4.2%");
   });
+
+  it("keeps the expanded source table separate from method notes and adds a column only for missing observations", async () => {
+    const compiled = await import("../functions/lib/dataset-figures.js");
+    for (const render of [renderDataFigure, compiled.renderDataFigure]) {
+      const item = projection();
+      const markup = render("figure-source-table", data, item);
+      const [table, method] = Array.from(markup.matchAll(/<details\b[^>]*>(.*?)<\/details>/gs), match => match[1]);
+      expect(table).toContain('<th scope="col">Note</th>');
+      expect(table).toContain("<td>Missing</td><td>Not reported</td>");
+      expect(table).toContain("<td>4%</td><td></td>");
+      expect(table).not.toContain(item.release.methodNote);
+      expect(method).toContain(item.release.methodNote);
+      expect(method).not.toContain("<table>");
+
+      item.release.points = item.release.points.filter(point => point.value !== null);
+      const complete = render("figure-source-table", data, item);
+      expect(complete).not.toContain('<th scope="col">Note</th>');
+      expect(complete).toContain("<td>4%</td></tr>");
+    }
+  });
+
+  it("keeps headline coverage tied to its approved period when the chart spans other dates", () => {
+    const item = projection();
+    const markup = renderDataFigure("figure-coverage", data, item);
+    expect(markup).toContain("September 1, 2026 through September 30, 2026");
+    expect(markup).toContain("Released October 15, 2026");
+
+    item.release.period.start = item.release.period.end;
+    const singleDay = renderDataFigure("figure-coverage", data, item);
+    expect(singleDay).toContain("Headline coverage:</strong> September 30, 2026</p>");
+  });
 });
 
 describe("frozen data figure admission", () => {
