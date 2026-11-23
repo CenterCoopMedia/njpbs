@@ -4,6 +4,7 @@
 // This module has no DOM or network access.
 
 import type { ConsoleEntry, ConsoleLevel } from "./console-capture";
+import { normalizeAccountProblemReportUrl } from "../../../packages/content-core/src/account-problem-report";
 
 export type CategoryId = "bug" | "suggestion" | "question";
 
@@ -143,7 +144,9 @@ export function buildReportPayload(input: RawReportInput): ReportPayload {
     category: input.category,
     description: clampDescription(input.description),
     email: deliverableEmail(input.email),
-    url: clampStringOrNull(input.url, MAX_URL_LENGTH),
+    url: typeof input.url === "string"
+      ? normalizeAccountProblemReportUrl(input.url).slice(0, MAX_URL_LENGTH)
+      : null,
     userAgent: clampStringOrNull(input.userAgent, MAX_USER_AGENT_LENGTH),
     screenSize: clampStringOrNull(input.screenSize, MAX_SCREEN_SIZE_LENGTH),
     consoleLogs: normalizeConsoleLogs(input.consoleLogs),

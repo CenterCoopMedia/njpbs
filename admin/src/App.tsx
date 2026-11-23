@@ -15,6 +15,7 @@ import {
 } from "react";
 import { createBrowserRouter, RouterProvider } from "react-router";
 import { StaffSiteHandoff } from "./components/StaffSiteHandoff";
+import { accountProblemReportUrl } from "../../packages/content-core/src/account-problem-report";
 import { LoadingIndicator } from "./components/ui/LoadingIndicator";
 import { AuthFrame, BootstrapView } from "./components/BootstrapView";
 import {
@@ -92,13 +93,20 @@ interface SignedOutViewProps {
   signInWithGoogle: () => Promise<void>;
 }
 
+function ownErrorField(error: unknown, field: string): unknown {
+  if (typeof error !== "object" || error === null) return undefined;
+  try {
+    return Object.getOwnPropertyDescriptor(error, field)?.value;
+  } catch {
+    return undefined;
+  }
+}
+
 function accountActionError(actionError: unknown, creatingAccount: boolean) {
-  const detail = typeof actionError === "object" && actionError !== null
-    ? actionError as { code?: unknown; data?: unknown; status?: unknown } : null;
-  const data = typeof detail?.data === "object" && detail.data !== null
-    ? detail.data as { code?: unknown } : null;
-  const code = detail?.status === 429 ? "auth/too-many-requests" : detail?.code ?? data?.code;
-  const fallback = detail?.status === 503
+  const status = ownErrorField(actionError, "status");
+  const code = status === 429 ? "auth/too-many-requests"
+    : ownErrorField(actionError, "code") ?? ownErrorField(ownErrorField(actionError, "data"), "code");
+  const fallback = status === 503
     ? "Account actions are temporarily unavailable. Try again later."
     : "We couldn't complete this account action. Try again. If it keeps failing, use Report a problem.";
   let message = fallback;
@@ -141,7 +149,8 @@ function accountActionError(actionError: unknown, creatingAccount: boolean) {
       message = "Allow pop-ups for Boardwalk, then try signing in again.";
       break;
   }
-  return { message, title, canSignIn };
+  const reportUrl = accountProblemReportUrl(status === 503 ? "account-service-unavailable" : code);
+  return { message, title, canSignIn, reportUrl };
 }
 
 function SignedOutView({
@@ -190,7 +199,12 @@ function SignedOutView({
   function sendReset() {
     if (!email.trim()) {
       setMessage(null);
-      setError({ message: "Enter your email address first.", title: "Account action failed", canSignIn: false });
+      setError({
+        message: "Enter your email address first.",
+        title: "Account action failed",
+        canSignIn: false,
+        reportUrl: accountProblemReportUrl(),
+      });
       return;
     }
     void run(
@@ -389,7 +403,7 @@ function SignedOutView({
       <a
         aria-label="Report a problem (opens in a new tab)"
         className="button button-ghost"
-        href="https://njpbs.org/contact/#report-a-problem"
+        href={error?.reportUrl ?? accountProblemReportUrl()}
         rel="noopener noreferrer"
         target="_blank"
       >

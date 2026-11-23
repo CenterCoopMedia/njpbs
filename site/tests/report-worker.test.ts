@@ -391,12 +391,27 @@ describe("handleReport", () => {
     const forwarded = JSON.parse(init.body);
     expect(forwarded.category).toBe("bug");
     expect(forwarded.email).toBe("viewer@example.com");
+    expect(forwarded.url).toBe("https://njpbs.org/live/");
     expect(forwarded.ipHash).toMatch(/^[0-9a-f]{32}$/);
     expect(forwarded.turnstileToken).toBeUndefined();
     // No Access service-token env set, so those headers are omitted.
     expect(init.headers["CF-Access-Client-Id"]).toBeUndefined();
     expect(init.headers["CF-Access-Client-Secret"]).toBeUndefined();
     expect(res.headers.get("Access-Control-Allow-Origin")).toBe("https://njpbs.org");
+  });
+
+  it.each([
+    ["account-error=auth%2Finternal-error&email=person%40example.org", "?account-error=auth%2Finternal-error"],
+    ["account-error=synthetic-password", ""],
+    ["account-error=auth%2Finternal-error&account-error=synthetic-token", ""],
+  ])("forwards only a recognized, unambiguous account diagnostic from %s", async (query, safeQuery) => {
+    const { deps, fetch } = makeDeps();
+    const url = `https://njpbs.org/contact/?${query}#report-a-problem`;
+    const res = await handleReport(post({ ...validBody, url }), makeEnv(), deps);
+    expect(res.status).toBe(200);
+    const intakeCall = fetch.mock.calls.find((c) => c[0] === INTAKE);
+    const init = intakeCall![1] as unknown as { body: string };
+    expect(JSON.parse(init.body).url).toBe(`https://njpbs.org/contact/${safeQuery}#report-a-problem`);
   });
 
   it("adds the Cloudflare Access service-token headers when configured", async () => {

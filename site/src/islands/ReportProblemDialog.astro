@@ -463,7 +463,7 @@ if (reportRequired && (!endpoint || !turnstileSitekey)) {
       });
     }
 
-    // The signed-out Boardwalk screen links here without carrying account data.
+    // The signed-out Boardwalk screen can attach an allowlisted service code.
     // Keep the same configured public form and its ordinary spam-check gate.
     const requestedTrigger = document.querySelector<HTMLElement>("#main")
       ?? document.querySelector<HTMLElement>("[data-report-open]");
