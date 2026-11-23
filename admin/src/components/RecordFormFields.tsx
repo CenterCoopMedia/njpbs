@@ -194,6 +194,7 @@ export function RecordFormFields({
     field.path === undefined &&
     (field.key === "title" || field.key === "description");
   const pageWritingInMain = writingTarget !== undefined;
+  const archivePost = (record.published as { metadata?: { spotlightArchive?: true } } | undefined)?.metadata?.spotlightArchive === true;
 
   const renderEditorField = (field: EditorField): ReactNode => {
     if (["contentLinkUrl", "contentLinkNewTab"].includes(field.key) && record.contentLinkMode !== "custom") return null;
@@ -213,7 +214,7 @@ export function RecordFormFields({
         onRemove={interactionLocked ? undefined : () => setField({ ...field, key: "leadMedia" }, null)}>{leadEditor}</PostLeadMediaInspector> : <Fragment key={pathKey}>{leadEditor()}</Fragment>;
     }
     if (kind === "post" && field.key === "publishedLayout" &&
-        (presentation !== "standard" || record.liveBlog != null || record.spotlightArchive === true)) {
+        (presentation !== "standard" || record.liveBlog != null || archivePost)) {
       return null;
     }
     const value = readFieldValue(record, field);
