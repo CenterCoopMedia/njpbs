@@ -103,7 +103,7 @@ async function inspect(firestore, transaction, attempt) {
         !["verified", "superseded"].includes(value.postProof.status) &&
         !(allowed.has(`queue-failed:${queue.ref.path}`) && exhaustedPostProof(value) && value.postProof.attempts === 4))) refuse();
   }
-  const counts = await i.drain(firestore, transaction, a, false, source.initialQueueFailures, allowed);
+  const { counts } = await i.drain(firestore, transaction, a, false, source.initialQueueFailures, allowed);
   // The approved source remains intended source, never proof of publication.
   // Record exact affected document IDs, including all public source members for
   // context-wide failures, without copying staff data into the operator result.

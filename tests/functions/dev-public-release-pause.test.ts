@@ -45,11 +45,11 @@ const preparation = (status = "building", attempts = 1) => ({ schemaVersion: 1, 
   nextAttemptAt: status === "verified" || attempts === 4 && status === "failed" ? null : Date.now() + 60_000,
   ...(status === "verified" ? { preparedDigest: "c".repeat(64) } : {}), admissionRevision: 1,
   reservation: { buildBatchId: "original-background", generation: 2, commitSha: oldRuntime.commitSha, cutoffAt: Timestamp.fromMillis(1000) } });
-async function acceptNativeContext() {
+async function acceptNativeContext(operationId = nativeOperationId) {
   await db.doc("system/publicDeployment/contexts/public").set({ schemaVersion: 1, revision: 1 });
   await db.runTransaction(async transaction => {
     const accepted = await contextOwner.enqueuePublicContextInTransaction({ firestore: db, transaction,
-      operationId: nativeOperationId, runtime: { owner: "cloudflare", release: oldRuntime.commitSha }, reason: "settings", contextRevision: 1 });
+      operationId, runtime: { owner: "cloudflare", release: oldRuntime.commitSha }, reason: "settings", contextRevision: 1 });
     accepted.write();
   });
 }
@@ -96,6 +96,28 @@ async function failNativeContext() {
   await task.update({ status: "failed", attempts: 4, claim: null, nextAttemptAt: null, error: "background_retry_exhausted" });
   await db.doc("cmsBackgroundOutputs/search").update({ status: "failed" });
   await db.doc(`cmsPublishQueue/${nativeOperationId}`).update({ status: "failed", error: "background_retry_exhausted" });
+}
+async function failUnselectedOutput(afterPause = false) {
+  const operationId = "A".repeat(20);
+  await acceptNativeContext(); await acceptNativeContext(operationId);
+  await db.doc(contextOwner.CURRENT_PATH).delete();
+  if (afterPause) {
+    await expect(apply()).rejects.toThrow();
+    expect(await read()).toMatchObject({ pauseCommitted: true, stop: false });
+  }
+  const task = db.doc(`cmsPublishQueue/${operationId}/backgroundOutputs/search`);
+  const output = db.doc("cmsBackgroundOutputs/search");
+  const queues = [nativeOperationId, operationId].map(id => db.doc(`cmsPublishQueue/${id}`));
+  const batch = db.batch();
+  for (const family of contextOwner.OUTPUTS) {
+    const failed = family === "search";
+    batch.update(db.doc(`cmsPublishQueue/${operationId}/backgroundOutputs/${family}`), {
+      status: failed ? "failed" : "verified", attempts: failed ? 4 : 1, claim: null, nextAttemptAt: null });
+    batch.update(db.doc(`cmsBackgroundOutputs/${family}`), { status: failed ? "failed" : "verified" });
+  }
+  for (const queue of queues) batch.update(queue, { status: "failed", error: "background_generation_failed" });
+  await batch.commit();
+  return { operationId, task, output, queues };
 }
 async function acceptPostProof(postProof: any) {
   await acceptNativeContext(); await finishNativeContext();
@@ -352,6 +374,35 @@ it("records an immutable paused/failed STOP when native work exhausts after paus
     expect(error.stderr).toContain("#4471"); expect(error.stderr).toContain("STOP:");
   }
 });
+it.each([false, true])("drains one unrelated stopped output and its aliases with one warning (after pause: %s)", async afterPause => {
+  const { operationId, task, output, queues } = await failUnselectedOutput(afterPause);
+  const refs = [task, output, ...queues];
+  const before = await db.getAll(...refs);
+  const result = await apply();
+  expect(result).toMatchObject({ drainCommitted: true, currentReady: true, stop: false,
+    receipt: { acceptedWorkChanged: 0, warnings: [{ output: "search", operationId, path: task.path }] } });
+  expect(await read()).toMatchObject({ drainCommitted: true, failureReceipt: null, receipt: result.receipt, receiptDigest: result.receiptDigest });
+  expect(await apply()).toMatchObject({ idempotent: true, receipt: result.receipt });
+  const after = await db.getAll(...refs);
+  expect(after.map(row => [row.data(), row.updateTime])).toEqual(before.map(row => [row.data(), row.updateTime]));
+});
+it.each(["accepted-alias", "accepted-output", "withdrawal", "live-claim", "scheduled-retry", "active-queue"])(
+  "refuses a drain with a stopped output when there is %s", async blocker => {
+    const { task, output, queues } = await failUnselectedOutput();
+    if (blocker === "accepted-alias") await db.doc(contextOwner.CURRENT_PATH).set({ operationId: queues[0].id });
+    if (blocker === "accepted-output") {
+      const current = db.doc("cmsPublishQueue/current-context");
+      await current.set({ ...acceptedQueue("success"), aggregateReceipt: { outputs: { search: { taskPath: task.path } } } });
+      await db.doc(contextOwner.CURRENT_PATH).set({ operationId: current.id });
+    }
+    if (blocker === "withdrawal") await output.update({ withdrawalDeadlineRevision: 1 });
+    if (blocker === "live-claim") await task.update({ claim: "11111111-1111-4111-8111-111111111111", nextAttemptAt: Date.now() + 60_000 });
+    if (blocker === "scheduled-retry") await task.update({ slowRetryAt: Date.now() + 60_000 });
+    if (blocker === "active-queue") await db.doc("cmsPublishQueue/active").set(acceptedQueue());
+    await expect(apply()).rejects.toThrow();
+    expect(await read()).toMatchObject({ pauseCommitted: blocker === "active-queue", drainCommitted: false,
+      ownsClosedFence: false, stop: false, receipt: null, failureReceipt: null });
+  });
 it.each(["pending", "failed"])("waits for an original Post's nested %s public check despite queue success", async status => {
   const ref = await acceptPostProof({ status, attempts: 1, claim: status === "pending" ? "11111111-1111-4111-8111-111111111111" : null,
     nextAttemptAt: Date.now() + 60_000 });
