@@ -390,6 +390,7 @@ describe("public version evidence", () => {
     { response: () => pageHead("/contact/", "contact", 7, 200, "https://example.org/"), label: "Public status unavailable" },
     { response: () => pageHead("/contact/", "contact", 7, 410), label: "Not live" },
     { response: () => new Response(null, { headers: { "x-njpbs-content-source": "r2-last-good" } }), label: "Public status unavailable" },
+    { response: () => new Response(null, { status: 200 }), label: "Public status unavailable" },
     { response: () => pageHead("/reused-path/", "about", 7), label: "Public status unavailable" },
   ])("uses the current unowned Page decision ($label)", async ({ response, label }) => {
     vi.stubGlobal("crypto", webcrypto);

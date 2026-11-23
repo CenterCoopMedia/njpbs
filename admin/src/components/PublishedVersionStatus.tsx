@@ -176,7 +176,8 @@ export function PublishedVersionStatus({
     (!metadata?.unavailable && saved?.publishedSourceVersion === null ||
       !loadPublicationMetadata && publicStatus?.state === "current" && matchingKey && !inventoryRoute &&
       !publishedSourceVersion && !pendingSourceVersion && liveSourceVersion == null);
-  // The committed inventory can lag current Page context decisions.
+  // An unverified HEAD does not identify what GET serves. The public Worker
+  // can replace the committed Contact asset with a live projection on GET.
   const route = isPage ? (pageStatus?.state === "live" ? pageStatus.route : undefined) : inventoryRoute;
   const pendingVersion = saved?.publishedSourceVersion ?? publishedSourceVersion ?? pendingSourceVersion;
   const servedPost = !metadata?.unavailable && collection === "cmsPosts" && saved?.postServingConfirmed === true &&
