@@ -73,3 +73,18 @@ it("normalizes approved endpoints through the same compiler boundary and rejects
     { ...values, PUBLIC_REPORT_ENDPOINT: "https://user:synthetic-sensitive-value@report.example.org/" }, values))
     .toThrow("missing or differ");
 });
+
+it("records a development receipt with no production values and keeps the two contracts apart", async () => {
+  const development = { schemaVersion: 1 as const, commitSha, environment: "development" as const, values: {}, overridesAbsent: true };
+  // The development compiler environment carries no analytics, report or share values.
+  expect(expectedPublicBuildValues(commitSha, { ...values, CMS_DEPLOYMENT_ENVIRONMENT: "development" })).toEqual({});
+  expect(createPublicBuildSettings(commitSha, { ...values, CMS_DEPLOYMENT_ENVIRONMENT: "development" }, {})).toEqual(development);
+  await store(development);
+  expect(await readPreparedPublicBuildSettings(directory, commitSha, {})).toEqual(development);
+  await expect(readPreparedPublicBuildSettings(directory, commitSha, values)).rejects.toThrow("missing or differ");
+  await store(snapshot);
+  await expect(readPreparedPublicBuildSettings(directory, commitSha, {})).rejects.toThrow("missing or differ");
+  for (const value of [{ ...development, values }, { ...snapshot, environment: "production" }, { ...development, environment: "staging" }]) {
+    expect(() => assertPreparedPublicBuildSettings(value, commitSha)).toThrow("missing or differ");
+  }
+});

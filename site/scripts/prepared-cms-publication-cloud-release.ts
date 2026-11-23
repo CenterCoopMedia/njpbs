@@ -97,7 +97,8 @@ export async function main(args = process.argv.slice(2), environment: NodeJS.Pro
       const cloudflareApiToken = parseCloudflareToken(readFileSync(6, "utf8"));
       storage = createCmsPublicationCloudStorage({ ...credential, includeRenderer: true, target });
       result = await sealPreparedCloudRelease({ firestore, storage, queueId, commitSha, stateDirectory,
-        previewStorageCredential, cloudflareApiToken, buildEnvironment: { ...buildEnvironment }, ...scoped });
+        previewStorageCredential, cloudflareApiToken, ...scoped,
+        buildEnvironment: { ...buildEnvironment, ...(target.environment === "development" ? { CMS_DEPLOYMENT_ENVIRONMENT: target.environment } : {}) } });
     }
     process.stdout.write(`${JSON.stringify(result)}\n`);
   } catch (error) {

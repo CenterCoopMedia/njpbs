@@ -104,7 +104,8 @@ function storage({ frozen = null as Buffer | null, restored = false, publicSeal 
   };
 }
 
-function dependencies({ generation = 298, publicSeal = undefined as object | undefined, server = serverSeal } = {}) {
+function dependencies({ generation = 298, publicSeal = undefined as object | undefined, server = serverSeal,
+  settings = publicBuildSettings as unknown } = {}) {
   const prepared = { commitSha: release, buildBatchId, generation, artifactDigest: "c".repeat(64) };
   return {
     assertSourceCheckout: vi.fn(async () => undefined),
@@ -117,7 +118,7 @@ function dependencies({ generation = 298, publicSeal = undefined as object | und
       const content = await readFile(path.join(retainedInputDirectory ?? "", "input.json"), "utf8");
       await mkdir(path.join(distDirectory, "posts"), { recursive: true });
       await writeFile(path.join(distDirectory, "posts/index.html"), `built from ${content}`);
-      await writeSeals(rendererDirectory, distDirectory, publicSeal, publicBuildSettings, server);
+      await writeSeals(rendererDirectory, distDirectory, publicSeal, settings, server);
       await writeFile(artifactReceiptPath, "{}");
       return { receipt: true };
     }),
@@ -166,7 +167,9 @@ it("builds and checkpoints NEW while OLD stays pinned, without creating executab
 it("builds and checkpoints a development release against development records only", async () => {
   const development = cloudReleaseTarget({ CMS_DEPLOYMENT_ENVIRONMENT: "development" });
   const seal = { schemaVersion: 1, rendererSha: release, environment: "development" };
-  const developmentSeals = () => dependencies({ publicSeal: seal, server: JSON.stringify({ ...seal, files: {} }) });
+  // The development compiler records an empty development settings receipt.
+  const settings = { schemaVersion: 1, commitSha: release, environment: "development", values: {}, overridesAbsent: true };
+  const developmentSeals = () => dependencies({ publicSeal: seal, server: JSON.stringify({ ...seal, files: {} }), settings });
   const fakes = developmentSeals();
   const result = await run({ firestore: database({ cloudCommit: active, serializerId: "cloudflare-dev-publisher" }),
     dependencies: fakes, prepareAgainstCommitSha: active, target: development });
@@ -174,7 +177,7 @@ it("builds and checkpoints a development release against development records onl
   expect(fakes.build).toHaveBeenCalledWith(expect.objectContaining({
     buildEnvironment: expect.objectContaining({ CMS_DEPLOYMENT_ENVIRONMENT: "development" }) }));
   expect(fakes.prepareDetached).toHaveBeenCalledWith(expect.objectContaining({ target: development }));
-  expect(fakes.recordCheckpoint).toHaveBeenCalledWith(expect.objectContaining({ target: development }));
+  expect(fakes.recordCheckpoint).toHaveBeenCalledWith(expect.objectContaining({ target: development, publicBuildSettings: settings }));
   // The production publisher pin and a production seal both refuse a development release.
   const production = developmentSeals();
   await expect(run({ firestore: database({ cloudCommit: active }), dependencies: production, prepareAgainstCommitSha: active,

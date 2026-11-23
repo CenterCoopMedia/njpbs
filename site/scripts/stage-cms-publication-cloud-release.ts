@@ -375,7 +375,9 @@ async function produceCloudRelease({ firestore, storage, queueId, commitSha, sta
   const dependencies = { ...defaultDependencies, ...overrides };
   // Shared release records treat an absent target as production.
   const scoped = target.environment === "development" ? { target } : {};
-  const expectedValues = prepareAgainstCommitSha ? expectedPublicBuildValues(commitSha, buildEnvironment) : undefined;
+  // The build child compiles for the target, so the expected settings follow it.
+  const compileTarget = target.environment === "development" ? { CMS_DEPLOYMENT_ENVIRONMENT: target.environment } : {};
+  const expectedValues = prepareAgainstCommitSha ? expectedPublicBuildValues(commitSha, { ...buildEnvironment, ...compileTarget }) : undefined;
   await dependencies.assertSourceCheckout(commitSha);
   const runtime = { owner: "cloudflare" as const, release: commitSha };
   const buildBatchId = `cms-${queueId}`;

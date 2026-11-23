@@ -176,6 +176,8 @@ it("refuses a freshness check under NEW pins or an unaccepted phase", async () =
 
 async function seal(target) {
   const scoped = target ? { target } : {};
+  const settings = target ? { schemaVersion: 1, commitSha, environment: "development", values: {}, overridesAbsent: true }
+    : publicBuildSettings;
   const reservation = await prepare(scoped);
   const mediaManifest = mediaModule.createPublicMediaManifest({ reservation, owners: [],
     artifactInventory: ["cmsPages", "cmsPosts", "cmsSettings", "cmsAuthorProfilesPublic"]
@@ -191,14 +193,14 @@ async function seal(target) {
   candidate.publicationReceiptDigest = createHash("sha256").update(JSON.stringify(publication)).digest("hex");
   await preparation.recordPreparedPublicReleaseCheckpoint({ firestore: db, preparationId, commitSha,
     inputSha256: "f".repeat(64), artifactCheckpointDigest: "a".repeat(64),
-    preparedArtifact: promotion.preparedArtifactFromCandidate(candidate), publicBuildSettings, ...scoped });
+    preparedArtifact: promotion.preparedArtifactFromCandidate(candidate), publicBuildSettings: settings, ...scoped });
   await preparation.recordPreparedPublicWorkerCandidate({ firestore: db, preparationId, candidate, ...scoped });
   await db.doc(`cmsPreviewPublicContexts/${reservation.buildBatchId}`).set({ schemaVersion: 1,
     buildBatchId: reservation.buildBatchId, artifactReceiptDigest: candidate.artifactReceiptDigest, sha256: "e".repeat(64),
     byteLength: 100, key: `public-context/${reservation.buildBatchId}/${"e".repeat(64)}.json` });
   const input = { firestore: db, preparationId, commitSha, inputSha256: "f".repeat(64),
     artifactCheckpointDigest: "a".repeat(64), preparedArtifact: promotion.preparedArtifactFromCandidate(candidate),
-    mediaManifest, publicBuildSettings, ...scoped };
+    mediaManifest, publicBuildSettings: settings, ...scoped };
   const proof = await promotion.sealPreparedPublicRelease(input);
   return { reservation, candidate, proof, input };
 }
