@@ -9,6 +9,8 @@ const { contentRows } = require("./source-video-replacement-publication");
 const { publicCopies, scheduledVideoAssetIds } = require("./public-video-references");
 const { AUDIT_COLLECTIONS, adminLogEntry } = require("./audit");
 const { budgetRefs } = require("./video-transcript-paid-budget");
+const { transcriptId } = require("./video-transcript-contract");
+const byok = require("./video-transcript-byok-job");
 
 const LEASE_MS = 15 * 60_000;
 const DEFERRAL_MS = 15 * 60_000;
@@ -26,6 +28,43 @@ const settledLocalFailure = row => {
     Boolean(job.localAttemptId) && receipt.attemptId === job.localAttemptId &&
     Boolean(job.workerId) && receipt.workerId === job.workerId;
 };
+
+function matchesRetiredTranscript(row, version) {
+  const job = row.data();
+  return job.id === row.id && job.assetId === version.assetId && job.sourceId === version.sourceId &&
+    job.sourceSizeBytes === version.binary.sizeBytes && keyMatches(job, version.binary);
+}
+
+function unsettledPaidTranscript(row, version) {
+  const job = row.data();
+  if (!["stale", "cancelled"].includes(job.phase) || !(job.startIntentAt || job.submissionIntentAt)) return false;
+  if (job.provider !== byok.PROVIDER) return job.audioProviderTerminal !== true;
+  if (job.active !== false || !job.submissionIntentAt || !matchesRetiredTranscript(row, version)) return true;
+  try {
+    byok.validJob(job, row.id);
+    return !byok.completedResponse(job);
+  } catch { return true; }
+}
+
+function mayReadAmazonTranscript(row, version, now) {
+  const job = row.data();
+  return job.active === false && (job.provider === undefined || job.provider === "amazon-transcribe") &&
+    Number.isFinite(Date.parse(job.startIntentAt)) && !job.submissionIntentAt && !(job.leaseUntil > now) &&
+    matchesRetiredTranscript(row, version) &&
+    transcriptId({ ...version.binary, sourceId: version.sourceId }, job.sourceBucket, job) === row.id;
+}
+
+async function settleAmazonTranscript(firestore, row, readAmazonStatus) {
+  const status = await readAmazonStatus(row.data());
+  if (status !== "COMPLETED" && status !== "FAILED") return;
+  await firestore.runTransaction(async tx => {
+    const current = await tx.get(row.ref);
+    // A fresh snapshot prevents an old provider response from settling a changed job.
+    if (current.updateTime && row.updateTime?.isEqual(current.updateTime)) {
+      tx.update(row.ref, { audioProviderTerminal: true });
+    }
+  });
+}
 
 async function relatedRows(tx, db, version) {
   const { assetId, binary } = version;
@@ -83,13 +122,9 @@ async function claimVideoVersionCleanup({ firestore, queueRef, now = Date.now(),
     // A stale worker cannot recreate bytes after this deletion. Its existing owner
     // releases admission/leases through the ordinary stale-job path first.
     const writers = [...related.previews, ...related.transcripts, ...related.alignments, ...related.privateCopies, ...related.preparations];
-    const unsettledTranscript = related.transcripts.some(row => {
-      const job = row.data();
-      return ["stale", "cancelled"].includes(job.phase) &&
-        (job.startIntentAt || job.submissionIntentAt) && job.audioProviderTerminal !== true;
-    });
+    const unsettledTranscripts = related.transcripts.filter(row => unsettledPaidTranscript(row, version));
     const settled = new Set(related.transcripts.filter(settledLocalFailure));
-    const repairRequired = unsettledTranscript || writers.some(row => !settled.has(row) && unresolvedWriter(row.data()));
+    const repairRequired = unsettledTranscripts.length > 0 || writers.some(row => !settled.has(row) && unresolvedWriter(row.data()));
     const writing = repairRequired || writers
       .some(row => {
         const job = row.data(), phase = job.phase ?? job.state;
@@ -98,7 +133,9 @@ async function claimVideoVersionCleanup({ firestore, queueRef, now = Date.now(),
           !settled.has(row) && ["starting", "running", "needs_reconciliation"].includes(phase);
       });
     if (writing || urls.length > 0 && publicRecord?.operation?.expiresAt > now) {
-      return defer(repairRequired ? "writer_reconciliation_required" : "writer_or_public_copy");
+      const blocked = defer(repairRequired ? "writer_reconciliation_required" : "writer_or_public_copy");
+      const amazonTranscript = unsettledTranscripts.find(row => mayReadAmazonTranscript(row, version, now));
+      return amazonTranscript ? { ...blocked, amazonTranscript } : blocked;
     }
     const blocked = (await contentRows(firestore, tx)).some(row => {
       const content = row.data();
@@ -183,7 +220,7 @@ function createVideoVersionStorage(config, { s3, replica, readSource, privateSto
   };
 }
 
-async function cleanupVideoVersion({ firestore, queueRef, remove, now = Date.now(), log, dryRun = false }) {
+async function cleanupVideoVersion({ firestore, queueRef, remove, readAmazonStatus, now = Date.now(), log, dryRun = false }) {
   let version;
   try { version = await claimVideoVersionCleanup({ firestore, queueRef, now, dryRun }); }
   catch {
@@ -198,7 +235,15 @@ async function cleanupVideoVersion({ firestore, queueRef, remove, now = Date.now
     });
   }
   if (!version) return;
-  if (version.blocked) { log?.warn?.("Video version cleanup deferred", version); return version; }
+  if (version.blocked) {
+    const { amazonTranscript, ...blocked } = version;
+    if (!dryRun && amazonTranscript && readAmazonStatus) {
+      try { await settleAmazonTranscript(firestore, amazonTranscript, readAmazonStatus); }
+      catch { log?.warn?.("Retired video transcript settlement deferred", { jobId: amazonTranscript.id }); }
+    }
+    log?.warn?.("Video version cleanup deferred", blocked);
+    return blocked;
+  }
   if (version.wouldDelete) { log?.info?.("Video version cleanup dry run", version); return version; }
   try {
     await remove(version);

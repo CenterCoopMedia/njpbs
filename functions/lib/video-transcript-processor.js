@@ -41,6 +41,7 @@ function inputKey(job) {
   }
   return key;
 }
+const mediaUri = (bucket, job) => `s3://${bucket}/${inputKey(job)}`;
 const resultKey = (job, format = "json") => `transcripts/results/${job.id}.${format}`;
 const editedResultKey = (job, format) => `transcripts/results/${job.id}.edited.${format}`;
 const alignedResultKey = (job, requestId, format) =>
@@ -91,6 +92,32 @@ function alignmentAudioExpired(job, at) {
   return !Number.isFinite(started) || started > at || at - started > 86400000;
 }
 
+// Transcribe accepts m4a at start but reports the job's MediaFormat as mp4 (observed October 18, 2026).
+const PREPARED_AUDIO_FORMATS = new Set(["m4a", "mp4"]);
+function createAmazonTranscriptReader(config, transcribe = new TranscribeClient({
+  region: config.region, maxAttempts: 1,
+  credentials: createAwsRoleCredentialProvider({ roleArn: config.controlRoleArn, audience: config.audience, region: config.region }),
+  requestHandler: { connectionTimeout: 5000, requestTimeout: 15000, throwOnRequestTimeout: true },
+})) {
+  return async job => {
+    let provider;
+    try {
+      provider = (await transcribe.send(new GetTranscriptionJobCommand({ TranscriptionJobName: jobName(job) }))).TranscriptionJob;
+    } catch (error) {
+      // Transcribe also uses BadRequestException when the exact job is missing.
+      if (error.name === "BadRequestException" && /couldn't be found|cannot be found|not found|does not exist/i.test(error.message ?? "")) return null;
+      throw error;
+    }
+    if (provider && (provider.TranscriptionJobName !== jobName(job) || provider.LanguageCode !== job.languageCode ||
+        provider.Media?.MediaFileUri !== mediaUri(config.bucket, job) || provider.Settings?.ShowSpeakerLabels !== true ||
+        provider.Settings?.MaxSpeakerLabels !== job.maxSpeakers ||
+        (job.providerInputRevision === "m4a-v1" && !PREPARED_AUDIO_FORMATS.has(provider.MediaFormat)))) {
+      throw new Error("transcript_job_identity_invalid");
+    }
+    return provider;
+  };
+}
+
 function createVideoTranscriptProcessor(config, dependencies = {}) {
   const credentials = dependencies.credentials ?? createAwsRoleCredentialProvider({
     roleArn: config.controlRoleArn, audience: config.audience, region: config.region,
@@ -107,27 +134,7 @@ function createVideoTranscriptProcessor(config, dependencies = {}) {
     firestore, s3, config, storage: require("./private-video-runtime").privateVideoStorage,
   });
   const location = (Key) => ({ Bucket: config.bucket, Key, ExpectedBucketOwner: config.accountId });
-  const mediaUri = (job) => `s3://${config.bucket}/${inputKey(job)}`;
-
-  async function existingJob(job) {
-    try {
-      return (await transcribe.send(new GetTranscriptionJobCommand({ TranscriptionJobName: jobName(job) }))).TranscriptionJob;
-    } catch (error) {
-      // Transcribe uses BadRequestException for a job name that does not exist.
-      // Restrict this to the documented missing-job text; other 400s must fail.
-      if (error.name === "BadRequestException" && /couldn't be found|cannot be found|not found|does not exist/i.test(error.message ?? "")) return null;
-      throw error;
-    }
-  }
-
-  // Transcribe accepts m4a at start but reports the job's MediaFormat as mp4 (observed October 18, 2026).
-  const PREPARED_AUDIO_FORMATS = new Set(["m4a", "mp4"]);
-  function validateProviderJob(job, provider) {
-    if (provider.TranscriptionJobName !== jobName(job) || provider.LanguageCode !== job.languageCode ||
-        provider.Media?.MediaFileUri !== mediaUri(job) || provider.Settings?.ShowSpeakerLabels !== true ||
-        provider.Settings?.MaxSpeakerLabels !== job.maxSpeakers ||
-        (job.providerInputRevision === "m4a-v1" && !PREPARED_AUDIO_FORMATS.has(provider.MediaFormat))) throw new Error("transcript_job_identity_invalid");
-  }
+  const existingJob = createAmazonTranscriptReader(config, transcribe);
 
   async function storeResult(job, save) {
     if (!await save({ processingStage: "finalizing", errorCode: null })) return;
@@ -191,7 +198,6 @@ function createVideoTranscriptProcessor(config, dependencies = {}) {
     if (!job || (job.provider !== undefined && job.provider !== "amazon-transcribe")) return;
     const provider = await existingJob(job);
     if (provider) {
-      validateProviderJob(job, provider);
       if (provider.TranscriptionJobStatus === "COMPLETED") {
         if (!await save({ audioProviderTerminal: true })) return;
         await deleteProviderAudio(job, save);
@@ -221,7 +227,7 @@ function createVideoTranscriptProcessor(config, dependencies = {}) {
     // SDK retries are disabled for Transcribe. A timeout is reconciled by GET.
     await transcribe.send(new StartTranscriptionJobCommand({
       TranscriptionJobName: jobName(job), LanguageCode: job.languageCode,
-      Media: { MediaFileUri: mediaUri(job) }, MediaFormat: job.providerInputRevision === "m4a-v1" ? "m4a" : "mp4",
+      Media: { MediaFileUri: mediaUri(config.bucket, job) }, MediaFormat: job.providerInputRevision === "m4a-v1" ? "m4a" : "mp4",
       Settings: { ShowSpeakerLabels: true, MaxSpeakerLabels: job.maxSpeakers },
       OutputBucketName: config.bucket, OutputKey: resultKey(job),
       JobExecutionSettings: { AllowDeferredExecution: true, DataAccessRoleArn: config.dataRoleArn },
@@ -461,5 +467,5 @@ function createVideoTranscriptProcessor(config, dependencies = {}) {
     prepareLocalInputs, cleanupAudio };
 }
 
-module.exports = { createVideoTranscriptProcessor, jobName, inputKey, resultKey, editedResultKey,
+module.exports = { createVideoTranscriptProcessor, createAmazonTranscriptReader, jobName, inputKey, resultKey, editedResultKey,
   alignedResultKey, selectedTranscriptOutputs, transcriptSegmentsVersion, boundedBody };

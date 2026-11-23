@@ -10,6 +10,8 @@ const { db } = require("./lib/firebase");
 const { makeHandler } = require("./source-media-uploads");
 const { runtimeRegistry, runtimeAwsConfig, FUNCTION_SERVICE_ACCOUNT } = require("./source-media");
 const { createAwsRoleCredentialProvider } = require("./lib/aws-workload-credentials");
+const { objectKeyWithinSource } = require("./lib/media-sources");
+const { createAmazonTranscriptReader } = require("./lib/video-transcript-processor");
 const { parseSourceMediaAsset, sourceMediaAssetDetail, ID_PATTERN, SourceMediaValidationError } = require("./lib/source-media-contract");
 const { REPLACEMENTS, PURGE_QUEUE, replacementRef, requestVideoRollback, promoteReplacement, failReplacementPromotion, sameBinary } = require("./lib/source-video-replacement");
 const { migrateVideoReferences } = require("./lib/source-video-replacement-publication");
@@ -184,9 +186,19 @@ function removeVersion() {
     publicStorage: () => require("./source-video-publication").defaultR2(),
     purge: urls => require("./source-video-publication").purgeVideoReplacementCopies(urls) });
 }
+function createRetiredTranscriptStatusReader() {
+  let read;
+  return async job => {
+    const config = require("./video-transcripts").transcriptConfig();
+    if (!config.enabled || !config.bucket || !config.controlRoleArn || config.source?.id !== job.sourceId ||
+        config.source?.bucket !== job.sourceBucket || !objectKeyWithinSource(config.source, job.sourceObjectKey)) return null;
+    read ??= createAmazonTranscriptReader(config);
+    return (await read(job))?.TranscriptionJobStatus;
+  };
+}
 const cleanupIsDryRun = () => videoReplacementRuntimeConfig().dryRun;
 async function processReplacements({ firestore = db, source = runtimeRegistry().get("video-library"),
-  remove, log = logger, now = Date.now(), dryRun = cleanupIsDryRun(), ...deps } = {}) {
+  remove, readAmazonStatus, log = logger, now = Date.now(), dryRun = cleanupIsDryRun(), ...deps } = {}) {
   if (!source) return;
   const collection = firestore.collection(REPLACEMENTS);
   const scan = firestore.doc("mediaSourceReplacementScans/tick");
@@ -213,7 +225,8 @@ async function processReplacements({ firestore = db, source = runtimeRegistry().
   }
   const cleanup = await firestore.collection(PURGE_QUEUE).where("expiresAt", "<=", now).limit(10).get();
   for (const row of cleanup.docs) {
-    try { await cleanupVideoVersion({ firestore, queueRef: row.ref, now, dryRun, remove: remove ?? (dryRun ? undefined : removeVersion()), log }); }
+    try { await cleanupVideoVersion({ firestore, queueRef: row.ref, now, dryRun, readAmazonStatus,
+      remove: remove ?? (dryRun ? undefined : removeVersion()), log }); }
     catch (error) {
       const code = CLEANUP_RETRY_CODES.has(error?.message) ? error.message : "video_cleanup_failed";
       log.warn("Video version cleanup will retry", { queueId: row.id, code });
@@ -225,7 +238,8 @@ const options = { region: "us-central1", serviceAccount: FUNCTION_SERVICE_ACCOUN
   memory: "512MiB", maxInstances: 1, concurrency: 1,
   secrets: [...WRITE_SECRETS, R2_ACCESS_KEY_ID, R2_SECRET_ACCESS_KEY,
     MEDIA_CACHE_PURGE_TOKEN] };
-const onSourceVideoReplacementTick = onSchedule({ ...options, schedule: "every 1 minutes", retryCount: 0 }, () => processReplacements());
+const onSourceVideoReplacementTick = onSchedule({ ...options, schedule: "every 1 minutes", retryCount: 0 },
+  () => processReplacements({ readAmazonStatus: createRetiredTranscriptStatusReader() }));
 module.exports = { cmsGetSourceVideoReplacement, cmsRollbackSourceVideoReplacement, onSourceVideoReplacementTick,
   getReplacement, parseReplacementRequest, preparePublicCopy, queueReplacementTranscript,
   processReplacement, processReplacements, removeVersion, cleanupIsDryRun };
