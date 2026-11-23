@@ -25,7 +25,7 @@ const { createAwsRoleCredentialProvider } = require("./lib/aws-workload-credenti
 const { adminLogEntry, AUDIT_COLLECTIONS } = require("./lib/audit");
 const { executionName, executionArn } = require("./lib/video-preview-processor");
 const { CLIP_JOBS, CLIP_TTL_MS, SOURCE_EXPORT_MAX_DURATION_SECONDS, problem, parseClipRequest, clipSettings,
-  OUTPUT_FRAME_RATES, EDITOR_FORMATS, jobScope, jobFormat, validateClipResolution, clipIdentity, sameClipSource, clipSummary,
+  OUTPUT_FRAME_RATES, EDITOR_FORMATS, jobScope, jobFormat, validateClipResolution, clipIdentity, sameClipSource, clipFileVersion, clipSummary,
   encodeClipHistoryCursor, validateClipOutput, validateClipRange } = require("./lib/video-clip-contract");
 const { createOriginalStorage } = require("./lib/source-originals");
 const { assertOriginalReadable, safeStorageDiagnostic } = require("./lib/source-original-state");
@@ -429,13 +429,20 @@ function clipHandler(action, deps = {}) {
         const clip = await (deps.cancelClip ?? cancelClip)(firestore, source, request, actor);
         res.status(200).json({ success: true, clip }); return;
       }
-      const result = action === "read" ? { access: await (deps.clipRead ?? clipRead)((deps.readConfig ?? runtimeAwsConfig)(), source, job) } : { clip: actorClipSummary(job, actor, asset) };
       if (action === "read") {
+        const fileVersion = clipFileVersion(job);
+        if (request.fileVersion !== undefined && request.fileVersion !== fileVersion) {
+          throw problem(409, "The clip changed; request it again");
+        }
+        const access = await (deps.clipRead ?? clipRead)((deps.readConfig ?? runtimeAwsConfig)(), source, job);
         const current = (await getClip(firestore, source, request)).job;
-        if (current.attemptId !== job.attemptId || clipSummary(current).state !== "ready") throw problem(409, "The clip changed; request it again");
+        if (current.attemptId !== job.attemptId || clipFileVersion(current) !== fileVersion || clipSummary(current).state !== "ready") {
+          throw problem(409, "The clip changed; request it again");
+        }
+        res.status(200).json({ success: true, access: { ...access, fileVersion } }); return;
       }
       res.status(200).json({ success: true,
-        ...(action === "get" ? { editorExportsEnabled: getEditorExportsEnabled() } : {}), ...result });
+        editorExportsEnabled: getEditorExportsEnabled(), clip: actorClipSummary(job, actor, asset) });
     } catch (error) {
       const status = Number.isInteger(error.status) ? error.status : 500;
       if (action === "register" && status >= 500) logger.warn("Clip registration failed", safeStorageDiagnostic(error));
