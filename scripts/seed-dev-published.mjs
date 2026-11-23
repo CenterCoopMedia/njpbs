@@ -580,17 +580,25 @@ function seedHashOf(data) {
   if (seedData.mediaDiscovery) seedData.mediaDiscovery = Object.fromEntries(Object.entries(seedData.mediaDiscovery).filter(([key]) => !['createdAtKey', 'updatedAtKey'].includes(key)));
   return digest(seedData);
 }
-// A refresh removes only withdrawn content: production withdrew it, so dev does
-// too. Shared rows (media, categories, sections, author rows) stay, because
-// dev-authored records may use them. A configuration-only manifest removes nothing.
-const REMOVABLE = /^(cmsPages|cmsPosts|cmsSettings)\//;
+// A refresh removes only withdrawn public records: production withdrew them, so
+// dev does too. Shared rows (media, categories, sections, private author rows and
+// Sponsor or Newsletter cards) stay, because dev-authored records may use them.
+// A configuration-only manifest removes nothing.
+const REMOVABLE = /^(cmsPages|cmsPosts|cmsSettings|cmsAuthorProfilesPublic)\//;
 async function trackedRemovals(transaction, firestore, manifest, records) {
   if (manifest.configurationOnly) return [];
   const paths = new Set(records.map(record => record.path));
   const tracked = await transaction.get(firestore.collection('devSeedRecords'));
-  return tracked.docs.map(doc => doc.data().path)
-    .filter(path => typeof path === 'string' && !paths.has(path) && REMOVABLE.test(path))
-    .sort((a, b) => a.localeCompare(b, 'en'));
+  const candidates = tracked.docs.map(doc => doc.data().path)
+    .filter(path => typeof path === 'string' && !paths.has(path) && REMOVABLE.test(path));
+  // Cards are stored with Posts; keep a seeded card whatever the source references.
+  const posts = candidates.filter(path => path.startsWith('cmsPosts/'));
+  const cards = new Set();
+  for (let offset = 0; offset < posts.length; offset += 100) {
+    const snapshots = await transaction.getAll(...posts.slice(offset, offset + 100).map(path => firestore.doc(path)));
+    snapshots.forEach(snapshot => { if (['sponsor', 'newsletter'].includes(snapshot.data()?.type)) cards.add(snapshot.ref.path); });
+  }
+  return candidates.filter(path => !cards.has(path)).sort((a, b) => a.localeCompare(b, 'en'));
 }
 const PUBLIC_RECORD = /^(cmsPosts|cmsPages|cmsSettings|cmsAuthorProfilesPublic|media_assets_public)\//;
 

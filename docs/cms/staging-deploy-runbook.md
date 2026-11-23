@@ -296,8 +296,8 @@ sh -c "$SEED_WRITER_COMMAND" | $SEED import $PAIR --manifest "$MANIFEST" | tee "
 ```
 
 The dry run is the plan. `restored` lists seeded records that dev changed or
-deleted; `removed` lists seeded Pages, Posts and settings the source no longer
-publishes. Each
+deleted; `removed` lists seeded Pages, Posts, settings and public author
+profiles the source no longer publishes. Each
 entry records the document and receipt hashes the dry run saw. Apply takes the
 plan from the same run and restores or removes a listed row only while both
 hashes still match.
@@ -360,8 +360,9 @@ commits. Without a plan it refuses a seeded record that dev edited
 or deleted and retains a seeded record the source withdrew. With a plan it
 restores or removes only the listed seed-written rows whose document and receipt
 still match the dry run; a seeded record changed after the dry run is refused.
-The refresh removes only withdrawn content records; seeded media, categories,
-sections and author rows stay, because dev-authored records may use them. Like
+The refresh removes only withdrawn public records (Pages, Posts, settings and
+public author profiles). Seeded media, categories, sections, private author rows
+and Sponsor or Newsletter cards stay, because dev-authored records may use them. Like
 the publication owners, apply advances the public context (and its withdrawal
 fence for a removal) when it changes public records, and advances the media
 discovery revision, clearing the cached active count, when it changes seeded

@@ -506,6 +506,16 @@ describe('isolated published-content seed', () => {
     expect((await dev.doc(`cmsAuthorProfilesPublic/${authorId}`).get()).data().photo.url).toBe(mediaUrl);
     expect((await dev.doc(`cmsAuthorProfiles/${authorId}`).get()).data().photo).toBeNull();
     expect((await dev.doc('cmsPosts/post-one').get()).data().published.metadata.credits[0].displayName).toBe('Public author');
+    // A withdrawn public profile leaves dev, as on production; the working profile stays.
+    await source.doc(`cmsAuthorProfilesPublic/${authorId}`).delete();
+    const withdrawn = await exportSeed();
+    expect(await refresh({ firestore: dev, manifest: withdrawn })).toMatchObject({ removed: at(`cmsAuthorProfilesPublic/${authorId}`) });
+    expect((await dev.doc(`cmsAuthorProfilesPublic/${authorId}`).get()).exists).toBe(false);
+    expect((await dev.doc(`cmsAuthorProfiles/${authorId}`).get()).exists).toBe(true);
+    expect((await dev.doc('cmsPosts/post-one').get()).data().published.metadata.credits[0]).toEqual({ kind: 'custom', name: 'Public author' });
+    expect((await verifyPublished({ firestore: dev, manifest: withdrawn })).verified).toBe(true);
+    await source.doc(`cmsAuthorProfilesPublic/${authorId}`).set({ authorId, slug: 'public-author', displayName: 'Public author',
+      jobTitle: 'Reporter', bio: 'Public biography', previousSlugs: [], photo: null, links: {}, publishedAt: when, snapshotVersion: 2 });
     const author = manifest.records.find(record => record.collection === 'cmsAuthorProfilesPublic').projection;
     const cutoffAt = Timestamp.fromDate(new Date(when));
     const receipt = createPublicArtifactInventoryReceipt({ reservation: { schemaVersion: 1, buildBatchId: 'build-1', generation: 42,
@@ -543,6 +553,12 @@ describe('isolated published-content seed', () => {
     ]));
     await importPublished({ firestore: dev, manifest, copy: await copied(manifest), apply: true });
     expect((await dev.doc('cmsPosts/sponsor-1').get()).data().name).toBe('Released sponsor');
+    // A card the source stops referencing stays: a dev-authored page may still use it.
+    await source.doc('cmsPages/contact').update({ 'published.blocks': [] });
+    const next = await exportSeed({ publication: live, context });
+    expect(await refresh({ firestore: dev, manifest: next })).toMatchObject({ deleted: 0, removed: [] });
+    expect((await dev.doc('cmsPosts/sponsor-1').get()).data().name).toBe('Released sponsor');
+    expect((await verifyPublished({ firestore: dev, manifest: next })).verified).toBe(true);
   });
   it('retains built-in navigation fallbacks and redacts mailto settings without breaking their schema', async () => {
     const values = structuredClone(DEFAULT_SITE_NAVIGATION);
