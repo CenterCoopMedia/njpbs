@@ -46,6 +46,12 @@ focus, spacing owners and phone bounds. Inspect before accepting the images;
 a passing updated screenshot does not establish usability. Keep evidence images
 outside the source repository; committed golden fixtures are the exception.
 
+For a stalled hosted visual shard, filter its log for `Admin visual progress`.
+The last line gives the runner stage, or the active test's file and line with
+the browser or hook phase. If the log ends after before hooks finish, inspect
+the identified test body and worker logs. Use the failure trace when the shard
+retains one.
+
 Real media fonts require separate byte, MIME, CORS, CSP and desktop/phone reader
 verification. PDFs read the committed Public Sans files. Existing social-art
 PNGs remain published assets; the unused source generator has been removed.

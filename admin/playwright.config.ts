@@ -28,7 +28,9 @@ export default defineConfig({
   fullyParallel: false,
   forbidOnly: !!process.env.CI,
   retries: 0,
-  reporter: process.env.CI ? [["github"], ["list"]] : [["list"]],
+  reporter: process.env.CI
+    ? [["github"], ["list"], ["./tests/visual-progress-reporter.ts"]]
+    : [["list"]],
   timeout: 60_000,
   expect: {
     toHaveScreenshot: {
