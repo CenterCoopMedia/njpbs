@@ -12,6 +12,16 @@ const permalink = "https://archive.example.org/stories/harbor/";
 const mediaByUrl = new Map([["https://archive.example.org/uploads/harbor.jpg", "harbor_asset"]]);
 const fixture = (name: string) => readFileSync(new URL(`../fixtures/wordpress-archive/${name}.html`, import.meta.url), "utf8");
 const convert = (html: string) => convertWordPressStory({ html, sourceRef, permalink, mediaByUrl });
+const schema = getSchema(richTextExtensions());
+
+function checkEditableBlocks(blocks: unknown) {
+  const parsed = parseBlocks(blocks);
+  if (!parsed.ok) throw new Error(parsed.error);
+  for (const block of parsed.blocks) {
+    if (block.type === "prose") schema.nodeFromJSON(block.data.content).check();
+  }
+  return parsed.blocks;
+}
 
 it("produces editable story blocks and renders media, captions and corrections in order", () => {
   const story = convert(fixture("common"));
@@ -20,15 +30,7 @@ it("produces editable story blocks and renders media, captions and corrections i
   expect(story.blocks.map(block => [block.type, block.order])).toEqual([
     ["prose", 0], ["image", 1], ["data_table", 2], ["embed", 3], ["prose", 4],
   ]);
-  const parsed = parseBlocks(story.blocks);
-  expect(parsed.ok).toBe(true);
-  if (!parsed.ok) throw new Error(parsed.error);
-
-  const schema = getSchema(richTextExtensions());
-  for (const block of parsed.blocks) {
-    if (block.type === "prose") schema.nodeFromJSON(block.data.content).check();
-  }
-  const [intro, photo, table, video, correction] = parsed.blocks.map(block => renderBlock(block, {
+  const [intro, photo, table, video, correction] = checkEditableBlocks(story.blocks).map(block => renderBlock(block, {
     resolveAsset: assetId => assetId === "harbor_asset" ? { url: "https://media.example.org/harbor.jpg" } : null,
   }));
   expect(intro).toContain("<h2>Harbor restoration</h2>");
@@ -51,21 +53,22 @@ it("reports lossy or unsupported source regions while keeping safe text and link
   expect(report).toMatchObject({ sourceRef, status: "manual_review" });
   expect(report.issues.map(issue => issue.code)).toEqual(expect.arrayContaining([
     "heading_level", "missing_media", "unsupported_embed", "unsafe_link", "malformed_html",
-    "interactive_markup", "shortcode", "dynamic_block", "unsupported_block", "unsupported_table",
+    "interactive_markup", "hidden_markup", "code_formatting", "shortcode",
+    "dynamic_block", "unsupported_block", "unsupported_table",
   ]));
   const unsupported = report.issues.find(issue => issue.code === "unsupported_block")!;
   expect(html.slice(unsupported.start, unsupported.end)).toMatch(/^<!-- wp:example\//);
   expect(JSON.stringify(report)).not.toMatch(/private-content|https:|A recovered paragraph|Archive desk/);
-  const parsed = parseBlocks(blocks);
-  expect(parsed.ok).toBe(true);
-  if (!parsed.ok) throw new Error(parsed.error);
-  const rendered = parsed.blocks.map(block => renderBlock(block)).join("");
-  expect(rendered).toContain("<p>Opening from a classic story.</p><p>Next paragraph with [Note] and [[gallery]].");
+  const rendered = checkEditableBlocks(blocks).map(block => renderBlock(block)).join("");
+  expect(rendered).toContain("<p>Opening from a classic story.<br><em>A line from City Hall.</em></p>");
+  expect(rendered).toContain("<p>Next paragraph with [Note] and [gallery].</p>");
   expect(rendered).toMatch(/<p>A recovered paragraph<\/p><p>Later paragraph<\/p>.*<h3>Deeper heading<\/h3>/s);
   expect(rendered).toContain('<a href="https://archive.example.org/credits/">Archive desk</a>');
   expect(rendered).toContain("<p>Link label survives</p>");
+  expect(rendered).toContain('<strong><a href="https://archive.example.org/formula/">the formula</a></strong>');
+  expect(rendered).toContain('<a href="https://x.com/harbor/status/123456789">View post on X</a>');
   expect(rendered).toContain("<p>Last line of the story.</p>");
-  expect(rendered).not.toMatch(/<iframe|<script|<img|private-content|\[gallery ids/);
+  expect(rendered).not.toMatch(/<iframe|<script|<img|private-content|Watch video on X|\[gallery ids/);
 });
 
 it("distinguishes empty input from source that requires review before import", () => {

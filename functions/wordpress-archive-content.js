@@ -22,14 +22,24 @@ const children = node => node.childNodes ?? [];
 const attr = (node, name) => node.attrs?.find(item => item.name === name)?.value;
 const hasClass = (node, name) => attr(node, "class")?.split(/\s+/).includes(name);
 const textNode = (text, marks = []) => ({ type: "text", text, ...(marks.length ? { marks } : {}) });
-const isInline = node => node.type === "text" || node.type === "hardBreak";
+const isInline = node => ["text", "hardBreak", "classicBreak"].includes(node.type);
+const visibleInline = node => node.type === "hardBreak" || (node.type === "text" && node.text.trim());
+
+function isHidden(node) {
+  const style = attr(node, "style")?.replace(/\/\*[\s\S]*?(?:\*\/|$)/g, "") ?? "";
+  return attr(node, "hidden") !== undefined
+    || /(?:^|;)\s*(?:display\s*:\s*none|visibility\s*:\s*(?:hidden|collapse))\s*(?:!\s*important\s*)?(?=;|$)/i.test(style);
+}
 
 function paragraphs(pieces) {
   const result = [];
   let inline = [];
   function flush() {
-    if (inline.some(node => node.type === "hardBreak" || node.text.trim())) {
-      result.push({ type: "paragraph", content: inline });
+    const first = inline.findIndex(visibleInline);
+    if (first >= 0) {
+      const content = inline.slice(first, inline.findLastIndex(visibleInline) + 1)
+        .map(node => node.type === "classicBreak" ? { type: "hardBreak" } : node);
+      result.push({ type: "paragraph", content });
     }
     inline = [];
   }
@@ -126,24 +136,31 @@ function convertWordPressStory({ html, sourceRef, permalink, mediaByUrl = new Ma
   function textWithShortcodes(node, marks) {
     const value = node.value;
     const parts = [];
-    const parent = node.parentNode;
+    let parent = node.parentNode;
+    while (INLINE.has(parent.tagName)) parent = parent.parentNode;
     const classicFlow = parent.nodeName === "#document-fragment" || GROUPS.has(parent.tagName);
     function addText(text) {
       const chunks = classicFlow ? text.split(/\n[\t ]*\n+/) : [text];
       for (const [index, value] of chunks.entries()) {
         if (index) parts.push({ type: "paragraphBoundary" });
-        if (value) parts.push(textNode(value, marks));
+        const lines = classicFlow ? value.split("\n") : [value];
+        for (const [lineIndex, line] of lines.entries()) {
+          if (lineIndex) parts.push({ type: "classicBreak" });
+          if (line) parts.push(textNode(line, marks));
+        }
       }
     }
+    function recognized(name, args, closing) {
+      return (!args || /^[\s/]/.test(args)) && (closing || CORE_SHORTCODES.has(name.toLowerCase())
+        || args.includes("=") || args.endsWith("/") || closingShortcodes.has(name.toLowerCase()));
+    }
     let start = 0;
-    // Preserve ordinary bracketed prose and escaped shortcode literals.
-    for (const match of value.matchAll(/\[\[[^\[\]]*\]\]|\[(\/?)([a-z][\w:-]*)([^\[\]]*)\]/gi)) {
-      const [, closing, name, args] = match;
-      if (!name || (args && !/^[\s/]/.test(args))) continue;
-      if (!closing && !CORE_SHORTCODES.has(name.toLowerCase()) && !args.includes("=")
-        && !args.endsWith("/") && !closingShortcodes.has(name.toLowerCase())) continue;
-      flag("shortcode", node.sourceCodeLocation);
+    for (const match of value.matchAll(/\[\[([a-z][\w:-]*)([^\[\]]*)\]\]|\[(\/?)([a-z][\w:-]*)([^\[\]]*)\]/gi)) {
+      const [, escapedName, escapedArgs, closing, name, args] = match;
+      if (!recognized(escapedName ?? name, escapedArgs ?? args, closing)) continue;
       addText(value.slice(start, match.index));
+      if (escapedName) addText(match[0].slice(1, -1));
+      else flag("shortcode", node.sourceCodeLocation);
       start = match.index + match[0].length;
     }
     addText(value.slice(start));
@@ -166,12 +183,12 @@ function convertWordPressStory({ html, sourceRef, permalink, mediaByUrl = new Ma
   }
   function embed(node, raw) {
     const url = resolveHref(raw);
-    const playerUrl = url && (embedPlayer(url, false)?.src ?? xVideoLink(url));
-    if (!playerUrl || attr(node, "srcdoc") !== undefined) {
-      flag("unsupported_embed", node.sourceCodeLocation);
-      return [];
-    }
-    return [block("embed", { url: playerUrl }, node)];
+    const canUseUrl = url && attr(node, "srcdoc") === undefined;
+    const player = canUseUrl && embedPlayer(url, false);
+    if (player) return [block("embed", { url: player.src }, node)];
+    flag("unsupported_embed", node.sourceCodeLocation);
+    const post = canUseUrl && xVideoLink(url);
+    return post ? [{ type: "paragraph", content: [textNode("View post on X", [{ type: "link", attrs: { href: post } }])] }] : [];
   }
   function table(node) {
     const direct = children(node);
@@ -179,11 +196,15 @@ function convertWordPressStory({ html, sourceRef, permalink, mediaByUrl = new Ma
       .filter(child => child.tagName === "tr");
     const cells = rows.map(row => children(row).filter(cell => ["th", "td"].includes(cell.tagName)));
     const simple = cells[0]?.length && cells[0].every(cell => cell.tagName === "th")
+      && !direct.some(isHidden) && !rows.some(isHidden)
       && cells.every((row, index) => row.every(cell => (index === 0 || cell.tagName === "td")
-        && attr(cell, "rowspan") === undefined && attr(cell, "colspan") === undefined));
+        && !isHidden(cell) && attr(cell, "rowspan") === undefined && attr(cell, "colspan") === undefined));
     const caption = direct.find(child => child.tagName === "caption");
+    if (caption && children(caption).some(child => child.nodeName !== "#text")) {
+      flag("table_formatting", caption.sourceCodeLocation);
+    }
     const data = {
-      title: caption ? project(children(caption)) : "Table",
+      title: caption && simple ? project(children(caption)) : "Table",
       csv: simple ? cells.map(row => row.map(cell => {
         if (children(cell).some(child => child.nodeName !== "#text")) flag("table_formatting", cell.sourceCodeLocation);
         return `"${project(children(cell)).replaceAll('"', '""')}"`;
@@ -209,6 +230,7 @@ function convertWordPressStory({ html, sourceRef, permalink, mediaByUrl = new Ma
     const [{ caption, pieces }] = captions;
     if (captions.length === 1 && content.length === 1 && ["image", "embed", "data_table"].includes(only.blockType)
       && children(caption).every(child => child.nodeName === "#text")
+      && !isHidden(caption)
       && parts.indexOf(captions[0]) > parts.findIndex(part => part.pieces.includes(only))
       && !only.hasCaption) {
       const value = plainText(pieces).trim();
@@ -232,13 +254,24 @@ function convertWordPressStory({ html, sourceRef, permalink, mediaByUrl = new Ma
   function convert(node, marks = [], literal = false) {
     const location = node.sourceCodeLocation;
     const tag = node.tagName;
-    if (node.nodeName === "#text") return literal ? [textNode(node.value, marks)] : textWithShortcodes(node, marks);
+    if (node.nodeName === "#text") {
+      if (literal) return [textNode(node.value)];
+      if (marks.length > 1 && marks.some(mark => mark.type === "code")) {
+        flag("code_formatting", location);
+        marks = marks.filter(mark => mark.type !== "code");
+      }
+      return textWithShortcodes(node, marks);
+    }
     if (node.nodeName === "#comment") {
       comment(node);
       return [];
     }
     if (INTERACTIVE.has(tag)) {
       flag("interactive_markup", location);
+      return [];
+    }
+    if (isHidden(node)) {
+      flag("hidden_markup", location);
       return [];
     }
     if (tag === "br") return [{ type: "hardBreak" }];

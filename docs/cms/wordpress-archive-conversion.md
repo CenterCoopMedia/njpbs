@@ -10,16 +10,17 @@ publication dates, lifecycle, and revisions. The function performs no I/O.
 
 | WordPress input | Boardwalk output |
 | --- | --- |
-| Classic body text, paragraphs, headings, lists, quotes, inline credits and correction text | Editable prose with safe links, emphasis and code. Blank lines separate unwrapped classic paragraphs. Headings outside levels 2 and 3 use the nearest supported level and are flagged. |
+| Classic body text, paragraphs, headings, lists, quotes, inline credits and correction text | Editable prose with safe links, emphasis and code. Blank lines separate unwrapped classic paragraphs and single newlines become line breaks. Headings outside levels 2 and 3 use the nearest supported level and are flagged. Combined inline code and other marks retain the other marks and are flagged. |
 | Group, column and gallery wrappers with static HTML | Children in reading order. Column geometry and gallery styling are flattened. |
 | Inline or standalone image with a mapped URL | An image block with the source alt text, link and plain caption when present. Missing assets and alt text are flagged. Rich captions and linked credits remain in adjacent prose. |
 | Rectangular table with column headers and plain cells | An editable data table. Captions become titles and cell text is CSV-escaped. Spans, irregular rows and missing headers need manual reconstruction. Formatting inside a representable cell is flagged. |
-| Player iframe or Gutenberg embed URL recognized by the shared renderer | An embed block with the provider's rebuilt URL. Unapproved URLs, inline frame documents and raw audio or video files are flagged. |
-| Shortcodes, dynamic blocks and interactive markup | A review entry at the source location. Static fallback prose may be retained. Scripts, forms and unapproved frames are discarded. |
+| Player iframe or Gutenberg embed URL recognized by the shared renderer | An embed block with the provider's rebuilt URL. X posts become links and are flagged for review. Unapproved URLs, inline frame documents and raw audio or video files are flagged. |
+| Shortcodes, dynamic blocks and interactive markup | A review entry at the source location. Static fallback prose may be retained. Scripts, forms, hidden markup and unapproved frames are discarded. |
 
 The shortcode inventory recognizes core media and caption commands, paired
 plugin commands and tokens with attributes or a self-closing marker. Ordinary
-bracketed prose and escaped shortcode literals are preserved. Classic caption
+bracketed prose is preserved and escaped recognized shortcodes become literal
+single-bracket text. Classic caption
 shortcodes leave their image and readable caption in order for review. Query,
 latest-posts, feeds, navigation, synced patterns and other dynamic or unknown
 Gutenberg blocks get review entries. The converter never executes WordPress
