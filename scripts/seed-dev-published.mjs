@@ -582,11 +582,15 @@ function seedHashOf(data) {
 // A configuration-only manifest reconciles only the registries it carries.
 const inScope = (manifest, path) => !manifest.configurationOnly ||
   (/^(sections|mediaCategories)\//.test(path) && path !== 'mediaCategories/dev-seed');
+// Each planned removal keeps the receipt it was planned from.
 async function trackedRemovals(transaction, firestore, manifest, records) {
   const paths = new Set(records.map(record => record.path));
   const tracked = await transaction.get(firestore.collection('devSeedRecords'));
-  return tracked.docs.map(doc => doc.data().path).filter(path => typeof path === 'string' && !paths.has(path) && inScope(manifest, path)).sort();
+  return tracked.docs.map(doc => ({ path: doc.data().path, receipt: doc.data() }))
+    .filter(({ path }) => typeof path === 'string' && !paths.has(path) && inScope(manifest, path))
+    .sort((a, b) => a.path.localeCompare(b.path, 'en'));
 }
+const PUBLIC_RECORD = /^(cmsPosts|cmsPages|cmsSettings|cmsAuthorProfilesPublic|media_assets_public)\//;
 
 export async function importPublished({ firestore, manifest, copy, source = SOURCE, destination = DESTINATION, apply = false }) {
   assertPair(source, destination); assertDatabase(firestore, DESTINATION);
@@ -630,15 +634,17 @@ export async function importPublished({ firestore, manifest, copy, source = SOUR
       }
       changes.push({ ref, priorRef, record, data, seedHash });
     }
-    for (const path of removals) {
+    for (const { path, receipt } of removals) {
       const priorRef = firestore.doc(`devSeedRecords/${digest(path)}`);
       const prior = await transaction.get(priorRef);
       // A resumed refresh already removed this row.
-      if (!prior.exists || prior.data().path !== path) continue;
+      if (!prior.exists) continue;
+      // A concurrent refresh rewrote this row after it was planned; never delete its newer copy.
+      if (canonical(prior.data()) !== canonical(receipt)) fail(`Seed record changed during the refresh: ${path}; run the refresh again`);
       removed.push({ ref: firestore.doc(path), priorRef, path });
     }
-    if (write && [...changes.map(({ record }) => record.path), ...removed.map(({ path }) => path)]
-      .some(path => /^(cmsPosts|cmsPages|cmsSettings|cmsAuthorProfilesPublic|media_assets_public)\//.test(path))) {
+    // The preflight checks the whole plan, so a refused refresh writes nothing.
+    if ([...changes.map(({ record }) => record.path), ...removed.map(({ path }) => path)].some(path => PUBLIC_RECORD.test(path))) {
       const enrollment = await transaction.get(firestore.doc('system/publicReleaseChangeLog'));
       if (enrollment.exists && enrollment.data()?.enabled !== false) fail('Published seeding refuses an enrolled public change log; use its publication owners');
     }
@@ -660,11 +666,11 @@ export async function importPublished({ firestore, manifest, copy, source = SOUR
   const preflight = await run(records, removals, false);
   if (!apply) return preflight;
   const result = { ...preflight, applied: true, changed: 0, unchanged: 0, deleted: 0, restored: [], removed: [] };
-  const items = [...records.map(record => ({ record })), ...removals.map(path => ({ path }))];
+  const items = [...records.map(record => ({ record })), ...removals.map(removal => ({ removal }))];
   // The empty seed still initializes the fresh coordinator.
   for (let offset = 0; offset < Math.max(1, items.length); offset += 100) {
     const group = items.slice(offset, offset + 100);
-    const batch = await run(group.filter(item => item.record).map(item => item.record), group.filter(item => item.path).map(item => item.path), true);
+    const batch = await run(group.filter(item => item.record).map(item => item.record), group.filter(item => item.removal).map(item => item.removal), true);
     result.changed += batch.changed; result.unchanged += batch.unchanged; result.deleted += batch.deleted;
     result.restored.push(...batch.restored); result.removed.push(...batch.removed);
   }
@@ -680,12 +686,16 @@ export async function verifyPublished({ firestore, manifest, source = SOURCE, de
     const differ = [];
     for (let offset = 0; offset < records.length; offset += 100) {
       const group = records.slice(offset, offset + 100);
-      const snapshots = await transaction.getAll(...group.map(record => firestore.doc(record.path)));
+      const snapshots = await transaction.getAll(...group.flatMap(record => [firestore.doc(record.path), firestore.doc(`devSeedRecords/${digest(record.path)}`)]));
       group.forEach((record, index) => {
-        if (!snapshots[index].exists || seedHashOf(snapshots[index].data()) !== seedHashOf(record.data)) differ.push(record.path);
+        const [current, prior] = snapshots.slice(index * 2, index * 2 + 2);
+        // A matching receipt is what lets the next refresh treat this row as seeded.
+        if (!current.exists || seedHashOf(current.data()) !== seedHashOf(record.data) || !prior.exists ||
+            prior.data().path !== record.path || prior.data().recordHash !== digest(current.data()) ||
+            prior.data().seedHash !== seedHashOf(record.data)) differ.push(record.path);
       });
     }
-    const extra = await trackedRemovals(transaction, firestore, manifest, records);
+    const extra = (await trackedRemovals(transaction, firestore, manifest, records)).map(({ path }) => path);
     if (differ.length || extra.length) {
       fail(`Dev does not match source snapshot ${manifest.hash}: ${differ.length} differ, ${extra.length} extra (first: ${[...differ, ...extra][0]})`);
     }

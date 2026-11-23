@@ -266,24 +266,34 @@ storage authority. Never substitute an administrator credential.
 ### Refresh dev before a rehearsal
 
 Run from a fresh clone at the source SHA, after the root and `site` installs and
-`npm run functions:build`, on a4000 or Legion (credentials through
-`ssh houseofjawn "~/.claude/pass-get ..."`; on landofjawn use `pass show`):
+`npm run functions:build`. `SEED_READER_COMMAND` and `SEED_WRITER_COMMAND` are
+operator-supplied commands that stream the production reader and dev writer
+service-account JSON to stdout at use time.
+
+Plan (read-only on both projects):
 
 ```bash
 set -euo pipefail
 STATE=$(mktemp -d)   # owner-only; keep it for the rehearsal record
 SHA=$(git rev-parse HEAD)
-SEED="/usr/bin/node --experimental-strip-types --no-warnings scripts/seed-dev-published.mjs"
+SEED="node --experimental-strip-types --no-warnings scripts/seed-dev-published.mjs"
 PAIR="--source njpbs-site --destination njpbs-site-dev"
 # The code-context receipt names the generation the production pointer serves.
 curl -fsS 'https://njpbs.org/_publication.json?cms-context=code' > "$STATE/publication.json"
-ssh houseofjawn "~/.claude/pass-get claude/firebase/njpbs-site-prod-cms-reader" |
+sh -c "$SEED_READER_COMMAND" |
   $SEED export $PAIR --source-sha "$SHA" --publication "$STATE/publication.json" --output "$STATE/manifests" | tee "$STATE/export.json"
-MANIFEST=$(/usr/bin/node -e 'console.log(JSON.parse(require("fs").readFileSync(process.argv[1],"utf8")).path)' "$STATE/export.json")
+MANIFEST=$(node -e 'console.log(JSON.parse(require("fs").readFileSync(process.argv[1],"utf8")).path)' "$STATE/export.json")
 $SEED validate $PAIR --manifest "$MANIFEST"
-ssh houseofjawn "~/.claude/pass-get claude/firebase/njpbs-site-dev/seed-writer" | $SEED import $PAIR --manifest "$MANIFEST"
-ssh houseofjawn "~/.claude/pass-get claude/firebase/njpbs-site-dev/seed-writer" | $SEED import $PAIR --manifest "$MANIFEST" --apply
-ssh houseofjawn "~/.claude/pass-get claude/firebase/njpbs-site-dev/seed-writer" | $SEED verify $PAIR --manifest "$MANIFEST"
+sh -c "$SEED_WRITER_COMMAND" | $SEED import $PAIR --manifest "$MANIFEST" | tee "$STATE/plan.json"
+```
+
+Read `restored` and `removed` in `plan.json` before you apply. `restored` lists
+seeded records that dev changed or deleted; `removed` lists seeded records the
+source no longer publishes. Then apply and verify, in the same shell:
+
+```bash
+sh -c "$SEED_WRITER_COMMAND" | $SEED import $PAIR --manifest "$MANIFEST" --apply | tee "$STATE/apply.json"
+sh -c "$SEED_WRITER_COMMAND" | $SEED verify $PAIR --manifest "$MANIFEST" | tee "$STATE/verify.json"
 ```
 
 If the snapshot references a Sponsor or Newsletter card, export also needs

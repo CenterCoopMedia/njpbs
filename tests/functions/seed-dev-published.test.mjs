@@ -657,7 +657,7 @@ describe('isolated published-content seed', () => {
     await expect(verifyPublished({ firestore: dev, manifest: next })).rejects.toThrow(/0 differ, 4 extra/);
     // The withdrawn page was the only reference to its image, so both leave dev.
     expect(await importPublished({ firestore: dev, manifest: next, apply: true })).toMatchObject({ deleted: 4,
-      removed: ['cmsPages/contact', 'mediaCategories/dev-seed', 'media_assets/image-1', 'media_assets_public/image-1'] });
+      removed: ['cmsPages/contact', 'media_assets_public/image-1', 'media_assets/image-1', 'mediaCategories/dev-seed'] });
     expect((await dev.doc('cmsPages/contact').get()).exists).toBe(false);
     expect((await dev.doc('cmsPages/local-page').get()).data().title).toBe('Dev-only work');
     expect(await verifyPublished({ firestore: dev, manifest: next })).toMatchObject({ verified: true, manifestHash: next.hash });
@@ -665,6 +665,41 @@ describe('isolated published-content seed', () => {
     await dev.doc('cmsPages/contact').set({ title: 'Dev-authored contact page' });
     await expect(importPublished({ firestore: dev, manifest: await exportSeed(), apply: true })).rejects.toThrow('Dev-authored record collides with the source: cmsPages/contact');
     expect((await dev.doc('cmsPages/contact').get()).data().title).toBe('Dev-authored contact page');
+  });
+  it('never deletes a seeded record that a concurrent refresh rewrote after planning', async () => {
+    const manifest = await exportSeed(); const copy = await copied(manifest);
+    await importPublished({ firestore: dev, manifest, copy, apply: true });
+    await source.doc('cmsPages/contact').update({ publiclyVisible: false });
+    const next = await exportSeed();
+    const receipt = dev.doc(`devSeedRecords/${digest('cmsPages/contact')}`);
+    let planned = false;
+    // The first transaction plans the removals; another refresh then rewrites the row.
+    const racing = new Proxy(dev, { get(target, key) {
+      if (key === 'runTransaction') return async (body, options) => {
+        const result = await target.runTransaction(body, options);
+        if (!planned) { planned = true; await receipt.update({ manifestHash: 'concurrent-refresh' }); }
+        return result;
+      };
+      const value = target[key];
+      return typeof value === 'function' ? value.bind(target) : value;
+    } });
+    await expect(importPublished({ firestore: racing, manifest: next, apply: true })).rejects.toThrow('Seed record changed during the refresh: cmsPages/contact');
+    expect((await dev.doc('cmsPages/contact').get()).exists).toBe(true);
+    expect((await receipt.get()).exists).toBe(true);
+  });
+  it('fails verification when a seeded record has lost its tracking receipt', async () => {
+    const manifest = await exportSeed(); const copy = await copied(manifest);
+    await importPublished({ firestore: dev, manifest, copy, apply: true });
+    await dev.doc(`devSeedRecords/${digest('cmsPages/contact')}`).delete();
+    await expect(verifyPublished({ firestore: dev, manifest })).rejects.toThrow(/1 differ, 0 extra \(first: cmsPages\/contact\)/);
+  });
+  it('refuses an enrolled public change log in the dry run before any group is written', async () => {
+    const manifest = await exportSeed(); const copy = await copied(manifest);
+    await importPublished({ firestore: dev, manifest, copy, apply: true });
+    await source.doc('cmsPages/contact').update({ publiclyVisible: false });
+    await dev.doc('system/publicReleaseChangeLog').set({ enabled: true });
+    await expect(importPublished({ firestore: dev, manifest: await exportSeed() })).rejects.toThrow('enrolled public change log');
+    expect((await dev.doc('cmsPages/contact').get()).exists).toBe(true);
   });
   it('exports published election results approved before a later as-of time, without their approvals', async () => {
     const block = electionBlock(electionRace({ asOf: '2026-01-02T00:00:00.000Z' }));
