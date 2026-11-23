@@ -1,13 +1,32 @@
 import { createExecutionContext, env as workerEnv } from "cloudflare:test";
-import { afterEach, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { PublicContentEntrypoint, type CmsApiEnv } from "../src/index";
 import { releaseSelector } from "../../tests/helpers/private-public-release-pair.js";
+
+let now: number;
+// The rate-control runtime tests exercise the real Durable Object binding.
+const rateLimiters = {
+  getByName: () => ({
+    consume: async () => {
+      now += 10;
+      return { allowed: true, remaining: 1, retryAfterSeconds: 0 };
+    },
+  }),
+} as unknown as CmsApiEnv["RATE_LIMITERS"];
 const environment = (): CmsApiEnv => ({ ...workerEnv, PREVIEW_RENDERER: undefined, PUBLIC_RELEASE_READERS_ENABLED: "true", PUBLIC_RELEASE_RATE_CONTROLS_ENABLED: "true", CMS_EDGE_ORIGIN_SECRET: "fixture-edge",
   CMS_DEPLOYMENT_ENVIRONMENT: "development", FIREBASE_PROJECT_ID: "njpbs-site-dev", FUNCTIONS_ORIGIN: "https://us-central1-njpbs-site-dev.cloudfunctions.net",
-  ADMIN_ORIGIN: "https://dev-admin.example.org" });
+  ADMIN_ORIGIN: "https://dev-admin.example.org", RATE_LIMITERS: rateLimiters });
 const entry = (changes = {}) => new PublicContentEntrypoint(createExecutionContext(), { ...environment(), ...changes });
-afterEach(() => vi.unstubAllGlobals());
+beforeEach(() => {
+  now = 0;
+  vi.spyOn(performance, "now").mockImplementation(() => now);
+});
+afterEach(() => {
+  vi.restoreAllMocks();
+  vi.unstubAllGlobals();
+});
 it("uses the fixed private selector mode with a bounded authority timeout", async () => {
+  const timeout = vi.spyOn(AbortSignal, "timeout");
   vi.stubGlobal("fetch", async (url: string, options: RequestInit) => {
     expect(url).toBe(environment().FUNCTIONS_ORIGIN + "/cmsGetPublicPage");
     expect(options.redirect).toBe("manual"); expect(options.signal).toBeInstanceOf(AbortSignal);
@@ -15,6 +34,7 @@ it("uses the fixed private selector mode with a bounded authority timeout", asyn
     return Response.json({ environment: "development", selector: releaseSelector(), readStartedAt: Date.now() });
   });
   expect((await entry().getReleaseSelector(900)).selector).toEqual(releaseSelector());
+  expect(timeout).toHaveBeenCalledExactlyOnceWith(890);
 });
 it.each([{ PUBLIC_RELEASE_READERS_ENABLED: "false" }, { FIREBASE_PROJECT_ID: "foreign" }, { FUNCTIONS_ORIGIN: "https://foreign.invalid" }])(
   "refuses disabled or mixed identities before I/O %j", async changes => {
