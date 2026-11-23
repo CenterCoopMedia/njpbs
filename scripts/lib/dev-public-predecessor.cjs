@@ -72,12 +72,13 @@ function assertPredecessor(s, request) {
 
 async function initializeDevPublicPredecessor({ firestore, step, request: raw }) {
   const request = validate(firestore, step, raw);
+  const initializeRuntime = step === "runtime";
   await firestore.runTransaction(async tx => {
     const s = await state(firestore, tx, step, request);
     const pointer = assertPredecessor(s, request);
     // A second apply never recreates a deleted control or flips a later fence.
     if (s.saved.exists) refuse();
-    if (step === "runtime") {
+    if (initializeRuntime) {
       if (s.pins.exists) refuse();
       tx.create(firestore.doc(runtime.RUNTIME_DOCUMENT_PATH), request.oldRuntime);
     } else {
@@ -87,13 +88,13 @@ async function initializeDevPublicPredecessor({ firestore, step, request: raw })
     tx.create(firestore.doc(`${ROOT}/${step}`), receipt(step, request));
     tx.create(firestore.collection("admin_logs").doc(), require("../../functions/lib/audit").adminLogEntry({
       actorUid: "system:dev-public-predecessor",
-      action: step === "runtime"
+      action: initializeRuntime
         ? "public-release.dev-initialize-runtime"
         : "public-release.dev-initialize-media-lifecycle",
-      target: step === "runtime" ? runtime.RUNTIME_DOCUMENT_PATH : "system/publicDeployment",
-      before: step === "runtime" ? null : { mediaLifecycleReady: false },
+      target: initializeRuntime ? runtime.RUNTIME_DOCUMENT_PATH : "system/publicDeployment",
+      before: initializeRuntime ? null : { mediaLifecycleReady: false },
       after: { operationId: request.operationId, requestDigest: p.publicReleaseDigest(request),
-        ...(step === "runtime" ? { runtime: request.oldRuntime } : { mediaLifecycleReady: true }) } }));
+        ...(initializeRuntime ? { runtime: request.oldRuntime } : { mediaLifecycleReady: true }) } }));
   });
   return readDevPublicPredecessor({ firestore, step, request });
 }
