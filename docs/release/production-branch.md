@@ -1,10 +1,10 @@
 # Production branch promotion
 
-Status: **App route untested.** This document describes the proposed switch;
-committing these files applies no GitHub configuration. Activation requires
-separate approval. The promotion workflow must stay undispatched until then.
-Track the remaining activation work and live probes in
-[issue #57](https://github.com/CenterCoopMedia/njpbs/issues/57).
+Status: **active.** Production releases promote through this workflow (for
+example `Promote production a45b5368…` succeeded on Nov. 23, 2026). The
+`production` and `development` branches, both rulesets and both environments
+were read back on Nov. 23, 2026. Committing these files applies no GitHub
+configuration; settings changes need separate approval.
 The `production` branch selects a release by fast-forwarding to a green commit
 already on `main`. The only trigger for `promote.yml` is `workflow_dispatch`,
 with a required `sha` input of 40 lowercase hexadecimal characters. The dispatch
