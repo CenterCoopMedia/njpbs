@@ -1,0 +1,83 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>NJ PBS public reading studies</title>
+<style>
+  html {
+    font: 100% / 1.6 system-ui, sans-serif;
+    color: #161d2a;
+    background: #fff;
+  }
+  body { margin: 0; }
+  main {
+    box-sizing: border-box;
+    max-inline-size: 72ch;
+    margin-inline: auto;
+    padding: 1rem;
+  }
+  h1, h2, h3 { line-height: 1.2; }
+  a { color: #20518b; text-underline-offset: 0.16em; }
+  a:focus-visible, h2:focus, h3:focus {
+    outline: 3px solid #20518b;
+    outline-offset: 3px;
+  }
+  article { border-block-start: 1px solid #768298; margin-block: 2rem; }
+  :target { scroll-margin-block-start: 1rem; }
+  .jump-links {
+    padding: 0.75rem 1rem;
+    background: #edf2f9;
+    border-inline-start: 0.25rem solid #20518b;
+  }
+  .jump-links ul { margin-block: 0.25rem 0; padding-inline-start: 1.25rem; }
+  .jump-links a, .actions a { display: inline-block; padding-block: 0.25rem; }
+  .actions { display: flex; flex-wrap: wrap; gap: 0.5rem 1.25rem; }
+  @media print {
+    .jump-links, .study-index, .actions, .video-slot { display: none; }
+    main { max-inline-size: none; padding: 0; }
+    a { color: inherit; }
+  }
+</style>
+<main>
+  <h1>Public reading studies</h1>
+  <p>These examples use sample editorial copy to demonstrate two ways to move through a page.</p>
+  <nav class="study-index" aria-label="Studies">
+    <ul>
+      <li><a href="#reference">Reference page with section links</a></li>
+      <li><a href="#video">Video-first Post with a text path</a></li>
+    </ul>
+  </nav>
+
+  <article aria-labelledby="reference">
+    <h2 id="reference" tabindex="-1">Reference page with section links</h2>
+    <p>When a program guide changes, start with the revised dates and then check how to find the program or request assistance.</p>
+    <nav class="jump-links" aria-label="On this page">
+      <ul>
+        <li><a href="#dates">Revised dates</a></li>
+        <li><a href="#watch">How to watch</a></li>
+        <li><a href="#assistance">Request assistance</a></li>
+      </ul>
+    </nav>
+    <h3 id="dates" tabindex="-1">Revised dates</h3>
+    <p>The next episode is on Saturday. The online schedule shows the date and time for the next broadcast.</p>
+    <h3 id="watch" tabindex="-1">How to watch</h3>
+    <p>Check the program page for available episodes. The schedule lists upcoming broadcasts, and the program page lists episodes available to stream.</p>
+    <h3 id="assistance" tabindex="-1">Request assistance</h3>
+    <p>Contact the program team if you need help finding an episode. Include the program title and the date you saw in the schedule.</p>
+  </article>
+
+  <article aria-labelledby="video">
+    <h2 id="video" tabindex="-1">Video-first Post with a text path</h2>
+    <p class="actions">
+      <a href="#sample-player">Go to the video slot</a>
+      <a href="#synopsis">Read the summary</a>
+    </p>
+    <section class="video-slot" aria-labelledby="sample-player">
+      <h3 id="sample-player" tabindex="-1">Video slot</h3>
+      <p>The published Post would show its player here.</p>
+    </section>
+    <h3 id="synopsis" tabindex="-1">Summary</h3>
+    <p>The sample story reports how a library plans to move its after-school program while the building is closed for repairs.</p>
+  </article>
+</main>
+</html>
