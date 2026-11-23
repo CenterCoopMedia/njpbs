@@ -1,3 +1,4 @@
+import { createRequire } from "node:module";
 import path from "node:path";
 import {
   MODEL_ID,
@@ -36,7 +37,11 @@ export async function fetchSearchModel(input: string | URL, init?: RequestInit) 
 export async function loadSearchEncoder(
   offline = Boolean(process.env.PUBLIC_ARTIFACT_BUNDLE_PATH),
 ) {
-  const { pipeline, env, ModelFileNotFoundError } = await import("@huggingface/transformers");
+  // Astro can close the Vite config runner before astro:build:done runs.
+  // Use Node's loader so the encoder can still load on demand in that hook.
+  const { pipeline, env, ModelFileNotFoundError } = createRequire(import.meta.url)(
+    "@huggingface/transformers",
+  ) as typeof import("@huggingface/transformers");
   env.remotePathTemplate = `{model}/resolve/${MODEL_REVISION}/`;
   const originalFetch = env.fetch;
   const load = (cacheOnly: boolean) => {

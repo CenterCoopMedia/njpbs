@@ -9,7 +9,14 @@ const transformers = vi.hoisted(() => ({
   env: { cacheDir: "/model-cache", fetch: vi.fn(), allowRemoteModels: true },
   ModelFileNotFoundError: class extends Error {},
 }));
-vi.mock("@huggingface/transformers", () => transformers);
+vi.mock("node:module", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("node:module")>();
+  return {
+    ...actual,
+    createRequire: (url: string | URL) => (id: string) =>
+      id === "@huggingface/transformers" ? transformers : actual.createRequire(url)(id),
+  };
+});
 
 const modelUrl = "https://huggingface.co/example/resolve/pinned/config.json";
 const networkError = () =>
