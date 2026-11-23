@@ -176,20 +176,21 @@ const editorialMarkup = config?.presentation === "editorial"
   .home-hero__slide {
     grid-area: 1 / 1;
     min-width: 0;
-    opacity: 1;
-    visibility: visible;
-    transition:
-      opacity var(--motion-duration-standard) var(--motion-ease-standard),
-      visibility 0s linear 0s;
+    /* The global reduced-motion rule sets a near-zero transition duration. */
+    transition-property: none;
   }
+  /* Keep the tallest slide in the grid and show only the active story copy. */
   .home-hero__slide[hidden] {
     display: block;
-    opacity: 0;
     visibility: hidden;
     pointer-events: none;
-    transition:
-      opacity var(--motion-duration-standard) var(--motion-ease-standard),
-      visibility 0s linear var(--motion-duration-standard);
+  }
+  .home-hero__slide .home-hero__copy {
+    transition: transform var(--motion-duration-standard) var(--motion-ease-standard);
+  }
+  .home-hero__slide[hidden] .home-hero__copy {
+    transform: translateY(0.375rem);
+    transition: none;
   }
   .home-hero__item { height: 100%; color: var(--text); text-decoration: none; }
   .home-hero__item:focus-visible { outline: var(--focus-outline); outline-offset: var(--focus-offset-inset); }
@@ -219,9 +220,8 @@ const editorialMarkup = config?.presentation === "editorial"
   @media (prefers-reduced-motion: reduce) {
     .home-hero__background,
     .home-hero__background[hidden],
-    .home-hero__slide,
-    .home-hero__slide[hidden] { transition: none; }
+    .home-hero__slide .home-hero__copy { transition: none; }
   }
   :global(html[data-motion="off"]) .home-hero__background,
-  :global(html[data-motion="off"]) .home-hero__slide { transition: none; }
+  :global(html[data-motion="off"]) .home-hero__slide .home-hero__copy { transition: none; }
 </style>
