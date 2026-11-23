@@ -27,7 +27,7 @@ const store = {
 };
 let decision: PairServingDecision;
 const selection = () => ({ environment: "development" as const, selector: { ...releaseSelector(), contentHead: decision.contentHead }, readStartedAt: Date.now() });
-const getDecision = vi.fn(async (_selection: SelectorReceipt, _path: string) => decision as PairServingDecision | { kind: "reselect" });
+const getDecision = vi.fn<(selection: SelectorReceipt, path: string) => Promise<PairServingDecision | { kind: "reselect" }>>(async () => decision);
 const slot = () => createPublicReleaseSlot({ pair, workerVersionId: pair.publicWorker.versionId, store, getDecision });
 const request = (headers = {}, method = "GET") => new Request("https://dev-public.example.org/contact/", { method, headers });
 async function setup(staticPost = false, staticProof?: unknown, contentRedirect = false) {
