@@ -30,6 +30,7 @@ import { deleteApp, getApps, initializeApp } from "firebase-admin/app";
 import { getFirestore } from "firebase-admin/firestore";
 import storePkg from "../functions/lib/author-profile-store.js";
 import contractPkg from "../functions/lib/author-profile-contract.js";
+import { cmsTarget } from "./lib/cms-target.mjs";
 
 const { ensureAuthorIdentity, AUDIT_ACTIONS } = storePkg;
 const { AUTHOR_NAME_MAX } = contractPkg;
@@ -212,7 +213,7 @@ async function main() {
     }
   }
 
-  const app = getApps()[0] || initializeApp({ projectId: "njpbs-site" });
+  const app = getApps()[0] || initializeApp({ projectId: cmsTarget().projectId });
   try {
     const result = await backfillAuthorProfiles({
       firestore: getFirestore(app),

@@ -6,6 +6,7 @@ import { builtinModules, createRequire } from "node:module";
 import runtimeProcess from "node:process";
 import { deploymentInputFingerprint, readDeploymentManifest, renderCommittedDeploymentSource } from "../render-development-config.mjs";
 import { fileURLToPath } from "node:url";
+import { cmsTarget } from "./cms-target.mjs";
 import { addCommittedFunctionsContracts, contractInputs } from "./functions-contracts.mjs";
 
 const previewPair = () => createRequire(import.meta.url)("../../functions/lib/cms-preview-pair.js");
@@ -22,7 +23,8 @@ export const RECEIPT_COMPONENTS = Object.freeze(["functions", "renderer", "cmsAp
 export const RECEIPT_INPUT_PATHS = Object.freeze({
   functions: Object.freeze([
     ...contractInputs,
-    FUNCTIONS_CONFIGURATION_TABLE, "config/functions-deployment.json",
+    FUNCTIONS_CONFIGURATION_TABLE, "config/functions-deployment.json", "config/functions-deployment.development.json",
+    "scripts/lib/cms-target.mjs", "firebase.dev.json",
     "scripts/configure-cms-functions.mjs", "scripts/lib/functions-configuration.mjs",
     "scripts/lib/functions-secret-versions.mjs",
     "scripts/render-development-config.mjs",
@@ -1156,7 +1158,7 @@ export async function readConsistentRendererApplication(fetchFn, account, token,
     const body = await read(base, "Renderer container identity could not be read");
     const applications = Array.isArray(body?.result) ? body.result : body?.result?.applications;
     const matches = Array.isArray(applications)
-      ? applications.filter((entry) => entry?.name === (deps.applicationName ?? "njpbs-cms-preview-renderer"))
+      ? applications.filter((entry) => entry?.name === (deps.applicationName ?? cmsTarget().rendererWorker))
       : [];
     const application = matches[0];
     if (matches.length !== 1 || !application?.id) fail("Renderer container identity is invalid");
@@ -1230,7 +1232,7 @@ export async function collectLiveIdentities(component, deps = {}) {
       };
       return listPages(
         request,
-        "https://cloudfunctions.googleapis.com/v2/projects/njpbs-site/locations/us-central1/functions",
+        `https://cloudfunctions.googleapis.com/v2/projects/${cmsTarget().projectId}/locations/us-central1/functions`,
         "functions",
       );
     }))();
@@ -1254,6 +1256,7 @@ export async function collectLiveIdentities(component, deps = {}) {
     const token = deps.cloudflareToken ?? process.env.CLOUDFLARE_API_TOKEN ?? "";
     const account = deps.cloudflareAccount ?? process.env.CLOUDFLARE_ACCOUNT_ID ?? "";
     if (!token || !account) fail("Cloudflare credentials are required for renderer identities");
+    const { rendererWorker } = cmsTarget();
     const application = await readConsistentRendererApplication(fetchFn, account, token, {
       ...deps,
       rendererSha: data.rendererSha,
@@ -1265,7 +1268,7 @@ export async function collectLiveIdentities(component, deps = {}) {
     if (!image && !imageDigest) fail("Renderer container image identity is missing");
     const version = application.version ?? application.current_version ?? application.configuration?.version ?? null;
     const deploymentResponse = await fetchFn(
-      `https://api.cloudflare.com/client/v4/accounts/${account}/workers/scripts/njpbs-cms-preview-renderer/deployments`,
+      `https://api.cloudflare.com/client/v4/accounts/${account}/workers/scripts/${rendererWorker}/deployments`,
       {
         headers: { authorization: `Bearer ${token}` },
         redirect: "error",
@@ -1280,7 +1283,7 @@ export async function collectLiveIdentities(component, deps = {}) {
       fail("Renderer Worker deployment identity is invalid");
     }
     const scheduleResponse = await fetchFn(
-      `https://api.cloudflare.com/client/v4/accounts/${account}/workers/scripts/njpbs-cms-preview-renderer/schedules`,
+      `https://api.cloudflare.com/client/v4/accounts/${account}/workers/scripts/${rendererWorker}/schedules`,
       {
         headers: { authorization: `Bearer ${token}` },
         redirect: "error",
@@ -1308,12 +1311,12 @@ export async function collectLiveIdentities(component, deps = {}) {
       }),
       legacyIdentityFingerprint: stableObjectFingerprint({
         id: application.id,
-        name: application.name ?? "njpbs-cms-preview-renderer",
+        name: application.name ?? rendererWorker,
         image: legacyImage,
         imageDigest: legacyImageDigest,
         version,
       }),
-      workerScript: "njpbs-cms-preview-renderer",
+      workerScript: rendererWorker,
       workerDeploymentId,
       workerScheduleFingerprint: stableObjectFingerprint(crons),
     };
@@ -1324,9 +1327,10 @@ export async function collectLiveIdentities(component, deps = {}) {
   if (!token || !account) fail("Cloudflare credentials are required for CMS API identities");
   const { readCmsApiDeployment, CmsApiReadbackError, WorkerReadbackMismatch } = await import("./cloudflare-worker-readback.mjs");
   try {
-    return await readCmsApiDeployment("njpbs-cms-api", async () => {
+    const { cmsApiWorker } = cmsTarget();
+    return await readCmsApiDeployment(cmsApiWorker, async () => {
       const response = await fetchFn(
-        `https://api.cloudflare.com/client/v4/accounts/${account}/workers/scripts/njpbs-cms-api/deployments`,
+        `https://api.cloudflare.com/client/v4/accounts/${account}/workers/scripts/${cmsApiWorker}/deployments`,
         {
           headers: { authorization: `Bearer ${token}` },
           redirect: "error",

@@ -345,10 +345,22 @@ const CMS_ONLY_DEPLOY_PATHS = [
   "site/tests/cms-publisher-compatibility.test.ts", // Tests for this gate; the Site build does not read site/tests.
 ];
 
+// The dev public site is behind Access; its service token goes only to that exact origin.
+export function publisherReceiptHeaders(receiptUrl, env = process.env) {
+  const headers = { "cache-control": "no-cache" };
+  if (env.CMS_TARGET !== "development") return headers;
+  const devOrigin = env.CMS_DEV_PUBLIC_ORIGIN ?? "";
+  if (!/^https:\/\/dev[.-][a-z0-9.-]+$/.test(devOrigin) || new URL(receiptUrl).origin !== devOrigin ||
+      !env.CMS_DEV_ACCESS_CLIENT_ID || !env.CMS_DEV_ACCESS_CLIENT_SECRET) {
+    throw new Error("The development publisher receipt needs the dev origin and its Access service token");
+  }
+  return { ...headers, "CF-Access-Client-Id": env.CMS_DEV_ACCESS_CLIENT_ID, "CF-Access-Client-Secret": env.CMS_DEV_ACCESS_CLIENT_SECRET };
+}
+
 export async function verifyLivePublisher(repoRoot, receiptUrl) {
   const response = await fetch(receiptUrl, {
     cache: "no-store", redirect: "error", signal: AbortSignal.timeout(10_000),
-    headers: { "cache-control": "no-cache" },
+    headers: publisherReceiptHeaders(receiptUrl),
   });
   if (!response.ok) throw new Error(`Public publication receipt returned HTTP ${response.status}`);
   const receipt = await response.json();

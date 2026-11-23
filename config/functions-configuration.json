@@ -27,7 +27,7 @@
     "COST_LEDGER_CLOUDFLARE_ACCOUNT_ID": {"variable": "COST_LEDGER_CLOUDFLARE_ACCOUNT_ID", "default": "", "type": "string"},
     "COST_LEDGER_GITHUB_ACCOUNT": {"variable": "COST_LEDGER_GITHUB_ACCOUNT", "default": "", "type": "string"},
     "COST_LEDGER_GITHUB_ACCOUNT_TYPE": {"variable": "COST_LEDGER_GITHUB_ACCOUNT_TYPE", "default": "", "type": "string"},
-    "CMS_PUBLISH_TRANSPORT": {"default": "serializer", "type": "string", "pattern": "^serializer$"},
+    "CMS_PUBLISH_TRANSPORT": {"default": "serializer", "type": "string", "pattern": "^(?:serializer|github)$"},
     "CMS_WRITEBACK_CONFIGURED": {"variable": "CMS_WRITEBACK_CONFIGURED", "default": "", "type": "boolean"},
     "CMS_PREVIEW_TRANSPORT": {"variable": "CMS_PREVIEW_TRANSPORT", "default": "serializer", "type": "string"},
     "CMS_PREVIEW_SERIALIZER_READY": {"variable": "CMS_PREVIEW_SERIALIZER_READY", "default": "false", "type": "boolean"},

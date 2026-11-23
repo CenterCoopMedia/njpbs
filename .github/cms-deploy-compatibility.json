@@ -10,6 +10,9 @@
     },
     "cmsDevReleaseChecks": {
       "version": 1
+    },
+    "cmsReleaseTargets": {
+      "version": 1
     }
   }
 }

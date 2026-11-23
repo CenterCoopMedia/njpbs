@@ -4,7 +4,8 @@ const { onSchedule } = require("firebase-functions/v2/scheduler");
 const logger = require("firebase-functions/logger");
 const { CMS_EDGE_ORIGIN_SECRET, CMS_EDGE_HEADER } = require("./lib/cms-edge");
 
-const SAVE_URL = "https://us-central1-njpbs-site.cloudfunctions.net/cmsSaveContent";
+// A dev deployment warms its own save function (CMS_DEPLOYMENT_ENVIRONMENT, as in lib/cms-edge.js).
+const SAVE_URL = `https://us-central1-${process.env.CMS_DEPLOYMENT_ENVIRONMENT === "development" ? "njpbs-site-dev" : "njpbs-site"}.cloudfunctions.net/cmsSaveContent`;
 
 function createCmsSaveWarmupHandler({
   fetchImpl = fetch,

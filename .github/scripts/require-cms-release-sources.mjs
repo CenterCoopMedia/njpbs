@@ -53,7 +53,8 @@ export function requireCmsReleaseSources({ releaseSha, trustedWorkflowSha, relea
   const hasContractRecipe = execFileSync("git", ["ls-tree", "--name-only", releaseSha, "--", CMS_FUNCTION_CONTRACT_FILES[0]], {
     cwd: releaseRoot, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"],
   }).trim();
-  const releaseFiles = hasContractRecipe ? [...CMS_RELEASE_CHECK_FILES, ...CMS_FUNCTION_CONTRACT_FILES] : CMS_RELEASE_CHECK_FILES;
+  const releaseFiles = [...CMS_RELEASE_CHECK_FILES, ...(hasContractRecipe ? CMS_FUNCTION_CONTRACT_FILES : []),
+    ...(target === "development" ? ["scripts/lib/cms-target.mjs", "config/functions-deployment.development.json"] : [])];
   execFileSync("git", ["ls-files", "--error-unmatch", "--", ".github/cms-deploy-compatibility.json", "admin/package.json", ...releaseFiles], {
     cwd: releaseRoot, stdio: ["ignore", "pipe", "pipe"],
   });
@@ -61,6 +62,11 @@ export function requireCmsReleaseSources({ releaseSha, trustedWorkflowSha, relea
   const version = manifest.contracts?.cmsReleaseChecks?.version;
   if (version !== 1) {
     throw new Error("Release checks require a supported cmsReleaseChecks contract");
+  }
+  // Older sources name production Workers in their operators. The dev Cloudflare
+  // token can edit those Workers, so a dev run needs a source that selects its target.
+  if (target === "development" && manifest.contracts?.cmsReleaseTargets?.version !== 1) {
+    throw new Error("A development deploy requires a release source with the cmsReleaseTargets contract");
   }
   for (const path of releaseFiles) {
     if (!lstatSync(resolve(releaseRoot, path)).isFile()) throw new Error(`Release operator must be a committed file: ${path}`);

@@ -337,6 +337,8 @@ export function classifyPath(value) {
     path === "scripts/assert-r2-lifecycle.mjs" ||
     path === "config/functions-configuration.json" ||
     path === "config/functions-deployment.json" ||
+    path === "config/functions-deployment.development.json" ||
+    path === "scripts/lib/cms-target.mjs" ||
     path === "scripts/configure-cms-functions.mjs" ||
     path === "scripts/lib/functions-configuration.mjs" ||
     path === "scripts/lib/functions-secret-versions.mjs" ||

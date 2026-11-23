@@ -1,5 +1,6 @@
 "use strict";
 
+const { productionServiceAccount } = require("./lib/production-service-account");
 const { fetchAnalyticsJson } = require("./lib/analytics-http");
 const { fetchMailchimp } = require("./mailchimp-analytics");
 const { GoogleAuth } = require("google-auth-library");
@@ -572,7 +573,7 @@ const cmsGetAnalytics = cmsOnRequest(
   {
     cors: true,
     timeoutSeconds: 120,
-    serviceAccount: "cms-analytics@njpbs-site.iam.gserviceaccount.com",
+    serviceAccount: productionServiceAccount("cms-analytics"),
     secrets: [CF_TOKEN, MAILCHIMP_KEY],
   },
   createCmsGetAnalyticsHandler(),

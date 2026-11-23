@@ -772,7 +772,7 @@
         },
         {
           "name": "cmsSubmitBugReport",
-          "module": "functions/bug-report.js"
+          "module": "functions/dev-bug-report.js"
         },
         {
           "name": "cmsTransitionContent",

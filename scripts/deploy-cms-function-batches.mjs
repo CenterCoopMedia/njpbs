@@ -7,8 +7,9 @@ import { setTimeout as pause } from "node:timers/promises";
 import { stripVTControlCharacters } from "node:util";
 import { explicitCloudWakeDecision } from "./lib/cms-release-plan.mjs";
 import { assertNoFunctionDeletions, loadFunctionDeployManifest, readFunctionsDeployInventory, requestDeploymentInventory } from "./lib/functions-deploy-inventory.mjs";
+import { cmsTarget } from "./lib/cms-target.mjs";
 
-const PROJECT = "njpbs-site";
+const PROJECT = cmsTarget().projectId;
 const REGION = "us-central1";
 export { REGION as FUNCTION_DEPLOY_REGION };
 const CLOUD_WAKE_FUNCTIONS = ["onNoBuildCloudState", "onNoBuildCloudCandidate", "onNoBuildCloudRelease"];
@@ -26,15 +27,17 @@ export async function loadCloudWakeDeployment({
     throw new ComponentReceiptError("Cloud wake deployment inputs are required");
   }
   const decision = explicitCloudWakeDecision(env);
-  if (decision.environment !== "production") {
-    throw new ComponentReceiptError("The function batch runner deploys the production codebase only");
+  const target = cmsTarget(env);
+  if (decision.environment !== target.environment) {
+    throw new ComponentReceiptError("The function batch runner deploys the selected target's codebase only");
   }
   await prepare({ environment: decision.environment, enabled: decision.enabled });
-  const deployment = read({ env: { GCLOUD_PROJECT: PROJECT, GOOGLE_CLOUD_PROJECT: PROJECT } });
-  if (deployment.enabled !== decision.enabled || deployment.environment !== "production") {
+  const deployment = read({ env: { GCLOUD_PROJECT: target.projectId, GOOGLE_CLOUD_PROJECT: target.projectId } });
+  // The reader reports production for an unreadable artifact, so dev needs an exact match.
+  if (deployment.enabled !== decision.enabled || deployment.environment !== target.environment) {
     throw new ComponentReceiptError("Cloud wake discovery does not match the explicit decision");
   }
-  return { ...deployment, projectId: PROJECT };
+  return { ...deployment, projectId: target.projectId };
 }
 
 export function assertCloudWakeSettings(functions) {
@@ -155,7 +158,10 @@ export async function listPages(request, url, field) {
 function expiredFunctionFailures(output, names, project = PROJECT) {
   const summaries = [...output.matchAll(/^Functions deploy had errors with the following functions:\n((?:\t[^\n]+\n)+)/gm)];
   if (summaries.length !== 1) return [];
-  const failed = summaries[0][1].trimEnd().split("\n").map(line => line.match(/^\t([A-Za-z][A-Za-z0-9]*)\(us-central1\)$/)?.[1]);
+  // Firebase labels a non-default codebase's functions <codebase>:<name>(<region>).
+  const { codebase } = cmsTarget();
+  const label = new RegExp(`^\\t${codebase === "default" ? "" : `${codebase}:`}([A-Za-z][A-Za-z0-9]*)\\(us-central1\\)$`);
+  const failed = summaries[0][1].trimEnd().split("\n").map(line => line.match(label)?.[1]);
   if (failed.some(name => !names.includes(name)) || new Set(failed).size !== failed.length) return [];
 
   // Firebase prints unlabelled build errors, then a separate failed-name list.
@@ -178,8 +184,11 @@ function expiredFunctionFailures(output, names, project = PROJECT) {
 
 function runFunctionDeploy(names, launch, project) {
   return new Promise((resolve, reject) => {
+    const { firebaseConfig, codebase } = cmsTarget();
+    // Firebase reads functions:<name> as the default codebase; another codebase needs its name.
+    const selector = name => codebase === "default" ? `functions:${name}` : `functions:${codebase}:${name}`;
     const child = launch("npx", ["--no-install", "firebase", "deploy", "--project", project,
-      "--only", names.map((name) => `functions:${name}`).join(","), "--force", "--non-interactive"],
+      ...(firebaseConfig === "firebase.json" ? [] : ["--config", firebaseConfig]), "--only", names.map(selector).join(","), "--force", "--non-interactive"],
     { stdio: ["ignore", "pipe", "pipe"] });
     let output = "";
     const observe = (chunk, stream) => {
@@ -200,7 +209,7 @@ export async function deployBatch(names, launch = spawn, project = PROJECT, { ma
       names.some(name => !manifest.some(fn => fn.name === name))) throw new ComponentReceiptError("Function batch differs from the exact manifest");
   let pending = names;
   for (let attempt = 1; attempt <= 3; attempt++) {
-    assertNoFunctionDeletions(manifest, await readFunctionsDeployInventory(project, request), { projectId: project, codebase: "default", only: pending });
+    assertNoFunctionDeletions(manifest, await readFunctionsDeployInventory(project, request), { projectId: project, codebase: cmsTarget().codebase, only: pending });
     const { code, output } = await runFunctionDeploy(pending, launch, project);
     if (code === 0 && output.includes("Deploy complete!")) return;
     const failed = code !== 0 ? expiredFunctionFailures(output, pending, project) : [];

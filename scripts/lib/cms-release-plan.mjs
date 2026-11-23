@@ -1,6 +1,7 @@
 import { repositoryMatches } from "./repository-identity.mjs";
 import { ComponentReceiptError, assertLegacyPreviewProtocol, configurationFingerprint, fingerprintPaths, functionGraphsMatch, FUNCTION_GRAPH_VERSION } from "./cms-component-receipt.mjs";
 import { contractInputs } from "./functions-contracts.mjs";
+import { cmsTarget } from "./cms-target.mjs";
 
 export async function assertLegacyCmsWorkflow(firestore) {
   const row = await firestore.doc("system/cmsPreviewRuntime").get();
@@ -47,13 +48,13 @@ export async function deploymentSecretsUnchanged(env, matches) {
 // Retained exports outside the selected source (for example billingKillSwitch)
 // are not updated by a CMS release. Keep them in the provider identity, but do
 // not require them to carry this release's dotenv or secret bindings.
-export function functionsForRuntimeComparison(functions, graph) {
+export function functionsForRuntimeComparison(functions, graph, target = cmsTarget()) {
   const names = Object.keys(graph?.exports ?? {});
   if (!Array.isArray(functions) || !names.length || names.some(name => !/^[A-Za-z][A-Za-z0-9]*$/.test(name))) return null;
   const selected = names.map(name => functions.filter(fn =>
-    fn?.name === `projects/njpbs-site/locations/us-central1/functions/${name}`));
+    fn?.name === `projects/${target.projectId}/locations/us-central1/functions/${name}`));
   if (selected.some(matches => matches.length !== 1
-    || (matches[0].labels?.["firebase-functions-codebase"] ?? "default") !== "default"
+    || (matches[0].labels?.["firebase-functions-codebase"] ?? "default") !== target.codebase
     || matches[0].buildConfig?.entryPoint !== matches[0].name.split("/").at(-1))) return null;
   return selected.flat();
 }
@@ -63,7 +64,7 @@ export async function boundSecretVersionsCurrent(functions, describe, comparedVe
   return changes !== null && Object.values(changes).every(reasons => reasons.length === 0);
 }
 
-export async function boundSecretVersionChanges(functions, describe, comparedVersions = new Map()) {
+export async function boundSecretVersionChanges(functions, describe, comparedVersions = new Map(), project = cmsTarget().projectId) {
   if (!Array.isArray(functions) || !functions.length) return null;
   const versions = new Map();
   try {
@@ -74,13 +75,13 @@ export async function boundSecretVersionChanges(functions, describe, comparedVer
       changes[name] = [];
       for (const binding of fn?.serviceConfig?.secretEnvironmentVariables ?? []) {
         const { projectId, secret, version } = binding;
-        if (!/^(?:njpbs-site|[0-9]+)$/.test(projectId ?? "") || !/^[A-Za-z0-9_-]+$/.test(secret ?? "")
+        if (!(projectId === project || /^[0-9]+$/.test(projectId ?? "")) || !/^[A-Za-z0-9_-]+$/.test(secret ?? "")
           || !/^[1-9][0-9]*$/.test(version ?? "")) return null;
         const key = `${projectId}/${secret}`;
         if (!versions.has(key)) versions.set(key, Promise.resolve(describe(projectId, secret)));
         const latest = await versions.get(key);
-        const match = latest?.name?.match(/^projects\/(njpbs-site|[0-9]+)\/secrets\/([A-Za-z0-9_-]+)\/versions\/([1-9][0-9]*)$/);
-        if (latest?.state !== "ENABLED" || !match || (projectId !== "njpbs-site" && match[1] !== projectId)
+        const match = latest?.name?.match(/^projects\/([a-z0-9-]+)\/secrets\/([A-Za-z0-9_-]+)\/versions\/([1-9][0-9]*)$/);
+        if (latest?.state !== "ENABLED" || !match || (match[1] !== project && !/^[0-9]+$/.test(match[1])) || (projectId !== project && match[1] !== projectId)
           || match[2] !== secret || (comparedVersions.has(secret) && comparedVersions.get(secret) !== match[3])) return null;
         if (match[3] !== version) changes[name].push(`secret_version:${secret}`);
       }
@@ -183,6 +184,9 @@ export const RELEASE_CHECK_PATHS = Object.freeze([
   "scripts/lib/functions-configuration.mjs",
   "config/functions-configuration.json",
   "config/functions-deployment.json",
+  "config/functions-deployment.development.json",
+  "scripts/lib/cms-target.mjs",
+  "firebase.dev.json",
   "scripts/check-cms-secret-iam.mjs",
   "scripts/assert-r2-lifecycle.mjs",
   "scripts/retire-cms-functions.mjs", "scripts/lib/functions-retirement.mjs",
@@ -227,7 +231,7 @@ function rendererIdentityCoreMatches(left, right) {
 function validRendererV2(identity) {
   return identity.identityVersion === "2"
     && FINGERPRINT_PATTERN.test(identity.identityFingerprint ?? "")
-    && identity.workerScript === "njpbs-cms-preview-renderer"
+    && identity.workerScript === cmsTarget().rendererWorker
     && typeof identity.workerDeploymentId === "string"
     && identity.workerDeploymentId.length > 0
     && identity.workerDeploymentId.length <= 80

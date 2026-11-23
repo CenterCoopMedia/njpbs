@@ -811,7 +811,8 @@ if(process.env.CMS_BUG_REPORT_TELEGRAM_ADMIN_MAP)process.exit(8); require("node:
     expect(firestoreDeployStart).toBeGreaterThan(targetValidation);
     expect(functionDeployStart).toBeGreaterThan(firestoreDeployStart);
     const firestoreDeployInvocation = deployCommand.slice(firestoreDeployStart, functionDeployStart);
-    expect(firestoreDeployInvocation).toContain('--only "firestore:rules,firestore:indexes,storage"');
+    expect(firestoreDeployInvocation).toContain('--config "$CMS_TARGET_FIREBASE_CONFIG"');
+    expect(firestoreDeployInvocation).toContain('--only "$CMS_TARGET_FIREBASE_RULES"');
     expect(firestoreDeployInvocation).toContain("--non-interactive");
     expect(firestoreDeployInvocation).not.toContain("--force");
     expect(deployCommand).not.toContain("firebase functions:delete");
@@ -819,7 +820,7 @@ if(process.env.CMS_BUG_REPORT_TELEGRAM_ADMIN_MAP)process.exit(8); require("node:
     expect(workflow).toContain("node scripts/component-runner.mjs functions smoke");
     expect(workflow).not.toContain('if [ "$DEPLOY_SHA" != "$GATE_SHA" ]');
     expect(workflow).toContain(
-      "VITE_FUNCTIONS_BASE_URL: ${{ vars.VITE_FUNCTIONS_BASE_URL || secrets.VITE_FUNCTIONS_BASE_URL }}",
+      "VITE_FUNCTIONS_BASE_URL: ${{ vars.VITE_FUNCTIONS_BASE_URL || inputs.target != 'development' && secrets.VITE_FUNCTIONS_BASE_URL || '' }}",
     );
     expect(workflow).toContain(
       "VITE_CMS_PREVIEW_ENABLED: ${{ vars.VITE_CMS_PREVIEW_ENABLED || 'false' }}",
@@ -857,17 +858,17 @@ if(process.env.CMS_BUG_REPORT_TELEGRAM_ADMIN_MAP)process.exit(8); require("node:
     expect(CONFIGURATION_INPUTS).toHaveProperty("CMS_PREVIEW_SERIALIZER_READY");
     expect(parse(workflow).env.CMS_PUBLISH_TRANSPORT).toBe("serializer");
     expect(workflow).not.toContain("vars.CMS_PUBLISH_TRANSPORT");
-    expect(CONFIGURATION_INPUTS.CMS_PUBLISH_TRANSPORT).toMatchObject({ default: "serializer", pattern: "^serializer$" });
+    expect(CONFIGURATION_INPUTS.CMS_PUBLISH_TRANSPORT).toMatchObject({ default: "serializer", pattern: "^(?:serializer|github)$" });
     expect(workflow).toContain(
-      "CLOUDFLARE_API_TOKEN: ${{ secrets.CMS_ADMIN_ACCESS_API_TOKEN }}",
+      "CLOUDFLARE_API_TOKEN: ${{ inputs.target != 'development' && secrets.CMS_ADMIN_ACCESS_API_TOKEN || '' }}",
     );
     expect(parse(workflow).jobs.verify.needs).toBeUndefined();
     expect(parse(workflow).jobs["firebase-preflight"].needs).toEqual(["admin-build", "verify"]);
     expect(workflow).toContain("force_firebase:");
     expect(workflow).toContain("node scripts/component-runner.mjs functions plan");
     expect(workflow).toContain("node scripts/component-runner.mjs functions verify");
-    expect(workflow).toContain("CMS_FUNCTION_DEPLOY_TARGETS: ${{ vars.CMS_PREVIEW_CLOUD_ENABLED == 'true' && needs.firebase-preflight.outputs.preview_pause_late == 'true' && needs.firebase-preflight.outputs.functions_during_preview || needs.firebase-preflight.outputs.function_deploy_targets }}");
-    expect(workflow).toContain("CMS_PREVIEW_RENDERER_SHA: ${{ needs.firebase-preflight.outputs.renderer_target_sha }}");
+    expect(workflow).toContain("CMS_FUNCTION_DEPLOY_TARGETS: ${{ inputs.target != 'development' && vars.CMS_PREVIEW_CLOUD_ENABLED == 'true' && needs.firebase-preflight.outputs.preview_pause_late == 'true' && needs.firebase-preflight.outputs.functions_during_preview || needs.firebase-preflight.outputs.function_deploy_targets }}");
+    expect(workflow).toContain("CMS_PREVIEW_RENDERER_SHA: ${{ env.CMS_TARGET_RENDERER_SHA || needs.firebase-preflight.outputs.renderer_target_sha }}");
     expect(workflow.indexOf("Revalidate the selective release baseline before mutation"))
       .toBeLessThan(workflow.indexOf("Mark the Functions receipt in progress"));
     // The cms-api job plans its own Worker release, so a partial rerun recomputes
@@ -901,7 +902,7 @@ if(process.env.CMS_BUG_REPORT_TELEGRAM_ADMIN_MAP)process.exit(8); require("node:
     expect(confirm).toContain("component-runner.mjs cmsApi confirm");
     expect(workflow).not.toContain("cms_api_mutated");
     expect(workflow).toContain("Deploy Firestore and Storage rules without Functions");
-    expect(workflow).toContain("firestore:rules,firestore:indexes,storage");
+    expect(workflow).toContain("'firestore:rules,firestore:indexes,storage' }}");
     expect(workflow).toContain("component-runner.mjs functions confirm");
     expect(workflow).toContain("component-runner.mjs renderer confirm");
     expect(workflow).toContain("node scripts/component-runner.mjs functions plan");
@@ -987,7 +988,7 @@ if(process.env.CMS_BUG_REPORT_TELEGRAM_ADMIN_MAP)process.exit(8); require("node:
       "node scripts/check-admin-pages-security.mjs postdeploy",
     );
     expect(adminDeploy).toContain(
-      "if: hashFiles('admin/dist/guide-content/manifest.json') != ''",
+      "if: inputs.target != 'development' && hashFiles('admin/dist/guide-content/manifest.json') != ''",
     );
     expect(adminDeploy).toContain(
       "node scripts/check-admin-pages-security.mjs",
@@ -1027,10 +1028,10 @@ if(process.env.CMS_BUG_REPORT_TELEGRAM_ADMIN_MAP)process.exit(8); require("node:
     expect(firstMutation).toBeGreaterThan(appCheckGate);
     expect(cmsApi).toBeGreaterThan(firstMutation);
     expect(gate).toContain(
-      "FIREBASE_APP_ID: ${{ vars.VITE_FIREBASE_APP_ID || secrets.VITE_FIREBASE_APP_ID }}",
+      "FIREBASE_APP_ID: ${{ vars.VITE_FIREBASE_APP_ID || inputs.target != 'development' && secrets.VITE_FIREBASE_APP_ID || '' }}",
     );
     expect(gate).toContain(
-      "FIREBASE_APPCHECK_SITE_KEY: ${{ vars.VITE_FIREBASE_APPCHECK_SITE_KEY || secrets.VITE_FIREBASE_APPCHECK_SITE_KEY }}",
+      "FIREBASE_APPCHECK_SITE_KEY: ${{ vars.VITE_FIREBASE_APPCHECK_SITE_KEY || inputs.target != 'development' && secrets.VITE_FIREBASE_APPCHECK_SITE_KEY || '' }}",
     );
     expect(gate).toContain(
       "firebaseappcheck.googleapis.com/v1/projects/${project_number}/apps/${FIREBASE_APP_ID}/recaptchaEnterpriseConfig",
@@ -1070,7 +1071,7 @@ if(process.env.CMS_BUG_REPORT_TELEGRAM_ADMIN_MAP)process.exit(8); require("node:
     );
     expect(secretPreparation).not.toContain("if: needs.firebase-preflight");
     expect(secretPreparation).toContain(
-      "FIREBASE_WEB_API_KEY: ${{ vars.VITE_FIREBASE_API_KEY || secrets.VITE_FIREBASE_API_KEY }}",
+      "FIREBASE_WEB_API_KEY: ${{ vars.VITE_FIREBASE_API_KEY || inputs.target != 'development' && secrets.VITE_FIREBASE_API_KEY || '' }}",
     );
     expect(secretPreparation).toContain("if (!firebaseWebApiKey) throw new Error");
     expect(secretPreparation).toContain("FIREBASE_WEB_API_KEY: firebaseWebApiKey");

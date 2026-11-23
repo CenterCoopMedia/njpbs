@@ -10,8 +10,12 @@ import { loadFunctionSource, readFunctionsDeployInventory } from "./lib/function
 import { provisionCmsSecret } from "./lib/functions-secret-versions.mjs";
 import { assertR2Lifecycle } from "./assert-r2-lifecycle.mjs";
 import { assertDevelopmentSource } from "./render-development-config.mjs";
+import { cmsTarget } from "./lib/cms-target.mjs";
 
-const project = "njpbs-site";
+const target = cmsTarget();
+const project = target.projectId;
+const DEVELOPMENT_ONLY_SECRETS = Object.freeze(["CMS_DEV_ACCESS_CLIENT_ID", "CMS_DEV_ACCESS_CLIENT_SECRET",
+  "CMS_DEV_PUBLISH_APP_ID", "CMS_DEV_PUBLISH_APP_PRIVATE_KEY"]);
 const secretBase = name => `https://secretmanager.googleapis.com/v1/projects/${project}/secrets/${name}`;
 const require = createRequire(import.meta.url);
 function scopedGcloud(args, env, execute) {
@@ -44,7 +48,11 @@ export function resolveDiscovery(env, execute = execFileSync) {
 
 export function configurationRequirements(source, number, parameters) {
   const requirements = secretRequirements(source, number);
-  for (const name of requirements.keys()) if (!Object.hasOwn(FUNCTION_SECRETS, name)) fail("Unmapped Functions secret binding");
+  for (const name of requirements.keys()) {
+    // The dev workflows own these dev-only secrets; this table neither compares nor provisions them.
+    if (target.environment === "development" && DEVELOPMENT_ONLY_SECRETS.includes(name)) requirements.delete(name);
+    else if (!Object.hasOwn(FUNCTION_SECRETS, name)) fail("Unmapped Functions secret binding");
+  }
   // SDK declarations and __endpoint bindings are the native export table. A
   // configured name cannot silently misspell an actual parameter or a secret.
   const { declaredParams } = require("firebase-functions/params");
@@ -327,7 +335,9 @@ export function requireConfigurationSource(env) {
   try {
     if (!/^[a-f0-9]{40}$/.test(env.DEPLOY_SHA ?? "") || realpathSync(".") !== realpathSync(new URL("../", import.meta.url)) ||
         execFileSync("git", ["rev-parse", "HEAD"], { encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] }).trim() !== env.DEPLOY_SHA) throw new Error();
-    assertDevelopmentSource(process.cwd(), env);
+    // A dev run writes its runtime parameters over the tracked dev-index template.
+    assertDevelopmentSource(process.cwd(), env,
+      { allowedChanges: target.environment === "development" ? [`functions/.env.${project}`] : [] });
   } catch { fail("Functions configuration requires a clean source checkout at DEPLOY_SHA"); }
 }
 
@@ -346,12 +356,16 @@ export async function main(argv) {
   if (operation !== "configure") requireConfigurationSource(process.env);
   const input = configurationInputs(process.env);
   const env = { ...process.env, ...input };
-  const configPath = resolve("config/functions-deployment.json");
+  const configPath = resolve(target.deploymentConfig);
   const config = validateDeploymentConfiguration(JSON.parse(readFileSync(configPath, "utf8")));
   let parameters = runtimeParameters(input, resolveDiscovery(env));
   if (operation === "configure") {
     const path = `functions/.env.${config.projectId}`;
-    const text = runtimeDotenv(parameters);
+    // Dev keeps its template's dev-only settings, such as stored-only report intake.
+    const kept = target.environment !== "development" ? "" : readFileSync(path, "utf8").split("\n")
+      .filter(line => /^[A-Z][A-Z0-9_]*=/.test(line) && !Object.hasOwn(parameters, line.slice(0, line.indexOf("="))))
+      .map(line => `${line}\n`).join("");
+    const text = kept + runtimeDotenv(parameters);
     writeConfigurationFile(path, text);
     console.log(`Configured ${Object.keys(parameters).length} Functions runtime parameters`);
     return;

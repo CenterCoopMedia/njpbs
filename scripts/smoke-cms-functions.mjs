@@ -372,6 +372,18 @@ export async function runCmsFunctionSmoke({
   return { checked: result.checked + 1 };
 }
 
+// A cms-staging-deploy development run deploys the production entry into the
+// dev project, but the dev API gateway serves only the dev manifest's
+// endpoints. Its live-smoke job proves the dev Admin's anonymous refusal in
+// place of the production authentication shell.
+export async function runTargetDevCmsFunctionSmoke({ baseUrl, target, request = fetch } = {}) {
+  if (target?.environment !== "development" || baseUrl !== target.apiOrigin) {
+    throw new CmsSmokeError("Development smoke requires the dev API origin");
+  }
+  return runFunctionSmoke({ baseUrl, functionsOrigin: target.functionsOrigin,
+    adminOrigin: target.adminOrigin, deployedFunctionNames: declaredDevFunctionNames(), request });
+}
+
 async function runFunctionSmoke({ baseUrl, functionsOrigin, adminOrigin, deployedFunctionNames, request }) {
   const deployed = new Set(deployedFunctionNames);
   const authenticatedPostFunctions = AUTHENTICATED_POST_FUNCTION_NAMES.filter(name => deployed.has(name));
@@ -636,7 +648,13 @@ export async function main(argv = process.argv.slice(2)) {
     console.log("CMS production export manifest: matched");
   }
 
-  if (!manifestOnly) {
+  if (manifestOnly) return;
+  // The staged smoke loads no release-tree module at startup.
+  const { cmsTarget } = await import("./lib/cms-target.mjs");
+  const target = cmsTarget();
+  if (target.environment === "development") {
+    await runTargetDevCmsFunctionSmoke({ baseUrl: process.env.VITE_FUNCTIONS_BASE_URL, target });
+  } else {
     await runCmsFunctionSmoke({
       baseUrl:
         process.env.VITE_FUNCTIONS_BASE_URL ?? DEFAULT_CMS_API_BASE_URL,
