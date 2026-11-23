@@ -202,6 +202,10 @@ describe("source video recycle bin", () => {
       post("open-post", { type: "post", title: "Planning meeting", section: "news", createdBy: "staff-1", blocks: [video] }),
       post("published-post", { type: "post", title: "Past coverage", section: "news", publiclyVisible: true,
         published: { blocks: [publicVideo] } }),
+      post("live-post", { type: "post", title: "Earlier public rendering", section: "news", publiclyVisible: true,
+        publishBuildPending: true, published: { blocks: [], previousVideoCopies: [{ assetId: "fixture-video", url: `${object}.mp4` }] } }),
+      post("settled-post", { type: "post", title: "Settled revision", section: "news", publiclyVisible: true,
+        published: { blocks: [], previousVideoCopies: [{ assetId: "fixture-video", url: `${object}.mp4` }] } }),
       post("closed-post", { type: "post", title: "Private draft", section: "other", createdBy: "staff-2", blocks: [video] }),
       post("deleted-post", { type: "post", title: "Deleted", section: "news", deleted: true, blocks: [video] }),
       post("other-source", { type: "post", title: "Other source", section: "news", blocks: [
@@ -221,6 +225,7 @@ describe("source video recycle bin", () => {
     expect(res.body).toEqual({ success: true, incomplete: false, nextCursor: "cmsPages:0", items: [
       { collection: "cmsPosts", documentId: "open-post", title: "Planning meeting", working: true, published: false },
       { collection: "cmsPosts", documentId: "published-post", title: "Past coverage", working: false, published: true },
+      { collection: "cmsPosts", documentId: "live-post", title: "Earlier public rendering", working: false, published: true },
     ] });
   });
 });

@@ -13,7 +13,7 @@ const { liveBlogVideoBlocks } = require("./lib/live-blog");
 const { runtimeAwsConfig, runtimeRegistry } = require("./lib/media-source-runtime");
 const { authorizeMediaSource, objectKeyWithinSource } = require("./lib/media-sources");
 const { leadVideoBlocks } = require("./lib/post-lead-media");
-const { publiclyVisible, videoCopies } = require("./lib/public-video-references");
+const { publicCopies } = require("./lib/public-video-references");
 const { createS3MediaRestoreCheck } = require("./lib/s3-media-source");
 const { ID_PATTERN, encodeCursor, parseSourceMediaAsset, parseSourceMediaListRequest } = require("./lib/source-media-contract");
 const { parseDeleteSourceMediaRequest } = require("./lib/source-media-upload-contract");
@@ -139,11 +139,7 @@ function contentUsage(snapshot, actor, source, assetId) {
     ...leadVideoBlocks(stored.leadMedia),
     ...liveBlogVideoBlocks(stored.type === "post" ? stored.liveBlog : undefined),
   ].some(block => block?.type === "video" && block.data?.sourceId === source.id && block.data.assetId === assetId);
-  const published = publiclyVisible(stored) && videoCopies([
-    ...(Array.isArray(stored.published?.blocks) ? stored.published.blocks : []),
-    ...leadVideoBlocks(stored.published?.metadata?.leadMedia),
-    ...liveBlogVideoBlocks(stored.published?.metadata?.type === "post" ? stored.published.metadata.liveBlog : undefined),
-  ]).some(copy => copy.assetId === assetId);
+  const published = publicCopies(stored).some(copy => copy.assetId === assetId);
   if (!working && !published) return [];
   const title = typeof stored.title === "string" && stored.title.trim() ? stored.title.trim().slice(0, 200) : documentId;
   return [{ collection, documentId, title, working, published }];
@@ -160,8 +156,9 @@ async function readVideoUsage({ actor, firestore, request, source }) {
     }
     const query = firestore.collection(request.collection).orderBy(FieldPath.documentId()).offset(request.offset)
       .select("title", "type", "blocks", "leadMedia", "liveBlog", "createdBy", "section", "deleted", "unassignedDraft",
-        "status", "publiclyVisible", "published.blocks", "published.metadata.type",
-        "published.metadata.leadMedia", "published.metadata.liveBlog");
+        "status", "publiclyVisible", "publishBuildPending", "publicSourceVersion", "published.sourceVersion",
+        "published.blocks", "published.metadata.type", "published.metadata.leadMedia",
+        "published.metadata.liveBlog", "published.previousVideoCopies");
     const { docs } = await transaction.get(query.limit(USAGE_BATCH_SIZE + 1));
     const page = docs.slice(0, USAGE_BATCH_SIZE);
     const followingCollection = USAGE_COLLECTIONS[USAGE_COLLECTIONS.indexOf(request.collection) + 1];

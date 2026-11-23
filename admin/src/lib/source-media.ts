@@ -1,6 +1,6 @@
 import type { OriginalAvailability } from "./video-original";
 import { postFunction } from "./functions";
-import { setMediaSourceCount, type MediaTabCounts } from "./media-session-cache";
+import type { MediaTabCounts } from "./media-session-cache";
 import { invalidateVideoSearchCorpus, videoSearchCacheRevision } from "./video-search-session-cache";
 
 export function uploadableSharedVideoSource<T extends { id: string; canUpload: boolean }>(
@@ -182,12 +182,9 @@ export function listBinnedVideoUsage(token: string, sourceId: string, assetId: s
   return postFunction<BinnedVideoUsagePage>("cmsSourceVideoBin", token, { action: "usage", sourceId, assetId, cursor }, {}, { signal });
 }
 
-export async function restoreBinnedVideo(token: string, sourceId: string, { id: assetId, version: expectedVersion }: BinnedVideo) {
-  const result = await postFunction<{ originalState?: "archived" | "restoring"; viewingCopyUnavailable?: boolean }>(
+export function restoreBinnedVideo(token: string, sourceId: string, { id: assetId, version: expectedVersion }: BinnedVideo) {
+  return postFunction<{ originalState?: "archived" | "restoring"; viewingCopyUnavailable?: boolean }>(
     "cmsSourceVideoBin", token, { action: "restore", sourceId, assetId, expectedVersion }, {}, { appCheck: true });
-  invalidateVideoSearchCorpus(sourceId);
-  setMediaSourceCount(sourceId, null);
-  return result;
 }
 
 export function listSourceMedia(

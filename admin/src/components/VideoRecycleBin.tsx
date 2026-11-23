@@ -2,8 +2,10 @@ import { useEffect, useId, useRef, useState } from "react";
 import { Link } from "react-router";
 import { isPublicPageId } from "../../../packages/content-core/src/public-pages";
 import { HttpError } from "../lib/functions";
+import { setMediaSourceCount } from "../lib/media-session-cache";
 import { editPagePath, editRecordPath } from "../lib/routes";
 import { listBinnedVideos, listBinnedVideoUsage, restoreBinnedVideo, type BinnedVideo, type BinnedVideoPage, type BinnedVideoUsagePage } from "../lib/source-media";
+import { invalidateVideoSearchCorpus } from "../lib/video-search-session-cache";
 import { Button, EmptyState, InlineMessage } from "./ui/Primitives";
 import { LoadingIndicator } from "./ui/LoadingIndicator";
 import "./MediaRecycleBin.css";
@@ -120,6 +122,13 @@ export function VideoRecycleBin({ backSearch, ...source }: VideoBinSource & { ba
     return () => controller.abort();
   }, [cursor, getIdToken, revision, sourceId]);
 
+  function refreshAfterRestore() {
+    invalidateVideoSearchCorpus(sourceId);
+    setMediaSourceCount(sourceId, null);
+    heading.current?.focus();
+    setRevision(value => value + 1);
+  }
+
   async function restore(asset: BinnedVideo) {
     if (restoring) return;
     setRestoring(asset.id);
@@ -127,19 +136,17 @@ export function VideoRecycleBin({ backSearch, ...source }: VideoBinSource & { ba
     setSuccess("");
     try {
       const { originalState, viewingCopyUnavailable } = await restoreBinnedVideo(await getIdToken(), sourceId, asset);
-      heading.current?.focus();
       const originalNotice = originalState === "archived" ? " The original is archived. You can request it from the video details."
         : originalState === "restoring" ? " The archived original is still being retrieved." : "";
       const viewingCopyNotice = viewingCopyUnavailable ? " The viewing copy is unavailable because processing stopped." : "";
       setSuccess(`${asset.name} was restored to the video library.${originalNotice}${viewingCopyNotice}`);
-      setRevision(value => value + 1);
+      refreshAfterRestore();
     } catch (failure) {
       setRestoreError(failure instanceof Error ? failure.message : "Try again to restore this video.");
       // A response can be lost after the server commits. Recheck the bin before
       // offering another restore of the same version.
       if (!(failure instanceof HttpError) || failure.status >= 500) {
-        heading.current?.focus();
-        setRevision(value => value + 1);
+        refreshAfterRestore();
       }
     } finally {
       setRestoring(undefined);
