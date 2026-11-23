@@ -9,14 +9,14 @@ import { compare } from "./report-code-health.mjs";
 
 test("reports only added lint errors and type errors", () => {
   const lint = { file: "admin/src/old.ts", line: 5, rule: "no-undef", severity: 2, message: "old" };
-  const type = { file: "functions/old.js", line: 6, rule: "TS2322", message: "old", source: "return f(old); f(old)" };
+  const type = { file: "functions/old.js", line: 6, rule: "TS2322", message: "old", source: "return f(old); 7 f(old)" };
   const base = {
     lint: [lint],
     types: { findings: [type] },
   };
   const moved = { ...lint, file: "admin/src/new.ts", line: 20 };
   const extraLint = { ...moved, line: 30 };
-  const extraType = { ...type, line: 9, source: "const x = f(old); f(old)" };
+  const extraType = { ...type, line: 9, source: "return f(old); 9 f(old)" };
   const head = {
     lint: [
       moved, extraLint, { ...lint, message: "replaced name" }, { ...lint, severity: 1, rule: "complexity" },

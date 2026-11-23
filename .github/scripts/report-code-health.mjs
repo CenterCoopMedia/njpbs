@@ -49,14 +49,18 @@ function checkFunctions(ts, cwd, sizes) {
     const file = diagnostic.file ? relative(cwd, diagnostic.file.fileName) : null;
     if (file && !checked.has(file)) continue;
     const { file: sourceFile, start, length = 0 } = diagnostic;
-    const line = start === undefined ? undefined : sourceFile?.getLineAndCharacterOfPosition(start).line;
+    const { line, character } = start === undefined || !sourceFile ? {}
+      : sourceFile.getLineAndCharacterOfPosition(start);
     const message = ts.flattenDiagnosticMessageText(diagnostic.messageText, "\n").replaceAll(cwd + "/", "");
-    const lineStarts = sourceFile?.getLineStarts();
-    // The flagged line plus the flagged text, so two errors on the same name differ.
-    const source = line === undefined ? message : [
-      sourceFile.text.slice(lineStarts[line], lineStarts[line + 1]),
-      sourceFile.text.slice(start, start + length),
-    ].join(" ").replace(/\s+/g, " ").trim();
+    // The flagged line, column and text: two errors on the same name differ, and
+    // an error keeps its identity when other lines move. Editing the line makes it new.
+    let source = message;
+    if (line !== undefined) {
+      const lineText = sourceFile.text.slice(sourceFile.getLineStarts()[line], sourceFile.getLineStarts()[line + 1]);
+      const indent = lineText.length - lineText.trimStart().length;
+      source = [lineText.trim(), character - indent, sourceFile.text.slice(start, start + length)]
+        .join(" ").replace(/\s+/g, " ");
+    }
     findings.push({ file, line: line === undefined ? null : line + 1, rule: "TS" + diagnostic.code, message, source });
   }
   return { files: files.length, findings };
