@@ -76,23 +76,6 @@ leave navigation reads; no bodies or working slugs. Duplicate paths refuse.
 Missing/invalid published settings retain publisher defaults. Chrome digest
 and optional sweep preserve their own refresh bounds.
 
-## Retained pilot rollout and removal
-
-Use the retained shadow workflow only for its explicitly authorized pilot.
-Functions/indexes first, private relay/disabled shadow second, signed-out and
-staff proof before explicit enable. `enabled=false, remove=false` stages off;
-`enabled=true, remove=false` admits only the configured pilot;
-`remove=true` takes precedence and skips build/secret upload.
-
-Admission/removal require exactly one approved parent gateway route and no
-foreign/unassigned/duplicate owner. Deploy refuses active development public
-publication; removal remains available. Removal deletes only its exact Post
-route (including orphan), proves absence and unchanged parent identity, then
-deletes shadow and relay. Unexpected ownership/API failure stops. Function,
-secret and read-only account have separate retirement authority; names alone
-do not prove retirement. Preserve serving/cold/withdrawal and binding census
-before any later source removal.
-
 ## Reader-before-writer compatibility
 
 Election/schema upgrades first deploy readers accepting known old/new versions

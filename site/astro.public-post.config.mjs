@@ -1,4 +1,4 @@
-import shadowConfig from "./astro.shadow.config.mjs";
+import postParityConfig from "./astro.post-parity.config.mjs";
 import { publicPostRenderEnvironment } from "./scripts/public-post-render-environment.ts";
 import { createRequire } from "node:module";
 import compiledRendererAdapter from "./scripts/compiled-renderer-adapter.mjs";
@@ -6,13 +6,13 @@ const targetContract = createRequire(import.meta.url)("../functions/lib/publicat
 const environment = publicPostRenderEnvironment(process.env);
 const target = targetContract.publicationTarget(environment.CMS_DEPLOYMENT_ENVIRONMENT);
 export default {
-  ...shadowConfig,
+  ...postParityConfig,
   adapter: compiledRendererAdapter({ publicPostsOnly: true, publicPages: true, publicRecords: true }),
   outDir: "./.public-post-renderer",
-  build: { ...shadowConfig.build, assetsPrefix: `${target.origin}/posts/_no-build-assets` },
+  build: { ...postParityConfig.build, assetsPrefix: `${target.origin}/posts/_no-build-assets` },
   // Public templates run in workerd, which has no Node process global. Seal the
   // render environment at compilation; never copy the publisher's environment.
-  vite: { ...shadowConfig.vite, define: { "process.env": JSON.stringify(environment),
+  vite: { ...postParityConfig.vite, define: { "process.env": JSON.stringify(environment),
     __CMS_BROWSER_DEPLOYMENT_ENVIRONMENT__: JSON.stringify(target.environment) },
     plugins: [{ name: "sealed-public-schedule", enforce: "pre",
       resolveId(source) {

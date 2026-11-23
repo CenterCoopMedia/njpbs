@@ -173,14 +173,10 @@ jobs:
           tests/dev-renderer-bootstrap-inputs.test.mjs tests/dev-current-code-preflight.test.ts
           tests/dev-renderer-workflow.test.mjs tests/development-install-command-files.test.ts
           --maxWorkers=1 --no-file-parallelism
-      - name: Check shadow Post Worker
-        run: |
-          npx --no-install tsc --project workers/tsconfig.shadow-posts.json
-          npm run test:published-post-reader
-          npx --no-install wrangler deploy --config workers/wrangler.published-post-reader.jsonc --dry-run
-          npx --no-install wrangler types --config workers/wrangler.shadow-posts.jsonc --config cms-api/wrangler.jsonc --include-runtime=false --strict-vars=false --env-interface ShadowPostEnv --check workers/src/shadow-post-worker-configuration.d.ts
-          npm --prefix site run build:shadow
-          npm --prefix site run test:shadow
+      - name: Check build-free Post reader in workerd
+        run: node scripts/test-no-build-post-reader-runtime.mjs
+      - name: Check compiled Post parity
+        run: npm --prefix site run test:post-parity
       - name: Cache Firebase emulator binaries
         uses: actions/cache@v6
         with:

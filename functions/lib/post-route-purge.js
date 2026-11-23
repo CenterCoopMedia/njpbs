@@ -34,8 +34,7 @@ class RoutePurgeError extends Error {
   constructor(code, retryable) { super(code); this.code = code; this.retryable = retryable; }
 }
 
-// Implements the shadow PostRoutePurger interface. It never logs or retains the
-// token, provider response body or a fetch exception's message.
+// Keep the token, provider response body and raw fetch errors out of logs and state.
 // config-input: SHADOW_POST_ROUTE_PURGE_TOKEN
 function createCloudflareRoutePurger({ config = routePurgeConfig(), getToken = () => process.env[TOKEN_SECRET], fetchImpl = fetch } = {}) {
   return {

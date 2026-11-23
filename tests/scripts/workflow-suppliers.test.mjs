@@ -150,31 +150,3 @@ test("enabled Studio preflight refuses invalid presets before credentials or pau
     }
   } finally { rmSync(directory, { recursive: true, force: true }); }
 });
-
-test("the published relay endpoint is configured before Wrangler is invoked", async () => {
-  const { mkdtempSync, writeFileSync, rmSync, existsSync } = await import("node:fs");
-  const { tmpdir } = await import("node:os");
-  const { join } = await import("node:path");
-  const workflow = read("shadow-posts-dev-deploy.yml");
-  const step = workflow.split('      - name: Deploy the private published Post relay\n')[1]?.split('\n      - name:')[0];
-  assert.ok(step?.includes('PUBLISHED_POST_FUNCTION_URL: ${{ vars.SHADOW_PUBLISHED_POST_FUNCTION_URL }}'));
-  const commands = step.split('        run: |\n')[1].split('\n').map(line => line.slice(10)).join('\n');
-  const directory = mkdtempSync(join(tmpdir(), 'relay-supplier-'));
-  const marker = join(directory, 'called');
-  writeFileSync(join(directory, 'npx'), '#!/usr/bin/env bash\ntouch "$MARKER"\n', { mode: 0o700 });
-  try {
-    for (const [url, allowed] of [[undefined, false], ['', false], ['REPLACE_ME', false],
-      ['https://wrong.fixture.test/cmsGetPublishedPost', false],
-      ['https://a.b.cloudfunctions.net/cmsGetPublishedPost', false],
-      ['https://fixture.cloudfunctions.net:8443/cmsGetPublishedPost', false],
-      ['https://us-central1-fixture.cloudfunctions.net/cmsGetPublishedPost', true]]) {
-      rmSync(marker, { force: true });
-      const result = spawnSync('bash', ['-e', '-c', commands], { encoding: 'utf8', env: {
-        PATH: `${directory}:${process.env.PATH}`, MARKER: marker,
-        ...(url === undefined ? {} : { PUBLISHED_POST_FUNCTION_URL: url }),
-      } });
-      assert.equal(result.status, allowed ? 0 : 1);
-      assert.equal(existsSync(marker), allowed);
-    }
-  } finally { rmSync(directory, { recursive: true, force: true }); }
-});

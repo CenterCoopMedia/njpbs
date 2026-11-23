@@ -1,15 +1,12 @@
 import { describe, expect, expectTypeOf, it } from "vitest";
 import fixture from "./fixtures/shadow-posts/post.json";
-import { createShadowPostWorker, purgePublishedPostRoutes } from "../../workers/src/shadow-post-worker";
-import { createFakePublishedPostReader, projectPublishedPostRead } from "../src/lib/published-post-shadow";
+import { projectPublishedPostRead } from "../src/lib/published-post-shadow";
 import { resolvePublicCreditLinks } from "../src/lib/public-author-links";
 import { renderAuthors } from "../src/lib/cms-render-context";
 import { LIVE_BLOG_POST_AS_OF, liveBlogPostFixture } from "./fixtures/live-blog-post";
 
 const now = new Date("2026-10-07T13:00:00Z");
 const rendererSha = "a".repeat(40);
-const url = "https://dev-public.example.org/posts/shadow-fixture/";
-const config = { SHADOW_POSTS_ENABLED: "true", SHADOW_POST_SLUGS: "shadow-fixture" };
 const authorId = `au_${"1".repeat(32)}`;
 const otherAuthorId = `au_${"2".repeat(32)}`;
 // The public Ada input from posts-authors.e2e.test.ts, with its path identity.
@@ -27,20 +24,7 @@ function registeredRead(): any {
   ] });
   return { ...read, authors: [authorSnapshot()] };
 }
-function harness() {
-  const reader = createFakePublishedPostReader({ "shadow-fixture": fixture });
-  const entries = new Map<string, Response>();
-  const cache = {
-    async match(key: Request) { return entries.get(key.url)?.clone(); },
-    async put(key: Request, response: Response) { entries.set(key.url, response.clone()); },
-  };
-  let renders = 0;
-  const worker = createShadowPostWorker({ reader, cache, rendererSha, now: () => now,
-    async render(content) { renders++; return `<!doctype html><html><title>${content.posts[0].title}</title><main>Published body</main></html>`; } });
-  return { worker, reader, entries, renders: () => renders };
-}
-
-describe("Post shadow edge boundary", () => {
+describe("Published Post projection", () => {
   it("hydrates update-only public reporters and keeps missing reporters as frozen credits", () => {
     const read: any = liveBlogPostFixture();
     const credit = { kind: "registered", authorId, displayName: "Ada at publication" };
@@ -195,66 +179,5 @@ describe("Post shadow edge boundary", () => {
     const read = registeredRead();
     read.authors[0].bio = "a".repeat(2 * 1024 * 1024);
     expect(() => projectPublishedPostRead(read, "shadow-fixture", rendererSha, now)).toThrow("Published read too large");
-  });
-
-  it("caches by exact input and checks visibility before every cache hit", async () => {
-    const h = harness();
-    const first = await h.worker.fetch(new Request(url), config);
-    expect(first.status).toBe(200);
-    expect(first.headers.get("Cache-Tag")).toBe("njpbs-dev-post-shadow-fixture");
-    expect(first.headers.get("X-Robots-Tag")).toContain("noindex");
-    expect(first.headers.get("X-Njpbs-Source-Version")).toBe("7");
-    await h.worker.fetch(new Request(url), config);
-    expect(h.renders()).toBe(1);
-    h.reader.set("shadow-fixture", null);
-    const withdrawn = await h.worker.fetch(new Request(url), config);
-    expect(withdrawn.status).toBe(404);
-    expect(await withdrawn.text()).not.toContain("Published body");
-  });
-
-  it("fails closed on a read failure even when HTML is cached", async () => {
-    const h = harness();
-    await h.worker.fetch(new Request(url), config);
-    h.reader.fail(new Error("Private backend details"));
-    const failed = await h.worker.fetch(new Request(url), config);
-    expect(failed.status).toBe(503);
-    expect(failed.headers.get("Cache-Control")).toBe("no-store");
-    expect(await failed.text()).not.toMatch(/Published body|Private backend details/);
-  });
-
-  it("does not reuse HTML for a newer published version", async () => {
-    const h = harness();
-    await h.worker.fetch(new Request(url), config);
-    const next = structuredClone(fixture);
-    next.document.published.sourceVersion = 8;
-    next.document.published.metadata.title = "A newer publication";
-    h.reader.set("shadow-fixture", next);
-    const response = await h.worker.fetch(new Request(url), config);
-    expect(await response.text()).toContain("A newer publication");
-    expect(h.renders()).toBe(2);
-  });
-
-  it("refuses production hosts, disabled flags, other routes and query variants", async () => {
-    const h = harness();
-    for (const target of [url.replace("dev-public.example.org", "njpbs.org"), url + "?draft=1", "https://dev-public.example.org/posts/", "https://dev-public.example.org/"]) {
-      expect((await h.worker.fetch(new Request(target), config)).status).toBe(404);
-    }
-    expect((await h.worker.fetch(new Request(url), { ...config, SHADOW_POSTS_ENABLED: "false" })).status).toBe(404);
-    expect((await h.worker.fetch(new Request(url), { ...config, SHADOW_POST_SLUGS: "" })).status).toBe(404);
-    expect((await h.worker.fetch(new Request(url, { method: "POST" }), config)).status).toBe(405);
-    expect(h.renders()).toBe(0);
-  });
-
-  it("calls the purge boundary with old and new route tags after a publish commit", async () => {
-    const calls: string[][] = [];
-    const reader = createFakePublishedPostReader({});
-    await reader.publish("shadow-fixture", fixture, slugs => purgePublishedPostRoutes(slugs, {
-      async purge(tags) {
-        expect(await reader.read("shadow-fixture")).toEqual(fixture);
-        calls.push(tags);
-      },
-    }), ["old-fixture", "shadow-fixture"]);
-    expect(calls).toEqual([["njpbs-dev-post-old-fixture", "njpbs-dev-post-shadow-fixture"]]);
-    await expect(purgePublishedPostRoutes(["shadow-fixture"], { async purge() { throw new Error("Unavailable"); } })).rejects.toThrow("Unavailable");
   });
 });

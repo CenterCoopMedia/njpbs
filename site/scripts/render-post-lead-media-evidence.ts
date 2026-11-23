@@ -3,7 +3,7 @@ import { resolve, join } from "node:path";
 import { pathToFileURL } from "node:url";
 import { LEAD_LAYOUTS, LEAD_KINDS, postLeadFixture } from "../tests/fixtures/post-lead-media";
 
-// Compile only astro.shadow.config.mjs in each checkout first. No loaders or services.
+// Compile astro.post-parity.config.mjs in each checkout first.
 const root = resolve(process.argv[2] ?? "..");
 const output = resolve(process.argv[3] ?? "../scratch/post-lead-media");
 const phase = process.argv[4] ?? "after";

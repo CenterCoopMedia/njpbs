@@ -53,7 +53,7 @@ try {
       try { return await route.fulfill({ body: await readFile(file), contentType: mime }); }
       catch { return route.fulfill({ status: 404, body: "Fixture file not found" }); }
     }
-    if (url.pathname.startsWith("/posts/_shadow-assets/_astro/")) {
+    if (url.pathname.startsWith("/posts/_no-build-assets/_astro/")) {
       const file = join(root, phase, "client/_astro", url.pathname.split("/_astro/")[1]);
       return route.fulfill({ body: await readFile(file), contentType: extname(file) === ".css" ? "text/css" : "text/javascript" });
     }

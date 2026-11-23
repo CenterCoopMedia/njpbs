@@ -13,6 +13,6 @@ export default defineConfig({
   markdown: { processor: unified({ rehypePlugins: [rehypePublicContentLinks] }) },
   adapter: compiledRendererAdapter({ publicPostsOnly: true }),
   image: { service: { entrypoint: "astro/assets/services/noop" }, remotePatterns: [] },
-  build: { format: "directory", assetsPrefix: "https://dev-public.example.org/posts/_shadow-assets" },
+  build: { format: "directory", assetsPrefix: "https://njpbs.org/posts/_no-build-assets" },
   vite: { build: { chunkSizeWarningLimit: 4000 } },
 });
