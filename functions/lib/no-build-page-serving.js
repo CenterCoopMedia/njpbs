@@ -34,7 +34,7 @@ async function readPageAuthorityInTransaction({ firestore, transaction, state, r
 /** An accepted route retains authority when admission is paused or unselected.
  * Only authoritative absence is a pass. Refusal leaves any Worker Assets
  * fallback unconfirmed; it cannot manufacture a publication receipt. */
-async function readNoBuildPageDecision({ firestore, path, rendererSha, target, currentCodeRequest, scheduleCapture, readScheduledDecision, legacyStaffServing = false, pageStatus = false }) {
+async function readNoBuildPageDecision({ firestore, path, rendererSha, target, currentCodeRequest, scheduleCapture = undefined, readScheduledDecision = undefined, legacyStaffServing = false, pageStatus = false }) {
   target = pagePublicationTarget({ firestore, target });
   const schedules = require("./no-build-page-schedule-reader");
   if (schedules.isPageScheduleExportPath(path)) return schedules.readNoBuildPageScheduleExport({ firestore, path, rendererSha, target, currentCodeRequest, scheduleCapture });

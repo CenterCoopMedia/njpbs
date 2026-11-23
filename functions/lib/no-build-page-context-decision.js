@@ -12,7 +12,7 @@ const { assertNoBuildPageContextInTransaction, readPageRenderDependenciesInTrans
 
 /** Called only after the exclusive Page owner decision. Never turns a claim,
  * alias, owned withdrawal, or unreadable snapshot into an ASSETS fallback. */
-async function readNoBuildPageContextDecision({ firestore, transaction, path, unownedPath, rendererSha, now = new Date(), target, scheduleCapture, requestScheduleCapture = false, readProviderInput, strictPublicReleaseInputs = false, legacyStaffServing = false, pageStatus = false }) {
+async function readNoBuildPageContextDecision({ firestore, transaction, path, unownedPath = undefined, rendererSha, now = new Date(), target, scheduleCapture, requestScheduleCapture = false, readProviderInput = undefined, strictPublicReleaseInputs = false, legacyStaffServing = false, pageStatus = false }) {
   target = pagePublicationTarget({ firestore, target });
   if (typeof path !== "string" || !(path === "/" || /^\/[a-z0-9]+(?:-[a-z0-9]+)*\/$/.test(path))) return { kind: "pass", path };
   // A caller may have already checked this exact path in this transaction.
