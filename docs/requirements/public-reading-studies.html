@@ -12,11 +12,12 @@
   body { margin: 0; }
   main {
     box-sizing: border-box;
-    max-inline-size: 72ch;
+    max-inline-size: 66rem;
     margin-inline: auto;
     padding: 1rem;
   }
   h1, h2, h3 { line-height: 1.2; }
+  main > p, .reading-body, .media-study { max-inline-size: 65ch; }
   a { color: #20518b; text-underline-offset: 0.16em; }
   a:focus-visible, h2:focus, h3:focus {
     outline: 3px solid #20518b;
@@ -32,10 +33,36 @@
   .jump-links ul { margin-block: 0.25rem 0; padding-inline-start: 1.25rem; }
   .jump-links a, .actions a { display: inline-block; padding-block: 0.25rem; }
   .actions { display: flex; flex-wrap: wrap; gap: 0.5rem 1.25rem; }
+  .reading-study { container-type: inline-size; }
+  .related-links {
+    border-block-start: 1px solid #768298;
+    margin-block: 1.5rem 0;
+    overflow-wrap: anywhere;
+  }
+  .related-links ul { padding-inline-start: 1.25rem; }
+  .related-links a { display: inline-block; padding-block: 0.25rem; }
+  @media screen {
+    @container (min-width: 58em) {
+      .reading:has(> .related-links) {
+        display: grid;
+        grid-template-columns: minmax(0, 65ch) minmax(0, 18rem);
+        align-items: start;
+        gap: 2rem;
+      }
+      .related-links {
+        border-block-start: 0;
+        border-inline-start: 1px solid #768298;
+        margin-block-start: 1rem;
+        padding-inline-start: 1rem;
+      }
+      .related-links h3 { margin-block-start: 0; }
+    }
+  }
   @media print {
     .jump-links, .study-index, .actions, .video-slot { display: none; }
     main { max-inline-size: none; padding: 0; }
     a { color: inherit; }
+    .related-links a[href]::after { content: " (" attr(href) ")"; }
   }
 </style>
 <main>
@@ -48,25 +75,36 @@
     </ul>
   </nav>
 
-  <article aria-labelledby="reference">
+  <article class="reading-study" aria-labelledby="reference">
     <h2 id="reference" tabindex="-1">Reference page with section links</h2>
-    <p>When a program guide changes, start with the revised dates and then check how to find the program or request assistance.</p>
-    <nav class="jump-links" aria-label="On this page">
-      <ul>
-        <li><a href="#dates">Revised dates</a></li>
-        <li><a href="#watch">How to watch</a></li>
-        <li><a href="#assistance">Request assistance</a></li>
-      </ul>
-    </nav>
-    <h3 id="dates" tabindex="-1">Revised dates</h3>
-    <p>The next episode is on Saturday. The online schedule shows the date and time for the next broadcast.</p>
-    <h3 id="watch" tabindex="-1">How to watch</h3>
-    <p>Check the program page for available episodes. The schedule lists upcoming broadcasts, and the program page lists episodes available to stream.</p>
-    <h3 id="assistance" tabindex="-1">Request assistance</h3>
-    <p>Contact the program team if you need help finding an episode. Include the program title and the date you saw in the schedule.</p>
+    <div class="reading">
+      <div class="reading-body">
+        <p>When a program guide changes, start with the revised dates and then check how to find the program or request assistance.</p>
+        <nav class="jump-links" aria-label="On this page">
+          <ul>
+            <li><a href="#dates">Revised dates</a></li>
+            <li><a href="#watch">How to watch</a></li>
+            <li><a href="#assistance">Request assistance</a></li>
+          </ul>
+        </nav>
+        <h3 id="dates" tabindex="-1">Revised dates</h3>
+        <p>The next episode is on Saturday. The online schedule shows the date and time for the next broadcast.</p>
+        <h3 id="watch" tabindex="-1">How to watch</h3>
+        <p>Check the program page for available episodes. The schedule lists upcoming broadcasts, and the program page lists episodes available to stream.</p>
+        <h3 id="assistance" tabindex="-1">Request assistance</h3>
+        <p>Contact the program team if you need help finding an episode. Include the program title and the date you saw in the schedule.</p>
+      </div>
+      <aside class="related-links" aria-labelledby="related-links-title">
+        <h3 id="related-links-title">Related links</h3>
+        <ul>
+          <li><a href="https://example.org/schedule">Full broadcast schedule</a></li>
+          <li><a href="https://example.org/programs">Program and episode directory</a></li>
+        </ul>
+      </aside>
+    </div>
   </article>
 
-  <article aria-labelledby="video">
+  <article class="media-study" aria-labelledby="video">
     <h2 id="video" tabindex="-1">Video-first Post with a text path</h2>
     <p class="actions">
       <a href="#sample-player">Go to the video slot</a>
@@ -74,7 +112,7 @@
     </p>
     <section class="video-slot" aria-labelledby="sample-player">
       <h3 id="sample-player" tabindex="-1">Video slot</h3>
-      <p>The published Post would show its player here.</p>
+      <p>A published Post would show its player here.</p>
     </section>
     <h3 id="synopsis" tabindex="-1">Summary</h3>
     <p>The sample story reports how a library plans to move its after-school program while the building is closed for repairs.</p>
