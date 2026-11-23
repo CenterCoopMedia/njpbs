@@ -466,10 +466,19 @@ jobs:
       contents: read
     uses: ./.github/workflows/firebase-ci.yml
 
+  code-health:
+    name: Code health
+    needs: [policy]
+    if: >-
+      !cancelled() &&
+      needs.policy.result == 'success' &&
+      (github.event_name == 'pull_request' || github.event_name == 'merge_group')
+    uses: ./.github/workflows/code-health.yml
+
   ci:
     name: ci
     if: always()
-    needs: [policy, docs, site, admin, firebase]
+    needs: [policy, docs, site, admin, firebase, code-health]
     runs-on: ubuntu-24.04
     # Allow checkout/network overhead on busy runners; aggregation is Node-only.
     timeout-minutes: 5 # Runaway guard: 3x max 38s rounds to 2m; keep fleet#21's 5m floor.
@@ -516,6 +525,11 @@ jobs:
           ADMIN_RESULT: ${{ needs.admin.result }}
           FIREBASE_RESULT: ${{ needs.firebase.result }}
         run: node .github/scripts/ci-classifier.mjs aggregate
+      - name: Require code health for pull requests and merge groups
+        if: github.event_name == 'pull_request' || github.event_name == 'merge_group'
+        env:
+          CODE_HEALTH_RESULT: ${{ needs['code-health'].result }}
+        run: test "$CODE_HEALTH_RESULT" = success
       - name: Full CI inputs ${{ needs.policy.outputs.inputs_hash }}
         # Only a full run can supply proof for a later main push.
         if: >-

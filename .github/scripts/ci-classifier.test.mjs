@@ -935,7 +935,7 @@ describe("Final CI aggregation", () => {
     assert.match(finalJob, /^    if: always\(\)$/m);
     assert.match(
       finalJob,
-      /needs: \[policy, docs, site, admin, firebase\]/,
+      /needs: \[policy, docs, site, admin, firebase, code-health\]/,
     );
     assert.match(
       finalJob,

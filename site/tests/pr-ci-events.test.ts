@@ -145,6 +145,32 @@ describe("Merge queue events at the Actions workflow boundary", () => {
     expect(ci.jobs.ci.name).toBe("ci");
   });
 
+  it("requires a successful Code health job on a pull request and in the merge queue", () => {
+    const health = ci.jobs["code-health"];
+    const aggregate = ci.jobs.ci;
+    const step = aggregate.steps.find((item: { env?: object }) =>
+      Object.hasOwn(item.env ?? {}, "CODE_HEALTH_RESULT"));
+    const policy = { result: "success" };
+    expect(health.uses).toBe("./.github/workflows/code-health.yml");
+    expect(aggregate.needs).toContain("code-health");
+
+    for (const github of [eventContext("synchronize"), queue()]) {
+      expect(expression(health.if, github, { needs: { policy } })).toBe(true);
+      expect(expression(step.if, github)).toBe(true);
+      for (const status of ["success", "failure", "skipped", "cancelled", ""]) {
+        const needs = { "code-health": { result: status } };
+        const result = spawnSync("bash", ["-e", "-c", step.run], {
+          env: { ...process.env, CODE_HEALTH_RESULT: expression(step.env.CODE_HEALTH_RESULT, github, { needs }) },
+        });
+        expect(result.status).toBe(status === "success" ? 0 : 1);
+      }
+    }
+
+    const main = { event_name: "push", ref: "refs/heads/main" };
+    expect(expression(health.if, main, { needs: { policy } })).toBe(false);
+    expect(expression(step.if, main)).toBe(false);
+  });
+
   it("selects every consumer even when the classifier would skip it", () => {
     const outputs = Object.fromEntries(
       ["docs", "site", "admin", "firebase"].map((consumer) => {

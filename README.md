@@ -78,12 +78,14 @@ fixed before submission.
 After changing a pull request's base branch, push an updated head or reopen
 the pull request to run CI for the new base.
 
-The hosted **Code health** workflow records lint, Functions JavaScript type
-errors, and source size. Download the `code-health` artifact for the tested
-merge tree, its base, the base's ESLint bulk suppressions and the new findings.
-The report uses the same rules on both trees. It compares diagnostic counts
-by file, rule and message so shifted lines keep their baseline. It also
-tracks detected renames. Test files are linted and excluded from size counts.
+Required CI compares lint, Functions JavaScript types and source size on pull
+requests and merge groups. It fails for new errors, files crossing 1,000 lines,
+and growth in files already over 1,000 lines. Download the `code-health`
+artifact for the tested tree, its base, the base's ESLint bulk suppressions and
+the new findings. The check compares diagnostic counts by file, rule and
+message so shifted lines keep their baseline. It also tracks detected renames.
+Test files are linted and excluded from size counts. Main pushes record the
+current baseline in the **Code health** workflow.
 
 | Report | Failure it identifies | Existing protection | Removal condition |
 | --- | --- | --- | --- |
@@ -91,8 +93,7 @@ tracks detected renames. Test files are linted and excluded from size counts.
 | Functions types | New JavaScript type mismatches such as invalid call arguments | Functions unit and emulator tests exercise runtime paths | Remove this pass when equivalent type coverage checks Functions |
 | Size | Source files crossing 1,000 lines or oversized files growing, and functions crossing 200 lines | Code review | Remove the file growth comparison when all files are within the limit |
 
-Complexity warnings help identify functions for review. The quality reports
-run independently of required CI.
+Complexity warnings help identify functions for review.
 
 The configuration input check scans current source reads against
 `config/configuration-inputs.json`. Each input needs a named supplier, scope and
