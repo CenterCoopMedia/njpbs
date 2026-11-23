@@ -1332,8 +1332,8 @@ describe("cmsPages loader against the Firestore emulator", () => {
     expect(watchPreviewHtml.match(/Programs on demand/g)).toHaveLength(1);
     expect(watchPreviewHtml.match(/PBS handles the player/g)).toHaveLength(1);
     expect(watchPreviewHtml).not.toContain('<a class="public-page__card"');
-    expect(watchPreviewHtml).toContain(
-      '<a class="public-page__card-title-link" href="https://watch.njpbs.org/"',
+    expect(watchPreviewHtml).toMatch(
+      /<a\b[^>]*\bhref="https:\/\/watch\.njpbs\.org\/"[^>]*>Programs on demand</,
     );
     expect(watchPreviewHtml).toContain('<a href="/faq/">See Watch help</a>');
     expect(watchPreviewHtml.indexOf("Use Watch for NJ PBS video")).toBeLessThan(
