@@ -7,7 +7,7 @@ import { SECURITY_HEADER_BASELINE } from "../../packages/content-core/src/public
 import { isVideoCatalogPath } from "../../packages/content-core/src/video-catalog-path";
 import { PUBLIC_GONE_BRANCH_HEADER } from "./public-gone";
 import { useAssetsForUnavailablePost } from "../../functions/lib/transitional-post-fallback.js";
-import { isPublicContentSlug } from "../../site/src/lib/public-content-routes";
+import { isPostRouteSlug, postSlugForPath } from "../../site/src/lib/public-content-routes";
 import type { PublishedPostContent } from "../../site/src/lib/published-post-shadow";
 import { WITHDRAWAL_UNKNOWN_HEADER, type Withdrawal } from "./durable-post-withdrawals";
 import { isVerifiedLastGoodResponse, readAssetCodeGeneration, reportLastGoodRetentionFailure, type PublicContentLastGood } from "./public-content-last-good";
@@ -58,10 +58,10 @@ function publicPath(path: string): string | null {
   if (/%|\\|\/\//.test(path) || path.length > 512) throw new Error("Invalid public path");
   if (path.startsWith("/posts/_no-build-assets/")) return null;
   path = path.replace(/\/index\.html\/?$/, "/");
-  if (/^\/posts\/[^/]+$/.test(path) || /^\/(programs|shows|events)(?:\/[^/]+)?$/.test(path) ||
+  if (/^\/(?:es\/)?posts\/[^/]+$/.test(path) || /^\/(programs|shows|events)(?:\/[^/]+)?$/.test(path) ||
       isVideoCatalogPath(path) && !path.endsWith("/")) path += "/";
   if (!isIndependentPostBackgroundPath(path) && !["/", "/_home-sources.json", "/_publication.json", "/_content-status.json"].includes(path) &&
-      !/^\/posts\/[^/]+\/$/.test(path)) return null;
+      !postSlugForPath(path)) return null;
   return path;
 }
 
@@ -110,11 +110,11 @@ function catalogPosts(reply: NoBuildPostReply) {
   if (!["receipts", "partial-receipts", "static"].includes(reply.kind)) throw new Error("Invalid public catalog");
   const posts = reply.catalog?.posts ?? (reply.receipt ? [reply.receipt] : null);
   const refused = reply.catalog?.refusedPosts;
-  if (!Array.isArray(posts) || posts.some(post => !post || !isPublicContentSlug(post.slug) ||
-      !Array.isArray(post.ownedSlugs) || post.ownedSlugs.some(slug => !isPublicContentSlug(slug))) ||
+  if (!Array.isArray(posts) || posts.some(post => !post || !isPostRouteSlug(post.slug) ||
+      !Array.isArray(post.ownedSlugs) || post.ownedSlugs.some(slug => !isPostRouteSlug(slug))) ||
       (reply.kind === "partial-receipts" ? !Array.isArray(refused) || !refused.length || refused.some(owner =>
         typeof owner?.postId !== "string" || !/^[A-Za-z0-9_-]{1,128}$/.test(owner.postId) || !Array.isArray(owner.ownedSlugs) ||
-        !owner.ownedSlugs.length || owner.ownedSlugs.some(slug => !isPublicContentSlug(slug)))
+        !owner.ownedSlugs.length || owner.ownedSlugs.some(slug => !isPostRouteSlug(slug)))
         : !posts.length || refused !== undefined)) {
     throw new Error("Invalid public catalog");
   }
@@ -148,12 +148,12 @@ export function createTransitionalPostReadWorker(dependencies: Dependencies) {
     const url = new URL(request.url);
     return !url.search && ["GET", "HEAD"].includes(request.method) &&
       !["authorization", "cookie", "range"].some(header => request.headers.has(header)) &&
-      /^\/(posts|programs|shows|events)\/[a-z0-9]+(?:-[a-z0-9]+)*\/$/.test(url.pathname) ? url.pathname : null;
+      (postSlugForPath(url.pathname) || /^\/(programs|shows|events)\/[a-z0-9]+(?:-[a-z0-9]+)*\/$/.test(url.pathname)) ? url.pathname : null;
   };
   /** A 410, a 503 for unknown withdrawal state, or null when no withdrawal
    * applies. Rejects when the route has no last-good authority. */
   async function lastGoodWithdrawal(request: Request, path: string): Promise<Response | null> {
-    const slug = /^\/posts\/([^/]+)\/$/.exec(path)?.[1];
+    const slug = postSlugForPath(path);
     if (slug) {
       if (!dependencies.readWithdrawal) throw new Error("Post withdrawal authority unavailable");
       let marker: Withdrawal | null;
@@ -511,7 +511,7 @@ export function createTransitionalPostReadWorker(dependencies: Dependencies) {
     } catch { /* A failed context may have seen a newer withdrawal. */ }
     // The current no-build reader can confirm a publication that the code
     // context could not qualify. Check before allowing a static copy.
-    const path = new URL(request.url).pathname, slug = /^\/posts\/([^/]+)\/$/.exec(path)?.[1];
+    const path = new URL(request.url).pathname, slug = postSlugForPath(path);
     if (!slug || !dependencies.readWithdrawal) return unavailable(request);
     try {
       const marker = await timed(dependencies.readWithdrawal(slug), 500);
@@ -537,7 +537,7 @@ export function createTransitionalPostReadWorker(dependencies: Dependencies) {
       if (retained) return retained;
     }
     const response = await dependencies.fetchAsset(request);
-    if (response.status === 410 && /^\/posts\/[^/]+\/$/.test(publicPath(new URL(request.url).pathname) ?? "")) {
+    if (response.status === 410 && postSlugForPath(publicPath(new URL(request.url).pathname) ?? "")) {
       void response.body?.cancel().catch(() => {});
       return unavailable(request);
     }
@@ -585,7 +585,7 @@ export function createTransitionalPostReadWorker(dependencies: Dependencies) {
         return assets(request, false);
       }
       if (!["GET", "HEAD"].includes(request.method)) return assets(request, false);
-      const slug = !isIndependentPostBackgroundPath(path) ? /^\/posts\/([^/]+)\/$/.exec(path)?.[1] : undefined;
+      const slug = postSlugForPath(path);
       let withdrawal: Withdrawal | null = null;
       if (slug && dependencies.readWithdrawal) {
         try { withdrawal = await timed(dependencies.readWithdrawal(slug), 500); }

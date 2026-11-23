@@ -1,4 +1,4 @@
-import { isServerMintableSlugShape as isPublicContentSlug } from "../../packages/content-core/src/post-slugs";
+import { isPostRouteSlug } from "../../packages/content-core/src/post-slugs";
 
 export const WITHDRAWAL_MANIFEST_BYTES = 1024 * 1024;
 export const WITHDRAWAL_MANIFEST_POSTS = 2500;
@@ -57,7 +57,7 @@ export function validateWithdrawalManifest(value: unknown, workerName: string): 
         !raw.ownedSlugs.length || raw.ownedSlugs.length > 100) refuse();
     posts.add(raw.postId as string);
     const ownedSlugs = (raw.ownedSlugs as unknown[]).map(slug => {
-      if (typeof slug !== "string" || !isPublicContentSlug(slug) || slugs.has(slug)) refuse();
+      if (!isPostRouteSlug(slug) || slugs.has(slug)) refuse();
       slugs.add(slug as string);
       if (slugs.size > WITHDRAWAL_MANIFEST_SLUGS) refuse();
       return slug as string;
@@ -112,7 +112,7 @@ export async function readWithdrawalValue(object: WithdrawalObject, signal?: Abo
  * unreadable catalog, an R2 error or a timeout rejects: withdrawal state is unknown. */
 export async function readDurablePostWithdrawal(store: WithdrawalReader | undefined, workerName: string,
   slug: string): Promise<Withdrawal | null> {
-  if (!store || !isPublicContentSlug(slug)) return null;
+  if (!store || !isPostRouteSlug(slug)) return null;
   return readKnownDurableWithdrawal(store, async (reader, signal) => {
     const object = await reader.get(withdrawalManifestKey(workerName));
     if (!object) return null;

@@ -6,6 +6,7 @@ export { homeCatalogJson, isHomeSelectedIds, isHomeSelectionReceipt } from "./ho
 
 import { readHomeServiceSources, type HomeServiceSources } from "./home-service-sources.ts";
 import { adaptHomeNewsletter } from "./home-newsletter-source.ts";
+import { isPostRouteSlug, postRoutePath } from "./post-slugs.ts";
 
 export interface HomeEditorialCatalog {
   services?: HomeServiceSources;
@@ -113,7 +114,7 @@ export function homePostPlacements(snapshot: { blocks?: readonly { id?: string; 
   const blocks = snapshot.blocks ?? [];
   const canonical = blocks.filter((block): block is { id: string; type: string; visible?: boolean; section?: string; data: unknown } => typeof block.id === "string" && typeof block.type === "string" && block.data !== undefined);
   const placements: { blockId: string; section: string; title: string; refreshable: boolean }[] = homeSectionsUsingPost(canonical, postId).map(section => ({ ...section, refreshable: true }));
-  const paths = new Set(slugs.map(slug => `/posts/${slug}`));
+  const paths = new Set(slugs.filter(isPostRouteSlug).map(slug => postRoutePath(slug).slice(0, -1)));
   function mentions(value: unknown): boolean {
     if (typeof value === "string") {
       if (value === postId) return true;

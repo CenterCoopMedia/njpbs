@@ -60,8 +60,9 @@ import { projectDatasetFigures } from "./dataset-figures-projection.ts";
 import { routesOf } from "./slug-routes.ts";
 import {
   POST_PUBLIC_ROUTE_BASE,
-  isPublicContentSlug,
   postPublicPath,
+  isPostRouteSlug,
+  isSpanishPostSlug,
 } from "./public-content-routes.ts";
 export interface CmsPostDoc {
   id: string;
@@ -98,6 +99,7 @@ export interface CmsPostBuildData extends ContentLinkMetadata {
   slug: string;
   previousSlugs: string[];
   locale: string;
+  editionOf?: string;
   path: string;
   title: string;
   /** Absent on older artifacts; reader-facing attribution is opt-in. */
@@ -414,8 +416,12 @@ export function projectCmsPost(
   if (typeof metadata.title !== "string" || metadata.title.trim() === "") {
     throw new Error(`post ${doc.id} has no published title`);
   }
-  if (!isPublicContentSlug(metadata.slug)) {
+  if (!isPostRouteSlug(metadata.slug)) {
     throw new Error(`post ${doc.id} has no route-safe published slug`);
+  }
+  const spanish = isSpanishPostSlug(metadata.slug);
+  if (spanish && (metadata.locale !== "es" || typeof metadata.editionOf !== "string" || !metadata.editionOf)) {
+    throw new Error(`post ${doc.id} has invalid Spanish edition metadata`);
   }
   const previousSlugs = Array.isArray(metadata.previousSlugs)
     ? metadata.previousSlugs
@@ -429,7 +435,7 @@ export function projectCmsPost(
   const routableRedirects = routesOf({
     slug: metadata.slug,
     previousSlugs: previousSlugs as string[],
-  }).redirects.filter((slug) => isPublicContentSlug(slug));
+  }).redirects.filter((slug) => isPostRouteSlug(slug) && isSpanishPostSlug(slug) === spanish);
 
   if (typeof snapshot.publishedAt !== "string") {
     throw new Error(`post ${doc.id} published snapshot has no publish time`);
@@ -514,6 +520,7 @@ export function projectCmsPost(
       ? metadata.locale
       : "en",
     path: postPublicPath(metadata.slug),
+    ...(spanish ? { editionOf: metadata.editionOf as string } : {}),
     ...contentLinkMetadata(metadata as unknown as Record<string, unknown>),
     title: metadata.title,
     spotlightNews: spotlightArchive || metadata.spotlightNews === true,

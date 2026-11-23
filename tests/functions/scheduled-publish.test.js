@@ -163,7 +163,7 @@ describe("scheduled publish snapshot", () => {
     expect(enqueuePublishFn).not.toHaveBeenCalled();
     const saved = (await edition.get()).data();
     expect(saved).toMatchObject({ status: "draft", editionOf: "english-original", scheduledPublishFailure: {
-      reason: expect.stringContaining("Spanish editions"),
+      reason: expect.stringContaining("Approve the translation"),
     } });
     expect(saved).not.toHaveProperty("published");
     expect(saved).not.toHaveProperty("publishAt");

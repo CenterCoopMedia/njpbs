@@ -7,7 +7,7 @@ import work from "../../functions/lib/public-release-pair-work.js";
 import visibility from "../../functions/lib/public-video-references.js";
 import postState from "../../functions/lib/no-build-post-state.js";
 import { canonicalPublicationReceipt } from "../src/lib/public-publication-receipt";
-import { isPublicContentSlug, programPublicPath, eventPublicPath } from "../src/lib/public-content-routes";
+import { isPostRouteSlug, isPublicContentSlug, postPublicPath, programPublicPath, eventPublicPath } from "../src/lib/public-content-routes";
 import type { PairReplayTargetReceipt } from "./public-release-pair-replay";
 const hash = (value: string) => createHash("sha256").update(value).digest("hex");
 function refuse(): never { throw new work.PairExecutionError("input-unavailable"); }
@@ -43,8 +43,8 @@ export async function derivePublicReleasePairPublicReceipts(options: { pair: Pub
     if (!/^[A-Za-z0-9_-]{1,128}$/.test(state.postId) || ids.has(state.postId) || !/^[A-Za-z0-9]{20}$/.test(state.operationId) ||
         ![undefined, "dynamic", "static"].includes(state.mode) || !Number.isSafeInteger(state.generation) || state.generation < 1 ||
         !Number.isSafeInteger(state.sourceVersion) || state.sourceVersion < 1 || typeof state.visible !== "boolean" ||
-        !isPublicContentSlug(state.slug) || !Array.isArray(state.ownedSlugs) || !state.ownedSlugs.includes(state.slug) ||
-        !state.ownedSlugs.every(isPublicContentSlug) || new Set(state.ownedSlugs).size !== state.ownedSlugs.length ||
+        !isPostRouteSlug(state.slug) || !Array.isArray(state.ownedSlugs) || !state.ownedSlugs.includes(state.slug) ||
+        !state.ownedSlugs.every(isPostRouteSlug) || new Set(state.ownedSlugs).size !== state.ownedSlugs.length ||
         state.snapshotDigest !== undefined && !/^[a-f0-9]{64}$/.test(state.snapshotDigest) ||
         state.datasetFiguresDigest !== undefined && (!/^[a-f0-9]{64}$/.test(state.datasetFiguresDigest) || !state.snapshotDigest)) refuse();
     ids.add(state.postId);
@@ -52,15 +52,15 @@ export async function derivePublicReleasePairPublicReceipts(options: { pair: Pub
     if (state.mode === "static") {
       const snapshot = document?.published, metadata = snapshot?.metadata;
       if (metadata?.type !== "post" || !Number.isSafeInteger(snapshot?.sourceVersion) || snapshot.sourceVersion < 1 ||
-          !isPublicContentSlug(metadata.slug) || metadata.previousSlugs !== undefined && !Array.isArray(metadata.previousSlugs)) refuse();
+          !isPostRouteSlug(metadata.slug) || metadata.previousSlugs !== undefined && !Array.isArray(metadata.previousSlugs)) refuse();
       const currentSlugs = [metadata.slug, ...(metadata.previousSlugs ?? [])];
       const visible = visibility.publiclyVisible(document);
-      if (currentSlugs.length > 100 || !currentSlugs.every(isPublicContentSlug) || visible &&
+      if (currentSlugs.length > 100 || !currentSlugs.every(isPostRouteSlug) || visible &&
           (!Number.isSafeInteger(document.version) || snapshot.sourceVersion > document.version ||
             Number.isSafeInteger(document.publicSourceVersion) && snapshot.sourceVersion < document.publicSourceVersion)) refuse();
       const ownedSlugs = [...new Set<string>([...state.ownedSlugs, ...currentSlugs])].sort();
       if (ownedSlugs.length > 100) refuse();
-      const link = visible ? contentLink(metadata, `/posts/${metadata.slug}/`) : null;
+      const link = visible ? contentLink(metadata, postPublicPath(metadata.slug)) : null;
       // currentStaticInput derives these fields from the current frozen
       // document; a static owner's retained source version/slug may be older.
       return { schemaVersion: 1, postId: state.postId, operationId: state.operationId, generation: state.generation,

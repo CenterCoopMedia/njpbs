@@ -16,6 +16,7 @@ export default function compiledRendererAdapter({ publicPostsOnly = false, publi
           ["/data-hub/", "./src/pages/data-hub/[...hub].astro"],
           ["/[...slug]", "./src/pages/[...slug].astro"],
           ["/posts/[...slug]", "./src/pages/posts/[...slug].astro"],
+          ["/es/posts/[...slug]", "./src/pages/es/posts/[...slug].astro"],
           ["/programs/[...slug]", "./src/pages/programs/[...slug].astro"],
           ["/events/[...slug]", "./src/pages/events/[...slug].astro"],
           ["/schedule/", "./src/pages/schedule/[...schedule].astro"],
@@ -34,7 +35,7 @@ export default function compiledRendererAdapter({ publicPostsOnly = false, publi
         }
         for (const [pattern, entrypoint] of routes) {
           if ((publicRecords || publicPages) && ["/events/[...slug]", "/programs/[...slug]"].includes(pattern)) continue;
-          if (!publicPostsOnly || publicPages || pattern === "/posts/[...slug]") injectRoute({ pattern, entrypoint, prerender: false });
+          if (!publicPostsOnly || publicPages || pattern.endsWith("/posts/[...slug]")) injectRoute({ pattern, entrypoint, prerender: false });
         }
       },
       "astro:config:done": ({ setAdapter }) => setAdapter({

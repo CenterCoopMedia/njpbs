@@ -43,6 +43,9 @@ describe("sitemap locale policy", () => {
 
     expect(filter?.("https://njpbs.org/about/")).toBe(true);
     expect(filter?.("https://njpbs.org/es/about/")).toBe(true);
+    expect(filter?.("https://njpbs.org/es/posts/noticias/")).toBe(true);
+    mocks.pageDeclaresNoindex.mockReturnValueOnce(true);
+    expect(filter?.("https://njpbs.org/es/posts/noticias-anteriores/")).toBe(false);
     expect(filter?.("https://njpbs.org/es/wiki/example/")).toBe(false);
     expect(filter?.("https://njpbs.org/es/design-system/")).toBe(false);
     expect(filter?.("https://njpbs.org/admin/docs/")).toBe(false);

@@ -115,6 +115,7 @@ const DEFAULT_VARIABLES = {
   DATA_FIGURE_VERSION: "1",
   ELECTION_RESULTS_VERSION: "0",
   LIVE_BLOG_VERSION: "0",
+  SPANISH_POST_VERSION: "0",
   DATA_HUB_PUBLIC: "0",
 };
 const FAMILY_CAPABILITY = { schemaVersion: 2, families: ["posts"], enabled: true,
@@ -470,7 +471,7 @@ describe("public Worker candidate upload orchestration", () => {
     ]));
     expect(upload?.filter((_, index) => upload[index - 1] === "--var")).toEqual([
       `NO_BUILD_RECORD_RENDERER_SHA:${COMMIT_SHA}`, "NO_BUILD_POST_FAMILIES:posts", `NO_BUILD_POST_RENDERER_SHA:${COMMIT_SHA}`,
-      `NO_BUILD_PAGE_RENDERER_SHA:${COMMIT_SHA}`, "DATA_FIGURE_VERSION:1", "ELECTION_RESULTS_VERSION:0", "LIVE_BLOG_VERSION:0", "DATA_HUB_PUBLIC:0", "DATA_HUB_COMPOSITION_VERSION:0",
+      `NO_BUILD_PAGE_RENDERER_SHA:${COMMIT_SHA}`, "DATA_FIGURE_VERSION:1", "ELECTION_RESULTS_VERSION:0", "LIVE_BLOG_VERSION:0", "SPANISH_POST_VERSION:0", "DATA_HUB_PUBLIC:0", "DATA_HUB_COMPOSITION_VERSION:0",
     ]);
     expect(upload?.[upload.indexOf("--assets") + 1]).toBe(prepared.distDirectory);
     expect(candidate.noBuildPost).toEqual(FAMILY_CAPABILITY);
@@ -557,7 +558,7 @@ describe("public Worker candidate upload orchestration", () => {
     const upload = wrangler.commands.find(args => args[1] === "upload")!;
     expect(upload.filter((_, index) => upload[index - 1] === "--var")).toEqual([
       `NO_BUILD_RECORD_RENDERER_SHA:${COMMIT_SHA}`, "NO_BUILD_POST_FAMILIES:posts", `NO_BUILD_POST_RENDERER_SHA:${COMMIT_SHA}`,
-      `NO_BUILD_PAGE_RENDERER_SHA:${COMMIT_SHA}`, "DATA_FIGURE_VERSION:1", "ELECTION_RESULTS_VERSION:0", "LIVE_BLOG_VERSION:0", "DATA_HUB_PUBLIC:0", "DATA_HUB_COMPOSITION_VERSION:0",
+      `NO_BUILD_PAGE_RENDERER_SHA:${COMMIT_SHA}`, "DATA_FIGURE_VERSION:1", "ELECTION_RESULTS_VERSION:0", "LIVE_BLOG_VERSION:0", "SPANISH_POST_VERSION:0", "DATA_HUB_PUBLIC:0", "DATA_HUB_COMPOSITION_VERSION:0",
     ]);
   });
 
@@ -600,7 +601,7 @@ describe("public Worker candidate upload orchestration", () => {
     const upload = wrangler.commands.find(args => args[1] === "upload")!;
     expect(upload.filter((_, index) => upload[index - 1] === "--var")).toEqual([
       `NO_BUILD_RECORD_RENDERER_SHA:${COMMIT_SHA}`, "NO_BUILD_POST_FAMILIES:posts", `NO_BUILD_POST_RENDERER_SHA:${COMMIT_SHA}`,
-      `NO_BUILD_PAGE_RENDERER_SHA:${COMMIT_SHA}`, "DATA_FIGURE_VERSION:1", "ELECTION_RESULTS_VERSION:0", "LIVE_BLOG_VERSION:0", "DATA_HUB_PUBLIC:0", "DATA_HUB_COMPOSITION_VERSION:0",
+      `NO_BUILD_PAGE_RENDERER_SHA:${COMMIT_SHA}`, "DATA_FIGURE_VERSION:1", "ELECTION_RESULTS_VERSION:0", "LIVE_BLOG_VERSION:0", "SPANISH_POST_VERSION:0", "DATA_HUB_PUBLIC:0", "DATA_HUB_COMPOSITION_VERSION:0",
     ]);
     const stored = await db.doc(`system/publicDeployment/buildBatches/${candidate.buildBatchId}/candidates/worker`).get();
     expect(stored.data()?.noBuildPost).toEqual(candidate.noBuildPost);

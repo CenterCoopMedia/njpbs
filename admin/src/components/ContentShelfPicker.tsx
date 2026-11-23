@@ -7,7 +7,7 @@ import type { LoadedRecord } from "./EditorWorkspace";
 import type { PageDirectoryEntry } from "./PagesDirectory";
 import type { RecordKind } from "../../../packages/content-core/src/editor-admin";
 import { PUBLIC_PAGES } from "../../../packages/content-core/src/public-pages";
-import { isServerMintableSlugShape } from "../../../packages/content-core/src/post-slugs";
+import { isPostRouteSlug, postRoutePath } from "../../../packages/content-core/src/post-slugs";
 import { readPostLeadMedia, leadMediaAssetIds, leadMediaTitle } from "../../../packages/content-core/src/post-lead-media";
 import { mintCollectionItemId } from "../lib/collection-item-keys";
 import { Button, Select, TextInput } from "./ui/Primitives";
@@ -34,7 +34,7 @@ export function postShelfCard(record: Record<string, unknown>): Record<string, u
     throw new Error("This post has no settled public snapshot. Try again after publication finishes.");
   }
   const metadata = object(published.metadata);
-  if (!isServerMintableSlugShape(metadata.slug)) throw new Error("This post has no published destination.");
+  if (!isPostRouteSlug(metadata.slug)) throw new Error("This post has no published destination.");
   const lead = readPostLeadMedia(metadata, true);
   const image = lead?.kind === "image" ? lead.data : null;
   return {
@@ -43,7 +43,7 @@ export function postShelfCard(record: Record<string, unknown>): Record<string, u
     imageAssetId: leadMediaAssetIds(lead)[0] ?? "",
     alt: image ? image.alt : lead && lead.kind !== "image" ? leadMediaTitle(lead) : "",
     ...(image?.altDecorative === true ? { altDecorative: true } : {}),
-    href: `/posts/${metadata.slug}/`,
+    href: postRoutePath(metadata.slug),
   };
 }
 

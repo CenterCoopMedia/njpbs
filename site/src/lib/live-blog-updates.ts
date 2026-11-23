@@ -1,5 +1,6 @@
 import { parseLiveBlogFeed, parseLiveBlogManifest, type LiveBlogManifest } from "../../../packages/content-core/src/live-blog-manifest";
 import { resolveLiveBlogPresentation } from "../../../packages/content-core/src/live-blog";
+import { postSlugForPath } from "./public-content-routes";
 import { installLiveBlogFollowUps } from "./live-blog-follow-ups";
 import { installLiveBlogPagination } from "./live-blog-pagination";
 
@@ -14,7 +15,7 @@ export function installLiveBlogUpdates(root: HTMLElement, onLoaded: () => void =
   const controls = root.querySelector<HTMLElement>("[data-live-blog-refresh]");
   const button = controls?.querySelector<HTMLButtonElement>("[data-live-blog-load]");
   const status = root.querySelector<HTMLElement>("[data-live-blog-announcement]");
-  if (!win || !marker || !controls || !button || !status || !/^\/posts\/[a-z0-9]+(?:-[a-z0-9]+)*\/$/.test(win.location.pathname)) return;
+  if (!win || !marker || !controls || !button || !status || !postSlugForPath(win.location.pathname)) return;
   let applied: LiveBlogManifest;
   try {
     applied = parseLiveBlogManifest(JSON.parse(marker.textContent ?? ""));

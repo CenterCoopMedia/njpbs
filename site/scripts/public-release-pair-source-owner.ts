@@ -1,4 +1,5 @@
 import { contentLink } from "../../packages/content-core/src/content-link.ts";
+import { postRoutePath } from "../../packages/content-core/src/post-slugs.ts";
 import { PAIR_SEARCH_INPUTS_FILE, derivePublicReleasePairSearchInputs, parsePublicReleasePairSearchInputs, publicReleasePairSearchInputDescriptor, PairSearchInputsError, type PairSearchInputs } from "./public-release-pair-search-inputs";
 import { createHash } from "node:crypto";
 import { createRequire } from "node:module";
@@ -32,6 +33,7 @@ import { preparePublicReleasePairMediaPin, preparePublicReleasePairMediaPinInTra
 
 const require = createRequire(import.meta.url);
 const postReader = require("../../functions/published-post-reader.js");
+const editions = require("../../functions/lib/spanish-edition.js");
 const pageReader = require("../../functions/lib/no-build-page-render-context.js");
 const recordReader = require("../../functions/lib/no-build-record-source.js");
 const pages = require("../../functions/lib/no-build-page-ownership.js");
@@ -236,25 +238,45 @@ async function derivePairInput(options: SourceOptions, retained?: HistoricalPubl
       routes.set(route.path, route.renderer === "withdrawal" ? { ...route, read: { kind: "withdrawn", path: route.path } } : route);
     };
     const global = globalCapture;
-    const postIds = members.filter(member => member.change.kind === "post").map(member => member.change.id);
+    const postMembers = members.filter(member => member.change.kind === "post");
+    const postIds = new Set(postMembers.map(member => member.change.id));
+    const alternateIds = new Map<string, string>();
+    if (!global) for (const { change, snapshot } of postMembers) {
+      alternateIds.set(change.id, editions.alternatePostId(change.id, snapshot.metadata));
+    }
     const affectedPageIds = members.filter(member => member.change.kind === "page").map(member => member.change.id);
     const changedPageIds = [...affectedPageIds];
-    if (postIds.length || changedPageIds.length) affectedPageIds.push("home");
+    if (postIds.size || changedPageIds.length) affectedPageIds.push("home");
     const posts = global ? await bounded(transaction, firestore, "cmsPosts", firestore.collection("cmsPosts")
-      .where("published.metadata.type", "in", ["post", "program", "event"])) : await identified(transaction, firestore, "cmsPosts", postIds);
+      .where("published.metadata.type", "in", ["post", "program", "event"]))
+      : await identified(transaction, firestore, "cmsPosts", [...new Set([...postIds, ...alternateIds.values()])]);
+    // The retained bytes for the linked edition must change in the same view
+    // as the publishing or withdrawing Post, even though its source is unchanged.
+    const postsById = new Map(posts.map(row => [row.id, row.data()]));
+    const alternatePaths = new Map<string, string>();
+    const linkedIds = new Set<string>();
+    for (const { change, snapshot } of postMembers) {
+      const id = alternateIds.get(change.id);
+      if (!id) continue;
+      const path = editions.visibleAlternatePath(change.id, snapshot.metadata, id, postsById.get(id), now);
+      if (path) {
+        alternatePaths.set(change.id, path);
+        linkedIds.add(id);
+      }
+    }
     const pageRows = global ? await bounded(transaction, firestore, "cmsPages", firestore.collection("cmsPages")
       .where("published.sourceVersion", ">", 0)) : await identified(transaction, firestore, "cmsPages", affectedPageIds);
     const pageOwners = global ? await bounded(transaction, firestore, pages.PAGE_OWNER_COLLECTION)
       : await identified(transaction, firestore, pages.PAGE_OWNER_COLLECTION, affectedPageIds);
     const postOwners = global ? await bounded(transaction, firestore, "system/publicDeployment/noBuildPostOwners")
-      : await identified(transaction, firestore, "system/publicDeployment/noBuildPostOwners", postIds);
+      : await identified(transaction, firestore, "system/publicDeployment/noBuildPostOwners", [...postIds]);
     const affectedFamilies = [...new Set(members.filter(member => member.change.kind === "record")
       .map(member => member.snapshot.metadata.type === "program" ? "programs" : "events"))];
     const recordOwners = global ? await bounded(transaction, firestore, records.RECORD_OWNER_COLLECTION) : affectedFamilies.length
       ? await bounded(transaction, firestore, records.RECORD_OWNER_COLLECTION,
         firestore.collection(records.RECORD_OWNER_COLLECTION).where("family", "in", affectedFamilies)) : [];
     const homeOwner = pageOwners.find(row => row.id === "home")?.data();
-    const postChange = members.some(member => member.change.kind === "post");
+    const postChange = postIds.size > 0;
     const homeRefresh = postChange ? (await transaction.get(firestore.doc(`cmsPublishQueue/${sourceOperationId}/homePageRefresh/home`))).data() : null;
     const dependentHome = retained ? postChange && !!homeOwner : postChange && homeOwner?.homeRefresh?.sourceOperationId === sourceOperationId;
     const pinnedPageHome = !!homeOwner && changedPageIds.length > 0 && homeHeroNeedsPageRefresh(
@@ -265,7 +287,7 @@ async function derivePairInput(options: SourceOptions, retained?: HistoricalPubl
         homeRefresh.input?.homeSourceVersion !== homeOwner?.sourceVersion) || homeRefresh && !dependentHome)) refuse();
     if (dependentHome && !retained) {
       if (!homeRefresh) refuse();
-      const expected = members.filter(member => member.change.kind === "post").map(({ change }) => ({
+      const expected = postMembers.map(({ change }) => ({
         postId: change.id, sourceVersion: change.sourceVersion, visible: change.action !== "withdraw" })).sort((a, b) => a.postId < b.postId ? -1 : 1);
       const actual = homeRefresh.input.postChanges ?? [{ postId: homeRefresh.input.postId,
         sourceVersion: homeRefresh.input.sourceVersion, visible: homeRefresh.input.visible }];
@@ -275,19 +297,21 @@ async function derivePairInput(options: SourceOptions, retained?: HistoricalPubl
       members.some(member => member.change.kind === kind && member.change.id === id);
     for (const row of posts) {
       const document = row.data();
-      if (!affected("post", row.id) || document.published?.metadata?.type !== "post") continue;
+      const directlyAffected = affected("post", row.id);
+      if ((!directlyAffected && !linkedIds.has(row.id)) || document.published?.metadata?.type !== "post") continue;
+      const canonical = postRoutePath(document.published.metadata.slug);
       const owner = postOwners.find(owner => owner.id === row.id)?.data();
-      const slugs = [...new Set<string>([...(owner?.ownedSlugs ?? []), document.published.metadata.slug,
-        ...(document.published.metadata.previousSlugs ?? [])])];
+      const slugs = [...new Set<string>([document.published.metadata.slug,
+        ...(directlyAffected ? [...(owner?.ownedSlugs ?? []), ...(document.published.metadata.previousSlugs ?? [])] : [])])];
       if (!publiclyVisible(document)) {
-        if (owner || affected("post", row.id) && !global) for (const slug of slugs) add({ path: `/posts/${slug}/`, renderer: "withdrawal", read: null, homeSources: null, status: 410 });
+        if (owner || directlyAffected && !global) for (const slug of slugs) add({ path: postRoutePath(slug), renderer: "withdrawal", read: null, homeSources: null, status: 410 });
         continue;
       }
-      const read = await postReader.readPublishedPost({ firestore, transaction, slug: document.published.metadata.slug, now });
+      const read = await postReader.readPublishedPost({ firestore, transaction, slug: document.published.metadata.slug, now,
+        allowLegacyVisibility: !directlyAffected });
       if (read.kind !== "published-post") refuse();
-      const canonical = `/posts/${document.published.metadata.slug}/`;
       for (const slug of slugs) {
-        const path = `/posts/${slug}/`;
+        const path = postRoutePath(slug);
         add(path === canonical ? { path, renderer: "post", read, homeSources: null, status: contentLink(document.published.metadata, canonical).external ? 302 : 200 }
           : { path, renderer: "redirect", read: { kind: "redirect", path, location: canonical }, homeSources: null, status: 308 });
       }
@@ -385,8 +409,9 @@ async function derivePairInput(options: SourceOptions, retained?: HistoricalPubl
           let paths = [...routes.keys()];
           if (change.kind === "post") {
             const owner = postOwners.find(row => row.id === change.id)?.data();
-            const own = new Set([...(owner?.ownedSlugs ?? []), snapshot.metadata.slug, ...(snapshot.metadata.previousSlugs ?? [])].map(slug => `/posts/${slug}/`));
-            paths = paths.filter(path => own.has(path) || dependentHome && ["/", "/_home-sources.json"].includes(path));
+            const own = new Set([...(owner?.ownedSlugs ?? []), snapshot.metadata.slug, ...(snapshot.metadata.previousSlugs ?? [])].map(postRoutePath));
+            paths = paths.filter(path => own.has(path) || path === alternatePaths.get(change.id) ||
+              dependentHome && ["/", "/_home-sources.json"].includes(path));
           } else if (change.kind === "page") {
             const owner = pageOwners.find(row => row.id === change.id)?.data();
             const own = new Set([...(owner?.ownedPaths ?? []), publicPagePath(change.id, snapshot.metadata),

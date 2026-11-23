@@ -550,17 +550,23 @@ describe("CMS preview request", () => {
     expect(retained.body).toMatchObject({ status: "expired", previewUrl: null, expiresAt: new Date(started + 86400000).toISOString() });
   });
 
-  it("freezes a post draft and its private route without changing publication", async () => {
-    const stored = { ...page(), type: "post", status: "draft", slug: "new-report", previousSlugs: [],
-      locale: "en", tags: [], credits: [{ kind: "custom", name: "NJ PBS staff" }] };
+  it.each([
+    { status: "draft", locale: "en", slug: "new-report", path: "/posts/new-report/" },
+    { status: "scheduled", locale: "es", slug: "es/noticias", path: "/es/posts/noticias/" },
+    { status: "published", locale: "es", slug: "es/noticias", path: "/es/posts/noticias/" },
+  ])("freezes a $status Post and its private route without changing publication", async ({ status, locale, slug, path }) => {
+    const stored = { ...page(), type: "post", status, slug, previousSlugs: [],
+      ...(locale === "es" ? { editionOf: "source-post" } : {}),
+      locale, tags: [], credits: [{ kind: "custom", name: "NJ PBS staff" }] };
     await db.collection("cmsPosts").doc("post-1").set(stored);
     const result = await enqueuePreview({ actor: previewActor(), collection: "cmsPosts",
       pageId: "post-1", persistent: true, automatic: true },
     { ...configuredPreviewPipeline(), firestore: db, getTransport: () => "serializer", serializerReady: true });
     const queue = (await db.collection("cmsPreviewQueue").doc(result.queueId).get()).data();
-    expect(queue).toMatchObject({ collection: "cmsPosts", pagePath: "/posts/new-report/", sourceVersion: 7,
+    expect(result).toMatchObject({ pagePath: path });
+    expect(queue).toMatchObject({ collection: "cmsPosts", pagePath: path, sourceVersion: 7,
       snapshot: { id: "post-1", version: 7, published: { metadata: { title: stored.title,
-        slug: "new-report", credits: stored.credits }, sourceVersion: 7 } } });
+        slug, locale, credits: stored.credits }, sourceVersion: 7 } } });
     expect((await db.collection("cmsPosts").doc("post-1").get()).data()).toEqual(stored);
   });
 

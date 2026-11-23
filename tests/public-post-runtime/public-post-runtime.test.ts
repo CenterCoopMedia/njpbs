@@ -5,6 +5,7 @@ import { fileURLToPath } from "node:url";
 import { createRequire } from "node:module";
 import { expect, it } from "vitest";
 import { prose, video, registeredAuthor, withdrawnAuthor, uploadedImages, uploadedAuthors, uploadedImageUrl } from "../../site/tests/fixtures/shadow-posts/fixtures";
+import { isSpanishPostSlug, postRoutePath } from "../../packages/content-core/src/post-slugs";
 
 const require = createRequire(import.meta.url);
 const target = require("../../functions/lib/publication-target.js").publicationTarget(process.env.CMS_DEPLOYMENT_ENVIRONMENT ?? "production");
@@ -23,9 +24,12 @@ it("serves immediate, scheduled, uploaded and live-blog Posts in one compiled re
   const { liveBlogPostFixture } = await import(`data:text/javascript;base64,${Buffer.from(fixtureCode.outputFiles[0].text).toString("base64")}`);
   const release = JSON.parse(await readFile(rendererRelease, "utf8"));
   const { rendererSha } = release;
-  expect(release).toEqual({ schemaVersion: 1, rendererSha, liveBlogVersion: 1, electionResultsVersion: 2, pageReaderVersion: 3,
+  expect(release).toEqual({ schemaVersion: 1, rendererSha, liveBlogVersion: 1, electionResultsVersion: 2, spanishPostVersion: 1, pageReaderVersion: 3,
     ...(target.environment === "development" ? { environment: "development" } : {}) });
   const secondPost = { ...video, document: { ...video.document, id: "runtime-video" } };
+  const spanishPost = { ...prose, alternatePath: postRoutePath(prose.document.published.metadata.slug),
+    document: { ...prose.document, id: "runtime-spanish", published: { ...prose.document.published,
+      metadata: { ...prose.document.published.metadata, locale: "es", slug: "es/noticias", editionOf: prose.document.id } } } };
   // A scheduled fire freezes the actual publication instant and scheduler actor.
   // The later working title must stay outside the rendered snapshot.
   const firedAt = "2026-10-09T12:04:00.000Z";
@@ -39,7 +43,7 @@ it("serves immediate, scheduled, uploaded and live-blog Posts in one compiled re
     return { ...read, document: { ...read.document, id: slug, published: { ...read.document.published,
       metadata: { ...read.document.published.metadata, slug } } } };
   });
-  const replies = [prose, secondPost, registeredAuthor, withdrawnAuthor, ...uploadedAuthors, ...uploadedImages.filter(read => read.document.published.metadata.slug.endsWith("-current") && !read.document.published.metadata.slug.includes("-interactive-")), scheduledPost, ...liveBlogs].map((published, index) => {
+  const replies = [prose, secondPost, spanishPost, registeredAuthor, withdrawnAuthor, ...uploadedAuthors, ...uploadedImages.filter(read => read.document.published.metadata.slug.endsWith("-current") && !read.document.published.metadata.slug.includes("-interactive-")), scheduledPost, ...liveBlogs].map((published, index) => {
     const slug = published.document.published.metadata.slug;
     return { kind: "post", published, receipt: { schemaVersion: 1, postId: published.document.id,
       operationId: String(index + 1).padStart(20, "0"), sourceVersion: published.document.published.sourceVersion,
@@ -48,10 +52,11 @@ it("serves immediate, scheduled, uploaded and live-blog Posts in one compiled re
   const bundle = await build({ stdin: { resolveDir: repo, contents: `
     import { createNoBuildPostWorker } from './workers/src/no-build-post-worker.ts';
     import { renderPublishedPost, rendererSha } from './site/.public-post-renderer/server/entry.mjs';
+    import { postRoutePath } from './packages/content-core/src/post-slugs.ts';
     const replies = ${JSON.stringify(replies)};
     export default { fetch(request) { return createNoBuildPostWorker({
       rendererSha, render: renderPublishedPost, cache: caches.default, target: ${JSON.stringify(target)},
-      getDecision: async path => structuredClone(replies.find(reply => path === "/posts/" + reply.receipt.slug + "/")),
+      getDecision: async path => structuredClone(replies.find(reply => path === postRoutePath(reply.receipt.slug))),
       fetchAsset: async () => new Response(null, { status: 404 }),
     }).fetch(request); } };
   ` }, bundle: true, write: false, platform: "browser", format: "esm" });
@@ -65,13 +70,19 @@ it("serves immediate, scheduled, uploaded and live-blog Posts in one compiled re
       const { receipt } = reply;
       const analytics = target.environment === "production" && !["runtime-live-blog-library-video", "runtime-live-blog-embed", "runtime-live-blog-linked-video"].includes(receipt.slug)
         && !reply.published.document.published.blocks.some(block => block.type === "video");
-      const response = await runtime.dispatchFetch(`${target.origin}/posts/${receipt.slug}/`);
+      const pathname = postRoutePath(receipt.slug);
+      const response = await runtime.dispatchFetch(`${target.origin}${pathname}`);
       expect(response.status).toBe(200);
       expect(response.headers.get("cache-control")).toBe("no-store");
       expect(response.headers.get("x-njpbs-publication-operation")).toBe(receipt.operationId);
       expect(response.headers.get("x-njpbs-admission-revision")).toBe("1");
       const html = await response.text();
-      assertPublishedResources(html, `/posts/${receipt.slug}/`, target.origin);
+      assertPublishedResources(html, pathname, target.origin);
+      if (isSpanishPostSlug(receipt.slug)) {
+        expect(html).toMatch(/<html[^>]*lang="es"/);
+        expect(html).toContain(`href="https://njpbs.org${pathname}"`);
+        expect(html).toContain(`href="${spanishPost.alternatePath}"`);
+      }
       if (analytics && receipt.slug !== "scheduled-story" && !receipt.slug.startsWith("runtime-live-blog-")) expect(html).toContain("A published fixture");
       if (receipt.slug === "scheduled-story") expect(html).toContain("Scheduled fixture");
       if (receipt.slug.startsWith("runtime-live-blog-")) {

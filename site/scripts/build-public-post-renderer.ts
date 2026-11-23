@@ -17,7 +17,7 @@ if (process.argv.length > 3 || (phase && !["--compile-only", "--copy-assets", "-
 const testPages = phase === "--test-pages";
 const sha = git("rev-parse", "HEAD");
 const target = publicationTarget(testPages ? "development" : process.env.CMS_DEPLOYMENT_ENVIRONMENT ?? "production");
-const releaseSeal = { schemaVersion: 1, rendererSha: sha, liveBlogVersion: 1, electionResultsVersion: 2,
+const releaseSeal = { schemaVersion: 1, rendererSha: sha, liveBlogVersion: 1, electionResultsVersion: 2, spanishPostVersion: 1,
   pageReaderVersion: pageReaderContract.PAGE_READER_VERSION,
   ...(dataHubPageEnabled(process.env) ? { dataHubReportingVersion: 1, dataHubCompositionVersion: 1 } : {}),
   ...(target.environment === "development" ? { environment: "development" } : {}) };

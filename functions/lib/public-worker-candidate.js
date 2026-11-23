@@ -181,8 +181,8 @@ function projectCloudflareWorkerVersion(value, { tag, message, target = publicat
     stateError("The uploaded public Worker version receipt is invalid");
   }
   if (target.environment === "development" &&
-      (![3, 4, 5, 6, 7, 8, 9, 10, 11, 12].includes(bindings.length) || new Set(bindings.map(binding => binding?.name)).size !== bindings.length ||
-        !bindings.every(binding => ["ASSETS", "CMS_API", "NO_BUILD_POST_RENDERER_SHA", "NO_BUILD_PAGE_RENDERER_SHA", "NO_BUILD_CODE_POST_RENDERER_SHA", "NO_BUILD_RECORD_RENDERER_SHA", "DATA_FIGURE_VERSION", "ELECTION_RESULTS_VERSION", "LIVE_BLOG_VERSION", "DATA_HUB_PUBLIC", "DATA_HUB_COMPOSITION_VERSION", "DURABLE_POST_WITHDRAWALS", "CF_VERSION_METADATA"].includes(binding?.name)) ||
+      (bindings.length < 3 || bindings.length > 13 || new Set(bindings.map(binding => binding?.name)).size !== bindings.length ||
+        !bindings.every(binding => ["ASSETS", "CMS_API", "NO_BUILD_POST_RENDERER_SHA", "NO_BUILD_PAGE_RENDERER_SHA", "NO_BUILD_CODE_POST_RENDERER_SHA", "NO_BUILD_RECORD_RENDERER_SHA", "DATA_FIGURE_VERSION", "ELECTION_RESULTS_VERSION", "LIVE_BLOG_VERSION", "SPANISH_POST_VERSION", "DATA_HUB_PUBLIC", "DATA_HUB_COMPOSITION_VERSION", "DURABLE_POST_WITHDRAWALS", "CF_VERSION_METADATA"].includes(binding?.name)) ||
         bindings.some(binding => binding.name === "CF_VERSION_METADATA" && binding.type !== "version_metadata") ||
         bindings.some(binding => binding.name === "DURABLE_POST_WITHDRAWALS" &&
           (binding.type !== "r2_bucket" || binding.bucket_name !== "njpbs-dev-cms-publication")))) {
@@ -207,6 +207,9 @@ function projectCloudflareWorkerVersion(value, { tag, message, target = publicat
   const liveBlogMarker = variable("LIVE_BLOG_VERSION");
   if (liveBlogMarker !== undefined && !["0", "1"].includes(liveBlogMarker)) stateError("The candidate live blog metadata is invalid");
   const liveBlogVersion = liveBlogMarker === "1" ? 1 : undefined;
+  const spanishPostMarker = variable("SPANISH_POST_VERSION");
+  if (spanishPostMarker !== undefined && !["0", "1"].includes(spanishPostMarker)) stateError("The candidate Spanish Post metadata is invalid");
+  const spanishPostVersion = spanishPostMarker === "1" ? 1 : undefined;
   // New family metadata takes precedence over retained pilot variables.
   // Runtime admission is read from authority, never from these version fields.
   const postId = families === undefined ? variable("NO_BUILD_POST_ID") : undefined;
@@ -217,6 +220,7 @@ function projectCloudflareWorkerVersion(value, { tag, message, target = publicat
     const paths = assets.config?.run_worker_first ?? assets.run_worker_first ?? assets.raw_run_worker_first;
     const requiredPaths = ["/posts", "/posts/*", "/authors", "/authors/*", "/feeds/*", "/api/v1/*", "/sitemap*", "/pagefind/*", "/search/*", "/_content-status.json"];
     if (families === "posts") requiredPaths.unshift("/");
+    if (spanishPostVersion) requiredPaths.push("/es/posts", "/es/posts/*");
     if (paths !== true && (!Array.isArray(paths) || !requiredPaths.every(path => paths.includes(path)))) {
       stateError("The candidate does not preserve instant Post paths");
     }
@@ -225,7 +229,8 @@ function projectCloudflareWorkerVersion(value, { tag, message, target = publicat
       ? { schemaVersion: 2, families: ["posts"], rendererSha, enabled: true, authoritative: true,
         ...(dataFigureVersion ? { dataFigureVersion } : {}),
         ...(electionResultsVersion ? { electionResultsVersion } : {}),
-        ...(liveBlogVersion ? { liveBlogVersion } : {}) }
+        ...(liveBlogVersion ? { liveBlogVersion } : {}),
+        ...(spanishPostVersion ? { spanishPostVersion } : {}) }
       : { schemaVersion: 1, postId, rendererSha, enabled: variable("NO_BUILD_POST_ENABLED") === "true", authoritative: true,
         ...(dataFigureVersion ? { dataFigureVersion } : {}),
         ...(electionResultsVersion ? { electionResultsVersion } : {}),
@@ -258,6 +263,7 @@ function projectCloudflareWorkerVersion(value, { tag, message, target = publicat
       rendererSha: recordRendererSha, enabled: true, authoritative: true, families: ["programs", "events"] });
   }
   if (liveBlogVersion && !noBuildPost) stateError("The candidate live blog renderer has no Post reader");
+  if (spanishPostVersion && noBuildPost?.schemaVersion !== 2) stateError("The Spanish Post renderer has no Post family reader");
   if (electionResultsVersion && !noBuildPost && !noBuildPage) stateError("The candidate election results renderer has no public reader");
   if (dataFigureVersion && !noBuildPost && !noBuildPage) stateError("The candidate data figure renderer has no public reader");
   return Object.freeze({

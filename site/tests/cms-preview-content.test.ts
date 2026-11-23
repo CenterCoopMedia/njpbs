@@ -144,6 +144,16 @@ describe("request-scoped preview content", () => {
     expect(JSON.stringify(value.publicContext)).not.toContain("Exact draft");
   });
 
+  it("projects a scheduled Spanish Post into its private render path", () => {
+    const value = input("cmsPosts");
+    const metadata = value.snapshot.published!.metadata;
+    Object.assign(metadata, { locale: "es", slug: "es/noticias", editionOf: "source-post" });
+    const { bytes, request } = fixture(value);
+    const result = projectCmsPreviewContent(bytes, request, now);
+    expect(result.target.pagePath).toBe("/es/posts/noticias/");
+    expect(result.posts).toMatchObject([{ path: result.target.pagePath, locale: "es", noindex: true }]);
+  });
+
   it("coalesces overlapping reads only within the source that owns them", async () => {
     const f = fixture();
     const read = vi.fn(async () => f.bytes);

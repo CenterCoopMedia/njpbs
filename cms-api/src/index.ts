@@ -1,4 +1,5 @@
 import { CONTENT_LINK_DIRECTORY_MAX_BYTES } from "../../packages/content-core/src/content-link.ts";
+import { postSlugForPath } from "../../packages/content-core/src/post-slugs";
 import { wakeAcceptedPreviewPair, type PreviewPairWakeEnvironment } from "./preview-pair-wake";
 import type { PublicReleasePair } from "../../packages/content-core/src/public-release";
 import type { PairServingDecision } from "../../functions/lib/public-release-serving";
@@ -918,7 +919,7 @@ export class PublicContentEntrypoint extends WorkerEntrypoint<CmsApiEnv> {
 
   async getNoBuildCodePost(path: string, rendererSha: string, method = "GET"): Promise<CodePostReply> {
     if (!pageReaderEnvironment(this.env) || !this.env.CMS_EDGE_ORIGIN_SECRET?.trim() ||
-        typeof path !== "string" || path.length > 512 || !/^\/posts\/[a-z0-9]+(?:-[a-z0-9]+)*\/$/.test(path) ||
+        typeof path !== "string" || path.length > 512 || !postSlugForPath(path) ||
         !/^[a-f0-9]{40}$/.test(rendererSha) || !["GET", "HEAD"].includes(method)) throw new PublicContentRpcError("Code Post request was refused");
     const response = await fetch(`${this.env.FUNCTIONS_ORIGIN}/${PUBLIC_CONTENT_FUNCTION}`, {
       method: "POST", headers: publicDecisionHeaders(this.env.CMS_EDGE_ORIGIN_SECRET), redirect: "manual",

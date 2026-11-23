@@ -28,7 +28,7 @@ const LAUNCH_CONTRACTS = {
   "site/src/lib/public-content-links.ts": "526e8f43707ce45118ec827c74f67b00f83bf60b",
   "site/scripts/build-compiled-renderer.ts": "aa48e668534cf10f72caafd1d6fd42da264c8927",
   "site/scripts/build-preview-runtime.mjs": "04f41dfe5cd53056d9c48ed744bc766d6627df83",
-  "site/scripts/compiled-renderer-adapter.mjs": "cd5e7ca5750dc34a1a000f768953bbfdea66aee2",
+  "site/scripts/compiled-renderer-adapter.mjs": "502cbd53e85f694fd1b2b6713203b03053377974",
   "site/scripts/process-cms-preview.ts": "99833050f6abb21b74abb33e0e584392664bef5d",
   "site/scripts/run-cms-preview-cloud.ts": "aa8a210eeb0de195bb1ca71e5ae6f6c6c405eb3a",
   "site/scripts/render-compiled-preview.ts": "4f8bc132ec4a460149734b0b2c5e6a43f3481ab2",

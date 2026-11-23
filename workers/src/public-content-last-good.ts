@@ -1,4 +1,5 @@
 import { SECURITY_HEADER_BASELINE } from "../../packages/content-core/src/public-security-headers";
+import { postSlugForPath } from "../../packages/content-core/src/post-slugs";
 import { publicationTarget, type PublicationTarget } from "../../functions/lib/publication-target";
 
 const MAX_HTML_BYTES = 4 * 1024 * 1024;
@@ -55,7 +56,7 @@ export async function readAssetCodeGeneration(fetchAsset: (request: Request) => 
 
 export function isVerifiedLastGoodResponse(path: string, response: Response, rendererSha: string): boolean {
   const source = response.headers.get("x-njpbs-content-source");
-  if (path.startsWith("/posts/")) return ["cms-no-build", "cms-code-post-context"].includes(source ?? "") &&
+  if (path.startsWith("/posts/") || path.startsWith("/es/posts/")) return ["cms-no-build", "cms-code-post-context"].includes(source ?? "") &&
     response.headers.get("x-njpbs-renderer-sha") === rendererSha;
   const record = /^\/(programs|shows|events)\/[^/]+\/$/.exec(path);
   if (record) {
@@ -128,8 +129,7 @@ export async function readVerifiedLastGoodBytes(store: Pick<ContentStore, "get">
   rendererSha: string, codeGeneration: number, path: string, expectedDigest: string, signal?: AbortSignal): Promise<Uint8Array<ArrayBuffer> | null> {
   if (!LAST_GOOD_WORKERS.has(target.workerName) || !/^[a-f0-9]{40}$/.test(rendererSha) ||
       !Number.isSafeInteger(codeGeneration) || codeGeneration < 1 || !/^[a-f0-9]{64}$/.test(expectedDigest) ||
-      !(path === "/" || /^\/[a-z0-9]+(?:-[a-z0-9]+)*\/$/.test(path) ||
-        /^\/(posts|programs|shows|events)\/[a-z0-9]+(?:-[a-z0-9]+)*\/$/.test(path))) return null;
+      !canRetainPath(path)) return null;
   try {
     if (signal?.aborted) return null;
     const object = await store.get(lastGoodObjectKey(target, rendererSha, codeGeneration, path));
@@ -147,6 +147,11 @@ export async function readVerifiedLastGoodBytes(store: Pick<ContentStore, "get">
 export const lastGoodObjectKey = (target: PublicationTarget, rendererSha: string, generation: number, path: string) =>
   `public-content-last-good/v1/${target.workerName}/${rendererSha}/${generation}/${encodeURIComponent(path)}.html`;
 
+function canRetainPath(path: string): boolean {
+  return path === "/" || /^\/[a-z0-9]+(?:-[a-z0-9]+)*\/$/.test(path) ||
+    Boolean(postSlugForPath(path)) || /^\/(programs|shows|events)\/[a-z0-9]+(?:-[a-z0-9]+)*\/$/.test(path);
+}
+
 /** Stale display bytes only. Each source has its own namespace until the
  * compatible-renderer contract and retained code assets support cross-release reads. */
 export function createPublicContentLastGood({ store, target, rendererSha }: {
@@ -159,8 +164,7 @@ export function createPublicContentLastGood({ store, target, rendererSha }: {
     const url = new URL(request.url);
     if (url.origin !== target.origin || url.search || !["GET", "HEAD"].includes(request.method) ||
         ["authorization", "cookie", "range"].some(header => request.headers.has(header)) ||
-        !(url.pathname === "/" || /^\/[a-z0-9]+(?:-[a-z0-9]+)*\/$/.test(url.pathname) ||
-          /^\/(posts|programs|shows|events)\/[a-z0-9]+(?:-[a-z0-9]+)*\/$/.test(url.pathname))) return null;
+        !canRetainPath(url.pathname)) return null;
     return url.pathname;
   }
   const keyFor = (path: string, generation: number) =>

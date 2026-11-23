@@ -16,7 +16,7 @@ interface SearchIndex {
   search(
     term: string | null,
     options?: { filters: Record<string, string> },
-  ): Promise<{ results: { data(): Promise<SearchResult> }[] }>;
+  ): Promise<{ results: { id: string; data(): Promise<SearchResult> }[] }>;
 }
 
 let indexPromise: Promise<SearchIndex> | undefined;
@@ -28,15 +28,14 @@ function loadIndex(): Promise<SearchIndex> {
   });
 }
 
-async function loadResults(term: string, limit: number, filters: Record<string, string>) {
+async function loadResults(term: string, limit: number, filters: Record<string, string>, spanish: boolean) {
   const index = await loadIndex();
   const search = Object.keys(filters).length
     ? await index.search(term || null, { filters })
     : await index.search(term);
-  const results = await Promise.all(
-    search.results.slice(0, limit).map((result) => result.data()),
-  );
-  return { results, total: search.results.length };
+  const matches = spanish ? search.results.filter(result => result.id.startsWith("es_")) : search.results;
+  const results = await Promise.all(matches.slice(0, limit).map(result => result.data()));
+  return { results, total: matches.length };
 }
 
 function resultItem(result: SearchResult): HTMLLIElement {
@@ -44,6 +43,7 @@ function resultItem(result: SearchResult): HTMLLIElement {
   if (url.origin !== location.origin)
     throw new Error("Unexpected search result origin");
   const item = document.createElement("li");
+  if (url.pathname.startsWith("/es/posts/")) item.lang = "es";
   const heading = document.createElement("h2");
   const link = document.createElement("a");
   const destination = contentLink(result.meta.contentLinkUrl ? { contentLinkMode: "custom", contentLinkUrl: result.meta.contentLinkUrl, contentLinkNewTab: result.meta.contentLinkNewTab !== "false" } : {}, url.pathname + url.hash);
@@ -77,6 +77,7 @@ function resultItem(result: SearchResult): HTMLLIElement {
 export function mountSiteSearch(root: HTMLElement): void {
   const archive = root.hasAttribute("data-archive-search");
   const archiveLink = root.querySelector<HTMLElement>("[data-archive-link]");
+  const spanish = root.lang === "es";
   const form = root.querySelector<HTMLFormElement>("form")!;
   const input = form.querySelector<HTMLInputElement>("input")!;
   const status = root.querySelector<HTMLElement>(".search-status")!;
@@ -124,7 +125,8 @@ export function mountSiteSearch(root: HTMLElement): void {
     const loadingMore = limit > pageSize;
     more.disabled = true;
     recovery.hidden = !filtersUnavailable;
-    status.textContent = loadingMore ? "Loading more results…" : "Searching…";
+    status.textContent = spanish ? (loadingMore ? "Cargando más resultados…" : "Buscando…")
+      : loadingMore ? "Loading more results…" : "Searching…";
     let timeout: ReturnType<typeof setTimeout> | undefined;
     try {
       // Pagefind can leave a request pending after a failed index/worker fetch.
@@ -151,7 +153,8 @@ export function mountSiteSearch(root: HTMLElement): void {
         const emptyHint = filtered
           ? archive ? "Try a different search term or filter." : "Change or clear the program filters."
           : "Try fewer words or a different spelling.";
-        status.textContent = total
+        status.textContent = spanish ? (total ? `${total} resultados para “${term}”. Se muestran ${results.length}.`
+          : `No hay resultados para “${term}”. Prueba con otras palabras.`) : total
           ? `${total} ${total === 1 ? "result" : "results"} ${queryLabel}. Showing ${results.length}.`
           : `No results ${queryLabel}. ${emptyHint}`;
         if (keywordUnavailable)
@@ -164,7 +167,7 @@ export function mountSiteSearch(root: HTMLElement): void {
 
       keywordPendingRevision = request;
       const keyword = await Promise.race([
-        loadResults(term, limit, filters),
+        loadResults(term, limit, filters, spanish),
         new Promise<never>((_, reject) => {
           timeout = setTimeout(
             () => reject(new Error("Search timed out")),
@@ -220,8 +223,8 @@ export function mountSiteSearch(root: HTMLElement): void {
       }
     } catch {
       if (request !== revision) return;
-      status.textContent =
-        "Search could not load. Your connection or the search service may be unavailable.";
+      status.textContent = spanish ? "No se pudo cargar la búsqueda. Comprueba tu conexión e inténtalo de nuevo."
+        : "Search could not load. Your connection or the search service may be unavailable.";
       recovery.hidden = false;
       more.hidden = true;
     } finally {
@@ -241,7 +244,7 @@ export function mountSiteSearch(root: HTMLElement): void {
     const filtered = Object.keys(selectedFilters()).length > 0;
     if (meaningStatus) meaningStatus.hidden = filtered;
     const shouldSearch = archive || Boolean(input.value.trim()) || filtered;
-    status.textContent = shouldSearch
+    status.textContent = spanish ? (shouldSearch ? "Buscando…" : "Escribe una palabra o frase para buscar.") : shouldSearch
       ? "Searching…"
       : "Enter a word or phrase to search.";
     if (!shouldSearch || composing) return;

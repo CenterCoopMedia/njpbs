@@ -4,6 +4,7 @@ import { randomBytes, createHmac } from "node:crypto";
 import deployment from "../../functions/lib/public-deployment.js";
 import mediaContract from "../../functions/lib/media-contract.js";
 import readerModule from "../../functions/published-post-reader.js";
+import editions from "../../functions/lib/spanish-edition.js";
 import { servicePublishedPostReader, createShadowPostWorker } from "../../workers/src/shadow-post-worker";
 import { forwardPublishedPostRead } from "../../workers/src/published-post-reader-worker";
 import "../../functions/lib/firebase.js";
@@ -85,6 +86,26 @@ beforeAll(async () => {
 afterEach(async () => { for (const path of records.splice(0)) await db.doc(path).delete(); });
 
 describe("published Post reader with the real Firestore emulator", () => {
+  it("reads reciprocal canonical paths only while both editions are public", async () => {
+    const originalId = "reader-fixture";
+    const editionId = editions.spanishPostEditionId(originalId);
+    const edition = document({ publiclyVisible: false });
+    Object.assign(edition.published.metadata, { slug: "es/shadow-fixture", locale: "es", editionOf: originalId });
+    await put(`cmsPosts/${originalId}`, document());
+    await put(`cmsPosts/${editionId}`, edition);
+    const read = (slug: string) => readerModule.readPublishedPost({ firestore: db, slug, now });
+    expect(await read("shadow-fixture")).not.toHaveProperty("alternatePath");
+    expect(await read("es/shadow-fixture")).toEqual({ kind: "not-found" });
+    await db.doc(`cmsPosts/${editionId}`).update({ publiclyVisible: true });
+    expect(await read("shadow-fixture")).toMatchObject({ alternatePath: "/es/posts/shadow-fixture/" });
+    const spanish = await read("es/shadow-fixture");
+    expect(spanish).toMatchObject({ alternatePath: "/posts/shadow-fixture/" });
+    expect(projectPublishedPostRead(spanish, "es/shadow-fixture", "a".repeat(40), now)?.target.pagePath).toBe("/es/posts/shadow-fixture/");
+    await db.doc(`cmsPosts/${originalId}`).update({ publiclyVisible: false });
+    expect(await read("es/shadow-fixture")).not.toHaveProperty("alternatePath");
+    await db.doc(`cmsPosts/${editionId}`).update({ publiclyVisible: false });
+    expect(await read("es/shadow-fixture")).toEqual({ kind: "not-found" });
+  });
   it("reads live-blog update-only public profiles without consulting private reporter rows", async () => {
     const value = document();
     const stamp = value.published.publishedAt;

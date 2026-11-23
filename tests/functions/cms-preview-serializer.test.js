@@ -272,10 +272,13 @@ describe("CMS preview serializer completion", () => {
     expect((await queueRef().get()).data()).toEqual(before);
   });
 
-  it("finalizes a saved post only at the route frozen in its exact queue", async () => {
+  it.each([
+    { slug: "new-report", pathname: "/posts/new-report/", metadata: {} },
+    { slug: "es/noticias", pathname: "/es/posts/noticias/", metadata: { type: "post", locale: "es" } },
+  ])("finalizes a saved Post only at its frozen $pathname route", async ({ slug, pathname, metadata }) => {
     await seedQueue({ collection: "cmsPosts", pageId: "post-1", persistent: true,
-      pagePath: "/posts/new-report/", snapshot: { id: "post-1", version: 7,
-        published: { metadata: { slug: "new-report" } } } });
+      pagePath: pathname, snapshot: { id: "post-1", version: 7,
+        published: { metadata: { ...metadata, slug } } } });
     await claim();
     await expect(finish({ collection: "cmsPosts", pageId: "post-1", persistent: false }))
       .rejects.toThrow(/does not match/);

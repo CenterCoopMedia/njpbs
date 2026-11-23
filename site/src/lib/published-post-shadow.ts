@@ -15,7 +15,7 @@ import { projectCmsPost } from "./cms-posts-projection";
 import { projectCmsProgram, type CmsProgramBuildData, type CmsProgramDoc } from "./cms-programs-projection";
 import { projectCmsEvent, type CmsEventBuildData } from "./cms-events-projection";
 import { exportRecordCards } from "./record-card-resolution";
-import { isPublicContentSlug } from "./public-content-routes";
+import { isPostRouteSlug, isPublicContentSlug, isSpanishPostSlug, postSlugForPath } from "./public-content-routes";
 import { isAuthorId, isValidAuthorSlug } from "../../../packages/content-core/src/author-profiles";
 import { SECTION_BLOCK_CATALOG } from "../../../packages/content-core/src/editor-admin";
 import { STORY_CREDITS_MAX, STORY_CREDIT_NAME_MAX, normalizeCustomCreditName } from "../../../packages/content-core/src/story-credits";
@@ -31,6 +31,7 @@ export type PublishedPostContent = Omit<CmsPreviewContent, "kind" | "target" | "
   readonly kind: "public-post-shadow";
   readonly posts: readonly NonNullable<ReturnType<typeof projectCmsPost>>[];
   readonly contentLinks?: readonly ContentLinkEntry[];
+  readonly alternatePath?: string;
   readonly navigationPages: readonly { pageId: string; path: string }[];
   readonly target: Readonly<{
     documentId: string;
@@ -154,8 +155,10 @@ export function projectChrome(input: Record<string, unknown>) {
   if (!contentLinkDirectoryFits(contentLinks)) throw new Error("Invalid content link directory");
   const projectedLinks = (contentLinks as unknown[]).map(entry => {
     if (!object(entry) || typeof entry.path !== "string" || !/^\/(?:[a-z0-9]+(?:-[a-z0-9]+)*\/)*$/.test(entry.path)) throw new Error("Invalid content link path");
+    const postSlug = postSlugForPath(entry.path);
+    const validPreviousSlug = isSpanishPostSlug(postSlug) ? isSpanishPostSlug : isPublicContentSlug;
     return { path: entry.path, ...contentLinkMetadata(entry),
-      ...(Array.isArray(entry.previousSlugs) && entry.previousSlugs.every(slug => typeof slug === "string" && /^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(slug)) ? { previousSlugs: entry.previousSlugs as string[] } : {}) };
+      ...(Array.isArray(entry.previousSlugs) && entry.previousSlugs.every(validPreviousSlug) ? { previousSlugs: entry.previousSlugs as string[] } : {}) };
   });
   return { settings, navigationPages, ...(projectedLinks.length ? { contentLinks: projectedLinks } : {}) };
 }
@@ -164,7 +167,7 @@ export function projectChrome(input: Record<string, unknown>) {
 export function projectPublishedPostRead(
   input: unknown, slug: string, rendererSha: string, now: Date,
 ): PublishedPostContent | null {
-  if (!isPublicContentSlug(slug) || !/^[a-f0-9]{40}$/.test(rendererSha)) throw new Error("Invalid shadow target");
+  if (!isPostRouteSlug(slug) || !/^[a-f0-9]{40}$/.test(rendererSha)) throw new Error("Invalid shadow target");
   if (input === null) return null;
   if (!object(input) || input.kind !== "published-post" || !object(input.document) ||
     typeof input.document.id !== "string" || !Array.isArray(input.assets)) {
@@ -184,6 +187,13 @@ export function projectPublishedPostRead(
     published: structuredClone(doc.published) }, { now, assets });
   if (!post) return null;
   if (post.slug !== slug) throw new Error("Published Post does not own this route");
+  const alternatePath = input.alternatePath;
+  if (alternatePath !== undefined) {
+    const alternateSlug = typeof alternatePath === "string" && postSlugForPath(alternatePath);
+    if (!alternateSlug || isSpanishPostSlug(alternateSlug) === isSpanishPostSlug(slug)) {
+      throw new Error("Invalid Post edition route");
+    }
+  }
   // The editor's Post catalog is the one list of block types the Post template
   // renders. Any other type is refused by name before it reaches the renderer.
   const outsideCatalog = post.blocks.find(block => !SECTION_BLOCK_CATALOG.post.includes(block.type));
@@ -191,7 +201,7 @@ export function projectPublishedPostRead(
   const joined = projectJoinedRecords(input.joinedRecords, assets, now);
   return freeze({ kind: "public-post-shadow", target: {
     documentId: post.postId, sourceVersion: post.sourceVersion, rendererSha, pagePath: post.path,
-  }, posts: [post], pages: [], authors, ...projectChrome(input), ...joined });
+  }, posts: [post], pages: [], authors, ...(typeof alternatePath === "string" ? { alternatePath } : {}), ...projectChrome(input), ...joined });
 }
 
 /** Home uses card metadata and bylines, independently of the detail body's

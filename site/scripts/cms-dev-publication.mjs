@@ -19,6 +19,7 @@ import { retainCloudPreviewPublicContext } from "./cms-preview-cloud-storage.ts"
 import { retryWorkerVersionReceipt, prepareStaticPostProof } from "./upload-public-worker-candidate.ts";
 import { findExactRecentWorkerVersion } from "../src/lib/public-worker-version-recovery.ts";
 import { publicRouteBaseForRecordKind } from "../../packages/content-core/src/public-record-kinds.ts";
+import { isPostRouteSlug, isServerMintableSlugShape, postRoutePath, postSlugForPath } from "../../packages/content-core/src/post-slugs.ts";
 
 const { initializeApp, applicationDefault, getFirestore, FieldValue } = firebaseAdminRuntime;
 const require = createRequire(import.meta.url);
@@ -206,6 +207,7 @@ export async function restoreDevPostRenderer(sourceSha, artifactDirectory = dire
   const clientSeal = await json(path.join(artifactDirectory, "dist/posts/_no-build-assets/renderer-release.json"));
   if (![1, 2].includes(seal?.electionResultsVersion) ||
       !isDeepStrictEqual(seal, { schemaVersion: 1, rendererSha: sourceSha, liveBlogVersion: 1,
+      ...(seal.spanishPostVersion === 1 ? { spanishPostVersion: 1 } : {}),
       ...(isPageReaderVersion(seal.pageReaderVersion) ? { pageReaderVersion: seal.pageReaderVersion } : {}),
       electionResultsVersion: seal.electionResultsVersion, environment: "development" }) ||
       !isDeepStrictEqual(clientSeal, seal) ||
@@ -305,6 +307,7 @@ async function uploadCandidate(publication) {
       "--var", `NO_BUILD_PAGE_RENDERER_SHA:${publication.commitSha}`,
       "--var", `NO_BUILD_RECORD_RENDERER_SHA:${publication.commitSha}`,
       "--var", "DATA_FIGURE_VERSION:1", "--var", "ELECTION_RESULTS_VERSION:2",
+      "--var", "SPANISH_POST_VERSION:1",
       "--tag", publicWorkerCandidateTag(publication), "--message", publicWorkerCandidateMessage(publication), "--strict"], {
       cwd: root, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"], maxBuffer: 1024 * 1024,
       env: { PATH: process.env.PATH, HOME: process.env.HOME, CLOUDFLARE_ACCOUNT_ID: cloudflareAccount(),
@@ -410,11 +413,12 @@ export async function freezeDevPostRoutes(db, id, reservation, inventory) {
           throw new Error("Development Post withdrawal input differs");
         }
         if (["sponsor", "newsletter"].includes(metadata?.type)) continue;
+        const post = metadata?.type === "post";
         if (!base || !Array.isArray(metadata.previousSlugs) ||
-            [metadata.slug, ...metadata.previousSlugs].some(slug => typeof slug !== "string" || !/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(slug))) {
+            ![metadata.slug, ...metadata.previousSlugs].every(post ? isPostRouteSlug : isServerMintableSlugShape)) {
           throw new Error("Development Post withdrawal input differs");
         }
-        routes = [...new Set([metadata.slug, ...metadata.previousSlugs])].map(slug => `${base}${slug}/`);
+        routes = [...new Set([metadata.slug, ...metadata.previousSlugs])].map(post ? postRoutePath : slug => `${base}${slug}/`);
       } else {
         if (artifact?.sourceVersion !== change.sourceVersion) throw new Error("Development Post publication input differs");
         routes = artifact.canonicalPath ? [artifact.canonicalPath, ...artifact.aliases] : [];
@@ -425,11 +429,13 @@ export async function freezeDevPostRoutes(db, id, reservation, inventory) {
   }, { readOnly: true, readTime: reservation.cutoffAt });
 }
 
-export async function verifyDevPostRoutes(ownedPaths = new Set()) {
+export async function verifyDevPostRoutes(owners = []) {
+  const ownedPaths = new Set(owners.flatMap(({ state }) => state.ownedSlugs.map(postRoutePath)));
   const checks = await json(path.join(directory, "post-routes.json"));
   for (const { route, removed } of checks) {
     // Validate even retained paths before sending the publisher Access identity.
-    if (typeof removed !== "boolean" || !/^\/(?:posts|programs|events)\/[a-z0-9]+(?:-[a-z0-9]+)*\/$/.test(route)) {
+    if (typeof removed !== "boolean" || typeof route !== "string" ||
+        (!postSlugForPath(route) && !/^\/(?:programs|events)\/[a-z0-9]+(?:-[a-z0-9]+)*\/$/.test(route))) {
       throw new Error("Development Post route is invalid");
     }
     // Owned routes have their fresh authority proof, separate from frozen Assets.
@@ -626,8 +632,7 @@ export async function upload(db, id, reconcileOnly = false, recovery = null) {
     if (evidence.action !== "activate") throw new Error("The generic dev candidate activation is unconfirmed");
     await verifyDevReadback(candidate.workerVersionId, active.id, publication, { timedOutRecovery });
     const owners = await listNoBuildPostOwners({ firestore: db });
-    const ownedPaths = new Set(owners.flatMap(({ state: owner }) => owner.ownedSlugs.map(slug => "/posts/" + slug + "/")));
-    await verifyDevPostRoutes(ownedPaths);
+    await verifyDevPostRoutes(owners);
     await verifyNoBuildPostPublicRoute({ firestore: db, candidate, target: publicationTarget,
       headers: { "cf-access-client-id": process.env.CMS_DEV_ACCESS_CLIENT_ID,
         "cf-access-client-secret": process.env.CMS_DEV_ACCESS_CLIENT_SECRET } });

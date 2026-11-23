@@ -10,6 +10,7 @@ import log from "../../functions/lib/public-release-change-log.js";
 import baseline from "../../functions/lib/public-release-change-baseline.js";
 import protocol from "../../functions/lib/public-release-pair.js";
 import producer from "../../functions/lib/public-release-producer.js";
+import editions from "../../functions/lib/spanish-edition.js";
 import { captureOwnedPublicReleasePairInput, derivePublicReleasePairInput } from "../../site/scripts/public-release-pair-source-owner";
 import { parsePublicReleasePairRenderPlan } from "../../site/scripts/public-release-pair-render-plan";
 import type { PairViewStore } from "../../site/scripts/public-release-pair-view-storage";
@@ -84,6 +85,39 @@ it("commits the original source binding with H's receipt and reopens it after la
   expect(replay.idempotent).toBe(true);
   expect(replay.receipt).toEqual(captured.receipt);
   await expect(derivePublicReleasePairInput(options())).rejects.toMatchObject({ code: "input-unavailable" });
+});
+
+it.each(["publish", "withdraw"] as const)("refreshes the English alternate when a Spanish edition changes (%s)", async action => {
+  const editionId = editions.spanishPostEditionId(sourceId);
+  const spanishPath = "/es/posts/noticias-locales/";
+  const englishPath = "/posts/shadow-fixture/";
+  const snapshot = { ...source.document.published, metadata: { ...source.document.published.metadata,
+    slug: "es/noticias-locales", locale: "es", editionOf: sourceId } };
+  const original = { ...source.document, version: 7, status: "published" };
+  delete original.publiclyVisible;
+  await db.doc(`cmsPosts/${sourceId}`).set(original);
+  await db.runTransaction(async transaction => {
+    const write = await producer.preparePublicReleaseProducerInTransaction({ firestore: db, transaction, operationId,
+      changes: [{ kind: "post", id: editionId, action, sourceVersion: 7, snapshot }] });
+    write();
+    transaction.set(db.doc(`cmsPosts/${editionId}`), { ...source.document, version: 8,
+      publiclyVisible: action === "publish", published: snapshot });
+    transaction.set(db.doc("system/publicDeployment/contexts/public"), { schemaVersion: 1, revision: 2 });
+  });
+  const frozen = await derivePublicReleasePairInput(options());
+  const json = (file: string) => JSON.parse(new TextDecoder().decode(frozen.files.get(file)!.bytes));
+  const plan = parsePublicReleasePairRenderPlan(json("render-plan.json"), frozen.root);
+  expect(plan.expectedOutputs).toMatchObject([
+    { path: spanishPath, status: action === "publish" ? 200 : 410 }, { path: englishPath, status: 200 },
+  ]);
+  const english = json(plan.routes[1].inputFile).read;
+  if (action === "publish") {
+    expect(english.alternatePath).toBe(spanishPath);
+    expect(json(plan.routes[0].inputFile).read.alternatePath).toBe(englishPath);
+  } else {
+    expect(english).not.toHaveProperty("alternatePath");
+  }
+  expect(json("authority.json").members[0].paths).toEqual([spanishPath, englishPath]);
 });
 it("refuses missing immutable evidence and a forged or superseded source before storing a pack", async () => {
   await accept();

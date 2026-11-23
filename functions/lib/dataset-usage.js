@@ -1,4 +1,5 @@
 "use strict";
+const { postRoutePath } = require("./post-slug-contract");
 const { createHash } = require("node:crypto");
 const { validDatasetId, DatasetError } = require("./datasets");
 const { digest, figureBlocks, validateFrozenDatasetFigures } = require("./dataset-dependencies");
@@ -40,7 +41,7 @@ async function prepareDatasetUsageWrites({ firestore, transaction, collection, d
     const identity = { collection, documentId, blockId: block.id };
     rows.set(useId(identity), { schemaVersion: 1, ...identity, datasetId: binding.datasetId,
       ownerTitle: typeof snapshot.metadata?.title === "string" ? snapshot.metadata.title.slice(0, 300) : "Published content",
-      publicPath: collection === "cmsPosts" ? `/posts/${snapshot.metadata.slug}/` : require("./public-page-contract").publicPagePath(documentId, snapshot.metadata),
+      publicPath: collection === "cmsPosts" ? postRoutePath(snapshot.metadata.slug) : require("./public-page-contract").publicPagePath(documentId, snapshot.metadata),
       operationId, ownerSnapshotDigest, editorialSnapshotDigest: editorialDigest,
       releasePolicy: block.data.version.mode, releaseId: binding.releaseId, revision: binding.revision,
       approvedDigest: binding.digest, sourceVersion: snapshot.sourceVersion, snapshotDigest: digest(snapshot),

@@ -187,6 +187,7 @@ const cmsPosts = defineCollection({
     slug: z.string(),
     previousSlugs: z.array(z.string()),
     locale: z.string(),
+    editionOf: z.string().optional(),
     path: z.string(),
     title: z.string(),
     spotlightNews: z.boolean().default(false),

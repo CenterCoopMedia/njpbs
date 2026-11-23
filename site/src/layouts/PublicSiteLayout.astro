@@ -90,6 +90,8 @@ interface Props {
   /** Locales this page has a published translation in. Forwarded to Base, which
       turns them into hreflang alternates. Empty until the translation exists. */
   translations?: readonly string[];
+  language?: "en" | "es";
+  editionPaths?: Record<"en" | "es", string>;
   /** Turns analytics off for this page. Set when the page content plays a video. */
   noAnalytics?: boolean;
   /** Child-directed templates/metadata must suppress every site tracker. */
@@ -117,6 +119,8 @@ const {
   hasNjDecidesPageHeading = false,
   metaRefreshTo,
   translations = [],
+  language = "en",
+  editionPaths,
   noAnalytics = false,
   childDirected = false,
   editTarget,
@@ -155,7 +159,7 @@ const wisepopsEnabled = analyticsEnabled && !noindex && !metaRefreshTo;
 const pageHref = (publicSlug: string) => `/${publicSlug}/`;
 const homeHref = "/";
 const donateHref = donateUrl;
-const searchHref = pageHref("search");
+const searchHref = language === "es" ? "/es/search/" : pageHref("search");
 const accountHref = pageHref("account");
 const isActive = (href: string) =>
   href.startsWith("/") && (path === href || path === href.replace(/\/$/, ""));
@@ -250,6 +254,8 @@ const legalLinks: LayoutLink[] = [
   canonicalPath={canonicalPath}
   noindex={noindex}
   translations={translations}
+  language={language}
+  editionPaths={editionPaths}
 >
   {/* Must run before every other page script, so it goes in the head via the
       "head" slot rather than the body. Inline + classic (is:inline) so it is not
@@ -281,7 +287,7 @@ const legalLinks: LayoutLink[] = [
 
   {resolvedEditTarget && !pathSegments.includes("kids") && !metaRefreshTo && <BoardwalkEdit target={resolvedEditTarget} />}
 
-  <header class="site-head">
+  <header class="site-head" lang={language === "es" ? "en" : undefined}>
     <div class="head-inner">
       <a class="brand" href={homeHref} aria-label="NJ PBS home">
         <img src="/brand/njpbs-horizontal-white.svg" alt="NJ PBS" width="146" height="40" />
@@ -477,7 +483,7 @@ const legalLinks: LayoutLink[] = [
 
   {analyticsEnabled && <AnalyticsConsent measurementId={ga4MeasurementId} activeCampaign={!noindex && !metaRefreshTo} />}
 
-  <footer class="site-foot">
+  <footer class="site-foot" lang={language === "es" ? "en" : undefined}>
     <div class="foot-cols">
       {
         footerCols.map((col) => (

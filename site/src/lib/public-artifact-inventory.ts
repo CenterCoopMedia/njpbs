@@ -348,6 +348,7 @@ function routedFamilyRoute(collection: PublicArtifactCollection, route: unknown)
     return routeUnderBase(route, AUTHOR_ROUTE_BASE);
   }
   if (collection !== "cmsPosts") return false;
+  if (routeUnderBase(route, "/es/posts/")) return true;
   return ["post", "program", "event"].some((kind) => {
     const base = publicRouteBaseForRecordKind(kind);
     return base !== null && routeUnderBase(route, base);
@@ -721,7 +722,9 @@ export function createPublicArtifactInventoryReceipt({
       if (collection === "cmsPosts") {
         const content = input as PublicArtifactContentInput;
         const snapshot = content.publishedSnapshot as Record<string, unknown>;
-        const base = publicRouteBaseForRecordKind(content.kind);
+        const base = content.kind === "post" && plainObject(snapshot.metadata) &&
+          typeof snapshot.metadata.slug === "string" && snapshot.metadata.slug.startsWith("es/")
+          ? "/es/posts/" : publicRouteBaseForRecordKind(content.kind);
         if (
           base === null ||
           !plainObject(snapshot.metadata) ||
@@ -1176,7 +1179,7 @@ export async function finalizePublicArtifactInventoryReceipt({
   // A hint overflow must retain static serving, never stop an unrelated build.
   const contextPaths = recordContextPostPaths.length <= 10_000 ? recordContextPostPaths : [];
   if (new Set(contextPaths).size !== contextPaths.length || contextPaths.some(path =>
-        typeof path !== "string" || path.length > 512 || !/^\/posts\/[a-z0-9]+(?:-[a-z0-9]+)*\/$/.test(path) ||
+        typeof path !== "string" || path.length > 512 || !/^\/(?:es\/)?posts\/[a-z0-9]+(?:-[a-z0-9]+)*\/$/.test(path) ||
         !routes.some(route => route.source === "cms" && route.path === path))) invalid("Invalid joined-card Post route catalog");
   for (const route of routes) if (contextPaths.includes(route.path)) route.recordContext = true;
   await atomicWriteJson(resolvedOutput, canonical);

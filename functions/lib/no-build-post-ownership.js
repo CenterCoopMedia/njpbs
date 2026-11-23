@@ -1,6 +1,6 @@
 "use strict";
 
-const { isServerMintableSlugShape } = require("./post-slug-contract");
+const { isPostRouteSlug } = require("./post-slug-contract");
 const { validateState: validatePostState, validateCapability, effectiveNoBuildPostState, candidateNoBuildContract, candidateSupportsPost } = require("./no-build-post-state");
 
 const LEGACY_STATE_PATH = "system/publicDeployment/noBuildPosts/current";
@@ -43,7 +43,7 @@ async function readNoBuildPostOwner({ firestore, transaction, postId }) {
 async function listNoBuildPostOwners({ firestore, transaction, slug, onMalformedOwner }) {
   let query = firestore.collection(OWNER_COLLECTION);
   if (slug !== undefined) {
-    if (!isServerMintableSlugShape(slug)) refuse();
+    if (!isPostRouteSlug(slug)) refuse();
     query = query.where("ownedSlugs", "array-contains", slug);
   }
   const legacyRef = firestore.doc(LEGACY_STATE_PATH);
@@ -59,8 +59,8 @@ async function listNoBuildPostOwners({ firestore, transaction, slug, onMalformed
       // Ordinary aggregate readers can withhold this owner only if its route
       // scope still has a bounded, unambiguous identity.
       if (!onMalformedOwner || value?.postId !== row.id || !isNoBuildPostId(value.postId) || value.mode === "static" ||
-          !isServerMintableSlugShape(value.slug) || !Array.isArray(value.ownedSlugs) || value.ownedSlugs.length > 100 ||
-          !value.ownedSlugs.includes(value.slug) || value.ownedSlugs.some(path => !isServerMintableSlugShape(path)) ||
+          !isPostRouteSlug(value.slug) || !Array.isArray(value.ownedSlugs) || value.ownedSlugs.length > 100 ||
+          !value.ownedSlugs.includes(value.slug) || value.ownedSlugs.some(slug => !isPostRouteSlug(slug)) ||
           new Set(value.ownedSlugs).size !== value.ownedSlugs.length) throw error;
       malformed.push({ postId: value.postId, ownedSlugs: value.ownedSlugs });
       return [];

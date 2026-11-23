@@ -129,7 +129,8 @@ export async function buildSearchIndex(directory = distDir) {
 
   const linked = JSON.parse(await readFile(path.join(directory, "search/content-links.json"), "utf8").catch(error => { if (error.code === "ENOENT") return "[]"; throw error; }));
   for (const record of linked) {
-    const { errors } = await index.addCustomRecord({ url: record.path, content: `${record.title} ${record.text}`, language: "en",
+    const { errors } = await index.addCustomRecord({ url: record.path, content: `${record.title} ${record.text}`,
+      language: record.path.startsWith("/es/posts/") ? "es" : "en",
       meta: { title: record.title, contentLinkUrl: record.contentLinkUrl, contentLinkNewTab: String(record.contentLinkNewTab !== false) } });
     if (errors.length) throw new Error("The linked content search record is invalid");
   }

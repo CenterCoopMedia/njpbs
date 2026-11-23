@@ -8,6 +8,7 @@ export const REHEARSAL_HOLD_OWNER_BLOBS = Object.freeze(Object.fromEntries(Objec
     { blob: 'a50edf43d30b72a3066e03bf7459c39bd59db12d', reviewedIn: '#4443' },
     { blob: '437aa9294dc09055ce1bfecddd70ff509749afc7', reviewedIn: '#4474' },
     { blob: 'e4fc8071bd394cc48324f69b064d1c91898cb84e', reviewedIn: '#4545' },
+    { blob: '934a28101a82685a6f797f34c1c459b6e163c964', reviewedIn: '#441' },
   ],
   'site/scripts/public-release-original-continuation.ts': [
     { blob: '9d63f973df10ca003770cecbfe155e87dde664a4', reviewedIn: '#4443' },

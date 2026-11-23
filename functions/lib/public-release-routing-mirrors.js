@@ -1,4 +1,5 @@
 "use strict";
+const { postRoutePath } = require("./post-slug-contract");
 const p = require("./public-release-pair");
 const work = require("./public-release-pair-work");
 const view = require("./public-release-pair-view");
@@ -84,7 +85,7 @@ async function ownedRoutes(firestore, transaction) {
     const state = { ...original, sourceVersion: current.sourceVersion, visible: current.visible, slug: current.slug,
       ownedSlugs: current.ownedSlugs, snapshotDigest: pages.digest(document.published) };
     if (original.mode !== "static" && original.snapshotDigest && original.snapshotDigest !== state.snapshotDigest) fail();
-    add("post", state.postId, state, state.ownedSlugs.map(slug => `/posts/${slug}/`), `/posts/${state.slug}/`, row.ref.path, document, original);
+    add("post", state.postId, state, state.ownedSlugs.map(postRoutePath), postRoutePath(state.slug), row.ref.path, document, original);
   }
   for (const row of recordRows.docs) {
     const state = records.validateNoBuildRecordState(row.data()); if (!state || state.documentId !== row.id) fail();

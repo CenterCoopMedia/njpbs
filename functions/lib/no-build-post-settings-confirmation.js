@@ -1,5 +1,6 @@
 "use strict";
 
+const { postRoutePath } = require("./post-slug-contract");
 const { createHash } = require("node:crypto");
 const { publiclyVisible } = require("./public-video-references");
 const { readNoBuildPostOwner } = require("./no-build-post-ownership");
@@ -46,7 +47,7 @@ async function postSettingsCoverage({ firestore, transaction, identity, target, 
   const results = await readSettingsInputs(required, async row => {
     const owner = await readNoBuildPostOwner({ firestore, transaction, postId: row.id });
     const metadata = row.data().published.metadata;
-    const path = `/posts/${metadata.slug}/`;
+    const path = postRoutePath(metadata.slug);
     const link = contentLink(metadata, path);
     const destination = link.external ? { contentRedirectUrl: link.href } : {};
     if (!owner.state?.operationId || owner.state.mode === "static") {
@@ -83,7 +84,7 @@ async function postSettingsCoverage({ firestore, transaction, identity, target, 
 async function readPostSettingsReceipt({ entry, target, headers, fetchPublic, signal }) {
   const expected = entry.receipt;
   const codePost = entry.kind === "code-post";
-  const path = codePost ? expected.canonicalPath : `/posts/${expected.slug}/`;
+  const path = codePost ? expected.canonicalPath : postRoutePath(expected.slug);
   const status = entry.contentRedirectUrl ? 302 : 200;
   const response = await readPublicPostAfterRefresh(`${target.origin}${path}`, fetchPublic, signal, headers);
   try {

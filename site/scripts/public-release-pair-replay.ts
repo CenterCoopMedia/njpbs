@@ -7,6 +7,7 @@ import views from "../../functions/lib/public-release-pair-view.js";
 import work from "../../functions/lib/public-release-pair-execution.js";
 import { parsePublicReleasePairRenderRequest } from "./public-release-pair-render-request";
 import { projectPublishedPostRead, type PublishedPostContent } from "../src/lib/published-post-shadow";
+import { postSlugForPath } from "../src/lib/public-content-routes";
 import { projectPublishedPageRead, type PublishedPageContent } from "../src/lib/published-page-render";
 import { projectPublicPageContextRead, type PublicPageContextContent } from "../src/lib/public-page-context-render";
 import { projectPublishedRecordRead, projectPublishedRecordRoute, type PublishedRecordContent } from "../src/lib/published-record-render";
@@ -89,7 +90,7 @@ export async function projectPublicReleasePairReplay(context: PairReplayContext)
   const now = new Date(renderedAt);
   let projected: Content | null;
   if (route.renderer === "post") {
-    const slug = route.path.match(/^\/posts\/([a-z0-9]+(?:-[a-z0-9]+)*)\/$/)?.[1];
+    const slug = postSlugForPath(route.path);
     if (!slug) refuse();
     projected = projectPublishedPostRead(input, slug, originalSha, now);
   } else if (route.renderer === "page") {

@@ -1,7 +1,7 @@
 "use strict";
 
 const { randomUUID } = require("node:crypto");
-const { isServerMintableSlugShape } = require("./post-slug-contract");
+const { isPostRouteSlug } = require("./post-slug-contract");
 
 const { publicationTarget, publicationPostCacheTag } = require("./publication-target");
 
@@ -25,7 +25,7 @@ function queueEnabled(firestore, config) {
   return devEnabled(config) && firestore.projectId === config.projectId;
 }
 function routeTags(slugs) {
-  if (!Array.isArray(slugs) || slugs.some(slug => !isServerMintableSlugShape(slug) || slug.length > 1000)) {
+  if (!Array.isArray(slugs) || slugs.some(slug => !isPostRouteSlug(slug) || slug.length > 1000)) {
     throw new Error("Invalid Post routes");
   }
   return [...new Set(slugs)].map(slug => publicationPostCacheTag(publicationTarget("development"), slug));
@@ -47,7 +47,7 @@ function createCloudflareRoutePurger({ config = routePurgeConfig(), getToken = (
       catch { throw new RoutePurgeError("purge_not_configured", false); }
       if (typeof token !== "string" || token.trim() === "") throw new RoutePurgeError("purge_not_configured", false);
       if (!Array.isArray(tags) || tags.length === 0 || tags.some(tag => typeof tag !== "string" ||
-          !/^njpbs-dev-post-[a-z0-9]+(?:-[a-z0-9]+)*$/.test(tag) || tag.length > 1024)) {
+          !/^njpbs-dev-(?:es-)?post-[a-z0-9]+(?:-[a-z0-9]+)*$/.test(tag) || tag.length > 1024)) {
         throw new RoutePurgeError("purge_invalid_tags", false);
       }
       const unique = [...new Set(tags)];

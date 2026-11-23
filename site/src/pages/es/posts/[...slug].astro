@@ -1,0 +1,10 @@
+---
+import PublicPost from "../../../components/PublicPost.astro";
+import { postStaticPaths } from "../../../lib/post-static-paths";
+
+export function getStaticPaths() {
+  return postStaticPaths("es");
+}
+---
+
+<PublicPost {...Astro.props} />

@@ -2,6 +2,7 @@
 
 const { isDeepStrictEqual } = require("node:util");
 const { contentLink } = require("./content-link");
+const { postRoutePath, postSlugForPath } = require("./post-slug-contract");
 const { dependency } = require("./post-background-outputs");
 const { readPublicContextInTransaction, readPublicContextRevisionInTransaction, publicContextDigest } = require("./public-context-revision");
 
@@ -66,9 +67,9 @@ async function assertStaticCandidateInTransaction({ firestore, transaction, stat
 }
 async function readStaticDecision({ firestore, transaction, state, pointer, rendererSha, path, candidate }) {
   const { input, metadata } = await currentStaticPublication({ firestore, transaction, state });
-  const link = input.visible ? contentLink(metadata, `/posts/${input.slug}/`) : null;
-  const match = /^\/posts\/([^/]+)\/$/.exec(path);
-  const owned = match && input.ownedSlugs.includes(match[1]);
+  const link = input.visible ? contentLink(metadata, postRoutePath(input.slug)) : null;
+  const slug = postSlugForPath(path);
+  const owned = slug && input.ownedSlugs.includes(slug);
   const receipt = { schemaVersion: 1, postId: input.postId, operationId: input.operationId, generation: state.generation,
     sourceVersion: input.sourceVersion, visible: input.visible, slug: input.slug, ownedSlugs: input.ownedSlugs,
     rendererSha, mode: "static", contextDigest: input.contextDigest,
@@ -86,7 +87,7 @@ async function readStaticDecision({ firestore, transaction, state, pointer, rend
     const expected = staticProofInput(proof);
     if (!isDeepStrictEqual(input, expected)) refuse();
   }
-  if (owned && match[1] !== input.slug) return { kind: "alias", location: `/posts/${input.slug}/`, receipt };
+  if (owned && slug !== input.slug) return { kind: "alias", location: postRoutePath(input.slug), receipt };
   const lookup = !path.endsWith("/") && !/\.[^/]+$/.test(path) ? `${path}/` : path;
   const file = proof.files.find(file => file.path === lookup);
   return { kind: "static", receipt, staticFile: file ?? null };

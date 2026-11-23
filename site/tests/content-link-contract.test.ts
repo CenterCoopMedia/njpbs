@@ -225,7 +225,7 @@ it("keeps a custom-link draft's retained body in private preview and redirects o
   expect(renderContentLinks(html, entries, "https://njpbs.org/posts/election-reporting/", undefined)).toBe(html);
   const publicHtml = renderContentLinks(html, entries, "https://njpbs.org/posts/election-reporting/", "/posts/election-reporting/");
   expect(publicHtml).not.toContain("Retained reporting body");
-  expect(readFileSync(resolve("src/pages/posts/[...slug].astro"), "utf8")).toContain('post && renderContext?.content.kind !== "private-preview" ? contentLink(post, canonicalPath)');
+  expect(readFileSync(resolve("src/components/PublicPost.astro"), "utf8")).toContain('post && renderContext?.content.kind !== "private-preview" ? contentLink(post, canonicalPath)');
   expect(publicHtml).toContain('http-equiv="refresh"');
   expect(publicHtml).toContain('name="robots" content="noindex, nofollow"');
   expect(readFileSync(resolve("src/middleware.ts"), "utf8")).toContain('content?.kind === "private-preview" ? undefined : context.url.pathname');
@@ -241,7 +241,7 @@ it("keeps direct Post image and continuation anchors inside the new-tab notice c
   const index = readFileSync(resolve("src/components/PostIndex.astro"), "utf8");
   const media = index.slice(index.indexOf('"post-index-card__media"'), index.indexOf("</a>", index.indexOf('"post-index-card__media"')));
   expect(media).toMatch(/aria-label=\{\s*contentLink\(post, post.path\).newTab\s*\? `\$\{post.title\} \(opens in new tab\)`/);
-  const detail = readFileSync(resolve("src/pages/posts/[...slug].astro"), "utf8");
+  const detail = readFileSync(resolve("src/components/PublicPost.astro"), "utf8");
   const continuation = detail.match(/<a href=\{outbound.href\}[\s\S]*?<\/a>/)![0];
   expect(continuation).toContain("outbound.newTab && <Fragment set:html={homeExternalLinkNotice}");
 });

@@ -1,5 +1,6 @@
 "use strict";
 
+const { postRoutePath } = require("./post-slug-contract");
 const { createHash, randomUUID } = require("node:crypto");
 const { contentLink } = require("./content-link");
 const { setTimeout: delay } = require("node:timers/promises");
@@ -99,7 +100,7 @@ async function readPublicPostAfterRefresh(url, fetchPublic, signal, headers) {
 }
 
 async function readPublicPostReceipt(state, fetchPublic, signal, target, headers) {
-  const response = await readPublicPostAfterRefresh(`${target.origin}/posts/${state.slug}/`, fetchPublic, signal, headers);
+  const response = await readPublicPostAfterRefresh(`${target.origin}${postRoutePath(state.slug)}`, fetchPublic, signal, headers);
   const snapshotDigest = response.headers.get("x-njpbs-snapshot-sha256");
   const datasetFiguresDigest = response.headers.get("x-njpbs-dataset-figures-sha256");
   if (response.status !== (state.visible ? state.contentRedirectUrl ? 302 : 200 : 410) ||
@@ -186,7 +187,7 @@ async function settleServedPost({ firestore, state, claim, purgeReceipt, now }) 
         const owner = (await readNoBuildPostOwner({ firestore, transaction, postId: state.postId })).state;
         const serving = effectiveNoBuildPostState(owner, await readNoBuildPostCapability({ firestore, transaction }));
         const reply = await readNoBuildPostDecisionInTransaction({ firestore, transaction,
-          path: `/posts/${state.slug}/`, rendererSha: serving?.rendererSha });
+          path: postRoutePath(state.slug), rendererSha: serving?.rendererSha });
         const document = (await transaction.get(firestore.doc(`cmsPosts/${state.postId}`))).data();
         if (reply.kind !== "post" || reply.receipt.operationId !== state.operationId ||
             reply.receipt.sourceVersion !== state.sourceVersion || document?.publishBuildPending !== true ||
@@ -400,7 +401,7 @@ async function verifyOwnedPostRoutes({ state, staticProof, contentRedirectUrl, c
     // Read the body inside the deadline; the deadline aborts the request when it settles.
     await withinDeadline(10_000, async signal => {
     const response = await readPublicPostAfterRefresh(
-      `${target.origin}/posts/${slug}/?cms-code=${candidate.workerVersionId}`, fetchPublic, signal, new Headers(headers));
+      `${target.origin}${postRoutePath(slug)}?cms-code=${candidate.workerVersionId}`, fetchPublic, signal, new Headers(headers));
     // New-admission selection cannot discard an already accepted route.
     // Invalid metadata still refuses visible proof; retained withdrawals stay absent.
     const enabled = !!staticProof || !state.visible || (candidate.noBuildPost.enabled &&
@@ -412,7 +413,7 @@ async function verifyOwnedPostRoutes({ state, staticProof, contentRedirectUrl, c
           response.headers.get("x-njpbs-source-version") !== String(staticProof?.sourceVersion ?? state.sourceVersion) ||
           response.headers.get("x-njpbs-renderer-sha") !== candidate.commitSha)) ||
         (enabled && !staticProof && response.headers.get("x-njpbs-admission-revision") !== String(admission.admissionRevision ?? "unavailable")) ||
-        (expected === 308 && response.headers.get("location") !== `/posts/${staticProof?.slug ?? state.slug}/`) ||
+        (expected === 308 && response.headers.get("location") !== postRoutePath(staticProof?.slug ?? state.slug)) ||
         (expected === 302 && (response.headers.get("location") !== contentRedirectUrl || response.headers.get("x-robots-tag") !== "noindex, nofollow"))) {
       await response.body?.cancel();
       throw new Error("The public candidate did not preserve its instant Post routes");
@@ -463,7 +464,7 @@ async function verifyNoBuildPostPublicRoute({ firestore, candidate, fetchPublic 
       : state.mode === "static" ? state.staticProof : null;
     let contentRedirectUrl = state.contentRedirectUrl;
     if (staticProof) {
-      const link = staticProof.visible ? contentLink((await firestore.doc(`cmsPosts/${state.postId}`).get()).data()?.published?.metadata ?? {}, `/posts/${staticProof.slug}/`) : null;
+      const link = staticProof.visible ? contentLink((await firestore.doc(`cmsPosts/${state.postId}`).get()).data()?.published?.metadata ?? {}, postRoutePath(staticProof.slug)) : null;
       contentRedirectUrl = link?.external ? link.href : undefined;
     }
     await verifyOwnedPostRoutes({ ...options, state, staticProof, contentRedirectUrl });

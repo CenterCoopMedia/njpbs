@@ -17,7 +17,7 @@ function publicReleaseSnapshotJson(value, maxBytes = 800_000) {
 }
 const AUTHORITY_FIELDS = ["schemaVersion", "state", "mediaLifecycleReady", "activeGeneration", "activeDeploymentId", "activeCommitSha",
   "lastReservedGeneration", "newestEligibleGeneration", "newestEligibleBuildBatchId", "rendererSha", "generation", "servingEnabled",
-  "families", "terminalOwner", "dataFigureVersion", "dataHubReportingVersion", "dataHubCompositionVersion", "liveBlogVersion",
+  "families", "terminalOwner", "dataFigureVersion", "dataHubReportingVersion", "dataHubCompositionVersion", "liveBlogVersion", "spanishPostVersion",
   "electionResultsVersion", "revision", "enabled", "postId", "backgroundBucket", "operationId", "sourceVersion", "snapshotDigest",
   "visible", "ownedPaths", "canonicalPath", "path", "slug", "ownedSlugs", "family", "documentId", "pageId", "runtime", "mode",
   "admissionRevision", "contextRevision", "contextDigest", "durableWithdrawal", "owner", "ownerPath", "retainedSource", "externalInputs",

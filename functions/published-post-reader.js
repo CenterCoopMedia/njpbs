@@ -8,7 +8,8 @@ const { defineSecret } = require("firebase-functions/params");
 const { db } = require("./lib/firebase");
 const { requestHeader } = require("./lib/cms-edge");
 const { parsePublishInstant } = require("./lib/publish-instant");
-const { isServerMintableSlugShape } = require("./lib/post-slug-contract");
+const { isServerMintableSlugShape, isSpanishPostSlug } = require("./lib/post-slug-contract");
+const { isLinkedSpanishPost, alternatePostId, visibleAlternatePath } = require("./lib/spanish-edition");
 const { parseBlocks } = require("./lib/content-blocks");
 const { visibleLayoutBlocks } = require("./lib/content-layout");
 const { validateKnownMetadata } = require("./lib/content-metadata");
@@ -229,6 +230,9 @@ function projectPublishedPostSnapshot(owners, slug, now, cardsOnly, allowLegacyV
   if (!(cardsOnly || allowLegacyVisibility ? publiclyVisible(document) : document.publiclyVisible === true) || snapshot?.metadata?.type !== "post" || snapshot.metadata.slug !== slug) {
     return { kind: "not-found" };
   }
+  if (isSpanishPostSlug(slug) && !isLinkedSpanishPost(owner.id, snapshot.metadata)) {
+    throw readerFailure("reader_invalid_snapshot");
+  }
   const instant = parsePublishInstant(snapshot.publishedAt);
   if (instant === null) throw readerFailure("reader_invalid_snapshot");
   if (instant > now.getTime()) return { kind: "not-found" };
@@ -283,6 +287,12 @@ async function readPublishedPost({ firestore, slug, now, transaction, includeChr
     const selected = await readPublishedPostSnapshot({ firestore, transaction: tx, slug, now, cardsOnly, allowLegacyVisibility, nextDocument, documentId });
     if (selected.kind !== "snapshot") return selected;
     const { owner, published } = selected;
+    let alternatePath;
+    if (!cardsOnly && includeChrome) {
+      const alternateId = alternatePostId(owner.id, published.metadata);
+      const alternate = (await tx.get(firestore.doc(`cmsPosts/${alternateId}`))).data();
+      alternatePath = visibleAlternatePath(owner.id, published.metadata, alternateId, alternate, now);
+    }
     const authors = await readPublishedAuthors(firestore, tx, published.metadata);
     const { assetIds } = collectPublishedMediaUsage({ collection: "cmsPosts", snapshot: published });
     if (assetIds.length > 100) throw readerFailure("reader_invalid_snapshot");
@@ -337,7 +347,7 @@ async function readPublishedPost({ firestore, slug, now, transaction, includeChr
       firestore, transaction: tx, bodyIds: recordIds, settings: chrome.settings?.find(setting => setting.id === "story-ctas") });
     const result = { kind: cardsOnly ? "published-post-card" : "published-post", document: { id: owner.id, status: "published", publiclyVisible: true, deleted: false,
       publishAt: published.publishedAt, published }, assets: [...assetIds.filter(id => safeAssets[id]).map(id => ({ id, ...safeAssets[id] })), ...joinedAssets],
-      joinedRecords, authors, ...chrome };
+      joinedRecords, authors, ...chrome, ...(alternatePath ? { alternatePath } : {}) };
     for (const card of ctaCards) {
       joinedRecords.push(card);
       if (!require("./lib/content-link").contentLinkReadFits(result, 2 * 1024 * 1024)) joinedRecords.pop();

@@ -3,6 +3,7 @@
 const { gzipSync, gunzipSync } = require("node:zlib");
 const { isDeepStrictEqual } = require("node:util");
 const { contentLinkReadFits } = require("./lib/content-link");
+const { postSlugForPath } = require("./lib/post-slug-contract");
 const { readNoBuildPostDecision } = require("./lib/no-build-post-publication");
 const { readNoBuildPageDecision } = require("./lib/no-build-page-serving");
 const { readSelectedNoBuildPageProjection } = require("./lib/no-build-page-source");
@@ -175,7 +176,7 @@ function createCmsGetPublicPageHandler(deps = {}) {
       }
       if (req.body?.mode === "no-build-code-post-v1") {
         const { path, rendererSha, method = "GET" } = req.body;
-        if (typeof path !== "string" || path.length > 512 || !/^\/posts\/[a-z0-9]+(?:-[a-z0-9]+)*\/$/.test(path) ||
+        if (typeof path !== "string" || path.length > 512 || !postSlugForPath(path) ||
             !/^[a-f0-9]{40}$/.test(rendererSha ?? "") || !["GET", "HEAD"].includes(method)) throw new Error("Invalid code Post request");
         const read = async () => {
           const result = await require("./lib/no-build-code-post-consumer").readCodePostConsumer({ firestore, path, rendererSha, log,
@@ -220,7 +221,7 @@ function createCmsGetPublicPageHandler(deps = {}) {
         const { outputForPath, isBackgroundAssetPath } = require("./lib/post-background-outputs");
         // Only detail and receipt reads repeat expensive Post authority reads.
         // Background bytes keep their own post-serve authority check.
-        if (!probe && (/^\/posts\/[^/]+\/$/.test(path) || ["/_publication.json", "/_content-status.json"].includes(path)) &&
+        if (!probe && (postSlugForPath(path) || ["/_publication.json", "/_content-status.json"].includes(path)) &&
             !outputForPath(path) && !isBackgroundAssetPath(path)) {
           return await cachedDecision(req, res, JSON.stringify(["post", path, rendererSha, method]), async () => {
             const result = await (deps.readNoBuildPostFn ?? readNoBuildPostDecision)({ firestore, path, rendererSha, probe, log });
