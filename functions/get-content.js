@@ -238,14 +238,15 @@ async function publicationMetadata(firestore, stored, collection, documentId) {
   };
 }
 
-async function spanishSourceStatus(firestore, principal, edition) {
+async function spanishSourceStatus(firestore, principal, edition, log) {
   const { editionOf, translationSource } = edition;
   if (!isBoundedDocumentId(editionOf) || !translationSource) return undefined;
 
   let snapshot;
   try {
     snapshot = await firestore.collection("cmsPosts").doc(editionOf).get();
-  } catch {
+  } catch (error) {
+    log.warn("cmsGetContent could not check the Spanish edition source", { code: error?.code ?? "unknown" });
     return "unavailable";
   }
   const source = snapshot.data();
@@ -372,7 +373,7 @@ function createCmsGetContentHandler(deps = {}) {
       }
 
       const translationSourceStatus = collection === "cmsPosts" && stored?.locale === "es"
-        ? await spanishSourceStatus(firestore, user.principal, stored)
+        ? await spanishSourceStatus(firestore, user.principal, stored, log)
         : undefined;
       // The addressed id wins over any `id` the document carries: an older
       // record can still hold a conflicting one, and the client keys its editor
