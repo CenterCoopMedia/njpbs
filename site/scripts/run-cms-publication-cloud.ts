@@ -128,7 +128,7 @@ async function runCloudPublicationStages(
   await assertPreviewSandboxAvailable();
   if (mode === "--preflight") return;
   progress.stage = "inputs";
-  const buildEnvironment = { ...parseCmsPublicationPublicBuildEnvironment(environment),
+  const buildEnvironment = { ...parseCmsPublicationPublicBuildEnvironment(environment, target.environment),
     CMS_DEPLOYMENT_ENVIRONMENT: target.environment };
   if (!/^[A-Za-z0-9_-]{20,80}$/.test(cloudflareApiToken)) {
     throw new Error("Cloud publication credentials are invalid");

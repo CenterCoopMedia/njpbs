@@ -6,6 +6,7 @@ import type { App } from "firebase-admin/app";
 import { parsePreviewStorageCredential } from "./cms-preview-storage-credential";
 import { CmsPublicationRuntimeGuardError } from "./cms-publication-runtime-guard";
 import { assertProductionFirestoreRouting, parseCmsPublicationFirebaseServiceAccount } from "./cms-publication-credentials";
+import { devCloudflareAccount } from "./dev-cloudflare-account.mjs";
 import { expectedPublicBuildValues } from "./prepared-public-build-settings";
 import { assertPreparedPublicBuildSettings } from "../../functions/lib/public-build-settings.js";
 
@@ -67,6 +68,12 @@ export async function main(args = process.argv.slice(2), environment: NodeJS.Pro
     assertProductionFirestoreRouting(environment);
     // The account must belong to the target project, so a mixed credential refuses before any dependency loads.
     const serviceAccount = parseCmsPublicationFirebaseServiceAccount(readFileSync(3, "utf8"), target.projectId);
+    // Wrangler uploads to the active account; a development seal requires the independent development pin.
+    if (action === "--seal" && target.environment === "development") {
+      try { devCloudflareAccount(environment); } catch {
+        throw new PreparedReleaseOperatorError("Development Cloudflare account configuration is missing or differs");
+      }
+    }
     const { firebaseAdminRuntime, createCmsPublicationCloudStorage, sealPreparedCloudRelease, promotePreparedCloudRelease,
       checkSealedPublicRelease, handoverPreparedPublicRelease, parseCloudflareToken } = await loadReleaseDependencies();
     runtime = firebaseAdminRuntime;

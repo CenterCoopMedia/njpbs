@@ -31,14 +31,14 @@ it.each([
 
 const account = (project: string) => JSON.stringify({ type: "service_account", project_id: project,
   client_email: `release@${project}.iam.gserviceaccount.com`, private_key: "k".repeat(64) });
-const runOperator = (environment: Record<string, string>, credential?: string) => {
+const runOperator = (environment: Record<string, string>, credential?: string, action = "--check") => {
   const directory = mkdtempSync(path.join(tmpdir(), "prepared-target-"));
   const file = path.join(directory, "firebase-service-account");
   writeFileSync(file, credential ?? "");
   const fd = openSync(file, "r");
   try {
     return spawnSync(process.execPath, ["--import", `${root}/site/node_modules/tsx/dist/loader.mjs`,
-      `${root}/site/scripts/prepared-cms-publication-cloud-release.ts`, "--check", operation, commit], {
+      `${root}/site/scripts/prepared-cms-publication-cloud-release.ts`, action, operation, commit], {
       cwd: root, env: { PATH: "/usr/bin:/bin", ...environment }, encoding: "utf8", stdio: ["ignore", "pipe", "pipe", fd],
     });
   } finally {
@@ -61,6 +61,14 @@ it("selects the release target only from the explicit deployment environment", (
 it.each(["", "staging", "Production"])("refuses the unknown target %j before opening any credential descriptor", target => {
   const result = runOperator({ CMS_DEPLOYMENT_ENVIRONMENT: target });
   expect([result.status, result.stderr]).toEqual([1, "The prepared release target must be production or development\n"]);
+});
+
+it("refuses a development seal whose active Cloudflare account is not the development pin", () => {
+  const pin = "a".repeat(32);
+  for (const environment of [{}, { CMS_DEV_CLOUDFLARE_ACCOUNT_ID: pin, CLOUDFLARE_ACCOUNT_ID: "b".repeat(32) }]) {
+    const result = runOperator({ CMS_DEPLOYMENT_ENVIRONMENT: "development", ...environment }, account("njpbs-site-dev"), "--seal");
+    expect([result.status, result.stderr]).toEqual([1, "Development Cloudflare account configuration is missing or differs\n"]);
+  }
 });
 
 it("refuses a production account for a development run before any database read", () => {
