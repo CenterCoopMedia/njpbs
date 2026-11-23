@@ -9,7 +9,10 @@ import converter from "../../functions/wordpress-archive-content.js";
 const { convertWordPressStory } = converter;
 const sourceRef = { source: "sample-archive", postId: "3561" };
 const permalink = "https://archive.example.org/stories/harbor/";
-const mediaByUrl = new Map([["https://archive.example.org/uploads/harbor.jpg", "harbor_asset"]]);
+const mediaByUrl = new Map([
+  ["https://archive.example.org/uploads/harbor.jpg", "harbor_asset"],
+  ["https://archive.example.org/uploads/pier.jpg", "pier_asset"],
+]);
 const fixture = (name: string) => readFileSync(new URL(`../fixtures/wordpress-archive/${name}.html`, import.meta.url), "utf8");
 const convert = (html: string) => convertWordPressStory({ html, sourceRef, permalink, mediaByUrl });
 const schema = getSchema(richTextExtensions());
@@ -102,6 +105,41 @@ it.each([
   const { blocks, report } = convert(html);
   expect(report).toMatchObject({ status: "manual_review", issues: [{ code: "list_layout", start: 0, end: html.length }] });
   expect(renderBlock(checkEditableBlocks(blocks)[0])).toBe("<ol><li><p>First</p></li><li><p>Second</p></li></ol>");
+});
+
+it("converts legacy gallery and provider markup with scheme-relative URLs", () => {
+  const { blocks, report } = convert(`<!-- wp:gallery -->
+<figure><ul class="blocks-gallery-grid">
+  <li class="blocks-gallery-item"><figure><a href="//archive.example.org/photo/">
+    <img src="//archive.example.org/uploads/harbor.jpg" alt="Harbor">
+  </a><figcaption>Harbor credit</figcaption></figure></li>
+  <li class="blocks-gallery-item"><figure><img src="/uploads/pier.jpg" alt="Pier"></figure></li>
+</ul></figure>
+<!-- /wp:gallery -->
+<!-- wp:core-embed/youtube -->
+<figure><iframe src="//www.youtube.com/embed/AbC123xYz_0"></iframe></figure>
+<!-- /wp:core-embed/youtube -->`);
+  expect(report.status).toBe("complete");
+  expect(checkEditableBlocks(blocks)).toMatchObject([
+    { type: "image", data: { assetId: "harbor_asset", href: "https://archive.example.org/photo/", caption: "Harbor credit" } },
+    { type: "image", data: { assetId: "pier_asset" } },
+    { type: "embed", data: { url: "https://www.youtube-nocookie.com/embed/AbC123xYz_0" } },
+  ]);
+
+  const credentialLink = convert('<p><a href="//author@archive.example.org/story/">Read the story</a></p>');
+  expect(credentialLink.report.issues).toContainEqual(expect.objectContaining({ code: "unsafe_link" }));
+  expect(renderBlock(checkEditableBlocks(credentialLink.blocks)[0])).toBe("<p>Read the story</p>");
+});
+
+it("reports standalone classic URLs whose providers need manual review", () => {
+  const html = "Read the dispatch.\n\nhttps://twitter.com/harbor/status/123456789\n\nhttps://audio.example.org/episode";
+  const { blocks, report } = convert(html);
+  expect(report).toMatchObject({
+    status: "manual_review", issues: [{ code: "unsupported_embed", start: 0, end: html.length }],
+  });
+  expect(renderBlock(checkEditableBlocks(blocks)[0])).toBe('<p>Read the dispatch.</p>'
+    + '<p><a href="https://x.com/harbor/status/123456789">View post on X</a></p>'
+    + '<p><a href="https://audio.example.org/episode">https://audio.example.org/episode</a></p>');
 });
 
 it("distinguishes empty input from source that requires review before import", () => {

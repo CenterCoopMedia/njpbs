@@ -120,9 +120,12 @@ function convertWordPressStory({ html, sourceRef, permalink, mediaByUrl = new Ma
   const closingShortcodes = new Set();
   for (const match of html.matchAll(/\[\/([a-z][\w:-]*)\]/gi)) closingShortcodes.add(match[1].toLowerCase());
   const classicStory = !/<!--\s*wp:[a-z]/i.test(html);
+  const textOrigins = new WeakMap();
 
   function resolveHref(raw) {
-    const href = safeHref(raw);
+    const value = typeof raw === "string" ? raw.trim() : "";
+    // Network-path references in the archive inherit the original permalink's scheme.
+    const href = /^\/\/[^/\\]/.test(value) ? value : safeHref(raw);
     if (!href) return null;
     try { return safeHref(new URL(href, permalink).href); }
     catch { return null; }
@@ -157,7 +160,11 @@ function convertWordPressStory({ html, sourceRef, permalink, mediaByUrl = new Ma
         const lines = classicFlow ? value.split("\n") : [value];
         for (const [lineIndex, line] of lines.entries()) {
           if (lineIndex) parts.push({ type: "classicBreak" });
-          if (line) parts.push(textNode(line, marks));
+          if (line) {
+            const piece = textNode(line, marks);
+            textOrigins.set(piece, node);
+            parts.push(piece);
+          }
         }
       }
     }
@@ -192,14 +199,15 @@ function convertWordPressStory({ html, sourceRef, permalink, mediaByUrl = new Ma
     if (!alt.trim()) flag("missing_alt", node.sourceCodeLocation);
     return [block("image", { assetId, alt, ...(href ? { href } : {}) }, node)];
   }
-  function embed(node, raw) {
+  function embed(node, raw, linkFallback = false) {
     const url = resolveHref(raw);
     const canUseUrl = url && attr(node, "srcdoc") === undefined;
     const player = canUseUrl && embedPlayer(url, false);
     if (player) return [block("embed", { url: player.src }, node)];
     flag("unsupported_embed", node.sourceCodeLocation);
     const post = canUseUrl && xVideoLink(url);
-    return post ? [{ type: "paragraph", content: [textNode("View post on X", [{ type: "link", attrs: { href: post } }])] }] : [];
+    const href = post || (linkFallback && canUseUrl ? url : null);
+    return href ? [{ type: "paragraph", content: [textNode(post ? "View post on X" : raw, [{ type: "link", attrs: { href } }])] }] : [];
   }
   function table(node) {
     const direct = children(node);
@@ -256,7 +264,7 @@ function convertWordPressStory({ html, sourceRef, permalink, mediaByUrl = new Ma
   function comment(node) {
     const marker = /^\s*wp:([a-z][a-z\d-]*(?:\/[a-z][a-z\d-]*)?)(?=\s|\/|$)/i.exec(node.data);
     if (!marker) return;
-    const name = marker[1].replace(/^core\//, "");
+    const name = marker[1].startsWith("core-embed/") ? "embed" : marker[1].replace(/^core\//, "");
     if (STATIC_BLOCKS.has(name) && !node.data.trimEnd().endsWith("/")) return;
     const code = name === "shortcode" ? "shortcode" : name === "html" ? "interactive_markup"
       : DYNAMIC_BLOCKS.has(name) || name.startsWith("post-") ? "dynamic_block" : "unsupported_block";
@@ -305,6 +313,8 @@ function convertWordPressStory({ html, sourceRef, permalink, mediaByUrl = new Ma
     const mark = MARKS.get(tag);
     if (mark && !marks.some(item => item.type === mark)) marks = [...marks, { type: mark }];
     const pieces = children(node).flatMap(child => convert(child, marks, literal || tag === "pre"));
+    if ((tag === "ul" && (hasClass(node, "blocks-gallery-grid") || hasClass(node, "wp-block-gallery")))
+      || (tag === "li" && hasClass(node, "blocks-gallery-item"))) return paragraphs(pieces);
     if (GROUPS.has(tag) || tag === "p" || tag === "figcaption") return paragraphs(pieces);
     if (/^h[1-6]$/.test(tag)) {
       const level = tag === "h1" || tag === "h2" ? 2 : 3;
@@ -352,18 +362,17 @@ function convertWordPressStory({ html, sourceRef, permalink, mediaByUrl = new Ma
     if (prose.length) add("prose", { content: { type: "doc", content: prose } });
     prose = [];
   }
-  for (const piece of paragraphs(children(fragment).flatMap(node => convert(node)))) {
+  function classicEmbed(piece) {
+    if (piece.type !== "paragraph" || piece.content.length !== 1) return piece;
+    const [text] = piece.content;
+    const raw = text.type === "text" && !text.marks ? text.text.trim() : "";
+    return /^https?:\/\/\S+$/i.test(raw) ? embed(textOrigins.get(text), raw, true)[0] ?? piece : piece;
+  }
+  const content = paragraphs(children(fragment).flatMap(node => convert(node)));
+  for (const piece of classicStory ? content.map(classicEmbed) : content) {
     if (piece.blockType) {
       flush();
       add(piece.blockType, piece.data);
-      continue;
-    }
-    const single = classicStory && piece.type === "paragraph" && piece.content.length === 1 ? piece.content[0] : null;
-    const raw = single?.type === "text" && !single.marks ? single.text.trim() : "";
-    const player = /^https?:\/\/\S+$/i.test(raw) && embedPlayer(resolveHref(raw) ?? "", false);
-    if (player) {
-      flush();
-      add("embed", { url: player.src });
     } else prose.push(piece);
   }
   flush();
