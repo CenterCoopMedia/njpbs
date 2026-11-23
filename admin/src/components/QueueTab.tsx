@@ -208,11 +208,14 @@ export function QueueTab() {
       const now = Date.now();
       const nextCheck = Math.min(...[...items.values()].map(item => item.contextCheckDueAt ?? Infinity).filter(at => at > now));
       if (Number.isFinite(nextCheck)) checkTimer = window.setTimeout(updateItems, nextCheck - now);
-      setPublishItems([...items.values()].map(item => ({ ...item,
-        status: item.status === "checking" && (item.contextCheckDueAt ?? Infinity) <= now ? "public_unconfirmed" : item.status,
-        proofRecovery: proofItems.get(item.id)?.proofRecovery === true && item.proofExhausted === true,
-        contextRetry: proofItems.get(item.id)?.contextRetry === true,
-      })).sort((a, b) => (b.timestamp?.getTime() ?? 0) - (a.timestamp?.getTime() ?? 0)));
+      setPublishItems([...items.values()].map(item => {
+        const status = item.status === "checking" && (item.contextCheckDueAt ?? Infinity) <= now ? "public_unconfirmed" : item.status;
+        return { ...item, status,
+          ...(status === "checking" ? { recheckMessage: undefined, recheckOutcome: undefined } : {}),
+          proofRecovery: proofItems.get(item.id)?.proofRecovery === true && item.proofExhausted === true,
+          contextRetry: proofItems.get(item.id)?.contextRetry === true,
+        };
+      }).sort((a, b) => (b.timestamp?.getTime() ?? 0) - (a.timestamp?.getTime() ?? 0)));
       setPublishRecoveryTruncated(recoveryTruncated || proofTruncated);
       setPublishLoading(false);
       setPublishError(null);

@@ -485,12 +485,14 @@ it("offers a record check when its confirmation window expires without a fresh r
     firestoreMocks.onSnapshot.mockImplementation((_request, next) => {
       next({ docs: [{ id, data: () => ({ status: "success", transport: "public-context-no-build-v1",
         recordPublication: { family: "events", rendererSha: "a".repeat(40), contextRevision: 2, contextDigest: "b".repeat(64) },
+        lastPublicCheck: { outcome: "failed", queueStatus: "success", alertEpoch: null, message: "The earlier public check failed." },
         triggeredAt: createdAt, createdAt }) }] });
       return firestoreMocks.unsubscribe;
     });
     renderQueue();
     await act(async () => { await vi.advanceTimersByTimeAsync(0); });
     expect(screen.queryByRole("button", { name: "Check again" })).not.toBeInTheDocument();
+    expect(screen.queryByText("The earlier public check failed.")).not.toBeInTheDocument();
     await act(async () => { await vi.advanceTimersByTimeAsync(1_000); });
     expect(screen.getByRole("button", { name: "Check again" })).toBeEnabled();
     expect(publishMocks.loadPublishActivitySummary).toHaveBeenCalledTimes(1);
