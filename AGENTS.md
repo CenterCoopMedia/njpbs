@@ -9,6 +9,13 @@
 - Repository identity comes from explicit configuration. Name and numeric ID
   literals belong only in test fixtures; never add a default authorization target.
 - Keep validation, authorization, and data-retention controls in place.
+- Dev rehearsal refresh (coordinator decision, Nov. 23, 2026, for Joe's goal
+  that the release command passes twice on the dev CMS and dev site with real
+  data): on njpbs-site-dev only, the rehearsal refresh may restore seed-written
+  records that dev changed and remove seed-written records that production
+  withdrew, limited to the paths, documents and receipt hashes bound in the
+  dry-run plan stored in the same run record. Records the seed did not write
+  stay refused. Production retention controls are unchanged.
 - Run focused checks before you submit a change. List changed or removed tests
   and explain why they changed. Do not weaken assertions to make a check pass.
 - Check keyboard access, visible focus, labels, contrast, and reduced motion for
