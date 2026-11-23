@@ -2368,7 +2368,7 @@
     if(m.id==='industryjobs'&&Array.isArray(m.industryBreakdown)){
       const breakdown=m.industryBreakdown;
       const total=breakdown.reduce((sum,r)=>sum+r.change,0);
-      content+=`<p class="v10-table-note">${escape(m.period)} net change by <strong>industry</strong>, seasonally adjusted. This is an employer payroll survey, not an occupation-by-occupation breakdown.</p>
+      content+=`<p class="v10-table-note">${escape(m.period.split(' · ')[0])} net change by <strong>industry</strong>, seasonally adjusted. This is an employer payroll survey, not an occupation-by-occupation breakdown.</p>
       <div class="v10-table-wrap"><table class="v10-reference-table nj-industry-table">
       <caption>${escape(m.period.split(" ")[0])} jobs gained or lost by major industry (New Jersey)</caption>
       <thead><tr><th scope="col">Industry</th><th scope="col">Monthly jobs change</th><th scope="col" class="nj-industry-bar-heading">Direction &amp; relative size</th></tr></thead>
@@ -2378,7 +2378,7 @@
         return `<tr><th scope="row">${escape(r.sector)}</th><td class="nj-industry-count ${gain?'nj-industry-count--up':'nj-industry-count--down'}">${r.change>0?'+':'−'}${numberCount(Math.abs(r.change))}</td><td class="nj-industry-bar-cell"><div class="nj-job-axis" aria-hidden="true"><div class="nj-job-axis__half nj-job-axis__half--negative">${gain?'':`<span style="width:${pct}%"></span>`}</div><div class="nj-job-axis__half nj-job-axis__half--positive">${gain?`<span style="width:${pct}%"></span>`:''}</div></div></td></tr>`;
       }).join('')}</tbody>
       <tfoot><tr><th scope="row">Net change · all industries</th><td class="nj-industry-count">${total>0?'+':'−'}${numberCount(Math.abs(total))}</td><td>Across 10 reported sectors</td></tr></tfoot>
-      </table></div><p class="v10-table-note">The sectors above sum to the official statewide net change. Bars are proportional to each industry’s absolute month-to-month change, with zero at the center; counts are shown explicitly. October may revise these preliminary values.</p>`;
+      </table></div><p class="v10-table-note">The sectors above sum to the official statewide net change. Bars are proportional to each industry’s absolute month-to-month change, with zero at the center; counts are shown explicitly. The next monthly report may revise these preliminary values.</p>`;
     }
     if(m.id==='temperature'&&Array.isArray(m.monthlyReference)){
       content+=`<p class="v10-table-note">Each month is compared with its own 1991–2020 normal. These are monthly averages, not a year-to-date annual mean.</p><div class="v10-table-wrap"><table class="v10-reference-table"><caption>New Jersey monthly average temperature, 2026</caption><thead><tr><th scope="col">Month</th><th scope="col">2026</th><th scope="col">Normal</th><th scope="col">Difference</th></tr></thead><tbody>${m.monthlyReference.map(r=>`<tr><th scope="row">${escape(monthText(r.date))}</th><td>${r.value.toFixed(1)}°F</td><td>${r.normal.toFixed(1)}°F</td><td>${r.departure>=0?'+':''}${r.departure.toFixed(1)}°F</td></tr>`).join('')}</tbody></table></div>`;
