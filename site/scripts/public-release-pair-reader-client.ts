@@ -7,6 +7,21 @@ import { PAIR_READER_PATH, PAIR_READER_REPLY_LIMIT, parseReaderSeals, parseReade
   readBoundedBody, readerRefused, withinReaderDeadline, PAIR_READER_DEADLINE_MS,
   type ReaderNamespaceAbsence, type ReaderSeals } from "./public-release-pair-reader-contract";
 
+export class PairReaderReadError extends Error {
+  constructor(readonly code: "reader-timeout" | "reader-rate-limited" | "reader-unavailable" | "reader-refused") {
+    super(`Private pair reader refused: ${code}`);
+  }
+}
+
+function isReadTimeout(error: unknown) {
+  if (error instanceof DOMException && error.name === "TimeoutError") return true;
+  // Native fetch wraps Undici and system errors in a TypeError cause.
+  const cause = error instanceof Error ? error.cause ?? error : error;
+  if (!cause || typeof cause !== "object" || !("code" in cause)) return false;
+  return cause.code === "ETIMEDOUT" || cause.code === "UND_ERR_CONNECT_TIMEOUT" ||
+    cause.code === "UND_ERR_HEADERS_TIMEOUT" || cause.code === "UND_ERR_BODY_TIMEOUT";
+}
+
 /** Always crosses the deployed HTTP transport. There is deliberately no
  * injectable decision function or in-process fallback. Credentials are fetched
  * at use and never included in an error, receipt or log. Unavailable or
@@ -27,25 +42,37 @@ export function createPrivatePairReaderClient({ pair: rawPair, seals: rawSeals, 
     let response: Response | undefined;
     try {
       return await withinReaderDeadline(signal, async () => {
-      signal.throwIfAborted();
-      const headers = new Headers(await credentials());
-      signal.throwIfAborted();
-      headers.set("content-type", "application/json");
-      headers.set("cache-control", "no-store");
-      // Native fetch computes the wire length from these exact bytes. A manual
-      // content-length can be rejected by undici before the request is sent.
-      const encoded = new TextEncoder().encode(JSON.stringify(request));
-      response = await fetch(`${seals.deployment.origin}${PAIR_READER_PATH}`, {
-        method: "POST", headers, body: encoded, redirect: "manual", cache: "no-store", signal,
+        signal.throwIfAborted();
+        const headers = new Headers(await credentials());
+        signal.throwIfAborted();
+        headers.set("content-type", "application/json");
+        headers.set("cache-control", "no-store");
+        // Native fetch computes the wire length from these exact bytes. A manual
+        // content-length can be rejected by undici before the request is sent.
+        const encoded = new TextEncoder().encode(JSON.stringify(request));
+        response = await fetch(`${seals.deployment.origin}${PAIR_READER_PATH}`, {
+          method: "POST", headers, body: encoded, redirect: "manual", cache: "no-store", signal,
+        });
+        switch (response.status) {
+          case 408:
+          case 504:
+            throw new PairReaderReadError("reader-timeout");
+          case 429:
+            throw new PairReaderReadError("reader-rate-limited");
+          case 502:
+          case 503:
+            throw new PairReaderReadError("reader-unavailable");
+        }
+        if (response.status !== 200 || response.headers.get("content-type") !== "application/json" ||
+            response.headers.get("cache-control") !== "private, no-store") readerRefused();
+        const bytes = await readBoundedBody(response.body, PAIR_READER_REPLY_LIMIT, signal);
+        const reply = parseReaderReply(JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(bytes)), pair, request);
+        signal.throwIfAborted();
+        return reply;
       });
-      if (response.status !== 200 || response.headers.get("content-type") !== "application/json" ||
-          response.headers.get("cache-control") !== "private, no-store") readerRefused();
-      const bytes = await readBoundedBody(response.body, PAIR_READER_REPLY_LIMIT, signal);
-      const reply = parseReaderReply(JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(bytes)), pair, request);
-      signal.throwIfAborted();
-      return reply;
-      });
-    } catch { readerRefused(); }
-    finally { if (response?.body && !response.body.locked) void response.body.cancel().catch(() => {}); }
+    } catch (error) {
+      if (error instanceof PairReaderReadError) throw error;
+      throw new PairReaderReadError(isReadTimeout(error) || isReadTimeout(signal.reason) ? "reader-timeout" : "reader-refused");
+    } finally { if (response?.body && !response.body.locked) void response.body.cancel().catch(() => {}); }
   };
 }
