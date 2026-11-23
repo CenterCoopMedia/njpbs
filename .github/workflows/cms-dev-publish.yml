@@ -489,6 +489,8 @@ jobs:
         run: npm --prefix site run guardrails
         env:
           INTERNAL_SURFACES: "0"
+          # Matches the build, which emits the Data Hub as production does.
+          DATA_HUB_PUBLIC: "1"
       - name: Verify retained Post renderer files
         run: |
           test -f dev-publication/renderer/server/entry.mjs

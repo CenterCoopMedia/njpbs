@@ -34,7 +34,7 @@ const html = renderLiveBlog(liveBlog, { id: postId, asOf: publishedAt, preview, 
     resolveAsset: (assetId, placement) => resolved.get(responsiveImageKey(assetId, placement)) ?? null,
   });
   const full = assets[media.data.assetId];
-  return full ? `<a class="live-blog__image-link" data-live-blog-image href="${escapeHtml(full.url)}" target="_blank" rel="noopener"><span class="live-blog__sr-only">Expand image. </span>${rendered}<span class="live-blog__image-hint" aria-hidden="true">Expand image ↗</span><span class="live-blog__sr-only" data-live-blog-image-fallback> (opens in a new tab)</span></a>` : rendered;
+  return full ? `<a class="live-blog__image-link" data-live-blog-image data-width="${full.width}" data-height="${full.height}" href="${escapeHtml(full.url)}" target="_blank" rel="noopener"><span class="live-blog__sr-only">Expand image. </span>${rendered}<span class="live-blog__image-hint" aria-hidden="true">Expand image ↗</span><span class="live-blog__sr-only" data-live-blog-image-fallback> (opens in new tab)</span></a>` : rendered;
 } });
 ---
 <Fragment set:html={html} />

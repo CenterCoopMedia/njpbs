@@ -4,11 +4,11 @@ const { fallbackUrl } = Astro.props;
 ---
 <dialog class="live-blog-image-dialog" data-live-blog-image-dialog aria-label="Expanded live update image" aria-describedby="live-blog-image-caption">
   <div class="live-blog-image-dialog__controls">
-    <a data-full-image href={fallbackUrl} target="_blank" rel="noopener">Open full image<span class="live-blog__sr-only"> (opens in a new tab)</span></a>
+    <a data-full-image href={fallbackUrl} target="_blank" rel="noopener">Open full image<span class="live-blog__sr-only"> (opens in new tab)</span></a>
     <button type="button" data-dialog-close>Close image</button>
   </div>
   <figure>
-    <img data-expanded-image alt="" />
+    <img data-expanded-image alt="" hidden />
     <figcaption id="live-blog-image-caption" data-image-caption></figcaption>
   </figure>
 </dialog>
@@ -21,7 +21,9 @@ const { fallbackUrl } = Astro.props;
   .live-blog-image-dialog button { border: 1px solid var(--line-strong); border-radius: var(--radius-control); background: var(--color-surface-page); cursor: pointer; }
   .live-blog-image-dialog :is(a, button):focus-visible { outline: var(--focus-outline); outline-offset: var(--focus-offset); }
   figure { margin: 0; }
-  img { display: block; max-inline-size: 100%; max-block-size: 72dvh; inline-size: auto; block-size: auto; margin-inline: auto; object-fit: contain; }
+  img[hidden] { display: none; }
+  /* The width and height attributes reserve the box before the full image loads. */
+  img { display: block; max-inline-size: 100%; max-block-size: 72dvh; block-size: auto; margin-inline: auto; object-fit: contain; }
   figcaption :global(.cms-image-credit) { display: block; }
   figcaption { margin-block-start: var(--space-3); white-space: pre-line; overflow-wrap: anywhere; }
 </style>
