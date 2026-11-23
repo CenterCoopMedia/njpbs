@@ -163,7 +163,12 @@ it("stages verified image and PDF originals by attachment identity and keeps rev
       postId, sourceStatus: postId === "72" ? "private" : "inherit",
       ...(postId === "70" && { attachmentUrl: "https://example.org/uploads/schedule.pdf", title: "Service schedule" }),
     }));
-  await writeArchive(file, attachment, document, duplicate, privateItem, missing, changed, unsupported);
+  const publishedParent = await loadStory();
+  const privateParent = sourceRevision(publishedParent, { postId: "76", sourceStatus: "private" });
+  const inheritedPrivate = sourceRevision(attachment, { postId: "77", parentPostId: privateParent.postId });
+  const inheritedUnknown = sourceRevision(attachment, { postId: "78", parentPostId: null });
+  await writeArchive(file, publishedParent, privateParent, attachment, document, duplicate, privateItem, missing, changed,
+    unsupported, inheritedPrivate, inheritedUnknown);
   await stageWordPressArchive({ firestore, file, apply: true });
 
   const png = await sharp({ create: { width: 8, height: 4, channels: 3, background: "blue" } }).png().toBuffer();
@@ -190,6 +195,8 @@ it("stages verified image and PDF originals by attachment identity and keeps rev
     item(missing, { sha256: missingHash }),
     item(changed, { sha256: incorrectHash }),
     item(unsupported, { mimeType: "image/svg+xml" }),
+    item(inheritedPrivate),
+    item(inheritedUnknown),
   ];
   const manifestFile = join(scratch, "approved.json");
   const writeManifest = entries => writeFile(manifestFile, JSON.stringify({ source, version: 1, items: entries }));
@@ -199,18 +206,18 @@ it("stages verified image and PDF originals by attachment identity and keeps rev
   await writeManifest(items);
   const rows = [];
   await expect(stageWordPressArchiveMedia({ ...options, report: row => rows.push(row) }))
-    .resolves.toEqual({ stage: 3, skip: 0, review: 4 });
+    .resolves.toEqual({ stage: 3, skip: 0, review: 6 });
   expect(rows.filter(row => row.action === "review").map(row => row.reason))
-    .toEqual(["nonpublic-source", "missing-original", "checksum-mismatch", "unsupported-type"]);
+    .toEqual(["nonpublic-source", "missing-original", "checksum-mismatch", "unsupported-type", "nonpublic-source", "unverified-parent"]);
   expect((await stagedRef(attachment.postId).get()).data().media).toBeUndefined();
 
   await expect(stageWordPressArchiveMedia({ ...options, apply: true, report: async row => {
     if (row.phase === "plan-complete") await stagedRef(document.postId).update({ version: 2, editorialTitle: "Staff correction" });
-  } })).resolves.toEqual({ stage: 2, skip: 0, review: 5 });
+  } })).resolves.toEqual({ stage: 2, skip: 0, review: 7 });
   expect((await stagedRef(document.postId).get()).data()).toMatchObject({ version: 2, editorialTitle: "Staff correction" });
   expect((await stagedRef(document.postId).get()).data().media).toBeUndefined();
-  await expect(stageWordPressArchiveMedia({ ...options, apply: true })).resolves.toEqual({ stage: 1, skip: 2, review: 4 });
-  await expect(stageWordPressArchiveMedia({ ...options, apply: true })).resolves.toEqual({ stage: 0, skip: 3, review: 4 });
+  await expect(stageWordPressArchiveMedia({ ...options, apply: true })).resolves.toEqual({ stage: 1, skip: 2, review: 6 });
+  await expect(stageWordPressArchiveMedia({ ...options, apply: true })).resolves.toEqual({ stage: 0, skip: 3, review: 6 });
 
   const image = (await stagedRef(attachment.postId).get()).data();
   expect(image).toMatchObject({ version: 2, sourceRef: { source, postId: attachment.postId }, record: attachment });
@@ -228,6 +235,8 @@ it("stages verified image and PDF originals by attachment identity and keeps rev
   expect(sameBytes.sourceRef.postId).toBe(duplicate.postId);
   expect(sameBytes.media.original.sha256).toBe(imageHash);
   expect((await stagedRef(privateItem.postId).get()).data().media).toBeUndefined();
+  expect((await stagedRef(inheritedPrivate.postId).get()).data().media).toBeUndefined();
+  expect((await stagedRef(inheritedUnknown.postId).get()).data().media).toBeUndefined();
   expect((await firestore.listCollections()).map(collection => collection.id)).toEqual([archive]);
 
   await writeManifest([{ ...imageEntry, caption: "A replacement caption" },

@@ -122,8 +122,11 @@ node scripts/stage-wordpress-archive-media.mjs approved.json originals --project
 
 The report identifies missing originals, unsupported types, checksum or decode
 failures, private source attachments, and staging conflicts by source and
-attachment ID. Apply needs update permission on staged attachments and read
-permission on their creation receipts. It saves the verified checksum, filename,
+attachment ID. An attachment that inherits its status needs a staged parent
+story from the same source whose WordPress status is published. An absent or
+unverified parent goes to review. Apply needs update permission on staged
+attachments and read permission on the staging records and their creation
+receipts. It saves the verified checksum, filename,
 MIME type, byte size, image dimensions or PDF page count, and descriptive
 metadata on each matched attachment. The transaction checks the staged revision
 and version again before saving. Exact replays skip and changed metadata goes to

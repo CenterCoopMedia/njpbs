@@ -68,17 +68,30 @@ async function readManifest(path) {
   return manifest;
 }
 
-function attachmentProblem(staged, receipt, sourceRef, entry) {
+function matchesStagingReceipt(staged, receipt, sourceRef, kind) {
+  return staged?.kind === kind && staged.record?.kind === kind &&
+    staged.formatVersion === 1 && Number.isSafeInteger(staged.version) && staged.version >= 1 &&
+    staged.record.lifecycle === "staged" && staged.record.postId === sourceRef.postId &&
+    matches(staged.record.revision?.sha256, HEX_DIGEST) &&
+    isDeepStrictEqual(staged.sourceRef, sourceRef) && isDeepStrictEqual(receipt?.sourceRef, sourceRef) &&
+    receipt.kind === kind && receipt.action === "create" &&
+    isDeepStrictEqual(receipt.revision, staged.record.revision);
+}
+
+async function attachmentProblem({ firestore, reader, staged, receipt, sourceRef, entry }) {
   if (!staged) return "missing-staged-attachment";
-  if (staged.kind !== "attachment" || staged.record?.kind !== "attachment" ||
-      staged.formatVersion !== 1 || !Number.isSafeInteger(staged.version) || staged.version < 1 ||
-      staged.record.lifecycle !== "staged" || staged.record.postId !== sourceRef.postId ||
-      !isDeepStrictEqual(staged.sourceRef, sourceRef) || !isDeepStrictEqual(receipt?.sourceRef, sourceRef) ||
-      receipt.kind !== "attachment" || receipt.action !== "create" ||
-      !isDeepStrictEqual(receipt.revision, staged.record.revision)) return "invalid-staged-attachment";
-  if (!["publish", "inherit"].includes(staged.record.sourceStatus)) return "nonpublic-source";
-  if (staged.record.revision?.sha256 !== entry.revisionSha256) return "source-revision-conflict";
-  return null;
+  if (!matchesStagingReceipt(staged, receipt, sourceRef, "attachment")) return "invalid-staged-attachment";
+  if (staged.record.revision.sha256 !== entry.revisionSha256) return "source-revision-conflict";
+  const { sourceStatus, parentPostId } = staged.record;
+  if (sourceStatus === "publish") return null;
+  if (sourceStatus !== "inherit") return "nonpublic-source";
+  if (!matches(parentPostId, POST_ID)) return "unverified-parent";
+  const parentSource = { source: sourceRef.source, postId: parentPostId };
+  const ref = archiveItemRef(firestore, parentSource.source, parentSource.postId);
+  const [parent, accepted] = await reader.getAll(ref, ref.collection("archiveImportReceipts").doc("staged"));
+  const story = parent.data();
+  if (!matchesStagingReceipt(story, accepted.data(), parentSource, "story")) return "unverified-parent";
+  return story.record.sourceStatus === "publish" ? null : "nonpublic-source";
 }
 
 async function verifyOriginal(directory, entry) {
@@ -151,7 +164,7 @@ export async function stageWordPressArchiveMedia({ firestore, manifestFile, orig
     const receipt = ref.collection("archiveImportReceipts").doc("staged");
     const [doc, accepted] = await firestore.getAll(ref, receipt);
     const staged = doc.data();
-    const problem = attachmentProblem(staged, accepted.data(), sourceRef, entry);
+    const problem = await attachmentProblem({ firestore, reader: firestore, staged, receipt: accepted.data(), sourceRef, entry });
     const verified = problem ? review(problem) : await verifyOriginal(originals, entry);
     const result = verified.proof ? decide(ref, staged, verified.proof, staged.version) : verified;
     counts[result.action]++;
@@ -166,7 +179,7 @@ export async function stageWordPressArchiveMedia({ firestore, manifestFile, orig
     const result = await firestore.runTransaction(async transaction => {
       const [doc, accepted] = await transaction.getAll(ref, receipt);
       const staged = doc.data();
-      const problem = attachmentProblem(staged, accepted.data(), sourceRef, entry);
+      const problem = await attachmentProblem({ firestore, reader: transaction, staged, receipt: accepted.data(), sourceRef, entry });
       if (problem) return review(problem);
       const decision = decide(ref, staged, proof, version);
       if (decision.action === "stage") transaction.update(ref, { version: version + 1, media: proof });
