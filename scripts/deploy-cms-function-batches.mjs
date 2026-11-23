@@ -181,9 +181,11 @@ function expiredFunctionFailures(output, names, project = PROJECT) {
 
 function runFunctionDeploy(names, launch, project) {
   return new Promise((resolve, reject) => {
-    const { firebaseConfig } = cmsTarget();
+    const { firebaseConfig, codebase } = cmsTarget();
+    // Firebase reads functions:<name> as the default codebase; another codebase needs its name.
+    const selector = name => codebase === "default" ? `functions:${name}` : `functions:${codebase}:${name}`;
     const child = launch("npx", ["--no-install", "firebase", "deploy", "--project", project,
-      ...(firebaseConfig === "firebase.json" ? [] : ["--config", firebaseConfig]), "--only", names.map((name) => `functions:${name}`).join(","), "--force", "--non-interactive"],
+      ...(firebaseConfig === "firebase.json" ? [] : ["--config", firebaseConfig]), "--only", names.map(selector).join(","), "--force", "--non-interactive"],
     { stdio: ["ignore", "pipe", "pipe"] });
     let output = "";
     const observe = (chunk, stream) => {
