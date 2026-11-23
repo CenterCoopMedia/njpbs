@@ -7,6 +7,7 @@ import { expect, it } from "vitest";
 import { prose, video, registeredAuthor, withdrawnAuthor, uploadedImages, uploadedAuthors, uploadedImageUrl } from "../../site/tests/fixtures/shadow-posts/fixtures";
 import { isSpanishPostSlug, postRoutePath } from "../../packages/content-core/src/post-slugs";
 import { SPANISH_POST_SEAL_ENABLED } from "../../packages/content-core/src/private-pair-http.mjs";
+import { PUBLIC_PAGE_READER_SEAL_VERSION } from "../../site/scripts/public-post-renderer-release";
 
 const require = createRequire(import.meta.url);
 const target = require("../../functions/lib/publication-target.js").publicationTarget(process.env.CMS_DEPLOYMENT_ENVIRONMENT ?? "production");
@@ -25,7 +26,7 @@ it("serves immediate, scheduled, uploaded and live-blog Posts in one compiled re
   const { liveBlogPostFixture } = await import(`data:text/javascript;base64,${Buffer.from(fixtureCode.outputFiles[0].text).toString("base64")}`);
   const release = JSON.parse(await readFile(rendererRelease, "utf8"));
   const { rendererSha } = release;
-  expect(release).toEqual({ schemaVersion: 1, rendererSha, liveBlogVersion: 1, electionResultsVersion: 2, pageReaderVersion: 3,
+  expect(release).toEqual({ schemaVersion: 1, rendererSha, liveBlogVersion: 1, electionResultsVersion: 2, pageReaderVersion: PUBLIC_PAGE_READER_SEAL_VERSION,
     ...(SPANISH_POST_SEAL_ENABLED ? { spanishPostVersion: 1 } : {}),
     ...(target.environment === "development" ? { environment: "development" } : {}) });
   const secondPost = { ...video, document: { ...video.document, id: "runtime-video" } };
