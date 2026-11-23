@@ -792,6 +792,7 @@ describe("Image link fields", () => {
     const onChange = vi.fn();
     const block = imageBlock({});
     const rendered = render(<InlineBlockSurface block={block} hasError={false} onChange={onChange} />);
+    expect(screen.queryByLabelText(/^Open link in a new tab/)).toBeNull();
     fireEvent.change(screen.getByLabelText(/^Image link/), { target: { value: "https://youtu.be/abc" } });
     expect(onChange.mock.lastCall?.[0]).toEqual({ ...block.data, href: "https://youtu.be/abc" });
     rendered.rerender(<InlineBlockSurface block={imageBlock({ href: "https://youtu.be/abc" })} hasError={false} onChange={onChange} />);
@@ -799,8 +800,64 @@ describe("Image link fields", () => {
     expect(onChange.mock.lastCall?.[0]).toEqual({ ...block.data, href: "https://youtu.be/abc", newTab: true });
   });
 
-  it("names a link on a decorative image as the error", () => {
-    render(<InlineBlockSurface block={imageBlock({ alt: "", altDecorative: true, href: "/live/" })} hasError onChange={vi.fn()} />);
+  it("asks editors to remove the link before marking the image decorative", () => {
+    const onChange = vi.fn();
+    const block = imageBlock({ alt: "", caption: "Watch the newscast", href: "/live/", newTab: true });
+    const view = (current: AdminBlock) => <InlineBlockSurface block={current} hasError={false} onChange={onChange} />;
+    const rendered = render(view(block));
+    const toggle = screen.getByLabelText("Mark as decorative");
+    expect(toggle).toHaveAttribute("aria-disabled", "true");
+    expect(toggle).toHaveAccessibleDescription("Remove the image link before marking this image decorative.");
+    fireEvent.click(toggle);
+    expect(onChange).not.toHaveBeenCalled();
+
+    fireEvent.change(screen.getByLabelText(/^Image link/), { target: { value: "" } });
+    const unlinked = imageBlock({ ...block.data, href: "", newTab: false });
+    expect(onChange).toHaveBeenLastCalledWith(unlinked.data);
+    rendered.rerender(view(unlinked));
+    expect(toggle).not.toHaveAttribute("aria-disabled");
+    fireEvent.click(screen.getByLabelText("Mark as decorative"));
+    const decorative = imageBlock({ ...unlinked.data, altDecorative: true });
+    expect(onChange).toHaveBeenLastCalledWith(decorative.data);
+    rendered.rerender(view(decorative));
+    expect(screen.queryByLabelText(/^Image link/)).toBeNull();
+    expect(screen.queryByLabelText(/^Open link in a new tab/)).toBeNull();
+  });
+
+  it.each(["", " ", "//example.org/video"])("hides the new-tab choice for an unusable link (%j)", href => {
+    render(<InlineBlockSurface block={imageBlock({ href, newTab: true })} hasError={false} onChange={vi.fn()} />);
+    expect(screen.getByLabelText(/^Image link/)).toHaveValue(href);
+    expect(screen.queryByLabelText(/^Open link in a new tab/)).toBeNull();
+  });
+
+  it.each(["/live/", " "])("lets editors clear a decorative image link (%j) without losing focus", href => {
+    const onChange = vi.fn();
+    const block = imageBlock({ alt: "", altDecorative: true, href });
+    const view = (current: AdminBlock) => <InlineBlockSurface block={current} hasError onChange={onChange} />;
+    const rendered = render(view(block));
     expect(screen.getByText("Image link must be empty while Mark as decorative is on.")).toBeInTheDocument();
+    const link = screen.getByLabelText(/^Image link/);
+    link.focus();
+    fireEvent.change(link, { target: { value: "" } });
+    const repaired = imageBlock({ ...block.data, href: "" });
+    expect(onChange).toHaveBeenLastCalledWith(repaired.data);
+    rendered.rerender(view(repaired));
+    expect(link).not.toBeInTheDocument();
+    expect(screen.getByLabelText("Mark as decorative")).toHaveFocus();
+  });
+
+  it("keeps the decorative toggle focused when an editor unmarks a linked image", () => {
+    const onChange = vi.fn();
+    const block = imageBlock({ alt: "", altDecorative: true, href: "/live/" });
+    const view = (current: AdminBlock) => <InlineBlockSurface block={current} hasError={false} onChange={onChange} />;
+    const rendered = render(view(block));
+    const toggle = screen.getByLabelText("Mark as decorative");
+    toggle.focus();
+    fireEvent.click(toggle);
+    const repaired = imageBlock({ ...block.data, altDecorative: false });
+    expect(onChange).toHaveBeenLastCalledWith(repaired.data);
+    rendered.rerender(view(repaired));
+    expect(toggle).toHaveAttribute("aria-disabled", "true");
+    expect(toggle).toHaveFocus();
   });
 });

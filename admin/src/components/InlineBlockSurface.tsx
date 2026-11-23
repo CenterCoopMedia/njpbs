@@ -14,7 +14,7 @@ import "../../../packages/content-core/src/custom-shelf.css";
 import { installCustomShelfControls } from "../../../packages/content-core/src/custom-shelf-controls";
 import { AssetImage } from "./ui/AssetImage";
 import { mediaImageSources, mediaPreviewImage, mediaPreviewUrl } from "../lib/media-image";
-import { createContext, lazy, Suspense, useContext, useEffect, useRef, useState } from "react";
+import { createContext, lazy, Suspense, useContext, useEffect, useRef, useState, type Ref } from "react";
 import { ContentShelfSources } from "./ContentShelfPicker";
 import { DEFAULT_CONTENT_QUERY } from "../lib/content-query";
 import type { LibrarySelection } from "../lib/content-library";
@@ -720,6 +720,8 @@ interface InlineImageEditorProps {
   onMediaPickerDirtyChange?: (dirty: boolean) => void;
   onChange: (image: ImageData) => void;
   onRemove?: (trigger: HTMLButtonElement) => void;
+  hasImageLink?: boolean;
+  decorativeToggleRef?: Ref<HTMLInputElement>;
 }
 
 function InlineImageEditor({
@@ -737,6 +739,8 @@ function InlineImageEditor({
   onMediaPickerDirtyChange,
   onChange,
   onRemove,
+  hasImageLink = false,
+  decorativeToggleRef,
 }: InlineImageEditorProps) {
   const suffix = labelSuffix ? ` ${labelSuffix}` : "";
   const assetIdInput = `${idPrefix}-asset-id`;
@@ -744,6 +748,8 @@ function InlineImageEditor({
   const captionInput = `${idPrefix}-caption`;
   const decorativeInput = `${idPrefix}-alt-decorative`;
   const decorative = image.altDecorative === true;
+  const decorativeUnavailable = hasImageLink && !decorative;
+  const decorativeHelp = `${decorativeInput}-help`;
   const [pickerOpen, setPickerOpen] = useState(false);
   const [selectedAsset, setSelectedAsset] = useState<MediaAssetSummary | null>(
     null,
@@ -948,15 +954,25 @@ function InlineImageEditor({
         <label className="inline-image-decorative" htmlFor={decorativeInput}>
           <input
             id={decorativeInput}
+            ref={decorativeToggleRef}
             className="editor-toggle"
             type="checkbox"
             checked={decorative}
-            onChange={(event) =>
-              onChange({ ...image, altDecorative: event.target.checked })
-            }
+            aria-disabled={decorativeUnavailable || undefined}
+            aria-describedby={decorativeUnavailable ? decorativeHelp : undefined}
+            onChange={(event) => {
+              if (!decorativeUnavailable) {
+                onChange({ ...image, altDecorative: event.target.checked });
+              }
+            }}
           />
           <span>Mark as decorative{suffix}</span>
         </label>
+        {decorativeUnavailable ? (
+          <p className="inline-image-decorative-help" id={decorativeHelp}>
+            Remove the image link before marking this image decorative.
+          </p>
+        ) : null}
       </div>
       {pickerOpen && loadMedia ? (
         <MediaPickerDialog
@@ -991,8 +1007,15 @@ function InlineImage({
   onRemoveImage,
 }: BlockSurfaceProps) {
   const image = imageFromValue(block.data);
+  const decorativeToggleRef = useRef<HTMLInputElement>(null);
   const fields = editorFieldsForBlock("image");
-  const linkFields = fields.filter(field => field.key === "href" || field.key === "newTab");
+  // The save validator requires an empty string for a decorative image's link.
+  const hasImageLink = typeof block.data.href === "string" && block.data.href !== "";
+  const canOpenLinkInNewTab = !image.altDecorative && isSafeHref(block.data.href);
+  const linkFields = fields.filter(field =>
+    (field.key === "href" && (!image.altDecorative || hasImageLink)) ||
+    (field.key === "newTab" && canOpenLinkInNewTab)
+  );
   return (
     <div className="inline-block-surface inline-image">
       <InlineImageEditor
@@ -1009,16 +1032,29 @@ function InlineImage({
         onMediaPickerDirtyChange={onMediaPickerDirtyChange}
         onChange={(next) => onChange({ ...block.data, ...next })}
         onRemove={onRemoveImage}
+        hasImageLink={hasImageLink}
+        decorativeToggleRef={decorativeToggleRef}
       />
-      <div className="inline-image-link-fields">
+      {linkFields.length > 0 ? <div className="inline-image-link-fields">
         {linkFields.map(field => {
           const value = block.data[field.key] ?? (field.kind === "toggle" ? false : "");
           const error = hasError ? editorFieldValidationMessage(field, value, { siblings: block.data, fields }) : null;
           return <FieldRenderer key={field.key} field={field} value={value}
-            onChange={next => onChange({ ...block.data, [field.key]: next })}
+            onChange={next => {
+              const clearsLink = field.key === "href" && next === "";
+              // A contradictory draft can still be repaired. Return focus to the
+              // decorative choice before clearing the URL removes its input.
+              if (clearsLink && image.altDecorative) decorativeToggleRef.current?.focus();
+              onChange({
+                ...block.data,
+                [field.key]: next,
+                ...(field.key === "href" && block.data.newTab === true &&
+                  (!hasImageLink || clearsLink) ? { newTab: false } : {}),
+              });
+            }}
             fieldId={`block-${block.id}-${field.key}`} error={error ?? undefined} />;
         })}
-      </div>
+      </div> : null}
     </div>
   );
 }

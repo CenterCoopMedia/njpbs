@@ -4970,8 +4970,11 @@
   font-weight: 400;
 }
 
-/* The empty-alt warning spans the row for the same reason as the decorative mark. */
-.inline-image-fields .inline-image-alt-warning {
+.inline-image-decorative .editor-toggle[aria-disabled="true"] {
+  opacity: .6;
+}
+
+.inline-image-fields :is(.inline-image-alt-warning, .inline-image-decorative-help) {
   grid-column: 1 / -1;
   margin: 0;
 }

@@ -4,9 +4,12 @@ import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { parseBlocks } from "../../packages/content-core/src/content-model";
+import { renderBlock } from "../../packages/content-core/src/content-render";
 import { cmsPagesLoader, type CmsPageBuildData } from "../src/lib/cms-loader";
 import { readCmsPreviewInput, resolveCmsPreviewInput } from "../src/lib/cms-preview-input";
 import { cmsPostsLoader } from "../src/lib/cms-posts-loader";
+import { projectCmsPost } from "../src/lib/cms-posts-projection";
 import { cmsProgramsLoader } from "../src/lib/cms-programs-loader";
 import { cmsAuthorsLoader } from "../src/lib/cms-authors-loader";
 import { publicHomepageBannerLoader } from "../src/lib/public-homepage-banner";
@@ -103,8 +106,12 @@ describe("private preview input", () => {
     const postId = "post-one";
     const sourceVersion = 9;
     const savedSlug = "saved-draft-story";
+    const imageBlock = { id: "newscast-image", type: "image", visible: true, order: 1,
+      data: { assetId: "newscast-still", alt: "Watch the newscast", href: "/live/", newTab: true } };
+    const asset = { id: "newscast-still", url: "https://media.njpbs.org/cms-media/news/image/newscast.webp",
+      mimeType: "image/webp", width: 1600, height: 900 };
     const blocks = [{ id: "table", type: "data_table", visible: true, order: 0,
-      data: { title: "", csv: "", source: "", sourceHref: "" } }];
+      data: { title: "", csv: "", source: "", sourceHref: "" } }, imageBlock];
     const snapshot = {
       id: postId,
       version: sourceVersion,
@@ -157,6 +164,7 @@ describe("private preview input", () => {
       pageId: postId,
       sourceVersion,
       snapshot,
+      assets: [asset],
       publicContext: related,
     };
     const { env, request } = await fixture(postInput, {
@@ -180,7 +188,8 @@ describe("private preview input", () => {
     expect(request.collection).toBe("cmsPosts");
     expect(postLoader.name).toContain(request.sha256);
     expect(postEntries.map(entry => entry.id).sort()).toEqual([postId, "related-post"]);
-    expect(postEntries.find(entry => entry.id === postId)?.data).toMatchObject({
+    const preview = postEntries.find(entry => entry.id === postId)?.data;
+    expect(preview).toMatchObject({
       postId,
       path: `/posts/${savedSlug}/`,
       title: "Exact saved post",
@@ -189,6 +198,18 @@ describe("private preview input", () => {
       sourceVersion,
       noindex: true,
     });
+    const parsed = parseBlocks(preview?.blocks, { complete: false });
+    if (!parsed.ok) throw new Error("Saved preview blocks did not parse");
+    const published = projectCmsPost({
+      id: postId, status: "published",
+      publishAt: snapshot.published.publishedAt,
+      published: { ...snapshot.published, blocks: [imageBlock] },
+    }, { now, assets: new Map([[asset.id, asset]]) });
+    const image = parsed.blocks.find(block => block.type === "image")!;
+    const resolveAsset = () => asset;
+    const previewMarkup = renderBlock(image, { resolveAsset, videoPlaceholder: true });
+    expect(previewMarkup).toBe(renderBlock(published!.blocks[0], { resolveAsset }));
+    expect(previewMarkup).toContain('<a class="image-link" href="/live/" target="_blank" rel="noopener">');
     expect(postEntries.find(entry => entry.id === "related-post")?.data)
       .toEqual(releasedPosts[1]);
 
