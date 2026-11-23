@@ -98,9 +98,9 @@ jobs:
           npm run cms-api:test
           npx --no-install wrangler deploy --cwd cms-api --dry-run
       - name: Public Worker tests
-        run: |
-          npm run test:public-worker
-          npx --no-install vitest run tests/public-release-slot.test.ts --maxWorkers=1 --no-file-parallelism
+        run: npm run test:public-worker
+      - name: Paired public release slot tests
+        run: npx --no-install vitest run tests/public-release-slot.test.ts --maxWorkers=1 --no-file-parallelism
       - name: Private preview Worker checks
         run: |
           npm run check:preview-worker
