@@ -25,7 +25,7 @@ const { postPresentationTagError } = require("./post-formats");
 const { isPostLeadMedia } = require("./post-lead-media");
 const { isPostSidebar } = require("./post-sidebar");
 const { parsePublishInstant } = require("./publish-instant");
-const { pageThemeError } = require("./content-metadata");
+const { pageThemeError, publishedLayoutError } = require("./content-metadata");
 
 const SERVER_MANAGED_CONTENT_FIELDS = Object.freeze([
   "id",
@@ -107,6 +107,7 @@ const CONTENT_DOCUMENT_CONTRACTS = Object.freeze({
       title: "text",
       childDirected: "boolean",
       pageTheme: "pageTheme",
+      publishedLayout: "publishedLayout",
       description: "string",
       heroBackgroundImage: "assetId",
       heroBackgroundPosition: "string",
@@ -212,6 +213,7 @@ const CONTENT_DOCUMENT_CONTRACTS = Object.freeze({
       coverageLabelId: "coverageLabelId",
       showInHomeHero: "boolean",
       disableStoryCtas: "boolean",
+      publishedLayout: "publishedLayout",
       postSidebar: "postSidebar",
       title: "text",
       summary: "string",
@@ -326,6 +328,8 @@ function fieldTypeError(field, rule, value, kind) {
       return value === 1 ? null : "The service composition version is invalid.";
     case "pageTheme":
       return pageThemeError(value);
+    case "publishedLayout":
+      return publishedLayoutError(value);
     case "type":
       return value === kind ? null : `type must be ${kind}`;
     case "text":

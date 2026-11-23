@@ -12,6 +12,13 @@ import { rebuildHomeSourcesForPosts } from "../src/lib/home-editorial-catalog";
 import { DEFAULT_NJ_DECIDES_SETTINGS } from "../../packages/content-core/src/cms-settings";
 
 describe("published Page render boundary", () => {
+  it("retains the saved layout in the compiled Page renderer input", async () => {
+    const input = publishedPageRead("contact");
+    input.page.publishedLayout = "reading";
+    const content = await projectPublishedPageRead(input, "contact", "a".repeat(40), now);
+    expect(content.pages[0].publishedLayout).toBe("reading");
+  });
+
   it("admits all five chrome settings while keeping story CTAs off Home content", async () => {
     const input = publishedPageRead("home");
     input.settings.push(

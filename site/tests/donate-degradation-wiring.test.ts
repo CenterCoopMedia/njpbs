@@ -554,6 +554,8 @@ const expectedCmsAnchorEmitters: Readonly<Record<string, number>> = {
   "live-player-render.ts": 4,
   "nj-decides-render.ts": 1,
   "post-media-player.ts": 2,
+  // Section links point only to generated fragment IDs in the current document.
+  "reading-sections.ts": 1,
   "schedule-now-next-render.ts": 4,
   // Fixed state PDF paths and reviewed county reports in the election snapshot.
   "town-election-trends.ts": 1,

@@ -1,0 +1,42 @@
+.reading-body > :is(.cms-block--prose, .cms-block--headline) {
+  max-inline-size: 68ch;
+  margin-inline: 0;
+  overflow-wrap: anywhere;
+}
+
+.reading-sections {
+  box-sizing: border-box;
+  max-inline-size: 68ch;
+  margin-block-end: 1.25rem;
+  padding: 1rem;
+  border: 1px solid var(--color-border-strong);
+  background: var(--color-surface-panel);
+  color: var(--color-text-on-surface);
+  overflow-wrap: anywhere;
+}
+
+.reading-sections > ul {
+  margin-block: 0.25rem 0;
+  padding-inline-start: 1.25rem;
+}
+
+.reading-sections a {
+  display: inline-block;
+  padding-block: 0.25rem;
+  color: var(--color-link);
+  text-decoration: underline;
+  text-underline-offset: 0.2em;
+}
+
+.reading-body :is(h2, h3, h4, h5, h6)[tabindex="-1"] {
+  scroll-margin-block-start: 1rem;
+}
+
+.reading-body :is(h2, h3, h4, h5, h6)[tabindex="-1"]:focus-visible {
+  outline: var(--focus-outline);
+  outline-offset: var(--focus-offset);
+}
+
+@media print {
+  .reading-sections { display: none; }
+}

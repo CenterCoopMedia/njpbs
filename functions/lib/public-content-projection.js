@@ -12,7 +12,7 @@ const { parseHomeHero } = require("./home-hero");
 const { parseBlocks } = require("./content-blocks");
 const { isCountyComparisonData } = require("./county-comparison");
 const { visibleLayoutBlocks } = require("./content-layout");
-const { validateKnownMetadata, isPageTheme, isPlainObject } = require("./content-metadata");
+const { validateKnownMetadata, isPageTheme, isPlainObject, publishedLayoutError } = require("./content-metadata");
 const { validateSection } = require("./editor-section-contract");
 const { collectPublishedMediaUsage } = require("./media-usage");
 const { parsePublishInstant } = require("./publish-instant");
@@ -63,12 +63,10 @@ function optionalString(value, label) {
 function selectedMetadata(value) {
   if (!isPlainObject(value)) fail("Published metadata must be an object");
   const pageTheme = isPageTheme(value.pageTheme) ? value.pageTheme : undefined;
-  // A malformed historical optional theme falls back to the standard design.
+  const publishedLayout = publishedLayoutError(value.publishedLayout) ? undefined : value.publishedLayout;
+  // Unsupported optional presentation choices fall back to the standard design.
   // Other malformed metadata remains a hard public-projection error.
-  const metadataForRender = value.pageTheme === undefined || pageTheme !== undefined
-    ? value
-    : { ...value, pageTheme: undefined };
-  const metadataError = validateKnownMetadata(metadataForRender, {
+  const metadataError = validateKnownMetadata({ ...value, pageTheme, publishedLayout }, {
     descriptionIsString: true,
   });
   if (metadataError) fail(`Published metadata is invalid: ${metadataError}`);
@@ -82,6 +80,7 @@ function selectedMetadata(value) {
     ...Object.fromEntries(["contentLinkMode", "contentLinkUrl", "contentLinkNewTab"].filter(key => value[key] !== undefined).map(key => [key, value[key]])),
     ...(value.childDirected !== undefined ? { childDirected: value.childDirected } : {}),
     ...(pageTheme !== undefined ? { pageTheme } : {}),
+    ...(publishedLayout !== undefined ? { publishedLayout } : {}),
     ...(value.dataHubCompositionVersion === 1 ? { dataHubCompositionVersion: 1 } : {}),
     ...(value.dataHubReporting !== undefined ? { dataHubReporting: require("./data-hub-reporting").parseDataHubReporting(value.dataHubReporting) } : {}),
     ...(value.homeHero !== undefined ? { homeHero: parseHomeHero(value.homeHero) } : {}),
@@ -602,6 +601,7 @@ function preparePublicPage({ pageId, document, now }) {
         ...Object.fromEntries(["contentLinkMode", "contentLinkUrl", "contentLinkNewTab"].filter(key => metadata[key] !== undefined).map(key => [key, metadata[key]])),
         ...(metadata.childDirected !== undefined ? { childDirected: metadata.childDirected } : {}),
         ...(metadata.pageTheme !== undefined ? { pageTheme: metadata.pageTheme } : {}),
+        ...(metadata.publishedLayout !== undefined ? { publishedLayout: metadata.publishedLayout } : {}),
         ...(metadata.dataHubCompositionVersion === 1 ? { dataHubCompositionVersion: 1 } : {}),
         ...(metadata.dataHubReporting !== undefined ? { dataHubReporting: metadata.dataHubReporting } : {}),
         ...(metadata.homeHero !== undefined ? { homeHero: metadata.homeHero } : {}),

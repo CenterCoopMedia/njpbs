@@ -859,7 +859,7 @@ describe("record field descriptors", () => {
     const groups = editorFieldGroupsFor("page");
     expect(groups.map((group) => group.id)).toEqual(["content-link", "hero-image", "basics", "search", "social"]);
     expect(groups.find((group) => group.id === "basics")?.fields.map((field) => field.key))
-      .toEqual(["title", "description", "pageTheme", "slug"]);
+      .toEqual(["title", "description", "pageTheme", "publishedLayout", "slug"]);
 
     const search = groups.find((group) => group.id === "search")!;
     expect(search.fields.map((field) => [field.path, field.key])).toEqual([
@@ -946,7 +946,7 @@ describe("record field descriptors", () => {
     ]);
     expect(
       groups.find((group) => group.id === "basics")?.fields.map((field) => field.key),
-    ).toEqual(["title", "summary"]);
+    ).toEqual(["title", "summary", "publishedLayout"]);
     expect(
       groups.find((group) => group.id === "excerpt")?.fields.map((field) => field.key),
     ).toEqual(["excerpt"]);
@@ -982,6 +982,7 @@ describe("record field descriptors", () => {
       "contentLinkNewTab",
       "title",
       "summary",
+      "publishedLayout",
       "excerpt",
       "date",
       "recordMeaningfulUpdate",

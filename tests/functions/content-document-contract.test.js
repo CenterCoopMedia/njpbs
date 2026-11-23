@@ -47,7 +47,7 @@ function ruleFor(field) {
     case "url": return field.required ? "text" : "string";
     case "asset": return "assetId";
     case "recordList":
-    case "select": return "string";
+    case "select": return field.key === "publishedLayout" ? "publishedLayout" : "string";
     case "storyCredits": return "storyCredits";
     default: throw new Error(`Unhandled editor field kind ${field.kind}`);
   }
@@ -70,6 +70,26 @@ function editorRulesFor(kind, pageId) {
 }
 
 describe("server content document contract", () => {
+  it.each([undefined, "standard", "reading"])("keeps the %s layout through draft preview and publication", publishedLayout => {
+    const now = "2026-11-23T12:00:00.000Z";
+    const page = { id: "privacy", title: "Privacy policy", version: 2, blocks: [], publishedLayout };
+    const post = { type: "post", title: "Transit changes", slug: "transit-changes", version: 2,
+      date: "2026-11-23", tags: [], blocks: [], locale: "en", previousSlugs: [], publishedLayout };
+    const publish = (collection, document) => publishSnapshotPkg.createPublishedSnapshot({
+      collection, document, publishedAt: now, publishedBy: "editor",
+    });
+    expect(publish("cmsPages", page).metadata.publishedLayout).toBe(publishedLayout);
+    expect(publish("cmsPosts", post).metadata.publishedLayout).toBe(publishedLayout);
+    expect(previewSnapshotPkg.createPreviewSnapshot(page.id, page).publishedLayout).toBe(publishedLayout);
+    expect(previewSnapshotPkg.createPostPreviewSnapshot("post-one", post, Date.parse(now)).published.metadata.publishedLayout)
+      .toBe(publishedLayout);
+  });
+
+  it.each(["", "sidebar", true, null])("rejects an unsupported layout value %s for both content kinds", publishedLayout => {
+    expect(validateContentFieldValues("cmsPages", "page", { publishedLayout })).toBe("publishedLayout must be standard or reading");
+    expect(validateContentFieldValues("cmsPosts", "post", { publishedLayout })).toBe("publishedLayout must be standard or reading");
+  });
+
   it("accepts a bounded Post sidebar and rejects invalid section lists", () => {
     const sections = [
       { id: "topics", visible: true },

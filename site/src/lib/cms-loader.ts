@@ -19,6 +19,7 @@ import {
   type PageBlock,
   type PageMetadata,
   type PageTheme,
+  type PublishedLayout,
   type PublishedSnapshot,
   type SearchMetadata,
   type SocialMetadata,
@@ -109,6 +110,7 @@ export interface CmsPageDoc {
   id: string;
   title?: unknown;
   pageTheme?: unknown;
+  publishedLayout?: unknown;
   description?: unknown;
   dataHubCompositionVersion?: unknown;
   dataHubReporting?: unknown;
@@ -132,6 +134,7 @@ export interface CmsPageBuildData extends ContentLinkMetadata {
   pageId: string;
   childDirected?: boolean;
   pageTheme?: PageTheme;
+  publishedLayout?: PublishedLayout;
   homeCompositionVersion?: 1 | 2;
   serviceCompositionVersion?: 1;
   scheduleCopy?: PageMetadata["scheduleCopy"];

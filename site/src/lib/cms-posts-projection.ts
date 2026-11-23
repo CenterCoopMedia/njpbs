@@ -37,9 +37,11 @@ import { isSpotlightArchivePaths } from "../../../packages/content-core/src/spot
 
 import { visibleLayoutBlocks } from "../../../packages/content-core/src/content-layout.ts";
 import {
+  isPublishedLayout,
   parseBlocks,
   type PageBlock,
   type PostPublishedMetadata,
+  type PublishedLayout,
   type SearchMetadata,
   type SocialMetadata,
 } from "../../../packages/content-core/src/content-model.ts";
@@ -112,6 +114,7 @@ export interface CmsPostBuildData extends ContentLinkMetadata {
   coverageLabelId?: string;
   showInHomeHero?: boolean;
   disableStoryCtas?: boolean;
+  publishedLayout?: PublishedLayout;
   postSidebar?: PostSidebar;
   summary: string;
   excerpt: string;
@@ -546,6 +549,7 @@ export function projectCmsPost(
     ...(postCoverageLabelId(metadata) ? { coverageLabelId: postCoverageLabelId(metadata) } : {}),
     ...(metadata.showInHomeHero === undefined ? {} : { showInHomeHero: metadata.showInHomeHero }),
     ...(metadata.disableStoryCtas === undefined ? {} : { disableStoryCtas: metadata.disableStoryCtas }),
+    ...(isPublishedLayout(metadata.publishedLayout) ? { publishedLayout: metadata.publishedLayout } : {}),
     ...(metadata.postSidebar === undefined ? {} : { postSidebar: metadata.postSidebar }),
     summary: optionalString(metadata.summary, "summary") ?? "",
     excerpt: optionalString(metadata.excerpt, "excerpt") ?? "",

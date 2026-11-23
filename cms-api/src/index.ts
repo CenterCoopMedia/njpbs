@@ -19,10 +19,12 @@ import { parseLiveCommand } from "../../packages/content-core/src/live-productio
 import { visibleLayoutBlocks } from "../../packages/content-core/src/content-layout";
 import {
   isPageTheme,
+  isPublishedLayout,
   parseBlocks,
   type ImageData,
   type PageBlock,
   type PageTheme,
+  type PublishedLayout,
   type SearchMetadata,
   type SocialMetadata,
 } from "../../packages/content-core/src/content-model";
@@ -116,6 +118,7 @@ interface PublicPageProjectionData {
   template: SectionId;
   title: string;
   pageTheme?: PageTheme;
+  publishedLayout?: PublishedLayout;
   description: string;
   heroBackgroundImage?: string;
   heroBackgroundPosition?: "center" | "top" | "bottom";
@@ -615,6 +618,7 @@ function validatePublicPageProjection(
       title: pageValue.title,
       ...(scheduleCopy ? { scheduleCopy } : {}),
       ...(pageTheme !== undefined ? { pageTheme } : {}),
+      ...(isPublishedLayout(pageValue.publishedLayout) ? { publishedLayout: pageValue.publishedLayout } : {}),
       ...heroBackgroundMetadata(pageValue),
       description: pageValue.description,
       ...(pageValue.homeHeroTitle !== undefined

@@ -115,6 +115,14 @@ function makeRes() {
 }
 
 describe("public page projection", () => {
+  it.each([["reading", "reading"], ["sidebar", undefined]])("projects Page layout %s with a Standard fallback", (stored, expected) => {
+    const document = publishedPage();
+    document.published.metadata.publishedLayout = stored;
+    const result = projectPublicPageDocument({ pageId: "contact", document, assets: new Map(), now: NOW });
+    expect(result.state).toBe("live");
+    expect(result.page?.publishedLayout).toBe(expected);
+  });
+
   it("returns the exact immutable live version while a later draft stays private", () => {
     const result = projectPublicPageDocument({
       pageId: "contact",
