@@ -289,7 +289,12 @@ sh -c "$SEED_WRITER_COMMAND" | $SEED import $PAIR --manifest "$MANIFEST" | tee "
 
 Read `restored` and `removed` in `plan.json` before you apply. `restored` lists
 seeded records that dev changed or deleted; `removed` lists seeded records the
-source no longer publishes. Then apply and verify, in the same shell:
+source no longer publishes. Apply writes only to the dev project, under the
+[standing approval for rehearsal refreshes](https://github.com/jamditis/jawn-ops/issues/1150#issuecomment-7108233874):
+restore and remove only rows the seed wrote, never a production write. Keep
+`plan.json` with the rehearsal run record; it is the record of what the apply
+changed. Any other dev write needs its own approval. Then apply and verify, in
+the same shell:
 
 ```bash
 sh -c "$SEED_WRITER_COMMAND" | $SEED import $PAIR --manifest "$MANIFEST" --apply | tee "$STATE/apply.json"
