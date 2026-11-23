@@ -109,6 +109,14 @@ export interface PublicHomepageBannerSettingsValues {
   readonly election: ElectionHomepageBannerContent;
 }
 
+export function activeHomepageBannerContent(
+  values: PublicHomepageBannerSettingsValues | LegacyHomepageBannerSettingsValues,
+): LegacyHomepageBannerSettingsValues {
+  if (!("standard" in values)) return values;
+  const { njDecides, standard, election } = values;
+  return { ...(njDecides ? election : standard), njDecides };
+}
+
 // Admin uses this only when it seeds the settings document. The public build
 // reads the detached published snapshot and does not fall back to this value.
 export const DEFAULT_PUBLIC_HOMEPAGE_BANNER_SETTINGS = Object.freeze({
@@ -129,6 +137,18 @@ export function legacyBannerNeedsSave(
     ("standard" in published || (values.njDecides === true) !== (published.njDecides === true));
 }
 
+function splitElectionDetails({ liveLabel, startsAt, endsAt, excludedPaths, ...content }: ElectionHomepageBannerContent) {
+  return {
+    content,
+    details: {
+      ...(liveLabel != null ? { liveLabel } : {}),
+      ...(startsAt != null ? { startsAt } : {}),
+      ...(endsAt != null ? { endsAt } : {}),
+      ...(excludedPaths != null ? { excludedPaths } : {}),
+    },
+  };
+}
+
 // Only the current draft and detached publication carry legacy content. Import
 // each into its own mode and leave any mode without a saved message off.
 export function separateHomepageBannerContent(
@@ -136,23 +156,20 @@ export function separateHomepageBannerContent(
   published?: LegacyHomepageBannerSettingsValues | PublicHomepageBannerSettingsValues,
 ): PublicHomepageBannerSettingsValues {
   if ("standard" in values) return values;
-  const { njDecides, liveLabel, startsAt, endsAt, excludedPaths, ...content } = values;
-  const electionDetails = {
-    ...(liveLabel != null ? { liveLabel } : {}),
-    ...(startsAt != null ? { startsAt } : {}),
-    ...(endsAt != null ? { endsAt } : {}),
-    ...(excludedPaths != null ? { excludedPaths } : {}),
-  };
+  const { njDecides, ...legacyContent } = values;
+  const { content, details } = splitElectionDetails(legacyContent);
   const prior = published ? separateHomepageBannerContent(published) : undefined;
-  return njDecides ? {
-    njDecides: true,
-    standard: prior?.standard ?? EMPTY_HOMEPAGE_BANNER,
-    election: { ...content, ...electionDetails },
-  } : {
+  if (njDecides) {
+    return { njDecides: true, standard: prior?.standard ?? EMPTY_HOMEPAGE_BANNER, election: { ...content, ...details } };
+  }
+  // The shared copy came from the active mode, but the election-only fields
+  // were editable in either mode. The draft owns those fields, including clears.
+  const electionContent = prior && (prior.njDecides || (published && "standard" in published))
+    ? splitElectionDetails(prior.election).content : EMPTY_HOMEPAGE_BANNER;
+  return {
     njDecides: false,
     standard: content,
-    election: prior && (prior.njDecides || (published && "standard" in published))
-      ? prior.election : { ...EMPTY_HOMEPAGE_BANNER, ...electionDetails },
+    election: { ...electionContent, ...details },
   };
 }
 

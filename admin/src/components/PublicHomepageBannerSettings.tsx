@@ -9,6 +9,7 @@ import { BannerPageExclusions } from "./BannerPageExclusions";
 import {
   DEFAULT_PUBLIC_HOMEPAGE_BANNER_SETTINGS,
   PUBLIC_HOMEPAGE_BANNER_SETTINGS_ID,
+  activeHomepageBannerContent,
   cmsSettingsSchemaFor,
   legacyBannerNeedsSave,
   separateHomepageBannerContent,
@@ -608,8 +609,8 @@ export function PublicHomepageBannerSettings({
     );
   }
 
-  const { njDecides } = draftValues;
-  const values: ElectionHomepageBannerContent = draftValues[mode];
+  const values = activeHomepageBannerContent(draftValues);
+  const { njDecides } = values;
   const dirty = !valuesEqual(draftValues, loadState.values);
   const publishedMatchesSaved = Boolean(
     loadState.published && valuesEqual(loadState.values, separateHomepageBannerContent(loadState.published.values)),

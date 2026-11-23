@@ -1,5 +1,6 @@
 import {
   PUBLIC_HOMEPAGE_BANNER_SETTINGS_ID,
+  activeHomepageBannerContent,
   projectPublishedCmsSettings,
   type CmsSettingsPublishedSnapshot,
   type LegacyHomepageBannerSettingsValues,
@@ -61,11 +62,8 @@ export function projectPublicHomepageBannerArtifact(
     );
   }
   if (!snapshot) return null;
-  const published = snapshot.values as unknown as PublicHomepageBannerSettingsValues | LegacyHomepageBannerSettingsValues;
-  const { njDecides } = published;
-  const values: LegacyHomepageBannerSettingsValues = "standard" in published
-    ? (njDecides ? published.election : published.standard)
-    : published;
+  const values = activeHomepageBannerContent(snapshot.values as unknown as PublicHomepageBannerSettingsValues | LegacyHomepageBannerSettingsValues);
+  const { njDecides } = values;
   const hasLink =
     typeof values.linkLabel === "string" &&
     values.linkLabel.trim() !== "" &&

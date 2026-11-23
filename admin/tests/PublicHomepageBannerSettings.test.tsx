@@ -14,9 +14,10 @@ import type {
 import {
   DEFAULT_PUBLIC_HOMEPAGE_BANNER_SETTINGS,
   DEFAULT_NJ_DECIDES_SETTINGS,
+  activeHomepageBannerContent,
+  projectPublishedCmsSettings,
   type LegacyHomepageBannerSettingsValues,
 } from "../../packages/content-core/src/cms-settings";
-import { projectPublicHomepageBanner } from "../../site/src/lib/public-homepage-banner-data";
 
 function values(
   overrides: Partial<LegacyHomepageBannerSettingsValues> = {},
@@ -603,16 +604,18 @@ describe("Public homepage banner settings", () => {
     await screen.findByText("Saved draft version 5");
     const currentPublicBanner = () => {
       if (!stored.found) throw new Error("Missing fixture");
-      return projectPublicHomepageBanner({ id: stored.id, ...stored.settings });
+      const published = projectPublishedCmsSettings({ documentId: stored.id, document: stored.settings });
+      if (!published) throw new Error("Missing publication");
+      return activeHomepageBannerContent(published.values as unknown as PublicHomepageBannerValues);
     };
-    expect(currentPublicBanner()?.message).toBe(standard.message);
+    expect(currentPublicBanner().message).toBe(standard.message);
     fireEvent.click(screen.getByRole("button", { name: "Publish" }));
     await screen.findByText("Saved draft version 6");
-    const publishedElection = currentPublicBanner()!;
+    const publishedElection = currentPublicBanner();
     expect(publishedElection).toMatchObject({ njDecides: true, message: "Election night coverage" });
     const electionPreview = within(screen.getByLabelText("Proposed NJ Decides sitewide banner preview"));
     expect(electionPreview.getByText(publishedElection.message)).toBeVisible();
-    expect(electionPreview.getByRole("link", { name: "Results" })).toHaveAttribute("href", publishedElection.link?.href);
+    expect(electionPreview.getByRole("link", { name: "Results" })).toHaveAttribute("href", publishedElection.linkHref);
 
     unmount();
     render(<PublicHomepageBannerSettings {...props} />);
@@ -623,11 +626,11 @@ describe("Public homepage banner settings", () => {
     await screen.findByText("Saved draft version 7");
     fireEvent.click(screen.getByRole("button", { name: "Publish" }));
     await screen.findByText("Saved draft version 8");
-    const publishedStandard = currentPublicBanner()!;
-    expect(publishedStandard).toMatchObject({ njDecides: false, message: standard.message, link: { href: standard.linkHref } });
+    const publishedStandard = currentPublicBanner();
+    expect(publishedStandard).toMatchObject({ njDecides: false, message: standard.message, linkHref: standard.linkHref });
     const standardPreview = within(screen.getByLabelText("Proposed homepage banner preview"));
     expect(standardPreview.getByText(publishedStandard.message, { exact: false })).toBeVisible();
-    expect(standardPreview.getByRole("link", { name: "Check link: View schedule (opens in new tab)" })).toHaveAttribute("href", `https://njpbs.org${publishedStandard.link?.href}`);
+    expect(standardPreview.getByRole("link", { name: "Check link: View schedule (opens in new tab)" })).toHaveAttribute("href", `https://njpbs.org${publishedStandard.linkHref}`);
   });
 
   it("does not invent standard text history when only an election publication is available", async () => {

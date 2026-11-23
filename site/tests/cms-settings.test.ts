@@ -18,6 +18,7 @@ import {
   createCmsSettingsPublishedSnapshot,
   currentCmsSettingsSchemaFor,
   projectPublishedCmsSettings,
+  separateHomepageBannerContent,
   validateCmsSettingsValues,
   type CmsSettingsSchema,
   type CmsSettingsSchemaCatalog,
@@ -366,5 +367,32 @@ describe("NJ Decides banner exclusions", () => {
     expect(projectPublishedCmsSettings({ documentId: PUBLIC_HOMEPAGE_BANNER_SETTINGS_ID, schemas: oldCatalog, document })).toEqual(published);
     expect(() => projectPublishedCmsSettings({ documentId: PUBLIC_HOMEPAGE_BANNER_SETTINGS_ID, schemas: oldCatalog,
       document: { ...document, published: { ...published, schemaVersion: 3, sourceVersion: 2, values: document.values } } })).toThrow(/schema is not available/);
+  });
+});
+
+it("keeps unpublished election details from a legacy standard draft when restoring election copy", () => {
+  const published = {
+    njDecides: true,
+    enabled: true,
+    message: "Election coverage",
+    linkLabel: "Results",
+    linkHref: "/results/",
+    liveLabel: "Live",
+    startsAt: "2026-11-03T23:00:00.000Z",
+    endsAt: "2026-11-04T04:00:00.000Z",
+    excludedPaths: ["/results/"],
+  };
+  const draft = { enabled: true, message: "Homepage update", endsAt: "2026-11-04T06:00:00.000Z", excludedPaths: [] };
+  expect(separateHomepageBannerContent(draft, published)).toEqual({
+    njDecides: false,
+    standard: { enabled: true, message: "Homepage update" },
+    election: {
+      enabled: true,
+      message: "Election coverage",
+      linkLabel: "Results",
+      linkHref: "/results/",
+      endsAt: draft.endsAt,
+      excludedPaths: [],
+    },
   });
 });
