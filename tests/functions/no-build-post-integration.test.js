@@ -1723,22 +1723,52 @@ describe("one-Post acceptance, ownership and public receipt contracts", () => {
   it("bounds proof retries without another purge or a failed publication", async () => {
     await publish();
     const owned = await state();
+    const queueRef = db.doc(`cmsPublishQueue/${owned.operationId}`);
     let time = 1_000_000;
     let purges = 0;
     let reads = 0;
-    const recover = () => recovery.recoverNoBuildPostDetail({ firestore: db, purgeConfig,
-      fetchPurge: async () => { purges += 1; return Response.json({ success: true }); },
-      now: () => time, fetchPublic: async () => { reads += 1; throw new Error("Synthetic outage"); } });
+    const failPublicRead = async () => { reads += 1; throw new Error("Synthetic outage"); };
+    const recover = ({ operationId, fetchPublic = failPublicRead } = {}) =>
+      recovery.recoverNoBuildPostDetail({ firestore: db, purgeConfig, operationId,
+        fetchPurge: async () => { purges += 1; return Response.json({ success: true }); },
+        now: () => time, fetchPublic });
     await recover();
+    const retry = { operationId: owned.operationId };
     for (let attempt = 2; attempt <= 4; attempt += 1) {
       time += 10 * 60_000;
-      await Promise.all([recover(), recover()]);
+      if (attempt === 2) {
+        // Keep the race to acquire a due proof lease in the emulator.
+        await Promise.all([recover(retry), recover(retry)]);
+        continue;
+      }
+      // Keep two recoveries in flight while the winner owns the proof.
+      // The duplicate sees the durable lease before its readback finishes.
+      const started = Promise.withResolvers();
+      const release = Promise.withResolvers();
+      const active = recover({ ...retry, fetchPublic: async () => {
+        started.resolve();
+        await release.promise;
+        return failPublicRead();
+      } });
+      try {
+        await Promise.race([started.promise, active.then(() => {
+          throw new Error("Expected the retry to reach public readback");
+        })]);
+        await recover(retry);
+        expect(reads).toBe(attempt - 1);
+        expect((await queueRef.get()).data().postProof).toMatchObject({
+          status: "pending", attempts: attempt, claim: expect.any(String),
+        });
+      } finally {
+        release.resolve();
+        await active;
+      }
     }
     time += 10 * 60_000;
     await recover();
     expect(purges).toBe(1);
     expect(reads).toBe(4);
-    expect((await db.doc(`cmsPublishQueue/${owned.operationId}`).get()).data()).toMatchObject({
+    expect((await queueRef.get()).data()).toMatchObject({
       status: "success", postProof: { status: "failed", attempts: 4, claim: null, nextAttemptAt: null } });
     expect(await current()).toMatchObject({ publishBuildPending: false, publicSourceVersion: 2,
       publicPostProof: { status: "failed", retryPending: false } });
