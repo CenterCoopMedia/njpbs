@@ -15,6 +15,7 @@ import { ContentTab as ProductionContentTab } from "../src/components/ContentTab
 import { HttpError } from "../src/lib/functions";
 import type { PreviewSessionResult } from "../src/lib/staff-site";
 import { createBlock, type AdminBlock } from "../src/lib/block-factory";
+import { editorWorkRecoveryKey } from "../src/lib/editor-work-recovery";
 import { homeCompositionDefaults } from "../../packages/content-core/src/home-composition";
 import { createHomeNewsletterBlock } from "../../packages/content-core/src/home-newsletter-section";
 import v1Home from "../../site/tests/fixtures/home-composition-v1.json";
@@ -3332,6 +3333,10 @@ describe("ContentTab page version echo (#530, #563)", () => {
     const heading = await screen.findByDisplayValue("Existing headline");
     fireEvent(window, new Event("offline"));
     fireEvent.change(heading, { target: { value: "Draft written offline" } });
+    const snapshotKey = editorWorkRecoveryKey(editor.id!, "cmsPages:home");
+    expect(localStorage.getItem(snapshotKey)).toBeNull();
+    fireEvent(window, new Event("pagehide"));
+    expect(localStorage.getItem(snapshotKey)).not.toBeNull();
     first.unmount();
 
     functionsMocks.cmsGetContent.mockRejectedValueOnce(new TypeError("Offline"));

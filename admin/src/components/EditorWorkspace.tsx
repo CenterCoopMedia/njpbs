@@ -40,7 +40,7 @@ import { editorSaveReceipt, type SavedEditorReceipt } from "../lib/editor-save-r
 import { useDraftAutosave } from "../hooks/useDraftAutosave";
 import { HeldNewRecordArea } from "./HeldNewRecordArea";
 import { isRecordKind, RECORD_KINDS } from "../lib/content-vocab";
-import { HOLD_NEW_RECORDS_EVENT } from "../lib/session-ended";
+import { deliberateSignOut, HOLD_NEW_RECORDS_EVENT } from "../lib/session-ended";
 import {
   canCreateEditableRecord,
   clearHeldNewRecord,
@@ -102,6 +102,7 @@ import type {
 } from "../lib/editor-locks";
 import {
   browserEditorWorkStorage,
+  canKeepBrowserRecoveredWork,
   clearRecoveredWork,
   readRecoveredWork,
   writeRecoveredWork,
@@ -985,6 +986,12 @@ function EditorWorkspaceContent({
   const activeDraftCheckTimer = useRef<ReturnType<typeof setTimeout> | null>(
     null,
   );
+  const pendingSnapshot = useRef<{ key: string; write: () => void }>();
+  const flushWorkspaceSnapshot = useCallback(() => {
+    const pending = pendingSnapshot.current;
+    pendingSnapshot.current = undefined;
+    pending?.write();
+  }, []);
   const activeSurfaceRef = useRef(surface);
   activeSurfaceRef.current = surface;
   // The byline picker's feed (#1040), read once for this workspace. A failure is
@@ -1057,7 +1064,18 @@ function EditorWorkspaceContent({
   }
 
   function refreshDirty(value: Surface = surface) {
-    syncWorkspaceSnapshot(value);
+    const snapshotKey = editorLockSurfaceKey(value);
+    if (snapshotKey && recoveryStorage && recoveryOwner) {
+      if (isSameSurface(value, surface) && surfaceHasDraft(value)) {
+        pendingSnapshot.current = {
+          key: snapshotKey,
+          write: () => syncWorkspaceSnapshot(value, editorLock.displacedBy ?? undefined),
+        };
+      } else {
+        if (pendingSnapshot.current?.key === snapshotKey) pendingSnapshot.current = undefined;
+        syncWorkspaceSnapshot(value);
+      }
+    }
     const activeHasDraft = surfaceHasDraft(surface);
     setDirty(drafts.current.size > 0 || pageMetadataDrafts.current.size > 0);
     setActiveSurfaceDirty(activeHasDraft);
@@ -1071,16 +1089,13 @@ function EditorWorkspaceContent({
     activeDraftCheckTimer.current = globalThis.setTimeout(() => {
       activeDraftCheckTimer.current = null;
       if (!isSameSurface(activeSurfaceRef.current, checkedSurface)) return;
-      const before = drafts.current.size + pageMetadataDrafts.current.size;
       if (checkedSurface.kind === "page") {
         pageDraftFor(checkedSurface);
         pageMetadataDraftFor(checkedSurface);
       } else if (checkedSurface.kind === "record") {
         recordDraftFor(checkedSurface);
       }
-      if (before !== drafts.current.size + pageMetadataDrafts.current.size) {
-        syncWorkspaceSnapshot(checkedSurface);
-      }
+      flushWorkspaceSnapshot();
       setDirty(drafts.current.size > 0 || pageMetadataDrafts.current.size > 0);
       setActiveSurfaceDirty(surfaceHasDraft(checkedSurface));
     }, ACTIVE_DRAFT_RECONCILE_MS);
@@ -1256,7 +1271,9 @@ function EditorWorkspaceContent({
   const heldSnapshots = useRef(new Map<string, RecoveredEditorWork>());
   const [recoveryOffer, setRecoveryOffer] = useState<RecoveredEditorWork | null>(null);
   const [recoveredWork, setRecoveredWork] = useState<RecoveredEditorWork | null>(null);
-  const activeRecoveryOffer = recoveryOffer?.surfaceKey === activeEditorLockSurfaceKey
+  const [recoveryWriteFailed, setRecoveryWriteFailed] = useState<string | null>(null);
+  const activeRecoveryOffer = recoveryOffer && recoveryOffer.surfaceKey === activeEditorLockSurfaceKey &&
+    recoveryOffer.actorId === recoveryOwner
     ? recoveryOffer : null;
   const recoveryLoaded = surface.kind === "page"
     ? pageLoad.status === "ready" : recordLoad.status === "ready";
@@ -1274,6 +1291,7 @@ function EditorWorkspaceContent({
   useEffect(() => {
     if (!discardRecoveryRef) return;
     discardRecoveryRef.current = () => {
+      pendingSnapshot.current = undefined;
       for (const work of heldSnapshots.current.values()) clearWorkspaceSnapshot(work);
     };
     return () => { discardRecoveryRef.current = null; };
@@ -1281,7 +1299,8 @@ function EditorWorkspaceContent({
 
   function syncWorkspaceSnapshot(value: Surface, displacedBy?: string) {
     const key = editorLockSurfaceKey(value);
-    if (!recoveryStorage || !recoveryOwner || !key) return;
+    if (!recoveryStorage || !recoveryOwner || !key ||
+        !canKeepBrowserRecoveredWork(recoveryOwner) || deliberateSignOut()) return;
     const held = heldSnapshots.current.get(key);
     const prior = held?.actorId === recoveryOwner ? held : undefined;
     const draft = drafts.current.get(surfaceKey(value));
@@ -1290,18 +1309,24 @@ function EditorWorkspaceContent({
     if (!draft && !metadataDraft) {
       if (prior) clearWorkspaceSnapshot(prior);
       setRecoveredWork(work => work?.surfaceKey === key ? null : work);
+      setRecoveryWriteFailed(failed => failed === key ? null : failed);
       return;
     }
     const work: RecoveredEditorWork = {
       actorId: recoveryOwner,
       surfaceKey: key,
       label: labelForSurface(value),
-      displacedBy: displacedBy ?? prior?.displacedBy,
+      displacedBy,
       savedAtMs: Date.now(),
       // Each dirty panel retains the version its changes were composed against.
       payload: { draft, metadataDraft },
     };
-    if (writeRecoveredWork(recoveryStorage, work)) heldSnapshots.current.set(key, work);
+    if (writeRecoveredWork(recoveryStorage, work)) {
+      heldSnapshots.current.set(key, work);
+      setRecoveryWriteFailed(failed => failed === key ? null : failed);
+    } else {
+      setRecoveryWriteFailed(key);
+    }
   }
 
   useLayoutEffect(() => {
@@ -1312,11 +1337,29 @@ function EditorWorkspaceContent({
       ? readRecoveredWork(recoveryStorage, recoveryOwner, activeEditorLockSurfaceKey)
       : null;
     setRecoveryOffer(stored);
-  }, [activeEditorLockSurfaceKey, recoveryOwner, recoveryStorage]);
+    return flushWorkspaceSnapshot;
+  }, [activeEditorLockSurfaceKey, recoveryOwner, recoveryStorage, flushWorkspaceSnapshot]);
 
   useEffect(() => {
-    if (editorLock.displacedBy) syncWorkspaceSnapshot(activeSurfaceRef.current, editorLock.displacedBy);
-  }, [editorLock.displacedBy]);
+    const previous = activeEditorLockSurfaceKey && heldSnapshots.current.get(activeEditorLockSurfaceKey);
+    if (editorLock.displacedBy || (editorLock.ownsLock && previous && previous.displacedBy)) {
+      // A lease change supersedes any queued label for this surface.
+      pendingSnapshot.current = undefined;
+      syncWorkspaceSnapshot(activeSurfaceRef.current, editorLock.displacedBy ?? undefined);
+    }
+  }, [activeEditorLockSurfaceKey, editorLock.displacedBy, editorLock.ownsLock]);
+
+  useEffect(() => {
+    const flushWhenHidden = () => {
+      if (document.visibilityState === "hidden") flushWorkspaceSnapshot();
+    };
+    window.addEventListener("pagehide", flushWorkspaceSnapshot);
+    document.addEventListener("visibilitychange", flushWhenHidden);
+    return () => {
+      window.removeEventListener("pagehide", flushWorkspaceSnapshot);
+      document.removeEventListener("visibilitychange", flushWhenHidden);
+    };
+  }, [flushWorkspaceSnapshot]);
 
   useEffect(() => {
     if (!activeRecoveryOffer || !recoveryReadFailed) return;
@@ -3577,9 +3620,6 @@ function EditorWorkspaceContent({
       ? `New ${recordDestination(surface.record).label.toLowerCase()}`
       : surface.kind === "page" && pageLoad.status === "ready" && typeof pageLoad.metadata.title === "string"
         ? pageLoad.metadata.title : loadedRecordTitle ?? labelForSurface(surface);
-  // Read by the displacement snapshot, which fires from an effect and needs the title the person
-  // was actually looking at rather than one captured when the callback was created.
-
   return (
     <EditorActionsProvider label={workspaceActionsAvailable
       ? surface.kind === "page" ? "Page"
@@ -3676,10 +3716,15 @@ function EditorWorkspaceContent({
                   recoveredWork?.surfaceKey === activeEditorLockSurfaceKey ? recoveredWork : null,
                   () => setRecoveredWork(null),
                 )}
+                {recoveryWriteFailed === activeEditorLockSurfaceKey && recoveryWriteFailed !== null ? (
+                  <InlineMessage tone="warning" title="This device could not keep your latest changes">
+                    Save a draft before closing the editor to keep this work.
+                  </InlineMessage>
+                ) : null}
                 {activeRecoveryOffer ? (
                   <InlineMessage tone="info" title="Unsaved changes on this device">
                     <p role="status">{recoveryReady
-                      ? "Restore these changes to the editor, or discard the copy on this device."
+                      ? `Saved on this device ${new Date(activeRecoveryOffer.savedAtMs).toLocaleString()}. Changes made after that time may be missing.`
                       : recoveryLoaded
                         ? "You need editing access to restore these changes."
                         : "The editor needs to load the saved content before you can restore these changes."}</p>

@@ -10,6 +10,11 @@
 export const EDITOR_WORK_RECOVERY_TTL_MS = 7 * 24 * 60 * 60 * 1_000;
 
 const KEY_PREFIX = "njpbs-admin:displaced-work";
+let browserRecoveryActor: string | null | undefined;
+
+export function canKeepBrowserRecoveredWork(actorId: string): boolean {
+  return browserRecoveryActor === undefined || browserRecoveryActor === actorId;
+}
 
 export interface RecoveredEditorWork {
   actorId: string;
@@ -134,6 +139,8 @@ export function browserEditorWorkStorage(): Storage | null {
 // A null actor ends recovery for the browser, including records left by earlier accounts or
 // older builds. Never clear unrelated preferences or Firebase's own session storage.
 export function pruneBrowserRecoveredWork(actorId: string | null): void {
+  // Reject pending writes from the editor being unmounted after this auth change.
+  browserRecoveryActor = actorId;
   const storage = browserEditorWorkStorage();
   if (!storage) return;
   const actorPrefix = `${KEY_PREFIX}:${actorId}:`;
