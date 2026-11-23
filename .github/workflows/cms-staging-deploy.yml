@@ -211,7 +211,7 @@ jobs:
             echo "- Functions: no functions-deployment.development.json; deploy-cms-function-batches, functions-secret-versions and the pre-deploy IAM check fix njpbs-site"
             echo "- Functions migrations: the eight backfill and seed programs fix project njpbs-site"
             echo "- CMS API: the Worker deploy selects the production wrangler config"
-            echo "- Receipts and plans: the component receipt and release plan libraries read production Worker names"
+            echo "- Receipts, plans, Functions configuration and retirement: the shared scripts accept only project njpbs-site and read production provider identities"
             echo "- Live smoke: the Functions smoke accepts only the production API, Functions and Admin origins"
             echo "- Preview renderer: deploy-cms-preview-cloud and the Containers read probe name the production renderer"
             echo "- Admin: the Pages security check, the public authentication shell and the revision check name admin.njpbs.org"

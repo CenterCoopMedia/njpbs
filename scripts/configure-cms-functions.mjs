@@ -4,15 +4,14 @@ import { createRequire } from "node:module";
 import { resolve } from "node:path";
 import { randomUUID, timingSafeEqual } from "node:crypto";
 import { RUNTIME_PARAMETERS, FUNCTION_SECRETS, NATIVE_CONFIGURATION, MEDIA_CREDENTIALS, configurationInputs, runtimeParameters, runtimeDotenv,
-  validateDeploymentConfiguration, functionsDeploymentPath, desiredSecret, configurationFailure as fail } from "./lib/functions-configuration.mjs";
+  validateDeploymentConfiguration, desiredSecret, configurationFailure as fail } from "./lib/functions-configuration.mjs";
 import { secretRequirements, checkSecretIam } from "./check-cms-secret-iam.mjs";
 import { loadFunctionSource, readFunctionsDeployInventory } from "./lib/functions-deploy-inventory.mjs";
 import { provisionCmsSecret } from "./lib/functions-secret-versions.mjs";
 import { assertR2Lifecycle } from "./assert-r2-lifecycle.mjs";
 import { assertDevelopmentSource } from "./render-development-config.mjs";
-import { cmsTarget } from "./lib/cms-target.mjs";
 
-const project = cmsTarget().projectId;
+const project = "njpbs-site";
 const secretBase = name => `https://secretmanager.googleapis.com/v1/projects/${project}/secrets/${name}`;
 const require = createRequire(import.meta.url);
 function scopedGcloud(args, env, execute) {
@@ -347,7 +346,7 @@ export async function main(argv) {
   if (operation !== "configure") requireConfigurationSource(process.env);
   const input = configurationInputs(process.env);
   const env = { ...process.env, ...input };
-  const configPath = resolve(functionsDeploymentPath());
+  const configPath = resolve("config/functions-deployment.json");
   const config = validateDeploymentConfiguration(JSON.parse(readFileSync(configPath, "utf8")));
   let parameters = runtimeParameters(input, resolveDiscovery(env));
   if (operation === "configure") {

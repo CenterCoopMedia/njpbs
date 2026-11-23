@@ -5,7 +5,6 @@ import { cert, deleteApp, getApps, initializeApp } from "firebase-admin/app";
 import { getFirestore } from "firebase-admin/firestore";
 import { ComponentReceiptError, collectLiveIdentities, edgeOriginSecretFingerprint, fingerprintFunctionGraph, fingerprintInputs, readReceipt } from "./lib/cms-component-receipt.mjs";
 import { fingerprintRendererGraph } from "./lib/cms-renderer-graph.mjs";
-import { cmsTarget } from "./lib/cms-target.mjs";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import { createRequire } from "node:module";
@@ -66,7 +65,7 @@ async function loadCredential() {
     : process.env.FIREBASE_SERVICE_ACCOUNT || process.env.CMS_PREVIEW_FIREBASE_ACCOUNT;
   if (!raw) fail("Firebase credentials are required");
   const parsed = raw.trim().startsWith("{") ? JSON.parse(raw) : JSON.parse(readFileSync(raw, "utf8"));
-  if (parsed.project_id !== cmsTarget().projectId) fail(`Firebase project must be ${cmsTarget().projectId}`);
+  if (parsed.project_id !== "njpbs-site") fail("Firebase project must be njpbs-site");
   return parsed;
 }
 
@@ -116,7 +115,7 @@ export async function main() {
   const configurationFingerprint = cloudWakeConfigurationFingerprint(edgeFingerprint, decision, variablesFingerprint);
   const parsed = await loadCredential();
   const created = getApps().length === 0;
-  const app = getApps()[0] || initializeApp({ credential: cert(parsed), projectId: cmsTarget().projectId });
+  const app = getApps()[0] || initializeApp({ credential: cert(parsed), projectId: "njpbs-site" });
   try {
     const firestore = getFirestore(app);
     await assertLegacyCmsWorkflow(firestore);
