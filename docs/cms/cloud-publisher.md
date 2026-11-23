@@ -228,7 +228,16 @@ to Assets. Home root/source catalogs retain their own authority.
 The single external-refresh owner seals schedule, Spotlight and media inputs as
 three immutable JSON objects, verifies size/digest readback, then advances
 context and enqueues aggregates transactionally. Observation timestamps alone
-do not advance context. Unchanged checks retain original input provenance.
+do not advance context. The owner compares the effective content digest before
+uploading, so unchanged checks reuse the original input objects and provenance.
+Before the first upload, it records the attempt's private input prefix and
+lease. Acceptance clears the staging marker in the same transaction that
+publishes the input receipts. On a later wake, the owner fences an expired
+attempt and deletes up to three staged JSON objects before starting another
+refresh. A failed deletion leaves the marker for retry. Input objects already
+accepted into a context remain available for historical replay and recovery.
+The publisher storage identity needs `storage.objects.delete` on the
+`post-background-v1/external-inputs/` namespace for that cleanup.
 Consumers restore accepted bytes; they never refetch under an accepted revision.
 Four bounded attempts per scheduled period preserve last accepted context.
 Concurrent wake hints cannot start duplicate refreshes; shutdown drains it.

@@ -2,6 +2,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { initializeApp, deleteApp } from 'firebase-admin/app';
 import { backgroundStorageFixture } from './background-storage-fixture';
 import { createPublicReleaseBackgroundReads } from '../../scripts/lib/public-release-background-reads.mjs';
+import storageModule from '../../functions/lib/post-background-storage.js';
 
 describe.each(['development', 'production'] as const)('%s original provider storage boundary', environment => {
   const bucket = environment === 'production' ? 'njpbs-public-artifacts' : 'njpbs-dev-public-artifacts';
@@ -20,5 +21,25 @@ describe.each(['development', 'production'] as const)('%s original provider stor
     expect(boundary.reads).toEqual([key]); expect(boundary.writes).toEqual([]);
     await expect(reads.get('release-pair-inputs/v2/arbitrary/object.json')).rejects.toThrow();
     expect(boundary.reads).toEqual([key]);
+  });
+
+  it('retries deletion of an abandoned input prefix and preserves other storage keys', async () => {
+    const storage = storageModule.createPostBackgroundStorage(bucket, app);
+    const operationId = 'A'.repeat(20);
+    const prefix = `post-background-v1/external-inputs/${operationId}`;
+    const first = `${prefix}/launch-media-manager.json`;
+    const second = `${prefix}/spotlight-news.json`;
+    const unrelated = `${prefix}/another-file.json`;
+    const bytes = Buffer.from('fixture');
+    for (const key of [first, second, unrelated]) boundary.objects.set(key, bytes);
+    boundary.rejectDelete(key => key === second);
+    await expect(storage.deleteExternalInputs(operationId)).rejects.toMatchObject({ code: 403 });
+    expect(boundary.objects.has(first)).toBe(false);
+    expect(boundary.objects.has(second)).toBe(true);
+    boundary.rejectDelete(null);
+    await storage.deleteExternalInputs(operationId);
+    expect(boundary.objects.has(second)).toBe(false);
+    expect(boundary.objects.get(unrelated)).toEqual(bytes);
+    await expect(storage.deleteExternalInputs('../another-prefix')).rejects.toThrow('Invalid external refresh operation');
   });
 });

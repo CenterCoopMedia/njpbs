@@ -3,6 +3,7 @@
 const { getStorage } = require("firebase-admin/storage");
 const { Readable } = require("node:stream");
 const { pipeline } = require("node:stream/promises");
+const { EXTERNAL_INPUT_FILES } = require("./cloud-external-refresh-state");
 const PREFIX = "post-background-v1/";
 function createPostBackgroundStorage(bucketName = process.env.NO_BUILD_POST_BACKGROUND_BUCKET, app) {
   function file(key) {
@@ -13,6 +14,14 @@ function createPostBackgroundStorage(bucketName = process.env.NO_BUILD_POST_BACK
     return getStorage(app).bucket(bucketName).file(key);
   }
   return {
+    async deleteExternalInputs(operationId) {
+      if (typeof operationId !== "string" || !/^[A-Za-z0-9]{20}$/.test(operationId)) {
+        throw new Error("Invalid external refresh operation");
+      }
+      for (const name of EXTERNAL_INPUT_FILES) {
+        await file(`${PREFIX}external-inputs/${operationId}/${name}`).delete({ ignoreNotFound: true });
+      }
+    },
     async put(key, bytes, { contentType, signal } = {}) {
       signal?.throwIfAborted();
       try {

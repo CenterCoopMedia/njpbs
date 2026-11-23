@@ -55,6 +55,7 @@ beforeEach(async () => {
   );
   boundary.objects.clear();
   boundary.reject(null);
+  boundary.rejectDelete(null);
   boundary.refuseReads(false);
   now = Date.parse("2026-10-12T14:00:00Z");
   title = "Public provider story";
@@ -121,13 +122,54 @@ it("freezes provider bytes with readback and atomically advances context without
   const count = requests;
   await owner()();
   expect(requests).toBe(count);
+  const uploaded = boundary.writes.length;
   now = refresh.nextAttemptAt;
   await owner()();
+  expect(boundary.writes).toHaveLength(uploaded);
+  expect((await db.doc(state.EXTERNAL_REFRESH_PATH).get()).data()).toMatchObject({
+    status: "verified", checkedAt: now, contentDigest: current.externalInputs.contentDigest,
+  });
   expect((await db.doc(context.PUBLIC_CONTEXT_PATH).get()).data().revision).toBe(2);
   title = "Updated public provider story";
   now = (await db.doc(state.EXTERNAL_REFRESH_PATH).get()).data().nextAttemptAt;
   await owner()();
   expect((await db.doc(context.PUBLIC_CONTEXT_PATH).get()).data().revision).toBe(3);
+});
+
+it("reaps only the interrupted attempt's input files and retries a partial cleanup", async () => {
+  await owner()();
+  const ref = db.doc(state.EXTERNAL_REFRESH_PATH);
+  const contextRef = db.doc(context.PUBLIC_CONTEXT_PATH);
+  const accepted = (await contextRef.get()).data()!;
+  const retained = new Map(boundary.objects);
+  const operationId = "I".repeat(20);
+  const [first, second] = state.EXTERNAL_INPUT_FILES.map(name => `post-background-v1/external-inputs/${operationId}/${name}`);
+  boundary.objects.set(first, Buffer.from("candidate first"));
+  boundary.objects.set(second, Buffer.from("candidate second"));
+  boundary.rejectDelete(key => key === second);
+  const leaseUntil = now + 10 * 60_000;
+  await ref.update({ operationId, status: "fetching", stagedInputsUntil: leaseUntil, nextAttemptAt: leaseUntil });
+  const count = requests;
+  now = leaseUntil - 1;
+  await owner()();
+  expect(requests).toBe(count);
+  expect(boundary.objects.has(first)).toBe(true);
+  expect(boundary.objects.has(second)).toBe(true);
+
+  now = leaseUntil;
+  await expect(owner()()).rejects.toMatchObject({ code: 403 });
+  expect((await ref.get()).data()).toMatchObject({ operationId, status: "failed", stagedInputsUntil: leaseUntil });
+  expect(boundary.objects.has(first)).toBe(false);
+  expect(boundary.objects.has(second)).toBe(true);
+  expect(requests).toBe(count);
+
+  boundary.rejectDelete(null);
+  await owner()();
+  expect((await ref.get()).data()).toMatchObject({ status: "verified", stagedInputsUntil: null });
+  expect((await ref.get()).data()?.operationId).not.toBe(operationId);
+  expect((await contextRef.get()).data()).toEqual(accepted);
+  expect(boundary.objects).toEqual(retained);
+  expect(requests).toBeGreaterThan(count);
 });
 
 it("keeps the accepted video catalog and advances the other inputs when video pagination is incomplete", async () => {
@@ -204,7 +246,7 @@ it("keeps failure fixed and bounded, preserves prior context, and respects globa
 });
 
 it("records a safe seal failure without changing context or logging SDK details", async () => {
-  boundary.reject(() => true);
+  boundary.reject(key => key.endsWith("/spotlight-news.json"));
   const errorLog = vi.spyOn(console, "error").mockImplementation(() => {});
   await owner()();
   expect((await db.doc(state.EXTERNAL_REFRESH_PATH).get()).data()).toMatchObject({
@@ -213,6 +255,14 @@ it("records a safe seal failure without changing context or logging SDK details"
   expect(errorLog.mock.calls).toEqual([["Cloud external refresh failed at seal"]]);
   expect((await db.doc(context.PUBLIC_CONTEXT_PATH).get()).data().revision).toBe(1);
   expect((await db.collection("cmsPublishQueue").get()).size).toBe(0);
+  const failed = (await db.doc(state.EXTERNAL_REFRESH_PATH).get()).data()!;
+  const orphan = `post-background-v1/external-inputs/${failed.operationId}/launch-media-manager.json`;
+  expect(boundary.objects.has(orphan)).toBe(true);
+  now = failed.nextAttemptAt;
+  boundary.reject(null);
+  await owner()();
+  expect(boundary.objects.has(orphan)).toBe(false);
+  expect((await db.doc(context.PUBLIC_CONTEXT_PATH).get()).data().revision).toBe(2);
 });
 
 it("preserves the accepted schedule pair and clock on unchanged refresh and cold reads", async () => {
