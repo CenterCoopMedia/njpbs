@@ -1008,7 +1008,7 @@ describe("cmsPages loader against the Firestore emulator", () => {
     // CMS migration is route-by-route. A strict build for Contact must retain
     // the committed homepage until a published home snapshot is admitted.
     const homeHtml = readFileSync("dist/index.html", "utf8");
-    const heroHeading = /<h1 id="hero-h">([^<]+)<\/h1>/;
+    const heroHeading = /<h1\b[^>]*\bid="hero-h"[^>]*>\s*([^\s<][^<]*)<\/h1>/;
     const fallbackHeroHeading = homeHtml.match(heroHeading)?.[1];
     expect(fallbackHeroHeading).toBeTruthy();
     expect(homeHtml).not.toContain('data-cms-page="home"');
