@@ -217,6 +217,16 @@ last-good output; no cold/static fallback can republish removed content. Retaine
 public copies, assets, aliases and generation/context readback stay available
 for guarded recovery without creating a second public writer.
 
+The runtime starts due editorial preview retention before running background
+maintenance. Retention needs the selected preparation or preview projection,
+the active CODE receipt and verified private bytes. Those inputs can qualify
+while the aggregate is pending or failed. If work discovery fails, retention
+checks its own inputs directly. Background discovery or maintenance failure is logged
+and leaves a staged release eligible for its own checks on that wake. The
+release still needs its exact artifact, activation lease and required content
+proofs. Background health still reports failed work, and readers identify an
+eligible last-good response as stale until the replacement verifies.
+
 For current failed context recovery, the direct Node loader preserves fd 3;
 the `npx tsx` wrapper does not. The operator is
 [retry-public-context-publication.ts](../../site/scripts/retry-public-context-publication.ts).

@@ -12,11 +12,17 @@ import { buildNoBuildCloudBackground } from "./build-no-build-cloud-background";
 import { startPublicWorkerDeploymentReconciliationOwner } from "./public-worker-deployment-reconciliation-owner";
 import { runNoBuildCloudRelease } from "./no-build-cloud-release";
 import { createCmsPublicationCloudStorage } from "./cms-publication-cloud-storage";
+import { safeExternalErrorIdentity } from "./cms-publication-error-identity";
 import type { MediaManagerCredential } from "./frozen-publication";
 
 const require = createRequire(import.meta.url);
 const { readNoBuildCloudWork, cloudBillingPaused } = require("../../functions/lib/no-build-cloud-work");
 const { OWNER_COLLECTION } = require("../../functions/lib/no-build-post-ownership");
+
+function reportBackgroundFailure(stage: "work discovery" | "maintenance", error: unknown) {
+  const identity = safeExternalErrorIdentity(error);
+  console.error(`Cloud background ${stage} failed${identity ? ` (${identity})` : ""}`);
+}
 
 /** The cloud runtime never constructs a legacy serializer or claims its queue. */
 export function startNoBuildCloudRuntime({ firestore, firebaseApp, commitSha, serializerId,
@@ -64,11 +70,17 @@ export function startNoBuildCloudRuntime({ firestore, firebaseApp, commitSha, se
     const work = await readNoBuildCloudWork({ runtime,
       read: async (document: string) => (await firestore.doc(document).get()).data() ?? null,
       listOwners: async () => (await firestore.collection(OWNER_COLLECTION).get()).docs.map(row => row.data()),
+    }).catch((error: unknown) => {
+      reportBackgroundFailure("work discovery", error);
+      // Retention checks its own selector, source and checkpoint before it claims work.
+      kickPreview();
     });
-    if (work.maintenance) await maintain();
+    if (work?.previewContext) kickPreview();
+    if (work?.maintenance) {
+      await maintain().catch(error => reportBackgroundFailure("maintenance", error));
+    }
     const pointer = (await firestore.doc("system/publicDeployment").get()).data();
     if (!stopped && pointer?.state === "idle") await runNoBuildCloudRelease({ firestore, storage, serializerId, commitSha, stateDirectory, cloudflareApiToken, previewStorageCredential });
-    if (!stopped && "previewContext" in work && work.previewContext) kickPreview();
   } });
   const stop = () => { stopped = true; service.stop(); owner.stop(); };
   const closed = (async () => {
