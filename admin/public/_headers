@@ -58,6 +58,9 @@
 /reports*
   Cache-Control: private, no-store
 
+/whats-new*
+  Cache-Control: private, no-store
+
 /resources*
   Cache-Control: private, no-store
 
