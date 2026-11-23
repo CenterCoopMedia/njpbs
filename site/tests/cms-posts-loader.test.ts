@@ -95,6 +95,11 @@ describe("admission", () => {
     expect(projectCmsPost(post({ spotlightArchive: true }), { now: NOW })).not.toHaveProperty("spotlightArchive");
     expect(() => projectCmsPost(post({}, { ...metadata, date: "2012-02-30" }), { now: NOW }))
       .toThrow(/original publication day/);
+    expect(projectCmsPost(archived, { now: NOW })).not.toHaveProperty("archivePublishedAt");
+    expect(() => projectCmsPost(post({}, { ...metadata, archivePublishedAt: "2012-02-30T09:00:00Z" }), { now: NOW }))
+      .toThrow(/original UTC publication time/);
+    expect(() => projectCmsPost(post({}, { archivePublishedAt: "2012-03-01T02:30:00Z" }), { now: NOW }))
+      .toThrow(/original UTC publication time/);
   });
 
   it("ignores the other record kinds that share the cmsPosts collection", () => {

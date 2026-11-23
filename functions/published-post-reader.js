@@ -146,6 +146,12 @@ function publicSnapshot(snapshot, cardsOnly = false) {
   if (readable.leadMedia !== undefined && readable.leadMedia !== null && !isPostLeadMedia(readable.leadMedia)) readable.leadMedia = null;
   if (validateKnownMetadata(readable)) throw readerFailure("reader_invalid_snapshot");
   const metadata = pick(readable, POST_METADATA_FIELDS.filter(field => !PRIVATE_METADATA.has(field)));
+  if (readable.archivePublishedAt !== undefined) {
+    if (readable.spotlightArchive !== true || parsePublishInstant(readable.archivePublishedAt) === null) {
+      throw readerFailure("reader_invalid_snapshot");
+    }
+    metadata.archivePublishedAt = readable.archivePublishedAt;
+  }
   if (metadata.coverageLabelId === undefined && snapshot.metadata.liveBlog?.branding === "nj-decides-2026") metadata.coverageLabelId = "nj-decides-2026";
   delete metadata.liveBlog;
   if (!cardsOnly && snapshot.metadata.liveBlog !== undefined) {

@@ -73,6 +73,7 @@ interface Props {
   socialDescription?: string;
   socialImage?: string;
   socialImageAlt?: string;
+  articlePublishedTime?: string;
   preview?: boolean;
   canonicalPath?: string;
   noindex?: boolean;
@@ -112,6 +113,7 @@ const {
   socialDescription,
   socialImage,
   socialImageAlt,
+  articlePublishedTime,
   preview = true,
   canonicalPath,
   noindex = true,
@@ -251,6 +253,7 @@ const legalLinks: LayoutLink[] = [
   ogDescription={socialDescription}
   ogImage={socialImage}
   ogImageAlt={socialImageAlt}
+  articlePublishedTime={articlePublishedTime}
   canonicalPath={canonicalPath}
   noindex={noindex}
   translations={translations}

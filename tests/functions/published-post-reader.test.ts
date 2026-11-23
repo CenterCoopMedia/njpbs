@@ -106,6 +106,19 @@ describe("published Post reader with the real Firestore emulator", () => {
     await db.doc(`cmsPosts/${editionId}`).update({ publiclyVisible: false });
     expect(await read("es/shadow-fixture")).toEqual({ kind: "not-found" });
   });
+  it("passes the original UTC time from the approved archive snapshot to the renderer", async () => {
+    const value = document({ archivePublishedAt: "2026-10-07T12:00:00Z" });
+    Object.assign(value.published.metadata, {
+      spotlightArchive: true, date: "2012-02-29", editorialDateSource: "backdated",
+      archivePublishedAt: "2012-03-01T02:30:00Z",
+    });
+    await put("cmsPosts/reader-fixture", value);
+    const result = await servicePublishedPostReader(service(), { secret: key, now: () => now }).read("shadow-fixture");
+    expect(projectPublishedPostRead(result, "shadow-fixture", "a".repeat(40), now)?.posts[0]).toMatchObject({
+      displayDate: "2012-02-29", archivePublishedAt: "2012-03-01T02:30:00Z",
+    });
+  });
+
   it("reads live-blog update-only public profiles without consulting private reporter rows", async () => {
     const value = document();
     const stamp = value.published.publishedAt;
