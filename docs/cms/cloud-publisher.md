@@ -43,9 +43,14 @@ logs, source, image layers or the offline renderer.
 
 ## Prepare while publication stays open
 
-Use [stage-cms-publication-cloud-release.sh](../../scripts/stage-cms-publication-cloud-release.sh)
-with `--prepare <operation-id> <new-commit-sha> <old-commit-sha>` in the prepared
-method. Both runtime controls and active public source must be ready at OLD.
+Start an authorized release with `jawn-ops njpbs release run --inputs <approved-release.json> --json`.
+Use the same command for content and code releases. Before the runner starts
+content preparation, it obtains and verifies the exact NEW source's
+[immutable publisher image receipt](../release/publisher-image.md#receipt).
+
+The runner calls [stage-cms-publication-cloud-release.sh](../../scripts/stage-cms-publication-cloud-release.sh)
+with `--prepare <operation-id> <new-commit-sha> <old-commit-sha>`. Both runtime
+controls and active public source must be ready at OLD.
 The immutable preparation records NEW, proposed generation, exact predecessor,
 context and server read-time. It reserves no live generation, changes no pin,
 traffic or media fence, and creates no wakeable release request.
@@ -87,18 +92,25 @@ instead of enlarging the bound without review.
 Candidate live-blog contract must match exact NEW and version 3 before sealing.
 Never seed a missing marker by hand. Once newer live-blog appearance/follow-up
 data is published, a lower-contract rollback is unsupported: fix forward.
-After a stale final-ready check, retain all receipts and prepare one fresh
-operation outside the pause. A second published drift stops for a new operating
-decision; do not loop through fresh IDs or weaken the freshness test.
+After a stale final-ready check, the runner retains the receipts and prepares
+a fresh operation outside the pause within its retry limit. A fresh operation
+uses the original verified image for the same NEW source and release inputs.
+The candidate must take a fresh content cutoff and pass the same checks.
+
+Record the prepare-to-seal duration from the release journal. Subtract the
+`candidate-prepare` intent timestamp from the successful `candidate-seal`
+timestamp for the same candidate attempt. For a stale restart, record the
+duration for each sealed attempt and whether both used the original image
+digest. Image build time and waits before candidate preparation fall outside
+this interval.
 
 ## Release order
 
 1. Verify both release/activation access checks using the publisher's own scoped
    identity, READY indexes and retained OLD. Do not pause while they fail.
-2. Prepare exact committed image context with
-   `node scripts/prepare-cloud-publisher.mjs <new-commit-sha>`. Build/push and
-   verify the immutable registry image before pause. Finish preparation, seal,
-   actual retained-candidate replay and final READY while OLD stays open.
+2. Obtain and verify the immutable publisher image receipt. Then prepare,
+   seal, replay the retained candidate and run the final READY check while
+   OLD stays open.
 3. Run the private operator pause block: pause both runtime phases at OLD and
    strict-drain accepted queues, claims, journals and release work. In the
    prepared method, complete guarded handover now.
