@@ -754,6 +754,25 @@ describe('isolated published-content seed', () => {
     expect((await dev.doc('cmsPages/contact').get()).exists).toBe(true);
     expect((await receipt.get()).exists).toBe(true);
   });
+  it('refuses a removal whose receipt no longer names its record', async () => {
+    const manifest = await exportSeed(); const copy = await copied(manifest);
+    await importPublished({ firestore: dev, manifest, copy, apply: true });
+    await source.doc('cmsPages/contact').update({ publiclyVisible: false });
+    const next = await exportSeed();
+    let inventoried = false;
+    // The receipt changes after the removal inventory reads it.
+    const changing = new Proxy(dev, { get(target, key) {
+      if (key === 'runTransaction') return async (body, options) => {
+        const result = await target.runTransaction(body, options);
+        if (!inventoried) { inventoried = true; await dev.doc(`devSeedRecords/${digest('cmsPages/contact')}`).update({ path: 'cmsPages/other' }); }
+        return result;
+      };
+      const value = target[key];
+      return typeof value === 'function' ? value.bind(target) : value;
+    } });
+    await expect(importPublished({ firestore: changing, manifest: next })).rejects.toThrow('Seed receipt does not match its record: cmsPages/contact');
+    expect((await dev.doc('cmsPages/contact').get()).exists).toBe(true);
+  });
   it('fails verification when a seeded record has lost its tracking receipt', async () => {
     const manifest = await exportSeed(); const copy = await copied(manifest);
     await importPublished({ firestore: dev, manifest, copy, apply: true });

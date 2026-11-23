@@ -665,6 +665,8 @@ export async function importPublished({ firestore, manifest, copy, plan, source 
       const [current, prior] = await transaction.getAll(ref, priorRef);
       // A resumed refresh already removed this row.
       if (!prior.exists) continue;
+      // Only a receipt that names this path shows that the seed wrote it.
+      if (prior.data().path !== path) fail(`Seed receipt does not match its record: ${path}`);
       const seen = observed(path, current, prior);
       if (enforce && !scope.removed.has(path)) { retained.push(path); continue; }
       // A row edited or rewritten by another refresh after the dry run is never deleted.

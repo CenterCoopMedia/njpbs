@@ -295,13 +295,21 @@ entry records the document and receipt hashes the dry run saw. Apply takes the
 plan from the same run and restores or removes a listed row only while both
 hashes still match.
 
-Review the plan before apply. Every `restored` path must be a seeded record a
-dev rehearsal or proof changed, and every `removed` path must be a record
-production no longer publishes. Stop and investigate a path you cannot explain.
+The plan is checked before apply in one of two ways:
+
+- By hand: read `plan.json`. Every `restored` path must be a seeded record a dev
+  rehearsal or proof changed, and every `removed` path must be a record
+  production no longer publishes. Stop and investigate a path you cannot explain.
+- Through `jawn-ops njpbs release run --target development`: the command applies
+  the plan from the same run with no person wait. Apply itself enforces the
+  [dev rehearsal refresh policy](../../AGENTS.md): it acts only on seed-written
+  rows whose path, document and receipt hashes the plan binds, and refuses
+  anything else. The plan and apply records go into the run record.
+
 Then apply and verify:
 
 ```bash
-sh -c "$SEED_WRITER_COMMAND" | $SEED import $PAIR --manifest "$MANIFEST" --plan "$STATE/plan.json" --apply | tee "$STATE/apply.json"
+sh -c "$SEED_WRITER_COMMAND" | $SEED import $PAIR --manifest "$MANIFEST" --plan "$STATE/plan.json" --apply | tee -a "$STATE/apply.json"
 sh -c "$SEED_WRITER_COMMAND" | $SEED verify $PAIR --manifest "$MANIFEST" | tee "$STATE/verify.json"
 ```
 
@@ -311,7 +319,7 @@ without it. Production's Nov. 23, 2026 snapshot references none.
 
 Keep `plan.json`, `apply.json` and `verify.json` with the rehearsal run record.
 Apply prints one JSON line per committed group, then a summary, so a partial
-apply still records what it wrote. The summary's `plan` field compares the apply
+apply still records what it wrote; `tee -a` keeps every attempt when you resume. The summary's `plan` field compares the apply
 with its plan: `matched` is false when a planned path was not applied or a
 withdrawn row was `retained` because the plan did not list it.
 
