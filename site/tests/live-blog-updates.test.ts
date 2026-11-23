@@ -391,11 +391,38 @@ describe("explicit live blog updates", () => {
     await vi.advanceTimersByTimeAsync(60_000); expect(fetch).not.toHaveBeenCalled();
     window.dispatchEvent(new Event("pageshow")); await vi.advanceTimersByTimeAsync(30_000); expect(fetch).toHaveBeenCalledOnce();
   });
-  it("stops checking when coverage ends without another entry, including after cached-page return", async () => {
-    const fetch = vi.spyOn(window, "fetch").mockResolvedValue(Response.json(liveBlogManifest("coverage", { ...blog(25), coverageState: "ended" })));
-    mount(); await vi.advanceTimersByTimeAsync(30_000);
+  it("opens the chronological archive when coverage ends without another entry", async () => {
+    const next: LiveBlogData = { ...blog(25), coverageState: "ended", updatedAt: "2026-11-04T05:00:00.000Z" };
+    const head = '<header class="post-head"><h1>Coverage</h1></header>';
+    const endedHead = head.replace("</header>", '<p class="post-head__summary">The vote passed.</p></header>');
+    const fetch = vi.spyOn(window, "fetch").mockResolvedValueOnce(Response.json(liveBlogFeed(liveBlogManifest("coverage", next))))
+      .mockResolvedValueOnce(new Response(`<article class="post">${endedHead}${html(next)}</article>`, { headers: { "content-type": "text/html" } }));
+    document.body.innerHTML = `<article class="post">${head}${html(blog(25))}</article>`;
+    const root = document.querySelector<HTMLElement>("[data-live-blog]")!;
+    const button = root.querySelector<HTMLButtonElement>("[data-live-blog-load]")!;
+    const visible = () => root.querySelectorAll(".live-blog__updates > li:not([hidden])").length;
+    installLiveBlogUpdates(root);
+    const entries = () => Array.from(root.querySelectorAll<HTMLElement>("[data-live-blog-entry]"));
+    const initial = entries();
+    const link = root.querySelector<HTMLAnchorElement>(".live-blog__permalink")!;
+    link.focus();
+    await vi.advanceTimersByTimeAsync(30_000);
+    expect(button.hidden).toBe(false);
+    expect(document.activeElement).toBe(link);
+    expect(entries()).toEqual(initial);
     window.dispatchEvent(new Event("pagehide")); window.dispatchEvent(new Event("pageshow"));
     await vi.advanceTimersByTimeAsync(1_800_000); expect(fetch).toHaveBeenCalledOnce();
+    button.focus(); button.click(); await vi.advanceTimersByTimeAsync(0);
+    expect(button.hidden).toBe(true);
+    expect(entries()).toEqual(initial.reverse());
+    expect(document.activeElement).toBe(root.querySelector(":scope > h2"));
+    expect(document.querySelector(".post-head h1")?.nextElementSibling?.textContent).toBe("The vote passed.");
+    expect(visible()).toBe(20);
+    const more = root.querySelector<HTMLButtonElement>("[data-live-blog-older]")!;
+    expect(more.textContent).toBe("Show 5 later updates");
+    more.click();
+    expect(visible()).toBe(25);
+    expect(document.activeElement).toBe(entries()[20]);
   });
   it("keeps new key links and the archive label in fresh-render order", async () => {
     const next = blog(26); next.updates[25].keyUpdate = true;

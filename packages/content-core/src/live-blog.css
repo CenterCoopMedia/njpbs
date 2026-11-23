@@ -6,7 +6,7 @@
 .live-blog button { cursor:pointer; }
 .live-blog a { color:var(--color-link); text-underline-offset:var(--space-1); }
 .live-blog :is(a,button,input):focus-visible,.live-blog article:focus { outline:var(--focus-outline); outline-offset:var(--focus-offset); }
-.live-blog article { scroll-margin-block-start:max(calc(var(--space-8) * 4),var(--live-blog-header-bottom,0px)); }
+.live-blog :is(article,h2[tabindex]) { scroll-margin-block-start:max(calc(var(--space-8) * 4),var(--live-blog-header-bottom,0px)); }
 .live-blog__metadata,.live-blog__reporter-title { color:var(--color-text-muted); }
 .live-blog__clock { white-space:nowrap; }
 .live-blog__state { font-weight:700; }

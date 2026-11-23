@@ -116,7 +116,7 @@ export function LiveBlogEditor({ coverageControl, value, published, saved, follo
         <option value="ongoing">Ongoing</option><option value="paused">Paused</option><option value="ended">Ended</option>
       </Select>
     </div>
-    <p className="editor-field-help">Ending coverage keeps its published archive. New updates appear first; corrections keep their original position and link.</p>
+    <p className="editor-field-help">Ended blogs show updates from oldest to newest. Ongoing and paused blogs show the newest updates first. Corrections keep their original publication time and link.</p>
     <fieldset className="editor-field" disabled={readOnly}>
       <legend>Live blog appearance</legend>
       {([

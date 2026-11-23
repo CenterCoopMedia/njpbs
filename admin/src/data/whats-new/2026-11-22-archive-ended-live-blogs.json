@@ -1,0 +1,7 @@
+{
+  "date": "2026-11-22",
+  "kind": "improved",
+  "title": "Read ended live blogs from the start",
+  "body": "When you publish a live blog as Ended, readers can follow the key update links or read updates from oldest to newest. Include a recap in the Post summary if readers need a quick account of what happened. Published corrections and update links stay with the archive.",
+  "prs": []
+}

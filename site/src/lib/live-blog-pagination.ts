@@ -20,12 +20,14 @@ export function installLiveBlogPagination(root: HTMLElement): { refresh(): void 
   };
   const initial = destination(win.location.hash);
   if (initial) visible = Math.min(entries.length, Math.ceil((initial.index + 1) / pageSize) * pageSize);
-  const update = (announcement = "") => {
+  const update = (added = 0) => {
     entries.forEach((entry, index) => { entry.hidden = index >= visible; });
     const remaining = entries.length - visible;
     older.hidden = remaining === 0;
     const next = Math.min(pageSize, remaining);
-    older.textContent = `Show ${next} older update${next === 1 ? "" : "s"}`;
+    const direction = root.querySelector('[data-live-blog-order="oldest-first"]') ? "later" : "older";
+    older.textContent = `Show ${next} ${direction} update${next === 1 ? "" : "s"}`;
+    const announcement = added ? `${added} ${direction} update${added === 1 ? "" : "s"} shown. ` : "";
     count.textContent = `${announcement}Showing ${visible} of ${entries.length} updates.`;
   };
   update(); controls.hidden = entries.length <= pageSize;
@@ -34,7 +36,7 @@ export function installLiveBlogPagination(root: HTMLElement): { refresh(): void 
     count.setAttribute("aria-live", "polite");
     const first = visible;
     visible = Math.min(entries.length, visible + pageSize);
-    update(`${visible - first} older updates shown. `);
+    update(visible - first);
     // The first new entry occupies the old control's position. Keep that position
     // and give keyboard readers a useful next destination before hiding the button.
     entries[first]?.querySelector<HTMLElement>("article")?.focus({ preventScroll: true });
