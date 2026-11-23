@@ -40,6 +40,7 @@ const {
   cmsSettingsSchemaFor,
   createCmsSettingsPublishedSnapshot,
   currentCmsSettingsSchemaFor,
+  legacyBannerNeedsSave,
   projectPublishedCmsSettings,
   validateCmsSettingsValues,
   cloneSettingsValues,
@@ -312,9 +313,8 @@ function requireCurrentSchema(documentId, settingsSchemas) {
 
 function isPublicHomepageBannerUpgrade(documentId, stored, currentSchema) {
   return documentId === PUBLIC_HOMEPAGE_BANNER_SETTINGS_ID &&
-    [1, 2, 3].includes(stored?.schemaVersion) &&
-    currentSchema?.schemaVersion === 4 &&
-    currentSchema.valueContract === "publicHomepageBannerV4";
+    [1, 2, 3, 4].includes(stored?.schemaVersion) &&
+    currentSchema?.schemaVersion === 5;
 }
 
 function isSiteNavigationUpgrade(documentId, stored, currentSchema) {
@@ -332,13 +332,16 @@ function settingsSchemaForPublication(
   settingsSchemas,
 ) {
   if (stored.schemaVersion === currentSchema.schemaVersion) return currentSchema;
+  if (isPublicHomepageBannerUpgrade(documentId, stored, currentSchema) && legacyBannerNeedsSave(stored.values, stored.published?.values)) {
+    throw new SettingsRejection(409, "Save the homepage banner draft before publishing to keep both banner modes.");
+  }
   if (isPublicHomepageBannerUpgrade(documentId, stored, currentSchema) || isSiteNavigationUpgrade(documentId, stored, currentSchema) || isStoryCtasUpgrade(documentId, stored, currentSchema)) {
     const storedSchema = cmsSettingsSchemaFor(
       documentId,
       stored.schemaVersion,
       settingsSchemas,
     );
-    if ([1, 2, 3].includes(storedSchema?.schemaVersion)) return storedSchema;
+    if (storedSchema) return storedSchema;
   }
   throw new SettingsRejection(
     409,
@@ -680,12 +683,6 @@ function createCmsSaveSettingsHandler(deps = {}) {
               409,
               "This settings document changed since you opened it. Reload before saving.",
             );
-          }
-          // Older clients omit fields they cannot display. Require explicit
-          // empty strings to remove an existing second link.
-          if (id === PUBLIC_HOMEPAGE_BANNER_SETTINGS_ID && before.values.secondLinkLabel &&
-            (!Object.hasOwn(req.body.values, "secondLinkLabel") || !Object.hasOwn(req.body.values, "secondLinkHref"))) {
-            throw new SettingsRejection(409, "This banner has a second link. Reload the latest Boardwalk before saving.");
           }
           if (id === "site-navigation" && before.values.postsBrowse &&
             (!values.postsBrowse || (before.values.postsBrowse.archiveLayout && !values.postsBrowse.archiveLayout))) {

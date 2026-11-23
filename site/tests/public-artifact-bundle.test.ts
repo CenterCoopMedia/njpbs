@@ -6,7 +6,7 @@ import { cmsAuthorsLoader } from "../src/lib/cms-authors-loader";
 import { cmsPagesLoader } from "../src/lib/cms-loader";
 import { cmsPostsLoader } from "../src/lib/cms-posts-loader";
 import { cmsProgramsLoader } from "../src/lib/cms-programs-loader";
-import { publicHomepageBannerLoader } from "../src/lib/public-homepage-banner";
+import { publicHomepageBannerEntry, publicHomepageBannerLoader } from "../src/lib/public-homepage-banner";
 import { siteNavigationLoader } from "../src/lib/site-navigation";
 import { DEFAULT_SITE_NAVIGATION } from "../../packages/content-core/src/cms-settings";
 import { loadHomeSourceSnapshot } from "../src/lib/home-sources-loader";
@@ -399,10 +399,14 @@ describe("public artifact bundle", () => {
     }
   });
 
-  it("binds the fixed homepage setting to its exact receipt source version", () => {
+  it("binds a disabled standard banner with no message to its exact receipt", () => {
     const publishedSnapshot = {
-      schemaVersion: 1,
-      values: { enabled: true, message: "A public update" },
+      schemaVersion: 5,
+      values: {
+        njDecides: false,
+        standard: { enabled: false, message: "" },
+        election: { enabled: true, message: "Election coverage" },
+      },
       sourceVersion: 4,
       publishedAt: "2026-08-31T14:00:00.000Z",
     };
@@ -410,8 +414,9 @@ describe("public artifact bundle", () => {
       ...emptyBundle(),
       settings: [{
         settingId: "public-homepage-banner",
-        enabled: true,
-        message: "A public update",
+        njDecides: false,
+        enabled: false,
+        message: "",
         sourceVersion: 4,
         publishedAt: "2026-08-31T14:00:00.000Z",
       }],
@@ -429,14 +434,21 @@ describe("public artifact bundle", () => {
       }),
     };
 
-    expect(assertPublicArtifactBundle(bundle)).toMatchObject({
+    const parsed = assertPublicArtifactBundle(bundle);
+    expect(parsed).toMatchObject({
       schemaVersion: 3,
       settings: [expect.objectContaining({ sourceVersion: 4 })],
     });
+    expect(publicHomepageBannerEntry.parse(parsed.settings[0])).toEqual(bundle.settings[0]);
+    expect(publicHomepageBannerEntry.safeParse({ ...bundle.settings[0], enabled: true }).success).toBe(false);
     expect(() => assertPublicArtifactBundle({
       ...bundle,
       settings: [{ ...bundle.settings[0], sourceVersion: 5 }],
     })).toThrow(/cmsSettings coverage is invalid/);
+    expect(() => assertPublicArtifactBundle({
+      ...bundle,
+      settings: [{ ...bundle.settings[0], enabled: true }],
+    })).toThrow(/message is required/);
   });
 
   it("carries bounded page exclusions through the frozen artifact contract", () => {

@@ -83,6 +83,11 @@ const DEFAULT_PUBLIC_HOMEPAGE_BANNER_SETTINGS = Object.freeze({
     "https://inside.montclair.edu/news/montclair-state-university-acquire-nj-spotlight-commits-continuing-its-watchdog-journalism-through",
 });
 
+function legacyBannerNeedsSave(values, published) {
+  return published !== undefined && !("standard" in values) &&
+    ("standard" in published || (values.njDecides === true) !== (published.njDecides === true));
+}
+
 /**
  * @typedef {object} CmsSettingsSchemaShape
  * @property {number} schemaVersion
@@ -188,7 +193,7 @@ const CMS_SETTINGS_SCHEMAS = Object.freeze({
     }),
   }),
   [PUBLIC_HOMEPAGE_BANNER_SETTINGS_ID]: Object.freeze({
-    currentVersion: 4,
+    currentVersion: 5,
     versions: Object.freeze({
       1: Object.freeze({
         schemaVersion: 1,
@@ -330,6 +335,14 @@ const CMS_SETTINGS_SCHEMAS = Object.freeze({
             format: "canonicalUtcInstant",
           }),
           excludedPaths: Object.freeze({ kind: "canonicalPathList", maxItems: 50, maxBytes: 512 }),
+        }),
+      }),
+      5: Object.freeze({
+        schemaVersion: 5,
+        fields: Object.freeze({
+          njDecides: Object.freeze({ kind: "boolean", required: true }),
+          standard: Object.freeze({ kind: "homepageBannerContent", required: true, mode: "standard" }),
+          election: Object.freeze({ kind: "homepageBannerContent", required: true, mode: "election" }),
         }),
       }),
     }),
@@ -741,6 +754,7 @@ function cloneNavigationLink(link) {
 }
 
 function cloneSettingsValue(definition, value) {
+  if (definition.kind === "homepageBannerContent" && plainObject(value)) return cloneSettingsValues(activeBannerSchema, value);
   if (definition.kind === "storyCtaRules") return structuredClone(value);
   if (definition.kind === "postsBrowse") return JSON.parse(JSON.stringify(value));
   if (definition.kind === "coverageLabels" && Array.isArray(value)) return value.map(label => ({ ...label }));
@@ -768,7 +782,8 @@ function schemaError(schema) {
     (schema.valueContract !== undefined &&
       schema.valueContract !== "njDecidesBrandV1" &&
       schema.valueContract !== "publicHomepageBannerV2" &&
-      schema.valueContract !== "publicHomepageBannerV4") ||
+      schema.valueContract !== "publicHomepageBannerV4" &&
+      schema.valueContract !== "publicHomepageBannerContentV5") ||
     Object.keys(schema.fields).length > MAX_CMS_SETTINGS_FIELDS
   ) {
     return "The CMS settings schema is invalid";
@@ -791,7 +806,12 @@ function schemaError(schema) {
     const keys = new Set(Object.keys(definition));
     keys.delete("kind");
     keys.delete("required");
-    if (definition.kind === "string" || definition.kind === "safeHref") {
+    if (definition.kind === "homepageBannerContent") {
+      keys.delete("mode");
+      if (definition.required !== true || (definition.mode !== "standard" && definition.mode !== "election")) {
+        return "The CMS settings schema is invalid";
+      }
+    } else if (definition.kind === "string" || definition.kind === "safeHref") {
       keys.delete("maxBytes");
       keys.delete("pairedWith");
       if (definition.kind === "string") {
@@ -1028,6 +1048,11 @@ function validateCmsSettingsValues(schema, values) {
       continue;
     }
     switch (definition.kind) {
+      case "homepageBannerContent": {
+        const error = validateHomepageBannerContent(definition.mode, value);
+        if (error) return `${field}.${error}`;
+        break;
+      }
       case "postsBrowse": {
         const error = validatePostsBrowse(value);
         if (error) return error;
@@ -1176,8 +1201,21 @@ function contrastRatio(foreground, background) {
   return (lighter + 0.05) / (darker + 0.05);
 }
 
+const activeBannerSchema = {
+  ...CMS_SETTINGS_SCHEMAS[PUBLIC_HOMEPAGE_BANNER_SETTINGS_ID].versions[4],
+  valueContract: "publicHomepageBannerContentV5",
+};
+
+function validateHomepageBannerContent(mode, value) {
+  if (!plainObject(value)) return "Banner content must be an object";
+  for (const key of mode === "standard" ? ["njDecides", "liveLabel", "startsAt", "endsAt", "excludedPaths"] : ["njDecides"]) {
+    if (Object.hasOwn(value, key)) return `Unknown settings field ${key}`;
+  }
+  return validateCmsSettingsValues(activeBannerSchema, { ...value, njDecides: mode === "election" });
+}
+
 function validateValueContract(contract, values) {
-  if (contract === "publicHomepageBannerV2" || contract === "publicHomepageBannerV4") {
+  if (contract === "publicHomepageBannerV2" || contract === "publicHomepageBannerV4" || contract === "publicHomepageBannerContentV5") {
     const startsAt = values.startsAt;
     const endsAt = values.endsAt;
     if (
@@ -1189,20 +1227,21 @@ function validateValueContract(contract, values) {
     }
     if (
       values.njDecides !== true &&
+      (contract !== "publicHomepageBannerContentV5" || values.enabled === true) &&
       typeof values.message === "string" &&
       values.message.trim() === ""
     ) {
       return "message is required unless NJ Decides mode is enabled";
     }
     if (values.njDecides === true) {
-      for (const field of contract === "publicHomepageBannerV4" ? ["linkHref", "secondLinkHref"] : ["linkHref"]) {
+      for (const field of contract === "publicHomepageBannerV2" ? ["linkHref"] : ["linkHref", "secondLinkHref"]) {
         const href = values[field];
         if (typeof href === "string" && href.trim() !== "" && safeNavigationHref(href) !== href) {
           return `${field} must be an absolute address or a path that starts with / for NJ Decides`;
         }
       }
     }
-    if (contract === "publicHomepageBannerV4" &&
+    if (contract !== "publicHomepageBannerV2" &&
       typeof values.secondLinkLabel === "string" && values.secondLinkLabel.trim() !== "" &&
       !(typeof values.linkLabel === "string" && values.linkLabel.trim() !== "")) {
       return "secondLinkLabel requires the first link";
@@ -1359,6 +1398,7 @@ module.exports = {
   collectCmsSettingsAssetOccurrences,
   createCmsSettingsPublishedSnapshot,
   currentCmsSettingsSchemaFor,
+  legacyBannerNeedsSave,
   projectPublishedCmsSettings,
   safeNavigationHref,
   validateCmsSettingsValues,

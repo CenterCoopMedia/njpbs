@@ -29,6 +29,7 @@ import {
   NJ_DECIDES_SETTINGS_ID,
   SITE_NAVIGATION_SETTINGS_ID,
   cmsSettingsSchemaFor,
+  validateActiveHomepageBanner,
   validateCmsSettingsValues,
 } from "../../../packages/content-core/src/cms-settings.ts";
 import type { PublicHomepageBannerBuildData } from "./public-homepage-banner";
@@ -348,7 +349,6 @@ export function assertPublicArtifactBundle(value: unknown): PublicArtifactBundle
       setting.settingId !== PUBLIC_HOMEPAGE_BANNER_SETTINGS_ID ||
       typeof setting.enabled !== "boolean" ||
       typeof setting.message !== "string" ||
-      (setting.njDecides !== true && setting.message.trim() === "") ||
       !Number.isSafeInteger(setting.sourceVersion) ||
       Number(setting.sourceVersion) < 1 ||
       !parsedAt ||
@@ -365,27 +365,19 @@ export function assertPublicArtifactBundle(value: unknown): PublicArtifactBundle
     ) {
       throw new Error("The public artifact bundle settings list is invalid");
     }
-    const schema = cmsSettingsSchemaFor(PUBLIC_HOMEPAGE_BANNER_SETTINGS_ID, 4);
-    const settingsError = schema
-      ? validateCmsSettingsValues(schema, {
-          enabled: setting.enabled,
-          message: setting.message,
-          ...(setting.njDecides !== undefined ? { njDecides: setting.njDecides } : {}),
-          ...(setting.liveLabel !== undefined ? { liveLabel: setting.liveLabel } : {}),
-          ...(setting.startsAt !== undefined ? { startsAt: setting.startsAt } : {}),
-          ...(setting.endsAt !== undefined ? { endsAt: setting.endsAt } : {}),
-          ...(setting.excludedPaths !== undefined ? { excludedPaths: setting.excludedPaths } : {}),
-          ...(setting.secondLink
-            ? { secondLinkLabel: setting.secondLink.label, secondLinkHref: setting.secondLink.href }
-            : {}),
-          ...(setting.link
-            ? {
-                linkLabel: setting.link.label,
-                linkHref: setting.link.href,
-              }
-            : {}),
-        })
-      : "The public homepage banner settings schema is missing";
+    const settingsError = validateActiveHomepageBanner({
+      enabled: setting.enabled,
+      message: setting.message,
+      ...(setting.njDecides !== undefined ? { njDecides: setting.njDecides } : {}),
+      ...(setting.liveLabel !== undefined ? { liveLabel: setting.liveLabel } : {}),
+      ...(setting.startsAt !== undefined ? { startsAt: setting.startsAt } : {}),
+      ...(setting.endsAt !== undefined ? { endsAt: setting.endsAt } : {}),
+      ...(setting.excludedPaths !== undefined ? { excludedPaths: setting.excludedPaths } : {}),
+      ...(setting.secondLink
+        ? { secondLinkLabel: setting.secondLink.label, secondLinkHref: setting.secondLink.href }
+        : {}),
+      ...(setting.link ? { linkLabel: setting.link.label, linkHref: setting.link.href } : {}),
+    });
     if (settingsError) {
       throw new Error(`The public artifact bundle settings list is invalid: ${settingsError}`);
     }

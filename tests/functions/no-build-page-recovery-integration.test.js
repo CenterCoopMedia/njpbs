@@ -854,12 +854,13 @@ it.each(["context", "provider-refresh"])("confirms every settings alias behind a
   await seedSettingsPosts(2);
   const settingsOwner = require("../../functions/lib/settings-publication.js");
   const settingsContract = require("../../functions/lib/cms-settings-contract.js");
-  const { DEFAULT_PUBLIC_HOMEPAGE_BANNER_SETTINGS } = await import("../../packages/content-core/src/cms-settings");
+  const { DEFAULT_PUBLIC_HOMEPAGE_BANNER_SETTINGS, separateHomepageBannerContent } = await import("../../packages/content-core/src/cms-settings");
   const firstIdentity = (await firestore.doc(`cmsPublishQueue/${settingsOperationId}`).get()).data().settingsPublication;
   const id = "public-homepage-banner", bannerId = settingsOwner.settingsOperationId(id, 1);
-  const published = settingsContract.createCmsSettingsPublishedSnapshot({ schema: settingsContract.currentCmsSettingsSchemaFor(id),
-    values: DEFAULT_PUBLIC_HOMEPAGE_BANNER_SETTINGS, sourceVersion: 1, publishedAt: "2026-10-12T10:00:00.000Z" });
-  await firestore.doc(`cmsSettings/${id}`).set({ version: 1, schemaVersion: 1, values: DEFAULT_PUBLIC_HOMEPAGE_BANNER_SETTINGS, published });
+  const schema = settingsContract.currentCmsSettingsSchemaFor(id);
+  const values = separateHomepageBannerContent(DEFAULT_PUBLIC_HOMEPAGE_BANNER_SETTINGS);
+  const published = settingsContract.createCmsSettingsPublishedSnapshot({ schema, values, sourceVersion: 1, publishedAt: "2026-10-12T10:00:00.000Z" });
+  await firestore.doc(`cmsSettings/${id}`).set({ version: 1, schemaVersion: schema.schemaVersion, values, published });
   const identities = [firstIdentity, { ...firstIdentity, id, operationId: bannerId, originalOperationId: bannerId,
     snapshotDigest: require("node:crypto").createHash("sha256").update(JSON.stringify(published)).digest("hex") }];
   await firestore.doc(`cmsPublishQueue/${settingsOperationId}`).delete();

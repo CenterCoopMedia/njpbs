@@ -178,8 +178,9 @@ Check the next accepted update.
 
 1. Open **Admin settings → Homepage banner**. Turn on
    **Use NJ Decides sitewide mode**, then **Show NJ Decides band sitewide**.
-2. Review any existing message and link before reusing them. The logo is the
-   title. A message and link are optional in election mode; enter both
+2. Review the saved election message and links. Switching modes brings back
+   that mode's own message, links and on/off setting. The election logo is the
+   title. A message and link are optional in election mode. Enter both
    **Link label** and **Link URL**, or leave both blank. After the first link,
    optionally fill in **Second link label** and **Second link URL**. Both links
    appear side by side and wrap on phones. Clear both second-link fields to remove
@@ -201,10 +202,12 @@ except the selected URLs. Unknown or removed URLs do not affect other pages.
 The normal announcement mode appears on Home only. A themed hub uses its own
 heading instead of duplicating the election banner.
 
-To remove the banner early, turn off **Show NJ Decides band sitewide**, save and
-publish. Saving alone leaves the public banner as it was. An already open tab
-checks scheduled bounds and checks again when restored. That scheduled change
-in an open cached page needs JavaScript; reload to check the current state.
+To remove the election band early, turn off **Show NJ Decides band sitewide**,
+save and publish. To return to the saved homepage announcement, turn off
+**Use NJ Decides sitewide mode**, then save and publish. Saving alone leaves the
+public banner as it was. An already open tab checks the election schedule and
+checks again when restored. Scheduled changes in an open cached page need
+JavaScript. Reload to check the current state.
 
 ## Live blog
 

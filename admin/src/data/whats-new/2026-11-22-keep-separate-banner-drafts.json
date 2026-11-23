@@ -1,0 +1,8 @@
+{
+  "date": "2026-11-22",
+  "kind": "improved",
+  "title": "Keep separate drafts for homepage and election banners",
+  "body": "In Settings → Homepage banner, switch NJ Decides sitewide mode on or off to edit that banner. Each mode keeps its own message, links and on/off setting. Save draft to keep your changes to both modes, then publish the banner selected in the preview.",
+  "prs": [],
+  "order": 1795392000000
+}

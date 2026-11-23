@@ -9,10 +9,18 @@ import "../cms-workspace.css";
 function Specimen() {
   const transport = useMemo<PublicHomepageBannerSettingsTransport>(() => {
     let version = 1;
-    let values: PublicHomepageBannerValues = { enabled: true, njDecides: true, message: "Find voting information for New Jersey.",
-      ...(new URLSearchParams(location.search).has("long") ? { excludedPaths: ["/" + "a".repeat(510) + "/"] } : {}),
-      ...(new URLSearchParams(location.search).has("cap") ? { excludedPaths: Array.from({ length: 49 }, (_, index) => `/page-${index}/`) } : {}) };
-    const settings = () => ({ schemaVersion: 3, version, values: structuredClone(values) });
+    const query = new URLSearchParams(location.search);
+    let values: PublicHomepageBannerValues = {
+      njDecides: true,
+      standard: { enabled: false, message: "" },
+      election: {
+        enabled: true,
+        message: "Find voting information for New Jersey.",
+        ...(query.has("long") ? { excludedPaths: ["/" + "a".repeat(510) + "/"] } : {}),
+        ...(query.has("cap") ? { excludedPaths: Array.from({ length: 49 }, (_, index) => `/page-${index}/`) } : {}),
+      },
+    };
+    const settings = () => ({ schemaVersion: 5, version, values: structuredClone(values) });
     return {
       load: async () => ({ success: true, found: true, id: PUBLIC_HOMEPAGE_BANNER_SETTINGS_ID, settings: settings() }),
       save: async request => {

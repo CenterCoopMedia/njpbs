@@ -22,7 +22,7 @@ import { prepareContractRuntime, replay } from "../../scripts/check-cms-public-c
 import { writeFunctionsContracts } from "../../scripts/lib/functions-contracts.mjs";
 import postFixture from "../../site/tests/fixtures/shadow-posts/post.json";
 import { chromeSettings } from "../../site/tests/fixtures/shadow-posts/chrome";
-import { DEFAULT_SITE_NAVIGATION, DEFAULT_PUBLIC_SITE_CHROME_SETTINGS, DEFAULT_PUBLIC_HOMEPAGE_BANNER_SETTINGS,
+import { DEFAULT_SITE_NAVIGATION, DEFAULT_PUBLIC_SITE_CHROME_SETTINGS, DEFAULT_PUBLIC_HOMEPAGE_BANNER_SETTINGS, separateHomepageBannerContent,
   DEFAULT_NJ_DECIDES_SETTINGS } from "../../packages/content-core/src/cms-settings";
 
 const execute = promisify(execFile);
@@ -176,7 +176,7 @@ async function seed() {
   await db.doc("cmsPages/contact").set({ ...page, publiclyVisible: true, published: native("./functions/lib/publish-snapshot.js").createPublishedSnapshot({
     collection: "cmsPages", document: page, publishedAt: "2026-10-07T12:00:00.000Z", publishedBy: actorId }) });
   const values = { "site-navigation": DEFAULT_SITE_NAVIGATION, "public-site-chrome": DEFAULT_PUBLIC_SITE_CHROME_SETTINGS,
-    "public-homepage-banner": DEFAULT_PUBLIC_HOMEPAGE_BANNER_SETTINGS, "nj-decides-brand": DEFAULT_NJ_DECIDES_SETTINGS,
+    "public-homepage-banner": separateHomepageBannerContent(DEFAULT_PUBLIC_HOMEPAGE_BANNER_SETTINGS), "nj-decides-brand": DEFAULT_NJ_DECIDES_SETTINGS,
     "coverage-labels": c0Client.DEFAULT_COVERAGE_LABELS };
   const schemas = native("./functions/lib/cms-settings-contract.js");
   for (const id of CONTRACT_SETTINGS) {
@@ -238,17 +238,17 @@ beforeAll(async () => {
       { cwd: c0, timeout: 90_000, maxBuffer: 8 * 1024 * 1024 });
     artifact = join(c0, "site/.public-page-renderer");
     await compareContractInputs({ candidateSha, baselineSha, cwd: c1 });
-    const older = join(scratch, "R-without-banner-four");
+    const older = join(scratch, "R-without-banner-five");
     await localClone(older, baselineSha);
     const schemaFile = join(older, "packages/content-core/src/cms-settings.ts");
     const schema = await readFile(schemaFile, "utf8");
     const needle = "): CmsSettingsSchema | null {\n  if (!positiveVersion(schemaVersion))";
     if (!schema.includes(needle)) throw new Error("Native renderer schema fixture unavailable");
-    // A genuine fixture commit/build models R without banner v4. C0 and C1
+    // A genuine fixture commit/build models R without banner v5. C0 and C1
     // retain identical full backend inputs; no module or successful reply is mocked.
-    await writeFile(schemaFile, schema.replace(needle, "): CmsSettingsSchema | null {\n  if (documentId === PUBLIC_HOMEPAGE_BANNER_SETTINGS_ID && schemaVersion === 4) return null;\n  if (!positiveVersion(schemaVersion))"));
+    await writeFile(schemaFile, schema.replace(needle, "): CmsSettingsSchema | null {\n  if (documentId === PUBLIC_HOMEPAGE_BANNER_SETTINGS_ID && schemaVersion === 5) return null;\n  if (!positiveVersion(schemaVersion))"));
     await execute("git", ["add", "packages/content-core/src/cms-settings.ts"], { cwd: older });
-    await execute("git", ["-c", "user.name=Contract fixture", "-c", "user.email=contract@example.test", "commit", "--quiet", "-m", "Model a renderer without banner four"], { cwd: older });
+    await execute("git", ["-c", "user.name=Contract fixture", "-c", "user.email=contract@example.test", "commit", "--quiet", "-m", "Model a renderer without banner five"], { cwd: older });
     unsupportedSha = (await execute("git", ["rev-parse", "HEAD"], { cwd: older })).stdout.trim();
     await execute(process.execPath, ["--import", join(older, "site/node_modules/tsx/dist/loader.mjs"), join(older, "site/scripts/build-public-post-renderer.ts"), "--test-pages"],
       { cwd: older, timeout: 90_000, maxBuffer: 8 * 1024 * 1024 });
@@ -419,10 +419,10 @@ if (!inputs) it("refuses accepted C1 banner output only at R semantics while C1/
   await ui.waitFor(() => expect(save.disabled).toBe(false)); ui.fireEvent.click(save);
   const publish = ui.within(mounted.container).getByRole("button", { name: "Publish", exact: true });
   await ui.waitFor(() => expect(publish.disabled).toBe(false)); ui.fireEvent.click(publish);
-  await ui.waitFor(async () => expect((await db.doc("cmsSettings/public-homepage-banner").get()).data()?.published?.schemaVersion).toBe(4));
+  await ui.waitFor(async () => expect((await db.doc("cmsSettings/public-homepage-banner").get()).data()?.published?.schemaVersion).toBe(5));
   const accepted = await nativePost();
   expect(accepted.kind).toBe("post");
-  expect(accepted.published.settings.find((row: any) => row.id === "public-homepage-banner").published.values.message).toBe("Accepted candidate banner");
+  expect(accepted.published.settings.find((row: any) => row.id === "public-homepage-banner").published.values.standard.message).toBe("Accepted candidate banner");
   expect(() => unsupportedReader.projectPublishedPostRead(accepted.published, postSlug, unsupportedSha, new Date())).toThrow();
 });
 

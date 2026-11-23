@@ -64,6 +64,29 @@ describe("public homepage banner projection", () => {
     });
   });
 
+  it("keeps receipt evidence for an unconfigured standard mode without exposing the saved election content", () => {
+    expect(projectPublicHomepageBanner({
+      id: PUBLIC_HOMEPAGE_BANNER_SETTINGS_ID,
+      version: 7,
+      published: {
+        ...published,
+        schemaVersion: 5,
+        values: {
+          njDecides: false,
+          standard: { enabled: false, message: "" },
+          election: { enabled: true, message: "Election coverage", linkLabel: "Results", linkHref: "/results/" },
+        },
+      },
+    })).toEqual({
+      settingId: PUBLIC_HOMEPAGE_BANNER_SETTINGS_ID,
+      enabled: false,
+      njDecides: false,
+      message: "",
+      sourceVersion: 7,
+      publishedAt: "2026-08-31T14:00:00.000Z",
+    });
+  });
+
   it("projects an empty NJ Decides band and its optional schedule fields", () => {
     expect(projectPublicHomepageBanner({
       id: PUBLIC_HOMEPAGE_BANNER_SETTINGS_ID,
