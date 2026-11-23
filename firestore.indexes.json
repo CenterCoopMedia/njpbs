@@ -2144,6 +2144,16 @@
       "fieldPath": "expireAt",
       "ttl": true,
       "indexes": []
+    },
+    {
+      "collectionGroup": "wordpressArchiveItems",
+      "fieldPath": "record",
+      "indexes": []
+    },
+    {
+      "collectionGroup": "wordpressArchiveItems",
+      "fieldPath": "conversion",
+      "indexes": []
     }
   ]
 }
