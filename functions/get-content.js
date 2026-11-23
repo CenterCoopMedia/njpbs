@@ -32,6 +32,7 @@ const logger = require("firebase-functions/logger");
 const { db } = require("./lib/firebase");
 const { resolveEditorTarget } = require("./lib/boardwalk-open-target");
 const { requirePrincipal } = require("./lib/auth");
+const { contentVersion } = require("./lib/content-version");
 const { PAGE_EDITOR_TEMPLATES } = require("./lib/public-page-contract");
 const {
   authorizeContentRead,
@@ -237,6 +238,28 @@ async function publicationMetadata(firestore, stored, collection, documentId) {
   };
 }
 
+async function spanishSourceStatus(firestore, principal, edition, log) {
+  const { editionOf, translationSource } = edition;
+  if (!isBoundedDocumentId(editionOf) || !translationSource) return undefined;
+
+  let snapshot;
+  try {
+    snapshot = await firestore.collection("cmsPosts").doc(editionOf).get();
+  } catch (error) {
+    log.warn("cmsGetContent could not check the Spanish edition source", { code: error?.code ?? "unknown" });
+    return "unavailable";
+  }
+  const source = snapshot.data();
+  const decision = authorizeContentRead(principal, {
+    exists: snapshot.exists,
+    resource: contentResource({ collection: "cmsPosts", documentId: editionOf, stored: source }),
+  });
+  if (!decision.allowed || source?.type !== "post" || source.deleted === true || source.status === "archived") {
+    return "unavailable";
+  }
+  return contentVersion(source) === translationSource.contentVersion ? "current" : "changed";
+}
+
 function createCmsGetContentHandler(deps = {}) {
   const {
     firestore = db,
@@ -349,13 +372,18 @@ function createCmsGetContentHandler(deps = {}) {
         return;
       }
 
+      const translationSourceStatus = collection === "cmsPosts" && stored?.locale === "es"
+        ? await spanishSourceStatus(firestore, user.principal, stored, log)
+        : undefined;
       // The addressed id wins over any `id` the document carries: an older
       // record can still hold a conflicting one, and the client keys its editor
       // on the document it asked for.
       res.status(200).json({
         success: true,
         found: snapshot.exists,
-        document: stored ? { ...stored, id } : null,
+        document: stored ? {
+          ...stored, id, ...(translationSourceStatus ? { translationSourceStatus } : {}),
+        } : null,
       });
     } catch (error) {
       if (res.headersSent) return;

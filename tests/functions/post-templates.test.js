@@ -357,6 +357,7 @@ describe("Post template trusted persistence", () => {
   });
 
   it("creates one private Spanish draft from an authorized original and preserves its edition identity", async () => {
+    await db.doc("cmsPosts/source").update({ contentVersion: 5 });
     const request = {
       collection: "cmsPosts", document: { type: "post" },
       postSource: { id: "source", version: 7, editionLocale: "es" },
@@ -371,14 +372,18 @@ describe("Post template trusted persistence", () => {
     for (const response of [first, second]) expect(response.statusCode, JSON.stringify(response.body)).toBe(200);
     expect([first.body.created, second.body.created].sort()).toEqual([false, true]);
     const draft = first.body.document;
+    const readEdition = user => invoke(getContent.createCmsGetContentHandler, { collection: "cmsPosts", id: draft.id }, user);
     expect(second.body.document.id).toBe(draft.id);
     expect(draft).toMatchObject({ editionOf: "source", locale: "es", status: "draft", section: "watch", blocks: [] });
+    expect(draft.translationSource).toEqual({ version: 7, contentVersion: 5 });
     expect(draft).not.toHaveProperty("published");
+    expect((await readEdition()).body.document.translationSourceStatus).toBe("current");
 
     const update = { collection: "cmsPosts", id: draft.id, baseVersion: draft.version };
     const edit = await invoke(save.createCmsSaveHandler, {
       ...update, document: {
         title: "Noticias de Nueva Jersey", editionOf: "other", locale: "en",
+        translationSource: { version: 99, contentVersion: 99 }, translationSourceStatus: "current",
         translationApproval: { reviewedVersion: draft.version, contentVersion: draft.contentVersion, approvedBy: "author" },
       },
     });
@@ -386,11 +391,13 @@ describe("Post template trusted persistence", () => {
     expect(edit.body.document).toMatchObject({ editionOf: "source", locale: "es", title: "Noticias de Nueva Jersey" });
     expect(edit.body.document).not.toHaveProperty("slug");
     expect(edit.body.document).not.toHaveProperty("translationApproval");
+    expect(edit.body.document.translationSource).toEqual({ version: 7, contentVersion: 5 });
+    expect(edit.body.document).not.toHaveProperty("translationSourceStatus");
     const preview = previewSnapshot.createPostPreviewSnapshot(draft.id, edit.body.document);
     expect(preview.published.metadata).toMatchObject({ locale: "es", title: "Noticias de Nueva Jersey" });
     const retry = await invoke(save.createCmsSaveHandler, request);
     expect(retry.body.document.version).toBe(edit.body.document.version);
-    expect((await db.doc("cmsPosts/source").get()).data()).toEqual(fixture());
+    expect((await db.doc("cmsPosts/source").get()).data()).toEqual({ ...fixture(), contentVersion: 5 });
     expect((await db.collection("cmsPosts").get()).size).toBe(2);
 
     const publication = { ...update, baseVersion: edit.body.document.version, document: {} };
@@ -403,6 +410,17 @@ describe("Post template trusted persistence", () => {
     expect((await invoke(save.createCmsSaveHandler, droppedIdentity)).statusCode).toBe(409);
     expect((await api(captureRequest({ sourceId: draft.id, sourceVersion: edit.body.document.version }))).statusCode).toBe(409);
     expect((await db.doc(`cmsPosts/${draft.id}`).get()).data().published).toBeUndefined();
+
+    await db.doc("cmsPosts/source").update({ version: 8, assignee: "reporter" });
+    expect((await readEdition()).body.document.translationSourceStatus).toBe("current");
+    await db.doc("cmsPosts/source").update({ version: 9, contentVersion: 6, title: "Updated story" });
+    expect((await readEdition()).body.document).toMatchObject({
+      translationSourceStatus: "changed",
+      translationSource: { version: 7, contentVersion: 5 },
+      title: "Noticias de Nueva Jersey",
+    });
+    await db.doc("cmsPosts/source").update({ section: "support" });
+    expect((await readEdition(scoped("editor", "watch"))).body.document.translationSourceStatus).toBe("unavailable");
   });
 
   it.each([

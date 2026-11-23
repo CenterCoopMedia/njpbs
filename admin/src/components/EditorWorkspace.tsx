@@ -2568,6 +2568,13 @@ function EditorWorkspaceContent({
       ownerId: principal.id,
     };
     const editionOf = typeof initial?.editionOf === "string" ? initial.editionOf : null;
+    const translationSourceStatus = initial?.translationSourceStatus;
+    const translationSourceRead = translationSourceStatus ? { translationSourceStatus } : {};
+    const translationSourceNotice = translationSourceStatus === "changed"
+      ? "The original Post changed after this draft was created. Compare both versions before approving the translation."
+      : translationSourceStatus === "unavailable"
+        ? "Boardwalk could not check the original Post. Verify the source before approving the translation."
+        : null;
     const approval = initial?.translationApproval as { contentVersion?: number; reviewedVersion?: number } | undefined;
     const translationApproved = recordStatus === "approved" &&
       Number.isSafeInteger(approval?.contentVersion) &&
@@ -2727,7 +2734,7 @@ function EditorWorkspaceContent({
             // response becomes either the clean baseline or a fresh uncontrolled form seed.
             const normalizedSaved = normalizeEditorRecordDates(
               recordSurface.record,
-              saved,
+              { ...saved, ...translationSourceRead },
             );
             rememberPreviewReceipt(recordSurface, normalizedSaved.version);
             recordBaselines.current.set(key, normalizedSaved);
@@ -2793,8 +2800,9 @@ function EditorWorkspaceContent({
           surface={{ kind: "record", record: recordSurface.record }}
           listLabel={labelForSurface(recordSurface)}
         />
-        {editionOf !== null ? <InlineMessage title="Spanish edition" tone="info">
+        {editionOf !== null ? <InlineMessage title="Spanish edition" tone={translationSourceNotice ? "warning" : "info"}>
           <div>
+            {translationSourceNotice ? <p>{translationSourceNotice}</p> : null}
             {recordStatus !== "published" && recordStatus !== "scheduled" && <p>{translationApproved
               ? "Translation approved for this saved version."
               : recordStatus === "approved"
@@ -2948,7 +2956,7 @@ function EditorWorkspaceContent({
                     // instead of forcing a false conflict and reload.
                     setRecordLoad({
                       status: "ready",
-                      record: { ...record, ...savedDocument },
+                      record: { ...record, ...savedDocument, ...translationSourceRead },
                       initialIsClean: true,
                     });
                     setRecordHistoryRevision((revision) => revision + 1);
