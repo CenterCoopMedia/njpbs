@@ -1160,6 +1160,11 @@ service cloud.firestore {
       allow read, write: if false;
     }
 
+    // Raw imports, converted drafts and their receipts are server-only.
+    match /wordpressArchiveItems/{document=**} {
+      allow read, write: if false;
+    }
+
     match /{document=**} {
       allow read, write: if false;
     }
