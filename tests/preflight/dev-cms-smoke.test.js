@@ -12,7 +12,9 @@ async function devResponse(url, init = {}) {
   if (origin === "https://dev-admin.example.org") return new Response(null, { status: 302, headers: {
     location: "https://fixture.cloudflareaccess.com/cdn-cgi/access/login/dev-admin.example.org",
   } });
-  if (origin === "https://us-central1-njpbs-site-dev.cloudfunctions.net") return new Response(null, { status: 403 });
+  if (origin === "https://us-central1-njpbs-site-dev.cloudfunctions.net") {
+    return new Response(null, { status: pathname === "/donationHealth" ? 405 : 403 });
+  }
   expect(origin).toBe("https://dev-api.example.org");
   if (pathname === "/health") return new Response(null, { status: 200 });
   if (init.method === "OPTIONS") return new Response(null, { status: 204, headers: {
@@ -68,7 +70,9 @@ describe("isolated development smoke target", () => {
     })).rejects.toThrow("Dev anonymous refusal failed");
   });
   it("fails the dev smoke when a deployed settings boundary stops refusing anonymous writes", async () => {
-    const request = async url => new Response(null, { status: url.endsWith("/health") ? 200 : 404 });
+    const request = async url => new Response(null, {
+      status: url.endsWith("/health") ? 200 : url.endsWith("/donationHealth") ? 405 : 404,
+    });
     await expect(runDevCmsFunctionSmoke({ deployedFunctionNames: Object.keys(DEV_FUNCTIONS), request })).rejects.toThrow("expected 401");
   });
 });

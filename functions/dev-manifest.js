@@ -6,6 +6,7 @@ const { CLOUD_WAKE_FUNCTIONS } = require("./lib/cloud-publication-wake-deploymen
 
 const DEV_FUNCTIONS = Object.freeze({
   health: "./health",
+  donationHealth: "./donation-health",
   cmsCollectBoardwalkUsage: "./boardwalk-usage",
   cmsGetBoardwalkUsage: "./boardwalk-usage",
   registerStaffProfile: "./staff-profile",

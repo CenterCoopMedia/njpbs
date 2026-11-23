@@ -13,6 +13,7 @@ import { createPublicContentLastGood } from "./public-content-last-good";
 import { createContentBaselineAssetReader } from "./public-content-baseline";
 import { pendingAuthorResponse } from "./public-author-pending";
 import { rollbackCacheControl, rollbackProbe, rollbackRead, versionedProof } from "./rollback-proof";
+import { createDonationHealthReader, serveDonationDocument } from "./public-donation-fallback";
 
 type PublicEnv = Omit<Env, "CMS_API"> & IsolateStartEnvironment & {
   CMS_API: Service<typeof PublicContentEntrypoint>;
@@ -25,6 +26,10 @@ type PublicEnv = Omit<Env, "CMS_API"> & IsolateStartEnvironment & {
   CF_VERSION_METADATA?: WorkerVersionMetadata;
 };
 type Target = ReturnType<typeof publicationTarget>;
+const donationHealth = {
+  production: createDonationHealthReader(publicationTarget("production").projectId),
+  development: createDonationHealthReader(publicationTarget("development").projectId),
+};
 
 export default {
   async fetch(request: Request, env: PublicEnv, ctx: ExecutionContext): Promise<Response> {
@@ -36,7 +41,8 @@ export default {
     const read = target.environment === "development" ? rollbackRead(url, request.method) : null;
     const probe = request.headers.get(rollbackProbe);
     if (!read || !probe || request.headers.get("cache-control") !== rollbackCacheControl) {
-      return serve(request, env, ctx, target, false);
+      return serveDonationDocument(request, document => serve(document, env, ctx, target, false),
+        donationHealth[target.environment], ctx);
     }
     const version = env.CF_VERSION_METADATA?.id;
     if (!version || probe !== (read === "edge" ? "current" : version)) {

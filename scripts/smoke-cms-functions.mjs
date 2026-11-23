@@ -264,6 +264,7 @@ export const PRIVATE_RPC_FUNCTION_NAMES = Object.freeze([
 
 export const DEPLOYED_FUNCTION_NAMES = Object.freeze([
   "health",
+  "donationHealth",
   ...AUTHENTICATED_POST_FUNCTION_NAMES,
   ...PRIVATE_RPC_FUNCTION_NAMES,
   ...BACKGROUND_FUNCTION_NAMES,
@@ -386,7 +387,6 @@ async function runFunctionSmoke({ baseUrl, functionsOrigin, adminOrigin, deploye
     expected: 200,
     label: "health",
   });
-
   for (const endpoint of authenticatedPostFunctions) {
     const uploadBody = ["cmsUploadMedia", "cmsReplaceMediaBinary", "cmsSubmitBugReport"].includes(endpoint)
       ? new FormData()
@@ -583,6 +583,12 @@ async function runFunctionSmoke({ baseUrl, functionsOrigin, adminOrigin, deploye
       label: "cmsSubmitBugReport preflight",
     });
   }
+  await check({
+    url: endpointUrl(functionsOrigin, "donationHealth"),
+    init: { method: "HEAD", redirect: "manual" },
+    expected: 405,
+    label: "donationHealth read-only method boundary",
+  });
   return { checked };
 }
 

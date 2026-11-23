@@ -53,6 +53,8 @@ export interface DonateCtaResult {
   readonly retryable: boolean;
 }
 
+export const DONATE_ALTERNATE_LABEL = "Contact NJ PBS to give another way";
+
 /**
  * Shown when the donation form is down with a transient failure (timeout, 429, or a
  * generic upstream error). Names the situation honestly, keeps a CCM-controlled way
@@ -60,7 +62,7 @@ export interface DonateCtaResult {
  * transient failure. A 403 lapse uses {@link DONATE_LAPSED_NOTICE} instead.
  */
 export const DONATE_UNAVAILABLE_NOTICE =
-  "Online donations through PBS are temporarily unavailable, so a gift can't be completed here right now. Contact NJ PBS to give another way, or try again shortly.";
+  `Online donations through PBS are temporarily unavailable, so a gift can't be completed here right now. ${DONATE_ALTERNATE_LABEL}, or try again shortly.`;
 
 /**
  * Shown for a 403 from the donation endpoint. A forbidden is a service-side rejection,
@@ -70,7 +72,7 @@ export const DONATE_UNAVAILABLE_NOTICE =
  * is being restored, staying honest without the futile retry.
  */
 export const DONATE_LAPSED_NOTICE =
-  "Online donations through PBS are temporarily unavailable, so a gift can't be completed here right now. Contact NJ PBS to give another way while online donations are restored.";
+  `Online donations through PBS are temporarily unavailable, so a gift can't be completed here right now. ${DONATE_ALTERNATE_LABEL} while online donations are restored.`;
 
 /**
  * The honest unavailable notice for an outage, chosen by whether it was a transient

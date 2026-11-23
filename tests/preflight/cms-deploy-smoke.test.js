@@ -72,6 +72,7 @@ const EXPECTED_PROBES = [
   ...probeTargets(BASE_URL, "OPTIONS", [
     "deactivateStaff", "submitStaffAccessRequest", "cmsUploadMedia", "cmsSubmitBugReport",
   ]),
+  `HEAD ${FUNCTIONS_ORIGIN}/donationHealth`,
   `GET ${ADMIN_ORIGIN}`,
 ];
 
@@ -81,7 +82,7 @@ function expectedResponseFor(url, init = {}) {
     return { status: 200, headers: new Headers() };
   }
   if (parsedUrl.origin === FUNCTIONS_ORIGIN) {
-    return { status: 403, headers: new Headers() };
+    return { status: parsedUrl.pathname === "/donationHealth" ? 405 : 403, headers: new Headers() };
   }
   const endpoint = parsedUrl.pathname.slice(1);
   if (endpoint === "health") return { status: 200, headers: new Headers() };

@@ -28,7 +28,18 @@ const replies = pageIds.map((pageId, index) => {
     ...(pageId === "home" ? { homeRefreshRevision: 1 } : {}) },
   ...(pageId === "home" ? { needsBaseline: true, homeRefresh: { schemaVersion: 1, revision: 1, status: "pending" } } : {}) };
 });
-const bundle = await build({ entryPoints: [fileURLToPath(new URL("../../workers/src/dev-public-worker.ts", import.meta.url))],
+const bundle = await build({ stdin: { resolveDir: repo, contents: `
+  import publicWorker from "./workers/src/dev-public-worker.ts";
+  export default { async fetch(request, env, ctx) {
+    const pending = [];
+    const response = await publicWorker.fetch(request, env, { waitUntil(task) {
+      pending.push(task);
+      ctx.waitUntil(task);
+    } });
+    await Promise.allSettled(pending);
+    return response;
+  } };
+` },
   absWorkingDir: repo, bundle: true, write: false, platform: "browser", format: "esm",
   plugins: [{ name: "isolated-dev-page-graph", setup(build) {
     build.onResolve({ filter: /\.public-post-renderer\/server\/entry\.mjs$/ }, () => ({
@@ -87,7 +98,10 @@ const runtime = new Miniflare({ workers: [
           : path === '/_home-sources.json' ? JSON.stringify(sources) : "Static unowned Page fixture",
         {headers:{'content-type':'application/json'}});
       } } } },
-    dev: { outboundService: { type: "fetcher", handler: () => new WorkerResponse(null, { status: 502 }) } } },
+    dev: { outboundService: { type: "fetcher", handler: (request: Request) =>
+      new URL(request.url).pathname === "/donationHealth"
+        ? WorkerResponse.json({ status: "forbidden" })
+        : new WorkerResponse(null, { status: 502 }) } } },
   { config: { name: "authority", type: "worker", compatibilityDate: "2026-07-09",
     manifest: { mainModule: "index.js", modules: { "index.js": { type: "esm", contents: authority } } } } },
 ] });
@@ -108,6 +122,10 @@ try {
       } else if (path === reply.receipt.path) {
         assert.match(text, /<!doctype html>/i);
         assert.match(text, /<\/html>/i);
+        if (path === "/give/") {
+          assert.doesNotMatch(text, /href="https:\/\/www\.pbs\.org\/donation\//);
+          assert.match(text, /<a href="\/contact\/">Contact NJ PBS to give another way<\/a> while online donations are restored/);
+        }
       } else assert.equal(response.headers.get('location'), reply.receipt.path);
     }
   }
