@@ -2,11 +2,15 @@ import { repositoryFixture } from "../../tests/helpers/repository-identity.mjs";
 Object.assign(process.env, repositoryFixture);
 import "@testing-library/jest-dom/vitest";
 import { configure } from "@testing-library/react";
-import { afterAll, vi } from "vitest";
+import { afterAll, beforeEach, vi } from "vitest";
 
 // findBy and waitFor give up after 1 s by default. On a shared CI host a heavy
 // editor render can take longer, so allow 5 s before reporting a missing element.
 configure({ asyncUtilTimeout: 5_000 });
+
+// Each test opens a fresh browser store. Remounts within a test still share it, including
+// drafts written when the previous editor unmounted.
+beforeEach(() => localStorage.clear());
 
 // jsdom has no layout and omits Range geometry used by ProseMirror's selection
 // scrolling. Browser tests verify actual geometry; component tests need the API.

@@ -305,7 +305,7 @@ function mockMissingContent() {
   });
 }
 
-afterEach(() => { cleanup(); localStorage.clear(); vi.unstubAllEnvs(); });
+afterEach(() => { cleanup(); vi.unstubAllEnvs(); });
 
 describe("ContentTab", () => {
   beforeEach(() => {
@@ -3315,6 +3315,18 @@ describe("ContentTab page version echo (#530, #563)", () => {
     );
   }
 
+  async function openPageHeading() {
+    const inline = screen.queryByRole("textbox", { name: "Heading" });
+    if (inline) return inline;
+    fireEvent.click(await screen.findByRole("button", { name: /^Edit heading / }));
+    return openComponentEditor().getByRole("textbox", { name: "Heading" });
+  }
+
+  function finishPageHeading() {
+    const dialog = screen.queryAllByRole("dialog").find(element => element.classList.contains("component-editor-dialog"));
+    if (dialog) fireEvent.click(within(dialog).getByRole("button", { name: "Done" }));
+  }
+
   it("claims the version it read the page at", async () => {
     // The version has to come from the same response the blocks did, or the claim describes
     // content the person was never shown.
@@ -3330,7 +3342,7 @@ describe("ContentTab page version echo (#530, #563)", () => {
       surface={{ kind: "page", pageId: "home", section: "home" }} /></MemoryRouter>;
     storedPage({ version: 3 });
     const first = render(workspace());
-    const heading = await screen.findByDisplayValue("Existing headline");
+    const heading = await openPageHeading();
     fireEvent(window, new Event("offline"));
     fireEvent.change(heading, { target: { value: "Draft written offline" } });
     const snapshotKey = editorWorkRecoveryKey(editor.id!, "cmsPages:home");
@@ -3350,7 +3362,8 @@ describe("ContentTab page version echo (#530, #563)", () => {
     fireEvent(window, new Event("online"));
     await waitFor(() => expect(restore).toBeEnabled());
     fireEvent.click(restore);
-    expect(await screen.findByDisplayValue("Draft written offline")).toBeVisible();
+    expect(await openPageHeading()).toHaveValue("Draft written offline");
+    finishPageHeading();
 
     const savedBlocks = [{ ...storedHeadline, data: { ...storedHeadline.data, text: "Draft written offline" } }];
     savedPage({ version: 4, blocks: savedBlocks });
@@ -3377,19 +3390,20 @@ describe("ContentTab page version echo (#530, #563)", () => {
       surface={{ kind: "page", pageId: "home", section: "home" }} /></MemoryRouter>;
     storedPage({ version: 3 });
     const first = render(workspace());
-    fireEvent.change(await screen.findByDisplayValue("Existing headline"), { target: { value: "Uncommitted copy" } });
+    fireEvent.change(await openPageHeading(), { target: { value: "Uncommitted copy" } });
     first.unmount();
 
     storedPage({ version: 4 });
     functionsMocks.cmsSaveContent.mockRejectedValueOnce(new HttpError(409, "This document changed since you opened it."));
     render(workspace());
     fireEvent.click(await screen.findByRole("button", { name: "Restore unsaved changes" }));
-    await screen.findByDisplayValue("Uncommitted copy");
+    expect(await openPageHeading()).toHaveValue("Uncommitted copy");
+    finishPageHeading();
     fireEvent.click(screen.getByRole("button", { name: "Save page" }));
     await screen.findByText(/Someone else saved this page/);
     expect(functionsMocks.cmsSaveContent).toHaveBeenCalledTimes(1);
     expect(functionsMocks.cmsSaveContent.mock.calls[0]![1].baseVersion).toBe(3);
-    expect(screen.getByDisplayValue("Uncommitted copy")).toBeVisible();
+    expect(await openPageHeading()).toHaveValue("Uncommitted copy");
   });
 
   it.each(["blocks", "metadata"] as const)("reviews the current Page before resubmitting local %s at its exact version", async panel => {
