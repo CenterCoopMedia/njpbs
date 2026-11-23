@@ -817,7 +817,6 @@ if(process.env.CMS_BUG_REPORT_TELEGRAM_ADMIN_MAP)process.exit(8); require("node:
     expect(smoke).toBeGreaterThan(firebaseDeploy);
     expect(workflow).toContain("node scripts/component-runner.mjs functions smoke");
     expect(workflow).not.toContain('if [ "$DEPLOY_SHA" != "$GATE_SHA" ]');
-    expect(workflow).toContain("Boardwalk account alerts require a configured private recipient");
     expect(workflow).toContain(
       "VITE_FUNCTIONS_BASE_URL: ${{ vars.VITE_FUNCTIONS_BASE_URL || secrets.VITE_FUNCTIONS_BASE_URL }}",
     );
@@ -837,13 +836,19 @@ if(process.env.CMS_BUG_REPORT_TELEGRAM_ADMIN_MAP)process.exit(8); require("node:
     expect(workflow).toContain(
       "CMS_PREVIEW_TRANSPORT must be serializer",
     );
-    expect(workflow).toContain("Verify the report relay");
-    expect(workflow).toContain("getMe");
-    expect(workflow).toContain("getWebhookInfo");
-    expect(workflow).toContain("CMS_BUG_REPORT_TELEGRAM_BOT_ID");
-    expect(workflow).toContain("CMS_BUG_REPORT_TELEGRAM_BOT_USERNAME");
-    expect(workflow).not.toContain("/setWebhook");
-    expect(workflow).not.toContain("/deleteWebhook");
+    // A Telegram outage must not stop a CMS deploy (#537): the relay check runs
+    // in its own workflow, and the deploy makes no call to Telegram.
+    expect(workflow).not.toContain("api.telegram.org");
+    expect(workflow).not.toContain("report-relay.mjs");
+    const relayCheck = parse(readFileSync(join(REPO_ROOT, ".github/workflows/report-relay-check.yml"), "utf8"));
+    const relayStep = relayCheck.jobs.verify.steps.find(step => step.name === "Verify the report relay");
+    expect(relayStep.run).toBe("node .github/scripts/report-relay.mjs");
+    expect(relayStep.env.CMS_BUG_REPORT_TELEGRAM_BOT_ID).toBe("${{ vars.CMS_BUG_REPORT_TELEGRAM_BOT_ID }}");
+    expect(relayStep.env.CMS_BUG_REPORT_TELEGRAM_BOT_USERNAME).toBe("${{ vars.CMS_BUG_REPORT_TELEGRAM_BOT_USERNAME }}");
+    const relayScript = readFileSync(join(REPO_ROOT, ".github/scripts/report-relay.mjs"), "utf8");
+    expect(relayScript).not.toContain("/setWebhook");
+    expect(relayScript).not.toContain("/deleteWebhook");
+    expect(relayScript).toContain("Boardwalk account alerts require a configured private recipient");
     expect(workflow).toContain(
       "CMS_PREVIEW_SERIALIZER_READY must be true for the serializer preview transport",
     );
@@ -876,7 +881,7 @@ if(process.env.CMS_BUG_REPORT_TELEGRAM_ADMIN_MAP)process.exit(8); require("node:
     expect(plan).toContain("--configuration-fingerprint-file");
     expect(plan).toContain("CMS_EDGE_ORIGIN_SECRET_FINGERPRINT: ${{ needs.firebase-preflight.outputs.edge_origin_secret_fingerprint }}");
     const functionsPlan = workflow.slice(workflow.indexOf("- name: Plan Functions and renderer release"),
-      workflow.indexOf("- name: Verify the report relay", workflow.indexOf("- name: Plan Functions and renderer release")));
+      workflow.indexOf("- name: Clean up deploy preflight files", workflow.indexOf("- name: Plan Functions and renderer release")));
     expect(functionsPlan).toContain("CMS_EDGE_ORIGIN_SECRET: ${{ secrets.CMS_EDGE_ORIGIN_SECRET }}");
     expect(workflow).toContain("edge_origin_secret_fingerprint: ${{ steps.release_plan.outputs.edge_origin_secret_fingerprint }}");
     expect(workflow).toContain("functions_configuration_fingerprint: ${{ steps.release_plan.outputs.functions_configuration_fingerprint }}");

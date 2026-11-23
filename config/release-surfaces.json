@@ -18,6 +18,7 @@
     ".github/workflows/publisher-image.yml",
     ".github/workflows/recovered-service-source.yml",
     ".github/workflows/recovered-services-deploy.yml.disabled",
+    ".github/workflows/report-relay-check.yml",
     ".github/workflows/schedule-bake.yml"
   ],
   "wrangler": [
