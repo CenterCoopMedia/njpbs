@@ -13,6 +13,22 @@
   min-width: 0;
 }
 
+.video-upload-results {
+  min-width: 0;
+}
+
+.video-upload-results > summary {
+  padding-block: var(--cms-space-2);
+  min-block-size: var(--cms-control-height);
+  cursor: pointer;
+  font-weight: 700;
+}
+
+.video-upload-results-list {
+  max-block-size: min(24rem, 50dvh);
+  overflow: auto;
+}
+
 .media-workspace-upload {
   display: flex;
   flex: none;

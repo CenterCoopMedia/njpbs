@@ -19,6 +19,7 @@ export interface UploadTrayRow {
   /** Percentage from 0 through 100. Omit for indeterminate progress. */
   progress?: number;
   message?: string;
+  announceMessage?: boolean;
   onStop?: () => void;
   stopDisabled?: boolean;
   onPause?: () => void;
@@ -104,7 +105,9 @@ function UploadTrayRowView({
           value={progress}
         />
       ) : null}
-      {row.message ? <p>{row.message}</p> : null}
+      {row.message ? <p role={row.announceMessage ? "status" : undefined}>
+        {row.announceMessage ? <span className="sr-only">{row.name}. </span> : null}{row.message}
+      </p> : null}
       {row.onStop || row.onPause || row.onResume || row.onRetry || row.onCancel || row.onClear || row.onViewAsset ? (
         <div className="media-upload-tray-actions">
           {row.onStop ? <Button aria-label={`Stop ${row.name}`} disabled={row.stopDisabled} onClick={() => run(row.onStop!)}>Stop</Button> : null}
