@@ -5,6 +5,7 @@ const { enqueueVideoSearchShard } = require("./video-search-outbox");
 const { createHash, randomUUID } = require("node:crypto");
 const { processingChanges, requesterName } = require("./video-processing-status");
 const { parseNewAttempt } = require("./video-transcript-attempt");
+const { validTranscriptionId } = require("./video-transcript-elevenlabs");
 const PROVIDER = "elevenlabs";
 const MODEL = "scribe_v2";
 const ADAPTER_REVISION = "elevenlabs-transcript-v1";
@@ -209,6 +210,35 @@ async function attachSpool({ firestore, claim, receipt, now = Date.now() }) {
     return true;
   });
 }
+function completedResponse(job) {
+  const response = job?.completedResponse;
+  if (job?.budgetReservation?.state !== "consumed" || !job.attemptId || !response ||
+      response.attemptId !== job.attemptId || !validTranscriptionId(response.transcriptionId) ||
+      typeof response.inputSha256 !== "string" || !HEX.test(response.inputSha256)) return null;
+  return { attemptId: response.attemptId, transcriptionId: response.transcriptionId, inputSha256: response.inputSha256 };
+}
+async function recordCompletedResponse({ firestore, claim, response, now = Date.now() }) {
+  const { transcriptionId, inputSha256 } = response;
+  if (!validTranscriptionId(transcriptionId) || typeof inputSha256 !== "string" || !HEX.test(inputSha256)) {
+    throw problem("byok_completed_response_invalid");
+  }
+  const ref = refFor(firestore, claim.id);
+  return firestore.runTransaction(async tx => {
+    const job = (await tx.get(ref)).data();
+    validJob(job, claim.id);
+    if (!owns(job, claim, now) || !job.submissionIntentAt || job.phase !== "running" ||
+        job.budgetReservation?.state !== "consumed") return false;
+    if (job.completedResponse !== undefined) {
+      const existing = completedResponse(job);
+      if (existing?.transcriptionId !== transcriptionId || existing?.inputSha256 !== inputSha256) {
+        throw problem("byok_completed_response_changed");
+      }
+      return true;
+    }
+    tx.update(ref, { completedResponse: { attemptId: job.attemptId, transcriptionId, inputSha256 } });
+    return true;
+  });
+}
 function owns(job, claim, now) {
   return job.active && job.leaseOwner === claim.leaseOwner && job.attemptId === claim.attemptId && job.leaseUntil > now;
 }
@@ -249,4 +279,4 @@ async function finishJob({ firestore, claim, result, validateCurrent, now = Date
     return true;
   });
 }
-module.exports = { PROVIDER, MODEL, ADAPTER_REVISION, AUDIO_ADAPTER_REVISION, MAX_INPUT_BYTES, MIN_DURATION_SECONDS, MAX_DURATION_SECONDS, COLLECTION, LEASE_MS, INTENT_LEASE_MS, variantId, createJob, validJob, deferPreparation, waitForAudio, claimRecovery, attachSpool, cancelBeforeIntent, requestJob, claimJob, recordIntent, finishJob };
+module.exports = { PROVIDER, MODEL, ADAPTER_REVISION, AUDIO_ADAPTER_REVISION, MAX_INPUT_BYTES, MIN_DURATION_SECONDS, MAX_DURATION_SECONDS, COLLECTION, LEASE_MS, INTENT_LEASE_MS, variantId, createJob, validJob, deferPreparation, waitForAudio, claimRecovery, attachSpool, cancelBeforeIntent, requestJob, claimJob, recordIntent, completedResponse, recordCompletedResponse, finishJob };
