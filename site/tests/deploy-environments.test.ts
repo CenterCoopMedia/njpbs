@@ -97,11 +97,13 @@ describe("deploy credential environments", () => {
     const definition = workflow("promote");
     expect(definition.on.workflow_dispatch.inputs.target.options).toEqual(["production", "development"]);
     expect(definition.on.workflow_dispatch.inputs.target.default).toBe("production");
-    const production = definition.jobs.promote;
-    const development = definition.jobs["promote-development"];
+    type Step = { uses?: string; run?: string; with?: unknown };
+    type Job = { if: string; steps: Step[] };
+    const production: Job = definition.jobs.promote;
+    const development: Job & { environment: string; permissions?: unknown } = definition.jobs["promote-development"];
     expect(development.environment).toBe("development");
     assertConfiguredAdmission(development, "promote", { target: "development" });
-    const admits = (job: any, target?: string) => runInNewContext(job.if, {
+    const admits = (job: Job, target?: string) => runInNewContext(job.if, {
       github: { event_name: "workflow_dispatch", ref: "refs/heads/main", repository_id: "1",
         workflow_ref: "o/r/.github/workflows/promote.yml@refs/heads/main", triggering_actor: "a" },
       vars: { CANONICAL_GITHUB_REPOSITORY: "o/r", CANONICAL_GITHUB_REPOSITORY_ID: "1", CMS_DEPLOY_OWNER: "a" },
@@ -112,12 +114,12 @@ describe("deploy credential environments", () => {
     expect([admits(production, "production"), admits(development, "production")]).toEqual([true, false]);
     expect([admits(production, "development"), admits(development, "development")]).toEqual([false, true]);
     expect(development.permissions).toBeUndefined();
-    const step = (job: any, prefix: string) => job.steps.find((s: any) => s.uses?.startsWith(prefix));
+    const step = (job: Job, prefix: string) => job.steps.find(s => s.uses?.startsWith(prefix));
     expect(step(development, "actions/create-github-app-token@")?.with).toEqual(step(production, "actions/create-github-app-token@")?.with);
     const push = development.steps[development.steps.length - 1];
     expect(push.run).toBe('git push origin "$SELECTED_SHA:refs/heads/development"');
     expect(JSON.stringify(development)).not.toContain("production");
-    for (const s of development.steps.filter((s: any) => s.uses)) expect(s.uses).toMatch(/@[a-f0-9]{40}$/);
+    for (const s of development.steps.filter(s => s.uses)) expect(s.uses).toMatch(/@[a-f0-9]{40}$/);
   });
 
   it("restricts the isolated dev staff gateway to explicit main-only development dispatches", () => {
