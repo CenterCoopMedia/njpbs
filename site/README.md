@@ -88,6 +88,12 @@ blocks. The Pagefind index drives keyword, topic and publication-year searches
 at `/search/spotlight-archive/`. The archive stays out of the latest Posts,
 homepage selections and released-content feeds.
 
+When the archive export supplies `postDateUtc`, the approved snapshot can carry
+it as `archivePublishedAt`. Boardwalk preserves it on later publishes and uses
+it for `article:published_time` and `NewsArticle.datePublished`. The byline still
+shows the original local day. If the source UTC time is absent, JSON-LD uses that
+day and the page omits `article:published_time`.
+
 ### Archive route comparison
 
 Use `compare:archive` from `site/` with two anonymously readable origins and

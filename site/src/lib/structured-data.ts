@@ -57,11 +57,9 @@ export function organizationJsonLd(site: string | URL): JsonLd {
  * A published Post. `NewsArticle` rather than the looser `Article` because that
  * is what this station publishes and what news surfaces read.
  *
- * Every value is a fact the page itself already states. `datePublished` is the
- * editorial display date resolved through the dates contract, never the instant
- * this particular revision was rebuilt; `dateModified` appears only when the
- * newsroom decided to show an update, so the structured data cannot contradict
- * the visible byline. Authors use the same ordered credits and resolved public
+ * `datePublished` uses the editorial display date or the original UTC time for
+ * an archive story. `dateModified` appears when the newsroom decides to show an
+ * update. Authors use the same ordered credits and resolved public
  * names as the page. A registered credit with a public profile gains a `url`;
  * a custom credit has only a name, because "NJ PBS staff" has no profile page.
  */

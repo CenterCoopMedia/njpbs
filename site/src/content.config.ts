@@ -192,6 +192,7 @@ const cmsPosts = defineCollection({
     title: z.string(),
     spotlightNews: z.boolean().default(false),
     spotlightArchive: z.literal(true).optional(),
+    archivePublishedAt: z.string().optional(),
     coverageLabelId: z.string().regex(/^[a-z0-9][a-z0-9-]{0,63}$/).optional(),
     showInHomeHero: z.boolean().optional(),
     disableStoryCtas: z.boolean().optional(),

@@ -9,6 +9,7 @@ import { isPostSidebar, type PostSidebar } from "../../../packages/content-core/
 import { heroBackgroundMetadata } from "../../../packages/content-core/src/hero-background.ts";
 import { publicLiveBlogData, previewLiveBlogData, type LiveBlogData } from "../../../packages/content-core/src/live-blog.ts";
 import { isCmsImageUrl } from "../../../packages/content-core/src/media-origin.ts";
+import { parsePublishInstant } from "../../../packages/content-core/src/publish-instant.ts";
 // The public Post loader: Firestore `cmsPosts` published snapshots -> /posts/{slug}/.
 //
 // This mirrors `cms-loader.ts` deliberately rather than sharing its body. The two
@@ -105,6 +106,7 @@ export interface CmsPostBuildData extends ContentLinkMetadata {
   /** Absent on older artifacts; reader-facing attribution is opt-in. */
   spotlightNews?: boolean;
   spotlightArchive?: true;
+  archivePublishedAt?: string;
   coverageLabelId?: string;
   showInHomeHero?: boolean;
   disableStoryCtas?: boolean;
@@ -467,6 +469,11 @@ export function projectCmsPost(
     throw new Error(`post ${doc.id} archive snapshot requires its original publication day`);
   }
   const spotlightArchive = metadata.spotlightArchive === true;
+  const archivePublishedAt = metadata.archivePublishedAt;
+  if (archivePublishedAt !== undefined && (!spotlightArchive ||
+      typeof archivePublishedAt !== "string" || parsePublishInstant(archivePublishedAt) === null)) {
+    throw new Error(`post ${doc.id} archive snapshot requires a valid original UTC publication time`);
+  }
   const update = resolveUpdateDisplay(dates);
 
   const available = options.assets ?? new Map();
@@ -528,6 +535,7 @@ export function projectCmsPost(
     title: metadata.title,
     spotlightNews: spotlightArchive || metadata.spotlightNews === true,
     ...(spotlightArchive ? { spotlightArchive: true } : {}),
+    ...(archivePublishedAt === undefined ? {} : { archivePublishedAt }),
     ...(postCoverageLabelId(metadata) ? { coverageLabelId: postCoverageLabelId(metadata) } : {}),
     ...(metadata.showInHomeHero === undefined ? {} : { showInHomeHero: metadata.showInHomeHero }),
     ...(metadata.disableStoryCtas === undefined ? {} : { disableStoryCtas: metadata.disableStoryCtas }),

@@ -350,7 +350,7 @@ function createPublishedSnapshot({
   const metadata = selectFields(document, metadataFieldsFor(collection, kind));
   if (kind === "post") {
     // Archive admission is server-managed. A later working edit cannot turn an
-    // approved historical story into current news or change its original date.
+    // approved historical story into current news or change its original dates.
     const prior = document.published?.metadata;
     delete metadata.spotlightArchive;
     if (prior?.spotlightArchive === true) {
@@ -358,6 +358,12 @@ function createPublishedSnapshot({
       metadata.spotlightArchive = true;
       metadata.date = prior.date;
       metadata.editorialDateSource = "backdated";
+      if (prior.archivePublishedAt !== undefined) {
+        if (parsePublishInstant(prior.archivePublishedAt) === null) {
+          throw new PublishSnapshotError("Archive Post needs a valid original UTC publication time");
+        }
+        metadata.archivePublishedAt = prior.archivePublishedAt;
+      }
     }
   }
 

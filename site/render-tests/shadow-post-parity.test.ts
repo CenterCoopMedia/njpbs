@@ -9,7 +9,7 @@ import { prose as fixture, video as videoFixture, videoUrl, spotlight, spotlight
 import { catalogFixtures, catalogReads } from "../tests/fixtures/shadow-posts/block-catalog";
 import { postLeadFixture } from "../tests/fixtures/post-lead-media";
 import { projectPublishedPostRead } from "../src/lib/published-post-shadow";
-import { comparePostHtml, postHtmlSemantics } from "../src/lib/post-html-comparison";
+import { archiveHtmlMetadata, comparePostHtml, postHtmlSemantics } from "../src/lib/post-html-comparison";
 import { createFakePublishedPostReader } from "../src/lib/published-post-shadow";
 import { createShadowPostWorker } from "../../workers/src/shadow-post-worker";
 
@@ -36,6 +36,25 @@ describe("compiled shadow uses the static Post output", () => {
         const html = readFileSync(resolve(`.shadow-static-fixtures${path}index.html`), "utf8");
         const shadowHtml = await compiled.renderPublishedPost(renderFixture(read));
         expect(comparePostHtml(html, shadowHtml)).toEqual([]);
+        const metadata = archiveHtmlMetadata(shadowHtml);
+        if (read === spotlightArchivePost) {
+          expect(metadata).toMatchObject({
+            title: "Archive transit coverage — NJ PBS",
+            canonical: ["https://njpbs.org/posts/archived-transit/"],
+            description: ["Original reporting on rail service."],
+            publishedTime: ["2012-03-01T02:30:00Z"],
+            articleTimes: ["2012-02-29"],
+          });
+          expect(metadata.structuredData).toContainEqual(expect.objectContaining({
+            "@type": "NewsArticle", headline: "Historical transit reporting",
+            description: "Original reporting on rail service.",
+            url: "https://njpbs.org/posts/archived-transit/",
+            datePublished: "2012-03-01T02:30:00Z",
+          }));
+        } else {
+          expect(metadata.publishedTime).toEqual([]);
+          expect(metadata.structuredData).not.toContainEqual(expect.objectContaining({ "@type": "NewsArticle" }));
+        }
         await index.addHTMLFile({ url: path, content: html });
       }
       const output = await index.getFiles();
@@ -55,6 +74,19 @@ describe("compiled shadow uses the static Post output", () => {
       await index.deleteIndex();
       await pagefind.close();
     }
+  });
+
+  it("uses the original editorial day for an archive story without a source UTC time", async () => {
+    const read = structuredClone(spotlightArchivePost);
+    const { archivePublishedAt: _, ...metadata } = read.document.published.metadata;
+    const html = await compiled.renderPublishedPost(renderFixture({
+      ...read, document: { ...read.document, published: { ...read.document.published, metadata } },
+    }));
+    const observed = archiveHtmlMetadata(html);
+    expect(observed.publishedTime).toEqual([]);
+    expect(observed.structuredData).toContainEqual(expect.objectContaining({
+      "@type": "NewsArticle", datePublished: "2012-02-29",
+    }));
   });
 
   it("keeps the legacy guide and renders ordered, visible sections from the snapshot", async () => {

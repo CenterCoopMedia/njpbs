@@ -59,7 +59,7 @@ const baseArticleJsonLd =
         title: post.title,
         description: post.seo?.description ?? post.summary,
         canonicalPath,
-        datePublished: post.displayDate,
+        datePublished: post.archivePublishedAt ?? post.displayDate,
         dateModified: post.updateShown ? post.updatedDate : null,
         imageUrl: post.heroImage?.url ?? null,
         credits,
@@ -68,7 +68,7 @@ const baseArticleJsonLd =
 const articleJsonLd = baseArticleJsonLd && post?.liveBlog && post.liveBlog.coverageState !== "ended" ? {
   ...baseArticleJsonLd,
   ...liveBlogPostingJsonLd({ postId: post.postId, title: post.title, canonicalPath,
-    datePublished: post.displayDate, liveBlog: post.liveBlog, site: Astro.site! }),
+    datePublished: post.archivePublishedAt ?? post.displayDate, liveBlog: post.liveBlog, site: Astro.site! }),
 } : baseArticleJsonLd;
 ---
 
@@ -85,6 +85,7 @@ const articleJsonLd = baseArticleJsonLd && post?.liveBlog && post.liveBlog.cover
     socialDescription={post.social?.description}
     socialImage={socialImage?.url}
     socialImageAlt={socialImage?.alt}
+    articlePublishedTime={baseArticleJsonLd ? post.archivePublishedAt : undefined}
     preview={false}
     canonicalPath={canonicalPath}
     language={language}
