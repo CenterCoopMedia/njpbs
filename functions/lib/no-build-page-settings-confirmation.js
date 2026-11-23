@@ -287,10 +287,6 @@ async function provePageConsumers({ firestore, operationId, queue, identity, tar
     } catch { return { confirmed: false, missingPosts: postCoverage.missingPosts }; }
   }
   if (postCoverage.missingPosts.length) return { confirmed: false, missingPosts: postCoverage.missingPosts };
-  // A prior-slug redirect has no settings frame. Check canonical Post details
-  // before the Page proof so a large catalog can give the next wake a prefix.
-  const posts = await readPostSettingsProof({ coverage: postCoverage, target, headers, fetchPublic, now, deadline, proof });
-  if (!posts.ready) return { confirmed: false, continuingPosts: posts.advanced };
   // Actual CODE and packet IO finish before coverage or the write transaction.
   let scheduleCapture;
   try {
@@ -323,7 +319,7 @@ async function provePageConsumers({ firestore, operationId, queue, identity, tar
   // Keep probing other owners, but never acknowledge a partial family. Failures
   // expose only bounded owner IDs, with no response bodies, URLs or errors.
   const failures = [];
-  let results;
+  let results, posts;
   try {
     results = await readSettingsProofs(proofs, (proof, signal) => proof.read(signal), {
       deadline, now, onFailure(proof, error) {
@@ -331,11 +327,15 @@ async function provePageConsumers({ firestore, operationId, queue, identity, tar
         return { kind: "missing" };
       },
     });
+    // A prior-slug redirect has no settings frame. Check canonical Post details
+    // after Pages so a Post refusal can still report any earlier Page failures.
+    posts = await readPostSettingsProof({ coverage: postCoverage, target, headers, fetchPublic, now, deadline, proof });
   } catch (error) {
     if (failures.length) unavailablePageConsumers(failures, log);
     throw error;
   }
   if (failures.length) return unavailablePageConsumers(failures, log);
+  if (!posts.ready) return { confirmed: false, continuingPosts: posts.advanced };
   const receipts = results.filter(result => result.kind === "page");
   const contextReceipts = results.filter(result => result.kind === "context").map(result => result.receipt);
   const { readSettingsPublication } = require("./settings-publication");
