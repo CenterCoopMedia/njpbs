@@ -91,7 +91,7 @@ the new findings. Lint errors match by file, rule and message. Type errors
 match by position, because a type message quotes the callee's signature and
 changes when another file changes: an error on an unchanged line matches the
 same rule at the same base line and column, and an error inside a changed hunk
-matches the same rule and flagged text in that hunk. Both track detected
+matches the same rule, flagged text and message in that hunk. Both track detected
 renames.
 Test files are linted and excluded from size counts. Main pushes record the
 current baseline in the **Code health** workflow.

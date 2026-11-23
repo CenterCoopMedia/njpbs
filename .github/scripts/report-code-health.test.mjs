@@ -21,22 +21,24 @@ test("reports only added lint errors and type errors", () => {
     ] }],
   ]);
   const moved = { ...lint, file: "admin/src/new.ts", line: 20 };
-  const extraLint = { ...moved, line: 30, message: "replaced name" };
+  const extraLint = { ...moved, line: 30 };
+  const replacedLint = { ...moved, line: 40, message: "replaced name" };
   const sameName = { ...kept, line: 8, column: 6 };
   const head = {
     lint: [
-      moved, extraLint, { ...lint, severity: 1, rule: "complexity" },
+      moved, extraLint, replacedLint, { ...lint, severity: 1, rule: "complexity" },
       { ...lint, rule: "max-lines-per-function", message: "Function 'f' has too many lines (201)." },
     ],
     types: { findings: [
       sameName, { ...kept, line: 8, message: "changed signature" },
-      { ...edited, line: 12, column: 9 }, { ...edited, line: 4, column: 1 },
+      { ...edited, line: 12, column: 20, message: "other argument" }, { ...edited, line: 12, column: 9 },
+      { ...edited, line: 4, column: 1 },
     ] },
   };
 
   assert.deepEqual(compare(base, head, changes), {
-    lint: [extraLint],
-    types: [sameName, { ...edited, line: 4, column: 1 }],
+    lint: [extraLint, replacedLint],
+    types: [sameName, { ...edited, line: 12, column: 20, message: "other argument" }, { ...edited, line: 4, column: 1 }],
   });
   assert.deepEqual(compare(base, base), { lint: [], types: [] });
 });
