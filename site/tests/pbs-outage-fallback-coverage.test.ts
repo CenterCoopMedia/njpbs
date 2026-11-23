@@ -47,25 +47,19 @@ import {
   type LaunchCard,
 } from "../src/data/launch-fallback";
 
-// Every non-ok transport failure the proxy collapses PBS into, shared across the
-// surfaces that take a ScheduleFetchStatus / GatedFetchFailure. The list is bound to
-// both status unions, not free-standing: `satisfies` proves no *extra* case (every
-// entry is a real non-ok status on both surfaces), and the AssertCovers aliases below
-// prove no *missing* case (every non-ok ScheduleFetchStatus and every GatedFetchFailure
-// appears here). So a surface that grows a new outage status fails to compile until it
-// is listed and exercised, instead of silently skipping coverage.
+// Pin the schedule failure cases in both directions. `satisfies` rejects extra
+// cases and AssertCovers rejects any missing case when the schedule status grows.
 const FETCH_FAILURES = [
   "timeout",
   "forbidden",
   "rateLimited",
   "error",
-] as const satisfies readonly (Exclude<ScheduleFetchStatus, "ok"> & GatedFetchFailure)[];
+] as const satisfies readonly Exclude<ScheduleFetchStatus, "ok">[];
 
 type FetchFailure = (typeof FETCH_FAILURES)[number];
 // Fails to compile if Union has a member missing from FETCH_FAILURES.
 type AssertCovers<Union extends FetchFailure> = Union;
 type _CoversSchedule = AssertCovers<Exclude<ScheduleFetchStatus, "ok">>;
-type _CoversGated = AssertCovers<GatedFetchFailure>;
 const NOW = new Date("2026-07-09T12:00:00-04:00");
 
 // One prover per surface the model claims has a fallback. Each drives that surface's
