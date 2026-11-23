@@ -571,7 +571,9 @@ describe('isolated published-content seed', () => {
     const next = await exportSeed({ publication: live, context });
     // A row that no longer matches its seed receipt has no known kind, so it is never removed.
     await dev.doc('cmsPosts/sponsor-1').update({ type: 'post' });
-    expect(await refresh({ firestore: dev, manifest: next })).toMatchObject({ deleted: 0, removed: [] });
+    expect(await refresh({ firestore: dev, manifest: next })).toMatchObject({ deleted: 0, removed: [], unresolved: ['cmsPosts/sponsor-1'] });
+    // The kept row is reported, and verify fails until it is resolved.
+    await expect(verifyPublished({ firestore: dev, manifest: next })).rejects.toThrow('Dev keeps 1 edited record(s) the source withdrew (first: cmsPosts/sponsor-1)');
     await dev.doc('cmsPosts/sponsor-1').update({ type: 'sponsor' });
     expect(await refresh({ firestore: dev, manifest: next })).toMatchObject({ deleted: 0, removed: [] });
     expect((await dev.doc('cmsPosts/sponsor-1').get()).data().name).toBe('Released sponsor');

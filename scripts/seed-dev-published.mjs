@@ -589,7 +589,7 @@ function seedHashOf(data) {
 // A configuration-only manifest removes nothing.
 const REMOVABLE = /^(cmsPages|cmsPosts|cmsSettings|cmsAuthorProfilesPublic)\//;
 async function trackedRemovals(transaction, firestore, manifest, records) {
-  if (manifest.configurationOnly) return [];
+  if (manifest.configurationOnly) return { removals: [], unresolved: [] };
   const paths = new Set(records.map(record => record.path));
   const tracked = new Map((await transaction.get(firestore.collection('devSeedRecords'))).docs.map(doc => [doc.data().path, doc.data()]));
   const candidates = [...tracked.keys()].filter(path => typeof path === 'string' && !paths.has(path) && REMOVABLE.test(path));
@@ -597,15 +597,18 @@ async function trackedRemovals(transaction, firestore, manifest, records) {
   // matches the receipt the seed wrote; a seeded card, or a Post whose kind cannot
   // be established that way, is never removed.
   const posts = candidates.filter(path => path.startsWith('cmsPosts/'));
-  const kept = new Set();
+  const kept = new Set(); const unresolved = [];
   for (let offset = 0; offset < posts.length; offset += 100) {
     const snapshots = await transaction.getAll(...posts.slice(offset, offset + 100).map(path => firestore.doc(path)));
     snapshots.forEach(snapshot => {
       const seeded = snapshot.exists && digest(snapshot.data()) === tracked.get(snapshot.ref.path).recordHash;
       if (!seeded || ['sponsor', 'newsletter'].includes(snapshot.data().type)) kept.add(snapshot.ref.path);
+      // A dev-edited row the source withdrew stays, but the refresh has not reconciled it.
+      if (snapshot.exists && !seeded) unresolved.push(snapshot.ref.path);
     });
   }
-  return candidates.filter(path => !kept.has(path)).sort((a, b) => a.localeCompare(b, 'en'));
+  const byPath = (a, b) => a.localeCompare(b, 'en');
+  return { removals: candidates.filter(path => !kept.has(path)).sort(byPath), unresolved: unresolved.sort(byPath) };
 }
 const PUBLIC_RECORD = /^(cmsPosts|cmsPages|cmsSettings|cmsAuthorProfilesPublic|media_assets_public)\//;
 
@@ -724,8 +727,8 @@ export async function importPublished({ firestore, manifest, copy, plan, source 
     return { applied: write, changed: changes.length, unchanged, deleted: removed.length, restored,
       removed: removed.map(({ seen }) => seen), retained, manifestHash: manifest.hash };
   }, write ? {} : { readOnly: true });
-  const removals = await firestore.runTransaction(transaction => trackedRemovals(transaction, firestore, manifest, records), { readOnly: true });
-  const preflight = await run(records, removals, apply, false);
+  const { removals, unresolved } = await firestore.runTransaction(transaction => trackedRemovals(transaction, firestore, manifest, records), { readOnly: true });
+  const preflight = { ...await run(records, removals, apply, false), unresolved };
   if (!apply) return preflight;
   const result = { ...preflight, applied: true, changed: 0, unchanged: 0, deleted: 0, restored: [], removed: [], retained: [] };
   const items = [...records.map(record => ({ record })), ...removals.map(removal => ({ removal }))];
@@ -778,10 +781,11 @@ export async function verifyPublished({ firestore, manifest, source = SOURCE, de
             prior.data().seedHash !== seedHashOf(record.data)) differ.push(record.path);
       });
     }
-    const extra = await trackedRemovals(transaction, firestore, manifest, records);
+    const { removals: extra, unresolved } = await trackedRemovals(transaction, firestore, manifest, records);
     if (differ.length || extra.length) {
       fail(`Dev does not match source snapshot ${manifest.hash}: ${differ.length} differ, ${extra.length} extra (first: ${[...differ, ...extra][0]})`);
     }
+    if (unresolved.length) fail(`Dev keeps ${unresolved.length} edited record(s) the source withdrew (first: ${unresolved[0]})`);
     return { verified: true, manifestHash: manifest.hash, publication: manifest.publication, exportedAt: manifest.exportedAt,
       counts: manifest.counts, documents: records.length };
   }, { readOnly: true });

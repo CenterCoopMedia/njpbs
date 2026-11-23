@@ -365,7 +365,8 @@ The refresh removes only withdrawn public records (Pages, Posts, settings and
 public author profiles). Seeded media, categories, sections, private author rows
 and Sponsor or Newsletter cards stay, because dev-authored records may use them.
 A seeded Post whose row no longer matches its seed receipt has no known kind and
-is never removed. Like
+is never removed; if the source withdrew it, the plan lists it as `unresolved`
+and verify fails until it is resolved. Like
 the publication owners, apply advances the public context (and its withdrawal
 fence for a removal) when it changes public records, and advances the media
 discovery revision, clearing the cached active count, when it changes seeded
