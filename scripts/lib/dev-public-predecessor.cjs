@@ -86,7 +86,10 @@ async function initializeDevPublicPredecessor({ firestore, step, request: raw })
     }
     tx.create(firestore.doc(`${ROOT}/${step}`), receipt(step, request));
     tx.create(firestore.collection("admin_logs").doc(), require("../../functions/lib/audit").adminLogEntry({
-      actorUid: "system:dev-public-predecessor", action: `public-release.dev-initialize-${step}`,
+      actorUid: "system:dev-public-predecessor",
+      action: step === "runtime"
+        ? "public-release.dev-initialize-runtime"
+        : "public-release.dev-initialize-media-lifecycle",
       target: step === "runtime" ? runtime.RUNTIME_DOCUMENT_PATH : "system/publicDeployment",
       before: step === "runtime" ? null : { mediaLifecycleReady: false },
       after: { operationId: request.operationId, requestDigest: p.publicReleaseDigest(request),
