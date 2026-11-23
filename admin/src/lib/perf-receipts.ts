@@ -240,6 +240,7 @@ export function operationCategoryForEndpoint(
     endpoint === "cmsMutateMediaCollection" ||
     endpoint === "cmsSetMediaCollectionItems" ||
     endpoint === "cmsRestoreMedia" ||
+    endpoint === "cmsSourceVideoBin" ||
     endpoint === "cmsPurgeBinnedImage"
   )
     return "media-write";

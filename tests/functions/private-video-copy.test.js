@@ -327,6 +327,37 @@ it("does no copy work in disabled mode and keeps the cleanup query bounded", asy
   expect(queries.at(-1).cap).toBe(20);
 });
 
+it("verifies the original, viewing copy and poster by retained S3 version before a restore", async () => {
+  const { asset } = fixture();
+  const versions = new Map([[asset.objectVersionId, asset.sizeBytes],
+    [asset.rendition.web.objectVersionId, web.length], [asset.rendition.poster.objectVersionId, poster.length]]);
+  const send = vi.fn(async ({ input }) => {
+    if (!versions.has(input.VersionId)) throw Object.assign(Error("Missing"), { name: "NotFound" });
+    return { VersionId: input.VersionId, ContentLength: versions.get(input.VersionId) };
+  });
+  const verify = s3Reader.createS3MediaRestoreCheck(config, { S3ClientCtor: class { send = send; } });
+  await expect(verify(source, asset)).resolves.toBe("available");
+  expect(send.mock.calls.map(([command]) => command.input)).toEqual([
+    { Bucket: source.bucket, ExpectedBucketOwner: source.expectedBucketOwner, Key: asset.objectKey, VersionId: "original-v1" },
+    { Bucket: config.renditionBucket, ExpectedBucketOwner: source.expectedBucketOwner, Key: asset.rendition.web.objectKey, VersionId: "web-v1" },
+    { Bucket: config.renditionBucket, ExpectedBucketOwner: source.expectedBucketOwner, Key: asset.rendition.poster.objectKey, VersionId: "poster-v1" },
+  ]);
+  versions.delete("web-v1");
+  await expect(verify(source, asset)).rejects.toMatchObject({ status: 409, message: "The viewing copy is no longer available." });
+});
+
+it("creates fresh private delivery keys if a video is restored during revocation", async () => {
+  const { firestore, rows, ref, binding } = fixture();
+  const job = { ...copies.newCopy(binding, 1), phase: "revoking", revoked: true };
+  rows.set(ref.path, job);
+  const remove = vi.fn();
+  await worker.processPrivateVideoTick({ firestore, source, transfer: { remove }, copyEnabled: true, now: () => 2 });
+  expect(remove).toHaveBeenCalledOnce();
+  const replacement = rows.get(ref.path);
+  expect(replacement).toMatchObject({ phase: "copying", active: true, revoked: false });
+  expect(replacement.files.web.key).not.toBe(job.files.web.key);
+});
+
 it("reaches a due video copy behind a full batch of leased copies", async () => {
   const { firestore, rows, ref, binding } = fixture();
   for (let index = 0; index < 20; index++) {

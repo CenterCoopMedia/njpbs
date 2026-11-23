@@ -89,7 +89,7 @@ export function SourceMediaLibraryBrowse({
         <VideoOriginalNotices {...originals} />
         {linkError ? <InlineMessage tone="warning" title="Media link">{linkError}</InlineMessage> : null}
         {related}
-        {deletedName ? <InlineMessage tone="success" title="Video deleted from library">{deletedName} was removed. The original is retained for recovery.</InlineMessage> : null}
+        {deletedName ? <InlineMessage tone="success" title="Video deleted from library">{deletedName} was moved to the video recycle bin.</InlineMessage> : null}
         {favoriteError ? <InlineMessage tone="error" title="Favorites need attention">
           <span>{favoriteError}</span>
           {onRetryFavorites ? <Button disabled={favoriteRetryDisabled} onClick={onRetryFavorites}>Try again</Button> : null}

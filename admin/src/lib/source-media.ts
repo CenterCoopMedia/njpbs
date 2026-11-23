@@ -1,6 +1,6 @@
 import type { OriginalAvailability } from "./video-original";
 import { postFunction } from "./functions";
-import type { MediaTabCounts } from "./media-session-cache";
+import { setMediaSourceCount, type MediaTabCounts } from "./media-session-cache";
 import { invalidateVideoSearchCorpus, videoSearchCacheRevision } from "./video-search-session-cache";
 
 export function uploadableSharedVideoSource<T extends { id: string; canUpload: boolean }>(
@@ -147,6 +147,46 @@ export async function deleteSourceMedia(token: string | null, sourceId: string, 
   const result = await postFunction<{ success: true; deleted: true }>("cmsDeleteSourceMedia", token,
     { sourceId, assetId, expectedVersion }, {}, { appCheck: true });
   invalidateVideoSearchCorpus(sourceId);
+  return result;
+}
+
+export interface BinnedVideo {
+  id: string;
+  name: string;
+  version: number;
+  deletedAt: string;
+}
+
+export interface BinnedVideoPage {
+  records: BinnedVideo[];
+  nextCursor: string | null;
+}
+
+export interface BinnedVideoUsagePage {
+  items: {
+    collection: "cmsPosts" | "cmsPages";
+    documentId: string;
+    title: string;
+    working: boolean;
+    published: boolean;
+  }[];
+  nextCursor: string | null;
+  incomplete: boolean;
+}
+
+export function listBinnedVideos(token: string, sourceId: string, cursor: string | undefined, signal: AbortSignal) {
+  return postFunction<BinnedVideoPage>("cmsSourceVideoBin", token, { action: "list", sourceId, cursor }, {}, { signal });
+}
+
+export function listBinnedVideoUsage(token: string, sourceId: string, assetId: string, cursor: string | undefined, signal: AbortSignal) {
+  return postFunction<BinnedVideoUsagePage>("cmsSourceVideoBin", token, { action: "usage", sourceId, assetId, cursor }, {}, { signal });
+}
+
+export async function restoreBinnedVideo(token: string, sourceId: string, { id: assetId, version: expectedVersion }: BinnedVideo) {
+  const result = await postFunction<{ originalState?: "archived" | "restoring"; viewingCopyUnavailable?: boolean }>(
+    "cmsSourceVideoBin", token, { action: "restore", sourceId, assetId, expectedVersion }, {}, { appCheck: true });
+  invalidateVideoSearchCorpus(sourceId);
+  setMediaSourceCount(sourceId, null);
   return result;
 }
 
