@@ -58,7 +58,7 @@ import { availableSelectionActions, type MediaTileActionId } from "../lib/media-
 import { readRecentTags, recordRecentTags } from "../lib/recent-media-tags";
 import { stepPosition, stepTarget, viewerKeyAction, type StepDirection } from "../lib/media-step";
 import type { MediaToolbarSurfaceConfiguration } from "../components/media/MediaToolbar";
-import { metadataFilterProperties } from "../components/media/MediaFilterPopover";
+import { videoFilterProperties } from "../components/media/video-filter-properties";
 import { mediaAspect } from "../lib/media-browse-metadata";
 import { SourceMediaLibraryBrowse } from "./SourceMediaLibraryBrowse";
 import { DEFAULT_VIDEO_MEDIA_QUERY, parseVideoMediaLocation, encodeVideoMediaLocation, type VideoMediaLocationQuery, type VideoMediaSort } from "../lib/media-query";
@@ -1706,11 +1706,13 @@ export function SourceMediaLibrary({ principal, source, getIdToken, userId, onEx
   }
   const filterState = { query: videoQuery, selectedId: videoLocation.selectedId };
   const chips = videoFilterChips(filterState, (id) => id === userId ? "Me" : uploaderNames.get(id) ?? "Staff uploader");
+  function writeFilter(filter: VideoStructuredFilter | null) {
+    writeVideoQuery({ ...setVideoStructuredFilter(filterState, filter).query, q: searchDraft.current });
+  }
   function changeStructuredFilter(property: string, value: string) {
     if (property === "aspect") {
       const aspect = videoQuery.aspect === value ? undefined : mediaAspect(value);
-      const next = setVideoStructuredFilter(filterState, { bounds: { aspect } });
-      writeVideoQuery({ ...next.query, q: searchDraft.current });
+      writeFilter({ bounds: { aspect } });
       return;
     }
     if (property !== "tag" && property !== "by" && property !== "rights" && property !== "metadata") return;
@@ -1718,8 +1720,7 @@ export function SourceMediaLibrary({ principal, source, getIdToken, userId, onEx
     setTagError("");
     const current = videoQuery[property];
     const filter = property !== "tag" && current === value ? null : { field: property, value } as VideoStructuredFilter;
-    const next = setVideoStructuredFilter(filterState, filter);
-    writeVideoQuery({ ...next.query, q: searchDraft.current });
+    writeFilter(filter);
   }
   const sortOptions = [
     { value: "updated_desc", label: "Recently updated", directions: [{ value: "desc", label: "Newest first" }] },
@@ -1744,30 +1745,14 @@ export function SourceMediaLibrary({ principal, source, getIdToken, userId, onEx
       placeholder: "Search video names", title: "Search video names by prefix · /",
     },
     filter: {
-      properties: [
-        { id: "tag", label: "Tag", picker: "text", appliedCount: videoQuery.tag ? 1 : 0,
-          options: tagOptions.map(value => ({ value, label: value, selected: videoQuery.tag === value })),
-          hint: "Enter an exact tag or choose one from this page or your recent tags.",
-          text: { value: tagInput, placeholder: "Enter an exact tag", maxLength: 80, error: tagError,
-            onChange: value => { setTagInput(value); setTagError(""); } } },
-        { id: "rights", label: "Rights review", picker: "options", appliedCount: videoQuery.rights ? 1 : 0,
-          options: [{ value: "pending", label: "Needs review" }, { value: "complete", label: "Rights recorded" }]
-            .map(option => ({ ...option, selected: videoQuery.rights === option.value })) },
-        { id: "by", label: "Uploader", picker: "options", appliedCount: videoQuery.by ? 1 : 0,
-          options: [{ value: userId, label: "Me" },
-            ...[...uploaderNames].filter(([id]) => id !== userId).map(([value, label]) => ({ value, label }))]
-            .map(option => ({ ...option, selected: videoQuery.by === option.value })) },
-        ...metadataFilterProperties(videoQuery, {
-          duration: true, aspect: true, requested: videoQuery.metadata === "requested",
-          applyRange: bounds => {
-            const next = setVideoStructuredFilter(filterState, { bounds });
-            writeVideoQuery({ ...next.query, q: searchDraft.current });
-          },
-        }),
-      ],
+      properties: videoFilterProperties(videoQuery, {
+        tagOptions, uploaderNames, userId,
+        tag: { value: tagInput, error: tagError, onChange: value => { setTagInput(value); setTagError(""); } },
+        applyRange: bounds => writeFilter({ bounds }),
+      }),
       chips, note: "Videos filter by one property at a time.",
       onSelect: changeStructuredFilter,
-      onRemove: () => writeVideoQuery({ ...setVideoStructuredFilter(filterState, null).query, q: searchDraft.current }),
+      onRemove: () => writeFilter(null),
       onClearAll: clearFilters,
     },
     sort: {
