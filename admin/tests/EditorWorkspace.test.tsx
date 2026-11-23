@@ -43,15 +43,6 @@ import {
 vi.setConfig({ testTimeout: 10_000 });
 
 afterEach(cleanup);
-// The bento arrangement persists to localStorage; clear it between tests so a rearrange in one
-// test cannot leak its layout into the next.
-afterEach(() => {
-  try {
-    localStorage.clear();
-  } catch {
-    // No storage in this environment; nothing to clear.
-  }
-});
 
 // A deterministic id generator so the page editor does not depend on crypto.randomUUID.
 function counterIds() {

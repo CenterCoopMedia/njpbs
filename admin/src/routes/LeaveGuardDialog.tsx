@@ -34,6 +34,7 @@ function focusableWithin(container: HTMLElement | null): HTMLElement[] {
 
 export function LeaveGuardDialog({
   onConfirm,
+  onDiscard = onConfirm,
   onCancel,
   onSave,
   title = "Leave with unsaved changes?",
@@ -42,6 +43,7 @@ export function LeaveGuardDialog({
   cancelLabel = "Keep editing",
 }: {
   onConfirm: () => void;
+  onDiscard?: () => void;
   onCancel: () => void;
   onSave?: () => Promise<ExitSaveOutcome>;
   title?: string;
@@ -161,7 +163,7 @@ export function LeaveGuardDialog({
           </Button>
           {/* The one choice here that destroys work, styled like every other destructive action
               in the CMS so it cannot be mistaken for the neutral one beside it. */}
-          <Button variant="danger-quiet" disabled={saving} onClick={onConfirm}>
+          <Button variant="danger-quiet" disabled={saving} onClick={onDiscard}>
             {confirmLabel}
           </Button>
           {onSave ? (

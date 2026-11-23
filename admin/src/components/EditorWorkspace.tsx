@@ -40,7 +40,7 @@ import { editorSaveReceipt, type SavedEditorReceipt } from "../lib/editor-save-r
 import { useDraftAutosave } from "../hooks/useDraftAutosave";
 import { HeldNewRecordArea } from "./HeldNewRecordArea";
 import { isRecordKind, RECORD_KINDS } from "../lib/content-vocab";
-import { HOLD_NEW_RECORDS_EVENT } from "../lib/session-ended";
+import { deliberateSignOut, HOLD_NEW_RECORDS_EVENT } from "../lib/session-ended";
 import {
   canCreateEditableRecord,
   clearHeldNewRecord,
@@ -102,6 +102,7 @@ import type {
 } from "../lib/editor-locks";
 import {
   browserEditorWorkStorage,
+  canKeepBrowserRecoveredWork,
   clearRecoveredWork,
   readRecoveredWork,
   writeRecoveredWork,
@@ -392,6 +393,10 @@ type PageMetadataDraft = {
   seedFromLegacyPage?: { id: SectionId; version?: number };
 };
 
+function isRecoveryRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
 interface EditorWorkspaceProps {
   electionSources?: ElectionSourceApi;
   pageDirectoryApi?: PageDirectoryApi;
@@ -591,6 +596,7 @@ interface EditorWorkspaceProps {
   // only when every unsaved panel of that surface landed and nothing was left behind; a refusal,
   // a failure, a conflict, or an edit made while the save was in flight all resolve false.
   saveRequestRef?: MutableRefObject<(() => Promise<ExitSaveOutcome>) | null>;
+  discardRecoveryRef?: MutableRefObject<(() => void) | null>;
   // Firestore presence is injected beside the content boundary so this workspace remains a pure,
   // directly renderable component in tests and the development gallery.
   editorLockClient?: EditorLockClient;
@@ -676,6 +682,7 @@ function EditorWorkspaceContent({
   onDirtyChange,
   unsavedProbeRef,
   saveRequestRef,
+  discardRecoveryRef,
   editorLockClient,
   editorLockActor,
   contentSections,
@@ -965,6 +972,12 @@ function EditorWorkspaceContent({
   const activeDraftCheckTimer = useRef<ReturnType<typeof setTimeout> | null>(
     null,
   );
+  const pendingSnapshot = useRef<{ key: string; write: () => void }>();
+  const flushWorkspaceSnapshot = useCallback(() => {
+    const pending = pendingSnapshot.current;
+    pendingSnapshot.current = undefined;
+    pending?.write();
+  }, []);
   const activeSurfaceRef = useRef(surface);
   activeSurfaceRef.current = surface;
   // The byline picker's feed (#1040), read once for this workspace. A failure is
@@ -1036,17 +1049,22 @@ function EditorWorkspaceContent({
     );
   }
 
-  function refreshDirty() {
+  function refreshDirty(value: Surface = surface) {
+    const snapshotKey = editorLockSurfaceKey(value);
+    if (snapshotKey && recoveryStorage && recoveryOwner) {
+      if (isSameSurface(value, surface) && surfaceHasDraft(value)) {
+        pendingSnapshot.current = {
+          key: snapshotKey,
+          write: () => syncWorkspaceSnapshot(value, editorLock.displacedBy ?? undefined),
+        };
+      } else {
+        if (pendingSnapshot.current?.key === snapshotKey) pendingSnapshot.current = undefined;
+        syncWorkspaceSnapshot(value);
+      }
+    }
     const activeHasDraft = surfaceHasDraft(surface);
     setDirty(drafts.current.size > 0 || pageMetadataDrafts.current.size > 0);
     setActiveSurfaceDirty(activeHasDraft);
-    // Every draft write and delete passes through here, and both dirty flags stop changing after
-    // the first one. While a displaced snapshot is being kept current, the recovery effects need
-    // to hear about each subsequent change, so this signal is raised only in that state rather
-    // than adding a render to every keystroke of ordinary editing.
-    if (displacementCaptured.current !== null) {
-      setDisplacedDraftRevision((revision) => revision + 1);
-    }
     if (activeDraftCheckTimer.current !== null) {
       globalThis.clearTimeout(activeDraftCheckTimer.current);
       activeDraftCheckTimer.current = null;
@@ -1063,6 +1081,7 @@ function EditorWorkspaceContent({
       } else if (checkedSurface.kind === "record") {
         recordDraftFor(checkedSurface);
       }
+      flushWorkspaceSnapshot();
       setDirty(drafts.current.size > 0 || pageMetadataDrafts.current.size > 0);
       setActiveSurfaceDirty(surfaceHasDraft(checkedSurface));
     }, ACTIVE_DRAFT_RECONCILE_MS);
@@ -1233,157 +1252,167 @@ function EditorWorkspaceContent({
     await reserveEditorForSave();
     return restoreRevision(collection, id, revisionId, baseVersion);
   }
-  // Losing the lease to a forced takeover must not cost the displaced person their unsaved work.
-  // The draft already survives in this workspace's map for the rest of the visit; this writes the
-  // same snapshot to the browser so it also survives a reload, a closed tab, or a crash while the
-  // person is deciding what to do (#1047).
   const recoveryStorage = browserEditorWorkStorage();
+  const recoveryOwner = canSave ? principal.id : undefined;
+  const heldSnapshots = useRef(new Map<string, RecoveredEditorWork>());
+  const [recoveryOffer, setRecoveryOffer] = useState<RecoveredEditorWork | null>(null);
   const [recoveredWork, setRecoveredWork] = useState<RecoveredEditorWork | null>(null);
-  const displacementCaptured = useRef<string | null>(null);
-  const workspaceTitleRef = useRef("");
-  // Bumped whenever a draft for the active surface is written. `activeSurfaceDirty` is a boolean
-  // and stops changing after the first keystroke, so it cannot on its own tell the recovery
-  // snapshot that there is newer work to keep.
-  const [displacedDraftRevision, setDisplacedDraftRevision] = useState(0);
-  const sawDirtySinceMount = useRef(false);
+  const [recoveryWriteFailed, setRecoveryWriteFailed] = useState<string | null>(null);
+  const activeRecoveryOffer = recoveryOffer && recoveryOffer.surfaceKey === activeEditorLockSurfaceKey &&
+    recoveryOffer.actorId === recoveryOwner
+    ? recoveryOffer : null;
+  const recoveryLoaded = surface.kind === "page"
+    ? pageLoad.status === "ready" : recordLoad.status === "ready";
+  const recoveryReady = activeSurfaceMayMutate && recoveryLoaded;
+  const recoveryReadFailed = surface.kind === "page"
+    ? pageLoad.status === "error" : recordLoad.status === "error";
 
-  // The displaced editor stays mounted and its forms stay interactive on purpose: the point of
-  // the state is that the person keeps their work and can read it, copy from it, and carry on
-  // until they take the record back. Making it genuinely read-only would mean disabling the very
-  // draft the banner promises is still there. So the snapshot has to track the draft rather than
-  // freeze at the instant of displacement, or a reload would restore a stale copy and lose
-  // everything typed afterwards.
-  useEffect(() => {
-    const actorId = activeEditorLockActor?.id;
-    if (
-      !recoveryStorage ||
-      actorId === undefined ||
-      !activeEditorLockSurfaceKey ||
-      !editorLock.displacedBy
-    ) {
-      return;
+  function clearWorkspaceSnapshot(work: RecoveredEditorWork) {
+    if (recoveryStorage) {
+      clearRecoveredWork(recoveryStorage, work.actorId, work.surfaceKey, work);
     }
-    const active = activeSurfaceRef.current;
-    const draft = drafts.current.get(surfaceKey(active));
-    const metadataDraft =
-      active.kind === "page"
-        ? pageMetadataDrafts.current.get(pageMetadataKey(active))
-        : undefined;
-    if (!draft && !metadataDraft) return;
-    displacementCaptured.current = activeEditorLockSurfaceKey;
-    writeRecoveredWork(recoveryStorage, {
-      actorId,
-      surfaceKey: activeEditorLockSurfaceKey,
-      label: workspaceTitleRef.current,
-      displacedBy: editorLock.displacedBy,
-      savedAtMs: Date.now(),
-      // The clean baselines travel with the draft. A page's blocks and its metadata are two
-      // drafts over one document, so a snapshot of only one of them would otherwise restore into
-      // a mount that has no loaded content behind it and show the page as empty.
-      payload: {
-        draft,
-        metadataDraft,
-        blockBaseline:
-          active.kind === "page"
-            ? pageBaselines.current.get(surfaceKey(active))
-            : undefined,
-        metadataBaseline:
-          active.kind === "page"
-            ? pageMetadataBaselines.current.get(pageMetadataKey(active))
-            : undefined,
-      },
-    });
-  }, [
-    activeEditorLockActor?.id,
-    activeEditorLockSurfaceKey,
-    activeSurfaceDirty,
-    displacedDraftRevision,
-    editorLock.displacedBy,
-    recoveryStorage,
-  ]);
-
-  // Reinstall a displaced snapshot before the hydration effect reads the draft map, so recovered
-  // work travels the ordinary draft-restore path rather than a second, divergent one.
-  useLayoutEffect(() => {
-    const actorId = activeEditorLockActor?.id;
-    setRecoveredWork(null);
-    displacementCaptured.current = null;
-    sawDirtySinceMount.current = false;
-    if (!recoveryStorage || actorId === undefined || !activeEditorLockSurfaceKey) return;
-    const stored = readRecoveredWork(recoveryStorage, actorId, activeEditorLockSurfaceKey);
-    if (!stored) return;
-    const payload = stored.payload as {
-      draft?: Draft;
-      metadataDraft?: PageMetadataDraft;
-      blockBaseline?: AdminBlock[];
-      metadataBaseline?: Record<string, unknown>;
-    } | null;
-    const active = activeSurfaceRef.current;
-    const key = surfaceKey(active);
-    // A live draft for this surface is newer than anything on disk; never overwrite it.
-    if (payload?.draft && !drafts.current.has(key)) {
-      drafts.current.set(key, payload.draft);
-    }
-    if (active.kind === "page") {
-      const metadataKeyValue = pageMetadataKey(active);
-      if (payload?.metadataDraft && !pageMetadataDrafts.current.has(metadataKeyValue)) {
-        pageMetadataDrafts.current.set(metadataKeyValue, payload.metadataDraft);
-      }
-      // Restore the baselines the drafts were written against, so recovering one of the two
-      // page drafts does not present the other half of the document as empty.
-      if (payload?.blockBaseline && !pageBaselines.current.has(key)) {
-        pageBaselines.current.set(key, payload.blockBaseline);
-      }
-      if (
-        payload?.metadataBaseline &&
-        !pageMetadataBaselines.current.has(metadataKeyValue)
-      ) {
-        pageMetadataBaselines.current.set(metadataKeyValue, payload.metadataBaseline);
-      }
-    }
-    // Recovered work is unsaved work. Saying so keeps the editor mounted and the draft visible
-    // even while somebody else still holds the record, instead of hiding it behind the
-    // read-only message the person is trying to get out from under.
-    refreshDirty();
-    setRecoveredWork(stored);
-  }, [activeEditorLockActor?.id, activeEditorLockSurfaceKey, recoveryStorage]);
-
-  // The snapshot stops being work to recover once the surface has no unsaved draft left. That
-  // happens two ways: this tab holds the record and is clean, or a save that was already in
-  // flight when somebody took over landed and cleared the draft underneath. Ownership cannot be
-  // the only condition, or the second case would leave an obsolete snapshot to be offered later
-  // as unsaved work when it is in fact the saved content.
-  useEffect(() => {
-    const actorId = activeEditorLockActor?.id;
-    if (!recoveryStorage || actorId === undefined || !activeEditorLockSurfaceKey) return;
-    if (activeSurfaceDirty) {
-      sawDirtySinceMount.current = true;
-      return;
-    }
-    // A restored snapshot marks the surface dirty from a layout effect, one commit after this
-    // effect first runs. Requiring an observed dirty-to-clean transition keeps that restore from
-    // clearing the very snapshot it just reinstated.
-    if (!editorLock.ownsLock && !sawDirtySinceMount.current) return;
-    clearRecoveredWork(recoveryStorage, actorId, activeEditorLockSurfaceKey);
-    displacementCaptured.current = null;
-    sawDirtySinceMount.current = false;
-    setRecoveredWork(null);
-  }, [
-    activeEditorLockActor?.id,
-    activeEditorLockSurfaceKey,
-    activeSurfaceDirty,
-    displacedDraftRevision,
-    editorLock.ownsLock,
-    recoveryStorage,
-  ]);
-
-  function discardRecoveredWork() {
-    const actorId = activeEditorLockActor?.id;
-    if (recoveryStorage && actorId !== undefined && activeEditorLockSurfaceKey) {
-      clearRecoveredWork(recoveryStorage, actorId, activeEditorLockSurfaceKey);
-    }
-    setRecoveredWork(null);
+    heldSnapshots.current.delete(work.surfaceKey);
   }
+
+  useEffect(() => {
+    if (!discardRecoveryRef) return;
+    discardRecoveryRef.current = () => {
+      pendingSnapshot.current = undefined;
+      for (const work of heldSnapshots.current.values()) clearWorkspaceSnapshot(work);
+    };
+    return () => { discardRecoveryRef.current = null; };
+  }, [discardRecoveryRef, recoveryStorage]);
+
+  function syncWorkspaceSnapshot(value: Surface, displacedBy?: string) {
+    const key = editorLockSurfaceKey(value);
+    if (!recoveryStorage || !recoveryOwner || !key ||
+        !canKeepBrowserRecoveredWork(recoveryOwner) || deliberateSignOut()) return;
+    const held = heldSnapshots.current.get(key);
+    const prior = held?.actorId === recoveryOwner ? held : undefined;
+    const draft = drafts.current.get(surfaceKey(value));
+    const metadataDraft = value.kind === "page"
+      ? pageMetadataDrafts.current.get(pageMetadataKey(value)) : undefined;
+    if (!draft && !metadataDraft) {
+      if (prior) clearWorkspaceSnapshot(prior);
+      setRecoveredWork(work => work?.surfaceKey === key ? null : work);
+      setRecoveryWriteFailed(failed => failed === key ? null : failed);
+      return;
+    }
+    const work: RecoveredEditorWork = {
+      actorId: recoveryOwner,
+      surfaceKey: key,
+      label: labelForSurface(value),
+      displacedBy,
+      savedAtMs: Date.now(),
+      // Each dirty panel retains the version its changes were composed against.
+      payload: { draft, metadataDraft },
+    };
+    if (writeRecoveredWork(recoveryStorage, work)) {
+      heldSnapshots.current.set(key, work);
+      setRecoveryWriteFailed(failed => failed === key ? null : failed);
+    } else {
+      setRecoveryWriteFailed(key);
+    }
+  }
+
+  useLayoutEffect(() => {
+    setRecoveredWork(null);
+    const active = activeSurfaceRef.current;
+    const stored = recoveryStorage && recoveryOwner && activeEditorLockSurfaceKey &&
+      !surfaceHasDraft(active)
+      ? readRecoveredWork(recoveryStorage, recoveryOwner, activeEditorLockSurfaceKey)
+      : null;
+    setRecoveryOffer(stored);
+    return flushWorkspaceSnapshot;
+  }, [activeEditorLockSurfaceKey, recoveryOwner, recoveryStorage, flushWorkspaceSnapshot]);
+
+  useEffect(() => {
+    const previous = activeEditorLockSurfaceKey && heldSnapshots.current.get(activeEditorLockSurfaceKey);
+    if (editorLock.displacedBy || (editorLock.ownsLock && previous && previous.displacedBy)) {
+      // A lease change supersedes any queued label for this surface.
+      pendingSnapshot.current = undefined;
+      syncWorkspaceSnapshot(activeSurfaceRef.current, editorLock.displacedBy ?? undefined);
+    }
+  }, [activeEditorLockSurfaceKey, editorLock.displacedBy, editorLock.ownsLock]);
+
+  useEffect(() => {
+    const flushWhenHidden = () => {
+      if (document.visibilityState === "hidden") flushWorkspaceSnapshot();
+    };
+    window.addEventListener("pagehide", flushWorkspaceSnapshot);
+    document.addEventListener("visibilitychange", flushWhenHidden);
+    return () => {
+      window.removeEventListener("pagehide", flushWorkspaceSnapshot);
+      document.removeEventListener("visibilitychange", flushWhenHidden);
+    };
+  }, [flushWorkspaceSnapshot]);
+
+  useEffect(() => {
+    if (!activeRecoveryOffer || !recoveryReadFailed) return;
+    const retryRead = surface.kind === "page" ? setReloadCount : setRecordReloadCount;
+    const reconnect = () => retryRead(count => count + 1);
+    window.addEventListener("online", reconnect);
+    return () => window.removeEventListener("online", reconnect);
+  }, [activeRecoveryOffer, recoveryReadFailed, surface.kind]);
+
+  function restoreWorkspaceSnapshot(work: RecoveredEditorWork) {
+    if (!recoveryReady || work.surfaceKey !== activeEditorLockSurfaceKey || surfaceHasDraft(surface)) return;
+    const payload = work.payload as { draft?: Draft; metadataDraft?: PageMetadataDraft } | null;
+    const key = surfaceKey(surface);
+    let installed = false;
+    if (surface.kind === "page" && pageLoad.status === "ready") {
+      const block = payload?.draft;
+      const metadata = payload?.metadataDraft;
+      const blockDraft = block?.kind === "page" && Array.isArray(block.blocks) &&
+        block.blocks.every(item => isRecoveryRecord(item) && typeof item.id === "string" &&
+          typeof item.type === "string" && isRecoveryRecord(item.data)) &&
+        !blocksEqual(block.blocks, pageBaselines.current.get(key) ?? []) ? block : undefined;
+      const metadataKey = pageMetadataKey(surface);
+      const metadataDraft = metadata && isRecoveryRecord(metadata.metadata) &&
+        !recordsEqual(metadata.metadata, pageMetadataBaselines.current.get(metadataKey) ?? {})
+        ? metadata : undefined;
+      const claim = blockDraft ?? metadataDraft;
+      if (claim) {
+        // The addressed read has already initialized the host's raw blocks and access
+        // policy. The recovered panels keep their own base claims for the normal saves.
+        if (blockDraft) {
+          drafts.current.set(key, blockDraft);
+          draftLabels.current.set(key, work.label);
+          blockBaseVersion.current = blockDraft.version;
+        }
+        if (metadataDraft) {
+          pageMetadataDrafts.current.set(metadataKey, metadataDraft);
+          draftLabels.current.set(metadataKey, work.label);
+          metadataBaseVersion.current = metadataDraft.version;
+        }
+        expectedAbsent.current = claim.expectedAbsent === true;
+        seedFromLegacyPage.current = claim.seedFromLegacyPage;
+        installed = true;
+      }
+    } else if (surface.kind === "record" && recordLoad.status === "ready") {
+      const draft = payload?.draft;
+      if (draft?.kind === "record" && isRecoveryRecord(draft.record) &&
+          draft.record.id === surface.id && !recordsEqual(draft.record, recordLoad.record)) {
+        drafts.current.set(key, draft);
+        draftLabels.current.set(key, work.label);
+        installed = true;
+      }
+    }
+    setRecoveryOffer(null);
+    if (!installed) {
+      clearWorkspaceSnapshot(work);
+      return;
+    }
+    heldSnapshots.current.set(work.surfaceKey, work);
+    refreshDirty();
+    setRecoveredWork(work);
+  }
+
+  // Takeover recovery already opened the draft automatically. Wait for the ordinary
+  // addressed read so restored Pages have the same save context as other Pages.
+  useLayoutEffect(() => {
+    if (activeRecoveryOffer?.displacedBy && recoveryReady) restoreWorkspaceSnapshot(activeRecoveryOffer);
+  }, [activeRecoveryOffer, recoveryReady]);
 
   // A stale lock document must not hide a terminal read result. Lock UI becomes authoritative
   // only after the addressed page or record has loaded into an editable state.
@@ -1672,7 +1701,7 @@ function EditorWorkspaceContent({
         seedFromLegacyPage: seedFromLegacyPage.current,
       });
     }
-    refreshDirty();
+    refreshDirty(pageSurface);
     // Drafts live in refs. Refresh the summary only when membership changes;
     // typing within a section must not rerender the workspace on each keystroke.
     if (editorSectionCount(previousBlocks, pageSurface.pageId) !== editorSectionCount(blocks ?? savedBlocks, pageSurface.pageId)) {
@@ -1713,7 +1742,7 @@ function EditorWorkspaceContent({
         seedFromLegacyPage: seedFromLegacyPage.current,
       });
     }
-    refreshDirty();
+    refreshDirty(pageSurface);
   }
 
   function advancePageAfterSave(
@@ -1875,7 +1904,7 @@ function EditorWorkspaceContent({
         restoredCreate: previous?.kind === "record" ? previous.restoredCreate : undefined,
       });
     }
-    refreshDirty();
+    refreshDirty(value);
   }
 
   // Whether any held draft still differs from its clean point, answered by value.
@@ -3563,10 +3592,6 @@ function EditorWorkspaceContent({
       ? `New ${recordDestination(surface.record).label.toLowerCase()}`
       : surface.kind === "page" && pageLoad.status === "ready" && typeof pageLoad.metadata.title === "string"
         ? pageLoad.metadata.title : loadedRecordTitle ?? labelForSurface(surface);
-  // Read by the displacement snapshot, which fires from an effect and needs the title the person
-  // was actually looking at rather than one captured when the callback was created.
-  workspaceTitleRef.current = workspaceDocumentTitle;
-
   return (
     <EditorActionsProvider label={workspaceActionsAvailable
       ? surface.kind === "page" ? "Page"
@@ -3584,7 +3609,7 @@ function EditorWorkspaceContent({
           ? renderIsolatedSurfacePicker(surface, saving, selectIsolatedSurface, isSameSurface)
           : null}
         <WorkspaceTitle>
-          <h1 id="page-title" className="programmatic-focus-target">
+          <h1 id="page-title" className="programmatic-focus-target" tabIndex={-1}>
             {editorView?.kind === "post" && surface.kind === "record" && surface.id !== null ? "Edit post" : workspaceDocumentTitle}
           </h1>
         </WorkspaceTitle>
@@ -3612,6 +3637,7 @@ function EditorWorkspaceContent({
             ) : editorLockCanGateActiveEditor &&
               editorLock.blockingLock &&
               (!saving || changingElectionSources) &&
+              !activeRecoveryOffer &&
               !activeSurfaceDirty ? (
               <>
                 {lockedSurfaceMessage(editorLock.blockingLock, editorLock, surface, editorLockActor)}
@@ -3658,8 +3684,40 @@ function EditorWorkspaceContent({
                 {editorLockCanGateActiveEditor
                   ? takeoverRequestMessage(editorLock, activeSurfaceDirty, saving)
                   : null}
-                {recoveredWorkMessage(recoveredWork, discardRecoveredWork)}
-                {surface.kind === "page-list" ? (
+                {recoveredWorkMessage(
+                  recoveredWork?.surfaceKey === activeEditorLockSurfaceKey ? recoveredWork : null,
+                  () => setRecoveredWork(null),
+                )}
+                {recoveryWriteFailed === activeEditorLockSurfaceKey && recoveryWriteFailed !== null ? (
+                  <InlineMessage tone="warning" title="This device could not keep your latest changes">
+                    Save a draft before closing the editor to keep this work.
+                  </InlineMessage>
+                ) : null}
+                {activeRecoveryOffer ? (
+                  <InlineMessage tone="info" title="Unsaved changes on this device">
+                    <p role="status">{recoveryReady
+                      ? `Saved on this device ${new Date(activeRecoveryOffer.savedAtMs).toLocaleString()}. Changes made after that time may be missing.`
+                      : recoveryLoaded
+                        ? "You need editing access to restore these changes."
+                        : "The editor needs to load the saved content before you can restore these changes."}</p>
+                    <div className="button-row">
+                      <Button variant="primary" disabled={!recoveryReady} onClick={() => {
+                        restoreWorkspaceSnapshot(activeRecoveryOffer);
+                        document.getElementById("page-title")?.focus();
+                      }}>
+                        Restore unsaved changes
+                      </Button>
+                      <Button variant="danger-quiet" onClick={() => {
+                        clearWorkspaceSnapshot(activeRecoveryOffer);
+                        setRecoveryOffer(null);
+                        document.getElementById("page-title")?.focus();
+                      }}>
+                        Discard unsaved changes
+                      </Button>
+                    </div>
+                  </InlineMessage>
+                ) : null}
+                {activeRecoveryOffer && recoveryLoaded ? null : surface.kind === "page-list" ? (
                   <PagesDirectory api={pageDirectoryApi} persistentEditorDirty={dirty} />
                 ) : surface.kind === "library" || (surface.kind === "record-list" && surface.record === "post") ? (
                   <ContentLibrary

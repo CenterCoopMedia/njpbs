@@ -220,6 +220,7 @@ export function ContentTab({
   onDirtyChange,
   unsavedProbeRef,
   saveRequestRef,
+  discardRecoveryRef,
 }: {
   principal: Principal;
   // Production keeps this on. Direct integration tests can turn it off when Home is only a
@@ -248,6 +249,7 @@ export function ContentTab({
   onDirtyChange?: (dirty: boolean) => void;
   unsavedProbeRef?: MutableRefObject<(() => boolean) | null>;
   saveRequestRef?: MutableRefObject<(() => Promise<ExitSaveOutcome>) | null>;
+  discardRecoveryRef?: MutableRefObject<(() => void) | null>;
 }) {
   const { getIdToken, state } = useAuth();
   const [conflictReview, setConflictReview] = useState<{
@@ -1170,6 +1172,7 @@ export function ContentTab({
         onDirtyChange={onDirtyChange}
         unsavedProbeRef={unsavedProbeRef}
         saveRequestRef={saveRequestRef}
+        discardRecoveryRef={discardRecoveryRef}
         editorLockClient={editorLockClient}
         editorLockActor={editorLockActor}
         contentSections={contentSections}

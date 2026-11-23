@@ -201,6 +201,7 @@ export function ContentLayout() {
   // rather than for the click that asked for it (#1032). Absent means no editor is mounted, and
   // a save that cannot be attempted is not a save that landed.
   const saveRequestRef = useRef<(() => Promise<ExitSaveOutcome>) | null>(null);
+  const discardRecoveryRef = useRef<(() => void) | null>(null);
   const saveBeforeExit = useCallback(
     (): Promise<ExitSaveOutcome> =>
       saveRequestRef.current?.() ??
@@ -324,6 +325,11 @@ export function ContentLayout() {
   // silent and released once the save settles.
   const isDirtyLeave =
     blocker.state === "blocked" && blockReason.current === "dirty-leave";
+  function discardRecoveryOnExit() {
+    if (blocker.state === "blocked" && mountedSurfaceForAccess(
+      parseContentPath(blocker.location.pathname), canBrowseContent, canBrowsePages,
+    ) === null) discardRecoveryRef.current?.();
+  }
 
   useEffect(() => {
     // Release a save-hold once the save settles, however it settled: the click that fired during
@@ -395,7 +401,7 @@ export function ContentLayout() {
             {canBrowsePages ? "Go to pages" : "Go to All content"}
           </Button>
         </NotFoundBody>
-        {renderLeaveGuard(isDirtyLeave, blocker, saveAllBeforeExit)}
+        {renderLeaveGuard(isDirtyLeave, blocker, saveAllBeforeExit, discardRecoveryOnExit)}
       </>
     );
   }
@@ -416,9 +422,10 @@ export function ContentLayout() {
           onDirtyChange={setDirty}
           unsavedProbeRef={unsavedProbeRef}
           saveRequestRef={saveRequestRef}
+          discardRecoveryRef={discardRecoveryRef}
         />
       </Suspense>
-      {renderLeaveGuard(isDirtyLeave, blocker, saveAllBeforeExit)}
+      {renderLeaveGuard(isDirtyLeave, blocker, saveAllBeforeExit, discardRecoveryOnExit)}
     </>
   );
 }
@@ -430,12 +437,14 @@ function renderLeaveGuard(
   isDirtyLeave: boolean,
   blocker: ReturnType<typeof useBlocker>,
   save: () => Promise<ExitSaveOutcome>,
+  discard: () => void,
 ) {
   if (!isDirtyLeave || blocker.state !== "blocked") return null;
   return (
     <LeaveGuardDialog
       onSave={save}
       onConfirm={() => blocker.proceed()}
+      onDiscard={() => { discard(); blocker.proceed(); }}
       onCancel={() => blocker.reset()}
     />
   );

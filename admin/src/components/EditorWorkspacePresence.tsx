@@ -169,12 +169,13 @@ export function recoveredWorkMessage(recoveredWork: RecoveredEditorWork | null, 
   return (
     <InlineMessage
       tone="info"
+      role="status"
       title="Recovered your unsaved changes"
       className="editor-lock-message editor-lock-message-recovered"
     >
-      <p>
-        {`These are the changes you had open when ${recoveredWork.displacedBy} took over on ${new Intl.DateTimeFormat(undefined, { dateStyle: "medium", timeStyle: "short" }).format(new Date(recoveredWork.savedAtMs))}. Review them before saving, because the record may have changed since.`}
-      </p>
+      <p>{recoveredWork.displacedBy
+        ? `These are the changes you had open when ${recoveredWork.displacedBy} took over. Review them before saving, because the record may have changed since.`
+        : "Review the recovered changes, then save them as a draft."}</p>
       <div className="button-row">
         <Button variant="secondary" onClick={discardRecoveredWork}>
           Dismiss this notice
