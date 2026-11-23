@@ -9,6 +9,7 @@ const { safeHref } = require("./lib/safe-href");
 
 const MAX_HTML = 512_000;
 const GROUPS = new Set(["article", "div", "section", "main", "aside", "header", "footer"]);
+const CLASSIC_CONTAINERS = new Set(["p", "blockquote", "li"]);
 const INLINE = new Set(["a", "span", "cite", "strong", "b", "em", "i", "code"]);
 const INTERACTIVE = new Set(["script", "style", "object", "embed", "svg", "math", "template",
   "form", "input", "button", "select", "textarea", "noscript"]);
@@ -118,6 +119,7 @@ function convertWordPressStory({ html, sourceRef, permalink, mediaByUrl = new Ma
   }
   const closingShortcodes = new Set();
   for (const match of html.matchAll(/\[\/([a-z][\w:-]*)\]/gi)) closingShortcodes.add(match[1].toLowerCase());
+  const classicStory = !/<!--\s*wp:[a-z]/i.test(html);
 
   function resolveHref(raw) {
     const href = safeHref(raw);
@@ -146,7 +148,8 @@ function convertWordPressStory({ html, sourceRef, permalink, mediaByUrl = new Ma
     const parts = [];
     let parent = node.parentNode;
     while (INLINE.has(parent.tagName)) parent = parent.parentNode;
-    const classicFlow = parent.nodeName === "#document-fragment" || GROUPS.has(parent.tagName);
+    const classicFlow = parent.nodeName === "#document-fragment" || GROUPS.has(parent.tagName)
+      || (classicStory && CLASSIC_CONTAINERS.has(parent.tagName));
     function addText(text) {
       const chunks = classicFlow ? text.split(/\n[\t ]*\n+/) : [text];
       for (const [index, value] of chunks.entries()) {
@@ -306,7 +309,11 @@ function convertWordPressStory({ html, sourceRef, permalink, mediaByUrl = new Ma
     if (/^h[1-6]$/.test(tag)) {
       const level = tag === "h1" || tag === "h2" ? 2 : 3;
       if (tag !== "h2" && tag !== "h3") flag("heading_level", location);
-      return [{ type: "heading", attrs: { level }, content: richOnly(pieces).filter(isInline) }];
+      if (pieces.some(piece => !isInline(piece))) {
+        flag("heading_layout", location);
+        return paragraphs(pieces);
+      }
+      return [{ type: "heading", attrs: { level }, content: pieces }];
     }
     if (tag === "pre") {
       const value = plainText(richOnly(pieces));
@@ -346,9 +353,15 @@ function convertWordPressStory({ html, sourceRef, permalink, mediaByUrl = new Ma
     if (piece.blockType) {
       flush();
       add(piece.blockType, piece.data);
-    } else {
-      prose.push(piece);
+      continue;
     }
+    const single = classicStory && piece.type === "paragraph" && piece.content.length === 1 ? piece.content[0] : null;
+    const raw = single?.type === "text" && !single.marks ? single.text.trim() : "";
+    const player = /^https?:\/\/\S+$/i.test(raw) && embedPlayer(resolveHref(raw) ?? "", false);
+    if (player) {
+      flush();
+      add("embed", { url: player.src });
+    } else prose.push(piece);
   }
   flush();
   if (validateSection("post", blocks)) {

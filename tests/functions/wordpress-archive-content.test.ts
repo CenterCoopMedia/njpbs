@@ -71,6 +71,28 @@ it("reports lossy or unsupported source regions while keeping safe text and link
   expect(rendered).not.toMatch(/<iframe|<script|<img|private-content|Watch video on X|\[gallery ids/);
 });
 
+it("preserves classic paragraphs inside quotes, attributed paragraphs and list items", () => {
+  const { blocks, report } = convert(`<blockquote>First quote.
+
+Second quote.</blockquote>
+<p style="text-align:center">First line.
+Second line.</p>
+<ul><li>First item line.
+Second item line.</li></ul>
+
+https://vimeo.com/123456789`);
+  expect(report.status).toBe("complete");
+  const rendered = checkEditableBlocks(blocks).map(block => renderBlock(block)).join("");
+  expect(rendered).toContain("<blockquote><p>First quote.</p><p>Second quote.</p></blockquote>");
+  expect(rendered).toContain("<p>First line.<br>Second line.</p>");
+  expect(rendered).toContain("<ul><li><p>First item line.<br>Second item line.</p></li></ul>");
+  expect(rendered).toContain('src="https://player.vimeo.com/video/123456789?dnt=1"');
+
+  const damagedHeading = convert("<h2><p>A title in a paragraph</p></h2>");
+  expect(damagedHeading.report.status).toBe("manual_review");
+  expect(renderBlock(checkEditableBlocks(damagedHeading.blocks)[0])).toContain("<p>A title in a paragraph</p>");
+});
+
 it("distinguishes empty input from source that requires review before import", () => {
   expect(convert("<!-- ordinary comment --> \n")).toEqual({
     blocks: [], report: { sourceRef, status: "skipped", issues: [] },
