@@ -354,7 +354,8 @@ URLs.
 The first full import requires absent deployment and preview pointers and
 empty queues; it then creates generation zero and a paused, unconfigured
 preview. Later imports never reset controls. Apply writes in transactional
-groups of at most 100. Without a plan it refuses a seeded record that dev edited
+groups of at most 100; a group Firestore refuses as too big is halved until it
+commits. Without a plan it refuses a seeded record that dev edited
 or deleted and retains a seeded record the source withdrew. With a plan it
 restores or removes only the listed seed-written rows whose document and receipt
 still match the dry run; a seeded record changed after the dry run is refused.

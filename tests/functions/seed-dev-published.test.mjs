@@ -664,10 +664,28 @@ describe('isolated published-content seed', () => {
     const manifest = await exportSeed();
     const copy = await copied(manifest);
     const groups = [];
-    const first = await importPublished({ firestore: dev, manifest, copy, apply: true, onGroup: group => groups.push(group) });
+    // Fake Firestore's commit limit: a write transaction with more than 60 sets
+    // is refused as the real service refuses an index-heavy commit.
+    const limited = new Proxy(dev, { get(target, key) {
+      if (key === 'runTransaction') return (body, options) => target.runTransaction(async transaction => {
+        let sets = 0;
+        const counted = new Proxy(transaction, { get(inner, name) {
+          if (name === 'set') return (...args) => { sets++; return inner.set(...args); };
+          const value = inner[name];
+          return typeof value === 'function' ? value.bind(inner) : value;
+        } });
+        const result = await body(counted);
+        if (sets > 60) throw Object.assign(new Error('3 INVALID_ARGUMENT: Transaction too big. Decrease transaction size.'), { code: 3 });
+        return result;
+      }, options);
+      const value = target[key];
+      return typeof value === 'function' ? value.bind(target) : value;
+    } });
+    const first = await importPublished({ firestore: limited, manifest, copy, apply: true, onGroup: group => groups.push(group) });
     expect(first.changed).toBe(112);
-    // Each committed group is reported as it commits.
-    expect(groups.map(group => [group.group, group.changed])).toEqual([[0, 100], [1, 12]]);
+    // Each committed group is reported as it commits; refused groups are halved until they fit.
+    expect(groups.map(group => group.changed)).toEqual([25, 25, 25, 25, 12]);
+    expect(groups.map(group => group.group)).toEqual([0, 1, 2, 3, 4]);
     expect((await importPublished({ firestore: dev, manifest, copy, apply: true })).unchanged).toBe(112);
     await source.doc('cmsPages/contact').update({ 'published.metadata.title': 'Updated public title', 'published.sourceVersion': 5 });
     const newer = await exportSeed();

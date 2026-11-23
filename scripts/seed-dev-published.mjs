@@ -704,15 +704,28 @@ export async function importPublished({ firestore, manifest, copy, plan, source 
   if (!apply) return preflight;
   const result = { ...preflight, applied: true, changed: 0, unchanged: 0, deleted: 0, restored: [], removed: [], retained: [] };
   const items = [...records.map(record => ({ record })), ...removals.map(removal => ({ removal }))];
-  // The empty seed still initializes the fresh coordinator.
-  for (let offset = 0, group = 0; offset < Math.max(1, items.length); offset += 100, group++) {
-    const slice = items.slice(offset, offset + 100);
-    const batch = await run(slice.filter(item => item.record).map(item => item.record), slice.filter(item => item.removal).map(item => item.removal), true, true);
+  let group = 0;
+  const applyGroup = async slice => {
+    let batch;
+    try {
+      batch = await run(slice.filter(item => item.record).map(item => item.record), slice.filter(item => item.removal).map(item => item.removal), true, true);
+    } catch (error) {
+      // Firestore counts index entries toward its commit limit, so a group of
+      // index-heavy rows can exceed it (production media on Nov. 23, 2026).
+      // Halve the group; each half repeats every check in its own transaction.
+      if (slice.length < 2 || error?.code !== 3 || !/Transaction too big/.test(String(error.message))) throw error;
+      const half = Math.ceil(slice.length / 2);
+      await applyGroup(slice.slice(0, half));
+      await applyGroup(slice.slice(half));
+      return;
+    }
     // Each committed group is reported at once, so a later failure keeps the record of earlier writes.
-    onGroup({ group, ...batch });
+    onGroup({ group: group++, ...batch });
     result.changed += batch.changed; result.unchanged += batch.unchanged; result.deleted += batch.deleted;
     result.restored.push(...batch.restored); result.removed.push(...batch.removed); result.retained.push(...batch.retained);
-  }
+  };
+  // The empty seed still initializes the fresh coordinator.
+  for (let offset = 0; offset < Math.max(1, items.length); offset += 100) await applyGroup(items.slice(offset, offset + 100));
   // Compare what apply did with the plan it was given. Planned rows already at the
   // source (a resumed refresh) are notApplied; retained rows still fail verify.
   const done = new Set([...result.restored, ...result.removed].map(({ path }) => path));
