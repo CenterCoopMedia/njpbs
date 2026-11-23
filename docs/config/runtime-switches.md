@@ -60,10 +60,17 @@ release-path controls in the
 | `system/mediaPurge.enabled` and `dryRun` | [Sweep](../../functions/media-purge-sweep.js), [executor](../../functions/lib/media-purge-executor.js) | Sweep setting defaults to enabled and dry-run. Deployment real-delete admission also applies. Values require Firestore readback. | Media retention | Another runtime mechanism can stop or dry-run deletion without touching unrelated services. |
 | `system/mediaPurge.immediateDeleteDelegates` | [Image bin](../../functions/list-binned-media.js), [permanent deletion](../../functions/media-purge-now.js) | Optional array of explicitly delegated administrator UIDs. An absent or empty array grants nobody access. Only a backend operator can change it. The deployment real-delete fence and runtime switches still apply. | Media retention | Permanent image deletion no longer accepts individual delegations. |
 | `CMS_VIDEO_REPLACEMENT_CLEANUP_DRY_RUN` | [Media source configuration](../../functions/lib/media-source-runtime.js), [source replacement](../../functions/source-video-replacement.js) | Dry-run. Repo unset. Committed development: dry-run. | Media retention | Cleanup is retired or separately reviewed permanent-deletion authorization replaces this guard. |
-| `NJPBS_VIDEO_BACKUP_ENABLED` | [Backup service entrypoint](../../infrastructure/video-backup/run.sh), [copy command](../../scripts/backup-video-viewing-copies.mjs) | Off. Installed host value needs readback. | Media backup | A replacement retains verified backups and an independent stop for scheduled copy work. |
+| `NJPBS_VIDEO_BACKUP_ENABLED` | [Backup service entrypoint](../../infrastructure/video-backup/run.sh), [copy command](../../scripts/backup-video-viewing-copies.mjs) | Off. Installed host value needs readback. See the backup project setting below. | Media backup | A replacement retains verified backups and an independent stop for scheduled copy work. |
 | `COST_LEDGER_GCP_PULL`, `COST_LEDGER_CLOUDFLARE_PULL`, `COST_LEDGER_AWS_PULL`, `COST_LEDGER_GITHUB_PULL` | [Cost ledger refresh](../../functions/cost-ledger-refresh.js), [provider dispatch](../../functions/lib/cost-pullers.js) | Off individually. Repo: all four on. | Cost ledger | Remove a provider's switch with that provider's puller, or when a provider-specific credential circuit breaker replaces it. |
 | `system/billing.disabled`, `BILLING_DISABLE_THRESHOLD` | [Billing handler](../../functions/billing.js), [spending guard](../../functions/lib/billing-state.js) | Missing control permits metered work. Threshold defaults to `1.0`. Control needs Firestore readback. | Billing operations | All metered consumers use a replacement spending halt and its on-budget, over-budget and recovery behavior is proven. |
 | `BILLING_KILL_SWITCH_MODE`, `BILLING_KILL_SWITCH_THRESHOLD` | [Cloud Billing kill switch](../../infrastructure/billing-kill-switch/index.js) | `simulate` and ratio `1.0`. Installed provider value needs readback. | Billing operations | The standalone service is retired or the replacement can rehearse and stop Cloud Billing with preserved authorization. |
+
+Set `GOOGLE_CLOUD_PROJECT` to the backup Firebase project before running
+`--inventory` or enabling scheduled copies. The service reads its environment
+from `~/.config/njpbs-video-backup.env`. The service account's `project_id` must
+match. Scheduled copies track inventory separately for each project. The first
+run after this change starts a fresh inventory and keeps existing verified
+archive receipts. Keep a single writer per destination bucket.
 
 ### Build and operator controls
 

@@ -53,7 +53,7 @@ if (phase === "backup") {
       eligibleBytes: sizeBytes, gapCount: 1, gapReasons: { missing_viewing_copy: 1 },
     });
     const state = createFileBackupState(join(root, "state"));
-    const options = { db, sourceBucket, state, destination, pageSize: 1,
+    const options = { projectId: project, db, sourceBucket, state, destination, pageSize: 1,
       source: createFileBackupSource(join(root, "source"), identityKey) };
     let inventory;
     do {

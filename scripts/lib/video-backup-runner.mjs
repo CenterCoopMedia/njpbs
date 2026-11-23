@@ -2,17 +2,21 @@ import backup from "../../functions/lib/video-backup.js";
 
 const { inventoryPage, copyViewingCopy, MAX_PAGE } = backup;
 
-function runKey(runId) {
+function runKey(projectKey, runId) {
   if (!/^[A-Za-z0-9_-]{1,100}$/.test(runId)) throw Error("Invalid inventory run ID");
-  return `runs/${runId}`;
+  return `${projectKey}/runs/${runId}`;
 }
 
 // Call one step per independent job invocation. These functions do not install
 // a schedule, initialize Firebase, resolve credentials or call the app workflow.
-export function createVideoBackupRunner({ db, source, sourceBucket, destination, state,
+export function createVideoBackupRunner({ projectId, db, source, sourceBucket, destination, state,
   pageSize = MAX_PAGE, maxFileBytes, stagingDirectory, now = () => new Date().toISOString() }) {
+  // Sweep cursors belong to Firestore. The lock and verified object receipts
+  // belong to the destination and stay shared across sweeps.
+  const projectKey = `projects/${projectId}`;
+  const backgroundKey = `${projectKey}/background`;
   async function inventoryStep(runId) {
-    const key = runKey(runId);
+    const key = runKey(projectKey, runId);
     const checkpoint = await state.read(`${key}/inventory`) || {
       schemaVersion: 1, runId, sourceBucket, startedAt: now(), pages: 0, after: null,
       scanned: 0, eligibleFiles: 0, eligibleBytes: 0, gapCount: 0, gapReasons: {}, complete: false,
@@ -35,7 +39,7 @@ export function createVideoBackupRunner({ db, source, sourceBucket, destination,
 
   async function copyStep(runId, { verifyExisting = false } = {}) {
     if (typeof verifyExisting !== "boolean") throw Error("Invalid verification mode");
-    const key = runKey(runId);
+    const key = runKey(projectKey, runId);
     const inventory = await state.read(`${key}/inventory`);
     if (!inventory?.complete) throw Error("Complete and report inventory before copying");
     if (inventory.sourceBucket !== sourceBucket) throw Error("Inventory source binding changed");
@@ -71,19 +75,16 @@ export function createVideoBackupRunner({ db, source, sourceBucket, destination,
     // transfer. New sweeps start at the beginning to discover newly ready copies
     // behind a previous cursor. Failed copies are retried on subsequent sweeps.
     tick: ({ allowCopy = false } = {}) => state.withLock(async () => {
-      let cycle = await state.read("background") || { sequence: 1, phase: "inventory" };
+      const cycle = await state.read(backgroundKey) || { sequence: 1, phase: "inventory" };
       const runId = `sweep-${cycle.sequence}`;
       if (cycle.phase === "inventory") {
         const inventory = await inventoryStep(runId);
-        if (inventory.complete) {
-          cycle = { ...cycle, phase: "copy" };
-          await state.write("background", cycle);
-        }
+        if (inventory.complete) await state.write(backgroundKey, { ...cycle, phase: "copy" });
         return { phase: "inventory", inventory };
       }
-      if (!allowCopy) return { phase: "awaiting_copy", inventory: await state.read(`${runKey(runId)}/inventory`) };
+      if (!allowCopy) return { phase: "awaiting_copy", inventory: await state.read(`${runKey(projectKey, runId)}/inventory`) };
       const copy = await copyStep(runId);
-      if (copy.complete) await state.write("background", { sequence: cycle.sequence + 1, phase: "inventory" });
+      if (copy.complete) await state.write(backgroundKey, { sequence: cycle.sequence + 1, phase: "inventory" });
       return { phase: "copy", copy };
     }),
   };
