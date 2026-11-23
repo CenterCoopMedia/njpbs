@@ -59,7 +59,7 @@ test("the Studio and Admin builds receive their configured suppliers", () => {
   assert.ok(step?.includes('CMS_STUDIO_API_ORIGIN: ${{ vars.CMS_STUDIO_API_ORIGIN }}'));
   assert.ok(step?.includes('node agents/vmix/build-windows.mjs'));
   const admin = workflow.split('      - name: Build admin app\n')[1]?.split('\n      - name:')[0];
-  assert.ok(admin?.includes('VITE_CMS_STUDIO_CONFIGURATION: ${{ secrets.VITE_CMS_STUDIO_CONFIGURATION }}'));
+  assert.ok(admin?.includes("VITE_CMS_STUDIO_CONFIGURATION: ${{ inputs.target != 'development' && secrets.VITE_CMS_STUDIO_CONFIGURATION || '' }}"));
   const policy = JSON.parse(readFileSync(new URL('../../.github/deploy-environments.json', import.meta.url), 'utf8'));
   assert.ok(policy.production.secrets.includes('VITE_CMS_STUDIO_CONFIGURATION'));
 });
@@ -70,7 +70,8 @@ test("the Functions writer and planner derive Studio titles from the same privat
   const planner = workflow.jobs["firebase-preflight"].steps.find(step => step.name === "Plan Functions and renderer release");
   const admin = workflow.jobs["admin-build"].steps.find(step => step.name === "Build admin app");
   for (const step of [writer, planner]) {
-    assert.equal(step.env.VITE_CMS_STUDIO_CONFIGURATION, "${{ secrets.VITE_CMS_STUDIO_CONFIGURATION }}");
+    // A development run reads no production Studio preset.
+    assert.equal(step.env.VITE_CMS_STUDIO_CONFIGURATION, "${{ inputs.target != 'development' && secrets.VITE_CMS_STUDIO_CONFIGURATION || '' }}");
     assert.equal(step.env.VITE_LIVE_PRODUCTION_ENABLED, "${{ vars.LIVE_PRODUCTION_ENABLED || 'false' }}");
     assert.equal(step.env.VITE_LIVE_PRODUCTION_ENABLED, admin.env.VITE_LIVE_PRODUCTION_ENABLED);
   }

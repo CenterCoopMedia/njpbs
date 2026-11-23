@@ -372,17 +372,14 @@ export async function runCmsFunctionSmoke({
 }
 
 // A cms-staging-deploy development run deploys the production entry into the
-// dev project. The dev Admin stays behind Access, so it proves the anonymous
-// refusal instead of the production authentication shell.
+// dev project. Its live-smoke job proves the dev Admin's anonymous refusal in
+// place of the production authentication shell.
 export async function runTargetDevCmsFunctionSmoke({ baseUrl, target, request = fetch } = {}) {
   if (target?.environment !== "development" || baseUrl !== target.apiOrigin) {
     throw new CmsSmokeError("Development smoke requires the dev API origin");
   }
-  const result = await runFunctionSmoke({ baseUrl, functionsOrigin: target.functionsOrigin,
+  return runFunctionSmoke({ baseUrl, functionsOrigin: target.functionsOrigin,
     adminOrigin: target.adminOrigin, deployedFunctionNames: DEPLOYED_FUNCTION_NAMES, request });
-  const { checkDevAnonymousRefusal } = await import("./check-dev-anonymous-refusal.mjs");
-  await checkDevAnonymousRefusal({ hosts: [new URL(target.adminOrigin).hostname], fetchImpl: request });
-  return { checked: result.checked + 1 };
 }
 
 async function runFunctionSmoke({ baseUrl, functionsOrigin, adminOrigin, deployedFunctionNames, request }) {

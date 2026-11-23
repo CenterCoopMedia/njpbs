@@ -88,6 +88,13 @@ env:
   # Production evaluates to the values this workflow has always used. Names stay
   # literal: repository variables hold production values, so a dev run must never
   # fall back to one.
+  # A job in the development environment falls back to the repository (production)
+  # value of any name the environment lacks. The jawn-ops release runner lists the
+  # development environment before a development dispatch and refuses any name
+  # below that it lacks. JSON; tests/preflight/cms-deploy-workflow-parity.test.js
+  # keeps it equal to what a development run reads.
+  CMS_DEVELOPMENT_ENVIRONMENT_NAMES: >-
+    {"secrets": ["CLOUDFLARE_ACCOUNT_ID", "CLOUDFLARE_API_TOKEN", "CMS_BUG_REPORT_GITHUB_TOKEN", "CMS_BUG_REPORT_GITHUB_WEBHOOK_SECRET", "CMS_BUG_REPORT_TELEGRAM_ADMIN_MAP", "CMS_BUG_REPORT_TELEGRAM_BOT_TOKEN", "CMS_BUG_REPORT_TELEGRAM_CHAT_ID", "CMS_BUG_REPORT_TELEGRAM_WEBHOOK_SECRET", "CMS_DEV_ACCESS_CLIENT_ID", "CMS_DEV_ACCESS_CLIENT_SECRET", "CMS_EDGE_ORIGIN_SECRET", "CMS_MEDIA_CACHE_PURGE_TOKEN", "CMS_PREVIEW_R2_CREDENTIAL", "CMS_PREVIEW_SMOKE_CREDENTIAL", "CMS_STAFF_EMAIL_API_TOKEN", "CMS_VOICEOVER_R2_ACCESS_KEY_ID", "CMS_VOICEOVER_R2_SECRET_ACCESS_KEY", "FIREBASE_SERVICE_ACCOUNT"], "variables": ["CMS_DEV_RENDERER_SOURCE_SHA", "CMS_PREVIEW_SMOKE_TARGET", "FIREBASE_DEPLOY_SERVICE_ACCOUNT", "VITE_FIREBASE_API_KEY", "VITE_FIREBASE_APPCHECK_SITE_KEY", "VITE_FIREBASE_APP_ID", "VITE_FIREBASE_AUTH_DOMAIN", "VITE_FIREBASE_PROJECT_ID", "VITE_FUNCTIONS_BASE_URL"]}
   CMS_TARGET: ${{ inputs.target == 'development' && 'development' || 'production' }}
   CMS_TARGET_FIREBASE_PROJECT: ${{ inputs.target == 'development' && 'njpbs-site-dev' || 'njpbs-site' }}
   CMS_TARGET_ADMIN_ORIGIN: ${{ inputs.target == 'development' && 'https://dev-admin.njpbs.org' || 'https://admin.njpbs.org' }}
@@ -212,6 +219,19 @@ jobs:
             echo "The $CMS_TARGET environment is missing deploy secrets: ${missing[*]}" >&2
             exit 1
           fi
+      - name: Record the production steps a development run skips
+        if: inputs.target == 'development'
+        run: |
+          {
+            echo "### Production steps this development run skips"
+            echo "- Preview renderer pause, deploy, receipts and Containers probe: not rehearsed on dev; cms-dev-deploy.yml still writes the dev renderer (jawn-ops#1188)."
+            echo "- Admin public authentication shell: the dev Admin stays behind Access. Dev counterpart: the anonymous-refusal proof in live-smoke."
+            echo "- Signed-out Admin boot check: the dev Admin answers with the Access login. Dev counterpart: the anonymous-refusal proof in live-smoke."
+            echo "- Private guide boundary checks: they read the production guide bucket and host."
+            echo "- Studio connector package: dev has no private master-media bucket."
+            echo "- Contract settlement: dev publication is held (CMS_DEV_PUBLISH_ENABLED=false)."
+            echo "- Voiceover upload: the dev voiceover keys are placeholders; not rehearsed on dev."
+          } >> "$GITHUB_STEP_SUMMARY"
       - name: Metered-API source scan (before any scanned code runs)
         run: node "$RUNNER_TEMP/admin-status-gate"/.github/scripts/metered-api-scan.mjs --target-root "$GITHUB_WORKSPACE"
       - name: Check out trusted configuration renderer
@@ -400,7 +420,7 @@ jobs:
         run: npm run admin:build
         env:
           # Source-reader integration is documented in docs/config/studio-build-suppliers.md.
-          VITE_CMS_STUDIO_CONFIGURATION: ${{ secrets.VITE_CMS_STUDIO_CONFIGURATION }}
+          VITE_CMS_STUDIO_CONFIGURATION: ${{ inputs.target != 'development' && secrets.VITE_CMS_STUDIO_CONFIGURATION || '' }}
           VITE_FIREBASE_API_KEY: ${{ vars.VITE_FIREBASE_API_KEY || secrets.VITE_FIREBASE_API_KEY }}
           VITE_FIREBASE_APP_ID: ${{ vars.VITE_FIREBASE_APP_ID || secrets.VITE_FIREBASE_APP_ID }}
           VITE_FIREBASE_AUTH_DOMAIN: ${{ vars.VITE_FIREBASE_AUTH_DOMAIN || secrets.VITE_FIREBASE_AUTH_DOMAIN }}
@@ -659,7 +679,7 @@ jobs:
           CMS_BUG_REPORT_TELEGRAM_CHAT_ID: ${{ secrets.CMS_BUG_REPORT_TELEGRAM_CHAT_ID }}
           CMS_BUG_REPORT_TELEGRAM_ADMIN_MAP: ${{ secrets.CMS_BUG_REPORT_TELEGRAM_ADMIN_MAP }}
           CMS_DEPLOYMENT_VARIABLES_JSON: ${{ toJSON(vars) }}
-          VITE_CMS_STUDIO_CONFIGURATION: ${{ secrets.VITE_CMS_STUDIO_CONFIGURATION }}
+          VITE_CMS_STUDIO_CONFIGURATION: ${{ inputs.target != 'development' && secrets.VITE_CMS_STUDIO_CONFIGURATION || '' }}
           VITE_LIVE_PRODUCTION_ENABLED: ${{ vars.LIVE_PRODUCTION_ENABLED || 'false' }}
           CMS_MEDIA_CACHE_PURGE_TOKEN: ${{ secrets.CMS_MEDIA_CACHE_PURGE_TOKEN }}
           CMS_VOICEOVER_R2_ACCESS_KEY_ID: ${{ secrets.CMS_VOICEOVER_R2_ACCESS_KEY_ID }}
@@ -725,7 +745,7 @@ jobs:
         env:
           DEPLOY_SHA: ${{ needs.admin-build.outputs.deploy_sha }}
           CMS_DEPLOYMENT_VARIABLES_JSON: ${{ toJSON(vars) }}
-          VITE_CMS_STUDIO_CONFIGURATION: ${{ secrets.VITE_CMS_STUDIO_CONFIGURATION }}
+          VITE_CMS_STUDIO_CONFIGURATION: ${{ inputs.target != 'development' && secrets.VITE_CMS_STUDIO_CONFIGURATION || '' }}
           VITE_LIVE_PRODUCTION_ENABLED: ${{ vars.LIVE_PRODUCTION_ENABLED || 'false' }}
           CMS_ADMIN_BUILD_REVISION: ${{ needs.admin-build.outputs.deploy_sha }}
           CMS_PREVIEW_RENDERER_SHA: ${{ env.CMS_TARGET_RENDERER_SHA || needs.admin-build.outputs.deploy_sha }}
@@ -805,7 +825,7 @@ jobs:
           CMS_BUG_REPORT_TELEGRAM_CHAT_ID: ${{ secrets.CMS_BUG_REPORT_TELEGRAM_CHAT_ID }}
           CMS_BUG_REPORT_TELEGRAM_ADMIN_MAP: ${{ secrets.CMS_BUG_REPORT_TELEGRAM_ADMIN_MAP }}
           CMS_DEPLOYMENT_VARIABLES_JSON: ${{ toJSON(vars) }}
-          VITE_CMS_STUDIO_CONFIGURATION: ${{ secrets.VITE_CMS_STUDIO_CONFIGURATION }}
+          VITE_CMS_STUDIO_CONFIGURATION: ${{ inputs.target != 'development' && secrets.VITE_CMS_STUDIO_CONFIGURATION || '' }}
           VITE_LIVE_PRODUCTION_ENABLED: ${{ vars.LIVE_PRODUCTION_ENABLED || 'false' }}
           CMS_MEDIA_CACHE_PURGE_TOKEN: ${{ secrets.CMS_MEDIA_CACHE_PURGE_TOKEN }}
           CMS_VOICEOVER_R2_ACCESS_KEY_ID: ${{ secrets.CMS_VOICEOVER_R2_ACCESS_KEY_ID }}
@@ -1274,7 +1294,7 @@ jobs:
         env:
           DEPLOY_SHA: ${{ needs.admin-build.outputs.deploy_sha }}
           CMS_DEPLOYMENT_VARIABLES_JSON: ${{ toJSON(vars) }}
-          VITE_CMS_STUDIO_CONFIGURATION: ${{ secrets.VITE_CMS_STUDIO_CONFIGURATION }}
+          VITE_CMS_STUDIO_CONFIGURATION: ${{ inputs.target != 'development' && secrets.VITE_CMS_STUDIO_CONFIGURATION || '' }}
           VITE_LIVE_PRODUCTION_ENABLED: ${{ vars.LIVE_PRODUCTION_ENABLED || 'false' }}
           CMS_ADMIN_BUILD_REVISION: ${{ needs.admin-build.outputs.deploy_sha }}
           CMS_PREVIEW_RENDERER_SHA: ${{ env.CMS_TARGET_RENDERER_SHA || needs.firebase-preflight.outputs.renderer_target_sha }}
@@ -1356,7 +1376,8 @@ jobs:
         # reported, not guessed at; supply AUTHOR_PROFILE_MAPPING and rerun to seed
         # them, or let each person's first profile visit mint their own.
         env:
-          AUTHOR_PROFILE_MAPPING: ${{ vars.AUTHOR_PROFILE_MAPPING }}
+          # The mapping names production accounts; dev reports unmapped accounts instead.
+          AUTHOR_PROFILE_MAPPING: ${{ inputs.target != 'development' && vars.AUTHOR_PROFILE_MAPPING || '' }}
         run: |
           set -euo pipefail
           node scripts/backfill-author-profiles.mjs
@@ -1472,7 +1493,7 @@ jobs:
         env:
           DEPLOY_SHA: ${{ needs.admin-build.outputs.deploy_sha }}
           CMS_DEPLOYMENT_VARIABLES_JSON: ${{ toJSON(vars) }}
-          VITE_CMS_STUDIO_CONFIGURATION: ${{ secrets.VITE_CMS_STUDIO_CONFIGURATION }}
+          VITE_CMS_STUDIO_CONFIGURATION: ${{ inputs.target != 'development' && secrets.VITE_CMS_STUDIO_CONFIGURATION || '' }}
           VITE_LIVE_PRODUCTION_ENABLED: ${{ vars.LIVE_PRODUCTION_ENABLED || 'false' }}
           CMS_ADMIN_BUILD_REVISION: ${{ needs.admin-build.outputs.deploy_sha }}
           CMS_PREVIEW_RENDERER_SHA: ${{ env.CMS_TARGET_RENDERER_SHA || needs.admin-build.outputs.deploy_sha }}
@@ -1782,6 +1803,10 @@ jobs:
         env:
           ADMIN_BOOT_URL: ${{ env.CMS_TARGET_ADMIN_ORIGIN }}/
         run: npm run test:boot -w njpbs-admin
+      - name: Prove the dev Admin refuses anonymous requests
+        # Dev counterpart of the signed-out Admin shell check (dev-anonymous-refusal.yml runs the same proof).
+        if: inputs.target == 'development'
+        run: node scripts/check-dev-anonymous-refusal.mjs "${CMS_TARGET_ADMIN_ORIGIN#https://}"
       - name: Smoke-test one signed-in private preview
         timeout-minutes: 4
         env:
@@ -2048,7 +2073,7 @@ jobs:
           CMS_BUG_REPORT_TELEGRAM_CHAT_ID: ${{ secrets.CMS_BUG_REPORT_TELEGRAM_CHAT_ID }}
           CMS_BUG_REPORT_TELEGRAM_ADMIN_MAP: ${{ secrets.CMS_BUG_REPORT_TELEGRAM_ADMIN_MAP }}
           CMS_DEPLOYMENT_VARIABLES_JSON: ${{ toJSON(vars) }}
-          VITE_CMS_STUDIO_CONFIGURATION: ${{ secrets.VITE_CMS_STUDIO_CONFIGURATION }}
+          VITE_CMS_STUDIO_CONFIGURATION: ${{ inputs.target != 'development' && secrets.VITE_CMS_STUDIO_CONFIGURATION || '' }}
           VITE_LIVE_PRODUCTION_ENABLED: ${{ vars.LIVE_PRODUCTION_ENABLED || 'false' }}
           CMS_MEDIA_CACHE_PURGE_TOKEN: ${{ secrets.CMS_MEDIA_CACHE_PURGE_TOKEN }}
           CMS_VOICEOVER_R2_ACCESS_KEY_ID: ${{ secrets.CMS_VOICEOVER_R2_ACCESS_KEY_ID }}
@@ -2173,7 +2198,7 @@ jobs:
           CMS_BUG_REPORT_TELEGRAM_CHAT_ID: ${{ secrets.CMS_BUG_REPORT_TELEGRAM_CHAT_ID }}
           CMS_BUG_REPORT_TELEGRAM_ADMIN_MAP: ${{ secrets.CMS_BUG_REPORT_TELEGRAM_ADMIN_MAP }}
           CMS_DEPLOYMENT_VARIABLES_JSON: ${{ toJSON(vars) }}
-          VITE_CMS_STUDIO_CONFIGURATION: ${{ secrets.VITE_CMS_STUDIO_CONFIGURATION }}
+          VITE_CMS_STUDIO_CONFIGURATION: ${{ inputs.target != 'development' && secrets.VITE_CMS_STUDIO_CONFIGURATION || '' }}
           VITE_LIVE_PRODUCTION_ENABLED: ${{ vars.LIVE_PRODUCTION_ENABLED || 'false' }}
           CMS_MEDIA_CACHE_PURGE_TOKEN: ${{ secrets.CMS_MEDIA_CACHE_PURGE_TOKEN }}
           CMS_VOICEOVER_R2_ACCESS_KEY_ID: ${{ secrets.CMS_VOICEOVER_R2_ACCESS_KEY_ID }}
