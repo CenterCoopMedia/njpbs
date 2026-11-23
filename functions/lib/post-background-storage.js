@@ -14,11 +14,12 @@ function createPostBackgroundStorage(bucketName = process.env.NO_BUILD_POST_BACK
     return getStorage(app).bucket(bucketName).file(key);
   }
   return {
-    async deleteExternalInputs(operationId) {
+    async deleteExternalInputs(operationId, { signal } = {}) {
       if (typeof operationId !== "string" || !/^[A-Za-z0-9]{20}$/.test(operationId)) {
         throw new Error("Invalid external refresh operation");
       }
       for (const name of EXTERNAL_INPUT_FILES) {
+        signal?.throwIfAborted();
         await file(`${PREFIX}external-inputs/${operationId}/${name}`).delete({ ignoreNotFound: true });
       }
     },

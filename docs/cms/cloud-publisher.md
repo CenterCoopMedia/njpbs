@@ -234,7 +234,8 @@ Before the first upload, it records the staged prefix and lease. Acceptance
 removes the staging entry in the same transaction that publishes the input
 receipts. A later refresh claim fences the previous attempt and sweeps up to
 four expired staging entries, each with three exact JSON object keys. Cleanup
-failures keep entries for a later pass while provider refresh continues.
+has a 30-second budget. Failures keep entries for a later pass while provider
+refresh continues.
 Accepted input objects remain available for historical replay and recovery.
 The publisher storage identity needs `storage.objects.delete` on the
 `post-background-v1/external-inputs/` namespace for that cleanup.

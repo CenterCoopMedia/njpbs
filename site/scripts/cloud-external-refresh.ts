@@ -137,18 +137,36 @@ export function boundedFetch(fetchImpl: typeof fetch, provider: "media-manager" 
   };
 }
 
-async function cleanAbandonedExternalInputs(staging: CollectionReference, storage: Storage, now: number) {
-  const expired = await staging.where("cleanupAfter", "<=", now).orderBy("cleanupAfter").limit(INPUT_CLEANUP_BATCH).get();
-  for (const row of expired.docs) {
-    try {
-      await storage.deleteExternalInputs(row.id);
-      await row.ref.delete();
-    } catch {
-      console.error("Abandoned external input cleanup failed");
-      // Let later prefixes make progress even when one prefix can't be deleted.
-      await row.ref.update({ cleanupAfter: now + 60_000 }).catch(() => {});
-    }
-  }
+export async function cleanAbandonedExternalInputs(staging: CollectionReference, storage: Pick<Storage, "deleteExternalInputs">, now: number) {
+  const controller = new AbortController();
+  const { signal } = controller;
+  const sweep = async () => {
+    const expired = await staging.where("cleanupAfter", "<=", now).orderBy("cleanupAfter").limit(INPUT_CLEANUP_BATCH).get();
+    await Promise.all(expired.docs.map(async row => {
+      signal.throwIfAborted();
+      try {
+        await storage.deleteExternalInputs(row.id, { signal });
+        signal.throwIfAborted();
+        await row.ref.delete();
+      } catch {
+        signal.throwIfAborted();
+        console.error("Abandoned external input cleanup failed");
+        // Let later prefixes make progress even when one prefix can't be deleted.
+        await row.ref.update({ cleanupAfter: now + 60_000 }).catch(() => {});
+      }
+    }));
+  };
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const deadline = new Promise<never>((_, reject) => {
+    timer = setTimeout(() => {
+      const error = new Error("Abandoned external input cleanup timed out");
+      controller.abort(error);
+      reject(error);
+    }, INPUT_IO_MS);
+  });
+  // An in-flight SDK request can settle late, but it cannot start another one.
+  try { await Promise.race([sweep(), deadline]); }
+  finally { clearTimeout(timer); }
 }
 
 export function cloudExternalRefresh({ firestore, firebaseApp, runtime, backgroundBucket, stateDirectory,
@@ -211,7 +229,7 @@ export function cloudExternalRefresh({ firestore, firebaseApp, runtime, backgrou
       // The new claim fences older attempts. Sweep only entries already due
       // when it was claimed, independently of the provider refresh result.
       cleanup = cleanAbandonedExternalInputs(staging, storage, claim.startedAt)
-        .catch(() => { console.error("Abandoned external input cleanup discovery failed"); });
+        .catch(() => { console.error("Abandoned external input cleanup did not complete"); });
       await mkdir(directory, { recursive: true, mode: 0o700 });
       const environment = { ...buildEnvironment, REQUIRE_FRESH_CONTENT: "1",
         MEDIA_MANAGER_API_KEY: mediaManagerCredential.key, MEDIA_MANAGER_API_SECRET: mediaManagerCredential.secret,
