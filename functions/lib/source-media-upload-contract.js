@@ -257,6 +257,52 @@ function parseMetadataUpdateRequest(value) {
   };
 }
 
+const BATCH_METADATA_FIELDS = new Set(["description", "credit", "license", "tags", "rightsStatus"]);
+
+function parseBatchMetadataItem(value) {
+  rejectUnknown(value, new Set(["assetId", "expectedVersion", "changes"]), "Item");
+  if (!Number.isSafeInteger(value.expectedVersion) || value.expectedVersion < 1) {
+    throw new SourceMediaValidationError("Expected asset version is invalid");
+  }
+  rejectUnknown(value.changes, BATCH_METADATA_FIELDS, "Metadata");
+  return {
+    assetId: requiredId(value.assetId, "Asset id"),
+    expectedVersion: value.expectedVersion,
+    changes: normalizeMetadata(value.changes, null, { partial: true }),
+  };
+}
+
+function parseMetadataBatchRequest(value) {
+  const action = value?.action;
+  const fields = new Set(["sourceId", "action"]);
+  switch (action) {
+    case "start": fields.add("entries"); break;
+    case "advance": fields.add("assetId"); break;
+    case "inspect":
+    case "cancel": break;
+    default: throw new SourceMediaValidationError("Batch action is invalid");
+  }
+  if (action !== "inspect") fields.add("operationKey");
+  rejectUnknown(value, fields);
+  const sourceId = requiredId(value.sourceId, "Source id");
+  if (action === "inspect") return { sourceId, action };
+  const { operationKey } = value;
+  if (!Number.isSafeInteger(operationKey) || operationKey < 1) {
+    throw new SourceMediaValidationError("Batch operation key is invalid");
+  }
+  const request = { sourceId, action, operationKey };
+  if (action === "advance") return { ...request, assetId: requiredId(value.assetId, "Asset id") };
+  if (action === "cancel") return request;
+  if (!Array.isArray(value.entries) || value.entries.length < 1 || value.entries.length > 100) {
+    throw new SourceMediaValidationError("A batch must contain from 1 through 100 items");
+  }
+  const entries = value.entries.map(parseBatchMetadataItem);
+  if (new Set(entries.map(entry => entry.assetId)).size !== entries.length) {
+    throw new SourceMediaValidationError("A video is listed more than once");
+  }
+  return { ...request, entries };
+}
+
 module.exports = {
   CHECKSUM_PATTERN,
   DEFAULT_PART_SIZE,
@@ -270,6 +316,7 @@ module.exports = {
   normalizeMetadata,
   normalizeVideoMimeType,
   parseDeleteSourceMediaRequest,
+  parseMetadataBatchRequest,
   parseMetadataUpdateRequest,
   parseSessionRequest,
   parseSignUploadPartsRequest,
