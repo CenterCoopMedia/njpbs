@@ -6,9 +6,9 @@ const {
   canonicalMediaAssetRef,
   mediaAssetRefDocumentId,
   parseMediaAssetRef,
-  parseUniqueMediaAssetRefs,
-  storedMediaAssetRef,
 } = require("./media-asset-ref");
+const { SUBCLIP_ID_PATTERN } = require("./saved-video-subclips");
+const { ID_PATTERN } = require("./source-media-contract");
 
 const COLLECTION_SCHEMA_VERSION = 1;
 const COLLECTION_SCOPES = Object.freeze(["private", "all_staff"]);
@@ -105,21 +105,39 @@ function parseCollectionRef(value) {
   }
 }
 
-function parseSortedRefs(values) {
-  let refs;
-  try {
-    refs = parseUniqueMediaAssetRefs(values, MAX_COLLECTION_ITEM_BATCH);
-  } catch (error) {
-    if (error instanceof MediaAssetRefValidationError) {
-      throw new MediaCollectionValidationError(error.message, error.status);
+function parseCollectionItemRef(value) {
+  if (value?.backend === "subclip") {
+    rejectUnknownFields(value, new Set(["backend", "id"]), "Subclip reference");
+    if (typeof value.id !== "string" || !SUBCLIP_ID_PATTERN.test(value.id)) {
+      throw new MediaCollectionValidationError("Saved subclip id is invalid");
     }
-    throw error;
+    return { backend: "subclip", id: value.id };
   }
-  if (refs.length === 0) {
+  return parseCollectionRef(value);
+}
+
+function canonicalCollectionItemRef(ref) {
+  return ref.backend === "subclip" ? `subclip:${ref.id}` : canonicalMediaAssetRef(ref);
+}
+
+function collectionItemDocumentId(ref) {
+  return ref.backend === "subclip"
+    ? createHash("sha256").update(canonicalCollectionItemRef(ref), "utf8").digest("hex")
+    : mediaAssetRefDocumentId(ref);
+}
+
+function parseSortedRefs(values) {
+  if (!Array.isArray(values)) throw new MediaCollectionValidationError("Refs must be an array");
+  if (values.length > MAX_COLLECTION_ITEM_BATCH) throw new MediaCollectionValidationError("Refs has too many values");
+  if (values.length === 0) {
     throw new MediaCollectionValidationError("Choose at least one collection item");
   }
-  return refs.sort((left, right) =>
-    canonicalMediaAssetRef(left).localeCompare(canonicalMediaAssetRef(right)));
+  const unique = new Map(values.map(value => {
+    const ref = parseCollectionItemRef(value);
+    return [canonicalCollectionItemRef(ref), ref];
+  }));
+  return [...unique.values()].sort((left, right) =>
+    canonicalCollectionItemRef(left).localeCompare(canonicalCollectionItemRef(right)));
 }
 
 function parseCursor(value, expected) {
@@ -199,8 +217,14 @@ function parseListCollectionsRequest(value, uid) {
 }
 
 function parseListCollectionItemsRequest(value, uid) {
-  rejectUnknownFields(value, new Set(["collectionId", "cursor", "limit"]));
+  rejectUnknownFields(value, new Set(["collectionId", "cursor", "limit", "subclipId"]));
   const collectionId = requiredDocumentId(value.collectionId);
+  if (value.subclipId !== undefined) {
+    if (value.cursor !== undefined || value.limit !== undefined) {
+      throw new MediaCollectionValidationError("Open a subclip without a page limit or cursor");
+    }
+    return { collectionId, subclipRef: parseCollectionItemRef({ backend: "subclip", id: value.subclipId }) };
+  }
   return {
     collectionId,
     limit: pageLimit(value.limit),
@@ -267,11 +291,17 @@ function parseSetCollectionItemsRequest(value) {
   rejectUnknownFields(
     value,
     new Set([
-      "collectionId", "requestId", "baseMembershipVersion", "present", "refs",
+      "collectionId", "requestId", "baseMembershipVersion", "present", "refs", "subclipAssetId",
     ]),
   );
   if (typeof value.present !== "boolean") {
     throw new MediaCollectionValidationError("Item state must be true or false");
+  }
+  const refs = parseSortedRefs(value.refs);
+  const addingSubclip = value.present && refs.some(ref => ref.backend === "subclip");
+  if (addingSubclip ? refs.length !== 1 || typeof value.subclipAssetId !== "string" || !ID_PATTERN.test(value.subclipAssetId)
+    : value.subclipAssetId !== undefined) {
+    throw new MediaCollectionValidationError("Choose one saved subclip and its source video");
   }
   return {
     collectionId: requiredDocumentId(value.collectionId),
@@ -281,7 +311,8 @@ function parseSetCollectionItemsRequest(value) {
       "Base membership version",
     ),
     present: value.present,
-    refs: parseSortedRefs(value.refs),
+    refs,
+    ...(addingSubclip ? { subclipAssetId: value.subclipAssetId } : {}),
   };
 }
 
@@ -332,8 +363,14 @@ function parseColor(value) {
 }
 
 function storedCollectionItem(value) {
-  const ref = storedMediaAssetRef(value);
-  return ref && value?.schemaVersion === COLLECTION_SCHEMA_VERSION ? ref : null;
+  if (value?.schemaVersion !== COLLECTION_SCHEMA_VERSION) return null;
+  try {
+    const ref = parseCollectionItemRef(value.ref);
+    return canonicalCollectionItemRef(ref) === value.canonicalRef ? ref : null;
+  } catch (error) {
+    if (error instanceof MediaCollectionValidationError) return null;
+    throw error;
+  }
 }
 
 function timestampIso(value) {
@@ -353,10 +390,13 @@ module.exports = {
   MAX_COLLECTION_ITEM_SCAN,
   MAX_COLLECTION_PAGE_SIZE,
   MediaCollectionValidationError,
+  canonicalCollectionItemRef,
   collectionDocumentId,
+  collectionItemDocumentId,
   collectionRequestDocumentId,
   encodeCursor,
   mediaAssetRefDocumentId,
+  parseCollectionItemRef,
   parseListCollectionItemsRequest,
   parseListCollectionsRequest,
   parseMutateCollectionRequest,

@@ -85,10 +85,11 @@ function clipSettingsLabel(clip: VideoClip) {
 const activeTranscript = (state?: string) => state === "queued" || state === "processing";
 const activeClip = (state?: string) => state === "queued" || state === "processing";
 
-export function useVideoProductionTools({ headerControls = false, workspace = false, commentThreads, commentsIncomplete, onOpenComment, commentsAction, onWorkspacePaneChange, principal, onCredentialsDirtyChange, onCredentialsBusyChange, asset, getIdToken, player, canRequest, disabled: mediaDisabled, onDownloadOriginal, onTranscriptDirtyChange, onTranscriptSavingChange, onBusyChange, onSearchContentChanged, onTranscriptRequested, onTranscriptObserved, onTranscriptReady }: {
+export function useVideoProductionTools({ headerControls = false, workspace = false, initialClipRange, commentThreads, commentsIncomplete, onOpenComment, commentsAction, onWorkspacePaneChange, principal, onCredentialsDirtyChange, onCredentialsBusyChange, asset, getIdToken, player, canRequest, disabled: mediaDisabled, onDownloadOriginal, onTranscriptDirtyChange, onTranscriptSavingChange, onBusyChange, onSearchContentChanged, onTranscriptRequested, onTranscriptObserved, onTranscriptReady }: {
   principal?: Principal;
   headerControls?: boolean;
   workspace?: boolean;
+  initialClipRange?: { inMs: number; outMs: number };
   commentThreads?: readonly CommentThread[];
   commentsIncomplete?: boolean;
   onOpenComment?: (comment: MediaComment) => void;
@@ -170,15 +171,15 @@ export function useVideoProductionTools({ headerControls = false, workspace = fa
   const transcriptQuery = useRef("");
   const [transcriptCheckedAt, setTranscriptCheckedAt] = useState<number>();
   const [transcriptChecking, setTranscriptChecking] = useState(false);
-  const [clipOpen, setClipOpen] = useState(false);
+  const [clipOpen, setClipOpen] = useState(Boolean(initialClipRange));
   const [clipSettings, setClipSettings] = useState<ClipSettings>({ resolution: "source", quality: "balanced" });
   const clipSettingsHelpId = useId();
   const validClipSettings = clipResolutionAvailable(clipSettings.resolution, asset.viewingCopy?.width, asset.viewingCopy?.height);
   const duration = asset.viewingCopy?.durationSeconds ?? 0;
   const durationMs = Math.floor(duration * 1000);
-  const [inTime, setInTime] = useState("00:00:00.000");
-  const [outTime, setOutTime] = useState(videoTime(Math.min(durationMs, 1_800_000) / 1000));
-  const outEdited = useRef(false);
+  const [inTime, setInTime] = useState(() => videoTime((initialClipRange?.inMs ?? 0) / 1000));
+  const [outTime, setOutTime] = useState(() => videoTime((initialClipRange?.outMs ?? Math.min(durationMs, 1_800_000)) / 1000));
+  const outEdited = useRef(Boolean(initialClipRange));
   useEffect(() => { if (!outEdited.current && duration > 0) setOutTime(videoTime(Math.min(durationMs, 1_800_000) / 1000)); }, [durationMs]);
   const [clip, setClip] = useState<VideoClip>();
   const binaryIdentity = `${asset.sourceId}/${asset.id}/${asset.fileVersion ?? ""}`;
@@ -709,7 +710,7 @@ export function useVideoProductionTools({ headerControls = false, workspace = fa
         {!validRange ? <p role="status">Enter an in/out range within this video ({videoTime(duration)}).</p> : <p>Selected length: {videoTime((outMs! - inMs!) / 1000)}</p>}
       </>}
       {clipOpen && principal?.id && asset.sourceId === "video-library" && asset.fileVersion ? <VideoSubclips
-        key={`${principal.id}/${binaryIdentity}`} assetId={asset.id} fileVersion={asset.fileVersion}
+        key={`${principal.id}/${binaryIdentity}`} userId={principal.id} assetId={asset.id} fileVersion={asset.fileVersion}
         durationMs={ready ? durationMs : 0} range={ready && validRange ? { inMs: inMs!, outMs: outMs! } : undefined}
         getIdToken={getIdToken} disabled={controlsDisabled}
         onOpen={range => {

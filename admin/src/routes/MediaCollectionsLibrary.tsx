@@ -31,6 +31,7 @@ import {
   mediaCollectionRefKey,
   setMediaCollectionItems,
   type MediaCollectionItemPage,
+  type MediaCollectionItemRef,
   type MediaCollectionLifecycle,
   type MediaCollectionColor,
   type MediaCollectionScope,
@@ -42,7 +43,6 @@ import type { CmsUserDoc } from "../lib/principal";
 import { mediaCollectionsPath, mediaImagesPath, mediaVideosPath } from "../lib/routes";
 import { encodeCollectionsMediaLocation, parseCollectionsMediaLocation } from "../lib/media-query";
 import { MediaToolbar, type MediaToolbarSurfaceConfiguration } from "../components/media/MediaToolbar";
-import type { MediaAssetRef } from "../lib/media-identity";
 import type { Principal } from "../../../packages/content-core/src/rbac";
 import type { SavedMediaView } from "../lib/saved-media-views";
 import { MediaCollectionItems } from "./MediaCollectionItems";
@@ -334,7 +334,8 @@ export function MediaCollectionsLibrary({
       const page = await listMediaCollectionItems(await getIdToken(), { collectionId: id, cursor, limit: 30 });
       if (generation.current !== current) return;
       setDetailState(previous => append && previous.status === "ready"
-        ? { status: "ready", page: { ...page, items: [...previous.page.items, ...page.items] }, pages: previous.pages + 1 }
+        ? { status: "ready", page: { ...page, items: [...previous.page.items, ...page.items],
+          subclips: [...(previous.page.subclips ?? []), ...(page.subclips ?? [])] }, pages: previous.pages + 1 }
         : { status: "ready", page, pages: 1 });
       if (!append && selectedRef && !closesViewer && !page.items.some(item => item.available
         && mediaFullViewerKey(item.ref) === mediaFullViewerKey(selectedRef))) clearOpened();
@@ -517,10 +518,10 @@ export function MediaCollectionsLibrary({
     }
   }
 
-  async function removeItems(refs: readonly MediaAssetRef[]): Promise<boolean> {
+  async function removeItems(refs: readonly MediaCollectionItemRef[]): Promise<boolean> {
     if (!collection || removePending || collection.lifecycle !== "active" || refs.length < 1 || refs.length > 30) return false;
     const key = JSON.stringify(refs);
-    const keys = new Set(refs.map(ref => JSON.stringify(ref)));
+    const keys = new Set(refs.map(mediaCollectionRefKey));
     const operation = removeOperation.current?.key === key && removeOperation.current.version === collection.membershipVersion
       ? removeOperation.current
       : { key, version: collection.membershipVersion, requestId: newRequestId() };
@@ -557,7 +558,8 @@ export function MediaCollectionsLibrary({
               ? previous.page.collection.itemCount
               : Math.max(0, previous.page.collection.itemCount - refs.length),
           },
-          items: previous.page.items.filter(candidate => !keys.has(JSON.stringify(candidate.ref))),
+          items: previous.page.items.filter(candidate => !keys.has(mediaCollectionRefKey(candidate.ref))),
+          subclips: previous.page.subclips?.filter(candidate => !keys.has(mediaCollectionRefKey(candidate.ref))),
         },
       });
       if (changedRefs) {
@@ -720,6 +722,7 @@ export function MediaCollectionsLibrary({
 
   if (collectionId) {
     const canOrganize = Boolean(collection?.canEdit && collection.lifecycle === "active");
+    const hasItems = Boolean(detail?.items.length || detail?.subclips?.length);
     return <section className="media-collections-library" aria-labelledby="media-collection-title">
       {blocker.state === "blocked" && !mutationPending && !viewerOpen ? <LeaveGuardDialog
         onCancel={() => blocker.reset()}
@@ -763,7 +766,7 @@ export function MediaCollectionsLibrary({
             <section className="media-collection-items" aria-labelledby="media-collection-items-title">
               <div className="media-collection-section-heading"><div><h3 id="media-collection-items-title" ref={itemsHeadingRef} tabIndex={-1}>Items</h3><p>Removing an item from this collection does not delete or change the file.</p></div>
                 {collection.itemCount !== undefined ? <StatusBadge tone="neutral">{collection.itemCount} {collection.itemCount === 1 ? "item" : "items"}</StatusBadge> : null}</div>
-              {detail.items.length === 0 ? <EmptyState
+              {!hasItems ? <EmptyState
                 title={collection.scope === "private" ? "This collection is empty" : "No accessible items to show"}
                 description={collection.scope === "private"
                   ? (canOrganize ? "Browse a media source, select items, then choose Add to collection." : undefined)
@@ -772,8 +775,8 @@ export function MediaCollectionsLibrary({
                   {canBrowseImages ? <Button variant="primary" onClick={() => navigate(mediaImagesPath())}>Browse images</Button> : null}
                   <Button variant={canBrowseImages ? undefined : "primary"} onClick={() => navigate(mediaVideosPath())}>Browse videos</Button>
                 </div> : undefined} /> : null}
-              {detail.items.length > 0 || detail.nextCursor ? <MediaCollectionItems
-                  collection={collection} items={detail.items} principal={principal} categories={categories}
+              {hasItems || detail.nextCursor ? <MediaCollectionItems
+                  collection={collection} items={detail.items} subclips={detail.subclips} principal={principal} categories={categories}
                   getIdToken={getIdToken} userId={userId} removalPending={Boolean(removePending)}
                   removalError={removeError} onRemoveMany={removeItems}
                   onLoadMore={() => void loadMoreItems()} loadingMore={detailLoadingMore}
@@ -788,7 +791,7 @@ export function MediaCollectionsLibrary({
                     blocker.proceed?.();
                   }}
                   onInternalNavigation={() => { internalNavigation.current = true; }} /> : null}
-              {detail.items.length === 0 && !detail.nextCursor && removeError ? <InlineMessage tone="error" title="Collection items were not removed">{removeError}</InlineMessage> : null}
+              {!hasItems && !detail.nextCursor && removeError ? <InlineMessage tone="error" title="Collection items were not removed">{removeError}</InlineMessage> : null}
               {detailMoreError ? <InlineMessage tone="error" title="More items were not loaded">{detailMoreError}</InlineMessage> : null}
             </section>
             {archiveError ? <InlineMessage tone="error" title="Collection status did not change">{archiveError}</InlineMessage> : null}

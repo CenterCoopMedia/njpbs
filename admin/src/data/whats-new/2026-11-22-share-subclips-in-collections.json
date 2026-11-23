@@ -1,0 +1,8 @@
+{
+  "date": "2026-11-22",
+  "kind": "new",
+  "order": 1795397113957,
+  "title": "Share saved video ranges in collections",
+  "body": "Open Clip settings on a video, then choose Add to collection next to a saved subclip. In the collection, choose Open range to reuse the same in and out times. Staff still need access to the source video, and adding a range creates no new media file.",
+  "prs": []
+}

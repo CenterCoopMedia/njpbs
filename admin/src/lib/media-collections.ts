@@ -7,32 +7,31 @@ export type MediaCollectionColor = (typeof MEDIA_COLLECTION_COLORS)[number];
 export type MediaCollectionScope = "private" | "all_staff";
 export type MediaCollectionLifecycle = "active" | "archived";
 export type MediaCollectionAsset = MediaAssetSummary | SourceMediaAssetSummary;
+export type MediaCollectionSubclipRef = { backend: "subclip"; id: string };
+export type MediaCollectionItemRef = MediaAssetRef | MediaCollectionSubclipRef;
 
-export function mediaCollectionRefKey(ref: MediaAssetRef): string {
-  return ref.backend === "r2"
-    ? JSON.stringify(["r2", ref.id])
-    : JSON.stringify(["s3", ref.sourceId, ref.id]);
+export function mediaCollectionRefKey(ref: MediaCollectionItemRef): string {
+  return ref.backend === "s3"
+    ? JSON.stringify([ref.backend, ref.sourceId, ref.id])
+    : JSON.stringify([ref.backend, ref.id]);
 }
 
 /** An older or incomplete response cannot prove which requested refs changed. */
-export function confirmedCollectionChangedRefs(
-  result: { changed: boolean; replayed: boolean; changedRefs?: MediaAssetRef[] },
-  requested: readonly MediaAssetRef[],
-): MediaAssetRef[] | null {
+export function confirmedCollectionChangedRefs<Ref extends MediaCollectionItemRef>(
+  result: { changed: boolean; replayed: boolean; changedRefs?: MediaCollectionItemRef[] },
+  requested: readonly Ref[],
+): Ref[] | null {
   if (!result.changed || result.replayed || !Array.isArray(result.changedRefs) || result.changedRefs.length === 0) return null;
-  const requestedKeys = new Set(requested.map(mediaCollectionRefKey));
+  const requestedRefs = new Map(requested.map(ref => [mediaCollectionRefKey(ref), ref]));
   const seen = new Set<string>();
-  const refs: MediaAssetRef[] = [];
+  const refs: Ref[] = [];
   for (const candidate of result.changedRefs) {
-    const ref = candidate?.backend === "r2" && typeof candidate.id === "string" && candidate.id
-      ? { backend: "r2" as const, id: candidate.id }
-      : candidate?.backend === "s3" && typeof candidate.sourceId === "string" && candidate.sourceId
-        && typeof candidate.id === "string" && candidate.id
-        ? { backend: "s3" as const, sourceId: candidate.sourceId, id: candidate.id }
-        : null;
-    if (!ref) return null;
-    const key = mediaCollectionRefKey(ref);
-    if (!requestedKeys.has(key) || seen.has(key)) return null;
+    if (!candidate || typeof candidate.id !== "string" || !candidate.id ||
+      !["r2", "s3", "subclip"].includes(candidate.backend) ||
+      (candidate.backend === "s3" && (typeof candidate.sourceId !== "string" || !candidate.sourceId))) return null;
+    const key = mediaCollectionRefKey(candidate);
+    const ref = requestedRefs.get(key);
+    if (!ref || seen.has(key)) return null;
     seen.add(key);
     refs.push(ref);
   }
@@ -68,6 +67,19 @@ export type MediaCollectionItem =
       available: false;
     };
 
+type SavedRange = {
+  name: string;
+  fileVersion: string;
+  inMs: number;
+  outMs: number;
+  state: "current" | "replaced" | "unavailable";
+};
+
+export type MediaCollectionSubclip = {
+  ref: MediaCollectionSubclipRef;
+  addedAt: string;
+} & ({ available: true; subclip: SavedRange } | { available: false });
+
 export interface MediaCollectionPage {
   success: true;
   collections: MediaCollectionSummary[];
@@ -79,6 +91,7 @@ export interface MediaCollectionItemPage {
   success: true;
   collection: MediaCollectionSummary;
   items: MediaCollectionItem[];
+  subclips?: MediaCollectionSubclip[];
   nextCursor: string | null;
   hasMore: boolean;
 }
@@ -132,6 +145,17 @@ export function listMediaCollectionItems(
   );
 }
 
+export function openMediaCollectionSubclip(
+  token: string | null,
+  collectionId: string,
+  subclipId: string,
+  signal: AbortSignal,
+) {
+  return postFunction<{ success: true; subclip: SavedRange; asset: SourceMediaAssetSummary; canRequestProduction: boolean }>(
+    "cmsListMediaCollectionItems", token, { collectionId, subclipId }, {}, { signal },
+  );
+}
+
 export function mutateMediaCollection(
   token: string | null,
   request: MediaCollectionMutation,
@@ -151,7 +175,8 @@ export function setMediaCollectionItems(
     requestId: string;
     baseMembershipVersion: number;
     present: boolean;
-    refs: MediaAssetRef[];
+    refs: MediaCollectionItemRef[];
+    subclipAssetId?: string;
   },
 ) {
   return postFunction<{
@@ -161,7 +186,7 @@ export function setMediaCollectionItems(
     replayed: boolean;
     version: number;
     membershipVersion: number;
-    changedRefs?: MediaAssetRef[];
+    changedRefs?: MediaCollectionItemRef[];
     hiddenChangedCount?: number;
   }>("cmsSetMediaCollectionItems", token, request, {}, { appCheck: true });
 }

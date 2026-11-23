@@ -1,5 +1,5 @@
 import { useRef } from "react";
-import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { useVideoProductionTools, videoProductionMessage } from "../src/components/VideoProductionTools";
 import { postFunction } from "../src/lib/functions";
@@ -49,11 +49,16 @@ const response = (state: string) => ({ success: true, cached: true, transcript: 
 beforeEach(() => { vi.useFakeTimers(); vi.setSystemTime(new Date("2026-09-15T16:00:00Z")); vi.mocked(postFunction).mockReset(); });
 afterEach(() => { cleanup(); vi.useRealTimers(); });
 
-it("saves and reopens exact subclip times without requesting a video export", async () => {
+it("saves, reopens, and collects a subclip without requesting a video export", async () => {
   const fileVersion = "a".repeat(32);
   const clip = { id: "b".repeat(64), name: "Interview", inMs: 1251, outMs: 2702, fileVersion, state: "current" };
+  const collection = { id: "c".repeat(64), name: "Team selects", scope: "all_staff", membershipVersion: 1 };
   let saved = false;
   vi.mocked(postFunction).mockImplementation(async (endpoint, _token, body) => {
+    if (endpoint === "cmsListMediaCollections") return {
+      success: true, collections: (body as { scope: string }).scope === "all_staff" ? [collection] : [], nextCursor: null,
+    };
+    if (endpoint === "cmsSetMediaCollectionItems") return { success: true, collectionId: collection.id, membershipVersion: 2 };
     if (endpoint !== "cmsManageVideoSubclips") return { success: true, clips: [] };
     if ((body as { action: string }).action === "save") saved = true;
     return { success: true, subclips: saved ? [clip] : [] };
@@ -70,7 +75,16 @@ it("saves and reopens exact subclip times without requesting a video export", as
   await act(async () => fireEvent.click(screen.getByRole("button", { name: "Open range for Interview" })));
   expect(inTime).toHaveValue("00:00:01.251");
   expect(outTime).toHaveValue("00:00:02.702");
+  await act(async () => fireEvent.click(screen.getByRole("button", { name: "Add Interview to collection" })));
+  const picker = within(screen.getByRole("dialog", { name: "Add selected to collection" }));
+  fireEvent.click(picker.getByRole("radio", { name: /Team selects/ }));
+  await act(async () => fireEvent.click(picker.getByRole("button", { name: "Add to collection" })));
+  expect(screen.getByText("Subclip is in Team selects.")).toBeVisible();
   const calls = vi.mocked(postFunction).mock.calls;
+  expect(calls.find(([endpoint]) => endpoint === "cmsSetMediaCollectionItems")?.[2]).toMatchObject({
+    collectionId: collection.id, present: true, baseMembershipVersion: 1,
+    refs: [{ backend: "subclip", id: clip.id }], subclipAssetId: asset.id,
+  });
   expect(calls.filter(([endpoint]) => endpoint === "cmsManageVideoSubclips").map(([, , body]) => body)).toEqual([
     { sourceId: asset.sourceId, assetId: asset.id, action: "list" },
     { sourceId: asset.sourceId, assetId: asset.id, action: "save", name: clip.name, fileVersion, inMs: 1251, outMs: 2702 },

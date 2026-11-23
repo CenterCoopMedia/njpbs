@@ -139,6 +139,7 @@ export interface VideoPreviewProps {
   initialConfirmDelete?: boolean;
   asset: SourceMediaAssetSummary;
   initialSeek?: number;
+  initialClipRange?: { inMs: number; outMs: number };
   onClose: () => void;
   getIdToken: () => Promise<string>;
   canEditMetadata: boolean;
@@ -181,6 +182,7 @@ export interface VideoViewerBodyProps extends Omit<VideoPreviewProps, "steppingO
 
 export function VideoViewerBody({
   initialSeek = 0,
+  initialClipRange,
   initialConfirmDelete = false,
   principal,
   asset,
@@ -214,7 +216,7 @@ export function VideoViewerBody({
   deleteConfirmationId,
   headerTarget, factsTarget, footerTarget, sourceLabel,
 }: VideoViewerBodyProps) {
-  const [workspaceView, setWorkspaceView] = useState<"watch" | "transcript" | "comments">(initialConfirmDelete || initialSeek > 0 || asset.viewingCopy?.state !== "ready" ? "watch" : "transcript");
+  const [workspaceView, setWorkspaceView] = useState<"watch" | "transcript" | "comments">(initialConfirmDelete || initialClipRange || initialSeek > 0 || asset.viewingCopy?.state !== "ready" ? "watch" : "transcript");
   const [contextView, setContextView] = useState<VideoContextView>("details");
   const workspaceId = useId();
   const contextId = `${workspaceId}-context`;
@@ -287,7 +289,7 @@ export function VideoViewerBody({
   const [durationMs, setDurationMs] = useState(() => (asset.viewingCopy?.durationSeconds ?? 0) * 1000);
   // Media time of the frame on screen, from requestVideoFrameCallback.
   const shownMediaTime = useRef<number | null>(null);
-  const production = useVideoProductionTools({ headerControls: true, workspace: hasTranscriptPane,
+  const production = useVideoProductionTools({ headerControls: true, workspace: hasTranscriptPane, initialClipRange,
     commentThreads: commentThreads(feedback.comments.comments).filter(thread => timelineComments.includes(thread.comment)),
     commentsIncomplete: Boolean(feedback.comments.nextCursor),
     onOpenComment: comment => {
