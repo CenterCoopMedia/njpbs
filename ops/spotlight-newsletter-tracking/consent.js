@@ -44,8 +44,8 @@ export function mountNewsletterConsent(win) {
     }
     if (loaded && win.vgo?.q) win.vgo.q.length = 0;
     if (loaded && win.wisepops?.q) win.wisepops.q.length = 0;
-    if (target) win.location.replace(target);
-    else win.location.reload();
+    if (target) win.history.replaceState(null, "", target);
+    win.location.reload();
   }
 
   function excludeMedia() {
