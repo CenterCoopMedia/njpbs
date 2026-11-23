@@ -9,6 +9,7 @@ import {
   type ReactNode,
 } from "react";
 import { createPortal } from "react-dom";
+import { Link } from "react-router";
 import { Inspector, InspectorSection } from "../ui/Inspector";
 import type { Token } from "../ui/TokenInput";
 import { MediaTagInput } from "./MediaTagInput";
@@ -24,6 +25,8 @@ import {
 } from "../../lib/source-media";
 import { sourceFrameRateLabel, isBroadcastFrameRate, sourceFramesPerSecond } from "../../lib/video-frame-rate";
 import { formatMediaDuration, formatVideoBytes } from "../../lib/media-format";
+import { mediaVideosPath } from "../../lib/routes";
+import { videoTime } from "../../lib/video-production";
 import { useMediaFeedback, type MediaFeedback } from "../../lib/use-media-feedback";
 import { tagsToTokens, tokensToTags } from "../../lib/media-tags";
 import { MediaApprovals } from "./MediaApprovals";
@@ -326,6 +329,7 @@ export function VideoDetailsInspector({
   </div>;
   const noticeFooter = contextual && headerSave && Boolean(saveMessage || conflict);
   const viewingCopy = asset.viewingCopy;
+  const parent = asset.parentSource;
   const approvalVersions = asset.approvalVersions;
 
   const detailsFields = <>
@@ -377,6 +381,11 @@ export function VideoDetailsInspector({
           <div><dt>Added to library</dt><dd>{displayDate(asset.createdAt)}</dd></div>
           <div><dt>Filename</dt><dd>{asset.originalName}</dd></div>
           <div><dt>Original file size</dt><dd>{formatVideoBytes(asset.sizeBytes)}</dd></div>
+          {parent?.fileVersion && parent.inMs !== undefined && parent.outMs !== undefined ? <div>
+            <dt>Original range</dt><dd><Link to={`${mediaVideosPath(parent.sourceId)}?${new URLSearchParams({
+              asset: parent.assetId, t: String(parent.inMs / 1000), file: parent.fileVersion,
+            })}`}>{videoTime(parent.inMs / 1000)} to {videoTime(parent.outMs / 1000)}</Link></dd>
+          </div> : null}
           {viewingCopy?.state === "ready" && viewingCopy.sizeBytes ? <div><dt>Web copy size</dt><dd>{formatVideoBytes(viewingCopy.sizeBytes)}</dd></div> : null}
           <div><dt>Source frame rate</dt><dd>{sourceFrameRateLabel(viewingCopy)}</dd></div>
           {sourceFramesPerSecond(viewingCopy) !== null && !isBroadcastFrameRate(viewingCopy) ? <div><dt>Broadcast notice</dt><dd>Not the 29.97 fps broadcast standard. CentralCast needs 29.97 fps (30000/1001); this source cannot air. Selection and publishing remain available.</dd></div> : null}

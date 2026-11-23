@@ -76,22 +76,28 @@ function advancePreviewAdmissionLocks(transaction, refs, snapshots) {
   }));
 }
 
+async function readPreviewAdmission(transaction, firestore, actorUid) {
+  const jobs = firestore.collection(PREVIEW_JOBS);
+  const locks = previewAdmissionLocks(firestore, actorUid);
+  const [actorPreviews, globalPreviews, ...lockSnapshots] = await Promise.all([
+    transaction.get(jobs.where("actorUid", "==", actorUid).where("active", "==", true).limit(MAX_ACTIVE_PREVIEWS_PER_ACTOR)),
+    transaction.get(jobs.where("active", "==", true).limit(MAX_ACTIVE_PREVIEWS_GLOBAL)),
+    ...locks.map(lock => transaction.get(lock)),
+  ]);
+  return { actorPreviews, globalPreviews, locks, lockSnapshots };
+}
+
 async function reservePreviewAdmission(transaction, firestore, session) {
   if (session.sourceId !== "video-library") return;
   const previewJobs = firestore.collection(PREVIEW_JOBS);
   const holdRef = previewJobs.doc(previewHoldId(session.id));
-  const lockRefs = previewAdmissionLocks(firestore, session.actorUid);
-  const [holdSnapshot, actorPreviews, globalPreviews, ...lockSnapshots] = await Promise.all([
+  const [holdSnapshot, { actorPreviews, globalPreviews, locks, lockSnapshots }] = await Promise.all([
     transaction.get(holdRef),
-    transaction.get(previewJobs.where("actorUid", "==", session.actorUid)
-      .where("active", "==", true).limit(MAX_ACTIVE_PREVIEWS_PER_ACTOR)),
-    transaction.get(previewJobs.where("active", "==", true)
-      .limit(MAX_ACTIVE_PREVIEWS_GLOBAL)),
-    ...lockRefs.map((ref) => transaction.get(ref)),
+    readPreviewAdmission(transaction, firestore, session.actorUid),
   ]);
   if (holdSnapshot.exists && holdSnapshot.data()?.active === true) return;
   assertPreviewCapacity(actorPreviews, globalPreviews);
-  advancePreviewAdmissionLocks(transaction, lockRefs, lockSnapshots);
+  advancePreviewAdmissionLocks(transaction, locks, lockSnapshots);
   transaction.set(holdRef, {
     active: true,
     actorUid: session.actorUid,
@@ -339,8 +345,19 @@ function completedAsset(session, head, now) {
     updatedBy: session.actorUid,
     objectKey: session.objectKey,
     objectVersionId: versionId,
-    checksumSha256: head.ChecksumSHA256,
+    checksumSha256: head.ChecksumSHA256 ?? null,
   };
+}
+
+function createIndexedVideo(transaction, firestore, asset, stats, auditEntry) {
+  const assetRef = firestore.collection("mediaSourceAssets").doc(asset.id);
+  transaction.create(assetRef, asset);
+  enqueueVideoSearchShard(transaction, firestore, asset.id, asset.sourceId);
+  transaction.create(firestore.collection(AUDIT_COLLECTIONS.adminLogs).doc(), auditEntry);
+  if (stats?.exact === true && Number.isSafeInteger(stats.activeCount)) {
+    transaction.update(firestore.collection("mediaSourceStats").doc(asset.sourceId),
+      { activeCount: stats.activeCount + 1, updatedAt: asset.updatedAt });
+  }
 }
 
 async function storeCompletedAsset(
@@ -358,20 +375,13 @@ async function storeCompletedAsset(
   return firestore.runTransaction(async (transaction) => {
     const previewJobs = firestore.collection(PREVIEW_JOBS);
     const holdRef = previewJobs.doc(previewHoldId(session.id));
-    const lockRefs = previewAdmissionLocks(firestore, session.actorUid);
-    const actorPreviewQuery = previewJobs.where("actorUid", "==", session.actorUid)
-      .where("active", "==", true).limit(MAX_ACTIVE_PREVIEWS_PER_ACTOR);
-    const globalPreviewQuery = previewJobs.where("active", "==", true)
-      .limit(MAX_ACTIVE_PREVIEWS_GLOBAL);
     const [currentSessionSnapshot, existingAssetSnapshot, statsSnapshot,
-      actorPreviews, globalPreviews, holdSnapshot, ...lockSnapshots] = await Promise.all([
+      holdSnapshot, { actorPreviews, globalPreviews, locks, lockSnapshots }] = await Promise.all([
       transaction.get(sessionRef),
       transaction.get(assetRef),
       transaction.get(statsRef),
-      transaction.get(actorPreviewQuery),
-      transaction.get(globalPreviewQuery),
       transaction.get(holdRef),
-      ...lockRefs.map((ref) => transaction.get(ref)),
+      readPreviewAdmission(transaction, firestore, session.actorUid),
     ]);
     const current = currentSessionSnapshot.exists
       ? validSession(currentSessionSnapshot.id, currentSessionSnapshot.data())
@@ -403,32 +413,16 @@ async function storeCompletedAsset(
         const holdActive = holdSnapshot.exists && holdSnapshot.data()?.active === true;
         if (!holdActive) {
           assertPreviewCapacity(actorPreviews, globalPreviews);
-          advancePreviewAdmissionLocks(transaction, lockRefs, lockSnapshots);
+          advancePreviewAdmissionLocks(transaction, locks, lockSnapshots);
         }
         const job = { ...pendingPreview(asset), actorUid: session.actorUid };
         asset = { ...asset, rendition: renditionState(job, "processing") };
         transaction.create(firestore.collection(PREVIEW_JOBS).doc(job.id), job);
       }
-      transaction.create(assetRef, asset);
-      enqueueVideoSearchShard(transaction, firestore, asset.id, asset.sourceId);
-      transaction.create(
-        firestore.collection(AUDIT_COLLECTIONS.adminLogs).doc(),
-        adminLogEntryFn({
-          actorUid: actor.uid,
-          actorEmail: actor.email ?? null,
-          action: "media.upload",
-          target: `mediaSourceAssets/${asset.id}`,
-          before: null,
-          after: auditMetadata(asset),
-        }),
-      );
-      const stats = statsSnapshot.exists ? statsSnapshot.data() : null;
-      if (stats?.exact === true && Number.isSafeInteger(stats.activeCount)) {
-        transaction.update(statsRef, {
-          activeCount: stats.activeCount + 1,
-          updatedAt: asset.updatedAt,
-        });
-      }
+      createIndexedVideo(transaction, firestore, asset, statsSnapshot.data(), adminLogEntryFn({
+        actorUid: actor.uid, actorEmail: actor.email ?? null, action: "media.upload",
+        target: `mediaSourceAssets/${asset.id}`, before: null, after: auditMetadata(asset),
+      }));
     }
     if (holdSnapshot.exists && holdSnapshot.data()?.active === true) {
       transaction.update(holdRef, { active: false, phase: "consumed" });
@@ -1048,6 +1042,7 @@ module.exports = {
   advancePreviewAdmissionLocks,
   assertPreviewCapacity,
   previewAdmissionLocks,
+  readPreviewAdmission,
   previewHoldId,
   SESSION_TTL_MS,
   SourceUploadError,
@@ -1062,6 +1057,7 @@ module.exports = {
   cmsUpdateSourceMediaMetadata,
   completeUpload,
   completedAsset,
+  createIndexedVideo,
   objectKey,
   loadSession,
   makeHandler,

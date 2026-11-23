@@ -13,7 +13,12 @@ const { cmsOnRequest } = require("./lib/cms-edge");
 const { requirePrincipal, verifyAppCheckToken } = require("./lib/auth");
 const { validateBoundedJsonRequest } = require("./lib/http-json");
 const { authorizeMediaSource, objectKeyWithinSource } = require("./lib/media-sources");
-const { parseSourceMediaAsset } = require("./lib/source-media-contract");
+const { parseSourceMediaAsset, sourceMediaFileVersion } = require("./lib/source-media-contract");
+const { MAX_VIDEO_BYTES, VIDEO_MIME_EXTENSIONS } = require("./lib/source-media-upload-contract");
+const { createS3MediaUploader } = require("./lib/s3-media-upload");
+const { completedAsset, createIndexedVideo, objectKey, assertPreviewCapacity, readPreviewAdmission,
+  advancePreviewAdmissionLocks } = require("./source-media-uploads");
+const { PREVIEW_JOBS, pendingPreview, renditionState } = require("./lib/video-preview-job");
 const { runtimeRegistry, runtimeAwsConfig, FUNCTION_SERVICE_ACCOUNT } = require("./source-media");
 const { previewProcessorConfig } = require("./video-previews");
 const { createAwsRoleCredentialProvider } = require("./lib/aws-workload-credentials");
@@ -21,7 +26,7 @@ const { adminLogEntry, AUDIT_COLLECTIONS } = require("./lib/audit");
 const { executionName, executionArn } = require("./lib/video-preview-processor");
 const { CLIP_JOBS, CLIP_TTL_MS, SOURCE_EXPORT_MAX_DURATION_SECONDS, problem, parseClipRequest, clipSettings,
   OUTPUT_FRAME_RATES, EDITOR_FORMATS, jobScope, jobFormat, validateClipResolution, clipIdentity, sameClipSource, clipSummary,
-  encodeClipHistoryCursor, validateClipOutput } = require("./lib/video-clip-contract");
+  encodeClipHistoryCursor, validateClipOutput, validateClipRange } = require("./lib/video-clip-contract");
 const { createOriginalStorage } = require("./lib/source-originals");
 const { assertOriginalReadable, safeStorageDiagnostic } = require("./lib/source-original-state");
 const ENABLED = defineString("CMS_MEDIA_CLIP_PROCESSING_ENABLED", { default: "false" });
@@ -202,8 +207,9 @@ function availableClip(asset, source, job, now) {
   return clipBelongsToAsset(asset, source, job) &&
     (sameClipSource(asset, job) || clipSummary(job, now).state === "ready");
 }
-async function getClip(firestore, source, request, now = Date.now()) {
-  const [assetSnapshot, jobSnapshot] = await Promise.all([firestore.collection("mediaSourceAssets").doc(request.assetId).get(), firestore.collection(CLIP_JOBS).doc(request.clipId).get()]);
+async function getClip(firestore, source, request, now = Date.now(), read = ref => ref.get()) {
+  const [assetSnapshot, jobSnapshot] = await Promise.all([read(firestore.collection("mediaSourceAssets").doc(request.assetId)),
+    read(firestore.collection(CLIP_JOBS).doc(request.clipId))]);
   const asset = readAsset(assetSnapshot, source);
   const job = jobSnapshot.data();
   if (!availableClip(asset, source, job, now)) throw problem(404, "Clip is no longer available");
@@ -291,8 +297,99 @@ async function clipRead(config, source, job, now = Date.now(), deps = {}) {
     ResponseContentDisposition: `attachment; filename="${name}.${extension}"` }), { expiresIn: ttl });
   return { url, expiresAt: new Date(now + ttl * 1000).toISOString() };
 }
+
+async function registerClip(firestore, source, request, actor, uploader, now = Date.now()) {
+  // An export attempt has one library identity, even after its job expires.
+  const assetId = `clip-${createHash("sha256").update(JSON.stringify([request.clipId, request.attemptId])).digest("hex")}`;
+  const ref = firestore.collection("mediaSourceAssets").doc(assetId);
+  const jobRef = firestore.collection(CLIP_JOBS).doc(request.clipId);
+  function registered(snapshot) {
+    if (!snapshot.exists) return null;
+    if (snapshot.data()?.lifecycle === "deleted") {
+      throw problem(409, "This saved clip was deleted. Save a new export of the range after this export expires, or change its export settings.");
+    }
+    const asset = parseSourceMediaAsset(snapshot.id, snapshot.data());
+    if (!asset || asset.sourceId !== source.id || asset.parentSource?.assetId !== request.assetId ||
+        !asset.parentSource.fileVersion || !objectKeyWithinSource(source, asset.objectKey)) {
+      throw problem(409, "The registered clip is no longer available");
+    }
+    return { id: asset.id, name: asset.name };
+  }
+  const existing = registered(await ref.get());
+  if (existing) return existing;
+  const { asset: parent, job } = await getClip(firestore, source, request, now);
+  if (job.id !== request.clipId || jobScope(job) !== "clip" || job.attemptId !== request.attemptId ||
+      job.phase !== "ready" || !(Date.parse(job.expiresAt) > now)) {
+    throw problem(409, "The selected clip changed, is unfinished, or has expired");
+  }
+  validateClipRange(job.inMs, job.outMs);
+  const resultKey = jobFormat(job) === "original_copy" ? "original" : EDITOR_FORMATS[jobFormat(job)]?.resultKey ?? "web";
+  let output;
+  try {
+    output = validateClipOutput(job, { id: job.id, attemptId: job.attemptId, [resultKey]: job.output });
+  } catch {
+    throw problem(409, "The clip output is no longer available");
+  }
+  if (output.objectVersionId === "null" || output.sizeBytes > MAX_VIDEO_BYTES) {
+    throw problem(409, "This clip output cannot be saved in the video library");
+  }
+  const fileVersion = sourceMediaFileVersion(job.sourceObjectVersionId);
+  const name = `${parent.name.slice(0, 440).toWellFormed()} — Clip ${job.inMs / 1000}–${job.outMs / 1000}s`;
+  const session = { id: job.attemptId, assetId, sourceId: source.id, actorUid: actor.uid,
+    objectKey: objectKey(source, assetId, output.mimeType), mimeType: output.mimeType,
+    originalName: `${name}${VIDEO_MIME_EXTENSIONS[output.mimeType]}`, sizeBytes: output.sizeBytes,
+    parentSource: { sourceId: source.id, assetId: parent.id, fileVersion, inMs: job.inMs, outMs: job.outMs },
+    metadata: { name, description: null, license: null, credit: null, tags: [], rightsStatus: "pending" } };
+  const capacity = await readPreviewAdmission({ get: item => item.get() }, firestore, actor.uid);
+  assertPreviewCapacity(capacity.actorPreviews, capacity.globalPreviews);
+  // The render bucket expires these objects. Copy the exact output before indexing a library original.
+  const head = await uploader.copyClip(source, session, output, {
+    uploadId: job.registrationUploadId,
+    claimUpload: uploadId => firestore.runTransaction(async tx => {
+      const current = (await tx.get(jobRef)).data();
+      if (current?.attemptId !== job.attemptId || current.phase !== "ready" || !(Date.parse(current.expiresAt) > now)) {
+        throw problem(409, "The selected clip changed while it was being saved");
+      }
+      if (current.registrationUploadId) return current.registrationUploadId;
+      tx.update(jobRef, { registrationUploadId: uploadId });
+      return uploadId;
+    }),
+    clearUpload: uploadId => firestore.runTransaction(async tx => {
+      const current = (await tx.get(jobRef)).data();
+      if (current?.attemptId === job.attemptId && current.registrationUploadId === uploadId) {
+        tx.update(jobRef, { registrationUploadId: null });
+      }
+    }),
+  });
+  if (!head) return null;
+  if (head.VersionId === "null") throw problem(409, "The saved video copy is unavailable");
+  const asset = completedAsset(session, head, new Date(now).toISOString());
+  return firestore.runTransaction(async tx => {
+    const replay = registered(await tx.get(ref));
+    if (replay) return replay;
+    const { job: current } = await getClip(firestore, source, request, now, clipRef => tx.get(clipRef));
+    if (current.phase !== "ready" || current.attemptId !== job.attemptId || current.output?.objectVersionId !== output.objectVersionId) {
+      throw problem(409, "The selected clip changed while it was being saved");
+    }
+    const previewJobs = firestore.collection(PREVIEW_JOBS);
+    const [stats, { actorPreviews, globalPreviews, locks, lockSnapshots }] = await Promise.all([
+      tx.get(firestore.collection("mediaSourceStats").doc(source.id)),
+      readPreviewAdmission(tx, firestore, actor.uid),
+    ]);
+    assertPreviewCapacity(actorPreviews, globalPreviews);
+    advancePreviewAdmissionLocks(tx, locks, lockSnapshots);
+    const preview = { ...pendingPreview(asset, now), actorUid: actor.uid };
+    tx.create(previewJobs.doc(preview.id), preview);
+    createIndexedVideo(tx, firestore, { ...asset, rendition: renditionState(preview, "processing") },
+      stats.data(), adminLogEntry({ actorUid: actor.uid, actorEmail: actor.email ?? null, action: "media.clip.register",
+        target: `mediaSourceAssets/${asset.id}`, before: null, after: { name: asset.name, parentSource: asset.parentSource } }));
+    return { id: asset.id, name: asset.name };
+  });
+}
+
 function clipHandler(action, deps = {}) {
   let defaultOriginalStorage;
+  let defaultUploader;
   return async (req, res) => {
     res.set("Cache-Control", "private, no-store");
     try {
@@ -303,7 +400,12 @@ function clipHandler(action, deps = {}) {
       const request = parseClipRequest(req.body, action);
       const firestore = deps.firestore ?? db;
       const source = (deps.registry ?? runtimeRegistry)().get(request.sourceId);
-      await (deps.authorize ?? authorizeMediaSource)({ firestore, actor, source, operation: "browse" });
+      await (deps.authorize ?? authorizeMediaSource)({ firestore, actor, source, operation: action === "register" ? "upload" : "browse" });
+      if (action === "register") {
+        const uploader = deps.uploader ?? (defaultUploader ??= createS3MediaUploader(runtimeAwsConfig()));
+        const asset = await registerClip(firestore, source, request, actor, uploader);
+        res.status(200).json(asset ? { success: true, asset } : { success: true, pending: true }); return;
+      }
       const getEditorExportsEnabled = deps.editorExportsEnabled ?? editorExportsEnabled;
       const getOriginalCopiesEnabled = deps.originalCopiesEnabled ?? originalCopiesEnabled;
       if (action === "request") {
@@ -336,7 +438,8 @@ function clipHandler(action, deps = {}) {
         ...(action === "get" ? { editorExportsEnabled: getEditorExportsEnabled() } : {}), ...result });
     } catch (error) {
       const status = Number.isInteger(error.status) ? error.status : 500;
-      res.status(status).json({ error: status < 500 ? error.message : "Clip export request failed",
+      if (action === "register" && status >= 500) logger.warn("Clip registration failed", safeStorageDiagnostic(error));
+      res.status(status).json({ error: status < 500 ? error.message : action === "register" ? "The clip could not be saved to the video library. Try again." : "Clip export request failed",
         ...(status === 429 && error.code === "clip_export_quota" ? { code: error.code, quota: error.quota } : {}),
         ...(["original_archived", "original_restoring"].includes(error?.code) ? { code: error.code } : {}) });
     }
@@ -451,6 +554,7 @@ const cmsRequestVideoClip = cmsOnRequest(options, clipHandler("request"));
 const cmsGetVideoClip = cmsOnRequest(options, clipHandler("get"));
 const cmsCreateVideoClipRead = cmsOnRequest(options, clipHandler("read"));
 const cmsCancelVideoClip = cmsOnRequest(options, clipHandler("cancel"));
+const cmsRegisterVideoClip = cmsOnRequest({ ...options, timeoutSeconds: 120 }, clipHandler("register"));
 const onVideoClipTick = onSchedule({ schedule: "every 1 minutes", region: "us-central1", timeoutSeconds: 240, memory: "256MiB", maxInstances: 1, concurrency: 1, serviceAccount: FUNCTION_SERVICE_ACCOUNT }, () => processClipTick());
 module.exports = { USER_CLIP_EXPORTS_PER_DAY, GLOBAL_CLIP_EXPORTS_PER_DAY, cmsRequestVideoClip, cmsGetVideoClip, cmsCreateVideoClipRead, cmsCancelVideoClip, onVideoClipTick,
-  requestClip, getClip, recentClips, cancelClip, clipRead, clipHandler, processClipTick, providerInput };
+  cmsRegisterVideoClip, requestClip, getClip, recentClips, cancelClip, clipRead, clipHandler, processClipTick, providerInput };

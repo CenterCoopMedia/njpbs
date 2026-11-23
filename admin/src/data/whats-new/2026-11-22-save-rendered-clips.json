@@ -1,0 +1,8 @@
+{
+  "date": "2026-11-22",
+  "kind": "new",
+  "order": 1795406400000,
+  "title": "Save a completed clip to the video library",
+  "body": "In Clip settings, select a completed export and choose Save clip to video library. Open the saved video from the confirmation, or find it in Videos. Its details link to the original range. The saved video stays in the library after the export expires.",
+  "prs": []
+}

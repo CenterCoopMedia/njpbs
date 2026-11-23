@@ -82,6 +82,7 @@ export interface TranscriptResponse {
 }
 export interface VideoClip {
   id: string;
+  attemptId?: string;
   state: "queued" | "processing" | "ready" | "failed" | "expired" | "needs_reconciliation" | "cancelled" | "stale";
   inMs: number;
   outMs: number;
@@ -168,6 +169,11 @@ export function listVideoClips(token: string, identity: VideoIdentity, cursor?: 
 }
 export function readVideoClip(token: string, identity: VideoIdentity, clipId: string) {
   return postFunction<{ success: true; access: { url: string; expiresAt: string } }>("cmsCreateVideoClipRead", token, { ...identity, clipId }, {}, { appCheck: true });
+}
+
+export function registerVideoClip(token: string, identity: VideoIdentity, clipId: string, attemptId: string, signal: AbortSignal) {
+  return postFunction<{ success: true } & ({ asset: { id: string; name: string } } | { pending: true })>("cmsRegisterVideoClip", token,
+    { ...identity, clipId, attemptId }, {}, { appCheck: true, signal });
 }
 
 export function videoTime(seconds: number) {

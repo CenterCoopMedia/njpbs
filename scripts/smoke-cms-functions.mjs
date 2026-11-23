@@ -124,6 +124,7 @@ export const AUTHENTICATED_POST_FUNCTION_NAMES = Object.freeze([
   "cmsManageVideoSubclips",
   "cmsCreateVideoClipRead",
   "cmsCancelVideoClip",
+  "cmsRegisterVideoClip",
   "cmsRequestVideoTranscript",
   "cmsGetVideoTranscript",
   "cmsGetVideoSearchCorpus",

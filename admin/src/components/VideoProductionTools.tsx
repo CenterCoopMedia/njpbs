@@ -11,6 +11,8 @@ import { VideoTranscriptVariants } from "./VideoTranscriptVariants";
 import { TranscriptEditor } from "./TranscriptEditor";
 import { EditorVideoExports } from "./EditorVideoExports";
 import { VideoSubclips } from "./media/VideoSubclips";
+import { RegisterClipButton } from "./media/RegisterClipButton";
+import { canUploadMedia } from "../lib/access";
 import type { MenuItem } from "./ui/Menu";
 import { MediaDialogNotice } from "../context/MediaDialogContext";
 import type { SourceMediaAssetSummary } from "../lib/source-media";
@@ -85,7 +87,7 @@ function clipSettingsLabel(clip: VideoClip) {
 const activeTranscript = (state?: string) => state === "queued" || state === "processing";
 const activeClip = (state?: string) => state === "queued" || state === "processing";
 
-export function useVideoProductionTools({ headerControls = false, workspace = false, initialClipRange, commentThreads, commentsIncomplete, onOpenComment, commentsAction, onWorkspacePaneChange, principal, onCredentialsDirtyChange, onCredentialsBusyChange, asset, getIdToken, player, canRequest, disabled: mediaDisabled, onDownloadOriginal, onTranscriptDirtyChange, onTranscriptSavingChange, onBusyChange, onSearchContentChanged, onTranscriptRequested, onTranscriptObserved, onTranscriptReady }: {
+export function useVideoProductionTools({ headerControls = false, workspace = false, initialClipRange, commentThreads, commentsIncomplete, onOpenComment, commentsAction, onWorkspacePaneChange, principal, onCredentialsDirtyChange, onCredentialsBusyChange, asset, getIdToken, player, canRequest, disabled: mediaDisabled, onDownloadOriginal, onTranscriptDirtyChange, onTranscriptSavingChange, onBusyChange, onSearchContentChanged, onTranscriptRequested, onTranscriptObserved, onTranscriptReady, onClipRegistered }: {
   principal?: Principal;
   headerControls?: boolean;
   workspace?: boolean;
@@ -110,7 +112,9 @@ export function useVideoProductionTools({ headerControls = false, workspace = fa
   onTranscriptRequested?: (assetId: string, settings: TranscriptSettings, ready: boolean) => void;
   onTranscriptObserved?: (assetId: string, settings: TranscriptSettings) => void;
   onTranscriptReady?: (assetId: string, settings: TranscriptSettings) => void;
+  onClipRegistered?: () => void;
 }) {
+  const canRegisterClip = asset.sourceId === "video-library" && Boolean(principal && canUploadMedia(principal));
   const [credentialsOpen, setCredentialsOpen] = useState(false);
   const [credentialsDirty, setCredentialsDirty] = useState(false);
   const [credentialsBusy, setCredentialsBusy] = useState(false);
@@ -753,6 +757,7 @@ export function useVideoProductionTools({ headerControls = false, workspace = fa
       sourceRate={asset.viewingCopy} sourceDurationSeconds={duration}
       onDownloadOriginal={onDownloadOriginal}
       identity={identity} name={asset.name} getIdToken={getIdToken} canRequest={canRequest}
+      canRegisterClip={canRegisterClip} onClipRegistered={onClipRegistered}
       disabled={disabled} inMs={inMs} outMs={outMs} validRange={validRange}
       onBusyChange={setEditorExportsBusy}
       exportEligible={ready && Number.isFinite(duration) && duration > 0 && duration <= 86_400}
@@ -787,6 +792,8 @@ export function useVideoProductionTools({ headerControls = false, workspace = fa
       {canRequest ? <Button disabled={!validRange || !validClipSettings || controlsDisabled} onClick={() => void exportClip()}>{clipAction === "request" ? "Sending clip request" : "Export clip"}</Button> : null}
       {clip?.state === "ready" ? <>
         <Button disabled={clipBusy} onClick={() => void downloadClip()}>{clipAction === "download" ? "Preparing download" : "Download clip"}</Button>
+        {canRegisterClip && clip.attemptId ? <RegisterClipButton key={`${asset.id}/${clip.id}/${clip.attemptId}`} identity={identity}
+          clipId={clip.id} attemptId={clip.attemptId} getIdToken={getIdToken} disabled={clipBusy || disabled} onRegistered={onClipRegistered} /> : null}
         {clip.matchesCurrentFile === false ? <p>This clip uses a previous video file. Its transcript is unavailable here.</p> : transcriptState === "ready" ? <>
           <label>Clip transcript format<Select value={clipTranscriptFormat} disabled={clipBusy || transcriptBusy || transcriptLocked || disabled} onChange={event => setClipTranscriptFormat(event.target.value as ClipTranscriptFormat)}>
             <option value="txt">Text</option><option value="vtt">Captions (VTT)</option><option value="srt">Captions (SRT)</option><option value="tsv">Soundbite log (TSV)</option>
