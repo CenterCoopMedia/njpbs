@@ -115,7 +115,7 @@ describe("compiled Data Hub Page composition", () => {
     (document.querySelector('[data-export-format="json"]') as HTMLButtonElement).click();
     const exported = JSON.parse(await downloads.at(-1)!.text());
     expect(exported.metric).toMatchObject({ title: "Unemployment rate", value: 4.2,
-      description: "Share of the New Jersey labor force unemployed in September 2026, seasonally adjusted." });
+      description: "Share of the New Jersey labor force unemployed in October 2026, seasonally adjusted." });
     expect(JSON.stringify(exported)).not.toContain("Staff heading");
   });
 });

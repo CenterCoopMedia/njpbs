@@ -1,0 +1,3224 @@
+{
+  "project": "NJ PBS / New Jersey by the Numbers — verified-source dashboard, October 20 source review",
+  "asOf": "2026-11-19",
+  "timezone": "America/New_York",
+  "status": "published on NJ PBS; source-verified snapshot",
+  "notes": [
+    "Property tax average derived from DCA yearly tables and corroborated by Rutgers reporting; validate the exact source spreadsheet cell during ingestion.",
+    "Not all datasets have fixed release days. nextCheck is an internal review reminder, not a guaranteed release date.",
+    "No automatic publication. Source changes should create review candidates; an editor approves or overrides.",
+    "Property tax historical benchmarks are selected published years only (not a full year-by-year interpolation). Annual minimum-wage history excludes the announced future rate.",
+    "A future implementation must compute comparison deltas from the same approved source series and revision. Browser-only overrides invalidate historical comparisons until separately reviewed.",
+    "New additions use authoritative government figures; most lack a fully verified historical series, so available snapshot comparisons differ by dataset.",
+    "Geographic view is allowed only where all 21 counties (or all 564 municipalities) are enumerated and reconciled; the voter registration panel is the only county view enabled here.",
+    "ACS 1-year and ACS 5-year estimates must not be spliced into a time series. Margins of error are shown with median estimates.",
+    "Figures and downloads preserve their dated source snapshot; this page does not provide a public API or CMS figure picker.",
+    "Chart honesty: bars used to compare absolute totals start at zero. A focused range may never be used to exaggerate changes in population-size counts.",
+    "A data release from 2024 or earlier is always dated explicitly; period comparison labels such as one year ago are reserved for current 2025–2026 observations.",
+    "A single survey estimate is not depicted as a change or a multi-period trend. If statistical margins are shown, they are numerically described rather than positioned on a misleading magnitude axis.",
+    "Voter registration is a count with year-over-year and month-over-month percentage changes. There is intentionally no magnitude chart for 6.6–6.7 million counts.",
+    "Source: U.S. Census Bureau Building Permits Survey state monthly series NJBPPRIV, via FRED (October 27, 2026 vintage). Preliminary, not seasonally adjusted. January–September 2026 includes 22,517 privately owned housing units authorized; the same nine months of 2025 include 23,695. Difference −1,178 units (−4.97%). Data are units authorized, not permit documents, starts, completions or individual dwellings occupied. Both totals add only the monthly readings of this single series. Official annual and separately published county year-to-date aggregates have different vintages and must not be combined with these totals.",
+    "A 2024 or 2025 figure is explicitly marked as the latest verified period in this source snapshot; it is not represented as a current 2026 condition.",
+    "National comparisons appear only for matching units, populations, geography definitions and time windows, from the same federal series/agency. Where no equivalent benchmark is available, state the reason and retain dated internal context.",
+    "Percent changes in absolute counts are presented as figures, not truncated-scale magnitude charts. The complete voter-registration table is visible by default for all 21 counties.",
+    "November 19 NJDOL October labor update: NJ seasonally adjusted October unemployment 4.2% (unchanged), payroll jobs −900 to 4,379,000; September payroll gain revised from +14,900 to +17,400. CES industry jobs are not occupations or unique people. Historical unemployment through September retains the October 20 BLS snapshot; preliminary October appended from NJDOL. October 2025 unemployment is missing, not zero.",
+    "No verified monthly occupational job-gains series exists in the NJDOL September 2026 release. Occupations are different from industries; the wage survey OEWS is not monthly and is excluded rather than inferred.",
+    "Three unpopulated/reuse-unresolved dataset panels excluded from this collection: occupation mean wages (unverified value), NJ TRANSIT performance (data reuse not cleared), and 2025 goods exports (official source conflict). These are not displayed, exported or replicated.",
+    "Rutgers nClimDiv statewide monthly table updated through October 2026, verified November 9. September and other months were revised. The source values for 2026, same months of 2025 and the 1991–2020 normals are taken from one identical revised table and compared only over January–October.",
+    "The temperature figure uses the November 9, 2026 Rutgers nClimDiv statewide mean-temperature table through October, including revised July–September readings. Temperature and precipitation are separate elements; each must use its own matching observed months and 1991–2020 normals from a single revision.",
+    "BLS CPI-U September 2026 report published October 14: 4.5% annual inflation for NY–NJ–PA metro versus 3.7% for U.S. CPI-U in same report month. No NJ statewide CPI-U exists in these BLS metro results.",
+    "Published metrics must be status verified, contain a finite numeric value, and link to a primary official public source. Local browser drafts cannot replace the verified public preview. Underlying reuses are still subject to editorial source and terms review.",
+    "October 20 source corrections: unemployment history reconciled to one BLS LAUS snapshot; graduation comparison uses the 2021 and 2025 state cohort tables; absence comparisons disclose the 2024–25 inclusion-rule change; SNAP uses the July 2026 DFD report. Publication approval remains separate."
+  ],
+  "metrics": [
+    {
+      "id": "unemployment",
+      "category": "Work & wages",
+      "title": "Unemployment rate",
+      "value": 4.2,
+      "unit": "%",
+      "display": "4.2%",
+      "period": "October 2026",
+      "released": "2026-11-19",
+      "checked": "2026-11-19",
+      "description": "Share of the New Jersey labor force unemployed in October 2026, seasonally adjusted.",
+      "insight": "Unchanged from September at 4.2%; 0.1 percentage point above the U.S. October unemployment rate of 4.1%.",
+      "keywords": [
+        "jobs",
+        "jobless",
+        "workforce",
+        "employment",
+        "unemployment",
+        "labor market",
+        "unemployed",
+        "monthly"
+      ],
+      "source": "NJ Department of Labor and Workforce Development",
+      "sourceUrl": "https://nj.gov/labor/lwdhome/press/2026/20261119_jobs.shtml",
+      "scheduleUrl": "https://www.nj.gov/labor/labormarketinformation/tools-resources/publications-reports/employmentpressrelease.shtml",
+      "cadence": "Monthly; announced NJDOL schedule",
+      "nextCheck": "2026-12-17",
+      "nextReleaseLabel": "November NJ employment estimates · Dec. 17, 2026",
+      "status": "verified",
+      "chartTitle": "New Jersey unemployment · monthly, August 2021–October 2026",
+      "points": [
+        {
+          "label": "Sep 2026",
+          "value": 4.2
+        },
+        {
+          "label": "Oct 2026",
+          "value": 4.2
+        }
+      ],
+      "methodNote": "NJDOL's November 19 release gives preliminary October 2026 NJ seasonally adjusted unemployment of 4.2%, unchanged from September. BLS national CPS October rate was 4.1%, released November 6. State LAUS and U.S. CPS use related unemployment concepts but different estimation procedures. Prior NJ LAUS history through September was checked against an October 20 BLS snapshot; October 2026 is an appended preliminary same-series NJDOL observation. October 2025 NJ data are missing, not zero, so a year-over-year October comparison cannot be made. Revisions are possible.",
+      "history": [
+        {
+          "date": "2021-08",
+          "value": 6.7
+        },
+        {
+          "date": "2021-09",
+          "value": 6.2
+        },
+        {
+          "date": "2021-10",
+          "value": 5.9
+        },
+        {
+          "date": "2021-11",
+          "value": 5.6
+        },
+        {
+          "date": "2021-12",
+          "value": 5.5
+        },
+        {
+          "date": "2022-01",
+          "value": 5.2
+        },
+        {
+          "date": "2022-02",
+          "value": 4.7
+        },
+        {
+          "date": "2022-03",
+          "value": 4.3
+        },
+        {
+          "date": "2022-04",
+          "value": 4.1
+        },
+        {
+          "date": "2022-05",
+          "value": 3.8
+        },
+        {
+          "date": "2022-06",
+          "value": 3.6
+        },
+        {
+          "date": "2022-07",
+          "value": 3.3
+        },
+        {
+          "date": "2022-08",
+          "value": 3.1
+        },
+        {
+          "date": "2022-09",
+          "value": 3.3
+        },
+        {
+          "date": "2022-10",
+          "value": 3.5
+        },
+        {
+          "date": "2022-11",
+          "value": 3.7
+        },
+        {
+          "date": "2022-12",
+          "value": 3.8
+        },
+        {
+          "date": "2023-01",
+          "value": 3.9
+        },
+        {
+          "date": "2023-02",
+          "value": 4
+        },
+        {
+          "date": "2023-03",
+          "value": 4.1
+        },
+        {
+          "date": "2023-04",
+          "value": 4.2
+        },
+        {
+          "date": "2023-05",
+          "value": 4.2
+        },
+        {
+          "date": "2023-06",
+          "value": 4.3
+        },
+        {
+          "date": "2023-07",
+          "value": 4.4
+        },
+        {
+          "date": "2023-08",
+          "value": 4.5
+        },
+        {
+          "date": "2023-09",
+          "value": 4.5
+        },
+        {
+          "date": "2023-10",
+          "value": 4.5
+        },
+        {
+          "date": "2023-11",
+          "value": 4.5
+        },
+        {
+          "date": "2023-12",
+          "value": 4.5
+        },
+        {
+          "date": "2024-01",
+          "value": 4.5
+        },
+        {
+          "date": "2024-02",
+          "value": 4.5
+        },
+        {
+          "date": "2024-03",
+          "value": 4.5
+        },
+        {
+          "date": "2024-04",
+          "value": 4.6
+        },
+        {
+          "date": "2024-05",
+          "value": 4.6
+        },
+        {
+          "date": "2024-06",
+          "value": 4.6
+        },
+        {
+          "date": "2024-07",
+          "value": 4.7
+        },
+        {
+          "date": "2024-08",
+          "value": 4.7
+        },
+        {
+          "date": "2024-09",
+          "value": 4.7
+        },
+        {
+          "date": "2024-10",
+          "value": 4.7
+        },
+        {
+          "date": "2024-11",
+          "value": 4.8
+        },
+        {
+          "date": "2024-12",
+          "value": 4.8
+        },
+        {
+          "date": "2025-01",
+          "value": 4.9
+        },
+        {
+          "date": "2025-02",
+          "value": 5
+        },
+        {
+          "date": "2025-03",
+          "value": 5.1
+        },
+        {
+          "date": "2025-04",
+          "value": 5.1
+        },
+        {
+          "date": "2025-05",
+          "value": 5.2
+        },
+        {
+          "date": "2025-06",
+          "value": 5.4
+        },
+        {
+          "date": "2025-07",
+          "value": 5.5
+        },
+        {
+          "date": "2025-08",
+          "value": 5.5
+        },
+        {
+          "date": "2025-09",
+          "value": 5.5
+        },
+        {
+          "date": "2025-10",
+          "value": null
+        },
+        {
+          "date": "2025-11",
+          "value": 5.4
+        },
+        {
+          "date": "2025-12",
+          "value": 5.4
+        },
+        {
+          "date": "2026-01",
+          "value": 5.2
+        },
+        {
+          "date": "2026-02",
+          "value": 5.1
+        },
+        {
+          "date": "2026-03",
+          "value": 4.9
+        },
+        {
+          "date": "2026-04",
+          "value": 4.8
+        },
+        {
+          "date": "2026-05",
+          "value": 4.7
+        },
+        {
+          "date": "2026-06",
+          "value": 4.5
+        },
+        {
+          "date": "2026-07",
+          "value": 4.4
+        },
+        {
+          "date": "2026-08",
+          "value": 4.3
+        },
+        {
+          "date": "2026-09",
+          "value": 4.2,
+          "sourceUrl": "https://nj.gov/labor/lwdhome/press/2026/20261015_jobs.shtml"
+        },
+        {
+          "date": "2026-10",
+          "value": 4.2,
+          "sourceUrl": "https://nj.gov/labor/lwdhome/press/2026/20261119_jobs.shtml"
+        }
+      ],
+      "historySeriesId": "NJUR",
+      "historySourceUrl": "https://fred.stlouisfed.org/data/NJUR",
+      "historySource": "U.S. Bureau of Labor Statistics via FRED (NJUR)",
+      "historyNote": "BLS LAUS seasonally adjusted NJ series LASST340000000000003 / FRED NJUR. History through September came from the October 20, 2026 snapshot; the October 2026 preliminary value is appended from NJDOL November 19. October 2025 is missing. No cross-vintage historical revisions have been inferred.",
+      "historyKind": "monthly",
+      "chartKind": "line",
+      "comparisons": [
+        {
+          "label": "1 month ago",
+          "offsetMonths": 1
+        },
+        {
+          "label": "1 year ago",
+          "offsetMonths": 12
+        },
+        {
+          "label": "5 years ago",
+          "offsetMonths": 60
+        }
+      ],
+      "historyChartNote": "BLS NJ LAUS seasonally adjusted rate; history through September checked October 20, 2026, with preliminary October 2026 appended from NJDOL November 19. October 2025 missing; year-over-year October change unavailable. State LAUS and U.S. CPS estimation differ.",
+      "historyYAxisMax": 8,
+      "comparisonUnit": "percentage_points",
+      "comparisonMode": "source_context",
+      "comparisonsPublic": [
+        {
+          "label": "U.S. unemployment rate",
+          "value": "4.1%",
+          "detail": "October 2026 BLS CPS, seasonally adjusted",
+          "period": "October 2026",
+          "kind": "national",
+          "sourceUrl": "https://www.bls.gov/news.release/archives/empsit_11062026.htm"
+        },
+        {
+          "label": "September New Jersey rate",
+          "value": "4.2%",
+          "detail": "Unchanged in October",
+          "period": "September 2026",
+          "kind": "historical",
+          "sourceUrl": "https://nj.gov/labor/lwdhome/press/2026/20261119_jobs.shtml"
+        },
+        {
+          "label": "New Jersey vs. U.S.",
+          "value": "+0.1 percentage point",
+          "detail": "October 2026 unemployment; state LAUS and U.S. CPS estimation differs",
+          "period": "October 2026",
+          "kind": "difference",
+          "sourceUrl": null
+        },
+        {
+          "label": "October 2025 New Jersey",
+          "value": "Unavailable",
+          "detail": "No prior-year rate in the verified historical series; not zero",
+          "period": "October 2025",
+          "kind": "historical",
+          "sourceUrl": null
+        }
+      ],
+      "historyRetrieved": "2026-10-20",
+      "historyVerificationUrl": "https://api.bls.gov/publicAPI/v2/timeseries/data/LASST340000000000003?startyear=2021&endyear=2026"
+    },
+    {
+      "id": "industryjobs",
+      "category": "Work & wages",
+      "title": "Jobs gained and lost by industry",
+      "value": -900,
+      "unit": "jobs",
+      "display": "−900 jobs",
+      "period": "October 2026 · seasonally adjusted monthly change",
+      "released": "2026-11-19",
+      "checked": "2026-11-19",
+      "description": "New Jersey nonfarm payroll employment fell slightly in October, with all ten major industry changes shown.",
+      "insight": "Education and health services gained 5,900 jobs, but overall payroll jobs declined. Industry sectors are not occupations.",
+      "keywords": [
+        "jobs",
+        "employment",
+        "industry",
+        "payroll",
+        "gains",
+        "losses",
+        "business services",
+        "manufacturing",
+        "health care",
+        "hiring",
+        "CES"
+      ],
+      "source": "New Jersey Department of Labor & Workforce Development / BLS CES",
+      "sourceUrl": "https://nj.gov/labor/lwdhome/press/2026/20261119_jobs.shtml",
+      "scheduleUrl": "https://www.nj.gov/labor/labormarketinformation/tools-resources/publications-reports/employmentpressrelease.shtml",
+      "cadence": "monthly",
+      "nextCheck": "2026-12-17",
+      "nextReleaseLabel": "NJ November payroll report · Dec. 17, 2026",
+      "status": "verified",
+      "chartTitle": "October employment change by major industry sector",
+      "methodNote": "NJDOL/BLS Current Employment Statistics (CES), preliminary seasonally adjusted October 2026 NJ nonfarm payroll jobs: 4,379,000, down 900 from September's revised level. September's net change was revised from +14,900 to +17,400. NJ jobs increased by 5,600 over October 2025. CES is an employer payroll survey; the figures measure jobs by INDUSTRY, not occupations, job postings, hires or unique workers. The ten sector changes below sum exactly to −900; monthly values are subject to revision.",
+      "historyKind": "none",
+      "history": [],
+      "points": [],
+      "comparisonMode": "numeric",
+      "comparisonsPublic": [
+        {
+          "label": "Revised September change",
+          "value": "+17,400 jobs",
+          "detail": "Originally +14,900; revision +2,500 jobs",
+          "period": "September 2026",
+          "kind": "historical",
+          "sourceUrl": "https://nj.gov/labor/lwdhome/press/2026/20261119_jobs.shtml"
+        },
+        {
+          "label": "October payroll employment",
+          "value": "4,379,000 jobs",
+          "detail": "Seasonally adjusted total nonfarm jobs",
+          "period": "October 2026",
+          "kind": "context",
+          "sourceUrl": "https://nj.gov/labor/lwdhome/press/2026/20261119_jobs.shtml"
+        },
+        {
+          "label": "Compared with October 2025",
+          "value": "+5,600 jobs (+0.13%)",
+          "detail": "Matching October payroll levels; percentage calculated from prior-year level",
+          "period": "October 2025 to October 2026",
+          "kind": "historical",
+          "sourceUrl": "https://nj.gov/labor/lwdhome/press/2026/20261119_jobs.shtml"
+        }
+      ],
+      "industryBreakdown": [
+        {
+          "sector": "Private education and health services",
+          "change": 5900
+        },
+        {
+          "sector": "Trade, transportation and utilities",
+          "change": 1000
+        },
+        {
+          "sector": "Government",
+          "change": 600
+        },
+        {
+          "sector": "Financial activities",
+          "change": 300
+        },
+        {
+          "sector": "Information",
+          "change": 100
+        },
+        {
+          "sector": "Construction",
+          "change": -800
+        },
+        {
+          "sector": "Other services",
+          "change": -900
+        },
+        {
+          "sector": "Professional and business services",
+          "change": -1700
+        },
+        {
+          "sector": "Manufacturing",
+          "change": -2100
+        },
+        {
+          "sector": "Leisure and hospitality",
+          "change": -3300
+        }
+      ],
+      "historyChartNote": "October 2026 NJDOL preliminary seasonally adjusted CES changes. Ten reported sectors reconcile to −900 statewide net jobs. Industries are not occupations; September's prior preliminary +14,900 was revised to +17,400.",
+      "geography": "New Jersey statewide",
+      "reuseRights": "Official public NJDOL/BLS statistical release; verify official attribution and applicable terms before public publishing."
+    },
+    {
+      "id": "propertytax",
+      "category": "Housing & taxes",
+      "title": "Average property tax bill",
+      "value": 10570,
+      "unit": "USD",
+      "display": "$10,570",
+      "period": "Calendar year 2025",
+      "released": null,
+      "checked": "2026-10-14",
+      "description": "Statewide average annual residential property tax bill — not a statewide tax rate.",
+      "insight": "The 2025 average bill was 4.7% higher than in 2024. There is no directly matched national average in this state DCA source.",
+      "keywords": [
+        "tax",
+        "taxes",
+        "property",
+        "homeowner",
+        "housing",
+        "property tax bill",
+        "real estate",
+        "municipalities",
+        "towns"
+      ],
+      "source": "NJ Department of Community Affairs, Division of Local Government Services",
+      "sourceUrl": "https://www.nj.gov/dca/dlgs/resources/Property_Tax_info.shtml",
+      "scheduleUrl": "https://www.nj.gov/dca/dlgs/resources/Property_Tax_info.shtml",
+      "cadence": "Annual; publication date varies",
+      "nextCheck": "2027-01-15",
+      "nextReleaseLabel": "2026 tax-year tables · begin checking January 2027 (date unannounced)",
+      "status": "verified",
+      "chartTitle": "Average residential property tax bill · selected years",
+      "points": [
+        {
+          "label": "2024",
+          "value": 10095
+        },
+        {
+          "label": "2025",
+          "value": 10570
+        }
+      ],
+      "methodNote": "Statewide average residential property tax bill, rounded to the nearest dollar; not a tax rate and not the bill for a typical individual home. Annual tax bills vary widely by municipality. The chart intentionally shows only documented benchmark years. Nominal dollars (not inflation-adjusted). Values from DCA property tax tables, corroborated by NJ Office of Legislative Services and contemporaneous reporting.",
+      "history": [
+        {
+          "date": "2015",
+          "value": 8353,
+          "sourceUrl": "https://nj.gov/dca/news/news/2015/approved/20160205.html"
+        },
+        {
+          "date": "2020",
+          "value": 9112,
+          "sourceUrl": "https://www.nj.gov/dca/dlgs/resources/Property_Tax_info.shtml"
+        },
+        {
+          "date": "2021",
+          "value": 9284,
+          "sourceUrl": "https://pub.njleg.state.nj.us/Bills/2022/S1000/522_E1.HTM"
+        },
+        {
+          "date": "2023",
+          "value": 9803,
+          "sourceUrl": "https://www.nj.gov/dca/dlgs/resources/Property_Tax_info.shtml"
+        },
+        {
+          "date": "2024",
+          "value": 10095,
+          "sourceUrl": "https://pub.njleg.state.nj.us/Bills/2024/S2000/1756_E1.HTM"
+        },
+        {
+          "date": "2025",
+          "value": 10570,
+          "sourceUrl": "https://www.nj.gov/dca/dlgs/resources/Property_Tax_info.shtml"
+        }
+      ],
+      "historyKind": "annual_selected",
+      "chartKind": "bar",
+      "comparisons": [
+        {
+          "label": "1 year ago",
+          "offsetYears": 1
+        },
+        {
+          "label": "5 years ago",
+          "offsetYears": 5
+        },
+        {
+          "label": "10 years ago",
+          "offsetYears": 10
+        }
+      ],
+      "historySource": "New Jersey Department of Community Affairs, Division of Local Government Services",
+      "historySourceUrl": "https://www.nj.gov/dca/dlgs/resources/Property_Tax_info.shtml",
+      "historyChartNote": "Selected benchmark years, not a complete year-by-year series. Values are nominal dollars, not adjusted for inflation. Data from DCA annual tables; older amounts corroborated by state legislative records and contemporary DCA-based reporting.",
+      "historyYAxisMax": 12000,
+      "comparisonMode": "numeric",
+      "comparisonsPublic": [
+        {
+          "label": "Statewide average in 2024",
+          "value": "$10,095",
+          "detail": "2025 increased by $475 (+4.7%)",
+          "period": "2024",
+          "kind": "historical",
+          "sourceUrl": null
+        },
+        {
+          "label": "Change in the annual bill",
+          "value": "+$475 (+4.7%)",
+          "detail": "Nominal dollars; not inflation adjusted",
+          "period": "2024 to 2025",
+          "kind": "difference",
+          "sourceUrl": null
+        }
+      ]
+    },
+    {
+      "id": "precipitation",
+      "category": "Weather & climate",
+      "title": "Precipitation in 2026",
+      "value": 36.98,
+      "unit": "in",
+      "display": "36.98 in.",
+      "period": "January–October 2026 (year to date)",
+      "released": null,
+      "checked": "2026-11-09",
+      "description": "New Jersey statewide precipitation from January through October 2026, including rain and water-equivalent snowfall, from the Rutgers/NOAA nClimDiv statewide monthly series.",
+      "insight": "Through October, 2026 was 9.4% wetter than the same ten months of 2025 but 7.4% below its matching 1991–2020 normal, according to the same revised Rutgers statewide series.",
+      "keywords": [
+        "rain",
+        "rainfall",
+        "precipitation",
+        "weather",
+        "climate",
+        "drought",
+        "annual",
+        "wet",
+        "dry",
+        "2026",
+        "year to date",
+        "ytd",
+        "monthly",
+        "year over year",
+        "climate normal"
+      ],
+      "source": "Rutgers Office of the New Jersey State Climatologist (NOAA NClimDiv)",
+      "sourceUrl": "https://climate.rutgers.edu/stateclim_v1/nclimdiv/index.php?elem=pcpn&stn=NJ00",
+      "scheduleUrl": "https://www.njweather.org/monthly-summaries",
+      "cadence": "Monthly summaries; annual roundup after year-end",
+      "nextCheck": "2026-12-06",
+      "nextReleaseLabel": "Check Rutgers' nClimDiv statewide monthly table for November and any further revisions; no fixed release date",
+      "status": "verified",
+      "chartTitle": "New Jersey monthly precipitation departure from normal, January–October 2026",
+      "points": [],
+      "methodNote": "Rutgers Office of the New Jersey State Climatologist, NOAA nClimDiv statewide monthly precipitation table, checked November 9, 2026. All January–October 2026 values, same months in 2025 and matching 1991–2020 normal values are taken from the same revised table. 2026: 36.98 in.; 2025 same months: 33.81 in.; normal for the same ten months: 39.93 in. Difference from 2025: +3.17 in. (+9.4%); difference from normal: −2.95 in. (−7.4%). October 2026: 2.69 in. vs. October 2025 3.45 in. and October normal 4.19 in. Full-year 2026 has not been observed; no Jan–Oct to full-year comparison. Monthly values may be revised by NOAA and Rutgers.",
+      "history": [
+        {
+          "date": "2026-01",
+          "value": 2.67,
+          "sourceUrl": "https://climate.rutgers.edu/stateclim_v1/nclimdiv/index.php?elem=pcpn&stn=NJ00"
+        },
+        {
+          "date": "2026-02",
+          "value": 1.74,
+          "sourceUrl": "https://climate.rutgers.edu/stateclim_v1/nclimdiv/index.php?elem=pcpn&stn=NJ00"
+        },
+        {
+          "date": "2026-03",
+          "value": 3.17,
+          "sourceUrl": "https://climate.rutgers.edu/stateclim_v1/nclimdiv/index.php?elem=pcpn&stn=NJ00"
+        },
+        {
+          "date": "2026-04",
+          "value": 2.41,
+          "sourceUrl": "https://climate.rutgers.edu/stateclim_v1/nclimdiv/index.php?elem=pcpn&stn=NJ00"
+        },
+        {
+          "date": "2026-05",
+          "value": 2.79,
+          "sourceUrl": "https://climate.rutgers.edu/stateclim_v1/nclimdiv/index.php?elem=pcpn&stn=NJ00"
+        },
+        {
+          "date": "2026-06",
+          "value": 2.41,
+          "sourceUrl": "https://climate.rutgers.edu/stateclim_v1/nclimdiv/index.php?elem=pcpn&stn=NJ00"
+        },
+        {
+          "date": "2026-07",
+          "value": 6.13,
+          "sourceUrl": "https://climate.rutgers.edu/stateclim_v1/nclimdiv/index.php?elem=pcpn&stn=NJ00"
+        },
+        {
+          "date": "2026-08",
+          "value": 7.2,
+          "sourceUrl": "https://climate.rutgers.edu/stateclim_v1/nclimdiv/index.php?elem=pcpn&stn=NJ00"
+        },
+        {
+          "date": "2026-09",
+          "value": 5.77,
+          "sourceUrl": "https://climate.rutgers.edu/stateclim_v1/nclimdiv/index.php?elem=pcpn&stn=NJ00"
+        },
+        {
+          "date": "2026-10",
+          "value": 2.69,
+          "sourceUrl": "https://climate.rutgers.edu/stateclim_v1/nclimdiv/index.php?elem=pcpn&stn=NJ00"
+        }
+      ],
+      "historyKind": "monthly",
+      "chartKind": "deviation",
+      "comparisons": [],
+      "historySource": "Rutgers Office of the New Jersey State Climatologist (NOAA NClimDiv)",
+      "historySourceUrl": "https://climate.rutgers.edu/stateclim_v1/nclimdiv/index.php?elem=pcpn&stn=NJ00",
+      "historyChartNote": "Rutgers consolidated statewide nClimDiv monthly series checked November 9, 2026. All ten January–October 2026 readings are compared with their corresponding 1991–2020 monthly normals from the same source table; the chart shows differences in inches around a zero baseline. Earlier monthly observations, including September, have been revised since the October source check. November–December are missing, not zero.",
+      "historyBaseline": 39.93,
+      "historyBaselineLabel": "January–October 1991–2020 normal",
+      "historyYAxisMax": null,
+      "monthlyReference": [
+        {
+          "date": "2026-01",
+          "month": "Jan",
+          "value": 2.67,
+          "previousYear": 0.77,
+          "normal": 3.49,
+          "departure": -0.82,
+          "sourceUrl": "https://climate.rutgers.edu/stateclim_v1/nclimdiv/index.php?elem=pcpn&stn=NJ00"
+        },
+        {
+          "date": "2026-02",
+          "month": "Feb",
+          "value": 1.74,
+          "previousYear": 2.61,
+          "normal": 2.86,
+          "departure": -1.12,
+          "sourceUrl": "https://climate.rutgers.edu/stateclim_v1/nclimdiv/index.php?elem=pcpn&stn=NJ00"
+        },
+        {
+          "date": "2026-03",
+          "month": "Mar",
+          "value": 3.17,
+          "previousYear": 3.77,
+          "normal": 4.2,
+          "departure": -1.03,
+          "sourceUrl": "https://climate.rutgers.edu/stateclim_v1/nclimdiv/index.php?elem=pcpn&stn=NJ00"
+        },
+        {
+          "date": "2026-04",
+          "month": "Apr",
+          "value": 2.41,
+          "previousYear": 3.39,
+          "normal": 3.7,
+          "departure": -1.29,
+          "sourceUrl": "https://climate.rutgers.edu/stateclim_v1/nclimdiv/index.php?elem=pcpn&stn=NJ00"
+        },
+        {
+          "date": "2026-05",
+          "month": "May",
+          "value": 2.79,
+          "previousYear": 7.04,
+          "normal": 3.75,
+          "departure": -0.96,
+          "sourceUrl": "https://climate.rutgers.edu/stateclim_v1/nclimdiv/index.php?elem=pcpn&stn=NJ00"
+        },
+        {
+          "date": "2026-06",
+          "month": "Jun",
+          "value": 2.41,
+          "previousYear": 2.67,
+          "normal": 4.3,
+          "departure": -1.89,
+          "sourceUrl": "https://climate.rutgers.edu/stateclim_v1/nclimdiv/index.php?elem=pcpn&stn=NJ00"
+        },
+        {
+          "date": "2026-07",
+          "month": "Jul",
+          "value": 6.13,
+          "previousYear": 5.4,
+          "normal": 4.71,
+          "departure": 1.42,
+          "sourceUrl": "https://climate.rutgers.edu/stateclim_v1/nclimdiv/index.php?elem=pcpn&stn=NJ00"
+        },
+        {
+          "date": "2026-08",
+          "month": "Aug",
+          "value": 7.2,
+          "previousYear": 2.06,
+          "normal": 4.57,
+          "departure": 2.63,
+          "sourceUrl": "https://climate.rutgers.edu/stateclim_v1/nclimdiv/index.php?elem=pcpn&stn=NJ00"
+        },
+        {
+          "date": "2026-09",
+          "month": "Sep",
+          "value": 5.77,
+          "previousYear": 2.65,
+          "normal": 4.16,
+          "departure": 1.61,
+          "sourceUrl": "https://climate.rutgers.edu/stateclim_v1/nclimdiv/index.php?elem=pcpn&stn=NJ00"
+        },
+        {
+          "date": "2026-10",
+          "month": "Oct",
+          "value": 2.69,
+          "previousYear": 3.45,
+          "normal": 4.19,
+          "departure": -1.5,
+          "sourceUrl": "https://climate.rutgers.edu/stateclim_v1/nclimdiv/index.php?elem=pcpn&stn=NJ00"
+        }
+      ],
+      "ytd": {
+        "start": "2026-01",
+        "end": "2026-10",
+        "total": 36.98,
+        "priorYearTotal": 33.81,
+        "normalTotal": 39.93,
+        "differenceFrom2025": 3.17,
+        "differenceFromNormal": -2.95,
+        "monthlySource": "https://climate.rutgers.edu/stateclim_v1/nclimdiv/index.php?elem=pcpn&stn=NJ00",
+        "preliminary": true
+      },
+      "comparisonMode": "source_context",
+      "comparisonsPublic": [
+        {
+          "label": "Jan.–Oct. 1991–2020 normal",
+          "value": "39.93 in.",
+          "detail": "Same ten calendar months in Rutgers nClimDiv normal",
+          "period": "January–October",
+          "kind": "normal",
+          "sourceUrl": "https://climate.rutgers.edu/stateclim_v1/nclimdiv/index.php?elem=pcpn&stn=NJ00"
+        },
+        {
+          "label": "January–October 2025",
+          "value": "33.81 in.",
+          "detail": "2026 is 3.17 in. (+9.4%) wetter for the same ten months",
+          "period": "January–October 2025",
+          "kind": "historical",
+          "sourceUrl": "https://climate.rutgers.edu/stateclim_v1/nclimdiv/index.php?elem=pcpn&stn=NJ00"
+        },
+        {
+          "label": "October 2026 precipitation",
+          "value": "2.69 in.",
+          "detail": "October 2025: 3.45 in.; October 1991–2020 normal: 4.19 in.",
+          "period": "October 2026",
+          "kind": "historical",
+          "sourceUrl": "https://climate.rutgers.edu/stateclim_v1/nclimdiv/index.php?elem=pcpn&stn=NJ00"
+        }
+      ]
+    },
+    {
+      "id": "minimumwage",
+      "category": "Work & wages",
+      "title": "Minimum hourly wage",
+      "value": 15.92,
+      "unit": "USD/hour",
+      "display": "$15.92",
+      "period": "Effective Jan. 1–Dec. 31, 2026",
+      "released": "2026-09-29",
+      "checked": "2026-10-14",
+      "description": "Current legal minimum for most New Jersey workers, not an average wage.",
+      "insight": "The rate for most workers is $15.92 today. An increase to $16.48 has been announced for Jan. 1, 2027.",
+      "keywords": [
+        "pay",
+        "wage",
+        "wages",
+        "minimum",
+        "salary",
+        "minimum wage",
+        "employees",
+        "hourly",
+        "employment"
+      ],
+      "source": "NJ Department of Labor and Workforce Development",
+      "sourceUrl": "https://www.nj.gov/labor/lwdhome/press/2026/20260929_min_wage.shtml",
+      "scheduleUrl": "https://www.nj.gov/labor/wagehour/",
+      "cadence": "Annual change effective January 1; typically announced in September",
+      "nextCheck": "2027-01-01",
+      "nextReleaseLabel": "Announced new rate $16.48/hour takes effect Jan. 1, 2027",
+      "status": "verified",
+      "chartTitle": "Minimum wage for most workers · January 1 rates, 2020–2026",
+      "points": [
+        {
+          "label": "2026 · current",
+          "value": 15.92
+        },
+        {
+          "label": "2027 · announced",
+          "value": 16.48
+        }
+      ],
+      "methodNote": "State minimum hourly wage for most employees. Actual January 1 rates, 2020–2026, collected from NJDOL rules and annual announcements. Different rules apply to tipped, small/seasonal, agricultural and some care workers. The announced January 1, 2027 rate of $16.48 is not yet in effect as of October 14, 2026.",
+      "history": [
+        {
+          "date": "2020",
+          "value": 11
+        },
+        {
+          "date": "2021",
+          "value": 12
+        },
+        {
+          "date": "2022",
+          "value": 13
+        },
+        {
+          "date": "2023",
+          "value": 14.13
+        },
+        {
+          "date": "2024",
+          "value": 15.13
+        },
+        {
+          "date": "2025",
+          "value": 15.49
+        },
+        {
+          "date": "2026",
+          "value": 15.92
+        }
+      ],
+      "historyKind": "annual",
+      "chartKind": "bar",
+      "comparisons": [
+        {
+          "label": "1 year ago",
+          "offsetYears": 1
+        },
+        {
+          "label": "5 years ago",
+          "offsetYears": 5
+        },
+        {
+          "label": "Jan. 1, 2027 · announced",
+          "referenceValue": 16.48,
+          "period": "Effective Jan. 1, 2027",
+          "future": true
+        }
+      ],
+      "historySource": "NJ Department of Labor and Workforce Development",
+      "historySourceUrl": "https://www.nj.gov/labor/wageandhour/tools-resources/laws/wageandhourlaws.shtml",
+      "historyChartNote": "Rates effective January 1 for most workers; actual annual rates, not inflation-adjusted. The announced 2027 rate is a future change and is deliberately excluded from the historical chart.",
+      "historyYAxisMax": 20,
+      "comparisonMode": "source_context",
+      "comparisonsPublic": [
+        {
+          "label": "Announced rate for 2027",
+          "value": "$16.48/hr",
+          "detail": "Not in effect until January 1, 2027",
+          "period": "Jan. 1, 2027",
+          "kind": "announced",
+          "sourceUrl": null
+        }
+      ]
+    },
+    {
+      "checked": "2026-11-09",
+      "status": "verified",
+      "geography": "statewide",
+      "reuseRights": "US federal public statistical data; source attribution required in NJ PBS figures",
+      "coverage": {
+        "statewide": true,
+        "county": false,
+        "municipality": false
+      },
+      "id": "electricity",
+      "category": "Energy & bills",
+      "title": "Residential electricity price",
+      "value": 24.61,
+      "unit": "cents/kWh",
+      "display": "24.61¢/kWh",
+      "period": "August 2026",
+      "released": "2026-10-23",
+      "description": "Average New Jersey residential electricity price per kilowatt-hour in August 2026, not a household's monthly electricity bill.",
+      "insight": "In August, New Jersey's average residential electricity price declined by 0.4% year over year, while the U.S. average increased 3.4%. New Jersey remained 35.5% above the U.S. price per kWh.",
+      "keywords": [
+        "electricity",
+        "electric",
+        "energy",
+        "power",
+        "utility",
+        "utilities",
+        "bill",
+        "electric bill",
+        "electricity costs",
+        "kilowatt-hour",
+        "kwh",
+        "residential"
+      ],
+      "source": "U.S. Energy Information Administration, Electric Power Monthly, Table 5.6.A",
+      "sourceUrl": "https://www.eia.gov/electricity/monthly/epm_table_grapher.php?t=epmt_5_6_a",
+      "scheduleUrl": "https://www.eia.gov/electricity/monthly/",
+      "cadence": "Monthly; dated Electric Power Monthly release calendar",
+      "nextCheck": "2026-11-24",
+      "nextReleaseLabel": "Next Electric Power Monthly due November 24, 2026",
+      "points": [
+        {
+          "label": "August 2025",
+          "value": 24.7
+        },
+        {
+          "label": "August 2026",
+          "value": 24.61
+        }
+      ],
+      "history": [
+        {
+          "date": "2025",
+          "value": 24.7
+        },
+        {
+          "date": "2026",
+          "value": 24.61
+        }
+      ],
+      "historyKind": "annual_selected",
+      "chartKind": "bar",
+      "chartTitle": "Average residential price · August 2025 vs. August 2026",
+      "comparisons": [
+        {
+          "label": "Same month last year",
+          "offsetYears": 1
+        }
+      ],
+      "historyChartNote": "Two matched August observations for New Jersey and the United States, all from EIA Electric Power Monthly Table 5.6.A. Chart bars use a zero-based axis. August 2026 prices are preliminary; these are prices per kilowatt-hour, not household electricity bills.",
+      "methodNote": "U.S. EIA Electric Power Monthly Table 5.6.A, residential sector, October 23, 2026 release. August 2026: New Jersey 24.61¢/kWh and U.S. 18.16¢/kWh; August 2025: New Jersey 24.70¢/kWh and U.S. 17.57¢/kWh. The NJ year-over-year change calculated from published rounded prices is −0.4%; the U.S. change is +3.4%. The NJ rate was 6.45¢/kWh (35.5%) above the U.S. in August 2026. Average price is residential revenue divided by kilowatt-hours sold; not a tariff or monthly bill. Every figure comes from the same table, source revision and residential sector.",
+      "historySource": "U.S. Energy Information Administration, Electric Power Monthly, Table 5.6.A",
+      "historySourceUrl": "https://www.eia.gov/electricity/monthly/epm_table_grapher.php?t=epmt_5_6_a",
+      "comparisonMode": "numeric",
+      "comparisonsPublic": [
+        {
+          "label": "U.S. residential average",
+          "value": "18.16¢/kWh",
+          "detail": "Same EIA residential sector · August 2026",
+          "period": "August 2026",
+          "kind": "national",
+          "sourceUrl": "https://www.eia.gov/electricity/monthly/epm_table_grapher.php?t=epmt_5_6_a"
+        },
+        {
+          "label": "NJ above U.S.",
+          "value": "+6.45¢/kWh (+35.5%)",
+          "detail": "Same month, EIA table and sector",
+          "period": "August 2026",
+          "kind": "difference",
+          "sourceUrl": "https://www.eia.gov/electricity/monthly/epm_table_grapher.php?t=epmt_5_6_a"
+        },
+        {
+          "label": "NJ change since August 2025",
+          "value": "−0.4%",
+          "detail": "24.70¢/kWh to 24.61¢/kWh",
+          "period": "August 2025–August 2026",
+          "kind": "historical",
+          "sourceUrl": "https://www.eia.gov/electricity/monthly/epm_table_grapher.php?t=epmt_5_6_a"
+        },
+        {
+          "label": "U.S. change since August 2025",
+          "value": "+3.4%",
+          "detail": "17.57¢/kWh to 18.16¢/kWh",
+          "period": "August 2025–August 2026",
+          "kind": "historical",
+          "sourceUrl": "https://www.eia.gov/electricity/monthly/epm_table_grapher.php?t=epmt_5_6_a"
+        }
+      ],
+      "electricityComparison": [
+        {
+          "year": 2025,
+          "nj": 24.7,
+          "us": 17.57
+        },
+        {
+          "year": 2026,
+          "nj": 24.61,
+          "us": 18.16
+        }
+      ]
+    },
+    {
+      "checked": "2026-11-09",
+      "status": "verified",
+      "geography": "statewide",
+      "reuseRights": "US federal public statistical data; source attribution required in NJ PBS figures",
+      "coverage": {
+        "statewide": true,
+        "county": false,
+        "municipality": false
+      },
+      "id": "medianrent",
+      "category": "Housing & taxes",
+      "title": "Median gross monthly rent",
+      "value": 1885,
+      "unit": "USD/month",
+      "display": "$1,885/mo",
+      "period": "2025 ACS 1-year estimate",
+      "description": "Median gross monthly rent of renter-occupied housing units paying cash rent in New Jersey, 2025 ACS 1-year survey; includes contract rent and certain utility costs.",
+      "insight": "New Jersey's 2025 ACS median gross monthly rent was $1,885, $328 (21.1%) above the national $1,557 estimate for the same survey year and table.",
+      "keywords": [
+        "rent",
+        "renting",
+        "rental",
+        "renter",
+        "housing",
+        "apartment",
+        "cost of living",
+        "gross rent",
+        "median"
+      ],
+      "source": "U.S. Census Bureau, 2025 ACS 1-Year Detailed Table B25064, Median Gross Rent",
+      "sourceUrl": "https://data.census.gov/table/ACSDT1Y2025.B25064",
+      "scheduleUrl": "https://www.census.gov/programs-surveys/acs/news/data-releases.html",
+      "cadence": "Annual; ACS 1-year survey estimates",
+      "nextCheck": "2027-10-29",
+      "nextReleaseLabel": "Review 2026 ACS one-year rent when released; date is an editorial check, not a confirmed release.",
+      "singleEstimate": true,
+      "uncertaintyNote": "2025 90% margin of error: ±$19.",
+      "points": [],
+      "history": [],
+      "historyKind": "single_year",
+      "chartTitle": "Median gross monthly rent, 2025 ACS 1-year",
+      "methodNote": "2025 Census American Community Survey (ACS) 1-year Detailed Table B25064, released Oct. 29, 2026, universe renter-occupied housing units paying cash rent. New Jersey median gross monthly rent $1,885 ±$19; United States $1,557 ±$4; New York $1,704 ±$14; Pennsylvania $1,329 ±$13. These are 90% survey margins of error and are not the range of rents paid. Gross rent includes contract rent and utility costs paid separately if applicable, not advertised asking rents. NJ−US difference $328 (+21.1%) is calculated from rounded estimates and not asserted statistically significant without testing. All four values use one survey table and reference year; no ACS 5-year data or different housing definitions are mixed.",
+      "comparisons": [],
+      "historySource": "U.S. Census Bureau, 2025 ACS 1-year Detailed Table B25064",
+      "historySourceUrl": "https://data.census.gov/table/ACSDT1Y2025.B25064",
+      "chartKind": "bar",
+      "historyChartNote": "2025 ACS one-year Detailed Table B25064. Two default bars (NJ and USA) use a zero-based dollar scale; optional regional view adds New York and Pennsylvania from the same B25064 table. Renter-occupied housing units paying cash rent are the survey universe. Exact 90% margins of error are included in the chart and source table. No ACS five-year estimates, private asking-rent data, or earlier years are combined.",
+      "released": "2026-10-29",
+      "comparisonMode": "2025_median_gross_rent_national_regional",
+      "comparisonsPublic": [
+        {
+          "label": "U.S. median gross rent",
+          "value": "$1,557 ±$4 per month",
+          "detail": "2025 ACS 1-year, same survey table and housing-unit universe",
+          "period": "2025",
+          "kind": "national",
+          "sourceUrl": "https://data.census.gov/table/ACSDT1Y2025.B25064"
+        },
+        {
+          "label": "NJ above U.S. median",
+          "value": "$328 (+21.1%)",
+          "detail": "Difference between rounded medians; not a matched-household rent premium",
+          "period": "2025",
+          "kind": "difference",
+          "sourceUrl": "https://data.census.gov/table/ACSDT1Y2025.B25064"
+        },
+        {
+          "label": "New York median gross rent",
+          "value": "$1,704 ±$14 per month",
+          "detail": "2025 ACS 1-year regional context",
+          "period": "2025",
+          "kind": "regional",
+          "sourceUrl": "https://data.census.gov/table/ACSDT1Y2025.B25064"
+        },
+        {
+          "label": "Pennsylvania median gross rent",
+          "value": "$1,329 ±$13 per month",
+          "detail": "2025 ACS 1-year regional context",
+          "period": "2025",
+          "kind": "regional",
+          "sourceUrl": "https://data.census.gov/table/ACSDT1Y2025.B25064"
+        }
+      ],
+      "acs2025GrossRent": {
+        "year": 2025,
+        "table": "B25064",
+        "universe": "Renter-occupied units paying cash rent",
+        "moeLevel": 90,
+        "geographies": [
+          {
+            "id": "NJ",
+            "label": "New Jersey",
+            "value": 1885,
+            "moe": 19
+          },
+          {
+            "id": "US",
+            "label": "United States",
+            "value": 1557,
+            "moe": 4
+          },
+          {
+            "id": "NY",
+            "label": "New York",
+            "value": 1704,
+            "moe": 14
+          },
+          {
+            "id": "PA",
+            "label": "Pennsylvania",
+            "value": 1329,
+            "moe": 13
+          }
+        ]
+      }
+    },
+    {
+      "checked": "2026-11-09",
+      "status": "verified",
+      "geography": "statewide",
+      "reuseRights": "US federal public statistical data; source attribution required in NJ PBS figures",
+      "coverage": {
+        "statewide": true,
+        "county": false,
+        "municipality": false
+      },
+      "id": "medianincome",
+      "category": "Work & wages",
+      "title": "Median household income",
+      "value": 107797,
+      "unit": "USD/year",
+      "display": "$107,797",
+      "period": "2025 ACS 1-year estimate (2025 dollars)",
+      "description": "Median income across New Jersey households, from the 2025 American Community Survey one-year estimate; half of households have more and half have less.",
+      "insight": "New Jersey’s 2025 median was $23,017 (27.1%) above the U.S. median from the same survey. Its estimated 0.6% real increase over 2024 was not statistically significant.",
+      "keywords": [
+        "median household income",
+        "household",
+        "income",
+        "pay",
+        "wages",
+        "earning",
+        "affordability",
+        "middle class",
+        "census",
+        "acs"
+      ],
+      "source": "U.S. Census Bureau, Household Income in States and Metropolitan Areas: 2025, Appendix Table 1",
+      "sourceUrl": "https://www2.census.gov/library/publications/2026/demo/acsbr-028.pdf",
+      "scheduleUrl": "https://www.census.gov/programs-surveys/acs/news/data-releases.html",
+      "cadence": "Annual; ACS 1-year survey estimates",
+      "nextCheck": "2027-09-01",
+      "nextReleaseLabel": "Check next ACS one-year income release; publication date not yet announced",
+      "history": [
+        {
+          "date": "2024",
+          "value": 107112
+        },
+        {
+          "date": "2025",
+          "value": 107797
+        }
+      ],
+      "historyKind": "annual_selected",
+      "chartKind": "bar",
+      "comparisons": [
+        {
+          "label": "2024 (both in 2025 dollars)",
+          "offsetYears": 1
+        }
+      ],
+      "uncertaintyNote": "2025 ACS one-year 90% margins of error: New Jersey ±$1,374; U.S. ±$215; New York ±$934; Pennsylvania ±$603. The 0.6% estimated NJ increase from 2024 was not statistically significant.",
+      "chartTitle": "Median household income · 2025 ACS one-year estimates",
+      "historyChartNote": "2024 and 2025 ACS one-year median incomes in 2025 inflation-adjusted dollars. The main chart compares matching 2025 NJ and U.S. estimates, with an optional NY–NJ–PA regional comparison. Both chart scales start at zero. The NJ 2024-to-2025 real change was not statistically significant; do not interpret it as verified growth.",
+      "methodNote": "The Census Bureau's ACSBR-028 Appendix Table 1 provides 2025 median household income and 90% margins of error for NJ ($107,797 ±$1,374), the United States ($84,780 ±$215), NY ($89,210 ±$934) and PA ($81,473 ±$603). Its inflation-adjusted 2024 NJ comparison is $107,112 ±$1,023 in 2025 dollars; the 0.6% change is not statistically significant. This is median income for households, not individual salary or mean income. The ACS asks about income over 12 months before the interview, not strictly calendar-year earnings. Different household compositions and local costs of living are not adjusted in the geographical comparisons. Do not mix ACS with CPS/ASEC estimates or 5-year ACS results.",
+      "points": [],
+      "historySource": "U.S. Census Bureau, Household Income in States and Metropolitan Areas: 2025, Appendix Table 1",
+      "historySourceUrl": "https://www2.census.gov/library/publications/2026/demo/acsbr-028.pdf",
+      "released": "2026-10-29",
+      "comparisonMode": "numeric",
+      "comparisonsPublic": [
+        {
+          "label": "U.S. median household income",
+          "value": "$84,780",
+          "detail": "Same 2025 ACS 1-year survey; 2025 dollars",
+          "period": "2025",
+          "kind": "national",
+          "sourceUrl": "https://www2.census.gov/library/publications/2026/demo/acsbr-028.pdf"
+        },
+        {
+          "label": "NJ above U.S.",
+          "value": "+$23,017 (+27.1%)",
+          "detail": "Difference in survey medians; not an individual household comparison",
+          "period": "2025",
+          "kind": "difference",
+          "sourceUrl": "https://www2.census.gov/library/publications/2026/demo/acsbr-028.pdf"
+        },
+        {
+          "label": "New York median",
+          "value": "$89,210",
+          "detail": "Same survey and year; regional comparison view",
+          "period": "2025",
+          "kind": "regional",
+          "sourceUrl": "https://www2.census.gov/library/publications/2026/demo/acsbr-028.pdf"
+        },
+        {
+          "label": "Pennsylvania median",
+          "value": "$81,473",
+          "detail": "Same survey and year; regional comparison view",
+          "period": "2025",
+          "kind": "regional",
+          "sourceUrl": "https://www2.census.gov/library/publications/2026/demo/acsbr-028.pdf"
+        },
+        {
+          "label": "NJ in 2024 (2025 dollars)",
+          "value": "$107,112",
+          "detail": "2025 estimate is 0.6% higher; difference not statistically significant",
+          "period": "2024",
+          "kind": "historical",
+          "sourceUrl": "https://www2.census.gov/library/publications/2026/demo/acsbr-028.pdf"
+        }
+      ],
+      "incomeGeographies": [
+        {
+          "id": "nj",
+          "label": "New Jersey",
+          "value": 107797,
+          "moe": 1374
+        },
+        {
+          "id": "ny",
+          "label": "New York",
+          "value": 89210,
+          "moe": 934
+        },
+        {
+          "id": "us",
+          "label": "United States",
+          "value": 84780,
+          "moe": 215
+        },
+        {
+          "id": "pa",
+          "label": "Pennsylvania",
+          "value": 81473,
+          "moe": 603
+        }
+      ]
+    },
+    {
+      "checked": "2026-11-09",
+      "status": "verified",
+      "geography": "statewide",
+      "reuseRights": "US federal public statistical data; source attribution required in NJ PBS figures",
+      "coverage": {
+        "statewide": true,
+        "county": false,
+        "municipality": false
+      },
+      "id": "housingpermits",
+      "category": "Housing & taxes",
+      "title": "New housing units permitted in 2026",
+      "value": 22517,
+      "unit": "count",
+      "display": "22,517",
+      "period": "January–September 2026 (year to date; monthly series)",
+      "description": "New private housing units authorized by building permits in New Jersey, January through September 2026, according to the unadjusted monthly Census series.",
+      "insight": "Between January and September 2026, building permits authorized 1,178 fewer new housing units (−5.0%) than the same nine months of 2025, based on matching monthly observations.",
+      "keywords": [
+        "housing",
+        "homes",
+        "construction",
+        "building",
+        "permits",
+        "housing starts",
+        "residential development",
+        "development",
+        "2026",
+        "year to date",
+        "ytd",
+        "2025",
+        "monthly",
+        "residential permits"
+      ],
+      "source": "U.S. Census Bureau Building Permits Survey, via FRED (NJBPPRIV)",
+      "sourceUrl": "https://fred.stlouisfed.org/data/NJBPPRIV",
+      "scheduleUrl": "https://www.census.gov/construction/bps/",
+      "cadence": "Monthly preliminary source series; annual official Census estimates published separately",
+      "nextCheck": "2026-11-25",
+      "nextReleaseLabel": "Census revised October 2026 monthly state building permits scheduled November 25, 2026",
+      "history": [
+        {
+          "date": "2026-01",
+          "value": 3320,
+          "sourceUrl": "https://fred.stlouisfed.org/data/NJBPPRIV"
+        },
+        {
+          "date": "2026-02",
+          "value": 2725,
+          "sourceUrl": "https://fred.stlouisfed.org/data/NJBPPRIV"
+        },
+        {
+          "date": "2026-03",
+          "value": 2389,
+          "sourceUrl": "https://fred.stlouisfed.org/data/NJBPPRIV"
+        },
+        {
+          "date": "2026-04",
+          "value": 2256,
+          "sourceUrl": "https://fred.stlouisfed.org/data/NJBPPRIV"
+        },
+        {
+          "date": "2026-05",
+          "value": 2630,
+          "sourceUrl": "https://fred.stlouisfed.org/data/NJBPPRIV"
+        },
+        {
+          "date": "2026-06",
+          "value": 2796,
+          "sourceUrl": "https://fred.stlouisfed.org/data/NJBPPRIV"
+        },
+        {
+          "date": "2026-07",
+          "value": 2211,
+          "sourceUrl": "https://fred.stlouisfed.org/data/NJBPPRIV"
+        },
+        {
+          "date": "2026-08",
+          "value": 2200,
+          "sourceUrl": "https://fred.stlouisfed.org/data/NJBPPRIV"
+        },
+        {
+          "date": "2026-09",
+          "value": 1990,
+          "sourceUrl": "https://fred.stlouisfed.org/data/NJBPPRIV"
+        }
+      ],
+      "historyKind": "monthly",
+      "chartKind": "bar",
+      "comparisons": [],
+      "chartTitle": "Monthly new housing units authorized, 2025 vs. 2026",
+      "historySource": "U.S. Census Bureau Building Permits Survey, via FRED (NJBPPRIV)",
+      "historySourceUrl": "https://fred.stlouisfed.org/data/NJBPPRIV",
+      "historyChartNote": "Side-by-side monthly totals for January–September 2025 and January–September 2026, all from the same unadjusted, preliminary Census NJBPPRIV monthly series as released via FRED October 27, 2026. The 2026 monthly total is 22,517; the 2025 same-month total is 23,695. Monthly observations can be revised; these are not construction starts, completed homes or final annual permit totals.",
+      "methodNote": "Source: U.S. Census Bureau Building Permits Survey state monthly series NJBPPRIV, via FRED (October 27, 2026 vintage). Preliminary, not seasonally adjusted. January–September 2026 includes 22,517 privately owned housing units authorized; the same nine months of 2025 include 23,695. Difference −1,178 units (−4.97%). Data are units authorized, not permit documents, starts, completions or individual dwellings occupied. Both totals add only the monthly readings of this single series. Official annual and separately published county year-to-date aggregates have different vintages and must not be combined with these totals.",
+      "points": [],
+      "released": "2026-10-27",
+      "monthlyReference": [
+        {
+          "date": "2026-01",
+          "month": "Jan",
+          "value": 3320,
+          "previousYear": 2913,
+          "sourceUrl": "https://fred.stlouisfed.org/data/NJBPPRIV"
+        },
+        {
+          "date": "2026-02",
+          "month": "Feb",
+          "value": 2725,
+          "previousYear": 2215,
+          "sourceUrl": "https://fred.stlouisfed.org/data/NJBPPRIV"
+        },
+        {
+          "date": "2026-03",
+          "month": "Mar",
+          "value": 2389,
+          "previousYear": 3337,
+          "sourceUrl": "https://fred.stlouisfed.org/data/NJBPPRIV"
+        },
+        {
+          "date": "2026-04",
+          "month": "Apr",
+          "value": 2256,
+          "previousYear": 2544,
+          "sourceUrl": "https://fred.stlouisfed.org/data/NJBPPRIV"
+        },
+        {
+          "date": "2026-05",
+          "month": "May",
+          "value": 2630,
+          "previousYear": 2404,
+          "sourceUrl": "https://fred.stlouisfed.org/data/NJBPPRIV"
+        },
+        {
+          "date": "2026-06",
+          "month": "Jun",
+          "value": 2796,
+          "previousYear": 2655,
+          "sourceUrl": "https://fred.stlouisfed.org/data/NJBPPRIV"
+        },
+        {
+          "date": "2026-07",
+          "month": "Jul",
+          "value": 2211,
+          "previousYear": 2638,
+          "sourceUrl": "https://fred.stlouisfed.org/data/NJBPPRIV"
+        },
+        {
+          "date": "2026-08",
+          "month": "Aug",
+          "value": 2200,
+          "previousYear": 2513,
+          "sourceUrl": "https://fred.stlouisfed.org/data/NJBPPRIV"
+        },
+        {
+          "date": "2026-09",
+          "month": "Sep",
+          "value": 1990,
+          "previousYear": 2476,
+          "sourceUrl": "https://fred.stlouisfed.org/data/NJBPPRIV"
+        }
+      ],
+      "ytd": {
+        "start": "2026-01",
+        "end": "2026-09",
+        "total": 22517,
+        "priorYearTotal": 23695,
+        "differenceFrom2025": -1178,
+        "pctChange": -4.9715,
+        "preliminary": true,
+        "monthlySource": "https://fred.stlouisfed.org/data/NJBPPRIV"
+      },
+      "comparisonMode": "numeric_table",
+      "comparisonsPublic": [
+        {
+          "label": "Same months in 2025",
+          "value": "23,695 units",
+          "detail": "January–September; same NJBPPRIV monthly series and vintage",
+          "period": "Jan–Sep 2025",
+          "kind": "historical",
+          "sourceUrl": "https://fred.stlouisfed.org/data/NJBPPRIV"
+        },
+        {
+          "label": "Year-over-year difference",
+          "value": "−1,178 units (−5.0%)",
+          "detail": "Preliminary units authorized, not completed housing",
+          "period": "Jan–Sep 2025 to 2026",
+          "kind": "difference",
+          "sourceUrl": "https://fred.stlouisfed.org/data/NJBPPRIV"
+        }
+      ]
+    },
+    {
+      "checked": "2026-10-14",
+      "status": "verified",
+      "geography": "statewide",
+      "reuseRights": "Public state-government official election statistics; attribution to NJ Division of Elections, original report URL required.",
+      "coverage": {
+        "statewide": true,
+        "county": true,
+        "municipality": false,
+        "countyCount": 21,
+        "periods": [
+          "2025-10",
+          "2026-09",
+          "2026-10"
+        ]
+      },
+      "id": "voterregistration",
+      "category": "Civic life",
+      "title": "Registered voters",
+      "value": 6725177,
+      "unit": "count",
+      "display": "6,725,177",
+      "period": "October 1, 2026 snapshot",
+      "description": "Active registered voters statewide as of October 1, 2026, compared with the same date in 2025 and September 2026.",
+      "insight": "Current registration counts are snapshots of the voter rolls—not votes cast or turnout. Exact year-over-year and month-over-month changes appear below.",
+      "keywords": [
+        "voters",
+        "voting",
+        "elections",
+        "politics",
+        "registered",
+        "registration",
+        "unaffiliated",
+        "democrat",
+        "republican",
+        "county",
+        "civic"
+      ],
+      "source": "New Jersey Division of Elections, statewide registration archive",
+      "sourceUrl": "https://www.nj.gov/state/elections/election-information-svrs.shtml",
+      "scheduleUrl": "https://www.nj.gov/state/elections/election-information-svrs.shtml",
+      "cadence": "Monthly archive; publication day can vary",
+      "nextCheck": "2026-11-02",
+      "nextReleaseLabel": "Check for November 2026 county report in early November",
+      "history": [
+        {
+          "date": "2025-10",
+          "value": 6609895
+        },
+        {
+          "date": "2026-09",
+          "value": 6709471
+        },
+        {
+          "date": "2026-10",
+          "value": 6725177
+        }
+      ],
+      "historyKind": "monthly",
+      "chartKind": "numeric_summary",
+      "comparisons": [],
+      "chartTitle": "Voter registrations changed modestly",
+      "historyChartNote": "Numeric comparisons use dated official statewide registration snapshots. The Oct. 1, 2026 total is 6,725,177; Oct. 1, 2025 was 6,609,895 and Sept. 1, 2026 was 6,709,471. Change = (new−old)÷old × 100. No absolute-count magnitude chart. These are first-of-month snapshots, not election-day totals. All 21 counties reconcile.",
+      "methodNote": "Total voter registrations as reported in the county summaries dated October 1, 2025; September 1, 2026; October 1, 2026. This is not turnout, eligible population, or ballots cast. Party affiliations are enumerated in the agency report. Every county is included for each comparison period; cumulative statewide totals were independently reconciled to the PDFs. Changes are reported as percentages of the prior registration count, not percentage points. No election-to-election comparison is implied, because these are monthly snapshots rather than matched election-day rosters.",
+      "historySource": "NJ Division of Elections, county voter-registration summaries",
+      "historySourceUrl": "https://www.nj.gov/state/elections/assets/pdf/svrs-reports/2026/2026-10-voter-registration-by-county.pdf",
+      "points": [],
+      "released": null,
+      "comparisonMode": "county_table",
+      "comparisonsPublic": [
+        {
+          "label": "Compared with Oct. 2025",
+          "value": "+1.74%",
+          "detail": "+115,282 registered voters",
+          "period": "Oct. 2025–Oct. 2026",
+          "kind": "historical",
+          "sourceUrl": null
+        },
+        {
+          "label": "Compared with Sept. 2026",
+          "value": "+0.23%",
+          "detail": "+15,706 registered voters",
+          "period": "Sept.–Oct. 2026",
+          "kind": "historical",
+          "sourceUrl": null
+        }
+      ]
+    },
+    {
+      "checked": "2026-11-09",
+      "status": "verified",
+      "geography": "statewide",
+      "reuseRights": "Publicly released government statistical material; retain primary source links and review applicable reuse conditions",
+      "coverage": {
+        "statewide": true,
+        "county": false,
+        "municipality": false
+      },
+      "points": [],
+      "history": [],
+      "historyKind": "annual_selected",
+      "chartKind": "treemap",
+      "comparisons": [],
+      "chartTitle": "Where New Jersey's FY2027 state-funded budget goes",
+      "historyChartNote": "State-funded enacted FY2027 budget only (July 2026–June 2027). The treemap's default categorization is spending type; its alternate department/account view is a separate reclassification of the same total, not additional spending. All 5 type totals and all 22 department/account entries reconcile to $60,743,569,000. Source scoresheet amounts are in thousands of dollars and are converted to dollars for the exact-value table. No federal appropriations or later expenditures are included.",
+      "id": "statebudget",
+      "category": "Government & economy",
+      "title": "State government budget",
+      "value": 60.743569,
+      "unit": "USD billions",
+      "display": "$60.74 billion",
+      "period": "Enacted FY2027 budget (July 2026–June 2027) · state-funded appropriations",
+      "description": "New Jersey's enacted FY2027 state-funded appropriations, distributed by spending type and by department/account; not actual expenditures or federally funded appropriations.",
+      "insight": "Enacted state-funded appropriations total $60.74 billion. State aid and grants-in-aid are the largest spending types, at 40.9% and 34.4%.",
+      "keywords": [
+        "spending",
+        "fiscal",
+        "government",
+        "state budget",
+        "appropriations",
+        "state finance",
+        "revenues",
+        "pension",
+        "tax relief",
+        "FY2027"
+      ],
+      "source": "NJ Office of Legislative Services, FY2027 Appropriations Act Scoresheet, Sections D and E, P.L.2026, c.27",
+      "sourceUrl": "https://pub.njleg.state.nj.us/publications/budget/FY%202027%20Appropriations%20Act%20Scoresheet.pdf",
+      "scheduleUrl": "https://www.nj.gov/treasury/omb/",
+      "cadence": "Annual budget proposal, legislative appropriation and final signed act",
+      "nextCheck": "2027-03-01",
+      "nextReleaseLabel": "Begin checking FY2028 executive budget proposal in early 2027",
+      "released": "2026-07-01",
+      "comparisonMode": "budget_treemap",
+      "comparisonsPublic": [],
+      "methodNote": "Official New Jersey Office of Legislative Services FY2027 Appropriations Act Scoresheet, P.L.2026, c.27 with line-item veto and revenue certification, report dated July 1, 2026, final enacted Act column (3). Section D gives five mutually exclusive appropriations by category; Section E gives 22 department/account totals. Both reconcile to $60,743,569 thousands. A grouped 'Other departments and accounts' rectangle is derived as the sum of 16 named smaller entries in Section E; all are itemized in the complete table. Enacted appropriations are authorization to spend state funds, not actual expenditures, federal grants, or amounts paid directly to taxpayers. Do not add the department and spending type views together.",
+      "historySource": "NJ Office of Legislative Services, FY2027 Appropriations Act Scoresheet, P.L.2026, c.27",
+      "historySourceUrl": "https://pub.njleg.state.nj.us/publications/budget/FY%202027%20Appropriations%20Act%20Scoresheet.pdf",
+      "budgetScorecard": {
+        "sourceUnits": "thousands of dollars",
+        "reportDate": "2026-07-01",
+        "totalThousands": 60743569,
+        "spendingTypes": [
+          {
+            "name": "State aid",
+            "valueThousands": 24859309
+          },
+          {
+            "name": "Grants-in-aid",
+            "valueThousands": 20911242
+          },
+          {
+            "name": "Direct state services",
+            "valueThousands": 12523929
+          },
+          {
+            "name": "Capital construction",
+            "valueThousands": 1919899
+          },
+          {
+            "name": "Debt service",
+            "valueThousands": 529190
+          }
+        ],
+        "departmentAccounts": [
+          {
+            "name": "Legislature",
+            "valueThousands": 124093
+          },
+          {
+            "name": "Chief Executive",
+            "valueThousands": 14745
+          },
+          {
+            "name": "Agriculture",
+            "valueThousands": 136787
+          },
+          {
+            "name": "Banking and Insurance",
+            "valueThousands": 79417
+          },
+          {
+            "name": "Children and Families",
+            "valueThousands": 1550088
+          },
+          {
+            "name": "Community Affairs",
+            "valueThousands": 1228167
+          },
+          {
+            "name": "Corrections",
+            "valueThousands": 1330075
+          },
+          {
+            "name": "Education",
+            "valueThousands": 21800104
+          },
+          {
+            "name": "Environmental Protection",
+            "valueThousands": 506382
+          },
+          {
+            "name": "Health",
+            "valueThousands": 1459033
+          },
+          {
+            "name": "Human Services",
+            "valueThousands": 11166718
+          },
+          {
+            "name": "Labor and Workforce Development",
+            "valueThousands": 213732
+          },
+          {
+            "name": "Law and Public Safety",
+            "valueThousands": 1010407
+          },
+          {
+            "name": "Military Affairs",
+            "valueThousands": 11666
+          },
+          {
+            "name": "State",
+            "valueThousands": 2002095
+          },
+          {
+            "name": "Transportation",
+            "valueThousands": 2872436
+          },
+          {
+            "name": "Treasury",
+            "valueThousands": 5682362
+          },
+          {
+            "name": "Veterans Affairs",
+            "valueThousands": 144306
+          },
+          {
+            "name": "Miscellaneous Executive Commissions",
+            "valueThousands": 994
+          },
+          {
+            "name": "Interdepartmental Accounts",
+            "valueThousands": 7919631
+          },
+          {
+            "name": "Judiciary",
+            "valueThousands": 961141
+          },
+          {
+            "name": "Debt Service",
+            "valueThousands": 529190
+          }
+        ]
+      }
+    },
+    {
+      "checked": "2026-11-09",
+      "status": "verified",
+      "geography": "statewide",
+      "reuseRights": "Publicly released government statistical material; retain primary source links and review applicable reuse conditions",
+      "coverage": {
+        "statewide": true,
+        "county": false,
+        "municipality": false
+      },
+      "points": [],
+      "history": [
+        {
+          "date": "2026-01",
+          "value": 27.7,
+          "sourceUrl": "https://climate.rutgers.edu/stateclim_v1/nclimdiv/index.php?elem=avgt&stn=NJ00"
+        },
+        {
+          "date": "2026-02",
+          "value": 29.4,
+          "sourceUrl": "https://climate.rutgers.edu/stateclim_v1/nclimdiv/index.php?elem=avgt&stn=NJ00"
+        },
+        {
+          "date": "2026-03",
+          "value": 45.1,
+          "sourceUrl": "https://climate.rutgers.edu/stateclim_v1/nclimdiv/index.php?elem=avgt&stn=NJ00"
+        },
+        {
+          "date": "2026-04",
+          "value": 54.4,
+          "sourceUrl": "https://climate.rutgers.edu/stateclim_v1/nclimdiv/index.php?elem=avgt&stn=NJ00"
+        },
+        {
+          "date": "2026-05",
+          "value": 61.7,
+          "sourceUrl": "https://climate.rutgers.edu/stateclim_v1/nclimdiv/index.php?elem=avgt&stn=NJ00"
+        },
+        {
+          "date": "2026-06",
+          "value": 71.9,
+          "sourceUrl": "https://climate.rutgers.edu/stateclim_v1/nclimdiv/index.php?elem=avgt&stn=NJ00"
+        },
+        {
+          "date": "2026-07",
+          "value": 75.9,
+          "sourceUrl": "https://climate.rutgers.edu/stateclim_v1/nclimdiv/index.php?elem=avgt&stn=NJ00"
+        },
+        {
+          "date": "2026-08",
+          "value": 74.9,
+          "sourceUrl": "https://climate.rutgers.edu/stateclim_v1/nclimdiv/index.php?elem=avgt&stn=NJ00"
+        },
+        {
+          "date": "2026-09",
+          "value": 68.1,
+          "sourceUrl": "https://climate.rutgers.edu/stateclim_v1/nclimdiv/index.php?elem=avgt&stn=NJ00"
+        },
+        {
+          "date": "2026-10",
+          "value": 57.3,
+          "sourceUrl": "https://climate.rutgers.edu/stateclim_v1/nclimdiv/index.php?elem=avgt&stn=NJ00"
+        }
+      ],
+      "historyKind": "monthly",
+      "chartKind": "deviation",
+      "comparisons": [],
+      "chartTitle": "Monthly New Jersey temperature departures from 1991–2020 normal, January–October 2026",
+      "historyChartNote": "All January–October 2026 statewide monthly mean temperatures and their matched 1991–2020 normals from the same Rutgers nClimDiv statewide mean temperature table checked November 9, 2026. July, August and September have been revised since the October data snapshot. A bar above zero is warmer than that month’s normal; a bar below zero is cooler. November and December 2026 are not available; no 2026 annual temperature is estimated.",
+      "id": "temperature",
+      "category": "Weather & climate",
+      "title": "Statewide average temperature",
+      "value": 57.3,
+      "unit": "°F",
+      "display": "57.3°F",
+      "period": "October 2026 statewide monthly mean",
+      "description": "New Jersey's statewide monthly mean temperature in October 2026, from the current Rutgers/NOAA nClimDiv statewide series.",
+      "insight": "October 2026 averaged 57.3°F statewide, 1.9°F above the 1991–2020 October normal of 55.4°F. Each 2026 month is compared with its own monthly normal.",
+      "keywords": [
+        "temperature",
+        "warming",
+        "climate",
+        "heat",
+        "cold",
+        "weather",
+        "monthly",
+        "degrees",
+        "new jersey"
+      ],
+      "source": "Rutgers Office of the New Jersey State Climatologist / NOAA nClimDiv",
+      "sourceUrl": "https://climate.rutgers.edu/stateclim_v1/nclimdiv/index.php?elem=avgt&stn=NJ00",
+      "scheduleUrl": "https://climate.rutgers.edu/stateclim_v1/nclimdiv/index.php",
+      "cadence": "Monthly statewide climate division series; revisions possible",
+      "nextCheck": "2026-12-06",
+      "nextReleaseLabel": "Review Rutgers nClimDiv November monthly temperature and revisions; no fixed release date",
+      "comparisonMode": "temperature_table",
+      "comparisonsPublic": [
+        {
+          "label": "1991–2020 October normal",
+          "value": "55.4°F",
+          "detail": "Same statewide monthly nClimDiv series and month",
+          "period": "October",
+          "kind": "normal",
+          "sourceUrl": "https://climate.rutgers.edu/stateclim_v1/nclimdiv/index.php?elem=avgt&stn=NJ00"
+        },
+        {
+          "label": "October 2026 above normal",
+          "value": "+1.9°F",
+          "detail": "57.3°F minus 55.4°F; a Fahrenheit difference, not percent",
+          "period": "October 2026",
+          "kind": "difference",
+          "sourceUrl": "https://climate.rutgers.edu/stateclim_v1/nclimdiv/index.php?elem=avgt&stn=NJ00"
+        },
+        {
+          "label": "October 2025 monthly mean",
+          "value": "56.1°F",
+          "detail": "October 2026 was 1.2°F warmer than October 2025",
+          "period": "October 2025",
+          "kind": "historical",
+          "sourceUrl": "https://climate.rutgers.edu/stateclim_v1/nclimdiv/index.php?elem=avgt&stn=NJ00"
+        }
+      ],
+      "monthlyReference": [
+        {
+          "date": "2026-01",
+          "value": 27.7,
+          "normal": 31.7,
+          "departure": -4,
+          "sourceUrl": "https://climate.rutgers.edu/stateclim_v1/nclimdiv/index.php?elem=avgt&stn=NJ00"
+        },
+        {
+          "date": "2026-02",
+          "value": 29.4,
+          "normal": 33.9,
+          "departure": -4.5,
+          "sourceUrl": "https://climate.rutgers.edu/stateclim_v1/nclimdiv/index.php?elem=avgt&stn=NJ00"
+        },
+        {
+          "date": "2026-03",
+          "value": 45.1,
+          "normal": 41,
+          "departure": 4.1,
+          "sourceUrl": "https://climate.rutgers.edu/stateclim_v1/nclimdiv/index.php?elem=avgt&stn=NJ00"
+        },
+        {
+          "date": "2026-04",
+          "value": 54.4,
+          "normal": 51.5,
+          "departure": 2.9,
+          "sourceUrl": "https://climate.rutgers.edu/stateclim_v1/nclimdiv/index.php?elem=avgt&stn=NJ00"
+        },
+        {
+          "date": "2026-05",
+          "value": 61.7,
+          "normal": 61.2,
+          "departure": 0.5,
+          "sourceUrl": "https://climate.rutgers.edu/stateclim_v1/nclimdiv/index.php?elem=avgt&stn=NJ00"
+        },
+        {
+          "date": "2026-06",
+          "value": 71.9,
+          "normal": 70.3,
+          "departure": 1.6,
+          "sourceUrl": "https://climate.rutgers.edu/stateclim_v1/nclimdiv/index.php?elem=avgt&stn=NJ00"
+        },
+        {
+          "date": "2026-07",
+          "value": 75.9,
+          "normal": 75.4,
+          "departure": 0.5,
+          "sourceUrl": "https://climate.rutgers.edu/stateclim_v1/nclimdiv/index.php?elem=avgt&stn=NJ00"
+        },
+        {
+          "date": "2026-08",
+          "value": 74.9,
+          "normal": 73.6,
+          "departure": 1.3,
+          "sourceUrl": "https://climate.rutgers.edu/stateclim_v1/nclimdiv/index.php?elem=avgt&stn=NJ00"
+        },
+        {
+          "date": "2026-09",
+          "value": 68.1,
+          "normal": 66.9,
+          "departure": 1.2,
+          "sourceUrl": "https://climate.rutgers.edu/stateclim_v1/nclimdiv/index.php?elem=avgt&stn=NJ00"
+        },
+        {
+          "date": "2026-10",
+          "value": 57.3,
+          "normal": 55.4,
+          "departure": 1.9,
+          "sourceUrl": "https://climate.rutgers.edu/stateclim_v1/nclimdiv/index.php?elem=avgt&stn=NJ00"
+        }
+      ],
+      "methodNote": "Rutgers Office of the New Jersey State Climatologist, NOAA nClimDiv statewide monthly mean temperature table, checked November 9, 2026. October 2026 57.3°F; matching 1991–2020 October normal 55.4°F, departure +1.9°F; October 2025 from the same statewide table is 56.1°F. Monthly observations January–October 2026 and matching monthly normals all use this one table, which may be revised. This is area-wide monthly mean temperature, not a station extreme or statewide annual average. Never infer a completed 2026 annual value from these ten months.",
+      "released": null,
+      "historySource": "Rutgers Office of the New Jersey State Climatologist / NOAA nClimDiv",
+      "historySourceUrl": "https://climate.rutgers.edu/stateclim_v1/nclimdiv/index.php?elem=avgt&stn=NJ00"
+    },
+    {
+      "checked": "2026-11-09",
+      "status": "verified",
+      "geography": "statewide",
+      "reuseRights": "Publicly released government statistical material; retain primary source links and review applicable reuse conditions",
+      "coverage": {
+        "statewide": true,
+        "county": false,
+        "municipality": false
+      },
+      "points": [],
+      "history": [
+        {
+          "date": "2026-01",
+          "value": 1809464,
+          "sourceUrl": "https://www.nj.gov/humanservices/dmahs/documents/news/reports/enrollment_2026_01.pdf"
+        },
+        {
+          "date": "2026-02",
+          "value": 1812049,
+          "sourceUrl": "https://www.nj.gov/humanservices/dmahs/documents/news/reports/enrollment_2026_02.pdf"
+        },
+        {
+          "date": "2026-03",
+          "value": 1815571,
+          "sourceUrl": "https://www.nj.gov/humanservices/dmahs/documents/news/reports/enrollment_2026_03.pdf"
+        },
+        {
+          "date": "2026-04",
+          "value": 1827845,
+          "sourceUrl": "https://www.nj.gov/humanservices/dmahs/documents/news/reports/enrollment_2026_04.pdf"
+        },
+        {
+          "date": "2026-05",
+          "value": 1823772,
+          "sourceUrl": "https://www.nj.gov/humanservices/dmahs/documents/news/reports/enrollment_2026_05.pdf"
+        },
+        {
+          "date": "2026-06",
+          "value": 1799053,
+          "sourceUrl": "https://www.nj.gov/humanservices/dmahs/documents/news/reports/enrollment_2026_06.pdf"
+        },
+        {
+          "date": "2026-07",
+          "value": 1790043,
+          "sourceUrl": "https://www.nj.gov/humanservices/dmahs/documents/news/reports/enrollment_2026_07.pdf"
+        },
+        {
+          "date": "2026-08",
+          "value": 1788321,
+          "sourceUrl": "https://www.nj.gov/humanservices/dmahs/documents/news/reports/enrollment_2026_08.pdf"
+        },
+        {
+          "date": "2026-09",
+          "value": 1791141,
+          "sourceUrl": "https://www.nj.gov/humanservices/dmahs/documents/news/reports/enrollment_2026_09.pdf"
+        },
+        {
+          "date": "2026-10",
+          "value": 1786101,
+          "sourceUrl": "https://www.nj.gov/humanservices/dmahs/documents/news/reports/enrollment_2026_10.pdf"
+        }
+      ],
+      "historyKind": "monthly",
+      "chartKind": "line",
+      "comparisons": [],
+      "chartTitle": "Change in NJ FamilyCare enrollment since January 2026",
+      "historyChartNote": "Trend is net change in enrolled people relative to January 2026; zero denotes the January baseline, not zero enrollees. January–October figures use only the ten NJ DMAHS NJ FamilyCare monthly enrollment summary reports. The category view uses the same October report. These categories describe program eligibility, not mutually exclusive age brackets. Do not combine with CMS Performance Indicator enrollment totals, Census uninsured rates, application counts, or an external survey.",
+      "id": "familycare",
+      "category": "Health & benefits",
+      "title": "NJ FamilyCare enrollment",
+      "value": 1786101,
+      "unit": "count",
+      "display": "1,786,101",
+      "period": "October 2026",
+      "description": "People enrolled in NJ FamilyCare and related state public medical assistance programs, reported by the New Jersey Division of Medical Assistance and Health Services in its monthly enrollment summaries.",
+      "insight": "NJ FamilyCare enrollment declined by 23,363 (1.3%) from January through October 2026; October enrollment was 5,040 lower than September. The trend uses only the monthly NJ DMAHS enrollment summaries.",
+      "keywords": [
+        "medicaid",
+        "familycare",
+        "healthcare",
+        "insurance",
+        "access",
+        "chip",
+        "enrollment",
+        "health benefits"
+      ],
+      "source": "NJ Department of Human Services, Division of Medical Assistance and Health Services, 2026 monthly NJ FamilyCare enrollment summaries",
+      "sourceUrl": "https://www.nj.gov/humanservices/dmahs/documents/news/reports/enrollment_2026_10.pdf",
+      "scheduleUrl": "https://www.nj.gov/humanservices/dmahs/news-publications/reports/",
+      "cadence": "Monthly state enrollment summary",
+      "nextCheck": "2026-12-09",
+      "nextReleaseLabel": "Check official DMAHS monthly enrollment reports for November 2026; exact posting date not confirmed.",
+      "comparisonMode": "familycare_trend_with_category_toggle",
+      "comparisonsPublic": [
+        {
+          "label": "January 2026 enrollment",
+          "value": "1,809,464 people",
+          "detail": "Baseline for the monthly trend chart",
+          "period": "January 2026",
+          "kind": "historical",
+          "sourceUrl": "https://www.nj.gov/humanservices/dmahs/documents/news/reports/enrollment_2026_01.pdf"
+        },
+        {
+          "label": "Change since January",
+          "value": "−23,363 people (−1.3%)",
+          "detail": "October minus January; same DMAHS monthly series",
+          "period": "January–October 2026",
+          "kind": "difference",
+          "sourceUrl": "https://www.nj.gov/humanservices/dmahs/documents/news/reports/enrollment_2026_10.pdf"
+        },
+        {
+          "label": "Change since September",
+          "value": "−5,040 people (−0.28%)",
+          "detail": "October minus September; same DMAHS monthly series",
+          "period": "September–October 2026",
+          "kind": "difference",
+          "sourceUrl": "https://www.nj.gov/humanservices/dmahs/documents/news/reports/enrollment_2026_09.pdf"
+        }
+      ],
+      "methodNote": "The ten 2026 NJ FamilyCare enrollment reports published by the NJ Division of Medical Assistance and Health Services, checked November 9, 2026, show 1,809,464 enrolled in January and 1,786,101 in October (−23,363 or −1.3%). October's five published eligibility categories sum to that statewide total; the mutually exclusive optional groups are non-ABD children 812,517, non-ABD adults 669,673, aged/blind/disabled 303,911. 'Non-ABD children' and 'Non-ABD adults' are eligibility categories, not exact age-only populations. Total includes public medical assistance, Medicaid, CHIP and certain other state programs. Does not measure uninsured residents, eligible population, patient visits or causation of change. Comparisons are enrolled individuals at specific reporting dates, not people gaining or losing insurance in a longitudinal cohort.",
+      "released": null,
+      "historySource": "NJ Division of Medical Assistance and Health Services monthly enrollment reports",
+      "historySourceUrl": "https://www.nj.gov/humanservices/dmahs/news-publications/reports/",
+      "monthlyEnrollment": [
+        {
+          "date": "2026-01",
+          "total": 1809464,
+          "changeFromJanuary": 0,
+          "sourceUrl": "https://www.nj.gov/humanservices/dmahs/documents/news/reports/enrollment_2026_01.pdf"
+        },
+        {
+          "date": "2026-02",
+          "total": 1812049,
+          "changeFromJanuary": 2585,
+          "sourceUrl": "https://www.nj.gov/humanservices/dmahs/documents/news/reports/enrollment_2026_02.pdf"
+        },
+        {
+          "date": "2026-03",
+          "total": 1815571,
+          "changeFromJanuary": 6107,
+          "sourceUrl": "https://www.nj.gov/humanservices/dmahs/documents/news/reports/enrollment_2026_03.pdf"
+        },
+        {
+          "date": "2026-04",
+          "total": 1827845,
+          "changeFromJanuary": 18381,
+          "sourceUrl": "https://www.nj.gov/humanservices/dmahs/documents/news/reports/enrollment_2026_04.pdf"
+        },
+        {
+          "date": "2026-05",
+          "total": 1823772,
+          "changeFromJanuary": 14308,
+          "sourceUrl": "https://www.nj.gov/humanservices/dmahs/documents/news/reports/enrollment_2026_05.pdf"
+        },
+        {
+          "date": "2026-06",
+          "total": 1799053,
+          "changeFromJanuary": -10411,
+          "sourceUrl": "https://www.nj.gov/humanservices/dmahs/documents/news/reports/enrollment_2026_06.pdf"
+        },
+        {
+          "date": "2026-07",
+          "total": 1790043,
+          "changeFromJanuary": -19421,
+          "sourceUrl": "https://www.nj.gov/humanservices/dmahs/documents/news/reports/enrollment_2026_07.pdf"
+        },
+        {
+          "date": "2026-08",
+          "total": 1788321,
+          "changeFromJanuary": -21143,
+          "sourceUrl": "https://www.nj.gov/humanservices/dmahs/documents/news/reports/enrollment_2026_08.pdf"
+        },
+        {
+          "date": "2026-09",
+          "total": 1791141,
+          "changeFromJanuary": -18323,
+          "sourceUrl": "https://www.nj.gov/humanservices/dmahs/documents/news/reports/enrollment_2026_09.pdf"
+        },
+        {
+          "date": "2026-10",
+          "total": 1786101,
+          "changeFromJanuary": -23363,
+          "sourceUrl": "https://www.nj.gov/humanservices/dmahs/documents/news/reports/enrollment_2026_10.pdf"
+        }
+      ],
+      "octoberEligibilityCategories": [
+        {
+          "category": "Aged",
+          "count": 108521
+        },
+        {
+          "category": "Blind",
+          "count": 941
+        },
+        {
+          "category": "Disabled",
+          "count": 194449
+        },
+        {
+          "category": "Non-ABD Children",
+          "count": 812517
+        },
+        {
+          "category": "Non-ABD Adults",
+          "count": 669673
+        }
+      ],
+      "categorySourceUrl": "https://www.nj.gov/humanservices/dmahs/documents/news/reports/enrollment_2026_10.pdf"
+    },
+    {
+      "checked": "2026-11-09",
+      "status": "verified",
+      "geography": "statewide",
+      "reuseRights": "Publicly released government statistical material; retain primary source links and review applicable reuse conditions",
+      "coverage": {
+        "statewide": true,
+        "county": false,
+        "municipality": false
+      },
+      "points": [],
+      "history": [],
+      "historyKind": "single_year",
+      "chartKind": "bar",
+      "comparisons": [],
+      "chartTitle": "Uninsured rate in New Jersey and the United States · 2025",
+      "historyChartNote": "Only 2025 ACS one-year uninsured rate estimates in Census ACSBR-027 Appendix Table A-2 are used. The default shows NJ 7.7% (±0.3 pp) versus U.S. 8.4% (±0.1 pp); optional age groups show NJ working-age adults 11.1% (±0.4 pp) and children under 19 4.2% (±0.5 pp). All margins are 90% margins of error. The 2025 questionnaire and processing were changed; pre-2025 health-insurance estimates are not treated as a directly comparable time series.",
+      "id": "uninsured",
+      "category": "Health & benefits",
+      "title": "Residents without health insurance",
+      "value": 7.7,
+      "unit": "%",
+      "display": "7.7%",
+      "period": "2025 ACS 1-year estimate",
+      "description": "Share of New Jersey's civilian noninstitutionalized population without comprehensive health insurance in 2025; 2025 American Community Survey 1-year estimates.",
+      "insight": "In 2025, 7.7% of New Jersey residents in the ACS civilian noninstitutionalized population were uninsured versus 8.4% nationally. Among New Jersey residents, the uninsured rate was 11.1% for adults ages 19–64 and 4.2% for children under 19.",
+      "keywords": [
+        "uninsured",
+        "health insurance",
+        "coverage",
+        "health access",
+        "healthcare",
+        "census",
+        "acs",
+        "affordable care"
+      ],
+      "source": "U.S. Census Bureau, Health Insurance Coverage by State: 2025 (ACSBR-027), Appendix Table A-2",
+      "sourceUrl": "https://www2.census.gov/library/publications/2026/demo/acsbr-027.pdf",
+      "scheduleUrl": "https://www.census.gov/programs-surveys/acs/news/data-releases.html",
+      "cadence": "Annual; ACS one-year estimates",
+      "nextCheck": "2027-10-29",
+      "nextReleaseLabel": "Check 2026 ACS one-year health insurance figures when released; do not treat an anticipated release date as confirmed",
+      "comparisonMode": "uninsured_2025_national_with_age_toggle",
+      "comparisonsPublic": [
+        {
+          "label": "United States uninsured rate",
+          "value": "8.4% ±0.1 pp",
+          "detail": "2025 ACS one-year; all ages; 90% margin of error",
+          "period": "2025",
+          "kind": "national",
+          "sourceUrl": "https://www2.census.gov/library/publications/2026/demo/acsbr-027.pdf"
+        },
+        {
+          "label": "New Jersey vs. United States",
+          "value": "0.7 percentage point lower",
+          "detail": "Difference of the rounded 2025 uninsured rates, not relative percent change",
+          "period": "2025",
+          "kind": "difference",
+          "sourceUrl": "https://www2.census.gov/library/publications/2026/demo/acsbr-027.pdf"
+        },
+        {
+          "label": "NJ adults ages 19–64",
+          "value": "11.1% ±0.4 pp",
+          "detail": "Uninsured rate within this age group; 90% margin of error",
+          "period": "2025",
+          "kind": "age",
+          "sourceUrl": "https://www2.census.gov/library/publications/2026/demo/acsbr-027.pdf"
+        },
+        {
+          "label": "NJ children under 19",
+          "value": "4.2% ±0.5 pp",
+          "detail": "Uninsured rate within this age group; 90% margin of error",
+          "period": "2025",
+          "kind": "age",
+          "sourceUrl": "https://www2.census.gov/library/publications/2026/demo/acsbr-027.pdf"
+        }
+      ],
+      "methodNote": "Census Bureau ACSBR-027, Appendix Table A-2, October 2026, 2025 American Community Survey (ACS) 1-year. Universe: civilian noninstitutionalized population. Uninsured means no comprehensive health insurance at time of interview, including people whose only coverage was through Indian Health Service. Survey estimates describe the annual average of coverage status at the time of interview, not Medicaid/NJ FamilyCare administrative enrollments. All chart values from one source table and estimate year. Margins of error (± percentage points) represent 90% confidence intervals. The NJ−U.S. difference of −0.7 percentage point is the arithmetic difference of two rounded rates, not a confidence interval for the difference; no unsupported significance claim. Age rates have age-specific denominators and do not represent shares of all uninsured people. The 2025 ACS changed questions and processing, and the Census cautions that comparisons with 2024 and earlier estimates may be misleading.",
+      "released": "2026-10-29",
+      "historySource": "U.S. Census Bureau, ACSBR-027 Appendix Table A-2",
+      "historySourceUrl": "https://www2.census.gov/library/publications/2026/demo/acsbr-027.pdf",
+      "acs2025Uninsured": {
+        "year": 2025,
+        "series": "ACS 1-year",
+        "table": "ACSBR-027 Appendix Table A-2",
+        "population": "Civilian noninstitutionalized population",
+        "marginLevel": 90,
+        "records": [
+          {
+            "view": "national",
+            "population": "New Jersey · all ages",
+            "label": "New Jersey",
+            "rate": 7.7,
+            "moe": 0.3,
+            "year": 2025
+          },
+          {
+            "view": "national",
+            "population": "United States · all ages",
+            "label": "United States",
+            "rate": 8.4,
+            "moe": 0.1,
+            "year": 2025
+          },
+          {
+            "view": "ages",
+            "population": "New Jersey · adults ages 19–64",
+            "label": "Adults ages 19–64",
+            "rate": 11.1,
+            "moe": 0.4,
+            "year": 2025
+          },
+          {
+            "view": "ages",
+            "population": "New Jersey · children under 19",
+            "label": "Children under 19",
+            "rate": 4.2,
+            "moe": 0.5,
+            "year": 2025
+          }
+        ]
+      }
+    },
+    {
+      "checked": "2026-11-09",
+      "status": "verified",
+      "geography": "metro",
+      "reuseRights": "Publicly released government statistical material; retain primary source links and review applicable reuse conditions",
+      "coverage": {
+        "statewide": false,
+        "county": false,
+        "municipality": false,
+        "regional": "New York–Newark–Jersey City, NY–NJ–PA multi-state metropolitan area"
+      },
+      "points": [],
+      "history": [],
+      "historyKind": "monthly_annual_rate",
+      "chartKind": "bar",
+      "comparisons": [],
+      "chartTitle": "New York–Newark metro inflation versus U.S., September 2026",
+      "historyChartNote": "Default shows September 2026 metro 4.5% versus U.S. 3.7%, both BLS CPI-U all-items year-over-year, not seasonally adjusted. History toggle shows January–September 2026 year-over-year metro rates (2.9, 3.2, 4.0, 4.6, 5.1, 4.1, 4.6, 4.3, 4.5), all from the BLS September metro CPI release and consistently defined. The metro includes areas of NY, NJ and PA and does not represent statewide NJ inflation. The historical line uses 0–6% to avoid exaggerating variation. These are 12-month changes, not successive-month percentage movements.",
+      "id": "inflationmetro",
+      "category": "Prices & affordability",
+      "title": "Inflation in the New York–Newark metro area",
+      "value": 4.5,
+      "unit": "%",
+      "display": "4.5%",
+      "period": "12 months ending September 2026",
+      "description": "Twelve-month CPI-U all-items percentage change in the New York–Newark–Jersey City, NY–NJ–PA multi-state metropolitan area, not an NJ statewide measure.",
+      "insight": "The NY–NJ–PA metro area's all-items CPI-U rose 4.5% in the 12 months ending September 2026, compared with 3.7% for the national CPI-U; that is a 0.8 percentage-point difference.",
+      "keywords": [
+        "inflation",
+        "CPI",
+        "cost of living",
+        "prices",
+        "consumer",
+        "regional",
+        "Newark",
+        "New York",
+        "affordability"
+      ],
+      "source": "U.S. Bureau of Labor Statistics, New York–Newark area CPI-U report, September 2026",
+      "sourceUrl": "https://www.bls.gov/regions/northeast/news-release/2026/consumerpriceindex_newyork_20261014.htm",
+      "scheduleUrl": "https://www.bls.gov/cpi/",
+      "cadence": "Monthly; BLS advance release calendar",
+      "nextCheck": "2026-11-10",
+      "nextReleaseLabel": "October 2026 CPI scheduled Nov. 10, 2026 8:30 a.m. ET",
+      "released": "2026-10-14",
+      "comparisonMode": "metro_us_cpi_2026_with_history",
+      "comparisonsPublic": [
+        {
+          "label": "U.S. annual inflation",
+          "value": "3.7%",
+          "detail": "Same September 2026 BLS CPI-U all-items 12-month definition, national U.S. city average",
+          "period": "September 2026",
+          "kind": "national",
+          "sourceUrl": "https://www.bls.gov/news.release/archives/cpi_10142026.htm"
+        },
+        {
+          "label": "Metro annual inflation",
+          "value": "4.5%",
+          "detail": "Multi-state NY–NJ–PA metro area; not an NJ-only measure",
+          "period": "September 2026",
+          "kind": "regional",
+          "sourceUrl": "https://www.bls.gov/regions/northeast/news-release/2026/consumerpriceindex_newyork_20261014.htm"
+        },
+        {
+          "label": "Metro rate above U.S.",
+          "value": "+0.8 percentage point",
+          "detail": "Difference of two matching 12-month rates, not a cost-of-living level",
+          "period": "September 2026",
+          "kind": "difference",
+          "sourceUrl": "https://www.bls.gov/regions/northeast/news-release/2026/consumerpriceindex_newyork_20261014.htm"
+        }
+      ],
+      "methodNote": "U.S. Bureau of Labor Statistics CPI-U all-items 12-month percent changes, not seasonally adjusted. NY–Newark–Jersey City, NY–NJ–PA multi-state metropolitan area: 4.5% in September 2026; United States city average 3.7% in September 2026, from matched BLS CPI-U releases October 14, 2026. The 0.8 percentage-point comparison is the arithmetic difference, not an estimate of cost-of-living level. The metro history uses nine January–September 2026 annual-change observations from the same September metro regional BLS publication. The national comparator comes from the national BLS release for exactly the same index definition and reporting period; do not treat either series as a standalone NJ CPI. September 2026 is the latest comparable 12-month period; BLS cannot report the October 2026 annual change because October 2025 index data are unavailable.",
+      "historySource": "BLS CPI-U, New York–Newark–Jersey City area",
+      "historySourceUrl": "https://www.bls.gov/regions/northeast/news-release/2026/consumerpriceindex_newyork_20261014.htm",
+      "metroCPI": {
+        "program": "BLS CPI-U all items",
+        "seasonal": "Not seasonally adjusted 12-month percentage change",
+        "period": "September 2026",
+        "metroArea": "New York–Newark–Jersey City, NY–NJ–PA multi-state metropolitan area",
+        "metroAnnualRate": 4.5,
+        "usAnnualRate": 3.7,
+        "monthlyMetro": [
+          {
+            "month": "2026-01",
+            "rate": 2.9,
+            "sourceUrl": "https://www.bls.gov/regions/northeast/news-release/2026/consumerpriceindex_newyork_20261014.htm"
+          },
+          {
+            "month": "2026-02",
+            "rate": 3.2,
+            "sourceUrl": "https://www.bls.gov/regions/northeast/news-release/2026/consumerpriceindex_newyork_20261014.htm"
+          },
+          {
+            "month": "2026-03",
+            "rate": 4,
+            "sourceUrl": "https://www.bls.gov/regions/northeast/news-release/2026/consumerpriceindex_newyork_20261014.htm"
+          },
+          {
+            "month": "2026-04",
+            "rate": 4.6,
+            "sourceUrl": "https://www.bls.gov/regions/northeast/news-release/2026/consumerpriceindex_newyork_20261014.htm"
+          },
+          {
+            "month": "2026-05",
+            "rate": 5.1,
+            "sourceUrl": "https://www.bls.gov/regions/northeast/news-release/2026/consumerpriceindex_newyork_20261014.htm"
+          },
+          {
+            "month": "2026-06",
+            "rate": 4.1,
+            "sourceUrl": "https://www.bls.gov/regions/northeast/news-release/2026/consumerpriceindex_newyork_20261014.htm"
+          },
+          {
+            "month": "2026-07",
+            "rate": 4.6,
+            "sourceUrl": "https://www.bls.gov/regions/northeast/news-release/2026/consumerpriceindex_newyork_20261014.htm"
+          },
+          {
+            "month": "2026-08",
+            "rate": 4.3,
+            "sourceUrl": "https://www.bls.gov/regions/northeast/news-release/2026/consumerpriceindex_newyork_20261014.htm"
+          },
+          {
+            "month": "2026-09",
+            "rate": 4.5,
+            "sourceUrl": "https://www.bls.gov/regions/northeast/news-release/2026/consumerpriceindex_newyork_20261014.htm"
+          }
+        ],
+        "sourceMetro": "https://www.bls.gov/regions/northeast/news-release/2026/consumerpriceindex_newyork_20261014.htm",
+        "sourceUS": "https://www.bls.gov/news.release/archives/cpi_10142026.htm"
+      }
+    },
+    {
+      "checked": "2026-10-20",
+      "status": "verified",
+      "geography": "statewide",
+      "reuseRights": "Publicly released government statistical material; retain primary source links and review applicable reuse conditions",
+      "coverage": {
+        "statewide": true,
+        "county": false,
+        "municipality": false
+      },
+      "points": [],
+      "history": [],
+      "historyKind": "annual_selected",
+      "chartKind": "numeric_summary",
+      "comparisons": [],
+      "chartTitle": "Published rates and a change in inclusion rules",
+      "historyChartNote": "Historical rates use different student-inclusion rules. The 2024–25 change must not be treated as a like-for-like trend.",
+      "id": "schoolabsence",
+      "category": "Schools",
+      "title": "Students chronically absent",
+      "value": 14.4,
+      "unit": "%",
+      "display": "14.4%",
+      "period": "2024–25 school year",
+      "description": "Share of eligible NJ public-school students absent for at least 10% of counted membership days. Locally excused and unexcused absences count; State-excused absences are excluded.",
+      "insight": "NJDOE reported 14.9% in 2023–24 and 10.6% in 2018–19. Inclusion rules changed in 2024–25, so these published rates are not directly comparable.",
+      "keywords": [
+        "schools",
+        "attendance",
+        "absenteeism",
+        "students",
+        "truancy",
+        "education",
+        "chronic absent",
+        "missing class"
+      ],
+      "source": "NJ Department of Education, May 7, 2026 School Performance Data release",
+      "sourceUrl": "https://www.nj.gov/education/news/2026/SchoolPerformanceDataShowsGainsInKeyMetricsOfCollegeAndCareerReadiness.pdf",
+      "scheduleUrl": "https://www.nj.gov/education/spr/download/",
+      "cadence": "Annual school performance reporting",
+      "nextCheck": "2027-05-01",
+      "nextReleaseLabel": "Check 2025–26 school performance release in spring 2027",
+      "released": "2026-05-07",
+      "comparisonMode": "source_context",
+      "comparisonsPublic": [
+        {
+          "label": "2023–24 published rate",
+          "value": "14.9%",
+          "detail": "Earlier inclusion rules; not directly comparable with 2024–25",
+          "period": "2023–24",
+          "kind": "historical",
+          "sourceUrl": "https://www.nj.gov/education/news/2025/NJDOEReleases2023-2024SchoolPerformanceReports.pdf"
+        },
+        {
+          "label": "2018–19 published rate",
+          "value": "10.6%",
+          "detail": "Earlier inclusion rules; not directly comparable with 2024–25",
+          "period": "2018–19",
+          "kind": "historical",
+          "sourceUrl": "https://www.nj.gov/education/news/2026/SchoolPerformanceDataShowsGainsInKeyMetricsOfCollegeAndCareerReadiness.pdf"
+        },
+        {
+          "label": "2024–25 methodology change",
+          "value": "Not directly comparable",
+          "detail": "Minimum membership changed from 45 to 90 days; qualifying records are included regardless of end-of-year status",
+          "period": "From 2024–25",
+          "kind": "methodology",
+          "sourceUrl": "https://www.nj.gov/education/safety/sandp/attendance/docs/Reporting_Student_Attendance_and_Determining_Chronic_Absenteeism_Rates.pdf"
+        }
+      ],
+      "methodNote": "Chronic absenteeism means absence for at least 10% of counted membership days. Locally excused and unexcused absences count; State-excused absences do not. Starting in 2024–25, students need at least 90 days present or absent for inclusion, previously 45, and qualifying student records are included regardless of end-of-year active status. These inclusion changes prevent a like-for-like comparison with the published 14.9% for 2023–24 and 10.6% for 2018–19. No percentage-point change or national benchmark is presented.",
+      "historySource": "NJ Department of Education, May 7, 2026 School Performance Data release",
+      "historySourceUrl": "https://www.nj.gov/education/news/2026/SchoolPerformanceDataShowsGainsInKeyMetricsOfCollegeAndCareerReadiness.pdf",
+      "methodologyUrl": "https://www.nj.gov/education/safety/sandp/attendance/docs/Reporting_Student_Attendance_and_Determining_Chronic_Absenteeism_Rates.pdf",
+      "methodologySource": "NJ Department of Education, April 2026 attendance guidance",
+      "exportNotes": [
+        "From 2024–25, minimum membership changed from 45 to 90 days; qualifying inactive records are included. Historical rates are not directly comparable.",
+        "Locally excused and unexcused absences count; State-excused absences are excluded."
+      ]
+    },
+    {
+      "checked": "2026-11-09",
+      "status": "verified",
+      "geography": "statewide",
+      "reuseRights": "Publicly released government statistical material; retain primary source links and review applicable reuse conditions",
+      "coverage": {
+        "statewide": true,
+        "county": false,
+        "municipality": false
+      },
+      "points": [],
+      "history": [],
+      "historyKind": "graduation_cohort",
+      "chartKind": "line",
+      "comparisons": [],
+      "chartTitle": "New Jersey four-year graduation-rate change since class of 2022",
+      "historyChartNote": "Default chart uses percentage-point changes since class of 2022, for NJDOE's state-calculated four-year adjusted cohorts 2022 (90.9%), 2023 (91.1%), 2024 (91.3%), and 2025 (91.8%). Its zero line represents no change since 2022, not zero graduates. The student-group toggle uses class-of-2025 four-year state rates (statewide 91.8%, economically disadvantaged 88.9%, students with disabilities 82.4%) from NJDOE's 2025 official cohort report. Group memberships may overlap and rates are not additive. Federal calculation and five/six-year cohorts are excluded. The 2021 state four-year rate is 90.6%, as independently confirmed in NJDOE's 2024 state-version chart; a May 2026 press release describes 90.9% as a four-years-earlier baseline, apparently referring to the 2022 value. The chart starts at 2022 until that editorial conflict is explicitly annotated.",
+      "id": "graduation",
+      "category": "Schools",
+      "title": "Four-year high school graduation rate",
+      "value": 91.8,
+      "unit": "%",
+      "display": "91.8%",
+      "period": "Class of 2025 · state four-year adjusted cohort",
+      "description": "New Jersey state-calculated four-year adjusted cohort graduation rate for the class of 2025, and comparable class-of-2022 through class-of-2025 results.",
+      "insight": "The state four-year graduation rate reached 91.8% for the class of 2025, a 0.9 percentage-point increase from 90.9% for the class of 2022. Rates reflect the same state calculation, not federal or five-year cohort rates.",
+      "keywords": [
+        "graduation",
+        "high school",
+        "education",
+        "schools",
+        "diploma",
+        "cohort",
+        "student outcomes"
+      ],
+      "source": "NJ Department of Education, state-calculated four-year adjusted cohort graduation data, classes of 2022–2025",
+      "sourceUrl": "https://www.nj.gov/education/spr/adddata/doc/acgrdocs/AdjustedCohort4-YearGraduationRates_2022_2023_2024_2025.xlsx",
+      "scheduleUrl": "https://www.nj.gov/education/spr/adddata/acgr.shtml",
+      "cadence": "Annual four-year adjusted cohort rates",
+      "nextCheck": "2027-05-01",
+      "nextReleaseLabel": "Check class of 2026 cohort data in spring 2027",
+      "released": "2026-05-21",
+      "comparisonMode": "state_four_year_cohort_with_2025_group_toggle",
+      "comparisonsPublic": [
+        {
+          "label": "Class of 2022 · state four-year rate",
+          "value": "90.9%",
+          "detail": "Same state-version calculation and four-year cohort duration",
+          "period": "2022",
+          "kind": "historical",
+          "sourceUrl": "https://www.nj.gov/education/spr/adddata/doc/acgrdocs/AdjustedCohort4-YearGraduationRates_2022_2023_2024_2025.xlsx"
+        },
+        {
+          "label": "Change from class of 2022 to 2025",
+          "value": "+0.9 percentage point",
+          "detail": "91.8% minus 90.9%; not a relative percentage change",
+          "period": "Classes of 2022–2025",
+          "kind": "difference",
+          "sourceUrl": "https://www.nj.gov/education/spr/adddata/doc/acgrdocs/AdjustedCohort4-YearGraduationRates_2022_2023_2024_2025.xlsx"
+        },
+        {
+          "label": "2025 economically disadvantaged students",
+          "value": "88.9%",
+          "detail": "State-version four-year cohort; student-group population overlaps with other classifications",
+          "period": "2025",
+          "kind": "student_group",
+          "sourceUrl": "https://www.nj.gov/education/spr/adddata/doc/acgrdocs/Cohort2025_4YearAdjustedCohortGraduationRatesbyStudentGroup.xlsx"
+        },
+        {
+          "label": "2025 students with disabilities",
+          "value": "82.4%",
+          "detail": "State-version four-year cohort; students can appear in multiple group classifications",
+          "period": "2025",
+          "kind": "student_group",
+          "sourceUrl": "https://www.nj.gov/education/spr/adddata/doc/acgrdocs/Cohort2025_4YearAdjustedCohortGraduationRatesbyStudentGroup.xlsx"
+        }
+      ],
+      "methodNote": "Authoritative NJDOE 2025 four-year adjusted cohort archive includes the 2022–2025 state version rates in the same multi-cohort workbook, and class of 2025 student-group rates from the corresponding year cohort workbook. State calculation counts all students earning state-endorsed diplomas; the federal calculation excludes certain graduates under ESSA criteria. Cohorts have different graduating populations; these are cohort rates, not a panel of students followed across cohorts. In the four-year state-version series, 2022 90.9%, 2023 91.1%, 2024 91.3%, 2025 91.8%; gain +0.9 percentage point since 2022 and +0.5 from 2024. The 2021 state four-year rate was 90.6% according to NJDOE's 2024 State Board chart and 2021 cohort table; the May 7, 2026 summary's attribution of 90.9% to four years prior conflicts with those records. The 2025 student-group rates 88.9% economically disadvantaged and 82.4% disabilities use the 2025 state cohort methodology and do not sum to or partition the statewide rate. Do not mix 4-year and 5-year rates, state and federal calculations, or treat any delta as a percentage change.",
+      "historySource": "NJDOE four-year adjusted cohort graduation rates, state version (2022–2025)",
+      "historySourceUrl": "https://www.nj.gov/education/spr/adddata/doc/acgrdocs/AdjustedCohort4-YearGraduationRates_2022_2023_2024_2025.xlsx",
+      "cohortRates": [
+        {
+          "year": 2022,
+          "rate": 90.9
+        },
+        {
+          "year": 2023,
+          "rate": 91.1
+        },
+        {
+          "year": 2024,
+          "rate": 91.3
+        },
+        {
+          "year": 2025,
+          "rate": 91.8
+        }
+      ],
+      "cohortGroupRates2025": [
+        {
+          "label": "Statewide",
+          "rate": 91.8
+        },
+        {
+          "label": "Economically disadvantaged",
+          "rate": 88.9
+        },
+        {
+          "label": "Students with disabilities",
+          "rate": 82.4
+        }
+      ],
+      "cohortSources": {
+        "trend": "https://www.nj.gov/education/spr/adddata/doc/acgrdocs/AdjustedCohort4-YearGraduationRates_2022_2023_2024_2025.xlsx",
+        "groups": "https://www.nj.gov/education/spr/adddata/doc/acgrdocs/Cohort2025_4YearAdjustedCohortGraduationRatesbyStudentGroup.xlsx",
+        "older2021": "https://www.nj.gov/education/spr/adddata/doc/acgrdocs/Cohort2021_4YearAdjustedCohortGraduationRatesandCountsbyStudentGroup.xlsx",
+        "stateBoard": "https://www.nj.gov/education/sboe/meetings/agenda/2025/April/public/4_2023-2024_School_Performance_Reports_and_Graduation_Data.pdf",
+        "press": "https://www.nj.gov/education/news/2026/SchoolPerformanceDataShowsGainsInKeyMetricsOfCollegeAndCareerReadiness.pdf"
+      }
+    },
+    {
+      "checked": "2026-11-09",
+      "status": "verified",
+      "geography": "statewide",
+      "reuseRights": "Publicly released government statistical material; retain primary source links and review applicable reuse conditions",
+      "coverage": {
+        "statewide": true,
+        "county": false,
+        "municipality": false
+      },
+      "points": [],
+      "history": [],
+      "historyKind": "matched_months",
+      "chartKind": "bar",
+      "comparisons": [],
+      "chartTitle": "Year-over-year change in NJ SNAP participation, January–July 2026",
+      "historyChartNote": "Seven comparable same-month pairs (January–July 2025 and 2026) from DFD's July 2026 Current Program Statistics Table 5. Each bar shows (2026 recipients − 2025 recipients) / 2025 recipients × 100, with zero as no year-over-year change. The 2025 and 2026 participant totals are people receiving SNAP issuances during each reporting month, not household or benefit-dollar totals. The policy timeline is separately sourced and not a statistical causal model.",
+      "id": "snap",
+      "category": "Health & benefits",
+      "title": "People receiving NJ SNAP",
+      "value": 737447,
+      "unit": "count",
+      "display": "737,447",
+      "period": "July 2026",
+      "description": "New Jersey residents who received SNAP benefits during July 2026, with January–July 2026 compared with the same 2025 months from one DFD administrative issuance series.",
+      "insight": "In July 2026, 737,447 people received NJ SNAP benefits, 55,669 fewer (−7.0%) than in July 2025. Every available January–July 2026 month had fewer participants than the same month in 2025.",
+      "keywords": [
+        "snap",
+        "food assistance",
+        "food stamps",
+        "nutrition",
+        "poverty",
+        "benefits",
+        "households",
+        "human services",
+        "hunger"
+      ],
+      "source": "New Jersey Department of Human Services, Division of Family Development, Current Program Statistics, July 2026, Table 5",
+      "sourceUrl": "https://www.nj.gov/humanservices/dfd/news/reports/pdf/cps/2026/CPS_July2026.pdf",
+      "scheduleUrl": "https://www.nj.gov/humanservices/dfd/news/reports/cps.shtml",
+      "cadence": "Monthly DFD Current Program Statistics",
+      "nextCheck": "2026-12-01",
+      "nextReleaseLabel": "Check for updated NJ DFD Current Program Statistics; later-month availability is not confirmed.",
+      "comparisonMode": "snap_matched_month_yoy",
+      "comparisonsPublic": [
+        {
+          "label": "July 2025 participants",
+          "value": "793,116 people",
+          "detail": "Same calendar month, DFD July 2026 Table 5",
+          "period": "July 2025",
+          "kind": "historical",
+          "sourceUrl": "https://www.nj.gov/humanservices/dfd/news/reports/pdf/cps/2026/CPS_July2026.pdf"
+        },
+        {
+          "label": "July 2026 year-over-year change",
+          "value": "−55,669 people (−7.0%)",
+          "detail": "Same table, issuance-based people not households",
+          "period": "July 2025–July 2026",
+          "kind": "difference",
+          "sourceUrl": "https://www.nj.gov/humanservices/dfd/news/reports/pdf/cps/2026/CPS_July2026.pdf"
+        },
+        {
+          "label": "July 2026 participating households",
+          "value": "401,859 households",
+          "detail": "Separate household measure; not added to individual participants",
+          "period": "July 2026",
+          "kind": "context",
+          "sourceUrl": "https://www.nj.gov/humanservices/dfd/news/reports/pdf/cps/2026/CPS_July2026.pdf"
+        }
+      ],
+      "methodNote": "The New Jersey Division of Family Development's July 2026 Current Program Statistics, Table 5, supplies all 14 2025 and 2026 monthly person-participation observations used here. DFD defines them as households and persons receiving SNAP issuances during each month, derived from NJ MMIS Shared Data Warehouse issuance files. January–July 2026 is compared only with the matching months in 2025. July 2025: 793,116 people; July 2026: 737,447; difference −55,669 (−7.0% of July 2025). This metric excludes SNAP households, eligibility estimates, applications, food insecurity and benefits paid. Separate federal policy milestones are sourced to the NJ DFD Federal Changes to SNAP page and are not causal claims; administrative time series alone cannot attribute the decline to specific laws or implementation dates. Do not mix federal USDA program data with state DFD participation counts.",
+      "released": null,
+      "historySource": "NJ Division of Family Development, Current Program Statistics, July 2026, Table 5",
+      "historySourceUrl": "https://www.nj.gov/humanservices/dfd/news/reports/pdf/cps/2026/CPS_July2026.pdf",
+      "snapYearOverYear": {
+        "source": "DFD July 2026 Current Program Statistics, Table 5",
+        "unit": "persons receiving SNAP issuances during reporting month",
+        "period": "January–July 2026 versus same 2025 month",
+        "rows": [
+          {
+            "month": "Jan",
+            "date": "2026-01",
+            "persons2025": 819216,
+            "persons2026": 785810,
+            "difference": -33406,
+            "percentChange": -4.0778
+          },
+          {
+            "month": "Feb",
+            "date": "2026-02",
+            "persons2025": 817023,
+            "persons2026": 776576,
+            "difference": -40447,
+            "percentChange": -4.9505
+          },
+          {
+            "month": "Mar",
+            "date": "2026-03",
+            "persons2025": 817040,
+            "persons2026": 766278,
+            "difference": -50762,
+            "percentChange": -6.2129
+          },
+          {
+            "month": "Apr",
+            "date": "2026-04",
+            "persons2025": 806240,
+            "persons2026": 757528,
+            "difference": -48712,
+            "percentChange": -6.0419
+          },
+          {
+            "month": "May",
+            "date": "2026-05",
+            "persons2025": 824020,
+            "persons2026": 748124,
+            "difference": -75896,
+            "percentChange": -9.2105
+          },
+          {
+            "month": "Jun",
+            "date": "2026-06",
+            "persons2025": 810939,
+            "persons2026": 739593,
+            "difference": -71346,
+            "percentChange": -8.7979
+          },
+          {
+            "month": "Jul",
+            "date": "2026-07",
+            "persons2025": 793116,
+            "persons2026": 737447,
+            "difference": -55669,
+            "percentChange": -7.019
+          }
+        ]
+      },
+      "snapPolicyContext": {
+        "source": "NJ Division of Family Development, Federal Changes to SNAP",
+        "url": "https://nj.gov/humanservices/dfd/news/federal-changes/",
+        "milestones": [
+          {
+            "date": "2025-07-04",
+            "label": "Federal law enacted",
+            "description": "The federal reconciliation law introduced changes to SNAP work requirements and noncitizen eligibility."
+          },
+          {
+            "date": "2026-02-01",
+            "label": "Work-rule waiver changes",
+            "description": "Most New Jersey areas ceased to have the prior time-limit waiver; remaining waivers covered Camden City and Cape May County."
+          },
+          {
+            "date": "2026-04-10",
+            "label": "Noncitizen eligibility changes",
+            "description": "New noncitizen eligibility rules applied to newly received applications; previously approved cases were affected at recertification."
+          }
+        ],
+        "note": "Legislative and implementation milestones are context, not quantified causes of changes in DFD monthly SNAP participation. Declines were already recorded before some implementation dates."
+      }
+    }
+  ],
+  "releaseCalendar": [
+    {
+      "date": "2026-12-06",
+      "timeET": null,
+      "dataset": "temperature",
+      "label": "Editorial check for November 2026 Rutgers nClimDiv monthly temperatures and revisions",
+      "type": "editorial check"
+    },
+    {
+      "date": "2026-12-06",
+      "timeET": null,
+      "dataset": "precipitation",
+      "label": "Editorial check for Rutgers November 2026 statewide precipitation and any revisions",
+      "type": "editorial check"
+    },
+    {
+      "date": "2026-12-01",
+      "timeET": null,
+      "dataset": "snap",
+      "label": "Check NJ DFD for any post-July 2026 SNAP program statistics",
+      "type": "editorial check"
+    },
+    {
+      "date": "2026-11-24",
+      "timeET": "EIA confirmed",
+      "dataset": "electricity",
+      "label": "EIA Electric Power Monthly: next residential prices",
+      "type": "confirmed",
+      "publicLabel": "Residential electricity prices"
+    },
+    {
+      "date": "2026-11-25",
+      "timeET": "8:00 a.m. ET",
+      "dataset": "housingpermits",
+      "label": "Census revised October 2026 state monthly building permits",
+      "type": "confirmed",
+      "publicLabel": "October 2026 building permits"
+    },
+    {
+      "date": "2026-10-28",
+      "timeET": "by 10 a.m.",
+      "dataset": "unemployment",
+      "label": "NJ September sub-state labor-force estimates",
+      "type": "confirmed",
+      "publicLabel": "New Jersey sub-state labor force estimates"
+    },
+    {
+      "date": "2026-10-29",
+      "timeET": "date announced",
+      "dataset": "medianincome",
+      "label": "2025 ACS 1-year estimates (income, rent, uninsured)",
+      "type": "confirmed",
+      "publicLabel": "Income, rent and health insurance (ACS one-year estimates)"
+    },
+    {
+      "date": "2026-11-02",
+      "timeET": null,
+      "dataset": "voterregistration",
+      "label": "Check NJ Division of Elections monthly registration report",
+      "type": "editorial check"
+    },
+    {
+      "date": "2026-12-09",
+      "timeET": null,
+      "dataset": "familycare",
+      "label": "Check for November 2026 NJ FamilyCare DMAHS monthly enrollment report",
+      "type": "editorial check"
+    },
+    {
+      "date": "2026-11-10",
+      "timeET": "8:30 a.m.",
+      "dataset": "inflationmetro",
+      "label": "October 2026 CPI national and metro index",
+      "type": "confirmed",
+      "publicLabel": "New York–Newark metro inflation"
+    },
+    {
+      "date": "2026-11-19",
+      "timeET": "by 4:30 p.m.",
+      "dataset": "unemployment",
+      "label": "NJ October employment estimates",
+      "type": "confirmed",
+      "publicLabel": "New Jersey employment estimates"
+    },
+    {
+      "date": "2026-12-17",
+      "timeET": "by 4:30 p.m.",
+      "dataset": "unemployment",
+      "label": "NJ November employment estimates",
+      "type": "confirmed",
+      "publicLabel": "New Jersey employment estimates"
+    },
+    {
+      "date": "2027-01-01",
+      "timeET": null,
+      "dataset": "minimumwage",
+      "label": "$16.48 minimum wage goes into effect (most employees)",
+      "type": "effective date"
+    },
+    {
+      "date": "2027-01-15",
+      "timeET": null,
+      "dataset": "propertytax",
+      "label": "Check for 2026 property tax bill tables",
+      "type": "editorial check"
+    },
+    {
+      "date": "2027-01-21",
+      "timeET": "by 4:30 p.m.",
+      "dataset": "unemployment",
+      "label": "NJ December employment estimates",
+      "type": "confirmed",
+      "publicLabel": "New Jersey employment estimates"
+    },
+    {
+      "date": "2027-02-15",
+      "timeET": null,
+      "dataset": "housingpermits",
+      "label": "Check Census annual housing-unit permits for 2026",
+      "type": "editorial check"
+    },
+    {
+      "date": "2027-03-01",
+      "timeET": null,
+      "dataset": "statebudget",
+      "label": "Check governor’s FY2028 budget proposal",
+      "type": "editorial check"
+    },
+    {
+      "date": "2027-05-01",
+      "timeET": null,
+      "dataset": "schoolabsence",
+      "label": "Check 2025–26 NJDOE performance report",
+      "type": "editorial check"
+    }
+  ],
+  "geographicDatasets": [
+    {
+      "metricId": "voterregistration",
+      "geographyLevel": "county",
+      "expectedCounties": 21,
+      "checked": "2026-10-14",
+      "unit": "registered_voters",
+      "periods": [
+        "2025-10",
+        "2026-09",
+        "2026-10"
+      ],
+      "statewideTotals": {
+        "2025-10": 6609895,
+        "2026-09": 6709471,
+        "2026-10": 6725177
+      },
+      "sources": {
+        "2025-10": "https://www.nj.gov/state/elections/assets/pdf/svrs-reports/2025/2025-10-voter-registration-by-county.pdf",
+        "2026-09": "https://www.nj.gov/state/elections/assets/pdf/svrs-reports/2026/2026-09-voter-registration-by-county.pdf",
+        "2026-10": "https://www.nj.gov/state/elections/assets/pdf/svrs-reports/2026/2026-10-voter-registration-by-county.pdf"
+      },
+      "partyLabels": [
+        "UNA",
+        "DEM",
+        "REP",
+        "CNV",
+        "CON",
+        "GRE",
+        "LIB",
+        "NAT",
+        "RFP",
+        "SSP"
+      ],
+      "partyTotal2026_10": {
+        "UNA": 2391969,
+        "DEM": 2572254,
+        "REP": 1686614,
+        "CNV": 13154,
+        "CON": 11298,
+        "GRE": 11291,
+        "LIB": 24260,
+        "NAT": 5257,
+        "RFP": 1341,
+        "SSP": 7739
+      },
+      "rows": [
+        {
+          "county": "Atlantic",
+          "2025-10": 203981,
+          "2026-09": 205984,
+          "2026-10": 206206,
+          "2026-10-UNA": 71702,
+          "2026-10-DEM": 70095,
+          "2026-10-REP": 61812,
+          "changeMonth": 222,
+          "changeYear": 2225
+        },
+        {
+          "county": "Bergen",
+          "2025-10": 677478,
+          "2026-09": 683709,
+          "2026-10": 685254,
+          "2026-10-UNA": 259733,
+          "2026-10-DEM": 255001,
+          "2026-10-REP": 164279,
+          "changeMonth": 1545,
+          "changeYear": 7776
+        },
+        {
+          "county": "Burlington",
+          "2025-10": 368698,
+          "2026-09": 375007,
+          "2026-10": 376138,
+          "2026-10-UNA": 126581,
+          "2026-10-DEM": 146114,
+          "2026-10-REP": 99353,
+          "changeMonth": 1131,
+          "changeYear": 7440
+        },
+        {
+          "county": "Camden",
+          "2025-10": 389244,
+          "2026-09": 393938,
+          "2026-10": 394758,
+          "2026-10-UNA": 134683,
+          "2026-10-DEM": 183646,
+          "2026-10-REP": 71421,
+          "changeMonth": 820,
+          "changeYear": 5514
+        },
+        {
+          "county": "Cape May",
+          "2025-10": 76556,
+          "2026-09": 77035,
+          "2026-10": 77158,
+          "2026-10-UNA": 23140,
+          "2026-10-DEM": 18944,
+          "2026-10-REP": 34227,
+          "changeMonth": 123,
+          "changeYear": 602
+        },
+        {
+          "county": "Cumberland",
+          "2025-10": 96645,
+          "2026-09": 97823,
+          "2026-10": 98037,
+          "2026-10-UNA": 38479,
+          "2026-10-DEM": 32094,
+          "2026-10-REP": 25825,
+          "changeMonth": 214,
+          "changeYear": 1392
+        },
+        {
+          "county": "Essex",
+          "2025-10": 566085,
+          "2026-09": 574844,
+          "2026-10": 576424,
+          "2026-10-UNA": 207330,
+          "2026-10-DEM": 297918,
+          "2026-10-REP": 65854,
+          "changeMonth": 1580,
+          "changeYear": 10339
+        },
+        {
+          "county": "Gloucester",
+          "2025-10": 228801,
+          "2026-09": 233363,
+          "2026-10": 234159,
+          "2026-10-UNA": 76247,
+          "2026-10-DEM": 86779,
+          "2026-10-REP": 68306,
+          "changeMonth": 796,
+          "changeYear": 5358
+        },
+        {
+          "county": "Hudson",
+          "2025-10": 427425,
+          "2026-09": 434573,
+          "2026-10": 436484,
+          "2026-10-UNA": 148336,
+          "2026-10-DEM": 227411,
+          "2026-10-REP": 55304,
+          "changeMonth": 1911,
+          "changeYear": 9059
+        },
+        {
+          "county": "Hunterdon",
+          "2025-10": 107042,
+          "2026-09": 108068,
+          "2026-10": 108295,
+          "2026-10-UNA": 30587,
+          "2026-10-DEM": 32397,
+          "2026-10-REP": 44432,
+          "changeMonth": 227,
+          "changeYear": 1253
+        },
+        {
+          "county": "Mercer",
+          "2025-10": 266925,
+          "2026-09": 272040,
+          "2026-10": 272387,
+          "2026-10-UNA": 102379,
+          "2026-10-DEM": 122738,
+          "2026-10-REP": 43853,
+          "changeMonth": 347,
+          "changeYear": 5462
+        },
+        {
+          "county": "Middlesex",
+          "2025-10": 582846,
+          "2026-09": 594733,
+          "2026-10": 596222,
+          "2026-10-UNA": 232077,
+          "2026-10-DEM": 244980,
+          "2026-10-REP": 112560,
+          "changeMonth": 1489,
+          "changeYear": 13376
+        },
+        {
+          "county": "Monmouth",
+          "2025-10": 503764,
+          "2026-09": 510180,
+          "2026-10": 510995,
+          "2026-10-UNA": 190775,
+          "2026-10-DEM": 143932,
+          "2026-10-REP": 171120,
+          "changeMonth": 815,
+          "changeYear": 7231
+        },
+        {
+          "county": "Morris",
+          "2025-10": 388191,
+          "2026-09": 394899,
+          "2026-10": 395779,
+          "2026-10-UNA": 131654,
+          "2026-10-DEM": 122478,
+          "2026-10-REP": 138026,
+          "changeMonth": 880,
+          "changeYear": 7588
+        },
+        {
+          "county": "Ocean",
+          "2025-10": 477562,
+          "2026-09": 484086,
+          "2026-10": 485011,
+          "2026-10-UNA": 171901,
+          "2026-10-DEM": 103971,
+          "2026-10-REP": 203762,
+          "changeMonth": 925,
+          "changeYear": 7449
+        },
+        {
+          "county": "Passaic",
+          "2025-10": 338772,
+          "2026-09": 344412,
+          "2026-10": 344893,
+          "2026-10-UNA": 121027,
+          "2026-10-DEM": 137053,
+          "2026-10-REP": 82193,
+          "changeMonth": 481,
+          "changeYear": 6121
+        },
+        {
+          "county": "Salem",
+          "2025-10": 49861,
+          "2026-09": 50499,
+          "2026-10": 50605,
+          "2026-10-UNA": 18421,
+          "2026-10-DEM": 14608,
+          "2026-10-REP": 16815,
+          "changeMonth": 106,
+          "changeYear": 744
+        },
+        {
+          "county": "Somerset",
+          "2025-10": 258485,
+          "2026-09": 262366,
+          "2026-10": 263004,
+          "2026-10-UNA": 99056,
+          "2026-10-DEM": 95298,
+          "2026-10-REP": 66184,
+          "changeMonth": 638,
+          "changeYear": 4519
+        },
+        {
+          "county": "Sussex",
+          "2025-10": 121025,
+          "2026-09": 122534,
+          "2026-10": 122873,
+          "2026-10-UNA": 40198,
+          "2026-10-DEM": 28143,
+          "2026-10-REP": 52813,
+          "changeMonth": 339,
+          "changeYear": 1848
+        },
+        {
+          "county": "Union",
+          "2025-10": 390356,
+          "2026-09": 397116,
+          "2026-10": 397999,
+          "2026-10-UNA": 141421,
+          "2026-10-DEM": 183049,
+          "2026-10-REP": 69415,
+          "changeMonth": 883,
+          "changeYear": 7643
+        },
+        {
+          "county": "Warren",
+          "2025-10": 90153,
+          "2026-09": 92262,
+          "2026-10": 92496,
+          "2026-10-UNA": 26242,
+          "2026-10-DEM": 25605,
+          "2026-10-REP": 39060,
+          "changeMonth": 234,
+          "changeYear": 2343
+        }
+      ],
+      "validated": true,
+      "validation": [
+        "21 unique counties in each period",
+        "Identical county roster across periods",
+        "County registrations sum to state total in each period",
+        "Oct 2026 party totals reconcile to state party totals",
+        "No missing/suppressed rows in these three monthly county tables"
+      ],
+      "policy": "County exploration is disabled if any period has missing county rows, noncomparable definitions, or a reconciliation mismatch; municipality level is not approved."
+    }
+  ]
+}
