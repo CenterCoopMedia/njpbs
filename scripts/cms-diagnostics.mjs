@@ -4,15 +4,22 @@ import { promisify } from "node:util";
 import { pathToFileURL } from "node:url";
 
 import timingsModule from "../functions/lib/preview-timings.js";
+import publicDeployment from "../functions/lib/public-deployment-pointer.js";
 const { previewTimings, previewStartup } = timingsModule;
+const { isPublicDeploymentIdentifier } = publicDeployment;
 
 const TIMEOUT_MS = 10_000;
+// The Worker allows three seconds for its reader, before transport time.
+const CANDIDATE_PROBE_TIMEOUT_MS = 5_000;
 const MAX_BYTES = 256 * 1024;
 const SHA = /^[a-f0-9]{40}$/;
 const QUEUE_ID = /^[a-zA-Z0-9]{20}$/;
+const WORKER_VERSION_ID = /^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i;
 export const FIELDS = Object.freeze({
   runtime: ["phase", "rendererSha", "serializerId", "checkedAt", "startupTimingsMs"],
-  deployment: ["state", "activeGeneration", "activeCommitSha", "updatedAt"],
+  deployment: ["state", "activeGeneration", "activeCommitSha", "updatedAt",
+    "candidateBuildBatchId", "candidateGeneration", "candidateCommitSha"],
+  candidate: ["buildBatchId", "generation", "commitSha", "workerVersionId"],
   queue: ["status", "rendererSha", "requestedAt", "serializerClaim.claimedAt", "completedAt", "timingsMs", "startup"],
 });
 const URLS = {
@@ -80,6 +87,34 @@ async function fetchJson(url, fetcher) {
     return JSON.parse(Buffer.concat(chunks).toString("utf8"));
   } finally { await reader.cancel(); }
 }
+
+async function candidateProbe(pointer, readCandidate, fetcher) {
+  const { candidateBuildBatchId: batchId, candidateGeneration: generation, candidateCommitSha: commit } = pointer;
+  if (!isPublicDeploymentIdentifier(batchId) || !Number.isSafeInteger(generation) || generation < 1 || !sha(commit)) {
+    fail("invalid_data");
+  }
+  const candidate = await readCandidate(batchId);
+  if (candidate?.buildBatchId !== batchId || candidate.generation !== generation || candidate.commitSha !== commit ||
+      typeof candidate.workerVersionId !== "string" || !WORKER_VERSION_ID.test(candidate.workerVersionId)) {
+    fail("invalid_data");
+  }
+  const url = new URL(URLS.publication);
+  url.searchParams.set("candidate", batchId);
+  url.searchParams.set("version", candidate.workerVersionId);
+  const started = performance.now();
+  let response;
+  try {
+    response = await fetcher(url.href, { signal: AbortSignal.timeout(CANDIDATE_PROBE_TIMEOUT_MS),
+      redirect: "error", credentials: "omit", headers: { "cache-control": "no-cache" } });
+  } catch {
+    return { status: null, durationMs: Math.round(performance.now() - started), refreshOutcome: "unknown" };
+  }
+  const durationMs = Math.round(performance.now() - started);
+  const refresh = response.headers.get("x-njpbs-publication-refresh");
+  // This observation needs only the status and the allowlisted header value.
+  void response.body?.cancel().catch(() => {});
+  return { status: response.status, durationMs, refreshOutcome: refresh === null ? "none" : refresh === "pending" ? "pending" : "unknown" };
+}
 export function queueSummary(id, data, checkedAt) {
   const requestedAt = required(timestamp(data.requestedAt));
   const claimedAt = timestamp(data.serializerClaim?.claimedAt);
@@ -109,6 +144,12 @@ export function firestoreReads(db, queueId) {
       if (!row.exists) fail("not_found");
       return row.data();
     },
+    candidate: async batchId => {
+      if (!isPublicDeploymentIdentifier(batchId)) fail("invalid_data");
+      const [row] = await db.getAll(db.doc(`system/publicDeployment/buildBatches/${batchId}/candidates/worker`), { fieldMask: FIELDS.candidate });
+      if (!row.exists) fail("not_found");
+      return row.data();
+    },
     queue: async () => {
       if (queueId) {
         const [row] = await db.getAll(db.doc(`cmsPreviewQueue/${queueId}`), { fieldMask: FIELDS.queue });
@@ -131,6 +172,18 @@ export async function diagnose({ fetcher = fetch, readGit = gitRevision, reads, 
   async function check(name, operation) {
     try { report.checks[name] = { ok: true, data: await bounded(operation) }; }
     catch (error) { report.ok = false; report.checks[name] = { ok: false, error: safeCode(error) }; }
+  }
+  async function checkDeployment() {
+    let pointer;
+    await check("publicDeployment", async () => {
+      pointer = await reads.deployment();
+      return { state: required(choice(pointer.state, ["idle", "deploying", "reconciling"])),
+        activeGeneration: required(Number.isSafeInteger(pointer.activeGeneration) && pointer.activeGeneration >= 0 ? pointer.activeGeneration : null),
+        activeCommitSha: sha(pointer.activeCommitSha), updatedAt: timestamp(pointer.updatedAt) };
+    });
+    if (report.checks.publicDeployment.data?.state === "reconciling") {
+      await check("candidateProbe", () => candidateProbe(pointer, reads.candidate, fetcher));
+    }
   }
   await Promise.all([
     check("gitHead", async () => required(sha(await readGit("HEAD")))),
@@ -166,12 +219,7 @@ export async function diagnose({ fetcher = fetch, readGit = gitRevision, reads, 
         checkedAt: phase === "ready" ? required(checkedAt) : checkedAt,
         startupTimingsMs: previewTimings(data.startupTimingsMs) };
     }),
-    check("publicDeployment", async () => {
-      const data = await reads.deployment();
-      return { state: required(choice(data.state, ["idle", "deploying", "reconciling"])),
-        activeGeneration: required(Number.isSafeInteger(data.activeGeneration) && data.activeGeneration >= 0 ? data.activeGeneration : null),
-        activeCommitSha: sha(data.activeCommitSha), updatedAt: timestamp(data.updatedAt) };
-    }),
+    checkDeployment(),
     check("previewQueue", async () => {
       const rows = await reads.queue();
       if (!Array.isArray(rows) || rows.length > 20) fail("invalid_data");
