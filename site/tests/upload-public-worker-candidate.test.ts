@@ -1,11 +1,15 @@
 // @vitest-environment node
 
+import { createRequire } from "node:module";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { main, retryWorkerVersionReceipt } from
   "../scripts/upload-public-worker-candidate";
 import { findExactRecentWorkerVersion } from
   "../src/lib/public-worker-version-recovery";
+import { publicPostRendererRelease, publicWorkerCandidateRendererContract } from "../scripts/public-post-renderer-release";
+import { privatePairReaderCapabilities } from "../../packages/content-core/src/private-pair-http.mjs";
 
+const { projectCloudflareWorkerVersion } = createRequire(import.meta.url)("../../functions/lib/public-worker-candidate.js");
 const VERSION_ID = "11111111-1111-4111-8111-111111111111";
 const TAG = "cms-g8-aaaaaaaaaaaaaaaa";
 const MESSAGE = "exact candidate";
@@ -22,6 +26,36 @@ function version(overrides: Record<string, unknown> = {}) {
     ...overrides,
   };
 }
+
+it("emits a Post candidate accepted by the deployed CMS reader", () => {
+  const sha = "a".repeat(40);
+  const seal = publicPostRendererRelease(sha, "production", {});
+  const { variables, pageReaderVersion } = publicWorkerCandidateRendererContract(seal, sha);
+  const candidate = projectCloudflareWorkerVersion(version({
+    metadata: { source: "wrangler", created_on: "2026-08-27T20:00:00.000Z" },
+    annotations: { "workers/tag": TAG, "workers/message": MESSAGE, "workers/triggered_by": "version_upload" },
+    resources: {
+      script: {},
+      script_runtime: { assets: { run_worker_first: true } },
+      bindings: [
+        ...Object.entries(variables).map(([name, text]) => ({ name, text, type: "plain_text" })),
+        { name: "ASSETS", type: "assets" },
+        { name: "CMS_API", type: "service", service: "njpbs-cms-api", entrypoint: "PublicContentEntrypoint" },
+      ],
+    },
+  }), { tag: TAG, message: MESSAGE });
+
+  // Exact family contract accepted by candidateNoBuildContract at bce824c.
+  expect(candidate.noBuildPost).toEqual({
+    schemaVersion: 2, families: ["posts"], rendererSha: sha, enabled: true, authoritative: true,
+    dataFigureVersion: 1, electionResultsVersion: 2, liveBlogVersion: 1,
+  });
+  expect(variables.SPANISH_POST_VERSION).toBe("0");
+  expect(pageReaderVersion).toBe(seal.pageReaderVersion);
+  expect(privatePairReaderCapabilities(sha).post).toEqual({
+    dataFigureVersion: 1, electionResultsVersion: 2, liveBlogVersion: 1,
+  });
+});
 
 describe("public Worker candidate recovery", () => {
   it("validates the CLI pilot environment before credentials or upload", async () => {

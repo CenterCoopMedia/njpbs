@@ -308,9 +308,17 @@ describe("development renderer, version and baseline boundaries", () => {
     receipt.resources.script_runtime.assets = { ...assets, ...change };
     vi.stubGlobal("fetch", vi.fn(async () => Response.json({ success: true, result: receipt })));
     if (accepted) {
-      expect(await verifyVersion(versionId, publication)).toMatchObject({ workerVersionId: versionId,
+      expect(await verifyVersion(versionId, publication, release)).toMatchObject({ workerVersionId: versionId,
         noBuildPost: { schemaVersion: 2, families: ["posts"], rendererSha: identity.commitSha, authoritative: true } });
-    } else await expect(verifyVersion(versionId, publication)).rejects.toThrow();
+    } else await expect(verifyVersion(versionId, publication, release)).rejects.toThrow();
+  });
+  it("requires the development Worker to advertise Spanish Posts only when its renderer seal does", async () => {
+    const receipt = version();
+    receipt.resources.bindings.push({ name: "SPANISH_POST_VERSION", type: "plain_text", text: "1" });
+    vi.stubGlobal("fetch", vi.fn(async () => Response.json({ success: true, result: receipt })));
+    await expect(verifyVersion(versionId, publication, release)).rejects.toThrow("capability differs");
+    expect((await verifyVersion(versionId, publication, { ...release, spanishPostVersion: 1 }))
+      .noBuildPost.spanishPostVersion).toBe(1);
   });
   it.each(["wrong version", "tag", "source", "created time", "production API", "entrypoint", "SHA", "extra secret", "duplicate binding"])(
     "refuses an incompatible provider version: %s", async problem => {
@@ -325,7 +333,7 @@ describe("development renderer, version and baseline boundaries", () => {
       if (problem === "extra secret") receipt.resources.bindings.push({ type: "secret_text", name: "unexpected" });
       if (problem === "duplicate binding") receipt.resources.bindings.push(receipt.resources.bindings[1]);
       vi.stubGlobal("fetch", vi.fn(async () => Response.json({ success: true, result: receipt })));
-      await expect(verifyVersion(versionId, publication)).rejects.toThrow();
+      await expect(verifyVersion(versionId, publication, release)).rejects.toThrow();
       expect(processBoundary).not.toHaveBeenCalled();
     });
 

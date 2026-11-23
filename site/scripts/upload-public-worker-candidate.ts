@@ -19,8 +19,7 @@ import {
 import { findExactRecentWorkerVersion } from
   "../src/lib/public-worker-version-recovery";
 import { assertCmsPublicationSourceCheckout } from "./cms-publication-runtime-guard";
-import pageReaderContract from "../../functions/lib/page-reader-contract.js";
-
+import { publicWorkerCandidateRendererContract } from "./public-post-renderer-release.ts";
 const requireModule = createRequire(import.meta.url);
 const { readNoBuildFamilyAdmission } = requireModule("../../functions/lib/no-build-family-admission.js");
 const { listNoBuildPostOwners } = requireModule("../../functions/lib/no-build-post-ownership.js");
@@ -416,43 +415,7 @@ export async function uploadPublicWorkerCandidate({
     throw new Error("The detached upload does not match its preparation");
   }
   const rendererRelease = await readJson(path.join(distDirectory, "posts/_no-build-assets/renderer-release.json"), "The public Post renderer release");
-  const dataHubPublic = rendererRelease !== null && typeof rendererRelease === "object" &&
-    "dataHubReportingVersion" in rendererRelease && rendererRelease.dataHubReportingVersion === 1;
-  const dataHubComposition = dataHubPublic && "dataHubCompositionVersion" in rendererRelease && rendererRelease.dataHubCompositionVersion === 1;
-  const electionResults = rendererRelease !== null && typeof rendererRelease === "object" &&
-    "electionResultsVersion" in rendererRelease && [1, 2].includes(rendererRelease.electionResultsVersion as number)
-    ? rendererRelease.electionResultsVersion as 1 | 2 : undefined;
-  const liveBlog = rendererRelease !== null && typeof rendererRelease === "object" &&
-    "liveBlogVersion" in rendererRelease && rendererRelease.liveBlogVersion === 1;
-  const spanishPosts = rendererRelease !== null && typeof rendererRelease === "object" &&
-    "spanishPostVersion" in rendererRelease && rendererRelease.spanishPostVersion === 1;
-  const pageReaderVersion = rendererRelease !== null && typeof rendererRelease === "object" &&
-    "pageReaderVersion" in rendererRelease ? rendererRelease.pageReaderVersion : undefined;
-  if (pageReaderVersion !== undefined && !pageReaderContract.isPageReaderVersion(pageReaderVersion)) throw new Error("Unsupported Page reader contract");
-  if (!isDeepStrictEqual(rendererRelease, { schemaVersion: 1, rendererSha: prepared.commitSha,
-    ...(dataHubPublic ? { dataHubReportingVersion: 1 } : {}),
-    ...(dataHubComposition ? { dataHubCompositionVersion: 1 } : {}),
-    ...(liveBlog ? { liveBlogVersion: 1 } : {}),
-    ...(spanishPosts ? { spanishPostVersion: 1 } : {}),
-    ...(pageReaderVersion !== undefined ? { pageReaderVersion } : {}),
-    ...(electionResults ? { electionResultsVersion: electionResults } : {}) })) {
-    throw new Error("The public Post renderer does not match its prepared production artifact");
-  }
-  // Fixed metadata attests the family reader. Each request reads admission;
-  // neither this marker nor retained legacy variables enable publication.
-  const variables = {
-    NO_BUILD_RECORD_RENDERER_SHA: prepared.commitSha,
-    NO_BUILD_POST_FAMILIES: "posts",
-    NO_BUILD_POST_RENDERER_SHA: prepared.commitSha,
-    NO_BUILD_PAGE_RENDERER_SHA: prepared.commitSha,
-    DATA_FIGURE_VERSION: "1",
-    ELECTION_RESULTS_VERSION: electionResults ? String(electionResults) : "0",
-    // Explicit zero clears a retained feature marker when --keep-vars is used.
-    LIVE_BLOG_VERSION: liveBlog ? "1" : "0",
-    SPANISH_POST_VERSION: spanishPosts ? "1" : "0",
-    DATA_HUB_PUBLIC: dataHubPublic ? "1" : "0",
-    DATA_HUB_COMPOSITION_VERSION: dataHubComposition ? "1" : "0",
-  };
+  const { variables, pageReaderVersion } = publicWorkerCandidateRendererContract(rendererRelease, prepared.commitSha);
 
   let batch: { noBuildStaticInput?: unknown; runtime?: PublicationRuntime };
   if (preparationId !== undefined) {

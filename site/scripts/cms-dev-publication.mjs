@@ -217,6 +217,7 @@ export async function restoreDevPostRenderer(sourceSha, artifactDirectory = dire
   const destination = path.join(siteDirectory, ".public-post-renderer");
   await rm(destination, { recursive: true, force: true });
   await cp(retained, destination, { recursive: true });
+  return seal;
 }
 
 async function retainContext(db, publication) {
@@ -252,7 +253,7 @@ function verifyPrivateWorker() {
   return verifyDevPublicWorkerPrivate(cloudflareApi);
 }
 
-export async function verifyVersion(versionId, publication) {
+export async function verifyVersion(versionId, publication, rendererSeal) {
   if (!UUID.test(versionId ?? "")) throw new Error("Development Worker candidate is missing; reconcile with retained evidence");
   const version = await cloudflare(`/versions/${versionId}`);
   const runtime = version?.resources?.script_runtime;
@@ -270,6 +271,9 @@ export async function verifyVersion(versionId, publication) {
     tag: publicWorkerCandidateTag(publication), message: publicWorkerCandidateMessage(publication) });
   if (projected.noBuildPost?.schemaVersion !== 2 || projected.noBuildPost.rendererSha !== publication.commitSha) {
     throw new Error("Development Worker lacks its Post family capability");
+  }
+  if (projected.noBuildPost.spanishPostVersion !== rendererSeal.spanishPostVersion) {
+    throw new Error("Development Worker Spanish Post capability differs from the renderer seal");
   }
   return projected;
 }
@@ -297,7 +301,7 @@ async function assertDevWorkerConfig() {
   }
 }
 
-async function uploadCandidate(publication) {
+async function uploadCandidate(publication, rendererSeal) {
   // Keep provider diagnostics private: child errors can contain environment details.
   let output;
   try {
@@ -307,7 +311,7 @@ async function uploadCandidate(publication) {
       "--var", `NO_BUILD_PAGE_RENDERER_SHA:${publication.commitSha}`,
       "--var", `NO_BUILD_RECORD_RENDERER_SHA:${publication.commitSha}`,
       "--var", "DATA_FIGURE_VERSION:1", "--var", "ELECTION_RESULTS_VERSION:2",
-      "--var", "SPANISH_POST_VERSION:1",
+      ...(rendererSeal.spanishPostVersion === 1 ? ["--var", "SPANISH_POST_VERSION:1"] : []),
       "--tag", publicWorkerCandidateTag(publication), "--message", publicWorkerCandidateMessage(publication), "--strict"], {
       cwd: root, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"], maxBuffer: 1024 * 1024,
       env: { PATH: process.env.PATH, HOME: process.env.HOME, CLOUDFLARE_ACCOUNT_ID: cloudflareAccount(),
@@ -587,7 +591,7 @@ export async function upload(db, id, reconcileOnly = false, recovery = null) {
     const publication = await json(path.join(directory, "publication.json"));
     const retainedLease = timedOutRecovery ? state.prepareTimedOutDevReconciliation({
       ...reconciliationInput(id, current, inventory, recovery), publication }) : null;
-    await restoreDevPostRenderer(id.commitSha);
+    const rendererSeal = await restoreDevPostRenderer(id.commitSha);
     const rebuilt = await preparePublicWorkerArtifact({ artifactReceipt: inventory, distDirectory: path.join(directory, "dist"),
       outputPath: path.join(directory, "checked-publication.json") });
     if (!isDeepStrictEqual(rebuilt, publication)) throw new Error("Development artifact bytes changed");
@@ -611,11 +615,11 @@ export async function upload(db, id, reconcileOnly = false, recovery = null) {
           return found;
         });
       } else {
-        versionId = await find() ?? await uploadCandidate(publication);
+        versionId = await find() ?? await uploadCandidate(publication, rendererSeal);
       }
     }
-    const version = timedOutRecovery ? await verifyVersion(versionId, publication)
-      : await retryWorkerVersionReceipt(() => verifyVersion(versionId, publication));
+    const verify = () => verifyVersion(versionId, publication, rendererSeal);
+    const version = timedOutRecovery ? await verify() : await retryWorkerVersionReceipt(verify);
     let candidate, lease;
     if (timedOutRecovery) {
       candidate = current.candidate;
