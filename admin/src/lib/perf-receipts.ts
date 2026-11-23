@@ -248,10 +248,8 @@ export function operationCategoryForEndpoint(
   if (endpoint === "cmsAssignContent") return "content-write";
   if (endpoint === "cmsListContent" || endpoint === "cmsListAudit")
     return "content-list";
-  // The wire names differ from the client wrapper names.
-  // are the exported functions, while what reaches the transport is cmsPreview and
-  // cmsPreviewStatus. A drift test reads the real strings out of the transport module so this
-  // cannot silently fall back to `other` again.
+  // Classify the endpoint names sent by the transport. A drift test checks
+  // those names against the real requests.
   if (
     endpoint === "cmsGetContent" ||
     endpoint === "cmsPreview" ||
