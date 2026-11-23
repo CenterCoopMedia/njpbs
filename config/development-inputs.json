@@ -190,7 +190,6 @@
         "scripts/fixtures/dev-targets.json",
         "scripts/lib/development-public-release-gateway.mjs",
         "scripts/prepare-public-release-routing-measurement.mjs",
-        "site/scripts/cms-dev-publication.mjs",
         "tests/dev-preview-gateways.test.ts",
         "tests/functions/cms-reader-first-install-adapter.test.ts",
         "tests/functions/dev-publication-upload-idempotence.test.js",

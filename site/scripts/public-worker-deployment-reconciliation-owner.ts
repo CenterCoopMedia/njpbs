@@ -8,6 +8,7 @@ import type { Firestore } from "firebase-admin/firestore";
 import {
   reconcilePublicWorkerDeployment,
 } from "./reconcile-public-worker-deployment";
+import type { PublicationTarget } from "../../functions/lib/publication-target";
 
 const requireModule = createRequire(import.meta.url);
 const { ownsPublication, publicationRuntime } = requireModule("../../functions/lib/publication-runtime-owner.js");
@@ -74,6 +75,7 @@ interface ReconciliationOwnerDependencies {
     firestore: Firestore;
     cloudflareApiToken: string;
     runtime?: { owner: "node-compute" | "cloudflare"; release: string };
+    target?: PublicationTarget;
   }): Promise<ReconciliationResult>;
   scheduleRetry(callback: () => void, delayMs: number): unknown;
   cancelRetry(handle: unknown): void;
@@ -156,11 +158,13 @@ export function startPublicWorkerDeploymentReconciliationOwner({
   firestore,
   cloudflareApiToken,
   runtime,
+  target,
   dependencies: dependencyOverrides,
 }: {
   firestore: Firestore;
   cloudflareApiToken: string;
   runtime?: { owner: "node-compute" | "cloudflare"; release: string };
+  target?: PublicationTarget;
   dependencies?: Partial<ReconciliationOwnerDependencies>;
 }): PublicDeploymentReconciliationOwner {
   if (
@@ -278,6 +282,7 @@ export function startPublicWorkerDeploymentReconciliationOwner({
         firestore,
         cloudflareApiToken,
         ...(runtime ? { runtime } : {}),
+        ...(target ? { target } : {}),
       });
       assertReconciliationResult(result);
       if (

@@ -1,5 +1,6 @@
 import { cloudflarePublicWorkerTag } from "./cloudflare-account.mjs";
 import { createServer } from "node:http";
+import { createRequire } from "node:module";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { assertCmsPreviewSourceCheckout } from "./cms-publication-runtime-guard";
@@ -22,6 +23,8 @@ import {
 } from "./cms-publication-cloud-control";
 
 const STATE_DIRECTORY = "/var/lib/njpbs-cms-publisher";
+const { publicationTarget } = createRequire(import.meta.url)("../../functions/lib/publication-target.js") as
+  typeof import("../../functions/lib/publication-target");
 
 // Names the startup step that failed. The message stays the original one for
 // callers; the process log prints only the stage, error name and error code.
@@ -101,6 +104,13 @@ async function runCloudPublicationStages(
     throw new Error("Invalid cloud publication operator mode");
   progress.stage = "cloudflare-configuration";
   cloudflarePublicWorkerTag(environment);
+  progress.stage = "target";
+  // One target for the whole process; a missing environment never means production.
+  const target = publicationTarget(environment.CMS_DEPLOYMENT_ENVIRONMENT ?? "");
+  if (target.environment === "development" && rawMediaStorage) {
+    // The Spotlight cache writes the production media bucket and origin only.
+    throw new Error("Development cloud publication refuses Spotlight media storage");
+  }
   progress.stage = "source-checkout";
   await assertCmsPreviewSourceCheckout(commitSha);
   progress.stage = "sandbox";
@@ -112,7 +122,7 @@ async function runCloudPublicationStages(
   if (!/^[A-Za-z0-9_-]{20,80}$/.test(cloudflareApiToken)) {
     throw new Error("Cloud publication credentials are invalid");
   }
-  const account = parseCmsPublicationFirebaseServiceAccount(rawAccount);
+  const account = parseCmsPublicationFirebaseServiceAccount(rawAccount, target.projectId);
   const mediaManagerCredential = parseCmsPublicationMediaManagerCredential(rawMediaManager);
   // Keep the optional media credential in this operator. Parse it only when a
   // normal refresh needs storage; never pass it into the Astro build environment.
@@ -122,12 +132,12 @@ async function runCloudPublicationStages(
   const previewStorageCredential = parsePreviewStorageCredential(rawPreviewStorage);
   progress.stage = "firebase";
   const app = firebaseAdminRuntime.initializeApp(
-    { credential: firebaseAdminRuntime.cert(account), projectId: "njpbs-site" },
+    { credential: firebaseAdminRuntime.cert(account), projectId: target.projectId },
     "cms-publication-cloud",
   );
   const firestore = firebaseAdminRuntime.getFirestore(app);
   progress.stage = "storage-client";
-  const storage = createCmsPublicationCloudStorage({ ...credentials, includeRenderer: true });
+  const storage = createCmsPublicationCloudStorage({ ...credentials, includeRenderer: true, target });
   let runtime:
     ReturnType<typeof startNoBuildCloudRuntime> | undefined;
   let stopping = false;
@@ -192,6 +202,7 @@ async function runCloudPublicationStages(
     runtime = startNoBuildCloudRuntime({
       firestore, firebaseApp: app, serializerId, commitSha, cloudflareApiToken,
       stateDirectory: STATE_DIRECTORY, buildEnvironment, storage, previewStorageCredential, mediaManagerCredential, spotlightImageStorageFactory,
+      target,
     });
     const closed = runtime.closed.then(
       () => null,

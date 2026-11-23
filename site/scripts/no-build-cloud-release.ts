@@ -13,6 +13,7 @@ import { uploadPublicWorkerCandidate } from "./upload-public-worker-candidate";
 import { PublicWorkerActivationOperatorError, runPublicWorkerActivationOperator } from "./activate-public-worker-candidate";
 import { assertCmsPublicationSourceCheckout } from "./cms-publication-runtime-guard";
 import { assertPreparedPublicWorkerArtifact, verifyPreparedPublicWorkerArtifact } from "../src/lib/public-worker-artifact";
+import type { PublicationTarget } from "../../functions/lib/publication-target";
 
 const require = createRequire(import.meta.url);
 const { assertPublicationOwner } = require("../../functions/lib/publication-runtime-owner");
@@ -160,9 +161,9 @@ async function materializePreparedRelease(firestore: Firestore, preparationId: s
 /** One request per pass. The cloud journal retains its original job until a
  * terminal batch; an ambiguous activation remains with the shared lease owner. */
 export async function runNoBuildCloudRelease({ firestore, storage, serializerId, commitSha, stateDirectory, cloudflareApiToken,
-  previewStorageCredential, sourceGit, activationIO }: {
+  previewStorageCredential, sourceGit, activationIO, target }: {
   firestore: Firestore; storage: Storage; serializerId: string; commitSha: string; stateDirectory: string; cloudflareApiToken: string;
-  previewStorageCredential: PreviewStorageCredential;
+  previewStorageCredential: PreviewStorageCredential; target?: PublicationTarget;
   sourceGit?: Parameters<typeof assertCmsPublicationSourceCheckout>[1];
   activationIO?: Pick<Parameters<typeof runPublicWorkerActivationOperator>[0], "requestJson" | "requestPublication">;
 }) {
@@ -237,6 +238,8 @@ export async function runNoBuildCloudRelease({ firestore, storage, serializerId,
     let prepared: Awaited<ReturnType<typeof verifyRelease>>;
     if (request.preparationId !== undefined) {
       stage = "release verification";
+      // Promotion seals only production pins and journals; development never reads them.
+      if (target?.environment === "development") throw new Error("Prepared releases are production-only");
       if (request.preparationId !== row.id) throw new Error("Prepared release operation differs");
       // A leased candidate keeps its original reconciliation path. Its metadata
       // is already durable and must not be registered again after traffic moves.
@@ -265,15 +268,18 @@ export async function runNoBuildCloudRelease({ firestore, storage, serializerId,
       stage = "candidate upload";
       await uploadPublicWorkerCandidate({ firestore: firestore as never, runtime, cloudflareApiToken,
         artifactReceiptPath: path.join(directory, "artifact-inventory.json"),
-        preparedArtifactPath: path.join(directory, "prepared-worker.json"), distDirectory: path.join(directory, "dist") });
+        preparedArtifactPath: path.join(directory, "prepared-worker.json"), distDirectory: path.join(directory, "dist"),
+        ...(target ? { target } : {}) });
       const { publicationReceiptDigest, artifactFileCount, artifactBytes, ...publication } = prepared;
       stage = "context retention";
       await retainCloudPreviewPublicContext({ firestore: firestore as never, file: path.join(directory, "public-context.json"),
-        publication, ...previewStorageCredential, allowCloudRecovery: true });
+        publication, ...previewStorageCredential, allowCloudRecovery: true,
+        ...(target ? { bucket: target.previewBucket, deploymentEnvironment: target.environment } : {}) });
     }
     stage = "activation";
     const result = await runPublicWorkerActivationOperator({ firestore: firestore as never, runtime, cloudflareApiToken,
-      preparedArtifact: prepared, requestJson: activationIO?.requestJson, requestPublication: activationIO?.requestPublication });
+      preparedArtifact: prepared, requestJson: activationIO?.requestJson, requestPublication: activationIO?.requestPublication,
+      ...(target ? { target } : {}) });
     if (["deployed", "failed", "superseded"].includes(result.outcome)) {
       const failureReason = result.outcome === "failed" ? cloudReleaseFailureReason(stage) : null;
       if (failureReason) console.error(failureReason);

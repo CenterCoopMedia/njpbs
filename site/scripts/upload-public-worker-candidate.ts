@@ -20,7 +20,11 @@ import { findExactRecentWorkerVersion } from
   "../src/lib/public-worker-version-recovery";
 import { assertCmsPublicationSourceCheckout } from "./cms-publication-runtime-guard";
 import { publicWorkerCandidateRendererContract } from "./public-post-renderer-release.ts";
+import { writeDevelopmentPublicWorkerConfig } from "./development-public-worker-config.ts";
+import type { PublicationTarget } from "../../functions/lib/publication-target";
 const requireModule = createRequire(import.meta.url);
+const { assertPublicationTarget, publicationTarget } = requireModule("../../functions/lib/publication-target.js") as
+  typeof import("../../functions/lib/publication-target");
 const { readNoBuildFamilyAdmission } = requireModule("../../functions/lib/no-build-family-admission.js");
 const { listNoBuildPostOwners } = requireModule("../../functions/lib/no-build-post-ownership.js");
 const { readPublicReleasePreparation, preparedPublicWorkerCandidateRef, recordPreparedPublicWorkerCandidate,
@@ -33,10 +37,10 @@ const candidateModule = requireModule(
 ) as {
   projectCloudflareWorkerVersion: (
     value: unknown,
-    expected: { tag: string; message: string },
+    expected: { tag: string; message: string; target?: PublicationTarget },
   ) => { workerVersionId: string; versionCreatedOn: string; noBuildPost?: PublicWorkerCandidateInput["noBuildPost"]; noBuildPage?: PublicWorkerCandidateInput["noBuildPage"]; noBuildRecord?: PublicWorkerCandidateInput["noBuildRecord"] };
-  projectPublicWorkerCandidate: (value: unknown) => PublicWorkerCandidate;
-  projectPublicWorkerCandidateInput: (value: unknown) => PublicWorkerCandidateInput;
+  projectPublicWorkerCandidate: (value: unknown, buildBatchId?: string | null, options?: { target?: PublicationTarget }) => PublicWorkerCandidate;
+  projectPublicWorkerCandidateInput: (value: unknown, options?: { target?: PublicationTarget }) => PublicWorkerCandidateInput;
   publicWorkerCandidateMessage: (value: unknown) => string;
   publicWorkerCandidateTag: (value: unknown) => string;
   workerVersionIdFromWranglerOutput: (value: string) => string;
@@ -48,6 +52,7 @@ const candidateStoreModule = requireModule(
     firestore: Firestore;
     candidate: PublicWorkerCandidateInput;
     runtime?: PublicationRuntime;
+    target?: PublicationTarget;
   }) => Promise<{ idempotent: boolean; candidate: PublicWorkerCandidate }>;
 };
 const coordinatorModule = requireModule(
@@ -149,7 +154,7 @@ interface PublicWorkerCandidateInput {
   buildBatchId: string;
   generation: number;
   commitSha: string;
-  workerName: "njpbs-production";
+  workerName: PublicationTarget["workerName"];
   workerVersionId: string;
   workerVersionTag: string;
   versionCreatedOn: string;
@@ -329,22 +334,36 @@ async function exactVersionReceipt({
   workerVersionId,
   tag,
   message,
+  config,
+  target,
 }: {
   runCommand: CommandRunner;
   workerVersionId: string;
   tag: string;
   message: string;
+  config: string;
+  target?: PublicationTarget;
 }) {
   const view = await runCommand([
     "versions",
     "view",
     workerVersionId,
     "--config",
-    wranglerConfig,
+    config,
     "--json",
   ]);
   const receipt = parseJsonOutput(view, "version view");
-  return { receipt, version: projectCloudflareWorkerVersion(receipt, { tag, message }) };
+  return { receipt, version: projectCloudflareWorkerVersion(receipt, { tag, message, target }) };
+}
+
+/** Production uploads through its reviewed config. Development derives its own
+ * config beside the artifact and refuses one that names any production value. */
+export async function publicWorkerWranglerConfig({ target, directory, distDirectory }: {
+  target?: PublicationTarget; directory: string; distDirectory: string;
+}): Promise<string> {
+  if (target === undefined || assertPublicationTarget(target).environment === "production") return wranglerConfig;
+  return writeDevelopmentPublicWorkerConfig({ root: repoRoot, target, assetsDirectory: distDirectory,
+    file: path.join(directory, "wrangler.development.json") });
 }
 
 function candidateMatchesPrepared(
@@ -373,6 +392,7 @@ export async function uploadPublicWorkerCandidate({
   publicBuildEnvironment = {},
   runtime,
   preparationId,
+  target,
 }: {
   artifactReceiptPath: string;
   preparedArtifactPath: string;
@@ -384,7 +404,12 @@ export async function uploadPublicWorkerCandidate({
   publicBuildEnvironment?: Record<string, string | undefined>;
   runtime?: PublicationRuntime;
   preparationId?: string;
+  target?: PublicationTarget;
 }): Promise<PublicWorkerCandidate> {
+  // Resolve the Wrangler config first: a refused dev config precedes every read and Wrangler call.
+  const selected = target === undefined ? undefined : assertPublicationTarget(target);
+  if (selected?.environment === "development" && preparationId !== undefined) throw new Error("Detached public release uploads are production-only");
+  const config = await publicWorkerWranglerConfig({ target: selected, directory: path.dirname(preparedArtifactPath), distDirectory });
   const legacySettings = parseNoBuildPostEnvironment(publicBuildEnvironment);
   const admission = await readNoBuildFamilyAdmission({ firestore, env: publicBuildEnvironment });
   if (!admission.valid && Object.keys(legacySettings).length) {
@@ -447,7 +472,7 @@ export async function uploadPublicWorkerCandidate({
   const storedSnapshot = await candidateRef.get();
   let workerVersionId: string | null = null;
   if (storedSnapshot.exists) {
-    const stored = projectPublicWorkerCandidate(storedSnapshot.data());
+    const stored = projectPublicWorkerCandidate(storedSnapshot.data(), null, { target: selected });
     assertPublicationOwner(stored, executor);
     if (!candidateMatchesPrepared(stored, prepared)) {
       throw new Error("The stored public Worker candidate conflicts with this artifact");
@@ -463,7 +488,7 @@ export async function uploadPublicWorkerCandidate({
       "versions",
       "list",
       "--config",
-      wranglerConfig,
+      config,
       "--json",
     ]);
     workerVersionId = findExactRecentWorkerVersion(
@@ -482,7 +507,7 @@ export async function uploadPublicWorkerCandidate({
       "versions",
       "upload",
       "--config",
-      wranglerConfig,
+      config,
       "--tag",
       tag,
       "--message",
@@ -503,6 +528,7 @@ export async function uploadPublicWorkerCandidate({
     workerVersionId,
     tag,
     message,
+    config, target: selected,
   }));
   assertUploadedVariables(receipt, variables);
   if (version.noBuildPost) {
@@ -519,7 +545,7 @@ export async function uploadPublicWorkerCandidate({
     buildBatchId: prepared.buildBatchId,
     generation: prepared.generation,
     commitSha: prepared.commitSha,
-    workerName: "njpbs-production",
+    workerName: (selected ?? publicationTarget("production")).workerName,
     workerVersionId: version.workerVersionId,
     workerVersionTag: tag,
     versionCreatedOn: version.versionCreatedOn,
@@ -534,7 +560,7 @@ export async function uploadPublicWorkerCandidate({
     ...(version.noBuildPage ? { noBuildPage: version.noBuildPage } : {}),
     ...(version.noBuildRecord ? { noBuildRecord: version.noBuildRecord } : {}),
     ...(staticProof ? { noBuildStatic: staticProof } : {}),
-  });
+  }, { target: selected });
   if (pageReaderVersion !== undefined) {
     const { preparePageReaderMarker } = requireModule("../../functions/lib/page-reader-compatibility.js");
     await firestore.runTransaction(async (transaction: unknown) => {
@@ -552,6 +578,7 @@ export async function uploadPublicWorkerCandidate({
     firestore,
     candidate,
     runtime: executor,
+    ...(selected ? { target: selected } : {}),
   })).candidate;
 }
 

@@ -12,6 +12,7 @@ import { retainCloudEditorialPreviewContext } from "./cms-preview-cloud-storage"
 import { createNoBuildPreparationStorage } from "./no-build-preparation-storage";
 import { assertCmsPublicationSourceCheckout } from "./cms-publication-runtime-guard";
 import type { PreviewStorageCredential } from "./cms-preview-storage-credential";
+import type { PublicationTarget } from "../../functions/lib/publication-target";
 
 const require = createRequire(import.meta.url);
 const { cloudCmsPublicationRuntimeControl } = require("../../functions/lib/cms-publication-runtime-control");
@@ -25,9 +26,9 @@ const ready = (value: unknown, release: string, serializerId: string) => {
 
 /** Private retention is separate from public aggregate completion. */
 export function cloudEditorialPreviewRetention({ firestore, firebaseApp, runtime, serializerId, backgroundBucket,
-  stateDirectory, previewStorageCredential, client, requestPublication = requestPublicPublicationReceipt, clock = Date.now }: {
+  stateDirectory, previewStorageCredential, client, requestPublication = requestPublicPublicationReceipt, clock = Date.now, target }: {
   firestore: Firestore; firebaseApp: App; runtime: { owner: "cloudflare"; release: string }; serializerId: string;
-  backgroundBucket: string; stateDirectory: string; previewStorageCredential: PreviewStorageCredential;
+  backgroundBucket: string; stateDirectory: string; previewStorageCredential: PreviewStorageCredential; target?: PublicationTarget;
   client?: S3Client; requestPublication?: typeof requestPublicPublicationReceipt; clock?: () => number;
 }) {
   return async () => {
@@ -72,7 +73,7 @@ export function cloudEditorialPreviewRetention({ firestore, firebaseApp, runtime
     try {
       await assertCmsPublicationSourceCheckout(runtime.release);
       stage = "receipt";
-      const url = new URL(`${PUBLICATION_PROBE_PATH}?cms-context=code`, PUBLICATION_PROBE_ORIGIN).toString();
+      const url = new URL(`${PUBLICATION_PROBE_PATH}?cms-context=code`, target?.origin ?? PUBLICATION_PROBE_ORIGIN).toString();
       const publication = canonicalPublicationReceipt(JSON.parse(await requestPublication(url)));
       stage = "selector";
       const selection = await firestore.runTransaction(async transaction => {
@@ -106,7 +107,8 @@ export function cloudEditorialPreviewRetention({ firestore, firebaseApp, runtime
       }
       stage = "retain";
       await retainCloudEditorialPreviewContext({ firestore, file: path.join(directory, "public-context.json"),
-        operationId: selection.operationId, publication, claim, serializerId, clock, client, ...previewStorageCredential });
+        operationId: selection.operationId, publication, claim, serializerId, clock, client, ...previewStorageCredential,
+        ...(target ? { bucket: target.previewBucket, deploymentEnvironment: target.environment } : {}) });
       return true;
     } catch {
       console.error(`Editorial preview retention failed at ${stage}`);

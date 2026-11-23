@@ -17,6 +17,7 @@ import { preparePublicWorkerArtifact } from "../src/lib/public-worker-artifact.t
 import { retainCloudPreviewPublicContext } from "./cms-preview-cloud-storage.ts";
 
 import { retryWorkerVersionReceipt, prepareStaticPostProof } from "./upload-public-worker-candidate.ts";
+import { writeDevelopmentPublicWorkerConfig } from "./development-public-worker-config.ts";
 import { publicWorkerCandidateRendererContract } from "./public-post-renderer-release.ts";
 import { findExactRecentWorkerVersion } from "../src/lib/public-worker-version-recovery.ts";
 import { publicRouteBaseForRecordKind } from "../../packages/content-core/src/public-record-kinds.ts";
@@ -288,21 +289,10 @@ async function activeDeployment(versionId) {
   return active;
 }
 
-// Dev runs the production Worker program from the production config. Only
-// the Worker name, data bindings and routes change; nothing else is dev-only.
 async function writeDevWorkerConfig() {
   target();
-  const { experimental_readRawConfig } = await import("wrangler");
-  const config = experimental_readRawConfig({ config: path.join(root, "workers/wrangler.jsonc") }).rawConfig;
-  const file = path.join(directory, "wrangler.development.json");
-  await save(file, { ...config, name: state.TARGET.workerName, main: path.join(root, "workers", config.main),
-    routes: [], workers_dev: false, preview_urls: false,
-    assets: { ...config.assets, directory: path.join(directory, "dist") },
-    r2_buckets: [{ binding: "DURABLE_POST_WITHDRAWALS", bucket_name: publicationTarget.publicationBucket }],
-    services: [{ binding: "CMS_API", service: "template-dev-cms-api", entrypoint: "PublicContentEntrypoint" }],
-    version_metadata: { binding: "CF_VERSION_METADATA" },
-    vars: { ...config.vars, PUBLICATION_ENVIRONMENT: "development" } });
-  return file;
+  return writeDevelopmentPublicWorkerConfig({ root, target: publicationTarget, assetsDirectory: path.join(directory, "dist"),
+    file: path.join(directory, "wrangler.development.json") });
 }
 
 async function uploadCandidate(publication, rendererSeal) {

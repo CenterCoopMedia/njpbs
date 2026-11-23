@@ -16,20 +16,23 @@ import {
 import {
   activeDeployment,
   assertPublicWorkerIdentity,
+  assertPublicWorkerTriggers,
   assertUploadOnlyProductionTrigger,
   PUBLICATION_PROBE_ORIGIN,
   PUBLICATION_PROBE_PATH,
   PUBLIC_WORKER_NAME,
+  publicWorkerTarget,
   requestCloudflareJson,
   requestPublicPublicationReceipt,
   workerApiPath,
 } from "./activate-public-worker-candidate";
+import type { PublicationTarget } from "../../functions/lib/publication-target";
 
 const requireModule = createRequire(import.meta.url);
 const { ownsPublication, assertPublicationOwner, assertRuntimeSource } = requireModule("../../functions/lib/publication-runtime-owner.js");
 type PublicationRuntime = { owner: "node-compute" | "cloudflare"; release: string };
 const { verifyNoBuildPostPublicRoute } = requireModule("../../functions/lib/no-build-post-recovery.js") as {
-  verifyNoBuildPostPublicRoute(input: { firestore: Firestore; candidate: PublicWorkerCandidate }): Promise<void> };
+  verifyNoBuildPostPublicRoute(input: { firestore: Firestore; candidate: PublicWorkerCandidate; target?: PublicationTarget }): Promise<void> };
 const deploymentModule = requireModule(
   "../../functions/lib/public-deployment.js",
 ) as {
@@ -60,6 +63,7 @@ const candidateModule = requireModule(
   assertPublicWorkerCandidateMatchesBatch(
     candidate: unknown,
     batch: unknown,
+    options?: { target?: PublicationTarget },
   ): PublicWorkerCandidate;
 };
 const activationEvidenceModule = requireModule(
@@ -70,6 +74,7 @@ const activationEvidenceModule = requireModule(
     candidate: PublicWorkerCandidate;
     deploymentStatus: unknown;
     deploymentSource: "api";
+    target?: PublicationTarget;
   }): ActivationEvidence;
   projectApiDeploymentStatus(value: unknown): { deploymentId: string; versionId: string };
 };
@@ -87,6 +92,7 @@ const outcomeStoreModule = requireModule(
     lease: PublicDeploymentLease;
     evidence: ActivationEvidence;
     runtime?: PublicationRuntime;
+    target?: PublicationTarget;
   }): Promise<ReconciliationResult>;
   readPublicDeploymentPredecessorRestore(input: { firestore: Firestore; buildBatchId: string; predecessorBuildBatchId: string; runtime?: PublicationRuntime }):
     Promise<{ lease: PublicDeploymentLease; candidate: PublicWorkerCandidate; predecessor: PublicWorkerCandidate } |
@@ -189,9 +195,10 @@ interface CloudflareRequest {
 
 type RequestJson = (request: CloudflareRequest) => Promise<unknown>;
 type RequestPublication = (url: string) => Promise<string>;
-type ReadState = (firestore: Firestore, runtime?: PublicationRuntime) => Promise<ReconciliationState | null>;
+type ReadState = (firestore: Firestore, runtime?: PublicationRuntime, target?: PublicationTarget) => Promise<ReconciliationState | null>;
 type SettleOutcome = (input: {
   runtime?: PublicationRuntime;
+  target?: PublicationTarget;
   firestore: Firestore;
   lease: PublicDeploymentLease;
   evidence: ActivationEvidence;
@@ -255,6 +262,7 @@ function assertPointerLeaseAlignment(
 export async function readPublicDeploymentReconciliationState(
   firestore: Firestore,
   runtime?: PublicationRuntime,
+  target?: PublicationTarget,
 ): Promise<ReconciliationState | null> {
   if (
     !firestore ||
@@ -302,6 +310,7 @@ export async function readPublicDeploymentReconciliationState(
     const candidate = assertPublicWorkerCandidateMatchesBatch(
       candidateSnapshot.data(),
       batchValue,
+      { target },
     );
     return Object.freeze({ lease, candidate });
   });
@@ -331,29 +340,32 @@ async function collectActivationEvidence({
   cloudflareApiToken,
   requestJson,
   requestPublication,
+  target,
 }: {
   state: ReconciliationState;
   firestore: Firestore;
   cloudflareApiToken: string;
   requestJson: RequestJson;
   requestPublication: RequestPublication;
+  target?: PublicationTarget;
 }): Promise<ActivationEvidence> {
   cloudflarePublicWorkerTag();
+  const selected = publicWorkerTarget(target);
   try {
     const workerResponse = await requestJson({
       url: workerApiPath("/workers/scripts"),
       method: "GET",
       token: cloudflareApiToken,
     });
-    const workerTag = assertPublicWorkerIdentity(workerResponse);
+    const workerTag = assertPublicWorkerIdentity(workerResponse, selected);
     const triggerResponse = await requestJson({
       url: workerApiPath(`/builds/workers/${workerTag}/triggers`),
       method: "GET",
       token: cloudflareApiToken,
     });
-    assertUploadOnlyProductionTrigger(triggerResponse, workerTag);
+    assertPublicWorkerTriggers(triggerResponse, workerTag, selected);
     const deploymentsResponse = await requestJson({
-      url: workerApiPath(`/workers/scripts/${PUBLIC_WORKER_NAME}/deployments`),
+      url: workerApiPath(`/workers/scripts/${selected.workerName}/deployments`),
       method: "GET",
       token: cloudflareApiToken,
     });
@@ -362,24 +374,25 @@ async function collectActivationEvidence({
       candidate: state.candidate,
       deploymentStatus: activeDeployment(deploymentsResponse),
       deploymentSource: "api",
+      ...(target ? { target: selected } : {}),
     });
     if (evidence.action !== "activate") return evidence;
 
     const prepared = preparedFromCandidate(state.candidate);
-    const probe = new URL(PUBLICATION_PROBE_PATH, PUBLICATION_PROBE_ORIGIN);
+    const probe = new URL(PUBLICATION_PROBE_PATH, selected.origin);
     probe.searchParams.set("candidate", prepared.buildBatchId);
     probe.searchParams.set("version", state.candidate.workerVersionId);
     const body = await requestPublication(probe.toString());
     if (!publicPublicationReceiptMatchesPreparedArtifact(body, prepared)) {
       return { action: "reconcile" };
     }
-    await verifyNoBuildPostPublicRoute({ firestore, candidate: state.candidate });
+    await verifyNoBuildPostPublicRoute({ firestore, candidate: state.candidate, ...(target ? { target: selected } : {}) });
     const finalTriggerResponse = await requestJson({
       url: workerApiPath(`/builds/workers/${workerTag}/triggers`),
       method: "GET",
       token: cloudflareApiToken,
     });
-    assertUploadOnlyProductionTrigger(finalTriggerResponse, workerTag);
+    assertPublicWorkerTriggers(finalTriggerResponse, workerTag, selected);
     return evidence;
   } catch {
     return { action: "reconcile" };
@@ -435,10 +448,12 @@ export async function reconcilePublicWorkerDeployment({
   requestJson = requestCloudflareJson,
   requestPublication = requestPublicPublicationReceipt,
   settleOutcome = settlePublicDeploymentOutcome,
+  target,
 }: {
   firestore: Firestore;
   cloudflareApiToken: string;
   runtime?: PublicationRuntime;
+  target?: PublicationTarget;
   readState?: ReadState;
   requestJson?: RequestJson;
   requestPublication?: RequestPublication;
@@ -454,16 +469,19 @@ export async function reconcilePublicWorkerDeployment({
   ) {
     reconciliationError("The public deployment reconciler input is invalid");
   }
-  const state = await readState(firestore, runtime);
+  const selected = target === undefined ? undefined : publicWorkerTarget(target);
+  const state = await (selected ? readState(firestore, runtime, selected) : readState(firestore, runtime));
   if (state === null) return { outcome: "idle", idempotent: true };
   assertPublicationOwner(state.lease, runtime ?? { owner: "node-compute", release: state.lease.commitSha });
-  const settleOwned: SettleOutcome = input => settleOutcome({ ...input, ...(runtime ? { runtime } : {}) });
+  const settleOwned: SettleOutcome = input => settleOutcome({ ...input, ...(runtime ? { runtime } : {}),
+    ...(selected ? { target: selected } : {}) });
   const evidence = await collectActivationEvidence({
     firestore,
     state,
     cloudflareApiToken,
     requestJson,
     requestPublication,
+    target: selected,
   });
   return settleWithFallback({
     firestore,
