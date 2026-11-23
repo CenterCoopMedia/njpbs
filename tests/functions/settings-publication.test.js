@@ -1,3 +1,4 @@
+import editorRecheck from "../../functions/lib/publication-recheck.js";
 import { enrollPublicReleaseLog, publicReleaseEntries } from "../helpers/public-release-producer.js";
 import { clearEmulatorFirestore, isolatedFirestore } from "../helpers/emulator-firestore.js";
 import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
@@ -10,7 +11,6 @@ import publication from "../../functions/lib/settings-publication.js";
 import context from "../../functions/lib/public-context-revision.js";
 import deployment from "../../functions/lib/public-deployment.js";
 import aggregatePublication from "../../functions/lib/public-context-publication.js";
-import editorRecheck from "../../functions/lib/publication-recheck.js";
 import { DEFAULT_SITE_NAVIGATION, DEFAULT_PUBLIC_SITE_CHROME_SETTINGS, DEFAULT_PUBLIC_HOMEPAGE_BANNER_SETTINGS } from "../../packages/content-core/src/cms-settings";
 const db = isolatedFirestore("settings-publication.test.js");
 

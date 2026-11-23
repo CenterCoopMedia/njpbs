@@ -3,6 +3,7 @@
 const { readNoBuildRecordOwner } = require("./no-build-record-ownership");
 const { recordFamily, readRecordPublication } = require("./no-build-record-publication");
 const { PUBLIC_CONTEXT_PATH, publicContextDigest } = require("./public-context-revision");
+const { currentContextCheck } = require("./context-publication-check-state");
 async function recordPublicationMetadata({ firestore, documentId, stored }) {
   if (!recordFamily(stored)) return null;
   const { state } = await readNoBuildRecordOwner({ firestore, documentId });
@@ -10,7 +11,8 @@ async function recordPublicationMetadata({ firestore, documentId, stored }) {
   const accepted = await readRecordPublication({ firestore, operationId: state.operationId, document: stored });
   if (!accepted) throw new Error("The accepted record publication is unavailable");
   const { queue, publication } = accepted;
-  const proof = queue.lastPublicCheck?.outcome === "confirmed_late" ? queue.lastPublicCheck.recordProof : null;
+  const check = currentContextCheck(queue);
+  const proof = check?.outcome === "confirmed_late" ? check.recordProof : null;
   let checked = false;
   if (proof && proof.rendererSha === queue.recordPublication.rendererSha &&
       proof.contextDigest === queue.recordPublication.contextDigest && proof.contextRevision === queue.recordPublication.contextRevision) {
@@ -20,7 +22,7 @@ async function recordPublicationMetadata({ firestore, documentId, stored }) {
   }
   const receipt = checked ? { ...publication, status: "success", missingConsumers: [] } : publication;
   if (checked) delete receipt.warning;
-  const awaitingCheck = !proof && queue.lastPublicCheck?.outcome !== "superseded" &&
+  const awaitingCheck = !proof && check?.outcome !== "superseded" &&
     queue.recordRegeneration !== "deferred" && publication.warning &&
     (["failed", "public_unconfirmed"].includes(queue.status) || queue.status === "success" && publication.missingConsumers.length > 0);
   const version = value => Number.isSafeInteger(value) && value > 0 ? value : null;

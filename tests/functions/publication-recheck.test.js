@@ -131,6 +131,10 @@ it("rechecks an exact site-wide update with settings access and an atomic audit"
   expect(audit.docs[0].data()).toMatchObject({ target: queueId, after: {
     outcome: "confirmed_late", operationId: queueId, receipt: { contextRevision: 3, contextDigest: context.publicContextDigest(3) },
   } });
+  expect((await summary()).body.recoveryCount).toBe(0);
+  await queueRef().update({ alertEpoch: "1f018878-2511-48f8-91c9-8b4b15a294bd" });
+  expect((await summary()).body.recoveryCount).toBe(1);
+  expect((await check()).body).toMatchObject({ outcome: "confirmed_late" });
 });
 
 it("only reports a newer site-wide update after every selected family verifies", async () => {

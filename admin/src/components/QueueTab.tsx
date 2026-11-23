@@ -62,17 +62,22 @@ function queueItemFromDoc(id: string, data: DocumentData, settingsAccess: boolea
     : pairedContext && (data.familyPublication?.kind === "record" ||
       settingsAccess && (!data.familyPublication || data.familyPublication.kind === "settings"));
   let status = typeof data.status === "string" ? data.status : "unknown";
+  let check = data.lastPublicCheck;
   if (legacyContext || pairedContext) {
-    if (data.lastPublicCheck?.outcome === "confirmed_late") status = "success";
-    else if (data.lastPublicCheck?.outcome === "superseded") status = "superseded";
+    if (check?.queueStatus !== status || check?.alertEpoch !== (data.alertEpoch ?? null)) check = undefined;
+    if (check?.outcome === "confirmed_late") status = "success";
+    else if (check?.outcome === "superseded") status = "superseded";
     else if (legacyContext && status === "success") {
       const identity = data.recordPublication ?? data.settingsPublication ?? data.libraryCardPublication;
       const consumers = data.recordPublication ? ["pages", "home", "posts", "record"] : ["pages", "home", "posts"];
-      if (identity && consumers.some(name => {
+      const missingProof = identity && consumers.some(name => {
         const proof = data.consumerReceipts?.[name];
         return proof?.rendererSha !== identity.rendererSha || proof?.contextDigest !== identity.contextDigest ||
           proof?.contextRevision !== identity.contextRevision || !(proof?.verifiedAt > 0);
-      })) status = "public_unconfirmed";
+      });
+      const startedAt = valueToDate(data.recordRetryAt ?? data.settingsRetryAt ?? data.cardRetryAt ?? data.triggeredAt ?? data.createdAt);
+      if (missingProof) status = startedAt && Date.now() - startedAt.getTime() >= 5 * 60_000 ? "public_unconfirmed" : "checking";
+      if (status !== "public_unconfirmed") check = undefined;
     }
   }
   return {
@@ -95,9 +100,9 @@ function queueItemFromDoc(id: string, data: DocumentData, settingsAccess: boolea
     proofExhausted: data.transport === "post-no-build-v1" && data.status === "success" &&
       data.postProof?.status === "failed" && data.postProof.nextAttemptAt === null &&
       Number.isSafeInteger(data.postProof.attempts) && data.postProof.attempts >= 4,
-    ...(typeof data.lastPublicCheck?.message === "string" ? {
-      recheckMessage: data.lastPublicCheck.message,
-      recheckOutcome: data.lastPublicCheck.outcome,
+    ...(typeof check?.message === "string" ? {
+      recheckMessage: check.message,
+      recheckOutcome: check.outcome,
     } : {}),
   };
 }

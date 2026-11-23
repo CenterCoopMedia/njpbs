@@ -388,26 +388,31 @@ function requestView(body) {
 async function readPublishActivitySummary(firestore, includePostProofRecovery = false) {
   // One snapshot, then local buckets, so a status change cannot land in two
   // aggregations or in none while those queries race.
+  const { currentContextCheck } = require("./lib/context-publication-check-state");
   const recheckFields = includePostProofRecovery
-    ? ["triggeredAt", "createdAt", "settingsPublication", "libraryCardPublication", "familyPublication.kind", "consumerReceipts", "lastPublicCheck.outcome"]
+    ? ["triggeredAt", "createdAt", "settingsRetryAt", "cardRetryAt", "settingsPublication", "libraryCardPublication", "familyPublication.kind", "consumerReceipts"]
     : [];
   const snapshot = await firestore.collection("cmsPublishQueue")
-    .select("status", "transport", "postProof.status", "postProof.attempts", "postProof.nextAttemptAt", "noBuildPost.postId", ...recheckFields).get();
+    .select("status", "transport", "postProof.status", "postProof.attempts", "postProof.nextAttemptAt", "noBuildPost.postId",
+      "alertEpoch", "lastPublicCheck.outcome", "lastPublicCheck.queueStatus", "lastPublicCheck.alertEpoch", ...recheckFields).get();
   let activeCount = 0;
   let recoveryCount = 0;
   for (const doc of snapshot.docs) {
-    const status = doc.data()?.status;
+    const queue = doc.data();
+    const status = queue?.status;
     if (status === "reserved" || status === "pending" || status === "publishing") {
       activeCount += 1;
-    } else if (status === "failed" || status === "public_unconfirmed") {
+    } else if ((status === "failed" || status === "public_unconfirmed") &&
+        !["confirmed_late", "superseded"].includes(currentContextCheck(queue)?.outcome)) {
       recoveryCount += 1;
     }
   }
   const postProofRecoveryIds = await require("./lib/no-build-post-proof-state")
     .currentPostProofRecoveryIds(firestore, snapshot.docs);
   const contextRetry = includePostProofRecovery ? await require("./lib/generic-context-retry").genericContextRetry(firestore) : null;
-  // Context rows without triggeredAt are excluded by the
-  // normal ordered listeners. Use the existing bounded recovery lookup.
+  // Rows without triggeredAt use the existing bounded recovery lookup.
+  const now = Date.now();
+  const { PUBLICATION_BUDGET_MS } = require("./lib/settings-publication");
   const contextRechecks = includePostProofRecovery ? snapshot.docs.flatMap(row => {
     const queue = row.data();
     if (queue.triggeredAt) return [];
@@ -415,13 +420,15 @@ async function readPublishActivitySummary(firestore, includePostProofRecovery = 
         ["failed", "superseded"].includes(queue.status)) return [{ id: row.id, time: queue.createdAt?.toMillis?.() ?? 0 }];
     const identity = queue.settingsPublication ?? queue.libraryCardPublication;
     if (!identity || queue.transport !== "public-context-no-build-v1") return [];
-    const hasCheck = ["confirmed_late", "superseded"].includes(queue.lastPublicCheck?.outcome);
+    const hasCheck = ["confirmed_late", "superseded"].includes(currentContextCheck(queue)?.outcome);
     const missing = ["pages", "home", "posts"].some(name => {
       const proof = queue.consumerReceipts?.[name];
       return proof?.rendererSha !== identity.rendererSha || proof?.contextRevision !== identity.contextRevision ||
         proof?.contextDigest !== identity.contextDigest || !(proof?.verifiedAt > 0);
     });
-    return hasCheck || ["failed", "public_unconfirmed"].includes(queue.status) || queue.status === "success" && missing
+    const startedAt = (queue.settingsRetryAt ?? queue.cardRetryAt ?? queue.createdAt)?.toMillis?.() ?? now;
+    return hasCheck || ["failed", "public_unconfirmed"].includes(queue.status) ||
+      queue.status === "success" && missing && now - startedAt >= PUBLICATION_BUDGET_MS
       ? [{ id: row.id, time: queue.createdAt?.toMillis?.() ?? 0 }] : [];
   }).sort((left, right) => right.time - left.time || left.id.localeCompare(right.id)).slice(0, 100).map(row => row.id) : [];
   recoveryCount += postProofRecoveryIds.length;

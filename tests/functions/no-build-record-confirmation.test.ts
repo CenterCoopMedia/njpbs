@@ -106,13 +106,14 @@ it.each(["program", "event"] as const)("confirms every %s detail, alias and inde
 it("checks incomplete record confirmation without changing record, queue or dispatch state", async () => {
   const identity = await accept("event"); await prepare(identity);
   const ref = db.doc(`cmsPublishQueue/${identity.operationId}`);
+  const staff = { uid: "fixture-admin", principal: { id: "fixture-admin", grants: [{ role: "admin" }] } };
+  const check = () => editorRecheck.recheckPublication({ firestore: db, queueId: ref.id, actor: staff, target, headers, artifacts, fetchPublic });
+  await expect(check()).rejects.toThrow("publication is not awaiting confirmation");
   await ref.update({ createdAt: Timestamp.fromMillis(Date.now() - 360_000) });
   const before = await ref.get();
   const record = (await db.doc(`cmsPosts/${id}`).get()).data();
   const metadata = () => recordMetadata.recordPublicationMetadata({ firestore: db, documentId: id, stored: record });
   expect(await metadata()).toMatchObject({ recheckQueueId: ref.id, queueStatus: "failed" });
-  const staff = { uid: "fixture-admin", principal: { id: "fixture-admin", grants: [{ role: "admin" }] } };
-  const check = () => editorRecheck.recheckPublication({ firestore: db, queueId: ref.id, actor: staff, target, headers, artifacts, fetchPublic });
   corruptPath = identity.ownedPaths[0];
   expect(await check()).toMatchObject({ outcome: "failed" });
   corruptPath = undefined;
@@ -138,6 +139,7 @@ it("checks incomplete record confirmation without changing record, queue or disp
 it("requires current withdrawal readback before retiring an older record check", async () => {
   const original = await accept();
   await prepare(original);
+  await db.doc(`cmsPublishQueue/${original.operationId}`).update({ createdAt: Timestamp.fromMillis(Date.now() - 360_000) });
   const removal = await accept("program", true);
   await prepare(removal);
   const staff = { uid: "fixture-admin", principal: { id: "fixture-admin", grants: [{ role: "admin" }] } };

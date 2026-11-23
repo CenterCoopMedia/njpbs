@@ -7,6 +7,7 @@ const { CURRENT_PATH, TRANSPORT, verifiedPreparation, retryPublicContextInTransa
 const { contextOutputs } = require("./no-build-record-namespace");
 const { ownsPublication } = require("./publication-runtime-owner");
 const { assertCmsPublicationCloudAdmission } = require("./cms-publication-runtime-control");
+const { currentContextCheck } = require("./context-publication-check-state");
 
 function refuse(message = "This site update changed. Refresh Publish activity before retrying.", status = 409) {
   throw Object.assign(new Error(message), { status });
@@ -31,7 +32,7 @@ async function genericContextRetry(firestore) {
   const job = (await firestore.doc(`cmsPublishQueue/${id}`).get()).data();
   if (!genericJob(job, id) || job.status !== "failed" || !ownsPublication(selected, job.runtime) ||
       selected.contextDigest !== job.publicContext.contextDigest) return null;
-  const { outcome, message } = job.lastPublicCheck ?? {};
+  const { outcome, message } = currentContextCheck(job) ?? {};
   return { queueId: id, createdAt: job.createdAt?.toDate?.().toISOString() ?? null,
     ...(["confirmed_late", "superseded", "failed"].includes(outcome) && typeof message === "string"
       ? { lastPublicCheck: { outcome, message } } : {}) };

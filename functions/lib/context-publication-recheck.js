@@ -17,10 +17,11 @@ const { libraryCardReceipt, latestLibraryCardPublication } = require("./no-build
 const paired = require("./public-release-admission-contract");
 const { publicReleaseDigest } = require("./public-release-pair");
 const { assertPairPublicationTerminalReceiptInTransaction } = require("./public-release-terminal");
+const { currentContextCheck } = require("./context-publication-check-state");
 
 const operationId = /^[A-Za-z0-9]{20}$/;
 const failed = queue => ["failed", "public_unconfirmed"].includes(queue.status);
-const terminalCheck = queue => ["confirmed_late", "superseded"].includes(queue.lastPublicCheck?.outcome);
+const terminalCheck = queue => ["confirmed_late", "superseded"].includes(currentContextCheck(queue)?.outcome);
 const handlesContextRecheck = queue => queue?.transport === TRANSPORT || queue?.transport === paired.TRANSPORT;
 
 function refuse(status, message) { throw Object.assign(new Error(message), { status }); }
@@ -126,7 +127,7 @@ async function readLegacyRecheck(input) {
     readReceipt = libraryCardReceipt;
   }
   const original = readReceipt(queue);
-  if (!failed(queue) && (queue.status !== "success" || !original.missingConsumers.length)) {
+  if (!failed(queue) && (queue.status !== "success" || !original.warning || !original.missingConsumers.length)) {
     refuse(409, "The publication is not awaiting confirmation.");
   }
   if (!accepted) return null;
@@ -146,7 +147,7 @@ async function readLegacyRecheck(input) {
   const check = { operationId: accepted.ref.id, superseded: accepted.ref.id !== queueId };
   if (queue.recordPublication) {
     if (missingConsumers.some(name => name !== "record")) return null;
-    return { ...check, record: { queue: current.queue } };
+    return { ...check, record: { queue: current.queue, state: current.state } };
   }
   if (missingConsumers.length) return null;
   return { ...check, receipt: { aggregate: active.receipt, consumers: current.queue.consumerReceipts } };
@@ -210,6 +211,7 @@ async function completeContextRecheck({ firestore, queueId, actor, source, initi
         "The public check still could not confirm this update. You can try again later.";
     const recordProof = outcome === "confirmed_late" && publicProof?.consumer;
     transaction.update(queueRef, { lastPublicCheck: { outcome, actorUid: actor.uid, checkedAt: FieldValue.serverTimestamp(), message,
+      queueStatus: queue.status, alertEpoch: queue.alertEpoch ?? null,
       ...(recordProof ? { recordProof } : {}) } });
     transaction.create(auditRef, adminLogEntry({ actorUid: actor.uid, actorEmail: actor.email ?? null,
       action: "cms.publicationRechecked", target: queueId, source, before: { status: queue.status },
