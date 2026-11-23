@@ -2,7 +2,7 @@ import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testi
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createMemoryRouter, MemoryRouter, RouterProvider } from "react-router";
 import { useRef } from "react";
-import { SourceMediaBulkEditor, classifyBulkSaveFailure, useSourceMediaBulkEditing } from "../src/components/SourceMediaBulkEditor";
+import { SourceMediaBulkEditor, useSourceMediaBulkEditing } from "../src/components/SourceMediaBulkEditor";
 import { MediaGrid, restoreMediaFocus, type MediaGridHandle } from "../src/components/media/MediaGrid";
 import { MediaTile } from "../src/components/media/MediaTile";
 import { SourceMediaLibrary } from "../src/routes/SourceMediaLibrary";
@@ -10,13 +10,21 @@ import { SuccessNoticeProvider } from "../src/components/ui/SuccessNoticeRegion"
 import { BULK_SAVE_INTERVAL_MS, emptyBulkMetadataDraft, type BulkMetadataDraft } from "../src/lib/source-media-bulk";
 import { cmsUpdateMediaMetadata, HttpError, type MediaAssetSummary } from "../src/lib/functions";
 import { createSourceMediaRead, listSourceMedia, updateSourceMediaMetadata, type MediaSourceSummary, type SourceMediaAssetSummary } from "../src/lib/source-media";
+import type { VideoBatchEntry, VideoMetadataBatch } from "../src/lib/use-video-metadata-batch";
 
 const collectionMocks = vi.hoisted(() => ({ list: vi.fn(), setItems: vi.fn() }));
+const sendBatch = vi.hoisted(() => vi.fn());
 
-vi.mock("../src/lib/functions", async importOriginal => ({
-  ...(await importOriginal<typeof import("../src/lib/functions")>()),
-  cmsUpdateMediaMetadata: vi.fn(),
-}));
+vi.mock("../src/lib/functions", async importOriginal => {
+  const actual = await importOriginal<typeof import("../src/lib/functions")>();
+  return {
+    ...actual,
+    cmsUpdateMediaMetadata: vi.fn(),
+    postFunction: (...args: Parameters<typeof actual.postFunction>) => args[0] === "cmsSourceMediaMetadataBatch"
+      ? sendBatch(args[2])
+      : actual.postFunction(...args),
+  };
+});
 vi.mock("../src/lib/source-media", () => ({ createSourceMediaRead: vi.fn(), listSourceMedia: vi.fn(), updateSourceMediaMetadata: vi.fn(), deleteSourceMedia: vi.fn() }));
 vi.mock("../src/components/VideoUploadPanel", () => ({ VideoUploadPanel: () => null }));
 vi.mock("../src/components/VideoMeaningSearch", () => ({ VideoMeaningSearch: () => null }));
@@ -48,9 +56,13 @@ const onClose = vi.fn();
 const onDirtyChange = vi.fn();
 const onSavingChange = vi.fn();
 const navigation = { navigationBlocked: false, onKeepNavigation: vi.fn(), onDiscardNavigation: vi.fn() };
+const startBatch = vi.fn().mockResolvedValue(undefined);
+let receipt: VideoMetadataBatch | null;
+let advanceStatus: (id: string) => "saved" | "stale";
 
 function editor(assets = [first, second]) {
-  return render(<SourceMediaBulkEditor sourceId={source.id} assets={assets} getIdToken={getIdToken} onClose={onClose} onDirtyChange={onDirtyChange} onSavingChange={onSavingChange} {...navigation} />);
+  return render(<SourceMediaBulkEditor sourceId={source.id} assets={assets} videoBatch={{ nextKey: 1, starting: false, start: startBatch }}
+    onClose={onClose} onDirtyChange={onDirtyChange} onSavingChange={onSavingChange} {...navigation} />);
 }
 function imageDraft(): BulkMetadataDraft {
   const draft = emptyBulkMetadataDraft();
@@ -108,9 +120,38 @@ function setInspectorTagAndReview(value = "Newark") {
 }
 async function settle() { await act(async () => { await Promise.resolve(); await Promise.resolve(); }); }
 
+async function reviewSelection() {
+  fireEvent.click(screen.getByLabelText("Select Interview"));
+  fireEvent.click(within(bar()).getByRole("checkbox", { name: "Select this page" }));
+  fireEvent.click(screen.getByRole("button", { name: "Edit selected" }));
+  setInspectorTagAndReview();
+  await settle();
+}
+
 beforeEach(() => {
   vi.clearAllMocks();
   getIdToken.mockReset().mockResolvedValue("token");
+  receipt = null;
+  advanceStatus = () => "saved";
+  sendBatch.mockReset().mockImplementation(async (request: { action: string; entries?: VideoBatchEntry[]; operationKey?: number; assetId?: string }) => {
+    if (request.action === "start") {
+      receipt = {
+        operationKey: request.operationKey!, status: "active",
+        items: request.entries!.map(entry => {
+          const video = entry.assetId === first.id ? first : second;
+          return { assetId: video.id, name: video.name, originalName: video.originalName, status: Object.keys(entry.changes).length ? "pending" : "unchanged" };
+        }),
+      };
+    }
+    if (receipt && (request.action === "advance" || request.action === "cancel")) {
+      const status = request.action === "cancel" ? "canceled" : "completed";
+      const items = receipt.items.map(item => item.status !== "pending" ? item
+        : request.action === "cancel" ? { ...item, status: "canceled" as const }
+        : item.assetId === request.assetId ? { ...item, status: advanceStatus(item.assetId) } : item);
+      receipt = { ...receipt, items, status: items.some(item => item.status === "pending") ? "active" : status };
+    }
+    return { batch: structuredClone(receipt) };
+  });
   vi.mocked(updateSourceMediaMetadata).mockReset().mockImplementation(async (_token, _sourceId, id, expectedVersion, changes) => ({ success: true, asset: { ...(id === first.id ? first : second), ...changes, version: expectedVersion + 1 } }));
   vi.mocked(cmsUpdateMediaMetadata).mockReset().mockImplementation(async (_token, asset, changes) => ({
     success: true, changed: true, asset: { ...asset, ...changes, version: asset.version + 1, etag: `${asset.etag}-next` },
@@ -134,37 +175,35 @@ describe("batch metadata editor", () => {
     review();
     expect(screen.getByRole("button", { name: "Apply to 0 videos" })).toBeDisabled();
     expect(screen.getByRole("heading", { name: "Review changes" })).toHaveFocus();
-    expect(updateSourceMediaMetadata).not.toHaveBeenCalled();
+    expect(startBatch).not.toHaveBeenCalled();
   });
   it("requires review then explicit apply, preserves per-file tags and uses exact versions", async () => {
-    vi.useFakeTimers();
     editor(); setTagAction(); review();
     fireEvent.click(screen.getByText("Changes for Interview"));
     expect(screen.getByText("Before: Interview")).toBeInTheDocument();
     expect(screen.getByText("After: Interview, Newark")).toBeInTheDocument();
-    expect(updateSourceMediaMetadata).not.toHaveBeenCalled();
-    fireEvent.click(screen.getByRole("button", { name: "Apply to 2 videos" }));
+    expect(startBatch).not.toHaveBeenCalled();
+    const apply = screen.getByRole("button", { name: "Apply to 2 videos" });
+    fireEvent.click(apply);
     await settle();
-    expect(updateSourceMediaMetadata).toHaveBeenCalledWith("token", "video-library", "a", 4, { tags: ["Interview", "Newark"] });
-    expect(updateSourceMediaMetadata).toHaveBeenCalledTimes(1);
-    await act(async () => { await vi.advanceTimersByTimeAsync(BULK_SAVE_INTERVAL_MS); });
-    expect(updateSourceMediaMetadata).toHaveBeenLastCalledWith("token", "video-library", "b", 9, { tags: ["B-roll", "Newark"] });
-    expect(screen.getByText("2 saved · 0 already matched · 0 not confirmed saved.")).toBeInTheDocument();
-    expect(onDirtyChange).toHaveBeenLastCalledWith(false);
-    expect(onSavingChange).toHaveBeenLastCalledWith(false);
+    fireEvent.click(apply);
+    expect(startBatch.mock.calls).toEqual(Array.from({ length: 2 }, () => [1, [
+      { assetId: "a", expectedVersion: 4, changes: { tags: ["Interview", "Newark"] } },
+      { assetId: "b", expectedVersion: 9, changes: { tags: ["B-roll", "Newark"] } },
+    ]]));
   });
   it("warns before tag replacement and refuses a blank replacement", () => {
     editor(); setTagAction("replace", " "); review();
     expect(screen.getByText(/This removes the selected videos' existing tags/)).toBeInTheDocument();
     expect(screen.getByText("Fix these changes before reviewing")).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /Apply to/ })).not.toBeInTheDocument();
-    expect(updateSourceMediaMetadata).not.toHaveBeenCalled();
+    expect(startBatch).not.toHaveBeenCalled();
   });
   it("prevents partial execution when one resulting tag set exceeds the server limit", () => {
     editor([{ ...first, tags: Array.from({ length: 30 }, (_, i) => `Tag ${i}`) }, second]);
     setTagAction(); review();
     expect(screen.getByText(/Interview: this change would exceed 30 tags/)).toBeInTheDocument();
-    expect(updateSourceMediaMetadata).not.toHaveBeenCalled();
+    expect(startBatch).not.toHaveBeenCalled();
   });
   it("preserves literal text values that happen to match rights-status codes", () => {
     editor([{ ...first, description: "pending" }]);
@@ -183,53 +222,57 @@ describe("batch metadata editor", () => {
     fireEvent.click(screen.getByRole("button", { name: "Keep editing" }));
     expect(screen.queryByText("Discard batch changes?")).not.toBeInTheDocument();
   });
-  it("reports an uncertain save and stops without retrying subsequent files", async () => {
-    vi.mocked(updateSourceMediaMetadata).mockRejectedValueOnce(new Error("Network error"));
-    editor(); setTagAction(); review();
+  it("reopens a lost save response after remount and resumes only pending videos", async () => {
+    const respond = sendBatch.getMockImplementation()!;
+    sendBatch.mockImplementation(async request => {
+      const response = await respond(request);
+      if (request.action === "advance" && request.assetId === "a") throw new Error("Connection closed");
+      return response;
+    });
+    const view = render(<Harness />);
+    await reviewSelection();
     fireEvent.click(screen.getByRole("button", { name: "Apply to 2 videos" }));
-    await screen.findByRole("heading", { name: "Batch results" });
-    expect(updateSourceMediaMetadata).toHaveBeenCalledTimes(1);
-    expect(screen.getByText("Save unconfirmed")).toBeInTheDocument();
-    expect(screen.getByText("Not attempted")).toBeInTheDocument();
-    expect(onDirtyChange).toHaveBeenLastCalledWith(true);
-    fireEvent.click(screen.getByRole("button", { name: "Back to library" }));
-    expect(onClose).not.toHaveBeenCalled();
-    expect(screen.getByText("Return with unresolved batch results?")).toBeInTheDocument();
+    await screen.findByRole("button", { name: "Check batch status" });
+    expect(sendBatch.mock.calls.map(([request]) => request.action)).toEqual(["inspect", "start", "advance"]);
+    view.unmount();
+    render(<Harness />);
+    fireEvent.click(await screen.findByRole("button", { name: "Latest video batch" }));
+    await screen.findByText("1 saved · 1 pending");
+    fireEvent.click(screen.getByRole("button", { name: "Resume batch" }));
+    await screen.findByText("2 saved · 0 pending");
+    expect(sendBatch.mock.calls.filter(([request]) => request.action === "advance").map(([request]) => request.assetId)).toEqual(["a", "b"]);
   });
-  it("can stop while token acquisition is pending without sending any saves", async () => {
+  it("does not send a start after the route unmounts during authentication", async () => {
+    const view = render(<Harness />);
+    await reviewSelection();
     let resolve!: (token: string) => void;
     getIdToken.mockImplementationOnce(() => new Promise<string>(done => { resolve = done; }));
-    editor(); setTagAction(); review();
-    fireEvent.click(screen.getByRole("button", { name: "Apply to 2 videos" }));
-    fireEvent.click(screen.getByRole("button", { name: "Stop after current file" }));
-    await act(async () => { resolve("token"); });
-    expect(updateSourceMediaMetadata).not.toHaveBeenCalled();
-    expect(screen.getByRole("heading", { name: "Batch results" })).toBeInTheDocument();
-  });
-  it("does not continue a batch after the editor unmounts during authentication", async () => {
-    let resolve!: (token: string) => void;
-    getIdToken.mockImplementationOnce(() => new Promise<string>(done => { resolve = done; }));
-    const view = editor(); setTagAction(); review();
     fireEvent.click(screen.getByRole("button", { name: "Apply to 2 videos" }));
     view.unmount(); await act(async () => { resolve("token"); });
-    expect(updateSourceMediaMetadata).not.toHaveBeenCalled();
+    expect(sendBatch.mock.calls.map(([request]) => request.action)).toEqual(["inspect"]);
   });
-  it("keeps the dialog open during an in-flight save and settles that file before stopping", async () => {
-    let resolve!: (value: Awaited<ReturnType<typeof updateSourceMediaMetadata>>) => void;
-    vi.mocked(updateSourceMediaMetadata).mockImplementationOnce(() => new Promise(done => { resolve = done; }));
-    editor(); setTagAction(); review();
-    fireEvent.click(screen.getByRole("button", { name: "Apply to 2 videos" })); await settle();
-    expect(screen.getByRole("button", { name: "Cancel" })).toBeDisabled();
-    fireEvent.click(screen.getByRole("button", { name: "Stop after current file" }));
-    await act(async () => { resolve({ success: true, asset: { ...first, version: 5, tags: ["Interview", "Newark"] } }); });
-    expect(screen.getByText("1 saved · 0 already matched · 1 not confirmed saved.")).toBeInTheDocument();
-    expect(updateSourceMediaMetadata).toHaveBeenCalledTimes(1);
-  });
-  it("classifies conflicts, denied access, rate limits and uncertain server errors explicitly", () => {
-    expect(classifyBulkSaveFailure(new HttpError(409, "Conflict"))).toMatchObject({ status: "conflict", stop: false });
-    for (const status of [401, 403, 429]) expect(classifyBulkSaveFailure(new HttpError(status, "Stop"))).toMatchObject({ status: "failed", stop: true });
-    expect(classifyBulkSaveFailure(new HttpError(400, "Invalid tag"))).toMatchObject({ status: "failed", stop: false });
-    for (const error of [new HttpError(408, "Timeout"), new HttpError(500, "Server error"), new Error("Offline")]) expect(classifyBulkSaveFailure(error)).toMatchObject({ status: "unconfirmed", stop: true });
+  it("settles the in-flight video when paused and cancels only after confirmation", async () => {
+    const respond = sendBatch.getMockImplementation()!;
+    let release!: () => void;
+    sendBatch.mockImplementation(async request => {
+      if (request.action === "advance") await new Promise<void>(resolve => { release = resolve; });
+      return respond(request);
+    });
+    render(<Harness />);
+    await reviewSelection();
+    const apply = screen.getByRole("button", { name: "Apply to 2 videos" });
+    fireEvent.click(apply);
+    fireEvent.click(apply);
+    expect(await screen.findByRole("button", { name: "Back to library" })).toBeDisabled();
+    fireEvent.click(screen.getByRole("button", { name: "Pause after current video" }));
+    await act(async () => { release(); });
+    expect(screen.getByText("1 saved · 1 pending")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Cancel remaining videos" }));
+    expect(sendBatch.mock.calls.map(([request]) => request.action)).toEqual(["inspect", "start", "advance"]);
+    fireEvent.click(screen.getByRole("button", { name: "Confirm cancellation" }));
+    await screen.findByText("Canceled");
+    expect(screen.getByText("1 saved · 0 pending")).toBeInTheDocument();
+    expect(sendBatch).toHaveBeenLastCalledWith({ sourceId: source.id, action: "cancel", operationKey: 1 });
   });
 });
 
@@ -416,16 +459,14 @@ describe("bulk video selection", () => {
   });
   it("removes successful files, retains a conflict, and refreshes only once when closing results", async () => {
     vi.useFakeTimers();
-    vi.mocked(updateSourceMediaMetadata).mockRejectedValueOnce(new HttpError(409, "Conflict"));
-    render(<Harness />); fireEvent.click(screen.getByLabelText("Select Interview"));
-    fireEvent.click(within(bar()).getByRole("checkbox", { name: "Select this page" }));
-    fireEvent.click(screen.getByRole("button", { name: "Edit selected" })); setInspectorTagAndReview();
+    advanceStatus = id => id === first.id ? "stale" : "saved";
+    render(<Harness />);
+    await reviewSelection();
     fireEvent.click(screen.getByRole("button", { name: "Apply to 2 videos" })); await settle();
     await act(async () => { await vi.advanceTimersByTimeAsync(BULK_SAVE_INTERVAL_MS); });
     expect(onRefresh).not.toHaveBeenCalled();
+    expect(screen.getByText("Changed elsewhere")).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Back to library" }));
-    expect(screen.getByText("Return with unresolved batch results?")).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: "Return to library" }));
     expect(screen.getByLabelText("Select Interview")).toBeChecked();
     expect(screen.getByLabelText("Select B-roll")).not.toBeChecked();
     expect(onRefresh).toHaveBeenCalledTimes(1);

@@ -4,8 +4,9 @@ import { ComponentEditorDialog } from "./ComponentEditorDialog";
 import { MediaCollectionPicker } from "./MediaCollectionPicker";
 import { useSuccessNotice } from "./ui/SuccessNoticeRegion";
 import { Button, InlineMessage, Select, TextInput, Textarea } from "./ui/Primitives";
-import { cmsUpdateMediaMetadata, HttpError, type MediaAssetSummary } from "../lib/functions";
-import { updateSourceMediaMetadata, type MediaSourceSummary, type SourceMediaAssetSummary } from "../lib/source-media";
+import { cmsUpdateMediaMetadata, type MediaAssetSummary } from "../lib/functions";
+import type { MediaSourceSummary, SourceMediaAssetSummary } from "../lib/source-media";
+import { useVideoMetadataBatch, type VideoBatchEntry, type VideoMetadataBatch } from "../lib/use-video-metadata-batch";
 import {
   BULK_SAVE_INTERVAL_MS, MAX_BULK_VIDEOS, buildBulkMetadataPlan, buildImageBulkPlan,
   classifyImageBulkFailure, emptyBulkMetadataDraft, hasBulkMetadataIntent, imageBulkSave,
@@ -34,16 +35,6 @@ interface NavigationGuard {
 const fieldLabels = { description: "Description", credit: "Credit", license: "License", tags: "Tags", rightsStatus: "Rights review" };
 const statusLabels = { pending: "Not attempted", saving: "Saving", saved: "Saved", unchanged: "Unchanged", conflict: "Changed elsewhere", failed: "Needs attention", unconfirmed: "Save unconfirmed" };
 
-export function classifyBulkSaveFailure(error: unknown): BulkFailure {
-  if (error instanceof HttpError) {
-    if (error.status === 409) return { status: "conflict", stop: false, message: "Changed elsewhere. Reopen this video and review its latest details before retrying." };
-    if (error.status === 401 || error.status === 403) return { status: "failed", stop: true, message: "Access could not be verified. The batch stopped; check your access before retrying." };
-    if (error.status === 429) return { status: "failed", stop: true, message: "The save limit was reached. The batch stopped; wait before retrying the remaining videos." };
-    if (error.status >= 400 && error.status < 500 && error.status !== 408) return { status: "failed", stop: false, message: error.message || "This video could not be updated. Review its details before retrying." };
-  }
-  return { status: "unconfirmed", stop: true, message: "The save was not confirmed and may have completed. The batch stopped. Reopen this video to check before retrying." };
-}
-
 function displayValue(key: string, value: unknown) {
   if (Array.isArray(value)) return value.length ? value.join(", ") : "No tags";
   if (key === "rightsStatus" && value === "pending") return "Needs review";
@@ -52,12 +43,18 @@ function displayValue(key: string, value: unknown) {
 }
 
 interface BulkEditorCommonProps extends NavigationGuard {
-  getIdToken: () => Promise<string>;
   initialDraft?: BulkMetadataDraft;
   onBackToEditing?: () => void;
   onDirtyChange: (dirty: boolean) => void;
   onSavingChange: (saving: boolean) => void;
 }
+
+type VideoBatchStart<P = MetadataPatch> = {
+  nextKey: number | undefined;
+  starting: boolean;
+  error?: string;
+  start: (operationKey: number, entries: VideoBatchEntry<P>[]) => Promise<void>;
+};
 
 export type SourceMediaBulkEditorProps = BulkEditorCommonProps & (
   | {
@@ -65,13 +62,15 @@ export type SourceMediaBulkEditorProps = BulkEditorCommonProps & (
     sourceId: string;
     assets: readonly SourceMediaAssetSummary[];
     canEdit?: never;
-    onClose: (results?: BulkResult<SourceMediaAssetSummary, MetadataPatch>[]) => void;
+    videoBatch: VideoBatchStart;
+    onClose: () => void;
   }
   | {
     surface: "images";
     sourceId?: never;
     assets: readonly MediaAssetSummary[];
     canEdit: (asset: MediaAssetSummary) => boolean;
+    getIdToken: () => Promise<string>;
     /** The inspector owns image editing, so image review always starts from its frozen draft. */
     initialDraft: BulkMetadataDraft;
     onClose: (results?: BulkResult<MediaAssetSummary, ImageBulkPatch>[]) => void;
@@ -86,44 +85,46 @@ interface BulkEditorCoreProps<T extends ReviewAsset, P extends object> extends B
   buildPlan: (draft: BulkMetadataDraft) => BulkMetadataPlan<T, P> & {
     excluded?: { asset: T; reason: string }[];
   };
-  save: (token: string, entry: BulkPlanEntry<T, P>) => Promise<T>;
-  classifyFailure: (error: unknown) => BulkFailure;
+  imageSave?: {
+    getIdToken: () => Promise<string>;
+    save: (token: string, entry: BulkPlanEntry<T, P>) => Promise<T>;
+    classifyFailure: (error: unknown) => BulkFailure;
+  };
+  videoBatch?: VideoBatchStart<P>;
   onClose: (results?: BulkResult<T, P>[]) => void;
 }
 
 export function SourceMediaBulkEditor(props: SourceMediaBulkEditorProps) {
   if (props.surface === "images") {
-    const { assets, canEdit, initialDraft, onClose, ...common } = props;
+    const { assets, canEdit, getIdToken, initialDraft, onClose, ...common } = props;
     return <BulkEditorCore<MediaAssetSummary, ImageBulkPatch> {...common} assets={assets}
       surface="images" initialDraft={initialDraft} onClose={onClose}
       buildPlan={draft => buildImageBulkPlan(assets, draft, canEdit)}
-      save={(token, entry) => imageBulkSave(token, cmsUpdateMediaMetadata)(entry)}
-      classifyFailure={classifyImageBulkFailure} />;
+      imageSave={{ getIdToken, save: (token, entry) => imageBulkSave(token, cmsUpdateMediaMetadata)(entry), classifyFailure: classifyImageBulkFailure }} />;
   }
   const { assets, sourceId, onClose, ...common } = props;
   return <BulkEditorCore<SourceMediaAssetSummary, MetadataPatch> {...common} assets={assets}
     surface="video" onClose={onClose}
-    buildPlan={draft => buildBulkMetadataPlan(sourceId, assets, draft)}
-    save={async (token, entry) => (await updateSourceMediaMetadata(token, sourceId, entry.asset.id, entry.asset.version, entry.changes)).asset}
-    classifyFailure={classifyBulkSaveFailure} />;
+    buildPlan={draft => buildBulkMetadataPlan(sourceId, assets, draft)} />;
 }
 
 function BulkEditorCore<T extends ReviewAsset, P extends object>({
-  surface, assets, getIdToken, initialDraft, onBackToEditing, onClose, onDirtyChange,
+  surface, assets, initialDraft, onBackToEditing, onClose, onDirtyChange,
   onSavingChange, navigationBlocked, onKeepNavigation, onDiscardNavigation, buildPlan,
-  save, classifyFailure,
+  imageSave, videoBatch,
 }: BulkEditorCoreProps<T, P>) {
   const id = useId();
   const [draft, setDraft] = useState(() => initialDraft ?? emptyBulkMetadataDraft());
   const [reviewing, setReviewing] = useState(Boolean(initialDraft));
   const [validationRequested, setValidationRequested] = useState(false);
-  const [saving, setSaving] = useState(false);
+  const [imageSaving, setSaving] = useState(false);
   const [finished, setFinished] = useState(false);
   const [stopping, setStopping] = useState(false);
   const [confirmClose, setConfirmClose] = useState(false);
   const [runError, setRunError] = useState("");
   const [results, setResults] = useState<BulkResult<T, P>[]>();
   const busy = useRef(false);
+  const submittedKey = useRef<number>();
   const mounted = useRef(true);
   const stopRequested = useRef(false);
   const wake = useRef<() => void>();
@@ -140,6 +141,7 @@ function BulkEditorCore<T extends ReviewAsset, P extends object>({
   const [singular, plural] = surface === "images" ? imageNoun : ["video", "videos"];
   const countLabel = (count: number) => count === 1 ? singular : plural;
   const changedCount = plan.entries.filter(entry => Object.keys(entry.changes).length > 0).length;
+  const saving = imageSaving || videoBatch?.starting === true;
   const unresolvedResults = finished && results?.some(row => row.status !== "saved" && row.status !== "unchanged") === true;
   const dirty = hasBulkMetadataIntent(draft) && (!finished || unresolvedResults);
   useEffect(() => { onDirtyChange(dirty); return () => onDirtyChange(false); }, [dirty, onDirtyChange]);
@@ -152,7 +154,7 @@ function BulkEditorCore<T extends ReviewAsset, P extends object>({
   useEffect(() => { if (confirmClose) keepEditing.current?.focus(); }, [confirmClose]);
 
   function close() {
-    if (busy.current) return;
+    if (busy.current || saving) return;
     if (dirty) setConfirmClose(true);
     else onClose(results);
   }
@@ -165,7 +167,17 @@ function BulkEditorCore<T extends ReviewAsset, P extends object>({
     });
   }
   async function apply() {
-    if (busy.current || finished || !reviewing || plan.errors.length || changedCount === 0) return;
+    if (busy.current || saving || finished || !reviewing || plan.errors.length || changedCount === 0) return;
+    if (videoBatch) {
+      const operationKey = submittedKey.current ?? videoBatch.nextKey;
+      if (operationKey === undefined) return;
+      submittedKey.current = operationKey;
+      await videoBatch.start(operationKey, plan.entries.map(({ asset, changes }) => ({
+        assetId: asset.id, expectedVersion: asset.version, changes,
+      })));
+      return;
+    }
+    if (!imageSave) return;
     busy.current = true;
     stopRequested.current = false;
     setSaving(true);
@@ -175,10 +187,10 @@ function BulkEditorCore<T extends ReviewAsset, P extends object>({
     setResults(pendingBulkResults(plan));
     try {
       // One short-lived token in this call only; every save retains server auth and App Check.
-      const token = await getIdToken();
+      const token = await imageSave.getIdToken();
       const next = await runBulkMetadataPlan(plan, {
-        save: entry => save(token, entry),
-        classifyFailure,
+        save: entry => imageSave.save(token, entry),
+        classifyFailure: imageSave.classifyFailure,
         shouldStop: () => stopRequested.current || !mounted.current,
         wait: waitBetweenSaves,
         onProgress: next => { if (mounted.current) setResults(next); },
@@ -202,15 +214,19 @@ function BulkEditorCore<T extends ReviewAsset, P extends object>({
 
   return <ComponentEditorDialog open title={`Edit selected ${plural}`} description={`${assets.length} selected ${plural}. Only the fields you choose will change.`}
     onClose={close} closeDisabled={saving} closeLabel={finished ? "Back to library" : "Cancel"} focusTargetId={initialDraft ? undefined : `${id}-tags-action`}
-    footerNote={saving ? "Saves run one file at a time. Keep this window open." : "Updates affect staff-library metadata only, not the original files or public site."}
+    footerNote={imageSaving ? "Saves run one file at a time. Keep this window open." : "Updates affect staff-library metadata only, not the original files or public site."}
     footerActions={finished ? undefined : <>
       {reviewing && !saving && !finished ? <Button onClick={() => {
         if (onBackToEditing) { onBackToEditing(); return; }
+        submittedKey.current = undefined;
         setReviewing(false); setResults(undefined); setRunError("");
         requestAnimationFrame(() => document.getElementById(`${id}-tags-action`)?.focus());
       }}>Back to editing</Button> : null}
-      {saving ? <Button disabled={stopping} onClick={stop}>{stopping ? "Stopping after current file" : "Stop after current file"}</Button>
-        : <Button variant="primary" type="submit" form={`${id}-form`} disabled={reviewing && (changedCount === 0 || plan.errors.length > 0)}>{reviewing ? `Apply to ${changedCount} ${countLabel(changedCount)}` : "Review changes"}</Button>}
+      {imageSaving ? <Button disabled={stopping} onClick={stop}>{stopping ? "Stopping after current file" : "Stop after current file"}</Button>
+        : <Button variant="primary" type="submit" form={`${id}-form`}
+          disabled={saving || (reviewing && (changedCount === 0 || plan.errors.length > 0 || Boolean(videoBatch && videoBatch.nextKey === undefined && submittedKey.current === undefined)))}>
+          {reviewing ? `Apply to ${changedCount} ${countLabel(changedCount)}` : "Review changes"}
+        </Button>}
     </>}>
     <div className="source-bulk-editor">
       {navigationBlocked ? <InlineMessage tone="warning" title={unresolvedResults ? "Leave with unresolved batch results?" : "Leave with unsaved batch changes?"}>
@@ -221,6 +237,8 @@ function BulkEditorCore<T extends ReviewAsset, P extends object>({
         <p>{unresolvedResults ? `Check each unresolved ${singular} before retrying. Saved files are not undone.` : "This discards the unapplied form. Previously saved changes are not undone."}</p><Button onClick={() => onClose(unresolvedResults ? results : undefined)}>{unresolvedResults ? "Return to library" : "Discard batch changes"}</Button><Button ref={keepEditing} onClick={() => { setConfirmClose(false); requestAnimationFrame(() => reviewing ? reviewHeading.current?.focus() : document.getElementById(`${id}-tags-action`)?.focus()); }}>{unresolvedResults ? "Keep results open" : "Keep editing"}</Button>
       </InlineMessage> : null}
       {runError ? <InlineMessage tone="error" title="Batch needs attention">{runError}</InlineMessage> : null}
+      {videoBatch?.error ? <InlineMessage tone="error" title="Batch needs attention">{videoBatch.error} Close this review to check the latest batch from the library.</InlineMessage> : null}
+      {videoBatch?.starting ? <p role="status">Starting video batch…</p> : null}
       <form id={`${id}-form`} onSubmit={event => {
         event.preventDefault();
         if (reviewing) { void apply(); return; }
@@ -258,7 +276,7 @@ function BulkEditorCore<T extends ReviewAsset, P extends object>({
           <h3 ref={reviewHeading} id={`${id}-review`} tabIndex={-1}>{finished ? "Batch results" : "Review changes"}</h3>
           {plan.errors.length ? <InlineMessage tone="error" title="Fix these changes before applying"><ul>{plan.errors.map((error, index) => <li key={index}>{error}</li>)}</ul></InlineMessage> : null}
           {finished ? <p role="status">{savedCount} saved · {unchangedCount} already matched · {remainingCount} not confirmed saved.</p>
-            : saving ? <><p role="status">{completed} of {rows.length} processed · {savedCount} saved{stopping ? " · Stopping" : ""}</p><progress aria-label="Batch save progress" value={completed} max={Math.max(1, rows.length)} /></>
+            : imageSaving ? <><p role="status">{completed} of {rows.length} processed · {savedCount} saved{stopping ? " · Stopping" : ""}</p><progress aria-label="Batch save progress" value={completed} max={Math.max(1, rows.length)} /></>
               : <p>{changedCount} {countLabel(changedCount)} will change; {plan.entries.length - changedCount} already match. Expand a {singular} to compare its current and proposed values. Nothing is saved until you select Apply.</p>}
           {finished && remainingCount > 0 ? <InlineMessage tone="warning" title={`Some ${plural} still need attention`}>Saved changes are not rolled back. The remaining {plural} stay selected. Reopen conflicts or unconfirmed saves to review current details before starting another batch. No saves are retried automatically.</InlineMessage> : null}
           {excluded.length ? <section aria-labelledby={`${id}-excluded`}><h4 id={`${id}-excluded`}>Images left out</h4>
@@ -309,6 +327,10 @@ export function useSourceMediaBulkEditing({ source, userId, records, favorites, 
   const [reviewDirty, setReviewDirty] = useState(false);
   const [focusRequest, setFocusRequest] = useState(0);
   const [saving, setSaving] = useState(false);
+  const recovery = useVideoMetadataBatch(userId, source.id, source.canEditMetadata, getIdToken);
+  const [batchOpenScope, setBatchOpenScope] = useState<string>();
+  const batchOpen = batchOpenScope === scope && source.canEditMetadata;
+  const submitted = useRef<{ operationKey: number; entries: Map<string, string[]> }>();
   // A card's Add to collection names its one video and keeps the selection; the bar's names
   // the selection and clears it once the videos are added.
   const [pickerTarget, setPickerTarget] = useState<{
@@ -318,8 +340,9 @@ export function useSourceMediaBulkEditing({ source, userId, records, favorites, 
   const selection = scoped.scope === scope ? scoped.selection : emptySelection<SourceMediaAssetSummary>();
   const assets = selection.items;
   const visible = records.filter(asset => asset.sourceId === source.id);
-  const open = Boolean(session && session.scope === scope && source.canEditMetadata);
-  const reviewOpen = open && session?.reviewing === true;
+  const editing = Boolean(session && session.scope === scope && source.canEditMetadata);
+  const open = editing || batchOpen;
+  const reviewOpen = editing && session?.reviewing === true;
   const pickerOpen = Boolean(pickerTarget);
   const selectionBusy = open || pickerOpen || favoritesSaving;
   const locked = disabled || selectionBusy;
@@ -328,7 +351,14 @@ export function useSourceMediaBulkEditing({ source, userId, records, favorites, 
     accepts: asset => asset.sourceId === source.id,
   }), [source.id]);
   const focusAfter = () => requestAnimationFrame(() => (returnFocus ?? focusVideoSearch)());
-  useEffect(() => { setScoped({ scope, selection: emptySelection() }); setSession(undefined); setPickerTarget(undefined); setCollectionSuccess(""); }, [scope, source.canEditMetadata]);
+  useEffect(() => {
+    setScoped({ scope, selection: emptySelection() });
+    setSession(undefined);
+    setBatchOpenScope(undefined);
+    setPickerTarget(undefined);
+    setCollectionSuccess("");
+    submitted.current = undefined;
+  }, [scope, source.canEditMetadata]);
   useEffect(() => {
     favoriteRequest.current = undefined;
     setFavoriteFeedback({ scope, saving: false, status: "", error: "" });
@@ -369,7 +399,23 @@ export function useSourceMediaBulkEditing({ source, userId, records, favorites, 
   }
   function edit() {
     if (locked || !assets.length || !source.canEditMetadata) return;
+    if (recovery.batch?.status === "active") {
+      inspectBatch();
+      return;
+    }
     setSession({ scope, assets: [...assets], reviewing: false });
+  }
+  function inspectBatch() {
+    if (locked || !source.canEditMetadata) return;
+    setBatchOpenScope(scope);
+    void recovery.run({ action: "inspect" });
+  }
+  function startBatch(operationKey: number, entries: VideoBatchEntry[]) {
+    return recovery.run({ action: "start", operationKey, entries, onStarted(batch) {
+      submitted.current = { operationKey: batch.operationKey, entries: new Map(entries.map(entry => [entry.assetId, entry.changes.tags ?? []])) };
+      close();
+      setBatchOpenScope(scope);
+    } });
   }
   async function favoriteSelection(favorite: boolean) {
     if (locked || favorites.retryDisabled || favoriteRequest.current || !userId || !assets.length || assets.length > 100) return;
@@ -422,24 +468,39 @@ export function useSourceMediaBulkEditing({ source, userId, records, favorites, 
     if (id === "collect") collect();
     if (id === "edit-selected") edit();
   }
-  function close(results?: BulkResult[]) {
-    if (results) {
-      const completedIds = new Set(results.filter(result => result.status === "saved" || result.status === "unchanged").map(result => result.asset.id));
-      setScoped(previous => ({ ...previous, selection: { ...previous.selection, items: previous.selection.items.filter(asset => !completedIds.has(asset.id)), error: "" } }));
-      const savedTags = results.filter(result => result.status === "saved").flatMap(result => result.changes.tags ?? []);
-      if (savedTags.length) onTagsSaved?.(savedTags);
-    }
+  function close() {
     setSession(undefined);
     setInspectorDirty(false);
     setReviewDirty(false);
-    // A successful batch can disable its opener. Return focus to a stable control.
-    if (results) focusAfter();
-    if (results?.some(result => result.status !== "pending" && result.status !== "unchanged")) onRefresh();
+  }
+  function closeBatch() {
+    const batch = recovery.batch;
+    if (batch) {
+      const recorded = submitted.current;
+      if (recorded?.operationKey === batch.operationKey) {
+        const completedIds = new Set<string>();
+        const tags: string[] = [];
+        for (const item of batch.items) {
+          if (item.status !== "saved" && item.status !== "unchanged") continue;
+          const added = recorded.entries.get(item.assetId);
+          if (!added) continue;
+          if (item.status === "saved") tags.push(...added);
+          completedIds.add(item.assetId);
+          recorded.entries.delete(item.assetId);
+        }
+        if (completedIds.size) setScoped(previous => ({
+          ...previous, selection: { ...previous.selection, items: previous.selection.items.filter(asset => !completedIds.has(asset.id)), error: "" },
+        }));
+        if (tags.length) onTagsSaved?.(tags);
+      }
+      if (batch.items.some(item => item.status === "saved" || item.status === "stale" || item.status === "unavailable")) onRefresh();
+    }
+    setBatchOpenScope(undefined);
+    focusAfter();
   }
   function discard() {
-    setSession(undefined);
-    setInspectorDirty(false);
-    setReviewDirty(false);
+    close();
+    setBatchOpenScope(undefined);
   }
   const offPage = offPageCount(assets, visible);
   const pageState = pageSelectionState(assets, visible);
@@ -448,7 +509,9 @@ export function useSourceMediaBulkEditing({ source, userId, records, favorites, 
       ? { ...action, hidden: true, disabledReason: "Wait for the favorite save to finish." }
       : action);
   return {
-    open, reviewOpen, dirty: open && (reviewOpen ? reviewDirty : inspectorDirty), saving: (open && saving) || favoritesSaving, discard, refreshAsset, removeAsset,
+    open, reviewOpen, dirty: editing && (reviewOpen ? reviewDirty : inspectorDirty),
+    saving: (editing && saving) || (batchOpen && (recovery.activity === "saving" || recovery.activity === "canceling")) || favoritesSaving,
+    discard, refreshAsset, removeAsset,
     selectionActions, selectionBusy,
     selection, rules, changeSelection, clear, collect, edit, selectionAction,
     /** The list header's Select this page: the same state and change as the bar's. */
@@ -462,6 +525,9 @@ export function useSourceMediaBulkEditing({ source, userId, records, favorites, 
     /** The always-mounted announcement of the count; the bar has no live region of its own. */
     summary: assets.length ? selectionSummary({ count: assets.length, offPage, cap: MAX_BULK_VIDEOS }) : "",
     notice: <>{collectionSuccess ? <InlineMessage tone="success" title="Items added to collection">{collectionSuccess}</InlineMessage> : null}
+      {source.canEditMetadata && (recovery.batch || recovery.error) ? <div>
+        <Button disabled={locked || Boolean(recovery.activity)} onClick={inspectBatch}>{recovery.batch ? "Latest video batch" : "Check video batch"}</Button>
+      </div> : null}
       {!notice.available && favoritesSaving ? <p role="status">Saving favorites…</p> : null}
       {!notice.available && favoriteState?.status ? <InlineMessage tone="success" title="Favorites updated">{favoriteState.status}</InlineMessage> : null}
       {!notice.available && favoriteState?.error ? <InlineMessage tone="error" title="Favorites need attention">{favoriteState.error}</InlineMessage> : null}
@@ -495,14 +561,69 @@ export function useSourceMediaBulkEditing({ source, userId, records, favorites, 
       onPageChange={checked => changeSelection(setPageSelection(selection, visible, checked, rules))}
       pageDisabled={locked || !visible.length}
       pageState={pageState} />,
-    inspector: open && session ? <MediaBulkInspector key={scope} open={!reviewOpen} reviewing={reviewOpen}
+    inspector: editing && session ? <MediaBulkInspector key={`inspector:${scope}`} open={!reviewOpen} reviewing={reviewOpen}
       surface="video" assets={session.assets} pageTags={pageTags} recentTags={recentTags} offPageCount={offPage} focusRequest={focusRequest}
       onCancel={() => close()} onReview={draft => { setReviewDirty(true); setSession(previous => previous ? { ...previous, draft, reviewing: true } : previous); }}
       onDirtyChange={setInspectorDirty} /> : null,
-    editor: (navigation: NavigationGuard) => reviewOpen && session?.draft ? <SourceMediaBulkEditor key={scope} sourceId={source.id} assets={session.assets} getIdToken={getIdToken}
+    editor: (navigation: NavigationGuard) => batchOpen ? <VideoMetadataBatchDialog key={`batch:${scope}`} recovery={recovery} onClose={closeBatch} />
+      : reviewOpen && session?.draft ? <SourceMediaBulkEditor key={`review:${scope}`} sourceId={source.id} assets={session.assets}
+      videoBatch={{
+        nextKey: recovery.batch === undefined || recovery.batch?.status === "active" ? undefined : (recovery.batch?.operationKey ?? 0) + 1,
+        starting: recovery.activity === "saving", error: recovery.error, start: startBatch,
+      }}
       initialDraft={session.draft} onBackToEditing={() => { setSession(previous => previous ? { ...previous, reviewing: false } : previous); setFocusRequest(value => value + 1); }}
       onClose={close} onDirtyChange={setReviewDirty} onSavingChange={setSaving} {...navigation} /> : null,
   };
+}
+
+const videoBatchStatus = {
+  pending: "Pending", saved: "Saved", unchanged: "Unchanged", stale: "Changed elsewhere",
+  unavailable: "Video unavailable", canceled: "Canceled",
+} satisfies Record<VideoMetadataBatch["items"][number]["status"], string>;
+
+function VideoMetadataBatchDialog({ recovery, onClose }: { recovery: ReturnType<typeof useVideoMetadataBatch>; onClose: () => void }) {
+  const { batch, activity, error, pausing, pause, run } = recovery;
+  const [confirmKey, setConfirmKey] = useState<number>();
+  const summaryId = useId();
+  const summary = useRef<HTMLParagraphElement>(null);
+  const keepBatch = useRef<HTMLButtonElement>(null);
+  const pending = batch?.items.filter(item => item.status === "pending").length ?? 0;
+  const saved = batch?.items.filter(item => item.status === "saved").length ?? 0;
+  const canContinue = batch?.status === "active" && !activity && !error;
+  const confirming = canContinue && confirmKey === batch.operationKey;
+  useEffect(() => {
+    if (confirming) keepBatch.current?.focus();
+    else summary.current?.focus();
+  }, [activity, confirming]);
+  return <ComponentEditorDialog open title="Video batch results" focusTargetId={summaryId}
+    onClose={onClose} closeDisabled={activity === "saving" || activity === "canceling"} closeLabel="Back to library"
+    footerNote="The library keeps your latest batch results."
+    footerActions={activity === "saving" ? <Button disabled={pausing} onClick={pause}>{pausing ? "Pausing after current video" : "Pause after current video"}</Button>
+      : error ? <Button disabled={Boolean(activity)} onClick={() => void run({ action: "inspect" })}>Check batch status</Button>
+      : canContinue && !confirming ? <>
+        <Button onClick={() => setConfirmKey(batch.operationKey)}>Cancel remaining videos</Button>
+        <Button variant="primary" onClick={() => void run({ action: "resume", operationKey: batch.operationKey })}>Resume batch</Button>
+      </> : undefined}>
+    <div className="source-bulk-editor">
+      <p ref={summary} id={summaryId} tabIndex={-1} role="status">
+        {activity === "checking" ? "Checking latest batch…"
+          : activity === "canceling" ? "Canceling remaining videos…"
+          : batch ? `${saved} saved · ${pending} pending${activity === "saving" ? " · Saving" : ""}`
+          : error ? "Batch results are unavailable." : "No video batch yet."}
+      </p>
+      {error ? <InlineMessage tone="error" title="Batch needs attention">{error}</InlineMessage> : null}
+      {confirming ? <InlineMessage tone="warning" title="Cancel the remaining videos?">
+        <p>Saved video changes will stay in the library.</p>
+        <Button onClick={() => { setConfirmKey(undefined); void run({ action: "cancel", operationKey: batch.operationKey }); }}>Confirm cancellation</Button>
+        <Button ref={keepBatch} onClick={() => setConfirmKey(undefined)}>Keep batch</Button>
+      </InlineMessage> : null}
+      {batch ? <ul className="source-bulk-review">{batch.items.map((item, index) => <li key={item.assetId}>
+        <div className="source-bulk-review-heading"><strong>{item.name || item.originalName || `Video ${index + 1}`}</strong><span>{videoBatchStatus[item.status]}</span></div>
+        {item.originalName && item.originalName !== item.name ? <p>{item.originalName}</p> : null}
+        {item.status === "stale" ? <p>Open the video to review its latest details before making another change.</p> : null}
+      </li>)}</ul> : null}
+    </div>
+  </ComponentEditorDialog>;
 }
 
 function focusVideoSearch() { document.getElementById("video-search")?.focus(); }
