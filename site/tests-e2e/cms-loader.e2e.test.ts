@@ -1008,8 +1008,9 @@ describe("cmsPages loader against the Firestore emulator", () => {
     // CMS migration is route-by-route. A strict build for Contact must retain
     // the committed homepage until a published home snapshot is admitted.
     const homeHtml = readFileSync("dist/index.html", "utf8");
-    expect(homeHtml).toContain('id="hero-h"');
-    expect(homeHtml).toContain("We're the new NJ PBS");
+    const heroHeading = /<h1 id="hero-h">([^<]+)<\/h1>/;
+    const fallbackHeroHeading = homeHtml.match(heroHeading)?.[1];
+    expect(fallbackHeroHeading).toBeTruthy();
     expect(homeHtml).not.toContain('data-cms-page="home"');
 
     await db.collection("cmsPages").doc("give").set(
@@ -1135,13 +1136,12 @@ describe("cmsPages loader against the Firestore emulator", () => {
       encoding: "utf8",
       shell: process.platform === "win32",
     });
-    expect(cmsHomeBuild.status).toBe(0);
+    expect(cmsHomeBuild.status, `${cmsHomeBuild.stdout}${cmsHomeBuild.stderr}`).toBe(0);
     expect(`${cmsHomeBuild.stdout}${cmsHomeBuild.stderr}`).toMatch(
       /cmsPages loader: loaded 5 page\(s\)/,
     );
     const cmsHomeHtml = readFileSync("dist/index.html", "utf8");
-    expect(cmsHomeHtml).toContain('id="hero-h"');
-    expect(cmsHomeHtml).toContain("We're the new NJ PBS");
+    expect(cmsHomeHtml.match(heroHeading)?.[1]).toBe(fallbackHeroHeading);
     expect(cmsHomeHtml).not.toContain('data-cms-page-blocks="home"');
     expect(cmsHomeHtml).not.toContain("CMS home editorial region");
     expect(cmsHomeHtml).toContain("CMS manual shelf");
@@ -1172,7 +1172,7 @@ describe("cmsPages loader against the Firestore emulator", () => {
       encoding: "utf8",
       shell: process.platform === "win32",
     });
-    expect(draftBuild.status).toBe(0);
+    expect(draftBuild.status, `${draftBuild.stdout}${draftBuild.stderr}`).toBe(0);
     expect(`${draftBuild.stdout}${draftBuild.stderr}`).toMatch(
       /loaded 1 page.*draft content/,
     );
@@ -1237,7 +1237,7 @@ describe("cmsPages loader against the Firestore emulator", () => {
       encoding: "utf8",
       shell: process.platform === "win32",
     });
-    expect(queuedDraftBuild.status).toBe(0);
+    expect(queuedDraftBuild.status, `${queuedDraftBuild.stdout}${queuedDraftBuild.stderr}`).toBe(0);
     expect(`${queuedDraftBuild.stdout}${queuedDraftBuild.stderr}`).toMatch(
       /loaded 1 page.*draft content/,
     );
@@ -1323,7 +1323,7 @@ describe("cmsPages loader against the Firestore emulator", () => {
       encoding: "utf8",
       shell: process.platform === "win32",
     });
-    expect(watchPreviewBuild.status).toBe(0);
+    expect(watchPreviewBuild.status, `${watchPreviewBuild.stdout}${watchPreviewBuild.stderr}`).toBe(0);
     const watchPreviewHtml = readFileSync("dist/watch/index.html", "utf8");
     expect(watchPreviewHtml).toContain("Private preview. The public site has not changed.");
     expect(watchPreviewHtml).toContain('data-cms-service-page="watch"');
