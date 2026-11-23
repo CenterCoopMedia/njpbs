@@ -158,7 +158,7 @@ test("a development image uses the same source with only the development names",
   assert.equal(config.vars.CMS_DEPLOYMENT_ENVIRONMENT, "development");
   // The Worker variables are the container's source: a development Worker carries the pin.
   assert.equal(config.vars.CMS_DEV_CLOUDFLARE_ACCOUNT_ID, account);
-  const { CMS_DEV_CLOUDFLARE_ACCOUNT_ID: _pin, ...unpinned } = variables;
+  const unpinned = { ...variables }; delete unpinned.CMS_DEV_CLOUDFLARE_ACCOUNT_ID;
   for (const pinned of [unpinned, { ...variables, CMS_DEV_CLOUDFLARE_ACCOUNT_ID: "" }, { ...variables, CMS_DEV_CLOUDFLARE_ACCOUNT_ID: "e".repeat(32) }]) {
     assert.throws(() => productionConfig(dev, prepared, { checkout, sha, image: devImage, variables: pinned, target }), /contract refused/);
   }
