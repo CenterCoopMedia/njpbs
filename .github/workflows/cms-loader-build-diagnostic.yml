@@ -1,0 +1,44 @@
+name: CMS loader build diagnostic
+
+on:
+  push:
+    branches: [diag/nj380-loader-build]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: cms-loader-build-diagnostic-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  enabled-loader-build:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: "22.23.5"
+          cache: npm
+          cache-dependency-path: |
+            package-lock.json
+            site/package-lock.json
+      - uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: "21.0.13+9.0.LTS"
+      - run: npm ci --ignore-scripts
+      - run: npm --prefix site ci --ignore-scripts
+      - uses: actions/cache@v6
+        with:
+          path: ~/.cache/firebase/emulators
+          key: ${{ runner.os }}-firebase-emulators-15.36.0
+      - name: Run the enabled Astro build case
+        env:
+          ASTRO_TELEMETRY_DISABLED: "1"
+          CMS_LOADER_E2E_BUILD: "1"
+          METADATA_SERVER_DETECTION: none
+        run: >-
+          node scripts/run-firebase-emulators.mjs exec firestore
+          "npm --prefix site run test:cms-loader -- tests-e2e/cms-loader.e2e.test.ts -t 'loads the collection during a real astro build'"
