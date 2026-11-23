@@ -255,41 +255,72 @@ reloading cannot repair a server response contract.
 ## Development published seed
 
 The [seed operator](../../scripts/seed-dev-published.mjs) keeps `export`,
-`validate`, `copy-media` and `import` separate, fixed production-read/development-
-write project pair, explicit Node type-stripping flag and service-account stdin.
-A private operator step verifies dedicated read-only source and dev-only writer
-identities first. No ADC, Auth/database export or production storage authority.
-Never substitute an administrator credential.
+`validate`, `copy-media`, `import` and `verify` separate, with a fixed
+production-read/development-write project pair, the explicit Node type-stripping
+flag and service-account JSON on stdin. Export accepts only the read-only
+`agent-cms-reader@njpbs-site` identity (Firestore viewer; the script confirms it
+holds only entity get/list). Import and verify accept only
+`dev-seed-writer@njpbs-site-dev`. No ADC, Auth/database export or production
+storage authority. Never substitute an administrator credential.
 
-Order: provision dev roles/test accounts/billing/rules/indexes with admission
-paused; obtain exact verified active publication and matching retained context;
-export from one read-only snapshot; validate the content-addressed manifest;
-optionally copy admitted public media locally; dry-run import; separately
-authorized apply; readback; first dev publication; then matched preview setup.
+### Refresh dev before a rehearsal
 
-Export arguments remain `--source njpbs-site --destination njpbs-site-dev`,
-`--source-sha <reviewed-40-character-sha>`, `--publication`, optional required
-`--context` for frozen cards and `--output`. Validation takes `--manifest`.
-Import takes that manifest; `--apply` writes. `--configuration-only` hashes
-scope and imports only complete section/media-category registries with receipts,
-never content or runtime controls. A scoped manifest cannot broaden if that flag
-is omitted. These are argument contracts, not credential-producing examples.
+Run from a fresh clone at the source SHA, after the root and `site` installs and
+`npm run functions:build`, on a4000 or Legion (credentials through
+`ssh houseofjawn "~/.claude/pass-get ..."`; on landofjawn use `pass show`):
 
-Public immutable snapshots and allowlisted registries only; no draft/hidden/
-private profile/auth/queue/lease/system/secret import. Settings retain their
-public schema; provenance lives in `devSeedRecords`. Registered credits missing
-a public profile become frozen custom credits; private rights attestations are
-not copied. Public media remains a read-only production dependency. Strict HTTPS
-host/path/type/size/redirect gates and actual HEAD/GET byte counts apply.
-Local hashed copy receipts never upload or rewrite URLs.
+```bash
+set -euo pipefail
+STATE=$(mktemp -d)   # owner-only; keep it for the rehearsal record
+SHA=$(git rev-parse HEAD)
+SEED="/usr/bin/node --experimental-strip-types --no-warnings scripts/seed-dev-published.mjs"
+PAIR="--source njpbs-site --destination njpbs-site-dev"
+# The code-context receipt names the generation the production pointer serves.
+curl -fsS 'https://njpbs.org/_publication.json?cms-context=code' > "$STATE/publication.json"
+ssh houseofjawn "~/.claude/pass-get claude/firebase/njpbs-site-prod-cms-reader" |
+  $SEED export $PAIR --source-sha "$SHA" --publication "$STATE/publication.json" --output "$STATE/manifests" | tee "$STATE/export.json"
+MANIFEST=$(/usr/bin/node -e 'console.log(JSON.parse(require("fs").readFileSync(process.argv[1],"utf8")).path)' "$STATE/export.json")
+$SEED validate $PAIR --manifest "$MANIFEST"
+ssh houseofjawn "~/.claude/pass-get claude/firebase/njpbs-site-dev/seed-writer" | $SEED import $PAIR --manifest "$MANIFEST"
+ssh houseofjawn "~/.claude/pass-get claude/firebase/njpbs-site-dev/seed-writer" | $SEED import $PAIR --manifest "$MANIFEST" --apply
+ssh houseofjawn "~/.claude/pass-get claude/firebase/njpbs-site-dev/seed-writer" | $SEED verify $PAIR --manifest "$MANIFEST"
+```
 
-First full import requires absent deployment/preview pointers and empty queues,
-then creates generation zero and paused unconfigured preview. Later imports
-never reset controls. Inventory preflight and groups of at most 100 transactional
-records reject staff edits/deletions/untracked rows. A partial import resumes
-the same manifest; unchanged is no-op. Source updates touch only still-matching
-tracked records. No deletion/reset/adoption override exists. Configuration-only
-repair leaves content/runtime controls and existing seed category unchanged.
+If the snapshot references a Sponsor or Newsletter card, export also needs
+`--context` with the retained public context of that publication and refuses
+without it. Production's Nov. 23, 2026 snapshot references none.
+
+`verify` prints the manifest hash, the source publication receipt, the export
+time and per-collection counts; record that line with the rehearsal. It fails
+when any seeded dev document differs from the manifest or dev still tracks a
+record the snapshot no longer has. Rerun `import --apply` with the same manifest
+to resume an interrupted refresh; finished groups report `unchanged`.
+
+### What the refresh copies and reconciles
+
+Public immutable snapshots and allowlisted registries only: routed published
+Pages, Posts, Programs and Events whose `publishAt` has passed, the three public
+settings, public author profiles, and the public media records they reference.
+No draft, hidden, deleted, scheduled, staff-type, private profile, Auth, queue,
+lease, system, secret or rights-attestation data. Published snapshots are
+rebuilt through the publish contract and scrubbed of email, private, internal,
+credential, token and storage fields. Settings keep their public schema;
+provenance lives in `devSeedRecords`. Registered credits missing a public
+profile become frozen custom credits. Public media stays a read-only production
+dependency: dev records keep the `media.njpbs.org` URLs, so the refresh adds no
+dev storage. Strict HTTPS host/path/type/size/redirect gates and real HEAD/GET
+byte counts apply. Optional local hashed copy receipts never upload or rewrite
+URLs.
+
+The first full import requires absent deployment and preview pointers and
+empty queues; it then creates generation zero and a paused, unconfigured
+preview. Later imports never reset controls. Each import reconciles dev with the
+snapshot in transactional groups of at most 100: seeded records that dev edited
+or deleted are restored (listed as `restored`), seeded records the source no
+longer publishes are deleted (listed as `removed`), and an untracked dev record
+at a source path is refused, so dev-authored fixtures are never overwritten.
+Configuration-only manifests reconcile only the section and media-category
+registries and leave content, runtime controls and the `dev-seed` category alone.
 
 ## Schedule automation and timing evidence
 

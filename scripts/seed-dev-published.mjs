@@ -14,6 +14,7 @@ import publicProjection from '../functions/lib/public-content-projection.js';
 import pageContract from '../functions/lib/public-page-contract.js';
 import settingsContract from '../functions/lib/cms-settings-contract.js';
 import mediaUsage from '../functions/lib/media-usage.js';
+import electionApproval from '../functions/lib/election-results-approval.js';
 import mediaContract from '../functions/lib/media-contract.js';
 import mediaDiscovery from '../functions/lib/media-discovery.js';
 import mediaCategories from '../functions/lib/media-categories.js';
@@ -49,7 +50,8 @@ export function canonical(value) {
   if (Array.isArray(value)) return `[${value.map(canonical).join(',')}]`;
   if (value && typeof value === 'object') {
     if (typeof value.toDate === 'function') return canonical(value.toDate().toISOString());
-    return `{${Object.keys(value).sort().map(key => `${JSON.stringify(key)}:${canonical(value[key])}`).join(',')}}`;
+    // Block projections leave absent optional fields as undefined; JSON omits them.
+    return `{${Object.keys(value).filter(key => value[key] !== undefined).sort().map(key => `${JSON.stringify(key)}:${canonical(value[key])}`).join(',')}}`;
   }
   if (value === undefined || (typeof value === 'number' && !Number.isFinite(value))) throw new Error('Non-JSON seed value');
   return JSON.stringify(value);
@@ -108,11 +110,18 @@ function publicSnapshot(collection, id, value) {
   if (collection === 'cmsPages' && !pageContract.publicPagePath(id, cleaned.metadata)) fail(`Invalid public page route: ${id}`);
   const parsed = blockContract.parseBlocks(cleaned.blocks, { complete: true, ...(collection === 'cmsPages' ? { pageId: id } : {}) });
   if (!parsed.ok) fail(`Invalid published blocks: ${collection}/${id}`);
-  return snapshotContract.createPublishedSnapshot({ collection, document: {
+  const document = {
     ...cleaned.metadata, id, blocks: visibleLayoutBlocks(parsed.blocks).map(block => block.type === 'bio_card'
       ? pick(block, ['id', 'type', 'section', 'layout', 'order', 'visible', 'data']) : publicProjection.selectedBlock(block)), version: value.sourceVersion,
     contentVersion: value.contentVersion ?? value.sourceVersion,
-  }, publishedAt: instant(value.publishedAt), publishedBy: ACTOR });
+  };
+  // Published election races were approved before publication. The snapshot
+  // gate needs those approvals; they never enter the snapshot or dev. A race's
+  // as-of time can follow the first publication, so approve at the latest one.
+  const asOf = document.blocks.flatMap(block => block.type === 'election_results' ? block.data.races.map(race => Date.parse(race.asOf)) : []);
+  const approvedAt = new Date(Math.max(Date.parse(instant(value.publishedAt)), ...asOf.filter(Number.isFinite))).toISOString();
+  document.electionResultsApprovals = electionApproval.approveElectionResults(document, { uid: ACTOR, displayName: ACTOR }, approvedAt);
+  return snapshotContract.createPublishedSnapshot({ collection, document, publishedAt: instant(value.publishedAt), publishedBy: ACTOR });
 }
 function publicSetting(id, value) {
   const published = settingsContract.projectPublishedCmsSettings({
@@ -564,14 +573,32 @@ function editableRecords(manifest) {
   return output.sort((a, b) => a.path.localeCompare(b.path, 'en'));
 }
 
+// Timestamps are not seed content; an earlier seed's createdAt is kept on refresh.
+function seedHashOf(data) {
+  const seedData = Object.fromEntries(Object.entries(data).filter(([key]) => !['createdAt', 'updatedAt'].includes(key)));
+  if (seedData.mediaDiscovery) seedData.mediaDiscovery = Object.fromEntries(Object.entries(seedData.mediaDiscovery).filter(([key]) => !['createdAtKey', 'updatedAtKey'].includes(key)));
+  return digest(seedData);
+}
+// A configuration-only manifest reconciles only the registries it carries.
+const inScope = (manifest, path) => !manifest.configurationOnly ||
+  (/^(sections|mediaCategories)\//.test(path) && path !== 'mediaCategories/dev-seed');
+async function trackedRemovals(transaction, firestore, manifest, records) {
+  const paths = new Set(records.map(record => record.path));
+  const tracked = await transaction.get(firestore.collection('devSeedRecords'));
+  return tracked.docs.map(doc => doc.data().path).filter(path => typeof path === 'string' && !paths.has(path) && inScope(manifest, path)).sort();
+}
+
 export async function importPublished({ firestore, manifest, copy, source = SOURCE, destination = DESTINATION, apply = false }) {
   assertPair(source, destination); assertDatabase(firestore, DESTINATION);
   validateManifest(manifest);
   if (copy) validateCopy(manifest, copy);
   const records = editableRecords(manifest);
-  // Preflight every record before any write. Each bounded apply transaction then
-  // repeats the conflict check. An interrupted large import resumes by seed hashes.
-  const run = (selected, write) => firestore.runTransaction(async transaction => {
+  // A refresh makes every seeded record match the source snapshot again: dev
+  // edits and deletions of seeded records are restored, and seeded records the
+  // source no longer publishes are removed. Untracked dev-authored records are
+  // never overwritten. Preflight every record before any write; each bounded
+  // apply transaction repeats the check. An interrupted refresh resumes by seed hashes.
+  const run = (selected, removals, write) => firestore.runTransaction(async transaction => {
     const pointerRef = firestore.doc('system/publicDeployment');
     const pointer = manifest.configurationOnly ? null : await transaction.get(pointerRef);
     const runtimeRef = firestore.doc('system/cmsPreviewRuntime');
@@ -584,24 +611,34 @@ export async function importPublished({ firestore, manifest, copy, source = SOUR
         if (!(await transaction.get(firestore.collection(collection).limit(1))).empty) fail('Initial dev seed requires empty queues');
       }
     }
-    const changes = []; let unchanged = 0;
+    const changes = []; const restored = []; const removed = []; let unchanged = 0;
     for (const record of selected) {
       const ref = firestore.doc(record.path);
       const priorRef = firestore.doc(`devSeedRecords/${digest(record.path)}`);
       const [current, prior] = await transaction.getAll(ref, priorRef);
-      const seedData = Object.fromEntries(Object.entries(record.data).filter(([key]) => !['createdAt', 'updatedAt'].includes(key)));
-      if (seedData.mediaDiscovery) seedData.mediaDiscovery = Object.fromEntries(Object.entries(seedData.mediaDiscovery).filter(([key]) => !['createdAtKey', 'updatedAtKey'].includes(key)));
-      const seedHash = digest(seedData);
+      const seedHash = seedHashOf(record.data);
+      const tracked = prior.exists && prior.data().path === record.path;
+      // An untracked row at a source path is dev-authored work; overwriting it would lose it.
+      if (current.exists && !tracked) fail(`Dev-authored record collides with the source: ${record.path}`);
+      const clean = current.exists && digest(current.data()) === prior.data().recordHash;
+      if (clean && prior.data().seedHash === seedHash) { unchanged++; continue; }
+      if (tracked && !clean) restored.push(record.path);
       let data = record.data;
       if (current.exists) {
-        if (!prior.exists || prior.data().path !== record.path || digest(current.data()) !== prior.data().recordHash) fail(`Dev edit conflict: ${record.path}`);
-        if (prior.data().seedHash === seedHash) { unchanged++; continue; }
         if (!record.path.startsWith('cmsSettings/') && current.data().createdAt !== undefined) data = { ...data, createdAt: current.data().createdAt };
         if (data.mediaDiscovery) data = mediaDiscovery.withMediaDiscovery(record.path.split('/')[1], data);
-      } else if (prior.exists) fail(`Dev deletion conflict: ${record.path}; explicit reset required`);
+      }
       changes.push({ ref, priorRef, record, data, seedHash });
     }
-    if (write && changes.some(({ record }) => /^(cmsPosts|cmsPages|cmsSettings|cmsAuthorProfilesPublic|media_assets_public)\//.test(record.path))) {
+    for (const path of removals) {
+      const priorRef = firestore.doc(`devSeedRecords/${digest(path)}`);
+      const prior = await transaction.get(priorRef);
+      // A resumed refresh already removed this row.
+      if (!prior.exists || prior.data().path !== path) continue;
+      removed.push({ ref: firestore.doc(path), priorRef, path });
+    }
+    if (write && [...changes.map(({ record }) => record.path), ...removed.map(({ path }) => path)]
+      .some(path => /^(cmsPosts|cmsPages|cmsSettings|cmsAuthorProfilesPublic|media_assets_public)\//.test(path))) {
       const enrollment = await transaction.get(firestore.doc('system/publicReleaseChangeLog'));
       if (enrollment.exists && enrollment.data()?.enabled !== false) fail('Published seeding refuses an enrolled public change log; use its publication owners');
     }
@@ -610,23 +647,51 @@ export async function importPublished({ firestore, manifest, copy, source = SOUR
         transaction.set(ref, data);
         transaction.set(priorRef, { path: record.path, recordHash: digest(data), seedHash, manifestHash: manifest.hash });
       }
+      for (const { ref, priorRef } of removed) { transaction.delete(ref); transaction.delete(priorRef); }
       if (!manifest.configurationOnly && !marker.exists) {
         transaction.create(pointerRef, deploymentContract.initialPublicDeploymentPointer());
         transaction.create(runtimeRef, { schemaVersion: 1, phase: 'paused', rendererSha: manifest.sourceSha, serializerId: 'dev-seed-unconfigured' });
         transaction.create(markerRef, { schemaVersion: 1, firstManifestHash: manifest.hash, actor: ACTOR });
       }
     }
-    return { applied: write, changed: changes.length, unchanged, deleted: 0, manifestHash: manifest.hash };
+    return { applied: write, changed: changes.length, unchanged, deleted: removed.length, restored, removed: removed.map(({ path }) => path), manifestHash: manifest.hash };
   }, write ? {} : { readOnly: true });
-  const preflight = await run(records, false);
+  const removals = await firestore.runTransaction(transaction => trackedRemovals(transaction, firestore, manifest, records), { readOnly: true });
+  const preflight = await run(records, removals, false);
   if (!apply) return preflight;
-  const result = { ...preflight, applied: true, changed: 0, unchanged: 0 };
+  const result = { ...preflight, applied: true, changed: 0, unchanged: 0, deleted: 0, restored: [], removed: [] };
+  const items = [...records.map(record => ({ record })), ...removals.map(path => ({ path }))];
   // The empty seed still initializes the fresh coordinator.
-  for (let offset = 0; offset < Math.max(1, records.length); offset += 100) {
-    const batch = await run(records.slice(offset, offset + 100), true);
-    result.changed += batch.changed; result.unchanged += batch.unchanged;
+  for (let offset = 0; offset < Math.max(1, items.length); offset += 100) {
+    const group = items.slice(offset, offset + 100);
+    const batch = await run(group.filter(item => item.record).map(item => item.record), group.filter(item => item.path).map(item => item.path), true);
+    result.changed += batch.changed; result.unchanged += batch.unchanged; result.deleted += batch.deleted;
+    result.restored.push(...batch.restored); result.removed.push(...batch.removed);
   }
   return result;
+}
+
+// Read-only proof that dev holds exactly this source snapshot's seeded records.
+export async function verifyPublished({ firestore, manifest, source = SOURCE, destination = DESTINATION }) {
+  assertPair(source, destination); assertDatabase(firestore, DESTINATION);
+  validateManifest(manifest);
+  const records = editableRecords(manifest);
+  return firestore.runTransaction(async transaction => {
+    const differ = [];
+    for (let offset = 0; offset < records.length; offset += 100) {
+      const group = records.slice(offset, offset + 100);
+      const snapshots = await transaction.getAll(...group.map(record => firestore.doc(record.path)));
+      group.forEach((record, index) => {
+        if (!snapshots[index].exists || seedHashOf(snapshots[index].data()) !== seedHashOf(record.data)) differ.push(record.path);
+      });
+    }
+    const extra = await trackedRemovals(transaction, firestore, manifest, records);
+    if (differ.length || extra.length) {
+      fail(`Dev does not match source snapshot ${manifest.hash}: ${differ.length} differ, ${extra.length} extra (first: ${[...differ, ...extra][0]})`);
+    }
+    return { verified: true, manifestHash: manifest.hash, publication: manifest.publication, exportedAt: manifest.exportedAt,
+      counts: manifest.counts, documents: records.length };
+  }, { readOnly: true });
 }
 
 async function cliDatabase(mode, emulator) {
@@ -640,7 +705,7 @@ async function cliDatabase(mode, emulator) {
   let input = '';
   for await (const chunk of process.stdin) { input += chunk; if (input.length > 32_768) fail('Credential input too large'); }
   const account = JSON.parse(input);
-  const identity = mode === 'export' ? `dev-seed-reader@${SOURCE}.iam.gserviceaccount.com` : `dev-seed-writer@${DESTINATION}.iam.gserviceaccount.com`;
+  const identity = mode === 'export' ? `agent-cms-reader@${SOURCE}.iam.gserviceaccount.com` : `dev-seed-writer@${DESTINATION}.iam.gserviceaccount.com`;
   if (account.project_id !== projectId || account.client_email !== identity) fail('The dedicated seed service identity is required');
   const credential = cert(account);
   if (mode === 'export') {
@@ -662,7 +727,7 @@ async function main() {
     ...['apply', 'emulator', 'configuration-only'].map(name => [name, { type: 'boolean', default: false }]),
   ]) });
   const [mode] = positionals;
-  if (positionals.length !== 1 || !['export', 'validate', 'copy-media', 'import'].includes(mode)) fail('Usage: seed-dev-published.mjs export|validate|copy-media|import [options]');
+  if (positionals.length !== 1 || !['export', 'validate', 'copy-media', 'import', 'verify'].includes(mode)) fail('Usage: seed-dev-published.mjs export|validate|copy-media|import|verify [options]');
   assertPair(values.source, values.destination);
   if (values['configuration-only'] && !['export', 'import'].includes(mode)) fail('Configuration-only is an export/import option');
   const json = async file => JSON.parse(await readFile(file, 'utf8'));
@@ -679,6 +744,7 @@ async function main() {
   const { app, firestore } = await cliDatabase(mode, values.emulator);
   try {
     if (mode === 'export') await save(await exportPublished({ firestore, sourceSha: values['source-sha'], publication: await json(values.publication), context: values.context ? await json(values.context) : undefined, configurationOnly: values['configuration-only'] }), values.output);
+    else if (mode === 'verify') console.log(JSON.stringify(await verifyPublished({ firestore, manifest: await json(values.manifest) })));
     else {
       const manifest = await json(values.manifest);
       if (values['configuration-only'] && manifest.configurationOnly !== true) fail('Configuration-only import requires a configuration-only export');

@@ -6,7 +6,8 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
-import { SOURCE, DESTINATION, ACTOR, assertPair, canonical, digest, exportPublished, validateManifest, copyMedia, importPublished, assertPublicMediaUrl } from '../../scripts/seed-dev-published.mjs';
+import { SOURCE, DESTINATION, ACTOR, assertPair, canonical, digest, exportPublished, validateManifest, copyMedia, importPublished, verifyPublished, assertPublicMediaUrl } from '../../scripts/seed-dev-published.mjs';
+import { electionBlock, electionRace } from '../fixtures/election-results.ts';
 import mediaContract from '../../functions/lib/media-contract.js';
 import mediaSafety from '../../functions/lib/published-media-safety.js';
 import mediaUsage from '../../functions/lib/media-usage.js';
@@ -163,31 +164,38 @@ describe('isolated published-content seed', () => {
     expect((await dev.collection('cmsPosts').get()).empty).toBe(true);
     expect((await dev.collection('devSeedRecords').get()).size).toBe(7);
   });
-  it.each(['untracked', 'edited', 'deleted'])('refuses a %s configuration conflict before any writes', async kind => {
+  it('refuses an untracked dev-authored configuration row at a source path before any writes', async () => {
     const manifest = await exportSeed({ configurationOnly: true });
-    if (kind === 'untracked') await dev.doc('sections/news').set({ id: 'news', label: 'Existing dev news' });
-    else {
-      await importPublished({ firestore: dev, manifest, apply: true });
-      if (kind === 'edited') await dev.doc('sections/news').update({ label: 'Dev staff edit' });
-      else await dev.doc('sections/news').delete();
-    }
-    await source.doc('mediaCategories/general').update({ label: 'Changed source label', version: 2 });
-    const newer = await exportSeed({ configurationOnly: true });
-    await expect(importPublished({ firestore: dev, manifest: newer, apply: true })).rejects.toThrow(/Dev (edit|deletion) conflict/);
-    const general = await dev.doc('mediaCategories/general').get();
-    if (kind === 'untracked') expect(general.exists).toBe(false);
-    else expect(general.data().label).toBe('General');
+    await dev.doc('sections/news').set({ id: 'news', label: 'Existing dev news' });
+    await expect(importPublished({ firestore: dev, manifest, apply: true })).rejects.toThrow('Dev-authored record collides with the source: sections/news');
+    expect((await dev.doc('mediaCategories/general').get()).exists).toBe(false);
+    expect((await dev.doc('sections/news').get()).data().label).toBe('Existing dev news');
   });
-  it('updates untouched registry hashes and retains configuration removed from a later source', async () => {
+  it.each(['edited', 'deleted'])('restores a %s seeded configuration row to the source', async kind => {
+    const manifest = await exportSeed({ configurationOnly: true });
+    await importPublished({ firestore: dev, manifest, apply: true });
+    if (kind === 'edited') await dev.doc('sections/news').update({ label: 'Dev rehearsal edit' });
+    else await dev.doc('sections/news').delete();
+    expect(await importPublished({ firestore: dev, manifest, apply: true })).toMatchObject({ changed: 1, unchanged: 6, restored: ['sections/news'] });
+    expect((await dev.doc('sections/news').get()).data().label).toBe('News');
+    expect(await verifyPublished({ firestore: dev, manifest })).toMatchObject({ verified: true, manifestHash: manifest.hash, documents: 7 });
+  });
+  it('updates untouched registry hashes and removes seeded configuration the source removed', async () => {
     await source.doc('sections/sports').set({ id: 'sports', label: 'Sports', description: '', order: 8 });
     const manifest = await exportSeed({ configurationOnly: true });
     await importPublished({ firestore: dev, manifest, apply: true });
+    await dev.doc('sections/local').set({ id: 'local', label: 'Dev-only section' });
     await source.doc('sections/news').update({ label: 'News desk' });
     await source.doc('sections/sports').delete();
     const newer = await exportSeed({ configurationOnly: true });
-    expect(await importPublished({ firestore: dev, manifest: newer, apply: true })).toMatchObject({ changed: 1, unchanged: 6, deleted: 0 });
-    expect((await dev.doc('sections/news').get()).data().label).toBe('News desk');
+    expect(await importPublished({ firestore: dev, manifest: newer })).toMatchObject({ applied: false, deleted: 1, removed: ['sections/sports'] });
     expect((await dev.doc('sections/sports').get()).exists).toBe(true);
+    expect(await importPublished({ firestore: dev, manifest: newer, apply: true })).toMatchObject({ changed: 1, unchanged: 6, deleted: 1 });
+    expect((await dev.doc('sections/news').get()).data().label).toBe('News desk');
+    expect((await dev.doc('sections/sports').get()).exists).toBe(false);
+    expect((await dev.doc(`devSeedRecords/${digest('sections/sports')}`).get()).exists).toBe(false);
+    expect((await dev.doc('sections/local').get()).data().label).toBe('Dev-only section');
+    expect(await importPublished({ firestore: dev, manifest: newer, apply: true })).toMatchObject({ changed: 0, unchanged: 7, deleted: 0 });
   });
   it.each([
     ['sections/news', { label: '' }], ['sections/news', { id: 'watch' }],
@@ -626,23 +634,45 @@ describe('isolated published-content seed', () => {
     expect((await importPublished({ firestore: dev, manifest: newer, copy: await copied(newer), apply: true })).changed).toBe(1);
     expect((await dev.doc('cmsPages/contact').get()).data().title).toBe('Updated public title');
   });
-  it('refuses staff edits atomically, including edits to public media', async () => {
+  it('restores dev edits and deletions of seeded records, then verifies dev against the snapshot', async () => {
     const manifest = await exportSeed(); const copy = await copied(manifest);
     await importPublished({ firestore: dev, manifest, copy, apply: true });
-    await dev.doc('media_assets_public/image-1').update({ altText: 'Dev staff edit' });
-    await expect(importPublished({ firestore: dev, manifest, copy, apply: true })).rejects.toThrow('Dev edit conflict');
-    expect((await dev.doc('media_assets_public/image-1').get()).data().altText).toBe('Dev staff edit');
-  });
-  it('does not recreate a deleted seeded record or erase records missing from a later seed', async () => {
-    const manifest = await exportSeed(); const copy = await copied(manifest);
-    await importPublished({ firestore: dev, manifest, copy, apply: true });
+    expect(await verifyPublished({ firestore: dev, manifest })).toMatchObject({ verified: true, publication, counts: manifest.counts });
+    await dev.doc('media_assets_public/image-1').update({ altText: 'Dev rehearsal edit' });
     await dev.doc('cmsPages/contact').delete();
-    await expect(importPublished({ firestore: dev, manifest, copy, apply: true })).rejects.toThrow('explicit reset');
+    await expect(verifyPublished({ firestore: dev, manifest })).rejects.toThrow(`Dev does not match source snapshot ${manifest.hash}: 2 differ, 0 extra`);
+    expect(await importPublished({ firestore: dev, manifest, copy, apply: true })).toMatchObject({ changed: 2,
+      restored: ['cmsPages/contact', 'media_assets_public/image-1'] });
+    expect((await dev.doc('media_assets_public/image-1').get()).data().altText).toBe('Public alt');
+    expect((await dev.doc('cmsPages/contact').get()).data().title).toBe('Public title');
+    expect((await verifyPublished({ firestore: dev, manifest })).verified).toBe(true);
+  });
+  it('removes seeded records the source withdrew and keeps dev-authored records', async () => {
+    const manifest = await exportSeed(); const copy = await copied(manifest);
+    await importPublished({ firestore: dev, manifest, copy, apply: true });
     await dev.doc('cmsPages/local-page').set({ title: 'Dev-only work' });
+    await dev.doc('cmsPages/contact').update({ title: 'Dev rehearsal edit' });
     await source.doc('cmsPages/contact').update({ publiclyVisible: false });
-    const next = await exportSeed(); const nextCopy = await copied(next);
-    expect((await importPublished({ firestore: dev, manifest: next, copy: nextCopy, apply: true })).deleted).toBe(0);
+    const next = await exportSeed();
+    await expect(verifyPublished({ firestore: dev, manifest: next })).rejects.toThrow(/0 differ, 4 extra/);
+    // The withdrawn page was the only reference to its image, so both leave dev.
+    expect(await importPublished({ firestore: dev, manifest: next, apply: true })).toMatchObject({ deleted: 4,
+      removed: ['cmsPages/contact', 'mediaCategories/dev-seed', 'media_assets/image-1', 'media_assets_public/image-1'] });
+    expect((await dev.doc('cmsPages/contact').get()).exists).toBe(false);
     expect((await dev.doc('cmsPages/local-page').get()).data().title).toBe('Dev-only work');
+    expect(await verifyPublished({ firestore: dev, manifest: next })).toMatchObject({ verified: true, manifestHash: next.hash });
+    await source.doc('cmsPages/contact').update({ publiclyVisible: true });
+    await dev.doc('cmsPages/contact').set({ title: 'Dev-authored contact page' });
+    await expect(importPublished({ firestore: dev, manifest: await exportSeed(), apply: true })).rejects.toThrow('Dev-authored record collides with the source: cmsPages/contact');
+    expect((await dev.doc('cmsPages/contact').get()).data().title).toBe('Dev-authored contact page');
+  });
+  it('exports published election results approved before a later as-of time, without their approvals', async () => {
+    const block = electionBlock(electionRace({ asOf: '2026-01-02T00:00:00.000Z' }));
+    await source.doc('cmsPages/contact').update({ 'published.blocks': [{ ...block, order: 0, visible: true }] });
+    const manifest = await exportSeed();
+    const projection = manifest.records.find(record => record.collection === 'cmsPages').projection;
+    expect(projection.blocks[0].data.races[0].asOf).toBe('2026-01-02T00:00:00.000Z');
+    expect(canonical(manifest)).not.toContain('electionResultsApprovals');
   });
   it('requires a fresh dev coordinator and refuses a source receipt mismatch', async () => {
     await expect(exportSeed({ publication: {} })).rejects.toThrow('Invalid published contract: publication/receipt');
