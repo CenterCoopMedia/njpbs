@@ -25,6 +25,11 @@ Builds that need content services require their environment configuration.
 `CMS_OFFLINE_BUILD=1` uses retained content without remote content reads.
 `PUBLIC_ONLY=1` builds the small public landing page and public wiki.
 
+Static builds stop before image generation if they request more than 6,912
+distinct optimized remote variants. Repeated variants share one Astro output.
+The build runs up to four Sharp transforms at a time. If the variant budget is
+reached, reduce the number of distinct sources or placements in the build input.
+
 Public builds prepare the five licensed PBS Sans font files at
 `public/brand/fonts/`, which is ignored by Git. The build downloads them from
 the public station site and verifies the checked-in SHA-256 manifest at
