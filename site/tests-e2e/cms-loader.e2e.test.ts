@@ -1150,11 +1150,12 @@ describe("cmsPages loader against the Firestore emulator", () => {
     expect(cmsHomeHtml).not.toContain('class="page-hero"');
     const giveHtml = readFileSync("dist/give/index.html", "utf8");
     const donateHtml = readFileSync("dist/donate/index.html", "utf8");
-    for (const aliasHtml of [giveHtml, donateHtml]) {
-      expect(aliasHtml).toContain('class="public-page');
-      expect(aliasHtml).toContain('data-cms-page-blocks="give"');
-      expect(aliasHtml).toContain("CMS Give editorial region");
-    }
+    expect(giveHtml).toContain('data-cms-service-page="give"');
+    expect(giveHtml).toContain('data-cms-page-blocks="give"');
+    expect(giveHtml).toContain("CMS Give editorial region");
+    expect(donateHtml).toContain('rel="canonical" href="https://njpbs.org/give/"');
+    expect(donateHtml).toContain('http-equiv="refresh" content="0; url=/give/"');
+    expect(donateHtml).not.toContain("CMS Give editorial region");
     const scheduleHtml = readFileSync("dist/schedule/index.html", "utf8");
     expect(scheduleHtml).toContain("data-native-schedule");
     expect(scheduleHtml).toContain('data-cms-page-blocks="schedule"');
