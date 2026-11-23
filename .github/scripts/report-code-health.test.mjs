@@ -9,17 +9,17 @@ import { compare } from "./report-code-health.mjs";
 
 test("reports only added lint errors and type errors", () => {
   const lint = { file: "admin/src/old.ts", line: 5, rule: "no-undef", severity: 2, message: "old" };
-  const type = { file: "functions/old.js", line: 6, rule: "TS2322", message: "old" };
+  const type = { file: "functions/old.js", line: 6, rule: "TS2322", message: "old", source: "f(old)" };
   const base = {
     lint: [lint],
     types: { findings: [type] },
   };
   const moved = { ...lint, file: "admin/src/new.ts", line: 20 };
   const extraLint = { ...moved, line: 30 };
-  const extraType = { ...type, line: 9, message: "new" };
+  const extraType = { ...type, line: 9, source: "f(new)" };
   const head = {
     lint: [
-      moved, extraLint, { ...lint, severity: 1, rule: "complexity" },
+      moved, extraLint, { ...lint, message: "replaced name" }, { ...lint, severity: 1, rule: "complexity" },
       { ...lint, rule: "max-lines-per-function", message: "Function 'f' has too many lines (201)." },
     ],
     types: { findings: [{ ...type, line: 8, message: "callee signature changed" }, extraType] },
@@ -27,7 +27,7 @@ test("reports only added lint errors and type errors", () => {
   const renames = new Map([["admin/src/new.ts", lint.file]]);
 
   assert.deepEqual(compare(base, head, renames), {
-    lint: [extraLint],
+    lint: [extraLint, { ...lint, message: "replaced name" }],
     types: [extraType],
   });
   assert.deepEqual(compare(base, base), { lint: [], types: [] });

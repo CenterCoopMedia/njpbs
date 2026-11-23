@@ -51,7 +51,9 @@ function checkFunctions(ts, cwd, sizes) {
     const line = diagnostic.start === undefined ? undefined
       : diagnostic.file?.getLineAndCharacterOfPosition(diagnostic.start).line;
     const message = ts.flattenDiagnosticMessageText(diagnostic.messageText, "\n").replaceAll(cwd + "/", "");
-    findings.push({ file, line: line === undefined ? null : line + 1, rule: "TS" + diagnostic.code, message });
+    const source = diagnostic.start === undefined ? message
+      : diagnostic.file?.text.slice(diagnostic.start, diagnostic.start + (diagnostic.length ?? 0)).replace(/\s+/g, " ");
+    findings.push({ file, line: line === undefined ? null : line + 1, rule: "TS" + diagnostic.code, message, source });
   }
   return { files: files.length, findings };
 }
@@ -85,10 +87,8 @@ function renamedPaths(cwd, base) {
   return renames;
 }
 
-// Count by file and rule. A type message quotes the callee's signature, so a
-// signature change elsewhere would relabel every existing error as new.
-function addedDiagnostics(baseline, current, renames) {
-  const key = ({ rule }, file) => JSON.stringify([file, rule]);
+function addedDiagnostics(baseline, current, renames, identity) {
+  const key = (finding, file) => JSON.stringify([file, finding.rule, finding[identity]]);
   const counts = new Map();
   for (const finding of baseline) {
     const id = key(finding, finding.file);
@@ -109,8 +109,10 @@ export function compare(baseline, current, renames = new Map()) {
   const errors = (lint) => lint.filter(({ severity, rule }) =>
     severity === 2 && rule !== "max-lines-per-function");
   return {
-    lint: addedDiagnostics(errors(baseline.lint), errors(current.lint), renames),
-    types: addedDiagnostics(baseline.types.findings, current.types.findings, renames),
+    lint: addedDiagnostics(errors(baseline.lint), errors(current.lint), renames, "message"),
+    // A type message quotes the callee's signature, so a signature change elsewhere
+    // would relabel existing errors as new. The flagged source text does not change.
+    types: addedDiagnostics(baseline.types.findings, current.types.findings, renames, "source"),
   };
 }
 
