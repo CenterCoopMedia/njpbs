@@ -97,6 +97,23 @@ a fresh operation outside the pause within its retry limit. A fresh operation
 uses the original verified image for the same NEW source and release inputs.
 The candidate must take a fresh content cutoff and pass the same checks.
 
+Before preparing a release, read the last-good receipt for each of the six
+aggregate outputs (listings, authors, feed, Content API, sitemap and paired
+search). Recheck their ages before activation. When a renderer or context
+change makes an output stale, its serving cutoff is 24 hours after that
+output's `verifiedAt`. An old receipt can expire as soon as the release changes
+the renderer. Check that each renderer's retained Assets graph is compatible
+and each receipt has enough time left for the replacement to verify. If a
+receipt is missing or too old, keep publication open until the publisher has
+verified a fresh output. Use the [context recovery procedure](#external-inputs-output-recovery-and-health)
+for a failed preparation, then read the resulting receipts again.
+
+An existing withdrawal can impose a shorter cutoff. The reader uses the
+active withdrawal deadline when present, or 60 seconds from the earlier of
+`verifiedAt` and `sourceReadAt` when the latter is recorded. The candidate's
+preparation read-time and the final-ready check qualify the release itself.
+Each output keeps its original serving timestamps through both checks.
+
 Record the prepare-to-seal duration from the release journal. Subtract the
 `candidate-prepare` intent timestamp from the successful `candidate-seal`
 timestamp for the same candidate attempt. For a stale restart, record the

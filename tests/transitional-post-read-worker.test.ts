@@ -1029,6 +1029,46 @@ describe("transitional public Post authority", () => {
     expect(h.calls).toHaveLength(0);
   });
 
+  it.each(["expiry", "purge"])("bounds retained asset misses until %s and shares GET authority with HEAD", async boundary => {
+    const h = harness();
+    const pathname = "/_astro/retained.js";
+    h.assets(404);
+    h.route({ kind: "pass" });
+    const miss = await h.request(h.worker(), pathname);
+    expect(miss!.status).toBe(404);
+    expect(miss!.headers.get("content-type")).toBe("text/html");
+    expect(await miss!.text()).toBe("Full-build Assets");
+
+    h.route({ kind: "background", status: 200, bytes: btoa("retained asset"), headers: {
+      "content-type": "text/javascript", "x-njpbs-admission-revision": "1", "x-njpbs-background-renderer-sha": rendererSha,
+    } });
+    h.advance(9_999);
+    const head = await h.request(h.worker(), pathname, { method: "HEAD" });
+    expect(head!.status).toBe(404);
+    expect(await head!.text()).toBe("");
+    expect(h.calls.map(({ path, method }) => [path, method])).toEqual([[pathname, "GET"]]);
+    expect(h.assetPaths).toEqual([pathname, pathname]);
+
+    if (boundary === "expiry") h.advance(1);
+    else h.cache.purge("njpbs-post-background");
+    const retained = await h.request(h.worker(), pathname);
+    expect(retained!.status).toBe(200);
+    expect(await retained!.text()).toBe("retained asset");
+    expect(h.calls).toHaveLength(2);
+    expect(h.assetPaths).toEqual([pathname, pathname, pathname]);
+    await h.drain();
+  });
+
+  it("checks the normalized Assets URL when it differs from the original miss", async () => {
+    const h = harness();
+    h.assets(404);
+    h.route({ kind: "pass" });
+    const response = await h.request(h.worker(), "/_astro/%72etained.js");
+    expect(response!.status).toBe(404);
+    expect(h.assetPaths).toEqual(["/_astro/%72etained.js", "/_astro/retained.js"]);
+    await h.drain();
+  });
+
   it("shares normalized ownership across encoded and directory-index spellings", async () => {
     const h = harness();
     h.catalog(catalog);
