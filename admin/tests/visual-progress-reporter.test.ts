@@ -8,7 +8,6 @@ it("records the active visual phase before it completes without exposing step ar
   const browser = { category: "fixture", title: 'Fixture "browser"' };
   const setup = { category: "hook", title: "Before Hooks" };
   try {
-    reporter.onConfigure();
     reporter.onBegin(undefined, { allTests: () => [] });
     reporter.onBegin(undefined, { allTests: () => [test] });
     reporter.onTestBegin(test);
@@ -16,7 +15,7 @@ it("records the active visual phase before it completes without exposing step ar
     reporter.onStepBegin(test, undefined, browser);
 
     expect(output.mock.calls.map(([line]) => line)).toEqual([
-      "Admin visual progress Runner configured",
+      "Admin visual progress Runner reporter loaded",
       "Admin visual progress Suite ready",
       "Admin visual progress gallery.spec.ts:17 Test started",
       "Admin visual progress gallery.spec.ts:17 Before hooks started",

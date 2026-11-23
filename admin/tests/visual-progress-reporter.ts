@@ -17,8 +17,8 @@ function logProgress(message: string, test?: TestLocation) {
 }
 
 export default class VisualProgressReporter implements Reporter {
-  onConfigure() {
-    logProgress("Runner configured");
+  constructor() {
+    logProgress("Runner reporter loaded");
   }
 
   onBegin(_config: unknown, suite: { allTests(): readonly unknown[] }) {
