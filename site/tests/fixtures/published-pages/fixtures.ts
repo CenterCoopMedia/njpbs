@@ -12,6 +12,7 @@ import { chromeSettings } from "../shadow-posts/chrome";
 import { registeredAuthor } from "../shadow-posts/fixtures";
 import type { CmsPageDoc } from "../../../src/lib/cms-loader";
 import { givingPageBlocks, givingPageIds } from "../giving-page";
+import staffPage from "../../../../tests/fixtures/staff-page-editorial.json";
 const require = createRequire(import.meta.url);
 const { createPublishedSnapshot } = require("../../../../functions/lib/publish-snapshot.js");
 const { projectPublicPageDocument } = require("../../../../functions/lib/public-content-projection.js");
@@ -55,6 +56,7 @@ export function pageDocument(pageId: string): CmsPageDoc {
     ],
   };
   if (pageId === "give" || pageId === "passport") Object.assign(working, { blocks: givingPageBlocks });
+  if (pageId === "staff") Object.assign(working, staffPage.edited);
   const published = createPublishedSnapshot({ collection: "cmsPages", document: working,
     publishedAt: "2026-10-12T11:00:00.000Z", publishedBy: "PRIVATE actor" });
   return { ...working, id: pageId, version: 8, template: publicPage(pageId)!.editorTemplate,

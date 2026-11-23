@@ -198,6 +198,7 @@ describe("page composition seeds", () => {
         label: "Published staff roster",
         detail: "The roster is generated from published public author profiles. It is read-only on this Page and cannot be replaced with authored blocks.",
       },
+      expect.objectContaining({ label: "Staff page labels" }),
     ]);
   });
 
