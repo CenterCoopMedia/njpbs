@@ -73,6 +73,15 @@ function nextRowKey(): string {
   return `row-${listRowSeq}`;
 }
 
+type UpdateListItem = (current: Record<string, unknown>) => Record<string, unknown>;
+
+interface StructuredListItem {
+  item: Record<string, unknown>;
+  id: string;
+  index: number;
+  update: (change: UpdateListItem) => void;
+}
+
 interface FieldRendererProps {
   termSuggestions?: { values: string[]; note: string; ready: boolean; onFocus?: () => void };
   field: EditorField;
@@ -83,6 +92,7 @@ interface FieldRendererProps {
   value: unknown;
   placeholder?: string;
   onChange: (value: unknown) => void;
+  renderListItem?: (props: StructuredListItem) => ReactNode;
   fieldId: string;
   // An editor-facing validation message shown under the control (e.g. a required field
   // left blank). Plain words, never a machine field name.
@@ -140,6 +150,7 @@ export function FieldRenderer({
   value,
   placeholder,
   onChange,
+  renderListItem,
   fieldId,
   error,
   invalid: externallyInvalid,
@@ -231,6 +242,7 @@ export function FieldRenderer({
           value={value}
           placeholder={placeholder}
           onChange={onChange}
+          renderListItem={renderListItem}
           fieldId={fieldId}
           describedBy={describedBy}
           loadMedia={loadMedia}
@@ -620,6 +632,7 @@ function FieldControl({
   value,
   placeholder,
   onChange,
+  renderListItem,
   fieldId,
   describedBy,
   invalid,
@@ -729,6 +742,7 @@ function FieldControl({
           field={field}
           value={value}
           onChange={onChange}
+          renderListItem={renderListItem}
           fieldId={fieldId}
           labelId={labelId}
           invalid={invalid}
@@ -882,6 +896,7 @@ interface ListFieldProps {
   field: EditorField;
   value: unknown;
   onChange: (value: unknown) => void;
+  renderListItem?: FieldRendererProps["renderListItem"];
   fieldId: string;
   labelId: string;
   invalid: boolean;
@@ -1130,6 +1145,7 @@ function StructuredListField({
   field,
   value,
   onChange,
+  renderListItem,
   fieldId,
   labelId,
   invalid,
@@ -1155,6 +1171,8 @@ function StructuredListField({
   // updates both arrays together; a content edit (replaceAt) keeps the row's key, so its
   // editor is not remounted mid-typing.
   const [rowKeys, setRowKeys] = useState<string[]>(() => items.map(nextRowKey));
+  const currentRows = useRef({ items, rowKeys, onChange });
+  currentRows.current = { items, rowKeys, onChange };
   if (rowKeys.length !== items.length) {
     // The items array changed length without going through the handlers below (a parent
     // reset). Pad or truncate the keys to match so every row still has one, keeping the
@@ -1171,6 +1189,18 @@ function StructuredListField({
 
   function replaceAt(index: number, next: unknown) {
     onChange(items.map((item, i) => (i === index ? next : item)));
+  }
+
+  function updateRow(rowKey: string, change: UpdateListItem) {
+    const current = currentRows.current;
+    const index = current.rowKeys.indexOf(rowKey);
+    if (index < 0) return;
+    const item = (current.items[index] ?? {}) as Record<string, unknown>;
+    const updated = change(item);
+    if (item === updated) return;
+    const next = current.items.map((value, i) => i === index ? updated : value);
+    currentRows.current = { ...current, items: next };
+    current.onChange(next);
   }
 
   function add() {
@@ -1214,7 +1244,8 @@ function StructuredListField({
       {items.map((item, index) => (
         <div className="editor-list-item" key={rowKeys[index]}>
           <div className="editor-list-item-body">
-            {itemFields.map((sub) => (
+            {renderListItem ? renderListItem({ item: (item ?? {}) as Record<string, unknown>, id: `${fieldId}-${rowKeys[index]}`,
+              index, update: change => updateRow(rowKeys[index], change) }) : itemFields.map((sub) => (
               <FieldRenderer
                 key={sub.key}
                 field={{ ...sub, required: fieldIsRequired(sub, (item ?? {}) as Record<string, unknown>) }}

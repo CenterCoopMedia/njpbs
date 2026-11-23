@@ -5,6 +5,7 @@ import { VideoBlockEditor } from "./VideoBlockEditor";
 import { Icon } from "./ui/Icon";
 import { InlineDataTable } from "./InlineDataTable";
 import { InlineDataFigure } from "./InlineDataFigure";
+import { ScrollStoryEditor } from "./ScrollStoryEditor";
 import { ContentShelfPicker } from "./ContentShelfPicker";
 import { RecordPickerDialog } from "./RecordPickerDialog";
 import type { RecordCardKind } from "../../../packages/content-core/src/content-model";
@@ -377,8 +378,13 @@ export function InlineBlockSurface({
         />
       );
 
-    case "support_appeal":
-    case "scroll_story": {
+    case "scroll_story":
+      return <ScrollStoryEditor block={block} onChange={onChange} readOnly={readOnly}
+        errorId={errorId} hasError={hasError} generatedHeadingLevel={generatedHeadingLevel}
+        loadMedia={loadMedia} mediaPickerUnavailable={mediaPickerUnavailable}
+        onMediaPickerDirtyChange={onMediaPickerDirtyChange} />;
+
+    case "support_appeal": {
       const fields = editorFieldsForBlock(block.type);
       return <fieldset className="inline-block-surface" disabled={readOnly}
         aria-invalid={hasError || undefined} aria-describedby={hasError ? errorId : undefined}>

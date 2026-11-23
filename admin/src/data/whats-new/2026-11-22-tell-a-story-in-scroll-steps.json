@@ -2,7 +2,7 @@
   "date": "2026-11-22",
   "kind": "new",
   "title": "Tell a story in scroll steps",
-  "body": "In a Post, add a Scroll story block. Write each step, optionally select an image and describe it in the alt text field, then use the move buttons to set the reading order. Save and preview the draft to see how readers will scroll through it.",
+  "body": "In a Post, add a Scroll story block. Write each step and optionally add an image with alt text, a library video with a ready viewing copy, or a figure from an approved dataset release. Use the move buttons to set the reading order, then save and preview the story.",
   "prs": [],
   "order": 1795392000000
 }

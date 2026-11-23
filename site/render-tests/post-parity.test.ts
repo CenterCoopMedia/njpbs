@@ -176,7 +176,8 @@ describe("compiled and static Post output", () => {
       if (read === catalogReads.promotion_playlist) expect(html).toContain("custom-shelf--grid");
       if (read === catalogReads.image_gallery) expect(html).toContain("Morning rush");
       if (read === catalogReads.scroll_story) {
-        expect(html).toMatch(/<ol class="scroll-story">.*Commuters arrive.*alt="Commuters waiting for a train".*The train departs.*The station quiets down.*alt="A passenger at the station"/s);
+        expect(html).toMatch(/<ol class="scroll-story">.*Commuters arrive.*alt="Commuters waiting for a train".*The train departs.*<video[^>]+controls[^>]+aria-label="Train departure".*A morning train leaves the station.*New Jersey employment rate.*The station quiets down.*alt="A passenger at the station"/s);
+        expect(html).not.toMatch(/data-analytics-consent|googletagmanager\.com|chimpstatic\.com/);
       }
       if (read === catalogReads.link_card) expect(html).toContain("Budget hearing schedule");
     }

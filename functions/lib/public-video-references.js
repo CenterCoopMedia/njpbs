@@ -4,6 +4,7 @@ const { liveBlogVideoBlocks } = require("./live-blog");
 const { leadVideoBlocks } = require("./post-lead-media");
 const { visibleLayoutBlocks } = require("./content-layout");
 const {
+  blockVideoSelections,
   isPublicVideoData,
   isPublicVideoUrl,
   VIDEO_BLOCK_SOURCE_ID,
@@ -29,11 +30,11 @@ function validCopy(copy) {
 
 function videoCopies(blocks) {
   if (!Array.isArray(blocks)) return [];
-  return visibleLayoutBlocks(blocks).flatMap((block) => {
-    const media = block?.data?.public;
-    if (block.type !== "video" || !isPublicVideoData(media)) return [];
+  return visibleLayoutBlocks(blocks).flatMap(blockVideoSelections).flatMap(data => {
+    const media = data.public;
+    if (!isPublicVideoData(media)) return [];
     const copies = [media.url, media.posterUrl].map((url) => ({
-      assetId: block.data.assetId,
+      assetId: data.assetId,
       url,
     }));
     return copies.every(validCopy) ? copies : [];
@@ -77,15 +78,13 @@ function scheduledVideoAssetIds(document) {
     return [];
   return visibleLayoutBlocks(
     [...leadVideoBlocks(document.leadMedia), ...liveBlogVideoBlocks(document.type === "post" ? document.liveBlog : undefined), ...document.blocks.filter((block) => block && typeof block === "object")],
-  )
+  ).flatMap(blockVideoSelections)
     .filter(
-      (block) =>
-        block.type === "video" &&
-        block.data?.sourceId === VIDEO_BLOCK_SOURCE_ID &&
-        typeof block.data.assetId === "string" &&
-        /^[A-Za-z0-9_-]{1,128}$/.test(block.data.assetId),
+      data => data.sourceId === VIDEO_BLOCK_SOURCE_ID &&
+        typeof data.assetId === "string" &&
+        /^[A-Za-z0-9_-]{1,128}$/.test(data.assetId),
     )
-    .map((block) => block.data.assetId);
+    .map(data => data.assetId);
 }
 
 module.exports = {

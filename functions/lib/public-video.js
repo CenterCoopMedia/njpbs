@@ -25,6 +25,8 @@ const {
 } = require("@aws-sdk/client-s3");
 const { isMissingObject } = require("./r2-media");
 const {
+  blockVideoSelections,
+  mapBlockVideoData,
   VIDEO_BLOCK_SOURCE_ID,
   isPublicVideoData,
 } = require("./video-block");
@@ -323,6 +325,19 @@ function visibleVideoSourceBlocks(blocks) {
   return new Set(visibleLayoutBlocks(indexed).map(block => blocks[block.sourceIndex]));
 }
 
+function visibleVideoSelections(blocks, visibleBlocks) {
+  return blocks.filter(block => visibleBlocks.has(block)).flatMap(blockVideoSelections);
+}
+
+function stampBlockVideos(block, visible, records) {
+  const renderable = new Set(visible ? blockVideoSelections(block) : []);
+  return mapBlockVideoData(block, data => {
+    const { public: _server, ...authored } = data;
+    const copy = renderable.has(data) ? records.get(data.assetId) : undefined;
+    return copy ? { ...authored, public: copy } : authored;
+  });
+}
+
 function withLiveBlogVideoCopies(document, records) {
   if (document.type !== "post" || !document.liveBlog) return {};
   return { liveBlog: { ...document.liveBlog, updates: document.liveBlog.updates.map(entry => {
@@ -338,11 +353,9 @@ async function withPublicVideos({ tx, firestore, document, collection, documentI
   const entryBlocks = liveBlogVideoBlocks(document?.type === "post" ? document.liveBlog : undefined);
   const syntheticBlocks = [...leadBlocks, ...entryBlocks];
   const blocks = Array.isArray(document?.blocks) ? [...document.blocks, ...syntheticBlocks] : null;
-  if (!blocks || !blocks.some((block) => block?.type === "video")) return document;
+  if (!blocks || !blocks.some(block => block?.type === "video" || block?.type === "scroll_story")) return document;
   const visibleBlocks = visibleVideoSourceBlocks(blocks);
-  const assetIds = [...new Set(blocks
-    .filter((block) => block?.type === "video" && visibleBlocks.has(block))
-    .map((block) => block.data?.assetId))];
+  const assetIds = [...new Set(visibleVideoSelections(blocks, visibleBlocks).map(data => data.assetId))];
   if (assetIds.length > 0 && collection === "cmsPages" && RUNTIME_PAGE_IDS.has(documentId)) {
     throw new PublicVideoError(
       "The Contact page cannot show a video because it loads analytics. Remove or hide the video block, then publish.",
@@ -368,21 +381,12 @@ async function withPublicVideos({ tx, firestore, document, collection, documentI
       ...(records.get(document.leadMedia.data.assetId) ? { public: records.get(document.leadMedia.data.assetId) } : {}),
     } } } : {}),
     ...withLiveBlogVideoCopies(document, records),
-    blocks: blocks.filter(block => !syntheticBlocks.includes(block)).map((block) => {
-      if (block?.type !== "video") return block;
-      const data = { ...block.data };
-      delete data.public;
-      return visibleBlocks.has(block)
-        ? { ...block, data: { ...data, public: records.get(data.assetId) } }
-        : { ...block, data };
-    }),
+    blocks: document.blocks.map(block => stampBlockVideos(block, visibleBlocks.has(block), records)),
   };
 }
 
-function previewVideoAssetIds(blocks, visibleBlocks) {
-  return [...new Set(blocks
-    .filter((block) => block?.type === "video" && visibleBlocks.has(block))
-    .map((block) => block.data?.assetId)
+function previewVideoAssetIds(selections) {
+  return [...new Set(selections.map(data => data.assetId)
     // An incomplete draft may hold any bounded string; only a real asset id names a document.
     .filter((assetId) => typeof assetId === "string" && ID_PATTERN.test(assetId)))];
 }
@@ -426,10 +430,10 @@ async function withPreviewVideos({ tx, firestore, document }) {
   const entryBlocks = liveBlogVideoBlocks(document?.type === "post" ? document.liveBlog : undefined);
   const syntheticBlocks = [...leadBlocks, ...entryBlocks];
   const blocks = Array.isArray(document?.blocks) ? [...document.blocks, ...syntheticBlocks] : null;
-  if (!blocks || !blocks.some((block) => block?.type === "video")) return document;
+  if (!blocks || !blocks.some(block => block?.type === "video" || block?.type === "scroll_story")) return document;
   const visibleBlocks = visibleVideoSourceBlocks(blocks);
   const records = await currentPreviewVideos({
-    tx, firestore, assetIds: previewVideoAssetIds(blocks, visibleBlocks),
+    tx, firestore, assetIds: previewVideoAssetIds(visibleVideoSelections(blocks, visibleBlocks)),
   });
   return {
     ...document,
@@ -438,13 +442,7 @@ async function withPreviewVideos({ tx, firestore, document }) {
       ...(records.get(document.leadMedia.data.assetId) ? { public: records.get(document.leadMedia.data.assetId) } : {}),
     } } } : {}),
     ...withLiveBlogVideoCopies(document, records),
-    blocks: blocks.filter(block => !syntheticBlocks.includes(block)).map((block) => {
-      if (block?.type !== "video") return block;
-      const data = { ...block.data };
-      delete data.public;
-      const media = visibleBlocks.has(block) ? records.get(data.assetId) : undefined;
-      return { ...block, data: media ? { ...data, public: media } : data };
-    }),
+    blocks: document.blocks.map(block => stampBlockVideos(block, visibleBlocks.has(block), records)),
   };
 }
 
@@ -455,12 +453,10 @@ async function withPreviewVideos({ tx, firestore, document }) {
 function previewVideoState(document) {
   const blocks = [...(Array.isArray(document?.blocks) ? document.blocks : []), ...leadVideoBlocks(document?.leadMedia),
     ...liveBlogVideoBlocks(document?.type === "post" ? document.liveBlog : undefined)];
-  const visibleBlocks = visibleVideoSourceBlocks(blocks);
-  const assetIds = previewVideoAssetIds(blocks, visibleBlocks);
+  const selections = visibleVideoSelections(blocks, visibleVideoSourceBlocks(blocks));
+  const assetIds = previewVideoAssetIds(selections);
   if (assetIds.length === 0) return null;
-  const urls = new Map(blocks
-    .filter((block) => block?.type === "video" && visibleBlocks.has(block) && block.data?.public)
-    .map((block) => [block.data.assetId, block.data.public.url]));
+  const urls = new Map(selections.filter(data => data.public).map(data => [data.assetId, data.public.url]));
   return Object.fromEntries(assetIds.map((assetId) => [assetId, urls.get(assetId) ?? null]));
 }
 

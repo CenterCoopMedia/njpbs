@@ -4,6 +4,7 @@ import publicVideo from "../../functions/lib/public-video.js";
 import sourceVideoPublication from "../../functions/source-video-publication.js";
 import sourceContract from "../../functions/lib/source-media-contract.js";
 import renditionContract from "../../functions/lib/source-media-rendition.js";
+import videoReferences from "../../functions/lib/public-video-references.js";
 
 const {
   PublicVideoError,
@@ -497,6 +498,32 @@ describe("withPreviewVideos", () => {
     media: storedMedia(),
   };
   const asset = storedReadyDoc();
+
+  it("uses the same copy and reference lifecycle for visible scroll story videos", async () => {
+    const { firestore, tx, writes } = memoryFirestore({
+      [`cmsPublicVideos/${ASSET_ID}`]: record,
+      [`mediaSourceAssets/${ASSET_ID}`]: asset,
+    });
+    const step = { text: "The meeting starts.", assetId: "", alt: "", caption: "" };
+    const video = { ...videoBlock("v1", ASSET_ID).data, caption: "A county meeting." };
+    const missing = { ...video, assetId: "unavailable-video", public: storedMedia() };
+    const block = { id: "story", type: "scroll_story", visible: true, order: 0,
+      data: { steps: [{ ...step, video }, { ...step, video: missing }] } };
+    const document = { blocks: [block] };
+    const draft = await withPreviewVideos({ firestore, tx, document });
+    expect(draft.blocks[0].data.steps[0].video).toEqual({ ...video, public: storedMedia() });
+    expect(draft.blocks[0].data.steps[1].video).not.toHaveProperty("public");
+    expect(previewVideoState(draft)).toEqual({ [ASSET_ID]: VIDEO_URL, "unavailable-video": null });
+    await expect(withPublicVideos({ firestore, tx, document })).rejects.toMatchObject({ status: 409 });
+
+    const approved = { ...block, data: { steps: [{ ...step, video }] } };
+    const hidden = { ...block, id: "hidden-story", order: 1, visible: false };
+    const published = await withPublicVideos({ firestore, tx, document: { blocks: [approved, hidden] } });
+    expect(published.blocks[1].data.steps[1].video).not.toHaveProperty("public");
+    expect(videoReferences.videoCopies(published.blocks)).toEqual([VIDEO_URL, POSTER_URL].map(url => ({ assetId: ASSET_ID, url })));
+    expect(videoReferences.scheduledVideoAssetIds({ ...published, status: "scheduled" })).toEqual([ASSET_ID]);
+    expect(writes).toEqual([]);
+  });
 
   it("stamps the public copy when it matches the current viewing copy", async () => {
     const { firestore, tx, writes } = memoryFirestore({

@@ -28,7 +28,7 @@ const { r2ClientConfig } = require("./lib/r2-media");
 const { acquirePublicVideoCopy, samePublicVideoSource, PublicVideoError, publishSourceVideo } = require("./lib/public-video");
 const { createPublicVideoWithdrawalHandler: withdrawalHandler, createPublicVideoWithdrawalRecoveryHandler: recoveryHandler } = require("./lib/public-video-withdrawal");
 const { leadVideoBlocks } = require("./lib/post-lead-media");
-const { VIDEO_BLOCK_SOURCE_ID } = require("./lib/video-block");
+const { blockVideoSelections, VIDEO_BLOCK_SOURCE_ID } = require("./lib/video-block");
 const { FUNCTION_SERVICE_ACCOUNT, respondWithError } = require("./source-media");
 
 const R2_ACCESS_KEY_ID = defineSecret("CMS_MEDIA_R2_ACCESS_KEY_ID");
@@ -123,8 +123,8 @@ function createCmsPublishSourceVideoHandler(deps = {}) {
         // The addressed record must actually use this video; an allowed record is not a
         // permit to expose unrelated library items. Hidden rows follow the publish contract.
         const blocks = Array.isArray(content.blocks) ? content.blocks.filter((block) => block && typeof block === "object") : [];
-        if (!visibleLayoutBlocks([...leadVideoBlocks(content.leadMedia), ...liveBlogVideoBlocks(content.type === "post" ? content.liveBlog : undefined), ...blocks]).some((block) => block.type === "video" &&
-            block.data?.sourceId === request.sourceId && block.data?.assetId === request.assetId)) {
+        if (!visibleLayoutBlocks([...leadVideoBlocks(content.leadMedia), ...liveBlogVideoBlocks(content.type === "post" ? content.liveBlog : undefined), ...blocks])
+          .flatMap(blockVideoSelections).some(data => data.sourceId === request.sourceId && data.assetId === request.assetId)) {
           throw new PublicVideoError("This video is not visible in the saved content", 403);
         }
       }

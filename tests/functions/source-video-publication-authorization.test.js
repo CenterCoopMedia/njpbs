@@ -153,6 +153,18 @@ describe("public video content authorization (#2822)", () => {
     await expectNoPublicCopy(storage);
   });
 
+  it("binds a scroll story video to a visible, readable step in the saved Post", async () => {
+    const step = { text: "Watch the clip.", assetId: "", alt: "", caption: "", video: video.data };
+    const block = { ...video, type: "scroll_story", data: { steps: [step] } };
+    const { handler, storage } = await setup({ content: { blocks: [block] } });
+    expect((await call(handler, body)).status).toBe(200);
+    expect(storage.objects.size).toBe(2);
+    await db.doc(`cmsPublicVideos/${assetId}`).delete(); storage.objects.clear();
+    await db.doc(`cmsPosts/${postId}`).update({ blocks: [{ ...block, data: { steps: [{ ...step, text: " " }] } }] });
+    expect((await call(handler, body)).status).toBe(403);
+    await expectNoPublicCopy(storage);
+  });
+
   it("refuses an unbound request from a scoped editor before making a video public", async () => {
     const { handler, storage } = await setup();
     const result = await call(handler, { sourceId: "video-library", assetId });

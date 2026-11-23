@@ -151,4 +151,17 @@ describe("frozen dataset figure projection", () => {
     expect(content.pages[0].datasetFigures).toEqual(figures());
     expect(Object.isFrozen(content.pages[0].datasetFigures)).toBe(true);
   });
+
+  it("matches a scroll story figure to its frozen step and keeps withdrawn steps readable", () => {
+    const story = post();
+    const snapshot = story.published as { blocks: PageBlock[]; datasetFigures?: DatasetFigures };
+    snapshot.blocks = [{ id: "scroll", type: "scroll_story", order: 0, visible: true, data: { steps: [
+      { text: "The monthly figures give the story context.", assetId: "", alt: "", caption: "", figure: block.data },
+    ] } }];
+    expect(() => projectCmsPost(story, { now: postNow })).toThrow("frozen dataset figures do not match its blocks");
+    snapshot.datasetFigures = { figures: [{ blockId: "scroll-figure-scroll-1", datasetId: "jobs-rate", withdrawn: true }], releases: [] };
+    const projected = projectCmsPost(story, { now: postNow })!;
+    const manifest = createExternalContentManifest({ site: "https://www.njpbs.org/", posts: [projected], programs: [], authors: [] });
+    expect(manifest.items[0].contentHtml).toMatch(/The monthly figures give the story context\..*This data figure is unavailable\./s);
+  });
 });

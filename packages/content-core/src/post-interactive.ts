@@ -1,6 +1,7 @@
 import { isDataFigureData } from "./data-figure";
 import { dataTableError } from "./data-table";
 import { visibleLayoutBlocks } from "./content-layout";
+import { figureSelections } from "./scroll-story";
 import {
   safeHref,
   type PageBlock,
@@ -22,9 +23,11 @@ export function interactivePostInventory(
 
   for (const block of visibleLayoutBlocks(blocks)) {
     if (block.visible === false) continue;
-    if (block.type === "data_figure") {
-      if (isDataFigureData(block.data, true)) modules += 1;
-      else unsafeModules += 1;
+    if (block.type === "data_figure" || block.type === "scroll_story") {
+      for (const { data } of figureSelections(block)) {
+        if (isDataFigureData(data, true)) modules += 1;
+        else unsafeModules += 1;
+      }
       continue;
     }
     if (block.type === "data_table") {

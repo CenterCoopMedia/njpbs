@@ -695,8 +695,10 @@ describe("durable dataset correction refresh", () => {
     }
     await capacity.commit();
     await firestore.doc(`cmsDatasets/${full.id}`).update({ publishedUseCount: 500, usageRevision: 1 });
-    const unavailable = postSource("schedule-unavailable", dataFigureBlock("unavailable", archived.id,
-      { mode: "pinned", releaseId: archived.approvedReleaseId }), 1, "Unavailable source");
+    const unavailable = postSource("schedule-unavailable", { id: "unavailable", type: "scroll_story", order: 0,
+      visible: true, data: { steps: [{ text: "The source figures give the story context.", assetId: "", alt: "", caption: "",
+        figure: dataFigureBlock("archived", archived.id, { mode: "pinned", releaseId: archived.approvedReleaseId }).data,
+      }] } }, 1, "Unavailable source");
     const overCapacity = postSource("schedule-capacity", dataFigureBlock("capacity", full.id,
       { mode: "pinned", releaseId: full.approvedReleaseId }), 1, "Full source");
     const healthyPost = postSource("schedule-healthy", { id: "post-divider", type: "divider", order: 0,

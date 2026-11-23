@@ -44,6 +44,9 @@ const blocks = [
   { id: "v2", type: "video", order: 1, visible: true, data: { sourceId: "video-library", assetId: "clip-1", title: "Again" } },
   { id: "v3", type: "video", order: 2, visible: false, data: { sourceId: "video-library", assetId: "hidden-clip", title: "Hidden" } },
 ];
+const scrollVideo = { id: "scroll", type: "scroll_story", order: 0, visible: true, data: {
+  steps: [{ text: "Watch the clip.", assetId: "", alt: "", caption: "", video: blocks[0].data }],
+} };
 
 afterEach(() => {
   vi.restoreAllMocks();
@@ -68,14 +71,14 @@ describe("publishing content that holds a video block (#2751)", () => {
     expect(progress[0]).toBe("Copying video to the public site…");
   });
 
-  it("copies before a schedule save too", async () => {
+  it("copies a scroll story video before a schedule save too", async () => {
     const fetchMock = stubEndpoints({
       cmsPublishSourceVideo: { status: 200, body: { success: true, media } },
       cmsSaveContent: saved,
     });
     await saveContentWithPublicVideos("id-token", {
       collection: "cmsPosts", id: "post-1", baseVersion: 7, scheduleAt: "2026-10-08T14:00:00.000Z", document: {},
-    }, { blocks });
+    }, { blocks: [scrollVideo] });
     expect(endpointsCalled(fetchMock)).toEqual(["cmsPublishSourceVideo", "cmsSaveContent"]);
     expect(bodyOf(fetchMock, "cmsPublishSourceVideo")).toEqual({
       sourceId: "video-library", assetId: "clip-1", collection: "cmsPosts", id: "post-1",
@@ -84,7 +87,9 @@ describe("publishing content that holds a video block (#2751)", () => {
 
   it("does not copy a video on a draft save, and strips server-owned public data", async () => {
     const fetchMock = stubEndpoints({ cmsSaveContent: saved });
-    const draftBlocks = [{ ...blocks[0]!, data: { ...blocks[0]!.data, public: media } }];
+    const draftBlocks = [{ ...blocks[0]!, data: { ...blocks[0]!.data, public: media } }, {
+      ...scrollVideo, data: { steps: scrollVideo.data.steps.map(step => ({ ...step, video: { ...step.video, public: media } })) },
+    }];
     await saveContentWithPublicVideos("id-token", {
       collection: "cmsPosts", id: "post-1", baseVersion: 7, document: { blocks: draftBlocks },
     }, { blocks: draftBlocks });
@@ -93,6 +98,7 @@ describe("publishing content that holds a video block (#2751)", () => {
     expect(bodyOf(fetchMock, "cmsSaveContent").document.blocks[0].data).toEqual(
       { sourceId: "video-library", assetId: "clip-1", title: "Clip" },
     );
+    expect(bodyOf(fetchMock, "cmsSaveContent").document.blocks[1]).toEqual(scrollVideo);
   });
 
   it("binds a page video to the saved page without adding another request", async () => {

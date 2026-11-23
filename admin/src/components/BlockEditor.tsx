@@ -44,6 +44,7 @@ import { reconcileBlockId } from "../lib/block-editor-state";
 import type { SavedEditorReceipt } from "../lib/editor-save-receipt";
 import { useBlockEditor } from "../hooks/useBlockEditor";
 import { visibleLayoutBlocks } from "../../../packages/content-core/src/content-layout";
+import { scrollStoryMediaError } from "../../../packages/content-core/src/scroll-story";
 import {
   contradictedBlockContent,
   missingBlockContent,
@@ -305,6 +306,18 @@ function hiddenBlockErrors(block: AdminBlock, fields: ReturnType<typeof validati
     fields.filter(field => field.kind === "number" || field.key === "mapSize" || field.key === "mapWidth"),
     block.data, { allowIncomplete: true },
   ));
+  return errors;
+}
+
+function visibleBlockErrors(block: AdminBlock, fields: ReturnType<typeof validationFieldsForBlock>, allowIncomplete: boolean) {
+  const errors = missingBlockContent(fields, block.data, {
+    allowIncomplete: allowIncomplete || block.type === "newsletter_signup" && block.section === "home-newsletter" &&
+      Array.isArray(block.data.newsletterIds) && block.data.newsletterIds.length === 0,
+  });
+  if (!allowIncomplete && block.type === "scroll_story") {
+    const mediaError = scrollStoryMediaError(block.data.steps);
+    if (mediaError) errors.push(mediaError);
+  }
   return errors;
 }
 
@@ -945,10 +958,7 @@ export const BlockEditor = forwardRef<BlockEditorHandle, BlockEditorProps>(
           if (!prev[block.id]) continue;
           const fields = validationFieldsForBlock(block);
           const messages = visibleBlockIds.has(block.id)
-            ? missingBlockContent(fields, block.data, {
-                allowIncomplete: allowIncomplete || block.type === "newsletter_signup" && block.section === "home-newsletter" &&
-                  Array.isArray(block.data.newsletterIds) && block.data.newsletterIds.length === 0,
-              })
+            ? visibleBlockErrors(block, fields, allowIncomplete)
             : hiddenBlockErrors(block, fields);
           if (messages.length > 0) next[block.id] = messages;
         }
@@ -989,10 +999,7 @@ export const BlockEditor = forwardRef<BlockEditorHandle, BlockEditorProps>(
         // the same page as an unattributed format error instead of a marked field.
         const fields = validationFieldsForBlock(block);
         const messages = visibleBlockIds.has(block.id)
-          ? missingBlockContent(fields, block.data, {
-              allowIncomplete: !complete || block.type === "newsletter_signup" && block.section === "home-newsletter" &&
-                Array.isArray(block.data.newsletterIds) && block.data.newsletterIds.length === 0,
-            })
+          ? visibleBlockErrors(block, fields, !complete)
           : hiddenBlockErrors(block, fields);
         if (complete && homeCompositionVersion !== undefined && block.section === "home-passport-copy" && isRichTextDoc(block.data.content)) {
           if (homePassportHeading(block.data.content) === null) messages.push("Passport heading is required.");

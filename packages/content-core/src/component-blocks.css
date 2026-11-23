@@ -323,7 +323,7 @@ section.support-appeal--dark .support-appeal__button { border-color: var(--color
 
 @media (prefers-reduced-motion: no-preference) and (min-height: 38rem) {
   @container (min-width: 44rem) {
-    .scroll-story__step:has(.scroll-story__media) {
+    html:not([data-motion="off"]) .scroll-story__step:has(.scroll-story__media) {
       display: grid;
       grid-template-columns: minmax(0, 1fr) minmax(0, 1.15fr);
       align-items: start;
@@ -332,9 +332,12 @@ section.support-appeal--dark .support-appeal__button { border-color: var(--color
     }
 
     .scroll-story__media {
+      margin-block-start: 0;
+    }
+
+    html:not([data-motion="off"]) .scroll-story__media:not(:has(.cms-data-figure)) {
       position: sticky;
       inset-block-start: 7rem;
-      margin-block-start: 0;
     }
 
     .scroll-story__media img { max-block-size: 48svh; object-fit: contain; }
