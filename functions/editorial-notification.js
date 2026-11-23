@@ -44,10 +44,12 @@ async function deliverEditorialNotification(auditId, audit, deps = {}) {
     }
     return deliverStaffAccessEmail(id, { ...deps, firestore, authClient, now });
   }));
-  if (attempts.some(attempt => attempt.status === "rejected")) {
-    throw new Error("Editorial notification outbox processing failed");
+  const results = [];
+  for (const attempt of attempts) {
+    if (attempt.status === "rejected") throw new Error("Editorial notification outbox processing failed");
+    results.push(attempt.value);
   }
-  return attempts.map(attempt => attempt.value);
+  return results;
 }
 
 const onEditorialNotificationCreated = onDocumentCreated({

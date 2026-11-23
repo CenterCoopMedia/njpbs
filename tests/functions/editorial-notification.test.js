@@ -35,7 +35,7 @@ it("routes committed Page and Post notices to eligible participants once per tra
   const id = "sample post";
   const record = { type: "post", section: "news", createdBy: "writer", assignee: "assigned" };
   const inReview = { ...record, reviewRequest: reviewQueue.createReviewRequest({
-    collection, id, sourceVersion: 2, requestedBy: "writer", requestedAt: "2026-11-22T12:00:00.000Z",
+    collection, id, sourceVersion: 2, requestedBy: "reviewer", requestedAt: "2026-11-22T12:00:00.000Z",
   }) };
   const audit = (actorUid, action, after = record) => ({
     actorUid, after: editorialNotice(collection, id, action, inReview, after),
@@ -60,8 +60,8 @@ it("routes committed Page and Post notices to eligible participants once per tra
   ]);
 
   for (const [action, actorUid, expected] of [
-    ["sendBack", "assigned", ["writer@example.org"]],
-    ["approve", "assigned", ["writer@example.org"]],
+    ["sendBack", "assigned", ["reviewer@example.org", "writer@example.org"]],
+    ["approve", "assigned", ["reviewer@example.org", "writer@example.org"]],
     ["schedule", "assigned", ["writer@example.org"]],
     ["publish", "system:scheduler", ["assigned@example.org", "writer@example.org"]],
   ]) {
@@ -74,9 +74,9 @@ it("routes committed Page and Post notices to eligible participants once per tra
   sendEmail.mockClear();
   await deliverEditorialNotification("page", {
     actorUid: "system:scheduler",
-    after: editorialNotice("cmsPages", "watch", "publish", {}, { createdBy: "otherDesk" }),
+    after: editorialNotice("cmsPages", "contact", "publish", {}, { createdBy: "otherDesk" }),
   }, deps);
   expect(sendEmail).toHaveBeenCalledOnce();
   expect(sendEmail.mock.calls[0][0]).toMatchObject({ to: "otherdesk@example.org" });
-  expect(sendEmail.mock.calls[0][0].text).toContain("https://boardwalk.example.org/content/pages/watch/edit");
+  expect(sendEmail.mock.calls[0][0].text).toContain("https://boardwalk.example.org/content/pages/contact/edit");
 });

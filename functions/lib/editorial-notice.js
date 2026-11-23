@@ -8,7 +8,7 @@ const { readAutomationAccount } = require("./automation-accounts");
 
 const messages = {
   submit: ["Ready for review", "is ready for review", "Open Boardwalk to review the submitted draft."],
-  sendBack: ["Changes requested", "was returned for changes", "Open Boardwalk to read the review feedback."],
+  sendBack: ["Changes requested", "was returned for changes", "Open Boardwalk to review the draft."],
   approve: ["Approved for publication", "was approved for publication", "Open Boardwalk to see the approved version."],
   schedule: ["Publication scheduled", "was scheduled for publication", "Open Boardwalk to see when it is scheduled to publish."],
   publish: ["Publication started", "was sent for publication", "Open Boardwalk to check the publication status."],
