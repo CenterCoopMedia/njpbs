@@ -1,9 +1,12 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import {
   loadPublicContentStatus,
+  loadPublicPageStatus,
+  PUBLIC_PAGE_STATUS_TIMEOUT_MS,
   publicContentKey,
   type PublicContentInventory,
   type PublicContentRoute,
+  type PublicPageStatus,
 } from "../lib/public-content-status";
 import { cmsGetPublicationStatus, cmsRetryPublication, cmsRecheckPublication,
   type PublicationRecheckResult, type ContentPublicationMetadata, type SaveCollection } from "../lib/functions";
@@ -18,6 +21,7 @@ const PublicContentStatusControlContext = createContext<{
   subscribe: () => () => void;
 } | null>(null);
 type MetadataResult = { data: ContentPublicationMetadata | null; unavailable: boolean;
+  publicPage?: PublicPageStatus; publicPageChecking?: boolean;
   lastRecheck?: PublicationRecheckResult; lastRecheckSourceVersion?: number | null };
 interface WatchedRecord { collection: SaveCollection; id: string; count: number; loading: boolean; poll: boolean }
 const PublicationMetadataContext = createContext<{
@@ -53,25 +57,40 @@ export function PublicContentStatusProvider({ children, getIdToken }: {
     const identity = `${record.collection}/${record.id}`;
     record.loading = true;
     const controller = new AbortController();
-    const timeout = window.setTimeout(() => controller.abort(), 8_000);
+    let timeout = window.setTimeout(() => controller.abort(), 8_000);
     try {
       const response = await cmsGetPublicationStatus(await getIdToken(), {
         collection: record.collection, id: record.id,
       }, controller.signal);
+      window.clearTimeout(timeout);
       if (!response.publication) throw new Error("Publication status is unavailable.");
+      const publication = response.publication;
+      const pagePath = record.collection === "cmsPages" && publication.publicationTransport !== "page-no-build-v1"
+        ? publication.pagePublicPath : undefined;
       record.poll = response.publication.postProofPending === true ||
         response.publication.recordPublication?.status === "pending" ||
         ["reserved", "pending", "publishing", "unavailable"].includes(response.publication.queueStatus ?? "");
       if (watched.current.get(identity) === record) {
         setRecords((previous) => {
-          const old = previous[identity], publication = response.publication;
+          const old = previous[identity];
           const operationId = publication.publicBuildQueueId ?? publication.recheckQueueId ??
             publication.postProofQueueId ?? publication.pageReceipt?.operationId;
           const retainOutcome = old?.lastRecheck && old.lastRecheckSourceVersion === publication.publishedSourceVersion &&
             (!operationId || operationId === old.lastRecheck.queueId);
+          const publicPage = !old?.unavailable && old?.data?.pagePublicPath === publication.pagePublicPath &&
+            old?.data?.publiclyVisible === publication.publiclyVisible &&
+            old?.data?.publishedSourceVersion === publication.publishedSourceVersion ? old?.publicPage : undefined;
           return { ...previous, [identity]: { data: publication, unavailable: false,
+            publicPage: pagePath ? publicPage : undefined, publicPageChecking: Boolean(pagePath),
             ...(retainOutcome ? { lastRecheck: old.lastRecheck, lastRecheckSourceVersion: old.lastRecheckSourceVersion } : {}) } };
         });
+      }
+      if (pagePath && watched.current.get(identity) === record) {
+        timeout = window.setTimeout(() => controller.abort(), PUBLIC_PAGE_STATUS_TIMEOUT_MS);
+        const publicPage = await loadPublicPageStatus(pagePath, record.id, controller.signal);
+        if (watched.current.get(identity) === record) {
+          setRecords(previous => ({ ...previous, [identity]: { ...previous[identity], publicPage, publicPageChecking: false } }));
+        }
       }
     } catch {
       record.poll = true;

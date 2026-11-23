@@ -85,6 +85,52 @@ export async function publicContentKey(collection: string, documentId: string): 
   return Array.from(new Uint8Array(hash), (byte) => byte.toString(16).padStart(2, "0")).join("");
 }
 
+export type PublicPageStatus = { state: "live"; route: PublicContentRoute } | { state: "gone" };
+export const PUBLIC_PAGE_STATUS_TIMEOUT_MS = 15_000;
+const pagePathPattern = /^\/(?:[a-z0-9]+(?:-[a-z0-9]+)*\/)?$/;
+
+export async function loadPublicPageStatus(
+  path: string,
+  pageId: string,
+  signal: AbortSignal,
+): Promise<PublicPageStatus | undefined> {
+  if (!pagePathPattern.test(path)) return;
+  try {
+    const key = await publicContentKey("cmsPages", pageId);
+    async function probe(address: string) {
+      const url = `${publicSiteOrigin}${address}?cms-page-status=1`;
+      const response = await fetchStaffSiteRead(url, {
+        ...requestOptions(signal), method: "HEAD", redirect: "error",
+      });
+      const receipt = /^([a-f0-9]{64}):(site|[1-9]\d*)$/.exec(response.headers.get("x-njpbs-page-status") ?? "");
+      if (signal.aborted || response.url !== url || response.headers.get("x-njpbs-page-path") !== address ||
+          receipt?.[1] !== key) return;
+      return { status: response.status, version: receipt[2], alias: response.headers.get("x-njpbs-page-redirect") };
+    }
+    let result = await probe(path);
+    if (result?.alias) {
+      if (result.status !== 200 || result.alias === path || !pagePathPattern.test(result.alias)) return;
+      path = result.alias;
+      result = await probe(path);
+    }
+    if (!result || result.alias !== null) return;
+    const { status, version } = result;
+    if (version === "site") {
+      if (status === 200) return { state: "live", route: { path, source: "site" } };
+      return;
+    }
+    const sourceVersion = Number(version);
+    if (!Number.isSafeInteger(sourceVersion)) return;
+    if (status === 410) return { state: "gone" };
+    if (status === 200) return {
+      state: "live", route: { path, source: "cms", contentKey: key, sourceVersion },
+    };
+  } catch {
+    // Retained content and unavailable reads cannot confirm current authority.
+    return;
+  }
+}
+
 function requestOptions(signal: AbortSignal): RequestInit {
   return { signal, credentials: "omit", cache: "no-store" };
 }

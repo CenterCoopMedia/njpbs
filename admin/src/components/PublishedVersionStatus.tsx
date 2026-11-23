@@ -1,10 +1,10 @@
-import { Children, useEffect, useId, useState } from "react";
+import { Children, useEffect, useId, useRef, useState } from "react";
 import { contentStatusPresentation, displayContentStatus, displayLiveVersion } from "../lib/content-status";
 import type { ContentPublicationMetadata } from "../lib/functions";
-import { publicContentKey } from "../lib/public-content-status";
+import { loadPublicPageStatus, PUBLIC_PAGE_STATUS_TIMEOUT_MS, publicContentKey, type PublicPageStatus } from "../lib/public-content-status";
 import { usePublicationMetadata, usePublicationRetry, usePublicationRecheck, usePublicContentStatus } from "../context/PublicContentStatusContext";
 import { PublicationRecheckAction } from "./PublicationRecheckAction";
-import { PUBLIC_PAGES } from "../../../packages/content-core/src/public-pages";
+import { isCustomPageId, publicPage } from "../../../packages/content-core/src/public-pages";
 import { Icon } from "./ui/Icon";
 import { LoadingIndicator } from "./ui/LoadingIndicator";
 import { AsyncActionButton, StatusBadge } from "./ui/Primitives";
@@ -106,23 +106,71 @@ export function PublishedVersionStatus({
   const recheck = usePublicationRecheck();
   const [retrying, setRetrying] = useState(false);
   const [retryError, setRetryError] = useState<string | null>(null);
+  const badge = useRef<HTMLSpanElement>(null);
+  const [listedPage, setListedPage] = useState<{ id: string; path: string; current?: PublicPageStatus; checking?: boolean }>();
   const identity = collection && documentId ? `${collection}/${documentId}` : null;
   const [key, setKey] = useState<{ identity: string; value: string } | null>(null);
   useEffect(() => {
-    if (!collection || !documentId || !identity) return;
+    if (!collection || collection === "cmsPages" && loadPublicationMetadata || !documentId || !identity) return;
     let stopped = false;
     void publicContentKey(collection, documentId).then((value) => {
       if (!stopped) setKey({ identity, value });
     }).catch(() => { if (!stopped) setKey(null); });
     return () => { stopped = true; };
-  }, [collection, documentId, identity]);
+  }, [collection, documentId, identity, loadPublicationMetadata]);
 
-  const page = collection === "cmsPages" ? PUBLIC_PAGES.find((entry) => entry.id === documentId) : null;
+  const isPage = collection === "cmsPages";
   const matchingKey = key?.identity === identity ? key?.value : null;
-  // Every unowned Page, Contact included, is served from the committed context
-  // that the public inventory describes. Owned Pages carry their own receipt.
-  const route = publicStatus?.routes.find((entry) => entry.contentKey === matchingKey ||
-    (entry.source === "site" && entry.path === page?.path));
+  const inventoryRoute = publicStatus?.routes.find((entry) => entry.contentKey === matchingKey);
+  const listedPath = isPage && documentId && !loadPublicationMetadata && watchPublicReceipts &&
+    !pageReceipt && !publicationTransport && publicStatus?.state === "current" && matchingKey
+    ? inventoryRoute?.path ?? (isCustomPageId(documentId) ? undefined : publicPage(documentId)?.path) : undefined;
+  useEffect(() => {
+    if (!documentId || !listedPath || !badge.current) return;
+    let active: AbortController | undefined;
+    let visible = typeof IntersectionObserver !== "function";
+    let timer = 0;
+    const read = async () => {
+      if (!visible || active || document.visibilityState === "hidden") return;
+      const controller = new AbortController();
+      active = controller;
+      setListedPage(previous => previous?.path === listedPath && previous.id === documentId && previous.current
+        ? previous : { id: documentId, path: listedPath, checking: true });
+      timer = window.setTimeout(() => controller.abort(), PUBLIC_PAGE_STATUS_TIMEOUT_MS);
+      const current = await loadPublicPageStatus(listedPath, documentId, controller.signal);
+      window.clearTimeout(timer);
+      if (active === controller) {
+        active = undefined;
+        setListedPage({ id: documentId, path: listedPath, current });
+      }
+    };
+    const observer = visible ? null : new IntersectionObserver(entries => {
+      const wasVisible = visible;
+      visible = entries.some(entry => entry.isIntersecting);
+      if (visible && !wasVisible) void read();
+    });
+    if (observer) observer.observe(badge.current);
+    else void read();
+    window.addEventListener("focus", read);
+    return () => {
+      observer?.disconnect();
+      window.removeEventListener("focus", read);
+      window.clearTimeout(timer);
+      active?.abort();
+      active = undefined;
+    };
+  }, [documentId, listedPath, publishedSourceVersion, pendingSourceVersion]);
+  const listedResult = listedPath && listedPage?.path === listedPath && listedPage.id === documentId ? listedPage : undefined;
+  const pageStatus = saved && !metadata?.unavailable ? metadata?.publicPage : listedResult?.current;
+  const pageChecking = isPage && (loadPublicationMetadata
+    ? !metadata?.unavailable && ((!metadata && publicStatus) || metadata?.publicPageChecking)
+    : listedResult?.checking || listedPath && !listedResult);
+  const unpublishedCustomPage = isPage && documentId && isCustomPageId(documentId) &&
+    (!metadata?.unavailable && saved?.publishedSourceVersion === null ||
+      !loadPublicationMetadata && publicStatus?.state === "current" && matchingKey && !inventoryRoute &&
+      !publishedSourceVersion && !pendingSourceVersion && liveSourceVersion == null);
+  // The committed inventory can lag current Page context decisions.
+  const route = isPage ? (pageStatus?.state === "live" ? pageStatus.route : undefined) : inventoryRoute;
   const pendingVersion = saved?.publishedSourceVersion ?? publishedSourceVersion ?? pendingSourceVersion;
   const servedPost = !metadata?.unavailable && collection === "cmsPosts" && saved?.postServingConfirmed === true &&
     saved.publiclyVisible && saved.queueStatus === "success" && !saved.publicUpdatePending &&
@@ -136,8 +184,8 @@ export function PublishedVersionStatus({
   const recordConfirmed = !metadata?.unavailable && confirmedRecord?.status === "success" &&
     (saved ? saved.queueStatus === "success" && !saved.publicUpdatePending && confirmedRecord.withdrawal === !saved.publiclyVisible : !publicUpdatePending) &&
     confirmedRecord.sourceVersion === pendingVersion;
-  const canConfirm = Boolean(recordConfirmed || pageConfirmed || !noBuildPage && !confirmedRecord &&
-    identity && matchingKey && publicStatus?.state === "current" && (!page || route));
+  const canConfirm = Boolean(recordConfirmed || pageConfirmed || (isPage ? pageStatus || unpublishedCustomPage
+    : !confirmedRecord && identity && matchingKey && publicStatus?.state === "current"));
   const actualVersion = recordConfirmed ? (confirmedRecord.withdrawal ? null : confirmedRecord.sourceVersion) : pageConfirmed ? (confirmedPage!.visible ? confirmedPage!.sourceVersion : null) : canConfirm ? route?.sourceVersion : null;
   const pending = saved?.publicUpdatePending ?? publicUpdatePending;
   const queueId = saved ? saved.publicBuildQueueId : publicBuildQueueId;
@@ -201,7 +249,7 @@ export function PublishedVersionStatus({
   } else if (identity && watchPublicReceipts) {
     if (canConfirm) {
       liveLabel = !pageConfirmed && route?.source === "site" ? "Site content live" : actualVersion ? (actualVersion === pendingVersion && publishedVersion ? `Version ${publishedVersion} live` : "Published copy live") : "Not live";
-    } else if (publicStatus?.state === "checking") {
+    } else if (publicStatus?.state === "checking" || pageChecking) {
       liveLabel = "Checking public site…";
     } else {
       liveLabel = unknownLabel;
@@ -271,7 +319,7 @@ export function PublishedVersionStatus({
     </span>;
   }
 
-  if (statusOnly) return <span className="published-version-status" data-public-state={publicState} aria-live={ariaLive}>{statusLabel}</span>;
+  if (statusOnly) return <span ref={badge} className="published-version-status" data-public-state={publicState} aria-live={ariaLive}>{statusLabel}</span>;
 
   const details = Children.toArray([
     !alertsOnly && unified && (publicState === "unknown" || publicState === "live") && presentation.label !== liveLabel ?
@@ -337,7 +385,7 @@ export function PublishedVersionStatus({
   if (detailsOnly && details.length === 0) return null;
 
   return (
-    <span className="published-version-status" data-public-state={publicState} aria-live={ariaLive}>
+    <span ref={badge} className="published-version-status" data-public-state={publicState} aria-live={ariaLive}>
       {detailsOnly ? null : statusLabel}
       {details}
     </span>

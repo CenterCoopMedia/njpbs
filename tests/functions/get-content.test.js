@@ -152,9 +152,19 @@ describe("cmsGetContent", () => {
       workingVersion: 3, contentVersion: 3, publishedContentVersion: null, workingStatus: "draft", publishedSourceVersion: 2,
       publicSourceVersion: 1, publicUpdatePending: true,
       publiclyVisible: false,
-      publicBuildQueueId: "queue-one", queueStatus: "failed", canResumeReservation: false,
+      publicBuildQueueId: "queue-one", queueStatus: "failed", canResumeReservation: false, pagePublicPath: "/",
     } });
     expect(firestore.reads).toEqual(["cmsPages/home", "cmsPublishQueue/queue-one"]);
+  });
+
+  it("uses the published Page address when a withdrawal has a renamed draft", async () => {
+    const { res, firestore } = await call(siteWide("editor"), {
+      collection: "cmsPages", id: "contact", publicationOnly: true,
+    }, { "cmsPages/contact": { ...storedPage, slug: "contact-draft", publiclyVisible: false,
+      published: { sourceVersion: 2, metadata: { slug: "old-contact" } } } });
+    expect(res.statusCode).toBe(200);
+    expect(res.body.publication.pagePublicPath).toBe("/old-contact/");
+    expect(firestore.reads).toEqual(["cmsPages/contact"]);
   });
 
   it("authorizes publication reads before touching a queue", async () => {

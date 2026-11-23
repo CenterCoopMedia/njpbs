@@ -1,5 +1,6 @@
 "use strict";
 
+const { createHash } = require("node:crypto");
 const { pageContextCodeGeneration } = require("./public-release-page-context-code-seal");
 const { PUBLIC_PAGE_DEFINITIONS, publicPageDefinition, publicPagePath } = require("./public-page-contract");
 const { pagePublicationTarget } = require("./no-build-page-target");
@@ -68,6 +69,7 @@ async function readNoBuildPageContextDecision({ firestore, transaction, path, un
   const siteFrame = result.state !== "live" && !pageId.startsWith("page-") && Boolean(builtIn);
   const receipt = { rendererSha, contextRevision, contextDigest: publicContextDigest(contextRevision),
     codeGeneration: pointer.activeGeneration, path, source: siteFrame ? "site" : "cms",
+    contentKey: createHash("sha256").update(`cmsPages/${pageId}`).digest("hex"),
     ...(siteFrame ? {} : { sourceVersion: document?.published?.sourceVersion }) };
   // An unowned built-in withdrawal/scheduled snapshot keeps its committed
   // frame, as the full build does. Exclusive owners were refused above.

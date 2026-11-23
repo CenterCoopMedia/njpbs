@@ -822,7 +822,7 @@ export interface NoBuildPageReply {
   scheduleReceipt?: import("../../site/src/lib/page-schedule-receipt").PageScheduleReceipt;
   bytes?: string;
   contextReceipt?: { rendererSha: string; contextRevision: number; contextDigest: string;
-    codeGeneration: number; path: string; source: "cms" | "site"; sourceVersion?: number };
+    codeGeneration: number; path: string; source: "cms" | "site"; sourceVersion?: number; contentKey?: string };
   renderContext?: unknown;
   receipt?: { schemaVersion: 1; pageId: string; operationId: string; rendererSha: string;
     sourceVersion: number; snapshotDigest: string; path: string; ownedPaths: string[]; generation: number; operationGeneration?: number; codeGeneration: number;

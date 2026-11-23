@@ -1102,6 +1102,7 @@ export interface ContentPublicationMetadata {
   postProofQueueId?: string;
   recheckQueueId?: string;
   pageReceipt?: { operationId: string; sourceVersion: number; visible: boolean };
+  pagePublicPath?: string;
   publicationTransport?: "page-no-build-v1";
   // Present while a build-free Page queue is pending: the live public check state.
   pageConfirmation?: { checking: boolean; attempts: number; nextAttemptAt: number | null };

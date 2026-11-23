@@ -185,6 +185,7 @@ export function createNoBuildPageWorker(deps: {
     const url = new URL(request.url);
     if (url.origin !== target.origin) return null;
     const head = request.method === "HEAD";
+    const statusProbe = head && url.search === "?cms-page-status=1";
     let parsedPath;
     try { parsedPath = pagePath(url.pathname); } catch { return unavailable(head, 404); }
     if (!parsedPath) return null;
@@ -443,11 +444,19 @@ export function createNoBuildPageWorker(deps: {
             if (deps.readWithdrawal) {
               let latest: PageWithdrawal | null = null;
               try { latest = await measure("withdrawal", () => bounded(deps.readWithdrawal!(path), 500)); }
-              catch { /* Keep the same known-withdrawal policy as receipt Pages. */ }
+              catch { withdrawalKnown = false; }
               if (withdrawal && !latest) return durableGone(withdrawal);
               if (latest && !outranksWithdrawal(reply, latest, path)) return durableGone(latest);
             }
             if (authorityUnchanged && homeFence) await cacheWork(() => responseCache.qualifyHome(reply, homeFence));
+            if (statusProbe && authorityUnchanged && withdrawalKnown && /^[a-f0-9]{64}$/.test(receipt.contentKey ?? "")) {
+              headers.set("x-njpbs-page-status", `${receipt.contentKey}:${receipt.sourceVersion ?? "site"}`);
+              headers.set("access-control-expose-headers", "x-njpbs-page-status, x-njpbs-page-path, x-njpbs-page-redirect");
+              // Expose the verified route decision without sending Boardwalk to a content link.
+              if (status === 308 && reply.location) headers.set("x-njpbs-page-redirect", reply.location);
+              headers.delete("location");
+              return new Response(null, { status: status === 410 ? 410 : 200, headers });
+            }
             return authorityUnchanged ? retain(request, prepared) : prepared;
           }
           const headers = receiptHeaders(reply, deps.rendererSha, adminOrigin);
