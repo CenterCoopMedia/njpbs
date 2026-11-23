@@ -1,12 +1,16 @@
 import { createHash } from 'node:crypto';
+import { createRequire } from 'node:module';
 import protocol from '../../functions/lib/public-release-pair.js';
 import serving from '../../functions/lib/public-release-serving.js';
 import admissions from '../../functions/lib/public-release-admission-contract.js';
 import terminal from '../../functions/lib/public-release-terminal.js';
 import targets from '../../functions/lib/publication-target.js';
+import postSlugs from '../../functions/lib/post-slug-contract.js';
+import publicVideos from '../../functions/lib/public-video-references.js';
 import { hasRehearsalHttpCredential, rehearsalHttpHeaders } from './public-release-rehearsal-http-auth.mjs';
 
 const target = targets.publicationTarget('development');
+const require = createRequire(import.meta.url);
 const rootPath = '/_publication-v2.json';
 const hash = bytes => createHash('sha256').update(bytes).digest('hex');
 const same = (left, right) => protocol.publicReleaseDigest(left) === protocol.publicReleaseDigest(right);
@@ -53,7 +57,7 @@ export function createRehearsalIngressProof({ packet, httpCredential }) {
       if (request.method !== 'GET' || url.origin !== target.origin || url.search || url.hash ||
           url.pathname.length > 1024 || !/^\/(?:[A-Za-z0-9._~-]+\/)*[A-Za-z0-9._~-]*$/.test(url.pathname) ||
           url.pathname.split('/').some(part => part === '.' || part === '..') ||
-          url.username || url.password || !protocol.digest(bodyDigest) || ![200, 308, 410].includes(status)) refuse();
+          url.username || url.password || !protocol.digest(bodyDigest) || ![200, 302, 308, 410].includes(status)) refuse();
       let response;
       try {
         response = await fetch(new URL(url.pathname, packet.proofOrigin), { redirect: 'manual', cache: 'no-store',
@@ -131,9 +135,11 @@ export async function readOriginalRehearsalProof({ firestore, packet, operationI
         coverage.schemaVersion !== 2 || coverage.operationId !== operationId || coverage.admissionDigest !== receipt.admissionDigest ||
         !same(coverage.originalExecution, receipt.originalExecution) || !Array.isArray(canonical.proofs) || !canonical.proofs.length) refuse();
     const proofs = canonical.proofs.filter(proof => proof.path === path);
-    if (proofs.length !== 1 || ![200, 308, 410].includes(proofs[0].status) || !protocol.digest(proofs[0].bodyDigest) ||
+    if (proofs.length !== 1 || ![200, 302, 308, 410].includes(proofs[0].status) || !protocol.digest(proofs[0].bodyDigest) ||
         !Number.isSafeInteger(proofs[0].bytes) || proofs[0].bytes < 0 || proofs[0].bytes > 16 * 1024 * 1024 ||
-        proofs[0].status === 410 && (proofs[0].bytes !== 0 || proofs[0].bodyDigest !== hash(''))) refuse();
+        [302, 410].includes(proofs[0].status) && (proofs[0].bytes !== 0 || proofs[0].bodyDigest !== hash('')) ||
+        proofs[0].status === 302 && (admission.source.kind !== 'post' || admission.source.action !== 'publish' ||
+          !postSlugs.postSlugForPath(path))) refuse();
     const original = ['old', 'new'].find(side => same(protocol.publicReleasePairReference(packet[`${side}Pair`]), admission.pair));
     if (!original) refuse();
     return { operation: { operationId, originalPair: original, snapshotDigest: admission.source.snapshotDigest,
@@ -159,10 +165,21 @@ export async function verifyOriginalRehearsalProof({ firestore, packet, operatio
       decision.route.operationId && (decision.route.operationId !== operation.operationId ||
         decision.route.sourceVersion !== operation.sourceVersion || decision.route.snapshotDigest !== operation.snapshotDigest) ||
       proof.status === 410 && decision.route.kind !== 'gone') refuse();
+  let location;
+  if (proof.status === 302) {
+    const route = decision.route;
+    if (route.kind !== 'serve' || route.family !== 'post' || route.canonicalPath !== proof.path ||
+        route.operationId !== operation.operationId) refuse();
+    const document = (await firestore.doc(`cmsPosts/${route.id}`).get()).data();
+    const published = document?.published, publiclyVisible = publicVideos.publiclyVisible(document);
+    if (!publiclyVisible || published?.metadata?.contentLinkMode !== 'custom' ||
+        protocol.publicReleaseDigest(JSON.parse(JSON.stringify({ published, publiclyVisible }))) !== route.sourceDigest) refuse();
+    location = require('../../functions/lib/content-link.js').contentLink(published.metadata, proof.path).href;
+  }
   const root = await verifyRehearsalRoot({ packet, selector: before.selector, httpCredential });
   const after = await serving.readPublicReleaseSelector({ firestore, environment: 'development' });
   if (!same(before.selector, after.selector)) refuse();
   return { schemaVersion: 1, operationId: operation.operationId, admissionDigest: source.admissionDigest,
     canonicalProofDigest: source.canonicalProofDigest, coverageDigest: source.coverageDigest,
-    currentSelectorDigest: root.selectorDigest, rootBodyDigest: root.bodyDigest };
+    currentSelectorDigest: root.selectorDigest, rootBodyDigest: root.bodyDigest, ...(location ? { location } : {}) };
 }

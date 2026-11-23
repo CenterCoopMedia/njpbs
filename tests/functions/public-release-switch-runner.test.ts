@@ -143,6 +143,7 @@ it("observes pending NEW content through OLD without writes and rejects altered 
     originalPair: protocol.publicReleasePairReference(fixture.pair) });
   expect(proof.selector.selectedPair).toEqual(protocol.publicReleasePairReference(pair));
   expect((await db.doc(`cmsPublishQueue/${publicationId}`).get()).updateTime).toEqual(queueBefore.updateTime);
+  await expect(observeCurrentPublicReleaseOperation({ ...options, status: 302 })).rejects.toThrow();
   for (const alteration of ["body", "identity"]) {
     await expect(observeCurrentPublicReleaseOperation({ ...options, ingress: { async prove(request, digest, expected) {
       const response = await router.prove(request, digest, expected), headers = new Headers(response.headers);

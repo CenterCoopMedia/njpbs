@@ -184,7 +184,7 @@ async function openBoundSetup({ plan: raw, pair: rawPair, cases, authorized = fa
     const ingressProof = Object.freeze({ async prove(request, digest, expected) {
       current(); const url = new URL(request.url);
       if (request.method !== 'GET' || url.origin !== targets.publicationTarget('development').origin || url.search || url.hash ||
-          !protocol.digest(digest) || ![200, 308, 410].includes(expected?.status)) refuse();
+          !protocol.digest(digest) || ![200, 302, 308, 410].includes(expected?.status)) refuse();
       return client.prove({ path: url.pathname, bodyDigest: digest, status: expected.status, signal: request.signal });
     } });
     const dispatch = createRehearsalTimingDispatch({ firestore, pair, cases, publications: plan.publications, authorized: true });

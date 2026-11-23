@@ -13,6 +13,7 @@ const nativeFetch = globalThis.fetch, origin = "https://operator.example.test";
 const clientId = "rehearsalOperator.access", audience = "a".repeat(64);
 const oldPair = releasePair(), newPair = releasePair("b", "b".repeat(40));
 const body = "<!doctype html><html>Retained source bytes</html>";
+const customDestination = "https://example.org/report?edition=morning";
 const sha = (value: string) => createHash("sha256").update(value).digest("hex");
 let key: Awaited<ReturnType<typeof generateKeyPair>>, jwk: Awaited<ReturnType<typeof exportJWK>>, assertion: string;
 let upstream: Server, upstreamOrigin: string, bridges: Awaited<ReturnType<typeof startDevelopmentRehearsalHttp>>;
@@ -31,11 +32,13 @@ beforeAll(async () => {
 beforeEach(async () => {
   selector = releaseSelector(); mode = "normal"; requests = []; authorityChanges = false; networkCalls = 0;
   const slots: PublicSlot[] = [oldPair, newPair].map(identity => ({ identity, async serve(request) {
-    const path = new URL(request.url).pathname, status = path === "/withdrawn/" ? 410 : path === "/alias/" ? 308 : 200;
+    const path = new URL(request.url).pathname;
+    const status = path === "/withdrawn/" ? 410 : path === "/alias/" ? 308 : path === "/posts/linked-story/" ? 302 : 200;
     const bytes = status === 200 ? body : "";
     if (authorityChanges) selector = { ...selector, contentHead: { ...selector.contentHead, contextSequence: selector.contentHead.contextSequence + 1 } };
     return { kind: "response", response: new Response(bytes || null, { status,
-      headers: { "content-type": "text/html", "x-njpbs-deliberate-leak": "fixture", ...(status === 308 ? { location: "/current/" } : {}) } }),
+      headers: { "content-type": "text/html", "x-njpbs-deliberate-leak": "fixture", ...(status === 308 ? { location: "/current/" } : {}),
+        ...(status === 302 ? { location: customDestination, "x-robots-tag": "noindex, nofollow" } : {}) } }),
     evidence: { epoch: selector.epoch, pairId: identity.pairId, manifestDigest: selector.contentHead.manifestDigest,
       operationId: "original-operation", sourceVersion: 4, snapshotDigest: "d".repeat(64), rendererSha: identity.commitSha, bodyDigest: sha(bytes) } };
   } }));
@@ -137,7 +140,7 @@ it("refuses changed pair/code/content identity in the expected root", async () =
   await expect(verifyRehearsalRoot({ packet: packet(), selector: { ...selector, contentHead: { ...selector.contentHead, contextSequence: 1 } },
     httpCredential: bridges.httpCredential })).rejects.toThrow("Rehearsal original proof refused");
 });
-it.each([["/current/", 200, body], ["/withdrawn/", 410, ""], ["/alias/", 308, ""]] as const)(
+it.each([["/current/", 200, body], ["/withdrawn/", 410, ""], ["/alias/", 308, ""], ["/posts/linked-story/", 302, ""]] as const)(
   "relays the actual native %s status%d and original operation headers without following redirects", async (path, status, bytes) => {
     const ingress = createRehearsalIngressProof({ packet: packet(), httpCredential: bridges.httpCredential });
     const response = await ingress.prove(new Request("https://dev-public.example.org" + path), sha(bytes), { status });
@@ -151,6 +154,10 @@ it.each([["/current/", 200, body], ["/withdrawn/", 410, ""], ["/alias/", 308, ""
     expect(response.headers.get("x-njpbs-content-head-sha256")).toBe(selector.contentHead.manifestDigest);
     expect(response.headers.get("x-njpbs-release-epoch")).toBe(String(selector.epoch));
     if (status === 308) expect(response.headers.get("location")).toBe("/current/");
+    if (status === 302) {
+      expect(response.headers.get("location")).toBe(customDestination);
+      expect(response.headers.get("x-robots-tag")).toBe("noindex, nofollow");
+    }
     expect(requests).toEqual(["/private-pair-operator/v1/prove"]);
   });
 it("refuses an authority change during actual private proof", async () => {

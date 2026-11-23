@@ -2,6 +2,7 @@ import { createRequire } from 'node:module';
 import protocol from '../../functions/lib/public-release-pair.js';
 import work from '../../functions/lib/public-release-pair-work.js';
 import admission from '../../functions/lib/public-release-admission.js';
+import postSlugs from '../../functions/lib/post-slug-contract.js';
 import { assertDevelopmentRehearsalEnvironment, assertDemoRehearsalEnvironment } from './development-rehearsal-credentials.mjs';
 import { MAX_REHEARSAL_TIMING_CASES, isRehearsalTimingOperationId } from './rehearsal-timing-cases.mjs';
 
@@ -36,14 +37,17 @@ export function createRehearsalTimingDispatch({ firestore, pair: rawPair, cases,
     if (!isRehearsalTimingOperationId(input.operationId) || plans.has(input.operationId) || publication.operationId !== input.operationId ||
         !/^[A-Za-z0-9_-]{1,128}$/.test(publication.documentId) || !protocol.digest(publication.beforeDocumentDigest) ||
         next?.id !== publication.documentId || next?.type !== 'post' || !protocol.positive(next.version) ||
-        !protocol.positive(input.sourceVersion) || !protocol.digest(input.snapshotDigest) || ![200, 308, 410].includes(input.status)) refuse();
+        !protocol.positive(input.sourceVersion) || !protocol.digest(input.snapshotDigest) || ![200, 302, 308, 410].includes(input.status)) refuse();
     const source = admission.publicationSource({ kind: 'post', family: 'posts', id: publication.documentId,
       action: visible ? 'publish' : 'withdraw', sourceVersion: snapshot?.sourceVersion, snapshot });
     if (source.sourceVersion !== input.sourceVersion || source.snapshotDigest !== input.snapshotDigest ||
         typeof snapshot?.metadata?.slug !== 'string') refuse();
-    const canonical = `/posts/${snapshot.metadata.slug}/`;
-    const previous = (snapshot.metadata.previousSlugs ?? []).map(slug => `/posts/${slug}/`);
-    if (visible !== (input.status !== 410) || input.status === 200 && input.path !== canonical ||
+    const canonical = postSlugs.postRoutePath(snapshot.metadata.slug);
+    const previous = (snapshot.metadata.previousSlugs ?? []).map(postSlugs.postRoutePath);
+    const customLink = snapshot.metadata.contentLinkMode === 'custom';
+    if (visible !== (input.status !== 410) ||
+        [200, 302].includes(input.status) && (input.path !== canonical || input.status !== (customLink ? 302 : 200)) ||
+        input.status === 302 && require('../../functions/lib/content-link.js').contentLinkError(snapshot.metadata) !== null ||
         input.status === 308 && (input.path === canonical || !previous.includes(input.path)) ||
         input.status === 410 && ![canonical, ...previous].includes(input.path)) refuse();
     plans.set(input.operationId, protocol.freeze({ input, ...publication }));
