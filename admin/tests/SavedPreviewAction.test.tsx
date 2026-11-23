@@ -67,6 +67,19 @@ describe("one Preview action", () => {
     expect(input.loadPreviewStatus).toHaveBeenCalledWith(queueId, { signal: expect.any(AbortSignal), waitMs: 5000, observedStatus: "pending" });
     expect(popup.location.replace).toHaveBeenCalledTimes(1);
   });
+  it("retries a temporary status error on the accepted queue without requesting a new preview", async () => {
+    vi.useFakeTimers();
+    const requestPreview = vi.fn(async () => result({ status: "building", previewUrl: null }));
+    const loadPreviewStatus = vi.fn()
+      .mockRejectedValueOnce(Object.assign(new Error("Temporary status error"), { status: 503 }))
+      .mockResolvedValueOnce(result());
+    render(<SavedPreview {...props({ requestPreview, loadPreviewStatus })} />);
+    fireEvent.click(screen.getByRole("button", { name: "Preview" }));
+    await act(async () => { await vi.advanceTimersByTimeAsync(750); });
+    expect(requestPreview).toHaveBeenCalledExactlyOnceWith(target);
+    expect(loadPreviewStatus.mock.calls.map(([id]) => id)).toEqual([queueId, queueId]);
+    expect(popup.location.replace).toHaveBeenCalledExactlyOnceWith(result().previewUrl + "contact/");
+  });
   it("shows context refresh progress and stops that progress on the typed failure", async () => {
     vi.useFakeTimers();
     const status = deferred<ReturnType<typeof result>>();

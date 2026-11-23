@@ -139,8 +139,6 @@ import type {
   BylineAuthorsResponse,
   BulkArchiveResponse,
   MediaCategoryDefinition,
-  PreviewRequestResponse,
-  PreviewStatusResponse,
   GetRevisionResponse,
   ListRevisionsResponse,
   RestoreRevisionResponse,
@@ -507,9 +505,6 @@ interface EditorWorkspaceProps {
   autoSaveEnabled?: boolean;
   requestSavedPreview?: SavedPreviewProps["requestPreview"];
   preparePreviewSession?: SavedPreviewProps["prepareSession"];
-  requestPagePreview?: (
-    pageId: PublicPageId,
-  ) => Promise<PreviewRequestResponse>;
   loadPagePreviewStatus?: SavedPreviewProps["loadPreviewStatus"];
   // Revision summaries and full rows stay behind the same authenticated
   // record-aware boundary as content hydration. The workspace supplies only
@@ -666,7 +661,6 @@ function EditorWorkspaceContent({
   autoSaveEnabled = false,
   requestSavedPreview,
   preparePreviewSession,
-  requestPagePreview,
   loadPagePreviewStatus,
   loadRevisions,
   loadRevision,
@@ -832,14 +826,6 @@ function EditorWorkspaceContent({
     status: "idle" | "saving" | "saved" | "error";
     message?: string;
   }>({ key: "", status: "idle" });
-  const [previewAfterReload, setPreviewAfterReload] =
-    useState<PublicPageId | null>(null);
-  const activePageId = surface.kind === "page" ? surface.pageId : null;
-  useEffect(() => {
-    if (previewAfterReload !== null && previewAfterReload !== activePageId) {
-      setPreviewAfterReload(null);
-    }
-  }, [activePageId, previewAfterReload]);
   const revealRequest = useRef(0);
   const [bentoReveal, setBentoReveal] = useState<{
     id: string;
@@ -2138,6 +2124,31 @@ function EditorWorkspaceContent({
     }
   }
 
+  function savedPreviewFor(
+    collection: SavedPreviewProps["collection"],
+    documentId: string,
+    canSave: boolean,
+  ) {
+    if (!requestSavedPreview || !loadPagePreviewStatus) return null;
+    const hasReceipt = previewReceipts.current.has(surfaceKey(surface));
+    const enabled = !mediaPickerDirty && (activeSurfaceDirty ? canSave : hasReceipt);
+    const disabledReason = mediaPickerDirty ? "Finish or cancel the media changes before previewing."
+      : activeSurfaceDirty && !canSave ? "Your access does not allow saving these changes for preview."
+        : collection === "cmsPages" ? "Wait for a saved page to load before previewing."
+          : "Wait for a saved record to load before previewing.";
+    return <SavedPreview
+      key={documentId}
+      collection={collection}
+      documentId={documentId}
+      enabled={enabled}
+      disabledReason={disabledReason}
+      preparePreview={preparePreview}
+      requestPreview={requestSavedPreview}
+      prepareSession={preparePreviewSession}
+      loadPreviewStatus={loadPagePreviewStatus}
+    />;
+  }
+
   // The save an exit asks for: commit whatever the surface the person is on still holds, then
   // report honestly on everything else.
   //
@@ -2252,12 +2263,6 @@ function EditorWorkspaceContent({
     refreshDirty();
     setPageLoad({ status: "loading" });
     setReloadCount((count) => count + 1);
-  }
-
-  function reloadPageForPreview() {
-    if (surface.kind !== "page") return;
-    setPreviewAfterReload(surface.pageId);
-    reloadPage();
   }
 
   // Discard the addressed record's local draft and re-read that exact immutable id. Used by
@@ -2728,23 +2733,9 @@ function EditorWorkspaceContent({
           recordId={persistedRecordId}
         />
       ) : null;
-    const recordPreview = requestSavedPreview && loadPagePreviewStatus && persistedRecordId &&
-      recordKindHasPublicRoute(recordSurface.record) && recordStatus !== "archived" ? (
-        <SavedPreview
-          key={persistedRecordId}
-          collection="cmsPosts"
-          documentId={persistedRecordId}
-          enabled={!mediaPickerDirty && (!activeSurfaceDirty || canSaveRecord) &&
-            (!!previewReceipts.current.get(key) || activeSurfaceDirty)}
-          disabledReason={mediaPickerDirty ? "Finish or cancel the media changes before previewing."
-            : activeSurfaceDirty && !canSaveRecord ? "Your access does not allow saving these changes for preview."
-              : "Wait for a saved record to load before previewing."}
-          preparePreview={preparePreview}
-          requestPreview={requestSavedPreview}
-          prepareSession={preparePreviewSession}
-          loadPreviewStatus={loadPagePreviewStatus}
-        />
-      ) : null;
+    const recordPreview = persistedRecordId && recordKindHasPublicRoute(recordSurface.record) && recordStatus !== "archived"
+      ? savedPreviewFor("cmsPosts", persistedRecordId, canSaveRecord)
+      : null;
     return (
       <div className="record-editor">
         {workspaceActionsAvailable ? (
@@ -3458,15 +3449,6 @@ function EditorWorkspaceContent({
       restoreDisabledReason: historyRestoreDisabledReason,
       restoreRevision: restoreRevision ? restoreFromHistory : undefined,
     } : null;
-    const savePreviewChanges = canSavePage
-      ? async () => (await savePageSurface(pageSurface)).landed
-      : undefined;
-    const savedPreviewEnabled = !mediaPickerDirty && (!activeSurfaceDirty || canSavePage) &&
-      (Boolean(previewReceipts.current.get(pageKey)) || activeSurfaceDirty);
-    const savedPreviewDisabledReason = mediaPickerDirty ? "Finish or cancel the media changes before previewing."
-      : activeSurfaceDirty && !canSavePage ? "Your access does not allow saving these changes for preview."
-        : "Wait for a saved page to load before previewing.";
-
     return (
       <EditorWorkspacePagePanels
         pageSurface={pageSurface}
@@ -3522,17 +3504,7 @@ function EditorWorkspaceContent({
           localConfirmation: !successNotice.available,
           updatePage,
         } : null}
-        savedPreviewEnabled={savedPreviewEnabled}
-        savedPreviewDisabledReason={savedPreviewDisabledReason}
-        preparePreview={preparePreview}
-        requestSavedPreview={requestSavedPreview}
-        preparePreviewSession={preparePreviewSession}
-        loadPagePreviewStatus={loadPagePreviewStatus}
-        requestPagePreview={requestPagePreview}
-        savePreviewChanges={savePreviewChanges}
-        reloadPageForPreview={reloadPageForPreview}
-        previewAfterReload={previewAfterReload}
-        onPreviewStarted={() => setPreviewAfterReload(null)}
+        preview={savedPreviewFor("cmsPages", pageSurface.pageId, canSavePage)}
         reloadPage={reloadPage}
         lifecycle={lifecycle}
         revisions={revisions}

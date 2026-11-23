@@ -1,6 +1,6 @@
 import { pageCompositionFixedRegions } from "../../../packages/content-core/src/page-composition-seeds";
-import { publicPage, publicPagePath, type PublicPageId } from "../../../packages/content-core/src/public-pages";
-import type { ComponentProps, Ref } from "react";
+import { publicPage, publicPagePath } from "../../../packages/content-core/src/public-pages";
+import type { ComponentProps, ReactNode, Ref } from "react";
 import { BlockEditor } from "./BlockEditor";
 import type { AdminBlock } from "../lib/block-factory";
 import { editorSectionCount } from "../lib/content-outline";
@@ -11,11 +11,9 @@ import type { PageContent, Surface } from "./EditorWorkspace";
 import { EditorBackLink, labelForSurface } from "./EditorWorkspaceNavigation";
 import { ElectionResultsHistory } from "./ElectionResultsHistory";
 import { LifecycleActionsPanel } from "./LifecycleActionsPanel";
-import { PagePreview } from "./PagePreview";
 import { PublishedVersionStatus } from "./PublishedVersionStatus";
 import { RecordForm } from "./RecordForm";
 import { RevisionHistory } from "./RevisionHistory";
-import { SavedPreview, type SavedPreviewProps } from "./SavedPreview";
 import { ScheduledPublicationTime } from "./ScheduledPublicationTime";
 import { Icon } from "./ui/Icon";
 import { AsyncActionButton, Button, InlineMessage, Toolbar } from "./ui/Primitives";
@@ -97,17 +95,7 @@ interface EditorWorkspacePagePanelsProps {
     localConfirmation: boolean;
     updatePage: () => Promise<void>;
   } | null;
-  savedPreviewEnabled: boolean;
-  savedPreviewDisabledReason: string;
-  preparePreview: SavedPreviewProps["preparePreview"];
-  requestSavedPreview: SavedPreviewProps["requestPreview"] | undefined;
-  preparePreviewSession: SavedPreviewProps["prepareSession"];
-  loadPagePreviewStatus: SavedPreviewProps["loadPreviewStatus"] | undefined;
-  requestPagePreview: ComponentProps<typeof PagePreview>["requestPreview"];
-  savePreviewChanges: ComponentProps<typeof PagePreview>["saveChanges"];
-  reloadPageForPreview: () => void;
-  previewAfterReload: PublicPageId | null;
-  onPreviewStarted: () => void;
+  preview: ReactNode;
   reloadPage: () => void;
   lifecycle: PageWorkspaceLifecycle | null;
   revisions: PageWorkspaceRevisions | null;
@@ -154,17 +142,7 @@ export function EditorWorkspacePagePanels({
   setHomeHeroTarget,
   homeEditorTarget,
   pageUpdate,
-  savedPreviewEnabled,
-  savedPreviewDisabledReason,
-  preparePreview,
-  requestSavedPreview,
-  preparePreviewSession,
-  loadPagePreviewStatus,
-  requestPagePreview,
-  savePreviewChanges,
-  reloadPageForPreview,
-  previewAfterReload,
-  onPreviewStarted,
+  preview,
   reloadPage,
   lifecycle,
   revisions,
@@ -347,41 +325,7 @@ export function EditorWorkspacePagePanels({
       subtitle: "Preview the saved page on desktop and mobile.",
       defaultZone: "side",
       defaultCollapsed: true,
-      body: requestSavedPreview && loadPagePreviewStatus ? (
-        <SavedPreview
-          key={pageSurface.pageId}
-          collection="cmsPages"
-          documentId={pageSurface.pageId}
-          enabled={savedPreviewEnabled}
-          disabledReason={savedPreviewDisabledReason}
-          preparePreview={preparePreview}
-          requestPreview={requestSavedPreview}
-          prepareSession={preparePreviewSession}
-          loadPreviewStatus={loadPagePreviewStatus}
-        />
-      ) : (
-        <PagePreview
-          key={pageSurface.pageId}
-          pageId={pageSurface.pageId}
-          pagePath={pagePath ?? registryPage.path}
-          dirty={activeSurfaceDirty}
-          saving={saving}
-          savedVersion={pageCurrentVersion ?? 0}
-          requestPreview={requestPagePreview}
-          loadPreviewStatus={loadPagePreviewStatus}
-          // The gate's two ways out of unsaved work are this workspace's own: the same page-save
-          // sequence the Save draft control and the exit guard run (#1032), and the same
-          // discard-and-re-read the conflict banner offers. The preview never gets a private
-          // definition of saved, and never builds from work that is only in the browser (#1042).
-          saveChanges={savePreviewChanges}
-          discardChanges={reloadPageForPreview}
-          startOnMount={previewAfterReload === pageSurface.pageId}
-          onStartOnMountHandled={onPreviewStarted}
-          headless
-          workspaceAction={workspaceActionsAvailable}
-          onReveal={() => revealBentoPanel("preview")}
-        />
-      ),
+      body: preview ?? <p>Preview builds are not configured in this environment.</p>,
     });
   }
   if (lifecycle) {

@@ -904,7 +904,9 @@ describe("admin routing shell", () => {
     );
   });
 
-  it("keeps the document title, status, preview, save, and publish actions in one header", async () => {
+  it("keeps the document title, status, preview, save, and publish actions in one header", async ({ onTestFinished }) => {
+    vi.stubEnv("VITE_CMS_PREVIEW_ENABLED", "true");
+    onTestFinished(() => { vi.unstubAllEnvs(); });
     functionMocks.cmsGetContent.mockResolvedValue({
       success: true,
       found: true,

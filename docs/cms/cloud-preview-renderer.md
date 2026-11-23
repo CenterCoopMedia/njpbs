@@ -122,6 +122,10 @@ never bounded audit receipts. Preview and revision history recognize a truncated
 before-state marker on either the history row or the before-state itself.
 Different exact versions keep independent attempts.
 
+Page, Post and Staff page editors use the same Preview action. The action uses
+the loaded saved version or saves the draft as it was when the editor selected
+Preview. The preview request includes that exact version.
+
 The click opens one owned progress tab. Acceptance/save/status can proceed in
 parallel, but ready navigation waits for the bounded private session attempt.
 The ID token goes only to the fixed private session endpoint, not URLs, popup

@@ -18,7 +18,7 @@ let actions:HTMLDivElement;
 let feedback:HTMLDivElement;
 let replace:ReturnType<typeof vi.fn>;
 const preview = vi.fn(async (target:{collection:"cmsPages"|"cmsPosts";documentId:string;sourceVersion:number}) => ({ success:true as const,
-  queueId, ...target, pageId:target.documentId, rendererSha:"a".repeat(40), pagePath: target.collection==="cmsPosts" ? "/posts/story/":"/contact/",
+  queueId, ...target, pageId:target.documentId, rendererSha:"a".repeat(40), pagePath: target.collection==="cmsPosts" ? "/posts/story/":target.documentId==="home" ? "/" : `/${target.documentId}/`,
   status:"ready" as const, previewUrl:`https://preview.njpbs.org/p/${queueId}/`, requestedAt:null,completedAt:null,error:null,expiresAt:null,reused:true as const,retryAfterMs:0 }));
 const status=vi.fn();
 function deferred<T>() {let resolve!:(value:T)=>void;const promise=new Promise<T>(yes=>{resolve=yes;});return {promise,resolve};}
@@ -167,14 +167,17 @@ describe("real workspace to exact Preview",()=>{
     expect(body).toHaveTextContent("After Preview click");
     expect(within(actions).getByRole("button",{name:"Save draft"})).toBeEnabled();
   });
-  it("uses the final metadata acknowledgment for a dirty Page",async()=>{
-    const savePageMetadata=vi.fn(async(_id:string,_section:string,metadata:Record<string,unknown>)=>({blocks:[],metadata,status:"draft",version:13}));
-    mount({surface:{kind:"page",pageId:"contact",section:"genericPage"},savePageMetadata,
-      loadPage:async()=>({blocks:[],metadata:{title:"Contact"},status:"draft",version:12})});
-    const title=await screen.findByRole("textbox",{name:"Page title"});
-    fireEvent.change(title,{target:{value:"Changed Contact"}});await clickPreview();
-    await waitFor(()=>expect(preview).toHaveBeenCalledWith({collection:"cmsPages",documentId:"contact",sourceVersion:13}));
+  it.each(["contact", "staff"] as const)("previews the acknowledged metadata save for the %s page",async pageId=>{
+    const savePageMetadata=vi.fn<NonNullable<React.ComponentProps<typeof EditorWorkspace>["savePageMetadata"]>>(
+      async(_id,_section,metadata)=>({blocks:[],metadata,status:"draft",version:13}));
+    mount({surface:{kind:"page",pageId,section:"genericPage"},savePageMetadata,
+      loadPage:async()=>({blocks:[],metadata:{title:"Original page title"},status:"draft",version:12})});
+    const title=await screen.findByRole("textbox",{name:pageId==="staff"?"Staff hero title":"Page title"});
+    fireEvent.change(title,{target:{value:"Edited page title"}});await clickPreview();
+    await waitFor(()=>expect(preview).toHaveBeenCalledExactlyOnceWith({collection:"cmsPages",documentId:pageId,sourceVersion:13}));
     expect(savePageMetadata).toHaveBeenCalledTimes(1);
+    expect(savePageMetadata.mock.calls[0].slice(0,4)).toEqual([pageId,"genericPage",expect.objectContaining({title:"Edited page title"}),12]);
+    expect(replace).toHaveBeenCalledExactlyOnceWith(`https://preview.njpbs.org/p/${queueId}/${pageId}/`);
   });
   it("joins an older Page metadata save and previews the title captured at click",async()=>{
     const older=deferred<{blocks:AdminBlock[];metadata:Record<string,unknown>;version:number}>();

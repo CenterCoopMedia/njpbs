@@ -9,16 +9,16 @@ import {seedDataHubPageBlocks} from "../src/lib/data-hub-page-seed";
 import {editContentRows} from "../src/lib/content-row-editing";
 import {validateSection} from "../../packages/content-core/src/editor-admin";
 const now="2026-10-22T12:00:00.000Z";
-afterEach(()=>{cleanup();localStorage.clear();});
+afterEach(()=>{cleanup();localStorage.clear();vi.restoreAllMocks();});
 async function fixture(unversioned=false){
  const retained={...createBlock("link_card","retained-card"),data:{title:"Retained link",url:"https://example.org/",summary:"Legacy copy"}};
  const dirty=vi.fn();const save=vi.fn(async(_id,_section,metadata)=>({blocks:[],metadata,version:2,status:"draft"}));
  const saveBlocks=vi.fn(async(_id,_section,blocks)=>({blocks,version:2}));
- const preview=vi.fn(async()=>({success:true as const,queueId:"fixture",pageId:"data-hub" as const,sourceVersion:1,dispatched:true,status:"building" as const}));
+ const preview=vi.fn(async()=>{throw new Error("Preview request must stay behind validation");});
  const transport:ReportingEditorTransport={preview:async()=>({stories:[],checkedAt:null,failed:false,cutoffAt:now}),terms:async()=>[],vocabulary:async()=>({tags:["wages"],categories:[]})};
  function Workspace(){const [target,setTarget]=useState<HTMLDivElement|null>(null); return <><div ref={setTarget} role="toolbar" aria-label="Fixture page actions"/><WorkspaceActionsProvider target={target}><EditorWorkspace principal={{id:"editor",grants:[{role:"editor"}]}} surface={{kind:"page",pageId:"data-hub",section:"genericPage"}}
   loadPage={async()=>({blocks:unversioned?[retained]:[],metadata:{title:"New Jersey by the Numbers",description:"Official figures",...(!unversioned?{dataHubCompositionVersion:1}:{})},version:1,status:"draft"})}
-  savePage={saveBlocks} savePageMetadata={save} requestPagePreview={preview} loadPagePreviewStatus={async()=>{throw new Error("Preview read must stay behind validation");}} reportingTransport={transport} onDirtyChange={dirty}/></WorkspaceActionsProvider></>; }
+  savePage={saveBlocks} savePageMetadata={save} requestSavedPreview={preview} loadPagePreviewStatus={async()=>{throw new Error("Preview read must stay behind validation");}} reportingTransport={transport} onDirtyChange={dirty}/></WorkspaceActionsProvider></>; }
  render(<Workspace/>);
  const summary=await screen.findByText("Related reporting");
  const reporting=within(summary.closest("details")!);
@@ -88,9 +88,10 @@ it("saves a mapping through metadata and never sends editor-only term state",asy
 });
 
 it("keeps Preview behind the same unfinished-term save gate",async()=>{
+ vi.spyOn(window,"open").mockReturnValue({closed:false,document:document.implementation.createHTMLDocument(),opener:null,close:vi.fn()} as unknown as Window);
  const {save,preview}=await fixture();fireEvent.change(screen.getByRole("combobox",{name:"Post tags"}),{target:{value:"unfinished"}});
  fireEvent.click(screen.getByRole("button",{name:"Preview"}));
- fireEvent.click(await screen.findByRole("button",{name:"Save and preview"}));
  await screen.findAllByText(/Finish adding or clear/);
+ await screen.findByText("Preview is temporarily unavailable. Your edits remain in the editor.");
  expect(save).not.toHaveBeenCalled();expect(preview).not.toHaveBeenCalled();
 });

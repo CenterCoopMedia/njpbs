@@ -51,7 +51,6 @@ import {
   cmsLoadPagePreviewStatus,
   cmsRequestSavedPreview,
   cmsPublish,
-  cmsRequestPagePreview,
   cmsRestoreRevision,
   cmsTransitionContent,
   cmsSaveContent,
@@ -681,14 +680,6 @@ export function ContentTab({
     [getIdToken],
   );
 
-  const requestPagePreview = useCallback(
-    async (pageId: PublicPageId) => {
-      const idToken = await getIdToken();
-      return cmsRequestPagePreview(idToken, pageId);
-    },
-    [getIdToken],
-  );
-
   const loadPagePreviewStatus = useCallback(
     async (queueId: string, options?: Parameters<typeof cmsLoadPagePreviewStatus>[2]) => {
       const idToken = await getIdToken();
@@ -1163,7 +1154,6 @@ export function ContentTab({
         autoSaveEnabled
         requestSavedPreview={previewEnabled ? requestSavedPreview : undefined}
         preparePreviewSession={previewEnabled ? preparePreviewSession : undefined}
-        requestPagePreview={previewEnabled ? requestPagePreview : undefined}
         loadPagePreviewStatus={
           previewEnabled ? loadPagePreviewStatus : undefined
         }
