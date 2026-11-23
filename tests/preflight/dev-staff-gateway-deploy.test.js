@@ -19,12 +19,15 @@ const publicBindings = [
   { type: 'service', name: 'CMS_API', service: 'template-dev-cms-api', entrypoint: 'PublicContentEntrypoint', environment: 'production' },
   { type: 'plain_text', name: 'NO_BUILD_POST_RENDERER_SHA', text: sha },
   { type: 'plain_text', name: 'PUBLICATION_ENVIRONMENT', text: 'development' },
+  { type: 'version_metadata', name: 'CF_VERSION_METADATA' },
 ];
 it('qualifies the native version binding on development candidates and gateway readbacks', () => {
   const metadata = { type: 'version_metadata', name: 'CF_VERSION_METADATA' };
-  expect(() => assertDevPublicWorkerBindings([...publicBindings, metadata], sha)).not.toThrow();
-  expect(() => assertDevPublicWorkerBindings([...publicBindings, metadata])).not.toThrow();
-  expect(() => assertDevPublicWorkerBindings([...publicBindings, { ...metadata, type: 'plain_text' }], sha))
+  const unversioned = publicBindings.filter(binding => binding.name !== 'CF_VERSION_METADATA');
+  expect(() => assertDevPublicWorkerBindings(publicBindings, sha)).not.toThrow();
+  expect(() => assertDevPublicWorkerBindings(unversioned, sha)).toThrow('exact reader bindings');
+  expect(() => assertDevPublicWorkerBindings(unversioned)).not.toThrow();
+  expect(() => assertDevPublicWorkerBindings([...unversioned, { ...metadata, type: 'plain_text' }], sha))
     .toThrow('exact reader bindings');
 });
 it('requires the development target on publication candidates before activation', () => {

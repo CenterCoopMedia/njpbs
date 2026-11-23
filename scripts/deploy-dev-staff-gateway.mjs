@@ -45,8 +45,8 @@ export function assertDevPublicWorkerBindings(bindings, rendererSha) {
   const spanishPostVersion = bindings.find(binding => binding?.name === 'SPANISH_POST_VERSION');
   const versionMetadata = bindings.find(binding => binding?.name === 'CF_VERSION_METADATA');
   const environment = bindings.find(binding => binding?.name === 'PUBLICATION_ENVIRONMENT');
-  // Publication candidates run the shared entry, which serves dev only with this
-  // variable. Gateway readbacks may still see the retired dev entry serving.
+  // Publication candidates run the shared entry, which serves dev and its rollback
+  // proof only with these bindings. Gateway readbacks may still see the retired entry.
   requireState(assets?.type === 'assets' && api?.type === 'service' &&
     api.service === 'template-dev-cms-api' && api.entrypoint === 'PublicContentEntrypoint' &&
     (api.environment === undefined || api.environment === 'production') &&
@@ -59,7 +59,7 @@ export function assertDevPublicWorkerBindings(bindings, rendererSha) {
     (!electionResultsVersion || electionResultsVersion.type === 'plain_text' && ['0', '1', '2'].includes(electionResultsVersion.text)) &&
     (!dataFigureVersion || dataFigureVersion.type === 'plain_text' && dataFigureVersion.text === '1') &&
     (!spanishPostVersion || spanishPostVersion.type === 'plain_text' && ['0', '1'].includes(spanishPostVersion.text)) &&
-    (!versionMetadata || versionMetadata.type === 'version_metadata') &&
+    (versionMetadata ? versionMetadata.type === 'version_metadata' : rendererSha === undefined) &&
     (environment ? environment.type === 'plain_text' && environment.text === 'development' : rendererSha === undefined),
   'Dev public Worker must have the exact reader bindings');
 }
