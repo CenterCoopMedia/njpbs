@@ -72,7 +72,8 @@
       "VITE_FIREBASE_APP_ID",
       "VITE_FIREBASE_AUTH_DOMAIN",
       "VITE_FIREBASE_PROJECT_ID",
-      "VITE_FUNCTIONS_BASE_URL"
+      "VITE_FUNCTIONS_BASE_URL",
+      "CCM_PROMOTE_APP_PRIVATE_KEY"
     ]
   },
   "publisher-image": {

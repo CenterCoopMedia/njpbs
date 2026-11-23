@@ -27,14 +27,14 @@ function secretNames(value: unknown): string[] {
   return [...names];
 }
 
-function assertConfiguredAdmission(job: any, filename: string) {
+function assertConfiguredAdmission(job: any, filename: string, inputs: Record<string, string> = {}) {
   const github = { event_name: "workflow_dispatch", ref: "refs/heads/main", repository_id: "123456",
     workflow_ref: `fixture-org/fixture-site/.github/workflows/${filename}.yml@refs/heads/main`,
     triggering_actor: "fixture-owner" };
   const vars = { CANONICAL_GITHUB_REPOSITORY: "fixture-org/fixture-site",
     CANONICAL_GITHUB_REPOSITORY_ID: "123456", CMS_DEPLOY_OWNER: "fixture-owner" };
   const admit = (changedGithub = {}, changedVars = {}) => runInNewContext(job.if, {
-    github: { ...github, ...changedGithub }, vars: { ...vars, ...changedVars },
+    github: { ...github, ...changedGithub }, vars: { ...vars, ...changedVars }, inputs,
     format: (pattern: string, value: string) => pattern.replace("{0}", value),
   });
   expect(admit()).toBe(true);
@@ -91,6 +91,33 @@ describe("deploy credential environments", () => {
       "permission-contents": "write",
       "permission-workflows": "write",
     });
+  });
+
+  it("runs a development promotion only in the development environment with the same admission and token", () => {
+    const definition = workflow("promote");
+    expect(definition.on.workflow_dispatch.inputs.target.options).toEqual(["production", "development"]);
+    expect(definition.on.workflow_dispatch.inputs.target.default).toBe("production");
+    const production = definition.jobs.promote;
+    const development = definition.jobs["promote-development"];
+    expect(development.environment).toBe("development");
+    assertConfiguredAdmission(development, "promote", { target: "development" });
+    const admits = (job: any, target?: string) => runInNewContext(job.if, {
+      github: { event_name: "workflow_dispatch", ref: "refs/heads/main", repository_id: "1",
+        workflow_ref: "o/r/.github/workflows/promote.yml@refs/heads/main", triggering_actor: "a" },
+      vars: { CANONICAL_GITHUB_REPOSITORY: "o/r", CANONICAL_GITHUB_REPOSITORY_ID: "1", CMS_DEPLOY_OWNER: "a" },
+      inputs: target === undefined ? {} : { target },
+      format: (pattern: string, value: string) => pattern.replace("{0}", value),
+    });
+    // Exactly one job runs for each target.
+    expect([admits(production, "production"), admits(development, "production")]).toEqual([true, false]);
+    expect([admits(production, "development"), admits(development, "development")]).toEqual([false, true]);
+    expect(development.permissions).toBeUndefined();
+    const step = (job: any, prefix: string) => job.steps.find((s: any) => s.uses?.startsWith(prefix));
+    expect(step(development, "actions/create-github-app-token@")?.with).toEqual(step(production, "actions/create-github-app-token@")?.with);
+    const push = development.steps[development.steps.length - 1];
+    expect(push.run).toBe('git push origin "$SELECTED_SHA:refs/heads/development"');
+    expect(JSON.stringify(development)).not.toContain("production");
+    for (const s of development.steps.filter((s: any) => s.uses)) expect(s.uses).toMatch(/@[a-f0-9]{40}$/);
   });
 
   it("restricts the isolated dev staff gateway to explicit main-only development dispatches", () => {
