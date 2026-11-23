@@ -485,7 +485,7 @@ describe("public version evidence", () => {
     vi.stubGlobal("crypto", webcrypto);
     let retry: (() => void) | undefined;
     const start = loadPublicationMetadata ? "setInterval" : "setTimeout";
-    const timer = window[start].bind(window);
+    const timer = globalThis[start];
     vi.spyOn(window, start).mockImplementation((callback, delay) => {
       if (delay === 5_000 && typeof callback === "function") {
         retry = () => callback();
