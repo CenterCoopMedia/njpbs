@@ -77,10 +77,11 @@ async function claimPageConsumerProof({ firestore, operationId, identity, now, d
       if (confirmed && prior.postCheckpoint) checkpointUpdate = { postCheckpoint: null };
       if (!confirmed && postCheckpoint !== undefined) {
         const queue = (await transaction.get(queueRef)).data();
-        if (queue?.status === "cancelled" || proofKey(queue) !== acquired.key || now() >= prior.leaseUntil) return false;
-        checkpointUpdate = { postCheckpoint };
+        if (queue && queue.status !== "cancelled" && proofKey(queue) === acquired.key && now() < prior.leaseUntil) {
+          checkpointUpdate = { postCheckpoint };
+        }
       }
-      if (waitingForInputs || continuingPosts) {
+      if (waitingForInputs || (continuingPosts && checkpointUpdate.postCheckpoint)) {
         transaction.update(ref, { status: "waiting", attempts: acquired.attempts - 1,
           claim: null, leaseUntil: null, nextAttemptAt: null, ...checkpointUpdate });
         return false;
