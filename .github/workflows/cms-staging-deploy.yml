@@ -441,8 +441,11 @@ jobs:
           DEPLOY_SHA: ${{ steps.reviewed_ref.outputs.deploy_sha }}
         run: |
           set -euo pipefail
-          npm ci --ignore-scripts --prefix agents/vmix
-          node agents/vmix/build-windows.mjs --source-sha "$DEPLOY_SHA" --output "$RUNNER_TEMP/studio-connector"
+          # Build from a clean tree of the checkout: on development the earlier render step
+          # rewrites packages/content-core, which build-windows.mjs refuses as uncommitted.
+          git worktree add --detach "$RUNNER_TEMP/studio-source" HEAD
+          npm ci --ignore-scripts --prefix "$RUNNER_TEMP/studio-source/agents/vmix"
+          node "$RUNNER_TEMP/studio-source/agents/vmix/build-windows.mjs" --source-sha "$DEPLOY_SHA" --output "$RUNNER_TEMP/studio-connector"
       - name: Retain the Studio connector package for deployment
         if: env.CMS_TARGET_STUDIO_BUCKET != ''
         uses: actions/upload-artifact@v7
