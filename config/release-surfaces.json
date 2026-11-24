@@ -22,6 +22,7 @@
     ".github/workflows/schedule-bake.yml"
   ],
   "wrangler": [
+    "admin/wrangler.dev.jsonc",
     "admin/wrangler.jsonc",
     "cms-api/wrangler.dev.jsonc",
     "cms-api/wrangler.jsonc",

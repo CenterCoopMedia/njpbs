@@ -31,6 +31,7 @@ const authored = message => Object.assign(new Error(message.slice(0, 200)), { au
 const refused = (step, reply) => authored(`${step} refused: ${reply.status} ${reply.body?.error ?? ''}`);
 
 export function refuseUnsafeEnvironment(env = process.env) {
+  // config-input: DEBUG, NODE_OPTIONS, PWDEBUG
   const set = REFUSED_ENVIRONMENT.filter(name => env[name] !== undefined && env[name] !== '');
   if (set.length) throw authored(`Unset ${set.join(', ')} before signing in`);
 }

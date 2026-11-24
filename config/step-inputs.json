@@ -9,6 +9,7 @@
   ".github/scripts/require-release-source.mjs": [],
   "agents/vmix/build-windows.mjs": ["CMS_STUDIO_API_ORIGIN", "VITE_FIREBASE_API_KEY"],
   "scripts/admin-status-manifest.mjs": ["CANONICAL_GITHUB_REPOSITORY", "CANONICAL_GITHUB_REPOSITORY_ID"],
+  "scripts/assert-dev-cms-targets.mjs": [],
   "scripts/backfill-author-profiles.mjs": ["GOOGLE_APPLICATION_CREDENTIALS"],
   "scripts/backfill-byline-projections.mjs": ["GOOGLE_APPLICATION_CREDENTIALS"],
   "scripts/backfill-media-category-assignments.mjs": ["GOOGLE_APPLICATION_CREDENTIALS"],
