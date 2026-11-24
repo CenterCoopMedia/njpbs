@@ -58,7 +58,7 @@ async function claimPageConsumerProof({ firestore, operationId, identity, now, l
     log.warn("Page consumer confirmation skipped for stale context", { operationId, contextRevision: identity.contextRevision });
     return null;
   }
-  if (lost !== null) log.warn("Page consumer confirmation attempt ended without a record", { operationId, ...lost });
+  if (lost !== null) log.warn("Page consumer confirmation attempt ended without a record", { operationId, .../** @type {any} */ (lost) });
   const updateOwned = update => firestore.runTransaction(async transaction => {
     const prior = (await transaction.get(ref)).data();
     if (prior?.claim !== claim || prior.key !== acquired.key) return false;
@@ -71,7 +71,7 @@ async function claimPageConsumerProof({ firestore, operationId, identity, now, l
     next = { ...next, ...update };
     writing ??= (async () => {
       while (next) {
-        const write = { .../** @type {any} */ (next), peakRssMb: peakRssMb(), stateAt: now() };
+        const write = { ...next, peakRssMb: peakRssMb(), stateAt: now() };
         next = null;
         try { await updateOwned(write); } catch { /* The proof's own result still records below. */ }
       }
