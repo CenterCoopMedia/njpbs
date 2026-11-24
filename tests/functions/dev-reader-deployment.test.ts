@@ -54,7 +54,7 @@ beforeEach(async () => {
   // without copying repository configuration, credentials or the Git index.
   const gitDirectory = execFileSync("git", ["rev-parse", "--absolute-git-dir"], { encoding: "utf8" }).trim();
   writeFileSync(new URL(".git", root), `gitdir: ${gitDirectory}\n`);
-  for (const path of ["firebase.dev.json", "cms-api/wrangler.dev.jsonc", "preview-renderer/wrangler.dev.jsonc",
+  for (const path of ["firebase.dev.json", "admin/wrangler.dev.jsonc", "cms-api/wrangler.dev.jsonc", "preview-renderer/wrangler.dev.jsonc",
     "workers/wrangler.staff-preview.dev.jsonc", "workers/wrangler.preview.dev.jsonc", "functions/.env.njpbs-site-dev"]) {
     mkdirSync(join(directory, path, ".."), { recursive: true });
     const fixtureSource = path === "functions/.env.njpbs-site-dev" ? "functions/.env.example" : path;
