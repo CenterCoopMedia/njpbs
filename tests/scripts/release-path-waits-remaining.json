@@ -4,7 +4,6 @@
   "functions/lib/cloud-external-refresh-state.js": 1,
   "functions/lib/dev-public-release-pause.js": 1,
   "functions/lib/no-build-cloud-work.js": 3,
-  "functions/lib/no-build-post-proof-state.js": 1,
   "functions/lib/post-background-alerts.js": 4,
   "functions/lib/post-background-outputs.js": 3,
   "functions/lib/preview-build-policy.js": 1,

@@ -8,8 +8,7 @@ const POST_PROOF_EXHAUSTED_WARNING = "The public check failed after publication.
 
 function exhaustedPostProof(queue) {
   return queue?.transport === "post-no-build-v1" && queue.status === "success" &&
-    queue.postProof?.status === "failed" && queue.postProof.nextAttemptAt === null &&
-    Number.isSafeInteger(queue.postProof.attempts) && queue.postProof.attempts >= 4;
+    queue.postProof?.status === "failed" && queue.postProof.nextAttemptAt === null;
 }
 
 // Only the current publication's exhausted proof belongs in recovery. Read
