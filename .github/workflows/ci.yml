@@ -325,7 +325,7 @@ jobs:
         working-directory: site
         run: npm run lint
       - name: Unit tests
-        timeout-minutes: 13 # Hang guard: 3x max 247s (min 149s) (10 successful Site jobs, runs 45378060964-45392733747, 2026-11-24).
+        timeout-minutes: 13 # Hang guard: 3x max 259s (median 207s, p99 249s) (210 successful Site jobs, runs 45175090443-45406212494, Nov. 2026).
         working-directory: site
         run: npm test -- --reporter=default --reporter=github-actions --reporter=../.github/scripts/site-resource-reporter.mjs
       - name: Shared preview template input tests
@@ -343,7 +343,7 @@ jobs:
           PUBLIC_SHARE_INTAKE_ENDPOINT: https://intake.example.test/
         run: npm run build:public-post-renderer -- --compile-only
       - name: Check public Post rendering in workerd
-        timeout-minutes: 6 # Hang guard: 3x max 119s (min 73s) (10 successful Site jobs, runs 45378060964-45392733747, 2026-11-24).
+        timeout-minutes: 7 # Hang guard: 3x max 139s (median 102s, p99 125s) (210 successful Site jobs, runs 45175090443-45406212494, Nov. 2026).
         working-directory: site
         run: npm run test:public-post-runtime
       - name: Public build
@@ -357,7 +357,7 @@ jobs:
           PUBLIC_ONLY: "1"
         run: npm run guardrails -- --reporter=default --reporter=github-actions --reporter=../.github/scripts/site-resource-reporter.mjs
       - name: Browser interactions over coming-soon build
-        timeout-minutes: 2 # Hang guard: 3x max 15s (min 12s) rounds to 1m; 2m floor (10 successful Site jobs, runs 45378060964-45392733747, 2026-11-24).
+        timeout-minutes: 5 # Hang guard: 5m floor; max 15s (median 13s, p99 15s) (210 successful Site jobs, runs 45175090443-45406212494, Nov. 2026).
         working-directory: site
         run: |
           set -euo pipefail
@@ -391,7 +391,7 @@ jobs:
       - name: QA audit over full build
         run: python3 qa/audit_dist.py site/dist
       - name: Accessibility scan over full build
-        timeout-minutes: 9 # Hang guard: 3x max 168s (min 154s) (10 successful Site jobs, runs 45378060964-45392733747, 2026-11-24).
+        timeout-minutes: 9 # Hang guard: 3x max 171s (median 165s, p99 170s) (210 successful Site jobs, runs 45175090443-45406212494, Nov. 2026).
         id: axe_scan
         working-directory: site
         run: |
@@ -443,7 +443,7 @@ jobs:
         env:
           INTERNAL_SURFACES: "1"
       - name: Verify video catalog routes and search in the PR preview
-        timeout-minutes: 2 # Hang guard: 3x max 8s (min 6s) rounds to 1m; 2m floor (10 successful Site jobs, runs 45378060964-45392733747, 2026-11-24).
+        timeout-minutes: 5 # Hang guard: 5m floor; max 8s (median 7s, p99 8s) (210 successful Site jobs, runs 45175090443-45406212494, Nov. 2026).
         working-directory: site
         run: |
           set -euo pipefail
