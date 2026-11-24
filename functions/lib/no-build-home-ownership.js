@@ -4,6 +4,7 @@ const { isDeepStrictEqual } = require("node:util");
 const { publicationRuntime } = require("./publication-runtime-owner");
 const { publiclyVisible } = require("./public-video-references");
 const { PUBLIC_CONTEXT_PATH } = require("./public-context-revision");
+const { SUPERSEDED, prepareSupersededPreparationsInTransaction } = require("./superseded-preparation");
 
 const HOME_PAGE_OWNER_PATH = "system/publicDeployment/noBuildPageOwners/home";
 const HOME_BACKGROUND_PATH = "cmsBackgroundOutputs/home";
@@ -145,6 +146,7 @@ async function prepareHomePlanInTransaction({ firestore, transaction, nextDocume
   }
   let taskRef = null;
   let task = null;
+  let supersedePreparations = () => {};
   if (state && state.owner !== HOME_PAGE_OWNER) {
     if (state.schemaVersion !== 1 || state.owner !== "post-background-v1" || state.output !== "home" ||
         !/^cmsPublishQueue\/[A-Za-z0-9_-]{1,200}\/backgroundOutputs\/home(?:-[1-9][0-9]*)?$/.test(state.taskPath ?? "")) refuse();
@@ -154,14 +156,19 @@ async function prepareHomePlanInTransaction({ firestore, transaction, nextDocume
         task.revision !== state.revision) refuse();
     // Do not erase an uncertain claim. The legacy owner must settle it first.
     if (task.claim != null) refuse("A Home background publication is still in progress. Retry after it settles.");
+    // This publication moves the public context, so no earlier digest is read again.
+    supersedePreparations = await prepareSupersededPreparationsInTransaction({ firestore, transaction,
+      queueIds: task.contextOnly === true ? [] : [taskRef.path.split("/")[1]] });
   }
   const retainedSource = retainedHomeSource(state);
   const backgroundMarker = { schemaVersion: 1, owner: HOME_PAGE_OWNER,
     output: "home", pageId: "home", ownerPath: HOME_PAGE_OWNER_PATH, operationId: operation.operationId, retainedSource };
   // The common Page owner must set its new owner row before this closure.
   return { ownedPaths: [...HOME_PATHS], retainedSource, background: { path: HOME_BACKGROUND_PATH, data: backgroundMarker }, write() {
+    supersedePreparations();
     if (refreshRef) {
-      transaction.update(refreshRef, { status: "superseded", supersededBy: operation.operationId });
+      // No reader follows this task again, so it keeps no claim or retry time.
+      transaction.update(refreshRef, { ...SUPERSEDED, supersededBy: operation.operationId });
       transaction.update(firestore.doc(HOME_PAGE_OWNER_PATH), { homeRefresh: {
         ...refresh, status: "superseded", supersededBy: operation.operationId } });
     }
@@ -233,11 +240,17 @@ async function prepareHomeRefreshInTransaction({ firestore, transaction, queueId
     if (!isDeepStrictEqual(existing.input, input)) refuse("Home refresh identity changed.");
     return () => {};
   }
+  // Recovery follows only the newest signal. An earlier task that still waits
+  // for its next read ends here; its claim holder finds the claim gone.
+  const earlierRef = owner.homeRefresh?.status === "pending" ? firestore.doc(owner.homeRefresh.taskPath) : null;
+  const earlier = earlierRef ? (await transaction.get(earlierRef)).data() : null;
+  const earlierWaits = ["pending", "failed"].includes(earlier?.status) && earlier.nextAttemptAt != null;
   const revision = (owner.homeRefresh?.revision ?? 0) + 1;
   if (!Number.isSafeInteger(revision) || revision < 1) refuse();
   const refresh = { schemaVersion: 1, revision, sourceOperationId: queueId, ...refreshIdentity,
     status: "pending", taskPath: taskRef.path };
   return () => {
+    if (earlierWaits) transaction.update(earlierRef, SUPERSEDED);
     transaction.create(taskRef, { schemaVersion: 1, owner: HOME_PAGE_OWNER, pageId: "home", revision,
       input, affectedSections, status: "pending", runtime: owner.runtime, rendererSha: owner.rendererSha });
     transaction.update(firestore.doc(HOME_PAGE_OWNER_PATH), { homeRefresh: refresh });

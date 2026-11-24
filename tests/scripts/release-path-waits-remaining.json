@@ -13,7 +13,6 @@
   "functions/lib/cms-reader-mount-descriptor.js": 1,
   "functions/lib/data-hub-reporting-context.js": 1,
   "functions/lib/no-build-home-ownership.js": 1,
-  "functions/lib/no-build-page-publication.js": 2,
   "functions/lib/post-background-alerts.js": 2,
   "functions/lib/post-background-outputs.js": 3,
   "functions/lib/post-background-storage.js": 1,

@@ -213,7 +213,7 @@ async function assertNoBuildPageScheduleInTransaction({ firestore, transaction, 
 /** Called by an authorized publish/schedule caller before its write transaction.
  * Selection is repeated at acceptance; a changed selection cannot mint work. */
 async function capturePageScheduleForPublication({ firestore, collection, documentId, publishing, config,
-  target, currentCodeRequest, releaseSelector, scheduledCandidate = false, now = Date.now, deadline = now() + 45_000 }) {
+  target, currentCodeRequest, releaseSelector, scheduledCandidate = false }) {
   if (!publishing || collection !== "cmsPages" || !["schedule", "live"].includes(documentId)) return undefined;
   target = pagePublicationTarget({ firestore, target });
   if (releaseSelector === undefined && !await pagePublicationSelected({ firestore, documentId, config })) return undefined;
@@ -223,7 +223,7 @@ async function capturePageScheduleForPublication({ firestore, collection, docume
   const schedules = require("./no-build-page-schedule-reader");
   try {
     return await schedules.capturePageSchedule({ firestore, target,
-      rendererSha: capability.rendererSha, request: currentCodeRequest, now, deadline,
+      rendererSha: capability.rendererSha, request: currentCodeRequest,
       ...(releaseSelector !== undefined ? { releaseSelector } : {}) });
   } catch (error) {
     if (scheduledCandidate && schedules.isPageScheduleAvailabilityError(error)) defer(error.message);

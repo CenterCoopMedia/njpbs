@@ -28,6 +28,7 @@ const { digest: canonicalDigest } = require("./no-build-page-ownership");
 const { publicationRuntime, runtimeFields } = require("./publication-runtime-owner");
 const { homePostPlacements } = require("./home-source-catalog");
 const { prepareHomePostRefreshInTransaction } = require("./no-build-home-ownership");
+const { supersededPostProof } = require("./superseded-preparation");
 const STATE_PATH = "system/publicDeployment/noBuildPosts/current";
 const TRANSPORT = "post-no-build-v1";
 const digest = value => createHash("sha256").update(JSON.stringify(value)).digest("hex");
@@ -303,8 +304,9 @@ async function prepareNoBuildPostPublication({ firestore, transaction, collectio
     homeFullBuildQueueId: homeBuild?.queueRef.id ?? null, affectedHomeSections, warnings, write() {
     writeReleaseChange();
     const cancelPrevious = previousQueue && !["success", "cancelled"].includes(previousQueue.status);
-    if (cancelPrevious || supersedePreviousHome) {
-      transaction.update(previousQueueRef, {
+    const supersededProof = supersededPostProof(previousQueue);
+    if (cancelPrevious || supersedePreviousHome || supersededProof) {
+      transaction.update(previousQueueRef, { ...supersededProof,
         ...(cancelPrevious ? { status: "cancelled", completedAt: FieldValue.serverTimestamp(),
           claim: null, nextAttemptAt: null, error: "Superseded by a newer instant publication" } : {}),
         ...(supersedePreviousHome ? { homeFullBuild: { ...previousHomeReceipt, status: "superseded" } } : {}),

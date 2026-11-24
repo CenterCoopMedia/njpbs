@@ -198,13 +198,23 @@ describe("Home Page authority at the Firestore boundary", () => {
   it("supersedes pending Post refresh on a new Home publication without resetting its revision", async () => {
     await handoff();
     await acceptPost();
-    await db.doc("cmsPublishQueue/POSTrefreshoperat001/homePageRefresh/home").update({ claim: "preparing-owned" });
+    await db.doc("cmsPublishQueue/POSTrefreshoperat001/homePageRefresh/home").update({ claim: "preparing-owned", attempts: 1, nextAttemptAt: Date.now() + 600_000 });
     const nextHomeOperation = "HOMEpageoperation002";
     await handoff({ id: nextHomeOperation });
     expect((await authority()).homeRefresh).toMatchObject({ revision: 1, status: "superseded", supersededBy: nextHomeOperation });
     expect((await db.doc("cmsPublishQueue/POSTrefreshoperat001/homePageRefresh/home").get()).data())
-      .toMatchObject({ revision: 1, status: "superseded", supersededBy: nextHomeOperation, claim: "preparing-owned" });
+      .toMatchObject({ revision: 1, status: "superseded", supersededBy: nextHomeOperation, claim: null, nextAttemptAt: null });
     await acceptPost("POSTrefreshoperat002", post(4));
+    expect((await authority()).homeRefresh).toMatchObject({ revision: 2, status: "pending" });
+  });
+
+  it("ends an earlier refresh that waits for its next read when a newer Post refresh replaces it", async () => {
+    await handoff();
+    await acceptPost();
+    const earlier = db.doc("cmsPublishQueue/POSTrefreshoperat001/homePageRefresh/home");
+    await earlier.update({ attempts: 1, claim: null, nextAttemptAt: Date.now() + 600_000 });
+    await acceptPost("POSTrefreshoperat002", post(4));
+    expect((await earlier.get()).data()).toMatchObject({ revision: 1, status: "superseded", claim: null, nextAttemptAt: null });
     expect((await authority()).homeRefresh).toMatchObject({ revision: 2, status: "pending" });
   });
 

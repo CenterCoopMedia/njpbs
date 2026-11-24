@@ -26,7 +26,7 @@ async function storeRecordManifest({ manifest, task, artifacts, signal, checkpoi
   requireValue(stored instanceof Uint8Array && stored.length === bytes.length && hash(stored) === digest);
   return { key, digest, size: bytes.length, count: manifest.length, assetPathHashes: assetPathHashes(manifest), ...(checkpoint ? { checkpoint } : {}) };
 }
-async function readRecordManifest({ receipt, output, artifacts, signal, scope }) {
+async function readRecordManifest({ receipt, output, artifacts, signal = undefined, scope }) {
   const ref = receipt.fileManifest;
   const claim = /^post-background-v1\/(programs|events|videoCatalog|search)\/([a-f0-9-]{36})\/manifest\.json$/.exec(ref?.key ?? "");
   requireValue(ref && (Object.keys(ref).length === 5 && ref.checkpoint === undefined || Object.keys(ref).length === 6 && ref.checkpoint &&

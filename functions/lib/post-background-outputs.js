@@ -3,6 +3,7 @@
 const { runtimeFields, ownsPublication, samePublicationOwner, publicationRuntime } = require("./publication-runtime-owner");
 const { createHash, randomUUID } = require("node:crypto");
 const { platformLimit } = require("./release-wait");
+const { prepareSupersededPreparationsInTransaction } = require("./superseded-preparation");
 const { isDeepStrictEqual } = require("node:util");
 const { isPostRouteSlug, postRoutePath } = require("./post-slug-contract");
 const { collectPublishedMediaUsage, MediaUsageError } = require("./media-usage");
@@ -260,7 +261,11 @@ function createPostBackgroundOutputs({ firestore, enabled = false, accepting = e
     requireValue(previous.every(row => row.exists && row.data().schemaVersion === 1 && row.data().owner === OWNER));
     const context = await currentContext(transaction);
     const dependencies = changedDependencies(before, after, homePlacementPaths);
+    // This publication moves the public context, so no earlier digest is read again.
+    const supersedePreparations = await prepareSupersededPreparationsInTransaction({ firestore, transaction,
+      queueIds: previous.filter(row => row.data().contextOnly !== true).map(row => row.ref.path.split("/")[1]) });
     return () => {
+      supersedePreparations();
       for (const row of previous) {
         if (row.exists && row.data().status !== "verified") transaction.update(row.ref,
           { status: "superseded", claim: null, nextAttemptAt: null });

@@ -194,7 +194,7 @@ async function completeContextRecheck({ firestore, queueId, actor, source, initi
   if (initial.proof?.record) {
     try {
       publicProof = await require("./no-build-record-confirmation").prepareRecordPublicProof({
-        firestore, accepted: initial.proof.record, ...network });
+        firestore, accepted: initial.proof.record, ...network, once: true });
     } catch { /* Retain the original publication state on a failed readback. */ }
   }
   const auditRef = firestore.collection("admin_logs").doc();

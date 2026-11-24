@@ -76,11 +76,11 @@ async function readRecheck({ firestore, transaction, queueId, actor, allowContex
   return { queueRef, queue, recordRef, record, state, currentQueue, superseded, page };
 }
 
-async function preparePostConfirmation({ firestore, state, target, headers = {}, fetchPublic = fetch }) {
+async function preparePostConfirmation({ firestore, state, target = undefined, headers = {}, fetchPublic = fetch, once = true }) {
   target = assertReadbackTarget(firestore, target);
   const readHeaders = publicReadbackHeaders(target, headers);
   const receipt = await readPublicAnswer("public Post recheck", signal =>
-    readPublicPostReceipt(state, fetchPublic, signal, target, readHeaders, { once: true }));
+    readPublicPostReceipt(state, fetchPublic, signal, target, readHeaders, { once }));
   return { receipt, preflight: ({ transaction }) => assertCurrentPostReceipt(firestore, transaction, state, receipt) };
 }
 

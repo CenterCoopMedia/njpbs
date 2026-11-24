@@ -25,7 +25,8 @@ function isPageScheduleAvailabilityError(error) {
 /** Schema one uses the root-approved private CODE transport. An explicit pair
  * selector uses its sealed original CODE with fresh actual selection checks.
  * Neither path substitutes mutable Assets or a retained family input. */
-function createPageCurrentCodeContextReader({ firestore, rendererSha, target, request, signal, releaseSelector, readSecret }) {
+function createPageCurrentCodeContextReader({ firestore, rendererSha, target, request, signal = undefined,
+  releaseSelector = undefined, readSecret = undefined }) {
   if (releaseSelector !== undefined) return require("./public-release-page-schedule-code").createPairScheduleCodeContextReader({
     firestore, rendererSha, releaseSelector, signal, environment: pagePublicationTarget({ firestore, target }).environment });
   let reader;
@@ -120,7 +121,7 @@ function captureData(capture, target, rendererSha) {
   }
   return data;
 }
-async function capturePageSchedule({ firestore, target, rendererSha, request, releaseSelector }) {
+async function capturePageSchedule({ firestore, target, rendererSha = undefined, request, releaseSelector = undefined }) {
   target = pagePublicationTarget({ firestore, target });
   if (releaseSelector !== undefined) {
     const selected = require("./public-release-media-fence").parseStoredSelector(releaseSelector);

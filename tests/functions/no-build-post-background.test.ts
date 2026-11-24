@@ -88,6 +88,31 @@ it("persists background reservation timestamps with the publisher SDK and retain
 });
 
 
+it("ends a preparation whose context moves while it runs, with no retry time left", async () => {
+  const preparation = firestore.doc(`cmsPublishQueue/${operationId}/backgroundPreparation/${context.publicContextDigest(1)}`);
+  boundary.onRead(async () => { await firestore.doc(context.PUBLIC_CONTEXT_PATH).update({ revision: 2 }); });
+  boundary.refuseReads(true);
+  try {
+    await noBuildPostMaintenance({ firestore, firebaseApp: app, commitSha, stateDirectory: directory,
+      distDirectory: path.join(directory, "dist"), buildEnvironment: {} })();
+  } finally { boundary.onRead(null); }
+  expect((await preparation.get()).data()).toMatchObject({ status: "superseded", attempts: 1, claim: null, nextAttemptAt: null,
+    error: "background_preparation_failed" });
+});
+
+it("ends a failed preparation after its context moves and prepares the current one", async () => {
+  const runtime = { owner: "node-compute", release: commitSha };
+  const preparations = firestore.collection(`cmsPublishQueue/${operationId}/backgroundPreparation`);
+  const earlier = preparations.doc(context.publicContextDigest(1));
+  await earlier.set({ runtime, schemaVersion: 1, contextDigest: earlier.id, status: "failed", attempts: 1, claim: null, nextAttemptAt: 1 });
+  await firestore.doc(context.PUBLIC_CONTEXT_PATH).update({ revision: 2 });
+  const maintain = noBuildPostMaintenance({ firestore, commitSha, stateDirectory: directory,
+    distDirectory: path.join(directory, "dist"), buildEnvironment: {} });
+  await maintain();
+  expect((await earlier.get()).data()).toMatchObject({ status: "superseded", attempts: 1, claim: null, nextAttemptAt: null });
+  expect((await preparations.doc(context.publicContextDigest(2)).get()).data()).toMatchObject({ status: "failed", attempts: 1 });
+});
+
 it("does not prepare a cloud-owned job on OFJ even before its first preparation exists", async () => {
   await firestore.doc(`cmsPublishQueue/${operationId}`).set({
     transport: "post-no-build-v1", backgroundRuntime: { owner: "cloudflare", release: commitSha },

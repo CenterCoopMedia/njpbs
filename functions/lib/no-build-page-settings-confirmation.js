@@ -240,7 +240,7 @@ async function confirmNoBuildPageSettings({ firestore, operationId, target, head
       })) return { confirmed: true };
   const proof = await claimPageConsumerProof({ firestore, operationId, identity, now, log, platformSeconds });
   if (!proof) return { confirmed: false };
-  let status = "waiting", failureReason;
+  let status = "running", failureReason;
   try {
     const { refused = false, failureReason: reason, ...result } = await provePageConsumers({ firestore, operationId, queue, identity, target,
       headers, fetchPublic, now, currentCodeRequest, log, proof, fetchPurge, purgeConfig, once });

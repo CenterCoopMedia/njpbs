@@ -45,7 +45,7 @@ async function claimPageConsumerProof({ firestore, operationId, identity, now, l
     // A refused public answer ends this proof until its publication retries.
     if (prior?.status === "failed" && prior.nextAttemptAt == null) return null;
     // A killed process cannot record its own end. Name it at the next claim.
-    if (prior?.status === "running") lost = { tries: prior.tries ?? prior.attempts, waitingOn: prior.waitingOn ?? null };
+    if (prior?.status === "running" && prior.claim) lost = { tries: prior.tries ?? prior.attempts, waitingOn: prior.waitingOn ?? null };
     const tries = (prior?.tries ?? prior?.attempts ?? 0) + 1;
     const postCheckpoint = prior?.postCheckpoint;
     transaction.set(ref, { key, claim, attempts: storedAttempts(tries), tries, status: "running", startedAt: time,
@@ -71,7 +71,7 @@ async function claimPageConsumerProof({ firestore, operationId, identity, now, l
     next = { ...next, ...update };
     writing ??= (async () => {
       while (next) {
-        const write = { ...next, peakRssMb: peakRssMb(), stateAt: now() };
+        const write = { .../** @type {any} */ (next), peakRssMb: peakRssMb(), stateAt: now() };
         next = null;
         try { await updateOwned(write); } catch { /* The proof's own result still records below. */ }
       }
@@ -89,7 +89,8 @@ async function claimPageConsumerProof({ firestore, operationId, identity, now, l
         throw Object.assign(new Error("Page consumer confirmation claim moved"), { status: 409, code: "proof_claim_moved" });
       }
     },
-    /** "verified", "failed" (a public answer refused) or "waiting". */
+    /** "verified", "failed" (a public answer refused) or "running" (the next
+     * wake reads again; release readers count it as work of its own context). */
     async finish(status, failureReason = { code: "confirmation_incomplete" }) {
       while (writing) await writing;
       await firestore.runTransaction(async transaction => {

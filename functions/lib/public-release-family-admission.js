@@ -6,6 +6,7 @@ const a = require("./public-release-admission");
 const { FieldValue } = require("firebase-admin/firestore");
 const { publiclyVisible } = require("./public-video-references");
 const { readPublicContextRevisionInTransaction, publicContextDigest, bumpPublicContextRevision } = require("./public-context-revision");
+const { supersededPostProof } = require("./superseded-preparation");
 const { collectPublishedMediaUsage } = require("./media-usage");
 const { assertPublishedAssetProjection } = require("./published-media-safety");
 const { selectedAssets } = require("./public-content-projection");
@@ -182,7 +183,8 @@ async function preparePairContentPublication({ firestore, transaction, collectio
       { status: "cancelled", completedAt: FieldValue.serverTimestamp(), claim: null, nextAttemptAt: null,
         error: "Superseded by a newer Page publication" });
     const cancelPost = legacyPost && !["success", "cancelled"].includes(previous.status);
-    if (cancelPost || supersedeHome) transaction.update(previousQueue.ref, {
+    const supersededProof = legacyPost ? supersededPostProof(previous) : null;
+    if (cancelPost || supersedeHome || supersededProof) transaction.update(previousQueue.ref, { ...supersededProof,
       ...(cancelPost ? { status: "cancelled", completedAt: FieldValue.serverTimestamp(), claim: null, nextAttemptAt: null,
         error: "Superseded by a newer instant publication" } : {}),
       ...(supersedeHome ? { homeFullBuild: { ...previousHome, status: "superseded" } } : {}) });

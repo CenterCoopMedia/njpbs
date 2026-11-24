@@ -33,6 +33,7 @@ const { readPublicContextInTransaction, readPublicBackgroundContextInTransaction
   readPublicContextInTransaction(transaction: unknown, firestore: Firestore): Promise<string>;
   readPublicBackgroundContextInTransaction(transaction: unknown, firestore: Firestore): Promise<unknown> };
 const { createPostBackgroundStorage } = require("../../functions/lib/post-background-storage");
+const { SUPERSEDED, prepareSupersededPreparationsInTransaction } = require("../../functions/lib/superseded-preparation");
 const { verifiedPreviewProjection } = require("../../functions/lib/editorial-preview-projection");
 const { enqueuePostWithdrawalBuild, warnFirstHomeFailure } = require("../../functions/lib/transitional-post-withdrawal");
 const { contextOutputs, outputLimits, CHECKPOINT_FAMILIES, CHECKPOINT_FILES_MAX, CHECKPOINT_MANIFEST_BYTES_MAX } = require("../../functions/lib/no-build-record-namespace");
@@ -371,17 +372,43 @@ export function noBuildPostMaintenance({ firestore, firebaseApp, commitSha, stat
         return true;
       }
       console.error(`No-build background preparation failed: ${diagnostic}`);
-      await firestore.runTransaction(async transaction => {
+      const superseded = await firestore.runTransaction(async transaction => {
         const current = (await transaction.get(preparation)).data();
-        if (!current || !ownsPublication(current, runtime) || (acquired ? current.claim !== claim : current.status !== "verified")) return;
-        transaction.update(preparation, { status: "failed", claim: null, error: "background_preparation_failed", diagnostic,
-          nextAttemptAt: current.attempts >= 4 ? null : Date.now() + 60_000 * 2 ** (current.attempts - 1) });
+        if (!current || !ownsPublication(current, runtime) || (acquired ? current.claim !== claim : current.status !== "verified")) return false;
+        // Nothing reads a preparation again after its context moves, so it ends
+        // here instead of keeping a retry time.
+        const moved = contextOnly ? await contextSelectionMoved(transaction, queueId, contextDigest)
+          : await readPublicContextInTransaction(transaction, firestore) !== contextDigest;
+        transaction.update(preparation, { ...(moved ? SUPERSEDED : { status: "failed", claim: null,
+          nextAttemptAt: current.attempts >= 4 ? null : Date.now() + 60_000 * 2 ** (current.attempts - 1) }),
+        error: "background_preparation_failed", diagnostic });
+        return moved;
       });
-      if (!contextOnly) await attemptHomeFallback(queueId, true);
+      if (!contextOnly) await attemptHomeFallback(queueId, !superseded);
       else await failPublicContextPreparation({ firestore, operationId: queueId, runtime });
       return true;
     }
   };
+  async function contextSelectionMoved(transaction: Transaction, queueId: string, contextDigest: string) {
+    const selected = (await transaction.get(firestore.doc(CURRENT_PATH))).data();
+    return !selected || !ownsPublication(selected, runtime) || selected.preparationOperationId !== queueId || selected.contextDigest !== contextDigest;
+  }
+  // A preparation that failed first and whose context or release moved after it.
+  async function supersedeStalePreparations() {
+    const outputs = await firestore.getAll(...families.map(output => firestore.doc(`cmsBackgroundOutputs/${output}`)));
+    const queueIds = outputs.map(row => row.data()).filter(output => output && output.contextOnly !== true)
+      .map(output => /^cmsPublishQueue\/([A-Za-z0-9]{20})\//.exec(output!.taskPath ?? "")?.[1]).filter(id => id !== undefined);
+    if (!queueIds.length) return;
+    await firestore.runTransaction(async transaction => {
+      const pointer = (await transaction.get(firestore.doc("system/publicDeployment"))).data();
+      if (pointer?.state !== "idle" || pointer.activeCommitSha !== commitSha) return;
+      const contextDigest = await readPublicContextInTransaction(transaction, firestore);
+      const write = await prepareSupersededPreparationsInTransaction({ firestore, transaction, queueIds,
+        keep: (row: { id: string; data(): unknown }) => row.id === contextDigest &&
+          (ownsPublication(row.data(), runtime) || !samePublicationOwner(row.data(), runtime)) });
+      write();
+    });
+  }
   async function recoverFailedContextOutputs(contextJob: BackgroundContextSelection, publicContext: unknown, bucket: string) {
     // Restore only the sealed preparation. Never reset its build budget or the
     // aggregate's failed status before every exact output receipt verifies.
@@ -405,6 +432,8 @@ export function noBuildPostMaintenance({ firestore, firebaseApp, commitSha, stat
     if (await paused()) return;
     const admission = await readNoBuildFamilyAdmission({ firestore, env: buildEnvironment });
     const owners = await listNoBuildPostOwners({ firestore });
+    try { await supersedeStalePreparations(); }
+    catch { console.error("Superseded background preparations could not end"); }
     // Accepted normal builds must drain even when fast admission is missing or
     // malformed. Keep the existing owner fence; generation still needs admission.
     for (const { state } of owners) {

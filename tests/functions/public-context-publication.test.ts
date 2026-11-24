@@ -342,6 +342,28 @@ it("keeps preparation backoff and exhaustion asleep and retries under the origin
   await expect(db.runTransaction(transaction => publication.retryPublicContextInTransaction({ transaction, firestore: db, operationId, runtime }))).rejects.toThrow("refused");
 });
 
+it("ends the retry times of the work a newer context replaces", async () => {
+  await enqueue();
+  const second = "B".repeat(20), post = "P".repeat(20);
+  const retry = { status: "failed", attempts: 1, claim: null, nextAttemptAt: Date.now() + 600_000 };
+  const ended = { status: "superseded", claim: null, nextAttemptAt: null };
+  const preparation = db.doc(`cmsPublishQueue/${operationId}/backgroundPreparation/${contextDigest}`);
+  await preparation.set({ ...retry, runtime, contextDigest });
+  await db.doc(`cmsPublishQueue/${operationId}`).update({ previewContext: { ...retry, contextDigest, publicationGeneration: 1 } });
+  // A Post still owns Search, with its own failed task and preparation.
+  const task = db.doc(`cmsPublishQueue/${post}/backgroundOutputs/search`);
+  await task.set({ ...retry, schemaVersion: 1, owner: "post-background-v1", runtime, output: "search", revision: 1, postId: "a-post" });
+  await db.doc("cmsBackgroundOutputs/search").update({ taskPath: task.path, contextOnly: false, postId: "a-post" });
+  const postPreparation = db.doc(`cmsPublishQueue/${post}/backgroundPreparation/${contextDigest}`);
+  await postPreparation.set({ ...retry, runtime, contextDigest });
+  await db.doc(context.PUBLIC_CONTEXT_PATH).update({ revision: 2 });
+  await enqueue(second, { contextRevision: 2 });
+  for (const row of [preparation, postPreparation, task]) expect((await row.get()).data(), row.path).toMatchObject(ended);
+  expect((await db.doc(`cmsPublishQueue/${operationId}`).get()).data()).toMatchObject({ status: "cancelled", previewContext: ended });
+  expect((await db.doc("cmsBackgroundOutputs/search").get()).data()).toMatchObject({
+    taskPath: `cmsPublishQueue/${second}/backgroundOutputs/search`, contextOnly: true, status: "pending" });
+});
+
 it("does not starve retained Post Home maintenance while context preparation is in backoff", async () => {
   await enqueue();
   await db.doc(`cmsPublishQueue/${operationId}/backgroundPreparation/${contextDigest}`).set({ runtime,

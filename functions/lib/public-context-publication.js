@@ -7,6 +7,7 @@ const { publicationRuntime, ownsPublication, samePublicationOwner } = require(".
 const { publicContextDigest, PUBLIC_CONTEXT_PATH } = require("./public-context-revision");
 const { retryExhausted } = require("./no-build-cloud-work");
 const { dependency, lastGood } = require("./post-background-outputs");
+const { SUPERSEDED, retryLeft, prepareSupersededPreparationsInTransaction } = require("./superseded-preparation");
 
 const CURRENT_PATH = "system/publicDeployment/aggregateContexts/current";
 const TRANSPORT = "public-context-no-build-v1";
@@ -184,8 +185,9 @@ async function enqueuePublicContextInTransaction({ transaction, firestore, opera
   const previousIds = previous ? previous.operationIds ?? [previous.operationId] : [];
   requireValue(Array.isArray(previousIds) && previousIds.length <= MAX_CONTEXT_ALIASES && previousIds.every(id => /^[A-Za-z0-9]{20}$/.test(id)));
   const priorQueues = previousIds.length ? await transaction.getAll(...previousIds.map(id => firestore.doc(`cmsPublishQueue/${id}`))) : [];
-  const preparation = previous && ownsPublication(previous, runtime) && /^[A-Za-z0-9]{20}$/.test(previous.preparationOperationId ?? "")
-    ? (await transaction.get(firestore.doc(`cmsPublishQueue/${previous.preparationOperationId}/backgroundPreparation/${previous.contextDigest}`))).data() : null;
+  const previousPreparation = previous && samePublicationOwner(previous, runtime) && /^[A-Za-z0-9]{20}$/.test(previous.preparationOperationId ?? "")
+    ? await transaction.get(firestore.doc(`cmsPublishQueue/${previous.preparationOperationId}/backgroundPreparation/${previous.contextDigest}`)) : null;
+  const preparation = previous && ownsPublication(previous, runtime) ? previousPreparation?.data() : null;
   const followUpQueues = await publicContextFollowUpQueuesInTransaction({ transaction, firestore, selected: previous });
   const waiting = followUpQueues.filter(row => row.data().status === "pending");
   const sameFollowUp = previous?.followUp?.contextDigest === contextDigest && ownsPublication(previous, runtime) && waiting.length > 0 &&
@@ -225,8 +227,23 @@ async function enqueuePublicContextInTransaction({ transaction, firestore, opera
   const namespaceOperationId = complete || preparationRecoveryOfQueueId ? previous.namespaceOperationId ?? originalId : operationId;
   requireValue(/^[A-Za-z0-9]{20}$/.test(namespaceOperationId ?? ""));
   requireValue(preparationOperationId === null || /^[A-Za-z0-9]{20}$/.test(preparationOperationId));
+  // The aggregate takes these families from their Posts. Only Home can still
+  // select a Post preparation, and only at the current context.
+  const takenQueueIds = preparationRecoveryOfQueueId || complete ? [] : prior.filter(row => row.exists && row.data().contextOnly !== true &&
+    samePublicationOwner(row.data(), runtime)).map(row => row.ref.path.split("/")[1]);
+  const homeQueueId = takenQueueIds.length
+    ? (await transaction.get(firestore.doc("cmsBackgroundOutputs/home"))).data()?.taskPath?.split("/")[1] : null;
+  const supersedePreparations = await prepareSupersededPreparationsInTransaction({ firestore, transaction, queueIds: takenQueueIds,
+    keep: (row, queueId) => row.id === contextDigest && queueId === homeQueueId });
+  const selectedQueue = priorQueues.find(row => row.id === previous?.operationId);
   return { ...result, write() {
     namespace.write();
+    if (previousPreparation?.exists && previous.preparationOperationId !== preparationOperationId && retryLeft(previousPreparation.data()))
+      transaction.update(previousPreparation.ref, SUPERSEDED);
+    supersedePreparations();
+    // Preview retention reads only the selected operation.
+    const preview = selectedQueue?.id !== operationId ? selectedQueue?.data()?.previewContext : null;
+    if (retryLeft(preview)) transaction.update(selectedQueue.ref, { previewContext: { ...preview, ...SUPERSEDED } });
     for (const priorQueue of sameContext ? [] : priorQueues) {
       if (priorQueue.exists && priorQueue.data().transport === TRANSPORT && samePublicationOwner(priorQueue.data(), runtime) &&
           priorQueue.data().status !== "success") transaction.update(priorQueue.ref,
@@ -234,9 +251,11 @@ async function enqueuePublicContextInTransaction({ transaction, firestore, opera
     }
     if (!useWaiting) for (const row of waiting) transaction.update(row.ref,
       { status: "cancelled", error: "public_context_superseded", completedAt: FieldValue.serverTimestamp() });
-    for (const row of preparationRecoveryOfQueueId ? [] : prior) if (row.exists && row.data().contextOnly === true &&
-        ownsPublication(row.data(), runtime) && row.data().status !== "verified") transaction.update(row.ref,
-      { status: "superseded", claim: null, nextAttemptAt: null });
+    // These tasks lose their family, whoever made them. A retained complete set keeps its tasks.
+    for (const row of preparationRecoveryOfQueueId ? [] : prior) if (row.exists && row.data().status !== "verified" &&
+        (complete ? row.data().contextOnly === true && ownsPublication(row.data(), runtime) : samePublicationOwner(row.data(), runtime))) {
+      transaction.update(row.ref, SUPERSEDED);
+    }
     const queueValue = { schemaVersion: 1, transport: TRANSPORT, runtime, backgroundRuntime: runtime,
       publicContext: identity, status: "pending", changes: [], ...activityTime, createdAt: FieldValue.serverTimestamp(), aggregateReceipt: null,
       ...(preparationRecoveryOfQueueId ? { preparationRecoveryOfQueueId } : {}) };

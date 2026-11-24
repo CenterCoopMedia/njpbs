@@ -264,7 +264,7 @@ async function verifyServedPost({ firestore, state, claim, fetchPublic, target, 
 // Publication and its later proof keep independent retries under the
 // same queue. A lost process after success cannot leave the proof unowned.
 async function recoverNoBuildPostDetail({ firestore, fetchPublic = fetch, fetchPurge = fetch, purgeConfig,
-  operationId, now = Date.now, target = publicationTarget(process.env.CMS_DEPLOYMENT_ENVIRONMENT ?? "production"), headers = {}, once = false }) {
+  operationId = undefined, now = Date.now, target = publicationTarget(process.env.CMS_DEPLOYMENT_ENVIRONMENT ?? "production"), headers = {}, once = false }) {
   target = assertReadbackTarget(firestore, target);
   const readHeaders = publicReadbackHeaders(target, headers);
   if (!operationId) {

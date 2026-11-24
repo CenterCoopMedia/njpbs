@@ -164,7 +164,7 @@ async function recoverNoBuildHomeCatalog({ firestore, target, headers, fetchPubl
   await registerVerifiedHomeCatalog({ firestore, receipt });
 }
 
-async function capturePageRenderContext({ firestore, state, rendererSha, target, scheduleCapture, currentCodeRequest }) {
+async function capturePageRenderContext({ firestore, state, rendererSha, target, scheduleCapture = undefined, currentCodeRequest }) {
   const homeCodeCapture = state.pageId === "home" ? await capturePageHomeCodeSourcesIfNeeded({
     firestore, target, rendererSha, request: currentCodeRequest }) : undefined;
   const capture = createHomeProviderCapture({ firestore, target });
@@ -188,7 +188,7 @@ async function capturePageRenderContext({ firestore, state, rendererSha, target,
 // Manual rechecks and automatic recovery share the same bounded public read
 // and transaction-time authority proof.
 async function preparePageConfirmation({ firestore, state, fetchPublic = fetch,
-  target, headers = {}, currentCodeRequest, fetchPurge, purgeConfig, once = false }) {
+  target = undefined, headers = {}, currentCodeRequest = undefined, fetchPurge = undefined, purgeConfig = undefined, once = false }) {
   target = assertReadbackTarget(firestore, pagePublicationTarget({ firestore, target }));
   const readHeaders = publicReadbackHeaders(target, headers);
   if (state.pageId === "home") await require("./no-build-post-recovery").purgePublicHome({ target, fetchPurge, purgeConfig });
@@ -235,8 +235,8 @@ async function preparePageConfirmation({ firestore, state, fetchPublic = fetch,
   };
 }
 
-async function recoverNoBuildPageDetail({ firestore, operationId, fetchPublic = fetch, now = Date.now,
-  target, headers = {}, currentCodeRequest, fetchPurge, purgeConfig, once = false }) {
+async function recoverNoBuildPageDetail({ firestore, operationId = undefined, fetchPublic = fetch, now = Date.now,
+  target, headers = {}, currentCodeRequest = undefined, fetchPurge = undefined, purgeConfig = undefined, once = false }) {
   target = pagePublicationTarget({ firestore, target });
   target = assertReadbackTarget(firestore, target);
   const readHeaders = publicReadbackHeaders(target, headers);

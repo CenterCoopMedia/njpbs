@@ -938,7 +938,7 @@ it("shares a durable Page proof claim, waits without a cap and stops on a refuse
   expect((await first).confirmed).toBe(false);
   for (let tries = 1; tries <= 6; tries++) {
     const prior = (await proofRef.get()).data();
-    expect(prior).toMatchObject({ tries, attempts: Math.min(tries, 4), status: "waiting", claim: null,
+    expect(prior).toMatchObject({ tries, attempts: Math.min(tries, 4), status: "running", claim: null,
       leaseUntil: null, nextAttemptAt: null });
     expect(prior.peakRssMb).toBeGreaterThan(0);
     const before = calls;
@@ -986,8 +986,8 @@ it("takes over a killed Page proof after the platform limit, names its end and f
     { readOnly: true })).rejects.toMatchObject({ message: "Page consumer confirmation claim moved", status: 409, code: "proof_claim_moved" });
   await first.finish("failed");
   await firestore.runTransaction(transaction => successor.assertCurrent(transaction, { settingsPublication: identity }), { readOnly: true });
-  await successor.finish("waiting");
-  expect((await proofRef.get()).data()).toMatchObject({ tries: 2, status: "waiting", claim: null });
+  await successor.finish("running");
+  expect((await proofRef.get()).data()).toMatchObject({ tries: 2, status: "running", claim: null });
   for (let tries = 3; tries <= 6; tries++) {
     const killed = await claim();
     expect(killed).not.toBeNull();
@@ -1067,7 +1067,7 @@ it.each(["unchanged", "changed Post roster", "staff retry", "in-flight staff ret
   const firstBatch = [...visited].filter(path => !/settings-story-[89]\//.test(path));
   expect(firstBatch).toHaveLength(8);
   const checkpoint = (await proofRef.get()).data();
-  expect(checkpoint).toMatchObject({ tries: 1, status: "waiting", claim: null, postCheckpoint: { verified: 8 } });
+  expect(checkpoint).toMatchObject({ tries: 1, status: "running", claim: null, postCheckpoint: { verified: 8 } });
   expect((await queueRef.get()).data().consumerReceipts).toBeUndefined();
 
   if (change === "changed Post roster") {
@@ -1269,7 +1269,7 @@ it("waits cheaply for a missing input and confirms when the packet arrives", asy
   for (let wake = 0; wake < 6; wake++) {
     expect(await settingsConfirmation.confirmNoBuildPageSettings(options))
       .toEqual({ confirmed: false, missingPages: ["live", "schedule"] });
-    expect((await proofRef.get()).data()).toMatchObject({ status: "waiting", tries: wake + 1, nextAttemptAt: null });
+    expect((await proofRef.get()).data()).toMatchObject({ status: "running", tries: wake + 1, nextAttemptAt: null });
     offset += 5 * 60_000;
   }
   expect(scheduleFixture.codeRequests()).toBe(0);

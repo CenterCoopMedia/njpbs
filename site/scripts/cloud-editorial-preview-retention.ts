@@ -119,6 +119,8 @@ export function cloudEditorialPreviewRetention({ firestore, firebaseApp, runtime
         const [queue, pointer, currentRow, control] = await transaction.getAll(queueRef,
           firestore.doc("system/publicDeployment"), firestore.doc(CURRENT), firestore.doc(CONTROL));
         const current = queue.data()?.previewContext;
+        // Retention reads only the selected operation, so a moved selection ends its retry.
+        const moved = currentRow.data()?.operationId !== selected.operationId || currentRow.data()?.contextDigest !== selected.contextDigest;
         const ownClaim = current?.status === "building" && current.claim === claim;
         let failed = current;
         if (!ownClaim) {
@@ -139,9 +141,9 @@ export function cloudEditorialPreviewRetention({ firestore, firebaseApp, runtime
             publicationGeneration: pointerBefore.activeGeneration, contextDigest: selected.contextDigest,
             attempts, startedAt: same ? current.startedAt : clock() };
         }
-        transaction.update(queueRef, { previewContext: { ...failed, status: "failed", claim: null,
+        transaction.update(queueRef, { previewContext: { ...failed, status: moved ? "superseded" : "failed", claim: null,
           error: "preview_context_retention_failed", diagnostic: stage,
-          nextAttemptAt: failed.attempts >= 4 ? null : clock() + 60_000 * 2 ** (failed.attempts - 1) } });
+          nextAttemptAt: moved || failed.attempts >= 4 ? null : clock() + 60_000 * 2 ** (failed.attempts - 1) } });
       });
       return true;
     } finally { if (directory) await rm(directory, { recursive: true, force: true }); }

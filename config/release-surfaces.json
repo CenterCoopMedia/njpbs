@@ -1064,7 +1064,7 @@
     {"id":"pub-record-proof","kind":"release","sources":["functions/lib/no-build-record-publication.js"],"states":["pending","success","failed","overdue"]},
     {"id":"pub-cohort","kind":"release","sources":["functions/lib/public-context-publication.js"],"states":["selected_pending","followup_waiting","success","failed","cancelled"]},
     {"id":"pub-context","kind":"release","sources":["functions/lib/public-context-revision.js"],"states":["current","invalidated"]},
-    {"id":"pub-preparation","kind":"release","sources":["functions/lib/pre-enrollment-history.js","functions/lib/public-context-publication.js","site/scripts/no-build-post-background.ts","site/scripts/retry-public-context-publication.ts"],"states":["absent","building","input_durable","verified","failed","cancelled_history"]},
+    {"id":"pub-preparation","kind":"release","sources":["functions/lib/pre-enrollment-history.js","functions/lib/public-context-publication.js","functions/lib/superseded-preparation.js","site/scripts/no-build-post-background.ts","site/scripts/retry-public-context-publication.ts"],"states":["absent","building","input_durable","verified","failed","superseded","cancelled_history"]},
     {"id":"pub-early-preview","kind":"release","sources":["site/scripts/no-build-post-background.ts"],"states":["absent","verified"]},
     {"id":"pub-background","kind":"release","sources":["functions/lib/post-background-outputs.js"],"states":["pending","claimed","verified","failed","superseded"]},
     {"id":"pub-background-serving","kind":"release","sources":["functions/lib/post-background-outputs.js"],"states":["current","stale_serving","blocked","previous_assets"]},

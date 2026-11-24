@@ -126,10 +126,10 @@ function retiredPageProof({ queue, row, value, id, selected, now, context }) {
       identity.contextDigest !== publicContextDigest(identity.contextRevision) || value.key !== proofKey(queue) ||
       !knownAttempts(value.attempts) || !dueOrAbsent(value.nextAttemptAt, now) || value.claimPresent === true ||
       value.retirementReceiptPath) return null;
-  if (value.status === "running") {
+  if (value.status === "running" && value.claim != null) {
     if (typeof value.claim !== "string" || !/^[a-f0-9]{8}-(?:[a-f0-9]{4}-){3}[a-f0-9]{12}$/.test(value.claim) ||
         !positive(value.leaseUntil) || value.leaseUntil > now) return null;
-  } else if (!["stale", "failed"].includes(value.status) || value.claim != null || value.leaseUntil != null ||
+  } else if (!["stale", "failed", "running"].includes(value.status) || value.claim != null || value.leaseUntil != null ||
       value.status === "stale" && value.nextAttemptAt != null) return null;
   return staleProof(value.key, value.attempts);
 }
