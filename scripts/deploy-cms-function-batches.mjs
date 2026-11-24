@@ -171,7 +171,7 @@ function failedFunctionNames(output, names) {
   return failed.some(name => !names.includes(name)) || new Set(failed).size !== failed.length ? [] : failed;
 }
 
-function runFunctionDeploy(names, launch, project) {
+function runFunctionDeploy(names, launch, project, deadline, now = Date.now) {
   return new Promise((resolve, reject) => {
     const { firebaseConfig, codebase } = cmsTarget();
     // Firebase reads functions:<name> as the default codebase; another codebase needs its name.
@@ -187,8 +187,13 @@ function runFunctionDeploy(names, launch, project) {
     child.stdout.on("data", (chunk) => observe(chunk, process.stdout));
     child.stderr.on("data", (chunk) => observe(chunk, process.stderr));
     child.on("error", () => reject(new ComponentReceiptError("Could not start Firebase deployment")));
+    // An attempt still running at the job deadline is ended, so the step records its
+    // failure instead of the job being cancelled.
+    let late = false;
+    const stop = deadline === undefined ? undefined : setTimeout(() => { late = true; child.kill("SIGTERM"); }, Math.max(0, deadline - now()));
     child.on("close", (code) => {
-      resolve({ code, output: stripVTControlCharacters(output).replace(/\r\n/g, "\n") });
+      clearTimeout(stop);
+      resolve({ code, late, output: stripVTControlCharacters(output).replace(/\r\n/g, "\n") });
     });
   });
 }
@@ -213,9 +218,14 @@ export async function deployFunctionTargets(names, launch = spawn, project = PRO
   for (let attempt = 1, delay = 60_000; ; attempt++, delay = Math.min(delay * 2, 300_000)) {
     assertNoFunctionDeletions(manifest, await readFunctionsDeployInventory(project, request), { projectId: project, codebase: cmsTarget().codebase, only: pending });
     const started = now();
-    const { code, output } = await runFunctionDeploy(pending, launch, project);
+    const { code, late, output } = await runFunctionDeploy(pending, launch, project, deadline, now);
     const took = now() - started;
     if (code === 0 && output.includes("Deploy complete!")) return;
+    if (late) {
+      console.error(`Firebase deployment stopped for the job deadline during an attempt; still pending: ${pending.join(", ")}; ` +
+        `last provider line: ${lastProviderLine(output)}`);
+      throw new ComponentReceiptError("Firebase deployment did not confirm completion");
+    }
     const permanent = permanentFailure(output);
     if (permanent) {
       console.error(`Firebase deployment failed: class ${permanent}, attempt ${attempt}, last provider line: ${lastProviderLine(output)}`);

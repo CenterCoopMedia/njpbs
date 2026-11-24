@@ -238,11 +238,33 @@ describe("CMS function build queue expiry recovery", () => {
     await expect(run.promise).resolves.toBeUndefined();
     expect(run.launch).toHaveBeenCalledTimes(9);
   });
-  it("names the firebase job's own timeout as the deploy deadline", () => {
+  it("sets one deadline for both Functions deploy steps from the job's own start and timeout", () => {
     const workflow = parse(readFileSync(new URL("../../.github/workflows/cms-staging-deploy.yml", import.meta.url), "utf8"));
-    const step = workflow.jobs.firebase.steps.find(item => item.name === "Deploy Firebase rules, indexes, and functions");
-    expect(step.env.FIREBASE_JOB_TIMEOUT_MINUTES).toBe(workflow.jobs.firebase["timeout-minutes"]);
-    expect(step.run).toContain("CMS_FUNCTIONS_DEPLOY_DEADLINE_MS=");
+    const steps = workflow.jobs.firebase.steps;
+    const deadline = steps.findIndex(item => item.name === "Set the Functions deploy deadline from this job's start");
+    expect(steps[deadline].env.FIREBASE_JOB_TIMEOUT_MINUTES).toBe(workflow.jobs.firebase["timeout-minutes"]);
+    expect(steps[deadline].run).toContain(".started_at");
+    expect(steps[deadline].run).toContain('CMS_FUNCTIONS_DEPLOY_DEADLINE_MS=');
+    expect(steps[deadline].run).toContain('>> "$GITHUB_ENV"');
+    for (const name of ["Deploy ordinary Functions before the preview pause", "Deploy Firebase rules, indexes, and functions"]) {
+      expect(steps.findIndex(item => item.name === name)).toBeGreaterThan(deadline);
+    }
+  });
+  it("ends an attempt still running at the job deadline as a recorded failure", async () => {
+    const errors = vi.spyOn(console, "error").mockImplementation(() => {});
+    const launch = vi.fn(() => {
+      const child = new EventEmitter(); child.stdout = new EventEmitter(); child.stderr = new EventEmitter();
+      // A hung Firebase invocation: it closes only when it is killed.
+      child.kill = vi.fn(() => queueMicrotask(() => child.emit("close", null)));
+      return child;
+    });
+    await expect(deployFunctionTargets(["handler"], launch, "njpbs-site", {
+      manifest: [{ name: "handler", region: "us-central1", platform: "gcfv2" }], request: async () => ({}), wait: async () => {},
+      deadline: Date.now() + 20,
+    })).rejects.toThrow("did not confirm completion");
+    expect(launch.mock.results[0].value.kill).toHaveBeenCalledWith("SIGTERM");
+    expect(errors).toHaveBeenLastCalledWith(expect.stringContaining("stopped for the job deadline during an attempt; still pending: handler"));
+    errors.mockRestore();
   });
   it("keeps deploying only the failed functions, paced to 5 min, until they complete", async () => {
     const run = deployment([...Array.from({ length: 5 }, () => [1, recordings[1]]), [0, "Deploy complete!\n"]], ["health", ...failures[1]]);
