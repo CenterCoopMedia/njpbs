@@ -37,7 +37,7 @@ it("keeps staged legacy rollback helpers independent of deploy-source pair code"
         files: [plan, "scripts/lib/cms-component-receipt.mjs", "scripts/lib/repository-identity.mjs",
           "scripts/lib/functions-configuration.mjs", "scripts/lib/studio-title-files.mjs", "scripts/lib/functions-contracts.mjs",
           "scripts/render-development-config.mjs", "config/development-inputs.json", "config/functions-configuration.json",
-          "agents/vmix/configuration.mjs", "scripts/lib/cms-target.mjs"],
+          "agents/vmix/configuration.mjs", "scripts/lib/cms-target.mjs", "scripts/lib/provider-call.mjs"],
       },
     });
     const entry = pathToFileURL(join(root, plan)).href;
