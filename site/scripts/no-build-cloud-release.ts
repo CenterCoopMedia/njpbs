@@ -70,12 +70,21 @@ export function cloudReleaseHttpStatus(error: unknown): number | undefined {
   return status;
 }
 
-/** Only operator-owned text and a bounded HTTP status leave this boundary.
- * Provider bodies, arbitrary messages, headers and URLs are never copied. */
+/** The method, path and Cloudflare error codes of the operator's own refused call. */
+function cloudReleaseCall(error: unknown): string {
+  const call = error instanceof PublicWorkerActivationOperatorError ? error.call : undefined;
+  if (!call || !/^(?:GET|POST)$/.test(call.method) || !/^\/[A-Za-z0-9/_:.-]{0,120}$/.test(call.path)) return "";
+  return `; ${call.method} ${call.path}${call.codes.length ? `; Cloudflare code ${call.codes.join(", ")}` : ""}`;
+}
+
+/** Only operator-owned text, a bounded HTTP status and the operator's own call
+ * leave this boundary. Provider bodies, arbitrary messages, headers, ids and
+ * queries are never copied. */
 export function cloudReleaseFailureReason(stage: CloudReleaseFailureStage, error?: unknown, exhausted = false): string {
   const status = cloudReleaseHttpStatus(error);
   const message = Object.hasOwn(failureMessages, stage) ? `${stage}: ${failureMessages[stage]}` : "release: The attempt did not complete";
-  return `${message}${status === undefined ? "" : ` (HTTP ${status})`}.${exhausted
+  const detail = `${status === undefined ? "" : `HTTP ${status}`}${cloudReleaseCall(error)}`.replace(/^; /, "");
+  return `${message}${detail && ` (${detail})`}.${exhausted
     ? " Automatic retry attempts exhausted; original release ownership is retained." : ""}`.slice(0, 300);
 }
 

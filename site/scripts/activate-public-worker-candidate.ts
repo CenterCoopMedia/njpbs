@@ -174,11 +174,28 @@ type SettleOutcome = (input: {
   evidence: ActivationEvidence;
 }) => Promise<ActivationResult>;
 
+/** The provider call a refusal came from. Resource ids, the query and the
+ * provider's own text stay out; only its numeric error codes are kept. */
+export interface CloudflareCall { method: string; path: string; status?: number; codes: number[] }
+
 export class PublicWorkerActivationOperatorError extends Error {
-  constructor(message: string) {
+  readonly call?: CloudflareCall;
+  constructor(message: string, call?: CloudflareCall) {
     super(message);
     this.name = "PublicWorkerActivationOperatorError";
+    if (call) this.call = call;
   }
+}
+
+const callPath = (url: string) => new URL(url).pathname.replace(/^\/client\/v4/, "").replace(/[a-f0-9]{32}/gi, ":id");
+
+async function cloudflareErrorCodes(response: Response): Promise<number[]> {
+  try {
+    const text = await response.text();
+    if (Buffer.byteLength(text, "utf8") > MAX_CLOUDFLARE_RESPONSE_BYTES) return [];
+    const errors: unknown = JSON.parse(text)?.errors;
+    return Array.isArray(errors) ? errors.map(entry => entry?.code).filter(Number.isSafeInteger).slice(0, 3) : [];
+  } catch { return []; }
 }
 
 function operatorError(message: string): never {
@@ -355,10 +372,12 @@ export async function requestCloudflareJson(
       signal: AbortSignal.timeout(15_000),
     });
   } catch {
-    operatorError("The Cloudflare API request did not complete");
+    throw new PublicWorkerActivationOperatorError("The Cloudflare API request did not complete",
+      { method: request.method, path: callPath(request.url), codes: [] });
   }
   if (!response.ok) {
-    operatorError(`The Cloudflare API returned HTTP ${response.status}`);
+    throw new PublicWorkerActivationOperatorError(`The Cloudflare API returned HTTP ${response.status}`,
+      { method: request.method, path: callPath(request.url), status: response.status, codes: await cloudflareErrorCodes(response) });
   }
   const text = await response.text();
   if (Buffer.byteLength(text, "utf8") > MAX_CLOUDFLARE_RESPONSE_BYTES) {
