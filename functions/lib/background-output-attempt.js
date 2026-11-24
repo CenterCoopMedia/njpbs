@@ -46,15 +46,30 @@ function publicationClaim(row, claim, now, takeoverMs = undefined) {
 // The public route, or the purge it needs, answered and refused. Any other
 // error is a state that has not arrived yet, so the publication keeps waiting.
 const REFUSED = ["public_receipt_refused", "public_bytes_refused", "public_purge_refused"];
-const publicAnswerRefused = error => REFUSED.includes(error?.code);
 
-function publicationFailure(row, family, now, error = undefined) {
+/** What a refused public answer said about its own origin. */
+function publicAnswerOrigin({ status, headers }) {
+  return { rendererSha: headers.get("x-njpbs-renderer-sha"), contextDigest: headers.get("x-njpbs-context-sha256"),
+    unmarkedGone: status === 410 && !headers.has("x-njpbs-withdrawal-revision") };
+}
+
+/** A wrong receipt is final only from the current renderer and context. An
+ * answer from another renderer or context, or a 410 without the durable
+ * withdrawal marker, means the current answer has not arrived. */
+function publicAnswerRefused(error, current = undefined) {
+  if (!REFUSED.includes(error?.code)) return false;
+  const { rendererSha = null, contextDigest = null, unmarkedGone = false } = error.origin ?? {};
+  if (rendererSha === null && contextDigest === null) return !unmarkedGone;
+  return current !== undefined && rendererSha === current.rendererSha && contextDigest === current.contextDigest;
+}
+
+function publicationFailure(row, family, now, error = undefined, current = undefined) {
   if (family === "background") {
     const exhausted = row.attempts >= 4;
     return { status: "failed", claim: null, nextAttemptAt: exhausted ? null : now + 60_000 * 2 ** (row.attempts - 1),
       error: families[family].error };
   }
-  const refused = publicAnswerRefused(error);
+  const refused = publicAnswerRefused(error, current);
   return { status: refused || family === "postProof" ? "failed" : "pending", claim: null,
     ...(refused ? { attempts: TERMINAL } : {}),
     // The next minute wake reads again. This write must not wake itself.
@@ -86,5 +101,5 @@ function expiredBackgroundClaim(task, time) {
     Number.isFinite(task.nextAttemptAt) && task.nextAttemptAt <= time;
 }
 
-module.exports = { publicAnswerRefused, publicationAttempt, publicationClaim, publicationFailure, publicationRetry,
+module.exports = { publicAnswerOrigin, publicAnswerRefused, publicationAttempt, publicationClaim, publicationFailure, publicationRetry,
   SLOW_RETRY_MS, FAILURE_CLASSES, backgroundFailure, slowBackgroundRetryDue, expiredBackgroundClaim };

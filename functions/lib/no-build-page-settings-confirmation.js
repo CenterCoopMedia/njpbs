@@ -13,7 +13,7 @@ const { readPageAuthorityInTransaction } = require("./no-build-page-serving");
 const { PUBLIC_PAGE_HTML_MAX_BYTES, readPublicPageReceipt, recoverNoBuildHomeCatalog } = require("./no-build-page-recovery");
 const { readNoBuildPageContextDecision } = require("./no-build-page-context-decision");
 const { projectPublishedCmsSettings } = require("./cms-settings-contract");
-const { assertReadbackTarget, publicReadbackHeaders, verifyPublicHtml, readPublicPostAfterRefresh } = require("./no-build-post-recovery");
+const { assertReadbackTarget, publicReadbackHeaders, refusedAnswer, verifyPublicHtml, readPublicPostAfterRefresh } = require("./no-build-post-recovery");
 const { publicAnswerRefused } = require("./background-output-attempt");
 const { postSettingsCoverage, readPostSettingsProof, readSettingsProofs } = require("./no-build-post-settings-confirmation");
 
@@ -23,7 +23,7 @@ const { claimPageConsumerProof } = require("./page-consumer-proof");
 const { settingsProofTransaction, readSettingsInputs } = require("./settings-proof-transaction");
 
 const MAX_PAGES = 500 + Object.keys(PUBLIC_PAGE_DEFINITIONS).length;
-function unavailablePageConsumers(failures, log) {
+function unavailablePageConsumers(failures, log, identity) {
   const missingPages = [...new Set(failures.map(failure => failure.pageId))].sort();
   log.warn("Page consumer confirmation is unavailable", {
     missingPages: missingPages.filter(id => typeof id === "string" && publicPageDefinition(id)).slice(0, 8),
@@ -31,7 +31,7 @@ function unavailablePageConsumers(failures, log) {
     failures: failures.filter(failure => typeof failure.pageId === "string" && publicPageDefinition(failure.pageId))
       .slice(0, 8).map(({ pageId, error }) => ({ pageId, causes: confirmationErrorCauses(error) })),
   });
-  const refused = failures.find(failure => publicAnswerRefused(failure.error));
+  const refused = failures.find(failure => publicAnswerRefused(failure.error, identity));
   return { confirmed: false, missingPages, refused: Boolean(refused),
     failureReason: { code: "page_readback_failed",
     causes: confirmationErrorCauses((refused ?? failures[0]).error, { includeSource: false }) } };
@@ -144,7 +144,7 @@ function sameDestination(location, expected, requested) {
   } catch { return false; }
 }
 
-const refuseReceipt = message => { throw Object.assign(new Error(message), { status: 409, code: "public_receipt_refused" }); };
+const refuseReceipt = (message, response) => { throw Object.assign(refusedAnswer("public_receipt_refused", message, response), { status: 409 }); };
 const refuseMoved = (message = "The Page settings inputs moved during the proof.") => {
   throw Object.assign(new Error(message), { status: 409, code: "page_coverage_moved" });
 };
@@ -166,11 +166,11 @@ async function readContextReceipt({ path, decision, target, headers, fetchPublic
     if (decision.kind === "code-home-sources") {
       if (response.status !== 200 || response.headers.get("cache-control") !== "no-store" ||
           response.headers.get("x-njpbs-content-source") !== "assets" ||
-          !response.headers.get("content-type")?.startsWith("application/json")) refuseReceipt("The CODE Home catalog is unavailable.");
+          !response.headers.get("content-type")?.startsWith("application/json")) refuseReceipt("The CODE Home catalog is unavailable.", response);
       const chunks = [];
       const bodyDigest = await verifyPublicHtml(response, 2 * 1024 * 1024, false, chunk => chunks.push(Buffer.from(chunk)));
       if (digest(JSON.parse(Buffer.concat(chunks).toString("utf8"))) !== digest(decision.homeSources)) {
-        refuseReceipt("The public CODE Home catalog differs from the captured source.");
+        refuseReceipt("The public CODE Home catalog differs from the captured source.", response);
       }
       return { path, identity: expected, bodyDigest, codeSource: decision.codeSource };
     }
@@ -185,7 +185,7 @@ async function readContextReceipt({ path, decision, target, headers, fetchPublic
         response.headers.has("x-njpbs-publication-operation") ||
         status === 308 && response.headers.get("location") !== decision.location ||
         status === 302 && (response.headers.get("location") !== contentRedirectUrl || response.headers.get("x-robots-tag") !== "noindex, nofollow") ||
-        status === 200 && !response.headers.get("content-type")?.startsWith(path === "/_home-sources.json" ? "application/json" : "text/html")) refuseReceipt("Page context receipt is unavailable.");
+        status === 200 && !response.headers.get("content-type")?.startsWith(path === "/_home-sources.json" ? "application/json" : "text/html")) refuseReceipt("Page context receipt is unavailable.", response);
     const bodyDigest = status === 200 ? await verifyPublicHtml(response,
       path === "/_home-sources.json" ? 2 * 1024 * 1024 : PUBLIC_PAGE_HTML_MAX_BYTES, path !== "/_home-sources.json") : null;
     const rendered = [200, 302].includes(status) ? readRenderedRecordSourceReceipt(response) : null;
@@ -193,7 +193,7 @@ async function readContextReceipt({ path, decision, target, headers, fetchPublic
     const schedule = decision.renderContext?.schedule;
     const scheduleReceiptDigest = schedule && createHash("sha256").update(JSON.stringify(schedule.receipt)).digest("hex");
     if (scheduleReceiptDigest && response.headers.get("x-njpbs-schedule-receipt-sha256") !== scheduleReceiptDigest) {
-      refuseReceipt("The rendered Schedule/Live packet differs.");
+      refuseReceipt("The rendered Schedule/Live packet differs.", response);
     }
     return { path, identity: expected, bodyDigest, ...(rendered ?? {}), ...(scheduleReceiptDigest ? { scheduleReceiptDigest } : {}) };
   } finally { await response.body?.cancel().catch(() => {}); }
@@ -257,7 +257,7 @@ async function confirmNoBuildPageSettings({ firestore, operationId, target, head
     return result;
   } catch (error) {
     log.warn("Page consumer confirmation refused", { operationId, causes: confirmationErrorCauses(error) });
-    if (publicAnswerRefused(error)) status = "failed";
+    if (publicAnswerRefused(error, identity)) status = "failed";
     failureReason = { code: "confirmation_error", causes: confirmationErrorCauses(error, { includeSource: false }) };
     throw error;
   } finally {
@@ -281,7 +281,7 @@ async function provePageConsumers({ firestore, operationId, queue, identity, tar
     // The owned picker can still progress while another Page input is missing.
     // Catalog repair never acknowledges the settings family by itself.
     try { await recoverNoBuildHomeCatalog({ firestore, target, headers, fetchPublic }); }
-    catch (error) { return { ...unavailablePageConsumers([{ pageId: "home", error }], log) }; }
+    catch (error) { return { ...unavailablePageConsumers([{ pageId: "home", error }], log, identity) }; }
   }
   if (prerequisites.missingPages.length) return { confirmed: false, missingPages: prerequisites.missingPages };
   proof.waitingOn("post coverage");
@@ -342,10 +342,10 @@ async function provePageConsumers({ firestore, operationId, queue, identity, tar
     // after Pages so a Post refusal can still report any earlier Page failures.
     await readPostSettingsProof({ coverage: postCoverage, target, headers, fetchPublic, proof, once });
   } catch (error) {
-    if (failures.length) unavailablePageConsumers(failures, log);
+    if (failures.length) unavailablePageConsumers(failures, log, identity);
     throw error;
   }
-  if (failures.length) return unavailablePageConsumers(failures, log);
+  if (failures.length) return unavailablePageConsumers(failures, log, identity);
   proof.waitingOn("final transaction");
   const receipts = results.filter(result => result.kind === "page");
   const contextReceipts = results.filter(result => result.kind === "context").map(result => result.receipt);

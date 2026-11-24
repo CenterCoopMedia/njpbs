@@ -1,5 +1,6 @@
-import { expect, it } from "vitest";
+import { describe, expect, it } from "vitest";
 import policy from "../../functions/lib/background-output-attempt.js";
+import recovery from "../../functions/lib/no-build-post-recovery.js";
 
 const families = [
   ["post", { transport: "post-no-build-v1" }, "pending", "Public Post confirmation is unavailable"],
@@ -60,4 +61,51 @@ it("limits slow transient retries and longer leases to their original background
   expect(policy.publicationAttempt({ ...row, lastAttempt: { retryable: false, failureClass: "validation" } }, "background", 600_000)).toBeNull();
   expect(policy.publicationAttempt(row, "postProof", 600_000)).toBeNull();
   expect(policy.publicationAttempt({ ...row, transport: "post-no-build-v1" }, "post", 600_000)).toBeNull();
+});
+
+describe("which public answers are final", () => {
+  const current = { rendererSha: "a".repeat(40), contextDigest: "b".repeat(64) };
+  const answer = (status, headers = {}) => Object.assign(new Error("Refused"), { code: "public_receipt_refused",
+    origin: policy.publicAnswerOrigin(new Response(null, { status, headers })) });
+  const from = ({ rendererSha, contextDigest }) => ({ "x-njpbs-renderer-sha": rendererSha, "x-njpbs-context-sha256": contextDigest });
+
+  it("ends on a wrong receipt from the current renderer and context", () => {
+    expect(policy.publicAnswerRefused(answer(200, from(current)), current)).toBe(true);
+    expect(policy.publicAnswerRefused(answer(410, from(current)), current)).toBe(true);
+    expect(policy.publicAnswerRefused(refused, current)).toBe(true);
+  });
+
+  it("waits for another renderer, another context and an unmarked 410", () => {
+    expect(policy.publicAnswerRefused(answer(200, from({ ...current, rendererSha: "c".repeat(40) })), current)).toBe(false);
+    expect(policy.publicAnswerRefused(answer(200, from({ ...current, contextDigest: "d".repeat(64) })), current)).toBe(false);
+    expect(policy.publicAnswerRefused(answer(410, { "x-njpbs-gone-branch": "post-reader-deleted" }), current)).toBe(false);
+    // A deployment under way has no current renderer yet.
+    expect(policy.publicAnswerRefused(answer(200, from(current)))).toBe(false);
+  });
+
+  it("ends on a durable withdrawal and on an answer with no receipt at all", () => {
+    expect(policy.publicAnswerRefused(answer(410, { "x-njpbs-withdrawal-revision": "4" }), current)).toBe(true);
+    expect(policy.publicAnswerRefused(answer(404), current)).toBe(true);
+  });
+
+  it("keeps a skewed answer's row pending with the next wake", () => {
+    const row = { transport: "page-no-build-v1", status: "pending", attempts: 2, nextAttemptAt: 0, claim: "claim" };
+    const old = answer(200, from({ ...current, rendererSha: "c".repeat(40) }));
+    expect(policy.publicationFailure(row, "page", 1_000, old, current)).toMatchObject({ status: "pending", nextAttemptAt: 61_000 });
+    expect(policy.publicationFailure(row, "page", 1_000, answer(200, from(current)), current))
+      .toMatchObject({ status: "failed", attempts: 4, nextAttemptAt: null });
+  });
+});
+
+it.each([500, 503, 520, 522, 525, 429])("reads again after a %i that carries no public receipt", async status => {
+  const answers = [new Response(null, { status }), new Response("ok")];
+  const read = once => recovery.readPublicPostAfterRefresh("https://njpbs.org/posts/x/", async () => answers.shift(), undefined, {}, { once });
+  await expect(read(true)).rejects.toMatchObject({ code: recovery.REFRESH_PENDING });
+  expect((await read(true)).status).toBe(200);
+});
+
+it("judges a 500 that carries a public header", async () => {
+  const response = await recovery.readPublicPostAfterRefresh("https://njpbs.org/posts/x/",
+    async () => new Response(null, { status: 500, headers: { "x-njpbs-content-source": "cms-no-build" } }), undefined, {}, { once: true });
+  expect(response.status).toBe(500);
 });

@@ -14,7 +14,7 @@ const { readPageAuthorityInTransaction } = require("./no-build-page-serving");
 const { settleBuildQueue } = require("./publish-build-state");
 const { can, canEditContent } = require("./rbac");
 const { contentResourceSection } = require("./content-authorization");
-const { assertReadbackTarget, publicReadbackHeaders, readPublicAnswer, refusedAnswer, verifyPublicHtml, readPublicPostAfterRefresh } = require("./no-build-post-recovery");
+const { assertReadbackTarget, publicReadbackHeaders, readPublicAnswer, readServingIdentity, refusedAnswer, verifyPublicHtml, readPublicPostAfterRefresh } = require("./no-build-post-recovery");
 
 const { readRenderedRecordSourceReceipt, assertRenderedRecordSourceBinding } = require("./no-build-page-source-binding");
 
@@ -75,7 +75,7 @@ async function readPublicPageReceipt({ state, fetchPublic = fetch, target, heade
           (status === 308 && response.headers.get("location") !== state.path) ||
           (status === 302 && (response.headers.get("location") !== state.contentRedirectUrl || response.headers.get("x-robots-tag") !== "noindex, nofollow")) ||
           (status === 200 && !response.headers.get("content-type")?.startsWith(path === "/_home-sources.json" ? "application/json" : "text/html")) ||
-          (state.pageId === "home" && (response.headers.get("x-njpbs-home-refresh-revision") !== String(state.homeRefresh?.revision ?? 0)))) throw refusedAnswer("public_receipt_refused", "Public Page receipt is unavailable");
+          (state.pageId === "home" && (response.headers.get("x-njpbs-home-refresh-revision") !== String(state.homeRefresh?.revision ?? 0)))) throw refusedAnswer("public_receipt_refused", "Public Page receipt is unavailable", response);
       const chunks = status === 200 && path === "/_home-sources.json" ? [] : null;
       const htmlDigest = status === 200 ? await verifyPublicHtml(response,
         path === "/_home-sources.json" ? 2 * 1024 * 1024 : PUBLIC_PAGE_HTML_MAX_BYTES, path !== "/_home-sources.json",
@@ -320,7 +320,7 @@ async function recoverNoBuildPageDetail({ firestore, operationId = undefined, fe
   await firestore.runTransaction(async transaction => {
     const queue = (await transaction.get(queueRef)).data();
     if (queue?.claim !== claim || queue.status === "success" || queue.status === "cancelled") return;
-    transaction.update(queueRef, publicationFailure(queue, "page", now(), failed));
+    transaction.update(queueRef, publicationFailure(queue, "page", now(), failed, await readServingIdentity(transaction, firestore)));
   });
 }
 
@@ -392,7 +392,7 @@ async function recoverNoBuildHomeRefresh({ firestore, fetchPublic = fetch, now =
     await firestore.runTransaction(async transaction => {
       const task = (await transaction.get(taskRef)).data();
       if (task?.claim !== claim || task.status === "verified" || task.status === "superseded") return;
-      transaction.update(taskRef, publicationFailure(task, "home", now(), error));
+      transaction.update(taskRef, publicationFailure(task, "home", now(), error, await readServingIdentity(transaction, firestore)));
     });
   }
 }

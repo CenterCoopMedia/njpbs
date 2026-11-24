@@ -10,10 +10,10 @@ const { readNoBuildPostOwner, listNoBuildPostOwners, readNoBuildPostCapability, 
 const { settleBuildQueue, settleBuildQueueInTransaction } = require("./publish-build-state");
 const { publishedBlockResourceError } = require("./published-resource-check");
 const { postProofDue } = require("./no-build-post-proof-state");
-const { publicationAttempt, publicationClaim, publicationFailure, publicationRetry } = require("./background-output-attempt");
+const { publicAnswerOrigin, publicationAttempt, publicationClaim, publicationFailure, publicationRetry } = require("./background-output-attempt");
 const { readNoBuildFamilyAdmission } = require("./no-build-family-admission");
 const { publicationTarget, assertPublicationTarget, assertPublicationDatabase, publicationPostCacheTag } = require("./publication-target");
-const { readPublicContextInTransaction } = require("./public-context-revision");
+const { PUBLIC_CONTEXT_PATH, publicContextDigest, readPublicContextInTransaction } = require("./public-context-revision");
 const DUE_QUEUE_LIMIT = 32;
 
 function assertReadbackTarget(firestore, target) {
@@ -52,7 +52,17 @@ async function readPublicAnswer(what, work, { onPending = undefined, stop = unde
 
 // A real answer that carries the wrong receipt is the public route's own
 // failure report. Only pending, updating and missing answers are waited for.
-const refusedAnswer = (code, message) => Object.assign(new Error(message), { code });
+const refusedAnswer = (code, message, response = undefined) => Object.assign(new Error(message), { code,
+  ...(response ? { origin: publicAnswerOrigin(response) } : {}) });
+
+/** The renderer and context whose wrong receipt is final. None while a public
+ * deployment is under way. */
+async function readServingIdentity(transaction, firestore) {
+  const [deployment, context] = await transaction.getAll(firestore.doc("system/publicDeployment"), firestore.doc(PUBLIC_CONTEXT_PATH));
+  const pointer = deployment.data(), revision = context.data()?.revision;
+  if (pointer?.state !== "idle" || !Number.isSafeInteger(revision) || revision < 1) return undefined;
+  return { rendererSha: pointer.activeCommitSha, contextDigest: publicContextDigest(revision) };
+}
 
 async function purgePostRoutes(state, config, fetchImpl, target) {
   const routes = [...new Set(state.ownedSlugs.map(slug => publicationPostCacheTag(target, slug)))];
@@ -93,10 +103,11 @@ async function purgePublicHome({ target, fetchPurge = fetch, purgeConfig } = {})
   await purgePublicCacheTags([publicationPostCacheTag(target, "background")], config, fetchPurge);
 }
 
-// The public Worker's "content is being updated" answer, or an edge that has
-// no answer yet. It carries no receipt, unlike a withdrawal or renderer refusal.
+// The public Worker's "content is being updated" answer, or an edge or Worker
+// error (500, 1101, 52x) that has no answer yet. It carries no receipt, unlike a
+// withdrawal or renderer refusal.
 function isUpdatingAnswer(response) {
-  return NO_ANSWER_STATUSES.includes(response.status) &&
+  return (response.status === 429 || response.status >= 500) &&
     ![...response.headers.keys()].some(name => name.startsWith("x-njpbs-"));
 }
 
@@ -133,14 +144,14 @@ async function readPublicPostReceipt(state, fetchPublic, signal, target, headers
       snapshotDigest !== (state.snapshotDigest ?? null) ||
       datasetFiguresDigest !== (state.datasetFiguresDigest ?? null)) {
     await response.body?.cancel();
-    throw refusedAnswer("public_receipt_refused", "Public Post receipt is unavailable");
+    throw refusedAnswer("public_receipt_refused", "Public Post receipt is unavailable", response);
   }
   const revisionHeader = response.headers.get("x-njpbs-admission-revision");
   const admissionRevision = /^[1-9][0-9]*$/.test(revisionHeader ?? "") ? Number(revisionHeader) : null;
   if ((admissionRevision === null && (state.visible || revisionHeader !== "unavailable")) ||
       (admissionRevision !== null && !Number.isSafeInteger(admissionRevision))) {
     await response.body?.cancel();
-    throw refusedAnswer("public_receipt_refused", "Public admission receipt is unavailable");
+    throw refusedAnswer("public_receipt_refused", "Public admission receipt is unavailable", response);
   }
   const htmlDigest = state.visible && !state.contentRedirectUrl ? await verifyPublicHtml(response) : null;
   if (!state.visible || state.contentRedirectUrl) await response.body?.cancel();
@@ -154,7 +165,7 @@ async function readPublicPostReceipt(state, fetchPublic, signal, target, headers
 
 async function verifyPublicHtml(response, maxBytes = 2 * 1024 * 1024, fullDocument = false, onChunk) {
   if (!response.body || !/^[a-f0-9]{64}$/.test(response.headers.get("x-njpbs-html-sha256") ?? "") ||
-      Number(response.headers.get("content-length")) > maxBytes) throw refusedAnswer("public_bytes_refused", "Public Post bytes are unavailable");
+      Number(response.headers.get("content-length")) > maxBytes) throw refusedAnswer("public_bytes_refused", "Public Post bytes are unavailable", response);
   const reader = response.body.getReader();
   let size = 0;
   const digest = createHash("sha256");
@@ -165,7 +176,7 @@ async function verifyPublicHtml(response, maxBytes = 2 * 1024 * 1024, fullDocume
       const chunk = await reader.read();
       if (chunk.done) break;
       size += chunk.value.byteLength;
-      if (size > maxBytes) throw refusedAnswer("public_bytes_refused", "Public Post bytes exceed their bound");
+      if (size > maxBytes) throw refusedAnswer("public_bytes_refused", "Public Post bytes exceed their bound", response);
       if (onChunk) onChunk(chunk.value);
       digest.update(chunk.value);
       if (fullDocument) {
@@ -175,9 +186,9 @@ async function verifyPublicHtml(response, maxBytes = 2 * 1024 * 1024, fullDocume
     }
   } finally { await reader.cancel(); }
   const htmlDigest = digest.digest("hex");
-  if (htmlDigest !== response.headers.get("x-njpbs-html-sha256")) throw refusedAnswer("public_bytes_refused", "Public Post bytes changed");
+  if (htmlDigest !== response.headers.get("x-njpbs-html-sha256")) throw refusedAnswer("public_bytes_refused", "Public Post bytes changed", response);
   if (fullDocument && (!/^\s*<!doctype html>/i.test(prefix.toString("utf8")) || !/<\/html\s*>/i.test(tail.toString("utf8")))) {
-    throw refusedAnswer("public_bytes_refused", "Public Page document is incomplete");
+    throw refusedAnswer("public_bytes_refused", "Public Page document is incomplete", response);
   }
   return htmlDigest;
 }
@@ -250,7 +261,7 @@ async function verifyServedPost({ firestore, state, claim, fetchPublic, target, 
     const queue = (await transaction.get(queueRef)).data();
     const document = (await transaction.get(postRef)).data();
     if (queue?.status !== "success" || queue.postProof?.claim !== claim) return;
-    const failure = publicationFailure(queue.postProof, "postProof", now(), failed);
+    const failure = publicationFailure(queue.postProof, "postProof", now(), failed, await readServingIdentity(transaction, firestore));
     const resourceError = document?.published?.sourceVersion === state.sourceVersion
       ? publishedBlockResourceError(document.published.blocks ?? [], "/posts/") : null;
     if (resourceError) failure.error = resourceError;
@@ -354,7 +365,7 @@ async function recoverNoBuildPostDetail({ firestore, fetchPublic = fetch, fetchP
   await firestore.runTransaction(async transaction => {
     const queue = (await transaction.get(queueRef)).data();
     if (queue?.claim !== claim || queue.status === "success") return;
-    transaction.update(queueRef, publicationFailure(queue, "post", now(), failed));
+    transaction.update(queueRef, publicationFailure(queue, "post", now(), failed, await readServingIdentity(transaction, firestore)));
   });
 }
 
@@ -527,4 +538,4 @@ async function verifyNoBuildPostPublicRoute({ firestore, candidate, fetchPublic 
 }
 module.exports = { purgePublicHome, recoverNoBuildPostDetail, existingNoBuildPostPublication, verifyNoBuildPostPublicRoute,
   assertCurrentPostReceipt, assertReadbackTarget, publicReadbackHeaders, readPublicPostAfterRefresh, readPublicPostReceipt,
-  readPublicAnswer, refusedAnswer, REFRESH_PENDING, verifyPublicHtml, verifyOwnedPostRoutes };
+  readPublicAnswer, readServingIdentity, refusedAnswer, REFRESH_PENDING, verifyPublicHtml, verifyOwnedPostRoutes };

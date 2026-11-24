@@ -8,17 +8,21 @@ const { readNoBuildPostDecisionInTransaction } = require("./no-build-post-public
 const { joinedRecordIds } = require("./joined-records");
 const { contentLink } = require("./content-link");
 const { readPublicContextRevisionInTransaction, publicContextDigest } = require("./public-context-revision");
-const { readPublicAnswer, REFRESH_PENDING, verifyPublicHtml, readPublicPostAfterRefresh } = require("./no-build-post-recovery");
+const { readPublicAnswer, refusedAnswer, REFRESH_PENDING, verifyPublicHtml, readPublicPostAfterRefresh } = require("./no-build-post-recovery");
 
+const { publicAnswerRefused } = require("./background-output-attempt");
 const { readSettingsInputs } = require("./settings-proof-transaction");
 
 const MAX_POSTS = 500;
 const PROOF_BATCH_SIZE = 8;
 const digest = value => createHash("sha256").update(JSON.stringify(value)).digest("hex");
-function refuse(postId, reason, code = "post_coverage_moved") {
-  throw Object.assign(new Error(`The settings Post proof for ${postId} ${reason}.`), { status: 409, code });
+const proofMessage = (postId, reason) => `The settings Post proof for ${postId} ${reason}.`;
+function refuse(postId, reason) {
+  throw Object.assign(new Error(proofMessage(postId, reason)), { status: 409, code: "post_coverage_moved" });
 }
-const refuseReceipt = (postId, reason) => refuse(postId, reason, "public_receipt_refused");
+function refuseReceipt(postId, reason, response) {
+  throw Object.assign(refusedAnswer("public_receipt_refused", proofMessage(postId, reason), response), { status: 409 });
+}
 
 /** The published roster, not the admitted catalog or sitemap, defines coverage.
  * Private later drafts do not change this roster or its public source seal. */
@@ -100,7 +104,7 @@ async function readPostSettingsReceipt({ entry, target, headers, fetchPublic, si
         status === 200 && !response.headers.get("content-type")?.startsWith("text/html") ||
         status === 302 && (response.headers.get("location") !== entry.contentRedirectUrl ||
           response.headers.get("x-robots-tag") !== "noindex, nofollow")) {
-      refuseReceipt(entry.postId, `has an unavailable public receipt at ${path}`);
+      refuseReceipt(entry.postId, `has an unavailable public receipt at ${path}`, response);
     }
     if (codePost) {
       const seals = { "x-njpbs-public-context-revision": String(expected.contextRevision),
@@ -109,10 +113,10 @@ async function readPostSettingsReceipt({ entry, target, headers, fetchPublic, si
         "x-njpbs-input-source-sha256": expected.inputSourceDigest, "x-njpbs-snapshot-sha256": expected.snapshotDigest };
       if (Object.entries(seals).some(([key, value]) => response.headers.get(key) !== value) ||
           response.headers.has("x-njpbs-publication-operation") || response.headers.has("x-njpbs-admission-revision") ||
-          !/^[a-f0-9]{64}$/.test(response.headers.get("x-njpbs-input-sha256") ?? "")) refuseReceipt(entry.postId, "has a changed CODE receipt");
+          !/^[a-f0-9]{64}$/.test(response.headers.get("x-njpbs-input-sha256") ?? "")) refuseReceipt(entry.postId, "has a changed CODE receipt", response);
     } else if (response.headers.get("x-njpbs-publication-operation") !== expected.operationId ||
         response.headers.get("x-njpbs-admission-revision") !== String(expected.admissionRevision)) {
-      refuseReceipt(entry.postId, `has an unavailable public receipt at ${path}`);
+      refuseReceipt(entry.postId, `has an unavailable public receipt at ${path}`, response);
     }
     return { postId: entry.postId, path, htmlDigest: status === 200 ? await verifyPublicHtml(response, 2 * 1024 * 1024, true) : null };
   } finally { await response.body?.cancel().catch(() => {}); }
@@ -171,9 +175,10 @@ async function readPostSettingsProof({ coverage, target, headers, fetchPublic, p
   if (prior && !start) proof.recordPostCheckpoint(null);
   let verified = start, pending = null;
   await readSettingsProofs(entries.slice(start), (entry, signal) => readPostSettingsReceipt({ entry, target, headers, fetchPublic, signal, once }), {
-    // A refreshing detail waits for the next wake beside the rest of this pass.
+    // A detail that has not arrived waits for the next wake beside the rest of this pass.
     ...(once ? { onFailure(entry, error) {
-      if (error?.code !== REFRESH_PENDING) throw error;
+      const notArrived = error?.code === REFRESH_PENDING || error?.code === "public_receipt_refused" && !publicAnswerRefused(error, entry.receipt);
+      if (!notArrived) throw error;
       pending ??= error;
     } } : {}),
     onDone(waiting) {

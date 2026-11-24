@@ -270,7 +270,10 @@ it("waits through every updating answer, ends on a refused one, and an authorize
     await recover({ now: () => Date.now() + wake * 60_001, once: true, fetchPublic: async () => new Response(null, { status: 503 }) });
     expect((await queueRef().get()).data()).toMatchObject({ status: "pending", attempts: Math.min(wake + 1, 3), claim: null });
   }
-  await recover({ now: () => Date.now() + 6 * 60_001, fetchPublic: async () => new Response(null, { status: 404 }) });
+  const skewed = { "x-njpbs-renderer-sha": "0".repeat(40), "x-njpbs-context-sha256": state.contextDigest };
+  await recover({ now: () => Date.now() + 6 * 60_001, fetchPublic: async () => new Response(null, { headers: skewed }) });
+  expect((await queueRef().get()).data()).toMatchObject({ status: "pending", attempts: 3, claim: null });
+  await recover({ now: () => Date.now() + 7 * 60_001, fetchPublic: async () => new Response(null, { status: 404 }) });
   expect((await queueRef().get()).data()).toMatchObject({ status: "failed", attempts: 4, nextAttemptAt: null });
   const request = { firestore, actor, retry: true, baseVersion: 8, changes: [{ collection: "cmsPages", id: pageId, sourceVersion: 7 }] };
   await expect(recovery.existingNoBuildPagePublication({ ...request, baseVersion: 7 })).rejects.toThrow("Publication changed");
@@ -849,6 +852,9 @@ it.each(["owner", "context"].flatMap(lane => [false, true].map(stale => ({ lane,
   expect(responses[1].context).toBe(context.publicContextDigest(stale ? 3 : 4));
   expect(responses[1].html.includes("Current newsletter label")).toBe(!stale);
   const queue = (await firestore.doc(`cmsPublishQueue/${nextOperationId}`).get()).data();
+  // The old context's answer has not arrived yet; the next wake reads again.
+  expect((await firestore.doc(`cmsPublishQueue/${nextOperationId}/confirmation/page-consumers`).get()).data())
+    .toMatchObject({ status: stale ? "running" : "verified", claim: null });
   if (stale) expect(queue.consumerReceipts).toBeUndefined();
   else expect(queue.consumerReceipts.pages).toMatchObject({ contextRevision: 4, contextDigest: nextIdentity.contextDigest });
 });
