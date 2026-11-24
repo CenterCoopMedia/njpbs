@@ -87,14 +87,15 @@ export async function checkSignedInPreview(browser, { admin, preview, credential
     page.on("requestfailed", request => {
       if (isSession(request) && !saw.session) saw.session = { failed: failureName(request.failure()?.errorText) };
     });
-    // The document wait ends on the preview job, not on a clock: a failed or expired job
-    // (from Admin's own cmsPreview/cmsPreviewStatus replies) or Admin stopping in the tab
-    // ends it at once, and a ready job is followed by the document.
+    // The document wait ends on the preview job, not on a clock. Admin follows the addressed
+    // job (an older blocking job can fail before the requested one is made), so its terminal
+    // progress state in the tab ends the wait at once; a ready job is followed by the document.
+    // Coordinator ruling (Nov. 24, 2026, review of e74c821): this state-based wait and the
+    // backstop below are this change's scope, because a 60 s timer failed a working preview.
     let stop;
     const stopped = new Promise((_, reject) => { stop = reject; });
-    page.on("response", reply => void readJob(reply, saw).then(ended => {
-      if (ended) stop(new PreviewSmokeFailure("preview_job_failed"));
-    }));
+    // The receipt keeps the last job status and error code from Admin's own replies.
+    page.on("response", reply => void readJob(reply, saw));
     // The tab opens inside the click and Admin bounds the session request at 30 s,
     // so these 60 s waits end on Admin's own outcome for a working system.
     const [, , document] = await Promise.all([
@@ -143,22 +144,21 @@ export async function checkSignedInPreview(browser, { admin, preview, credential
 const DOCUMENT_HANG_BACKSTOP_MS = 180_000;
 const jobStatuses = new Set(["pending", "building", "ready", "failed", "expired"]);
 
-// Record the addressed job's status from Admin's preview replies; true when it ended without a preview.
+// Record the last job status and error code from Admin's preview replies.
 async function readJob(reply, saw) {
   try {
     const request = reply.request();
-    if (request.method() !== "POST" || !/\/cmsPreview(?:Status)?$/.test(new URL(reply.url()).pathname)) return false;
+    if (request.method() !== "POST" || !/\/cmsPreview(?:Status)?$/.test(new URL(reply.url()).pathname)) return;
     if (reply.status() < 200 || reply.status() > 299) {
       saw.job = { ...saw.job, http: reply.status() };
-      return false;
+      return;
     }
     const body = await reply.json();
-    if (!jobStatuses.has(body?.status)) return false;
+    if (!jobStatuses.has(body?.status)) return;
     const error = typeof body.error === "string" && /^[a-z][a-z0-9_]{0,63}$/.test(body.error) ? body.error
       : body.error ? "unlisted" : undefined;
     saw.job = { status: body.status, ...(error ? { error } : {}) };
-    return body.status === "failed" || body.status === "expired";
-  } catch { return false; }
+  } catch { /* A reply without a readable job leaves the last status in place. */ }
 }
 
 // Admin's terminal progress states mean it stopped without opening the preview.
@@ -192,6 +192,8 @@ const progressStates = new Set(["preparing", "requesting", "waiting", "pending",
 const settledStates = new Set(["refresh-failed", "error", "session-slow", "updating"]);
 
 // A fast session failure can arrive before Admin moves the tab, so give it up to 5 s to settle.
+// Coordinator ruling (Nov. 24, 2026): the tab can still show an earlier state after a refused
+// session when the job takes longer than 5 s; the session status already names that cause.
 async function describePopup(popup, origins) {
   if (!popup) return null;
   const deadline = Date.now() + 5_000;

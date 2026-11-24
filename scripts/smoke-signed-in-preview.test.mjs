@@ -152,9 +152,10 @@ test("names the missing wait and where the preview tab settled", async () => {
     ok: false, code: "private_preview_unavailable", missing: ["document"],
     session: { status: 204 }, job: { status: "building" }, document: null, popup: { place: "about:blank", progress: "building" },
   });
-  // A failed job ends the wait at once and names its error code.
-  assert.deepEqual(await check({ noDocument: true, hang: true, job: { status: "failed", error: "preview_build_timeout" }, progress: "error" }), {
-    ok: false, code: "preview_job_failed", missing: ["document"],
+  // A failed older job alone does not end the wait; Admin's terminal state does, and the receipt names the job error.
+  assert.deepEqual(await check({ noDocument: true, hang: true, job: { status: "failed", error: "preview_build_timeout" },
+    progress: "waiting", later: { progress: "error" } }), {
+    ok: false, code: "preview_admin_stopped", missing: ["document"],
     session: { status: 204 }, job: { status: "failed", error: "preview_build_timeout" }, document: null,
     popup: { place: "about:blank", progress: "error" },
   });
