@@ -9,7 +9,7 @@ const retryLeft = value => value?.status === "failed" && value.claim == null && 
 
 /** Reads first, returns the writes for the caller's transaction. `keep` names
  * the rows a live reader can still select. Other states are left to their owner. */
-async function prepareSupersededPreparationsInTransaction({ firestore, transaction, queueIds, keep = (_row, _queueId) => false }) {
+async function prepareSupersededPreparationsInTransaction({ firestore, transaction, queueIds, keep = () => false }) {
   const rows = [];
   for (const queueId of new Set(queueIds)) {
     const failed = await transaction.get(firestore.collection(`cmsPublishQueue/${queueId}/backgroundPreparation`)

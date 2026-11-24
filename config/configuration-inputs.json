@@ -90,7 +90,7 @@
     },
     {
       "suppliers": ["process-environment"],
-      "names": ["DEV_CLOUDFLARE_READ_ENTRY", "DEV_OPERATOR_CREDENTIAL_ENTRY", "DEV_PUBLISHER_KEY_ENTRY", "JAWN_OPS", "PUBLISHER_IMAGE_RUN", "PUBLISHER_SHA"]
+      "names": ["DEV_CLOUDFLARE_READ_ENTRY", "DEV_OPERATOR_CREDENTIAL_ENTRY", "DEV_PUBLISHER_ACTIVATION_ENTRY", "DEV_PUBLISHER_DEPLOY_ENTRY", "DEV_PUBLISHER_KEY_ENTRY", "JAWN_OPS", "PUBLISHER_IMAGE_RUN", "PUBLISHER_SHA"]
     },
     {
       "suppliers": ["process-environment", "video-backup-service"],
