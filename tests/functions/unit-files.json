@@ -83,6 +83,7 @@
   "tests/functions/no-build-page-source.test.js",
   "tests/functions/no-build-preparation-storage.test.ts",
   "tests/functions/no-build-record-contract.test.ts",
+  "tests/functions/owned-route-rollout.test.js",
   "tests/functions/paired-admin-pages-http.test.ts",
   "tests/functions/post-background-storage-budget.test.js",
   "tests/functions/post-background-storage.test.js",
