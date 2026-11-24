@@ -19,12 +19,19 @@ interface Dependencies {
   dev?: { audience: string; accessOrigin?: string; origin?: "https://dev-public.example.org" | "https://dev-preview.example.org" };
 }
 
-function response(body: BodyInit | null, status: number, extra: HeadersInit = {}): Response {
+function directives(value: string | null): string[] {
+  return (value ?? "").split(",").map((part) => part.split("=", 1)[0].trim().toLowerCase());
+}
+
+// `origin` marks a proxied dev answer. Release readers compare its cache and
+// robots headers exactly, so an origin value that already forbids storage or
+// indexing passes unchanged. Every other answer gets the gateway values.
+function response(body: BodyInit | null, status: number, extra: HeadersInit = {}, origin = false): Response {
   const headers = new Headers(extra);
-  headers.set("cache-control", "private, no-store");
+  if (!origin || !directives(headers.get("cache-control")).includes("no-store")) headers.set("cache-control", "private, no-store");
   if (status === 429) headers.set("retry-after", "1");
   headers.set("referrer-policy", "no-referrer");
-  headers.set("x-robots-tag", "noindex, nofollow, noarchive");
+  if (!origin || !directives(headers.get("x-robots-tag")).includes("noindex")) headers.set("x-robots-tag", "noindex, nofollow, noarchive");
   headers.set("x-content-type-options", "nosniff");
   return new Response(body, { status, headers });
 }
@@ -115,7 +122,8 @@ export async function serveStaffSite(request: Request, dependencies: Dependencie
       originHeaders.set(rollbackProbe, probe);
       if (selected) originHeaders.set(versionOverride, `${dependencies.rollbackWorker}="${selected}"`);
     } else {
-      for (const name of ["accept", "range", "if-range", "if-none-match", "if-modified-since"]) {
+      // Dev release readers send `cache-control: no-cache`; production origins honor it.
+      for (const name of ["accept", "range", "if-range", "if-none-match", "if-modified-since", ...(dev ? ["cache-control"] : [])]) {
         const value = request.headers.get(name);
         if (value) originHeaders.set(name, value);
       }
@@ -142,7 +150,7 @@ export async function serveStaffSite(request: Request, dependencies: Dependencie
       headers.delete("access-control-allow-credentials");
       for (const [name, value] of Object.entries(receiptCors(request))) headers.set(name, value);
     }
-    return response(request.method === "HEAD" ? null : upstream.body, upstream.status, headers);
+    return response(request.method === "HEAD" ? null : upstream.body, upstream.status, headers, !!dev);
   } catch {
     return response(request.method === "HEAD" ? null : "Site access unavailable", 503, dev ? receiptCors(request) : {});
   }

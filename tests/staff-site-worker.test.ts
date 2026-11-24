@@ -443,6 +443,38 @@ describe("isolated dev gateway", () => {
     expect(await result.text()).toBe("published dev page");
     expect((await devWorker.fetch(request("/", { cookie: "__Host-njpbs-staff=prod-token" }), env())).status).toBe(401);
   });
+  it("passes origin cache and robots headers that already forbid storage and indexing", async () => {
+    const sent: Request[] = [];
+    let answer: Record<string, string> = {};
+    const config = { ...env(), DEV_PUBLIC: { fetch: async (request: Request) => {
+      sent.push(request);
+      return new Response(null, { headers: answer });
+    } } } as Parameters<typeof devWorker.fetch>[1];
+    const read = async (headers: Record<string, string>) => {
+      answer = headers;
+      const result = await devWorker.fetch(request("/posts/dev-proof/", {
+        cookie: "__Host-njpbs-staff=dev-token", "cache-control": "no-cache", "x-njpbs-rollback-probe": "forged",
+      }), config);
+      return [result.headers.get("cache-control"), result.headers.get("x-robots-tag")];
+    };
+    expect(await read({ "cache-control": "no-store", "x-robots-tag": "noindex, nofollow" }))
+      .toEqual(["no-store", "noindex, nofollow"]);
+    expect(Object.fromEntries(sent[0].headers)).toEqual({ "cache-control": "no-cache" });
+    // The gateway still never serves a cacheable or indexable answer.
+    for (const [cache, robots] of [[undefined, undefined], ["public, max-age=60", "all"],
+      ["no-cache", "nofollow"], ["max-age=60, no-store-later", "noindex-later"]]) {
+      expect(await read({ ...cache ? { "cache-control": cache } : {}, ...robots ? { "x-robots-tag": robots } : {} }))
+        .toEqual(["private, no-store", "noindex, nofollow, noarchive"]);
+    }
+    expect(await read({ "cache-control": "Public, No-Store", "x-robots-tag": "NoIndex" }))
+      .toEqual(["Public, No-Store", "NoIndex"]);
+  });
+  it("keeps gateway headers on its own refusals", async () => {
+    const result = await devWorker.fetch(request("/", { "cache-control": "no-store" }), env());
+    expect(result.status).toBe(401);
+    expect(result.headers.get("cache-control")).toBe("private, no-store");
+    expect(result.headers.get("x-robots-tag")).toBe("noindex, nofollow, noarchive");
+  });
   it("uses only the dev Admin session origin", async () => {
     for (const origin of ["https://dev-admin.example.org", "https://admin.njpbs.org"]) {
       const result = await devWorker.fetch(request("/__cms-session", { origin, authorization: "Bearer dev-token" }, "POST"), env());
