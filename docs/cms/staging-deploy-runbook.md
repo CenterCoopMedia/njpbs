@@ -351,7 +351,9 @@ profile become frozen custom credits. Public media stays a read-only production
 dependency: dev records keep the `media.njpbs.org` URLs, so the refresh adds no
 dev storage. Strict HTTPS host/path/type/size/redirect gates and real HEAD/GET
 byte counts apply. Optional local hashed copy receipts never upload or rewrite
-URLs.
+URLs. The refresh skips the page seed images (`PAGE_SEED_MEDIA` in
+`scripts/backfill-page-seed-media.mjs`); the CMS deploy's page seed backfill
+writes them, so run a dev CMS deploy after the first import.
 
 The first full import requires absent deployment and preview pointers and
 empty queues; it then creates generation zero and a paused, unconfigured

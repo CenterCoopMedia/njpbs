@@ -27,6 +27,7 @@ import { visibleLayoutBlocks } from '../packages/content-core/src/content-layout
 import { isPublishable } from '../packages/content-core/src/publish-gate.ts';
 import { assertContextMatchesPublication } from '../site/src/lib/retained-public-context.ts';
 import { canonicalPublicationReceipt } from '../site/src/lib/public-publication-receipt.ts';
+import { PAGE_SEED_MEDIA } from './backfill-page-seed-media.mjs';
 
 export const SOURCE = 'njpbs-site';
 export const DESTINATION = 'njpbs-site-dev';
@@ -40,6 +41,9 @@ const SHA = /^[a-f0-9]{64}$/;
 const ID = /^[A-Za-z0-9_-]{1,128}$/;
 const PUBLIC_ORIGIN = 'https://media.njpbs.org';
 const DEV_ORIGIN = 'https://dev-media.example.org';
+// The CMS deploy's page seed backfill writes these records in every project and
+// refuses any other shape, so the refresh leaves them to it.
+const PAGE_SEED_IDS = new Set(PAGE_SEED_MEDIA.map(seed => seed.id));
 const MAX_OBJECT_BYTES = 25 * 1024 * 1024;
 const MAX_VIDEO_BYTES = 1024 * 1024 * 1024;
 const COPY_TYPES = ['image/jpeg', 'image/png', 'image/webp', 'image/gif', 'image/avif', 'application/pdf', 'video/mp4'];
@@ -555,6 +559,7 @@ function editableRecords(manifest) {
     } else if (record.collection === 'cmsSettings') {
       output.push({ path: `cmsSettings/${record.id}`, data: { version, schemaVersion: projection.schemaVersion, values: projection.values, published: projection } });
     } else if (record.collection === 'media_assets_public') {
+      if (PAGE_SEED_IDS.has(record.id)) continue;
       const type = mediaContract.MEDIA_TYPES[projection.mimeType];
       const data = mediaDiscovery.withMediaDiscovery(record.id, { ...base, ...projection, lifecycle: 'active', kind: type.kind,
         name: record.id, originalName: `${record.id}.${type.extension}`, category: 'dev-seed', categories: ['dev-seed'], tags: [],
@@ -571,7 +576,7 @@ function editableRecords(manifest) {
       output.push({ path: `cmsPosts/${record.id}`, data: { ...base, ...fields, status: 'approved', deleted: false, publiclyVisible: false } });
     }
   }
-  if (manifest.records.some(record => record.collection === 'media_assets_public')) output.push({ path: 'mediaCategories/dev-seed', data: { id: 'dev-seed', label: 'Dev seed', description: 'Copied public media', order: 1000, active: true, version: 1, ...dates } });
+  if (output.some(item => item.path.startsWith('media_assets/'))) output.push({ path: 'mediaCategories/dev-seed', data: { id: 'dev-seed', label: 'Dev seed', description: 'Copied public media', order: 1000, active: true, version: 1, ...dates } });
   const paths = output.map(item => item.path);
   if (new Set(paths).size !== paths.length) fail('Duplicate import path');
   return output.sort((a, b) => a.path.localeCompare(b.path, 'en'));
