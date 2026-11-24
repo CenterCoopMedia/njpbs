@@ -136,7 +136,8 @@ export async function readPublisher(cloudflare) {
     refuse("The development publisher container application is not bound to the Worker");
   }
   const versions = deployments?.deployments?.[0]?.versions ?? [];
-  return { secrets: secretNames(settings), commit: plain(settings, "PUBLICATION_COMMIT_SHA"), application: named[0],
+  const vars = Object.fromEntries((settings?.bindings ?? []).filter(b => b.type === "plain_text").map(b => [b.name, b.text]).sort(([a], [b]) => a.localeCompare(b)));
+  return { secrets: secretNames(settings), commit: plain(settings, "PUBLICATION_COMMIT_SHA"), vars, application: named[0],
     image: named[0].configuration?.image, version: versions.length === 1 && versions[0].percentage === 100 ? versions[0].version_id : undefined };
 }
 
@@ -194,11 +195,12 @@ export async function install({ sha, run, check }, io) {
     const cloudflare = route => io.cloudflare(account, route, readToken);
     const before = await readPublisher(cloudflare);
     assertBefore(before);
-    // A Worker at the commit on one version whose application already runs the image is installed,
+    // A Worker on one version with exactly the rendered public variables (so the commit too), whose application already runs the image, is installed,
     // including a first install with no rollout (jawn-ops records it as NoRollout); only the readback runs.
     const rollouts = await cloudflare(`containers/applications/${before.application.id}/rollouts`);
     const applied = appliedImage(before.application, rollouts);
-    const installed = before.commit === sha && Boolean(before.version) && applied === receipt.image;
+    const rendered = Object.fromEntries(Object.entries(config.vars).sort(([a], [b]) => a.localeCompare(b)));
+    const installed = JSON.stringify(before.vars) === JSON.stringify(rendered) && Boolean(before.version) && applied === receipt.image;
     const live = { version: before.version ?? null, commit: before.commit ?? null, application: before.application.id, image: applied ?? null };
     if (check) return { schema: 1, check: true, source_sha: sha, image: receipt.image, live, deploy_needed: !installed };
     if (installed) return await readBack({ cloudflare, health: io.health, sleep: io.sleep, before, sha, image: receipt.image, deployed: false });

@@ -22,6 +22,8 @@ const imageRun = { repository: { full_name: "CenterCoopMedia/njpbs" }, path: ".g
 const receipt = { schema: 1, target: "development", source_sha: sha, image, workflow_run_id: run, deployment_input_sha256: fingerprint };
 const aligned = { runtime: { phase: "ready", commitSha: sha, cloud: { phase: "ready", commitSha: sha, serializerId: "cloudflare-dev-publisher" } },
   pointer: { state: "idle", activeCommitSha: sha } };
+// The public variables the rendered config carries; the fake Worker serves them once deployed.
+const renderedVars = { ...source.vars, ...publicVars, CLOUDFLARE_ACCOUNT_ID: account, CMS_DEV_CLOUDFLARE_ACCOUNT_ID: account, PUBLICATION_COMMIT_SHA: sha };
 const secrets = SECRETS.map(name => ({ type: "secret_text", name }));
 
 function prepared() {
@@ -51,7 +53,7 @@ function harness({ live = oldImage, liveCommit = "f".repeat(40), history = [], l
   rollouts = ["pending", "progressing", "completed"], health = [503, 200], applications, overrides = {} } = {}) {
   const calls = [], tokens = [];
   let reads = 0, prep;
-  const provider = { version: "v-old", commit: liveCommit, record: live, appVersion: 1, secrets, rollouts: history };
+  const provider = { version: "v-old", commit: liveCommit, record: live, appVersion: 1, secrets, rollouts: history, drift: {} };
   const io = {
     identity: () => identity,
     assertSource: () => calls.push("source"),
@@ -65,7 +67,8 @@ function harness({ live = oldImage, liveCommit = "f".repeat(40), history = [], l
     token: fd => (tokens.push(fd), `token-${fd}-${"z".repeat(20)}`),
     firestore: async () => (calls.push("firestore"), state),
     cloudflare: async (_account, route) => {
-      if (route.endsWith("/settings")) return { bindings: [...provider.secrets, { type: "plain_text", name: "PUBLICATION_COMMIT_SHA", text: provider.commit },
+      if (route.endsWith("/settings")) return { bindings: [...provider.secrets,
+        ...Object.entries({ ...renderedVars, ...provider.drift, PUBLICATION_COMMIT_SHA: provider.commit }).map(([name, text]) => ({ type: "plain_text", name, text })),
         { type: "durable_object_namespace", name: "PUBLISHER", namespace_id: "ns-dev" }] };
       if (route.endsWith("/deployments")) return { deployments: [{ versions: [{ version_id: provider.version, percentage: 100 }] }] };
       if (route === `containers/applications/${applicationId}/rollouts`) {
@@ -84,7 +87,7 @@ function harness({ live = oldImage, liveCommit = "f".repeat(40), history = [], l
         provider.rollouts = [...provider.rollouts, rollout("r-new", "2026-11-24T01:00:00Z", { current: provider.record })];
         if (!lag) Object.assign(provider, { record: image, appVersion: 2 });
       }
-      Object.assign(provider, { version: "v-new", commit: sha });
+      Object.assign(provider, { version: "v-new", commit: sha, drift: {} });
     },
     sleep: async () => {},
     ...overrides,
@@ -207,6 +210,16 @@ test("Worker-only drift at the applied image deploys and keeps the earlier state
     assert.equal(result.noRollout, history.length === 0);
     assert.deepEqual(h.tokens, [3, 5, 4]);
   }
+});
+
+test("a public variable drift at the installed commit and image deploys", async () => {
+  const history = [{ ...rollout("r-old", "2026-11-24T00:00:00Z"), current_version: 0, target_version: 1 }];
+  const h = harness({ live: image, liveCommit: sha, history });
+  h.provider.drift = { PUBLICATION_ENABLED: "false" };
+  assert.equal((await install({ sha, run, check: true }, harness({ live: image, liveCommit: sha, history }).io)).deploy_needed, false);
+  assert.equal((await install({ sha, run, check: true }, h.io)).deploy_needed, true);
+  const result = await install({ sha, run, check: false }, h.io);
+  assert.equal(result.deployed, true);
 });
 
 test("an image recorded on the application but not yet applied by its rollout deploys", async () => {
