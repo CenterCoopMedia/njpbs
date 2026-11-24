@@ -6,6 +6,7 @@ import { fileURLToPath } from "node:url";
 import type { Firestore } from "firebase-admin/firestore";
 import { prepareDevPreviewRenderer, preparePreviewRenderer } from "../../scripts/prepare-preview-renderer.mjs";
 import { cmsTarget } from "../../scripts/lib/cms-target.mjs";
+import { providerCall } from "../../scripts/lib/provider-call.mjs";
 import { firebaseAdminRuntime } from "./firebase-admin-runtime";
 import { assertProductionFirestoreRouting, parseCmsPublicationFirebaseServiceAccount } from "./cms-publication-inputs";
 import { parsePreviewStorageCredential } from "./run-cms-preview-serializer";
@@ -250,16 +251,10 @@ async function cloudflare(token: string, suffix: string): Promise<unknown> {
   return body.result;
 }
 
-/** Retry only transient provider reads; mutations never use this deferral. */
-export async function retryCloudPreviewRead<T>(read: () => Promise<T>,
-  sleep = (ms: number) => new Promise<void>(resolve => setTimeout(resolve, ms))): Promise<T> {
-  for (let attempt = 1; ; attempt++) {
-    try { return await read(); }
-    catch (error) {
-      if (!(error instanceof CloudPreviewProviderReadError) || attempt >= 3) throw error;
-      await sleep(10_000);
-    }
-  }
+/** A read is repeated when the provider could not be read; a refused or invalid answer is final. */
+export function retryCloudPreviewRead<T>(read: () => Promise<T>, options = {}): Promise<T> {
+  return providerCall("Cloudflare Containers read", read, {
+    permanent: (error: unknown) => error instanceof CloudPreviewProviderReadError ? null : "answer", ...options });
 }
 
 async function applicationId(token: string): Promise<string | null> {
@@ -281,7 +276,7 @@ async function verifyCloudPreviewDependencies(firestore: Firestore, rawStorage: 
 }
 
 async function containersInactive(token: string, id: string): Promise<boolean> {
-  const result = await cloudflare(token, `/${id}/instances?per_page=100`) as {
+  const result = await retryCloudPreviewRead(() => cloudflare(token, `/${id}/instances?per_page=100`)) as {
     instances?: { status?: { state?: string } }[];
   };
   if (!Array.isArray(result?.instances) || result.instances.length >= 100) {
@@ -317,7 +312,8 @@ export async function wrangler(prepared: Awaited<ReturnType<typeof preparePrevie
     let timedOut = false;
     const fail = (code: number | null, signal: string | null, failureClass: string) => {
       const elapsed = ((Date.now() - started) / 1_000).toFixed(1);
-      reject(new Error(`Cloud preview Wrangler ${operation} failed (exit=${code ?? "none"}, signal=${signal ?? "none"}, elapsed=${elapsed}s, class=${failureClass})`));
+      const message = `Cloud preview Wrangler ${operation} failed (exit=${code ?? "none"}, signal=${signal ?? "none"}, elapsed=${elapsed}s, class=${failureClass})`;
+      reject(Object.assign(new Error(message), { failureClass, providerLine: message }));
     };
     // Bound image deployment separately from startup health verification.
     const timeout = operation === "image deploy" ? setTimeout(() => {
@@ -368,6 +364,13 @@ export async function wrangler(prepared: Awaited<ReturnType<typeof preparePrevie
   });
 }
 
+/** A deploy sets the Worker, image and secrets to this exact release, so a repeat reaches the same state.
+ * A refused credential and our own deadline are final. */
+export function retryWrangler(prepared: Awaited<ReturnType<typeof preparePreviewRenderer>>, args: string[], token: string, input?: string, options = {}) {
+  return providerCall(`preview renderer wrangler ${args[0]}`, () => wrangler(prepared, args, token, input), {
+    permanent: (error: { failureClass?: string }) => ["authentication", "timeout"].find(kind => kind === error.failureClass) ?? null, ...options });
+}
+
 export async function deployPreviewRuntime({ firestore, rendererSha, token, rawAccount, rawStorage, publicationAccess }: {
   firestore: Firestore; rendererSha: string; token: string; rawAccount: string; rawStorage: string; publicationAccess?: PublicationAccess;
 }) {
@@ -385,10 +388,10 @@ export async function deployPreviewRuntime({ firestore, rendererSha, token, rawA
     ? (await readCloudPreviewRollouts(query => retryCloudPreviewRead(() => cloudflare(token, `/${existingId}/rollouts${query}`)))).map(row => row.id) : [];
   if (existingId) {
     // Also repairs a first deployment interrupted before secret provisioning.
-    await wrangler(prepared, ["secret", "bulk"], token, secrets);
+    await retryWrangler(prepared, ["secret", "bulk"], token, secrets);
     process.stdout.write("Stopping the previous cloud preview container\n");
     // Worker-only deploy keeps the old image until the service has stopped.
-    await wrangler(prepared, ["deploy", "--containers-rollout=none"], token);
+    await retryWrangler(prepared, ["deploy", "--containers-rollout=none"], token);
     await waitFor("previous preview container to stop", () => containersInactive(token, existingId));
     if (!await previewRuntimeDrained(firestore)) throw new Error("Preview work changed during the container stop");
   }
@@ -397,8 +400,8 @@ export async function deployPreviewRuntime({ firestore, rendererSha, token, rawA
     // The first disabled Worker must exist before stdin secret provisioning.
     await writeFile(prepared.configPath, `${JSON.stringify({ ...config, secrets: undefined }, null, 2)}\n`);
   }
-  await wrangler(prepared, ["deploy"], token);
-  if (!existingId) await wrangler(prepared, ["secret", "bulk"], token, secrets);
+  await retryWrangler(prepared, ["deploy"], token);
+  if (!existingId) await retryWrangler(prepared, ["secret", "bulk"], token, secrets);
   await firestore.runTransaction(async transaction => {
     const current = parsePreviewRuntimeControl((await transaction.get(ref)).data());
     if (current.phase !== "paused" || current.rendererSha !== control.rendererSha || current.serializerId !== control.serializerId) {
@@ -408,7 +411,7 @@ export async function deployPreviewRuntime({ firestore, rendererSha, token, rawA
   });
   config.vars.PREVIEW_RENDERER_ENABLED = "true";
   await writeFile(prepared.configPath, `${JSON.stringify(config, null, 2)}\n`);
-  await wrangler(prepared, ["deploy", "--containers-rollout=none"], token);
+  await retryWrangler(prepared, ["deploy", "--containers-rollout=none"], token);
   process.stdout.write("Waiting for cloud preview startup verification\n");
   let startupId: Promise<string> | null = existingId ? Promise.resolve(existingId) : null;
   const resolveStartupId = () => startupId ??= applicationId(token).then(id => {

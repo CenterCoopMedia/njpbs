@@ -98,6 +98,22 @@ describe("Admin public authentication shell", () => {
     });
   });
 
+  it("reads the policies back before it repeats a lost policy creation", async () => {
+    const app = response([{ id: "admin-app", domain: "admin.njpbs.org", type: "self_hosted" }]);
+    const policy = { id: "public-policy", name: "Public Admin authentication shell" };
+    const landed = vi.fn().mockResolvedValueOnce(app.clone()).mockResolvedValueOnce(response(null, 503))
+      .mockResolvedValueOnce(response([])).mockResolvedValueOnce(response(null, 502)).mockResolvedValueOnce(response([policy]));
+    await expect(configureAdminPublicShell({ accountId: ACCOUNT_ID, apiToken: TOKEN, fetchFn: landed, wait: async () => {} }))
+      .resolves.toMatchObject({ policyId: "public-policy", operation: "created" });
+    expect(landed.mock.calls.filter(([, init]) => init.method === "POST")).toHaveLength(1);
+
+    const lost = vi.fn().mockResolvedValueOnce(app.clone()).mockResolvedValueOnce(response([]))
+      .mockResolvedValueOnce(response(null, 502)).mockResolvedValueOnce(response([])).mockResolvedValueOnce(response(policy));
+    await expect(configureAdminPublicShell({ accountId: ACCOUNT_ID, apiToken: TOKEN, fetchFn: lost, wait: async () => {} }))
+      .resolves.toMatchObject({ policyId: "public-policy", operation: "created" });
+    expect(lost.mock.calls.filter(([, init]) => init.method === "POST")).toHaveLength(2);
+  });
+
   it("stops if the exact Access application is not unique", async () => {
     const fetchFn = vi.fn(async () => response([]));
 

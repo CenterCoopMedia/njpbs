@@ -366,15 +366,18 @@ test("preserves placeholder sentinels and configures an unrendered trusted smoke
       rule: "the unrendered trusted smoke probe's independence at startup",
       files: [smoke],
     } });
+    // The first probe imports the retry rule, which has no source imports of its own.
+    const helper = "scripts/lib/provider-call.mjs";
+    await copyImportClosure(root, directory, [helper], { boundary: { rule: "the retry rule's independence", files: [helper] } });
     const program = `import assert from "node:assert/strict";
       import {parseApiOrigin} from ${JSON.stringify(pathToFileURL(join(root, "agents/vmix/configuration.mjs")).href)};
       import {runCmsFunctionSmoke} from ${JSON.stringify(pathToFileURL(join(directory, smoke)).href)};
       assert.equal(parseApiOrigin(process.env.CMS_PRODUCTION_API_ORIGIN), process.env.CMS_PRODUCTION_API_ORIGIN);
       const requests = [];
-      await assert.rejects(runCmsFunctionSmoke({ request: async url => {
+      await assert.rejects(runCmsFunctionSmoke({ wait: () => {}, request: async url => {
         requests.push(url); throw new Error("private-provider-canary");
       }}), /health request failed/);
-      assert.deepEqual(requests, [process.env.CMS_PRODUCTION_API_ORIGIN + "/health"]);
+      assert.deepEqual(requests, Array(5).fill(process.env.CMS_PRODUCTION_API_ORIGIN + "/health"));
       await assert.rejects(runCmsFunctionSmoke({baseUrl:"https://other.fixture.test",request:async()=>{throw new Error("unexpected-request")}}), /CMS API URL must/);`;
     const result = spawnSync(process.execPath, ["--input-type=module", "-e", program], {
       env: { PATH: process.env.PATH, CMS_PRODUCTION_API_ORIGIN: inputs.CMS_PRODUCTION_API_ORIGIN }, encoding: "utf8", timeout: 5000 });

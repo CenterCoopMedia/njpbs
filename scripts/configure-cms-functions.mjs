@@ -9,6 +9,7 @@ import { secretRequirements, checkSecretIam } from "./check-cms-secret-iam.mjs";
 import { loadFunctionSource, readFunctionsDeployInventory } from "./lib/functions-deploy-inventory.mjs";
 import { provisionCmsSecret } from "./lib/functions-secret-versions.mjs";
 import { assertR2Lifecycle } from "./assert-r2-lifecycle.mjs";
+import { providerCall, providerGcloud, providerJson } from "./lib/provider-call.mjs";
 import { assertDevelopmentSource } from "./render-development-config.mjs";
 import { cmsTarget } from "./lib/cms-target.mjs";
 
@@ -18,10 +19,15 @@ const DEVELOPMENT_ONLY_SECRETS = Object.freeze(["CMS_DEV_ACCESS_CLIENT_ID", "CMS
   "CMS_DEV_PUBLISH_APP_ID", "CMS_DEV_PUBLISH_APP_PRIVATE_KEY"]);
 const secretBase = name => `https://secretmanager.googleapis.com/v1/projects/${project}/secrets/${name}`;
 const require = createRequire(import.meta.url);
-function scopedGcloud(args, env, execute) {
-  try { return execute("gcloud", args, { env: { ...env,
-    CLOUDSDK_AUTH_CREDENTIAL_FILE_OVERRIDE: env.GOOGLE_APPLICATION_CREDENTIALS || undefined },
-    encoding: "utf8", stdio: ["ignore", "pipe", "pipe"], timeout: 30000, maxBuffer: 1024 * 1024 }).trim(); }
+const gcloudOptions = env => ({ env: { ...env,
+  CLOUDSDK_AUTH_CREDENTIAL_FILE_OVERRIDE: env.GOOGLE_APPLICATION_CREDENTIALS || undefined },
+encoding: "utf8", stdio: ["ignore", "pipe", "pipe"], timeout: 30000, maxBuffer: 1024 * 1024 });
+function readGcloud(args, env, execute, wait) {
+  try { return providerGcloud(args, gcloudOptions(env), execute, { wait }).trim(); }
+  catch { fail("Scoped Google configuration command failed"); }
+}
+function writeGcloud(args, env, execute) {
+  try { return execute("gcloud", args, gcloudOptions(env)).trim(); }
   catch { fail("Scoped Google configuration command failed"); }
 }
 
@@ -35,7 +41,7 @@ export function resolveDiscovery(env, execute = execFileSync) {
     try { text = execute("bash", [`scripts/${script}`], { env: { ...ambient,
       ...Object.fromEntries(Object.entries(env).filter(([key]) => /^(?:COST_LEDGER_|CMS_MEDIA_PURGE_)/.test(key))),
       ...(GOOGLE_APPLICATION_CREDENTIALS ? { CLOUDSDK_AUTH_CREDENTIAL_FILE_OVERRIDE: GOOGLE_APPLICATION_CREDENTIALS } : {}) },
-      encoding: "utf8", stdio: ["ignore", "pipe", "pipe"], timeout: 120000, maxBuffer: 64 * 1024 }); }
+      encoding: "utf8", stdio: ["ignore", "pipe", "inherit"], timeout: 600000, maxBuffer: 64 * 1024 }); }
     catch { fail(`Could not resolve discovery configuration: ${script}`); }
     for (const line of text.trim().split("\n")) {
       const match = line.match(/^([A-Z][A-Z0-9_]*)=(.*)$/);
@@ -81,12 +87,13 @@ export async function provisionDiscoverySecrets(env, provider) {
   }
 }
 
-export async function nativeConfigurationProvider(env, { execute = execFileSync, Auth = require("google-auth-library").GoogleAuth } = {}) {
+export async function nativeConfigurationProvider(env, { execute = execFileSync, Auth = require("google-auth-library").GoogleAuth, wait, waitSync } = {}) {
   const account = env.FIREBASE_DEPLOY_SERVICE_ACCOUNT;
   if (!/^[a-z0-9-]+@[a-z0-9.-]+\.gserviceaccount\.com$/.test(account ?? "")) fail("Configure FIREBASE_DEPLOY_SERVICE_ACCOUNT");
   const auth = new Auth({ keyFilename: env.GOOGLE_APPLICATION_CREDENTIALS, scopes: ["https://www.googleapis.com/auth/cloud-platform"] });
   if ((await auth.getCredentials()).client_email !== account) fail("Configuration SDK credential identity differs");
-  const gcloud = args => scopedGcloud(args, env, execute);
+  const gcloud = args => readGcloud(args, env, execute, waitSync);
+  const changeGcloud = args => writeGcloud(args, env, execute);
   // A credential-file override need not enroll an account in gcloud's store.
   // SDK identity above and this exact file bind both clients to one principal.
   if (!env.GOOGLE_APPLICATION_CREDENTIALS &&
@@ -96,7 +103,10 @@ export async function nativeConfigurationProvider(env, { execute = execFileSync,
   let clientPromise;
   const request = async options => {
     clientPromise ??= auth.getClient();
-    return (await clientPromise).request({ ...options, timeout: 15000, retry: false, maxRedirects: 0 });
+    const client = await clientPromise;
+    const send = () => client.request({ ...options, timeout: 15000, retry: false, maxRedirects: 0 });
+    // A write is sent once; its owner reads the result back.
+    return (options.method ?? "GET") === "GET" ? providerCall(`Google ${new URL(options.url).pathname}`, send, { wait }) : send();
   };
   const nativeVersion = (name, value) => {
     if (!value || value.state !== "ENABLED" || !new RegExp(`^projects/(?:${project}|${number})/secrets/${name}/versions/[1-9][0-9]*$`).test(value.name ?? "")) fail(`Missing or invalid enabled version: ${name}`);
@@ -148,7 +158,7 @@ export async function nativeConfigurationProvider(env, { execute = execFileSync,
       if (!NATIVE_CONFIGURATION.ttlCollections.includes(group)) fail("Unknown TTL collection group");
       // Native TTL enablement may take ten minutes or more. Queue once, then
       // fail closed until native readback is ACTIVE; a later invocation resumes.
-      gcloud(["firestore", "fields", "ttls", "update", NATIVE_CONFIGURATION.ttlField, `--collection-group=${group}`,
+      changeGcloud(["firestore", "fields", "ttls", "update", NATIVE_CONFIGURATION.ttlField, `--collection-group=${group}`,
         `--project=${project}`, `--database=${NATIVE_CONFIGURATION.databaseId}`, "--enable-ttl", "--async", "--quiet"]);
     },
     policy: name => gcloud(["secrets", "get-iam-policy", name, `--project=${project}`, "--format=json"]),
@@ -159,12 +169,12 @@ export async function nativeConfigurationProvider(env, { execute = execFileSync,
       } catch (error) {
         if (error?.response?.status !== 404) fail(`Could not read secret resource: ${name}`);
         if (!value) fail(`Missing provisioning value for absent resource: ${name}`);
-        gcloud(["secrets", "create", name, `--project=${project}`, "--replication-policy=automatic", "--quiet"]);
+        changeGcloud(["secrets", "create", name, `--project=${project}`, "--replication-policy=automatic", "--quiet"]);
         const data = (await request({ url: secretBase(name) })).data;
         if (![project, number].some(id => data?.name === `projects/${id}/secrets/${name}`)) fail(`Unverified secret resource: ${name}`);
       }
     },
-    grant(name, account, role) { gcloud(["secrets", "add-iam-policy-binding", name, `--project=${project}`,
+    grant(name, account, role) { changeGcloud(["secrets", "add-iam-policy-binding", name, `--project=${project}`,
       `--member=serviceAccount:${account}`, `--role=${role}`, "--condition=None", "--quiet"]); },
     lifecycle: (account, bucket, token) => verifyMediaLifecycle(account, bucket, token),
   };
@@ -172,17 +182,15 @@ export async function nativeConfigurationProvider(env, { execute = execFileSync,
 
 // Each refusal names its fix (docs/cms/functions-deploy.md#development-project-setup):
 // dev CMS runs on Nov. 23, 2026 found both by hand, one run at a time.
-export async function verifyMediaLifecycle(account, bucket, token, fetchImpl = fetch) {
-  let response, body;
+export async function verifyMediaLifecycle(account, bucket, token, fetchImpl = fetch, wait = undefined) {
+  let body;
   try {
-    response = await fetchImpl(`https://api.cloudflare.com/client/v4/accounts/${account}/r2/buckets/${bucket}/lifecycle`, {
-      headers: { authorization: `Bearer ${token}` }, redirect: "error", signal: AbortSignal.timeout(15000) });
-    if (response.ok) body = await response.json();
-  } catch { fail("Could not verify media bucket retention lifecycle"); }
-  if (response.status === 401 || response.status === 403) {
+    body = await providerJson("media bucket lifecycle", () => fetchImpl(`https://api.cloudflare.com/client/v4/accounts/${account}/r2/buckets/${bucket}/lifecycle`, {
+      headers: { authorization: `Bearer ${token}` }, redirect: "error", signal: AbortSignal.timeout(15000) }), { wait });
+  } catch (error) {
+    if (![401, 403].includes(error.response?.status)) fail("Could not verify media bucket retention lifecycle");
     fail(`CLOUDFLARE_API_TOKEN cannot read the ${bucket} lifecycle: give the ${target.environment} deploy token the account permission Workers R2 Storage Read`);
   }
-  if (!response.ok) fail("Could not verify media bucket retention lifecycle");
   try { assertR2Lifecycle(body); }
   catch (error) {
     fail(`${bucket}: ${error.message}. A missing staging rule is added with npx wrangler r2 bucket lifecycle add ${bucket} cms-media-staging-expiry cms-media-staging/ --expire-days 7`);
@@ -292,7 +300,7 @@ export async function checkMedia(config, env, provider, provision, createClient)
       credentials: { accessKeyId: access.toString("utf8"), secretAccessKey: secret.toString("utf8") } });
     if (provision) await mediaCanary(client, commands, bucket, `cms-media-staging/deploy-preflight-${randomUUID()}`);
     else {
-      try { await client.send(new commands.HeadBucketCommand({ Bucket: bucket }), { abortSignal: AbortSignal.timeout(15000) }); }
+      try { await providerCall("media bucket read", () => client.send(new commands.HeadBucketCommand({ Bucket: bucket }), { abortSignal: AbortSignal.timeout(15000) })); }
       catch { fail("Could not read media bucket with the pinned credentials"); }
       finally { client.destroy(); }
     }

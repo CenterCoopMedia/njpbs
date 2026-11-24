@@ -190,7 +190,7 @@ describe("Functions configuration contract", () => {
       symlinkSync(join(repo, "packages"), join(root, "packages"), "dir");
       writeFileSync(join(root, "gcloud"), `#!${process.execPath}\nconst {readFileSync}=require('node:fs');
         const name=process.argv.find(arg=>arg.startsWith('--secret=')).slice(9);
-        try { process.stdout.write(readFileSync(${JSON.stringify(root)}+'/'+name)); } catch { process.exitCode=1; }\n`, { mode: 0o755 });
+        try { process.stdout.write(readFileSync(${JSON.stringify(root)}+'/'+name)); } catch { console.error('ERROR: (gcloud.secrets.versions.describe) NOT_FOUND: Secret not found or has no versions.'); process.exitCode=1; }\n`, { mode: 0o755 });
       const requested = { ...input(), ...values, PATH: `${root}:${process.env.PATH}`,
         COST_LEDGER_GCP_PULL: "true", COST_LEDGER_GCP_PROJECT: "fixture-project", COST_LEDGER_GCP_BILLING_TABLE: "fixture.billing.table",
         COST_LEDGER_CLOUDFLARE_PULL: "true", COST_LEDGER_CLOUDFLARE_ACCOUNT_ID: "a".repeat(32), COST_LEDGER_AWS_PULL: "true",
@@ -282,7 +282,7 @@ describe("Functions configuration contract", () => {
       .rejects.toThrow("CLOUDFLARE_API_TOKEN cannot read the fixture-media lifecycle: give the production deploy token the account permission Workers R2 Storage Read");
     await expect(verifyMediaLifecycle(env.CLOUDFLARE_ACCOUNT_ID, "fixture-media", "token", reply(200, { success: true, result: { rules: [] } })))
       .rejects.toThrow("npx wrangler r2 bucket lifecycle add fixture-media cms-media-staging-expiry cms-media-staging/ --expire-days 7");
-    await expect(verifyMediaLifecycle(env.CLOUDFLARE_ACCOUNT_ID, "fixture-media", "token", reply(500))).rejects.toThrow("Could not verify media bucket retention lifecycle");
+    await expect(verifyMediaLifecycle(env.CLOUDFLARE_ACCOUNT_ID, "fixture-media", "token", reply(500), async () => {})).rejects.toThrow("Could not verify media bucket retention lifecycle");
     await expect(verifyMediaLifecycle(env.CLOUDFLARE_ACCOUNT_ID, "fixture-media", "token", reply(200, { success: true, result: { rules: [rule] } }))).resolves.toBeUndefined();
   });
 

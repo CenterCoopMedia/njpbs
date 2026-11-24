@@ -170,7 +170,7 @@ async function main(argv = process.argv.slice(2)) {
       const attempts = component === "renderer" ? 8 : 1;
       for (let attempt = 1; attempt <= attempts; attempt += 1) {
         try {
-          // One read per confirm attempt. This loop owns the retries.
+          // One sample per confirm attempt. This loop waits for a state that has not settled.
           const live = await collectLiveIdentities(component, { firestore, rolloutDeadlineMs: 0 });
           if (identitiesMatch(live, recorded)) {
             process.stdout.write(`${component} live identity matches the receipt\n`);

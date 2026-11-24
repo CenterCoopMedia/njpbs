@@ -89,6 +89,7 @@ else if (args[0] === 'secrets' && args[1] === 'get-iam-policy') {
 `);
 chmodSync(join(fixture, "gcloud"), 0o700);
 writeFileSync(join(fixture, "inventory-network.mjs"), `
+  Atomics.wait = () => "timed-out"; // Provider retries do not wait in the fixture.
   globalThis.fetch = async (input, init) => {
     const url = new URL(input);
     if (url.href === 'https://cloudresourcemanager.googleapis.com/v1/projects/njpbs-site:testIamPermissions' &&
@@ -291,7 +292,7 @@ describe("deployed Functions secret IAM", () => {
     const result = run(mode, undefined, undefined, [fixture, "--post-deploy"]);
     const policies = result.calls.filter(args => args[0] === "run");
     expect(result.status, result.stderr).toBe(mode.endsWith("exhausted") ? 1 : 0);
-    expect(policies.filter(args => args[3] === events[0].name.toLowerCase())).toHaveLength(mode.endsWith("exhausted") ? 3 : 2);
+    expect(policies.filter(args => args[3] === events[0].name.toLowerCase())).toHaveLength(mode.endsWith("exhausted") ? 5 : 2);
     expect(result.calls.some(args => args.includes("add-iam-policy-binding"))).toBe(false);
   });
 
@@ -443,7 +444,7 @@ describe("deployed Functions secret IAM", () => {
     expect(checker.with["persist-credentials"]).toBe(false);
     expect(checker.with["sparse-checkout-cone-mode"]).toBe(false);
     expect(checker.with["sparse-checkout"].trim().split("\n")).toEqual([
-      "scripts/check-cms-secret-iam.mjs", "scripts/lib/cms-target.mjs", "scripts/lib/functions-deploy-inventory.mjs", "scripts/lib/functions-readbacks.sh",
+      "scripts/check-cms-secret-iam.mjs", "scripts/lib/cms-target.mjs", "scripts/lib/functions-deploy-inventory.mjs", "scripts/lib/provider-call.mjs", "scripts/lib/functions-readbacks.sh",
     ]);
     const setup = steps.findIndex(step => step.name === "Set up Google Cloud CLI for Functions IAM");
     const deploy = steps.findIndex(step => step.id === "deploy_functions");

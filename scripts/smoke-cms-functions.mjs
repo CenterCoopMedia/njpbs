@@ -44,13 +44,13 @@ export async function readVerifiedDevManifest(root = new URL("../", import.meta.
   return names;
 }
 
-export async function runDevCmsFunctionSmoke({ deployedFunctionNames, request = fetch } = {}) {
+export async function runDevCmsFunctionSmoke({ deployedFunctionNames, request = fetch, wait } = {}) {
   if (!Array.isArray(deployedFunctionNames) ||
       [...deployedFunctionNames].sort().join() !== declaredDevFunctionNames().join()) {
     throw new Error("Dev smoke requires the verified complete dev manifest");
   }
   const target = cmsSmokeTarget("development");
-  const result = await runFunctionSmoke({ ...target, deployedFunctionNames, request });
+  const result = await runFunctionSmoke({ ...target, deployedFunctionNames, request, wait });
   const { checkDevAnonymousRefusal } = await import("./check-dev-anonymous-refusal.mjs");
   let adminChecks = 0;
   await checkDevAnonymousRefusal({ hosts: [new URL(target.adminOrigin).hostname], fetchImpl: (...args) => {
@@ -332,18 +332,25 @@ async function expectStatus({
   expectedHeaders = {},
   allowIpRateLimit = false,
   label,
+  wait,
 }) {
+  const ipRateLimited = answer => allowIpRateLimit && answer.status === 429 &&
+    answer.headers?.get("x-rate-limit-scope") === "ip" &&
+    /^[1-9]\d*$/.test(answer.headers.get("retry-after") ?? "");
+  const { httpFault, providerCall } = await import("./lib/provider-call.mjs");
   let response;
   try {
-    response = await request(url, init);
-  } catch {
-    throw new CmsSmokeError(`${label} request failed`);
+    response = await providerCall(`smoke ${label}`, async () => {
+      const answer = await request(url, init);
+      if (answer.status === expected || ipRateLimited(answer)) return answer;
+      throw httpFault(answer);
+    }, { wait });
+  } catch (error) {
+    if (!error.response) throw new CmsSmokeError(`${label} request failed`);
+    response = error.response;
   }
 
-  const ipRateLimited = allowIpRateLimit && response.status === 429 &&
-    response.headers?.get("x-rate-limit-scope") === "ip" &&
-    /^[1-9]\d*$/.test(response.headers.get("retry-after") ?? "");
-  if (response.status !== expected && !ipRateLimited) {
+  if (response.status !== expected && !ipRateLimited(response)) {
     const expectedStatus = allowIpRateLimit
       ? `${expected} or an IP rate-limit 429 with positive Retry-After`
       : expected;
@@ -368,7 +375,7 @@ async function expectStatus({
 
 // A development caller supplies the dev Access service token in `request`, so
 // the dev Admin shell answers 200 exactly as the public production shell does.
-export async function runCmsFunctionSmoke({ environment = "production", request = fetch, ...tuple } = {}) {
+export async function runCmsFunctionSmoke({ environment = "production", request = fetch, wait, ...tuple } = {}) {
   const target = cmsSmokeTarget(environment);
   const { baseUrl = target.baseUrl, functionsOrigin = target.functionsOrigin, adminOrigin = target.adminOrigin } = tuple;
   if (environment === "production") assertProductionCmsApiBaseUrl(baseUrl);
@@ -376,8 +383,8 @@ export async function runCmsFunctionSmoke({ environment = "production", request 
     throw new Error(`CMS smoke requires the exact ${environment} target tuple`);
   }
   const deployedFunctionNames = environment === "production" ? DEPLOYED_FUNCTION_NAMES : declaredDevFunctionNames();
-  const result = await runFunctionSmoke({ baseUrl, functionsOrigin, adminOrigin, deployedFunctionNames, request });
-  await expectStatus({ request, url: adminOrigin, init: { redirect: "manual" }, expected: 200,
+  const result = await runFunctionSmoke({ baseUrl, functionsOrigin, adminOrigin, deployedFunctionNames, request, wait });
+  await expectStatus({ request, wait, url: adminOrigin, init: { redirect: "manual" }, expected: 200,
     label: "public Admin authentication shell" });
   return { checked: result.checked + 1 };
 }
@@ -386,20 +393,20 @@ export async function runCmsFunctionSmoke({ environment = "production", request 
 // dev project, but the dev API gateway serves only the dev manifest's
 // endpoints. Its live-smoke job proves the dev Admin's anonymous refusal in
 // place of the production authentication shell.
-export async function runTargetDevCmsFunctionSmoke({ baseUrl, target, request = fetch } = {}) {
+export async function runTargetDevCmsFunctionSmoke({ baseUrl, target, request = fetch, wait } = {}) {
   if (target?.environment !== "development" || baseUrl !== target.apiOrigin) {
     throw new CmsSmokeError("Development smoke requires the dev API origin");
   }
   return runFunctionSmoke({ baseUrl, functionsOrigin: target.functionsOrigin,
-    adminOrigin: target.adminOrigin, deployedFunctionNames: declaredDevFunctionNames(), request });
+    adminOrigin: target.adminOrigin, deployedFunctionNames: declaredDevFunctionNames(), request, wait });
 }
 
-async function runFunctionSmoke({ baseUrl, functionsOrigin, adminOrigin, deployedFunctionNames, request }) {
+async function runFunctionSmoke({ baseUrl, functionsOrigin, adminOrigin, deployedFunctionNames, request, wait }) {
   const deployed = new Set(deployedFunctionNames);
   const authenticatedPostFunctions = AUTHENTICATED_POST_FUNCTION_NAMES.filter(name => deployed.has(name));
   let checked = 0;
   const check = async (probe) => {
-    await expectStatus({ request, ...probe });
+    await expectStatus({ request, wait, ...probe });
     checked += 1;
   };
 

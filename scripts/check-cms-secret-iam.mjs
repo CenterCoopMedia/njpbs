@@ -5,6 +5,7 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 import { resolve } from "node:path";
 import { loadFunctionSource, functionDeployManifest, readFunctionsDeployInventory, requestDeploymentInventory, FunctionsDeployInventoryError } from "./lib/functions-deploy-inventory.mjs";
 import { cmsTarget } from "./lib/cms-target.mjs";
+import { providerGcloud, providerJson } from "./lib/provider-call.mjs";
 
 
 const PROJECT = cmsTarget().projectId;
@@ -41,7 +42,7 @@ export function secretRequirements(source, projectNumber) {
 
 function gcloud(args) {
   try {
-    return execFileSync("gcloud", args, { encoding: "utf8", stdio: ["ignore", "pipe", "pipe"], timeout: 30000 }).trim();
+    return providerGcloud(args, { encoding: "utf8", stdio: ["ignore", "pipe", "pipe"], timeout: 30000 }).trim();
   } catch {
     throw new FunctionsDeployInventoryError(`Could not read CMS IAM metadata: gcloud ${args.join(" ")}`);
   }
@@ -163,11 +164,9 @@ async function requireInvokerGrantPermission() {
   const token = gcloud(["auth", "print-access-token"]);
   let granted = [];
   try {
-    const response = await fetch(`https://cloudresourcemanager.googleapis.com/v1/projects/${PROJECT}:testIamPermissions`, {
+    granted = (await providerJson("deploy identity permission test", () => fetch(`https://cloudresourcemanager.googleapis.com/v1/projects/${PROJECT}:testIamPermissions`, {
       method: "POST", headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
-      body: JSON.stringify({ permissions: INVOKER_GRANT_PERMISSIONS }), redirect: "error", signal: AbortSignal.timeout(30_000) });
-    if (response.ok) granted = (await response.json()).permissions ?? [];
-    else await response.body?.cancel();
+      body: JSON.stringify({ permissions: INVOKER_GRANT_PERMISSIONS }), redirect: "error", signal: AbortSignal.timeout(30_000) }))).permissions ?? [];
   } catch { /* Reported below without provider response details. */ }
   if (!INVOKER_GRANT_PERMISSIONS.every(permission => granted.includes(permission))) {
     throw new FunctionsDeployInventoryError(`New event trigger services need an invoker grant after deployment; the deploy identity needs ${INVOKER_GRANT_PERMISSIONS.join(" and ")} on ${PROJECT}`);
@@ -219,9 +218,7 @@ export async function main(sourceRoot = new URL("../", import.meta.url), { preDe
   } else if (gcloud(["auth", "list", "--filter=status:ACTIVE", "--format=value(account)"]) !== DEPLOY_ACCOUNT) {
     throw new FunctionsDeployInventoryError(`FIREBASE_SERVICE_ACCOUNT must authenticate ${DEPLOY_ACCOUNT}`);
   }
-  const read = postDeploy
-    ? args => requestDeploymentInventory({ request: async () => ({ data: gcloud(args) }) }, "gcloud-read")
-    : async args => gcloud(args);
+  const read = async args => gcloud(args);
   const number = await read(["projects", "describe", project, "--format=value(projectNumber)"]);
   const source = loadFunctionSource(project, sourceRoot);
   const events = eventTriggerRequirements(source, number);
@@ -241,9 +238,10 @@ export async function main(sourceRoot = new URL("../", import.meta.url), { preDe
       let policy = await read(["run", "services", "get-iam-policy", serviceName, `--region=${region}`, `--project=${project}`, "--format=json"]);
       if (!eventRole(eventPolicy(policy), account, "roles/run.invoker")) {
         // A new trigger's service exists only after this deploy, so the release
-        // grants the account its reviewed source declares. The binding is additive.
+        // grants the account its reviewed source declares. The binding is additive,
+        // so a repeat after a lost answer changes nothing.
         try {
-          policy = execFileSync("gcloud", ["run", "services", "add-iam-policy-binding", serviceName,
+          policy = providerGcloud(["run", "services", "add-iam-policy-binding", serviceName,
             `--member=serviceAccount:${account}`, "--role=roles/run.invoker", "--condition=None",
             `--region=${region}`, `--project=${project}`, "--format=json"],
           { encoding: "utf8", stdio: ["ignore", "pipe", "pipe"], timeout: 30000 });

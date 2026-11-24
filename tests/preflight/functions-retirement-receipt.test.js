@@ -133,7 +133,7 @@ it.each([
 });
 
 it("keeps provider failures value-free and rejects a foreign Scheduler deletion", async () => {
-  const provider = retirementProvider(scope, async () => ({ access_token: "synthetic-token" }), async () => { throw Error("synthetic-private-body"); });
+  const provider = retirementProvider(scope, async () => ({ access_token: "synthetic-token" }), async () => { throw Error("synthetic-private-body"); }, undefined, async () => {});
   await expect(provider.listSchedules()).rejects.toThrow("Functions retirement original attempt or provider proof is unavailable");
   expect(() => provider.deleteSchedule("projects/foreign-project/locations/us-central1/jobs/firebase-schedule-oldHandler-us-central1")).toThrow();
 });
