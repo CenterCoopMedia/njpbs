@@ -1,5 +1,6 @@
 #!/usr/bin/env node
-// Operator settle for a development refresh run that ended before its fail step (#595).
+// Operator settle for a development refresh run that ended before its fail step (#595),
+// or whose upload step failed before a deployment lease (#615).
 // Plan reads nothing. --readback reads the row. --apply proves the run from the
 // live Actions API, then ends the row through the fail step's settle.
 // The packet request is { runId, commitSha }: the batch's commitSha and the run
@@ -33,11 +34,12 @@ export function parseKilledRefreshPacket(packet) {
   return { packet, sdk, identity: { queueId, buildBatchId: `cms-${queueId}`, commitSha } };
 }
 
-// Actions API proof: the run is a completed development refresh run, and the
-// upload step never started in any attempt (absent or skipped). A failed or
-// cancelled upload may have reached the provider; that run keeps its row for
-// retained reconciliation. The Firestore owner then requires the batch to be
-// reserved and never leased.
+// Actions API proof: the run is a completed development refresh run, and no
+// attempt's upload step succeeded or was cancelled: it is absent, skipped, or
+// failed (#615). The Firestore owner then requires the batch to be reserved and
+// never leased, which is the fact that rules out activation; a failed upload
+// that recorded a candidate or took a lease keeps its row. Returns whether an
+// upload step failed, so the row records the upload error.
 export async function verifyKilledDevRefresh(runId, github) {
   const { repository: repo } = repositoryIdentity();
   const run = await github(`actions/runs/${runId}`);
@@ -45,15 +47,18 @@ export async function verifyKilledDevRefresh(runId, github) {
   if (String(run?.id) !== runId || run.status !== "completed" || run.path !== WORKFLOW ||
       run.repository?.full_name !== repo || run.head_repository?.full_name !== repo ||
       !Number.isSafeInteger(attempt) || attempt < 1 || attempt > 10) operatorRefused();
+  let uploadFailed = false;
   for (let n = 1; n <= attempt; n++) {
     const jobs = await github(`actions/runs/${runId}/attempts/${n}/jobs?per_page=100`);
     if (!Array.isArray(jobs?.jobs) || jobs.total_count !== jobs.jobs.length ||
         jobs.jobs.some(job => String(job.run_id) !== runId || job.status !== "completed" || !Array.isArray(job.steps) ||
-          job.steps.some(step => step.name === UPLOAD && step.conclusion !== "skipped"))) operatorRefused();
+          job.steps.some(step => step.name === UPLOAD && !["skipped", "failure"].includes(step.conclusion)))) operatorRefused();
+    uploadFailed ||= jobs.jobs.some(job => job.steps.some(step => step.name === UPLOAD && step.conclusion === "failure"));
   }
   // A rerun started during these reads invalidates the proof.
   const latest = await github(`actions/runs/${runId}`);
   if (latest?.run_attempt !== attempt || latest.status !== "completed") operatorRefused();
+  return uploadFailed;
 }
 
 export async function runKilledRefreshSettlement(args, { openSdk = openDevelopmentInstallSdk, github } = {}) {
@@ -61,17 +66,18 @@ export async function runKilledRefreshSettlement(args, { openSdk = openDevelopme
   const { packet, sdk, identity } = parseKilledRefreshPacket(await readOperatorPacket(options));
   assertOperatorSource(packet.operatorCommitSha);
   if (options.mode === "plan") return { mode: "plan", packetDigest: options.packetDigest, identity, authorityReads: 0, authorityWrites: 0 };
+  let uploadFailed = false;
   if (options.mode === "apply") {
     let pipe;
     try {
       if (!github) pipe = developmentInstallCredential(4, developmentInstallToken);
-      await verifyKilledDevRefresh(packet.request.runId, github ?? devSettlementGithub(await pipe.read()));
+      uploadFailed = await verifyKilledDevRefresh(packet.request.runId, github ?? devSettlementGithub(await pipe.read()));
     } finally { pipe?.close(); }
   }
   const connection = await openSdk(sdk, 3);
   try {
     const { default: dev } = await import("./lib/dev-publication.cjs");
-    const outcome = await dev.settleKilledDevRefresh(connection.firestore, identity, { readOnly: options.mode === "readback" });
+    const outcome = await dev.settleKilledDevRefresh(connection.firestore, identity, { readOnly: options.mode === "readback", uploadFailed });
     return { mode: options.mode, packetDigest: options.packetDigest, identity, outcome };
   } finally { await connection.close(); }
 }

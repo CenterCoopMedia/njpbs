@@ -123,8 +123,8 @@ export async function prepare(db) {
   db ??= await database();
   const id = await identity();
   const current = await state.readDevPublication(db, id);
-  if (current.queue?.status === "failed" && current.queue.error === state.DEV_BUILD_FAILED_ERROR) {
-    throw new Error(state.DEV_BUILD_FAILED_ERROR);
+  if (current.queue?.status === "failed" && state.DEV_SETTLED_ERRORS.has(current.queue.error)) {
+    throw new Error(current.queue.error);
   }
   await mkdir(directory, { recursive: true, mode: 0o700 });
   if (await lstat(path.join(directory, "frozen.json")).catch(() => null)) {
@@ -684,6 +684,12 @@ export function buildFailedBeforeUpload(env = process.env) {
   return env.GITHUB_RUN_ATTEMPT === "1" && ["failure", "cancelled"].includes(env.DEV_BUILD_RESULT);
 }
 
+// The upload step of this attempt failed after a successful build (#615). The
+// owner settles only if the batch was never leased; a leased batch keeps its row.
+export function uploadFailedBeforeLease(env = process.env) {
+  return env.DEV_BUILD_RESULT === "success" && env.DEV_UPLOAD_OUTCOME === "failure";
+}
+
 async function main() {
   const command = process.argv[2];
   if (command === "source") return writeDevPublicationSource();
@@ -706,7 +712,7 @@ async function main() {
     return upload(db, id, true, recovery);
   }
   if (command === "fail") {
-    return state.finishDevPublication(await database(), await identity(), { buildFailed: buildFailedBeforeUpload() });
+    return state.finishDevPublication(await database(), await identity(), { buildFailed: buildFailedBeforeUpload(), uploadFailed: uploadFailedBeforeLease() });
   }
   throw new Error("Expected source, inspect-retry, prepare, build, upload, reconcile or fail");
 }

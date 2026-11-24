@@ -29,6 +29,9 @@ const TARGET = Object.freeze({ environment: "development", projectId: "njpbs-sit
 const hash = value => createHash("sha256").update(value).digest("hex");
 // A refresh run whose build job failed or was cancelled settles its own row (#593).
 const DEV_BUILD_FAILED_ERROR = "Development build failed or was cancelled before upload; dispatch a new run";
+const DEV_UPLOAD_FAILED_ERROR = "Development upload failed before a deployment lease; dispatch a new run";
+// Either fail-step settle ends the row for good: a rerun of that run refuses.
+const DEV_SETTLED_ERRORS = new Set([DEV_BUILD_FAILED_ERROR, DEV_UPLOAD_FAILED_ERROR]);
 const inputRef = (db, id) => publicBuildBatchRef(db, id.buildBatchId).collection("inputs").doc("devFrozen");
 
 function assertDevTarget(target) {
@@ -216,7 +219,7 @@ async function settleDevDeploymentOutcome(db, identity, lease, evidence) {
 
 // Terminal queue writeback consumes the generic outcome. This adapter never
 // promotes a pointer, fabricates batch readiness or owns a second activation.
-async function finishDevPublication(db, identity, { timeoutOutcome = null, buildFailed = false } = {}) {
+async function finishDevPublication(db, identity, { timeoutOutcome = null, buildFailed = false, uploadFailed = false } = {}) {
   const current = await readDevPublication(db, identity);
   if (!current.queue || !current.batch) return "unclaimed";
   // The ordinary finalize/fail cleanup cannot undo a failed-queue refusal.
@@ -242,7 +245,14 @@ async function finishDevPublication(db, identity, { timeoutOutcome = null, build
   // here, and settleBuildQueue retires the batch, so the release pause and the
   // media purge do not wait for the 24-hour stale sweep (#593). A rerun of this
   // run then refuses in prepare; a new run publishes.
-  if (buildFailed && neverLeased(current, identity)) return settleNeverLeased(db, identity);
+  if (buildFailed && neverLeased(current, identity)) return settleNeverLeased(db, identity, DEV_BUILD_FAILED_ERROR);
+  // The upload step failed (#615). A reserved batch with no candidate and no
+  // pointer eligibility was never leased, and activation needs a lease, so no
+  // attempt made a version live. A partial upload cannot pass as none: once
+  // upload records its candidate the batch leaves this state and keeps its row.
+  // Before that record, at most an unreferenced, inactive provider version
+  // exists, which no later run can lease, because the batch is retired.
+  if (uploadFailed && neverLeased(current, identity)) return settleNeverLeased(db, identity, DEV_UPLOAD_FAILED_ERROR);
   // Any other pre-lease failure preserves reservation/candidate evidence.
   // Cancellation needs its existing authorized generic owner.
   return current.queue.status === "success" ? "success" : "unclaimed";
@@ -303,7 +313,7 @@ function neverLeased(current, identity) {
 // The settle transaction reads the queue, batch, candidate and pointer again and
 // refuses unless the row is still never leased, so a rerun or reconciliation
 // that records a candidate or takes a lease after the first read wins.
-async function settleNeverLeased(db, identity) {
+async function settleNeverLeased(db, identity, error) {
   const preflight = async ({ transaction, queue }) => {
     const [batch, candidate, pointer] = await transaction.getAll(publicBuildBatchRef(db, identity.buildBatchId),
       publicWorkerCandidateRef(db, identity.buildBatchId), publicDeploymentRef(db));
@@ -313,20 +323,21 @@ async function settleNeverLeased(db, identity) {
     }
   };
   await settleBuildQueue(db, { queueId: identity.queueId, status: "failed", preflight,
-    queueUpdate: { status: "failed", completedAt: FieldValue.serverTimestamp(), error: DEV_BUILD_FAILED_ERROR } });
+    queueUpdate: { status: "failed", completedAt: FieldValue.serverTimestamp(), error } });
   return "failed";
 }
 
 // Operator settle for a development refresh run that ended before its fail step
-// ran (#595). The caller proves from the Actions API that the run is completed
-// and that no attempt's upload step succeeded. This owner then requires the same
+// ran (#595), or whose upload step failed before the fail step could settle it
+// (#615). The caller proves from the Actions API that the run is completed and
+// that no attempt's upload step succeeded. This owner then requires the same
 // never-leased state as the fail step and ends the row the same way. Any other
 // state refuses: it has a lease or a candidate, and its owner must settle it.
-async function settleKilledDevRefresh(db, identity, { readOnly = false } = {}) {
+async function settleKilledDevRefresh(db, identity, { readOnly = false, uploadFailed = false } = {}) {
   const current = await readDevPublication(db, identity);
-  if (current.queue?.status === "failed" && current.queue.error === DEV_BUILD_FAILED_ERROR && current.batch?.status === "retired") return "failed";
+  if (current.queue?.status === "failed" && DEV_SETTLED_ERRORS.has(current.queue.error) && current.batch?.status === "retired") return "failed";
   if (!neverLeased(current, identity)) throw new Error("The development refresh row is not pending with a never-leased reserved batch");
-  return readOnly ? "pending" : settleNeverLeased(db, identity);
+  return readOnly ? "pending" : settleNeverLeased(db, identity, uploadFailed ? DEV_UPLOAD_FAILED_ERROR : DEV_BUILD_FAILED_ERROR);
 }
 
 // This permits verification of an existing lease only. It cannot admit a failed
@@ -346,7 +357,7 @@ function prepareTimedOutDevReconciliation(input) {
 }
 
 module.exports = {
-  DEV_BUILD_FAILED_ERROR, TARGET, hash, assertDevTarget, assertDevDatabase, assertDevQueue, assertIdentity,
+  DEV_BUILD_FAILED_ERROR, DEV_UPLOAD_FAILED_ERROR, DEV_SETTLED_ERRORS, TARGET, hash, assertDevTarget, assertDevDatabase, assertDevQueue, assertIdentity,
   selectDevPublicationSource,
   readDevPublication, reserveDevPublication, recordDevInputs, recordDevCandidate,
   assertDevPublicationUnreserved,
