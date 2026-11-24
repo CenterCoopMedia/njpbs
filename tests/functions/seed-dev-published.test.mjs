@@ -303,9 +303,14 @@ describe('isolated published-content seed', () => {
     await source.doc('media_assets_public/pdf-notice').update({ url: brandUrl });
     await expect(exportSeed({ fetchImpl })).rejects.toThrow('Public PDF URL must use the media host');
   });
-  it('exports, validates and imports all seven launch assets from the repository backfill unchanged', async () => {
+  it('exports seven launch assets and leaves their dev records to the CMS deploy page seed backfill', async () => {
     const ids = ['launch-contact', 'launch-give', 'launch-passport', 'launch-politics', 'launch-support', 'launch-under-the-dome', 'launch-watch'];
     await backfillPageSeedMedia({ firestore: source, nowIso: when });
+    // Production staff edit page seed alt text; dev keeps the backfill's own record.
+    for (const id of ids) {
+      await source.doc(`media_assets/${id}`).update({ altText: `Staff alt ${id}` });
+      await source.doc(`media_assets_public/${id}`).update({ altText: `Staff alt ${id}` });
+    }
     await source.doc('cmsPages/contact').update({ 'published.blocks': [page().published.blocks[0], ...ids.map((assetId, index) => ({
       id: `launch-image-${index}`, type: 'image', order: index + 1, visible: true, data: { assetId, alt: assetId, decorative: false },
     }))] });
@@ -333,16 +338,47 @@ describe('isolated published-content seed', () => {
     const copy = await copyMedia({ manifest, directory, fetchImpl: copyFetch });
     expect(copyFetch).toHaveBeenCalledExactlyOnceWith(mediaUrl, expect.objectContaining({ redirect: 'manual', credentials: 'omit' }));
     await importPublished({ firestore: dev, manifest, copy, apply: true });
+    for (const id of ids) {
+      expect((await dev.doc(`media_assets/${id}`).get()).exists).toBe(false);
+      expect((await dev.doc(`media_assets_public/${id}`).get()).exists).toBe(false);
+    }
+    await expect(verifyPublished({ firestore: dev, manifest })).rejects.toThrow('Dev lacks or differs on 7 page seed media record(s)');
+    // The CMS deploy's backfill step creates every page seed record in dev, and a
+    // later refresh and deploy leave them in the shape the backfill requires.
+    await expect(backfillPageSeedMedia({ firestore: dev, nowIso: when })).resolves.toEqual({ created: PAGE_SEED_MEDIA.length, verified: 0 });
+    const backfilled = await Promise.all(PAGE_SEED_MEDIA.map(seed => dev.doc(`media_assets/${seed.id}`).get().then(doc => doc.data())));
+    expect((await importPublished({ firestore: dev, manifest, copy, apply: true })).changed).toBe(0);
+    await expect(backfillPageSeedMedia({ firestore: dev, nowIso: when })).resolves.toEqual({ created: 0, verified: PAGE_SEED_MEDIA.length });
+    for (const [index, seed] of PAGE_SEED_MEDIA.entries()) {
+      const stored = (await dev.doc(`media_assets/${seed.id}`).get()).data();
+      expect(stored).toEqual(backfilled[index]);
+      expect(stored).toMatchObject({ category: 'site-seed', originalName: seed.path.split('/').at(-1), storageKey: null, source: 'site_seed',
+        contentHash: createHash('sha256').update(await readFile(new URL(`../../site/public/${seed.path}`, import.meta.url))).digest('hex') });
+    }
+    await expect(verifyPublished({ firestore: dev, manifest })).resolves.toMatchObject({ verified: true });
+    const watch = (await dev.doc('media_assets_public/launch-watch').get()).data();
+    await dev.doc('media_assets_public/launch-watch').update({ width: watch.width + 1 });
+    await expect(verifyPublished({ firestore: dev, manifest })).rejects.toThrow('Dev lacks or differs on 1 page seed media record(s) (first: media_assets_public/launch-watch)');
+    await dev.doc('media_assets_public/launch-watch').set(watch);
     const assets = new Map();
     for (const id of ['image-1', ...ids]) {
       const imported = (await dev.doc(`media_assets_public/${id}`).get()).data();
       assets.set(id, imported);
       if (id !== 'image-1') expect(imported.url).toBe(`https://njpbs.org/brand/spotlight/${id.slice(7)}.jpg`);
     }
+    const now = new Date();
     const rendered = publicProjection.projectPublicPageDocument({ pageId: 'contact',
-      document: (await dev.doc('cmsPages/contact').get()).data(), assets, now: new Date() });
+      document: (await dev.doc('cmsPages/contact').get()).data(), assets, now });
     expect(rendered.state).toBe('live');
     for (const id of ids) expect(rendered.page.assets[id].url).toBe(assets.get(id).url);
+    // Asset alt text is an Admin suggestion; the dev page renders as production's does.
+    const sourceAssets = new Map();
+    for (const id of ['image-1', ...ids]) sourceAssets.set(id, (await source.doc(`media_assets_public/${id}`).get()).data());
+    expect(sourceAssets.get(ids[0]).altText).not.toBe(assets.get(ids[0]).altText);
+    const sourceRendered = publicProjection.projectPublicPageDocument({ pageId: 'contact',
+      document: (await source.doc('cmsPages/contact').get()).data(), assets: sourceAssets, now });
+    expect(rendered.page.blocks).toEqual(sourceRendered.page.blocks);
+    expect(rendered.page.assets).toEqual(sourceRendered.page.assets);
   });
   it.each([
     'http://njpbs.org/brand/spotlight/contact.jpg',

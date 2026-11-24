@@ -313,10 +313,17 @@ The plan is checked before apply in one of two ways:
   rows whose path, document and receipt hashes the plan binds, and refuses
   anything else. The plan and apply records go into the run record.
 
-Then apply and verify:
+Then apply:
 
 ```bash
 sh -c "$SEED_WRITER_COMMAND" | $SEED import $PAIR --manifest "$MANIFEST" --plan "$STATE/plan.json" --apply | tee -a "$STATE/apply.json"
+```
+
+After a first import, run the dev CMS deploy with `migrations` set to
+`page-seed-media` and confirm its log reports 12 page seed media records
+created or verified. Then verify:
+
+```bash
 sh -c "$SEED_WRITER_COMMAND" | $SEED verify $PAIR --manifest "$MANIFEST" | tee "$STATE/verify.json"
 ```
 
@@ -333,7 +340,8 @@ withdrawn row was `retained` because the plan did not list it.
 `verify` prints the manifest hash, the source publication receipt, the export
 time and per-collection counts; record that line with the rehearsal. It fails
 when any seeded dev document differs from the manifest or dev still tracks a
-record the snapshot no longer has. Rerun the apply with the same manifest and
+record the snapshot no longer has. It also fails while a referenced page seed
+image is missing in dev. Rerun the apply with the same manifest and
 plan to resume an interrupted refresh; finished groups report `unchanged`.
 
 ### What the refresh copies and reconciles
@@ -351,7 +359,11 @@ profile become frozen custom credits. Public media stays a read-only production
 dependency: dev records keep the `media.njpbs.org` URLs, so the refresh adds no
 dev storage. Strict HTTPS host/path/type/size/redirect gates and real HEAD/GET
 byte counts apply. Optional local hashed copy receipts never upload or rewrite
-URLs.
+URLs. The refresh skips the page seed images (`PAGE_SEED_MEDIA` in
+`scripts/backfill-page-seed-media.mjs`); the CMS deploy's page seed backfill
+writes them, and the step runs only when Functions change or `migrations`
+names `page-seed-media`. Dev keeps the backfill's alt text suggestion for them;
+pages render their blocks' own alt text.
 
 The first full import requires absent deployment and preview pointers and
 empty queues; it then creates generation zero and a paused, unconfigured
