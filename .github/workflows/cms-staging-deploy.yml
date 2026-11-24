@@ -222,16 +222,18 @@ jobs:
           if [ "$CMS_TARGET" = development ]; then
             # GitHub masks every secret value in logs and drops any job output that contains one. A dev
             # placeholder "1" emptied the Functions configuration fingerprint (dev CMS run 45306098095,
-            # Nov. 23, 2026). Fix: docs/cms/functions-deploy.md#development-project-setup.
+            # Nov. 23, 2026). Six characters keep real Telegram chat IDs valid; a fixed six-character value
+            # occurs in a 64-character hex output with odds of about 64/16^6 (4 in a million).
+            # Fix: docs/cms/functions-deploy.md#development-project-setup.
             short=()
             for name in $(jq -r '.secrets[]' <<<"$CMS_DEVELOPMENT_ENVIRONMENT_NAMES"); do
               if [ ! -v "$name" ]; then echo "This step does not read the development secret $name" >&2; exit 1; fi
               value=${!name}
-              if [ -n "$value" ] && [ "${#value}" -lt 12 ]; then short+=("$name"); fi
+              if [ -n "$value" ] && [ "${#value}" -lt 6 ]; then short+=("$name"); fi
             done
             unset value
             if [ "${#short[@]}" -gt 0 ]; then
-              echo "Development secrets shorter than 12 characters (GitHub would mask them in every job output): ${short[*]}" >&2
+              echo "Development secrets shorter than 6 characters (GitHub would mask them in every job output): ${short[*]}" >&2
               exit 1
             fi
           fi
