@@ -43,9 +43,9 @@ const PUBLIC_ORIGIN = 'https://media.njpbs.org';
 const DEV_ORIGIN = 'https://dev-media.example.org';
 // The CMS deploy's page seed backfill writes these records in every project and
 // refuses any other shape, so the refresh leaves them to it. They are repository
-// assets: verify requires each referenced one in dev but, by design, does not
-// compare it with production's editable fields. Its alt text is an Admin
-// suggestion; pages render their blocks' own alt text.
+// assets: verify requires each referenced one in dev with the source's rendered
+// fields. By design it does not compare the alt text, an Admin suggestion; pages
+// render their blocks' own alt text.
 const PAGE_SEED_IDS = new Set(PAGE_SEED_MEDIA.map(seed => seed.id));
 const MAX_OBJECT_BYTES = 25 * 1024 * 1024;
 const MAX_VIDEO_BYTES = 1024 * 1024 * 1024;
@@ -789,10 +789,12 @@ export async function verifyPublished({ firestore, manifest, source = SOURCE, de
             prior.data().seedHash !== seedHashOf(record.data)) differ.push(record.path);
       });
     }
+    // Page seed images render their url, type and size; dev keeps the backfill's alt text suggestion.
     const pageSeeds = manifest.records.filter(record => record.collection === 'media_assets_public' && PAGE_SEED_IDS.has(record.id));
-    const missingSeeds = pageSeeds.length ? (await transaction.getAll(...pageSeeds.map(record => firestore.doc(`media_assets_public/${record.id}`))))
-      .filter(snapshot => !snapshot.exists).map(snapshot => snapshot.ref.path) : [];
-    if (missingSeeds.length) fail(`Dev lacks ${missingSeeds.length} page seed media record(s) (first: ${missingSeeds[0]}); run the CMS deploy page seed backfill`);
+    const seedSnapshots = pageSeeds.length ? await transaction.getAll(...pageSeeds.map(record => firestore.doc(`media_assets_public/${record.id}`))) : [];
+    const staleSeeds = pageSeeds.filter((record, index) => !seedSnapshots[index].exists ||
+      ['url', 'mimeType', 'width', 'height'].some(field => seedSnapshots[index].data()[field] !== record.projection[field])).map(record => `media_assets_public/${record.id}`);
+    if (staleSeeds.length) fail(`Dev lacks or differs on ${staleSeeds.length} page seed media record(s) (first: ${staleSeeds[0]}); run the CMS deploy page seed backfill`);
     const { removals: extra, unresolved } = await trackedRemovals(transaction, firestore, manifest, records);
     if (differ.length || extra.length) {
       fail(`Dev does not match source snapshot ${manifest.hash}: ${differ.length} differ, ${extra.length} extra (first: ${[...differ, ...extra][0]})`);
