@@ -48,7 +48,7 @@ test("adds Access headers on one origin and refuses to forward them on redirects
 });
 
 function fixtureBrowser(settings, { sessionStatus = 204, documentStatus = 200, headingVisible = true,
-  sessionFailure, noDocument = false, progress = "building" } = {}) {
+  sessionFailure, noDocument = false, progress = "building", later } = {}) {
   const context = new EventEmitter();
   const page = new EventEmitter();
   const frame = {};
@@ -111,6 +111,8 @@ function fixtureBrowser(settings, { sessionStatus = 204, documentStatus = 200, h
         context.emit("page", popup);
         if (sessionFailure) page.emit("requestfailed", { url: () => staffSession, method: () => "POST", failure: () => ({ errorText: sessionFailure }) });
         else page.emit("response", response(staffSession, sessionStatus, "POST", false));
+        // Admin can move the tab after the smoke has already seen a refused session.
+        if (later) setTimeout(() => { if (later.url) popupUrl = later.url; if (later.progress) progress = later.progress; }, 300);
         if (noDocument) return;
         popupUrl = artifact;
         context.emit("response", response(artifact, documentStatus, "GET", true));
@@ -124,36 +126,41 @@ function fixtureBrowser(settings, { sessionStatus = 204, documentStatus = 200, h
 
 test("requires staff session, first private document response and fixture heading", async () => {
   const settings = previewSmokeSettings("production", env);
-  const session = { status: 204, host: "preview.njpbs.org" };
-  const document = { status: 200, host: "preview.njpbs.org" };
-  const atArtifact = { host: "preview.njpbs.org", progress: "building" };
+  const atArtifact = { place: "preview", progress: null };
   assert.deepEqual(await checkSignedInPreview(fixtureBrowser(settings), settings), { ok: true, code: "signed_in_private_preview" });
   for (const [input, receipt] of [
     [{ sessionStatus: 403 }, { code: "preview_session_failed", missing: [],
-      session: { status: 403, host: "preview.njpbs.org" }, document, popup: atArtifact }],
+      session: { status: 403 }, document: { status: 200 }, popup: atArtifact }],
     [{ documentStatus: 302 }, { code: "preview_document_failed", missing: [],
-      session, document: { status: 302, host: "preview.njpbs.org" }, popup: atArtifact }],
-    [{ headingVisible: false }, { code: "preview_heading_missing", missing: [], session, document, popup: atArtifact }],
+      session: { status: 204 }, document: { status: 302 }, popup: atArtifact }],
+    [{ headingVisible: false }, { code: "preview_heading_missing", missing: [],
+      session: { status: 204 }, document: { status: 200 }, popup: atArtifact }],
   ]) {
     assert.deepEqual(await checkSignedInPreview(fixtureBrowser(settings, input), settings), { ok: false, ...receipt });
   }
 });
 
-test("names the missing wait and what the preview tab showed", async () => {
+test("names the missing wait and where the preview tab settled", async () => {
   const settings = previewSmokeSettings("production", env);
-  assert.deepEqual(await checkSignedInPreview(fixtureBrowser(settings, { noDocument: true, progress: "error" }), settings), {
+  const check = input => checkSignedInPreview(fixtureBrowser(settings, input), settings);
+  assert.deepEqual(await check({ noDocument: true, progress: "error" }), {
     ok: false, code: "private_preview_unavailable", missing: ["document"],
-    session: { status: 204, host: "preview.njpbs.org" }, document: null, popup: { host: "about:blank", progress: "error" },
+    session: { status: 204 }, document: null, popup: { place: "about:blank", progress: "error" },
   });
-  assert.deepEqual(await checkSignedInPreview(fixtureBrowser(settings, {
-    sessionFailure: "net::ERR_HTTP2_PROTOCOL_ERROR", noDocument: true, progress: "session-slow" }), settings), {
+  assert.deepEqual(await check({ sessionFailure: "net::ERR_HTTP2_PROTOCOL_ERROR", noDocument: true, progress: "session-slow" }), {
     ok: false, code: "private_preview_unavailable", missing: ["document"],
-    session: { failed: "net::ERR_HTTP2_PROTOCOL_ERROR" }, document: null, popup: { host: "about:blank", progress: "session-slow" },
+    session: { failed: "net::ERR_HTTP2_PROTOCOL_ERROR" }, document: null, popup: { place: "about:blank", progress: "session-slow" },
   });
-  // Unknown progress values and raw failure text never reach the receipt.
-  const receipt = await checkSignedInPreview(fixtureBrowser(settings, {
-    sessionFailure: "net::ERR_FAILED https://secret.example/?token=x", noDocument: true, progress: "<b>draft title</b>" }), settings);
-  assert.deepEqual([receipt.session, receipt.popup], [{ failed: "failed" }, { host: "about:blank", progress: null }]);
+  // A refused session fails at once; the receipt waits for Admin's sign-in handoff.
+  assert.deepEqual(await check({ sessionStatus: 401, noDocument: true, later: { url: `${settings.admin}/?staffSite=x` } }), {
+    ok: false, code: "preview_session_failed", missing: ["document"],
+    session: { status: 401 }, document: null, popup: { place: "admin", progress: null },
+  });
+  assert.deepEqual((await check({ noDocument: true, later: { progress: "updating" } })).popup, { place: "about:blank", progress: "updating" });
+  // Unknown progress values, other hosts and raw failure text never reach the receipt.
+  const receipt = await check({ sessionFailure: "net::ERR_FAILED https://secret.example/?token=x", noDocument: true,
+    progress: "<b>draft title</b>", later: { url: "https://another.example.org/" } });
+  assert.deepEqual([receipt.session, receipt.popup], [{ failed: "failed" }, { place: "other", progress: null }]);
 });
 
 test("aborts a failed Access fetch with the upstream failure class", async () => {

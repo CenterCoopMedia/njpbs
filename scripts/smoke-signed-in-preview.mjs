@@ -91,7 +91,7 @@ export async function checkSignedInPreview(browser, { admin, preview, credential
     const [, , document] = await Promise.all([
       context.waitForEvent("page", { timeout: 60_000 }).then(value => { popup = value; saw.popup = true; return value; }),
       page.waitForResponse(reply => isSession(reply.request()), { timeout: 60_000 }).then(reply => {
-        saw.session = { status: reply.status(), host: urlHost(reply.url()) };
+        saw.session = { status: reply.status() };
         if (reply.status() !== 204) throw new PreviewSmokeFailure("preview_session_failed");
       }),
       context.waitForEvent("response", { timeout: 60_000, predicate: reply => {
@@ -99,7 +99,7 @@ export async function checkSignedInPreview(browser, { admin, preview, credential
         return url.origin === preview && previewPath.test(url.pathname) &&
           reply.request().isNavigationRequest() && reply.request().resourceType() === "document";
       }}).then(reply => {
-        saw.document = { status: reply.status(), host: urlHost(reply.url()) };
+        saw.document = { status: reply.status() };
         if (reply.status() !== 200) throw new PreviewSmokeFailure("preview_document_failed");
         return reply;
       }),
@@ -114,16 +114,20 @@ export async function checkSignedInPreview(browser, { admin, preview, credential
     const code = error instanceof PreviewSmokeFailure ? error.message : phase;
     if (phase !== "private_preview_unavailable" && phase !== "preview_heading_missing") return { ok: false, code };
     return { ok: false, code, missing: ["popup", "session", "document"].filter(key => !saw[key]),
-      session: saw.session ?? null, document: saw.document ?? null, popup: await describePopup(popup) };
+      session: saw.session ?? null, document: saw.document ?? null, popup: await describePopup(popup, { admin, preview }) };
   }
 }
 
-// Receipts carry hosts, statuses and Admin progress state names only: never paths, bodies or page text.
-function urlHost(value) {
+// Receipts carry statuses, fixed place names and Admin progress state names only:
+// never configured hosts, paths, bodies or page text.
+function place(value, { admin, preview }) {
   try {
     const url = new URL(value);
-    return url.protocol === "about:" ? url.href : url.host;
-  } catch { return "invalid"; }
+    if (url.href === "about:blank") return "about:blank";
+    if (url.origin === admin) return "admin";
+    if (url.origin === preview) return "preview";
+  } catch { /* An unreadable address is reported as other. */ }
+  return "other";
 }
 
 function failureName(text) {
@@ -133,13 +137,20 @@ function failureName(text) {
 // Admin writes its preview state on the progress page it opens before navigation.
 const progressStates = new Set(["preparing", "requesting", "waiting", "pending", "building", "refreshing",
   "refresh-failed", "opening", "error", "session-slow", "updating"]);
+const settledStates = new Set(["refresh-failed", "error", "session-slow", "updating"]);
 
-async function describePopup(popup) {
+// A fast session failure can arrive before Admin moves the tab, so give it up to 5 s to settle.
+async function describePopup(popup, origins) {
   if (!popup) return null;
-  const host = urlHost(popup.url());
-  const state = await popup.locator("main.cms-preview-progress").first()
-    .getAttribute("data-progress", { timeout: 2_000 }).catch(() => null);
-  return { host, progress: progressStates.has(state) ? state : null };
+  const deadline = Date.now() + 5_000;
+  for (;;) {
+    const where = place(popup.url(), origins);
+    const state = where !== "about:blank" ? null : await popup.locator("main.cms-preview-progress").first()
+      .getAttribute("data-progress", { timeout: 1_000 }).catch(() => null);
+    const progress = progressStates.has(state) ? state : null;
+    if (where !== "about:blank" || settledStates.has(progress) || Date.now() >= deadline) return { place: where, progress };
+    await new Promise(resolve => setTimeout(resolve, 250));
+  }
 }
 
 async function main() {
