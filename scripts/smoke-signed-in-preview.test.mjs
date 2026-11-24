@@ -48,7 +48,7 @@ test("adds Access headers on one origin and refuses to forward them on redirects
 });
 
 function fixtureBrowser(settings, { sessionStatus = 204, documentStatus = 200, headingVisible = true,
-  sessionFailure, noDocument = false, progress = "building", later } = {}) {
+  sessionFailure, noDocument = false, progress = "building", later, job, hang = false } = {}) {
   const context = new EventEmitter();
   const page = new EventEmitter();
   const frame = {};
@@ -56,7 +56,7 @@ function fixtureBrowser(settings, { sessionStatus = 204, documentStatus = 200, h
   const staffSession = `${settings.preview}/__cms-session`;
   const wait = (emitter, event, predicate, timeout) => new Promise((resolve, reject) => {
     // A wait for something the fixture never sends times out at once.
-    if (timeout && ((event === "response" && emitter === context && noDocument) ||
+    if (timeout && ((event === "response" && emitter === context && noDocument && !hang) ||
         (event === "response" && emitter === page && sessionFailure))) {
       setTimeout(() => reject(new Error("Timeout exceeded")), 5);
     }
@@ -113,6 +113,10 @@ function fixtureBrowser(settings, { sessionStatus = 204, documentStatus = 200, h
         else page.emit("response", response(staffSession, sessionStatus, "POST", false));
         // Admin can move the tab after the smoke has already seen a refused session.
         if (later) setTimeout(() => { if (later.url) popupUrl = later.url; if (later.progress) progress = later.progress; }, 300);
+        if (job) {
+          const reply = response("https://dev-cms-api.example.test/cmsPreviewStatus", 200, "POST", false);
+          page.emit("response", { ...reply, json: async () => job });
+        }
         if (noDocument) return;
         popupUrl = artifact;
         context.emit("response", response(artifact, documentStatus, "GET", true));
@@ -130,11 +134,11 @@ test("requires staff session, first private document response and fixture headin
   assert.deepEqual(await checkSignedInPreview(fixtureBrowser(settings), settings), { ok: true, code: "signed_in_private_preview" });
   for (const [input, receipt] of [
     [{ sessionStatus: 403 }, { code: "preview_session_failed", missing: [],
-      session: { status: 403 }, document: { status: 200 }, popup: atArtifact }],
+      session: { status: 403 }, job: null, document: { status: 200 }, popup: atArtifact }],
     [{ documentStatus: 302 }, { code: "preview_document_failed", missing: [],
-      session: { status: 204 }, document: { status: 302 }, popup: atArtifact }],
+      session: { status: 204 }, job: null, document: { status: 302 }, popup: atArtifact }],
     [{ headingVisible: false }, { code: "preview_heading_missing", missing: [],
-      session: { status: 204 }, document: { status: 200 }, popup: atArtifact }],
+      session: { status: 204 }, job: null, document: { status: 200 }, popup: atArtifact }],
   ]) {
     assert.deepEqual(await checkSignedInPreview(fixtureBrowser(settings, input), settings), { ok: false, ...receipt });
   }
@@ -143,24 +147,37 @@ test("requires staff session, first private document response and fixture headin
 test("names the missing wait and where the preview tab settled", async () => {
   const settings = previewSmokeSettings("production", env);
   const check = input => checkSignedInPreview(fixtureBrowser(settings, input), settings);
-  assert.deepEqual(await check({ noDocument: true, progress: "error" }), {
+  // Only the hang backstop ends the wait while the job is still building.
+  assert.deepEqual(await check({ noDocument: true, job: { status: "building" } }), {
     ok: false, code: "private_preview_unavailable", missing: ["document"],
-    session: { status: 204 }, document: null, popup: { place: "about:blank", progress: "error" },
+    session: { status: 204 }, job: { status: "building" }, document: null, popup: { place: "about:blank", progress: "building" },
+  });
+  // A failed job ends the wait at once and names its error code.
+  assert.deepEqual(await check({ noDocument: true, hang: true, job: { status: "failed", error: "preview_build_timeout" }, progress: "error" }), {
+    ok: false, code: "preview_job_failed", missing: ["document"],
+    session: { status: 204 }, job: { status: "failed", error: "preview_build_timeout" }, document: null,
+    popup: { place: "about:blank", progress: "error" },
+  });
+  // Admin stopping in the tab (for example while the renderer updates) also ends the wait.
+  assert.deepEqual(await check({ noDocument: true, hang: true, progress: "updating" }), {
+    ok: false, code: "preview_admin_stopped", missing: ["document"],
+    session: { status: 204 }, job: null, document: null, popup: { place: "about:blank", progress: "updating" },
   });
   assert.deepEqual(await check({ sessionFailure: "net::ERR_HTTP2_PROTOCOL_ERROR", noDocument: true, progress: "session-slow" }), {
     ok: false, code: "private_preview_unavailable", missing: ["document"],
-    session: { failed: "net::ERR_HTTP2_PROTOCOL_ERROR" }, document: null, popup: { place: "about:blank", progress: "session-slow" },
+    session: { failed: "net::ERR_HTTP2_PROTOCOL_ERROR" }, job: null, document: null, popup: { place: "about:blank", progress: "session-slow" },
   });
   // A refused session fails at once; the receipt waits for Admin's sign-in handoff.
   assert.deepEqual(await check({ sessionStatus: 401, noDocument: true, later: { url: `${settings.admin}/?staffSite=x` } }), {
     ok: false, code: "preview_session_failed", missing: ["document"],
-    session: { status: 401 }, document: null, popup: { place: "admin", progress: null },
+    session: { status: 401 }, job: null, document: null, popup: { place: "admin", progress: null },
   });
   assert.deepEqual((await check({ noDocument: true, later: { progress: "updating" } })).popup, { place: "about:blank", progress: "updating" });
   // Unknown progress values, other hosts and raw failure text never reach the receipt.
   const receipt = await check({ sessionFailure: "net::ERR_FAILED https://secret.example/?token=x", noDocument: true,
-    progress: "<b>draft title</b>", later: { url: "https://another.example.org/" } });
-  assert.deepEqual([receipt.session, receipt.popup], [{ failed: "failed" }, { place: "other", progress: null }]);
+    progress: "<b>draft title</b>", later: { url: "https://another.example.org/" }, job: { status: "building", error: "Draft title at /x" } });
+  assert.deepEqual([receipt.session, receipt.job, receipt.popup],
+    [{ failed: "failed" }, { status: "building", error: "unlisted" }, { place: "other", progress: null }]);
 });
 
 test("aborts a failed Access fetch with the upstream failure class", async () => {
