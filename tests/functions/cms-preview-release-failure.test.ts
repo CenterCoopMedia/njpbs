@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { spawn } from "node:child_process";
 import { EventEmitter } from "node:events";
 import { PassThrough } from "node:stream";
-import { CloudPreviewProviderReadError, describeCloudPreviewReleaseFailure, readCloudPreviewRollouts, releaseSecretsFor, retryCloudPreviewRead, waitForCloudPreviewStartup, wrangler } from "../../site/scripts/deploy-cms-preview-cloud";
+import { CloudPreviewProviderReadError, describeCloudPreviewReleaseFailure, releaseCredentials, readCloudPreviewRollouts, releaseSecretsFor, retryCloudPreviewRead, waitForCloudPreviewStartup, wrangler } from "../../site/scripts/deploy-cms-preview-cloud";
 
 vi.mock("node:child_process", async importOriginal => ({
   ...await importOriginal<typeof import("node:child_process")>(),
@@ -419,5 +419,31 @@ describe("pre-mutation Containers reads", () => {
     await expect(retryCloudPreviewRead(read, sleep)).rejects.toBe(failure);
     expect(read).toHaveBeenCalledTimes(1);
     expect(sleep).not.toHaveBeenCalled();
+  });
+});
+
+describe("renderer release credentials", () => {
+  const dev = { CMS_TARGET: "development", CMS_DEV_ADMIN_ORIGIN: "https://dev-admin.njpbs.org", CMS_DEV_API_ORIGIN: "https://dev-cms-api.njpbs.org",
+    CMS_DEV_PUBLIC_ORIGIN: "https://dev.njpbs.org", CMS_DEV_MEDIA_ORIGIN: "https://dev-media.njpbs.org",
+    CMS_DEV_API_WORKER: "njpbs-dev-cms-api", CMS_DEV_PREVIEW_RENDERER: "njpbs-dev-cms-preview-renderer", CMS_DEV_ADMIN_PAGES: "njpbs-dev-admin" };
+  const full = { CMS_PREVIEW_FIREBASE_ACCOUNT: "account", CMS_PREVIEW_R2_CREDENTIAL: "storage", CLOUDFLARE_API_TOKEN: "token",
+    CMS_DEV_ACCESS_CLIENT_ID: "client", CMS_DEV_ACCESS_CLIENT_SECRET: "secret" };
+
+  it("refuses a missing dev secret by its development name", () => {
+    for (const [name, secret] of [["CMS_PREVIEW_FIREBASE_ACCOUNT", "CMS_DEV_PREVIEW_FIREBASE_ACCOUNT"],
+      ["CMS_PREVIEW_R2_CREDENTIAL", "CMS_DEV_PREVIEW_R2_CREDENTIAL"], ["CLOUDFLARE_API_TOKEN", "CLOUDFLARE_DEV_PREVIEW_RENDERER_TOKEN"],
+      ["CMS_DEV_ACCESS_CLIENT_SECRET", "CMS_DEV_ACCESS_CLIENT_SECRET"]]) {
+      expect(() => releaseCredentials({ ...dev, ...full, [name]: "" }), name).toThrow(`${secret} is required for a development renderer release`);
+    }
+  });
+
+  it("takes and clears the dev Access client only on development", () => {
+    const env: NodeJS.ProcessEnv = { ...dev, ...full };
+    expect(releaseCredentials(env)).toEqual({ rawAccount: "account", rawStorage: "storage", token: "token",
+      publicationAccess: { clientId: "client", clientSecret: "secret" } });
+    expect(Object.keys(full).filter(name => name in env)).toEqual([]);
+    const production: NodeJS.ProcessEnv = { ...full, CLOUDFLARE_API_TOKEN: "" };
+    expect(releaseCredentials(production)).toEqual({ rawAccount: "account", rawStorage: "storage", token: "", publicationAccess: undefined });
+    expect(production.CMS_DEV_ACCESS_CLIENT_ID).toBe("client");
   });
 });

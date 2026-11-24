@@ -184,7 +184,10 @@ export async function main() {
       `configuration_parameters_match=${parameterChanges !== null && Object.values(parameterChanges).every(reasons => !reasons.length)}`,
       `configuration_bindings_current=${secretChanges !== null && Object.values(secretChanges).every(reasons => !reasons.length)}`,
     ].join("\n") + "\n");
-    const liveRendererIdentities = await collectLiveIdentities("renderer", { firestore }).catch(() => null);
+    // A dev run reads the dev renderer with its own token, never CLOUDFLARE_API_TOKEN.
+    const rendererToken = cmsTarget().environment === "development"
+      ? { cloudflareToken: process.env.CLOUDFLARE_DEV_PREVIEW_RENDERER_TOKEN ?? "" } : {};
+    const liveRendererIdentities = await collectLiveIdentities("renderer", { firestore, ...rendererToken }).catch(() => null);
     const liveFunctionsSha = functionsReceipt?.state === "complete"
       ? functionsReceipt.mutation?.sourceSha
       : functionsReceipt?.lastComplete?.sourceSha;

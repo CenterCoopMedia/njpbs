@@ -95,7 +95,7 @@ env:
   # environment lacks. tests/preflight/cms-deploy-workflow-parity.test.js keeps it equal
   # to the workflow's reads and names the variables shared on purpose.
   CMS_DEVELOPMENT_ENVIRONMENT_NAMES: >-
-    {"secrets": ["CLOUDFLARE_ACCOUNT_ID", "CLOUDFLARE_API_TOKEN", "CMS_BUG_REPORT_GITHUB_TOKEN", "CMS_BUG_REPORT_GITHUB_WEBHOOK_SECRET", "CMS_BUG_REPORT_TELEGRAM_ADMIN_MAP", "CMS_BUG_REPORT_TELEGRAM_BOT_TOKEN", "CMS_BUG_REPORT_TELEGRAM_CHAT_ID", "CMS_BUG_REPORT_TELEGRAM_WEBHOOK_SECRET", "CMS_DEV_ACCESS_CLIENT_ID", "CMS_DEV_ACCESS_CLIENT_SECRET", "CMS_EDGE_ORIGIN_SECRET", "CMS_MEDIA_CACHE_PURGE_TOKEN", "CMS_PREVIEW_R2_CREDENTIAL", "CMS_PREVIEW_SMOKE_CREDENTIAL", "CMS_STAFF_EMAIL_API_TOKEN", "CMS_VOICEOVER_R2_ACCESS_KEY_ID", "CMS_VOICEOVER_R2_SECRET_ACCESS_KEY", "FIREBASE_SERVICE_ACCOUNT"], "variables": ["CMS_DEV_RENDERER_SOURCE_SHA", "CMS_PREVIEW_SMOKE_TARGET", "FIREBASE_DEPLOY_SERVICE_ACCOUNT", "VITE_FIREBASE_API_KEY", "VITE_FIREBASE_APPCHECK_SITE_KEY", "VITE_FIREBASE_APP_ID", "VITE_FIREBASE_AUTH_DOMAIN", "VITE_FIREBASE_PROJECT_ID", "VITE_FUNCTIONS_BASE_URL"]}
+    {"secrets": ["CLOUDFLARE_ACCOUNT_ID", "CLOUDFLARE_API_TOKEN", "CLOUDFLARE_DEV_PREVIEW_RENDERER_TOKEN", "CMS_BUG_REPORT_GITHUB_TOKEN", "CMS_BUG_REPORT_GITHUB_WEBHOOK_SECRET", "CMS_BUG_REPORT_TELEGRAM_ADMIN_MAP", "CMS_BUG_REPORT_TELEGRAM_BOT_TOKEN", "CMS_BUG_REPORT_TELEGRAM_CHAT_ID", "CMS_BUG_REPORT_TELEGRAM_WEBHOOK_SECRET", "CMS_DEV_ACCESS_CLIENT_ID", "CMS_DEV_ACCESS_CLIENT_SECRET", "CMS_DEV_PREVIEW_FIREBASE_ACCOUNT", "CMS_DEV_PREVIEW_R2_CREDENTIAL", "CMS_EDGE_ORIGIN_SECRET", "CMS_MEDIA_CACHE_PURGE_TOKEN", "CMS_PREVIEW_R2_CREDENTIAL", "CMS_PREVIEW_SMOKE_CREDENTIAL", "CMS_STAFF_EMAIL_API_TOKEN", "CMS_VOICEOVER_R2_ACCESS_KEY_ID", "CMS_VOICEOVER_R2_SECRET_ACCESS_KEY", "FIREBASE_SERVICE_ACCOUNT"], "variables": ["CMS_PREVIEW_SMOKE_TARGET", "FIREBASE_DEPLOY_SERVICE_ACCOUNT", "VITE_FIREBASE_API_KEY", "VITE_FIREBASE_APPCHECK_SITE_KEY", "VITE_FIREBASE_APP_ID", "VITE_FIREBASE_AUTH_DOMAIN", "VITE_FIREBASE_PROJECT_ID", "VITE_FUNCTIONS_BASE_URL"]}
   CMS_TARGET: ${{ inputs.target == 'development' && 'development' || 'production' }}
   CMS_TARGET_FIREBASE_PROJECT: ${{ inputs.target == 'development' && 'njpbs-site-dev' || 'njpbs-site' }}
   CMS_TARGET_ADMIN_ORIGIN: ${{ inputs.target == 'development' && 'https://dev-admin.njpbs.org' || 'https://admin.njpbs.org' }}
@@ -108,8 +108,6 @@ env:
   CMS_TARGET_FIREBASE_CONFIG: ${{ inputs.target == 'development' && 'firebase.dev.json' || 'firebase.json' }}
   # The dev project has no Firebase Storage rules.
   CMS_TARGET_FIREBASE_RULES: ${{ inputs.target == 'development' && 'firestore:rules,firestore:indexes' || 'firestore:rules,firestore:indexes,storage' }}
-  # The dev run deploys the CMS against the renderer cms-dev-deploy.yml installed and pinned.
-  CMS_TARGET_RENDERER_SHA: ${{ inputs.target == 'development' && vars.CMS_DEV_RENDERER_SOURCE_SHA || '' }}
   # The dev render writes these names into the dev configs; production renders none of them.
   CLOUDFLARE_DEV_PUBLIC_WORKER: ${{ inputs.target == 'development' && vars.CLOUDFLARE_DEV_PUBLIC_WORKER || '' }}
   CMS_DEV_ADMIN_ORIGIN: ${{ inputs.target == 'development' && vars.CMS_DEV_ADMIN_ORIGIN || '' }}
@@ -208,6 +206,9 @@ jobs:
           CMS_PREVIEW_SMOKE_CREDENTIAL: ${{ secrets.CMS_PREVIEW_SMOKE_CREDENTIAL }}
           CMS_DEV_ACCESS_CLIENT_ID: ${{ inputs.target == 'development' && secrets.CMS_DEV_ACCESS_CLIENT_ID || '' }}
           CMS_DEV_ACCESS_CLIENT_SECRET: ${{ inputs.target == 'development' && secrets.CMS_DEV_ACCESS_CLIENT_SECRET || '' }}
+          CLOUDFLARE_DEV_PREVIEW_RENDERER_TOKEN: ${{ inputs.target == 'development' && secrets.CLOUDFLARE_DEV_PREVIEW_RENDERER_TOKEN || '' }}
+          CMS_DEV_PREVIEW_FIREBASE_ACCOUNT: ${{ inputs.target == 'development' && secrets.CMS_DEV_PREVIEW_FIREBASE_ACCOUNT || '' }}
+          CMS_DEV_PREVIEW_R2_CREDENTIAL: ${{ inputs.target == 'development' && secrets.CMS_DEV_PREVIEW_R2_CREDENTIAL || '' }}
           CMS_BUG_REPORT_GITHUB_TOKEN: ${{ inputs.target == 'development' && secrets.CMS_BUG_REPORT_GITHUB_TOKEN || '' }}
           CMS_BUG_REPORT_GITHUB_WEBHOOK_SECRET: ${{ inputs.target == 'development' && secrets.CMS_BUG_REPORT_GITHUB_WEBHOOK_SECRET || '' }}
           CMS_BUG_REPORT_TELEGRAM_ADMIN_MAP: ${{ inputs.target == 'development' && secrets.CMS_BUG_REPORT_TELEGRAM_ADMIN_MAP || '' }}
@@ -256,7 +257,6 @@ jobs:
         run: |
           {
             echo "### Production steps this development run skips"
-            echo "- Preview renderer pause, deploy, receipts and Containers probe: not rehearsed on dev; cms-dev-deploy.yml still writes the dev renderer (jawn-ops#1188)."
             echo "- Admin public authentication shell: the dev Admin stays behind Access. Dev counterpart: the anonymous-refusal proof in live-smoke."
             echo "- Signed-out Admin boot check: the dev Admin answers with the Access login. Dev counterpart: the anonymous-refusal proof in live-smoke."
             echo "- Private guide boundary checks: they read the production guide bucket and host."
@@ -763,6 +763,7 @@ jobs:
           CLOUD_PUBLICATION_WAKE_ENVIRONMENT: ${{ env.CMS_TARGET }}
           CLOUD_PUBLICATION_WAKE_ENABLED: ${{ inputs.target != 'development' }}
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_DEV_PREVIEW_RENDERER_TOKEN: ${{ inputs.target == 'development' && secrets.CLOUDFLARE_DEV_PREVIEW_RENDERER_TOKEN || '' }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           FIREBASE_WEB_API_KEY: ${{ vars.VITE_FIREBASE_API_KEY || inputs.target != 'development' && secrets.VITE_FIREBASE_API_KEY || '' }}
           CMS_PREVIEW_R2_CREDENTIAL: ${{ secrets.CMS_PREVIEW_R2_CREDENTIAL }}
@@ -786,10 +787,10 @@ jobs:
         with:
           project_id: ${{ env.CMS_TARGET_FIREBASE_PROJECT }}
       - name: Check Containers reads before any provider mutation
-        if: inputs.target != 'development' && vars.CMS_PREVIEW_CLOUD_ENABLED == 'true'
+        if: (inputs.target == 'development' || vars.CMS_PREVIEW_CLOUD_ENABLED == 'true')
         env:
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_API_TOKEN: ${{ inputs.target == 'development' && secrets.CLOUDFLARE_DEV_PREVIEW_RENDERER_TOKEN || inputs.target != 'development' && secrets.CLOUDFLARE_API_TOKEN || '' }}
         run: node "$RUNNER_TEMP/release-gate/.github/scripts/cms-containers-read-probe.mjs"
       - name: Require the provisioned published Post reader secret
         env:
@@ -816,7 +817,7 @@ jobs:
           VITE_CMS_STUDIO_CONFIGURATION: ${{ inputs.target != 'development' && secrets.VITE_CMS_STUDIO_CONFIGURATION || '' }}
           VITE_LIVE_PRODUCTION_ENABLED: ${{ inputs.target != 'development' && vars.LIVE_PRODUCTION_ENABLED || 'false' }}
           CMS_ADMIN_BUILD_REVISION: ${{ needs.admin-build.outputs.deploy_sha }}
-          CMS_PREVIEW_RENDERER_SHA: ${{ env.CMS_TARGET_RENDERER_SHA || needs.admin-build.outputs.deploy_sha }}
+          CMS_PREVIEW_RENDERER_SHA: ${{ needs.admin-build.outputs.deploy_sha }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           CMS_BUG_REPORT_TELEGRAM_CHAT_ID: ${{ secrets.CMS_BUG_REPORT_TELEGRAM_CHAT_ID }}
           CMS_BUG_REPORT_TELEGRAM_ADMIN_MAP: ${{ secrets.CMS_BUG_REPORT_TELEGRAM_ADMIN_MAP }}
@@ -910,6 +911,7 @@ jobs:
           CLOUD_PUBLICATION_WAKE_ENVIRONMENT: ${{ env.CMS_TARGET }}
           CLOUD_PUBLICATION_WAKE_ENABLED: ${{ inputs.target != 'development' }}
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_DEV_PREVIEW_RENDERER_TOKEN: ${{ inputs.target == 'development' && secrets.CLOUDFLARE_DEV_PREVIEW_RENDERER_TOKEN || '' }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
         run: |
           set -euo pipefail
@@ -1307,7 +1309,7 @@ jobs:
       - name: Install workspace deps
         run: npm ci --ignore-scripts
       - name: Install Site release dependencies before mutation
-        if: inputs.target != 'development' && vars.CMS_PREVIEW_CLOUD_ENABLED == 'true' && needs.firebase-preflight.outputs.preview_paused == 'true'
+        if: (inputs.target == 'development' || vars.CMS_PREVIEW_CLOUD_ENABLED == 'true') && needs.firebase-preflight.outputs.preview_paused == 'true'
         run: npm --prefix site ci --ignore-scripts --no-audit --no-fund
       - name: Prepare Functions contracts and verify preview deploy flags
         env:
@@ -1375,7 +1377,7 @@ jobs:
       - name: Mark the Functions receipt in progress
         if: needs.firebase-preflight.outputs.functions_mutated == 'true' && !inputs.install_reader_bridge
         env:
-          RENDERER_TARGET_SHA: ${{ env.CMS_TARGET_RENDERER_SHA || needs.firebase-preflight.outputs.renderer_target_sha }}
+          RENDERER_TARGET_SHA: ${{ needs.firebase-preflight.outputs.renderer_target_sha }}
           DEPLOY_SHA: ${{ needs.admin-build.outputs.deploy_sha }}
         run: |
           node scripts/component-runner.mjs functions start \
@@ -1392,7 +1394,7 @@ jobs:
           CLOUD_PUBLICATION_WAKE_ENABLED: ${{ inputs.target != 'development' }}
         run: node scripts/component-runner.mjs functions prepare
       - name: Mark the renderer receipt in progress
-        if: inputs.target != 'development' && vars.CMS_PREVIEW_CLOUD_ENABLED == 'true' && needs.firebase-preflight.outputs.preview_paused == 'true'
+        if: (inputs.target == 'development' || vars.CMS_PREVIEW_CLOUD_ENABLED == 'true') && needs.firebase-preflight.outputs.preview_paused == 'true'
         env:
           DEPLOY_SHA: ${{ needs.admin-build.outputs.deploy_sha }}
           RENDERER_INPUT_FINGERPRINT: ${{ needs.firebase-preflight.outputs.renderer_input_fingerprint }}
@@ -1404,12 +1406,14 @@ jobs:
             --run-id "$GITHUB_RUN_ID" \
             --run-attempt "$GITHUB_RUN_ATTEMPT"
       - name: Pause cloud preview admission before changing Functions
-        if: inputs.target != 'development' && vars.CMS_PREVIEW_CLOUD_ENABLED == 'true' && needs.firebase-preflight.outputs.preview_paused == 'true' && needs.firebase-preflight.outputs.preview_protocol == 'schema-one' && needs.firebase-preflight.outputs.preview_pause_late != 'true'
+        if: (inputs.target == 'development' || vars.CMS_PREVIEW_CLOUD_ENABLED == 'true') && needs.firebase-preflight.outputs.preview_paused == 'true' && needs.firebase-preflight.outputs.preview_protocol == 'schema-one' && needs.firebase-preflight.outputs.preview_pause_late != 'true'
         env:
-          CMS_PREVIEW_FIREBASE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
-          CMS_PREVIEW_R2_CREDENTIAL: ${{ secrets.CMS_PREVIEW_R2_CREDENTIAL }}
+          CMS_PREVIEW_FIREBASE_ACCOUNT: ${{ inputs.target == 'development' && secrets.CMS_DEV_PREVIEW_FIREBASE_ACCOUNT || inputs.target != 'development' && secrets.FIREBASE_SERVICE_ACCOUNT || '' }}
+          CMS_PREVIEW_R2_CREDENTIAL: ${{ inputs.target == 'development' && secrets.CMS_DEV_PREVIEW_R2_CREDENTIAL || inputs.target != 'development' && secrets.CMS_PREVIEW_R2_CREDENTIAL || '' }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_API_TOKEN: ${{ inputs.target == 'development' && secrets.CLOUDFLARE_DEV_PREVIEW_RENDERER_TOKEN || inputs.target != 'development' && secrets.CLOUDFLARE_API_TOKEN || '' }}
+          CMS_DEV_ACCESS_CLIENT_ID: ${{ inputs.target == 'development' && secrets.CMS_DEV_ACCESS_CLIENT_ID || '' }}
+          CMS_DEV_ACCESS_CLIENT_SECRET: ${{ inputs.target == 'development' && secrets.CMS_DEV_ACCESS_CLIENT_SECRET || '' }}
           CMS_PREVIEW_TRANSPORT: ${{ vars.CMS_PREVIEW_TRANSPORT || 'serializer' }}
           RENDERER_SHA: ${{ needs.admin-build.outputs.deploy_sha }}
         run: |
@@ -1427,7 +1431,7 @@ jobs:
           VITE_CMS_STUDIO_CONFIGURATION: ${{ inputs.target != 'development' && secrets.VITE_CMS_STUDIO_CONFIGURATION || '' }}
           VITE_LIVE_PRODUCTION_ENABLED: ${{ inputs.target != 'development' && vars.LIVE_PRODUCTION_ENABLED || 'false' }}
           CMS_ADMIN_BUILD_REVISION: ${{ needs.admin-build.outputs.deploy_sha }}
-          CMS_PREVIEW_RENDERER_SHA: ${{ env.CMS_TARGET_RENDERER_SHA || needs.firebase-preflight.outputs.renderer_target_sha }}
+          CMS_PREVIEW_RENDERER_SHA: ${{ needs.firebase-preflight.outputs.renderer_target_sha }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           CMS_BUG_REPORT_TELEGRAM_CHAT_ID: ${{ secrets.CMS_BUG_REPORT_TELEGRAM_CHAT_ID }}
           CMS_BUG_REPORT_TELEGRAM_ADMIN_MAP: ${{ secrets.CMS_BUG_REPORT_TELEGRAM_ADMIN_MAP }}
@@ -1541,12 +1545,14 @@ jobs:
             --days 7 \
             --force
       - name: Check preview dependencies before ordinary Functions mutate
-        if: inputs.target != 'development' && vars.CMS_PREVIEW_CLOUD_ENABLED == 'true' && needs.firebase-preflight.outputs.preview_paused == 'true' && needs.firebase-preflight.outputs.preview_protocol == 'schema-one' && needs.firebase-preflight.outputs.preview_pause_late == 'true'
+        if: (inputs.target == 'development' || vars.CMS_PREVIEW_CLOUD_ENABLED == 'true') && needs.firebase-preflight.outputs.preview_paused == 'true' && needs.firebase-preflight.outputs.preview_protocol == 'schema-one' && needs.firebase-preflight.outputs.preview_pause_late == 'true'
         env:
-          CMS_PREVIEW_FIREBASE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
-          CMS_PREVIEW_R2_CREDENTIAL: ${{ secrets.CMS_PREVIEW_R2_CREDENTIAL }}
+          CMS_PREVIEW_FIREBASE_ACCOUNT: ${{ inputs.target == 'development' && secrets.CMS_DEV_PREVIEW_FIREBASE_ACCOUNT || inputs.target != 'development' && secrets.FIREBASE_SERVICE_ACCOUNT || '' }}
+          CMS_PREVIEW_R2_CREDENTIAL: ${{ inputs.target == 'development' && secrets.CMS_DEV_PREVIEW_R2_CREDENTIAL || inputs.target != 'development' && secrets.CMS_PREVIEW_R2_CREDENTIAL || '' }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_API_TOKEN: ${{ inputs.target == 'development' && secrets.CLOUDFLARE_DEV_PREVIEW_RENDERER_TOKEN || inputs.target != 'development' && secrets.CLOUDFLARE_API_TOKEN || '' }}
+          CMS_DEV_ACCESS_CLIENT_ID: ${{ inputs.target == 'development' && secrets.CMS_DEV_ACCESS_CLIENT_ID || '' }}
+          CMS_DEV_ACCESS_CLIENT_SECRET: ${{ inputs.target == 'development' && secrets.CMS_DEV_ACCESS_CLIENT_SECRET || '' }}
           CMS_PREVIEW_TRANSPORT: ${{ vars.CMS_PREVIEW_TRANSPORT || 'serializer' }}
           RENDERER_SHA: ${{ needs.admin-build.outputs.deploy_sha }}
         run: |
@@ -1556,7 +1562,7 @@ jobs:
             site/scripts/deploy-cms-preview-cloud.ts preflight "$RENDERER_SHA"
       - name: Deploy Firebase rules and indexes before the preview pause
         id: deploy_rules_before_preview
-        if: inputs.target != 'development' && vars.CMS_PREVIEW_CLOUD_ENABLED == 'true' && needs.firebase-preflight.outputs.preview_pause_late == 'true'
+        if: (inputs.target == 'development' || vars.CMS_PREVIEW_CLOUD_ENABLED == 'true') && needs.firebase-preflight.outputs.preview_pause_late == 'true'
         run: |
           npx --no-install firebase deploy \
             --project "$CMS_TARGET_FIREBASE_PROJECT" --config "$CMS_TARGET_FIREBASE_CONFIG" \
@@ -1564,7 +1570,7 @@ jobs:
             --non-interactive
       - name: Deploy ordinary Functions before the preview pause
         id: deploy_functions_before_preview
-        if: inputs.target != 'development' && vars.CMS_PREVIEW_CLOUD_ENABLED == 'true' && needs.firebase-preflight.outputs.preview_pause_late == 'true' && needs.firebase-preflight.outputs.functions_before_preview != ''
+        if: (inputs.target == 'development' || vars.CMS_PREVIEW_CLOUD_ENABLED == 'true') && needs.firebase-preflight.outputs.preview_pause_late == 'true' && needs.firebase-preflight.outputs.functions_before_preview != ''
         env:
           DEPLOY_SHA: ${{ needs.admin-build.outputs.deploy_sha }}
           FUNCTION_TARGETS: ${{ needs.verify.outputs.function_targets }}
@@ -1575,12 +1581,14 @@ jobs:
           CLOUD_PUBLICATION_WAKE_ENABLED: ${{ inputs.target != 'development' }}
         run: node scripts/component-runner.mjs functions deploy
       - name: Pause preview admission before the preview Functions subset
-        if: inputs.target != 'development' && vars.CMS_PREVIEW_CLOUD_ENABLED == 'true' && needs.firebase-preflight.outputs.preview_paused == 'true' && needs.firebase-preflight.outputs.preview_protocol == 'schema-one' && needs.firebase-preflight.outputs.preview_pause_late == 'true'
+        if: (inputs.target == 'development' || vars.CMS_PREVIEW_CLOUD_ENABLED == 'true') && needs.firebase-preflight.outputs.preview_paused == 'true' && needs.firebase-preflight.outputs.preview_protocol == 'schema-one' && needs.firebase-preflight.outputs.preview_pause_late == 'true'
         env:
-          CMS_PREVIEW_FIREBASE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
-          CMS_PREVIEW_R2_CREDENTIAL: ${{ secrets.CMS_PREVIEW_R2_CREDENTIAL }}
+          CMS_PREVIEW_FIREBASE_ACCOUNT: ${{ inputs.target == 'development' && secrets.CMS_DEV_PREVIEW_FIREBASE_ACCOUNT || inputs.target != 'development' && secrets.FIREBASE_SERVICE_ACCOUNT || '' }}
+          CMS_PREVIEW_R2_CREDENTIAL: ${{ inputs.target == 'development' && secrets.CMS_DEV_PREVIEW_R2_CREDENTIAL || inputs.target != 'development' && secrets.CMS_PREVIEW_R2_CREDENTIAL || '' }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_API_TOKEN: ${{ inputs.target == 'development' && secrets.CLOUDFLARE_DEV_PREVIEW_RENDERER_TOKEN || inputs.target != 'development' && secrets.CLOUDFLARE_API_TOKEN || '' }}
+          CMS_DEV_ACCESS_CLIENT_ID: ${{ inputs.target == 'development' && secrets.CMS_DEV_ACCESS_CLIENT_ID || '' }}
+          CMS_DEV_ACCESS_CLIENT_SECRET: ${{ inputs.target == 'development' && secrets.CMS_DEV_ACCESS_CLIENT_SECRET || '' }}
           CMS_PREVIEW_TRANSPORT: ${{ vars.CMS_PREVIEW_TRANSPORT || 'serializer' }}
           RENDERER_SHA: ${{ needs.admin-build.outputs.deploy_sha }}
         run: |
@@ -1594,7 +1602,7 @@ jobs:
         env:
           FIRESTORE_DEPLOYED_BEFORE_PREVIEW: ${{ steps.deploy_rules_before_preview.outcome }}
           DEPLOY_SHA: ${{ needs.admin-build.outputs.deploy_sha }}
-          CMS_FUNCTION_DEPLOY_TARGETS: ${{ inputs.target != 'development' && vars.CMS_PREVIEW_CLOUD_ENABLED == 'true' && needs.firebase-preflight.outputs.preview_pause_late == 'true' && needs.firebase-preflight.outputs.functions_during_preview || needs.firebase-preflight.outputs.function_deploy_targets }}
+          CMS_FUNCTION_DEPLOY_TARGETS: ${{ (inputs.target == 'development' || vars.CMS_PREVIEW_CLOUD_ENABLED == 'true') && needs.firebase-preflight.outputs.preview_pause_late == 'true' && needs.firebase-preflight.outputs.functions_during_preview || needs.firebase-preflight.outputs.function_deploy_targets }}
           FUNCTION_TARGETS: ${{ needs.verify.outputs.function_targets }}
           CLOUD_PUBLICATION_WAKE_ENVIRONMENT: ${{ env.CMS_TARGET }}
           CLOUD_PUBLICATION_WAKE_ENABLED: ${{ inputs.target != 'development' }}
@@ -1634,7 +1642,7 @@ jobs:
           VITE_CMS_STUDIO_CONFIGURATION: ${{ inputs.target != 'development' && secrets.VITE_CMS_STUDIO_CONFIGURATION || '' }}
           VITE_LIVE_PRODUCTION_ENABLED: ${{ inputs.target != 'development' && vars.LIVE_PRODUCTION_ENABLED || 'false' }}
           CMS_ADMIN_BUILD_REVISION: ${{ needs.admin-build.outputs.deploy_sha }}
-          CMS_PREVIEW_RENDERER_SHA: ${{ env.CMS_TARGET_RENDERER_SHA || needs.admin-build.outputs.deploy_sha }}
+          CMS_PREVIEW_RENDERER_SHA: ${{ needs.admin-build.outputs.deploy_sha }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           CMS_BUG_REPORT_TELEGRAM_CHAT_ID: ${{ secrets.CMS_BUG_REPORT_TELEGRAM_CHAT_ID }}
           CMS_BUG_REPORT_TELEGRAM_ADMIN_MAP: ${{ secrets.CMS_BUG_REPORT_TELEGRAM_ADMIN_MAP }}
@@ -1763,17 +1771,17 @@ jobs:
     # Wrangler builds the renderer container image and needs a Docker engine.
     runs-on: ubuntu-24.04
     # Allow all three wait limits plus setup and image deployment.
-    # Measured Nov. 2026: 303 s, 290 s (45191230409, 44613342087; dev skips it).
+    # Measured Nov. 2026: 303 s, 290 s (45191230409, 44613342087).
     timeout-minutes: 60 # Runaway guard: 3x max rounds to 48m; preserve 55m waits plus setup (#2657).
     steps:
       - uses: actions/checkout@v7
-        if: inputs.target != 'development' && vars.CMS_PREVIEW_CLOUD_ENABLED == 'true'
+        if: (inputs.target == 'development' || vars.CMS_PREVIEW_CLOUD_ENABLED == 'true')
         with:
           ref: ${{ needs.admin-build.outputs.deploy_sha }}
           fetch-depth: 0
           persist-credentials: false
       - name: Check out trusted release source gate
-        if: inputs.target != 'development' && vars.CMS_PREVIEW_CLOUD_ENABLED == 'true'
+        if: (inputs.target == 'development' || vars.CMS_PREVIEW_CLOUD_ENABLED == 'true')
         uses: actions/checkout@v7
         with:
           ref: ${{ github.sha }}
@@ -1785,13 +1793,13 @@ jobs:
             config/development-inputs.json
           persist-credentials: false
       - name: Isolate trusted release-gate checkout
-        if: inputs.target != 'development' && vars.CMS_PREVIEW_CLOUD_ENABLED == 'true'
+        if: (inputs.target == 'development' || vars.CMS_PREVIEW_CLOUD_ENABLED == 'true')
         run: |
           set -euo pipefail
           mv .release-gate "$RUNNER_TEMP/release-gate"
           ln -s "$GITHUB_WORKSPACE/node_modules" "$RUNNER_TEMP/release-gate/node_modules"
       - name: Require reviewed renderer source
-        if: inputs.target != 'development' && vars.CMS_PREVIEW_CLOUD_ENABLED == 'true'
+        if: (inputs.target == 'development' || vars.CMS_PREVIEW_CLOUD_ENABLED == 'true')
         env:
           EMERGENCY_RELEASE: ${{ inputs.emergency_release || false }}
           EMERGENCY_AUTHORIZATION: ${{ inputs.emergency_authorization || '' }}
@@ -1800,29 +1808,29 @@ jobs:
         env:
           CMS_RELEASE_CHECKS_SHA: ${{ inputs.deploy_ref }}
           CMS_TRUSTED_WORKFLOW_SHA: ${{ github.sha }}
-        if: inputs.target != 'development' && vars.CMS_PREVIEW_CLOUD_ENABLED == 'true'
+        if: (inputs.target == 'development' || vars.CMS_PREVIEW_CLOUD_ENABLED == 'true')
         run: node "$RUNNER_TEMP/release-gate"/.github/scripts/require-cms-release-sources.mjs
       - name: Metered-API source scan (before any scanned code runs)
-        if: inputs.target != 'development' && vars.CMS_PREVIEW_CLOUD_ENABLED == 'true'
+        if: (inputs.target == 'development' || vars.CMS_PREVIEW_CLOUD_ENABLED == 'true')
         run: node "$RUNNER_TEMP/release-gate"/.github/scripts/metered-api-scan.mjs --target-root "$GITHUB_WORKSPACE"
       - name: Render deployment resource configuration
-        if: inputs.target != 'development' && vars.CMS_PREVIEW_CLOUD_ENABLED == 'true'
+        if: (inputs.target == 'development' || vars.CMS_PREVIEW_CLOUD_ENABLED == 'true')
         run: node "$RUNNER_TEMP/release-gate/scripts/render-development-config.mjs" "${CMS_TARGET_RENDER_SCOPE:?}" --root "$GITHUB_WORKSPACE"
       - uses: actions/setup-node@v7
-        if: inputs.target != 'development' && vars.CMS_PREVIEW_CLOUD_ENABLED == 'true'
+        if: (inputs.target == 'development' || vars.CMS_PREVIEW_CLOUD_ENABLED == 'true')
         with:
           node-version: "22.23.5"
           package-manager-cache: false
       - name: Install release dependencies
-        if: inputs.target != 'development' && vars.CMS_PREVIEW_CLOUD_ENABLED == 'true'
+        if: (inputs.target == 'development' || vars.CMS_PREVIEW_CLOUD_ENABLED == 'true')
         run: |
           npm ci --ignore-scripts --no-audit --no-fund
           npm --prefix site ci --ignore-scripts --no-audit --no-fund
           npm run functions:build --if-present
       - name: Mark the renderer receipt in progress
-        if: inputs.target != 'development' && vars.CMS_PREVIEW_CLOUD_ENABLED == 'true' && needs.firebase-preflight.outputs.preview_paused == 'true'
+        if: (inputs.target == 'development' || vars.CMS_PREVIEW_CLOUD_ENABLED == 'true') && needs.firebase-preflight.outputs.preview_paused == 'true'
         env:
-          CMS_PREVIEW_FIREBASE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+          CMS_PREVIEW_FIREBASE_ACCOUNT: ${{ inputs.target == 'development' && secrets.CMS_DEV_PREVIEW_FIREBASE_ACCOUNT || inputs.target != 'development' && secrets.FIREBASE_SERVICE_ACCOUNT || '' }}
           DEPLOY_SHA: ${{ needs.admin-build.outputs.deploy_sha }}
           RENDERER_INPUT_FINGERPRINT: ${{ needs.firebase-preflight.outputs.renderer_input_fingerprint }}
         run: |
@@ -1833,21 +1841,23 @@ jobs:
             --run-id "$GITHUB_RUN_ID" \
             --run-attempt "$GITHUB_RUN_ATTEMPT"
       - name: Deploy and verify the matched cloud preview renderer
-        if: inputs.target != 'development' && vars.CMS_PREVIEW_CLOUD_ENABLED == 'true' && needs.firebase-preflight.outputs.preview_paused == 'true'
+        if: (inputs.target == 'development' || vars.CMS_PREVIEW_CLOUD_ENABLED == 'true') && needs.firebase-preflight.outputs.preview_paused == 'true'
         env:
-          CMS_PREVIEW_FIREBASE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
-          CMS_PREVIEW_R2_CREDENTIAL: ${{ secrets.CMS_PREVIEW_R2_CREDENTIAL }}
+          CMS_PREVIEW_FIREBASE_ACCOUNT: ${{ inputs.target == 'development' && secrets.CMS_DEV_PREVIEW_FIREBASE_ACCOUNT || inputs.target != 'development' && secrets.FIREBASE_SERVICE_ACCOUNT || '' }}
+          CMS_PREVIEW_R2_CREDENTIAL: ${{ inputs.target == 'development' && secrets.CMS_DEV_PREVIEW_R2_CREDENTIAL || inputs.target != 'development' && secrets.CMS_PREVIEW_R2_CREDENTIAL || '' }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_API_TOKEN: ${{ inputs.target == 'development' && secrets.CLOUDFLARE_DEV_PREVIEW_RENDERER_TOKEN || inputs.target != 'development' && secrets.CLOUDFLARE_API_TOKEN || '' }}
+          CMS_DEV_ACCESS_CLIENT_ID: ${{ inputs.target == 'development' && secrets.CMS_DEV_ACCESS_CLIENT_ID || '' }}
+          CMS_DEV_ACCESS_CLIENT_SECRET: ${{ inputs.target == 'development' && secrets.CMS_DEV_ACCESS_CLIENT_SECRET || '' }}
           RENDERER_SHA: ${{ needs.admin-build.outputs.deploy_sha }}
         run: |
           node --import ./site/node_modules/tsx/dist/loader.mjs \
             site/scripts/deploy-cms-preview-cloud.ts deploy "$RENDERER_SHA"
       - name: Record the completed renderer receipt
-        if: inputs.target != 'development' && vars.CMS_PREVIEW_CLOUD_ENABLED == 'true' && needs.firebase-preflight.outputs.preview_paused == 'true'
+        if: (inputs.target == 'development' || vars.CMS_PREVIEW_CLOUD_ENABLED == 'true') && needs.firebase-preflight.outputs.preview_paused == 'true'
         env:
-          CMS_PREVIEW_FIREBASE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
-          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CMS_PREVIEW_FIREBASE_ACCOUNT: ${{ inputs.target == 'development' && secrets.CMS_DEV_PREVIEW_FIREBASE_ACCOUNT || inputs.target != 'development' && secrets.FIREBASE_SERVICE_ACCOUNT || '' }}
+          CLOUDFLARE_API_TOKEN: ${{ inputs.target == 'development' && secrets.CLOUDFLARE_DEV_PREVIEW_RENDERER_TOKEN || inputs.target != 'development' && secrets.CLOUDFLARE_API_TOKEN || '' }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           DEPLOY_SHA: ${{ needs.admin-build.outputs.deploy_sha }}
         run: |
@@ -1858,10 +1868,10 @@ jobs:
             --live
 
       - name: Confirm the live renderer is ready
-        if: inputs.target != 'development' && vars.CMS_PREVIEW_CLOUD_ENABLED == 'true' && needs.firebase-preflight.outputs.preview_paused != 'true'
+        if: (inputs.target == 'development' || vars.CMS_PREVIEW_CLOUD_ENABLED == 'true') && needs.firebase-preflight.outputs.preview_paused != 'true'
         env:
-          CMS_PREVIEW_FIREBASE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
-          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CMS_PREVIEW_FIREBASE_ACCOUNT: ${{ inputs.target == 'development' && secrets.CMS_DEV_PREVIEW_FIREBASE_ACCOUNT || inputs.target != 'development' && secrets.FIREBASE_SERVICE_ACCOUNT || '' }}
+          CLOUDFLARE_API_TOKEN: ${{ inputs.target == 'development' && secrets.CLOUDFLARE_DEV_PREVIEW_RENDERER_TOKEN || inputs.target != 'development' && secrets.CLOUDFLARE_API_TOKEN || '' }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           RENDERER_TARGET_SHA: ${{ needs.firebase-preflight.outputs.renderer_target_sha }}
         run: node scripts/component-runner.mjs renderer confirm --source-sha "$RENDERER_TARGET_SHA"
@@ -2049,10 +2059,10 @@ jobs:
           printf '%s' "$SA" > "$GOOGLE_APPLICATION_CREDENTIALS"
           node scripts/component-runner.mjs functions confirm --source-sha "$LIVE_FUNCTIONS_SHA"
       - name: Recheck live renderer identity before Admin upload
-        if: inputs.target != 'development' && vars.CMS_PREVIEW_CLOUD_ENABLED == 'true'
+        if: (inputs.target == 'development' || vars.CMS_PREVIEW_CLOUD_ENABLED == 'true')
         env:
-          CMS_PREVIEW_FIREBASE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
-          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CMS_PREVIEW_FIREBASE_ACCOUNT: ${{ inputs.target == 'development' && secrets.CMS_DEV_PREVIEW_FIREBASE_ACCOUNT || inputs.target != 'development' && secrets.FIREBASE_SERVICE_ACCOUNT || '' }}
+          CLOUDFLARE_API_TOKEN: ${{ inputs.target == 'development' && secrets.CLOUDFLARE_DEV_PREVIEW_RENDERER_TOKEN || inputs.target != 'development' && secrets.CLOUDFLARE_API_TOKEN || '' }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           RENDERER_TARGET_SHA: ${{ needs.firebase-preflight.outputs.renderer_target_sha }}
         run: |
@@ -2254,6 +2264,7 @@ jobs:
           CLOUD_PUBLICATION_WAKE_ENVIRONMENT: ${{ env.CMS_TARGET }}
           CLOUD_PUBLICATION_WAKE_ENABLED: ${{ inputs.target != 'development' }}
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_DEV_PREVIEW_RENDERER_TOKEN: ${{ inputs.target == 'development' && secrets.CLOUDFLARE_DEV_PREVIEW_RENDERER_TOKEN || '' }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           FIREBASE_WEB_API_KEY: ${{ vars.VITE_FIREBASE_API_KEY || inputs.target != 'development' && secrets.VITE_FIREBASE_API_KEY || '' }}
           CMS_PREVIEW_R2_CREDENTIAL: ${{ secrets.CMS_PREVIEW_R2_CREDENTIAL }}
@@ -2403,6 +2414,7 @@ jobs:
           CLOUD_PUBLICATION_WAKE_ENVIRONMENT: ${{ env.CMS_TARGET }}
           CLOUD_PUBLICATION_WAKE_ENABLED: ${{ inputs.target != 'development' }}
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_DEV_PREVIEW_RENDERER_TOKEN: ${{ inputs.target == 'development' && secrets.CLOUDFLARE_DEV_PREVIEW_RENDERER_TOKEN || '' }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           FIREBASE_WEB_API_KEY: ${{ vars.VITE_FIREBASE_API_KEY || inputs.target != 'development' && secrets.VITE_FIREBASE_API_KEY || '' }}
           CMS_PREVIEW_R2_CREDENTIAL: ${{ secrets.CMS_PREVIEW_R2_CREDENTIAL }}

@@ -456,7 +456,7 @@ test("dev deployment writes the exact Admin source revision before Functions dep
   } finally { rmSync(workspace, { recursive: true, force: true }); }
 });
 
-test("dev dispatch defaults to pinned renderer verification and opts into image release explicitly", () => {
+test("dev dispatch reads the renderer component receipt and opts into image release explicitly", () => {
   const { parse } = require("yaml");
   const workflow = parse(readFileSync(new URL("../.github/workflows/cms-dev-deploy.yml", import.meta.url), "utf8"));
   assert.equal(workflow.on.workflow_dispatch.inputs.release_preview_renderer.type, "boolean");
@@ -475,15 +475,22 @@ test("dev dispatch defaults to pinned renderer verification and opts into image 
   const deploy = workflow.jobs.deploy;
   assert.equal(evaluate(renderer.if, context(false, "skipped")), false);
   assert.equal(evaluate(deploy.if, context(false, "skipped")), true);
-  assert.equal(evaluate(deploy.env.CMS_DEV_RENDERER_SOURCE_SHA, context(false, "skipped")), pinned);
   assert.equal(evaluate(renderer.if, context(true, "success")), true);
   assert.equal(evaluate(deploy.if, context(true, "success")), true);
-  assert.equal(evaluate(deploy.env.CMS_DEV_RENDERER_SOURCE_SHA, context(true, "success")), released);
   for (const [releasing, result, cancelled] of [[true, "skipped", false], [true, "failure", false], [false, "failure", false], [false, "skipped", true]]) {
     assert.equal(evaluate(deploy.if, context(releasing, result, cancelled)), false);
   }
-  const verification = deploy.steps.find(step => step.name === "Verify the pinned dev renderer for a routine deploy");
-  assert.equal(evaluate(verification.if, context(false, "skipped")), true);
-  assert.equal(evaluate(verification.if, context(true, "success")), false);
-  assert.deepEqual(Object.keys(verification.env).sort(), ["CLOUDFLARE_API_TOKEN", "CMS_DEV_PREVIEW_FIREBASE_ACCOUNT"]);
+  // The legacy pinned-renderer verify is gone: the dev renderer has a component receipt from cms-staging-deploy.yml.
+  assert.equal(deploy.steps.some(step => /--verify-pinned/.test(step.run ?? "")), false);
+  // The dev Functions renderer SHA comes from that receipt, confirmed live, never from a variable.
+  assert.equal(deploy.env.CMS_DEV_RENDERER_SOURCE_SHA, undefined);
+  const receiptRead = deploy.steps.findIndex(step => step.name === "Read and confirm the dev renderer component receipt");
+  assert.ok(receiptRead >= 0 && receiptRead < deploy.steps.findIndex(step => step.uses?.startsWith("google-github-actions/auth@")));
+  assert.match(deploy.steps[receiptRead].run, /renderer read\)"[\s\S]*renderer confirm --source-sha "\$sha"[\s\S]*CMS_DEV_RENDERER_SOURCE_SHA=%s\\n' "\$sha" >> "\$GITHUB_ENV"/);
+  assert.equal(deploy.steps[receiptRead].env.CLOUDFLARE_API_TOKEN, "${{ secrets.CLOUDFLARE_DEV_PREVIEW_RENDERER_TOKEN }}");
+  // Both dev renderer writers share one concurrency group, so they never run at once.
+  const staging = parse(readFileSync(new URL("../.github/workflows/cms-staging-deploy.yml", import.meta.url), "utf8"));
+  assert.equal(workflow.concurrency.group, "cms-staging-deploy-development");
+  assert.equal(evaluate(staging.concurrency.group, { inputs: { target: "development" } }), workflow.concurrency.group);
+  assert.equal(workflow.concurrency["cancel-in-progress"], false);
 });

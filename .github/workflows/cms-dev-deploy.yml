@@ -83,7 +83,8 @@ env:
   CMS_DEV_ACCESS_ORIGIN: ${{ vars.CMS_DEV_ACCESS_ORIGIN }}
 
 concurrency:
-  group: cms-dev-deploy
+  # Shared with development runs of cms-staging-deploy.yml: both write the dev renderer and dev Functions.
+  group: cms-staging-deploy-development
   cancel-in-progress: false
 
 jobs:
@@ -273,7 +274,6 @@ jobs:
       CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
       CMS_ADMIN_PAGES_BRANCH: main
       CMS_DEV_RELEASE_PREVIEW_RENDERER: ${{ inputs.release_preview_renderer }}
-      CMS_DEV_RENDERER_SOURCE_SHA: ${{ inputs.release_preview_renderer && needs.preview-renderer.outputs.renderer_sha || vars.CMS_DEV_RENDERER_SOURCE_SHA }}
     steps:
       - uses: actions/checkout@v7
         with:
@@ -358,20 +358,24 @@ jobs:
           node --import ./site/node_modules/tsx/dist/loader.mjs "$RUNNER_TEMP/cms-contract-source/scripts/check-cms-public-contract.mjs" prepare
           --environment development --candidate "$DEPLOY_SHA" --source-root "$GITHUB_WORKSPACE"
           --state-directory "$RUNNER_TEMP/cms-public-contract-private"
-      - name: Verify the pinned dev renderer for a routine deploy
-        if: ${{ !inputs.release_preview_renderer }}
+      - name: Read and confirm the dev renderer component receipt
         env:
-          CMS_DEV_PREVIEW_FIREBASE_ACCOUNT: ${{ secrets.CMS_DEV_PREVIEW_FIREBASE_ACCOUNT }}
+          CMS_TARGET: development
+          CMS_PREVIEW_FIREBASE_ACCOUNT: ${{ secrets.CMS_DEV_PREVIEW_FIREBASE_ACCOUNT }}
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_DEV_PREVIEW_RENDERER_TOKEN }}
-        run: node --import ./site/node_modules/tsx/dist/loader.mjs preview-renderer/deploy-dev.mjs --verify-pinned "$CMS_DEV_RENDERER_SOURCE_SHA" "$RUNNER_TEMP/dev-preview-renderer-pin-receipt.json"
-      - name: Retain safe existing renderer verification receipt
-        if: ${{ !inputs.release_preview_renderer }}
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
-        with:
-          name: dev-preview-renderer-pin-receipt
-          path: ${{ runner.temp }}/dev-preview-renderer-pin-receipt.json
-          if-no-files-found: error
-          retention-days: 7
+          CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          set -euo pipefail
+          receipt="$(node "$RUNNER_TEMP/cms-contract-source/scripts/component-runner.mjs" renderer read)"
+          sha="$(printf '%s' "$receipt" | node -e '
+            const receipt = JSON.parse(require("node:fs").readFileSync(0, "utf8"));
+            const sha = receipt?.state === "complete" ? receipt.mutation?.sourceSha : undefined;
+            if (typeof sha !== "string" || !/^[0-9a-f]{40}$/.test(sha)) throw new Error("The dev renderer receipt is not complete");
+            process.stdout.write(sha);
+          ')"
+          [[ "$sha" =~ ^[0-9a-f]{40}$ ]]
+          node "$RUNNER_TEMP/cms-contract-source/scripts/component-runner.mjs" renderer confirm --source-sha "$sha"
+          printf 'CMS_DEV_RENDERER_SOURCE_SHA=%s\n' "$sha" >> "$GITHUB_ENV"
       - name: Select and check dev Functions entry
         run: |
           node scripts/assert-dev-cms-targets.mjs

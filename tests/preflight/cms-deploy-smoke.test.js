@@ -867,8 +867,8 @@ if(process.env.CMS_BUG_REPORT_TELEGRAM_ADMIN_MAP)process.exit(8); require("node:
     expect(workflow).toContain("force_firebase:");
     expect(workflow).toContain("node scripts/component-runner.mjs functions plan");
     expect(workflow).toContain("node scripts/component-runner.mjs functions verify");
-    expect(workflow).toContain("CMS_FUNCTION_DEPLOY_TARGETS: ${{ inputs.target != 'development' && vars.CMS_PREVIEW_CLOUD_ENABLED == 'true' && needs.firebase-preflight.outputs.preview_pause_late == 'true' && needs.firebase-preflight.outputs.functions_during_preview || needs.firebase-preflight.outputs.function_deploy_targets }}");
-    expect(workflow).toContain("CMS_PREVIEW_RENDERER_SHA: ${{ env.CMS_TARGET_RENDERER_SHA || needs.firebase-preflight.outputs.renderer_target_sha }}");
+    expect(workflow).toContain("CMS_FUNCTION_DEPLOY_TARGETS: ${{ (inputs.target == 'development' || vars.CMS_PREVIEW_CLOUD_ENABLED == 'true') && needs.firebase-preflight.outputs.preview_pause_late == 'true' && needs.firebase-preflight.outputs.functions_during_preview || needs.firebase-preflight.outputs.function_deploy_targets }}");
+    expect(workflow).toContain("CMS_PREVIEW_RENDERER_SHA: ${{ needs.firebase-preflight.outputs.renderer_target_sha }}");
     expect(workflow.indexOf("Revalidate the selective release baseline before mutation"))
       .toBeLessThan(workflow.indexOf("Mark the Functions receipt in progress"));
     // The cms-api job plans its own Worker release, so a partial rerun recomputes

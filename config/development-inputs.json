@@ -251,6 +251,7 @@
         "scripts/lib/dev-publication.cjs",
         "site/scripts/cms-preview-cloud-runtime.ts",
         "site/scripts/cms-preview-cloud-storage.ts",
+        "site/scripts/deploy-cms-preview-cloud.ts",
         "site/scripts/preview-output-target.d.mts",
         "site/scripts/preview-output-target.mjs",
         "site/tests/cms-preview-cloud-storage.test.ts",
