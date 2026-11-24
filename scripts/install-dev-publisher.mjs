@@ -121,6 +121,19 @@ export function deployCommand({ wrangler, config, secretsFile, sha, token, accou
   };
 }
 
+// Every non-secret binding, as the live Worker reports it and as the rendered config declares it.
+const sortedBindings = list => JSON.stringify(list.sort((a, b) => `${a.type}:${a.name}`.localeCompare(`${b.type}:${b.name}`)));
+export function liveBindings(settings) {
+  return sortedBindings((settings?.bindings ?? []).filter(b => b.type !== "secret_text").map(b => b.type === "plain_text"
+    ? { type: b.type, name: b.name, text: b.text } : b.type === "r2_bucket" ? { type: b.type, name: b.name, bucket_name: b.bucket_name }
+      : b.type === "durable_object_namespace" ? { type: b.type, name: b.name, class_name: b.class_name } : { type: b.type, name: b.name }));
+}
+export function renderedBindings(config) {
+  return sortedBindings([...Object.entries(config.vars).map(([name, text]) => ({ type: "plain_text", name, text })),
+    ...config.r2_buckets.map(b => ({ type: "r2_bucket", name: b.binding, bucket_name: b.bucket_name })),
+    ...config.durable_objects.bindings.map(b => ({ type: "durable_object_namespace", name: b.name, class_name: b.class_name }))]);
+}
+
 const secretNames = settings => (settings?.bindings ?? []).filter(b => b.type === "secret_text").map(b => b.name).sort();
 const plain = (settings, name) => settings?.bindings?.find(b => b.type === "plain_text" && b.name === name)?.text;
 
@@ -136,8 +149,7 @@ export async function readPublisher(cloudflare) {
     refuse("The development publisher container application is not bound to the Worker");
   }
   const versions = deployments?.deployments?.[0]?.versions ?? [];
-  const vars = Object.fromEntries((settings?.bindings ?? []).filter(b => b.type === "plain_text").map(b => [b.name, b.text]).sort(([a], [b]) => a.localeCompare(b)));
-  return { secrets: secretNames(settings), commit: plain(settings, "PUBLICATION_COMMIT_SHA"), vars, application: named[0],
+  return { secrets: secretNames(settings), commit: plain(settings, "PUBLICATION_COMMIT_SHA"), bindings: liveBindings(settings), application: named[0],
     image: named[0].configuration?.image, version: versions.length === 1 && versions[0].percentage === 100 ? versions[0].version_id : undefined };
 }
 
@@ -160,13 +172,13 @@ export function assertBefore(before) {
 
 // Waits for the commit on one Worker version, the receipt image applied and /health 200.
 // After a deploy the Worker version must also differ from the one read before it.
-export async function readBack({ cloudflare, health, sleep, before, sha, image, deployed }) {
+export async function readBack({ cloudflare, health, sleep, before, sha, image, bindings, deployed }) {
   for (let attempt = 0; attempt < WAIT.attempts; attempt += 1) {
     if (attempt) await sleep(WAIT.intervalMs);
     const after = await readPublisher(cloudflare);
     if (JSON.stringify(after.secrets) !== JSON.stringify(before.secrets)) refuse("Publisher secret names changed");
     if (after.application.id !== before.application.id) refuse("Publisher container application changed");
-    if (after.commit !== sha || !after.version || (deployed && after.version === before.version)) continue;
+    if (after.commit !== sha || after.bindings !== bindings || !after.version || (deployed && after.version === before.version)) continue;
     const rollouts = await cloudflare(`containers/applications/${after.application.id}/rollouts`);
     // The application record can keep the previous image after a rollout completes; the applied target is the proof.
     if (appliedImage(after.application, rollouts) !== image) continue;
@@ -195,20 +207,20 @@ export async function install({ sha, run, check }, io) {
     const cloudflare = route => io.cloudflare(account, route, readToken);
     const before = await readPublisher(cloudflare);
     assertBefore(before);
-    // A Worker on one version with exactly the rendered public variables (so the commit too), whose application already runs the image, is installed,
+    // A Worker on one version with exactly the rendered non-secret bindings (so the commit too), whose application already runs the image, is installed,
     // including a first install with no rollout, which the release method accepts; only the readback runs.
     const rollouts = await cloudflare(`containers/applications/${before.application.id}/rollouts`);
     const applied = appliedImage(before.application, rollouts);
-    const rendered = Object.fromEntries(Object.entries(config.vars).sort(([a], [b]) => a.localeCompare(b)));
-    const installed = JSON.stringify(before.vars) === JSON.stringify(rendered) && Boolean(before.version) && applied === receipt.image;
+    const bindings = renderedBindings(config);
+    const installed = before.bindings === bindings && Boolean(before.version) && applied === receipt.image;
     const live = { version: before.version ?? null, commit: before.commit ?? null, application: before.application.id, image: applied ?? null };
     if (check) return { schema: 1, check: true, source_sha: sha, image: receipt.image, live, deploy_needed: !installed };
-    if (installed) return await readBack({ cloudflare, health: io.health, sleep: io.sleep, before, sha, image: receipt.image, deployed: false });
+    if (installed) return await readBack({ cloudflare, health: io.health, sleep: io.sleep, before, sha, image: receipt.image, bindings, deployed: false });
     const configPath = path.join(prepared.directory, "deploy.json"), secretsFile = path.join(prepared.directory, "keep-secrets.json");
     writeFileSync(configPath, `${JSON.stringify(config, null, 2)}\n`);
     writeFileSync(secretsFile, "{}\n");
     io.deploy(deployCommand({ wrangler: prepared.wrangler, config: configPath, secretsFile, sha, token: io.token(4), account }), prepared.source);
-    return await readBack({ cloudflare, health: io.health, sleep: io.sleep, before, sha, image: receipt.image, deployed: true });
+    return await readBack({ cloudflare, health: io.health, sleep: io.sleep, before, sha, image: receipt.image, bindings, deployed: true });
   } finally {
     rmSync(prepared.directory, { recursive: true, force: true });
   }
