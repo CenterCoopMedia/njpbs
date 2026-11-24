@@ -101,6 +101,62 @@ A development artifact contains only `receipt.json`: schema 1, `target`,
 bundles `functions/lib/publication-target.js`, whose development Worker name,
 origin and preview bucket are templates until rendering, and the withdrawal
 catalog keys derive from that Worker name; a config pointing at this unrendered
-checkout would write catalogs the development public Worker never reads. No
-development publisher deployment path exists yet; the artifact grants no
-deployment authority.
+checkout would write catalogs the development public Worker never reads. The
+artifact grants no deployment authority.
+
+## Development install outside a release run
+
+`scripts/install-dev-publisher.mjs --sha X --image-run <run> [--check]`
+installs the development publisher at main commit X from that run's
+development artifact. Run it from a clean checkout of main that contains X,
+with the root and site dependencies installed. Supply three credentials on
+descriptors, each read only when it is used: 3, the development Firestore
+operator credential JSON; 4, the development publisher deploy token; 5, the
+development Cloudflare read token. `--check` makes every read and stops
+before the deploy, so it never opens descriptor 4.
+
+The script installs nothing until all of these pass:
+
+- The run is a successful main `publisher-image.yml` run titled
+  `Publisher image development X`.
+- Its receipt names target `development`, source X and a
+  `njpbs-dev-cms-publisher` image.
+- The script renders X with the same GitHub variables the run read (the
+  `publisher-image` environment first, then the repository), and the
+  fingerprint must equal the receipt's `deployment_input_sha256`.
+- The rendered config passes the image workflow's source/config comparison,
+  and it names only the development Worker, container, route and bucket.
+- `system/cmsPublicationRuntime` is ready, with `commitSha` and
+  `cloud.commitSha` both X.
+- `system/publicDeployment` is idle at X.
+- The live Worker carries exactly the development secret names.
+
+There is no target argument, and the Worker name
+`njpbs-dev-cms-publisher` and container application are fixed in the
+script. The deploy token can also write production Workers.
+
+The deploy runs `wrangler deploy --name njpbs-dev-cms-publisher
+--containers-rollout immediate --secrets-file <{}>`. Cloudflare's
+[rollout documentation](https://developers.cloudflare.com/containers/platform-details/rollouts/)
+says the first deploy creates the container application without a rollout,
+and a later deploy with a changed image starts one. `immediate` makes that
+one 100% step. The empty JSON secrets file sets `keep_secrets`, so every
+existing secret, including a placeholder, stays unchanged. Per Cloudflare's
+[secrets documentation](https://developers.cloudflare.com/workers/configuration/secrets/),
+"Secrets not included in the file are preserved from the previous version".
+The script handles no secret values.
+
+When the app already runs the receipt image, the script skips the deploy
+and only reads back. The readback waits up to 15 minutes for all of the
+following:
+
+- a single new Worker version at 100% with `PUBLICATION_COMMIT_SHA` X;
+- the same secret names;
+- the newest rollout `completed` at the receipt image;
+- `/health` 200.
+
+It prints one JSON receipt with the previous and new version IDs and the
+rollout ID. After an install, jawn-ops' development first-install record
+(`release_target_settings.go`) no longer describes the live publisher. Update
+or delete that record from the printed version before the next development
+release run.
