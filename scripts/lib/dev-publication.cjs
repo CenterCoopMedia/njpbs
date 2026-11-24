@@ -9,7 +9,8 @@ const { publicationTarget } = require("../../functions/lib/publication-target");
 const { publicationRuntime, assertPublicationOwner, runtimeFields } = require("../../functions/lib/publication-runtime-owner");
 const { assertPublicDeploymentPointer, projectPublicBuildReservation, projectPublicDeploymentLease,
   assertPublicDeploymentReservedBatch, assertPublicDeploymentLeaseBatch,
-  assertPublicDeploymentTerminalBatchStructure, assertPublicDeploymentCancelledBatch } = require("../../functions/lib/public-deployment");
+  assertPublicDeploymentTerminalBatchStructure, assertPublicDeploymentCancelledBatch,
+  assertPublicDeploymentFailedPublishRetiredBatch, FAILED_PUBLISH_RETIRED_REASON } = require("../../functions/lib/public-deployment");
 const { publicDeploymentRef, publicBuildBatchRef, publicWorkerCandidateRef, acquirePublicDeploymentLease } = require("../../functions/lib/public-deployment-coordinator");
 const { createPublicMediaManifest } = require("../../functions/lib/public-media-manifest");
 const { stagePublicMediaManifest, markPublicMediaManifestReady } = require("../../functions/lib/public-media-manifest-store");
@@ -90,7 +91,10 @@ function assertFrozenInput(input, identity) {
 }
 function batchReservation(batch, identity) {
   if (batch.status === "retired") {
-    preupload.assertDevPreuploadRetiredBatch(batch, identity.buildBatchId);
+    // A stale sweep or failed dispatch retires a reserved batch with its own receipt.
+    if (batch.retirementReceipt?.reason === FAILED_PUBLISH_RETIRED_REASON) {
+      assertPublicDeploymentFailedPublishRetiredBatch(batch, identity.buildBatchId);
+    } else preupload.assertDevPreuploadRetiredBatch(batch, identity.buildBatchId);
     const { retiredAt, retirementReceipt, ...original } = batch;
     return projectPublicBuildReservation({ ...original, status: "reserved" }, identity.buildBatchId);
   }
