@@ -35,12 +35,23 @@ export async function routePreviewSmokeAccess(context, origin, headers) {
       // Fetch one hop so Access credentials cannot follow a redirect.
       response = await route.fetch({ headers: { ...route.request().headers(), ...headers }, maxRedirects: 0 });
       await route.fulfill({ response });
-    } catch {
-      await route.abort().catch(() => {});
+    } catch (error) {
+      await route.abort(abortCode(error)).catch(() => {});
     } finally {
       await response?.dispose().catch(() => {});
     }
   });
+}
+
+// Keep the upstream failure class so the browser's requestfailed names it.
+export function abortCode(error) {
+  const text = String(error?.message ?? "");
+  if (/ENOTFOUND|EAI_AGAIN/.test(text)) return "namenotresolved";
+  if (/ECONNREFUSED/.test(text)) return "connectionrefused";
+  if (/ECONNRESET|socket hang up/.test(text)) return "connectionreset";
+  if (/EHOSTUNREACH|ENETUNREACH/.test(text)) return "addressunreachable";
+  if (/ETIMEDOUT|Timeout \d+ms exceeded/.test(text)) return "timedout";
+  return "failed";
 }
 
 class PreviewSmokeFailure extends Error {}

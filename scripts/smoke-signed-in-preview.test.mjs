@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { EventEmitter } from "node:events";
 import { test } from "node:test";
-import { checkSignedInPreview, previewSmokeSettings, routePreviewSmokeAccess } from "./smoke-signed-in-preview.mjs";
+import { abortCode, checkSignedInPreview, previewSmokeSettings, routePreviewSmokeAccess } from "./smoke-signed-in-preview.mjs";
 
 const credential = { email: "preview@example.org", password: "fixture-password" };
 const access = { "CF-Access-Client-Id": "preview.access", "CF-Access-Client-Secret": "fixture-secret" };
@@ -154,4 +154,20 @@ test("names the missing wait and what the preview tab showed", async () => {
   const receipt = await checkSignedInPreview(fixtureBrowser(settings, {
     sessionFailure: "net::ERR_FAILED https://secret.example/?token=x", noDocument: true, progress: "<b>draft title</b>" }), settings);
   assert.deepEqual([receipt.session, receipt.popup], [{ failed: "failed" }, { host: "about:blank", progress: null }]);
+});
+
+test("aborts a failed Access fetch with the upstream failure class", async () => {
+  assert.deepEqual(["getaddrinfo ENOTFOUND dev-preview.example.test", "connect ECONNREFUSED 192.0.2.1:443", "socket hang up",
+    "Timeout 30000ms exceeded.", "unable to verify the first certificate"].map(message => abortCode(new Error(message))),
+  ["namenotresolved", "connectionrefused", "connectionreset", "timedout", "failed"]);
+  await routePreviewSmokeAccess({ async route(_matches, handle) {
+    let aborted;
+    await handle({
+      request: () => ({ headers: () => ({}) }),
+      async fetch() { throw new Error("getaddrinfo ENOTFOUND dev-preview.example.test"); },
+      async fulfill() { assert.fail("A failed fetch is never fulfilled"); },
+      async abort(code) { aborted = code; },
+    });
+    assert.equal(aborted, "namenotresolved");
+  } }, env.CMS_DEV_PREVIEW_ORIGIN, access);
 });
