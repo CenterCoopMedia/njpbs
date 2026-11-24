@@ -87,9 +87,16 @@ export async function recordReaderCandidates({ firestore, binding, collect, rece
   return mount.readCmsReaderMountDescriptor({ firestore, environment: binding });
 }
 
+// GitHub drops a job output that contains any masked value, and the lines of a
+// multiline JSON secret mask "{" and "}"; the binding crosses jobs as base64.
+export const encodeBinding = selected => Buffer.from(JSON.stringify(selected)).toString("base64");
+
+export function decodeBinding(value) {
+  return value ? JSON.parse(Buffer.from(value, "base64").toString("utf8")) : null;
+}
+
 const binding = () => {
-  const value = process.env.CMS_READER_BINDING ?? "";
-  const parsed = value ? JSON.parse(value) : null;
+  const parsed = decodeBinding(process.env.CMS_READER_BINDING ?? "");
   if (!parsed || READER_KEYS.some(key => typeof parsed[key] !== "string")) fail("CMS_READER_BINDING is required");
   return parsed;
 };
@@ -121,7 +128,7 @@ async function main([command, component]) {
     }));
     // The bind and record steps run from the release source; refuse before any mutation if it predates them.
     if (selected && !existsSync("scripts/cms-reader-binding.mjs")) fail("This release source cannot keep the readers bound; deploy a source with scripts/cms-reader-binding.mjs");
-    appendFileSync(process.env.GITHUB_OUTPUT, `binding=${selected ? JSON.stringify(selected) : ""}\n`);
+    appendFileSync(process.env.GITHUB_OUTPUT, `binding=${selected ? encodeBinding(selected) : ""}\n`);
     console.log(selected ? `Readers bound to operation ${selected.CMS_READER_BRIDGE_OPERATION_ID}` : "No reader binding for this run");
   } else if (command === "bind" && component === "functions") {
     const path = `functions/.env.${target.projectId}`;

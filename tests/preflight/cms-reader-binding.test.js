@@ -2,7 +2,8 @@ import { readFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import { describe, expect, it, vi } from "vitest";
 import { parse } from "yaml";
-import { assertFirstApiAttempt, bindApiConfig, bindFunctionsDotenv, recordReaderCandidates, selectReaderBinding } from "../../scripts/cms-reader-binding.mjs";
+import { assertFirstApiAttempt, bindApiConfig, bindFunctionsDotenv, decodeBinding, encodeBinding, recordReaderCandidates,
+  selectReaderBinding } from "../../scripts/cms-reader-binding.mjs";
 import { cmsTarget } from "../../scripts/lib/cms-target.mjs";
 
 const require = createRequire(import.meta.url);
@@ -87,6 +88,13 @@ describe("CMS reader binding for an ordinary deploy", () => {
       ["commit", "functions"], ["commit", "cmsApi"]]);
     expect(calls[0][1]).toEqual({ component: "functions", ...mutation("functions"), runId: "45310500950", runAttempt: 2 });
     expect(calls[4][2]).toEqual({ adminSession: [1, 2] });
+  });
+
+  it("passes the binding between jobs without the braces a multiline secret masks", () => {
+    const binding = { CMS_READER_BRIDGE_ENABLED: "true", CMS_READER_BRIDGE_OPERATION_ID: "reader-dev-45330201062-1" };
+    expect(encodeBinding(binding)).not.toMatch(/[{}]/);
+    expect(decodeBinding(encodeBinding(binding))).toEqual(binding);
+    expect(decodeBinding("")).toBeNull();
   });
 
   it("refuses a failed-job rerun of a bound run's CMS API job", () => {
