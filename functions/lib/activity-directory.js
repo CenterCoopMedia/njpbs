@@ -208,6 +208,7 @@ const ACTIVITY_ACTION_LABELS = Object.freeze({
   "public-release.bootstrap-admission": "Public publishing admission updated",
   "public-release.dev-initialize-runtime": "Development public publishing runtime initialized",
   "public-release.dev-initialize-media-lifecycle": "Development public media lifecycle initialized",
+  "public-release.dev-runtime-repin": "Development public publishing runtime re-pinned",
   "public-release.dev-runtime-pause": "Development public publishing paused",
   "public-release.dev-pause-failed": "Development public publishing drain failed",
   "public-release.dev-pause-quiescent": "Development public publishing failures sealed",
