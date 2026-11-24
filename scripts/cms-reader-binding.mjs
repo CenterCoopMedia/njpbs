@@ -9,7 +9,7 @@
 //   proof keeps today's behavior and is only logged (CenterCoopMedia/njpbs#584).
 // After both receipts complete, the run records and verifies this run's
 // reader candidates, which the mount descriptor reads on every request.
-import { appendFileSync, readFileSync, writeFileSync } from "node:fs";
+import { appendFileSync, existsSync, readFileSync, writeFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import { pathToFileURL } from "node:url";
 import { cmsTarget } from "./lib/cms-target.mjs";
@@ -19,7 +19,16 @@ export const READER_KEYS = Object.freeze(["CMS_READER_BRIDGE_ENABLED", "CMS_READ
   "CMS_READER_BRIDGE_FUNCTIONS_CANDIDATE", "CMS_READER_BRIDGE_CMS_API_CANDIDATE"]);
 const fail = message => { throw new Error(message); };
 
-export async function selectReaderBinding({ env = process.env, target = cmsTarget(env), readLiveApiVars, readInstalledProof, log = console.log }) {
+export async function selectReaderBinding({ env = process.env, target = cmsTarget(env), readLiveApiVars, readInstalledProof,
+  readCompatibilityReceipts, log = console.log }) {
+  // Only a completed reader install may be kept bound; a first install keeps its separate authorization.
+  const { currentReader } = require("../functions/lib/cms-preview-pair.js");
+  const receipts = await readCompatibilityReceipts();
+  try { for (const component of ["functions", "cmsApi"]) currentReader(receipts[component], component); }
+  catch {
+    log("No completed reader install; this deploy leaves the readers unbound");
+    return null;
+  }
   if (target.environment === "development") {
     const { devReaderUpdateDeployment } = require("../functions/lib/dev-reader-deployment.js");
     return devReaderUpdateDeployment({ ...env, FIREBASE_PROJECT_ID: target.projectId, CMS_DEPLOYMENT_ENVIRONMENT: "development" });
@@ -62,8 +71,11 @@ export async function recordReaderCandidates({ firestore, binding, collect, rece
   const inputs = [];
   for (const component of ["functions", "cmsApi"]) {
     const input = candidateInput(component, (await firestore.doc(`cmsDeploymentReceipts/${component}`).get()).data(), binding);
-    await receipts.startCandidateReceipt(firestore, input);
-    await receipts.verifyCandidateReceipt(firestore, input, { collect });
+    // A rerun keeps the candidate an earlier attempt verified; the Worker was not redeployed for it.
+    if ((await receipts.candidateReceiptRef(firestore, input).get()).data()?.state !== "verified") {
+      await receipts.startCandidateReceipt(firestore, input);
+      await receipts.verifyCandidateReceipt(firestore, input, { collect });
+    }
     inputs.push(input);
   }
   for (const input of inputs) await receipts.commitLiveReaderReceipt(firestore, { ...input, supported: mount.SUPPORT }, { collect });
@@ -85,27 +97,37 @@ async function cloudflare(path) {
   return body.result;
 }
 
+async function liveApiVars(target) {
+  const version = (await cloudflare(`workers/scripts/${target.cmsApiWorker}/deployments`))?.deployments?.[0]?.versions?.[0]?.version_id;
+  if (!version) fail("The live CMS API version could not be read");
+  const bindings = (await cloudflare(`workers/scripts/${target.cmsApiWorker}/versions/${version}`))?.resources?.bindings ?? [];
+  return Object.fromEntries(bindings.filter(row => row.type === "plain_text" && READER_KEYS.includes(row.name)).map(row => [row.name, row.text]));
+}
+
 async function main([command, component]) {
   const target = cmsTarget();
   const { withFirestore } = await import("./cms-component-receipt.mjs");
   if (command === "select") {
     const selected = await withFirestore(firestore => selectReaderBinding({ target,
-      readLiveApiVars: async () => {
-        const version = (await cloudflare(`workers/scripts/${target.cmsApiWorker}/deployments`))?.deployments?.[0]?.versions?.[0]?.version_id;
-        if (!version) fail("The live CMS API version could not be read");
-        const bindings = (await cloudflare(`workers/scripts/${target.cmsApiWorker}/versions/${version}`))?.resources?.bindings ?? [];
-        return Object.fromEntries(bindings.filter(row => row.type === "plain_text" && READER_KEYS.includes(row.name)).map(row => [row.name, row.text]));
-      },
+      readLiveApiVars: () => liveApiVars(target),
       readInstalledProof: async operationId => (await firestore.doc(`cmsReaderBridgeInstalledProofs/${operationId}`).get()).exists,
+      readCompatibilityReceipts: async () => Object.fromEntries(await Promise.all(["functions", "cmsApi"].map(async component =>
+        [component, (await firestore.doc(`cmsReaderCompatibilityReceipts/${component}`).get()).data()]))),
     }));
+    // The bind and record steps run from the release source; refuse before any mutation if it predates them.
+    if (selected && !existsSync("scripts/cms-reader-binding.mjs")) fail("This release source cannot keep the readers bound; deploy a source with scripts/cms-reader-binding.mjs");
     appendFileSync(process.env.GITHUB_OUTPUT, `binding=${selected ? JSON.stringify(selected) : ""}\n`);
     console.log(selected ? `Readers bound to operation ${selected.CMS_READER_BRIDGE_OPERATION_ID}` : "No reader binding for this run");
   } else if (command === "bind" && component === "functions") {
     const path = `functions/.env.${target.projectId}`;
     writeFileSync(path, bindFunctionsDotenv(readFileSync(path, "utf8"), binding()));
   } else if (command === "bind" && component === "cmsApi") {
+    const selected = binding();
     const path = target.environment === "development" ? "cms-api/wrangler.dev.jsonc" : "cms-api/wrangler.jsonc";
-    writeFileSync(path, `${JSON.stringify(bindApiConfig(JSON.parse(readFileSync(path, "utf8")), binding()), null, 2)}\n`);
+    writeFileSync(path, `${JSON.stringify(bindApiConfig(JSON.parse(readFileSync(path, "utf8")), selected), null, 2)}\n`);
+    // A rerun finds this binding live already and keeps the verified Worker version.
+    const live = await liveApiVars(target);
+    appendFileSync(process.env.GITHUB_OUTPUT, `redeploy=${READER_KEYS.some(key => live[key] !== selected[key])}\n`);
   } else if (command === "record") {
     const selected = binding();
     const receipts = await import("./lib/cms-component-receipt.mjs");
