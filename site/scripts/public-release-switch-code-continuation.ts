@@ -96,7 +96,12 @@ export function createPublicReleaseSwitchCodeContinuation(options: Options): {
       }
       const initial = { schemaVersion: 2, kind: "switch-code-pending", operationId, pairDigest: hash(pair), scope: current.scope,
         sourceDigest: hash(current.source), lease: null, nextAttemptAt: 0, failures: 0, lastFailure: null };
-      const pending = row.exists ? owner.parseSwitchCodePending(row.data(), pair, current) : initial;
+      const stored = row.exists ? owner.parseSwitchCodePending(row.data(), pair, current) : initial;
+      // A row the removed work-failed branch parked re-enters this pass: its
+      // work now always has a next attempt. Delete when no stored pending row
+      // has lastFailure work-failed.
+      const pending = stored.nextAttemptAt === null && stored.lastFailure === "work-failed"
+        ? { ...stored, failures: 0, lastFailure: null, nextAttemptAt: 0 } : stored;
       if (pending.nextAttemptAt === null || pending.nextAttemptAt! > clock() || pending.lease && pending.lease.until > clock()) return null;
       const lease = { token: randomUUID(), until: clock() + 180_000 };
       transaction.set(ref, { ...pending, lease });

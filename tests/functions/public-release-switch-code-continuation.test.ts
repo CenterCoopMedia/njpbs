@@ -171,6 +171,12 @@ it("recovers a missed CODE wake through actual leased H, completed G and private
   expect(waiting).toMatchObject({ lease: null, failures: pendingBefore.failures, lastFailure: pendingBefore.lastFailure });
   expect(waiting.nextAttemptAt).toBeGreaterThan(0);
   expect((await task.ref.get()).data()).toMatchObject({ status: "failed", nextAttemptAt: null });
+  // A row the removed work-failed branch parked re-enters the normal pass, paced.
+  await pendingRef.set({ ...waiting, nextAttemptAt: null, failures: 3, lastFailure: "work-failed" });
+  await continuation.beforePoll!({});
+  const resumed = (await pendingRef.get()).data()!;
+  expect(resumed).toMatchObject({ lease: null, failures: 0, lastFailure: null });
+  expect(resumed.nextAttemptAt).toBeGreaterThan(0);
   // Restore the private failure fixture before exercising the real G owner.
   await task.ref.set(taskBefore); await pendingRef.set(pendingBefore);
   const staged = await stagedPublicReleasePairCompositeFixture({ ...fixture, taskId: task.id }, store);
