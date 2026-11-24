@@ -7,13 +7,13 @@
 //   gh run list --repo "$CANONICAL_GITHUB_REPOSITORY" --workflow cms-dev-publish.yml --status completed --limit 100 \
 //     --json databaseId --jq '.[].databaseId' | while read id; do
 //     [ "$(printf 'dev-code-refresh:%s' "$id" | sha256sum | cut -c1-20)" = "<queueId>" ] && echo "$id"; done
-// Fd 3 carries the development SDK credential and fd 4 a GitHub token, as for
-// settle-dev-preupload-failure.mjs. Production and active runs refuse.
+// Fd 3 carries the development SDK credential and fd 4 a GitHub token.
+// Production and active runs refuse.
 import { pathToFileURL } from "node:url";
 import { parseOperatorArgs, readOperatorPacket, assertOperatorSource, operatorRefused } from "./lib/public-release-operator-io.mjs";
 import { parseDevelopmentInstallSdkPacket, openDevelopmentInstallSdk } from "./lib/development-install-sdk.mjs";
 import { developmentInstallCredential, developmentInstallToken } from "./lib/development-install-credentials.mjs";
-import { devSettlementGithub } from "./lib/dev-preupload-provenance.mjs";
+import { devSettlementGithub } from "./lib/dev-settlement-github.mjs";
 import { repositoryIdentity } from "./lib/repository-identity.mjs";
 import protocol from "../functions/lib/public-release-pair.js";
 import { createHash } from "node:crypto";

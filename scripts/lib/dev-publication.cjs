@@ -22,7 +22,6 @@ const { recordCmsPublishArtifactInclusion, settleCmsPublishQueueFromPublicDeploy
   assertTerminalAlignment, terminalLease } = require("../../functions/lib/cms-public-deployment-writeback");
 const { STALE_PUBLISH_ERROR } = require("../../functions/lib/publish-reconcile");
 const preupload = require("../../functions/lib/dev-publication-preupload");
-const { publicReleaseDigest, exact } = require("../../functions/lib/public-release-pair");
 
 const PUBLICATION_TARGET = publicationTarget("development");
 const TARGET = Object.freeze({ environment: "development", projectId: "njpbs-site-dev",
@@ -105,73 +104,6 @@ function batchReservation(batch, identity) {
   else if (batch.status === "cancelled") assertPublicDeploymentCancelledBatch(batch, identity.buildBatchId);
   else assertPublicDeploymentLeaseBatch(batch, identity.buildBatchId);
   return projectPublicBuildReservation(batch, identity.buildBatchId);
-}
-
-// The operator proves the original Actions failure before calling this owner.
-// No absence-only or ordinary workflow cleanup path may invoke this settlement.
-// The one workflow exception is finishDevPublication's buildFailed case: the
-// fail step of the same run, after its build job failed or was cancelled and
-// before any upload, ends its own row through settleBuildQueue (#593).
-// settleKilledDevRefresh ends a run killed before that step the same way (#595).
-async function settleDevPreuploadFailure(db, request, { readOnly = false } = {}) {
-  assertDevDatabase(db);
-  preupload.parseDevPreuploadSettlement(request);
-  const { identity, generation, inputDigest, failure } = request;
-  if (hash(`dev-code-refresh:${failure.runId}`).slice(0, 20) !== identity.queueId) preupload.refuse();
-  const queueRef = db.doc(`cmsPublishQueue/${identity.queueId}`);
-  const batchRef = publicBuildBatchRef(db, identity.buildBatchId);
-  const receiptRef = batchRef.collection("retirements").doc("devPreupload");
-  await db.runTransaction(async transaction => {
-    const [legacy, queueRow, batchRow, candidate, inputRow, pointerRow, manifest, verification, receiptRow] = await transaction.getAll(
-      db.doc("system/devPublication"), queueRef, batchRef, publicWorkerCandidateRef(db, identity.buildBatchId),
-      inputRef(db, identity), publicDeploymentRef(db), batchRef.collection("manifests").doc("publicMedia"),
-      batchRef.collection("manifests").doc("publicMedia").collection("verifications").doc("complete"), receiptRef);
-    await require("../../functions/lib/public-release-writer-fence").assertNoReleaseWriterInTransaction({ firestore: db, transaction });
-    if (legacy.exists || !queueRow.exists || !batchRow.exists || !inputRow.exists || !pointerRow.exists ||
-        candidate.exists || manifest.exists || verification.exists) preupload.refuse();
-    const pointer = assertPublicDeploymentPointer(pointerRow.data());
-    if (pointer.state !== "idle") preupload.refuse();
-    const queue = queueRow.data(), batch = batchRow.data(), input = inputRow.data();
-    const runtime = queueRuntime(queue, identity);
-    assertPublicationOwner(batch, runtime);
-    assertFrozenInput(input, identity);
-    if (input.inputDigest !== inputDigest) preupload.refuse();
-    if (batch.status === "retired") {
-      preupload.assertDevPreuploadRetiredBatch(batch, identity.buildBatchId);
-      const receipt = batch.retirementReceipt;
-      const { preUploadFailureReceiptDigest, ...originalQueue } = queue;
-      if (!isDeepStrictEqual(receipt.request, request) || !receiptRow.exists ||
-          !isDeepStrictEqual(receiptRow.data(), { ...receipt, retiredAt: batch.retiredAt }) ||
-          queue.status !== "failed" || queue.error !== preupload.failureMessage(failure.code) ||
-          !isDeepStrictEqual(queue.completedAt, batch.retiredAt) || preUploadFailureReceiptDigest !== publicReleaseDigest(receipt) ||
-          receipt.originalQueueDigest !== publicReleaseDigest({ ...originalQueue, status: "pending", error: null, completedAt: null }) ||
-          receipt.originalInputDigest !== publicReleaseDigest(input)) preupload.refuse();
-      return;
-    }
-    if (readOnly || receiptRow.exists) preupload.refuse();
-    assertPublicDeploymentReservedBatch(batch, identity.buildBatchId);
-    exact(queue, ["status", "transport", "environment", "projectId", "triggeredBy", "triggeredByEmail", "triggeredAt",
-      "completedAt", "error", "changes", "runtime", "artifactBuild"]);
-    const reservation = projectPublicBuildReservation(batch, identity.buildBatchId);
-    if (queue.status !== "pending" || queue.triggeredBy !== "dev-code-refresh" || queue.triggeredByEmail !== null ||
-        queue.changes.length !== 0 || queue.completedAt !== null || queue.error !== null ||
-        batch.noBuildStaticInput !== undefined || reservation.generation !== generation || reservation.commitSha !== identity.commitSha ||
-        !isDeepStrictEqual(queue.artifactBuild, { buildBatchId: identity.buildBatchId, generation,
-          commitSha: identity.commitSha, cutoffAt: batch.cutoffAt }) ||
-        pointer.lastReservedGeneration < generation || pointer.activeGeneration === generation ||
-        pointer.newestEligibleGeneration === generation || pointer.newestEligibleBuildBatchId === identity.buildBatchId ||
-        !Number.isFinite(input.recordedAt?.toMillis?.()) || input.recordedAt.toMillis() < batch.reservedAt.toMillis() ||
-        input.recordedAt.toMillis() > Date.parse(failure.completedAt)) preupload.refuse();
-    const receipt = { schemaVersion: 1, reason: preupload.REASON, outcome: "failed_not_published", request,
-      requestDigest: publicReleaseDigest(request), originalQueueDigest: publicReleaseDigest(queue),
-      originalBatchDigest: publicReleaseDigest(batch), originalInputDigest: publicReleaseDigest(input) };
-    const retiredAt = FieldValue.serverTimestamp();
-    transaction.create(receiptRef, { ...receipt, retiredAt });
-    transaction.update(batchRef, { status: "retired", retiredAt, retirementReceipt: receipt });
-    transaction.update(queueRef, { status: "failed", error: preupload.failureMessage(failure.code), completedAt: retiredAt,
-      preUploadFailureReceiptDigest: publicReleaseDigest(receipt) });
-  }, readOnly ? { readOnly: true } : {});
-  return (await receiptRef.get()).data();
 }
 
 // The legacy journal is never drained, reset or adopted by the new adapter.
@@ -419,4 +351,4 @@ module.exports = {
   readDevPublication, reserveDevPublication, recordDevInputs, recordDevCandidate,
   assertDevPublicationUnreserved,
   acquireDevDeploymentLease, settleDevDeploymentOutcome, finishDevPublication, assertDevReconcileInputs,
-  prepareTimedOutDevReconciliation, settleDevPreuploadFailure, settleKilledDevRefresh };
+  prepareTimedOutDevReconciliation, settleKilledDevRefresh };
