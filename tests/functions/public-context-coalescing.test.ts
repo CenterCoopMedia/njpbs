@@ -480,7 +480,8 @@ it.each(["enqueue", "maintenance", "unqueued"])("bypasses withdrawn frozen backo
     latest = (await selected()).operationId;
     expect((await selected()).contextRevision).toBe(2);
     expect((await queue(1)).status).toBe("cancelled");
-    expect((await ref.get()).data()).toMatchObject({ nextAttemptAt: epoch + 600_000,
+    // The cancelled queue's failed preparation is superseded, so it keeps no retry time.
+    expect((await ref.get()).data()).toMatchObject({ status: "superseded", claim: null, nextAttemptAt: null,
       frozenContext: { withdrawalRevision: 0 }, reservation: { cutoffAt: firebaseAdminRuntime.Timestamp.fromMillis(epoch) } });
     expect((await db.doc(`cmsPublishQueue/${id(1)}/backgroundOutputs/listings`).get()).data())
       .toMatchObject({ status: "superseded", claim: null });
