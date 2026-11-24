@@ -561,6 +561,10 @@ describe("cms staging deploy surface", () => {
         expect(step.env.SA).toBe("${{ secrets.FIREBASE_SERVICE_ACCOUNT }}");
         expect(step.env.GOOGLE_APPLICATION_CREDENTIALS).toBe("${{ runner.temp }}/firebase-service-account.json");
         expect(step.run).not.toContain("GITHUB_ENV");
+      } else if (name === "admin-deploy" && step.name === "Recheck live renderer identity before Admin upload") {
+        // A dev run reads the dev renderer with dev credentials only, with no fallback to production secrets.
+        expect(step.env.CMS_PREVIEW_FIREBASE_ACCOUNT).toBe("${{ inputs.target == 'development' && secrets.CMS_DEV_PREVIEW_FIREBASE_ACCOUNT || inputs.target != 'development' && secrets.FIREBASE_SERVICE_ACCOUNT || '' }}");
+        expect(step.env.CLOUDFLARE_API_TOKEN).toBe("${{ inputs.target == 'development' && secrets.CLOUDFLARE_DEV_PREVIEW_RENDERER_TOKEN || inputs.target != 'development' && secrets.CLOUDFLARE_API_TOKEN || '' }}");
       } else {
         expect(step.env.CMS_PREVIEW_FIREBASE_ACCOUNT, step.name).toBe("${{ secrets.FIREBASE_SERVICE_ACCOUNT }}");
       }
