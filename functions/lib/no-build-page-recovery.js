@@ -14,7 +14,7 @@ const { readPageAuthorityInTransaction } = require("./no-build-page-serving");
 const { settleBuildQueue } = require("./publish-build-state");
 const { can, canEditContent } = require("./rbac");
 const { contentResourceSection } = require("./content-authorization");
-const { assertReadbackTarget, publicReadbackHeaders, withinDeadline, verifyPublicHtml, readPublicPostAfterRefresh } = require("./no-build-post-recovery");
+const { assertReadbackTarget, publicReadbackHeaders, withinDeadline, withinPublicRead, PUBLIC_READ_BUDGET_MS, verifyPublicHtml, readPublicPostAfterRefresh } = require("./no-build-post-recovery");
 
 const { readRenderedRecordSourceReceipt, assertRenderedRecordSourceBinding } = require("./no-build-page-source-binding");
 
@@ -161,6 +161,8 @@ async function recoverNoBuildHomeCatalog({ firestore, target, headers, fetchPubl
   if (now() >= deadline) return;
   headers = publicReadbackHeaders(target, headers);
   headers.set("cache-control", "no-cache");
+  // This opportunistic probe has no attempt to spend and runs again every
+  // minute. It must not hold the shared deadline while Home refreshes.
   const receipt = await withinDeadline(Math.min(10_000, deadline - now()), signal => readPublicPageReceipt({ state, target, headers, fetchPublic, signal }));
   if (now() >= deadline) return;
   await registerVerifiedHomeCatalog({ firestore, receipt });
@@ -198,7 +200,7 @@ async function preparePageConfirmation({ firestore, state, fetchPublic = fetch, 
   if (state.pageId === "home") await require("./no-build-post-recovery").purgePublicHome({ target, fetchPurge, purgeConfig });
   const scheduleCapture = state.visible && ["schedule", "live"].includes(state.pageId)
     ? await capturePageSchedule({ firestore, target, request: currentCodeRequest, now, deadline }) : undefined;
-  const receipt = await withinDeadline(Math.max(1, Math.min(10_000, deadline - now())),
+  const receipt = await withinPublicRead(Math.max(1, Math.min(PUBLIC_READ_BUDGET_MS, deadline - now())),
     signal => readPublicPageReceipt({ state, fetchPublic, signal, target, headers: readHeaders }));
   const records = state.visible ? await capturePageRenderContext({ firestore, state, rendererSha: receipt.rendererSha,
     target, scheduleCapture, now, deadline, currentCodeRequest }) : null;
@@ -320,6 +322,7 @@ async function recoverNoBuildPageDetail({ firestore, operationId, fetchPublic = 
     return owner.state;
   });
   if (!state) return;
+  let failed;
   try {
     const proof = await preparePageConfirmation({ firestore, state, fetchPublic, now, target,
       headers: readHeaders, currentCodeRequest, deadline, fetchPurge, purgeConfig });
@@ -333,11 +336,11 @@ async function recoverNoBuildPageDetail({ firestore, operationId, fetchPublic = 
         claim: null, nextAttemptAt: null, publicReceipt: proof.receipt }),
     });
     return;
-  } catch { /* The claimed attempt below records the failed public read. */ }
+  } catch (error) { failed = error; /* The claimed attempt below records the failed public read. */ }
   await firestore.runTransaction(async transaction => {
     const queue = (await transaction.get(queueRef)).data();
     if (queue?.claim !== claim || queue.status === "success" || queue.status === "cancelled") return;
-    transaction.update(queueRef, publicationFailure(queue, "page", now()));
+    transaction.update(queueRef, publicationFailure(queue, "page", now(), { error: failed, since: queue.createdAt }));
   });
 }
 
@@ -379,7 +382,7 @@ async function recoverNoBuildHomeRefresh({ firestore, fetchPublic = fetch, now =
   try {
     if (now() >= deadline) refuse("The Home confirmation deadline expired.");
     await require("./no-build-post-recovery").purgePublicHome({ target, fetchPurge, purgeConfig });
-    const receipt = await withinDeadline(Math.min(10_000, deadline - now()), signal => readPublicPageReceipt({ state, fetchPublic, signal, target, headers }));
+    const receipt = await withinPublicRead(Math.min(PUBLIC_READ_BUDGET_MS, deadline - now()), signal => readPublicPageReceipt({ state, fetchPublic, signal, target, headers }));
     const records = state.visible ? await capturePageRenderContext({ firestore, state,
       rendererSha: receipt.rendererSha, target, now, deadline, currentCodeRequest }) : null;
     await firestore.runTransaction(async transaction => {
@@ -416,11 +419,11 @@ async function recoverNoBuildHomeRefresh({ firestore, fetchPublic = fetch, now =
       transaction.update(firestore.doc("system/publicDeployment/noBuildPageOwners/home"), {
         homeRefresh: { ...current.homeRefresh, status: "verified" } });
     });
-  } catch {
+  } catch (error) {
     await firestore.runTransaction(async transaction => {
       const task = (await transaction.get(taskRef)).data();
       if (task?.claim !== claim || task.status === "verified" || task.status === "superseded") return;
-      transaction.update(taskRef, publicationFailure(task, "home", now()));
+      transaction.update(taskRef, publicationFailure(task, "home", now(), { error, since: task.createdAt }));
     });
   }
 }

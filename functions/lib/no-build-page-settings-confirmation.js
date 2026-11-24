@@ -13,7 +13,8 @@ const { readPageAuthorityInTransaction } = require("./no-build-page-serving");
 const { PUBLIC_PAGE_HTML_MAX_BYTES, readPublicPageReceipt, recoverNoBuildHomeCatalog } = require("./no-build-page-recovery");
 const { readNoBuildPageContextDecision } = require("./no-build-page-context-decision");
 const { projectPublishedCmsSettings } = require("./cms-settings-contract");
-const { assertReadbackTarget, publicReadbackHeaders, withinDeadline, verifyPublicHtml, readPublicPostAfterRefresh } = require("./no-build-post-recovery");
+const { assertReadbackTarget, publicReadbackHeaders, withinDeadline, REFRESH_PENDING, verifyPublicHtml, readPublicPostAfterRefresh } = require("./no-build-post-recovery");
+const { waitsForRefresh } = require("./background-output-attempt");
 const { postSettingsCoverage, readPostSettingsProof, readSettingsProofs } = require("./no-build-post-settings-confirmation");
 
 const { readRenderedRecordSourceReceipt, assertRecordSourceBinding, assertRenderedRecordSourceBinding } = require("./no-build-page-source-binding");
@@ -30,7 +31,8 @@ function unavailablePageConsumers(failures, log) {
     failures: failures.filter(failure => typeof failure.pageId === "string" && publicPageDefinition(failure.pageId))
       .slice(0, 8).map(({ pageId, error }) => ({ pageId, causes: confirmationErrorCauses(error) })),
   });
-  return { confirmed: false, missingPages, failureReason: { code: "page_readback_failed",
+  return { confirmed: false, missingPages, refreshPending: failures.every(failure => failure.error?.code === REFRESH_PENDING),
+    failureReason: { code: "page_readback_failed",
     causes: confirmationErrorCauses(failures[0].error, { includeSource: false }) } };
 }
 function requiredPages(rows, capability) {
@@ -191,6 +193,11 @@ async function readContextReceipt({ path, decision, target, headers, fetchPublic
   } finally { await response.body?.cancel().catch(() => {}); }
 }
 
+function refreshMayWait(queue, time) {
+  const started = queue.settingsRetryAt ?? queue.cardRetryAt ?? queue.recordRetryAt ?? queue.createdAt;
+  return waitsForRefresh({ code: REFRESH_PENDING }, started, time);
+}
+
 /** A subset never acknowledges the family. Committed and unowned frames use
  * current authority; Schedule/Live require their sealed packet capture. */
 async function confirmNoBuildPageSettings({ firestore, operationId, target, headers = {}, fetchPublic = fetch,
@@ -237,7 +244,9 @@ async function confirmNoBuildPageSettings({ firestore, operationId, target, head
   try {
     const outcome = await provePageConsumers({ firestore, operationId, queue, identity, target, headers, fetchPublic,
       now, deadline, currentCodeRequest, log, proof, fetchPurge, purgeConfig });
-    ({ waitingForInputs = false, continuingPosts = false, failureReason, ...result } = outcome);
+    let refreshPending;
+    ({ waitingForInputs = false, continuingPosts = false, refreshPending = false, failureReason, ...result } = outcome);
+    if (refreshPending) waitingForInputs ||= refreshMayWait(queue, now());
     if (!result.confirmed && !continuingPosts) {
       const missingPageCount = result.missingPages?.length ?? 0;
       const missingPostCount = result.missingPosts?.length ?? 0;
@@ -248,6 +257,7 @@ async function confirmNoBuildPageSettings({ firestore, operationId, target, head
     return result;
   } catch (error) {
     log.warn("Page consumer confirmation refused", { operationId, causes: confirmationErrorCauses(error) });
+    if (error?.code === REFRESH_PENDING) waitingForInputs = refreshMayWait(queue, now());
     failureReason = { code: "confirmation_error", causes: confirmationErrorCauses(error, { includeSource: false }) };
     throw error;
   } finally {

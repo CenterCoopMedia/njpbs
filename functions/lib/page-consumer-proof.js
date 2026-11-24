@@ -20,6 +20,7 @@ async function claimPageConsumerProof({ firestore, operationId, identity, now, d
   const queueRef = firestore.doc(`cmsPublishQueue/${operationId}`);
   const ref = queueRef.collection("confirmation").doc("page-consumers");
   const claim = randomUUID();
+  let lost = null;
   const acquired = await firestore.runTransaction(async transaction => {
     const [queueRow, proofRow, deployment, context] = await transaction.getAll(queueRef, ref,
       firestore.doc("system/publicDeployment"), firestore.doc(PUBLIC_CONTEXT_PATH));
@@ -43,6 +44,8 @@ async function claimPageConsumerProof({ firestore, operationId, identity, now, d
       return { exhausted: true };
     }
     if (prior?.nextAttemptAt > time) return null;
+    // A killed process cannot record its own end. Name it at the next claim.
+    if (prior?.status === "running") lost = prior.attempts;
     const attempts = (prior?.attempts ?? 0) + 1;
     const leaseUntil = Math.max(time + LEASE_MS, deadline + 5_000);
     const postCheckpoint = prior?.postCheckpoint;
@@ -59,6 +62,7 @@ async function claimPageConsumerProof({ firestore, operationId, identity, now, d
     log.warn("Page consumer confirmation skipped for stale context", { operationId, contextRevision: identity.contextRevision });
     return null;
   }
+  if (lost !== null) log.warn("Page consumer confirmation attempt ended without a record", { operationId, attempts: lost });
   let postCheckpoint;
   return {
     postCheckpoint: acquired.postCheckpoint,

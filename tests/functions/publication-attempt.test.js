@@ -55,3 +55,13 @@ it("limits slow transient retries and longer leases to their original background
   expect(policy.publicationAttempt(row, "postProof", 600_000)).toBeNull();
   expect(policy.publicationAttempt({ ...row, transport: "post-no-build-v1" }, "post", 600_000)).toBeNull();
 });
+
+it("spends no attempt while a route reports its own refresh, within the queue's bound", () => {
+  const now = 10_000_000, row = { status: "pending", attempts: 4 };
+  const error = Object.assign(new Error("Public Post confirmation timed out"), { code: "public_refresh_pending" });
+  const at = age => ({ toMillis: () => now - age });
+  expect(policy.publicationFailure(row, "post", now, { error, since: at(60_000) })).toMatchObject({ status: "pending", attempts: 3, nextAttemptAt: now + 60_000 });
+  expect(policy.publicationFailure(row, "post", now, { error, since: at(30 * 60_000) })).toMatchObject({ status: "failed", nextAttemptAt: null });
+  expect(policy.publicationFailure(row, "post", now, { error, since: undefined })).toMatchObject({ status: "failed" });
+  expect(policy.publicationFailure(row, "post", now, { error: new Error("receipt"), since: at(0) })).toMatchObject({ status: "failed" });
+});

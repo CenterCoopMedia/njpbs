@@ -34,7 +34,17 @@ function publicationClaim(row, claim, now, leaseMs = 60_000) {
   return { claim, attempts: (row.attempts ?? 0) + 1, nextAttemptAt: now + leaseMs };
 }
 
-function publicationFailure(row, family, now) {
+// A route that still reports its own refresh has not refused this publication.
+// Its wait spends no attempt, within a bound from the queue's own timestamp.
+const REFRESH_WAIT_MS = 30 * 60_000;
+function waitsForRefresh(error, since, now) {
+  const started = since?.toMillis?.() ?? null;
+  return error?.code === "public_refresh_pending" && Number.isFinite(started) && now - started < REFRESH_WAIT_MS;
+}
+
+function publicationFailure(row, family, now, { error, since } = {}) {
+  if (waitsForRefresh(error, since, now)) return { status: family === "postProof" ? "failed" : "pending", claim: null,
+    attempts: row.attempts - 1, nextAttemptAt: now + 60_000, error: families[family].error };
   const exhausted = row.attempts >= 4;
   return { status: exhausted || ["background", "postProof"].includes(family) ? "failed" : "pending", claim: null,
     nextAttemptAt: exhausted ? null : now + 60_000 * 2 ** (row.attempts - 1), error: families[family].error };
@@ -65,5 +75,5 @@ function expiredBackgroundClaim(task, time) {
     Number.isFinite(task.nextAttemptAt) && task.nextAttemptAt <= time;
 }
 
-module.exports = { publicationAttempt, publicationClaim, publicationFailure, publicationRetry,
+module.exports = { waitsForRefresh, publicationAttempt, publicationClaim, publicationFailure, publicationRetry,
   SLOW_RETRY_MS, FAILURE_CLASSES, backgroundFailure, slowBackgroundRetryDue, expiredBackgroundClaim };

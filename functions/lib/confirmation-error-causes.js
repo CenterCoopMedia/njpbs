@@ -13,7 +13,7 @@ function confirmationErrorCauses(error, { includeSource = true } = {}) {
     }
     const names = ["Error", "TypeError", "RangeError", "SyntaxError", "AbortError", "TimeoutError", "FirebaseError", "GoogleError"];
     const codes = ["permission-denied", "failed-precondition", "unavailable", "not-found", "deadline-exceeded",
-      "record_publication_unavailable", "record_publication_replaced", "settings_publication_unavailable",
+      "public_refresh_pending", "record_publication_unavailable", "record_publication_replaced", "settings_publication_unavailable",
       "storage/unauthorized", "storage/object-not-found", "ETIMEDOUT", "ECONNRESET", "ENOTFOUND", "EACCES"];
     // A multiline message can contain text shaped like a local stack frame.
     const header = `${current?.name}: ${current?.message}`, stack = includeSource ? current?.stack : null;

@@ -8,7 +8,7 @@ const { readNoBuildPostDecisionInTransaction } = require("./no-build-post-public
 const { joinedRecordIds } = require("./joined-records");
 const { contentLink } = require("./content-link");
 const { readPublicContextRevisionInTransaction, publicContextDigest } = require("./public-context-revision");
-const { withinDeadline, verifyPublicHtml, readPublicPostAfterRefresh } = require("./no-build-post-recovery");
+const { withinPublicRead, REFRESH_PENDING, verifyPublicHtml, readPublicPostAfterRefresh } = require("./no-build-post-recovery");
 
 const { readSettingsInputs } = require("./settings-proof-transaction");
 
@@ -118,24 +118,42 @@ async function readPostSettingsReceipt({ entry, target, headers, fetchPublic, si
   } finally { await response.body?.cancel().catch(() => {}); }
 }
 
-/** Bound concurrent public reads and header/body time together. Every batch
- * must finish; a rejected or timed-out detail cannot acknowledge a subset. */
+/** Bound concurrent public reads and header/body time together. Every read
+ * must finish; a rejected or timed-out detail cannot acknowledge a subset. A
+ * route that keeps refreshing waits beside the next batches, not before them. */
 async function readSettingsProofs(values, read, { deadline, now, onFailure = undefined }) {
-  const results = [];
-  for (let offset = 0; offset < values.length; offset += PROOF_BATCH_SIZE) {
-    if (now() >= deadline) throw new Error("Settings consumer confirmation timed out");
-    const batch = await Promise.allSettled(values.slice(offset, offset + PROOF_BATCH_SIZE).map(async value => {
-      try { return await withinDeadline(Math.min(PROOF_READ_TIMEOUT_MS, deadline - now()), signal => read(value, signal)); }
-      catch (error) {
-        if (!onFailure) throw error;
-        return onFailure(value, error);
-      }
-    }));
-    const failed = batch.find(result => result.status === "rejected");
+  const results = [], slow = [];
+  const stop = new AbortController();
+  let refreshing = false;
+  const attempt = async (value, index, park) => {
+    try {
+      results[index] = await withinPublicRead(deadline - now(), signal => read(value, signal), { onSlowRefresh: park, stop: stop.signal });
+    } catch (error) {
+      refreshing ||= error?.code === REFRESH_PENDING;
+      if (!onFailure) throw error;
+      results[index] = await onFailure(value, error);
+    }
+  };
+  const settle = async reads => {
+    const failed = (await Promise.allSettled(reads)).find(result => result.status === "rejected");
     if (failed) throw failed.reason;
-    results.push(...batch.map(result => result.value));
-  }
-  return results;
+  };
+  try {
+    for (let offset = 0; offset < values.length; offset += PROOF_BATCH_SIZE) {
+      if (now() >= deadline) {
+        throw Object.assign(new Error("Settings consumer confirmation timed out"), refreshing ? { code: REFRESH_PENDING } : {});
+      }
+      await settle(values.slice(offset, offset + PROOF_BATCH_SIZE).map((value, index) => {
+        let park;
+        const parked = new Promise(resolve => { park = resolve; });
+        const done = attempt(value, offset + index, () => { slow.push(done); park(); });
+        done.catch(() => {});
+        return Promise.race([done, parked]);
+      }));
+    }
+    await settle(slow);
+    return results;
+  } finally { stop.abort(); }
 }
 
 /** Cover an ordered prefix of one exact roster. A wake can lose its unfinished

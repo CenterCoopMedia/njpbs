@@ -9,7 +9,7 @@ const { settleBuildQueueInTransaction } = require("./publish-build-state");
 const { readNoBuildPageOwner } = require("./no-build-page-ownership");
 const { readNoBuildPostOwner } = require("./no-build-post-ownership");
 const { preparePageConfirmation, assertPageQueue } = require("./no-build-page-recovery");
-const { assertReadbackTarget, publicReadbackHeaders, withinDeadline,
+const { assertReadbackTarget, publicReadbackHeaders, withinPublicRead, PUBLIC_READ_BUDGET_MS,
   readPublicPostReceipt, assertCurrentPostReceipt } = require("./no-build-post-recovery");
 
 const PAGE = "page-no-build-v1", POST = "post-no-build-v1";
@@ -79,7 +79,7 @@ async function readRecheck({ firestore, transaction, queueId, actor, allowContex
 async function preparePostConfirmation({ firestore, state, target, headers = {}, fetchPublic = fetch }) {
   target = assertReadbackTarget(firestore, target);
   const readHeaders = publicReadbackHeaders(target, headers);
-  const receipt = await withinDeadline(10_000, signal => readPublicPostReceipt(state, fetchPublic, signal, target, readHeaders));
+  const receipt = await withinPublicRead(PUBLIC_READ_BUDGET_MS, signal => readPublicPostReceipt(state, fetchPublic, signal, target, readHeaders));
   return { receipt, preflight: ({ transaction }) => assertCurrentPostReceipt(firestore, transaction, state, receipt) };
 }
 

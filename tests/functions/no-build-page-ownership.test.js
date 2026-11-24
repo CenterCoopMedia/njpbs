@@ -1,9 +1,9 @@
 import { createRequire } from "node:module";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 const require = createRequire(import.meta.url);
 const ownership = require("../../functions/lib/no-build-page-ownership.js");
 const recovery = require("../../functions/lib/no-build-page-recovery.js");
-const { withinDeadline } = require("../../functions/lib/no-build-post-recovery.js");
+const { withinDeadline, withinPublicRead, readPublicPostAfterRefresh } = require("../../functions/lib/no-build-post-recovery.js");
 const compatibility = require("../../functions/lib/data-figure-compatibility.js");
 const sha = "a".repeat(40);
 const operationId = "A".repeat(20);
@@ -22,6 +22,37 @@ it.each(["r2-last-good", "assets"])("bounds a permanently pending %s Page by the
     } }))).rejects.toThrow("Public Post confirmation timed out");
   expect(reads).toBe(1);
   expect(cancelled).toBe(true);
+});
+
+describe("public read progress", () => {
+  const pending = () => new Response("Pending", { headers: { "x-njpbs-publication-refresh": "pending", "retry-after": "1" } });
+  const updating = () => new Response("Content is being updated.", { status: 503, headers: { "retry-after": "1" } });
+  const read = (answers, milliseconds, options) => withinPublicRead(milliseconds, signal =>
+    readPublicPostAfterRefresh("https://example.test/", async () => (answers.shift() ?? pending)(), signal, {}, options));
+  const timed = async work => {
+    vi.useFakeTimers();
+    try { return await work(); } finally { vi.useRealTimers(); }
+  };
+  it("counts each pending answer as progress past the stall limit", () => timed(async () => {
+    const result = read([...Array(14).fill(pending), () => new Response("ready")], 45_000);
+    await vi.advanceTimersByTimeAsync(14_000);
+    expect((await result).status).toBe(200);
+  }));
+  it("separates a stalled GET from a route still refreshing at the deadline", () => timed(async () => {
+    const stalled = withinPublicRead(45_000, () => new Promise(() => {})).catch(error => error);
+    const refreshing = read([], 12_000).catch(error => error);
+    await vi.advanceTimersByTimeAsync(12_000);
+    expect(await stalled).toMatchObject({ message: "Public Post confirmation timed out" });
+    expect((await stalled).code).toBeUndefined();
+    expect(await refreshing).toMatchObject({ code: "public_refresh_pending" });
+  }));
+  it("waits through the reader's own updating answer unless 503 is a final answer", () => timed(async () => {
+    const waited = read([updating, () => new Response("ready")], 45_000);
+    await vi.advanceTimersByTimeAsync(1_000);
+    expect((await waited).status).toBe(200);
+    expect((await read([updating], 45_000, { updatingIsPending: false })).status).toBe(503);
+    expect((await read([() => new Response("", { status: 503, headers: { "retry-after": "1", "x-njpbs-content-source": "assets" } })], 45_000)).status).toBe(503);
+  }));
 });
 
 describe("retained Page owner contract", () => {

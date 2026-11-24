@@ -51,6 +51,39 @@ async function withinDeadline(milliseconds, work) {
   finally { clearTimeout(timer); controller.abort(); }
 }
 
+const PUBLIC_READ_STALL_MS = 10_000;
+const PUBLIC_READ_BUDGET_MS = 45_000;
+const REFRESH_PENDING = "public_refresh_pending";
+const refreshProgress = new WeakMap();
+
+// One public read. Each GET has ten seconds for its headers and body. A valid
+// refresh-pending answer is progress: it restarts that limit until the caller's
+// deadline. A route still refreshing at the deadline is distinct from a stall.
+async function withinPublicRead(milliseconds, work, { onSlowRefresh, stop } = {}) {
+  const controller = new AbortController();
+  let stall, end, refreshing = false;
+  const slowAt = Date.now() + PUBLIC_READ_STALL_MS;
+  let cancel;
+  const limit = new Promise((resolve, reject) => {
+    const fail = code => {
+      controller.abort();
+      reject(Object.assign(new Error("Public Post confirmation timed out"), code ? { code } : {}));
+    };
+    const arm = () => { clearTimeout(stall); stall = setTimeout(() => fail(), PUBLIC_READ_STALL_MS); };
+    refreshProgress.set(controller.signal, () => {
+      refreshing = true;
+      arm();
+      if (Date.now() >= slowAt) onSlowRefresh?.();
+    });
+    cancel = () => fail();
+    stop?.addEventListener("abort", cancel, { once: true });
+    end = setTimeout(() => fail(refreshing ? REFRESH_PENDING : null), milliseconds);
+    arm();
+  });
+  try { return await Promise.race([work(controller.signal), limit]); }
+  finally { clearTimeout(stall); clearTimeout(end); stop?.removeEventListener("abort", cancel); controller.abort(); }
+}
+
 async function purgePostRoutes(state, config, fetchImpl, target) {
   const routes = [...new Set(state.ownedSlugs.map(slug => publicationPostCacheTag(target, slug)))];
   if (!routes.length || routes.length > 100 || !state.ownedSlugs.includes(state.slug)) throw new Error("Invalid Post purge routes");
@@ -84,16 +117,25 @@ async function purgePublicHome({ target, fetchPurge = fetch, purgeConfig } = {})
   await purgePublicCacheTags([publicationPostCacheTag(target, "background")], config, fetchPurge);
 }
 
-async function readPublicPostAfterRefresh(url, fetchPublic, signal, headers) {
+// The Post reader's own "retry in one second" answer while its authority
+// refreshes. It carries no receipt, unlike a withdrawal or renderer refusal.
+function isUpdatingAnswer(response) {
+  return response.status === 503 && response.headers.get("retry-after") === "1" &&
+    ![...response.headers.keys()].some(name => name.startsWith("x-njpbs-"));
+}
+
+async function readPublicPostAfterRefresh(url, fetchPublic, signal, headers, { updatingIsPending = true } = {}) {
   headers = new Headers(headers);
   while (!signal.aborted) {
     const response = await fetchPublic(url, {
       method: "GET", redirect: "manual", signal, ...(headers.keys().next().done ? {} : { headers }),
     });
-    if (response.headers.get("x-njpbs-publication-refresh") !== "pending" || response.headers.get("retry-after") !== "1") return response;
+    const pending = response.headers.get("x-njpbs-publication-refresh") === "pending" && response.headers.get("retry-after") === "1";
+    if (!pending && !(updatingIsPending && isUpdatingAnswer(response))) return response;
     await response.body?.cancel();
-    // Public reads return Assets while their edge refresh runs. This polling is
-    // inside the existing ten-second deadline and retains the same operation.
+    // Public reads return Assets while their edge refresh runs. Each pending
+    // answer restarts the caller's stall limit and retains the same operation.
+    refreshProgress.get(signal)?.();
     await delay(1_000, undefined, { signal });
   }
   throw new Error("Public Post confirmation timed out");
@@ -206,11 +248,12 @@ async function settleServedPost({ firestore, state, claim, purgeReceipt, now }) 
   });
 }
 
-async function verifyServedPost({ firestore, state, claim, fetchPublic, target, readHeaders, now }) {
+async function verifyServedPost({ firestore, state, claim, fetchPublic, target, readHeaders, now, readDeadline }) {
   const queueRef = firestore.doc(`cmsPublishQueue/${state.operationId}`);
   const postRef = firestore.doc(`cmsPosts/${state.postId}`);
+  let failed;
   try {
-    const receipt = await withinDeadline(10_000, signal => readPublicPostReceipt(state, fetchPublic, signal, target, readHeaders));
+    const receipt = await withinPublicRead(readDeadline - now(), signal => readPublicPostReceipt(state, fetchPublic, signal, target, readHeaders));
     await firestore.runTransaction(async transaction => {
       const queue = (await transaction.get(queueRef)).data();
       const document = (await transaction.get(postRef)).data();
@@ -223,12 +266,12 @@ async function verifyServedPost({ firestore, state, claim, fetchPublic, target, 
       }
     });
     return;
-  } catch { /* Preserve successful publication while retrying its separate proof. */ }
+  } catch (error) { failed = error; /* Preserve successful publication while retrying its separate proof. */ }
   await firestore.runTransaction(async transaction => {
     const queue = (await transaction.get(queueRef)).data();
     const document = (await transaction.get(postRef)).data();
     if (queue?.status !== "success" || queue.postProof?.claim !== claim) return;
-    const failure = publicationFailure(queue.postProof, "postProof", now());
+    const failure = publicationFailure(queue.postProof, "postProof", now(), { error: failed, since: queue.completedAt });
     const resourceError = document?.published?.sourceVersion === state.sourceVersion
       ? publishedBlockResourceError(document.published.blocks ?? [], "/posts/") : null;
     if (resourceError) failure.error = resourceError;
@@ -242,7 +285,8 @@ async function verifyServedPost({ firestore, state, claim, fetchPublic, target, 
 // Publication and its later proof keep independent bounded retries under the
 // same queue. A lost process after success cannot leave the proof unowned.
 async function recoverNoBuildPostDetail({ firestore, fetchPublic = fetch, fetchPurge = fetch, purgeConfig,
-  operationId, now = Date.now, target = publicationTarget(process.env.CMS_DEPLOYMENT_ENVIRONMENT ?? "production"), headers = {} }) {
+  operationId, now = Date.now, target = publicationTarget(process.env.CMS_DEPLOYMENT_ENVIRONMENT ?? "production"), headers = {},
+  readDeadline = now() + PUBLIC_READ_BUDGET_MS }) {
   target = assertReadbackTarget(firestore, target);
   const readHeaders = publicReadbackHeaders(target, headers);
   if (!operationId) {
@@ -280,7 +324,7 @@ async function recoverNoBuildPostDetail({ firestore, fetchPublic = fetch, fetchP
     const ordered = [...due].sort(([leftId, leftTime], [rightId, rightTime]) => leftTime - rightTime || leftId.localeCompare(rightId));
     for (let offset = 0; offset < ordered.length && now() < deadline; offset += 4) {
       await Promise.all(ordered.slice(offset, offset + 4).map(([operationId]) => recoverNoBuildPostDetail({ firestore, fetchPublic, fetchPurge, purgeConfig,
-        operationId, now, target, headers: readHeaders })));
+        operationId, now, target, headers: readHeaders, readDeadline: deadline + PUBLIC_READ_STALL_MS })));
     }
     for (const { state } of activeOwners) {
       if (now() >= deadline) break;
@@ -332,17 +376,17 @@ async function recoverNoBuildPostDetail({ firestore, fetchPublic = fetch, fetchP
   });
   if (!acquired) return;
   if (acquired === "exhausted") return;
-  if (acquired === "proof") return verifyServedPost({ firestore, state, claim, fetchPublic, target, readHeaders, now });
-  let receipt = null;
+  if (acquired === "proof") return verifyServedPost({ firestore, state, claim, fetchPublic, target, readHeaders, now, readDeadline });
+  let receipt = null, failed;
   try {
     const purgeReceipt = await purgePostRoutes(state, purgeConfig, fetchPurge, target);
     if (state.visible) {
       if (await settleServedPost({ firestore, state, claim, purgeReceipt, now })) {
-        await verifyServedPost({ firestore, state, claim, fetchPublic, target, readHeaders, now });
+        await verifyServedPost({ firestore, state, claim, fetchPublic, target, readHeaders, now, readDeadline });
       }
       return;
     }
-    receipt = await withinDeadline(10_000, signal => readPublicPostReceipt(state, fetchPublic, signal, target, readHeaders));
+    receipt = await withinPublicRead(readDeadline - now(), signal => readPublicPostReceipt(state, fetchPublic, signal, target, readHeaders));
     await settleBuildQueue(firestore, { queueId: state.operationId, status: "success",
       acceptQueue: queue => queue.transport === TRANSPORT && queue.claim === claim,
       preflight: ({ transaction }) => assertCurrentPostReceipt(firestore, transaction, state, receipt),
@@ -350,11 +394,11 @@ async function recoverNoBuildPostDetail({ firestore, fetchPublic = fetch, fetchP
         claim: null, nextAttemptAt: null, publicReceipt: receipt, purgeReceipt },
     });
     return;
-  } catch { /* A fixed durable refusal retains the exact operation. */ }
+  } catch (error) { failed = error; /* A fixed durable refusal retains the exact operation. */ }
   await firestore.runTransaction(async transaction => {
     const queue = (await transaction.get(queueRef)).data();
     if (queue?.claim !== claim || queue.status === "success") return;
-    transaction.update(queueRef, publicationFailure(queue, "post", now()));
+    transaction.update(queueRef, publicationFailure(queue, "post", now(), { error: failed, since: queue.createdAt }));
   });
 }
 
@@ -432,8 +476,9 @@ async function judgeCandidateAnswer({ url, fetchPublic, headers, candidate, prev
   const previous = previousRendererSha && previousRendererSha !== candidate.commitSha ? previousRendererSha : null;
   const backstop = rollout.now() + rollout.backstopMs;
   // Read the body inside the deadline; the deadline aborts the request when it settles.
-  while (await withinDeadline(10_000, async signal => {
-    const response = await readPublicPostAfterRefresh(url, fetchPublic, signal, new Headers(headers));
+  while (await withinPublicRead(backstop - rollout.now(), async signal => {
+    // A disabled reader's 503 is an expected final answer here.
+    const response = await readPublicPostAfterRefresh(url, fetchPublic, signal, new Headers(headers), { updatingIsPending: false });
     if (previous && response.headers.get("x-njpbs-renderer-sha") === previous) {
       await response.body?.cancel();
       return true;
@@ -535,4 +580,4 @@ async function verifyNoBuildPostPublicRoute({ firestore, candidate, fetchPublic 
 }
 module.exports = { purgePublicHome, recoverNoBuildPostDetail, existingNoBuildPostPublication, verifyNoBuildPostPublicRoute,
   assertCurrentPostReceipt, assertReadbackTarget, publicReadbackHeaders, readPublicPostAfterRefresh, readPublicPostReceipt,
-  withinDeadline, verifyPublicHtml, verifyOwnedPostRoutes };
+  withinDeadline, withinPublicRead, PUBLIC_READ_BUDGET_MS, REFRESH_PENDING, verifyPublicHtml, verifyOwnedPostRoutes };

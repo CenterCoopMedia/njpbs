@@ -1264,7 +1264,7 @@ it("refuses when the shared public readback reaches its deadline", async () => {
   } finally { vi.useRealTimers(); }
 });
 
-it("reports a timed-out pending Page and continues the next settings proof batch", async () => {
+it("waits for a refreshing Page beside the next settings proof batch and reports it as pending", async () => {
   vi.useFakeTimers();
   try {
     const entries = Array.from({ length: 9 }, (_, index) => ({ pageId: index === 0 ? "schedule" : `page-${index}` }));
@@ -1276,13 +1276,15 @@ it("reports a timed-out pending Page and continues the next settings proof batch
         fetchPublic: async () => new Response("Pending Schedule", { headers: {
           "x-njpbs-content-source": "assets", "x-njpbs-publication-refresh": "pending", "retry-after": "1" } }) });
     }, { now: Date.now, deadline: Date.now() + 45_000, onFailure(entry, error) {
-      failures.push({ pageId: entry.pageId, message: error.message });
+      failures.push({ pageId: entry.pageId, message: error.message, ...(error.code ? { code: error.code } : {}) });
       return { kind: "missing" };
     } });
-    await vi.advanceTimersByTimeAsync(10_000);
-    expect(await proof).toEqual([{ kind: "missing" }, ...Array.from({ length: 8 }, () => ({ kind: "page" }))]);
-    expect(failures).toEqual([{ pageId: "schedule", message: "Public Post confirmation timed out" }]);
+    await vi.advanceTimersByTimeAsync(12_000);
     expect(visited).toContain("page-8");
+    expect(failures).toEqual([]);
+    await vi.advanceTimersByTimeAsync(33_000);
+    expect(await proof).toEqual([{ kind: "missing" }, ...Array.from({ length: 8 }, () => ({ kind: "page" }))]);
+    expect(failures).toEqual([{ pageId: "schedule", message: "Public Post confirmation timed out", code: "public_refresh_pending" }]);
   } finally { vi.useRealTimers(); }
 });
 

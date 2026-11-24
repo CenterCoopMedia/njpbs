@@ -22,6 +22,12 @@ const ZONE_ID = defineString("CMS_MEDIA_CLOUDFLARE_ZONE_ID", { default: "" });
 const DEV_ACCESS_ID = DEVELOPMENT ? defineSecret("CMS_DEV_ACCESS_CLIENT_ID") : null;
 const DEV_ACCESS_SECRET = DEVELOPMENT ? defineSecret("CMS_DEV_ACCESS_CLIENT_SECRET") : null;
 const confirmationSecrets = [PURGE_TOKEN, CMS_EDGE_ORIGIN_SECRET, ...(DEVELOPMENT ? [DEV_ACCESS_ID, DEV_ACCESS_SECRET] : [])];
+// Coverage, 32 Pages and 109 Posts measured 77 to 110 s on development, before
+// the final transaction repeats coverage. Work ends before this limit, with
+// time left to record the attempt.
+const CONFIRMATION_TIMEOUT_SECONDS = 300;
+const CONFIRMATION_RESERVE_MS = 15_000;
+const confirmationDeadline = startedAt => startedAt + CONFIRMATION_TIMEOUT_SECONDS * 1_000 - CONFIRMATION_RESERVE_MS;
 const purgeConfigFn = () => ({ zoneId: ZONE_ID.value(), token: PURGE_TOKEN.value() });
 const readbackOptions = () => ({ target: publicationTarget(DEVELOPMENT ? "development" : "production"),
   headers: DEVELOPMENT ? { "cf-access-client-id": DEV_ACCESS_ID.value(), "cf-access-client-secret": DEV_ACCESS_SECRET.value() } : {} });
@@ -29,6 +35,7 @@ const readbackOptions = () => ({ target: publicationTarget(DEVELOPMENT ? "develo
 function createNoBuildPostConfirmationHandler(deps = {}) {
   const { firestore = db, config = purgeConfigFn, readback = readbackOptions, ...network } = deps;
   return async event => {
+    const startedAt = Date.now();
     const queue = event.data?.after.data();
     const before = event.data?.before?.data();
     if (queue?.transport === "public-context-no-build-v1" && before) {
@@ -59,7 +66,7 @@ function createNoBuildPostConfirmationHandler(deps = {}) {
       if (["pending", "publishing", "success"].includes(queue.status)) {
         // Context acceptance and settlement both give a bounded natural wake.
         // Catalog failure cannot make another owner's context job fail.
-        const deadline = Date.now() + 45_000;
+        const deadline = confirmationDeadline(startedAt);
         try { await recoverNoBuildHomeCatalog({ firestore, ...readback(), ...network, deadline }); } catch { /* Later context/recovery wake retries. */ }
         // A settings publication proves its Page and Home consumers on this
         // same wake. The minute scheduler remains the recovery path.
@@ -90,7 +97,7 @@ function createNoBuildPostConfirmationHandler(deps = {}) {
 // Acceptance and explicit retries wake detail confirmation independently of the
 // publisher's build lock. The same durable claim deduplicates delivered events.
 const onNoBuildPostConfirmation = onDocumentWritten({
-  document: "cmsPublishQueue/{queueId}", retry: true, timeoutSeconds: 60,
+  document: "cmsPublishQueue/{queueId}", retry: true, timeoutSeconds: CONFIRMATION_TIMEOUT_SECONDS,
   minInstances: 0, maxInstances: 2, concurrency: 4, secrets: confirmationSecrets,
 }, async event => {
   if (process.env.FUNCTIONS_EMULATOR === "true") return;
@@ -99,7 +106,7 @@ const onNoBuildPostConfirmation = onDocumentWritten({
 
 async function recoverNoBuildPublications({ firestore = db, config = purgeConfigFn, readback = readbackOptions,
   now = Date.now, log = logger, ...network } = {}) {
-  const deadline = now() + 45_000;
+  const deadline = confirmationDeadline(now());
   // Start each independent owner before another can spend the shared budget.
   const outcomes = await Promise.allSettled([
     recoverNoBuildPostDetail({ firestore, ...readback(), ...network, now, purgeConfig: config(), deadline }),
@@ -118,7 +125,7 @@ async function recoverNoBuildPublications({ firestore = db, config = purgeConfig
 
 
 const onNoBuildPostConfirmationRecovery = onSchedule({
-  schedule: "every 1 minutes", timeZone: "UTC", timeoutSeconds: 60,
+  schedule: "every 1 minutes", timeZone: "UTC", timeoutSeconds: CONFIRMATION_TIMEOUT_SECONDS,
   minInstances: 0, maxInstances: 1, concurrency: 1, retryCount: 0,
   secrets: DEVELOPMENT ? confirmationSecrets : [PURGE_TOKEN, CMS_EDGE_ORIGIN_SECRET, productionAlerts.TELEGRAM_BOT_TOKEN],
 }, async () => {
