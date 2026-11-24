@@ -39,7 +39,7 @@ function assertConfiguredAdmission(job: any, filename: string, inputs: Record<st
     CANONICAL_GITHUB_REPOSITORY_ID: "123456", CMS_DEPLOY_OWNER: "fixture-owner" };
   const admit = (changedGithub = {}, changedVars = {}) => runInNewContext(job.if, {
     github: { ...github, ...changedGithub }, vars: { ...vars, ...changedVars }, inputs,
-    format: (pattern: string, value: string) => pattern.replace("{0}", value),
+    format: (pattern: string, ...values: string[]) => pattern.replace(/\{(\d+)\}/g, (_, index) => values[Number(index)]),
   });
   expect(admit()).toBe(true);
   for (const patch of [{ event_name: "push" }, { ref: "refs/heads/feature" },
@@ -112,11 +112,13 @@ describe("deploy credential environments", () => {
         workflow_ref: "o/r/.github/workflows/promote.yml@refs/heads/main", triggering_actor: "a" },
       vars: { CANONICAL_GITHUB_REPOSITORY: "o/r", CANONICAL_GITHUB_REPOSITORY_ID: "1", CMS_DEPLOY_OWNER: "a" },
       inputs: target === undefined ? {} : { target },
-      format: (pattern: string, value: string) => pattern.replace("{0}", value),
+      format: (pattern: string, ...values: string[]) => pattern.replace(/\{(\d+)\}/g, (_, index) => values[Number(index)]),
     });
     // Exactly one job runs for each target.
     expect([admits(production, "production"), admits(development, "production")]).toEqual([true, false]);
     expect([admits(production, "development"), admits(development, "development")]).toEqual([false, true]);
+    // The release-run-site exception covers development only. Remove it when #632 merges.
+    expect(production.if).not.toContain("release-run-site");
     expect(development.permissions).toBeUndefined();
     const step = (job: Job, prefix: string) => job.steps.find(s => s.uses?.startsWith(prefix));
     expect(step(development, "actions/create-github-app-token@")?.with).toEqual(step(production, "actions/create-github-app-token@")?.with);
@@ -197,7 +199,19 @@ describe("deploy credential environments", () => {
       production: ["main"], "schedule-bake": ["main"], "publisher-image": ["main"], development: ["main"],
     });
     expect(environmentPolicy()["publisher-image"].secrets).toEqual(["CLOUDFLARE_PUBLISHER_IMAGE_TOKEN"]);
-    assertConfiguredAdmission(workflow("publisher-image").jobs.image, "publisher-image");
+    const image = workflow("publisher-image").jobs.image;
+    assertConfiguredAdmission(image, "publisher-image");
+    // No target other than development admits the release branch. Remove the exception when #632 merges.
+    const ref = "refs/heads/release-run-site";
+    for (const target of ["production", undefined]) {
+      expect(runInNewContext(image.if, {
+        github: { event_name: "workflow_dispatch", ref, repository_id: "1",
+          workflow_ref: `o/r/.github/workflows/publisher-image.yml@${ref}`, triggering_actor: "a" },
+        vars: { CANONICAL_GITHUB_REPOSITORY: "o/r", CANONICAL_GITHUB_REPOSITORY_ID: "1", CMS_DEPLOY_OWNER: "a" },
+        inputs: target === undefined ? {} : { target },
+        format: (pattern: string, ...values: string[]) => pattern.replace(/\{(\d+)\}/g, (_, index) => values[Number(index)]),
+      })).toBe(false);
+    }
   });
 
   for (const file of readdirSync(new URL("../../.github/workflows/", import.meta.url)).filter(file => /\.ya?ml$/.test(file))) {
