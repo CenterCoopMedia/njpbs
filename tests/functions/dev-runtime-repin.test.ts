@@ -82,11 +82,16 @@ it("accepts only explicit arguments with the credential on stdin", () => {
   expect(() => parseRepinArguments(args.slice(0, 8), {}, false)).toThrow("dev_repin_arguments_required");
 });
 
-it("accepts only the canonical GitHub origin", () => {
-  for (const url of ["https://github.com/CenterCoopMedia/njpbs.git", "https://github.com/CenterCoopMedia/njpbs",
-    "git@github.com:CenterCoopMedia/njpbs.git", "ssh://git@github.com/CenterCoopMedia/njpbs.git"]) expect(isCanonicalOrigin(url)).toBe(true);
-  for (const url of ["https://example.org/CenterCoopMedia/njpbs.git", "/tmp/CenterCoopMedia/njpbs.git",
-    "https://github.com/CenterCoopMedia/njpbs-fork.git", "https://github.com.evil/CenterCoopMedia/njpbs.git"]) expect(isCanonicalOrigin(url)).toBe(false);
+it("accepts only the configured canonical GitHub origin", () => {
+  const env = { CANONICAL_GITHUB_REPOSITORY: "example-org/site", CANONICAL_GITHUB_REPOSITORY_ID: "123" };
+  for (const url of ["https://github.com/example-org/site.git", "https://github.com/example-org/site",
+    "git@github.com:example-org/site.git", "ssh://git@github.com/example-org/site.git"]) expect(isCanonicalOrigin(url, env)).toBe(true);
+  for (const url of ["https://example.org/example-org/site.git", "/tmp/example-org/site.git",
+    "https://github.com/example-org/site-fork.git", "https://github.com.evil/example-org/site.git",
+    "https://github.com/other-org/site.git"]) expect(isCanonicalOrigin(url, env)).toBe(false);
+  // Without configured identity nothing is trusted.
+  expect(isCanonicalOrigin("https://github.com/example-org/site.git", {})).toBe(false);
+  expect(isCanonicalOrigin("https://github.com/example-org/site.git", { CANONICAL_GITHUB_REPOSITORY: "example-org/site" })).toBe(false);
 });
 
 it("refuses a checkout that is not the clean reviewed operator commit before reading a credential", () => {

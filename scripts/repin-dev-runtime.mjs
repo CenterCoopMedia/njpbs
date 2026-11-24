@@ -4,7 +4,9 @@
 //   --operator-commit <reviewed main sha> --operation-id <id> --from <runtime sha> --to <pointer sha> (--apply | --read)
 // Development only: the owner refuses any other project. Before the owner loads or the credential
 // is read, the checkout must be the clean canonical repository at a reviewed commit on origin/main.
+// CANONICAL_GITHUB_REPOSITORY and CANONICAL_GITHUB_REPOSITORY_ID name that repository.
 import { assertDevelopmentSource } from "./render-development-config.mjs";
+import { repositoryMatches } from "./lib/repository-identity.mjs";
 import { createRequire } from "node:module";
 import { execFileSync } from "node:child_process";
 import { fileURLToPath, pathToFileURL } from "node:url";
@@ -15,11 +17,15 @@ const AMBIENT = ["FIRESTORE_EMULATOR_HOST", "FIREBASE_AUTH_EMULATOR_HOST", "GOOG
 const SAFE_REFUSALS = new Set(["dev_repin_arguments_required", "dev_repin_explicit_stdin_required",
   "dev_repin_operator_source_refused", "dev_repin_target_not_on_main", "dev_operator_credential_required"]);
 const SHA = /^[a-f0-9]{40}$/;
-// The canonical GitHub repository only, over HTTPS or SSH; any other host or a local path refuses.
-const CANONICAL_ORIGIN = /^(?:https:\/\/github\.com\/|git@github\.com:|ssh:\/\/git@github\.com\/)CenterCoopMedia\/njpbs(?:\.git)?$/;
+// A github.com origin over HTTPS or SSH; any other host or a local path refuses.
+const GITHUB_ORIGIN = /^(?:https:\/\/github\.com\/|git@github\.com:|ssh:\/\/git@github\.com\/)([A-Za-z0-9-]+\/[A-Za-z0-9_.-]+?)(?:\.git)?$/;
 const refuse = code => { throw new Error(code); };
 
-export const isCanonicalOrigin = url => CANONICAL_ORIGIN.test(url);
+// The configured canonical repository is the trust anchor; missing configuration refuses.
+export function isCanonicalOrigin(url, env = process.env) {
+  const slug = GITHUB_ORIGIN.exec(url ?? "")?.[1];
+  return slug !== undefined && repositoryMatches(slug, env);
+}
 
 export function parseRepinArguments(args, env, isTTY) {
   const [flag0, operatorCommitSha, flag1, operationId, flag2, fromCommitSha, flag3, toCommitSha, mode] = args;
