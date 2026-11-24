@@ -43,8 +43,8 @@ const PUBLIC_ORIGIN = 'https://media.njpbs.org';
 const DEV_ORIGIN = 'https://dev-media.example.org';
 // The CMS deploy's page seed backfill writes these records in every project and
 // refuses any other shape, so the refresh leaves them to it. They are repository
-// assets, not source snapshot content: import and verify do not cover them, and
-// the backfill checks every one on each deploy that runs it.
+// assets: verify requires each referenced one in dev but, by design, does not
+// compare it with production's editable fields.
 const PAGE_SEED_IDS = new Set(PAGE_SEED_MEDIA.map(seed => seed.id));
 const MAX_OBJECT_BYTES = 25 * 1024 * 1024;
 const MAX_VIDEO_BYTES = 1024 * 1024 * 1024;
@@ -788,6 +788,10 @@ export async function verifyPublished({ firestore, manifest, source = SOURCE, de
             prior.data().seedHash !== seedHashOf(record.data)) differ.push(record.path);
       });
     }
+    const pageSeeds = manifest.records.filter(record => record.collection === 'media_assets_public' && PAGE_SEED_IDS.has(record.id));
+    const missingSeeds = pageSeeds.length ? (await transaction.getAll(...pageSeeds.map(record => firestore.doc(`media_assets_public/${record.id}`))))
+      .filter(snapshot => !snapshot.exists).map(snapshot => snapshot.ref.path) : [];
+    if (missingSeeds.length) fail(`Dev lacks ${missingSeeds.length} page seed media record(s) (first: ${missingSeeds[0]}); run the CMS deploy page seed backfill`);
     const { removals: extra, unresolved } = await trackedRemovals(transaction, firestore, manifest, records);
     if (differ.length || extra.length) {
       fail(`Dev does not match source snapshot ${manifest.hash}: ${differ.length} differ, ${extra.length} extra (first: ${[...differ, ...extra][0]})`);

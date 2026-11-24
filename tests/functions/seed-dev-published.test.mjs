@@ -337,6 +337,7 @@ describe('isolated published-content seed', () => {
       expect((await dev.doc(`media_assets/${id}`).get()).exists).toBe(false);
       expect((await dev.doc(`media_assets_public/${id}`).get()).exists).toBe(false);
     }
+    await expect(verifyPublished({ firestore: dev, manifest })).rejects.toThrow('Dev lacks 7 page seed media record(s)');
     // The CMS deploy's backfill step creates every page seed record in dev, and a
     // later refresh and deploy leave them in the shape the backfill requires.
     await expect(backfillPageSeedMedia({ firestore: dev, nowIso: when })).resolves.toEqual({ created: PAGE_SEED_MEDIA.length, verified: 0 });

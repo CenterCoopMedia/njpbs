@@ -333,7 +333,9 @@ withdrawn row was `retained` because the plan did not list it.
 `verify` prints the manifest hash, the source publication receipt, the export
 time and per-collection counts; record that line with the rehearsal. It fails
 when any seeded dev document differs from the manifest or dev still tracks a
-record the snapshot no longer has. Rerun the apply with the same manifest and
+record the snapshot no longer has. It also fails while a referenced page seed
+image is missing in dev; after a first import, run verify after the
+`page-seed-media` deploy described below. Rerun the apply with the same manifest and
 plan to resume an interrupted refresh; finished groups report `unchanged`.
 
 ### What the refresh copies and reconciles
