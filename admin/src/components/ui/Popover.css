@@ -19,16 +19,6 @@
   visibility: hidden;
 }
 
-/* The global reduced-motion rule gives every property a 0.01ms transition. Visibility would
-   then still read hidden when the panel is placed and focus moves in, so focus stayed on the
-   trigger. Nothing here needs a transition with reduced motion. */
-@media (prefers-reduced-motion: reduce) {
-  .ui-popover,
-  .ui-popover * {
-    transition-property: none;
-  }
-}
-
 .ui-popover:focus-visible {
   outline: var(--cms-focus-outline);
   outline-offset: 2px;
