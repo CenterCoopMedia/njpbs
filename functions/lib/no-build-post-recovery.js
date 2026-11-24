@@ -395,36 +395,89 @@ async function existingNoBuildPostPublication({ firestore, changes, retry = fals
     firestore, changes, actor, baseVersion, operationId: result.homeWithdrawalOperationId }, buildDeps);
   return result;
 }
-async function verifyOwnedPostRoutes({ state, staticProof, contentRedirectUrl, candidate, admission, fetchPublic, target, headers }) {
+// A 100 percent version deployment reaches edges over seconds, and
+// ?cms-code= selects no version. On dev run 45409644014 (Nov. 24, 2026) the
+// switch landed at 14:07:16.9Z, edges still answered from the previous version
+// 4 to 6 s later, and a single read at about 9.5 s failed a working deploy.
+// A read answered by the previous renderer is read again; the first answer
+// from any other renderer is judged once. The backstop ends only a rollout
+// that never arrives, at ten times the longest skew observed.
+const OWNED_ROUTE_ROLLOUT_BACKSTOP_MS = 60_000;
+const OWNED_ROUTE_ROLLOUT_INTERVAL_MS = 1_000;
+const CANDIDATE_ROLLOUT = Object.freeze({ backstopMs: OWNED_ROUTE_ROLLOUT_BACKSTOP_MS, now: Date.now,
+  wait: () => delay(OWNED_ROUTE_ROLLOUT_INTERVAL_MS) });
+
+// The dev staff gateway in front of dev.njpbs.org rebuilds every answer with
+// "private, no-store" (workers/src/staff-site-worker.ts:24,145); production
+// njpbs.org has no gateway and answers "no-store". Both forbid storage. The
+// rule still refuses an answer a cache may keep, such as the Assets fallback,
+// which is what the exact "no-store" comparison was stopping.
+function forbidsStorage(value) {
+  return (value ?? "").split(",").some(part => part.split("=")[0].trim().toLowerCase() === "no-store");
+}
+
+// Refuses with the first compared field that differs, naming what was
+// expected and what the answer carried.
+async function refuseFirstMismatch(response, message, checks) {
+  for (const [field, expected, found, ok = found === expected] of checks) {
+    if (ok) continue;
+    await response.body?.cancel();
+    throw new Error(`${message}: ${field} expected ${expected}, found ${found ?? "absent"}`);
+  }
+}
+
+// Reads one public path until an answer comes from a renderer other than the
+// previous one, then lets judge decide that answer once.
+async function judgeCandidateAnswer({ url, fetchPublic, headers, candidate, previousRendererSha, rollout = CANDIDATE_ROLLOUT }, judge) {
+  const previous = previousRendererSha && previousRendererSha !== candidate.commitSha ? previousRendererSha : null;
+  const backstop = rollout.now() + rollout.backstopMs;
+  // Read the body inside the deadline; the deadline aborts the request when it settles.
+  while (await withinDeadline(10_000, async signal => {
+    const response = await readPublicPostAfterRefresh(url, fetchPublic, signal, new Headers(headers));
+    if (previous && response.headers.get("x-njpbs-renderer-sha") === previous) {
+      await response.body?.cancel();
+      return true;
+    }
+    await judge(response);
+    return false;
+  })) {
+    if (rollout.now() >= backstop) throw new Error("The public route still answers from the previous renderer; the candidate version has not reached it");
+    await rollout.wait();
+  }
+}
+
+async function verifyOwnedPostRoutes({ state, staticProof, contentRedirectUrl, candidate, admission, fetchPublic, target, headers,
+  previousRendererSha, rollout = CANDIDATE_ROLLOUT }) {
   const slugs = staticProof?.ownedSlugs ?? state.ownedSlugs;
   for (const slug of slugs) {
-    // Read the body inside the deadline; the deadline aborts the request when it settles.
-    await withinDeadline(10_000, async signal => {
-    const response = await readPublicPostAfterRefresh(
-      `${target.origin}${postRoutePath(slug)}?cms-code=${candidate.workerVersionId}`, fetchPublic, signal, new Headers(headers));
+    await judgeCandidateAnswer({ url: `${target.origin}${postRoutePath(slug)}?cms-code=${candidate.workerVersionId}`,
+      fetchPublic, headers, candidate, previousRendererSha, rollout }, async response => {
     // New-admission selection cannot discard an already accepted route.
     // Invalid metadata still refuses visible proof; retained withdrawals stay absent.
     const enabled = !!staticProof || !state.visible || (candidate.noBuildPost.enabled &&
       admission.valid);
     const expected = !enabled ? 503 : !(staticProof?.visible ?? state.visible) ? 410 : slug === (staticProof?.slug ?? state.slug) ? contentRedirectUrl ? 302 : 200 : 308;
-    if (response.status !== expected || response.headers.get("cache-control") !== "no-store" ||
-        (enabled && (response.headers.get("x-njpbs-content-source") !== (staticProof ? "cms-static-return" : "cms-no-build") ||
-          response.headers.get("x-njpbs-publication-operation") !== state.operationId ||
-          response.headers.get("x-njpbs-source-version") !== String(staticProof?.sourceVersion ?? state.sourceVersion) ||
-          response.headers.get("x-njpbs-renderer-sha") !== candidate.commitSha)) ||
-        (enabled && !staticProof && response.headers.get("x-njpbs-admission-revision") !== String(admission.admissionRevision ?? "unavailable")) ||
-        (expected === 308 && response.headers.get("location") !== postRoutePath(staticProof?.slug ?? state.slug)) ||
-        (expected === 302 && (response.headers.get("location") !== contentRedirectUrl || response.headers.get("x-robots-tag") !== "noindex, nofollow"))) {
-      await response.body?.cancel();
-      throw new Error("The public candidate did not preserve its instant Post routes");
-    }
+    const header = name => response.headers.get(name);
+    await refuseFirstMismatch(response, `The public candidate did not preserve its instant Post routes (${postRoutePath(slug)})`, [
+      ["status", expected, response.status],
+      ["cache-control", "a no-store directive", header("cache-control"), forbidsStorage(header("cache-control"))],
+      ...enabled ? [
+        ["x-njpbs-content-source", staticProof ? "cms-static-return" : "cms-no-build", header("x-njpbs-content-source")],
+        ["x-njpbs-publication-operation", state.operationId, header("x-njpbs-publication-operation")],
+        ["x-njpbs-source-version", String(staticProof?.sourceVersion ?? state.sourceVersion), header("x-njpbs-source-version")],
+        ["x-njpbs-renderer-sha", candidate.commitSha, header("x-njpbs-renderer-sha")],
+      ] : [],
+      ...enabled && !staticProof ? [["x-njpbs-admission-revision", String(admission.admissionRevision ?? "unavailable"), header("x-njpbs-admission-revision")]] : [],
+      ...expected === 308 ? [["location", postRoutePath(staticProof?.slug ?? state.slug), header("location")]] : [],
+      ...expected === 302 ? [["location", contentRedirectUrl, header("location")], ["x-robots-tag", "noindex, nofollow", header("x-robots-tag")]] : [],
+    ]);
     if (expected === 200) await verifyPublicHtml(response);
     else await response.body?.cancel();
     });
   }
 }
 
-async function verifyStaticPostOutputs({ staticProof, candidate, fetchPublic, target, headers }) {
+async function verifyStaticPostOutputs({ staticProof, candidate, fetchPublic, target, headers, previousRendererSha, rollout = CANDIDATE_ROLLOUT }) {
   const proof = require("./no-build-post-static-return").projectStaticProof(staticProof);
   const paths = ["/_publication.json", "/_content-status.json", "/posts/", "/feeds/news.xml", "/api/v1/content.json",
     "/pagefind/pagefind.js", "/search/meaning-index.json",
@@ -432,21 +485,26 @@ async function verifyStaticPostOutputs({ staticProof, candidate, fetchPublic, ta
     proof.files.find(file => file.path.startsWith("/authors/"))?.path ?? "/authors/"];
   for (const path of paths) {
     const file = proof.files.find(file => file.path === path);
-    await withinDeadline(10_000, async signal => {
-    const response = await readPublicPostAfterRefresh(
-      `${target.origin}${path}?cms-code=${candidate.workerVersionId}`, fetchPublic, signal, new Headers(headers));
-    if (response.status !== (file ? 200 : 404) || response.headers.get("cache-control") !== "no-store" ||
-        response.headers.get("x-njpbs-content-source") !== "cms-static-return" ||
-        response.headers.get("x-njpbs-renderer-sha") !== candidate.commitSha ||
-        response.headers.get("x-njpbs-source-version") !== String(proof.sourceVersion)) {
-      await response.body?.cancel();
-      throw new Error("The static Post candidate did not prove its complete public outputs");
-    }
+    await judgeCandidateAnswer({ url: `${target.origin}${path}?cms-code=${candidate.workerVersionId}`,
+      fetchPublic, headers, candidate, previousRendererSha, rollout }, async response => {
+    const header = name => response.headers.get(name);
+    await refuseFirstMismatch(response, `The static Post candidate did not prove its complete public outputs (${path})`, [
+      ["status", file ? 200 : 404, response.status],
+      ["cache-control", "a no-store directive", header("cache-control"), forbidsStorage(header("cache-control"))],
+      ["x-njpbs-content-source", "cms-static-return", header("x-njpbs-content-source")],
+      ["x-njpbs-renderer-sha", candidate.commitSha, header("x-njpbs-renderer-sha")],
+      ["x-njpbs-source-version", String(proof.sourceVersion), header("x-njpbs-source-version")],
+    ]);
     if (file) {
       if (await verifyPublicHtml(response, file.bytes) !== file.digest) throw new Error("The static Post candidate bytes changed");
     } else await response.body?.cancel();
     });
   }
+}
+
+// During the switch the pointer's active commit is the version being replaced.
+async function readReplacedRendererSha(firestore) {
+  return (await firestore.doc("system/publicDeployment").get()).data()?.activeCommitSha;
 }
 
 async function verifyNoBuildPostPublicRoute({ firestore, candidate, fetchPublic = fetch,
@@ -456,8 +514,9 @@ async function verifyNoBuildPostPublicRoute({ firestore, candidate, fetchPublic 
   const readHeaders = publicReadbackHeaders(target, headers);
   const owners = (await listNoBuildPostOwners({ firestore })).filter(owner => owner.state.operationId);
   if (!owners.length) return;
+  const previousRendererSha = await readReplacedRendererSha(firestore);
   const admission = await readNoBuildFamilyAdmission({ firestore });
-  const options = { candidate, admission, fetchPublic, target,
+  const options = { candidate, admission, fetchPublic, target, previousRendererSha,
     headers: { ...Object.fromEntries(readHeaders), "cache-control": "no-cache" } };
   for (const { state } of owners) {
     const staticProof = candidate.noBuildStatic?.postId === state.postId ? candidate.noBuildStatic
@@ -476,4 +535,4 @@ async function verifyNoBuildPostPublicRoute({ firestore, candidate, fetchPublic 
 }
 module.exports = { purgePublicHome, recoverNoBuildPostDetail, existingNoBuildPostPublication, verifyNoBuildPostPublicRoute,
   assertCurrentPostReceipt, assertReadbackTarget, publicReadbackHeaders, readPublicPostAfterRefresh, readPublicPostReceipt,
-  withinDeadline, verifyPublicHtml };
+  withinDeadline, verifyPublicHtml, verifyOwnedPostRoutes };
