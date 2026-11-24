@@ -38,13 +38,10 @@ describe("the refused Cloudflare call", () => {
     const error = await refused(`https://api.cloudflare.com/client/v4/zones/${zone}/workers/routes?account.id=${account}`,
       async () => new Response(body, { status: 403 }));
     expect(error).toBeInstanceOf(PublicWorkerActivationOperatorError);
-    for (const exhausted of [false, true]) {
-      const reason = cloudReleaseFailureReason("activation", error, exhausted);
-      expect(reason).toContain("(HTTP 403; GET /zones/:id/workers/routes; Cloudflare code 10000)");
-      expect(reason.length).toBeLessThanOrEqual(300);
-      expect(reason).not.toMatch(/PRIVATE|https?:|account\.id|[a-f0-9]{32}/);
-      if (exhausted) expect(reason).toContain("original release ownership is retained");
-    }
+    const reason = cloudReleaseFailureReason("activation", error);
+    expect(reason).toContain("(HTTP 403; GET /zones/:id/workers/routes; Cloudflare code 10000)");
+    expect(reason.length).toBeLessThanOrEqual(300);
+    expect(reason).not.toMatch(/PRIVATE|https?:|account\.id|[a-f0-9]{32}/);
   });
   it("is named when the request does not complete, and without codes when the body is not JSON", async () => {
     const url = `https://api.cloudflare.com/client/v4/accounts/${account}/workers/scripts`;
