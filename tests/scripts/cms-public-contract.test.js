@@ -9,7 +9,7 @@ import { Timestamp } from "firebase-admin/firestore";
 import { CONTRACT_SETTINGS, CmsPublicContractError, assertUnchangedPlan, devMutationSelection, contractTarget,
   encodeContractValue, decodeContractValue, writePrivateCapsule, readPrivateCapsule, boundedContractProof,
   contractDigest, contractSummary, recheckContractSummary } from "../../scripts/lib/cms-public-contract.mjs";
-import { assertActiveRendererCheckpoint, devCompletedBaseline, prepareDependencies, prepareContractRuntime, refusalLine, replayDockerArguments, replayRefusal, restoreRendererArchive, retainRendererArchive } from "../../scripts/check-cms-public-contract.mjs";
+import { assertActiveRendererCheckpoint, devCompletedBaseline, prepareDependencies, prepareContractRuntime, productionPlanCommands, refusalLine, replayDockerArguments, replayRefusal, restoreRendererArchive, retainRendererArchive } from "../../scripts/check-cms-public-contract.mjs";
 import { createCmsPublicationCloudStorage } from "../../site/scripts/cms-publication-cloud-storage.ts";
 import { repositoryFixture } from "../helpers/repository-identity.mjs";
 import { copyImportClosure } from "../helpers/isolated-checkout.mjs";
@@ -387,5 +387,23 @@ describe("Docker isolation at the process boundary", () => {
     `);
     const { stdout } = await execute("docker", args, { env: { ...process.env, CMS_SYNTHETIC_HOST_SECRET: "synthetic-emulator-only" }, timeout: 10_000 });
     expect(stdout.trim()).toBe("isolated");
+  });
+});
+
+describe("production preflight plan entry", () => {
+  // The step runs these exact command lines. A module that only exports main
+  // exits 0 and writes no plan, so the preflight then reads a missing file.
+  it("runs every production plan command through an entry that executes", async () => {
+    const root = resolve(".");
+    const commands = productionPlanCommands(root, { candidateSha: sha, workflowSha: sha,
+      secretsFile: join(directory, "missing-secrets.json"), fingerprintFile: join(directory, "missing.sha256") });
+    expect(Object.keys(commands)).toEqual(["functions", "cmsApi"]);
+    for (const argv of Object.values(commands)) {
+      const result = await execute(process.execPath, argv, { cwd: root, env: { PATH: process.env.PATH }, timeout: 60_000 })
+        .then(() => ({ code: 0, stderr: "" }), error => ({ code: error.code, stderr: String(error.stderr) }));
+      // Without its inputs the real entry refuses and says why.
+      expect(result.code).not.toBe(0);
+      expect(result.stderr.trim()).not.toBe("");
+    }
   });
 });
