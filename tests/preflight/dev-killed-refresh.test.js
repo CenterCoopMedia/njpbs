@@ -43,14 +43,22 @@ it.each(["kind", "run id", "commit", "extra field"])("refuses a packet with a wr
 });
 
 it("accepts a completed run whose upload step was skipped or never listed", async () => {
-  await expect(verifyKilledDevRefresh("1001", fixture("skipped").github)).resolves.toBeUndefined();
+  await expect(verifyKilledDevRefresh("1001", fixture("skipped").github)).resolves.toBe(false);
   const { state, github } = fixture();
   state.jobs.jobs[1].steps = [];
-  await expect(verifyKilledDevRefresh("1001", github)).resolves.toBeUndefined();
+  await expect(verifyKilledDevRefresh("1001", github)).resolves.toBe(false);
 });
 
-// A failed or cancelled upload may have reached the provider; it keeps retained reconciliation.
-it.each(["failure", "cancelled", "success", null])("refuses an upload step that concluded %s", async upload => {
+// Run 45389965388 (#615): the build succeeded and the upload step failed at its
+// precondition. The Firestore owner decides from the never-leased batch.
+it("accepts a completed run whose upload step failed and reports it", async () => {
+  const { state, github } = fixture("failure");
+  state.jobs.jobs[0].steps = [{ name: "Build", conclusion: "success" }];
+  await expect(verifyKilledDevRefresh("1001", github)).resolves.toBe(true);
+});
+
+// A cancelled upload is not a recorded failure; success needs no settle.
+it.each(["cancelled", "success", null])("refuses an upload step that concluded %s", async upload => {
   await expect(verifyKilledDevRefresh("1001", fixture(upload).github)).rejects.toThrow("refused");
 });
 

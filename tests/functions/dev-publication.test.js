@@ -8,7 +8,7 @@ import manifestModule from "../../functions/lib/public-media-manifest.js";
 import publicationModule from "../../functions/lib/no-build-post-publication.js";
 import reconciliation from "../../functions/lib/publish-reconcile.js";
 import buildState from "../../functions/lib/publish-build-state.js";
-import { buildFailedBeforeUpload, inspectDevPublicationRetry, prepare } from "../../site/scripts/cms-dev-publication.mjs";
+import { buildFailedBeforeUpload, inspectDevPublicationRetry, prepare, uploadFailedBeforeLease } from "../../site/scripts/cms-dev-publication.mjs";
 
 const project = process.env.GCLOUD_PROJECT ?? "demo-njpbs";
 const id = { queueId: "A1b2C3d4E5f6G7h8I9j0", buildBatchId: "cms-A1b2C3d4E5f6G7h8I9j0", commitSha: "a".repeat(40) };
@@ -196,6 +196,54 @@ it("only a first-attempt build failure or cancellation reports no upload", () =>
   for (const result of ["success", "skipped", "", undefined]) {
     expect(buildFailedBeforeUpload({ GITHUB_RUN_ATTEMPT: "1", DEV_BUILD_RESULT: result })).toBe(false);
   }
+});
+
+// Run 45389965388 (#615): the build succeeded and upload() threw at its receipt
+// precondition before any provider call. The row was pending and the batch
+// reserved with no candidate; the fail step now ends both, and a rerun refuses.
+it("the fail step of a run whose upload failed before a lease ends its own row; a rerun refuses (#615)", async () => {
+  const previous = { ...deployment.initialPublicDeploymentPointer(), activeGeneration: 4, activeDeploymentId: "old-deployment",
+    activeCommitSha: "b".repeat(40), lastReservedGeneration: 4, newestEligibleGeneration: 4, newestEligibleBuildBatchId: "old-build" };
+  await db.doc("system/publicDeployment").set(previous);
+  await frozen();
+  // upload()'s own catch runs the ordinary cleanup first; it keeps the row.
+  expect(await dev.finishDevPublication(db, id)).toBe("unclaimed");
+  expect(await dev.finishDevPublication(db, id, { uploadFailed: true })).toBe("failed");
+  expect((await queueRef().get()).data()).toMatchObject({ status: "failed", error: dev.DEV_UPLOAD_FAILED_ERROR });
+  expect((await batchRef().get()).data()).toMatchObject({ status: "retired",
+    retirementReceipt: { reason: deployment.FAILED_PUBLISH_RETIRED_REASON, queueId: id.queueId, queueStatus: "failed" } });
+  expect(await pointer()).toMatchObject({ activeGeneration: 4, activeDeploymentId: "old-deployment", activeCommitSha: "b".repeat(40) });
+  vi.stubEnv("QUEUE_ID", id.queueId);
+  vi.stubEnv("SOURCE_SHA", id.commitSha);
+  try {
+    await expect(prepare(db)).rejects.toThrow("dispatch a new run");
+  } finally {
+    vi.unstubAllEnvs();
+  }
+});
+
+it("a failed upload that recorded a candidate keeps its row", async () => {
+  await prepared();
+  expect(await dev.finishDevPublication(db, id, { uploadFailed: true })).toBe("unclaimed");
+  expect((await queueRef().get()).data().status).toBe("pending");
+  expect((await batchRef().get()).data().status).toBe("ready");
+});
+
+it("only a failed upload step after a successful build reports an upload failure", () => {
+  expect(uploadFailedBeforeLease({ DEV_BUILD_RESULT: "success", DEV_UPLOAD_OUTCOME: "failure" })).toBe(true);
+  for (const outcome of ["cancelled", "skipped", "success", "", undefined]) {
+    expect(uploadFailedBeforeLease({ DEV_BUILD_RESULT: "success", DEV_UPLOAD_OUTCOME: outcome })).toBe(false);
+  }
+  expect(uploadFailedBeforeLease({ DEV_BUILD_RESULT: "failure", DEV_UPLOAD_OUTCOME: "failure" })).toBe(false);
+});
+
+it("the operator settle records an upload failure and treats it as settled on repeat (#615)", async () => {
+  await frozen();
+  expect(await dev.settleKilledDevRefresh(db, id, { uploadFailed: true })).toBe("failed");
+  expect((await queueRef().get()).data()).toMatchObject({ status: "failed", error: dev.DEV_UPLOAD_FAILED_ERROR });
+  const settled = (await queueRef().get()).data();
+  expect(await dev.settleKilledDevRefresh(db, id, { uploadFailed: true })).toBe("failed");
+  expect((await queueRef().get()).data()).toEqual(settled);
 });
 
 it("a reported build failure leaves a batch with a recorded candidate to its owners", async () => {
