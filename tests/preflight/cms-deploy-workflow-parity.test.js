@@ -461,7 +461,8 @@ describe("CMS deploy target", () => {
     expect(steps.some(row => row.name === "Refuse development steps that still act on production systems")).toBe(false);
     // The Studio master steps use the target's own master bucket: dev names its bucket, and only
     // production reads the repository variable (jawn-ops#1273).
-    expect(branches("CMS_TARGET_STUDIO_BUCKET")).toEqual(["'njpbs-dev-cms-media-masters'", "vars.CMS_MEDIA_MASTER_R2_BUCKET"]);
+    expect(workflow.env.CMS_TARGET_STUDIO_BUCKET).toBe("${{ inputs.target == 'development' && vars.CMS_DEV_STUDIO_BUCKET || " +
+      "inputs.target != 'development' && vars.CMS_MEDIA_MASTER_R2_BUCKET || '' }}");
     const studio = steps.filter(row => /CMS_TARGET_STUDIO_BUCKET/.test(row.if ?? ""));
     expect(studio.map(row => [row.name, row.if])).toEqual([
       ["Report unavailable Studio connector storage", "env.CMS_TARGET_STUDIO_BUCKET == ''"],

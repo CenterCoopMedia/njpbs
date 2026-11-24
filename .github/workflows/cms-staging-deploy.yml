@@ -103,8 +103,9 @@ env:
   CMS_TARGET_PUBLIC_ORIGIN: ${{ inputs.target == 'development' && 'https://dev.njpbs.org' || 'https://njpbs.org' }}
   CMS_TARGET_MEDIA_ORIGIN: ${{ inputs.target == 'development' && 'https://dev-media.njpbs.org' || 'https://media.njpbs.org' }}
   CMS_TARGET_MEDIA_BUCKET: ${{ inputs.target == 'development' && 'njpbs-dev-media' || vars.CMS_MEDIA_R2_BUCKET }}
-  # Repository vars hold the production master bucket; development names its own (jawn-ops#1273).
-  CMS_TARGET_STUDIO_BUCKET: ${{ inputs.target == 'development' && 'njpbs-dev-cms-media-masters' || vars.CMS_MEDIA_MASTER_R2_BUCKET }}
+  # Each target reads its own master bucket setting: development never falls back to the production
+  # repository variable, and an unset dev variable leaves the Studio steps off (jawn-ops#1273).
+  CMS_TARGET_STUDIO_BUCKET: ${{ inputs.target == 'development' && vars.CMS_DEV_STUDIO_BUCKET || inputs.target != 'development' && vars.CMS_MEDIA_MASTER_R2_BUCKET || '' }}
   CMS_TARGET_ADMIN_PAGES: ${{ inputs.target == 'development' && 'njpbs-dev-admin' || 'njpbs-admin' }}
   CMS_TARGET_RENDER_SCOPE: ${{ inputs.target == 'development' && '--development' || '--production' }}
   CMS_TARGET_FIREBASE_CONFIG: ${{ inputs.target == 'development' && 'firebase.dev.json' || 'firebase.json' }}
