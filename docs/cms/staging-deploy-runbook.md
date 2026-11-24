@@ -353,7 +353,9 @@ dev storage. Strict HTTPS host/path/type/size/redirect gates and real HEAD/GET
 byte counts apply. Optional local hashed copy receipts never upload or rewrite
 URLs. The refresh skips the page seed images (`PAGE_SEED_MEDIA` in
 `scripts/backfill-page-seed-media.mjs`); the CMS deploy's page seed backfill
-writes them, so run a dev CMS deploy after the first import.
+writes them. After the first import, run a dev CMS deploy with `migrations`
+set to `page-seed-media` (the step runs otherwise only when Functions change)
+and confirm its log reports 12 page seed media records created or verified.
 
 The first full import requires absent deployment and preview pointers and
 empty queues; it then creates generation zero and a paused, unconfigured
