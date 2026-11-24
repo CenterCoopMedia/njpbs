@@ -8,7 +8,6 @@ import { deploymentInputFingerprint, readDeploymentManifest, renderCommittedDepl
 import { fileURLToPath } from "node:url";
 import { cmsTarget } from "./cms-target.mjs";
 import { addCommittedFunctionsContracts, contractInputs } from "./functions-contracts.mjs";
-import releaseWait from "../../functions/lib/release-wait.js";
 
 const previewPair = () => createRequire(import.meta.url)("../../functions/lib/cms-preview-pair.js");
 const pageReader = () => createRequire(import.meta.url)("../../functions/lib/page-reader-compatibility.js");
@@ -1182,7 +1181,8 @@ export async function readConsistentRendererApplication(fetchFn, account, token,
   // pending, progressing, completed, reverted, replaced.
   // reverted and replaced do not finish.
   const terminalFailure = new Set(["reverted", "replaced"]);
-  const { waitFor } = releaseWait;
+  // Loaded on use, as provider-call is above.
+  const { default: { waitFor } } = await import("../../functions/lib/release-wait.js");
   return waitFor("Renderer container rollout", async () => {
     const body = await read(base, "Renderer container identity could not be read");
     const applications = Array.isArray(body?.result) ? body.result : body?.result?.applications;

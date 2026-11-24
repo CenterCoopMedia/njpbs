@@ -8,7 +8,8 @@ const SUPERSEDED = Object.freeze({ status: "superseded", claim: null, nextAttemp
 const retryLeft = value => value?.status === "failed" && value.claim == null && value.nextAttemptAt != null;
 
 /** Reads first, returns the writes for the caller's transaction. `keep` names
- * the rows a live reader can still select. Other states are left to their owner. */
+ * the rows a live reader can still select. Other states are left to their owner.
+ * @param {{ firestore: any, transaction: any, queueIds: Iterable<string>, keep?: (row: any, queueId: string) => boolean }} options */
 async function prepareSupersededPreparationsInTransaction({ firestore, transaction, queueIds, keep = () => false }) {
   const rows = [];
   for (const queueId of new Set(queueIds)) {

@@ -1,5 +1,5 @@
 import { existsSync, readFileSync } from 'node:fs';
-import { dirname, join, resolve } from 'node:path';
+import { dirname, resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { run, verifySignedOut, assertDevPublicWorkerBindings } from '../../scripts/deploy-dev-staff-gateway.mjs';
 

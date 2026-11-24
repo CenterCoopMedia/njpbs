@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createRequire } from 'node:module';
-import { afterEach, beforeEach, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, expect, it } from 'vitest';
 import { preparePairedAdminArtifact, pairedAdminArtifactContents } from '../../scripts/lib/paired-admin-pages-artifact.mjs';
 import { createPairedAdminPagesHttp, createPairedAdminPagesProvider } from '../../scripts/lib/paired-admin-pages-provider.mjs';
 import { DEV_TARGETS } from '../../scripts/assert-dev-cms-targets.mjs';

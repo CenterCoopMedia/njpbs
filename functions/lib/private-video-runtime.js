@@ -28,7 +28,8 @@ function configuredStorage(mode) {
   let client = clients.get(mode);
   if (!client) {
     // No request timeout: a call ends when R2 answers or the caller cancels.
-    client = new S3Client({ ...r2ClientConfig({ endpoint, accessKeyId, secretAccessKey }), maxAttempts: write ? 2 : 1 });
+    client = new S3Client(/** @type {import("@aws-sdk/client-s3").S3ClientConfig} */ ({
+      ...r2ClientConfig({ endpoint, accessKeyId, secretAccessKey }), maxAttempts: write ? 2 : 1 }));
     clients.set(mode, client);
   }
   return { client, bucket };

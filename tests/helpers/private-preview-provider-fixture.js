@@ -24,7 +24,7 @@ export async function previewProviderFixture(overrides = {}) {
   const prepared = await prepare();
   const state = { identity: false, version: false, deployed: false, container: false, schedules: false,
     writes: /** @type {string[]} */ ([]), requests: /** @type {{path: string, method: string}[]} */ ([]),
-    beforeWrite: async () => {}, afterRequest: (/** @type {{path: string, method: string}} */ _request) => {},
+    beforeWrite: async () => {}, afterRequest: /** @type {(request: {path: string, method: string}) => void} */ (() => {}),
     failAction: /** @type {string|null} */ (null), lostAction: /** @type {string|null} */ (null),
     healthLost: false, healthReady: true, corrupt: /** @type {string|null} */ (null), tags: /** @type {string[]} */ ([]), domains: [],
     staleVersionReads: 0, staleDeploymentReads: 0, newerDeployment: false };
