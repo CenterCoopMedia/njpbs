@@ -19,6 +19,11 @@ test("machine receipt GET and HEAD use the fixed dev origin and log statuses plu
     bytes: 16, sha256: "08dea33b559cbb92aa5275db116fb757d56c88e0fa488369a64fc49f9ed0faee" }), "HEAD /_publication.json: 200"]);
 });
 
+test("accepts the origin no-store that the gateway passes through", async () => {
+  await checkDevMachineReceipt({ env, log: () => {}, fetchImpl: async (_url, options) =>
+    new Response(options.method === "HEAD" ? null : "{}", { headers: { ...headers, "cache-control": "no-store" } }) });
+});
+
 test("receipt digest binds raw UTF-8 bytes without emitting the JSON body", async () => {
   const logs = [];
   await checkDevMachineReceipt({ env, log: line => logs.push(line), fetchImpl: async (_url, options) =>

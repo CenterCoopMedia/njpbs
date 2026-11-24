@@ -21,7 +21,8 @@ export async function checkDevMachineReceipt({ env = process.env, fetchImpl = fe
     const body = Buffer.from(await response.arrayBuffer());
     let valid = response.status === 200 &&
       /^application\/json(?:;|$)/i.test(response.headers.get("content-type") ?? "") &&
-      response.headers.get("cache-control") === "private, no-store";
+      // The gateway passes the origin's no-store and adds private, no-store otherwise.
+      ["no-store", "private, no-store"].includes(response.headers.get("cache-control"));
     // Fetch hides HEAD payloads; this probe proves status and headers only.
     if (method === "GET") {
       try {
