@@ -30,7 +30,7 @@ export const corruptEvidence = (error: any) => error instanceof protocol.PublicR
   error instanceof work.PairExecutionError && ["input-unavailable", "byte-mismatch"].includes(error.code) ||
   error instanceof HistoricalInputError || error instanceof PairCodePackError || error instanceof PairSourceInputsError ||
   error instanceof PairSearchInputsError || error instanceof PairSourceCensusError ||
-  sourceLimits.isHistoricalSourceLimitError(error) && ["changes", "rootFiles", "censusBytes"].includes(error.details.metric);
+  sourceLimits.isHistoricalSourceLimitError(error);
 type Pending = { schemaVersion: 2; operationId: string; admissionDigest: string; nextAttemptAt?: number | null;
   recoveryLease?: { token: string; until: number } | null; recoveryFailures?: number; recoveryFailure?: string | null };
 type CaptureOptions = Pick<Parameters<typeof captureHistoricalPublicReleasePairInput>[0],

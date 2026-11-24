@@ -806,7 +806,7 @@ export async function processPublicReleaseCaptureOutboxOperation(options: Histor
     return { status: "captured" as const, ...captured };
   } catch (error) {
     const sourceLimit = sourceLimits.isHistoricalSourceLimitError(error);
-    const permanent = error instanceof protocol.PublicReleaseProtocolError || sourceLimit && ["changes", "rootFiles", "censusBytes"].includes(error.details.metric);
+    const permanent = error instanceof protocol.PublicReleaseProtocolError || sourceLimit;
     const code = sourceLimit ? error.code : permanent ? "historical-source-evidence-invalid" : error instanceof HistoricalInputError || error instanceof PairCodePackError || error instanceof PairSourceInputsError || error instanceof PairSearchInputsError
       ? error.code : "historical-capture-transport-unavailable";
     return options.firestore.runTransaction(async transaction => {
