@@ -443,6 +443,10 @@ export function decideRelease({
       configurationRequiresRelease: true,
       releaseReason: "in_progress_receipt",
       blockedComponent: "renderer",
+      // The plan treats the receipt as stale once its run completes, so the
+      // retry is a fresh dispatch with the default inputs, which the
+      // correlated release dispatch requires (require-cms-release-sources).
+      retry: { dispatch: {}, afterRun: /^[0-9]{1,20}$/.test(rendererReceipt?.mutation?.runId ?? "") ? rendererReceipt.mutation.runId : null },
     };
   }
   if (recoveringFunctions) return full("stale_functions_receipt", functionsReceipt.lastComplete?.sourceSha);

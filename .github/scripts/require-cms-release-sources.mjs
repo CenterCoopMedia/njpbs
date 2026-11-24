@@ -90,18 +90,28 @@ export function requireCmsReleaseSources({ releaseSha, trustedWorkflowSha, relea
   const receipt = { schemaVersion: 1, deploySha: releaseSha, releaseChecksSha: releaseSha, trustedWorkflowSha, releaseChecksContractVersion: version,
     ...(target === "development" ? { target } : {}) };
   if (!dispatchInputs) return receipt;
+  const inputs = JSON.parse(dispatchInputs);
+  if (!correlatedDispatchAccepted(inputs, { releaseSha, target })) {
+    throw new Error("Correlated CMS dispatch requires the reviewed deploy ref and default settings");
+  }
+  return { ...receipt, releaseDispatchId: inputs.release_dispatch_id };
+}
+
+/** The one rule for a release run's correlated dispatch: the reviewed deploy
+ * ref, its dispatch id and every other input at its default. The release plan
+ * advises only inputs this accepts (cms-release-plan.test.js). */
+export function correlatedDispatchAccepted(dispatched, { releaseSha, target = "production" }) {
   // GitHub can omit optional inputs whose default is an empty string.
   const inputs = {
     emergency_authorization: "", migrations: "", reader_operation_id: "", reader_install_authorization: "", target: "production",
-    ...JSON.parse(dispatchInputs),
+    ...dispatched,
   };
   const releaseDispatchId = inputs.release_dispatch_id;
-  if (typeof releaseDispatchId !== "string" || !/^[a-f0-9]{32}$/.test(releaseDispatchId) || !isDeepStrictEqual(inputs, {
+  return typeof releaseDispatchId === "string" && /^[a-f0-9]{32}$/.test(releaseDispatchId) && isDeepStrictEqual(inputs, {
     deploy_ref: releaseSha, release_dispatch_id: releaseDispatchId, cloudflare_pages_branch: "main",
     emergency_release: false, emergency_authorization: "", force_firebase: false, migrations: "",
     install_reader_bridge: false, reader_operation_id: "", reader_install_authorization: "", target,
-  })) throw new Error("Correlated CMS dispatch requires the reviewed deploy ref and default settings");
-  return { ...receipt, releaseDispatchId };
+  });
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {

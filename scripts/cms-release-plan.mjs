@@ -237,7 +237,8 @@ export async function main() {
     });
     if (plan.abort) {
       if (plan.blockedComponent === "renderer") {
-        fail("Renderer receipt run is active or could not be verified (in_progress_receipt). Confirm the run has stopped, then start CMS staging deploy with force_firebase=true on the same reviewed commit");
+        fail(`Renderer receipt run ${plan.retry.afterRun ?? "(unknown)"} is active or could not be verified (in_progress_receipt). ` +
+          "Once that run has completed, dispatch CMS staging deploy again on the same reviewed commit with its default inputs; the plan then treats the receipt as stale");
       }
       fail(`An in-progress CMS receipt is still active (${plan.releaseReason})`);
     }

@@ -4,6 +4,7 @@ import { readFileSync } from "node:fs";
 import { parse } from "yaml";
 import { FUNCTION_RUNTIME_VARIABLES, functionsForRuntimeComparison, runtimeParametersMatch, boundSecretVersionsCurrent, boundSecretVersionChanges, runtimeParameterChanges, CMS_RELEASE_SECRET_NAMES, deploymentSecretsUnchanged, deploymentVariablesFingerprint, cloudWakeConfigurationFingerprint, decideRelease, explicitCloudWakeDecision, fingerprintExecutionSource, fingerprintFunctionsRenderSource, identitiesMatch, planCmsApiRelease, componentReceiptRunCompleted } from "../../scripts/lib/cms-release-plan.mjs";
 import { releasePlanOutputLines, desiredRuntimeParameters } from "../../scripts/cms-release-plan.mjs";
+import { correlatedDispatchAccepted } from "../../.github/scripts/require-cms-release-sources.mjs";
 
 const SHA = "a".repeat(40);
 const OTHER = "b".repeat(40);
@@ -396,6 +397,19 @@ describe("stopped component receipt recovery", () => {
       functionGraph: GRAPH, deploySha: OTHER, rendererGraphAvailable: true,
       functionsReceipt: completeReceipt("functions"), rendererReceipt: receipt, rendererRunCompleted,
     })).toMatchObject({ abort: true, releaseReason: "in_progress_receipt", blockedComponent: "renderer" });
+  });
+
+  it("advises only a retry the correlated release dispatch accepts", async () => {
+    const plan = decideRelease({
+      functionGraph: GRAPH, deploySha: OTHER, rendererGraphAvailable: true,
+      functionsReceipt: completeReceipt("functions"), rendererReceipt: receipt, rendererRunCompleted: false,
+    });
+    expect(plan).toMatchObject({ abort: true, blockedComponent: "renderer", retry: { afterRun: receipt.mutation.runId } });
+    for (const target of ["production", "development"]) {
+      expect(correlatedDispatchAccepted({ deploy_ref: OTHER, release_dispatch_id: "a".repeat(32), cloudflare_pages_branch: "main",
+        emergency_release: false, force_firebase: false, install_reader_bridge: false, target, ...plan.retry.dispatch },
+      { releaseSha: OTHER, target })).toBe(true);
+    }
   });
 
   it("checks the latest run attempt rather than trusting a completed older attempt", async () => {
