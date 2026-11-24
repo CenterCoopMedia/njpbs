@@ -302,9 +302,10 @@ async function finishDevPublication(db, identity, { timeoutOutcome = null, build
     if (outcome.outcome === "deployed") return finishDevPublication(db, identity);
     return outcome.outcome;
   }
-  // The fail step of the run that owns this row reports a build job that failed
-  // or was cancelled. Upload requires a successful build, so no candidate, lease
-  // or activation exists: a reserved batch has never been leased. The row ends
+  // The fail step of the run that owns this row reports that the build job of
+  // its first attempt failed or was cancelled. Upload requires a successful
+  // build, so no attempt uploaded, and no candidate, lease or activation
+  // exists: a reserved batch has never been leased. The row ends
   // here, and settleBuildQueue retires the batch, so the release pause and the
   // media purge do not wait for the 24-hour stale sweep (#593). A rerun of this
   // run then refuses in prepare; a new run publishes.

@@ -670,6 +670,7 @@
         "DEPLOY_SHA",
         "DEV_BRIDGE_REQUEST_A",
         "DEV_BRIDGE_REQUEST_B",
+        "DEV_BUILD_RESULT",
         "DEV_CLOSE_PACKET",
         "DEV_CLOSE_PACKET_SHA256",
         "DEV_CONSUMER_ADAPTER_A",

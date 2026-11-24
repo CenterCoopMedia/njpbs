@@ -8,7 +8,7 @@ import manifestModule from "../../functions/lib/public-media-manifest.js";
 import publicationModule from "../../functions/lib/no-build-post-publication.js";
 import reconciliation from "../../functions/lib/publish-reconcile.js";
 import buildState from "../../functions/lib/publish-build-state.js";
-import { inspectDevPublicationRetry, prepare } from "../../site/scripts/cms-dev-publication.mjs";
+import { buildFailedBeforeUpload, inspectDevPublicationRetry, prepare } from "../../site/scripts/cms-dev-publication.mjs";
 
 const project = process.env.GCLOUD_PROJECT ?? "demo-njpbs";
 const id = { queueId: "A1b2C3d4E5f6G7h8I9j0", buildBatchId: "cms-A1b2C3d4E5f6G7h8I9j0", commitSha: "a".repeat(40) };
@@ -185,6 +185,16 @@ it("the fail step of a run whose build failed ends its own row and retires its b
     await expect(prepare(db)).rejects.toThrow("dispatch a new run");
   } finally {
     vi.unstubAllEnvs();
+  }
+});
+
+it("only a first-attempt build failure or cancellation reports no upload", () => {
+  expect(buildFailedBeforeUpload({ GITHUB_RUN_ATTEMPT: "1", DEV_BUILD_RESULT: "failure" })).toBe(true);
+  expect(buildFailedBeforeUpload({ GITHUB_RUN_ATTEMPT: "1", DEV_BUILD_RESULT: "cancelled" })).toBe(true);
+  // An earlier attempt may have uploaded before this rerun's build failed.
+  expect(buildFailedBeforeUpload({ GITHUB_RUN_ATTEMPT: "2", DEV_BUILD_RESULT: "failure" })).toBe(false);
+  for (const result of ["success", "skipped", "", undefined]) {
+    expect(buildFailedBeforeUpload({ GITHUB_RUN_ATTEMPT: "1", DEV_BUILD_RESULT: result })).toBe(false);
   }
 });
 

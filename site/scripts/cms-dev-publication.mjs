@@ -663,6 +663,13 @@ export async function upload(db, id, reconcileOnly = false, recovery = null) {
   }
 }
 
+// Upload runs only after a successful build, so a failed build in the first
+// attempt shows that no attempt began an upload. A rerun attempt cannot tell:
+// an earlier attempt may have uploaded, so it keeps the reservation (#593).
+export function buildFailedBeforeUpload(env = process.env) {
+  return env.GITHUB_RUN_ATTEMPT === "1" && ["failure", "cancelled"].includes(env.DEV_BUILD_RESULT);
+}
+
 async function main() {
   const command = process.argv[2];
   if (command === "source") return writeDevPublicationSource();
@@ -685,9 +692,7 @@ async function main() {
     return upload(db, id, true, recovery);
   }
   if (command === "fail") {
-    // Upload runs only after a successful build, so this result alone shows no upload began.
-    const buildFailed = ["failure", "cancelled"].includes(process.env.DEV_BUILD_RESULT);
-    return state.finishDevPublication(await database(), await identity(), { buildFailed });
+    return state.finishDevPublication(await database(), await identity(), { buildFailed: buildFailedBeforeUpload() });
   }
   throw new Error("Expected source, inspect-retry, prepare, build, upload, reconcile or fail");
 }
