@@ -414,7 +414,7 @@ describe("CMS deploy target", () => {
     // The admin-build credential check exits on any listed name its step does not bind.
     const check = workflow.jobs["admin-build"].steps.find(row => row.name === "Require the target's deploy credentials");
     for (const name of names.secrets) expect(Object.keys(check.env), name).toContain(name);
-    expect(names.secrets).toEqual(["CLOUDFLARE_ACCOUNT_ID", "CLOUDFLARE_API_TOKEN", "CLOUDFLARE_DEV_PREVIEW_RENDERER_TOKEN", "CMS_BUG_REPORT_GITHUB_TOKEN",
+    expect(names.secrets).toEqual(["CLOUDFLARE_ACCOUNT_ID", "CLOUDFLARE_API_TOKEN", "CLOUDFLARE_DEV_PREVIEW_RENDERER_TOKEN", "CLOUDFLARE_DEV_PUBLIC_WORKER_TOKEN", "CMS_BUG_REPORT_GITHUB_TOKEN",
       "CMS_BUG_REPORT_GITHUB_WEBHOOK_SECRET", "CMS_BUG_REPORT_TELEGRAM_ADMIN_MAP", "CMS_BUG_REPORT_TELEGRAM_BOT_TOKEN",
       "CMS_BUG_REPORT_TELEGRAM_CHAT_ID", "CMS_BUG_REPORT_TELEGRAM_WEBHOOK_SECRET", "CMS_DEV_ACCESS_CLIENT_ID", "CMS_DEV_ACCESS_CLIENT_SECRET",
       "CMS_DEV_PREVIEW_FIREBASE_ACCOUNT", "CMS_DEV_PREVIEW_R2_CREDENTIAL", "CMS_EDGE_ORIGIN_SECRET", "CMS_MEDIA_CACHE_PURGE_TOKEN", "CMS_PREVIEW_R2_CREDENTIAL", "CMS_PREVIEW_SMOKE_CREDENTIAL",
@@ -436,6 +436,20 @@ describe("CMS deploy target", () => {
       "CMS_GPU_WORKER_ID", "CMS_LOCAL_PUBLICATION_OWNER", "CMS_PREVIEW_ACCESS_VERIFIED", "CMS_PREVIEW_SERIALIZER_READY",
       "CMS_PREVIEW_TRANSPORT", "CMS_PRODUCTION_API_ORIGIN", "VITE_CMS_PREVIEW_ENABLED", "VITE_VIDEO_REPLACEMENT_ENABLED",
     ]);
+  });
+
+  it("gives the dev Cloudflare tokens to development runs only", () => {
+    // A production run must evaluate every dev token to ''; the dev branch never falls through to it.
+    const devOnly = /^\$\{\{ inputs\.target == 'development' && secrets\.(CLOUDFLARE_DEV_\w+) \|\| (?:inputs\.target != 'development' && secrets\.\w+ \|\| )?'' \}\}$/;
+    const values = Object.values(workflow.jobs).flatMap(current => [current.env, ...current.steps.flatMap(row => [row.env, row.with])])
+      .flatMap(map => Object.values(map ?? {})).filter(value => /secrets\.CLOUDFLARE_DEV_/.test(String(value)));
+    expect(values.length).toBeGreaterThanOrEqual(6);
+    for (const value of values) expect(value).toMatch(devOnly);
+    const contract = Object.values(workflow.jobs).flatMap(current => current.steps).filter(row => row.name?.startsWith("Verify the singleton public contract at "));
+    expect(contract.map(row => row.name)).toEqual(["preflight", "before-upload", "settlement"].map(at => `Verify the singleton public contract at ${at}`));
+    for (const row of contract) expect(row.env).toMatchObject({
+      CMS_CONTRACT_PUBLIC_TOKEN: "${{ inputs.target == 'development' && secrets.CLOUDFLARE_DEV_PUBLIC_WORKER_TOKEN || '' }}",
+      CMS_CONTRACT_PREVIEW_TOKEN: "${{ inputs.target == 'development' && secrets.CLOUDFLARE_DEV_PREVIEW_RENDERER_TOKEN || '' }}" });
   });
 
   it("keeps every Cloudflare write of a development run on dev names", () => {

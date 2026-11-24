@@ -95,7 +95,7 @@ env:
   # environment lacks. tests/preflight/cms-deploy-workflow-parity.test.js keeps it equal
   # to the workflow's reads and names the variables shared on purpose.
   CMS_DEVELOPMENT_ENVIRONMENT_NAMES: >-
-    {"secrets": ["CLOUDFLARE_ACCOUNT_ID", "CLOUDFLARE_API_TOKEN", "CLOUDFLARE_DEV_PREVIEW_RENDERER_TOKEN", "CMS_BUG_REPORT_GITHUB_TOKEN", "CMS_BUG_REPORT_GITHUB_WEBHOOK_SECRET", "CMS_BUG_REPORT_TELEGRAM_ADMIN_MAP", "CMS_BUG_REPORT_TELEGRAM_BOT_TOKEN", "CMS_BUG_REPORT_TELEGRAM_CHAT_ID", "CMS_BUG_REPORT_TELEGRAM_WEBHOOK_SECRET", "CMS_DEV_ACCESS_CLIENT_ID", "CMS_DEV_ACCESS_CLIENT_SECRET", "CMS_DEV_PREVIEW_FIREBASE_ACCOUNT", "CMS_DEV_PREVIEW_R2_CREDENTIAL", "CMS_EDGE_ORIGIN_SECRET", "CMS_MEDIA_CACHE_PURGE_TOKEN", "CMS_PREVIEW_R2_CREDENTIAL", "CMS_PREVIEW_SMOKE_CREDENTIAL", "CMS_STAFF_EMAIL_API_TOKEN", "CMS_VOICEOVER_R2_ACCESS_KEY_ID", "CMS_VOICEOVER_R2_SECRET_ACCESS_KEY", "FIREBASE_SERVICE_ACCOUNT"], "variables": ["CMS_PREVIEW_SMOKE_TARGET", "FIREBASE_DEPLOY_SERVICE_ACCOUNT", "VITE_FIREBASE_API_KEY", "VITE_FIREBASE_APPCHECK_SITE_KEY", "VITE_FIREBASE_APP_ID", "VITE_FIREBASE_AUTH_DOMAIN", "VITE_FIREBASE_PROJECT_ID", "VITE_FUNCTIONS_BASE_URL"]}
+    {"secrets": ["CLOUDFLARE_ACCOUNT_ID", "CLOUDFLARE_API_TOKEN", "CLOUDFLARE_DEV_PREVIEW_RENDERER_TOKEN", "CLOUDFLARE_DEV_PUBLIC_WORKER_TOKEN", "CMS_BUG_REPORT_GITHUB_TOKEN", "CMS_BUG_REPORT_GITHUB_WEBHOOK_SECRET", "CMS_BUG_REPORT_TELEGRAM_ADMIN_MAP", "CMS_BUG_REPORT_TELEGRAM_BOT_TOKEN", "CMS_BUG_REPORT_TELEGRAM_CHAT_ID", "CMS_BUG_REPORT_TELEGRAM_WEBHOOK_SECRET", "CMS_DEV_ACCESS_CLIENT_ID", "CMS_DEV_ACCESS_CLIENT_SECRET", "CMS_DEV_PREVIEW_FIREBASE_ACCOUNT", "CMS_DEV_PREVIEW_R2_CREDENTIAL", "CMS_EDGE_ORIGIN_SECRET", "CMS_MEDIA_CACHE_PURGE_TOKEN", "CMS_PREVIEW_R2_CREDENTIAL", "CMS_PREVIEW_SMOKE_CREDENTIAL", "CMS_STAFF_EMAIL_API_TOKEN", "CMS_VOICEOVER_R2_ACCESS_KEY_ID", "CMS_VOICEOVER_R2_SECRET_ACCESS_KEY", "FIREBASE_SERVICE_ACCOUNT"], "variables": ["CMS_PREVIEW_SMOKE_TARGET", "FIREBASE_DEPLOY_SERVICE_ACCOUNT", "VITE_FIREBASE_API_KEY", "VITE_FIREBASE_APPCHECK_SITE_KEY", "VITE_FIREBASE_APP_ID", "VITE_FIREBASE_AUTH_DOMAIN", "VITE_FIREBASE_PROJECT_ID", "VITE_FUNCTIONS_BASE_URL"]}
   CMS_TARGET: ${{ inputs.target == 'development' && 'development' || 'production' }}
   CMS_TARGET_FIREBASE_PROJECT: ${{ inputs.target == 'development' && 'njpbs-site-dev' || 'njpbs-site' }}
   CMS_TARGET_ADMIN_ORIGIN: ${{ inputs.target == 'development' && 'https://dev-admin.njpbs.org' || 'https://admin.njpbs.org' }}
@@ -209,6 +209,7 @@ jobs:
           CLOUDFLARE_DEV_PREVIEW_RENDERER_TOKEN: ${{ inputs.target == 'development' && secrets.CLOUDFLARE_DEV_PREVIEW_RENDERER_TOKEN || '' }}
           CMS_DEV_PREVIEW_FIREBASE_ACCOUNT: ${{ inputs.target == 'development' && secrets.CMS_DEV_PREVIEW_FIREBASE_ACCOUNT || '' }}
           CMS_DEV_PREVIEW_R2_CREDENTIAL: ${{ inputs.target == 'development' && secrets.CMS_DEV_PREVIEW_R2_CREDENTIAL || '' }}
+          CLOUDFLARE_DEV_PUBLIC_WORKER_TOKEN: ${{ inputs.target == 'development' && secrets.CLOUDFLARE_DEV_PUBLIC_WORKER_TOKEN || '' }}
           CMS_BUG_REPORT_GITHUB_TOKEN: ${{ inputs.target == 'development' && secrets.CMS_BUG_REPORT_GITHUB_TOKEN || '' }}
           CMS_BUG_REPORT_GITHUB_WEBHOOK_SECRET: ${{ inputs.target == 'development' && secrets.CMS_BUG_REPORT_GITHUB_WEBHOOK_SECRET || '' }}
           CMS_BUG_REPORT_TELEGRAM_ADMIN_MAP: ${{ inputs.target == 'development' && secrets.CMS_BUG_REPORT_TELEGRAM_ADMIN_MAP || '' }}
@@ -742,6 +743,9 @@ jobs:
       - name: Verify the singleton public contract at preflight
         env:
           CMS_DEV_PUBLISH_ENABLED: ${{ inputs.target == 'development' && vars.CMS_DEV_PUBLISH_ENABLED || '' }}
+          # The dev contract reads the dev public and preview Workers with their own dev tokens.
+          CMS_CONTRACT_PUBLIC_TOKEN: ${{ inputs.target == 'development' && secrets.CLOUDFLARE_DEV_PUBLIC_WORKER_TOKEN || '' }}
+          CMS_CONTRACT_PREVIEW_TOKEN: ${{ inputs.target == 'development' && secrets.CLOUDFLARE_DEV_PREVIEW_RENDERER_TOKEN || '' }}
           GITHUB_TOKEN: ${{ github.token }}
           DEPLOY_SHA: ${{ needs.admin-build.outputs.deploy_sha }}
           CMS_BUG_REPORT_TELEGRAM_CHAT_ID: ${{ secrets.CMS_BUG_REPORT_TELEGRAM_CHAT_ID }}
@@ -2243,6 +2247,9 @@ jobs:
         id: public_contract
         env:
           CMS_DEV_PUBLISH_ENABLED: ${{ inputs.target == 'development' && vars.CMS_DEV_PUBLISH_ENABLED || '' }}
+          # The dev contract reads the dev public and preview Workers with their own dev tokens.
+          CMS_CONTRACT_PUBLIC_TOKEN: ${{ inputs.target == 'development' && secrets.CLOUDFLARE_DEV_PUBLIC_WORKER_TOKEN || '' }}
+          CMS_CONTRACT_PREVIEW_TOKEN: ${{ inputs.target == 'development' && secrets.CLOUDFLARE_DEV_PREVIEW_RENDERER_TOKEN || '' }}
           GITHUB_TOKEN: ${{ github.token }}
           DEPLOY_SHA: ${{ needs.admin-build.outputs.deploy_sha }}
           CMS_BUG_REPORT_TELEGRAM_CHAT_ID: ${{ secrets.CMS_BUG_REPORT_TELEGRAM_CHAT_ID }}
@@ -2393,6 +2400,9 @@ jobs:
       - name: Verify the singleton public contract at settlement
         env:
           CMS_DEV_PUBLISH_ENABLED: ${{ inputs.target == 'development' && vars.CMS_DEV_PUBLISH_ENABLED || '' }}
+          # The dev contract reads the dev public and preview Workers with their own dev tokens.
+          CMS_CONTRACT_PUBLIC_TOKEN: ${{ inputs.target == 'development' && secrets.CLOUDFLARE_DEV_PUBLIC_WORKER_TOKEN || '' }}
+          CMS_CONTRACT_PREVIEW_TOKEN: ${{ inputs.target == 'development' && secrets.CLOUDFLARE_DEV_PREVIEW_RENDERER_TOKEN || '' }}
           GITHUB_TOKEN: ${{ github.token }}
           DEPLOY_SHA: ${{ needs.admin-build.outputs.deploy_sha }}
           CMS_BUG_REPORT_TELEGRAM_CHAT_ID: ${{ secrets.CMS_BUG_REPORT_TELEGRAM_CHAT_ID }}
