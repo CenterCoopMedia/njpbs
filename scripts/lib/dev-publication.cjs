@@ -3,7 +3,7 @@
 const { createHash } = require("node:crypto");
 const { isDeepStrictEqual } = require("node:util");
 const { FieldValue } = require("firebase-admin/firestore");
-const { addressedPublishChanges } = require("../../functions/lib/publish-build-state");
+const { addressedPublishChanges, settleBuildQueue } = require("../../functions/lib/publish-build-state");
 const { reserveCmsPublishArtifact, queueIncludesArtifact } = require("../../functions/lib/cms-publish-artifact");
 const { publicationTarget } = require("../../functions/lib/publication-target");
 const { publicationRuntime, assertPublicationOwner, runtimeFields } = require("../../functions/lib/publication-runtime-owner");
@@ -28,6 +28,8 @@ const PUBLICATION_TARGET = publicationTarget("development");
 const TARGET = Object.freeze({ environment: "development", projectId: "njpbs-site-dev",
   workerName: "template-dev-public", origin: "https://dev-public.example.org", previewBucket: "template-dev-cms-previews" });
 const hash = value => createHash("sha256").update(value).digest("hex");
+// A refresh run whose build job failed or was cancelled settles its own row (#593).
+const DEV_BUILD_FAILED_ERROR = "Development build failed or was cancelled before upload; dispatch a new run";
 const inputRef = (db, id) => publicBuildBatchRef(db, id.buildBatchId).collection("inputs").doc("devFrozen");
 
 function assertDevTarget(target) {
@@ -106,7 +108,10 @@ function batchReservation(batch, identity) {
 }
 
 // The operator proves the original Actions failure before calling this owner.
-// No absence-only or ordinary workflow cleanup path may invoke settlement.
+// No absence-only or ordinary workflow cleanup path may invoke this settlement.
+// The one workflow exception is finishDevPublication's buildFailed case: the
+// fail step of the same run, after its build job failed or was cancelled and
+// before any upload, ends its own row through settleBuildQueue (#593).
 async function settleDevPreuploadFailure(db, request, { readOnly = false } = {}) {
   assertDevDatabase(db);
   preupload.parseDevPreuploadSettlement(request);
@@ -278,7 +283,7 @@ async function settleDevDeploymentOutcome(db, identity, lease, evidence) {
 
 // Terminal queue writeback consumes the generic outcome. This adapter never
 // promotes a pointer, fabricates batch readiness or owns a second activation.
-async function finishDevPublication(db, identity, { timeoutOutcome = null } = {}) {
+async function finishDevPublication(db, identity, { timeoutOutcome = null, buildFailed = false } = {}) {
   const current = await readDevPublication(db, identity);
   if (!current.queue || !current.batch) return "unclaimed";
   // The ordinary finalize/fail cleanup cannot undo a failed-queue refusal.
@@ -297,8 +302,19 @@ async function finishDevPublication(db, identity, { timeoutOutcome = null } = {}
     if (outcome.outcome === "deployed") return finishDevPublication(db, identity);
     return outcome.outcome;
   }
-  // A pre-lease failure preserves reservation/candidate evidence. Cancellation
-  // needs its existing authorized generic owner; a workflow cleanup cannot invent it.
+  // The fail step of the run that owns this row reports a build job that failed
+  // or was cancelled. Upload requires a successful build, so no candidate, lease
+  // or activation exists: a reserved batch has never been leased. The row ends
+  // here, and settleBuildQueue retires the batch, so the release pause and the
+  // media purge do not wait for the 24-hour stale sweep (#593). A rerun of this
+  // run then refuses in prepare; a new run publishes.
+  if (buildFailed && current.queue.status === "pending" && current.batch.status === "reserved" && !current.candidate) {
+    await settleBuildQueue(db, { queueId: identity.queueId, status: "failed",
+      queueUpdate: { status: "failed", completedAt: FieldValue.serverTimestamp(), error: DEV_BUILD_FAILED_ERROR } });
+    return "failed";
+  }
+  // Any other pre-lease failure preserves reservation/candidate evidence.
+  // Cancellation needs its existing authorized generic owner.
   return current.queue.status === "success" ? "success" : "unclaimed";
 }
 
@@ -363,7 +379,8 @@ function prepareTimedOutDevReconciliation(input) {
   return batch.status === "deployed" ? terminalLease(batch) : projectPublicDeploymentLease(batch, identity.buildBatchId);
 }
 
-module.exports = { TARGET, hash, assertDevTarget, assertDevDatabase, assertDevQueue, assertIdentity,
+module.exports = {
+  DEV_BUILD_FAILED_ERROR, TARGET, hash, assertDevTarget, assertDevDatabase, assertDevQueue, assertIdentity,
   selectDevPublicationSource,
   readDevPublication, reserveDevPublication, recordDevInputs, recordDevCandidate,
   assertDevPublicationUnreserved,

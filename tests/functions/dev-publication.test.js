@@ -8,7 +8,7 @@ import manifestModule from "../../functions/lib/public-media-manifest.js";
 import publicationModule from "../../functions/lib/no-build-post-publication.js";
 import reconciliation from "../../functions/lib/publish-reconcile.js";
 import buildState from "../../functions/lib/publish-build-state.js";
-import { inspectDevPublicationRetry } from "../../site/scripts/cms-dev-publication.mjs";
+import { inspectDevPublicationRetry, prepare } from "../../site/scripts/cms-dev-publication.mjs";
 
 const project = process.env.GCLOUD_PROJECT ?? "demo-njpbs";
 const id = { queueId: "A1b2C3d4E5f6G7h8I9j0", buildBatchId: "cms-A1b2C3d4E5f6G7h8I9j0", commitSha: "a".repeat(40) };
@@ -161,6 +161,38 @@ it("a pre-lease build failure preserves the previous site and exact frozen recov
   expect((await queueRef().get()).data().status).toBe("pending");
   expect((await db.doc("cmsPages/home").get()).data()).toMatchObject({ title: "A later draft", published: { sourceVersion: 7 }, publishBuildPending: true });
   expect((await db.doc("system/devPublication").get()).exists).toBe(false);
+});
+
+it("the fail step of a run whose build failed ends its own row and retires its batch; a rerun refuses (#593)", async () => {
+  const previous = { ...deployment.initialPublicDeploymentPointer(), activeGeneration: 4, activeDeploymentId: "old-deployment",
+    activeCommitSha: "b".repeat(40), lastReservedGeneration: 4, newestEligibleGeneration: 4, newestEligibleBuildBatchId: "old-build" };
+  await db.doc("system/publicDeployment").set(previous);
+  await frozen();
+  expect(await dev.finishDevPublication(db, id, { buildFailed: true })).toBe("failed");
+  expect((await queueRef().get()).data()).toMatchObject({ status: "failed", error: dev.DEV_BUILD_FAILED_ERROR });
+  expect((await batchRef().get()).data()).toMatchObject({ status: "retired",
+    retirementReceipt: { schemaVersion: 1, reason: deployment.FAILED_PUBLISH_RETIRED_REASON, queueId: id.queueId, queueStatus: "failed" } });
+  expect(await pointer()).toMatchObject({ activeGeneration: 4, activeDeploymentId: "old-deployment", activeCommitSha: "b".repeat(40) });
+  // The page keeps its previous public revision; only the queue and batch ended.
+  expect((await db.doc("cmsPages/home").get()).data()).toMatchObject({ published: { sourceVersion: 7 } });
+  // A repeated fail step changes nothing, and a rerun of the same run refuses.
+  const settled = (await queueRef().get()).data();
+  expect(await dev.finishDevPublication(db, id, { buildFailed: true })).toBe("unclaimed");
+  expect((await queueRef().get()).data()).toEqual(settled);
+  vi.stubEnv("QUEUE_ID", id.queueId);
+  vi.stubEnv("SOURCE_SHA", id.commitSha);
+  try {
+    await expect(prepare(db)).rejects.toThrow("dispatch a new run");
+  } finally {
+    vi.unstubAllEnvs();
+  }
+});
+
+it("a reported build failure leaves a batch with a recorded candidate to its owners", async () => {
+  await prepared();
+  expect(await dev.finishDevPublication(db, id, { buildFailed: true })).toBe("unclaimed");
+  expect((await queueRef().get()).data().status).toBe("pending");
+  expect((await batchRef().get()).data().status).toBe("ready");
 });
 
 it("stages generic media and candidate, then activates the shared renderer and settles only the published revision", async () => {

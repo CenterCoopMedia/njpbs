@@ -123,6 +123,9 @@ export async function prepare(db) {
   db ??= await database();
   const id = await identity();
   const current = await state.readDevPublication(db, id);
+  if (current.queue?.status === "failed" && current.queue.error === state.DEV_BUILD_FAILED_ERROR) {
+    throw new Error(state.DEV_BUILD_FAILED_ERROR);
+  }
   await mkdir(directory, { recursive: true, mode: 0o700 });
   if (await lstat(path.join(directory, "frozen.json")).catch(() => null)) {
     const frozen = await json(path.join(directory, "frozen.json"));
@@ -681,7 +684,11 @@ async function main() {
     if (current.queue?.status !== "failed") state.assertDevReconcileInputs(reconciliationInput(id, current, inventory, recovery));
     return upload(db, id, true, recovery);
   }
-  if (command === "fail") return state.finishDevPublication(await database(), await identity());
+  if (command === "fail") {
+    // Upload runs only after a successful build, so this result alone shows no upload began.
+    const buildFailed = ["failure", "cancelled"].includes(process.env.DEV_BUILD_RESULT);
+    return state.finishDevPublication(await database(), await identity(), { buildFailed });
+  }
   throw new Error("Expected source, inspect-retry, prepare, build, upload, reconcile or fail");
 }
 
