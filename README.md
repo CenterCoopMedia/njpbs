@@ -87,8 +87,12 @@ new errors. Function length (over 200 lines) and file size (over 1,000 lines)
 appear in the report totals only; a long function or file runs the same as a
 short one. Download the `code-health`
 artifact for the tested tree, its base, the base's ESLint bulk suppressions and
-the new findings. The check compares diagnostic counts by file, rule and
-message so shifted lines keep their baseline. It also tracks detected renames.
+the new findings. Lint errors match by file, rule and message. Type errors
+match by position, because a type message quotes the callee's signature and
+changes when another file changes: an error on an unchanged line matches the
+same rule at the same base line and column, and an error inside a changed hunk
+matches the same rule and flagged text in that hunk, whatever its message. Both track detected
+renames.
 Test files are linted and excluded from size counts. Main pushes record the
 current baseline in the **Code health** workflow.
 
