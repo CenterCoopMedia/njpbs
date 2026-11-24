@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { spawn } from "node:child_process";
 import { EventEmitter } from "node:events";
 import { PassThrough } from "node:stream";
-import { CloudPreviewProviderReadError, describeCloudPreviewReleaseFailure, releaseCredentials, readCloudPreviewRollouts, releaseSecretsFor, retryCloudPreviewRead, waitForCloudPreviewStartup, wrangler } from "../../site/scripts/deploy-cms-preview-cloud";
+import { CloudPreviewProviderReadError, describeCloudPreviewReleaseFailure, releaseCredentials, readCloudPreviewRollouts, releaseSecretsFor, retryCloudPreviewRead, retryWrangler, waitForCloudPreviewStartup, wrangler } from "../../site/scripts/deploy-cms-preview-cloud";
 
 vi.mock("node:child_process", async importOriginal => ({
   ...await importOriginal<typeof import("node:child_process")>(),
@@ -396,19 +396,44 @@ ${"K".repeat(64)}
 });
 
 
+describe("Wrangler retries", () => {
+  const run = (exits: (child: ReturnType<typeof childProcess>) => void) => {
+    vi.mocked(spawn).mockImplementation(() => {
+      const child = Object.assign(new EventEmitter(), { stdin: new PassThrough(), stdout: new PassThrough(), stderr: new PassThrough(), kill: vi.fn() });
+      setImmediate(() => exits(child as ReturnType<typeof childProcess>));
+      return child as unknown as ReturnType<typeof spawn>;
+    });
+    const wait = vi.fn().mockResolvedValue(undefined);
+    return { wait, result: retryWrangler(prepared, ["deploy"], "synthetic-token", undefined, { wait, log: vi.fn() }) };
+  };
+  it("deploys again after an unknown provider failure", async () => {
+    let attempt = 0;
+    const { wait, result } = run(child => { child.stderr.write("Unrecognized provider failure"); setImmediate(() => child.emit("close", attempt++ ? 0 : 1, null)); });
+    await expect(result).resolves.toBeUndefined();
+    expect(spawn).toHaveBeenCalledTimes(2);
+    expect(wait.mock.calls).toEqual([[2_000]]);
+  });
+  it("does not repeat a refused credential", async () => {
+    const { wait, result } = run(child => { child.stderr.write("Authentication error: invalid API token"); setImmediate(() => child.emit("close", 1, null)); });
+    await expect(result).rejects.toThrow("class=authentication");
+    expect(spawn).toHaveBeenCalledTimes(1);
+    expect(wait).not.toHaveBeenCalled();
+  });
+});
+
 describe("pre-mutation Containers reads", () => {
-  it("retries a transient read at most three times with two ten-second deferrals", async () => {
+  it("retries a transient read at most five times by the provider call rule", async () => {
     const read = vi.fn().mockRejectedValue(new CloudPreviewProviderReadError());
     const sleep = vi.fn().mockResolvedValue(undefined);
-    await expect(retryCloudPreviewRead(read, sleep)).rejects.toBeInstanceOf(CloudPreviewProviderReadError);
-    expect(read).toHaveBeenCalledTimes(3);
-    expect(sleep.mock.calls).toEqual([[10_000], [10_000]]);
+    await expect(retryCloudPreviewRead(read, { wait: sleep })).rejects.toBeInstanceOf(CloudPreviewProviderReadError);
+    expect(read).toHaveBeenCalledTimes(5);
+    expect(sleep.mock.calls).toEqual([[2_000], [4_000], [8_000], [16_000]]);
   });
   it("returns a successful third read after two transient failures", async () => {
     const read = vi.fn().mockRejectedValueOnce(new CloudPreviewProviderReadError())
       .mockRejectedValueOnce(new CloudPreviewProviderReadError()).mockResolvedValue("verified");
     const sleep = vi.fn().mockResolvedValue(undefined);
-    expect(await retryCloudPreviewRead(read, sleep)).toBe("verified");
+    expect(await retryCloudPreviewRead(read, { wait: sleep })).toBe("verified");
     expect(read).toHaveBeenCalledTimes(3);
     expect(sleep).toHaveBeenCalledTimes(2);
   });
@@ -416,7 +441,7 @@ describe("pre-mutation Containers reads", () => {
     const failure = new Error("invalid provider metadata");
     const read = vi.fn().mockRejectedValue(failure);
     const sleep = vi.fn();
-    await expect(retryCloudPreviewRead(read, sleep)).rejects.toBe(failure);
+    await expect(retryCloudPreviewRead(read, { wait: sleep })).rejects.toBe(failure);
     expect(read).toHaveBeenCalledTimes(1);
     expect(sleep).not.toHaveBeenCalled();
   });

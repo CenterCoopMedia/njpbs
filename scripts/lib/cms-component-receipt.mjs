@@ -7,6 +7,7 @@ import runtimeProcess from "node:process";
 import { deploymentInputFingerprint, readDeploymentManifest, renderCommittedDeploymentSource } from "../render-development-config.mjs";
 import { fileURLToPath } from "node:url";
 import { cmsTarget } from "./cms-target.mjs";
+import { providerJson } from "./provider-call.mjs";
 import { addCommittedFunctionsContracts, contractInputs } from "./functions-contracts.mjs";
 
 const previewPair = () => createRequire(import.meta.url)("../../functions/lib/cms-preview-pair.js");
@@ -36,7 +37,7 @@ export const RECEIPT_INPUT_PATHS = Object.freeze({
     "firebase.json",
     ".firebaserc",
     "scripts/deploy-cms-function-batches.mjs",
-    "scripts/lib/functions-deploy-inventory.mjs",
+    "scripts/lib/functions-deploy-inventory.mjs", "scripts/lib/provider-call.mjs",
     "scripts/smoke-cms-functions.mjs",
     "scripts/resolve-media-purge.sh",
     "scripts/resolve-cost-ledger-pulls.sh",
@@ -1144,16 +1145,15 @@ export function rolloutApplied(application, rollout) {
     && rolloutBoundToApplication(application, rollout);
 }
 
+const readProvider = (fetchFn, url, token, deps) => providerJson(`Cloudflare ${new URL(url).pathname.split("/").slice(5).join("/")}`,
+  () => fetchFn(url, { headers: { authorization: `Bearer ${token}` }, redirect: "error", signal: AbortSignal.timeout(15_000) }),
+  { wait: deps.sleep });
+
 export async function readConsistentRendererApplication(fetchFn, account, token, deps) {
   const base = `https://api.cloudflare.com/client/v4/accounts/${account}/containers/applications`;
   const read = async (url, error) => {
-    const response = await fetchFn(url, {
-      headers: { authorization: `Bearer ${token}` },
-      redirect: "error",
-      signal: AbortSignal.timeout(15_000),
-    });
-    if (!response?.ok) fail(error);
-    return response.json();
+    try { return await readProvider(fetchFn, url, token, deps); }
+    catch { fail(error); }
   };
   const releases = async () => deps.rendererRelease
     ? releasesOfCommit(deps.rendererRelease, deps.rendererSha)
@@ -1229,10 +1229,10 @@ export async function collectLiveIdentities(component, deps = {}) {
       const require = createRequire(import.meta.url);
       const { GoogleAuth } = require("google-auth-library");
       const client = await new GoogleAuth({ scopes: ["https://www.googleapis.com/auth/cloud-platform"] }).getClient();
-      const { listPages } = await import("../deploy-cms-function-batches.mjs");
+      const { listPages, requestDeploymentInventory } = await import("../deploy-cms-function-batches.mjs");
       const request = async (url, pageToken) => {
         try {
-          return (await client.request({ url, params: { pageSize: 100, ...(pageToken ? { pageToken } : {}) } })).data;
+          return await requestDeploymentInventory(client, url, pageToken);
         } catch {
           fail("Live function inventory could not be read");
         }
@@ -1274,31 +1274,17 @@ export async function collectLiveIdentities(component, deps = {}) {
     const imageDigest = legacyImageDigest ?? "";
     if (!image && !imageDigest) fail("Renderer container image identity is missing");
     const version = application.version ?? application.current_version ?? application.configuration?.version ?? null;
-    const deploymentResponse = await fetchFn(
-      `https://api.cloudflare.com/client/v4/accounts/${account}/workers/scripts/${rendererWorker}/deployments`,
-      {
-        headers: { authorization: `Bearer ${token}` },
-        redirect: "error",
-        signal: AbortSignal.timeout(15_000),
-      },
-    );
-    if (!deploymentResponse?.ok) fail("Renderer Worker deployment identity could not be read");
-    const deploymentBody = await deploymentResponse.json();
+    const deploymentBody = await readProvider(fetchFn,
+      `https://api.cloudflare.com/client/v4/accounts/${account}/workers/scripts/${rendererWorker}/deployments`, token, deps)
+      .catch(() => fail("Renderer Worker deployment identity could not be read"));
     const workerDeploymentId = deploymentBody?.result?.deployments?.[0]?.id
       ?? deploymentBody?.result?.[0]?.id;
     if (typeof workerDeploymentId !== "string" || workerDeploymentId.length === 0 || workerDeploymentId.length > 80) {
       fail("Renderer Worker deployment identity is invalid");
     }
-    const scheduleResponse = await fetchFn(
-      `https://api.cloudflare.com/client/v4/accounts/${account}/workers/scripts/${rendererWorker}/schedules`,
-      {
-        headers: { authorization: `Bearer ${token}` },
-        redirect: "error",
-        signal: AbortSignal.timeout(15_000),
-      },
-    );
-    if (!scheduleResponse?.ok) fail("Renderer Worker schedule identity could not be read");
-    const scheduleBody = await scheduleResponse.json();
+    const scheduleBody = await readProvider(fetchFn,
+      `https://api.cloudflare.com/client/v4/accounts/${account}/workers/scripts/${rendererWorker}/schedules`, token, deps)
+      .catch(() => fail("Renderer Worker schedule identity could not be read"));
     const schedules = Array.isArray(scheduleBody?.result?.schedules)
       ? scheduleBody.result.schedules
       : Array.isArray(scheduleBody?.result) ? scheduleBody.result : null;
@@ -1335,18 +1321,9 @@ export async function collectLiveIdentities(component, deps = {}) {
   const { readCmsApiDeployment, CmsApiReadbackError, WorkerReadbackMismatch } = await import("./cloudflare-worker-readback.mjs");
   try {
     const { cmsApiWorker } = cmsTarget();
-    return await readCmsApiDeployment(cmsApiWorker, async () => {
-      const response = await fetchFn(
-        `https://api.cloudflare.com/client/v4/accounts/${account}/workers/scripts/${cmsApiWorker}/deployments`,
-        {
-          headers: { authorization: `Bearer ${token}` },
-          redirect: "error",
-          signal: AbortSignal.timeout(15_000),
-        },
-      );
-      if (!response?.ok) fail("CMS API deployment identity could not be read");
-      return response.json();
-    }, deps.expectedWorkerVersion, deps.readbackClock);
+    return await readCmsApiDeployment(cmsApiWorker, () => readProvider(fetchFn,
+      `https://api.cloudflare.com/client/v4/accounts/${account}/workers/scripts/${cmsApiWorker}/deployments`, token, deps)
+      .catch(() => fail("CMS API deployment identity could not be read")), deps.expectedWorkerVersion, deps.readbackClock);
   } catch (error) {
     if (error instanceof CmsApiReadbackError || error instanceof WorkerReadbackMismatch) fail(error.message);
     throw error;

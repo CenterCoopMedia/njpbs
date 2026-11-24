@@ -2,6 +2,7 @@
 
 import { readFile } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
+import { httpFault, providerCall } from "./lib/provider-call.mjs";
 
 const CLOUDFLARE_API = "https://api.cloudflare.com/client/v4";
 const PROJECT_NAME = "njpbs-admin";
@@ -134,36 +135,35 @@ export function guideProbeError(pathname, status, expectedStatus) {
     : `${pathname} returned ${status}; expected a client error`;
 }
 
-async function cloudflareRequest(token, path) {
-  const response = await fetch(`${CLOUDFLARE_API}${path}`, {
-    headers: { authorization: `Bearer ${token}` },
+async function cloudflareRequest(token, path, { absent = false } = {}) {
+  return providerCall(`Cloudflare read ${path.split("?")[0].split("/").at(-1)}`, async () => {
+    const response = await fetch(`${CLOUDFLARE_API}${path}`, {
+      headers: { authorization: `Bearer ${token}` },
+    });
+    if (absent && response.status === 404) return null;
+    const body = await response.json().catch(() => null);
+    if (!response.ok || body?.success !== true) {
+      const details = Array.isArray(body?.errors)
+        ? body.errors.map((error) => error?.message).filter(Boolean).join("; ")
+        : "";
+      throw Object.assign(new Error(
+        `Cloudflare Pages check failed (${response.status})${details ? `: ${details}` : ""}`,
+      ), response.ok ? {} : { response });
+    }
+    return body.result;
   });
-  const body = await response.json().catch(() => null);
-  if (!response.ok || body?.success !== true) {
-    const details = Array.isArray(body?.errors)
-      ? body.errors.map((error) => error?.message).filter(Boolean).join("; ")
-      : "";
-    throw new Error(
-      `Cloudflare Pages check failed (${response.status})${details ? `: ${details}` : ""}`,
-    );
-  }
-  return body.result;
 }
 
 async function loadAdminProject(token) {
   const accounts = await cloudflareRequest(token, "/accounts?per_page=100");
   const matches = [];
   for (const account of accounts) {
-    const response = await fetch(
-      `${CLOUDFLARE_API}/accounts/${account.id}/pages/projects/${PROJECT_NAME}`,
-      { headers: { authorization: `Bearer ${token}` } },
+    const project = await cloudflareRequest(
+      token,
+      `/accounts/${account.id}/pages/projects/${PROJECT_NAME}`,
+      { absent: true },
     );
-    if (response.status === 404) continue;
-    const body = await response.json().catch(() => null);
-    if (!response.ok || body?.success !== true) {
-      throw new Error(`Cloudflare Pages project check failed (${response.status})`);
-    }
-    matches.push({ project: body.result, accountId: account.id });
+    if (project) matches.push({ project, accountId: account.id });
   }
   if (matches.length !== 1) {
     throw new Error(`Expected one ${PROJECT_NAME} Pages project; found ${matches.length}`);
@@ -195,13 +195,18 @@ async function probeGuideHost(origin, { optional = false } = {}) {
   for (const probe of GUIDE_PROBES) {
     let response;
     try {
-      response = await fetch(new URL(probe.path, origin), {
-        cache: "no-store",
-        redirect: "follow",
-        signal: AbortSignal.timeout(15_000),
+      response = await providerCall(`Admin Pages guide probe of ${origin}`, async () => {
+        const answer = await fetch(new URL(probe.path, origin), {
+          cache: "no-store",
+          redirect: "follow",
+          signal: AbortSignal.timeout(15_000),
+        });
+        if (answer.status >= 500 || answer.status === 429) throw httpFault(answer);
+        return answer;
       });
     } catch (error) {
-      if (optional && !reachable) {
+      // An HTTP answer proves the host is reachable, so a lasting 5xx still fails.
+      if (optional && !reachable && !error.response) {
         console.warn(`Admin Pages guide probe skipped unreachable ${origin}: ${error.message}`);
         return;
       }

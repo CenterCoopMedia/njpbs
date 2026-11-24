@@ -28,7 +28,7 @@ export const CMS_RELEASE_CHECK_FILES = Object.freeze([
   "scripts/deploy-cms-api-worker.mjs", "scripts/lib/cloudflare-worker-readback.mjs",
   "scripts/cms-release-plan.mjs", "scripts/lib/cms-release-plan.mjs",
   "scripts/lib/cms-renderer-graph.mjs", "scripts/deploy-cms-function-batches.mjs",
-  "scripts/lib/functions-deploy-inventory.mjs", "scripts/confirm-admin-revision.mjs",
+  "scripts/lib/functions-deploy-inventory.mjs", "scripts/lib/provider-call.mjs", "scripts/confirm-admin-revision.mjs",
   "scripts/check-admin-pages-security.mjs",
 ]);
 export const CMS_FUNCTION_CONTRACT_FILES = Object.freeze([

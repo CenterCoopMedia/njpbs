@@ -3,20 +3,28 @@ import { existsSync, readFileSync } from "node:fs";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { wranglerVersion } from "./lib/cloudflare-worker-readback.mjs";
 import { assertDevelopmentWorkerConfig, cmsTarget } from "./lib/cms-target.mjs";
+import { providerCallSync } from "./lib/provider-call.mjs";
 
 class CmsApiDeployError extends Error {}
 
-export function deployCmsApiWorker(secretsFile, spawn = spawnSync, { cwd = "cms-api", devSourceSha } = {}) {
+export function deployCmsApiWorker(secretsFile, spawn = spawnSync, { cwd = "cms-api", devSourceSha, wait } = {}) {
   const args = ["deploy", "--cwd", cwd];
   if (devSourceSha) args.push("--config", "wrangler.dev.jsonc", "--tag", devSourceSha);
   if (secretsFile && existsSync(secretsFile)) args.push("--secrets-file", secretsFile);
-  const result = spawn(fileURLToPath(new URL("../node_modules/.bin/wrangler", import.meta.url)), args, {
-    encoding: "utf8",
-    stdio: ["ignore", "pipe", "ignore"],
-    maxBuffer: 4 * 1024 * 1024,
-    env: { ...process.env, WRANGLER_SEND_METRICS: "false", WRANGLER_WRITE_LOGS: "false" },
-  });
-  if (result.status !== 0) throw new CmsApiDeployError("CMS API Wrangler deploy did not report success");
+  // A deploy sets the Worker to this exact source, so a repeat after a lost
+  // answer reaches the same state. The receipt reads the last version back.
+  const result = providerCallSync("CMS API wrangler deploy", () => {
+    const child = spawn(fileURLToPath(new URL("../node_modules/.bin/wrangler", import.meta.url)), args, {
+      encoding: "utf8",
+      stdio: ["ignore", "pipe", "pipe"],
+      maxBuffer: 4 * 1024 * 1024,
+      env: { ...process.env, WRANGLER_SEND_METRICS: "false", WRANGLER_WRITE_LOGS: "false" },
+    });
+    // Wrangler errors can contain configuration values, so its output only selects the class.
+    if (child.status !== 0) throw Object.assign(new CmsApiDeployError("CMS API Wrangler deploy did not report success"), {
+      providerLine: "withheld", stdout: child.stdout, stderr: child.stderr });
+    return child;
+  }, { wait });
   const version = wranglerVersion(result.stdout);
   if (!version) throw new CmsApiDeployError("CMS API Wrangler deploy did not report a valid versionId");
   return version;

@@ -174,6 +174,7 @@ export const TRUSTED_RELEASE_PATHS = Object.freeze([
   "scripts/lib/production-reader-authorization.mjs",
   "scripts/check-cms-secret-iam.mjs",
   "scripts/lib/functions-deploy-inventory.mjs",
+  "scripts/lib/provider-call.mjs",
   "scripts/lib/functions-readbacks.sh",
   "scripts/assert-r2-lifecycle.mjs",
 ]);
@@ -193,6 +194,7 @@ export const RELEASE_CHECK_PATHS = Object.freeze([
   "scripts/component-runner.mjs", "scripts/lib/deployment-components.mjs",
   "scripts/deploy-cms-function-batches.mjs",
   "scripts/lib/functions-deploy-inventory.mjs",
+  "scripts/lib/provider-call.mjs",
   "scripts/lib/functions-secret-versions.mjs",
   "scripts/smoke-cms-functions.mjs",
   "scripts/cms-component-receipt.mjs",

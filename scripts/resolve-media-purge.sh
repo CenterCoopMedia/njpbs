@@ -3,9 +3,16 @@ set -euo pipefail
 
 # Discovery and runtime use the same metadata-only decision. No secret payloads.
 ready() {
-  local state
-  state="$(timeout 10s gcloud secrets versions describe latest --secret="$1" \
-    --project njpbs-site --format='value(state)' 2>/dev/null)" || return 1
+  local state status=0
+  state="$(node "$(dirname "${BASH_SOURCE[0]}")/lib/provider-call.mjs" "secret version $1" -- \
+    timeout 30s gcloud secrets versions describe latest --secret="$1" \
+    --project njpbs-site --format='value(state)')" || status=$?
+  # Only an absent version is an answer. A provider fault must not switch a feature off.
+  [[ "$status" != 4 ]] || return 1
+  if [[ "$status" != 0 ]]; then
+    echo "The secret version state of $1 could not be read." >&2
+    exit 1
+  fi
   [[ "$state" == ENABLED ]]
 }
 enabled=false
